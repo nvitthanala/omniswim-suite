@@ -1,0 +1,8 @@
+{
+  "description": "Versioned NCAA cutline tables. Each <version>.json is an array of CutlineRecord. The server serves these via GET /api/cutlines/:version with hot-reload.",
+  "default": "2025-2026",
+  "versions": [
+    "2025-2026"
+  ],
+  "updatedAt": "2026-06-19T05:07:53.188Z"
+}

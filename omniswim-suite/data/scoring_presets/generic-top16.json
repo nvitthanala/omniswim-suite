@@ -1,0 +1,17 @@
+{
+  "id": "generic-top16",
+  "label": "Generic Top 16",
+  "description": "16-place table, unlimited individual scorers and relays, per-event caps. For ACC/SEC/Big 12 PDFs with a HyTek Points column, enable PDF place points (auto or on) so team totals match the sheet.",
+  "scoringPoints": [20, 17, 16, 15, 14, 13, 12, 11, 9, 7, 6, 5, 4, 3, 2, 1],
+  "relayMultiplier": 2,
+  "halfRateRelaySwimmer": true,
+  "maxIndividualScorersPerTeam": 999,
+  "maxRelaysScoringPerTeam": 999,
+  "aFinalBracketSize": 8,
+  "scorerCapScope": "event",
+  "diverScorerWeight": 1,
+  "relayEligibleFromScorerPool": false,
+  "diverEventPattern": ["DIVING", "DIVE"],
+  "maxIndividualEntriesPerSwimmer": 999,
+  "maxRelayEntriesPerSwimmer": 999
+}

@@ -1,0 +1,6 @@
+{
+  "name": "OmniSwim: Biomechanics",
+  "description": "Video-based biomechanical analysis of swimming with splits, stroke efficiency metrics, underwater kick tempo, and visualizations.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

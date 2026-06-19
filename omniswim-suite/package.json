@@ -1,0 +1,22 @@
+{
+  "name": "omniswim-suite",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev -w @omniswim/shell",
+    "build": "npm run build -w @omniswim/shell",
+    "start": "npm run start -w @omniswim/shell",
+    "lint": "npm run lint --workspaces --if-present",
+    "migrate:legacy": "node scripts/migrate-legacy-data.mjs",
+    "migrate:sqlite": "tsx scripts/migrate-json-to-sqlite.mjs",
+    "test:roundtrip": "tsx scripts/test_sqlite_roundtrip.mjs"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
