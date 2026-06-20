@@ -1,12 +1,16 @@
 # OMNI-SWIM · Suite
 
-![Omni Swim Suite logo](omniswim-suite/public/OMNISWIMLOGO.png)
+<p align="center">
+  <img src="omniswim-suite/public/OMNISWIMLOGO.png" alt="Omni Swim Suite logo" width="180" />
+</p>
 
-[![Node](https://img.shields.io/badge/Node-%3E%3D20-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
-[![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
-[![React](https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white)](https://react.dev/)
-[![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)](https://vite.dev/)
-[![Express](https://img.shields.io/badge/Express-4-000000?logo=express&logoColor=white)](https://expressjs.com/)
+<p align="center">
+  <a href="https://nodejs.org/"><img src="https://img.shields.io/badge/Node-%3E%3D20-339933?logo=node.js&logoColor=white" alt="Node.js" /></a>
+  <a href="https://www.typescriptlang.org/"><img src="https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white" alt="TypeScript" /></a>
+  <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=white" alt="React" /></a>
+  <a href="https://vite.dev/"><img src="https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white" alt="Vite" /></a>
+  <a href="https://expressjs.com/"><img src="https://img.shields.io/badge/Express-4-000000?logo=express&logoColor=white" alt="Express" /></a>
+</p>
 
 Omni Swim Suite is a workspace for swim-meet operations, combining roster planning, scoring workflows, and reporting in one place. The repository is organized as a monorepo so the shell application, shared packages, and supporting utilities can evolve together.
 
@@ -19,6 +23,8 @@ Omni Swim Suite is a workspace for swim-meet operations, combining roster planni
 | Metrics | Local metrics and video/session analysis |
 | Storage | JSON-first persistence with optional SQLite support |
 
+---
+
 ## Table of contents
 
 1. [Tech stack](#tech-stack)
@@ -27,6 +33,8 @@ Omni Swim Suite is a workspace for swim-meet operations, combining roster planni
 4. [Development](#development)
 5. [Documentation](#documentation)
 6. [Troubleshooting](#troubleshooting)
+
+---
 
 ## Tech stack
 
@@ -70,6 +78,8 @@ Omni Swim Suite is a workspace for swim-meet operations, combining roster planni
 - Node.js 20+
 - npm
 - Python 3 (recommended for PDF parsing workflows)
+
+---
 
 ### Quick start
 
@@ -127,6 +137,8 @@ The repo includes a few practical references for day-to-day work:
 - [omniswim-suite/backend](omniswim-suite/backend) — parsing and scoring utilities
 - [omniswim-suite/scripts](omniswim-suite/scripts) — automation and validation scripts
 
+---
+
 ## Troubleshooting
 
 - If the app does not start, confirm that Node.js 20+ is installed and that `npm install` completed successfully.
@@ -136,3 +148,4 @@ The repo includes a few practical references for day-to-day work:
 ## License
 
 This project uses the same open-source approach as the surrounding swim tooling in this workspace. Please review repository-specific licensing details before redistribution or commercial use.
+
