@@ -6,16 +6,22 @@
   "exports": {
     ".": "./src/index.ts",
     "./schema": "./src/schema.ts",
-    "./service": "./src/WorkspaceService.ts"
+    "./service": "./src/WorkspaceService.ts",
+    "./pg": "./src/PgWorkspaceService.ts",
+    "./auth": "./src/AuthService.ts"
   },
   "scripts": {
     "lint": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
-    "@omniswim/core": "*"
+    "@omniswim/core": "*",
+    "bcryptjs": "^3.0.2",
+    "pg": "^8.16.0"
   },
   "devDependencies": {
+    "@types/bcryptjs": "^2.4.6",
     "@types/node": "^22.14.0",
+    "@types/pg": "^8.15.4",
     "typescript": "~5.8.2"
   }
 }

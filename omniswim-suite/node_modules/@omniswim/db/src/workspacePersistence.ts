@@ -1,0 +1,123 @@
+/**
+ * Shared workspace assembly / child-table persistence helpers used by SQLite and PostgreSQL services.
+ */
+import type { Workspace, SwimmerResult } from '@omniswim/core/types';
+
+export type Json = unknown;
+
+export const CHILD_TABLES = [
+  'meet_results',
+  'recruits',
+  'roster_overrides',
+  'meet_entry_plans',
+  'relay_leg_overrides',
+  'deleted_swimmers',
+  'athlete_history',
+] as const;
+
+export type ChildTable = (typeof CHILD_TABLES)[number];
+
+export function parseJson<T>(value: unknown, fallback: T): T {
+  if (typeof value !== 'string' || value.length === 0) return fallback;
+  try {
+    return JSON.parse(value) as T;
+  } catch {
+    return fallback;
+  }
+}
+
+export function assembleWorkspace(
+  row: Record<string, unknown>,
+  childData: (table: string) => Json[]
+): Workspace {
+  const allResults = childData('meet_results') as SwimmerResult[];
+  const menResults = allResults.filter(r => (r as { gender?: string }).gender !== 'Women');
+  const womenResults = allResults.filter(r => (r as { gender?: string }).gender === 'Women');
+
+  return {
+    id: String(row.id),
+    name: String(row.name ?? ''),
+    createdAt: Number(row.created_at ?? Date.now()),
+    menResults,
+    womenResults,
+    recruits: childData('recruits') as Workspace['recruits'],
+    deletedSwimmers: childData('deleted_swimmers') as Workspace['deletedSwimmers'],
+    scorerRosterOverrides: childData('roster_overrides') as Workspace['scorerRosterOverrides'],
+    meetEntryPlans: childData('meet_entry_plans') as Workspace['meetEntryPlans'],
+    relayLegOverrides: childData('relay_leg_overrides') as Workspace['relayLegOverrides'],
+    athleteHistory: childData('athlete_history') as Workspace['athleteHistory'],
+    conference: row.conference != null ? String(row.conference) : undefined,
+    entryPlanMode: (row.entry_plan_mode as Workspace['entryPlanMode']) ?? undefined,
+    scoringSettings: parseJson<Workspace['scoringSettings']>(row.scoring_settings, undefined),
+    loadedMeet: parseJson<Workspace['loadedMeet']>(row.loaded_meet, undefined),
+    officialTeamScores: parseJson<Workspace['officialTeamScores']>(
+      row.official_team_scores,
+      undefined
+    ),
+    activeEntryIds: parseJson<string[] | undefined>(row.active_entry_ids, undefined),
+    historySources: parseJson<Workspace['historySources']>(row.history_sources, undefined),
+  };
+}
+
+export type WorkspaceScope = {
+  ownerId?: string;
+  teamId?: string;
+};
+
+export type WorkspaceRowMeta = WorkspaceScope & {
+  updatedAt?: number;
+  version?: number;
+};
+
+export function workspaceRowValues(ws: Workspace, sortIndex: number, meta: WorkspaceRowMeta = {}) {
+  return {
+    id: ws.id,
+    name: ws.name,
+    created_at: ws.createdAt ?? Date.now(),
+    conference: ws.conference ?? null,
+    entry_plan_mode: ws.entryPlanMode ?? null,
+    scoring_settings: ws.scoringSettings ? JSON.stringify(ws.scoringSettings) : null,
+    loaded_meet: ws.loadedMeet ? JSON.stringify(ws.loadedMeet) : null,
+    official_team_scores: ws.officialTeamScores ? JSON.stringify(ws.officialTeamScores) : null,
+    active_entry_ids: ws.activeEntryIds ? JSON.stringify(ws.activeEntryIds) : null,
+    history_sources: ws.historySources ? JSON.stringify(ws.historySources) : null,
+    sort_index: sortIndex,
+    owner_id: meta.ownerId ?? null,
+    team_id: meta.teamId ?? null,
+    updated_at: meta.updatedAt ?? Date.now(),
+    version: meta.version ?? 1,
+  };
+}
+
+export function insertResultsRows(
+  workspaceId: string,
+  results: SwimmerResult[],
+  gender: string
+): { id: string; workspace_id: string; gender: string; position: number; data: string }[] {
+  return results.map((r, i) => {
+    const rid = (r as { id?: string }).id || `${workspaceId}_${gender}_${i}`;
+    return { id: rid, workspace_id: workspaceId, gender, position: i, data: JSON.stringify(r) };
+  });
+}
+
+export function insertWithIdRows(
+  table: string,
+  workspaceId: string,
+  rows: ReadonlyArray<{ id?: string }>
+): { id: string; workspace_id: string; position: number; data: string }[] {
+  return rows.map((row, i) => {
+    const rid = row.id || `${workspaceId}_${table}_${i}`;
+    return { id: rid, workspace_id: workspaceId, position: i, data: JSON.stringify(row) };
+  });
+}
+
+export function insertPositionalRows(
+  workspaceId: string,
+  rows: unknown[]
+): { workspace_id: string; position: number; data: string }[] {
+  return rows.map((row, i) => ({
+    workspace_id: workspaceId,
+    position: i,
+    data: JSON.stringify(row),
+  }));
+}

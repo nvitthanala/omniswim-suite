@@ -1,4 +1,4 @@
-#!C:\Users\nihar\Desktop\omniswim suite\omniswim-suite\venv\Scripts\python.exe
+#!C:\Users\nihar\Documents\GitHub\omniswim-suite\omniswim-suite\venv\Scripts\python.exe
 """A command line tool for extracting text and images from PDF and
 output it to plain text, html, xml or tags.
 """

@@ -182,16 +182,13 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-3 mb-6">
-        <h2 className="text-ui-label font-black uppercase tracking-widest text-[var(--text-primary)]">
-          Meet Charts / Tables
-        </h2>
+      <div className="flex flex-wrap items-center gap-3 mb-4">
         {rosterDirty ? (
           <Link
             to="/manager"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-md border border-[var(--text-accent)]/30 text-[var(--text-accent)] hover:bg-[var(--text-accent)]/10 transition-colors"
+            className="btn-ghost text-ui-caption flex items-center gap-1.5 text-[var(--text-accent)]"
           >
-            Edit roster in Manager
+            Roster edits in Manager — open to adjust
             <ExternalLink size={12} />
           </Link>
         ) : null}
@@ -211,10 +208,10 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
             baselineBundle={baseline}
             baselineByTeam={baselineByTeam}
             scoringSettings={scoringSettings}
-            suggestedPresetId={suggestedPresetId}
             searchQuery={searchQuery}
             onSearchChange={setSearchQuery}
             whatIfMode={whatIfMode}
+            onWhatIfModeChange={setWhatIfMode}
             isParsingPdf={isParsingPdf}
             pdfFormat={pdfFormat}
             onPdfFormatChange={setPdfFormat}
@@ -224,8 +221,6 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
             onRequestDeleteSwimmer={
               whatIfMode ? name => setSwimmerDeleteCandidate({ name }) : undefined
             }
-            onSaveScoringSettings={sets => void onUpdate({ scoringSettings: sets })}
-            onClearSuggestedPreset={() => setSuggestedPresetId(null)}
             scoringRefreshKey={scoringRefreshKey}
           />
         </motion.div>

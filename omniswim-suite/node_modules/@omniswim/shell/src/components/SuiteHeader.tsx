@@ -1,8 +1,9 @@
 import { Link } from 'react-router-dom';
-import { Settings } from 'lucide-react';
+import { Settings, Globe, LogOut, User, TrendingUp } from 'lucide-react';
 import { Gender } from '@omniswim/core/types';
-import { ThemeToggle } from '@omniswim/ui';
+import { ThemeToggle, useSwimCloudWindow } from '@omniswim/ui';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
+import { useAuth } from '../context/AuthContext';
 import AppletNav from './AppletNav';
 
 type Props = {
@@ -19,6 +20,8 @@ export default function SuiteHeader({
   onOpenScoringSettings,
 }: Props) {
   const { activeWorkspace, activeGender, setActiveGender } = useSuiteWorkspace();
+  const { open, toggleWindow } = useSwimCloudWindow();
+  const { user, authRequired, logout } = useAuth();
 
   return (
     <header className="app-header h-16 flex items-center justify-between px-6 z-20 shrink-0">
@@ -31,7 +34,7 @@ export default function SuiteHeader({
             <img src="/OMNISWIMLOGO.png" alt="Omni Swim Logo" className="w-full h-full object-contain p-1" />
           </div>
           <h1 className="text-xl font-black tracking-tighter text-[var(--text-primary)] group-hover:text-[var(--text-accent)] transition-colors">
-            OMNI SWIM <span className="text-[var(--text-muted)] font-semibold text-base">SUITE</span>
+            Omni Swim <span className="text-[var(--text-muted)] font-semibold text-base">Suite</span>
           </h1>
         </Link>
       </div>
@@ -44,7 +47,7 @@ export default function SuiteHeader({
             <button
               type="button"
               onClick={() => setActiveGender(Gender.MEN)}
-              className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest rounded-sm transition-all ${
+              className={`px-3 py-1.5 text-ui-caption font-semibold rounded-sm transition-all ${
                 activeGender === Gender.MEN ? 'nav-tab-active' : 'nav-tab-inactive'
               }`}
             >
@@ -53,7 +56,7 @@ export default function SuiteHeader({
             <button
               type="button"
               onClick={() => setActiveGender(Gender.WOMEN)}
-              className={`px-3 py-1.5 text-[10px] font-bold uppercase tracking-widest rounded-sm transition-all ${
+              className={`px-3 py-1.5 text-ui-caption font-semibold rounded-sm transition-all ${
                 activeGender === Gender.WOMEN ? 'nav-tab-active' : 'nav-tab-inactive'
               }`}
             >
@@ -62,7 +65,34 @@ export default function SuiteHeader({
           </nav>
         ) : null}
 
+        <Link to="/analytics" className="btn-ghost p-1.5 rounded hidden sm:flex" title="Season analytics">
+          <TrendingUp size={14} />
+        </Link>
+
+        {user ? (
+          <div className="hidden md:flex items-center gap-2 px-2 py-1 rounded-full border border-theme-soft text-ui-caption">
+            <User size={12} className="text-theme-muted" />
+            <span className="truncate max-w-[100px]">{user.displayName}</span>
+            <button type="button" onClick={() => void logout()} className="p-1 theme-hover-row rounded" title="Sign out">
+              <LogOut size={12} />
+            </button>
+          </div>
+        ) : authRequired ? (
+          <Link to="/login" className="btn-ghost px-3 py-1.5 rounded text-ui-caption font-semibold">
+            Sign in
+          </Link>
+        ) : null}
+
         <ThemeToggle theme={theme} onToggle={onThemeToggle} className="ml-1" />
+
+        <button
+          type="button"
+          onClick={toggleWindow}
+          className={`p-1.5 rounded transition-colors ${open ? 'btn-accent-outline' : 'btn-ghost'}`}
+          title="SwimCloud reference window"
+        >
+          <Globe size={14} />
+        </button>
 
         {showWorkspaceControls && activeWorkspace && onOpenScoringSettings ? (
           <button
@@ -76,10 +106,8 @@ export default function SuiteHeader({
         ) : null}
 
         {showWorkspaceControls && activeWorkspace ? (
-          <div className="hidden lg:flex px-3 py-1.5 text-[10px] font-mono bg-[var(--surface-muted)] text-[var(--text-accent)] border border-[var(--text-accent)]/20 rounded-full items-center">
-            <span className="truncate max-w-[140px]">
-              {activeWorkspace.name.toUpperCase().replace(/\s+/g, '_')}
-            </span>
+          <div className="hidden lg:flex px-3 py-1.5 text-ui-caption bg-[var(--surface-muted)] text-[var(--text-primary)] border border-theme-soft rounded-full items-center">
+            <span className="truncate max-w-[160px]">{activeWorkspace.name}</span>
           </div>
         ) : null}
 

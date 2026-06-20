@@ -2,6 +2,7 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { UploadCloud, Save, FolderOpen, Download, Trash2, X } from 'lucide-react';
 import { VideoPlayer, type TrackingEvent } from './components/VideoPlayer';
 import { MetricsDashboard } from './components/MetricsDashboard';
+import { SessionComparePanel, LapCompareTable } from './components/SessionComparePanel';
 import { RaceSetupForm } from './components/RaceSetupForm';
 import { BiomechanicsData, RaceConfig } from './types';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
@@ -318,6 +319,12 @@ export default function MetricsApp() {
                 </button>
               </div>
               <MetricsDashboard data={data} />
+              <LapCompareTable data={data} />
+              <SessionComparePanel
+                current={data}
+                sessions={sessions}
+                currentLabel={raceConfig.swimmerName || 'Current'}
+              />
             </>
           ) : videoUrl ? (
             <RaceSetupForm

@@ -5,7 +5,7 @@ import fs3 from "fs";
 import { fileURLToPath } from "url";
 import { createServer as createViteServer } from "vite";
 import multer from "multer";
-import { v4 as uuidv4 } from "uuid";
+import { v4 as uuidv42 } from "uuid";
 import { spawn, execSync } from "child_process";
 
 // ../../packages/core/src/constants.ts
@@ -752,8 +752,84 @@ import { DatabaseSync } from "node:sqlite";
 import fs2 from "node:fs";
 import path2 from "node:path";
 
+// ../../packages/db/src/workspacePersistence.ts
+function parseJson(value, fallback) {
+  if (typeof value !== "string" || value.length === 0) return fallback;
+  try {
+    return JSON.parse(value);
+  } catch {
+    return fallback;
+  }
+}
+function assembleWorkspace(row, childData) {
+  const allResults = childData("meet_results");
+  const menResults = allResults.filter((r) => r.gender !== "Women");
+  const womenResults = allResults.filter((r) => r.gender === "Women");
+  return {
+    id: String(row.id),
+    name: String(row.name ?? ""),
+    createdAt: Number(row.created_at ?? Date.now()),
+    menResults,
+    womenResults,
+    recruits: childData("recruits"),
+    deletedSwimmers: childData("deleted_swimmers"),
+    scorerRosterOverrides: childData("roster_overrides"),
+    meetEntryPlans: childData("meet_entry_plans"),
+    relayLegOverrides: childData("relay_leg_overrides"),
+    athleteHistory: childData("athlete_history"),
+    conference: row.conference != null ? String(row.conference) : void 0,
+    entryPlanMode: row.entry_plan_mode ?? void 0,
+    scoringSettings: parseJson(row.scoring_settings, void 0),
+    loadedMeet: parseJson(row.loaded_meet, void 0),
+    officialTeamScores: parseJson(
+      row.official_team_scores,
+      void 0
+    ),
+    activeEntryIds: parseJson(row.active_entry_ids, void 0),
+    historySources: parseJson(row.history_sources, void 0)
+  };
+}
+function workspaceRowValues(ws, sortIndex, meta = {}) {
+  return {
+    id: ws.id,
+    name: ws.name,
+    created_at: ws.createdAt ?? Date.now(),
+    conference: ws.conference ?? null,
+    entry_plan_mode: ws.entryPlanMode ?? null,
+    scoring_settings: ws.scoringSettings ? JSON.stringify(ws.scoringSettings) : null,
+    loaded_meet: ws.loadedMeet ? JSON.stringify(ws.loadedMeet) : null,
+    official_team_scores: ws.officialTeamScores ? JSON.stringify(ws.officialTeamScores) : null,
+    active_entry_ids: ws.activeEntryIds ? JSON.stringify(ws.activeEntryIds) : null,
+    history_sources: ws.historySources ? JSON.stringify(ws.historySources) : null,
+    sort_index: sortIndex,
+    owner_id: meta.ownerId ?? null,
+    team_id: meta.teamId ?? null,
+    updated_at: meta.updatedAt ?? Date.now(),
+    version: meta.version ?? 1
+  };
+}
+function insertResultsRows(workspaceId, results, gender) {
+  return results.map((r, i) => {
+    const rid = r.id || `${workspaceId}_${gender}_${i}`;
+    return { id: rid, workspace_id: workspaceId, gender, position: i, data: JSON.stringify(r) };
+  });
+}
+function insertWithIdRows(table, workspaceId, rows) {
+  return rows.map((row, i) => {
+    const rid = row.id || `${workspaceId}_${table}_${i}`;
+    return { id: rid, workspace_id: workspaceId, position: i, data: JSON.stringify(row) };
+  });
+}
+function insertPositionalRows(workspaceId, rows) {
+  return rows.map((row, i) => ({
+    workspace_id: workspaceId,
+    position: i,
+    data: JSON.stringify(row)
+  }));
+}
+
 // ../../packages/db/src/schema.ts
-var SCHEMA_VERSION = 1;
+var SCHEMA_VERSION = 2;
 var CREATE_TABLES_SQL = `
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
@@ -774,7 +850,11 @@ CREATE TABLE IF NOT EXISTS workspaces (
   official_team_scores TEXT,
   active_entry_ids     TEXT,
   history_sources      TEXT,
-  sort_index           INTEGER NOT NULL DEFAULT 0
+  sort_index           INTEGER NOT NULL DEFAULT 0,
+  owner_id             TEXT,
+  team_id              TEXT,
+  updated_at           INTEGER NOT NULL DEFAULT 0,
+  version              INTEGER NOT NULL DEFAULT 1
 );
 
 CREATE TABLE IF NOT EXISTS meet_results (
@@ -839,94 +919,106 @@ CREATE TABLE IF NOT EXISTS workspace_snapshots (
 );
 CREATE INDEX IF NOT EXISTS idx_workspace_snapshots_ws ON workspace_snapshots(workspace_id);
 `;
+var SQLITE_MIGRATIONS_V2 = [
+  "ALTER TABLE workspaces ADD COLUMN owner_id TEXT",
+  "ALTER TABLE workspaces ADD COLUMN team_id TEXT",
+  "ALTER TABLE workspaces ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0",
+  "ALTER TABLE workspaces ADD COLUMN version INTEGER NOT NULL DEFAULT 1"
+];
 
 // ../../packages/db/src/WorkspaceService.ts
-function parseJson(value, fallback) {
-  if (typeof value !== "string" || value.length === 0) return fallback;
-  try {
-    return JSON.parse(value);
-  } catch {
-    return fallback;
-  }
-}
 var WorkspaceService = class {
   db;
+  scope = {};
   constructor(dbPath) {
     fs2.mkdirSync(path2.dirname(dbPath), { recursive: true });
     this.db = new DatabaseSync(dbPath);
     this.db.exec(CREATE_TABLES_SQL);
+    for (const sql of SQLITE_MIGRATIONS_V2) {
+      try {
+        this.db.exec(sql);
+      } catch {
+      }
+    }
     this.db.prepare("INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)").run("schema_version", String(SCHEMA_VERSION));
+  }
+  setScope(scope) {
+    this.scope = scope;
   }
   close() {
     this.db.close();
   }
-  /** Number of workspaces currently stored (used to detect an empty DB). */
   count() {
-    const row = this.db.prepare("SELECT COUNT(*) AS n FROM workspaces").get();
+    const { where, params } = this.buildScopeWhere();
+    const row = this.db.prepare(`SELECT COUNT(*) AS n FROM workspaces ${where}`).get(
+      ...params
+    );
     return row?.n ?? 0;
   }
   listWorkspaces() {
-    const rows = this.db.prepare("SELECT id FROM workspaces ORDER BY sort_index ASC, created_at ASC").all();
+    const { where, params } = this.buildScopeWhere();
+    const rows = this.db.prepare(`SELECT id FROM workspaces ${where} ORDER BY sort_index ASC, created_at ASC`).all(...params);
     return rows.map((r) => this.getWorkspace(r.id)).filter((w) => w != null);
   }
   getWorkspace(id) {
-    const row = this.db.prepare("SELECT * FROM workspaces WHERE id = ?").get(id);
+    const clauses = ["id = ?"];
+    const params = [id];
+    if (this.scope.teamId) {
+      clauses.push("team_id = ?");
+      params.push(this.scope.teamId);
+    } else if (this.scope.ownerId) {
+      clauses.push("owner_id = ?");
+      params.push(this.scope.ownerId);
+    }
+    const row = this.db.prepare(`SELECT * FROM workspaces WHERE ${clauses.join(" AND ")}`).get(...params);
     if (!row) return void 0;
     const childData = (table) => {
       const rows = this.db.prepare(`SELECT data FROM ${table} WHERE workspace_id = ? ORDER BY position ASC`).all(id);
-      return rows.map((r) => parseJson(r.data, null)).filter((d) => d != null);
+      return rows.map((r) => {
+        try {
+          return JSON.parse(r.data);
+        } catch {
+          return null;
+        }
+      }).filter((d) => d != null);
     };
-    const allResults = childData("meet_results");
-    const menResults = allResults.filter((r) => r.gender !== "Women");
-    const womenResults = allResults.filter((r) => r.gender === "Women");
-    const workspace = {
-      id: String(row.id),
-      name: String(row.name ?? ""),
-      createdAt: Number(row.created_at ?? Date.now()),
-      menResults,
-      womenResults,
-      recruits: childData("recruits"),
-      deletedSwimmers: childData("deleted_swimmers"),
-      scorerRosterOverrides: childData("roster_overrides"),
-      meetEntryPlans: childData("meet_entry_plans"),
-      relayLegOverrides: childData("relay_leg_overrides"),
-      athleteHistory: childData("athlete_history"),
-      conference: row.conference != null ? String(row.conference) : void 0,
-      entryPlanMode: row.entry_plan_mode ?? void 0,
-      scoringSettings: parseJson(row.scoring_settings, void 0),
-      loadedMeet: parseJson(row.loaded_meet, void 0),
-      officialTeamScores: parseJson(
-        row.official_team_scores,
-        void 0
-      ),
-      activeEntryIds: parseJson(row.active_entry_ids, void 0),
-      historySources: parseJson(row.history_sources, void 0)
-    };
-    return workspace;
+    return assembleWorkspace(row, childData);
+  }
+  getWorkspaceMeta(id) {
+    const row = this.db.prepare("SELECT version, updated_at FROM workspaces WHERE id = ?").get(id);
+    if (!row) return void 0;
+    return { version: Number(row.version ?? 1), updatedAt: Number(row.updated_at ?? 0) };
   }
   createWorkspace(ws, sortIndex) {
-    this.writeWorkspace(ws, sortIndex ?? this.count());
+    this.writeWorkspace(ws, sortIndex ?? this.count(), { version: 1 });
     return this.getWorkspace(ws.id);
   }
-  updateWorkspace(id, patch) {
+  updateWorkspace(id, patch, expectedVersion) {
     const existing = this.getWorkspace(id);
     if (!existing) return void 0;
+    if (expectedVersion != null) {
+      const meta = this.getWorkspaceMeta(id);
+      if (meta && meta.version !== expectedVersion) {
+        const err = new Error("VERSION_CONFLICT");
+        err.code = "VERSION_CONFLICT";
+        throw err;
+      }
+    }
     const merged = { ...existing, ...patch, id };
     const sortRow = this.db.prepare("SELECT sort_index FROM workspaces WHERE id = ?").get(id);
-    this.writeWorkspace(merged, sortRow?.sort_index ?? this.count());
+    const currentVersion = this.getWorkspaceMeta(id)?.version ?? 1;
+    this.writeWorkspace(merged, sortRow?.sort_index ?? this.count(), { version: currentVersion + 1 });
     return this.getWorkspace(id);
   }
   deleteWorkspace(id) {
     this.db.prepare("DELETE FROM workspaces WHERE id = ?").run(id);
   }
-  /** Replace the entire dataset (used by the JSON → SQLite migration). */
   replaceAll(workspaces) {
     this.tx(() => {
       this.db.exec("DELETE FROM workspaces");
-      workspaces.forEach((ws, i) => this.writeWorkspaceUnsafe(ws, i));
+      workspaces.forEach((ws, i) => this.writeWorkspaceUnsafe(ws, i, { version: 1 }));
     });
   }
-  /** Full export for JSON backup / portability. */
   exportAll() {
     return this.listWorkspaces();
   }
@@ -948,9 +1040,25 @@ var WorkspaceService = class {
   restoreSnapshot(snapshotId) {
     const row = this.db.prepare("SELECT workspace_id, blob FROM workspace_snapshots WHERE id = ?").get(snapshotId);
     if (!row) return void 0;
-    const ws = parseJson(row.blob, null);
-    if (!ws) return void 0;
-    return this.updateWorkspace(row.workspace_id, ws);
+    try {
+      const ws = JSON.parse(row.blob);
+      return this.updateWorkspace(row.workspace_id, ws);
+    } catch {
+      return void 0;
+    }
+  }
+  buildScopeWhere() {
+    const clauses = [];
+    const params = [];
+    if (this.scope.teamId) {
+      clauses.push("team_id = ?");
+      params.push(this.scope.teamId);
+    } else if (this.scope.ownerId) {
+      clauses.push("owner_id = ?");
+      params.push(this.scope.ownerId);
+    }
+    const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+    return { where, params };
   }
   tx(fn) {
     this.db.exec("BEGIN");
@@ -962,85 +1070,527 @@ var WorkspaceService = class {
       throw err;
     }
   }
-  writeWorkspace(ws, sortIndex) {
-    this.tx(() => this.writeWorkspaceUnsafe(ws, sortIndex));
+  writeWorkspace(ws, sortIndex, meta) {
+    this.tx(() => this.writeWorkspaceUnsafe(ws, sortIndex, meta));
   }
-  /** Write without its own transaction (caller must provide one). */
-  writeWorkspaceUnsafe(ws, sortIndex) {
-    {
-      this.db.prepare(
-        `INSERT INTO workspaces
-            (id, name, created_at, conference, entry_plan_mode, scoring_settings,
-             loaded_meet, official_team_scores, active_entry_ids, history_sources, sort_index)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(id) DO UPDATE SET
-             name = excluded.name,
-             created_at = excluded.created_at,
-             conference = excluded.conference,
-             entry_plan_mode = excluded.entry_plan_mode,
-             scoring_settings = excluded.scoring_settings,
-             loaded_meet = excluded.loaded_meet,
-             official_team_scores = excluded.official_team_scores,
-             active_entry_ids = excluded.active_entry_ids,
-             history_sources = excluded.history_sources,
-             sort_index = excluded.sort_index`
-      ).run(
-        ws.id,
-        ws.name,
-        ws.createdAt ?? Date.now(),
-        ws.conference ?? null,
-        ws.entryPlanMode ?? null,
-        ws.scoringSettings ? JSON.stringify(ws.scoringSettings) : null,
-        ws.loadedMeet ? JSON.stringify(ws.loadedMeet) : null,
-        ws.officialTeamScores ? JSON.stringify(ws.officialTeamScores) : null,
-        ws.activeEntryIds ? JSON.stringify(ws.activeEntryIds) : null,
-        ws.historySources ? JSON.stringify(ws.historySources) : null,
-        sortIndex
-      );
-      for (const table of [
-        "meet_results",
-        "recruits",
-        "roster_overrides",
-        "meet_entry_plans",
-        "relay_leg_overrides",
-        "deleted_swimmers",
-        "athlete_history"
-      ]) {
-        this.db.prepare(`DELETE FROM ${table} WHERE workspace_id = ?`).run(ws.id);
-      }
-      this.insertResults(ws.id, ws.menResults ?? [], "Men");
-      this.insertResults(ws.id, ws.womenResults ?? [], "Women");
-      this.insertWithId("recruits", ws.id, ws.recruits ?? []);
-      this.insertWithId("meet_entry_plans", ws.id, ws.meetEntryPlans ?? []);
-      this.insertPositional("roster_overrides", ws.id, ws.scorerRosterOverrides ?? []);
-      this.insertPositional("relay_leg_overrides", ws.id, ws.relayLegOverrides ?? []);
-      this.insertPositional("deleted_swimmers", ws.id, ws.deletedSwimmers ?? []);
-      this.insertPositional("athlete_history", ws.id, ws.athleteHistory ?? []);
+  writeWorkspaceUnsafe(ws, sortIndex, meta) {
+    const vals = workspaceRowValues(ws, sortIndex, {
+      ownerId: this.scope.ownerId,
+      teamId: this.scope.teamId,
+      updatedAt: Date.now(),
+      version: meta.version
+    });
+    this.db.prepare(
+      `INSERT INTO workspaces
+          (id, name, created_at, conference, entry_plan_mode, scoring_settings,
+           loaded_meet, official_team_scores, active_entry_ids, history_sources, sort_index,
+           owner_id, team_id, updated_at, version)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name,
+           created_at = excluded.created_at,
+           conference = excluded.conference,
+           entry_plan_mode = excluded.entry_plan_mode,
+           scoring_settings = excluded.scoring_settings,
+           loaded_meet = excluded.loaded_meet,
+           official_team_scores = excluded.official_team_scores,
+           active_entry_ids = excluded.active_entry_ids,
+           history_sources = excluded.history_sources,
+           sort_index = excluded.sort_index,
+           owner_id = COALESCE(excluded.owner_id, owner_id),
+           team_id = COALESCE(excluded.team_id, team_id),
+           updated_at = excluded.updated_at,
+           version = excluded.version`
+    ).run(
+      vals.id,
+      vals.name,
+      vals.created_at,
+      vals.conference,
+      vals.entry_plan_mode,
+      vals.scoring_settings,
+      vals.loaded_meet,
+      vals.official_team_scores,
+      vals.active_entry_ids,
+      vals.history_sources,
+      vals.sort_index,
+      vals.owner_id,
+      vals.team_id,
+      vals.updated_at,
+      vals.version
+    );
+    for (const table of [
+      "meet_results",
+      "recruits",
+      "roster_overrides",
+      "meet_entry_plans",
+      "relay_leg_overrides",
+      "deleted_swimmers",
+      "athlete_history"
+    ]) {
+      this.db.prepare(`DELETE FROM ${table} WHERE workspace_id = ?`).run(ws.id);
     }
-  }
-  insertResults(workspaceId, results, gender) {
-    const stmt = this.db.prepare(
+    const insertResult = this.db.prepare(
       "INSERT INTO meet_results(id, workspace_id, gender, position, data) VALUES(?, ?, ?, ?, ?)"
     );
-    results.forEach((r, i) => {
-      const rid = r.id || `${workspaceId}_${gender}_${i}`;
-      stmt.run(rid, workspaceId, gender, i, JSON.stringify(r));
-    });
+    for (const row of insertResultsRows(ws.id, ws.menResults ?? [], "Men")) {
+      insertResult.run(row.id, row.workspace_id, row.gender, row.position, row.data);
+    }
+    for (const row of insertResultsRows(ws.id, ws.womenResults ?? [], "Women")) {
+      insertResult.run(row.id, row.workspace_id, row.gender, row.position, row.data);
+    }
+    const insertWithId = (table) => this.db.prepare(`INSERT INTO ${table}(id, workspace_id, position, data) VALUES(?, ?, ?, ?)`);
+    for (const row of insertWithIdRows("recruits", ws.id, ws.recruits ?? [])) {
+      insertWithId("recruits").run(row.id, row.workspace_id, row.position, row.data);
+    }
+    for (const row of insertWithIdRows("meet_entry_plans", ws.id, ws.meetEntryPlans ?? [])) {
+      insertWithId("meet_entry_plans").run(row.id, row.workspace_id, row.position, row.data);
+    }
+    const insertPos = (table) => this.db.prepare(`INSERT INTO ${table}(workspace_id, position, data) VALUES(?, ?, ?)`);
+    for (const row of insertPositionalRows(ws.id, ws.scorerRosterOverrides ?? [])) {
+      insertPos("roster_overrides").run(row.workspace_id, row.position, row.data);
+    }
+    for (const row of insertPositionalRows(ws.id, ws.relayLegOverrides ?? [])) {
+      insertPos("relay_leg_overrides").run(row.workspace_id, row.position, row.data);
+    }
+    for (const row of insertPositionalRows(ws.id, ws.deletedSwimmers ?? [])) {
+      insertPos("deleted_swimmers").run(row.workspace_id, row.position, row.data);
+    }
+    for (const row of insertPositionalRows(ws.id, ws.athleteHistory ?? [])) {
+      insertPos("athlete_history").run(row.workspace_id, row.position, row.data);
+    }
   }
-  insertWithId(table, workspaceId, rows) {
-    const stmt = this.db.prepare(
-      `INSERT INTO ${table}(id, workspace_id, position, data) VALUES(?, ?, ?, ?)`
-    );
-    rows.forEach((row, i) => {
-      const rid = row.id || `${workspaceId}_${table}_${i}`;
-      stmt.run(rid, workspaceId, i, JSON.stringify(row));
-    });
+};
+
+// ../../packages/db/src/PgWorkspaceService.ts
+import pg from "pg";
+
+// ../../packages/db/src/pgSchema.ts
+var PG_SCHEMA_VERSION = 2;
+var CREATE_PG_TABLES_SQL = `
+CREATE TABLE IF NOT EXISTS meta (
+  key   TEXT PRIMARY KEY,
+  value TEXT
+);
+
+CREATE TABLE IF NOT EXISTS users (
+  id            TEXT PRIMARY KEY,
+  email         TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  display_name  TEXT,
+  created_at    BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS teams (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL,
+  owner_id   TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS team_members (
+  team_id    TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role       TEXT NOT NULL DEFAULT 'member',
+  joined_at  BIGINT NOT NULL,
+  PRIMARY KEY (team_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id         TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at BIGINT NOT NULL,
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+
+CREATE TABLE IF NOT EXISTS workspaces (
+  id                   TEXT PRIMARY KEY,
+  name                 TEXT NOT NULL,
+  created_at           BIGINT NOT NULL,
+  conference           TEXT,
+  entry_plan_mode      TEXT,
+  scoring_settings     TEXT,
+  loaded_meet          TEXT,
+  official_team_scores TEXT,
+  active_entry_ids     TEXT,
+  history_sources      TEXT,
+  sort_index           INTEGER NOT NULL DEFAULT 0,
+  owner_id             TEXT REFERENCES users(id) ON DELETE SET NULL,
+  team_id              TEXT REFERENCES teams(id) ON DELETE SET NULL,
+  updated_at           BIGINT NOT NULL DEFAULT 0,
+  version              INTEGER NOT NULL DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_workspaces_team ON workspaces(team_id);
+CREATE INDEX IF NOT EXISTS idx_workspaces_owner ON workspaces(owner_id);
+
+CREATE TABLE IF NOT EXISTS meet_results (
+  id           TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  gender       TEXT NOT NULL,
+  position     INTEGER NOT NULL DEFAULT 0,
+  data         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_meet_results_ws ON meet_results(workspace_id);
+
+CREATE TABLE IF NOT EXISTS recruits (
+  id           TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  position     INTEGER NOT NULL DEFAULT 0,
+  data         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_recruits_ws ON recruits(workspace_id);
+
+CREATE TABLE IF NOT EXISTS roster_overrides (
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  position     INTEGER NOT NULL DEFAULT 0,
+  data         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_roster_overrides_ws ON roster_overrides(workspace_id);
+
+CREATE TABLE IF NOT EXISTS meet_entry_plans (
+  id           TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  position     INTEGER NOT NULL DEFAULT 0,
+  data         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_meet_entry_plans_ws ON meet_entry_plans(workspace_id);
+
+CREATE TABLE IF NOT EXISTS relay_leg_overrides (
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  position     INTEGER NOT NULL DEFAULT 0,
+  data         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_relay_leg_overrides_ws ON relay_leg_overrides(workspace_id);
+
+CREATE TABLE IF NOT EXISTS deleted_swimmers (
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  position     INTEGER NOT NULL DEFAULT 0,
+  data         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_deleted_swimmers_ws ON deleted_swimmers(workspace_id);
+
+CREATE TABLE IF NOT EXISTS athlete_history (
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  position     INTEGER NOT NULL DEFAULT 0,
+  data         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_athlete_history_ws ON athlete_history(workspace_id);
+
+CREATE TABLE IF NOT EXISTS workspace_snapshots (
+  id           TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  created_at   BIGINT NOT NULL,
+  label        TEXT,
+  blob         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_workspace_snapshots_ws ON workspace_snapshots(workspace_id);
+
+CREATE TABLE IF NOT EXISTS share_links (
+  id           TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  team_id      TEXT REFERENCES teams(id) ON DELETE CASCADE,
+  created_by   TEXT REFERENCES users(id) ON DELETE SET NULL,
+  label        TEXT,
+  token        TEXT NOT NULL UNIQUE,
+  created_at   BIGINT NOT NULL,
+  expires_at   BIGINT
+);
+CREATE INDEX IF NOT EXISTS idx_share_links_token ON share_links(token);
+`;
+
+// ../../packages/db/src/PgWorkspaceService.ts
+var { Pool } = pg;
+var PgWorkspaceService = class {
+  pool;
+  scope;
+  constructor(options) {
+    this.pool = new Pool({ connectionString: options.connectionString });
+    this.scope = options.scope ?? {};
   }
-  insertPositional(table, workspaceId, rows) {
-    const stmt = this.db.prepare(
-      `INSERT INTO ${table}(workspace_id, position, data) VALUES(?, ?, ?)`
+  async init() {
+    const client = await this.pool.connect();
+    try {
+      await client.query(CREATE_PG_TABLES_SQL);
+      await client.query(
+        "INSERT INTO meta(key, value) VALUES($1, $2) ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value",
+        ["schema_version", String(PG_SCHEMA_VERSION)]
+      );
+    } finally {
+      client.release();
+    }
+  }
+  async close() {
+    await this.pool.end();
+  }
+  setScope(scope) {
+    this.scope = scope;
+  }
+  async count() {
+    const { where, params } = this.scopeFilter();
+    const res = await this.pool.query(`SELECT COUNT(*)::int AS n FROM workspaces ${where}`, params);
+    return res.rows[0]?.n ?? 0;
+  }
+  async listWorkspaces() {
+    const { where, params } = this.scopeFilter();
+    const res = await this.pool.query(
+      `SELECT id FROM workspaces ${where} ORDER BY sort_index ASC, created_at ASC`,
+      params
     );
-    rows.forEach((row, i) => stmt.run(workspaceId, i, JSON.stringify(row)));
+    const out = [];
+    for (const row of res.rows) {
+      const ws = await this.getWorkspace(row.id);
+      if (ws) out.push(ws);
+    }
+    return out;
+  }
+  async getWorkspace(id) {
+    const { where, params } = this.scopeFilter("id = $1", [id]);
+    const res = await this.pool.query(`SELECT * FROM workspaces ${where}`, params);
+    const row = res.rows[0];
+    if (!row) return void 0;
+    const childData = async (table) => {
+      const childRes = await this.pool.query(
+        `SELECT data FROM ${table} WHERE workspace_id = $1 ORDER BY position ASC`,
+        [id]
+      );
+      return childRes.rows.map((r) => parseJson(r.data, null)).filter((d) => d != null);
+    };
+    const tables = [
+      "meet_results",
+      "recruits",
+      "roster_overrides",
+      "meet_entry_plans",
+      "relay_leg_overrides",
+      "deleted_swimmers",
+      "athlete_history"
+    ];
+    const dataMap = {};
+    for (const t of tables) dataMap[t] = await childData(t);
+    return assembleWorkspace(row, (table) => dataMap[table] ?? []);
+  }
+  async getWorkspaceMeta(id) {
+    const res = await this.pool.query(
+      "SELECT version, updated_at FROM workspaces WHERE id = $1",
+      [id]
+    );
+    const row = res.rows[0];
+    if (!row) return void 0;
+    return { version: Number(row.version), updatedAt: Number(row.updated_at) };
+  }
+  async createWorkspace(ws, sortIndex) {
+    await this.writeWorkspace(ws, sortIndex ?? await this.count(), { bumpVersion: false });
+    return await this.getWorkspace(ws.id);
+  }
+  async updateWorkspace(id, patch, expectedVersion) {
+    const existing = await this.getWorkspace(id);
+    if (!existing) return void 0;
+    if (expectedVersion != null) {
+      const meta = await this.getWorkspaceMeta(id);
+      if (meta && meta.version !== expectedVersion) {
+        const err = new Error("VERSION_CONFLICT");
+        err.code = "VERSION_CONFLICT";
+        throw err;
+      }
+    }
+    const merged = { ...existing, ...patch, id };
+    const sortRes = await this.pool.query("SELECT sort_index FROM workspaces WHERE id = $1", [id]);
+    const sortIndex = Number(sortRes.rows[0]?.sort_index ?? 0);
+    const currentVersion = (await this.getWorkspaceMeta(id))?.version ?? 1;
+    await this.writeWorkspace(merged, sortIndex, {
+      bumpVersion: true,
+      version: currentVersion + 1
+    });
+    return this.getWorkspace(id);
+  }
+  async deleteWorkspace(id) {
+    await this.pool.query("DELETE FROM workspaces WHERE id = $1", [id]);
+  }
+  async replaceAll(workspaces) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query("DELETE FROM workspaces");
+      for (let i = 0; i < workspaces.length; i++) {
+        await this.writeWorkspaceUnsafe(client, workspaces[i], i, { bumpVersion: false });
+      }
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+  async exportAll() {
+    return this.listWorkspaces();
+  }
+  async createSnapshot(workspaceId, label) {
+    const ws = await this.getWorkspace(workspaceId);
+    if (!ws) return void 0;
+    const id = `snap_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
+    await this.pool.query(
+      "INSERT INTO workspace_snapshots(id, workspace_id, created_at, label, blob) VALUES($1, $2, $3, $4, $5)",
+      [id, workspaceId, Date.now(), label, JSON.stringify(ws)]
+    );
+    return { id };
+  }
+  async listSnapshots(workspaceId) {
+    const res = await this.pool.query(
+      "SELECT id, created_at, label FROM workspace_snapshots WHERE workspace_id = $1 ORDER BY created_at DESC",
+      [workspaceId]
+    );
+    return res.rows.map((r) => ({
+      id: r.id,
+      createdAt: Number(r.created_at),
+      label: r.label ?? ""
+    }));
+  }
+  async restoreSnapshot(snapshotId) {
+    const res = await this.pool.query(
+      "SELECT workspace_id, blob FROM workspace_snapshots WHERE id = $1",
+      [snapshotId]
+    );
+    const row = res.rows[0];
+    if (!row) return void 0;
+    const ws = parseJson(row.blob, null);
+    if (!ws) return void 0;
+    return this.updateWorkspace(row.workspace_id, ws);
+  }
+  scopeFilter(baseClause, baseParams = []) {
+    const clauses = [];
+    const params = [...baseParams];
+    if (baseClause) clauses.push(baseClause);
+    if (this.scope.teamId) {
+      params.push(this.scope.teamId);
+      clauses.push(`team_id = $${params.length}`);
+    } else if (this.scope.ownerId) {
+      params.push(this.scope.ownerId);
+      clauses.push(`owner_id = $${params.length}`);
+    }
+    const where = clauses.length > 0 ? `WHERE ${clauses.join(" AND ")}` : "";
+    return { where, params };
+  }
+  async writeWorkspace(ws, sortIndex, opts) {
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await this.writeWorkspaceUnsafe(client, ws, sortIndex, opts);
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+  }
+  async writeWorkspaceUnsafe(client, ws, sortIndex, opts) {
+    const now = Date.now();
+    const meta = {
+      ownerId: this.scope.ownerId,
+      teamId: this.scope.teamId,
+      updatedAt: now,
+      version: opts.version ?? 1
+    };
+    const vals = workspaceRowValues(ws, sortIndex, meta);
+    await client.query(
+      `INSERT INTO workspaces
+        (id, name, created_at, conference, entry_plan_mode, scoring_settings,
+         loaded_meet, official_team_scores, active_entry_ids, history_sources, sort_index,
+         owner_id, team_id, updated_at, version)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+       ON CONFLICT(id) DO UPDATE SET
+         name = EXCLUDED.name,
+         created_at = EXCLUDED.created_at,
+         conference = EXCLUDED.conference,
+         entry_plan_mode = EXCLUDED.entry_plan_mode,
+         scoring_settings = EXCLUDED.scoring_settings,
+         loaded_meet = EXCLUDED.loaded_meet,
+         official_team_scores = EXCLUDED.official_team_scores,
+         active_entry_ids = EXCLUDED.active_entry_ids,
+         history_sources = EXCLUDED.history_sources,
+         sort_index = EXCLUDED.sort_index,
+         owner_id = COALESCE(EXCLUDED.owner_id, workspaces.owner_id),
+         team_id = COALESCE(EXCLUDED.team_id, workspaces.team_id),
+         updated_at = EXCLUDED.updated_at,
+         version = EXCLUDED.version`,
+      [
+        vals.id,
+        vals.name,
+        vals.created_at,
+        vals.conference,
+        vals.entry_plan_mode,
+        vals.scoring_settings,
+        vals.loaded_meet,
+        vals.official_team_scores,
+        vals.active_entry_ids,
+        vals.history_sources,
+        vals.sort_index,
+        vals.owner_id,
+        vals.team_id,
+        vals.updated_at,
+        vals.version
+      ]
+    );
+    for (const table of [
+      "meet_results",
+      "recruits",
+      "roster_overrides",
+      "meet_entry_plans",
+      "relay_leg_overrides",
+      "deleted_swimmers",
+      "athlete_history"
+    ]) {
+      await client.query(`DELETE FROM ${table} WHERE workspace_id = $1`, [ws.id]);
+    }
+    for (const row of insertResultsRows(ws.id, ws.menResults ?? [], "Men")) {
+      await client.query(
+        "INSERT INTO meet_results(id, workspace_id, gender, position, data) VALUES($1,$2,$3,$4,$5)",
+        [row.id, row.workspace_id, row.gender, row.position, row.data]
+      );
+    }
+    for (const row of insertResultsRows(ws.id, ws.womenResults ?? [], "Women")) {
+      await client.query(
+        "INSERT INTO meet_results(id, workspace_id, gender, position, data) VALUES($1,$2,$3,$4,$5)",
+        [row.id, row.workspace_id, row.gender, row.position, row.data]
+      );
+    }
+    for (const row of insertWithIdRows("recruits", ws.id, ws.recruits ?? [])) {
+      await client.query(
+        "INSERT INTO recruits(id, workspace_id, position, data) VALUES($1,$2,$3,$4)",
+        [row.id, row.workspace_id, row.position, row.data]
+      );
+    }
+    for (const row of insertWithIdRows("meet_entry_plans", ws.id, ws.meetEntryPlans ?? [])) {
+      await client.query(
+        "INSERT INTO meet_entry_plans(id, workspace_id, position, data) VALUES($1,$2,$3,$4)",
+        [row.id, row.workspace_id, row.position, row.data]
+      );
+    }
+    for (const row of insertPositionalRows(ws.id, ws.scorerRosterOverrides ?? [])) {
+      await client.query(
+        "INSERT INTO roster_overrides(workspace_id, position, data) VALUES($1,$2,$3)",
+        [row.workspace_id, row.position, row.data]
+      );
+    }
+    for (const row of insertPositionalRows(ws.id, ws.relayLegOverrides ?? [])) {
+      await client.query(
+        "INSERT INTO relay_leg_overrides(workspace_id, position, data) VALUES($1,$2,$3)",
+        [row.workspace_id, row.position, row.data]
+      );
+    }
+    for (const row of insertPositionalRows(ws.id, ws.deletedSwimmers ?? [])) {
+      await client.query(
+        "INSERT INTO deleted_swimmers(workspace_id, position, data) VALUES($1,$2,$3)",
+        [row.workspace_id, row.position, row.data]
+      );
+    }
+    for (const row of insertPositionalRows(ws.id, ws.athleteHistory ?? [])) {
+      await client.query(
+        "INSERT INTO athlete_history(workspace_id, position, data) VALUES($1,$2,$3)",
+        [row.workspace_id, row.position, row.data]
+      );
+    }
   }
 };
 
@@ -1085,7 +1635,6 @@ var JsonRepo = class {
   backup(label = "manual") {
     return this.store.backup(label);
   }
-  // Snapshots are SQLite-only; JSON repo returns no-ops.
   async snapshot() {
     return void 0;
   }
@@ -1101,13 +1650,29 @@ var SqliteRepo = class {
   service;
   backupDir;
   seed;
-  constructor(dbPath, backupDir, seed) {
+  jsonSourcePath;
+  constructor(dbPath, backupDir, seed, jsonSourcePath) {
     this.service = new WorkspaceService(dbPath);
     this.backupDir = backupDir;
     this.seed = seed;
+    this.jsonSourcePath = jsonSourcePath;
+  }
+  setScope(scope) {
+    this.service.setScope(scope);
   }
   async init() {
     if (this.service.count() === 0) {
+      if (this.jsonSourcePath) {
+        try {
+          const raw = await fsp2.readFile(this.jsonSourcePath, "utf-8");
+          const workspaces = JSON.parse(raw);
+          if (Array.isArray(workspaces) && workspaces.length > 0) {
+            this.service.replaceAll(workspaces);
+            return;
+          }
+        } catch {
+        }
+      }
       for (const ws of this.seed()) this.service.createWorkspace(ws);
     }
   }
@@ -1117,8 +1682,8 @@ var SqliteRepo = class {
   async create(ws) {
     return this.service.createWorkspace(ws);
   }
-  async update(id, patch) {
-    return this.service.updateWorkspace(id, patch);
+  async update(id, patch, expectedVersion) {
+    return this.service.updateWorkspace(id, patch, expectedVersion);
   }
   async remove(id) {
     this.service.deleteWorkspace(id);
@@ -1138,6 +1703,372 @@ var SqliteRepo = class {
     return this.service.restoreSnapshot(snapshotId);
   }
 };
+var PgRepo = class {
+  kind = "postgres";
+  service;
+  backupDir;
+  constructor(connectionString, backupDir, scope) {
+    this.service = new PgWorkspaceService({ connectionString, scope });
+    this.backupDir = backupDir;
+  }
+  setScope(scope) {
+    this.service.setScope(scope);
+  }
+  async init() {
+    await this.service.init();
+  }
+  async list() {
+    return this.service.listWorkspaces();
+  }
+  async create(ws) {
+    return this.service.createWorkspace(ws);
+  }
+  async update(id, patch, expectedVersion) {
+    return this.service.updateWorkspace(id, patch, expectedVersion);
+  }
+  async remove(id) {
+    await this.service.deleteWorkspace(id);
+  }
+  async backup(label = "manual") {
+    return writeJsonBackup(this.backupDir, await this.service.exportAll(), label);
+  }
+  async snapshot(id, label) {
+    const res = await this.service.createSnapshot(id, label);
+    if (!res) return void 0;
+    return { id: res.id, createdAt: Date.now(), label };
+  }
+  async listSnapshots(id) {
+    return this.service.listSnapshots(id);
+  }
+  async restoreSnapshot(snapshotId) {
+    return this.service.restoreSnapshot(snapshotId);
+  }
+};
+
+// lib/authMiddleware.ts
+var COOKIE_NAME = "omni_session";
+function getSessionToken(req) {
+  const header = req.headers.authorization;
+  if (header?.startsWith("Bearer ")) return header.slice(7);
+  const cookie = req.headers.cookie;
+  if (!cookie) return void 0;
+  const match = cookie.match(new RegExp(`${COOKIE_NAME}=([^;]+)`));
+  return match?.[1];
+}
+function setSessionCookie(res, token, expiresAt) {
+  const maxAge = Math.max(0, expiresAt - Date.now());
+  res.setHeader(
+    "Set-Cookie",
+    `${COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${Math.floor(maxAge / 1e3)}`
+  );
+}
+function clearSessionCookie(res) {
+  res.setHeader("Set-Cookie", `${COOKIE_NAME}=; Path=/; HttpOnly; Max-Age=0`);
+}
+function createAuthMiddleware(auth, requireAuth) {
+  return async (req, res, next) => {
+    if (!auth) {
+      if (requireAuth) {
+        return res.status(503).json({ error: "Auth not configured (requires OMNI_DB=postgres + DATABASE_URL)" });
+      }
+      return next();
+    }
+    const token = getSessionToken(req);
+    if (!token) {
+      if (requireAuth) return res.status(401).json({ error: "Authentication required" });
+      return next();
+    }
+    const user = await auth.validateSession(token);
+    if (!user) {
+      if (requireAuth) return res.status(401).json({ error: "Invalid or expired session" });
+      return next();
+    }
+    req.user = user;
+    req.sessionToken = token;
+    next();
+  };
+}
+
+// ../../packages/db/src/AuthService.ts
+import crypto from "node:crypto";
+import bcrypt from "bcryptjs";
+import pg2 from "pg";
+function uuidv4() {
+  return crypto.randomUUID();
+}
+var { Pool: Pool2 } = pg2;
+var SESSION_TTL_MS = 30 * 24 * 60 * 60 * 1e3;
+function hashToken(token) {
+  return crypto.createHash("sha256").update(token).digest("hex");
+}
+var AuthService = class {
+  pool;
+  constructor(connectionString) {
+    this.pool = new Pool2({ connectionString });
+  }
+  async close() {
+    await this.pool.end();
+  }
+  async register(email, password, displayName) {
+    const normalized = email.trim().toLowerCase();
+    const existing = await this.pool.query("SELECT id FROM users WHERE email = $1", [normalized]);
+    if (existing.rows.length > 0) {
+      throw new Error("EMAIL_EXISTS");
+    }
+    const userId = uuidv4();
+    const teamId = uuidv4();
+    const passwordHash = await bcrypt.hash(password, 10);
+    const now = Date.now();
+    const client = await this.pool.connect();
+    try {
+      await client.query("BEGIN");
+      await client.query(
+        "INSERT INTO users(id, email, password_hash, display_name, created_at) VALUES($1,$2,$3,$4,$5)",
+        [userId, normalized, passwordHash, displayName ?? normalized.split("@")[0], now]
+      );
+      await client.query(
+        "INSERT INTO teams(id, name, owner_id, created_at) VALUES($1,$2,$3,$4)",
+        [teamId, `${displayName ?? "My"} Team`, userId, now]
+      );
+      await client.query(
+        "INSERT INTO team_members(team_id, user_id, role, joined_at) VALUES($1,$2,$3,$4)",
+        [teamId, userId, "owner", now]
+      );
+      await client.query("COMMIT");
+    } catch (err) {
+      await client.query("ROLLBACK");
+      throw err;
+    } finally {
+      client.release();
+    }
+    return this.createSession(userId, teamId);
+  }
+  async login(email, password) {
+    const normalized = email.trim().toLowerCase();
+    const res = await this.pool.query(
+      "SELECT id, password_hash, display_name FROM users WHERE email = $1",
+      [normalized]
+    );
+    const row = res.rows[0];
+    if (!row) throw new Error("INVALID_CREDENTIALS");
+    const ok = await bcrypt.compare(password, row.password_hash);
+    if (!ok) throw new Error("INVALID_CREDENTIALS");
+    const teamRes = await this.pool.query(
+      "SELECT team_id FROM team_members WHERE user_id = $1 LIMIT 1",
+      [row.id]
+    );
+    const teamId = teamRes.rows[0]?.team_id;
+    return this.createSession(row.id, teamId);
+  }
+  async validateSession(token) {
+    const tokenHash = hashToken(token);
+    const res = await this.pool.query(
+      `SELECT s.user_id, s.expires_at, u.email, u.display_name
+       FROM sessions s JOIN users u ON u.id = s.user_id
+       WHERE s.token_hash = $1`,
+      [tokenHash]
+    );
+    const row = res.rows[0];
+    if (!row) return null;
+    if (Number(row.expires_at) < Date.now()) {
+      await this.pool.query("DELETE FROM sessions WHERE token_hash = $1", [tokenHash]);
+      return null;
+    }
+    const teamRes = await this.pool.query(
+      "SELECT team_id FROM team_members WHERE user_id = $1 LIMIT 1",
+      [row.user_id]
+    );
+    return {
+      id: row.user_id,
+      email: row.email,
+      displayName: row.display_name ?? "",
+      teamId: teamRes.rows[0]?.team_id
+    };
+  }
+  async logout(token) {
+    await this.pool.query("DELETE FROM sessions WHERE token_hash = $1", [hashToken(token)]);
+  }
+  async inviteToTeam(teamId, inviterUserId, email) {
+    const memberCheck = await this.pool.query(
+      "SELECT role FROM team_members WHERE team_id = $1 AND user_id = $2",
+      [teamId, inviterUserId]
+    );
+    if (!memberCheck.rows[0]) throw new Error("FORBIDDEN");
+    const userRes = await this.pool.query("SELECT id FROM users WHERE email = $1", [
+      email.trim().toLowerCase()
+    ]);
+    const userId = userRes.rows[0]?.id;
+    if (!userId) throw new Error("USER_NOT_FOUND");
+    await this.pool.query(
+      `INSERT INTO team_members(team_id, user_id, role, joined_at) VALUES($1,$2,$3,$4)
+       ON CONFLICT DO NOTHING`,
+      [teamId, userId, "member", Date.now()]
+    );
+  }
+  async createSession(userId, teamId) {
+    const token = crypto.randomBytes(32).toString("hex");
+    const sessionId = uuidv4();
+    const expiresAt = Date.now() + SESSION_TTL_MS;
+    await this.pool.query(
+      "INSERT INTO sessions(id, user_id, token_hash, expires_at, created_at) VALUES($1,$2,$3,$4,$5)",
+      [sessionId, userId, hashToken(token), expiresAt, Date.now()]
+    );
+    const userRes = await this.pool.query(
+      "SELECT email, display_name FROM users WHERE id = $1",
+      [userId]
+    );
+    const u = userRes.rows[0];
+    return {
+      token,
+      expiresAt,
+      user: {
+        id: userId,
+        email: u.email,
+        displayName: u.display_name ?? "",
+        teamId
+      }
+    };
+  }
+};
+var ShareLinkService = class {
+  pool;
+  constructor(connectionString) {
+    this.pool = new Pool2({ connectionString });
+  }
+  async createLink(workspaceId, createdBy, teamId, label, ttlMs) {
+    const id = uuidv4();
+    const token = crypto.randomBytes(24).toString("hex");
+    const expiresAt = ttlMs ? Date.now() + ttlMs : null;
+    await this.pool.query(
+      "INSERT INTO share_links(id, workspace_id, team_id, created_by, label, token, created_at, expires_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8)",
+      [id, workspaceId, teamId ?? null, createdBy, label ?? "Report", token, Date.now(), expiresAt]
+    );
+    return { id, token, url: `/share/${token}` };
+  }
+  async resolveToken(token) {
+    const res = await this.pool.query(
+      "SELECT workspace_id, label, expires_at FROM share_links WHERE token = $1",
+      [token]
+    );
+    const row = res.rows[0];
+    if (!row) return null;
+    if (row.expires_at && Number(row.expires_at) < Date.now()) return null;
+    return { workspaceId: row.workspace_id, label: row.label ?? "Report" };
+  }
+};
+
+// ../../packages/core/src/lib/seasonAnalytics.ts
+function parseTimeSeconds(t) {
+  const parts = t.trim().split(":");
+  if (parts.length === 2) {
+    return parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
+  }
+  return parseFloat(t) || Infinity;
+}
+function buildSeasonTrends(workspaces) {
+  const swimmerMap = /* @__PURE__ */ new Map();
+  for (const ws of workspaces) {
+    const meetLabel = ws.loadedMeet?.meetLabel ?? ws.name;
+    for (const r of [...ws.menResults ?? [], ...ws.womenResults ?? []]) {
+      if (r.isRelay || !r.name || !r.event || typeof r.time !== "string") continue;
+      const key = `${r.name.toLowerCase()}::${r.event}`;
+      const existing = swimmerMap.get(key);
+      const entry = { label: meetLabel, time: r.time };
+      if (!existing) {
+        swimmerMap.set(key, {
+          name: r.name,
+          event: r.event,
+          bestTime: r.time,
+          meetCount: 1,
+          progression: [entry]
+        });
+      } else {
+        existing.meetCount += 1;
+        existing.progression.push(entry);
+        if (parseTimeSeconds(r.time) < parseTimeSeconds(existing.bestTime)) {
+          existing.bestTime = r.time;
+        }
+      }
+    }
+    for (const h of ws.athleteHistory ?? []) {
+      if (!h.name || !h.event || !h.time) continue;
+      const key = `${h.name.toLowerCase()}::${h.event}`;
+      const existing = swimmerMap.get(key);
+      const entry = { label: "history", time: h.time };
+      if (!existing) {
+        swimmerMap.set(key, {
+          name: h.name,
+          event: h.event,
+          bestTime: h.time,
+          meetCount: 1,
+          progression: [entry]
+        });
+      } else {
+        existing.meetCount += 1;
+        existing.progression.push(entry);
+        if (parseTimeSeconds(h.time) < parseTimeSeconds(existing.bestTime)) {
+          existing.bestTime = h.time;
+        }
+      }
+    }
+  }
+  const teamScoreTrends = workspaces.filter((ws) => ws.officialTeamScores || (ws.menResults?.length ?? 0) > 0).map((ws) => {
+    const menTotal = Object.values(ws.officialTeamScores?.men ?? {}).reduce((a, b) => a + b, 0);
+    const womenTotal = Object.values(ws.officialTeamScores?.women ?? {}).reduce((a, b) => a + b, 0);
+    return {
+      meetLabel: ws.loadedMeet?.meetLabel ?? ws.name,
+      menTotal: menTotal || (ws.menResults ?? []).reduce((s, r) => s + (Number(r.points) || 0), 0),
+      womenTotal: womenTotal || (ws.womenResults ?? []).reduce((s, r) => s + (Number(r.points) || 0), 0)
+    };
+  });
+  const swimmerTrends = [...swimmerMap.values()].sort(
+    (a, b) => a.name.localeCompare(b.name)
+  );
+  return { swimmerTrends, teamScoreTrends };
+}
+
+// ../../packages/core/src/lib/reportBuilder.ts
+function esc(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function buildMeetReportHtml(workspace) {
+  const trends = buildSeasonTrends([workspace]);
+  const menCount = workspace.menResults?.length ?? 0;
+  const womenCount = workspace.womenResults?.length ?? 0;
+  const generated = (/* @__PURE__ */ new Date()).toLocaleString();
+  const swimmerRows = trends.swimmerTrends.slice(0, 50).map(
+    (t) => `<tr><td>${esc(t.name)}</td><td>${esc(t.event)}</td><td class="mono">${esc(t.bestTime)}</td><td>${t.meetCount}</td></tr>`
+  ).join("");
+  return `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>${esc(workspace.name)} \u2014 Meet Report</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; color: #111; }
+    h1 { font-size: 1.5rem; margin-bottom: 0.25rem; }
+    .meta { color: #666; font-size: 0.875rem; margin-bottom: 1.5rem; }
+    table { width: 100%; border-collapse: collapse; font-size: 0.875rem; }
+    th, td { border: 1px solid #ddd; padding: 0.5rem 0.75rem; text-align: left; }
+    th { background: #f4f4f5; }
+    .mono { font-family: ui-monospace, monospace; }
+    @media print { body { margin: 0; } }
+  </style>
+</head>
+<body>
+  <h1>${esc(workspace.name)}</h1>
+  <p class="meta">Omni Swim Suite \xB7 Generated ${esc(generated)} \xB7 ${menCount} men&apos;s + ${womenCount} women&apos;s results</p>
+  ${workspace.conference ? `<p><strong>Conference:</strong> ${esc(workspace.conference)}</p>` : ""}
+  ${workspace.loadedMeet?.meetLabel ? `<p><strong>Meet:</strong> ${esc(workspace.loadedMeet.meetLabel)}</p>` : ""}
+  <h2>Top swimmer trends</h2>
+  <table>
+    <thead><tr><th>Swimmer</th><th>Event</th><th>Best</th><th>Data points</th></tr></thead>
+    <tbody>${swimmerRows || '<tr><td colspan="4">No trend data</td></tr>'}</tbody>
+  </table>
+  <p class="meta" style="margin-top:2rem">Print this page (Ctrl+P) to save as PDF.</p>
+</body>
+</html>`;
+}
 
 // server.ts
 var PORT = 3e3;
@@ -1148,7 +2079,9 @@ var DATA_DIR = path4.join(PROJECT_ROOT, "data");
 var MEETS_FILE = path4.join(DATA_DIR, "meets.json");
 var DB_FILE = path4.join(DATA_DIR, "omniswim.db");
 var BACKUP_DIR = path4.join(DATA_DIR, "backups");
-var STORAGE_BACKEND = (process.env.OMNI_DB ?? "json").toLowerCase();
+var STORAGE_BACKEND = (process.env.OMNI_DB ?? "sqlite").toLowerCase();
+var DATABASE_URL = process.env.DATABASE_URL ?? "";
+var AUTH_REQUIRED = process.env.OMNI_AUTH_REQUIRED === "true" || STORAGE_BACKEND === "postgres";
 var SCORING_PRESETS_DIR = path4.join(DATA_DIR, "scoring_presets");
 var CUTLINES_DIR = path4.join(DATA_DIR, "cutlines");
 var BUILTIN_CUTLINE_VERSION = "2025-2026";
@@ -1227,20 +2160,44 @@ async function runPythonScript(scriptPath, args, stdin) {
     }
   });
 }
+function venvPythonPath(venvPath) {
+  return process.platform === "win32" ? path4.join(venvPath, "Scripts", "python.exe") : path4.join(venvPath, "bin", "python");
+}
+function ensurePythonVenv() {
+  const pythonCmd = process.platform === "win32" ? "python" : "python3";
+  const venvPath = path4.join(PROJECT_ROOT, "venv");
+  const createVenv = () => {
+    execSync(`${pythonCmd} -m venv venv`, { stdio: "ignore", cwd: PROJECT_ROOT });
+  };
+  const venvPythonUsable = (interpreter) => {
+    try {
+      execSync(`"${interpreter}" -c "import sys"`, { stdio: "ignore", cwd: PROJECT_ROOT });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+  if (!fs3.existsSync(venvPath)) {
+    createVenv();
+  }
+  let venvPython = venvPythonPath(venvPath);
+  if (!venvPythonUsable(venvPython)) {
+    fs3.rmSync(venvPath, { recursive: true, force: true });
+    createVenv();
+    venvPython = venvPythonPath(venvPath);
+    if (!venvPythonUsable(venvPython)) {
+      throw new Error("Python venv could not be created or repaired");
+    }
+  }
+  try {
+    execSync(`"${venvPython}" -c "import pdfplumber"`, { stdio: "ignore", cwd: PROJECT_ROOT });
+  } catch {
+    execSync(`"${venvPython}" -m pip install pdfplumber`, { stdio: "inherit", cwd: PROJECT_ROOT });
+  }
+}
 async function startServer() {
   try {
-    const pythonCmd = process.platform === "win32" ? "python" : "python3";
-    const venvPath = path4.join(PROJECT_ROOT, "venv");
-    if (!fs3.existsSync(venvPath)) {
-      execSync(`${pythonCmd} -m venv venv`, { stdio: "ignore", cwd: PROJECT_ROOT });
-    }
-    const venvPython = process.platform === "win32" ? path4.join(venvPath, "Scripts", "python.exe") : path4.join(venvPath, "bin", "python");
-    try {
-      execSync(`"${venvPython}" -c "import pdfplumber"`, { stdio: "ignore", cwd: PROJECT_ROOT });
-    } catch {
-      const pip = process.platform === "win32" ? path4.join(venvPath, "Scripts", "pip.exe") : path4.join(venvPath, "bin", "pip");
-      execSync(`"${pip}" install pdfplumber`, { stdio: "inherit", cwd: PROJECT_ROOT });
-    }
+    ensurePythonVenv();
   } catch (err) {
     console.warn("Python venv setup warning:", err);
   }
@@ -1248,7 +2205,7 @@ async function startServer() {
   app.use(express.json({ limit: "50mb" }));
   const seedWorkspaces = () => [
     {
-      id: uuidv4(),
+      id: uuidv42(),
       name: "Blank Workspace 1",
       menResults: [],
       womenResults: [],
@@ -1259,9 +2216,21 @@ async function startServer() {
     }
   ];
   let repo;
-  if (STORAGE_BACKEND === "sqlite") {
+  let auth = null;
+  let shareLinks = null;
+  if (STORAGE_BACKEND === "postgres") {
+    if (!DATABASE_URL) {
+      console.error("OMNI_DB=postgres requires DATABASE_URL");
+      process.exit(1);
+    }
+    auth = new AuthService(DATABASE_URL);
+    shareLinks = new ShareLinkService(DATABASE_URL);
+    repo = new PgRepo(DATABASE_URL, BACKUP_DIR);
+    await repo.init();
+    console.log("Storage backend: PostgreSQL (shared multi-user)");
+  } else if (STORAGE_BACKEND === "sqlite") {
     try {
-      repo = new SqliteRepo(DB_FILE, BACKUP_DIR, seedWorkspaces);
+      repo = new SqliteRepo(DB_FILE, BACKUP_DIR, seedWorkspaces, MEETS_FILE);
       await repo.init();
       console.log("Storage backend: SQLite (data/omniswim.db)");
     } catch (err) {
@@ -1274,6 +2243,57 @@ async function startServer() {
     await repo.init();
     console.log("Storage backend: JSON (data/meets.json)");
   }
+  const optionalAuth = createAuthMiddleware(auth, false);
+  const requireAuth = createAuthMiddleware(auth, true);
+  function applyRepoScope(req) {
+    if (req.user && repo.setScope) {
+      repo.setScope({ ownerId: req.user.id, teamId: req.user.teamId });
+    }
+  }
+  app.post("/api/auth/register", async (req, res) => {
+    if (!auth) return res.status(503).json({ error: "Auth requires PostgreSQL backend" });
+    try {
+      const { email, password, displayName } = req.body ?? {};
+      if (typeof email !== "string" || typeof password !== "string" || password.length < 6) {
+        return res.status(400).json({ error: "Valid email and password (6+ chars) required" });
+      }
+      const session = await auth.register(email, password, displayName);
+      setSessionCookie(res, session.token, session.expiresAt);
+      res.json({ user: session.user });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(msg === "EMAIL_EXISTS" ? 409 : 500).json({ error: msg });
+    }
+  });
+  app.post("/api/auth/login", async (req, res) => {
+    if (!auth) return res.status(503).json({ error: "Auth requires PostgreSQL backend" });
+    try {
+      const { email, password } = req.body ?? {};
+      const session = await auth.login(String(email ?? ""), String(password ?? ""));
+      setSessionCookie(res, session.token, session.expiresAt);
+      res.json({ user: session.user });
+    } catch (err) {
+      res.status(401).json({ error: "Invalid credentials" });
+    }
+  });
+  app.post("/api/auth/logout", optionalAuth, async (req, res) => {
+    if (auth && req.sessionToken) await auth.logout(req.sessionToken);
+    clearSessionCookie(res);
+    res.json({ success: true });
+  });
+  app.get("/api/auth/me", optionalAuth, (req, res) => {
+    res.json({ user: req.user ?? null, authRequired: AUTH_REQUIRED });
+  });
+  app.post("/api/auth/invite", requireAuth, async (req, res) => {
+    if (!auth || !req.user?.teamId) return res.status(503).json({ error: "Invite unavailable" });
+    try {
+      await auth.inviteToTeam(req.user.teamId, req.user.id, String(req.body?.email ?? ""));
+      res.json({ success: true });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(400).json({ error: msg });
+    }
+  });
   function normalizeWorkspaceResults(ws) {
     return {
       ...ws,
@@ -1281,22 +2301,23 @@ async function startServer() {
       womenResults: (ws.womenResults || []).map(normalizeSwimmerResultRelayFields)
     };
   }
-  app.get("/api/workspaces", async (_req, res) => {
+  app.get("/api/workspaces", AUTH_REQUIRED ? requireAuth : optionalAuth, async (req, res) => {
     try {
+      applyRepoScope(req);
       const data = await repo.list();
       res.json(data.map(normalizeWorkspaceResults));
     } catch (err) {
       res.status(500).json({ error: "Failed to read workspaces", details: String(err) });
     }
   });
-  app.post("/api/workspaces", async (req, res) => {
+  app.post("/api/workspaces", AUTH_REQUIRED ? requireAuth : optionalAuth, async (req, res) => {
     const parsed = createWorkspaceSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
       return res.status(400).json({ error: "Invalid workspace payload", details: parsed.error.issues });
     }
     const body = parsed.data;
     const newWorkspace = {
-      id: typeof body.id === "string" ? body.id : uuidv4(),
+      id: typeof body.id === "string" ? body.id : uuidv42(),
       name: body.name || "New Workspace",
       menResults: body.menResults ?? [],
       womenResults: body.womenResults ?? [],
@@ -1307,65 +2328,121 @@ async function startServer() {
       ...body
     };
     try {
+      applyRepoScope(req);
       const created = await repo.create(newWorkspace);
       res.json(created);
     } catch (err) {
       res.status(500).json({ error: "Failed to create workspace", details: String(err) });
     }
   });
-  app.put("/api/workspaces/:id", async (req, res) => {
+  app.put("/api/workspaces/:id", AUTH_REQUIRED ? requireAuth : optionalAuth, async (req, res) => {
     const parsed = updateWorkspaceSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
       return res.status(400).json({ error: "Invalid workspace patch", details: parsed.error.issues });
     }
+    const expectedVersion = typeof req.body?.version === "number" ? req.body.version : void 0;
     try {
-      const updated = await repo.update(req.params.id, parsed.data);
+      applyRepoScope(req);
+      const updated = await repo.update(req.params.id, parsed.data, expectedVersion);
       if (!updated) return res.status(404).json({ error: "Workspace not found" });
       res.json(updated);
     } catch (err) {
+      if (err instanceof Error && err.code === "VERSION_CONFLICT") {
+        return res.status(409).json({ error: "Version conflict \u2014 refresh and retry" });
+      }
       res.status(500).json({ error: "Failed to update workspace", details: String(err) });
     }
   });
-  app.delete("/api/workspaces/:id", async (req, res) => {
+  app.delete("/api/workspaces/:id", AUTH_REQUIRED ? requireAuth : optionalAuth, async (req, res) => {
     try {
+      applyRepoScope(req);
       await repo.remove(req.params.id);
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: "Failed to delete workspace", details: String(err) });
     }
   });
-  app.post("/api/workspaces/backup", async (_req, res) => {
+  app.post("/api/workspaces/backup", AUTH_REQUIRED ? requireAuth : optionalAuth, async (req, res) => {
     try {
+      applyRepoScope(req);
       const file = await repo.backup("manual");
       res.json({ success: true, file: path4.basename(file) });
     } catch (err) {
       res.status(500).json({ error: "Backup failed", details: String(err) });
     }
   });
-  app.post("/api/workspaces/:id/snapshots", async (req, res) => {
+  app.post("/api/workspaces/:id/snapshots", AUTH_REQUIRED ? requireAuth : optionalAuth, async (req, res) => {
     try {
+      applyRepoScope(req);
       const label = typeof req.body?.label === "string" ? req.body.label : "snapshot";
       const snap = await repo.snapshot(req.params.id, label);
-      if (!snap) return res.status(400).json({ error: "Snapshots require the SQLite backend" });
+      if (!snap) return res.status(400).json({ error: "Snapshots require SQLite or PostgreSQL backend" });
       res.json(snap);
     } catch (err) {
       res.status(500).json({ error: "Snapshot failed", details: String(err) });
     }
   });
-  app.get("/api/workspaces/:id/snapshots", async (req, res) => {
+  app.get("/api/workspaces/:id/snapshots", AUTH_REQUIRED ? requireAuth : optionalAuth, async (req, res) => {
     try {
+      applyRepoScope(req);
       res.json(await repo.listSnapshots(req.params.id));
     } catch (err) {
       res.status(500).json({ error: "Failed to list snapshots", details: String(err) });
     }
   });
-  app.post("/api/snapshots/:snapshotId/restore", async (req, res) => {
+  app.post("/api/snapshots/:snapshotId/restore", AUTH_REQUIRED ? requireAuth : optionalAuth, async (req, res) => {
     try {
+      applyRepoScope(req);
       const restored = await repo.restoreSnapshot(req.params.snapshotId);
       if (!restored) return res.status(404).json({ error: "Snapshot not found" });
       res.json(restored);
     } catch (err) {
       res.status(500).json({ error: "Restore failed", details: String(err) });
+    }
+  });
+  app.post("/api/workspaces/:id/share", AUTH_REQUIRED ? requireAuth : optionalAuth, async (req, res) => {
+    if (!shareLinks || !req.user) {
+      return res.status(503).json({ error: "Share links require PostgreSQL auth backend" });
+    }
+    try {
+      applyRepoScope(req);
+      const ws = (await repo.list()).find((w) => w.id === req.params.id);
+      if (!ws) return res.status(404).json({ error: "Workspace not found" });
+      const link = await shareLinks.createLink(
+        req.params.id,
+        req.user.id,
+        req.user.teamId,
+        typeof req.body?.label === "string" ? req.body.label : ws.name
+      );
+      res.json(link);
+    } catch (err) {
+      res.status(500).json({ error: "Failed to create share link", details: String(err) });
+    }
+  });
+  app.get("/api/share/:token", async (req, res) => {
+    if (!shareLinks) return res.status(503).json({ error: "Share links unavailable" });
+    try {
+      const resolved = await shareLinks.resolveToken(req.params.token);
+      if (!resolved) return res.status(404).json({ error: "Link not found or expired" });
+      const all = await repo.list();
+      const ws = all.find((w) => w.id === resolved.workspaceId);
+      if (!ws) return res.status(404).json({ error: "Workspace not found" });
+      res.json({ label: resolved.label, workspace: normalizeWorkspaceResults(ws) });
+    } catch (err) {
+      res.status(500).json({ error: "Failed to load share", details: String(err) });
+    }
+  });
+  app.get("/api/workspaces/:id/report", AUTH_REQUIRED ? requireAuth : optionalAuth, async (req, res) => {
+    try {
+      applyRepoScope(req);
+      const ws = (await repo.list()).find((w) => w.id === req.params.id);
+      if (!ws) return res.status(404).json({ error: "Workspace not found" });
+      const html = buildMeetReportHtml(ws);
+      res.setHeader("Content-Type", "text/html; charset=utf-8");
+      res.setHeader("Content-Disposition", `inline; filename="${ws.name.replace(/[^a-z0-9]/gi, "_")}-report.html"`);
+      res.send(html);
+    } catch (err) {
+      res.status(500).json({ error: "Report failed", details: String(err) });
     }
   });
   app.get("/api/scoring-presets", (_req, res) => {
@@ -1420,7 +2497,7 @@ async function startServer() {
       const teamClock = a.relay_team_time || a.finals_time || a.prelims_time;
       const isRelay = Boolean(a.is_relay) || /\brelay\b/i.test(String(a.event || ""));
       return normalizeSwimmerResultRelayFields({
-        id: uuidv4(),
+        id: uuidv42(),
         rank: parsedRank > 0 ? parsedRank : 0,
         name: String(a.name),
         classYear: a.year || "UNKNOWN",

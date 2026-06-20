@@ -1,4 +1,4 @@
-#!C:\Users\nihar\Desktop\omniswim suite\omniswim-suite\venv\Scripts\python.exe
+#!C:\Users\nihar\Documents\GitHub\omniswim-suite\omniswim-suite\venv\Scripts\python.exe
 """Extract pdf structure in XML format"""
 
 import logging
