@@ -1,0 +1,33 @@
+# --- dependencies ---
+node_modules/
+**/node_modules/
+
+# --- build output ---
+dist/
+**/dist/
+**/.vite/
+*.local
+
+# --- python / backend runtime ---
+venv/
+**/venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyd
+
+# --- local data files (SQLite is default; meets.json is a local backup only) ---
+omniswim-suite/data/meets.json
+omniswim-suite/data/*.db
+omniswim-suite/data/*.db-shm
+omniswim-suite/data/*.db-wal
+
+# --- environment & secrets ---
+.env
+.env.*
+!.env.example
+
+# --- OS / editor ---
+.DS_Store
+Thumbs.db
+*.log
