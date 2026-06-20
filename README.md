@@ -1,4 +1,4 @@
-# Omni Swim Suite
+# OMNI-SWIM · Suite
 
 ![Omni Swim Suite logo](omniswim-suite/public/OMNISWIMLOGO.png)
 
@@ -8,61 +8,70 @@
 [![Vite](https://img.shields.io/badge/Vite-6-646CFF?logo=vite&logoColor=white)](https://vite.dev/)
 [![Express](https://img.shields.io/badge/Express-4-000000?logo=express&logoColor=white)](https://expressjs.com/)
 
-Omni Swim Suite is a swim-meet operations workspace designed for roster planning, meet scoring, performance review, and reporting. The suite brings together three focused applets under one shell so coaches, meet managers, and analysts can move between planning and results without losing context.
+Omni Swim Suite is a workspace for swim-meet operations, combining roster planning, scoring workflows, and reporting in one place. The repository is organized as a monorepo so the shell application, shared packages, and supporting utilities can evolve together.
 
-## What the suite does
+## At a glance
 
-- **Manage entries and rosters** for athletes, relays, and scoring overrides.
-- **Review meet results and scoring scenarios** with what-if analysis and batch optimization.
-- **Import and export swim data** from SwimCloud paste, CSV, PDF, and HyTek-style formats.
-- **Track local metrics sessions** for video and split-based analysis.
-- **Persist workspaces** using JSON or SQLite-backed storage.
+| Area | Purpose |
+|---|---|
+| Manager | Athlete history, roster planning, event setup, and exports |
+| Matrix | Meet scoring views, projections, and scenario review |
+| Metrics | Local metrics and video/session analysis |
+| Storage | JSON-first persistence with optional SQLite support |
 
-## Feature highlights
+## Table of contents
 
-- **Manager** for roster configuration, athlete history imports, event planning, and exports.
-- **Matrix** for meet scoring views, visual breakdowns, and projection tools.
-- **Metrics** for local video/session analysis and reporting.
-- **Snapshots** to save and restore workspace states.
-- **Toast-based feedback** for import, export, and scoring actions.
-- **Optional runtime toggles** for storage backend and AI-enabled paths.
+1. [Tech stack](#tech-stack)
+2. [Repository layout](#repository-layout)
+3. [Getting started](#getting-started)
+4. [Development](#development)
+5. [Documentation](#documentation)
+6. [Troubleshooting](#troubleshooting)
 
 ## Tech stack
 
-| Layer | Stack | Notes |
-|---|---|---|
-| Frontend | React 19, TypeScript, Vite | App shell and lazy-loaded applets |
-| UI system | Tailwind CSS, custom design tokens, Lucide icons, motion | Shared styling and visual polish |
-| Data fetching | TanStack React Query | Workspace state caching and mutation flow |
-| Charts | Recharts | Scorecards and metrics charts |
-| API/server | Express, dotenv, multer, UUID | File uploads, workspace endpoints, server-side routing |
-| Validation | Zod | Request and data validation |
-| Persistence | JSON files + SQLite (`node:sqlite`) | Configurable storage backend |
-| Scripting | `tsx`, `esbuild`, Node scripts | Migrations, tests, and automation |
-| Parsing | Python utilities | Meet PDF parsing pipeline for scoring workflows |
+### Application
 
-## Project layout
+| Area | Stack |
+|---|---|
+| UI | React 19, TypeScript, Vite 6 |
+| Styling | Tailwind CSS, custom design tokens, Lucide icons, motion |
+| Charts | Recharts |
+| Server | Express, dotenv, multer |
+| Validation | Zod |
+| Persistence | JSON files and SQLite (`node:sqlite`) |
+| Parsing | Python utilities for meet PDF workflows |
 
-- `apps/shell` — main application shell, routing, Express server, and workspace UI.
-- `packages/core` — shared types, scoring logic, workspace provider, API helpers, and data models.
-- `packages/ui` — reusable UI primitives and shared styling.
-- `packages/manager` — roster, imports, exports, and planning tools.
-- `packages/matrix` — scoring and results-focused workflows.
-- `packages/metrics` — local metrics and video/session review experience.
-- `packages/db` — SQLite schema and workspace persistence service.
-- `backend` — Python parsing utilities for meet documents.
-- `scripts` — migration, verification, and utility scripts.
-- `data` — workspace data and scoring configuration assets.
+### Supporting libraries
 
-## Quick start
+- `@tanstack/react-query` for workspace state and cache updates
+- `uuid` for generated workspace identifiers
+- `recharts` for charts and visual summaries
+- `lucide-react` and `motion` for UI polish
+
+## Repository layout
+
+- [omniswim-suite](omniswim-suite) — main application and monorepo root for the suite
+- [omniswim-suite/apps/shell](omniswim-suite/apps/shell) — shell app, routing, and Express server
+- [omniswim-suite/packages/core](omniswim-suite/packages/core) — shared types, scoring logic, and workspace helpers
+- [omniswim-suite/packages/ui](omniswim-suite/packages/ui) — shared UI primitives and styling
+- [omniswim-suite/packages/manager](omniswim-suite/packages/manager) — roster and planning workflows
+- [omniswim-suite/packages/matrix](omniswim-suite/packages/matrix) — scoring and results views
+- [omniswim-suite/packages/metrics](omniswim-suite/packages/metrics) — local metrics workflows
+- [omniswim-suite/packages/db](omniswim-suite/packages/db) — SQLite persistence layer
+- [omniswim-suite/backend](omniswim-suite/backend) — Python parsing utilities
+- [omniswim-suite/scripts](omniswim-suite/scripts) — migration and verification scripts
+- [omniswim-suite/data](omniswim-suite/data) — sample data and configuration assets
+
+## Getting started
 
 ### Prerequisites
 
-- Node.js 20 or newer
-- npm (workspace-based install)
+- Node.js 20+
+- npm
 - Python 3 (recommended for PDF parsing workflows)
 
-### Install and run
+### Quick start
 
 ```bash
 cd omniswim-suite
@@ -70,126 +79,60 @@ npm install
 npm run dev
 ```
 
-Then open http://localhost:3000
+Then open http://localhost:3000.
 
 ### One-click startup on Windows
 
 Double-click either:
 
-- `Start-OmniSwim-Suite.bat` in this folder, or
-- `Start-OmniSwim-Suite.bat` in the parent project folder
+- [omniswim-suite/Start-OmniSwim-Suite.bat](omniswim-suite/Start-OmniSwim-Suite.bat), or
+- [Start-OmniSwim-Suite.bat](Start-OmniSwim-Suite.bat) from the repository root
 
-The launcher checks for Node/Python, installs dependencies when needed, and opens the app in your browser.
+The launcher checks for Node/Python, installs dependencies on first run, and opens the app in your browser.
 
-## Common commands
+## Development
+
+### Common commands
 
 ```bash
-# Start the dev server
+# Start the development server
 npm run dev
 
-# Build for production
+# Build the production bundle
 npm run build
 
-# Start the production server
+# Run the production server
 npm run start
 
 # Migrate JSON data to SQLite
 npm run migrate:sqlite
 
-# Run the SQLite round-trip verification script
+# Verify SQLite round-trip behavior
 npm run test:roundtrip
 ```
 
-> Note: the default runtime storage is JSON unless `OMNI_DB=sqlite` is explicitly enabled.
-
-## Runtime options
+### Runtime configuration
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `OMNI_DB` | `json` | Switches storage to SQLite after migration. |
-| `OMNI_AI_ENABLED` | `false` | Keeps optional AI/OCR paths off unless intentionally enabled. |
+| `OMNI_DB` | `json` | Switches persistence to SQLite after migration |
+| `OMNI_AI_ENABLED` | `false` | Keeps optional AI/OCR paths disabled unless explicitly enabled |
 
-## Functional notes by area
+## Documentation
 
-### Manager
+The repo includes a few practical references for day-to-day work:
 
-- Import athlete history from pasted SwimCloud content or CSV files.
-- Configure entries, event plans, and roster overrides.
-- Export entries to CSV or HyTek-friendly formats.
-- Run batch optimization for scoring scenarios.
-
-### Matrix
-
-- Upload meet PDFs and review scoring outputs.
-- Inspect score breakdowns and meet summaries.
-- Use what-if projections without permanently changing the workspace.
-- Compare scenarios and visualize results.
-
-### Metrics
-
-- Work with local video/session analysis.
-- Compare split times and workspace data.
-- Export reports for review and sharing.
-
-### Data and snapshots
-
-- Save workspace snapshots for recovery and comparison.
-- Keep JSON backups during data migrations.
-- Use SQLite for smoother persistence when desired.
-
-## Dependencies at a glance
-
-### Runtime dependencies
-
-- `@tanstack/react-query`
-- `@vitejs/plugin-react`
-- `dotenv`
-- `express`
-- `lucide-react`
-- `motion`
-- `multer`
-- `react`
-- `react-dom`
-- `react-router-dom`
-- `recharts`
-- `uuid`
-- `vite`
-- `zod`
-
-### Build / tooling dependencies
-
-- `@types/express`
-- `@types/multer`
-- `@types/node`
-- `@types/react`
-- `@types/react-dom`
-- `@types/uuid`
-- `@tailwindcss/vite`
-- `esbuild`
-- `tailwindcss`
-- `tsx`
-- `typescript`
-
-### Workspace packages
-
-- `@omniswim/shell`
-- `@omniswim/core`
-- `@omniswim/ui`
-- `@omniswim/manager`
-- `@omniswim/matrix`
-- `@omniswim/metrics`
-- `@omniswim/db`
-
-## Legacy and migration notes
-
-The repository also contains legacy reference folders for prior swim tooling. These are retained for continuity and can be migrated into the main suite when needed.
+- [omniswim-suite/README.md](omniswim-suite/README.md) — project-specific setup guidance for the main suite
+- [omniswim-suite/PHASE2_PROGRESS.md](omniswim-suite/PHASE2_PROGRESS.md) — implementation notes and verification status
+- [omniswim-suite/backend](omniswim-suite/backend) — parsing and scoring utilities
+- [omniswim-suite/scripts](omniswim-suite/scripts) — automation and validation scripts
 
 ## Troubleshooting
 
-- If the app cannot start, confirm that Node.js 20+ is installed and that `npm install` completed successfully.
-- If PDF parsing seems unavailable, install Python 3 and retry the relevant workflow.
-- If you want to switch persistence modes, use the `OMNI_DB` runtime setting and run the migration script first.
+- If the app does not start, confirm that Node.js 20+ is installed and that `npm install` completed successfully.
+- If PDF parsing workflows fail, install Python 3 and retry the relevant steps.
+- If you want to switch storage modes, set `OMNI_DB` appropriately and run the migration script first.
 
-## Repository status
+## License
 
-This project is set up as a monorepo with shared packages and a unified shell experience. The build and runtime flow are intended to support both lightweight local use and more structured meet-management workflows.
+This project uses the same open-source approach as the surrounding swim tooling in this workspace. Please review repository-specific licensing details before redistribution or commercial use.
