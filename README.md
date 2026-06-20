@@ -1,6 +1,6 @@
 # Omni Swim Suite
 
-![Omni Swim Suite logo](public/OMNISWIMLOGO.png)
+![Omni Swim Suite logo](omniswim-suite/public/OMNISWIMLOGO.png)
 
 [![Node](https://img.shields.io/badge/Node-%3E%3D20-339933?logo=node.js&logoColor=white)](https://nodejs.org/)
 [![TypeScript](https://img.shields.io/badge/TypeScript-5.8-3178C6?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
