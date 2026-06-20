@@ -79,6 +79,8 @@ export function SuiteWorkspaceProvider({
   } = useQuery({
     queryKey: WORKSPACES_KEY,
     queryFn: fetchWorkspaces,
+    refetchInterval: 15_000,
+    refetchIntervalInBackground: false,
   });
 
   const [activeWorkspaceId, setActiveWorkspaceIdState] = useState<string | null>(() => {

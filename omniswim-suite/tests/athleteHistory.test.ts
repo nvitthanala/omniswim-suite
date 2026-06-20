@@ -1,0 +1,15 @@
+import { describe, it, expect } from 'vitest';
+import { parseSwimCloudPasteDetailed } from '../packages/core/src/lib/athleteHistory';
+import { Gender } from '../packages/core/src/types';
+
+describe('athleteHistory', () => {
+  it('parses tab-separated SwimCloud paste', () => {
+    const text = 'Landon Dehn\t200 Freestyle\t1:56.47\nJane Doe\t100 Breaststroke\t1:05.00';
+    const result = parseSwimCloudPasteDetailed(text, {
+      team: 'Test U',
+      gender: Gender.MEN,
+    });
+    expect(result.swims.length).toBeGreaterThan(0);
+    expect(result.swims[0].event).toMatch(/Freestyle|Breaststroke/);
+  });
+});

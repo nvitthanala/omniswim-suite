@@ -26,8 +26,8 @@ if not exist "node_modules\" (
 echo [BUILD] Building client + server bundle...
 call npm run build || (echo [ERROR] Build failed. & pause & exit /b 1)
 
-:: Persistence backend: set OMNI_DB=sqlite to use data/omniswim.db (else JSON).
-if not defined OMNI_DB set "OMNI_DB=json"
+:: Persistence: SQLite is default (OMNI_DB=sqlite). Use OMNI_DB=json for legacy JSON.
+if not defined OMNI_DB set "OMNI_DB=sqlite"
 set "NODE_ENV=production"
 set "NODE_OPTIONS=--use-system-ca"
 

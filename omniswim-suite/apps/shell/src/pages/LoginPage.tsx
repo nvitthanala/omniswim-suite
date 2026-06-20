@@ -1,0 +1,92 @@
+import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { login, register } from '@omniswim/core/api/auth';
+import { useToast } from '@omniswim/ui';
+
+import { useAuth } from '../context/AuthContext';
+
+export default function LoginPage() {
+  const navigate = useNavigate();
+  const toast = useToast();
+  const { refresh } = useAuth();
+  const [mode, setMode] = useState<'login' | 'register'>('login');
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy(true);
+    try {
+      if (mode === 'login') {
+        await login(email, password);
+        toast.push('success', 'Signed in');
+      } else {
+        await register(email, password, displayName || undefined);
+        toast.push('success', 'Account created');
+      }
+      await refresh();
+      navigate('/');
+    } catch (err) {
+      toast.push('error', err instanceof Error ? err.message : 'Auth failed');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="max-w-md mx-auto py-16 px-4">
+      <div className="panel p-8">
+        <h1 className="text-xl font-black text-[var(--text-primary)] mb-1">Omni Swim Suite</h1>
+        <p className="text-ui-caption text-theme-muted mb-6">
+          {mode === 'login' ? 'Sign in to your team workspace' : 'Create a coach account'}
+        </p>
+        <form onSubmit={submit} className="space-y-4">
+          {mode === 'register' ? (
+            <label className="block">
+              <span className="text-ui-caption text-theme-muted">Display name</span>
+              <input
+                className="glass-input w-full mt-1"
+                value={displayName}
+                onChange={e => setDisplayName(e.target.value)}
+                placeholder="Coach name"
+              />
+            </label>
+          ) : null}
+          <label className="block">
+            <span className="text-ui-caption text-theme-muted">Email</span>
+            <input
+              type="email"
+              required
+              className="glass-input w-full mt-1"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+            />
+          </label>
+          <label className="block">
+            <span className="text-ui-caption text-theme-muted">Password</span>
+            <input
+              type="password"
+              required
+              minLength={6}
+              className="glass-input w-full mt-1"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+            />
+          </label>
+          <button type="submit" disabled={busy} className="btn-primary w-full py-2.5 rounded-lg font-bold">
+            {busy ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'}
+          </button>
+        </form>
+        <button
+          type="button"
+          className="btn-ghost w-full mt-4 text-ui-caption"
+          onClick={() => setMode(m => (m === 'login' ? 'register' : 'login'))}
+        >
+          {mode === 'login' ? 'Need an account? Register' : 'Already have an account? Sign in'}
+        </button>
+      </div>
+    </div>
+  );
+}

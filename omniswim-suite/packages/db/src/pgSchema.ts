@@ -1,28 +1,50 @@
 /**
- * SQLite schema for the Omni Swim Suite (built on Node's built-in `node:sqlite`).
- *
- * Design: `workspaces` holds scalar + small-JSON metadata; each large collection
- * is normalized into its own child table where every element is one row storing
- * the element as a JSON blob. This keeps the schema queryable and migratable to
- * PostgreSQL later without the fragility of mapping every nested relay-split
- * field into columns.
+ * PostgreSQL schema for Omni Swim Suite (shared multi-user deployment).
  */
+export const PG_SCHEMA_VERSION = 2;
 
-export const SCHEMA_VERSION = 2;
-
-export const CREATE_TABLES_SQL = `
-PRAGMA journal_mode = WAL;
-PRAGMA foreign_keys = ON;
-
+export const CREATE_PG_TABLES_SQL = `
 CREATE TABLE IF NOT EXISTS meta (
   key   TEXT PRIMARY KEY,
   value TEXT
 );
 
+CREATE TABLE IF NOT EXISTS users (
+  id            TEXT PRIMARY KEY,
+  email         TEXT NOT NULL UNIQUE,
+  password_hash TEXT NOT NULL,
+  display_name  TEXT,
+  created_at    BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS teams (
+  id         TEXT PRIMARY KEY,
+  name       TEXT NOT NULL,
+  owner_id   TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  created_at BIGINT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS team_members (
+  team_id    TEXT NOT NULL REFERENCES teams(id) ON DELETE CASCADE,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  role       TEXT NOT NULL DEFAULT 'member',
+  joined_at  BIGINT NOT NULL,
+  PRIMARY KEY (team_id, user_id)
+);
+
+CREATE TABLE IF NOT EXISTS sessions (
+  id         TEXT PRIMARY KEY,
+  user_id    TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token_hash TEXT NOT NULL UNIQUE,
+  expires_at BIGINT NOT NULL,
+  created_at BIGINT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_sessions_user ON sessions(user_id);
+
 CREATE TABLE IF NOT EXISTS workspaces (
   id                   TEXT PRIMARY KEY,
   name                 TEXT NOT NULL,
-  created_at           INTEGER NOT NULL,
+  created_at           BIGINT NOT NULL,
   conference           TEXT,
   entry_plan_mode      TEXT,
   scoring_settings     TEXT,
@@ -31,11 +53,13 @@ CREATE TABLE IF NOT EXISTS workspaces (
   active_entry_ids     TEXT,
   history_sources      TEXT,
   sort_index           INTEGER NOT NULL DEFAULT 0,
-  owner_id             TEXT,
-  team_id              TEXT,
-  updated_at           INTEGER NOT NULL DEFAULT 0,
+  owner_id             TEXT REFERENCES users(id) ON DELETE SET NULL,
+  team_id              TEXT REFERENCES teams(id) ON DELETE SET NULL,
+  updated_at           BIGINT NOT NULL DEFAULT 0,
   version              INTEGER NOT NULL DEFAULT 1
 );
+CREATE INDEX IF NOT EXISTS idx_workspaces_team ON workspaces(team_id);
+CREATE INDEX IF NOT EXISTS idx_workspaces_owner ON workspaces(owner_id);
 
 CREATE TABLE IF NOT EXISTS meet_results (
   id           TEXT PRIMARY KEY,
@@ -93,19 +117,21 @@ CREATE INDEX IF NOT EXISTS idx_athlete_history_ws ON athlete_history(workspace_i
 CREATE TABLE IF NOT EXISTS workspace_snapshots (
   id           TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-  created_at   INTEGER NOT NULL,
+  created_at   BIGINT NOT NULL,
   label        TEXT,
   blob         TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_workspace_snapshots_ws ON workspace_snapshots(workspace_id);
+
+CREATE TABLE IF NOT EXISTS share_links (
+  id           TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  team_id      TEXT REFERENCES teams(id) ON DELETE CASCADE,
+  created_by   TEXT REFERENCES users(id) ON DELETE SET NULL,
+  label        TEXT,
+  token        TEXT NOT NULL UNIQUE,
+  created_at   BIGINT NOT NULL,
+  expires_at   BIGINT
+);
+CREATE INDEX IF NOT EXISTS idx_share_links_token ON share_links(token);
 `;
-
-export { CHILD_TABLES, type ChildTable } from './workspacePersistence';
-
-/** SQLite v1 → v2 column migrations (idempotent). */
-export const SQLITE_MIGRATIONS_V2 = [
-  'ALTER TABLE workspaces ADD COLUMN owner_id TEXT',
-  'ALTER TABLE workspaces ADD COLUMN team_id TEXT',
-  'ALTER TABLE workspaces ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0',
-  'ALTER TABLE workspaces ADD COLUMN version INTEGER NOT NULL DEFAULT 1',
-];

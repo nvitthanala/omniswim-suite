@@ -18,7 +18,16 @@ import {
   parsePdfSchema,
   parseAthleteHistorySchema,
 } from '../../packages/core/src/schemas/workspace.ts';
-import { JsonRepo, SqliteRepo, type WorkspaceRepo } from './lib/workspaceRepo.ts';
+import { JsonRepo, SqliteRepo, PgRepo, type WorkspaceRepo } from './lib/workspaceRepo.ts';
+import {
+  createAuthMiddleware,
+  getSessionToken,
+  setSessionCookie,
+  clearSessionCookie,
+  type AuthedRequest,
+} from './lib/authMiddleware.ts';
+import { AuthService, ShareLinkService } from '../../packages/db/src/AuthService.ts';
+import { buildMeetReportHtml } from '../../packages/core/src/lib/reportBuilder.ts';
 import { cutlines as builtinCutlines } from '../../packages/core/src/cutlines.ts';
 
 const PORT = 3000;
@@ -29,7 +38,9 @@ const DATA_DIR = path.join(PROJECT_ROOT, 'data');
 const MEETS_FILE = path.join(DATA_DIR, 'meets.json');
 const DB_FILE = path.join(DATA_DIR, 'omniswim.db');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
-const STORAGE_BACKEND = (process.env.OMNI_DB ?? 'json').toLowerCase();
+const STORAGE_BACKEND = (process.env.OMNI_DB ?? 'sqlite').toLowerCase();
+const DATABASE_URL = process.env.DATABASE_URL ?? '';
+const AUTH_REQUIRED = process.env.OMNI_AUTH_REQUIRED === 'true' || STORAGE_BACKEND === 'postgres';
 const SCORING_PRESETS_DIR = path.join(DATA_DIR, 'scoring_presets');
 const CUTLINES_DIR = path.join(DATA_DIR, 'cutlines');
 const BUILTIN_CUTLINE_VERSION = '2025-2026';
@@ -122,26 +133,53 @@ async function runPythonScript(scriptPath: string, args: string[], stdin?: strin
   });
 }
 
+function venvPythonPath(venvPath: string): string {
+  return process.platform === 'win32'
+    ? path.join(venvPath, 'Scripts', 'python.exe')
+    : path.join(venvPath, 'bin', 'python');
+}
+
+function ensurePythonVenv() {
+  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
+  const venvPath = path.join(PROJECT_ROOT, 'venv');
+
+  const createVenv = () => {
+    execSync(`${pythonCmd} -m venv venv`, { stdio: 'ignore', cwd: PROJECT_ROOT });
+  };
+
+  const venvPythonUsable = (interpreter: string): boolean => {
+    try {
+      execSync(`"${interpreter}" -c "import sys"`, { stdio: 'ignore', cwd: PROJECT_ROOT });
+      return true;
+    } catch {
+      return false;
+    }
+  };
+
+  if (!fs.existsSync(venvPath)) {
+    createVenv();
+  }
+
+  let venvPython = venvPythonPath(venvPath);
+  if (!venvPythonUsable(venvPython)) {
+    fs.rmSync(venvPath, { recursive: true, force: true });
+    createVenv();
+    venvPython = venvPythonPath(venvPath);
+    if (!venvPythonUsable(venvPython)) {
+      throw new Error('Python venv could not be created or repaired');
+    }
+  }
+
+  try {
+    execSync(`"${venvPython}" -c "import pdfplumber"`, { stdio: 'ignore', cwd: PROJECT_ROOT });
+  } catch {
+    execSync(`"${venvPython}" -m pip install pdfplumber`, { stdio: 'inherit', cwd: PROJECT_ROOT });
+  }
+}
+
 async function startServer() {
   try {
-    const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
-    const venvPath = path.join(PROJECT_ROOT, 'venv');
-    if (!fs.existsSync(venvPath)) {
-      execSync(`${pythonCmd} -m venv venv`, { stdio: 'ignore', cwd: PROJECT_ROOT });
-    }
-    const venvPython =
-      process.platform === 'win32'
-        ? path.join(venvPath, 'Scripts', 'python.exe')
-        : path.join(venvPath, 'bin', 'python');
-    try {
-      execSync(`"${venvPython}" -c "import pdfplumber"`, { stdio: 'ignore', cwd: PROJECT_ROOT });
-    } catch {
-      const pip =
-        process.platform === 'win32'
-          ? path.join(venvPath, 'Scripts', 'pip.exe')
-          : path.join(venvPath, 'bin', 'pip');
-      execSync(`"${pip}" install pdfplumber`, { stdio: 'inherit', cwd: PROJECT_ROOT });
-    }
+    ensurePythonVenv();
   } catch (err) {
     console.warn('Python venv setup warning:', err);
   }
@@ -163,9 +201,22 @@ async function startServer() {
   ];
 
   let repo: WorkspaceRepo;
-  if (STORAGE_BACKEND === 'sqlite') {
+  let auth: AuthService | null = null;
+  let shareLinks: ShareLinkService | null = null;
+
+  if (STORAGE_BACKEND === 'postgres') {
+    if (!DATABASE_URL) {
+      console.error('OMNI_DB=postgres requires DATABASE_URL');
+      process.exit(1);
+    }
+    auth = new AuthService(DATABASE_URL);
+    shareLinks = new ShareLinkService(DATABASE_URL);
+    repo = new PgRepo(DATABASE_URL, BACKUP_DIR);
+    await repo.init();
+    console.log('Storage backend: PostgreSQL (shared multi-user)');
+  } else if (STORAGE_BACKEND === 'sqlite') {
     try {
-      repo = new SqliteRepo(DB_FILE, BACKUP_DIR, seedWorkspaces);
+      repo = new SqliteRepo(DB_FILE, BACKUP_DIR, seedWorkspaces, MEETS_FILE);
       await repo.init();
       console.log('Storage backend: SQLite (data/omniswim.db)');
     } catch (err) {
@@ -179,6 +230,65 @@ async function startServer() {
     console.log('Storage backend: JSON (data/meets.json)');
   }
 
+  const optionalAuth = createAuthMiddleware(auth, false);
+  const requireAuth = createAuthMiddleware(auth, true);
+
+  function applyRepoScope(req: AuthedRequest): void {
+    if (req.user && repo.setScope) {
+      repo.setScope({ ownerId: req.user.id, teamId: req.user.teamId });
+    }
+  }
+
+  // --- Auth routes (PostgreSQL deployments) ---
+  app.post('/api/auth/register', async (req, res) => {
+    if (!auth) return res.status(503).json({ error: 'Auth requires PostgreSQL backend' });
+    try {
+      const { email, password, displayName } = req.body ?? {};
+      if (typeof email !== 'string' || typeof password !== 'string' || password.length < 6) {
+        return res.status(400).json({ error: 'Valid email and password (6+ chars) required' });
+      }
+      const session = await auth.register(email, password, displayName);
+      setSessionCookie(res, session.token, session.expiresAt);
+      res.json({ user: session.user });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(msg === 'EMAIL_EXISTS' ? 409 : 500).json({ error: msg });
+    }
+  });
+
+  app.post('/api/auth/login', async (req, res) => {
+    if (!auth) return res.status(503).json({ error: 'Auth requires PostgreSQL backend' });
+    try {
+      const { email, password } = req.body ?? {};
+      const session = await auth.login(String(email ?? ''), String(password ?? ''));
+      setSessionCookie(res, session.token, session.expiresAt);
+      res.json({ user: session.user });
+    } catch (err) {
+      res.status(401).json({ error: 'Invalid credentials' });
+    }
+  });
+
+  app.post('/api/auth/logout', optionalAuth, async (req: AuthedRequest, res) => {
+    if (auth && req.sessionToken) await auth.logout(req.sessionToken);
+    clearSessionCookie(res);
+    res.json({ success: true });
+  });
+
+  app.get('/api/auth/me', optionalAuth, (req: AuthedRequest, res) => {
+    res.json({ user: req.user ?? null, authRequired: AUTH_REQUIRED });
+  });
+
+  app.post('/api/auth/invite', requireAuth, async (req: AuthedRequest, res) => {
+    if (!auth || !req.user?.teamId) return res.status(503).json({ error: 'Invite unavailable' });
+    try {
+      await auth.inviteToTeam(req.user.teamId, req.user.id, String(req.body?.email ?? ''));
+      res.json({ success: true });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      res.status(400).json({ error: msg });
+    }
+  });
+
   function normalizeWorkspaceResults(ws: Workspace): Workspace {
     return {
       ...ws,
@@ -187,8 +297,9 @@ async function startServer() {
     };
   }
 
-  app.get('/api/workspaces', async (_req, res) => {
+  app.get('/api/workspaces', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     try {
+      applyRepoScope(req);
       const data = await repo.list();
       res.json(data.map(normalizeWorkspaceResults));
     } catch (err) {
@@ -196,7 +307,7 @@ async function startServer() {
     }
   });
 
-  app.post('/api/workspaces', async (req, res) => {
+  app.post('/api/workspaces', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     const parsed = createWorkspaceSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
       return res.status(400).json({ error: 'Invalid workspace payload', details: parsed.error.issues });
@@ -214,6 +325,7 @@ async function startServer() {
       ...body,
     };
     try {
+      applyRepoScope(req);
       const created = await repo.create(newWorkspace);
       res.json(created);
     } catch (err) {
@@ -221,22 +333,29 @@ async function startServer() {
     }
   });
 
-  app.put('/api/workspaces/:id', async (req, res) => {
+  app.put('/api/workspaces/:id', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     const parsed = updateWorkspaceSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
       return res.status(400).json({ error: 'Invalid workspace patch', details: parsed.error.issues });
     }
+    const expectedVersion =
+      typeof req.body?.version === 'number' ? (req.body.version as number) : undefined;
     try {
-      const updated = await repo.update(req.params.id, parsed.data as Partial<Workspace>);
+      applyRepoScope(req);
+      const updated = await repo.update(req.params.id, parsed.data as Partial<Workspace>, expectedVersion);
       if (!updated) return res.status(404).json({ error: 'Workspace not found' });
       res.json(updated);
     } catch (err) {
+      if (err instanceof Error && (err as Error & { code?: string }).code === 'VERSION_CONFLICT') {
+        return res.status(409).json({ error: 'Version conflict — refresh and retry' });
+      }
       res.status(500).json({ error: 'Failed to update workspace', details: String(err) });
     }
   });
 
-  app.delete('/api/workspaces/:id', async (req, res) => {
+  app.delete('/api/workspaces/:id', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     try {
+      applyRepoScope(req);
       await repo.remove(req.params.id);
       res.json({ success: true });
     } catch (err) {
@@ -244,8 +363,9 @@ async function startServer() {
     }
   });
 
-  app.post('/api/workspaces/backup', async (_req, res) => {
+  app.post('/api/workspaces/backup', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     try {
+      applyRepoScope(req);
       const file = await repo.backup('manual');
       res.json({ success: true, file: path.basename(file) });
     } catch (err) {
@@ -254,32 +374,84 @@ async function startServer() {
   });
 
   // Workspace snapshots (SQLite backend only; JSON backend returns empty/no-op).
-  app.post('/api/workspaces/:id/snapshots', async (req, res) => {
+  app.post('/api/workspaces/:id/snapshots', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     try {
+      applyRepoScope(req);
       const label = typeof req.body?.label === 'string' ? req.body.label : 'snapshot';
       const snap = await repo.snapshot(req.params.id, label);
-      if (!snap) return res.status(400).json({ error: 'Snapshots require the SQLite backend' });
+      if (!snap) return res.status(400).json({ error: 'Snapshots require SQLite or PostgreSQL backend' });
       res.json(snap);
     } catch (err) {
       res.status(500).json({ error: 'Snapshot failed', details: String(err) });
     }
   });
 
-  app.get('/api/workspaces/:id/snapshots', async (req, res) => {
+  app.get('/api/workspaces/:id/snapshots', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     try {
+      applyRepoScope(req);
       res.json(await repo.listSnapshots(req.params.id));
     } catch (err) {
       res.status(500).json({ error: 'Failed to list snapshots', details: String(err) });
     }
   });
 
-  app.post('/api/snapshots/:snapshotId/restore', async (req, res) => {
+  app.post('/api/snapshots/:snapshotId/restore', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     try {
+      applyRepoScope(req);
       const restored = await repo.restoreSnapshot(req.params.snapshotId);
       if (!restored) return res.status(404).json({ error: 'Snapshot not found' });
       res.json(restored);
     } catch (err) {
       res.status(500).json({ error: 'Restore failed', details: String(err) });
+    }
+  });
+
+  // Shareable read-only links + printable reports
+  app.post('/api/workspaces/:id/share', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
+    if (!shareLinks || !req.user) {
+      return res.status(503).json({ error: 'Share links require PostgreSQL auth backend' });
+    }
+    try {
+      applyRepoScope(req);
+      const ws = (await repo.list()).find(w => w.id === req.params.id);
+      if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+      const link = await shareLinks.createLink(
+        req.params.id,
+        req.user.id,
+        req.user.teamId,
+        typeof req.body?.label === 'string' ? req.body.label : ws.name
+      );
+      res.json(link);
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to create share link', details: String(err) });
+    }
+  });
+
+  app.get('/api/share/:token', async (req, res) => {
+    if (!shareLinks) return res.status(503).json({ error: 'Share links unavailable' });
+    try {
+      const resolved = await shareLinks.resolveToken(req.params.token);
+      if (!resolved) return res.status(404).json({ error: 'Link not found or expired' });
+      const all = await repo.list();
+      const ws = all.find(w => w.id === resolved.workspaceId);
+      if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+      res.json({ label: resolved.label, workspace: normalizeWorkspaceResults(ws) });
+    } catch (err) {
+      res.status(500).json({ error: 'Failed to load share', details: String(err) });
+    }
+  });
+
+  app.get('/api/workspaces/:id/report', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
+    try {
+      applyRepoScope(req);
+      const ws = (await repo.list()).find(w => w.id === req.params.id);
+      if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+      const html = buildMeetReportHtml(ws);
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.setHeader('Content-Disposition', `inline; filename="${ws.name.replace(/[^a-z0-9]/gi, '_')}-report.html"`);
+      res.send(html);
+    } catch (err) {
+      res.status(500).json({ error: 'Report failed', details: String(err) });
     }
   });
 

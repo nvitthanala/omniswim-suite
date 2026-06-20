@@ -1,0 +1,7 @@
+-- PostgreSQL schema for Omni Swim Suite
+-- Applied automatically by PgWorkspaceService.init() or via npm run migrate:postgres
+
+CREATE TABLE IF NOT EXISTS meta (
+  key   TEXT PRIMARY KEY,
+  value TEXT
+);

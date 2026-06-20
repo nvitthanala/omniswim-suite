@@ -3,7 +3,7 @@ import type { Workspace } from '../types';
 const API_BASE = '';
 
 export async function fetchWorkspaces(): Promise<Workspace[]> {
-  const res = await fetch(`${API_BASE}/api/workspaces`);
+  const res = await fetch(`${API_BASE}/api/workspaces`, { credentials: 'include' });
   const data = await res.json();
   return Array.isArray(data) ? data : [];
 }
@@ -12,6 +12,7 @@ export async function createWorkspace(name: string, body?: Partial<Workspace>): 
   const res = await fetch(`${API_BASE}/api/workspaces`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify({ name, ...(body ?? {}) }),
   });
   return res.json();
@@ -21,6 +22,7 @@ export async function updateWorkspaceApi(id: string, patch: Partial<Workspace>):
   const res = await fetch(`${API_BASE}/api/workspaces/${id}`, {
     method: 'PUT',
     headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
     body: JSON.stringify(patch),
   });
   if (!res.ok) {
@@ -31,5 +33,5 @@ export async function updateWorkspaceApi(id: string, patch: Partial<Workspace>):
 }
 
 export async function deleteWorkspaceApi(id: string): Promise<void> {
-  await fetch(`${API_BASE}/api/workspaces/${id}`, { method: 'DELETE' });
+  await fetch(`${API_BASE}/api/workspaces/${id}`, { method: 'DELETE', credentials: 'include' });
 }

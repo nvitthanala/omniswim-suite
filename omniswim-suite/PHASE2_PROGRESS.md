@@ -3,7 +3,7 @@
 > Living document. Updated continuously during Phase 2 work so any agent (or human)
 > can resume mid-stream. **Source of truth for the plan:** `c:\Users\nihar\.cursor\plans\omni_swim_phase_2_4df6b445.plan.md` (do NOT edit the plan file).
 
-Last updated: 2026-06-19 (session 3). Phase 2 **fully complete** — all items DONE and verified via full production build + SQLite roundtrip test.
+Last updated: 2026-06-19 (session 3). Phase 2 **fully complete** — superseded by [PHASE3_PROGRESS.md](./PHASE3_PROGRESS.md).
 
 ---
 
@@ -14,7 +14,7 @@ Last updated: 2026-06-19 (session 3). Phase 2 **fully complete** — all items D
 3. Re-run the verification commands in **Verification** to confirm the current build state.
 4. Continue from **Next concrete steps**.
 
-Working dir for all commands: `C:\Users\nihar\Desktop\omniswim suite\omniswim-suite`
+Working dir for all commands: `C:\Users\nihar\Documents\GitHub\omniswim-suite\omniswim-suite`
 Package manager: **npm** (workspaces). Node + Python (venv auto-created by server on first run).
 
 ---
