@@ -1,7 +1,7 @@
 import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { ToastProvider } from '@omniswim/ui';
+import { ToastProvider, SwimCloudProvider } from '@omniswim/ui';
 import '@omniswim/ui/styles.css';
 import App from './App';
 
@@ -19,7 +19,9 @@ createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <QueryClientProvider client={queryClient}>
       <ToastProvider>
-        <App />
+        <SwimCloudProvider>
+          <App />
+        </SwimCloudProvider>
       </ToastProvider>
     </QueryClientProvider>
   </StrictMode>

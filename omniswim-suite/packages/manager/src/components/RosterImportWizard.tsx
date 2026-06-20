@@ -11,7 +11,7 @@ import {
 } from '@omniswim/core/lib/athleteHistory';
 import { parseCsvHistory } from '@omniswim/core/lib/csvImport';
 import { divisionForTeam } from '@omniswim/core/data/teamDivisions';
-import { useToast } from '@omniswim/ui';
+import { useToast, useSwimCloudWindow } from '@omniswim/ui';
 
 type ImportMode = 'paste' | 'csv';
 
@@ -41,8 +41,8 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
   const [warnings, setWarnings] = useState<string[]>([]);
   const [format, setFormat] = useState<string>('unknown');
   const [step, setStep] = useState<'paste' | 'preview'>('paste');
-  const [showReference, setShowReference] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const { openWindow } = useSwimCloudWindow();
 
   const handleParse = () => {
     if (!team.trim()) {
@@ -140,34 +140,16 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
                 </button>
                 <button
                   type="button"
-                  onClick={() => setShowReference(s => !s)}
-                  className={`ml-auto px-3 py-2 text-ui-micro font-bold uppercase tracking-widest flex items-center gap-1.5 transition-colors ${showReference ? 'text-[var(--text-primary)]' : 'nav-tab-inactive'}`}
+                  onClick={openWindow}
+                  className="ml-auto btn-ghost text-ui-caption flex items-center gap-1.5"
                 >
-                  <Globe size={13} /> SwimCloud
+                  <Globe size={13} /> Open SwimCloud
                 </button>
               </div>
 
-              {showReference ? (
-                <div className="border border-theme-soft rounded overflow-hidden">
-                  <div className="px-3 py-1.5 bg-[var(--surface-strong)] text-ui-caption text-theme-muted flex items-center justify-between">
-                    <span>Reference panel — open SwimCloud, then copy/paste into the importer.</span>
-                    <a
-                      href="https://www.swimcloud.com/"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[var(--text-accent)] hover:underline"
-                    >
-                      Open in new tab ↗
-                    </a>
-                  </div>
-                  <iframe
-                    title="SwimCloud reference"
-                    src="https://www.swimcloud.com/"
-                    className="w-full h-64 bg-white"
-                    sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-                  />
-                </div>
-              ) : null}
+              <p className="text-ui-caption text-theme-muted">
+                Use the floating SwimCloud window to copy data, then paste it below.
+              </p>
 
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <label className="flex flex-col gap-1">

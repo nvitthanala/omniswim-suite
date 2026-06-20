@@ -6,15 +6,14 @@
 import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Gender, Recruit, Workspace } from '@omniswim/core/types';
-import { normalizeSwimmerName, mergeScoringSettings } from '@omniswim/core/lib/utils';
+import { mergeScoringSettings } from '@omniswim/core/lib/utils';
 import { usesScorerRoster, scorerRosterKey } from '@omniswim/core/lib/scorerRoster';
 import { useWorkspaceScoring } from '@omniswim/core/lib/useWorkspaceScoring';
 import { exportEntriesCsv, exportEntriesHytek, type EntryExport } from '@omniswim/core/lib/entryExport';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
-import { useToast } from '@omniswim/ui';
+import { Toolbar, ToolbarSpacer, useToast } from '@omniswim/ui';
 import TeamManagementSubTabs, { type TeamManagementViewId } from './components/TeamManagementSubTabs';
 import TeamManagementView from './components/TeamManagementView';
-import SwimmerDeleteConfirmModal from './components/SwimmerDeleteConfirmModal';
 import RosterImportWizard from './components/RosterImportWizard';
 import BatchOptimizerPanel from './components/BatchOptimizerPanel';
 
@@ -39,12 +38,11 @@ export default function ManagerApp() {
   const [scoringRefreshKey, setScoringRefreshKey] = useState(0);
   const [showImportWizard, setShowImportWizard] = useState(false);
   const [showBatchOptimizer, setShowBatchOptimizer] = useState(false);
-  const [swimmerDeleteCandidate, setSwimmerDeleteCandidate] = useState<{ name: string } | null>(null);
 
   if (!activeWorkspace) {
     return (
       <div className="flex flex-col items-center justify-center py-24 text-theme-secondary">
-        <p className="text-xs uppercase tracking-widest font-bold">Select or create a workspace to use Manager</p>
+        <p className="text-ui-body font-medium">Select or create a workspace to use Manager</p>
       </div>
     );
   }
@@ -87,65 +85,35 @@ export default function ManagerApp() {
     toast.push('success', `Exported ${exp.count} entr${exp.count === 1 ? 'y' : 'ies'} → ${exp.filename}`);
   };
 
-  const confirmDeleteSwimmer = () => {
-    if (!swimmerDeleteCandidate) return;
-    const name = swimmerDeleteCandidate.name;
-    const key = normalizeSwimmerName(name);
-    const field = activeGender === Gender.MEN ? 'menResults' : 'womenResults';
-    const arr = activeWorkspace[field] ?? [];
-    const filtered = arr.filter(r => !(normalizeSwimmerName(r.name) === key && !r.isRelay));
-    const nextDeleted = [...(activeWorkspace.deletedSwimmers ?? [])];
-    if (!nextDeleted.some(d => d.gender === activeGender && normalizeSwimmerName(d.name) === key)) {
-      nextDeleted.push({ name, gender: activeGender });
-    }
-    const recruitsFiltered = (activeWorkspace.recruits ?? []).filter(
-      r => !(r.gender === activeGender && normalizeSwimmerName(r.name) === key)
-    );
-    void updateWorkspace({ [field]: filtered, recruits: recruitsFiltered, deletedSwimmers: nextDeleted });
-    setSwimmerDeleteCandidate(null);
-  };
-
   return (
     <>
-      <div className="flex flex-wrap items-center gap-3 mb-6">
-        <h2 className="text-ui-label font-black uppercase tracking-widest text-[var(--text-primary)]">
-          Team Management
-        </h2>
-        <TeamManagementSubTabs activeView={teamMgmtView} onViewChange={setTeamMgmtView} />
-        <div className="ml-auto flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => handleExport('csv')}
-            className="px-3 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-md nav-tab-inactive hover:text-[var(--text-primary)] border border-theme-soft transition-colors"
-            title="Export active meet entries as CSV"
-          >
+      <header className="mb-5 space-y-3">
+        <div className="flex flex-wrap items-center gap-3">
+          <h2 className="text-ui-label font-bold text-[var(--text-primary)]">Team management</h2>
+          <TeamManagementSubTabs activeView={teamMgmtView} onViewChange={setTeamMgmtView} />
+        </div>
+        <Toolbar>
+          <button type="button" onClick={() => setShowImportWizard(true)} className="btn-primary text-ui-caption px-4 py-2">
+            Import roster
+          </button>
+          <button type="button" onClick={() => setShowBatchOptimizer(true)} className="btn-secondary text-ui-caption">
+            Batch optimizer
+          </button>
+          <button type="button" onClick={() => handleExport('csv')} className="btn-ghost text-ui-caption">
             Export CSV
           </button>
-          <button
-            type="button"
-            onClick={() => handleExport('hytek')}
-            className="px-3 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-md nav-tab-inactive hover:text-[var(--text-primary)] border border-theme-soft transition-colors"
-            title="Export active meet entries as HyTek-style entry list"
-          >
+          <button type="button" onClick={() => handleExport('hytek')} className="btn-ghost text-ui-caption">
             Export HyTek
           </button>
-          <button
-            type="button"
-            onClick={() => setShowBatchOptimizer(true)}
-            className="px-3 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-md border border-theme-soft theme-hover-row hover:text-[var(--text-accent)] transition-colors"
-            title="Run batch optimizer across all teams"
-          >
-            Batch Optimizer
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowImportWizard(true)}
-            className="px-3 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-md btn-primary transition-colors"
-          >
-            Import Roster
-          </button>
-        </div>
-      </div>
+          <ToolbarSpacer />
+          {activeWorkspace.loadedMeet?.pdfFilename ? (
+            <span className="text-ui-caption text-theme-muted truncate max-w-xs">
+              Meet: <span className="text-[var(--text-primary)]">{activeWorkspace.loadedMeet.pdfFilename}</span>
+            </span>
+          ) : null}
+        </Toolbar>
+      </header>
+
       <AnimatePresence mode="wait">
         <motion.div
           key={`${teamMgmtView}-${scoringRefreshKey}`}
@@ -168,9 +136,12 @@ export default function ManagerApp() {
             onReloadScoring={() => setScoringRefreshKey(k => k + 1)}
             onAddRecruit={handleAddRecruit}
             onUpdate={updateWorkspace}
+            onOpenImport={() => setShowImportWizard(true)}
+            onOpenBatchOptimizer={() => setShowBatchOptimizer(true)}
           />
         </motion.div>
       </AnimatePresence>
+
       {showImportWizard && (
         <RosterImportWizard
           workspace={activeWorkspace}
@@ -189,14 +160,6 @@ export default function ManagerApp() {
             setShowBatchOptimizer(false);
           }}
           onClose={() => setShowBatchOptimizer(false)}
-        />
-      )}
-      {swimmerDeleteCandidate && (
-        <SwimmerDeleteConfirmModal
-          swimmerName={swimmerDeleteCandidate.name}
-          gender={activeGender}
-          onConfirm={confirmDeleteSwimmer}
-          onCancel={() => setSwimmerDeleteCandidate(null)}
         />
       )}
     </>
