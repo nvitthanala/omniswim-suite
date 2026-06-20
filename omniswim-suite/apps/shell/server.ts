@@ -634,8 +634,10 @@ async function startServer() {
         return res.json(result);
       }
       if (typeof imageBase64 === 'string' && imageBase64.trim() && AI_ENABLED && process.env.GEMINI_API_KEY) {
-        let GoogleGenAI;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        let GoogleGenAI: any;
         try {
+          // @ts-expect-error — @google/genai is an optional runtime dep; omitted from package.json intentionally
           ({ GoogleGenAI } = await import('@google/genai'));
         } catch {
           return res.status(501).json({ error: 'AI image parsing is not installed in this build' });
