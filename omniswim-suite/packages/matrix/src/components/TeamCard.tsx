@@ -20,7 +20,18 @@ import { getYearsRemaining, convertTimeToSeconds, relaySplitQualificationCutEven
 import { displayTimeForRelayLeg, formatLegSplitSummary } from '@omniswim/core/lib/relaySplits';
 import { compareTimeToCutline, getCutlinesForSwim, normalizeEventForCutline } from '@omniswim/core/lib/cutlineUtils';
 import { useThemeColors } from '@omniswim/core/lib/useThemeColors';
+import { SegmentedControl } from '@omniswim/ui';
 import ProjectedActualScore from './ProjectedActualScore';
+
+function resolveChartDataIndex(
+  index: number | string | undefined,
+  length: number
+): number | null {
+  if (index == null || length === 0) return null;
+  const numeric = typeof index === 'number' ? index : Number(index);
+  if (!Number.isFinite(numeric) || numeric < 0 || numeric >= length) return null;
+  return numeric;
+}
 
 function relayMissingStrokeLabel(stroke: RelayLegStroke | undefined): string {
   if (!stroke) return '';
@@ -136,6 +147,8 @@ export default function TeamCard({ team, index, gender, eventsList = [], confere
         swimmers,
       };
     });
+
+  const showEventDots = eventData.length <= 2;
 
   // Always sort chronological for the line chart if eventsList is provided
   if (eventsList.length > 0) {
@@ -324,16 +337,16 @@ export default function TeamCard({ team, index, gender, eventsList = [], confere
   };
 
   return (
-    <div className={`neon-card rounded-md overflow-hidden mb-4`} style={{ borderLeftColor: teamChartColor }}>
+    <div className="panel panel-compact overflow-hidden p-0">
       <button 
         onClick={() => setIsExpanded(!isExpanded)}
-        className="w-full flex items-center justify-between p-5 theme-hover-row transition-colors"
+        className="w-full flex items-center justify-between p-4 theme-hover-row transition-colors"
       >
         <div className="flex flex-col items-start gap-1">
-          <h3 className="text-sm font-black uppercase tracking-tighter text-[var(--text-primary)]">{team.teamName}</h3>
+          <h3 className="text-ui-body font-bold text-[var(--text-primary)]">{team.teamName}</h3>
           <div className="flex flex-col gap-1">
-            <span className="text-ui-caption text-theme-secondary uppercase tracking-widest font-medium">
-              {conference ? `${conference} • ` : ''}{topSwimmers.length} Athletes
+            <span className="text-ui-caption text-theme-secondary">
+              {conference ? `${conference} · ` : ''}{topSwimmers.length} athletes
             </span>
             {(actualScore != null || baselineScore != null) ? (
               <ProjectedActualScore
@@ -352,7 +365,7 @@ export default function TeamCard({ team, index, gender, eventsList = [], confere
             <span className="block text-2xl font-black text-[var(--text-accent)] font-mono tracking-tighter leading-none">
               {team.totalPoints.toFixed(1)}
             </span>
-            <span className="text-[9px] text-theme-secondary uppercase tracking-widest font-medium font-mono">Projected Points</span>
+            <span className="text-ui-micro text-theme-muted font-mono">Projected points</span>
           </div>
           {isExpanded ? <ChevronUp size={16} className="text-theme-secondary" /> : <ChevronDown size={16} className="text-theme-secondary" />}
         </div>
@@ -364,7 +377,7 @@ export default function TeamCard({ team, index, gender, eventsList = [], confere
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
-            className="border-t border-theme-soft surface-overlay"
+            className="border-t border-theme-soft bg-[var(--surface-muted)]"
           >
             <div
               ref={chartSplitRowRef}
@@ -378,29 +391,24 @@ export default function TeamCard({ team, index, gender, eventsList = [], confere
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2">
                     <BarChart3 size={14} className="text-[var(--text-accent)]" />
-                    <span className="text-[10px] font-medium uppercase tracking-widest text-theme-secondary">
-                      {chartView === 'event' ? 'Points by Event' : 'Points by Class'}
+                    <span className="text-ui-caption text-theme-secondary">
+                      {chartView === 'event' ? 'Points by event' : 'Points by class'}
                     </span>
                   </div>
-                  <div className="flex items-center surface-overlay border border-theme-soft rounded p-0.5">
-                    <button
-                      type="button"
-                      onClick={() => { setChartView('event'); clearChartTooltips(); }}
-                      className={`text-[9px] px-2 py-1 uppercase tracking-widest rounded ${chartView === 'event' ? 'bg-[var(--surface-strong)]/60 text-[var(--text-primary)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}
-                    >
-                      By Event
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setChartView('class'); clearChartTooltips(); }}
-                      className={`text-[9px] px-2 py-1 uppercase tracking-widest rounded ${chartView === 'class' ? 'bg-[var(--surface-strong)]/60 text-[var(--text-primary)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}
-                    >
-                      By Class
-                    </button>
-                  </div>
+                  <SegmentedControl
+                    options={[
+                      { id: 'event' as const, label: 'By event' },
+                      { id: 'class' as const, label: 'By class' },
+                    ]}
+                    value={chartView}
+                    onChange={v => {
+                      setChartView(v);
+                      clearChartTooltips();
+                    }}
+                  />
                 </div>
                 
-                <div className="h-72 w-full min-w-0 surface-overlay p-2 rounded border border-theme-soft relative group/chart">
+                <div className="h-72 w-full min-w-0 rounded-lg bg-[var(--surface-muted)] relative group/chart">
                   {chartView === 'event' ? (
                   <div ref={eventChartSurfaceRef} className="h-full w-full relative">
                     {/* Hover Tooltip (Absolute relative to chart) */}
@@ -438,8 +446,8 @@ export default function TeamCard({ team, index, gender, eventsList = [], confere
                         data={eventData}
                         onMouseMove={(state: any) => {
                           if (isDraggingSplitRef.current) return;
-                          const idx = state?.activeTooltipIndex;
-                          if (idx == null || idx < 0 || !eventData[idx]) {
+                          const idx = resolveChartDataIndex(state?.activeTooltipIndex, eventData.length);
+                          if (idx == null) {
                             if (lastTooltipIndexRef.current !== null) {
                               lastTooltipIndexRef.current = null;
                               setActiveTooltip(null);
@@ -462,13 +470,9 @@ export default function TeamCard({ team, index, gender, eventsList = [], confere
                         }}
                         onClick={(state: any) => {
                           if (isDraggingSplitRef.current) return;
-                          if (
-                            state &&
-                            state.activeTooltipIndex != null &&
-                            state.activeTooltipIndex >= 0 &&
-                            eventData[state.activeTooltipIndex]
-                          ) {
-                            const payload = eventData[state.activeTooltipIndex];
+                          const idx = resolveChartDataIndex(state?.activeTooltipIndex, eventData.length);
+                          if (idx != null) {
+                            const payload = eventData[idx];
                             const x = state.activeCoordinate?.x ?? 0;
                             const y = state.activeCoordinate?.y ?? 0;
                             const w = eventChartSurfaceRef.current?.clientWidth ?? 500;
@@ -486,9 +490,9 @@ export default function TeamCard({ team, index, gender, eventsList = [], confere
                           dataKey="points"
                           stroke={teamChartColor}
                           strokeWidth={2.5}
-                          dot={false}
+                          dot={showEventDots ? { r: 4, fill: teamChartColor, strokeWidth: 0 } : false}
                           isAnimationActive={false}
-                          activeDot={false}
+                          activeDot={showEventDots ? false : { r: 5, fill: teamChartColor, strokeWidth: 0 }}
                         />
                       </LineChart>
                     </ResponsiveContainer>
@@ -528,7 +532,7 @@ export default function TeamCard({ team, index, gender, eventsList = [], confere
                     <ResponsiveContainer width="100%" height="100%">
                       <BarChart data={classData} onMouseLeave={() => setActiveClassTooltip(null)}>
                         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: chartTheme.chartTick, fontSize: 10, fontStyle: 'bold', fontFamily: 'JetBrains Mono' }} />
-                        <Tooltip content={<></>} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
+                        <Tooltip content={() => null} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
                         <Bar 
                           dataKey="points" 
                           radius={[2, 2, 0, 0]}
@@ -564,8 +568,8 @@ export default function TeamCard({ team, index, gender, eventsList = [], confere
                   )}
                 </div>
 
-                <div className="flex justify-between mt-2 px-2 text-[10px] text-theme-secondary font-mono border-t border-theme-soft pt-2 italic uppercase">
-                  <span>{chartView === 'event' ? 'Chronological Event Scoring Timeline' : 'Class Year Contribution'}</span>
+                <div className="flex justify-between mt-2 px-2 text-ui-caption text-theme-secondary font-mono border-t border-theme-soft pt-2">
+                  <span>{chartView === 'event' ? 'Event scoring timeline' : 'Class year contribution'}</span>
                   <span>
                     {(chartView === 'event'
                       ? eventData.reduce((acc, d) => acc + d.points, 0)
@@ -593,48 +597,45 @@ export default function TeamCard({ team, index, gender, eventsList = [], confere
                 <div className="flex items-center justify-between mb-4">
                   <div className="flex items-center gap-2">
                     <List size={14} className="text-[var(--text-accent)]" />
-                    <span className="text-[10px] font-medium uppercase tracking-widest text-theme-secondary">Team Matrix</span>
+                    <span className="text-ui-caption text-theme-secondary">Team matrix</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <select 
-                      className="glass-input text-[9px] uppercase tracking-widest text-theme-secondary rounded p-1 outline-none"
+                      className="glass-input-compact"
                       value={sortMode}
                       onChange={(e) => setSortMode(e.target.value as any)}
                     >
                       {viewMode === 'event' && <option value="chrono">Chronological</option>}
-                      {viewMode === 'event' && <option value="eventDesc">High to Low</option>}
-                      {viewMode === 'event' && <option value="eventAsc">Low to High</option>}
-                      {viewMode === 'swimmer' && <option value="swimmerDesc">High to Low</option>}
-                      {viewMode === 'swimmer' && <option value="swimmerAsc">Low to High</option>}
+                      {viewMode === 'event' && <option value="eventDesc">High to low</option>}
+                      {viewMode === 'event' && <option value="eventAsc">Low to high</option>}
+                      {viewMode === 'swimmer' && <option value="swimmerDesc">High to low</option>}
+                      {viewMode === 'swimmer' && <option value="swimmerAsc">Low to high</option>}
                     </select>
 
-                    <div className="flex items-center surface-overlay border border-theme-soft rounded p-0.5">
-                      <button 
-                        onClick={() => { setViewMode('event'); setSortMode('eventDesc'); }}
-                        className={`text-[9px] px-2 py-1 uppercase tracking-widest rounded ${viewMode === 'event' ? 'bg-[var(--surface-strong)]/60 text-[var(--text-primary)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}
-                      >
-                        By Event
-                      </button>
-                      <button 
-                        onClick={() => { setViewMode('swimmer'); setSortMode('swimmerDesc'); }}
-                        className={`text-[9px] px-2 py-1 uppercase tracking-widest rounded ${viewMode === 'swimmer' ? 'bg-[var(--surface-strong)]/60 text-[var(--text-primary)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}
-                      >
-                        By Swimmer
-                      </button>
-                    </div>
+                    <SegmentedControl
+                      options={[
+                        { id: 'event' as const, label: 'By event' },
+                        { id: 'swimmer' as const, label: 'By swimmer' },
+                      ]}
+                      value={viewMode}
+                      onChange={v => {
+                        setViewMode(v);
+                        setSortMode(v === 'event' ? 'eventDesc' : 'swimmerDesc');
+                      }}
+                    />
                   </div>
                 </div>
 
                 <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                   {(viewMode === 'swimmer' ? topSwimmers : topEvents).map((group: any) => (
-                    <div key={group.name || group.event} className="p-3 rounded surface-overlay border border-theme-soft group transition-all hover:border-[var(--border)]">
+                    <div key={group.name || group.event} className="p-3 rounded-lg bg-[var(--surface-muted)] border border-theme-soft group transition-all hover:border-[var(--border)]">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-3">
-                          <h4 className="text-xs font-medium text-[var(--text-primary)] uppercase group-hover:text-[var(--text-accent)] transition-colors">
+                          <h4 className="text-ui-caption font-semibold text-[var(--text-primary)] group-hover:text-[var(--text-accent)] transition-colors">
                             {viewMode === 'swimmer' ? group.name : group.event}
                           </h4>
                           {viewMode === 'swimmer' && (
-                            <span className="px-1.5 py-0.5 rounded surface-overlay border border-theme-soft text-[9px] font-mono font-medium text-theme-secondary">
+                            <span className="px-1.5 py-0.5 rounded bg-[var(--surface)] border border-theme-soft text-ui-micro font-mono text-theme-secondary">
                               {group.classYear}
                             </span>
                           )}
@@ -650,7 +651,7 @@ export default function TeamCard({ team, index, gender, eventsList = [], confere
                           )}
                         </div>
                         <div className="text-right">
-                          <span className="font-mono font-black text-[var(--text-primary)] text-xs">{group.points.toFixed(1)} <span className="text-[8px] text-theme-secondary">PTS</span></span>
+                          <span className="font-mono font-bold text-[var(--text-primary)] text-ui-caption tabular-nums">{group.points.toFixed(1)} <span className="text-ui-micro text-theme-secondary">pts</span></span>
                         </div>
                       </div>
 
@@ -679,7 +680,7 @@ export default function TeamCard({ team, index, gender, eventsList = [], confere
                           const relaySplitPrimary = res.isRelay && (res.relayLegSplitDetail || res.relayLegSplit);
 
                           return (
-                            <div key={i} className="flex items-center justify-between text-[10px] py-1.5 border-t border-theme-soft">
+                            <div key={i} className="flex items-center justify-between text-ui-caption py-2 border-t border-theme-soft">
                               <div className="flex items-center gap-2 text-theme-secondary font-mono w-1/3">
                                 <span className="w-4 font-medium text-theme-secondary">{res.rank || '-'}</span>
                                 <span className="truncate max-w-[150px]" title={viewMode === 'swimmer' ? res.event : res.name}>
