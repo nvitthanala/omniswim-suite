@@ -196,12 +196,12 @@ export function VideoPlayer({
   return (
     <div className="relative group w-full h-full flex items-center justify-center bg-transparent">
       {!videoUrl ? (
-        <div className="text-center p-8 bg-white/80 dark:bg-black/40 border border-slate-200 dark:border-white/5 rounded-xl backdrop-blur-sm max-w-sm shadow-xl dark:shadow-none transition-colors">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-100 dark:bg-white/5 mb-4 text-accent-500 dark:text-accent-400">
+        <div className="text-center p-8 bg-[var(--surface)] border border-theme-soft rounded-xl max-w-sm">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[var(--surface-muted)] mb-4 text-[var(--text-accent)] border border-theme-soft">
             <Play className="w-8 h-8 ml-1" />
           </div>
-          <h3 className="text-lg font-medium text-slate-900 dark:text-white">Upload a video</h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
+          <h3 className="text-lg font-medium text-[var(--text-primary)]">Upload a video</h3>
+          <p className="text-ui-caption text-theme-muted mt-2">
             Select a raw video of a swimming performance. All analysis is performed entirely locally on your device.
           </p>
         </div>
@@ -217,7 +217,7 @@ export function VideoPlayer({
           />
 
           {!data && (
-             <div className="absolute top-4 right-4 z-30 bg-black/80 backdrop-blur-md border border-accent-500/50 p-4 rounded-xl shadow-2xl min-w-[200px]">
+             <div className="absolute top-4 right-4 z-30 bg-black/80 backdrop-blur-md border border-[var(--text-accent)]/50 p-4 rounded-xl shadow-2xl min-w-[200px]">
                <div className="flex items-center justify-between mb-3 pb-2 border-b border-white/10">
                  <div className="flex items-center gap-2 cursor-pointer" onClick={() => setTrackingActive(!trackingActive)}>
                    <div className={`w-2 h-2 rounded-full ${trackingActive ? 'bg-red-500 animate-pulse' : 'bg-slate-500'}`} />
@@ -236,43 +236,43 @@ export function VideoPlayer({
                    <span className="opacity-60 group-hover:opacity-100 flex items-center gap-2">
                      <span className="bg-white/10 px-1 py-0.5 rounded border border-white/20 font-bold min-w-[20px] text-center">D</span> Dive Entry
                    </span>
-                   <span className="text-accent-400 font-bold">{trackingEvents.filter(e => e.type === 'dive').length}</span>
+                   <span className="text-[var(--text-accent)] font-bold">{trackingEvents.filter(e => e.type === 'dive').length}</span>
                  </div>
                  <div className="flex justify-between items-center group">
                    <span className="opacity-60 group-hover:opacity-100 flex items-center gap-2">
                      <span className="bg-white/10 px-1 py-0.5 rounded border border-white/20 font-bold min-w-[20px] text-center">B</span> Breakout
                    </span>
-                   <span className="text-accent-400 font-bold">{trackingEvents.filter(e => e.type === 'breakout').length}</span>
+                   <span className="text-[var(--text-accent)] font-bold">{trackingEvents.filter(e => e.type === 'breakout').length}</span>
                  </div>
                  <div className="flex justify-between items-center group">
                    <span className="opacity-60 group-hover:opacity-100 flex items-center gap-2">
                      <span className="bg-white/10 px-1 py-0.5 rounded border border-white/20 font-bold min-w-[20px] text-center">K</span> UW Kick
                    </span>
-                   <span className="text-accent-400 font-bold">{trackingEvents.filter(e => e.type === 'kick').length}</span>
+                   <span className="text-[var(--text-accent)] font-bold">{trackingEvents.filter(e => e.type === 'kick').length}</span>
                  </div>
                  <div className="flex justify-between items-center group">
                    <span className="opacity-60 group-hover:opacity-100 flex items-center gap-2">
                      <span className="bg-white/10 px-1 py-0.5 rounded border border-white/20 font-bold min-w-[20px] text-center">S</span> Stroke
                    </span>
-                   <span className="text-accent-400 font-bold">{trackingEvents.filter(e => e.type === 'stroke').length}</span>
+                   <span className="text-[var(--text-accent)] font-bold">{trackingEvents.filter(e => e.type === 'stroke').length}</span>
                  </div>
                  <div className="flex justify-between items-center group">
                    <span className="opacity-60 group-hover:opacity-100 flex items-center gap-2">
                      <span className="bg-white/10 px-1 py-0.5 rounded border border-white/20 font-bold min-w-[20px] text-center">F</span> 15m Mark
                    </span>
-                   <span className="text-accent-400 font-bold">{trackingEvents.filter(e => e.type === '15m').length}</span>
+                   <span className="text-[var(--text-accent)] font-bold">{trackingEvents.filter(e => e.type === '15m').length}</span>
                  </div>
                  <div className="flex justify-between items-center group">
                    <span className="opacity-60 group-hover:opacity-100 flex items-center gap-2">
                      <span className="bg-white/10 px-1 py-0.5 rounded border border-white/20 font-bold min-w-[20px] text-center">T</span> Turn
                    </span>
-                   <span className="text-accent-400 font-bold">{trackingEvents.filter(e => e.type === 'turn').length}</span>
+                   <span className="text-[var(--text-accent)] font-bold">{trackingEvents.filter(e => e.type === 'turn').length}</span>
                  </div>
                  <div className="flex justify-between items-center group">
                    <span className="opacity-60 group-hover:opacity-100 flex items-center gap-2">
                      <span className="bg-white/10 px-1 py-0.5 rounded border border-white/20 font-bold min-w-[20px] text-center">X</span> Finish
                    </span>
-                   <span className="text-accent-400 font-bold">{trackingEvents.filter(e => e.type === 'finish').length}</span>
+                   <span className="text-[var(--text-accent)] font-bold">{trackingEvents.filter(e => e.type === 'finish').length}</span>
                  </div>
                </div>
 
@@ -286,7 +286,7 @@ export function VideoPlayer({
                    </div>
                    
                    <div className="text-right">
-                     <div className="text-[9px] text-accent-400 uppercase tracking-widest font-bold mb-1">Latest Tag</div>
+                     <div className="text-[9px] text-[var(--text-accent)] uppercase tracking-widest font-bold mb-1">Latest Tag</div>
                      <div className="text-sm font-mono text-white/90">
                        {formatTime(trackingEvents[trackingEvents.length - 1].time)}
                      </div>
@@ -307,10 +307,14 @@ export function VideoPlayer({
                   onChange={handleSeek}
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                 />
-                <div className="w-full h-1.5 bg-white/30 dark:bg-slate-800 rounded-full overflow-hidden backdrop-blur-sm border border-black/20">
+                <div className="w-full h-1.5 bg-white/30 rounded-full overflow-hidden backdrop-blur-sm border border-black/20">
                   <div
-                    className="h-full bg-accent-500 rounded-full transition-all duration-100 ease-linear shadow-[0_0_8px_var(--accent-500)]"
-                    style={{ width: `${progress}%` }}
+                    className="h-full rounded-full transition-all duration-100 ease-linear"
+                    style={{
+                      width: `${progress}%`,
+                      backgroundColor: 'var(--text-accent)',
+                      boxShadow: '0 0 8px color-mix(in srgb, var(--text-accent) 60%, transparent)',
+                    }}
                   />
                 </div>
                 {startTime !== null && startTime !== undefined && duration > 0 && (
@@ -348,19 +352,19 @@ export function VideoPlayer({
               
               <div className="flex items-center justify-between text-white flex-wrap gap-y-2 mt-1">
                 <div className="flex items-center gap-3">
-                  <button onClick={() => stepFrame(-1)} className="hover:text-accent-400 transition-colors focus:outline-none" title="Previous Frame">
+                  <button onClick={() => stepFrame(-1)} className="hover:text-[var(--text-accent)] transition-colors focus:outline-none" title="Previous Frame">
                     <SkipBack className="w-4 h-4 fill-current opacity-80 hover:opacity-100" />
                   </button>
-                  <button onClick={togglePlay} className="hover:text-accent-400 transition-colors focus:outline-none bg-accent-500/20 p-1.5 rounded-full backdrop-blur-sm border border-accent-500/30 text-accent-100">
+                  <button onClick={togglePlay} className="hover:text-[var(--text-accent)] transition-colors focus:outline-none bg-[var(--text-accent)]/20 p-1.5 rounded-full backdrop-blur-sm border border-[var(--text-accent)]/30 text-white">
                     {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
                   </button>
-                  <button onClick={() => stepFrame(1)} className="hover:text-accent-400 transition-colors focus:outline-none" title="Next Frame">
+                  <button onClick={() => stepFrame(1)} className="hover:text-[var(--text-accent)] transition-colors focus:outline-none" title="Next Frame">
                     <SkipForward className="w-4 h-4 fill-current opacity-80 hover:opacity-100" />
                   </button>
                   
                   <div className="text-xs font-mono font-medium tracking-wide opacity-90 drop-shadow-md ml-2 border-l border-white/20 pl-4 py-0.5 flex items-center gap-4">
                     <span>{formatTime(currentTime)} / {formatTime(duration)}</span>
-                    <span className="text-accent-300">FR: {Math.floor(currentTime * fps)}</span>
+                    <span className="text-[var(--text-accent)] opacity-80">FR: {Math.floor(currentTime * fps)}</span>
                   </div>
                 </div>
 
@@ -413,7 +417,7 @@ export function VideoPlayer({
                   </div>
                   
                   <div className="hidden md:flex items-center gap-2 border-l border-white/20 pl-4 ml-2 h-8 group">
-                    <button onClick={toggleMute} className="hover:text-accent-400 transition-colors focus:outline-none">
+                    <button onClick={toggleMute} className="hover:text-[var(--text-accent)] transition-colors focus:outline-none">
                       {isMuted || volume === 0 ? <VolumeX className="w-4 h-4 drop-shadow-md" /> : <Volume2 className="w-4 h-4 drop-shadow-md" />}
                     </button>
                     <input
@@ -427,7 +431,7 @@ export function VideoPlayer({
                     />
                   </div>
 
-                  <button className="hover:text-accent-400 transition-colors ml-2 border-l border-white/20 pl-4">
+                  <button className="hover:text-[var(--text-accent)] transition-colors ml-2 border-l border-white/20 pl-4">
                     <Maximize className="w-4 h-4 drop-shadow-md" />
                   </button>
                 </div>

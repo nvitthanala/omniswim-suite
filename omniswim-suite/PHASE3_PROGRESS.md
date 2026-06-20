@@ -3,9 +3,21 @@
 > Living document. Updated during Phase 3 work so any agent (or human) can resume mid-stream.
 > **Source of truth for the plan:** `.cursor/plans/omni_swim_phase_3_2b678aae.plan.md` (do NOT edit the plan file).
 
-Last updated: 2026-06-19. Phase 3 **fully complete**.
+Last updated: 2026-06-19. Phase 3 **fully complete**. Post-Phase-3 chart/theming fixes applied.
 
 ---
+
+## Post-Phase-3 fixes (2026-06-19)
+
+| area | fix |
+|------|-----|
+| Metrics charts | `MetricsDashboard` now uses suite tokens (`var(--text-accent)`, `useThemeColors`) — Velocity Profile line/area visible in dark/light |
+| Metrics panels | `RaceSetupForm`, `VideoPlayer` upload/progress bar migrated off orphaned `--accent-500` / `dark:` classes |
+| Matrix charts | `TeamCard` event line: single-point dots, normalized `activeTooltipIndex`; class bar tooltip cleanup |
+| Matrix timeline | `MeetOperationsView` score timeline shows dots when ≤2 events; theme-aware tooltip cursor |
+| cleanup | Removed unused `packages/metrics/src/index.css` (never imported by suite) |
+
+Next: see [PHASE4_PLAN.md](PHASE4_PLAN.md) for proposed Phase 4 epics.
 
 ## How to resume (read this first)
 
