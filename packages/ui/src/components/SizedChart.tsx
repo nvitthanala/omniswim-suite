@@ -1,5 +1,12 @@
-import type { ReactNode } from 'react';
-import { ResponsiveContainer } from 'recharts';
+import {
+  Children,
+  cloneElement,
+  isValidElement,
+  type ReactElement,
+  type ReactNode,
+  useLayoutEffect,
+  useState,
+} from 'react';
 import { isChartMeasurementReady } from './ChartShell';
 
 type SizedChartProps = {
@@ -9,20 +16,45 @@ type SizedChartProps = {
   children: ReactNode;
 };
 
+type ChartChildProps = {
+  width?: number;
+  height?: number;
+  responsive?: boolean;
+};
+
 /**
- * Recharts 3 fast path: numeric width/height on ResponsiveContainer skips DOM
- * resize detection and provides sizing context to chart children.
- * Do not use %/100% here — ChartShell already supplies pixel dimensions.
+ * Injects pixel width/height and responsive={false} into a Recharts chart child.
+ * Uses Recharts 3 StaticDiv path — no ResponsiveContainer or % sizing.
  */
 export function SizedChart({ width, height, minPixels = 8, children }: SizedChartProps) {
   const w = Math.floor(width);
   const h = Math.floor(height);
-  if (!isChartMeasurementReady({ width: w, height: h }, minPixels)) {
+  const [mounted, setMounted] = useState(false);
+
+  useLayoutEffect(() => {
+    if (!isChartMeasurementReady({ width: w, height: h }, minPixels)) {
+      setMounted(false);
+      return;
+    }
+    const id = requestAnimationFrame(() => setMounted(true));
+    return () => {
+      cancelAnimationFrame(id);
+      setMounted(false);
+    };
+  }, [w, h, minPixels]);
+
+  if (!mounted || !isChartMeasurementReady({ width: w, height: h }, minPixels)) {
     return null;
   }
-  return (
-    <ResponsiveContainer width={w} height={h}>
-      {children}
-    </ResponsiveContainer>
-  );
+
+  const child = Children.only(children);
+  if (!isValidElement(child)) {
+    return null;
+  }
+
+  return cloneElement(child as ReactElement<ChartChildProps>, {
+    width: w,
+    height: h,
+    responsive: false,
+  });
 }

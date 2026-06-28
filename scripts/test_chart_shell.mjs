@@ -6,8 +6,8 @@
  * measured parent is effectively collapsed, then should mount once dimensions
  * become usable.
  *
- * Rule: ChartShell supplies pixel dimensions; wrap charts in SizedChart (numeric
- * ResponsiveContainer). Do not pass width/height directly to LineChart/BarChart.
+ * Rule: ChartShell supplies pixel dimensions; SizedChart injects width/height and
+ * responsive={false} on chart children. Never use %/100% ResponsiveContainer.
  */
 import {
   getChartContentBoxSize,

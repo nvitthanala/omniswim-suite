@@ -404,7 +404,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                 <ChartShell size="lg" className="surface-overlay p-2 rounded border border-theme-soft group/chart">
                   {({ width, height }) =>
                     chartView === 'event' ? (
-                  <div ref={eventChartSurfaceRef} className="relative">
+                  <div ref={eventChartSurfaceRef} className="relative h-full w-full min-h-0 min-w-0">
                     {!pinnedTooltip && activeTooltip && (
                       <div 
                         className="absolute pointer-events-none rounded-lg overflow-hidden"
@@ -502,7 +502,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                     )}
                   </div>
                   ) : (
-                  <div ref={classChartSurfaceRef} className="relative">
+                  <div ref={classChartSurfaceRef} className="relative h-full w-full min-h-0 min-w-0">
                     {!pinnedClassTooltip && activeClassTooltip && (
                       <div 
                         className="absolute pointer-events-none rounded-lg overflow-hidden"

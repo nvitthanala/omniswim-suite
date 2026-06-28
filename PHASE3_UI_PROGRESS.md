@@ -87,6 +87,21 @@ Fix:
 - Added `scripts/test_chart_render.mjs` (happy-dom DOM regression) wired into `npm test`.
 - Rule: **numeric `ResponsiveContainer` via `SizedChart` is OK**; **`%`/`100%` `ResponsiveContainer` is not**.
 
+### Chart static sizing fix (sixth pass)
+
+Symptom persisted after fifth pass in real Matrix UI: border and HTML legend rendered but chart interior stayed blank. Isolated happy-dom test passed without `ChartShell` CSS; failure was in the layout/mount chain. Root cause: fifth-pass `SizedChart` relied on numeric `ResponsiveContainer` context to supply dimensions to `LineChart` with `responsive: false` default; in absolute viewport + TeamCard wrapper layouts, Recharts wrapper could collapse to 0×0 before Redux layout committed.
+
+Fix:
+
+- Rewrote `SizedChart` as a recharts-free wrapper: `cloneElement(child, { width, height, responsive: false })` for Recharts 3 `StaticDiv` path.
+- Added one-frame `requestAnimationFrame` deferred mount in `SizedChart` after valid dimensions.
+- Removed `recharts` dependency from `@omniswim/ui`.
+- `.chart-shell__viewport`: explicit `width: 100%; height: 100%`.
+- TeamCard chart surface wrappers: `h-full w-full min-h-0 min-w-0`.
+- Narrowed `timelineChartKey` (dropped `timelineData.length`).
+- Upgraded `scripts/test_chart_render.mjs` to render full `ChartShell` → `SizedChart` → `LineChart` stack with shell CSS.
+- Rule: **`ChartShell` → `SizedChart` injects static `width`/`height` + `responsive={false}`**; never `%` `ResponsiveContainer`.
+
 ### Matrix formatting cleanup (second pass)
 
 - Added `packages/matrix/src/components/matrixPresentation.tsx` with `AthleteName`, `TeamName`, `PointsValue`, `SwimTimeCell`, and `MatrixRow`.

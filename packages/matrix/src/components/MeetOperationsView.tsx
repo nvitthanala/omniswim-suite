@@ -166,7 +166,7 @@ export default function MeetOperationsView({
   }, [scoringBundle.allScored, gender, searchQuery, scoringRefreshKey]);
 
   const { events, timelineData } = scoringBundle;
-  const timelineChartKey = `timeline-${scoringBundle.teamStyleSignature}-${timelineData.length}-${scoringRefreshKey}`;
+  const timelineChartKey = `timeline-${scoringRefreshKey}-${scoringBundle.teamStyleSignature}`;
 
   return (
     <div className="flex flex-col gap-6">
