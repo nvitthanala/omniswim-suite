@@ -12,10 +12,12 @@ import { Gender, Recruit, ScoringSettings, TeamScore, Workspace } from '@omniswi
 import { assignTeamLineStyles, isRelayResult } from '@omniswim/core/lib/utils';
 import { aggregateSwimmerMeetPoints, scorerRosterKey } from '@omniswim/core/lib/scorerRoster';
 import { buildTeamScoreLookup, officialScoresForGender } from '@omniswim/core/lib/teamScoreMatching';
+import type { PrelimsDeltaTimelinePoint } from '@omniswim/core/lib/prelimsProjection';
 import type { ScoringBundle } from '@omniswim/core/lib/useWorkspaceScoring';
 import TeamCard from './TeamCard';
 import ScoringSettingsPanel from './ScoringSettingsPanel';
 import MeetDiffTable from './MeetDiffTable';
+import PrelimsDiffTable from './PrelimsDiffTable';
 import { useThemeColors } from '@omniswim/core/lib/useThemeColors';
 import { AthleteName, PointsValue, TeamName } from './matrixPresentation';
 
@@ -24,9 +26,16 @@ type TimelineTooltipContentProps = {
   payload?: ReadonlyArray<{ name?: string; dataKey?: string; value?: unknown; color?: string }>;
   label?: string;
   teamsWithLineStyles: TeamScore[];
+  prelimsDeltaByTeam?: Record<string, number>;
 };
 
-function TimelineTooltipContent({ active, payload, label, teamsWithLineStyles }: TimelineTooltipContentProps) {
+function TimelineTooltipContent({
+  active,
+  payload,
+  label,
+  teamsWithLineStyles,
+  prelimsDeltaByTeam,
+}: TimelineTooltipContentProps) {
   if (!active || !payload?.length) return null;
   const dashByTeam = Object.fromEntries(teamsWithLineStyles.map(t => [t.teamName, t.strokeDasharray]));
   const rows = [...payload]
@@ -35,6 +44,7 @@ function TimelineTooltipContent({ active, payload, label, teamsWithLineStyles }:
       value: typeof p.value === 'number' ? p.value : Number(p.value),
       color: String(p.color ?? ''),
       strokeDasharray: dashByTeam[String(p.name ?? p.dataKey ?? '')] as string | undefined,
+      prelimsDelta: prelimsDeltaByTeam?.[String(p.name ?? p.dataKey ?? '')],
     }))
     .filter(r => !Number.isNaN(r.value))
     .sort((a, b) => b.value - a.value || a.name.localeCompare(b.name));
@@ -48,6 +58,8 @@ function TimelineTooltipContent({ active, payload, label, teamsWithLineStyles }:
         {rows.map((r, index) => {
           const teamBelow = rows[index + 1];
           const gapBelow = teamBelow ? r.value - teamBelow.value : null;
+          const prelimsOu =
+            r.prelimsDelta != null && Math.abs(r.prelimsDelta) > 0.05 ? r.prelimsDelta : null;
           return (
             <li key={r.name} className="grid grid-cols-[1fr_auto_auto] items-center gap-x-3 text-[var(--text-primary)]">
               <span className="flex items-center gap-2 min-w-0">
@@ -64,8 +76,22 @@ function TimelineTooltipContent({ active, payload, label, teamsWithLineStyles }:
                 </svg>
                 <span className="truncate font-sans text-ui-body">{r.name}</span>
               </span>
-              <span className="text-theme-secondary text-ui-micro text-right tabular-nums shrink-0">
-                {gapBelow != null && gapBelow > 0 ? `+${gapBelow.toFixed(1)}` : index === rows.length - 1 ? '—' : ''}
+              <span
+                className={`text-ui-micro text-right tabular-nums shrink-0 ${
+                  prelimsOu != null
+                    ? prelimsOu > 0
+                      ? 'text-points-positive'
+                      : 'text-points-negative'
+                    : 'text-theme-secondary'
+                }`}
+              >
+                {prelimsOu != null
+                  ? `${prelimsOu > 0 ? '+' : ''}${prelimsOu.toFixed(1)} vs prelims`
+                  : gapBelow != null && gapBelow > 0
+                    ? `+${gapBelow.toFixed(1)}`
+                    : index === rows.length - 1
+                      ? '—'
+                      : ''}
               </span>
               <span className="text-points-positive font-bold shrink-0 tabular-nums">{r.value.toFixed(1)}</span>
             </li>
@@ -81,7 +107,11 @@ type Props = {
   gender: Gender;
   scoringBundle: ScoringBundle;
   baselineBundle: ScoringBundle;
+  prelimsProjectedBundle: ScoringBundle;
   baselineByTeam: Map<string, number>;
+  prelimsByTeam: Map<string, number>;
+  prelimsDeltaTimeline: PrelimsDeltaTimelinePoint[];
+  showPrelimsPerformance: boolean;
   scoringSettings: ScoringSettings;
   suggestedPresetId: string | null;
   searchQuery: string;
@@ -104,7 +134,11 @@ export default function MeetOperationsView({
   gender,
   scoringBundle,
   baselineBundle,
+  prelimsProjectedBundle,
   baselineByTeam,
+  prelimsByTeam,
+  prelimsDeltaTimeline,
+  showPrelimsPerformance,
   scoringSettings,
   suggestedPresetId,
   searchQuery,
@@ -122,7 +156,7 @@ export default function MeetOperationsView({
   scoringRefreshKey,
 }: Props) {
   const chartTheme = useThemeColors();
-  const [matrixView, setMatrixView] = useState<'standings' | 'diff'>('standings');
+  const [matrixView, setMatrixView] = useState<'standings' | 'diff' | 'prelims'>('standings');
   const meetConference = workspace.conference;
 
   const teamsWithLineStyles = useMemo(
@@ -168,6 +202,14 @@ export default function MeetOperationsView({
   const { events, timelineData } = scoringBundle;
   const timelineChartKey = `timeline-${scoringRefreshKey}-${scoringBundle.teamStyleSignature}`;
 
+  const prelimsDeltaByLabel = useMemo(() => {
+    const map = new Map<string, Record<string, number>>();
+    for (const pt of prelimsDeltaTimeline) {
+      map.set(pt.name, pt.baselineDelta);
+    }
+    return map;
+  }, [prelimsDeltaTimeline]);
+
   return (
     <div className="flex flex-col gap-6">
       <ScoringSettingsPanel
@@ -188,6 +230,11 @@ export default function MeetOperationsView({
             <h3 className="text-[12px] font-bold text-[var(--text-primary)] uppercase tracking-tight">
               Chronological Team Score Timeline
             </h3>
+            {showPrelimsPerformance ? (
+              <p className="text-[10px] text-theme-muted mt-1 normal-case tracking-normal">
+                Tooltip middle column shows baseline over/under vs prelims projection at each event.
+              </p>
+            ) : null}
           </div>
 
           <ChartShell size="md" className="surface-overlay p-2 rounded border border-theme-soft">
@@ -234,6 +281,11 @@ export default function MeetOperationsView({
                           label={props.label != null ? String(props.label) : undefined}
                           payload={props.payload as TimelineTooltipContentProps['payload']}
                           teamsWithLineStyles={teamsWithLineStyles}
+                          prelimsDeltaByTeam={
+                            showPrelimsPerformance && props.label != null
+                              ? prelimsDeltaByLabel.get(String(props.label))
+                              : undefined
+                          }
                         />
                       )}
                     />
@@ -387,10 +439,29 @@ export default function MeetOperationsView({
                 <GitCompareArrows size={12} />
                 <span>Diff</span>
               </button>
+              {showPrelimsPerformance ? (
+                <button
+                  type="button"
+                  onClick={() => setMatrixView('prelims')}
+                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] uppercase font-medium transition-colors ${
+                    matrixView === 'prelims'
+                      ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
+                      : 'text-theme-secondary hover:text-[var(--text-primary)]'
+                  }`}
+                  title="Show over/underperformance vs prelims projection"
+                >
+                  <TrendingUp size={12} />
+                  <span>Prelims</span>
+                </button>
+              ) : null}
             </div>
             {matrixView === 'diff' ? (
               <p className="text-[10px] uppercase tracking-widest text-theme-secondary">
                 Comparing what-if projection against loaded meet baseline
+              </p>
+            ) : matrixView === 'prelims' ? (
+              <p className="text-[10px] uppercase tracking-widest text-theme-secondary">
+                Over/under vs engine-computed prelims projection
               </p>
             ) : null}
           </div>
@@ -400,6 +471,13 @@ export default function MeetOperationsView({
               <MeetDiffTable
                 projectedTeams={teamsWithLineStyles}
                 baselineTeams={baselineBundle.sortedTeams}
+                searchQuery={searchQuery}
+              />
+            ) : matrixView === 'prelims' ? (
+              <PrelimsDiffTable
+                projectedTeams={teamsWithLineStyles}
+                baselineTeams={baselineBundle.sortedTeams}
+                prelimsTeams={prelimsProjectedBundle.sortedTeams}
                 searchQuery={searchQuery}
               />
             ) : teamsWithLineStyles.length > 0 ? (
@@ -425,6 +503,19 @@ export default function MeetOperationsView({
                     searchQuery={searchQuery}
                     actualScore={officialLookup.get(team.teamName)}
                     baselineScore={baselineByTeam.get(team.teamName)}
+                    prelimsProjectedScore={prelimsByTeam.get(team.teamName)}
+                    baselineOverUnder={
+                      prelimsByTeam.has(team.teamName)
+                        ? (baselineByTeam.get(team.teamName) ?? 0) -
+                          (prelimsByTeam.get(team.teamName) ?? 0)
+                        : undefined
+                    }
+                    projectedOverUnder={
+                      prelimsByTeam.has(team.teamName)
+                        ? team.totalPoints - (prelimsByTeam.get(team.teamName) ?? 0)
+                        : undefined
+                    }
+                    showPrelimsPerformance={showPrelimsPerformance}
                     eventThrough={workspace.officialTeamScores?.eventThrough}
                     onRequestDeleteSwimmer={onRequestDeleteSwimmer}
                     scoringRefreshKey={scoringRefreshKey}

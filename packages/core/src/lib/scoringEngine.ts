@@ -15,6 +15,7 @@ import {
   stripEventGenderMarker,
 } from './utils';
 import { mergeScoringSettings } from './scoringDefaults';
+import { buildPrelimsProjectedBundle } from './prelimsProjection';
 import { buildWhatIfResults } from './whatIfProjection';
 
 export type ScoringBundle = {
@@ -149,5 +150,6 @@ export function buildScoringSnapshot(workspace: Workspace, gender: Gender, remov
     applyWhatIf: false,
     scorerRosterOverrides: [],
   });
-  return { projected, baseline };
+  const prelimsProjected = buildPrelimsProjectedBundle({ workspace, gender });
+  return { projected, baseline, prelimsProjected };
 }

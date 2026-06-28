@@ -3,7 +3,7 @@
 > Living document. Updated continuously during Phase 2 work so any agent (or human)
 > can resume mid-stream. **Source of truth for the plan:** `c:\Users\nihar\.cursor\plans\omni_swim_phase_2_4df6b445.plan.md` (do NOT edit the plan file).
 
-Last updated: 2026-06-22 (session 4). Phase 2 complete; **repo flattened/cleaned, unification Phase 4 (polish + cutover) finished, and the broken Matrix/TeamCard graphs fixed**. Verified via production build, full test suite (`npm test`), and a headless render check of the Matrix charts.
+Last updated: 2026-06-28 (prelims over/underperformance). Phase 2 complete; **repo flattened/cleaned, unification Phase 4 (polish + cutover) finished, and the broken Matrix/TeamCard graphs fixed**. Verified via production build, full test suite (`npm test`), and a headless render check of the Matrix charts.
 
 ---
 
@@ -35,6 +35,38 @@ Package manager: **npm** (workspaces). Node + Python (venv auto-created by serve
 > **CURRENT CHECKPOINT (2026-06-19, session 3):** Phase 2 is **fully complete**. All 8 epics DONE and build-verified. Latest: `npm run -w @omniswim/shell build` exit 0, `npx tsx scripts/test_sqlite_roundtrip.mjs` PASSED.
 
 > **HANDOFF (ready for next phase):** Phase 2 is fully complete. All epics DONE + build-verified. Tauri optional (skipped). See **Phase 2 summary** below for all implemented artifacts.
+
+---
+
+---
+
+## Prelims over/underperformance (2026-06-28)
+
+Engine-computed prelims projection and Matrix UI for meet performance vs prelims expectation.
+
+### Algorithm (`packages/core/src/lib/prelimsProjection.ts`)
+
+1. Extract prelims clocks from loaded meet rows (`prelimsTime`, or prelims-only `time`).
+2. Dedupe to one row per athlete/relay per event (fastest prelims clock wins).
+3. Re-rank each event; sprint events → projected A Final (1–8) / B Final (9–16); distance/diving → Preliminaries tier.
+4. Score with existing `calculatePoints` and conference settings.
+5. Compare **baseline** and **projected** bundles against the prelims anchor (always from raw meet data, not what-if edits).
+
+### UI (Matrix only)
+
+- **Prelims** view toggle — `PrelimsDiffTable` with Prelims Proj, Baseline, Baseline O/U, Projected, Projected O/U columns.
+- **TeamCard** / compact score summary — prelims projected + both over/under deltas.
+- **Timeline tooltip** — per-event cumulative baseline vs prelims delta when prelims data exists.
+
+### Verification
+
+```powershell
+cd "C:\Users\nihar\Documents\GitHub\omniswim-suite"
+npm test
+npm run -w @omniswim/shell build
+```
+
+New test: `scripts/test_prelims_projection.mjs` (self-contained synthetic fixture).
 
 ---
 

@@ -50,7 +50,16 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
   const [scoringRefreshKey, setScoringRefreshKey] = useState(0);
   const parseAbortRef = useRef<AbortController | null>(null);
 
-  const { projected, baseline, baselineByTeam, scoringSettings } = useWorkspaceScoring({
+  const {
+    projected,
+    baseline,
+    prelimsProjected,
+    baselineByTeam,
+    prelimsByTeam,
+    prelimsDeltaTimeline,
+    showPrelimsPerformance,
+    scoringSettings,
+  } = useWorkspaceScoring({
     workspace,
     gender,
     removeSeniors,
@@ -209,7 +218,11 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
             gender={gender}
             scoringBundle={projected}
             baselineBundle={baseline}
+            prelimsProjectedBundle={prelimsProjected}
             baselineByTeam={baselineByTeam}
+            prelimsByTeam={prelimsByTeam}
+            prelimsDeltaTimeline={prelimsDeltaTimeline}
+            showPrelimsPerformance={showPrelimsPerformance}
             scoringSettings={scoringSettings}
             suggestedPresetId={suggestedPresetId}
             searchQuery={searchQuery}

@@ -42,6 +42,10 @@ interface Props {
   searchQuery?: string;
   actualScore?: number;
   baselineScore?: number;
+  prelimsProjectedScore?: number;
+  baselineOverUnder?: number;
+  projectedOverUnder?: number;
+  showPrelimsPerformance?: boolean;
   eventThrough?: number;
   scoringRefreshKey?: number;
   onUpdateTime?: (id: string, newTime: string) => void;
@@ -49,7 +53,7 @@ interface Props {
   onRequestDeleteSwimmer?: (name: string) => void;
 }
 
-function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, conference, searchQuery, actualScore, baselineScore, eventThrough, scoringRefreshKey = 0, onUpdateTime, onRequestDeleteSwimmer }: Props) {
+function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, conference, searchQuery, actualScore, baselineScore, prelimsProjectedScore, baselineOverUnder, projectedOverUnder, showPrelimsPerformance, eventThrough, scoringRefreshKey = 0, onUpdateTime, onRequestDeleteSwimmer }: Props) {
   const chartTheme = useThemeColors();
   const teamChartColor = useMemo(
     () => colorForChartStroke(team.color || '#F43F5E', chartTheme.isDark ? 'dark' : 'light'),
@@ -335,13 +339,16 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
             <span className="text-ui-caption text-theme-secondary uppercase tracking-widest font-medium">
               {conference ? `${conference} • ` : ''}{topSwimmers.length} Athletes
             </span>
-            {(actualScore != null || baselineScore != null) ? (
+            {(actualScore != null || baselineScore != null || showPrelimsPerformance) ? (
               <ProjectedActualScore
                 actual={actualScore}
                 baseline={baselineScore}
                 projected={team.totalPoints}
                 compact
                 eventThrough={eventThrough}
+                prelimsProjected={prelimsProjectedScore}
+                baselineOverUnder={baselineOverUnder}
+                projectedOverUnder={projectedOverUnder}
               />
             ) : null}
           </div>

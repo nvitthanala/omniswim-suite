@@ -19,7 +19,7 @@ Omni Swim Suite is a workspace for swim-meet operations, combining roster planni
 | Applet | Purpose |
 |---|---|
 | Manager | Athlete history, roster planning, event setup, and exports |
-| Matrix | Meet scoring views, projections, charts, and scenario review |
+| Matrix | Meet scoring views, projections, prelims over/under, charts, and scenario review |
 | Metrics | Local video/session metrics analysis (no cloud keys) |
 
 Workspaces persist locally (JSON by default, optional SQLite). Manager and Matrix share live workspace data, so roster edits update Matrix charts without a reload.
@@ -122,6 +122,15 @@ npm run test:roundtrip
 - [PHASE2_PROGRESS.md](PHASE2_PROGRESS.md) — implementation notes, status, and verification history
 - [backend](backend) — parsing and scoring utilities
 - [scripts](scripts) — automation and validation scripts
+
+### Prelims projection (Matrix)
+
+When a loaded meet includes prelims times, Matrix computes a **prelims projected score** by re-ranking each event on prelims clocks and assigning expected A/B final placements (distance and diving stay on prelim scoring rules). **Over/underperformance** is shown as:
+
+- **Baseline vs prelims** — loaded meet score minus prelims projection (actual meet performance)
+- **Projected vs prelims** — what-if score minus prelims projection (scenario vs prelims expectation)
+
+Use the **Prelims** view in the Performance Matrix for a team diff table; team cards and the timeline tooltip show meet-total and per-event cumulative deltas when prelims data is present.
 
 ## Troubleshooting
 

@@ -4,16 +4,18 @@
  */
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Gender, Workspace } from '../types';
+import { buildPrelimsDeltaTimeline, hasPrelimsData } from './prelimsProjection';
 import { mergeScoringSettings } from './scoringDefaults';
 import { buildScoringSnapshot, type ScoringBundle } from './scoringEngine';
 
-type Snapshot = { projected: ScoringBundle; baseline: ScoringBundle };
+type Snapshot = { projected: ScoringBundle; baseline: ScoringBundle; prelimsProjected: ScoringBundle };
 
 type WorkerResponse = {
   id: number;
   ok: boolean;
   projected?: ScoringBundle;
   baseline?: ScoringBundle;
+  prelimsProjected?: ScoringBundle;
   error?: string;
 };
 
@@ -29,7 +31,7 @@ type UseWorkspaceScoringArgs = {
 };
 
 /**
- * Computes projected + baseline scoring bundles.
+ * Computes projected + baseline + prelims-projected scoring bundles.
  *
  * The first computation runs synchronously (correct first paint). Subsequent
  * recomputes are offloaded to a Web Worker so the UI stays responsive during
@@ -64,8 +66,12 @@ export function useWorkspaceScoring({
         const data = event.data;
         if (!data || data.id < latestHandledRef.current) return;
         latestHandledRef.current = data.id;
-        if (data.ok && data.projected && data.baseline) {
-          setSnapshot({ projected: data.projected, baseline: data.baseline });
+        if (data.ok && data.projected && data.baseline && data.prelimsProjected) {
+          setSnapshot({
+            projected: data.projected,
+            baseline: data.baseline,
+            prelimsProjected: data.prelimsProjected,
+          });
         }
       };
       worker.onerror = () => {
@@ -138,11 +144,41 @@ export function useWorkspaceScoring({
     return map;
   }, [snapshot.baseline.teamStyleSignature]);
 
+  const prelimsByTeam = useMemo(() => {
+    const map = new Map<string, number>();
+    for (const t of snapshot.prelimsProjected.sortedTeams) {
+      map.set(t.teamName, t.totalPoints);
+    }
+    return map;
+  }, [snapshot.prelimsProjected.teamStyleSignature]);
+
+  const prelimsDeltaTimeline = useMemo(
+    () =>
+      buildPrelimsDeltaTimeline(
+        snapshot.baseline.timelineData,
+        snapshot.projected.timelineData,
+        snapshot.prelimsProjected.timelineData
+      ),
+    [
+      snapshot.baseline.timelineData,
+      snapshot.projected.timelineData,
+      snapshot.prelimsProjected.timelineData,
+    ]
+  );
+
+  const currentResults =
+    gender === Gender.MEN ? (workspace.menResults ?? []) : (workspace.womenResults ?? []);
+  const showPrelimsPerformance = hasPrelimsData(currentResults);
+
   return {
     projected: snapshot.projected,
     baseline: snapshot.baseline,
+    prelimsProjected: snapshot.prelimsProjected,
     scoringSettings,
     baselineByTeam,
+    prelimsByTeam,
+    prelimsDeltaTimeline,
+    showPrelimsPerformance,
   };
 }
 

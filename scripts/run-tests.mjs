@@ -7,7 +7,7 @@
  * require local-only fixtures (not committed to the repo) are skipped when the
  * fixture is absent so `npm test` stays green on a clean checkout.
  */
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -23,12 +23,14 @@ const TESTS = [
   ['test_chart_shell.mjs'],
   ['test_chart_render.mjs'],
   ['test_theme_css.mjs'],
+  ['test_chart_bundle.mjs'],
   ['test_roster_optimizer.mjs'],
   ['test_entry_limits.mjs'],
   ['test_athlete_history.mjs'],
   ['test_relay_splits.mjs'],
   ['test_relay_overrides.mjs'],
   ['test_dq_scoring.mjs'],
+  ['test_prelims_projection.mjs'],
   ['test_team_colors.mjs'],
   ['test_individual_scoring.mjs', 'tests/test_nsisc_output.json'],
   ['test_relay_scoring.mjs', 'tests/test_nsisc_output.json'],
@@ -61,6 +63,27 @@ for (const [file, fixture] of TESTS) {
     failures.push(`--- ${file} ---\n${out.trim().split('\n').slice(-8).join('\n')}`);
     failed += 1;
   }
+}
+
+const playwrightBin = join(repoRoot, 'node_modules', '@playwright', 'test', 'cli.js');
+if (existsSync(playwrightBin)) {
+  const e2e = spawnSync(process.execPath, [playwrightBin, 'test'], {
+    cwd: repoRoot,
+    stdio: 'pipe',
+    env: { ...process.env, NODE_OPTIONS: process.env.NODE_OPTIONS ?? '--use-system-ca' },
+  });
+  if (e2e.status === 0) {
+    console.log('PASS  playwright matrix-chart e2e');
+    passed += 1;
+  } else {
+    console.log('FAIL  playwright matrix-chart e2e');
+    const out = (e2e.stdout?.toString() || '') + (e2e.stderr?.toString() || '');
+    failures.push(`--- playwright e2e ---\n${out.trim().split('\n').slice(-15).join('\n')}`);
+    failed += 1;
+  }
+} else {
+  console.log('SKIP  playwright e2e (@playwright/test not installed)');
+  skipped += 1;
 }
 
 console.log(`\n${passed} passed, ${failed} failed, ${skipped} skipped`);
