@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
+import { ChartShell } from '@omniswim/ui';
 import { TeamScore, SwimmerResult, ClassYear, Gender, RelayLegStroke } from '@omniswim/core/types';
 import { getYearsRemaining, convertTimeToSeconds, relaySplitQualificationCutEvent, formatEventChartAxisLabel, stripEventGenderMarker, colorForChartStroke } from '@omniswim/core/lib/utils';
 import { displayTimeForRelayLeg, formatLegSplitSummary } from '@omniswim/core/lib/relaySplits';
@@ -58,6 +59,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
   const [viewMode, setViewMode] = useState<'swimmer'|'event'>('event');
   const [chartView, setChartView] = useState<'event' | 'class'>('event');
   const [sortMode, setSortMode] = useState<'chrono'|'eventDesc'|'eventAsc'|'swimmerDesc'|'swimmerAsc'>('eventDesc');
+  const [chartsReady, setChartsReady] = useState(false);
   
   // Custom Tooltip State
   const [activeTooltip, setActiveTooltip] = useState<any>(null);
@@ -319,7 +321,14 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
   return (
     <div className={`neon-card rounded-md overflow-hidden mb-4`} style={{ borderLeftColor: teamChartColor }}>
       <button 
-        onClick={() => setIsExpanded(!isExpanded)}
+        onClick={() => {
+          const nextExpanded = !isExpanded;
+          setIsExpanded(nextExpanded);
+          if (!nextExpanded) {
+            setChartsReady(false);
+            clearChartTooltips();
+          }
+        }}
         className="w-full flex items-center justify-between p-5 theme-hover-row transition-colors"
       >
         <div className="flex flex-col items-start gap-1">
@@ -357,6 +366,8 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
             initial={{ height: 0, opacity: 0 }}
             animate={{ height: 'auto', opacity: 1 }}
             exit={{ height: 0, opacity: 0 }}
+            onAnimationStart={() => setChartsReady(false)}
+            onAnimationComplete={() => setChartsReady(true)}
             className="border-t border-theme-soft surface-overlay"
           >
             <div
@@ -393,8 +404,9 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                   </div>
                 </div>
                 
-                <div className="h-72 w-full min-w-0 surface-overlay p-2 rounded border border-theme-soft relative group/chart">
-                  {chartView === 'event' ? (
+                <ChartShell size="lg" className="surface-overlay p-2 rounded border border-theme-soft group/chart">
+                  {chartsReady ? (
+                  chartView === 'event' ? (
                   <div ref={eventChartSurfaceRef} className="h-full w-full relative">
                     {/* Hover Tooltip (Absolute relative to chart) */}
                     {!pinnedTooltip && activeTooltip && (
@@ -426,7 +438,8 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                       </motion.div>
                     )}
 
-                    <ResponsiveContainer width="100%" height="100%">
+                    {eventData.length > 0 ? (
+                    <ResponsiveContainer key={`event-${Math.round(chartPanePercent)}`} width="100%" height="100%" debounce={50}>
                       <LineChart
                         data={eventData}
                         onMouseMove={(state: any) => {
@@ -485,6 +498,11 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                         />
                       </LineChart>
                     </ResponsiveContainer>
+                    ) : (
+                      <div className="flex h-full items-center justify-center text-center text-ui-caption text-theme-muted">
+                        No scoring events yet.
+                      </div>
+                    )}
                   </div>
                   ) : (
                   <div ref={classChartSurfaceRef} className="h-full w-full relative">
@@ -518,7 +536,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                       </motion.div>
                     )}
 
-                    <ResponsiveContainer width="100%" height="100%">
+                    <ResponsiveContainer key={`class-${Math.round(chartPanePercent)}`} width="100%" height="100%" debounce={50}>
                       <BarChart data={classData} onMouseLeave={() => setActiveClassTooltip(null)}>
                         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: chartTheme.chartTick, fontSize: 10, fontStyle: 'bold', fontFamily: 'JetBrains Mono' }} />
                         <Tooltip content={<></>} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
@@ -554,8 +572,13 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                       </BarChart>
                     </ResponsiveContainer>
                   </div>
+                  )
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-center text-ui-caption text-theme-muted">
+                      Preparing chart surface...
+                    </div>
                   )}
-                </div>
+                </ChartShell>
 
                 <div className="flex justify-between mt-2 px-2 text-ui-micro text-theme-secondary font-mono border-t border-theme-soft pt-2 italic uppercase">
                   <span>{chartView === 'event' ? 'Chronological Event Scoring Timeline' : 'Class Year Contribution'}</span>

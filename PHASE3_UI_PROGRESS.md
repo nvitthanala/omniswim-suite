@@ -30,20 +30,30 @@ Last updated: 2026-06-28.
 - `SuiteWorkspaceProvider` public shape was not changed.
 - `useWorkspaceScoring` public shape was not changed.
 
+## Chart Robustness Update
+
+- Added `ChartShell` in `packages/ui/src/components/ChartShell.tsx` so Recharts surfaces wait for non-collapsed dimensions before mounting.
+- Replaced fragile Tailwind-height-only chart wrappers in Matrix timeline, Matrix TeamCard, Metrics velocity, and Analytics season trends with semantic `.chart-shell-*` sizing.
+- TeamCard charts now mount only after the expand animation completes, avoiding Recharts measuring a `0px` parent during `height: 0 -> auto`.
+- Metrics and Analytics charts now read suite theme tokens through `useThemeColors` instead of relying on the orphaned Metrics `--accent-500` token or raw CSS variable strokes.
+- Added high-contrast overrides for `--chart-grid` and `--chart-tick`.
+- Extended regression coverage with `scripts/test_chart_shell.mjs` and extra production CSS checks for `.chart-shell--md`, `.chart-shell--lg`, and `.chart-shell--fluid`.
+
 ## Files Changed
 
+- `packages/ui/src/components/ChartShell.tsx` - shared measured chart container with readiness gating.
 - `packages/core/src/preferences/types.ts` - preference types, defaults, preset metadata, text-scale values.
 - `packages/core/src/preferences/SuitePreferencesProvider.tsx` - core provider, hook, persistence, legacy theme migration, DOM application.
 - `packages/core/src/index.ts` and `packages/core/package.json` - exports for preferences.
 - `packages/core/src/lib/useThemeColors.ts` - watches preference attributes and returns accent/high-contrast state for charts.
-- `packages/ui/src/index.css` - preset tokens, custom accent support, text scale, high contrast, enhanced focus, reduced motion, accent-derived effects.
+- `packages/ui/src/index.css` - preset tokens, custom accent support, text scale, high contrast, enhanced focus, reduced motion, accent-derived effects, and semantic chart shell sizing.
 - `packages/ui/src/components/Button.tsx` - shared token-driven button primitive.
 - `packages/ui/src/components/Badge.tsx` - shared status badge primitive.
 - `packages/ui/src/components/EmptyState.tsx` - guided empty-state primitive with optional CTA.
 - `packages/ui/src/components/SettingsSection.tsx` - reusable settings section wrapper.
 - `packages/ui/src/components/SegmentedControl.tsx` - shared segmented control for tabs/text scale controls.
 - `packages/ui/src/components/AppletSkeleton.tsx` - per-applet loading skeletons for Manager, Matrix, Metrics, and suite load.
-- `packages/ui/src/index.ts` - exports for new UI primitives.
+- `packages/ui/src/index.ts` - exports for new UI primitives and `ChartShell`.
 - `apps/shell/index.html` - anti-FOUC bootstrap for stored preferences.
 - `apps/shell/src/App.tsx` - provider wiring, `/settings` route, reduced-motion route transition, per-route skeleton fallbacks, scoring settings save toast.
 - `apps/shell/src/pages/SettingsPage.tsx` - new permanent settings page, now using shared UI primitives.
@@ -53,12 +63,13 @@ Last updated: 2026-06-28.
 - `packages/manager/src/ManagerApp.tsx` - guided empty state and optimizer apply toast.
 - `packages/manager/src/components/TeamRosterPanel.tsx` - lightweight roster row windowing for teams above 80 athletes and semantic text scale cleanup.
 - `packages/matrix/src/MatrixApp.tsx` - guided empty state for no active workspace.
-- `packages/matrix/src/components/TeamCard.tsx` - memoized TeamCard, stabilized grouped chart/table data, and semantic text scale cleanup.
+- `packages/matrix/src/components/TeamCard.tsx` - memoized TeamCard, stabilized grouped chart/table data, semantic text scale cleanup, and chart mount gating after expand animation.
 - `packages/metrics/src/MetricsApp.tsx` - guided no-video empty state and extra session/video feedback.
 - `packages/metrics/src/components/VideoPlayer.tsx` - semantic text scale cleanup for manual tracking controls.
 - `packages/metrics/src/components/RaceSetupForm.tsx` - semantic text scale cleanup for setup labels.
-- `packages/metrics/src/components/MetricsDashboard.tsx` - memoized dashboard/card rendering, stabilized split chart data, and semantic text scale cleanup.
+- `packages/metrics/src/components/MetricsDashboard.tsx` - memoized dashboard/card rendering, stabilized split chart data, semantic text scale cleanup, and suite-token chart colors.
 - `scripts/test_theme_css.mjs` - new production CSS regression check for chart heights, theme presets, accent tokens, and text-scale tokens.
+- `scripts/test_chart_shell.mjs` - readiness regression for collapsed vs usable chart measurements.
 - `scripts/run-tests.mjs` - added `test_theme_css.mjs` to the main test runner.
 - `PHASE3_UI_PROGRESS.md` - this handoff.
 
@@ -94,7 +105,19 @@ Result: PASS on 2026-06-28.
 node scripts/test_theme_css.mjs
 ```
 
-Result: PASS on 2026-06-28. The script builds production assets and verified `.h-64`, `.h-72`, `.text-ui-micro`, `[data-theme-preset]`, `[data-text-scale]`, `--text-scale`, `--text-ui-micro`, and `--custom-accent` in emitted CSS.
+Result: PASS on 2026-06-28. The script builds production assets and verified `.h-64`, `.h-72`, `.chart-shell--md`, `.chart-shell--lg`, `.chart-shell--fluid`, `.text-ui-micro`, `[data-theme-preset]`, `[data-text-scale]`, `--text-scale`, `--text-ui-micro`, and `--custom-accent` in emitted CSS.
+
+```powershell
+npm test
+```
+
+Result: PASS on 2026-06-28 after the chart robustness update. 11 passed, 0 failed, 2 skipped for optional local NSISC fixtures.
+
+```powershell
+npm run build
+```
+
+Result: PASS on 2026-06-28 after the chart robustness update. Vite production build and bundled shell server completed successfully.
 
 Attempted:
 

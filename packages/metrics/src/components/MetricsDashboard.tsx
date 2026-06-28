@@ -2,9 +2,12 @@ import React, { useCallback, useMemo } from 'react';
 import { BiomechanicsData } from '../types';
 import { formatTime, exportToCSV } from '../lib/utils';
 import { Download } from 'lucide-react';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { useThemeColors } from '@omniswim/core/lib/useThemeColors';
+import { ChartShell } from '@omniswim/ui';
 
-function MetricsDashboardComponent({ data, isDarkMode = true }: { data: BiomechanicsData; isDarkMode?: boolean }) {
+function MetricsDashboardComponent({ data }: { data: BiomechanicsData }) {
+  const chartTheme = useThemeColors();
   
   const chartData = useMemo(() => data.splits.map((s, i) => {
     // Generate a simulated velocity point for the chart for visual intrigue
@@ -27,7 +30,7 @@ function MetricsDashboardComponent({ data, isDarkMode = true }: { data: Biomecha
       <section>
         <h3 className="text-ui-micro font-bold text-slate-500 uppercase tracking-[0.2em] mb-3">Performance Metrics</h3>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <MetricCard label="Avg Velocity" value={`${data.avgVelocity.toFixed(2)}`} unit="m/s" highlightClass="text-accent-500 dark:text-accent-400" />
+          <MetricCard label="Avg Velocity" value={`${data.avgVelocity.toFixed(2)}`} unit="m/s" highlightClass="text-[var(--text-accent)]" />
           <MetricCard label="Fatigue Index" value={`${data.fatigueIndex.toFixed(1)}`} unit="%" highlightClass="text-red-500 dark:text-red-400" />
           <MetricCard label="Stroke Rate" value={`${Math.round(data.strokeRate)}`} unit="s/m" />
           <MetricCard label="Dist. per Stroke" value={`${data.distancePerStroke.toFixed(2)}`} unit="m" />
@@ -36,32 +39,32 @@ function MetricsDashboardComponent({ data, isDarkMode = true }: { data: Biomecha
 
       <section className="flex-1 min-h-[250px] flex flex-col">
         <h3 className="text-ui-micro font-bold text-slate-500 uppercase tracking-[0.2em] mb-3">Velocity Profile</h3>
-        <div className="bg-white dark:bg-black/30 border border-slate-200 dark:border-white/5 rounded-lg p-5 flex-1 relative overflow-hidden shadow-sm dark:shadow-none transition-colors">
-          <ResponsiveContainer width="100%" height="100%">
+        <ChartShell size="fluid" className="bg-white dark:bg-black/30 border border-slate-200 dark:border-white/5 rounded-lg p-5 overflow-hidden shadow-sm dark:shadow-none transition-colors">
+          <ResponsiveContainer width="100%" height="100%" debounce={50}>
             <AreaChart data={chartData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="colorVelocity" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor="var(--accent-500)" stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor="var(--accent-500)" stopOpacity={0}/>
+                  <stop offset="5%" stopColor={chartTheme.accent} stopOpacity={0.3}/>
+                  <stop offset="95%" stopColor={chartTheme.accent} stopOpacity={0}/>
                 </linearGradient>
               </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={isDarkMode ? "#ffffff" : "#000000"} strokeOpacity={0.05} vertical={false} />
-              <XAxis dataKey="distance" stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
-              <YAxis stroke="#64748b" fontSize={10} tickLine={false} axisLine={false} />
+              <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.chartGrid} vertical={false} />
+              <XAxis dataKey="distance" stroke={chartTheme.chartTick} fontSize={10} tickLine={false} axisLine={false} />
+              <YAxis stroke={chartTheme.chartTick} fontSize={10} tickLine={false} axisLine={false} />
               <Tooltip 
                 contentStyle={{ 
-                  backgroundColor: isDarkMode ? '#000000' : '#ffffff', 
-                  borderColor: isDarkMode ? '#ffffff20' : '#e2e8f0', 
+                  backgroundColor: 'var(--popover-bg)', 
+                  borderColor: 'var(--popover-border)', 
                   borderRadius: '8px',
-                  color: isDarkMode ? '#f1f5f9' : '#0f172a'
+                  color: 'var(--text-primary)'
                 }}
-                itemStyle={{ color: isDarkMode ? '#f1f5f9' : '#0f172a', fontSize: '12px', fontFamily: 'var(--font-mono)' }}
+                itemStyle={{ color: 'var(--text-primary)', fontSize: '12px', fontFamily: 'var(--font-mono)' }}
               />
-              <Area type="monotone" dataKey="velocity" stroke="var(--accent-500)" strokeWidth={2} fillOpacity={1} fill="url(#colorVelocity)" />
+              <Area type="monotone" dataKey="velocity" stroke={chartTheme.accent} strokeWidth={2} fillOpacity={1} fill="url(#colorVelocity)" />
               <Line type="monotone" dataKey="time" stroke="#10b981" strokeWidth={0} dot={{ r: 3, fill: '#10b981', strokeWidth: 0 }} />
             </AreaChart>
           </ResponsiveContainer>
-        </div>
+        </ChartShell>
       </section>
 
       <section className="flex flex-col">
@@ -90,7 +93,7 @@ function MetricsDashboardComponent({ data, isDarkMode = true }: { data: Biomecha
                 <div>{row.distance}</div>
                 <div>{row.time.toFixed(2)}</div>
                 <div>{formatTime(row.cumulative)}</div>
-                <div className="text-accent-500 dark:text-accent-400 font-bold">{row.velocity.toFixed(2)}</div>
+                <div className="text-[var(--text-accent)] font-bold">{row.velocity.toFixed(2)}</div>
               </div>
             ))}
           </div>
@@ -108,14 +111,14 @@ function MetricsDashboardComponent({ data, isDarkMode = true }: { data: Biomecha
       </section>
 
       <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-accent-50 dark:bg-accent-500/10 p-4 rounded-lg border border-accent-100 dark:border-accent-500/20 flex justify-between items-center transition-colors">
+        <div className="bg-[var(--surface-muted)] p-4 rounded-lg border border-theme-soft flex justify-between items-center transition-colors">
           <div>
-            <div className="text-ui-micro text-accent-600 dark:text-accent-400 font-bold uppercase tracking-wider mb-1">UW Kick Tempo</div>
-            <div className="text-xl font-mono text-accent-900 dark:text-accent-100">{Math.round(data.underwaterKickTempo)} <span className="text-ui-micro opacity-80 dark:opacity-60 text-accent-600 dark:text-accent-400">k/min</span></div>
+            <div className="text-ui-micro text-[var(--text-accent)] font-bold uppercase tracking-wider mb-1">UW Kick Tempo</div>
+            <div className="text-xl font-mono text-[var(--text-primary)]">{Math.round(data.underwaterKickTempo)} <span className="text-ui-micro opacity-80 text-[var(--text-accent)]">k/min</span></div>
           </div>
           <div className="text-right">
-             <div className="text-ui-micro text-accent-600 dark:text-accent-400 font-bold uppercase tracking-wider mb-1">Kick Count</div>
-             <div className="text-xl font-mono text-accent-900 dark:text-accent-100">{data.kicksCount}</div>
+             <div className="text-ui-micro text-[var(--text-accent)] font-bold uppercase tracking-wider mb-1">Kick Count</div>
+             <div className="text-xl font-mono text-[var(--text-primary)]">{data.kicksCount}</div>
           </div>
         </div>
         

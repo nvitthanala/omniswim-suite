@@ -37,6 +37,9 @@ const css = cssFiles
 const requiredChecks = [
   ['chart utility .h-64', /\.h-64\{/],
   ['chart utility .h-72', /\.h-72\{/],
+  ['chart shell .chart-shell--md', /\.chart-shell--md\{/],
+  ['chart shell .chart-shell--lg', /\.chart-shell--lg\{/],
+  ['chart shell .chart-shell--fluid', /\.chart-shell--fluid\{/],
   ['text utility .text-ui-micro', /\.text-ui-micro\{/],
   ['text scale token', /--text-scale:/],
   ['text micro token', /--text-ui-micro:/],

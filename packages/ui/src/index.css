@@ -16,6 +16,7 @@
 @source "../../metrics/src";
 @source "../../core/src";
 @source "./";
+@source inline("h-64 h-72");
 
 :root {
   --font-sans: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
@@ -205,6 +206,8 @@
   --text-muted: color-mix(in srgb, var(--text-primary) 64%, var(--text-muted));
   --border: color-mix(in srgb, var(--text-primary) 32%, var(--border));
   --border-soft: color-mix(in srgb, var(--text-primary) 24%, var(--border-soft));
+  --chart-grid: color-mix(in srgb, var(--text-primary) 28%, transparent);
+  --chart-tick: var(--text-primary);
 }
 
 [data-focus-ring-enhanced='true'] {
@@ -238,6 +241,38 @@
 
 .surface-overlay {
   background: rgba(var(--surface-rgb), 0.08);
+}
+
+.chart-shell {
+  width: 100%;
+  min-width: 0;
+  position: relative;
+}
+
+.chart-shell--sm {
+  height: 12rem;
+  min-height: 12rem;
+}
+
+.chart-shell--md {
+  height: 16rem;
+  min-height: 16rem;
+}
+
+.chart-shell--lg {
+  height: 18rem;
+  min-height: 18rem;
+}
+
+.chart-shell--fluid {
+  flex: 1 1 auto;
+  min-height: 250px;
+}
+
+.chart-shell__placeholder {
+  position: absolute;
+  inset: 0.5rem;
+  pointer-events: none;
 }
 
 .surface-soft {

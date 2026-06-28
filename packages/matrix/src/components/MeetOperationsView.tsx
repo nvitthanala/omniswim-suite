@@ -7,6 +7,7 @@ import React, { useMemo, useState } from 'react';
 import { Users, Plus, TrendingUp, Search, X, GitCompareArrows, ListTree } from 'lucide-react';
 import { motion } from 'motion/react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { ChartShell } from '@omniswim/ui';
 import { Gender, Recruit, ScoringSettings, TeamScore, Workspace } from '@omniswim/core/types';
 import { assignTeamLineStyles, isRelayResult } from '@omniswim/core/lib/utils';
 import { aggregateSwimmerMeetPoints, scorerRosterKey } from '@omniswim/core/lib/scorerRoster';
@@ -187,60 +188,66 @@ export default function MeetOperationsView({
             </h3>
           </div>
 
-          <div className="h-64 w-full surface-overlay p-2 rounded border border-theme-soft">
-            <ResponsiveContainer width="100%" height="100%">
-              <LineChart data={timelineData}>
-                <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.chartGrid} vertical={false} />
-                <XAxis
-                  dataKey="name"
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{
-                    fill: chartTheme.chartTick,
-                    fontSize: 9,
-                    fontStyle: 'bold',
-                    fontFamily: 'JetBrains Mono',
-                  }}
-                  interval="preserveStartEnd"
-                />
-                <YAxis
-                  axisLine={false}
-                  tickLine={false}
-                  tick={{
-                    fill: chartTheme.chartTick,
-                    fontSize: 10,
-                    fontStyle: 'bold',
-                    fontFamily: 'JetBrains Mono',
-                  }}
-                />
-                <Tooltip
-                  cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 2 }}
-                  content={props => (
-                    <TimelineTooltipContent
-                      active={props.active}
-                      label={props.label != null ? String(props.label) : undefined}
-                      payload={props.payload as TimelineTooltipContentProps['payload']}
-                      teamsWithLineStyles={teamsWithLineStyles}
-                    />
-                  )}
-                />
-                {teamsWithLineStyles.map(team => (
-                  <Line
-                    key={team.teamName}
-                    type="monotone"
-                    dataKey={team.teamName}
-                    name={team.teamName}
-                    stroke={team.lineColor ?? team.color}
-                    strokeWidth={2.5}
-                    strokeDasharray={team.strokeDasharray}
-                    dot={false}
-                    isAnimationActive={false}
-                    activeDot={{ r: 5, strokeWidth: 0, fill: team.lineColor ?? team.color }}
+          <ChartShell size="md" className="surface-overlay p-2 rounded border border-theme-soft">
+            {timelineData.length > 0 ? (
+              <ResponsiveContainer width="100%" height="100%" debounce={50}>
+                <LineChart data={timelineData}>
+                  <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.chartGrid} vertical={false} />
+                  <XAxis
+                    dataKey="name"
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{
+                      fill: chartTheme.chartTick,
+                      fontSize: 9,
+                      fontStyle: 'bold',
+                      fontFamily: 'JetBrains Mono',
+                    }}
+                    interval="preserveStartEnd"
                   />
-                ))}
-              </LineChart>
-            </ResponsiveContainer>
-          </div>
+                  <YAxis
+                    axisLine={false}
+                    tickLine={false}
+                    tick={{
+                      fill: chartTheme.chartTick,
+                      fontSize: 10,
+                      fontStyle: 'bold',
+                      fontFamily: 'JetBrains Mono',
+                    }}
+                  />
+                  <Tooltip
+                    cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 2 }}
+                    content={props => (
+                      <TimelineTooltipContent
+                        active={props.active}
+                        label={props.label != null ? String(props.label) : undefined}
+                        payload={props.payload as TimelineTooltipContentProps['payload']}
+                        teamsWithLineStyles={teamsWithLineStyles}
+                      />
+                    )}
+                  />
+                  {teamsWithLineStyles.map(team => (
+                    <Line
+                      key={team.teamName}
+                      type="monotone"
+                      dataKey={team.teamName}
+                      name={team.teamName}
+                      stroke={team.lineColor ?? team.color}
+                      strokeWidth={2.5}
+                      strokeDasharray={team.strokeDasharray}
+                      dot={false}
+                      isAnimationActive={false}
+                      activeDot={{ r: 5, strokeWidth: 0, fill: team.lineColor ?? team.color }}
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <div className="flex h-full items-center justify-center text-center text-ui-caption text-theme-muted">
+                Load meet results to see team score progression.
+              </div>
+            )}
+          </ChartShell>
           <div
             className="mt-3 flex flex-wrap gap-x-4 gap-y-2 justify-center pointer-events-none select-none border-t border-theme-soft pt-3"
             aria-hidden
