@@ -1,0 +1,1 @@
+[package] name = "omni-swim-suite" version = "1.0.0" description = "Omni Swim Suite desktop shell" authors = ["Omni Swim"] edition = "2021"  [build-dependencies] tauri-build = { version = "2", features = [] }  [dependencies] tauri = { version = "2", features = [] } tauri-plugin-shell = "2"  [lib] name = "omni_swim_suite_lib" crate-type = ["staticlib", "cdylib", "rlib"]

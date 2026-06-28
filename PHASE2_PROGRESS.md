@@ -1,4 +1,4 @@
-# Omni Swim Suite — Phase 2 Implementation Progress / Handoff
+﻿# Omni Swim Suite ΓÇö Phase 2 Implementation Progress / Handoff
 
 > Living document. Updated continuously during Phase 2 work so any agent (or human)
 > can resume mid-stream. **Source of truth for the plan:** `c:\Users\nihar\.cursor\plans\omni_swim_phase_2_4df6b445.plan.md` (do NOT edit the plan file).
@@ -51,14 +51,14 @@ Package manager: **npm** (workspaces). Node + Python (venv auto-created by serve
 - **Fix:** added explicit `@source` directives in [`packages/ui/src/index.css`](packages/ui/src/index.css) for `apps/shell/src` and each `packages/*/src`. Confirmed the built CSS now contains `.h-64`/`.h-72` and that the timeline + TeamCard charts render (headless screenshot of `/matrix`).
 
 ### Unification Phase 4 (polish + cutover)
-- Verified landing cards ([`SuiteHome.tsx`](apps/shell/src/pages/SuiteHome.tsx)), nav active/inactive states ([`AppletNav.tsx`](apps/shell/src/components/AppletNav.tsx)), animated loading spinner, lazy applet chunks + hover/idle prefetch ([`appletPrefetch.ts`](apps/shell/src/lib/appletPrefetch.ts)), and `?workspace=&gender=` deep-link restore — all working.
+- Verified landing cards ([`SuiteHome.tsx`](apps/shell/src/pages/SuiteHome.tsx)), nav active/inactive states ([`AppletNav.tsx`](apps/shell/src/components/AppletNav.tsx)), animated loading spinner, lazy applet chunks + hover/idle prefetch ([`appletPrefetch.ts`](apps/shell/src/lib/appletPrefetch.ts)), and `?workspace=&gender=` deep-link restore ΓÇö all working.
 - Added a test runner [`scripts/run-tests.mjs`](scripts/run-tests.mjs) wired to `npm test`; fixed `scripts/run-smoke-tests.bat` (its old `if exist` paths never matched after the flatten). Added [`scripts/test_chart_data.mjs`](scripts/test_chart_data.mjs) to guard the chart data pipeline.
 
 ---
 
 ## Completed in earlier sessions (session 3)
 
-### p2d-matrix-polish — Batch Optimizer UI + Workspace Snapshots UI (DONE)
+### p2d-matrix-polish ΓÇö Batch Optimizer UI + Workspace Snapshots UI (DONE)
 
 **Batch Optimizer UI:**
 - **`packages/manager/src/components/BatchOptimizerPanel.tsx`** (NEW): Modal panel with:
@@ -71,7 +71,7 @@ Package manager: **npm** (workspaces). Node + Python (venv auto-created by serve
 - **`packages/manager/src/ManagerApp.tsx`** (EDITED): Added "Batch Optimizer" button in header toolbar, wired open/close state.
 
 **Workspace Snapshots UI:**
-- **`packages/core/src/api/snapshots.ts`** (NEW): Client API — `createSnapshot`, `listSnapshots`, `restoreSnapshot` with proper error handling.
+- **`packages/core/src/api/snapshots.ts`** (NEW): Client API ΓÇö `createSnapshot`, `listSnapshots`, `restoreSnapshot` with proper error handling.
 - **`apps/shell/src/components/WorkspaceSidebar.tsx`** (EDITED): Added "Snapshots" section at bottom of sidebar:
   - Camera icon to toggle create-snapshot inline form
   - Label input + Save/Cancel buttons
@@ -92,9 +92,9 @@ Package manager: **npm** (workspaces). Node + Python (venv auto-created by serve
 ## Completed in earlier sessions
 
 ### p2a-server-io (DONE)
-- **`apps/shell/lib/jsonStore.ts`** (NEW): `JsonStore<T>` class — async single-writer queue, atomic temp-file+rename writes, timestamped backups in `data/backups/` with pruning (keep 20). Methods: `init()`, `read()`, `mutate(fn)`, `backup(label)`.
-- **`packages/core/src/schemas/workspace.ts`** (NEW): Zod schemas — `workspaceSchema`, `createWorkspaceSchema`, `updateWorkspaceSchema`, `parsePdfSchema`, `parseAthleteHistorySchema`, `importCsvSchema`. Permissive (`.passthrough()`).
-- **`backend/parse_meet.py`** (NEW): single-process pipeline → `{ athletes, conference, officialTeamScores }`. Imports `pdf_parser.parse_pdf`, `point_calculator.calculate_points`, `team_rankings_parser.extract_team_rankings_from_pdf`.
+- **`apps/shell/lib/jsonStore.ts`** (NEW): `JsonStore<T>` class ΓÇö async single-writer queue, atomic temp-file+rename writes, timestamped backups in `data/backups/` with pruning (keep 20). Methods: `init()`, `read()`, `mutate(fn)`, `backup(label)`.
+- **`packages/core/src/schemas/workspace.ts`** (NEW): Zod schemas ΓÇö `workspaceSchema`, `createWorkspaceSchema`, `updateWorkspaceSchema`, `parsePdfSchema`, `parseAthleteHistorySchema`, `importCsvSchema`. Permissive (`.passthrough()`).
+- **`backend/parse_meet.py`** (NEW): single-process pipeline ΓåÆ `{ athletes, conference, officialTeamScores }`. Imports `pdf_parser.parse_pdf`, `point_calculator.calculate_points`, `team_rankings_parser.extract_team_rankings_from_pdf`.
 - **`backend/pdf_parser.py`** (EDITED): `parse_pdf()` now **returns** results (was `print`); `__main__` prints. Keeps CLI working + lets `parse_meet.py` import it.
 - **`apps/shell/server.ts`** (EDITED): workspace CRUD now uses `JsonStore` (async). Added Zod validation on POST/PUT/parse-pdf/parse-athlete-history. New `POST /api/workspaces/backup`. `/api/parse-pdf` now tries `parseMeetUnified()` (single process) and falls back to `parseMeetLegacy()` (3 processes). Extracted `mapAthleteRows()` helper.
 - **`packages/ui/src/components/Toast.tsx`** (NEW): `ToastProvider`, `useToast()` (graceful console fallback if no provider), viewport bottom-right. Exported from `packages/ui/src/index.ts`.
@@ -106,10 +106,10 @@ Package manager: **npm** (workspaces). Node + Python (venv auto-created by serve
 - **`packages/core/src/store/SuiteWorkspaceProvider.tsx`** (REWRITTEN): now uses TanStack Query `useQuery(['workspaces'])` + `useMutation` for update. Optimistic edits via `queryClient.setQueryData`, 300ms debounce retained. **Public context surface UNCHANGED** (hard constraint). Added optional `onNotify?: (kind, message) => void` prop for toast wiring.
 - **`apps/shell/src/App.tsx`** (EDITED): passes `onNotify={toast.push}` to provider.
 - **`packages/core/src/lib/scoringEngine.ts`** (NEW): extracted pure `buildScoringBundle` + `buildScoringSnapshot` from `useWorkspaceScoring` so it runs on main thread OR in a worker.
-- **`packages/core/src/workers/scoringWorker.ts`** (NEW): worker entry, message protocol `{ id, workspace, gender, removeSeniors }` → `{ id, ok, projected, baseline }`.
+- **`packages/core/src/workers/scoringWorker.ts`** (NEW): worker entry, message protocol `{ id, workspace, gender, removeSeniors }` ΓåÆ `{ id, ok, projected, baseline }`.
 
 ### Build fixes applied during verification
-- **`apps/shell/vite.config.ts`**: added specific alias `@omniswim/ui/styles.css` → `packages/ui/src/index.css`. Added `shared-suite` manualChunk for `packages/core` + `packages/ui` to break an `applet-manager ↔ applet-matrix` circular chunk.
+- **`apps/shell/vite.config.ts`**: added specific alias `@omniswim/ui/styles.css` ΓåÆ `packages/ui/src/index.css`. Added `shared-suite` manualChunk for `packages/core` + `packages/ui` to break an `applet-manager Γåö applet-matrix` circular chunk.
 - **`packages/matrix/src/index.ts`** (NEW): barrel `export { default } from './MatrixApp'` so the directory-targeting alias `@omniswim/matrix` resolves the bare import.
 
 ### p2b-sqlite (DONE)
@@ -119,7 +119,7 @@ Package manager: **npm** (workspaces). Node + Python (venv auto-created by serve
 - **`scripts/migrate-json-to-sqlite.mjs`** + **`scripts/test_sqlite_roundtrip.mjs`**: migration and round-trip integrity test. **PASSES.**
 
 ### p2c-swim-data (DONE)
-- **`packages/core/src/lib/csvImport.ts`** (NEW): `parseCsvHistory(csv, {team,gender})` → HistoricalSwim[].
+- **`packages/core/src/lib/csvImport.ts`** (NEW): `parseCsvHistory(csv, {team,gender})` ΓåÆ HistoricalSwim[].
 - **`packages/core/src/lib/entryExport.ts`** (NEW): `exportEntriesCsv` + `exportEntriesHytek` + `selectActiveEntries`.
 - **`packages/manager/src/components/RosterImportWizard.tsx`**: added Paste/CSV mode tabs, CSV file picker, SwimCloud reference `<iframe>` panel.
 - **`packages/manager/src/ManagerApp.tsx`**: Export CSV + Export HyTek buttons.
@@ -142,7 +142,7 @@ Package manager: **npm** (workspaces). Node + Python (venv auto-created by serve
 cd "C:\Users\nihar\Documents\GitHub\omniswim-suite"   # repo root == monorepo root
 # Full production build
 npm run build
-# Test suite (scoring, persistence, chart-data) — skips fixture-only tests
+# Test suite (scoring, persistence, chart-data) ΓÇö skips fixture-only tests
 npm test
 # SQLite round-trip test (subset of npm test)
 npm run test:roundtrip
@@ -150,17 +150,17 @@ npm run test:roundtrip
 npm run dev   # or Start-OmniSwim-Suite.bat ; open http://localhost:3000
 ```
 
-Manual smoke (after dev server up): Matrix PDF upload → charts; toggle what-if; Manager roster edits persist after refresh; trigger a bad PDF to see error toast; try batch optimizer in Manager; take/restore snapshots in sidebar.
+Manual smoke (after dev server up): Matrix PDF upload ΓåÆ charts; toggle what-if; Manager roster edits persist after refresh; trigger a bad PDF to see error toast; try batch optimizer in Manager; take/restore snapshots in sidebar.
 
 ---
 
 ## Architecture decisions / constraints (do not violate)
 
-- **No external AI**: do not wire Gemini / cloud video / cloud OCR. `/api/analyze-video` stays 501. `parse-athlete-history` image branch only runs if `GEMINI_API_KEY` set — leave gated.
+- **No external AI**: do not wire Gemini / cloud video / cloud OCR. `/api/analyze-video` stays 501. `parse-athlete-history` image branch only runs if `GEMINI_API_KEY` set ΓÇö leave gated.
 - **Applet API stability**: `SuiteWorkspaceProvider` context value shape is frozen. `useWorkspaceScoring` return shape is frozen.
 - **Metrics is local-only** (`calculateMetricsLocal`, manual tagging).
 - **Persistence default = SQLite** for p2b; PostgreSQL is a later optional adapter. Keep JSON backup export for portability.
-- `core` must NOT import `@omniswim/ui` (avoid coupling) — use the `onNotify` callback pattern instead.
+- `core` must NOT import `@omniswim/ui` (avoid coupling) ΓÇö use the `onNotify` callback pattern instead.
 
 ---
 
@@ -192,17 +192,17 @@ Manual smoke (after dev server up): Matrix PDF upload → charts; toggle what-if
 
 All files created or modified during Phase 2 are listed above. The monorepo structure is:
 
-- `apps/shell` — SPA host, Express server, routing
-- `packages/core` — types, scoring libs, workspace store, API client
-- `packages/ui` — Matrix design tokens, Toast
-- `packages/db` — SQLite backend (node:sqlite)
-- `packages/{manager,matrix,metrics}` — lazy-loaded applets
-- `backend/` — Python parse pipeline
-- `scripts/` — migration, test, export utilities
+- `apps/shell` ΓÇö SPA host, Express server, routing
+- `packages/core` ΓÇö types, scoring libs, workspace store, API client
+- `packages/ui` ΓÇö Matrix design tokens, Toast
+- `packages/db` ΓÇö SQLite backend (node:sqlite)
+- `packages/{manager,matrix,metrics}` ΓÇö lazy-loaded applets
+- `backend/` ΓÇö Python parse pipeline
+- `scripts/` ΓÇö migration, test, export utilities
 
 ## How to enable SQLite at runtime
 
-PowerShell: `$env:OMNI_DB='sqlite'; npm run dev` (or use `Start-OmniSwim-Suite-Prod.bat` after `$env:OMNI_DB='sqlite'`). First migrate JSON→DB with `npm run migrate:sqlite`. JSON stays the default; SqliteRepo falls back to JSON if init fails.
+PowerShell: `$env:OMNI_DB='sqlite'; npm run dev` (or use `Start-OmniSwim-Suite-Prod.bat` after `$env:OMNI_DB='sqlite'`). First migrate JSONΓåÆDB with `npm run migrate:sqlite`. JSON stays the default; SqliteRepo falls back to JSON if init fails.
 
 ## Pre-existing non-issue
 

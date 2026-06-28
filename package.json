@@ -12,9 +12,18 @@
     "build": "npm run build -w @omniswim/shell",
     "start": "npm run start -w @omniswim/shell",
     "lint": "npm run lint --workspaces --if-present",
-    "migrate:sqlite": "tsx scripts/migrate-json-to-sqlite.mjs",
     "test": "node scripts/run-tests.mjs",
-    "test:roundtrip": "tsx scripts/test_sqlite_roundtrip.mjs"
+    "test:unit": "vitest run",
+    "test:watch": "vitest",
+    "migrate:sqlite": "tsx scripts/migrate-json-to-sqlite.mjs",
+    "migrate:postgres": "tsx scripts/migrate-json-to-postgres.mjs",
+    "test:roundtrip": "tsx scripts/test_sqlite_roundtrip.mjs",
+    "tauri:dev": "tauri dev",
+    "tauri:build": "tauri build"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2.6.2",
+    "vitest": "^3.2.4"
   },
   "engines": {
     "node": ">=20"

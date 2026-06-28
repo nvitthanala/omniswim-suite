@@ -7,3 +7,7 @@ export { Button } from './components/Button';
 export { EmptyState } from './components/EmptyState';
 export { SettingsSection } from './components/SettingsSection';
 export { SegmentedControl, type SegmentedControlOption } from './components/SegmentedControl';
+export { SectionHeader } from './components/SectionHeader';
+export { Toolbar, ToolbarSpacer } from './components/Toolbar';
+export { FloatingWindow, type FloatingWindowState } from './components/FloatingWindow';
+export { SwimCloudProvider, useSwimCloudWindow } from './components/SwimCloudContext';

@@ -11,6 +11,11 @@ import SuiteHeader from './components/SuiteHeader';
 import WorkspaceSidebar from './components/WorkspaceSidebar';
 import SuiteHome from './pages/SuiteHome';
 import SettingsPage from './pages/SettingsPage';
+import LoginPage from './pages/LoginPage';
+import SharePage from './pages/SharePage';
+import AnalyticsPage from './pages/AnalyticsPage';
+import SwimCloudWindow from './components/SwimCloudWindow';
+import { AuthProvider } from './context/AuthContext';
 import { ManagerAppLazy, MatrixAppLazy, MetricsAppLazy, prefetchLastApplet } from './lib/appletPrefetch';
 
 const ManagerApp = ManagerAppLazy;
@@ -119,6 +124,9 @@ function ShellLayout() {
               >
                 <Routes location={location}>
                   <Route path="/" element={<SuiteHome />} />
+                  <Route path="/login" element={<LoginPage />} />
+                  <Route path="/share/:token" element={<SharePage />} />
+                  <Route path="/analytics" element={<AnalyticsPage />} />
                   <Route path="/manager" element={<ManagerApp />} />
                   <Route path="/matrix" element={<MatrixApp />} />
                   <Route path="/metrics" element={<MetricsApp />} />
@@ -131,15 +139,15 @@ function ShellLayout() {
         </main>
       </div>
 
-      <footer className="app-footer min-h-8 px-4 py-1 flex items-center justify-between text-ui-caption font-mono gap-4 shrink-0">
-        <div className="flex flex-wrap gap-4">
-          <span className="flex items-center gap-1">
-            <span className="w-1 h-1 bg-green-500 rounded-full" /> SYSTEM: READY
+      <footer className="app-footer min-h-8 px-4 py-1 flex items-center justify-between text-ui-caption gap-4 shrink-0">
+        <div className="flex flex-wrap gap-4 text-theme-muted">
+          <span className="flex items-center gap-1.5">
+            <span className="w-1.5 h-1.5 bg-green-500 rounded-full" /> Ready
           </span>
-          <span>DB: MEETS.JSON</span>
+          <span>SQLite · local-first</span>
         </div>
-        <span className="hidden sm:block text-theme-muted uppercase font-bold tracking-tighter truncate">
-          © 2026 OMNI SWIM ANALYTICS GROUP
+        <span className="hidden sm:block text-theme-muted truncate">
+          © 2026 Omni Swim Suite
         </span>
       </footer>
 
@@ -160,6 +168,8 @@ function ShellLayout() {
           onClose={() => setShowScoringModal(false)}
         />
       )}
+
+      <SwimCloudWindow />
     </div>
   );
 }
@@ -169,9 +179,11 @@ export default function App() {
   return (
     <BrowserRouter>
       <SuitePreferencesProvider>
-        <SuiteWorkspaceProvider onNotify={toast.push}>
-          <ShellLayout />
-        </SuiteWorkspaceProvider>
+        <AuthProvider>
+          <SuiteWorkspaceProvider onNotify={toast.push}>
+            <ShellLayout />
+          </SuiteWorkspaceProvider>
+        </AuthProvider>
       </SuitePreferencesProvider>
     </BrowserRouter>
   );

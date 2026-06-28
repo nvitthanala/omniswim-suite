@@ -11,6 +11,12 @@
     "strict": true,
     "noEmit": true,
     "resolveJsonModule": true,
-    "allowImportingTsExtensions": true
+    "allowImportingTsExtensions": true,
+    "paths": {
+      "@omniswim/core": ["./packages/core/src/index.ts"],
+      "@omniswim/core/*": ["./packages/core/src/*"],
+      "@omniswim/ui": ["./packages/ui/src/index.ts"],
+      "@omniswim/ui/*": ["./packages/ui/src/*"]
+    }
   }
 }

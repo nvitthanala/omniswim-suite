@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+    branches: [main, master]
+
+jobs:
+  build-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: omniswim-suite/package-lock.json
+
+      - name: Install
+        working-directory: omniswim-suite
+        run: npm ci
+
+      - name: Lint
+        working-directory: omniswim-suite
+        run: npm run lint
+
+      - name: Test
+        working-directory: omniswim-suite
+        run: npm test
+
+      - name: Build
+        working-directory: omniswim-suite
+        run: npm run build

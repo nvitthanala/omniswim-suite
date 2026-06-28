@@ -1,0 +1,1 @@
+﻿import type { ReactNode } from 'react';type Props = {  children: ReactNode;  className?: string;};export function Toolbar({ children, className = '' }: Props) {  return <div className={`toolbar ${className}`.trim()}>{children}</div>;}export function ToolbarSpacer() {  return <div className="toolbar-spacer" aria-hidden />;}
