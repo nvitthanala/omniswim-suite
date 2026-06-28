@@ -1,130 +1,143 @@
 /**
  * WorkspaceService — SQLite-backed persistence for full `Workspace` aggregates.
- *
- * Built on Node's built-in `node:sqlite` (no native module compilation needed,
- * which matters on bleeding-edge Node where `better-sqlite3` has no prebuilt
- * binary). The public API returns/accepts complete `Workspace` objects so the
- * server routes and `SuiteWorkspaceProvider` stay unchanged.
  */
 import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Workspace, SwimmerResult, Gender } from '@omniswim/core/types';
-import { SCHEMA_VERSION, CREATE_TABLES_SQL } from './schema';
-
-type Json = unknown;
-
-function parseJson<T>(value: unknown, fallback: T): T {
-  if (typeof value !== 'string' || value.length === 0) return fallback;
-  try {
-    return JSON.parse(value) as T;
-  } catch {
-    return fallback;
-  }
-}
+import type { Workspace, SwimmerResult } from '@omniswim/core/types';
+import { SCHEMA_VERSION, CREATE_TABLES_SQL, SQLITE_MIGRATIONS_V2 } from './schema';
+import {
+  assembleWorkspace,
+  insertPositionalRows,
+  insertResultsRows,
+  insertWithIdRows,
+  workspaceRowValues,
+  type WorkspaceScope,
+} from './workspacePersistence';
 
 export class WorkspaceService {
   private db: DatabaseSync;
+  private scope: WorkspaceScope = {};
 
   constructor(dbPath: string) {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
     this.db = new DatabaseSync(dbPath);
     this.db.exec(CREATE_TABLES_SQL);
+    for (const sql of SQLITE_MIGRATIONS_V2) {
+      try {
+        this.db.exec(sql);
+      } catch {
+        /* column already exists */
+      }
+    }
     this.db
       .prepare('INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)')
       .run('schema_version', String(SCHEMA_VERSION));
+  }
+
+  setScope(scope: WorkspaceScope): void {
+    this.scope = scope;
   }
 
   close(): void {
     this.db.close();
   }
 
-  /** Number of workspaces currently stored (used to detect an empty DB). */
   count(): number {
-    const row = this.db.prepare('SELECT COUNT(*) AS n FROM workspaces').get() as { n: number };
+    const { where, params } = this.buildScopeWhere();
+    const row = this.db.prepare(`SELECT COUNT(*) AS n FROM workspaces ${where}`).get(
+      ...(params as (string | number | null)[])
+    ) as {
+      n: number;
+    };
     return row?.n ?? 0;
   }
 
   listWorkspaces(): Workspace[] {
+    const { where, params } = this.buildScopeWhere();
     const rows = this.db
-      .prepare('SELECT id FROM workspaces ORDER BY sort_index ASC, created_at ASC')
-      .all() as { id: string }[];
+      .prepare(`SELECT id FROM workspaces ${where} ORDER BY sort_index ASC, created_at ASC`)
+      .all(...(params as (string | number | null)[])) as { id: string }[];
     return rows.map(r => this.getWorkspace(r.id)).filter((w): w is Workspace => w != null);
   }
 
   getWorkspace(id: string): Workspace | undefined {
-    const row = this.db.prepare('SELECT * FROM workspaces WHERE id = ?').get(id) as
-      | Record<string, unknown>
-      | undefined;
+    const clauses = ['id = ?'];
+    const params: unknown[] = [id];
+    if (this.scope.teamId) {
+      clauses.push('team_id = ?');
+      params.push(this.scope.teamId);
+    } else if (this.scope.ownerId) {
+      clauses.push('owner_id = ?');
+      params.push(this.scope.ownerId);
+    }
+    const row = this.db
+      .prepare(`SELECT * FROM workspaces WHERE ${clauses.join(' AND ')}`)
+      .get(...(params as (string | number | null)[])) as Record<string, unknown> | undefined;
     if (!row) return undefined;
 
-    const childData = (table: string): Json[] => {
+    const childData = (table: string) => {
       const rows = this.db
         .prepare(`SELECT data FROM ${table} WHERE workspace_id = ? ORDER BY position ASC`)
         .all(id) as { data: string }[];
-      return rows.map(r => parseJson<Json>(r.data, null)).filter(d => d != null);
+      return rows
+        .map(r => {
+          try {
+            return JSON.parse(r.data);
+          } catch {
+            return null;
+          }
+        })
+        .filter(d => d != null);
     };
 
-    const allResults = childData('meet_results') as SwimmerResult[];
-    const menResults = allResults.filter(r => (r as { gender?: string }).gender !== 'Women');
-    const womenResults = allResults.filter(r => (r as { gender?: string }).gender === 'Women');
+    return assembleWorkspace(row, childData);
+  }
 
-    const workspace: Workspace = {
-      id: String(row.id),
-      name: String(row.name ?? ''),
-      createdAt: Number(row.created_at ?? Date.now()),
-      menResults,
-      womenResults,
-      recruits: childData('recruits') as Workspace['recruits'],
-      deletedSwimmers: childData('deleted_swimmers') as Workspace['deletedSwimmers'],
-      scorerRosterOverrides: childData('roster_overrides') as Workspace['scorerRosterOverrides'],
-      meetEntryPlans: childData('meet_entry_plans') as Workspace['meetEntryPlans'],
-      relayLegOverrides: childData('relay_leg_overrides') as Workspace['relayLegOverrides'],
-      athleteHistory: childData('athlete_history') as Workspace['athleteHistory'],
-      conference: row.conference != null ? String(row.conference) : undefined,
-      entryPlanMode: (row.entry_plan_mode as Workspace['entryPlanMode']) ?? undefined,
-      scoringSettings: parseJson<Workspace['scoringSettings']>(row.scoring_settings, undefined),
-      loadedMeet: parseJson<Workspace['loadedMeet']>(row.loaded_meet, undefined),
-      officialTeamScores: parseJson<Workspace['officialTeamScores']>(
-        row.official_team_scores,
-        undefined
-      ),
-      activeEntryIds: parseJson<string[] | undefined>(row.active_entry_ids, undefined),
-      historySources: parseJson<Workspace['historySources']>(row.history_sources, undefined),
-    };
-    return workspace;
+  getWorkspaceMeta(id: string): { version: number; updatedAt: number } | undefined {
+    const row = this.db
+      .prepare('SELECT version, updated_at FROM workspaces WHERE id = ?')
+      .get(id) as { version: number; updated_at: number } | undefined;
+    if (!row) return undefined;
+    return { version: Number(row.version ?? 1), updatedAt: Number(row.updated_at ?? 0) };
   }
 
   createWorkspace(ws: Workspace, sortIndex?: number): Workspace {
-    this.writeWorkspace(ws, sortIndex ?? this.count());
+    this.writeWorkspace(ws, sortIndex ?? this.count(), { version: 1 });
     return this.getWorkspace(ws.id)!;
   }
 
-  updateWorkspace(id: string, patch: Partial<Workspace>): Workspace | undefined {
+  updateWorkspace(id: string, patch: Partial<Workspace>, expectedVersion?: number): Workspace | undefined {
     const existing = this.getWorkspace(id);
     if (!existing) return undefined;
+    if (expectedVersion != null) {
+      const meta = this.getWorkspaceMeta(id);
+      if (meta && meta.version !== expectedVersion) {
+        const err = new Error('VERSION_CONFLICT');
+        (err as Error & { code: string }).code = 'VERSION_CONFLICT';
+        throw err;
+      }
+    }
     const merged: Workspace = { ...existing, ...patch, id };
     const sortRow = this.db.prepare('SELECT sort_index FROM workspaces WHERE id = ?').get(id) as
       | { sort_index: number }
       | undefined;
-    this.writeWorkspace(merged, sortRow?.sort_index ?? this.count());
+    const currentVersion = this.getWorkspaceMeta(id)?.version ?? 1;
+    this.writeWorkspace(merged, sortRow?.sort_index ?? this.count(), { version: currentVersion + 1 });
     return this.getWorkspace(id);
   }
 
   deleteWorkspace(id: string): void {
-    // ON DELETE CASCADE clears child rows.
     this.db.prepare('DELETE FROM workspaces WHERE id = ?').run(id);
   }
 
-  /** Replace the entire dataset (used by the JSON → SQLite migration). */
   replaceAll(workspaces: Workspace[]): void {
     this.tx(() => {
       this.db.exec('DELETE FROM workspaces');
-      workspaces.forEach((ws, i) => this.writeWorkspaceUnsafe(ws, i));
+      workspaces.forEach((ws, i) => this.writeWorkspaceUnsafe(ws, i, { version: 1 }));
     });
   }
 
-  /** Full export for JSON backup / portability. */
   exportAll(): Workspace[] {
     return this.listWorkspaces();
   }
@@ -155,9 +168,26 @@ export class WorkspaceService {
       .prepare('SELECT workspace_id, blob FROM workspace_snapshots WHERE id = ?')
       .get(snapshotId) as { workspace_id: string; blob: string } | undefined;
     if (!row) return undefined;
-    const ws = parseJson<Workspace | null>(row.blob, null);
-    if (!ws) return undefined;
-    return this.updateWorkspace(row.workspace_id, ws);
+    try {
+      const ws = JSON.parse(row.blob) as Workspace;
+      return this.updateWorkspace(row.workspace_id, ws);
+    } catch {
+      return undefined;
+    }
+  }
+
+  private buildScopeWhere(): { where: string; params: unknown[] } {
+    const clauses: string[] = [];
+    const params: unknown[] = [];
+    if (this.scope.teamId) {
+      clauses.push('team_id = ?');
+      params.push(this.scope.teamId);
+    } else if (this.scope.ownerId) {
+      clauses.push('owner_id = ?');
+      params.push(this.scope.ownerId);
+    }
+    const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
+    return { where, params };
   }
 
   private tx(fn: () => void): void {
@@ -171,99 +201,105 @@ export class WorkspaceService {
     }
   }
 
-  private writeWorkspace(ws: Workspace, sortIndex: number): void {
-    this.tx(() => this.writeWorkspaceUnsafe(ws, sortIndex));
+  private writeWorkspace(ws: Workspace, sortIndex: number, meta: { version: number }): void {
+    this.tx(() => this.writeWorkspaceUnsafe(ws, sortIndex, meta));
   }
 
-  /** Write without its own transaction (caller must provide one). */
-  private writeWorkspaceUnsafe(ws: Workspace, sortIndex: number): void {
-    {
-      this.db
-        .prepare(
-          `INSERT INTO workspaces
-            (id, name, created_at, conference, entry_plan_mode, scoring_settings,
-             loaded_meet, official_team_scores, active_entry_ids, history_sources, sort_index)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-           ON CONFLICT(id) DO UPDATE SET
-             name = excluded.name,
-             created_at = excluded.created_at,
-             conference = excluded.conference,
-             entry_plan_mode = excluded.entry_plan_mode,
-             scoring_settings = excluded.scoring_settings,
-             loaded_meet = excluded.loaded_meet,
-             official_team_scores = excluded.official_team_scores,
-             active_entry_ids = excluded.active_entry_ids,
-             history_sources = excluded.history_sources,
-             sort_index = excluded.sort_index`
-        )
-        .run(
-          ws.id,
-          ws.name,
-          ws.createdAt ?? Date.now(),
-          ws.conference ?? null,
-          ws.entryPlanMode ?? null,
-          ws.scoringSettings ? JSON.stringify(ws.scoringSettings) : null,
-          ws.loadedMeet ? JSON.stringify(ws.loadedMeet) : null,
-          ws.officialTeamScores ? JSON.stringify(ws.officialTeamScores) : null,
-          ws.activeEntryIds ? JSON.stringify(ws.activeEntryIds) : null,
-          ws.historySources ? JSON.stringify(ws.historySources) : null,
-          sortIndex
-        );
+  private writeWorkspaceUnsafe(ws: Workspace, sortIndex: number, meta: { version: number }): void {
+    const vals = workspaceRowValues(ws, sortIndex, {
+      ownerId: this.scope.ownerId,
+      teamId: this.scope.teamId,
+      updatedAt: Date.now(),
+      version: meta.version,
+    });
 
-      // Rewrite child collections.
-      for (const table of [
-        'meet_results',
-        'recruits',
-        'roster_overrides',
-        'meet_entry_plans',
-        'relay_leg_overrides',
-        'deleted_swimmers',
-        'athlete_history',
-      ]) {
-        this.db.prepare(`DELETE FROM ${table} WHERE workspace_id = ?`).run(ws.id);
-      }
+    this.db
+      .prepare(
+        `INSERT INTO workspaces
+          (id, name, created_at, conference, entry_plan_mode, scoring_settings,
+           loaded_meet, official_team_scores, active_entry_ids, history_sources, sort_index,
+           owner_id, team_id, updated_at, version)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         ON CONFLICT(id) DO UPDATE SET
+           name = excluded.name,
+           created_at = excluded.created_at,
+           conference = excluded.conference,
+           entry_plan_mode = excluded.entry_plan_mode,
+           scoring_settings = excluded.scoring_settings,
+           loaded_meet = excluded.loaded_meet,
+           official_team_scores = excluded.official_team_scores,
+           active_entry_ids = excluded.active_entry_ids,
+           history_sources = excluded.history_sources,
+           sort_index = excluded.sort_index,
+           owner_id = COALESCE(excluded.owner_id, owner_id),
+           team_id = COALESCE(excluded.team_id, team_id),
+           updated_at = excluded.updated_at,
+           version = excluded.version`
+      )
+      .run(
+        vals.id,
+        vals.name,
+        vals.created_at,
+        vals.conference,
+        vals.entry_plan_mode,
+        vals.scoring_settings,
+        vals.loaded_meet,
+        vals.official_team_scores,
+        vals.active_entry_ids,
+        vals.history_sources,
+        vals.sort_index,
+        vals.owner_id,
+        vals.team_id,
+        vals.updated_at,
+        vals.version
+      );
 
-      this.insertResults(ws.id, ws.menResults ?? [], 'Men');
-      this.insertResults(ws.id, ws.womenResults ?? [], 'Women');
-      this.insertWithId('recruits', ws.id, ws.recruits ?? []);
-      this.insertWithId('meet_entry_plans', ws.id, ws.meetEntryPlans ?? []);
-      this.insertPositional('roster_overrides', ws.id, ws.scorerRosterOverrides ?? []);
-      this.insertPositional('relay_leg_overrides', ws.id, ws.relayLegOverrides ?? []);
-      this.insertPositional('deleted_swimmers', ws.id, ws.deletedSwimmers ?? []);
-      this.insertPositional('athlete_history', ws.id, ws.athleteHistory ?? []);
+    for (const table of [
+      'meet_results',
+      'recruits',
+      'roster_overrides',
+      'meet_entry_plans',
+      'relay_leg_overrides',
+      'deleted_swimmers',
+      'athlete_history',
+    ]) {
+      this.db.prepare(`DELETE FROM ${table} WHERE workspace_id = ?`).run(ws.id);
     }
-  }
 
-  private insertResults(workspaceId: string, results: SwimmerResult[], gender: string): void {
-    const stmt = this.db.prepare(
+    const insertResult = this.db.prepare(
       'INSERT INTO meet_results(id, workspace_id, gender, position, data) VALUES(?, ?, ?, ?, ?)'
     );
-    results.forEach((r, i) => {
-      const rid = (r as { id?: string }).id || `${workspaceId}_${gender}_${i}`;
-      stmt.run(rid, workspaceId, gender, i, JSON.stringify(r));
-    });
-  }
+    for (const row of insertResultsRows(ws.id, ws.menResults ?? [], 'Men')) {
+      insertResult.run(row.id, row.workspace_id, row.gender, row.position, row.data);
+    }
+    for (const row of insertResultsRows(ws.id, ws.womenResults ?? [], 'Women')) {
+      insertResult.run(row.id, row.workspace_id, row.gender, row.position, row.data);
+    }
 
-  private insertWithId(
-    table: string,
-    workspaceId: string,
-    rows: ReadonlyArray<{ id?: string }>
-  ): void {
-    const stmt = this.db.prepare(
-      `INSERT INTO ${table}(id, workspace_id, position, data) VALUES(?, ?, ?, ?)`
-    );
-    rows.forEach((row, i) => {
-      const rid = row.id || `${workspaceId}_${table}_${i}`;
-      stmt.run(rid, workspaceId, i, JSON.stringify(row));
-    });
-  }
+    const insertWithId = (table: string) =>
+      this.db.prepare(`INSERT INTO ${table}(id, workspace_id, position, data) VALUES(?, ?, ?, ?)`);
+    for (const row of insertWithIdRows('recruits', ws.id, ws.recruits ?? [])) {
+      insertWithId('recruits').run(row.id, row.workspace_id, row.position, row.data);
+    }
+    for (const row of insertWithIdRows('meet_entry_plans', ws.id, ws.meetEntryPlans ?? [])) {
+      insertWithId('meet_entry_plans').run(row.id, row.workspace_id, row.position, row.data);
+    }
 
-  private insertPositional(table: string, workspaceId: string, rows: unknown[]): void {
-    const stmt = this.db.prepare(
-      `INSERT INTO ${table}(workspace_id, position, data) VALUES(?, ?, ?)`
-    );
-    rows.forEach((row, i) => stmt.run(workspaceId, i, JSON.stringify(row)));
+    const insertPos = (table: string) =>
+      this.db.prepare(`INSERT INTO ${table}(workspace_id, position, data) VALUES(?, ?, ?)`);
+    for (const row of insertPositionalRows(ws.id, ws.scorerRosterOverrides ?? [])) {
+      insertPos('roster_overrides').run(row.workspace_id, row.position, row.data);
+    }
+    for (const row of insertPositionalRows(ws.id, ws.relayLegOverrides ?? [])) {
+      insertPos('relay_leg_overrides').run(row.workspace_id, row.position, row.data);
+    }
+    for (const row of insertPositionalRows(ws.id, ws.deletedSwimmers ?? [])) {
+      insertPos('deleted_swimmers').run(row.workspace_id, row.position, row.data);
+    }
+    for (const row of insertPositionalRows(ws.id, ws.athleteHistory ?? [])) {
+      insertPos('athlete_history').run(row.workspace_id, row.position, row.data);
+    }
   }
 }
 
-export type { Workspace, Gender };
+export type { Workspace, SwimmerResult };

@@ -1,6 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
+    "types": ["node"],
     "paths": {
       "@omniswim/core": ["../../packages/core/src/index.ts"],
       "@omniswim/core/*": ["../../packages/core/src/*"],

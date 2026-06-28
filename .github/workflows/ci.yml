@@ -16,20 +16,16 @@ jobs:
         with:
           node-version: '22'
           cache: npm
-          cache-dependency-path: omniswim-suite/package-lock.json
+          cache-dependency-path: package-lock.json
 
       - name: Install
-        working-directory: omniswim-suite
         run: npm ci
 
       - name: Lint
-        working-directory: omniswim-suite
         run: npm run lint
 
       - name: Test
-        working-directory: omniswim-suite
         run: npm test
 
       - name: Build
-        working-directory: omniswim-suite
         run: npm run build
