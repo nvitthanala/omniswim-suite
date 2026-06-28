@@ -26,3 +26,17 @@ for (const [measurement, expected] of cases) {
 }
 
 console.log('chart shell readiness checks passed');
+
+// Render-prop contract: pixel dimensions must exceed minPixels before charts mount.
+const minPixels = 8;
+for (const { width, height, expectedReady } of [
+  { width: 300, height: 200, expectedReady: true },
+  { width: 8, height: 200, expectedReady: false },
+]) {
+  const ready = isChartMeasurementReady({ width, height }, minPixels);
+  if (ready !== expectedReady) {
+    throw new Error(`render-prop gate: ${width}x${height} expected ready=${expectedReady}, got ${ready}`);
+  }
+}
+
+console.log('chart shell render-prop gate checks passed');

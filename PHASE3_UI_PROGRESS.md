@@ -34,10 +34,28 @@ Last updated: 2026-06-28.
 
 - Added `ChartShell` in `packages/ui/src/components/ChartShell.tsx` so Recharts surfaces wait for non-collapsed dimensions before mounting.
 - Replaced fragile Tailwind-height-only chart wrappers in Matrix timeline, Matrix TeamCard, Metrics velocity, and Analytics season trends with semantic `.chart-shell-*` sizing.
-- TeamCard charts now mount only after the expand animation completes, avoiding Recharts measuring a `0px` parent during `height: 0 -> auto`.
 - Metrics and Analytics charts now read suite theme tokens through `useThemeColors` instead of relying on the orphaned Metrics `--accent-500` token or raw CSS variable strokes.
 - Added high-contrast overrides for `--chart-grid` and `--chart-tick`.
-- Extended regression coverage with `scripts/test_chart_shell.mjs` and extra production CSS checks for `.chart-shell--md`, `.chart-shell--lg`, and `.chart-shell--fluid`.
+- Extended regression coverage with `scripts/test_chart_shell.mjs` and extra production CSS checks for `.chart-shell--md`, `.chart-shell--lg`, `.chart-shell--fluid`, `.chart-shell__viewport`, and `.matrix-data-grid`.
+
+### Chart pixel-sizing fix (second pass)
+
+Symptom after PDF load: team legend rendered below the timeline but the chart area stayed blank (no axes, grid, or lines). Root cause: Recharts 3 `ResponsiveContainer` with `width="100%" height="100%"` often measured `0×0` when first mounted after async data arrived, and never recovered.
+
+Fix:
+
+- `ChartShell` now exposes a render prop with measured pixel `width`/`height` and a `ready` gate; content renders inside `.chart-shell__viewport`.
+- All Recharts surfaces (Matrix timeline, TeamCard event/class charts, Metrics velocity, Analytics season trends) pass explicit pixel dimensions to `ResponsiveContainer`.
+- Data-driven `key` props force remount when scoring data or pane size changes (`timelineChartKey`, `scoringRefreshKey`, etc.).
+- Removed TeamCard `chartsReady` animation gate; expand animation is opacity-only so charts can measure immediately.
+- Timeline lines use `connectNulls` and theme-based tooltip cursor strokes.
+
+### Matrix formatting cleanup (second pass)
+
+- Added `packages/matrix/src/components/matrixPresentation.tsx` with `AthleteName`, `TeamName`, `PointsValue`, `SwimTimeCell`, and `MatrixRow`.
+- Applied to MeetOperationsView (timeline legend, top contributors), MeetDiffTable, and TeamCard swimmer rows.
+- Added `.matrix-data-grid` CSS for unified row layout.
+- Reformatted corrupted one-line `packages/core/src/lib/seasonAnalytics.ts`.
 
 ## Files Changed
 
@@ -63,7 +81,12 @@ Last updated: 2026-06-28.
 - `packages/manager/src/ManagerApp.tsx` - guided empty state and optimizer apply toast.
 - `packages/manager/src/components/TeamRosterPanel.tsx` - lightweight roster row windowing for teams above 80 athletes and semantic text scale cleanup.
 - `packages/matrix/src/MatrixApp.tsx` - guided empty state for no active workspace.
-- `packages/matrix/src/components/TeamCard.tsx` - memoized TeamCard, stabilized grouped chart/table data, semantic text scale cleanup, and chart mount gating after expand animation.
+- `packages/matrix/src/components/TeamCard.tsx` - memoized TeamCard, pixel-dimension charts via ChartShell render prop, opacity-only expand, unified swimmer/points formatting.
+- `packages/matrix/src/components/MeetOperationsView.tsx` - pixel-dimension timeline chart, connectNulls, data remount keys, matrixPresentation in legend/table.
+- `packages/matrix/src/components/MeetDiffTable.tsx` - TeamName and PointsValue formatting.
+- `packages/matrix/src/components/matrixPresentation.tsx` - shared Matrix data display helpers.
+- `packages/core/src/lib/seasonAnalytics.ts` - reformatted from merge corruption.
+- `apps/shell/src/pages/AnalyticsPage.tsx` - pixel-dimension season trend chart.
 - `packages/metrics/src/MetricsApp.tsx` - guided no-video empty state and extra session/video feedback.
 - `packages/metrics/src/components/VideoPlayer.tsx` - semantic text scale cleanup for manual tracking controls.
 - `packages/metrics/src/components/RaceSetupForm.tsx` - semantic text scale cleanup for setup labels.

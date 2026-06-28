@@ -40,7 +40,14 @@ function MetricsDashboardComponent({ data }: { data: BiomechanicsData }) {
       <section className="flex-1 min-h-[250px] flex flex-col">
         <h3 className="text-ui-micro font-bold text-slate-500 uppercase tracking-[0.2em] mb-3">Velocity Profile</h3>
         <ChartShell size="fluid" className="bg-white dark:bg-black/30 border border-slate-200 dark:border-white/5 rounded-lg p-5 overflow-hidden shadow-sm dark:shadow-none transition-colors">
-          <ResponsiveContainer width="100%" height="100%" debounce={50}>
+          {({ width, height, ready }) =>
+            !ready ? null : (
+          <ResponsiveContainer
+            key={`velocity-${chartData.length}-${width}x${height}`}
+            width={width}
+            height={height}
+            debounce={50}
+          >
             <AreaChart data={chartData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="colorVelocity" x1="0" y1="0" x2="0" y2="1">
@@ -64,6 +71,8 @@ function MetricsDashboardComponent({ data }: { data: BiomechanicsData }) {
               <Line type="monotone" dataKey="time" stroke="#10b981" strokeWidth={0} dot={{ r: 3, fill: '#10b981', strokeWidth: 0 }} />
             </AreaChart>
           </ResponsiveContainer>
+          )
+          }
         </ChartShell>
       </section>
 

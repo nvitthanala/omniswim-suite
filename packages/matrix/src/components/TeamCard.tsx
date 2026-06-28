@@ -21,6 +21,7 @@ import { getYearsRemaining, convertTimeToSeconds, relaySplitQualificationCutEven
 import { displayTimeForRelayLeg, formatLegSplitSummary } from '@omniswim/core/lib/relaySplits';
 import { compareTimeToCutline, getCutlinesForSwim, normalizeEventForCutline } from '@omniswim/core/lib/cutlineUtils';
 import { useThemeColors } from '@omniswim/core/lib/useThemeColors';
+import { AthleteName, PointsValue, SwimTimeCell } from './matrixPresentation';
 import ProjectedActualScore from './ProjectedActualScore';
 
 const EMPTY_EVENTS_LIST: string[] = [];
@@ -42,12 +43,13 @@ interface Props {
   actualScore?: number;
   baselineScore?: number;
   eventThrough?: number;
+  scoringRefreshKey?: number;
   onUpdateTime?: (id: string, newTime: string) => void;
   /** Opens delete confirmation (individual rows only; parent removes swims + marks departed). */
   onRequestDeleteSwimmer?: (name: string) => void;
 }
 
-function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, conference, searchQuery, actualScore, baselineScore, eventThrough, onUpdateTime, onRequestDeleteSwimmer }: Props) {
+function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, conference, searchQuery, actualScore, baselineScore, eventThrough, scoringRefreshKey = 0, onUpdateTime, onRequestDeleteSwimmer }: Props) {
   const chartTheme = useThemeColors();
   const teamChartColor = useMemo(
     () => colorForChartStroke(team.color || '#F43F5E', chartTheme.isDark ? 'dark' : 'light'),
@@ -59,7 +61,6 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
   const [viewMode, setViewMode] = useState<'swimmer'|'event'>('event');
   const [chartView, setChartView] = useState<'event' | 'class'>('event');
   const [sortMode, setSortMode] = useState<'chrono'|'eventDesc'|'eventAsc'|'swimmerDesc'|'swimmerAsc'>('eventDesc');
-  const [chartsReady, setChartsReady] = useState(false);
   
   // Custom Tooltip State
   const [activeTooltip, setActiveTooltip] = useState<any>(null);
@@ -324,10 +325,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
         onClick={() => {
           const nextExpanded = !isExpanded;
           setIsExpanded(nextExpanded);
-          if (!nextExpanded) {
-            setChartsReady(false);
-            clearChartTooltips();
-          }
+          if (!nextExpanded) clearChartTooltips();
         }}
         className="w-full flex items-center justify-between p-5 theme-hover-row transition-colors"
       >
@@ -363,11 +361,10 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
       <AnimatePresence>
         {isExpanded && (
           <motion.div
-            initial={{ height: 0, opacity: 0 }}
-            animate={{ height: 'auto', opacity: 1 }}
-            exit={{ height: 0, opacity: 0 }}
-            onAnimationStart={() => setChartsReady(false)}
-            onAnimationComplete={() => setChartsReady(true)}
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.15 }}
             className="border-t border-theme-soft surface-overlay"
           >
             <div
@@ -405,10 +402,9 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                 </div>
                 
                 <ChartShell size="lg" className="surface-overlay p-2 rounded border border-theme-soft group/chart">
-                  {chartsReady ? (
-                  chartView === 'event' ? (
+                  {({ width, height, ready }) =>
+                    !ready ? null : chartView === 'event' ? (
                   <div ref={eventChartSurfaceRef} className="h-full w-full relative">
-                    {/* Hover Tooltip (Absolute relative to chart) */}
                     {!pinnedTooltip && activeTooltip && (
                       <div 
                         className="absolute pointer-events-none rounded-lg overflow-hidden"
@@ -423,7 +419,6 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                       </div>
                     )}
                     
-                    {/* Pinned Tooltip (Draggable, Resizable) */}
                     {pinnedTooltip && (
                       <motion.div 
                         drag
@@ -439,9 +434,15 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                     )}
 
                     {eventData.length > 0 ? (
-                    <ResponsiveContainer key={`event-${Math.round(chartPanePercent)}`} width="100%" height="100%" debounce={50}>
+                    <ResponsiveContainer
+                      key={`event-${team.teamName}-${eventData.length}-${Math.round(chartPanePercent)}-${scoringRefreshKey}`}
+                      width={width}
+                      height={height}
+                      debounce={50}
+                    >
                       <LineChart
                         data={eventData}
+                        margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
                         onMouseMove={(state: any) => {
                           if (isDraggingSplitRef.current) return;
                           const idx = state?.activeTooltipIndex;
@@ -486,7 +487,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                         <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.chartGrid} vertical={false} />
                         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: chartTheme.chartTick, fontSize: 8, fontStyle: 'bold', fontFamily: 'JetBrains Mono' }} interval="preserveStartEnd" />
                         <YAxis axisLine={false} tickLine={false} tick={{ fill: chartTheme.chartTick, fontSize: 8, fontStyle: 'bold', fontFamily: 'JetBrains Mono' }} width={30} />
-                        <Tooltip content={() => null} cursor={{ stroke: 'rgba(255,255,255,0.05)', strokeWidth: 1 }} />
+                        <Tooltip content={() => null} cursor={{ stroke: chartTheme.chartGrid, strokeWidth: 1 }} />
                         <Line
                           type="monotone"
                           dataKey="points"
@@ -506,7 +507,6 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                   </div>
                   ) : (
                   <div ref={classChartSurfaceRef} className="h-full w-full relative">
-                    {/* Hover Tooltip (Absolute relative to chart) */}
                     {!pinnedClassTooltip && activeClassTooltip && (
                       <div 
                         className="absolute pointer-events-none rounded-lg overflow-hidden"
@@ -521,7 +521,6 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                       </div>
                     )}
                     
-                    {/* Pinned Tooltip (Draggable, Resizable) */}
                     {pinnedClassTooltip && (
                       <motion.div 
                         drag
@@ -536,8 +535,13 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                       </motion.div>
                     )}
 
-                    <ResponsiveContainer key={`class-${Math.round(chartPanePercent)}`} width="100%" height="100%" debounce={50}>
-                      <BarChart data={classData} onMouseLeave={() => setActiveClassTooltip(null)}>
+                    <ResponsiveContainer
+                      key={`class-${team.teamName}-${classData.reduce((n, d) => n + d.points, 0)}-${Math.round(chartPanePercent)}-${scoringRefreshKey}`}
+                      width={width}
+                      height={height}
+                      debounce={50}
+                    >
+                      <BarChart data={classData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} onMouseLeave={() => setActiveClassTooltip(null)}>
                         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: chartTheme.chartTick, fontSize: 10, fontStyle: 'bold', fontFamily: 'JetBrains Mono' }} />
                         <Tooltip content={<></>} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
                         <Bar 
@@ -573,11 +577,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                     </ResponsiveContainer>
                   </div>
                   )
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-center text-ui-caption text-theme-muted">
-                      Preparing chart surface...
-                    </div>
-                  )}
+                  }
                 </ChartShell>
 
                 <div className="flex justify-between mt-2 px-2 text-ui-micro text-theme-secondary font-mono border-t border-theme-soft pt-2 italic uppercase">
@@ -698,8 +698,12 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                             <div key={i} className="flex items-center justify-between text-ui-caption py-1.5 border-t border-theme-soft">
                               <div className="flex items-center gap-2 text-theme-secondary font-mono w-1/3">
                                 <span className="w-4 font-medium text-theme-secondary">{res.rank || '-'}</span>
-                                <span className="truncate max-w-[150px]" title={viewMode === 'swimmer' ? res.event : res.name}>
-                                  {viewMode === 'swimmer' ? res.event : res.name}
+                                <span className="truncate max-w-[150px]">
+                                  {viewMode === 'swimmer' ? (
+                                    <AthleteName name={res.event} className="text-theme-secondary font-mono" />
+                                  ) : (
+                                    <AthleteName name={res.name} className="text-theme-secondary font-mono" />
+                                  )}
                                 </span>
                                 {res.relayMissingLeg && (
                                   <span className="text-ui-micro text-amber-400 shrink-0" title="Missing relay leg">
@@ -773,9 +777,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                               <div className="flex items-center justify-end gap-2 w-1/3 flex-wrap">
                                 {isACut && <span title="Current A Cut Achieved" className="text-ui-micro btn-accent-outline px-1 rounded-sm">A CUT</span>}
                                 {isBCut && <span title="Current B Cut Achieved" className="text-ui-micro bg-amber-400/10 text-amber-400 px-1 border border-amber-400/30 rounded-sm">B CUT</span>}
-                                <span className={`font-mono font-medium w-8 text-right ${res.points === 'N/A' || res.points === 0 ? 'text-theme-secondary' : 'text-points-positive'}`}>
-                                  {res.points === 'N/A' ? 'N/A' : `+${res.points}`}
-                                </span>
+                                <PointsValue value={typeof res.points === 'number' ? res.points : res.points} />
                               </div>
                             </div>
                           );

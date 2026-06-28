@@ -40,6 +40,8 @@ const requiredChecks = [
   ['chart shell .chart-shell--md', /\.chart-shell--md\{/],
   ['chart shell .chart-shell--lg', /\.chart-shell--lg\{/],
   ['chart shell .chart-shell--fluid', /\.chart-shell--fluid\{/],
+  ['chart shell viewport', /\.chart-shell__viewport\{/],
+  ['matrix data grid', /\.matrix-data-grid\{/],
   ['text utility .text-ui-micro', /\.text-ui-micro\{/],
   ['text scale token', /--text-scale:/],
   ['text micro token', /--text-ui-micro:/],

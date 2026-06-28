@@ -1,5 +1,6 @@
 import { GitCompareArrows } from 'lucide-react';
 import type { TeamScore } from '@omniswim/core/types';
+import { PointsValue, TeamName } from './matrixPresentation';
 
 type Props = {
   projectedTeams: TeamScore[];
@@ -15,10 +16,6 @@ type DiffRow = {
   projectedRank: number | null;
   baselineRank: number | null;
 };
-
-function points(value: number) {
-  return value.toFixed(1);
-}
 
 export default function MeetDiffTable({ projectedTeams, baselineTeams, searchQuery }: Props) {
   const baselineByTeam = new Map(baselineTeams.map((team, index) => [team.teamName, { team, rank: index + 1 }]));
@@ -73,22 +70,20 @@ export default function MeetDiffTable({ projectedTeams, baselineTeams, searchQue
                 : null;
             return (
               <tr key={row.teamName} className="border-b border-theme-soft theme-hover-row transition-colors">
-                <td className="p-3 font-sans font-medium text-[var(--text-primary)]">{row.teamName}</td>
-                <td className="p-3 text-right text-theme-secondary tabular-nums">{points(row.baselinePoints)}</td>
-                <td className="p-3 text-right text-[var(--text-primary)] tabular-nums">
-                  {points(row.projectedPoints)}
-                </td>
-                <td
-                  className={`p-3 text-right font-bold tabular-nums ${
-                    row.delta > 0
-                      ? 'text-points-positive'
-                      : row.delta < 0
-                        ? 'text-points-negative'
-                        : 'text-theme-secondary'
-                  }`}
-                >
-                  {row.delta > 0 ? '+' : ''}
-                  {points(row.delta)}
+                <td className="p-3"><TeamName name={row.teamName} /></td>
+                <td className="p-3"><PointsValue value={row.baselinePoints} /></td>
+                <td className="p-3"><PointsValue value={row.projectedPoints} className="text-[var(--text-primary)]" /></td>
+                <td className="p-3">
+                  <PointsValue
+                    value={row.delta}
+                    className={
+                      row.delta > 0
+                        ? 'text-points-positive font-bold'
+                        : row.delta < 0
+                          ? 'text-points-negative font-bold'
+                          : 'text-theme-secondary'
+                    }
+                  />
                 </td>
                 <td className="p-3 text-right text-theme-secondary tabular-nums">
                   {row.projectedRank != null ? `#${row.projectedRank}` : '-'}

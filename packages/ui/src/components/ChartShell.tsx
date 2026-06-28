@@ -68,13 +68,16 @@ export function ChartShell({
     ready: isChartMeasurementReady(measurement, minPixels),
   };
 
+  const content =
+    !state.ready
+      ? placeholder ?? defaultPlaceholder()
+      : typeof children === 'function'
+        ? children(state)
+        : children;
+
   return (
     <div ref={ref} className={['chart-shell', `chart-shell--${size}`, className].filter(Boolean).join(' ')}>
-      {state.ready
-        ? typeof children === 'function'
-          ? children(state)
-          : children
-        : placeholder ?? defaultPlaceholder()}
+      <div className="chart-shell__viewport">{content}</div>
     </div>
   );
 }

@@ -53,9 +53,15 @@ export default function AnalyticsPage() {
       <div className="panel p-5 mb-6">
         <h2 className="text-ui-label font-bold text-[var(--text-primary)] mb-4">Team score trends</h2>
         <ChartShell size="md">
-          {chartData.length > 0 ? (
-            <ResponsiveContainer width="100%" height="100%" debounce={50}>
-              <LineChart data={chartData}>
+          {({ width, height, ready }) =>
+            !ready ? null : chartData.length > 0 ? (
+            <ResponsiveContainer
+              key={`season-${chartData.length}-${width}x${height}`}
+              width={width}
+              height={height}
+              debounce={50}
+            >
+              <LineChart data={chartData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
                 <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.chartGrid} />
                 <XAxis
                   dataKey="name"
@@ -72,15 +78,16 @@ export default function AnalyticsPage() {
                   }}
                   itemStyle={{ color: 'var(--text-primary)', fontSize: '12px', fontFamily: 'var(--font-mono)' }}
                 />
-                <Line type="monotone" dataKey="men" stroke={chartTheme.accent} name="Men" strokeWidth={2} />
-                <Line type="monotone" dataKey="women" stroke={womenLineColor} name="Women" strokeWidth={2} />
+                <Line type="monotone" dataKey="men" stroke={chartTheme.accent} name="Men" strokeWidth={2} connectNulls />
+                <Line type="monotone" dataKey="women" stroke={womenLineColor} name="Women" strokeWidth={2} connectNulls />
               </LineChart>
             </ResponsiveContainer>
           ) : (
             <div className="flex h-full items-center justify-center text-center text-ui-caption text-theme-muted">
               Load meets in Matrix to see season score trends.
             </div>
-          )}
+          )
+          }
         </ChartShell>
       </div>
 

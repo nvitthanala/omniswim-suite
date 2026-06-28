@@ -17,6 +17,7 @@ import TeamCard from './TeamCard';
 import ScoringSettingsPanel from './ScoringSettingsPanel';
 import MeetDiffTable from './MeetDiffTable';
 import { useThemeColors } from '@omniswim/core/lib/useThemeColors';
+import { AthleteName, PointsValue, TeamName } from './matrixPresentation';
 
 type TimelineTooltipContentProps = {
   active?: boolean;
@@ -165,6 +166,7 @@ export default function MeetOperationsView({
   }, [scoringBundle.allScored, gender, searchQuery, scoringRefreshKey]);
 
   const { events, timelineData } = scoringBundle;
+  const timelineChartKey = `timeline-${scoringBundle.teamStyleSignature}-${timelineData.length}-${scoringRefreshKey}`;
 
   return (
     <div className="flex flex-col gap-6">
@@ -189,64 +191,67 @@ export default function MeetOperationsView({
           </div>
 
           <ChartShell size="md" className="surface-overlay p-2 rounded border border-theme-soft">
-            {timelineData.length > 0 ? (
-              <ResponsiveContainer width="100%" height="100%" debounce={50}>
-                <LineChart data={timelineData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.chartGrid} vertical={false} />
-                  <XAxis
-                    dataKey="name"
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{
-                      fill: chartTheme.chartTick,
-                      fontSize: 9,
-                      fontStyle: 'bold',
-                      fontFamily: 'JetBrains Mono',
-                    }}
-                    interval="preserveStartEnd"
-                  />
-                  <YAxis
-                    axisLine={false}
-                    tickLine={false}
-                    tick={{
-                      fill: chartTheme.chartTick,
-                      fontSize: 10,
-                      fontStyle: 'bold',
-                      fontFamily: 'JetBrains Mono',
-                    }}
-                  />
-                  <Tooltip
-                    cursor={{ stroke: 'rgba(255,255,255,0.1)', strokeWidth: 2 }}
-                    content={props => (
-                      <TimelineTooltipContent
-                        active={props.active}
-                        label={props.label != null ? String(props.label) : undefined}
-                        payload={props.payload as TimelineTooltipContentProps['payload']}
-                        teamsWithLineStyles={teamsWithLineStyles}
-                      />
-                    )}
-                  />
-                  {teamsWithLineStyles.map(team => (
-                    <Line
-                      key={team.teamName}
-                      type="monotone"
-                      dataKey={team.teamName}
-                      name={team.teamName}
-                      stroke={team.lineColor ?? team.color}
-                      strokeWidth={2.5}
-                      strokeDasharray={team.strokeDasharray}
-                      dot={false}
-                      isAnimationActive={false}
-                      activeDot={{ r: 5, strokeWidth: 0, fill: team.lineColor ?? team.color }}
+            {({ width, height, ready }) =>
+              !ready ? null : timelineData.length > 0 ? (
+                <ResponsiveContainer key={timelineChartKey} width={width} height={height} debounce={50}>
+                  <LineChart data={timelineData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+                    <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.chartGrid} vertical={false} />
+                    <XAxis
+                      dataKey="name"
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{
+                        fill: chartTheme.chartTick,
+                        fontSize: 9,
+                        fontStyle: 'bold',
+                        fontFamily: 'JetBrains Mono',
+                      }}
+                      interval="preserveStartEnd"
                     />
-                  ))}
-                </LineChart>
-              </ResponsiveContainer>
-            ) : (
-              <div className="flex h-full items-center justify-center text-center text-ui-caption text-theme-muted">
-                Load meet results to see team score progression.
-              </div>
-            )}
+                    <YAxis
+                      axisLine={false}
+                      tickLine={false}
+                      tick={{
+                        fill: chartTheme.chartTick,
+                        fontSize: 10,
+                        fontStyle: 'bold',
+                        fontFamily: 'JetBrains Mono',
+                      }}
+                    />
+                    <Tooltip
+                      cursor={{ stroke: chartTheme.chartGrid, strokeWidth: 2 }}
+                      content={props => (
+                        <TimelineTooltipContent
+                          active={props.active}
+                          label={props.label != null ? String(props.label) : undefined}
+                          payload={props.payload as TimelineTooltipContentProps['payload']}
+                          teamsWithLineStyles={teamsWithLineStyles}
+                        />
+                      )}
+                    />
+                    {teamsWithLineStyles.map(team => (
+                      <Line
+                        key={team.teamName}
+                        type="monotone"
+                        dataKey={team.teamName}
+                        name={team.teamName}
+                        stroke={team.lineColor ?? team.color}
+                        strokeWidth={2.5}
+                        strokeDasharray={team.strokeDasharray}
+                        dot={false}
+                        connectNulls
+                        isAnimationActive={false}
+                        activeDot={{ r: 5, strokeWidth: 0, fill: team.lineColor ?? team.color }}
+                      />
+                    ))}
+                  </LineChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="flex h-full items-center justify-center text-center text-ui-caption text-theme-muted">
+                  Load meet results to see team score progression.
+                </div>
+              )
+            }
           </ChartShell>
           <div
             className="mt-3 flex flex-wrap gap-x-4 gap-y-2 justify-center pointer-events-none select-none border-t border-theme-soft pt-3"
@@ -255,7 +260,7 @@ export default function MeetOperationsView({
             {teamsWithLineStyles.map(t => (
               <span
                 key={t.teamName}
-                className="inline-flex items-center gap-2 text-ui-caption text-theme-secondary font-mono uppercase tracking-tight max-w-[220px]"
+                className="inline-flex items-center gap-2 text-ui-caption text-theme-secondary max-w-[220px]"
               >
                 <svg width="28" height="10" className="shrink-0 overflow-visible">
                   <line
@@ -268,9 +273,7 @@ export default function MeetOperationsView({
                     strokeDasharray={t.strokeDasharray}
                   />
                 </svg>
-                <span className="truncate" title={t.teamName}>
-                  {t.teamName}
-                </span>
+                <TeamName name={t.teamName} />
               </span>
             ))}
           </div>
@@ -416,6 +419,7 @@ export default function MeetOperationsView({
                     baselineScore={baselineByTeam.get(team.teamName)}
                     eventThrough={workspace.officialTeamScores?.eventThrough}
                     onRequestDeleteSwimmer={onRequestDeleteSwimmer}
+                    scoringRefreshKey={scoringRefreshKey}
                     onUpdateTime={
                       whatIfMode
                         ? (id, newTime) => {
@@ -444,7 +448,7 @@ export default function MeetOperationsView({
             </h4>
           </div>
           <table className="w-full text-left border-collapse">
-            <thead className="surface-overlay text-[10px] uppercase tracking-widest text-theme-secondary font-medium">
+            <thead className="surface-overlay text-ui-micro uppercase tracking-widest text-theme-secondary font-medium">
               <tr>
                 <th className="p-3">Rank</th>
                 <th className="p-3">Athlete Name</th>
@@ -453,28 +457,28 @@ export default function MeetOperationsView({
                 <th className="p-3 text-right">Meet pts</th>
               </tr>
             </thead>
-            <tbody className="text-xs font-mono">
+            <tbody>
               {topContributors.length > 0 ? (
                 topContributors.map((row, i) => (
                   <tr key={row.key} className="border-b border-theme-soft theme-hover-row transition-colors">
-                    <td className="p-3 text-theme-secondary">{i + 1}</td>
-                    <td className="p-3 font-sans font-medium text-[var(--text-primary)]">{row.name}</td>
-                    <td className="p-3 text-theme-secondary">{row.team}</td>
+                    <td className="p-3 text-ui-micro font-mono tabular-nums text-theme-muted">{i + 1}</td>
+                    <td className="p-3">
+                      <AthleteName name={row.name} />
+                    </td>
+                    <td className="p-3">
+                      <TeamName name={row.team} />
+                    </td>
                     <td className="p-3">
                       {row.classYear ? (
-                        <span className="px-1.5 py-0.5 rounded surface-overlay border border-theme-soft">
+                        <span className="px-1.5 py-0.5 rounded surface-overlay border border-theme-soft text-ui-micro font-mono">
                           {row.classYear}
                         </span>
                       ) : (
                         <span className="text-theme-muted">—</span>
                       )}
                     </td>
-                    <td
-                      className={`p-3 text-right font-medium ${
-                        row.meetPts > 0 ? 'text-points-positive' : 'text-theme-secondary'
-                      }`}
-                    >
-                      {row.meetPts.toFixed(1)}
+                    <td className="p-3">
+                      <PointsValue value={row.meetPts} />
                     </td>
                   </tr>
                 ))
