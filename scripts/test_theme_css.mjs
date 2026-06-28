@@ -45,6 +45,7 @@ const requiredChecks = [
   ['chart shell viewport fill', /\.chart-shell__viewport\{[^}]*(?:inset:\s*0|top:\s*0[^}]*left:\s*0)/],
   ['chart shell display block', /\.chart-shell\{[^}]*display:\s*block/],
   ['chart shell viewport size', /\.chart-shell__viewport\{[^}]*width:\s*100%/],
+  ['chart shell chart frame', /\.chart-shell__chart\{/],
   ['matrix data grid', /\.matrix-data-grid\{/],
   ['text utility .text-ui-micro', /\.text-ui-micro\{/],
   ['text scale token', /--text-scale:/],

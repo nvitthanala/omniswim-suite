@@ -14,6 +14,7 @@ export default defineConfig({
   resolve: {
     dedupe: ['react', 'react-dom', 'recharts'],
     alias: {
+      recharts: path.join(monorepoRoot, 'node_modules/recharts'),
       // Specific entries must precede the package-root aliases so they win.
       '@omniswim/ui/styles.css': path.join(monorepoRoot, 'packages/ui/src/index.css'),
       '@omniswim/core': path.join(monorepoRoot, 'packages/core/src'),
@@ -22,6 +23,9 @@ export default defineConfig({
       '@omniswim/matrix': path.join(monorepoRoot, 'packages/matrix/src'),
       '@omniswim/metrics': path.join(monorepoRoot, 'packages/metrics/src/MetricsApp.tsx'),
     },
+  },
+  optimizeDeps: {
+    include: ['recharts', 'react', 'react-dom'],
   },
   build: {
     outDir: path.join(monorepoRoot, 'dist'),

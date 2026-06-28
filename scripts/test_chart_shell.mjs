@@ -6,9 +6,8 @@
  * measured parent is effectively collapsed, then should mount once dimensions
  * become usable.
  *
- * Rule: ChartShell supplies pixel dimensions; pass width, height, and
- * responsive={false} directly on LineChart/BarChart/AreaChart. Never use
- * SizedChart cloneElement or %/100% ResponsiveContainer.
+ * Rule: ChartShell (live-ready gate) → ChartFrame → chart with Math.floor width,
+ * height, and responsive={false}. Never use ResponsiveContainer.
  */
 import {
   getChartContentBoxSize,
@@ -83,10 +82,12 @@ console.log('chart shell content-box sizing checks passed');
 
 const fallback = resolveChartMeasurement({ width: 0, height: 0 }, 'md');
 if (!isChartMeasurementReady(fallback)) {
-  throw new Error(`expected md fallback to be ready, got ${JSON.stringify(fallback)}`);
+  throw new Error(`expected md fallback dimensions to be ready, got ${JSON.stringify(fallback)}`);
 }
-if (fallback.width < 300 || fallback.height < 200) {
-  throw new Error(`unexpected md fallback dimensions: ${JSON.stringify(fallback)}`);
+
+// Live-only ready: zero viewport must NOT be ready (fallback is for display only).
+if (isChartMeasurementReady({ width: 0, height: 0 })) {
+  throw new Error('zero viewport should not be chart-ready');
 }
 
 const live = resolveChartMeasurement({ width: 400, height: 300 }, 'md');

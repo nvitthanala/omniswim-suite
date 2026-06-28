@@ -115,6 +115,20 @@ Fix:
 - Updated `scripts/test_chart_render.mjs` for explicit-props path and missing-dimension failure mode.
 - Rule: **`ChartShell` render prop → chart with explicit `width`/`height`/`responsive={false}`**; no SizedChart, no `%` ResponsiveContainer.
 
+### Chart live-ready gate + ChartFrame (eighth pass)
+
+Symptom persisted after seventh pass: browser console logged Recharts `width(-1) height(-1)` with `props width(100%) height(100%)` — ResponsiveContainer default path, not StaticDiv. Charts still blank despite explicit props on call sites.
+
+Fix:
+
+- `ChartShell` sets `ready=true` only when **live** viewport measure exceeds `minPixels` (fallback never opens the ready gate).
+- Added `ChartFrame` pixel-sized wrapper (`chart-shell__chart`) around all charts.
+- Call sites: `ChartShell` → `ChartFrame` → chart with `Math.floor(width/height)` and `responsive={false}`.
+- Vite: explicit `recharts` resolve alias + `optimizeDeps.include`.
+- `data-chart-live-ready` diagnostic on `.chart-shell`.
+- `test_chart_render.mjs` fails if `.recharts-responsive-container` appears in DOM.
+- Rule: **never use ResponsiveContainer**; charts mount only after live viewport sizing.
+
 ### Matrix formatting cleanup (second pass)
 
 - Added `packages/matrix/src/components/matrixPresentation.tsx` with `AthleteName`, `TeamName`, `PointsValue`, `SwimTimeCell`, and `MatrixRow`.

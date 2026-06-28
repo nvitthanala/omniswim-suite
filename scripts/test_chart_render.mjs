@@ -2,8 +2,8 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Full-stack DOM regression: ChartShell → LineChart with explicit width/height
- * must mount .recharts-wrapper, SVG surface, grid, and line paths.
+ * Full-stack DOM regression: ChartShell → ChartFrame → LineChart with explicit
+ * props must mount .recharts-wrapper without ResponsiveContainer.
  */
 import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -17,6 +17,7 @@ globalThis.React = React;
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const { ChartShell } = await import('../packages/ui/src/components/ChartShell.tsx');
+const { ChartFrame } = await import('../packages/ui/src/components/ChartFrame.tsx');
 
 const fixtureData = [
   { name: 'E1', teamA: 10, teamB: 8 },
@@ -35,6 +36,31 @@ function installDom() {
   globals.getComputedStyle = window.getComputedStyle.bind(window);
   globals.requestAnimationFrame = (cb) => setTimeout(cb, 0);
   globals.cancelAnimationFrame = (id) => clearTimeout(id);
+
+  const originalGetBoundingClientRect = globals.HTMLElement.prototype.getBoundingClientRect;
+  globals.HTMLElement.prototype.getBoundingClientRect = function getBoundingClientRect() {
+    const el = this;
+    if (
+      el.classList?.contains('chart-shell') ||
+      el.classList?.contains('chart-shell__viewport')
+    ) {
+      return {
+        width: 600,
+        height: 256,
+        top: 0,
+        left: 0,
+        right: 600,
+        bottom: 256,
+        x: 0,
+        y: 0,
+        toJSON() {
+          return {};
+        },
+      };
+    }
+    return originalGetBoundingClientRect.call(el);
+  };
+
   return window;
 }
 
@@ -48,7 +74,9 @@ function injectChartShellCss() {
   const style = document.createElement('style');
   style.textContent = `
     * { box-sizing: border-box; }
+    html, body { width: 640px; height: 320px; margin: 0; }
     ${chartRules}
+    .chart-shell--md { height: 256px; min-height: 256px; }
   `;
   document.head.appendChild(style);
 }
@@ -87,21 +115,30 @@ function ChartFixture() {
     ChartShell,
     { size: 'md', className: 'p-2' },
     ({ width, height }) =>
-      buildLineChart({
-        width,
-        height,
-        responsive: false,
-      })
+      React.createElement(
+        ChartFrame,
+        { width, height },
+        buildLineChart({
+          width: Math.floor(width),
+          height: Math.floor(height),
+          responsive: false,
+        })
+      )
   );
 }
 
-async function flushEffects(rounds = 6) {
+async function flushEffects(rounds = 10) {
   for (let i = 0; i < rounds; i += 1) {
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
 }
 
 function assertChartRendered(label) {
+  const responsiveContainer = document.querySelector('.recharts-responsive-container');
+  if (responsiveContainer) {
+    throw new Error(`${label}: ResponsiveContainer must not mount (causes -1 sizing warnings)`);
+  }
+
   const wrapper = document.querySelector('.recharts-wrapper');
   if (!wrapper) {
     throw new Error(`${label}: expected .recharts-wrapper to mount`);
@@ -134,9 +171,9 @@ function assertChartRendered(label) {
 const window = installDom();
 injectChartShellCss();
 
-// Explicit props path (seventh pass)
 const container = document.createElement('div');
 container.style.width = '640px';
+container.style.height = '320px';
 document.body.appendChild(container);
 const root = createRoot(container);
 
@@ -152,12 +189,16 @@ if (shell.getAttribute('data-chart-ready') !== 'true') {
     `expected data-chart-ready=true, got ${shell.getAttribute('data-chart-ready')} (w=${shell.getAttribute('data-chart-w')} h=${shell.getAttribute('data-chart-h')})`
   );
 }
+if (shell.getAttribute('data-chart-live-ready') !== 'true') {
+  throw new Error(
+    `expected data-chart-live-ready=true, got ${shell.getAttribute('data-chart-live-ready')}`
+  );
+}
 
-assertChartRendered('explicit width/height');
+assertChartRendered('ChartShell → ChartFrame → LineChart');
 root.unmount();
 document.body.innerHTML = '';
 
-// Missing dimensions should not render a usable chart (documents -1 failure mode)
 const failContainer = document.createElement('div');
 failContainer.style.width = '640px';
 document.body.appendChild(failContainer);

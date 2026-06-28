@@ -81,7 +81,8 @@ export function ChartShell({
 }: ChartShellProps) {
   const shellRef = useRef<HTMLDivElement>(null);
   const viewportRef = useRef<HTMLDivElement>(null);
-  const [measurement, setMeasurement] = useState({ width: 0, height: 0 });
+  const [liveMeasurement, setLiveMeasurement] = useState({ width: 0, height: 0 });
+  const [displayMeasurement, setDisplayMeasurement] = useState({ width: 0, height: 0 });
 
   useLayoutEffect(() => {
     const viewport = viewportRef.current;
@@ -90,11 +91,20 @@ export function ChartShell({
     if (!el) return;
 
     const update = () => {
-      const measured = viewport ? getChartViewportSize(viewport) : getChartContentBoxSize(shell!);
-      const resolved = resolveChartMeasurement(measured, size, minPixels);
-      setMeasurement(current => {
-        if (current.width === resolved.width && current.height === resolved.height) return current;
-        return resolved;
+      const viewportSize = viewport ? getChartViewportSize(viewport) : { width: 0, height: 0 };
+      const shellSize = shell ? getChartContentBoxSize(shell) : { width: 0, height: 0 };
+      const measured = isChartMeasurementReady(viewportSize, minPixels) ? viewportSize : shellSize;
+      const liveReady = isChartMeasurementReady(measured, minPixels);
+      setLiveMeasurement(current => {
+        if (current.width === measured.width && current.height === measured.height) return current;
+        return measured;
+      });
+      setDisplayMeasurement(current => {
+        const next = liveReady
+          ? { width: Math.floor(measured.width), height: Math.floor(measured.height) }
+          : resolveChartMeasurement(measured, size, minPixels);
+        if (current.width === next.width && current.height === next.height) return current;
+        return next;
       });
     };
 
@@ -116,9 +126,12 @@ export function ChartShell({
     };
   }, [size, minPixels]);
 
+  const liveReady = isChartMeasurementReady(liveMeasurement, minPixels);
+
   const state: ChartShellRenderState = {
-    ...measurement,
-    ready: isChartMeasurementReady(measurement, minPixels),
+    width: liveReady ? Math.floor(liveMeasurement.width) : displayMeasurement.width,
+    height: liveReady ? Math.floor(liveMeasurement.height) : displayMeasurement.height,
+    ready: liveReady,
   };
 
   const content =
@@ -133,8 +146,9 @@ export function ChartShell({
       ref={shellRef}
       className={['chart-shell', `chart-shell--${size}`, className].filter(Boolean).join(' ')}
       data-chart-ready={state.ready}
-      data-chart-w={Math.round(measurement.width)}
-      data-chart-h={Math.round(measurement.height)}
+      data-chart-live-ready={liveReady}
+      data-chart-w={Math.round(state.width)}
+      data-chart-h={Math.round(state.height)}
     >
       <div ref={viewportRef} className="chart-shell__viewport">
         {content}

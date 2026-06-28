@@ -6,6 +6,7 @@ export { Badge } from './components/Badge';
 export { Button } from './components/Button';
 export { EmptyState } from './components/EmptyState';
 export { ChartShell, getChartContentBoxSize, getChartViewportSize, isChartMeasurementReady, resolveChartMeasurement, type ChartShellRenderState, type ChartShellSize } from './components/ChartShell';
+export { ChartFrame } from './components/ChartFrame';
 export { SettingsSection } from './components/SettingsSection';
 export { SegmentedControl, type SegmentedControlOption } from './components/SegmentedControl';
 export { SectionHeader } from './components/SectionHeader';
