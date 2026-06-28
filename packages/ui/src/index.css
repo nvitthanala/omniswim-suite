@@ -247,8 +247,7 @@
   width: 100%;
   min-width: 0;
   position: relative;
-  display: flex;
-  flex-direction: column;
+  display: block;
 }
 
 .chart-shell--sm {

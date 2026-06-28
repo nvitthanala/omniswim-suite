@@ -4,7 +4,7 @@ import { formatTime, exportToCSV } from '../lib/utils';
 import { Download } from 'lucide-react';
 import { Line, XAxis, YAxis, CartesianGrid, Tooltip, AreaChart, Area } from 'recharts';
 import { useThemeColors } from '@omniswim/core/lib/useThemeColors';
-import { ChartShell, SizedChart } from '@omniswim/ui';
+import { ChartShell } from '@omniswim/ui';
 
 function MetricsDashboardComponent({ data }: { data: BiomechanicsData }) {
   const chartTheme = useThemeColors();
@@ -41,9 +41,11 @@ function MetricsDashboardComponent({ data }: { data: BiomechanicsData }) {
         <h3 className="text-ui-micro font-bold text-slate-500 uppercase tracking-[0.2em] mb-3">Velocity Profile</h3>
         <ChartShell size="fluid" className="bg-white dark:bg-black/30 border border-slate-200 dark:border-white/5 rounded-lg p-5 overflow-hidden shadow-sm dark:shadow-none transition-colors">
           {({ width, height }) => (
-          <SizedChart width={width} height={height}>
           <AreaChart
             key={`velocity-${chartData.length}`}
+            width={width}
+            height={height}
+            responsive={false}
             data={chartData}
             margin={{ top: 5, right: 0, left: -20, bottom: 0 }}
           >
@@ -68,7 +70,6 @@ function MetricsDashboardComponent({ data }: { data: BiomechanicsData }) {
               <Area type="monotone" dataKey="velocity" stroke={chartTheme.accent} strokeWidth={2} fillOpacity={1} fill="url(#colorVelocity)" />
               <Line type="monotone" dataKey="time" stroke="#10b981" strokeWidth={0} dot={{ r: 3, fill: '#10b981', strokeWidth: 0 }} />
           </AreaChart>
-          </SizedChart>
           )}
         </ChartShell>
       </section>

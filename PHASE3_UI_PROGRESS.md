@@ -102,6 +102,19 @@ Fix:
 - Upgraded `scripts/test_chart_render.mjs` to render full `ChartShell` → `SizedChart` → `LineChart` stack with shell CSS.
 - Rule: **`ChartShell` → `SizedChart` injects static `width`/`height` + `responsive={false}`**; never `%` `ResponsiveContainer`.
 
+### Chart explicit props fix (seventh pass — post-reorg)
+
+Symptom persisted after sixth pass: border and HTML legend rendered but chart interior blank. Browser console showed Recharts warning `width(-1) height(-1) should be greater than 0` — charts mounted without valid pixel dimensions. Root cause: `SizedChart` `cloneElement` + `requestAnimationFrame` defer did not reliably inject props in real Matrix UI (StrictMode, absolute viewport, post-flatten Vite chunk boundaries).
+
+Fix:
+
+- Removed `SizedChart` entirely; call sites pass `width`, `height`, and `responsive={false}` directly on `LineChart`/`BarChart`/`AreaChart`.
+- `ChartShell` measures `.chart-shell__viewport` via `getChartViewportSize` (not outer shell padding math).
+- `.chart-shell` uses `display: block` instead of flex.
+- Vite `resolve.dedupe: ['react', 'react-dom', 'recharts']` after monorepo flatten.
+- Updated `scripts/test_chart_render.mjs` for explicit-props path and missing-dimension failure mode.
+- Rule: **`ChartShell` render prop → chart with explicit `width`/`height`/`responsive={false}`**; no SizedChart, no `%` ResponsiveContainer.
+
 ### Matrix formatting cleanup (second pass)
 
 - Added `packages/matrix/src/components/matrixPresentation.tsx` with `AthleteName`, `TeamName`, `PointsValue`, `SwimTimeCell`, and `MatrixRow`.

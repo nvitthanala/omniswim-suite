@@ -23,8 +23,6 @@ const FALLBACK_CONTENT: Record<ChartShellSize, { width: number; height: number }
   fluid: { width: 400, height: 300 },
 };
 
-const SHELL_PADDING_PX = 16;
-
 export function isChartMeasurementReady(
   measurement: Pick<ChartShellRenderState, 'width' | 'height'>,
   minPixels = 8
@@ -43,6 +41,14 @@ export function getChartContentBoxSize(el: HTMLElement) {
   };
 }
 
+export function getChartViewportSize(el: HTMLElement) {
+  const rect = el.getBoundingClientRect();
+  return {
+    width: Math.max(0, rect.width),
+    height: Math.max(0, rect.height),
+  };
+}
+
 export function resolveChartMeasurement(
   measured: { width: number; height: number },
   size: ChartShellSize,
@@ -53,8 +59,8 @@ export function resolveChartMeasurement(
   }
   const fallback = FALLBACK_CONTENT[size];
   return {
-    width: Math.max(0, fallback.width - SHELL_PADDING_PX),
-    height: Math.max(0, fallback.height - SHELL_PADDING_PX),
+    width: Math.max(0, fallback.width),
+    height: Math.max(0, fallback.height),
   };
 }
 
@@ -74,14 +80,17 @@ export function ChartShell({
   minPixels = 8,
 }: ChartShellProps) {
   const shellRef = useRef<HTMLDivElement>(null);
+  const viewportRef = useRef<HTMLDivElement>(null);
   const [measurement, setMeasurement] = useState({ width: 0, height: 0 });
 
   useLayoutEffect(() => {
-    const el = shellRef.current;
+    const viewport = viewportRef.current;
+    const shell = shellRef.current;
+    const el = viewport ?? shell;
     if (!el) return;
 
     const update = () => {
-      const measured = getChartContentBoxSize(el);
+      const measured = viewport ? getChartViewportSize(viewport) : getChartContentBoxSize(shell!);
       const resolved = resolveChartMeasurement(measured, size, minPixels);
       setMeasurement(current => {
         if (current.width === resolved.width && current.height === resolved.height) return current;
@@ -98,6 +107,9 @@ export function ChartShell({
 
     const observer = new ResizeObserver(update);
     observer.observe(el);
+    if (shell && viewport && shell !== viewport) {
+      observer.observe(shell);
+    }
     return () => {
       cancelAnimationFrame(raf);
       observer.disconnect();
@@ -124,7 +136,9 @@ export function ChartShell({
       data-chart-w={Math.round(measurement.width)}
       data-chart-h={Math.round(measurement.height)}
     >
-      <div className="chart-shell__viewport">{content}</div>
+      <div ref={viewportRef} className="chart-shell__viewport">
+        {content}
+      </div>
     </div>
   );
 }

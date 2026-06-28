@@ -12,6 +12,7 @@ export default defineConfig({
   publicDir: path.join(monorepoRoot, 'public'),
   plugins: [react(), tailwindcss()],
   resolve: {
+    dedupe: ['react', 'react-dom', 'recharts'],
     alias: {
       // Specific entries must precede the package-root aliases so they win.
       '@omniswim/ui/styles.css': path.join(monorepoRoot, 'packages/ui/src/index.css'),
