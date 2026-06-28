@@ -1,0 +1,49 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="icon" type="image/png" href="/OMNISWIMLOGO.png" />
+    <script>
+      (function () {
+        try {
+          var defaults = {
+            themePreset: 'midnight',
+            accentColor: '#f87171',
+            colorMode: 'dark',
+            textScale: 'default',
+            reducedMotion: false,
+            highContrast: false,
+            focusRingEnhanced: false,
+          };
+          var stored = localStorage.getItem('omni-preferences');
+          var legacyTheme = localStorage.getItem('omni-theme');
+          var preferences = stored ? Object.assign(defaults, JSON.parse(stored)) : defaults;
+          if (!stored && (legacyTheme === 'light' || legacyTheme === 'dark')) {
+            preferences.colorMode = legacyTheme;
+            preferences.themePreset = legacyTheme === 'light' ? 'deck-light' : 'midnight';
+          }
+          var textScale = { compact: 0.9, default: 1, comfortable: 1.1, large: 1.2 }[preferences.textScale] || 1;
+          var root = document.documentElement;
+          root.dataset.theme = preferences.colorMode === 'light' ? 'light' : 'dark';
+          root.dataset.themePreset = preferences.themePreset || 'midnight';
+          root.dataset.textScale = preferences.textScale || 'default';
+          root.dataset.reducedMotion = String(Boolean(preferences.reducedMotion));
+          root.dataset.highContrast = String(Boolean(preferences.highContrast));
+          root.dataset.focusRingEnhanced = String(Boolean(preferences.focusRingEnhanced));
+          root.style.setProperty('--custom-accent', /^#[0-9a-fA-F]{6}$/.test(preferences.accentColor) ? preferences.accentColor : '#f87171');
+          root.style.setProperty('--text-scale', String(textScale));
+        } catch (error) {
+          document.documentElement.dataset.theme = 'dark';
+          document.documentElement.dataset.themePreset = 'midnight';
+          document.documentElement.dataset.textScale = 'default';
+        }
+      })();
+    </script>
+    <title>Omni Swim Suite</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>

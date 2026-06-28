@@ -1,7 +1,7 @@
 # OMNI-SWIM · Suite
 
 <p align="center">
-  <img src="omniswim-suite/public/OMNISWIMLOGO.png" alt="Omni Swim Suite logo" width="180" />
+  <img src="public/OMNISWIMLOGO.png" alt="Omni Swim Suite logo" width="180" />
 </p>
 
 <p align="center">
@@ -12,16 +12,17 @@
   <a href="https://expressjs.com/"><img src="https://img.shields.io/badge/Express-4-000000?logo=express&logoColor=white" alt="Express" /></a>
 </p>
 
-Omni Swim Suite is a workspace for swim-meet operations, combining roster planning, scoring workflows, and reporting in one place. The repository is organized as a monorepo so the shell application, shared packages, and supporting utilities can evolve together.
+Omni Swim Suite is a workspace for swim-meet operations, combining roster planning, scoring workflows, and reporting in one place. It is organized as an npm-workspaces monorepo so the shell application, shared packages, and supporting utilities can evolve together. The repository root is the monorepo root.
 
 ## At a glance
 
-| Area | Purpose |
+| Applet | Purpose |
 |---|---|
 | Manager | Athlete history, roster planning, event setup, and exports |
-| Matrix | Meet scoring views, projections, and scenario review |
-| Metrics | Local metrics and video/session analysis |
-| Storage | JSON-first persistence with optional SQLite support |
+| Matrix | Meet scoring views, projections, charts, and scenario review |
+| Metrics | Local video/session metrics analysis (no cloud keys) |
+
+Workspaces persist locally (JSON by default, optional SQLite). Manager and Matrix share live workspace data, so roster edits update Matrix charts without a reload.
 
 ---
 
@@ -31,45 +32,38 @@ Omni Swim Suite is a workspace for swim-meet operations, combining roster planni
 2. [Repository layout](#repository-layout)
 3. [Getting started](#getting-started)
 4. [Development](#development)
-5. [Documentation](#documentation)
-6. [Troubleshooting](#troubleshooting)
+5. [Runtime configuration](#runtime-configuration)
+6. [Documentation](#documentation)
+7. [Troubleshooting](#troubleshooting)
 
 ---
 
 ## Tech stack
 
-### Application
-
 | Area | Stack |
 |---|---|
 | UI | React 19, TypeScript, Vite 6 |
-| Styling | Tailwind CSS, custom design tokens, Lucide icons, motion |
-| Charts | Recharts |
+| Styling | Tailwind CSS v4, custom design tokens, Lucide icons, motion |
+| Charts | Recharts 3 |
+| Data/state | TanStack Query, Web Worker scoring |
 | Server | Express, dotenv, multer |
 | Validation | Zod |
 | Persistence | JSON files and SQLite (`node:sqlite`) |
 | Parsing | Python utilities for meet PDF workflows |
 
-### Supporting libraries
-
-- `@tanstack/react-query` for workspace state and cache updates
-- `uuid` for generated workspace identifiers
-- `recharts` for charts and visual summaries
-- `lucide-react` and `motion` for UI polish
-
 ## Repository layout
 
-- [omniswim-suite](omniswim-suite) — main application and monorepo root for the suite
-- [omniswim-suite/apps/shell](omniswim-suite/apps/shell) — shell app, routing, and Express server
-- [omniswim-suite/packages/core](omniswim-suite/packages/core) — shared types, scoring logic, and workspace helpers
-- [omniswim-suite/packages/ui](omniswim-suite/packages/ui) — shared UI primitives and styling
-- [omniswim-suite/packages/manager](omniswim-suite/packages/manager) — roster and planning workflows
-- [omniswim-suite/packages/matrix](omniswim-suite/packages/matrix) — scoring and results views
-- [omniswim-suite/packages/metrics](omniswim-suite/packages/metrics) — local metrics workflows
-- [omniswim-suite/packages/db](omniswim-suite/packages/db) — SQLite persistence layer
-- [omniswim-suite/backend](omniswim-suite/backend) — Python parsing utilities
-- [omniswim-suite/scripts](omniswim-suite/scripts) — migration and verification scripts
-- [omniswim-suite/data](omniswim-suite/data) — sample data and configuration assets
+- [apps/shell](apps/shell) — SPA host, routing, providers, and the Express server
+- [packages/core](packages/core) — shared types, scoring engine/worker, workspace store, API client
+- [packages/ui](packages/ui) — design tokens, shared primitives (Tailwind entry CSS lives here)
+- [packages/manager](packages/manager) — roster and planning workflows
+- [packages/matrix](packages/matrix) — scoring, charts, and results views
+- [packages/metrics](packages/metrics) — local metrics workflows
+- [packages/db](packages/db) — SQLite persistence layer
+- [backend](backend) — Python PDF parsing/scoring utilities
+- [scripts](scripts) — migration, test runner, and verification scripts
+- [data](data) — workspace data (`meets.json`), scoring presets, cutlines
+- [public](public) — static assets
 
 ## Getting started
 
@@ -79,12 +73,9 @@ Omni Swim Suite is a workspace for swim-meet operations, combining roster planni
 - npm
 - Python 3 (recommended for PDF parsing workflows)
 
----
-
 ### Quick start
 
 ```bash
-cd omniswim-suite
 npm install
 npm run dev
 ```
@@ -93,26 +84,22 @@ Then open http://localhost:3000.
 
 ### One-click startup on Windows
 
-Double-click either:
-
-- [omniswim-suite/Start-OmniSwim-Suite.bat](omniswim-suite/Start-OmniSwim-Suite.bat), or
-- [Start-OmniSwim-Suite.bat](Start-OmniSwim-Suite.bat) from the repository root
-
-The launcher checks for Node/Python, installs dependencies on first run, and opens the app in your browser.
+Double-click [Start-OmniSwim-Suite.bat](Start-OmniSwim-Suite.bat) (dev) or [Start-OmniSwim-Suite-Prod.bat](Start-OmniSwim-Suite-Prod.bat) (production build). The launcher checks for Node/Python, installs dependencies on first run, and opens the app in your browser.
 
 ## Development
-
-### Common commands
 
 ```bash
 # Start the development server
 npm run dev
 
-# Build the production bundle
+# Build the production client + server bundle
 npm run build
 
-# Run the production server
+# Run the production server (after build)
 npm run start
+
+# Run the test suite (scoring, persistence, chart-data checks)
+npm test
 
 # Migrate JSON data to SQLite
 npm run migrate:sqlite
@@ -121,31 +108,28 @@ npm run migrate:sqlite
 npm run test:roundtrip
 ```
 
-### Runtime configuration
+`npm test` runs the self-contained checks in [scripts](scripts) via the runner [scripts/run-tests.mjs](scripts/run-tests.mjs). Tests that depend on local-only fixtures are skipped automatically on a clean checkout.
+
+## Runtime configuration
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `OMNI_DB` | `json` | Switches persistence to SQLite after migration |
+| `OMNI_DB` | `json` | Switches persistence to SQLite (run `npm run migrate:sqlite` first) |
 | `OMNI_AI_ENABLED` | `false` | Keeps optional AI/OCR paths disabled unless explicitly enabled |
 
 ## Documentation
 
-The repo includes a few practical references for day-to-day work:
-
-- [omniswim-suite/README.md](omniswim-suite/README.md) — project-specific setup guidance for the main suite
-- [omniswim-suite/PHASE2_PROGRESS.md](omniswim-suite/PHASE2_PROGRESS.md) — implementation notes and verification status
-- [omniswim-suite/backend](omniswim-suite/backend) — parsing and scoring utilities
-- [omniswim-suite/scripts](omniswim-suite/scripts) — automation and validation scripts
-
----
+- [PHASE2_PROGRESS.md](PHASE2_PROGRESS.md) — implementation notes, status, and verification history
+- [backend](backend) — parsing and scoring utilities
+- [scripts](scripts) — automation and validation scripts
 
 ## Troubleshooting
 
-- If the app does not start, confirm that Node.js 20+ is installed and that `npm install` completed successfully.
-- If PDF parsing workflows fail, install Python 3 and retry the relevant steps.
-- If you want to switch storage modes, set `OMNI_DB` appropriately and run the migration script first.
+- If the app does not start, confirm Node.js 20+ is installed and `npm install` completed successfully.
+- If PDF parsing fails, install Python 3 and retry.
+- To switch storage modes, set `OMNI_DB=sqlite` and run `npm run migrate:sqlite` first.
+- If charts appear blank after adding UI in a workspace package, ensure that package's `src` is registered as a Tailwind `@source` in [packages/ui/src/index.css](packages/ui/src/index.css); Tailwind v4 only auto-scans the Vite root.
 
 ## License
 
 This project uses the same open-source approach as the surrounding swim tooling in this workspace. Please review repository-specific licensing details before redistribution or commercial use.
-

@@ -1,0 +1,37 @@
+# Dependencies
+node_modules/
+.pnp/
+.pnp.js
+
+# Python virtual env / caches
+venv/
+.venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+
+# Build output
+dist/
+build/
+.vite/
+*.tsbuildinfo
+
+# Local runtime data
+uploads/
+data/backups/
+*.db
+*.db-shm
+*.db-wal
+
+# Environment / secrets
+.env
+.env.*
+!.env.example
+
+# Logs
+*.log
+npm-debug.log*
+
+# OS / editor
+.DS_Store
+Thumbs.db
