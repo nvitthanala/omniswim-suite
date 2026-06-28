@@ -16,6 +16,15 @@ type ChartShellProps = {
   minPixels?: number;
 };
 
+const FALLBACK_CONTENT: Record<ChartShellSize, { width: number; height: number }> = {
+  sm: { width: 400, height: 192 },
+  md: { width: 400, height: 256 },
+  lg: { width: 400, height: 288 },
+  fluid: { width: 400, height: 300 },
+};
+
+const SHELL_PADDING_PX = 16;
+
 export function isChartMeasurementReady(
   measurement: Pick<ChartShellRenderState, 'width' | 'height'>,
   minPixels = 8
@@ -31,6 +40,21 @@ export function getChartContentBoxSize(el: HTMLElement) {
   return {
     width: Math.max(0, rect.width - padX),
     height: Math.max(0, rect.height - padY),
+  };
+}
+
+export function resolveChartMeasurement(
+  measured: { width: number; height: number },
+  size: ChartShellSize,
+  minPixels = 8
+) {
+  if (isChartMeasurementReady(measured, minPixels)) {
+    return measured;
+  }
+  const fallback = FALLBACK_CONTENT[size];
+  return {
+    width: Math.max(0, fallback.width - SHELL_PADDING_PX),
+    height: Math.max(0, fallback.height - SHELL_PADDING_PX),
   };
 }
 
@@ -57,21 +81,28 @@ export function ChartShell({
     if (!el) return;
 
     const update = () => {
-      const { width, height } = getChartContentBoxSize(el);
+      const measured = getChartContentBoxSize(el);
+      const resolved = resolveChartMeasurement(measured, size, minPixels);
       setMeasurement(current => {
-        if (current.width === width && current.height === height) return current;
-        return { width, height };
+        if (current.width === resolved.width && current.height === resolved.height) return current;
+        return resolved;
       });
     };
 
     update();
+    const raf = requestAnimationFrame(update);
 
-    if (typeof ResizeObserver === 'undefined') return;
+    if (typeof ResizeObserver === 'undefined') {
+      return () => cancelAnimationFrame(raf);
+    }
 
     const observer = new ResizeObserver(update);
     observer.observe(el);
-    return () => observer.disconnect();
-  }, [children, placeholder, minPixels]);
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+    };
+  }, [size, minPixels]);
 
   const state: ChartShellRenderState = {
     ...measurement,
@@ -89,6 +120,9 @@ export function ChartShell({
     <div
       ref={shellRef}
       className={['chart-shell', `chart-shell--${size}`, className].filter(Boolean).join(' ')}
+      data-chart-ready={state.ready}
+      data-chart-w={Math.round(measurement.width)}
+      data-chart-h={Math.round(measurement.height)}
     >
       <div className="chart-shell__viewport">{content}</div>
     </div>

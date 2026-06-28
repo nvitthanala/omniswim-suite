@@ -12,7 +12,7 @@ import { ArrowLeft, Download } from 'lucide-react';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
 import { buildSeasonTrends } from '@omniswim/core/lib/seasonAnalytics';
 import { useThemeColors } from '@omniswim/core/lib/useThemeColors';
-import { ChartShell } from '@omniswim/ui';
+import { ChartShell, SizedChart } from '@omniswim/ui';
 
 export default function AnalyticsPage() {
   const { workspaces, activeWorkspace } = useSuiteWorkspace();
@@ -54,12 +54,11 @@ export default function AnalyticsPage() {
         <ChartShell size="md">
           {({ width, height }) =>
             chartData.length > 0 ? (
+            <SizedChart width={width} height={height}>
             <LineChart
-              key={`season-${chartData.length}-${width}x${height}`}
-              width={width}
-              height={height}
+              key={`season-${chartData.length}`}
               data={chartData}
-              margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+              margin={{ top: 8, right: 12, left: 4, bottom: 20 }}
             >
                 <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.chartGrid} />
                 <XAxis
@@ -67,7 +66,7 @@ export default function AnalyticsPage() {
                   tick={{ fill: chartTheme.chartTick, fontSize: 11 }}
                   stroke={chartTheme.chartTick}
                 />
-                <YAxis tick={{ fill: chartTheme.chartTick, fontSize: 11 }} stroke={chartTheme.chartTick} />
+                <YAxis width={48} tick={{ fill: chartTheme.chartTick, fontSize: 11 }} stroke={chartTheme.chartTick} />
                 <Tooltip
                   contentStyle={{
                     backgroundColor: 'var(--popover-bg)',
@@ -80,6 +79,7 @@ export default function AnalyticsPage() {
                 <Line type="monotone" dataKey="men" stroke={chartTheme.accent} name="Men" strokeWidth={2} connectNulls />
                 <Line type="monotone" dataKey="women" stroke={womenLineColor} name="Women" strokeWidth={2} connectNulls />
             </LineChart>
+            </SizedChart>
           ) : (
             <div className="flex h-full items-center justify-center text-center text-ui-caption text-theme-muted">
               Load meets in Matrix to see season score trends.

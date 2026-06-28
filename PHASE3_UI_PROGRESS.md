@@ -73,6 +73,20 @@ Fix:
 - `Start-OmniSwim-Suite.bat` warns when port 3000 is in use and offers to kill a stale dev server PID.
 - CSS regression checks assert viewport stays absolutely positioned.
 
+### Chart SizedChart integration (fifth pass)
+
+Symptom persisted after fourth pass: chart border and HTML legend rendered but the interior stayed blank (no grid, axes, or lines). Root cause: Recharts 3 bootstraps SVG only after `ReportChartSize` dispatches layout width/height in a `useEffect`; passing `width`/`height` directly to `LineChart` skipped the numeric `ResponsiveContainer` context fast path, and unstable `ChartShell` effect deps (`children` render prop) caused ResizeObserver churn that could remount charts before Redux layout committed.
+
+Fix:
+
+- Added `SizedChart` in `packages/ui/src/components/SizedChart.tsx` — wraps charts in numeric `ResponsiveContainer` (pixel `width`/`height`, not `%`).
+- Hardened `ChartShell`: stable `useLayoutEffect` deps (`size`, `minPixels` only), `resolveChartMeasurement` fallbacks per shell size, `requestAnimationFrame` remeasure, and `data-chart-ready` / `data-chart-w` / `data-chart-h` diagnostics.
+- Migrated Matrix timeline, TeamCard, Analytics, and Metrics charts to `ChartShell` → `SizedChart` → chart (no `width`/`height` on chart components).
+- Timeline and Analytics: `margin={{ top: 8, right: 12, left: 4, bottom: 20 }}`, `YAxis width={48}`.
+- Removed `${width}x${height}` from chart remount keys in Analytics and Metrics.
+- Added `scripts/test_chart_render.mjs` (happy-dom DOM regression) wired into `npm test`.
+- Rule: **numeric `ResponsiveContainer` via `SizedChart` is OK**; **`%`/`100%` `ResponsiveContainer` is not**.
+
 ### Matrix formatting cleanup (second pass)
 
 - Added `packages/matrix/src/components/matrixPresentation.tsx` with `AthleteName`, `TeamName`, `PointsValue`, `SwimTimeCell`, and `MatrixRow`.

@@ -21,6 +21,7 @@ const TESTS = [
   ['test_sqlite_roundtrip.mjs'],
   ['test_chart_data.mjs'],
   ['test_chart_shell.mjs'],
+  ['test_chart_render.mjs'],
   ['test_theme_css.mjs'],
   ['test_roster_optimizer.mjs'],
   ['test_entry_limits.mjs'],

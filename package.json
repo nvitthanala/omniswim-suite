@@ -23,6 +23,8 @@
   },
   "devDependencies": {
     "@tauri-apps/cli": "^2.6.2",
+    "happy-dom": "^18.0.1",
+    "react-dom": "^19.0.1",
     "vitest": "^3.2.4"
   },
   "engines": {

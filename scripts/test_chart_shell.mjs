@@ -6,12 +6,13 @@
  * measured parent is effectively collapsed, then should mount once dimensions
  * become usable.
  *
- * Rule: never wrap ChartShell-sized charts in ResponsiveContainer — pass pixel
- * width/height directly to LineChart/BarChart/AreaChart instead.
+ * Rule: ChartShell supplies pixel dimensions; wrap charts in SizedChart (numeric
+ * ResponsiveContainer). Do not pass width/height directly to LineChart/BarChart.
  */
 import {
   getChartContentBoxSize,
   isChartMeasurementReady,
+  resolveChartMeasurement,
 } from '../packages/ui/src/components/ChartShell.tsx';
 
 const cases = [
@@ -78,3 +79,18 @@ for (const { rect, padding, expected } of contentBoxCases) {
 }
 
 console.log('chart shell content-box sizing checks passed');
+
+const fallback = resolveChartMeasurement({ width: 0, height: 0 }, 'md');
+if (!isChartMeasurementReady(fallback)) {
+  throw new Error(`expected md fallback to be ready, got ${JSON.stringify(fallback)}`);
+}
+if (fallback.width < 300 || fallback.height < 200) {
+  throw new Error(`unexpected md fallback dimensions: ${JSON.stringify(fallback)}`);
+}
+
+const live = resolveChartMeasurement({ width: 400, height: 300 }, 'md');
+if (live.width !== 400 || live.height !== 300) {
+  throw new Error(`live measurement should pass through, got ${JSON.stringify(live)}`);
+}
+
+console.log('chart shell fallback sizing checks passed');

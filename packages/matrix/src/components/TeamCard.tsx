@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, CartesianGrid } from 'recharts';
-import { ChartShell } from '@omniswim/ui';
+import { ChartShell, SizedChart } from '@omniswim/ui';
 import { TeamScore, SwimmerResult, ClassYear, Gender, RelayLegStroke } from '@omniswim/core/types';
 import { getYearsRemaining, convertTimeToSeconds, relaySplitQualificationCutEvent, formatEventChartAxisLabel, stripEventGenderMarker, colorForChartStroke } from '@omniswim/core/lib/utils';
 import { displayTimeForRelayLeg, formatLegSplitSummary } from '@omniswim/core/lib/relaySplits';
@@ -434,10 +434,9 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                     )}
 
                     {eventData.length > 0 ? (
+                      <SizedChart width={width} height={height}>
                       <LineChart
                         key={`event-${team.teamName}-${eventData.length}-${Math.round(chartPanePercent)}-${scoringRefreshKey}`}
-                        width={width}
-                        height={height}
                         data={eventData}
                         margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
                         onMouseMove={(state: any) => {
@@ -495,6 +494,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                           activeDot={false}
                         />
                       </LineChart>
+                      </SizedChart>
                     ) : (
                       <div className="flex items-center justify-center text-center text-ui-caption text-theme-muted" style={{ width, height }}>
                         No scoring events yet.
@@ -532,10 +532,9 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                     )}
 
                     {classData.length > 0 ? (
+                      <SizedChart width={width} height={height}>
                       <BarChart
                         key={`class-${team.teamName}-${classData.reduce((n, d) => n + d.points, 0)}-${Math.round(chartPanePercent)}-${scoringRefreshKey}`}
-                        width={width}
-                        height={height}
                         data={classData}
                         margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
                         onMouseLeave={() => setActiveClassTooltip(null)}
@@ -572,6 +571,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                           ))}
                         </Bar>
                       </BarChart>
+                      </SizedChart>
                     ) : (
                       <div className="flex items-center justify-center text-center text-ui-caption text-theme-muted" style={{ width, height }}>
                         No class year data yet.
