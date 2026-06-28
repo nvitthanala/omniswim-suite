@@ -6,7 +6,7 @@
 import React, { useMemo, useState } from 'react';
 import { Users, Plus, TrendingUp, Search, X, GitCompareArrows, ListTree } from 'lucide-react';
 import { motion } from 'motion/react';
-import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer, CartesianGrid } from 'recharts';
+import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { ChartShell } from '@omniswim/ui';
 import { Gender, Recruit, ScoringSettings, TeamScore, Workspace } from '@omniswim/core/types';
 import { assignTeamLineStyles, isRelayResult } from '@omniswim/core/lib/utils';
@@ -191,10 +191,15 @@ export default function MeetOperationsView({
           </div>
 
           <ChartShell size="md" className="surface-overlay p-2 rounded border border-theme-soft">
-            {({ width, height, ready }) =>
-              !ready ? null : timelineData.length > 0 ? (
-                <ResponsiveContainer key={timelineChartKey} width={width} height={height} debounce={50}>
-                  <LineChart data={timelineData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }}>
+            {({ width, height }) =>
+              timelineData.length > 0 ? (
+                <LineChart
+                  key={timelineChartKey}
+                  width={width}
+                  height={height}
+                  data={timelineData}
+                  margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+                >
                     <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.chartGrid} vertical={false} />
                     <XAxis
                       dataKey="name"
@@ -244,8 +249,7 @@ export default function MeetOperationsView({
                         activeDot={{ r: 5, strokeWidth: 0, fill: team.lineColor ?? team.color }}
                       />
                     ))}
-                  </LineChart>
-                </ResponsiveContainer>
+                </LineChart>
               ) : (
                 <div className="flex h-full items-center justify-center text-center text-ui-caption text-theme-muted">
                   Load meet results to see team score progression.

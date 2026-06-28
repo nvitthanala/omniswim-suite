@@ -14,7 +14,7 @@ import {
   Trash2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell, CartesianGrid } from 'recharts';
+import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, CartesianGrid } from 'recharts';
 import { ChartShell } from '@omniswim/ui';
 import { TeamScore, SwimmerResult, ClassYear, Gender, RelayLegStroke } from '@omniswim/core/types';
 import { getYearsRemaining, convertTimeToSeconds, relaySplitQualificationCutEvent, formatEventChartAxisLabel, stripEventGenderMarker, colorForChartStroke } from '@omniswim/core/lib/utils';
@@ -402,9 +402,9 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                 </div>
                 
                 <ChartShell size="lg" className="surface-overlay p-2 rounded border border-theme-soft group/chart">
-                  {({ width, height, ready }) =>
-                    !ready ? null : chartView === 'event' ? (
-                  <div ref={eventChartSurfaceRef} className="h-full w-full relative">
+                  {({ width, height }) =>
+                    chartView === 'event' ? (
+                  <div ref={eventChartSurfaceRef} className="relative">
                     {!pinnedTooltip && activeTooltip && (
                       <div 
                         className="absolute pointer-events-none rounded-lg overflow-hidden"
@@ -434,13 +434,10 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                     )}
 
                     {eventData.length > 0 ? (
-                    <ResponsiveContainer
-                      key={`event-${team.teamName}-${eventData.length}-${Math.round(chartPanePercent)}-${scoringRefreshKey}`}
-                      width={width}
-                      height={height}
-                      debounce={50}
-                    >
                       <LineChart
+                        key={`event-${team.teamName}-${eventData.length}-${Math.round(chartPanePercent)}-${scoringRefreshKey}`}
+                        width={width}
+                        height={height}
                         data={eventData}
                         margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
                         onMouseMove={(state: any) => {
@@ -498,15 +495,14 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                           activeDot={false}
                         />
                       </LineChart>
-                    </ResponsiveContainer>
                     ) : (
-                      <div className="flex h-full items-center justify-center text-center text-ui-caption text-theme-muted">
+                      <div className="flex items-center justify-center text-center text-ui-caption text-theme-muted" style={{ width, height }}>
                         No scoring events yet.
                       </div>
                     )}
                   </div>
                   ) : (
-                  <div ref={classChartSurfaceRef} className="h-full w-full relative">
+                  <div ref={classChartSurfaceRef} className="relative">
                     {!pinnedClassTooltip && activeClassTooltip && (
                       <div 
                         className="absolute pointer-events-none rounded-lg overflow-hidden"
@@ -535,13 +531,15 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                       </motion.div>
                     )}
 
-                    <ResponsiveContainer
-                      key={`class-${team.teamName}-${classData.reduce((n, d) => n + d.points, 0)}-${Math.round(chartPanePercent)}-${scoringRefreshKey}`}
-                      width={width}
-                      height={height}
-                      debounce={50}
-                    >
-                      <BarChart data={classData} margin={{ top: 8, right: 8, left: 0, bottom: 0 }} onMouseLeave={() => setActiveClassTooltip(null)}>
+                    {classData.length > 0 ? (
+                      <BarChart
+                        key={`class-${team.teamName}-${classData.reduce((n, d) => n + d.points, 0)}-${Math.round(chartPanePercent)}-${scoringRefreshKey}`}
+                        width={width}
+                        height={height}
+                        data={classData}
+                        margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+                        onMouseLeave={() => setActiveClassTooltip(null)}
+                      >
                         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: chartTheme.chartTick, fontSize: 10, fontStyle: 'bold', fontFamily: 'JetBrains Mono' }} />
                         <Tooltip content={<></>} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
                         <Bar 
@@ -574,7 +572,11 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                           ))}
                         </Bar>
                       </BarChart>
-                    </ResponsiveContainer>
+                    ) : (
+                      <div className="flex items-center justify-center text-center text-ui-caption text-theme-muted" style={{ width, height }}>
+                        No class year data yet.
+                      </div>
+                    )}
                   </div>
                   )
                   }

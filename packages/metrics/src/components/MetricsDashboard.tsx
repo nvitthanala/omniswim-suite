@@ -2,7 +2,7 @@ import React, { useCallback, useMemo } from 'react';
 import { BiomechanicsData } from '../types';
 import { formatTime, exportToCSV } from '../lib/utils';
 import { Download } from 'lucide-react';
-import { Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { Line, XAxis, YAxis, CartesianGrid, Tooltip, AreaChart, Area } from 'recharts';
 import { useThemeColors } from '@omniswim/core/lib/useThemeColors';
 import { ChartShell } from '@omniswim/ui';
 
@@ -40,15 +40,14 @@ function MetricsDashboardComponent({ data }: { data: BiomechanicsData }) {
       <section className="flex-1 min-h-[250px] flex flex-col">
         <h3 className="text-ui-micro font-bold text-slate-500 uppercase tracking-[0.2em] mb-3">Velocity Profile</h3>
         <ChartShell size="fluid" className="bg-white dark:bg-black/30 border border-slate-200 dark:border-white/5 rounded-lg p-5 overflow-hidden shadow-sm dark:shadow-none transition-colors">
-          {({ width, height, ready }) =>
-            !ready ? null : (
-          <ResponsiveContainer
+          {({ width, height }) => (
+          <AreaChart
             key={`velocity-${chartData.length}-${width}x${height}`}
             width={width}
             height={height}
-            debounce={50}
+            data={chartData}
+            margin={{ top: 5, right: 0, left: -20, bottom: 0 }}
           >
-            <AreaChart data={chartData} margin={{ top: 5, right: 0, left: -20, bottom: 0 }}>
               <defs>
                 <linearGradient id="colorVelocity" x1="0" y1="0" x2="0" y2="1">
                   <stop offset="5%" stopColor={chartTheme.accent} stopOpacity={0.3}/>
@@ -69,10 +68,8 @@ function MetricsDashboardComponent({ data }: { data: BiomechanicsData }) {
               />
               <Area type="monotone" dataKey="velocity" stroke={chartTheme.accent} strokeWidth={2} fillOpacity={1} fill="url(#colorVelocity)" />
               <Line type="monotone" dataKey="time" stroke="#10b981" strokeWidth={0} dot={{ r: 3, fill: '#10b981', strokeWidth: 0 }} />
-            </AreaChart>
-          </ResponsiveContainer>
-          )
-          }
+          </AreaChart>
+          )}
         </ChartShell>
       </section>
 

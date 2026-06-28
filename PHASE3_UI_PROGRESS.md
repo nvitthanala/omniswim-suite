@@ -50,6 +50,18 @@ Fix:
 - Removed TeamCard `chartsReady` animation gate; expand animation is opacity-only so charts can measure immediately.
 - Timeline lines use `connectNulls` and theme-based tooltip cursor strokes.
 
+### Chart ResponsiveContainer bypass (third pass)
+
+Symptom persisted after second pass: legend and scoring numbers rendered but SVG chart area stayed blank. Root cause: Recharts 3 `ResponsiveContainer` still returns `null` when its internal size check fails, even when pixel `width`/`height` are passed in.
+
+Fix:
+
+- `ChartShell` now measures `.chart-shell__viewport` with `useLayoutEffect` and `getChartContentBoxSize` (content-box, padding-aware).
+- Viewport CSS uses flow layout (`width/height: 100%`) instead of absolute positioning.
+- All chart call sites bypass `ResponsiveContainer` and pass pixel `width`/`height` directly to `LineChart`/`BarChart`/`AreaChart`.
+- Migrated files: `MeetOperationsView.tsx`, `TeamCard.tsx`, `AnalyticsPage.tsx`, `MetricsDashboard.tsx`.
+- Rule: **never wrap ChartShell-sized charts in ResponsiveContainer**.
+
 ### Matrix formatting cleanup (second pass)
 
 - Added `packages/matrix/src/components/matrixPresentation.tsx` with `AthleteName`, `TeamName`, `PointsValue`, `SwimTimeCell`, and `MatrixRow`.
@@ -59,7 +71,7 @@ Fix:
 
 ## Files Changed
 
-- `packages/ui/src/components/ChartShell.tsx` - shared measured chart container with readiness gating.
+- `packages/ui/src/components/ChartShell.tsx` - shared measured chart container with readiness gating, content-box sizing via `getChartContentBoxSize`.
 - `packages/core/src/preferences/types.ts` - preference types, defaults, preset metadata, text-scale values.
 - `packages/core/src/preferences/SuitePreferencesProvider.tsx` - core provider, hook, persistence, legacy theme migration, DOM application.
 - `packages/core/src/index.ts` and `packages/core/package.json` - exports for preferences.
@@ -81,12 +93,12 @@ Fix:
 - `packages/manager/src/ManagerApp.tsx` - guided empty state and optimizer apply toast.
 - `packages/manager/src/components/TeamRosterPanel.tsx` - lightweight roster row windowing for teams above 80 athletes and semantic text scale cleanup.
 - `packages/matrix/src/MatrixApp.tsx` - guided empty state for no active workspace.
-- `packages/matrix/src/components/TeamCard.tsx` - memoized TeamCard, pixel-dimension charts via ChartShell render prop, opacity-only expand, unified swimmer/points formatting.
-- `packages/matrix/src/components/MeetOperationsView.tsx` - pixel-dimension timeline chart, connectNulls, data remount keys, matrixPresentation in legend/table.
+- `packages/matrix/src/components/TeamCard.tsx` - memoized TeamCard, direct pixel-dimension charts (no ResponsiveContainer), opacity-only expand, unified swimmer/points formatting.
+- `packages/matrix/src/components/MeetOperationsView.tsx` - direct pixel-dimension timeline chart, connectNulls, data remount keys, matrixPresentation in legend/table.
 - `packages/matrix/src/components/MeetDiffTable.tsx` - TeamName and PointsValue formatting.
 - `packages/matrix/src/components/matrixPresentation.tsx` - shared Matrix data display helpers.
 - `packages/core/src/lib/seasonAnalytics.ts` - reformatted from merge corruption.
-- `apps/shell/src/pages/AnalyticsPage.tsx` - pixel-dimension season trend chart.
+- `apps/shell/src/pages/AnalyticsPage.tsx` - direct pixel-dimension season trend chart.
 - `packages/metrics/src/MetricsApp.tsx` - guided no-video empty state and extra session/video feedback.
 - `packages/metrics/src/components/VideoPlayer.tsx` - semantic text scale cleanup for manual tracking controls.
 - `packages/metrics/src/components/RaceSetupForm.tsx` - semantic text scale cleanup for setup labels.

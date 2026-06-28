@@ -1,4 +1,4 @@
-import { type ReactNode, useEffect, useRef, useState } from 'react';
+import { type ReactNode, useLayoutEffect, useRef, useState } from 'react';
 
 export type ChartShellSize = 'sm' | 'md' | 'lg' | 'fluid';
 
@@ -23,6 +23,17 @@ export function isChartMeasurementReady(
   return measurement.width > minPixels && measurement.height > minPixels;
 }
 
+export function getChartContentBoxSize(el: HTMLElement) {
+  const rect = el.getBoundingClientRect();
+  const style = getComputedStyle(el);
+  const padX = parseFloat(style.paddingLeft) + parseFloat(style.paddingRight);
+  const padY = parseFloat(style.paddingTop) + parseFloat(style.paddingBottom);
+  return {
+    width: Math.max(0, rect.width - padX),
+    height: Math.max(0, rect.height - padY),
+  };
+}
+
 function defaultPlaceholder() {
   return (
     <div className="chart-shell__placeholder" aria-hidden>
@@ -41,23 +52,22 @@ export function ChartShell({
   const ref = useRef<HTMLDivElement>(null);
   const [measurement, setMeasurement] = useState({ width: 0, height: 0 });
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = ref.current;
-    if (!el || typeof ResizeObserver === 'undefined') {
-      const rect = el?.getBoundingClientRect();
-      if (rect) setMeasurement({ width: rect.width, height: rect.height });
-      return;
-    }
+    if (!el) return;
 
     const update = () => {
-      const rect = el.getBoundingClientRect();
+      const { width, height } = getChartContentBoxSize(el);
       setMeasurement(current => {
-        if (current.width === rect.width && current.height === rect.height) return current;
-        return { width: rect.width, height: rect.height };
+        if (current.width === width && current.height === height) return current;
+        return { width, height };
       });
     };
 
     update();
+
+    if (typeof ResizeObserver === 'undefined') return;
+
     const observer = new ResizeObserver(update);
     observer.observe(el);
     return () => observer.disconnect();
@@ -76,8 +86,10 @@ export function ChartShell({
         : children;
 
   return (
-    <div ref={ref} className={['chart-shell', `chart-shell--${size}`, className].filter(Boolean).join(' ')}>
-      <div className="chart-shell__viewport">{content}</div>
+    <div className={['chart-shell', `chart-shell--${size}`, className].filter(Boolean).join(' ')}>
+      <div ref={ref} className="chart-shell__viewport">
+        {content}
+      </div>
     </div>
   );
 }

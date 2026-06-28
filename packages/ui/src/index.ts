@@ -5,7 +5,7 @@ export { AppletSkeleton } from './components/AppletSkeleton';
 export { Badge } from './components/Badge';
 export { Button } from './components/Button';
 export { EmptyState } from './components/EmptyState';
-export { ChartShell, isChartMeasurementReady, type ChartShellRenderState, type ChartShellSize } from './components/ChartShell';
+export { ChartShell, getChartContentBoxSize, isChartMeasurementReady, type ChartShellRenderState, type ChartShellSize } from './components/ChartShell';
 export { SettingsSection } from './components/SettingsSection';
 export { SegmentedControl, type SegmentedControlOption } from './components/SegmentedControl';
 export { SectionHeader } from './components/SectionHeader';
