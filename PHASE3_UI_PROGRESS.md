@@ -56,11 +56,22 @@ Symptom persisted after second pass: legend and scoring numbers rendered but SVG
 
 Fix:
 
-- `ChartShell` now measures `.chart-shell__viewport` with `useLayoutEffect` and `getChartContentBoxSize` (content-box, padding-aware).
-- Viewport CSS uses flow layout (`width/height: 100%`) instead of absolute positioning.
+- `ChartShell` uses `useLayoutEffect` and `getChartContentBoxSize` (content-box, padding-aware).
 - All chart call sites bypass `ResponsiveContainer` and pass pixel `width`/`height` directly to `LineChart`/`BarChart`/`AreaChart`.
 - Migrated files: `MeetOperationsView.tsx`, `TeamCard.tsx`, `AnalyticsPage.tsx`, `MetricsDashboard.tsx`.
 - Rule: **never wrap ChartShell-sized charts in ResponsiveContainer**.
+
+### Chart viewport layout fix (fourth pass)
+
+Symptom in dev (`Start-OmniSwim-Suite.bat`): third-pass flow layout (`width/height: 100%` on `.chart-shell__viewport`) let the viewport collapse to 0×0 in flex contexts, so `ChartShell` never reached `ready` and charts stayed blank while the HTML legend still rendered.
+
+Fix:
+
+- Restored `.chart-shell__viewport` to `position: absolute; inset: 0` inside the sized `.chart-shell` shell.
+- `ChartShell` measures the outer shell content box (subtracts consumer `p-2` padding) via `getChartContentBoxSize`.
+- Added `display: flex` on `.chart-shell` and stretch rules on `.chart-shell--fluid` for Metrics velocity charts.
+- `Start-OmniSwim-Suite.bat` warns when port 3000 is in use and offers to kill a stale dev server PID.
+- CSS regression checks assert viewport stays absolutely positioned.
 
 ### Matrix formatting cleanup (second pass)
 
@@ -71,7 +82,7 @@ Fix:
 
 ## Files Changed
 
-- `packages/ui/src/components/ChartShell.tsx` - shared measured chart container with readiness gating, content-box sizing via `getChartContentBoxSize`.
+- `packages/ui/src/components/ChartShell.tsx` - shared measured chart container; outer-shell content-box sizing via `getChartContentBoxSize`.
 - `packages/core/src/preferences/types.ts` - preference types, defaults, preset metadata, text-scale values.
 - `packages/core/src/preferences/SuitePreferencesProvider.tsx` - core provider, hook, persistence, legacy theme migration, DOM application.
 - `packages/core/src/index.ts` and `packages/core/package.json` - exports for preferences.
@@ -103,7 +114,8 @@ Fix:
 - `packages/metrics/src/components/VideoPlayer.tsx` - semantic text scale cleanup for manual tracking controls.
 - `packages/metrics/src/components/RaceSetupForm.tsx` - semantic text scale cleanup for setup labels.
 - `packages/metrics/src/components/MetricsDashboard.tsx` - memoized dashboard/card rendering, stabilized split chart data, semantic text scale cleanup, and suite-token chart colors.
-- `scripts/test_theme_css.mjs` - new production CSS regression check for chart heights, theme presets, accent tokens, and text-scale tokens.
+- `Start-OmniSwim-Suite.bat` - dev launcher; detects stale port-3000 server and offers to kill it.
+- `scripts/test_theme_css.mjs` - production CSS regression check for chart heights, theme presets, accent tokens, text-scale tokens, and absolute chart viewport layout.
 - `scripts/test_chart_shell.mjs` - readiness regression for collapsed vs usable chart measurements.
 - `scripts/run-tests.mjs` - added `test_theme_css.mjs` to the main test runner.
 - `PHASE3_UI_PROGRESS.md` - this handoff.

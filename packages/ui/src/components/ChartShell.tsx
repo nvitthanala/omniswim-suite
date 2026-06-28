@@ -49,11 +49,11 @@ export function ChartShell({
   placeholder,
   minPixels = 8,
 }: ChartShellProps) {
-  const ref = useRef<HTMLDivElement>(null);
+  const shellRef = useRef<HTMLDivElement>(null);
   const [measurement, setMeasurement] = useState({ width: 0, height: 0 });
 
   useLayoutEffect(() => {
-    const el = ref.current;
+    const el = shellRef.current;
     if (!el) return;
 
     const update = () => {
@@ -71,7 +71,7 @@ export function ChartShell({
     const observer = new ResizeObserver(update);
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [children, placeholder, minPixels]);
 
   const state: ChartShellRenderState = {
     ...measurement,
@@ -86,10 +86,11 @@ export function ChartShell({
         : children;
 
   return (
-    <div className={['chart-shell', `chart-shell--${size}`, className].filter(Boolean).join(' ')}>
-      <div ref={ref} className="chart-shell__viewport">
-        {content}
-      </div>
+    <div
+      ref={shellRef}
+      className={['chart-shell', `chart-shell--${size}`, className].filter(Boolean).join(' ')}
+    >
+      <div className="chart-shell__viewport">{content}</div>
     </div>
   );
 }

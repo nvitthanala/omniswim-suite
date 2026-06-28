@@ -41,6 +41,8 @@ const requiredChecks = [
   ['chart shell .chart-shell--lg', /\.chart-shell--lg\{/],
   ['chart shell .chart-shell--fluid', /\.chart-shell--fluid\{/],
   ['chart shell viewport', /\.chart-shell__viewport\{/],
+  ['chart shell viewport absolute', /\.chart-shell__viewport\{[^}]*position:\s*absolute/],
+  ['chart shell viewport fill', /\.chart-shell__viewport\{[^}]*(?:inset:\s*0|top:\s*0[^}]*left:\s*0)/],
   ['matrix data grid', /\.matrix-data-grid\{/],
   ['text utility .text-ui-micro', /\.text-ui-micro\{/],
   ['text scale token', /--text-scale:/],
