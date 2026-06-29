@@ -9,6 +9,12 @@ import { useEffect, useState } from 'react';
 
 const CHART_BUILD_EPOCH = 2;
 
+function isDevRuntime(): boolean {
+  if (typeof window === 'undefined') return false;
+  const host = window.location.hostname;
+  return host === 'localhost' || host === '127.0.0.1';
+}
+
 export default function ChartStaleBundleGuard() {
   const [stale, setStale] = useState(false);
 
@@ -32,7 +38,7 @@ export default function ChartStaleBundleGuard() {
   }, []);
 
   useEffect(() => {
-    if (!import.meta.env.DEV) return;
+    if (!isDevRuntime()) return;
     fetch('/api/dev/build-info')
       .then(r => (r.ok ? r.json() : null))
       .then(info => {

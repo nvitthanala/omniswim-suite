@@ -237,8 +237,14 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
           return;
         }
 
-        const parsedMen = data.results.filter((r: SwimmerResult) => r.gender === Gender.MEN);
-        const parsedWomen = data.results.filter((r: SwimmerResult) => r.gender === Gender.WOMEN);
+        const results = Array.isArray(data.results) ? data.results : [];
+        if (results.length === 0) {
+          toast.push('error', 'No individual psych entries found in PDF');
+          return;
+        }
+
+        const parsedMen = results.filter((r: SwimmerResult) => r.gender === Gender.MEN);
+        const parsedWomen = results.filter((r: SwimmerResult) => r.gender === Gender.WOMEN);
         const meetRows = [...(workspace.menResults ?? []), ...(workspace.womenResults ?? [])];
         const alignedMen = alignPsychResultsToMeetTeams(parsedMen, meetRows);
         const alignedWomen = alignPsychResultsToMeetTeams(parsedWomen, meetRows);
