@@ -13,6 +13,7 @@
     "start": "npm run start -w @omniswim/shell",
     "lint": "npm run lint --workspaces --if-present",
     "test": "node scripts/run-tests.mjs",
+    "test:e2e": "playwright test",
     "test:unit": "vitest run",
     "test:watch": "vitest",
     "migrate:sqlite": "tsx scripts/migrate-json-to-sqlite.mjs",
@@ -22,6 +23,7 @@
     "tauri:build": "tauri build"
   },
   "devDependencies": {
+    "@playwright/test": "^1.61.1",
     "@tauri-apps/cli": "^2.6.2",
     "happy-dom": "^18.0.1",
     "react-dom": "^19.0.1",

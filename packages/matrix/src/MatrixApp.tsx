@@ -4,6 +4,7 @@ import { Gender, type Workspace } from '@omniswim/core/types';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
 import { EmptyState } from '@omniswim/ui';
 import OpsModule from './components/OpsModule';
+import ChartStaleBundleGuard from './components/ChartStaleBundleGuard';
 
 export default function MatrixApp() {
   const { activeWorkspace, activeGender, updateWorkspace } = useSuiteWorkspace();
@@ -28,6 +29,7 @@ export default function MatrixApp() {
         exit={{ opacity: 0 }}
         transition={{ duration: 0.2 }}
       >
+        <ChartStaleBundleGuard />
         <OpsModule
           workspace={activeWorkspace}
           gender={activeGender}

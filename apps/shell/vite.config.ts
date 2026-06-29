@@ -53,5 +53,8 @@ export default defineConfig({
     fs: {
       allow: [monorepoRoot],
     },
+    headers: {
+      'Cache-Control': 'no-store',
+    },
   },
 });

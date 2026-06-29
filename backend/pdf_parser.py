@@ -1,5 +1,6 @@
 import sys
 import json
+import os
 import re
 import pdfplumber
 import difflib
@@ -36,26 +37,28 @@ _POINTS_SKIP_TOKENS = frozenset({
     'NC', 'PROV', 'NT', 'DQ', 'DFS', 'SCR', 'NS', 'NP', 'A', 'B', 'S', 'R', 'P', 'M',
 })
 
-# Map known abbreviations to full team names
-ABBREV_TEAMS = {
-    "UMSL": "University of Missouri-St. Louis",
-    "TRUM": "Truman State University",
-    "SBU": "Southwest Baptist University",
-    "WJC": "William Jewell College",
-    "MKU": "McKendree University",
-    "ROCK": "University of Indianapolis",
-    "MS&T": "Missouri S&T",
-    "QU": "Quincy University",
-    "DRURY": "Drury University",
-    "DRUR": "Drury University",
-    "UINDY": "University of Indianapolis",
-    "INDY": "University of Indianapolis",
-    "MST": "Missouri S&T",
-    "LU": "Lindenwood University",
-    "MARY": "University of Mary",
-    "NSU": "Northern State University",
-    "SCAD": "SCAD Savannah"
-}
+# Map known abbreviations to full team names (NSISC + GLVC; see packages/core/src/data/teamAbbreviations.json)
+_ALIASES_JSON = os.path.normpath(
+    os.path.join(os.path.dirname(__file__), '..', 'packages', 'core', 'src', 'data', 'teamAbbreviations.json')
+)
+
+
+def _load_abbrev_teams():
+    merged = {}
+    try:
+        with open(_ALIASES_JSON, encoding='utf-8') as fh:
+            merged.update(json.load(fh))
+    except OSError:
+        pass
+    merged.setdefault('UMSL', 'University of Missouri-St. Louis')
+    merged.setdefault('HSU', 'Henderson State University')
+    merged.setdefault('DSU', 'Delta State University')
+    merged.setdefault('OUAC', 'Ouachita Baptist University')
+    merged.setdefault('UWF', 'University of West Florida')
+    return merged
+
+
+ABBREV_TEAMS = _load_abbrev_teams()
 
 def is_data_line_text(stripped, is_relay_event=False):
     """Check if line is likely an athlete data line (not header, not split times)"""

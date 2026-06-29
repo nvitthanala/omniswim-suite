@@ -5,6 +5,7 @@ export {
   SCHEMA_VERSION,
   CREATE_TABLES_SQL,
   SQLITE_MIGRATIONS_V2,
+  SQLITE_MIGRATIONS_V3,
   CHILD_TABLES,
   type ChildTable,
 } from './schema';

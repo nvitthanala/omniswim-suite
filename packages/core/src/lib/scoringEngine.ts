@@ -16,6 +16,7 @@ import {
 } from './utils';
 import { mergeScoringSettings } from './scoringDefaults';
 import { buildPrelimsProjectedBundle } from './prelimsProjection';
+import { buildPsychProjectedBundle } from './psychProjection';
 import { buildWhatIfResults } from './whatIfProjection';
 
 export type ScoringBundle = {
@@ -151,5 +152,6 @@ export function buildScoringSnapshot(workspace: Workspace, gender: Gender, remov
     scorerRosterOverrides: [],
   });
   const prelimsProjected = buildPrelimsProjectedBundle({ workspace, gender });
-  return { projected, baseline, prelimsProjected };
+  const psychProjected = buildPsychProjectedBundle({ workspace, gender });
+  return { projected, baseline, prelimsProjected, psychProjected };
 }

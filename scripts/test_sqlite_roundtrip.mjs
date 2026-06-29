@@ -31,6 +31,7 @@ const sample = {
   entryPlanMode: 'overlay',
   scoringSettings: { scoringPoints: [20, 17, 16], relayMultiplier: 2 },
   loadedMeet: { pdfFilename: 'meet.pdf', uploadedAt: 1700000000001, conference: 'NSISC' },
+  loadedPsych: { pdfFilename: 'psych.pdf', uploadedAt: 1700000000003 },
   officialTeamScores: { eventThrough: 5, men: { A: 100 }, women: { B: 90 } },
   activeEntryIds: ['e1', 'e2'],
   historySources: [{ type: 'paste', label: 'SwimCloud', importedAt: 1700000000002 }],
@@ -40,6 +41,23 @@ const sample = {
   womenResults: [
     { id: 'w1', rank: 1, name: 'Jane Roe', classYear: 'JR', team: 'B', time: '48.90', points: 20, event: '100 Free', gender: 'Women', isRelay: false },
   ],
+  psychMenResults: [
+    {
+      id: 'pm1',
+      rank: 2,
+      name: 'John Doe',
+      classYear: 'SR',
+      team: 'A',
+      time: '44.50',
+      points: 0,
+      event: '100 Free',
+      gender: 'Men',
+      isRelay: false,
+      roundSwam: 'Psych Sheet',
+      isPsychSheet: true,
+    },
+  ],
+  psychWomenResults: [],
   recruits: [
     { id: 'r1', name: 'Recruit One', team: 'A', event: '200 Free', time: '1:38.0', gender: 'Men', classYear: 'FR', timeType: 'SCY' },
   ],
@@ -73,6 +91,9 @@ try {
   sortedEqual(got.activeEntryIds, sample.activeEntryIds, 'activeEntryIds');
   sortedEqual(got.menResults, sample.menResults, 'menResults');
   sortedEqual(got.womenResults, sample.womenResults, 'womenResults');
+  sortedEqual(got.psychMenResults, sample.psychMenResults, 'psychMenResults');
+  sortedEqual(got.psychWomenResults, sample.psychWomenResults, 'psychWomenResults');
+  sortedEqual(got.loadedPsych, sample.loadedPsych, 'loadedPsych');
   sortedEqual(got.recruits, sample.recruits, 'recruits');
   sortedEqual(got.deletedSwimmers, sample.deletedSwimmers, 'deletedSwimmers');
   sortedEqual(got.scorerRosterOverrides, sample.scorerRosterOverrides, 'scorerRosterOverrides');

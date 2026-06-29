@@ -17,12 +17,23 @@ import { motion, AnimatePresence } from 'motion/react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, CartesianGrid } from 'recharts';
 import { ChartFrame, ChartShell } from '@omniswim/ui';
 import { TeamScore, SwimmerResult, ClassYear, Gender, RelayLegStroke } from '@omniswim/core/types';
-import { getYearsRemaining, convertTimeToSeconds, relaySplitQualificationCutEvent, formatEventChartAxisLabel, stripEventGenderMarker, colorForChartStroke } from '@omniswim/core/lib/utils';
+import { getYearsRemaining, convertTimeToSeconds, relaySplitQualificationCutEvent, formatEventChartAxisLabel, colorForChartStroke } from '@omniswim/core/lib/utils';
+import type { PrelimsOverUnderEntry } from '@omniswim/core/lib/prelimsProjection';
+import {
+  buildMomentumSeriesForTeam,
+  entryKey,
+  prelimsOuOverUnderForDisplay,
+  sumPrelimsOuForSwimmers,
+} from '@omniswim/core/lib/prelimsProjection';
+import type { PsychOverUnderEntry } from '@omniswim/core/lib/psychProjection';
+import { psychExpectedForResult } from '@omniswim/core/lib/psychProjection';
+import { isRelayResult } from '@omniswim/core/lib/utils';
 import { displayTimeForRelayLeg, formatLegSplitSummary } from '@omniswim/core/lib/relaySplits';
 import { compareTimeToCutline, getCutlinesForSwim, normalizeEventForCutline } from '@omniswim/core/lib/cutlineUtils';
 import { useThemeColors } from '@omniswim/core/lib/useThemeColors';
-import { AthleteName, PointsValue, SwimTimeCell } from './matrixPresentation';
+import { AthleteName, CompactEventLabel, PlacementExpectedValue, PointsValue, PrelimsOuValue, SwimTimeCell } from './matrixPresentation';
 import ProjectedActualScore from './ProjectedActualScore';
+import MomentumChartCard from './MomentumChartCard';
 
 const EMPTY_EVENTS_LIST: string[] = [];
 
@@ -46,6 +57,10 @@ interface Props {
   baselineOverUnder?: number;
   projectedOverUnder?: number;
   showPrelimsPerformance?: boolean;
+  prelimsOuByEntry?: Map<string, PrelimsOverUnderEntry>;
+  showPsychPerformance?: boolean;
+  psychOuByEntry?: Map<string, PsychOverUnderEntry>;
+  psychProjectedScore?: number;
   eventThrough?: number;
   scoringRefreshKey?: number;
   onUpdateTime?: (id: string, newTime: string) => void;
@@ -53,8 +68,9 @@ interface Props {
   onRequestDeleteSwimmer?: (name: string) => void;
 }
 
-function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, conference, searchQuery, actualScore, baselineScore, prelimsProjectedScore, baselineOverUnder, projectedOverUnder, showPrelimsPerformance, eventThrough, scoringRefreshKey = 0, onUpdateTime, onRequestDeleteSwimmer }: Props) {
+function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, conference, searchQuery, actualScore, baselineScore, prelimsProjectedScore, baselineOverUnder, projectedOverUnder, showPrelimsPerformance, prelimsOuByEntry, showPsychPerformance, psychOuByEntry, psychProjectedScore, eventThrough, scoringRefreshKey = 0, onUpdateTime, onRequestDeleteSwimmer }: Props) {
   const chartTheme = useThemeColors();
+  const [momentumAnchor, setMomentumAnchor] = useState<'prelims' | 'psych'>('prelims');
   const teamChartColor = useMemo(
     () => colorForChartStroke(team.color || '#F43F5E', chartTheme.isDark ? 'dark' : 'light'),
     [team.color, chartTheme.isDark]
@@ -115,9 +131,50 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
 
   const filteredSwimmers = useMemo(() => team.swimmers.filter(s => !s.isTimeTrial), [team.swimmers]);
 
+  const psychMomentumHasData = (psychOuByEntry?.size ?? 0) > 0;
+  const prelimsMomentumHasData = (prelimsOuByEntry?.size ?? 0) > 0;
+
+  const momentumSeries = useMemo(
+    () => {
+      const lookup =
+        momentumAnchor === 'psych' && showPsychPerformance && psychOuByEntry && psychMomentumHasData
+          ? psychOuByEntry
+          : momentumAnchor !== 'psych' && showPrelimsPerformance && prelimsOuByEntry && prelimsMomentumHasData
+            ? prelimsOuByEntry
+            : undefined;
+      return lookup ? buildMomentumSeriesForTeam(team.teamName, lookup, eventsList) : [];
+    },
+    [
+      team.teamName,
+      showPrelimsPerformance,
+      showPsychPerformance,
+      prelimsOuByEntry,
+      psychOuByEntry,
+      psychMomentumHasData,
+      prelimsMomentumHasData,
+      eventsList,
+      momentumAnchor,
+    ]
+  );
+
+  const teamMomentumEmptyMessage =
+    momentumAnchor === 'psych' && showPsychPerformance && !psychMomentumHasData
+      ? 'No psych momentum for this team — psych sheet team names may not match meet results.'
+      : momentumAnchor === 'prelims' && showPrelimsPerformance && !prelimsMomentumHasData
+        ? 'No prelims momentum for this team.'
+        : undefined;
+
+  const momentumMeetTotal = useMemo(() => {
+    if (momentumAnchor === 'psych' && showPsychPerformance && psychProjectedScore != null && baselineScore != null) {
+      return baselineScore - psychProjectedScore;
+    }
+    return baselineOverUnder;
+  }, [momentumAnchor, showPsychPerformance, psychProjectedScore, baselineScore, baselineOverUnder]);
+
   const { eventData, classData, topSwimmersBase, topEventsBase } = useMemo(() => {
     const eventPointsMap: Record<string, number> = {};
     const eventSwimmersMap = new Map<string, SwimmerResult[]>();
+    const ouByEvent = new Map(momentumSeries.map(m => [m.rawEvent, m]));
     const classData = [
       { name: 'FR', points: 0, color: '#39FF14', swimmers: [] as SwimmerResult[] },
       { name: 'SO', points: 0, color: '#00F5FF', swimmers: [] as SwimmerResult[] },
@@ -153,17 +210,28 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
       eventGroups[s.event].swimmers.push(s);
     });
 
-    const eventData = Object.entries(eventPointsMap).map(([name, points]) => ({
-      name: formatEventChartAxisLabel(name, { maxLength: 20 }),
-      fullEvent: stripEventGenderMarker(name),
-      points,
-      swimmers: eventSwimmersMap.get(name) ?? [],
-    }));
+    const eventData = Object.entries(eventPointsMap).map(([name, points]) => {
+      const ou = ouByEvent.get(name);
+      return {
+        name: formatEventChartAxisLabel(name, { maxLength: 20 }),
+        rawEvent: name,
+        points,
+        overUnder: ou?.delta ?? 0,
+        cumulativeOu: ou?.cumulative ?? 0,
+        swimmers: eventSwimmersMap.get(name) ?? [],
+      };
+    });
 
     if (eventsList.length > 0) {
-      eventData.sort((a, b) => eventsList.indexOf(a.fullEvent) - eventsList.indexOf(b.fullEvent));
+      eventData.sort((a, b) => eventsList.indexOf(a.rawEvent) - eventsList.indexOf(b.rawEvent));
     } else {
       eventData.sort((a, b) => b.points - a.points);
+    }
+
+    let cumulativeOu = 0;
+    for (const row of eventData) {
+      cumulativeOu += row.overUnder;
+      row.cumulativeOu = row.cumulativeOu || cumulativeOu;
     }
 
     return {
@@ -172,7 +240,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
       topSwimmersBase: Object.values(swimmerGroups).sort((a: any, b: any) => b.points - a.points),
       topEventsBase: Object.values(eventGroups).sort((a: any, b: any) => b.points - a.points),
     };
-  }, [filteredSwimmers, eventsList]);
+  }, [filteredSwimmers, eventsList, momentumSeries]);
 
   const normalizedSearchQuery = searchQuery?.trim().toLowerCase() ?? '';
   const topSwimmers = useMemo(() => {
@@ -241,9 +309,14 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
         )}
         <div className="flex justify-between items-center mb-2 pb-2 border-b border-theme-soft shrink-0">
           <h4 className="font-bold text-[var(--text-accent)] uppercase tracking-widest" style={{ fontSize: 'clamp(8px, 5cqi, 12px)' }}>
-            {isClass ? `Class of ${data.name}` : data.fullEvent}
+            {isClass ? `Class of ${data.name}` : <CompactEventLabel event={data.rawEvent} />}
           </h4>
-          <span className="font-mono font-black" style={{ fontSize: 'clamp(9px, 6cqi, 14px)' }}>{data.points.toFixed(1)} PTS</span>
+          <div className="flex flex-col items-end gap-0.5">
+            <span className="font-mono font-black" style={{ fontSize: 'clamp(9px, 6cqi, 14px)' }}>{data.points.toFixed(1)} PTS</span>
+            {!isClass && showPrelimsPerformance && data.overUnder != null && Math.abs(data.overUnder) > 0.05 ? (
+              <PrelimsOuValue value={data.overUnder} compact />
+            ) : null}
+          </div>
         </div>
         
         <div className="space-y-1 mt-2 flex-1 overflow-y-auto custom-scrollbar">
@@ -311,6 +384,27 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                       )}
                     </span>
                     <span className="font-mono text-points-positive font-bold">{typeof s.points === 'number' ? s.points.toFixed(1) : s.points}</span>
+                    <div className="flex flex-col items-end gap-0.5">
+                      {showPrelimsPerformance && prelimsOuByEntry ? (
+                        <PlacementExpectedValue
+                          label="Prelims"
+                          value={prelimsOuByEntry.get(entryKey(s))?.expected}
+                        />
+                      ) : null}
+                      {showPsychPerformance && psychOuByEntry ? (
+                        <PlacementExpectedValue
+                          label="Psych"
+                          value={psychExpectedForResult(s, psychOuByEntry)}
+                        />
+                      ) : null}
+                      {showPrelimsPerformance && prelimsOuByEntry ? (
+                        <PrelimsOuValue
+                          value={prelimsOuOverUnderForDisplay(s, prelimsOuByEntry)}
+                          compact
+                          className="ml-1"
+                        />
+                      ) : null}
+                    </div>
                   </div>
                 </div>
               );
@@ -595,15 +689,61 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                   }
                 </ChartShell>
 
-                <div className="flex justify-between mt-2 px-2 text-ui-micro text-theme-secondary font-mono border-t border-theme-soft pt-2 italic uppercase">
-                  <span>{chartView === 'event' ? 'Chronological Event Scoring Timeline' : 'Class Year Contribution'}</span>
+                <div className="flex flex-wrap justify-between items-center gap-2 mt-2 px-2 text-ui-micro text-theme-secondary font-mono border-t border-theme-soft pt-2 italic uppercase">
                   <span>
-                    {(chartView === 'event'
-                      ? eventData.reduce((acc, d) => acc + d.points, 0)
-                      : classData.reduce((acc, d) => acc + d.points, 0)
-                    ).toFixed(1)} PTS TOTAL
+                    {chartView === 'event'
+                      ? 'Chronological Event Scoring Timeline'
+                      : 'Class Year Contribution'}
                   </span>
+                  <div className="flex items-center gap-2 not-italic">
+                    <span>
+                      {(
+                        chartView === 'event'
+                          ? eventData.reduce((acc, d) => acc + d.points, 0)
+                          : classData.reduce((acc, d) => acc + d.points, 0)
+                      ).toFixed(1)}{' '}
+                      PTS TOTAL
+                    </span>
+                  </div>
                 </div>
+
+                {(showPrelimsPerformance || showPsychPerformance) ? (
+                  <div className="mt-3">
+                    {showPrelimsPerformance && showPsychPerformance ? (
+                      <div className="flex items-center gap-1 mb-2">
+                        <button
+                          type="button"
+                          onClick={() => setMomentumAnchor('prelims')}
+                          className={`text-[9px] uppercase tracking-widest px-2 py-0.5 rounded ${
+                            momentumAnchor === 'prelims'
+                              ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
+                              : 'text-theme-muted hover:text-theme-secondary'
+                          }`}
+                        >
+                          vs Prelims
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setMomentumAnchor('psych')}
+                          className={`text-[9px] uppercase tracking-widest px-2 py-0.5 rounded ${
+                            momentumAnchor === 'psych'
+                              ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
+                              : 'text-theme-muted hover:text-theme-secondary'
+                          }`}
+                        >
+                          vs Psych
+                        </button>
+                      </div>
+                    ) : null}
+                    <MomentumChartCard
+                      title={momentumAnchor === 'psych' ? 'Momentum vs Psych' : 'Momentum vs Prelims'}
+                      series={momentumSeries}
+                      meetTotalOu={momentumMeetTotal}
+                      size="md"
+                      emptyMessage={teamMomentumEmptyMessage}
+                    />
+                  </div>
+                ) : null}
               </div>
 
               <div
@@ -662,7 +802,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-3">
                           <h4 className="text-xs font-medium text-[var(--text-primary)] uppercase group-hover:text-[var(--text-accent)] transition-colors">
-                            {viewMode === 'swimmer' ? group.name : group.event}
+                            {viewMode === 'swimmer' ? group.name : <CompactEventLabel event={group.event} className="font-mono" />}
                           </h4>
                           {viewMode === 'swimmer' && (
                             <span className="px-1.5 py-0.5 rounded surface-overlay border border-theme-soft text-ui-micro font-mono font-medium text-theme-secondary">
@@ -680,8 +820,16 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                             </button>
                           )}
                         </div>
-                        <div className="text-right">
+                        <div className="text-right flex flex-col items-end gap-0.5">
                           <span className="font-mono font-black text-[var(--text-primary)] text-xs">{group.points.toFixed(1)} <span className="text-ui-micro text-theme-secondary">PTS</span></span>
+                          {showPrelimsPerformance && prelimsOuByEntry ? (
+                            <PrelimsOuValue
+                              value={sumPrelimsOuForSwimmers(group.swimmers, prelimsOuByEntry, {
+                                includeRelay: viewMode === 'event',
+                              })}
+                              compact
+                            />
+                          ) : null}
                         </div>
                       </div>
 
@@ -715,7 +863,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                                 <span className="w-4 font-medium text-theme-secondary">{res.rank || '-'}</span>
                                 <span className="truncate max-w-[150px]">
                                   {viewMode === 'swimmer' ? (
-                                    <AthleteName name={res.event} className="text-theme-secondary font-mono" />
+                                    <CompactEventLabel event={res.event} className="text-theme-secondary font-mono truncate max-w-[150px] inline-block" />
                                   ) : (
                                     <AthleteName name={res.name} className="text-theme-secondary font-mono" />
                                   )}
@@ -792,7 +940,30 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                               <div className="flex items-center justify-end gap-2 w-1/3 flex-wrap">
                                 {isACut && <span title="Current A Cut Achieved" className="text-ui-micro btn-accent-outline px-1 rounded-sm">A CUT</span>}
                                 {isBCut && <span title="Current B Cut Achieved" className="text-ui-micro bg-amber-400/10 text-amber-400 px-1 border border-amber-400/30 rounded-sm">B CUT</span>}
-                                <PointsValue value={typeof res.points === 'number' ? res.points : res.points} />
+                                <div className="flex flex-col items-end gap-0.5">
+                                  <PointsValue
+                                    signed={false}
+                                    value={typeof res.points === 'number' ? res.points : res.points}
+                                  />
+                                  {showPrelimsPerformance && prelimsOuByEntry ? (
+                                    <PlacementExpectedValue
+                                      label="Prelims"
+                                      value={prelimsOuByEntry.get(entryKey(res))?.expected}
+                                    />
+                                  ) : null}
+                                  {showPsychPerformance && psychOuByEntry ? (
+                                    <PlacementExpectedValue
+                                      label="Psych"
+                                      value={psychExpectedForResult(res, psychOuByEntry)}
+                                    />
+                                  ) : null}
+                                  {showPrelimsPerformance && prelimsOuByEntry ? (
+                                    <PrelimsOuValue
+                                      value={prelimsOuOverUnderForDisplay(res, prelimsOuByEntry)}
+                                      compact
+                                    />
+                                  ) : null}
+                                </div>
                               </div>
                             </div>
                           );

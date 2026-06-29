@@ -4,13 +4,15 @@
  */
 
 import { Gender, OfficialTeamScores } from '../types';
+import { matchMeetTeamName, normalizeTeamKey } from '../data/teamAliases';
 
-function normalizeTeamKey(name: string): string {
-  return String(name ?? '')
-    .trim()
-    .toLowerCase()
-    .replace(/[^a-z0-9]/g, '');
-}
+export {
+  TEAM_ABBREVIATIONS,
+  expandTeamAbbrev,
+  matchMeetTeamName,
+  normalizeTeamKey,
+  teamAcronym,
+} from '../data/teamAliases';
 
 /** Resolve official PDF team score for a parsed matrix team name. */
 export function matchOfficialTeamScore(

@@ -13,6 +13,7 @@ import {
   formatEntryLimitLabel,
   swimmerExceedsEntryLimits,
 } from '@omniswim/core/lib/swimmerEntryLimits';
+import { compactEventTitleAttr, formatCompactEventLabel } from '@omniswim/core/lib/utils';
 
 type Props = {
   workspace: Workspace;
@@ -107,7 +108,9 @@ export default function AthleteMeetEntriesPanel({
         <ul className="space-y-1 mb-2">
           {athletePlans.map(p => (
             <li key={p.id} className="flex items-center gap-2 text-[10px]">
-              <span className="flex-1 truncate">{p.event}</span>
+              <span className="flex-1 truncate font-mono" title={compactEventTitleAttr(p.event)}>
+                {formatCompactEventLabel(p.event)}
+              </span>
               <input
                 type="text"
                 value={p.time}

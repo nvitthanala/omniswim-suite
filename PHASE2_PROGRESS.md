@@ -42,21 +42,23 @@ Package manager: **npm** (workspaces). Node + Python (venv auto-created by serve
 
 ## Prelims over/underperformance (2026-06-28)
 
-Engine-computed prelims projection and Matrix UI for meet performance vs prelims expectation.
+Placement-based prelims O/U in Matrix: each swimmer's **expected points from prelims placement** (scored as A/B finals seed) vs **actual baseline finals points**.
 
 ### Algorithm (`packages/core/src/lib/prelimsProjection.ts`)
 
-1. Extract prelims clocks from loaded meet rows (`prelimsTime`, or prelims-only `time`).
-2. Dedupe to one row per athlete/relay per event (fastest prelims clock wins).
-3. Re-rank each event; sprint events → projected A Final (1–8) / B Final (9–16); distance/diving → Preliminaries tier.
-4. Score with existing `calculatePoints` and conference settings.
-5. Compare **baseline** and **projected** bundles against the prelims anchor (always from raw meet data, not what-if edits).
+1. Eligible events: A/B prelims+finals format only (excludes time trials and timed-finals distance).
+2. Prelims rank per swimmer: **HyTek PDF rank** from prelims row when present; else field order by prelims time.
+3. Expected points = `pointsForPrelimsSeedRank(prelimsRank)` (e.g. prelims 4th → 15 pts, finals 1st → 20 pts → **+5 O/U**).
+4. Team prelims anchor = sum of expected points; O/U = baseline (or projected) total − anchor.
+
+### Dev server (same date)
+
+- [`apps/shell/server.ts`](apps/shell/server.ts): shared `http.createServer`, Vite HMR on same port as Express (no stray :24678), `OMNI_PORT`/`PORT` env, clear `EADDRINUSE` message.
 
 ### UI (Matrix only)
 
-- **Prelims** view toggle — `PrelimsDiffTable` with Prelims Proj, Baseline, Baseline O/U, Projected, Projected O/U columns.
-- **TeamCard** / compact score summary — prelims projected + both over/under deltas.
-- **Timeline tooltip** — per-event cumulative baseline vs prelims delta when prelims data exists.
+- **Prelims** view toggle — `PrelimsDiffTable`
+- **TeamCard** / timeline tooltip — cumulative O/U vs prelims anchor
 
 ### Verification
 
@@ -66,7 +68,7 @@ npm test
 npm run -w @omniswim/shell build
 ```
 
-New test: `scripts/test_prelims_projection.mjs` (self-contained synthetic fixture).
+Test: `scripts/test_prelims_projection.mjs` (Alice +5 O/U case, PDF rank preference, TT/timed-finals exclusion).
 
 ---
 

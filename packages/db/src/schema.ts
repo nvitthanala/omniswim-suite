@@ -8,7 +8,7 @@
  * field into columns.
  */
 
-export const SCHEMA_VERSION = 2;
+export const SCHEMA_VERSION = 3;
 
 export const CREATE_TABLES_SQL = `
 PRAGMA journal_mode = WAL;
@@ -27,6 +27,7 @@ CREATE TABLE IF NOT EXISTS workspaces (
   entry_plan_mode      TEXT,
   scoring_settings     TEXT,
   loaded_meet          TEXT,
+  loaded_psych         TEXT,
   official_team_scores TEXT,
   active_entry_ids     TEXT,
   history_sources      TEXT,
@@ -45,6 +46,15 @@ CREATE TABLE IF NOT EXISTS meet_results (
   data         TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_meet_results_ws ON meet_results(workspace_id);
+
+CREATE TABLE IF NOT EXISTS psych_results (
+  id           TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  gender       TEXT NOT NULL,
+  position     INTEGER NOT NULL DEFAULT 0,
+  data         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_psych_results_ws ON psych_results(workspace_id);
 
 CREATE TABLE IF NOT EXISTS recruits (
   id           TEXT PRIMARY KEY,
@@ -108,4 +118,17 @@ export const SQLITE_MIGRATIONS_V2 = [
   'ALTER TABLE workspaces ADD COLUMN team_id TEXT',
   'ALTER TABLE workspaces ADD COLUMN updated_at INTEGER NOT NULL DEFAULT 0',
   'ALTER TABLE workspaces ADD COLUMN version INTEGER NOT NULL DEFAULT 1',
+];
+
+/** SQLite v2 → v3 psych sheet persistence (idempotent). */
+export const SQLITE_MIGRATIONS_V3 = [
+  'ALTER TABLE workspaces ADD COLUMN loaded_psych TEXT',
+  `CREATE TABLE IF NOT EXISTS psych_results (
+  id           TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  gender       TEXT NOT NULL,
+  position     INTEGER NOT NULL DEFAULT 0,
+  data         TEXT NOT NULL
+)`,
+  'CREATE INDEX IF NOT EXISTS idx_psych_results_ws ON psych_results(workspace_id)',
 ];

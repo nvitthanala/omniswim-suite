@@ -116,6 +116,7 @@ npm run test:roundtrip
 |---|---|---|
 | `OMNI_DB` | `json` | Switches persistence to SQLite (run `npm run migrate:sqlite` first) |
 | `OMNI_AI_ENABLED` | `false` | Keeps optional AI/OCR paths disabled unless explicitly enabled |
+| `OMNI_PORT` / `PORT` | `3000` | HTTP port for `npm run dev` and `npm start` |
 
 ## Documentation
 
@@ -125,16 +126,20 @@ npm run test:roundtrip
 
 ### Prelims projection (Matrix)
 
-When a loaded meet includes prelims times, Matrix computes a **prelims projected score** by re-ranking each event on prelims clocks and assigning expected A/B final placements (distance and diving stay on prelim scoring rules). **Over/underperformance** is shown as:
+When a loaded meet includes prelims times, Matrix computes a **prelims projected score** per swimmer from their **prelims placement** (scored as if that seed were their finals result). HyTek prelims rank is used when present; otherwise the field is ordered by prelims time. **Over/underperformance** is the difference between actual finals points and that prelims expectation:
 
-- **Baseline vs prelims** — loaded meet score minus prelims projection (actual meet performance)
-- **Projected vs prelims** — what-if score minus prelims projection (scenario vs prelims expectation)
+- **Baseline vs prelims** — loaded meet score minus sum of prelims-placement expected points
+- **Projected vs prelims** — what-if score minus the same prelims anchor
+
+Example: 4th in prelims (15 pts expected) and 1st in finals (20 pts actual) → **+5 O/U**, even if the finals time was slower. Timed-finals distance events and time trials are excluded.
 
 Use the **Prelims** view in the Performance Matrix for a team diff table; team cards and the timeline tooltip show meet-total and per-event cumulative deltas when prelims data is present.
 
 ## Troubleshooting
 
 - If the app does not start, confirm Node.js 20+ is installed and `npm install` completed successfully.
+- **`EADDRINUSE` on port 3000** — another server is still running. Close the previous Omni Swim Suite terminal window, or run `netstat -ano | findstr :3000` to find the PID and stop it. Alternatively: `set OMNI_PORT=3001` then `npm run dev`.
+- **WebSocket / port 24678 errors** — should not occur after the shared HTTP server fix; if you see them on an old checkout, pull latest and restart. Only one dev instance should run at a time.
 - If PDF parsing fails, install Python 3 and retry.
 - To switch storage modes, set `OMNI_DB=sqlite` and run `npm run migrate:sqlite` first.
 - If charts appear blank after adding UI in a workspace package, ensure that package's `src` is registered as a Tailwind `@source` in [packages/ui/src/index.css](packages/ui/src/index.css); Tailwind v4 only auto-scans the Vite root.

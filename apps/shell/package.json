@@ -4,8 +4,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "predev": "node ../../scripts/free-port.mjs && node ../../scripts/clear-vite-cache.mjs",
     "dev": "tsx server.ts",
     "build": "vite build && esbuild server.ts --bundle --platform=node --format=esm --packages=external --outfile=dist/server.js",
+    "prestart": "node ../../scripts/free-port.mjs && npm run build",
     "start": "node dist/server.js",
     "lint": "tsc --noEmit -p tsconfig.json"
   },

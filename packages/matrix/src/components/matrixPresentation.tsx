@@ -6,6 +6,10 @@
 import type { ReactNode } from 'react';
 import type { SwimmerResult } from '@omniswim/core/types';
 import { displayTimeForRelayLeg } from '@omniswim/core/lib/relaySplits';
+import {
+  compactEventTitleAttr,
+  formatCompactEventLabel,
+} from '@omniswim/core/lib/utils';
 
 export function AthleteName({ name, className }: { name: string; className?: string }) {
   return (
@@ -29,19 +33,36 @@ export function TeamName({ name, className }: { name: string; className?: string
   );
 }
 
+/** Compact event label (E6 200IM) with full name on hover. */
+export function CompactEventLabel({ event, className }: { event: string; className?: string }) {
+  const compact = formatCompactEventLabel(event);
+  const full = compactEventTitleAttr(event);
+  return (
+    <span
+      className={className}
+      title={full !== compact ? full : undefined}
+    >
+      {compact}
+    </span>
+  );
+}
+
 export function PointsValue({
   value,
   className,
+  signed = true,
 }: {
   value: number | string;
   className?: string;
+  /** When false, show credited meet points without a leading + (O/U uses PrelimsOuValue). */
+  signed?: boolean;
 }) {
   const isZero = typeof value === 'number' ? value === 0 : value === '0' || value === 'N/A';
   const label =
     value === 'N/A'
       ? 'N/A'
       : typeof value === 'number'
-        ? value > 0
+        ? signed && value > 0
           ? `+${value.toFixed(1)}`
           : value.toFixed(1)
         : String(value);
@@ -57,6 +78,64 @@ export function PointsValue({
         .join(' ')}
     >
       {label}
+    </span>
+  );
+}
+
+/** Compact prelims over/under badge (+5.0 vs prelims). */
+export function PrelimsOuValue({
+  value,
+  compact = false,
+  className,
+}: {
+  value: number | undefined;
+  compact?: boolean;
+  className?: string;
+}) {
+  if (value == null || Math.abs(value) <= 0.05) return null;
+  const positive = value > 0;
+  const label = compact
+    ? `${positive ? '+' : ''}${value.toFixed(1)}`
+    : `${positive ? '+' : ''}${value.toFixed(1)} vs prelims`;
+  return (
+    <span
+      className={[
+        'font-mono tabular-nums text-ui-micro font-bold whitespace-nowrap',
+        positive ? 'text-points-positive' : 'text-points-negative',
+        className,
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      title="Over/under vs prelims placement expected"
+    >
+      {label}
+    </span>
+  );
+}
+
+/** Compact placement-expected points badge (prelims or psych anchor). */
+export function PlacementExpectedValue({
+  value,
+  label,
+  className,
+}: {
+  value?: number;
+  label: 'Prelims' | 'Psych';
+  className?: string;
+}) {
+  if (value == null || value <= 0) return null;
+  const short = label === 'Prelims' ? 'P' : 'Ps';
+  return (
+    <span
+      className={[
+        'font-mono tabular-nums text-ui-micro text-theme-muted whitespace-nowrap',
+        className,
+      ]
+        .filter(Boolean)
+        .join(' ')}
+      title={`${label} placement expected points`}
+    >
+      {short}:{value.toFixed(1)}
     </span>
   );
 }

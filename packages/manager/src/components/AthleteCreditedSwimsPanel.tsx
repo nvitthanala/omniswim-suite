@@ -7,6 +7,7 @@ import React from 'react';
 import { Trash2, X, Waves } from 'lucide-react';
 import type { AthleteCreditedSwim } from '@omniswim/core/lib/scorerRoster';
 import { formatLegSplitSummary } from '@omniswim/core/lib/relaySplits';
+import { compactEventTitleAttr, formatCompactEventLabel } from '@omniswim/core/lib/utils';
 
 type Props = {
   athleteName: string;
@@ -17,6 +18,8 @@ type Props = {
   deletable?: boolean;
   onDeleteSwim?: (swim: AthleteCreditedSwim) => void;
   entryLimitLabel?: string;
+  /** Optional prelims/psych placement expected points keyed by swim id. */
+  anchorExpectedBySwimId?: Map<string, { prelims?: number; psych?: number }>;
 };
 
 export default function AthleteCreditedSwimsPanel({
@@ -28,10 +31,12 @@ export default function AthleteCreditedSwimsPanel({
   deletable = false,
   onDeleteSwim,
   entryLimitLabel,
+  anchorExpectedBySwimId,
 }: Props) {
   const credited = swims.filter(s => s.points > 0);
   const other = swims.filter(s => s.points <= 0);
-  const colCount = deletable ? 7 : 6;
+  const showAnchors = Boolean(anchorExpectedBySwimId?.size);
+  const colCount = (deletable ? 7 : 6) + (showAnchors ? 2 : 0);
 
   const renderRows = (rows: AthleteCreditedSwim[], dimmed = false) =>
     rows.map(swim => (
@@ -39,7 +44,9 @@ export default function AthleteCreditedSwimsPanel({
         key={swim.id}
         className={`border-b border-theme-soft/50 text-[11px] ${dimmed ? 'text-theme-muted' : 'text-[var(--text-primary)]'}`}
       >
-        <td className="py-1.5 px-2">{swim.event}</td>
+        <td className="py-1.5 px-2" title={compactEventTitleAttr(swim.event)}>
+          {formatCompactEventLabel(swim.event)}
+        </td>
         <td className="py-1.5 px-2 text-theme-secondary">{swim.roundSwam?.trim() || '—'}</td>
         <td className="py-1.5 px-2 font-mono tabular-nums">
           <div>{swim.displayTime || swim.time || '—'}</div>
@@ -71,6 +78,20 @@ export default function AthleteCreditedSwimsPanel({
         >
           {swim.points.toFixed(1)}
         </td>
+        {showAnchors ? (
+          <>
+            <td className="py-1.5 px-2 text-right font-mono tabular-nums text-theme-muted text-[10px]">
+              {anchorExpectedBySwimId?.get(swim.id)?.prelims != null
+                ? anchorExpectedBySwimId.get(swim.id)!.prelims!.toFixed(1)
+                : '—'}
+            </td>
+            <td className="py-1.5 px-2 text-right font-mono tabular-nums text-theme-muted text-[10px]">
+              {anchorExpectedBySwimId?.get(swim.id)?.psych != null
+                ? anchorExpectedBySwimId.get(swim.id)!.psych!.toFixed(1)
+                : '—'}
+            </td>
+          </>
+        ) : null}
         {deletable ? (
           <td className="py-1.5 px-1 text-center">
             <button
@@ -138,6 +159,12 @@ export default function AthleteCreditedSwimsPanel({
                 <th className="text-right py-1.5 px-2 font-medium w-10">Pl</th>
                 <th className="text-center py-1.5 px-2 font-medium w-14">Type</th>
                 <th className="text-right py-1.5 px-2 font-medium w-14">Pts</th>
+                {showAnchors ? (
+                  <>
+                    <th className="text-right py-1.5 px-2 font-medium w-10">Pre</th>
+                    <th className="text-right py-1.5 px-2 font-medium w-10">Psych</th>
+                  </>
+                ) : null}
                 {deletable ? <th className="w-8" aria-label="Remove" /> : null}
               </tr>
             </thead>

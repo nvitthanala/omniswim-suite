@@ -2,6 +2,7 @@
  * Unified Omni Swim Suite server (Matrix API + Metrics video route).
  */
 import express from 'express';
+import http from 'node:http';
 import path from 'path';
 import fs from 'fs';
 import { fileURLToPath } from 'url';
@@ -16,6 +17,7 @@ import {
   createWorkspaceSchema,
   updateWorkspaceSchema,
   parsePdfSchema,
+  parsePsychPdfSchema,
   parseAthleteHistorySchema,
 } from '../../packages/core/src/schemas/workspace.ts';
 import { JsonRepo, SqliteRepo, PgRepo, type WorkspaceRepo } from './lib/workspaceRepo.ts';
@@ -29,8 +31,16 @@ import {
 import { AuthService, ShareLinkService } from '../../packages/db/src/AuthService.ts';
 import { buildMeetReportHtml } from '../../packages/core/src/lib/reportBuilder.ts';
 import { cutlines as builtinCutlines } from '../../packages/core/src/cutlines.ts';
+import { expandTeamAbbrev } from '../../packages/core/src/data/teamAliases.ts';
+import {
+  normalizePsychAthleteRows,
+  psychParseFormatsToTry,
+  pickBestPsychParseCandidate,
+  scorePsychParseQuality,
+  type PsychAthleteRow,
+} from '../../packages/core/src/lib/psychParseQuality.ts';
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT ?? process.env.OMNI_PORT ?? 3000);
 const __filename = fileURLToPath(import.meta.url);
 const SHELL_ROOT = path.dirname(__filename);
 const PROJECT_ROOT = path.join(SHELL_ROOT, '../..');
@@ -46,7 +56,10 @@ const CUTLINES_DIR = path.join(DATA_DIR, 'cutlines');
 const BUILTIN_CUTLINE_VERSION = '2025-2026';
 const SCORING_SETTINGS_FILE = path.join(DATA_DIR, 'scoring_settings.json');
 const AI_ENABLED = process.env.OMNI_AI_ENABLED === 'true';
+/** Bump when chart mounting architecture changes (client stale-bundle guard). */
+const CHART_BUILD_EPOCH = 2;
 const PARSE_MEET_SCRIPT = path.join(PROJECT_ROOT, 'backend', 'parse_meet.py');
+const PARSE_PSYCH_SCRIPT = path.join(PROJECT_ROOT, 'backend', 'psych_parser.py');
 const PDF_PARSER_SCRIPT = path.join(PROJECT_ROOT, 'backend', 'pdf_parser.py');
 const POINT_CALCULATOR_SCRIPT = path.join(PROJECT_ROOT, 'backend', 'point_calculator.py');
 const TEAM_RANKINGS_SCRIPT = path.join(PROJECT_ROOT, 'backend', 'team_rankings_parser.py');
@@ -101,7 +114,17 @@ async function runPythonScript(scriptPath: string, args: string[], stdin?: strin
 
     const proc = spawn(pythonCmd, [scriptPath, ...args], {
       cwd: PROJECT_ROOT,
-      env: { ...process.env, OMNI_PROJECT_ROOT: PROJECT_ROOT, OMNI_DATA_DIR: DATA_DIR },
+      env: {
+        ...process.env,
+        OMNI_PROJECT_ROOT: PROJECT_ROOT,
+        OMNI_DATA_DIR: DATA_DIR,
+        PYTHONPATH: [
+          path.join(PROJECT_ROOT, 'backend'),
+          process.env.PYTHONPATH,
+        ]
+          .filter(Boolean)
+          .join(path.delimiter),
+      },
     });
 
     let output = '';
@@ -124,7 +147,11 @@ async function runPythonScript(scriptPath: string, args: string[], stdin?: strin
       if (resolved) return;
       resolved = true;
       if (code !== 0) reject(new Error(`Python exit ${code}: ${errorOutput || output.slice(0, 500)}`));
-      else resolve(output);
+      else if (!output.trim() && errorOutput.trim()) {
+        reject(new Error(errorOutput.trim().slice(0, 500)));
+      } else if (!output.trim()) {
+        reject(new Error('Python script returned empty output'));
+      } else resolve(output);
     });
 
     if (stdin) {
@@ -507,6 +534,24 @@ async function startServer() {
     return res.status(404).json({ error: `Cutline version not found: ${safe}` });
   });
 
+  app.get('/api/dev/build-info', (_req, res) => {
+    let commit = 'unknown';
+    try {
+      commit = execSync('git rev-parse --short HEAD', {
+        cwd: PROJECT_ROOT,
+        encoding: 'utf8',
+        stdio: ['ignore', 'pipe', 'ignore'],
+      }).trim();
+    } catch {
+      /* not a git checkout */
+    }
+    res.json({
+      commit,
+      chartBuildEpoch: CHART_BUILD_EPOCH,
+      chartArchitecture: 'ChartShell-ChartFrame-static',
+    });
+  });
+
   function mapAthleteRows(athletes: Record<string, unknown>[]): SwimmerResult[] {
     return athletes.map((a: Record<string, unknown>) => {
         const rankMatch = a.rank != null ? String(a.rank).match(/(\d+)/) : null;
@@ -539,6 +584,91 @@ async function startServer() {
           pdfPoints: a.pdf_points != null ? Number(a.pdf_points) : undefined,
         });
       });
+  }
+
+  function mapPsychRows(rows: Record<string, unknown>[]): SwimmerResult[] {
+    return rows.map((a: Record<string, unknown>) => {
+      const rankMatch = a.rank != null ? String(a.rank).match(/(\d+)/) : null;
+      const parsedRank = rankMatch ? parseInt(rankMatch[1], 10) : 0;
+      const seedTime = String(a.time ?? a.finals_time ?? a.prelims_time ?? 'NT');
+      const rawTeam = String(a.team);
+      const expandedTeam = expandTeamAbbrev(rawTeam) ?? rawTeam;
+      return {
+        id: uuidv4(),
+        rank: parsedRank > 0 ? parsedRank : 0,
+        name: String(a.name),
+        classYear: (a.year as string) || 'UNKNOWN',
+        team: expandedTeam,
+        time: seedTime,
+        points: 0,
+        event: String(a.event),
+        gender: a.gender === 'Women' ? Gender.WOMEN : Gender.MEN,
+        isRelay: false,
+        isExhibition: Boolean(a.is_exhibition),
+        isTimeTrial: Boolean(a.is_time_trial),
+        roundSwam: 'Psych Sheet',
+        isPsychSheet: true,
+      };
+    });
+  }
+
+  async function runPdfParserRaw(tempFile: string, format: string): Promise<Record<string, unknown>[]> {
+    const output = await runPythonScript(PDF_PARSER_SCRIPT, [tempFile, format]);
+    const trimmed = output.trim();
+    if (!trimmed) {
+      throw new Error(
+        'PDF parser returned no output. Check that Python/pdfplumber is installed (see server console).'
+      );
+    }
+    let parsedJson: unknown;
+    try {
+      parsedJson = JSON.parse(trimmed);
+    } catch {
+      throw new Error(`PDF parser returned invalid JSON: ${trimmed.slice(0, 200)}`);
+    }
+    if (!Array.isArray(parsedJson)) {
+      const errObj = parsedJson as { error?: unknown };
+      if (errObj?.error) throw new Error(String(errObj.error));
+      throw new Error('PDF parser returned unexpected JSON shape');
+    }
+    return parsedJson as Record<string, unknown>[];
+  }
+
+  /**
+   * Parse psych sheet via pdf_parser (same engine as meet PDF).
+   * Auto mode tries divided → regular → auto and picks the highest-quality parse.
+   */
+  async function parsePsychPdfFile(tempFile: string, format: string): Promise<SwimmerResult[]> {
+    const tried = new Set<string>();
+    const candidates: { format: string; normalized: PsychAthleteRow[] }[] = [];
+    let maxRawCount = 0;
+
+    for (const attempt of psychParseFormatsToTry(format || 'auto')) {
+      if (tried.has(attempt)) continue;
+      tried.add(attempt);
+      const raw = await runPdfParserRaw(tempFile, attempt);
+      maxRawCount = Math.max(maxRawCount, raw.length);
+      candidates.push({ format: attempt, normalized: normalizePsychAthleteRows(raw) });
+    }
+
+    const best = pickBestPsychParseCandidate(candidates);
+    if (!best || best.normalized.length === 0) {
+      if (maxRawCount > 0) {
+        throw new Error(
+          `Parsed ${maxRawCount} PDF rows but found no individual psych seed times. Relays are skipped; try Regular or Divided format.`
+        );
+      }
+      throw new Error('No swimmer rows found in psych PDF — try Regular vs Divided format.');
+    }
+
+    if ((format || 'auto') === 'auto' && candidates.length > 1) {
+      const ranked = candidates
+        .map(c => ({ format: c.format, rows: c.normalized.length, score: scorePsychParseQuality(c.normalized) }))
+        .sort((a, b) => b.score - a.score);
+      console.log('Psych PDF format auto-detect:', ranked, '→', best.format);
+    }
+
+    return mapPsychRows(best.normalized);
   }
 
   /** Unified pipeline: one Python process returns athletes + conference + team scores. */
@@ -609,6 +739,50 @@ async function startServer() {
       res.json(payload);
     } catch (error) {
       res.status(500).json({ error: 'Failed to parse PDF', details: String(error) });
+    } finally {
+      if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+    }
+  });
+
+  app.post('/api/parse-psych-pdf', async (req, res) => {
+    const parsed = parsePsychPdfSchema.safeParse(req.body ?? {});
+    if (!parsed.success) {
+      return res.status(400).json({ error: 'Invalid psych PDF payload', details: parsed.error.issues });
+    }
+    const { base64, format } = parsed.data;
+    if (!base64?.trim()) {
+      return res.status(400).json({ error: 'No PDF data in request' });
+    }
+    const tempFile = path.join(PROJECT_ROOT, `temp_psych_${Date.now()}.pdf`);
+    try {
+      fs.writeFileSync(tempFile, Buffer.from(base64, 'base64'));
+      const fmt = format || 'auto';
+      let results: SwimmerResult[];
+      try {
+        results = await parsePsychPdfFile(tempFile, fmt);
+      } catch (primaryErr) {
+        console.warn('Psych parse via pdf_parser failed, trying psych_parser.py:', primaryErr);
+        const output = await runPythonScript(PARSE_PSYCH_SCRIPT, [tempFile, fmt]);
+        const trimmed = output.trim();
+        if (!trimmed) {
+          throw new Error('Psych parser returned empty output');
+        }
+        const parsedJson = JSON.parse(trimmed) as { error?: string; results?: Record<string, unknown>[] };
+        if (parsedJson.error) {
+          return res.status(500).json({ error: parsedJson.error });
+        }
+        const rawRows = Array.isArray(parsedJson.results) ? parsedJson.results : [];
+        results = mapPsychRows(rawRows);
+      }
+      if (results.length === 0) {
+        return res.status(422).json({
+          error: 'No individual psych entries found',
+          details: 'Try Regular List or Divided (2-Col) format from the dropdown.',
+        });
+      }
+      return res.json({ results });
+    } catch (error) {
+      return res.status(500).json({ error: 'Failed to parse psych PDF', details: String(error) });
     } finally {
       if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
     }
@@ -694,22 +868,68 @@ async function startServer() {
   });
 
   if (process.env.NODE_ENV !== 'production') {
+    const httpServer = http.createServer(app);
     const vite = await createViteServer({
       configFile: path.join(SHELL_ROOT, 'vite.config.ts'),
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: { server: httpServer },
+      },
       appType: 'spa',
     });
     app.use(vite.middlewares);
+
+    httpServer.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(
+          `Port ${PORT} is already in use. Close the other server window or run with OMNI_PORT=3001 npm run dev`
+        );
+        process.exit(1);
+      }
+      throw err;
+    });
+
+    httpServer.listen(PORT, '0.0.0.0', () => {
+      logServerReady();
+    });
   } else {
     app.use(express.static(path.join(PROJECT_ROOT, 'dist')));
+    app.use('/api', (_req, res) => {
+      res.status(404).json({ error: 'API route not found — restart the server after updating' });
+    });
     app.get('*', (_req, res) => {
       res.sendFile(path.join(PROJECT_ROOT, 'dist', 'index.html'));
     });
-  }
 
-  app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Omni Swim Suite running at http://localhost:${PORT}`);
-  });
+    const httpServer = http.createServer(app);
+    httpServer.on('error', (err: NodeJS.ErrnoException) => {
+      if (err.code === 'EADDRINUSE') {
+        console.error(
+          `Port ${PORT} is already in use. Close the other server or set OMNI_PORT to a free port.`
+        );
+        process.exit(1);
+      }
+      throw err;
+    });
+    httpServer.listen(PORT, '0.0.0.0', () => {
+      logServerReady();
+    });
+  }
+}
+
+function logServerReady() {
+  let commit = 'unknown';
+  try {
+    commit = execSync('git rev-parse --short HEAD', {
+      cwd: PROJECT_ROOT,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'ignore'],
+    }).trim();
+  } catch {
+    /* not a git checkout */
+  }
+  console.log(`Omni Swim Suite running at http://localhost:${PORT} (commit ${commit})`);
+  console.log('Charts: ChartShell → ChartFrame → Recharts (no ResponsiveContainer). Hard-refresh after git pull.');
 }
 
 startServer();

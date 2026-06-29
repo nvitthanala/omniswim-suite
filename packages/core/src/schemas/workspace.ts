@@ -76,6 +76,12 @@ export const parsePdfSchema = z.object({
   format: z.string().optional(),
 });
 
+/** Body accepted by POST /api/parse-psych-pdf. */
+export const parsePsychPdfSchema = z.object({
+  base64: z.string().min(1, 'No base64 PDF data provided'),
+  format: z.string().optional(),
+});
+
 /** Body accepted by POST /api/parse-athlete-history. */
 export const parseAthleteHistorySchema = z
   .object({

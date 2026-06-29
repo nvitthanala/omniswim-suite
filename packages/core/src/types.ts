@@ -81,6 +81,8 @@ export interface SwimmerResult {
   relayLegVacant?: boolean;
   /** HyTek place points from PDF Points column; overrides calculated scoring when set. */
   pdfPoints?: number;
+  /** Row imported from a psych sheet PDF (seed time projection). */
+  isPsychSheet?: boolean;
 }
 
 /** Swimmers removed from the workspace; excluded from individuals and treated as departed relay legs. */
@@ -185,6 +187,15 @@ export interface LoadedMeetMeta {
   uploadedAt: number;
   conference?: string;
   meetLabel?: string;
+  /** Optional tie to linked psych sheet upload timestamp. */
+  linkedPsychUploadedAt?: number;
+}
+
+export interface LoadedPsychMeta {
+  pdfFilename?: string;
+  uploadedAt: number;
+  format?: 'auto' | 'regular' | 'divided';
+  linkedMeetUploadedAt?: number;
 }
 
 export interface PlannedSwimEntry {
@@ -256,6 +267,10 @@ export interface Workspace {
   relayLegOverrides?: RelayLegOverride[];
   /** Metadata for the PDF currently loaded in this workspace. */
   loadedMeet?: LoadedMeetMeta;
+  /** Psych sheet results (individual entries only; no relay lineups). */
+  psychMenResults?: SwimmerResult[];
+  psychWomenResults?: SwimmerResult[];
+  loadedPsych?: LoadedPsychMeta;
   /** What-if meet entry plans (overlay or plan sheet). */
   meetEntryPlans?: PlannedSwimEntry[];
   entryPlanMode?: 'overlay' | 'plan_sheet';

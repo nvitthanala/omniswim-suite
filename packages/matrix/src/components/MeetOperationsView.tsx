@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Users, Plus, TrendingUp, Search, X, GitCompareArrows, ListTree } from 'lucide-react';
 import { motion } from 'motion/react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
@@ -12,12 +12,15 @@ import { Gender, Recruit, ScoringSettings, TeamScore, Workspace } from '@omniswi
 import { assignTeamLineStyles, isRelayResult } from '@omniswim/core/lib/utils';
 import { aggregateSwimmerMeetPoints, scorerRosterKey } from '@omniswim/core/lib/scorerRoster';
 import { buildTeamScoreLookup, officialScoresForGender } from '@omniswim/core/lib/teamScoreMatching';
-import type { PrelimsDeltaTimelinePoint } from '@omniswim/core/lib/prelimsProjection';
+import type { PrelimsDeltaTimelinePoint, PrelimsOverUnderEntry } from '@omniswim/core/lib/prelimsProjection';
+import { buildMeetMomentumChartDataFromLookup, buildPrelimsOverUnderByEntryKey } from '@omniswim/core/lib/prelimsProjection';
+import type { PsychOverUnderEntry } from '@omniswim/core/lib/psychProjection';
 import type { ScoringBundle } from '@omniswim/core/lib/useWorkspaceScoring';
 import TeamCard from './TeamCard';
 import ScoringSettingsPanel from './ScoringSettingsPanel';
 import MeetDiffTable from './MeetDiffTable';
 import PrelimsDiffTable from './PrelimsDiffTable';
+import MomentumChartCard from './MomentumChartCard';
 import { useThemeColors } from '@omniswim/core/lib/useThemeColors';
 import { AthleteName, PointsValue, TeamName } from './matrixPresentation';
 
@@ -108,20 +111,29 @@ type Props = {
   scoringBundle: ScoringBundle;
   baselineBundle: ScoringBundle;
   prelimsProjectedBundle: ScoringBundle;
+  psychProjectedBundle: ScoringBundle;
   baselineByTeam: Map<string, number>;
   prelimsByTeam: Map<string, number>;
+  psychByTeam: Map<string, number>;
   prelimsDeltaTimeline: PrelimsDeltaTimelinePoint[];
+  psychDeltaTimeline: PrelimsDeltaTimelinePoint[];
   showPrelimsPerformance: boolean;
+  showPsychPerformance: boolean;
+  prelimsOuByEntry: Map<string, PrelimsOverUnderEntry>;
+  psychOuByEntry: Map<string, PsychOverUnderEntry>;
   scoringSettings: ScoringSettings;
   suggestedPresetId: string | null;
   searchQuery: string;
   onSearchChange: (q: string) => void;
   whatIfMode: boolean;
   isParsingPdf: boolean;
+  isParsingPsychPdf: boolean;
   pdfFormat: string;
   onPdfFormatChange: (format: string) => void;
   onFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
+  onPsychFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onCancelPdfParse: () => void;
+  onCancelPsychPdfParse: () => void;
   onUpdate: (patch: Partial<Workspace>) => void;
   onRequestDeleteSwimmer?: (name: string) => void;
   onSaveScoringSettings: (sets: ScoringSettings) => void;
@@ -135,20 +147,29 @@ export default function MeetOperationsView({
   scoringBundle,
   baselineBundle,
   prelimsProjectedBundle,
+  psychProjectedBundle,
   baselineByTeam,
   prelimsByTeam,
+  psychByTeam,
   prelimsDeltaTimeline,
+  psychDeltaTimeline,
   showPrelimsPerformance,
+  showPsychPerformance,
+  prelimsOuByEntry,
+  psychOuByEntry,
   scoringSettings,
   suggestedPresetId,
   searchQuery,
   onSearchChange,
   whatIfMode,
   isParsingPdf,
+  isParsingPsychPdf,
   pdfFormat,
   onPdfFormatChange,
   onFileUpload,
+  onPsychFileUpload,
   onCancelPdfParse,
+  onCancelPsychPdfParse,
   onUpdate,
   onRequestDeleteSwimmer,
   onSaveScoringSettings,
@@ -157,7 +178,14 @@ export default function MeetOperationsView({
 }: Props) {
   const chartTheme = useThemeColors();
   const [matrixView, setMatrixView] = useState<'standings' | 'diff' | 'prelims'>('standings');
+  const [meetMomentumAnchor, setMeetMomentumAnchor] = useState<'prelims' | 'psych'>('prelims');
   const meetConference = workspace.conference;
+
+  useEffect(() => {
+    if (!showPrelimsPerformance && showPsychPerformance) {
+      setMeetMomentumAnchor('psych');
+    }
+  }, [showPrelimsPerformance, showPsychPerformance]);
 
   const teamsWithLineStyles = useMemo(
     () => assignTeamLineStyles(scoringBundle.sortedTeams, { chartTheme: chartTheme.isDark ? 'dark' : 'light' }),
@@ -199,6 +227,20 @@ export default function MeetOperationsView({
       .slice(0, 10);
   }, [scoringBundle.allScored, gender, searchQuery, scoringRefreshKey]);
 
+  const prelimsOuByEntryLocal = useMemo(
+    () =>
+      showPrelimsPerformance
+        ? buildPrelimsOverUnderByEntryKey(
+            baselineBundle.allScored,
+            prelimsProjectedBundle.allScored
+          )
+        : new Map(),
+    [showPrelimsPerformance, baselineBundle.allScored, prelimsProjectedBundle.allScored]
+  );
+
+  const resolvedPrelimsOuByEntry = prelimsOuByEntry.size > 0 ? prelimsOuByEntry : prelimsOuByEntryLocal;
+  const resolvedPsychOuByEntry = psychOuByEntry;
+
   const { events, timelineData } = scoringBundle;
   const timelineChartKey = `timeline-${scoringRefreshKey}-${scoringBundle.teamStyleSignature}`;
 
@@ -209,6 +251,39 @@ export default function MeetOperationsView({
     }
     return map;
   }, [prelimsDeltaTimeline]);
+
+  const psychMomentumHasData = resolvedPsychOuByEntry.size > 0;
+  const prelimsMomentumHasData = resolvedPrelimsOuByEntry.size > 0;
+
+  const meetMomentumData = useMemo(() => {
+    const teamNames = teamsWithLineStyles.map(t => t.teamName);
+    if (meetMomentumAnchor === 'psych' && showPsychPerformance) {
+      if (!psychMomentumHasData) return [];
+      return buildMeetMomentumChartDataFromLookup(teamNames, resolvedPsychOuByEntry, events);
+    }
+    if (showPrelimsPerformance) {
+      if (!prelimsMomentumHasData) return [];
+      return buildMeetMomentumChartDataFromLookup(teamNames, resolvedPrelimsOuByEntry, events);
+    }
+    return [];
+  }, [
+    meetMomentumAnchor,
+    showPrelimsPerformance,
+    showPsychPerformance,
+    psychMomentumHasData,
+    prelimsMomentumHasData,
+    resolvedPrelimsOuByEntry,
+    resolvedPsychOuByEntry,
+    teamsWithLineStyles,
+    events,
+  ]);
+
+  const momentumEmptyMessage =
+    meetMomentumAnchor === 'psych' && showPsychPerformance && !psychMomentumHasData
+      ? 'No psych momentum for this gender — team names on the psych sheet may not match meet results yet.'
+      : meetMomentumAnchor === 'prelims' && showPrelimsPerformance && !prelimsMomentumHasData
+        ? 'No prelims momentum — meet results need prelims times for scored events.'
+        : undefined;
 
   return (
     <div className="flex flex-col gap-6">
@@ -339,6 +414,47 @@ export default function MeetOperationsView({
           </div>
         </div>
 
+        {(showPrelimsPerformance || showPsychPerformance) ? (
+          <div className="mb-6">
+            {showPrelimsPerformance && showPsychPerformance ? (
+              <div className="flex items-center gap-1 mb-2 px-1">
+                <button
+                  type="button"
+                  onClick={() => setMeetMomentumAnchor('prelims')}
+                  className={`text-[9px] uppercase tracking-widest px-2 py-0.5 rounded ${
+                    meetMomentumAnchor === 'prelims'
+                      ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
+                      : 'text-theme-muted hover:text-theme-secondary'
+                  }`}
+                >
+                  vs Prelims
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setMeetMomentumAnchor('psych')}
+                  className={`text-[9px] uppercase tracking-widest px-2 py-0.5 rounded ${
+                    meetMomentumAnchor === 'psych'
+                      ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
+                      : 'text-theme-muted hover:text-theme-secondary'
+                  }`}
+                >
+                  vs Psych
+                </button>
+              </div>
+            ) : null}
+            <MomentumChartCard
+              mode="multi"
+              title={
+                meetMomentumAnchor === 'psych' ? 'Meet Momentum vs Psych' : 'Meet Momentum vs Prelims'
+              }
+              data={meetMomentumData}
+              teams={teamsWithLineStyles}
+              size="md"
+              emptyMessage={momentumEmptyMessage}
+            />
+          </div>
+        ) : null}
+
         <div className="surface-card rounded-lg p-5">
           <div className="flex justify-between items-end mb-6">
             <div>
@@ -360,7 +476,7 @@ export default function MeetOperationsView({
                   className="bg-transparent border-none outline-none text-[10px] uppercase placeholder:text-theme-secondary text-[var(--text-primary)] w-40"
                 />
               </div>
-              {isParsingPdf ? (
+              {isParsingPdf || isParsingPsychPdf ? (
                 <div className="flex items-center gap-2">
                   <div className="flex items-center gap-2 px-3 py-1.5 btn-accent-outline rounded text-[10px] uppercase font-medium">
                     <motion.div
@@ -369,7 +485,7 @@ export default function MeetOperationsView({
                     >
                       <Plus size={12} className="opacity-50" />
                     </motion.div>
-                    <span>Parsing PDF...</span>
+                    <span>{isParsingPsychPdf ? 'Parsing psych PDF...' : 'Parsing PDF...'}</span>
                     <div className="w-16 h-1 bg-[var(--text-accent)]/20 rounded overflow-hidden ml-2">
                       <motion.div
                         className="h-full bg-[var(--text-accent)]"
@@ -381,7 +497,7 @@ export default function MeetOperationsView({
                   </div>
                   <button
                     type="button"
-                    onClick={onCancelPdfParse}
+                    onClick={isParsingPsychPdf ? onCancelPsychPdfParse : onCancelPdfParse}
                     className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded btn-accent-outline text-[10px] uppercase font-medium"
                     title="Cancel PDF parsing"
                   >
@@ -406,6 +522,22 @@ export default function MeetOperationsView({
                     <span>Load PDF</span>
                     <input type="file" className="hidden" accept=".pdf" onChange={onFileUpload} />
                   </label>
+                  <label
+                    className="cursor-pointer flex items-center gap-1.5 px-3 py-1 border border-theme-soft rounded-sm text-[10px] uppercase font-medium text-theme-secondary hover:text-[var(--text-primary)] transition-all"
+                    title="Link psych sheet (separate from meet results PDF)"
+                  >
+                    <Plus size={12} />
+                    <span>Link Psych</span>
+                    <input type="file" className="hidden" accept=".pdf" onChange={onPsychFileUpload} />
+                  </label>
+                  {workspace.loadedPsych?.pdfFilename ? (
+                    <span
+                      className="text-[9px] text-theme-muted max-w-[120px] truncate"
+                      title={workspace.loadedPsych.pdfFilename}
+                    >
+                      Psych: {workspace.loadedPsych.pdfFilename}
+                    </span>
+                  ) : null}
                 </div>
               )}
             </div>
@@ -516,6 +648,10 @@ export default function MeetOperationsView({
                         : undefined
                     }
                     showPrelimsPerformance={showPrelimsPerformance}
+                    prelimsOuByEntry={resolvedPrelimsOuByEntry}
+                    showPsychPerformance={showPsychPerformance}
+                    psychOuByEntry={resolvedPsychOuByEntry}
+                    psychProjectedScore={psychByTeam.get(team.teamName)}
                     eventThrough={workspace.officialTeamScores?.eventThrough}
                     onRequestDeleteSwimmer={onRequestDeleteSwimmer}
                     scoringRefreshKey={scoringRefreshKey}

@@ -356,6 +356,37 @@ export function isFinalsRound(roundSwam: string | undefined): boolean {
   return tier === 'A' || tier === 'B' || tier === 'FIN';
 }
 
+export type EventScoringStage = 'prelims_finals' | 'timed_finals' | 'unknown';
+
+/**
+ * Infer how an event was contested from roundSwam on its rows.
+ * Prelims+A/B finals vs single-session timed finals (relays, 1650, etc.).
+ */
+export function eventScoringStage(eventRows: SwimmerResult[]): EventScoringStage {
+  const rows = eventRows.filter(r => !r.isExhibition && !r.isTimeTrial);
+  if (rows.length === 0) return 'unknown';
+
+  let hasPre = false;
+  let hasAbFinal = false;
+  let hasTimedFinalLabel = false;
+
+  for (const r of rows) {
+    const tier = classifyRoundTier(r.roundSwam);
+    if (tier === 'PRE') hasPre = true;
+    if (tier === 'A' || tier === 'B') hasAbFinal = true;
+    if (tier === 'FIN') hasTimedFinalLabel = true;
+  }
+
+  if (hasPre || hasAbFinal) return 'prelims_finals';
+  if (hasTimedFinalLabel) return 'timed_finals';
+  return 'unknown';
+}
+
+/** True when the event has a prelims session and A/B (or C) finals — eligible for placement O/U. */
+export function isPrelimsFinalsEvent(eventRows: SwimmerResult[]): boolean {
+  return eventScoringStage(eventRows) === 'prelims_finals';
+}
+
 /** Clock for the round this row represents (prelims row → prelims time; finals → relay/finals clock). */
 export function swimResultClock(
   r: Pick<SwimmerResult, 'roundSwam' | 'time' | 'finalsTime' | 'prelimsTime' | 'relayTeamTime'>
@@ -464,6 +495,18 @@ function scoringRowIndex(
   return idx >= 0 && idx < pts.length ? idx : null;
 }
 
+/** Single-place team points for a round + rank (no tie splits or scorer caps). */
+export function pointsForPlacement(
+  roundSwam: string | undefined,
+  rank: number,
+  event: string | undefined,
+  settings: ScoringSettings
+): number {
+  const idx = scoringRowIndex(roundSwam, rank, event, settings);
+  if (idx == null) return 0;
+  return settings.scoringPoints[idx] ?? 0;
+}
+
 function scoringRowIndexForRelay(
   roundSwam: string | undefined,
   rank: number,
@@ -510,21 +553,72 @@ export function stripEventGenderMarker(event: string): string {
     .trim();
 }
 
+/** Full stripped event name for hover tooltips when compact label is shown. */
+export function compactEventTitleAttr(event: string): string {
+  return stripEventGenderMarker(event);
+}
+
+const STROKE_ABBREV: [RegExp, string][] = [
+  [/\bIndividual\s+Medley\b/i, 'IM'],
+  [/\bMedley\s+Relay\b/i, 'MD-R'],
+  [/\bFreestyle\s+Relay\b/i, 'FR-R'],
+  [/\bButterfly\b/i, 'FL'],
+  [/\bBackstroke\b/i, 'BK'],
+  [/\bBreaststroke\b/i, 'BR'],
+  [/\bFreestyle\b/i, 'FR'],
+  [/\bDiving\b/i, 'DV'],
+  [/\bFly\b/i, 'FL'],
+  [/\bBack\b/i, 'BK'],
+  [/\bBreast\b/i, 'BR'],
+  [/\bFree\b/i, 'FR'],
+  [/\bIM\b/i, 'IM'],
+  [/\bRelay\b/i, 'R'],
+];
+
+function abbreviateStrokeText(strokeText: string): string {
+  let s = strokeText.trim();
+  if (!s) return '';
+  for (const [re, code] of STROKE_ABBREV) {
+    if (re.test(s)) {
+      s = s.replace(re, code);
+      break;
+    }
+  }
+  return s.replace(/\s+/g, '').toUpperCase();
+}
+
+/**
+ * Compact display label: `Event 6 Men 200 Yard Individual Medley` → `E6 200IM`.
+ * Display-only; does not mutate stored event keys.
+ */
+export function formatCompactEventLabel(event: string): string {
+  const eventNumMatch = event.match(/\bEvent\s+(\d+)\b/i);
+  const prefix = eventNumMatch ? `E${eventNumMatch[1]}` : '';
+
+  let s = stripEventGenderMarker(event);
+  s = s.replace(/\bEvent\s+\d+\b\s*/i, '');
+  s = s.replace(/\s*\(Avg Split\)\s*/gi, ' ');
+  s = s.replace(/\b(Yards?|Meters?|SCY|SCM|LCM)\b/gi, ' ');
+  s = s.replace(/\s{2,}/g, ' ').trim();
+
+  const distMatch = s.match(/\b(\d{2,4})\b/);
+  const distance = distMatch?.[1] ?? '';
+  const strokePart = distMatch ? s.slice(distMatch.index! + distMatch[0].length).trim() : s;
+  const strokeCode = abbreviateStrokeText(strokePart);
+
+  const body = `${distance}${strokeCode}`.trim();
+  if (prefix && body) return `${prefix} ${body}`;
+  if (prefix) return prefix;
+  return body || stripEventGenderMarker(event);
+}
+
 /** Compact event number + stroke label for chart x-axes and tooltips. */
 export function formatEventChartAxisLabel(
   event: string,
   options?: { abbreviate?: boolean; maxLength?: number }
 ): string {
   const { abbreviate = true, maxLength } = options ?? {};
-  let label = stripEventGenderMarker(event);
-  if (abbreviate) {
-    label = label
-      .replace(/ Freestyle/g, ' Free')
-      .replace(/Individual Medley/g, 'IM')
-      .replace(/Backstroke/g, 'Back')
-      .replace(/Breaststroke/g, 'Breast')
-      .replace(/Butterfly/g, 'Fly');
-  }
+  let label = abbreviate ? formatCompactEventLabel(event) : stripEventGenderMarker(event);
   if (maxLength != null && label.length > maxLength) {
     return label.substring(0, maxLength);
   }
@@ -611,8 +705,14 @@ export type CalculatePointsOptions = {
 };
 
 /** Distance timed finals (1000/1650 etc.) — one heat, not A/B prelims. */
-function isTimedFinalDistanceHeat(event: string | undefined, roundSwam: string | undefined): boolean {
-  if (!isDistanceEvent(event)) return false;
+export function isTimedFinalDistanceHeat(
+  event: string | undefined,
+  roundSwam: string | undefined
+): boolean {
+  if (!event) return false;
+  const u = event.toUpperCase();
+  const isDistance = /\b(1000|1650|1500|800|10000)\b/.test(u) || u.includes('TIMED');
+  if (!isDistance) return false;
   return classifyRoundTier(roundSwam) === 'FIN';
 }
 

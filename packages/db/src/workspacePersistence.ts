@@ -7,6 +7,7 @@ export type Json = unknown;
 
 export const CHILD_TABLES = [
   'meet_results',
+  'psych_results',
   'recruits',
   'roster_overrides',
   'meet_entry_plans',
@@ -33,6 +34,9 @@ export function assembleWorkspace(
   const allResults = childData('meet_results') as SwimmerResult[];
   const menResults = allResults.filter(r => (r as { gender?: string }).gender !== 'Women');
   const womenResults = allResults.filter(r => (r as { gender?: string }).gender === 'Women');
+  const allPsych = childData('psych_results') as SwimmerResult[];
+  const psychMenResults = allPsych.filter(r => (r as { gender?: string }).gender !== 'Women');
+  const psychWomenResults = allPsych.filter(r => (r as { gender?: string }).gender === 'Women');
 
   return {
     id: String(row.id),
@@ -40,6 +44,8 @@ export function assembleWorkspace(
     createdAt: Number(row.created_at ?? Date.now()),
     menResults,
     womenResults,
+    psychMenResults,
+    psychWomenResults,
     recruits: childData('recruits') as Workspace['recruits'],
     deletedSwimmers: childData('deleted_swimmers') as Workspace['deletedSwimmers'],
     scorerRosterOverrides: childData('roster_overrides') as Workspace['scorerRosterOverrides'],
@@ -50,6 +56,7 @@ export function assembleWorkspace(
     entryPlanMode: (row.entry_plan_mode as Workspace['entryPlanMode']) ?? undefined,
     scoringSettings: parseJson<Workspace['scoringSettings']>(row.scoring_settings, undefined),
     loadedMeet: parseJson<Workspace['loadedMeet']>(row.loaded_meet, undefined),
+    loadedPsych: parseJson<Workspace['loadedPsych']>(row.loaded_psych, undefined),
     officialTeamScores: parseJson<Workspace['officialTeamScores']>(
       row.official_team_scores,
       undefined
@@ -78,6 +85,7 @@ export function workspaceRowValues(ws: Workspace, sortIndex: number, meta: Works
     entry_plan_mode: ws.entryPlanMode ?? null,
     scoring_settings: ws.scoringSettings ? JSON.stringify(ws.scoringSettings) : null,
     loaded_meet: ws.loadedMeet ? JSON.stringify(ws.loadedMeet) : null,
+    loaded_psych: ws.loadedPsych ? JSON.stringify(ws.loadedPsych) : null,
     official_team_scores: ws.officialTeamScores ? JSON.stringify(ws.officialTeamScores) : null,
     active_entry_ids: ws.activeEntryIds ? JSON.stringify(ws.activeEntryIds) : null,
     history_sources: ws.historySources ? JSON.stringify(ws.historySources) : null,
