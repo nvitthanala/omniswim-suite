@@ -4,7 +4,7 @@
 > `C:\Users\nihar\.cursor\plans\omniswim_improvement_brainstorm_bbb2a9d7.plan.md`.
 > Do not edit the plan file.
 
-Last updated: 2026-06-28.
+Last updated: 2026-06-29.
 
 ## Scope Status
 
@@ -129,6 +129,41 @@ Fix:
 - `test_chart_render.mjs` fails if `.recharts-responsive-container` appears in DOM.
 - Rule: **never use ResponsiveContainer**; charts mount only after live viewport sizing.
 
+### Psych sheet, momentum charts, and team aliases (ninth pass — 2026-06-29)
+
+Matrix Operations now supports HyTek psych PDF upload alongside meet results. Psych entries feed placement-based projected scores and over/underperformance parallel to prelims.
+
+**Psych parsing**
+
+- `packages/core/src/lib/psychParseQuality.ts` — normalize rows, score parse quality, pick best layout (`auto` tries divided then regular).
+- `apps/shell/server.ts` — `POST /api/parse-psych-pdf`; TypeScript path with Python fallback (`backend/psych_parser.py`).
+- Fixture: `tests/fixtures/nsisc_psych_sheet.pdf`; regression: `scripts/test_nsisc_psych.mjs`.
+
+**Psych scoring / O/U**
+
+- `packages/core/src/lib/psychProjection.ts` — psych placement scoring, per-entry O/U, `alignPsychResultsToMeetTeams`.
+- `packages/core/src/lib/useWorkspaceScoring.ts` — psych bundles; gender-scoped `showPsychPerformance`.
+- Workspace fields: `psychMenResults`, `psychWomenResults`, `loadedPsych` (SQLite schema v3).
+
+**Team aliases**
+
+- `packages/core/src/data/teamAliases.ts` + `teamAbbreviations.json` — NSISC (`HSU` → Henderson State University, etc.) and GLVC abbreviations; acronym and fuzzy matching.
+- `packages/matrix/src/components/OpsModule.tsx` — aligns psych teams to meet teams on upload.
+- Regression: `scripts/test_team_aliases.mjs`.
+
+**Momentum charts**
+
+- `packages/core/src/lib/prelimsProjection.ts` — `buildMeetMomentumChartDataFromLookup`, event-aligned timelines.
+- `packages/matrix/src/components/MomentumChartCard.tsx` — meet-wide and per-team cumulative O/U charts.
+- `MeetOperationsView.tsx` / `TeamCard.tsx` — **vs Prelims** / **vs Psych** toggles; momentum section stays visible with empty-state guidance when psych teams do not match.
+
+**Chart reliability / CI**
+
+- `ChartStaleBundleGuard.tsx` — detects stale browser bundles (legacy ResponsiveContainer path) and prompts reload.
+- `scripts/clear-vite-cache.mjs`, `scripts/free-port.mjs` — `predev` hooks; Vite `Cache-Control: no-store` in dev.
+- `tests/e2e/matrix-chart.spec.ts` + `playwright.config.ts` — Playwright e2e wired into `npm test`.
+- `.github/workflows/ci.yml` — Python 3.12 + `pdfplumber`, Playwright Chromium, lint, test, build.
+
 ### Matrix formatting cleanup (second pass)
 
 - Added `packages/matrix/src/components/matrixPresentation.tsx` with `AthleteName`, `TeamName`, `PointsValue`, `SwimTimeCell`, and `MatrixRow`.
@@ -175,10 +210,30 @@ Fix:
 - `scripts/test_chart_shell.mjs` - readiness regression for collapsed vs usable chart measurements.
 - `scripts/run-tests.mjs` - added `test_theme_css.mjs` to the main test runner.
 - `PHASE3_UI_PROGRESS.md` - this handoff.
+- `packages/core/src/lib/psychParseQuality.ts` - psych PDF quality scoring and layout pick.
+- `packages/core/src/lib/psychProjection.ts` - psych placement scoring and team alignment.
+- `packages/core/src/lib/prelimsProjection.ts` - prelims/psych momentum series builders.
+- `packages/core/src/data/teamAliases.ts` - conference abbreviation resolution.
+- `packages/matrix/src/components/MomentumChartCard.tsx` - cumulative O/U momentum charts.
+- `packages/matrix/src/components/OpsModule.tsx` - psych PDF upload and team alignment on parse.
+- `packages/matrix/src/components/ChartStaleBundleGuard.tsx` - stale dev-bundle detection banner.
+- `tests/e2e/matrix-chart.spec.ts` - Playwright Matrix timeline chart regression.
+- `playwright.config.ts` - e2e dev-server config.
+- `.github/workflows/ci.yml` - lint, test (incl. Python + Playwright), build.
 
 ## Verification
 
-Completed:
+Completed (2026-06-29):
+
+```powershell
+npm run lint
+npm test
+npm run build
+```
+
+Result: **PASS** — 20 passed, 0 failed, 2 skipped (optional NSISC scoring fixtures). CI green on `main` (`6090023f`).
+
+Previous verification (2026-06-28):
 
 ```powershell
 npm test
@@ -254,5 +309,6 @@ Integration spot-checks:
 
 ## Next Steps
 
-- If time allows in later Phase 3 work, continue the broader typography sweep across the remaining lower-priority Matrix/Manager panels listed in the handoff notes.
-- Browser/CSS regression remains assigned to the separate worker; this pass intentionally used focused TypeScript/build verification only.
+- Extend `teamAbbreviations.json` when onboarding new conferences beyond NSISC/GLVC.
+- Re-link psych PDFs in existing workspaces after team-alias updates so stored rows use canonical meet team names.
+- If time allows, continue the broader typography sweep across the remaining lower-priority Matrix/Manager panels listed in the handoff notes.

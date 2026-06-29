@@ -1,8 +1,8 @@
 # Handoff: Blank Matrix Charts (Border + Legend, No SVG)
 
-Last updated: 2026-06-28  
+Last updated: 2026-06-29  
 Status: **RESOLVED** — root cause was stale dev server on port 3000 serving pre–eighth-pass bundles  
-Latest commit: verify with `git rev-parse --short HEAD`; server logs commit on startup
+Latest verified commit: `6090023f` (CI green: lint, 20 tests, build)
 
 Do not edit plan files in `.cursor/plans/`. This document is the operational handoff for the next engineer.
 
@@ -60,9 +60,12 @@ Playwright E2E against a **fresh** dev server confirms eighth-pass charts render
 
 **Regression coverage added:**
 
-- `tests/e2e/matrix-chart.spec.ts` — Playwright against real Vite dev server
+- `tests/e2e/matrix-chart.spec.ts` — Playwright against real Vite dev server (wired into `npm test` and CI)
 - `scripts/test_chart_bundle.mjs` — no ResponsiveContainer/SizedChart in source; single recharts version
 - `scripts/chart_browser_diagnostic.mjs` — manual Phase 0 checklist runner
+- `packages/matrix/src/components/ChartStaleBundleGuard.tsx` — in-app banner when stale cached JS is detected; offers reload
+- `scripts/clear-vite-cache.mjs` + `scripts/free-port.mjs` — run on `npm run dev` via `predev`
+- `apps/shell/vite.config.ts` — `Cache-Control: no-store` for dev assets
 
 ---
 
@@ -83,8 +86,8 @@ ChartShell (measure + ready gate)
 
 | File | Charts |
 |------|--------|
-| `packages/matrix/src/components/MeetOperationsView.tsx` | Timeline `LineChart` |
-| `packages/matrix/src/components/TeamCard.tsx` | Event `LineChart`, class `BarChart` (inside expanded card only) |
+| `packages/matrix/src/components/MeetOperationsView.tsx` | Timeline `LineChart`, meet momentum `MomentumChartCard` |
+| `packages/matrix/src/components/TeamCard.tsx` | Event `LineChart`, class `BarChart`, team momentum `MomentumChartCard` |
 | `apps/shell/src/pages/AnalyticsPage.tsx` | Season trends `LineChart` |
 | `packages/metrics/src/components/MetricsDashboard.tsx` | Velocity `AreaChart` |
 
@@ -182,8 +185,10 @@ Load Matrix with PDF, open DevTools on the **timeline** `.chart-shell`:
 | `scripts/test_chart_shell.mjs` | Readiness helpers, content-box math |
 | `scripts/test_chart_render.mjs` | ChartShell → ChartFrame → LineChart; no `.recharts-responsive-container`; mocks `getBoundingClientRect` for happy-dom |
 | `scripts/test_theme_css.mjs` | Production CSS includes `.chart-shell*`, `.chart-shell__chart` |
+| `tests/e2e/matrix-chart.spec.ts` | Real Chromium via Playwright; asserts live-ready shell, SVG dimensions, no `-1` console warnings |
+| `npm test` (CI) | Full suite on Ubuntu: Python `pdfplumber`, Playwright `--with-deps chromium`, then lint/test/build |
 
-**Gap:** No Playwright/puppeteer test against real Vite dev server + console warning assertion. happy-dom mocks layout; does not reproduce user’s `-1` warning.
+**Gap (closed 2026-06-29):** Playwright e2e is now in `npm test` and GitHub Actions CI.
 
 ---
 
@@ -226,16 +231,13 @@ node_modules/recharts/lib/context/chartLayoutContext.js      # ReportChartSize
 
 If `.recharts-responsive-container` exists → **stop** and find why ResponsiveContainer mounts (stale code or duplicate package).
 
-### Step 1 — Real browser regression test
+### Step 1 — Real browser regression test ✅
 
-Add Playwright (or puppeteer) test:
+Playwright test added and running in CI:
 
-- Start Vite dev server (or serve `dist/`)
-- Navigate to `/matrix` with fixture workspace/PDF
-- Assert: no console message matching `width\(-1\)`
-- Assert: `.recharts-wrapper` width > 100, SVG paths present
-
-Wire into CI or `npm test` with skip if Playwright not installed.
+- `tests/e2e/matrix-chart.spec.ts` — fixture workspace via API, Matrix timeline chart assertions
+- `playwright.config.ts` — starts `npm run dev` on CI; `npx playwright install --with-deps chromium` in `.github/workflows/ci.yml`
+- Run locally: `npm run test:e2e` or full `npm test`
 
 ### Step 2 — If ResponsiveContainer still mounts despite source clean
 
@@ -268,7 +270,8 @@ REM Ctrl+Shift+R after every pull
 ```
 
 ```bash
-npm test          # 12 passed expected
+npm test          # 20 passed expected (+ 2 skipped optional fixtures)
+npm run test:e2e  # Playwright only
 npm run build     # production bundle
 ```
 
@@ -287,8 +290,8 @@ npm run build     # production bundle
 
 **User-visible:** Matrix charts show border + legend but no SVG; console shows Recharts `width(-1) height(-1)` / `width(100%)` warning.
 
-**Code state:** Eighth pass on `main` uses `ChartShell` → `ChartFrame` → explicit numeric Recharts props; no ResponsiveContainer in source; tests pass in happy-dom **and** Playwright E2E (fresh server).
+**Code state:** Eighth pass on `main` uses `ChartShell` → `ChartFrame` → explicit numeric Recharts props; no ResponsiveContainer in source; tests pass in happy-dom, Playwright E2E, and CI.
 
-**Root cause (confirmed):** Stale dev server on port 3000 serving pre–eighth-pass JavaScript with ResponsiveContainer. Fresh restart + hard refresh fixes charts.
+**Root cause (confirmed):** Stale dev server on port 3000 serving pre–eighth-pass JavaScript with ResponsiveContainer. Fresh restart + hard refresh fixes charts. `ChartStaleBundleGuard` surfaces this in the Matrix UI during dev.
 
-**First action:** Kill stale port 3000, restart server (check startup log for commit hash), hard refresh. Run `npm run test:e2e` or `node scripts/chart_browser_diagnostic.mjs` to verify.
+**First action:** Kill stale port 3000, restart server (`npm run dev` clears Vite cache), hard refresh. Run `npm run test:e2e` or `node scripts/chart_browser_diagnostic.mjs` to verify.

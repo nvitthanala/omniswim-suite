@@ -19,7 +19,7 @@ Omni Swim Suite is a workspace for swim-meet operations, combining roster planni
 | Applet | Purpose |
 |---|---|
 | Manager | Athlete history, roster planning, event setup, and exports |
-| Matrix | Meet scoring views, projections, prelims over/under, charts, and scenario review |
+| Matrix | Meet scoring, psych sheet import, prelims/psych O/U, momentum charts, projections, and scenario review |
 | Metrics | Local video/session metrics analysis (no cloud keys) |
 
 Workspaces persist locally (JSON by default, optional SQLite). Manager and Matrix share live workspace data, so roster edits update Matrix charts without a reload.
@@ -98,8 +98,14 @@ npm run build
 # Run the production server (after build)
 npm run start
 
-# Run the test suite (scoring, persistence, chart-data checks)
+# Run the test suite (scoring, persistence, chart-data, psych, Playwright e2e)
 npm test
+
+# Run Playwright chart e2e only (starts dev server automatically)
+npm run test:e2e
+
+# Type-check all workspaces
+npm run lint
 
 # Migrate JSON data to SQLite
 npm run migrate:sqlite
@@ -118,10 +124,14 @@ npm run test:roundtrip
 | `OMNI_AI_ENABLED` | `false` | Keeps optional AI/OCR paths disabled unless explicitly enabled |
 | `OMNI_PORT` / `PORT` | `3000` | HTTP port for `npm run dev` and `npm start` |
 
+`npm test` runs the self-contained checks in [scripts](scripts) via the runner [scripts/run-tests.mjs](scripts/run-tests.mjs). Tests that depend on local-only fixtures are skipped automatically on a clean checkout. CI (GitHub Actions) installs Python `pdfplumber` and Playwright Chromium before running the same suite.
+
 ## Documentation
 
-- [PHASE2_PROGRESS.md](PHASE2_PROGRESS.md) — implementation notes, status, and verification history
-- [backend](backend) — parsing and scoring utilities
+- [PHASE2_PROGRESS.md](PHASE2_PROGRESS.md) — Phase 2 handoff, prelims O/U, psych pipeline notes
+- [PHASE3_UI_PROGRESS.md](PHASE3_UI_PROGRESS.md) — chart architecture, UI foundation, momentum/psych UI
+- [CHART_BLANK_HANDOFF.md](CHART_BLANK_HANDOFF.md) — blank-chart diagnostics and stale-bundle recovery
+- [backend](backend) — Python PDF parsing (`pdf_parser.py`, `psych_parser.py`)
 - [scripts](scripts) — automation and validation scripts
 
 ### Prelims projection (Matrix)
@@ -135,12 +145,44 @@ Example: 4th in prelims (15 pts expected) and 1st in finals (20 pts actual) → 
 
 Use the **Prelims** view in the Performance Matrix for a team diff table; team cards and the timeline tooltip show meet-total and per-event cumulative deltas when prelims data is present.
 
+### Psych sheet pipeline (Matrix)
+
+Upload a HyTek psych PDF from Matrix **Operations** (same format selector as meet PDFs: auto / regular / divided). The server parses individual entries via TypeScript quality scoring with a Python fallback (`backend/psych_parser.py`).
+
+- **Layout auto-detect** — tries `divided` (two-column) and `regular` (one-column) parses, scores row quality, and picks the best candidate. NSISC psych sheets are two-column; one-column meets prefer `regular` when divided rows are corrupt.
+- **Psych projected score** — each psych entry is scored as if its psych placement were the finals result (`packages/core/src/lib/psychProjection.ts`).
+- **Psych O/U** — difference between actual baseline finals points and psych-placement expected points (same placement logic as prelims).
+- **Team alignment** — psych PDF team abbreviations (e.g. `HSU`) are resolved to meet team names (e.g. Henderson State University) via `packages/core/src/data/teamAliases.ts` on upload and during scoring.
+- **Persistence** — workspaces store `psychMenResults`, `psychWomenResults`, and `loadedPsych` metadata (SQLite schema v3).
+
+Use **vs Psych** on team cards and the meet momentum section when a psych sheet is linked to the loaded meet.
+
+### Momentum charts (Matrix)
+
+Cumulative over/under by event for meet-wide and per-team views (`MomentumChartCard`, `packages/core/src/lib/prelimsProjection.ts`):
+
+- **vs Prelims** — event-aligned cumulative O/U from prelims placement expectations
+- **vs Psych** — same timeline using psych placement expectations (requires aligned team names)
+
+Timelines align to meet event order; empty psych momentum shows a guided message when team names on the psych sheet do not match meet results.
+
+### Team aliases (NSISC and GLVC)
+
+Conference abbreviations on psych sheets and HyTek PDFs map to canonical school names in `packages/core/src/data/teamAbbreviations.json` and `packages/core/src/data/teamAliases.ts`. Matching uses exact abbreviation lookup, acronym expansion, and fuzzy normalization. Extend the JSON map when onboarding a new conference.
+
+### Charts (Matrix / Analytics / Metrics)
+
+Charts use `ChartShell` → `ChartFrame` → Recharts with explicit pixel `width`/`height` and `responsive={false}` — never `ResponsiveContainer` at `%` sizing. If charts show a border and legend but no SVG after pulling changes, restart the dev server and hard-refresh; see [CHART_BLANK_HANDOFF.md](CHART_BLANK_HANDOFF.md). Matrix shows a stale-bundle banner when old cached JavaScript is detected (`ChartStaleBundleGuard`).
+
 ## Troubleshooting
 
 - If the app does not start, confirm Node.js 20+ is installed and `npm install` completed successfully.
 - **`EADDRINUSE` on port 3000** — another server is still running. Close the previous Omni Swim Suite terminal window, or run `netstat -ano | findstr :3000` to find the PID and stop it. Alternatively: `set OMNI_PORT=3001` then `npm run dev`.
 - **WebSocket / port 24678 errors** — should not occur after the shared HTTP server fix; if you see them on an old checkout, pull latest and restart. Only one dev instance should run at a time.
-- If PDF parsing fails, install Python 3 and retry.
+- If PDF parsing fails, install Python 3 and retry. On first server start, `pdfplumber` is auto-installed into `venv/`. CI installs it globally via `pip install pdfplumber`.
+- **Psych PDF parse errors** — restart the dev server after pulling API changes (`npm run dev`). An empty or 404 response usually means a stale server process.
+- **Psych teams missing from momentum** — re-upload the psych PDF after team-alias updates, or confirm meet team names match conference abbreviations (see Team aliases above).
+- **Charts blank after git pull** — kill port 3000, run `npm run dev` (clears Vite cache via `predev`), hard-refresh (Ctrl+Shift+R). Run `npm run test:e2e` to verify. See [CHART_BLANK_HANDOFF.md](CHART_BLANK_HANDOFF.md).
 - To switch storage modes, set `OMNI_DB=sqlite` and run `npm run migrate:sqlite` first.
 - If charts appear blank after adding UI in a workspace package, ensure that package's `src` is registered as a Tailwind `@source` in [packages/ui/src/index.css](packages/ui/src/index.css); Tailwind v4 only auto-scans the Vite root.
 

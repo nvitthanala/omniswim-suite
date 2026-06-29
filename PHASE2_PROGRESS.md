@@ -3,7 +3,7 @@
 > Living document. Updated continuously during Phase 2 work so any agent (or human)
 > can resume mid-stream. **Source of truth for the plan:** `c:\Users\nihar\.cursor\plans\omni_swim_phase_2_4df6b445.plan.md` (do NOT edit the plan file).
 
-Last updated: 2026-06-28 (prelims over/underperformance). Phase 2 complete; **repo flattened/cleaned, unification Phase 4 (polish + cutover) finished, and the broken Matrix/TeamCard graphs fixed**. Verified via production build, full test suite (`npm test`), and a headless render check of the Matrix charts.
+Last updated: 2026-06-29 (psych sheet pipeline, momentum charts, NSISC team aliases). Phase 2 complete; **repo flattened/cleaned, unification Phase 4 (polish + cutover) finished, and the broken Matrix/TeamCard graphs fixed**. Verified via production build, full test suite (`npm test`), Playwright chart e2e, and CI on GitHub Actions.
 
 ---
 
@@ -69,6 +69,43 @@ npm run -w @omniswim/shell build
 ```
 
 Test: `scripts/test_prelims_projection.mjs` (Alice +5 O/U case, PDF rank preference, TT/timed-finals exclusion).
+
+---
+
+## Psych sheet pipeline + momentum charts (2026-06-29)
+
+Placement-based psych O/U in Matrix: each swimmer's **expected points from psych-sheet placement** vs **actual baseline finals points**, parallel to prelims.
+
+### Algorithm
+
+| Module | Role |
+|--------|------|
+| `packages/core/src/lib/psychParseQuality.ts` | Normalize psych rows; score `regular` vs `divided` layout; auto-pick best parse |
+| `packages/core/src/lib/psychProjection.ts` | Psych placement scoring, per-entry O/U, `alignPsychResultsToMeetTeams` |
+| `packages/core/src/lib/prelimsProjection.ts` | Event-aligned momentum series (`buildMeetMomentumChartDataFromLookup`) |
+| `packages/core/src/data/teamAliases.ts` | Abbreviation → full school name (NSISC: `HSU`, `DSU`, `OUAC`, `UWF`, …) |
+| `backend/psych_parser.py` | Python fallback parser (same quality logic as TS path) |
+| `apps/shell/server.ts` | `POST /api/parse-psych-pdf` |
+
+### Persistence (schema v3)
+
+- `psychMenResults` / `psychWomenResults` — parsed psych entries aligned to meet team names
+- `loadedPsych` — filename, upload time, format, linked meet timestamp
+
+### UI (Matrix)
+
+- **Operations** — psych PDF upload (auto / regular / divided)
+- **vs Psych** toggle on team cards and meet momentum section
+- `MomentumChartCard` — cumulative O/U by event (meet-wide and per-team)
+
+### Verification
+
+```powershell
+npm test   # includes test_psych_projection.mjs, test_momentum_series.mjs,
+           # test_team_aliases.mjs, test_nsisc_psych.mjs, Playwright e2e
+```
+
+CI installs Python `pdfplumber` and Playwright Chromium (`.github/workflows/ci.yml`).
 
 ---
 
