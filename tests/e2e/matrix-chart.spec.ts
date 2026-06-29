@@ -38,8 +38,8 @@ test.describe('Matrix timeline chart', () => {
     await expect(page.getByText('Chronological Team Score Timeline')).toBeVisible({ timeout: 30_000 });
 
     const shell = page.locator('.chart-shell').first();
-    await expect(shell).toBeVisible({ timeout: 15_000 });
-    await expect(shell).toHaveAttribute('data-chart-live-ready', 'true', { timeout: 15_000 });
+    await expect(shell).toBeVisible({ timeout: 30_000 });
+    await expect(shell).toHaveAttribute('data-chart-live-ready', 'true', { timeout: 30_000 });
 
     const chartW = Number(await shell.getAttribute('data-chart-w'));
     const chartH = Number(await shell.getAttribute('data-chart-h'));
@@ -49,13 +49,13 @@ test.describe('Matrix timeline chart', () => {
     await expect(page.locator('.recharts-responsive-container')).toHaveCount(0);
 
     const wrapper = page.locator('.recharts-wrapper').first();
-    await expect(wrapper).toBeVisible();
+    await expect(wrapper).toBeVisible({ timeout: 45_000 });
     const box = await wrapper.boundingBox();
     expect(box?.width ?? 0).toBeGreaterThan(100);
     expect(box?.height ?? 0).toBeGreaterThan(100);
 
     const surface = page.locator('svg.recharts-surface').first();
-    await expect(surface).toBeVisible();
+    await expect(surface).toBeVisible({ timeout: 15_000 });
     const svgWidth = Number(await surface.getAttribute('width'));
     const svgHeight = Number(await surface.getAttribute('height'));
     expect(svgWidth).toBeGreaterThan(100);

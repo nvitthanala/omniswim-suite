@@ -83,7 +83,7 @@ if (existsSync(playwrightBin)) {
   } else {
     console.log('FAIL  playwright matrix-chart e2e');
     const out = (e2e.stdout?.toString() || '') + (e2e.stderr?.toString() || '');
-    failures.push(`--- playwright e2e ---\n${out.trim().split('\n').slice(-15).join('\n')}`);
+    failures.push(`--- playwright e2e ---\n${out.trim().split('\n').slice(-40).join('\n')}`);
     failed += 1;
   }
 } else {
