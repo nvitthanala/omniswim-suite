@@ -17,9 +17,13 @@ import {
   scorerRosterKey,
 } from './scorerRoster';
 import { mergeScoringSettings } from './scoringDefaults';
-import { getAthleteProfile } from './athleteHistory';
+import {
+  buildEventProfileFromCatalog,
+  getAthleteProfile,
+} from './athleteHistory';
 import { buildWhatIfResults, createPlannedEntry } from './whatIfProjection';
-import { calculatePoints } from './utils';
+import { buildCategorizedScoringInputs, calculatePoints } from './utils';
+import type { CatalogTeamRoster } from './rosterCatalog';
 
 export type OptimizerStage = 'scorers' | 'events' | 'hypothetical' | 'all';
 
@@ -39,7 +43,8 @@ function teamTotalForTeam(
   team: string,
   overrides: ScorerRosterOverride[],
   plans?: PlannedSwimEntry[],
-  activeIds?: string[]
+  activeIds?: string[],
+  rosterCatalog?: CatalogTeamRoster
 ): number {
   const ws: Workspace = {
     ...workspace,
@@ -47,7 +52,14 @@ function teamTotalForTeam(
     meetEntryPlans: plans ?? workspace.meetEntryPlans,
     activeEntryIds: activeIds ?? workspace.activeEntryIds,
   };
-  const results = buildWhatIfResults({ workspace: ws, gender, removeSeniors });
+  const base = buildWhatIfResults({ workspace: ws, gender, removeSeniors });
+  const results = rosterCatalog
+    ? buildCategorizedScoringInputs({
+        workspace: { ...ws, menResults: base, womenResults: gender === Gender.WOMEN ? base : [] },
+        gender,
+        rosterCatalog,
+      })
+    : base;
   const scored = calculatePoints(results, settings, {
     scorerRosterOverrides: overrides,
     conferenceForMerge: workspace.conference,
@@ -64,10 +76,14 @@ export function optimizeScorersForTeam(
   gender: Gender,
   team: string,
   removeSeniors: boolean,
-  settings: ScoringSettings
+  settings: ScoringSettings,
+  rosterCatalog?: CatalogTeamRoster
 ): ScorerRosterOverride[] {
   const merged = mergeScoringSettings(settings, { conference: workspace.conference });
-  const results = buildWhatIfResults({ workspace, gender, removeSeniors });
+  const base = buildWhatIfResults({ workspace, gender, removeSeniors });
+  const results = rosterCatalog
+    ? buildCategorizedScoringInputs({ workspace, gender, rosterCatalog })
+    : base;
   const scored = calculatePoints(results, merged, {
     scorerRosterOverrides: workspace.scorerRosterOverrides ?? [],
     conferenceForMerge: workspace.conference,
@@ -104,7 +120,7 @@ export function optimizeScorersForTeam(
   }
 
   // Local improvement: try flipping borderline athletes
-  let best = teamTotalForTeam(workspace, gender, removeSeniors, merged, team, overrides);
+  let best = teamTotalForTeam(workspace, gender, removeSeniors, merged, team, overrides, undefined, undefined, rosterCatalog);
   const borderline = ranked.slice(Math.max(0, cap - 3), cap + 3);
   for (const row of borderline) {
     const key = scorerRosterKey(row.team, row.gender, row.name);
@@ -114,7 +130,7 @@ export function optimizeScorersForTeam(
     const isOn = cur ? cur.isScorer : lookup.isScorer(row.name, row.team, row.gender);
     const trial = overrides.filter(o => scorerRosterKey(o.team, o.gender, o.name) !== key);
     trial.push({ name: row.name, team: row.team, gender: row.gender, isScorer: !isOn });
-    const t = teamTotalForTeam(workspace, gender, removeSeniors, merged, team, trial);
+    const t = teamTotalForTeam(workspace, gender, removeSeniors, merged, team, trial, undefined, undefined, rosterCatalog);
     if (t > best) {
       best = t;
       const rest = overrides.filter(o => scorerRosterKey(o.team, o.gender, o.name) !== key);
@@ -129,12 +145,14 @@ export function optimizeScorersForTeam(
   return overrides;
 }
 
-/** Stage B: pick active primary events per athlete from history + PDF. */
+/** Stage B: pick active primary events per athlete from history + PDF,
+ *  optionally enriched with catalog-stored additional events. */
 export function optimizeEventLineupForTeam(
   workspace: Workspace,
   gender: Gender,
   team: string,
-  settings: ScoringSettings
+  settings: ScoringSettings,
+  rosterCatalog?: CatalogTeamRoster
 ): { plans: PlannedSwimEntry[]; activeEntryIds: string[] } {
   const merged = mergeScoringSettings(settings, { conference: workspace.conference });
   const lookup = buildScorerRosterLookup(
@@ -150,7 +168,10 @@ export function optimizeEventLineupForTeam(
   const activeEntryIds: string[] = [];
 
   for (const athlete of teamAthletes) {
-    const profile = getAthleteProfile(workspace, team, gender, athlete.name, merged);
+    const profile =
+      buildEventProfileFromCatalog(rosterCatalog, team, gender, athlete.name, merged) ??
+      getAthleteProfile(workspace, team, gender, athlete.name, merged);
+    if (!profile) continue;
     for (const event of profile.primaryEvents) {
       const best = profile.bestByEvent[event];
       const entry = createPlannedEntry({
@@ -177,7 +198,8 @@ export function optimizeRosterForTeam(
   team: string,
   removeSeniors: boolean,
   settings: ScoringSettings,
-  stages: OptimizerStage = 'all'
+  stages: OptimizerStage = 'all',
+  rosterCatalog?: CatalogTeamRoster
 ): OptimizerResult {
   const merged = mergeScoringSettings(settings, { conference: workspace.conference });
   const previousTotal = teamTotalForTeam(
@@ -186,7 +208,10 @@ export function optimizeRosterForTeam(
     removeSeniors,
     merged,
     team,
-    workspace.scorerRosterOverrides ?? []
+    workspace.scorerRosterOverrides ?? [],
+    undefined,
+    undefined,
+    rosterCatalog
   );
 
   let overrides = [...(workspace.scorerRosterOverrides ?? [])];
@@ -194,12 +219,12 @@ export function optimizeRosterForTeam(
   let activeIds = [...(workspace.activeEntryIds ?? [])];
 
   if (stages === 'scorers' || stages === 'all') {
-    overrides = optimizeScorersForTeam(workspace, gender, team, removeSeniors, merged);
+    overrides = optimizeScorersForTeam(workspace, gender, team, removeSeniors, merged, rosterCatalog);
   }
 
   if (stages === 'events' || stages === 'all') {
     const wsWithScorers = { ...workspace, scorerRosterOverrides: overrides };
-    const ev = optimizeEventLineupForTeam(wsWithScorers, gender, team, merged);
+    const ev = optimizeEventLineupForTeam(wsWithScorers, gender, team, merged, rosterCatalog);
     plans = ev.plans;
     activeIds = ev.activeEntryIds;
   }
@@ -216,7 +241,8 @@ export function optimizeRosterForTeam(
     team,
     overrides,
     plans,
-    activeIds
+    activeIds,
+    rosterCatalog
   );
 
   return { overrides, meetEntryPlans: plans, activeEntryIds: activeIds, projectedTotal, previousTotal };
@@ -227,24 +253,25 @@ export function optimizeRosterAllTeams(
   gender: Gender,
   removeSeniors: boolean,
   settings: ScoringSettings,
-  stages: OptimizerStage = 'all'
+  stages: OptimizerStage = 'all',
+  rosterCatalog?: CatalogTeamRoster
 ): OptimizerResult {
-  const results = buildWhatIfResults({ workspace, gender, removeSeniors });
-  const teams = [
-    ...new Set(
-      results
-        .filter(r => !r.isRelay || r.name !== r.team)
-        .map(r => String(r.team ?? '').trim())
-        .filter(Boolean)
-    ),
-  ].sort();
+  const baselineResults = buildWhatIfResults({ workspace, gender, removeSeniors });
+  const baseTeams = new Set(
+    baselineResults
+      .filter(r => !r.isRelay || r.name !== r.team)
+      .map(r => String(r.team ?? '').trim())
+      .filter(Boolean)
+  );
+  if (rosterCatalog) baseTeams.add(rosterCatalog.team.name);
+  const teams = [...baseTeams].sort();
+  const merged = mergeScoringSettings(settings, { conference: workspace.conference });
 
   let overrides = [...(workspace.scorerRosterOverrides ?? [])];
   let plans = [...(workspace.meetEntryPlans ?? [])];
   let activeIds = [...(workspace.activeEntryIds ?? [])];
   let previousTotal = 0;
   let projectedTotal = 0;
-  const merged = mergeScoringSettings(settings, { conference: workspace.conference });
 
   for (const team of teams) {
     const sub = optimizeRosterForTeam(
@@ -253,7 +280,8 @@ export function optimizeRosterAllTeams(
       team,
       removeSeniors,
       merged,
-      stages
+      stages,
+      rosterCatalog
     );
     overrides = sub.overrides;
     plans = sub.meetEntryPlans;

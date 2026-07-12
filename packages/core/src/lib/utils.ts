@@ -13,6 +13,7 @@ import {
   TeamScore,
   RelayMissingLeg,
   RelayLegOverride,
+  Workspace,
 } from '../types';
 import {
   buildScorerRosterLookup,
@@ -42,6 +43,7 @@ import {
 
 export { DEFAULT_SCORING_SETTINGS, mergeScoringSettings } from './scoringDefaults';
 import teamColorsData from '../team_colors.json';
+import type { CatalogEventTime, CatalogTeamRoster } from './rosterCatalog';
 import {
   colorForChartStroke,
   parseTeamColorEntry,
@@ -1671,4 +1673,126 @@ export function relaySplitQualificationCutEvent(res: SwimmerResult): string | nu
   if (!ev.includes('medley')) return null;
   if (!/\b400\b/.test(ev)) return null;
   return '100 Backstroke';
+}
+
+// ===================== Catalog-backed scoring adapter =====================
+
+/**
+ * Map a catalog swimmer├ùevent combination into a `SwimmerResult` that drops
+ * into the existing points pool. The result deliberately carries
+ * `isRecruit: true` and a stable uuid-stable id so it's identical to the
+ * injected-recruit path used by `prepareRecruitsForScoring` (`utils.ts:975`).
+ *
+ * Time is always the SCY-normalized clock because `calculatePoints` works in
+ * SCY, but `timeText` keeps the original display value so chart tooltips and
+ * audit logs stay readable.
+ */
+export function buildCatalogEntryResult(
+  athleteName: string,
+  team: string,
+  time: CatalogEventTime,
+  classYear?: string | null,
+  defaultGender: Gender = Gender.MEN
+): SwimmerResult {
+  return {
+    id: `catalog_${time.id}`,
+    rank: 0,
+    name: athleteName,
+    classYear: classYear ?? 'UNKNOWN',
+    team,
+    time: formatSecondsToTime(time.timeSecondsScy),
+    finalsTime: formatSecondsToTime(time.timeSecondsScy),
+    prelimsTime: time.timeType === 'SCY' ? time.timeText : undefined,
+    roundSwam: 'A Final',
+    points: 0,
+    event: time.event,
+    gender: defaultGender,
+    isRecruit: true,
+  };
+}
+
+export interface CategorizedScoringInputArgs {
+  workspace: Workspace;
+  gender: Gender;
+  removeSeniors?: boolean;
+  /** A catalog roster for the active team. Optional. */
+  rosterCatalog?: CatalogTeamRoster;
+  /** Max individual entries per swimmer (default: scoring preset or 3). */
+  maxIndividualEntriesPerSwimmer?: number;
+}
+
+/**
+ * Build a unified `SwimmerResult[]` ready to feed `calculatePoints` based on
+ * the workspace's loaded meet + the (optional) catalog roster.
+ *
+ * Catalog swims are inserted as `isRecruit` rows already normalized to SCY, so
+ * they slot beside the existing recruit injection pathway (rank-by-time, A
+ * Final). The `maxIndividualEntriesPerSwimmer` cap is enforced here so the
+ * recruiter's per-swimmer entry limit is honored when toggling additional
+ * events on.
+ */
+export function buildCategorizedScoringInputs(
+  args: CategorizedScoringInputArgs
+): SwimmerResult[] {
+  const pdfRows =
+    args.gender === Gender.MEN
+      ? args.workspace.menResults ?? []
+      : args.workspace.womenResults ?? [];
+
+  if (!args.rosterCatalog) return pdfRows;
+
+  const merged = mergeScoringSettings(args.workspace.scoringSettings, {
+    conference: args.workspace.conference,
+  });
+  const indCap =
+    args.maxIndividualEntriesPerSwimmer ??
+    merged.maxIndividualEntriesPerSwimmer ??
+    999;
+
+  // Match a swimmer's existing PDF row (if any) so we keep their class year.
+  const pdfByName = new Map<string, SwimmerResult>();
+  for (const r of pdfRows) {
+    if (r.isRelay) continue;
+    const key = normalizeSwimmerName(r.name);
+    if (!pdfByName.has(key)) pdfByName.set(key, r);
+  }
+
+  const team = args.rosterCatalog.team;
+  const rosterRows: SwimmerResult[] = [];
+  for (const athlete of args.rosterCatalog.athletes) {
+    if (athlete.gender !== (args.gender === Gender.WOMEN ? 'Women' : 'Men')) continue;
+    // Cap to top-N best times per swimmer by SCY ΓÇö keeps within entry limits.
+    const eligibleTimes = athlete.times
+      .filter(t => t.isEligible)
+      .filter(t => !t.event.toLowerCase().includes('relay'))
+      .sort((a, b) => a.timeSecondsScy - b.timeSecondsScy)
+      .slice(0, indCap);
+
+    const pdfMatch = pdfByName.get(normalizeSwimmerName(athlete.fullName));
+    const classYear = athlete.classYear ?? pdfMatch?.classYear;
+
+    for (const t of eligibleTimes) {
+      rosterRows.push(
+        buildCatalogEntryResult(
+          athlete.fullName,
+          team.name,
+          t,
+          classYear,
+          args.gender
+        )
+      );
+    }
+  }
+
+  // Merge without duplicating an event for a swimmer that already has a PDF row.
+  const taken = new Set(
+    rosterRows.map(r => `${normalizeSwimmerName(r.name)}|${r.event}`)
+  );
+  const pdfOnly = pdfRows.filter(r => {
+    if (r.isRelay) return true;
+    const key = `${normalizeSwimmerName(r.name)}|${r.event}`;
+    return !taken.has(key);
+  });
+
+  return [...pdfOnly, ...rosterRows];
 }
