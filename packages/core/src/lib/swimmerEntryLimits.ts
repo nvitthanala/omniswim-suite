@@ -71,3 +71,17 @@ export function formatEntryLimitLabel(
   const relayCap = merged.maxRelayEntriesPerSwimmer ?? 999;
   return `${counts.individual}/${indCap} ind · ${counts.relayCount}/${relayCap} relay`;
 }
+
+/** Whether adding one more entry of the given event type would exceed caps. */
+export function canAcceptAnotherEntry(
+  counts: SwimmerEntryCounts,
+  settings: ScoringSettings,
+  event: string
+): boolean {
+  const merged = mergeScoringSettings(settings);
+  const indCap = merged.maxIndividualEntriesPerSwimmer ?? 999;
+  const relayCap = merged.maxRelayEntriesPerSwimmer ?? 999;
+  const isRelay = /\brelay\b/i.test(event);
+  if (isRelay) return counts.relayCount < relayCap;
+  return counts.individual < indCap;
+}

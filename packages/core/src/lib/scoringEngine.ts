@@ -18,6 +18,7 @@ import { mergeScoringSettings } from './scoringDefaults';
 import { buildPrelimsProjectedBundle } from './prelimsProjection';
 import { buildPsychProjectedBundle } from './psychProjection';
 import { buildWhatIfResults } from './whatIfProjection';
+import { getSourceResults } from './meetSource';
 
 export type ScoringBundle = {
   allResults: SwimmerResult[];
@@ -45,7 +46,10 @@ export function buildScoringBundle({
 }: BuildOptions): ScoringBundle {
   const menResults = workspace.menResults ?? [];
   const womenResults = workspace.womenResults ?? [];
-  const currentResults = gender === Gender.MEN ? menResults : womenResults;
+  const workingResults = gender === Gender.MEN ? menResults : womenResults;
+  const sourceResults = getSourceResults(workspace, gender);
+  /** Baseline uses frozen source copy; projected uses working + what-if layers. */
+  const currentResults = applyWhatIf ? workingResults : sourceResults;
   const pdfHint = [...menResults, ...womenResults];
 
   const scoringSettings = mergeScoringSettings(workspace.scoringSettings, {

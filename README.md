@@ -18,7 +18,7 @@ Omni Swim Suite is a workspace for swim-meet operations, combining roster planni
 
 | Applet | Purpose |
 |---|---|
-| Manager | Athlete history, roster planning, event setup, and exports |
+| Manager | Athlete history, roster planning (Source → Lineup → Relays → Optimize), compliance checklist, and exports |
 | Matrix | Meet scoring, psych sheet import, prelims/psych O/U, momentum charts, projections, and scenario review |
 | Metrics | Local video/session metrics analysis (no cloud keys) |
 
@@ -130,6 +130,7 @@ npm run test:roundtrip
 
 - [PHASE2_PROGRESS.md](PHASE2_PROGRESS.md) — Phase 2 handoff, prelims O/U, psych pipeline notes
 - [PHASE3_UI_PROGRESS.md](PHASE3_UI_PROGRESS.md) — chart architecture, UI foundation, momentum/psych UI
+- [ROSTER_LINEUP_PROGRESS.md](ROSTER_LINEUP_PROGRESS.md) — Manager Lineup/Relays workflow, compliance checklist, non-scorer relay vacate
 - [CHART_BLANK_HANDOFF.md](CHART_BLANK_HANDOFF.md) — blank-chart diagnostics and stale-bundle recovery
 - [backend](backend) — Python PDF parsing (`pdf_parser.py`, `psych_parser.py`)
 - [scripts](scripts) — automation and validation scripts

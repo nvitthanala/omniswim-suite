@@ -312,3 +312,7 @@ Integration spot-checks:
 - Extend `teamAbbreviations.json` when onboarding new conferences beyond NSISC/GLVC.
 - Re-link psych PDFs in existing workspaces after team-alias updates so stored rows use canonical meet team names.
 - If time allows, continue the broader typography sweep across the remaining lower-priority Matrix/Manager panels listed in the handoff notes.
+
+## Related: Roster Lineup pass (2026-07-12)
+
+See [ROSTER_LINEUP_PROGRESS.md](ROSTER_LINEUP_PROGRESS.md) for the Manager wizard Lineup/Relays overhaul (compliance checklist, non-scorer relay vacate, unified athlete editor). That work builds on Phase 3 UI tokens and is tracked separately from this Phase 3 foundation doc.

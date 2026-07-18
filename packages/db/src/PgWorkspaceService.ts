@@ -300,6 +300,7 @@ export class PgWorkspaceService {
 
     for (const table of [
       'meet_results',
+      'source_meet_results',
       'recruits',
       'roster_overrides',
       'meet_entry_plans',
@@ -320,6 +321,20 @@ export class PgWorkspaceService {
       await client.query(
         'INSERT INTO meet_results(id, workspace_id, gender, position, data) VALUES($1,$2,$3,$4,$5)',
         [row.id, row.workspace_id, row.gender, row.position, row.data]
+      );
+    }
+    const sourceMen = ws.sourceMenResults ?? ws.menResults ?? [];
+    const sourceWomen = ws.sourceWomenResults ?? ws.womenResults ?? [];
+    for (const row of insertResultsRows(ws.id, sourceMen, 'Men')) {
+      await client.query(
+        'INSERT INTO source_meet_results(id, workspace_id, gender, position, data) VALUES($1,$2,$3,$4,$5)',
+        [`src-${row.id}`, row.workspace_id, row.gender, row.position, row.data]
+      );
+    }
+    for (const row of insertResultsRows(ws.id, sourceWomen, 'Women')) {
+      await client.query(
+        'INSERT INTO source_meet_results(id, workspace_id, gender, position, data) VALUES($1,$2,$3,$4,$5)',
+        [`src-${row.id}`, row.workspace_id, row.gender, row.position, row.data]
       );
     }
     for (const row of insertWithIdRows('recruits', ws.id, ws.recruits ?? [])) {

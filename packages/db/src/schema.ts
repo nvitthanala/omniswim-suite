@@ -8,7 +8,7 @@
  * field into columns.
  */
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export const CREATE_TABLES_SQL = `
 PRAGMA journal_mode = WAL;
@@ -46,6 +46,15 @@ CREATE TABLE IF NOT EXISTS meet_results (
   data         TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_meet_results_ws ON meet_results(workspace_id);
+
+CREATE TABLE IF NOT EXISTS source_meet_results (
+  id           TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  gender       TEXT NOT NULL,
+  position     INTEGER NOT NULL DEFAULT 0,
+  data         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_source_meet_results_ws ON source_meet_results(workspace_id);
 
 CREATE TABLE IF NOT EXISTS psych_results (
   id           TEXT PRIMARY KEY,
@@ -131,4 +140,16 @@ export const SQLITE_MIGRATIONS_V3 = [
   data         TEXT NOT NULL
 )`,
   'CREATE INDEX IF NOT EXISTS idx_psych_results_ws ON psych_results(workspace_id)',
+];
+
+/** SQLite v3 → v4 frozen meet source copy for baseline scoring. */
+export const SQLITE_MIGRATIONS_V4 = [
+  `CREATE TABLE IF NOT EXISTS source_meet_results (
+  id           TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  gender       TEXT NOT NULL,
+  position     INTEGER NOT NULL DEFAULT 0,
+  data         TEXT NOT NULL
+)`,
+  'CREATE INDEX IF NOT EXISTS idx_source_meet_results_ws ON source_meet_results(workspace_id)',
 ];

@@ -1,14 +1,19 @@
 /**
  * Enhanced SwimCloud paste import with format detection and merge preview.
  */
-import React, { useMemo, useRef, useState } from 'react';
+import React, { useMemo, useRef, useState, useEffect } from 'react';
 import { X, ClipboardPaste, FileSpreadsheet, Globe } from 'lucide-react';
 import { Gender, HistoricalSwim, Workspace } from '@omniswim/core/types';
 import {
   detectSwimCloudPasteFormat,
-  mergeHistoryIndex,
   parseSwimCloudPasteDetailed,
 } from '@omniswim/core/lib/athleteHistory';
+import {
+  formatHistoryImportSummary,
+  importHistoryToRoster,
+  previewHistoryImportActions,
+  type ImportSwimmerAction,
+} from '@omniswim/core/lib/historyImportRoster';
 import { parseCsvHistory } from '@omniswim/core/lib/csvImport';
 import { divisionForTeam } from '@omniswim/core/data/teamDivisions';
 import { useToast } from '@omniswim/ui';
@@ -31,10 +36,24 @@ function uniqueTeams(workspace: Workspace, gender: Gender): string[] {
   return [...teams].sort();
 }
 
+function actionLabel(action: ImportSwimmerAction): string {
+  switch (action) {
+    case 'new_recruit':
+      return 'New recruit';
+    case 'add_to_lineup':
+      return 'Add to lineup';
+    case 'already_recruit':
+      return 'Already recruit';
+    case 'history_matched':
+    default:
+      return 'History only (matched)';
+  }
+}
+
 export default function RosterImportWizard({ workspace, gender, onClose, onUpdate }: Props) {
   const toast = useToast();
   const teams = useMemo(() => uniqueTeams(workspace, gender), [workspace, gender]);
-  const [team, setTeam] = useState(teams[0] ?? '');
+  const [team, setTeam] = useState('');
   const [mode, setMode] = useState<ImportMode>('paste');
   const [paste, setPaste] = useState('');
   const [preview, setPreview] = useState<HistoricalSwim[]>([]);
@@ -43,6 +62,13 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
   const [step, setStep] = useState<'paste' | 'preview'>('paste');
   const [showReference, setShowReference] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // If gender/meet changes and current team is no longer in the list, clear it.
+  useEffect(() => {
+    if (team && teams.length > 0 && !teams.includes(team)) {
+      setTeam('');
+    }
+  }, [teams, team, gender]);
 
   const handleParse = () => {
     if (!team.trim()) {
@@ -87,20 +113,26 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
   };
 
   const handleMerge = async () => {
-    if (preview.length === 0) return;
-    const merged = mergeHistoryIndex(workspace.athleteHistory ?? [], preview);
-    const sources = [
-      ...(workspace.historySources ?? []),
-      {
-        type: mode === 'csv' ? 'csv_import' : 'swimcloud_paste',
-        label: `${format} import (${team})`,
-        importedAt: Date.now(),
-      },
-    ];
-    await onUpdate({ athleteHistory: merged, historySources: sources });
-    toast.push('success', `Merged ${preview.length} swim(s) into ${team}.`);
+    if (preview.length === 0 || !team.trim()) return;
+    const result = importHistoryToRoster(workspace, preview, {
+      team: team.trim(),
+      gender,
+      sourceType: mode === 'csv' ? 'csv_import' : 'swimcloud_paste',
+      sourceLabel: `${format} import (${team})`,
+    });
+    if (result.noop) return;
+    await onUpdate(result.patch);
+    toast.push('success', formatHistoryImportSummary(result.summary));
     onClose();
   };
+
+  const swimmerActions = useMemo(
+    () =>
+      team.trim()
+        ? previewHistoryImportActions(workspace, preview, { team: team.trim(), gender })
+        : [],
+    [workspace, preview, team, gender]
+  );
 
   const detectedFormat =
     mode === 'paste' && paste.trim() ? detectSwimCloudPasteFormat(paste) : null;
@@ -172,18 +204,32 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <label className="flex flex-col gap-1">
                   <span className="label-caps">Team</span>
+                  <select
+                    value={team && teams.includes(team) ? team : ''}
+                    onChange={e => setTeam(e.target.value)}
+                    className="glass-input px-3 py-2 rounded text-ui-body appearance-none"
+                  >
+                    <option value="" disabled>
+                      Select a team…
+                    </option>
+                    {teams.map(t => (
+                      <option key={t} value={t}>
+                        {t}
+                      </option>
+                    ))}
+                  </select>
+                  {teams.length === 0 ? (
+                    <span className="text-ui-caption text-theme-muted">
+                      Load a meet PDF first, or type a custom team below.
+                    </span>
+                  ) : null}
                   <input
-                    list="import-teams"
                     value={team}
                     onChange={e => setTeam(e.target.value)}
-                    className="glass-input px-3 py-2 rounded text-ui-body"
-                    placeholder="Team name"
+                    className="glass-input px-3 py-2 rounded text-ui-body mt-1"
+                    placeholder="Or type a team name…"
+                    aria-label="Custom team name"
                   />
-                  <datalist id="import-teams">
-                    {teams.map(t => (
-                      <option key={t} value={t} />
-                    ))}
-                  </datalist>
                 </label>
                 <label className="flex flex-col gap-1">
                   <span className="label-caps">Gender</span>
@@ -239,6 +285,18 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
                   </span>
                 ))}
               </div>
+              {swimmerActions.length > 0 ? (
+                <div className="flex flex-wrap gap-1.5">
+                  {swimmerActions.map(s => (
+                    <span
+                      key={`${s.name}|${s.action}`}
+                      className="text-ui-micro px-1.5 py-0.5 rounded border border-theme-soft"
+                    >
+                      {s.name}: {actionLabel(s.action)}
+                    </span>
+                  ))}
+                </div>
+              ) : null}
               <div className="border border-theme-soft rounded max-h-64 overflow-y-auto custom-scrollbar">
                 <table className="w-full text-ui-caption">
                   <thead className="sticky top-0 bg-[var(--surface-strong)]">
@@ -292,7 +350,7 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
               disabled={preview.length === 0}
               className="px-4 py-2 btn-primary rounded text-ui-micro font-bold uppercase tracking-widest disabled:opacity-40"
             >
-              Merge into workspace
+              Import & add to roster
             </button>
           )}
         </div>

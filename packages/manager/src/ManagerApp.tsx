@@ -6,14 +6,14 @@
 import React, { useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Users } from 'lucide-react';
-import { Gender, Recruit, Workspace } from '@omniswim/core/types';
-import { normalizeSwimmerName, mergeScoringSettings } from '@omniswim/core/lib/utils';
+import { Recruit, Workspace } from '@omniswim/core/types';
+import { mergeScoringSettings } from '@omniswim/core/lib/utils';
 import { usesScorerRoster, scorerRosterKey } from '@omniswim/core/lib/scorerRoster';
+import { softRemoveSwimmerFromWorkspace } from '@omniswim/core/lib/swimmerSoftRemove';
 import { useWorkspaceScoring } from '@omniswim/core/lib/useWorkspaceScoring';
 import { exportEntriesCsv, exportEntriesHytek, type EntryExport } from '@omniswim/core/lib/entryExport';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
 import { EmptyState, useToast } from '@omniswim/ui';
-import TeamManagementSubTabs, { type TeamManagementViewId } from './components/TeamManagementSubTabs';
 import TeamManagementView from './components/TeamManagementView';
 import SwimmerDeleteConfirmModal from './components/SwimmerDeleteConfirmModal';
 import RosterImportWizard from './components/RosterImportWizard';
@@ -34,7 +34,6 @@ function downloadExport(exp: EntryExport) {
 export default function ManagerApp() {
   const { activeWorkspace, activeGender, updateWorkspace } = useSuiteWorkspace();
   const toast = useToast();
-  const [teamMgmtView, setTeamMgmtView] = useState<TeamManagementViewId>('roster');
   const [removeSeniors, setRemoveSeniors] = useState(false);
   const [whatIfMode, setWhatIfMode] = useState(true);
   const [scoringRefreshKey, setScoringRefreshKey] = useState(0);
@@ -93,34 +92,30 @@ export default function ManagerApp() {
 
   const confirmDeleteSwimmer = () => {
     if (!swimmerDeleteCandidate) return;
-    const name = swimmerDeleteCandidate.name;
-    const key = normalizeSwimmerName(name);
-    const field = activeGender === Gender.MEN ? 'menResults' : 'womenResults';
-    const arr = activeWorkspace[field] ?? [];
-    const filtered = arr.filter(r => !(normalizeSwimmerName(r.name) === key && !r.isRelay));
-    const nextDeleted = [...(activeWorkspace.deletedSwimmers ?? [])];
-    if (!nextDeleted.some(d => d.gender === activeGender && normalizeSwimmerName(d.name) === key)) {
-      nextDeleted.push({ name, gender: activeGender });
-    }
-    const recruitsFiltered = (activeWorkspace.recruits ?? []).filter(
-      r => !(r.gender === activeGender && normalizeSwimmerName(r.name) === key)
-    );
-    void updateWorkspace({ [field]: filtered, recruits: recruitsFiltered, deletedSwimmers: nextDeleted });
+    const patch = softRemoveSwimmerFromWorkspace(activeWorkspace, {
+      name: swimmerDeleteCandidate.name,
+      gender: activeGender,
+    });
+    void updateWorkspace(patch);
     setSwimmerDeleteCandidate(null);
   };
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-3 mb-6">
-        <h2 className="text-ui-label font-black uppercase tracking-widest text-[var(--text-primary)]">
-          Team Management
-        </h2>
-        <TeamManagementSubTabs activeView={teamMgmtView} onViewChange={setTeamMgmtView} />
-        <div className="ml-auto flex items-center gap-2">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center mb-5">
+        <div className="min-w-0">
+          <h2 className="text-xl font-semibold tracking-tight text-[var(--text-primary)]">
+            Team management
+          </h2>
+          <p className="text-ui-caption text-theme-muted mt-0.5">
+            Roster workflow · Source → Lineup → Relays → Optimize
+          </p>
+        </div>
+        <div className="sm:ml-auto flex flex-wrap items-center gap-2">
           <button
             type="button"
             onClick={() => handleExport('csv')}
-            className="px-3 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-md nav-tab-inactive hover:text-[var(--text-primary)] border border-theme-soft transition-colors"
+            className="px-3 py-2 text-ui-label rounded-lg nav-tab-inactive hover:text-[var(--text-primary)] border border-theme-soft transition-colors whitespace-nowrap"
             title="Export active meet entries as CSV"
           >
             Export CSV
@@ -128,7 +123,7 @@ export default function ManagerApp() {
           <button
             type="button"
             onClick={() => handleExport('hytek')}
-            className="px-3 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-md nav-tab-inactive hover:text-[var(--text-primary)] border border-theme-soft transition-colors"
+            className="px-3 py-2 text-ui-label rounded-lg nav-tab-inactive hover:text-[var(--text-primary)] border border-theme-soft transition-colors whitespace-nowrap"
             title="Export active meet entries as HyTek-style entry list"
           >
             Export HyTek
@@ -136,30 +131,29 @@ export default function ManagerApp() {
           <button
             type="button"
             onClick={() => setShowBatchOptimizer(true)}
-            className="px-3 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-md border border-theme-soft theme-hover-row hover:text-[var(--text-accent)] transition-colors"
+            className="px-3 py-2 text-ui-label rounded-lg border border-theme-soft theme-hover-row hover:text-[var(--text-accent)] transition-colors whitespace-nowrap"
             title="Run batch optimizer across all teams"
           >
-            Batch Optimizer
+            Batch optimizer
           </button>
           <button
             type="button"
             onClick={() => setShowImportWizard(true)}
-            className="px-3 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-md btn-primary transition-colors"
+            className="px-3 py-2 text-ui-label font-semibold rounded-lg btn-primary transition-colors whitespace-nowrap"
           >
-            Import Roster
+            Import roster
           </button>
         </div>
       </div>
       <AnimatePresence mode="wait">
         <motion.div
-          key={`${teamMgmtView}-${scoringRefreshKey}`}
+          key={`roster-${scoringRefreshKey}`}
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -6 }}
           transition={{ duration: 0.15 }}
         >
           <TeamManagementView
-            view={teamMgmtView}
             workspace={activeWorkspace}
             gender={activeGender}
             scoringBundle={projected}
@@ -172,6 +166,9 @@ export default function ManagerApp() {
             onReloadScoring={() => setScoringRefreshKey(k => k + 1)}
             onAddRecruit={handleAddRecruit}
             onUpdate={updateWorkspace}
+            onRequestDeleteSwimmer={
+              whatIfMode ? name => setSwimmerDeleteCandidate({ name }) : undefined
+            }
           />
         </motion.div>
       </AnimatePresence>

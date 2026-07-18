@@ -14,6 +14,8 @@ import {
 } from '../types';
 import { relayEntryKey } from './relaySplits';
 import { relayTemplateFromLeg } from './relayLegMatching';
+import { computeVacateRelayLegNames } from './rosterLineupAudit';
+import { mergeScoringSettings } from './scoringDefaults';
 import {
   convertTimeToSeconds,
   convertToSCY,
@@ -180,12 +182,20 @@ export function buildWhatIfResults({
     relayKeysForGender.has(o.relayEntryKey)
   );
 
+  const vacateRelayLegs = computeVacateRelayLegNames(
+    currentResults,
+    gender,
+    mergeScoringSettings(workspace.scoringSettings),
+    workspace.scorerRosterOverrides ?? []
+  );
+
   let base = simulateRoster(
     currentResults,
     recruitResults,
     removeSeniors,
     excluded,
-    relayOverrides
+    relayOverrides,
+    vacateRelayLegs
   );
 
   const plans = workspace.meetEntryPlans ?? [];

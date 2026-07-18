@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Workspace, SwimmerResult } from '@omniswim/core/types';
-import { SCHEMA_VERSION, CREATE_TABLES_SQL, SQLITE_MIGRATIONS_V2, SQLITE_MIGRATIONS_V3 } from './schema';
+import { SCHEMA_VERSION, CREATE_TABLES_SQL, SQLITE_MIGRATIONS_V2, SQLITE_MIGRATIONS_V3, SQLITE_MIGRATIONS_V4 } from './schema';
 import {
   assembleWorkspace,
   insertPositionalRows,
@@ -35,6 +35,13 @@ export class WorkspaceService {
         this.db.exec(sql);
       } catch {
         /* column/table already exists */
+      }
+    }
+    for (const sql of SQLITE_MIGRATIONS_V4) {
+      try {
+        this.db.exec(sql);
+      } catch {
+        /* table already exists */
       }
     }
     this.db
@@ -265,6 +272,7 @@ export class WorkspaceService {
 
     for (const table of [
       'meet_results',
+      'source_meet_results',
       'psych_results',
       'recruits',
       'roster_overrides',
@@ -284,6 +292,18 @@ export class WorkspaceService {
     }
     for (const row of insertResultsRows(ws.id, ws.womenResults ?? [], 'Women')) {
       insertResult.run(row.id, row.workspace_id, row.gender, row.position, row.data);
+    }
+
+    const insertSource = this.db.prepare(
+      'INSERT INTO source_meet_results(id, workspace_id, gender, position, data) VALUES(?, ?, ?, ?, ?)'
+    );
+    const sourceMen = ws.sourceMenResults ?? ws.menResults ?? [];
+    const sourceWomen = ws.sourceWomenResults ?? ws.womenResults ?? [];
+    for (const row of insertResultsRows(ws.id, sourceMen, 'Men')) {
+      insertSource.run(`src-${row.id}`, row.workspace_id, row.gender, row.position, row.data);
+    }
+    for (const row of insertResultsRows(ws.id, sourceWomen, 'Women')) {
+      insertSource.run(`src-${row.id}`, row.workspace_id, row.gender, row.position, row.data);
     }
 
     const insertPsych = this.db.prepare(

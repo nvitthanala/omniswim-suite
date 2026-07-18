@@ -253,6 +253,12 @@ export interface Workspace {
   name: string;
   menResults: SwimmerResult[];
   womenResults: SwimmerResult[];
+  /**
+   * Frozen PDF meet copy used for baseline scoring.
+   * When absent, baseline falls back to menResults/womenResults (legacy workspaces).
+   */
+  sourceMenResults?: SwimmerResult[];
+  sourceWomenResults?: SwimmerResult[];
   recruits: Recruit[];
   createdAt: number;
   scoringSettings?: ScoringSettings;

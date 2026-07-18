@@ -1398,11 +1398,14 @@ export function simulateRoster(
   recruits: SwimmerResult[],
   removeSeniors: boolean,
   excludedSwimmerNames?: Set<string>,
-  relayLegOverrides: RelayLegOverride[] = []
+  relayLegOverrides: RelayLegOverride[] = [],
+  vacateRelayLegNames: Set<string> = new Set()
 ): SwimmerResult[] {
   const excluded = excludedSwimmerNames ?? new Set<string>();
   const overrideList = relayLegOverrides ?? [];
-  const runRosterSim = removeSeniors || excluded.size > 0 || overrideList.length > 0;
+  const vacateLegs = vacateRelayLegNames ?? new Set<string>();
+  const runRosterSim =
+    removeSeniors || excluded.size > 0 || overrideList.length > 0 || vacateLegs.size > 0;
   if (!runRosterSim) {
     return [...results, ...recruits];
   }
@@ -1478,7 +1481,8 @@ export function simulateRoster(
       const isSeniorLeg =
         leg.year === 'SR' || leg.year === 'Sr' || leg.year === 'Senior' || leg.year === 'GR';
       const isDeletedLeg = excluded.has(normalizeSwimmerName(leg.name));
-      const needsReplace = (removeSeniors && isSeniorLeg) || isDeletedLeg;
+      const isNonScorerLeg = vacateLegs.has(normalizeSwimmerName(leg.name));
+      const needsReplace = (removeSeniors && isSeniorLeg) || isDeletedLeg || isNonScorerLeg;
       if (!needsReplace) {
         const nm = leg.name?.trim();
         if (nm && nm !== '—' && nm !== 'Unknown') {
@@ -1523,7 +1527,7 @@ export function simulateRoster(
       };
 
       if (!override) {
-        markVacant('vacant');
+        markVacant(isNonScorerLeg ? 'no_replacement' : 'vacant');
         continue;
       }
 

@@ -1,7 +1,7 @@
 /**
  * PostgreSQL schema for Omni Swim Suite (shared multi-user deployment).
  */
-export const PG_SCHEMA_VERSION = 2;
+export const PG_SCHEMA_VERSION = 3;
 
 export const CREATE_PG_TABLES_SQL = `
 CREATE TABLE IF NOT EXISTS meta (
@@ -69,6 +69,15 @@ CREATE TABLE IF NOT EXISTS meet_results (
   data         TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_meet_results_ws ON meet_results(workspace_id);
+
+CREATE TABLE IF NOT EXISTS source_meet_results (
+  id           TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  gender       TEXT NOT NULL,
+  position     INTEGER NOT NULL DEFAULT 0,
+  data         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_source_meet_results_ws ON source_meet_results(workspace_id);
 
 CREATE TABLE IF NOT EXISTS recruits (
   id           TEXT PRIMARY KEY,

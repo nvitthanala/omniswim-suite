@@ -20,7 +20,7 @@ const VIEWS: { id: TeamManagementViewId; label: string }[] = [
 export default function TeamManagementSubTabs({ activeView, onViewChange }: Props) {
   return (
     <nav
-      className="flex gap-1 p-1 surface-overlay border border-theme-soft rounded-lg w-fit"
+      className="flex gap-1 p-1 surface-overlay border border-theme-soft rounded-xl w-fit"
       aria-label="Team management views"
     >
       {VIEWS.map(view => (
@@ -28,7 +28,7 @@ export default function TeamManagementSubTabs({ activeView, onViewChange }: Prop
           key={view.id}
           type="button"
           onClick={() => onViewChange(view.id)}
-          className={`px-3 py-1.5 text-ui-label font-bold uppercase tracking-widest rounded-md transition-all ${
+          className={`px-3.5 py-2 text-ui-label font-semibold rounded-lg transition-all whitespace-nowrap ${
             activeView === view.id ? 'nav-tab-active' : 'nav-tab-inactive'
           }`}
         >

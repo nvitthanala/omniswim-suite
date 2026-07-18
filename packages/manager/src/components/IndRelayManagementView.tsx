@@ -22,6 +22,11 @@ import {
   upsertRelayLegOverride,
 } from '@omniswim/core/lib/relayLegMatching';
 import { convertToSCY, isRelayResult, normalizeSwimmerName } from '@omniswim/core/lib/utils';
+import {
+  buildRelaysFromIndividualLineup,
+  compareRelayLegSplits,
+} from '@omniswim/core/lib/relayBuilder';
+import { useToast } from '@omniswim/ui';
 
 type Props = {
   workspace: Workspace;
@@ -30,6 +35,9 @@ type Props = {
   whatIfMode: boolean;
   removeSeniors: boolean;
   onUpdate: (patch: Partial<Workspace>) => void;
+  selectedTeam?: string;
+  onSelectTeam?: (team: string) => void;
+  hideTeamPicker?: boolean;
 };
 
 type RelayGroup = {
@@ -56,9 +64,28 @@ export default function IndRelayManagementView({
   whatIfMode,
   removeSeniors,
   onUpdate,
+  selectedTeam: controlledTeam,
+  onSelectTeam,
+  hideTeamPicker = false,
 }: Props) {
-  const teams = scoringBundle.sortedTeams.map(t => t.teamName);
-  const [selectedTeam, setSelectedTeam] = useState<string>(teams[0] ?? '');
+  const toast = useToast();
+  const teams = useMemo(
+    () => [...scoringBundle.sortedTeams.map(t => t.teamName)].sort((a, b) => a.localeCompare(b)),
+    [scoringBundle.sortedTeams]
+  );
+  const [pickedTeam, setPickedTeam] = useState<string>('');
+  const selectedTeam =
+    controlledTeam !== undefined
+      ? controlledTeam && teams.includes(controlledTeam)
+        ? controlledTeam
+        : controlledTeam || ''
+      : pickedTeam && teams.includes(pickedTeam)
+        ? pickedTeam
+        : teams[0] ?? '';
+  const setSelectedTeam = (team: string) => {
+    setPickedTeam(team);
+    onSelectTeam?.(team);
+  };
   const [selectedRelayKey, setSelectedRelayKey] = useState<string | null>(null);
   const [manualTimes, setManualTimes] = useState<Record<string, string>>({});
   const [dragOverLeg, setDragOverLeg] = useState<string | null>(null);
@@ -307,6 +334,30 @@ export default function IndRelayManagementView({
     patchOverrides(removeRelayLegOverride(overrides, group.key, legIndex));
   };
 
+  const buildFromLineup = () => {
+    if (!whatIfMode || !selectedTeam) return;
+    const next = buildRelaysFromIndividualLineup(
+      workspace,
+      gender,
+      selectedTeam,
+      activeSwimmers,
+      scoringBundle.allResults.filter(r => isRelayResult(r))
+    );
+    patchOverrides(next ?? []);
+    toast.push('success', `Relay legs proposed from individual lineup for ${selectedTeam}`);
+  };
+
+  const selectedSplitCompare = useMemo(() => {
+    if (!selectedGroup || !selectedTeam) return [];
+    return compareRelayLegSplits(
+      workspace,
+      gender,
+      selectedGroup.legs,
+      selectedGroup.event,
+      selectedTeam
+    );
+  }, [selectedGroup, selectedTeam, workspace, gender]);
+
   const recruitCount = (workspace.recruits ?? []).filter(
     r => r.gender === gender && (!selectedTeam || r.team === selectedTeam)
   ).length;
@@ -316,16 +367,15 @@ export default function IndRelayManagementView({
       <div className="flex flex-col gap-4 flex-1 min-h-0 min-w-0">
         <div className="surface-card rounded-lg p-4 shrink-0">
           <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
-            {teams.length > 0 ? (
+            {!hideTeamPicker && teams.length > 0 ? (
               <label className="flex flex-col gap-1">
-                <span className="text-[9px] font-medium text-theme-secondary uppercase tracking-widest">
-                  Team
-                </span>
+                <span className="text-ui-caption text-theme-muted">Team</span>
                 <select
-                  value={selectedTeam || teams[0]}
+                  value={selectedTeam}
                   onChange={e => setSelectedTeam(e.target.value)}
-                  className="surface-muted-bg border border-theme-soft rounded px-2 py-1.5 text-[10px] text-[var(--text-primary)] min-w-[10rem]"
+                  className="glass-input rounded-lg px-3 py-2 text-ui-body min-w-[12rem]"
                 >
+                  <option value="">Select a team…</option>
                   {teams.map(team => (
                     <option key={team} value={team}>
                       {team}
@@ -360,12 +410,51 @@ export default function IndRelayManagementView({
               {recruitCount === 1 ? '' : 's'} for this team in the current projection.
             </p>
           ) : null}
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={!whatIfMode || !selectedTeam}
+              onClick={buildFromLineup}
+              className="text-[10px] px-3 py-1.5 rounded border border-theme-soft theme-hover-row disabled:opacity-40 uppercase font-bold tracking-widest"
+              title="Fill vacant relay legs using active meet entry plans, then roster bests"
+            >
+              Build relays from individual lineup
+            </button>
+          </div>
         </div>
 
         <div className="surface-card rounded-lg p-4 flex-1 min-h-0 flex flex-col">
           <h4 className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-primary)] mb-3">
             Relay split inspector
           </h4>
+          {selectedSplitCompare.length > 0 && selectedGroup ? (
+            <div className="mb-4 border border-theme-soft rounded-lg p-3 surface-muted-bg">
+              <p className="text-[9px] uppercase tracking-widest text-theme-secondary mb-2">
+                Known (PDF) vs calculated splits · {selectedGroup.event}
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {selectedSplitCompare.map(row => (
+                  <div key={row.legIndex} className="text-[10px] flex justify-between gap-2">
+                    <span className="text-[var(--text-primary)] truncate">
+                      L{row.legIndex + 1} {row.swimmerName}
+                    </span>
+                    <span className="font-mono text-theme-secondary shrink-0">
+                      {row.knownSplit ?? '—'}
+                      {row.calculatedSplit ? (
+                        <span className="text-[var(--text-accent)] ml-1">
+                          / {row.calculatedSplit}
+                          {row.deltaSec != null
+                            ? ` (${row.deltaSec >= 0 ? '+' : ''}${row.deltaSec.toFixed(2)}s)`
+                            : ''}
+                        </span>
+                      ) : null}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
           {relayGroups.length === 0 ? (
             <p className="text-[10px] text-theme-muted italic">No relay entries for this team.</p>
           ) : (

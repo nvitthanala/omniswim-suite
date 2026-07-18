@@ -7,6 +7,7 @@ export type Json = unknown;
 
 export const CHILD_TABLES = [
   'meet_results',
+  'source_meet_results',
   'psych_results',
   'recruits',
   'roster_overrides',
@@ -34,6 +35,9 @@ export function assembleWorkspace(
   const allResults = childData('meet_results') as SwimmerResult[];
   const menResults = allResults.filter(r => (r as { gender?: string }).gender !== 'Women');
   const womenResults = allResults.filter(r => (r as { gender?: string }).gender === 'Women');
+  const allSource = childData('source_meet_results') as SwimmerResult[];
+  const sourceMenResults = allSource.filter(r => (r as { gender?: string }).gender !== 'Women');
+  const sourceWomenResults = allSource.filter(r => (r as { gender?: string }).gender === 'Women');
   const allPsych = childData('psych_results') as SwimmerResult[];
   const psychMenResults = allPsych.filter(r => (r as { gender?: string }).gender !== 'Women');
   const psychWomenResults = allPsych.filter(r => (r as { gender?: string }).gender === 'Women');
@@ -44,6 +48,9 @@ export function assembleWorkspace(
     createdAt: Number(row.created_at ?? Date.now()),
     menResults,
     womenResults,
+    // Backfill: legacy rows without source copy use working results as baseline.
+    sourceMenResults: sourceMenResults.length > 0 ? sourceMenResults : undefined,
+    sourceWomenResults: sourceWomenResults.length > 0 ? sourceWomenResults : undefined,
     psychMenResults,
     psychWomenResults,
     recruits: childData('recruits') as Workspace['recruits'],
