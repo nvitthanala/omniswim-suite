@@ -19,6 +19,8 @@
     "migrate:sqlite": "tsx scripts/migrate-json-to-sqlite.mjs",
     "migrate:postgres": "tsx scripts/migrate-json-to-postgres.mjs",
     "test:roundtrip": "tsx scripts/test_sqlite_roundtrip.mjs",
+    "test:roundtrip:pg": "tsx scripts/test_pg_roundtrip.mjs",
+    "test:parity": "tsx scripts/test_persistence_parity.mjs",
     "tauri:dev": "tauri dev",
     "tauri:build": "tauri build"
   },
