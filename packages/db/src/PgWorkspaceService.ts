@@ -89,6 +89,7 @@ export class PgWorkspaceService {
 
     const tables = [
       'meet_results',
+      'psych_results',
       'recruits',
       'roster_overrides',
       'meet_entry_plans',
@@ -261,9 +262,9 @@ export class PgWorkspaceService {
     await client.query(
       `INSERT INTO workspaces
         (id, name, created_at, conference, entry_plan_mode, scoring_settings,
-         loaded_meet, official_team_scores, active_entry_ids, history_sources, sort_index,
+         loaded_meet, loaded_psych, official_team_scores, active_entry_ids, history_sources, sort_index,
          owner_id, team_id, updated_at, version)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
        ON CONFLICT(id) DO UPDATE SET
          name = EXCLUDED.name,
          created_at = EXCLUDED.created_at,
@@ -271,6 +272,7 @@ export class PgWorkspaceService {
          entry_plan_mode = EXCLUDED.entry_plan_mode,
          scoring_settings = EXCLUDED.scoring_settings,
          loaded_meet = EXCLUDED.loaded_meet,
+         loaded_psych = EXCLUDED.loaded_psych,
          official_team_scores = EXCLUDED.official_team_scores,
          active_entry_ids = EXCLUDED.active_entry_ids,
          history_sources = EXCLUDED.history_sources,
@@ -287,6 +289,7 @@ export class PgWorkspaceService {
         vals.entry_plan_mode,
         vals.scoring_settings,
         vals.loaded_meet,
+        vals.loaded_psych,
         vals.official_team_scores,
         vals.active_entry_ids,
         vals.history_sources,
@@ -300,6 +303,7 @@ export class PgWorkspaceService {
 
     for (const table of [
       'meet_results',
+      'psych_results',
       'recruits',
       'roster_overrides',
       'meet_entry_plans',
@@ -319,6 +323,18 @@ export class PgWorkspaceService {
     for (const row of insertResultsRows(ws.id, ws.womenResults ?? [], 'Women')) {
       await client.query(
         'INSERT INTO meet_results(id, workspace_id, gender, position, data) VALUES($1,$2,$3,$4,$5)',
+        [row.id, row.workspace_id, row.gender, row.position, row.data]
+      );
+    }
+    for (const row of insertResultsRows(ws.id, ws.psychMenResults ?? [], 'Men')) {
+      await client.query(
+        'INSERT INTO psych_results(id, workspace_id, gender, position, data) VALUES($1,$2,$3,$4,$5)',
+        [row.id, row.workspace_id, row.gender, row.position, row.data]
+      );
+    }
+    for (const row of insertResultsRows(ws.id, ws.psychWomenResults ?? [], 'Women')) {
+      await client.query(
+        'INSERT INTO psych_results(id, workspace_id, gender, position, data) VALUES($1,$2,$3,$4,$5)',
         [row.id, row.workspace_id, row.gender, row.position, row.data]
       );
     }
