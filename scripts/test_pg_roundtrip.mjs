@@ -141,6 +141,47 @@ try {
   assert.strictEqual(restored.name, 'Edited Name', 'restore name');
   sortedEqual(restored.psychMenResults, sample.psychMenResults, 'psychMenResults after restore');
 
+  // ---- Cross-tenant isolation, mirroring test_workspace_scope.mjs ----
+  // Postgres is the multi-user backend, so scope enforcement matters most here.
+  const A = 'ws-pg-scope-a';
+  const B = 'ws-pg-scope-b';
+  reader.setScope({});
+  await reader.deleteWorkspace(A);
+  await reader.deleteWorkspace(B);
+
+  reader.setScope({ teamId: 'pg-team-a' });
+  await reader.createWorkspace({ ...sample, id: A, name: 'Alpha Meet' });
+  const snapA = await reader.createSnapshot(A, 'alpha-snapshot');
+  assert.ok(snapA, 'tenant A could not snapshot its own workspace');
+
+  reader.setScope({ teamId: 'pg-team-b' });
+  await reader.createWorkspace({ ...sample, id: B, name: 'Bravo Meet' });
+
+  assert.strictEqual(await reader.getWorkspace(A), undefined, 'B could read A workspace');
+  assert.strictEqual(await reader.getWorkspaceMeta(A), undefined, 'B could read A version metadata');
+  assert.strictEqual(
+    await reader.updateWorkspace(A, { name: 'Hijacked' }),
+    undefined,
+    'B could update A'
+  );
+  assert.deepStrictEqual(await reader.listSnapshots(A), [], 'B could enumerate A snapshots');
+  assert.strictEqual(await reader.restoreSnapshot(snapA.id), undefined, 'B could restore an A snapshot');
+  assert.strictEqual(await reader.createSnapshot(A, 'stolen'), undefined, 'B could snapshot A');
+  assert.deepStrictEqual(
+    (await reader.listWorkspaces()).map(w => w.id),
+    [B],
+    'B listing leaked A workspace'
+  );
+
+  await reader.deleteWorkspace(A);
+  reader.setScope({ teamId: 'pg-team-a' });
+  const survivor = await reader.getWorkspace(A);
+  assert.ok(survivor, 'CROSS-TENANT DELETE: B destroyed A workspace');
+  assert.strictEqual(survivor.name, 'Alpha Meet', 'A workspace was mutated by B');
+
+  reader.setScope({});
+  await reader.deleteWorkspace(A);
+  await reader.deleteWorkspace(B);
   await reader.deleteWorkspace(WS_ID);
   await reader.close();
   console.log('PostgreSQL round-trip test PASSED');
