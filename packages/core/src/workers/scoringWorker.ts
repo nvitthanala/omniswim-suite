@@ -13,6 +13,7 @@ import {
 } from '../lib/crossCourseArbitrage';
 import { computeScenarioDiff, type ScenarioDiffResult } from '../lib/scenarioDiff';
 import type { Gender, ScoringSettings, Workspace } from '../types';
+import type { CatalogTeamRoster } from '../lib/rosterCatalog';
 
 /** Default op (backward compatible): full scoring snapshot. `op` may be omitted. */
 export type ScoringRequest = {
@@ -21,6 +22,7 @@ export type ScoringRequest = {
   workspace: Workspace;
   gender: Gender;
   removeSeniors: boolean;
+  rosterCatalog?: CatalogTeamRoster;
 };
 
 /** Cross-course arbitrage op (table + coverage gaps + exact swap ranking). */
@@ -112,9 +114,10 @@ ctx.onmessage = (event: MessageEvent<WorkerRequest>) => {
     return;
   }
 
-  const { id, workspace, gender, removeSeniors } = data;
+  // Default op: full scoring snapshot, optionally enriched by the roster catalog.
+  const { id, workspace, gender, removeSeniors, rosterCatalog } = data;
   try {
-    const snapshot = buildScoringSnapshot(workspace, gender, removeSeniors);
+    const snapshot = buildScoringSnapshot(workspace, gender, removeSeniors, rosterCatalog);
     ctx.postMessage({ id, ok: true, ...snapshot });
   } catch (err) {
     ctx.postMessage({ id, ok: false, error: err instanceof Error ? err.message : String(err) });

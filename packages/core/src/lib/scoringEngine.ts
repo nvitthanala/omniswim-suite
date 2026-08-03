@@ -7,6 +7,7 @@
  */
 import { Gender, SwimmerResult, TeamScore, Workspace } from '../types';
 import {
+  buildCategorizedScoringInputs,
   calculatePoints,
   getTeamColors,
   looksLikeInstitutionTeamName,
@@ -21,6 +22,7 @@ import { buildPsychProjectedBundle } from './psychProjection';
 import { buildWhatIfResults } from './whatIfProjection';
 import { getSourceResults } from './meetSource';
 import { buildAliasResolver } from './athleteAliases';
+import type { CatalogTeamRoster } from './rosterCatalog';
 
 export type ScoringBundle = {
   allResults: SwimmerResult[];
@@ -45,6 +47,9 @@ export type BuildOptions = {
   removeSeniors: boolean;
   applyWhatIf: boolean;
   scorerRosterOverrides: Workspace['scorerRosterOverrides'];
+  /** Optional long-lived Team Roster Catalog: opt-in events injected per
+   *  athlete, sorted by SCY-normalized best, capped to entry limits. */
+  rosterCatalog?: CatalogTeamRoster;
 };
 
 export function buildScoringBundle({
@@ -53,6 +58,7 @@ export function buildScoringBundle({
   removeSeniors,
   applyWhatIf,
   scorerRosterOverrides,
+  rosterCatalog,
 }: BuildOptions): ScoringBundle {
   const menResults = workspace.menResults ?? [];
   const womenResults = workspace.womenResults ?? [];
@@ -71,9 +77,18 @@ export function buildScoringBundle({
   let overrides = scorerRosterOverrides ?? [];
 
   if (applyWhatIf) {
-    allResults = buildWhatIfResults({ workspace, gender, removeSeniors });
+    const base = buildWhatIfResults({ workspace, gender, removeSeniors });
+    allResults = rosterCatalog
+      ? buildCategorizedScoringInputs({
+          workspace: { ...workspace, menResults: base, womenResults: gender === Gender.WOMEN ? base : [] },
+          gender,
+          rosterCatalog,
+        })
+      : base;
   } else {
-    allResults = currentResults;
+    allResults = rosterCatalog
+      ? buildCategorizedScoringInputs({ workspace, gender, rosterCatalog })
+      : currentResults;
     overrides = [];
   }
 
@@ -178,13 +193,19 @@ export function buildScoringBundle({
 }
 
 /** Build both projected (what-if) and baseline bundles in one pass. */
-export function buildScoringSnapshot(workspace: Workspace, gender: Gender, removeSeniors: boolean) {
+export function buildScoringSnapshot(
+  workspace: Workspace,
+  gender: Gender,
+  removeSeniors: boolean,
+  rosterCatalog?: CatalogTeamRoster
+) {
   const projected = buildScoringBundle({
     workspace,
     gender,
     removeSeniors,
     applyWhatIf: true,
     scorerRosterOverrides: workspace.scorerRosterOverrides,
+    rosterCatalog,
   });
   const baseline = buildScoringBundle({
     workspace,
@@ -192,6 +213,7 @@ export function buildScoringSnapshot(workspace: Workspace, gender: Gender, remov
     removeSeniors: false,
     applyWhatIf: false,
     scorerRosterOverrides: [],
+    rosterCatalog,
   });
   const prelimsProjected = buildPrelimsProjectedBundle({ workspace, gender });
   const psychProjected = buildPsychProjectedBundle({ workspace, gender });

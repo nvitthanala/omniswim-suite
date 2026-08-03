@@ -105,3 +105,12 @@ export * from './lib/swimEditor';
 export * from './lib/athleteAliases';
 export { buildMeetEventLabelIndex, computeVisibleEvents } from './lib/eventIdentity';
 export * from './lib/raceAnalysis';
+
+/* --- Cross-workspace team roster catalog. --- */
+export { rosterCatalogApi } from './api/rosterCatalog';
+export * from './lib/rosterCatalog';
+export {
+  buildEventProfileFromCatalog,
+  toggleSwimEligibility,
+  findAthleteInRoster,
+} from './lib/athleteHistory';

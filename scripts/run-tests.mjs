@@ -16,9 +16,13 @@ const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(scriptsDir, '..');
 
 // Each entry: [file, requiredFixture?]. If the fixture is listed and missing,
-// the test is skipped rather than failed.
+// the test is skipped rather than failed. A test may also skip itself by exiting
+// 0 with a leading `SKIP` line (used for checks needing a live database).
 const TESTS = [
   ['test_sqlite_roundtrip.mjs'],
+  ['test_pg_roundtrip.mjs'],
+  ['test_persistence_parity.mjs'],
+  ['test_workspace_scope.mjs'],
   ['test_chart_data.mjs'],
   ['test_chart_shell.mjs'],
   ['test_chart_render.mjs'],
@@ -76,9 +80,17 @@ for (const [file, fixture] of TESTS) {
     continue;
   }
   try {
-    execFileSync(process.execPath, ['--import', 'tsx', path], { cwd: repoRoot, stdio: 'pipe' });
-    console.log(`PASS  ${file}`);
-    passed += 1;
+    const out = execFileSync(process.execPath, ['--import', 'tsx', path], {
+      cwd: repoRoot,
+      stdio: 'pipe',
+    }).toString();
+    if (out.trimStart().startsWith('SKIP')) {
+      console.log(out.trim().split('\n')[0]);
+      skipped += 1;
+    } else {
+      console.log(`PASS  ${file}`);
+      passed += 1;
+    }
   } catch (err) {
     console.log(`FAIL  ${file}`);
     const out = (err.stdout?.toString() || '') + (err.stderr?.toString() || '');

@@ -24,6 +24,8 @@ import {
   IDENTITY_ALIAS_RESOLVER,
   type AthleteAliasResolver,
 } from './athleteAliases';
+import type { CatalogAthlete, CatalogEventTime, CatalogTeamRoster } from './rosterCatalog';
+import { bestTimesByEvent } from './rosterCatalog';
 
 function swimKey(name: string, team: string, gender: Gender, event: string): string {
   return `${normalizeSwimmerName(name)}|${team}|${gender}|${event}`;
@@ -553,4 +555,102 @@ export function getAthleteProfile(
   const results = gender === Gender.MEN ? workspace.menResults ?? [] : workspace.womenResults ?? [];
   const relays = relayEventsForAthlete(results, team, gender, name, alias);
   return categorizeBestEvents(merged, team, gender, name, settings, relays, alias);
+}
+// ===================== Catalog-backed helpers =====================
+
+/**
+ * Build an `AthleteEventProfile` strictly from a catalog roster (no
+ * `Workspace.athleteHistory` mixing). Used by the Manager UI to render the
+ * athlete's effective best times from the long-lived catalog.
+ */
+export function buildEventProfileFromCatalog(
+  roster: CatalogTeamRoster | undefined,
+  teamName: string,
+  gender: Gender,
+  fullName: string,
+  settings: ScoringSettings
+): AthleteEventProfile | null {
+  if (!roster) return null;
+  const merged = mergeScoringSettings(settings);
+  const indCap = merged.maxIndividualEntriesPerSwimmer ?? 3;
+  const relayCap = merged.maxRelayEntriesPerSwimmer ?? 4;
+  const athlete = roster.athletes.find(
+    a =>
+      normalizeSwimmerName(a.fullName) === normalizeSwimmerName(fullName) &&
+      (a.gender === (gender === Gender.WOMEN ? 'Women' : 'Men'))
+  );
+  if (!athlete) return null;
+  void teamName;
+
+  const bestMap = bestTimesByEvent(athlete.times);
+  const bestByEvent: AthleteEventProfile['bestByEvent'] = {};
+  for (const [event, t] of bestMap.entries()) {
+    if (event.toLowerCase().includes('relay')) continue;
+    bestByEvent[event] = {
+      time: t.timeText,
+      timeSec: t.timeSecondsScy,
+      source: t.source,
+    };
+  }
+  const ranked = Object.entries(bestByEvent).sort((a, b) => a[1].timeSec - b[1].timeSec);
+  const primaryEvents = ranked.slice(0, indCap).map(([ev]) => ev);
+
+  const relayEvents: string[] = [];
+  for (const t of athlete.times) {
+    if (t.event.toLowerCase().includes('relay') && t.isEligible) {
+      relayEvents.push(t.event);
+    }
+  }
+  const dedupedRelays = [...new Set(relayEvents)].slice(0, relayCap);
+
+  return {
+    name: athlete.fullName,
+    team: roster.team.name,
+    gender,
+    bestByEvent,
+    primaryEvents,
+    relayEvents: dedupedRelays,
+  };
+}
+
+/** Toggle a single time's eligibility inside a roster (immutable update). */
+export function toggleSwimEligibility(
+  roster: CatalogTeamRoster,
+  athleteId: string,
+  timeId: string,
+  isEligible: boolean
+): CatalogTeamRoster {
+  return {
+    ...roster,
+    athletes: roster.athletes.map((a: CatalogAthlete & { times: CatalogEventTime[] }) =>
+      a.id === athleteId
+        ? {
+            ...a,
+            times: a.times.map((t: CatalogEventTime) =>
+              t.id === timeId ? { ...t, isEligible, updatedAt: Date.now() } : t
+            ),
+          }
+        : a
+    ),
+  };
+}
+
+/** Search the roster for an athlete by name; returns the strongest match. */
+export function findAthleteInRoster(
+  roster: CatalogTeamRoster | undefined,
+  fullName: string,
+  gender: Gender
+): CatalogAthlete | undefined {
+  if (!roster) return undefined;
+  const candidates = roster.athletes.filter(
+    a => a.gender === (gender === Gender.WOMEN ? 'Women' : 'Men')
+  );
+  const exact = candidates.find(
+    a => normalizeSwimmerName(a.fullName) === normalizeSwimmerName(fullName)
+  );
+  if (exact) return exact;
+  return candidates.find(a =>
+    normalizeSwimmerName(a.fullName).includes(normalizeSwimmerName(fullName)) ||
+    normalizeSwimmerName(fullName).includes(normalizeSwimmerName(a.fullName))
+  );
 }

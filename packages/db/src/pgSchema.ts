@@ -1,7 +1,10 @@
 /**
  * PostgreSQL schema for Omni Swim Suite (shared multi-user deployment).
  */
-export const PG_SCHEMA_VERSION = 6;
+// 7 = union of the video-analysis branch (6: source_meet_results, race_analyses,
+// athlete_aliases, scoring_view) and main's psych-sheet schema (3: psych_results,
+// loaded_psych). The merged schema is a superset of both, so it gets its own version.
+export const PG_SCHEMA_VERSION = 7;
 
 export const CREATE_PG_TABLES_SQL = `
 CREATE TABLE IF NOT EXISTS meta (
@@ -50,6 +53,7 @@ CREATE TABLE IF NOT EXISTS workspaces (
   scoring_view         TEXT,
   scoring_settings     TEXT,
   loaded_meet          TEXT,
+  loaded_psych         TEXT,
   official_team_scores TEXT,
   active_entry_ids     TEXT,
   history_sources      TEXT,
@@ -79,6 +83,15 @@ CREATE TABLE IF NOT EXISTS source_meet_results (
   data         TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_source_meet_results_ws ON source_meet_results(workspace_id);
+
+CREATE TABLE IF NOT EXISTS psych_results (
+  id           TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  gender       TEXT NOT NULL,
+  position     INTEGER NOT NULL DEFAULT 0,
+  data         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_psych_results_ws ON psych_results(workspace_id);
 
 CREATE TABLE IF NOT EXISTS recruits (
   id           TEXT PRIMARY KEY,
@@ -159,4 +172,8 @@ CREATE TABLE IF NOT EXISTS share_links (
   expires_at   BIGINT
 );
 CREATE INDEX IF NOT EXISTS idx_share_links_token ON share_links(token);
+
+-- v2 → v3 psych sheet persistence: CREATE TABLE IF NOT EXISTS leaves pre-existing
+-- workspaces tables untouched, so the new column is added explicitly (idempotent).
+ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS loaded_psych TEXT;
 `;

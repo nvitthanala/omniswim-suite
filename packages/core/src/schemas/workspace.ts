@@ -101,4 +101,76 @@ export const importCsvSchema = z.object({
   gender: z.union([genderSchema, z.string()]).optional(),
 });
 
+// ====================== Roster Catalog ======================
+
+export const catalogGenderSchema = z.enum(['Men', 'Women']);
+export const catalogTimeTypeSchema = z.enum(['SCY', 'LCM', 'SCM']);
+export const catalogSourceSchema = z.enum(['paste', 'csv', 'ocr', 'manual', 'pdf', 'json']);
+
+export const rosterTeamCreateSchema = z.object({
+  name: z.string().min(1, 'Team name required'),
+  gender: catalogGenderSchema,
+  shortName: z.string().optional(),
+  division: z.string().optional(),
+  color: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+export const rosterTeamUpdateSchema = z.object({
+  name: z.string().min(1).optional(),
+  shortName: z.string().optional(),
+  division: z.string().optional(),
+  color: z.string().optional(),
+  notes: z.string().optional(),
+});
+
+export const rosterAthleteUpsertSchema = z.object({
+  teamId: z.string().min(1),
+  fullName: z.string().min(1),
+  nameKey: z.string().optional(),
+  classYear: z.string().optional(),
+  gender: catalogGenderSchema,
+});
+
+export const rosterEventTimeUpsertSchema = z.object({
+  athleteId: z.string().min(1),
+  event: z.string().min(1),
+  timeText: z.string().min(1),
+  timeType: catalogTimeTypeSchema,
+  source: catalogSourceSchema.default('manual'),
+  swimcloudBadge: z.string().optional().nullable(),
+  meetLabel: z.string().optional().nullable(),
+  swimDate: z.string().optional().nullable(),
+  isEligible: z.boolean().optional(),
+  notes: z.string().optional().nullable(),
+});
+
+export const rosterEligibilityToggleSchema = z.object({
+  timeId: z.string().min(1),
+  isEligible: z.boolean(),
+});
+
+export const rosterBulkImportSchema = z.object({
+  // Canonical JSON format used by the manager wizard.
+  json: z.unknown(),
+});
+
+export const rosterPasteImportSchema = z.object({
+  teamId: z.string().min(1),
+  text: z.string().min(1),
+  format: z.enum(['auto', 'personal_bests', 'roster']).default('auto'),
+  gender: catalogGenderSchema,
+  division: z.string().optional(),
+  // Optional explicit name resolution; mapped via nameKey in the wizard.
+  swimmerOverrides: z
+    .array(
+      z.object({
+        detectedName: z.string(),
+        fullName: z.string().min(1),
+        classYear: z.string().optional(),
+      })
+    )
+    .optional(),
+});
+
 export type WorkspaceInput = z.infer<typeof workspaceSchema>;

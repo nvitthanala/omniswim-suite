@@ -91,6 +91,8 @@ export class PgWorkspaceService {
 
     const tables = [
       'meet_results',
+      'source_meet_results',
+      'psych_results',
       'recruits',
       'roster_overrides',
       'meet_entry_plans',
@@ -107,10 +109,8 @@ export class PgWorkspaceService {
   }
 
   async getWorkspaceMeta(id: string): Promise<{ version: number; updatedAt: number } | undefined> {
-    const res = await this.pool.query(
-      'SELECT version, updated_at FROM workspaces WHERE id = $1',
-      [id]
-    );
+    const { where, params } = this.scopeFilter('id = $1', [id]);
+    const res = await this.pool.query(`SELECT version, updated_at FROM workspaces ${where}`, params);
     const row = res.rows[0];
     if (!row) return undefined;
     return { version: Number(row.version), updatedAt: Number(row.updated_at) };
@@ -150,7 +150,9 @@ export class PgWorkspaceService {
   }
 
   async deleteWorkspace(id: string): Promise<void> {
-    await this.pool.query('DELETE FROM workspaces WHERE id = $1', [id]);
+    // Scoped: a tenant must not be able to destroy another tenant's workspace by id.
+    const { where, params } = this.scopeFilter('id = $1', [id]);
+    await this.pool.query(`DELETE FROM workspaces ${where}`, params);
   }
 
   async replaceAll(workspaces: Workspace[]): Promise<void> {
@@ -188,6 +190,9 @@ export class PgWorkspaceService {
   async listSnapshots(
     workspaceId: string
   ): Promise<{ id: string; createdAt: number; label: string }[]> {
+    // Snapshot labels leak workspace names, so gate the listing on the same scope
+    // that governs reads rather than trusting the caller-supplied id.
+    if (!(await this.isInScope(workspaceId))) return [];
     const res = await this.pool.query(
       'SELECT id, created_at, label FROM workspace_snapshots WHERE workspace_id = $1 ORDER BY created_at DESC',
       [workspaceId]
@@ -216,9 +221,19 @@ export class PgWorkspaceService {
     );
     const row = res.rows[0];
     if (!row) return undefined;
+    // Check scope before deserializing: the blob is a full workspace, so an
+    // out-of-scope snapshot id must not pull another tenant's data into memory.
+    if (!(await this.isInScope(row.workspace_id as string))) return undefined;
     const ws = parseJson<Workspace | null>(row.blob, null);
     if (!ws) return undefined;
     return this.updateWorkspace(row.workspace_id as string, ws);
+  }
+
+  /** True when `id` is visible under the current scope. Cheap existence probe. */
+  private async isInScope(id: string): Promise<boolean> {
+    const { where, params } = this.scopeFilter('id = $1', [id]);
+    const res = await this.pool.query(`SELECT 1 FROM workspaces ${where} LIMIT 1`, params);
+    return res.rows.length > 0;
   }
 
   private scopeFilter(baseClause?: string, baseParams: unknown[] = []): {
@@ -275,9 +290,9 @@ export class PgWorkspaceService {
     await client.query(
       `INSERT INTO workspaces
         (id, name, created_at, conference, entry_plan_mode, scoring_view, scoring_settings,
-         loaded_meet, official_team_scores, active_entry_ids, history_sources, sort_index,
+         loaded_meet, loaded_psych, official_team_scores, active_entry_ids, history_sources, sort_index,
          owner_id, team_id, updated_at, version)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
        ON CONFLICT(id) DO UPDATE SET
          name = EXCLUDED.name,
          created_at = EXCLUDED.created_at,
@@ -286,6 +301,7 @@ export class PgWorkspaceService {
          scoring_view = EXCLUDED.scoring_view,
          scoring_settings = EXCLUDED.scoring_settings,
          loaded_meet = EXCLUDED.loaded_meet,
+         loaded_psych = EXCLUDED.loaded_psych,
          official_team_scores = EXCLUDED.official_team_scores,
          active_entry_ids = EXCLUDED.active_entry_ids,
          history_sources = EXCLUDED.history_sources,
@@ -303,6 +319,7 @@ export class PgWorkspaceService {
         vals.scoring_view,
         vals.scoring_settings,
         vals.loaded_meet,
+        vals.loaded_psych,
         vals.official_team_scores,
         vals.active_entry_ids,
         vals.history_sources,
@@ -317,6 +334,7 @@ export class PgWorkspaceService {
     for (const table of [
       'meet_results',
       'source_meet_results',
+      'psych_results',
       'recruits',
       'roster_overrides',
       'meet_entry_plans',
@@ -353,6 +371,18 @@ export class PgWorkspaceService {
       await client.query(
         'INSERT INTO source_meet_results(id, workspace_id, gender, position, data) VALUES($1,$2,$3,$4,$5)',
         [`src-${row.id}`, row.workspace_id, row.gender, row.position, row.data]
+      );
+    }
+    for (const row of insertResultsRows(ws.id, ws.psychMenResults ?? [], 'Men')) {
+      await client.query(
+        'INSERT INTO psych_results(id, workspace_id, gender, position, data) VALUES($1,$2,$3,$4,$5)',
+        [row.id, row.workspace_id, row.gender, row.position, row.data]
+      );
+    }
+    for (const row of insertResultsRows(ws.id, ws.psychWomenResults ?? [], 'Women')) {
+      await client.query(
+        'INSERT INTO psych_results(id, workspace_id, gender, position, data) VALUES($1,$2,$3,$4,$5)',
+        [row.id, row.workspace_id, row.gender, row.position, row.data]
       );
     }
     for (const row of insertWithIdRows('recruits', ws.id, ws.recruits ?? [])) {

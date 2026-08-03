@@ -97,17 +97,9 @@ export class WorkspaceService {
   }
 
   getWorkspace(id: string): Workspace | undefined {
-    const clauses = ['id = ?'];
-    const params: unknown[] = [id];
-    if (this.scope.teamId) {
-      clauses.push('team_id = ?');
-      params.push(this.scope.teamId);
-    } else if (this.scope.ownerId) {
-      clauses.push('owner_id = ?');
-      params.push(this.scope.ownerId);
-    }
+    const { where, params } = this.buildScopeWhere('id = ?', [id]);
     const row = this.db
-      .prepare(`SELECT * FROM workspaces WHERE ${clauses.join(' AND ')}`)
+      .prepare(`SELECT * FROM workspaces ${where}`)
       .get(...(params as (string | number | null)[])) as Record<string, unknown> | undefined;
     if (!row) return undefined;
 
@@ -130,9 +122,12 @@ export class WorkspaceService {
   }
 
   getWorkspaceMeta(id: string): { version: number; updatedAt: number } | undefined {
+    const { where, params } = this.buildScopeWhere('id = ?', [id]);
     const row = this.db
-      .prepare('SELECT version, updated_at FROM workspaces WHERE id = ?')
-      .get(id) as { version: number; updated_at: number } | undefined;
+      .prepare(`SELECT version, updated_at FROM workspaces ${where}`)
+      .get(...(params as (string | number | null)[])) as
+      | { version: number; updated_at: number }
+      | undefined;
     if (!row) return undefined;
     return { version: Number(row.version ?? 1), updatedAt: Number(row.updated_at ?? 0) };
   }
@@ -163,7 +158,9 @@ export class WorkspaceService {
   }
 
   deleteWorkspace(id: string): void {
-    this.db.prepare('DELETE FROM workspaces WHERE id = ?').run(id);
+    // Scoped: a tenant must not be able to destroy another tenant's workspace by id.
+    const { where, params } = this.buildScopeWhere('id = ?', [id]);
+    this.db.prepare(`DELETE FROM workspaces ${where}`).run(...(params as (string | number | null)[]));
   }
 
   replaceAll(workspaces: Workspace[]): void {
@@ -190,6 +187,9 @@ export class WorkspaceService {
   }
 
   listSnapshots(workspaceId: string): { id: string; createdAt: number; label: string }[] {
+    // Snapshot labels leak workspace names, so gate the listing on the same scope
+    // that governs reads rather than trusting the caller-supplied id.
+    if (!this.isInScope(workspaceId)) return [];
     const rows = this.db
       .prepare(
         'SELECT id, created_at, label FROM workspace_snapshots WHERE workspace_id = ? ORDER BY created_at DESC'
@@ -216,6 +216,9 @@ export class WorkspaceService {
       .prepare('SELECT workspace_id, blob FROM workspace_snapshots WHERE id = ?')
       .get(snapshotId) as { workspace_id: string; blob: string } | undefined;
     if (!row) return undefined;
+    // Check scope before deserializing: the blob is a full workspace, so an
+    // out-of-scope snapshot id must not pull another tenant's data into memory.
+    if (!this.isInScope(row.workspace_id)) return undefined;
     try {
       const ws = JSON.parse(row.blob) as Workspace;
       return this.updateWorkspace(row.workspace_id, ws);
@@ -224,9 +227,13 @@ export class WorkspaceService {
     }
   }
 
-  private buildScopeWhere(): { where: string; params: unknown[] } {
+  private buildScopeWhere(
+    baseClause?: string,
+    baseParams: unknown[] = []
+  ): { where: string; params: unknown[] } {
     const clauses: string[] = [];
-    const params: unknown[] = [];
+    const params = [...baseParams];
+    if (baseClause) clauses.push(baseClause);
     if (this.scope.teamId) {
       clauses.push('team_id = ?');
       params.push(this.scope.teamId);
@@ -236,6 +243,15 @@ export class WorkspaceService {
     }
     const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
     return { where, params };
+  }
+
+  /** True when `id` is visible under the current scope. Cheap existence probe. */
+  private isInScope(id: string): boolean {
+    const { where, params } = this.buildScopeWhere('id = ?', [id]);
+    const row = this.db
+      .prepare(`SELECT 1 AS ok FROM workspaces ${where} LIMIT 1`)
+      .get(...(params as (string | number | null)[]));
+    return row != null;
   }
 
   private tx(fn: () => void): void {

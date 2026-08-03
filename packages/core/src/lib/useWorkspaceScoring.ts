@@ -8,6 +8,7 @@ import { buildPrelimsDeltaTimeline, buildPrelimsOverUnderByEntryKey, hasPrelimsD
 import { buildPsychDeltaTimeline, buildPsychOverUnderByEntryKey, hasPsychData, psychResultsForGender } from './psychProjection';
 import { mergeScoringSettings } from './scoringDefaults';
 import { buildScoringSnapshot, type ScoringBundle } from './scoringEngine';
+import type { CatalogTeamRoster } from './rosterCatalog';
 
 type Snapshot = {
   projected: ScoringBundle;
@@ -49,6 +50,10 @@ type UseWorkspaceScoringArgs = {
   gender: Gender;
   removeSeniors: boolean;
   scoringRefreshKey: number;
+  /** Optional roster catalog: long-lived team → athletes → events. When
+   *  provided, the eligible catalog swims are layered into the scoring pool
+   *  on top of the PDF-meet rows. */
+  rosterCatalog?: CatalogTeamRoster;
 };
 
 /**
@@ -65,9 +70,10 @@ export function useWorkspaceScoring({
   gender,
   removeSeniors,
   scoringRefreshKey,
+  rosterCatalog,
 }: UseWorkspaceScoringArgs) {
   const [snapshot, setSnapshot] = useState<Snapshot>(() =>
-    buildScoringSnapshot(workspace, gender, removeSeniors)
+    buildScoringSnapshot(workspace, gender, removeSeniors, rosterCatalog)
   );
   /** False while a worker recompute for the latest workspace state is in flight. */
   const [settled, setSettled] = useState(true);
@@ -129,9 +135,16 @@ export function useWorkspaceScoring({
     if (worker) {
       const id = ++requestIdRef.current;
       setSettled(false);
-      worker.postMessage({ id, workspace, gender, removeSeniors });
+      const req: { id: number; workspace: Workspace; gender: Gender; removeSeniors: boolean; rosterCatalog?: CatalogTeamRoster } = {
+        id,
+        workspace,
+        gender,
+        removeSeniors,
+      };
+      if (rosterCatalog) req.rosterCatalog = rosterCatalog;
+      worker.postMessage(req);
     } else {
-      setSnapshot(buildScoringSnapshot(workspace, gender, removeSeniors));
+      setSnapshot(buildScoringSnapshot(workspace, gender, removeSeniors, rosterCatalog));
       setSettled(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -156,6 +169,7 @@ export function useWorkspaceScoring({
     gender,
     removeSeniors,
     scoringRefreshKey,
+    rosterCatalog,
   ]);
 
   const scoringSettings = useMemo(
