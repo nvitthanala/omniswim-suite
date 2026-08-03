@@ -88,6 +88,27 @@ function sortedEqual(a, b, label) {
   assert.strictEqual(norm(a), norm(b), `Mismatch in ${label}`);
 }
 
+/**
+ * Workspace with no child rows, for the scope checks.
+ * Child-table ids (`meet_results.id` et al) are global primary keys, not scoped
+ * per workspace, so two workspaces built from `sample` would collide on 'm1'.
+ */
+const bare = (id, name) => ({
+  id,
+  name,
+  createdAt: 1700000000000,
+  menResults: [],
+  womenResults: [],
+  psychMenResults: [],
+  psychWomenResults: [],
+  recruits: [],
+  deletedSwimmers: [],
+  scorerRosterOverrides: [],
+  meetEntryPlans: [],
+  relayLegOverrides: [],
+  athleteHistory: [],
+});
+
 let writer;
 let reader;
 let seedPool;
@@ -174,12 +195,12 @@ try {
   await reader.deleteWorkspace(B);
 
   reader.setScope({ teamId: 'pg-team-a' });
-  await reader.createWorkspace({ ...sample, id: A, name: 'Alpha Meet' });
+  await reader.createWorkspace(bare(A, 'Alpha Meet'));
   const snapA = await reader.createSnapshot(A, 'alpha-snapshot');
   assert.ok(snapA, 'tenant A could not snapshot its own workspace');
 
   reader.setScope({ teamId: 'pg-team-b' });
-  await reader.createWorkspace({ ...sample, id: B, name: 'Bravo Meet' });
+  await reader.createWorkspace(bare(B, 'Bravo Meet'));
 
   assert.strictEqual(await reader.getWorkspace(A), undefined, 'B could read A workspace');
   assert.strictEqual(await reader.getWorkspaceMeta(A), undefined, 'B could read A version metadata');
