@@ -104,10 +104,8 @@ export class PgWorkspaceService {
   }
 
   async getWorkspaceMeta(id: string): Promise<{ version: number; updatedAt: number } | undefined> {
-    const res = await this.pool.query(
-      'SELECT version, updated_at FROM workspaces WHERE id = $1',
-      [id]
-    );
+    const { where, params } = this.scopeFilter('id = $1', [id]);
+    const res = await this.pool.query(`SELECT version, updated_at FROM workspaces ${where}`, params);
     const row = res.rows[0];
     if (!row) return undefined;
     return { version: Number(row.version), updatedAt: Number(row.updated_at) };
@@ -147,7 +145,9 @@ export class PgWorkspaceService {
   }
 
   async deleteWorkspace(id: string): Promise<void> {
-    await this.pool.query('DELETE FROM workspaces WHERE id = $1', [id]);
+    // Scoped: a tenant must not be able to destroy another tenant's workspace by id.
+    const { where, params } = this.scopeFilter('id = $1', [id]);
+    await this.pool.query(`DELETE FROM workspaces ${where}`, params);
   }
 
   async replaceAll(workspaces: Workspace[]): Promise<void> {
@@ -185,6 +185,9 @@ export class PgWorkspaceService {
   async listSnapshots(
     workspaceId: string
   ): Promise<{ id: string; createdAt: number; label: string }[]> {
+    // Snapshot labels leak workspace names, so gate the listing on the same scope
+    // that governs reads rather than trusting the caller-supplied id.
+    if (!(await this.isInScope(workspaceId))) return [];
     const res = await this.pool.query(
       'SELECT id, created_at, label FROM workspace_snapshots WHERE workspace_id = $1 ORDER BY created_at DESC',
       [workspaceId]
@@ -203,9 +206,19 @@ export class PgWorkspaceService {
     );
     const row = res.rows[0];
     if (!row) return undefined;
+    // Check scope before deserializing: the blob is a full workspace, so an
+    // out-of-scope snapshot id must not pull another tenant's data into memory.
+    if (!(await this.isInScope(row.workspace_id as string))) return undefined;
     const ws = parseJson<Workspace | null>(row.blob, null);
     if (!ws) return undefined;
     return this.updateWorkspace(row.workspace_id as string, ws);
+  }
+
+  /** True when `id` is visible under the current scope. Cheap existence probe. */
+  private async isInScope(id: string): Promise<boolean> {
+    const { where, params } = this.scopeFilter('id = $1', [id]);
+    const res = await this.pool.query(`SELECT 1 FROM workspaces ${where} LIMIT 1`, params);
+    return res.rows.length > 0;
   }
 
   private scopeFilter(baseClause?: string, baseParams: unknown[] = []): {

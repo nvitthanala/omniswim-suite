@@ -22,6 +22,7 @@ const TESTS = [
   ['test_sqlite_roundtrip.mjs'],
   ['test_pg_roundtrip.mjs'],
   ['test_persistence_parity.mjs'],
+  ['test_workspace_scope.mjs'],
   ['test_chart_data.mjs'],
   ['test_chart_shell.mjs'],
   ['test_chart_render.mjs'],
