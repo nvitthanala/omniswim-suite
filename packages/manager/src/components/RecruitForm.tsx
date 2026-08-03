@@ -128,7 +128,7 @@ export default function RecruitForm({
   const inputClass = compact ? 'glass-input w-full rounded-lg px-2.5 py-2 text-ui-body' : 'glass-input w-full';
   const labelClass = compact
     ? 'block text-ui-caption text-theme-muted mb-1'
-    : 'block text-[10px] uppercase text-theme-muted font-bold mb-1.5';
+    : 'block text-ui-caption uppercase tracking-wide text-theme-muted font-bold mb-1.5';
   const teamOptions =
     teams.length > 0 ? teams.map(t => ({ value: t, label: t })) : [{ value: 'Unassigned', label: 'Unassigned' }];
 
@@ -223,7 +223,7 @@ export default function RecruitForm({
               type="text"
               value={formData.time}
               onChange={e => setFormData({ ...formData, time: e.target.value })}
-              className={`${inputClass} font-mono text-[var(--text-primary)]`}
+              className={`${inputClass} font-mono tabular-nums text-[var(--text-primary)]`}
               placeholder="00:00.00"
             />
           </div>
@@ -333,7 +333,7 @@ export default function RecruitForm({
       <button
         type="submit"
         disabled={disabled}
-        className="w-full py-3 mt-2 btn-recruit font-black text-[10px] uppercase tracking-[0.2em] rounded transition-all flex items-center justify-center gap-2"
+        className="w-full py-3 mt-2 btn-recruit font-black text-ui-caption uppercase tracking-[0.2em] rounded-lg transition-all flex items-center justify-center gap-2"
       >
         <Play size={12} fill="currentColor" />
         <span>Inject Recruit Into Matrix</span>

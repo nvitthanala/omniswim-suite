@@ -7,6 +7,7 @@
  */
 import { Gender, ScoringSettings, SwimmerResult, TeamScore, Workspace } from '../types';
 import { mergeScoringSettings } from './scoringDefaults';
+import { computeVisibleEvents } from './eventIdentity';
 import type { ScoringBundle } from './scoringEngine';
 import {
   entryKey,
@@ -307,6 +308,7 @@ function aggregateBundle(allResults: SwimmerResult[], allScored: SwimmerResult[]
     allResults,
     allScored,
     events,
+    visibleEvents: computeVisibleEvents(events, allResults, allResults, {}),
     sortedTeams,
     timelineData,
     teamStyleSignature,
@@ -341,9 +343,10 @@ export function buildPsychProjectedBundle({
       allResults: [],
       allScored: [],
       events: [],
+      visibleEvents: [],
       sortedTeams: [],
       timelineData: [],
-       teamStyleSignature: '',
+      teamStyleSignature: '',
     };
   }
 

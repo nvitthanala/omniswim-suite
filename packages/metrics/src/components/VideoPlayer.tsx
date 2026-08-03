@@ -1,42 +1,53 @@
 import React, { useRef, useState, useEffect } from 'react';
+import { tagsOfKind } from '@omniswim/core/lib/raceAnalysis';
 import { formatTime } from '../lib/utils';
-import { BiomechanicsData } from '../types';
-import { Play, Pause, Maximize, SkipBack, SkipForward, FastForward, Flag, Volume2, VolumeX } from 'lucide-react';
+import { Play, Pause, Maximize, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
+import type { OperatorKey, RaceTag } from '../types';
+import { TagTimeline } from './TagTimeline';
 
-export type TrackingEvent = { type: 'dive' | 'breakout' | 'kick' | 'turn' | '15m' | 'stroke' | 'finish', time: number };
+const ASSUMED_FPS_OPTIONS = [24, 25, 30, 50, 59.94, 60, 120];
 
 interface VideoPlayerProps {
   videoUrl: string | null;
-  data: BiomechanicsData | null;
-  goalTime?: number;
-  worldRecordTime?: number;
-  onMarkStart?: (time: number) => void;
-  onMarkEnd?: (time: number) => void;
-  startTime?: number | null;
-  endTime?: number | null;
-  onTrackingUpdate?: (events: TrackingEvent[]) => void;
+  tags: readonly RaceTag[];
+  measuredFps?: number;
+  fpsOverride: number | null;
+  onFpsOverrideChange: (fps: number | null) => void;
+  onSequentialKey: (key: OperatorKey, time: number) => void;
+  onOneShotKey: (kind: 'Signal' | 'Flags' | 'Kick', time: number) => void;
+  onUndo: () => void;
 }
 
-export function VideoPlayer({ 
-  videoUrl, 
-  data, 
-  goalTime = 120, 
-  worldRecordTime = 110,
-  onMarkStart,
-  onMarkEnd,
-  startTime,
-  endTime,
-  onTrackingUpdate
-}: VideoPlayerProps & { selectedLane?: number | null, onSelectLane?: (id: number) => void }) {
+function calculateLiveSPM(tags: readonly RaceTag[]): number {
+  const strokes = tagsOfKind(tags, 'Stroke');
+  if (strokes.length < 2) return 0;
+  const last = strokes[strokes.length - 1].time;
+  const prev = strokes[strokes.length - 2].time;
+  const diff = last - prev;
+  if (diff <= 0) return 0;
+  return 60 / diff;
+}
+
+export function VideoPlayer({
+  videoUrl,
+  tags,
+  measuredFps,
+  fpsOverride,
+  onFpsOverrideChange,
+  onSequentialKey,
+  onOneShotKey,
+  onUndo,
+}: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [progress, setProgress] = useState(0);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
   const [playbackRate, setPlaybackRate] = useState(1);
-  const [fps, setFps] = useState(30);
   const [volume, setVolume] = useState(1);
   const [isMuted, setIsMuted] = useState(false);
+
+  const effectiveFps = fpsOverride ?? measuredFps ?? null;
 
   useEffect(() => {
     if (videoRef.current) {
@@ -45,21 +56,14 @@ export function VideoPlayer({
     }
   }, [volume, isMuted, videoUrl]);
 
-  const toggleMute = () => {
-    setIsMuted(!isMuted);
-  };
+  const toggleMute = () => setIsMuted(!isMuted);
 
   const handleVolumeChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const newVolume = parseFloat(e.target.value);
     setVolume(newVolume);
-    if (newVolume > 0 && isMuted) {
-      setIsMuted(false);
-    } else if (newVolume === 0 && !isMuted) {
-      setIsMuted(true);
-    }
+    if (newVolume > 0 && isMuted) setIsMuted(false);
+    else if (newVolume === 0 && !isMuted) setIsMuted(true);
   };
-
-  // moved below
 
   const togglePlay = () => {
     if (!videoRef.current) return;
@@ -72,11 +76,18 @@ export function VideoPlayer({
   };
 
   const stepFrame = (frames: number) => {
+    if (!videoRef.current || effectiveFps === null) return;
+    videoRef.current.pause();
+    setIsPlaying(false);
+    const newTime = Math.max(0, Math.min(videoRef.current.duration, videoRef.current.currentTime + frames / effectiveFps));
+    videoRef.current.currentTime = newTime;
+  };
+
+  const seekTo = (time: number) => {
     if (!videoRef.current) return;
     videoRef.current.pause();
     setIsPlaying(false);
-    const newTime = Math.max(0, Math.min(videoRef.current.duration, videoRef.current.currentTime + (frames / fps)));
-    videoRef.current.currentTime = newTime;
+    videoRef.current.currentTime = time;
   };
 
   const handleTimeUpdate = () => {
@@ -86,9 +97,7 @@ export function VideoPlayer({
   };
 
   const handleLoadedMetadata = () => {
-    if (videoRef.current) {
-      setDuration(videoRef.current.duration);
-    }
+    if (videoRef.current) setDuration(videoRef.current.duration);
   };
 
   const handleSeek = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -102,106 +111,68 @@ export function VideoPlayer({
   const changePlaybackRate = (e: React.ChangeEvent<HTMLSelectElement>) => {
     const rate = parseFloat(e.target.value);
     setPlaybackRate(rate);
-    if (videoRef.current) {
-      videoRef.current.playbackRate = rate;
-    }
+    if (videoRef.current) videoRef.current.playbackRate = rate;
   };
-
-  const [scanState, setScanState] = useState<'idle' | 'scanning' | 'done'>('done');
-  const [detectedLanes, setDetectedLanes] = useState<{id: number, x: number, y: number, w: number, h: number}[]>([]);
-
-  const runBodyDetect = () => {
-    // Legacy stub
-  };
-
-  const selectLane = (id: number) => {
-    // Legacy stub
-  };
-
-  const [trackingEvents, setTrackingEvents] = useState<TrackingEvent[]>([]);
-  const [trackingActive, setTrackingActive] = useState(true);
-
-  useEffect(() => {
-    if (onTrackingUpdate) {
-      onTrackingUpdate(trackingEvents);
-    }
-  }, [trackingEvents, onTrackingUpdate]);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      // If user typing in a different input, ignore (unless they pressed space in our specific input context to do something, but let's just ignore all inputs for video hotkeys)
       if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
-          // exception: if they press enter in kick count, we remove focus
-          if (e.code === 'Enter') {
-             (document.activeElement as HTMLElement).blur();
-          }
-          return;
+        if (e.code === 'Enter') (document.activeElement as HTMLElement).blur();
+        return;
       }
 
-      if (!trackingActive) return;
+      if (!videoRef.current) return;
+      const time = videoRef.current.currentTime;
 
-      const time = videoRef.current?.currentTime || 0;
+      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') {
+        e.preventDefault();
+        onUndo();
+        return;
+      }
 
-      switch(e.code) {
+      switch (e.code) {
+        case 'KeyS':
+          e.preventDefault();
+          onSequentialKey('S', time);
+          break;
         case 'KeyD':
           e.preventDefault();
-          setTrackingEvents(prev => [...prev, { type: 'dive', time }]);
-          if (onMarkStart) onMarkStart(time);
+          onSequentialKey('D', time);
           break;
-        case 'KeyB':
+        case 'KeyA':
           e.preventDefault();
-          setTrackingEvents(prev => [...prev, { type: 'breakout', time }]);
+          onSequentialKey('A', time);
+          break;
+        case 'KeyR':
+          e.preventDefault();
+          onOneShotKey('Signal', time);
+          break;
+        case 'KeyG':
+          e.preventDefault();
+          onOneShotKey('Flags', time);
           break;
         case 'KeyK':
           e.preventDefault();
-          setTrackingEvents(prev => [...prev, { type: 'kick', time }]);
-          break;
-        case 'KeyT':
-          e.preventDefault();
-          setTrackingEvents(prev => [...prev, { type: 'turn', time }]);
-          break;
-        case 'KeyF':
-          e.preventDefault();
-          setTrackingEvents(prev => [...prev, { type: '15m', time }]);
-          break;
-        case 'KeyS':
-          e.preventDefault();
-          setTrackingEvents(prev => [...prev, { type: 'stroke', time }]);
-          break;
-        case 'KeyX':
-          e.preventDefault();
-          setTrackingEvents(prev => [...prev, { type: 'finish', time }]);
-          if (onMarkEnd) onMarkEnd(time);
+          onOneShotKey('Kick', time);
           break;
       }
     };
-    
+
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [trackingActive, onMarkEnd]);
+  }, [onSequentialKey, onOneShotKey, onUndo]);
 
-  const calculateLiveSPM = () => {
-    const strokes = trackingEvents.filter(e => e.type === 'stroke').sort((a,b) => a.time - b.time);
-    if (strokes.length < 2) return 0;
-    const last = strokes[strokes.length - 1].time;
-    const prev = strokes[strokes.length - 2].time;
-    const diff = last - prev;
-    if (diff <= 0) return 0;
-    return 60 / diff;
-  };
-
-  const interpolatedPace = data ? data.avgVelocity + Math.sin(currentTime * 2) * 0.1 : 0;
-  const interpolatedSR = data ? data.strokeRate + Math.cos(currentTime * 1.5) * 2 : 0;
+  const liveSpm = calculateLiveSPM(tags);
 
   return (
     <div className="relative group w-full h-full flex items-center justify-center bg-transparent">
       {!videoUrl ? (
-        <div className="text-center p-8 bg-white/80 dark:bg-black/40 border border-slate-200 dark:border-white/5 rounded-xl backdrop-blur-sm max-w-sm shadow-xl dark:shadow-none transition-colors">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-slate-100 dark:bg-white/5 mb-4 text-accent-500 dark:text-accent-400">
+        <div className="text-center p-8 surface-card rounded-2xl max-w-sm shadow-[var(--ui-shadow-lg)] transition-colors">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[var(--surface-muted)] mb-4 text-accent-500">
             <Play className="w-8 h-8 ml-1" />
           </div>
-          <h3 className="text-lg font-medium text-slate-900 dark:text-white">Upload a video</h3>
-          <p className="text-sm text-slate-500 dark:text-slate-400 mt-2">
+          <h3 className="text-lg font-medium text-[var(--text-primary)]">Upload a video</h3>
+          <p className="text-ui-body text-theme-secondary mt-2">
             Select a raw video of a swimming performance. All analysis is performed entirely locally on your device.
           </p>
         </div>
@@ -216,85 +187,20 @@ export function VideoPlayer({
             onClick={togglePlay}
           />
 
-          {!data && (
-             <div className="absolute top-4 right-4 z-30 bg-black/80 backdrop-blur-md border border-accent-500/50 p-4 rounded-xl shadow-2xl min-w-[200px]">
-               <div className="flex items-center justify-between mb-3 pb-2 border-b border-white/10">
-                 <div className="flex items-center gap-2 cursor-pointer" onClick={() => setTrackingActive(!trackingActive)}>
-                   <div className={`w-2 h-2 rounded-full ${trackingActive ? 'bg-red-500 animate-pulse' : 'bg-slate-500'}`} />
-                   <span className="text-white font-mono text-xs font-bold tracking-widest uppercase">Manual Tracking</span>
-                 </div>
-                 <button 
-                   onClick={() => setTrackingEvents([])} 
-                   className="text-ui-micro uppercase tracking-widest text-slate-400 hover:text-white transition-colors"
-                 >
-                   Reset
-                 </button>
-               </div>
-               
-               <div className="space-y-2 text-ui-micro font-mono text-slate-300">
-                 <div className="flex justify-between items-center group">
-                   <span className="opacity-60 group-hover:opacity-100 flex items-center gap-2">
-                     <span className="bg-white/10 px-1 py-0.5 rounded border border-white/20 font-bold min-w-[20px] text-center">D</span> Dive Entry
-                   </span>
-                   <span className="text-accent-400 font-bold">{trackingEvents.filter(e => e.type === 'dive').length}</span>
-                 </div>
-                 <div className="flex justify-between items-center group">
-                   <span className="opacity-60 group-hover:opacity-100 flex items-center gap-2">
-                     <span className="bg-white/10 px-1 py-0.5 rounded border border-white/20 font-bold min-w-[20px] text-center">B</span> Breakout
-                   </span>
-                   <span className="text-accent-400 font-bold">{trackingEvents.filter(e => e.type === 'breakout').length}</span>
-                 </div>
-                 <div className="flex justify-between items-center group">
-                   <span className="opacity-60 group-hover:opacity-100 flex items-center gap-2">
-                     <span className="bg-white/10 px-1 py-0.5 rounded border border-white/20 font-bold min-w-[20px] text-center">K</span> UW Kick
-                   </span>
-                   <span className="text-accent-400 font-bold">{trackingEvents.filter(e => e.type === 'kick').length}</span>
-                 </div>
-                 <div className="flex justify-between items-center group">
-                   <span className="opacity-60 group-hover:opacity-100 flex items-center gap-2">
-                     <span className="bg-white/10 px-1 py-0.5 rounded border border-white/20 font-bold min-w-[20px] text-center">S</span> Stroke
-                   </span>
-                   <span className="text-accent-400 font-bold">{trackingEvents.filter(e => e.type === 'stroke').length}</span>
-                 </div>
-                 <div className="flex justify-between items-center group">
-                   <span className="opacity-60 group-hover:opacity-100 flex items-center gap-2">
-                     <span className="bg-white/10 px-1 py-0.5 rounded border border-white/20 font-bold min-w-[20px] text-center">F</span> 15m Mark
-                   </span>
-                   <span className="text-accent-400 font-bold">{trackingEvents.filter(e => e.type === '15m').length}</span>
-                 </div>
-                 <div className="flex justify-between items-center group">
-                   <span className="opacity-60 group-hover:opacity-100 flex items-center gap-2">
-                     <span className="bg-white/10 px-1 py-0.5 rounded border border-white/20 font-bold min-w-[20px] text-center">T</span> Turn
-                   </span>
-                   <span className="text-accent-400 font-bold">{trackingEvents.filter(e => e.type === 'turn').length}</span>
-                 </div>
-                 <div className="flex justify-between items-center group">
-                   <span className="opacity-60 group-hover:opacity-100 flex items-center gap-2">
-                     <span className="bg-white/10 px-1 py-0.5 rounded border border-white/20 font-bold min-w-[20px] text-center">X</span> Finish
-                   </span>
-                   <span className="text-accent-400 font-bold">{trackingEvents.filter(e => e.type === 'finish').length}</span>
-                 </div>
-               </div>
-
-               {trackingEvents.length > 0 && (
-                 <div className="mt-4 pt-3 border-t border-white/10 flex justify-between items-end">
-                   <div>
-                     <div className="text-ui-micro text-emerald-400 uppercase tracking-widest font-bold mb-1">Live SPM</div>
-                     <div className="text-xl font-bold text-white leading-none">
-                       {calculateLiveSPM().toFixed(1)} <span className="text-ui-micro text-white/50">s/m</span>
-                     </div>
-                   </div>
-                   
-                   <div className="text-right">
-                     <div className="text-ui-micro text-accent-400 uppercase tracking-widest font-bold mb-1">Latest Tag</div>
-                     <div className="text-sm font-mono text-white/90">
-                       {formatTime(trackingEvents[trackingEvents.length - 1].time)}
-                     </div>
-                   </div>
-                 </div>
-               )}
-             </div>
-          )}
+          <div className="absolute top-4 right-4 z-30 bg-black/80 backdrop-blur-md border border-accent-500/50 p-3 rounded-xl shadow-2xl min-w-[180px] text-ui-micro font-mono text-slate-300">
+            <div className="flex justify-between items-center">
+              <span className="opacity-60 uppercase tracking-widest">Live tempo</span>
+              <span className="text-accent-400 font-bold">
+                {liveSpm > 0 ? liveSpm.toFixed(1) : '—'} <span className="text-white/50">cycles/min</span>
+              </span>
+            </div>
+            <div className="flex justify-between items-center mt-1.5 pt-1.5 border-t border-white/10">
+              <span className="opacity-60 uppercase tracking-widest">Frame rate</span>
+              <span className={measuredFps ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
+                {measuredFps ? `${measuredFps} measured` : 'not measured'}
+              </span>
+            </div>
+          </div>
 
           <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 via-slate-900/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-20">
             <div className="flex flex-col gap-2">
@@ -313,105 +219,57 @@ export function VideoPlayer({
                     style={{ width: `${progress}%` }}
                   />
                 </div>
-                {startTime !== null && startTime !== undefined && duration > 0 && (
-                   <div 
-                     className="absolute w-0.5 h-3 bg-emerald-400 z-0 pointer-events-none shadow-[0_0_5px_rgba(52,211,153,0.8)]" 
-                     style={{ left: `${(startTime / duration) * 100}%` }}
-                     title="Race Start"
-                   />
-                )}
-                {endTime !== null && endTime !== undefined && duration > 0 && (
-                   <div 
-                     className="absolute w-0.5 h-3 bg-red-500 z-0 pointer-events-none shadow-[0_0_5px_rgba(239,68,68,0.8)]" 
-                     style={{ left: `${(endTime / duration) * 100}%` }}
-                     title="Race End"
-                   />
-                )}
-                
-                {trackingEvents.map((event, i) => (
-                  <div
-                    key={i}
-                    className={`absolute w-0.5 h-3 z-0 pointer-events-none ${
-                        event.type === 'dive' ? 'bg-cyan-400 shadow-[0_0_5px_rgba(34,211,238,0.8)]' :
-                        event.type === 'breakout' ? 'bg-orange-400 shadow-[0_0_5px_rgba(251,146,60,0.8)]' :
-                        event.type === 'kick' ? 'bg-blue-400 shadow-[0_0_5px_rgba(96,165,250,0.8)]' :
-                        event.type === 'stroke' ? 'bg-amber-400 shadow-[0_0_5px_rgba(251,191,36,0.8)]' :
-                        event.type === '15m' ? 'bg-pink-400 shadow-[0_0_5px_rgba(244,114,182,0.8)]' :
-                        event.type === 'turn' ? 'bg-purple-400 shadow-[0_0_5px_rgba(192,132,252,0.8)]' :
-                        'bg-red-400 shadow-[0_0_5px_rgba(239,68,68,0.8)]'
-                    }`}
-                    style={{ left: `${(event.time / duration) * 100}%` }}
-                    title={event.type.toUpperCase()}
-                  />
-                ))}
+                <TagTimeline tags={tags} duration={duration} onSeek={seekTo} />
               </div>
-              
+
               <div className="flex items-center justify-between text-white flex-wrap gap-y-2 mt-1">
                 <div className="flex items-center gap-3">
-                  <button onClick={() => stepFrame(-1)} className="hover:text-accent-400 transition-colors focus:outline-none" title="Previous Frame">
+                  <button onClick={() => stepFrame(-1)} disabled={effectiveFps === null} className="hover:text-accent-400 transition-colors focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed" title="Previous Frame">
                     <SkipBack className="w-4 h-4 fill-current opacity-80 hover:opacity-100" />
                   </button>
                   <button onClick={togglePlay} className="hover:text-accent-400 transition-colors focus:outline-none bg-accent-500/20 p-1.5 rounded-full backdrop-blur-sm border border-accent-500/30 text-accent-100">
                     {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
                   </button>
-                  <button onClick={() => stepFrame(1)} className="hover:text-accent-400 transition-colors focus:outline-none" title="Next Frame">
+                  <button onClick={() => stepFrame(1)} disabled={effectiveFps === null} className="hover:text-accent-400 transition-colors focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed" title="Next Frame">
                     <SkipForward className="w-4 h-4 fill-current opacity-80 hover:opacity-100" />
                   </button>
-                  
+
                   <div className="text-xs font-mono font-medium tracking-wide opacity-90 drop-shadow-md ml-2 border-l border-white/20 pl-4 py-0.5 flex items-center gap-4">
                     <span>{formatTime(currentTime)} / {formatTime(duration)}</span>
-                    <span className="text-accent-300">FR: {Math.floor(currentTime * fps)}</span>
+                    <span className="text-accent-300">FR: {effectiveFps !== null ? Math.floor(currentTime * effectiveFps) : '—'}</span>
                   </div>
                 </div>
 
                 <div className="flex items-center gap-4 text-xs font-mono">
                   <div className="bg-black/40 backdrop-blur-sm rounded border border-white/10 px-2 flex items-center h-8">
-                     <span className="text-ui-micro text-white/60 mr-2 uppercase">FPS:</span>
-                     <select 
-                        value={fps}
-                        onChange={(e) => setFps(parseInt(e.target.value))}
-                        className="bg-transparent text-white focus:outline-none cursor-pointer appearance-none pr-3"
-                     >
-                       <option value={24} className="bg-slate-900 text-white">24</option>
-                       <option value={30} className="bg-slate-900 text-white">30</option>
-                       <option value={50} className="bg-slate-900 text-white">50</option>
-                       <option value={60} className="bg-slate-900 text-white">60</option>
-                       <option value={120} className="bg-slate-900 text-white">120</option>
-                     </select>
+                    <span className="text-ui-micro text-white/60 mr-2 uppercase">FPS:</span>
+                    <select
+                      value={fpsOverride ?? ''}
+                      onChange={(e) => onFpsOverrideChange(e.target.value ? parseFloat(e.target.value) : null)}
+                      className="bg-transparent text-white focus:outline-none cursor-pointer appearance-none pr-3"
+                    >
+                      <option value="" className="bg-slate-900 text-white">
+                        {measuredFps ? `Measured (${measuredFps})` : 'Not measured — select'}
+                      </option>
+                      {ASSUMED_FPS_OPTIONS.map((f) => (
+                        <option key={f} value={f} className="bg-slate-900 text-white">
+                          {f}
+                        </option>
+                      ))}
+                    </select>
                   </div>
                   <div className="bg-black/40 backdrop-blur-sm rounded border border-white/10 px-2 flex items-center h-8">
-                     <span className="text-ui-micro text-white/60 mr-2 uppercase">Speed:</span>
-                     <select 
-                        value={playbackRate}
-                        onChange={changePlaybackRate}
-                        className="bg-transparent text-white focus:outline-none cursor-pointer appearance-none pr-3"
-                     >
-                       <option value={0.1} className="bg-slate-900 text-white">0.1x</option>
-                       <option value={0.25} className="bg-slate-900 text-white">0.25x</option>
-                       <option value={0.5} className="bg-slate-900 text-white">0.5x</option>
-                       <option value={1} className="bg-slate-900 text-white">1.0x</option>
-                       <option value={1.5} className="bg-slate-900 text-white">1.5x</option>
-                       <option value={2} className="bg-slate-900 text-white">2.0x</option>
-                     </select>
+                    <span className="text-ui-micro text-white/60 mr-2 uppercase">Speed:</span>
+                    <select value={playbackRate} onChange={changePlaybackRate} className="bg-transparent text-white focus:outline-none cursor-pointer appearance-none pr-3">
+                      <option value={0.1} className="bg-slate-900 text-white">0.1x</option>
+                      <option value={0.25} className="bg-slate-900 text-white">0.25x</option>
+                      <option value={0.5} className="bg-slate-900 text-white">0.5x</option>
+                      <option value={1} className="bg-slate-900 text-white">1.0x</option>
+                      <option value={1.5} className="bg-slate-900 text-white">1.5x</option>
+                      <option value={2} className="bg-slate-900 text-white">2.0x</option>
+                    </select>
                   </div>
 
-                  <div className="hidden sm:flex border-l border-white/20 pl-4 ml-2 gap-2 h-8 items-center">
-                    <button 
-                      onClick={() => onMarkStart?.(currentTime)}
-                      className="px-2 py-1 text-ui-micro uppercase font-bold bg-emerald-500/20 hover:bg-emerald-500/40 text-emerald-300 border border-emerald-500/30 rounded transition-colors"
-                      title="Set race start exactly at current time"
-                    >
-                      <Flag className="w-3 h-3 inline mr-1" /> Mark Start
-                    </button>
-                    <button 
-                      onClick={() => onMarkEnd?.(currentTime)}
-                      className="px-2 py-1 text-ui-micro uppercase font-bold bg-red-500/20 hover:bg-red-500/40 text-red-300 border border-red-500/30 rounded transition-colors"
-                      title="Set race end exactly at current time"
-                    >
-                      <Flag className="w-3 h-3 inline mr-1" /> Mark End
-                    </button>
-                  </div>
-                  
                   <div className="hidden md:flex items-center gap-2 border-l border-white/20 pl-4 ml-2 h-8 group">
                     <button onClick={toggleMute} className="hover:text-accent-400 transition-colors focus:outline-none">
                       {isMuted || volume === 0 ? <VolumeX className="w-4 h-4 drop-shadow-md" /> : <Volume2 className="w-4 h-4 drop-shadow-md" />}

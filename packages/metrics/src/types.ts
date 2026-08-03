@@ -1,41 +1,28 @@
-export interface LapSplit {
-  lap: number;
-  time: number;
-  distance: number;
-}
-
-export interface BiomechanicsData {
-  splits: LapSplit[];
-  avgVelocity: number;
-  strokeRate: number;
-  distancePerStroke: number;
-  fatigueIndex: number;
-  underwaterKickTempo: number;
-  diveVelocity: number;
-  diveDistance: number;
-  
-  // Granular metrics
-  vel0to15m: number;
-  vel15mToWall: number;
-  firstLengthVel: number;
-  breakoutDistance: number;
-  breakoutTime: number;
-  kicksCount: number;
-}
-
-export type CourseType = 'SCY' | 'SCM' | 'LCM';
-export type StrokeType = 'Freestyle' | 'Backstroke' | 'Breaststroke' | 'Butterfly' | 'IM';
-
-export interface RaceConfig {
-  swimmerName: string;
-  stroke: StrokeType;
-  distance: number;
-  course: CourseType;
-  videoStartTime: number | null;
-  videoEndTime: number | null;
-  manualRaceTime: number | null;
-  manualSplits: string;
-  manualDiveVelocity?: number | null;
-  manualBreakoutDistance?: number | null;
-  manualKickCount?: number | null;
-}
+// All race-analysis types come from the @omniswim/core engine. This package
+// re-exports them so components have one local import path; it defines no
+// metric shapes of its own.
+export type {
+  CycleDefinition,
+  ImProposal,
+  LengthMetrics,
+  Measured,
+  OperatorKey,
+  Problem,
+  ProblemCode,
+  ProblemSeverity,
+  Provenance,
+  RaceAnalysisResult,
+  RaceConfig,
+  RaceCourse,
+  RaceTag,
+  RaceTagKind,
+  RaceTagStateMachine,
+  Stroke,
+  StrokeCycleMetric,
+  TagPressAccepted,
+  TagPressRejected,
+  TagPressResult,
+  TagPreview,
+  TurnMetrics,
+  Unit,
+} from '@omniswim/core/lib/raceAnalysis';

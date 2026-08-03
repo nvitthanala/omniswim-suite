@@ -12,7 +12,7 @@ import {
   SwimmerResult,
   Workspace,
 } from '../types';
-import { buildScorerRosterLookup, usesScorerRoster } from './scorerRoster';
+import { buildScorerRosterLookup, scorerRosterKey, usesScorerRoster } from './scorerRoster';
 import {
   countSwimmerEntries,
   swimmerExceedsEntryLimits,
@@ -49,6 +49,8 @@ export type LineupChecklistItem = {
   group: 'entries' | 'lineups' | 'relays';
   message: string;
   athleteName?: string;
+  /** ScorerRosterRow.key for the named athlete — lets a Jump match by key, not raw name. */
+  athleteKey?: string;
   relayEvent?: string;
   legIndex?: number;
   relayEntryKey?: string;
@@ -163,6 +165,9 @@ export function buildTeamLineupAudit(input: LineupAuditInput): TeamLineupAudit {
   const pushChecklist = (item: Omit<LineupChecklistItem, 'id'>) => {
     checklistItems.push({
       ...item,
+      athleteKey:
+        item.athleteKey ??
+        (item.athleteName ? scorerRosterKey(team, gender, item.athleteName) : undefined),
       id: `${item.type}|${item.athleteName ?? ''}|${item.relayEntryKey ?? ''}|${item.legIndex ?? ''}|${item.message}`,
     });
   };
@@ -223,6 +228,19 @@ export function buildTeamLineupAudit(input: LineupAuditInput): TeamLineupAudit {
         type: 'over_entry_limit',
         group: 'entries',
         message: `${displayName}: over relay entry limit`,
+        athleteName: displayName,
+      });
+    }
+    if (over.totalOver) {
+      const issue: LineupAthleteIssue = {
+        type: 'over_entry_limit',
+        message: 'Over total entry limit (individual + relay)',
+      };
+      pushIssue(displayName, issue);
+      pushChecklist({
+        type: 'over_entry_limit',
+        group: 'entries',
+        message: `${displayName}: over total entry limit (individual + relay)`,
         athleteName: displayName,
       });
     }

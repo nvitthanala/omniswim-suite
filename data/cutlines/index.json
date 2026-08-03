@@ -1,8 +1,10 @@
 {
-  "description": "Versioned NCAA cutline tables. Each <version>.json is an array of CutlineRecord. The server serves these via GET /api/cutlines/:version with hot-reload.",
-  "default": "2025-2026",
+  "description": "Versioned qualifying-standard tables, generated from the archived PDFs in sources/ by scripts/extract-cutlines.py. Each <version>.json is {version, season, generatedAt, divisions, sources, cutlines[]}. The server serves these via GET /api/cutlines/:version and accepts either a bare array or an object with a `cutlines` key. Never hand-edit these files.",
+  "default": "2026-2027",
+  "serverBuiltinVersion": "2025-2026",
   "versions": [
+    "2026-2027",
     "2025-2026"
   ],
-  "updatedAt": "2026-06-19T05:07:53.188Z"
+  "updatedAt": "2026-07-26T06:14:37Z"
 }

@@ -2,7 +2,7 @@
  * Enhanced SwimCloud paste import with format detection and merge preview.
  */
 import React, { useMemo, useRef, useState, useEffect } from 'react';
-import { X, ClipboardPaste, FileSpreadsheet, Globe } from 'lucide-react';
+import { X, ClipboardPaste, FileSpreadsheet, Globe, Undo2 } from 'lucide-react';
 import { Gender, HistoricalSwim, Workspace } from '@omniswim/core/types';
 import {
   detectSwimCloudPasteFormat,
@@ -12,11 +12,20 @@ import {
   formatHistoryImportSummary,
   importHistoryToRoster,
   previewHistoryImportActions,
+  rosterNamesForTeam,
   type ImportSwimmerAction,
 } from '@omniswim/core/lib/historyImportRoster';
+import {
+  addAliasLink,
+  buildAliasResolver,
+  suggestAliasCandidates,
+  type AliasNameEntry,
+  type AliasSuggestion,
+} from '@omniswim/core/lib/athleteAliases';
 import { parseCsvHistory } from '@omniswim/core/lib/csvImport';
-import { divisionForTeam } from '@omniswim/core/data/teamDivisions';
+import { divisionForTeamOrNull } from '@omniswim/core/data/teamDivisions';
 import { useToast } from '@omniswim/ui';
+import AliasSuggestionsPanel from './AliasSuggestionsPanel';
 
 type ImportMode = 'paste' | 'csv';
 
@@ -34,6 +43,11 @@ function uniqueTeams(workspace: Workspace, gender: Gender): string[] {
     if (r.team) teams.add(r.team);
   }
   return [...teams].sort();
+}
+
+/** Roster names (results + recruits) for a team/gender — the "existing" side of alias suggestions. */
+function rosterNameEntriesForTeam(workspace: Workspace, team: string, gender: Gender): AliasNameEntry[] {
+  return rosterNamesForTeam(workspace, team, gender).map(name => ({ name, team, gender }));
 }
 
 function actionLabel(action: ImportSwimmerAction): string {
@@ -61,6 +75,11 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
   const [format, setFormat] = useState<string>('unknown');
   const [step, setStep] = useState<'paste' | 'preview'>('paste');
   const [showReference, setShowReference] = useState(false);
+  const [dismissedAliasKeys, setDismissedAliasKeys] = useState<Set<string>>(new Set());
+  const [lastAliasLink, setLastAliasLink] = useState<{
+    inverse: Partial<Workspace>;
+    description: string;
+  } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // If gender/meet changes and current team is no longer in the list, clear it.
@@ -85,17 +104,21 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
       setWarnings(result.warnings);
       setFormat('csv');
       setStep('preview');
+      setDismissedAliasKeys(new Set());
+      setLastAliasLink(null);
       return;
     }
     const result = parseSwimCloudPasteDetailed(paste, {
       team: team.trim(),
       gender,
-      division: divisionForTeam(team.trim()),
+      division: divisionForTeamOrNull(team.trim()) ?? undefined,
     });
     setPreview(result.swims);
     setWarnings(result.warnings);
     setFormat(result.format);
     setStep('preview');
+    setDismissedAliasKeys(new Set());
+    setLastAliasLink(null);
   };
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -134,12 +157,72 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
     [workspace, preview, team, gender]
   );
 
+  // Same alias-suggestion approach as AthleteHistoryImportPanel: unmatched
+  // incoming swimmers (previewHistoryImportActions couldn't confidently match
+  // them) vs every roster name for this team/gender. Depends on
+  // workspace.athleteAliases so a just-added link drops its own suggestion.
+  const aliasSuggestions = useMemo<AliasSuggestion[]>(() => {
+    const trimmedTeam = team.trim();
+    if (!trimmedTeam || swimmerActions.length === 0) return [];
+    const existingNames = rosterNameEntriesForTeam(workspace, trimmedTeam, gender);
+    if (existingNames.length === 0) return [];
+    // All rows (not just new_recruit): an athlete already on the recruit list
+    // under a long-form name still needs a link offer against the roster name.
+    const incomingNames: AliasNameEntry[] = swimmerActions.map(s => ({
+      name: s.name,
+      team: s.team,
+      gender: s.gender,
+    }));
+    if (incomingNames.length === 0) return [];
+    const resolver = buildAliasResolver(workspace.athleteAliases ?? []);
+    return suggestAliasCandidates(existingNames, incomingNames, { resolver });
+  }, [
+    workspace.menResults,
+    workspace.womenResults,
+    workspace.recruits,
+    workspace.athleteAliases,
+    swimmerActions,
+    team,
+    gender,
+  ]);
+
+  const handleLinkAlias = (suggestion: AliasSuggestion) => {
+    const result = addAliasLink(workspace, {
+      canonicalName: suggestion.existing.name,
+      aliasName: suggestion.incoming.name,
+      gender: suggestion.incoming.gender,
+      team: suggestion.existing.team ?? suggestion.incoming.team,
+      source: 'import',
+    });
+    void onUpdate(result.patch);
+    setLastAliasLink({ inverse: result.inverse, description: result.description });
+    toast.push('success', result.description);
+  };
+
+  const handleDismissAlias = (key: string) => {
+    setDismissedAliasKeys(prev => {
+      const next = new Set(prev);
+      next.add(key);
+      return next;
+    });
+  };
+
+  const handleUndoAliasLink = () => {
+    if (!lastAliasLink) return;
+    void onUpdate(lastAliasLink.inverse);
+    toast.push('success', `Undid: ${lastAliasLink.description}`);
+    setLastAliasLink(null);
+  };
+
   const detectedFormat =
     mode === 'paste' && paste.trim() ? detectSwimCloudPasteFormat(paste) : null;
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--backdrop)]">
-      <div className="surface-card border border-theme w-full max-w-2xl max-h-[90vh] flex flex-col rounded-lg shadow-xl">
+      <div
+        className="surface-card border border-theme w-full max-w-2xl max-h-[90vh] flex flex-col rounded-xl"
+        style={{ boxShadow: 'var(--ui-shadow-lg)' }}
+      >
         <div className="flex items-center justify-between px-5 py-4 border-b border-theme-soft">
           <div>
             <h3 className="text-ui-label font-black uppercase tracking-widest">Import Roster / History</h3>
@@ -147,7 +230,7 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
               Paste SwimCloud Personal Bests or roster table text
             </p>
           </div>
-          <button type="button" onClick={onClose} className="p-2 theme-hover-row rounded" aria-label="Close">
+          <button type="button" onClick={onClose} className="p-2 theme-hover-row rounded-lg transition-colors" aria-label="Close">
             <X size={18} />
           </button>
         </div>
@@ -180,7 +263,7 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
               </div>
 
               {showReference ? (
-                <div className="border border-theme-soft rounded overflow-hidden">
+                <div className="border border-theme-soft rounded-lg overflow-hidden">
                   <div className="px-3 py-1.5 bg-[var(--surface-strong)] text-ui-caption text-theme-muted flex items-center justify-between">
                     <span>Reference panel — open SwimCloud, then copy/paste into the importer.</span>
                     <a
@@ -207,7 +290,7 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
                   <select
                     value={team && teams.includes(team) ? team : ''}
                     onChange={e => setTeam(e.target.value)}
-                    className="glass-input px-3 py-2 rounded text-ui-body appearance-none"
+                    className="glass-input px-3 py-2 rounded-lg text-ui-body appearance-none"
                   >
                     <option value="" disabled>
                       Select a team…
@@ -226,14 +309,14 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
                   <input
                     value={team}
                     onChange={e => setTeam(e.target.value)}
-                    className="glass-input px-3 py-2 rounded text-ui-body mt-1"
+                    className="glass-input px-3 py-2 rounded-lg text-ui-body mt-1"
                     placeholder="Or type a team name…"
                     aria-label="Custom team name"
                   />
                 </label>
                 <label className="flex flex-col gap-1">
                   <span className="label-caps">Gender</span>
-                  <div className="px-3 py-2 rounded border border-theme-soft text-ui-body bg-[var(--surface-muted)]">
+                  <div className="px-3 py-2 rounded-lg border border-theme-soft text-ui-body bg-[var(--surface-muted)]">
                     {gender}
                   </div>
                 </label>
@@ -265,7 +348,7 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
                   value={paste}
                   onChange={e => setPaste(e.target.value)}
                   rows={10}
-                  className="glass-input px-3 py-2 rounded text-ui-body font-mono text-sm resize-y"
+                  className="glass-input px-3 py-2 rounded-lg text-ui-body font-mono text-sm resize-y"
                   placeholder={
                     mode === 'csv'
                       ? 'Paste CSV with header row: name,event,time[,team,gender,date,meet]'
@@ -277,10 +360,10 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
           ) : (
             <>
               <div className="flex flex-wrap gap-2 text-ui-caption">
-                <span className="badge-info px-2 py-0.5 rounded">{format}</span>
+                <span className="badge-info px-2 py-0.5 rounded-full">{format}</span>
                 <span className="text-theme-muted">{preview.length} swims parsed</span>
                 {warnings.map(w => (
-                  <span key={w} className="badge-warning px-2 py-0.5 rounded">
+                  <span key={w} className="badge-warning px-2 py-0.5 rounded-full">
                     {w}
                   </span>
                 ))}
@@ -290,14 +373,33 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
                   {swimmerActions.map(s => (
                     <span
                       key={`${s.name}|${s.action}`}
-                      className="text-ui-micro px-1.5 py-0.5 rounded border border-theme-soft"
+                      className="text-ui-micro px-1.5 py-0.5 rounded-full border border-theme-soft"
                     >
                       {s.name}: {actionLabel(s.action)}
                     </span>
                   ))}
                 </div>
               ) : null}
-              <div className="border border-theme-soft rounded max-h-64 overflow-y-auto custom-scrollbar">
+              {aliasSuggestions.length > 0 ? (
+                <AliasSuggestionsPanel
+                  suggestions={aliasSuggestions}
+                  dismissed={dismissedAliasKeys}
+                  onLink={handleLinkAlias}
+                  onDismiss={handleDismissAlias}
+                />
+              ) : null}
+              {lastAliasLink ? (
+                <button
+                  type="button"
+                  onClick={handleUndoAliasLink}
+                  title={lastAliasLink.description}
+                  className="flex w-full items-center gap-1.5 truncate rounded-lg border border-theme-soft px-2.5 py-1.5 text-left text-ui-caption text-theme-muted transition-colors hover:text-theme-secondary"
+                >
+                  <Undo2 size={12} className="shrink-0" />
+                  <span className="truncate">Undo: {lastAliasLink.description}</span>
+                </button>
+              ) : null}
+              <div className="border border-theme-soft rounded-lg max-h-64 overflow-y-auto custom-scrollbar">
                 <table className="w-full text-ui-caption">
                   <thead className="sticky top-0 bg-[var(--surface-strong)]">
                     <tr className="text-left text-theme-muted uppercase tracking-wider">
@@ -308,10 +410,10 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
                   </thead>
                   <tbody>
                     {preview.map((s, i) => (
-                      <tr key={i} className="border-t border-theme-soft">
+                      <tr key={i} className="border-t border-theme-soft theme-hover-row transition-colors">
                         <td className="p-2">{s.name}</td>
                         <td className="p-2">{s.event}</td>
-                        <td className="p-2 font-mono">{s.time}</td>
+                        <td className="p-2 font-mono tabular-nums">{s.time}</td>
                       </tr>
                     ))}
                   </tbody>
@@ -339,7 +441,7 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
               type="button"
               onClick={handleParse}
               disabled={!paste.trim()}
-              className="px-4 py-2 btn-primary rounded text-ui-micro font-bold uppercase tracking-widest disabled:opacity-40"
+              className="px-4 py-2 btn-primary rounded-lg text-ui-micro font-bold uppercase tracking-widest disabled:opacity-40"
             >
               Preview
             </button>
@@ -348,7 +450,7 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
               type="button"
               onClick={() => void handleMerge()}
               disabled={preview.length === 0}
-              className="px-4 py-2 btn-primary rounded text-ui-micro font-bold uppercase tracking-widest disabled:opacity-40"
+              className="px-4 py-2 btn-primary rounded-lg text-ui-micro font-bold uppercase tracking-widest disabled:opacity-40"
             >
               Import & add to roster
             </button>

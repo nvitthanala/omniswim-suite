@@ -14,7 +14,8 @@ import {
 } from '../types';
 import { DEFAULT_SCORER_AUTO_RULES } from './scoringDefaults';
 import { displayTimeForRelayLeg } from './relaySplits';
-import { classifyRoundTier, isDivingEvent, isRelayResult, normalizeSwimmerName, sortEventsByMeetOrder } from './utils';
+import { canonicalSwimmerName, classifyRoundTier, isDivingEvent, isRelayResult, sortEventsByMeetOrder } from './utils';
+import { IDENTITY_ALIAS_RESOLVER, type AthleteAliasResolver } from './athleteAliases';
 
 export type ScorerRosterRowSource = 'auto' | 'manual';
 export type ScorerRosterAthleteRole = 'diver' | 'swimmer';
@@ -36,8 +37,18 @@ export type ScorerRosterLookup = {
   rows: ScorerRosterRow[];
 };
 
+/** Vacated / placeholder relay-leg names that must never become roster rows (BUG 3.5). */
+export function isPlaceholderAthleteName(name: string | undefined): boolean {
+  const n = String(name ?? '').trim();
+  return n === '' || n === '—' || n === '-' || n === 'Unknown';
+}
+
 export function scorerRosterKey(team: string, gender: Gender | string | undefined, name: string): string {
-  return `${String(team).trim()}|||${gender ?? ''}|||${normalizeSwimmerName(name)}`;
+  // canonicalSwimmerName folds "Last, First" ↔ "First Last" so one human is one roster
+  // row regardless of the spelling order stored on individual vs relay-leg rows (BUG 3.4).
+  // Alias resolution (when a resolver is used) is applied by callers before this call, so
+  // the effective identity is resolveAlias → canonicalize.
+  return `${String(team).trim()}|||${gender ?? ''}|||${canonicalSwimmerName(name)}`;
 }
 
 function isDistanceForRules(event: string | undefined, rules?: ScorerAutoRules): boolean {
@@ -68,22 +79,31 @@ export function rowSuggestsScorer(swim: SwimmerResult, rules?: ScorerAutoRules):
   return true;
 }
 
-function deriveAutoScorerKeys(results: SwimmerResult[], rules?: ScorerAutoRules): Set<string> {
+function deriveAutoScorerKeys(
+  results: SwimmerResult[],
+  rules: ScorerAutoRules | undefined,
+  resolver: AthleteAliasResolver
+): Set<string> {
   const keys = new Set<string>();
   if (!rules) return keys;
   for (const r of results) {
     if (r.isRecruit) continue;
     if (rowSuggestsScorer(r, rules)) {
-      keys.add(scorerRosterKey(String(r.team ?? '').trim() || 'Unknown', r.gender ?? Gender.MEN, r.name));
+      const team = String(r.team ?? '').trim() || 'Unknown';
+      const g = r.gender ?? Gender.MEN;
+      keys.add(scorerRosterKey(team, g, resolver.resolveAthleteName(r.name, team, g)));
     }
   }
   return keys;
 }
 
-function overrideMap(overrides?: ScorerRosterOverride[]): Map<string, boolean> {
+function overrideMap(
+  overrides: ScorerRosterOverride[] | undefined,
+  resolver: AthleteAliasResolver
+): Map<string, boolean> {
   const m = new Map<string, boolean>();
   for (const o of overrides ?? []) {
-    m.set(scorerRosterKey(o.team, o.gender, o.name), o.isScorer);
+    m.set(scorerRosterKey(o.team, o.gender, resolver.resolveAthleteName(o.name, o.team, o.gender as Gender)), o.isScorer);
   }
   return m;
 }
@@ -93,11 +113,12 @@ export function buildScorerRosterLookup(
   results: SwimmerResult[],
   settings: ScoringSettings,
   overrides?: ScorerRosterOverride[],
-  genderFilter?: Gender
+  genderFilter?: Gender,
+  resolver: AthleteAliasResolver = IDENTITY_ALIAS_RESOLVER
 ): ScorerRosterLookup {
   const rules = effectiveAutoRules(settings);
-  const autoKeys = deriveAutoScorerKeys(results, rules);
-  const manual = overrideMap(overrides);
+  const autoKeys = deriveAutoScorerKeys(results, rules, resolver);
+  const manual = overrideMap(overrides, resolver);
 
   const diverPatterns = settings.diverEventPattern;
   const meta = new Map<
@@ -115,9 +136,11 @@ export function buildScorerRosterLookup(
   for (const r of results) {
     if (genderFilter != null && r.gender != null && r.gender !== genderFilter) continue;
     if (!r.isRecruit && isRelayResult(r) && r.name === r.team) continue;
+    // Skip vacated / placeholder relay-leg names ("—", empty) — they are not athletes.
+    if (!r.isRecruit && isRelayResult(r) && isPlaceholderAthleteName(r.name)) continue;
     const team = String(r.team ?? '').trim() || 'Unknown';
     const g = (r.gender ?? genderFilter ?? Gender.MEN) as Gender;
-    const key = scorerRosterKey(team, g, r.name);
+    const key = scorerRosterKey(team, g, resolver.resolveAthleteName(r.name, team, g));
     const isDiverRow = !r.isRecruit && !isRelayResult(r) && isDivingEvent(r.event, diverPatterns);
     if (!meta.has(key)) {
       meta.set(key, {
@@ -141,7 +164,7 @@ export function buildScorerRosterLookup(
     if (genderFilter != null && r.gender != null && r.gender !== genderFilter) continue;
     const team = String(r.team ?? '').trim() || 'Unknown';
     const g = (r.gender ?? genderFilter ?? Gender.MEN) as Gender;
-    recruitKeys.add(scorerRosterKey(team, g, r.name));
+    recruitKeys.add(scorerRosterKey(team, g, resolver.resolveAthleteName(r.name, team, g)));
   }
 
   const rows: ScorerRosterRow[] = [];
@@ -165,7 +188,7 @@ export function buildScorerRosterLookup(
   return {
     rows,
     isScorer: (name, team, gender) => {
-      const key = scorerRosterKey(team, gender, name);
+      const key = scorerRosterKey(team, gender, resolver.resolveAthleteName(name, team, gender as Gender));
       const manualVal = manual.get(key);
       if (manualVal !== undefined) return manualVal;
       if (recruitKeys.has(key)) return true;

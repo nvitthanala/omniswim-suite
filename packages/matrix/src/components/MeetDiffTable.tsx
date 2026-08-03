@@ -43,7 +43,7 @@ export default function MeetDiffTable({ projectedTeams, baselineTeams, searchQue
 
   if (rows.length === 0) {
     return (
-      <div className="p-12 text-center border border-dashed border-theme-soft rounded-lg text-theme-secondary">
+      <div className="p-12 text-center border border-dashed border-theme-soft rounded-xl text-theme-secondary">
         <GitCompareArrows className="w-12 h-12 mx-auto mb-4 opacity-20" />
         <p className="text-xs uppercase font-medium tracking-widest">No team diff data available</p>
       </div>
@@ -51,7 +51,7 @@ export default function MeetDiffTable({ projectedTeams, baselineTeams, searchQue
   }
 
   return (
-    <div className="overflow-x-auto border border-theme-soft rounded-lg">
+    <div className="overflow-x-auto border border-theme-soft rounded-xl">
       <table className="w-full min-w-[620px] text-left border-collapse">
         <thead className="surface-overlay text-[10px] uppercase tracking-widest text-theme-secondary font-medium">
           <tr>

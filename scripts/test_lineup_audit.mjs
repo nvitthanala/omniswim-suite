@@ -264,8 +264,29 @@ function baseWorkspace(overrides = {}) {
         source: 'manual',
         active: true,
       },
+      {
+        id: 'p5',
+        name: 'Alpha, Ace',
+        team,
+        gender: Gender.MEN,
+        event: '100 Backstroke',
+        time: '50.00',
+        source: 'manual',
+        active: true,
+      },
+      {
+        id: 'p6',
+        name: 'Alpha, Ace',
+        team,
+        gender: Gender.MEN,
+        event: '200 Backstroke',
+        time: '1:50.00',
+        source: 'manual',
+        active: true,
+      },
     ],
-    activeEntryIds: ['p1', 'p2', 'p3', 'p4'],
+    // Alpha: 50 Free (PDF) + 6 plans + 1 relay leg = 8 total → over the NSISC 7-total cap.
+    activeEntryIds: ['p1', 'p2', 'p3', 'p4', 'p5', 'p6'],
     scorerRosterOverrides: [
       {
         name: 'Delta, Dan',

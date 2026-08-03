@@ -8,7 +8,7 @@
  * field into columns.
  */
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 7;
 
 export const CREATE_TABLES_SQL = `
 PRAGMA journal_mode = WAL;
@@ -25,6 +25,7 @@ CREATE TABLE IF NOT EXISTS workspaces (
   created_at           INTEGER NOT NULL,
   conference           TEXT,
   entry_plan_mode      TEXT,
+  scoring_view         TEXT,
   scoring_settings     TEXT,
   loaded_meet          TEXT,
   loaded_psych         TEXT,
@@ -109,6 +110,21 @@ CREATE TABLE IF NOT EXISTS athlete_history (
 );
 CREATE INDEX IF NOT EXISTS idx_athlete_history_ws ON athlete_history(workspace_id);
 
+CREATE TABLE IF NOT EXISTS race_analyses (
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  position     INTEGER NOT NULL DEFAULT 0,
+  data         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_race_analyses_ws ON race_analyses(workspace_id);
+
+CREATE TABLE IF NOT EXISTS athlete_aliases (
+  id           TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  position     INTEGER NOT NULL DEFAULT 0,
+  data         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_athlete_aliases_ws ON athlete_aliases(workspace_id);
+
 CREATE TABLE IF NOT EXISTS workspace_snapshots (
   id           TEXT PRIMARY KEY,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
@@ -152,4 +168,30 @@ export const SQLITE_MIGRATIONS_V4 = [
   data         TEXT NOT NULL
 )`,
   'CREATE INDEX IF NOT EXISTS idx_source_meet_results_ws ON source_meet_results(workspace_id)',
+];
+
+/** SQLite v4 → v5 matrix scoring view (merged vs pdf_only). */
+export const SQLITE_MIGRATIONS_V5 = [
+  'ALTER TABLE workspaces ADD COLUMN scoring_view TEXT',
+];
+
+/** SQLite v5 → v6 athlete name-alias links (one row per link). */
+export const SQLITE_MIGRATIONS_V6 = [
+  `CREATE TABLE IF NOT EXISTS athlete_aliases (
+  id           TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  position     INTEGER NOT NULL DEFAULT 0,
+  data         TEXT NOT NULL
+)`,
+  'CREATE INDEX IF NOT EXISTS idx_athlete_aliases_ws ON athlete_aliases(workspace_id)',
+];
+
+/** SQLite v6 → v7 race analyses (one JSON row per analysis). */
+export const SQLITE_MIGRATIONS_V7 = [
+  `CREATE TABLE IF NOT EXISTS race_analyses (
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  position     INTEGER NOT NULL DEFAULT 0,
+  data         TEXT NOT NULL
+)`,
+  'CREATE INDEX IF NOT EXISTS idx_race_analyses_ws ON race_analyses(workspace_id)',
 ];

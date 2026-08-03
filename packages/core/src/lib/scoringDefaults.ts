@@ -43,8 +43,10 @@ export const NSISC_PRESET_SETTINGS: ScoringSettings = {
     distanceEventPattern: ['1000', '1650', '1500'],
   },
   diverEventPattern: ['DIVING', 'DIVE'],
-  maxIndividualEntriesPerSwimmer: 3,
-  maxRelayEntriesPerSwimmer: 4,
+  // NSISC: entry legality is a 7-event total (any ind/relay mix); no per-type caps.
+  maxIndividualEntriesPerSwimmer: 999,
+  maxRelayEntriesPerSwimmer: 999,
+  maxTotalEntriesPerSwimmer: 7,
 };
 
 export const DEFAULT_SCORER_AUTO_RULES: ScorerAutoRules = {
@@ -146,6 +148,7 @@ export function mergeScoringSettings(
       merged.relayEligibleFromScorerPool = NSISC_PRESET_SETTINGS.relayEligibleFromScorerPool;
       merged.maxIndividualEntriesPerSwimmer = NSISC_PRESET_SETTINGS.maxIndividualEntriesPerSwimmer;
       merged.maxRelayEntriesPerSwimmer = NSISC_PRESET_SETTINGS.maxRelayEntriesPerSwimmer;
+      merged.maxTotalEntriesPerSwimmer = NSISC_PRESET_SETTINGS.maxTotalEntriesPerSwimmer;
     }
   }
   return merged;

@@ -15,6 +15,8 @@ export const CHILD_TABLES = [
   'relay_leg_overrides',
   'deleted_swimmers',
   'athlete_history',
+  'race_analyses',
+  'athlete_aliases',
 ] as const;
 
 export type ChildTable = (typeof CHILD_TABLES)[number];
@@ -59,8 +61,11 @@ export function assembleWorkspace(
     meetEntryPlans: childData('meet_entry_plans') as Workspace['meetEntryPlans'],
     relayLegOverrides: childData('relay_leg_overrides') as Workspace['relayLegOverrides'],
     athleteHistory: childData('athlete_history') as Workspace['athleteHistory'],
+    raceAnalyses: childData('race_analyses') as Workspace['raceAnalyses'],
+    athleteAliases: childData('athlete_aliases') as Workspace['athleteAliases'],
     conference: row.conference != null ? String(row.conference) : undefined,
     entryPlanMode: (row.entry_plan_mode as Workspace['entryPlanMode']) ?? undefined,
+    scoringView: (row.scoring_view as Workspace['scoringView']) ?? undefined,
     scoringSettings: parseJson<Workspace['scoringSettings']>(row.scoring_settings, undefined),
     loadedMeet: parseJson<Workspace['loadedMeet']>(row.loaded_meet, undefined),
     loadedPsych: parseJson<Workspace['loadedPsych']>(row.loaded_psych, undefined),
@@ -90,6 +95,7 @@ export function workspaceRowValues(ws: Workspace, sortIndex: number, meta: Works
     created_at: ws.createdAt ?? Date.now(),
     conference: ws.conference ?? null,
     entry_plan_mode: ws.entryPlanMode ?? null,
+    scoring_view: ws.scoringView ?? null,
     scoring_settings: ws.scoringSettings ? JSON.stringify(ws.scoringSettings) : null,
     loaded_meet: ws.loadedMeet ? JSON.stringify(ws.loadedMeet) : null,
     loaded_psych: ws.loadedPsych ? JSON.stringify(ws.loadedPsych) : null,

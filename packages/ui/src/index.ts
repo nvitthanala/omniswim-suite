@@ -3,6 +3,11 @@ export { LoadingSpinner } from './components/LoadingSpinner';
 export { ToastProvider, useToast, type Toast, type ToastKind } from './components/Toast';
 export { AppletSkeleton } from './components/AppletSkeleton';
 export { Badge } from './components/Badge';
+export {
+  CutlineTag,
+  CutlineNearMissChip,
+  NEAR_MISS_RELATIVE_THRESHOLD,
+} from './components/CutlineTag';
 export { Button } from './components/Button';
 export { EmptyState } from './components/EmptyState';
 export { ChartShell, getChartContentBoxSize, getChartViewportSize, isChartMeasurementReady, resolveChartMeasurement, type ChartShellRenderState, type ChartShellSize } from './components/ChartShell';

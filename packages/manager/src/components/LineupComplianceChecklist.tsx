@@ -10,7 +10,7 @@ import type { LineupChecklistItem, TeamLineupAudit } from '@omniswim/core/lib/ro
 
 type Props = {
   audit: TeamLineupAudit;
-  onJumpAthlete?: (athleteName: string) => void;
+  onJumpAthlete?: (athleteName: string, athleteKey?: string) => void;
   onFixItem?: (item: LineupChecklistItem) => void;
   onOpenRelays?: () => void;
 };
@@ -63,7 +63,7 @@ export default function LineupComplianceChecklist({
                 {list.map(item => (
                   <li
                     key={item.id}
-                    className="rounded-lg border border-theme-soft surface-muted-bg px-3 py-2.5"
+                    className="rounded-lg border border-theme-soft surface-muted-bg px-3 py-2.5 transition-colors hover:border-theme"
                   >
                     <p className="text-ui-caption text-[var(--text-primary)] leading-relaxed break-words">
                       {item.message}
@@ -73,7 +73,7 @@ export default function LineupComplianceChecklist({
                         <button
                           type="button"
                           className="text-ui-caption text-[var(--text-accent)] hover:underline"
-                          onClick={() => onJumpAthlete(item.athleteName!)}
+                          onClick={() => onJumpAthlete(item.athleteName!, item.athleteKey)}
                         >
                           Jump
                         </button>
@@ -143,7 +143,7 @@ export default function LineupComplianceChecklist({
               Compliance checklist
             </h4>
             {count > 0 ? (
-              <span className="ml-auto text-ui-caption font-mono text-amber-400">{count}</span>
+              <span className="ml-auto text-ui-caption font-mono tabular-nums text-amber-400">{count}</span>
             ) : null}
           </div>
           {body}

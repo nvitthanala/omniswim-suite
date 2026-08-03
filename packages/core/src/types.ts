@@ -1,3 +1,5 @@
+import type { RaceConfig, RaceTag } from './lib/raceAnalysis';
+
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -89,6 +91,14 @@ export interface SwimmerResult {
 export interface DeletedSwimmerRef {
   name: string;
   gender: Gender;
+  /**
+   * How the athlete was removed:
+   *  - 'hidden'  (default): what-if only — source rows stay, projection drops them.
+   *  - 'removed': permanent — their individual working rows were stripped from
+   *    menResults/womenResults too, so they leave the baseline roster as well.
+   * Absent is treated as 'hidden' for backward compatibility.
+   */
+  mode?: 'hidden' | 'removed';
 }
 
 export interface TeamScore {
@@ -138,6 +148,8 @@ export interface ScoringSettings {
   maxIndividualEntriesPerSwimmer?: number;
   /** Max relay events (distinct relay entries) a swimmer may swim. */
   maxRelayEntriesPerSwimmer?: number;
+  /** Max total events (individual + relay combined) a swimmer may enter. When set, overrides separate limits. */
+  maxTotalEntriesPerSwimmer?: number;
 }
 
 export interface ScorerAutoRules {
@@ -180,6 +192,14 @@ export interface RelayLegOverride {
   classYear?: ClassYear | string;
   manualLegTime?: string;
   source?: 'manual' | 'drag' | 'autofill';
+  /**
+   * Ordered fallback swimmer names for this leg (roster-resolved), captured from a
+   * scoring-theory parse (e.g. "Colton/Hunter/Alan" → primary Colton, alternates
+   * [Hunter, Alan]). Additive/optional: legacy overrides omit it. Consumed by
+   * suggestRelayAlternatePromotions (scoringTheory.ts) to auto-fill a leg whose
+   * primary becomes unavailable.
+   */
+  alternates?: string[];
 }
 
 export interface LoadedMeetMeta {
@@ -225,6 +245,13 @@ export type SwimCloudBadge =
 export type NcaaDivision = 'D1' | 'D2' | 'D3' | 'NAIA';
 
 export interface HistoricalSwim {
+  /**
+   * Stable id. Optional and additive: rows imported before this field existed
+   * (paste/OCR/CSV) carry no id and are still read normally; the swim editor
+   * (lib/swimEditor.ts) assigns one to rows it creates so they can be referenced
+   * for edit/remove. Nothing keys dedup/scoring on it.
+   */
+  id?: string;
   name: string;
   team: string;
   gender: Gender;
@@ -280,10 +307,105 @@ export interface Workspace {
   /** What-if meet entry plans (overlay or plan sheet). */
   meetEntryPlans?: PlannedSwimEntry[];
   entryPlanMode?: 'overlay' | 'plan_sheet';
+  /**
+   * Matrix scoring view. `merged` (default when absent) remaps imported/planned/
+   * recruit rows onto the loaded meet's real event groups so they compete inside
+   * the PDF field. `pdf_only` scores the loaded meet alone (plans + recruits are
+   * excluded; deletions, relay overrides and other PDF-native adjustments still
+   * apply).
+   */
+  scoringView?: 'merged' | 'pdf_only';
   activeEntryIds?: string[];
   /** Supplemental swims from paste/OCR/CSV imports. */
   athleteHistory?: HistoricalSwim[];
+  raceAnalyses?: Array<{ id: string; swimmerName: string; video: { fileName: string; duration: number; width: number; height: number; fps?: number }; config: RaceConfig; tags: RaceTag[]; createdAt: number; updatedAt: number }>;
   historySources?: { type: string; label: string; importedAt: number }[];
+  /**
+   * Confirmed athlete name-identity links: each row declares that `aliasName`
+   * and `canonicalName` are the same human (e.g. "Stevie Balistreri" ==
+   * "Steven Balistreri"). Used by buildAliasResolver to unify duplicate athletes
+   * across import spellings. No hardcoded nickname tables — links are created by
+   * the user (or accepted import suggestions).
+   */
+  athleteAliases?: AthleteAliasLink[];
+}
+
+/** Who created an alias link: a human decision, or the auto-linker heuristic. */
+export type AliasLinkOrigin = 'user' | 'auto';
+
+/**
+ * Evidence strength that justified an automatic link.
+ *  - `conclusive` — the two spellings are identical after folding case, whitespace,
+ *    punctuation and diacritics ("Oliver Pozvai" == "Olivér Pózvai").
+ *  - `strong`     — a recognized name-variant relation PLUS at least one exact
+ *    individual-event time shared across sources (relay times are never used).
+ *  - `moderate`   — a recognized name-variant relation with an identical surname,
+ *    where exactly one side competed and the other exists only in imported data.
+ */
+export type AliasEvidenceTier = 'conclusive' | 'strong' | 'moderate';
+
+/** Which rule fired to produce an automatic link (audit trail). */
+export type AliasAutoRule =
+  | 'identical_after_folding'
+  | 'name_variant_time_corroborated'
+  | 'name_variant_import_only';
+
+/** One exact time shared by both spellings, in the same individual event and course. */
+export interface AliasTimeMatch {
+  /** Normalized individual program event ("50 freestyle"). Relays never appear here. */
+  event: string;
+  /** The shared clock string as displayed ("20.59"). */
+  time: string;
+  course: 'SCY' | 'LCM' | 'SCM';
+}
+
+/**
+ * Why a link exists. Present on auto-created links (and optionally on user links).
+ * Absent ⇒ the link predates provenance tracking and is treated as `origin: 'user'`.
+ */
+export interface AliasLinkProvenance {
+  origin: AliasLinkOrigin;
+  /** Which auto rule fired. Absent for user links. */
+  rule?: AliasAutoRule;
+  tier?: AliasEvidenceTier;
+  /** Name-relation score in [0,1] that the decision was made at. */
+  score?: number;
+  /** Human-readable justification, safe to render in an audit panel. */
+  reason?: string;
+  /** Exact individual-event time corroboration used (empty/absent = none). */
+  timeMatches?: AliasTimeMatch[];
+  /** Which side of the link was seen in competed meet results. */
+  competedSide?: 'canonical' | 'alias' | 'neither';
+  decidedAt?: string;
+  /** Why the row was turned into a suppression tombstone. */
+  suppressedReason?: 'user_unlink' | 'user_reject';
+  suppressedAt?: string;
+  note?: string;
+}
+
+/**
+ * A confirmed link declaring two name spellings are the same athlete.
+ * `aliasName` resolves to `canonicalName`. Scope: always gender-specific;
+ * team-scoped when `team` is set (team-scoped links take precedence over global).
+ *
+ * Rows with `status: 'suppressed'` are TOMBSTONES, not links: they resolve
+ * nothing, and they permanently block the auto-linker from re-proposing that
+ * pair. Tombstones live in the same `athleteAliases` array (and therefore the
+ * same `athlete_aliases` persistence table) so a user's "unlink" survives a
+ * reload and a re-import without any schema change.
+ */
+export interface AthleteAliasLink {
+  id: string;
+  gender: Gender;
+  team?: string;
+  canonicalName: string;
+  aliasName: string;
+  source: 'manual' | 'import';
+  createdAt?: string;
+  /** Absent ⇒ `'active'`. See the tombstone note above. */
+  status?: 'active' | 'suppressed';
+  /** Audit trail: which rule/evidence produced this row. */
+  provenance?: AliasLinkProvenance;
 }
 
 export interface Recruit {

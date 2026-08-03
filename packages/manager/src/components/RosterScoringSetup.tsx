@@ -157,6 +157,20 @@ export default function RosterScoringSetup({ workspace, settings, onSave }: Prop
                 }
               />
             </label>
+            <label className="flex flex-col gap-1.5 min-w-0">
+              <span className="text-ui-caption text-theme-muted">Max total entries / swimmer</span>
+              <input
+                type="number"
+                className="glass-input rounded-lg px-3 py-2 text-ui-body font-mono"
+                value={local.maxTotalEntriesPerSwimmer ?? 999}
+                onChange={e =>
+                  setLocal({
+                    ...local,
+                    maxTotalEntriesPerSwimmer: parseInt(e.target.value, 10) || 999,
+                  })
+                }
+              />
+            </label>
           </div>
           <button
             type="button"

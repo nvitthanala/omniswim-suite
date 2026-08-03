@@ -8,9 +8,18 @@ interface Props {
   settings: ScoringSettings;
   onSave: (s: ScoringSettings) => void;
   onClose: () => void;
+  /** Workspace-level scoring view (absent = 'merged'); omit the callback to hide the toggle. */
+  scoringView?: 'merged' | 'pdf_only';
+  onScoringViewChange?: (view: 'merged' | 'pdf_only') => void;
 }
 
-export default function ScoringSettingsModal({ settings, onSave, onClose }: Props) {
+export default function ScoringSettingsModal({
+  settings,
+  onSave,
+  onClose,
+  scoringView,
+  onScoringViewChange,
+}: Props) {
   const base = mergeScoringSettings(settings);
   const [places, setPlaces] = useState(base.scoringPoints.length);
   const [points, setPoints] = useState<number[]>([...base.scoringPoints]);
@@ -28,6 +37,9 @@ export default function ScoringSettingsModal({ settings, onSave, onClose }: Prop
   );
   const [maxRelayEntriesPerSwimmer, setMaxRelayEntriesPerSwimmer] = useState(
     base.maxRelayEntriesPerSwimmer ?? 999
+  );
+  const [maxTotalEntriesPerSwimmer, setMaxTotalEntriesPerSwimmer] = useState(
+    base.maxTotalEntriesPerSwimmer ?? 999
   );
   const [presets, setPresets] = useState<ScoringPresetMeta[]>([]);
 
@@ -61,6 +73,7 @@ export default function ScoringSettingsModal({ settings, onSave, onClose }: Prop
     setRelayPool(s.relayEligibleFromScorerPool === true);
     setMaxIndividualEntriesPerSwimmer(s.maxIndividualEntriesPerSwimmer ?? 999);
     setMaxRelayEntriesPerSwimmer(s.maxRelayEntriesPerSwimmer ?? 999);
+    setMaxTotalEntriesPerSwimmer(s.maxTotalEntriesPerSwimmer ?? 999);
   };
 
   const applyGenericTop16 = () => {
@@ -76,6 +89,7 @@ export default function ScoringSettingsModal({ settings, onSave, onClose }: Prop
     setRelayPool(s.relayEligibleFromScorerPool === true);
     setMaxIndividualEntriesPerSwimmer(s.maxIndividualEntriesPerSwimmer ?? 999);
     setMaxRelayEntriesPerSwimmer(s.maxRelayEntriesPerSwimmer ?? 999);
+    setMaxTotalEntriesPerSwimmer(s.maxTotalEntriesPerSwimmer ?? 999);
   };
 
   const set24Places = () => {
@@ -84,6 +98,49 @@ export default function ScoringSettingsModal({ settings, onSave, onClose }: Prop
     setRelayMultiplier(2);
     setHalfRate(true);
   };
+
+  const resolvedScoringView = scoringView ?? 'merged';
+
+  const scoringViewControl = onScoringViewChange ? (
+    <div className="flex flex-col gap-2 border-b border-theme-soft pb-6">
+      <label className="block text-[10px] text-theme-secondary uppercase tracking-widest font-medium">
+        Scoring view
+      </label>
+      <div className="inline-flex items-center self-start rounded-md border border-theme-soft surface-overlay p-1">
+        <button
+          type="button"
+          onClick={() => onScoringViewChange('merged')}
+          aria-pressed={resolvedScoringView === 'merged'}
+          className={`px-3 py-1.5 rounded text-[10px] uppercase font-medium transition-colors ${
+            resolvedScoringView === 'merged'
+              ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
+              : 'text-theme-secondary hover:text-[var(--text-primary)]'
+          }`}
+          title="Imported/planned/recruit entries remap onto the loaded meet's events and compete for points"
+        >
+          Merged
+        </button>
+        <button
+          type="button"
+          onClick={() => onScoringViewChange('pdf_only')}
+          aria-pressed={resolvedScoringView === 'pdf_only'}
+          className={`px-3 py-1.5 rounded text-[10px] uppercase font-medium transition-colors ${
+            resolvedScoringView === 'pdf_only'
+              ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
+              : 'text-theme-secondary hover:text-[var(--text-primary)]'
+          }`}
+          title="Plans and recruits are excluded from scoring — original PDF-base scoring only"
+        >
+          PDF only
+        </button>
+      </div>
+      <p className="text-[9px] text-theme-muted normal-case tracking-normal">
+        {resolvedScoringView === 'merged'
+          ? 'Plans, imports, and recruits remap onto the loaded meet and compete for points.'
+          : 'Plans and recruits are excluded from scoring — only the original meet results score.'}
+      </p>
+    </div>
+  ) : null;
 
   const buildSettings = (): ScoringSettings => ({
     scoringPoints: points,
@@ -98,11 +155,12 @@ export default function ScoringSettingsModal({ settings, onSave, onClose }: Prop
     diverEventPattern: base.diverEventPattern ?? ['DIVING', 'DIVE'],
     maxIndividualEntriesPerSwimmer,
     maxRelayEntriesPerSwimmer,
+    maxTotalEntriesPerSwimmer,
   });
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop backdrop-blur-sm">
-      <div className="surface-card rounded-lg p-6 max-w-2xl w-full mx-4 shadow-2xl max-h-[90vh] flex flex-col">
+      <div className="surface-card rounded-2xl p-6 max-w-2xl w-full mx-4 shadow-2xl max-h-[90vh] flex flex-col">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-lg font-medium text-[var(--text-primary)] uppercase tracking-tight">Scoring Matrix Configuration</h2>
           <button onClick={onClose} className="text-theme-secondary hover:text-[var(--text-primary)] transition-colors">
@@ -111,6 +169,7 @@ export default function ScoringSettingsModal({ settings, onSave, onClose }: Prop
         </div>
 
         <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6 text-sm">
+          {scoringViewControl}
           <div className="flex flex-col gap-3 border-b border-theme-soft pb-6">
             <label className="block text-[10px] text-theme-secondary uppercase tracking-widest font-medium">
               Preset configurations
@@ -135,14 +194,14 @@ export default function ScoringSettingsModal({ settings, onSave, onClose }: Prop
               <button
                 type="button"
                 onClick={applyGenericTop16}
-                className="px-3 py-1.5 bg-[var(--surface-muted)] hover:bg-[var(--surface-strong)] text-[var(--text-primary)] rounded text-xs transition-colors border border-theme-soft"
+                className="px-3 py-1.5 bg-[var(--surface-muted)] hover:bg-[var(--surface-strong)] text-[var(--text-primary)] rounded-lg text-xs transition-colors border border-theme-soft"
               >
                 Generic Top 16
               </button>
               <button
                 type="button"
                 onClick={set24Places}
-                className="px-3 py-1.5 bg-[var(--surface-muted)] hover:bg-[var(--surface-strong)] text-[var(--text-primary)] rounded text-xs transition-colors border border-theme-soft"
+                className="px-3 py-1.5 bg-[var(--surface-muted)] hover:bg-[var(--surface-strong)] text-[var(--text-primary)] rounded-lg text-xs transition-colors border border-theme-soft"
               >
                 Top 24 points only
               </button>
@@ -245,6 +304,15 @@ export default function ScoringSettingsModal({ settings, onSave, onClose }: Prop
                 />
               </div>
               <div>
+                <label className="block text-theme-secondary mb-1 text-[10px] uppercase">Max total entries / swimmer</label>
+                <input
+                  type="number"
+                  value={maxTotalEntriesPerSwimmer}
+                  onChange={e => setMaxTotalEntriesPerSwimmer(parseInt(e.target.value, 10) || 999)}
+                  className="glass-input w-full text-xs font-mono"
+                />
+              </div>
+              <div>
                 <label className="block text-theme-secondary mb-2">Relay multiplier</label>
                 <select
                   value={relayMultiplier}
@@ -272,12 +340,12 @@ export default function ScoringSettingsModal({ settings, onSave, onClose }: Prop
         </div>
 
         <div className="pt-6 mt-2 border-t border-theme-soft flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 theme-hover-row rounded text-theme-secondary transition-colors">
+          <button onClick={onClose} className="px-4 py-2 theme-hover-row rounded-lg text-theme-secondary transition-colors">
             Cancel
           </button>
           <button
             onClick={() => onSave(buildSettings())}
-            className="px-6 py-2 bg-[var(--text-accent)] border border-[var(--text-accent)]/25 text-white rounded font-medium flex items-center gap-2"
+            className="px-6 py-2 bg-[var(--text-accent)] border border-[var(--text-accent)]/25 text-white rounded-lg font-medium flex items-center gap-2 transition-colors hover:bg-[var(--btn-action-hover)]"
           >
             <Save size={16} />
             Update scoring model

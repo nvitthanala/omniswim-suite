@@ -137,10 +137,10 @@ function baseWorkspace(overrides = {}) {
   });
   assert.equal(result.noop, false);
   assert.ok((result.patch.athleteHistory?.length ?? 0) >= 4);
-  // NSISC cap 3 individual → at most 3 recruit entries
-  assert.ok(result.summary.newRecruits <= 3);
-  assert.equal(result.summary.newRecruits, 3);
-  assert.equal((result.patch.recruits ?? []).filter(r => r.name === 'Vera, Blaise').length, 3);
+  // NSISC total-only cap (7 combined) → all 4 individual swims fit
+  assert.ok(result.summary.newRecruits <= 7, 'total cap bounds recruit entries');
+  assert.equal(result.summary.newRecruits, 4);
+  assert.equal((result.patch.recruits ?? []).filter(r => r.name === 'Vera, Blaise').length, 4);
 
   const projected = buildWhatIfResults({
     workspace: { ...ws, ...result.patch },
@@ -239,21 +239,26 @@ function baseWorkspace(overrides = {}) {
 
 // --- respects caps when athlete already at max entries ---
 {
+  const planFor = (id, event, time) => ({
+    id,
+    name: 'Smith, John',
+    team: 'Ouachita Baptist University',
+    gender: Gender.MEN,
+    event,
+    time,
+    source: 'manual',
+    active: true,
+  });
   const ws = baseWorkspace({
     meetEntryPlans: [
-      {
-        id: 'p1',
-        name: 'Smith, John',
-        team: 'Ouachita Baptist University',
-        gender: Gender.MEN,
-        event: '200 Freestyle',
-        time: '1:40.00',
-        source: 'manual',
-        active: true,
-      },
+      planFor('p1', '200 Freestyle', '1:40.00'),
+      planFor('p2', '500 Freestyle', '4:40.00'),
+      planFor('p3', '200 IM', '1:52.00'),
+      planFor('p4', '400 IM', '4:00.00'),
+      planFor('p5', '100 Backstroke', '50.00'),
     ],
   });
-  // PDF already has 50 Free + 100 Free; plan adds 200 Free → 3 ind. Import more should add 0.
+  // PDF has 50 Free + 100 Free; plans add 5 more → 7 total (NSISC total cap). Import should add 0.
   const preview = [
     {
       name: 'Smith, John',

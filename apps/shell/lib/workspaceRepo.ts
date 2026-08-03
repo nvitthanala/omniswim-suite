@@ -28,6 +28,8 @@ export interface WorkspaceRepo {
   backup(label?: string): Promise<string>;
   snapshot(id: string, label: string): Promise<SnapshotMeta | undefined>;
   listSnapshots(id: string): Promise<SnapshotMeta[]>;
+  /** Read-only snapshot content (no restore). Undefined on JSON backend / unknown id. */
+  getSnapshotContent(snapshotId: string): Promise<Workspace | undefined>;
   restoreSnapshot(snapshotId: string): Promise<Workspace | undefined>;
   setScope?(scope: WorkspaceScope): void;
 }
@@ -84,6 +86,9 @@ export class JsonRepo implements WorkspaceRepo {
   }
   async listSnapshots() {
     return [];
+  }
+  async getSnapshotContent() {
+    return undefined;
   }
   async restoreSnapshot() {
     return undefined;
@@ -153,6 +158,9 @@ export class SqliteRepo implements WorkspaceRepo {
   async listSnapshots(id: string) {
     return this.service.listSnapshots(id);
   }
+  async getSnapshotContent(snapshotId: string) {
+    return this.service.getSnapshotContent(snapshotId);
+  }
   async restoreSnapshot(snapshotId: string) {
     return this.service.restoreSnapshot(snapshotId);
   }
@@ -197,6 +205,9 @@ export class PgRepo implements WorkspaceRepo {
   }
   async listSnapshots(id: string) {
     return this.service.listSnapshots(id);
+  }
+  async getSnapshotContent(snapshotId: string) {
+    return this.service.getSnapshotContent(snapshotId);
   }
   async restoreSnapshot(snapshotId: string) {
     return this.service.restoreSnapshot(snapshotId);

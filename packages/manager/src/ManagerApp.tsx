@@ -9,8 +9,11 @@ import { Users } from 'lucide-react';
 import { Recruit, Workspace } from '@omniswim/core/types';
 import { mergeScoringSettings } from '@omniswim/core/lib/utils';
 import { usesScorerRoster, scorerRosterKey } from '@omniswim/core/lib/scorerRoster';
-import { softRemoveSwimmerFromWorkspace } from '@omniswim/core/lib/swimmerSoftRemove';
-import { useWorkspaceScoring } from '@omniswim/core/lib/useWorkspaceScoring';
+import {
+  removeAthleteFromWorkspace,
+  softRemoveSwimmerFromWorkspace,
+} from '@omniswim/core/lib/swimmerSoftRemove';
+import { ScoringSettledContext, useWorkspaceScoring } from '@omniswim/core/lib/useWorkspaceScoring';
 import { exportEntriesCsv, exportEntriesHytek, type EntryExport } from '@omniswim/core/lib/entryExport';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
 import { EmptyState, useToast } from '@omniswim/ui';
@@ -52,7 +55,7 @@ export default function ManagerApp() {
     );
   }
 
-  const { projected, baselineByTeam, scoringSettings } = useWorkspaceScoring({
+  const { projected, baselineByTeam, scoringSettings, scoringSettled } = useWorkspaceScoring({
     workspace: activeWorkspace,
     gender: activeGender,
     removeSeniors,
@@ -90,21 +93,33 @@ export default function ManagerApp() {
     toast.push('success', `Exported ${exp.count} entr${exp.count === 1 ? 'y' : 'ies'} → ${exp.filename}`);
   };
 
-  const confirmDeleteSwimmer = () => {
+  const hideSwimmer = () => {
     if (!swimmerDeleteCandidate) return;
     const patch = softRemoveSwimmerFromWorkspace(activeWorkspace, {
       name: swimmerDeleteCandidate.name,
       gender: activeGender,
     });
     void updateWorkspace(patch);
+    toast.push('info', `${swimmerDeleteCandidate.name} hidden from What-if projection.`);
+    setSwimmerDeleteCandidate(null);
+  };
+
+  const removeSwimmer = () => {
+    if (!swimmerDeleteCandidate) return;
+    const { patch, description } = removeAthleteFromWorkspace(activeWorkspace, {
+      name: swimmerDeleteCandidate.name,
+      gender: activeGender,
+    });
+    void updateWorkspace(patch);
+    toast.push('success', `${description} — Restore in the roster panel to undo.`);
     setSwimmerDeleteCandidate(null);
   };
 
   return (
-    <>
+    <ScoringSettledContext.Provider value={scoringSettled}>
       <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center mb-5">
         <div className="min-w-0">
-          <h2 className="text-xl font-semibold tracking-tight text-[var(--text-primary)]">
+          <h2 className="text-heading-2">
             Team management
           </h2>
           <p className="text-ui-caption text-theme-muted mt-0.5">
@@ -197,10 +212,11 @@ export default function ManagerApp() {
         <SwimmerDeleteConfirmModal
           swimmerName={swimmerDeleteCandidate.name}
           gender={activeGender}
-          onConfirm={confirmDeleteSwimmer}
+          onHide={hideSwimmer}
+          onRemove={removeSwimmer}
           onCancel={() => setSwimmerDeleteCandidate(null)}
         />
       )}
-    </>
+    </ScoringSettledContext.Provider>
   );
 }

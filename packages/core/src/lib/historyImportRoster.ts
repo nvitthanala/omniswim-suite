@@ -15,11 +15,26 @@ import {
   ScorerRosterOverride,
   Workspace,
 } from '../types';
-import { mergeHistoryIndex, matchAthleteToRoster, categorizeBestEvents } from './athleteHistory';
+import {
+  mergeHistoryIndex,
+  matchAthleteToRoster,
+  categorizeBestEvents,
+  isChampionshipProgramEvent,
+} from './athleteHistory';
 import { mergeScoringSettings } from './scoringDefaults';
 import { usesScorerRoster, scorerRosterKey } from './scorerRoster';
-import { convertTimeToSeconds, convertToSCY, normalizeSwimmerName } from './utils';
+import {
+  convertTimeToSeconds,
+  convertSwimToSCY,
+  foldDiacritics,
+  normalizeSwimmerName,
+} from './utils';
 import { createPlannedEntry } from './whatIfProjection';
+import {
+  buildAliasResolver,
+  IDENTITY_ALIAS_RESOLVER,
+  type AthleteAliasResolver,
+} from './athleteAliases';
 
 export type ImportSwimmerAction = 'new_recruit' | 'add_to_lineup' | 'history_matched' | 'already_recruit';
 
@@ -50,7 +65,46 @@ export type HistoryImportRosterOpts = {
   gender: Gender;
   sourceLabel?: string;
   sourceType?: string;
+  /**
+   * Per-swimmer class-year overrides keyed by `normalizeSwimmerName(name)`, matched
+   * diacritic-insensitively. Applied only to new recruits / planned entries for the named
+   * swimmers; swimmers absent from the map keep their parsed default.
+   */
+  classYearOverrides?: Record<string, ClassYear>;
+  /**
+   * Athlete alias resolver so a confirmed link ("Stevie" == "Steven") unifies the
+   * import onto the existing athlete instead of creating a duplicate. Defaults to
+   * a resolver built from `workspace.athleteAliases`.
+   */
+  resolver?: AthleteAliasResolver;
 };
+
+/** Diacritic-insensitive class-year override lookup keyed by normalized name. */
+export function buildClassYearOverrideLookup(
+  overrides?: Record<string, ClassYear>
+): Map<string, ClassYear> {
+  const map = new Map<string, ClassYear>();
+  if (!overrides) return map;
+  for (const [rawName, year] of Object.entries(overrides)) {
+    const norm = normalizeSwimmerName(rawName);
+    if (!map.has(norm)) map.set(norm, year);
+    const folded = foldDiacritics(norm);
+    if (!map.has(folded)) map.set(folded, year);
+  }
+  return map;
+}
+
+function lookupClassYearOverride(
+  map: Map<string, ClassYear>,
+  ...names: string[]
+): ClassYear | undefined {
+  for (const name of names) {
+    const norm = normalizeSwimmerName(name);
+    const hit = map.get(norm) ?? map.get(foldDiacritics(norm));
+    if (hit) return hit;
+  }
+  return undefined;
+}
 
 function isRelayEventName(event: string): boolean {
   return /\brelay\b/i.test(event);
@@ -68,7 +122,7 @@ function parseClassYear(raw: string | undefined): ClassYear {
   return ClassYear.HS;
 }
 
-function rosterNamesForTeam(workspace: Workspace, team: string, gender: Gender): string[] {
+export function rosterNamesForTeam(workspace: Workspace, team: string, gender: Gender): string[] {
   const results = gender === Gender.MEN ? workspace.menResults ?? [] : workspace.womenResults ?? [];
   const names = new Set<string>();
   for (const r of results) {
@@ -85,10 +139,14 @@ function rosterNamesForTeam(workspace: Workspace, team: string, gender: Gender):
   return [...names];
 }
 
-function groupPreviewBySwimmer(preview: HistoricalSwim[]): Map<string, HistoricalSwim[]> {
+function groupPreviewBySwimmer(
+  preview: HistoricalSwim[],
+  resolver: AthleteAliasResolver = IDENTITY_ALIAS_RESOLVER
+): Map<string, HistoricalSwim[]> {
   const map = new Map<string, HistoricalSwim[]>();
   for (const s of preview) {
-    const key = `${normalizeSwimmerName(s.name)}|${s.team}|${s.gender}`;
+    const resolved = resolver.resolveAthleteName(s.name, s.team, s.gender);
+    const key = `${normalizeSwimmerName(resolved)}|${s.team}|${s.gender}`;
     const list = map.get(key) ?? [];
     list.push(s);
     map.set(key, list);
@@ -96,25 +154,28 @@ function groupPreviewBySwimmer(preview: HistoricalSwim[]): Map<string, Historica
   return map;
 }
 
-function bestSwimsByEvent(swims: HistoricalSwim[]): HistoricalSwim[] {
+/**
+ * SCY-equivalent lineup candidates: each swim is converted to its SCY program event and
+ * time (400 Free LCM → 500 Free, etc.), non-championship events (25s, 100 IM, diving, odd
+ * metric distances) are dropped, and the fastest swim per program event is kept (sorted).
+ * The original swims are never mutated — conversion happens on read.
+ */
+function toProgramCandidates(swims: HistoricalSwim[]): HistoricalSwim[] {
   const best = new Map<string, HistoricalSwim>();
   for (const s of swims) {
-    const prev = best.get(s.event);
-    if (!prev) {
-      best.set(s.event, s);
-      continue;
-    }
-    const sec = convertTimeToSeconds(convertToSCY(s.time, s.event, s.gender, s.timeType ?? 'SCY'));
-    const prevSec = convertTimeToSeconds(
-      convertToSCY(prev.time, prev.event, prev.gender, prev.timeType ?? 'SCY')
-    );
-    if (sec < prevSec) best.set(s.event, s);
+    const relay = isRelayEventName(s.event);
+    const { event, time } = relay
+      ? { event: s.event, time: s.time }
+      : convertSwimToSCY(s.event, s.time, s.gender, s.timeType ?? 'SCY');
+    if (!isChampionshipProgramEvent(event)) continue;
+    const candidate: HistoricalSwim = { ...s, event, time, timeType: 'SCY' };
+    const sec = convertTimeToSeconds(time);
+    const prev = best.get(event);
+    if (!prev || sec < convertTimeToSeconds(prev.time)) best.set(event, candidate);
   }
-  return [...best.values()].sort((a, b) => {
-    const sa = convertTimeToSeconds(convertToSCY(a.time, a.event, a.gender, a.timeType ?? 'SCY'));
-    const sb = convertTimeToSeconds(convertToSCY(b.time, b.event, b.gender, b.timeType ?? 'SCY'));
-    return sa - sb;
-  });
+  return [...best.values()].sort(
+    (a, b) => convertTimeToSeconds(a.time) - convertTimeToSeconds(b.time)
+  );
 }
 
 function planKey(name: string, team: string, gender: Gender, event: string): string {
@@ -189,23 +250,25 @@ function countExistingEntries(
 export function previewHistoryImportActions(
   workspace: Workspace,
   preview: HistoricalSwim[],
-  opts: Pick<HistoryImportRosterOpts, 'team' | 'gender'>
+  opts: Pick<HistoryImportRosterOpts, 'team' | 'gender' | 'resolver'>
 ): ImportSwimmerPreview[] {
   if (!preview.length || !opts.team.trim()) return [];
+  const resolver = opts.resolver ?? buildAliasResolver(workspace);
   const rosterNames = rosterNamesForTeam(workspace, opts.team, opts.gender);
   const recruitKeys = new Set(
     (workspace.recruits ?? [])
       .filter(r => r.gender === opts.gender && r.team === opts.team)
-      .map(r => normalizeSwimmerName(r.name))
+      .map(r => normalizeSwimmerName(resolver.resolveAthleteName(r.name, opts.team, opts.gender)))
   );
-  const groups = groupPreviewBySwimmer(preview);
+  const groups = groupPreviewBySwimmer(preview, resolver);
   const out: ImportSwimmerPreview[] = [];
 
   for (const [, swims] of groups) {
     const sample = swims[0];
     if (sample.team !== opts.team || sample.gender !== opts.gender) continue;
-    const match = matchAthleteToRoster(sample.name, rosterNames);
-    const isRecruitAlready = recruitKeys.has(normalizeSwimmerName(sample.name));
+    const resolvedName = resolver.resolveAthleteName(sample.name, opts.team, opts.gender);
+    const match = matchAthleteToRoster(resolvedName, rosterNames);
+    const isRecruitAlready = recruitKeys.has(normalizeSwimmerName(resolvedName));
     let action: ImportSwimmerAction;
     if (isRecruitAlready || (match.match && recruitKeys.has(normalizeSwimmerName(match.match)))) {
       action = 'already_recruit';
@@ -216,7 +279,7 @@ export function previewHistoryImportActions(
         opts.team,
         opts.gender
       );
-      const hasNew = bestSwimsByEvent(swims).some(s => !existingEvents.has(s.event));
+      const hasNew = toProgramCandidates(swims).some(s => !existingEvents.has(s.event));
       action = hasNew ? 'add_to_lineup' : 'history_matched';
     } else {
       action = 'new_recruit';
@@ -259,11 +322,13 @@ export function importHistoryToRoster(
   }
 
   const gender = opts.gender;
+  const resolver = opts.resolver ?? buildAliasResolver(workspace);
   const settings = mergeScoringSettings(workspace.scoringSettings, {
     conference: workspace.conference,
   });
   const indCap = settings.maxIndividualEntriesPerSwimmer ?? 3;
   const relayCap = settings.maxRelayEntriesPerSwimmer ?? 4;
+  const totalCap = settings.maxTotalEntriesPerSwimmer ?? 999;
 
   const athleteHistory = mergeHistoryIndex(workspace.athleteHistory ?? [], preview);
   const historySources = [
@@ -283,6 +348,7 @@ export function importHistoryToRoster(
   let overrides = [...(workspace.scorerRosterOverrides ?? [])];
 
   const rosterNames = rosterNamesForTeam(workspace, team, gender);
+  const classYearOverrides = buildClassYearOverrideLookup(opts.classYearOverrides);
   const results =
     gender === Gender.MEN ? workspace.menResults ?? [] : workspace.womenResults ?? [];
 
@@ -294,25 +360,27 @@ export function importHistoryToRoster(
 
   let newRecruits = 0;
   let lineupEntriesAdded = 0;
-  const swimmerPreviews = previewHistoryImportActions(workspace, preview, { team, gender });
+  const swimmerPreviews = previewHistoryImportActions(workspace, preview, { team, gender, resolver });
 
-  const groups = groupPreviewBySwimmer(preview);
+  const groups = groupPreviewBySwimmer(preview, resolver);
   for (const [, swims] of groups) {
     const sample = swims[0];
     if (sample.team !== team || sample.gender !== gender) continue;
 
-    const match = matchAthleteToRoster(sample.name, rosterNames);
+    const resolvedSampleName = resolver.resolveAthleteName(sample.name, team, gender);
+    const match = matchAthleteToRoster(resolvedSampleName, rosterNames);
     const matchedName = match.match && match.confidence >= 0.7 ? match.match : null;
-    const displayName = matchedName ?? sample.name;
+    const displayName = matchedName ?? resolvedSampleName;
     const isOnRoster = Boolean(matchedName);
     const isExistingRecruit = recruits.some(
       r =>
         r.gender === gender &&
         r.team === team &&
-        normalizeSwimmerName(r.name) === normalizeSwimmerName(displayName)
+        normalizeSwimmerName(resolver.resolveAthleteName(r.name, team, gender)) ===
+          normalizeSwimmerName(displayName)
     );
 
-    const ranked = bestSwimsByEvent(swims);
+    const ranked = toProgramCandidates(swims);
     const profile = categorizeBestEvents(
       ranked,
       team,
@@ -360,11 +428,15 @@ export function importHistoryToRoster(
 
     let indSlots = Math.max(0, indCap - counts.individual);
     let relaySlots = Math.max(0, relayCap - counts.relay);
-    const classYear = parseClassYear(sample.classYear);
+    let totalSlots = Math.max(0, totalCap - (counts.individual + counts.relay));
+    const classYear =
+      lookupClassYearOverride(classYearOverrides, displayName, sample.name) ??
+      parseClassYear(sample.classYear);
 
     for (const swim of candidates) {
       const relayish = isRelayEventName(swim.event);
       if (counts.events.has(swim.event)) continue;
+      if (totalSlots <= 0) continue;
       if (relayish) {
         if (relaySlots <= 0) continue;
       } else if (indSlots <= 0) {
@@ -389,6 +461,7 @@ export function importHistoryToRoster(
         activeEntryIds.push(entry.id);
         lineupEntriesAdded += 1;
         counts.events.add(swim.event);
+        totalSlots -= 1;
         if (relayish) {
           relaySlots -= 1;
           counts.relay += 1;
@@ -414,6 +487,7 @@ export function importHistoryToRoster(
         existingRecruitEventKeys.add(rk);
         newRecruits += 1;
         counts.events.add(swim.event);
+        totalSlots -= 1;
         if (relayish) {
           relaySlots -= 1;
           counts.relay += 1;

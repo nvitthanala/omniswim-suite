@@ -10,6 +10,9 @@ type Props = {
   suggestedPresetId?: string | null;
   collapsible?: boolean;
   defaultOpen?: boolean;
+  /** Workspace-level scoring view (absent = 'merged'); omit to hide the toggle. */
+  scoringView?: 'merged' | 'pdf_only';
+  onScoringViewChange?: (view: 'merged' | 'pdf_only') => void;
 };
 
 export default function ScoringSettingsPanel({
@@ -18,6 +21,8 @@ export default function ScoringSettingsPanel({
   suggestedPresetId,
   collapsible = false,
   defaultOpen = false,
+  scoringView,
+  onScoringViewChange,
 }: Props) {
   const [open, setOpen] = useState(defaultOpen);
   const [localSettings, setLocalSettings] = useState<ScoringSettings>(() => mergeScoringSettings(settings));
@@ -79,8 +84,52 @@ export default function ScoringSettingsPanel({
     </div>
   );
 
+  const resolvedScoringView = scoringView ?? 'merged';
+
+  const scoringViewControl = onScoringViewChange ? (
+    <div className="mb-4 p-3 rounded-lg border border-theme-soft surface-overlay">
+      <label className="block text-[10px] text-theme-secondary uppercase tracking-widest font-medium mb-2">
+        Scoring view
+      </label>
+      <div className="inline-flex items-center rounded-md border border-theme-soft surface-overlay p-1">
+        <button
+          type="button"
+          onClick={() => onScoringViewChange('merged')}
+          aria-pressed={resolvedScoringView === 'merged'}
+          className={`px-3 py-1.5 rounded text-[10px] uppercase font-medium transition-colors ${
+            resolvedScoringView === 'merged'
+              ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
+              : 'text-theme-secondary hover:text-[var(--text-primary)]'
+          }`}
+          title="Imported/planned/recruit entries remap onto the loaded meet's events and compete for points"
+        >
+          Merged
+        </button>
+        <button
+          type="button"
+          onClick={() => onScoringViewChange('pdf_only')}
+          aria-pressed={resolvedScoringView === 'pdf_only'}
+          className={`px-3 py-1.5 rounded text-[10px] uppercase font-medium transition-colors ${
+            resolvedScoringView === 'pdf_only'
+              ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
+              : 'text-theme-secondary hover:text-[var(--text-primary)]'
+          }`}
+          title="Plans and recruits are excluded from scoring — original PDF-base scoring only"
+        >
+          PDF only
+        </button>
+      </div>
+      <p className="text-[9px] text-theme-muted mt-2 normal-case tracking-normal">
+        {resolvedScoringView === 'merged'
+          ? 'Plans, imports, and recruits remap onto the loaded meet and compete for points.'
+          : 'Plans and recruits are excluded from scoring — only the original meet results score.'}
+      </p>
+    </div>
+  ) : null;
+
   const body = (
     <>
+      {scoringViewControl}
       {suggestedPresetId && (
         <div className="mb-4 p-3 rounded badge-warning text-[10px]">
           <span className="uppercase tracking-widest font-medium">Suggested preset: </span>
@@ -246,6 +295,20 @@ export default function ScoringSettingsPanel({
             />
           </div>
           <div>
+            <label className="block text-[10px] text-theme-secondary uppercase mb-1">Max total entries / swimmer</label>
+            <input
+              type="number"
+              value={localSettings.maxTotalEntriesPerSwimmer ?? 999}
+              onChange={e =>
+                setLocalSettings({
+                  ...localSettings,
+                  maxTotalEntriesPerSwimmer: parseInt(e.target.value, 10) || 999,
+                })
+              }
+              className="glass-input w-full text-xs"
+            />
+          </div>
+          <div>
             <label className="block text-[10px] text-theme-secondary uppercase mb-1">Relay multiplier</label>
             <input
               type="number"
@@ -295,7 +358,7 @@ export default function ScoringSettingsPanel({
 
   if (collapsible) {
     return (
-      <div className="surface-card rounded-lg overflow-hidden shrink-0">
+      <div className="surface-card rounded-xl overflow-hidden shrink-0">
         <div className="flex items-center gap-2 p-4">
           <button
             type="button"
@@ -313,7 +376,7 @@ export default function ScoringSettingsPanel({
   }
 
   return (
-    <div className="surface-card rounded-lg p-5">
+    <div className="surface-card rounded-xl p-5">
       <div className="mb-4 flex items-center justify-between gap-3">
         {headerTitle}
         {saveButton}

@@ -3,12 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { FileCheck2, FileWarning, Link2 } from 'lucide-react';
-import { Gender, Recruit, ScoringSettings, Workspace } from '@omniswim/core/types';
+import { ClassYear, Gender, Recruit, ScoringSettings, Workspace } from '@omniswim/core/types';
 import RecruitForm, { type RecruitAthletePrefill } from './RecruitForm';
 import RosterScoringSetup from './RosterScoringSetup';
 import AthleteHistoryImportPanel from './AthleteHistoryImportPanel';
+import ScoringTheoryPanel from './ScoringTheoryPanel';
+import LoadMeetHereCard from './LoadMeetHereCard';
 
 type Props = {
   workspace: Workspace;
@@ -35,6 +37,7 @@ export default function RosterSourceStep({
   onAddRecruit,
   onUpdate,
 }: Props) {
+  const [classYearOverrides, setClassYearOverrides] = useState<Record<string, ClassYear>>({});
   const hasMeet = Boolean(workspace.loadedMeet?.pdfFilename);
   const hasSource =
     (workspace.sourceMenResults?.length ?? 0) > 0 ||
@@ -97,6 +100,8 @@ export default function RosterSourceStep({
           </div>
         </section>
 
+        <LoadMeetHereCard workspace={workspace} onUpdate={onUpdate} whatIfMode={whatIfMode} />
+
         <section className="surface-card rounded-xl p-4 sm:p-5">
           <div className="flex items-center gap-2 mb-1">
             <Link2 size={16} className="text-[var(--text-accent)] shrink-0" />
@@ -125,7 +130,7 @@ export default function RosterSourceStep({
         </section>
       </div>
 
-      <div className="xl:col-span-7 min-w-0">
+      <div className="xl:col-span-7 min-w-0 flex flex-col gap-4">
         <AthleteHistoryImportPanel
           workspace={workspace}
           gender={gender}
@@ -134,6 +139,17 @@ export default function RosterSourceStep({
           onTeamChange={onSelectTeam}
           onUpdate={onUpdate}
           importDisabled={!whatIfMode}
+          onClassYearsChange={setClassYearOverrides}
+        />
+        <ScoringTheoryPanel
+          workspace={workspace}
+          gender={gender}
+          team={selectedTeam}
+          classYearOverrides={
+            Object.keys(classYearOverrides).length > 0 ? classYearOverrides : undefined
+          }
+          onUpdate={onUpdate}
+          applyDisabled={!whatIfMode}
         />
       </div>
     </div>

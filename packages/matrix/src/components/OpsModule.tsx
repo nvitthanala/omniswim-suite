@@ -54,7 +54,6 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
   const [scoringRefreshKey, setScoringRefreshKey] = useState(0);
   const parseAbortRef = useRef<AbortController | null>(null);
   const psychParseAbortRef = useRef<AbortController | null>(null);
-
   const {
     projected,
     baseline,
@@ -285,6 +284,10 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
     psychParseAbortRef.current?.abort();
   };
 
+  const handleScoringViewChange = (view: 'merged' | 'pdf_only') => {
+    void onUpdate({ scoringView: view });
+  };
+
   const rosterDirty = hasRosterEdits(workspace);
 
   return (
@@ -345,6 +348,7 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
               whatIfMode ? name => setSwimmerDeleteCandidate({ name }) : undefined
             }
             onSaveScoringSettings={sets => void onUpdate({ scoringSettings: sets })}
+            onScoringViewChange={handleScoringViewChange}
             onClearSuggestedPreset={() => setSuggestedPresetId(null)}
             scoringRefreshKey={scoringRefreshKey}
           />

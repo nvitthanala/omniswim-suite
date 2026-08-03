@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Gender, Workspace } from '../types';
 import { buildPrelimsDeltaTimeline, buildPrelimsOverUnderByEntryKey, hasPrelimsData } from './prelimsProjection';
 import { buildPsychDeltaTimeline, buildPsychOverUnderByEntryKey, hasPsychData, psychResultsForGender } from './psychProjection';
@@ -30,6 +30,20 @@ function supportsModuleWorker(): boolean {
   return typeof window !== 'undefined' && typeof Worker !== 'undefined';
 }
 
+/**
+ * Whether the scoring worker has settled for the current workspace state
+ * (no recompute in flight). Provided by the app that owns useWorkspaceScoring
+ * (e.g. ManagerApp) so deeply nested panels can gate actions — like capturing
+ * a "· N pts" scenario label — on a non-transient total. Defaults to true so
+ * consumers outside a provider behave exactly as before.
+ */
+export const ScoringSettledContext = createContext<boolean>(true);
+
+/** Read the nearest ScoringSettledContext (true when none is provided). */
+export function useScoringSettled(): boolean {
+  return useContext(ScoringSettledContext);
+}
+
 type UseWorkspaceScoringArgs = {
   workspace: Workspace;
   gender: Gender;
@@ -55,6 +69,8 @@ export function useWorkspaceScoring({
   const [snapshot, setSnapshot] = useState<Snapshot>(() =>
     buildScoringSnapshot(workspace, gender, removeSeniors)
   );
+  /** False while a worker recompute for the latest workspace state is in flight. */
+  const [settled, setSettled] = useState(true);
 
   const workerRef = useRef<Worker | null>(null);
   const requestIdRef = useRef(0);
@@ -71,6 +87,8 @@ export function useWorkspaceScoring({
         const data = event.data;
         if (!data || data.id < latestHandledRef.current) return;
         latestHandledRef.current = data.id;
+        // Settled once the response for the newest posted request arrives.
+        if (data.id >= requestIdRef.current) setSettled(true);
         if (
           data.ok &&
           data.projected &&
@@ -89,6 +107,8 @@ export function useWorkspaceScoring({
       worker.onerror = () => {
         workerRef.current?.terminate();
         workerRef.current = null;
+        // Future recomputes run synchronously — nothing left in flight.
+        setSettled(true);
       };
       workerRef.current = worker;
     } catch {
@@ -108,9 +128,11 @@ export function useWorkspaceScoring({
     const worker = workerRef.current;
     if (worker) {
       const id = ++requestIdRef.current;
+      setSettled(false);
       worker.postMessage({ id, workspace, gender, removeSeniors });
     } else {
       setSnapshot(buildScoringSnapshot(workspace, gender, removeSeniors));
+      setSettled(true);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -119,6 +141,9 @@ export function useWorkspaceScoring({
     workspace.psychMenResults,
     workspace.psychWomenResults,
     workspace.recruits,
+    // Alias links change athlete identity, so the bundle must rebuild when one
+    // is added or removed — otherwise a just-linked duplicate stays on screen.
+    workspace.athleteAliases,
     workspace.deletedSwimmers,
     workspace.relayLegOverrides,
     workspace.meetEntryPlans,
@@ -127,6 +152,7 @@ export function useWorkspaceScoring({
     workspace.scoringSettings,
     workspace.scorerRosterOverrides,
     workspace.conference,
+    workspace.scoringView,
     gender,
     removeSeniors,
     scoringRefreshKey,
@@ -238,6 +264,8 @@ export function useWorkspaceScoring({
   );
 
   return {
+    /** True when no worker recompute is pending for the current workspace state. */
+    scoringSettled: settled,
     projected: snapshot.projected,
     baseline: snapshot.baseline,
     prelimsProjected: snapshot.prelimsProjected,

@@ -1,160 +1,322 @@
-import React, { useCallback, useMemo } from 'react';
-import { BiomechanicsData } from '../types';
-import { formatTime, exportToCSV } from '../lib/utils';
-import { Download } from 'lucide-react';
-import { Line, XAxis, YAxis, CartesianGrid, Tooltip, AreaChart, Area } from 'recharts';
-import { useThemeColors } from '@omniswim/core/lib/useThemeColors';
-import { ChartFrame, ChartShell } from '@omniswim/ui';
+import React from 'react';
+import { Badge } from '@omniswim/ui';
+import {
+  raceAnalysisReferenceBands,
+  UNDERWATER_LEGAL_LIMIT_METRES,
+  type ReferenceBand,
+} from '@omniswim/core/lib/raceAnalysis';
+import type { LengthMetrics, Measured, Problem, RaceAnalysisResult } from '../types';
+import { VelocityProfile } from './VelocityProfile';
+import { TempoProfile } from './TempoProfile';
 
-function MetricsDashboardComponent({ data }: { data: BiomechanicsData }) {
-  const chartTheme = useThemeColors();
-  
-  const chartData = useMemo(() => data.splits.map((s, i) => {
-    // Generate a simulated velocity point for the chart for visual intrigue
-    const velocity = (s.distance / s.time).toFixed(2);
-    return {
-      lap: s.lap,
-      distance: `${s.distance}m`,
-      time: s.time,
-      cumulative: data.splits.slice(0, i + 1).reduce((acc, curr) => acc + curr.time, 0),
-      velocity: parseFloat(velocity)
-    };
-  }), [data.splits]);
+const APPROX_CAVEAT =
+  'Approximate — derived from an entered or estimated distance, not measured directly from tags.';
 
-  const handleExport = useCallback(() => {
-    exportToCSV(chartData, `omni_swim_splits_${new Date().getTime()}.csv`);
-  }, [chartData]);
+function decimalsForMeasured(measured: Extract<Measured<number>, { status: 'value' }>): number {
+  if (measured.unit === 'count') return 0;
+  if (measured.unit.endsWith('/min')) return 1;
+  return 2;
+}
 
+function MeasuredValue({ measured }: { measured: Measured<number> }) {
+  if (measured.status === 'absent') {
+    return (
+      <span className="italic text-theme-muted" title={measured.reason}>
+        {'not measured'}
+      </span>
+    );
+  }
+  const digits = decimalsForMeasured(measured);
   return (
-    <div className="space-y-6 flex flex-col h-full">
-      <section>
-        <h3 className="text-ui-micro font-bold text-slate-500 uppercase tracking-[0.2em] mb-3">Performance Metrics</h3>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <MetricCard label="Avg Velocity" value={`${data.avgVelocity.toFixed(2)}`} unit="m/s" highlightClass="text-[var(--text-accent)]" />
-          <MetricCard label="Fatigue Index" value={`${data.fatigueIndex.toFixed(1)}`} unit="%" highlightClass="text-red-500 dark:text-red-400" />
-          <MetricCard label="Stroke Rate" value={`${Math.round(data.strokeRate)}`} unit="s/m" />
-          <MetricCard label="Dist. per Stroke" value={`${data.distancePerStroke.toFixed(2)}`} unit="m" />
-        </div>
-      </section>
+    <span className="inline-flex items-center gap-1.5">
+      <span className="font-mono text-[var(--text-primary)]">
+        {measured.value.toFixed(digits)}
+        {measured.unit !== 'count' ? (
+          <span className="ml-1 text-ui-micro opacity-70 text-theme-muted">{measured.unit}</span>
+        ) : null}
+      </span>
+      {measured.approximate ? (
+        <Badge tone="neutral" title={APPROX_CAVEAT}>
+          {'≈'}
+        </Badge>
+      ) : null}
+    </span>
+  );
+}
 
-      <section className="flex-1 min-h-[250px] flex flex-col">
-        <h3 className="text-ui-micro font-bold text-slate-500 uppercase tracking-[0.2em] mb-3">Velocity Profile</h3>
-        <ChartShell size="fluid" className="bg-white dark:bg-black/30 border border-slate-200 dark:border-white/5 rounded-lg p-5 overflow-hidden shadow-sm dark:shadow-none transition-colors">
-          {({ width, height }) => (
-          <ChartFrame width={width} height={height}>
-          <AreaChart
-            key={`velocity-${chartData.length}`}
-            width={Math.floor(width)}
-            height={Math.floor(height)}
-            responsive={false}
-            data={chartData}
-            margin={{ top: 5, right: 0, left: -20, bottom: 0 }}
-          >
-              <defs>
-                <linearGradient id="colorVelocity" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="5%" stopColor={chartTheme.accent} stopOpacity={0.3}/>
-                  <stop offset="95%" stopColor={chartTheme.accent} stopOpacity={0}/>
-                </linearGradient>
-              </defs>
-              <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.chartGrid} vertical={false} />
-              <XAxis dataKey="distance" stroke={chartTheme.chartTick} fontSize={10} tickLine={false} axisLine={false} />
-              <YAxis stroke={chartTheme.chartTick} fontSize={10} tickLine={false} axisLine={false} />
-              <Tooltip 
-                contentStyle={{ 
-                  backgroundColor: 'var(--popover-bg)', 
-                  borderColor: 'var(--popover-border)', 
-                  borderRadius: '8px',
-                  color: 'var(--text-primary)'
-                }}
-                itemStyle={{ color: 'var(--text-primary)', fontSize: '12px', fontFamily: 'var(--font-mono)' }}
-              />
-              <Area type="monotone" dataKey="velocity" stroke={chartTheme.accent} strokeWidth={2} fillOpacity={1} fill="url(#colorVelocity)" />
-              <Line type="monotone" dataKey="time" stroke="#10b981" strokeWidth={0} dot={{ r: 3, fill: '#10b981', strokeWidth: 0 }} />
-          </AreaChart>
-          </ChartFrame>
-          )}
-        </ChartShell>
-      </section>
+function StatCard({ label, measured, note }: { label: string; measured: Measured<number>; note?: string }) {
+  return (
+    <div className="surface-card p-4 rounded-xl transition-colors">
+      <div className="text-ui-micro text-theme-muted mb-1 uppercase tracking-wider font-bold">{label}</div>
+      <div className="text-2xl">
+        <MeasuredValue measured={measured} />
+      </div>
+      {note ? <div className="text-ui-micro text-theme-muted mt-1">{note}</div> : null}
+    </div>
+  );
+}
 
-      <section className="flex flex-col">
-        <div className="flex justify-between items-center mb-3">
-          <h3 className="text-ui-micro font-bold text-slate-500 uppercase tracking-[0.2em]">Split Analytics</h3>
-          <button 
-            onClick={handleExport}
-            className="text-slate-500 hover:text-slate-900 dark:hover:text-white transition-colors flex items-center gap-1 text-ui-micro font-medium"
+function BandNote({ bandKey }: { bandKey: ReferenceBand['key'] }) {
+  const band = raceAnalysisReferenceBands.find((candidate) => candidate.key === bandKey);
+  if (!band) return null;
+  const citation = `"${band.quote}" — ${band.label} reference (SwimCloud, retrieved ${band.retrievedAt})`;
+  return (
+    <a
+      href={band.sourceUrl}
+      target="_blank"
+      rel="noreferrer"
+      className="block text-ui-micro text-theme-muted italic border-l-2 border-theme-soft pl-2 mt-3 hover:text-[var(--text-accent)] transition-colors"
+    >
+      {citation}
+    </a>
+  );
+}
+
+function Section({
+  title,
+  bandKey,
+  children,
+}: {
+  title: string;
+  bandKey?: ReferenceBand['key'];
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <h3 className="text-ui-micro font-bold text-theme-muted uppercase tracking-[0.2em] mb-3">{title}</h3>
+      {children}
+      {bandKey ? <BandNote bandKey={bandKey} /> : null}
+    </section>
+  );
+}
+
+interface LengthColumn {
+  key: string;
+  header: string;
+  get: (length: LengthMetrics) => Measured<number>;
+}
+
+const UNDERWATER_COLUMNS: readonly LengthColumn[] = [
+  { key: 'breakoutTime', header: 'BREAKOUT', get: (length) => length.breakoutTime },
+  { key: 'underwaterVelocity', header: 'UW VEL', get: (length) => length.underwaterVelocity },
+  { key: 'kickCount', header: 'KICKS', get: (length) => length.kickCount },
+  { key: 'kickTempo', header: 'KICK TEMPO', get: (length) => length.kickTempo },
+];
+
+const FIFTEEN_METRE_COLUMNS: readonly LengthColumn[] = [
+  { key: 'fifteenMetreTime', header: '15M TIME', get: (length) => length.fifteenMetreTime },
+  { key: 'zeroToFifteenMetreVelocity', header: '0-15M VEL', get: (length) => length.zeroToFifteenMetreVelocity },
+];
+
+const STROKE_COLUMNS: readonly LengthColumn[] = [
+  { key: 'strokeRate', header: 'RATE', get: (length) => length.strokeRate },
+  { key: 'cycleCount', header: 'CYCLES', get: (length) => length.cycleCount },
+  { key: 'distancePerCycle', header: 'DIST/CYCLE', get: (length) => length.distancePerCycle },
+  { key: 'meanVelocity', header: 'MEAN VEL', get: (length) => length.meanVelocity },
+];
+
+function LengthMetricsTable({
+  lengths,
+  columns,
+}: {
+  lengths: readonly LengthMetrics[];
+  columns: readonly LengthColumn[];
+}) {
+  const templateColumns = `repeat(${columns.length + 1}, minmax(0, 1fr))`;
+  return (
+    <div className="surface-card rounded-xl overflow-hidden font-mono text-ui-caption transition-colors">
+      <div
+        className="grid p-3 border-b border-theme-soft text-theme-muted font-bold bg-[var(--surface-muted)] transition-colors"
+        style={{ gridTemplateColumns: templateColumns }}
+      >
+        <div>{'LEN'}</div>
+        {columns.map((column) => (
+          <div key={column.key}>{column.header}</div>
+        ))}
+      </div>
+      <div className="divide-y divide-[var(--border-soft)]">
+        {lengths.map((length) => (
+          <div
+            key={length.lengthIndex}
+            className="grid p-3 theme-hover-row text-theme-secondary transition-colors"
+            style={{ gridTemplateColumns: templateColumns }}
           >
-            <Download className="w-3 h-3" />
-            <span>CSV Export</span>
-          </button>
-        </div>
-        <div className="bg-white dark:bg-black/30 rounded-lg border border-slate-200 dark:border-white/5 overflow-hidden flex flex-col font-mono text-ui-caption shadow-sm dark:shadow-none transition-colors">
-          <div className="grid grid-cols-5 p-3 border-b border-slate-200 dark:border-white/5 text-slate-500 font-bold bg-slate-50 dark:bg-white/5 transition-colors">
-            <div>LAP</div>
-            <div>DIST</div>
-            <div>TIME</div>
-            <div>CUM.</div>
-            <div>VEL.</div>
-          </div>
-          <div className="divide-y divide-slate-100 dark:divide-white/5">
-            {chartData.map((row, i) => (
-              <div key={i} className="grid grid-cols-5 p-3 hover:bg-slate-50 dark:hover:bg-white/5 text-slate-700 dark:text-slate-300 transition-colors">
-                <div className="text-slate-500">{row.lap}</div>
-                <div>{row.distance}</div>
-                <div>{row.time.toFixed(2)}</div>
-                <div>{formatTime(row.cumulative)}</div>
-                <div className="text-[var(--text-accent)] font-bold">{row.velocity.toFixed(2)}</div>
+            <div className="text-theme-muted">
+              {`L${length.lengthIndex}`}
+              {length.lengthIndex === 1 ? (
+                <span className="block text-[10px] normal-case opacity-70">{'dive start'}</span>
+              ) : null}
+            </div>
+            {columns.map((column) => (
+              <div key={column.key}>
+                <MeasuredValue measured={column.get(length)} />
               </div>
             ))}
           </div>
+        ))}
+        {lengths.length === 0 ? (
+          <div className="p-3 text-theme-muted italic">{'No lengths analyzed yet.'}</div>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+function severityTone(severity: string): 'danger' | 'warning' | 'info' | 'neutral' {
+  if (severity === 'error') return 'danger';
+  if (severity === 'warning') return 'warning';
+  if (severity === 'info') return 'info';
+  return 'neutral';
+}
+
+function ProblemsPanel({ problems }: { problems: readonly Problem[] }) {
+  if (problems.length === 0) {
+    return (
+      <div className="surface-card rounded-xl p-4 text-ui-caption text-theme-muted">
+        {'No analysis problems detected.'}
+      </div>
+    );
+  }
+
+  const grouped: Record<string, Problem[]> = {};
+  for (const problem of problems) {
+    (grouped[problem.severity] ?? (grouped[problem.severity] = [])).push(problem);
+  }
+  const preferredOrder = ['error', 'warning', 'info'];
+  const severityKeys = [
+    ...preferredOrder.filter((key) => grouped[key] !== undefined),
+    ...Object.keys(grouped).filter((key) => !preferredOrder.includes(key)),
+  ];
+  const hasError = (grouped.error?.length ?? 0) > 0;
+
+  return (
+    <div
+      className={
+        hasError
+          ? 'rounded-xl border-2 border-red-500/60 bg-red-500/10 p-4 transition-colors'
+          : 'surface-card rounded-xl p-4 transition-colors'
+      }
+    >
+      {hasError ? (
+        <div className="text-ui-caption font-bold text-red-500 dark:text-red-400 mb-3 uppercase tracking-wide">
+          {'Analysis incomplete — resolve the error below'}
         </div>
+      ) : null}
+      <div className="space-y-3">
+        {severityKeys.map((severity) => (
+          <div key={severity}>
+            <div className="text-ui-micro font-bold uppercase tracking-widest text-theme-muted mb-1">{severity}</div>
+            <ul className="space-y-1">
+              {grouped[severity].map((problem, index) => (
+                <li
+                  key={`${problem.code}-${index}`}
+                  className="flex items-start gap-2 text-ui-caption text-theme-secondary"
+                >
+                  <Badge tone={severityTone(severity)}>{problem.code}</Badge>
+                  <span>
+                    {problem.message}
+                    {problem.lengthIndex !== undefined ? ` (length ${problem.lengthIndex})` : ''}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+function MetricsDashboardComponent({ data }: { data: RaceAnalysisResult }) {
+  return (
+    <div className="space-y-6 flex flex-col h-full">
+      <ProblemsPanel problems={data.problems} />
+
+      <section className="grid grid-cols-2 gap-4">
+        <StatCard label="Race time" measured={data.raceTime} />
+        <StatCard label="Race mean velocity" measured={data.raceMeanVelocity} />
       </section>
 
       <section>
-        <h3 className="text-ui-micro font-bold text-slate-500 uppercase tracking-[0.2em] mb-3">Granular Segment Velocity</h3>
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
-          <MetricCard label="0-Dive Entry" value={`${data.diveVelocity.toFixed(2)}`} unit="m/s" highlightClass="text-emerald-500 dark:text-emerald-400" />
-          <MetricCard label="0-15m Segment" value={`${data.vel0to15m.toFixed(2)}`} unit="m/s" />
-          <MetricCard label="15m-Wall" value={`${data.vel15mToWall.toFixed(2)}`} unit="m/s" />
-          <MetricCard label="1st Length Avg" value={`${data.firstLengthVel.toFixed(2)}`} unit="m/s" />
-        </div>
+        <VelocityProfile lengths={data.lengths} turns={data.turns} />
       </section>
 
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="bg-[var(--surface-muted)] p-4 rounded-lg border border-theme-soft flex justify-between items-center transition-colors">
-          <div>
-            <div className="text-ui-micro text-[var(--text-accent)] font-bold uppercase tracking-wider mb-1">UW Kick Tempo</div>
-            <div className="text-xl font-mono text-[var(--text-primary)]">{Math.round(data.underwaterKickTempo)} <span className="text-ui-micro opacity-80 text-[var(--text-accent)]">k/min</span></div>
+      <Section title="Start" bandKey="start">
+        <div className="grid grid-cols-2 gap-4">
+          <StatCard label="Reaction time" measured={data.reactionTime} />
+          <StatCard label="Flight time" measured={data.flightTime} />
+        </div>
+      </Section>
+
+      <Section title="Underwater" bandKey="underwaterLimit">
+        <p className="text-ui-caption text-theme-muted mb-3">
+          {`Legal limit: ${UNDERWATER_LEGAL_LIMIT_METRES} m off each wall.`}
+        </p>
+        <LengthMetricsTable lengths={data.lengths} columns={UNDERWATER_COLUMNS} />
+        <p className="text-ui-micro text-theme-muted mt-2">{APPROX_CAVEAT}</p>
+      </Section>
+
+      <Section title="15 Metre" bandKey="fifteenMetreTime">
+        <LengthMetricsTable lengths={data.lengths} columns={FIFTEEN_METRE_COLUMNS} />
+        <p className="text-ui-micro text-theme-muted mt-2">
+          {'15 m metrics on lengths after the first are documented approximations (marked ≈).'}
+        </p>
+      </Section>
+
+      <Section title="Stroke">
+        <LengthMetricsTable lengths={data.lengths} columns={STROKE_COLUMNS} />
+        <div className="grid grid-cols-2 gap-4 mt-4">
+          <StatCard
+            label="First to last stroke-rate delta"
+            measured={data.firstToLastStrokeRateDelta}
+            note="Length 1 starts from a dive, not a push-off — this delta includes the start, not just the mid-race trend."
+          />
+          <StatCard
+            label="First to last velocity delta"
+            measured={data.firstToLastLengthMeanVelocityDelta}
+            note="Length 1 starts from a dive, not a push-off — this delta includes the start, not just the mid-race trend."
+          />
+        </div>
+        <div className="mt-4">
+          <TempoProfile lengths={data.lengths} turns={data.turns} />
+        </div>
+      </Section>
+
+      <Section title="Turns" bandKey="turnTime">
+        <div className="surface-card rounded-xl overflow-hidden font-mono text-ui-caption transition-colors">
+          <div className="grid grid-cols-2 p-3 border-b border-theme-soft text-theme-muted font-bold bg-[var(--surface-muted)] transition-colors">
+            <div>{'TURN'}</div>
+            <div>{'TIME'}</div>
           </div>
-          <div className="text-right">
-             <div className="text-ui-micro text-[var(--text-accent)] font-bold uppercase tracking-wider mb-1">Kick Count</div>
-             <div className="text-xl font-mono text-[var(--text-primary)]">{data.kicksCount}</div>
+          <div className="divide-y divide-[var(--border-soft)]">
+            {data.turns.map((turn) => (
+              <div
+                key={turn.turnIndex}
+                className="grid grid-cols-2 p-3 theme-hover-row text-theme-secondary transition-colors"
+              >
+                <div className="text-theme-muted">
+                  {`T${turn.turnIndex} (L${turn.lengthIndex} → L${turn.lengthIndex + 1})`}
+                </div>
+                <div>
+                  <MeasuredValue measured={turn.turnTime} />
+                </div>
+              </div>
+            ))}
+            {data.turns.length === 0 ? (
+              <div className="p-3 text-theme-muted italic">{'No turns for this race.'}</div>
+            ) : null}
           </div>
         </div>
-        
-        <div className="bg-slate-50 dark:bg-slate-800/50 p-4 rounded-lg border border-slate-200 dark:border-white/5 flex justify-between items-center transition-colors">
-          <div>
-            <div className="text-ui-micro text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1">Breakout Dist</div>
-            <div className="text-xl font-mono text-slate-900 dark:text-slate-100">{data.breakoutDistance.toFixed(1)} <span className="text-ui-micro opacity-80 dark:opacity-60 text-slate-500">m</span></div>
-          </div>
-          <div className="text-right">
-             <div className="text-ui-micro text-slate-500 dark:text-slate-400 font-bold uppercase tracking-wider mb-1">Breakout Time</div>
-             <div className="text-xl font-mono text-slate-900 dark:text-slate-100">{data.breakoutTime.toFixed(2)} <span className="text-ui-micro opacity-80 dark:opacity-60 text-slate-500">s</span></div>
-          </div>
+      </Section>
+
+      <Section title="Finish">
+        <div className="grid grid-cols-2 gap-4">
+          <StatCard label="Finish segment time" measured={data.finishSegmentTime} />
+          <StatCard label="Finish segment velocity" measured={data.finishSegmentVelocity} />
         </div>
-      </section>
+      </Section>
     </div>
   );
 }
 
 export const MetricsDashboard = React.memo(MetricsDashboardComponent);
-
-const MetricCard = React.memo(function MetricCard({ label, value, unit, highlightClass }: { label: string, value: string, unit: string, highlightClass?: string }) {
-  return (
-    <div className="bg-white dark:bg-black/30 p-4 rounded-lg border border-slate-200 dark:border-white/5 shadow-sm dark:shadow-none transition-colors">
-      <div className="text-ui-micro text-slate-500 dark:text-slate-400 mb-1 uppercase tracking-wider font-bold">{label}</div>
-      <div className={`text-2xl font-mono ${highlightClass || 'text-slate-900 dark:text-white'}`}>
-        {value}<span className="text-ui-micro ml-1 opacity-60 text-slate-500">{unit}</span>
-      </div>
-    </div>
-  );
-});

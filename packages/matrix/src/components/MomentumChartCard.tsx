@@ -55,7 +55,7 @@ export default function MomentumChartCard(props: Props) {
   return (
     <div
       className={[
-        'surface-overlay border border-theme-soft rounded-lg p-3',
+        'surface-overlay border border-theme-soft rounded-xl p-4',
         props.className,
       ]
         .filter(Boolean)

@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { ClipboardPaste, LayoutList, Sparkles, Waves } from 'lucide-react';
+import { CheckCircle2, ClipboardPaste, LayoutList, Sparkles, Waves } from 'lucide-react';
 
 export type RosterWizardStepId = 'source' | 'lineup' | 'relays' | 'optimize';
 
@@ -63,7 +63,7 @@ export default function RosterWizardShell({ step, onStepChange, toolbar, childre
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 flex-1">
             <p className="text-ui-caption text-theme-muted mb-1">Roster workflow</p>
-            <h3 className="text-lg sm:text-xl font-semibold text-[var(--text-primary)] tracking-tight truncate">
+            <h3 className="text-heading-2 truncate">
               {active.title}
             </h3>
             <p className="text-ui-body text-theme-secondary mt-1 max-w-2xl leading-relaxed">
@@ -98,13 +98,15 @@ export default function RosterWizardShell({ step, onStepChange, toolbar, childre
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <span
-                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg ${
+                    className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
                       isActive
                         ? 'bg-[var(--text-accent)]/20 text-[var(--text-accent)]'
-                        : 'surface-overlay text-theme-secondary'
+                        : isDone
+                          ? 'bg-[var(--text-accent)]/10 text-[var(--text-accent)]'
+                          : 'surface-overlay text-theme-secondary'
                     }`}
                   >
-                    {s.icon}
+                    {isDone && !isActive ? <CheckCircle2 size={16} /> : s.icon}
                   </span>
                   <div className="min-w-0">
                     <p
