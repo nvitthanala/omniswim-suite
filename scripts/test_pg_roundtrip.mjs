@@ -12,6 +12,7 @@
  * WARNING: this writes to the target database. Point it at a throwaway one.
  */
 import assert from 'node:assert';
+import pg from 'pg';
 import { PgWorkspaceService } from '../packages/db/src/PgWorkspaceService.ts';
 
 const url = process.env.PG_TEST_URL || process.env.DATABASE_URL;
@@ -89,6 +90,7 @@ function sortedEqual(a, b, label) {
 
 let writer;
 let reader;
+let seedPool;
 try {
   writer = new PgWorkspaceService({ connectionString: url });
   await writer.init();
@@ -143,8 +145,30 @@ try {
 
   // ---- Cross-tenant isolation, mirroring test_workspace_scope.mjs ----
   // Postgres is the multi-user backend, so scope enforcement matters most here.
+  //
+  // Unlike SQLite, pgSchema declares `workspaces.team_id REFERENCES teams(id)`,
+  // so a tenant scope must correspond to real users/teams rows — an arbitrary id
+  // trips workspaces_team_id_fkey. Seed the two tenants directly rather than
+  // going through AuthService, to keep this test about persistence scoping only.
   const A = 'ws-pg-scope-a';
   const B = 'ws-pg-scope-b';
+  seedPool = new pg.Pool({ connectionString: url });
+  for (const [userId, teamId] of [
+    ['user-pg-scope-a', 'pg-team-a'],
+    ['user-pg-scope-b', 'pg-team-b'],
+  ]) {
+    await seedPool.query(
+      `INSERT INTO users(id, email, password_hash, display_name, created_at)
+       VALUES($1,$2,$3,$4,$5) ON CONFLICT (id) DO NOTHING`,
+      [userId, `${userId}@roundtrip.test`, 'not-a-real-hash', userId, Date.now()]
+    );
+    await seedPool.query(
+      `INSERT INTO teams(id, name, owner_id, created_at)
+       VALUES($1,$2,$3,$4) ON CONFLICT (id) DO NOTHING`,
+      [teamId, teamId, userId, Date.now()]
+    );
+  }
+
   reader.setScope({});
   await reader.deleteWorkspace(A);
   await reader.deleteWorkspace(B);
@@ -183,16 +207,25 @@ try {
   await reader.deleteWorkspace(A);
   await reader.deleteWorkspace(B);
   await reader.deleteWorkspace(WS_ID);
+  // Workspaces first: teams/users are only removable once nothing references them.
+  await seedPool.query("DELETE FROM teams WHERE id IN ('pg-team-a','pg-team-b')");
+  await seedPool.query("DELETE FROM users WHERE id IN ('user-pg-scope-a','user-pg-scope-b')");
+  await seedPool.end();
   await reader.close();
   console.log('PostgreSQL round-trip test PASSED');
 } catch (err) {
   console.error('PostgreSQL round-trip test FAILED:', err.message);
-  for (const svc of [writer, reader]) {
+  for (const closable of [writer, reader]) {
     try {
-      await svc?.close();
+      await closable?.close();
     } catch {
       /* pool already closed */
     }
+  }
+  try {
+    await seedPool?.end();
+  } catch {
+    /* pool already closed */
   }
   process.exit(1);
 }
