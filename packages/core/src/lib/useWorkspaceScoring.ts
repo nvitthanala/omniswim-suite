@@ -32,6 +32,16 @@ function supportsModuleWorker(): boolean {
 }
 
 /**
+ * Trailing debounce, in ms, between a workspace change and the recompute it
+ * triggers. 200ms sits comfortably above normal keystroke/drag cadence
+ * (~50-100ms between events) so a burst of edits collapses into a single
+ * recompute, while staying under the ~300ms threshold where UI feedback
+ * starts reading as sluggish. `scoringSettled` itself is NOT debounced — see
+ * the effect below.
+ */
+export const SCORING_DEBOUNCE_MS = 200;
+
+/**
  * Whether the scoring worker has settled for the current workspace state
  * (no recompute in flight). Provided by the app that owns useWorkspaceScoring
  * (e.g. ManagerApp) so deeply nested panels can gate actions — like capturing
@@ -131,22 +141,39 @@ export function useWorkspaceScoring({
       isFirstRun.current = false;
       return;
     }
-    const worker = workerRef.current;
-    if (worker) {
-      const id = ++requestIdRef.current;
-      setSettled(false);
-      const req: { id: number; workspace: Workspace; gender: Gender; removeSeniors: boolean; rosterCatalog?: CatalogTeamRoster } = {
-        id,
-        workspace,
-        gender,
-        removeSeniors,
-      };
-      if (rosterCatalog) req.rosterCatalog = rosterCatalog;
-      worker.postMessage(req);
-    } else {
-      setSnapshot(buildScoringSnapshot(workspace, gender, removeSeniors, rosterCatalog));
-      setSettled(true);
-    }
+    // Correctness: `settled` flips false the instant a watched field changes —
+    // synchronously, outside the debounce below. ScenarioSnapshotsPanel gates
+    // its Save button on this flag so a scenario can't be captured with a
+    // "· N pts" label computed from a workspace state that has already moved
+    // on. Only the recompute itself (worker postMessage or the synchronous
+    // fallback) may wait out the debounce.
+    const id = ++requestIdRef.current;
+    setSettled(false);
+
+    const timer = setTimeout(() => {
+      const worker = workerRef.current;
+      if (worker) {
+        const req: { id: number; workspace: Workspace; gender: Gender; removeSeniors: boolean; rosterCatalog?: CatalogTeamRoster } = {
+          id,
+          workspace,
+          gender,
+          removeSeniors,
+        };
+        if (rosterCatalog) req.rosterCatalog = rosterCatalog;
+        worker.postMessage(req);
+      } else {
+        setSnapshot(buildScoringSnapshot(workspace, gender, removeSeniors, rosterCatalog));
+        // Settled once the response for the newest posted request "arrives"
+        // (here, completes synchronously) — same rule as the worker path.
+        if (id >= requestIdRef.current) setSettled(true);
+      }
+    }, SCORING_DEBOUNCE_MS);
+
+    // Clears the pending timer on unmount and whenever a newer change
+    // supersedes it (effect cleanup runs before the next effect invocation),
+    // so a burst of changes results in exactly one postMessage/recompute —
+    // only the last-scheduled timer ever fires.
+    return () => clearTimeout(timer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     workspace.menResults,

@@ -34,6 +34,7 @@ const TESTS = [
   ['test_history_import_roster.mjs'],
   ['test_multi_profile_import.mjs'],
   ['test_scoring_theory.mjs'],
+  ['test_workspace_scoring_debounce.mjs'],
   ['test_meet_source.mjs'],
   ['test_roster_arbitrage.mjs'],
   ['test_cross_course_arbitrage.mjs'],

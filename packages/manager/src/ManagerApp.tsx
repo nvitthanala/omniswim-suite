@@ -5,7 +5,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Users } from 'lucide-react';
+import { Loader2, Users } from 'lucide-react';
 import { Gender, Recruit, Workspace } from '@omniswim/core/types';
 import { mergeScoringSettings } from '@omniswim/core/lib/utils';
 import { usesScorerRoster, scorerRosterKey } from '@omniswim/core/lib/scorerRoster';
@@ -181,6 +181,20 @@ export default function ManagerApp() {
             Roster workflow · Source → Lineup → Relays → Optimize
           </p>
         </div>
+        {/* Reserved-width live region: mounts/unmounts only its inner content
+            so screen readers announce settle via aria-live, while the fixed
+            min-width keeps neighboring header controls from shifting. */}
+        <span
+          aria-live="polite"
+          className="inline-flex items-center gap-1.5 min-w-[8.5rem] text-ui-caption text-theme-muted"
+        >
+          {!scoringSettled ? (
+            <>
+              <Loader2 size={12} className="animate-spin" aria-hidden="true" />
+              <span>Recalculating…</span>
+            </>
+          ) : null}
+        </span>
         <div className="sm:ml-auto flex flex-wrap items-center gap-2">
           <button
             type="button"
