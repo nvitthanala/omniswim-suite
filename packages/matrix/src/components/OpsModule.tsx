@@ -81,7 +81,6 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
     })();
   }, []);
 
-
   const {
     projected,
     baseline,
