@@ -11,6 +11,7 @@ import RosterScoringSetup from './RosterScoringSetup';
 import AthleteHistoryImportPanel from './AthleteHistoryImportPanel';
 import ScoringTheoryPanel from './ScoringTheoryPanel';
 import LoadMeetHereCard from './LoadMeetHereCard';
+import BaselineDiffPanel from './BaselineDiffPanel';
 
 type Props = {
   workspace: Workspace;
@@ -217,6 +218,15 @@ export default function RosterSourceStep({
         </section>
 
         <LoadMeetHereCard workspace={workspace} onUpdate={onUpdate} whatIfMode={whatIfMode} />
+
+        {hasSource ? (
+          <BaselineDiffPanel
+            workspace={workspace}
+            gender={gender}
+            team={selectedTeam}
+            scoringSettings={scoringSettings}
+          />
+        ) : null}
 
         <ScoringTheoryPanel
           workspace={workspace}
