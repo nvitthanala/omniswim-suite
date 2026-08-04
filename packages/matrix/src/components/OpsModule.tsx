@@ -5,7 +5,7 @@
 
 import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { Database, ExternalLink } from 'lucide-react';
+import { BarChart3, ClipboardPaste, Database, ExternalLink, Trophy } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Gender, OfficialTeamScores, SwimmerResult, ScoringSettings, Workspace } from '@omniswim/core/types';
 import { mergeScoringSettings } from '@omniswim/core/lib/utils';
@@ -20,7 +20,8 @@ import { alignPsychResultsToMeetTeams } from '@omniswim/core/lib/psychProjection
 import { meetCopyFromParsed } from '@omniswim/core/lib/meetSource';
 import { softRemoveSwimmerFromWorkspace } from '@omniswim/core/lib/swimmerSoftRemove';
 import { rosterCatalogApi, type CatalogTeamRoster } from '@omniswim/core/api/rosterCatalog';
-import { useToast } from '@omniswim/ui';
+import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
+import { useToast, WizardShell, type WizardStep } from '@omniswim/ui';
 import MeetOperationsView from './MeetOperationsView';
 import SwimmerDeleteConfirmModal from './SwimmerDeleteConfirmModal';
 
@@ -29,6 +30,15 @@ interface Props {
   gender: Gender;
   onUpdate: (updated: Partial<Workspace>) => void | Promise<void>;
 }
+
+type MatrixStepId = 'load' | 'score' | 'standings' | 'analyze';
+
+const MATRIX_STEPS: WizardStep<MatrixStepId>[] = [
+  { id: 'load', label: 'Load', title: 'Bring in the meet', hint: 'Load results and link a psych sheet before reviewing projections.', icon: <ClipboardPaste size={16} /> },
+  { id: 'score', label: 'Score', title: 'Set the scoring rules', hint: 'Choose the scoring model, presets, and official-score comparison.', icon: <BarChart3 size={16} /> },
+  { id: 'standings', label: 'Standings', title: 'See where teams land', hint: 'Review the projected team order and the swims behind each total.', icon: <Trophy size={16} /> },
+  { id: 'analyze', label: 'Analyze', title: 'Explain the result', hint: 'Trace score changes, momentum, and differences from prelims.', icon: <BarChart3 size={16} /> },
+];
 
 function hasRosterEdits(workspace: Workspace): boolean {
   return (
@@ -42,6 +52,7 @@ function hasRosterEdits(workspace: Workspace): boolean {
 
 export default function OpsModule({ workspace, gender, onUpdate }: Props) {
   const toast = useToast();
+  const { workspaces } = useSuiteWorkspace();
   const [searchQuery, setSearchQuery] = useState('');
   const [removeSeniors, setRemoveSeniors] = useState(false);
   const [isParsingPdf, setIsParsingPdf] = useState(false);
@@ -52,6 +63,7 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
     presetIdForConference(workspace.conference)
   );
   const [whatIfMode, setWhatIfMode] = useState(false);
+  const [step, setStep] = useState<MatrixStepId>('load');
   const [scoringRefreshKey, setScoringRefreshKey] = useState(0);
   const parseAbortRef = useRef<AbortController | null>(null);
   const psychParseAbortRef = useRef<AbortController | null>(null);
@@ -316,24 +328,43 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
     void onUpdate({ scoringView: view });
   };
 
+  const copyMeetFromWorkspace = (sourceId: string) => {
+    const source = workspaces.find(candidate => candidate.id === sourceId);
+    if (!source) return;
+    void onUpdate({
+      ...meetCopyFromParsed(source.menResults ?? [], source.womenResults ?? []),
+      loadedMeet: source.loadedMeet,
+      psychMenResults: source.psychMenResults,
+      psychWomenResults: source.psychWomenResults,
+      loadedPsych: source.loadedPsych,
+      officialTeamScores: source.officialTeamScores,
+      conference: source.conference,
+    });
+    setScoringRefreshKey(key => key + 1);
+    toast.push('success', `Copied meet results from ${source.name}`);
+  };
+
   const rosterDirty = hasRosterEdits(workspace);
 
   return (
     <>
-      <div className="flex flex-wrap items-center gap-3 mb-6">
-        <h2 className="text-ui-label font-black uppercase tracking-widest text-[var(--text-primary)]">
-          Meet Charts / Tables
-        </h2>
-        {rosterDirty ? (
-          <Link
-            to="/manager"
-            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-md border border-[var(--text-accent)]/30 text-[var(--text-accent)] hover:bg-[var(--text-accent)]/10 transition-colors"
-          >
-            Edit roster in Manager
-            <ExternalLink size={12} />
-          </Link>
-        ) : null}
-        <div className="ml-auto flex items-center gap-2">
+      <WizardShell
+        steps={MATRIX_STEPS}
+        eyebrow="Meet workflow"
+        ariaLabel="Meet workflow steps"
+        step={step}
+        onStepChange={setStep}
+        toolbar={<>
+          {rosterDirty ? (
+            <Link
+              to="/manager"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-md border border-[var(--text-accent)]/30 text-[var(--text-accent)] hover:bg-[var(--text-accent)]/10 transition-colors"
+            >
+              Edit roster in Manager
+              <ExternalLink size={12} />
+            </Link>
+          ) : null}
+          <div className="flex items-center gap-2">
           <Database size={14} className="text-[var(--text-accent)]" />
           <span className="text-ui-caption text-theme-secondary">Catalog:</span>
           <select
@@ -348,6 +379,7 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
             }}
             className="text-[10px] surface-muted-bg border border-theme-soft rounded px-2 py-1"
             title="Layer catalog roster opt-in events into the scoring pool"
+            aria-label="Catalog roster for scoring"
           >
             <option value="">(off — PDF only)</option>
             {catalogTeams
@@ -366,18 +398,22 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
               eligible events
             </span>
           ) : null}
-        </div>
-      </div>
-      <AnimatePresence mode="wait">
-        <motion.div
-          key="meet-ops"
+          </div>
+        </>}
+      >
+        <AnimatePresence mode="wait">
+          <motion.div
+          key={step}
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -6 }}
           transition={{ duration: 0.15 }}
         >
           <MeetOperationsView
+            activeStep={step}
             workspace={workspace}
+            workspaceMeetSources={workspaces.filter(candidate => candidate.id !== workspace.id)}
+            onCopyMeetFromWorkspace={copyMeetFromWorkspace}
             gender={gender}
             scoringBundle={projected}
             baselineBundle={baseline}
@@ -414,8 +450,9 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
             onClearSuggestedPreset={() => setSuggestedPresetId(null)}
             scoringRefreshKey={scoringRefreshKey}
           />
-        </motion.div>
-      </AnimatePresence>
+          </motion.div>
+        </AnimatePresence>
+      </WizardShell>
       {swimmerDeleteCandidate && (
         <SwimmerDeleteConfirmModal
           swimmerName={swimmerDeleteCandidate.name}

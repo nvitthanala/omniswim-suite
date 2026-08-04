@@ -496,6 +496,9 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
   return (
     <div className={`neon-card rounded-xl overflow-hidden mb-4`} style={{ borderLeftColor: teamChartColor }}>
       <button 
+        type="button"
+        aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${team.teamName} team details`}
+        aria-expanded={isExpanded}
         onClick={() => {
           const nextExpanded = !isExpanded;
           setIsExpanded(nextExpanded);
@@ -564,6 +567,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                     <button
                       type="button"
                       onClick={() => { setChartView('event'); clearChartTooltips(); }}
+                      aria-label="Show points chart by event"
                       className={`text-ui-micro px-2 py-1 uppercase tracking-widest rounded transition-colors ${chartView === 'event' ? 'bg-[var(--surface-strong)]/60 text-[var(--text-primary)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}
                     >
                       By Event
@@ -571,6 +575,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                     <button
                       type="button"
                       onClick={() => { setChartView('class'); clearChartTooltips(); }}
+                      aria-label="Show points chart by class year"
                       className={`text-ui-micro px-2 py-1 uppercase tracking-widest rounded transition-colors ${chartView === 'class' ? 'bg-[var(--surface-strong)]/60 text-[var(--text-primary)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}
                     >
                       By Class
@@ -790,6 +795,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                         <button
                           type="button"
                           onClick={() => setMomentumAnchor('prelims')}
+                          aria-label="Show team momentum versus prelims"
                           className={`text-[9px] uppercase tracking-widest px-2 py-0.5 rounded ${
                             momentumAnchor === 'prelims'
                               ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
@@ -801,6 +807,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                         <button
                           type="button"
                           onClick={() => setMomentumAnchor('psych')}
+                          aria-label="Show team momentum versus psych sheet"
                           className={`text-[9px] uppercase tracking-widest px-2 py-0.5 rounded ${
                             momentumAnchor === 'psych'
                               ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
@@ -847,6 +854,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                       className="glass-input text-ui-micro uppercase tracking-widest text-theme-secondary rounded p-1 outline-none"
                       value={sortMode}
                       onChange={(e) => setSortMode(e.target.value as any)}
+                      aria-label="Sort team matrix"
                     >
                       {viewMode === 'event' && <option value="chrono">Chronological</option>}
                       {viewMode === 'event' && <option value="eventDesc">High to Low</option>}
@@ -857,13 +865,17 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
 
                     <div className="flex items-center surface-overlay border border-theme-soft rounded-md p-0.5">
                       <button 
+                        type="button"
                         onClick={() => { setViewMode('event'); setSortMode('eventDesc'); }}
+                        aria-label="Group team matrix by event"
                         className={`text-ui-micro px-2 py-1 uppercase tracking-widest rounded transition-colors ${viewMode === 'event' ? 'bg-[var(--surface-strong)]/60 text-[var(--text-primary)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}
                       >
                         By Event
                       </button>
                       <button 
+                        type="button"
                         onClick={() => { setViewMode('swimmer'); setSortMode('swimmerDesc'); }}
+                        aria-label="Group team matrix by swimmer"
                         className={`text-ui-micro px-2 py-1 uppercase tracking-widest rounded transition-colors ${viewMode === 'swimmer' ? 'bg-[var(--surface-strong)]/60 text-[var(--text-primary)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}
                       >
                         By Swimmer
@@ -889,6 +901,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                             <button
                               type="button"
                               title="Remove swimmer from workspace"
+                              aria-label={`Remove ${group.name} from workspace`}
                               className="p-1 rounded border border-theme-soft text-theme-secondary hover:text-[var(--text-accent)] hover:border-[var(--text-accent)]/40 transition-colors"
                               onClick={() => onRequestDeleteSwimmer(group.name)}
                             >
@@ -1022,6 +1035,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                                     <input 
                                       type="text" 
                                       autoFocus
+                                      aria-label={`Edit time for ${res.name}`}
                                       value={editValue} 
                                       onChange={e => setEditValue(e.target.value)} 
                                       className="surface-muted-bg text-ui-micro px-1 py-0.5 outline-none font-mono flex-1 text-[var(--text-primary)]" 

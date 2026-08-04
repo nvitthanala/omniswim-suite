@@ -66,6 +66,11 @@ test.describe('Matrix timeline chart', () => {
     const created = (await createRes.json()) as { id: string };
 
     await page.goto(`/matrix?workspace=${created.id}`);
+
+    // Matrix is a stepped wizard (Load → Score → Standings → Analyze); the score
+    // timeline lives on the Analyze step, so open it before asserting the chart.
+    await page.getByRole('tab', { name: /Analyze/ }).click({ timeout: 30_000 });
+
     await expect(page.getByText('Chronological Team Score Timeline')).toBeVisible({ timeout: 30_000 });
 
     const shell = page.locator('.chart-shell').first();
