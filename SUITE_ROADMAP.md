@@ -248,10 +248,48 @@ clean broadcast video of elite swims, and easier to obtain rights to.
 
 ---
 
-## 8. First brief — C1/C3, Matrix only
+## 8. First brief — C1/C3, Matrix as a stepped wizard
 
-Self-contained, in the lift-and-paste style of `VIDEO_ANALYSIS_MASTERPLAN.md` §10.
-Scoped to one screen so the pattern can be judged before Manager follows.
+**Decision (user, 2026-08-03): Matrix adopts the stepped wizard pattern**, rather
+than staying a dense dashboard with corrected ordering.
+
+This is the stronger choice and it fixes the reading-order defect *structurally*
+rather than cosmetically: with `Load` as step 1, it becomes impossible to land on
+analysis output before the input that produces it. It also makes the two main
+screens learn-once — a coach who understands Manager already understands Matrix.
+
+**Proposed Matrix steps** (mirroring Manager's `label` / `title` / `hint` shape):
+
+| # | Label | Title | Holds |
+| - | ----- | ----- | ----- |
+| 1 | Load | Bring in the meet | `LOAD PDF`, `LINK PSYCH`, meet copy from another workspace, loaded-meet status |
+| 2 | Score | Set the scoring rules | `CUSTOM SCORING LOGIC`, Configure Scoring Model, presets, official team scores |
+| 3 | Standings | See where teams land | `PERFORMANCE MATRIX`, `TeamCard`, format toggles (Auto / Regular List / Divided 2-Col) |
+| 4 | Analyze | Explain the result | Score timeline, momentum vs prelims, `DIFF`, `PRELIMS` tables |
+
+Every panel currently on the screen lands in exactly one step. Nothing is removed.
+
+### 8.1 Extract the shell first
+
+`RosterWizardShell.tsx` (131 lines) is already ~90% generic — layout, tablist,
+active/done states, toolbar slot and children are all reusable. Only four things
+are roster-specific: the `STEPS` array, the `RosterWizardStepId` type, the
+`"Roster workflow"` eyebrow, and `aria-label="Roster steps"`.
+
+**Extract it to `@omniswim/ui` as `WizardShell`** and have both screens consume
+it. Duplicating it into Matrix would guarantee the two drift apart, which defeats
+the consistency this decision is meant to buy. Manager's file becomes a thin
+wrapper passing its own steps — its behaviour must not change.
+
+**Fix the ARIA while extracting.** The current implementation uses
+`role="tablist"` and `role="tab"` but has no `aria-controls`, no
+`role="tabpanel"` on the content region, and no arrow-key navigation. The ARIA
+tabs pattern requires all three. Since this component is about to be used twice,
+fixing it once here is much cheaper than twice later.
+
+---
+
+Self-contained brief, in the lift-and-paste style of `VIDEO_ANALYSIS_MASTERPLAN.md` §10.
 
 > **Goal.** Make the Matrix screen legible to someone who has never used it,
 > without removing any capability.
@@ -263,22 +301,36 @@ Scoped to one screen so the pattern can be judged before Manager follows.
 > presented above its input.** The screen also shows 22 buttons at once, 6 of
 > them icon-only with hover-tooltips, and 2 with no accessible name at all.
 >
-> **Do:**
-> 1. Reorder so inputs precede outputs: load/link data, then scoring config, then
->    results. Ordering only — no panel is removed and none becomes unreachable.
-> 2. Group the toolbar so a small primary set is visible and the rest sits behind
->    labelled menus or disclosure.
-> 3. Give every control an accessible name. `title` alone is not enough — add
->    `aria-label`. Two buttons currently have neither.
-> 4. Add a first-run empty state naming the next action when no meet is loaded,
->    matching the pattern Metrics already uses ("Upload a race video to begin").
+> **Do, in this order:**
+>
+> 1. **Extract `WizardShell` into `@omniswim/ui`** from
+>    `packages/manager/src/components/RosterWizardShell.tsx`. Parameterise the
+>    four roster-specific things: `steps` (array of `{id,label,title,hint,icon}`),
+>    `eyebrow` (currently `"Roster workflow"`), `ariaLabel`, plus the existing
+>    `step` / `onStepChange` / `toolbar` / `children`. Keep the visual result
+>    identical.
+> 2. **Repoint Manager** at the shared component. Its rendering and behaviour must
+>    not change — this is a pure refactor and is how you prove the extraction is
+>    faithful.
+> 3. **Fix the ARIA in the shared shell**: add `aria-controls` on each tab,
+>    `role="tabpanel"` + `aria-labelledby` on the content region, and arrow-key
+>    navigation between tabs (Left/Right, Home/End). Both screens then inherit it.
+> 4. **Restructure Matrix into the four steps** in the table above — Load, Score,
+>    Standings, Analyze. Every existing panel moves into exactly one step. None is
+>    removed, none becomes unreachable.
+> 5. **Give every control an accessible name.** `title` alone is not enough — add
+>    `aria-label`. Two buttons on Matrix currently have neither.
+> 6. **Add a first-run empty state** on step 1 naming the next action when no meet
+>    is loaded, matching the pattern Metrics already uses ("Upload a race video to
+>    begin").
 >
 > **Do not:**
-> - Delete or hide any panel. Every one is in use; this is an ordering and
+> - Delete or hide any panel. Every one is in use; this is a structure and
 >   disclosure problem, not a surface-area one.
+> - Change Manager's appearance or behaviour. Step 2 is a refactor only.
 > - Touch `packages/db/**`, `packages/core/src/lib/raceAnalysis/**`, or any test.
-> - Touch Manager. It comes next, after this pattern is judged.
-> - Add a dependency.
+> - Add a dependency. `lucide-react` icons and `@omniswim/ui` primitives already
+>   cover this work.
 >
 > **Repo facts — do not rediscover these.**
 > - Entry points: `packages/matrix/src/components/OpsModule.tsx` (429 lines) wraps
@@ -303,14 +355,18 @@ Scoped to one screen so the pattern can be judged before Manager follows.
 > npm test         # 39 passed, 0 failed, 3 skipped
 > npm run build    # exit 0
 > ```
-> Then run the app (`npm run dev`, port 3000), open `/matrix`, and confirm: no
-> console errors, every panel still reachable, and the first thing a newcomer
-> reads is how to load data.
+> Then run the app (`npm run dev`, port 3000) and confirm:
+> - `/matrix` opens on step 1 (Load), not on a chart.
+> - All four steps reachable; every panel that existed before is still reachable
+>   from exactly one step.
+> - `/manager` looks and behaves **exactly** as before the refactor.
+> - No console errors on either screen.
+> - Tabs are operable by keyboard alone: arrow keys move between them.
 
 ---
 
 ## 9. Open questions
 
-1. Should the four-step wizard pattern from Manager be extended to Matrix, or should Matrix stay a single dense dashboard with better ordering? This is a real fork and I would rather you choose than guess.
-2. Who are the "uninitiated" — assistant coaches, athletes, other programmes? Which of them need to self-serve without you present determines how much hand-holding C4 needs.
-3. Do you want the footage bytes committed via Git LFS instead of kept local? `git-lfs` is installed but not configured here. It fixes repository bloat but **not** the public-redistribution question, so the manifest approach is the current default.
+1. Who are the "uninitiated" — assistant coaches, athletes, other programmes? Which of them need to self-serve without you present determines how much hand-holding the empty states need.
+2. Do you want the footage bytes committed via Git LFS instead of kept local? `git-lfs` is installed but not configured here. It fixes repository bloat but **not** the public-redistribution question, so the manifest approach is the current default.
+3. Should Metrics eventually adopt the same wizard shell (Setup → Tag → Review)? Not now — but if yes, that argues for getting `WizardShell`'s API right in this first pass rather than shaping it around two consumers and retrofitting a third.
