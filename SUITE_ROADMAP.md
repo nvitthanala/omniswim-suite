@@ -144,9 +144,86 @@ From `VIDEO_ANALYSIS_MASTERPLAN.md`, still binding:
 
 ---
 
-## 4. Open questions
+## 4. Answers (user, 2026-08-03) and what they change
 
-1. **Which panels do you actually use?** Blocks workstream C. I will bring the inventory.
-2. **Is there a GPU on the machine that will run detection?** Changes E1 from minutes to seconds per race and affects whether real-time feedback is plausible at all.
-3. **Do you have existing swimming footage with known landmark times?** If so E3's data problem is much smaller than assumed.
-4. **How many races have been tagged so far?** Determines whether E3 is reachable this cycle or next.
+| Q | Answer | Consequence |
+| - | ------ | ----------- |
+| Which panels are used? | **All of them.** The problem is that "the flow and viewing is confusing to the uninitiated." | Workstream C is **not** a deletion exercise. Every panel stays; ordering, grouping and labelling change. This is a materially different job from the one first scoped. |
+| GPU? | Build machine has one. **Other users will not.** | Detection cannot be assumed interactive. See §5. |
+| Footage with known landmark times? | **No.** | There is no ground truth. E1 accuracy cannot currently be measured, only eyeballed. |
+| Races tagged so far? | **None.** | E3 has no training data, and the video suite has never been exercised end-to-end on real footage. |
+
+### 4.1 The sequencing consequence
+
+Zero tagged races is the single most important fact here. It means:
+
+1. **E3 is not startable.** No labels, no eval set, no accuracy bar.
+2. **E1 cannot be validated.** Detected landmarks could only be compared against nothing.
+3. The video suite is built, green and **unproven**. Tests pass against synthetic fixtures; no real race has gone through it.
+
+Everything therefore converges on the same first move: **make tagging pleasant enough that races actually get tagged.** Every tagged race is simultaneously a product outcome, a validation case for E1, and a training example for E3. C and D are not merely "nice UI work before the interesting part" — they are what generates the dataset the interesting part requires.
+
+**Recommended first milestone:** tag one real race end to end, by hand, before any further building. It will surface usability and correctness problems no synthetic fixture can.
+
+---
+
+## 5. Detection on machines without a GPU
+
+The constraint is that the machine doing the building has a GPU and the machines doing the coaching do not. The resolution is already in the data model.
+
+**Detections persist.** `race_analyses` is a workspace child table on both engines, and a workspace round-trips whole through `PUT /api/workspaces/:id`. So inference is a **produce-once, read-many** operation:
+
+1. Detection runs on a capable machine, once, per race.
+2. Detected landmarks are stored in the analysis with model version and confidence.
+3. Every other user opens the workspace and sees the detections **without running inference at all**.
+
+That reframes the GPU problem from "everyone needs a GPU" to "one person does, and only when creating an analysis." Consequences for E1:
+
+- Detection is **opt-in and explicitly invoked**, never automatic on video open.
+- It is a **batch job with a progress indicator and a cancel**, never a blocking call.
+- The UI states an expected duration before starting, derived from frame count and a measured per-frame rate.
+- A machine without a GPU is not blocked — it is slow, and told so honestly up front.
+- Manual tagging remains fully functional and is never gated behind detection.
+
+---
+
+## 6. Measured UI findings
+
+Taken from the running app at `9220316d`, not from reading source. These are facts, not opinions, and they give workstream C something objective to move against.
+
+| Screen | Buttons on screen at once | Icon-only (hover-tooltip only) | No accessible name at all | `<select>` |
+| ------ | ------------------------- | ------------------------------ | ------------------------- | ---------- |
+| Manager | **27** | 6 | 2 | — |
+| Matrix | **22** | 6 | 2 | 3 |
+
+**The single clearest defect is reading order on Matrix.** In DOM order a new user meets:
+
+```
+… WORKSPACES · SNAPSHOTS
+  MEET CHARTS / TABLES
+  CUSTOM SCORING LOGIC
+  CHRONOLOGICAL TEAM SCORE TIMELINE     ← analysis output
+  MEET MOMENTUM VS PRELIMS              ← analysis output
+  PERFORMANCE MATRIX: OVERALL STANDING  ← analysis output
+  LOAD PDF · LINK PSYCH · STANDINGS     ← the thing you must do FIRST
+```
+
+The output of the workflow is presented before its input. Someone who already knows the tool reads past it; someone who does not has no idea where to begin. This is exactly "confusing to the uninitiated," and it is fixable by reordering rather than removing.
+
+**What is already good and should be preserved:** Manager's four-step wizard (`1. Source → 2. Lineup → 3. Relays → 4. Optimize`, each with a plain-language subtitle like "Bring in swimmers") is well-formed. The scaffolding is sound; the density around it is the problem.
+
+### 6.1 Workstream C, restated
+
+Since every panel stays:
+
+- **C1 — Task order.** Reorder each screen so inputs precede outputs. Load → configure → read results.
+- **C2 — Progressive disclosure.** Reduce 22–27 simultaneous controls to a small primary set plus grouped menus. Nothing becomes unreachable; things stop competing.
+- **C3 — Name every control.** 6 icon-only buttons per screen rely on hover tooltips, and 2 per screen have no accessible name at all. Cheap to fix, disproportionately helpful to a newcomer, and required for screen readers.
+- **C4 — First-run guidance.** An empty state that names the next action, extending the pattern Metrics already uses ("Upload a race video to begin").
+
+---
+
+## 7. Open questions
+
+1. Should the four-step wizard pattern from Manager be extended to Matrix, or should Matrix stay a single dense dashboard with better ordering? This is a real fork and I would rather you choose than guess.
+2. Who are the "uninitiated" — assistant coaches, athletes, other programmes? Which of them need to self-serve without you present determines how much hand-holding C4 needs.
