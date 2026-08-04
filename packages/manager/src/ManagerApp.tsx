@@ -3,12 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Loader2, Users } from 'lucide-react';
 import { Gender, Recruit, Workspace } from '@omniswim/core/types';
 import { mergeScoringSettings } from '@omniswim/core/lib/utils';
 import { usesScorerRoster, scorerRosterKey } from '@omniswim/core/lib/scorerRoster';
+import { countWorkingCopyChanges } from '@omniswim/core/lib/workingCopyChanges';
 import {
   removeAthleteFromWorkspace,
   softRemoveSwimmerFromWorkspace,
@@ -23,6 +24,28 @@ import SwimmerDeleteConfirmModal from './components/SwimmerDeleteConfirmModal';
 import RosterImportWizard from './components/RosterImportWizard';
 import RosterCatalogPanel from './components/RosterCatalogPanel';
 import BatchOptimizerPanel from './components/BatchOptimizerPanel';
+
+/** Human-readable breakdown for the "Modified copy" badge's title/aria-label, e.g. "2 recruits, 1 removal". */
+function workingCopyChangeSummary(counts: ReturnType<typeof countWorkingCopyChanges>): string {
+  const parts: string[] = [];
+  const push = (n: number, singular: string, plural: string) => {
+    if (n > 0) parts.push(`${n} ${n === 1 ? singular : plural}`);
+  };
+  push(counts.recruits, 'recruit', 'recruits');
+  push(counts.removals, 'removal', 'removals');
+  push(counts.rosterOverrides, 'roster override', 'roster overrides');
+  push(counts.relayLegOverrides, 'relay leg override', 'relay leg overrides');
+  push(counts.plannedEntries, 'planned entry', 'planned entries');
+  const summary = parts.length ? parts.join(', ') : 'no changes';
+  // Stale relay leg overrides match no entry in either gender, so they are kept
+  // out of the badge total. Mention them here rather than dropping them
+  // silently — an edit that scores nothing is still worth surfacing.
+  if (counts.unresolvedRelayLegOverrides > 0) {
+    const n = counts.unresolvedRelayLegOverrides;
+    return `${summary} (plus ${n} unmatched relay leg ${n === 1 ? 'override' : 'overrides'})`;
+  }
+  return summary;
+}
 
 function downloadExport(exp: EntryExport) {
   const blob = new Blob([exp.content], { type: exp.mimeType });
@@ -52,6 +75,15 @@ export default function ManagerApp() {
     gender: Gender;
   } | null>(null);
   const [swimmerDeleteCandidate, setSwimmerDeleteCandidate] = useState<{ name: string } | null>(null);
+
+  // Working-copy change count for the persistent "Modified copy" badge — a pure
+  // tally of the edits (recruits, removals, overrides, plans) that make the
+  // projection differ from the loaded meet. Recomputed only when the workspace
+  // or active gender changes.
+  const workingCopyChanges = useMemo(
+    () => (activeWorkspace ? countWorkingCopyChanges(activeWorkspace, activeGender) : null),
+    [activeWorkspace, activeGender]
+  );
 
   // Load the catalog roster lazily — only re-fetches when the user opens
   // the panel or toggles the catalog team to score.
@@ -193,6 +225,22 @@ export default function ManagerApp() {
               <Loader2 size={12} className="animate-spin" aria-hidden="true" />
               <span>Recalculating…</span>
             </>
+          ) : null}
+        </span>
+        {/* Persistent modified-copy indicator — a signal, not a control. Same
+            reserved-width trick as the live region above: the wrapper span
+            always occupies its slot in the flex row, only the badge inside
+            mounts/unmounts, so neighboring header controls never shift when
+            edits are made or a fresh meet loads. Blank (not shown) at 0. */}
+        <span className="inline-flex items-center min-w-[10rem]">
+          {workingCopyChanges && workingCopyChanges.total > 0 ? (
+            <span
+              className="badge-warning inline-flex items-center px-2 py-0.5 rounded-full text-ui-caption font-medium whitespace-nowrap"
+              title={workingCopyChangeSummary(workingCopyChanges)}
+              aria-label={`Modified copy: ${workingCopyChangeSummary(workingCopyChanges)}`}
+            >
+              Modified copy · {workingCopyChanges.total} {workingCopyChanges.total === 1 ? 'change' : 'changes'}
+            </span>
           ) : null}
         </span>
         <div className="sm:ml-auto flex flex-wrap items-center gap-2">

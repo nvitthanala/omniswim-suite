@@ -36,6 +36,7 @@ const TESTS = [
   ['test_scoring_theory.mjs'],
   ['test_workspace_scoring_debounce.mjs'],
   ['test_meet_source.mjs'],
+  ['test_working_copy_changes.mjs'],
   ['test_roster_arbitrage.mjs'],
   ['test_cross_course_arbitrage.mjs'],
   ['test_drop_add_analysis.mjs'],
