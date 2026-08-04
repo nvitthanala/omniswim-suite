@@ -1,11 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { UploadCloud, Settings2, FolderOpen, Save, Download, Trash2, X } from 'lucide-react';
 import { analyzeRace, createTagStateMachine, raceLengthCount } from '@omniswim/core/lib/raceAnalysis';
 import { VideoPlayer } from './components/VideoPlayer';
 import { MetricsDashboard } from './components/MetricsDashboard';
 import { RaceSetupForm, STROKE_LABEL } from './components/RaceSetupForm';
 import { TagDeck } from './components/TagDeck';
-import { TagTable } from './components/TagTable';
+import { TagTable, updateTagTime } from './components/TagTable';
 import { SessionComparePanel } from './components/SessionComparePanel';
 import type { OperatorKey, RaceAnalysisResult, RaceConfig, RaceTag } from './types';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
@@ -108,24 +108,75 @@ export default function MetricsApp() {
     return candidates.length > 0 ? candidates[0] : null;
   }, [activeWorkspace, swimmerName, raceConfig.raceDistance, raceConfig.strokePerLength]);
 
+  const openVideoFile = useCallback(
+    (file: File) => {
+      if (videoUrl) URL.revokeObjectURL(videoUrl);
+      const url = URL.createObjectURL(file);
+      setVideoUrl(url);
+      setVideoFileName(file.name);
+      setVideoMeta(null);
+      setFpsOverride(null);
+      setTags([]);
+      setSetupConfirmed(false);
+      setSessionId(null);
+      setSessionCreatedAt(null);
+      extractVideoMeta(url)
+        .then(setVideoMeta)
+        .catch(() => undefined);
+      toast.push('success', `Video "${file.name}" opened`);
+    },
+    [videoUrl, toast],
+  );
+
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    if (videoUrl) URL.revokeObjectURL(videoUrl);
-    const url = URL.createObjectURL(file);
-    setVideoUrl(url);
-    setVideoFileName(file.name);
-    setVideoMeta(null);
-    setFpsOverride(null);
-    setTags([]);
-    setSetupConfirmed(false);
-    setSessionId(null);
-    setSessionCreatedAt(null);
-    extractVideoMeta(url)
-      .then(setVideoMeta)
-      .catch(() => undefined);
-    toast.push('success', `Video "${file.name}" opened`);
+    openVideoFile(file);
   };
+
+  const dragCounter = useRef(0);
+  const [isDragOverVideo, setIsDragOverVideo] = useState(false);
+
+  const handleVideoDragEnter = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    if (!event.dataTransfer.types.includes('Files')) return;
+    event.preventDefault();
+    dragCounter.current += 1;
+    setIsDragOverVideo(true);
+  }, []);
+
+  const handleVideoDragOver = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    if (!event.dataTransfer.types.includes('Files')) return;
+    event.preventDefault();
+    event.dataTransfer.dropEffect = 'copy';
+  }, []);
+
+  const handleVideoDragLeave = useCallback((event: React.DragEvent<HTMLDivElement>) => {
+    if (!event.dataTransfer.types.includes('Files')) return;
+    event.preventDefault();
+    dragCounter.current = Math.max(0, dragCounter.current - 1);
+    if (dragCounter.current === 0) setIsDragOverVideo(false);
+  }, []);
+
+  const handleVideoDrop = useCallback(
+    (event: React.DragEvent<HTMLDivElement>) => {
+      if (!event.dataTransfer.types.includes('Files')) return;
+      event.preventDefault();
+      dragCounter.current = 0;
+      setIsDragOverVideo(false);
+      const file = event.dataTransfer.files[0];
+      if (!file) return;
+      if (!file.type.startsWith('video/')) {
+        toast.push('error', `"${file.name}" is not a video file.`);
+        return;
+      }
+      openVideoFile(file);
+    },
+    [openVideoFile, toast],
+  );
+
+  const handleTagDragCommit = useCallback((index: number, nextTime: number) => {
+    setTags((prev) => updateTagTime(prev, index, nextTime));
+  }, []);
 
   const measuredFps = videoMeta?.fps;
   const effectiveFps = fpsOverride ?? measuredFps ?? null;
@@ -404,7 +455,15 @@ export default function MetricsApp() {
       ) : null}
 
       <main className="flex-1 flex overflow-hidden flex-col lg:flex-row min-h-0">
-        <div className="flex-1 lg:flex-[1.8] relative bg-[var(--surface-muted)] flex flex-col items-center justify-center border-b lg:border-b-0 lg:border-r border-theme-soft overflow-hidden">
+        <div
+          className="flex-1 lg:flex-[1.8] relative bg-[var(--surface-muted)] flex flex-col items-center justify-center border-b lg:border-b-0 lg:border-r border-theme-soft overflow-hidden"
+          role="region"
+          aria-label="Video drop zone. Drag and drop a video file here, or use the Open Video button."
+          onDragEnter={handleVideoDragEnter}
+          onDragOver={handleVideoDragOver}
+          onDragLeave={handleVideoDragLeave}
+          onDrop={handleVideoDrop}
+        >
           <VideoPlayer
             videoUrl={videoUrl}
             tags={tags}
@@ -414,10 +473,21 @@ export default function MetricsApp() {
             onSequentialKey={handleSequentialKey}
             onOneShotKey={handleOneShotKey}
             onUndo={handleUndo}
+            onTagDragCommit={handleTagDragCommit}
           />
           {videoUrl && setupConfirmed ? (
             <div className="absolute top-4 left-4 z-30 w-64 max-h-[calc(100%-2rem)] overflow-y-auto custom-scrollbar">
               <TagDeck machine={machine} tags={tags} lengthCount={lengthCount} fifteenMetreGateReason={fifteenMetreGateReason} />
+            </div>
+          ) : null}
+          {isDragOverVideo ? (
+            <div className="absolute inset-2 z-40 flex items-center justify-center rounded-lg border-2 border-dashed border-[var(--text-accent)] bg-[var(--surface)]/90 pointer-events-none">
+              <div className="flex flex-col items-center gap-2 text-center px-4">
+                <UploadCloud size={28} className="text-[var(--text-accent)]" />
+                <span className="text-ui-label font-bold uppercase tracking-widest text-[var(--text-primary)]">
+                  Drop video to open
+                </span>
+              </div>
             </div>
           ) : null}
         </div>

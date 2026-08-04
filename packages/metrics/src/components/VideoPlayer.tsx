@@ -16,6 +16,7 @@ interface VideoPlayerProps {
   onSequentialKey: (key: OperatorKey, time: number) => void;
   onOneShotKey: (kind: 'Signal' | 'Flags' | 'Kick', time: number) => void;
   onUndo: () => void;
+  onTagDragCommit: (index: number, nextTime: number) => void;
 }
 
 function calculateLiveSPM(tags: readonly RaceTag[]): number {
@@ -37,6 +38,7 @@ export function VideoPlayer({
   onSequentialKey,
   onOneShotKey,
   onUndo,
+  onTagDragCommit,
 }: VideoPlayerProps) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [isPlaying, setIsPlaying] = useState(false);
@@ -48,6 +50,7 @@ export function VideoPlayer({
   const [isMuted, setIsMuted] = useState(false);
 
   const effectiveFps = fpsOverride ?? measuredFps ?? null;
+  const frameSeconds = effectiveFps !== null ? 1 / effectiveFps : null;
 
   useEffect(() => {
     if (videoRef.current) {
@@ -219,7 +222,13 @@ export function VideoPlayer({
                     style={{ width: `${progress}%` }}
                   />
                 </div>
-                <TagTimeline tags={tags} duration={duration} onSeek={seekTo} />
+                <TagTimeline
+                  tags={tags}
+                  duration={duration}
+                  frameSeconds={frameSeconds}
+                  onSeek={seekTo}
+                  onTagTimeChange={onTagDragCommit}
+                />
               </div>
 
               <div className="flex items-center justify-between text-white flex-wrap gap-y-2 mt-1">
