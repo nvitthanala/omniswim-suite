@@ -1,0 +1,66 @@
+{
+  "description": "Primary-source qualifying-standard PDFs. Every cutline record in data/cutlines/*.json traces to one of these by sourceId + sha256. Regenerate with scripts/fetch-cutlines.py then scripts/extract-cutlines.py.",
+  "generatedAt": "2026-07-26T06:14:07Z",
+  "sources": [
+    {
+      "id": "ncaa-d1-2025-26",
+      "division": "D1",
+      "season": "2025-2026",
+      "genders": "MW",
+      "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2025-26D1XSW_QUALSTANDARDS.pdf",
+      "filename": "2025-26D1XSW_QUALSTANDARDS.pdf",
+      "sha256": "acd6624227405e92e466b6078d7621e0048e18334d0026d2c51d4c5f5b22d1d3",
+      "bytes": 200094,
+      "pageCount": 4,
+      "retrievedAt": "2026-07-26T05:30:05Z"
+    },
+    {
+      "id": "ncaa-d2-men-2026-27",
+      "division": "D2",
+      "season": "2026-2027",
+      "genders": "M",
+      "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d2/2026-27D2MSW_QualStandards.pdf",
+      "filename": "2026-27D2MSW_QualStandards.pdf",
+      "sha256": "5864b9e84fdd2eed08d2e0283e2bc1424e7293a5be87636a08b295549d844852",
+      "bytes": 156359,
+      "pageCount": 2,
+      "retrievedAt": "2026-07-26T05:30:05Z"
+    },
+    {
+      "id": "ncaa-d2-women-2026-27",
+      "division": "D2",
+      "season": "2026-2027",
+      "genders": "W",
+      "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d2/2026-27D2WSW_QualStandards.pdf",
+      "filename": "2026-27D2WSW_QualStandards.pdf",
+      "sha256": "cda92c2c63346a49ada7ec941f6ed3fe1f18b37f459e0462193babd032bfc8a7",
+      "bytes": 152729,
+      "pageCount": 2,
+      "retrievedAt": "2026-07-26T05:30:06Z"
+    },
+    {
+      "id": "ncaa-d3-2026-27",
+      "division": "D3",
+      "season": "2026-2027",
+      "genders": "MW",
+      "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d3/2026-27D3XSW_QualifyingStandards.pdf",
+      "filename": "2026-27D3XSW_QualifyingStandards.pdf",
+      "sha256": "3668b73e3eb9b71686a29636f06349437053b35f1bc1df792dad9c118a7d188d",
+      "bytes": 162052,
+      "pageCount": 1,
+      "retrievedAt": "2026-07-26T05:30:06Z"
+    },
+    {
+      "id": "naia-2026-27",
+      "division": "NAIA",
+      "season": "2026-2027",
+      "genders": "MW",
+      "url": "https://www.naia.org/wp-content/uploads/2026/05/2026-27-SD-Qualifying-Standards-wo-Relays.pdf",
+      "filename": "2026-27-SD-Qualifying-Standards-wo-Relays.pdf",
+      "sha256": "395be842a2fde60a25348ed9d534cbdf65024fb831626ccfa908ca00c130c166",
+      "bytes": 169011,
+      "pageCount": 1,
+      "retrievedAt": "2026-07-26T05:30:06Z"
+    }
+  ]
+}

@@ -29,6 +29,7 @@ const sample = {
   createdAt: 1700000000000,
   conference: 'NSISC',
   entryPlanMode: 'overlay',
+  scoringView: 'pdf_only',
   scoringSettings: { scoringPoints: [20, 17, 16], relayMultiplier: 2 },
   loadedMeet: { pdfFilename: 'meet.pdf', uploadedAt: 1700000000001, conference: 'NSISC' },
   loadedPsych: { pdfFilename: 'psych.pdf', uploadedAt: 1700000000003 },
@@ -66,6 +67,9 @@ const sample = {
   meetEntryPlans: [{ id: 'p1', swimmerName: 'John Doe', event: '100 Free', gender: 'Men' }],
   relayLegOverrides: [{ relayEntryKey: 'k1', legIndex: 0, swimmerName: 'John Doe' }],
   athleteHistory: [{ name: 'John Doe', team: 'A', gender: 'Men', event: '100 Free', time: '44.0', source: 'paste' }],
+  athleteAliases: [
+    { id: 'al1', gender: 'Men', team: 'A', canonicalName: 'John Doe', aliasName: 'Johnny Doe', source: 'manual', createdAt: '2026-07-19T00:00:00.000Z' },
+  ],
 };
 
 function sortedEqual(a, b, label) {
@@ -85,6 +89,7 @@ try {
 
   assert.strictEqual(got.name, sample.name, 'name');
   assert.strictEqual(got.conference, sample.conference, 'conference');
+  assert.strictEqual(got.scoringView, sample.scoringView, 'scoringView');
   assert.strictEqual(got.createdAt, sample.createdAt, 'createdAt');
   sortedEqual(got.scoringSettings, sample.scoringSettings, 'scoringSettings');
   sortedEqual(got.officialTeamScores, sample.officialTeamScores, 'officialTeamScores');
@@ -100,6 +105,7 @@ try {
   sortedEqual(got.meetEntryPlans, sample.meetEntryPlans, 'meetEntryPlans');
   sortedEqual(got.relayLegOverrides, sample.relayLegOverrides, 'relayLegOverrides');
   sortedEqual(got.athleteHistory, sample.athleteHistory, 'athleteHistory');
+  sortedEqual(got.athleteAliases, sample.athleteAliases, 'athleteAliases');
 
   // Snapshot + update + restore.
   const snap = reopened.createSnapshot('ws-test-1', 'before-edit');

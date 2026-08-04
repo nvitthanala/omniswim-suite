@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Cog, Globe, LogOut, Settings, TrendingUp, User } from 'lucide-react';
+import { Cog, Globe, LogOut, Search, Settings, TrendingUp, User } from 'lucide-react';
 import { Gender } from '@omniswim/core/types';
 import { ThemeToggle, useSwimCloudWindow } from '@omniswim/ui';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
@@ -11,13 +11,17 @@ type Props = {
   onThemeToggle: () => void;
   showWorkspaceControls?: boolean;
   onOpenScoringSettings?: () => void;
+  onOpenCommandPalette?: () => void;
 };
+
+const IS_MAC = typeof navigator !== 'undefined' && navigator.userAgent.includes('Mac');
 
 export default function SuiteHeader({
   theme,
   onThemeToggle,
   showWorkspaceControls,
   onOpenScoringSettings,
+  onOpenCommandPalette,
 }: Props) {
   const { activeWorkspace, activeGender, setActiveGender } = useSuiteWorkspace();
   const { open, toggleWindow } = useSwimCloudWindow();
@@ -28,8 +32,8 @@ export default function SuiteHeader({
       <div className="flex items-center gap-4">
         <Link to="/" className="flex items-center gap-4 group">
           <div
-            className="w-10 h-10 flex items-center justify-center bg-[var(--surface-muted)] rounded shadow border border-[var(--border)] overflow-hidden"
-            style={{ boxShadow: '0 4px 12px var(--shadow)' }}
+            className="w-10 h-10 flex items-center justify-center bg-[var(--surface-muted)] rounded-lg border border-[var(--border)] overflow-hidden"
+            style={{ boxShadow: 'var(--ui-shadow-sm)' }}
           >
             <img src="/OMNISWIMLOGO.png" alt="Omni Swim Logo" className="w-full h-full object-contain p-1" />
           </div>
@@ -43,11 +47,11 @@ export default function SuiteHeader({
         <AppletNav />
 
         {showWorkspaceControls ? (
-          <nav className="hidden md:flex gap-1 bg-[var(--surface)] p-1 rounded-md border border-[var(--border)] ml-2">
+          <nav className="hidden md:flex gap-1 bg-[var(--surface)] p-1 rounded-lg border border-[var(--border)] ml-2">
             <button
               type="button"
               onClick={() => setActiveGender(Gender.MEN)}
-              className={`px-3 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-sm transition-all ${
+              className={`px-3 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-md transition-colors ${
                 activeGender === Gender.MEN ? 'nav-tab-active' : 'nav-tab-inactive'
               }`}
             >
@@ -56,13 +60,26 @@ export default function SuiteHeader({
             <button
               type="button"
               onClick={() => setActiveGender(Gender.WOMEN)}
-              className={`px-3 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-sm transition-all ${
+              className={`px-3 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-md transition-colors ${
                 activeGender === Gender.WOMEN ? 'nav-tab-active' : 'nav-tab-inactive'
               }`}
             >
               Women
             </button>
           </nav>
+        ) : null}
+
+        {onOpenCommandPalette ? (
+          <button
+            type="button"
+            onClick={onOpenCommandPalette}
+            className="btn-ghost hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-theme-soft text-theme-muted hover:text-[var(--text-primary)] transition-colors"
+            title="Command palette"
+            aria-label="Open command palette"
+          >
+            <Search size={12} />
+            <kbd className="text-ui-micro font-mono">{IS_MAC ? '⌘K' : 'Ctrl K'}</kbd>
+          </button>
         ) : null}
 
         <Link to="/analytics" className="btn-ghost p-1.5 rounded hidden sm:flex" title="Season analytics">
@@ -87,7 +104,7 @@ export default function SuiteHeader({
 
         <Link
           to="/settings"
-          className="p-1.5 theme-hover-row rounded btn-accent-outline transition-colors"
+          className="p-1.5 theme-hover-row rounded-lg btn-accent-outline transition-colors"
           title="Suite Settings"
           aria-label="Open suite settings"
         >
@@ -97,7 +114,7 @@ export default function SuiteHeader({
         <button
           type="button"
           onClick={toggleWindow}
-          className={`p-1.5 rounded transition-colors ${open ? 'btn-accent-outline' : 'btn-ghost'}`}
+          className={`p-1.5 rounded-lg transition-colors ${open ? 'btn-accent-outline' : 'btn-ghost'}`}
           title="SwimCloud reference window"
         >
           <Globe size={14} />
@@ -107,7 +124,7 @@ export default function SuiteHeader({
           <button
             type="button"
             onClick={onOpenScoringSettings}
-            className="p-1.5 theme-hover-row rounded btn-accent-outline transition-colors"
+            className="p-1.5 theme-hover-row rounded-lg btn-accent-outline transition-colors"
             title="Configure Scoring Model"
           >
             <Settings size={14} />

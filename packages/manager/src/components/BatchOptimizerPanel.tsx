@@ -136,7 +136,8 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
       <div
-        className="surface-card rounded-xl shadow-2xl border border-theme-soft w-full max-w-2xl max-h-[80vh] flex flex-col"
+        className="surface-card rounded-xl border border-theme-soft w-full max-w-2xl max-h-[80vh] flex flex-col"
+        style={{ boxShadow: 'var(--ui-shadow-lg)' }}
         onClick={e => e.stopPropagation()}
       >
         {/* Header */}
@@ -144,10 +145,10 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
           <div className="flex items-center gap-3">
             <Sparkles size={18} className="text-[var(--text-accent)]" />
             <div>
-              <h2 className="text-sm font-bold uppercase tracking-widest text-[var(--text-primary)]">
+              <h2 className="text-ui-label font-bold uppercase tracking-widest text-[var(--text-primary)]">
                 Batch Optimizer
               </h2>
-              <p className="text-[10px] text-theme-secondary mt-0.5">
+              <p className="text-ui-caption text-theme-secondary mt-0.5">
                 Automatically optimize roster and events for all teams
               </p>
             </div>
@@ -155,7 +156,7 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
           <button
             type="button"
             onClick={onClose}
-            className="p-2 theme-hover-row rounded text-theme-secondary hover:text-[var(--text-primary)]"
+            className="p-2 theme-hover-row rounded-lg text-theme-secondary hover:text-[var(--text-primary)] transition-colors"
           >
             <X size={16} />
           </button>
@@ -165,7 +166,7 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
         <div className="p-5 overflow-y-auto flex-1 space-y-5">
           {/* Stage selector */}
           <div>
-            <label className="text-[10px] uppercase tracking-widest font-bold text-theme-secondary mb-2 block">
+            <label className="text-ui-caption uppercase tracking-widest font-bold text-theme-secondary mb-2 block">
               Optimization Scope
             </label>
             <div className="grid grid-cols-3 gap-2">
@@ -180,10 +181,10 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
                       : 'border-theme-soft theme-hover-row'
                   }`}
                 >
-                  <div className="text-[11px] font-bold uppercase tracking-wider text-[var(--text-primary)]">
+                  <div className="text-ui-label font-bold uppercase tracking-wider text-[var(--text-primary)]">
                     {s.label}
                   </div>
-                  <div className="text-[9px] text-theme-secondary mt-1 leading-relaxed">{s.desc}</div>
+                  <div className="text-ui-micro text-theme-secondary mt-1 leading-relaxed">{s.desc}</div>
                 </button>
               ))}
             </div>
@@ -194,7 +195,7 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
             type="button"
             onClick={runOptimizer}
             disabled={isRunning}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg btn-primary text-[11px] font-bold uppercase tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg btn-primary text-ui-label font-bold uppercase tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isRunning ? (
               <>
@@ -221,21 +222,21 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
               >
                 {/* Summary card */}
                 <div className="surface-overlay rounded-lg border border-theme-soft p-4">
-                  <h4 className="text-[10px] uppercase tracking-widest font-bold text-theme-secondary mb-3">
+                  <h4 className="text-ui-caption uppercase tracking-widest font-bold text-theme-secondary mb-3">
                     Optimization Summary
                   </h4>
                   <div className="grid grid-cols-3 gap-4">
                     <div className="text-center p-3 rounded-lg surface-muted-bg border border-theme-soft">
-                      <div className="text-[20px] font-bold tabular-nums text-points-positive">
+                      <div className="text-2xl font-bold tabular-nums text-points-positive">
                         {result.teamDeltas[0]?.projectedPoints.toFixed(1) ?? '0.0'}
                       </div>
-                      <div className="text-[9px] uppercase tracking-wider text-theme-secondary mt-1">
+                      <div className="text-ui-micro uppercase tracking-wider text-theme-secondary mt-1">
                         Projected Total
                       </div>
                     </div>
                     <div className="text-center p-3 rounded-lg surface-muted-bg border border-theme-soft">
                       <div
-                        className={`text-[20px] font-bold tabular-nums ${
+                        className={`text-2xl font-bold tabular-nums ${
                           (result.teamDeltas[0]?.delta ?? 0) > 0
                             ? 'text-points-positive'
                             : (result.teamDeltas[0]?.delta ?? 0) < 0
@@ -246,15 +247,15 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
                         {(result.teamDeltas[0]?.delta ?? 0) > 0 ? '+' : ''}
                         {(result.teamDeltas[0]?.delta ?? 0).toFixed(1)}
                       </div>
-                      <div className="text-[9px] uppercase tracking-wider text-theme-secondary mt-1">
+                      <div className="text-ui-micro uppercase tracking-wider text-theme-secondary mt-1">
                         Delta
                       </div>
                     </div>
                     <div className="text-center p-3 rounded-lg surface-muted-bg border border-theme-soft">
-                      <div className="text-[20px] font-bold tabular-nums text-[var(--text-primary)]">
+                      <div className="text-2xl font-bold tabular-nums text-[var(--text-primary)]">
                         {result.teamDeltas[0]?.previousPoints.toFixed(1) ?? '0.0'}
                       </div>
-                      <div className="text-[9px] uppercase tracking-wider text-theme-secondary mt-1">
+                      <div className="text-ui-micro uppercase tracking-wider text-theme-secondary mt-1">
                         Baseline Total
                       </div>
                     </div>
@@ -263,19 +264,19 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
 
                 {/* Changes detail */}
                 <div className="surface-overlay rounded-lg border border-theme-soft p-4">
-                  <h4 className="text-[10px] uppercase tracking-widest font-bold text-theme-secondary mb-3">
+                  <h4 className="text-ui-caption uppercase tracking-widest font-bold text-theme-secondary mb-3">
                     Changes Proposed
                   </h4>
                   <div className="flex gap-4">
                     <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-theme-soft">
                       <CheckCircle size={14} className="text-points-positive" />
-                      <span className="text-[11px] font-medium text-[var(--text-primary)]">
+                      <span className="text-ui-label font-medium text-[var(--text-primary)]">
                         {overrideChanges} scorer override{overrideChanges !== 1 ? 's' : ''}
                       </span>
                     </div>
                     <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-theme-soft">
                       <CheckCircle size={14} className="text-points-positive" />
-                      <span className="text-[11px] font-medium text-[var(--text-primary)]">
+                      <span className="text-ui-label font-medium text-[var(--text-primary)]">
                         {planChanges === 0 ? 'No new' : `+${planChanges}`} event plan{planChanges !== 1 ? 's' : ''}
                       </span>
                     </div>
@@ -291,7 +292,7 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
           <button
             type="button"
             onClick={onClose}
-            className="px-4 py-2 rounded-lg border border-theme-soft text-[10px] font-bold uppercase tracking-widest text-theme-secondary hover:text-[var(--text-primary)] transition-colors"
+            className="px-4 py-2 rounded-lg border border-theme-soft text-ui-caption font-bold uppercase tracking-widest text-theme-secondary hover:text-[var(--text-primary)] transition-colors"
           >
             Cancel
           </button>
@@ -299,7 +300,7 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
             type="button"
             onClick={handleApply}
             disabled={!result}
-            className="px-4 py-2 rounded-lg btn-primary text-[10px] font-bold uppercase tracking-widest transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            className="px-4 py-2 rounded-lg btn-primary text-ui-caption font-bold uppercase tracking-widest transition-all disabled:opacity-40 disabled:cursor-not-allowed"
           >
             Apply to Workspace
           </button>

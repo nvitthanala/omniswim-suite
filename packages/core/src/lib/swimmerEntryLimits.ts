@@ -14,6 +14,7 @@ export type SwimmerEntryCounts = {
   individual: number;
   relayEvents: Set<string>;
   relayCount: number;
+  total?: number; // individual + relayCount
 };
 
 export function countSwimmerEntries(
@@ -46,19 +47,22 @@ export function countSwimmerEntries(
     }
   }
 
-  return { individual, relayEvents, relayCount: relayEvents.size };
+  return { individual, relayEvents, relayCount: relayEvents.size, total: individual + relayEvents.size };
 }
 
 export function swimmerExceedsEntryLimits(
   counts: SwimmerEntryCounts,
   settings: ScoringSettings
-): { individualOver: boolean; relayOver: boolean } {
+): { individualOver: boolean; relayOver: boolean; totalOver: boolean } {
   const merged = mergeScoringSettings(settings);
   const indCap = merged.maxIndividualEntriesPerSwimmer ?? 999;
   const relayCap = merged.maxRelayEntriesPerSwimmer ?? 999;
+  const totalCap = merged.maxTotalEntriesPerSwimmer ?? 999;
+  const total = (counts.total ?? counts.individual + counts.relayCount);
   return {
     individualOver: counts.individual > indCap,
     relayOver: counts.relayCount > relayCap,
+    totalOver: total > totalCap,
   };
 }
 
@@ -69,5 +73,31 @@ export function formatEntryLimitLabel(
   const merged = mergeScoringSettings(settings);
   const indCap = merged.maxIndividualEntriesPerSwimmer ?? 999;
   const relayCap = merged.maxRelayEntriesPerSwimmer ?? 999;
+  const totalCap = merged.maxTotalEntriesPerSwimmer ?? 999;
+  const total = (counts.total ?? counts.individual + counts.relayCount);
+
+  if (totalCap < 999) {
+    return `${total}/${totalCap} total (${counts.individual} ind · ${counts.relayCount} relay)`;
+  }
   return `${counts.individual}/${indCap} ind · ${counts.relayCount}/${relayCap} relay`;
+}
+
+/** Whether adding one more entry of the given event type would exceed caps. */
+export function canAcceptAnotherEntry(
+  counts: SwimmerEntryCounts,
+  settings: ScoringSettings,
+  event: string
+): boolean {
+  const merged = mergeScoringSettings(settings);
+  const indCap = merged.maxIndividualEntriesPerSwimmer ?? 999;
+  const relayCap = merged.maxRelayEntriesPerSwimmer ?? 999;
+  const totalCap = merged.maxTotalEntriesPerSwimmer ?? 999;
+  const total = (counts.total ?? counts.individual + counts.relayCount);
+
+  // Check total cap first (if set, it takes precedence)
+  if (totalCap < 999 && total >= totalCap) return false;
+
+  const isRelay = /\brelay\b/i.test(event);
+  if (isRelay) return counts.relayCount < relayCap;
+  return counts.individual < indCap;
 }

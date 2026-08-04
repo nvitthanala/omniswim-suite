@@ -36,6 +36,16 @@ export async function listSnapshots(workspaceId: string): Promise<Snapshot[]> {
   return Array.isArray(data) ? (data as Snapshot[]) : [];
 }
 
+/** Read-only: fetch a snapshot's stored workspace content without restoring it. */
+export async function getSnapshotContent(snapshotId: string): Promise<Workspace> {
+  const res = await fetch(`${API_BASE}/api/snapshots/${encodeURIComponent(snapshotId)}`);
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({}));
+    throw new Error((err as Record<string, unknown>).error as string || `Snapshot fetch failed (${res.status})`);
+  }
+  return res.json() as Promise<Workspace>;
+}
+
 export async function restoreSnapshot(snapshotId: string): Promise<Workspace> {
   const res = await fetch(`${API_BASE}/api/snapshots/${encodeURIComponent(snapshotId)}/restore`, {
     method: 'POST',

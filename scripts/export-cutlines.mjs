@@ -1,42 +1,34 @@
 /**
- * Export the built-in cutline dataset to data/cutlines/<version>.json so it can
- * be versioned and hot-reloaded/overridden without rebuilding.
- * Run: npx tsx scripts/export-cutlines.mjs [version]
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * RETIRED 2026-07-26.
+ *
+ * This script used to write `data/cutlines/<version>.json` from the hand-authored
+ * `cutlines` array in packages/core. That direction is now backwards and
+ * destructive: `data/cutlines/*.json` is the generated source of truth, produced
+ * from the archived PDFs under `data/cutlines/sources/`, and
+ * `packages/core/src/cutlines.ts` is a thin typed loader over it. Running the old
+ * export would overwrite provenance-carrying published data with a flattened,
+ * lossy view of itself.
+ *
+ * Use instead:
+ *
+ *     python scripts/fetch-cutlines.py      # archive the published PDFs + manifest
+ *     python scripts/extract-cutlines.py    # parse them into data/cutlines/*.json
+ *
+ * See the "Data provenance" section of CLAUDE.md.
  */
-import fs from 'node:fs';
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
-import { cutlines } from '../packages/core/src/cutlines.ts';
-
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const CUTLINES_DIR = path.join(__dirname, '..', 'data', 'cutlines');
-const version = process.argv[2] || '2025-2026';
-
-fs.mkdirSync(CUTLINES_DIR, { recursive: true });
-const outFile = path.join(CUTLINES_DIR, `${version}.json`);
-fs.writeFileSync(outFile, JSON.stringify(cutlines, null, 2), 'utf-8');
-
-const indexFile = path.join(CUTLINES_DIR, 'index.json');
-const existing = fs.existsSync(indexFile)
-  ? JSON.parse(fs.readFileSync(indexFile, 'utf-8'))
-  : { versions: [] };
-const versions = new Set(existing.versions ?? []);
-versions.add(version);
-fs.writeFileSync(
-  indexFile,
-  JSON.stringify(
-    {
-      description:
-        'Versioned NCAA cutline tables. Each <version>.json is an array of CutlineRecord. The server serves these via GET /api/cutlines/:version with hot-reload.',
-      default: version,
-      versions: [...versions].sort().reverse(),
-      updatedAt: new Date().toISOString(),
-    },
-    null,
-    2
-  ),
-  'utf-8'
+console.error(
+  [
+    'scripts/export-cutlines.mjs is retired and does nothing.',
+    '',
+    'data/cutlines/*.json is now generated from the archived PDFs, not from TypeScript.',
+    'Regenerate it with:',
+    '',
+    '  python scripts/fetch-cutlines.py',
+    '  python scripts/extract-cutlines.py',
+    '',
+  ].join('\n')
 );
-
-console.log(`Wrote ${cutlines.length} cutline rows → ${outFile}`);
-console.log(`Updated ${indexFile}`);
+process.exit(1);

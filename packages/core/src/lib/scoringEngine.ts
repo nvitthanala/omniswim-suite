@@ -16,15 +16,26 @@ import {
   stripEventGenderMarker,
 } from './utils';
 import { mergeScoringSettings } from './scoringDefaults';
+import { computeVisibleEvents } from './eventIdentity';
 import { buildPrelimsProjectedBundle } from './prelimsProjection';
 import { buildPsychProjectedBundle } from './psychProjection';
 import { buildWhatIfResults } from './whatIfProjection';
+import { getSourceResults } from './meetSource';
+import { buildAliasResolver } from './athleteAliases';
 import type { CatalogTeamRoster } from './rosterCatalog';
 
 export type ScoringBundle = {
   allResults: SwimmerResult[];
   allScored: SwimmerResult[];
   events: string[];
+  /**
+   * Subset of `events` fit for the matrix event axis: excludes non-program
+   * individual events (25-yard events, 100 IM, time trials) and, when a meet is
+   * loaded, leftover canonical-only labels that never matched a meet event.
+   * Relays and diving always remain. Purely presentational — points/totals are
+   * computed from `events` and are unaffected by this field.
+   */
+  visibleEvents: string[];
   sortedTeams: TeamScore[];
   timelineData: Record<string, unknown>[];
   teamStyleSignature: string;
@@ -51,7 +62,10 @@ export function buildScoringBundle({
 }: BuildOptions): ScoringBundle {
   const menResults = workspace.menResults ?? [];
   const womenResults = workspace.womenResults ?? [];
-  const currentResults = gender === Gender.MEN ? menResults : womenResults;
+  const workingResults = gender === Gender.MEN ? menResults : womenResults;
+  const sourceResults = getSourceResults(workspace, gender);
+  /** Baseline uses frozen source copy; projected uses working + what-if layers. */
+  const currentResults = applyWhatIf ? workingResults : sourceResults;
   const pdfHint = [...menResults, ...womenResults];
 
   const scoringSettings = mergeScoringSettings(workspace.scoringSettings, {
@@ -78,6 +92,28 @@ export function buildScoringBundle({
     overrides = [];
   }
 
+  // Collapse confirmed duplicate spellings to one identity BEFORE scoring, so a
+  // swimmer imported twice ("Camden Mask" from a SwimCloud paste vs "Cam Mask"
+  // in the meet results) is one athlete everywhere downstream — roster rows,
+  // scorer caps, entry limits and relay legs. Links are user-confirmed or
+  // evidence-backed auto-links; an empty alias set is an identity no-op, so this
+  // costs nothing when nothing is linked. See athleteAliases.ts.
+  const aliasLinks = workspace.athleteAliases ?? [];
+  if (aliasLinks.length > 0) {
+    const resolver = buildAliasResolver(aliasLinks);
+    const canonical = (name: string, team?: string) => resolver.resolveAthleteName(name, team, gender);
+    allResults = allResults.map(r => {
+      const resolved = canonical(String(r.name ?? ''), r.team);
+      return resolved === r.name ? r : { ...r, name: resolved };
+    });
+    // Overrides are keyed by name; resolve them too or a link would orphan the
+    // scorer toggle that was set under the old spelling.
+    overrides = overrides.map(o => {
+      const resolved = canonical(String(o.name ?? ''), o.team);
+      return resolved === o.name ? o : { ...o, name: resolved };
+    });
+  }
+
   const allScored = calculatePoints(allResults, scoringSettings, {
     scorerRosterOverrides: overrides,
     conferenceForMerge: workspace.conference,
@@ -85,6 +121,11 @@ export function buildScoringBundle({
   });
   const scoredById = new Map(allScored.map(r => [r.id, r]));
   const events = sortEventsByMeetOrder(Array.from(new Set(allResults.map(r => r.event))));
+
+  // Loaded-meet event labels (from the PDF result rows) drive visibility: any
+  // canonical-only label that never matched a real meet event is hidden.
+  const genderPdfResults = gender === Gender.MEN ? menResults : womenResults;
+  const visibleEvents = computeVisibleEvents(events, allResults, genderPdfResults, scoringSettings);
 
   const teamsMap: Record<string, TeamScore> = {};
   const timelineData: Record<string, unknown>[] = [];
@@ -144,6 +185,7 @@ export function buildScoringBundle({
     allResults,
     allScored,
     events,
+    visibleEvents,
     sortedTeams,
     timelineData,
     teamStyleSignature,

@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Workspace, SwimmerResult } from '@omniswim/core/types';
-import { SCHEMA_VERSION, CREATE_TABLES_SQL, SQLITE_MIGRATIONS_V2, SQLITE_MIGRATIONS_V3 } from './schema';
+import { SCHEMA_VERSION, CREATE_TABLES_SQL, SQLITE_MIGRATIONS_V2, SQLITE_MIGRATIONS_V3, SQLITE_MIGRATIONS_V4, SQLITE_MIGRATIONS_V5, SQLITE_MIGRATIONS_V6, SQLITE_MIGRATIONS_V7 } from './schema';
 import {
   assembleWorkspace,
   insertPositionalRows,
@@ -35,6 +35,34 @@ export class WorkspaceService {
         this.db.exec(sql);
       } catch {
         /* column/table already exists */
+      }
+    }
+    for (const sql of SQLITE_MIGRATIONS_V4) {
+      try {
+        this.db.exec(sql);
+      } catch {
+        /* table already exists */
+      }
+    }
+    for (const sql of SQLITE_MIGRATIONS_V5) {
+      try {
+        this.db.exec(sql);
+      } catch {
+        /* column already exists */
+      }
+    }
+    for (const sql of SQLITE_MIGRATIONS_V6) {
+      try {
+        this.db.exec(sql);
+      } catch {
+        /* table already exists */
+      }
+    }
+    for (const sql of SQLITE_MIGRATIONS_V7) {
+      try {
+        this.db.exec(sql);
+      } catch {
+        /* table already exists */
       }
     }
     this.db
@@ -170,6 +198,19 @@ export class WorkspaceService {
     return rows.map(r => ({ id: r.id, createdAt: r.created_at, label: r.label }));
   }
 
+  /** Read-only: snapshot's stored workspace content without restoring it. */
+  getSnapshotContent(snapshotId: string): Workspace | undefined {
+    const row = this.db
+      .prepare('SELECT blob FROM workspace_snapshots WHERE id = ?')
+      .get(snapshotId) as { blob: string } | undefined;
+    if (!row) return undefined;
+    try {
+      return JSON.parse(row.blob) as Workspace;
+    } catch {
+      return undefined;
+    }
+  }
+
   restoreSnapshot(snapshotId: string): Workspace | undefined {
     const row = this.db
       .prepare('SELECT workspace_id, blob FROM workspace_snapshots WHERE id = ?')
@@ -239,15 +280,16 @@ export class WorkspaceService {
     this.db
       .prepare(
         `INSERT INTO workspaces
-          (id, name, created_at, conference, entry_plan_mode, scoring_settings,
+          (id, name, created_at, conference, entry_plan_mode, scoring_view, scoring_settings,
            loaded_meet, loaded_psych, official_team_scores, active_entry_ids, history_sources, sort_index,
            owner_id, team_id, updated_at, version)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            created_at = excluded.created_at,
            conference = excluded.conference,
            entry_plan_mode = excluded.entry_plan_mode,
+           scoring_view = excluded.scoring_view,
            scoring_settings = excluded.scoring_settings,
            loaded_meet = excluded.loaded_meet,
            loaded_psych = excluded.loaded_psych,
@@ -266,6 +308,7 @@ export class WorkspaceService {
         vals.created_at,
         vals.conference,
         vals.entry_plan_mode,
+        vals.scoring_view,
         vals.scoring_settings,
         vals.loaded_meet,
         vals.loaded_psych,
@@ -281,6 +324,7 @@ export class WorkspaceService {
 
     for (const table of [
       'meet_results',
+      'source_meet_results',
       'psych_results',
       'recruits',
       'roster_overrides',
@@ -288,6 +332,8 @@ export class WorkspaceService {
       'relay_leg_overrides',
       'deleted_swimmers',
       'athlete_history',
+      'race_analyses',
+      'athlete_aliases',
     ]) {
       this.db.prepare(`DELETE FROM ${table} WHERE workspace_id = ?`).run(ws.id);
     }
@@ -300,6 +346,18 @@ export class WorkspaceService {
     }
     for (const row of insertResultsRows(ws.id, ws.womenResults ?? [], 'Women')) {
       insertResult.run(row.id, row.workspace_id, row.gender, row.position, row.data);
+    }
+
+    const insertSource = this.db.prepare(
+      'INSERT INTO source_meet_results(id, workspace_id, gender, position, data) VALUES(?, ?, ?, ?, ?)'
+    );
+    const sourceMen = ws.sourceMenResults ?? ws.menResults ?? [];
+    const sourceWomen = ws.sourceWomenResults ?? ws.womenResults ?? [];
+    for (const row of insertResultsRows(ws.id, sourceMen, 'Men')) {
+      insertSource.run(`src-${row.id}`, row.workspace_id, row.gender, row.position, row.data);
+    }
+    for (const row of insertResultsRows(ws.id, sourceWomen, 'Women')) {
+      insertSource.run(`src-${row.id}`, row.workspace_id, row.gender, row.position, row.data);
     }
 
     const insertPsych = this.db.prepare(
@@ -320,6 +378,9 @@ export class WorkspaceService {
     for (const row of insertWithIdRows('meet_entry_plans', ws.id, ws.meetEntryPlans ?? [])) {
       insertWithId('meet_entry_plans').run(row.id, row.workspace_id, row.position, row.data);
     }
+    for (const row of insertWithIdRows('athlete_aliases', ws.id, ws.athleteAliases ?? [])) {
+      insertWithId('athlete_aliases').run(row.id, row.workspace_id, row.position, row.data);
+    }
 
     const insertPos = (table: string) =>
       this.db.prepare(`INSERT INTO ${table}(workspace_id, position, data) VALUES(?, ?, ?)`);
@@ -334,6 +395,9 @@ export class WorkspaceService {
     }
     for (const row of insertPositionalRows(ws.id, ws.athleteHistory ?? [])) {
       insertPos('athlete_history').run(row.workspace_id, row.position, row.data);
+    }
+    for (const row of insertPositionalRows(ws.id, ws.raceAnalyses ?? [])) {
+      insertPos('race_analyses').run(row.workspace_id, row.position, row.data);
     }
   }
 }

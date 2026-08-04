@@ -1,0 +1,967 @@
+Avery Henke
+Event	Time		Meet	Date	Stamp Link
+100 Breast SCY	54.09	D2 B	New South Championships	Feb 20, 2026	
+50 Breast SCY	25.16	X	New South Championships	Feb 20, 2026	
+50 Back SCY	22.53	R	New South Championships	Feb 18, 2026	
+200 IM SCY	1:49.77	WIN JRS	2023 Louisiana Senior SC State Championships	Feb 12, 2023	
+50 Breast LCM	29.29		SE AUB Richard Quick Invitational	Jun 23, 2024	
+200 Free SCY	1:41.29	R	2023 Louisiana Senior SC State Championships	Feb 9, 2023	
+200 Breast SCY	2:00.93		First Chance Invite	Feb 8, 2025	
+100 Free SCY	45.39	R	2023 Louisiana Senior SC State Championships	Feb 10, 2023	
+200 Back SCY	1:49.63		2021 MS Tupelo Top TYR Invitational	Mar 7, 2021	
+100 Back SCY	49.58	R	New South Championships	Feb 19, 2026	
+100 Fly SCY	49.29		New South Championships	Feb 19, 2026	
+200 Breast LCM	2:25.44		2022 Louisiana Senior LC State	Jul 16, 2022	
+100 Back LCM	59.86		2022 Louisiana Senior LC State	Jul 15, 2022	
+50 Free LCM	24.20		SE AUB Richard Quick Invitational	Jun 22, 2024	
+50 Fly SCY	23.07	X	New South Championships	Feb 19, 2026	
+100 Fly LCM	57.32		2022 Louisiana Senior LC State	Jul 15, 2022	
+50 Fly LCM	25.83		Louisiana Senior State Championships	Jul 16, 2023	
+100 Breast LCM	1:06.02		NT DM Dallas Mustang Last Chance for the Big Show	May 28, 2021	
+400 IM SCY	4:09.18		LA TIGR Tiger Aquatics Mardi Gras Invite	Jan 13, 2023	
+200 Free LCM	1:59.46	R	Louisiana Senior State Championships	Jul 13, 2023	
+200 IM LCM	2:14.00		Louisiana 13 & Over Long Course Championship	Jul 18, 2019	
+50 Free SCY	20.99	R	2022 LHSAA Division 2 Championship*	Nov 18, 2022	
+50 Back LCM	28.34	R	2022 Louisiana Senior LC State	Jul 17, 2022	
+200 Back LCM	2:13.59		Speedo Champions Series - College Station	Feb 28, 2020	
+100 Free LCM	56.15		2021 CA Long Course Invitation	May 15, 2021	
+400 IM LCM	4:52.50		Louisiana 13 & Over Long Course Championship	Jul 20, 2019	
+500 Free SCY	4:56.06		LA CA Winter Invitational	Jan 29, 2023	
+1000 Free SCY	10:33.23		2020 LA TAQ Mardi Gras Meet	Jan 25, 2020	
+1500 Free LCM	18:18.30		2021 LA CA Summer Invitational	Jun 20, 2021	
+1650 Free SCY	18:15.50		2020 LA TAQ Mardi Gras Meet	Jan 26, 2020	
+200 Fly SCY	2:04.21		2020 LA CA Winter Invitational	Jan 12, 2020	
+400 Free LCM	4:48.31		SE GPAC Tom Lalor Invitatational	Jun 1, 2019	
+800 Free LCM	10:01.10		2018 LA CA Crawfish Aquatics Summer Invitational	Jun 23, 2018	
+200 Fly LCM	2:28.94		2019 LA CA Long Course Invitat	May 18, 2019	
+100 IM SCY	53.27		Little Rock Fall Invite	Oct 10, 2025	
+
+Colin Candebat
+Event	Time		Meet	Date	Stamp Link
+200 IM LCM	2:05.40	FTR-19O	Louisiana Senior LC State Championships	Jul 20, 2025	
+100 Free LCM	51.33	FTR-19O	Speedo Sectionals - Austin	Jul 10, 2025	
+200 IM SCY	1:46.74	D2 B	New South Championships	Feb 18, 2026	
+200 Free LCM	1:53.46	FTR-19O	Louisiana Senior LC State Championships	Jul 18, 2025	
+100 Free SCY	44.32	D2 BR	New South Championships	Feb 21, 2026	
+200 Free SCY	1:38.91	D2 B	New South Championships	Feb 22, 2025	
+200 Fly SCY	1:48.43	D2 B	New South Championships	Feb 21, 2025	
+1000 Free SCY	9:32.79		Louisiana Senior Short Course State Championships	Feb 18, 2024	
+100 Fly SCY	47.82	D2 B	New South Championships	Feb 19, 2026	
+100 Fly LCM	55.30		LA TAQ Tristan Vessel Invitational 2025	May 30, 2025	
+50 Fly SCY	22.31	X	New South Championships	Feb 19, 2026	
+400 IM LCM	4:32.63		Speedo Sectionals - Austin	Jul 12, 2024	
+800 Free LCM	8:29.04		Speedo Sectionals - Austin	Jul 11, 2024	
+500 Free SCY	4:38.87		Speedo Sectionals - Lewisville	Mar 8, 2024	
+400 IM SCY	3:59.66		Louisiana Senior Short Course State Championships	Feb 16, 2024	
+50 Fly LCM	25.61	X	Speedo Sectionals - Austin	Jul 12, 2025	
+200 Breast SCY	2:02.39		New South Championships	Feb 22, 2025	
+200 Fly LCM	2:07.39		Speedo Sectionals - Austin	Jul 11, 2024	
+50 Breast SCY	27.25	X	LHSAA Division 1 Championship	Nov 17, 2023	
+1500 Free LCM	16:56.09		2024 Crawfish Aquatics Summer Invitational	Jun 22, 2024	
+50 Free LCM	24.44	X	Speedo Sectionals - Austin	Jul 10, 2025	
+100 Back LCM	1:00.35		LA TAQ Tristan Vessel Invitational 2025	May 31, 2025	
+100 Breast SCY	58.12		LHSAA Division 1 Championship	Nov 17, 2023	
+200 Breast LCM	2:26.77		LA TAQ Tristan Vessel Invitational 2025	May 31, 2025	
+200 Back LCM	2:11.30		Speedo Sectionals - Austin	Jul 8, 2023	
+400 Free LCM	4:20.63		2024 CA Long Course Invitational	May 17, 2024	
+1650 Free SCY	16:54.48		2023 LA CRAW Fall Invitational	Oct 7, 2023	
+50 Breast LCM	31.01		2026 Crawfish Aquatics Summer	Jun 19, 2026	
+200 Back SCY	1:54.44		2023 Louisiana Senior SC State Championships	Feb 12, 2023	
+100 Back SCY	51.99		Speedo Sectionals - College Station	Mar 5, 2023	
+100 Breast LCM	1:08.19		LA Senior LC State Championships	Jul 21, 2024	
+50 Free SCY	21.17	XR	New South Championships	Feb 21, 2026	
+50 Back LCM	28.57		2024 Crawfish Aquatics Summer Invitational	Jun 21, 2024	
+50 Back SCY	24.76	R	2021 Louisiana SC Championship	Mar 25, 2021	
+100 IM SCY	1:02.01		Louisiana 12 & Under Long Course Championship	Mar 10, 2018	
+
+Colton Bennett
+1000 Free SCY	9:24.87	D2 B	New South Championships	Feb 19, 2025	
+400 Free LCM	4:06.21		Speedo Sectionals - Austin	Jul 12, 2025	
+500 Free SCY	4:33.41		New South Championships	Feb 20, 2026	
+1650 Free SCY	16:01.49		New South Championships	Feb 24, 2024	
+1500 Free LCM	16:27.90		Speedo Sectionals - Austin	Jul 14, 2024	
+200 Free LCM	1:55.91		Speedo Sectionals - Austin	Jul 11, 2025	
+200 Fly SCY	1:50.61		New South Championships	Feb 20, 2026	
+400 IM LCM	4:38.09		Speedo Sectionals - Austin	Jul 12, 2024	
+200 Free SCY	1:41.40		Delta State Thanksgiving Invitational	Nov 22, 2025	
+200 Fly LCM	2:06.70		Speedo Sectionals - Austin	Jul 10, 2025	
+800 Free LCM	8:44.19		Speedo Sectionals - Austin	Jul 9, 2023	
+50 Fly SCY	23.14		Little Rock Fall Invite	Oct 10, 2025	
+400 IM SCY	4:10.48		ST TXLA Jingle Bell Splash	Dec 17, 2022	
+100 Fly LCM	59.02		Speedo Sectionals - Austin	Jul 13, 2024	
+200 IM LCM	2:16.23		ST AAAA LC STAGS Championship	Jul 17, 2022	
+100 Free LCM	56.11		ST TXLA 11&O End of School Splash	May 25, 2024	
+200 IM SCY	1:58.98		ST TXLA Jingle Bell Splash	Dec 18, 2022	
+100 Fly SCY	52.43		ST TXLA Jingle Bell Splash	Dec 9, 2023	
+50 Fly LCM	27.35	X	Speedo Sectionals - Austin	Jul 12, 2025	
+100 Free SCY	49.27	R	Speedo Sectionals - College Station	Mar 2, 2023	
+200 Back SCY	1:58.28		2023 NT 41st Annual Greater Southwest	Jan 28, 2023	
+200 Back LCM	2:19.29		2023 ST AAAA 20th Annual Cinco	May 6, 2023	
+50 Free LCM	26.44		2023 ST AAAA 20th Annual Cinco	May 5, 2023	
+200 Breast SCY	2:16.42		ST TXLA Jingle Bell Splash	Dec 8, 2023	
+100 Back LCM	1:06.02		2023 ST AAAA 20th Annual Cinco	May 7, 2023	
+200 Breast LCM	2:41.34		2023 ST AAAA 20th Annual Cinco	May 7, 2023	
+50 Free SCY	22.93		ST TXLA Jingle Bell Splash	Dec 10, 2023	
+100 Back SCY	56.40		2023 South Texas Age Group Swimming Short Course Championship	Feb 25, 2023	
+50 Breast SCY	30.66	X	2022 ST-TST Arena Southern Slam	Dec 10, 2022	
+100 Breast SCY	1:04.80		2022 ST-TST Arena Southern Slam	Dec 10, 2022	
+100 Breast LCM	1:15.54		ST AAAA 19th Annual Cinco de Mayo	May 7, 2022	
+50 Back SCY	27.01	X	2023 South Texas Age Group Swimming Short Course Championship	Feb 25, 2023	
+50 Back LCM	32.06	X	ST AAAA 19th Annual Cinco de Mayo	May 8, 2022	
+50 Breast LCM	35.82	X	ST AAAA 19th Annual Cinco de Mayo	May 7, 2022	
+375 Free SCY	3:47.04	R	61st Annual Hendrix Relays	Oct 25, 2024	
+100 IM SCY	57.01		Henderson State vs. Ouachita Baptist	Jan 12, 2024	
+
+Bartu Akin
+Event	Time		Meet	Date	Stamp Link
+400 Free LCM	4:04.11		Tsvetnitsa	Apr 20, 2024	
+1000 Free SCY	9:30.37		New South Championships	Feb 18, 2026	
+800 Free LCM	8:23.47		Tsvetnitsa	Apr 20, 2024	
+1500 Free LCM	16:11.27		TÜRKİYE YILDIZ-GENÇ VE AÇIK YAŞ UZUN KULVAR MİLLİ TAKIM SEÇMESİ	May 3, 2024	
+1500 Free SCM	15:47.99		TÜRKİYE KULÜPLER ARASI KISA KULVAR YILDIZ, GENÇ VE AÇIK YAŞ ŞAMPİYONASI	Dec 24, 2024	
+1650 Free SCY	16:00.67		New South Championships	Feb 21, 2026	
+800 Free SCM	8:17.00		TÜRKİYE KULÜPLER ARASI KISA KULVAR YILDIZ, GENÇ VE AÇIK YAŞ ŞAMPİYONASI	Dec 26, 2024	
+400 Free SCM	4:01.80	U	TED Mersin Koleji Spor Kulübü Intrasquad	Nov 22, 2024	
+500 Free SCY	4:36.04		New South Championships	Feb 20, 2026	
+400 IM SCY	3:58.72		New South Championships	Feb 19, 2026	
+200 Free SCM	1:54.30		TÜRKİYE KULÜPLER ARASI KISA KULVAR YILDIZ, GENÇ VE AÇIK YAŞ ŞAMPİYONASI	Dec 27, 2024	
+400 IM LCM	4:41.58		Arena Turkish Open Age And Juniors Championship	Jul 14, 2022	
+200 IM LCM	2:12.45		Arena Turkish LCM Summer Nationals	Aug 4, 2023	
+200 Free SCY	1:42.67	R	New South Championships	Feb 17, 2026	
+200 IM SCM	2:07.45		Arena Turkish SCM Winter Nationals	Dec 20, 2023	
+400 IM SCM	4:33.96		Arena Turkish SCM Winter Nationals	Dec 21, 2023	
+200 Free LCM	1:59.21		Tsvetnitsa	Apr 21, 2024	
+200 Fly LCM	2:09.93		Arena Turkish Open Age And Juniors Championship	Jul 16, 2022	
+200 Breast SCM	2:22.39		Arena Turkish SCM Winter Nationals	Dec 24, 2023	
+200 Breast LCM	2:31.95		Arena Turkish LCM Summer Nationals	Aug 7, 2023	
+200 Fly SCM	2:09.07		Arena Turkish SCM Winter Nationals	Dec 22, 2023	
+100 Free SCM	54.49	U	TED Mersin Koleji Spor Kulübü Intrasquad	Nov 22, 2024	
+100 Breast SCM	1:08.56	U	TÜRKİYE KISA KULVAR YÜZME ŞAMPİYONASI BARAJ GEÇME VE YÜZME PERFORMANS TESPİT MÜSABAKALARI MERSİN (25M) Kısa Kulvar (25m) Mersin (TUR)	Nov 24, 2023	
+100 Breast LCM	1:11.13		Turkish LCM National Team Selection	Dec 23, 2022	
+100 Fly LCM	1:03.02	X	Arena Turkish LCM Summer Nationals	Aug 5, 2023	
+50 Fly LCM	28.40	X	Arena Turkish LCM Summer Nationals	Aug 4, 2023	
+100 Fly SCY	54.91	X	New South Championships	Feb 19, 2026	
+50 Free SCY	22.65		Little Rock Fall Invite	Oct 10, 2025	
+50 Breast LCM	33.42	X	Turkish LCM National Team Selection	Dec 23, 2022	
+200 IM SCY	2:04.27		UMSL vs. HSU
+
+Alan Alejan Gonzalez Mujica
+Event	Time		Meet	Date	Stamp Link
+400 Free LCM	4:04.95		Nacionales CONADE - Natacion	Jun 6, 2022	
+1000 Free SCY	9:34.46		New South Championships	Feb 18, 2026	
+800 Free LCM	8:29.63		Nacionales CONADE - Natacion	Jun 8, 2022	
+500 Free SCY	4:33.77		New South Championships	Feb 20, 2026	
+200 Free LCM	1:55.42		Nacionales CONADE - Natacion	Jun 7, 2022	
+1650 Free SCY	16:05.52		New South Championships	Feb 21, 2026	
+200 Free SCY	1:41.25		New South Championships	Feb 19, 2026	
+1500 Free LCM	16:43.04		Nacionales CONADE - Natacion	Jun 10, 2022	
+400 IM LCM	4:44.77		Nacionales CONADE - Natacion	Jun 9, 2022	
+50 Breast SCY	28.03		Little Rock Fall Invite	Oct 10, 2025	
+
+Gavin Kock
+Event	Time		Meet	Date	Stamp Link
+100 Breast SCY	55.69		New South Championships	Feb 20, 2026	
+50 Breast SCY	25.93		Little Rock Fall Invite	Oct 10, 2025	
+50 Free LCM	23.84		X Dominican Republic International Open	Apr 12, 2025	
+100 Free SCY	45.52		New South Championships	Feb 21, 2026	
+100 Breast LCM	1:05.60		XXXVI CCCAN Championship	Jun 17, 2024	
+200 Breast LCM	2:24.80		Himno y Bandera	Mar 6, 2025	
+100 Fly LCM	57.05		Stingray challenge	May 3, 2025	
+100 Free LCM	53.66		Himno y Bandera	Mar 8, 2025	
+50 Fly LCM	25.75		Campeonato Arubano	Jun 5, 2026	
+50 Breast LCM	30.04		Stingray challenge	May 3, 2025	
+50 Free SCY	20.46	R	New South Championships	Feb 20, 2026	
+50 Free SCM	23.39	R	TYR Giants Open	Oct 13, 2024	
+100 Breast SCM	1:04.17		TYR Giants Open	Oct 11, 2024	
+50 Fly SCY	23.21	X	New South Championships	Feb 19, 2026	
+100 Free SCM	52.47		Campeonato Arubano SCM	Dec 1, 2023	
+100 Fly SCY	50.08		New South Championships	Feb 19, 2026	
+200 Free LCM	1:59.93		Himno y Bandera	Mar 7, 2025	
+200 IM LCM	2:14.45		9th World Aquatics Junior Championships	Sep 5, 2023	
+100 IM SCM	58.25		TYR Giants Open	Oct 13, 2024	
+50 Breast SCM	29.64		TYR Giants Open	Oct 13, 2024	
+400 IM LCM	4:50.32		X Dominican Republic International Open	Apr 12, 2025	
+200 Breast SCY	2:07.36		FG PST 34th Annual Winter Championships	Dec 13, 2024	
+200 Breast SCM	2:24.42		TYR Giants Open	Oct 12, 2024	
+400 Free LCM	4:24.78		22nd Aruba Dolphins Age Group	Nov 1, 2024	
+50 Fly SCM	26.23		Campeonato Arubano SCM	Dec 2, 2023	
+100 Back LCM	1:03.07		20th Aruba Dolphins Age Group Meet	Nov 4, 2022	
+200 Fly LCM	2:14.67		Campeonato Arubano	Jul 5, 2025	
+400 IM SCY	4:15.08		FG PST 33rd Speedo Winter Championships	Dec 9, 2023	
+50 Back LCM	29.52		20th Aruba Dolphins Age Group Meet	Nov 5, 2022	
+100 Fly SCM	59.63		TYR Giants Open	Oct 13, 2024	
+1500 Free LCM	18:10.72		Campeonato Arubano	Jun 30, 2023	
+800 Free LCM	9:32.11		Campeonato Arubano Di Natacion	Jun 6, 2021	
+200 Back LCM	2:22.02		8th FINA World Junior Championships	Sep 4, 2022	
+200 IM SCY	2:05.33		31st Speedo Winter Championships - Plantation	Dec 10, 2021	
+50 Back SCY	26.16		FL PST 32nd Speedo Winter Championships	Dec 9, 2022	
+100 Back SCY	56.57		FG PST 33rd Speedo Winter Championships	Dec 10, 2023	
+25 Free SCM	11.00		Short Course Fall Meet	Sep 20, 2024	
+100 IM SCY	52.57		FG PST 34th Annual Winter Championships	Dec 15, 2024	
+
+Camden Mask
+Event	Time		Meet	Date	Stamp Link
+50 Breast SCY	25.88		Southeastern Championships	Feb 23, 2025	
+100 Breast SCY	55.52		New South Championships	Feb 20, 2026	
+50 Breast LCM	29.66		Southeastern LSC Championships (50m)	Jul 20, 2025	
+200 Breast SCY	2:02.69		New South Championships	Feb 21, 2026	
+100 Breast LCM	1:06.15		Southeastern LSC Championships (50m)	Jul 18, 2025	
+200 Breast LCM	2:30.44		Southeastern LSC Championships (50m)	Jul 19, 2025	
+200 IM SCY	1:56.87		New South Championships	Feb 18, 2026	
+50 Fly SCY	25.13		ARPA State Championship	Jul 26, 2025	
+200 IM LCM	2:27.50		Southeastern LC Championships	Jul 21, 2024	
+100 Free LCM	1:00.19		SE AUB Richard Quick Prelim/Finals	Jun 28, 2026	
+50 Free SCY	23.35	R	ARPA State Championship	Jul 26, 2025	
+50 Free LCM	27.79		SE PCST Speedo Long Course Invitational	May 11, 2025	
+100 Free SCY	53.14		SE AUB August Invitational	Aug 10, 2024	
+200 Fly SCY	2:10.73		SE GPAC Winter Invitational	Jan 18, 2025	
+100 Fly SCY	58.44		SE AUB Ralph Crocker Invitational	Jan 13, 2024	
+50 Fly LCM	31.74	X	SE OST Long Course Open	May 3, 2025	
+100 Fly LCM	1:11.11		SE PCST Speedo Long Course Invitational	May 11, 2025	
+50 Back SCY	29.18		SE GPAC Winter Invitational	Jan 19, 2025	
+200 Free LCM	2:30.04		SE AUB Jimi Flowers Spring Splash	Apr 16, 2023	
+100 Back SCY	1:04.44		GA HURR Groundhog Invite	Jan 22, 2023	
+50 Back LCM	36.57		SE DDST Spring Splash	Apr 23, 2022	
+200 Free SCY	3:00.45		SE AUB War Eagle Invitational	Oct 27, 2019	
+100 Back LCM	1:45.51		2017 SE Jimi Flowers Spring Sp	Apr 2, 2017	
+25 Free SCY	22.69		2015 SE Auburn Aquatics Open Invitational	Dec 6, 2015	
+25 Back SCY	25.96		2015 SE Auburn Aquatics Open Invitational	Dec 6, 2015	
+100 IM SCY	54.76		ARPA State Championship	Jul 25, 2025	
+
+
+Thomas Landreneau
+Event	Time		Meet	Date	Stamp Link
+1000 Free SCY	9:37.44		New South Championships	Feb 18, 2026	
+1650 Free SCY	16:15.16		New South Championships	Feb 21, 2026	
+500 Free SCY	4:39.97		New South Championships	Feb 20, 2026	
+200 Free SCY	1:42.92		New South Championships	Feb 19, 2026	
+200 Free LCM	2:00.53		Southern Zone Senior Championships	Jul 31, 2025	
+400 Free LCM	4:20.82		Louisiana Senior LC State Championships	Jul 19, 2025	
+100 Free LCM	56.09		Southern Zone Senior Championships	Jul 30, 2025	
+800 Free LCM	9:06.71		Louisiana Senior LC State Championships	Jul 20, 2025	
+1500 Free LCM	17:34.21		Louisiana Senior LC State Championships	Jul 17, 2025	
+50 Free LCM	25.85		LA Senior LC State Championships	Jul 21, 2024	
+100 Free SCY	49.41		Louisiana Senior State Championship (25y)	Feb 15, 2025	
+50 Fly LCM	27.67		Southern Zone Senior Championships	Jul 31, 2025	
+50 Breast SCY	29.21	X	Louisiana Senior State Championship (25y)	Feb 16, 2025	
+400 IM LCM	5:03.18		Louisiana Senior LC State Championships	Jul 18, 2025	
+100 Breast SCY	1:02.51		Louisiana Senior State Championship (25y)	Feb 16, 2025	
+100 Fly LCM	1:02.75		Southern Zone Senior Championships	Aug 1, 2025	
+50 Fly SCY	25.96		MS/LA Swimposium Sprint & Kick	Aug 18, 2024	
+200 IM LCM	2:27.38		17th Annual Splashin’ the Coast	Jun 14, 2025	
+400 IM SCY	4:35.37		LA BAC Winter Invitational	Jan 17, 2025	
+50 Breast LCM	34.25		18th Annual Splashin’ the Coast	Jun 21, 2026	
+100 Fly SCY	56.50		Louisiana Senior Short Course State Championships	Feb 16, 2024	
+50 Free SCY	23.28	R	LA BAC Winter Invitational	Jan 19, 2025	
+200 Fly SCY	2:08.67		LA TAQ Christmas invite	Dec 10, 2023	
+200 IM SCY	2:07.96		UMSL vs. HSU	Jan 17, 2026	
+200 Fly LCM	2:29.60		Louisiana Senior State Championships	Jul 15, 2023	
+100 Breast LCM	1:17.69		17th Annual Splashin’ the Coast	Jun 13, 2025	
+200 Breast SCY	2:30.51		LA BAC Winter Invitational	Jan 18, 2025	
+100 Back LCM	1:14.95		17th Annual Splashin’ the Coast	Jun 15, 2025	
+200 Back SCY	2:25.63		2022 LA BAC Winter Invitational	Jan 15, 2022	
+200 Back LCM	2:50.71		2022 LA YNWL LCM Spring Invitational	Apr 30, 2022	
+50 Back LCM	36.45	X	17th Annual Splashin’ the Coast	Jun 15, 2025	
+200 Breast LCM	3:33.08		GU SHRK Sharks LCM May Meet	May 16, 2021	
+50 Back SCY	46.18		LA TAQ Christmas Meet	Dec 2, 2018	
+100 Back SCY	1:41.37		LA TAQ Christmas Meet	Dec 1, 2018	
+
+Olivér Pózvai
+Event	Time		Meet	Date	Stamp Link
+100 Free LCM	51.14		1. Int. Österr. Staats- und Juniorenmeisterschaften	Jun 6, 2026	
+100 Free SCM	49.71		XXI Országos Bajnokság (25m)	Nov 5, 2025	
+100 Free SCY	44.28	D2 B	Delta State Thanksgiving Invitational	Nov 23, 2025	
+50 Free LCM	23.44		CXXVI Országos Bajnokság	Apr 10, 2024	
+200 Free SCY	1:40.30		New South Championships	Feb 20, 2025	
+50 Free SCM	22.49		XXI Országos Bajnokság (25m)	Nov 6, 2025	
+50 Free SCY	20.22	D2 B	Delta State Thanksgiving Invitational	Nov 21, 2025	
+50 Fly LCM	25.80		CXXVII Hungarian Championship	Apr 11, 2025	
+100 Fly LCM	57.90		CXXVI Országos Bajnokság	Apr 12, 2024	
+50 Fly SCM	25.57		XX. Országos Rövidpályás Bajnokság	Nov 8, 2024	
+200 Free LCM	2:00.86		ISC - Int. Swim Cup - Ingolstadt	Feb 3, 2024	
+100 IM SCM	59.14		XX. Országos Rövidpályás Bajnokság	Nov 9, 2024	
+100 Back SCY	51.94		New South Championships	Feb 20, 2026	
+200 Free SCM	2:01.55		FINA Swimming World Cup - Budapest	Oct 9, 2021	
+50 Back SCY	24.93	X	New South Championships	Feb 20, 2026	
+200 IM LCM	2:23.52		XIV. Gyor Open	Dec 18, 2020	
+100 Fly SCY	53.94		Henderson State vs. UT Permian Basin	Oct 24, 2024	
+50 Fly SCY	25.60	X	Henderson State vs. Montevallo	Jan 16, 2025	
+100 Back LCM	1:08.61		7. Int. Rheinfallmeeting - Arena Cup	May 14, 2022	
+400 IM LCM	5:36.09		Gyor Open	Jul 31, 2019	
+50 Breast LCM	37.07		Gyor Open	Aug 1, 2019	
+50 Back LCM	34.61		Gyor Open	Aug 3, 2019
+
+Hunter Rytting
+Event	Time		Meet	Date	Stamp Link
+500 Free SCY	4:36.09	FTR-18U	Minnesota Senior SC Championship	Mar 9, 2024	
+1000 Free SCY	9:37.76		Minnesota Senior SC Championship	Mar 7, 2024	
+400 IM SCY	3:57.74	D2 B	New South Championships	Feb 19, 2026	
+200 Back SCY	1:48.02		New South Championships	Feb 21, 2026	
+100 Back LCM	59.20	R	IN NCSA Summer Championships	Jul 29, 2025	
+200 IM SCY	1:51.18		New South Championships	Feb 18, 2026	
+400 IM LCM	4:39.82	FTR-18U	Speedo Sectionals - Minneapolis	Jul 11, 2025	
+200 IM LCM	2:12.45		MN AQJT Summer Spectacular	Jun 21, 2024	
+1650 Free SCY	16:33.10		MN NSAC Winter Invite	Feb 2, 2025	
+400 Free LCM	4:16.63		IN NCSA Summer Championships	Jul 28, 2025	
+100 Back SCY	50.41		New South Championships	Feb 20, 2026	
+200 Free SCY	1:43.68		MN RSC President’s Day Meet	Feb 15, 2025	
+100 Free LCM	54.83		USA Swimming Futures Championship - Minneapolis	Jul 26, 2024	
+200 Back LCM	2:11.06		IN NCSA Summer Championships	Jul 25, 2025	
+200 Fly SCY	1:54.21		Minnesota Senior SC Championship	Mar 9, 2024	
+1500 Free LCM	17:10.22		Minnesota Senior LC Championship	Jul 23, 2023	
+200 Free LCM	2:02.16		MN WOLF Huff N Puff	May 31, 2024	
+100 Free SCY	47.94		IL FMC Speedo Grand Challenge	Nov 23, 2024	
+100 Breast SCY	59.48		MN FOXJ WINTER CLASSIC	Jan 12, 2025	
+800 Free LCM	9:04.03		MN AQJT Summer Spectacular	Jun 25, 2023	
+50 Breast SCY	28.22	X	MN FOXJ WINTER CLASSIC	Jan 12, 2025	
+200 Fly LCM	2:13.43		Minnesota Senior LC Championship	Jul 22, 2023	
+100 Fly LCM	59.83		USA Swimming Futures Championship - Minneapolis	Jul 27, 2024	
+50 Back SCY	24.31	R	New South Championships	Feb 18, 2026	
+50 Back LCM	28.61	R	IN NCSA Summer Championships	Jul 25, 2025	
+50 Free SCY	21.47		IL FMC Speedo Grand Challenge	Nov 22, 2024	
+50 Free LCM	25.46		IN NCSA Summer Championships	Jul 29, 2025	
+200 Breast SCY	2:10.43		MN FOXJ WINTER CLASSIC	Jan 11, 2025	
+50 Fly SCY	24.68	X	IL FMC Speedo Grand Challenge	Nov 24, 2024	
+100 Fly SCY	52.63		MN FOXJ WINTER CLASSIC	Jan 11, 2025	
+50 Breast LCM	32.07		IN NCSA Summer Championships	Jul 27, 2025	
+50 Fly LCM	27.76	X	Speedo Sectionals - Indianapolis TT's	Mar 27, 2025	
+100 Breast LCM	1:11.14		Speedo Sectionals - Westmont	Jul 13, 2024	
+200 Breast LCM	2:37.36		MN AQJT Summer Spectacular	Jun 23, 2024	
+100 IM SCY	54.46		Little Rock Fall Invite	Oct 10, 2025	
+
+Steven Balistreri
+Event	Time		Meet	Date	Stamp Link
+100 Fly SCY	49.20		New South Championships	Feb 19, 2026	
+100 Free LCM	54.03		Southern Senior Zone Championships	Jul 28, 2021	
+100 Free SCY	46.09	A	Rocky Mountain Athletic Conference Championships	Feb 11, 2023	
+200 Fly SCY	1:51.67		New South Championships	Feb 20, 2026	
+50 Fly SCY	23.06	X	New South Championships	Feb 19, 2026	
+200 IM SCY	1:51.64		New South Championships	Feb 18, 2026	
+200 IM LCM	2:12.58		NCSA Summer Championships	Aug 14, 2021	
+200 Free SCY	1:43.70		2021 Gulf Southern Senior Championship	Dec 3, 2021	
+100 Fly LCM	57.77		NCSA Summer Championships	Aug 13, 2021	
+50 Fly LCM	26.30		Southern Senior Zone Championships	Jul 29, 2021	
+200 Free LCM	2:00.70		Southern Senior Zone Championships	Jul 29, 2021	
+1000 Free SCY	10:07.97	X	New South Championships	Feb 21, 2026	
+400 IM SCY	4:13.16		GU SHRK Winter Invitational 13&Over	Dec 18, 2020	
+1650 Free SCY	16:52.04		New South Championships	Feb 21, 2026	
+50 Free LCM	24.87	R	Southern Senior Zone Championships	Jul 27, 2021	
+200 Fly LCM	2:11.94	U	GU FCST Summer Splash	Jun 18, 2021	
+500 Free SCY	4:54.58		2021 ST TST Arena Southern Sla	Jan 15, 2021	
+400 IM LCM	4:51.96	U	GU FCST Summer Splash	Jun 18, 2021	
+100 Back LCM	1:02.81		Gulf LSC Senior LC Championship	Jul 16, 2022	
+50 Free SCY	21.74	R	2021 Gulf Southern Senior Championship	Dec 5, 2021	
+400 Free LCM	4:32.12		GU SWIM Aggieland July Long Course Invitational	Jul 8, 2021	
+50 Back SCY	24.98	R	2021 Gulf Southern Senior Championship	Dec 3, 2021	
+100 Back SCY	54.02		Sharks Spring Championship	Mar 7, 2021	
+50 Breast SCY	29.84	X	2021 ST TST Arena Southern Sla	Jan 17, 2021	
+200 Back SCY	2:01.81		GU SSAN Pink Out Kara Ward Meet	Oct 17, 2021	
+200 Back LCM	2:22.59		GU FCST Summer Splash	Jun 19, 2022	
+50 Back LCM	30.65	X	Gulf LSC Senior LC Championship	Jul 16, 2022	
+100 Breast SCY	1:04.13		2021 ST TST Arena Southern Sla	Jan 17, 2021	
+100 Breast LCM	1:13.60	U	GU FCST Summer Splash	Jun 18, 2021	
+200 Breast SCY	2:21.69		2021 ST TST Arena Southern Sla	Jan 16, 2021	
+1500 Free LCM	19:06.96	U	GU FCST Summer Splash	Jun 18, 2021	
+200 Breast LCM	2:47.62		GU SWIM Aggieland July Long Course Invitational	Jul 9, 2021	
+800 Free LCM	10:37.80		GU Bay Area Open Invitati	May 11, 2018	
+100 IM SCY	59.44		GU TWST MLK Holiday Weekend Meet	Jan 13, 2019
+
+Reid Remmert
+Event	Time		Meet	Date	Stamp Link
+50 Fly SCY	22.79	X	New South Championships	Feb 19, 2026	
+100 Free SCY	45.83		UIL Region 5-6A Championship	Feb 7, 2025	
+100 Fly SCY	49.78		New South Championships	Feb 19, 2026	
+50 Free SCY	21.00		New South Championships	Feb 18, 2026	
+50 Breast SCY	28.16	U	SHRSL All Star Meet	Jul 2, 2024	
+200 Free SCY	1:55.29		Sugar Land College Meet	Dec 16, 2023	
+50 Back SCY	26.78	U	SHRSL All Star Meet	Jul 2, 2024	
+100 Breast SCY	1:06.56		KHS AHS EHS Senior Night	Jan 14, 2025	
+200 IM SCY	2:09.86		KHS AHS EHS Senior Night	Jan 14, 2025	
+200 Fly SCY	2:32.61		THE COLLEGE MEET	Dec 17, 2022	
+100 IM SCY	54.91	U	SHRSL All Star Meet	Jul 2, 2024
+
+Emiliano Pina
+Event	Time		Meet	Date	Stamp Link
+1500 Free SCM	15:27.07	U	Aniversario car Tijuana	Oct 15, 2021	
+1000 Free SCY	9:23.21		SI CSA Presidents' Day Senior Meet	Feb 17, 2023	
+1500 Free LCM	16:00.19		XXXIV CCCAN Championships	Jul 9, 2022	
+800 Free SCM	8:11.63	U	CAMP ESTATAL CURSO CORTO	Nov 26, 2021	
+800 Free LCM	8:25.20		Nacionales CONADE - Natacion	Jun 8, 2022	
+500 Free SCY	4:35.45		SI CSA Presidents' Day Senior Meet	Feb 18, 2023	
+400 Free LCM	4:06.63		Nacionales CONADE - Natacion	Jun 6, 2022	
+400 Free SCM	3:58.46		XV Aniversario CAR Tijuana	Nov 5, 2022	
+1650 Free SCY	16:00.39		SI CSA Presidents' Day Senior Meet	Feb 20, 2023	
+400 IM LCM	4:39.88		Nacionales CONADE - Natacion	Jun 9, 2022	
+200 Free SCM	1:54.47		XV Aniversario CAR Tijuana	Nov 6, 2022	
+400 IM SCY	4:01.13		New South Championships	Feb 19, 2026	
+400 IM SCM	4:31.48		XV Aniversario CAR Tijuana	Nov 4, 2022	
+200 Fly SCY	1:53.38		New South Championships	Feb 20, 2026	
+200 Breast SCY	2:07.05		SI CSA Presidents' Day Senior Meet	Feb 20, 2023	
+200 Free SCY	1:45.50		SI CSA Presidents' Day Senior Meet	Feb 19, 2023	
+200 Fly SCM	2:08.49		XV Aniversario CAR Tijuana	Nov 6, 2022	
+200 IM SCY	1:54.43		New South Championships	Feb 18, 2026	
+200 Free LCM	2:01.27		Nacionales CONADE - Natacion	Jun 7, 2022	
+200 Breast SCM	2:22.92		XV Aniversario CAR Tijuana	Nov 5, 2022	
+200 Breast LCM	2:30.55		Selectivo Nacional de Natacion	Apr 9, 2023	
+100 Free LCM	56.55		Selectivo Nacional de Natacion	Apr 4, 2023	
+100 Free SCM	54.29	U	CAMP ESTATAL CURSO CORTO	Nov 26, 2021	
+50 Fly SCY	24.06		Little Rock Fall Invite	Oct 10, 2025	
+200 IM SCM	2:12.84	A	Campeonato Nacional Mexicano (25m)	Dec 17, 2024	
+200 Fly LCM	2:14.05		CA TROJ LA Invitational	Jul 12, 2026	
+200 IM LCM	2:17.26		CA TROJ LA Invitational	Jul 12, 2026	
+100 Fly LCM	1:00.59		CA TROJ LA Invitational	Jul 11, 2026	
+100 Breast SCY	1:01.23		Henderson State vs. Truman State	Oct 25, 2025	
+100 Fly SCY	53.00		Henderson State vs. Oklahoma Christian	Oct 16, 2025	
+100 Breast LCM	1:11.18		COPA GOYAN’S	May 13, 2023	
+100 Free SCY	49.97	R	SI CSA Presidents' Day Senior Meet	Feb 20, 2023	
+50 Fly LCM	28.30	X	CA TROJ LA Invitational	Jul 11, 2026	
+50 Breast SCY	29.30	X	Henderson State vs. Truman State	Oct 25, 2025	
+50 Free LCM	27.37	X	Selectivo Nacional de Natacion	Apr 4, 2023	
+50 Free SCM	26.50	X	XV Aniversario CAR Tijuana	Nov 5, 2022	
+50 Breast LCM	35.58	X	Olimpiada Nacional y Nacional Juvenil	May 4, 2019	
+50 Free SCY	24.20	X	SI CSA Presidents' Day Senior Meet	Feb 20, 2023	
+
+Cody Bauer
+Event	Time		Meet	Date	Stamp Link
+50 Fly SCY	23.26	X	New South Championships	Feb 20, 2025	
+100 Free SCY	46.28	R	New South Championships	Feb 24, 2024	
+100 Fly SCY	50.14		New South Championships	Feb 20, 2025	
+100 Free LCM	55.72		AZ LC Regional Championship	Jul 8, 2023	
+50 Free SCY	21.13		New South Championships	Feb 19, 2025	
+200 Free SCY	1:46.79		New South Championships	Feb 20, 2025	
+50 Breast SCY	29.32		AZ NEP Holiday Swim Festival	Dec 3, 2022	
+50 Free LCM	26.13		2022 AZ SAC Cactus Classic	May 28, 2022	
+200 Free LCM	2:10.52		AZ LC Regional Championship	Jul 9, 2023	
+100 Fly LCM	1:03.38		2022 AZ HEAT Arizona LC Regionals @ YWSF	Jul 10, 2022	
+400 IM SCY	4:37.98		PSC Candy Cane Classic	Dec 9, 2022	
+100 Breast SCY	1:05.20		Copper Classic #3	Jun 4, 2023	
+200 Fly SCY	2:08.59		PSC Candy Cane Classic	Dec 11, 2022	
+100 Breast LCM	1:15.77		AZ LC Regional Championship	Jul 8, 2023	
+50 Breast LCM	34.79	X	AZ LC Regional Championship	Jul 8, 2023	
+500 Free SCY	5:32.63		PSC Candy Cane Classic	Dec 10, 2022	
+200 IM SCY	2:12.63		PSC Candy Cane Classic	Dec 11, 2022	
+200 IM LCM	2:34.99		2022 AZ HEAT Arizona LC Regionals @ YWSF	Jul 9, 2022	
+50 Fly LCM	30.79	X	2021 Arizona Senior Long Course Championships	Jul 23, 2021	
+200 Breast LCM	2:54.80		AZ LC Regional Championship	Jul 9, 2023	
+50 Back SCY	28.58		Copper Classic #3	Jun 3, 2023	
+200 Breast SCY	2:34.48		PSC Candy Cane Classic	Dec 10, 2022	
+100 Back SCY	1:05.44		2022 AZ SAC Winter Invitational	Jan 30, 2022	
+100 IM SCY	57.53		Copper Classic #3	Jun 3, 2023	
+
+Tristin Ferguson
+Event	Time		Meet	Date	Stamp Link
+100 Free LCM	53.88	R	XXXVII CARIFTA Championship	Mar 30, 2024	
+50 Free LCM	24.35		XXVII Goodwill Championships	Aug 19, 2023	
+50 Free SCY	20.59		New South Championships	Feb 18, 2026	
+100 Free SCY	46.50		New South Championships	Feb 21, 2026	
+200 Free LCM	2:01.53		52nd Bahamian Championships	Jun 21, 2024	
+50 Fly SCY	23.87	X	New South Championships	Feb 19, 2026	
+400 Free LCM	4:25.26		52nd Bahamian Championships	Jun 23, 2024	
+50 Breast SCY	27.67	X	New South Championships	Feb 20, 2026	
+100 Breast SCY	59.68		New South Championships	Feb 20, 2026	
+100 Fly SCY	52.20		New South Championships	Feb 19, 2026	
+800 Free LCM	9:15.53		52nd Bahamian Championships	Jun 20, 2024	
+50 Fly LCM	27.37		XXVII Goodwill Championships	Aug 19, 2023	
+50 Breast LCM	32.13		5th Annual Oak Tree Medical &	May 31, 2025	
+100 Fly LCM	1:01.31		9th Annual CG Atlantic Barracuda Invitational	May 24, 2024	
+200 IM LCM	2:21.44		Bahamas National Championship	Jun 17, 2023	
+1500 Free LCM	18:02.41		XXXVII CARIFTA Championship	Mar 30, 2024	
+100 Breast LCM	1:11.85		4th Annual Oak Tree Medical & Mako Invite	May 31, 2024	
+200 Breast LCM	2:40.56		52nd Bahamian Championships	Jun 20, 2024	
+50 Back LCM	30.68	R	Bahamas National Championships	Jun 27, 2026	
+200 Fly LCM	2:25.34		Bahamas Games	Jul 8, 2023	
+100 Back LCM	1:08.57		2023 Alpha Aquatics Spring Invitational	May 12, 2023	
+400 IM LCM	5:29.55		2nd Annual Oak Tree Medical In	Jun 11, 2022	
+50 Free SCM	28.61		Team Orca 7th Annual Winter In	Nov 24, 2018	
+400 IM SCM	5:44.41		Team Orca 7th Annual Winter In	Nov 24, 2018	
+50 Fly SCM	32.84		Team Orca 7th Annual Winter In	Nov 24, 2018	
+200 Free SCY	2:17.71		FG Speedo Winter Championships	Nov 19, 2016	
+200 Back LCM	2:51.84		Milo Butler Invitational	Feb 25, 2023	
+100 IM SCY	1:16.97		FG Speedo Winter Championships	Nov 19, 2016	
+
+Ethan Priddle
+Event	Time		Meet	Date	Stamp Link
+200 Free SCY	1:43.92		New South Championships	Feb 19, 2026	
+200 Fly SCY	1:54.67		New South Championships	Feb 20, 2026	
+1000 Free SCY	10:14.13		AR LRAD Paul Blair Memorial Invitational	Nov 22, 2024	
+200 Free LCM	2:02.24		NCSA Summer Championships	Jul 26, 2024	
+200 Back SCY	1:53.47		New South Championships	Feb 21, 2026	
+100 Free SCY	48.10		2024 Arkansas Senior Champions	Mar 10, 2024	
+50 Fly SCY	24.28	NCSA	AR CASC Go Pink Halloween Meet	Oct 25, 2024	
+100 Free LCM	56.16		SE TNAQ Invite	Jun 20, 2025	
+200 Back LCM	2:15.85		Speedo Sectionals - Columbia	Mar 14, 2024	
+500 Free SCY	4:55.22		AR CASC Go Pink Halloween Meet	Oct 25, 2024	
+100 Fly SCY	52.14		2024 Arkansas Senior Champions	Mar 8, 2024	
+100 Back SCY	52.87		Centennial Bank Arkansas 4A-1A State Championship	Feb 24, 2024	
+100 Back LCM	1:03.05		SE TNAQ Invite	Jun 22, 2025	
+100 Fly LCM	1:00.52		NCSA Summer Championships	Jul 27, 2024	
+50 Back LCM	29.14		Speedo Sectionals - Columbia	Jul 15, 2023	
+200 IM SCY	1:58.85		New South Championships	Feb 18, 2026	
+50 Fly LCM	27.50		Speedo Sectionals - Columbia	Mar 14, 2024	
+50 Free SCY	21.83	R	Winter Classic	Jan 18, 2025	
+400 IM SCY	4:23.62		2022 AR LRAD Paul Blair Memorial Invitational	Nov 18, 2022	
+50 Back SCY	24.94	NCSA	Speedo Sectionals - Columbia	Mar 11, 2023	
+50 Free LCM	26.07		SE TNAQ Invite	Jun 22, 2025	
+400 IM LCM	5:04.92	U	Arkansas LSC LC Championships	Jul 21, 2022	
+200 Fly LCM	2:20.06		Speedo Sectionals - Columbia	Jul 15, 2022	
+200 IM LCM	2:24.90	U	Arkansas LSC LC Championships	Jul 21, 2022	
+400 Free LCM	4:40.76		Tucker Memorial Invitational	Jun 28, 2025	
+50 Breast SCY	32.87		AR ATAC Go Pink Halloween Meet	Oct 22, 2021	
+100 Breast SCY	1:11.78		2021 AR HAK 57th Annual Aquakids Bob Courtway	Oct 2, 2021	
+100 Breast LCM	1:32.91		2021 AR HAK Aquakids End of School In	May 22, 2021	
+50 Breast LCM	56.68		2016 Spring Splash Invitationa	May 8, 2016	
+25 Free SCY	10.56		8th Annual Battle for the Belt	Feb 21, 2025	
+25 Back SCY	12.26		7th Annual Battle for the Belt	Feb 16, 2024	
+25 Breast SCY	14.83		6TH ANNUAL BATTLE FOR THE BELT	Feb 17, 2023	
+25 Fly SCY	11.25		8th Annual Battle for the Belt	Feb 21, 2025	
+100 IM SCY	57.65		8th Annual Battle for the Belt	Feb 21, 2025	
+
+Jack Groce
+Event	Time		Meet	Date	Stamp Link
+1650 Free SCY	16:50.46		Louisiana Senior State Championship (25y)	Feb 13, 2025	
+500 Free SCY	4:47.52		Louisiana Senior State Championship (25y)	Feb 15, 2025	
+1000 Free SCY	10:09.81		Delta State Thanksgiving Invitational	Nov 20, 2025	
+400 IM SCY	4:10.44		New South Championships	Feb 19, 2026	
+200 IM SCY	1:55.92		New South Championships	Feb 18, 2026	
+200 IM LCM	2:17.60		LA Senior LC State Championships	Jul 21, 2024	
+400 Free LCM	4:26.57		Louisiana Senior LC State Championships	Jul 19, 2025	
+400 IM LCM	4:54.38		LA Senior LC State Championships	Jul 19, 2024	
+1500 Free LCM	17:40.44		LA Senior LC State Championships	Jul 18, 2024	
+200 Free SCY	1:48.96		NT COR NT COR CLASSIC	Dec 6, 2024	
+200 Free LCM	2:06.08		Louisiana Senior LC State Championships	Jul 18, 2025	
+800 Free LCM	9:22.23		Louisiana Senior State Championships	Jul 13, 2023	
+200 Back SCY	1:58.07		New South Championships	Feb 21, 2026	
+200 Breast LCM	2:37.52		LA Senior LC State Championships	Jul 20, 2024	
+50 Breast SCY	29.93	NCSAX	Louisiana Senior Short Course State Championships	Feb 18, 2024	
+50 Fly SCY	25.37		Little Rock Fall Invite	Oct 10, 2025	
+100 Free SCY	51.14	R	Louisiana Senior State Championship (25y)	Feb 14, 2025	
+100 Free LCM	59.78		Louisiana Senior LC State Championships	Jul 19, 2025	
+100 Breast SCY	1:04.01		Louisiana Senior Short Course State Championships	Feb 18, 2024	
+100 Back SCY	56.00		LHSAA Division 4 Championship	Nov 20, 2024	
+50 Free LCM	27.03	R	Louisiana Senior LC State Championships	Jul 20, 2025	
+50 Back SCY	25.98	R	LA BAC Winter Invitational	Jan 18, 2025	
+200 Breast SCY	2:19.01		Louisiana Senior Short Course State Championships	Feb 17, 2024	
+200 Back LCM	2:25.98		LA Senior LC State Championships	Jul 21, 2024	
+50 Fly LCM	29.49	X	LA Senior LC State Championships	Jul 21, 2024	
+50 Free SCY	23.46		RRHSC Championship	Nov 2, 2024	
+100 Breast LCM	1:15.93		2022 MS BEST 15th Annual Splashin' The Coast Prelim/Finals	Jun 16, 2023	
+50 Back LCM	31.86		LA YNWL Spring LCM Invitational	Apr 27, 2024	
+100 Fly SCY	57.98	X	New South Championships	Feb 19, 2026	
+100 Back LCM	1:10.37		LA COSST Damon McCoy Invitational	Jun 8, 2024	
+100 Fly LCM	1:07.85		LA COSST Damon McCoy Invitational	Jun 9, 2024	
+200 Fly SCY	2:14.41		2023 Winter Invitational	Jan 15, 2023	
+50 Breast LCM	35.99		2023 LA YNWL LCM Spring Invitational	Apr 29, 2023	
+200 Fly LCM	2:42.61		Louisiana Senior State Championships	Jul 15, 2023	
+
+Eli Westbrook
+Event	Time		Meet	Date	Stamp Link
+100 Back LCM	1:00.96		SE NAC Southeastern Long Course Championship	Jul 15, 2022	
+200 Back SCY	1:51.59		New South Championships	Feb 21, 2026	
+100 Back SCY	51.29		New South Championships	Feb 20, 2026	
+50 Back LCM	28.53		Southeastern LC Championships	Jul 15, 2023	
+200 IM SCY	1:56.07		New South Championships	Feb 18, 2026	
+50 Back SCY	24.23	R	Delta State Thanksgiving Invitational	Nov 20, 2025	
+200 Back LCM	2:18.25		Southeastern LC Championships	Jul 16, 2023	
+200 IM LCM	2:22.73		SE DDST Spring Splash	Apr 23, 2022	
+200 Free SCY	1:51.90		2022 SE War Eagle Invitational	Oct 16, 2022	
+100 Free SCY	50.48		2022 SE War Eagle Invitational	Oct 15, 2022	
+200 Free LCM	2:11.34		2022 SE ABST BSL Jack Barncastle Invite	Jun 4, 2022	
+500 Free SCY	5:19.75		SE BSL Sprint Into Fall Invitational	Sep 18, 2021	
+400 IM SCY	4:33.62		Henderson State vs. Ouachita Baptist	Dec 5, 2025	
+50 Fly SCY	26.45	U	SE OST Opelika Swim Team Time Trial	Jun 17, 2020	
+100 Free LCM	1:01.85		SE AUB Jimi Flowers Spring Splash	Apr 15, 2023	
+50 Free LCM	27.68		SE PCST May Speedo Invitational	May 22, 2022	
+50 Free SCY	23.38		2022 SE War Eagle Invitational	Oct 16, 2022	
+400 Free LCM	4:55.40		PCST Speedo Long Course May In	May 14, 2023	
+100 Fly SCY	57.76		Southeastern Senior Championships	Feb 21, 2021	
+50 Breast SCY	31.86	U	SE OST Opelika Swim Team Time Trial	Jun 17, 2020	
+100 Breast SCY	1:08.92		SE OST Veterans Day Meet	Nov 6, 2021	
+200 Breast SCY	2:30.24		SE LTSE October Invite	Oct 1, 2021	
+100 Breast LCM	1:20.86		SE PCST May Speedo Invitational	May 21, 2022	
+200 Fly LCM	2:41.02		PCST Speedo Long Course May In	May 13, 2023	
+50 Breast LCM	38.04	X	SE PCST May Speedo Invitational	May 21, 2022	
+100 Fly LCM	1:13.61		SE BSL Iron City Invite	Apr 11, 2021	
+100 Back SCM	1:18.23		2016 SE Pensacola Harvest Classic	Sep 24, 2016	
+50 Free SCM	32.46		2016 SE Pensacola Harvest Classic	Sep 25, 2016	
+100 Free SCM	1:12.87		2016 SE Pensacola Harvest Classic	Sep 25, 2016	
+50 Fly LCM	37.72		SE AU Jimi Flowers Spring Splash	Apr 21, 2018	
+50 Back SCM	37.54		2016 SE Pensacola Harvest Classic	Sep 25, 2016	
+200 Free SCM	2:48.25		2016 SE Pensacola Harvest Classic	Sep 24, 2016	
+50 Fly SCM	39.91		2016 SE Pensacola Harvest Classic	Sep 24, 2016	
+25 Free SCY	17.70		2013 SE Auburn Aquatics Late J	Jun 22, 2013	
+25 Back SCY	19.97		2013 SE Auburn Aquatics Late J	Jun 22, 2013	
+25 Fly SCY	18.98		2013 SE Auburn Aquatics Late J	Jun 22, 2013	
+100 IM SCY	56.96		2021 SE Alabama Recreation & Parks Association Championship	Jul 23, 2021	
+
+Benjamin Skinner
+Event	Time		Meet	Date	Stamp Link
+100 Breast SCY	57.52		New South Championships	Feb 20, 2026	
+50 Breast SCY	27.47	X	New South Championships	Feb 20, 2026	
+100 Breast LCM	1:08.18		STAGS Championships	Jul 14, 2023	
+200 Breast SCY	2:09.66		Delta State Thanksgiving Invitational	Nov 23, 2025	
+200 Breast LCM	2:35.27		ST AAAA LC STAGS Championship	Jul 17, 2022	
+50 Breast LCM	32.41	X	Speedo Sectionals - Austin	Jul 12, 2025	
+500 Free SCY	5:17.72		ST TXLA Jingle Bell Splash	Dec 19, 2021	
+200 IM SCY	2:06.41		New South Championships	Feb 18, 2026	
+400 Free LCM	4:49.44		ST TXLA Texas Open	Jun 25, 2022	
+200 IM LCM	2:30.40		STAGS Championships	Jul 16, 2023	
+400 IM SCY	4:35.63		New South Championships	Feb 20, 2025	
+200 Free SCY	1:58.02		ST TXLA New Years Classic	Jan 14, 2024	
+400 IM LCM	5:29.15		NT MARS 15th Annual Bill Nixon Meet	Jun 15, 2023	
+100 Free LCM	1:03.41		ST TXLA Texas Open	Jun 24, 2022	
+200 Free LCM	2:19.47		ST TXLA Texas Open	Jun 26, 2022	
+100 Free SCY	55.80		2022 ST ASC South Texas Champs South	Feb 13, 2022	
+50 Fly SCY	28.74		2022 ST SRG SCY New Year's Res	Jan 14, 2023	
+50 Free SCY	25.53		ST TXLA Jingle Bell Splash	Dec 10, 2023	
+200 Back SCY	2:19.04		ST SRG SCY Surge Earth Da	Apr 25, 2021	
+50 Fly LCM	32.70		GU AGS Texas Senior Circuit	Jun 1, 2023	
+50 Free LCM	30.75	X	ST TXLA Texas Open	Jun 24, 2022	
+100 Back LCM	1:16.56		ST TXLA Texas Open	Jun 25, 2022	
+100 Fly SCY	1:04.21	X	New South Championships	Feb 20, 2025	
+200 Fly SCY	2:26.21		ST TXLA 11 & Over November	Nov 21, 2022	
+100 Back SCY	1:05.61		ST SCY Surge Kebbab Klass	Feb 28, 2021	
+50 Back LCM	35.81		GU AGS Texas Senior Circuit	Jun 2, 2023	
+200 Back LCM	2:49.72		ST AAAA surge bud dallmann memorial	May 21, 2022	
+100 Fly LCM	1:14.94		ST TXLA Texas Open	Jun 26, 2022	
+50 Back SCY	32.14	X	ST SCY Surge Kebbab Klass	Feb 28, 2021	
+100 IM SCY	1:02.01		ST SRG SCY Surge Earth Da	Apr 24, 2021	
+75 M Diving SCY	1:03.81	R	61st Annual Hendrix Relays	Oct 25, 2024
+
+Afonso Campanico
+Event	Time		Meet	Date	Stamp Link
+1650 Free SCY	17:01.40		Western Zone Senior Championships	Apr 5, 2025	
+1000 Free SCY	10:16.75	A	CA SAND TYR Las Vegas Super Finals Invite	Dec 12, 2024	
+400 Free LCM	4:28.63		CA SCS Summer A/G Champs	Jul 26, 2025	
+1500 Free LCM	17:43.95		CA SCS Summer A/G Champs	Jul 24, 2025	
+500 Free SCY	4:56.69	A	NIAA Class 4A Mountain Region Championship	May 5, 2025	
+800 Free LCM	9:18.69		CA SCS Summer A/G Champs	Jul 27, 2025	
+200 Free SCY	1:52.94	A	NIAA 4A State Championship	May 15, 2025	
+200 Free LCM	2:09.94	U	Lisbon Youth and Absolute Championship	Jul 3, 2025	
+100 Free LCM	59.89	R	CA BREA Summer A/G Champs	Jul 28, 2024	
+400 IM LCM	5:12.31		CA SCS Summer A/G Champs	Jul 25, 2025	
+200 IM LCM	2:28.25		CA BREA Summer A/G Champs	Jul 27, 2024	
+400 IM SCY	4:33.75	A	CA SAND Pumpkin Meet	Oct 20, 2024	
+100 Free SCY	52.46		Desert Committee Championship	Feb 15, 2025	
+200 IM SCY	2:08.49		CA BCH April Intrasquad	Apr 26, 2024	
+50 Breast SCY	31.40	X	CA LVSC Winter Classic	Jan 18, 2025	
+50 Free LCM	28.13		CA SCS/RAA Summer A/G Championships	Jul 23, 2023	
+200 Fly SCY	2:11.59	A	CA SAND TYR Las Vegas Super Finals Invite	Dec 15, 2024	
+100 Breast SCY	1:07.08	U	CA LVSC Winter Classic	Jan 17, 2025	
+50 Free SCY	24.14	R	NIAA 4A State Championship	May 15, 2025	
+50 Fly SCY	27.26		Little Rock Fall Invite	Oct 10, 2025	
+100 Fly SCY	58.87	A	Nevada State Championship	Nov 9, 2024	
+200 Breast SCY	2:27.01	A	Nevada State Championship	Nov 10, 2024	
+100 Fly LCM	1:08.56	X	CA SCS Summer A/G Champs	Jul 25, 2025	
+200 Fly LCM	2:33.40	A	2025 LVSC Memorial Day Invite	May 25, 2025	
+200 Breast LCM	2:57.17	A	CA SAND Cinco de Mayo Invitational	May 3, 2025	
+100 Breast LCM	1:21.30		CA Team Rebel Aquatics Long	Apr 12, 2025	
+200 Back LCM	2:41.38	A	2025 LVSC Memorial Day Invite	May 25, 2025	
+200 Back SCY	2:17.68	A	CA LVSC Winter Classic	Jan 18, 2025	
+50 Fly LCM	32.72	X	CA SCS/RAA Summer A/G Championships	Jul 22, 2023	
+100 Back SCY	1:04.16	U	CA LVSC Winter Classic	Jan 17, 2025	
+100 Back LCM	1:19.04		2022 AZ MAC 11th Annual Speedo Arizona Invitational	May 29, 2022	
+50 Back SCY	30.96	X	CA LVSC Winter Classic	Jan 19, 2025	
+100 IM SCY	1:02.53		CA SAND Pumpkin Invite	Oct 22, 2023
+
+Nihar Vitthanala
+Event	Time		Meet	Date	Stamp Link
+100 Free LCM	56.51		NT MAC April A/BB Meet	Apr 28, 2024	
+100 Free SCY	48.49		New South Championships	Feb 21, 2026	
+50 Fly SCY	24.23		Little Rock Fall Invite	Oct 10, 2025	
+200 Free SCY	1:50.01		NT LAC Heart Racer	Feb 4, 2024	
+50 Free LCM	25.90		NT MAC April A/BB Meet	Apr 26, 2024	
+100 Fly LCM	1:01.60		NT MAC April A/BB Meet	Apr 27, 2024	
+100 Fly SCY	53.52		NT LAC Heart Racer	Feb 3, 2024	
+200 Free LCM	2:08.28		NT MAC April A/BB Meet	Apr 27, 2024	
+50 Fly LCM	28.03	X	NT MAC April A/BB Meet	Apr 27, 2024	
+50 Free SCY	22.28		NT LAC Heart Racer	Feb 4, 2024	
+100 Back SCY	55.44		New South Championships	Feb 20, 2026	
+50 Back SCY	26.19	X	New South Championships	Feb 20, 2026	
+100 Back LCM	1:07.36		GU MAC Senior Invite	May 19, 2024	
+500 Free SCY	5:28.62		NT COR October Senior Meet	Oct 1, 2021	
+200 IM SCY	2:09.82		NT LAC Splashing Pumpkins	Oct 6, 2024	
+400 Free LCM	4:59.83		2021 NT MARS A/BB Divisional	May 15, 2021	
+50 Back LCM	32.11	X	GU MAC Senior Invite	May 19, 2024	
+200 IM LCM	2:35.66		2022 NT LAC Summer Senior Meet	Jul 10, 2022	
+200 Back SCY	2:18.73	U	NT LAC Splashing Pumpkins	Oct 17, 2020	
+50 Breast SCY	35.15	X	North Texas Senior Champs	Feb 8, 2020	
+100 Breast SCY	1:14.76		NT NTN Sharing the Harvest	Nov 15, 2020	
+200 Breast SCY	2:48.09		NT LAC Jingle Bell	Dec 8, 2018	
+400 IM SCY	5:55.70		NT Metro Fall Swim Meet Level 3 Division 2	Oct 22, 2017	
+50 Breast LCM	56.08		2015 NT MAC End of the Season	Aug 2, 2015	
+
+Cayden Weingartner
+Event	Time		Meet	Date	Stamp Link
+200 Free SCY	1:49.94		New South Championships	Feb 19, 2026	
+500 Free SCY	5:01.97		OKS Senior State Championship	Mar 8, 2025	
+400 Free LCM	4:37.05		OKS 11-Over Championships	Jul 27, 2025	
+1000 Free SCY	10:49.29		OKS Senior Championships	Mar 1, 2024	
+100 Free SCY	50.63		New South Championships	Feb 21, 2026	
+100 Free LCM	59.12	R	OKS 11-Over Championships	Jul 25, 2025	
+50 Free LCM	27.07		OKS 11-Over Championships	Jul 25, 2025	
+200 Free LCM	2:12.53		Oklahoma State Championship (50m)	Jul 20, 2024	
+50 Free SCY	23.13		New South Championships	Feb 18, 2026	
+1650 Free SCY	18:57.03		OKS Senior Championships	Mar 3, 2024	
+200 Free SCM	2:13.36		Carl Albert/Broken Arrow/BWT	Nov 12, 2024	
+100 Free SCM	1:00.34	R	Carl Albert/Broken Arrow/BWT	Nov 12, 2024	
+1500 Free LCM	19:41.25		Oklahoma State Championships	Jul 21, 2023	
+50 Fly SCY	27.34		OKS Senior State Championship	Mar 7, 2025	
+50 Free SCM	27.55	R	Carl Albert/Broken Arrow/BWT	Nov 12, 2024	
+400 Free SCM	4:53.28		Carl Albert/Broken Arrow/BWT	Nov 12, 2024	
+200 IM LCM	2:39.64		Oklahoma State Championship (50m)	Jul 21, 2024	
+800 Free LCM	10:35.53		Oklahoma State Championships	Jul 23, 2023	
+200 IM SCY	2:18.50		OK BVSC Meet of Champions	Jan 14, 2024	
+100 Fly LCM	1:11.35		MV EKC Rose Memorial	May 11, 2024	
+400 IM LCM	5:51.40		OK KMSC Spring Twister	May 5, 2024	
+50 Fly LCM	32.52	X	MV EKC Rose Memorial	May 11, 2024	
+100 Fly SCY	1:02.60		BHS, BA, BTW, PCN, Wesleyan	Dec 12, 2023	
+100 Back LCM	1:17.73		OZ CSP 87th Summer Invitational	Jun 21, 2025	
+200 Back SCY	2:24.13		OK Stars of Winter	Dec 3, 2023	
+200 Back LCM	2:50.60		OK KMSC Spring Twister	May 4, 2024	
+100 Breast LCM	1:28.24		OZ CSP 86th Annual Summer Invitational	Jun 23, 2024	
+50 Breast SCY	36.86	X	OK Stars of Winter	Dec 3, 2023	
+100 Back SCY	1:08.13		BHS, BA, BTW, PCN, Wesleyan	Dec 12, 2023	
+200 Breast LCM	3:17.47		OK KMSC Spring Twister	May 4, 2024	
+100 Breast SCY	1:18.27		OK Stars of Winter	Dec 3, 2023	
+200 Breast SCY	2:48.35		OK BVSC Meet of Champions	Jan 13, 2024	
+50 Back LCM	37.63	X	OZ CSP 86th Annual Summer Invitational	Jun 22, 2024	
+50 Breast LCM	41.97	X	OZ CSP 86th Annual Summer Invitational	Jun 23, 2024	
+200 IM SCM	3:01.06		2022 OK SwimTulsa Fall Dual	Nov 13, 2022	
+50 Back SCY	33.19	X	BHS, BA, BTW, PCN, Wesleyan	Dec 12, 2023	
+100 Breast SCM	1:34.02		2022 OK SwimTulsa Fall Dual	Nov 13, 2022	
+200 Fly LCM	3:16.45		Splash Club Stars of Summer Swim Meet	Jun 8, 2025	
+50 Breast SCM	44.50	X	2022 OK SwimTulsa Fall Dual	Nov 13, 2022
+
+Aiden Killackey
+Event	Time		Meet	Date	Stamp Link
+100 Back SCY	53.82	R	Henderson State vs. Delta State	Nov 7, 2025	
+200 Free SCY	1:51.35		New South Championships	Feb 19, 2026	
+100 Free SCY	50.82		New South Championships	Feb 18, 2026	
+50 Back SCY	25.95	XR	Henderson State vs. Delta State	Nov 7, 2025	
+100 Free LCM	1:00.33		OK KMSC Firecracker	Jun 28, 2026	
+50 Breast SCY	30.09	X	New South Championships	Feb 20, 2026	
+100 Breast SCY	1:05.27		New South Championships	Feb 20, 2026	
+50 Free LCM	27.92		OK KMSC Firecracker	Jun 27, 2026	
+200 IM SCY	2:09.50		New South Championships	Feb 18, 2026	
+50 Free SCY	24.32	X	New South Championships	Feb 18, 2026	
+200 Breast SCY	2:26.64		New South Championships	Feb 21, 2026	
+200 Free LCM	2:22.20		Tucker Memorial Invitational	Jun 27, 2025	
+50 Breast LCM	36.20		2024 AquaHawgs Long Course Opener	Apr 27, 2024	
+500 Free SCY	5:45.80		Arkansas AAU State Championship	Jun 21, 2024	
+100 Breast LCM	1:20.27		OK KMSC Firecracker	Jun 27, 2026	
+50 Fly LCM	32.44		2024 AquaHawgs Long Course Opener	Apr 27, 2024
+
+Mason Doucet
+Event	Time		Meet	Date	Stamp Link
+50 Fly SCY	24.76		Louisiana Senior State Championship (25y)	Feb 16, 2025	
+50 Free LCM	26.23		LA Senior LC State Championships	Jul 21, 2024	
+100 Free LCM	58.94		LA Senior LC State Championships	Jul 20, 2024	
+100 Free SCY	50.20		New South Championships	Feb 21, 2026	
+50 Back SCY	25.30		Louisiana Senior State Championship (25y)	Feb 15, 2025	
+100 Back SCY	55.28		LHSAA Division 1 Championship	Nov 22, 2024	
+50 Free SCY	22.72		LA TAQ Christmas Meet	Dec 6, 2024	
+100 Fly SCY	55.18		LA TAQ Christmas Meet	Dec 7, 2024	
+50 Back LCM	30.56		LA Senior LC State Championships	Jul 20, 2024	
+100 Fly LCM	1:04.70		LA Senior LC State Championships	Jul 19, 2024	
+50 Fly LCM	29.58	X	LA Senior LC State Championships	Jul 19, 2024	
+200 Free SCY	1:58.60		LA TAQ Christmas invite	Dec 10, 2023	
+200 Back SCY	2:07.16		LA TAQ Christmas Meet	Dec 7, 2024	
+100 Back LCM	1:09.23		LA Senior LC State Championships	Jul 19, 2024	
+200 IM SCY	2:11.11		LA TAQ Christmas invite	Dec 10, 2023	
+200 Back LCM	2:32.39		LA Senior LC State Championships	Jul 21, 2024	
+400 IM SCY	4:45.23		LA TAQ Christmas invite	Dec 8, 2023	
+200 IM LCM	2:43.06		2021 Louisiana AG LC State Championships	Jul 18, 2021	
+200 Free LCM	2:30.82		2021 Louisiana AG LC State Championships	Jul 16, 2021	
+50 Breast SCY	37.67	X	2022 LA Tiger Aquatics Mardi Gras Meet	Jan 8, 2022	
+100 Breast SCY	1:20.22		2022 LA Tiger Aquatics Mardi Gras Meet	Jan 8, 2022	
+
+Elijah Johnston
+Event	Time		Meet	Date	Stamp Link
+500 Free SCY	5:44.43		Centennial Bank Arkansas 5A State Championship Meet	Feb 25, 2023	
+200 Free SCY	2:03.77		New South Championships	Feb 19, 2026	
+100 Free SCY	57.18		New South Championships	Feb 21, 2026	
+800 Free LCM	10:56.57		2023 AR Spring Splash Invitationa	May 7, 2023	
+100 Free LCM	1:09.05		AAU Junior Olympic Games	Jul 30, 2023	
+400 IM SCY	5:14.43		6TH ANNUAL BATTLE FOR THE BELT	Feb 19, 2023	
+50 Free SCY	26.23		New South Championships	Feb 18, 2026	
+50 Free LCM	31.11		2023 AR Spring Splash Invitationa	May 7, 2023	
+200 Free LCM	2:33.37		Tucker Memorial Invitational	Jul 7, 2023	
+100 Back SCY	1:05.40		New South Championships	Feb 20, 2026	
+200 IM SCY	2:26.66	5A	5A South, 5A Central & 4A-1A Central Conference Championships	Feb 7, 2024	
+50 Fly SCY	30.66		AR NWAA Holiday Classic	Dec 16, 2023	
+400 IM LCM	6:15.64		Tucker Memorial Invitational	Jul 7, 2023	
+200 Back LCM	2:52.93		2023 AR Spring Splash Invitationa	May 7, 2023	
+200 Back SCY	2:26.68		Delta State Thanksgiving Invitational	Nov 23, 2025	
+200 IM LCM	2:57.74		AAU Junior Olympic Games	Jul 29, 2023	
+100 Fly SCY	1:06.90		5A South, 5A Central & 4A-1A Central Conference Championships	Feb 7, 2024	
+100 Back LCM	1:20.81		AAU Junior Olympic Games	Jul 29, 2023	
+50 Back SCY	31.80	X	New South Championships	Feb 20, 2026	
+50 Fly LCM	36.12	X	AAU Junior Olympic Games	Jul 29, 2023	
+50 Breast SCY	38.32		AR NWAA Holiday Classic	Dec 18, 2022	
+200 Fly SCY	2:39.07		6TH ANNUAL BATTLE FOR THE BELT	Feb 19, 2023	
+100 Breast SCY	1:21.49		Coach Knudsen Invite	Jan 23, 2024	
+100 Fly LCM	1:23.77		AAU Junior Olympic Games	Jul 28, 2023	
+200 Breast SCY	3:04.08		2022 AR LRAD Paul Blair Memorial Invitational	Nov 19, 2022	
+100 Breast LCM	1:38.76		2023 AR Spring Splash Invitationa	May 7, 2023	
+25 Free SCY	15.72		2021 AR ATAC Shark Holiday Invite	Jan 9, 2021	
+25 Fly SCY	20.69		2021 AR ATAC Shark Holiday Invite	Jan 9, 2021	
+100 IM SCY	1:10.96		Arkansas Senior Championships	Mar 23, 2025	
+
+Alex Tarkovács
+Event	Time		Meet	Date	Stamp Link
+50 Fly LCM	26.29		V. Löver Kupa - Sopron	Apr 6, 2025	
+100 Fly LCM	59.14		V. Löver Kupa - Sopron	Apr 5, 2025	
+50 Free LCM	25.18		CXXVIII. Országos Bajnokság	Apr 19, 2026	
+50 Fly SCM	26.19		III. Utánpótlás Rövidpályás Országos Bajnokság	Dec 7, 2024	
+100 Free SCM	54.24		44th Dr. Csik Ferenc Emlékverseny	Oct 26, 2025	
+50 Free SCM	24.42		III. Utánpótlás Rövidpályás Országos Bajnokság	Dec 6, 2024	
+100 Fly SCM	58.03		44th Dr. Csik Ferenc Emlékverseny	Oct 25, 2025	
+100 Free LCM	56.84		CXXVIII. Országos Bajnokság	Apr 15, 2026	
+200 Free LCM	2:07.76		XVIII. GYÕR Open	Dec 18, 2025	
+50 Back LCM	29.73		XVIII. GYÕR Open	Dec 20, 2025	
+50 Back SCM	27.99		44th Dr. Csik Ferenc Emlékverseny	Oct 26, 2025	
+100 Back SCM	1:02.01		44th Dr. Csik Ferenc Emlékverseny	Oct 24, 2025	
+100 IM SCM	1:03.64		43. Dr. Csik Ferenc Emlékverseny	Oct 26, 2024	
+200 Fly LCM	2:25.68		XVIII. GYÕR Open	Dec 20, 2025	
+
+River Paulk
+Event	Time		Meet	Date	Stamp Link
+50 Free LCM	22.33		USA Swimming Futures Championship - Ocala	Jul 26, 2025	
+100 Free SCY	42.99	NCAA B	James E Martin Invitational	Feb 28, 2025	
+100 Free LCM	50.24		USA Swimming Futures Championship - Ocala	Jul 24, 2025	
+200 Free SCY	1:37.77		Speedo Winter Junior Championship West	Dec 8, 2023	
+50 Free SCY	19.42	NCAA B	James E Martin Invitational	Mar 1, 2025	
+500 Free SCY	4:37.85		Speedo Sectionals - Lewisville	Mar 8, 2024	
+200 Free LCM	1:55.41	WIN JRS	TYR Pro Swim Series - Mission Viejo	May 19, 2023	
+50 Breast SCY	26.86	X	Speedo Sectionals - Lewisville	Mar 9, 2024	
+50 Fly SCY	22.71	X	SEC Championships	Feb 19, 2026	
+100 Breast SCY	57.11		Speedo Sectionals - Lewisville	Mar 9, 2024	
+400 Free LCM	4:16.01		Lone Star Club Championship 20	Jun 15, 2023	
+100 Fly SCY	49.92		SEC Championships	Feb 19, 2026	
+200 IM LCM	2:15.09		NT MARS 14th Annual Bill Nixon Meet	Jun 17, 2022	
+200 IM SCY	1:56.65		Speedo Winter Junior Championship Time Trials	Dec 10, 2021	
+50 Breast LCM	31.01		TYR Pro Swim Series - Mission Viejo	May 19, 2023	
+100 Fly LCM	59.65		USA Swimming Futures Championship - College Station	Jul 29, 2022	
+50 Fly LCM	26.90	X	Speedo Junior Nationals Time Trials	Aug 4, 2022	
+100 Breast LCM	1:09.08		USA Swimming Futures Championship - College Station	Jul 27, 2022	
+1650 Free SCY	17:25.72		2020 WT COM Syntal Capital Partners Invitational	Jan 17, 2020	
+1000 Free SCY	10:37.48	X	2020 WT COM Syntal Capital Partners Invitational	Jan 17, 2020	
+200 Back LCM	2:19.40		Lone Star Club Championship 20	Jun 16, 2023	
+100 Back LCM	1:04.62		NT MARS 14th Annual Bill Nixon Meet	Jun 19, 2022	
+400 IM SCY	4:29.35		West Texas Champs	Feb 21, 2020	
+100 Back SCY	55.13	R	Speedo Sectionals - College Station	Mar 5, 2022	
+50 Back SCY	25.99	R	Speedo Sectionals - College Station	Mar 4, 2022	
+50 Back LCM	30.80	X	NT MARS 14th Annual Bill Nixon Meet	Jun 19, 2022	
+200 Breast SCY	2:18.60		NT COR October Sr Meet	Oct 7, 2023	
+200 Back SCY	2:05.41		NT COR October Sr Meet	Oct 7, 2023	
+200 Breast LCM	3:03.69		ST TXLA Texas Open	Jun 23, 2018	
+100 IM SCY	1:03.69		NT COR 36th Speedo Greater Southwest	Jan 13, 2018	
+
+Máté Hosszú
+Event	Time		Meet	Date	Stamp Link
+100 Free SCM	49.63		III. Utánpótlás Rövidpályás Országos Bajnokság	Dec 5, 2024	
+100 Free LCM	51.69		XVIII. GYÕR Open	Dec 20, 2025	
+200 Free SCM	1:51.55		43. Dr. Csik Ferenc Emlékverseny	Oct 27, 2024	
+200 Free LCM	1:55.00		I. Sopron Open FINA Qualification Event	Dec 15, 2022	
+400 Free LCM	4:08.15		XV. GYÕR Open Olympic Qualification Event	Dec 15, 2021	
+50 Free LCM	23.65		XVIII. GYÕR Open	Dec 18, 2025	
+1500 Free LCM	16:30.07		XV. GYÕR Open Olympic Qualification Event	Dec 15, 2021	
+50 Free SCM	22.75		44th Dr. Csik Ferenc Emlékverseny	Oct 25, 2025	
+100 IM SCM	56.55		44th Dr. Csik Ferenc Emlékverseny	Oct 24, 2025	
+50 Fly LCM	25.81		XVIII. GYÕR Open	Dec 19, 2025	
+50 Breast SCM	28.96		III. Utánpótlás Rövidpályás Országos Bajnokság	Dec 8, 2024	
+50 Fly SCM	25.39		44th Dr. Csik Ferenc Emlékverseny	Oct 24, 2025	
+50 Breast LCM	30.98		CXXVI Országos Bajnokság	Apr 12, 2024	
+50 Back LCM	28.81		XVIII. GYÕR Open	Dec 20, 2025	
+100 Breast LCM	1:16.32		XIV. Gyor Open	Dec 19, 2020	
+
+Noel Kis
+Event	Time		Meet	Date	Stamp Link
+100 Free LCM	50.78	R	LEN European Junior Championships	Jul 5, 2023	
+100 Free SCM	48.99		XXI Országos Bajnokság (25m)	Nov 5, 2025	
+50 Free SCM	22.10		XXI Országos Bajnokság (25m)	Nov 6, 2025	
+50 Free LCM	23.32		World Aquatics World Cup - Budapest	Oct 20, 2023	
+50 Fly SCM	24.20		XXI Országos Bajnokság (25m)	Nov 7, 2025	
+50 Fly LCM	25.33		World Aquatics World Cup - Budapest	Oct 22, 2023	
+50 Back LCM	27.04		Multinations Junior Meet	Apr 7, 2024	
+100 Back SCM	56.44		Hajós Alfréd Kupa III. forduló	Sep 27, 2025	
+50 Back SCM	27.47	X	Hajós Alfréd Kupa III. forduló	Sep 27, 2025	
+200 Free SCM	2:12.23		Hajós Alfréd Kupa III. forduló	Sep 27, 2025	
+
+Benedek BONA
+Event	Time		Meet	Date	Stamp Link
+100 Free LCM	49.77		AD-SFL International Championships	Dec 15, 2024	
+200 Free SCM	1:45.86		Hamilton Aquatics Winter Wonder	Dec 7, 2024	
+200 Free LCM	1:49.41		Dubai Open Championship	Feb 14, 2025	
+100 Free SCM	48.13		Hamilton Aquatics Winter Wonder	Dec 8, 2024	
+400 Free LCM	3:58.84		Dubai Open Championship	Feb 15, 2025	
+100 Fly LCM	54.60		Dubai Open Championship	Feb 16, 2025	
+400 Free SCM	3:55.13		Hamilton Aquatics Winter Wonder	Dec 6, 2024	
+50 Free LCM	23.17		AD-SFL International Championships	Dec 14, 2024	
+50 Fly SCM	24.31		27th Speedo Invitational Short Course Meet	Nov 24, 2024	
+50 Fly LCM	25.07		Dubai International Aquatics Championship	Apr 19, 2025	
+100 Back LCM	58.28		AD-SFL International Championships	Dec 14, 2024	
+50 Free SCM	22.82		Hamilton Aquatics Short Course Meet	Oct 20, 2024	
+200 IM SCM	2:06.10		Hamilton Aquatics Short Course Meet	Oct 20, 2024	
+100 IM SCM	56.74		Hamilton Aquatics Winter Wonder	Dec 6, 2024	
+50 Back LCM	27.14		Dubai International Aquatics Championship	Apr 18, 2025	
+200 IM LCM	2:11.70		SC - 2nd Competitive Championship	Feb 2, 2025	
+100 Fly SCM	55.43		27th Speedo Invitational Short Course Meet	Nov 23, 2024	
+100 Back SCM	57.99		27th Speedo Invitational Short Course Meet	Nov 23, 2024	
+50 Back SCM	26.76		Hamilton Aquatics Short Course Meet	Oct 19, 2024	
+200 Back LCM	2:18.59		SC - 2nd Competitive Championship	Feb 1, 2025	
+200 Back SCM	2:11.84		27th Speedo Invitational Short Course Meet	Nov 24, 2024	
+50 Breast LCM	34.35		SC - 2nd Competitive Championship	Feb 2, 2025	
+100 Breast LCM	1:16.10		SC - 2nd Competitive Championship	Feb 1, 2025
+
+Fabio Capocci
+Event	Time		Meet	Date	Stamp Link
+50 Free LCM	23.06		Campeonato Brasileiro Absoluto de natação	Apr 25, 2025	
+100 Back LCM	56.98	U	Campeonato brasileiro Júnior de verão	Dec 11, 2024	
+50 Back LCM	26.21		Campeonato Brasileiro Absoluto de natação	Apr 24, 2025	
+50 Free SCM	22.58		Campeonato Paulista Júnior e Sênior de Verão	Nov 16, 2024	
+100 Free LCM	52.58		Campeonato Brasileiro Junior de Verao	Dec 11, 2024	
+100 Back SCM	54.44		Campeonato Paulista Júnior e Sênior de Verão	Nov 16, 2024	
+50 Back SCM	25.09		SP OPEN DE NATAÇÃO DE VERÃO	Nov 15, 2024	
+100 Fly LCM	56.30		Campeonato Brasileiro Absoluto de Natação	May 30, 2023	
+100 Free SCM	51.19		Campeonato Paulista Júnior e Sênior de Verão	Nov 14, 2024	
+50 Fly SCM	25.09		Campeonato Paulista Júnior e Sênior de Verão	Nov 14, 2024	
+50 Fly LCM	27.43	X	PAULISTÃO FAP JUVENIL A SÊNIOR DE VERÃO	Dec 18, 2021	
+
+Curtis Malone
+Event	Time	Date
+200 Back LCM	2:03.86	Jun 19, 2026
+100 Back LCM	57.29	Jul 18, 2025
+200 Free SCY	1:39.30	Mar 19, 2026
+100 Back SCY	48.71	Feb 20, 2026
+200 Back SCY	1:46.36	Feb 22, 2026
+1000 Free SCY	9:44.27	Jan 18, 2026
+50 Back LCM	26.86	Jul 19, 2025
+500 Free SCY	4:36.51	Jan 16, 2026
+100 Free SCY	45.50	Nov 21, 2025
+50 Back SCY	22.97	Nov 21, 2025
+200 IM LCM	2:10.74	Jul 20, 2025
+200 IM SCY	1:50.74	Nov 8, 2025
+100 Free LCM	53.49	Jun 21, 2026
+200 Free LCM	1:57.59	Jul 27, 2025
+400 IM SCY	4:01.83	Feb 20, 2026
+400 Free LCM	4:14.81	Jun 21, 2026
+800 Free LCM	8:45.20	Jun 18, 2026
+400 IM LCM	4:42.91	Jul 18, 2025
+50 Free LCM	24.91	Jul 19, 2025
+50 Fly SCY	24.04	Mar 21, 2025
+100 Fly LCM	59.94	Jul 19, 2024
+100 Fly SCY	51.92	Mar 21, 2025
+50 Free SCY	21.42	Jan 17, 2026
+200 Fly SCY	1:57.18	Jan 17, 2026
+1650 Free SCY	17:20.47	Feb 23, 2023
+100 Breast LCM	1:10.29	Jun 19, 2026
+200 Breast LCM	2:35.11	Jun 20, 2026
+50 Fly LCM	27.53	Jul 29, 2025
+1500 Free LCM	18:08.96	Jun 1, 2025
+200 Fly LCM	2:18.03	Jun 21, 2026
+100 Breast SCY	1:03.43	Dec 10, 2023
+50 Breast SCY	30.16	Dec 10, 2023
+50 Breast LCM	33.66	Jun 19, 2026
+200 Breast SCY	2:35.06	Nov 13, 2021
+100 IM SCY	1:03.05	Mar 25, 2021

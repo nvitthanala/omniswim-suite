@@ -1,0 +1,38 @@
+{
+  "_comment": "Per-project fleet overrides for omniswim-suite. Merged over the global fleet.config.json at C:/Users/nihar/superintelligent/fleet.config.json. Pools and the usage ledger stay global — a quota belongs to a subscription, not a repo.",
+
+  "policy": {
+    "_why": "CLAUDE.md rule: 'No git operations (commits, pushes, branches) — agents work on diffs only.' isolateByDefault enforces that mechanically: every assignment runs in its own worktree and comes back as a patch, so no delegated agent can ever touch this working tree or this branch.",
+    "isolateByDefault": true,
+
+    "_why_concurrency": "CLAUDE.md rule: 'Keep concurrent agents in disjoint package scopes.' Three at a time is the practical ceiling before scopes start overlapping in this monorepo.",
+    "maxConcurrent": 3,
+
+    "_why_fallback": "This repo's runs are long and Opus has historically hit session limits mid-task. A deeper chain means a limit costs a handoff instead of a lost run.",
+    "fallbackDepth": 4,
+
+    "fairness": "spread",
+    "fairnessWeight": 0.35
+  },
+
+  "models": [
+    {
+      "_comment": "This is a large TypeScript monorepo — scoring logic, roster/lineup correctness and extraction pipelines all need to hold a lot of the tree at once. Bump longContext and breadth where the model genuinely has it, so 'needs: refactor' and 'needs: research' land somewhere that can actually see the codebase.",
+      "id": "codex/terra",
+      "traits": { "longContext": 5, "breadth": 5 }
+    },
+    {
+      "id": "codex/gpt-5.5",
+      "traits": { "longContext": 5, "breadth": 5 }
+    },
+    {
+      "_comment": "Data-provenance work (cutlines, teamDivisions, parsers) is the highest-stakes code here and fails silently when wrong. Keep the cheap models out of it by making them ineligible for review-shaped needs rather than by ranking them.",
+      "id": "codex/mini",
+      "roles": ["formatter"]
+    },
+    {
+      "id": "claude/haiku",
+      "roles": ["formatter", "scout"]
+    }
+  ]
+}

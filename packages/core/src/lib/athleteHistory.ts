@@ -18,6 +18,12 @@ import { divisionForTeam } from '../data/teamDivisions';
 import { compareTimeToCutline } from './cutlineUtils';
 import { mergeScoringSettings } from './scoringDefaults';
 import { convertTimeToSeconds, convertToSCY, isRelayResult, normalizeSwimmerName } from './utils';
+import { parseSwimCloudMultiProfile } from './swimCloudMultiProfile';
+import {
+  buildAliasResolver,
+  IDENTITY_ALIAS_RESOLVER,
+  type AthleteAliasResolver,
+} from './athleteAliases';
 import type { CatalogAthlete, CatalogEventTime, CatalogTeamRoster } from './rosterCatalog';
 import { bestTimesByEvent } from './rosterCatalog';
 
@@ -56,7 +62,9 @@ export function mergeHistoryIndex(
 ): HistoricalSwim[] {
   const best = new Map<string, HistoricalSwim>();
   for (const s of [...existing, ...incoming]) {
-    const key = swimKey(s.name, s.team, s.gender, s.event);
+    // Best per event PER COURSE: an actual SCY swim and its LCM/SCM counterparts are
+    // distinct facts — the cross-course arbitrage view needs both to compare.
+    const key = `${swimKey(s.name, s.team, s.gender, s.event)}|${s.timeType ?? 'SCY'}`;
     const sec = convertTimeToSeconds(
       convertToSCY(s.time, s.event, s.gender, s.timeType ?? 'SCY')
     );
@@ -77,14 +85,15 @@ export function relayEventsForAthlete(
   results: SwimmerResult[],
   team: string,
   gender: Gender,
-  name: string
+  name: string,
+  resolver: AthleteAliasResolver = IDENTITY_ALIAS_RESOLVER
 ): string[] {
-  const nameKey = normalizeSwimmerName(name);
+  const nameKey = normalizeSwimmerName(resolver.resolveAthleteName(name, team, gender));
   const events = new Set<string>();
   for (const r of results) {
     if (r.gender != null && r.gender !== gender) continue;
     if (String(r.team ?? '').trim() !== team) continue;
-    if (normalizeSwimmerName(r.name) !== nameKey) continue;
+    if (normalizeSwimmerName(resolver.resolveAthleteName(r.name, team, gender)) !== nameKey) continue;
     if (isRelayResult(r) && r.name !== r.team) {
       events.add(r.event);
     }
@@ -98,17 +107,18 @@ export function categorizeBestEvents(
   gender: Gender,
   name: string,
   settings: ScoringSettings,
-  relayEvents: string[] = []
+  relayEvents: string[] = [],
+  resolver: AthleteAliasResolver = IDENTITY_ALIAS_RESOLVER
 ): AthleteEventProfile {
   const merged = mergeScoringSettings(settings);
   const indCap = merged.maxIndividualEntriesPerSwimmer ?? 3;
   const relayCap = merged.maxRelayEntriesPerSwimmer ?? 4;
-  const nameKey = normalizeSwimmerName(name);
+  const nameKey = normalizeSwimmerName(resolver.resolveAthleteName(name, team, gender));
 
   const bestByEvent: AthleteEventProfile['bestByEvent'] = {};
   for (const s of history) {
     if (s.gender !== gender || s.team !== team) continue;
-    if (normalizeSwimmerName(s.name) !== nameKey) continue;
+    if (normalizeSwimmerName(resolver.resolveAthleteName(s.name, team, gender)) !== nameKey) continue;
     if (s.event.toLowerCase().includes('relay')) continue;
     const sec = convertTimeToSeconds(
       convertToSCY(s.time, s.event, s.gender, s.timeType ?? 'SCY')
@@ -133,7 +143,7 @@ export function categorizeBestEvents(
   };
 }
 
-export type SwimCloudPasteFormat = 'personal_bests' | 'roster' | 'unknown';
+export type SwimCloudPasteFormat = 'personal_bests' | 'roster' | 'multi_profile' | 'unknown';
 
 const TIME_RE = /^(\d{1,2}:)?\d{1,2}\.\d{2}$/;
 const EVENT_COL_RE =
@@ -204,6 +214,35 @@ export function normalizeEventLabel(raw: string): string {
   return e.replace(/\s+/g, ' ').trim();
 }
 
+/** Canonical SCY championship individual program events (normalized labels). */
+const CHAMPIONSHIP_PROGRAM_EVENTS = new Set<string>([
+  '50 Freestyle',
+  '100 Freestyle',
+  '200 Freestyle',
+  '500 Freestyle',
+  '1000 Freestyle',
+  '1650 Freestyle',
+  '100 Backstroke',
+  '200 Backstroke',
+  '100 Breaststroke',
+  '200 Breaststroke',
+  '100 Butterfly',
+  '200 Butterfly',
+  '200 Individual Medley',
+  '400 Individual Medley',
+]);
+
+/**
+ * True only for events that can be scored as championship lineup entries: the standard
+ * SCY individual program (50/100/200/500/1000/1650 Free, 100/200 stroke, 200/400 IM) and
+ * relays. Excludes 25s, 100 IM, diving, and odd metric distances so they are never picked
+ * as lineup entries (their swims are still retained in athleteHistory).
+ */
+export function isChampionshipProgramEvent(event: string): boolean {
+  if (/\brelay\b/i.test(event)) return true;
+  return CHAMPIONSHIP_PROGRAM_EVENTS.has(normalizeEventLabel(event));
+}
+
 function looksLikePersonName(line: string): boolean {
   const t = line.trim();
   if (!t || t.includes('\t')) return false;
@@ -234,7 +273,37 @@ function isHeaderOrJunkLine(line: string): boolean {
   return false;
 }
 
+/** A bare name line in a multi-profile paste (no tab, not an event/time/header row). */
+export function isProfileNameLine(line: string): boolean {
+  const t = line.trim();
+  if (!t || t.includes('\t')) return false;
+  if (isHeaderOrJunkLine(t)) return false;
+  return looksLikePersonName(t);
+}
+
+/** Count bare name lines each followed (within their block) by >=1 personal-bests row. */
+function countProfileBlocks(text: string): number {
+  let blocks = 0;
+  let pending = false;
+  for (const line of text.split(/\r?\n/)) {
+    const t = line.trim();
+    if (!t) continue;
+    if (isProfileNameLine(t)) {
+      pending = true;
+      continue;
+    }
+    if (isHeaderOrJunkLine(t)) continue;
+    const cols = splitRow(t);
+    if (cols.length >= 2 && isEventToken(cols[0]) && isTimeToken(cols[1]) && pending) {
+      blocks += 1;
+      pending = false;
+    }
+  }
+  return blocks;
+}
+
 export function detectSwimCloudPasteFormat(text: string): SwimCloudPasteFormat {
+  if (countProfileBlocks(text) >= 2) return 'multi_profile';
   for (const line of text.split(/\r?\n/)) {
     const t = line.trim();
     if (!t || isHeaderOrJunkLine(t)) continue;
@@ -368,7 +437,7 @@ export type ParseSwimCloudOptions = {
   team: string;
   gender: Gender;
   swimmerName?: string;
-  format?: 'auto' | 'personal_bests' | 'roster';
+  format?: 'auto' | 'personal_bests' | 'roster' | 'multi_profile';
   division?: NcaaDivision;
 };
 
@@ -415,6 +484,23 @@ export function parseSwimCloudPasteDetailed(
   }
 
   let swims: HistoricalSwim[] = [];
+  if (format === 'multi_profile') {
+    const multi = parseSwimCloudMultiProfile(trimmed, {
+      team: opts.team,
+      gender: opts.gender,
+      division: opts.division,
+    });
+    swims = multi.athletes.flatMap(a => a.swims);
+    warnings.push(...multi.warnings);
+    warnings.push(`Multi-profile paste: ${multi.athletes.length} athlete(s) parsed`);
+    if (swims.some(s => s.timeType === 'LCM' || s.timeType === 'SCM')) {
+      warnings.push('LCM/SCM times included — cut comparison uses SCY conversion where applicable');
+    }
+    if (swims.length === 0) {
+      warnings.push('No swim rows parsed — check copy includes the Personal Bests tables');
+    }
+    return { swims, format, warnings, detectedName };
+  }
   if (format === 'personal_bests') {
     const swimmerName = (opts.swimmerName ?? detectedName ?? '').trim();
     if (!swimmerName) {
@@ -460,13 +546,15 @@ export function getAthleteProfile(
   team: string,
   gender: Gender,
   name: string,
-  settings: ScoringSettings
+  settings: ScoringSettings,
+  resolver?: AthleteAliasResolver
 ): AthleteEventProfile {
+  const alias = resolver ?? buildAliasResolver(workspace);
   const pdfHistory = buildHistoryFromWorkspace(workspace);
   const merged = mergeHistoryIndex(pdfHistory, workspace.athleteHistory ?? []);
   const results = gender === Gender.MEN ? workspace.menResults ?? [] : workspace.womenResults ?? [];
-  const relays = relayEventsForAthlete(results, team, gender, name);
-  return categorizeBestEvents(merged, team, gender, name, settings, relays);
+  const relays = relayEventsForAthlete(results, team, gender, name, alias);
+  return categorizeBestEvents(merged, team, gender, name, settings, relays, alias);
 }
 // ===================== Catalog-backed helpers =====================
 

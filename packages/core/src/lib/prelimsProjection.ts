@@ -7,6 +7,7 @@
  */
 import { Gender, ScoringSettings, SwimmerResult, TeamScore, Workspace } from '../types';
 import { mergeScoringSettings } from './scoringDefaults';
+import { computeVisibleEvents } from './eventIdentity';
 import type { ScoringBundle } from './scoringEngine';
 import {
   classifyRoundTier,
@@ -494,6 +495,7 @@ function aggregateBundle(allResults: SwimmerResult[], allScored: SwimmerResult[]
     allResults,
     allScored,
     events,
+    visibleEvents: computeVisibleEvents(events, allResults, allResults, {}),
     sortedTeams,
     timelineData,
     teamStyleSignature,
@@ -525,6 +527,7 @@ export function buildPrelimsProjectedBundle({
       allResults: [],
       allScored: [],
       events: [],
+      visibleEvents: [],
       sortedTeams: [],
       timelineData: [],
       teamStyleSignature: '',

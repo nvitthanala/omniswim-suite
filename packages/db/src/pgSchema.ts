@@ -1,7 +1,10 @@
 /**
  * PostgreSQL schema for Omni Swim Suite (shared multi-user deployment).
  */
-export const PG_SCHEMA_VERSION = 3;
+// 7 = union of the video-analysis branch (6: source_meet_results, race_analyses,
+// athlete_aliases, scoring_view) and main's psych-sheet schema (3: psych_results,
+// loaded_psych). The merged schema is a superset of both, so it gets its own version.
+export const PG_SCHEMA_VERSION = 7;
 
 export const CREATE_PG_TABLES_SQL = `
 CREATE TABLE IF NOT EXISTS meta (
@@ -47,6 +50,7 @@ CREATE TABLE IF NOT EXISTS workspaces (
   created_at           BIGINT NOT NULL,
   conference           TEXT,
   entry_plan_mode      TEXT,
+  scoring_view         TEXT,
   scoring_settings     TEXT,
   loaded_meet          TEXT,
   loaded_psych         TEXT,
@@ -70,6 +74,15 @@ CREATE TABLE IF NOT EXISTS meet_results (
   data         TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_meet_results_ws ON meet_results(workspace_id);
+
+CREATE TABLE IF NOT EXISTS source_meet_results (
+  id           TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  gender       TEXT NOT NULL,
+  position     INTEGER NOT NULL DEFAULT 0,
+  data         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_source_meet_results_ws ON source_meet_results(workspace_id);
 
 CREATE TABLE IF NOT EXISTS psych_results (
   id           TEXT PRIMARY KEY,
@@ -123,6 +136,21 @@ CREATE TABLE IF NOT EXISTS athlete_history (
   data         TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_athlete_history_ws ON athlete_history(workspace_id);
+
+CREATE TABLE IF NOT EXISTS race_analyses (
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  position     INTEGER NOT NULL DEFAULT 0,
+  data         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_race_analyses_ws ON race_analyses(workspace_id);
+
+CREATE TABLE IF NOT EXISTS athlete_aliases (
+  id           TEXT PRIMARY KEY,
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  position     INTEGER NOT NULL DEFAULT 0,
+  data         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_athlete_aliases_ws ON athlete_aliases(workspace_id);
 
 CREATE TABLE IF NOT EXISTS workspace_snapshots (
   id           TEXT PRIMARY KEY,

@@ -50,7 +50,7 @@ function SettingsPreview() {
       <div className="flex items-center justify-between border-b border-theme-soft pb-4">
         <div>
           <p className="text-ui-micro uppercase tracking-[0.22em] text-theme-muted font-bold">Live preview</p>
-          <h2 className="text-xl font-black tracking-tight mt-1">Meet Deck</h2>
+          <h2 className="text-heading-2 mt-1">Meet Deck</h2>
         </div>
         <div className="h-8 w-8 rounded-full bg-[var(--text-accent)] shadow-[0_0_24px_color-mix(in_srgb,var(--text-accent)_42%,transparent)]" />
       </div>
@@ -123,7 +123,7 @@ export default function SettingsPage() {
         <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
           <div>
             <p className="label-caps">Suite settings</p>
-            <h1 className="mt-2 text-3xl font-black tracking-tighter text-[var(--text-primary)]">Make OmniSwim yours</h1>
+            <h1 className="mt-2 text-heading-1">Make OmniSwim yours</h1>
             <p className="mt-2 max-w-2xl text-ui-body text-theme-secondary">
               Choose a meet-day look, tune text size, and keep the interface comfortable for the way you coach.
             </p>

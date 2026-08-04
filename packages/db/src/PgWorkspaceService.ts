@@ -34,6 +34,8 @@ export class PgWorkspaceService {
     const client = await this.pool.connect();
     try {
       await client.query(CREATE_PG_TABLES_SQL);
+      // Additive column migration for pre-existing deployments (idempotent).
+      await client.query('ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS scoring_view TEXT');
       await client.query(
         'INSERT INTO meta(key, value) VALUES($1, $2) ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value',
         ['schema_version', String(PG_SCHEMA_VERSION)]
@@ -89,6 +91,7 @@ export class PgWorkspaceService {
 
     const tables = [
       'meet_results',
+      'source_meet_results',
       'psych_results',
       'recruits',
       'roster_overrides',
@@ -96,6 +99,8 @@ export class PgWorkspaceService {
       'relay_leg_overrides',
       'deleted_swimmers',
       'athlete_history',
+      'race_analyses',
+      'athlete_aliases',
     ] as const;
     const dataMap: Record<string, unknown[]> = {};
     for (const t of tables) dataMap[t] = await childData(t);
@@ -199,6 +204,16 @@ export class PgWorkspaceService {
     }));
   }
 
+  /** Read-only: snapshot's stored workspace content without restoring it. */
+  async getSnapshotContent(snapshotId: string): Promise<Workspace | undefined> {
+    const res = await this.pool.query('SELECT blob FROM workspace_snapshots WHERE id = $1', [
+      snapshotId,
+    ]);
+    const row = res.rows[0];
+    if (!row) return undefined;
+    return parseJson<Workspace | null>(row.blob, null) ?? undefined;
+  }
+
   async restoreSnapshot(snapshotId: string): Promise<Workspace | undefined> {
     const res = await this.pool.query(
       'SELECT workspace_id, blob FROM workspace_snapshots WHERE id = $1',
@@ -274,15 +289,16 @@ export class PgWorkspaceService {
 
     await client.query(
       `INSERT INTO workspaces
-        (id, name, created_at, conference, entry_plan_mode, scoring_settings,
+        (id, name, created_at, conference, entry_plan_mode, scoring_view, scoring_settings,
          loaded_meet, loaded_psych, official_team_scores, active_entry_ids, history_sources, sort_index,
          owner_id, team_id, updated_at, version)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
        ON CONFLICT(id) DO UPDATE SET
          name = EXCLUDED.name,
          created_at = EXCLUDED.created_at,
          conference = EXCLUDED.conference,
          entry_plan_mode = EXCLUDED.entry_plan_mode,
+         scoring_view = EXCLUDED.scoring_view,
          scoring_settings = EXCLUDED.scoring_settings,
          loaded_meet = EXCLUDED.loaded_meet,
          loaded_psych = EXCLUDED.loaded_psych,
@@ -300,6 +316,7 @@ export class PgWorkspaceService {
         vals.created_at,
         vals.conference,
         vals.entry_plan_mode,
+        vals.scoring_view,
         vals.scoring_settings,
         vals.loaded_meet,
         vals.loaded_psych,
@@ -316,6 +333,7 @@ export class PgWorkspaceService {
 
     for (const table of [
       'meet_results',
+      'source_meet_results',
       'psych_results',
       'recruits',
       'roster_overrides',
@@ -323,6 +341,8 @@ export class PgWorkspaceService {
       'relay_leg_overrides',
       'deleted_swimmers',
       'athlete_history',
+      'race_analyses',
+      'athlete_aliases',
     ]) {
       await client.query(`DELETE FROM ${table} WHERE workspace_id = $1`, [ws.id]);
     }
@@ -337,6 +357,20 @@ export class PgWorkspaceService {
       await client.query(
         'INSERT INTO meet_results(id, workspace_id, gender, position, data) VALUES($1,$2,$3,$4,$5)',
         [row.id, row.workspace_id, row.gender, row.position, row.data]
+      );
+    }
+    const sourceMen = ws.sourceMenResults ?? ws.menResults ?? [];
+    const sourceWomen = ws.sourceWomenResults ?? ws.womenResults ?? [];
+    for (const row of insertResultsRows(ws.id, sourceMen, 'Men')) {
+      await client.query(
+        'INSERT INTO source_meet_results(id, workspace_id, gender, position, data) VALUES($1,$2,$3,$4,$5)',
+        [`src-${row.id}`, row.workspace_id, row.gender, row.position, row.data]
+      );
+    }
+    for (const row of insertResultsRows(ws.id, sourceWomen, 'Women')) {
+      await client.query(
+        'INSERT INTO source_meet_results(id, workspace_id, gender, position, data) VALUES($1,$2,$3,$4,$5)',
+        [`src-${row.id}`, row.workspace_id, row.gender, row.position, row.data]
       );
     }
     for (const row of insertResultsRows(ws.id, ws.psychMenResults ?? [], 'Men')) {
@@ -363,6 +397,12 @@ export class PgWorkspaceService {
         [row.id, row.workspace_id, row.position, row.data]
       );
     }
+    for (const row of insertWithIdRows('athlete_aliases', ws.id, ws.athleteAliases ?? [])) {
+      await client.query(
+        'INSERT INTO athlete_aliases(id, workspace_id, position, data) VALUES($1,$2,$3,$4)',
+        [row.id, row.workspace_id, row.position, row.data]
+      );
+    }
     for (const row of insertPositionalRows(ws.id, ws.scorerRosterOverrides ?? [])) {
       await client.query(
         'INSERT INTO roster_overrides(workspace_id, position, data) VALUES($1,$2,$3)',
@@ -384,6 +424,12 @@ export class PgWorkspaceService {
     for (const row of insertPositionalRows(ws.id, ws.athleteHistory ?? [])) {
       await client.query(
         'INSERT INTO athlete_history(workspace_id, position, data) VALUES($1,$2,$3)',
+        [row.workspace_id, row.position, row.data]
+      );
+    }
+    for (const row of insertPositionalRows(ws.id, ws.raceAnalyses ?? [])) {
+      await client.query(
+        'INSERT INTO race_analyses(workspace_id, position, data) VALUES($1,$2,$3)',
         [row.workspace_id, row.position, row.data]
       );
     }

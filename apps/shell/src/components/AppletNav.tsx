@@ -10,7 +10,7 @@ const APPLETS = [
 export default function AppletNav() {
   return (
     <nav
-      className="flex gap-1 bg-[var(--surface)] p-1 rounded-md border border-[var(--border)]"
+      className="flex gap-1 bg-[var(--surface)] p-1 rounded-lg border border-[var(--border)]"
       aria-label="Suite applets"
     >
       {APPLETS.map(applet => (
@@ -20,7 +20,7 @@ export default function AppletNav() {
           onMouseEnter={() => prefetchApplet(applet.id)}
           onFocus={() => prefetchApplet(applet.id)}
           className={({ isActive }) =>
-            `applet-nav-item px-4 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-sm transition-all ${
+            `applet-nav-item px-4 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-md transition-colors ${
               isActive ? 'nav-tab-active' : 'nav-tab-inactive'
             }`
           }

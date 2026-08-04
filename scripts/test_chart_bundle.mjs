@@ -25,7 +25,9 @@ for (const root of sourceRoots) {
   if (!existsSync(dir)) continue;
   const files = execSync(`git ls-files "${root}"`, { cwd: repoRoot, encoding: 'utf8' })
     .split('\n')
-    .filter(f => /\.(tsx?|jsx?)$/.test(f));
+    .filter(f => /\.(tsx?|jsx?)$/.test(f))
+    // Tracked files can be deleted in the working tree before the removal commit lands.
+    .filter(f => existsSync(join(repoRoot, f)));
   for (const rel of files) {
     const text = readFileSync(join(repoRoot, rel), 'utf8');
     if (rel.includes('node_modules')) continue;

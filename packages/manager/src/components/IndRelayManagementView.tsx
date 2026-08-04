@@ -22,6 +22,11 @@ import {
   upsertRelayLegOverride,
 } from '@omniswim/core/lib/relayLegMatching';
 import { convertToSCY, isRelayResult, normalizeSwimmerName } from '@omniswim/core/lib/utils';
+import {
+  buildRelaysFromIndividualLineup,
+  compareRelayLegSplits,
+} from '@omniswim/core/lib/relayBuilder';
+import { useToast } from '@omniswim/ui';
 
 type Props = {
   workspace: Workspace;
@@ -30,6 +35,9 @@ type Props = {
   whatIfMode: boolean;
   removeSeniors: boolean;
   onUpdate: (patch: Partial<Workspace>) => void;
+  selectedTeam?: string;
+  onSelectTeam?: (team: string) => void;
+  hideTeamPicker?: boolean;
 };
 
 type RelayGroup = {
@@ -56,9 +64,28 @@ export default function IndRelayManagementView({
   whatIfMode,
   removeSeniors,
   onUpdate,
+  selectedTeam: controlledTeam,
+  onSelectTeam,
+  hideTeamPicker = false,
 }: Props) {
-  const teams = scoringBundle.sortedTeams.map(t => t.teamName);
-  const [selectedTeam, setSelectedTeam] = useState<string>(teams[0] ?? '');
+  const toast = useToast();
+  const teams = useMemo(
+    () => [...scoringBundle.sortedTeams.map(t => t.teamName)].sort((a, b) => a.localeCompare(b)),
+    [scoringBundle.sortedTeams]
+  );
+  const [pickedTeam, setPickedTeam] = useState<string>('');
+  const selectedTeam =
+    controlledTeam !== undefined
+      ? controlledTeam && teams.includes(controlledTeam)
+        ? controlledTeam
+        : controlledTeam || ''
+      : pickedTeam && teams.includes(pickedTeam)
+        ? pickedTeam
+        : teams[0] ?? '';
+  const setSelectedTeam = (team: string) => {
+    setPickedTeam(team);
+    onSelectTeam?.(team);
+  };
   const [selectedRelayKey, setSelectedRelayKey] = useState<string | null>(null);
   const [manualTimes, setManualTimes] = useState<Record<string, string>>({});
   const [dragOverLeg, setDragOverLeg] = useState<string | null>(null);
@@ -307,6 +334,30 @@ export default function IndRelayManagementView({
     patchOverrides(removeRelayLegOverride(overrides, group.key, legIndex));
   };
 
+  const buildFromLineup = () => {
+    if (!whatIfMode || !selectedTeam) return;
+    const next = buildRelaysFromIndividualLineup(
+      workspace,
+      gender,
+      selectedTeam,
+      activeSwimmers,
+      scoringBundle.allResults.filter(r => isRelayResult(r))
+    );
+    patchOverrides(next ?? []);
+    toast.push('success', `Relay legs proposed from individual lineup for ${selectedTeam}`);
+  };
+
+  const selectedSplitCompare = useMemo(() => {
+    if (!selectedGroup || !selectedTeam) return [];
+    return compareRelayLegSplits(
+      workspace,
+      gender,
+      selectedGroup.legs,
+      selectedGroup.event,
+      selectedTeam
+    );
+  }, [selectedGroup, selectedTeam, workspace, gender]);
+
   const recruitCount = (workspace.recruits ?? []).filter(
     r => r.gender === gender && (!selectedTeam || r.team === selectedTeam)
   ).length;
@@ -314,18 +365,17 @@ export default function IndRelayManagementView({
   return (
     <div className="flex flex-col gap-4 flex-1 min-h-0 lg:flex-row">
       <div className="flex flex-col gap-4 flex-1 min-h-0 min-w-0">
-        <div className="surface-card rounded-lg p-4 shrink-0">
+        <div className="surface-card rounded-xl p-4 sm:p-5 shrink-0">
           <div className="flex flex-wrap items-end justify-between gap-3 mb-4">
-            {teams.length > 0 ? (
+            {!hideTeamPicker && teams.length > 0 ? (
               <label className="flex flex-col gap-1">
-                <span className="text-[9px] font-medium text-theme-secondary uppercase tracking-widest">
-                  Team
-                </span>
+                <span className="text-ui-caption text-theme-muted">Team</span>
                 <select
-                  value={selectedTeam || teams[0]}
+                  value={selectedTeam}
                   onChange={e => setSelectedTeam(e.target.value)}
-                  className="surface-muted-bg border border-theme-soft rounded px-2 py-1.5 text-[10px] text-[var(--text-primary)] min-w-[10rem]"
+                  className="glass-input rounded-lg px-3 py-2 text-ui-body min-w-[12rem]"
                 >
+                  <option value="">Select a team…</option>
                   {teams.map(team => (
                     <option key={team} value={team}>
                       {team}
@@ -348,26 +398,65 @@ export default function IndRelayManagementView({
                 key={item.label}
                 className="surface-overlay border border-theme-soft rounded-lg px-3 py-2"
               >
-                <p className="text-[9px] text-theme-secondary uppercase tracking-widest">{item.label}</p>
+                <p className="text-ui-micro text-theme-secondary uppercase tracking-widest">{item.label}</p>
                 <p className="text-lg font-semibold text-[var(--text-primary)] tabular-nums">{item.value}</p>
               </div>
             ))}
           </div>
 
           {recruitCount > 0 ? (
-            <p className="text-[10px] text-theme-secondary">
+            <p className="text-ui-caption text-theme-secondary">
               <span className="text-[var(--text-accent)]">{recruitCount}</span> injected recruit
               {recruitCount === 1 ? '' : 's'} for this team in the current projection.
             </p>
           ) : null}
+
+          <div className="mt-3 flex flex-wrap gap-2">
+            <button
+              type="button"
+              disabled={!whatIfMode || !selectedTeam}
+              onClick={buildFromLineup}
+              className="text-ui-caption px-3 py-1.5 rounded-lg border border-theme-soft theme-hover-row transition-colors disabled:opacity-40 uppercase font-bold tracking-widest"
+              title="Fill vacant relay legs using active meet entry plans, then roster bests"
+            >
+              Build relays from individual lineup
+            </button>
+          </div>
         </div>
 
-        <div className="surface-card rounded-lg p-4 flex-1 min-h-0 flex flex-col">
-          <h4 className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-primary)] mb-3">
+        <div className="surface-card rounded-xl p-4 sm:p-5 flex-1 min-h-0 flex flex-col">
+          <h4 className="text-ui-caption font-bold uppercase tracking-widest text-[var(--text-primary)] mb-3">
             Relay split inspector
           </h4>
+          {selectedSplitCompare.length > 0 && selectedGroup ? (
+            <div className="mb-4 border border-theme-soft rounded-lg p-3 surface-muted-bg">
+              <p className="text-ui-micro uppercase tracking-widest text-theme-secondary mb-2">
+                Known (PDF) vs calculated splits · {selectedGroup.event}
+              </p>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                {selectedSplitCompare.map(row => (
+                  <div key={row.legIndex} className="text-ui-caption flex justify-between gap-2">
+                    <span className="text-[var(--text-primary)] truncate">
+                      L{row.legIndex + 1} {row.swimmerName}
+                    </span>
+                    <span className="font-mono text-theme-secondary shrink-0">
+                      {row.knownSplit ?? '—'}
+                      {row.calculatedSplit ? (
+                        <span className="text-[var(--text-accent)] ml-1">
+                          / {row.calculatedSplit}
+                          {row.deltaSec != null
+                            ? ` (${row.deltaSec >= 0 ? '+' : ''}${row.deltaSec.toFixed(2)}s)`
+                            : ''}
+                        </span>
+                      ) : null}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ) : null}
           {relayGroups.length === 0 ? (
-            <p className="text-[10px] text-theme-muted italic">No relay entries for this team.</p>
+            <p className="text-ui-caption text-theme-muted italic">No relay entries for this team.</p>
           ) : (
             <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-4">
               {relayGroups.map(group => {
@@ -382,8 +471,8 @@ export default function IndRelayManagementView({
                   >
                     <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
                       <div>
-                        <p className="text-[11px] font-medium text-[var(--text-primary)]">{group.event}</p>
-                        <p className="text-[9px] text-theme-secondary">
+                        <p className="text-ui-label font-medium text-[var(--text-primary)]">{group.event}</p>
+                        <p className="text-ui-micro text-theme-secondary">
                           {group.roundSwam} · Pl {group.rank > 0 ? group.rank : '—'}
                           {vacantCount > 0 ? (
                             <span className="text-amber-400 ml-2">{vacantCount} vacant leg(s)</span>
@@ -394,7 +483,7 @@ export default function IndRelayManagementView({
                         {whatIfMode && vacantCount > 0 ? (
                           <button
                             type="button"
-                            className="text-[9px] px-2 py-0.5 rounded border border-theme-soft hover:border-[var(--text-accent)] text-theme-secondary"
+                            className="text-ui-micro px-2 py-0.5 rounded-md border border-theme-soft hover:border-[var(--text-accent)] text-theme-secondary transition-colors"
                             onClick={e => {
                               e.stopPropagation();
                               autofillAllVacant(group);
@@ -403,13 +492,13 @@ export default function IndRelayManagementView({
                             Auto-fill all
                           </button>
                         ) : null}
-                        <p className="text-[10px] font-mono text-[var(--text-accent)] tabular-nums">
+                        <p className="text-ui-caption font-mono text-[var(--text-accent)] tabular-nums">
                           Team {group.teamTotal}
                         </p>
                       </div>
                     </div>
                     {group.teamSplits ? (
-                      <p className="text-[9px] text-theme-secondary mb-3 font-mono">
+                      <p className="text-ui-micro text-theme-secondary mb-3 font-mono">
                         {formatTeamSplitSummary(group.teamSplits)}
                       </p>
                     ) : null}
@@ -423,7 +512,7 @@ export default function IndRelayManagementView({
                         return (
                           <div
                             key={leg.id}
-                            className={`border rounded px-2 py-1.5 text-[10px] transition-colors ${
+                            className={`border rounded-lg px-2 py-1.5 text-ui-caption transition-colors ${
                               isVacant
                                 ? 'border-amber-500/50 bg-amber-500/5'
                                 : 'border-theme-soft/60'
@@ -464,18 +553,18 @@ export default function IndRelayManagementView({
                               </span>
                             </div>
                             {leg.relayLegSplitDetail ? (
-                              <p className="text-[9px] text-theme-secondary font-mono mt-1 leading-snug">
+                              <p className="text-ui-micro text-theme-secondary font-mono mt-1 leading-snug">
                                 {formatLegSplitSummary(leg.relayLegSplitDetail)}
                               </p>
                             ) : null}
-                            <p className="text-[9px] text-theme-muted mt-0.5 tabular-nums">
+                            <p className="text-ui-micro text-theme-muted mt-0.5 tabular-nums">
                               {typeof leg.points === 'number' ? `${leg.points.toFixed(1)} pts` : '—'}
                             </p>
                             {whatIfMode && isVacant ? (
                               <div className="mt-2 space-y-1.5 border-t border-theme-soft/40 pt-2">
                                 <button
                                   type="button"
-                                  className="text-[9px] text-[var(--text-accent)] hover:underline"
+                                  className="text-ui-micro text-[var(--text-accent)] hover:underline"
                                   onClick={() => autofillLeg(group, legIndex)}
                                 >
                                   Auto-fill best
@@ -488,11 +577,11 @@ export default function IndRelayManagementView({
                                     onChange={e =>
                                       setManualTimes(prev => ({ ...prev, [fieldKey]: e.target.value }))
                                     }
-                                    className="flex-1 min-w-0 surface-muted-bg border border-theme-soft rounded px-1.5 py-0.5 text-[9px] font-mono"
+                                    className="flex-1 min-w-0 surface-muted-bg border border-theme-soft rounded-md px-1.5 py-0.5 text-ui-micro font-mono"
                                   />
                                   <button
                                     type="button"
-                                    className="text-[9px] px-1.5 py-0.5 rounded border border-theme-soft"
+                                    className="text-ui-micro px-1.5 py-0.5 rounded-md border border-theme-soft transition-colors"
                                     onClick={() => saveManualLeg(group, legIndex)}
                                   >
                                     Set
@@ -503,7 +592,7 @@ export default function IndRelayManagementView({
                                 ) ? (
                                   <button
                                     type="button"
-                                    className="text-[9px] text-theme-muted hover:text-amber-400"
+                                    className="text-ui-micro text-theme-muted hover:text-amber-400"
                                     onClick={() => clearLegOverride(group, legIndex)}
                                   >
                                     Clear override
@@ -524,17 +613,17 @@ export default function IndRelayManagementView({
       </div>
 
       {whatIfMode && selectedGroup ? (
-        <div className="surface-card rounded-lg p-4 w-full lg:w-72 shrink-0 flex flex-col min-h-[12rem] max-h-[40vh] lg:max-h-none">
-          <h4 className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-primary)] mb-1">
+        <div className="surface-card rounded-xl p-4 sm:p-5 w-full lg:w-72 shrink-0 flex flex-col min-h-[12rem] max-h-[40vh] lg:max-h-none">
+          <h4 className="text-ui-caption font-bold uppercase tracking-widest text-[var(--text-primary)] mb-1">
             Eligible swimmers
           </h4>
-          <p className="text-[9px] text-theme-secondary mb-3 leading-relaxed">
+          <p className="text-ui-micro text-theme-secondary mb-3 leading-relaxed">
             Drag onto a vacant leg for{' '}
             <span className="text-[var(--text-accent)]">{selectedGroup.event}</span>. Stroke must match
             the leg distance.
           </p>
           {poolCandidates.length === 0 ? (
-            <p className="text-[10px] text-theme-muted italic">No eligible candidates for vacant legs.</p>
+            <p className="text-ui-caption text-theme-muted italic">No eligible candidates for vacant legs.</p>
           ) : (
             <ul className="flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-1">
               {poolCandidates.map(swimmer => (
@@ -552,10 +641,10 @@ export default function IndRelayManagementView({
                       );
                       e.dataTransfer.effectAllowed = 'move';
                     }}
-                    className="border border-theme-soft rounded px-2 py-1.5 cursor-grab active:cursor-grabbing hover:border-[var(--text-accent)]/40"
+                    className="border border-theme-soft rounded-lg px-2 py-1.5 cursor-grab active:cursor-grabbing hover:border-[var(--text-accent)]/40 transition-colors"
                   >
-                    <p className="text-[10px] text-[var(--text-primary)] truncate">{swimmer.name}</p>
-                    <p className="text-[9px] text-theme-secondary truncate">
+                    <p className="text-ui-caption text-[var(--text-primary)] truncate">{swimmer.name}</p>
+                    <p className="text-ui-micro text-theme-secondary truncate">
                       {swimmer.classYear}
                       {swimmer.isRecruit ? ' · recruit' : ''} · {swimmer.event} {swimmer.time}
                     </p>

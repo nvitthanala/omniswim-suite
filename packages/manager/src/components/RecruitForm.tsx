@@ -125,10 +125,10 @@ export default function RecruitForm({
     }
   };
 
-  const inputClass = compact ? 'glass-input glass-input-compact w-full' : 'glass-input w-full';
+  const inputClass = compact ? 'glass-input w-full rounded-lg px-2.5 py-2 text-ui-body' : 'glass-input w-full';
   const labelClass = compact
-    ? 'block text-[9px] uppercase text-theme-muted font-bold mb-1'
-    : 'block text-[10px] uppercase text-theme-muted font-bold mb-1.5';
+    ? 'block text-ui-caption text-theme-muted mb-1'
+    : 'block text-ui-caption uppercase tracking-wide text-theme-muted font-bold mb-1.5';
   const teamOptions =
     teams.length > 0 ? teams.map(t => ({ value: t, label: t })) : [{ value: 'Unassigned', label: 'Unassigned' }];
 
@@ -136,11 +136,11 @@ export default function RecruitForm({
     return (
       <form
         onSubmit={handleSubmit}
-        className={`space-y-2 ${disabled ? 'opacity-60 pointer-events-none' : ''}`}
+        className={`space-y-3 ${disabled ? 'opacity-60 pointer-events-none' : ''}`}
       >
-        <div className="grid grid-cols-12 gap-2 items-end">
-          <div className="col-span-2">
-            <label className={labelClass}>First</label>
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="min-w-0">
+            <label className={labelClass}>First name</label>
             <input
               type="text"
               value={formData.firstName}
@@ -149,8 +149,8 @@ export default function RecruitForm({
               placeholder="First"
             />
           </div>
-          <div className="col-span-2">
-            <label className={labelClass}>Last</label>
+          <div className="min-w-0">
+            <label className={labelClass}>Last name</label>
             <input
               type="text"
               value={formData.lastName}
@@ -159,7 +159,7 @@ export default function RecruitForm({
               placeholder="Last"
             />
           </div>
-          <div className="col-span-3">
+          <div className="min-w-0 sm:col-span-2">
             <label className={labelClass}>Team</label>
             <select
               value={formData.team}
@@ -173,19 +173,7 @@ export default function RecruitForm({
               ))}
             </select>
           </div>
-          <div className="col-span-1">
-            <label className={labelClass}>Crs</label>
-            <select
-              value={formData.timeType}
-              onChange={e => setFormData({ ...formData, timeType: e.target.value as 'SCY' | 'LCM' | 'SCM' })}
-              className={`${inputClass} appearance-none`}
-            >
-              <option value="SCY">SCY</option>
-              <option value="LCM">LCM</option>
-              <option value="SCM">SCM</option>
-            </select>
-          </div>
-          <div className="col-span-3">
+          <div className="min-w-0">
             <label className={labelClass}>Event</label>
             <select
               value={formData.event}
@@ -199,39 +187,53 @@ export default function RecruitForm({
               ))}
             </select>
           </div>
-          <div className="col-span-1">
-            <label className={labelClass}>Yr</label>
-            <select
-              value={formData.classYear}
-              onChange={e => setFormData({ ...formData, classYear: e.target.value as ClassYear })}
-              className={`${inputClass} appearance-none`}
-            >
-              <option value={ClassYear.FR}>FR</option>
-              <option value={ClassYear.SO}>SO</option>
-              <option value={ClassYear.JR}>JR</option>
-              <option value={ClassYear.SR}>SR</option>
-              <option value={ClassYear.HS}>HS</option>
-            </select>
+          <div className="grid grid-cols-2 gap-3 min-w-0">
+            <div>
+              <label className={labelClass}>Course</label>
+              <select
+                value={formData.timeType}
+                onChange={e => setFormData({ ...formData, timeType: e.target.value as 'SCY' | 'LCM' | 'SCM' })}
+                className={`${inputClass} appearance-none`}
+              >
+                <option value="SCY">SCY</option>
+                <option value="LCM">LCM</option>
+                <option value="SCM">SCM</option>
+              </select>
+            </div>
+            <div>
+              <label className={labelClass}>Year</label>
+              <select
+                value={formData.classYear}
+                onChange={e => setFormData({ ...formData, classYear: e.target.value as ClassYear })}
+                className={`${inputClass} appearance-none`}
+              >
+                <option value={ClassYear.FR}>FR</option>
+                <option value={ClassYear.SO}>SO</option>
+                <option value={ClassYear.JR}>JR</option>
+                <option value={ClassYear.SR}>SR</option>
+                <option value={ClassYear.HS}>HS</option>
+              </select>
+            </div>
           </div>
         </div>
-        <div className="flex gap-2 items-end">
-          <div className="flex-1 max-w-[8rem]">
+        <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
+          <div className="sm:w-36">
             <label className={labelClass}>Time</label>
             <input
               type="text"
               value={formData.time}
               onChange={e => setFormData({ ...formData, time: e.target.value })}
-              className={`${inputClass} font-mono text-[var(--text-primary)]`}
+              className={`${inputClass} font-mono tabular-nums text-[var(--text-primary)]`}
               placeholder="00:00.00"
             />
           </div>
           <button
             type="submit"
             disabled={disabled}
-            className="flex-1 py-2 btn-recruit font-black text-[9px] uppercase tracking-widest rounded transition-all flex items-center justify-center gap-1.5"
+            className="flex-1 py-2.5 btn-recruit font-semibold text-ui-label rounded-lg transition-all flex items-center justify-center gap-2"
           >
-            <Play size={10} fill="currentColor" />
-            <span>Inject Recruit</span>
+            <Play size={12} fill="currentColor" />
+            <span>Inject recruit</span>
           </button>
         </div>
       </form>
@@ -331,7 +333,7 @@ export default function RecruitForm({
       <button
         type="submit"
         disabled={disabled}
-        className="w-full py-3 mt-2 btn-recruit font-black text-[10px] uppercase tracking-[0.2em] rounded transition-all flex items-center justify-center gap-2"
+        className="w-full py-3 mt-2 btn-recruit font-black text-ui-caption uppercase tracking-[0.2em] rounded-lg transition-all flex items-center justify-center gap-2"
       >
         <Play size={12} fill="currentColor" />
         <span>Inject Recruit Into Matrix</span>

@@ -1,20 +1,26 @@
-import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { UploadCloud, Save, FolderOpen, Download, Trash2, X } from 'lucide-react';
-import { VideoPlayer, type TrackingEvent } from './components/VideoPlayer';
+import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import { UploadCloud, Settings2, FolderOpen, Save, Download, Trash2, X } from 'lucide-react';
+import { analyzeRace, createTagStateMachine, raceLengthCount } from '@omniswim/core/lib/raceAnalysis';
+import { VideoPlayer } from './components/VideoPlayer';
 import { MetricsDashboard } from './components/MetricsDashboard';
-import { RaceSetupForm } from './components/RaceSetupForm';
-import { BiomechanicsData, RaceConfig } from './types';
+import { RaceSetupForm, STROKE_LABEL } from './components/RaceSetupForm';
+import { TagDeck } from './components/TagDeck';
+import { TagTable } from './components/TagTable';
+import { SessionComparePanel } from './components/SessionComparePanel';
+import type { OperatorKey, RaceAnalysisResult, RaceConfig, RaceTag } from './types';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
 import { EmptyState, useToast } from '@omniswim/ui';
+import { extractVideoMeta, formatMeta, type VideoMeta } from './lib/videoMeta';
 import {
   deleteSession,
   isIndexedDbAvailable,
   listSessions,
+  loadSession,
   saveSession,
-  type MetricsSession,
+  type SessionRecord,
+  type SessionSummary,
 } from './lib/sessionStore';
-import { extractVideoMeta, formatMeta, type VideoMeta } from './lib/videoMeta';
-import { buildMetricsReport } from './lib/reportExport';
+import { buildRaceReport } from './lib/reportExport';
 
 function downloadText(filename: string, mimeType: string, content: string) {
   const blob = new Blob([content], { type: mimeType });
@@ -28,42 +34,47 @@ function downloadText(filename: string, mimeType: string, content: string) {
   URL.revokeObjectURL(url);
 }
 
+const DEFAULT_RACE_CONFIG: RaceConfig = {
+  course: 'LCM',
+  raceDistance: 100,
+  strokePerLength: ['free', 'free'],
+  cycleDefinition: 'same-hand',
+  fifteenMetreReferenceConfirmed: true,
+  isRelayLeg: false,
+};
+
+function lengthCountForConfig(config: RaceConfig): number {
+  const raw = raceLengthCount(config);
+  return Number.isInteger(raw) ? Math.round(raw) : config.strokePerLength.length;
+}
+
+function insertSorted(tags: readonly RaceTag[], tag: RaceTag): RaceTag[] {
+  return [...tags, tag].sort((a, b) => a.time - b.time);
+}
+
 export default function MetricsApp() {
   const { rosterNames, activeWorkspace } = useSuiteWorkspace();
   const toast = useToast();
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
-  const [videoName, setVideoName] = useState<string | undefined>(undefined);
   const [videoMeta, setVideoMeta] = useState<VideoMeta | null>(null);
-  const [isAnalyzing, setIsAnalyzing] = useState(false);
-  const [data, setData] = useState<BiomechanicsData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [sessions, setSessions] = useState<MetricsSession[]>([]);
+  const [fpsOverride, setFpsOverride] = useState<number | null>(null);
+
+  const [swimmerName, setSwimmerName] = useState('');
+  const [raceConfig, setRaceConfig] = useState<RaceConfig>(DEFAULT_RACE_CONFIG);
+  const [setupConfirmed, setSetupConfirmed] = useState(false);
+  const [tags, setTags] = useState<RaceTag[]>([]);
+  const [videoFileName, setVideoFileName] = useState<string | undefined>(undefined);
+
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [sessionCreatedAt, setSessionCreatedAt] = useState<number | null>(null);
+  const [sessions, setSessions] = useState<SessionSummary[]>([]);
   const [showSessions, setShowSessions] = useState(false);
+  const [compareSessionId, setCompareSessionId] = useState<string>('');
+  const [compareData, setCompareData] = useState<{ label: string; config: RaceConfig; result: RaceAnalysisResult } | null>(
+    null
+  );
 
-  const [raceConfig, setRaceConfig] = useState<RaceConfig>({
-    swimmerName: '',
-    stroke: 'Freestyle',
-    distance: 100,
-    course: 'LCM',
-    videoStartTime: null,
-    videoEndTime: null,
-    manualRaceTime: null,
-    manualSplits: '',
-    manualDiveVelocity: null,
-    manualBreakoutDistance: null,
-    manualKickCount: null,
-  });
-
-  const [trackedEvents, setTrackedEvents] = useState<TrackingEvent[]>([]);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    return () => {
-      if (videoUrl) URL.revokeObjectURL(videoUrl);
-    };
-  }, [videoUrl]);
-
-  const refreshSessions = React.useCallback(() => {
+  const refreshSessions = useCallback(() => {
     if (!isIndexedDbAvailable()) return;
     listSessions().then(setSessions).catch(() => undefined);
   }, []);
@@ -72,14 +83,19 @@ export default function MetricsApp() {
     refreshSessions();
   }, [refreshSessions]);
 
-  // Best comparison time for the configured swimmer + event from the workspace.
+  useEffect(() => {
+    return () => {
+      if (videoUrl) URL.revokeObjectURL(videoUrl);
+    };
+  }, [videoUrl]);
+
   const comparisonTime = useMemo(() => {
-    if (!activeWorkspace || !raceConfig.swimmerName) return null;
-    const target = raceConfig.swimmerName.trim().toLowerCase();
-    const distanceStr = String(raceConfig.distance);
-    const strokeStr = raceConfig.stroke.toLowerCase();
-    const matches = (event: string) =>
-      event.toLowerCase().includes(strokeStr.slice(0, 4)) && event.includes(distanceStr);
+    if (!activeWorkspace || !swimmerName) return null;
+    const target = swimmerName.trim().toLowerCase();
+    const primaryStroke = raceConfig.strokePerLength[0];
+    const strokeSearch = primaryStroke === undefined ? '' : STROKE_LABEL[primaryStroke].toLowerCase().slice(0, 4);
+    const distanceStr = String(raceConfig.raceDistance);
+    const matches = (event: string) => event.toLowerCase().includes(strokeSearch) && event.includes(distanceStr);
     const candidates: string[] = [];
     for (const h of activeWorkspace.athleteHistory ?? []) {
       if (h.name.trim().toLowerCase() === target && matches(h.event)) candidates.push(h.time);
@@ -90,86 +106,193 @@ export default function MetricsApp() {
       }
     }
     return candidates.length > 0 ? candidates[0] : null;
-  }, [activeWorkspace, raceConfig.swimmerName, raceConfig.distance, raceConfig.stroke]);
+  }, [activeWorkspace, swimmerName, raceConfig.raceDistance, raceConfig.strokePerLength]);
 
   const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
-    setError(null);
-    setData(null);
     if (videoUrl) URL.revokeObjectURL(videoUrl);
     const url = URL.createObjectURL(file);
     setVideoUrl(url);
-    setVideoName(file.name);
+    setVideoFileName(file.name);
     setVideoMeta(null);
+    setFpsOverride(null);
+    setTags([]);
+    setSetupConfirmed(false);
+    setSessionId(null);
+    setSessionCreatedAt(null);
     extractVideoMeta(url)
       .then(setVideoMeta)
       .catch(() => undefined);
     toast.push('success', `Video "${file.name}" opened`);
   };
 
-  const handleSaveSession = async () => {
+  const measuredFps = videoMeta?.fps;
+  const effectiveFps = fpsOverride ?? measuredFps ?? null;
+  const frameSeconds = effectiveFps !== null ? 1 / effectiveFps : null;
+
+  const lengthCount = lengthCountForConfig(raceConfig);
+  const machine = useMemo(() => createTagStateMachine(raceConfig, tags), [raceConfig, tags]);
+  const result = useMemo(() => analyzeRace(raceConfig, tags), [raceConfig, tags]);
+  const fifteenMetreGateReason =
+    raceConfig.course === 'SCY' && !raceConfig.fifteenMetreReferenceConfirmed
+      ? '15 m reference not confirmed for SCY'
+      : undefined;
+
+  const handleSaveSession = useCallback(async () => {
     if (!isIndexedDbAvailable()) {
       toast.push('error', 'Session storage is unavailable in this browser.');
       return;
     }
-    const name = raceConfig.swimmerName?.trim()
-      ? `${raceConfig.swimmerName} — ${raceConfig.distance}${raceConfig.stroke}`
-      : `Session ${new Date().toLocaleString()}`;
-    const session: MetricsSession = {
-      id: `metrics_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
-      name,
-      savedAt: Date.now(),
-      videoName,
-      videoMeta: videoMeta ?? undefined,
+    if (!videoMeta) {
+      toast.push('error', 'Open a video before saving a session.');
+      return;
+    }
+    const now = Date.now();
+    const id = sessionId ?? `metrics_${now}_${Math.random().toString(36).slice(2, 7)}`;
+    const record: SessionRecord = {
+      id,
+      swimmerName,
+      video: {
+        fileName: videoFileName ?? 'unknown',
+        duration: videoMeta.duration,
+        width: videoMeta.width,
+        height: videoMeta.height,
+        fps: videoMeta.fps,
+      },
       config: raceConfig,
-      events: trackedEvents,
-      data,
+      tags,
+      createdAt: sessionCreatedAt ?? now,
+      updatedAt: now,
     };
     try {
-      await saveSession(session);
-      toast.push('success', `Saved session "${name}".`);
+      await saveSession(record);
+      setSessionId(id);
+      setSessionCreatedAt(record.createdAt);
+      toast.push('success', `Saved session for ${swimmerName || 'Unknown Swimmer'}.`);
       refreshSessions();
     } catch (err) {
       toast.push('error', `Save failed: ${err instanceof Error ? err.message : String(err)}`);
     }
-  };
+  }, [videoMeta, videoFileName, raceConfig, tags, swimmerName, sessionId, sessionCreatedAt, toast, refreshSessions]);
 
-  const handleLoadSession = (session: MetricsSession) => {
-    setRaceConfig(session.config);
-    setTrackedEvents(session.events ?? []);
-    setData(session.data ?? null);
-    setVideoMeta(session.videoMeta ?? null);
-    setVideoName(session.videoName);
-    setShowSessions(false);
-    toast.push('info', `Loaded "${session.name}". Re-open the video to view playback.`);
-  };
+  const handleLoadSession = useCallback(
+    async (id: string) => {
+      const loaded = await loadSession(id);
+      if (!loaded) return;
+      if (loaded.legacy) {
+        toast.push('info', `"${loaded.label}" ${loaded.reason}`);
+        return;
+      }
+      setSwimmerName(loaded.record.swimmerName);
+      setRaceConfig(loaded.record.config);
+      setTags(loaded.record.tags);
+      setVideoMeta({
+        duration: loaded.record.video.duration,
+        width: loaded.record.video.width,
+        height: loaded.record.video.height,
+        fps: loaded.record.video.fps,
+      });
+      setVideoFileName(loaded.record.video.fileName);
+      setSessionId(loaded.record.id);
+      setSessionCreatedAt(loaded.record.createdAt);
+      setSetupConfirmed(true);
+      setShowSessions(false);
+      toast.push('info', `Loaded "${loaded.record.swimmerName || 'Unnamed swimmer'}". Re-open "${loaded.record.video.fileName}" to view playback.`);
+    },
+    [toast],
+  );
 
-  const handleDeleteSession = async (id: string) => {
-    await deleteSession(id);
-    refreshSessions();
-    toast.push('success', 'Saved session deleted');
-  };
+  const handleDeleteSession = useCallback(
+    async (id: string) => {
+      await deleteSession(id);
+      if (sessionId === id) {
+        setSessionId(null);
+        setSessionCreatedAt(null);
+      }
+      if (compareSessionId === id) {
+        setCompareSessionId('');
+        setCompareData(null);
+      }
+      refreshSessions();
+      toast.push('success', 'Saved session deleted');
+    },
+    [sessionId, compareSessionId, refreshSessions, toast],
+  );
 
-  const handleExportReport = () => {
-    if (!data) return;
-    const report = buildMetricsReport(raceConfig, data, comparisonTime);
+  const handleSelectCompareSession = useCallback(
+    (id: string) => {
+      setCompareSessionId(id);
+      if (!id) {
+        setCompareData(null);
+        return;
+      }
+      loadSession(id)
+        .then((loaded) => {
+          if (!loaded) return;
+          if (loaded.legacy) {
+            toast.push('info', 'That session used an earlier schema and cannot be compared.');
+            setCompareData(null);
+            return;
+          }
+          setCompareData({
+            label: loaded.record.swimmerName || 'Unnamed swimmer',
+            config: loaded.record.config,
+            result: loaded.analysis,
+          });
+        })
+        .catch(() => toast.push('error', 'Failed to load session for comparison.'));
+    },
+    [toast],
+  );
+
+  const handleExportReport = useCallback(() => {
+    const report = buildRaceReport({ swimmerName, config: raceConfig, result });
     downloadText(report.filename, report.mimeType, report.content);
     toast.push('success', `Exported ${report.filename}`);
-  };
+  }, [swimmerName, raceConfig, result, toast]);
 
-  const runLocalAnalysis = async () => {
-    if (!videoUrl) return;
-    setIsAnalyzing(true);
-    try {
-      await new Promise(resolve => setTimeout(resolve, 800));
-      setData(calculateMetricsLocal(raceConfig, trackedEvents));
-    } catch {
-      setError('Failed to calculate metrics.');
-    } finally {
-      setIsAnalyzing(false);
+  const handleSequentialKey = useCallback(
+    (key: OperatorKey, time: number) => {
+      if (!setupConfirmed) return;
+      if (key === 'A' && fifteenMetreGateReason !== undefined) {
+        toast.push('info', fifteenMetreGateReason);
+        return;
+      }
+      const pressResult = machine.press(key, time);
+      if (pressResult.status === 'illegal') {
+        toast.push('error', pressResult.reason);
+        return;
+      }
+      setTags((prev) => insertSorted(prev, pressResult.tag));
+    },
+    [setupConfirmed, fifteenMetreGateReason, machine, toast],
+  );
+
+  const handleOneShotKey = useCallback(
+    (kind: 'Signal' | 'Flags' | 'Kick', time: number) => {
+      if (!setupConfirmed) return;
+      let lengthIndex: number | undefined;
+      if (kind === 'Kick') {
+        lengthIndex = machine.nextS().lengthIndex ?? machine.nextD().lengthIndex;
+      } else if (kind === 'Flags') {
+        lengthIndex = lengthCount;
+      }
+      const tag: RaceTag = lengthIndex === undefined ? { kind, time } : { kind, time, lengthIndex };
+      setTags((prev) => insertSorted(prev, tag));
+    },
+    [setupConfirmed, machine, lengthCount],
+  );
+
+  const handleUndo = useCallback(() => {
+    if (!setupConfirmed) return;
+    const undoResult = machine.undo();
+    if (undoResult.status === 'illegal') {
+      toast.push('info', undoResult.reason);
+      return;
     }
-  };
+    setTags((prev) => prev.filter((tag) => tag !== undoResult.tag));
+  }, [setupConfirmed, machine, toast]);
 
   return (
     <div className="flex flex-col h-[calc(100vh-8rem)] min-h-[480px] overflow-hidden rounded-lg border border-theme surface-card">
@@ -178,59 +301,71 @@ export default function MetricsApp() {
           <h2 className="text-ui-label font-black uppercase tracking-widest text-[var(--text-primary)]">
             Swim Metrics
           </h2>
-          <p className="text-ui-caption text-theme-muted">Video analysis & split metrics</p>
+          <p className="text-ui-caption text-theme-muted">Frame-accurate race tagging & analysis</p>
         </div>
         <div className="flex items-center gap-2">
           <button
             type="button"
-            onClick={() => setShowSessions(s => !s)}
-            className="px-3 py-2 rounded text-ui-micro font-bold uppercase tracking-widest flex items-center gap-2 border border-theme-soft nav-tab-inactive hover:text-[var(--text-primary)]"
+            onClick={() => setShowSessions((s) => !s)}
+            className="px-3 py-2 rounded-lg text-ui-micro font-bold uppercase tracking-widest flex items-center gap-2 border border-theme-soft nav-tab-inactive hover:text-[var(--text-primary)] transition-colors"
             title="Saved sessions"
           >
             <FolderOpen size={14} />
             Sessions{sessions.length ? ` (${sessions.length})` : ''}
           </button>
-          {videoUrl ? (
+          {videoUrl && setupConfirmed ? (
             <button
               type="button"
               onClick={() => void handleSaveSession()}
-              className="px-3 py-2 rounded text-ui-micro font-bold uppercase tracking-widest flex items-center gap-2 border border-theme-soft nav-tab-inactive hover:text-[var(--text-primary)]"
+              className="px-3 py-2 rounded-lg text-ui-micro font-bold uppercase tracking-widest flex items-center gap-2 border border-theme-soft nav-tab-inactive hover:text-[var(--text-primary)] transition-colors"
               title="Save this analysis session"
             >
               <Save size={14} />
               Save
             </button>
           ) : null}
-          {data ? (
+          {setupConfirmed ? (
             <button
               type="button"
               onClick={handleExportReport}
-              className="px-3 py-2 rounded text-ui-micro font-bold uppercase tracking-widest flex items-center gap-2 border border-theme-soft nav-tab-inactive hover:text-[var(--text-primary)]"
+              className="px-3 py-2 rounded-lg text-ui-micro font-bold uppercase tracking-widest flex items-center gap-2 border border-theme-soft nav-tab-inactive hover:text-[var(--text-primary)] transition-colors"
               title="Export metrics report as CSV"
             >
               <Download size={14} />
               Report
             </button>
           ) : null}
-          <input type="file" accept="video/*" className="hidden" ref={fileInputRef} onChange={handleFileChange} />
-          <button
-            type="button"
-            onClick={() => fileInputRef.current?.click()}
-            className="px-3 py-2 btn-primary rounded text-ui-micro font-bold uppercase tracking-widest flex items-center gap-2"
+          {videoUrl && setupConfirmed ? (
+            <button
+              type="button"
+              onClick={() => setSetupConfirmed(false)}
+              className="px-3 py-2 rounded-lg text-ui-micro font-bold uppercase tracking-widest flex items-center gap-2 border border-theme-soft nav-tab-inactive hover:text-[var(--text-primary)] transition-colors"
+            >
+              <Settings2 size={14} />
+              Re-configure
+            </button>
+          ) : null}
+          <input type="file" accept="video/*" className="hidden" id="metrics-file-input" onChange={handleFileChange} />
+          <label
+            htmlFor="metrics-file-input"
+            className="px-3 py-2 btn-primary rounded-lg text-ui-micro font-bold uppercase tracking-widest flex items-center gap-2 cursor-pointer"
           >
             <UploadCloud size={14} />
             Open Video
-          </button>
+          </label>
         </div>
       </div>
 
       {showSessions ? (
-        <div className="mx-4 mt-4 border border-theme-soft rounded-lg overflow-hidden">
+        <div className="mx-4 mt-4 border border-theme-soft rounded-lg overflow-hidden shrink-0">
           <div className="flex items-center justify-between px-3 py-2 bg-[var(--surface-strong)]">
-            <span className="text-ui-micro font-bold uppercase tracking-widest text-theme-muted">
-              Saved Sessions
-            </span>
-            <button type="button" onClick={() => setShowSessions(false)} className="p-1 theme-hover-row rounded" aria-label="Close">
+            <span className="text-ui-micro font-bold uppercase tracking-widest text-theme-muted">Saved Sessions</span>
+            <button
+              type="button"
+              onClick={() => setShowSessions(false)}
+              className="p-1 theme-hover-row rounded"
+              aria-label="Close"
+            >
               <X size={14} />
             </button>
           </div>
@@ -238,15 +373,20 @@ export default function MetricsApp() {
             <div className="p-4 text-ui-caption text-theme-muted">No saved sessions yet.</div>
           ) : (
             <ul className="max-h-48 overflow-y-auto custom-scrollbar divide-y divide-[var(--border-soft)]">
-              {sessions.map(s => (
+              {sessions.map((s) => (
                 <li key={s.id} className="flex items-center gap-2 px-3 py-2 text-ui-caption">
                   <button
                     type="button"
-                    onClick={() => handleLoadSession(s)}
+                    onClick={() => void handleLoadSession(s.id)}
                     className="flex-1 text-left hover:text-[var(--text-accent)]"
                   >
-                    <span className="font-bold">{s.name}</span>
-                    <span className="text-theme-muted ml-2">{new Date(s.savedAt).toLocaleString()}</span>
+                    <span className="font-bold">{s.label}</span>
+                    {s.legacy ? (
+                      <span className="ml-2 px-1.5 py-0.5 rounded text-ui-micro uppercase tracking-widest bg-[var(--surface-muted)] text-theme-muted">
+                        Legacy
+                      </span>
+                    ) : null}
+                    <span className="text-theme-muted ml-2">{s.updatedAt ? new Date(s.updatedAt).toLocaleString() : ''}</span>
                   </button>
                   <button
                     type="button"
@@ -263,192 +403,93 @@ export default function MetricsApp() {
         </div>
       ) : null}
 
-      {error ? (
-        <div className="mx-4 mt-4 p-3 toast-undo rounded text-ui-caption">{error}</div>
-      ) : null}
-
       <main className="flex-1 flex overflow-hidden flex-col lg:flex-row min-h-0">
         <div className="flex-1 lg:flex-[1.8] relative bg-[var(--surface-muted)] flex flex-col items-center justify-center border-b lg:border-b-0 lg:border-r border-theme-soft overflow-hidden">
-          {isAnalyzing ? (
-            <div className="flex flex-col items-center gap-4 p-8">
-              <div className="w-12 h-12 border-2 border-[var(--text-accent)] border-t-transparent rounded-full animate-spin" />
-              <p className="text-ui-caption uppercase tracking-widest text-theme-muted font-bold">
-                Calculating metrics…
-              </p>
+          <VideoPlayer
+            videoUrl={videoUrl}
+            tags={tags}
+            measuredFps={measuredFps}
+            fpsOverride={fpsOverride}
+            onFpsOverrideChange={setFpsOverride}
+            onSequentialKey={handleSequentialKey}
+            onOneShotKey={handleOneShotKey}
+            onUndo={handleUndo}
+          />
+          {videoUrl && setupConfirmed ? (
+            <div className="absolute top-4 left-4 z-30 w-64 max-h-[calc(100%-2rem)] overflow-y-auto custom-scrollbar">
+              <TagDeck machine={machine} tags={tags} lengthCount={lengthCount} fifteenMetreGateReason={fifteenMetreGateReason} />
             </div>
-          ) : (
-            <VideoPlayer
-              videoUrl={videoUrl}
-              data={data}
-              goalTime={raceConfig.distance === 100 ? 50.0 : raceConfig.distance === 50 ? 23.0 : 120.0}
-              worldRecordTime={raceConfig.distance === 100 ? 46.86 : raceConfig.distance === 50 ? 20.91 : 110.0}
-              startTime={raceConfig.videoStartTime}
-              endTime={raceConfig.videoEndTime}
-              onMarkStart={t => setRaceConfig(c => ({ ...c, videoStartTime: t }))}
-              onMarkEnd={t => setRaceConfig(c => ({ ...c, videoEndTime: t }))}
-              onTrackingUpdate={setTrackedEvents}
-            />
-          )}
+          ) : null}
         </div>
 
         <div className="flex-1 lg:flex-[1.2] xl:max-w-md p-4 sm:p-6 flex flex-col gap-4 overflow-y-auto custom-scrollbar bg-[var(--surface)]">
-          {data ? (
-            <>
-              <div className="flex items-center justify-between border-b border-theme-soft pb-3">
-                <div>
-                  <div className="text-ui-micro text-theme-muted uppercase tracking-widest font-bold mb-1">
-                    {raceConfig.course} {raceConfig.distance}m {raceConfig.stroke}
-                  </div>
-                  <h3 className="text-lg font-bold text-[var(--text-primary)]">
-                    {raceConfig.swimmerName || 'Unknown Swimmer'}
-                  </h3>
-                  {comparisonTime ? (
-                    <div className="text-ui-caption text-theme-muted mt-0.5">
-                      Workspace best: <span className="font-mono text-[var(--text-accent)]">{comparisonTime}</span>
-                    </div>
-                  ) : null}
-                  {videoMeta ? (
-                    <div className="text-ui-caption text-theme-muted mt-0.5 font-mono">{formatMeta(videoMeta)}</div>
-                  ) : null}
-                </div>
-                <button
-                  type="button"
-                  onClick={() => setData(null)}
-                  className="text-ui-micro px-3 py-1.5 rounded border border-theme-soft theme-hover-row uppercase font-bold tracking-widest"
-                >
-                  Re-configure
-                </button>
-              </div>
-              <MetricsDashboard data={data} />
-            </>
-          ) : videoUrl ? (
-            <RaceSetupForm
-              config={raceConfig}
-              rosterNames={rosterNames}
-              onChange={setRaceConfig}
-              onAnalyze={runLocalAnalysis}
-              isAnalyzing={isAnalyzing}
-            />
-          ) : (
+          {!videoUrl ? (
             <EmptyState
               className="h-full min-h-[280px] border-dashed bg-[var(--surface-muted)]"
               icon={<UploadCloud size={28} />}
               eyebrow="Metrics"
               title="Upload a race video to begin"
-              description="Open a local video, mark start and finish, then run split and velocity calculations on this device."
+              description="Open a local video, configure the race, then tag it frame by frame with the keyboard."
               actionLabel="Open Video"
-              onAction={() => fileInputRef.current?.click()}
+              onAction={() => document.getElementById('metrics-file-input')?.click()}
             />
+          ) : !setupConfirmed ? (
+            <RaceSetupForm
+              config={raceConfig}
+              swimmerName={swimmerName}
+              rosterNames={rosterNames}
+              onSwimmerNameChange={setSwimmerName}
+              onChange={setRaceConfig}
+              onConfirm={() => setSetupConfirmed(true)}
+            />
+          ) : (
+            <>
+              <div className="flex items-center justify-between border-b border-theme-soft pb-3">
+                <div>
+                  <div className="text-ui-micro text-theme-muted uppercase tracking-widest font-bold mb-1">
+                    {raceConfig.course} {raceConfig.raceDistance}
+                    {raceConfig.course === 'SCY' ? 'y' : 'm'}
+                  </div>
+                  <h3 className="text-lg font-bold text-[var(--text-primary)]">{swimmerName || 'Unknown Swimmer'}</h3>
+                  {comparisonTime ? (
+                    <div className="text-ui-caption text-theme-muted mt-0.5">
+                      Workspace best: <span className="font-mono text-[var(--text-accent)]">{comparisonTime}</span>
+                    </div>
+                  ) : null}
+                  {videoMeta ? <div className="text-ui-caption text-theme-muted mt-0.5 font-mono">{formatMeta(videoMeta)}</div> : null}
+                </div>
+              </div>
+              <TagTable config={raceConfig} tags={tags} frameSeconds={frameSeconds} onChange={setTags} />
+              <MetricsDashboard data={result} />
+              {sessions.filter((s) => !s.legacy).length > 0 ? (
+                <section className="panel p-4 border border-theme-soft rounded-xl">
+                  <label className="label-caps flex items-center gap-1.5 mb-1.5">Compare against saved session</label>
+                  <select
+                    value={compareSessionId}
+                    onChange={(e) => handleSelectCompareSession(e.target.value)}
+                    className="glass-input w-full"
+                  >
+                    <option value="">Select a session…</option>
+                    {sessions
+                      .filter((s) => !s.legacy)
+                      .map((s) => (
+                        <option key={s.id} value={s.id}>
+                          {s.label}
+                        </option>
+                      ))}
+                  </select>
+                </section>
+              ) : null}
+              {compareData ? (
+                <SessionComparePanel
+                  left={{ label: swimmerName || 'Current', config: raceConfig, result }}
+                  right={compareData}
+                />
+              ) : null}
+            </>
           )}
         </div>
       </main>
     </div>
   );
-}
-
-function calculateMetricsLocal(config: RaceConfig, events: TrackingEvent[]): BiomechanicsData {
-  const diveEvents = events.filter(e => e.type === 'dive').sort((a, b) => a.time - b.time);
-  const finishEvents = events.filter(e => e.type === 'finish').sort((a, b) => a.time - b.time);
-
-  const runStart = config.videoStartTime ?? (diveEvents.length > 0 ? diveEvents[0].time : 0);
-  const runEnd = config.videoEndTime ?? (finishEvents.length > 0 ? finishEvents[0].time : runStart + 50);
-
-  const duration = config.manualRaceTime ?? Math.max(0.1, runEnd - runStart);
-  const dist = config.distance || 100;
-  const avgVelocity = dist / duration;
-  const poolLen = config.course === 'SCY' || config.course === 'SCM' ? 25 : 50;
-  const manualSplitsArr = config.manualSplits.split(',').map(s => parseFloat(s.trim())).filter(s => !isNaN(s));
-
-  const breakoutEvents = events.filter(e => e.type === 'breakout').sort((a, b) => a.time - b.time);
-  const m15Events = events.filter(e => e.type === '15m').sort((a, b) => a.time - b.time);
-  const kickEvents = events.filter(e => e.type === 'kick').sort((a, b) => a.time - b.time);
-  const strokeEvents = events.filter(e => e.type === 'stroke').sort((a, b) => a.time - b.time);
-  const turnEvents = events.filter(e => e.type === 'turn').sort((a, b) => a.time - b.time);
-
-  let breakDist =
-    config.manualBreakoutDistance ??
-    (config.stroke === 'Breaststroke' ? 8.5 : config.stroke === 'Backstroke' ? 12 : 10);
-
-  let vel0to15 = avgVelocity * 1.3;
-  let breakTime = breakDist / vel0to15;
-  if (breakoutEvents.length > 0 && runStart > 0) {
-    breakTime = breakoutEvents[0].time - runStart;
-    vel0to15 = breakDist / breakTime;
-  }
-
-  const diveVel = config.manualDiveVelocity ?? Math.max(vel0to15 * 1.3, avgVelocity * 1.8);
-  if (m15Events.length > 0 && runStart > 0) {
-    vel0to15 = 15 / (m15Events[0].time - runStart);
-  }
-
-  let uwtTempo = config.stroke === 'Breaststroke' ? 0 : 160;
-  if (kickEvents.length > 1) {
-    let avgKickTime = 0;
-    for (let i = 1; i < kickEvents.length; i++) {
-      avgKickTime += kickEvents[i].time - kickEvents[i - 1].time;
-    }
-    avgKickTime /= kickEvents.length - 1;
-    uwtTempo = 60 / avgKickTime;
-  }
-
-  let strokeRate = config.stroke === 'Butterfly' ? 45 : 55;
-  if (strokeEvents.length > 1) {
-    let avgStrokeTime = 0;
-    for (let i = 1; i < strokeEvents.length; i++) {
-      avgStrokeTime += strokeEvents[i].time - strokeEvents[i - 1].time;
-    }
-    avgStrokeTime /= strokeEvents.length - 1;
-    strokeRate = 60 / avgStrokeTime;
-  }
-
-  const kicksCountVal =
-    typeof config.manualKickCount === 'number'
-      ? config.manualKickCount
-      : kickEvents.length > 0
-        ? kickEvents.length
-        : config.stroke === 'Breaststroke'
-          ? 1
-          : 6;
-
-  const lapEndTimes: number[] = [];
-  for (let i = 1; i < turnEvents.length; i += 2) {
-    lapEndTimes.push(turnEvents[i].time);
-  }
-  if (finishEvents.length > 0) lapEndTimes.push(finishEvents[0].time);
-  else if (runEnd > runStart) lapEndTimes.push(runEnd);
-
-  const splits: BiomechanicsData['splits'] = [];
-  if (lapEndTimes.length > 0) {
-    let prevTime = runStart;
-    for (let i = 0; i < lapEndTimes.length; i++) {
-      let lapTime = lapEndTimes[i] - prevTime;
-      if (manualSplitsArr[i]) lapTime = manualSplitsArr[i];
-      splits.push({ lap: i + 1, distance: poolLen, time: Math.max(0.1, lapTime) });
-      prevTime = lapEndTimes[i];
-    }
-  } else {
-    const numLaps = Math.max(1, Math.ceil(dist / poolLen));
-    for (let i = 1; i <= numLaps; i++) {
-      let lapTime = (poolLen / avgVelocity) * (i === 1 ? 0.9 : 1.05);
-      if (manualSplitsArr[i - 1]) lapTime = manualSplitsArr[i - 1];
-      splits.push({ lap: i, distance: poolLen, time: lapTime });
-    }
-  }
-
-  return {
-    splits,
-    avgVelocity,
-    strokeRate,
-    distancePerStroke: avgVelocity * (60 / strokeRate),
-    fatigueIndex: 8.4,
-    underwaterKickTempo: uwtTempo,
-    diveVelocity: diveVel,
-    diveDistance: breakDist + 2.5,
-    vel0to15m: vel0to15,
-    vel15mToWall: avgVelocity * 0.92,
-    firstLengthVel: avgVelocity * 1.15,
-    breakoutDistance: breakDist,
-    breakoutTime: breakTime,
-    kicksCount: kicksCountVal,
-  };
 }

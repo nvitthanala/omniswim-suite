@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useState } from 'react';
+import { Suspense, useEffect, useRef, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion } from 'motion/react';
 import { AppletSkeleton, useToast } from '@omniswim/ui';
@@ -15,6 +15,7 @@ import LoginPage from './pages/LoginPage';
 import SharePage from './pages/SharePage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import SwimCloudWindow from './components/SwimCloudWindow';
+import CommandPalette from './components/CommandPalette';
 import { AuthProvider } from './context/AuthContext';
 import { ManagerAppLazy, MatrixAppLazy, MetricsAppLazy, prefetchLastApplet } from './lib/appletPrefetch';
 
@@ -36,17 +37,39 @@ function WorkspaceRouteSync() {
   const workspaceParam = searchParams.get('workspace');
   const genderParam = searchParams.get('gender');
 
+  // The URL→state effects below read the current selection through refs rather than
+  // through their dependency arrays. Otherwise they re-fire whenever the selection changes
+  // (e.g. clicking a sidebar row) and, on the transient render where state leads the URL,
+  // revert the selection back to the still-stale URL param — fighting the state→URL effect
+  // that is simultaneously pushing the new selection into the URL. The two writers then swap
+  // the two values every render, causing a continuous selection/URL oscillation (and a
+  // snapshot-fetch storm). Keyed only on the params, these effects fire solely on genuine
+  // URL changes (shared links, back/forward), leaving the state→URL effect as the single
+  // authoritative URL writer.
+  const activeWorkspaceIdRef = useRef(activeWorkspaceId);
+  activeWorkspaceIdRef.current = activeWorkspaceId;
+  const setActiveWorkspaceIdRef = useRef(setActiveWorkspaceId);
+  setActiveWorkspaceIdRef.current = setActiveWorkspaceId;
+  const activeGenderRef = useRef(activeGender);
+  activeGenderRef.current = activeGender;
+  const setActiveGenderRef = useRef(setActiveGender);
+  setActiveGenderRef.current = setActiveGender;
+
   useEffect(() => {
-    if (workspaceParam && workspaces.some(w => w.id === workspaceParam) && workspaceParam !== activeWorkspaceId) {
-      setActiveWorkspaceId(workspaceParam);
+    if (
+      workspaceParam &&
+      workspaces.some(w => w.id === workspaceParam) &&
+      workspaceParam !== activeWorkspaceIdRef.current
+    ) {
+      setActiveWorkspaceIdRef.current(workspaceParam);
     }
-  }, [workspaceParam, workspaces, activeWorkspaceId, setActiveWorkspaceId]);
+  }, [workspaceParam, workspaces]);
 
   useEffect(() => {
     if (genderParam === Gender.MEN || genderParam === Gender.WOMEN) {
-      if (genderParam !== activeGender) setActiveGender(genderParam);
+      if (genderParam !== activeGenderRef.current) setActiveGenderRef.current(genderParam);
     }
-  }, [genderParam, activeGender, setActiveGender]);
+  }, [genderParam]);
 
   useEffect(() => {
     if (!activeWorkspaceId) return;
@@ -71,7 +94,20 @@ function ShellLayout() {
   const { preferences, toggleThemeMode } = useSuitePreferences();
   const toast = useToast();
   const [showScoringModal, setShowScoringModal] = useState(false);
+  const [showCommandPalette, setShowCommandPalette] = useState(false);
   const { isLoading, error, activeWorkspace, updateWorkspace } = useSuiteWorkspace();
+
+  // Global Ctrl+K / Cmd+K toggle for the command palette.
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setShowCommandPalette(prev => !prev);
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, []);
 
   const path = location.pathname;
   const showWorkspaceChrome = path === '/manager' || path === '/matrix';
@@ -101,6 +137,7 @@ function ShellLayout() {
         onThemeToggle={toggleThemeMode}
         showWorkspaceControls={showWorkspaceControls}
         onOpenScoringSettings={showWorkspaceControls ? () => setShowScoringModal(true) : undefined}
+        onOpenCommandPalette={() => setShowCommandPalette(true)}
       />
 
       {error ? (
@@ -160,6 +197,10 @@ function ShellLayout() {
               ...(activeWorkspace.womenResults ?? []),
             ],
           })}
+          scoringView={activeWorkspace.scoringView}
+          onScoringViewChange={view => {
+            void updateWorkspace({ scoringView: view });
+          }}
           onSave={settings => {
             void updateWorkspace({ scoringSettings: settings });
             toast.push('success', 'Scoring settings saved');
@@ -168,6 +209,8 @@ function ShellLayout() {
           onClose={() => setShowScoringModal(false)}
         />
       )}
+
+      <CommandPalette open={showCommandPalette} onClose={() => setShowCommandPalette(false)} />
 
       <SwimCloudWindow />
     </div>

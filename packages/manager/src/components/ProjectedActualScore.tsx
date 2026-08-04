@@ -26,7 +26,7 @@ function ScoreRow({
 }) {
   if (value == null) return null;
   return (
-    <div className="flex items-center justify-between gap-4 text-[10px] font-mono">
+    <div className="flex items-center justify-between gap-4 text-ui-caption font-mono">
       <span className={`uppercase tracking-widest ${muted ? 'text-theme-muted' : 'text-theme-secondary'}`}>
         {label}
       </span>
@@ -53,7 +53,7 @@ export default function ProjectedActualScore({
 
   if (compact) {
     return (
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[9px] font-mono uppercase tracking-widest">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-ui-micro font-mono uppercase tracking-widest">
         {actual != null ? (
           <span className="text-theme-secondary">
             Actual <span className="text-[var(--text-primary)] font-bold">{actual.toFixed(1)}</span>
@@ -76,23 +76,23 @@ export default function ProjectedActualScore({
   return (
     <div className="surface-overlay border border-theme-soft rounded-lg p-3 space-y-2">
       <div className="flex items-center justify-between gap-2 mb-1">
-        <h5 className="text-[9px] font-bold uppercase tracking-widest text-theme-secondary">
+        <h5 className="text-ui-micro font-bold uppercase tracking-widest text-theme-secondary">
           Team score summary
         </h5>
         {eventThrough != null ? (
-          <span className="text-[8px] text-theme-muted uppercase">Through event {eventThrough}</span>
+          <span className="text-ui-micro text-theme-muted uppercase">Through event {eventThrough}</span>
         ) : null}
       </div>
       <ScoreRow label="Actual" value={actual} />
       <ScoreRow label="Baseline" value={baseline} muted />
       <ScoreRow label="Projected" value={projected} highlight />
       {actual == null && baseline == null ? (
-        <p className="text-[9px] text-theme-muted italic leading-relaxed">
+        <p className="text-ui-micro text-theme-muted italic leading-relaxed">
           No official PDF totals — showing computed scores only.
         </p>
       ) : null}
       {delta != null && Math.abs(delta) > 0.05 ? (
-        <div className="pt-2 border-t border-theme-soft flex justify-between text-[10px] font-mono">
+        <div className="pt-2 border-t border-theme-soft flex justify-between text-ui-caption font-mono">
           <span className="text-theme-secondary uppercase tracking-widest">
             Delta vs {actual != null ? 'actual' : 'baseline'}
           </span>

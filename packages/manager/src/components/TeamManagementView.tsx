@@ -3,20 +3,27 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useMemo, useState, useCallback } from 'react';
-import { RefreshCw, UserMinus } from 'lucide-react';
+import React, { useMemo, useState, useCallback, useEffect, useRef } from 'react';
+import { RefreshCw, Undo2, UserMinus } from 'lucide-react';
 import { Gender, Recruit, ScoringSettings, Workspace } from '@omniswim/core/types';
 import type { ScoringBundle } from '@omniswim/core/lib/useWorkspaceScoring';
 import type { AthleteCreditedSwim } from '@omniswim/core/lib/scorerRoster';
-import RecruitForm, { type RecruitAthletePrefill } from './RecruitForm';
-import TeamRosterPanel from './TeamRosterPanel';
-import IndRelayManagementView from './IndRelayManagementView';
-import RosterScoringSetup from './RosterScoringSetup';
-import AthleteHistoryImportPanel from './AthleteHistoryImportPanel';
-import type { TeamManagementViewId } from './TeamManagementSubTabs';
+import { editCreditedSwim, removeCreditedSwim } from '@omniswim/core/lib/swimEditor';
+import {
+  ATHLETE_JUMP_EVENT,
+  consumePendingAthleteJump,
+  type AthleteJumpDetail,
+} from '@omniswim/core/lib/athleteJumpSignal';
+import { useToast } from '@omniswim/ui';
+import type { RecruitAthletePrefill } from './RecruitForm';
+import type { EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
+import RosterWizardShell, { type RosterWizardStepId } from './RosterWizardShell';
+import RosterSourceStep from './RosterSourceStep';
+import RosterLineupStep from './RosterLineupStep';
+import RosterRelayStep from './RosterRelayStep';
+import RosterOptimizeStep from './RosterOptimizeStep';
 
 type Props = {
-  view: TeamManagementViewId;
   workspace: Workspace;
   gender: Gender;
   scoringBundle: ScoringBundle;
@@ -29,10 +36,10 @@ type Props = {
   onReloadScoring: () => void;
   onAddRecruit: (recruit: Recruit) => void;
   onUpdate: (patch: Partial<Workspace>) => void;
+  onRequestDeleteSwimmer?: (name: string) => void;
 };
 
 export default function TeamManagementView({
-  view,
   workspace,
   gender,
   scoringBundle,
@@ -45,7 +52,22 @@ export default function TeamManagementView({
   onReloadScoring,
   onAddRecruit,
   onUpdate,
+  onRequestDeleteSwimmer,
 }: Props) {
+  const toast = useToast();
+  const [lastSwimEdit, setLastSwimEdit] = useState<{
+    inverse: Partial<Workspace>;
+    description: string;
+  } | null>(null);
+
+  // Compose-ref (BUG 3.2): build each credited-swim patch against the freshest
+  // workspace (prop composed forward with applied patches) so rapid successive
+  // deletes/edits don't clobber one another via a stale full-array replacement.
+  const workspaceRef = useRef(workspace);
+  useEffect(() => {
+    workspaceRef.current = workspace;
+  }, [workspace]);
+
   const projectedByTeam = useMemo(() => {
     const map = new Map<string, number>();
     for (const t of scoringBundle.sortedTeams) {
@@ -54,206 +76,236 @@ export default function TeamManagementView({
     return map;
   }, [scoringBundle.teamStyleSignature]);
 
-  const teams = scoringBundle.sortedTeams.map(t => t.teamName);
+  const teams = useMemo(() => {
+    return [...scoringBundle.sortedTeams.map(t => t.teamName)].sort((a, b) => a.localeCompare(b));
+  }, [scoringBundle.teamStyleSignature]);
   const [selectedTeam, setSelectedTeam] = useState<string>('');
   const [recruitPrefill, setRecruitPrefill] = useState<RecruitAthletePrefill | null>(null);
+  const [rosterStep, setRosterStep] = useState<RosterWizardStepId>('source');
+  const [jumpAthleteName, setJumpAthleteName] = useState<string | null>(null);
+  const [jumpAthleteKey, setJumpAthleteKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!selectedTeam) return;
+    if (teams.includes(selectedTeam)) return;
+    setSelectedTeam('');
+  }, [teams, selectedTeam, gender]);
 
   const handleAthleteSelect = useCallback((athlete: RecruitAthletePrefill | null) => {
     setRecruitPrefill(athlete);
+    if (athlete?.name) {
+      setJumpAthleteName(athlete.name);
+      setJumpAthleteKey(null);
+    }
   }, []);
+
+  // Checklist / arbitrage jump: carry the roster key when known so the roster panel
+  // can match by key first (BUG 1 hardening) and fall back to canonical name.
+  const handleJumpAthlete = useCallback(
+    (name: string, key?: string) => {
+      setRecruitPrefill({ name, team: selectedTeam, classYear: '' });
+      setJumpAthleteName(name);
+      setJumpAthleteKey(key ?? null);
+    },
+    [selectedTeam]
+  );
+
+  const handleJumpHandled = useCallback(() => {
+    setJumpAthleteName(null);
+    setJumpAthleteKey(null);
+  }, []);
+
+  // Cross-applet jump (shell command palette → athleteJumpSignal). Pick up the
+  // stored request on mount and listen for live events while mounted.
+  const pendingJumpRef = useRef<AthleteJumpDetail | null>(null);
+  const [jumpSignalTick, setJumpSignalTick] = useState(0);
+  useEffect(() => {
+    const pending = consumePendingAthleteJump();
+    if (pending) {
+      pendingJumpRef.current = pending;
+      setJumpSignalTick(t => t + 1);
+    }
+    const onJump = (e: Event) => {
+      consumePendingAthleteJump(); // clear storage so it can't replay on a later mount
+      const detail = (e as CustomEvent<AthleteJumpDetail>).detail;
+      if (detail?.name) {
+        pendingJumpRef.current = detail;
+        setJumpSignalTick(t => t + 1);
+      }
+    };
+    window.addEventListener(ATHLETE_JUMP_EVENT, onJump);
+    return () => window.removeEventListener(ATHLETE_JUMP_EVENT, onJump);
+  }, []);
+
+  // Consume only once the scored team list exists and gender has propagated —
+  // TeamRosterPanel resolves the jump against teamRows and treats a miss as a
+  // hard "could not open" (clears selection + toasts), so firing early would
+  // misreport every palette jump on a cold mount.
+  useEffect(() => {
+    const detail = pendingJumpRef.current;
+    if (!detail || teams.length === 0) return;
+    if (detail.gender && detail.gender !== gender) return;
+    pendingJumpRef.current = null;
+    if (detail.team && teams.includes(detail.team)) setSelectedTeam(detail.team);
+    setRosterStep('lineup');
+    setRecruitPrefill({ name: detail.name, team: detail.team ?? '', classYear: '' });
+    setJumpAthleteName(detail.name);
+    setJumpAthleteKey(null);
+  }, [jumpSignalTick, teams, gender]);
+
+  const applySwimPatch = (
+    build: (ws: Workspace) => { patch: Partial<Workspace>; inverse: Partial<Workspace>; description: string }
+  ) => {
+    const result = build(workspaceRef.current);
+    workspaceRef.current = { ...workspaceRef.current, ...result.patch };
+    onUpdate(result.patch);
+    setLastSwimEdit({ inverse: result.inverse, description: result.description });
+    toast.push('success', result.description);
+  };
 
   const handleDeleteSwim = (swim: AthleteCreditedSwim) => {
     if (swim.isRecruit) {
-      onUpdate({
-        recruits: (workspace.recruits ?? []).filter(r => r.id !== swim.id),
+      applySwimPatch(ws => {
+        const baseRecruits = ws.recruits ?? [];
+        return {
+          patch: { recruits: baseRecruits.filter(r => r.id !== swim.id) },
+          inverse: { recruits: baseRecruits },
+          description: `Remove recruit entry (${swim.event})`,
+        };
       });
       return;
     }
-    const field = gender === Gender.MEN ? 'menResults' : 'womenResults';
-    const arr = workspace[field] ?? [];
-    onUpdate({
-      [field]: arr.filter(r => r.id !== swim.id),
-    });
+    applySwimPatch(ws => removeCreditedSwim(ws, gender, swim.id));
+  };
+
+  const handleEditSwim = (swim: AthleteCreditedSwim, changes: EditCreditedSwimValues) => {
+    applySwimPatch(ws => editCreditedSwim(ws, gender, swim.id, changes));
+  };
+
+  const handleUndoSwimEdit = () => {
+    if (!lastSwimEdit) return;
+    workspaceRef.current = { ...workspaceRef.current, ...lastSwimEdit.inverse };
+    onUpdate(lastSwimEdit.inverse);
+    toast.push('success', `Undid: ${lastSwimEdit.description}`);
+    setLastSwimEdit(null);
   };
 
   const whatIfControls = (
     <div className="flex flex-wrap items-center gap-2">
-      <label className="flex items-center gap-2 cursor-pointer surface-overlay border border-theme-soft rounded px-3 py-1.5">
+      <label className="flex items-center gap-2 cursor-pointer surface-overlay border border-theme-soft rounded-lg px-3 py-2">
         <input
           type="checkbox"
           checked={whatIfMode}
           onChange={e => onWhatIfModeChange(e.target.checked)}
           className="accent-[var(--text-accent)]"
         />
-        <span className="text-[10px] font-bold uppercase tracking-widest text-[var(--text-primary)]">
-          What-if mode
+        <span className="text-ui-label font-medium text-[var(--text-primary)] whitespace-nowrap">
+          What-if
         </span>
       </label>
-      {view === 'roster' ? (
-        <button
-          type="button"
-          onClick={() => whatIfMode && onRemoveSeniorsChange(!removeSeniors)}
-          disabled={!whatIfMode}
-          className={`flex items-center gap-2 px-3 py-1.5 border rounded text-[10px] uppercase font-medium transition-all disabled:opacity-40 disabled:cursor-not-allowed ${
-            removeSeniors
-              ? 'bg-[var(--text-accent)]/20 border-[var(--text-accent)]/40 text-[var(--text-accent)]'
-              : 'surface-muted-bg border-theme-soft text-theme-secondary hover:text-[var(--text-primary)]'
-          }`}
-          title="Remove graduating seniors and simulate relay replacements"
-        >
-          <UserMinus size={12} />
-          <span>- Class of SR</span>
-        </button>
-      ) : null}
+      <button
+        type="button"
+        onClick={() => whatIfMode && onRemoveSeniorsChange(!removeSeniors)}
+        disabled={!whatIfMode}
+        className={`flex items-center gap-2 px-3 py-2 border rounded-lg text-ui-label transition-all disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap ${
+          removeSeniors
+            ? 'bg-[var(--text-accent)]/20 border-[var(--text-accent)]/40 text-[var(--text-accent)]'
+            : 'surface-muted-bg border-theme-soft text-theme-secondary hover:text-[var(--text-primary)]'
+        }`}
+        title="Remove graduating seniors and simulate relay replacements"
+      >
+        <UserMinus size={14} />
+        Drop seniors
+      </button>
       <button
         type="button"
         onClick={onReloadScoring}
-        className="flex items-center gap-2 px-3 py-1.5 btn-accent-outline rounded text-[10px] font-bold uppercase tracking-widest"
-        title="Recalculate projected scores from current data and settings"
+        className="flex items-center gap-2 px-3 py-2 btn-accent-outline rounded-lg text-ui-label font-medium whitespace-nowrap"
+        title="Recalculate projected scores"
       >
-        <RefreshCw size={12} />
-        Reload scoring
+        <RefreshCw size={14} />
+        Recalc
       </button>
+      {lastSwimEdit ? (
+        <button
+          type="button"
+          onClick={handleUndoSwimEdit}
+          title={lastSwimEdit.description}
+          className="flex items-center gap-1.5 px-3 py-2 border border-theme-soft rounded-lg text-ui-label text-theme-secondary hover:text-[var(--text-primary)] transition-colors whitespace-nowrap max-w-[16rem] truncate"
+        >
+          <Undo2 size={14} className="shrink-0" />
+          <span className="truncate">Undo: {lastSwimEdit.description}</span>
+        </button>
+      ) : null}
     </div>
   );
 
-  if (view === 'ind-relay') {
-    return (
-      <div className="flex flex-col gap-4 flex-1 min-h-0">
-        <div className="surface-card rounded-lg p-4 shrink-0">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div>
-              <h3 className="text-sm font-medium text-[var(--text-accent)] uppercase tracking-widest">
-                Individual & Relay Management
-              </h3>
-              <p className="text-[10px] text-theme-secondary mt-1 max-w-2xl leading-relaxed">
-                Relay split inspector — leg splits, segment ladders, and team cumulative times per relay
-                entry.
-              </p>
-            </div>
-            {whatIfControls}
-          </div>
-          {!whatIfMode ? (
-            <p className="text-[10px] text-theme-secondary mt-3">
-              Observe only — enable What-if mode to plan edits that affect projected scores.
-            </p>
-          ) : null}
-        </div>
-        <IndRelayManagementView
+  return (
+    <RosterWizardShell step={rosterStep} onStepChange={setRosterStep} toolbar={whatIfControls}>
+      {rosterStep === 'source' ? (
+        <RosterSourceStep
+          workspace={workspace}
+          gender={gender}
+          teams={teams}
+          selectedTeam={selectedTeam}
+          onSelectTeam={setSelectedTeam}
+          scoringSettings={scoringSettings}
+          whatIfMode={whatIfMode}
+          recruitPrefill={recruitPrefill}
+          onAddRecruit={onAddRecruit}
+          onUpdate={onUpdate}
+        />
+      ) : null}
+      {rosterStep === 'lineup' ? (
+        <RosterLineupStep
+          workspace={workspace}
+          gender={gender}
+          scoringBundle={scoringBundle}
+          scoringSettings={scoringSettings}
+          baselineByTeam={baselineByTeam}
+          projectedByTeam={projectedByTeam}
+          whatIfMode={whatIfMode}
+          removeSeniors={removeSeniors}
+          selectedTeam={selectedTeam}
+          onSelectTeam={setSelectedTeam}
+          onUpdate={onUpdate}
+          onDeleteSwim={whatIfMode ? handleDeleteSwim : undefined}
+          onEditSwim={whatIfMode ? handleEditSwim : undefined}
+          onAthleteSelect={handleAthleteSelect}
+          onRequestDeleteSwimmer={onRequestDeleteSwimmer}
+          onOpenRelays={() => setRosterStep('relays')}
+          jumpAthleteName={jumpAthleteName}
+          jumpAthleteKey={jumpAthleteKey}
+          onJumpAthlete={handleJumpAthlete}
+          onJumpAthleteHandled={handleJumpHandled}
+        />
+      ) : null}
+      {rosterStep === 'relays' ? (
+        <RosterRelayStep
           workspace={workspace}
           gender={gender}
           scoringBundle={scoringBundle}
           whatIfMode={whatIfMode}
           removeSeniors={removeSeniors}
+          selectedTeam={selectedTeam}
+          teams={teams}
+          onSelectTeam={setSelectedTeam}
           onUpdate={onUpdate}
         />
-      </div>
-    );
-  }
-
-  return (
-    <div className="flex flex-col gap-4 flex-1 min-h-0">
-      <div className="surface-card rounded-lg p-4 shrink-0">
-          <div className="flex flex-wrap items-start justify-between gap-3 mb-3">
-            <div>
-              <h3 className="text-sm font-medium text-[var(--text-accent)] uppercase tracking-widest">
-                Roster & What-if Controls
-              </h3>
-              <p className="text-[10px] text-theme-secondary mt-1 max-w-2xl leading-relaxed">
-                Manage rosters and what-if edits below. Projected scores sync to Meet Charts/Tables.
-              </p>
-            </div>
-            {whatIfControls}
-          </div>
-
-        {!whatIfMode ? (
-          <p className="text-[10px] text-theme-secondary mb-2">
-            Observe only — enable What-if mode to edit roster, recruits, and senior removal.
-          </p>
-        ) : null}
-
-        {workspace.loadedMeet?.pdfFilename ? (
-          <p className="text-[9px] text-theme-secondary mb-2">
-            Recruits saved with this workspace · loaded:{' '}
-            <span className="text-[var(--text-accent)]">{workspace.loadedMeet.pdfFilename}</span>
-          </p>
-        ) : null}
-
-        <RosterScoringSetup
+      ) : null}
+      {rosterStep === 'optimize' ? (
+        <RosterOptimizeStep
           workspace={workspace}
-          settings={scoringSettings}
-          onSave={onUpdate}
-        />
-
-        <div className="flex flex-wrap items-center gap-3 mb-3">
-          <label className="text-[9px] text-theme-secondary uppercase">Entry mode</label>
-          <select
-            value={workspace.entryPlanMode ?? 'overlay'}
-            disabled={!whatIfMode}
-            onChange={e =>
-              onUpdate({ entryPlanMode: e.target.value as 'overlay' | 'plan_sheet' })
-            }
-            className="text-[10px] surface-muted-bg border border-theme-soft rounded px-2 py-1"
-          >
-            <option value="overlay">Edit loaded meet (overlay)</option>
-            <option value="plan_sheet">Plan sheet</option>
-          </select>
-        </div>
-
-        <div className="max-w-xl w-full">
-          <h4 className="text-[9px] font-medium text-theme-secondary uppercase tracking-widest mb-2">
-            Recruit injection
-          </h4>
-          <RecruitForm
-            gender={gender}
-            teams={teams}
-            defaultTeam={selectedTeam || teams[0]}
-            athletePrefill={recruitPrefill}
-            onSubmit={onAddRecruit}
-            disabled={!whatIfMode}
-            compact
-          />
-          {recruitPrefill ? (
-            <p className="text-[9px] text-theme-secondary mt-2">
-              Prefilled from{' '}
-              <span className="text-[var(--text-accent)]">{recruitPrefill.name}</span> — pick a new event
-              and time, then inject.
-            </p>
-          ) : null}
-        </div>
-      </div>
-
-      <AthleteHistoryImportPanel
-        workspace={workspace}
-        gender={gender}
-        team={selectedTeam || teams[0] || ''}
-        onUpdate={onUpdate}
-        importDisabled={!whatIfMode}
-      />
-
-      <div className="flex-1 min-h-0 flex flex-col">
-        <TeamRosterPanel
-          results={scoringBundle.allResults}
-          scoredResults={scoringBundle.allScored}
-          settings={scoringSettings}
           gender={gender}
-          overrides={workspace.scorerRosterOverrides ?? []}
-          onChangeOverrides={next => onUpdate({ scorerRosterOverrides: next })}
-          editable={whatIfMode}
-          officialTeamScores={workspace.officialTeamScores}
-          projectedByTeam={projectedByTeam}
-          baselineByTeam={baselineByTeam}
-          showTeamSidebar
-          expanded
-          selectedTeam={selectedTeam || undefined}
-          onSelectTeam={setSelectedTeam}
-          onDeleteSwim={whatIfMode ? handleDeleteSwim : undefined}
-          onAthleteSelect={handleAthleteSelect}
-          workspace={workspace}
+          scoringSettings={scoringSettings}
+          whatIfMode={whatIfMode}
           removeSeniors={removeSeniors}
-          onWorkspaceUpdate={whatIfMode ? onUpdate : undefined}
+          selectedTeam={selectedTeam}
+          teams={teams}
+          onSelectTeam={setSelectedTeam}
+          onUpdate={onUpdate}
         />
-      </div>
-    </div>
+      ) : null}
+    </RosterWizardShell>
   );
 }

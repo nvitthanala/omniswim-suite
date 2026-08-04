@@ -8,7 +8,7 @@ import { AnimatePresence, motion } from 'motion/react';
 import { Database, ExternalLink } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Gender, OfficialTeamScores, SwimmerResult, ScoringSettings, Workspace } from '@omniswim/core/types';
-import { normalizeSwimmerName, mergeScoringSettings } from '@omniswim/core/lib/utils';
+import { mergeScoringSettings } from '@omniswim/core/lib/utils';
 import {
   applyPdfPlacePointsNeutralCaps,
   NSISC_PRESET_SETTINGS,
@@ -17,6 +17,8 @@ import {
 } from '@omniswim/core/lib/scoringDefaults';
 import { useWorkspaceScoring } from '@omniswim/core/lib/useWorkspaceScoring';
 import { alignPsychResultsToMeetTeams } from '@omniswim/core/lib/psychProjection';
+import { meetCopyFromParsed } from '@omniswim/core/lib/meetSource';
+import { softRemoveSwimmerFromWorkspace } from '@omniswim/core/lib/swimmerSoftRemove';
 import { rosterCatalogApi, type CatalogTeamRoster } from '@omniswim/core/api/rosterCatalog';
 import { useToast } from '@omniswim/ui';
 import MeetOperationsView from './MeetOperationsView';
@@ -79,6 +81,7 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
     })();
   }, []);
 
+
   const {
     projected,
     baseline,
@@ -104,19 +107,11 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
 
   const confirmDeleteSwimmer = () => {
     if (!swimmerDeleteCandidate) return;
-    const name = swimmerDeleteCandidate.name;
-    const key = normalizeSwimmerName(name);
-    const field = gender === Gender.MEN ? 'menResults' : 'womenResults';
-    const arr = workspace[field] ?? [];
-    const filtered = arr.filter(r => !(normalizeSwimmerName(r.name) === key && !r.isRelay));
-    const nextDeleted = [...(workspace.deletedSwimmers ?? [])];
-    if (!nextDeleted.some(d => d.gender === gender && normalizeSwimmerName(d.name) === key)) {
-      nextDeleted.push({ name, gender });
-    }
-    const recruitsFiltered = (workspace.recruits ?? []).filter(
-      r => !(r.gender === gender && normalizeSwimmerName(r.name) === key)
-    );
-    void onUpdate({ [field]: filtered, recruits: recruitsFiltered, deletedSwimmers: nextDeleted });
+    const patch = softRemoveSwimmerFromWorkspace(workspace, {
+      name: swimmerDeleteCandidate.name,
+      gender,
+    });
+    void onUpdate(patch);
     setSwimmerDeleteCandidate(null);
   };
 
@@ -188,8 +183,7 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
         }
 
         await onUpdate({
-          menResults: parsedMen,
-          womenResults: parsedWomen,
+          ...meetCopyFromParsed(parsedMen, parsedWomen),
           deletedSwimmers: [],
           scorerRosterOverrides: [],
           relayLegOverrides: [],
@@ -319,6 +313,10 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
     psychParseAbortRef.current?.abort();
   };
 
+  const handleScoringViewChange = (view: 'merged' | 'pdf_only') => {
+    void onUpdate({ scoringView: view });
+  };
+
   const rosterDirty = hasRosterEdits(workspace);
 
   return (
@@ -413,6 +411,7 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
               whatIfMode ? name => setSwimmerDeleteCandidate({ name }) : undefined
             }
             onSaveScoringSettings={sets => void onUpdate({ scoringSettings: sets })}
+            onScoringViewChange={handleScoringViewChange}
             onClearSuggestedPreset={() => setSuggestedPresetId(null)}
             scoringRefreshKey={scoringRefreshKey}
           />

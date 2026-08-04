@@ -61,7 +61,7 @@ export default function SuiteHome() {
           <p className="text-ui-micro font-bold uppercase tracking-[0.3em] text-[var(--text-accent)] mb-3">
             Omni Swim Suite
           </p>
-          <h2 className="text-3xl sm:text-4xl font-black tracking-tight text-[var(--text-primary)] mb-3">
+          <h2 className="text-heading-1 mb-3">
             Your meet command center
           </h2>
           <p className="text-ui-body text-theme-muted max-w-xl mx-auto">

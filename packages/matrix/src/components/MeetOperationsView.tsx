@@ -137,6 +137,7 @@ type Props = {
   onUpdate: (patch: Partial<Workspace>) => void;
   onRequestDeleteSwimmer?: (name: string) => void;
   onSaveScoringSettings: (sets: ScoringSettings) => void;
+  onScoringViewChange: (view: 'merged' | 'pdf_only') => void;
   onClearSuggestedPreset: () => void;
   scoringRefreshKey: number;
 };
@@ -173,6 +174,7 @@ export default function MeetOperationsView({
   onUpdate,
   onRequestDeleteSwimmer,
   onSaveScoringSettings,
+  onScoringViewChange,
   onClearSuggestedPreset,
   scoringRefreshKey,
 }: Props) {
@@ -241,7 +243,7 @@ export default function MeetOperationsView({
   const resolvedPrelimsOuByEntry = prelimsOuByEntry.size > 0 ? prelimsOuByEntry : prelimsOuByEntryLocal;
   const resolvedPsychOuByEntry = psychOuByEntry;
 
-  const { events, timelineData } = scoringBundle;
+  const { visibleEvents, timelineData } = scoringBundle;
   const timelineChartKey = `timeline-${scoringRefreshKey}-${scoringBundle.teamStyleSignature}`;
 
   const prelimsDeltaByLabel = useMemo(() => {
@@ -259,11 +261,11 @@ export default function MeetOperationsView({
     const teamNames = teamsWithLineStyles.map(t => t.teamName);
     if (meetMomentumAnchor === 'psych' && showPsychPerformance) {
       if (!psychMomentumHasData) return [];
-      return buildMeetMomentumChartDataFromLookup(teamNames, resolvedPsychOuByEntry, events);
+      return buildMeetMomentumChartDataFromLookup(teamNames, resolvedPsychOuByEntry, visibleEvents);
     }
     if (showPrelimsPerformance) {
       if (!prelimsMomentumHasData) return [];
-      return buildMeetMomentumChartDataFromLookup(teamNames, resolvedPrelimsOuByEntry, events);
+      return buildMeetMomentumChartDataFromLookup(teamNames, resolvedPrelimsOuByEntry, visibleEvents);
     }
     return [];
   }, [
@@ -275,7 +277,7 @@ export default function MeetOperationsView({
     resolvedPrelimsOuByEntry,
     resolvedPsychOuByEntry,
     teamsWithLineStyles,
-    events,
+    visibleEvents,
   ]);
 
   const momentumEmptyMessage =
@@ -296,10 +298,12 @@ export default function MeetOperationsView({
           onSaveScoringSettings(sets);
           onClearSuggestedPreset();
         }}
+        scoringView={workspace.scoringView ?? 'merged'}
+        onScoringViewChange={onScoringViewChange}
       />
 
       <div className="space-y-6 min-w-0">
-        <div className="surface-card rounded-lg p-5 mb-6">
+        <div className="surface-card rounded-xl p-5 mb-6">
           <div className="flex items-center gap-2 mb-4">
             <TrendingUp size={16} className="text-[var(--text-accent)]" />
             <h3 className="text-[12px] font-bold text-[var(--text-primary)] uppercase tracking-tight">
@@ -312,7 +316,7 @@ export default function MeetOperationsView({
             ) : null}
           </div>
 
-          <ChartShell size="md" className="surface-overlay p-2 rounded border border-theme-soft">
+          <ChartShell size="md" className="surface-overlay p-2 rounded-lg border border-theme-soft">
             {({ width, height }) =>
               timelineData.length > 0 ? (
                 <ChartFrame width={width} height={height}>
@@ -455,7 +459,7 @@ export default function MeetOperationsView({
           </div>
         ) : null}
 
-        <div className="surface-card rounded-lg p-5">
+        <div className="surface-card rounded-xl p-5">
           <div className="flex justify-between items-end mb-6">
             <div>
               <h3 className="text-lg font-medium text-[var(--text-primary)] uppercase tracking-tight">
@@ -467,7 +471,7 @@ export default function MeetOperationsView({
               </p>
             </div>
             <div className="flex items-center gap-3">
-              <div className="flex items-center surface-overlay border border-theme-soft rounded px-3 py-1.5 focus-within:border-[var(--text-accent)]/50 transition-colors">
+              <div className="flex items-center surface-overlay border border-theme-soft rounded-lg px-3 py-1.5 focus-within:border-[var(--text-accent)]/50 transition-colors">
                 <Search size={12} className="text-theme-secondary mr-2" />
                 <input
                   value={searchQuery}
@@ -506,7 +510,7 @@ export default function MeetOperationsView({
                   </button>
                 </div>
               ) : (
-                <div className="flex items-center gap-2 border border-theme-soft rounded p-1">
+                <div className="flex items-center gap-2 border border-theme-soft rounded-lg p-1">
                   <select
                     value={pdfFormat}
                     onChange={e => onPdfFormatChange(e.target.value)}
@@ -517,13 +521,13 @@ export default function MeetOperationsView({
                     <option value="regular">Regular List</option>
                     <option value="divided">Divided (2-Col)</option>
                   </select>
-                  <label className="cursor-pointer flex items-center gap-1.5 px-3 py-1 btn-accent-outline rounded-sm text-[10px] uppercase font-medium transition-all">
+                  <label className="cursor-pointer flex items-center gap-1.5 px-3 py-1 btn-accent-outline rounded-md text-[10px] uppercase font-medium transition-colors">
                     <Plus size={12} />
                     <span>Load PDF</span>
                     <input type="file" className="hidden" accept=".pdf" onChange={onFileUpload} />
                   </label>
                   <label
-                    className="cursor-pointer flex items-center gap-1.5 px-3 py-1 border border-theme-soft rounded-sm text-[10px] uppercase font-medium text-theme-secondary hover:text-[var(--text-primary)] transition-all"
+                    className="cursor-pointer flex items-center gap-1.5 px-3 py-1 border border-theme-soft rounded-md text-[10px] uppercase font-medium text-theme-secondary hover:text-[var(--text-primary)] transition-colors"
                     title="Link psych sheet (separate from meet results PDF)"
                   >
                     <Plus size={12} />
@@ -630,7 +634,7 @@ export default function MeetOperationsView({
                     team={team}
                     index={index}
                     gender={gender}
-                    eventsList={events}
+                    eventsList={visibleEvents}
                     conference={meetConference}
                     searchQuery={searchQuery}
                     actualScore={officialLookup.get(team.teamName)}
@@ -668,7 +672,7 @@ export default function MeetOperationsView({
                   />
                 ))
             ) : (
-              <div className="p-12 text-center border border-dashed border-theme-soft rounded-lg text-theme-secondary">
+              <div className="p-12 text-center border border-dashed border-theme-soft rounded-xl text-theme-secondary">
                 <Users className="w-12 h-12 mx-auto mb-4 opacity-20" />
                 <p className="text-xs uppercase font-medium tracking-widest">No matrix data persistent</p>
               </div>
@@ -676,7 +680,7 @@ export default function MeetOperationsView({
           </div>
         </div>
 
-        <div className="surface-card rounded-lg overflow-hidden">
+        <div className="surface-card rounded-xl overflow-hidden">
           <div className="p-4 border-b border-theme-soft surface-overlay">
             <h4 className="text-[10px] font-medium text-theme-secondary uppercase tracking-widest">
               Top Individual Contributors

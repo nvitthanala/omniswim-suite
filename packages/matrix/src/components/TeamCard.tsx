@@ -15,9 +15,9 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, CartesianGrid } from 'recharts';
-import { ChartFrame, ChartShell } from '@omniswim/ui';
-import { TeamScore, SwimmerResult, ClassYear, Gender, RelayLegStroke } from '@omniswim/core/types';
-import { getYearsRemaining, convertTimeToSeconds, relaySplitQualificationCutEvent, formatEventChartAxisLabel, colorForChartStroke } from '@omniswim/core/lib/utils';
+import { ChartFrame, ChartShell, CutlineTag, CutlineNearMissChip } from '@omniswim/ui';
+import { TeamScore, SwimmerResult, Gender, RelayLegStroke } from '@omniswim/core/types';
+import { convertTimeToSeconds, relaySplitQualificationCutEvent, formatEventChartAxisLabel, colorForChartStroke } from '@omniswim/core/lib/utils';
 import type { PrelimsOverUnderEntry } from '@omniswim/core/lib/prelimsProjection';
 import {
   buildMomentumSeriesForTeam,
@@ -29,13 +29,71 @@ import type { PsychOverUnderEntry } from '@omniswim/core/lib/psychProjection';
 import { psychExpectedForResult } from '@omniswim/core/lib/psychProjection';
 import { isRelayResult } from '@omniswim/core/lib/utils';
 import { displayTimeForRelayLeg, formatLegSplitSummary } from '@omniswim/core/lib/relaySplits';
-import { compareTimeToCutline, getCutlinesForSwim, normalizeEventForCutline } from '@omniswim/core/lib/cutlineUtils';
+import { normalizeEventForCutline } from '@omniswim/core/lib/cutlineUtils';
+import {
+  buildCutlineTagForTeam,
+  buildRelaySwimTagsForTeam,
+  type CutlineTagResult,
+  type RelaySwimTagResults,
+} from '@omniswim/core/lib/cutlineTags';
 import { useThemeColors } from '@omniswim/core/lib/useThemeColors';
 import { AthleteName, CompactEventLabel, PlacementExpectedValue, PointsValue, PrelimsOuValue, SwimTimeCell } from './matrixPresentation';
 import ProjectedActualScore from './ProjectedActualScore';
 import MomentumChartCard from './MomentumChartCard';
 
 const EMPTY_EVENTS_LIST: string[] = [];
+
+type TeamRowCutlineTags =
+  | { kind: 'relay'; tags: RelaySwimTagResults }
+  | { kind: 'single'; result: CutlineTagResult };
+
+/**
+ * One cutline verdict per row, except a relay leg carries TWO independent
+ * ones: the relay team's own result, and — only for an eligible leg, e.g. a
+ * medley relay's backstroke leadoff — the leg split judged as an individual
+ * swim. Building both here, once, keeps the two `TeamCard` render sites
+ * (event-view tooltip, swimmer-view list) from resolving eligibility
+ * differently.
+ *
+ * `individualTime` is supplied by the caller rather than resolved here so
+ * each call site keeps its own pre-existing time fallback for a *non-relay*
+ * row (they differ today; this only unifies the relay side, per the actual
+ * bug report).
+ */
+function buildTeamRowCutlineTags(
+  res: SwimmerResult,
+  gender: Gender | string,
+  teamName: string,
+  individualTime: string
+): TeamRowCutlineTags {
+  // normalizeEventForCutline strips course words, the HyTek "Event N <Gender>"
+  // prefix and Time Trial suffixes itself.
+  const cleanEventBase = res.event.replace(' (Avg Split)', '').trim();
+
+  if (res.isRelay) {
+    return {
+      kind: 'relay',
+      tags: buildRelaySwimTagsForTeam({
+        gender,
+        team: teamName,
+        relayEvent: cleanEventBase,
+        relayTeamTime: res.relayTeamTime || res.finalsTime || res.time,
+        legQualificationEvent: relaySplitQualificationCutEvent(res),
+        legSplit: res.relayLegSplit,
+      }),
+    };
+  }
+
+  return {
+    kind: 'single',
+    result: buildCutlineTagForTeam({
+      timeSec: convertTimeToSeconds(individualTime),
+      gender,
+      event: normalizeEventForCutline(cleanEventBase),
+      team: teamName,
+    }),
+  };
+}
 
 function relayMissingStrokeLabel(stroke: RelayLegStroke | undefined): string {
   if (!stroke) return '';
@@ -334,14 +392,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
             </>
           ) : (
             swimmersSorted.length > 0 ? swimmersSorted.map((s: any, idx: number) => {
-              const qualEv = relaySplitQualificationCutEvent(s);
-              const timeStrForCuts = qualEv && s.relayLegSplit ? s.relayLegSplit : s.finalsTime || s.time;
-              const timeSec = convertTimeToSeconds(timeStrForCuts);
-              const cleanEventBase = s.event.replace(" (Avg Split)", "").replace(/ Yard /i, " ").replace(/ Meter /i, " ").trim();
-              const cleanEvent = normalizeEventForCutline(qualEv ?? cleanEventBase);
-              const { achieved: cutAchieved } = compareTimeToCutline(timeSec, gender, cleanEvent);
-              const isACut = cutAchieved === 'A';
-              const isBCut = cutAchieved === 'B';
+              const rowTags = buildTeamRowCutlineTags(s, gender, team.teamName, s.finalsTime || s.time);
 
               return (
                 <div key={idx} className="flex items-center justify-between py-1 border-b border-theme-soft/50 last:border-0 swimmer-row text-ui-caption">
@@ -361,8 +412,14 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                         Missing L{(s.relayMissingLeg.legIndex ?? 0) + 1}: {relayMissingStrokeLabel(s.relayMissingLeg.stroke)}
                       </span>
                     )}
-                    {isACut && <span className="text-ui-micro btn-accent-outline px-1 rounded-sm ml-1" title="A CUT">A CUT</span>}
-                    {isBCut && <span className="text-ui-micro bg-amber-400/10 text-amber-400 px-1 border border-amber-400/30 rounded-sm ml-1" title="B CUT">B CUT</span>}
+                    {/* Non-relay rows only — a relay's verdicts belong next to the
+                        relay team time and the leg split, not the swimmer's name. */}
+                    {rowTags.kind === 'single' && (
+                      <>
+                        <CutlineTag result={rowTags.result} compact className="ml-1" />
+                        <CutlineNearMissChip nextTier={rowTags.result.nextTier} compact className="ml-1" />
+                      </>
+                    )}
                   </div>
                   <div className="flex gap-3 text-right">
                     <span className="font-mono text-theme-muted">{s.prelimsTime ? `P:${s.prelimsTime}` : ''}</span>
@@ -370,6 +427,15 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                       {s.isRelay && (s.relayLegSplitDetail || s.relayLegSplit) ? (
                         <>
                           <span className="text-points-positive">{displayTimeForRelayLeg(s)}</span>
+                          {/* The leg's own individual verdict, when this leg is
+                              eligible (e.g. a medley relay's backstroke leadoff) —
+                              anchored to the split it actually describes. */}
+                          {rowTags.kind === 'relay' && rowTags.tags.legQualification ? (
+                            <span className="inline-flex items-center gap-1 ml-1 align-middle no-underline">
+                              <CutlineTag result={rowTags.tags.legQualification} compact />
+                              <CutlineNearMissChip nextTier={rowTags.tags.legQualification.nextTier} compact />
+                            </span>
+                          ) : null}
                           {s.relayLegSplitDetail ? (
                             <span className="block text-ui-micro text-theme-muted font-sans">
                               {formatLegSplitSummary(s.relayLegSplitDetail)}
@@ -382,6 +448,16 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                       ) : (
                         s.time
                       )}
+                      {/* The relay's own verdict, next to the relay team time —
+                          repeats once per leg row on purpose: legs are sorted by
+                          points and are not necessarily adjacent, so this is the
+                          only placement that is unambiguous on every row. */}
+                      {rowTags.kind === 'relay' ? (
+                        <span className="inline-flex items-center gap-1 ml-1 align-middle no-underline">
+                          <CutlineTag result={rowTags.tags.relay} compact />
+                          <CutlineNearMissChip nextTier={rowTags.tags.relay.nextTier} compact />
+                        </span>
+                      ) : null}
                     </span>
                     <span className="font-mono text-points-positive font-bold">{typeof s.points === 'number' ? s.points.toFixed(1) : s.points}</span>
                     <div className="flex flex-col items-end gap-0.5">
@@ -418,7 +494,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
   };
 
   return (
-    <div className={`neon-card rounded-md overflow-hidden mb-4`} style={{ borderLeftColor: teamChartColor }}>
+    <div className={`neon-card rounded-xl overflow-hidden mb-4`} style={{ borderLeftColor: teamChartColor }}>
       <button 
         onClick={() => {
           const nextExpanded = !isExpanded;
@@ -484,25 +560,25 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                       {chartView === 'event' ? 'Points by Event' : 'Points by Class'}
                     </span>
                   </div>
-                  <div className="flex items-center surface-overlay border border-theme-soft rounded p-0.5">
+                  <div className="flex items-center surface-overlay border border-theme-soft rounded-md p-0.5">
                     <button
                       type="button"
                       onClick={() => { setChartView('event'); clearChartTooltips(); }}
-                      className={`text-ui-micro px-2 py-1 uppercase tracking-widest rounded ${chartView === 'event' ? 'bg-[var(--surface-strong)]/60 text-[var(--text-primary)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}
+                      className={`text-ui-micro px-2 py-1 uppercase tracking-widest rounded transition-colors ${chartView === 'event' ? 'bg-[var(--surface-strong)]/60 text-[var(--text-primary)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}
                     >
                       By Event
                     </button>
                     <button
                       type="button"
                       onClick={() => { setChartView('class'); clearChartTooltips(); }}
-                      className={`text-ui-micro px-2 py-1 uppercase tracking-widest rounded ${chartView === 'class' ? 'bg-[var(--surface-strong)]/60 text-[var(--text-primary)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}
+                      className={`text-ui-micro px-2 py-1 uppercase tracking-widest rounded transition-colors ${chartView === 'class' ? 'bg-[var(--surface-strong)]/60 text-[var(--text-primary)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}
                     >
                       By Class
                     </button>
                   </div>
                 </div>
                 
-                <ChartShell size="lg" className="surface-overlay p-2 rounded border border-theme-soft group/chart">
+                <ChartShell size="lg" className="surface-overlay p-2 rounded-lg border border-theme-soft group/chart">
                   {({ width, height }) =>
                     chartView === 'event' ? (
                   <div ref={eventChartSurfaceRef} className="relative h-full w-full min-h-0 min-w-0">
@@ -779,16 +855,16 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                       {viewMode === 'swimmer' && <option value="swimmerAsc">Low to High</option>}
                     </select>
 
-                    <div className="flex items-center surface-overlay border border-theme-soft rounded p-0.5">
+                    <div className="flex items-center surface-overlay border border-theme-soft rounded-md p-0.5">
                       <button 
                         onClick={() => { setViewMode('event'); setSortMode('eventDesc'); }}
-                        className={`text-ui-micro px-2 py-1 uppercase tracking-widest rounded ${viewMode === 'event' ? 'bg-[var(--surface-strong)]/60 text-[var(--text-primary)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}
+                        className={`text-ui-micro px-2 py-1 uppercase tracking-widest rounded transition-colors ${viewMode === 'event' ? 'bg-[var(--surface-strong)]/60 text-[var(--text-primary)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}
                       >
                         By Event
                       </button>
                       <button 
                         onClick={() => { setViewMode('swimmer'); setSortMode('swimmerDesc'); }}
-                        className={`text-ui-micro px-2 py-1 uppercase tracking-widest rounded ${viewMode === 'swimmer' ? 'bg-[var(--surface-strong)]/60 text-[var(--text-primary)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}
+                        className={`text-ui-micro px-2 py-1 uppercase tracking-widest rounded transition-colors ${viewMode === 'swimmer' ? 'bg-[var(--surface-strong)]/60 text-[var(--text-primary)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}
                       >
                         By Swimmer
                       </button>
@@ -798,7 +874,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
 
                 <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
                   {(viewMode === 'swimmer' ? topSwimmers : topEvents).map((group: any) => (
-                    <div key={group.name || group.event} className="p-3 rounded surface-overlay border border-theme-soft group transition-all hover:border-[var(--border)]">
+                    <div key={group.name || group.event} className="p-3 rounded-lg surface-overlay border border-theme-soft group transition-colors hover:border-[var(--border)]">
                       <div className="flex items-center justify-between mb-2">
                         <div className="flex items-center gap-3">
                           <h4 className="text-xs font-medium text-[var(--text-primary)] uppercase group-hover:text-[var(--text-accent)] transition-colors">
@@ -835,25 +911,17 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
 
                       <div className="space-y-1">
                         {group.swimmers.map((res: SwimmerResult, i: number) => {
-                          const qualEv = relaySplitQualificationCutEvent(res);
-                          const timeStrForCuts = qualEv && res.relayLegSplit ? res.relayLegSplit : res.time;
-                          const timeSec = convertTimeToSeconds(timeStrForCuts);
-                          const cleanEventBase = res.event.replace(" (Avg Split)", "").replace(/ Yard /i, " ").replace(/ Meter /i, " ").trim();
-                          const cleanEvent = normalizeEventForCutline(qualEv ?? cleanEventBase);
-                          const { achieved: cutAchieved } = compareTimeToCutline(timeSec, gender, cleanEvent);
-                          const isACut = cutAchieved === 'A';
-                          const isBCut = cutAchieved === 'B';
-                          const { aCut, bCut } = getCutlinesForSwim(gender, cleanEvent);
-
-                          const yearsRemaining = getYearsRemaining(res.classYear as ClassYear);
-                          const targetProp = yearsRemaining === 1 ? 'proj_26_27' : yearsRemaining === 2 ? 'proj_27_28' : yearsRemaining >= 3 ? 'proj_28_29' : null;
-                          let willMakeFutureCut = null;
-                          if (targetProp && !res.isRelay) {
-                             const futureACutSec = aCut ? convertTimeToSeconds((aCut as any)[targetProp]) : 0;
-                             const futureBCutSec = bCut ? convertTimeToSeconds((bCut as any)[targetProp]) : 0;
-                             if (futureACutSec > 0 && timeSec <= futureACutSec) willMakeFutureCut = 'A';
-                             else if (futureBCutSec > 0 && timeSec <= futureBCutSec) willMakeFutureCut = 'B';
-                          }
+                          const rowTags = buildTeamRowCutlineTags(res, gender, team.teamName, res.time);
+                          // Coloring keys off each row's own verdict: the relay's
+                          // for a relay leg (never the leg's, which was the bug —
+                          // a leadoff's individual split used to silently stand
+                          // in for the relay's own result), the single verdict
+                          // otherwise.
+                          const primaryTagResult = rowTags.kind === 'relay' ? rowTags.tags.relay : rowTags.result;
+                          const cutlineTier =
+                            primaryTagResult.state === 'tagged' ? primaryTagResult.tag.tier : null;
+                          const isACut = cutlineTier === 'A' || cutlineTier === 'Standard' || cutlineTier === 'Qualifying';
+                          const isBCut = cutlineTier === 'B' || cutlineTier === 'Provisional' || cutlineTier === 'Invited';
 
                           const relaySplitPrimary = res.isRelay && (res.relayLegSplitDetail || res.relayLegSplit);
 
@@ -887,17 +955,38 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                                     className={`font-mono font-medium cursor-pointer hover:underline ${isACut ? 'text-[var(--text-accent)]' : isBCut ? 'text-amber-400' : 'text-theme-secondary'}`}
                                     onClick={() => { if(onUpdateTime && res.id) { setEditingResultId(res.id); setEditValue(res.time); } }}
                                   >
-                                    Split: {displayTimeForRelayLeg(res)}
+                                    <span className="inline-flex items-center gap-1 flex-wrap">
+                                      <span>Split: {displayTimeForRelayLeg(res)}</span>
+                                      {/* The leg's own individual verdict — only present when this leg is eligible. */}
+                                      {rowTags.kind === 'relay' && rowTags.tags.legQualification ? (
+                                        <span className="inline-flex items-center gap-1 no-underline">
+                                          <CutlineTag result={rowTags.tags.legQualification} compact />
+                                          <CutlineNearMissChip nextTier={rowTags.tags.legQualification.nextTier} compact />
+                                        </span>
+                                      ) : null}
+                                    </span>
                                     {res.relayLegSplitDetail ? (
                                       <span className="block text-ui-micro text-theme-muted font-sans">
                                         {formatLegSplitSummary(res.relayLegSplitDetail)}
                                       </span>
                                     ) : null}
-                                    <span className="block text-ui-micro text-theme-secondary font-normal">Relay {res.relayTeamTime || res.finalsTime || res.time}</span>
+                                    <span className="block text-ui-micro text-theme-secondary font-normal">
+                                      <span className="inline-flex items-center gap-1 flex-wrap">
+                                        <span>Relay {res.relayTeamTime || res.finalsTime || res.time}</span>
+                                        {/* The relay's own verdict — anchored to the relay team time it
+                                            actually describes, not the swimmer's split above. */}
+                                        {rowTags.kind === 'relay' ? (
+                                          <span className="inline-flex items-center gap-1 no-underline">
+                                            <CutlineTag result={rowTags.tags.relay} compact />
+                                            <CutlineNearMissChip nextTier={rowTags.tags.relay.nextTier} compact />
+                                          </span>
+                                        ) : null}
+                                      </span>
+                                    </span>
                                   </div>
                                 )}
                                 {res.finalsTime && !relaySplitPrimary && (
-                                  <div 
+                                  <div
                                     className={`font-mono font-medium cursor-pointer hover:underline ${isACut ? 'text-[var(--text-accent)]' : isBCut ? 'text-amber-400' : 'text-theme-secondary'}`}
                                     onClick={() => { if(onUpdateTime && res.id) { setEditingResultId(res.id); setEditValue(res.time); } }}
                                   >
@@ -905,18 +994,22 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                                   </div>
                                 )}
                                 {!res.finalsTime && !res.prelimsTime && !relaySplitPrimary && (
-                                  <div 
+                                  <div
                                     className={`font-mono font-medium cursor-pointer hover:underline ${isACut ? 'text-[var(--text-accent)]' : isBCut ? 'text-amber-400' : 'text-theme-secondary'}`}
                                     onClick={() => { if(onUpdateTime && res.id) { setEditingResultId(res.id); setEditValue(res.time); } }}
                                   >
                                     {res.time}
                                   </div>
                                 )}
-                                {willMakeFutureCut && (
-                                  <div className="text-ui-micro text-[var(--text-accent)] font-mono mt-0.5">
-                                    Beats Future {willMakeFutureCut}-Cut ({targetProp?.replace('proj_', "'").replace('_', "-'")})
+                                {/* A relay row without a recorded split still needs its team-time
+                                    verdict shown somewhere — the two branches above cover the split
+                                    case inline, this covers the finalsTime/plain-time fallbacks. */}
+                                {!relaySplitPrimary && rowTags.kind === 'relay' ? (
+                                  <div className="flex items-center justify-end gap-1 flex-wrap">
+                                    <CutlineTag result={rowTags.tags.relay} compact />
+                                    <CutlineNearMissChip nextTier={rowTags.tags.relay.nextTier} compact />
                                   </div>
-                                )}
+                                ) : null}
                                 {editingResultId === res.id && (
                                   <form 
                                     onSubmit={(e) => {
@@ -938,8 +1031,15 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                                 )}
                               </div>
                               <div className="flex items-center justify-end gap-2 w-1/3 flex-wrap">
-                                {isACut && <span title="Current A Cut Achieved" className="text-ui-micro btn-accent-outline px-1 rounded-sm">A CUT</span>}
-                                {isBCut && <span title="Current B Cut Achieved" className="text-ui-micro bg-amber-400/10 text-amber-400 px-1 border border-amber-400/30 rounded-sm">B CUT</span>}
+                                {/* Relay verdicts are already anchored next to the relay team
+                                    time / leg split above; only a non-relay row's single verdict
+                                    belongs in this generic slot. */}
+                                {rowTags.kind === 'single' ? (
+                                  <>
+                                    <CutlineTag result={rowTags.result} compact />
+                                    <CutlineNearMissChip nextTier={rowTags.result.nextTier} compact />
+                                  </>
+                                ) : null}
                                 <div className="flex flex-col items-end gap-0.5">
                                   <PointsValue
                                     signed={false}

@@ -23,6 +23,9 @@ import {
   usesScorerRoster,
 } from './scorerRoster';
 import { CONVERSION_FACTORS, SCORING_POINTS } from '../constants';
+// Dependency-free by design — see the module header there. Importing
+// `cutlineUtils` here instead would create a cycle (it imports this file).
+import { normalizeEventForCutline } from './cutlineEventNames';
 import { DEFAULT_SCORING_SETTINGS, effectivePdfPlacePointsMode, mergeScoringSettings } from './scoringDefaults';
 import {
   buildSyntheticLegSplitDetail,
@@ -222,13 +225,26 @@ export function getTeamColors(teamName: string | null | undefined): { primary: s
   return { primary, secondary };
 }
 
+/**
+ * Pure string→seconds parse. Memoized: the same time strings are parsed
+ * thousands of times inside scoring/sort comparators (calculatePoints groups,
+ * relay grouping, TeamCard rows), so a bounded cache avoids repeated split/parseFloat.
+ */
+const timeToSecondsCache = new Map<string, number>();
+const TIME_CACHE_LIMIT = 20000;
+
 export function convertTimeToSeconds(timeStr: string): number {
   if (!timeStr || timeStr === 'NT' || timeStr === 'DQ') return Infinity;
+  const cached = timeToSecondsCache.get(timeStr);
+  if (cached !== undefined) return cached;
   const parts = timeStr.split(':');
-  if (parts.length === 2) {
-    return parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
-  }
-  return parseFloat(parts[0]);
+  const value =
+    parts.length === 2
+      ? parseFloat(parts[0]) * 60 + parseFloat(parts[1])
+      : parseFloat(parts[0]);
+  if (timeToSecondsCache.size >= TIME_CACHE_LIMIT) timeToSecondsCache.clear();
+  timeToSecondsCache.set(timeStr, value);
+  return value;
 }
 
 export function formatSecondsToTime(seconds: number): string {
@@ -242,6 +258,37 @@ export function formatSecondsToTime(seconds: number): string {
 /** Case-insensitive name key for roster / relay matching. */
 export function normalizeSwimmerName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, ' ');
+}
+
+/**
+ * Canonical identity key that also folds "Last, First" → "first last" so the same
+ * human matches across data sources that spell the name in either order. Uses a
+ * single-comma heuristic: names with 0 or 2+ commas (e.g. suffix forms like
+ * "Malone, Curtis, Jr.") are left to plain `normalizeSwimmerName` semantics, so
+ * suffixes are never mangled. Callers that must match identity across imports
+ * (deleted-swimmer exclusion, roster keys, plan/jump matching) should use this;
+ * `normalizeSwimmerName` remains the low-level key (e.g. relay group keys).
+ */
+export function canonicalSwimmerName(name: string): string {
+  const raw = String(name ?? '').trim();
+  const firstComma = raw.indexOf(',');
+  if (firstComma > 0 && firstComma === raw.lastIndexOf(',')) {
+    const last = raw.slice(0, firstComma).trim();
+    const rest = raw.slice(firstComma + 1).trim();
+    if (last && rest) return normalizeSwimmerName(`${rest} ${last}`);
+  }
+  return normalizeSwimmerName(raw);
+}
+
+/**
+ * Case-insensitive test for a graduating class year: senior or grad-student.
+ * Matches SR / SENIOR / GR / GRAD in any case (and blank-tolerant). Shared by the
+ * individual and relay-leg "drop seniors" filters so they stay in lockstep.
+ */
+export function isGraduatingClassYear(year: string | undefined | null): boolean {
+  const y = String(year ?? '').trim().toUpperCase();
+  if (!y) return false;
+  return y === 'SR' || y === 'SENIOR' || y === 'GR' || y === 'GRAD';
 }
 
 function relayGroupKey(r: SwimmerResult): string {
@@ -286,6 +333,38 @@ export function convertToSCY(timeStr: string, event: string, gender: Gender, typ
   }
   
   return formatSecondsToTime(seconds * factor);
+}
+
+/** Freestyle metric distances map to their SCY program-event distance (400→500, 800→1000, 1500→1650). */
+function remapMetricFreestyleEvent(event: string): string {
+  const e = event.trim();
+  if (/relay/i.test(e)) return event;
+  if (!/free/i.test(e)) return event;
+  if (/^400(\D|$)/.test(e)) return e.replace(/^400/, '500');
+  if (/^800(\D|$)/.test(e)) return e.replace(/^800/, '1000');
+  if (/^1500(\D|$)/.test(e)) return e.replace(/^1500/, '1650');
+  return event;
+}
+
+/**
+ * SCY-equivalent event *and* time for a swim. Unlike {@link convertToSCY} (time only),
+ * this also remaps distance-event identity so a 400 Free (LCM/SCM) competes in the 500
+ * Free SCY slot (800→1000, 1500→1650). Non-metric swims are returned unchanged.
+ */
+export function convertSwimToSCY(
+  event: string,
+  time: string,
+  gender: Gender,
+  timeType: 'SCY' | 'SCM' | 'LCM'
+): { event: string; time: string } {
+  if (timeType === 'SCY') return { event, time };
+  const scyTime = convertToSCY(time, event, gender, timeType);
+  return { event: remapMetricFreestyleEvent(event), time: scyTime };
+}
+
+/** Strip combining diacritical marks for accent-insensitive name comparisons. */
+export function foldDiacritics(s: string): string {
+  return s.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
 const DEFAULT_UNSCORED_ROUNDS = [
@@ -1400,19 +1479,22 @@ export function simulateRoster(
   recruits: SwimmerResult[],
   removeSeniors: boolean,
   excludedSwimmerNames?: Set<string>,
-  relayLegOverrides: RelayLegOverride[] = []
+  relayLegOverrides: RelayLegOverride[] = [],
+  vacateRelayLegNames: Set<string> = new Set()
 ): SwimmerResult[] {
   const excluded = excludedSwimmerNames ?? new Set<string>();
   const overrideList = relayLegOverrides ?? [];
-  const runRosterSim = removeSeniors || excluded.size > 0 || overrideList.length > 0;
+  const vacateLegs = vacateRelayLegNames ?? new Set<string>();
+  const runRosterSim =
+    removeSeniors || excluded.size > 0 || overrideList.length > 0 || vacateLegs.size > 0;
   if (!runRosterSim) {
     return [...results, ...recruits];
   }
 
   const basePool = results.filter(r => {
     if (r.isRelay) return true;
-    if (excluded.has(normalizeSwimmerName(r.name))) return false;
-    if (removeSeniors && (r.classYear === 'SR' || r.classYear === 'Sr' || r.classYear === 'Senior')) return false;
+    if (excluded.has(canonicalSwimmerName(r.name))) return false;
+    if (removeSeniors && isGraduatingClassYear(r.classYear)) return false;
     return true;
   });
 
@@ -1477,10 +1559,10 @@ export function simulateRoster(
 
     for (let index = 0; index < outLegs.length; index++) {
       const leg = outLegs[index];
-      const isSeniorLeg =
-        leg.year === 'SR' || leg.year === 'Sr' || leg.year === 'Senior' || leg.year === 'GR';
-      const isDeletedLeg = excluded.has(normalizeSwimmerName(leg.name));
-      const needsReplace = (removeSeniors && isSeniorLeg) || isDeletedLeg;
+      const isSeniorLeg = isGraduatingClassYear(leg.year);
+      const isDeletedLeg = excluded.has(canonicalSwimmerName(leg.name));
+      const isNonScorerLeg = vacateLegs.has(normalizeSwimmerName(leg.name));
+      const needsReplace = (removeSeniors && isSeniorLeg) || isDeletedLeg || isNonScorerLeg;
       if (!needsReplace) {
         const nm = leg.name?.trim();
         if (nm && nm !== '—' && nm !== 'Unknown') {
@@ -1497,10 +1579,11 @@ export function simulateRoster(
           ? convertTimeToSeconds(legRowForSplit.relayLegSplit)
           : null;
 
+      const legNameCanonical = canonicalSwimmerName(leg.name);
       const departedIndiv = results.find(
         s =>
           !s.isRelay &&
-          s.name === leg.name &&
+          canonicalSwimmerName(s.name) === legNameCanonical &&
           eventMatchesStrokeDistance(s.event, distance, strokes)
       );
 
@@ -1525,7 +1608,7 @@ export function simulateRoster(
       };
 
       if (!override) {
-        markVacant('vacant');
+        markVacant(isNonScorerLeg ? 'no_replacement' : 'vacant');
         continue;
       }
 
@@ -1650,29 +1733,61 @@ export function simulateRoster(
     }
   }
 
-  // Safety: never drop relay legs if grouping skipped them during iteration
-  const emittedRelayKeys = new Set(finalResults.filter(r => r.isRelay).map(r => relayGroupKey(r)));
+  // Safety: re-add only relay groups the main loop never processed. Compare against
+  // the ORIGINAL-row keys in `processedRelayKeys` — a modified relay carries a changed
+  // team clock, so recomputing keys from the emitted (modified) rows would never match
+  // the original group and would re-add the pre-modification legs (including a removed
+  // swimmer's leg under their original name, double-counting the relay). See BUG 2.
   for (const r of results) {
     if (!r.isRelay) continue;
     const k = relayGroupKey(r);
-    if (emittedRelayKeys.has(k)) continue;
+    if (processedRelayKeys.has(k)) continue;
     const group = results.filter(x => x.isRelay && relayGroupKey(x) === k);
-    group.forEach(row => {
-      finalResults.push(row);
-      emittedRelayKeys.add(k);
-    });
+    group.forEach(row => finalResults.push(row));
+    processedRelayKeys.add(k);
   }
 
   return finalResults;
 }
 
-/** For UI cut badges only: 400 medley leadoff back compares to 100 Backstroke standards (not scored as individual). */
+/**
+ * For UI cut badges only: the backstroke leadoff leg of a **400 Medley Relay** is
+ * swum over 100 yards and compares to the 100 Backstroke standards. It is never
+ * scored as an individual entry.
+ *
+ * The distance must be read off the **normalized** event name. HyTek labels the
+ * event by leg — `Event 20 Men 4x100 Yard Medley Relay` — which contains `100`
+ * and no literal `400`, so the previous raw-label `/\b400\b/` test never fired on
+ * any real row in `data/meets.json`. `normalizeEventForCutline` folds
+ * legs × leg-distance into the published total (`4x100 … Medley Relay` →
+ * `400 Medley Relay`).
+ *
+ * The 200 Medley Relay leadoff is deliberately NOT mapped: no NCAA/NAIA table
+ * held here publishes a 50 Backstroke standard, so there would be nothing to
+ * compare against. See the round report.
+ */
 export function relaySplitQualificationCutEvent(res: SwimmerResult): string | null {
   if (!res.isRelay || res.relayLegStroke !== 'back') return null;
-  const ev = res.event.toLowerCase();
-  if (!ev.includes('medley')) return null;
-  if (!/\b400\b/.test(ev)) return null;
-  return '100 Backstroke';
+  const raw = String(res.event ?? '');
+  if (!/medley/i.test(raw)) return null;
+
+  // Primary path: the normalized, published event name.
+  let normalized = '';
+  try {
+    normalized = normalizeEventForCutline(raw);
+  } catch {
+    normalized = '';
+  }
+  if (/\b400\b/.test(normalized) && /medley/i.test(normalized)) return '100 Backstroke';
+
+  // FALLBACK — intentionally kept. If normalization ever fails, is changed, or
+  // returns something this rule does not recognise, fall back to the original
+  // raw-label test so the rule cannot silently stop firing. This is a superset of
+  // the pre-fix behaviour, never a narrowing of it. (`4x50 … Medley Relay` still
+  // returns null: neither the normalized `200 Medley Relay` nor the raw label
+  // contains a standalone `400`.)
+  if (/\b400\b/.test(raw)) return '100 Backstroke';
+  return null;
 }
 
 // ===================== Catalog-backed scoring adapter =====================
