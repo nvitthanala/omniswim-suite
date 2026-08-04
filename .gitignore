@@ -51,3 +51,9 @@ Thumbs.db
 .cursor/
 test-results/
 
+
+# Training footage: third-party race video is not committed to this public repo.
+# See data/training/MANIFEST.md for identity, provenance and checksums.
+data/training/*
+!data/training/MANIFEST.md
+!data/training/checksums.txt

@@ -223,7 +223,94 @@ Since every panel stays:
 
 ---
 
-## 7. Open questions
+## 7. Training data
+
+First clip received 2026-08-03: Jordan Crooks, 17.93, 50 free (SCY).
+
+**Video files are not committed.** `data/training/` is gitignored except for
+`MANIFEST.md` and `checksums.txt`. This repository is public, and race footage is
+generally third-party copyrighted material showing identifiable athletes;
+committing it would republish it, permanently and beyond recall on a public host.
+The manifest records identity, provenance and SHA-256 for every clip, so the
+dataset stays reproducible and auditable without redistribution. Collaborators
+obtain files separately and verify with `sha256sum -c`.
+
+**The first clip is a good start and an insufficient dataset.** A 50 free is one
+length: start, breakout, strokes, finish, and **no turn**. It cannot validate
+turn detection, cross-wall segmentation, or the `UNPAIRED_TURN` path that Fixture
+C guards. Gaps are tracked in the manifest; the largest are turns, non-freestyle
+strokes, and — still — any clip at all with tagged landmark ground truth.
+
+**Likely counter-intuitive finding for later:** broadcast footage pans, cuts and
+zooms, which is much harder for a pose model than a fixed side-on camera.
+Ordinary meet footage from a tripod is probably more useful for training than
+clean broadcast video of elite swims, and easier to obtain rights to.
+
+---
+
+## 8. First brief — C1/C3, Matrix only
+
+Self-contained, in the lift-and-paste style of `VIDEO_ANALYSIS_MASTERPLAN.md` §10.
+Scoped to one screen so the pattern can be judged before Manager follows.
+
+> **Goal.** Make the Matrix screen legible to someone who has never used it,
+> without removing any capability.
+>
+> **The problem, measured on the running app.** In DOM order a newcomer meets
+> `MEET CHARTS / TABLES` → `CUSTOM SCORING LOGIC` → `CHRONOLOGICAL TEAM SCORE
+> TIMELINE` → `MEET MOMENTUM VS PRELIMS` → `PERFORMANCE MATRIX` → and only then
+> `LOAD PDF` / `LINK PSYCH` / `STANDINGS`. **The output of the workflow is
+> presented above its input.** The screen also shows 22 buttons at once, 6 of
+> them icon-only with hover-tooltips, and 2 with no accessible name at all.
+>
+> **Do:**
+> 1. Reorder so inputs precede outputs: load/link data, then scoring config, then
+>    results. Ordering only — no panel is removed and none becomes unreachable.
+> 2. Group the toolbar so a small primary set is visible and the rest sits behind
+>    labelled menus or disclosure.
+> 3. Give every control an accessible name. `title` alone is not enough — add
+>    `aria-label`. Two buttons currently have neither.
+> 4. Add a first-run empty state naming the next action when no meet is loaded,
+>    matching the pattern Metrics already uses ("Upload a race video to begin").
+>
+> **Do not:**
+> - Delete or hide any panel. Every one is in use; this is an ordering and
+>   disclosure problem, not a surface-area one.
+> - Touch `packages/db/**`, `packages/core/src/lib/raceAnalysis/**`, or any test.
+> - Touch Manager. It comes next, after this pattern is judged.
+> - Add a dependency.
+>
+> **Repo facts — do not rediscover these.**
+> - Entry points: `packages/matrix/src/components/OpsModule.tsx` (429 lines) wraps
+>   `MeetOperationsView.tsx` (737 lines). `TeamCard.tsx` is 1,084 lines and is the
+>   biggest single contributor to the screen.
+> - **Charts must stay `ChartShell → ChartFrame → Recharts` with no
+>   `ResponsiveContainer`.** The dev server prints this rule on boot. The existing
+>   chart components already comply; keep it that way.
+> - Tailwind v4: use existing `--ui-*` / `--surface-*` / `--text-*` custom
+>   properties. Never introduce an unprefixed global token — this repo has a known
+>   token-collision problem.
+> - UI primitives that already exist: `ChartShell`, `ChartFrame`, `EmptyState`,
+>   `useToast` from `@omniswim/ui`; `useThemeColors` from
+>   `@omniswim/core/lib/useThemeColors`.
+> - Manager's four-step wizard (`1. Source → 2. Lineup → 3. Relays → 4. Optimize`,
+>   each with a plain-language subtitle) is the in-repo precedent for legible
+>   flow. Borrow its vocabulary; do not import its components.
+>
+> **Verify before reporting done.**
+> ```
+> npm run lint     # clean, all 7 packages
+> npm test         # 39 passed, 0 failed, 3 skipped
+> npm run build    # exit 0
+> ```
+> Then run the app (`npm run dev`, port 3000), open `/matrix`, and confirm: no
+> console errors, every panel still reachable, and the first thing a newcomer
+> reads is how to load data.
+
+---
+
+## 9. Open questions
 
 1. Should the four-step wizard pattern from Manager be extended to Matrix, or should Matrix stay a single dense dashboard with better ordering? This is a real fork and I would rather you choose than guess.
 2. Who are the "uninitiated" — assistant coaches, athletes, other programmes? Which of them need to self-serve without you present determines how much hand-holding C4 needs.
+3. Do you want the footage bytes committed via Git LFS instead of kept local? `git-lfs` is installed but not configured here. It fixes repository bloat but **not** the public-redistribution question, so the manifest approach is the current default.
