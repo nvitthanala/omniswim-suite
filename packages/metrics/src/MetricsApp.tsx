@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { UploadCloud, Settings2, FolderOpen, Save, Download, Trash2, X } from 'lucide-react';
+import { BarChart3, FolderOpen, Save, Download, Settings2, Tags, Trash2, UploadCloud, X } from 'lucide-react';
 import { analyzeRace, createTagStateMachine, raceLengthCount } from '@omniswim/core/lib/raceAnalysis';
 import { VideoPlayer } from './components/VideoPlayer';
 import { MetricsDashboard } from './components/MetricsDashboard';
@@ -9,7 +9,7 @@ import { TagTable, updateTagTime } from './components/TagTable';
 import { SessionComparePanel } from './components/SessionComparePanel';
 import type { OperatorKey, RaceAnalysisResult, RaceConfig, RaceTag } from './types';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
-import { EmptyState, useToast } from '@omniswim/ui';
+import { EmptyState, useToast, WizardShell, type WizardStep } from '@omniswim/ui';
 import { extractVideoMeta, formatMeta, type VideoMeta } from './lib/videoMeta';
 import {
   deleteSession,
@@ -43,6 +43,14 @@ const DEFAULT_RACE_CONFIG: RaceConfig = {
   isRelayLeg: false,
 };
 
+type MetricsStepId = 'setup' | 'tag' | 'review';
+
+const METRICS_STEPS: readonly WizardStep<MetricsStepId>[] = [
+  { id: 'setup', label: 'Setup', title: 'Open the race', hint: 'Open a video and describe the race before tagging.', icon: <UploadCloud size={16} /> },
+  { id: 'tag', label: 'Tag', title: 'Tag the race', hint: 'Mark each landmark frame by frame with the keyboard.', icon: <Tags size={16} /> },
+  { id: 'review', label: 'Review', title: 'Read the result', hint: 'Check the splits, tempo and velocity, and compare against a saved session.', icon: <BarChart3 size={16} /> },
+];
+
 function lengthCountForConfig(config: RaceConfig): number {
   const raw = raceLengthCount(config);
   return Number.isInteger(raw) ? Math.round(raw) : config.strokePerLength.length;
@@ -58,6 +66,7 @@ export default function MetricsApp() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [videoMeta, setVideoMeta] = useState<VideoMeta | null>(null);
   const [fpsOverride, setFpsOverride] = useState<number | null>(null);
+  const [step, setStep] = useState<MetricsStepId>('setup');
 
   const [swimmerName, setSwimmerName] = useState('');
   const [raceConfig, setRaceConfig] = useState<RaceConfig>(DEFAULT_RACE_CONFIG);
@@ -88,6 +97,27 @@ export default function MetricsApp() {
       if (videoUrl) URL.revokeObjectURL(videoUrl);
     };
   }, [videoUrl]);
+
+  const raceSetupComplete = videoUrl !== null && setupConfirmed;
+  const activeStep: MetricsStepId = raceSetupComplete ? step : 'setup';
+  const metricsSteps = useMemo(
+    () => METRICS_STEPS.map((wizardStep) => (
+      wizardStep.id === 'setup' ? wizardStep : { ...wizardStep, disabled: !raceSetupComplete }
+    )),
+    [raceSetupComplete],
+  );
+
+  useEffect(() => {
+    if (!raceSetupComplete) {
+      setStep('setup');
+      return;
+    }
+    setStep((currentStep) => currentStep === 'setup' ? 'tag' : currentStep);
+  }, [raceSetupComplete]);
+
+  const handleStepChange = useCallback((nextStep: MetricsStepId) => {
+    if (nextStep === 'setup' || raceSetupComplete) setStep(nextStep);
+  }, [raceSetupComplete]);
 
   const comparisonTime = useMemo(() => {
     if (!activeWorkspace || !swimmerName) return null;
@@ -493,27 +523,38 @@ export default function MetricsApp() {
         </div>
 
         <div className="flex-1 lg:flex-[1.2] xl:max-w-md p-4 sm:p-6 flex flex-col gap-4 overflow-y-auto custom-scrollbar bg-[var(--surface)]">
-          {!videoUrl ? (
-            <EmptyState
-              className="h-full min-h-[280px] border-dashed bg-[var(--surface-muted)]"
-              icon={<UploadCloud size={28} />}
-              eyebrow="Metrics"
-              title="Upload a race video to begin"
-              description="Open a local video, configure the race, then tag it frame by frame with the keyboard."
-              actionLabel="Open Video"
-              onAction={() => document.getElementById('metrics-file-input')?.click()}
-            />
-          ) : !setupConfirmed ? (
-            <RaceSetupForm
-              config={raceConfig}
-              swimmerName={swimmerName}
-              rosterNames={rosterNames}
-              onSwimmerNameChange={setSwimmerName}
-              onChange={setRaceConfig}
-              onConfirm={() => setSetupConfirmed(true)}
-            />
-          ) : (
+          <WizardShell
+            steps={metricsSteps}
+            eyebrow="Race workflow"
+            ariaLabel="Race steps"
+            step={activeStep}
+            onStepChange={handleStepChange}
+          >
+            {activeStep === 'setup' ? (
+              !videoUrl ? (
+                <EmptyState
+                  className="h-full min-h-[280px] border-dashed bg-[var(--surface-muted)]"
+                  icon={<UploadCloud size={28} />}
+                  eyebrow="Metrics"
+                  title="Upload a race video to begin"
+                  description="Open a local video, configure the race, then tag it frame by frame with the keyboard."
+                  actionLabel="Open Video"
+                  onAction={() => document.getElementById('metrics-file-input')?.click()}
+                />
+              ) : (
+                <RaceSetupForm
+                  config={raceConfig}
+                  swimmerName={swimmerName}
+                  rosterNames={rosterNames}
+                  onSwimmerNameChange={setSwimmerName}
+                  onChange={setRaceConfig}
+                  onConfirm={() => setSetupConfirmed(true)}
+                />
+              )
+            ) : (
             <>
+              {activeStep === 'tag' ? (
+                <div className="flex flex-col gap-4">
               <div className="flex items-center justify-between border-b border-theme-soft pb-3">
                 <div>
                   <div className="text-ui-micro text-theme-muted uppercase tracking-widest font-bold mb-1">
@@ -530,11 +571,16 @@ export default function MetricsApp() {
                 </div>
               </div>
               <TagTable config={raceConfig} tags={tags} frameSeconds={frameSeconds} onChange={setTags} />
+                </div>
+              ) : null}
+              {activeStep === 'review' ? (
+                <div className="flex flex-col gap-4">
               <MetricsDashboard data={result} />
               {sessions.filter((s) => !s.legacy).length > 0 ? (
                 <section className="panel p-4 border border-theme-soft rounded-xl">
-                  <label className="label-caps flex items-center gap-1.5 mb-1.5">Compare against saved session</label>
+                  <label htmlFor="metrics-compare-session" className="label-caps flex items-center gap-1.5 mb-1.5">Compare against saved session</label>
                   <select
+                    id="metrics-compare-session"
                     value={compareSessionId}
                     onChange={(e) => handleSelectCompareSession(e.target.value)}
                     className="glass-input w-full"
@@ -556,8 +602,11 @@ export default function MetricsApp() {
                   right={compareData}
                 />
               ) : null}
+                </div>
+              ) : null}
             </>
           )}
+          </WizardShell>
         </div>
       </main>
     </div>

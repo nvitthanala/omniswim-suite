@@ -214,6 +214,7 @@ export function VideoPlayer({
                   max="100"
                   value={progress}
                   onChange={handleSeek}
+                  aria-label="Video progress"
                   className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
                 />
                 <div className="w-full h-1.5 bg-white/30 dark:bg-slate-800 rounded-full overflow-hidden backdrop-blur-sm border border-black/20">
@@ -233,13 +234,13 @@ export function VideoPlayer({
 
               <div className="flex items-center justify-between text-white flex-wrap gap-y-2 mt-1">
                 <div className="flex items-center gap-3">
-                  <button onClick={() => stepFrame(-1)} disabled={effectiveFps === null} className="hover:text-accent-400 transition-colors focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed" title="Previous Frame">
+                  <button onClick={() => stepFrame(-1)} disabled={effectiveFps === null} className="hover:text-accent-400 transition-colors focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed" title="Previous Frame" aria-label="Previous frame">
                     <SkipBack className="w-4 h-4 fill-current opacity-80 hover:opacity-100" />
                   </button>
-                  <button onClick={togglePlay} className="hover:text-accent-400 transition-colors focus:outline-none bg-accent-500/20 p-1.5 rounded-full backdrop-blur-sm border border-accent-500/30 text-accent-100">
+                  <button onClick={togglePlay} aria-label={isPlaying ? 'Pause video' : 'Play video'} className="hover:text-accent-400 transition-colors focus:outline-none bg-accent-500/20 p-1.5 rounded-full backdrop-blur-sm border border-accent-500/30 text-accent-100">
                     {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
                   </button>
-                  <button onClick={() => stepFrame(1)} disabled={effectiveFps === null} className="hover:text-accent-400 transition-colors focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed" title="Next Frame">
+                  <button onClick={() => stepFrame(1)} disabled={effectiveFps === null} className="hover:text-accent-400 transition-colors focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed" title="Next Frame" aria-label="Next frame">
                     <SkipForward className="w-4 h-4 fill-current opacity-80 hover:opacity-100" />
                   </button>
 
@@ -255,6 +256,7 @@ export function VideoPlayer({
                     <select
                       value={fpsOverride ?? ''}
                       onChange={(e) => onFpsOverrideChange(e.target.value ? parseFloat(e.target.value) : null)}
+                      aria-label="Frames per second"
                       className="bg-transparent text-white focus:outline-none cursor-pointer appearance-none pr-3"
                     >
                       <option value="" className="bg-slate-900 text-white">
@@ -269,7 +271,7 @@ export function VideoPlayer({
                   </div>
                   <div className="bg-black/40 backdrop-blur-sm rounded border border-white/10 px-2 flex items-center h-8">
                     <span className="text-ui-micro text-white/60 mr-2 uppercase">Speed:</span>
-                    <select value={playbackRate} onChange={changePlaybackRate} className="bg-transparent text-white focus:outline-none cursor-pointer appearance-none pr-3">
+                    <select value={playbackRate} onChange={changePlaybackRate} aria-label="Playback speed" className="bg-transparent text-white focus:outline-none cursor-pointer appearance-none pr-3">
                       <option value={0.1} className="bg-slate-900 text-white">0.1x</option>
                       <option value={0.25} className="bg-slate-900 text-white">0.25x</option>
                       <option value={0.5} className="bg-slate-900 text-white">0.5x</option>
@@ -280,7 +282,7 @@ export function VideoPlayer({
                   </div>
 
                   <div className="hidden md:flex items-center gap-2 border-l border-white/20 pl-4 ml-2 h-8 group">
-                    <button onClick={toggleMute} className="hover:text-accent-400 transition-colors focus:outline-none">
+                    <button onClick={toggleMute} aria-label={isMuted || volume === 0 ? 'Unmute video' : 'Mute video'} className="hover:text-accent-400 transition-colors focus:outline-none">
                       {isMuted || volume === 0 ? <VolumeX className="w-4 h-4 drop-shadow-md" /> : <Volume2 className="w-4 h-4 drop-shadow-md" />}
                     </button>
                     <input
@@ -290,11 +292,12 @@ export function VideoPlayer({
                       step="0.01"
                       value={isMuted ? 0 : volume}
                       onChange={handleVolumeChange}
+                      aria-label="Volume"
                       className="w-0 opacity-0 group-hover:w-16 group-hover:opacity-100 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer hover:bg-white/40 transition-all duration-300 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full focus:outline-none"
                     />
                   </div>
 
-                  <button className="hover:text-accent-400 transition-colors ml-2 border-l border-white/20 pl-4">
+                  <button aria-label="Maximize video" className="hover:text-accent-400 transition-colors ml-2 border-l border-white/20 pl-4">
                     <Maximize className="w-4 h-4 drop-shadow-md" />
                   </button>
                 </div>

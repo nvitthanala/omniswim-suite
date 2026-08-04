@@ -7,6 +7,7 @@ export type WizardStep<T extends string = string> = {
   title: string;
   hint: string;
   icon: React.ReactNode;
+  disabled?: boolean;
 };
 
 export type WizardShellProps<T extends string> = {
@@ -31,15 +32,32 @@ export function WizardShell<T extends string>({
 }: WizardShellProps<T>) {
   const reactId = useId().replace(/:/g, '');
   const tabRefs = useRef<Array<HTMLButtonElement | null>>([]);
-  const active = steps.find(s => s.id === step) ?? steps[0];
   const stepIndex = steps.findIndex(s => s.id === step);
-  const activeIndex = stepIndex >= 0 ? stepIndex : 0;
+  const firstEnabledIndex = steps.findIndex(s => !s.disabled);
+  const activeIndex =
+    stepIndex >= 0 && !steps[stepIndex].disabled
+      ? stepIndex
+      : firstEnabledIndex >= 0
+        ? firstEnabledIndex
+        : stepIndex >= 0
+          ? stepIndex
+          : 0;
+  const active = steps[activeIndex];
   const panelId = `wizard-panel-${reactId}`;
 
-  const selectStep = (index: number) => {
-    const nextIndex = (index + steps.length) % steps.length;
+  const selectStep = (nextIndex: number) => {
     onStepChange(steps[nextIndex].id);
     tabRefs.current[nextIndex]?.focus();
+  };
+
+  const selectAdjacentEnabledStep = (index: number, direction: -1 | 1) => {
+    for (let offset = 1; offset <= steps.length; offset += 1) {
+      const nextIndex = (index + direction * offset + steps.length) % steps.length;
+      if (!steps[nextIndex].disabled) {
+        selectStep(nextIndex);
+        return;
+      }
+    }
   };
 
   return (
@@ -62,6 +80,7 @@ export function WizardShell<T extends string>({
           {steps.map((s, i) => {
             const isActive = i === activeIndex;
             const isDone = i < activeIndex;
+            const isDisabled = s.disabled === true;
             const tabId = `wizard-tab-${reactId}-${s.id}`;
             return (
               <button
@@ -72,30 +91,39 @@ export function WizardShell<T extends string>({
                 id={tabId}
                 aria-controls={panelId}
                 aria-selected={isActive}
+                aria-disabled={isDisabled ? 'true' : undefined}
                 tabIndex={isActive ? 0 : -1}
-                onClick={() => onStepChange(s.id)}
+                onClick={() => {
+                  if (!isDisabled) onStepChange(s.id);
+                }}
                 onKeyDown={event => {
                   switch (event.key) {
                     case 'ArrowLeft':
                       event.preventDefault();
-                      selectStep(i - 1);
+                      selectAdjacentEnabledStep(i, -1);
                       break;
                     case 'ArrowRight':
                       event.preventDefault();
-                      selectStep(i + 1);
+                      selectAdjacentEnabledStep(i, 1);
                       break;
                     case 'Home':
                       event.preventDefault();
-                      selectStep(0);
+                      if (firstEnabledIndex >= 0) selectStep(firstEnabledIndex);
                       break;
                     case 'End':
                       event.preventDefault();
-                      selectStep(steps.length - 1);
+                      for (let index = steps.length - 1; index >= 0; index -= 1) {
+                        if (!steps[index].disabled) {
+                          selectStep(index);
+                          break;
+                        }
+                      }
                       break;
                   }
                 }}
-                className={`text-left rounded-xl border px-3.5 py-3 transition-colors min-w-0 ${
-                  isActive
+                className={`text-left rounded-xl border px-3.5 py-3 transition-colors min-w-0 ${isDisabled
+                  ? 'border-theme-soft surface-muted-bg text-theme-muted opacity-60 cursor-not-allowed'
+                  : isActive
                     ? 'border-[var(--text-accent)]/50 bg-[var(--text-accent)]/10'
                     : isDone
                       ? 'border-theme-soft surface-overlay hover:border-[var(--text-accent)]/30'
@@ -105,7 +133,9 @@ export function WizardShell<T extends string>({
                 <div className="flex items-center gap-2.5 min-w-0">
                   <span
                     className={`flex h-8 w-8 shrink-0 items-center justify-center rounded-lg transition-colors ${
-                      isActive
+                      isDisabled
+                        ? 'surface-overlay text-theme-muted'
+                        : isActive
                         ? 'bg-[var(--text-accent)]/20 text-[var(--text-accent)]'
                         : isDone
                           ? 'bg-[var(--text-accent)]/10 text-[var(--text-accent)]'
@@ -115,7 +145,7 @@ export function WizardShell<T extends string>({
                     {isDone && !isActive ? <CheckCircle2 size={16} /> : s.icon}
                   </span>
                   <div className="min-w-0">
-                    <p className={`text-ui-label font-semibold truncate ${isActive ? 'text-[var(--text-accent)]' : 'text-[var(--text-primary)]'}`}>
+                    <p className={`text-ui-label font-semibold truncate ${isDisabled ? 'text-theme-muted' : isActive ? 'text-[var(--text-accent)]' : 'text-[var(--text-primary)]'}`}>
                       {i + 1}. {s.label}
                     </p>
                     <p className="text-ui-caption text-theme-muted truncate">{s.title}</p>
