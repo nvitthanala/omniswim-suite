@@ -254,4 +254,66 @@ const OPTS = { team: 'HSU', gender: MEN, settings: SETTINGS };
   ok('requestScenarioDiff sync fallback matches computeScenarioDiff');
 }
 
+// ---------------------------------------------------------------------------
+// thenMode: 'baseline' — diff the loaded meet against the working copy.
+//
+// baseline is NOT a separate workspace: buildScoringSnapshot scores the SAME
+// workspace with applyWhatIf false, removeSeniors false and no scorer-roster
+// overrides. So a baseline diff passes one workspace as both sides and lets the
+// mode do the work. The assertion that matters is that the "then" total equals
+// the engine's own baseline total — otherwise the diff would silently disagree
+// with the baseline shown on the scoreboard.
+{
+  const ws = baseWorkspace({
+    menResults: [
+      result('a', 'Alpha, A', 'Team A', '50 Freestyle', '20.00', { rank: 1 }),
+      result('b', 'Beta, B', 'Team A', '50 Freestyle', '21.00', { rank: 2 }),
+      result('c', 'Gamma, C', 'Team B', '50 Freestyle', '22.00', { rank: 3 }),
+    ],
+    // A working-copy edit that only the what-if side may see.
+    deletedSwimmers: [{ name: 'Beta, B', gender: MEN }],
+  });
+
+  const baselineBundle = buildScoringBundle({
+    workspace: ws,
+    gender: MEN,
+    removeSeniors: false,
+    applyWhatIf: false,
+    scorerRosterOverrides: [],
+  });
+  const engineBaseline =
+    baselineBundle.sortedTeams.find(x => x.teamName === 'Team A')?.totalPoints ?? 0;
+
+  const diff = computeScenarioDiff(ws, ws, {
+    team: 'Team A',
+    gender: MEN,
+    settings: SETTINGS,
+    thenMode: 'baseline',
+  });
+
+  assert.equal(
+    diff.totals.then,
+    engineBaseline,
+    'baseline side must equal buildScoringBundle(applyWhatIf:false) for the same team'
+  );
+  ok('thenMode baseline matches the engine baseline total');
+
+  assert.equal(diff.totals.now, engineTeamTotal(ws, 'Team A'));
+  ok('thenMode baseline leaves the now side scored as what-if');
+
+  assert.notEqual(
+    diff.totals.delta,
+    0,
+    'a soft-removed swimmer must show as a baseline-vs-working difference'
+  );
+  ok('baseline diff surfaces a working-copy edit');
+
+  // Default must stay what-if on BOTH sides: same workspace both sides, no mode
+  // => no difference at all. Regression guard for every existing caller.
+  const same = computeScenarioDiff(ws, ws, { team: 'Team A', gender: MEN, settings: SETTINGS });
+  assert.equal(same.totals.delta, 0, 'default thenMode must score both sides identically');
+  assert.equal(same.swimmers.length, 0);
+  ok('omitting thenMode preserves the original snapshot-vs-current behaviour');
+}
+
 console.log(`\nscenario diff: ${n} checks passed`);

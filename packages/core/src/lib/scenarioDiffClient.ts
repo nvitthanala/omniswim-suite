@@ -14,10 +14,11 @@ import {
   computeScenarioDiff,
   type ScenarioDiffOptions,
   type ScenarioDiffResult,
+  type ScenarioDiffSideMode,
 } from './scenarioDiff';
 import type { ScenarioDiffResponse } from '../workers/scoringWorker';
 
-export type { ScenarioDiffOptions, ScenarioDiffResult };
+export type { ScenarioDiffOptions, ScenarioDiffResult, ScenarioDiffSideMode };
 
 function supportsModuleWorker(): boolean {
   return typeof window !== 'undefined' && typeof Worker !== 'undefined';
@@ -82,6 +83,10 @@ export function requestScenarioDiff(
       gender: opts.gender,
       settings: opts.settings,
       removeSeniors: opts.removeSeniors,
+      // Must be forwarded explicitly: this postMessage enumerates option fields
+      // rather than spreading `opts`, so a field missed here would silently be
+      // dropped on the worker path while still working in the sync fallback.
+      thenMode: opts.thenMode,
     });
   });
 }

@@ -20,6 +20,19 @@ import {
   sortEventsByMeetOrder,
 } from './utils';
 
+/**
+ * How one side of a diff is scored.
+ *
+ * - `whatIf`   — the working lineup: what-if edits applied, remove-seniors and
+ *                scorer-roster overrides honoured. This is the normal side.
+ * - `baseline` — the loaded meet as parsed, i.e. what-if OFF. Mirrors exactly
+ *                the `baseline` bundle in `buildScoringSnapshot`
+ *                (`applyWhatIf: false`, `removeSeniors: false`,
+ *                `scorerRosterOverrides: []`), so a diff computed against it
+ *                agrees with the baseline total shown on the scoreboard.
+ */
+export type ScenarioDiffSideMode = 'whatIf' | 'baseline';
+
 export type ScenarioDiffOptions = {
   team: string;
   gender: Gender;
@@ -27,6 +40,16 @@ export type ScenarioDiffOptions = {
   settings?: ScoringSettings;
   /** Mirror of the Lineup step's remove-seniors what-if toggle (default false). */
   removeSeniors?: boolean;
+  /**
+   * How the "then" side is scored. Defaults to `whatIf`, which is the
+   * snapshot-vs-current comparison this module was written for.
+   *
+   * Pass `baseline` to diff the loaded meet against the working copy. Because
+   * baseline is not a separate workspace — it is the same workspace scored with
+   * what-if off — a baseline diff passes the SAME workspace as both arguments
+   * and lets the mode do the work.
+   */
+  thenMode?: ScenarioDiffSideMode;
 };
 
 export type ScenarioSwimmerDiff = {
@@ -90,16 +113,23 @@ type TeamSide = {
   total: number;
 };
 
-function scoreSide(workspace: Workspace, opts: ScenarioDiffOptions): TeamSide {
+function scoreSide(
+  workspace: Workspace,
+  opts: ScenarioDiffOptions,
+  mode: ScenarioDiffSideMode = 'whatIf'
+): TeamSide {
   const ws: Workspace = opts.settings
     ? { ...workspace, scoringSettings: opts.settings }
     : workspace;
+  // `baseline` must match buildScoringSnapshot's baseline bundle exactly, or a
+  // baseline diff would disagree with the baseline total on the scoreboard.
+  const isBaseline = mode === 'baseline';
   const bundle = buildScoringBundle({
     workspace: ws,
     gender: opts.gender,
-    removeSeniors: opts.removeSeniors ?? false,
-    applyWhatIf: true,
-    scorerRosterOverrides: ws.scorerRosterOverrides,
+    removeSeniors: isBaseline ? false : (opts.removeSeniors ?? false),
+    applyWhatIf: !isBaseline,
+    scorerRosterOverrides: isBaseline ? [] : ws.scorerRosterOverrides,
   });
 
   const teamKey = opts.team.trim();
@@ -162,8 +192,8 @@ export function computeScenarioDiff(
   snapshotContent: Workspace,
   opts: ScenarioDiffOptions
 ): ScenarioDiffResult {
-  const then = scoreSide(snapshotContent, opts);
-  const now = scoreSide(current, opts);
+  const then = scoreSide(snapshotContent, opts, opts.thenMode ?? 'whatIf');
+  const now = scoreSide(current, opts, 'whatIf');
 
   const swimmers: ScenarioSwimmerDiff[] = [];
   /** event → set of changed swimmer/relay keys (for swimmersChanged counts). */
