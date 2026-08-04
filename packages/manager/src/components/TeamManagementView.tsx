@@ -36,6 +36,7 @@ type Props = {
   onReloadScoring: () => void;
   onAddRecruit: (recruit: Recruit) => void;
   onUpdate: (patch: Partial<Workspace>) => void;
+  onOpenImportWizard: () => void;
   onRequestDeleteSwimmer?: (name: string) => void;
 };
 
@@ -52,6 +53,7 @@ export default function TeamManagementView({
   onReloadScoring,
   onAddRecruit,
   onUpdate,
+  onOpenImportWizard,
   onRequestDeleteSwimmer,
 }: Props) {
   const toast = useToast();
@@ -254,6 +256,7 @@ export default function TeamManagementView({
           recruitPrefill={recruitPrefill}
           onAddRecruit={onAddRecruit}
           onUpdate={onUpdate}
+          onOpenImportWizard={onOpenImportWizard}
         />
       ) : null}
       {rosterStep === 'lineup' ? (

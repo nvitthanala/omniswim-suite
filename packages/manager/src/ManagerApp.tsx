@@ -259,6 +259,7 @@ export default function ManagerApp() {
             onReloadScoring={() => setScoringRefreshKey(k => k + 1)}
             onAddRecruit={handleAddRecruit}
             onUpdate={updateWorkspace}
+            onOpenImportWizard={() => setShowImportWizard(true)}
             onRequestDeleteSwimmer={
               whatIfMode ? name => setSwimmerDeleteCandidate({ name }) : undefined
             }
