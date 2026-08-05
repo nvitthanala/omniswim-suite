@@ -60,7 +60,7 @@ function downloadExport(exp: EntryExport) {
 }
 
 export default function ManagerApp() {
-  const { activeWorkspace, activeGender, updateWorkspace } = useSuiteWorkspace();
+  const { activeWorkspace, activeGender, createWorkspace, updateWorkspace } = useSuiteWorkspace();
   const toast = useToast();
   const [removeSeniors, setRemoveSeniors] = useState(false);
   const [whatIfMode, setWhatIfMode] = useState(true);
@@ -126,6 +126,8 @@ export default function ManagerApp() {
         eyebrow="Manager"
         title="Create a workspace to build your roster"
         description="Manager needs a workspace before it can import swimmers, tune scorer eligibility, or plan entries."
+        actionLabel="New workspace"
+        onAction={() => void createWorkspace()}
       />
     );
   }

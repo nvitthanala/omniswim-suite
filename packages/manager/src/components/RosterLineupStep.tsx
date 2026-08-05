@@ -12,7 +12,8 @@ import {
   suggestQuickFillForVacantLeg,
   type LineupChecklistItem,
 } from '@omniswim/core/lib/rosterLineupAudit';
-import { SegmentedControl, useToast } from '@omniswim/ui';
+import { FileWarning, Users } from 'lucide-react';
+import { EmptyState, SegmentedControl, useToast } from '@omniswim/ui';
 import TeamRosterPanel from './TeamRosterPanel';
 import DuplicateAthletesPanel from './DuplicateAthletesPanel';
 import type { EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
@@ -70,6 +71,8 @@ export default function RosterLineupStep({
 }: Props) {
   const toast = useToast();
   const [sidePanelTab, setSidePanelTab] = useState<SidePanelTab>('checklist');
+  const results = gender === Gender.MEN ? workspace.menResults : workspace.womenResults;
+  const hasMeetResults = (results ?? []).length > 0;
 
   const audit = useMemo(() => {
     if (!selectedTeam) {
@@ -123,6 +126,28 @@ export default function RosterLineupStep({
     onUpdate({ relayLegOverrides: suggestion.overrides });
     toast.push('success', suggestion.message);
   };
+
+  if (!hasMeetResults) {
+    return (
+      <EmptyState
+        icon={<FileWarning size={28} />}
+        eyebrow="Lineup"
+        title="Bring in a meet first"
+        description="Use Source to load the meet this lineup is built from."
+      />
+    );
+  }
+
+  if (!selectedTeam) {
+    return (
+      <EmptyState
+        icon={<Users size={28} />}
+        eyebrow="Lineup"
+        title="Choose a team to build its lineup"
+        description="Select a team to edit its roster and entries."
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col gap-3 flex-1 min-h-0">
