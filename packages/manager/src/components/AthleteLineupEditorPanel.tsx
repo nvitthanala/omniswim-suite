@@ -11,6 +11,7 @@
  * expanded at a time by default.
  */
 
+import AthleteEntriesSection from './AthleteEntriesSection';
 import AthleteHistorySection from './AthleteHistorySection';
 import DrawerSection from './DrawerSection';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
@@ -125,30 +126,19 @@ export default function AthleteLineupEditorPanel({
   autoIsScorer,
 }: Props) {
   const toast = useToast();
-  const [newEvent, setNewEvent] = useState<string>(ALL_PLAN_EVENTS[0]);
-  const [newTime, setNewTime] = useState('');
-  const [pasteOpen, setPasteOpen] = useState(false);
-  const [pasteText, setPasteText] = useState('');
-  const [editingTimeId, setEditingTimeId] = useState<string | null>(null);
-  const [editingTimeValue, setEditingTimeValue] = useState('');
   const [lastApplied, setLastApplied] = useState<{
     inverse: Partial<Workspace>;
     description: string;
   } | null>(null);
   const [aliasesOpen, setAliasesOpen] = useState(false);
   const [newAliasText, setNewAliasText] = useState('');
-  const [pastePreview, setParsePreview] = useState<Array<{ event: string; time: string; selected: boolean }>>([]);
 
   // A fresh athlete selection should never inherit a stale undo chip or open editors.
   useEffect(() => {
     setLastApplied(null);
-    setEditingTimeId(null);
-    // The history section resets its own inline edit on the same key — see
-    // AthleteHistorySection.
     setNewAliasText('');
-    setParsePreview([]);
-    setPasteOpen(false);
-    setPasteText('');
+    // The entries and history sections reset their own editors on the same
+    // key — see AthleteEntriesSection and AthleteHistorySection.
   }, [athlete.key]);
 
   // Escape closes the drawer, same as the backdrop click / X button.
@@ -400,166 +390,6 @@ export default function AthleteLineupEditorPanel({
     }
   };
 
-  const addEntry = () => {
-    if (!editable || !newTime.trim()) return;
-    if (!canAcceptAnotherEntry(counts, settings, newEvent)) {
-      toast.push('error', 'Entry limit reached for this type');
-      return;
-    }
-    applyPatch(ws =>
-      addPlannedEntry(ws, {
-        name: athlete.name,
-        team: athlete.team,
-        gender,
-        classYear: athlete.classYear,
-        event: newEvent,
-        time: newTime.trim(),
-      })
-    );
-    setNewTime('');
-  };
-
-  const removeEntry = (id: string) => {
-    applyPatch(ws => removePlannedEntry(ws, id));
-  };
-
-  const startTimeEdit = (p: PlannedSwimEntry) => {
-    setEditingTimeId(p.id);
-    setEditingTimeValue(p.time);
-  };
-
-  const cancelTimeEdit = () => {
-    setEditingTimeId(null);
-    setEditingTimeValue('');
-  };
-
-  const commitTimeEdit = (p: PlannedSwimEntry) => {
-    const time = editingTimeValue.trim();
-    cancelTimeEdit();
-    if (!time || time === p.time) return;
-    applyPatch(ws => updatePlannedEntry(ws, p.id, { time }));
-  };
-
-  const changeEntryEvent = (p: PlannedSwimEntry, event: string) => {
-    if (event === p.event) return;
-    applyPatch(ws => updatePlannedEntry(ws, p.id, { event }));
-  };
-
-  const toggleActive = (id: string) => {
-    if (!editable) return;
-    const target = athletePlans.find(p => p.id === id);
-    if (!target) return;
-    const enabling = target.active === false;
-    if (enabling) {
-      const without = countSwimmerEntries(
-        allResults.filter(r => r.id !== id),
-        athlete.team,
-        gender,
-        athlete.name
-      );
-      if (!canAcceptAnotherEntry(without, settings, target.event)) {
-        toast.push('error', 'Entry limit reached — cannot re-enable');
-        return;
-      }
-    }
-    applyPatch(ws => updatePlannedEntry(ws, id, { active: enabling }));
-  };
-
-  const previewPaste = () => {
-    if (!editable || !pasteText.trim()) return;
-    const parsed = parseSwimCloudPasteDetailed(pasteText, {
-      team: athlete.team,
-      gender,
-      swimmerName: athlete.name,
-      division: divisionForTeamOrNull(athlete.team) ?? undefined,
-    });
-    if (parsed.swims.length === 0) {
-      toast.push('error', parsed.warnings[0] || 'No swims parsed from paste.');
-      return;
-    }
-    let runningCounts = { individual: counts.individual, relayCount: counts.relayCount };
-    const have = new Set(athletePlans.map(p => p.event));
-    const preview: Array<{ event: string; time: string; selected: boolean }> = [];
-    const sorted = [...parsed.swims].sort((a, b) => {
-      const aRelay = /\brelay\b/i.test(a.event) ? 1 : 0;
-      const bRelay = /\brelay\b/i.test(b.event) ? 1 : 0;
-      return aRelay - bRelay;
-    });
-    for (const swim of sorted) {
-      if (have.has(swim.event)) continue;
-      const probe = {
-        individual: runningCounts.individual,
-        relayEvents: new Set<string>(),
-        relayCount: runningCounts.relayCount,
-      };
-      if (!canAcceptAnotherEntry(probe, settings, swim.event)) continue;
-      preview.push({ event: swim.event, time: swim.time, selected: true });
-      have.add(swim.event);
-      if (/\brelay\b/i.test(swim.event)) runningCounts.relayCount += 1;
-      else runningCounts.individual += 1;
-    }
-    if (preview.length === 0) {
-      toast.push('error', 'No entries can be added (all events exist or limits reached).');
-      return;
-    }
-    setParsePreview(preview);
-  };
-
-  const confirmPastePreview = () => {
-    const selected = pastePreview.filter(p => p.selected);
-    if (selected.length === 0) return;
-    const parsed = parseSwimCloudPasteDetailed(pasteText, {
-      team: athlete.team,
-      gender,
-      swimmerName: athlete.name,
-      division: divisionForTeamOrNull(athlete.team) ?? undefined,
-    });
-    const selectedEvents = new Set(selected.map(p => p.event));
-    const swims = parsed.swims.filter(s => selectedEvents.has(s.event));
-    const next = [
-      ...athletePlans,
-      ...swims.map(swim =>
-        createPlannedEntry({
-          name: athlete.name,
-          team: athlete.team,
-          gender,
-          classYear: athlete.classYear,
-          event: swim.event,
-          time: swim.time,
-          timeType: swim.timeType ?? 'SCY',
-          source: 'swimcloud',
-          active: true,
-        })
-      ),
-    ];
-    const ws = workspaceRef.current;
-    const basePlans = ws.meetEntryPlans ?? [];
-    const removedPlanIds = new Set(athletePlans.map(p => p.id));
-    applyRawPatch({
-      meetEntryPlans: [
-        ...basePlans.filter(
-          p =>
-            !(
-              canonicalSwimmerName(p.name) === athleteCanonical &&
-              String(p.team ?? '').trim() === athleteTeamTrim &&
-              p.gender === gender
-            )
-        ),
-        ...next,
-      ],
-      activeEntryIds: [
-        ...(ws.activeEntryIds ?? []).filter(id => !removedPlanIds.has(id)),
-        ...next.filter(p => p.active !== false).map(p => p.id),
-      ],
-      athleteHistory: [...(ws.athleteHistory ?? []), ...swims],
-    });
-    toast.push('success', `Added ${selected.length} lineup entr${selected.length === 1 ? 'y' : 'ies'} from paste`);
-    setPasteText('');
-    setParsePreview([]);
-    setPasteOpen(false);
-  };
-
-  const canAddSelected = canAcceptAnotherEntry(counts, settings, newEvent);
 
   return (
     <>
@@ -722,229 +552,19 @@ export default function AthleteLineupEditorPanel({
               collapsed) rather than inheriting whatever the previous athlete had
               toggled. */}
           <div key={athlete.key}>
-            <DrawerSection title="Individual entries" icon={<Waves size={14} />} defaultOpen>
-              <p className="text-ui-caption text-theme-secondary mb-2">
-                {formatEntryLimitLabel(counts, settings)}
-                {over.individualOver || over.relayOver || over.totalOver ? (
-                  <span className="text-amber-400 ml-2">Over limit</span>
-                ) : null}
-              </p>
-              {athletePlans.length > 0 ? (
-                <ul className="space-y-1.5 mb-3">
-                  {athletePlans.map(p => {
-                    const cutlineResult = buildCutlineTagForTeam({
-                      time: p.time,
-                      gender,
-                      event: p.event,
-                      team: athlete.team,
-                    });
-                    return (
-                    <li key={p.id} className="flex items-center gap-2 text-ui-body">
-                      {editable ? (
-                        <input
-                          type="checkbox"
-                          checked={p.active !== false}
-                          onChange={() => toggleActive(p.id)}
-                          className="accent-[var(--text-accent)] shrink-0"
-                          title="Active in lineup"
-                          aria-label={`Active ${p.event}`}
-                        />
-                      ) : null}
-                      {editable ? (
-                        <select
-                          value={p.event}
-                          onChange={e => changeEntryEvent(p, e.target.value)}
-                          title={compactEventTitleAttr(p.event)}
-                          className={`flex-1 min-w-0 font-mono glass-input rounded-lg px-1.5 py-1 text-ui-caption ${
-                            p.active === false ? 'opacity-40' : ''
-                          }`}
-                        >
-                          {ALL_PLAN_EVENTS.map(ev => (
-                            <option key={ev} value={ev}>
-                              {formatCompactEventLabel(ev)}
-                            </option>
-                          ))}
-                        </select>
-                      ) : (
-                        <span
-                          className={`flex-1 truncate font-mono min-w-0 ${
-                            p.active === false ? 'opacity-40 line-through' : ''
-                          }`}
-                          title={compactEventTitleAttr(p.event)}
-                        >
-                          {formatCompactEventLabel(p.event)}
-                        </span>
-                      )}
-                      {editingTimeId === p.id ? (
-                        <input
-                          type="text"
-                          autoFocus
-                          value={editingTimeValue}
-                          onChange={e => setEditingTimeValue(e.target.value)}
-                          onBlur={() => commitTimeEdit(p)}
-                          onKeyDown={e => {
-                            if (e.key === 'Enter') commitTimeEdit(p);
-                            if (e.key === 'Escape') cancelTimeEdit();
-                          }}
-                          className="w-24 font-mono tabular-nums glass-input rounded-lg px-2 py-1 text-ui-caption"
-                        />
-                      ) : (
-                        <button
-                          type="button"
-                          disabled={!editable}
-                          onClick={() => startTimeEdit(p)}
-                          className="w-24 text-left font-mono tabular-nums glass-input rounded-lg px-2 py-1 text-ui-caption disabled:cursor-default"
-                          title={editable ? 'Click to edit time' : undefined}
-                        >
-                          {p.time}
-                        </button>
-                      )}
-                      <CutlineTag result={cutlineResult} compact />
-                      <CutlineNearMissChip
-                        nextTier={cutlineResult.nextTier}
-                        compact
-                        className="hidden sm:inline-flex"
-                      />
-                      {editable ? (
-                        <button
-                          type="button"
-                          onClick={() => removeEntry(p.id)}
-                          className="p-1 rounded-md text-theme-muted hover:text-amber-400 transition-colors"
-                          aria-label={`Remove ${p.event}`}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      ) : null}
-                    </li>
-                    );
-                  })}
-                </ul>
-              ) : (
-                <p className="text-ui-caption text-theme-muted mb-3 italic">No planned individual entries yet.</p>
-              )}
-              {editable ? (
-                <div className="space-y-2">
-                  <div className="flex flex-wrap gap-2 items-end">
-                    <select
-                      value={newEvent}
-                      onChange={e => setNewEvent(e.target.value)}
-                      className="flex-1 min-w-[10rem] glass-input rounded-lg px-2 py-2 text-ui-body"
-                    >
-                      {ALL_PLAN_EVENTS.map(ev => (
-                        <option key={ev} value={ev}>
-                          {ev}
-                        </option>
-                      ))}
-                    </select>
-                    <input
-                      type="text"
-                      placeholder="Time"
-                      value={newTime}
-                      onChange={e => setNewTime(e.target.value)}
-                      className="w-24 font-mono glass-input rounded-lg px-2 py-2 text-ui-body"
-                    />
-                    <button
-                      type="button"
-                      onClick={addEntry}
-                      disabled={!canAddSelected || !newTime.trim()}
-                      title={!canAddSelected ? 'Entry limit reached for this type' : undefined}
-                      className="text-ui-label px-3 py-2 border border-theme-soft rounded-lg flex items-center gap-1.5 disabled:opacity-40"
-                    >
-                      <Plus size={14} /> Add
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        if (pasteOpen && pastePreview.length === 0) {
-                          setPasteOpen(false);
-                        } else if (!pasteOpen) {
-                          setPasteOpen(true);
-                        }
-                      }}
-                      className="text-ui-label px-3 py-2 border border-theme-soft rounded-lg flex items-center gap-1.5"
-                    >
-                      <ClipboardPaste size={14} /> Paste
-                    </button>
-                  </div>
-                  {pasteOpen ? (
-                    <div className="space-y-2">
-                      {pastePreview.length === 0 ? (
-                        <>
-                          <textarea
-                            value={pasteText}
-                            onChange={e => setPasteText(e.target.value)}
-                            rows={4}
-                            placeholder="Paste SwimCloud Personal Bests for this swimmer…"
-                            className="w-full font-mono glass-input rounded-lg px-3 py-2 text-ui-caption resize-y"
-                          />
-                          <button
-                            type="button"
-                            onClick={previewPaste}
-                            disabled={!pasteText.trim()}
-                            className="text-ui-label px-3 py-2 btn-accent-outline rounded-lg disabled:opacity-40"
-                          >
-                            Preview suggested entries
-                          </button>
-                        </>
-                      ) : (
-                        <>
-                          <p className="text-ui-caption text-theme-secondary mb-2">
-                            Select entries to add (uncheck to skip):
-                          </p>
-                          <ul className="space-y-1.5 border border-theme-soft rounded-lg p-2 max-h-48 overflow-y-auto">
-                            {pastePreview.map((item, idx) => (
-                              <li
-                                key={`${item.event}|${idx}`}
-                                className="flex items-center gap-2 text-ui-body"
-                              >
-                                <input
-                                  type="checkbox"
-                                  checked={item.selected}
-                                  onChange={() => {
-                                    setParsePreview(prev =>
-                                      prev.map((p, i) =>
-                                        i === idx ? { ...p, selected: !p.selected } : p
-                                      )
-                                    );
-                                  }}
-                                  className="accent-[var(--text-accent)] shrink-0"
-                                />
-                                <span className="font-mono text-ui-caption flex-1 min-w-0">
-                                  {formatCompactEventLabel(item.event)}
-                                </span>
-                                <span className="font-mono text-ui-caption text-theme-secondary">
-                                  {item.time}
-                                </span>
-                              </li>
-                            ))}
-                          </ul>
-                          <div className="flex gap-2">
-                            <button
-                              type="button"
-                              onClick={confirmPastePreview}
-                              disabled={pastePreview.every(p => !p.selected)}
-                              className="flex-1 text-ui-label px-3 py-2 btn-accent-outline rounded-lg disabled:opacity-40"
-                            >
-                              Add selected
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => {
-                                setParsePreview([]);
-                                setPasteText('');
-                              }}
-                              className="text-ui-label px-3 py-2 border border-theme-soft rounded-lg"
-                            >
-                              Cancel
-                            </button>
-                          </div>
-                        </>
-                      )}
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-            </DrawerSection>
+            <AthleteEntriesSection
+              workspace={workspace}
+              settings={settings}
+              athlete={athlete}
+              gender={gender}
+              allResults={allResults}
+              editable={editable}
+              counts={counts}
+              athletePlans={athletePlans}
+              getWorkspace={() => workspaceRef.current}
+              applyPatch={applyPatch}
+              applyRawPatch={applyRawPatch}
+            />
 
             <DrawerSection title="Relay involvement" icon={<ListChecks size={14} />}>
               {relayInvolvement.length === 0 ? (
