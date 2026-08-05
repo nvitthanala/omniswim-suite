@@ -11,6 +11,7 @@
  * expanded at a time by default.
  */
 
+import DrawerSection from './DrawerSection';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   Check,
@@ -110,45 +111,6 @@ type Props = {
   onClose: () => void;
   autoIsScorer: boolean;
 };
-
-/** Collapsible section used to break the drawer body into focused chunks. */
-function Section({
-  title,
-  icon,
-  defaultOpen = false,
-  badge,
-  children,
-}: {
-  title: string;
-  icon?: React.ReactNode;
-  defaultOpen?: boolean;
-  badge?: React.ReactNode;
-  children: React.ReactNode;
-}) {
-  const [open, setOpen] = useState(defaultOpen);
-  return (
-    <div className="border-b border-theme-soft last:border-b-0">
-      <button
-        type="button"
-        onClick={() => setOpen(v => !v)}
-        aria-expanded={open}
-        className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left"
-      >
-        <span className="flex items-center gap-1.5 text-ui-caption font-semibold text-theme-muted">
-          {icon}
-          {title}
-          {badge}
-        </span>
-        {open ? (
-          <ChevronUp size={14} className="text-theme-secondary shrink-0" />
-        ) : (
-          <ChevronDown size={14} className="text-theme-secondary shrink-0" />
-        )}
-      </button>
-      {open ? <div className="px-4 pb-4">{children}</div> : null}
-    </div>
-  );
-}
 
 export default function AthleteLineupEditorPanel({
   workspace,
@@ -831,7 +793,7 @@ export default function AthleteLineupEditorPanel({
               collapsed) rather than inheriting whatever the previous athlete had
               toggled. */}
           <div key={athlete.key}>
-            <Section title="Individual entries" icon={<Waves size={14} />} defaultOpen>
+            <DrawerSection title="Individual entries" icon={<Waves size={14} />} defaultOpen>
               <p className="text-ui-caption text-theme-secondary mb-2">
                 {formatEntryLimitLabel(counts, settings)}
                 {over.individualOver || over.relayOver || over.totalOver ? (
@@ -1053,9 +1015,9 @@ export default function AthleteLineupEditorPanel({
                   ) : null}
                 </div>
               ) : null}
-            </Section>
+            </DrawerSection>
 
-            <Section title="Relay involvement" icon={<ListChecks size={14} />}>
+            <DrawerSection title="Relay involvement" icon={<ListChecks size={14} />}>
               {relayInvolvement.length === 0 ? (
                 <p className="text-ui-caption text-theme-muted italic">Not on any projected relay legs.</p>
               ) : (
@@ -1079,9 +1041,9 @@ export default function AthleteLineupEditorPanel({
                   ))}
                 </ul>
               )}
-            </Section>
+            </DrawerSection>
 
-            <Section
+            <DrawerSection
               title="Credited swims"
               icon={<Medal size={14} />}
               badge={
@@ -1107,9 +1069,9 @@ export default function AthleteLineupEditorPanel({
                   No credited swims from the loaded meet yet.
                 </p>
               )}
-            </Section>
+            </DrawerSection>
 
-            <Section
+            <DrawerSection
               title="Supplemental history"
               icon={<History size={14} />}
               badge={
@@ -1305,7 +1267,7 @@ export default function AthleteLineupEditorPanel({
                   </button>
                 </div>
               ) : null}
-            </Section>
+            </DrawerSection>
           </div>
         </div>
       </div>
