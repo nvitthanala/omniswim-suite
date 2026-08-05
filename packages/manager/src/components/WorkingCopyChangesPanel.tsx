@@ -9,7 +9,7 @@
  * @omniswim/core for the underlying data.
  */
 
-import React from 'react';
+import React, { useState } from 'react';
 import { Undo2 } from 'lucide-react';
 import type { Gender, Workspace } from '@omniswim/core/types';
 import {
@@ -26,6 +26,11 @@ type Props = {
 };
 
 export default function WorkingCopyChangesPanel({ workspace, gender, onUpdate, disabled }: Props) {
+  // Collapsed by default. A real workspace can hold dozens of recruits, and one
+  // Revert button each would dominate the step — the Source screen went from 31
+  // to 70 visible controls when this list rendered expanded, which is precisely
+  // the density problem the stepped-wizard work exists to reduce.
+  const [expanded, setExpanded] = useState(false);
   const changes = listRevertibleChanges(workspace, gender);
   const counts = countWorkingCopyChanges(workspace, gender);
 
@@ -39,9 +44,28 @@ export default function WorkingCopyChangesPanel({ workspace, gender, onUpdate, d
 
   return (
     <section className="surface-card rounded-xl border border-theme-soft p-4 sm:p-5">
-      <h4 className="text-ui-label font-semibold text-[var(--text-primary)]">Working copy edits</h4>
+      <div className="flex items-center justify-between gap-3">
+        <h4 className="text-ui-label font-semibold text-[var(--text-primary)]">Working copy edits</h4>
+        {changes.length > 0 ? (
+          <button
+            type="button"
+            onClick={() => setExpanded(value => !value)}
+            aria-expanded={expanded}
+            aria-label={
+              expanded
+                ? 'Hide the list of revertible working copy edits'
+                : `Show ${changes.length} revertible working copy ${changes.length === 1 ? 'edit' : 'edits'}`
+            }
+            className="btn-accent-outline rounded-md px-2.5 py-1.5 text-ui-caption font-semibold shrink-0"
+          >
+            {expanded
+              ? 'Hide edits'
+              : `Show ${changes.length} ${changes.length === 1 ? 'edit' : 'edits'}`}
+          </button>
+        ) : null}
+      </div>
 
-      {changes.length > 0 ? (
+      {changes.length > 0 && expanded ? (
         <ul className="mt-3 flex flex-col gap-2">
           {changes.map(change => {
             const key = change.kind === 'recruit' ? `recruit:${change.id}` : `removal:${change.name}`;
