@@ -40,6 +40,7 @@ const TESTS = [
   ['test_working_copy_changes.mjs'],
   ['test_roster_arbitrage.mjs'],
   ['test_cross_course_arbitrage.mjs'],
+  ['test_cross_course_arbitrage_view.mjs'],
   ['test_drop_add_analysis.mjs'],
   ['test_relay_swaps.mjs'],
   ['test_roster_removal.mjs'],
