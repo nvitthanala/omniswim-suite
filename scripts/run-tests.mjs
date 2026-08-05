@@ -35,6 +35,7 @@ const TESTS = [
   ['test_multi_profile_import.mjs'],
   ['test_scoring_theory.mjs'],
   ['test_workspace_scoring_debounce.mjs'],
+  ['test_athlete_lineup_editor.mjs'],
   ['test_meet_source.mjs'],
   ['test_working_copy_changes.mjs'],
   ['test_roster_arbitrage.mjs'],
