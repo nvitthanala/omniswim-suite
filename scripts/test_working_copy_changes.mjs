@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { Gender } from '../packages/core/src/types.ts';
 import { relayEntryKey } from '../packages/core/src/lib/relaySplits.ts';
-import { countWorkingCopyChanges } from '../packages/core/src/lib/workingCopyChanges.ts';
+import { countWorkingCopyChanges, listRevertibleChanges } from '../packages/core/src/lib/workingCopyChanges.ts';
 
 const baseWorkspace = {
   id: 'w',
@@ -180,6 +180,99 @@ const baseWorkspace = {
   assert.equal(counts.relayLegOverrides, 0);
   assert.equal(counts.plannedEntries, 0);
   assert.equal(counts.total, 1);
+}
+
+// --- listRevertibleChanges -------------------------------------------------
+
+// Empty workspace: no revertible changes.
+{
+  const changes = listRevertibleChanges(baseWorkspace, Gender.MEN);
+  assert.deepEqual(changes, []);
+}
+
+// Recruits are listed with a human label/detail and gender-scoped.
+{
+  const ws = {
+    ...baseWorkspace,
+    recruits: [
+      { id: 'r1', name: 'Alan Gonzalez', team: 'Team A', event: '200 Freestyle', time: '1:44.93', gender: Gender.MEN, classYear: 'FR', timeType: 'SCY' },
+      { id: 'r2', name: 'Women Rec', team: 'Team B', event: '50 Freestyle', time: '22.00', gender: Gender.WOMEN, classYear: 'FR', timeType: 'SCY' },
+    ],
+  };
+  const men = listRevertibleChanges(ws, Gender.MEN);
+  assert.equal(men.length, 1);
+  assert.equal(men[0].kind, 'recruit');
+  assert.equal(men[0].id, 'r1');
+  assert.equal(men[0].label, 'Alan Gonzalez');
+  assert.equal(men[0].detail, '200 Freestyle · 1:44.93 · Team A');
+
+  const women = listRevertibleChanges(ws, Gender.WOMEN);
+  assert.equal(women.length, 1);
+  assert.equal(women[0].id, 'r2');
+}
+
+// A 'hidden' removal never stripped source rows, so it is always fully restorable.
+{
+  const ws = {
+    ...baseWorkspace,
+    deletedSwimmers: [{ name: 'Gone Swimmer', gender: Gender.MEN, mode: 'hidden' }],
+  };
+  const changes = listRevertibleChanges(ws, Gender.MEN);
+  assert.equal(changes.length, 1);
+  assert.equal(changes[0].kind, 'removal');
+  assert.equal(changes[0].mode, 'hidden');
+  assert.equal(changes[0].fullyRestorable, true);
+  assert.equal(changes[0].detail, 'removed from the projection');
+}
+
+// A 'removed' swimmer WITH matching rows in the frozen source copy is fully restorable.
+{
+  const sourceRow = {
+    id: 's1', rank: 1, name: 'Stripped Swimmer', classYear: 'SO', team: 'Team A',
+    time: '20.00', points: 0, event: '50 Freestyle', gender: Gender.MEN,
+  };
+  const ws = {
+    ...baseWorkspace,
+    sourceMenResults: [sourceRow],
+    menResults: [], // rows were stripped from the working copy
+    deletedSwimmers: [{ name: 'Stripped Swimmer', gender: Gender.MEN, mode: 'removed' }],
+  };
+  const changes = listRevertibleChanges(ws, Gender.MEN);
+  assert.equal(changes.length, 1);
+  assert.equal(changes[0].mode, 'removed');
+  assert.equal(changes[0].fullyRestorable, true);
+  assert.equal(changes[0].detail, 'removed from the roster');
+}
+
+// A 'removed' swimmer with NO source copy at all cannot be rebuilt — getSourceResults
+// would fall back to the already-stripped working rows, so restoring would silently
+// clear the tombstone and bring back nothing. Must report fullyRestorable: false.
+{
+  const ws = {
+    ...baseWorkspace,
+    menResults: [], // no sourceMenResults present, and working rows already stripped
+    deletedSwimmers: [{ name: 'Unrecoverable Swimmer', gender: Gender.MEN, mode: 'removed' }],
+  };
+  const changes = listRevertibleChanges(ws, Gender.MEN);
+  assert.equal(changes.length, 1);
+  assert.equal(changes[0].mode, 'removed');
+  assert.equal(changes[0].fullyRestorable, false);
+}
+
+// A 'removed' swimmer WITH a source copy but no matching rows in it is also
+// not fully restorable — the source copy exists but has nothing to rebuild from.
+{
+  const ws = {
+    ...baseWorkspace,
+    sourceMenResults: [
+      { id: 's2', rank: 1, name: 'Someone Else', classYear: 'SO', team: 'Team A', time: '20.00', points: 0, event: '50 Freestyle', gender: Gender.MEN },
+    ],
+    menResults: [],
+    deletedSwimmers: [{ name: 'Not In Source', gender: Gender.MEN, mode: 'removed' }],
+  };
+  const changes = listRevertibleChanges(ws, Gender.MEN);
+  assert.equal(changes.length, 1);
+  assert.equal(changes[0].fullyRestorable, false);
 }
 
 console.log('working copy change counter tests passed');

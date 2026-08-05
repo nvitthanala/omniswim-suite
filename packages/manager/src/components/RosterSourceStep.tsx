@@ -12,6 +12,7 @@ import AthleteHistoryImportPanel from './AthleteHistoryImportPanel';
 import ScoringTheoryPanel from './ScoringTheoryPanel';
 import LoadMeetHereCard from './LoadMeetHereCard';
 import BaselineDiffPanel from './BaselineDiffPanel';
+import WorkingCopyChangesPanel from './WorkingCopyChangesPanel';
 
 type Props = {
   workspace: Workspace;
@@ -227,6 +228,13 @@ export default function RosterSourceStep({
             scoringSettings={scoringSettings}
           />
         ) : null}
+
+        <WorkingCopyChangesPanel
+          workspace={workspace}
+          gender={gender}
+          onUpdate={onUpdate}
+          disabled={!whatIfMode}
+        />
 
         <ScoringTheoryPanel
           workspace={workspace}

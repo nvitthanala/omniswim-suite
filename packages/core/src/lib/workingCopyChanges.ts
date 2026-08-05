@@ -11,6 +11,8 @@
 
 import { Gender, Workspace } from '../types';
 import { relayEntryKey } from './relaySplits';
+import { canonicalSwimmerName, isRelayResult } from './utils';
+import { getSourceResults } from './meetSource';
 
 /** Per-category breakdown of working-copy edits for one gender, plus the total. */
 export interface WorkingCopyChangeCounts {
@@ -83,4 +85,78 @@ export function countWorkingCopyChanges(workspace: Workspace, gender: Gender): W
     plannedEntries,
     total: recruits + removals + rosterOverrides + relayLegOverrides + plannedEntries,
   };
+}
+
+/**
+ * One individually-revertible working-copy edit, ready for display. Only the
+ * two categories with an unambiguous revert unit are listed here — recruits
+ * (remove by id) and soft removals (restore via `restoreSwimmerToWorkspace`).
+ * Relay leg overrides and planned entries are NOT listed: they have their own
+ * editors and no single obvious "undo" action.
+ */
+export type RevertibleChange =
+  | { kind: 'recruit'; id: string; label: string; detail: string }
+  | {
+      kind: 'removal';
+      name: string;
+      mode: 'hidden' | 'removed';
+      label: string;
+      detail: string;
+      /**
+       * False when a `'removed'` swimmer's individual rows can no longer be
+       * rebuilt from the frozen source copy — either the workspace has no
+       * source copy at all (so `getSourceResults` would fall back to the
+       * already-stripped working rows), or the source copy exists but holds
+       * no matching non-relay rows for this athlete. In that case
+       * `restoreSwimmerToWorkspace` still clears the tombstone but brings
+       * back zero rows — a silent partial restore the UI must not offer
+       * without warning. Always true for `'hidden'` removals: their source
+       * rows were never touched.
+       */
+      fullyRestorable: boolean;
+    };
+
+/**
+ * List the individually-revertible edits for `gender`, in the same gender
+ * scoping as `countWorkingCopyChanges`. Pure: no scoring, no side effects.
+ */
+export function listRevertibleChanges(workspace: Workspace, gender: Gender): RevertibleChange[] {
+  const changes: RevertibleChange[] = [];
+
+  for (const r of workspace.recruits ?? []) {
+    if (r.gender !== gender) continue;
+    changes.push({
+      kind: 'recruit',
+      id: r.id,
+      label: r.name,
+      detail: `${r.event} · ${r.time} · ${r.team}`,
+    });
+  }
+
+  const hasSourceCopy =
+    gender === Gender.MEN ? workspace.sourceMenResults != null : workspace.sourceWomenResults != null;
+
+  for (const d of workspace.deletedSwimmers ?? []) {
+    if (d.gender !== gender) continue;
+    const mode = d.mode ?? 'hidden';
+    let fullyRestorable = true;
+    if (mode === 'removed') {
+      const key = canonicalSwimmerName(d.name);
+      const sourceRows = getSourceResults(workspace, gender);
+      const hasMatchingSourceRows = sourceRows.some(
+        row => !isRelayResult(row) && canonicalSwimmerName(row.name) === key
+      );
+      fullyRestorable = hasSourceCopy && hasMatchingSourceRows;
+    }
+    changes.push({
+      kind: 'removal',
+      name: d.name,
+      mode,
+      label: d.name,
+      detail: mode === 'removed' ? 'removed from the roster' : 'removed from the projection',
+      fullyRestorable,
+    });
+  }
+
+  return changes;
 }
