@@ -15,10 +15,12 @@
  */
 import assert from 'node:assert/strict';
 import { Window } from 'happy-dom';
-import React from 'react';
+import React, { act } from 'react';
 import { createRoot } from 'react-dom/client';
 
 globalThis.React = React;
+// React only flushes effects synchronously inside act() when this is set.
+globalThis.IS_REACT_ACT_ENVIRONMENT = true;
 
 function installDom() {
   const window = new Window({ url: 'http://localhost/' });
@@ -148,6 +150,18 @@ function runArmedDebounces() {
   for (const fn of callbacks) fn();
 }
 
+/**
+ * Render and flush synchronously. Counting macrotask turns is not portable:
+ * two turns were enough for React to commit on Node 26 locally and were NOT
+ * enough on CI's Node 22, so `latestResult` still held the mount value and the
+ * "settled goes false" assertion read a stale `true`. act() removes the guess.
+ */
+async function renderFixture(removeSeniors) {
+  await act(async () => {
+    root.render(React.createElement(Fixture, { removeSeniors }));
+  });
+}
+
 async function flushEffects(rounds = 2) {
   for (let i = 0; i < rounds; i += 1) {
     await new Promise(resolve => realSetTimeout(resolve, 0));
@@ -183,16 +197,14 @@ const container = document.body.appendChild(document.createElement('div'));
 const root = createRoot(container);
 
 // --- mount: first computation runs synchronously, no recompute scheduled ---
-root.render(React.createElement(Fixture, { removeSeniors: false }));
-await flushEffects(3);
+await renderFixture(false);
 assert.equal(latestResult.scoringSettled, true, 'initial mount should be settled (isFirstRun skip)');
 assert.equal(projectedRefs.size, 1, 'mount should produce exactly one snapshot');
 
 // --- burst: 6 rapid toggles of `removeSeniors` ---
 const BURST_STEPS = [true, false, true, false, true, true]; // final value: true
 for (const removeSeniors of BURST_STEPS) {
-  root.render(React.createElement(Fixture, { removeSeniors }));
-  await flushEffects(2);
+  await renderFixture(removeSeniors);
   // Regression guard: settled must flip false the instant the effect runs for
   // this change — synchronously, not after SCORING_DEBOUNCE_MS.
   assert.equal(
@@ -215,8 +227,9 @@ assert.equal(latestResult.scoringSettled, false, 'still unsettled right after th
 assert.equal(projectedRefs.size, 1, 'burst must not have triggered any recompute yet');
 
 // --- fire the debounce: exactly one recompute, using the final state ---
-runArmedDebounces();
-await flushEffects(4);
+await act(async () => {
+  runArmedDebounces();
+});
 
 assert.equal(latestResult.scoringSettled, true, 'settled must return to true once the debounced recompute resolves');
 assert.equal(
@@ -231,10 +244,11 @@ assert.equal(
 );
 
 // --- unmount cleanup: a pending debounced recompute must not fire after unmount ---
-root.render(React.createElement(Fixture, { removeSeniors: false }));
-await flushEffects(2);
+await renderFixture(false);
 assert.equal(latestResult.scoringSettled, false, 'settled flips false for the post-burst change too');
-root.unmount();
+await act(async () => {
+  root.unmount();
+});
 runArmedDebounces();
 await flushEffects(2);
 assert.equal(consoleErrors.length, 0, `expected no console.error after unmount, got: ${consoleErrors.join(' | ')}`);
