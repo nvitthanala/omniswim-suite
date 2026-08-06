@@ -107,14 +107,55 @@ assert.notEqual(
   'fixture must be set up so removeSeniors actually changes the projected bundle'
 );
 
+const realSetTimeout = globalThis.setTimeout;
+const realClearTimeout = globalThis.clearTimeout;
+
+/**
+ * Controllable clock for the debounce ONLY.
+ *
+ * The assertion that matters here — "settled flips false before the debounce
+ * elapses" — used to race a real 200ms timer: the test yielded to the macrotask
+ * queue, the debounce timer lived in that same queue, and a loaded CI runner
+ * stalling past 200ms fired it early and failed the run. A regression guard that
+ * flakes is worse than none, so the debounce timer is now driven explicitly.
+ *
+ * Only timers scheduled at exactly SCORING_DEBOUNCE_MS are intercepted; every
+ * other timer (React's scheduler, the test's own waits) passes through to the
+ * real implementation untouched.
+ */
+const armedDebounces = new Map();
+let nextFakeId = 1;
+globalThis.setTimeout = (fn, ms, ...rest) => {
+  if (ms === SCORING_DEBOUNCE_MS) {
+    const id = `debounce-${nextFakeId++}`;
+    armedDebounces.set(id, fn);
+    return id;
+  }
+  return realSetTimeout(fn, ms, ...rest);
+};
+globalThis.clearTimeout = handle => {
+  if (typeof handle === 'string' && handle.startsWith('debounce-')) {
+    armedDebounces.delete(handle);
+    return undefined;
+  }
+  return realClearTimeout(handle);
+};
+
+/** Fire every armed debounce, as the real clock would once the delay elapsed. */
+function runArmedDebounces() {
+  const callbacks = [...armedDebounces.values()];
+  armedDebounces.clear();
+  for (const fn of callbacks) fn();
+}
+
 async function flushEffects(rounds = 2) {
   for (let i = 0; i < rounds; i += 1) {
-    await new Promise(resolve => setTimeout(resolve, 0));
+    await new Promise(resolve => realSetTimeout(resolve, 0));
   }
 }
 
 function wait(ms) {
-  return new Promise(resolve => setTimeout(resolve, ms));
+  return new Promise(resolve => realSetTimeout(resolve, ms));
 }
 
 let latestResult = null;
@@ -147,13 +188,13 @@ await flushEffects(3);
 assert.equal(latestResult.scoringSettled, true, 'initial mount should be settled (isFirstRun skip)');
 assert.equal(projectedRefs.size, 1, 'mount should produce exactly one snapshot');
 
-// --- burst: 6 rapid toggles of `removeSeniors`, ~20ms apart (<< debounce) ---
+// --- burst: 6 rapid toggles of `removeSeniors` ---
 const BURST_STEPS = [true, false, true, false, true, true]; // final value: true
 for (const removeSeniors of BURST_STEPS) {
   root.render(React.createElement(Fixture, { removeSeniors }));
   await flushEffects(2);
-  // Regression guard: settled must flip false the instant the effect runs
-  // for this change, synchronously — not after SCORING_DEBOUNCE_MS.
+  // Regression guard: settled must flip false the instant the effect runs for
+  // this change — synchronously, not after SCORING_DEBOUNCE_MS.
   assert.equal(
     latestResult.scoringSettled,
     false,
@@ -164,15 +205,17 @@ for (const removeSeniors of BURST_STEPS) {
     1,
     'no recompute should have happened yet mid-burst — only the debounced timer may recompute'
   );
-  await wait(20);
+  // Exactly one debounce is armed: each change clears its predecessor, which is
+  // what collapses the burst into a single recompute.
+  assert.equal(armedDebounces.size, 1, 'a superseded debounce must be cleared, not stacked');
 }
 
-// Still within the debounce window of the *last* burst step.
+// Still armed, nothing recomputed yet.
 assert.equal(latestResult.scoringSettled, false, 'still unsettled right after the burst');
 assert.equal(projectedRefs.size, 1, 'burst must not have triggered any recompute yet');
 
-// --- past the debounce window: exactly one recompute, using the final state ---
-await wait(SCORING_DEBOUNCE_MS + 150);
+// --- fire the debounce: exactly one recompute, using the final state ---
+runArmedDebounces();
 await flushEffects(4);
 
 assert.equal(latestResult.scoringSettled, true, 'settled must return to true once the debounced recompute resolves');
@@ -192,7 +235,8 @@ root.render(React.createElement(Fixture, { removeSeniors: false }));
 await flushEffects(2);
 assert.equal(latestResult.scoringSettled, false, 'settled flips false for the post-burst change too');
 root.unmount();
-await wait(SCORING_DEBOUNCE_MS + 150);
+runArmedDebounces();
+await flushEffects(2);
 assert.equal(consoleErrors.length, 0, `expected no console.error after unmount, got: ${consoleErrors.join(' | ')}`);
 
 console.error = originalConsoleError;
