@@ -5,8 +5,10 @@
  */
 
 import React from 'react';
+import { FileWarning, Users } from 'lucide-react';
 import { Gender, Workspace } from '@omniswim/core/types';
 import type { ScoringBundle } from '@omniswim/core/lib/useWorkspaceScoring';
+import { EmptyState } from '@omniswim/ui';
 import IndRelayManagementView from './IndRelayManagementView';
 
 type Props = {
@@ -32,6 +34,34 @@ export default function RosterRelayStep({
   onSelectTeam,
   onUpdate,
 }: Props) {
+  // "Nothing to work with" is no scoreable TEAM, not no meet PDF. A workspace
+  // can be recruit-driven -- SwimCloud imports and planned entries with no meet
+  // loaded -- and still have a full roster to build, which is the HSU planning
+  // workflow. Keying this off menResults blocked that path entirely.
+  const hasRoster = scoringBundle.sortedTeams.length > 0;
+
+  if (!hasRoster) {
+    return (
+      <EmptyState
+        icon={<FileWarning size={28} />}
+        eyebrow="Relays"
+        title="Bring in swimmers first"
+        description="Load a meet or import swimmers on the Source step to build this relay plan."
+      />
+    );
+  }
+
+  if (!selectedTeam) {
+    return (
+      <EmptyState
+        icon={<Users size={28} />}
+        eyebrow="Relays"
+        title="Choose a team for relays"
+        description="Select a team to assign and review its relay legs."
+      />
+    );
+  }
+
   return (
     <div className="flex flex-col gap-4 flex-1 min-h-0">
       <div className="surface-card rounded-xl p-4 sm:p-5 shrink-0 space-y-3">

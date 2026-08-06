@@ -62,6 +62,7 @@ export default function ScoringSettingsPanel({
     <button
       type="button"
       onClick={saveCurrent}
+      aria-label="Save scoring settings"
       className="text-ui-micro badge-info px-2 py-1 rounded hover:opacity-90 transition-colors uppercase font-medium flex items-center gap-1 shrink-0"
     >
       <Save size={10} /> Save
@@ -95,6 +96,7 @@ export default function ScoringSettingsPanel({
         <button
           type="button"
           onClick={() => onScoringViewChange('merged')}
+          aria-label="Use merged scoring view"
           aria-pressed={resolvedScoringView === 'merged'}
           className={`px-3 py-1.5 rounded text-[10px] uppercase font-medium transition-colors ${
             resolvedScoringView === 'merged'
@@ -108,6 +110,7 @@ export default function ScoringSettingsPanel({
         <button
           type="button"
           onClick={() => onScoringViewChange('pdf_only')}
+          aria-label="Use PDF-only scoring view"
           aria-pressed={resolvedScoringView === 'pdf_only'}
           className={`px-3 py-1.5 rounded text-[10px] uppercase font-medium transition-colors ${
             resolvedScoringView === 'pdf_only'
@@ -138,6 +141,7 @@ export default function ScoringSettingsPanel({
             type="button"
             className="ml-2 underline hover:text-[var(--text-primary)]"
             onClick={() => applyPreset(suggestedPresetId).then(saveCurrent)}
+            aria-label={`Load and save suggested ${suggestedPresetId} scoring preset`}
           >
             Load & save
           </button>
@@ -149,6 +153,7 @@ export default function ScoringSettingsPanel({
           <label className="block text-[10px] text-theme-secondary uppercase mb-1">PDF place points</label>
           <select
             className="glass-input w-full text-xs uppercase"
+            aria-label="PDF place points setting"
             value={
               localSettings.usePdfPlacePoints === true
                 ? 'on'
@@ -174,6 +179,7 @@ export default function ScoringSettingsPanel({
           <label className="block text-[10px] text-theme-secondary uppercase mb-1">Scoring preset</label>
           <select
             className="glass-input w-full text-xs uppercase"
+            aria-label="Scoring preset"
             value={selectedPreset}
             onChange={e => {
               const id = e.target.value;
@@ -199,6 +205,7 @@ export default function ScoringSettingsPanel({
           <label className="block text-[10px] text-theme-secondary uppercase mb-1">Points distribution (comma separated)</label>
           <input
             value={pointsStr}
+            aria-label="Points distribution"
             onChange={e => setPointsStr(e.target.value)}
             className="glass-input w-full font-mono text-xs"
           />
@@ -209,6 +216,7 @@ export default function ScoringSettingsPanel({
             <label className="block text-[10px] text-theme-secondary uppercase mb-1">Scorer cap scope</label>
             <select
               className="glass-input w-full text-xs uppercase"
+              aria-label="Scorer cap scope"
               value={localSettings.scorerCapScope ?? 'event'}
               onChange={e =>
                 setLocalSettings({
@@ -225,6 +233,7 @@ export default function ScoringSettingsPanel({
             <label className="block text-[10px] text-theme-secondary uppercase mb-1">Diver scorer weight</label>
             <input
               type="number"
+              aria-label="Diver scorer weight"
               step="0.01"
               min="0"
               max="1"
@@ -242,6 +251,7 @@ export default function ScoringSettingsPanel({
             <label className="block text-[10px] text-theme-secondary uppercase mb-1">Max individual scorers / team</label>
             <input
               type="number"
+              aria-label="Maximum individual scorers per team"
               value={localSettings.maxIndividualScorersPerTeam}
               onChange={e =>
                 setLocalSettings({
@@ -256,6 +266,7 @@ export default function ScoringSettingsPanel({
             <label className="block text-[10px] text-theme-secondary uppercase mb-1">Max scoring relays / team / relay event</label>
             <input
               type="number"
+              aria-label="Maximum scoring relays per team per event"
               value={localSettings.maxRelaysScoringPerTeam}
               onChange={e =>
                 setLocalSettings({
@@ -270,6 +281,7 @@ export default function ScoringSettingsPanel({
             <label className="block text-[10px] text-theme-secondary uppercase mb-1">Max ind entries / swimmer</label>
             <input
               type="number"
+              aria-label="Maximum individual entries per swimmer"
               value={localSettings.maxIndividualEntriesPerSwimmer ?? 999}
               onChange={e =>
                 setLocalSettings({
@@ -284,6 +296,7 @@ export default function ScoringSettingsPanel({
             <label className="block text-[10px] text-theme-secondary uppercase mb-1">Max relay entries / swimmer</label>
             <input
               type="number"
+              aria-label="Maximum relay entries per swimmer"
               value={localSettings.maxRelayEntriesPerSwimmer ?? 999}
               onChange={e =>
                 setLocalSettings({
@@ -298,6 +311,7 @@ export default function ScoringSettingsPanel({
             <label className="block text-[10px] text-theme-secondary uppercase mb-1">Max total entries / swimmer</label>
             <input
               type="number"
+              aria-label="Maximum total entries per swimmer"
               value={localSettings.maxTotalEntriesPerSwimmer ?? 999}
               onChange={e =>
                 setLocalSettings({
@@ -312,6 +326,7 @@ export default function ScoringSettingsPanel({
             <label className="block text-[10px] text-theme-secondary uppercase mb-1">Relay multiplier</label>
             <input
               type="number"
+              aria-label="Relay multiplier"
               value={localSettings.relayMultiplier}
               onChange={e =>
                 setLocalSettings({
@@ -326,6 +341,7 @@ export default function ScoringSettingsPanel({
             <label className="flex items-center gap-2 text-[10px] text-theme-secondary cursor-pointer">
               <input
                 type="checkbox"
+                aria-label="Half-rate relay swimmers"
                 checked={localSettings.halfRateRelaySwimmer}
                 onChange={e =>
                   setLocalSettings({ ...localSettings, halfRateRelaySwimmer: e.target.checked })
@@ -339,6 +355,7 @@ export default function ScoringSettingsPanel({
             <label className="flex items-center gap-2 text-[10px] text-theme-secondary cursor-pointer">
               <input
                 type="checkbox"
+                aria-label="Require relay legs to be in individual scorer pool"
                 checked={localSettings.relayEligibleFromScorerPool === true}
                 onChange={e =>
                   setLocalSettings({
@@ -363,6 +380,7 @@ export default function ScoringSettingsPanel({
           <button
             type="button"
             onClick={() => setOpen(v => !v)}
+            aria-label={`${open ? 'Collapse' : 'Expand'} custom scoring logic`}
             aria-expanded={open}
             className="flex-1 min-w-0 text-left hover:opacity-90 transition-opacity"
           >

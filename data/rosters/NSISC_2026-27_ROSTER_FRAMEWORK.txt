@@ -1,0 +1,334 @@
+================================================================================
+NSISC 2026-27 ROSTER FRAMEWORK — DELTA STATE + OUACHITA BAPTIST
+================================================================================
+Purpose : Fill-in template for projecting 2026-27 NSISC scoring against HSU.
+Built   : 2026-08-04
+Author  : Claude (research pass), for nvitthanala
+Fill by : you — paste SwimCloud SCY best times into the TIME column.
+
+--------------------------------------------------------------------------------
+READ THIS FIRST — WHAT IS AND IS NOT VERIFIED
+--------------------------------------------------------------------------------
+This file follows the repo's data-provenance rules (CLAUDE.md). Specifically:
+
+  * NO TIME IN THIS FILE WAS INVENTED. Every time column is blank pending your
+    SwimCloud fill, EXCEPT AJ Alfeo's, which are quoted verbatim from a
+    published SwimSwam article (source cited inline).
+  * Absent is written as UNKNOWN, never as 0 and never as an empty cell that
+    could later be read as zero.
+  * Class-year advancement below is ARITHMETIC, NOT REPORTED. I advanced each
+    2025-26 athlete by one year. I have no source for redshirts, medical years,
+    transfers in/out, or portal departures. Every returner is therefore marked
+    PROJECTED, not confirmed. Treat as a starting hypothesis to verify against
+    the official 2026-27 rosters when they publish (typically Sept 2026).
+
+WHAT I COULD NOT ESTABLISH
+  * Delta State: NO published fall-2026 commitments found. Searched SwimSwam
+    (tag page + site search) and web search. Absence of evidence only — DSU
+    simply may not have announced. Do not read this as "DSU signed nobody."
+  * Ouachita Baptist: only ONE fall-2026 commit has a full article with times
+    (Alfeo). Two more names (Bready, Gluck) are mentioned inside that article
+    with stroke groups but NO times and NO separate article.
+  * SwimCloud was unreachable — Cloudflare returned 403 / interstitial to both
+    the fetch tool and the browser. The NSISC commitments feed at
+    swimcloud.com/country/usa/college/conference/nsisc/commitments/ is the best
+    single source for gaps here; please check it while filling times.
+  * Roster lists were extracted by automated page-reading. The SwimSwam Delta
+    State tag mentions a swimmer ("Matteo Fraschi") who does NOT appear in my
+    extracted DSU men's list, so that extraction may be incomplete or the
+    article may be archival. SPOT-CHECK BOTH ROSTERS against the live pages
+    before trusting counts.
+  * OBU men's roster page grouped 9 athletes under a header reading
+    "Seniors (5)". The class labels for OBU men are therefore SUSPECT — the
+    count and the list disagree. Flagged per-athlete below.
+
+PROGRAM STATUS (both verified active, both genders sponsored)
+  * Delta State University — NCAA D2, Gulf South Conference, swims NSISC.
+    Active. No cut/discontinuation news found.
+    Coaching change on file: Dan'l Murray departed Sept 2024 after 14 seasons;
+    Pace Clark named head coach Oct 2024. Relevant because a new staff's second
+    and third recruiting classes reshape a roster more than returners do.
+  * Ouachita Baptist University — NCAA D2, Great American Conference, swims
+    NSISC. Active. Head coach Dawson Pritchard; assistant Logan Kennedy.
+    OBU men won the 2025 New South Championships (up from 3rd the prior year).
+    The 2025 men's championship field was FOUR programs.
+
+REPO DATA NOTE (flagged, not changed)
+  teamDivisions.ts gives Ouachita Baptist the alias 'OBU'. Oklahoma Baptist
+  University — discontinued after 2020-21 — has NO aliases array, so it can
+  only match on its full name. Any historical meet file abbreviating Oklahoma
+  Baptist as "OBU" would silently resolve to Ouachita Baptist. Harmless for
+  2026-27 (Oklahoma Baptist no longer swims) but wrong for pre-2021 archives.
+
+--------------------------------------------------------------------------------
+HOW TO FILL
+--------------------------------------------------------------------------------
+Columns are pipe-delimited so this parses cleanly later.
+
+  NAME | CLASS_26_27 | HOMETOWN | EVENT_GROUP | SCY_EVENT | TIME | SOURCE
+
+  CLASS_26_27  So/Jr/Sr/5th — PROJECTED unless marked CONFIRMED
+  EVENT_GROUP  as published by the school's roster page
+  SCY_EVENT    add one row per event you have a time for
+  TIME         mm:ss.hh or ss.hh. Write UNKNOWN if none. NEVER write 0.
+  SOURCE       swimcloud URL, or meet name + date
+
+Add rows freely. Delete nobody — if an athlete turns out to have left, mark
+them DEPARTED in CLASS_26_27 rather than deleting, so the diff stays auditable.
+
+================================================================================
+OUACHITA BAPTIST — MEN — PROJECTED 2026-27
+================================================================================
+Source roster: https://obutigers.com/sports/mens-swimming-and-diving/roster (2025-26)
+NOTE: class labels for this squad are SUSPECT — see header. Verify each.
+
+-- GRADUATING OFF (2025-26 seniors — confirm none return as 5th years) --------
+Tyler Andruss        | DEPARTED? | Fort Worth, TX      | Free
+Fernando Bustillo    | DEPARTED? | Tegucigalpa, HND    | Free/Breast
+Sam Goins            | DEPARTED? | Grand Prairie, TX   | Diving
+Justin Oulette       | DEPARTED? | Maumelle, AR        | Breast
+Anthony Paculba      | DEPARTED? | Carrollton, TX      | Free
+Blayz Hood           | DEPARTED? | Keller, TX          | Free/Fly
+Sam Ragsdell         | DEPARTED? | Columbia, MO        | Free/Back
+Ian Redman Aguilar   | DEPARTED? | Tegucigalpa, HND    | Free
+James Savarese       | DEPARTED? | Dallas, TX          | Free/Back
+
+-- RETURNING SENIORS (2025-26 juniors) ----------------------------------------
+NAME | CLASS_26_27 | HOMETOWN | EVENT_GROUP | SCY_EVENT | TIME | SOURCE
+Colton Martinez  | Sr PROJECTED | Trophy Club, TX     | Free/Fly  | | UNKNOWN |
+David Pannell    | Sr PROJECTED | Houston, TX         | Free      | | UNKNOWN |
+Carson Powers    | Sr PROJECTED | Oviedo, FL          | Diving    | | UNKNOWN |
+Ethan Sparks     | Sr PROJECTED | Grapevine, TX       | Back      | | UNKNOWN |
+David Ware       | Sr PROJECTED | Powder Springs, GA  | Fly       | | UNKNOWN |
+
+-- RETURNING JUNIORS (2025-26 sophomores) -------------------------------------
+Tyler Bell         | Jr PROJECTED | Coweta, OK        | Free          | | UNKNOWN |
+Gavin Bolton       | Jr PROJECTED | Frisco, TX        | Fly           | | UNKNOWN |
+Walker Bridenstine | Jr PROJECTED | Tulsa, OK         | Back          | | UNKNOWN |
+Landon Dehn        | Jr PROJECTED | Wylie, TX         | Free/Breast   | | UNKNOWN |
+Elijah Donaldson   | Jr PROJECTED | Grand Prairie, TX | Diving        | | UNKNOWN |
+Caleb Guthrie      | Jr PROJECTED | Centerton, AR     | Free          | | UNKNOWN |
+Michael Higgens    | Jr PROJECTED | Dallas, TX        | Free/Fly      | | UNKNOWN |
+Vince Pal          | Jr PROJECTED | Tarnok, HUN       | Free/Fly      | | UNKNOWN |
+Gabriel Palomino   | Jr PROJECTED | Hobbs, NM         | Diving        | | UNKNOWN |
+Theo Scarpino      | Jr PROJECTED | St. Petersburg,FL | Breast/Diving | | UNKNOWN |
+Hagan Smithwick    | Jr PROJECTED | Hot Springs, AR   | Diving        | | UNKNOWN |
+Tyler Steffan      | Jr PROJECTED | Tulsa, OK         | Free          | | UNKNOWN |
+
+-- RETURNING SOPHOMORES (2025-26 freshmen) ------------------------------------
+Ansh Anand        | So PROJECTED | Frisco, TX        | Free       | | UNKNOWN |
+Lucas Cagle       | So PROJECTED | Midlothian, TX    | Breast     | | UNKNOWN |
+Stefan Duca       | So PROJECTED | Oradea, ROU       | Free/Back  | | UNKNOWN |
+Caston Feazel     | So PROJECTED | Shreveport, LA    | Fly        | | UNKNOWN |
+Chandler Garrett  | So PROJECTED | Mansfield, TX     | Free       | | UNKNOWN |
+Carson Gillum     | So PROJECTED | Little Rock, AR   | Free       | | UNKNOWN |
+Brody Hutchins    | So PROJECTED | Benton, AR        | Free/Fly   | | UNKNOWN |
+Mikhail Lymar     | So PROJECTED | Volgograd, RUS    | Free/Back  | | UNKNOWN |
+Brayden Miller    | So PROJECTED | Conroe, TX        | Free/Fly   | | UNKNOWN |
+Dylan Moreno      | So PROJECTED | Coppell, TX       | Free/Back  | | UNKNOWN |
+Jeronimo Quintero | So PROJECTED | Spring, TX        | Free/Back  | | UNKNOWN |
+Thatcher Schmitz  | So PROJECTED | Wichita, KS       | Back/Free  | | UNKNOWN |
+Franco Vega       | So PROJECTED | Port Arthur, TX   | Free       | | UNKNOWN |
+Nathan Wardlow    | So PROJECTED | Joplin, MO        | Back       | | UNKNOWN |
+Evan Wilkerson    | So PROJECTED | Wake Forest, NC   | Back/Free  | | UNKNOWN |
+
+-- INCOMING FRESHMEN — FALL 2026 (CONFIRMED COMMITS) --------------------------
+AJ Alfeo | Fr CONFIRMED | Texas (Metroplex Aquatics; Acellus Academy online)
+  Source: https://swimswam.com/sectionals-finalist-aj-alfeo-sends-verbal-to-ouachita-baptist-university-for-fall-2026/
+  Published 2025-10-31. Times below are QUOTED VERBATIM from that article (SCY).
+  Profile: distance free / fly / IM.
+    200 free  | 1:44.93 | swimswam 2025-10-31
+    500 free  | 4:47.84 | swimswam 2025-10-31
+    1000 free | 9:53.53 | swimswam 2025-10-31
+    200 fly   | 1:52.34 | swimswam 2025-10-31
+    200 IM    | 1:59.63 | swimswam 2025-10-31
+    400 IM    | 4:06.48 | swimswam 2025-10-31
+  Article's own projection vs 2025 New South Championships results (their claim,
+  not mine): A-final in 200 fly; B-final in 500 free and 400 IM; 11th in 1000 free.
+
+Cage Bready | Fr CONFIRMED | hometown UNKNOWN | Breast/Fly/IM
+  Source: named as a fall-2026 teammate inside the Alfeo article above.
+  NO times published. NO separate commitment article found. FILL FROM SWIMCLOUD.
+    (event) | | UNKNOWN |
+
+Chase Gluck | Fr CONFIRMED | hometown UNKNOWN | Breast/Free/IM
+  Source: named as a fall-2026 teammate inside the Alfeo article above.
+  NO times published. NO separate commitment article found. FILL FROM SWIMCLOUD.
+    (event) | | UNKNOWN |
+
+-- UNKNOWN ADDITIONAL COMMITS -------------------------------------------------
+Assume this list is INCOMPLETE. Most D2 signings never get a SwimSwam article.
+Check the OBU signing-class release and SwimCloud's NSISC commitments feed.
+
+================================================================================
+OUACHITA BAPTIST — WOMEN — PROJECTED 2026-27
+================================================================================
+Source roster: https://obutigers.com/sports/womens-swimming-and-diving/roster (2025-26)
+
+-- GRADUATING OFF (2025-26 seniors) -------------------------------------------
+Abigail McMahon      | DEPARTED? | Broken Arrow, OK | Back
+Jameson Tankersley   | DEPARTED? | Conway, AR       | Back/Free
+
+-- RETURNING SENIORS (2025-26 juniors) ----------------------------------------
+NAME | CLASS_26_27 | HOMETOWN | EVENT_GROUP | SCY_EVENT | TIME | SOURCE
+Sophie Derby      | Sr PROJECTED | Houston, TX      | Free/Fly    | | UNKNOWN |
+Victoria Duran    | Sr PROJECTED | Cortez, CO       | Free/Breast | | UNKNOWN |
+Tiffany Nordstrom | Sr PROJECTED | McKinney, TX     | Back/Fly    | | UNKNOWN |
+Anna Phelps       | Sr PROJECTED | Marlton, NJ      | Fly/Free    | | UNKNOWN |
+Kaylee Stika      | Sr PROJECTED | Broken Arrow, OK | Breast/Free | | UNKNOWN |
+
+-- RETURNING JUNIORS (2025-26 sophomores) -------------------------------------
+Britta Andruss | Jr PROJECTED | Fort Worth, TX   | Free/Fly  | | UNKNOWN |
+Monica McMahon | Jr PROJECTED | Broken Arrow, OK | Free      | | UNKNOWN |
+Linzay Taylor  | Jr PROJECTED | Pineville, LA    | Back/Free | | UNKNOWN |
+
+-- RETURNING SOPHOMORES (2025-26 freshmen) ------------------------------------
+Alyson Beason     | So PROJECTED | Beebe, AR         | Free/Back   | | UNKNOWN |
+Eva Canalito      | So PROJECTED | Humble, TX        | Free/Back   | | UNKNOWN |
+Lizzy Haralson    | So PROJECTED | Lubbock, TX       | Free/Back   | | UNKNOWN |
+Macy Hester       | So PROJECTED | Marshall, TX      | Free/Breast | | UNKNOWN |
+Lexa Jackson      | So PROJECTED | Eaton, CO         | Breast/Free | | UNKNOWN |
+McKenzie Jones    | So PROJECTED | Dubach, LA        | Free        | | UNKNOWN |
+Kaitlyn Koenig    | So PROJECTED | The Woodlands, TX | Free        | | UNKNOWN |
+Eden LaTurno      | So PROJECTED | Justin, TX        | Free        | | UNKNOWN |
+Sophia LeMaire    | So PROJECTED | Kingwood, TX      | Free        | | UNKNOWN |
+Caroline Lunsford | So PROJECTED | Burnet, TX        | Back/Free   | | UNKNOWN |
+Janna Moellenhoff | So PROJECTED | Wildwood, MO      | Free        | | UNKNOWN |
+Aurora Ruiz       | So PROJECTED | Flower Mound, TX  | Fly/Free    | | UNKNOWN |
+Mia Valentine     | So PROJECTED | Houston, TX       | Breast/Free | | UNKNOWN |
+
+-- INCOMING FRESHMEN — FALL 2026 ----------------------------------------------
+NONE FOUND with a published article. A "Kate McCown Commits to Ouachita Baptist
+with NSISC A-Final Times in 500/1650" article exists on SwimSwam but I did NOT
+open it and CANNOT confirm her entry year — she may already be on the roster
+above or be an earlier class. VERIFY BEFORE USING.
+  Kate McCown | ENTRY YEAR UNVERIFIED | | Distance free | | UNKNOWN |
+
+================================================================================
+DELTA STATE — MEN — PROJECTED 2026-27
+================================================================================
+Source roster: https://gostatesmen.com/sports/mens-swimming-and-diving/roster (2025-26)
+
+-- GRADUATING OFF (2025-26 seniors) -------------------------------------------
+Bryon Croom      | DEPARTED? | Palmer, AK           | Diving
+Jayden Curtis    | DEPARTED? | Nassau, BHS          | Free/Back/Fly
+Mateus Franco    | DEPARTED? | Vitoria, BRA         | Free/IM
+Neill Mauss      | DEPARTED? | Bochum, DEU          | Breast
+Ryan Whaley      | DEPARTED? | LaSalle, MI          | Diving
+
+-- RETURNING SENIORS (2025-26 juniors) ----------------------------------------
+NAME | CLASS_26_27 | HOMETOWN | EVENT_GROUP | SCY_EVENT | TIME | SOURCE
+Ethan Baylin      | Sr PROJECTED | Leeds, GBR      | Free/Breast     | | UNKNOWN |
+Lars Hetzel       | Sr PROJECTED | Buxheim, DEU    | Free/Back       | | UNKNOWN |
+Austin Huffhines  | Sr PROJECTED | Decherd, TN     | Free/Fly        | | UNKNOWN |
+Konstantin Illijic| Sr PROJECTED | Belgrade, SRB   | Free/Sprints    | | UNKNOWN |
+Braden Moore      | Sr PROJECTED | Spring, TX      | Diving          | | UNKNOWN |
+Riley Oakes       | Sr PROJECTED | Brentwood, TN   | IM/Back/Fly     | | UNKNOWN |
+Sergio Rodriguez  | Sr PROJECTED | Bogota, COL     | Free            | | UNKNOWN |
+Jacob Runyon      | Sr PROJECTED | Hilton, NY      | Free/Back/Fly   | | UNKNOWN |
+
+-- RETURNING JUNIORS (2025-26 sophomores) -------------------------------------
+Reece Achord         | Jr PROJECTED | Zachary, LA       | Breast/Free      | | UNKNOWN |
+Jacob Bigler         | Jr PROJECTED | The Woodlands, TX | Diving           | | UNKNOWN |
+Carter Foster        | Jr PROJECTED | Cleveland, MS     | Fly/Free/IM      | | UNKNOWN |
+Jacob Hamblen        | Jr PROJECTED | Tutbury, GBR      | Breast/Free      | | UNKNOWN |
+Kacper Mochnal       | Jr PROJECTED | Lodz, POL         | Fly/Free/IM      | | UNKNOWN |
+Adam Rickert         | Jr PROJECTED | Heidelberg, DEU   | Free/Fly         | | UNKNOWN |
+Michael Robinson     | Jr PROJECTED | Pearl, MS         | Free/Fly/Back    | | UNKNOWN |
+Santiago Santodomingo| Jr PROJECTED | Bogota, COL       | Diving           | | UNKNOWN |
+Eudald Tosquella     | Jr PROJECTED | Tarrega, ESP      | Breast/IM        | | UNKNOWN |
+
+-- RETURNING SOPHOMORES (2025-26 freshmen) ------------------------------------
+Lannom Bowman    | So PROJECTED | Prattville, AL    | Fly/Breast    | | UNKNOWN |
+Guilherme Furlan | So PROJECTED | Joinville, BRA    | Free/Fly      | | UNKNOWN |
+Luis Ploner      | So PROJECTED | Frankfurt, DEU    | Free/Fly      | | UNKNOWN |
+Valentino Soroor | So PROJECTED | Bellevue, WA      | UNKNOWN       | | UNKNOWN |
+Ashtin Wallace   | So PROJECTED | Vicksburg, MS     | Free/Fly      | | UNKNOWN |
+
+-- INCOMING FRESHMEN — FALL 2026 ----------------------------------------------
+NONE FOUND. No published fall-2026 Delta State commitment located. This is very
+likely a gap in public reporting rather than a genuine empty class — a new head
+coach (Clark, hired Oct 2024) recruiting his second full class would normally
+sign several. CHECK: DSU signing-class release + SwimCloud NSISC commitments.
+
+-- POSSIBLE ROSTER-EXTRACTION GAP ---------------------------------------------
+"Matteo Fraschi" (200 breast, school record) appears in a SwimSwam Delta State
+article but NOT in my extracted roster above. Either the article is archival or
+my extraction dropped rows. VERIFY the men's roster page manually.
+
+================================================================================
+DELTA STATE — WOMEN — PROJECTED 2026-27
+================================================================================
+Source roster: https://gostatesmen.com/sports/womens-swimming-and-diving/roster (2025-26)
+
+-- GRADUATING OFF (2025-26 seniors) -------------------------------------------
+Janne Bodemer    | DEPARTED? | Muenster, DEU        | Fly/IM
+Kaley Davis      | DEPARTED? | Vancleave, MS        | Free/Back/Fly
+Pia Delkeskamp   | DEPARTED? | Wermelskirchen, DEU  | Free/Breast/IM
+Jessica Gannon   | DEPARTED? | Castlerea, IRL       | Distance
+Emma Greene      | DEPARTED? | Jackson, MO          | Free/Fly
+Jordon Kloth     | DEPARTED? | Ames, IA             | Free/Back/Fly
+Mikayla Kloth    | DEPARTED? | Ames, IA             | Free/Fly
+Julia Santiago   | DEPARTED? | Rio de Janeiro, BRA  | Fly/IM/Free
+Aspen Shipp      | DEPARTED? | Opelousas, LA        | Free/Back/Fly
+
+NOTE: that is NINE seniors off a roster of 18 — DSU women lose half the squad on
+paper. If accurate, this is the single largest scoring swing in this document
+and the most important thing to verify first.
+
+-- RETURNING SENIORS (2025-26 juniors) ----------------------------------------
+NAME | CLASS_26_27 | HOMETOWN | EVENT_GROUP | SCY_EVENT | TIME | SOURCE
+Hannah Jones | Sr PROJECTED | Prattville, AL | Breast/Free/IM | | UNKNOWN |
+  (cross-check: SwimSwam reported her commitment to DSU in Jan 2023 for fall
+   2023, which is consistent with a 2026-27 senior year. Good provenance signal.)
+Ave Owens    | Sr PROJECTED | Placerville, CA | Free/Fly   | | UNKNOWN |
+Chloe Skelt  | Sr PROJECTED | Essex, GBR      | Breast     | | UNKNOWN |
+
+-- RETURNING JUNIORS (2025-26 sophomores) -------------------------------------
+Kennedy Cleasant | Jr PROJECTED | Birmingham, AL     | Fly/Back/IM    | | UNKNOWN |
+Julia Maciak     | Jr PROJECTED | Warsaw, POL       | Distance/Free  | | UNKNOWN |
+Olivia Murphy    | Jr PROJECTED | Tullahoma, TN     | Free/Fly/Back  | | UNKNOWN |
+Zinna Nimander   | Jr PROJECTED | Staffanstorp, SWE | Free/Fly/Back  | | UNKNOWN |
+
+-- RETURNING SOPHOMORES (2025-26 freshmen) ------------------------------------
+Kiera Cloete   | So PROJECTED | Johannesburg, ZAF | Breast/Free | | UNKNOWN |
+Rhianna Foster | So PROJECTED | Hull, GBR         | Free        | | UNKNOWN |
+
+-- INCOMING FRESHMEN — FALL 2026 ----------------------------------------------
+NONE FOUND. See the men's note — same caveat, and it matters more here given the
+nine departing seniors.
+
+================================================================================
+SCORING-PROJECTION NOTES (for when the times are filled)
+================================================================================
+1. NSISC entry cap is TOTAL-ONLY: max 7 events per swimmer, any individual/relay
+   mix. No separate per-type caps. Already encoded in the NSISC preset as
+   maxTotalEntriesPerSwimmer = 7.
+2. The 2025 New South men's championship had only FOUR programs. Small field =
+   depth matters disproportionately; a team's 3rd and 4th scorer in an event is
+   often the difference. Do not project from top-end times alone.
+3. Divers are listed here but SwimCloud will not have swim times for them. Leave
+   diving entries as UNKNOWN rather than 0 — a 0 would score as a real result.
+4. Do NOT extrapolate a returner's 2026-27 time from their 2025-26 time. Repo
+   rule: no interpolation, extrapolation, projection or estimation of a
+   competition value. Use the actual best time on file and let the engine
+   handle the comparison.
+5. When you add these teams' athletes to a workspace, both schools already exist
+   in teamDivisions.ts as active D2 with both genders sponsored — no new entry
+   needed, and no `provenance: 'legacy'` (banned).
+
+================================================================================
+SOURCES
+================================================================================
+[1] https://obutigers.com/sports/mens-swimming-and-diving/roster        2025-26
+[2] https://obutigers.com/sports/womens-swimming-and-diving/roster      2025-26
+[3] https://gostatesmen.com/sports/mens-swimming-and-diving/roster      2025-26
+[4] https://gostatesmen.com/sports/womens-swimming-and-diving/roster    2025-26
+[5] https://swimswam.com/sectionals-finalist-aj-alfeo-sends-verbal-to-ouachita-baptist-university-for-fall-2026/  pub. 2025-10-31
+[6] https://swimswam.com/pace-clark-named-head-coach-of-delta-state-university-swim-dive-program/
+[7] https://swimswam.com/delta-state-head-coach-danl-murray-is-leaving-the-program-after-14-seasons/
+[8] https://www.swimcloud.com/country/usa/college/conference/nsisc/commitments/  UNREACHABLE (403) — check manually
+[9] https://swimswam.com/tag/delta-state/   checked; archival articles only, no 2026 commits
+
+All roster pages retrieved 2026-08-04.
+================================================================================

@@ -12,7 +12,8 @@ import {
   suggestQuickFillForVacantLeg,
   type LineupChecklistItem,
 } from '@omniswim/core/lib/rosterLineupAudit';
-import { SegmentedControl, useToast } from '@omniswim/ui';
+import { FileWarning, Users } from 'lucide-react';
+import { EmptyState, SegmentedControl, useToast } from '@omniswim/ui';
 import TeamRosterPanel from './TeamRosterPanel';
 import DuplicateAthletesPanel from './DuplicateAthletesPanel';
 import type { EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
@@ -70,6 +71,11 @@ export default function RosterLineupStep({
 }: Props) {
   const toast = useToast();
   const [sidePanelTab, setSidePanelTab] = useState<SidePanelTab>('checklist');
+  // "Nothing to work with" is no scoreable TEAM, not no meet PDF. A workspace
+  // can be recruit-driven -- SwimCloud imports and planned entries with no meet
+  // loaded -- and still have a full roster to build, which is the HSU planning
+  // workflow. Keying this off menResults blocked that path entirely.
+  const hasRoster = scoringBundle.sortedTeams.length > 0;
 
   const audit = useMemo(() => {
     if (!selectedTeam) {
@@ -123,6 +129,28 @@ export default function RosterLineupStep({
     onUpdate({ relayLegOverrides: suggestion.overrides });
     toast.push('success', suggestion.message);
   };
+
+  if (!hasRoster) {
+    return (
+      <EmptyState
+        icon={<FileWarning size={28} />}
+        eyebrow="Lineup"
+        title="Bring in swimmers first"
+        description="Load a meet or import swimmers on the Source step to build this lineup."
+      />
+    );
+  }
+
+  if (!selectedTeam) {
+    return (
+      <EmptyState
+        icon={<Users size={28} />}
+        eyebrow="Lineup"
+        title="Choose a team to build its lineup"
+        description="Select a team to edit its roster and entries."
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col gap-3 flex-1 min-h-0">

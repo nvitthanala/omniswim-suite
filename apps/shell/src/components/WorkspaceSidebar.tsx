@@ -168,6 +168,8 @@ export default function WorkspaceSidebar() {
               onClick={toggleCollapsed}
               className="p-1.5 theme-hover-row rounded text-theme-secondary"
               aria-expanded={!sidebarCollapsed}
+              aria-label={sidebarCollapsed ? 'Expand workspace sidebar' : 'Collapse workspace sidebar'}
+              title={sidebarCollapsed ? 'Expand workspace sidebar' : 'Collapse workspace sidebar'}
             >
               {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
             </button>
@@ -210,6 +212,8 @@ export default function WorkspaceSidebar() {
                     setWorkspaceToDelete(w.id);
                   }}
                   className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 opacity-0 group-hover:opacity-100 hover:bg-[var(--text-accent)]/15 text-theme-muted hover:text-[var(--text-accent)] rounded"
+                  aria-label={`Delete workspace ${w.name}`}
+                  title={`Delete workspace ${w.name}`}
                 >
                   <Trash2 size={12} />
                 </button>
@@ -330,6 +334,7 @@ export default function WorkspaceSidebar() {
                       disabled={restoringSnapshotId === snap.id}
                       className="p-1 opacity-0 group-hover:opacity-100 rounded theme-hover-row text-theme-secondary hover:text-[var(--text-accent)] disabled:opacity-40"
                       title="Restore this snapshot"
+                      aria-label={`Restore snapshot ${snap.label || new Date(snap.createdAt).toLocaleString()}`}
                     >
                       {restoringSnapshotId === snap.id ? (
                         <Loader2 size={10} className="animate-spin" />

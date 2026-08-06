@@ -4,7 +4,7 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { Sparkles, Users } from 'lucide-react';
+import { FileWarning, Sparkles, Users } from 'lucide-react';
 import { Gender, ScoringSettings, Workspace } from '@omniswim/core/types';
 import { optimizeRosterForTeam, optimizeRosterAllTeams } from '@omniswim/core/lib/rosterOptimizer';
 import {
@@ -13,7 +13,7 @@ import {
   type ArbitrageCard,
   type ArbitrageMode,
 } from '@omniswim/core/lib/rosterArbitrage';
-import { useToast } from '@omniswim/ui';
+import { EmptyState, useToast } from '@omniswim/ui';
 
 type Props = {
   workspace: Workspace;
@@ -80,6 +80,11 @@ export default function RosterOptimizeStep({
   const [mode, setMode] = useState<ArbitrageMode>('individual_first');
   const [cards, setCards] = useState<ArbitrageCard[]>([]);
   const team = selectedTeam && teams.includes(selectedTeam) ? selectedTeam : '';
+  // "Nothing to work with" is no scoreable TEAM, not no meet PDF. A workspace
+  // can be recruit-driven -- SwimCloud imports and planned entries with no meet
+  // loaded -- and still have a full roster to build, which is the HSU planning
+  // workflow. Keying this off menResults blocked that path entirely.
+  const hasRoster = teams.length > 0;
 
   const previewCards = useMemo(() => {
     if (!team) return [];
@@ -132,6 +137,28 @@ export default function RosterOptimizeStep({
     });
     toast.push('success', 'Best roster applied for all teams');
   };
+
+  if (!hasRoster) {
+    return (
+      <EmptyState
+        icon={<FileWarning size={28} />}
+        eyebrow="Optimize"
+        title="Bring in swimmers first"
+        description="Load a meet or import swimmers on the Source step to build this optimization."
+      />
+    );
+  }
+
+  if (!selectedTeam) {
+    return (
+      <EmptyState
+        icon={<Users size={28} />}
+        eyebrow="Optimize"
+        title="Choose a team to optimize"
+        description="Select a team to review its point opportunities and optimize its entries."
+      />
+    );
+  }
 
   return (
     <div className="surface-card rounded-xl p-4 sm:p-5 flex flex-col gap-5">

@@ -18,3 +18,4 @@ export { SectionHeader } from './components/SectionHeader';
 export { Toolbar, ToolbarSpacer } from './components/Toolbar';
 export { FloatingWindow, type FloatingWindowState } from './components/FloatingWindow';
 export { SwimCloudProvider, useSwimCloudWindow } from './components/SwimCloudContext';
+export { WizardShell, type WizardShellProps, type WizardStep } from './components/WizardShell';

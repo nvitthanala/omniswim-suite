@@ -11,8 +11,15 @@ interface TagTableProps {
   onChange: (nextTags: RaceTag[]) => void;
 }
 
-function sortedByTime(tags: readonly RaceTag[]): RaceTag[] {
-  return [...tags].sort((a, b) => a.time - b.time);
+/**
+ * Single path for committing a tag's time — used by the table's ±1 frame
+ * nudge and by the timeline drag handle, so both produce the exact same
+ * shape of update and surface the exact same validation (NON_MONOTONIC_TAGS
+ * included) rather than each doing their own thing.
+ */
+export function updateTagTime(tags: readonly RaceTag[], index: number, nextTime: number): RaceTag[] {
+  const clampedTime = Math.max(0, nextTime);
+  return tags.map((tag, i) => (i === index ? { ...tag, time: clampedTime } : tag));
 }
 
 const SEVERITY_ORDER: readonly ProblemSeverity[] = ['error', 'warning', 'info'];
@@ -24,22 +31,33 @@ const SEVERITY_CLASS: Record<ProblemSeverity, string> = {
 };
 
 export function TagTable({ config, tags, frameSeconds, onChange }: TagTableProps) {
-  const rows = useMemo(() => sortedByTime(tags), [tags]);
-  const problems = useMemo(() => validateRaceTags(config, rows), [config, rows]);
+  // Validation runs on `tags` in its raw, as-tagged order — not the
+  // time-sorted display order — so an edit that puts a tag out of sequence
+  // (typed or dragged) is actually detected as NON_MONOTONIC_TAGS instead of
+  // being silently re-sorted away before validation ever sees it.
+  const problems = useMemo(() => validateRaceTags(config, tags), [config, tags]);
   const problemsBySeverity = useMemo(() => {
     const grouped: Record<ProblemSeverity, Problem[]> = { error: [], warning: [], info: [] };
     for (const problem of problems) grouped[problem.severity].push(problem);
     return grouped;
   }, [problems]);
 
+  // Display rows are sorted by time for readability, but each row carries
+  // the tag's real index into `tags` so edits land on the right entry and
+  // never reorder the underlying array themselves.
+  const rows = useMemo(
+    () => tags.map((tag, index) => ({ tag, index })).sort((a, b) => a.tag.time - b.tag.time),
+    [tags],
+  );
+
   const updateRow = (index: number, updater: (tag: RaceTag) => RaceTag) => {
-    const next = rows.map((tag, i) => (i === index ? updater(tag) : tag));
-    onChange(sortedByTime(next));
+    onChange(tags.map((tag, i) => (i === index ? updater(tag) : tag)));
   };
 
   const nudge = (index: number, direction: 1 | -1) => {
     if (frameSeconds === null) return;
-    updateRow(index, (tag) => ({ ...tag, time: Math.max(0, tag.time + direction * frameSeconds) }));
+    const tag = tags[index];
+    onChange(updateTagTime(tags, index, tag.time + direction * frameSeconds));
   };
 
   const retype = (index: number, kind: RaceTagKind) => {
@@ -47,7 +65,7 @@ export function TagTable({ config, tags, frameSeconds, onChange }: TagTableProps
   };
 
   const deleteRow = (index: number) => {
-    onChange(rows.filter((_, i) => i !== index));
+    onChange(tags.filter((_, i) => i !== index));
   };
 
   return (
@@ -63,7 +81,7 @@ export function TagTable({ config, tags, frameSeconds, onChange }: TagTableProps
           {rows.length === 0 ? (
             <div className="px-3 py-4 text-ui-caption text-theme-muted">No tags yet.</div>
           ) : (
-            rows.map((tag, index) => (
+            rows.map(({ tag, index }) => (
               <div key={`${tag.kind}-${tag.time}-${index}`} className="grid grid-cols-[1fr_auto_auto_auto] gap-2 items-center px-3 py-2 text-ui-caption">
                 <select
                   value={tag.kind}

@@ -11,7 +11,11 @@ import {
   computeCrossCourseArbitrage,
   type CrossCourseArbitrageResult,
 } from '../lib/crossCourseArbitrage';
-import { computeScenarioDiff, type ScenarioDiffResult } from '../lib/scenarioDiff';
+import {
+  computeScenarioDiff,
+  type ScenarioDiffResult,
+  type ScenarioDiffSideMode,
+} from '../lib/scenarioDiff';
 import type { Gender, ScoringSettings, Workspace } from '../types';
 import type { CatalogTeamRoster } from '../lib/rosterCatalog';
 
@@ -47,6 +51,8 @@ export type ScenarioDiffRequest = {
   gender: Gender;
   settings?: ScoringSettings;
   removeSeniors?: boolean;
+  /** How the "then" side is scored; `baseline` diffs the loaded meet. */
+  thenMode?: ScenarioDiffSideMode;
 };
 
 export type WorkerRequest = ScoringRequest | CrossCourseArbitrageRequest | ScenarioDiffRequest;
@@ -94,13 +100,14 @@ ctx.onmessage = (event: MessageEvent<WorkerRequest>) => {
   }
 
   if (data.op === 'scenarioDiff') {
-    const { id, current, snapshot, team, gender, settings, removeSeniors } = data;
+    const { id, current, snapshot, team, gender, settings, removeSeniors, thenMode } = data;
     try {
       const result = computeScenarioDiff(current, snapshot, {
         team,
         gender,
         settings,
         removeSeniors,
+        thenMode,
       });
       ctx.postMessage({ id, op: 'scenarioDiff', ok: true, result });
     } catch (err) {

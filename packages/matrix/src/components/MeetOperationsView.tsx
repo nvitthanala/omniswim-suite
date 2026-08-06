@@ -3,11 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
-import { Users, Plus, TrendingUp, Search, X, GitCompareArrows, ListTree } from 'lucide-react';
-import { motion } from 'motion/react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { Users, Plus, TrendingUp, Search, X, GitCompareArrows } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
-import { ChartFrame, ChartShell } from '@omniswim/ui';
+import { ChartFrame, ChartShell, EmptyState } from '@omniswim/ui';
 import { Gender, Recruit, ScoringSettings, TeamScore, Workspace } from '@omniswim/core/types';
 import { assignTeamLineStyles, isRelayResult } from '@omniswim/core/lib/utils';
 import { aggregateSwimmerMeetPoints, scorerRosterKey } from '@omniswim/core/lib/scorerRoster';
@@ -106,7 +105,10 @@ function TimelineTooltipContent({
 }
 
 type Props = {
+  activeStep: 'load' | 'score' | 'standings' | 'analyze';
   workspace: Workspace;
+  workspaceMeetSources: Workspace[];
+  onCopyMeetFromWorkspace: (sourceId: string) => void;
   gender: Gender;
   scoringBundle: ScoringBundle;
   baselineBundle: ScoringBundle;
@@ -143,7 +145,10 @@ type Props = {
 };
 
 export default function MeetOperationsView({
+  activeStep,
   workspace,
+  workspaceMeetSources,
+  onCopyMeetFromWorkspace,
   gender,
   scoringBundle,
   baselineBundle,
@@ -179,8 +184,9 @@ export default function MeetOperationsView({
   scoringRefreshKey,
 }: Props) {
   const chartTheme = useThemeColors();
-  const [matrixView, setMatrixView] = useState<'standings' | 'diff' | 'prelims'>('standings');
+  const [analysisView, setAnalysisView] = useState<'diff' | 'prelims'>('diff');
   const [meetMomentumAnchor, setMeetMomentumAnchor] = useState<'prelims' | 'psych'>('prelims');
+  const meetFileInputRef = useRef<HTMLInputElement>(null);
   const meetConference = workspace.conference;
 
   useEffect(() => {
@@ -289,20 +295,90 @@ export default function MeetOperationsView({
 
   return (
     <div className="flex flex-col gap-6">
-      <ScoringSettingsPanel
-        collapsible
-        defaultOpen={false}
-        settings={scoringSettings}
-        suggestedPresetId={suggestedPresetId}
-        onSave={sets => {
-          onSaveScoringSettings(sets);
-          onClearSuggestedPreset();
-        }}
-        scoringView={workspace.scoringView ?? 'merged'}
-        onScoringViewChange={onScoringViewChange}
-      />
+      {activeStep === 'score' ? <>
+        <div>
+          <h4 className="text-heading-2">Configure scoring model</h4>
+          <p className="mt-1 text-ui-body text-theme-secondary">Select a preset or adjust how entries earn points.</p>
+        </div>
+        <ScoringSettingsPanel
+          collapsible
+          defaultOpen
+          settings={scoringSettings}
+          suggestedPresetId={suggestedPresetId}
+          onSave={sets => {
+            onSaveScoringSettings(sets);
+            onClearSuggestedPreset();
+          }}
+          scoringView={workspace.scoringView ?? 'merged'}
+          onScoringViewChange={onScoringViewChange}
+        />
+        {officialLookup.size > 0 ? (
+          <div className="surface-card rounded-xl overflow-hidden">
+            <div className="p-4 border-b border-theme-soft surface-overlay"><h4 className="text-ui-label font-medium text-theme-secondary uppercase tracking-widest">Official team scores</h4></div>
+            <div className="grid gap-px sm:grid-cols-2 lg:grid-cols-3 surface-overlay">
+              {teamsWithLineStyles.filter(team => officialLookup.has(team.teamName)).map(team => (
+                <div key={team.teamName} className="surface-card px-4 py-3 flex items-center justify-between gap-3"><TeamName name={team.teamName} /><span className="font-mono font-bold text-[var(--text-primary)]">{officialLookup.get(team.teamName)?.toFixed(1)}</span></div>
+              ))}
+            </div>
+          </div>
+        ) : null}
+      </> : null}
 
       <div className="space-y-6 min-w-0">
+        {activeStep === 'load' ? (
+          <div className="space-y-6">
+            {!workspace.loadedMeet ? (
+              <EmptyState
+                icon={<Plus size={24} />}
+                eyebrow="Start here"
+                title="Load a meet PDF to begin"
+                description="Bring in the meet results first, then set the scoring rules and review team standings."
+                actionLabel="Load meet PDF"
+                onAction={() => meetFileInputRef.current?.click()}
+              />
+            ) : null}
+            <div className="surface-card rounded-xl p-5">
+              <div className="flex flex-wrap items-end justify-between gap-4">
+                <div>
+                  <h3 className="text-lg font-medium text-[var(--text-primary)] uppercase tracking-tight">Meet files</h3>
+                  <p className="text-xs text-theme-secondary">Load results and link a psych sheet for this meet.</p>
+                </div>
+                {isParsingPdf || isParsingPsychPdf ? (
+                  <div className="flex items-center gap-2">
+                    <span className="text-ui-caption text-theme-secondary">{isParsingPsychPdf ? 'Parsing psych PDF...' : 'Parsing meet PDF...'}</span>
+                    <button type="button" onClick={isParsingPsychPdf ? onCancelPsychPdfParse : onCancelPdfParse} aria-label="Cancel PDF parsing" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded btn-accent-outline text-[10px] uppercase font-medium">
+                      <X size={12} /><span>Cancel</span>
+                    </button>
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2 border border-theme-soft rounded-lg p-1">
+                    <label aria-label="Load meet results PDF" className="cursor-pointer flex items-center gap-1.5 px-3 py-1 btn-accent-outline rounded-md text-[10px] uppercase font-medium transition-colors">
+                      <Plus size={12} /><span>Load PDF</span><input ref={meetFileInputRef} aria-label="Meet results PDF file" type="file" className="hidden" accept=".pdf" onChange={onFileUpload} />
+                    </label>
+                    <label aria-label="Link psych sheet PDF" className="cursor-pointer flex items-center gap-1.5 px-3 py-1 border border-theme-soft rounded-md text-[10px] uppercase font-medium text-theme-secondary hover:text-[var(--text-primary)] transition-colors">
+                      <Plus size={12} /><span>Link Psych</span><input aria-label="Psych sheet PDF file" type="file" className="hidden" accept=".pdf" onChange={onPsychFileUpload} />
+                    </label>
+                  </div>
+                )}
+              </div>
+              <div className="mt-4 grid gap-3 sm:grid-cols-2 text-ui-caption">
+                <div className="rounded-lg border border-theme-soft surface-overlay p-3"><span className="text-theme-muted">Meet results</span><p className="mt-1 text-[var(--text-primary)]">{workspace.loadedMeet?.pdfFilename ?? 'No meet PDF loaded'}</p></div>
+                <div className="rounded-lg border border-theme-soft surface-overlay p-3"><span className="text-theme-muted">Psych sheet</span><p className="mt-1 text-[var(--text-primary)]">{workspace.loadedPsych?.pdfFilename ?? 'No psych sheet linked'}</p></div>
+              </div>
+              {workspaceMeetSources.length > 0 ? (
+                <div className="mt-4 border-t border-theme-soft pt-4">
+                  <label className="block text-ui-caption text-theme-secondary mb-2">Copy a loaded meet from another workspace</label>
+                  <select defaultValue="" onChange={event => { if (event.target.value) onCopyMeetFromWorkspace(event.target.value); event.target.value = ''; }} aria-label="Copy meet from another workspace" className="surface-overlay border border-theme-soft rounded-lg px-3 py-2 text-ui-caption text-[var(--text-primary)]">
+                    <option value="">Choose a workspace…</option>
+                    {workspaceMeetSources.map(source => <option key={source.id} value={source.id}>{source.name}</option>)}
+                  </select>
+                </div>
+              ) : null}
+            </div>
+          </div>
+        ) : null}
+
+        {activeStep === 'analyze' ? <>
         <div className="surface-card rounded-xl p-5 mb-6">
           <div className="flex items-center gap-2 mb-4">
             <TrendingUp size={16} className="text-[var(--text-accent)]" />
@@ -425,6 +501,7 @@ export default function MeetOperationsView({
                 <button
                   type="button"
                   onClick={() => setMeetMomentumAnchor('prelims')}
+                  aria-label="Show meet momentum versus prelims"
                   className={`text-[9px] uppercase tracking-widest px-2 py-0.5 rounded ${
                     meetMomentumAnchor === 'prelims'
                       ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
@@ -436,6 +513,7 @@ export default function MeetOperationsView({
                 <button
                   type="button"
                   onClick={() => setMeetMomentumAnchor('psych')}
+                  aria-label="Show meet momentum versus psych sheet"
                   className={`text-[9px] uppercase tracking-widest px-2 py-0.5 rounded ${
                     meetMomentumAnchor === 'psych'
                       ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
@@ -458,7 +536,20 @@ export default function MeetOperationsView({
             />
           </div>
         ) : null}
+        <div className="surface-card rounded-xl p-5">
+          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
+            <div><h3 className="text-lg font-medium text-[var(--text-primary)] uppercase tracking-tight">Score differences</h3><p className="text-xs text-theme-secondary">Compare the projection with the loaded meet and prelims.</p></div>
+            <div className="inline-flex items-center rounded-md border border-theme-soft surface-overlay p-1">
+              <button type="button" onClick={() => setAnalysisView('diff')} aria-label="Show projected versus baseline score differences" aria-pressed={analysisView === 'diff'} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] uppercase font-medium transition-colors ${analysisView === 'diff' ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}><GitCompareArrows size={12} /><span>Diff</span></button>
+              {showPrelimsPerformance ? <button type="button" onClick={() => setAnalysisView('prelims')} aria-label="Show score differences versus prelims" aria-pressed={analysisView === 'prelims'} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] uppercase font-medium transition-colors ${analysisView === 'prelims' ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}><TrendingUp size={12} /><span>Prelims</span></button> : null}
+            </div>
+          </div>
+          {analysisView === 'prelims' && showPrelimsPerformance ? <PrelimsDiffTable projectedTeams={teamsWithLineStyles} baselineTeams={baselineBundle.sortedTeams} prelimsTeams={prelimsProjectedBundle.sortedTeams} searchQuery={searchQuery} /> : <MeetDiffTable projectedTeams={teamsWithLineStyles} baselineTeams={baselineBundle.sortedTeams} searchQuery={searchQuery} />}
+        </div>
+        </> : null}
 
+        {activeStep === 'standings' ? (
+        <>
         <div className="surface-card rounded-xl p-5">
           <div className="flex justify-between items-end mb-6">
             <div>
@@ -471,152 +562,24 @@ export default function MeetOperationsView({
               </p>
             </div>
             <div className="flex items-center gap-3">
+              <select value={pdfFormat} onChange={e => onPdfFormatChange(e.target.value)} aria-label="PDF column format" className="surface-overlay border border-theme-soft rounded-lg text-[10px] uppercase tracking-widest text-theme-secondary outline-none py-1.5 px-2 cursor-pointer">
+                <option value="auto">Auto Format</option><option value="regular">Regular List</option><option value="divided">Divided (2-Col)</option>
+              </select>
               <div className="flex items-center surface-overlay border border-theme-soft rounded-lg px-3 py-1.5 focus-within:border-[var(--text-accent)]/50 transition-colors">
                 <Search size={12} className="text-theme-secondary mr-2" />
                 <input
                   value={searchQuery}
                   onChange={e => onSearchChange(e.target.value)}
                   placeholder="Filter swimmer or team..."
+                  aria-label="Filter swimmers or teams"
                   className="bg-transparent border-none outline-none text-[10px] uppercase placeholder:text-theme-secondary text-[var(--text-primary)] w-40"
                 />
               </div>
-              {isParsingPdf || isParsingPsychPdf ? (
-                <div className="flex items-center gap-2">
-                  <div className="flex items-center gap-2 px-3 py-1.5 btn-accent-outline rounded text-[10px] uppercase font-medium">
-                    <motion.div
-                      animate={{ rotate: 360 }}
-                      transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}
-                    >
-                      <Plus size={12} className="opacity-50" />
-                    </motion.div>
-                    <span>{isParsingPsychPdf ? 'Parsing psych PDF...' : 'Parsing PDF...'}</span>
-                    <div className="w-16 h-1 bg-[var(--text-accent)]/20 rounded overflow-hidden ml-2">
-                      <motion.div
-                        className="h-full bg-[var(--text-accent)]"
-                        initial={{ width: '0%' }}
-                        animate={{ width: '100%' }}
-                        transition={{ duration: 15, ease: 'easeOut' }}
-                      />
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={isParsingPsychPdf ? onCancelPsychPdfParse : onCancelPdfParse}
-                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded btn-accent-outline text-[10px] uppercase font-medium"
-                    title="Cancel PDF parsing"
-                  >
-                    <X size={12} />
-                    <span>Cancel</span>
-                  </button>
-                </div>
-              ) : (
-                <div className="flex items-center gap-2 border border-theme-soft rounded-lg p-1">
-                  <select
-                    value={pdfFormat}
-                    onChange={e => onPdfFormatChange(e.target.value)}
-                    className="bg-transparent text-[10px] uppercase tracking-widest text-theme-secondary outline-none py-1 pl-2 border-r border-theme-soft pr-2 cursor-pointer"
-                    title="PDF Column Format"
-                  >
-                    <option value="auto">Auto Format</option>
-                    <option value="regular">Regular List</option>
-                    <option value="divided">Divided (2-Col)</option>
-                  </select>
-                  <label className="cursor-pointer flex items-center gap-1.5 px-3 py-1 btn-accent-outline rounded-md text-[10px] uppercase font-medium transition-colors">
-                    <Plus size={12} />
-                    <span>Load PDF</span>
-                    <input type="file" className="hidden" accept=".pdf" onChange={onFileUpload} />
-                  </label>
-                  <label
-                    className="cursor-pointer flex items-center gap-1.5 px-3 py-1 border border-theme-soft rounded-md text-[10px] uppercase font-medium text-theme-secondary hover:text-[var(--text-primary)] transition-colors"
-                    title="Link psych sheet (separate from meet results PDF)"
-                  >
-                    <Plus size={12} />
-                    <span>Link Psych</span>
-                    <input type="file" className="hidden" accept=".pdf" onChange={onPsychFileUpload} />
-                  </label>
-                  {workspace.loadedPsych?.pdfFilename ? (
-                    <span
-                      className="text-[9px] text-theme-muted max-w-[120px] truncate"
-                      title={workspace.loadedPsych.pdfFilename}
-                    >
-                      Psych: {workspace.loadedPsych.pdfFilename}
-                    </span>
-                  ) : null}
-                </div>
-              )}
             </div>
-          </div>
-
-          <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
-            <div className="inline-flex items-center rounded-md border border-theme-soft surface-overlay p-1">
-              <button
-                type="button"
-                onClick={() => setMatrixView('standings')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] uppercase font-medium transition-colors ${
-                  matrixView === 'standings'
-                    ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
-                    : 'text-theme-secondary hover:text-[var(--text-primary)]'
-                }`}
-                title="Show team standings"
-              >
-                <ListTree size={12} />
-                <span>Standings</span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setMatrixView('diff')}
-                className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] uppercase font-medium transition-colors ${
-                  matrixView === 'diff'
-                    ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
-                    : 'text-theme-secondary hover:text-[var(--text-primary)]'
-                }`}
-                title="Show projected versus baseline score changes"
-              >
-                <GitCompareArrows size={12} />
-                <span>Diff</span>
-              </button>
-              {showPrelimsPerformance ? (
-                <button
-                  type="button"
-                  onClick={() => setMatrixView('prelims')}
-                  className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] uppercase font-medium transition-colors ${
-                    matrixView === 'prelims'
-                      ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
-                      : 'text-theme-secondary hover:text-[var(--text-primary)]'
-                  }`}
-                  title="Show over/underperformance vs prelims projection"
-                >
-                  <TrendingUp size={12} />
-                  <span>Prelims</span>
-                </button>
-              ) : null}
-            </div>
-            {matrixView === 'diff' ? (
-              <p className="text-[10px] uppercase tracking-widest text-theme-secondary">
-                Comparing what-if projection against loaded meet baseline
-              </p>
-            ) : matrixView === 'prelims' ? (
-              <p className="text-[10px] uppercase tracking-widest text-theme-secondary">
-                Over/under vs engine-computed prelims projection
-              </p>
-            ) : null}
           </div>
 
           <div className="space-y-4">
-            {matrixView === 'diff' ? (
-              <MeetDiffTable
-                projectedTeams={teamsWithLineStyles}
-                baselineTeams={baselineBundle.sortedTeams}
-                searchQuery={searchQuery}
-              />
-            ) : matrixView === 'prelims' ? (
-              <PrelimsDiffTable
-                projectedTeams={teamsWithLineStyles}
-                baselineTeams={baselineBundle.sortedTeams}
-                prelimsTeams={prelimsProjectedBundle.sortedTeams}
-                searchQuery={searchQuery}
-              />
-            ) : teamsWithLineStyles.length > 0 ? (
+            {teamsWithLineStyles.length > 0 ? (
               teamsWithLineStyles
                 .filter(
                   t =>
@@ -731,6 +694,8 @@ export default function MeetOperationsView({
             </tbody>
           </table>
         </div>
+        </>
+        ) : null}
       </div>
     </div>
   );
