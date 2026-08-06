@@ -70,8 +70,20 @@ core of the design and why tagging is fast:
 | `D` | `TurnStart` → `TurnEnd`, or `Finish` on the last length |
 | `A` | `FifteenMetre` |
 
-Three **one-shot** kinds are tagged separately, not through the sequential
-keys: `Signal`, `Flags`, `Kick` (`MetricsApp.tsx:354`).
+Three **one-shot** keys, each always producing the same kind:
+
+| Key | Yields |
+| --- | ------ |
+| `R` | `Signal` |
+| `G` | `Flags` |
+| `K` | `Kick` |
+
+`Ctrl`/`Cmd` + `Z` undoes the last tag.
+
+Bindings are on `window` and switch on `event.code`, not `event.key`
+(`VideoPlayer.tsx:136-158`) — so they are physical-key bindings and do not
+follow a remapped keyboard layout. Every tag takes the video's
+`currentTime` at the moment of the press.
 
 The state machine refuses illegal presses rather than recording them, with a
 reason string — e.g. `'D is not legal before breakout'`,
@@ -126,9 +138,31 @@ time, and record where it fights you — that friction is the finding.
 
 ### 2.1 Before tagging
 
-1. **Measure the true frame rate.** `packages/metrics/src/lib/videoMeta.ts`
-   derives real fps via `requestVideoFrameCallback`. Do not assume 30 or 60.
-   Every landmark time is quantised to a frame; a wrong fps biases every tag.
+1. **Check the frame rate, and know what it actually is.** This was written as
+   "measure the true fps" — that overstated the code. What
+   `packages/metrics/src/lib/videoMeta.ts` really does, verified by running it:
+
+   - It samples **10 frame callbacks** via `requestVideoFrameCallback` on a
+     hidden element driven by muted autoplay, then computes
+     `Math.round((frames - 1) / span)`.
+   - **The result is rounded to an integer.** A 59.94 fps clip reports `60`,
+     29.97 reports `30`. `formatMeta` prefixes it `~` for this reason.
+   - It runs **once, when the video is opened**, behind a 2-second timeout.
+     If autoplay is blocked or decoding is slow, it resolves with **no fps**.
+   - Playing the visible video afterwards does **not** retry the measurement.
+
+   **When fps is absent the frame-step buttons are disabled**, and the only
+   fallback is a dropdown of assumed rates (24 / 25 / 30 / 50) reading
+   "Not measured — select". Choosing from it is exactly the assumption this
+   document warns against, so if you must, record in the ground-truth file
+   that `measuredFps` was operator-selected rather than measured.
+
+   **Why the rounding matters for §4.1.** At a true 59.94 recorded as 60, tag
+   times drift ~0.001 s per second — about **1.2 frames over a 20-second
+   swim**, against a ±2 frame tolerance. For any clip longer than a 50, record
+   the container's true rate (`ffprobe -show_streams` gives the exact
+   fraction) alongside the app's estimate, and diff them before trusting a
+   timing comparison.
 2. **Configure the race first** — course, distance, `strokePerLength`. The
    Metrics wizard now gates Tag and Review behind a confirmed setup for exactly
    this reason: tagging against the wrong length count produces
@@ -218,7 +252,19 @@ data/training/ground-truth/<clip-id>.json
 Rules:
 
 - `sha256` ties the truth to an exact file. A re-encode is a different clip.
-- `measuredFps` is recorded, not assumed, and comes from `videoMeta.ts`.
+- **`measuredFps` records where the number came from**, because the app may
+  not have measured it at all (§2.1 step 1). Write it as an object, never a
+  bare number:
+  ```jsonc
+  "measuredFps": {
+    "value": 60,
+    "source": "app-measured",   // "app-measured" | "operator-selected" | "container"
+    "containerRate": "60000/1001" // the true fraction from ffprobe, when known
+  }
+  ```
+  `app-measured` values are rounded integers; a clip whose container says
+  `60000/1001` is really 59.94, and the difference is ~1.2 frames over 20 s
+  against a ±2 frame tolerance.
 - `passes` keeps every operator pass. **Never overwrite a pass** — disagreement
   between passes is data, not noise.
 - `consensus` is only written where passes agree within tolerance (§4.1). Where
@@ -321,6 +367,45 @@ times, not frames. See `MANIFEST.md` for why.
 
 Steps 1–5 need no ML at all, and steps 1–2 are worth doing even if detection is
 never built: they are the first real validation the video suite has ever had.
+
+---
+
+## 6.5 Readiness — what was exercised live, 2026-08-06
+
+The tagging path was driven end to end in the running app before this
+document was called ready. A synthetic 2.4 s clip was generated in-page and
+dropped on the Metrics screen (the real training clip was not used: the dev
+server does not serve `data/training/`, and copying copyrighted footage into
+a served directory to test a UI is not a trade worth making).
+
+**Confirmed working:**
+
+| Step | Result |
+| ---- | ------ |
+| Drop a video on the Metrics pane | Loads, `readyState 4`, duration read correctly |
+| Wizard gating | Tag and Review stay `aria-disabled` until setup is confirmed |
+| `Start Tagging` | Advances to Tag, both later steps unlock |
+| Sequential + one-shot keys | All of `S` `D` `A` `R` `G` `K` recorded — 9 presses produced 9 timeline markers |
+| Live validation | Moved from "start tag is required" to "turn start and turn end tags are not paired · L1" and "flags tag must occur before finish · L2" as tags landed |
+| Keyboard seek | Focusing a marker and activating it seeks the video (0 → 2.200 s) |
+| Frame stepping | Enabled as soon as an fps is available |
+| Console | No errors at any point |
+
+**Confirmed as gaps, not blockers:**
+
+- **fps was not measured on this clip** and had to be selected manually. See
+  §2.1 step 1. This is the single most likely thing to bite a real session.
+- `data/training/checksums.txt` had CRLF endings, so the `sha256sum -c`
+  command in `MANIFEST.md` failed to find the file it had just listed. Fixed,
+  and pinned to LF in `.gitattributes`. The archived clip verifies clean.
+- Tag rows render as a grid rather than a table; validation is visible only
+  on the **Tag** step, so a retime performed from Review commits without the
+  operator seeing the resulting problem list.
+
+**Not yet exercised, and worth doing first thing in the E1 session:** a real
+clip end to end. Everything above used a 2.4 s synthetic single-length video,
+which cannot exercise turns, `UNPAIRED_TURN` across a real wall, or fps
+measurement on true broadcast/tripod footage.
 
 ---
 

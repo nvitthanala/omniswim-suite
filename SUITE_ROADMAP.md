@@ -1,7 +1,58 @@
 # Omni Swim Suite — Roadmap
 
-**Status:** plan authored 2026-08-03, after a verification pass against the tree at `9220316d`. No implementation started.
+**Status:** plan authored 2026-08-03. **Workstreams A, B, C and D are complete** and
+merged to `main` as `ca753548` (PR #4, CI green). Only workstream E remains. See
+§0.1 for what shipped.
 **Base:** `main` @ `9220316d` (video analysis suite + roster catalog + db fixes, all merged and green).
+
+---
+
+## 0.1 Delivered — A/B/C/D, merged 2026-08-06
+
+28 commits, 47 files. CI: **44 passed, 0 failed, 2 skipped** (was 39 before).
+
+| Workstream | State | What landed |
+| ---------- | ----- | ----------- |
+| **C** — de-clutter | done | `WizardShell` extracted to `@omniswim/ui`; Manager, Matrix and Metrics all consume it. Matrix restructured Load → Score → Standings → Analyze, so its analysis output can no longer precede the input that produces it. ARIA tabs implemented once in the shared shell. Controls on screen: Matrix 22 → 17; zero unnamed buttons on either screen. First-run guidance on every Manager step. |
+| **B** — roster + semi-live scoring | done | 200 ms debounce on recomputes **without** debouncing `scoringSettled`, so the scenario Save gate still refuses a stale total. Add-athlete consolidated from five competing entry points to one chooser. |
+| **A** — baseline/working | done | "Modified copy · N changes" badge; baseline-vs-working diff panel backed by a new `thenMode: 'baseline'` in `computeScenarioDiff` that mirrors the engine's baseline bundle exactly; per-change revert for recruits and soft removals. |
+| **D** — drag and drop | done | Drop a video onto Metrics; drag a timeline tag to retime it, committing through the same `updateTagTime` path as a typed edit so `NON_MONOTONIC_TAGS` still fires. |
+
+Also delivered, outside the original five workstreams:
+
+- **Component splits**, both behind tests: `AthleteLineupEditorPanel` 1,314 → 635
+  (into `AthleteEntriesSection` / `AthleteHistorySection` / `DrawerSection`) and
+  `CrossCourseArbitragePanel` 1,064 → 908.
+- **New test coverage**: an athlete-drawer characterization test written *before*
+  the split and passing unchanged after it; a scoring-debounce regression guard;
+  the working-copy counter; the arbitrage view helpers.
+- **`VIDEO_TAGGING_FRAMEWORK.md`** — the tagging model, operator protocol,
+  ground-truth format and acceptance thresholds for E1, set before any detector
+  exists.
+- **`data/rosters/NSISC_2026-27_ROSTER_FRAMEWORK.txt`** — fill-in template for
+  Delta State and Ouachita Baptist.
+
+**An independent two-provider review before merge caught three regressions
+introduced by this work**, all fixed: timeline tags lost keyboard operation; the
+new first-run guidance blocked recruit-driven planning (the primary HSU
+workflow); and a new copy-meet-from-workspace feature could blank a loaded meet
+and its frozen source copy with no confirmation and no undo.
+
+**Known follow-up:** `BaselineDiffPanel` does not receive `rosterCatalog`, so with
+catalog scoring enabled its absolute totals diverge from the scoreboard. The delta
+stays correct. Threading it through core, the worker and three UI layers is a
+separate change.
+
+### 0.2 What §4.1 said, and where it now stands
+
+§4.1 argued everything converged on one first move: make tagging pleasant enough
+that races actually get tagged, because zero tagged races blocks E1 and E3. A–D
+are the work that was supposed to enable that, and they are done. The tagging path
+has since been driven end to end in the running app — see
+`VIDEO_TAGGING_FRAMEWORK.md` §6.5 for exactly what was confirmed and what was not.
+
+**Still true: no real race has been tagged.** That remains the gate on E1, and it
+is now the next action rather than a dependency.
 
 **Scope decisions already made (user, 2026-08-03):**
 
@@ -113,19 +164,21 @@ type Provenance = 'tagged' | 'entered' | 'derived' | 'official' | 'detected';
 ## 2. Sequencing
 
 ```
-  C  de-clutter Matrix + Manager      ← needs a layout decision from you first
+  C  de-clutter Matrix + Manager      ✅ done (merged ca753548)
   |
-  B  roster + semi-live scoring       ← lands inside C's new layout
+  B  roster + semi-live scoring       ✅ done
   |
-  A  baseline/working polish          ← small; data model already done
+  A  baseline/working polish          ✅ done
   |
-  D  drag and drop                    ← independent, can slot in anywhere
+  D  drag and drop                    ✅ done
+  |
+  ── tag one real race by hand ──     ← NEXT. Gates everything below.
   |
   E1 pose extraction (measure first)
   |
   E2 'detected' provenance
   |
-  E3 stroke detection + fine-tune     ← gated on tagged races from A–D
+  E3 stroke detection + fine-tune     ← gated on tagged races
 ```
 
 C before B because B's UI lands inside the layout C establishes; doing B first means redoing it. D is independent and can be pulled forward as a quick win. E1 should be measured on real footage before E2 is designed around it.

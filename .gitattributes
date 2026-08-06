@@ -1,2 +1,5 @@
-# Auto detect text files and perform LF normalization
-* text=auto
+# Checksum manifests are consumed by `sha256sum -c`, which treats a trailing
+# CR as part of the filename. On a Windows checkout autocrlf would rewrite
+# these to CRLF and the documented verification command would fail to find
+# the file it just listed. Pin them to LF.
+data/training/checksums.txt text eol=lf
