@@ -16,25 +16,17 @@ import AthleteHistorySection from './AthleteHistorySection';
 import DrawerSection from './DrawerSection';
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
-  Check,
   ChevronDown,
   ChevronUp,
-  ClipboardPaste,
-  History,
   Link2,
   ListChecks,
   Medal,
-  Pencil,
-  Plus,
   Trash2,
   Undo2,
   X,
-  Waves,
 } from 'lucide-react';
 import {
   Gender,
-  HistoricalSwim,
-  PlannedSwimEntry,
   ScoringSettings,
   SwimmerResult,
   Workspace,
@@ -42,7 +34,6 @@ import {
 import { ALL_PLAN_EVENTS } from '@omniswim/core/lib/eventCatalog';
 import { createPlannedEntry } from '@omniswim/core/lib/whatIfProjection';
 import {
-  canAcceptAnotherEntry,
   countSwimmerEntries,
   formatEntryLimitLabel,
   swimmerExceedsEntryLimits,
@@ -52,7 +43,6 @@ import { divisionForTeamOrNull } from '@omniswim/core/data/teamDivisions';
 import { buildCutlineTagForTeam } from '@omniswim/core/lib/cutlineTags';
 import {
   canonicalSwimmerName,
-  compactEventTitleAttr,
   formatCompactEventLabel,
   isRelayResult,
   normalizeSwimmerName,
@@ -73,15 +63,8 @@ import {
   type ScorerRosterRow,
 } from '@omniswim/core/lib/scorerRoster';
 import {
-  addHistorySwim,
-  addPlannedEntry,
   editCreditedSwim,
   removeCreditedSwim,
-  removeHistorySwim,
-  removePlannedEntry,
-  updateHistorySwim,
-  updatePlannedEntry,
-  type HistorySwimRef,
   type WorkspaceEditorPatch,
 } from '@omniswim/core/lib/swimEditor';
 import { addAliasLink, removeAliasLink } from '@omniswim/core/lib/athleteAliases';
@@ -280,7 +263,6 @@ export default function AthleteLineupEditorPanel({
 
 
   const counts = countSwimmerEntries(allResults, athlete.team, gender, athlete.name);
-  const over = swimmerExceedsEntryLimits(counts, settings);
 
   const relayInvolvement = useMemo((): RelayInvolvement[] => {
     const pdf = gender === Gender.MEN ? workspace.menResults ?? [] : workspace.womenResults ?? [];

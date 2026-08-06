@@ -73,6 +73,7 @@ type DragState = {
 
 export function TagTimeline({ tags, duration, frameSeconds, onSeek, onTagTimeChange }: TagTimelineProps) {
   const containerRef = useRef<HTMLDivElement>(null);
+  const suppressClickRef = useRef(false);
   const dragRef = useRef<DragState | null>(null);
   const [dragPreview, setDragPreview] = useState<{ index: number; time: number } | null>(null);
 
@@ -146,10 +147,22 @@ export function TagTimeline({ tags, duration, frameSeconds, onSeek, onTagTimeCha
     setDragPreview(null);
     if (drag.moved) {
       onTagTimeChange(drag.index, drag.previewTime);
-    } else {
-      // A press with no meaningful movement is a click, not a drag — seek as before.
-      onSeek(drag.originalTime);
+      // A completed drag is followed by a synthetic click; swallow it so the
+      // retime is not immediately followed by a seek.
+      suppressClickRef.current = true;
     }
+    // A press that never moved is a click, and the click handler below does the
+    // seek. Seeking here as well would leave keyboard users -- who get a click
+    // with no pointer events at all -- as the only ones who could not seek.
+  };
+
+  /** Seek on click, which is what Enter/Space on a focused marker dispatches. */
+  const handleClick = (time: number) => {
+    if (suppressClickRef.current) {
+      suppressClickRef.current = false;
+      return;
+    }
+    onSeek(time);
   };
 
   const handlePointerCancel = (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -167,11 +180,12 @@ export function TagTimeline({ tags, duration, frameSeconds, onSeek, onTagTimeCha
           <button
             key={`${tag.kind}-${tag.time}-${index}`}
             type="button"
+            onClick={() => handleClick(tag.time)}
             onPointerDown={(event) => handlePointerDown(event, index, tag)}
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerCancel}
-            className={`absolute top-0 bottom-0 w-0.5 pointer-events-auto cursor-ew-resize hover:w-1 transition-[width] ${
+            className={`absolute top-0 bottom-0 w-0.5 pointer-events-auto touch-none cursor-ew-resize hover:w-1 transition-[width] ${
               isDragging ? 'w-1 ring-2 ring-[var(--text-accent)]' : ''
             }`}
             style={{ left: `${(displayTime / duration) * 100}%`, backgroundColor: TAG_KIND_COLOR[tag.kind] }}

@@ -16,8 +16,6 @@ import React, { useEffect, useRef, useState } from 'react';
 import {
   AlertTriangle,
   ArrowLeftRight,
-  ChevronDown,
-  ChevronUp,
   Gauge,
   Plus,
   Repeat,
@@ -50,7 +48,6 @@ import {
   type AddOnlyRow,
   type CoverageGap,
   type CrossCourseArbitrageResult,
-  type CrossCourseRow,
   type DropOnlyRow,
   type ExactSwap,
   type RelayLegSwap,

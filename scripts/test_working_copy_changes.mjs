@@ -275,4 +275,27 @@ const baseWorkspace = {
   assert.equal(changes[0].fullyRestorable, false);
 }
 
+// A relay key present in BOTH genders' rows cannot be attributed to either.
+// Unreachable on real meet data (relay event names carry the gender), but
+// attributing it would count one edit twice across the two gender views.
+{
+  const shared = {
+    id: 'shared', rank: 1, name: 'Team A Relay', team: 'Team A', time: '1:25.00',
+    points: 0, event: 'Ambiguous Relay', roundSwam: '',
+  };
+  const key = relayEntryKey(shared);
+  const ws = {
+    ...baseWorkspace,
+    menResults: [{ ...shared, gender: Gender.MEN }],
+    womenResults: [{ ...shared, gender: Gender.WOMEN }],
+    relayLegOverrides: [{ relayEntryKey: key, legIndex: 0, assigneeName: 'Someone' }],
+  };
+  for (const g of [Gender.MEN, Gender.WOMEN]) {
+    const c = countWorkingCopyChanges(ws, g);
+    assert.equal(c.relayLegOverrides, 0, 'an ambiguous key is not attributed to a gender');
+    assert.equal(c.unresolvedRelayLegOverrides, 1, 'it is reported as unresolved instead');
+    assert.equal(c.total, 0, 'and never inflates the displayed total');
+  }
+}
+
 console.log('working copy change counter tests passed');

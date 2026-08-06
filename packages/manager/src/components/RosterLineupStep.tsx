@@ -71,8 +71,11 @@ export default function RosterLineupStep({
 }: Props) {
   const toast = useToast();
   const [sidePanelTab, setSidePanelTab] = useState<SidePanelTab>('checklist');
-  const results = gender === Gender.MEN ? workspace.menResults : workspace.womenResults;
-  const hasMeetResults = (results ?? []).length > 0;
+  // "Nothing to work with" is no scoreable TEAM, not no meet PDF. A workspace
+  // can be recruit-driven -- SwimCloud imports and planned entries with no meet
+  // loaded -- and still have a full roster to build, which is the HSU planning
+  // workflow. Keying this off menResults blocked that path entirely.
+  const hasRoster = scoringBundle.sortedTeams.length > 0;
 
   const audit = useMemo(() => {
     if (!selectedTeam) {
@@ -127,13 +130,13 @@ export default function RosterLineupStep({
     toast.push('success', suggestion.message);
   };
 
-  if (!hasMeetResults) {
+  if (!hasRoster) {
     return (
       <EmptyState
         icon={<FileWarning size={28} />}
         eyebrow="Lineup"
-        title="Bring in a meet first"
-        description="Use Source to load the meet this lineup is built from."
+        title="Bring in swimmers first"
+        description="Load a meet or import swimmers on the Source step to build this lineup."
       />
     );
   }

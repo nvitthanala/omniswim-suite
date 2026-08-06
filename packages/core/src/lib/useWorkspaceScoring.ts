@@ -92,6 +92,13 @@ export function useWorkspaceScoring({
   const requestIdRef = useRef(0);
   const latestHandledRef = useRef(0);
   const isFirstRun = useRef(true);
+  /**
+   * The debounced recompute that has been scheduled but has not run yet.
+   * `worker.onerror` needs it: with the recompute debounced, a change can be
+   * pending when the worker dies, and marking that state settled would reopen
+   * the very save-gate this flag exists to hold shut.
+   */
+  const pendingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (!supportsModuleWorker()) return;
@@ -123,8 +130,11 @@ export function useWorkspaceScoring({
       worker.onerror = () => {
         workerRef.current?.terminate();
         workerRef.current = null;
-        // Future recomputes run synchronously — nothing left in flight.
-        setSettled(true);
+        // Future recomputes run synchronously. Only claim settled when nothing
+        // is actually waiting: a debounced change may still be pending, and its
+        // timer will take the synchronous fallback and settle itself. Saying
+        // "settled" here would briefly expose a stale total to the save gate.
+        if (pendingTimerRef.current === null) setSettled(true);
       };
       workerRef.current = worker;
     } catch {
@@ -151,6 +161,7 @@ export function useWorkspaceScoring({
     setSettled(false);
 
     const timer = setTimeout(() => {
+      pendingTimerRef.current = null;
       const worker = workerRef.current;
       if (worker) {
         const req: { id: number; workspace: Workspace; gender: Gender; removeSeniors: boolean; rosterCatalog?: CatalogTeamRoster } = {
@@ -168,12 +179,16 @@ export function useWorkspaceScoring({
         if (id >= requestIdRef.current) setSettled(true);
       }
     }, SCORING_DEBOUNCE_MS);
+    pendingTimerRef.current = timer;
 
     // Clears the pending timer on unmount and whenever a newer change
     // supersedes it (effect cleanup runs before the next effect invocation),
     // so a burst of changes results in exactly one postMessage/recompute —
     // only the last-scheduled timer ever fires.
-    return () => clearTimeout(timer);
+    return () => {
+      clearTimeout(timer);
+      if (pendingTimerRef.current === timer) pendingTimerRef.current = null;
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     workspace.menResults,

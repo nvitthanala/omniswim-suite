@@ -1,7 +1,7 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- * Roster management wizard â€” Source â†’ Lineup â†’ Relays â†’ Optimize.
+ * Roster management wizard — Source → Lineup → Relays → Optimize.
  */
 
 import React from 'react';

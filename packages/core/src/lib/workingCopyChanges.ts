@@ -72,8 +72,16 @@ export function countWorkingCopyChanges(workspace: Workspace, gender: Gender): W
   let relayLegOverrides = 0;
   let unresolvedRelayLegOverrides = 0;
   for (const o of workspace.relayLegOverrides ?? []) {
-    if (thisGenderKeys.has(o.relayEntryKey)) relayLegOverrides += 1;
-    else if (!otherGenderKeys.has(o.relayEntryKey)) unresolvedRelayLegOverrides += 1;
+    const here = thisGenderKeys.has(o.relayEntryKey);
+    const there = otherGenderKeys.has(o.relayEntryKey);
+    // A key matching BOTH genders cannot be attributed to either. In practice
+    // relay event names carry the gender ("Event 11 Men 4x50 ..."), so this is
+    // unreachable on real meet data — but attributing an ambiguous key would
+    // count the same edit in both gender views, so it is reported instead of
+    // guessed, exactly like a key matching neither.
+    if (here && !there) relayLegOverrides += 1;
+    else if (!here && !there) unresolvedRelayLegOverrides += 1;
+    else if (here && there) unresolvedRelayLegOverrides += 1;
   }
 
   return {

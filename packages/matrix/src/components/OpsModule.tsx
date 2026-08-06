@@ -331,6 +331,32 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
   const copyMeetFromWorkspace = (sourceId: string) => {
     const source = workspaces.find(candidate => candidate.id === sourceId);
     if (!source) return;
+
+    // This overwrites the current meet AND its frozen source copy, which is what
+    // soft-remove restore rebuilds from. Two guards, because there is no undo:
+    //
+    // 1. Copying from a workspace with no meet would blank this one silently.
+    //    That is data loss dressed up as a copy, so refuse it outright.
+    const sourceHasMeet =
+      (source.menResults?.length ?? 0) > 0 || (source.womenResults?.length ?? 0) > 0;
+    if (!sourceHasMeet) {
+      toast.push('error', `${source.name} has no loaded meet to copy`);
+      return;
+    }
+
+    // 2. Overwriting a meet that is already loaded is destructive and easy to
+    //    trigger from a single select change, so make it deliberate.
+    const targetHasMeet =
+      (workspace.menResults?.length ?? 0) > 0 || (workspace.womenResults?.length ?? 0) > 0;
+    if (targetHasMeet) {
+      const current = workspace.loadedMeet?.pdfFilename ?? 'the loaded meet';
+      const ok = window.confirm(
+        `Replace ${current} with the meet from "${source.name}"?\n\n` +
+          'This also replaces the frozen source copy this workspace restores removed swimmers from. It cannot be undone.'
+      );
+      if (!ok) return;
+    }
+
     void onUpdate({
       ...meetCopyFromParsed(source.menResults ?? [], source.womenResults ?? []),
       loadedMeet: source.loadedMeet,
