@@ -20,6 +20,8 @@ import {
   matchAthleteToRoster,
   categorizeBestEvents,
   isChampionshipProgramEvent,
+  meetProgramEvents,
+  normalizeEventLabel,
 } from './athleteHistory';
 import { mergeScoringSettings } from './scoringDefaults';
 import { usesScorerRoster, scorerRosterKey } from './scorerRoster';
@@ -161,18 +163,26 @@ function groupPreviewBySwimmer(
  * metric distances) are dropped, and the fastest swim per program event is kept (sorted).
  * The original swims are never mutated — conversion happens on read.
  */
-function toProgramCandidates(swims: HistoricalSwim[]): HistoricalSwim[] {
+function toProgramCandidates(
+  swims: HistoricalSwim[],
+  allowedEvents: ReadonlySet<string> | null = null
+): HistoricalSwim[] {
   const best = new Map<string, HistoricalSwim>();
   for (const s of swims) {
     const relay = isRelayEventName(s.event);
-    // A metric swim we hold no published factor for cannot be stated in SCY. Such
-    // events (25s, 100 IM) are never part of the championship program and would be
-    // dropped on the next line anyway — skip before converting rather than after.
+    // A metric swim we hold no published factor for cannot be stated in SCY —
+    // skip before converting rather than after.
     if (!relay && (s.timeType ?? 'SCY') !== 'SCY' && !hasConversionFactor(s.event)) continue;
     const { event, time } = relay
       ? { event: s.event, time: s.time }
       : convertSwimToSCY(s.event, s.time, s.gender, s.timeType ?? 'SCY');
-    if (!isChampionshipProgramEvent(event)) continue;
+    // The loaded meet decides its own program; fall back to the standard
+    // championship program only when no meet is loaded.
+    if (!relay && allowedEvents && allowedEvents.size > 0) {
+      if (!allowedEvents.has(normalizeEventLabel(event))) continue;
+    } else if (!isChampionshipProgramEvent(event)) {
+      continue;
+    }
     const candidate: HistoricalSwim = { ...s, event, time, timeType: 'SCY' };
     const sec = convertTimeToSeconds(time);
     const prev = best.get(event);
@@ -181,6 +191,21 @@ function toProgramCandidates(swims: HistoricalSwim[]): HistoricalSwim[] {
   return [...best.values()].sort(
     (a, b) => convertTimeToSeconds(a.time) - convertTimeToSeconds(b.time)
   );
+}
+
+/**
+ * The events the workspace's loaded meet contests, for this gender. Read from the
+ * FROZEN source copy so previously-imported entries cannot widen the program that
+ * is meant to constrain the next import. Null when no meet is loaded, which means
+ * "fall back to the standard championship program".
+ */
+function workspaceProgramEvents(workspace: Workspace, gender: Gender): Set<string> | null {
+  const source =
+    gender === Gender.MEN
+      ? workspace.sourceMenResults ?? workspace.menResults
+      : workspace.sourceWomenResults ?? workspace.womenResults;
+  const program = meetProgramEvents(source);
+  return program.size > 0 ? program : null;
 }
 
 function planKey(name: string, team: string, gender: Gender, event: string): string {
@@ -265,6 +290,7 @@ export function previewHistoryImportActions(
       .filter(r => r.gender === opts.gender && r.team === opts.team)
       .map(r => normalizeSwimmerName(resolver.resolveAthleteName(r.name, opts.team, opts.gender)))
   );
+  const programEvents = workspaceProgramEvents(workspace, opts.gender);
   const groups = groupPreviewBySwimmer(preview, resolver);
   const out: ImportSwimmerPreview[] = [];
 
@@ -284,7 +310,9 @@ export function previewHistoryImportActions(
         opts.team,
         opts.gender
       );
-      const hasNew = toProgramCandidates(swims).some(s => !existingEvents.has(s.event));
+      const hasNew = toProgramCandidates(swims, programEvents).some(
+        s => !existingEvents.has(s.event)
+      );
       action = hasNew ? 'add_to_lineup' : 'history_matched';
     } else {
       action = 'new_recruit';
@@ -365,6 +393,7 @@ export function importHistoryToRoster(
 
   let newRecruits = 0;
   let lineupEntriesAdded = 0;
+  const programEvents = workspaceProgramEvents(workspace, gender);
   const swimmerPreviews = previewHistoryImportActions(workspace, preview, { team, gender, resolver });
 
   const groups = groupPreviewBySwimmer(preview, resolver);
@@ -385,14 +414,16 @@ export function importHistoryToRoster(
           normalizeSwimmerName(displayName)
     );
 
-    const ranked = toProgramCandidates(swims);
+    const ranked = toProgramCandidates(swims, programEvents);
     const profile = categorizeBestEvents(
       ranked,
       team,
       gender,
       displayName,
       settings,
-      ranked.filter(s => isRelayEventName(s.event)).map(s => s.event)
+      ranked.filter(s => isRelayEventName(s.event)).map(s => s.event),
+      undefined,
+      programEvents
     );
 
     const counts = countExistingEntries(

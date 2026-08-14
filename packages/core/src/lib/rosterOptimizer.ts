@@ -20,6 +20,7 @@ import { mergeScoringSettings } from './scoringDefaults';
 import {
   buildEventProfileFromCatalog,
   getAthleteProfile,
+  meetProgramEvents,
 } from './athleteHistory';
 import { buildWhatIfResults, createPlannedEntry } from './whatIfProjection';
 import { buildCategorizedScoringInputs, calculatePoints } from './utils';
@@ -167,9 +168,18 @@ export function optimizeEventLineupForTeam(
   const plans: PlannedSwimEntry[] = [...rest];
   const activeEntryIds: string[] = [];
 
+  // The loaded meet's program bounds what the optimizer may enter anyone in.
+  // Read from the frozen source copy so the plans it writes cannot widen it.
+  const sourceResults =
+    gender === Gender.MEN
+      ? workspace.sourceMenResults ?? workspace.menResults
+      : workspace.sourceWomenResults ?? workspace.womenResults;
+  const program = meetProgramEvents(sourceResults);
+  const allowedEvents = program.size > 0 ? program : null;
+
   for (const athlete of teamAthletes) {
     const profile =
-      buildEventProfileFromCatalog(rosterCatalog, team, gender, athlete.name, merged) ??
+      buildEventProfileFromCatalog(rosterCatalog, team, gender, athlete.name, merged, allowedEvents) ??
       getAthleteProfile(workspace, team, gender, athlete.name, merged);
     if (!profile) continue;
     for (const event of profile.primaryEvents) {

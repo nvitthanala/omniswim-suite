@@ -18,11 +18,14 @@ import { divisionForTeam } from '../data/teamDivisions';
 import { compareTimeToCutline } from './cutlineUtils';
 import { mergeScoringSettings } from './scoringDefaults';
 import {
+  convertSwimToSCY,
   convertTimeToSeconds,
   convertToSCY,
   hasConversionFactor,
+  isDivingEvent,
   isRelayResult,
   normalizeSwimmerName,
+  stripEventGenderMarker,
 } from './utils';
 import { parseSwimCloudMultiProfile } from './swimCloudMultiProfile';
 import {
@@ -115,7 +118,14 @@ export function categorizeBestEvents(
   name: string,
   settings: ScoringSettings,
   relayEvents: string[] = [],
-  resolver: AthleteAliasResolver = IDENTITY_ALIAS_RESOLVER
+  resolver: AthleteAliasResolver = IDENTITY_ALIAS_RESOLVER,
+  /**
+   * Canonical events this profile may offer. Pass the loaded meet's program (see
+   * {@link meetProgramEvents}) so an athlete is only ever proposed for an event
+   * the meet actually contests. `null` falls back to the standard SCY
+   * championship program, for recruit-driven workspaces with no meet loaded.
+   */
+  allowedEvents: ReadonlySet<string> | null = null
 ): AthleteEventProfile {
   const merged = mergeScoringSettings(settings);
   const indCap = merged.maxIndividualEntriesPerSwimmer ?? 3;
@@ -127,16 +137,28 @@ export function categorizeBestEvents(
     if (s.gender !== gender || s.team !== team) continue;
     if (normalizeSwimmerName(resolver.resolveAthleteName(s.name, team, gender)) !== nameKey) continue;
     if (s.event.toLowerCase().includes('relay')) continue;
-    // A metric swim in an event with no published conversion factor (25s, 100 IM
-    // — never part of the championship program) cannot be stated in SCY. Skip it
-    // rather than let it into the ranking under another event's factor.
+    // A metric swim in an event with no published conversion factor cannot be
+    // stated in SCY. Skip it rather than let it into the ranking under another
+    // event's factor.
     if ((s.timeType ?? 'SCY') !== 'SCY' && !hasConversionFactor(s.event)) continue;
-    const sec = convertTimeToSeconds(
-      convertToSCY(s.time, s.event, s.gender, s.timeType ?? 'SCY')
+
+    // Key on the SCY *program* event, not the raw history label: a 400 Free LCM
+    // competes in the 500 Free slot (800→1000, 1500→1650). Keying on the raw
+    // label left "400 Freestyle" and "1500 Freestyle" sitting in the profile as
+    // if they were events a meet could enter you in.
+    const { event: programEvent, time: programTime } = convertSwimToSCY(
+      s.event,
+      s.time,
+      s.gender,
+      s.timeType ?? 'SCY'
     );
-    const prev = bestByEvent[s.event];
+    if (!isEventOffered(programEvent, allowedEvents)) continue;
+
+    const sec = convertTimeToSeconds(programTime);
+    if (!Number.isFinite(sec) || sec <= 0) continue;
+    const prev = bestByEvent[programEvent];
     if (!prev || sec < prev.timeSec) {
-      bestByEvent[s.event] = { time: s.time, timeSec: sec, source: s.source };
+      bestByEvent[programEvent] = { time: programTime, timeSec: sec, source: s.source };
     }
   }
 
@@ -248,10 +270,66 @@ const CHAMPIONSHIP_PROGRAM_EVENTS = new Set<string>([
  * SCY individual program (50/100/200/500/1000/1650 Free, 100/200 stroke, 200/400 IM) and
  * relays. Excludes 25s, 100 IM, diving, and odd metric distances so they are never picked
  * as lineup entries (their swims are still retained in athleteHistory).
+ *
+ * This is the *fallback* program, used only when no meet is loaded. When a meet is
+ * loaded, the program comes from the meet — see {@link meetProgramEvents}. A
+ * conference that contests 100 IM is served by the meet-derived set, not by this
+ * constant.
  */
 export function isChampionshipProgramEvent(event: string): boolean {
   if (/\brelay\b/i.test(event)) return true;
   return CHAMPIONSHIP_PROGRAM_EVENTS.has(normalizeEventLabel(event));
+}
+
+/**
+ * Canonical individual-event label for an arbitrary meet event string, WITHOUT
+ * the championship whitelist. Handles HyTek labels
+ * ("Event 24 Men 100 Yard Backstroke" -> "100 Backstroke").
+ *
+ * Deliberately unfiltered: the loaded meet defines its own program. NSISC does not
+ * contest the 100 IM, but another conference may, and a hardcoded list cannot know
+ * that. Relays and diving return null — neither is an individual entry candidate.
+ */
+export function canonicalMeetEventLabel(raw: string): string | null {
+  if (!raw) return null;
+  if (/\brelay\b/i.test(raw)) return null;
+  if (isDivingEvent(raw)) return null;
+  let e = stripEventGenderMarker(raw);
+  e = e.replace(/\bEvent\s+\d+\b/gi, ' ');
+  e = e.replace(/\b(Yards?|Meters?|mtr|SCY|SCM|LCM)\b/gi, ' ');
+  e = e.replace(/\s{2,}/g, ' ').trim();
+  if (!e) return null;
+  const norm = normalizeEventLabel(e);
+  return norm || null;
+}
+
+/**
+ * The individual events a loaded meet actually contests, as canonical labels.
+ *
+ * This is the authority for "what can this athlete be entered in". Pass the FROZEN
+ * source results (`getSourceResults`) rather than the working copy, so planned
+ * entries cannot widen the program that is supposed to constrain them.
+ *
+ * Time trials are excluded: they are swum at the meet but score nothing, so they
+ * are not an opportunity to gain points. Returns an empty set when no meet is
+ * loaded; callers treat empty as "fall back to the championship program".
+ */
+export function meetProgramEvents(results: SwimmerResult[] | undefined): Set<string> {
+  const set = new Set<string>();
+  for (const r of results ?? []) {
+    if (isRelayResult(r)) continue;
+    if (r.isTimeTrial) continue;
+    const canon = canonicalMeetEventLabel(r.event);
+    if (canon) set.add(canon);
+  }
+  return set;
+}
+
+/** Is `event` one this profile may offer, given the meet program (or the fallback)? */
+function isEventOffered(event: string, allowed: ReadonlySet<string> | null): boolean {
+  const norm = normalizeEventLabel(event);
+  if (allowed && allowed.size > 0) return allowed.has(norm);
+  return isChampionshipProgramEvent(norm) && !/\brelay\b/i.test(norm);
 }
 
 function looksLikePersonName(line: string): boolean {
@@ -565,7 +643,24 @@ export function getAthleteProfile(
   const merged = mergeHistoryIndex(pdfHistory, workspace.athleteHistory ?? []);
   const results = gender === Gender.MEN ? workspace.menResults ?? [] : workspace.womenResults ?? [];
   const relays = relayEventsForAthlete(results, team, gender, name, alias);
-  return categorizeBestEvents(merged, team, gender, name, settings, relays, alias);
+  // Constrain the profile to what the loaded meet actually contests, read from the
+  // FROZEN source copy so planned entries cannot widen their own constraint. An
+  // empty set (no meet loaded) falls back to the standard championship program.
+  const sourceResults =
+    gender === Gender.MEN
+      ? workspace.sourceMenResults ?? workspace.menResults
+      : workspace.sourceWomenResults ?? workspace.womenResults;
+  const program = meetProgramEvents(sourceResults);
+  return categorizeBestEvents(
+    merged,
+    team,
+    gender,
+    name,
+    settings,
+    relays,
+    alias,
+    program.size > 0 ? program : null
+  );
 }
 // ===================== Catalog-backed helpers =====================
 
@@ -579,7 +674,9 @@ export function buildEventProfileFromCatalog(
   teamName: string,
   gender: Gender,
   fullName: string,
-  settings: ScoringSettings
+  settings: ScoringSettings,
+  /** Loaded meet's program; see {@link meetProgramEvents}. Null falls back to the championship program. */
+  allowedEvents: ReadonlySet<string> | null = null
 ): AthleteEventProfile | null {
   if (!roster) return null;
   const merged = mergeScoringSettings(settings);
@@ -597,6 +694,11 @@ export function buildEventProfileFromCatalog(
   const bestByEvent: AthleteEventProfile['bestByEvent'] = {};
   for (const [event, t] of bestMap.entries()) {
     if (event.toLowerCase().includes('relay')) continue;
+    // Same gate as the history-backed profile: only events the loaded meet
+    // contests (or the championship program when no meet is loaded). Without it
+    // a catalog 50 Butterfly became a scoring "opportunity" in a meet that
+    // contests no 50s of stroke.
+    if (!isEventOffered(event, allowedEvents)) continue;
     bestByEvent[event] = {
       time: t.timeText,
       timeSec: t.timeSecondsScy,

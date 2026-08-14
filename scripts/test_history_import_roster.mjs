@@ -136,11 +136,18 @@ function baseWorkspace(overrides = {}) {
     sourceLabel: 'test import',
   });
   assert.equal(result.noop, false);
+  // All four swims are retained as history regardless of the meet program.
   assert.ok((result.patch.athleteHistory?.length ?? 0) >= 4);
-  // NSISC total-only cap (7 combined) → all 4 individual swims fit
   assert.ok(result.summary.newRecruits <= 7, 'total cap bounds recruit entries');
-  assert.equal(result.summary.newRecruits, 4);
-  assert.equal((result.patch.recruits ?? []).filter(r => r.name === 'Vera, Blaise').length, 4);
+  // The loaded meet contests only 50 Free and 100 Free, so only those two become
+  // entries. A swimmer is never entered in an event the meet does not contest —
+  // 200 Freestyle and 100 Butterfly are dropped even though the athlete has times.
+  assert.equal(result.summary.newRecruits, 2);
+  const veraEvents = (result.patch.recruits ?? [])
+    .filter(r => r.name === 'Vera, Blaise')
+    .map(r => r.event)
+    .sort();
+  assert.deepEqual(veraEvents, ['100 Freestyle', '50 Freestyle']);
 
   const projected = buildWhatIfResults({
     workspace: { ...ws, ...result.patch },
@@ -157,11 +164,82 @@ function baseWorkspace(overrides = {}) {
     lookup.rows.some(r => normalizeSwimmerName(r.name) === normalizeSwimmerName('Vera, Blaise')),
     'recruit should appear in scorer roster lookup'
   );
+
+  // Same swimmer, same swims — but a meet that DOES contest 200 Free and 100 Fly.
+  // The gate must follow the meet, not narrow to a hardcoded list.
+  const widerMeet = baseWorkspace({
+    menResults: [
+      ...baseWorkspace().menResults,
+      {
+        id: 'r3',
+        rank: 1,
+        name: 'Smith, John',
+        classYear: 'JR',
+        team: 'Ouachita Baptist University',
+        time: '1:38.00',
+        points: 0,
+        event: 'Event 17 Men 200 Yard Freestyle',
+        gender: Gender.MEN,
+      },
+      {
+        id: 'r4',
+        rank: 1,
+        name: 'Smith, John',
+        classYear: 'JR',
+        team: 'Ouachita Baptist University',
+        time: '47.00',
+        points: 0,
+        event: 'Event 13 Men 100 Yard Butterfly',
+        gender: Gender.MEN,
+      },
+    ],
+  });
+  const widerResult = importHistoryToRoster(widerMeet, preview, {
+    team: 'Ouachita Baptist University',
+    gender: Gender.MEN,
+  });
+  const widerEvents = (widerResult.patch.recruits ?? [])
+    .filter(r => r.name === 'Vera, Blaise')
+    .map(r => r.event)
+    .sort();
+  assert.deepEqual(
+    widerEvents,
+    ['100 Butterfly', '100 Freestyle', '200 Freestyle', '50 Freestyle'],
+    'a meet that contests these events admits them (HyTek labels included)'
+  );
 }
 
 // --- existing athlete → meetEntryPlans, no duplicate recruits ---
 {
-  const ws = baseWorkspace();
+  // The meet must contest the events being added, or the gate correctly refuses
+  // them and the athlete reports `history_matched` instead.
+  const ws = baseWorkspace({
+    menResults: [
+      ...baseWorkspace().menResults,
+      {
+        id: 'r5',
+        rank: 1,
+        name: 'Other, Swimmer',
+        classYear: 'SR',
+        team: 'Ouachita Baptist University',
+        time: '1:39.00',
+        points: 0,
+        event: '200 Freestyle',
+        gender: Gender.MEN,
+      },
+      {
+        id: 'r6',
+        rank: 1,
+        name: 'Other, Swimmer',
+        classYear: 'SR',
+        team: 'Ouachita Baptist University',
+        time: '49.00',
+        points: 0,
+        event: '100 Backstroke',
+        gender: Gender.MEN,
+      },
+    ],
+  });
   const preview = [
     {
       name: 'Smith, John',

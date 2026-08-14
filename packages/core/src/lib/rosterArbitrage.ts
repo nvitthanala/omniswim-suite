@@ -13,6 +13,7 @@ import {
 } from '../types';
 import { mergeScoringSettings } from './scoringDefaults';
 import { getAthleteProfile } from './athleteHistory';
+import { buildMeetEventLabelIndex } from './eventIdentity';
 import { buildWhatIfResults, createPlannedEntry } from './whatIfProjection';
 import { buildScorerRosterLookup } from './scorerRoster';
 import { calculatePoints, convertTimeToSeconds } from './utils';
@@ -88,6 +89,22 @@ export function buildArbitrageCards(
   const athletes = lookup.rows.filter(r => r.team === team);
   const cards: ArbitrageCard[] = [];
 
+  // Profiles are keyed on canonical program events ("500 Freestyle") while a loaded
+  // meet's rows carry HyTek labels ("Event 22 Men 500 Yard Freestyle"). Without this
+  // bridge the field lookup below matched nothing, every gap collapsed to zero, and
+  // the panel silently produced no cards whenever a real meet was loaded.
+  const sourceResults =
+    gender === Gender.MEN
+      ? workspace.sourceMenResults ?? workspace.menResults
+      : workspace.sourceWomenResults ?? workspace.womenResults;
+  const meetLabelByCanonical = buildMeetEventLabelIndex(sourceResults ?? []);
+  const fieldFor = (canonicalEvent: string) => {
+    const meetLabel = meetLabelByCanonical.get(canonicalEvent);
+    return results.filter(
+      r => !r.isRelay && (r.event === canonicalEvent || (meetLabel != null && r.event === meetLabel))
+    );
+  };
+
   for (const athlete of athletes) {
     const profile = getAthleteProfile(workspace, team, gender, athlete.name, merged);
     const ranked = Object.entries(profile.bestByEvent).sort((a, b) => a[1].timeSec - b[1].timeSec);
@@ -98,8 +115,8 @@ export function buildArbitrageCards(
 
     // Approximate marginal value by time gap relative to field median in those events
     // (lightweight heuristic — not a full re-score per swap).
-    const fieldA = results.filter(r => r.event === evA && !r.isRelay);
-    const fieldB = results.filter(r => r.event === evB && !r.isRelay);
+    const fieldA = fieldFor(evA);
+    const fieldB = fieldFor(evB);
     const median = (rows: typeof fieldA) => {
       if (!rows.length) return bestA.timeSec;
       const secs = rows.map(r => convertTimeToSeconds(r.time)).sort((a, b) => a - b);
