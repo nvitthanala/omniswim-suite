@@ -10,6 +10,7 @@ import { Gender, Workspace } from '@omniswim/core/types';
 import type { ScoringBundle } from '@omniswim/core/lib/useWorkspaceScoring';
 import { EmptyState } from '@omniswim/ui';
 import IndRelayManagementView from './IndRelayManagementView';
+import TeamPickerEmptyState from './TeamPickerEmptyState';
 
 type Props = {
   workspace: Workspace;
@@ -53,11 +54,12 @@ export default function RosterRelayStep({
 
   if (!selectedTeam) {
     return (
-      <EmptyState
-        icon={<Users size={28} />}
+      <TeamPickerEmptyState
         eyebrow="Relays"
         title="Choose a team for relays"
         description="Select a team to assign and review its relay legs."
+        teams={teams}
+        onSelectTeam={onSelectTeam}
       />
     );
   }

@@ -313,25 +313,65 @@ export function calculateProjectedTime(timeSec: number, classYear: string, overa
   return timeSec * (1 + dropFraction);
 }
 
+/**
+ * Look up the published conversion factors for an event, trying the spellings a
+ * caller may legitimately arrive with. Returns `undefined` when the event has no
+ * published factor — never a stand-in from a different event.
+ */
+function lookupConversionFactors(baseEvent: string) {
+  const direct = CONVERSION_FACTORS[baseEvent];
+  if (direct) return direct;
+
+  // "200 IM" and "200 Individual Medley" are the same event under two labels;
+  // `normalizeEventLabel` emits the long form, most published tables use the short.
+  if (/\bIM\b/.test(baseEvent)) {
+    const long = CONVERSION_FACTORS[baseEvent.replace(/\bIM\b/, 'Individual Medley')];
+    if (long) return long;
+  }
+  if (/individual medley/i.test(baseEvent)) {
+    const short = CONVERSION_FACTORS[baseEvent.replace(/individual medley/i, 'IM')];
+    if (short) return short;
+  }
+
+  // A 50 of a stroke shares the 100's factor — the only sanctioned substitution here.
+  if (baseEvent.startsWith('50 ')) {
+    const hundred = CONVERSION_FACTORS[baseEvent.replace(/^50\s+/, '100 ')];
+    if (hundred) return hundred;
+  }
+  return undefined;
+}
+
+/** True when a metric swim in this event can be expressed in SCY at all. */
+export function hasConversionFactor(event: string): boolean {
+  const baseEvent = event.replace(/\s*\(Relay split\)\s*$/i, '').trim();
+  return lookupConversionFactors(baseEvent) != null;
+}
+
 export function convertToSCY(timeStr: string, event: string, gender: Gender, type: 'LCM' | 'SCM' | 'SCY'): string {
   if (type === 'SCY') return timeStr;
 
   const seconds = convertTimeToSeconds(timeStr);
   const baseEvent = event.replace(/\s*\(Relay split\)\s*$/i, '').trim();
-  let factors = CONVERSION_FACTORS[baseEvent];
-  if (!factors && baseEvent.startsWith('50 ')) {
-    const hundredKey = baseEvent.replace(/^50\s+/, '100 ');
-    factors = CONVERSION_FACTORS[hundredKey];
+  const factors = lookupConversionFactors(baseEvent);
+
+  // No published factor means the swim cannot be expressed in SCY. Substituting
+  // another event's factor (this used to silently borrow 50 Freestyle's) invents a
+  // competition time that looks real — the exact failure this codebase forbids.
+  // Raise instead, so a missing factor is added from a source rather than guessed.
+  if (!factors) {
+    throw new Error(
+      `No published ${type}→SCY conversion factor for "${baseEvent}". ` +
+        `Add the event to CONVERSION_FACTORS from a primary source rather than converting it with another event's factor.`
+    );
   }
-  if (!factors) factors = CONVERSION_FACTORS['50 Freestyle'];
-  
+
   let factor = 1.0;
   if (type === 'LCM') {
     factor = gender === Gender.MEN ? factors.men_lcm : factors.women_lcm;
   } else if (type === 'SCM') {
     factor = factors.both_scm;
   }
-  
+
   return formatSecondsToTime(seconds * factor);
 }
 
@@ -350,6 +390,12 @@ function remapMetricFreestyleEvent(event: string): string {
  * SCY-equivalent event *and* time for a swim. Unlike {@link convertToSCY} (time only),
  * this also remaps distance-event identity so a 400 Free (LCM/SCM) competes in the 500
  * Free SCY slot (800→1000, 1500→1650). Non-metric swims are returned unchanged.
+ *
+ * Relays pass through untouched. No governing body publishes a relay conversion
+ * factor, and a relay is not one stroke over one distance — a 400 Medley Relay is
+ * four different strokes. Every caller in this package already special-cases relays
+ * to passthrough before calling here; doing it once, here, keeps the primitive from
+ * being the odd one out (it used to convert relays with the 50 Freestyle factor).
  */
 export function convertSwimToSCY(
   event: string,
@@ -358,6 +404,7 @@ export function convertSwimToSCY(
   timeType: 'SCY' | 'SCM' | 'LCM'
 ): { event: string; time: string } {
   if (timeType === 'SCY') return { event, time };
+  if (/\brelay\b/i.test(event)) return { event, time };
   const scyTime = convertToSCY(time, event, gender, timeType);
   return { event: remapMetricFreestyleEvent(event), time: scyTime };
 }

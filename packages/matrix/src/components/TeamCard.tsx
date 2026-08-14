@@ -666,7 +666,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                         }}
                       >
                         <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.chartGrid} vertical={false} />
-                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: chartTheme.chartTick, fontSize: 8, fontStyle: 'bold', fontFamily: 'JetBrains Mono' }} interval="preserveStartEnd" />
+                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: chartTheme.chartTick, fontSize: 8, fontStyle: 'bold', fontFamily: 'JetBrains Mono' }} interval="equidistantPreserveStart" minTickGap={20} tickMargin={8} />
                         <YAxis axisLine={false} tickLine={false} tick={{ fill: chartTheme.chartTick, fontSize: 8, fontStyle: 'bold', fontFamily: 'JetBrains Mono' }} width={30} />
                         <Tooltip content={() => null} cursor={{ stroke: chartTheme.chartGrid, strokeWidth: 1 }} />
                         <Line
@@ -844,12 +844,15 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
 
               {/* Individual/Event Matrix */}
               <div className="min-w-0 w-full flex-1">
-                <div className="flex items-center justify-between mb-4">
-                  <div className="flex items-center gap-2">
-                    <List size={14} className="text-[var(--text-accent)]" />
-                    <span className="text-ui-micro font-medium uppercase tracking-widest text-theme-secondary">Team Matrix</span>
+                {/* Wraps like the chart header above it: in the split layout this
+                    row could not fit the sort select plus both toggles, and the
+                    trailing "By Swimmer" label was clipped at the column edge. */}
+                <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
+                  <div className="flex items-center gap-2 min-w-0">
+                    <List size={14} className="text-[var(--text-accent)] shrink-0" />
+                    <span className="text-ui-micro font-medium uppercase tracking-widest text-theme-secondary truncate">Team Matrix</span>
                   </div>
-                  <div className="flex items-center gap-2">
+                  <div className="flex items-center gap-2 shrink-0">
                     <select 
                       className="glass-input text-ui-micro uppercase tracking-widest text-theme-secondary rounded p-1 outline-none"
                       value={sortMode}

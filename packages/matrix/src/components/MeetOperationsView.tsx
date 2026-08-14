@@ -415,7 +415,13 @@ export default function MeetOperationsView({
                         fontStyle: 'bold',
                         fontFamily: 'JetBrains Mono',
                       }}
-                      interval="preserveStartEnd"
+                      // `preserveStartEnd` forces the final tick even when it collides
+                      // with its neighbour, which ran the last two event labels together
+                      // and clipped the result at the plot edge. Equidistant spacing with
+                      // a measured minimum gap keeps them apart.
+                      interval="equidistantPreserveStart"
+                      minTickGap={24}
+                      tickMargin={8}
                     />
                     <YAxis
                       width={48}

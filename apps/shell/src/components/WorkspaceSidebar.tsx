@@ -159,6 +159,7 @@ export default function WorkspaceSidebar() {
                 onClick={() => void handleCreateWorkspace()}
                 className="p-1 theme-hover-row rounded text-theme-secondary hover:text-[var(--text-primary)]"
                 title="New workspace"
+                aria-label="New workspace"
               >
                 <Plus size={14} />
               </button>
@@ -256,6 +257,8 @@ export default function WorkspaceSidebar() {
                 onClick={() => setShowCreateSnapshot(prev => !prev)}
                 className="p-1 theme-hover-row rounded text-theme-secondary hover:text-[var(--text-primary)]"
                 title="Take a workspace snapshot"
+                aria-label="Take a workspace snapshot"
+                aria-expanded={showCreateSnapshot}
               >
                 <Camera size={12} />
               </button>

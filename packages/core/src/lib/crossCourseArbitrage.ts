@@ -74,6 +74,7 @@ import {
   convertTimeToSeconds,
   convertToSCY,
   eventMeetSortKey,
+  hasConversionFactor,
   isDivingEvent,
   isRelayResult,
   normalizeSwimmerName,
@@ -316,6 +317,9 @@ export function buildCrossCourseTable(
   for (const s of history) {
     if (/\brelay\b/i.test(s.event)) continue;
     const timeType = s.timeType ?? 'SCY';
+    // No published factor → the swim has no SCY equivalent. These are non-program
+    // events (25s, 100 IM) that `canonicalProgramEvent` rejects below regardless.
+    if (timeType !== 'SCY' && !hasConversionFactor(s.event)) continue;
     const converted = convertSwimToSCY(s.event, s.time, s.gender, timeType);
     const programEvent = canonicalProgramEvent(converted.event);
     if (!programEvent) continue;
@@ -2131,6 +2135,9 @@ function buildRelayLegTimeIndex(
   for (const s of history) {
     if (/\brelay\b/i.test(s.event)) continue;
     const timeType = s.timeType ?? 'SCY';
+    // No published factor → no SCY equivalent (25s, 100 IM). `individualStrokeDistance`
+    // rejects these below anyway, so skip before converting rather than after.
+    if (timeType !== 'SCY' && !hasConversionFactor(s.event)) continue;
     const converted = convertSwimToSCY(s.event, s.time, s.gender, timeType);
     const sd = individualStrokeDistance(converted.event);
     if (!sd) continue;

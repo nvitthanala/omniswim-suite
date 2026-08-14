@@ -82,7 +82,12 @@ export default function SuiteHeader({
           </button>
         ) : null}
 
-        <Link to="/analytics" className="btn-ghost p-1.5 rounded hidden sm:flex" title="Season analytics">
+        <Link
+          to="/analytics"
+          className="btn-ghost p-1.5 rounded hidden sm:flex"
+          title="Season analytics"
+          aria-label="Season analytics"
+        >
           <TrendingUp size={14} />
         </Link>
 
@@ -116,6 +121,8 @@ export default function SuiteHeader({
           onClick={toggleWindow}
           className={`p-1.5 rounded-lg transition-colors ${open ? 'btn-accent-outline' : 'btn-ghost'}`}
           title="SwimCloud reference window"
+          aria-label="SwimCloud reference window"
+          aria-pressed={open}
         >
           <Globe size={14} />
         </button>
@@ -126,6 +133,7 @@ export default function SuiteHeader({
             onClick={onOpenScoringSettings}
             className="p-1.5 theme-hover-row rounded-lg btn-accent-outline transition-colors"
             title="Configure Scoring Model"
+            aria-label="Configure Scoring Model"
           >
             <Settings size={14} />
           </button>

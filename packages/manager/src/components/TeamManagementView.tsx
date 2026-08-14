@@ -88,9 +88,15 @@ export default function TeamManagementView({
   const [jumpAthleteKey, setJumpAthleteKey] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!selectedTeam) return;
+    // Exactly one scoreable team means there is nothing to choose between, so the
+    // Lineup/Relays/Optimize steps used to open on a "Choose a team" empty state
+    // that offered no way to choose one. Select it.
+    if (!selectedTeam) {
+      if (teams.length === 1) setSelectedTeam(teams[0]);
+      return;
+    }
     if (teams.includes(selectedTeam)) return;
-    setSelectedTeam('');
+    setSelectedTeam(teams.length === 1 ? teams[0] : '');
   }, [teams, selectedTeam, gender]);
 
   const handleAthleteSelect = useCallback((athlete: RecruitAthletePrefill | null) => {
@@ -270,6 +276,7 @@ export default function TeamManagementView({
           whatIfMode={whatIfMode}
           removeSeniors={removeSeniors}
           selectedTeam={selectedTeam}
+          teams={teams}
           onSelectTeam={setSelectedTeam}
           onUpdate={onUpdate}
           onDeleteSwim={whatIfMode ? handleDeleteSwim : undefined}

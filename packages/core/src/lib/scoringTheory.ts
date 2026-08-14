@@ -26,6 +26,7 @@ import {
   convertSwimToSCY,
   convertTimeToSeconds,
   foldDiacritics,
+  hasConversionFactor,
   isRelayResult,
   normalizeSwimmerName,
 } from './utils';
@@ -444,6 +445,9 @@ export function applyScoringTheory(
   for (const s of workspace.athleteHistory ?? []) {
     if (s.gender !== gender || String(s.team ?? '').trim() !== team) continue;
     const relay = /\brelay\b/i.test(s.event);
+    // No published factor → no SCY equivalent. Non-program events only; the
+    // championship filter on the next line rejects them regardless.
+    if (!relay && (s.timeType ?? 'SCY') !== 'SCY' && !hasConversionFactor(s.event)) continue;
     const { event, time } = relay
       ? { event: s.event, time: s.time }
       : convertSwimToSCY(s.event, s.time, s.gender, s.timeType ?? 'SCY');

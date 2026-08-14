@@ -14,6 +14,7 @@ import {
   type ArbitrageMode,
 } from '@omniswim/core/lib/rosterArbitrage';
 import { EmptyState, useToast } from '@omniswim/ui';
+import TeamPickerEmptyState from './TeamPickerEmptyState';
 
 type Props = {
   workspace: Workspace;
@@ -151,11 +152,12 @@ export default function RosterOptimizeStep({
 
   if (!selectedTeam) {
     return (
-      <EmptyState
-        icon={<Users size={28} />}
+      <TeamPickerEmptyState
         eyebrow="Optimize"
         title="Choose a team to optimize"
         description="Select a team to review its point opportunities and optimize its entries."
+        teams={teams}
+        onSelectTeam={onSelectTeam}
       />
     );
   }

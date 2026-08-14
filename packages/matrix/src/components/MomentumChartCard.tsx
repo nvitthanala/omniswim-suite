@@ -93,7 +93,11 @@ export default function MomentumChartCard(props: Props) {
                       fontSize: 8,
                       fontFamily: 'JetBrains Mono',
                     }}
-                    interval="preserveStartEnd"
+                    // Equidistant spacing rather than a forced end tick, so the last
+                    // two event labels cannot collide or clip at the plot edge.
+                    interval="equidistantPreserveStart"
+                    minTickGap={24}
+                    tickMargin={8}
                   />
                   <YAxis
                     axisLine={false}
@@ -157,7 +161,9 @@ export default function MomentumChartCard(props: Props) {
                   axisLine={false}
                   tickLine={false}
                   tick={{ fill: chartTheme.chartTick, fontSize: 8, fontFamily: 'JetBrains Mono' }}
-                  interval="preserveStartEnd"
+                  interval="equidistantPreserveStart"
+                  minTickGap={24}
+                  tickMargin={8}
                 />
                 <YAxis
                   axisLine={false}

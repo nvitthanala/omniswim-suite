@@ -21,8 +21,15 @@ export const CONVERSION_FACTORS: ConversionFactors = {
   '200 Breaststroke': { men_lcm: 0.868, women_lcm: 0.888, both_scm: 0.906 },
   '100 Butterfly': { men_lcm: 0.878, women_lcm: 0.887, both_scm: 0.906 },
   '200 Butterfly': { men_lcm: 0.876, women_lcm: 0.891, both_scm: 0.906 },
+  // Keyed under the canonical label produced by `normalizeEventLabel` ("200 IM"
+  // normalizes to "200 Individual Medley"). Both spellings are listed because
+  // callers reach this table with either: keying only the abbreviation is what
+  // made every IM conversion miss the table and silently fall back to the 50
+  // Freestyle factor.
   '200 IM': { men_lcm: 0.867, women_lcm: 0.877, both_scm: 0.906 },
   '400 IM': { men_lcm: 0.875, women_lcm: 0.886, both_scm: 0.906 },
+  '200 Individual Medley': { men_lcm: 0.867, women_lcm: 0.877, both_scm: 0.906 },
+  '400 Individual Medley': { men_lcm: 0.875, women_lcm: 0.886, both_scm: 0.906 },
 };
 
 export const SCORING_POINTS = [20, 17, 16, 15, 14, 13, 12, 11, 9, 7, 6, 5, 4, 3, 2, 1];

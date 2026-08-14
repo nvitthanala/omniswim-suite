@@ -18,6 +18,7 @@ import TeamRosterPanel from './TeamRosterPanel';
 import DuplicateAthletesPanel from './DuplicateAthletesPanel';
 import type { EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
 import LineupComplianceChecklist from './LineupComplianceChecklist';
+import TeamPickerEmptyState from './TeamPickerEmptyState';
 import CrossCourseArbitragePanel from './CrossCourseArbitragePanel';
 import ScenarioSnapshotsPanel from './ScenarioSnapshotsPanel';
 
@@ -33,6 +34,8 @@ type Props = {
   whatIfMode: boolean;
   removeSeniors: boolean;
   selectedTeam: string;
+  /** Scoreable teams, so the "choose a team" state can offer them. */
+  teams: string[];
   onSelectTeam: (team: string) => void;
   onUpdate: (patch: Partial<Workspace>) => void;
   onDeleteSwim?: (swim: AthleteCreditedSwim) => void;
@@ -57,6 +60,7 @@ export default function RosterLineupStep({
   whatIfMode,
   removeSeniors,
   selectedTeam,
+  teams,
   onSelectTeam,
   onUpdate,
   onDeleteSwim,
@@ -143,11 +147,12 @@ export default function RosterLineupStep({
 
   if (!selectedTeam) {
     return (
-      <EmptyState
-        icon={<Users size={28} />}
+      <TeamPickerEmptyState
         eyebrow="Lineup"
         title="Choose a team to build its lineup"
         description="Select a team to edit its roster and entries."
+        teams={teams}
+        onSelectTeam={onSelectTeam}
       />
     );
   }

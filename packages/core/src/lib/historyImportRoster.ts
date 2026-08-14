@@ -27,6 +27,7 @@ import {
   convertTimeToSeconds,
   convertSwimToSCY,
   foldDiacritics,
+  hasConversionFactor,
   normalizeSwimmerName,
 } from './utils';
 import { createPlannedEntry } from './whatIfProjection';
@@ -164,6 +165,10 @@ function toProgramCandidates(swims: HistoricalSwim[]): HistoricalSwim[] {
   const best = new Map<string, HistoricalSwim>();
   for (const s of swims) {
     const relay = isRelayEventName(s.event);
+    // A metric swim we hold no published factor for cannot be stated in SCY. Such
+    // events (25s, 100 IM) are never part of the championship program and would be
+    // dropped on the next line anyway — skip before converting rather than after.
+    if (!relay && (s.timeType ?? 'SCY') !== 'SCY' && !hasConversionFactor(s.event)) continue;
     const { event, time } = relay
       ? { event: s.event, time: s.time }
       : convertSwimToSCY(s.event, s.time, s.gender, s.timeType ?? 'SCY');

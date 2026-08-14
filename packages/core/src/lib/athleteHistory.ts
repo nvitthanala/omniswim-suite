@@ -17,7 +17,13 @@ import {
 import { divisionForTeam } from '../data/teamDivisions';
 import { compareTimeToCutline } from './cutlineUtils';
 import { mergeScoringSettings } from './scoringDefaults';
-import { convertTimeToSeconds, convertToSCY, isRelayResult, normalizeSwimmerName } from './utils';
+import {
+  convertTimeToSeconds,
+  convertToSCY,
+  hasConversionFactor,
+  isRelayResult,
+  normalizeSwimmerName,
+} from './utils';
 import { parseSwimCloudMultiProfile } from './swimCloudMultiProfile';
 import {
   buildAliasResolver,
@@ -65,17 +71,18 @@ export function mergeHistoryIndex(
     // Best per event PER COURSE: an actual SCY swim and its LCM/SCM counterparts are
     // distinct facts — the cross-course arbitrage view needs both to compare.
     const key = `${swimKey(s.name, s.team, s.gender, s.event)}|${s.timeType ?? 'SCY'}`;
-    const sec = convertTimeToSeconds(
-      convertToSCY(s.time, s.event, s.gender, s.timeType ?? 'SCY')
-    );
+    // Raw seconds, deliberately: the key already pins both the event and the
+    // course, so every swim compared here shares one conversion factor and the
+    // conversion cancels out of the ordering. Converting first would also drag
+    // non-program events (25s, 100 IM) through a factor table that does not
+    // publish them, for a comparison that does not need it.
+    const sec = convertTimeToSeconds(s.time);
     const prev = best.get(key);
     if (!prev) {
       best.set(key, s);
       continue;
     }
-    const prevSec = convertTimeToSeconds(
-      convertToSCY(prev.time, prev.event, prev.gender, prev.timeType ?? 'SCY')
-    );
+    const prevSec = convertTimeToSeconds(prev.time);
     if (sec < prevSec) best.set(key, s);
   }
   return [...best.values()];
@@ -120,6 +127,10 @@ export function categorizeBestEvents(
     if (s.gender !== gender || s.team !== team) continue;
     if (normalizeSwimmerName(resolver.resolveAthleteName(s.name, team, gender)) !== nameKey) continue;
     if (s.event.toLowerCase().includes('relay')) continue;
+    // A metric swim in an event with no published conversion factor (25s, 100 IM
+    // — never part of the championship program) cannot be stated in SCY. Skip it
+    // rather than let it into the ranking under another event's factor.
+    if ((s.timeType ?? 'SCY') !== 'SCY' && !hasConversionFactor(s.event)) continue;
     const sec = convertTimeToSeconds(
       convertToSCY(s.time, s.event, s.gender, s.timeType ?? 'SCY')
     );
