@@ -43,7 +43,32 @@ import {
 const PORT = Number(process.env.PORT ?? process.env.OMNI_PORT ?? 3000);
 const __filename = fileURLToPath(import.meta.url);
 const SHELL_ROOT = path.dirname(__filename);
-const PROJECT_ROOT = path.join(SHELL_ROOT, '../..');
+
+/**
+ * Walk up from the entry file to the monorepo root.
+ *
+ * A fixed `../..` only holds in dev, where the entry is `apps/shell/server.ts`.
+ * The production bundle is emitted to `apps/shell/dist/server.js`, one level
+ * deeper, so `../..` resolved to `apps/` — the prod server then looked for
+ * `apps/data/meets.json` (seeding an empty database) and served static files
+ * from `apps/dist` (404 on every page). Find the root by its markers instead,
+ * so dev, prod and a relocated bundle all agree.
+ */
+function findProjectRoot(start: string): string {
+  let dir = start;
+  for (let i = 0; i < 6; i += 1) {
+    const hasWorkspaces = fs.existsSync(path.join(dir, 'packages'));
+    const hasManifest = fs.existsSync(path.join(dir, 'package.json'));
+    if (hasWorkspaces && hasManifest) return dir;
+    const parent = path.dirname(dir);
+    if (parent === dir) break;
+    dir = parent;
+  }
+  // Fall back to the historical dev-layout guess rather than throwing at import time.
+  return path.join(start, '../..');
+}
+
+const PROJECT_ROOT = findProjectRoot(SHELL_ROOT);
 const DATA_DIR = path.join(PROJECT_ROOT, 'data');
 const MEETS_FILE = path.join(DATA_DIR, 'meets.json');
 const DB_FILE = path.join(DATA_DIR, 'omniswim.db');
