@@ -18,6 +18,9 @@ Roster Plan`) or read out of the tree — not inferred from the docs.
 | [06-testing-verification.md](06-testing-verification.md) | What the suite does and does not actually prove |
 | [07-packaging-offline-ops.md](07-packaging-offline-ops.md) | Getting it onto someone else's machine and keeping it there |
 | [08-docs-knowledge-debt.md](08-docs-knowledge-debt.md) | 18 root markdown files, several stale |
+| [09-performance.md](09-performance.md) | Measured main-thread blocking; an 8.3 s freeze introduced and fixed |
+| [10-security-exposure.md](10-security-exposure.md) | Binds every interface with no auth; unauthenticated file write |
+| [11-sequencing.md](11-sequencing.md) | **Start here if you want the order to do things in** |
 
 ## Worklogs — findings taken to done
 
@@ -52,6 +55,7 @@ These are already on `main` and are the reason some sections read "now" vs
 | `ea8ad61e` | The loaded meet now decides which events a swimmer can be entered in |
 | `350a42a7` | Best events ranked by quality vs the published standard, not by raw elapsed seconds |
 | `f3355927` | Arbitrage cards state real points, or state nothing — see [WORKLOG-01](WORKLOG-01-arbitrage-units.md) |
+| `15a0d293` | Scan for point opportunities on request — `f3355927` had introduced an 8.3 s main-thread freeze ([09 §1](09-performance.md#1-the-arbitrage-scan-blocked-the-main-thread-for-83-seconds)) |
 
 Current baseline: lint clean across 7 packages, `npm test` **47 passed / 0
 failed / 3 skipped**, `npm run build` exit 0.

@@ -30,6 +30,18 @@ right. The gap is that they live in prose and review, not in types and tests.
 | 10 | Fonts load from Google; first run pip-installs from PyPI | **P2** | [07](07-packaging-offline-ops.md) |
 | 11 | 18 root markdown files, 4 stale since June | **P2** | [08](08-docs-knowledge-debt.md) |
 
+### Added 2026-08-15, after a second pass
+
+| # | Finding | Sev | Where |
+| - | ------- | --- | ----- |
+| 12 | Server binds **`0.0.0.0`** with **no auth** in the default config, while the banner says `localhost` | **P0** in the meet scenario | [10 §1](10-security-exposure.md#1-the-server-listens-on-every-network-interface-with-no-authentication) |
+| 13 | Unauthenticated upload writes **outside the project directory**; no size cap; the 501 does not prevent the write | **P0** in the meet scenario | [10 §2](10-security-exposure.md#2-unauthenticated-file-upload-writes-outside-the-project-directory) |
+| 14 | The arbitrage fix introduced an **8.3 s main-thread freeze** — found, measured, fixed | fixed `15a0d293` | [09 §1](09-performance.md#1-the-arbitrage-scan-blocked-the-main-thread-for-83-seconds) |
+| 15 | `crossCourseArbitrage`'s incremental **fast path is not faster** than a full re-score | **P1** | [09 §1](09-performance.md#where-the-time-goes) |
+| 16 | `authMiddleware.ts` — the file deciding whether a request is authenticated — is **one 1,600-character line** | **P2** | [10 §4](10-security-exposure.md#4-authmiddlewarets-is-one-1600-character-line) |
+
+**The order to do all of this in is [11-sequencing.md](11-sequencing.md).**
+
 ## If you only do three things
 
 1. **Make the arbitrage cards re-score instead of estimate.** The machinery
@@ -47,6 +59,26 @@ right. The gap is that they live in prose and review, not in types and tests.
    key resolvable from `normalizeEventLabel`; every active `teamDivisions` entry
    carrying `sponsoredGenders`. Three of the four bugs fixed today would have
    been caught at commit time. → [06](06-testing-verification.md#4-encode-the-prose-rules-as-tests)
+
+## A second pattern, visible only after fixing things
+
+The correctness fix on 2026-08-14 (`f3355927`) shipped with an 8.3-second UI
+freeze attached. The number became right and the screen became unusable, in one
+commit, and only the number was verified before pushing.
+
+That is worth naming next to the first pattern: **this codebase's failures are
+consistently invisible at the point of change.** A wrong conversion factor, an
+empty field lookup, a frozen main thread — none of them threw, none of them
+failed a test, and each was found only by someone deliberately going to look.
+
+The remedy is the same in every case and it is not more care: it is a cheap
+mechanical check that fails loudly. Three of them are proposed in
+[06](06-testing-verification.md) and [09](09-performance.md), each costing about
+two hours, and each would have caught a defect that actually shipped:
+
+- a production-server smoke test → the 404-on-every-page bug
+- a `longtask` budget in CI → the 8.3 s freeze
+- a `CONVERSION_FACTORS` key round-trip test → 57 fabricated conversions
 
 ## The pattern worth naming
 
