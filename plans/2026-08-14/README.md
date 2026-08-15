@@ -1,9 +1,9 @@
-﻿# Improvement plan â€” 2026-08-14
+# Improvement plan — 2026-08-14
 
 A findings-and-options review of the suite, written after a day of correctness
 work on the scoring/roster core. Everything here is grounded in something
 measured against the two live workspaces (`Blank Workspace 1`, `HSU 2026-27
-Roster Plan`) or read out of the tree â€” not inferred from the docs.
+Roster Plan`) or read out of the tree — not inferred from the docs.
 
 ## How this folder is organised
 
@@ -19,18 +19,18 @@ Roster Plan`) or read out of the tree â€” not inferred from the docs.
 | [07-packaging-offline-ops.md](07-packaging-offline-ops.md) | Getting it onto someone else's machine and keeping it there |
 | [08-docs-knowledge-debt.md](08-docs-knowledge-debt.md) | 18 root markdown files, several stale |
 
-## Worklogs â€” findings taken to done
+## Worklogs — findings taken to done
 
 | Worklog | Finding | Status |
 | ------- | ------- | ------ |
-| [WORKLOG-01](WORKLOG-01-arbitrage-units.md) | Arbitrage "points" were seconds Ã— 2 | âœ… shipped `f3355927` |
+| [WORKLOG-01](WORKLOG-01-arbitrage-units.md) | Arbitrage "points" were seconds × 2 | done — shipped `f3355927` |
 
 ## Status legend used throughout
 
-- **P0** â€” produces a wrong number a coach could act on. Fix before it is trusted.
-- **P1** â€” real defect or real friction, not silently wrong.
-- **P2** â€” worth doing, no correctness consequence.
-- **Open question** â€” needs a decision from you, not an implementation.
+- **P0** — produces a wrong number a coach could act on. Fix before it is trusted.
+- **P1** — real defect or real friction, not silently wrong.
+- **P2** — worth doing, no correctness consequence.
+- **Open question** — needs a decision from you, not an implementation.
 
 ## Scope
 
@@ -40,18 +40,18 @@ suite's `VIDEO_ANALYSIS_MASTERPLAN.md` / `VIDEO_TAGGING_FRAMEWORK.md` workstream
 assessed here. Note only that they remain gated on the same thing they were in
 August: **no real race has been tagged by hand yet.**
 
-## What was fixed today, for context
+## What was fixed on 2026-08-14, for context
 
 These are already on `main` and are the reason some sections read "now" vs
 "was". They are listed so this plan is not confused with them.
 
 | Commit | What |
 | ------ | ---- |
-| `ad616e69` | IM conversion factor key mismatch (57 fabricated conversions); unknown-event conversion now raises; Manager steps 2â€“4 dead-end; layout clipping; 5 missing `aria-label`s |
+| `ad616e69` | IM conversion factor key mismatch (57 fabricated conversions); unknown-event conversion now raises; Manager steps 2–4 dead-end; layout clipping; 5 missing `aria-label`s |
 | `7af56513` | Production launcher served 404 and seeded an empty DB from a fresh clone |
 | `ea8ad61e` | The loaded meet now decides which events a swimmer can be entered in |
 | `350a42a7` | Best events ranked by quality vs the published standard, not by raw elapsed seconds |
+| `f3355927` | Arbitrage cards state real points, or state nothing — see [WORKLOG-01](WORKLOG-01-arbitrage-units.md) |
 
-Current baseline: lint clean across 7 packages, `npm test` **46 passed / 0
+Current baseline: lint clean across 7 packages, `npm test` **47 passed / 0
 failed / 3 skipped**, `npm run build` exit 0.
-
