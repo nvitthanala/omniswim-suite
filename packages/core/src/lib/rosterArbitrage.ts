@@ -107,11 +107,18 @@ export function buildArbitrageCards(
 
   for (const athlete of athletes) {
     const profile = getAthleteProfile(workspace, team, gender, athlete.name, merged);
-    const ranked = Object.entries(profile.bestByEvent).sort((a, b) => a[1].timeSec - b[1].timeSec);
-    if (ranked.length < 2) continue;
+    // The athlete's two strongest events by quality vs the published standard.
+    // Sorting by raw elapsed seconds here picked whichever two events were
+    // shortest, so every distance swimmer's card compared their two sprints.
+    const order = [...profile.primaryEvents, ...Object.keys(profile.bestByEvent)].filter(
+      (ev, i, all) => all.indexOf(ev) === i && profile.bestByEvent[ev] != null
+    );
+    if (order.length < 2) continue;
 
-    const [evA, bestA] = ranked[0];
-    const [evB, bestB] = ranked[1];
+    const evA = order[0];
+    const evB = order[1];
+    const bestA = profile.bestByEvent[evA];
+    const bestB = profile.bestByEvent[evB];
 
     // Approximate marginal value by time gap relative to field median in those events
     // (lightweight heuristic — not a full re-score per swap).

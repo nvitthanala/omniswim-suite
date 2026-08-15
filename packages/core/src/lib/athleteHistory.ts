@@ -14,7 +14,7 @@ import {
   Workspace,
   AthleteEventProfile,
 } from '../types';
-import { divisionForTeam } from '../data/teamDivisions';
+import { divisionForTeam, divisionForTeamOrNull } from '../data/teamDivisions';
 import { compareTimeToCutline } from './cutlineUtils';
 import { mergeScoringSettings } from './scoringDefaults';
 import {
@@ -162,8 +162,12 @@ export function categorizeBestEvents(
     }
   }
 
-  const ranked = Object.entries(bestByEvent).sort((a, b) => a[1].timeSec - b[1].timeSec);
-  const primaryEvents = ranked.slice(0, indCap).map(([ev]) => ev);
+  // Quality first, then anything we hold no standard for. Unrankable events stay
+  // eligible — they fill the cap only after every judged event has, so an athlete
+  // whose events lack published standards still gets a lineup, and the caller can
+  // see which picks were unjudged via `unrankedEvents`.
+  const quality = rankEventsByQuality(bestByEvent, gender, team);
+  const primaryEvents = [...quality.ranked, ...quality.unranked].slice(0, indCap);
   const relayList = relayEvents.slice(0, relayCap);
 
   return {
@@ -173,6 +177,10 @@ export function categorizeBestEvents(
     bestByEvent,
     primaryEvents,
     relayEvents: relayList,
+    qualityByEvent: quality.ratioByEvent,
+    unrankedEvents: quality.unranked,
+    rankingDivision: quality.division,
+    rankingTier: quality.tier,
   };
 }
 
@@ -330,6 +338,90 @@ function isEventOffered(event: string, allowed: ReadonlySet<string> | null): boo
   const norm = normalizeEventLabel(event);
   if (allowed && allowed.size > 0) return allowed.has(norm);
   return isChampionshipProgramEvent(norm) && !/\brelay\b/i.test(norm);
+}
+
+export type EventQualityRanking = {
+  /** Rankable events, best first. */
+  ranked: string[];
+  /** Events with no published standard to judge against, fastest first. */
+  unranked: string[];
+  /** `swimSeconds / standardSeconds` per rankable event. Lower is better. */
+  ratioByEvent: Record<string, number>;
+  division: NcaaDivision | null;
+  tier: 'A' | 'B' | null;
+};
+
+/**
+ * Order an athlete's events by how good the swim actually is, not by how short
+ * the event is.
+ *
+ * Sorting by raw elapsed seconds — which this replaces — ranks a 50 Free above a
+ * 1650 Free for every swimmer alive, because 20 is less than 900. It measures
+ * event length. Under a total-entry cap that silently entered distance swimmers
+ * in sprints: on the HSU roster it dropped 1000/1650/500 Free and 400 IM in
+ * favour of 50/100 Free for athletes whose distance swims were at the standard
+ * and whose sprints were 10%+ off it.
+ *
+ * The yardstick is each event's published NCAA standard for the team's division,
+ * already archived under `data/cutlines/` with a manifest. Ratio = swim ÷
+ * standard, so events of wildly different lengths become comparable.
+ *
+ * Two rules the repo already holds, applied here:
+ *
+ *  - **An unmapped team is not a D1 team.** With no division we hold no table, so
+ *    nothing is rankable and every event comes back in `unranked`.
+ *  - **One tier for the whole profile.** A ratio against the permissive tier and a
+ *    ratio against the strict tier are different scales; mixing them would make an
+ *    event look stronger purely because it was measured against a slower mark.
+ *    Events lacking the chosen tier are `unranked`, never quietly rescaled.
+ */
+export function rankEventsByQuality(
+  bestByEvent: AthleteEventProfile['bestByEvent'],
+  gender: Gender,
+  team: string,
+  divisionOverride?: NcaaDivision | null
+): EventQualityRanking {
+  const events = Object.keys(bestByEvent);
+  const byTimeThenName = (list: string[]) =>
+    [...list].sort(
+      (a, b) => (bestByEvent[a]?.timeSec ?? 0) - (bestByEvent[b]?.timeSec ?? 0) || a.localeCompare(b)
+    );
+
+  const division = divisionOverride !== undefined ? divisionOverride : divisionForTeamOrNull(team);
+  if (!division) {
+    return { ranked: [], unranked: byTimeThenName(events), ratioByEvent: {}, division: null, tier: null };
+  }
+
+  const refs = new Map<string, { a: number; b: number }>();
+  for (const event of events) {
+    const sec = bestByEvent[event]?.timeSec ?? 0;
+    const cmp = compareTimeToCutline(sec, gender, event, division);
+    refs.set(event, cmp.status === 'ok' ? { a: cmp.aCutSec, b: cmp.bCutSec } : { a: 0, b: 0 });
+  }
+
+  const withB = events.filter(e => (refs.get(e)?.b ?? 0) > 0);
+  const withA = events.filter(e => (refs.get(e)?.a ?? 0) > 0);
+  const tier: 'A' | 'B' | null =
+    withB.length > 0 && withB.length >= withA.length ? 'B' : withA.length > 0 ? 'A' : null;
+  if (!tier) {
+    return { ranked: [], unranked: byTimeThenName(events), ratioByEvent: {}, division, tier: null };
+  }
+
+  const ratioByEvent: Record<string, number> = {};
+  const ranked: string[] = [];
+  const unranked: string[] = [];
+  for (const event of events) {
+    const ref = tier === 'B' ? refs.get(event)?.b ?? 0 : refs.get(event)?.a ?? 0;
+    const sec = bestByEvent[event]?.timeSec ?? 0;
+    if (ref > 0 && Number.isFinite(sec) && sec > 0) {
+      ratioByEvent[event] = sec / ref;
+      ranked.push(event);
+    } else {
+      unranked.push(event);
+    }
+  }
+  ranked.sort((a, b) => ratioByEvent[a] - ratioByEvent[b] || a.localeCompare(b));
+  return { ranked, unranked: byTimeThenName(unranked), ratioByEvent, division, tier };
 }
 
 function looksLikePersonName(line: string): boolean {
@@ -705,8 +797,10 @@ export function buildEventProfileFromCatalog(
       source: t.source,
     };
   }
-  const ranked = Object.entries(bestByEvent).sort((a, b) => a[1].timeSec - b[1].timeSec);
-  const primaryEvents = ranked.slice(0, indCap).map(([ev]) => ev);
+  // Same quality ranking as the history-backed profile — raw seconds here would
+  // have ordered a catalog athlete's events by length just as it did there.
+  const quality = rankEventsByQuality(bestByEvent, gender, roster.team.name);
+  const primaryEvents = [...quality.ranked, ...quality.unranked].slice(0, indCap);
 
   const relayEvents: string[] = [];
   for (const t of athlete.times) {
@@ -723,6 +817,10 @@ export function buildEventProfileFromCatalog(
     bestByEvent,
     primaryEvents,
     relayEvents: dedupedRelays,
+    qualityByEvent: quality.ratioByEvent,
+    unrankedEvents: quality.unranked,
+    rankingDivision: quality.division,
+    rankingTier: quality.tier,
   };
 }
 

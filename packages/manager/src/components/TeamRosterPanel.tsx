@@ -20,6 +20,28 @@ import AthleteMeetEntriesPanel from './AthleteMeetEntriesPanel';
 import AthleteLineupEditorPanel from './AthleteLineupEditorPanel';
 import AthleteRoleTag from './AthleteRoleTag';
 import { getAthleteProfile } from '@omniswim/core/lib/athleteHistory';
+import type { AthleteEventProfile } from '@omniswim/core/types';
+
+/**
+ * Tooltip for the per-athlete event list. The list is ordered by how good each
+ * swim is against the published standard for the team's division, so say so and
+ * show the number — otherwise the order looks arbitrary, and it used to be
+ * (raw elapsed seconds, which just ranks the shortest events first).
+ */
+function describeStrongestEvents(profile: AthleteEventProfile): string {
+  const ratios = profile.qualityByEvent ?? {};
+  const lines = profile.primaryEvents.map(event => {
+    const r = ratios[event];
+    return r ? `${event} — ${(r * 100).toFixed(1)}% of the standard` : `${event} — no published standard`;
+  });
+  const header = profile.rankingDivision
+    ? `Strongest first, vs the published ${profile.rankingDivision} standard (lower is better):`
+    : 'Division unknown, so these are not ranked against a standard:';
+  const unranked = profile.unrankedEvents?.length
+    ? `\n\nNo published standard to judge: ${profile.unrankedEvents.join(', ')}`
+    : '';
+  return `${header}\n${lines.join('\n')}${unranked}`;
+}
 import {
   countSwimmerEntries,
   formatEntryLimitLabel,
@@ -620,7 +642,7 @@ export default function TeamRosterPanel({
                       {profile && profile.primaryEvents.length > 0 && !isSelected ? (
                         <p
                           className="text-ui-caption text-theme-muted truncate mt-1"
-                          title={profile.primaryEvents.join(', ')}
+                          title={describeStrongestEvents(profile)}
                         >
                           {profile.primaryEvents.slice(0, 3).join(' · ')}
                         </p>

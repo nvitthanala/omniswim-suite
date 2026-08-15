@@ -852,8 +852,11 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                     <List size={14} className="text-[var(--text-accent)] shrink-0" />
                     <span className="text-ui-micro font-medium uppercase tracking-widest text-theme-secondary truncate">Team Matrix</span>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
-                    <select 
+                  {/* Wraps rather than `shrink-0`: at 1024px the select plus both
+                      toggles are wider than the column, and refusing to shrink
+                      pushed them past its right edge instead of onto a new line. */}
+                  <div className="flex flex-wrap items-center justify-end gap-2 min-w-0">
+                    <select
                       className="glass-input text-ui-micro uppercase tracking-widest text-theme-secondary rounded p-1 outline-none"
                       value={sortMode}
                       onChange={(e) => setSortMode(e.target.value as any)}

@@ -273,6 +273,23 @@ export interface AthleteEventProfile {
   bestByEvent: Record<string, { time: string; timeSec: number; source: string }>;
   primaryEvents: string[];
   relayEvents: string[];
+  /**
+   * How good each swim is relative to the published standard for that event —
+   * `swimSeconds / standardSeconds`, so lower is better and 1.0 is exactly on the
+   * mark. This is what `primaryEvents` is ordered by. Absent for events with no
+   * published standard; see {@link AthleteEventProfile.unrankedEvents}.
+   */
+  qualityByEvent?: Record<string, number>;
+  /**
+   * Events held but not rankable: no published standard for this division, or the
+   * team's division is unknown. Listed rather than silently ordered last as though
+   * the athlete were weak in them — absent is not the same as bad.
+   */
+  unrankedEvents?: string[];
+  /** Division the ranking was computed against. `null` when the team is unmapped. */
+  rankingDivision?: NcaaDivision | null;
+  /** Published tier the ratios were measured against, one tier for the whole profile. */
+  rankingTier?: 'A' | 'B' | null;
 }
 
 export interface Workspace {

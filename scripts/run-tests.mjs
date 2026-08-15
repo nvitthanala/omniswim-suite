@@ -33,6 +33,7 @@ const TESTS = [
   ['test_athlete_history.mjs'],
   ['test_course_conversion.mjs'],
   ['test_meet_program_events.mjs'],
+  ['test_event_quality_ranking.mjs'],
   ['test_history_import_roster.mjs'],
   ['test_multi_profile_import.mjs'],
   ['test_scoring_theory.mjs'],
