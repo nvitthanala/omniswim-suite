@@ -3,12 +3,13 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { FileWarning, Sparkles, Users } from 'lucide-react';
 import { Gender, ScoringSettings, Workspace } from '@omniswim/core/types';
 import { optimizeRosterForTeam, optimizeRosterAllTeams } from '@omniswim/core/lib/rosterOptimizer';
 import {
   buildArbitrageCardsResult,
+  type ArbitrageCardsResult,
   optimizeWithArbitrage,
   type ArbitrageCard,
   type ArbitrageMode,
@@ -121,12 +122,35 @@ export default function RosterOptimizeStep({
   // workflow. Keying this off menResults blocked that path entirely.
   const hasRoster = teams.length > 0;
 
-  const preview = useMemo(() => {
-    if (!team) return { cards: [] as ArbitrageCard[], pointsMeaningful: true, reason: undefined };
-    return buildArbitrageCardsResult(workspace, gender, team, scoringSettings);
+  // Computed on request, never during render.
+  //
+  // `buildArbitrageCardsResult` re-scores the field once per candidate swap — 849
+  // candidates at ~7 ms each on the NSISC meet. Running that in a `useMemo` froze
+  // the main thread for 8.3 s in a single task (measured), so opening this step
+  // locked the UI. Correct numbers are not worth a frozen tab; the button makes
+  // the cost explicit and keeps the step instant to open.
+  const [preview, setPreview] = useState<ArbitrageCardsResult | null>(null);
+  const [scanning, setScanning] = useState(false);
+
+  // A stale scan is worse than none — it would describe a roster that no longer exists.
+  useEffect(() => {
+    setPreview(null);
   }, [workspace, gender, team, scoringSettings]);
 
-  const displayCards = cards.length > 0 ? cards : preview.cards;
+  const runScan = () => {
+    if (!team) return;
+    setScanning(true);
+    // Yield a frame so the "Scanning…" state paints before the blocking work starts.
+    window.setTimeout(() => {
+      try {
+        setPreview(buildArbitrageCardsResult(workspace, gender, team, scoringSettings));
+      } finally {
+        setScanning(false);
+      }
+    }, 0);
+  };
+
+  const displayCards = cards.length > 0 ? cards : preview?.cards ?? [];
 
   const applyTeam = () => {
     if (!whatIfMode || !team) return;
@@ -271,11 +295,31 @@ export default function RosterOptimizeStep({
             <span className="font-normal text-theme-secondary"> · {team}</span>
           ) : null}
         </h4>
-        <ArbitrageCardList
-          cards={displayCards}
-          pointsMeaningful={cards.length > 0 ? true : preview.pointsMeaningful}
-          reason={preview.reason}
-        />
+        {displayCards.length === 0 && !preview && cards.length === 0 ? (
+          <div className="rounded-xl border border-dashed border-theme-soft px-4 py-8 text-center">
+            <p className="text-ui-body text-theme-secondary leading-relaxed max-w-md mx-auto">
+              Scanning every event swap re-scores the meet once per candidate, so it
+              runs on request rather than on open.
+            </p>
+            <button
+              type="button"
+              onClick={runScan}
+              disabled={!team || scanning}
+              className="mt-4 px-4 py-2 text-ui-label font-semibold rounded-lg btn-primary transition-colors disabled:opacity-60"
+            >
+              {scanning ? 'Scanning…' : 'Find point opportunities'}
+            </button>
+            {!team ? (
+              <p className="text-ui-caption text-theme-muted mt-2">Choose a team first.</p>
+            ) : null}
+          </div>
+        ) : (
+          <ArbitrageCardList
+            cards={displayCards}
+            pointsMeaningful={cards.length > 0 ? true : preview?.pointsMeaningful ?? true}
+            reason={preview?.reason}
+          />
+        )}
       </div>
     </div>
   );
