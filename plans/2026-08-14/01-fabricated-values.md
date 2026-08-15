@@ -8,6 +8,13 @@ item below is a number currently rendered with a unit it does not have.
 
 ## 1. Arbitrage "points" are not points
 
+> **✅ FIXED 2026-08-14.** `buildArbitrageCards` now delegates to
+> `rankExactSwaps`, so the number is a real difference of two scored team totals.
+> See [WORKLOG-01](WORKLOG-01-arbitrage-units.md) — including a **correction to
+> the proposed acceptance test below**: the `delta <= max(SCORING_POINTS)` bound
+> suggested here is wrong, because it bounds one swim's points rather than a
+> team-total delta. The section is left as written for the record.
+
 **Severity: P0.** `packages/core/src/lib/rosterArbitrage.ts:123-137`
 
 ### What it does

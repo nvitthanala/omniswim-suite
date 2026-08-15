@@ -120,9 +120,18 @@ today; it is the cheapest guard in the whole plan.
 because the tests check that cards are produced and ordered — not that the
 numbers are dimensionally possible.
 
+> **Correction, 2026-08-14.** The first bullet below is **wrong** and was
+> rejected in practice — see [WORKLOG-01 §5](WORKLOG-01-arbitrage-units.md).
+> `max(SCORING_POINTS)` bounds *one swim's* points, not a *team-total* delta:
+> moving a swimmer out of an event promotes every teammate behind them, so a
+> legitimate swap can move a team total by more than any single event awards
+> (measured: +40.5, verified reproducible). The assertion that holds is internal
+> consistency — `deltaPoints === newTotal - baseTotal`, and applying the swap
+> reproduces it. Implemented in `scripts/test_arbitrage_units.mjs`.
+
 **Proposed:** a "sanity envelope" test per user-facing quantity:
 
-- no individual-event point delta exceeds `max(SCORING_POINTS)`
+- ~~no individual-event point delta exceeds `max(SCORING_POINTS)`~~ (see correction)
 - no projected team total exceeds `events × max points × relay multiplier`
 - no converted SCY time is faster than the world record for that event
 - no ratio-to-standard is below ~0.85 (would imply a swim well past NCAA A cuts)

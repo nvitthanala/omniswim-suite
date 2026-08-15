@@ -8,7 +8,7 @@ import { FileWarning, Sparkles, Users } from 'lucide-react';
 import { Gender, ScoringSettings, Workspace } from '@omniswim/core/types';
 import { optimizeRosterForTeam, optimizeRosterAllTeams } from '@omniswim/core/lib/rosterOptimizer';
 import {
-  buildArbitrageCards,
+  buildArbitrageCardsResult,
   optimizeWithArbitrage,
   type ArbitrageCard,
   type ArbitrageMode,
@@ -28,13 +28,38 @@ type Props = {
   onUpdate: (patch: Partial<Workspace>) => void;
 };
 
-function ArbitrageCardList({ cards }: { cards: ArbitrageCard[] }) {
+function ArbitrageCardList({
+  cards,
+  pointsMeaningful = true,
+  reason,
+}: {
+  cards: ArbitrageCard[];
+  pointsMeaningful?: boolean;
+  reason?: string;
+}) {
+  // "We cannot compute a point value here" and "we computed one and found no
+  // gains" are different answers. Showing the same empty state for both reads as
+  // the second, which is the more reassuring and the wrong one.
+  if (!pointsMeaningful) {
+    return (
+      <div className="rounded-xl border border-dashed border-theme-soft px-4 py-8 text-center">
+        <p className="text-ui-body text-theme-secondary leading-relaxed max-w-md mx-auto">
+          Point values need a scored field to place against.
+          {reason ? ` ${reason}` : ' Load a meet with at least two scoring teams.'}
+        </p>
+        <p className="text-ui-caption text-theme-muted mt-2 max-w-md mx-auto">
+          Event swaps can still be made by hand on the Lineup step — only the points
+          they would be worth cannot be stated yet.
+        </p>
+      </div>
+    );
+  }
   if (cards.length === 0) {
     return (
       <div className="rounded-xl border border-dashed border-theme-soft px-4 py-8 text-center">
         <p className="text-ui-body text-theme-secondary leading-relaxed max-w-md mx-auto">
-          No clear trade-offs yet. Import SwimCloud times or load a meet, then pick a team to see
-          where points can be gained by event swaps.
+          No swap gains points for this team — every athlete is already in the events
+          that score most for them.
         </p>
       </div>
     );
@@ -55,11 +80,20 @@ function ArbitrageCardList({ cards }: { cards: ArbitrageCard[] }) {
             </span>
           </div>
           <p className="text-ui-body text-theme-secondary mt-2 leading-relaxed break-words">
-            Prefer <span className="text-[var(--text-primary)]">{c.preferredEvent}</span>
-            {c.preferredDelta ? ` (~+${c.preferredDelta})` : ''} over{' '}
-            <span className="text-[var(--text-primary)]">{c.alternateEvent}</span>
-            {c.alternateDelta ? ` (~+${c.alternateDelta})` : ''}.
+            Swim <span className="text-[var(--text-primary)]">{c.preferredEvent}</span>
+            {c.addTime ? ` (${c.addTime})` : ''} instead of{' '}
+            <span className="text-[var(--text-primary)]">{c.alternateEvent}</span>.
           </p>
+          {c.addTimeConverted || c.needsVerify ? (
+            <p className="text-ui-caption text-theme-muted mt-1.5 break-words">
+              {c.addTimeConverted ? 'Entry time is converted from a metric swim' : null}
+              {c.addTimeConverted && c.needsVerify ? ' — ' : null}
+              {c.needsVerify
+                ? 'placing sits inside conversion-factor noise, so verify before acting'
+                : null}
+              .
+            </p>
+          ) : null}
         </li>
       ))}
     </ul>
@@ -87,12 +121,12 @@ export default function RosterOptimizeStep({
   // workflow. Keying this off menResults blocked that path entirely.
   const hasRoster = teams.length > 0;
 
-  const previewCards = useMemo(() => {
-    if (!team) return [];
-    return buildArbitrageCards(workspace, gender, team, scoringSettings);
+  const preview = useMemo(() => {
+    if (!team) return { cards: [] as ArbitrageCard[], pointsMeaningful: true, reason: undefined };
+    return buildArbitrageCardsResult(workspace, gender, team, scoringSettings);
   }, [workspace, gender, team, scoringSettings]);
 
-  const displayCards = cards.length > 0 ? cards : previewCards;
+  const displayCards = cards.length > 0 ? cards : preview.cards;
 
   const applyTeam = () => {
     if (!whatIfMode || !team) return;
@@ -237,7 +271,11 @@ export default function RosterOptimizeStep({
             <span className="font-normal text-theme-secondary"> · {team}</span>
           ) : null}
         </h4>
-        <ArbitrageCardList cards={displayCards} />
+        <ArbitrageCardList
+          cards={displayCards}
+          pointsMeaningful={cards.length > 0 ? true : preview.pointsMeaningful}
+          reason={preview.reason}
+        />
       </div>
     </div>
   );

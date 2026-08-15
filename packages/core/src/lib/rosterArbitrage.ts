@@ -13,10 +13,10 @@ import {
 } from '../types';
 import { mergeScoringSettings } from './scoringDefaults';
 import { getAthleteProfile } from './athleteHistory';
-import { buildMeetEventLabelIndex } from './eventIdentity';
+import { rankExactSwaps } from './crossCourseArbitrage';
 import { buildWhatIfResults, createPlannedEntry } from './whatIfProjection';
 import { buildScorerRosterLookup } from './scorerRoster';
-import { calculatePoints, convertTimeToSeconds } from './utils';
+import { calculatePoints, normalizeSwimmerName } from './utils';
 import {
   optimizeEventLineupForTeam,
   optimizeScorersForTeam,
@@ -28,13 +28,40 @@ export type ArbitrageMode = 'individual_first' | 'relay_first';
 export type ArbitrageCard = {
   athleteName: string;
   team: string;
+  /** Event to move this athlete INTO. */
   preferredEvent: string;
+  /** Event they currently occupy, which the swap gives up. */
   alternateEvent: string;
+  /**
+   * @deprecated Kept so existing consumers keep compiling. Both were derived from
+   * a time gap scaled by an arbitrary constant and never carried point units;
+   * `arbitragePts` is now the only real number on this card. Always 0.
+   */
   preferredDelta: number;
+  /** @deprecated See {@link ArbitrageCard.preferredDelta}. Always 0. */
   alternateDelta: number;
-  /** Points gained by choosing preferred over alternate (arbitrage). */
+  /**
+   * Points the team gains by making this swap — a genuine difference of two
+   * scored team totals, produced by `rankExactSwaps`, not an estimate.
+   */
   arbitragePts: number;
+  /** The athlete's best time in `preferredEvent`, SCY. */
+  addTime?: string;
+  /** True when `addTime` came from a converted LCM/SCM swim rather than a yards swim. */
+  addTimeConverted?: boolean;
+  /** Set when the swap's outcome sits inside conversion-factor noise — verify before acting. */
+  needsVerify?: boolean;
   explanation: string;
+};
+
+export type ArbitrageCardsResult = {
+  cards: ArbitrageCard[];
+  /**
+   * False when the loaded field cannot produce a point value at all — fewer than
+   * two scoring teams, so there is nothing to place against. `reason` explains it.
+   */
+  pointsMeaningful: boolean;
+  reason?: string;
 };
 
 export type ArbitrageOptimizeResult = OptimizerResult & {
@@ -69,87 +96,80 @@ function teamTotal(
 }
 
 /**
- * Build coach-facing arbitrage cards: for each athlete, compare marginal value of
- * their best event vs next-best within the entry cap.
+ * Coach-facing arbitrage cards: which single entry swap gains this team the most
+ * points, and how many.
+ *
+ * This is a presentation layer over {@link rankExactSwaps}. It used to compute its
+ * own number — the athlete's gap to the field median in seconds, multiplied by 2
+ * and labelled "pts". That is not a unit conversion: a 1650 swimmer 29 s clear of
+ * the median scored "+58.7" on a scale whose maximum is 20, and the inflation grew
+ * with event length, so distance events always outranked sprints for a reason
+ * unrelated to scoring.
+ *
+ * `rankExactSwaps` already answers the real question — it applies each candidate
+ * swap and re-scores the field, so `deltaPoints` is a genuine difference of two
+ * team totals. It also knows when the answer is meaningless (a field with fewer
+ * than two scoring teams) and says so via `pointsMeaningful`, rather than
+ * returning a confident number. Delegating gets all of that, and stops this file
+ * being a second, cruder implementation of a solved problem.
  */
+export function buildArbitrageCardsResult(
+  workspace: Workspace,
+  gender: Gender,
+  team: string,
+  settings: ScoringSettings
+): ArbitrageCardsResult {
+  const merged = mergeScoringSettings(settings, { conference: workspace.conference });
+  const ranking = rankExactSwaps(workspace, { team, gender, settings: merged });
+
+  // No scoreable field means no point value can be stated. Say why rather than
+  // rendering an empty panel that looks like "no opportunities found".
+  if (!ranking.pointsMeaningful) {
+    return { cards: [], pointsMeaningful: false, reason: ranking.reason };
+  }
+
+  // One card per athlete — their best available swap. `rankExactSwaps` returns
+  // every (athlete × add × drop) combination, so without this a single swimmer
+  // with six droppable entries fills the whole panel and hides the rest of the team.
+  const bestPerAthlete = new Map<string, (typeof ranking.swaps)[number]>();
+  for (const s of ranking.swaps) {
+    if (s.deltaPoints <= 0) continue;
+    const key = normalizeSwimmerName(s.athlete);
+    const prev = bestPerAthlete.get(key);
+    if (!prev || s.deltaPoints > prev.deltaPoints) bestPerAthlete.set(key, s);
+  }
+
+  const cards = [...bestPerAthlete.values()]
+    .sort((a, b) => b.deltaPoints - a.deltaPoints)
+    .slice(0, 12)
+    .map(s => ({
+      athleteName: s.athlete,
+      team,
+      preferredEvent: s.addEvent,
+      alternateEvent: s.dropEvent,
+      preferredDelta: 0,
+      alternateDelta: 0,
+      arbitragePts: Number(s.deltaPoints.toFixed(1)),
+      addTime: s.addTime,
+      addTimeConverted: s.addTimeConverted,
+      needsVerify: s.confidence === 'verify',
+      explanation:
+        `${s.athlete}: swim ${s.addEvent} instead of ${s.dropEvent} — ` +
+        `${s.deltaPoints.toFixed(1)} points to ${team} ` +
+        `(${s.baseTotal.toFixed(1)} → ${s.newTotal.toFixed(1)})`,
+    }));
+
+  return { cards, pointsMeaningful: true };
+}
+
+/** Cards only. Prefer {@link buildArbitrageCardsResult} so the empty case can explain itself. */
 export function buildArbitrageCards(
   workspace: Workspace,
   gender: Gender,
   team: string,
   settings: ScoringSettings
 ): ArbitrageCard[] {
-  const merged = mergeScoringSettings(settings, { conference: workspace.conference });
-  const results = buildWhatIfResults({ workspace, gender, removeSeniors: false });
-  const lookup = buildScorerRosterLookup(
-    results,
-    merged,
-    workspace.scorerRosterOverrides ?? [],
-    gender
-  );
-  const athletes = lookup.rows.filter(r => r.team === team);
-  const cards: ArbitrageCard[] = [];
-
-  // Profiles are keyed on canonical program events ("500 Freestyle") while a loaded
-  // meet's rows carry HyTek labels ("Event 22 Men 500 Yard Freestyle"). Without this
-  // bridge the field lookup below matched nothing, every gap collapsed to zero, and
-  // the panel silently produced no cards whenever a real meet was loaded.
-  const sourceResults =
-    gender === Gender.MEN
-      ? workspace.sourceMenResults ?? workspace.menResults
-      : workspace.sourceWomenResults ?? workspace.womenResults;
-  const meetLabelByCanonical = buildMeetEventLabelIndex(sourceResults ?? []);
-  const fieldFor = (canonicalEvent: string) => {
-    const meetLabel = meetLabelByCanonical.get(canonicalEvent);
-    return results.filter(
-      r => !r.isRelay && (r.event === canonicalEvent || (meetLabel != null && r.event === meetLabel))
-    );
-  };
-
-  for (const athlete of athletes) {
-    const profile = getAthleteProfile(workspace, team, gender, athlete.name, merged);
-    // The athlete's two strongest events by quality vs the published standard.
-    // Sorting by raw elapsed seconds here picked whichever two events were
-    // shortest, so every distance swimmer's card compared their two sprints.
-    const order = [...profile.primaryEvents, ...Object.keys(profile.bestByEvent)].filter(
-      (ev, i, all) => all.indexOf(ev) === i && profile.bestByEvent[ev] != null
-    );
-    if (order.length < 2) continue;
-
-    const evA = order[0];
-    const evB = order[1];
-    const bestA = profile.bestByEvent[evA];
-    const bestB = profile.bestByEvent[evB];
-
-    // Approximate marginal value by time gap relative to field median in those events
-    // (lightweight heuristic — not a full re-score per swap).
-    const fieldA = fieldFor(evA);
-    const fieldB = fieldFor(evB);
-    const median = (rows: typeof fieldA) => {
-      if (!rows.length) return bestA.timeSec;
-      const secs = rows.map(r => convertTimeToSeconds(r.time)).sort((a, b) => a - b);
-      return secs[Math.floor(secs.length / 2)] ?? bestA.timeSec;
-    };
-    const gapA = Math.max(0, median(fieldA) - bestA.timeSec);
-    const gapB = Math.max(0, median(fieldB) - bestB.timeSec);
-    // Scale gaps into rough point units (faster than median → higher value).
-    const preferredDelta = Number((gapA * 2).toFixed(1));
-    const alternateDelta = Number((gapB * 2).toFixed(1));
-    const arbitragePts = Number((preferredDelta - alternateDelta).toFixed(1));
-    if (arbitragePts <= 0) continue;
-
-    cards.push({
-      athleteName: athlete.name,
-      team,
-      preferredEvent: evA,
-      alternateEvent: evB,
-      preferredDelta,
-      alternateDelta,
-      arbitragePts,
-      explanation: `${athlete.name} in ${evA} (~+${preferredDelta} pts) vs ${evB} (~+${alternateDelta} pts) — arbitrage +${arbitragePts}`,
-    });
-  }
-
-  return cards.sort((a, b) => b.arbitragePts - a.arbitragePts).slice(0, 12);
+  return buildArbitrageCardsResult(workspace, gender, team, settings).cards;
 }
 
 /**

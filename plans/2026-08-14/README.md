@@ -19,6 +19,12 @@ Roster Plan`) or read out of the tree — not inferred from the docs.
 | [07-packaging-offline-ops.md](07-packaging-offline-ops.md) | Getting it onto someone else's machine and keeping it there |
 | [08-docs-knowledge-debt.md](08-docs-knowledge-debt.md) | 18 root markdown files, several stale |
 
+## Worklogs — findings taken to done
+
+| Worklog | Finding | Status |
+| ------- | ------- | ------ |
+| [WORKLOG-01](WORKLOG-01-arbitrage-units.md) | Arbitrage "points" were seconds × 2 | ✅ shipped `08d3c3d` |
+
 ## Status legend used throughout
 
 - **P0** — produces a wrong number a coach could act on. Fix before it is trusted.
