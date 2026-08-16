@@ -150,16 +150,41 @@ scorer roster rows for Henderson State University: 47
 
 The alias data is correct. The resolver is correct. The consumer ignores both.
 
-### Consequences
+### Consequences — measured 2026-08-16, and one of these was wrong
 
-- **Scorer cap.** `maxIndividualScorersPerTeam ?? 18` counts rows. Four
-  duplicated athletes consume four extra slots, so up to four genuine scorers
-  are pushed out of the scoring roster.
-- **Entry cap.** Each half is independently under `maxTotalEntriesPerSwimmer: 7`,
-  so a swimmer can be entered in up to 14 events across their two identities
-  without tripping the compliance checklist.
-- **Roster display.** 47 rows for what is at most 43 athletes.
-- **Anything keyed on athlete count** inherits the error.
+- ~~**Scorer cap.** Four duplicated athletes consume four extra slots, so up to
+  four genuine scorers are pushed out of the scoring roster.~~
+  **Not observable.** See §2b — `maxIndividualScorersPerTeam` does not change the
+  scored total for this workspace at any value from 1 to 999.
+- **Entry cap — real, and worse than stated.** Each half is independently under
+  `maxTotalEntriesPerSwimmer: 7`. Measured on Henderson State men:
+
+  | Athlete | Spelling A | Spelling B | Merged | Cap 7 |
+  | ------- | ---------- | ---------- | ------ | ----- |
+  | Pózvai | 3 | 7 | **10** | **over** |
+  | Balistreri | 3 | 7 | **10** | **over** |
+  | Ferguson | 3 | 7 | **10** | **over** |
+
+  **Real NSISC entry-limit violations are invisible today.** An over-entered
+  swimmer's swims can be voided, so this is a competition-rules consequence.
+- **Roster display.** 47 rows for what is at most 41 athletes (verified: applying
+  a resolver collapses 47 → 41 on HSU men).
+- **Team totals do NOT move.** Verified two ways: 1,258 `isScorer` probes across
+  both workspaces and both genders returned identical answers with and without a
+  resolver, and HSU men scores 1383.83 either way. The merge is a roster-shape
+  fix, not a scoring fix — which makes the entry-cap violation the whole story.
+
+### The trap in fixing this
+
+`countSwimmerEntries` lives in `swimmerEntryLimits.ts`, **not** in
+`scorerRoster.ts`, and keys on the raw name. `TeamRosterPanel` and
+`rosterLineupAudit` call it with `row.name`. The moment the roster starts
+resolving, `row.name` becomes the *canonical* spelling — so the count would find
+7 instead of 10 and report **compliant**.
+
+Fixing the roster without fixing the entry counter does not fix the bug. It
+relabels which half is counted and hides the violation more thoroughly. **The two
+must ship together.**
 
 ### Why this is P0 and not P1
 
@@ -183,6 +208,53 @@ bolt-on. **Effort:** ~1 session plus verification.
 raw athlete name — `countSwimmerEntries`, `aggregateSwimmerMeetPoints`, and the
 roster/optimizer paths are the likely candidates. The bug is not that one
 function forgot; it is that the resolver is opt-in, so forgetting is the default.
+
+## 2b. A scoring setting the UI exposes has no observable effect
+
+**Severity: P1 — needs investigation, not yet a diagnosis.** Found 2026-08-16
+while checking a consequence claimed in §2a.
+
+`maxIndividualScorersPerTeam` is editable in both scoring settings UIs
+(`ScoringSettingsPanel`, `ScoringSettingsModal`), is 18 in the NSISC preset, and
+is described as a meet-wide 18-scorer pool. Measured against the live meet
+workspace, sweeping the cap from 1 to 999:
+
+| Cap | HSU men total | roster rows / scorers |
+| --- | ------------- | --------------------- |
+| 1 | 1383.83 | 47 / 42 |
+| 5 | 1383.83 | 47 / 42 |
+| 18 | 1383.83 | 47 / 42 |
+| 999 | 1383.83 | 47 / 42 |
+
+**A cap of 1 admits 42 scorers and scores identically to a cap of 999.** Also
+tested with `scorerEligibilityMode: 'points_pool'` and with
+`scorerCapScope: 'event'` — all four combinations return 1383.83.
+
+### What is not yet known
+
+The mechanism is **not isolated**, and it should not be guessed at. Two candidate
+explanations, neither confirmed:
+
+1. **By design.** `scorerEligibilityMode: 'roster'` may mean the explicit scorer
+   roster decides eligibility and the numeric cap is for other modes — but that
+   would not explain the `points_pool` result.
+2. **PDF place points.** 676 of 920 result rows carry points parsed from the PDF.
+   `calculatePoints` receives `resultsForPdfHint` and may re-merge settings
+   internally to use those points directly, bypassing every cap. `usePdfPlacePoints`
+   reads `undefined` in stored settings, so if this is it, it is being switched on
+   somewhere downstream and is invisible in the workspace record.
+
+If (2) is the answer, a much larger statement follows: **for a meet whose PDF
+already carries place points, the entire scoring-settings surface may be inert**,
+and the app is displaying the meet's own arithmetic rather than its own. That
+would be worth knowing before anyone tunes a preset expecting it to matter.
+
+### Proposed
+
+A focused investigation, not a fix. Instrument `calculatePoints` to report which
+scoring path it took for a given call, then answer: does any scoring setting
+change the total for this workspace? Start there — the answer reframes several
+other findings in this folder.
 
 ## 3. Junk events reach the history store
 
