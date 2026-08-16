@@ -544,21 +544,114 @@ export function parseSwimCloudStampBadge(raw: string): SwimCloudBadge {
   return parseStampToken(raw) ?? 'none';
 }
 
+// ===================== Parse-boundary plausibility gate =====================
+
+/**
+ * Every distance a swimming race is contested over, in yards or metres.
+ *
+ * This is deliberately the *sanctioned* list, not the *familiar* list. A 50
+ * Butterfly, a 100 IM and a 25 Backstroke are all real races that NSISC simply
+ * does not contest, and all three appear in these rosters' age-group history —
+ * they belong here. The program filter (see {@link isChampionshipProgramEvent}
+ * and {@link meetProgramEvents}) is what decides whether an event can be *entered*;
+ * this list only decides whether it can *exist*.
+ */
+export const SANCTIONED_SWIM_DISTANCES: readonly number[] = [
+  25, 50, 100, 200, 400, 500, 800, 1000, 1500, 1650,
+];
+
+const SANCTIONED_SWIM_DISTANCE_SET: ReadonlySet<number> = new Set(SANCTIONED_SWIM_DISTANCES);
+
+/**
+ * The distance an event label leads with, or `null` when it leads with no number.
+ * Reads the label as-is; callers pass a {@link normalizeEventLabel} output so the
+ * course suffix ("375 Free SCY") is already gone.
+ */
+export function swimEventDistance(event: string): number | null {
+  const m = /^\s*(\d+)(?!\d)/.exec(event ?? '');
+  if (!m) return null;
+  const n = Number.parseInt(m[1], 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * False only for an event whose distance is provably not a swimming distance.
+ *
+ * Motivating defect: both live workspaces held a `375 Freestyle`, parsed from the
+ * SwimCloud row `375 Free SCY\t3:47.04\tR\t61st Annual Hendrix Relays`. 375 yards
+ * is not swum at any level; the row is a novelty-relay artefact that the parser
+ * accepted because the event column merely had to start with a number and a
+ * stroke. It then sat in history looking like a real personal best.
+ *
+ * Two deliberate non-rejections, because over-rejecting is the worse failure here:
+ *
+ *  - **Diving is exempt outright.** A diving label carries no distance. It leads
+ *    with a BOARD HEIGHT (`1 mtr Diving`, `3 mtr Diving`) or with no number at all
+ *    (`Platform Diving`), so reading its leading integer as a race distance would
+ *    see 1 and 3, find neither in the sanctioned set, and throw out every dive on
+ *    the board. The question this gate asks — "is that a real race distance" — does
+ *    not apply to a dive, so it is not asked.
+ *  - **An unreadable label passes.** With no leading number there is no distance to
+ *    disprove. This gate rejects what it can prove impossible, never what it merely
+ *    fails to recognise.
+ */
+export function isPlausibleSwimEvent(event: string): boolean {
+  if (isDivingEvent(event)) return true;
+  const distance = swimEventDistance(event);
+  if (distance == null) return true;
+  return SANCTIONED_SWIM_DISTANCE_SET.has(distance);
+}
+
+/** A paste row the plausibility gate refused to turn into a {@link HistoricalSwim}. */
+export type RejectedSwimRow = {
+  /** The paste line verbatim (trimmed), so an operator can find it in the source. */
+  raw: string;
+  /** Normalized event label that failed the gate. */
+  event: string;
+  /** Distance read off the label, or `null` if none was readable. */
+  distance: number | null;
+};
+
+/** Operator-facing text for one rejected row. Names the raw row, never just the count. */
+export function implausibleSwimRowWarning(row: RejectedSwimRow): string {
+  const which = row.distance == null ? 'it carries no readable distance' : `${row.distance} is not a swimming distance`;
+  return (
+    `Dropped row — "${row.event}" is not a swimming event: ${which} ` +
+    `(sanctioned: ${SANCTIONED_SWIM_DISTANCES.join('/')} yards or metres). Raw row: ${row.raw}`
+  );
+}
+
+/**
+ * A paste parse split into what was kept and what the plausibility gate refused.
+ *
+ * `rejected` is never dropped on the floor: `parseSwimCloudPasteDetailed` and
+ * `parseSwimCloudMultiProfile` turn each entry into a warning the import panels
+ * display. One bad row must not discard the other 850 — "fails loudly" here means
+ * reported, not fatal.
+ */
+export type ParseSwimRowsResult = {
+  swims: HistoricalSwim[];
+  rejected: RejectedSwimRow[];
+};
+
 /**
  * `division` may be passed `null` to state outright that the team's division is
  * unknown; omitting it resolves from the team. Either way an unresolved division
  * yields `computedCut: null` rather than a verdict from the D1 table.
+ *
+ * Rows failing {@link isPlausibleSwimEvent} are dropped and reported in `rejected`.
  */
-export function parseSwimCloudPersonalBests(
+export function parseSwimCloudPersonalBestsDetailed(
   text: string,
   swimmerName: string,
   team: string,
   gender: Gender,
   division?: NcaaDivision | null
-): HistoricalSwim[] {
+): ParseSwimRowsResult {
   const out: HistoricalSwim[] = [];
+  const rejected: RejectedSwimRow[] = [];
   const name = swimmerName.trim();
-  if (!name) return out;
+  if (!name) return { swims: out, rejected };
 
   for (const line of text.split(/\r?\n/)) {
     const t = line.trim();
@@ -568,6 +661,14 @@ export function parseSwimCloudPersonalBests(
     if (!isEventToken(cols[0]) || !isTimeToken(cols[1])) continue;
 
     const rawEvent = cols[0];
+    const event = normalizeEventLabel(rawEvent);
+    // Gate here, at the one point where a row's event string becomes a stored
+    // swim: the raw line is still in hand, so the warning can name exactly what
+    // was dropped.
+    if (!isPlausibleSwimEvent(event)) {
+      rejected.push({ raw: t, event, distance: swimEventDistance(event) });
+      continue;
+    }
     const time = cols[1];
     const timeType = parseCourseFromEvent(rawEvent) ?? 'SCY';
     let rest = cols.slice(2).filter(c => c.length > 0);
@@ -595,7 +696,7 @@ export function parseSwimCloudPersonalBests(
       name,
       team,
       gender,
-      event: normalizeEventLabel(rawEvent),
+      event,
       time,
       timeType,
       meetLabel: meetLabel || undefined,
@@ -605,21 +706,40 @@ export function parseSwimCloudPersonalBests(
     });
   }
 
-  return enrichWithComputedCut(out, team, division);
+  return { swims: enrichWithComputedCut(out, team, division), rejected };
 }
 
-/** `division` takes the same three states as {@link parseSwimCloudPersonalBests}. */
-export function parseSwimCloudRosterPaste(
+/**
+ * Kept-rows-only view of {@link parseSwimCloudPersonalBestsDetailed}. Existing
+ * callers keep their exact signature; use the detailed form when you can surface
+ * the rejected rows to an operator.
+ */
+export function parseSwimCloudPersonalBests(
   text: string,
+  swimmerName: string,
   team: string,
   gender: Gender,
   division?: NcaaDivision | null
 ): HistoricalSwim[] {
+  return parseSwimCloudPersonalBestsDetailed(text, swimmerName, team, gender, division).swims;
+}
+
+/**
+ * `division` takes the same three states as {@link parseSwimCloudPersonalBests}.
+ * Rows failing {@link isPlausibleSwimEvent} are dropped and reported in `rejected`.
+ */
+export function parseSwimCloudRosterPasteDetailed(
+  text: string,
+  team: string,
+  gender: Gender,
+  division?: NcaaDivision | null
+): ParseSwimRowsResult {
   const eventRe =
     /(\d+\s*(?:Yard\s*)?(?:Freestyle|Backstroke|Breaststroke|Butterfly|IM|Individual Medley|Diving)[^\t]*)/i;
   const timeRe = /(\d{1,2}:)?\d{1,2}\.\d{2}/;
   const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
   const out: HistoricalSwim[] = [];
+  const rejected: RejectedSwimRow[] = [];
 
   for (const line of lines) {
     const cols = line.split(/\t+|\s{2,}/).map(c => c.trim()).filter(Boolean);
@@ -633,18 +753,34 @@ export function parseSwimCloudRosterPaste(
       else if (!time && timeRe.test(c)) time = c.match(timeRe)![0];
     }
     if (!event || !time) continue;
+    // Same gate, same place: the last point before the row becomes a stored swim.
+    const normalized = normalizeEventLabel(event);
+    if (!isPlausibleSwimEvent(normalized)) {
+      rejected.push({ raw: line, event: normalized, distance: swimEventDistance(normalized) });
+      continue;
+    }
     out.push({
       name: swimmer,
       team,
       gender,
-      event: normalizeEventLabel(event),
+      event: normalized,
       time,
       source: 'paste',
       swimcloudBadge: 'none',
     });
   }
 
-  return enrichWithComputedCut(out, team, division);
+  return { swims: enrichWithComputedCut(out, team, division), rejected };
+}
+
+/** Kept-rows-only view of {@link parseSwimCloudRosterPasteDetailed}. */
+export function parseSwimCloudRosterPaste(
+  text: string,
+  team: string,
+  gender: Gender,
+  division?: NcaaDivision | null
+): HistoricalSwim[] {
+  return parseSwimCloudRosterPasteDetailed(text, team, gender, division).swims;
 }
 
 export type ParseSwimCloudOptions = {
@@ -705,6 +841,7 @@ export function parseSwimCloudPasteDetailed(
       division: opts.division,
     });
     swims = multi.athletes.flatMap(a => a.swims);
+    // multi.warnings already carries one implausible-row warning per rejected row.
     warnings.push(...multi.warnings);
     warnings.push(`Multi-profile paste: ${multi.athletes.length} athlete(s) parsed`);
     if (swims.some(s => s.timeType === 'LCM' || s.timeType === 'SCM')) {
@@ -721,7 +858,17 @@ export function parseSwimCloudPasteDetailed(
       warnings.push('Swimmer name required for personal bests paste');
       return { swims: [], format, warnings, detectedName };
     }
-    swims = parseSwimCloudPersonalBests(trimmed, swimmerName, opts.team, opts.gender, opts.division);
+    const parsed = parseSwimCloudPersonalBestsDetailed(
+      trimmed,
+      swimmerName,
+      opts.team,
+      opts.gender,
+      opts.division
+    );
+    swims = parsed.swims;
+    // One warning per rejected row, so the count an operator sees is the count of
+    // rows that were actually dropped.
+    warnings.push(...parsed.rejected.map(implausibleSwimRowWarning));
     if (swims.some(s => s.timeType === 'LCM' || s.timeType === 'SCM')) {
       warnings.push('LCM/SCM times included — cut comparison uses SCY conversion where applicable');
     }
@@ -729,7 +876,9 @@ export function parseSwimCloudPasteDetailed(
       warnings.push('Some rows are user-entered (U) — not from official meet files');
     }
   } else {
-    swims = parseSwimCloudRosterPaste(trimmed, opts.team, opts.gender, opts.division);
+    const parsed = parseSwimCloudRosterPasteDetailed(trimmed, opts.team, opts.gender, opts.division);
+    swims = parsed.swims;
+    warnings.push(...parsed.rejected.map(implausibleSwimRowWarning));
   }
 
   if (swims.length === 0) {

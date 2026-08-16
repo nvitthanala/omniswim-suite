@@ -7,8 +7,10 @@
 
 import { Gender, HistoricalSwim, NcaaDivision } from '../types';
 import {
+  implausibleSwimRowWarning,
   isProfileNameLine,
-  parseSwimCloudPersonalBests,
+  parseSwimCloudPersonalBestsDetailed,
+  type RejectedSwimRow,
 } from './athleteHistory';
 
 export type ParseMultiProfileOptions = {
@@ -26,15 +28,21 @@ export type MultiProfileAthlete = {
 export type ParseMultiProfileResult = {
   athletes: MultiProfileAthlete[];
   warnings: string[];
+  /**
+   * Rows the plausibility gate refused, across every block. Already rendered into
+   * `warnings` one-per-row; exposed structured so a caller can count or group them.
+   */
+  rejected: RejectedSwimRow[];
 };
 
 type RawBlock = { name: string; lines: string[] };
 
 /**
  * Split a multi-profile paste into per-athlete blocks and parse each block's rows with
- * {@link parseSwimCloudPersonalBests}. Blocks are delimited by bare name lines; header/junk
- * and blank lines are ignored. Warns (never throws) on a name with zero parsed rows and on
- * rows that appear before any name line.
+ * {@link parseSwimCloudPersonalBestsDetailed}. Blocks are delimited by bare name lines;
+ * header/junk and blank lines are ignored. Warns (never throws) on a name with zero parsed
+ * rows, on rows that appear before any name line, and on each row the plausibility gate
+ * refused.
  */
 export function parseSwimCloudMultiProfile(
   text: string,
@@ -65,24 +73,29 @@ export function parseSwimCloudMultiProfile(
   if (current) blocks.push(current);
 
   const athletes: MultiProfileAthlete[] = [];
+  const rejected: RejectedSwimRow[] = [];
   for (const block of blocks) {
-    const swims = parseSwimCloudPersonalBests(
+    const parsed = parseSwimCloudPersonalBestsDetailed(
       block.lines.join('\n'),
       block.name,
       opts.team,
       opts.gender,
       opts.division
     );
-    if (swims.length === 0) {
+    // Report before the empty-block bail, or a block whose every row was
+    // implausible would be reported as "nothing parsed" with no reason attached.
+    rejected.push(...parsed.rejected);
+    warnings.push(...parsed.rejected.map(implausibleSwimRowWarning));
+    if (parsed.swims.length === 0) {
       warnings.push(`No swims parsed for "${block.name}"`);
       continue;
     }
-    athletes.push({ name: block.name, swims });
+    athletes.push({ name: block.name, swims: parsed.swims });
   }
 
   if (athletes.length === 0) {
     warnings.push('No athlete profiles parsed — check the paste includes name + Personal Bests rows');
   }
 
-  return { athletes, warnings };
+  return { athletes, warnings, rejected };
 }

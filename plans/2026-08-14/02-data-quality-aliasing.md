@@ -156,23 +156,69 @@ The alias data is correct. The resolver is correct. The consumer ignores both.
   four genuine scorers are pushed out of the scoring roster.~~
   **Not observable.** See §2b — `maxIndividualScorersPerTeam` does not change the
   scored total for this workspace at any value from 1 to 999.
-- **Entry cap — real, and worse than stated.** Each half is independently under
-  `maxTotalEntriesPerSwimmer: 7`. Measured on Henderson State men:
+- **Entry cap — real, and the numbers above were wrong twice.**
 
-  | Athlete | Spelling A | Spelling B | Merged | Cap 7 |
-  | ------- | ---------- | ---------- | ------ | ----- |
-  | Pózvai | 3 | 7 | **10** | **over** |
-  | Balistreri | 3 | 7 | **10** | **over** |
-  | Ferguson | 3 | 7 | **10** | **over** |
+  > **⚠ CORRECTED 2026-08-16.** An earlier revision of this table said the merged
+  > counts were 10/10/10. They are **8/9/7**. The two halves *share* individual
+  > events — a recruit row remapped onto the meet's own event label is the **same
+  > entry**, not an additional one — so the halves cannot simply be added. I
+  > propagated the naive sum into an agent brief, and the agent measuring it
+  > caught the contradiction against its own data.
 
-  **Real NSISC entry-limit violations are invisible today.** An over-entered
-  swimmer's swims can be voided, so this is a competition-rules consequence.
+  Measured on Henderson State men, projected view, cap 7:
+
+  | Athlete | Half A | Half B | Merged | Over cap? | Newly visible? |
+  | ------- | ------ | ------ | ------ | --------- | -------------- |
+  | Balistreri | 7 | 3 | **9** | **yes** | yes |
+  | Pózvai | 7 | 3 | **8** | **yes** | yes |
+  | Fergunson/Ferguson | 7 | 3 | 7 | at cap | no |
+  | Gonzalez Mujica | 5 | 3 | 6 | no | no |
+  | Mask | 3 | 3 | 5 | no | no |
+  | Campanico | 2 | 3 | 5 | no | no |
+
+  **Two genuine NSISC entry-limit violations.** An over-entered swimmer's swims
+  can be voided, so this is a competition-rules consequence, not a cosmetic one.
 - **Roster display.** 47 rows for what is at most 41 athletes (verified: applying
   a resolver collapses 47 → 41 on HSU men).
 - **Team totals do NOT move.** Verified two ways: 1,258 `isScorer` probes across
   both workspaces and both genders returned identical answers with and without a
   resolver, and HSU men scores 1383.83 either way. The merge is a roster-shape
   fix, not a scoring fix — which makes the entry-cap violation the whole story.
+
+### 2c. The live bug is a silent empty, and it is the one this repo fears most
+
+Found 2026-08-16 while fixing the above. There are **two competing alias
+mechanisms**, and only one of them is opt-in.
+
+`buildScoringBundle` (`packages/core/src/lib/scoringEngine.ts:95-115`) **already
+eagerly rewrites every `r.name` to canonical** when `workspace.athleteAliases` is
+non-empty. So on the bundle path the two violations above were already visible,
+and the resolver work is idempotent there.
+
+What is actually broken on that path is worse:
+
+```
+buildScoringBundle(applyWhatIf: true).allResults
+  countSwimmerEntries(…, 'Oliver Pozvai')  ->  8   over cap
+  countSwimmerEntries(…, 'Olivér Pózvai')  ->  0   COMPLIANT   <-- silent empty
+```
+
+Querying by the **alias** spelling matches zero rows and reports a real 8-entry
+athlete as having none. `CLAUDE.md` rule 4 names this exactly:
+
+> *"Absent ≠ empty. A lookup that matches nothing must be distinguishable from a
+> real 'no cut achieved'. Silent empties are the top failure mode here."*
+
+It is live today, and any UI that offers both spellings can hit it.
+
+### Two mechanisms, no owner
+
+The eager rewrite and the opt-in resolver do the same job by different means. The
+rewrite is invisible at the call site, does **not** apply in `pdf_only` scoring
+view, and does not apply to any caller that bypasses `buildScoringBundle` —
+`AthleteMeetEntriesPanel.tsx:83` reads raw `workspace.menResults` and is
+unprotected. **Someone should decide which is canonical**; having both is how the
+silent empty arose.
 
 ### The trap in fixing this
 

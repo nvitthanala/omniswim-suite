@@ -1,7 +1,35 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
- * Phase 0: per-swimmer entry limit counting. Test: npx tsx scripts/test_entry_limits.mjs
+ * Phase 0: per-swimmer entry limit counting.
+ *
+ * Test: npx tsx scripts/test_entry_limits.mjs
+ *       npx tsx scripts/test_entry_limits_aliases.mjs
+ *
+ * ALIAS RESOLUTION. `countSwimmerEntries` takes a trailing
+ * `resolver: AthleteAliasResolver = IDENTITY_ALIAS_RESOLVER`, the same convention
+ * `buildScorerRosterLookup` (scorerRoster.ts) and `categorizeBestEvents`
+ * (athleteHistory.ts) use. Pass `buildAliasResolver(workspace)` and two spellings
+ * the user linked count as ONE athlete against ONE cap; omit it and behaviour is
+ * byte-identical to an unaliased workspace.
+ *
+ * WHY THIS IS NOT COSMETIC. An entry cap is a competition rule (NSISC:
+ * `maxTotalEntriesPerSwimmer: 7`); an over-entered swimmer's swims can be voided.
+ * Counting "Olivér Pózvai" (3) and "Oliver Pozvai" (7) as two athletes reports
+ * both compliant while the human is at 10 — the violation is invisible.
+ *
+ * AND IT MUST SHIP WITH THE ROSTER CHANGE. `TeamRosterPanel` and
+ * `rosterLineupAudit` pass `row.name` from `buildScorerRosterLookup`. Once that
+ * lookup is given a resolver, `row.name` is the CANONICAL spelling — so an
+ * unresolved count here would scan only the canonical half (7 of 10) and still
+ * report compliant. Making the roster alias-aware without this change does not
+ * fix the cap bug; it relabels which half is counted and hides the violation more
+ * thoroughly. Both sides of every name comparison below are resolved for exactly
+ * this reason — a half-resolved comparison is worse than none.
+ *
+ * `swimmerExceedsEntryLimits`, `formatEntryLimitLabel` and `canAcceptAnotherEntry`
+ * take a pre-computed `SwimmerEntryCounts` and never touch a name, so they need
+ * no resolver: they inherit merged identity from whatever produced the counts.
  */
 
 import { Gender, ScoringSettings, SwimmerResult } from '../types';
@@ -9,6 +37,7 @@ import { mergeScoringSettings } from './scoringDefaults';
 import { isRelayResult, normalizeSwimmerName } from './utils';
 import { relayEntryKey } from './relaySplits';
 import { relayTemplateFromLeg } from './relayLegMatching';
+import { IDENTITY_ALIAS_RESOLVER, type AthleteAliasResolver } from './athleteAliases';
 
 export type SwimmerEntryCounts = {
   individual: number;
@@ -17,13 +46,27 @@ export type SwimmerEntryCounts = {
   total?: number; // individual + relayCount
 };
 
+/**
+ * Count one athlete's distinct meet entries (individual events + relay entries).
+ *
+ * With a resolver, BOTH the queried `name` and each scanned row's name are
+ * resolved before keying, so either spelling of a linked athlete returns the same
+ * merged count. Relay entries are keyed by `relayEntryKey`, so two spellings that
+ * appear as legs of the SAME relay entry still count once — which is correct: one
+ * human occupies one relay slot however the leg was spelled.
+ *
+ * The key function stays `normalizeSwimmerName` (not `canonicalSwimmerName` and
+ * not `aliasNameKey`) so the identity default is unchanged: nothing folds comma
+ * order or diacritics unless a recorded link says so.
+ */
 export function countSwimmerEntries(
   results: SwimmerResult[],
   team: string,
   gender: Gender,
-  name: string
+  name: string,
+  resolver: AthleteAliasResolver = IDENTITY_ALIAS_RESOLVER
 ): SwimmerEntryCounts {
-  const nameKey = normalizeSwimmerName(name);
+  const nameKey = normalizeSwimmerName(resolver.resolveAthleteName(name, team, gender));
   const relayEvents = new Set<string>();
   let individual = 0;
   const indEvents = new Set<string>();
@@ -31,7 +74,9 @@ export function countSwimmerEntries(
   for (const r of results) {
     if (r.gender != null && r.gender !== gender) continue;
     if (String(r.team ?? '').trim() !== team) continue;
-    if (normalizeSwimmerName(r.name) !== nameKey) continue;
+    // Resolve the ROW's name too. Rows reaching here already passed the team and
+    // gender filters, so `team`/`gender` are the correct resolution scope.
+    if (normalizeSwimmerName(resolver.resolveAthleteName(r.name, team, gender)) !== nameKey) continue;
 
     if (isRelayResult(r) && r.name !== r.team) {
       const key = relayEntryKey(relayTemplateFromLeg(results, r));

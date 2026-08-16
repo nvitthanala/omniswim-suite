@@ -1,6 +1,24 @@
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
+ *
+ * Scorer roster: one row per athlete per team per gender, plus the `isScorer`
+ * lookup the scoring engine consults in roster eligibility mode.
+ *
+ * ALIAS RESOLUTION. Every function here that turns a name into a key takes a
+ * trailing `resolver: AthleteAliasResolver = IDENTITY_ALIAS_RESOLVER`, matching
+ * the convention `categorizeBestEvents` / `relayEventsForAthlete` already use in
+ * `athleteHistory.ts`. Pass `buildAliasResolver(workspace)` and two spellings the
+ * user linked collapse into ONE row carrying the canonical spelling; omit it and
+ * behaviour is byte-identical to an unaliased workspace.
+ *
+ * The default is identity because these are pure functions with many callers and
+ * silently changing every one of them is not a fix, it is a different bug. The
+ * resolver is therefore opt-in AT THE CALL SITE — see the caller audit in the
+ * round notes; a caller that does not pass one still double-counts linked
+ * athletes.
+ *
+ * Test: npx tsx scripts/test_alias_scorer_roster.mjs
  */
 
 import {
@@ -97,6 +115,16 @@ function deriveAutoScorerKeys(
   return keys;
 }
 
+/**
+ * Manual scorer flags, keyed by RESOLVED identity — so an override the user
+ * recorded against one spelling ("Camden Mask") applies to the merged athlete
+ * even though the roster row now displays the canonical spelling ("Cam Mask").
+ *
+ * If both spellings carry conflicting overrides they collide on one key; the
+ * LAST entry in the array wins. `scorerRosterOverrides` is append-ordered, so
+ * that is the most recently recorded decision — deterministic, and the same
+ * rule the array already implied for two rows of a single spelling.
+ */
 function overrideMap(
   overrides: ScorerRosterOverride[] | undefined,
   resolver: AthleteAliasResolver
@@ -140,11 +168,17 @@ export function buildScorerRosterLookup(
     if (!r.isRecruit && isRelayResult(r) && isPlaceholderAthleteName(r.name)) continue;
     const team = String(r.team ?? '').trim() || 'Unknown';
     const g = (r.gender ?? genderFilter ?? Gender.MEN) as Gender;
-    const key = scorerRosterKey(team, g, resolver.resolveAthleteName(r.name, team, g));
+    const canonicalName = resolver.resolveAthleteName(r.name, team, g);
+    const key = scorerRosterKey(team, g, canonicalName);
     const isDiverRow = !r.isRecruit && !isRelayResult(r) && isDivingEvent(r.event, diverPatterns);
     if (!meta.has(key)) {
       meta.set(key, {
-        name: r.name,
+        // Display the CANONICAL spelling, not whichever spelling happened to be
+        // encountered first. Without this the merged row's name is input-order
+        // dependent, and `getAthleteCreditedSwims` / `aggregateSwimmerMeetPoints`
+        // are then queried with an arbitrary half of the identity. Under
+        // IDENTITY_ALIAS_RESOLVER this is `r.name`, so the default is unchanged.
+        name: canonicalName,
         team,
         gender: g,
         classYear: String(r.classYear ?? ''),
@@ -231,10 +265,19 @@ export function isAbFinalRelayLeg(swim: SwimmerResult, settings: ScoringSettings
   return rowSuggestsScorer(swim, rules);
 }
 
-/** Sum projected meet points per athlete (individual swims + relay leg shares). */
+/**
+ * Sum projected meet points per athlete (individual swims + relay leg shares).
+ *
+ * Keys are `scorerRosterKey`s, so callers can index this map with a row from
+ * `buildScorerRosterLookup`. Pass the SAME resolver used to build that lookup —
+ * otherwise a merged roster row is keyed on the canonical spelling while the
+ * alias spelling's points sit under a second key, and the row silently under-
+ * reports. Defaults to identity, so existing callers are unchanged.
+ */
 export function aggregateSwimmerMeetPoints(
   scoredResults: SwimmerResult[],
-  genderFilter?: Gender
+  genderFilter?: Gender,
+  resolver: AthleteAliasResolver = IDENTITY_ALIAS_RESOLVER
 ): Map<string, number> {
   const totals = new Map<string, number>();
   for (const r of scoredResults) {
@@ -242,7 +285,7 @@ export function aggregateSwimmerMeetPoints(
     if (!r.isRecruit && isRelayResult(r) && r.name === r.team) continue;
     const team = String(r.team ?? '').trim() || 'Unknown';
     const g = (r.gender ?? genderFilter ?? Gender.MEN) as Gender;
-    const key = scorerRosterKey(team, g, r.name);
+    const key = scorerRosterKey(team, g, resolver.resolveAthleteName(r.name, team, g));
     const pts = typeof r.points === 'number' ? r.points : 0;
     totals.set(key, (totals.get(key) ?? 0) + pts);
   }
@@ -264,14 +307,26 @@ export type AthleteCreditedSwim = {
   relayTeamSplits?: RelayTeamSplitSummary;
 };
 
-/** All scored swims attributed to one roster athlete (individual rows + relay legs). */
+/**
+ * All scored swims attributed to one roster athlete (individual rows + relay legs).
+ *
+ * With a resolver, BOTH the queried name and each row's name are resolved, so
+ * either spelling of a linked athlete returns the merged athlete's full swim
+ * list. Pass the SAME resolver used to build the roster lookup the `athleteName`
+ * came from. Defaults to identity, so existing callers are unchanged.
+ */
 export function getAthleteCreditedSwims(
   scoredResults: SwimmerResult[],
   team: string,
   athleteName: string,
-  gender: Gender
+  gender: Gender,
+  resolver: AthleteAliasResolver = IDENTITY_ALIAS_RESOLVER
 ): AthleteCreditedSwim[] {
-  const targetKey = scorerRosterKey(team, gender, athleteName);
+  const targetKey = scorerRosterKey(
+    team,
+    gender,
+    resolver.resolveAthleteName(athleteName, team, gender)
+  );
   const swims: AthleteCreditedSwim[] = [];
 
   for (const r of scoredResults) {
@@ -279,7 +334,7 @@ export function getAthleteCreditedSwims(
     if (!r.isRecruit && isRelayResult(r) && r.name === r.team) continue;
     const t = String(r.team ?? '').trim() || 'Unknown';
     const g = (r.gender ?? gender) as Gender;
-    if (scorerRosterKey(t, g, r.name) !== targetKey) continue;
+    if (scorerRosterKey(t, g, resolver.resolveAthleteName(r.name, t, g)) !== targetKey) continue;
 
     const pts = typeof r.points === 'number' ? r.points : 0;
     const isRelay = isRelayResult(r);
