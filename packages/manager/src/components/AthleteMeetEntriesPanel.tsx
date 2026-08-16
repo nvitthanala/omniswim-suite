@@ -15,6 +15,7 @@ import {
   swimmerExceedsEntryLimits,
 } from '@omniswim/core/lib/swimmerEntryLimits';
 import { parseSwimCloudPasteDetailed } from '@omniswim/core/lib/athleteHistory';
+import { buildAliasResolver } from '@omniswim/core/lib/athleteAliases';
 import { divisionForTeamOrNull } from '@omniswim/core/data/teamDivisions';
 import { buildCutlineTagForTeam } from '@omniswim/core/lib/cutlineTags';
 import { canonicalSwimmerName, compactEventTitleAttr, formatCompactEventLabel } from '@omniswim/core/lib/utils';
@@ -47,6 +48,7 @@ export default function AthleteMeetEntriesPanel({
   const [pasteOpen, setPasteOpen] = useState(false);
   const [pasteText, setPasteText] = useState('');
 
+  const aliasResolver = useMemo(() => buildAliasResolver(workspace), [workspace]);
   const plans = workspace.meetEntryPlans ?? [];
   const athleteCanonical = canonicalSwimmerName(athleteName);
   const teamTrim = String(team ?? '').trim();
@@ -80,8 +82,8 @@ export default function AthleteMeetEntriesPanel({
           }) as const
       ),
     ];
-    return countSwimmerEntries(allResults as never, team, gender, athleteName);
-  }, [gender, workspace.menResults, workspace.womenResults, athletePlans, team, athleteName]);
+    return countSwimmerEntries(allResults as never, team, gender, athleteName, aliasResolver);
+  }, [gender, workspace.menResults, workspace.womenResults, athletePlans, team, athleteName, aliasResolver]);
   const over = useMemo(() => swimmerExceedsEntryLimits(counts, settings), [counts, settings]);
 
   const patchPlans = (next: PlannedSwimEntry[], activeIds?: string[]) => {

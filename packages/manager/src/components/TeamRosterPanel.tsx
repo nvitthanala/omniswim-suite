@@ -14,6 +14,7 @@ import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
 import { canonicalSwimmerName, isRelayResult, normalizeSwimmerName } from '@omniswim/core/lib/utils';
 import { buildTeamScoreLookup, officialScoresForGender } from '@omniswim/core/lib/teamScoreMatching';
 import { restoreSwimmerToWorkspace } from '@omniswim/core/lib/swimmerSoftRemove';
+import { buildAliasResolver } from '@omniswim/core/lib/athleteAliases';
 import ProjectedActualScore from './ProjectedActualScore';
 import AthleteCreditedSwimsPanel, { type EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
 import AthleteMeetEntriesPanel from './AthleteMeetEntriesPanel';
@@ -138,9 +139,13 @@ export default function TeamRosterPanel({
     [results, gender]
   );
 
+  // buildAliasResolver walks workspace.athleteAliases; memoize on workspace so
+  // it isn't rebuilt on every render (matches mergeScoringSettings discipline above).
+  const aliasResolver = useMemo(() => buildAliasResolver(workspace ?? []), [workspace]);
+
   const pointTotals = useMemo(
-    () => aggregateSwimmerMeetPoints(scoredResults, gender),
-    [scoredResults, gender]
+    () => aggregateSwimmerMeetPoints(scoredResults, gender, aliasResolver),
+    [scoredResults, gender, aliasResolver]
   );
 
   const teams = useMemo(() => {
@@ -218,10 +223,10 @@ export default function TeamRosterPanel({
   };
 
   const { rows, autoLookup } = useMemo(() => {
-    const autoLookup = buildScorerRosterLookup(genderResults, merged, [], gender);
-    const lookup = buildScorerRosterLookup(genderResults, merged, overrides, gender);
+    const autoLookup = buildScorerRosterLookup(genderResults, merged, [], gender, aliasResolver);
+    const lookup = buildScorerRosterLookup(genderResults, merged, overrides, gender, aliasResolver);
     return { rows: lookup.rows, autoLookup };
-  }, [genderResults, merged, overrides, gender]);
+  }, [genderResults, merged, overrides, gender, aliasResolver]);
 
   const teamRows = useMemo(() => {
     return rows
@@ -299,9 +304,10 @@ export default function TeamRosterPanel({
       scoredResults,
       selectedAthlete.team,
       selectedAthlete.name,
-      selectedAthlete.gender
+      selectedAthlete.gender,
+      aliasResolver
     );
-  }, [scoredResults, selectedAthlete]);
+  }, [scoredResults, selectedAthlete, aliasResolver]);
 
   const toggleAthleteSelection = (row: ScorerRosterRow) => {
     if (selectedAthleteKey === row.key) {
@@ -571,7 +577,7 @@ export default function TeamRosterPanel({
                 {rosterWindow.rows.map(row => {
                 const meetPts = pointTotals.get(row.key) ?? 0;
                 const isSelected = selectedAthleteKey === row.key;
-                const entryCounts = countSwimmerEntries(genderResults, row.team, gender, row.name);
+                const entryCounts = countSwimmerEntries(genderResults, row.team, gender, row.name, aliasResolver);
                 const entryOver = swimmerExceedsEntryLimits(entryCounts, merged);
                 const athleteIssues =
                   lineupAudit?.athleteIssues.get(normalizeSwimmerName(row.name)) ?? [];
@@ -771,7 +777,8 @@ export default function TeamRosterPanel({
                 genderResults,
                 selectedAthlete.team,
                 gender,
-                selectedAthlete.name
+                selectedAthlete.name,
+                aliasResolver
               ),
               merged
             )}

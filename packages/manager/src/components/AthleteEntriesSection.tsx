@@ -14,7 +14,7 @@
  * `counts` stay in the parent too, because Credited swims reads them.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { ClipboardPaste, Plus, Trash2, Waves } from 'lucide-react';
 import {
   Gender,
@@ -39,6 +39,7 @@ import {
   swimmerExceedsEntryLimits,
 } from '@omniswim/core/lib/swimmerEntryLimits';
 import { parseSwimCloudPasteDetailed } from '@omniswim/core/lib/athleteHistory';
+import { buildAliasResolver } from '@omniswim/core/lib/athleteAliases';
 import type { ScorerRosterRow } from '@omniswim/core/lib/scorerRoster';
 import {
   addPlannedEntry,
@@ -94,6 +95,7 @@ export default function AthleteEntriesSection({
   const athleteCanonical = canonicalSwimmerName(athlete.name);
   const athleteTeamTrim = String(athlete.team ?? '').trim();
   const over = swimmerExceedsEntryLimits(counts, settings);
+  const aliasResolver = useMemo(() => buildAliasResolver(workspace), [workspace]);
 
   const [newEvent, setNewEvent] = useState<string>(ALL_PLAN_EVENTS[0]);
   const [newTime, setNewTime] = useState('');
@@ -158,7 +160,8 @@ export default function AthleteEntriesSection({
         allResults.filter(r => r.id !== id),
         athlete.team,
         gender,
-        athlete.name
+        athlete.name,
+        aliasResolver
       );
       if (!canAcceptAnotherEntry(without, settings, target.event)) {
         toast.push('error', 'Entry limit reached — cannot re-enable');

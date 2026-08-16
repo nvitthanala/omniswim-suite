@@ -16,6 +16,7 @@ import {
   buildScorerRosterLookup,
   scorerRosterKey,
 } from './scorerRoster';
+import { buildAliasResolver } from './athleteAliases';
 import { mergeScoringSettings } from './scoringDefaults';
 import {
   buildEventProfileFromCatalog,
@@ -90,9 +91,21 @@ export function optimizeScorersForTeam(
     conferenceForMerge: workspace.conference,
     resultsForPdfHint: [...(workspace.menResults ?? []), ...(workspace.womenResults ?? [])],
   });
-  const lookup = buildScorerRosterLookup(results, merged, workspace.scorerRosterOverrides ?? [], gender);
+  // Built once per call. Two spellings of one athlete are two ranked rows, and
+  // `cap` selects the top N of them — so a duplicate both eats a scorer slot and
+  // splits that athlete's points across two keys, ranking them lower than they
+  // are. Points must be aggregated through the SAME resolver as the rows, or the
+  // merged row would be ranked on only its canonical half's points.
+  const resolver = buildAliasResolver(workspace);
+  const lookup = buildScorerRosterLookup(
+    results,
+    merged,
+    workspace.scorerRosterOverrides ?? [],
+    gender,
+    resolver
+  );
   const teamRows = lookup.rows.filter(r => r.team === team);
-  const points = aggregateSwimmerMeetPoints(scored, gender);
+  const points = aggregateSwimmerMeetPoints(scored, gender, resolver);
 
   const ranked = [...teamRows].sort((a, b) => {
     const pa = points.get(a.key) ?? 0;
@@ -156,11 +169,15 @@ export function optimizeEventLineupForTeam(
   rosterCatalog?: CatalogTeamRoster
 ): { plans: PlannedSwimEntry[]; activeEntryIds: string[] } {
   const merged = mergeScoringSettings(settings, { conference: workspace.conference });
+  // One resolver for the call. Without it a linked athlete appears twice here and
+  // gets TWO sets of planned entries — one human entered in their primary events
+  // twice over, straight past the entry cap.
   const lookup = buildScorerRosterLookup(
     buildWhatIfResults({ workspace, gender, removeSeniors: false }),
     merged,
     workspace.scorerRosterOverrides ?? [],
-    gender
+    gender,
+    buildAliasResolver(workspace)
   );
   const teamAthletes = lookup.rows.filter(r => r.team === team);
   const existing = [...(workspace.meetEntryPlans ?? [])];

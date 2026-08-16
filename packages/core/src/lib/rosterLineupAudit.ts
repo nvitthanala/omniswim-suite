@@ -26,7 +26,7 @@ import {
   upsertRelayLegOverride,
 } from './relayLegMatching';
 import { relayEntryKey } from './relaySplits';
-import { detectDuplicateAthletes } from './athleteAliases';
+import { buildAliasResolver, detectDuplicateAthletes } from './athleteAliases';
 import type { DuplicateAthletePair } from './athleteAliases';
 import { isRelayResult, normalizeSwimmerName } from './utils';
 
@@ -190,6 +190,17 @@ export function buildTeamLineupAudit(input: LineupAuditInput): TeamLineupAudit {
   const checklistItems: LineupChecklistItem[] = [];
   let vacantRelayLegCount = 0;
 
+  // Built ONCE for the whole audit (never per athlete): a confirmed alias link is
+  // the user telling us two spellings are one human. Without it the roster shows
+  // the athlete twice and each half sits independently under the entry cap, so a
+  // swimmer at 10 entries reads as 5 + 5 and the checklist stays clean. Empty
+  // `athleteAliases` yields the identity resolver, so an un-aliased workspace
+  // behaves exactly as before.
+  const resolver = buildAliasResolver(workspace);
+  /** Merged identity key for a raw name, in this team+gender scope. */
+  const identityKeyOf = (name: string): string =>
+    normalizeSwimmerName(resolver.resolveAthleteName(name, team, gender));
+
   const pushIssue = (name: string, issue: LineupAthleteIssue) => {
     const key = normalizeSwimmerName(name);
     const list = athleteIssues.get(key) ?? [];
@@ -218,27 +229,30 @@ export function buildTeamLineupAudit(input: LineupAuditInput): TeamLineupAudit {
     teamResults,
     merged,
     workspace.scorerRosterOverrides ?? [],
-    gender
+    gender,
+    resolver
   );
 
+  // Keyed by RESOLVED identity, so the two spellings of a linked athlete produce
+  // one audited athlete rather than two rows carrying the same merged counts.
   const athleteNames = new Set<string>();
   for (const r of teamResults) {
     if (isRelayResult(r) && r.name === r.team) continue;
     if (!isRelayResult(r) || r.name !== r.team) {
-      athleteNames.add(normalizeSwimmerName(r.name));
+      athleteNames.add(identityKeyOf(r.name));
     }
   }
   for (const row of lookup.rows) {
-    if (row.team === team) athleteNames.add(normalizeSwimmerName(row.name));
+    if (row.team === team) athleteNames.add(identityKeyOf(row.name));
   }
 
   for (const nameKey of athleteNames) {
     const displayName =
-      lookup.rows.find(r => r.team === team && normalizeSwimmerName(r.name) === nameKey)?.name ??
-      teamResults.find(r => normalizeSwimmerName(r.name) === nameKey)?.name ??
+      lookup.rows.find(r => r.team === team && identityKeyOf(r.name) === nameKey)?.name ??
+      teamResults.find(r => identityKeyOf(r.name) === nameKey)?.name ??
       nameKey;
 
-    const counts = countSwimmerEntries(allResults, team, gender, displayName);
+    const counts = countSwimmerEntries(allResults, team, gender, displayName, resolver);
     const over = swimmerExceedsEntryLimits(counts, merged);
     if (over.individualOver) {
       const issue: LineupAthleteIssue = {
@@ -281,7 +295,7 @@ export function buildTeamLineupAudit(input: LineupAuditInput): TeamLineupAudit {
     }
 
     const row = lookup.rows.find(
-      r => r.team === team && normalizeSwimmerName(r.name) === nameKey
+      r => r.team === team && identityKeyOf(r.name) === nameKey
     );
     if (row?.isScorer && counts.individual === 0) {
       const issue: LineupAthleteIssue = {

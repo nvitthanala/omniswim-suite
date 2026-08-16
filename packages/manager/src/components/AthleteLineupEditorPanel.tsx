@@ -67,7 +67,7 @@ import {
   removeCreditedSwim,
   type WorkspaceEditorPatch,
 } from '@omniswim/core/lib/swimEditor';
-import { addAliasLink, removeAliasLink } from '@omniswim/core/lib/athleteAliases';
+import { addAliasLink, buildAliasResolver, removeAliasLink } from '@omniswim/core/lib/athleteAliases';
 import { CutlineTag, CutlineNearMissChip, useToast } from '@omniswim/ui';
 import AthleteCreditedSwimsPanel, { type EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
 import AthleteRoleTag from './AthleteRoleTag';
@@ -181,9 +181,11 @@ export default function AthleteLineupEditorPanel({
       p.gender === gender
   );
 
+  const aliasResolver = useMemo(() => buildAliasResolver(workspace), [workspace]);
+
   const creditedSwims = useMemo(
-    () => getAthleteCreditedSwims(scoredResults, athlete.team, athlete.name, gender),
-    [scoredResults, athlete.team, athlete.name, gender]
+    () => getAthleteCreditedSwims(scoredResults, athlete.team, athlete.name, gender, aliasResolver),
+    [scoredResults, athlete.team, athlete.name, gender, aliasResolver]
   );
   const creditedPoints = useMemo(
     () => creditedSwims.reduce((sum, s) => sum + (s.points > 0 ? s.points : 0), 0),
@@ -262,7 +264,7 @@ export default function AthleteLineupEditorPanel({
   };
 
 
-  const counts = countSwimmerEntries(allResults, athlete.team, gender, athlete.name);
+  const counts = countSwimmerEntries(allResults, athlete.team, gender, athlete.name, aliasResolver);
 
   const relayInvolvement = useMemo((): RelayInvolvement[] => {
     const pdf = gender === Gender.MEN ? workspace.menResults ?? [] : workspace.womenResults ?? [];

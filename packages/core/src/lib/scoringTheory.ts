@@ -21,6 +21,7 @@ import { scorerRosterKey, usesScorerRoster } from './scorerRoster';
 import { relayEntryKey, parseRelayDistanceYards } from './relaySplits';
 import { relayTemplateFromLeg, upsertRelayLegOverride } from './relayLegMatching';
 import { countSwimmerEntries, swimmerExceedsEntryLimits } from './swimmerEntryLimits';
+import { buildAliasResolver } from './athleteAliases';
 import { buildWhatIfResults } from './whatIfProjection';
 import {
   convertSwimToSCY,
@@ -687,9 +688,14 @@ export function suggestRelayAlternatePromotions(
   );
   // Projected pool (results + active plans + recruits) for entry-cap counting.
   const pool = buildWhatIfResults({ workspace, gender, removeSeniors: false });
+  // One resolver for the whole scan, not one per candidate name. A relay
+  // alternate written in the theory file under the other spelling of a linked
+  // athlete must be counted against the SAME cap as the primary — otherwise the
+  // promotion "fills" a leg with someone already at their entry limit.
+  const resolver = buildAliasResolver(workspace);
 
   const isOverCap = (name: string): boolean => {
-    const counts = countSwimmerEntries(pool, team, gender, name);
+    const counts = countSwimmerEntries(pool, team, gender, name, resolver);
     const over = swimmerExceedsEntryLimits(counts, settings);
     return over.individualOver || over.totalOver;
   };

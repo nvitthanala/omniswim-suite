@@ -257,6 +257,36 @@ function forgot; it is that the resolver is opt-in, so forgetting is the default
 
 ## 2b. A scoring setting the UI exposes has no observable effect
 
+> **✅ DIAGNOSED 2026-08-16 — working as designed, and BOTH hypotheses below were
+> wrong.** Pinned by `scripts/test_scoring_settings_effect.mjs` so nobody repeats
+> the investigation.
+>
+> **The real mechanism** is in `mergeScoringSettings` (`scoringDefaults.ts`):
+> when `conference` matches NSISC, **seven fields are unconditionally overwritten
+> with the preset constants *after* the caller's settings are spread in.** The
+> user's edit is discarded before the engine ever sees it. That is deliberate —
+> the 18-scorer pool is a competition rule, not a preference, so a coach must not
+> be able to dial it to 999 and produce a fantasy total.
+>
+> **Not** the PDF path: `calculatePoints` does have a branch that copies HyTek
+> place points and bypasses every cap, but it reads `SwimmerResult.pdfPoints` —
+> the *parsed input* column — not `.points`, which is the engine's own *output*
+> and is present on every scored row. **Zero live rows carry `pdfPoints`**, so
+> that branch is never taken. My "676 of 920 rows carry points" observation
+> conflated the two columns.
+>
+> **Not** `scorerEligibilityMode: 'roster'` either — the cap is equally inert
+> under `points_pool`, and the engine honours it identically in both modes once
+> the value actually reaches it.
+>
+> **The remaining defect is a UI one:** both settings panels still render the
+> seven locked controls as editable for an NSISC workspace. A coach can change a
+> number, save, and see nothing happen. That is worth fixing — either disable them
+> with an explanation, or show the locked value and why.
+>
+> An NSISC total *does* respond to `scoringPoints`, `relayMultiplier` and
+> `aFinalBracketSize`. The settings surface is not globally inert.
+
 **Severity: P1 — needs investigation, not yet a diagnosis.** Found 2026-08-16
 while checking a consequence claimed in §2a.
 
