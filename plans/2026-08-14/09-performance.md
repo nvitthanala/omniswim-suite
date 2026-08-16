@@ -1,6 +1,6 @@
 # 09 — Performance
 
-`PERFORMANCE_NOTES.md` (2026-08-03) documents a real optimisation pass —
+`docs/reference/PERFORMANCE_NOTES.md` (2026-08-03) documents a real optimisation pass —
 `convertTimeToSeconds` memoisation, referential stability in `TeamRosterPanel`,
 transitions in the import panel. That work stands and is not repeated here.
 
@@ -102,7 +102,7 @@ Below the 8-second catastrophe but above the ~100 ms threshold where interaction
 starts to feel sticky. `TeamRosterPanel` (873 lines) and the compliance checklist
 both run over the full roster on this step.
 
-`PERFORMANCE_NOTES.md` §2 already stabilised `merged` here and notes the row body
+`docs/reference/PERFORMANCE_NOTES.md` §2 already stabilised `merged` here and notes the row body
 is windowed past a threshold. The remaining 230 ms is likely
 `buildTeamLineupAudit` plus the per-row `getAthleteProfile` calls — and
 `getAthleteProfile` got **more** expensive on 2026-08-14, since it now derives the

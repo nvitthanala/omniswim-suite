@@ -1,3 +1,5 @@
+> Archived 2026-08-16. Kept for the reasoning it records; may not reflect current behaviour.
+
 # Roster / Lineup Bugs — Deep-Dive Root-Cause Report
 
 **Implementation status (2026-07-19):** every fix-plan item below is implemented

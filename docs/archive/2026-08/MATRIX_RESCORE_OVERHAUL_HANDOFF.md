@@ -1,3 +1,5 @@
+> Archived 2026-08-16. Kept for the reasoning it records; may not reflect current behaviour.
+
 # Matrix Rescore & Event-Identity Overhaul — Handoff (Round 2)
 
 > Companion to `ROSTER_DATA_OVERHAUL_HANDOFF.md` (round 1). Covers the 2026-07-19 round:

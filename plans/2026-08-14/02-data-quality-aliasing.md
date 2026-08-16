@@ -93,7 +93,7 @@ same-surname/same-initial clusters:
 | `Afonso Campanico` | `Alfonso Campanico` | **spelling difference between sources** |
 
 The first three are the documented round-3 pattern that
-`ROSTER_ALIAS_DECLUTTER_HANDOFF.md` and the `suggestAliasCandidates` work
+`docs/archive/2026-08/ROSTER_ALIAS_DECLUTTER_HANDOFF.md` and the `suggestAliasCandidates` work
 addressed. The fourth is different and more interesting: `Afonso` vs `Alfonso` is
 not a nickname, it is one source being wrong. Whichever is the athlete's real
 name, the other is a data error worth correcting rather than aliasing.

@@ -1,3 +1,5 @@
+> Archived 2026-08-16. Kept for the reasoning it records; may not reflect current behaviour.
+
 # Roster Lineup Progress
 
 > Living handoff for the Manager roster workflow Lineup / Relays overhaul.

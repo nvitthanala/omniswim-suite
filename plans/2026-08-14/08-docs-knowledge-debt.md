@@ -3,6 +3,17 @@
 **Severity: P2 throughout.** No correctness consequence, real onboarding and
 navigation cost.
 
+> **✅ DONE 2026-08-16.** The root went from **18 markdown files to 4**
+> (`README.md`, `CLAUDE.md`, `SUITE_ROADMAP.md`, `CHANGELOG.md`). Everything else
+> moved under `docs/` — nothing deleted, every archived file carrying an
+> "Archived" header, and `docs/README.md` indexing all of it. `docs/INVARIANTS.md`
+> and `CHANGELOG.md` were both created. The filenames in the table below are
+> **old root paths, kept as the record of what was moved**; see `docs/README.md`
+> for where each lives now.
+>
+> One inaccuracy surfaced while doing it: the root `README.md` claimed `OMNI_DB`
+> defaults to `json`, but `apps/shell/server.ts` defaults it to `sqlite`. Fixed.
+
 ---
 
 ## 1. Eighteen markdown files in the repository root

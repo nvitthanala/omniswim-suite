@@ -1,3 +1,5 @@
+> Archived 2026-08-16. Kept for the reasoning it records; may not reflect current behaviour.
+
 # Roster Aliasing, Bug-Fix & Declutter — Handoff (Round 3)
 
 > Companion to `MATRIX_RESCORE_OVERHAUL_HANDOFF.md` (round 2) and

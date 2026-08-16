@@ -1,3 +1,5 @@
+> Archived 2026-08-16. Kept for the reasoning it records; may not reflect current behaviour.
+
 ﻿# Omni Swim Suite ΓÇö Phase 2 Implementation Progress / Handoff
 
 > Living document. Updated continuously during Phase 2 work so any agent (or human)

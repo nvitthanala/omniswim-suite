@@ -1,3 +1,5 @@
+> Archived 2026-08-16. Kept for the reasoning it records; may not reflect current behaviour.
+
 # Omni Swim Suite - Phase 3 UI Foundation Handoff
 
 > Living document for the blocking Phase 3 foundation work. Source plan:

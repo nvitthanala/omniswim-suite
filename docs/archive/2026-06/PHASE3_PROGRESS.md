@@ -1,3 +1,5 @@
+> Archived 2026-08-16. Kept for the reasoning it records; may not reflect current behaviour.
+
 ﻿# Omni Swim Suite — Phase 3 Implementation Progress / Handoff
 
 > Living document. **Source plan:** `.cursor/plans/omni_swim_phase_3_2b678aae.plan.md` (do not edit the plan file).

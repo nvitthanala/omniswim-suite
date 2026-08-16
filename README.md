@@ -120,7 +120,8 @@ npm run test:roundtrip
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `OMNI_DB` | `json` | Switches persistence to SQLite (run `npm run migrate:sqlite` first) |
+| `OMNI_DB` | `sqlite` | Persistence backend: `sqlite` (default), `postgres`, or `json`. A fresh checkout with no `data/omniswim.db` seeds itself from the tracked `data/meets.json` |
+| `OMNI_HOST` | `127.0.0.1` | Bind address. Loopback by default — the suite ships with authentication off, so exposing it to the network is opt-in. Set `0.0.0.0` to serve other devices; startup then prints a warning |
 | `OMNI_AI_ENABLED` | `false` | Keeps optional AI/OCR paths disabled unless explicitly enabled |
 | `OMNI_PORT` / `PORT` | `3000` | HTTP port for `npm run dev` and `npm start` |
 
@@ -128,11 +129,14 @@ npm run test:roundtrip
 
 ## Documentation
 
-- [PHASE2_PROGRESS.md](PHASE2_PROGRESS.md) — Phase 2 handoff, prelims O/U, psych pipeline notes
-- [PHASE3_UI_PROGRESS.md](PHASE3_UI_PROGRESS.md) — chart architecture, UI foundation, momentum/psych UI
-- [ROSTER_LINEUP_PROGRESS.md](ROSTER_LINEUP_PROGRESS.md) — Manager Lineup/Relays workflow, compliance checklist, non-scorer relay vacate
-- [ROSTER_DATA_OVERHAUL_HANDOFF.md](ROSTER_DATA_OVERHAUL_HANDOFF.md) — multi-athlete SwimCloud import, SCM/LCM→SCY conversion + distance remap, scoring-theory import, HSU 26-27 seed, UI token modernization
-- [CHART_BLANK_HANDOFF.md](CHART_BLANK_HANDOFF.md) — blank-chart diagnostics and stale-bundle recovery
+- [docs/README.md](docs/README.md) — full documentation index (reference, video, and historical archive)
+- [docs/INVARIANTS.md](docs/INVARIANTS.md) — undocumented-but-true facts about this codebase
+- [CHANGELOG.md](CHANGELOG.md) — user-visible behaviour changes, newest first
+- [docs/archive/2026-06/PHASE2_PROGRESS.md](docs/archive/2026-06/PHASE2_PROGRESS.md) — Phase 2 handoff, prelims O/U, psych pipeline notes (historical)
+- [docs/archive/2026-08/PHASE3_UI_PROGRESS.md](docs/archive/2026-08/PHASE3_UI_PROGRESS.md) — chart architecture, UI foundation, momentum/psych UI (historical)
+- [docs/archive/2026-08/ROSTER_LINEUP_PROGRESS.md](docs/archive/2026-08/ROSTER_LINEUP_PROGRESS.md) — Manager Lineup/Relays workflow, compliance checklist, non-scorer relay vacate (historical)
+- [docs/archive/2026-08/ROSTER_DATA_OVERHAUL_HANDOFF.md](docs/archive/2026-08/ROSTER_DATA_OVERHAUL_HANDOFF.md) — multi-athlete SwimCloud import, SCM/LCM→SCY conversion + distance remap, scoring-theory import, HSU 26-27 seed, UI token modernization (historical)
+- [docs/archive/2026-06/CHART_BLANK_HANDOFF.md](docs/archive/2026-06/CHART_BLANK_HANDOFF.md) — blank-chart diagnostics and stale-bundle recovery (historical, resolved)
 - [backend](backend) — Python PDF parsing (`pdf_parser.py`, `psych_parser.py`)
 - [scripts](scripts) — automation and validation scripts
 
@@ -174,7 +178,7 @@ Conference abbreviations on psych sheets and HyTek PDFs map to canonical school 
 
 ### Charts (Matrix / Analytics / Metrics)
 
-Charts use `ChartShell` → `ChartFrame` → Recharts with explicit pixel `width`/`height` and `responsive={false}` — never `ResponsiveContainer` at `%` sizing. If charts show a border and legend but no SVG after pulling changes, restart the dev server and hard-refresh; see [CHART_BLANK_HANDOFF.md](CHART_BLANK_HANDOFF.md). Matrix shows a stale-bundle banner when old cached JavaScript is detected (`ChartStaleBundleGuard`).
+Charts use `ChartShell` → `ChartFrame` → Recharts with explicit pixel `width`/`height` and `responsive={false}` — never `ResponsiveContainer` at `%` sizing. If charts show a border and legend but no SVG after pulling changes, restart the dev server and hard-refresh; see [docs/archive/2026-06/CHART_BLANK_HANDOFF.md](docs/archive/2026-06/CHART_BLANK_HANDOFF.md). Matrix shows a stale-bundle banner when old cached JavaScript is detected (`ChartStaleBundleGuard`).
 
 ## Troubleshooting
 
@@ -184,8 +188,9 @@ Charts use `ChartShell` → `ChartFrame` → Recharts with explicit pixel `width
 - If PDF parsing fails, install Python 3 and retry. On first server start, `pdfplumber` is auto-installed into `venv/`. CI installs it globally via `pip install pdfplumber`.
 - **Psych PDF parse errors** — restart the dev server after pulling API changes (`npm run dev`). An empty or 404 response usually means a stale server process.
 - **Psych teams missing from momentum** — re-upload the psych PDF after team-alias updates, or confirm meet team names match conference abbreviations (see Team aliases above).
-- **Charts blank after git pull** — kill port 3000, run `npm run dev` (clears Vite cache via `predev`), hard-refresh (Ctrl+Shift+R). Run `npm run test:e2e` to verify. See [CHART_BLANK_HANDOFF.md](CHART_BLANK_HANDOFF.md).
-- To switch storage modes, set `OMNI_DB=sqlite` and run `npm run migrate:sqlite` first.
+- **Charts blank after git pull** — kill port 3000, run `npm run dev` (clears Vite cache via `predev`), hard-refresh (Ctrl+Shift+R). Run `npm run test:e2e` to verify. See [docs/archive/2026-06/CHART_BLANK_HANDOFF.md](docs/archive/2026-06/CHART_BLANK_HANDOFF.md).
+- SQLite is the default backend. To use the JSON store instead, set `OMNI_DB=json`; for the shared multi-user backend, `OMNI_DB=postgres` with `DATABASE_URL` (this one requires authentication).
+- **The server is only reachable from this machine by default.** If a phone or a second laptop cannot connect, that is `OMNI_HOST=127.0.0.1` doing its job — start with `OMNI_HOST=0.0.0.0` to serve the network, and read the warning it prints first.
 - If charts appear blank after adding UI in a workspace package, ensure that package's `src` is registered as a Tailwind `@source` in [packages/ui/src/index.css](packages/ui/src/index.css); Tailwind v4 only auto-scans the Vite root.
 
 ## License

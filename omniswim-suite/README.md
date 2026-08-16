@@ -12,4 +12,6 @@ npm install
 npm run dev
 ```
 
-For handoff docs: [../PHASE2_PROGRESS.md](../PHASE2_PROGRESS.md), [../PHASE3_UI_PROGRESS.md](../PHASE3_UI_PROGRESS.md), [../CHART_BLANK_HANDOFF.md](../CHART_BLANK_HANDOFF.md).
+Documentation moved under `docs/` on 2026-08-16. Index:
+[../docs/README.md](../docs/README.md). The handoffs this file used to link
+directly now live in [../docs/archive/](../docs/archive/).

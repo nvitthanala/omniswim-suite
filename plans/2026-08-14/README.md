@@ -38,7 +38,7 @@ Roster Plan`) or read out of the tree — not inferred from the docs.
 ## Scope
 
 **Video analysis is deliberately excluded** (your instruction, 2026-08-14). The
-suite's `VIDEO_ANALYSIS_MASTERPLAN.md` / `VIDEO_TAGGING_FRAMEWORK.md` workstreams
+suite's `docs/video/` workstreams
 (E1 pose extraction, E2 `detected` provenance, E3 stroke classification) are not
 assessed here. Note only that they remain gated on the same thing they were in
 August: **no real race has been tagged by hand yet.**

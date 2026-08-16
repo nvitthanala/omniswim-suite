@@ -1,3 +1,5 @@
+> Archived 2026-08-16. Kept for the reasoning it records; may not reflect current behaviour.
+
 # Handoff: Blank Matrix Charts (Border + Legend, No SVG)
 
 Last updated: 2026-06-29  

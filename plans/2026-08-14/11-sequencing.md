@@ -146,7 +146,12 @@ Each of these changes what gets built, and none can be resolved by reading code:
    OBU (5), Delta State (4) and UWF (4) do. Excluding diving costs HSU nothing
    today; it would cost any of those three up to ~120 points.
    ([03 §2](03-scoring-model-depth.md#2-diving-is-excluded-everywhere-silently))
-4. **Should time trials count toward cut tagging?** ([03 §3](03-scoring-model-depth.md#3-time-trials-score-nothing-but-can-still-earn-a-cut)) — they score nothing but are officiated swims.
+4. ~~**Should time trials count toward cut tagging?**~~ — **answered from data
+   2026-08-16: they already do, correctly.** 4 of 18 time-trial swims in the
+   loaded meet carry a real cut tag, and stripping the `Time Trial` suffix does
+   not change the verdict. Cut tagging never consults `meetProgramEvents`, so
+   excluding time trials from the lineup program did not affect it. No split
+   needed. ([03 §3](03-scoring-model-depth.md#3-time-trials-score-nothing-but-can-still-earn-a-cut))
 5. **`Afonso` or `Alfonso` Campanico?** ([02 §2](02-data-quality-aliasing.md#2-four-athletes-are-still-two-people-each)) — one source is wrong; only you can say which.
 6. **Is the desktop-copy launcher flow still real?** ([07 §2](07-packaging-offline-ops.md#2-the-two-launchers-behave-very-differently))
 7. **Should the seed be a demo dataset rather than a snapshot of live working state?** ([07 §3](07-packaging-offline-ops.md#3-demodata-depends-on-a-gitignored-file--resolved-worth-keeping-resolved))

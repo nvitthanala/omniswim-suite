@@ -1,3 +1,5 @@
+> Archived 2026-08-16. Kept for the reasoning it records; may not reflect current behaviour.
+
 # Roster Data & UI Overhaul — Handoff
 
 > Companion to `ROSTER_LINEUP_PROGRESS.md`. Covers the 2026-07 overhaul: multi-athlete

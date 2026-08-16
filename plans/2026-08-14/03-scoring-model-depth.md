@@ -129,11 +129,32 @@ swim **can** achieve a qualifying standard. So for the *cutline* question the
 same rows matter. The suite currently treats "program" as one concept serving
 both questions.
 
-**Open question:** should `meetProgramEvents` grow a second flavour —
-`scoringProgram` (excludes TTs) vs `officiatedProgram` (includes them) — or is
-the cut-tagging path already reading raw results and unaffected? I believe the
-latter, since `enrichWithComputedCut` iterates `athleteHistory` directly, but
-confirming is worth 20 minutes before assuming.
+### Answered from data, 2026-08-16 — no change needed
+
+The hypothesis was right, and it is now measured rather than believed. The
+cut-tagging path reads result and history rows directly; it never consults
+`meetProgramEvents`. So excluding time trials from the lineup program did not
+touch cut tagging.
+
+Measured over the 18 time-trial rows in the loaded meet, via
+`buildCutlineTagForTeam`:
+
+| Result state | Count |
+| ------------ | ----- |
+| `tagged` (a real cut earned) | **4** |
+| `no_cut` | 14 |
+
+And a control — the identical time submitted under the event label with the
+`Time Trial` suffix stripped — returns the **same state** in every case. The
+suffix does not gate the verdict.
+
+So a time trial that achieves a standard is already tagged as achieving it,
+which is the correct behaviour, and the two concepts are already separate in the
+code even though they were not separate in my head. **No `scoringProgram` /
+`officiatedProgram` split is needed.**
+
+Worth keeping in mind for anyone who later "tidies up" by routing cut tagging
+through `meetProgramEvents`: doing so would silently drop four earned cuts.
 
 ---
 

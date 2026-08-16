@@ -124,7 +124,7 @@ does not throw; it silently produces a plausible, wrong lineup a coach may act o
 **Why this section exists:** the original `cutlines.ts` was labeled D1 while
 holding D2 data, and its `proj_*` columns were invented extrapolations — some rows
 repeated one value four times as a stub. It was rebuilt from published PDFs on
-2026-07-26. See `CUTLINE_TAGS_PLAN.md` for the full finding and the four verified
+2026-07-26. See `docs/reference/CUTLINE_TAGS_PLAN.md` for the full finding and the four verified
 sources (NCAA D1/D2/D3 + NAIA).
 
 ---
@@ -154,4 +154,4 @@ sources (NCAA D1/D2/D3 + NAIA).
 - **Data sources:** Meets.json (meet PDFs), SwimCloud (recruit imports), what-if projections.
 - **Key recent rounds:** Round 3 (2026-07-19) — athlete aliasing + drawer declutter; Round 2 — roster/lineup correctness bugs.
 
-See `ROSTER_ALIAS_DECLUTTER_HANDOFF.md` for the complete round-3 context.
+See `docs/archive/2026-08/ROSTER_ALIAS_DECLUTTER_HANDOFF.md` for the complete round-3 context.
