@@ -142,7 +142,10 @@ Each of these changes what gets built, and none can be resolved by reading code:
 
 1. **Who is the second user?** ([05 §6](05-ux-workflow.md#6-open-question-who-is-the-second-user)) — governs how much explanation the UI owes.
 2. **Does a governing body publish course-conversion factors?** ([02 §1](02-data-quality-aliasing.md#1-the-conversion-table-has-no-provenance)) — governs whether ratios are official or indicative.
-3. **Does HSU field divers?** ([03 §2](03-scoring-model-depth.md#2-diving-is-excluded-everywhere-silently))
+3. ~~**Does HSU field divers?**~~ — **answered from data 2026-08-16: no, zero.**
+   OBU (5), Delta State (4) and UWF (4) do. Excluding diving costs HSU nothing
+   today; it would cost any of those three up to ~120 points.
+   ([03 §2](03-scoring-model-depth.md#2-diving-is-excluded-everywhere-silently))
 4. **Should time trials count toward cut tagging?** ([03 §3](03-scoring-model-depth.md#3-time-trials-score-nothing-but-can-still-earn-a-cut)) — they score nothing but are officiated swims.
 5. **`Afonso` or `Alfonso` Campanico?** ([02 §2](02-data-quality-aliasing.md#2-four-athletes-are-still-two-people-each)) — one source is wrong; only you can say which.
 6. **Is the desktop-copy launcher flow still real?** ([07 §2](07-packaging-offline-ops.md#2-the-two-launchers-behave-very-differently))

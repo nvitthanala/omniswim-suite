@@ -80,10 +80,34 @@ Before today's arbitrage fix, the panel emitted
 built on the fabricated-points heuristic. That is gone. But so is any ability to
 reason about divers at all.
 
-**Open question:** should the roster tools model divers? If HSU has no divers it
-is moot. If it does, they are currently invisible to the optimiser while
-contributing to the score, which means the "optimised" total is systematically
-missing a component. Worth a one-line answer before any work.
+### Answered from data, 2026-08-16 — moot for HSU, not for everyone
+
+Measured against the loaded NSISC meet:
+
+| Team | Divers | Diving rows |
+| ---- | ------ | ----------- |
+| Ouachita Baptist | 5 | — |
+| Delta State | 4 | — |
+| University of West Florida | 4 | — |
+| **Henderson State** | **0** | **0** |
+
+25 diving result rows carrying **360 points**, out of 6,147 points across the meet.
+**Henderson State fields no divers at all**, so excluding diving from the roster
+optimiser costs HSU nothing today. The open question is closed for the current
+user.
+
+Two things that follow, and neither needs a decision now:
+
+1. **Rival totals already include diving.** Those 360 points come from the parsed
+   PDF and land in the standings normally. Nothing is under-counted in the
+   scoreboard — the exclusion only affects *optimising a team you own*.
+2. **The exclusion becomes real the moment HSU recruits a diver**, or the moment
+   anyone at Delta State, OBU or UWF uses this tool — all three field divers, and
+   for them the "optimised" total would be systematically missing a component
+   worth up to ~120 points.
+
+So: no work needed, but the assumption is now written down with the number that
+makes it safe, rather than being an unexamined silence.
 
 ---
 
