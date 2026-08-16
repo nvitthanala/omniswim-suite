@@ -1,8 +1,8 @@
-import React, { useEffect, useState } from 'react';
-import { ChevronDown, Settings, Save } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { ChevronDown, Lock, Settings, Save } from 'lucide-react';
 import { ScoringPresetMeta, ScoringSettings } from '@omniswim/core/types';
 import { fetchScoringPresetList, fetchScoringPresetSettings } from '@omniswim/core/lib/scoringPresets';
-import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
+import { mergeScoringSettings, scoringSettingsLock } from '@omniswim/core/lib/scoringDefaults';
 
 type Props = {
   settings: ScoringSettings;
@@ -13,6 +13,11 @@ type Props = {
   /** Workspace-level scoring view (absent = 'merged'); omit to hide the toggle. */
   scoringView?: 'merged' | 'pdf_only';
   onScoringViewChange?: (view: 'merged' | 'pdf_only') => void;
+  /**
+   * Workspace conference. Decides which controls the engine will overwrite —
+   * without it this panel offers edits that `mergeScoringSettings` discards.
+   */
+  conference?: string;
 };
 
 export default function ScoringSettingsPanel({
@@ -23,6 +28,7 @@ export default function ScoringSettingsPanel({
   defaultOpen = false,
   scoringView,
   onScoringViewChange,
+  conference,
 }: Props) {
   const [open, setOpen] = useState(defaultOpen);
   const [localSettings, setLocalSettings] = useState<ScoringSettings>(() => mergeScoringSettings(settings));
@@ -38,6 +44,25 @@ export default function ScoringSettingsPanel({
   useEffect(() => {
     fetchScoringPresetList().then(setPresets).catch(() => setPresets([]));
   }, []);
+
+  // Which controls the engine will overwrite whatever this panel sends. Rendering
+  // them editable meant a coach could change a number, save, and watch the total
+  // not move — `mergeScoringSettings` discards the value before scoring sees it.
+  const lock = useMemo(
+    () => scoringSettingsLock(localSettings, { conference }),
+    [localSettings, conference]
+  );
+  const lockedKeys = useMemo(() => new Set<string>(lock.keys as readonly string[]), [lock]);
+  const isLocked = (key: keyof ScoringSettings) => lockedKeys.has(key as string);
+  /** Applied to a locked control so it reads as fixed rather than broken. */
+  const lockProps = (key: keyof ScoringSettings) =>
+    isLocked(key)
+      ? {
+          disabled: true,
+          title: lock.message ?? 'Fixed by competition rule',
+          className: 'glass-input w-full text-xs opacity-60 cursor-not-allowed',
+        }
+      : { className: 'glass-input w-full text-xs' };
 
   const applyPreset = async (presetId: string) => {
     const next = await fetchScoringPresetSettings(presetId);
@@ -133,6 +158,19 @@ export default function ScoringSettingsPanel({
   const body = (
     <>
       {scoringViewControl}
+      {lock.message ? (
+        <div className="mb-4 p-3 rounded-lg border border-theme-soft surface-overlay flex items-start gap-2">
+          <Lock size={12} className="text-theme-muted mt-0.5 shrink-0" aria-hidden />
+          <p className="text-[10px] text-theme-secondary leading-relaxed normal-case tracking-normal">
+            {lock.message}
+            <span className="text-theme-muted">
+              {' '}
+              Editing them here would have no effect, so they are shown fixed rather than
+              accepting a change that is discarded before scoring.
+            </span>
+          </p>
+        </div>
+      ) : null}
       {suggestedPresetId && (
         <div className="mb-4 p-3 rounded badge-warning text-[10px]">
           <span className="uppercase tracking-widest font-medium">Suggested preset: </span>
@@ -215,8 +253,10 @@ export default function ScoringSettingsPanel({
           <div>
             <label className="block text-[10px] text-theme-secondary uppercase mb-1">Scorer cap scope</label>
             <select
-              className="glass-input w-full text-xs uppercase"
+              className={`glass-input w-full text-xs uppercase${isLocked('scorerCapScope') ? ' opacity-60 cursor-not-allowed' : ''}`}
               aria-label="Scorer cap scope"
+              disabled={isLocked('scorerCapScope')}
+              title={isLocked('scorerCapScope') ? lock.message ?? undefined : undefined}
               value={localSettings.scorerCapScope ?? 'event'}
               onChange={e =>
                 setLocalSettings({
@@ -244,7 +284,7 @@ export default function ScoringSettingsPanel({
                   diverScorerWeight: parseFloat(e.target.value) || 1,
                 })
               }
-              className="glass-input w-full text-xs"
+              {...lockProps('diverScorerWeight')}
             />
           </div>
           <div>
@@ -259,7 +299,7 @@ export default function ScoringSettingsPanel({
                   maxIndividualScorersPerTeam: parseInt(e.target.value, 10) || 999,
                 })
               }
-              className="glass-input w-full text-xs"
+              {...lockProps('maxIndividualScorersPerTeam')}
             />
           </div>
           <div>
@@ -274,7 +314,7 @@ export default function ScoringSettingsPanel({
                   maxRelaysScoringPerTeam: parseInt(e.target.value, 10) || 999,
                 })
               }
-              className="glass-input w-full text-xs"
+              {...lockProps('maxRelaysScoringPerTeam')}
             />
           </div>
           <div>
@@ -289,7 +329,7 @@ export default function ScoringSettingsPanel({
                   maxIndividualEntriesPerSwimmer: parseInt(e.target.value, 10) || 999,
                 })
               }
-              className="glass-input w-full text-xs"
+              {...lockProps('maxIndividualEntriesPerSwimmer')}
             />
           </div>
           <div>
@@ -304,7 +344,7 @@ export default function ScoringSettingsPanel({
                   maxRelayEntriesPerSwimmer: parseInt(e.target.value, 10) || 999,
                 })
               }
-              className="glass-input w-full text-xs"
+              {...lockProps('maxRelayEntriesPerSwimmer')}
             />
           </div>
           <div>
@@ -319,7 +359,7 @@ export default function ScoringSettingsPanel({
                   maxTotalEntriesPerSwimmer: parseInt(e.target.value, 10) || 999,
                 })
               }
-              className="glass-input w-full text-xs"
+              {...lockProps('maxTotalEntriesPerSwimmer')}
             />
           </div>
           <div>
@@ -352,10 +392,16 @@ export default function ScoringSettingsPanel({
             </label>
           </div>
           <div className="col-span-2">
-            <label className="flex items-center gap-2 text-[10px] text-theme-secondary cursor-pointer">
+            <label
+              className={`flex items-center gap-2 text-[10px] text-theme-secondary ${
+                isLocked('relayEligibleFromScorerPool') ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+              }`}
+              title={isLocked('relayEligibleFromScorerPool') ? lock.message ?? undefined : undefined}
+            >
               <input
                 type="checkbox"
                 aria-label="Require relay legs to be in individual scorer pool"
+                disabled={isLocked('relayEligibleFromScorerPool')}
                 checked={localSettings.relayEligibleFromScorerPool === true}
                 onChange={e =>
                   setLocalSettings({

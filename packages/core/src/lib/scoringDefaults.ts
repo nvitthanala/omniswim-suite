@@ -116,6 +116,81 @@ export function isNsiscShapedSettings(settings: ScoringSettings): boolean {
   );
 }
 
+/**
+ * Settings that `mergeScoringSettings` overwrites regardless of what the caller
+ * passed, and why.
+ *
+ * These are competition rules, not preferences — a coach must not be able to dial
+ * the 18-scorer pool to 999 and produce a fantasy total. The overwrite is
+ * deliberate and stays.
+ *
+ * What was NOT deliberate: both settings UIs rendered these controls as freely
+ * editable, so a coach could change a number, save it, and watch the total not
+ * move. The value was discarded inside `mergeScoringSettings` before the engine
+ * ever saw it. Export the lock so the UI can state it instead of implying the
+ * opposite.
+ *
+ * Keep this list in step with the assignments in `mergeScoringSettings` — a test
+ * asserts the two agree.
+ */
+export const NSISC_LOCKED_SETTING_KEYS = [
+  'maxIndividualScorersPerTeam',
+  'maxRelaysScoringPerTeam',
+  'scorerCapScope',
+  'diverScorerWeight',
+  'relayEligibleFromScorerPool',
+  'maxIndividualEntriesPerSwimmer',
+  'maxRelayEntriesPerSwimmer',
+  'maxTotalEntriesPerSwimmer',
+] as const satisfies readonly (keyof ScoringSettings)[];
+
+/** Settings the PDF place-points regime neutralises. See {@link applyPdfPlacePointsNeutralCaps}. */
+export const PDF_PLACE_POINTS_LOCKED_SETTING_KEYS = [
+  'scorerEligibilityMode',
+  'maxIndividualScorersPerTeam',
+  'maxRelaysScoringPerTeam',
+  'scorerCapScope',
+  'diverScorerWeight',
+  'relayEligibleFromScorerPool',
+] as const satisfies readonly (keyof ScoringSettings)[];
+
+export type ScoringSettingsLock = {
+  /** Field names the engine will overwrite. Empty when the caller's values all stand. */
+  keys: readonly (keyof ScoringSettings)[];
+  /** Which regime is doing the locking, for the UI to explain. */
+  reason: 'nsisc' | 'pdf_place_points' | null;
+  /** One sentence a UI can render verbatim. */
+  message: string | null;
+};
+
+/**
+ * Which settings will be ignored for this workspace, and why — so a settings UI
+ * can disable them and say so rather than accepting an edit it will discard.
+ */
+export function scoringSettingsLock(
+  settings?: Partial<ScoringSettings>,
+  options?: { conference?: string; resultsForPdfHint?: SwimmerResult[] }
+): ScoringSettingsLock {
+  const merged: ScoringSettings = { ...DEFAULT_SCORING_SETTINGS, ...settings };
+  if (effectivePdfPlacePointsMode(merged, options?.resultsForPdfHint)) {
+    return {
+      keys: PDF_PLACE_POINTS_LOCKED_SETTING_KEYS,
+      reason: 'pdf_place_points',
+      message:
+        'This meet PDF carries its own place points, so the scorer pool settings below are ignored — the published points are used as they stand.',
+    };
+  }
+  if (presetIdForConference(options?.conference) === 'nsisc') {
+    return {
+      keys: NSISC_LOCKED_SETTING_KEYS,
+      reason: 'nsisc',
+      message:
+        'NSISC fixes these by rule (18-scorer meet-wide pool, 2 scoring relays, 7 entries per swimmer), so they are locked to the conference values.',
+    };
+  }
+  return { keys: [], reason: null, message: null };
+}
+
 export function mergeScoringSettings(
   settings?: Partial<ScoringSettings>,
   options?: { conference?: string; resultsForPdfHint?: SwimmerResult[] }

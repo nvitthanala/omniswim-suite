@@ -198,6 +198,7 @@ function ShellLayout() {
             ],
           })}
           scoringView={activeWorkspace.scoringView}
+          conference={activeWorkspace.conference}
           onScoringViewChange={view => {
             void updateWorkspace({ scoringView: view });
           }}

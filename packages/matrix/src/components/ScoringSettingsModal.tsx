@@ -1,8 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { X, Save } from 'lucide-react';
+import React, { useEffect, useMemo, useState } from 'react';
+import { X, Lock, Save } from 'lucide-react';
 import { ScoringPresetMeta, ScoringSettings } from '@omniswim/core/types';
 import { fetchScoringPresetList, fetchScoringPresetSettings } from '@omniswim/core/lib/scoringPresets';
-import { GENERIC_TOP16_SETTINGS, mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
+import {
+  GENERIC_TOP16_SETTINGS,
+  mergeScoringSettings,
+  scoringSettingsLock,
+} from '@omniswim/core/lib/scoringDefaults';
 
 interface Props {
   settings: ScoringSettings;
@@ -11,6 +15,11 @@ interface Props {
   /** Workspace-level scoring view (absent = 'merged'); omit the callback to hide the toggle. */
   scoringView?: 'merged' | 'pdf_only';
   onScoringViewChange?: (view: 'merged' | 'pdf_only') => void;
+  /**
+   * Workspace conference. Decides which controls the engine will overwrite —
+   * without it this modal offers edits that `mergeScoringSettings` discards.
+   */
+  conference?: string;
 }
 
 export default function ScoringSettingsModal({
@@ -19,8 +28,18 @@ export default function ScoringSettingsModal({
   onClose,
   scoringView,
   onScoringViewChange,
+  conference,
 }: Props) {
   const base = mergeScoringSettings(settings);
+  // Same lock as ScoringSettingsPanel — both UIs render these controls, so both
+  // must state that the engine will overwrite them rather than accept the edit.
+  const lock = useMemo(() => scoringSettingsLock(settings, { conference }), [settings, conference]);
+  const lockedKeys = useMemo(() => new Set<string>(lock.keys as readonly string[]), [lock]);
+  const isLocked = (key: keyof ScoringSettings) => lockedKeys.has(key as string);
+  const lockAttrs = (key: keyof ScoringSettings) =>
+    isLocked(key)
+      ? { disabled: true, title: lock.message ?? 'Fixed by competition rule' }
+      : {};
   const [places, setPlaces] = useState(base.scoringPoints.length);
   const [points, setPoints] = useState<number[]>([...base.scoringPoints]);
   const [relayMultiplier, setRelayMultiplier] = useState(base.relayMultiplier);
@@ -245,12 +264,25 @@ export default function ScoringSettingsModal({
             <h3 className="text-[10px] text-theme-secondary uppercase tracking-widest font-medium pb-2 border-b border-theme-soft">
               Team caps & relays
             </h3>
+            {lock.message ? (
+              <div className="p-3 rounded-lg border border-theme-soft surface-overlay flex items-start gap-2">
+                <Lock size={12} className="text-theme-muted mt-0.5 shrink-0" aria-hidden />
+                <p className="text-[10px] text-theme-secondary leading-relaxed normal-case tracking-normal">
+                  {lock.message}
+                  <span className="text-theme-muted">
+                    {' '}
+                    Editing them here would have no effect, so they are shown fixed.
+                  </span>
+                </p>
+              </div>
+            ) : null}
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-theme-secondary mb-1 text-[10px] uppercase">Scorer cap scope</label>
                 <select
                   value={scorerCapScope}
                   onChange={e => setScorerCapScope(e.target.value as 'meet' | 'event')}
+                  {...lockAttrs('scorerCapScope')}
                   className="glass-input w-full text-xs"
                 >
                   <option value="event">Per event</option>
@@ -264,6 +296,7 @@ export default function ScoringSettingsModal({
                   step="0.01"
                   value={diverScorerWeight}
                   onChange={e => setDiverScorerWeight(parseFloat(e.target.value) || 1)}
+                  {...lockAttrs('diverScorerWeight')}
                   className="glass-input w-full text-xs font-mono"
                 />
               </div>
@@ -273,6 +306,7 @@ export default function ScoringSettingsModal({
                   type="number"
                   value={maxIndividualScorersPerTeam}
                   onChange={e => setMaxIndividualScorersPerTeam(parseInt(e.target.value, 10) || 999)}
+                  {...lockAttrs('maxIndividualScorersPerTeam')}
                   className="glass-input w-full text-xs font-mono"
                 />
               </div>
@@ -282,6 +316,7 @@ export default function ScoringSettingsModal({
                   type="number"
                   value={maxRelaysScoringPerTeam}
                   onChange={e => setMaxRelaysScoringPerTeam(parseInt(e.target.value, 10) || 999)}
+                  {...lockAttrs('maxRelaysScoringPerTeam')}
                   className="glass-input w-full text-xs font-mono"
                 />
               </div>
@@ -330,8 +365,19 @@ export default function ScoringSettingsModal({
                   <input type="checkbox" checked={halfRate} onChange={e => setHalfRate(e.target.checked)} className="accent-[var(--text-accent)]" />
                   Half-rate relay swimmers
                 </label>
-                <label className="flex items-center gap-2 text-theme-secondary cursor-pointer text-[10px]">
-                  <input type="checkbox" checked={relayPool} onChange={e => setRelayPool(e.target.checked)} className="accent-[var(--text-accent)]" />
+                <label
+                  className={`flex items-center gap-2 text-theme-secondary text-[10px] ${
+                    isLocked('relayEligibleFromScorerPool') ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
+                  }`}
+                  title={isLocked('relayEligibleFromScorerPool') ? lock.message ?? undefined : undefined}
+                >
+                  <input
+                    type="checkbox"
+                    checked={relayPool}
+                    onChange={e => setRelayPool(e.target.checked)}
+                    className="accent-[var(--text-accent)]"
+                    {...lockAttrs('relayEligibleFromScorerPool')}
+                  />
                   Relay legs must be in scorer pool
                 </label>
               </div>

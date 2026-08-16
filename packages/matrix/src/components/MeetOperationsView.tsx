@@ -311,6 +311,7 @@ export default function MeetOperationsView({
           }}
           scoringView={workspace.scoringView ?? 'merged'}
           onScoringViewChange={onScoringViewChange}
+          conference={workspace.conference}
         />
         {officialLookup.size > 0 ? (
           <div className="surface-card rounded-xl overflow-hidden">
