@@ -13,7 +13,21 @@ one place, so a failure is attributable to one scope rather than to a merge.
 | Round | Theme | Status |
 | ----- | ----- | ------ |
 | [Round 1](ROUND-1-stop-the-bleeding.md) | Network exposure, unmapped-division cuts, tests that could not fail | shipped `2559e429` |
-| [Round 2](ROUND-2-inputs-and-structure.md) | Alias resolution in scoring, parse plausibility, the 2,255-line split, docs | in progress |
+| [Round 2](ROUND-2-inputs-and-structure.md) | Alias resolution in core, parse plausibility, the 2,255-line split, docs | shipped `ef98abe0` |
+| [Round 3](ROUND-3-wiring-and-diagnosis.md) | Resolver reaches the UI; inert cap diagnosed; a destructive optimiser found | shipped `f7054e00` |
+
+## Where to pick this up
+
+**Read [2026-08-14/12-optimizer-destroys-score.md](../2026-08-14/12-optimizer-destroys-score.md) first.**
+It is the most severe thing in either folder and it is pre-existing: the
+**Optimize team** button takes the primary planning workspace from **1277 to 0**.
+It needs a guard before it needs a diagnosis — `optimizeRosterForTeam` already
+computes `previousTotal` and `projectedTotal` and simply never compares them.
+
+Then [2026-08-14/11-sequencing.md](../2026-08-14/11-sequencing.md) for the rest.
+Still open and unblocked: the fast-path perf investigation (the split cleared the
+way, and a dead per-context `Map` is a live lead), the branded `CanonicalEvent`
+type, and the `utils.ts` split.
 
 ## Standing rules for this run
 
