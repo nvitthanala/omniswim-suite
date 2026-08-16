@@ -1,5 +1,60 @@
 # 12 — "Optimize team" zeroes a recruit-driven workspace
 
+> **✅ FIXED 2026-08-16.** The guard turned out better than "refuse a loss":
+> each stage is now evaluated as a **complete candidate state** and the best one
+> wins, so the roster workspace does not merely avoid the wipeout — it **gains
+> +118** (1277 → 1395) where it previously lost everything.
+>
+> | HSU men | current | scorers | events | scorers+events |
+> | --- | --- | --- | --- | --- |
+> | meet loaded | 1383.83 | 1214.33 | 1242.00 | **1691.00** |
+> | recruits only | 1277.00 | 213.00 | **1395.00** | 0.00 |
+>
+> The measured data forced that shape: the `scorers` stage *alone* loses 170 on
+> the meet workspace and only pays off once `events` runs after it, while on the
+> roster workspace the chained result is the wipeout and `events` alone is the
+> best answer. Neither "always chain" nor "reject stage A" finds both.
+>
+> `optimizeRosterAllTeams` needed its own guard — team B's baseline was measured
+> *after* team A's changes, so per-team guards can sit on top of a chain-induced
+> loss. Note the per-team gains largely cancel when chained: +307 and +18
+> individually net to +16 across the field.
+>
+> `OptimizerResult` gained `outcome`, `appliedStages` and `unguardedTotal`, and
+> the UI no longer shows a success toast for a no-op.
+>
+> **The root cause is diagnosed below and is NOT fixed** — the guard makes the
+> button safe while the disagreement stands.
+
+## Root cause — three behaviours compounding
+
+Verified by perfect correlation, not inferred.
+
+1. The optimiser enforces `maxIndividualScorersPerTeam` (18 under NSISC); the
+   engine's automatic set does not — `buildScorerRosterLookup` defaults a recruit
+   row to `isScorer: true` unconditionally. 32 auto-scorers get "corrected" to 18,
+   so **every override written is an OFF**. This is the disagreement
+   [02 §2b](02-data-quality-aliasing.md) named.
+2. `prepareRecruitsForScoring` ranks a recruit against the PDF rows in its event.
+   With no PDF there are no comparators, so **all 281 rows come back rank 1**,
+   round "A Final" — one event becomes one tie group.
+3. `scoreIndividualsInEvent` gates a tie group with
+   `uniqueNames.every(n => rosterLookup.isScorer(...))`. **One non-scorer zeroes
+   the entire group.**
+
+So turning 14 of 32 athletes off does not cost 14 athletes' points — it zeroes
+every event any of them entered. Measured: 12 of 14 events contained a turned-off
+athlete and scored 0; the other 2 still scored. 1277 → 213. Running `events` after
+that puts an off athlete into all 14 → 0.00. Zero exceptions either way.
+
+**The severe half is #2/#3, not #1.** The `every()` gate turns a per-athlete
+eligibility decision into an all-or-nothing *event* decision whenever ranks
+collapse. Fixing #1 alone would leave that landmine for any workspace where a tie
+group spans a scorer and a non-scorer.
+
+---
+
+
 **Severity: P0. Pre-existing — confirmed on `HEAD` before any of this round's
 changes.** Found 2026-08-16 while measuring something else entirely.
 

@@ -178,23 +178,46 @@ export default function RosterOptimizeStep({
   const applyLegacy = () => {
     if (!whatIfMode || !team) return;
     const result = optimizeRosterForTeam(workspace, gender, team, removeSeniors, scoringSettings);
+    // "Found nothing better" is not success. The optimiser now refuses to apply a
+    // result that would lower the team total — on a recruit-driven workspace the
+    // unguarded run took 1277 points to 0 — so the toast must distinguish the two
+    // rather than reporting a win for a no-op.
+    if (result.outcome === 'unchanged') {
+      toast.push(
+        'info',
+        `${team}: already the best lineup found — nothing changed (${result.previousTotal.toFixed(1)} pts).`
+      );
+      return;
+    }
     onUpdate({
       scorerRosterOverrides: result.overrides,
       meetEntryPlans: result.meetEntryPlans,
       activeEntryIds: result.activeEntryIds,
     });
-    toast.push('success', `Best roster applied for ${team}`);
+    const gain = result.projectedTotal - result.previousTotal;
+    toast.push(
+      'success',
+      `${team}: +${gain.toFixed(1)} pts → ${result.projectedTotal.toFixed(1)} (${result.appliedStages?.replace('+', ' + ') ?? 'optimised'})`
+    );
   };
 
   const applyAll = () => {
     if (!whatIfMode) return;
     const result = optimizeRosterAllTeams(workspace, gender, removeSeniors, scoringSettings);
+    // Same rule as applyLegacy. The all-teams path guards on the aggregate, because
+    // per-team gains can cancel once chained — measured +307 and +18 individually
+    // netting to +16 across the meet.
+    if (result.outcome === 'unchanged') {
+      toast.push('info', 'No lineup change improved the field — nothing was applied.');
+      return;
+    }
     onUpdate({
       scorerRosterOverrides: result.overrides,
       meetEntryPlans: result.meetEntryPlans,
       activeEntryIds: result.activeEntryIds,
     });
-    toast.push('success', 'Best roster applied for all teams');
+    const gain = result.projectedTotal - result.previousTotal;
+    toast.push('success', `All teams: +${gain.toFixed(1)} pts across the field`);
   };
 
   if (!hasRoster) {

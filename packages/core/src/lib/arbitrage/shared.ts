@@ -556,8 +556,17 @@ export function collectDroppableEntries(
 type TeamScoreGroup = {
   /** Distinct swimmer keys sharing this placement (all-or-none against the pool). */
   names: string[];
-  /** Team points each listed swimmer earns if the group scores. */
-  ptsEach: number;
+  /**
+   * Team points the WHOLE group earns when it scores — summed over ROWS, not
+   * over distinct names. scoreIndividualsInEvent awards `each` to every member
+   * row (`members.forEach(r => ... points: each)`) while consuming pool weight
+   * only per distinct name (`uniqueNames`), so the two counts diverge whenever
+   * a team holds more rows than distinct swimmers at one placement (e.g. an
+   * athlete carried as BOTH a recruit row and an active optimizer plan for the
+   * same event). Awarding per name under-counted those groups and broke the
+   * self-validation below, which disabled the fast path wholesale.
+   */
+  ptsTotal: number;
   /** Pool weight each NEW swimmer consumes (diving events weigh less). */
   weight: number;
 };
@@ -614,8 +623,8 @@ function sweepTeamIndividualTotal(
       if (!canAll) continue;
       for (const n of grp.names) {
         if (!pool.has(n)) pool.set(n, grp.weight);
-        total += grp.ptsEach;
       }
+      total += grp.ptsTotal;
     }
   }
   return total;
@@ -647,7 +656,9 @@ function buildTeamGroupsForEvent(
   return keys.map(k => {
     const rs = byKey.get(k)!;
     const names = [...new Set(rs.map(r => normalizeSwimmerName(r.name)))];
-    return { names, ptsEach: Number(rs[0].points ?? 0), weight };
+    // Points are per ROW (see TeamScoreGroup.ptsTotal); pool weight is per NAME.
+    const ptsTotal = rs.reduce((s, r) => s + Number(r.points ?? 0), 0);
+    return { names, ptsTotal, weight };
   });
 }
 
@@ -729,7 +740,6 @@ export function buildFastSwapContext(
     conferenceForMerge: undefined,
     resultsForPdfHint: hint,
   });
-  const npById = new Map(npScored.map(r => [r.id, r]));
 
   // Event insertion order exactly as calculatePoints sees it: non-recruit rows
   // first, then recruit rows, deduped; then sorted by meet order (stable).
@@ -764,12 +774,20 @@ export function buildFastSwapContext(
   }
 
   // SELF-VALIDATION: the sweep must reproduce the real baseline exactly.
-  // NOTE (2026-07-20): on the seeded HSU+NSISC merged workspace this check
-  // currently FAILS (sweep 1044.3 vs real 1314.1 — the engine's roster-mode
-  // relay-leg pool seeding is not modeled by the sweep since the entry-limit
-  // round's scoring changes), so the context falls back to the full re-score
-  // wholesale there. Correctness is preserved by design; the 62x fast path is
-  // simply inactive on that regime until the sweep learns relay pool seeding.
+  // This is the only gate that can silently disable the fast path on a regime
+  // it is otherwise allowed to run on — it fails closed (correct but slow), so
+  // a modelling bug here shows up as "the optimizer is slow", never as a wrong
+  // number. scripts/test_fast_swap_context.mjs guards that it stays satisfied.
+  //
+  // HISTORY (2026-07-20 → 2026-08-16). This check used to fail on the seeded
+  // HSU+NSISC merged workspace (sweep 933.79 vs real 1117.83 on Henderson State
+  // men), and the note here blamed relay-leg pool seeding. That was wrong:
+  // seedAbRelayLegsIntoPool only runs under relayEligibleFromScorerPool, which
+  // the gate above already rejects. The real cause was TeamScoreGroup awarding
+  // points per distinct NAME while calculatePoints awards them per ROW — see
+  // TeamScoreGroup.ptsTotal. The workspace carries several athletes as BOTH a
+  // recruit row and an active optimizer plan for the same event, so those
+  // placements hold more rows than names and the sweep under-counted them.
   const sweepBase = sweepTeamIndividualTotal(eventsOrder, baseGroupsByEvent, cap);
   if (Math.abs(sweepBase - realIndivT) > 1e-4) return null;
 

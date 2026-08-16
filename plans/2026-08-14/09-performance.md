@@ -45,6 +45,35 @@ arrived in the same change, and only the first was verified before shipping.
 | Ouachita Baptist | 0 | 26 ms | — |
 | Delta State | 0 | 21 ms | — |
 
+> **✅ FIXED 2026-08-16 — the fast path now works, 5.7× faster.**
+>
+> | Team | Candidates | Full re-score | Fast path | Speedup |
+> | ---- | ---------- | ------------- | --------- | ------- |
+> | Henderson State, men | 849 | 5,117 ms | **895 ms** | **5.7×** |
+>
+> Equivalence verified: `rankExactSwaps` output is sha256-identical between the
+> fast path and `forceFullRescore: true` for every team and gender in both
+> workspaces.
+>
+> **The cause was a counting bug that silently disabled the optimisation.**
+> `TeamScoreGroup.ptsEach` awarded points **per distinct name**, but
+> `scoreIndividualsInEvent` awards them **per row** while consuming pool weight
+> per name. The two diverge whenever a team holds more rows than distinct
+> swimmers at one placement — an athlete carried as both a recruit row and an
+> active optimizer plan for the same event. That under-counted those groups, so
+> the context's own **self-validation check failed**, and the fast path fell back
+> to a full re-score wholesale. It failed *closed*: correct but slow, which is why
+> it went unnoticed for a month.
+>
+> Renamed to `ptsTotal`, summed over rows. The dead `npById` map was confirmed
+> unread and removed. `scripts/test_fast_swap_context.mjs` guards that the
+> self-validation stays satisfied, including a liveness assertion that the
+> duplicate-placement case actually moves a total (77 → 94).
+>
+> The scan button could now be reconsidered — 895 ms is under the 1,000 ms
+> single-task budget — but it is left in place: 895 ms is borderline for a render
+> path, and the button makes the cost visible.
+
 Two things fall out of this table:
 
 1. **849 candidates × a full field re-score each.** The cost is real work, not a
