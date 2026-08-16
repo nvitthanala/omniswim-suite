@@ -12,11 +12,15 @@ Baseline: lint clean (7 packages), `npm test` **56 passed / 0 failed / 3 skipped
 
 | # | Item | Why now |
 | - | ---- | ------- |
-| 1 | **Guard the optimiser** — [12](2026-08-14/12-optimizer-destroys-score.md) | It takes the primary workspace **1277 → 0**. It already computes `previousTotal` and `projectedTotal` and never compares them. Guard first, diagnose second. |
-| 2 | Disable the seven locked NSISC settings controls — [02 §2b](2026-08-14/02-data-quality-aliasing.md) | A coach can edit them, save, and watch nothing happen. Diagnosis is done; this is the leftover UI defect. |
-| 3 | Fast-path perf — [09 §1](2026-08-14/09-performance.md) | Unblocked by the arbitrage split. Live lead: a `Map` built per fast-swap context and never read. |
-| 4 | Branded `CanonicalEvent` — [04 §3](2026-08-14/04-architecture-complexity.md) | The structural bet. Four defects were the same bug: a value keyed on one identity, looked up by another. |
-| 5 | Conversion-factor provenance — [02 §1](2026-08-14/02-data-quality-aliasing.md) | **Blocked on an open question**: does any governing body publish these factors? If not, the whole table is indicative, not official. |
+| 1 | **Diagnose the Delta State score mismatch** — [13](2026-08-14/13-official-score-mismatch.md) | Computed totals disagree with the meet's **official published scores**: women +20, men −1. Six of eight teams match exactly, so it is specific to one team's rows. The only finding here with a ground-truth answer to check against. |
+| 2 | **The `every()` tie-group gate** — [12](2026-08-14/12-optimizer-destroys-score.md) | One non-scorer zeroes an entire tie group. The optimiser is now guarded, but this landmine stands for any workspace where ranks collapse. |
+| 3 | Branded `CanonicalEvent` — [04 §3](2026-08-14/04-architecture-complexity.md) | The structural bet. Four defects were the same bug: a value keyed on one identity, looked up by another. |
+| 4 | Conversion-factor provenance — [02 §1](2026-08-14/02-data-quality-aliasing.md) | **Blocked on an open question**: does any governing body publish these factors? If not, the whole table is indicative, not official. |
+| 5 | `utils.ts` split — [04 §2](2026-08-14/04-architecture-complexity.md) | `calculatePoints`, the most important function in the product, lives in a file called `utils`. |
+
+**Done since this page was written:** the optimiser guard (1277 → 0 became
+1277 → **1395**), the NSISC settings lock, and the fast path (**5.7×**, and the
+cause was a per-row/per-name counting bug that silently disabled it).
 
 ---
 
