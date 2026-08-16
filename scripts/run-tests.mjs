@@ -7,7 +7,7 @@
  * require local-only fixtures (not committed to the repo) are skipped when the
  * fixture is absent so `npm test` stays green on a clean checkout.
  */
-import { execFileSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -32,7 +32,11 @@ const TESTS = [
   ['test_entry_limits.mjs'],
   ['test_athlete_history.mjs'],
   ['test_course_conversion.mjs'],
+  ['test_conversion_keys.mjs'],
   ['test_meet_program_events.mjs'],
+  ['test_cut_division_absent.mjs'],
+  ['test_workspace_naming.mjs'],
+  ['test_server_binding.mjs'],
   ['test_event_quality_ranking.mjs'],
   ['test_arbitrage_units.mjs'],
   ['test_history_import_roster.mjs'],
@@ -51,6 +55,7 @@ const TESTS = [
   ['test_swim_editor.mjs'],
   ['test_scenario_diff.mjs'],
   ['test_athlete_aliases.mjs'],
+  ['test_duplicate_athletes.mjs'],
   ['test_athlete_autolink.mjs'],
   ['test_event_identity_scoring.mjs'],
   ['test_lineup_audit.mjs'],
@@ -87,22 +92,36 @@ for (const [file, fixture] of TESTS) {
     skipped += 1;
     continue;
   }
-  try {
-    const out = execFileSync(process.execPath, ['--import', 'tsx', path], {
-      cwd: repoRoot,
-      stdio: 'pipe',
-    }).toString();
-    if (out.trimStart().startsWith('SKIP')) {
-      console.log(out.trim().split('\n')[0]);
+  // spawnSync rather than execFileSync so BOTH streams are captured even on a
+  // zero exit. That matters for the `console.assert` guard below: Node's
+  // console.assert writes "Assertion failed" to stderr and then keeps going,
+  // leaving the exit code at 0. Three test files used it, so they reported PASS
+  // no matter what they found. Exit status alone is not enough evidence.
+  const run = spawnSync(process.execPath, ['--import', 'tsx', path], {
+    cwd: repoRoot,
+    stdio: 'pipe',
+  });
+  const stdout = run.stdout?.toString() ?? '';
+  const stderr = run.stderr?.toString() ?? '';
+  const combined = stdout + stderr;
+  // A test that cannot fail is not a test. If a file ever reintroduces
+  // console.assert, treat a tripped assertion as a failure regardless of status.
+  const silentAssertion = /^Assertion failed/m.test(combined);
+
+  if (run.status === 0 && !silentAssertion) {
+    if (stdout.trimStart().startsWith('SKIP')) {
+      console.log(stdout.trim().split('\n')[0]);
       skipped += 1;
     } else {
       console.log(`PASS  ${file}`);
       passed += 1;
     }
-  } catch (err) {
+  } else {
     console.log(`FAIL  ${file}`);
-    const out = (err.stdout?.toString() || '') + (err.stderr?.toString() || '');
-    failures.push(`--- ${file} ---\n${out.trim().split('\n').slice(-8).join('\n')}`);
+    const why = silentAssertion && run.status === 0
+      ? 'console.assert tripped but exited 0 — use node:assert/strict so the failure is real\n'
+      : '';
+    failures.push(`--- ${file} ---\n${why}${combined.trim().split('\n').slice(-8).join('\n')}`);
     failed += 1;
   }
 }
@@ -115,10 +134,10 @@ if (existsSync(playwrightBin)) {
     env: { ...process.env, NODE_OPTIONS: process.env.NODE_OPTIONS ?? '--use-system-ca' },
   });
   if (e2e.status === 0) {
-    console.log('PASS  playwright matrix-chart e2e');
+    console.log('PASS  playwright e2e (all specs)');
     passed += 1;
   } else {
-    console.log('FAIL  playwright matrix-chart e2e');
+    console.log('FAIL  playwright e2e (all specs)');
     const out = (e2e.stdout?.toString() || '') + (e2e.stderr?.toString() || '');
     failures.push(`--- playwright e2e ---\n${out.trim().split('\n').slice(-40).join('\n')}`);
     failed += 1;

@@ -9,6 +9,8 @@ import type { ScoringBundle } from '@omniswim/core/lib/useWorkspaceScoring';
 import type { AthleteCreditedSwim } from '@omniswim/core/lib/scorerRoster';
 import {
   buildTeamLineupAudit,
+  dismissDuplicateAthletePair,
+  linkDuplicateAthletePair,
   suggestQuickFillForVacantLeg,
   type LineupChecklistItem,
 } from '@omniswim/core/lib/rosterLineupAudit';
@@ -242,6 +244,32 @@ export default function RosterLineupStep({
               }}
               onFixItem={whatIfMode ? handleFixItem : undefined}
               onOpenRelays={onOpenRelays}
+              // Linking or dismissing a suspected duplicate edits the roster, so
+              // both are gated on What-if exactly like the other fix actions.
+              onLinkDuplicate={
+                whatIfMode
+                  ? pair => {
+                      const { patch } = linkDuplicateAthletePair(workspace, pair);
+                      onUpdate(patch);
+                      toast.push(
+                        'success',
+                        `Linked ${pair.aliasName} to ${pair.canonicalName} — their times now count as one athlete.`
+                      );
+                    }
+                  : undefined
+              }
+              onDismissDuplicate={
+                whatIfMode
+                  ? pair => {
+                      const { patch } = dismissDuplicateAthletePair(workspace, pair);
+                      onUpdate(patch);
+                      toast.push(
+                        'info',
+                        `${pair.canonicalName} and ${pair.aliasName} recorded as different people.`
+                      );
+                    }
+                  : undefined
+              }
             />
           ) : null}
           {sidePanelTab === 'arbitrage' ? (

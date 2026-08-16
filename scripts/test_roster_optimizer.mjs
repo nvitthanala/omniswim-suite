@@ -1,3 +1,4 @@
+import assert from 'node:assert/strict';
 import { readFileSync } from 'fs';
 import { optimizeRosterForTeam } from '../packages/core/src/lib/rosterOptimizer.ts';
 import { mergeScoringSettings } from '../packages/core/src/lib/scoringDefaults.ts';
@@ -10,8 +11,8 @@ const settings = mergeScoringSettings(ws.scoringSettings, { conference: 'NSISC' 
 const team = 'Ouachita Baptist University';
 const result = optimizeRosterForTeam(ws, Gender.MEN, team, false, settings, 'scorers');
 
-console.assert(Array.isArray(result.overrides), 'overrides array');
-console.assert(typeof result.projectedTotal === 'number', 'projected total');
+assert.ok(Array.isArray(result.overrides), 'overrides array');
+assert.equal(typeof result.projectedTotal, 'number', 'projected total');
 console.log(
   'optimizer',
   team,

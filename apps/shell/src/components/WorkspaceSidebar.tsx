@@ -202,7 +202,16 @@ export default function WorkspaceSidebar() {
                   ) : (
                     <span className="text-xs font-bold truncate pr-4">{w.name}</span>
                   )}
-                  <span className="text-ui-micro text-theme-muted mt-1 uppercase font-mono">
+                  {/* Which workspace holds which meet was invisible here: the row
+                      showed only a creation date, so the one holding the
+                      championship results looked identical to an empty one. */}
+                  <span
+                    className="text-ui-micro text-theme-muted mt-1 truncate w-full"
+                    title={w.loadedMeet?.pdfFilename ?? undefined}
+                  >
+                    {w.loadedMeet?.pdfFilename ?? 'No meet loaded'}
+                  </span>
+                  <span className="text-ui-micro text-theme-muted mt-0.5 uppercase font-mono">
                     {new Date(w.createdAt).toLocaleDateString()}
                   </span>
                 </button>

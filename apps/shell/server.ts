@@ -41,7 +41,36 @@ import {
 } from '../../packages/core/src/lib/psychParseQuality.ts';
 
 const PORT = Number(process.env.PORT ?? process.env.OMNI_PORT ?? 3000);
+/**
+ * Bind loopback only, unless the operator explicitly opts out.
+ *
+ * This suite is local-first and ships with authentication OFF (see
+ * AUTH_REQUIRED below), so the previous hardcoded `0.0.0.0` put the entire
+ * roster — athlete names, class years, performance history for identifiable
+ * minors — on whatever network the laptop had joined, readable AND writable by
+ * anyone on it. A coach running this at a meet is on venue or hotel wifi.
+ *
+ * `127.0.0.1` is reachable from this machine only. Set OMNI_HOST=0.0.0.0 to
+ * serve the network deliberately; startup then prints a warning rather than
+ * refusing, because sharing with an assistant coach is a legitimate use.
+ */
+const HOST = process.env.OMNI_HOST ?? '127.0.0.1';
 const __filename = fileURLToPath(import.meta.url);
+
+/** True only for addresses that cannot be reached from another machine. */
+function isLoopbackHost(host: string): boolean {
+  const normalized = host.trim().toLowerCase().replace(/^\[/, '').replace(/\]$/, '');
+  if (normalized === 'localhost' || normalized === '::1') return true;
+  // Unwrap IPv4-mapped IPv6 (::ffff:127.0.0.1), then match the whole 127.0.0.0/8 block.
+  const v4 = normalized.startsWith('::ffff:') ? normalized.slice('::ffff:'.length) : normalized;
+  return /^127(\.\d{1,3}){3}$/.test(v4);
+}
+
+/** Bracket bare IPv6 literals so the printed URL is actually clickable. */
+function urlHost(host: string): string {
+  if (!host) return '0.0.0.0';
+  return host.includes(':') && !host.startsWith('[') ? `[${host}]` : host;
+}
 const SHELL_ROOT = path.dirname(__filename);
 
 /**
@@ -232,6 +261,50 @@ function ensurePythonVenv() {
   } catch {
     execSync(`"${venvPython}" -m pip install pdfplumber`, { stdio: 'inherit', cwd: PROJECT_ROOT });
   }
+}
+
+const ALLOWED_VIDEO_MIMETYPES = new Set([
+  'video/mp4',
+  'video/quicktime',
+  'video/x-msvideo',
+  'video/x-matroska',
+  'video/webm',
+  'video/mpeg',
+]);
+
+/**
+ * Hardened video upload middleware. Defined but deliberately NOT mounted —
+ * `/api/analyze-video` returns 501, and multer writes the file to disk before
+ * the route handler runs, so mounting it while the feature is unimplemented is
+ * an unauthenticated write with nothing on the other end. Call this only when
+ * the route actually consumes the file.
+ *
+ * The client-supplied `file.originalname` is never used in the stored path. It
+ * is attacker-controlled, and the old `${Date.now()}-${originalname}` scheme
+ * only absorbed a LEADING `../`: a `..` following a path segment still escaped,
+ * so `x/../../../evil.txt` resolved outside the project root entirely. The
+ * stored name is generated server-side from a uuid; only a length-capped
+ * extension is carried over, and `path.extname` reads the basename, so it can
+ * never reintroduce a separator. See scripts/test_server_binding.mjs.
+ */
+export function createVideoUpload() {
+  const uploadDir = path.join(PROJECT_ROOT, 'uploads');
+  fs.mkdirSync(uploadDir, { recursive: true });
+  return multer({
+    storage: multer.diskStorage({
+      destination: (_req, _file, cb) => cb(null, uploadDir),
+      filename: (_req, file, cb) => cb(null, `${uuidv4()}${path.extname(file.originalname).slice(0, 10)}`),
+    }),
+    limits: { fileSize: 512 * 1024 * 1024, files: 1 },
+    fileFilter: (_req, file, cb) => {
+      if (!ALLOWED_VIDEO_MIMETYPES.has(file.mimetype)) {
+        // Reject loudly rather than silently dropping the file.
+        cb(new Error(`Unsupported upload type: ${file.mimetype}`));
+        return;
+      }
+      cb(null, true);
+    },
+  });
 }
 
 async function startServer() {
@@ -913,16 +986,11 @@ async function startServer() {
     }
   });
 
-  const uploadDir = path.join(PROJECT_ROOT, 'uploads');
-  fs.mkdirSync(uploadDir, { recursive: true });
-  const upload = multer({
-    storage: multer.diskStorage({
-      destination: (_req, _file, cb) => cb(null, uploadDir),
-      filename: (_req, file, cb) => cb(null, `${Date.now()}-${file.originalname}`),
-    }),
-  });
-
-  app.post('/api/analyze-video', upload.single('video'), async (_req, res) => {
+  // No upload middleware is mounted: the handler returns 501 and does nothing
+  // with a file, but multer writes to disk BEFORE the handler runs, so mounting
+  // it accepted an unauthenticated write from anyone who could reach the port.
+  // Re-enable via createVideoUpload() when the feature is actually implemented.
+  app.post('/api/analyze-video', async (_req, res) => {
     res.status(501).json({
       error: 'Gemini video analysis reserved for a future release. Use local metrics in the Metrics applet.',
     });
@@ -950,7 +1018,7 @@ async function startServer() {
       throw err;
     });
 
-    httpServer.listen(PORT, '0.0.0.0', () => {
+    httpServer.listen(PORT, HOST, () => {
       logServerReady();
     });
   } else {
@@ -972,7 +1040,7 @@ async function startServer() {
       }
       throw err;
     });
-    httpServer.listen(PORT, '0.0.0.0', () => {
+    httpServer.listen(PORT, HOST, () => {
       logServerReady();
     });
   }
@@ -989,8 +1057,45 @@ function logServerReady() {
   } catch {
     /* not a git checkout */
   }
-  console.log(`Omni Swim Suite running at http://localhost:${PORT} (commit ${commit})`);
+  // Print the host actually bound, never a friendly fiction: the old banner said
+  // "localhost" while the server was listening on every interface, which made the
+  // exposure invisible to the person running it.
+  const loopback = isLoopbackHost(HOST);
+  console.log(`Omni Swim Suite running at http://${urlHost(HOST)}:${PORT} (commit ${commit})`);
+  console.log(
+    `Bind host: ${HOST || '(all interfaces)'} — ${
+      loopback ? 'loopback, reachable from this machine only' : 'REACHABLE FROM THE NETWORK'
+    }`
+  );
+  console.log(
+    AUTH_REQUIRED
+      ? `Authentication: REQUIRED (${STORAGE_BACKEND} backend) — every workspace request needs a session.`
+      : 'Authentication: DISABLED — any request reaching this port can read and write roster data.'
+  );
   console.log('Charts: ChartShell → ChartFrame → Recharts (no ResponsiveContainer). Hard-refresh after git pull.');
+  warnIfNetworkExposed();
+}
+
+/**
+ * Loud, unmissable banner for the one combination that leaks a roster: bound to
+ * a routable interface with no authentication. Warn, do not throw — an operator
+ * may be deliberately sharing with an assistant coach on a trusted network.
+ */
+function warnIfNetworkExposed() {
+  if (isLoopbackHost(HOST) || AUTH_REQUIRED) return;
+  const bar = '='.repeat(74);
+  console.warn('');
+  console.warn(bar);
+  console.warn('  WARNING: THIS SERVER IS REACHABLE FROM THE NETWORK, WITH NO AUTHENTICATION');
+  console.warn(bar);
+  console.warn(`  Bound to ${HOST || '0.0.0.0'}, so every device on this wifi can reach port ${PORT}.`);
+  console.warn('  Authentication is off, so anyone who reaches it can READ and OVERWRITE');
+  console.warn('  roster data: athlete names, class years and performance history.');
+  console.warn('');
+  console.warn('  On venue, hotel or other shared wifi, stop the server and restart it');
+  console.warn('  without OMNI_HOST (it then binds 127.0.0.1 — this machine only).');
+  console.warn(bar);
+  console.warn('');
 }
 
 startServer();

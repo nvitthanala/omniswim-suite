@@ -60,9 +60,29 @@ Mirror the cutlines treatment exactly:
 
 ## 2. Four athletes are still two people each
 
+> **⚠ CORRECTED 2026-08-15 — the cause below is WRONG, and the truth is worse.**
+> These four pairs are **already linked**: `athleteAliases` holds all four as
+> `status: 'active'`, and `buildAliasResolver` merges every one of them
+> correctly. The original probe counted distinct name *strings* without checking
+> whether they were aliased, so "unresolved" was a false alarm.
+>
+> The symptom described below is nonetheless real, and its actual cause is a
+> defect: **`buildScorerRosterLookup` does not apply the alias resolver.**
+> Measured on `Blank Workspace 1` — 47 scorer-roster rows containing BOTH
+> spellings of all four pairs. So a split athlete still occupies two of the 18
+> scorer slots, still appears twice on the roster, and each half still sits
+> independently under the 7-event cap — **even though the user linked them.**
+>
+> That is worse than an unlinked athlete: the operator did the work and got
+> nothing for it, with no indication the link was ignored. See §2a below.
+>
+> The detection work built for this finding (`detectDuplicateAthletes`, surfaced
+> in the compliance checklist) still stands and correctly reports **0 pairs**
+> here — there is genuinely nothing left to link.
+
 **Severity: P1.** Measured in `Blank Workspace 1`.
 
-181 distinct athlete-name strings. **6 aliases recorded.** Four unresolved
+181 distinct athlete-name strings. **6 aliases recorded.** Four
 same-surname/same-initial clusters:
 
 | Spelling A | Spelling B | Likely cause |
@@ -106,6 +126,63 @@ genuinely different people — with the dismissal recorded, so it does not nag.
   `Blank Workspace 1`; dismissing one persists.
 
 ---
+
+## 2a. Recorded aliases are ignored by the scorer roster
+
+**Severity: P0.** Found 2026-08-15 while verifying the fix for §2.
+
+`packages/core/src/lib/scorerRoster.ts` — `buildScorerRosterLookup` builds its
+roster rows from result/recruit/plan names **without** passing them through
+`buildAliasResolver`. Measured on `Blank Workspace 1`:
+
+```
+Alan Alejan Gonzalez Mujica  ->  Alan Gonzalez Mujica     resolver: MERGED
+Camden Mask                  ->  Cam Mask                 resolver: MERGED
+Steven Balistreri            ->  Stevie Balistreri        resolver: MERGED
+Afonso Campanico             ->  Alfonso Campanico        resolver: MERGED
+
+scorer roster rows for Henderson State University: 47
+  Alan Alejan Gonzalez Mujica (1) | Alan Gonzalez Mujica (1)   BOTH PRESENT
+  Camden Mask (1)                 | Cam Mask (1)               BOTH PRESENT
+  Steven Balistreri (1)           | Stevie Balistreri (1)      BOTH PRESENT
+  Afonso Campanico (1)            | Alfonso Campanico (1)      BOTH PRESENT
+```
+
+The alias data is correct. The resolver is correct. The consumer ignores both.
+
+### Consequences
+
+- **Scorer cap.** `maxIndividualScorersPerTeam ?? 18` counts rows. Four
+  duplicated athletes consume four extra slots, so up to four genuine scorers
+  are pushed out of the scoring roster.
+- **Entry cap.** Each half is independently under `maxTotalEntriesPerSwimmer: 7`,
+  so a swimmer can be entered in up to 14 events across their two identities
+  without tripping the compliance checklist.
+- **Roster display.** 47 rows for what is at most 43 athletes.
+- **Anything keyed on athlete count** inherits the error.
+
+### Why this is P0 and not P1
+
+Everything else in this folder is a wrong number the app produced on its own.
+This one is a wrong number the app produced **after the user corrected it** —
+the link was made, stored, and silently discarded downstream. That is the worst
+class of defect in a tool whose premise is that a coach can trust what it shows.
+
+### Proposed fix
+
+`buildScorerRosterLookup` should take an `AthleteAliasResolver` (defaulting to
+`IDENTITY_ALIAS_RESOLVER`, as `categorizeBestEvents` and `relayEventsForAthlete`
+already do in `athleteHistory.ts` — the convention exists, this function just
+does not follow it) and resolve every name before keying a row.
+
+**This changes team totals**, because the scorer cap will select a different 18.
+It needs its own round with before/after totals captured and reviewed, not a
+bolt-on. **Effort:** ~1 session plus verification.
+
+**Audit the other consumers at the same time.** Grep for callers that key on a
+raw athlete name — `countSwimmerEntries`, `aggregateSwimmerMeetPoints`, and the
+roster/optimizer paths are the likely candidates. The bug is not that one
+function forgot; it is that the resolver is opt-in, so forgetting is the default.
 
 ## 3. Junk events reach the history store
 

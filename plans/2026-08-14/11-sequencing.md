@@ -34,6 +34,20 @@ world.
 
 ---
 
+## Round 0 — added 2026-08-15, ahead of everything
+
+| # | Task | Effort | Doc |
+| - | ---- | ------ | --- |
+| 0 | **`buildScorerRosterLookup` ignores recorded aliases.** Four linked athletes still occupy two scorer slots each and can be entered in 14 events. The user made the link; it was stored and discarded. | 1 session + verification | [02 §2a](02-data-quality-aliasing.md#2a-recorded-aliases-are-ignored-by-the-scorer-roster) |
+
+This displaces the dependency chain below: the aliasing *data* turned out to be
+clean already, so what gates trusting the numbers is not linking athletes — it is
+making the existing links count. Do this before anything that reads a team total.
+
+It changes team totals, so it needs before/after capture and its own review. Audit
+the other name-keyed consumers in the same pass; the resolver is opt-in, so
+forgetting it is the default.
+
 ## Round 1 — stop the bleeding (about one day)
 
 Small, independent, each removes a live risk. No dependencies between them.

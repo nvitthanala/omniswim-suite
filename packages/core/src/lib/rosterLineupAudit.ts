@@ -26,14 +26,25 @@ import {
   upsertRelayLegOverride,
 } from './relayLegMatching';
 import { relayEntryKey } from './relaySplits';
+import { detectDuplicateAthletes } from './athleteAliases';
+import type { DuplicateAthletePair } from './athleteAliases';
 import { isRelayResult, normalizeSwimmerName } from './utils';
+
+export type { DuplicateAthletePair } from './athleteAliases';
+export {
+  detectDuplicateAthletes,
+  linkDuplicateAthletePair,
+  dismissDuplicateAthletePair,
+} from './athleteAliases';
 
 export type LineupIssueType =
   | 'over_entry_limit'
   | 'empty_lineup'
   | 'relay_leg_vacant'
   | 'relay_scorer_off'
-  | 'relay_needs_fill';
+  | 'relay_needs_fill'
+  /** Two name spellings on this team that are probably one athlete. */
+  | 'duplicate_athlete';
 
 export type LineupAthleteIssue = {
   type: LineupIssueType;
@@ -41,12 +52,14 @@ export type LineupAthleteIssue = {
   relayEvent?: string;
   legIndex?: number;
   relayEntryKey?: string;
+  /** Present only on `duplicate_athlete` issues — the other spelling + evidence. */
+  duplicate?: DuplicateAthletePair;
 };
 
 export type LineupChecklistItem = {
   id: string;
   type: LineupIssueType;
-  group: 'entries' | 'lineups' | 'relays';
+  group: 'entries' | 'lineups' | 'relays' | 'roster';
   message: string;
   athleteName?: string;
   /** ScorerRosterRow.key for the named athlete — lets a Jump match by key, not raw name. */
@@ -54,6 +67,13 @@ export type LineupChecklistItem = {
   relayEvent?: string;
   legIndex?: number;
   relayEntryKey?: string;
+  /**
+   * Present only on `duplicate_athlete` items. Carries BOTH spellings plus the
+   * evidence, so the UI can offer Link / Not-the-same-person without re-running
+   * the detector. Feed it straight to `linkDuplicateAthletePair` /
+   * `dismissDuplicateAthletePair`.
+   */
+  duplicate?: DuplicateAthletePair;
 };
 
 export type TeamLineupAudit = {
@@ -72,6 +92,12 @@ export type LineupAuditInput = {
   /** Scored projection rows (relay vacant flags). */
   allScored: SwimmerResult[];
   removeSeniors: boolean;
+  /**
+   * Scan the team for athletes split across two name spellings (default true).
+   * Set false only to skip the O(n^2) name scan on a hot path — the split is
+   * still there, it just stops being reported.
+   */
+  detectDuplicates?: boolean;
 };
 
 /** Swimmers on relay legs who are not scorers — legs vacated in projection (non-scorers cannot swim relays). */
@@ -149,7 +175,16 @@ function teamFrom(t: string | undefined): string {
 }
 
 export function buildTeamLineupAudit(input: LineupAuditInput): TeamLineupAudit {
-  const { workspace, gender, team, settings, allResults, allScored, removeSeniors } = input;
+  const {
+    workspace,
+    gender,
+    team,
+    settings,
+    allResults,
+    allScored,
+    removeSeniors,
+    detectDuplicates = true,
+  } = input;
   const merged = mergeScoringSettings(settings);
   const athleteIssues = new Map<string, LineupAthleteIssue[]>();
   const checklistItems: LineupChecklistItem[] = [];
@@ -259,6 +294,34 @@ export function buildTeamLineupAudit(input: LineupAuditInput): TeamLineupAudit {
         group: 'lineups',
         message: `${displayName}: scorer with no individual entries`,
         athleteName: displayName,
+      });
+    }
+  }
+
+  // Athletes split across two name spellings. A split divides one human's
+  // history into two identities: each sits under the entry cap independently,
+  // each gets ranked and entered, and each counts against the distinct-scorer
+  // cap. Names are gathered by `buildAliasEvidenceIndex` (meet results + the
+  // frozen source copy + athleteHistory + recruits + meetEntryPlans), scoped to
+  // this team and gender; already-linked and user-rejected pairs are excluded.
+  if (detectDuplicates) {
+    for (const pair of detectDuplicateAthletes(workspace, { team, gender })) {
+      pushIssue(pair.canonicalName, {
+        type: 'duplicate_athlete',
+        message: `Also appears as "${pair.aliasName}" — likely the same athlete`,
+        duplicate: pair,
+      });
+      pushIssue(pair.aliasName, {
+        type: 'duplicate_athlete',
+        message: `Also appears as "${pair.canonicalName}" — likely the same athlete`,
+        duplicate: pair,
+      });
+      pushChecklist({
+        type: 'duplicate_athlete',
+        group: 'roster',
+        message: `${pair.canonicalName}: also entered as "${pair.aliasName}" — likely the same athlete`,
+        athleteName: pair.canonicalName,
+        duplicate: pair,
       });
     }
   }
@@ -455,6 +518,8 @@ export function issueBadgeLabel(issue: LineupAthleteIssue): string {
       return 'Relay removed';
     case 'relay_needs_fill':
       return 'Fill relay';
+    case 'duplicate_athlete':
+      return 'Duplicate?';
     default:
       return 'Issue';
   }

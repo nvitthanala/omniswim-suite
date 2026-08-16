@@ -18,6 +18,7 @@ import {
 import { useWorkspaceScoring } from '@omniswim/core/lib/useWorkspaceScoring';
 import { alignPsychResultsToMeetTeams } from '@omniswim/core/lib/psychProjection';
 import { meetCopyFromParsed } from '@omniswim/core/lib/meetSource';
+import { workspaceNameForLoadedMeet } from '@omniswim/core/lib/workspaceNaming';
 import { softRemoveSwimmerFromWorkspace } from '@omniswim/core/lib/swimmerSoftRemove';
 import { rosterCatalogApi, type CatalogTeamRoster } from '@omniswim/core/api/rosterCatalog';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
@@ -193,6 +194,11 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
           );
         }
 
+        // A workspace still carrying its generated placeholder takes its identity
+        // from the meet just loaded. Only placeholders are replaced — a name the
+        // user typed is never overwritten. See workspaceNameForLoadedMeet.
+        const autoName = workspaceNameForLoadedMeet(workspace.name, file.name, conference);
+
         await onUpdate({
           ...meetCopyFromParsed(parsedMen, parsedWomen),
           deletedSwimmers: [],
@@ -205,9 +211,13 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
             conference,
           },
           conference,
+          ...(autoName ? { name: autoName } : {}),
           ...(officialTeamScores ? { officialTeamScores } : {}),
           ...(scoringPatch ? { scoringSettings: scoringPatch } : {}),
         });
+        if (autoName) {
+          toast.push('info', `Workspace renamed to "${autoName}"`);
+        }
         setScoringRefreshKey(k => k + 1);
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') {

@@ -40,6 +40,19 @@ right. The gap is that they live in prose and review, not in types and tests.
 | 15 | `crossCourseArbitrage`'s incremental **fast path is not faster** than a full re-score | **P1** | [09 §1](09-performance.md#where-the-time-goes) |
 | 16 | `authMiddleware.ts` — the file deciding whether a request is authenticated — is **one 1,600-character line** | **P2** | [10 §4](10-security-exposure.md#4-authmiddlewarets-is-one-1600-character-line) |
 
+### Added 2026-08-15, found while fixing #4
+
+| # | Finding | Sev | Where |
+| - | ------- | --- | ----- |
+| 17 | **Recorded aliases are ignored by `buildScorerRosterLookup`.** Four linked athletes each occupy two of the 18 scorer slots and can be entered in 14 events. The user made the link; it was stored and silently discarded. | **P0** | [02 §2a](02-data-quality-aliasing.md#2a-recorded-aliases-are-ignored-by-the-scorer-roster) |
+| 18 | **Three test files could not fail.** 35 `console.assert` calls across `test_athlete_history`, `test_entry_limits`, `test_roster_optimizer` — Node's `console.assert` logs and returns, leaving exit code 0, so they reported PASS regardless of findings | fixed | [06](06-testing-verification.md) |
+
+**Finding #4 was wrong and is corrected in place.** The four athletes were
+already linked; the original probe counted name strings without checking
+`athleteAliases`. Chasing it is what surfaced #17, which is worse — everything
+else in this folder is a number the app got wrong on its own, while #17 is a
+number it got wrong *after the user corrected it*.
+
 **The order to do all of this in is [11-sequencing.md](11-sequencing.md).**
 
 ## If you only do three things

@@ -14,7 +14,7 @@ import {
   Workspace,
   AthleteEventProfile,
 } from '../types';
-import { divisionForTeam, divisionForTeamOrNull } from '../data/teamDivisions';
+import { divisionForTeamOrNull } from '../data/teamDivisions';
 import { compareTimeToCutline } from './cutlineUtils';
 import { mergeScoringSettings } from './scoringDefaults';
 import {
@@ -497,14 +497,41 @@ export function detectSwimCloudPasteFormat(text: string): SwimCloudPasteFormat {
   return 'unknown';
 }
 
+/**
+ * Stamp each swim with the cut it achieved, judged against **its own team's**
+ * division table. These values become the cut badges a coach reads.
+ *
+ * `division` follows the same three-state contract as
+ * {@link rankEventsByQuality}: `undefined` means "resolve it from the team",
+ * `null` means the caller has already established it is unresolvable, and a
+ * division wins outright.
+ *
+ * This resolved through the deprecated `divisionForTeam`, which answers `D1` for
+ * every team it does not recognise. D1 publishes the fastest standards, so an
+ * unmapped D2/D3/NAIA program had its cuts silently under-reported — and a swim
+ * quick enough for the D1 mark was stamped with a badge from a table that never
+ * applied to it. Neither failure throws; both render as a plausible badge.
+ * `divisionForTeamOrNull` returns the honest answer, and `compareTimeToCutline`
+ * reports the same case as `status: 'no_table_for_division'`.
+ *
+ * One consequence to carry downstream: `computedCut: null` is under-determined
+ * on its own — it covers both "we hold no table" and "missed every published
+ * standard". Per `CutlineLookupStatus`, only `status: 'ok'` licenses the
+ * statement "did not achieve a cut", so a caller rendering that phrase must
+ * re-check `divisionForTeamOrNull(team)` (or the lookup status) first rather
+ * than reading a null here as a miss.
+ */
 function enrichWithComputedCut(
   swims: HistoricalSwim[],
   team: string,
-  division?: NcaaDivision
+  division?: NcaaDivision | null
 ): HistoricalSwim[] {
-  const div = division ?? divisionForTeam(team);
+  const div = division !== undefined ? division : divisionForTeamOrNull(team);
   return swims.map(s => {
-    if (s.timeType && s.timeType !== 'SCY') {
+    // Two swims we hold no standard for: a metric swim (the NCAA publishes SCY
+    // standards only) and any swim whose division did not resolve. Neither may
+    // be given a verdict here; a value the caller arrived with is theirs to keep.
+    if (!div || (s.timeType && s.timeType !== 'SCY')) {
       return { ...s, computedCut: s.computedCut ?? null };
     }
     const sec = convertTimeToSeconds(convertToSCY(s.time, s.event, s.gender, s.timeType ?? 'SCY'));
@@ -517,12 +544,17 @@ export function parseSwimCloudStampBadge(raw: string): SwimCloudBadge {
   return parseStampToken(raw) ?? 'none';
 }
 
+/**
+ * `division` may be passed `null` to state outright that the team's division is
+ * unknown; omitting it resolves from the team. Either way an unresolved division
+ * yields `computedCut: null` rather than a verdict from the D1 table.
+ */
 export function parseSwimCloudPersonalBests(
   text: string,
   swimmerName: string,
   team: string,
   gender: Gender,
-  division?: NcaaDivision
+  division?: NcaaDivision | null
 ): HistoricalSwim[] {
   const out: HistoricalSwim[] = [];
   const name = swimmerName.trim();
@@ -576,11 +608,12 @@ export function parseSwimCloudPersonalBests(
   return enrichWithComputedCut(out, team, division);
 }
 
+/** `division` takes the same three states as {@link parseSwimCloudPersonalBests}. */
 export function parseSwimCloudRosterPaste(
   text: string,
   team: string,
   gender: Gender,
-  division?: NcaaDivision
+  division?: NcaaDivision | null
 ): HistoricalSwim[] {
   const eventRe =
     /(\d+\s*(?:Yard\s*)?(?:Freestyle|Backstroke|Breaststroke|Butterfly|IM|Individual Medley|Diving)[^\t]*)/i;

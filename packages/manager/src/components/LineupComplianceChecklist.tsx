@@ -6,19 +6,28 @@
 
 import React, { useMemo, useState } from 'react';
 import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
-import type { LineupChecklistItem, TeamLineupAudit } from '@omniswim/core/lib/rosterLineupAudit';
+import type {
+  DuplicateAthletePair,
+  LineupChecklistItem,
+  TeamLineupAudit,
+} from '@omniswim/core/lib/rosterLineupAudit';
 
 type Props = {
   audit: TeamLineupAudit;
   onJumpAthlete?: (athleteName: string, athleteKey?: string) => void;
   onFixItem?: (item: LineupChecklistItem) => void;
   onOpenRelays?: () => void;
+  /** Confirm a suspected split athlete — record the alias link. */
+  onLinkDuplicate?: (pair: DuplicateAthletePair, item: LineupChecklistItem) => void;
+  /** Reject a suspected split athlete — record the suppression tombstone. */
+  onDismissDuplicate?: (pair: DuplicateAthletePair, item: LineupChecklistItem) => void;
 };
 
 const GROUP_LABEL: Record<LineupChecklistItem['group'], string> = {
   entries: 'Entry limits',
   lineups: 'Empty lineups',
   relays: 'Relay gaps',
+  roster: 'Duplicate athletes',
 };
 
 export default function LineupComplianceChecklist({
@@ -26,6 +35,8 @@ export default function LineupComplianceChecklist({
   onJumpAthlete,
   onFixItem,
   onOpenRelays,
+  onLinkDuplicate,
+  onDismissDuplicate,
 }: Props) {
   const [mobileOpen, setMobileOpen] = useState(true);
   const items = audit.checklistItems;
@@ -36,6 +47,7 @@ export default function LineupComplianceChecklist({
       entries: [],
       lineups: [],
       relays: [],
+      roster: [],
     };
     for (const item of items) {
       map[item.group].push(item);
@@ -48,10 +60,13 @@ export default function LineupComplianceChecklist({
       {count === 0 ? (
         <div className="flex items-start gap-2 text-ui-body text-theme-secondary leading-relaxed">
           <CheckCircle2 size={16} className="shrink-0 mt-0.5 text-[var(--text-accent)]" />
-          <p>No compliance issues for this team. Entry limits, scorers, and relay legs look clear.</p>
+          <p>
+            No compliance issues for this team. Entry limits, scorers, relay legs, and athlete
+            names look clear.
+          </p>
         </div>
       ) : (
-        (['entries', 'lineups', 'relays'] as const).map(group => {
+        (['entries', 'lineups', 'relays', 'roster'] as const).map(group => {
           const list = grouped[group];
           if (list.length === 0) return null;
           return (
@@ -68,7 +83,35 @@ export default function LineupComplianceChecklist({
                     <p className="text-ui-caption text-[var(--text-primary)] leading-relaxed break-words">
                       {item.message}
                     </p>
+                    {item.duplicate ? (
+                      <p className="text-ui-caption text-theme-muted leading-relaxed break-words mt-1">
+                        {item.duplicate.reason}
+                        {item.duplicate.timeMatches.length > 0
+                          ? ` — same ${item.duplicate.timeMatches
+                              .map(t => `${t.event} ${t.time}`)
+                              .join(', ')}`
+                          : ''}
+                      </p>
+                    ) : null}
                     <div className="flex flex-wrap gap-2 mt-2">
+                      {item.duplicate && onLinkDuplicate ? (
+                        <button
+                          type="button"
+                          className="text-ui-caption text-[var(--text-accent)] hover:underline"
+                          onClick={() => onLinkDuplicate(item.duplicate!, item)}
+                        >
+                          Link
+                        </button>
+                      ) : null}
+                      {item.duplicate && onDismissDuplicate ? (
+                        <button
+                          type="button"
+                          className="text-ui-caption text-theme-secondary hover:text-[var(--text-accent)]"
+                          onClick={() => onDismissDuplicate(item.duplicate!, item)}
+                        >
+                          Not the same person
+                        </button>
+                      ) : null}
                       {item.athleteName && onJumpAthlete ? (
                         <button
                           type="button"
