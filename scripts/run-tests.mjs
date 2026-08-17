@@ -75,6 +75,7 @@ const TESTS = [
   ['test_team_aliases.mjs'],
   ['test_cutlines.mjs'],
   ['test_cutline_tags.mjs'],
+  ['test_team_rankings_parser.mjs'],
   ['test_nsisc_psych.mjs', 'tests/fixtures/nsisc_psych_sheet.pdf'],
   ['test_compact_event_label.mjs'],
   ['test_team_colors.mjs'],

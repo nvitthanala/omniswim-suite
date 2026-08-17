@@ -1,9 +1,9 @@
 # Current state — one page
 
-Last updated 2026-08-16 after `fae4da46`. **Start here.** 132 KB across 19 files
-sits behind this page; everything below links into it.
+Last updated 2026-08-16. **Start here.** 132 KB across 19 files sits behind this
+page; everything below links into it.
 
-Baseline: lint clean (7 packages), `npm test` **56 passed / 0 failed / 3 skipped**,
+Baseline: lint clean (7 packages), `npm test` **60 passed / 0 failed / 3 skipped**,
 `npm run build` exit 0.
 
 ---
@@ -12,15 +12,37 @@ Baseline: lint clean (7 packages), `npm test` **56 passed / 0 failed / 3 skipped
 
 | # | Item | Why now |
 | - | ---- | ------- |
-| 1 | **Diagnose the Delta State score mismatch** — [13](2026-08-14/13-official-score-mismatch.md) | Computed totals disagree with the meet's **official published scores**: women +20, men −1. Six of eight teams match exactly, so it is specific to one team's rows. The only finding here with a ground-truth answer to check against. |
+| 1 | **Commit the meet results PDF** — [13](2026-08-14/13-official-score-mismatch.md) | `loadedMeet.pdfFilename` names `2026_NSISC_Championships_Final_Results.pdf`; the file is not in the repo. It blocks **all three** inactive scoring checks and every open question in 13. Five minutes of answer, currently unreachable. |
 | 2 | **The `every()` tie-group gate** — [12](2026-08-14/12-optimizer-destroys-score.md) | One non-scorer zeroes an entire tie group. The optimiser is now guarded, but this landmine stands for any workspace where ranks collapse. |
-| 3 | Branded `CanonicalEvent` — [04 §3](2026-08-14/04-architecture-complexity.md) | The structural bet. Four defects were the same bug: a value keyed on one identity, looked up by another. |
-| 4 | Conversion-factor provenance — [02 §1](2026-08-14/02-data-quality-aliasing.md) | **Blocked on an open question**: does any governing body publish these factors? If not, the whole table is indicative, not official. |
-| 5 | `utils.ts` split — [04 §2](2026-08-14/04-architecture-complexity.md) | `calculatePoints`, the most important function in the product, lives in a file called `utils`. |
+| 3 | **Time-trial tagging in `backend/pdf_parser.py`** — [13](2026-08-14/13-official-score-mismatch.md) | Two untagged time-trial rows invent 20 points each. Three modules re-derive "is this a time trial" from the event label and all three were defeated by one bad label. Fix the label, not the readers. |
+| 4 | Branded `CanonicalEvent` — [04 §3](2026-08-14/04-architecture-complexity.md) | The structural bet. Four defects were the same bug: a value keyed on one identity, looked up by another. |
+| 5 | Conversion-factor provenance — [02 §1](2026-08-14/02-data-quality-aliasing.md) | **Blocked on an open question**: does any governing body publish these factors? If not, the whole table is indicative, not official. |
 
 **Done since this page was written:** the optimiser guard (1277 → 0 became
-1277 → **1395**), the NSISC settings lock, and the fast path (**5.7×**, and the
-cause was a per-row/per-name counting bug that silently disabled it).
+1277 → **1395**), the NSISC settings lock, the fast path (**5.7×**, cause was a
+per-row/per-name counting bug that silently disabled it), and the Delta State
+diagnosis below.
+
+### The Delta State mismatch is diagnosed — and the engine is exonerated
+
+`calculatePoints` reproduces `backend/point_calculator.py`'s stored points
+**exactly**, row by row, every event, both genders. Two independent
+implementations agree with each other and disagree with the meet, so the defect
+is upstream of both, in extraction. Three extraction defects found:
+
+- **Women +20 is fully explained.** One untagged time-trial row (`Event 938`,
+  `prelimsTime: "NT"`, last row of the array) wins a phantom one-swimmer event.
+  936 − 20 = **916 = official, exactly**.
+- **Men −1 is a net.** The mirror row (`Event 939 Boys …`) adds 20; a genuinely
+  dropped row in Event 13 (B-final winner, rank 9) removes 9; the residual −21
+  is not closed. Two seductive candidates were **eliminated** — Event 39 rank 8
+  is a DQ-vacated place, Event 22 ranks 11–16 are a sparse B final. Recorded so
+  nobody re-spends that hour.
+- **`officialTeamScores` was destroyed for every half-point total** — ✅ fixed.
+  pdfplumber splits `1,029.50` into `1,029. 50`, and the lazy regex took the
+  school name to be `… 1,029.` scoring `50`. It corrupted exactly the two teams
+  whose scores end in .50, and stored the wreckage under a *different key* than
+  the clean rows, so nothing could tell corrupt from missing.
 
 ---
 
@@ -59,7 +81,10 @@ ranked by nothing.
 version stamp, unattended backups · [04 §2](2026-08-14/04-architecture-complexity.md)
 `utils.ts` junk drawer.
 
-**Reported, not fixed** — dead `npById` per fast-swap context ·
+**Reported, not fixed** — two untagged time-trial rows score 20 points each
+([13](2026-08-14/13-official-score-mismatch.md)) · a duplicated row in Event 39 ·
+the `Boys`/`Girls` carve-out in `utils.ts` makes HyTek gender-token events score,
+unadjudicable without the PDF · dead `npById` per fast-swap context ·
 `CapVoidSummary.byAthlete` dead · `individualStrokeDistance` lacks label hygiene
 (latent, 0 live rows) · two competing alias mechanisms, neither canonical ·
 points awarded per row not per distinct name.

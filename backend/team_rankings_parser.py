@@ -12,10 +12,22 @@ except ImportError:
 
 
 def _parse_points_token(s: str) -> float:
-    cleaned = s.replace(',', '').strip()
+    # Whitespace is stripped from *inside* the token as well as around it:
+    # pdfplumber splits HyTek's proportionally-spaced totals at the decimal
+    # point, so "1,029.50" arrives as "1,029. 50". See _POINTS_RE.
+    cleaned = re.sub(r'\s+', '', s).replace(',', '')
     if not cleaned:
         return 0.0
     return float(cleaned)
+
+
+# The fractional part is allowed to be separated from the decimal point by
+# whitespace. Without this, `(.+?)\s+([\d,]+(?:\.\d+)?)$` finds its leftmost
+# match at the space *inside* the number: "1,029. 50" parses as the school
+# "<name> 1,029." scoring 50 points. That silently destroyed the official
+# total of every team whose score ended in a half point — in the NSISC
+# workspace, exactly the two teams scoring 1,029.50 and 875.50.
+_POINTS_RE = r'[\d,]+(?:\s*\.\s*\d+)?'
 
 
 def _normalize_team_line(line: str) -> tuple[int, str, float] | None:
@@ -24,7 +36,7 @@ def _normalize_team_line(line: str) -> tuple[int, str, float] | None:
     if not line or re.search(r'\bTotal\b', line, re.I):
         return None
     m = re.match(
-        r'^\s*(\d{1,2})\s+(.+?)\s+([\d,]+(?:\.\d+)?)\s*(?:\t.*)?$',
+        rf'^\s*(\d{{1,2}})\s+(.+?)\s+({_POINTS_RE})\s*(?:\t.*)?$',
         line,
     )
     if not m:
@@ -33,6 +45,13 @@ def _normalize_team_line(line: str) -> tuple[int, str, float] | None:
     team = m.group(2).strip()
     if not team or team.lower() == 'school':
         return None
+    # A school name containing digits means the split landed inside the score.
+    # Raise rather than store a number nobody can trust: a wrong official total
+    # is compared against computed totals and reads as a scoring defect.
+    if re.search(r'\d', team):
+        raise ValueError(
+            f'team score line split inside the number - school name contains digits: {line!r}'
+        )
     pts = _parse_points_token(m.group(3))
     return rank, team, pts
 
