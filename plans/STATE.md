@@ -3,7 +3,7 @@
 Last updated 2026-08-16. **Start here.** 132 KB across 19 files sits behind this
 page; everything below links into it.
 
-Baseline: lint clean (7 packages), `npm test` **60 passed / 0 failed / 3 skipped**,
+Baseline: lint clean (7 packages), `npm test` **61 passed / 0 failed / 3 skipped**,
 `npm run build` exit 0.
 
 ---
@@ -13,15 +13,16 @@ Baseline: lint clean (7 packages), `npm test` **60 passed / 0 failed / 3 skipped
 | # | Item | Why now |
 | - | ---- | ------- |
 | 1 | **Commit the meet results PDF** — [13](2026-08-14/13-official-score-mismatch.md) | `loadedMeet.pdfFilename` names `2026_NSISC_Championships_Final_Results.pdf`; the file is not in the repo. It blocks **all three** inactive scoring checks and every open question in 13. Five minutes of answer, currently unreachable. |
-| 2 | **The `every()` tie-group gate** — [12](2026-08-14/12-optimizer-destroys-score.md) | One non-scorer zeroes an entire tie group. The optimiser is now guarded, but this landmine stands for any workspace where ranks collapse. |
-| 3 | **Time-trial tagging in `backend/pdf_parser.py`** — [13](2026-08-14/13-official-score-mismatch.md) | Two untagged time-trial rows invent 20 points each. Three modules re-derive "is this a time trial" from the event label and all three were defeated by one bad label. Fix the label, not the readers. |
+| 2 | **Time-trial tagging in `backend/pdf_parser.py`** — [13](2026-08-14/13-official-score-mismatch.md) | Two untagged time-trial rows invent 20 points each. Three modules re-derive "is this a time trial" from the event label and all three were defeated by one bad label. Fix the label, not the readers. |
+| 3 | **Rank collapse on roster-only workspaces** — [12 §2](2026-08-14/12-optimizer-destroys-score.md) | `prepareRecruitsForScoring` returns every recruit at rank 1 when there are no comparators, so an event scores as a 281-way tie. No longer destructive, but it is not what a coach is looking at. |
 | 4 | Branded `CanonicalEvent` — [04 §3](2026-08-14/04-architecture-complexity.md) | The structural bet. Four defects were the same bug: a value keyed on one identity, looked up by another. |
 | 5 | Conversion-factor provenance — [02 §1](2026-08-14/02-data-quality-aliasing.md) | **Blocked on an open question**: does any governing body publish these factors? If not, the whole table is indicative, not official. |
 
 **Done since this page was written:** the optimiser guard (1277 → 0 became
-1277 → **1395**), the NSISC settings lock, the fast path (**5.7×**, cause was a
-per-row/per-name counting bug that silently disabled it), and the Delta State
-diagnosis below.
+1277 → 1395), the NSISC settings lock, the fast path (**5.7×**, cause was a
+per-row/per-name counting bug that silently disabled it), the **`every()`
+tie-group gate** (roster workspace best result 1395 → **1407.27**, and the
+`scorers` stage alone 213 → **1270**), and the Delta State diagnosis below.
 
 ### The Delta State mismatch is diagnosed — and the engine is exonerated
 
@@ -64,8 +65,9 @@ is upstream of both, in extraction. Three extraction defects found:
 
 ## Open findings, by severity
 
-**P0** — [12](2026-08-14/12-optimizer-destroys-score.md) optimiser destroys a
-roster-driven projection.
+**P0** — none open. [12](2026-08-14/12-optimizer-destroys-score.md) is closed:
+guarded last round, root cause fixed this round (**213 → 1270**, and the stage
+that produced the 0.00 wipeout is now the best answer at **1407.27**).
 
 **P1** — [02 §2b](2026-08-14/02-data-quality-aliasing.md) seven settings controls
 editable but ignored · [02 §1](2026-08-14/02-data-quality-aliasing.md) conversion

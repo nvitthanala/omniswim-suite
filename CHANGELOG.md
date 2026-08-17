@@ -8,6 +8,26 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 2026-08-16
+
+### Fixed
+
+- **Benching one athlete no longer zeroes their teammates.** Scorer-roster
+  eligibility was applied to a whole tie group at once, so a single athlete
+  turned off cost every teammate tied with them. On the HSU 2026-27 roster this
+  was the mechanism behind "Optimize team" destroying the projection: the
+  scorers stage alone scored **213**, and now scores **1270**. Displayed team
+  totals are unchanged — the bug only surfaced once an eligibility override
+  existed. Benched points are forfeited, not redistributed to teammates.
+- **"Optimize team" finds a better lineup on a roster-only workspace.** Best
+  available result on HSU men rises from 1395 to **1407.27** (current 1277),
+  because the stage combination that previously collapsed to zero is now viable.
+- **Official team scores ending in a half point are no longer destroyed on
+  import.** A meet PDF total of `1,029.50` was being read as the school
+  "… 1,029." scoring `50` points, silently, for every team whose score ended in
+  .50. Such a line now parses correctly, and a line that still cannot be split
+  safely raises instead of storing a wrong total.
+
 ## 2026-08-15
 
 ### Changed

@@ -1036,18 +1036,33 @@ function scoreIndividualsInEvent(
       byTeam.get(t)!.push(r);
     }
 
-    for (const [team, members] of byTeam) {
-      const meetState = getOrCreateMeetState(meetStates, team, members[0].gender);
-      const uniqueNames = [...new Set(members.map(m => m.name))];
-      const gender = members[0].gender;
+    for (const [team, allMembers] of byTeam) {
+      const meetState = getOrCreateMeetState(meetStates, team, allMembers[0].gender);
+      const gender = allMembers[0].gender;
 
+      // Roster eligibility is a per-ATHLETE decision, so it is applied per
+      // athlete. It used to be `uniqueNames.every(...)`, which zeroed the whole
+      // team group the moment one member was off the scoring roster.
+      //
+      // That is invisible in PDF-shaped data — a team almost never holds two
+      // swimmers on one placement, so the group is a single athlete and `every`
+      // reduces to the same test. It is catastrophic when ranks collapse:
+      // `prepareRecruitsForScoring` has no comparators on a roster-only
+      // workspace, so every recruit row returns rank 1 and an entire event
+      // becomes ONE tie group. Turning 14 of 32 athletes off then zeroed every
+      // event any of them entered — 12 of 14 events measured, zero exceptions,
+      // and a 1277-point projection went to 0. See plans/2026-08-14/12.
+      let members = allMembers;
       if (rosterLookup && usesScorerRoster(merged)) {
-        const rosterOk = uniqueNames.every(n => rosterLookup.isScorer(n, team, gender));
-        if (!rosterOk) {
-          members.forEach(r => indivOut.push({ ...r, points: 0 }));
-          continue;
+        members = [];
+        for (const r of allMembers) {
+          if (rosterLookup.isScorer(r.name, team, gender)) members.push(r);
+          else indivOut.push({ ...r, points: 0 });
         }
+        if (members.length === 0) continue;
       }
+
+      const uniqueNames = [...new Set(members.map(m => m.name))];
 
       const prelimDiveBlocked = (r: SwimmerResult) =>
         isPrelimDiving && athleteHasFinalsDiveInEvent(individuals, r.name, team, merged);

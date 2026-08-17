@@ -23,8 +23,48 @@
 > `OptimizerResult` gained `outcome`, `appliedStages` and `unguardedTotal`, and
 > the UI no longer shows a success toast for a no-op.
 >
-> **The root cause is diagnosed below and is NOT fixed** — the guard makes the
-> button safe while the disagreement stands.
+> **The root cause is diagnosed below.** ✅ **Its severe half — the `every()`
+> tie-group gate — was fixed 2026-08-16.** See the next section.
+
+## ✅ The `every()` gate is fixed — eligibility is now per athlete
+
+`scoreIndividualsInEvent` gated a team's slice of a tie group with
+`uniqueNames.every(n => rosterLookup.isScorer(...))`, so **one athlete off the
+scoring roster zeroed every teammate tied with them**. It now filters: the
+non-scorer takes 0, the scorers keep their share.
+
+Measured on the two live workspaces, HSU men:
+
+| | current | `scorers` | `events` | `scorers+events` |
+| --- | --- | --- | --- | --- |
+| meet loaded — before | 1383.83 | 1214.33 | 1242.00 | 1691.00 |
+| meet loaded — **after** | 1383.83 | **1364.24** | 1242.00 | **1566.87** |
+| recruits only — before | 1277.00 | **213.00** | 1395.00 | **0.00** |
+| recruits only — **after** | 1277.00 | **1270.03** | 1395.00 | **1407.27** |
+
+The catastrophic cells are gone. `scorers` alone on the roster workspace goes
+**213 → 1270**, and the chained stage that previously produced the 0.00 wipeout
+is now the **best available answer at 1407.27** — 12 points better than the
+`events` stage the guard used to have to fall back to.
+
+Two properties worth stating because they are what make this safe to ship:
+
+- **No displayed total moves.** Every `current` figure is unchanged, on both
+  workspaces and both genders, and `scripts/test_nsisc_team_totals.mjs` reports
+  byte-identical numbers before and after. With automatic scorers nobody is a
+  non-scorer, so the gate never fired until the optimizer wrote an override.
+- **Benched points are forfeited, not redistributed.** The tie share is set by
+  the placement, so it is identical before and after; a rival's points do not
+  move either. `scripts/test_tie_group_scoring.mjs` asserts both directions,
+  including that benching a whole team still scores nothing.
+
+The meet workspace's optimum falls 1691.00 → 1566.87. That is expected and is
+not a loss of real points: under the old gate a mixed group was zeroed *without
+consuming meet-wide pool weight*, so the 18-scorer pool stretched further than
+it should have. Scorers now score and consume, which is the honest accounting.
+
+The guard from the previous round stays. It is what made this change measurable
+rather than dangerous, and it still catches any future stage that loses points.
 
 ## Root cause — three behaviours compounding
 
@@ -51,6 +91,15 @@ that puts an off athlete into all 14 → 0.00. Zero exceptions either way.
 eligibility decision into an all-or-nothing *event* decision whenever ranks
 collapse. Fixing #1 alone would leave that landmine for any workspace where a tie
 group spans a scorer and a non-scorer.
+
+> #3 is fixed (see above). **#1 and #2 still stand** and are still worth closing:
+> the engine's automatic scorer set ignores `maxIndividualScorersPerTeam` while
+> the optimizer enforces it, so the two components still disagree about who
+> scores; and `prepareRecruitsForScoring` still returns every recruit at rank 1
+> when there are no comparators, which is why a whole event can be one tie group
+> at all. Neither is destructive any more — but #2 means a roster-only workspace
+> is still scoring an event as a 281-way tie, which is not what a coach is
+> looking at.
 
 ---
 

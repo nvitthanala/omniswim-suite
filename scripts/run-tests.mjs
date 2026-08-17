@@ -30,6 +30,7 @@ const TESTS = [
   ['test_chart_bundle.mjs'],
   ['test_roster_optimizer.mjs'],
   ['test_optimizer_never_loses.mjs'],
+  ['test_tie_group_scoring.mjs'],
   ['test_fast_swap_context.mjs'],
   ['test_entry_limits.mjs'],
   ['test_athlete_history.mjs'],
