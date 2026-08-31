@@ -8,8 +8,8 @@
 import { Gender, HistoricalSwim, NcaaDivision } from '../types';
 import {
   implausibleSwimRowWarning,
-  isProfileNameLine,
   parseSwimCloudPersonalBestsDetailed,
+  splitMultiProfileBlocks,
   type RejectedSwimRow,
 } from './athleteHistory';
 
@@ -35,42 +35,27 @@ export type ParseMultiProfileResult = {
   rejected: RejectedSwimRow[];
 };
 
-type RawBlock = { name: string; lines: string[] };
-
 /**
  * Split a multi-profile paste into per-athlete blocks and parse each block's rows with
- * {@link parseSwimCloudPersonalBestsDetailed}. Blocks are delimited by bare name lines;
- * header/junk and blank lines are ignored. Warns (never throws) on a name with zero parsed
- * rows, on rows that appear before any name line, and on each row the plausibility gate
- * refused.
+ * {@link parseSwimCloudPersonalBestsDetailed}. Blocking is delegated to
+ * {@link splitMultiProfileBlocks} so the parser and the format detector agree on where
+ * one athlete ends and the next begins — two independent splitters is precisely how a
+ * club line ends up owning another swimmer's times.
+ *
+ * Warns (never throws) on a name with zero parsed rows, on rows that appear before any
+ * name line, and on each row the plausibility gate refused. A zero-row warning names the
+ * header lines that were folded into that block, so an operator can see whether the block
+ * was empty or whether the split landed in the wrong place.
  */
 export function parseSwimCloudMultiProfile(
   text: string,
   opts: ParseMultiProfileOptions
 ): ParseMultiProfileResult {
   const warnings: string[] = [];
-  const blocks: RawBlock[] = [];
-  let current: RawBlock | null = null;
-  let warnedOrphanRows = false;
-
-  for (const rawLine of text.split(/\r?\n/)) {
-    const t = rawLine.trim();
-    if (!t) continue;
-    if (isProfileNameLine(t)) {
-      if (current) blocks.push(current);
-      current = { name: t, lines: [] };
-      continue;
-    }
-    if (!current) {
-      if (!warnedOrphanRows) {
-        warnings.push('Rows found before any swimmer name — ignored');
-        warnedOrphanRows = true;
-      }
-      continue;
-    }
-    current.lines.push(rawLine);
+  const { blocks, orphanLines } = splitMultiProfileBlocks(text);
+  if (orphanLines.length > 0) {
+    warnings.push('Rows found before any swimmer name — ignored');
   }
-  if (current) blocks.push(current);
 
   const athletes: MultiProfileAthlete[] = [];
   const rejected: RejectedSwimRow[] = [];
@@ -87,7 +72,11 @@ export function parseSwimCloudMultiProfile(
     rejected.push(...parsed.rejected);
     warnings.push(...parsed.rejected.map(implausibleSwimRowWarning));
     if (parsed.swims.length === 0) {
-      warnings.push(`No swims parsed for "${block.name}"`);
+      const folded =
+        block.absorbed.length > 0
+          ? ` (header lines folded in: ${block.absorbed.map(l => `"${l}"`).join(', ')})`
+          : '';
+      warnings.push(`No swims parsed for "${block.name}"${folded}`);
       continue;
     }
     athletes.push({ name: block.name, swims: parsed.swims });
