@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { CornerDownLeft, FileText, Home, Search, Settings, TrendingUp, User, Users } from 'lucide-react';
 import { Gender } from '@omniswim/core/types';
+import type { Recruit, SwimmerResult } from '@omniswim/core/types';
 import { foldDiacritics } from '@omniswim/core/lib/utils';
 import { requestAthleteJump } from '@omniswim/core/lib/athleteJumpSignal';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
@@ -46,6 +47,47 @@ function scoreItem(item: PaletteItem, foldedQuery: string): number | null {
   if (label.includes(foldedQuery)) return 2;
   if (item.keywords && fold(item.keywords).includes(foldedQuery)) return 3;
   return null;
+}
+
+interface AthleteCandidate {
+  gender: Gender;
+  source: string;
+  team?: string;
+}
+
+/** Adds each non-relay swimmer not already seen to `byName`, under `gender`. */
+function addRosterAthletes(
+  byName: Map<string, AthleteCandidate>,
+  results: readonly SwimmerResult[] | undefined,
+  gender: Gender,
+): void {
+  for (const r of results ?? []) {
+    if (r.name && !r.isRelay && !byName.has(r.name)) {
+      byName.set(r.name, { gender, source: 'Roster', team: r.team });
+    }
+  }
+}
+
+/** Adds each recruit not already seen to `byName`, under their own gender. */
+function addRecruitAthletes(byName: Map<string, AthleteCandidate>, recruits: readonly Recruit[] | undefined): void {
+  for (const r of recruits ?? []) {
+    if (r.name && !byName.has(r.name)) {
+      byName.set(r.name, { gender: r.gender, source: 'Recruit', team: r.team });
+    }
+  }
+}
+
+/** All athletes the palette can jump to: roster (both genders) then recruits, deduped by name. */
+function collectAthleteCandidates(activeWorkspace: {
+  menResults?: SwimmerResult[];
+  womenResults?: SwimmerResult[];
+  recruits?: Recruit[];
+}): Map<string, AthleteCandidate> {
+  const byName = new Map<string, AthleteCandidate>();
+  addRosterAthletes(byName, activeWorkspace.menResults, Gender.MEN);
+  addRosterAthletes(byName, activeWorkspace.womenResults, Gender.WOMEN);
+  addRecruitAthletes(byName, activeWorkspace.recruits);
+  return byName;
 }
 
 export default function CommandPalette({ open, onClose }: Props) {
@@ -131,22 +173,7 @@ export default function CommandPalette({ open, onClose }: Props) {
 
   const athleteItems = useMemo<PaletteItem[]>(() => {
     if (!activeWorkspace) return [];
-    const byName = new Map<string, { gender: Gender; source: string; team?: string }>();
-    for (const r of activeWorkspace.menResults ?? []) {
-      if (r.name && !r.isRelay && !byName.has(r.name)) {
-        byName.set(r.name, { gender: Gender.MEN, source: 'Roster', team: r.team });
-      }
-    }
-    for (const r of activeWorkspace.womenResults ?? []) {
-      if (r.name && !r.isRelay && !byName.has(r.name)) {
-        byName.set(r.name, { gender: Gender.WOMEN, source: 'Roster', team: r.team });
-      }
-    }
-    for (const r of activeWorkspace.recruits ?? []) {
-      if (r.name && !byName.has(r.name)) {
-        byName.set(r.name, { gender: r.gender, source: 'Recruit', team: r.team });
-      }
-    }
+    const byName = collectAthleteCandidates(activeWorkspace);
     return [...byName.entries()]
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([name, meta]) => ({

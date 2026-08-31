@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom';
-import { Cog, Globe, LogOut, Search, Settings, TrendingUp, User } from 'lucide-react';
-import { Gender } from '@omniswim/core/types';
+import { Cog, Globe, Settings, TrendingUp } from 'lucide-react';
 import { ThemeToggle, useSwimCloudWindow } from '@omniswim/ui';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
 import { useAuth } from '../context/AuthContext';
 import AppletNav from './AppletNav';
+import { CommandPaletteButton, GenderToggleNav, UserAuthControl } from './SuiteHeaderControls';
 
 type Props = {
   theme: 'dark' | 'light';
@@ -46,41 +46,9 @@ export default function SuiteHeader({
       <div className="flex items-center gap-2">
         <AppletNav />
 
-        {showWorkspaceControls ? (
-          <nav className="hidden md:flex gap-1 bg-[var(--surface)] p-1 rounded-lg border border-[var(--border)] ml-2">
-            <button
-              type="button"
-              onClick={() => setActiveGender(Gender.MEN)}
-              className={`px-3 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-md transition-colors ${
-                activeGender === Gender.MEN ? 'nav-tab-active' : 'nav-tab-inactive'
-              }`}
-            >
-              Men
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveGender(Gender.WOMEN)}
-              className={`px-3 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-md transition-colors ${
-                activeGender === Gender.WOMEN ? 'nav-tab-active' : 'nav-tab-inactive'
-              }`}
-            >
-              Women
-            </button>
-          </nav>
-        ) : null}
+        {showWorkspaceControls ? <GenderToggleNav activeGender={activeGender} onChange={setActiveGender} /> : null}
 
-        {onOpenCommandPalette ? (
-          <button
-            type="button"
-            onClick={onOpenCommandPalette}
-            className="btn-ghost hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-theme-soft text-theme-muted hover:text-[var(--text-primary)] transition-colors"
-            title="Command palette"
-            aria-label="Open command palette"
-          >
-            <Search size={12} />
-            <kbd className="text-ui-micro font-mono">{IS_MAC ? '⌘K' : 'Ctrl K'}</kbd>
-          </button>
-        ) : null}
+        {onOpenCommandPalette ? <CommandPaletteButton isMac={IS_MAC} onOpen={onOpenCommandPalette} /> : null}
 
         <Link
           to="/analytics"
@@ -91,19 +59,7 @@ export default function SuiteHeader({
           <TrendingUp size={14} />
         </Link>
 
-        {user ? (
-          <div className="hidden md:flex items-center gap-2 px-2 py-1 rounded-full border border-theme-soft text-ui-caption">
-            <User size={12} className="text-theme-muted" />
-            <span className="truncate max-w-[100px]">{user.displayName}</span>
-            <button type="button" onClick={() => void logout()} className="p-1 theme-hover-row rounded" title="Sign out">
-              <LogOut size={12} />
-            </button>
-          </div>
-        ) : authRequired ? (
-          <Link to="/login" className="btn-ghost px-3 py-1.5 rounded text-ui-caption font-semibold">
-            Sign in
-          </Link>
-        ) : null}
+        <UserAuthControl user={user} authRequired={authRequired} onLogout={() => void logout()} />
 
         <ThemeToggle theme={theme} onToggle={onThemeToggle} className="ml-1" />
 
