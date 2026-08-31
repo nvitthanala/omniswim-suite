@@ -12,9 +12,16 @@
  */
 
 import type {
+  AddOnlyRanking,
+  AddOnlyRow,
+  CoverageGap,
+  CrossCourseArbitrageResult,
   CrossCourseRow,
+  DropOnlyRanking,
+  DropOnlyRow,
   ExactSwap,
   RelayLegSwap,
+  RelayLegSwapRanking,
 } from '@omniswim/core/lib/crossCourseArbitrage';
 
 export function formatMargin(sec: number): string {
@@ -68,4 +75,103 @@ export function groupRelaySwaps(swaps: RelayLegSwap[]): RelaySwapGroup[] {
     else groups.set(key, { best: swap, otherCandidates: 0 });
   }
   return [...groups.values()];
+}
+
+/** `expanded ? list : list.slice(0, limit)` — the "show all" truncation every section applies. */
+export function paginate<T>(list: T[], expanded: boolean, limit: number): T[] {
+  return expanded ? list : list.slice(0, limit);
+}
+
+export type ArbitrageExpandedState = {
+  edges: boolean;
+  swaps: boolean;
+  drops: boolean;
+  adds: boolean;
+  relaySwaps: boolean;
+};
+
+export type ArbitrageLimits = {
+  edges: number;
+  swaps: number;
+  gaps: number;
+  drops: number;
+  adds: number;
+  relaySwaps: number;
+};
+
+type ResultDerivedFields = {
+  edges: CrossCourseRow[];
+  swaps: SwapGroup[];
+  gaps: CoverageGap[];
+  dropRanking: DropOnlyRanking | undefined;
+  drops: DropOnlyRow[];
+  addRanking: AddOnlyRanking | undefined;
+  adds: AddOnlyRow[];
+};
+
+/**
+ * Everything that comes straight off the engine result, or the all-empty shape
+ * when there's no result yet. A guard clause instead of five parallel `result ? … : []`
+ * ternaries — same values, one branch point instead of five.
+ */
+function deriveResultFields(
+  result: CrossCourseArbitrageResult | null,
+  gapsLimit: number
+): ResultDerivedFields {
+  if (!result) {
+    return { edges: [], swaps: [], gaps: [], dropRanking: undefined, drops: [], addRanking: undefined, adds: [] };
+  }
+  return {
+    edges: courseEdges(result.table.rows),
+    swaps: groupSwaps(result.swapRanking.swaps),
+    gaps: result.gaps.slice(0, gapsLimit),
+    dropRanking: result.dropRanking,
+    drops: result.dropRanking?.drops ?? [],
+    addRanking: result.addRanking,
+    adds: result.addRanking?.adds ?? [],
+  };
+}
+
+/**
+ * Derives every list the panel renders (full + "shown" slice) from the raw engine
+ * result plus the panel's expand/collapse and pagination-limit state. Pulled out
+ * of the component so its `? :` / `??` branches live in a plain function
+ * lizard/eslint can score on their own, not folded into the component's
+ * render-function complexity.
+ */
+export function buildArbitrageViewModel(
+  result: CrossCourseArbitrageResult | null,
+  relayRanking: RelayLegSwapRanking | null,
+  loading: boolean,
+  expanded: ArbitrageExpandedState,
+  limits: ArbitrageLimits
+) {
+  const { edges, swaps, gaps, dropRanking, drops, addRanking, adds } = deriveResultFields(
+    result,
+    limits.gaps
+  );
+  const effectiveRelayRanking: RelayLegSwapRanking = relayRanking ?? {
+    pointsMeaningful: false,
+    swaps: [],
+    candidatesEvaluated: 0,
+  };
+  const relaySwaps = groupRelaySwaps(effectiveRelayRanking.swaps);
+
+  return {
+    edges,
+    shownEdges: paginate(edges, expanded.edges, limits.edges),
+    swaps,
+    shownSwaps: paginate(swaps, expanded.swaps, limits.swaps),
+    gaps,
+    dropRanking,
+    drops,
+    shownDrops: paginate(drops, expanded.drops, limits.drops),
+    addRanking,
+    adds,
+    shownAdds: paginate(adds, expanded.adds, limits.adds),
+    effectiveRelayRanking,
+    relaySwaps,
+    shownRelaySwaps: paginate(relaySwaps, expanded.relaySwaps, limits.relaySwaps),
+    showingInitialLoad: loading && !result,
+  };
 }

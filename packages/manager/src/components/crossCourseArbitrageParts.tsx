@@ -12,7 +12,7 @@
  */
 
 import React, { useState } from 'react';
-import { ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeftRight, ChevronDown, ChevronUp } from 'lucide-react';
 
 /** Tiny muted pill flagging a best time older than the recency window. */
 export function StalePill() {
@@ -108,6 +108,30 @@ export function Section({
       </button>
       {open ? <div className="mt-3">{children}</div> : null}
     </div>
+  );
+}
+
+/** Small "Updating…" indicator shown in the panel header while a fresh result is pending. */
+export function UpdatingBadge({ show }: { show: boolean }) {
+  if (!show) return null;
+  return (
+    <span
+      className="ml-auto flex items-center gap-1.5 text-ui-micro text-theme-muted"
+      aria-live="polite"
+    >
+      <ArrowLeftRight size={11} className="animate-spin" />
+      Updating…
+    </span>
+  );
+}
+
+/** Amber error line shown when the worker request fails; renders nothing otherwise. */
+export function ArbitrageErrorNotice({ error }: { error: string | null }) {
+  if (!error) return null;
+  return (
+    <p className="text-ui-caption text-amber-400/90 leading-relaxed mb-3">
+      Couldn&apos;t compute cross-course data — {error}
+    </p>
   );
 }
 

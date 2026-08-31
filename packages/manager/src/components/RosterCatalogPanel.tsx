@@ -9,18 +9,7 @@
  *   - Read the matching SwimCloud paste parser output before persisting.
  */
 import React, { useEffect, useMemo, useState } from 'react';
-import {
-  X,
-  Database,
-  Users,
-  Plus,
-  Trash2,
-  ToggleLeft,
-  ToggleRight,
-  FileJson,
-  ClipboardPaste,
-  Save,
-} from 'lucide-react';
+import { X, Database, Users, ToggleLeft, ToggleRight, FileJson, Save } from 'lucide-react';
 import type { CatalogTeam, CatalogTeamRoster } from '@omniswim/core/lib/rosterCatalog';
 import { rosterCatalogApi } from '@omniswim/core/api/rosterCatalog';
 import {
@@ -28,7 +17,7 @@ import {
   type RosterCatalogImportJson,
 } from '@omniswim/core/lib/rosterCatalog';
 import { useToast } from '@omniswim/ui';
-import AthleteRosterRow from './AthleteRosterRow';
+import { AthletePane, TeamSidebar } from './RosterCatalogPanelParts';
 
 type Props = {
   onClose: () => void;
@@ -148,6 +137,13 @@ export default function RosterCatalogPanel({ onClose, defaultTeamName }: Props) 
     }
   };
 
+  const handleImportDone = async () => {
+    setImportMode('none');
+    if (!roster) return;
+    const r = await rosterCatalogApi.getRoster(roster.team.id);
+    setRoster(r);
+  };
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--backdrop)]">
       <div className="surface-card border border-theme w-full max-w-5xl max-h-[90vh] flex flex-col rounded-lg shadow-xl">
@@ -170,185 +166,38 @@ export default function RosterCatalogPanel({ onClose, defaultTeamName }: Props) 
         </div>
 
         <div className="flex-1 min-h-0 flex flex-col md:flex-row">
-          {/* Team sidebar */}
-          <aside className="md:w-64 border-b md:border-b-0 md:border-r border-theme-soft flex flex-col">
-            <div className="px-4 py-3 border-b border-theme-soft flex items-center justify-between">
-              <span className="text-ui-label font-bold uppercase tracking-widest text-theme-secondary">
-                Teams
-              </span>
-              <button
-                type="button"
-                onClick={() => setCreating(s => !s)}
-                className="p-1 theme-hover-row rounded text-[var(--text-accent)]"
-                aria-label="Create team"
-              >
-                <Plus size={16} />
-              </button>
-            </div>
-            {creating ? (
-              <div className="px-4 py-3 border-b border-theme-soft space-y-2">
-                <input
-                  value={newName}
-                  onChange={e => setNewName(e.target.value)}
-                  placeholder="Team name"
-                  className="glass-input px-3 py-1.5 rounded w-full text-ui-body"
-                />
-                <div className="flex gap-2">
-                  <select
-                    value={newGender}
-                    onChange={e => setNewGender(e.target.value as 'Men' | 'Women')}
-                    className="glass-input px-2 py-1 rounded text-ui-caption"
-                  >
-                    <option value="Men">Men</option>
-                    <option value="Women">Women</option>
-                  </select>
-                  <input
-                    value={newDivision}
-                    onChange={e => setNewDivision(e.target.value)}
-                    placeholder="Division (D1/D2/D3/NAIA)"
-                    className="glass-input px-2 py-1 rounded w-full text-ui-caption"
-                  />
-                </div>
-                <button
-                  type="button"
-                  onClick={handleCreateTeam}
-                  className="btn-primary px-3 py-1 rounded text-ui-caption w-full"
-                >
-                  Save
-                </button>
-              </div>
-            ) : null}
-            <ul className="flex-1 min-h-0 overflow-y-auto custom-scrollbar">
-              {(teams ?? []).map(team => (
-                <li
-                  key={team.id}
-                  className={`flex items-center justify-between gap-2 px-4 py-2 cursor-pointer border-b border-theme-soft ${
-                    team.id === selectedTeamId ? 'theme-hover-row' : 'theme-hover-row'
-                  }`}
-                  onClick={() => setSelectedTeamId(team.id)}
-                >
-                  <div className="min-w-0">
-                    <div className="text-ui-body truncate text-[var(--text-primary)]">{team.name}</div>
-                    <div className="text-ui-caption text-theme-muted">
-                      {team.gender}
-                      {team.division ? ` ┬╖ ${team.division}` : ''}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={e => {
-                      e.stopPropagation();
-                      void handleDeleteTeam(team);
-                    }}
-                    aria-label={`Delete ${team.name}`}
-                    className="p-1 text-theme-secondary hover:text-red-400"
-                  >
-                    <Trash2 size={14} />
-                  </button>
-                </li>
-              ))}
-              {teams && teams.length === 0 ? (
-                <li className="px-4 py-3 text-ui-caption text-theme-muted">
-                  No teams yet ΓÇö create one to start.
-                </li>
-              ) : null}
-              {teams == null ? (
-                <li className="px-4 py-3 text-ui-caption text-theme-muted">LoadingΓÇª</li>
-              ) : null}
-            </ul>
-          </aside>
+          <TeamSidebar
+            teams={teams}
+            selectedTeamId={selectedTeamId}
+            creating={creating}
+            onToggleCreating={() => setCreating(s => !s)}
+            newName={newName}
+            onNewNameChange={setNewName}
+            newGender={newGender}
+            onNewGenderChange={setNewGender}
+            newDivision={newDivision}
+            onNewDivisionChange={setNewDivision}
+            onSaveNewTeam={handleCreateTeam}
+            onSelectTeam={setSelectedTeamId}
+            onDeleteTeam={team => void handleDeleteTeam(team)}
+          />
 
           {/* Athlete + events pane */}
           <section className="flex-1 min-w-0 flex flex-col">
-            {!roster ? (
-              <div className="flex-1 flex items-center justify-center text-theme-muted text-ui-caption">
-                Select a team on the left to manage athletes.
-              </div>
-            ) : (
-              <>
-                <header className="px-5 py-3 border-b border-theme-soft">
-                  <div className="flex flex-wrap items-center gap-3 mb-2">
-                    <h4 className="text-ui-body font-bold text-[var(--text-primary)]">
-                      {roster.team.name}
-                    </h4>
-                    <span className="badge-info px-2 py-0.5 rounded text-[10px]">{roster.team.gender}</span>
-                    {roster.team.division ? (
-                      <span className="badge-warning px-2 py-0.5 rounded text-[10px]">{roster.team.division}</span>
-                    ) : null}
-                    <span className="text-ui-caption text-theme-muted">
-                      {roster.athletes.length} athletes ┬╖ {roster.athletes.reduce((s, a) => s + a.times.length, 0)} events
-                    </span>
-                  </div>
-                  <div className="flex flex-wrap gap-2">
-                    <button
-                      type="button"
-                      onClick={() => setImportMode(m => (m === 'paste' ? 'none' : 'paste'))}
-                      className={`px-3 py-1 text-ui-caption rounded border ${importMode === 'paste' ? 'btn-primary' : 'border-theme-soft nav-tab-inactive'}`}
-                    >
-                      <ClipboardPaste size={12} className="inline mr-1" /> Paste SwimCloud
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => setImportMode(m => (m === 'json' ? 'none' : 'json'))}
-                      className={`px-3 py-1 text-ui-caption rounded border ${importMode === 'json' ? 'btn-primary' : 'border-theme-soft nav-tab-inactive'}`}
-                    >
-                      <FileJson size={12} className="inline mr-1" /> Import JSON
-                    </button>
-                  </div>
-                </header>
-
-                {importMode === 'paste' ? (
-                  <RosterPasteImportPane
-                    teamId={roster.team.id}
-                    gender={roster.team.gender}
-                    onDone={async () => {
-                      setImportMode('none');
-                      const r = await rosterCatalogApi.getRoster(roster.team.id);
-                      setRoster(r);
-                    }}
-                  />
-                ) : null}
-                {importMode === 'json' ? (
-                  <RosterJsonImportPane
-                    teamId={roster.team.id}
-                    onDone={async () => {
-                      setImportMode('none');
-                      const r = await rosterCatalogApi.getRoster(roster.team.id);
-                      setRoster(r);
-                    }}
-                    prefill={{
-                      team: {
-                        name: roster.team.name,
-                        gender: roster.team.gender,
-                        division: roster.team.division ?? null,
-                        shortName: roster.team.shortName ?? null,
-                        color: roster.team.color ?? null,
-                        notes: roster.team.notes ?? null,
-                      },
-                      athletes: [],
-                    }}
-                  />
-                ) : null}
-
-                <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar p-3 space-y-2">
-                  {roster.athletes.length === 0 ? (
-                    <p className="text-ui-caption text-theme-muted">
-                      No athletes imported yet. Use the buttons above to bring in data.
-                    </p>
-                  ) : null}
-                  {roster.athletes.map(athlete => (
-                    <AthleteRosterRow
-                      key={athlete.id}
-                      athlete={athlete}
-                      onToggleEligibility={(timeId, isEligible) =>
-                        void handleToggleEligibility(athlete.id, timeId, isEligible)
-                      }
-                      onDeleteTime={timeId => void handleDeleteTime(timeId)}
-                    />
-                  ))}
-                </div>
-              </>
-            )}
+            <AthletePane
+              roster={roster}
+              importMode={importMode}
+              onToggleImportMode={mode => setImportMode(m => (m === mode ? 'none' : mode))}
+              onToggleEligibility={(athleteId, timeId, isEligible) =>
+                void handleToggleEligibility(athleteId, timeId, isEligible)
+              }
+              onDeleteTime={timeId => void handleDeleteTime(timeId)}
+              importPanes={
+                roster ? (
+                  <ImportPanes roster={roster} importMode={importMode} onDone={handleImportDone} />
+                ) : null
+              }
+            />
           </section>
         </div>
       </div>
@@ -357,6 +206,41 @@ export default function RosterCatalogPanel({ onClose, defaultTeamName }: Props) 
 }
 
 // ---------- Sub-panes ----------
+
+/** Picks the paste-import or JSON-import pane for the selected team, or nothing. */
+function ImportPanes({
+  roster,
+  importMode,
+  onDone,
+}: {
+  roster: CatalogTeamRoster;
+  importMode: 'none' | 'paste' | 'json';
+  onDone: () => void;
+}) {
+  if (importMode === 'paste') {
+    return <RosterPasteImportPane teamId={roster.team.id} gender={roster.team.gender} onDone={onDone} />;
+  }
+  if (importMode === 'json') {
+    return (
+      <RosterJsonImportPane
+        teamId={roster.team.id}
+        onDone={onDone}
+        prefill={{
+          team: {
+            name: roster.team.name,
+            gender: roster.team.gender,
+            division: roster.team.division ?? null,
+            shortName: roster.team.shortName ?? null,
+            color: roster.team.color ?? null,
+            notes: roster.team.notes ?? null,
+          },
+          athletes: [],
+        }}
+      />
+    );
+  }
+  return null;
+}
 
 function RosterPasteImportPane({
   teamId,
