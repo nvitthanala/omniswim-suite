@@ -36,8 +36,16 @@ export default function WorkspaceSidebar() {
   const [editingWorkspaceId, setEditingWorkspaceId] = useState<string | null>(null);
   const [editWorkspaceName, setEditWorkspaceName] = useState('');
   const [workspaceToDelete, setWorkspaceToDelete] = useState<string | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [deletedWorkspaceBackup, setDeletedWorkspaceBackup] = useState<(typeof workspaces)[0] | null>(null);
   const undoTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(
+    () => () => {
+      if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
+    },
+    []
+  );
 
   // Snapshots state
   const [snapshots, setSnapshots] = useState<Snapshot[]>([]);
@@ -132,10 +140,24 @@ export default function WorkspaceSidebar() {
   };
 
   const confirmDelete = async () => {
-    if (!workspaceToDelete) return;
-    const backup = workspaces.find(w => w.id === workspaceToDelete);
+    // The modal stays mounted for the whole round trip, so without this guard a
+    // second click fires a second DELETE for the same workspace.
+    if (!workspaceToDelete || isDeleting) return;
+    const id = workspaceToDelete;
+    const backup = workspaces.find(w => w.id === id);
+    setIsDeleting(true);
+    try {
+      await deleteWorkspace(id);
+    } catch {
+      // deleteWorkspace already surfaced the message through onNotify. The
+      // workspace still exists, so offer no undo for a delete that never
+      // happened.
+      setIsDeleting(false);
+      setWorkspaceToDelete(null);
+      return;
+    }
+    setIsDeleting(false);
     if (backup) setDeletedWorkspaceBackup(backup);
-    await deleteWorkspace(workspaceToDelete);
     toast.push('success', 'Workspace deleted');
     setWorkspaceToDelete(null);
     if (undoTimeoutRef.current) clearTimeout(undoTimeoutRef.current);
@@ -371,8 +393,11 @@ export default function WorkspaceSidebar() {
       {workspaceToDelete && (
         <DeleteConfirmationModal
           workspaceName={workspaces.find(w => w.id === workspaceToDelete)?.name ?? 'Workspace'}
+          busy={isDeleting}
           onConfirm={() => void confirmDelete()}
-          onCancel={() => setWorkspaceToDelete(null)}
+          onCancel={() => {
+            if (!isDeleting) setWorkspaceToDelete(null);
+          }}
         />
       )}
 
@@ -381,10 +406,15 @@ export default function WorkspaceSidebar() {
           <span className="text-xs uppercase tracking-widest font-bold">Workspace Deleted</span>
           <button
             type="button"
-            onClick={() => void restoreWorkspace(deletedWorkspaceBackup).then(() => {
-              toast.push('success', `Workspace "${deletedWorkspaceBackup.name}" restored`);
-              setDeletedWorkspaceBackup(null);
-            })}
+            onClick={() => void restoreWorkspace(deletedWorkspaceBackup).then(
+              () => {
+                toast.push('success', `Workspace "${deletedWorkspaceBackup.name}" restored`);
+                setDeletedWorkspaceBackup(null);
+              },
+              // restoreWorkspace reports the failure itself; keep the toast up
+              // so the undo is still available to retry.
+              () => undefined
+            )}
             className="bg-[var(--text-accent)] text-white px-3 py-1 rounded text-xs font-bold uppercase"
           >
             Undo

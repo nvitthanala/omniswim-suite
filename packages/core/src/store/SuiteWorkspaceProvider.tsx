@@ -74,6 +74,7 @@ export function SuiteWorkspaceProvider({
   const {
     data: workspaces = [],
     isLoading,
+    isSuccess,
     error: queryError,
     refetch,
   } = useQuery({
@@ -81,7 +82,12 @@ export function SuiteWorkspaceProvider({
     queryFn: fetchWorkspaces,
   });
 
-  const [activeWorkspaceId, setActiveWorkspaceIdState] = useState<string | null>(() => {
+  /**
+   * The user's *intent*. The selection actually handed to consumers is derived
+   * from this plus the live list (see `activeWorkspaceId` below), so this value
+   * is allowed to lag or to name a workspace that no longer exists.
+   */
+  const [storedWorkspaceId, setStoredWorkspaceId] = useState<string | null>(() => {
     if (typeof window === 'undefined') return null;
     return window.localStorage.getItem(WORKSPACE_KEY);
   });
@@ -92,24 +98,59 @@ export function SuiteWorkspaceProvider({
   });
   const [mutationError, setMutationError] = useState<string | null>(null);
   const pendingPatchRef = useRef<Partial<Workspace> | null>(null);
+  const pendingPatchTargetRef = useRef<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const error = mutationError ?? (queryError ? 'Failed to load workspaces' : null);
 
-  // Keep a valid active workspace selected as the list changes.
+  /**
+   * Single authority for "which workspace is selected".
+   *
+   * This used to be two writers that could disagree: an effect that snapped the
+   * selection to `workspaces[0]` whenever the list changed, and `deleteWorkspace`'s
+   * own inline pick which re-read the query cache from inside a `useState`
+   * updater (an impure reducer — React is free to replay update queues, so its
+   * answer depended on when React happened to run it).
+   *
+   * Deriving the selection during render instead makes it a pure function of
+   * (intent, list). It can never name a row that is not in the list, two
+   * writers can never hand it back and forth, and deleting a workspace needs no
+   * selection logic of its own — dropping the row from the list is enough.
+   */
+  const activeWorkspaceId = useMemo(() => {
+    if (workspaces.length === 0) return null;
+    if (storedWorkspaceId != null && workspaces.some(w => w.id === storedWorkspaceId)) {
+      return storedWorkspaceId;
+    }
+    return workspaces[0].id;
+  }, [workspaces, storedWorkspaceId]);
+
+  // Mirror the resolved id back into intent so the two cannot drift. Only ever
+  // writes a real id: while the list is still loading the derived value is null,
+  // and clobbering intent there would throw away the restored-from-storage
+  // selection before the list arrives.
   useEffect(() => {
-    setActiveWorkspaceIdState(current => {
-      if (workspaces.length === 0) return null;
-      if (current != null && workspaces.some(w => w.id === current)) return current;
-      return workspaces[0].id;
-    });
-  }, [workspaces]);
+    if (activeWorkspaceId == null) return;
+    setStoredWorkspaceId(current => (current === activeWorkspaceId ? current : activeWorkspaceId));
+  }, [activeWorkspaceId]);
 
   useEffect(() => {
-    if (activeWorkspaceId) {
+    if (typeof window === 'undefined') return;
+    if (activeWorkspaceId != null) {
       window.localStorage.setItem(WORKSPACE_KEY, activeWorkspaceId);
+    } else if (isSuccess && workspaces.length === 0) {
+      // Every workspace really is gone — don't leave a dead id to restore on reload.
+      window.localStorage.removeItem(WORKSPACE_KEY);
     }
-  }, [activeWorkspaceId]);
+  }, [activeWorkspaceId, isSuccess, workspaces.length]);
+
+  // A queued autosave must not outlive the provider.
+  useEffect(
+    () => () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    },
+    []
+  );
 
   useEffect(() => {
     window.localStorage.setItem(GENDER_KEY, activeGender);
@@ -122,8 +163,11 @@ export function SuiteWorkspaceProvider({
 
   const rosterNames = useMemo(() => collectRosterNames(activeWorkspace), [activeWorkspace]);
 
+  // Guard the cast: a caller handing us `undefined` (e.g. an id read off a
+  // malformed create response) must land on "no selection", not on a value that
+  // reads as absent to `!= null` but not to `=== null`.
   const setActiveWorkspaceId = useCallback((id: string | null) => {
-    setActiveWorkspaceIdState(id);
+    setStoredWorkspaceId(typeof id === 'string' ? id : null);
   }, []);
 
   const setActiveGender = useCallback((gender: Gender) => {
@@ -165,10 +209,13 @@ export function SuiteWorkspaceProvider({
       if (!activeWorkspaceId) return;
       setCache(list => list.map(w => (w.id === activeWorkspaceId ? { ...w, ...patch } : w)));
       pendingPatchRef.current = { ...pendingPatchRef.current, ...patch };
+      pendingPatchTargetRef.current = activeWorkspaceId;
       if (debounceRef.current) clearTimeout(debounceRef.current);
       debounceRef.current = setTimeout(() => {
         const merged = pendingPatchRef.current;
         pendingPatchRef.current = null;
+        pendingPatchTargetRef.current = null;
+        debounceRef.current = null;
         if (merged) void flushUpdate(activeWorkspaceId, merged);
       }, 300);
     },
@@ -180,7 +227,7 @@ export function SuiteWorkspaceProvider({
       try {
         const newWs = await createWorkspace(name ?? `Blank Workspace ${workspaces.length + 1}`);
         setCache(list => [...list, newWs]);
-        setActiveWorkspaceIdState(newWs.id);
+        setStoredWorkspaceId(newWs.id);
         setMutationError(null);
         return newWs;
       } catch (err) {
@@ -197,32 +244,48 @@ export function SuiteWorkspaceProvider({
     async (id: string) => {
       try {
         await deleteWorkspaceApi(id);
-        setCache(list => list.filter(w => w.id !== id));
-        setActiveWorkspaceIdState(current => {
-          if (current !== id) return current;
-          const remaining = (queryClient.getQueryData<Workspace[]>(WORKSPACES_KEY) ?? []).filter(
-            w => w.id !== id
-          );
-          return remaining[0]?.id ?? null;
-        });
       } catch (err) {
+        // The server still holds this workspace. Leaving it in the local list is
+        // the whole point: dropping it here is what used to make it "reappear"
+        // on the next read.
         const message = err instanceof Error ? err.message : 'Failed to delete workspace';
         setMutationError(message);
         notify('error', message);
         throw err;
       }
+      // A queued autosave for the workspace we just removed would PUT against a
+      // dead id, 404, and invalidate the whole list — a refetch on top of a
+      // delete. Drop it.
+      if (pendingPatchTargetRef.current === id) {
+        if (debounceRef.current) clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+        pendingPatchRef.current = null;
+        pendingPatchTargetRef.current = null;
+      }
+      // No selection logic here by design — `activeWorkspaceId` is derived from
+      // this list, so removing the row moves the selection on its own.
+      setCache(list => list.filter(w => w.id !== id));
+      setMutationError(null);
     },
-    [setCache, queryClient, notify]
+    [setCache, notify]
   );
 
   const restoreWorkspace = useCallback(
     async (workspace: Workspace) => {
-      const restored = await createWorkspace(workspace.name, workspace);
-      setCache(list => [...list, restored]);
-      setActiveWorkspaceIdState(restored.id);
-      return restored;
+      try {
+        const restored = await createWorkspace(workspace.name, workspace);
+        setCache(list => [...list, restored]);
+        setStoredWorkspaceId(restored.id);
+        setMutationError(null);
+        return restored;
+      } catch (err) {
+        const message = err instanceof Error ? err.message : 'Failed to restore workspace';
+        setMutationError(message);
+        notify('error', message);
+        throw err;
+      }
     },
-    [setCache]
+    [setCache, notify]
   );
 
   const refreshWorkspaces = useCallback(async () => {
