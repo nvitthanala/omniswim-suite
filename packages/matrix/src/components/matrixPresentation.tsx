@@ -47,6 +47,20 @@ export function CompactEventLabel({ event, className }: { event: string; classNa
   );
 }
 
+/** Formatted label for a points value — 'N/A' as-is, a signed number with an
+ *  optional leading '+', or the raw value stringified. */
+function formatPointsLabel(value: number | string, signed: boolean): string {
+  if (value === 'N/A') return 'N/A';
+  if (typeof value !== 'number') return String(value);
+  if (signed && value > 0) return `+${value.toFixed(1)}`;
+  return value.toFixed(1);
+}
+
+function isZeroPointsValue(value: number | string): boolean {
+  if (typeof value === 'number') return value === 0;
+  return value === '0' || value === 'N/A';
+}
+
 export function PointsValue({
   value,
   className,
@@ -57,15 +71,8 @@ export function PointsValue({
   /** When false, show credited meet points without a leading + (O/U uses PrelimsOuValue). */
   signed?: boolean;
 }) {
-  const isZero = typeof value === 'number' ? value === 0 : value === '0' || value === 'N/A';
-  const label =
-    value === 'N/A'
-      ? 'N/A'
-      : typeof value === 'number'
-        ? signed && value > 0
-          ? `+${value.toFixed(1)}`
-          : value.toFixed(1)
-        : String(value);
+  const isZero = isZeroPointsValue(value);
+  const label = formatPointsLabel(value, signed);
 
   return (
     <span
@@ -140,17 +147,23 @@ export function PlacementExpectedValue({
   );
 }
 
-export function SwimTimeCell({ result }: { result: SwimmerResult }) {
-  const isRelayLeg = Boolean(result.isRelay && (result.relayLegSplitDetail || result.relayLegSplit));
+/** First available team-level time for a relay leg, fastest-known-first. */
+function relayTeamDisplayTime(result: SwimmerResult): string | undefined {
+  return result.relayTeamTime || result.finalsTime || result.time;
+}
 
-  if (isRelayLeg) {
+function isRelayLegResult(result: SwimmerResult): boolean {
+  return Boolean(result.isRelay && (result.relayLegSplitDetail || result.relayLegSplit));
+}
+
+export function SwimTimeCell({ result }: { result: SwimmerResult }) {
+  if (isRelayLegResult(result)) {
+    const teamTime = relayTeamDisplayTime(result);
     return (
       <div className="min-w-0 text-right font-mono tabular-nums text-ui-caption">
         <span className="text-[var(--text-primary)]">{displayTimeForRelayLeg(result)}</span>
-        {result.relayTeamTime || result.finalsTime || result.time ? (
-          <span className="block text-ui-micro text-theme-muted">
-            Relay {result.relayTeamTime || result.finalsTime || result.time}
-          </span>
+        {teamTime ? (
+          <span className="block text-ui-micro text-theme-muted">Relay {teamTime}</span>
         ) : null}
       </div>
     );
