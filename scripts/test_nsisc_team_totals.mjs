@@ -6,9 +6,8 @@
  * team scores published in `2026_NSISC_Championships_Final_Results.pdf`
  * (page 76, "Team Rankings - Through Event 42").
  *
- * Six of the seven are hard assertions. The seventh, Delta State men, is a
- * declared XFAIL — the engine is right and the committed fixture is short. Read
- * on before changing any number here.
+ * All seven are hard assertions and all seven match exactly. Read on before
+ * changing any number here.
  *
  * ## What the two original mismatches were
  *
@@ -42,26 +41,26 @@
  *                                        ---
  *                                         21
  *
- * The other seven are prelims rows and three relay legs (which cost no points —
- * a short relay splits the same team total across the legs present).
+ * His other three rows are relay legs, which cost no points — a short relay
+ * splits the same team total across the legs present.
  * Fixed: `_split_yearless_individual_line` in `backend/pdf_parser.py`, which
  * pivots on the school instead and reports the year as UNKNOWN rather than
- * guessing one. Re-running the pipeline over the source PDF now reproduces all
- * seven official totals exactly.
+ * guessing one. Its relay twin, `_parse_relay_leg_line`, put Giustolisi back
+ * on the three Delta State relays he swam — see
+ * `scripts/test_yearless_relay_row.mjs`.
  *
- * ## Why one assertion is still an XFAIL
+ * ## The fixture
  *
- * `data/meets.json` was extracted by the old parser and is missing those four
- * rows. Closing the gap means re-running `backend/parse_meet.py` over
- * `2026_NSISC_Championships_Final_Results.pdf`, which is not committed to this
- * repo. Nothing here is patched by hand: hand-typing four competition results
- * into a fixture is the practice `CLAUDE.md` bans, and a reviewer could not
- * check the transcription against a source that is not present.
+ * `data/meets.json` was extracted by the old parser and carried that gap as a
+ * declared XFAIL until 2026-08-31, when the workspace was re-extracted from the
+ * source PDF by `scripts/reextract_meet_workspace.mjs`. Nothing here is patched
+ * by hand: hand-typing four competition results into a fixture is the practice
+ * `CLAUDE.md` bans, and a reviewer could not check the transcription against a
+ * source that is not present.
  *
- * To close it: archive the results PDF, re-run the parser, then delete
- * `MEN_DELTA_STATE_XFAIL` below and let the assertion run. The guards make that
- * hard to forget — this test fails if the fixture stops being short, or if it is
- * short by any amount other than these four swims.
+ * The four scoring swims are asserted below by name and by their point total, so
+ * a fixture re-extracted with a broken parser fails with a message that says
+ * what is missing, instead of only a total that comes out 21 short.
  */
 import { readFileSync } from 'fs';
 import {
@@ -91,19 +90,22 @@ const official = {
 };
 
 /**
- * The one total the committed fixture cannot reach, and by exactly how much.
- * Delete this block once the fixture is re-extracted — see the header.
+ * The four B-final swims the old parser dropped, and what each is worth. They
+ * are why Delta State men used to compute 21 short. Verbatim from the PDF.
  */
-const MEN_DELTA_STATE_XFAIL = {
-  key: 'Men|Delta State University',
-  /** Alessandro Giustolisi's four scoring finishes, absent from the fixture. */
-  missingPoints: 21,
-  missingAthlete: 'Alessandro Giustolisi',
-  why: 'fixture predates the pdf_parser.py yearless-row fix; needs re-extraction from the results PDF',
+const RECOVERED_SWIMS = {
+  athlete: 'Alessandro Giustolisi',
+  team: 'Delta State University',
+  points: 21,
+  swims: [
+    { event: 'Event 8 Men 50 Yard Freestyle', rank: 14, points: 3 },
+    { event: 'Event 13 Men 100 Yard Butterfly', rank: 9, points: 9 },
+    { event: 'Event 28 Men 200 Yard Butterfly', rank: 10, points: 7 },
+    { event: 'Event 35 Men 100 Yard Freestyle', rank: 15, points: 2 },
+  ],
 };
 
 let failed = false;
-let xfailed = 0;
 const fail = msg => {
   console.log('FAIL', msg);
   failed = true;
@@ -121,19 +123,59 @@ if (eventThrough !== 42) {
 }
 
 /**
- * The fixture gap must still be the gap this test documents. If Giustolisi is
- * present the fixture has been re-extracted and the XFAIL must be promoted to a
- * real assertion, so say so rather than quietly keeping the allowance.
+ * The rows the old parser lost must be in the fixture. A re-extraction with a
+ * regressed parser would otherwise show up only as a total 21 short, which
+ * reads as a scoring defect rather than the parse defect it is.
  */
-const fixtureHasMissingAthlete = [...(ws.menResults ?? []), ...(ws.womenResults ?? [])].some(
-  r => String(r.name ?? '').toLowerCase().includes('giustolisi')
+const recovered = (ws.menResults ?? []).filter(
+  r =>
+    String(r.name ?? '').trim() === RECOVERED_SWIMS.athlete &&
+    r.team === RECOVERED_SWIMS.team &&
+    !r.isRelay
 );
-if (fixtureHasMissingAthlete) {
+for (const swim of RECOVERED_SWIMS.swims) {
+  const row = recovered.find(r => r.event === swim.event && r.roundSwam === 'B Final');
+  if (!row) {
+    fail(
+      `${RECOVERED_SWIMS.athlete} has no ${swim.event} B-final row in data/meets.json. ` +
+        'He swims with no class year printed, so a parser that pivots on the year token ' +
+        'drops him; re-extract with scripts/reextract_meet_workspace.mjs.'
+    );
+  } else if (row.rank !== swim.rank) {
+    fail(`${RECOVERED_SWIMS.athlete} ${swim.event}: rank ${row.rank}, PDF says ${swim.rank}`);
+  }
+}
+if (recovered.some(r => r.classYear !== 'UNKNOWN')) {
   fail(
-    `${MEN_DELTA_STATE_XFAIL.missingAthlete} is now in data/meets.json, so the ` +
-      'fixture gap is closed. Delete MEN_DELTA_STATE_XFAIL in this file and let ' +
-      'the Delta State men assertion run.'
+    `${RECOVERED_SWIMS.athlete} carries a class year in data/meets.json. The PDF prints ` +
+      'none, and a class year drives senior-removal projections — it is never guessed.'
   );
+}
+
+/** And they must still be worth what the PDF's place points say they are. */
+{
+  const declared = RECOVERED_SWIMS.swims.reduce((sum, s) => sum + s.points, 0);
+  if (declared !== RECOVERED_SWIMS.points) {
+    fail(`RECOVERED_SWIMS lists ${declared} points but claims ${RECOVERED_SWIMS.points}`);
+  }
+  const scoredMen = calculatePoints(ws.menResults ?? [], settings, {
+    scorerRosterOverrides: ws.scorerRosterOverrides,
+    scoredEventNumberMax: eventThrough,
+  });
+  for (const swim of RECOVERED_SWIMS.swims) {
+    const row = scoredMen.find(
+      r =>
+        String(r.name ?? '').trim() === RECOVERED_SWIMS.athlete &&
+        r.event === swim.event &&
+        r.roundSwam === 'B Final'
+    );
+    if (row && row.points !== swim.points) {
+      fail(
+        `${RECOVERED_SWIMS.athlete} ${swim.event}: scored ${row.points}, ` +
+          `${swim.rank}th place pays ${swim.points}`
+      );
+    }
+  }
 }
 
 function teamTotals(results) {
@@ -165,24 +207,6 @@ for (const [label, results] of [
     const delta = Math.round((calc - off) * 100) / 100;
     const row = `${label} ${school}: ${calc.toFixed(2)} official ${off} delta ${delta.toFixed(2)}`;
 
-    if (key === MEN_DELTA_STATE_XFAIL.key) {
-      const expected = -MEN_DELTA_STATE_XFAIL.missingPoints;
-      if (Math.abs(delta - expected) < 0.01) {
-        xfailed += 1;
-        console.log(
-          `XFAIL ${row} — short by exactly ${MEN_DELTA_STATE_XFAIL.missingPoints} ` +
-            `(${MEN_DELTA_STATE_XFAIL.missingAthlete}: ${MEN_DELTA_STATE_XFAIL.why})`
-        );
-      } else {
-        fail(
-          `${row} — expected the documented fixture gap of ${expected.toFixed(2)}. ` +
-            'The engine or the fixture moved; re-read this file\'s header before ' +
-            'changing any number in it.'
-        );
-      }
-      continue;
-    }
-
     if (Math.abs(delta) < 0.01) {
       console.log('OK', row);
     } else {
@@ -191,9 +215,11 @@ for (const [label, results] of [
   }
 }
 
-if (xfailed > 0 && !failed) {
-  // Not an `XFAIL` line: the runner counts those, and the one above is the count.
-  console.log(`(${xfailed} documented fixture gap, not a scoring defect)`);
+if (!failed) {
+  console.log(
+    `OK ${RECOVERED_SWIMS.athlete}'s ${RECOVERED_SWIMS.swims.length} scoring swims ` +
+      `(${RECOVERED_SWIMS.points} points) are in the fixture, class year UNKNOWN`
+  );
 }
 
 process.exit(failed ? 1 : 0);

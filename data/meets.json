@@ -2885,6 +2885,24 @@
         "relayNames": []
       },
       {
+        "id": "b5a683e8-a979-415e-97a5-6607c60c26e1",
+        "rank": 14,
+        "name": "Alessandro Giustolisi",
+        "classYear": "UNKNOWN",
+        "team": "Delta State University",
+        "time": "21.65",
+        "prelimsTime": "21.52",
+        "finalsTime": "21.65",
+        "roundSwam": "B Final",
+        "points": 3,
+        "event": "Event 8 Men 50 Yard Freestyle",
+        "gender": "Men",
+        "isRelay": false,
+        "isExhibition": false,
+        "isTimeTrial": false,
+        "relayNames": []
+      },
+      {
         "id": "f911958f-0259-4710-b399-f13c3bb241b9",
         "rank": 0,
         "name": "Jase Callaway",
@@ -4136,7 +4154,7 @@
         "prelimsTime": null,
         "finalsTime": "1:31.22",
         "roundSwam": "B Final",
-        "points": 6,
+        "points": 4.5,
         "event": "Event 11 Men 4x50 Yard Medley Relay",
         "gender": "Men",
         "isRelay": true,
@@ -4150,6 +4168,10 @@
           {
             "name": "Neill Mauss",
             "year": "SR"
+          },
+          {
+            "name": "Alessandro Giustolisi",
+            "year": "UNKNOWN"
           },
           {
             "name": "Lars Hetzel",
@@ -4176,8 +4198,11 @@
           "legTotals": [
             "23.43",
             "24.83",
-            "22.75"
+            "22.75",
+            "20.21"
           ],
+          "firstHalf": "48.26",
+          "secondHalf": "42.96",
           "teamTotal": "1:31.22"
         },
         "relayTeamTime": "1:31.22"
@@ -4192,7 +4217,7 @@
         "prelimsTime": null,
         "finalsTime": "1:31.22",
         "roundSwam": "B Final",
-        "points": 6,
+        "points": 4.5,
         "event": "Event 11 Men 4x50 Yard Medley Relay",
         "gender": "Men",
         "isRelay": true,
@@ -4206,6 +4231,10 @@
           {
             "name": "Neill Mauss",
             "year": "SR"
+          },
+          {
+            "name": "Alessandro Giustolisi",
+            "year": "UNKNOWN"
           },
           {
             "name": "Lars Hetzel",
@@ -4232,23 +4261,26 @@
           "legTotals": [
             "23.43",
             "24.83",
-            "22.75"
+            "22.75",
+            "20.21"
           ],
+          "firstHalf": "48.26",
+          "secondHalf": "42.96",
           "teamTotal": "1:31.22"
         },
         "relayTeamTime": "1:31.22"
       },
       {
-        "id": "65435845-321e-48c8-8884-c23b1009f4c8",
+        "id": "53012c40-33b8-478f-9d7b-ad917b60eb0b",
         "rank": 9,
-        "name": "Lars Hetzel",
-        "classYear": "JR",
+        "name": "Alessandro Giustolisi",
+        "classYear": "UNKNOWN",
         "team": "Delta State University",
         "time": "1:31.22",
         "prelimsTime": null,
         "finalsTime": "1:31.22",
         "roundSwam": "B Final",
-        "points": 6,
+        "points": 4.5,
         "event": "Event 11 Men 4x50 Yard Medley Relay",
         "gender": "Men",
         "isRelay": true,
@@ -4262,6 +4294,10 @@
           {
             "name": "Neill Mauss",
             "year": "SR"
+          },
+          {
+            "name": "Alessandro Giustolisi",
+            "year": "UNKNOWN"
           },
           {
             "name": "Lars Hetzel",
@@ -4288,8 +4324,74 @@
           "legTotals": [
             "23.43",
             "24.83",
-            "22.75"
+            "22.75",
+            "20.21"
           ],
+          "firstHalf": "48.26",
+          "secondHalf": "42.96",
+          "teamTotal": "1:31.22"
+        },
+        "relayTeamTime": "1:31.22"
+      },
+      {
+        "id": "c5f1010f-7493-4dc1-b3d6-cf0d7039d34b",
+        "rank": 9,
+        "name": "Lars Hetzel",
+        "classYear": "JR",
+        "team": "Delta State University",
+        "time": "1:31.22",
+        "prelimsTime": null,
+        "finalsTime": "1:31.22",
+        "roundSwam": "B Final",
+        "points": 4.5,
+        "event": "Event 11 Men 4x50 Yard Medley Relay",
+        "gender": "Men",
+        "isRelay": true,
+        "isExhibition": false,
+        "isTimeTrial": false,
+        "relayNames": [
+          {
+            "name": "Mateus Franco",
+            "year": "SR"
+          },
+          {
+            "name": "Neill Mauss",
+            "year": "SR"
+          },
+          {
+            "name": "Alessandro Giustolisi",
+            "year": "UNKNOWN"
+          },
+          {
+            "name": "Lars Hetzel",
+            "year": "JR"
+          }
+        ],
+        "relayLegIndex": 3,
+        "relayLegStroke": "free",
+        "relayLegSplit": "20.21",
+        "relayLegSplitDetail": {
+          "legIndex": 3,
+          "stroke": "free",
+          "legDistanceYards": 50,
+          "segments": [
+            {
+              "yards": 50,
+              "segmentTime": "20.21",
+              "cumulativeLeg": "1:31.22"
+            }
+          ],
+          "legTotal": "20.21"
+        },
+        "relayTeamSplits": {
+          "legTotals": [
+            "23.43",
+            "24.83",
+            "22.75",
+            "20.21"
+          ],
+          "firstHalf": "48.26",
+          "secondHalf": "42.96",
           "teamTotal": "1:31.22"
         },
         "relayTeamTime": "1:31.22"
@@ -4935,6 +5037,24 @@
         "finalsTime": "52.61",
         "roundSwam": "A Final",
         "points": 11,
+        "event": "Event 13 Men 100 Yard Butterfly",
+        "gender": "Men",
+        "isRelay": false,
+        "isExhibition": false,
+        "isTimeTrial": false,
+        "relayNames": []
+      },
+      {
+        "id": "2f236830-b316-4a6d-9b93-b098df45ab0c",
+        "rank": 9,
+        "name": "Alessandro Giustolisi",
+        "classYear": "UNKNOWN",
+        "team": "Delta State University",
+        "time": "49.73",
+        "prelimsTime": "50.70",
+        "finalsTime": "49.73",
+        "roundSwam": "B Final",
+        "points": 9,
         "event": "Event 13 Men 100 Yard Butterfly",
         "gender": "Men",
         "isRelay": false,
@@ -7518,7 +7638,7 @@
         "prelimsTime": null,
         "finalsTime": "3:22.86",
         "roundSwam": "B Final",
-        "points": 4,
+        "points": 3,
         "event": "Event 20 Men 4x100 Yard Medley Relay",
         "gender": "Men",
         "isRelay": true,
@@ -7532,6 +7652,10 @@
           {
             "name": "Neill Mauss",
             "year": "SR"
+          },
+          {
+            "name": "Alessandro Giustolisi",
+            "year": "UNKNOWN"
           },
           {
             "name": "Ashtin Wallace",
@@ -7582,7 +7706,7 @@
         "prelimsTime": null,
         "finalsTime": "3:22.86",
         "roundSwam": "B Final",
-        "points": 4,
+        "points": 3,
         "event": "Event 20 Men 4x100 Yard Medley Relay",
         "gender": "Men",
         "isRelay": true,
@@ -7596,6 +7720,10 @@
           {
             "name": "Neill Mauss",
             "year": "SR"
+          },
+          {
+            "name": "Alessandro Giustolisi",
+            "year": "UNKNOWN"
           },
           {
             "name": "Ashtin Wallace",
@@ -7637,16 +7765,16 @@
         "relayTeamTime": "3:22.86"
       },
       {
-        "id": "9f659f75-8c06-4ab1-9bb6-e8e7945e9024",
+        "id": "4b73a8bb-e568-4d72-8353-51ff1e06d7c6",
         "rank": 11,
-        "name": "Ashtin Wallace",
-        "classYear": "FR",
+        "name": "Alessandro Giustolisi",
+        "classYear": "UNKNOWN",
         "team": "Delta State University",
         "time": "3:22.86",
         "prelimsTime": null,
         "finalsTime": "3:22.86",
         "roundSwam": "B Final",
-        "points": 4,
+        "points": 3,
         "event": "Event 20 Men 4x100 Yard Medley Relay",
         "gender": "Men",
         "isRelay": true,
@@ -7660,6 +7788,10 @@
           {
             "name": "Neill Mauss",
             "year": "SR"
+          },
+          {
+            "name": "Alessandro Giustolisi",
+            "year": "UNKNOWN"
           },
           {
             "name": "Ashtin Wallace",
@@ -7686,6 +7818,74 @@
             }
           ],
           "legTotal": "49.26"
+        },
+        "relayTeamSplits": {
+          "legTotals": [
+            "51.20",
+            "55.61",
+            "49.26",
+            "46.79"
+          ],
+          "firstHalf": "1:46.81",
+          "secondHalf": "1:36.05",
+          "teamTotal": "3:22.86"
+        },
+        "relayTeamTime": "3:22.86"
+      },
+      {
+        "id": "71158d04-b87a-4209-b503-5ab373778038",
+        "rank": 11,
+        "name": "Ashtin Wallace",
+        "classYear": "FR",
+        "team": "Delta State University",
+        "time": "3:22.86",
+        "prelimsTime": null,
+        "finalsTime": "3:22.86",
+        "roundSwam": "B Final",
+        "points": 3,
+        "event": "Event 20 Men 4x100 Yard Medley Relay",
+        "gender": "Men",
+        "isRelay": true,
+        "isExhibition": false,
+        "isTimeTrial": false,
+        "relayNames": [
+          {
+            "name": "Mateus Franco",
+            "year": "SR"
+          },
+          {
+            "name": "Neill Mauss",
+            "year": "SR"
+          },
+          {
+            "name": "Alessandro Giustolisi",
+            "year": "UNKNOWN"
+          },
+          {
+            "name": "Ashtin Wallace",
+            "year": "FR"
+          }
+        ],
+        "relayLegIndex": 3,
+        "relayLegStroke": "free",
+        "relayLegSplit": "46.79",
+        "relayLegSplitDetail": {
+          "legIndex": 3,
+          "stroke": "free",
+          "legDistanceYards": 100,
+          "segments": [
+            {
+              "yards": 50,
+              "segmentTime": "22.09",
+              "cumulativeLeg": "2:58.16"
+            },
+            {
+              "yards": 50,
+              "segmentTime": "24.70",
+              "cumulativeLeg": "3:22.86"
+            }
+          ],
+          "legTotal": "46.79"
         },
         "relayTeamSplits": {
           "legTotals": [
@@ -8899,6 +9099,24 @@
         "finalsTime": "1:53.38",
         "roundSwam": "B Final",
         "points": 9,
+        "event": "Event 28 Men 200 Yard Butterfly",
+        "gender": "Men",
+        "isRelay": false,
+        "isExhibition": false,
+        "isTimeTrial": false,
+        "relayNames": []
+      },
+      {
+        "id": "76edb828-29fc-4d4c-bdb8-8d3c7a4e7c8b",
+        "rank": 10,
+        "name": "Alessandro Giustolisi",
+        "classYear": "UNKNOWN",
+        "team": "Delta State University",
+        "time": "1:56.20",
+        "prelimsTime": "1:57.77",
+        "finalsTime": "1:56.20",
+        "roundSwam": "B Final",
+        "points": 7,
         "event": "Event 28 Men 200 Yard Butterfly",
         "gender": "Men",
         "isRelay": false,
@@ -11149,6 +11367,24 @@
         "finalsTime": "46.98",
         "roundSwam": "B Final",
         "points": 3,
+        "event": "Event 35 Men 100 Yard Freestyle",
+        "gender": "Men",
+        "isRelay": false,
+        "isExhibition": false,
+        "isTimeTrial": false,
+        "relayNames": []
+      },
+      {
+        "id": "6fc89d00-c462-496c-8a18-e37ed9a30225",
+        "rank": 15,
+        "name": "Alessandro Giustolisi",
+        "classYear": "UNKNOWN",
+        "team": "Delta State University",
+        "time": "47.83",
+        "prelimsTime": "47.90",
+        "finalsTime": "47.83",
+        "roundSwam": "B Final",
+        "points": 2,
         "event": "Event 35 Men 100 Yard Freestyle",
         "gender": "Men",
         "isRelay": false,
@@ -13475,7 +13711,7 @@
         "prelimsTime": null,
         "finalsTime": "3:07.46",
         "roundSwam": "B Final",
-        "points": 4,
+        "points": 3,
         "event": "Event 42 Men 4x100 Yard Freestyle Relay",
         "gender": "Men",
         "isRelay": true,
@@ -13493,6 +13729,10 @@
           {
             "name": "Sergio Rodriguez Rodriguez",
             "year": "JR"
+          },
+          {
+            "name": "Alessandro Giustolisi",
+            "year": "UNKNOWN"
           }
         ],
         "relayLegIndex": 0,
@@ -13539,7 +13779,7 @@
         "prelimsTime": null,
         "finalsTime": "3:07.46",
         "roundSwam": "B Final",
-        "points": 4,
+        "points": 3,
         "event": "Event 42 Men 4x100 Yard Freestyle Relay",
         "gender": "Men",
         "isRelay": true,
@@ -13557,6 +13797,10 @@
           {
             "name": "Sergio Rodriguez Rodriguez",
             "year": "JR"
+          },
+          {
+            "name": "Alessandro Giustolisi",
+            "year": "UNKNOWN"
           }
         ],
         "relayLegIndex": 1,
@@ -13603,7 +13847,7 @@
         "prelimsTime": null,
         "finalsTime": "3:07.46",
         "roundSwam": "B Final",
-        "points": 4,
+        "points": 3,
         "event": "Event 42 Men 4x100 Yard Freestyle Relay",
         "gender": "Men",
         "isRelay": true,
@@ -13621,6 +13865,10 @@
           {
             "name": "Sergio Rodriguez Rodriguez",
             "year": "JR"
+          },
+          {
+            "name": "Alessandro Giustolisi",
+            "year": "UNKNOWN"
           }
         ],
         "relayLegIndex": 2,
@@ -13643,6 +13891,74 @@
             }
           ],
           "legTotal": "46.24"
+        },
+        "relayTeamSplits": {
+          "legTotals": [
+            "47.68",
+            "46.42",
+            "46.24",
+            "47.12"
+          ],
+          "firstHalf": "1:34.10",
+          "secondHalf": "1:33.36",
+          "teamTotal": "3:07.46"
+        },
+        "relayTeamTime": "3:07.46"
+      },
+      {
+        "id": "4fbc4475-4a5b-4f49-9ca2-d95043437b8b",
+        "rank": 11,
+        "name": "Alessandro Giustolisi",
+        "classYear": "UNKNOWN",
+        "team": "Delta State University",
+        "time": "3:07.46",
+        "prelimsTime": null,
+        "finalsTime": "3:07.46",
+        "roundSwam": "B Final",
+        "points": 3,
+        "event": "Event 42 Men 4x100 Yard Freestyle Relay",
+        "gender": "Men",
+        "isRelay": true,
+        "isExhibition": false,
+        "isTimeTrial": false,
+        "relayNames": [
+          {
+            "name": "Ashtin Wallace",
+            "year": "FR"
+          },
+          {
+            "name": "Kostantin Ilijic",
+            "year": "JR"
+          },
+          {
+            "name": "Sergio Rodriguez Rodriguez",
+            "year": "JR"
+          },
+          {
+            "name": "Alessandro Giustolisi",
+            "year": "UNKNOWN"
+          }
+        ],
+        "relayLegIndex": 3,
+        "relayLegStroke": "free",
+        "relayLegSplit": "47.12",
+        "relayLegSplitDetail": {
+          "legIndex": 3,
+          "stroke": "free",
+          "legDistanceYards": 100,
+          "segments": [
+            {
+              "yards": 50,
+              "segmentTime": "22.11",
+              "cumulativeLeg": "2:42.45"
+            },
+            {
+              "yards": 50,
+              "segmentTime": "25.01",
+              "cumulativeLeg": "3:07.46"
+            }
+          ],
+          "legTotal": "47.12"
         },
         "relayTeamSplits": {
           "legTotals": [
@@ -13811,7 +14127,7 @@
         "prelimsTime": "NT",
         "finalsTime": "53.66R",
         "roundSwam": "A Final",
-        "points": 20,
+        "points": 0,
         "event": "Event 939 Boys 100 Yard Breaststroke",
         "gender": "Men",
         "isRelay": false,
@@ -20872,6 +21188,24 @@
         "relayNames": []
       },
       {
+        "id": "552c226b-1513-497a-8679-c1a7d294dd0e",
+        "rank": 21,
+        "name": "Torey Duran",
+        "classYear": "UNKNOWN",
+        "team": "Ouachita Baptist University",
+        "time": "2:02.41",
+        "prelimsTime": "2:02.18",
+        "finalsTime": "2:02.41",
+        "roundSwam": "C Final",
+        "points": 0,
+        "event": "Event 16 Women 200 Yard Freestyle",
+        "gender": "Women",
+        "isRelay": false,
+        "isExhibition": false,
+        "isTimeTrial": false,
+        "relayNames": []
+      },
+      {
         "id": "84c3d056-6af3-4431-89ed-33ede6db4591",
         "rank": 22,
         "name": "Caroline Lunsford",
@@ -24298,6 +24632,24 @@
         "time": "1:12.06",
         "prelimsTime": "1:10.98",
         "finalsTime": "1:12.06",
+        "roundSwam": "C Final",
+        "points": 0,
+        "event": "Event 25 Women 100 Yard Breaststroke",
+        "gender": "Women",
+        "isRelay": false,
+        "isExhibition": false,
+        "isTimeTrial": false,
+        "relayNames": []
+      },
+      {
+        "id": "a0adee6f-a302-4cb3-810f-490c34cc3460",
+        "rank": 19,
+        "name": "Torey Duran",
+        "classYear": "UNKNOWN",
+        "team": "Ouachita Baptist University",
+        "time": "1:12.40",
+        "prelimsTime": "1:12.41",
+        "finalsTime": "1:12.40",
         "roundSwam": "C Final",
         "points": 0,
         "event": "Event 25 Women 100 Yard Breaststroke",
@@ -27908,6 +28260,24 @@
         "relayNames": []
       },
       {
+        "id": "d96c13f2-9066-4c1e-8a21-6d1ee6f0b70a",
+        "rank": 18,
+        "name": "Torey Duran",
+        "classYear": "UNKNOWN",
+        "team": "Ouachita Baptist University",
+        "time": "2:36.42",
+        "prelimsTime": "2:36.08",
+        "finalsTime": "2:36.42",
+        "roundSwam": "C Final",
+        "points": 0,
+        "event": "Event 38 Women 200 Yard Breaststroke",
+        "gender": "Women",
+        "isRelay": false,
+        "isExhibition": false,
+        "isTimeTrial": false,
+        "relayNames": []
+      },
+      {
         "id": "5d7a090f-e352-43ad-896b-b28b9dcd0df7",
         "rank": 19,
         "name": "Lexa Jackson",
@@ -30603,7 +30973,7 @@
         "prelimsTime": "NT",
         "finalsTime": "1:05.16",
         "roundSwam": "A Final",
-        "points": 20,
+        "points": 0,
         "event": "Event 938 Women 100 Yard Breaststroke",
         "gender": "Women",
         "isRelay": false,
@@ -33494,6 +33864,24 @@
         "relayNames": []
       },
       {
+        "id": "b5a683e8-a979-415e-97a5-6607c60c26e1",
+        "rank": 14,
+        "name": "Alessandro Giustolisi",
+        "classYear": "UNKNOWN",
+        "team": "Delta State University",
+        "time": "21.65",
+        "prelimsTime": "21.52",
+        "finalsTime": "21.65",
+        "roundSwam": "B Final",
+        "points": 3,
+        "event": "Event 8 Men 50 Yard Freestyle",
+        "gender": "Men",
+        "isRelay": false,
+        "isExhibition": false,
+        "isTimeTrial": false,
+        "relayNames": []
+      },
+      {
         "id": "f911958f-0259-4710-b399-f13c3bb241b9",
         "rank": 0,
         "name": "Jase Callaway",
@@ -34745,7 +35133,7 @@
         "prelimsTime": null,
         "finalsTime": "1:31.22",
         "roundSwam": "B Final",
-        "points": 6,
+        "points": 4.5,
         "event": "Event 11 Men 4x50 Yard Medley Relay",
         "gender": "Men",
         "isRelay": true,
@@ -34759,6 +35147,10 @@
           {
             "name": "Neill Mauss",
             "year": "SR"
+          },
+          {
+            "name": "Alessandro Giustolisi",
+            "year": "UNKNOWN"
           },
           {
             "name": "Lars Hetzel",
@@ -34785,8 +35177,11 @@
           "legTotals": [
             "23.43",
             "24.83",
-            "22.75"
+            "22.75",
+            "20.21"
           ],
+          "firstHalf": "48.26",
+          "secondHalf": "42.96",
           "teamTotal": "1:31.22"
         },
         "relayTeamTime": "1:31.22"
@@ -34801,7 +35196,7 @@
         "prelimsTime": null,
         "finalsTime": "1:31.22",
         "roundSwam": "B Final",
-        "points": 6,
+        "points": 4.5,
         "event": "Event 11 Men 4x50 Yard Medley Relay",
         "gender": "Men",
         "isRelay": true,
@@ -34815,6 +35210,10 @@
           {
             "name": "Neill Mauss",
             "year": "SR"
+          },
+          {
+            "name": "Alessandro Giustolisi",
+            "year": "UNKNOWN"
           },
           {
             "name": "Lars Hetzel",
@@ -34841,23 +35240,26 @@
           "legTotals": [
             "23.43",
             "24.83",
-            "22.75"
+            "22.75",
+            "20.21"
           ],
+          "firstHalf": "48.26",
+          "secondHalf": "42.96",
           "teamTotal": "1:31.22"
         },
         "relayTeamTime": "1:31.22"
       },
       {
-        "id": "65435845-321e-48c8-8884-c23b1009f4c8",
+        "id": "53012c40-33b8-478f-9d7b-ad917b60eb0b",
         "rank": 9,
-        "name": "Lars Hetzel",
-        "classYear": "JR",
+        "name": "Alessandro Giustolisi",
+        "classYear": "UNKNOWN",
         "team": "Delta State University",
         "time": "1:31.22",
         "prelimsTime": null,
         "finalsTime": "1:31.22",
         "roundSwam": "B Final",
-        "points": 6,
+        "points": 4.5,
         "event": "Event 11 Men 4x50 Yard Medley Relay",
         "gender": "Men",
         "isRelay": true,
@@ -34871,6 +35273,10 @@
           {
             "name": "Neill Mauss",
             "year": "SR"
+          },
+          {
+            "name": "Alessandro Giustolisi",
+            "year": "UNKNOWN"
           },
           {
             "name": "Lars Hetzel",
@@ -34897,8 +35303,74 @@
           "legTotals": [
             "23.43",
             "24.83",
-            "22.75"
+            "22.75",
+            "20.21"
           ],
+          "firstHalf": "48.26",
+          "secondHalf": "42.96",
+          "teamTotal": "1:31.22"
+        },
+        "relayTeamTime": "1:31.22"
+      },
+      {
+        "id": "c5f1010f-7493-4dc1-b3d6-cf0d7039d34b",
+        "rank": 9,
+        "name": "Lars Hetzel",
+        "classYear": "JR",
+        "team": "Delta State University",
+        "time": "1:31.22",
+        "prelimsTime": null,
+        "finalsTime": "1:31.22",
+        "roundSwam": "B Final",
+        "points": 4.5,
+        "event": "Event 11 Men 4x50 Yard Medley Relay",
+        "gender": "Men",
+        "isRelay": true,
+        "isExhibition": false,
+        "isTimeTrial": false,
+        "relayNames": [
+          {
+            "name": "Mateus Franco",
+            "year": "SR"
+          },
+          {
+            "name": "Neill Mauss",
+            "year": "SR"
+          },
+          {
+            "name": "Alessandro Giustolisi",
+            "year": "UNKNOWN"
+          },
+          {
+            "name": "Lars Hetzel",
+            "year": "JR"
+          }
+        ],
+        "relayLegIndex": 3,
+        "relayLegStroke": "free",
+        "relayLegSplit": "20.21",
+        "relayLegSplitDetail": {
+          "legIndex": 3,
+          "stroke": "free",
+          "legDistanceYards": 50,
+          "segments": [
+            {
+              "yards": 50,
+              "segmentTime": "20.21",
+              "cumulativeLeg": "1:31.22"
+            }
+          ],
+          "legTotal": "20.21"
+        },
+        "relayTeamSplits": {
+          "legTotals": [
+            "23.43",
+            "24.83",
+            "22.75",
+            "20.21"
+          ],
+          "firstHalf": "48.26",
+          "secondHalf": "42.96",
           "teamTotal": "1:31.22"
         },
         "relayTeamTime": "1:31.22"
@@ -35544,6 +36016,24 @@
         "finalsTime": "52.61",
         "roundSwam": "A Final",
         "points": 11,
+        "event": "Event 13 Men 100 Yard Butterfly",
+        "gender": "Men",
+        "isRelay": false,
+        "isExhibition": false,
+        "isTimeTrial": false,
+        "relayNames": []
+      },
+      {
+        "id": "2f236830-b316-4a6d-9b93-b098df45ab0c",
+        "rank": 9,
+        "name": "Alessandro Giustolisi",
+        "classYear": "UNKNOWN",
+        "team": "Delta State University",
+        "time": "49.73",
+        "prelimsTime": "50.70",
+        "finalsTime": "49.73",
+        "roundSwam": "B Final",
+        "points": 9,
         "event": "Event 13 Men 100 Yard Butterfly",
         "gender": "Men",
         "isRelay": false,
@@ -38127,7 +38617,7 @@
         "prelimsTime": null,
         "finalsTime": "3:22.86",
         "roundSwam": "B Final",
-        "points": 4,
+        "points": 3,
         "event": "Event 20 Men 4x100 Yard Medley Relay",
         "gender": "Men",
         "isRelay": true,
@@ -38141,6 +38631,10 @@
           {
             "name": "Neill Mauss",
             "year": "SR"
+          },
+          {
+            "name": "Alessandro Giustolisi",
+            "year": "UNKNOWN"
           },
           {
             "name": "Ashtin Wallace",
@@ -38191,7 +38685,7 @@
         "prelimsTime": null,
         "finalsTime": "3:22.86",
         "roundSwam": "B Final",
-        "points": 4,
+        "points": 3,
         "event": "Event 20 Men 4x100 Yard Medley Relay",
         "gender": "Men",
         "isRelay": true,
@@ -38205,6 +38699,10 @@
           {
             "name": "Neill Mauss",
             "year": "SR"
+          },
+          {
+            "name": "Alessandro Giustolisi",
+            "year": "UNKNOWN"
           },
           {
             "name": "Ashtin Wallace",
@@ -38246,16 +38744,16 @@
         "relayTeamTime": "3:22.86"
       },
       {
-        "id": "9f659f75-8c06-4ab1-9bb6-e8e7945e9024",
+        "id": "4b73a8bb-e568-4d72-8353-51ff1e06d7c6",
         "rank": 11,
-        "name": "Ashtin Wallace",
-        "classYear": "FR",
+        "name": "Alessandro Giustolisi",
+        "classYear": "UNKNOWN",
         "team": "Delta State University",
         "time": "3:22.86",
         "prelimsTime": null,
         "finalsTime": "3:22.86",
         "roundSwam": "B Final",
-        "points": 4,
+        "points": 3,
         "event": "Event 20 Men 4x100 Yard Medley Relay",
         "gender": "Men",
         "isRelay": true,
@@ -38269,6 +38767,10 @@
           {
             "name": "Neill Mauss",
             "year": "SR"
+          },
+          {
+            "name": "Alessandro Giustolisi",
+            "year": "UNKNOWN"
           },
           {
             "name": "Ashtin Wallace",
@@ -38295,6 +38797,74 @@
             }
           ],
           "legTotal": "49.26"
+        },
+        "relayTeamSplits": {
+          "legTotals": [
+            "51.20",
+            "55.61",
+            "49.26",
+            "46.79"
+          ],
+          "firstHalf": "1:46.81",
+          "secondHalf": "1:36.05",
+          "teamTotal": "3:22.86"
+        },
+        "relayTeamTime": "3:22.86"
+      },
+      {
+        "id": "71158d04-b87a-4209-b503-5ab373778038",
+        "rank": 11,
+        "name": "Ashtin Wallace",
+        "classYear": "FR",
+        "team": "Delta State University",
+        "time": "3:22.86",
+        "prelimsTime": null,
+        "finalsTime": "3:22.86",
+        "roundSwam": "B Final",
+        "points": 3,
+        "event": "Event 20 Men 4x100 Yard Medley Relay",
+        "gender": "Men",
+        "isRelay": true,
+        "isExhibition": false,
+        "isTimeTrial": false,
+        "relayNames": [
+          {
+            "name": "Mateus Franco",
+            "year": "SR"
+          },
+          {
+            "name": "Neill Mauss",
+            "year": "SR"
+          },
+          {
+            "name": "Alessandro Giustolisi",
+            "year": "UNKNOWN"
+          },
+          {
+            "name": "Ashtin Wallace",
+            "year": "FR"
+          }
+        ],
+        "relayLegIndex": 3,
+        "relayLegStroke": "free",
+        "relayLegSplit": "46.79",
+        "relayLegSplitDetail": {
+          "legIndex": 3,
+          "stroke": "free",
+          "legDistanceYards": 100,
+          "segments": [
+            {
+              "yards": 50,
+              "segmentTime": "22.09",
+              "cumulativeLeg": "2:58.16"
+            },
+            {
+              "yards": 50,
+              "segmentTime": "24.70",
+              "cumulativeLeg": "3:22.86"
+            }
+          ],
+          "legTotal": "46.79"
         },
         "relayTeamSplits": {
           "legTotals": [
@@ -39508,6 +40078,24 @@
         "finalsTime": "1:53.38",
         "roundSwam": "B Final",
         "points": 9,
+        "event": "Event 28 Men 200 Yard Butterfly",
+        "gender": "Men",
+        "isRelay": false,
+        "isExhibition": false,
+        "isTimeTrial": false,
+        "relayNames": []
+      },
+      {
+        "id": "76edb828-29fc-4d4c-bdb8-8d3c7a4e7c8b",
+        "rank": 10,
+        "name": "Alessandro Giustolisi",
+        "classYear": "UNKNOWN",
+        "team": "Delta State University",
+        "time": "1:56.20",
+        "prelimsTime": "1:57.77",
+        "finalsTime": "1:56.20",
+        "roundSwam": "B Final",
+        "points": 7,
         "event": "Event 28 Men 200 Yard Butterfly",
         "gender": "Men",
         "isRelay": false,
@@ -41758,6 +42346,24 @@
         "finalsTime": "46.98",
         "roundSwam": "B Final",
         "points": 3,
+        "event": "Event 35 Men 100 Yard Freestyle",
+        "gender": "Men",
+        "isRelay": false,
+        "isExhibition": false,
+        "isTimeTrial": false,
+        "relayNames": []
+      },
+      {
+        "id": "6fc89d00-c462-496c-8a18-e37ed9a30225",
+        "rank": 15,
+        "name": "Alessandro Giustolisi",
+        "classYear": "UNKNOWN",
+        "team": "Delta State University",
+        "time": "47.83",
+        "prelimsTime": "47.90",
+        "finalsTime": "47.83",
+        "roundSwam": "B Final",
+        "points": 2,
         "event": "Event 35 Men 100 Yard Freestyle",
         "gender": "Men",
         "isRelay": false,
@@ -44084,7 +44690,7 @@
         "prelimsTime": null,
         "finalsTime": "3:07.46",
         "roundSwam": "B Final",
-        "points": 4,
+        "points": 3,
         "event": "Event 42 Men 4x100 Yard Freestyle Relay",
         "gender": "Men",
         "isRelay": true,
@@ -44102,6 +44708,10 @@
           {
             "name": "Sergio Rodriguez Rodriguez",
             "year": "JR"
+          },
+          {
+            "name": "Alessandro Giustolisi",
+            "year": "UNKNOWN"
           }
         ],
         "relayLegIndex": 0,
@@ -44148,7 +44758,7 @@
         "prelimsTime": null,
         "finalsTime": "3:07.46",
         "roundSwam": "B Final",
-        "points": 4,
+        "points": 3,
         "event": "Event 42 Men 4x100 Yard Freestyle Relay",
         "gender": "Men",
         "isRelay": true,
@@ -44166,6 +44776,10 @@
           {
             "name": "Sergio Rodriguez Rodriguez",
             "year": "JR"
+          },
+          {
+            "name": "Alessandro Giustolisi",
+            "year": "UNKNOWN"
           }
         ],
         "relayLegIndex": 1,
@@ -44212,7 +44826,7 @@
         "prelimsTime": null,
         "finalsTime": "3:07.46",
         "roundSwam": "B Final",
-        "points": 4,
+        "points": 3,
         "event": "Event 42 Men 4x100 Yard Freestyle Relay",
         "gender": "Men",
         "isRelay": true,
@@ -44230,6 +44844,10 @@
           {
             "name": "Sergio Rodriguez Rodriguez",
             "year": "JR"
+          },
+          {
+            "name": "Alessandro Giustolisi",
+            "year": "UNKNOWN"
           }
         ],
         "relayLegIndex": 2,
@@ -44252,6 +44870,74 @@
             }
           ],
           "legTotal": "46.24"
+        },
+        "relayTeamSplits": {
+          "legTotals": [
+            "47.68",
+            "46.42",
+            "46.24",
+            "47.12"
+          ],
+          "firstHalf": "1:34.10",
+          "secondHalf": "1:33.36",
+          "teamTotal": "3:07.46"
+        },
+        "relayTeamTime": "3:07.46"
+      },
+      {
+        "id": "4fbc4475-4a5b-4f49-9ca2-d95043437b8b",
+        "rank": 11,
+        "name": "Alessandro Giustolisi",
+        "classYear": "UNKNOWN",
+        "team": "Delta State University",
+        "time": "3:07.46",
+        "prelimsTime": null,
+        "finalsTime": "3:07.46",
+        "roundSwam": "B Final",
+        "points": 3,
+        "event": "Event 42 Men 4x100 Yard Freestyle Relay",
+        "gender": "Men",
+        "isRelay": true,
+        "isExhibition": false,
+        "isTimeTrial": false,
+        "relayNames": [
+          {
+            "name": "Ashtin Wallace",
+            "year": "FR"
+          },
+          {
+            "name": "Kostantin Ilijic",
+            "year": "JR"
+          },
+          {
+            "name": "Sergio Rodriguez Rodriguez",
+            "year": "JR"
+          },
+          {
+            "name": "Alessandro Giustolisi",
+            "year": "UNKNOWN"
+          }
+        ],
+        "relayLegIndex": 3,
+        "relayLegStroke": "free",
+        "relayLegSplit": "47.12",
+        "relayLegSplitDetail": {
+          "legIndex": 3,
+          "stroke": "free",
+          "legDistanceYards": 100,
+          "segments": [
+            {
+              "yards": 50,
+              "segmentTime": "22.11",
+              "cumulativeLeg": "2:42.45"
+            },
+            {
+              "yards": 50,
+              "segmentTime": "25.01",
+              "cumulativeLeg": "3:07.46"
+            }
+          ],
+          "legTotal": "47.12"
         },
         "relayTeamSplits": {
           "legTotals": [
@@ -44420,7 +45106,7 @@
         "prelimsTime": "NT",
         "finalsTime": "53.66R",
         "roundSwam": "A Final",
-        "points": 20,
+        "points": 0,
         "event": "Event 939 Boys 100 Yard Breaststroke",
         "gender": "Men",
         "isRelay": false,
@@ -51481,6 +52167,24 @@
         "relayNames": []
       },
       {
+        "id": "552c226b-1513-497a-8679-c1a7d294dd0e",
+        "rank": 21,
+        "name": "Torey Duran",
+        "classYear": "UNKNOWN",
+        "team": "Ouachita Baptist University",
+        "time": "2:02.41",
+        "prelimsTime": "2:02.18",
+        "finalsTime": "2:02.41",
+        "roundSwam": "C Final",
+        "points": 0,
+        "event": "Event 16 Women 200 Yard Freestyle",
+        "gender": "Women",
+        "isRelay": false,
+        "isExhibition": false,
+        "isTimeTrial": false,
+        "relayNames": []
+      },
+      {
         "id": "84c3d056-6af3-4431-89ed-33ede6db4591",
         "rank": 22,
         "name": "Caroline Lunsford",
@@ -54907,6 +55611,24 @@
         "time": "1:12.06",
         "prelimsTime": "1:10.98",
         "finalsTime": "1:12.06",
+        "roundSwam": "C Final",
+        "points": 0,
+        "event": "Event 25 Women 100 Yard Breaststroke",
+        "gender": "Women",
+        "isRelay": false,
+        "isExhibition": false,
+        "isTimeTrial": false,
+        "relayNames": []
+      },
+      {
+        "id": "a0adee6f-a302-4cb3-810f-490c34cc3460",
+        "rank": 19,
+        "name": "Torey Duran",
+        "classYear": "UNKNOWN",
+        "team": "Ouachita Baptist University",
+        "time": "1:12.40",
+        "prelimsTime": "1:12.41",
+        "finalsTime": "1:12.40",
         "roundSwam": "C Final",
         "points": 0,
         "event": "Event 25 Women 100 Yard Breaststroke",
@@ -58517,6 +59239,24 @@
         "relayNames": []
       },
       {
+        "id": "d96c13f2-9066-4c1e-8a21-6d1ee6f0b70a",
+        "rank": 18,
+        "name": "Torey Duran",
+        "classYear": "UNKNOWN",
+        "team": "Ouachita Baptist University",
+        "time": "2:36.42",
+        "prelimsTime": "2:36.08",
+        "finalsTime": "2:36.42",
+        "roundSwam": "C Final",
+        "points": 0,
+        "event": "Event 38 Women 200 Yard Breaststroke",
+        "gender": "Women",
+        "isRelay": false,
+        "isExhibition": false,
+        "isTimeTrial": false,
+        "relayNames": []
+      },
+      {
         "id": "5d7a090f-e352-43ad-896b-b28b9dcd0df7",
         "rank": 19,
         "name": "Lexa Jackson",
@@ -61212,7 +61952,7 @@
         "prelimsTime": "NT",
         "finalsTime": "1:05.16",
         "roundSwam": "A Final",
-        "points": 20,
+        "points": 0,
         "event": "Event 938 Women 100 Yard Breaststroke",
         "gender": "Women",
         "isRelay": false,
@@ -73821,8 +74561,8 @@
       "eventThrough": 42,
       "men": {
         "Henderson State University Henderson State University": 1056,
-        "Ouachita Baptist University Ouachita Baptist University 1,029.": 50,
-        "Delta State University Delta State University 875.": 50
+        "Ouachita Baptist University Ouachita Baptist University": 1029.5,
+        "Delta State University Delta State University": 875.5
       },
       "women": {
         "University of West Florida University of West Florida": 1239,

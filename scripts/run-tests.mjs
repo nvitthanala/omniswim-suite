@@ -21,8 +21,10 @@ const repoRoot = join(scriptsDir, '..');
 //
 // A test may also report a KNOWN FAILURE by printing a line beginning `XFAIL`
 // and exiting 0. That is for a check whose subject is correct but whose input is
-// not — today, the Delta State men total in `test_nsisc_team_totals.mjs`, where
-// the engine is right and the committed fixture is missing four result rows. The
+// not — the case it was built for was the Delta State men total in
+// `test_nsisc_team_totals.mjs`, where the engine was right and the committed
+// fixture was missing four result rows; that fixture has since been re-extracted
+// and the check is a plain assertion again. No test declares an XFAIL today. The
 // summary lists every one, so a known failure stays visible instead of being
 // skipped into silence. A test may not use it to excuse its own defect: the
 // failing case must be named in the test file with what would close it.
@@ -89,6 +91,7 @@ const TESTS = [
   ['test_cutline_tags.mjs'],
   ['test_team_rankings_parser.mjs'],
   ['test_yearless_result_row.mjs'],
+  ['test_yearless_relay_row.mjs'],
   ['test_scored_event_boundary.mjs'],
   ['test_nsisc_team_totals.mjs'],
   ['test_nsisc_psych.mjs', 'tests/fixtures/nsisc_psych_sheet.pdf'],

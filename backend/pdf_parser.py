@@ -897,6 +897,110 @@ def _relay_leg_stroke_for_event(event_name, leg_index):
     return 'free'
 
 
+# A leg marker opens the segment: "1)", "2)" ... It follows the line start, a
+# space, or a letter — pdfplumber runs the marker onto the previous class year
+# often enough ("... Tanish SR4) r:0.18 Nunez, Javier FR") that requiring
+# whitespace loses the leg. A digit, "(" or "." before it means the ")" closes a
+# split time such as "(20.63)", not a leg.
+_RELAY_LEG_MARKER = re.compile(r'(?<![(\d.:\-])(\d+)\)')
+# HyTek prints a reaction time before the name on every leg but the first.
+_RELAY_LEG_REACTION = re.compile(r'^r:[\+\-]?\d*\.\d+\s+')
+_RELAY_LEG_NAME_YEAR = re.compile(
+    r'^([A-Za-z\-\',\.\s\*#xX%]+?)\s+(FR|SO|JR|SR|5Y|FY|GS|GR)\b'
+)
+# Yearless leg: take the leading run of name characters and stop where the name
+# plainly ends — the end of the segment, a clock, a bracketed split, or the next
+# reaction time. GLVC prints "1) Briley Larcom 2) r:0.35 Kayden Cooper r:+0.77
+# 27.57 58.53", so a leg's own splits can share the segment with its swimmer.
+_RELAY_LEG_NAME_ONLY = re.compile(r'^([A-Za-z][A-Za-z\-\',\.\s\*#xX%]*?)\s*(?=$|[\d(]|r:)')
+
+
+def _looks_like_lost_relay_leg(segment):
+    """True when a leg segment plainly carries a swimmer name yet did not parse."""
+    return sum(
+        1 for t in segment.split() if re.match(r"^[A-Za-z][A-Za-z\-\'\.,]*$", t)
+    ) >= 2
+
+
+def _parse_relay_leg_line(nxt):
+    """
+    Read "1) Name YR 2) Name YR 3) Name YR 4) Name YR" into one entry per leg.
+
+    The class year is optional. This line had the same defect as the individual
+    result row: the old regex required a trailing year token, so a swimmer with
+    no class year on file was not merely missing a year, he was missing from the
+    relay. In `2026_NSISC_Championships_Final_Results.pdf` that dropped
+    Alessandro Giustolisi (Delta State) from three relays; in the 2026 ACC
+    results it dropped Claire Curzan from four.
+
+    A dropped leg also shifts the legs after it. `_build_relay_split_payload`
+    pairs `relay_names[i]` with split i, so a three-name list against four splits
+    credits leg 4's swim to leg 3's swimmer.
+
+    Each leg runs from its marker to the next marker, or to the end of the line.
+    That boundary — not the year token — separates one leg from the next. When no
+    year is printed the year is UNKNOWN. It is never guessed: a class year is
+    competition data that drives senior-removal projections.
+
+    Returns [] for a line that carries no legs, so the caller keeps its "not a
+    swimmer line" branch.
+
+    A leg that still cannot be read on a line whose other legs parsed is
+    reported on stderr, not raised. The individual result row raises because a
+    lost row costs the team its points. A lost leg costs no points — a short
+    relay splits the same team total across the legs present — and the segments
+    that reach this branch are pdfplumber column bleed, e.g. the 2026 Big 12
+    line "3) r:0.37 *Sheikhalizadehkhangh, M4a) rry:0am.17 J RWozniak, Julia
+    SR". Raising there would abort a whole meet over one mangled name, and
+    guessing the name from the wreckage would invent competition data.
+    """
+    markers = list(_RELAY_LEG_MARKER.finditer(nxt))
+    if not markers:
+        return []
+
+    legs = []
+    lost = []
+    for idx, marker in enumerate(markers):
+        end = markers[idx + 1].start() if idx + 1 < len(markers) else len(nxt)
+        segment = _RELAY_LEG_REACTION.sub('', nxt[marker.end():end].lstrip(), count=1)
+
+        year_match = _RELAY_LEG_NAME_YEAR.match(segment)
+        if year_match:
+            name_raw, year = year_match.group(1), year_match.group(2).upper()
+        else:
+            name_match = _RELAY_LEG_NAME_ONLY.match(segment)
+            # Two words minimum: HyTek prints "First Last" or "Last, First", and
+            # a lone token is stray furniture rather than a swimmer.
+            #
+            # The name must also end where a word ends. A run that stops inside
+            # one is a mangled name, not a shorter name: the GLVC ligature
+            # "Kadence Grif(cid:976)in SR" would otherwise enter the roster as
+            # "Kadence Grif", which reads as a real swimmer and is not one.
+            # Report the leg lost instead of inventing a name for it.
+            if (
+                not name_match
+                or len(name_match.group(1).split()) < 2
+                or segment[name_match.end(1):name_match.end(1) + 1].strip()
+            ):
+                if _looks_like_lost_relay_leg(segment):
+                    lost.append(segment.strip())
+                continue
+            name_raw, year = name_match.group(1), 'UNKNOWN'
+
+        name = normalize_name(re.sub(r'^[\*xX#%]\s*', '', name_raw.strip()))
+        if name:
+            legs.append({"name": name, "year": year})
+
+    if legs and lost:
+        print(
+            f'WARNING: unreadable relay leg on swimmer line {nxt!r}: {lost!r}. '
+            'The other legs on this line parsed, so this relay is short a '
+            'swimmer.',
+            file=sys.stderr,
+        )
+    return legs
+
+
 def _parse_nsisc_relay(
     stripped,
     lines,
@@ -976,13 +1080,10 @@ def _parse_nsisc_relay(
         if not nxt:
             continue
         # Swimmer line: "1) Shannah Dillman SR 2) Tori Johnston SR ..."
-        # Handle optional reaction times like r:0.12 or r:+0.55
-        swimmers = re.findall(r'(\d+)\)\s*((?:r:[\+\-]?\d*\.\d+\s+)?)([A-Za-z\-\',\.\s\*#xX%]+?)\s+(FR|SO|JR|SR|5Y|FY|GS|GR)', nxt)
+        # Optional reaction times (r:0.12, r:+0.55) and optional class years.
+        swimmers = _parse_relay_leg_line(nxt)
         if swimmers:
-            for num, _rt, sname, syear in swimmers:
-                sname_clean = re.sub(r'^[\*xX#%]\s*', '', sname.strip())
-                sname_clean = normalize_name(sname_clean)
-                relay_names.append({"name": sname_clean, "year": syear.upper()})
+            relay_names.extend(swimmers)
             continue
         if nxt.startswith('r:') or (re.match(r'^[\d:\.]+\s', nxt) and '(' in nxt):
             split_lines = _collect_relay_split_lines(lines, j - 1)
@@ -1119,7 +1220,12 @@ def _split_yearless_individual_line(rest_line):
         name_part = re.sub(r'^(\*?\d+)\s+', '', before).strip()
         if len(name_part.split()) < 2:
             continue
-        if not re.match(r"^[A-Za-z][A-Za-z\-\'\.\s]*$", name_part):
+        # The comma is not optional in practice: HyTek prints "Last, First" in
+        # every conference PDF archived here bar NSISC. Without it the ACC's
+        # "4 Clark, Kayleigh Florida State University 296.85 300.15 26" is not
+        # recovered, and the caller raises on it — one yearless diver aborting
+        # the whole meet.
+        if not re.match(r"^[A-Za-z][A-Za-z\-\',\.\s]*$", name_part):
             continue
         return 'UNKNOWN', before, after
     return None
