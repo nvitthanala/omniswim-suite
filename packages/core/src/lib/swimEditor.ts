@@ -17,6 +17,11 @@
  *      cross-course candidate-best table.
  *   3. Credited meet swims (menResults / womenResults rows for a real team).
  *
+ * `removeProjectedSwim` sits across planes 1 and 3 plus the recruit list: given
+ * a row id from the SCORED pool it works out which plane owns it and delegates.
+ * Callers holding a scored row cannot make that call themselves — `isRecruit` is
+ * true for a planned entry and a recruit row alike.
+ *
  * plus `copyMeetIntoWorkspace` ("load this meet here"), which brings a source
  * workspace's frozen meet field + scoring config into a target so roster plans
  * and a scoring field can coexist.
@@ -370,6 +375,56 @@ export function removeCreditedSwim(
     inverse: { [field]: results },
     description: `Remove credited swim ${row?.name ?? resultRowId}`,
   };
+}
+
+/**
+ * Remove ONE projected swim by the row id the scored pool shows, whichever plane
+ * that row actually came from.
+ *
+ * `buildWhatIfResults` composes three planes into one array of `SwimmerResult`s,
+ * and `planToResult` stamps `isRecruit: true` on a planned entry as well as on a
+ * recruit row. A caller holding a scored row therefore CANNOT tell a plan from a
+ * recruit by looking at it — and the UI's delete handler, which read `isRecruit`
+ * and filtered `workspace.recruits` by id, silently did nothing when the row was
+ * a plan: the filter dropped no element, the patch was a no-op, and the toast
+ * still said the swim had been removed. That is the "remove did not recalculate"
+ * report.
+ *
+ * Dispatch is by WHERE THE ID LIVES, which is unambiguous:
+ *   meetEntryPlans → removePlannedEntry (also drops it from activeEntryIds)
+ *   recruits       → filter the recruit out
+ *   men/womenResults → removeCreditedSwim (frozen source copy untouched)
+ *
+ * Raises when the id belongs to none of them rather than returning an empty
+ * patch: a delete that quietly removes nothing is the failure this function
+ * exists to end.
+ */
+export function removeProjectedSwim(
+  workspace: Workspace,
+  gender: Gender,
+  rowId: string
+): WorkspaceEditorPatch {
+  const plans = workspace.meetEntryPlans ?? [];
+  if (plans.some(p => p.id === rowId)) return removePlannedEntry(workspace, rowId);
+
+  const recruits = workspace.recruits ?? [];
+  const recruit = recruits.find(r => r.id === rowId);
+  if (recruit) {
+    return {
+      patch: { recruits: recruits.filter(r => r.id !== rowId) },
+      inverse: { recruits },
+      description: `Remove recruit entry (${recruit.name}: ${recruit.event})`,
+    };
+  }
+
+  const field = genderResultsField(gender);
+  if ((workspace[field] ?? []).some(r => r.id === rowId)) {
+    return removeCreditedSwim(workspace, gender, rowId);
+  }
+
+  throw new Error(
+    `removeProjectedSwim: id ${rowId} is not a planned entry, a recruit, or a ${field} row`
+  );
 }
 
 // --- 4. load this meet here -------------------------------------------------

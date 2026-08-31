@@ -8,7 +8,7 @@ import { RefreshCw, Undo2, UserMinus } from 'lucide-react';
 import { Gender, Recruit, ScoringSettings, Workspace } from '@omniswim/core/types';
 import type { ScoringBundle } from '@omniswim/core/lib/useWorkspaceScoring';
 import type { AthleteCreditedSwim } from '@omniswim/core/lib/scorerRoster';
-import { editCreditedSwim, removeCreditedSwim } from '@omniswim/core/lib/swimEditor';
+import { editCreditedSwim, removeProjectedSwim } from '@omniswim/core/lib/swimEditor';
 import {
   ATHLETE_JUMP_EVENT,
   consumePendingAthleteJump,
@@ -171,19 +171,23 @@ export default function TeamManagementView({
     toast.push('success', result.description);
   };
 
+  // `isRecruit` is true for a planned entry as well as a recruit row, so it
+  // cannot pick the plane to delete from. removeProjectedSwim dispatches on
+  // where the id actually lives — the old branch filtered `recruits` by a plan
+  // id, removed nothing, and still reported success.
+  //
+  // It raises on a row the workspace does not own — a Team Roster Catalog swim
+  // is injected at scoring time and has nothing to delete. Say so; the previous
+  // behaviour was a success toast over a patch that changed nothing.
   const handleDeleteSwim = (swim: AthleteCreditedSwim) => {
-    if (swim.isRecruit) {
-      applySwimPatch(ws => {
-        const baseRecruits = ws.recruits ?? [];
-        return {
-          patch: { recruits: baseRecruits.filter(r => r.id !== swim.id) },
-          inverse: { recruits: baseRecruits },
-          description: `Remove recruit entry (${swim.event})`,
-        };
-      });
-      return;
+    try {
+      applySwimPatch(ws => removeProjectedSwim(ws, gender, swim.id));
+    } catch {
+      toast.push(
+        'error',
+        `${swim.event} is not editable here — it comes from the Team Roster Catalog, not this workspace.`
+      );
     }
-    applySwimPatch(ws => removeCreditedSwim(ws, gender, swim.id));
   };
 
   const handleEditSwim = (swim: AthleteCreditedSwim, changes: EditCreditedSwimValues) => {

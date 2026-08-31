@@ -4,13 +4,14 @@
  *
  * Characterization tests for AthleteLineupEditorPanel (packages/manager).
  *
- * !! UNVERIFIED — NEVER EXECUTED !!
- * This file was authored in a worktree with no `node_modules`, so it has not
- * been run even once. Run it against the UNMODIFIED component before trusting
- * it or refactoring behind it. If an assertion fails, the correct fix is to
- * change the assertion to match what the component actually does — this file
- * characterizes what IS, not what it ought to be. Delete this banner once the
- * file has gone green against the unmodified component.
+ * Status: this file is in scripts/run-tests.mjs and runs green. The original
+ * "UNVERIFIED — NEVER EXECUTED" banner (it was authored in a worktree with no
+ * `node_modules`) is retired as of the 2026-08-30 test audit.
+ *
+ * It remains a CHARACTERIZATION test: it pins what the component DOES, not what
+ * it ought to do. If an assertion fails after an intentional behaviour change,
+ * update the assertion. If one fails after a refactor that was meant to preserve
+ * behaviour, the refactor is wrong.
  *
  * This file exists to pin the drawer's OBSERVABLE behaviour before it is split
  * into smaller components. It deliberately asserts only what the panel renders
