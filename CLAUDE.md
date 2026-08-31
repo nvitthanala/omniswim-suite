@@ -1,5 +1,35 @@
 # Omniswim Suite — Claude Code Instructions
 
+## Response & Writing Style
+
+This rule covers three things: chat replies, commit messages, and docs. Use
+plain words. Keep sentences short. Say one thing per sentence. Prefer active
+voice ("the parser drops the row" not "the row is dropped by the parser").
+Use the same term for the same thing every time — do not swap "swimmer" for
+"athlete" for "competitor" in one passage. Spell out an acronym on first use.
+
+Sources: [ASD-STE100 / Simplified Technical English](https://www.asd-ste100.org/)
+and the [Google developer documentation style guide](https://developers.google.com/style).
+
+**Commit messages** — apply both of these on every commit in this repo:
+[tbaggery, "A Note About Git Commit Messages"](https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html)
+and [cbea.ms, "How to Write a Git Commit Message"](https://cbea.ms/git-commit/).
+
+1. Subject line first, then a blank line, then the body.
+2. Subject: 50 characters or fewer. No period at the end.
+3. Subject: imperative mood — "Fix the race", not "Fixed the race" or "Fixes the race".
+   Test it by finishing the sentence "If applied, this commit will ___."
+4. Body: wrap at 72 characters.
+5. Body: explain what the change does and why. Skip the how — the diff shows that.
+
+**Docs and chat replies** — apply STE and the Google style guide:
+
+- One idea per sentence. Split any sentence that has "and" joining two instructions.
+- Write steps as commands to the reader: "Run the script," not "The script should be run."
+- Cut filler words — "in order to", "please note that", "it should be noted".
+- Say what the code does, not what you did to it, in commit/PR bodies and doc prose.
+- Skip hedging ("might", "could potentially") when you know the answer.
+
 ## AI Orchestration & Sequencing
 
 **Standing delegation model for this project:**
