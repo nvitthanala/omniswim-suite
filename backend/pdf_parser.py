@@ -312,14 +312,27 @@ def parse_meet_data(lines, conference="NSISC"):
         else:
             rest_line = stripped
         
-        # Find year token
+        # Find year token. A missing one is not automatically noise: HyTek omits
+        # the class year for an athlete who has none on file, and dropping the
+        # line loses a real result. Recover off the school, and raise when a row
+        # that plainly is a result cannot be recovered rather than losing it
+        # silently — a short meet reads as a scoring defect, not a parse defect.
         yr_match = re.search(YEAR_PATTERN, rest_line)
-        if not yr_match:
-            continue
-        
-        yr = yr_match.group(1).upper()
-        before_yr = rest_line[:yr_match.start()].strip()
-        after_yr = rest_line[yr_match.end():].strip()
+        if yr_match:
+            yr = yr_match.group(1).upper()
+            before_yr = rest_line[:yr_match.start()].strip()
+            after_yr = rest_line[yr_match.end():].strip()
+        else:
+            recovered = _split_yearless_individual_line(rest_line)
+            if recovered is None:
+                if _looks_like_lost_result_row(rest_line):
+                    raise ValueError(
+                        'unparseable individual result row in '
+                        f'{current_event!r} ({current_round}): no class year and '
+                        f'no known school to split on: {stripped!r}'
+                    )
+                continue
+            yr, before_yr, after_yr = recovered
         
         rank = None
         name = None
@@ -1055,6 +1068,61 @@ def _school_guess_after_year(after_yr):
         else:
             school_words.append(t)
     return ' '.join(school_words).strip()
+
+
+def _looks_like_lost_result_row(rest_line):
+    """
+    True when a line carries the unmistakable shape of an individual result row
+    — a leading place, at least one clock, and a name — yet could not be parsed.
+
+    Deliberately narrow. Page furniture ("2026 New South Intercollegiate
+    Swimming Conference") leads with a number too, but carries no time token, so
+    it never reaches the raise.
+    """
+    if not re.match(r'^(\*?\d+)\s+[A-Za-z]', rest_line.strip()):
+        return False
+    tokens = rest_line.split()
+    if not any(is_time(t.lstrip('Xx*#')) for t in tokens):
+        return False
+    return sum(1 for t in tokens if re.match(r'^[A-Za-z][A-Za-z\-\'\.]*$', t)) >= 2
+
+
+def _split_yearless_individual_line(rest_line):
+    """
+    Split "<place> <Name> <School> <times...>" when HyTek printed no class year.
+
+    The standard layout is "<place> <Name> <YR> <School> <times...>" and the
+    whole downstream parse pivots on the year token. A roster entry with no
+    class year on file prints without one, and every row for that athlete was
+    silently dropped — in the 2026 NSISC results, all 11 rows for Alessandro
+    Giustolisi (Delta State), including four scoring finishes worth 21 points.
+
+    Recovery pivots on the school instead, taken from the team cache built out
+    of this same PDF. Returns (year, before_school, school_and_times) shaped
+    exactly like the year-token split so the caller is unchanged, with the year
+    reported as UNKNOWN. The class year is never guessed: it is competition data
+    that drives senior-removal projections, and this PDF does not carry one.
+    """
+    if not _team_cache:
+        return None
+    for team in _team_cache:  # longest first, so the fullest school name wins
+        idx = rest_line.find(team)
+        if idx <= 0:
+            continue
+        before = rest_line[:idx].strip()
+        after = rest_line[idx:].strip()
+        if not before or not after:
+            continue
+        # Strip the place, then require a real athlete name. Guards the team
+        # score table ("1 University of West Florida University of West Florida
+        # 1,239"), where nothing but the place precedes the school.
+        name_part = re.sub(r'^(\*?\d+)\s+', '', before).strip()
+        if len(name_part.split()) < 2:
+            continue
+        if not re.match(r"^[A-Za-z][A-Za-z\-\'\.\s]*$", name_part):
+            continue
+        return 'UNKNOWN', before, after
+    return None
 
 
 def _build_team_cache(lines):

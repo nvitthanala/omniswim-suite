@@ -48,13 +48,16 @@ def _extract_athletes(pdf_path, fmt):
     )
 
 
-def _score_athletes(raw_athletes):
+def _score_athletes(raw_athletes, scored_event_number_max=None):
     import point_calculator
 
     fn = _load_callable(point_calculator, ['calculate_points'])
     if fn is None:
         raise RuntimeError('point_calculator.calculate_points not found')
-    return fn(raw_athletes)
+    if scored_event_number_max is None:
+        return fn(raw_athletes)
+    # The meet's own boundary keeps post-meet extra sessions out of the totals.
+    return fn(raw_athletes, {'scoredEventNumberMax': scored_event_number_max})
 
 
 def _team_rankings(pdf_path):
@@ -96,14 +99,17 @@ def main():
             print(json.dumps({'error': raw['error']}))
             sys.exit(1)
 
-        scored = _score_athletes(raw)
+        # Team rankings first: they carry "Through Event N", the meet's own
+        # statement of which events score. Scoring needs it.
+        official = _team_rankings(pdf_path)
+        event_through = official.get('eventThrough') if official else None
+
+        scored = _score_athletes(raw, event_through)
         conference = None
         if isinstance(scored, list) and scored and isinstance(scored[0], dict):
             c = scored[0].get('conference')
             if isinstance(c, str):
                 conference = c
-
-        official = _team_rankings(pdf_path)
 
         print(json.dumps({
             'athletes': scored,

@@ -219,6 +219,10 @@ def _resolve_scoring_settings(scoring_settings=None):
 
     cfg.setdefault('unscoredRounds', ['C FINAL', 'C-FINAL', 'BONUS FINAL', 'D FINAL', 'D-FINAL', 'TIME TRIAL'])
 
+    # Last event number the meet scored, from "Team Rankings - Through Event N".
+    # None means the meet published no boundary, so every event scores.
+    cfg.setdefault('scoredEventNumberMax', None)
+
     cfg.setdefault('exhibitionMarkers', ['x', 'X'])
 
     cfg.setdefault('timeTrialMarkers', ['TIME TRIAL', 'TT'])
@@ -343,11 +347,37 @@ def is_diving_event(event_name, cfg=None):
 
 
 
+def parse_event_number(event_name):
+    """Event number from a HyTek label ("Event 13 Men 100 Fly" -> 13), else None."""
+    m = re.match(r'\s*Event\s+(\d+)\b', str(event_name or ''), re.IGNORECASE)
+    return int(m.group(1)) if m else None
+
+
+def is_outside_scored_program(event_name, scored_event_number_max):
+    """
+    True when the label names an event past the meet's scored program.
+
+    HyTek numbers post-meet extra sessions above the program and leaves them out
+    of the published team totals. Most carry "Time Trial" in the name, but the
+    host may omit it — the 2026 NSISC results print events 938/939 after the
+    time trials with nothing but the number to give them away. Only a positively
+    out-of-range number excludes a row; an unnumbered label keeps scoring.
+    """
+    if scored_event_number_max is None:
+        return False
+    n = parse_event_number(event_name)
+    return n is not None and n > scored_event_number_max
+
+
 def is_unscored_round_or_event(round_swam, event_name, cfg):
 
     r = (round_swam or '').upper()
 
     e = (event_name or '').upper()
+
+    if is_outside_scored_program(event_name, cfg.get('scoredEventNumberMax')):
+
+        return True
 
     for ur in cfg.get('unscoredRounds', []):
 
