@@ -41,7 +41,12 @@ import {
 import { buildMeetEventLabelIndex, canonicalProgramEvent } from '../eventIdentity';
 import { effectivePdfPlacePointsMode } from '../scoringDefaults';
 import { buildScorerRosterLookup, usesScorerRoster, type ScorerRosterLookup } from '../scorerRoster';
-import { buildWhatIfResults, planToResult, projectRanksInField } from '../whatIfProjection';
+import {
+  buildWhatIfProjection,
+  buildWhatIfResults,
+  planToResult,
+  projectRanksInField,
+} from '../whatIfProjection';
 import {
   calculatePoints,
   classifyRoundTier,
@@ -552,21 +557,31 @@ export function collectDroppableEntries(
 // are identical to baseline, so the sweep re-uses cached baseline groups for
 // them and re-scores only the two touched events (no-pool) per candidate.
 
+/** One distinct swimmer within a tie group — one pool slot, one points figure. */
+type TeamScoreGroupMember = {
+  /** Normalized swimmer key. One pool slot per key. */
+  key: string;
+  /**
+   * Team points THIS swimmer's rows earn at this placement — summed over ROWS,
+   * not one per name. scoreIndividualsInEvent awards `each` to every member row
+   * while consuming pool weight only per distinct name, so the two counts
+   * diverge whenever a team holds more rows than distinct swimmers at one
+   * placement (e.g. an athlete carried as BOTH a recruit row and an active
+   * optimizer plan for the same event). Counting per name under-counted those
+   * groups and broke the self-validation below, disabling the fast path.
+   */
+  points: number;
+};
+
 /** One scored tie-group for a single team, in meet+rank order (pool sweep unit). */
 type TeamScoreGroup = {
-  /** Distinct swimmer keys sharing this placement (all-or-none against the pool). */
-  names: string[];
   /**
-   * Team points the WHOLE group earns when it scores — summed over ROWS, not
-   * over distinct names. scoreIndividualsInEvent awards `each` to every member
-   * row (`members.forEach(r => ... points: each)`) while consuming pool weight
-   * only per distinct name (`uniqueNames`), so the two counts diverge whenever
-   * a team holds more rows than distinct swimmers at one placement (e.g. an
-   * athlete carried as BOTH a recruit row and an active optimizer plan for the
-   * same event). Awarding per name under-counted those groups and broke the
-   * self-validation below, which disabled the fast path wholesale.
+   * The distinct swimmers sharing this placement, PRE-ORDERED the way
+   * `admitTieGroupToMeetPool` admits them: fastest first, name as tiebreak.
+   * Admission is per member and accumulates, so a group can score partially —
+   * it is no longer all-or-none. See the sweep below.
    */
-  ptsTotal: number;
+  members: TeamScoreGroupMember[];
   /** Pool weight each NEW swimmer consumes (diving events weigh less). */
   weight: number;
 };
@@ -591,40 +606,45 @@ export type FastSwapContext = {
   addOnlyTotalFor: (newEntry: PlannedSwimEntry) => number | null;
 };
 
-/** Sum of pool weights currently held. */
-function poolWeightSum(pool: Map<string, number>): number {
-  let s = 0;
-  pool.forEach(w => (s += w));
-  return s;
-}
-
 /**
- * Meet-wide scorer-pool sweep for ONE team, mirroring scoreIndividualsInEvent's
- * per-team pool logic exactly: groups are offered in meet+rank order; a group
- * scores iff every one of its distinct swimmers is already pooled or can still
- * be added (each checked against the pre-group pool, all-or-none). Newly pooled
- * swimmers consume their event weight. An unbounded cap never blocks.
+ * Meet-wide scorer-pool sweep for ONE team, mirroring `admitTieGroupToMeetPool`
+ * in utils.ts: groups are offered in meet+rank order, and within a group each
+ * swimmer is admitted individually, fastest first, against the pool AS IT
+ * STANDS AFTER the earlier members of that same group.
+ *
+ * This tracked the engine's old `every(...)` gate — all-or-none, and every
+ * member weighed against the same pre-group pool — until that gate was replaced
+ * (2026-08-30). The two must agree: this sweep is validated against a real
+ * `calculatePoints` baseline before the fast path is allowed to run, and
+ * scripts/test_cross_course_arbitrage.mjs checks fast === full per swap. If you
+ * change the admission rule in utils.ts, change it here in the same commit.
+ *
+ * An unbounded cap never blocks, short-circuited exactly as canAddSwimmerToPool
+ * does, so a large field cannot accumulate past 999 and start refusing.
  */
 function sweepTeamIndividualTotal(
   eventsOrder: string[],
   groupsByEvent: Map<string, TeamScoreGroup[]>,
   cap: number
 ): number {
-  const pool = new Map<string, number>();
+  const unbounded = cap >= 999;
+  const pool = new Set<string>();
+  let weightHeld = 0;
   let total = 0;
   for (const ev of eventsOrder) {
     const groups = groupsByEvent.get(ev);
     if (!groups) continue;
     for (const grp of groups) {
-      const preWeight = poolWeightSum(pool);
-      const canAll = grp.names.every(
-        n => pool.has(n) || preWeight + grp.weight <= cap + 1e-9
-      );
-      if (!canAll) continue;
-      for (const n of grp.names) {
-        if (!pool.has(n)) pool.set(n, grp.weight);
+      for (const m of grp.members) {
+        if (pool.has(m.key)) {
+          total += m.points;
+          continue;
+        }
+        if (!unbounded && weightHeld + grp.weight > cap + 1e-9) continue;
+        pool.add(m.key);
+        weightHeld += grp.weight;
+        total += m.points;
       }
-      total += grp.ptsTotal;
     }
   }
   return total;
@@ -655,10 +675,31 @@ function buildTeamGroupsForEvent(
   });
   return keys.map(k => {
     const rs = byKey.get(k)!;
-    const names = [...new Set(rs.map(r => normalizeSwimmerName(r.name)))];
-    // Points are per ROW (see TeamScoreGroup.ptsTotal); pool weight is per NAME.
-    const ptsTotal = rs.reduce((s, r) => s + Number(r.points ?? 0), 0);
-    return { names, ptsTotal, weight };
+    // Points are per ROW (see TeamScoreGroupMember.points); pool weight is per
+    // NAME — so rows are folded onto one entry per distinct swimmer key.
+    const agg = new Map<string, { key: string; points: number; time: number; label: string }>();
+    for (const r of rs) {
+      const key = normalizeSwimmerName(r.name);
+      const raw = convertTimeToSeconds(r.time);
+      const time = Number.isFinite(raw) ? raw : Number.POSITIVE_INFINITY;
+      const points = Number(r.points ?? 0);
+      const cur = agg.get(key);
+      if (!cur) {
+        agg.set(key, { key, points, time, label: r.name });
+      } else {
+        cur.points += points;
+        if (time < cur.time) cur.time = time;
+        // The engine breaks a time tie on the raw name. Two raw spellings can
+        // fold into one key here, so the lowest raw spelling stands in for the
+        // group; where that diverges the self-validation gate below fails the
+        // fast path closed rather than returning a wrong number.
+        if (r.name.localeCompare(cur.label) < 0) cur.label = r.name;
+      }
+    }
+    const members = [...agg.values()]
+      .sort((a, b) => a.time - b.time || a.label.localeCompare(b.label))
+      .map(m => ({ key: m.key, points: m.points }));
+    return { members, weight };
   });
 }
 
@@ -711,7 +752,24 @@ export function buildFastSwapContext(
 
   // Baseline scored once, in the SAME projection regime every swap produces
   // (an added optimizer plan always forces projectRanksInField).
-  const R = projectRanksInField(buildWhatIfResults({ workspace, gender, removeSeniors: false }));
+  const projection = buildWhatIfProjection({ workspace, gender, removeSeniors: false });
+
+  // --- gate: a shadowed row would resurface when its shadower is dropped.
+  // buildWhatIfProjection collapses one athlete's duplicate entries in an event
+  // down to the most explicit plane, so a plan can be hiding a recruit row for
+  // the same event. The incremental model here prices a DROP as "remove this
+  // row's points from its event group" — it has no way to know the hidden row
+  // comes back, and would under-count the drop. Fail closed: the caller's full
+  // re-score rebuilds the projection and gets it right.
+  if (
+    projection.collapsed.some(
+      r => String(r.team ?? '').trim() === team && (r.gender === gender || r.gender == null)
+    )
+  ) {
+    return null;
+  }
+
+  const R = projectRanksInField(projection.rows);
   const realScored = calculatePoints(R, merged, {
     scorerRosterOverrides: overrides,
     conferenceForMerge: workspace.conference,
@@ -785,7 +843,7 @@ export function buildFastSwapContext(
   // seedAbRelayLegsIntoPool only runs under relayEligibleFromScorerPool, which
   // the gate above already rejects. The real cause was TeamScoreGroup awarding
   // points per distinct NAME while calculatePoints awards them per ROW — see
-  // TeamScoreGroup.ptsTotal. The workspace carries several athletes as BOTH a
+  // TeamScoreGroupMember.points. The workspace carries several athletes as BOTH a
   // recruit row and an active optimizer plan for the same event, so those
   // placements hold more rows than names and the sweep under-counted them.
   const sweepBase = sweepTeamIndividualTotal(eventsOrder, baseGroupsByEvent, cap);

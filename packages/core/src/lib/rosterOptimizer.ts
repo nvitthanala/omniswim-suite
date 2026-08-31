@@ -97,13 +97,78 @@ export type GuardedOptimizerResult = OptimizerResult & {
 const IMPROVEMENT_EPSILON = 1e-6;
 
 /** One complete, internally coherent state the optimizer may return. */
-type OptimizerCandidate = {
+export type OptimizerCandidate = {
   appliedStages: Exclude<OptimizerAppliedStages, 'none'>;
   overrides: ScorerRosterOverride[];
   plans: PlannedSwimEntry[];
   activeIds: string[];
   total: number;
 };
+
+/** The caller's own state and what it scores — what a refusal hands back untouched. */
+export type OptimizerBaseState = {
+  overrides: ScorerRosterOverride[];
+  plans: PlannedSwimEntry[];
+  activeIds: string[];
+  total: number;
+};
+
+/**
+ * THE GUARD, on its own, so every optimizer entry point shares one copy.
+ *
+ * Takes the caller's current state and a list of COMPLETE candidate states, and
+ * returns the highest-scoring candidate that strictly beats the current total by
+ * more than {@link IMPROVEMENT_EPSILON}. When none does, it returns the caller's
+ * own `overrides` / `plans` / `activeIds` untouched with `outcome: 'unchanged'`
+ * and `appliedStages: 'none'` — not a half-applied hybrid, and never a state
+ * that scores less than the one it was handed.
+ *
+ * Ties go to the state already on screen: an equal-scoring reshuffle is churn,
+ * and changing a coach's lineup has a cost even when the number does not move.
+ *
+ * `unguardedTotal` is what the pre-guard code would have returned — the fully
+ * chained candidate, accepted or not. Diagnostic only; never apply it. It is
+ * what lets a test prove the guard is still load-bearing rather than decorative.
+ *
+ * Every candidate's `total` MUST come from the same scoring function that
+ * produced `base.total`. Comparing two differently-measured totals is the bug
+ * this guard exists to prevent, wearing a disguise.
+ */
+export function selectGuardedResult(
+  base: OptimizerBaseState,
+  candidates: readonly OptimizerCandidate[],
+  unguardedTotal: number
+): GuardedOptimizerResult {
+  let best: OptimizerCandidate | null = null;
+  for (const candidate of candidates) {
+    const bar = best ? best.total : base.total;
+    if (candidate.total > bar + IMPROVEMENT_EPSILON) best = candidate;
+  }
+
+  if (!best) {
+    return {
+      overrides: base.overrides,
+      meetEntryPlans: base.plans,
+      activeEntryIds: base.activeIds,
+      projectedTotal: base.total,
+      previousTotal: base.total,
+      outcome: 'unchanged',
+      appliedStages: 'none',
+      unguardedTotal,
+    };
+  }
+
+  return {
+    overrides: best.overrides,
+    meetEntryPlans: best.plans,
+    activeEntryIds: best.activeIds,
+    projectedTotal: best.total,
+    previousTotal: base.total,
+    outcome: 'improved',
+    appliedStages: best.appliedStages,
+    unguardedTotal,
+  };
+}
 
 /** Score one state once and bucket the points by team — every team's total from a single pass. */
 function teamTotalsForState(
@@ -145,7 +210,16 @@ function teamTotalsForState(
   return totals;
 }
 
-function teamTotalForTeam(
+/**
+ * Score ONE state and return one team's total from it.
+ *
+ * Exported so a second optimizer entry point cannot quietly grow its own copy.
+ * `optimizeWithArbitrage` in rosterArbitrage.ts used to have one, and it ignored
+ * `removeSeniors` — it scored a senior-full field while handing `removeSeniors`
+ * to the scorers stage, so the stage optimized one projection and the caller was
+ * shown another.
+ */
+export function teamTotalForTeam(
   workspace: Workspace,
   gender: Gender,
   removeSeniors: boolean,
@@ -172,34 +246,32 @@ function teamTotalForTeam(
 /**
  * Stage A: maximize scorer roster for one team.
  *
- * KNOWN DISAGREEMENT — diagnosed, deliberately not fixed here; the guard in
- * `optimizeRosterForTeam` makes the button safe while this stands.
+ * WHO ENFORCES THE CAP (resolved 2026-08-30 — the disagreement this comment
+ * used to record is gone; see the note on what is still open, below).
  *
- * `cap` below enforces `maxIndividualScorersPerTeam` (18 under NSISC). The
- * scoring engine's AUTOMATIC scorer set does not: `buildScorerRosterLookup`
- * defaults a recruit row to `isScorer: true` unconditionally, so a 32-athlete
- * recruit roster arrives with 32 auto-scorers. This function then "corrects"
- * that down to 18 by writing `isScorer: false` for the other 14 — every
- * override it writes on such a roster is an OFF.
+ * `cap` below selects the best `maxIndividualScorersPerTeam` (18 under NSISC)
+ * by projected points. It is NOT the only thing enforcing that number, and it
+ * must not be: the engine enforces it too, in the meet-wide scorer pool
+ * (`admitTieGroupToMeetPool` in utils.ts), which is where diver weighting and
+ * meet scope live. The two used to disagree — the pool tested each athlete
+ * against the pool AS IT STOOD, so a whole tie group of new names all passed
+ * the same check and the pool admitted 31 athletes against a cap of 18, while
+ * this function trimmed to exactly 18. Every override written here was then a
+ * forced OFF against a set the engine had never capped, and a single un-poolable
+ * athlete zeroed every teammate in the event.
  *
- * On a workspace with no meet PDF that is catastrophic, and the reason is two
- * further behaviours compounding downstream:
+ * The pool now admits per athlete and accumulates, so it holds exactly 18.
+ * `buildScorerRosterLookup` still defaults a recruit row to `isScorer: true`,
+ * and that is correct: it answers "is this athlete on the scoring roster at
+ * all", not "is this athlete one of the 18". One question, one enforcer. The
+ * overrides written here therefore steer WHICH 18 the pool takes — a ranked
+ * choice among a capped set — instead of fighting a second, uncapped one.
  *
- *  1. `prepareRecruitsForScoring` ranks a recruit against the PDF rows in its
- *     event. With no PDF rows there are no comparators, so EVERY recruit is
- *     rank 1 in EVERY event — one event becomes a single tie group.
- *  2. `scoreIndividualsInEvent` gates a tie group with
- *     `uniqueNames.every(n => rosterLookup.isScorer(...))`. One non-scorer in
- *     the group zeroes the entire group.
- *
- * So turning off 14 of 32 athletes does not cost 14 athletes' points — it zeroes
- * every event any of them entered. Measured on the HSU 2026-27 roster workspace:
- * 12 of 14 events contained at least one turned-off athlete and scored 0, the
- * 2 that did not still scored, and the team total went 1277.00 -> 213.00.
- * Running the events stage afterwards puts an off athlete in all 14 events and
- * the total reaches 0.00.
- *
- * Reconciling who-scores between the two components is a separate change.
+ * STILL OPEN, and not destructive: `prepareRecruitsForScoring` ranks a recruit
+ * against the PDF rows in its event, so with no PDF loaded there are no
+ * comparators and EVERY recruit is rank 1 in EVERY event. One event is still
+ * scored as a single N-way tie, which is not what a coach is looking at even
+ * though it no longer collapses a total. See plans/2026-08-14/12 §2.
  */
 export function optimizeScorersForTeam(
   workspace: Workspace,
@@ -474,36 +546,16 @@ export function optimizeRosterForTeam(
           : undefined;
   const unguardedTotal = chained ? chained.total : previousTotal;
 
-  // Strictly beat the incumbent, and ties go to the state already on screen.
-  let best: OptimizerCandidate | null = null;
-  for (const candidate of candidates) {
-    const bar = best ? best.total : previousTotal;
-    if (candidate.total > bar + IMPROVEMENT_EPSILON) best = candidate;
-  }
-
-  if (!best) {
-    return {
+  return selectGuardedResult(
+    {
       overrides: baseOverrides,
-      meetEntryPlans: basePlans,
-      activeEntryIds: baseActiveIds,
-      projectedTotal: previousTotal,
-      previousTotal,
-      outcome: 'unchanged',
-      appliedStages: 'none',
-      unguardedTotal,
-    };
-  }
-
-  return {
-    overrides: best.overrides,
-    meetEntryPlans: best.plans,
-    activeEntryIds: best.activeIds,
-    projectedTotal: best.total,
-    previousTotal,
-    outcome: 'improved',
-    appliedStages: best.appliedStages,
-    unguardedTotal,
-  };
+      plans: basePlans,
+      activeIds: baseActiveIds,
+      total: previousTotal,
+    },
+    candidates,
+    unguardedTotal
+  );
 }
 
 /**

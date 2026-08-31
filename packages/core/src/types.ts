@@ -124,6 +124,23 @@ export interface ScoringSettings {
   aFinalBracketSize?: number;
   /** Round/event substrings that earn no team points (case-insensitive). */
   unscoredRounds?: string[];
+  /**
+   * Last event number in the meet's scored program, from the HyTek
+   * "Team Rankings - Through Event N" line (`OfficialTeamScores.eventThrough`).
+   *
+   * HyTek numbers post-meet extra sessions outside the program — time trials,
+   * record attempts, exhibition swims — and excludes them from the published
+   * team totals. Most carry "Time Trial" in the event name and are caught by
+   * `unscoredRounds`, but the meet host is free to omit that suffix, and then
+   * nothing in the label distinguishes an extra swim from a championship final.
+   * The event number does. A row whose label parses to `Event N` with
+   * `N > scoredEventNumberMax` earns no team points.
+   *
+   * Meet-scoped, not a conference rule: normally injected by `calculatePoints`
+   * from `CalculatePointsOptions.scoredEventNumberMax`. Omit to score every
+   * event, which is the behaviour when the meet publishes no boundary.
+   */
+  scoredEventNumberMax?: number;
   /** When `'meet'`, individual scorer cap applies across the full meet (chronological). Relay cap is always per relay event. */
   scorerCapScope?: 'meet' | 'event';
   /** Weight toward maxIndividualScorersPerTeam for diving events (e.g. 1/3 for NSISC). */

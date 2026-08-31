@@ -118,6 +118,10 @@ export function buildScoringBundle({
     scorerRosterOverrides: overrides,
     conferenceForMerge: workspace.conference,
     resultsForPdfHint: pdfHint,
+    // The meet's own scoring boundary, from the PDF "Team Rankings - Through
+    // Event N" line. Keeps post-meet extra sessions out of the team totals even
+    // when the host left "Time Trial" off the event name.
+    scoredEventNumberMax: workspace.officialTeamScores?.eventThrough,
   });
   const scoredById = new Map(allScored.map(r => [r.id, r]));
   const events = sortEventsByMeetOrder(Array.from(new Set(allResults.map(r => r.event))));

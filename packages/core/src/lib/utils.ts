@@ -465,9 +465,43 @@ function isChampionshipGenderEvent(event: string | undefined): boolean {
   return /\b(Boys?|Girls?)\b/i.test(event);
 }
 
+/**
+ * Event number from a HyTek label ("Event 13 Men 100 Yard Butterfly" → 13).
+ * Null when the label carries no number — canonical roster labels such as
+ * "100 Yard Freestyle" and injected what-if rows have none.
+ */
+export function parseEventNumber(event: string | undefined): number | null {
+  const m = /^\s*Event\s+(\d+)\b/i.exec(String(event ?? ''));
+  if (!m) return null;
+  const n = Number.parseInt(m[1], 10);
+  return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * True when the label names an event past the meet's scored program.
+ *
+ * Only a positively identified out-of-range number excludes a row. An
+ * unnumbered label is left scoring: canonical and what-if rows carry no event
+ * number, and zeroing those would silently empty every projection.
+ */
+export function isOutsideScoredProgram(
+  event: string | undefined,
+  scoredEventNumberMax: number | undefined
+): boolean {
+  if (scoredEventNumberMax == null || !Number.isFinite(scoredEventNumberMax)) return false;
+  const n = parseEventNumber(event);
+  if (n == null) return false;
+  return n > scoredEventNumberMax;
+}
+
 function isUnscoredRoundOrEvent(roundSwam: string | undefined, event: string | undefined, settings: ScoringSettings): boolean {
   const r = (roundSwam || '').toUpperCase();
   const e = (event || '').toUpperCase();
+  // The meet's own published boundary. HyTek numbers post-meet extra sessions
+  // above the program and leaves them out of the team totals; the 2026 NSISC
+  // results score "Through Event 42" and print events 938/939 after the time
+  // trials with no "Time Trial" suffix to give them away.
+  if (isOutsideScoredProgram(event, settings.scoredEventNumberMax)) return true;
   const list = (settings.unscoredRounds?.length ? settings.unscoredRounds : DEFAULT_UNSCORED_ROUNDS).map(x => x.toUpperCase());
   for (const ur of list) {
     if (r.includes(ur) || e.includes(ur)) return true;
@@ -798,6 +832,87 @@ function addSwimmerToPool(pool: Map<string, number>, name: string, event: string
   pool.set(key, scorerWeightForEvent(event, settings));
 }
 
+/**
+ * Distinct athlete names in one tie group, ordered fastest first.
+ *
+ * A tie group has no internal ranking — that is what makes it a tie — so when
+ * the scorer cap cannot admit everyone in it, SOMETHING has to break the tie or
+ * the result depends on row order (i.e. on import order, which is not a
+ * competition rule). Fastest-first is the tiebreak: it is deterministic, and on
+ * a roster-only workspace, where `prepareRecruitsForScoring` collapses a whole
+ * event into one rank-1 group, it is also the answer a coach expects — the last
+ * scorer slot goes to the faster athlete. Equal times fall back to name order.
+ */
+function tieGroupNamesFastestFirst(members: SwimmerResult[]): string[] {
+  const best = new Map<string, number>();
+  for (const m of members) {
+    const raw = convertTimeToSeconds(m.time);
+    const t = Number.isFinite(raw) ? raw : Number.POSITIVE_INFINITY;
+    const prev = best.get(m.name);
+    if (prev === undefined || t < prev) best.set(m.name, t);
+  }
+  return [...best.keys()].sort((a, b) => (best.get(a)! - best.get(b)!) || a.localeCompare(b));
+}
+
+/**
+ * Admit one team's slice of one tie group into the meet-wide scorer pool, and
+ * return the names that may score. Newly admitted names are added to the pool.
+ *
+ * Replaces `uniqueNames.every(n => canAddSwimmerToPool(...))`, which got two
+ * things wrong. Both were invisible in PDF-shaped data — a team almost never
+ * holds two swimmers on one placement, so the group was a single athlete and
+ * `every` reduced to this — and both detonate when ranks collapse:
+ *
+ *  1. ADMISSION IS PER ATHLETE. An athlete already in the pool is already
+ *     consuming one of the team's scorer slots, so a groupmate who cannot fit
+ *     must not be able to un-score them. `every` zeroed the whole group, so on
+ *     a roster-only workspace ONE un-poolable athlete cost the team every point
+ *     in the event — measured: 5 of 14 events on the HSU 2026-27 roster, 10 of
+ *     14 on OBU. This is the same defect, in the pool gate, that was fixed in
+ *     the roster gate below; see plans/2026-08-14/12.
+ *
+ *  2. ADMISSION ACCUMULATES WITHIN THE GROUP. `canAddSwimmerToPool` weighs one
+ *     name against the pool AS IT STANDS, so N new names in a single group each
+ *     saw the same pre-group weight and all N passed. The 18-scorer pool
+ *     therefore admitted 31 athletes in HSU's first event — the cap was not
+ *     enforced at all, which is why the optimizer (which does enforce 18) and
+ *     the engine disagreed about who scores. Adding each admission immediately
+ *     makes the next test see it.
+ *
+ * Points are NOT redistributed: the tie share is fixed by the placement, so an
+ * athlete the pool cannot take forfeits their share rather than handing it to a
+ * teammate, and a rival's points never move.
+ */
+function admitTieGroupToMeetPool(
+  pool: Map<string, number>,
+  members: SwimmerResult[],
+  event: string,
+  settings: ScoringSettings
+): Set<string> {
+  const admitted = new Set<string>();
+  for (const name of tieGroupNamesFastestFirst(members)) {
+    if (!canAddSwimmerToPool(pool, name, event, settings)) continue;
+    addSwimmerToPool(pool, name, event, settings);
+    admitted.add(name);
+  }
+  return admitted;
+}
+
+/**
+ * Same admission rule for the per-EVENT scorer cap (`scorerCapScope: 'event'`).
+ * `used` is the team's scorer count so far in this event; the returned names are
+ * the ones that still fit. Previously this branch zeroed the entire group once
+ * the team was at its cap, and overshot the cap when the group crossed it.
+ */
+function admitTieGroupToEventCap(
+  members: SwimmerResult[],
+  used: number,
+  cap: number
+): Set<string> {
+  const room = Math.max(0, cap - used);
+  return new Set(tieGroupNamesFastestFirst(members).slice(0, room));
+}
+
 /** Add A/B relay legs to the meet scorer pool so relay-only athletes can score relays (pool rule). */
 function seedAbRelayLegsIntoPool(
   relayRows: SwimmerResult[],
@@ -830,6 +945,13 @@ export type CalculatePointsOptions = {
   conferenceForMerge?: string;
   /** When omitted, non-recruit rows from `results` are used for PDF-place auto-detect. */
   resultsForPdfHint?: SwimmerResult[];
+  /**
+   * Last event number the meet scored, from `OfficialTeamScores.eventThrough`
+   * ("Team Rankings - Through Event N"). Rows in higher-numbered events earn no
+   * team points. Overrides `ScoringSettings.scoredEventNumberMax`; omit both to
+   * score every event.
+   */
+  scoredEventNumberMax?: number;
 };
 
 /** Distance timed finals (1000/1650 etc.) — one heat, not A/B prelims. */
@@ -927,29 +1049,34 @@ function scoreTimedFinalIndividualsInEvent(
     let anyAwarded = false;
     for (const [team, members] of byTeam) {
       const meetState = getOrCreateMeetState(meetStates, team, members[0].gender);
-      const uniqueNames = [...new Set(members.map(m => m.name))];
-      const gender = members[0].gender;
 
+      // Cap admission is per athlete and accumulates — see admitTieGroupToMeetPool.
       if (useMeetWidePool) {
-        const canAllScore = uniqueNames.every(n =>
-          canAddSwimmerToPool(meetState.poolWeights, n, sample.event, merged)
+        const admitted = admitTieGroupToMeetPool(
+          meetState.poolWeights,
+          members,
+          sample.event,
+          merged
         );
         for (const r of members) {
-          const award = canAllScore ? each : 0;
+          const award = admitted.has(r.name) ? each : 0;
           indivOut.push({ ...r, points: award });
           if (award > 0) anyAwarded = true;
         }
-        if (canAllScore) {
-          uniqueNames.forEach(n => addSwimmerToPool(meetState.poolWeights, n, sample.event, merged));
+      } else if (cap < 999) {
+        const used = teamIndivScorers[team] || 0;
+        const allowed = admitTieGroupToEventCap(members, used, cap);
+        for (const r of members) {
+          const award = allowed.has(r.name) ? each : 0;
+          indivOut.push({ ...r, points: award });
+          if (award > 0) anyAwarded = true;
         }
-      } else if (cap < 999 && (teamIndivScorers[team] || 0) >= cap) {
-        members.forEach(r => indivOut.push({ ...r, points: 0 }));
+        teamIndivScorers[team] = used + allowed.size;
       } else {
         for (const r of members) {
           indivOut.push({ ...r, points: each });
         }
         anyAwarded = true;
-        if (cap < 999) teamIndivScorers[team] = (teamIndivScorers[team] || 0) + uniqueNames.length;
       }
     }
 
@@ -1062,32 +1189,36 @@ function scoreIndividualsInEvent(
         if (members.length === 0) continue;
       }
 
-      const uniqueNames = [...new Set(members.map(m => m.name))];
-
       const prelimDiveBlocked = (r: SwimmerResult) =>
         isPrelimDiving && athleteHasFinalsDiveInEvent(individuals, r.name, team, merged);
 
+      // A prelims dive by someone with a finals dive in the same event scores
+      // nothing, so it must not consume a scorer slot either — such rows are
+      // held out of admission exactly as the previous `.filter(...)` did.
+      // `prelimDiveBlocked` depends only on name/team/event, so it is constant
+      // per name within a group and this cannot split one athlete's rows.
+      const poolCandidates = members.filter(r => !prelimDiveBlocked(r));
+
+      // Cap admission is per athlete and accumulates — see admitTieGroupToMeetPool.
       if (useMeetWidePool) {
-        const canAllScore = uniqueNames.every(n =>
-          canAddSwimmerToPool(meetState.poolWeights, n, sample.event, merged)
+        const admitted = admitTieGroupToMeetPool(
+          meetState.poolWeights,
+          poolCandidates,
+          sample.event,
+          merged
         );
         for (const r of members) {
-          const pts = canAllScore && !prelimDiveBlocked(r) ? each : 0;
-          indivOut.push({ ...r, points: pts });
+          indivOut.push({ ...r, points: admitted.has(r.name) && !prelimDiveBlocked(r) ? each : 0 });
         }
-        if (canAllScore) {
-          uniqueNames
-            .filter(n => !members.some(m => m.name === n && prelimDiveBlocked(m)))
-            .forEach(n => addSwimmerToPool(meetState.poolWeights, n, sample.event, merged));
+      } else if (cap < 999) {
+        const used = teamIndivScorers[team] || 0;
+        const allowed = admitTieGroupToEventCap(poolCandidates, used, cap);
+        for (const r of members) {
+          indivOut.push({ ...r, points: allowed.has(r.name) && !prelimDiveBlocked(r) ? each : 0 });
         }
-      } else if (cap < 999 && (teamIndivScorers[team] || 0) >= cap) {
-        members.forEach(r => indivOut.push({ ...r, points: 0 }));
+        teamIndivScorers[team] = used + allowed.size;
       } else {
         members.forEach(r => indivOut.push({ ...r, points: prelimDiveBlocked(r) ? 0 : each }));
-        if (cap < 999) {
-          const added = uniqueNames.filter(n => !members.some(m => m.name === n && prelimDiveBlocked(m))).length;
-          teamIndivScorers[team] = (teamIndivScorers[team] || 0) + added;
-        }
       }
     }
   }
@@ -1206,8 +1337,9 @@ function scoreRelaysInEvent(
 }
 
 /** Per-row points from HyTek PDF when PDF-place scoring is active (see usePdfPlacePoints). */
-function pdfPlacePointsForRow(row: SwimmerResult): number {
+function pdfPlacePointsForRow(row: SwimmerResult, scoredEventNumberMax?: number): number {
   if (row.isExhibition) return 0;
+  if (isOutsideScoredProgram(row.event, scoredEventNumberMax)) return 0;
   if (row.isTimeTrial && !isChampionshipGenderEvent(row.event)) return 0;
   const pp = row.pdfPoints;
   if (pp != null && Number.isFinite(pp) && pp >= 0) return pp;
@@ -1252,6 +1384,11 @@ export function calculatePoints(
     conference: options?.conferenceForMerge,
     resultsForPdfHint: hint,
   });
+  // Meet-scoped, so it arrives with the call rather than with the conference
+  // preset. An explicit option wins over a value already on the settings.
+  if (options?.scoredEventNumberMax != null) {
+    merged.scoredEventNumberMax = options.scoredEventNumberMax;
+  }
   const usePdfScoring = effectivePdfPlacePointsMode(merged, hint);
 
   if (usePdfScoring) {
@@ -1267,7 +1404,7 @@ export function calculatePoints(
     });
     const scoredById = new Map<string, SwimmerResult>();
     for (const r of pdfResults) {
-      scoredById.set(r.id, { ...r, points: pdfPlacePointsForRow(r) });
+      scoredById.set(r.id, { ...r, points: pdfPlacePointsForRow(r, merged.scoredEventNumberMax) });
     }
     const sorted: SwimmerResult[] = [];
     let pdfIdx = 0;

@@ -162,16 +162,29 @@ export default function RosterOptimizeStep({
       scoringSettings,
       mode
     );
+    // The cards describe the lineup that came back, so they are worth showing
+    // whether or not that lineup was applied.
+    setCards(result.cards);
+    // Same rule as applyLegacy below. This path is guarded too now: it refuses a
+    // candidate that would lower the team total, and on a recruit-driven
+    // workspace it does refuse. A "+0.0 pts" success toast over an untouched
+    // lineup would report a win for a no-op.
+    if (result.outcome === 'unchanged') {
+      toast.push(
+        'info',
+        `${team}: already the best lineup found — nothing changed (${result.previousTotal.toFixed(1)} pts).`
+      );
+      return;
+    }
     onUpdate({
       scorerRosterOverrides: result.overrides,
       meetEntryPlans: result.meetEntryPlans,
       activeEntryIds: result.activeEntryIds,
     });
-    setCards(result.cards);
-    const delta = result.projectedTotal - result.previousTotal;
+    const gain = result.projectedTotal - result.previousTotal;
     toast.push(
       'success',
-      `${team}: ${delta >= 0 ? '+' : ''}${delta.toFixed(1)} pts (${mode.replace('_', ' ')})`
+      `${team}: +${gain.toFixed(1)} pts (${mode.replace('_', ' ')})`
     );
   };
 
