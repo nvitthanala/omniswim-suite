@@ -79,8 +79,10 @@ export default function ScoringSettingsModal({
     setPoints(newP);
   };
 
-  const applyPreset = async (presetId: string) => {
-    const s = await fetchScoringPresetSettings(presetId);
+  // Both a fetched preset and the built-in generic-top-16 settings populate the
+  // exact same set of fields — one shared setter avoids the two call sites
+  // drifting out of sync with each other.
+  const applySettingsToState = (s: ScoringSettings) => {
     handlePlacesChange(s.scoringPoints.length);
     setPoints([...s.scoringPoints]);
     setRelayMultiplier(s.relayMultiplier);
@@ -95,20 +97,13 @@ export default function ScoringSettingsModal({
     setMaxTotalEntriesPerSwimmer(s.maxTotalEntriesPerSwimmer ?? 999);
   };
 
+  const applyPreset = async (presetId: string) => {
+    const s = await fetchScoringPresetSettings(presetId);
+    applySettingsToState(s);
+  };
+
   const applyGenericTop16 = () => {
-    const s = GENERIC_TOP16_SETTINGS;
-    handlePlacesChange(s.scoringPoints.length);
-    setPoints([...s.scoringPoints]);
-    setRelayMultiplier(s.relayMultiplier);
-    setHalfRate(s.halfRateRelaySwimmer);
-    setMaxIndividualScorersPerTeam(s.maxIndividualScorersPerTeam);
-    setMaxRelaysScoringPerTeam(s.maxRelaysScoringPerTeam);
-    setScorerCapScope(s.scorerCapScope ?? 'event');
-    setDiverScorerWeight(s.diverScorerWeight ?? 1);
-    setRelayPool(s.relayEligibleFromScorerPool === true);
-    setMaxIndividualEntriesPerSwimmer(s.maxIndividualEntriesPerSwimmer ?? 999);
-    setMaxRelayEntriesPerSwimmer(s.maxRelayEntriesPerSwimmer ?? 999);
-    setMaxTotalEntriesPerSwimmer(s.maxTotalEntriesPerSwimmer ?? 999);
+    applySettingsToState(GENERIC_TOP16_SETTINGS);
   };
 
   const set24Places = () => {

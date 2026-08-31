@@ -41,14 +41,134 @@ const MATRIX_STEPS: WizardStep<MatrixStepId>[] = [
   { id: 'analyze', label: 'Analyze', title: 'Explain the result', hint: 'Trace score changes, momentum, and differences from prelims.', icon: <BarChart3 size={16} /> },
 ];
 
+/** True when a list prop that may be missing has at least one entry. */
+function hasEntries(list: unknown[] | undefined): boolean {
+  return (list?.length ?? 0) > 0;
+}
+
 function hasRosterEdits(workspace: Workspace): boolean {
   return (
-    (workspace.scorerRosterOverrides?.length ?? 0) > 0 ||
-    (workspace.meetEntryPlans?.length ?? 0) > 0 ||
-    (workspace.relayLegOverrides?.length ?? 0) > 0 ||
-    (workspace.recruits?.length ?? 0) > 0 ||
-    (workspace.deletedSwimmers?.length ?? 0) > 0
+    hasEntries(workspace.scorerRosterOverrides) ||
+    hasEntries(workspace.meetEntryPlans) ||
+    hasEntries(workspace.relayLegOverrides) ||
+    hasEntries(workspace.recruits) ||
+    hasEntries(workspace.deletedSwimmers)
   );
+}
+
+/** Only reached for a nonstandard scoring model — one that needs a scoring
+ * patch computed from the just-parsed PDF results before the workspace update
+ * is written. Returns undefined when the default settings already apply. */
+function buildScoringPatchForParsedPdf(
+  workspace: Workspace,
+  conference: string | undefined,
+  presetHint: string | null,
+  allParsed: SwimmerResult[]
+): ScoringSettings | undefined {
+  if (resultsHavePdfPlacePoints(allParsed)) {
+    return mergeScoringSettings(
+      {
+        ...workspace.scoringSettings,
+        usePdfPlacePoints: true,
+        scorerEligibilityMode: 'points_pool',
+        scorerAutoRules: undefined,
+        ...applyPdfPlacePointsNeutralCaps(
+          mergeScoringSettings(workspace.scoringSettings, { conference })
+        ),
+      },
+      { conference, resultsForPdfHint: allParsed }
+    );
+  }
+  if (presetHint === 'nsisc') {
+    return mergeScoringSettings(
+      {
+        ...workspace.scoringSettings,
+        ...NSISC_PRESET_SETTINGS,
+        scorerEligibilityMode: 'roster',
+      },
+      { conference }
+    );
+  }
+  return undefined;
+}
+
+/** Recruits already saved in the workspace survive a re-parse unless the user
+ * explicitly discards them — asked only when there's something to lose. */
+function resolveKeepRecruits(existingRecruits: unknown[]): boolean {
+  if (existingRecruits.length === 0) return true;
+  return window.confirm(
+    `${existingRecruits.length} recruit(s) saved in this workspace.\n\nOK = Keep recruits\nCancel = Discard recruits`
+  );
+}
+
+/** The workspace update patch for a freshly parsed meet PDF. */
+function buildParsedMeetUpdatePatch(params: {
+  parsedMen: SwimmerResult[];
+  parsedWomen: SwimmerResult[];
+  file: File;
+  conference: string | undefined;
+  autoName: string | null;
+  officialTeamScores: OfficialTeamScores | undefined;
+  scoringPatch: ScoringSettings | undefined;
+  keepRecruits: boolean;
+  existingRecruits: Workspace['recruits'];
+}): Partial<Workspace> {
+  const {
+    parsedMen,
+    parsedWomen,
+    file,
+    conference,
+    autoName,
+    officialTeamScores,
+    scoringPatch,
+    keepRecruits,
+    existingRecruits,
+  } = params;
+  return {
+    ...meetCopyFromParsed(parsedMen, parsedWomen),
+    deletedSwimmers: [],
+    scorerRosterOverrides: [],
+    relayLegOverrides: [],
+    recruits: keepRecruits ? existingRecruits : [],
+    loadedMeet: {
+      pdfFilename: file.name,
+      uploadedAt: Date.now(),
+      conference,
+    },
+    conference,
+    ...(autoName ? { name: autoName } : {}),
+    ...(officialTeamScores ? { officialTeamScores } : {}),
+    ...(scoringPatch ? { scoringSettings: scoringPatch } : {}),
+  };
+}
+
+/** Parses the psych-PDF endpoint's raw response body, folding the "empty
+ * body", "invalid JSON", "ok but carries an error field", and "no entries"
+ * cases into one result the caller checks once. */
+function parsePsychApiResponse(
+  rawText: string,
+  resStatus: number,
+  resOk: boolean
+): { error: string } | { results: SwimmerResult[] } {
+  if (!rawText.trim()) {
+    return {
+      error: `Psych PDF parse failed — server returned an empty response (${resStatus}). Restart dev server or run npm run build && npm start.`,
+    };
+  }
+  let data: { error?: string; details?: string; results?: SwimmerResult[] };
+  try {
+    data = JSON.parse(rawText) as typeof data;
+  } catch {
+    return { error: `Psych PDF parse failed — invalid server response: ${rawText.slice(0, 160)}` };
+  }
+  if (!resOk || data.error) {
+    return { error: `${data.error || 'Psych PDF parsing failed'}${data.details ? ` — ${data.details}` : ''}` };
+  }
+  const results = Array.isArray(data.results) ? data.results : [];
+  if (results.length === 0) {
+    return { error: 'No individual psych entries found in PDF' };
+  }
+  return { results };
 }
 
 export default function OpsModule({ workspace, gender, onUpdate }: Props) {
@@ -159,62 +279,30 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
         if (presetHint) setSuggestedPresetId(presetHint);
 
         const allParsed = [...parsedMen, ...parsedWomen] as SwimmerResult[];
-        let scoringPatch: ScoringSettings | undefined;
-        if (resultsHavePdfPlacePoints(allParsed)) {
-          scoringPatch = mergeScoringSettings(
-            {
-              ...workspace.scoringSettings,
-              usePdfPlacePoints: true,
-              scorerEligibilityMode: 'points_pool',
-              scorerAutoRules: undefined,
-              ...applyPdfPlacePointsNeutralCaps(
-                mergeScoringSettings(workspace.scoringSettings, { conference })
-              ),
-            },
-            { conference, resultsForPdfHint: allParsed }
-          );
-        } else if (presetHint === 'nsisc') {
-          scoringPatch = mergeScoringSettings(
-            {
-              ...workspace.scoringSettings,
-              ...NSISC_PRESET_SETTINGS,
-              scorerEligibilityMode: 'roster',
-            },
-            { conference }
-          );
-        }
-
+        const scoringPatch = buildScoringPatchForParsedPdf(workspace, conference, presetHint, allParsed);
         const officialTeamScores = data.officialTeamScores as OfficialTeamScores | undefined;
 
         const existingRecruits = workspace.recruits ?? [];
-        let keepRecruits = true;
-        if (existingRecruits.length > 0) {
-          keepRecruits = window.confirm(
-            `${existingRecruits.length} recruit(s) saved in this workspace.\n\nOK = Keep recruits\nCancel = Discard recruits`
-          );
-        }
+        const keepRecruits = resolveKeepRecruits(existingRecruits);
 
         // A workspace still carrying its generated placeholder takes its identity
         // from the meet just loaded. Only placeholders are replaced — a name the
         // user typed is never overwritten. See workspaceNameForLoadedMeet.
         const autoName = workspaceNameForLoadedMeet(workspace.name, file.name, conference);
 
-        await onUpdate({
-          ...meetCopyFromParsed(parsedMen, parsedWomen),
-          deletedSwimmers: [],
-          scorerRosterOverrides: [],
-          relayLegOverrides: [],
-          recruits: keepRecruits ? existingRecruits : [],
-          loadedMeet: {
-            pdfFilename: file.name,
-            uploadedAt: Date.now(),
+        await onUpdate(
+          buildParsedMeetUpdatePatch({
+            parsedMen,
+            parsedWomen,
+            file,
             conference,
-          },
-          conference,
-          ...(autoName ? { name: autoName } : {}),
-          ...(officialTeamScores ? { officialTeamScores } : {}),
-          ...(scoringPatch ? { scoringSettings: scoringPatch } : {}),
-        });
+            autoName,
+            officialTeamScores,
+            scoringPatch,
+            keepRecruits,
+            existingRecruits,
+          })
+        );
         if (autoName) {
           toast.push('info', `Workspace renamed to "${autoName}"`);
         }
@@ -256,34 +344,12 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
           body: JSON.stringify({ base64, format: pdfFormat }),
         });
         const rawText = await res.text();
-        if (!rawText.trim()) {
-          toast.push(
-            'error',
-            `Psych PDF parse failed — server returned an empty response (${res.status}). Restart dev server or run npm run build && npm start.`
-          );
+        const parsed = parsePsychApiResponse(rawText, res.status, res.ok);
+        if ('error' in parsed) {
+          toast.push('error', parsed.error);
           return;
         }
-        let data: { error?: string; details?: string; results?: SwimmerResult[] };
-        try {
-          data = JSON.parse(rawText) as typeof data;
-        } catch {
-          toast.push('error', `Psych PDF parse failed — invalid server response: ${rawText.slice(0, 160)}`);
-          return;
-        }
-
-        if (!res.ok || data.error) {
-          toast.push(
-            'error',
-            `${data.error || 'Psych PDF parsing failed'}${data.details ? ` — ${data.details}` : ''}`
-          );
-          return;
-        }
-
-        const results = Array.isArray(data.results) ? data.results : [];
-        if (results.length === 0) {
-          toast.push('error', 'No individual psych entries found in PDF');
-          return;
-        }
+        const { results } = parsed;
 
         const parsedMen = results.filter((r: SwimmerResult) => r.gender === Gender.MEN);
         const parsedWomen = results.filter((r: SwimmerResult) => r.gender === Gender.WOMEN);
@@ -347,8 +413,7 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
     //
     // 1. Copying from a workspace with no meet would blank this one silently.
     //    That is data loss dressed up as a copy, so refuse it outright.
-    const sourceHasMeet =
-      (source.menResults?.length ?? 0) > 0 || (source.womenResults?.length ?? 0) > 0;
+    const sourceHasMeet = hasEntries(source.menResults) || hasEntries(source.womenResults);
     if (!sourceHasMeet) {
       toast.push('error', `${source.name} has no loaded meet to copy`);
       return;
@@ -356,8 +421,7 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
 
     // 2. Overwriting a meet that is already loaded is destructive and easy to
     //    trigger from a single select change, so make it deliberate.
-    const targetHasMeet =
-      (workspace.menResults?.length ?? 0) > 0 || (workspace.womenResults?.length ?? 0) > 0;
+    const targetHasMeet = hasEntries(workspace.menResults) || hasEntries(workspace.womenResults);
     if (targetHasMeet) {
       const current = workspace.loadedMeet?.pdfFilename ?? 'the loaded meet';
       const ok = window.confirm(
