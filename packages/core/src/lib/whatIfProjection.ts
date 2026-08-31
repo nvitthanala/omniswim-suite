@@ -80,7 +80,15 @@ function planEntryActive(entry: PlannedSwimEntry, activeIds?: string[]): boolean
  * undefined/blank, so an athlete whose year was never recorded is kept rather
  * than guessed at.
  */
-function passesRosterGates(
+/**
+ * Shared removal gate: a tombstoned or (when removeSeniors is set) graduating
+ * swimmer is filtered out. Exported so any other view that lists "who's on
+ * the active roster" — e.g. the relay leg panel — applies the exact rule the
+ * scoring projection does, rather than a hand-rolled copy that can drift
+ * from it (this is what caused the "remove seniors" stale-total bug: two
+ * gates, only one of which the projection actually applied).
+ */
+export function passesRosterGates(
   name: string,
   classYear: string | undefined,
   excluded: Set<string>,

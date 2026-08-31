@@ -21,7 +21,8 @@ import {
   suggestBestRelayLegFill,
   upsertRelayLegOverride,
 } from '@omniswim/core/lib/relayLegMatching';
-import { convertToSCY, isRelayResult, normalizeSwimmerName } from '@omniswim/core/lib/utils';
+import { canonicalSwimmerName, convertToSCY, isRelayResult, normalizeSwimmerName } from '@omniswim/core/lib/utils';
+import { passesRosterGates } from '@omniswim/core/lib/whatIfProjection';
 import {
   buildRelaysFromIndividualLineup,
   compareRelayLegSplits,
@@ -95,8 +96,22 @@ export default function IndRelayManagementView({
   const overrides = workspace.relayLegOverrides ?? [];
 
   const activeSwimmers = useMemo(() => {
+    // Same identity key and the same shared senior test the scoring
+    // projection uses (buildWhatIfResults / passesRosterGates), so a
+    // tombstone or a "drop seniors" removal reaches this panel the same
+    // way it reaches the actual scored total. canonicalSwimmerName also
+    // folds "Last, First" to "first last", which plain normalizeSwimmerName
+    // does not — a tombstone recorded in either order still matches.
+    const excluded = new Set(
+      (workspace.deletedSwimmers ?? [])
+        .filter(d => d.gender === gender)
+        .map(d => canonicalSwimmerName(d.name))
+    );
+    const passesGates = (name: string, classYear: string | undefined): boolean =>
+      passesRosterGates(name, classYear, excluded, removeSeniors);
+
     const recruitResults: SwimmerResult[] = (workspace.recruits ?? [])
-      .filter(r => r.gender === gender)
+      .filter(r => r.gender === gender && passesGates(r.name, r.classYear))
       .map(r => ({
         id: r.id,
         rank: 0,
@@ -109,22 +124,9 @@ export default function IndRelayManagementView({
         isRecruit: true,
         gender: r.gender,
       }));
-    const excluded = new Set(
-      (workspace.deletedSwimmers ?? [])
-        .filter(d => d.gender === gender)
-        .map(d => normalizeSwimmerName(d.name))
+    const roster = originalResults.filter(
+      r => !r.isRelay && passesGates(r.name, r.classYear)
     );
-    const roster = originalResults.filter(r => {
-      if (r.isRelay) return false;
-      if (excluded.has(normalizeSwimmerName(r.name))) return false;
-      if (
-        removeSeniors &&
-        (r.classYear === 'SR' || r.classYear === 'Sr' || r.classYear === 'Senior')
-      ) {
-        return false;
-      }
-      return true;
-    });
     return [...roster, ...recruitResults];
   }, [gender, originalResults, removeSeniors, workspace.deletedSwimmers, workspace.recruits]);
 
