@@ -17,6 +17,7 @@ import { getAthleteProfile } from './athleteHistory';
 import { rankExactSwaps } from './crossCourseArbitrage';
 import { buildWhatIfResults, createPlannedEntry } from './whatIfProjection';
 import { buildScorerRosterLookup } from './scorerRoster';
+import { buildAliasResolver } from './athleteAliases';
 import { normalizeSwimmerName } from './utils';
 import {
   optimizeEventLineupForTeam,
@@ -164,8 +165,12 @@ export function buildArbitrageCards(
  * and the existing plans off the workspace it is given, so the caller controls
  * whether it runs against the current roster or a proposed one by choosing which
  * workspace to hand it.
+ *
+ * Exported (not just used internally) so a test can exercise it directly,
+ * without going through `optimizeWithArbitrage`'s never-loses guard, which
+ * would otherwise decide whether this stage's output is even reachable.
  */
-function relayFirstLineupForTeam(
+export function relayFirstLineupForTeam(
   workspace: Workspace,
   gender: Gender,
   team: string,
@@ -176,7 +181,8 @@ function relayFirstLineupForTeam(
     buildWhatIfResults({ workspace, gender, removeSeniors: false }),
     settings,
     overrides,
-    gender
+    gender,
+    buildAliasResolver(workspace)
   );
   const teamAthletes = lookup.rows.filter(r => r.team === team);
   const existing = [...(workspace.meetEntryPlans ?? [])];

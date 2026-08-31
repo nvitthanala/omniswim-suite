@@ -34,6 +34,7 @@ import {
   buildArbitrageCards,
   buildArbitrageCardsResult,
   optimizeWithArbitrage,
+  relayFirstLineupForTeam,
 } from '../packages/core/src/lib/rosterArbitrage.ts';
 
 const MEN = Gender.MEN;
@@ -255,6 +256,103 @@ function buildTwoTeamWorkspace() {
     assert.deepEqual(ws.scorerRosterOverrides, [], `${mode}: input overrides not mutated`);
     assert.deepEqual(ws.activeEntryIds, [], `${mode}: input activeEntryIds not mutated`);
   }
+}
+
+// --- 4. relay_first must not double-count a linked alias -------------------
+// `relayFirstLineupForTeam` used to call `buildScorerRosterLookup` without an
+// alias resolver, while `optimizeEventLineupForTeam` (the individual_first
+// sibling) passed `buildAliasResolver(workspace)`. Without it, two spellings
+// of one real athlete surfaced as two separate roster rows, and the loop
+// that builds relay+individual entries ran once per row — the same human's
+// swims got planned twice, past their entry cap, under two different names.
+{
+  const canonical = 'Alex Aliased';
+  const aliasSpelling = 'Alexander Aliased';
+  const events = ['50 Freestyle', '100 Freestyle', '200 Freestyle'];
+
+  const recruitRow = (id, name, event, seconds) => ({
+    id,
+    name,
+    team: 'Team A',
+    event,
+    time: secondsToTime(seconds),
+    gender: MEN,
+    classYear: 'FR',
+    timeType: 'SCY',
+  });
+
+  // Both spellings hold recruit rows for the same three events — this is what
+  // makes each spelling its own roster row before the fix.
+  const recruits = [
+    recruitRow('r1', canonical, events[0], 21.0),
+    recruitRow('r2', canonical, events[1], 45.0),
+    recruitRow('r3', canonical, events[2], 100.0),
+    recruitRow('r4', aliasSpelling, events[0], 21.0),
+    recruitRow('r5', aliasSpelling, events[1], 45.0),
+    recruitRow('r6', aliasSpelling, events[2], 100.0),
+  ];
+
+  // athleteHistory is what getAthleteProfile actually reads for best times —
+  // it already resolves aliases internally, so both spellings see the same
+  // events regardless of which name queries it. That is exactly why the bug
+  // is silent: the profile looks identical either way, so calling it twice
+  // (once per spelling) just plans the same swims twice.
+  const athleteHistory = events.flatMap((event, i) => [
+    { name: canonical, team: 'Team A', gender: MEN, event, time: secondsToTime(21 + i * 24), timeType: 'SCY', source: 'paste' },
+    { name: aliasSpelling, team: 'Team A', gender: MEN, event, time: secondsToTime(21 + i * 24), timeType: 'SCY', source: 'paste' },
+  ]);
+
+  const ws = {
+    id: 'w-alias',
+    name: 'alias duplication',
+    createdAt: 1,
+    menResults: [],
+    womenResults: [],
+    recruits,
+    athleteHistory,
+    athleteAliases: [
+      {
+        id: 'link-1',
+        gender: MEN,
+        team: 'Team A',
+        canonicalName: canonical,
+        aliasName: aliasSpelling,
+        source: 'manual',
+        createdAt: '2026-08-15T00:00:00.000Z',
+      },
+    ],
+    scoringSettings: { ...NSISC_PRESET_SETTINGS },
+    scorerRosterOverrides: [],
+    meetEntryPlans: [],
+    activeEntryIds: [],
+  };
+
+  const { plans } = relayFirstLineupForTeam(ws, MEN, 'Team A', NSISC_PRESET_SETTINGS);
+  const forAthlete = plans.filter(p => p.name === canonical || p.name === aliasSpelling);
+  const indCap = NSISC_PRESET_SETTINGS.maxIndividualEntriesPerSwimmer ?? 3;
+
+  assert.equal(
+    plans.filter(p => p.name === aliasSpelling).length,
+    0,
+    'the alias spelling must never hold a planned entry — everything resolves to the canonical name'
+  );
+  assert.ok(
+    forAthlete.length <= indCap,
+    `one real athlete must not exceed the individual cap of ${indCap} once merged, got ${forAthlete.length}`
+  );
+  // With three history events and no relay legs, the pre-fix bug planned all
+  // three events under BOTH spellings — six entries for one person.
+  assert.ok(
+    forAthlete.length < 2 * indCap,
+    `REGRESSION: alias split the athlete across two spellings and doubled their entries (${forAthlete.length})`
+  );
+
+  const uniqueEvents = new Set(forAthlete.map(p => p.event));
+  assert.equal(
+    uniqueEvents.size,
+    forAthlete.length,
+    'no event is planned twice for the merged athlete'
+  );
 }
 
 console.log('roster arbitrage tests passed');
