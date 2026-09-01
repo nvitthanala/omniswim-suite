@@ -9,6 +9,12 @@ import { ScoringPresetMeta, ScoringSettings, Workspace } from '@omniswim/core/ty
 import { fetchScoringPresetList, fetchScoringPresetSettings } from '@omniswim/core/lib/scoringPresets';
 import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
 import { usesScorerRoster } from '@omniswim/core/lib/scorerRoster';
+import {
+  NUMERIC_SETTING_FIELDS,
+  NumericSettingField,
+  ScorerModeSelect,
+  ScoringPresetSelect,
+} from './RosterScoringSetupParts';
 
 type Props = {
   workspace: Workspace;
@@ -66,111 +72,26 @@ export default function RosterScoringSetup({ workspace, settings, onSave }: Prop
             </p>
           ) : null}
           <div className="grid sm:grid-cols-2 gap-3">
-            <label className="flex flex-col gap-1.5 min-w-0">
-              <span className="text-ui-caption text-theme-muted">Preset</span>
-              <select
-                className="glass-input rounded-lg px-3 py-2 text-ui-body"
-                value={selectedPreset}
-                onChange={e => {
-                  const id = e.target.value;
-                  setSelectedPreset(id);
-                  if (id) applyPreset(id);
-                }}
-              >
-                <option value="">Custom</option>
-                {presets.map(p => (
-                  <option key={p.id} value={p.id}>
-                    {p.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="flex flex-col gap-1.5 min-w-0">
-              <span className="text-ui-caption text-theme-muted">Scorer mode</span>
-              <select
-                className="glass-input rounded-lg px-3 py-2 text-ui-body"
-                value={local.scorerEligibilityMode ?? 'points_pool'}
-                onChange={e =>
-                  setLocal({
-                    ...local,
-                    scorerEligibilityMode: e.target.value as 'points_pool' | 'roster',
-                  })
-                }
-              >
-                <option value="roster">Roster (NSISC)</option>
-                <option value="points_pool">Points pool</option>
-              </select>
-            </label>
-            <label className="flex flex-col gap-1.5 min-w-0">
-              <span className="text-ui-caption text-theme-muted">Max scorers / team</span>
-              <input
-                type="number"
-                className="glass-input rounded-lg px-3 py-2 text-ui-body font-mono"
-                value={local.maxIndividualScorersPerTeam}
-                onChange={e =>
-                  setLocal({
-                    ...local,
-                    maxIndividualScorersPerTeam: parseInt(e.target.value, 10) || 999,
-                  })
-                }
+            <ScoringPresetSelect
+              presets={presets}
+              selectedPreset={selectedPreset}
+              onSelect={id => {
+                setSelectedPreset(id);
+                if (id) applyPreset(id);
+              }}
+            />
+            <ScorerModeSelect
+              value={local.scorerEligibilityMode ?? 'points_pool'}
+              onChange={mode => setLocal({ ...local, scorerEligibilityMode: mode })}
+            />
+            {NUMERIC_SETTING_FIELDS.map(field => (
+              <NumericSettingField
+                key={field.key}
+                label={field.label}
+                value={local[field.key]}
+                onChange={next => setLocal({ ...local, [field.key]: next })}
               />
-            </label>
-            <label className="flex flex-col gap-1.5 min-w-0">
-              <span className="text-ui-caption text-theme-muted">Max relays / event</span>
-              <input
-                type="number"
-                className="glass-input rounded-lg px-3 py-2 text-ui-body font-mono"
-                value={local.maxRelaysScoringPerTeam}
-                onChange={e =>
-                  setLocal({
-                    ...local,
-                    maxRelaysScoringPerTeam: parseInt(e.target.value, 10) || 999,
-                  })
-                }
-              />
-            </label>
-            <label className="flex flex-col gap-1.5 min-w-0">
-              <span className="text-ui-caption text-theme-muted">Max ind entries / swimmer</span>
-              <input
-                type="number"
-                className="glass-input rounded-lg px-3 py-2 text-ui-body font-mono"
-                value={local.maxIndividualEntriesPerSwimmer ?? 999}
-                onChange={e =>
-                  setLocal({
-                    ...local,
-                    maxIndividualEntriesPerSwimmer: parseInt(e.target.value, 10) || 999,
-                  })
-                }
-              />
-            </label>
-            <label className="flex flex-col gap-1.5 min-w-0">
-              <span className="text-ui-caption text-theme-muted">Max relay entries / swimmer</span>
-              <input
-                type="number"
-                className="glass-input rounded-lg px-3 py-2 text-ui-body font-mono"
-                value={local.maxRelayEntriesPerSwimmer ?? 999}
-                onChange={e =>
-                  setLocal({
-                    ...local,
-                    maxRelayEntriesPerSwimmer: parseInt(e.target.value, 10) || 999,
-                  })
-                }
-              />
-            </label>
-            <label className="flex flex-col gap-1.5 min-w-0">
-              <span className="text-ui-caption text-theme-muted">Max total entries / swimmer</span>
-              <input
-                type="number"
-                className="glass-input rounded-lg px-3 py-2 text-ui-body font-mono"
-                value={local.maxTotalEntriesPerSwimmer ?? 999}
-                onChange={e =>
-                  setLocal({
-                    ...local,
-                    maxTotalEntriesPerSwimmer: parseInt(e.target.value, 10) || 999,
-                  })
-                }
-              />
-            </label>
+            ))}
           </div>
           <button
             type="button"

@@ -4,7 +4,7 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { ListChecks, Wand2 } from 'lucide-react';
+import { ListChecks } from 'lucide-react';
 import { ClassYear, Gender, Workspace } from '@omniswim/core/types';
 import {
   applyScoringTheory,
@@ -12,6 +12,17 @@ import {
   type ParsedScoringTheory,
 } from '@omniswim/core/lib/scoringTheory';
 import { useToast } from '@omniswim/ui';
+import {
+  RelaySquadsSection,
+  SwimmerMatchesSection,
+  TheoryApplyFooter,
+  TheoryWarningsList,
+} from './ScoringTheoryPanelParts';
+import {
+  buildTheoryAppliedMessage,
+  canParseTheory,
+  shouldShowTeamRequiredWarning,
+} from './scoringTheoryPanelView';
 
 type Props = {
   workspace: Workspace;
@@ -47,13 +58,7 @@ export default function ScoringTheoryPanel({
   const confirmApply = () => {
     if (!parsed || !preview || !team.trim()) return;
     onUpdate(preview.patch);
-    const s = preview.summary;
-    toast.push(
-      'success',
-      `Theory applied: ${s.scorersMarked} scorer(s), ${s.entriesAdded} entr${
-        s.entriesAdded === 1 ? 'y' : 'ies'
-      }, ${s.relayLegsAssigned} relay leg(s)`
-    );
+    toast.push('success', buildTheoryAppliedMessage(preview.summary));
     setParsed(null);
     setText('');
   };
@@ -87,7 +92,7 @@ export default function ScoringTheoryPanel({
       <div className="flex flex-wrap gap-2 mb-3">
         <button
           type="button"
-          disabled={!text.trim() || !team.trim()}
+          disabled={!canParseTheory(text, team)}
           onClick={parseLocal}
           className="text-ui-label px-4 py-2 btn-accent-outline rounded-lg font-medium disabled:opacity-40"
         >
@@ -95,7 +100,7 @@ export default function ScoringTheoryPanel({
         </button>
       </div>
 
-      {!team.trim() && text.trim() ? (
+      {shouldShowTeamRequiredWarning(text, team) ? (
         <p className="text-ui-caption text-amber-400/90 mb-3">
           Select a team above before parsing a theory.
         </p>
@@ -104,74 +109,12 @@ export default function ScoringTheoryPanel({
       {parsed && preview ? (
         <div className="border border-theme-soft rounded-xl overflow-hidden">
           <div className="max-h-56 overflow-y-auto custom-scrollbar p-3 space-y-3">
-            {preview.summary.resolvedSwimmers.length > 0 ? (
-              <div>
-                <p className="text-ui-caption text-theme-muted mb-1.5">Swimmer matches</p>
-                <div className="flex flex-wrap gap-1.5">
-                  {preview.summary.resolvedSwimmers.map(s => (
-                    <span
-                      key={s.rawName}
-                      className={`text-ui-caption px-2 py-1 rounded-lg border max-w-full truncate ${
-                        s.matched
-                          ? 'text-theme-secondary border-theme-soft'
-                          : 'badge-warning'
-                      }`}
-                      title={
-                        s.matched
-                          ? `${s.rawName} → ${s.matched} (${Math.round(s.confidence * 100)}%)`
-                          : `${s.rawName}: no roster match`
-                      }
-                    >
-                      {s.rawName}
-                      {s.matched && s.matched !== s.rawName ? ` → ${s.matched}` : ''}
-                      {!s.matched ? ' · unmatched' : ''}
-                    </span>
-                  ))}
-                </div>
-              </div>
-            ) : null}
-            {parsed.relays.length > 0 ? (
-              <div>
-                <p className="text-ui-caption text-theme-muted mb-1.5">Relay squads</p>
-                <ul className="text-ui-body text-theme-secondary space-y-1">
-                  {parsed.relays.map(r => (
-                    <li key={`${r.event}|${r.squad}`} className="break-words">
-                      <span className="text-[var(--text-primary)]">
-                        {r.event} {r.squad}
-                      </span>
-                      : {r.legs.map(l => l.name).join(', ')}
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            ) : null}
-            {warnings.length > 0 ? (
-              <ul className="text-ui-caption text-amber-400/90 list-disc list-inside space-y-1">
-                {warnings.map((w, i) => (
-                  <li key={i} className="break-words">
-                    {w}
-                  </li>
-                ))}
-              </ul>
-            ) : null}
+            <SwimmerMatchesSection resolvedSwimmers={preview.summary.resolvedSwimmers} />
+            <RelaySquadsSection relays={parsed.relays} />
+            <TheoryWarningsList warnings={warnings} />
           </div>
           <div className="p-3 border-t border-theme-soft surface-muted-bg">
-            {applyDisabled ? (
-              <p className="text-ui-caption text-theme-secondary leading-relaxed">
-                Enable <strong className="text-[var(--text-primary)]">What-if</strong> to apply the
-                theory to the roster.
-              </p>
-            ) : (
-              <button
-                type="button"
-                onClick={confirmApply}
-                className="text-ui-label text-[var(--text-accent)] hover:underline font-semibold flex items-center gap-1.5"
-              >
-                <Wand2 size={14} />
-                Apply theory ({preview.summary.entriesAdded} entries ·{' '}
-                {preview.summary.relayLegsAssigned} relay legs)
-              </button>
-            )}
+            <TheoryApplyFooter applyDisabled={applyDisabled} preview={preview} onApply={confirmApply} />
           </div>
         </div>
       ) : null}

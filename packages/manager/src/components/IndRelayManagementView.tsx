@@ -15,9 +15,7 @@ import {
   listEligibleRelayLegCandidates,
   relayLegRequirements,
   relayMissingStrokeLabel,
-  relayTemplateFromLeg,
   removeRelayLegOverride,
-  stableRelayEntryKey,
   suggestBestRelayLegFill,
   upsertRelayLegOverride,
 } from '@omniswim/core/lib/relayLegMatching';
@@ -28,6 +26,7 @@ import {
   compareRelayLegSplits,
 } from '@omniswim/core/lib/relayBuilder';
 import { useToast } from '@omniswim/ui';
+import { buildRelayGroups, type RelayGroup } from './indRelayGroupsView';
 
 type Props = {
   workspace: Workspace;
@@ -39,17 +38,6 @@ type Props = {
   selectedTeam?: string;
   onSelectTeam?: (team: string) => void;
   hideTeamPicker?: boolean;
-};
-
-type RelayGroup = {
-  key: string;
-  template: SwimmerResult;
-  event: string;
-  roundSwam: string;
-  rank: number;
-  teamTotal: string;
-  legs: SwimmerResult[];
-  teamSplits?: SwimmerResult['relayTeamSplits'];
 };
 
 type DragPayload = {
@@ -173,35 +161,7 @@ export default function IndRelayManagementView({
   const relayGroups = useMemo((): RelayGroup[] => {
     const team = selectedTeam || teams[0];
     if (!team) return [];
-
-    const map = new Map<string, RelayGroup>();
-    for (const r of scoringBundle.allScored) {
-      if (r.gender !== gender || String(r.team ?? '').trim() !== team) continue;
-      if (!isRelayResult(r) || r.name === r.team) continue;
-
-      const key = stableRelayEntryKey(originalResults, r);
-      if (!map.has(key)) {
-        const template = relayTemplateFromLeg(originalResults, r);
-        map.set(key, {
-          key,
-          template,
-          event: r.event,
-          roundSwam: r.roundSwam?.trim() || '—',
-          rank: r.rank,
-          teamTotal: r.relayTeamTime || r.finalsTime || r.time,
-          legs: [],
-          teamSplits: r.relayTeamSplits,
-        });
-      }
-      map.get(key)!.legs.push(r);
-    }
-
-    return [...map.values()]
-      .map(g => ({
-        ...g,
-        legs: [...g.legs].sort((a, b) => (a.relayLegIndex ?? 0) - (b.relayLegIndex ?? 0)),
-      }))
-      .sort((a, b) => a.event.localeCompare(b.event) || a.roundSwam.localeCompare(b.roundSwam));
+    return buildRelayGroups({ allScored: scoringBundle.allScored, originalResults, gender, team });
   }, [gender, originalResults, scoringBundle.allScored, selectedTeam, teams]);
 
   const selectedGroup =

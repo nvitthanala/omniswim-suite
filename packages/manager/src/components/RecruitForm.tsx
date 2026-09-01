@@ -41,16 +41,23 @@ function parseAthleteName(name: string): { firstName: string; lastName: string }
   return { firstName: trimmed, lastName: '' };
 }
 
+const CLASS_YEAR_ALIASES: Record<string, ClassYear> = {
+  FR: ClassYear.FR,
+  FRESHMAN: ClassYear.FR,
+  SO: ClassYear.SO,
+  SOPHOMORE: ClassYear.SO,
+  JR: ClassYear.JR,
+  JUNIOR: ClassYear.JR,
+  SR: ClassYear.SR,
+  SENIOR: ClassYear.SR,
+  HS: ClassYear.HS,
+};
+
 function parseClassYear(raw: string | undefined): ClassYear {
   const u = String(raw ?? '')
     .trim()
     .toUpperCase();
-  if (u === 'FR' || u === 'FRESHMAN') return ClassYear.FR;
-  if (u === 'SO' || u === 'SOPHOMORE') return ClassYear.SO;
-  if (u === 'JR' || u === 'JUNIOR') return ClassYear.JR;
-  if (u === 'SR' || u === 'SENIOR') return ClassYear.SR;
-  if (u === 'HS') return ClassYear.HS;
-  return ClassYear.FR;
+  return CLASS_YEAR_ALIASES[u] ?? ClassYear.FR;
 }
 
 const EVENTS = [
