@@ -4,14 +4,10 @@
  */
 
 import React, { useState } from 'react';
-import { Check, Pencil, Trash2, X, Waves } from 'lucide-react';
+import { X, Waves } from 'lucide-react';
 import type { Gender } from '@omniswim/core/types';
 import type { AthleteCreditedSwim } from '@omniswim/core/lib/scorerRoster';
-import { formatLegSplitSummary } from '@omniswim/core/lib/relaySplits';
-import { compactEventTitleAttr, formatCompactEventLabel } from '@omniswim/core/lib/utils';
-import { ALL_PLAN_EVENTS } from '@omniswim/core/lib/eventCatalog';
-import { buildCutlineTagForTeam } from '@omniswim/core/lib/cutlineTags';
-import { CutlineTag, CutlineNearMissChip } from '@omniswim/ui';
+import AthleteCreditedSwimsRow from './AthleteCreditedSwimsRow';
 
 export type EditCreditedSwimValues = { time: string; event: string };
 
@@ -88,158 +84,26 @@ export default function AthleteCreditedSwimsPanel({
 
   const renderRows = (rows: AthleteCreditedSwim[], dimmed = false) =>
     rows.map(swim => (
-      <tr
+      <AthleteCreditedSwimsRow
         key={swim.id}
-        className={`border-b border-theme-soft/50 text-ui-caption theme-hover-row transition-colors ${dimmed ? 'text-theme-muted' : 'text-[var(--text-primary)]'}`}
-      >
-        <td className="py-1.5 px-2" title={compactEventTitleAttr(swim.event)}>
-          {editingId === swim.id ? (
-            <select
-              value={editEvent}
-              onChange={e => setEditEvent(e.target.value)}
-              className="glass-input text-ui-caption font-mono rounded-md px-1.5 py-1 max-w-[10rem]"
-              autoFocus
-            >
-              {editEvent && !(ALL_PLAN_EVENTS as readonly string[]).includes(editEvent) ? (
-                <option value={editEvent}>{formatCompactEventLabel(editEvent)}</option>
-              ) : null}
-              {ALL_PLAN_EVENTS.map(ev => (
-                <option key={ev} value={ev}>
-                  {formatCompactEventLabel(ev)}
-                </option>
-              ))}
-            </select>
-          ) : (
-            formatCompactEventLabel(swim.event)
-          )}
-        </td>
-        <td className="py-1.5 px-2 text-theme-secondary">{swim.roundSwam?.trim() || '—'}</td>
-        <td className="py-1.5 px-2 font-mono tabular-nums">
-          {editingId === swim.id ? (
-            <input
-              type="text"
-              value={editTime}
-              onChange={e => setEditTime(e.target.value)}
-              onKeyDown={e => {
-                if (e.key === 'Enter') commitEdit(swim);
-                if (e.key === 'Escape') cancelEdit();
-              }}
-              placeholder="mm:ss.hh"
-              className="glass-input w-20 font-mono tabular-nums text-ui-caption rounded-md px-1.5 py-1"
-            />
-          ) : (
-            <>
-              <div className="flex items-center gap-1">
-                <span>{swim.displayTime || swim.time || '—'}</span>
-                {gender && swim.kind === 'individual' ? (() => {
-                  const cutlineResult = buildCutlineTagForTeam({
-                    time: swim.time,
-                    gender,
-                    event: swim.event,
-                    team,
-                  });
-                  return (
-                    <span className="hidden sm:inline-flex items-center gap-1 shrink-0">
-                      <CutlineTag compact result={cutlineResult} />
-                      <CutlineNearMissChip compact nextTier={cutlineResult.nextTier} />
-                    </span>
-                  );
-                })() : null}
-              </div>
-              {swim.kind === 'relay' && swim.relayLegSplitDetail ? (
-                <div
-                  className="text-ui-micro text-theme-secondary font-sans mt-0.5 leading-snug"
-                  title={formatLegSplitSummary(swim.relayLegSplitDetail)}
-                >
-                  {formatLegSplitSummary(swim.relayLegSplitDetail)}
-                </div>
-              ) : null}
-            </>
-          )}
-        </td>
-        <td className="py-1.5 px-2 text-right text-theme-secondary tabular-nums">
-          {swim.rank > 0 ? swim.rank : '—'}
-        </td>
-        <td className="py-1.5 px-2 text-center">
-          <span
-            className={`text-ui-micro uppercase tracking-wide px-1.5 py-0.5 rounded-full ${
-              swim.kind === 'relay' ? 'badge-warning' : 'badge-info'
-            }`}
-          >
-            {swim.kind === 'relay' ? 'Relay' : 'Ind'}
-          </span>
-        </td>
-        <td
-          className={`py-1.5 px-2 text-right font-mono tabular-nums font-medium ${
-            swim.points > 0 ? 'text-[var(--text-accent)]' : 'text-theme-muted'
-          }`}
-        >
-          {swim.points.toFixed(1)}
-        </td>
-        {showAnchors ? (
-          <>
-            <td className="py-1.5 px-2 text-right font-mono tabular-nums text-theme-muted text-ui-caption">
-              {anchorExpectedBySwimId?.get(swim.id)?.prelims != null
-                ? anchorExpectedBySwimId.get(swim.id)!.prelims!.toFixed(1)
-                : '—'}
-            </td>
-            <td className="py-1.5 px-2 text-right font-mono tabular-nums text-theme-muted text-ui-caption">
-              {anchorExpectedBySwimId?.get(swim.id)?.psych != null
-                ? anchorExpectedBySwimId.get(swim.id)!.psych!.toFixed(1)
-                : '—'}
-            </td>
-          </>
-        ) : null}
-        {deletable ? (
-          <td className="py-1.5 px-1 text-center whitespace-nowrap">
-            {editingId === swim.id ? (
-              <div className="flex items-center justify-center gap-1">
-                <button
-                  type="button"
-                  onClick={() => commitEdit(swim)}
-                  className="p-1 rounded-md text-theme-muted hover:text-points-positive hover:bg-points-positive/10 transition-colors"
-                  title="Save edit"
-                  aria-label={`Save ${swim.event}`}
-                >
-                  <Check size={12} />
-                </button>
-                <button
-                  type="button"
-                  onClick={cancelEdit}
-                  className="p-1 rounded-md text-theme-muted hover:text-[var(--text-accent)] hover:bg-[var(--text-accent)]/10 transition-colors"
-                  title="Cancel edit"
-                  aria-label={`Cancel edit ${swim.event}`}
-                >
-                  <X size={12} />
-                </button>
-              </div>
-            ) : (
-              <div className="flex items-center justify-center gap-1">
-                {editable && !swim.isRecruit && swim.kind === 'individual' ? (
-                  <button
-                    type="button"
-                    onClick={() => startEdit(swim)}
-                    className="p-1 rounded-md text-theme-muted hover:text-[var(--text-accent)] hover:bg-[var(--text-accent)]/10 transition-colors"
-                    title="Edit time/event"
-                    aria-label={`Edit ${swim.event}`}
-                  >
-                    <Pencil size={12} />
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => onDeleteSwim?.(swim)}
-                  className="p-1 rounded-md text-theme-muted hover:text-[var(--text-accent)] hover:bg-[var(--text-accent)]/10 transition-colors"
-                  title={swim.isRecruit ? 'Remove recruit entry' : 'Remove this swim from projection'}
-                  aria-label={`Remove ${swim.event}`}
-                >
-                  <Trash2 size={12} />
-                </button>
-              </div>
-            )}
-          </td>
-        ) : null}
-      </tr>
+        swim={swim}
+        dimmed={dimmed}
+        team={team}
+        gender={gender}
+        editingId={editingId}
+        editEvent={editEvent}
+        editTime={editTime}
+        onEditEventChange={setEditEvent}
+        onEditTimeChange={setEditTime}
+        editable={editable}
+        deletable={deletable}
+        showAnchors={showAnchors}
+        anchorExpected={anchorExpectedBySwimId?.get(swim.id)}
+        onStartEdit={startEdit}
+        onCancelEdit={cancelEdit}
+        onCommitEdit={commitEdit}
+        onDeleteSwim={onDeleteSwim}
+      />
     ));
 
   return (
