@@ -92,6 +92,7 @@ const TESTS = [
   ['test_team_rankings_parser.mjs'],
   ['test_yearless_result_row.mjs'],
   ['test_yearless_relay_row.mjs'],
+  ['test_abbreviated_school_column.mjs'],
   ['test_scored_event_boundary.mjs'],
   ['test_nsisc_team_totals.mjs'],
   ['test_nsisc_psych.mjs', 'tests/fixtures/nsisc_psych_sheet.pdf'],
