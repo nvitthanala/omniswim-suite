@@ -209,7 +209,7 @@ def _resolve_scoring_settings(scoring_settings=None):
 
                         cfg[k] = v
 
-        except Exception:
+        except FileNotFoundError:
 
             pass
 

@@ -44,12 +44,13 @@ _ALIASES_JSON = os.path.normpath(
 
 
 def _load_abbrev_teams():
+    # Fails loudly on purpose: a missing or unreadable teamAbbreviations.json
+    # means every team code below silently degrades to the tiny hardcoded
+    # fallback, misattributing points for every school not in that short
+    # list. A broken deploy should not start up able to score meets wrong.
     merged = {}
-    try:
-        with open(_ALIASES_JSON, encoding='utf-8') as fh:
-            merged.update(json.load(fh))
-    except OSError:
-        pass
+    with open(_ALIASES_JSON, encoding='utf-8') as fh:
+        merged.update(json.load(fh))
     merged.setdefault('UMSL', 'University of Missouri-St. Louis')
     merged.setdefault('HSU', 'Henderson State University')
     merged.setdefault('DSU', 'Delta State University')

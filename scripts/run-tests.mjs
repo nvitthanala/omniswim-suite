@@ -87,6 +87,7 @@ const TESTS = [
   ['test_momentum_series.mjs'],
   ['test_psych_projection.mjs'],
   ['test_team_aliases.mjs'],
+  ['test_team_abbreviation_parity.mjs'],
   ['test_cutlines.mjs'],
   ['test_cutline_tags.mjs'],
   ['test_team_rankings_parser.mjs'],
