@@ -226,12 +226,21 @@ assert.equal(
   null,
   'a title-case word is a name; a HyTek team code is printed in capitals'
 );
-assert.equal(out.code.ROCK, 'University of Indianapolis', 'the same word in capitals is a code');
+// ROCK and LU below are fixtures for the *matching mechanism*, not claims about
+// either school. Each asserts which resolver fires, so the expected value is
+// whatever `teamAbbreviations.json` records — read the value from the table, do
+// not pin it to a school by hand. Both were pinned to the wrong school until
+// 2026-09-01: ROCK to the University of Indianapolis, which scores separately
+// from Rockhurst in the same GLVC meet, and LU to Lindenwood, whose program was
+// cut after 2023-2024. See the sourcing block in
+// `packages/core/src/data/teamAliases.ts`.
+assert.equal(out.code.ROCK, 'Rockhurst University', 'the same word in capitals is a code');
 // `match_abbrev_team` accepts a code as a *suffix* of any word, which is why the
 // pivot may not use it: it would split a row in the middle of a swimmer's name.
+// "Manlu" ends in LU, so the loose matcher returns LU's school.
 assert.equal(
   out.loose.Manlu,
-  'Lindenwood University',
+  'Lewis University',
   'the loose matcher resolves a surname ending in a code — the reason for the strict one'
 );
 assert.equal(out.code.Manlu, null, 'the strict resolver requires the token to BE the code');

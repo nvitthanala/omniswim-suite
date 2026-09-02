@@ -5,7 +5,42 @@
  * HyTek psych-sheet / results PDF team abbreviations and meet-name resolution.
  */
 
-/** Uppercase abbreviation → canonical full school name. */
+/**
+ * Uppercase abbreviation → canonical full school name.
+ *
+ * Kept byte-identical to `teamAbbreviations.json`, which `backend/pdf_parser.py`
+ * loads at import time. Edit both together — nothing enforces the pair.
+ *
+ * Two codes were wrong until 2026-09-01, both in the way `CLAUDE.md` § Data
+ * provenance warns about: a plausible name that quietly attributes one school's
+ * swims to another.
+ *
+ * - `ROCK` mapped to the University of Indianapolis. Rockhurst and Indianapolis
+ *   are separate GLVC programs that score separately — the 2026 GLVC
+ *   championships list both, with distinct totals (men: Indianapolis 380,
+ *   Rockhurst 95; women: Indianapolis 514.5, Rockhurst 182). Indianapolis
+ *   already has its own codes below, so `ROCK` was merging Rockhurst's points
+ *   into it.
+ * - `LU` mapped to Lindenwood University, which cannot appear in a current meet:
+ *   see the Lindenwood entry in `teamDivisions.ts` — the program was cut after
+ *   2023-2024. `LU` is Lewis University, confirmed row-for-row rather than
+ *   inferred. `glvc_results26.pdf` prints `19 LU B 1:26.08` in the men's 200
+ *   free relay; the same meet's HyTek web output prints that relay as
+ *   `19 Lewis  'B'  1:26.80  1:26.08  12` — same place, squad and final time.
+ *
+ * Sources:
+ *   https://glvcsports.com/news/2026/2/12/drury-sits-atop-day-two-standings-of-2026-glvc-swimming-and-diving-championships.aspx
+ *   https://swimevansville.org/swimresults/2026-glvc/260210F031.htm
+ *   https://rockhursthawks.com/sports/mens-swimming-and-diving
+ *   https://lewisflyers.com/news/2026/2/14/mens-swimming-swimming-concludes-day-four-of-glvc-championships.aspx
+ *
+ * The map is flat and global on purpose: no caller passes a conference or a
+ * season, and no two schools across the conferences this repo parses (NSISC,
+ * GLVC, ACC, SEC, Big 12) share a code. Lindenwood and Lewis both abbreviate to
+ * `LU`, but Lindenwood no longer competes, so the collision is historical, not
+ * live. A live collision would need this map to become conference-aware; adding
+ * a code that reintroduces one is not a rename.
+ */
 export const TEAM_ABBREVIATIONS: Record<string, string> = {
   // NSISC
   HSU: 'Henderson State University',
@@ -19,7 +54,7 @@ export const TEAM_ABBREVIATIONS: Record<string, string> = {
   SBU: 'Southwest Baptist University',
   WJC: 'William Jewell College',
   MKU: 'McKendree University',
-  ROCK: 'University of Indianapolis',
+  ROCK: 'Rockhurst University',
   UINDY: 'University of Indianapolis',
   INDY: 'University of Indianapolis',
   'MS&T': 'Missouri S&T',
@@ -27,7 +62,7 @@ export const TEAM_ABBREVIATIONS: Record<string, string> = {
   QU: 'Quincy University',
   DRURY: 'Drury University',
   DRUR: 'Drury University',
-  LU: 'Lindenwood University',
+  LU: 'Lewis University',
   MARY: 'University of Mary',
   NSU: 'Northern State University',
   SCAD: 'SCAD Savannah',
