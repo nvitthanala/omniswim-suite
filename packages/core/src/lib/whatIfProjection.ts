@@ -99,6 +99,8 @@ export function passesRosterGates(
   return true;
 }
 
+const EMPTY_ID_SET: ReadonlySet<string> = new Set<string>();
+
 /** Which plane a composed row came from. Higher wins a same-event collision. */
 const PLANE_MEET = 0;
 const PLANE_RECRUIT = 1;
@@ -141,6 +143,12 @@ function entryIdentityKey(row: SwimmerResult, gender: Gender): string {
  *
  * Relays are never collapsed: a relay row's identity is the entry, not the one
  * swimmer whose leg it carries.
+ *
+ * `planIds` answers "which rows carry plan-sourced content", NOT "which rows were
+ * built by `planToResult`". Those two are not the same set — see
+ * `applyOverlayPlans`, which rewrites a meet row's content from a plan while
+ * keeping the row's meet id. The caller must include such a row here or the
+ * collapse reads a coach's edit as an untouched meet row.
  */
 function collapseCrossPlaneDuplicates(
   rows: SwimmerResult[],
@@ -150,6 +158,8 @@ function collapseCrossPlaneDuplicates(
 ): { rows: SwimmerResult[]; collapsed: SwimmerResult[] } {
   if (recruitIds.size === 0 && planIds.size === 0) return { rows, collapsed: [] };
 
+  // `planIds` may hold a MEET row's id — a row a plan rewrote in place. Content,
+  // not provenance of the id, decides the plane.
   const planeOf = (row: SwimmerResult): number => {
     if (planIds.has(row.id)) return PLANE_PLAN;
     if (recruitIds.has(row.id)) return PLANE_RECRUIT;
@@ -204,13 +214,32 @@ export function planToResult(entry: PlannedSwimEntry): SwimmerResult {
   };
 }
 
+/**
+ * The overlaid pool, plus the ids of the rows a plan REWROTE in place.
+ *
+ * A `replacesResultId` plan — what the pencil edit writes — does not add a row.
+ * It patches the meet row it names and leaves the row's `id` alone. The id has to
+ * stay: `removeProjectedSwim` dispatches on which array an id lives in, so
+ * deleting the row the coach sees must reach the meet swim, not the plan behind
+ * it (removing the plan would restore the old time rather than drop the swim).
+ *
+ * That leaves the row's id and the row's content pointing at different planes,
+ * which is exactly the question `collapseCrossPlaneDuplicates` asks. `patchedIds`
+ * is the answer it cannot get from the row itself.
+ */
+type OverlayedPlans = {
+  rows: SwimmerResult[];
+  /** Meet-row ids whose content a plan rewrote — plan-plane rows under a meet id. */
+  patchedIds: Set<string>;
+};
+
 function applyOverlayPlans(
   results: SwimmerResult[],
   plans: PlannedSwimEntry[],
   gender: Gender,
   activeIds?: string[],
   remapEvent: EventRemapper = e => e
-): SwimmerResult[] {
+): OverlayedPlans {
   const genderPlans = plans.filter(p => p.gender === gender && planEntryActive(p, activeIds));
   const replaceMap = new Map<string, PlannedSwimEntry>();
   for (const p of genderPlans) {
@@ -219,11 +248,13 @@ function applyOverlayPlans(
 
   const out: SwimmerResult[] = [];
   const replaced = new Set<string>();
+  const patchedIds = new Set<string>();
 
   for (const r of results) {
     const patch = replaceMap.get(r.id);
     if (patch) {
       replaced.add(r.id);
+      patchedIds.add(r.id);
       const time = convertToSCY(patch.time, patch.event, patch.gender, patch.timeType ?? 'SCY');
       out.push({
         ...r,
@@ -243,7 +274,7 @@ function applyOverlayPlans(
     if (!p.replacesResultId) out.push(remapResultEvent(planToResult(p), remapEvent));
   }
 
-  return out;
+  return { rows: out, patchedIds };
 }
 
 /** planToResult with its event remapped onto the loaded meet label (if any). */
@@ -397,6 +428,10 @@ export function buildWhatIfProjection({
   const activeIds = workspace.activeEntryIds;
   const mode = workspace.entryPlanMode ?? 'overlay';
 
+  // Meet rows a `replacesResultId` plan rewrote in place. They keep their meet
+  // id, so nothing on the row itself says its content is now plan-sourced.
+  let planPatchedIds: ReadonlySet<string> = EMPTY_ID_SET;
+
   if (mode === 'plan_sheet' && plans.length > 0) {
     const teamsInPlan = new Set(plans.filter(p => p.gender === gender).map(p => p.team));
     const relays = base.filter(r => isRelayResult(r));
@@ -406,8 +441,17 @@ export function buildWhatIfProjection({
     const planIndividuals = buildPlanSheetResults(plans, gender, teamsInPlan, activeIds, remapEvent);
     base = [...pdfIndividuals, ...planIndividuals, ...relays];
   } else if (plans.length > 0) {
-    base = applyOverlayPlans(base, plans, gender, activeIds, remapEvent);
+    const overlayed = applyOverlayPlans(base, plans, gender, activeIds, remapEvent);
+    base = overlayed.rows;
+    planPatchedIds = overlayed.patchedIds;
   }
+
+  // The plan plane is every row whose CONTENT a plan states — the rows
+  // `planToResult` built AND the meet rows a `replacesResultId` plan rewrote.
+  // Leaving the second group out let a stale recruit row, which is a less
+  // explicit statement, supersede a coach's edit and score in its place.
+  const planIds = new Set(plans.filter(p => p.gender === gender).map(p => p.id));
+  for (const id of planPatchedIds) planIds.add(id);
 
   // Reconcile the planes BEFORE ranks are projected: a phantom second entry for
   // one athlete would otherwise push every slower entrant in that event down a
@@ -416,7 +460,7 @@ export function buildWhatIfProjection({
     base,
     gender,
     new Set(recruitResults.map(r => r.id)),
-    new Set(plans.filter(p => p.gender === gender).map(p => p.id))
+    planIds
   );
   base = reconciled.rows;
 

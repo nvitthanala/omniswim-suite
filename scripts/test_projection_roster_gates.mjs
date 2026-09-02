@@ -52,6 +52,7 @@ import {
   softRemoveSwimmerFromWorkspace,
 } from '../packages/core/src/lib/swimmerSoftRemove.ts';
 import {
+  editCreditedSwim,
   removePlannedEntry,
   removeProjectedSwim,
   updatePlannedEntry,
@@ -382,6 +383,108 @@ const apply = (ws, result) => ({ ...ws, ...result.patch });
   });
   assert.equal(project(distinct).length, 3, 'distinct athlete/event pairs must all survive');
   ok('the collapse keys on athlete AND event — nothing else is touched');
+
+  // (g) AN EDITED MEET ROW CARRIES THE PLAN'S PRECEDENCE.
+  //
+  //     `editCreditedSwim` layers a pencil edit as a `replacesResultId` overlay
+  //     plan, and `applyOverlayPlans` rewrites the meet row's event/time IN PLACE
+  //     while KEEPING the row's id — deliberately, because `removeProjectedSwim`
+  //     dispatches on where the id lives and a delete of the row the coach sees
+  //     must remove the meet swim, not the plan behind it.
+  //
+  //     `planeOf` read that id and still called the row a meet row, so a stale
+  //     recruit row — a LESS explicit statement — displaced the coach's edit and
+  //     scored in its place. Nothing threw and nothing on screen said the edit
+  //     had not taken; the old time simply kept scoring.
+  const editedVsRecruit = workspace({
+    menResults: [meetRow('m1', 'Alan Gonzalez', 'Men 100 Yard Freestyle', '50.00')],
+    recruits: [recruitRow('r1', 'Alan Gonzalez', '100 Freestyle', '51.00')],
+  });
+
+  // Baseline, before any edit: a recruit row IS more explicit than a loaded meet
+  // row, so it supersedes. That part was always right.
+  const beforeEdit = buildWhatIfProjection({
+    workspace: editedVsRecruit,
+    gender: MEN,
+    removeSeniors: false,
+  });
+  assert.deepEqual(
+    beforeEdit.rows.map(r => r.id),
+    ['r1'],
+    'untouched, the recruit row supersedes the meet row'
+  );
+
+  const edited = apply(
+    editedVsRecruit,
+    editCreditedSwim(editedVsRecruit, MEN, 'm1', { time: '49.00' })
+  );
+  const afterEdit = buildWhatIfProjection({ workspace: edited, gender: MEN, removeSeniors: false });
+
+  assert.equal(afterEdit.rows.length, 1, 'the athlete still holds exactly one entry in the event');
+  assert.equal(afterEdit.rows[0].time, '49.00', "the coach's edited time is the one that scores");
+  assert.equal(
+    afterEdit.rows[0].event,
+    'Men 100 Yard Freestyle',
+    'and it competes under the loaded meet label'
+  );
+  assert.equal(
+    afterEdit.rows[0].id,
+    'm1',
+    'the row keeps the meet id removeProjectedSwim dispatches on'
+  );
+  assert.deepEqual(
+    afterEdit.collapsed.map(r => r.id),
+    ['r1'],
+    'the recruit row is the row that gets superseded, and it is reported'
+  );
+  ok('a pencil-edited meet row outranks a stale recruit row instead of vanishing');
+
+  // A pencil edit and the equivalent standalone plan are the same statement made
+  // two ways, so they must compose the same pool.
+  const plannedInstead = workspace({
+    menResults: [meetRow('m1', 'Alan Gonzalez', 'Men 100 Yard Freestyle', '50.00')],
+    recruits: [recruitRow('r1', 'Alan Gonzalez', '100 Freestyle', '51.00')],
+    meetEntryPlans: [planRow('p1', 'Alan Gonzalez', '100 Freestyle', '49.00')],
+  });
+  const plannedRows = project(plannedInstead);
+  assert.equal(plannedRows.length, 1, 'the standalone plan composes one entry too');
+  assert.equal(plannedRows[0].time, afterEdit.rows[0].time, 'same surviving time as the pencil edit');
+  assert.equal(
+    plannedRows[0].event,
+    afterEdit.rows[0].event,
+    'same surviving event as the pencil edit'
+  );
+  ok('a pencil edit and the equivalent standalone plan compose the same pool');
+
+  // The id has to stay `m1`. Deleting the row the coach sees removes the meet
+  // swim; deleting the plan behind it would restore the old time instead.
+  const deletedEdit = apply(edited, removeProjectedSwim(edited, MEN, 'm1'));
+  assert.deepEqual(
+    project(deletedEdit).map(r => r.id),
+    ['r1'],
+    'deleting the edited row removes the meet swim and lets the recruit row resurface'
+  );
+  ok('the edited row is still deletable by the id the pool shows');
+
+  // Two plan-plane statements for one athlete in one event are two lineup
+  // decisions in conflict, and the projection has no basis to prefer either.
+  // Same-plane rows both survive — the rule case (e) states, applied to a row
+  // whose content came from a plan. The collapse never picks a winner.
+  const conflicting = {
+    ...edited,
+    meetEntryPlans: [
+      ...edited.meetEntryPlans,
+      planRow('p2', 'Alan Gonzalez', '100 Freestyle', '48.00'),
+    ],
+  };
+  const conflictRows = project(conflicting);
+  assert.equal(conflictRows.length, 2, 'two plan-plane statements both survive');
+  assert.deepEqual(
+    conflictRows.map(r => r.time).sort(),
+    ['48.00', '49.00'],
+    'neither plan silently wins — the recruit row is all that collapses'
+  );
+  ok('two conflicting plan-plane entries are both kept rather than one picked');
 }
 
 // ===========================================================================
