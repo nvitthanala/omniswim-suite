@@ -1541,7 +1541,7 @@ def parse_pdf(file_path, format_type='auto'):
     conference = None
     if 'NSISC' in full_text.upper():
         conference = 'NSISC'
-    elif 'ACC' in full_text.upper() or 'ATLANTIC COAST' in full_text.upper():
+    elif re.search(r'\bACC\b', full_text.upper()) or 'ATLANTIC COAST' in full_text.upper():
         conference = 'ACC'
     elif re.search(r'\bSEC\b', full_text.upper()) or 'SOUTHEASTERN CONFERENCE' in full_text.upper():
         conference = 'SEC'
