@@ -9,6 +9,7 @@
 
 import {
   Gender,
+  Recruit,
   RelayLegOverride,
   RelayLegStroke,
   ScoringSettings,
@@ -130,22 +131,79 @@ export type RelayLegSwapOptions = {
   recencyMonths?: number;
 };
 
+// --- event-label classification ---------------------------------------------
+//
+// These regexes are module constants rather than inline literals so they carry
+// names. It also keeps them measurable: a regex literal in call-argument position
+// (`s.match(/.../)`) makes `lizard` silently drop the enclosing function from its
+// report, which hid this function's complexity from the metric entirely.
+
+/** Relay event labels — never an individual leg-time source. */
+const RELAY_LABEL_RE = /\brelay\b/;
+/** Medley / individual-medley labels — never a single-stroke leg-time source. */
+const MEDLEY_LABEL_RE = /\bim\b|individual medley|medley/;
+/** First 2-4 digit run in a label — the event distance. */
+const EVENT_DISTANCE_RE = /(\d{2,4})/;
+
+/**
+ * Relay-leg stroke named by a lowercased individual event label, or null.
+ *
+ * ORDERED CHAIN, not a lookup table: this is a first-match-wins scan, so a label
+ * naming more than one stroke resolves to the earlier test. Reordering it changes
+ * which stroke a mixed label reports.
+ */
+function strokeFromEventLabel(lower: string): RelayLegStroke | null {
+  if (/back/.test(lower)) return 'back';
+  if (/breast/.test(lower)) return 'breast';
+  if (/butterfly|\bfly\b/.test(lower)) return 'fly';
+  if (/free/.test(lower)) return 'free';
+  return null;
+}
+
 /** Parse an individual event label to its (distance yards, relay-leg stroke), or null. */
 function individualStrokeDistance(
   event: string
 ): { dist: number; stroke: RelayLegStroke } | null {
   const lower = event.toLowerCase();
-  if (/\brelay\b/.test(lower) || /\bim\b|individual medley|medley/.test(lower)) return null;
-  const m = lower.match(/(\d{2,4})/);
+  if (RELAY_LABEL_RE.test(lower) || MEDLEY_LABEL_RE.test(lower)) return null;
+  const m = lower.match(EVENT_DISTANCE_RE);
   if (!m) return null;
-  const dist = parseInt(m[1], 10);
-  let stroke: RelayLegStroke | null = null;
-  if (/back/.test(lower)) stroke = 'back';
-  else if (/breast/.test(lower)) stroke = 'breast';
-  else if (/butterfly|\bfly\b/.test(lower)) stroke = 'fly';
-  else if (/free/.test(lower)) stroke = 'free';
+  const stroke = strokeFromEventLabel(lower);
   if (!stroke) return null;
-  return { dist, stroke };
+  return { dist: parseInt(m[1], 10), stroke };
+}
+
+/** Append a ref to the (athlete, legKey) bucket, creating the nested maps on demand. */
+function addLegTimeRef(
+  buckets: Map<string, Map<string, RelayLegTimeRef[]>>,
+  nameKey: string,
+  legKey: string,
+  ref: RelayLegTimeRef
+): void {
+  let byLeg = buckets.get(nameKey);
+  if (!byLeg) {
+    byLeg = new Map();
+    buckets.set(nameKey, byLeg);
+  }
+  let refs = byLeg.get(legKey);
+  if (!refs) {
+    refs = [];
+    byLeg.set(legKey, refs);
+  }
+  refs.push(ref);
+}
+
+/** Recency-weighted best ref per leg key, for one athlete. */
+function bestRefPerLegKey(
+  legs: Map<string, RelayLegTimeRef[]>,
+  cutoffMs: number | null
+): Map<string, RelayLegTimeRef> {
+  const chosen = new Map<string, RelayLegTimeRef>();
+  for (const [legKey, refs] of legs) {
+    const best = pickRecencyBest(refs, cutoffMs);
+    if (best) chosen.set(legKey, best);
+  }
+  return chosen;
 }
 
 /** Per athlete → `${legDistanceYards}|${stroke}` → best SCY-converted leg time (recency-weighted). */
@@ -162,19 +220,7 @@ function buildRelayLegTimeIndex(
     if (!sd) continue;
     const timeSec = convertTimeToSeconds(converted.time);
     if (!Number.isFinite(timeSec)) continue;
-    const nameKey = normalizeSwimmerName(s.name);
-    const legKey = `${sd.dist}|${sd.stroke}`;
-    let m = buckets.get(nameKey);
-    if (!m) {
-      m = new Map();
-      buckets.set(nameKey, m);
-    }
-    let arr = m.get(legKey);
-    if (!arr) {
-      arr = [];
-      m.set(legKey, arr);
-    }
-    arr.push({
+    addLegTimeRef(buckets, normalizeSwimmerName(s.name), `${sd.dist}|${sd.stroke}`, {
       time: converted.time,
       timeSec,
       meetLabel: s.meetLabel,
@@ -184,14 +230,7 @@ function buildRelayLegTimeIndex(
   }
 
   const out = new Map<string, Map<string, RelayLegTimeRef>>();
-  for (const [nameKey, legs] of buckets) {
-    const chosen = new Map<string, RelayLegTimeRef>();
-    for (const [legKey, refs] of legs) {
-      const best = pickRecencyBest(refs, cutoffMs);
-      if (best) chosen.set(legKey, best);
-    }
-    out.set(nameKey, chosen);
-  }
+  for (const [nameKey, legs] of buckets) out.set(nameKey, bestRefPerLegKey(legs, cutoffMs));
   return out;
 }
 
@@ -203,6 +242,40 @@ type RelayEntry = {
   legRows: SwimmerResult[];
 };
 
+/** A relay row belonging to this team and gender (gender-less rows count). */
+function isTeamRelayRow(r: SwimmerResult, team: string, gender: Gender): boolean {
+  if (!isRelayResult(r)) return false;
+  if (String(r.team ?? '').trim() !== team) return false;
+  return r.gender == null || r.gender === gender;
+}
+
+/** The leg rows of one relay entry, ordered by leg index. */
+function legRowsForTemplate(
+  results: SwimmerResult[],
+  template: SwimmerResult,
+  team: string
+): SwimmerResult[] {
+  const round = (template.roundSwam || '').trim();
+  return results
+    .filter(
+      x =>
+        x.isRelay &&
+        String(x.team ?? '').trim() === team &&
+        x.event === template.event &&
+        x.rank === template.rank &&
+        (x.roundSwam || '').trim() === round
+    )
+    .sort((a, b) => (a.relayLegIndex ?? 0) - (b.relayLegIndex ?? 0));
+}
+
+/** Ordered leg names: the template's own roster when it has one, else the leg rows. */
+function legNamesForEntry(template: SwimmerResult, legRows: SwimmerResult[]): string[] {
+  if (template.relayNames && template.relayNames.length > 0) {
+    return template.relayNames.map(n => n.name);
+  }
+  return legRows.map(x => x.name);
+}
+
 /** Distinct team relay entries for a gender, deduped by relayEntryKey. */
 function collectTeamRelayEntries(
   results: SwimmerResult[],
@@ -212,59 +285,360 @@ function collectTeamRelayEntries(
   const seen = new Set<string>();
   const entries: RelayEntry[] = [];
   for (const r of results) {
-    if (!isRelayResult(r)) continue;
-    if (String(r.team ?? '').trim() !== team) continue;
-    if (r.gender != null && r.gender !== gender) continue;
+    if (!isTeamRelayRow(r, team, gender)) continue;
     const template = relayTemplateFromLeg(results, r);
     const entryKey = relayEntryKey(template);
     if (seen.has(entryKey)) continue;
     seen.add(entryKey);
-    const legRows = results
-      .filter(
-        x =>
-          x.isRelay &&
-          String(x.team ?? '').trim() === team &&
-          x.event === template.event &&
-          x.rank === template.rank &&
-          (x.roundSwam || '').trim() === (template.roundSwam || '').trim()
-      )
-      .sort((a, b) => (a.relayLegIndex ?? 0) - (b.relayLegIndex ?? 0));
-    const legNames =
-      template.relayNames && template.relayNames.length > 0
-        ? template.relayNames.map(n => n.name)
-        : legRows.map(x => x.name);
-    entries.push({ template, entryKey, legNames, legRows });
+    const legRows = legRowsForTemplate(results, template, team);
+    entries.push({ template, entryKey, legNames: legNamesForEntry(template, legRows), legRows });
   }
   return entries;
+}
+
+/** Individual result rows for this team and gender. */
+function teamIndividualResults(
+  results: SwimmerResult[],
+  team: string,
+  gender: Gender
+): SwimmerResult[] {
+  return results.filter(
+    r =>
+      !r.isRelay &&
+      (r.gender == null || r.gender === gender) &&
+      String(r.team ?? '').trim() === team
+  );
+}
+
+/** A recruit projected onto the SwimmerResult shape a leg override resolves against. */
+function recruitAsLegCandidate(rec: Recruit): SwimmerResult {
+  return {
+    id: rec.id,
+    rank: 0,
+    name: rec.name,
+    classYear: rec.classYear ?? 'UNKNOWN',
+    team: rec.team,
+    time: rec.time,
+    points: 0,
+    event: rec.event,
+    gender: rec.gender,
+    isRecruit: true,
+  };
 }
 
 /** Individuals (results + recruits) an override could actually resolve onto a leg. */
 function resolvableLegPool(workspace: Workspace, team: string, gender: Gender): SwimmerResult[] {
   const results = gender === Gender.MEN ? workspace.menResults ?? [] : workspace.womenResults ?? [];
-  const pool: SwimmerResult[] = [];
-  for (const r of results) {
-    if (r.isRelay) continue;
-    if (r.gender != null && r.gender !== gender) continue;
-    if (String(r.team ?? '').trim() !== team) continue;
-    pool.push(r);
+  const recruits = (workspace.recruits ?? []).filter(
+    rec => rec.gender === gender && String(rec.team ?? '').trim() === team
+  );
+  return [...teamIndividualResults(results, team, gender), ...recruits.map(recruitAsLegCandidate)];
+}
+
+// --- ranking internals --------------------------------------------------------
+
+/** Everything the per-candidate evaluation needs, assembled once per ranking. */
+type LegSwapContext = {
+  workspace: Workspace;
+  /** Gender-specific result rows (the same array the ranking was keyed from). */
+  results: SwimmerResult[];
+  team: string;
+  gender: Gender;
+  settings: ScoringSettings;
+  pool: SwimmerResult[];
+  legTimeIndex: Map<string, Map<string, RelayLegTimeRef>>;
+  rosterLookup: ScorerRosterLookup | null;
+  relayCap: number;
+  baseOverrides: RelayLegOverride[];
+  baseTotal: number;
+  baseTotalRounded: number;
+  /** True when the projection flags this leg holder for replacement. */
+  isReplaceableLeg: (name: string) => boolean;
+};
+
+/** The leg position a substitution is scored against. */
+type LegTarget = {
+  entry: RelayEntry;
+  legIndex: number;
+  stroke: RelayLegStroke;
+  legDistanceYards: number;
+  onRelay: Set<string>;
+  outAthlete: string;
+  outKey: string;
+  outTime?: string;
+  legKey: string;
+  clockLegTime?: string;
+};
+
+/** The ranking returned when the team fields no relay entries for this gender. */
+function emptyRelayLegRanking(team: string, gender: Gender): RelayLegSwapRanking {
+  const genderLabel = gender === Gender.MEN ? "men's" : "women's";
+  return {
+    pointsMeaningful: false,
+    reason: `No ${genderLabel} relay entries for ${team || 'this team'} to substitute legs on.`,
+    swaps: [],
+    candidatesEvaluated: 0,
+  };
+}
+
+/**
+ * Test for legs the projection flags for replacement: a non-scorer whose leg
+ * simulateRoster vacates, or a soft-removed (deleted) holder. An override on a
+ * healthy leg is a scorer no-op → guaranteed zero delta, so those legs are
+ * skipped wholesale rather than re-scored against every candidate.
+ */
+function buildReplaceableLegTest(
+  workspace: Workspace,
+  results: SwimmerResult[],
+  gender: Gender,
+  settings: ScoringSettings
+): (name: string) => boolean {
+  const vacateNames = computeVacateRelayLegNames(
+    results,
+    gender,
+    settings,
+    workspace.scorerRosterOverrides ?? []
+  );
+  const deletedNames = new Set(
+    (workspace.deletedSwimmers ?? [])
+      .filter(d => d.gender === gender)
+      .map(d => normalizeSwimmerName(d.name))
+  );
+  return (name: string): boolean => {
+    const k = normalizeSwimmerName(name);
+    return vacateNames.has(k) || deletedNames.has(k);
+  };
+}
+
+/**
+ * The clock-hold time the override carries (see CLOCK HOLD above).
+ *
+ * ORDERED, and the order is a rule: this mirrors simulateRoster, which prefers
+ * the departed swimmer's own matching individual time when it exists and parses,
+ * and only then falls back to the leg's recorded split. Swapping the two changes
+ * which clock the relay holds, and with it the re-scored delta.
+ */
+function resolveClockHoldTime(
+  results: SwimmerResult[],
+  relayEvent: string,
+  legIndex: number,
+  outAthlete: string,
+  legRow: SwimmerResult | undefined
+): string | undefined {
+  const req = relayLegRequirements(relayEvent, legIndex);
+  const departedIndiv = results.find(
+    s =>
+      !s.isRelay &&
+      s.name === outAthlete &&
+      eventMatchesStrokeDistance(s.event, req.legDistanceYards, req.keywords)
+  );
+  if (departedIndiv && Number.isFinite(convertTimeToSeconds(departedIndiv.time))) {
+    return departedIndiv.time;
   }
-  for (const rec of workspace.recruits ?? []) {
-    if (rec.gender !== gender) continue;
-    if (String(rec.team ?? '').trim() !== team) continue;
-    pool.push({
-      id: rec.id,
-      rank: 0,
-      name: rec.name,
-      classYear: rec.classYear ?? 'UNKNOWN',
-      team: rec.team,
-      time: rec.time,
-      points: 0,
-      event: rec.event,
-      gender: rec.gender,
-      isRecruit: true,
-    });
+  const rawSplit = legRow?.relayLegSplit;
+  if (rawSplit && rawSplit !== 'NT') return rawSplit;
+  return undefined;
+}
+
+/** Facts about one leg of one relay entry, resolved once for all candidates. */
+function buildLegTarget(
+  ctx: LegSwapContext,
+  entry: RelayEntry,
+  legIndex: number,
+  evLower: string,
+  legDistanceYards: number,
+  onRelay: Set<string>
+): LegTarget {
+  const stroke = relayStrokeForIndex(evLower, legIndex);
+  const outAthlete = entry.legNames[legIndex] ?? '';
+  const legRow = entry.legRows.find(r => (r.relayLegIndex ?? -1) === legIndex);
+  return {
+    entry,
+    legIndex,
+    stroke,
+    legDistanceYards,
+    onRelay,
+    outAthlete,
+    outKey: normalizeSwimmerName(outAthlete),
+    outTime: legRow ? displayTimeForRelayLeg(legRow) : undefined,
+    legKey: `${legDistanceYards}|${stroke}`,
+    clockLegTime: resolveClockHoldTime(
+      ctx.results,
+      entry.template.event,
+      legIndex,
+      outAthlete,
+      legRow
+    ),
+  };
+}
+
+/**
+ * True when the candidate already holds the per-swimmer relay-entry cap.
+ * The `>= 999` early exit preserves the original short-circuit: an effectively
+ * unlimited cap skips the entry count entirely rather than paying for it per
+ * candidate.
+ */
+function isAtRelayEntryCap(cand: SwimmerResult, ctx: LegSwapContext): boolean {
+  if (ctx.relayCap >= 999) return false;
+  const counts = countSwimmerEntries(ctx.results, ctx.team, ctx.gender, cand.name);
+  return counts.relayCount >= ctx.relayCap;
+}
+
+/**
+ * Eligibility for one leg. ORDERED CHAIN, kept explicit rather than collapsed:
+ * `candidatesEvaluated` counts exactly the candidates that clear EVERY gate, and
+ * the cheap identity tests deliberately precede the two expensive ones (the
+ * roster lookup and the entry count).
+ */
+function isEligibleLegCandidate(
+  cand: SwimmerResult,
+  candKey: string,
+  target: LegTarget,
+  ctx: LegSwapContext
+): boolean {
+  if (candKey === target.outKey) return false;
+  if (target.onRelay.has(candKey)) return false;
+  if (!swimmerMatchesRelayLeg(cand, target.entry.template.event, target.legIndex)) return false;
+  if (ctx.rosterLookup && !ctx.rosterLookup.isScorer(cand.name, ctx.team, ctx.gender)) return false;
+  return !isAtRelayEntryCap(cand, ctx);
+}
+
+/** Full re-score of the workspace with this substitution applied. */
+function scoreLegSubstitution(
+  ctx: LegSwapContext,
+  target: LegTarget,
+  cand: SwimmerResult
+): { newTotal: number; deltaPoints: number } {
+  const override: RelayLegOverride = {
+    relayEntryKey: target.entry.entryKey,
+    legIndex: target.legIndex,
+    assigneeName: cand.name,
+    classYear: cand.classYear,
+    ...(target.clockLegTime ? { manualLegTime: target.clockLegTime } : {}),
+    source: 'manual',
+  };
+  const modWs: Workspace = {
+    ...ctx.workspace,
+    relayLegOverrides: upsertRelayLegOverride(ctx.baseOverrides, override),
+  };
+  const newTotal = teamTotal(modWs, ctx.gender, ctx.team, ctx.settings);
+  return { newTotal, deltaPoints: Number((newTotal - ctx.baseTotal).toFixed(3)) };
+}
+
+/** Assemble the surfaced swap record for one scored substitution. */
+function buildRelayLegSwap(
+  ctx: LegSwapContext,
+  target: LegTarget,
+  cand: SwimmerResult,
+  bestRef: RelayLegTimeRef | undefined,
+  newTotal: number,
+  deltaPoints: number
+): RelayLegSwap {
+  return {
+    relayEntryKey: target.entry.entryKey,
+    relayEvent: target.entry.template.event,
+    relayRank: Number(target.entry.template.rank) || 0,
+    roundSwam: target.entry.template.roundSwam,
+    legIndex: target.legIndex,
+    stroke: target.stroke,
+    legDistanceYards: target.legDistanceYards,
+    outAthlete: target.outAthlete,
+    outTime: target.outTime,
+    inAthlete: cand.name,
+    inTime: bestRef?.time ?? cand.time,
+    inTimeConverted: bestRef?.converted ? true : undefined,
+    inTimeStale: bestRef?.stale ? true : undefined,
+    clockLegTime: target.clockLegTime,
+    deltaPoints,
+    newTotal: Number(newTotal.toFixed(3)),
+    baseTotal: ctx.baseTotalRounded,
+  };
+}
+
+/** Keep the highest-delta swap per (relay entry, leg, incoming athlete). */
+function keepBestSwap(
+  bestByKey: Map<string, RelayLegSwap>,
+  dedupKey: string,
+  swap: RelayLegSwap
+): void {
+  const prior = bestByKey.get(dedupKey);
+  if (!prior || swap.deltaPoints > prior.deltaPoints) bestByKey.set(dedupKey, swap);
+}
+
+/** Score every eligible candidate against one leg. Returns how many were re-scored. */
+function collectSwapsForLegTarget(
+  ctx: LegSwapContext,
+  target: LegTarget,
+  bestByKey: Map<string, RelayLegSwap>
+): number {
+  let evaluated = 0;
+  // Candidates: stroke/distance-matching individuals not already on this relay.
+  for (const cand of ctx.pool) {
+    const candKey = normalizeSwimmerName(cand.name);
+    if (!isEligibleLegCandidate(cand, candKey, target, ctx)) continue;
+
+    evaluated += 1;
+    const { newTotal, deltaPoints } = scoreLegSubstitution(ctx, target, cand);
+    if (deltaPoints <= 0) continue;
+
+    const bestRef = ctx.legTimeIndex.get(candKey)?.get(target.legKey);
+    const swap = buildRelayLegSwap(ctx, target, cand, bestRef, newTotal, deltaPoints);
+    keepBestSwap(bestByKey, `${target.entry.entryKey}|${target.legIndex}|${candKey}`, swap);
   }
-  return pool;
+  return evaluated;
+}
+
+/** Score every replaceable leg of one relay entry. Returns how many were re-scored. */
+function collectSwapsForEntry(
+  ctx: LegSwapContext,
+  entry: RelayEntry,
+  bestByKey: Map<string, RelayLegSwap>
+): number {
+  const evLower = entry.template.event.toLowerCase();
+  const legDistanceYards = relayLegDistanceYards(parseRelayDistanceYards(entry.template.event));
+  const onRelay = new Set(entry.legNames.filter(Boolean).map(n => normalizeSwimmerName(n)));
+
+  let evaluated = 0;
+  for (let legIndex = 0; legIndex < entry.legNames.length; legIndex++) {
+    // Only a replaceable leg can gain points; healthy scorer legs are no-ops.
+    if (!ctx.isReplaceableLeg(entry.legNames[legIndex] ?? '')) continue;
+    const target = buildLegTarget(ctx, entry, legIndex, evLower, legDistanceYards, onRelay);
+    evaluated += collectSwapsForLegTarget(ctx, target, bestByKey);
+  }
+  return evaluated;
+}
+
+/** Assemble the per-ranking context (pool, indexes, gates, baseline total). */
+function buildLegSwapContext(
+  workspace: Workspace,
+  opts: RelayLegSwapOptions,
+  team: string,
+  gender: Gender,
+  merged: ScoringSettings,
+  results: SwimmerResult[]
+): LegSwapContext {
+  const baseTotal = teamTotal(workspace, gender, team, merged);
+  return {
+    workspace,
+    results,
+    team,
+    gender,
+    settings: merged,
+    pool: resolvableLegPool(workspace, team, gender),
+    legTimeIndex: buildRelayLegTimeIndex(workspace, {
+      team,
+      gender,
+      recencyMonths: opts.recencyMonths,
+    }),
+    rosterLookup: usesScorerRoster(merged)
+      ? buildScorerRosterLookup(results, merged, workspace.scorerRosterOverrides ?? [], gender)
+      : null,
+    relayCap: merged.maxRelayEntriesPerSwimmer ?? 999,
+    baseOverrides: workspace.relayLegOverrides ?? [],
+    baseTotal,
+    baseTotalRounded: Number(baseTotal.toFixed(3)),
+    isReplaceableLeg: buildReplaceableLegTest(workspace, results, gender, merged),
+  };
 }
 
 /**
@@ -294,147 +668,13 @@ export function rankRelayLegSwaps(
 
   const results = gender === Gender.MEN ? workspace.menResults ?? [] : workspace.womenResults ?? [];
   const relayEntries = collectTeamRelayEntries(results, team, gender);
-  if (relayEntries.length === 0) {
-    return {
-      pointsMeaningful: false,
-      reason: `No ${gender === Gender.MEN ? "men's" : "women's"} relay entries for ${team || 'this team'} to substitute legs on.`,
-      swaps: [],
-      candidatesEvaluated: 0,
-    };
-  }
+  if (relayEntries.length === 0) return emptyRelayLegRanking(team, gender);
 
-  const legTimeIndex = buildRelayLegTimeIndex(workspace, {
-    team,
-    gender,
-    recencyMonths: opts.recencyMonths,
-  });
-  const pool = resolvableLegPool(workspace, team, gender);
-
-  const rosterMode = usesScorerRoster(merged);
-  const rosterLookup: ScorerRosterLookup | null = rosterMode
-    ? buildScorerRosterLookup(results, merged, workspace.scorerRosterOverrides ?? [], gender)
-    : null;
-  const relayCap = merged.maxRelayEntriesPerSwimmer ?? 999;
-
-  // A substitution only moves points on a leg the projection flags for replacement
-  // (a non-scorer whose leg simulateRoster vacates, or a soft-removed holder); an
-  // override on a healthy leg is a scorer no-op → guaranteed zero delta. Skip those
-  // legs wholesale rather than re-score every candidate against them.
-  const vacateNames = computeVacateRelayLegNames(
-    results,
-    gender,
-    merged,
-    workspace.scorerRosterOverrides ?? []
-  );
-  const deletedNames = new Set(
-    (workspace.deletedSwimmers ?? [])
-      .filter(d => d.gender === gender)
-      .map(d => normalizeSwimmerName(d.name))
-  );
-  const legIsReplaceable = (name: string): boolean => {
-    const k = normalizeSwimmerName(name);
-    return vacateNames.has(k) || deletedNames.has(k);
-  };
-
-  const baseTotal = teamTotal(workspace, gender, team, merged);
-  const baseTotalRounded = Number(baseTotal.toFixed(3));
-
-  const baseOverrides = workspace.relayLegOverrides ?? [];
+  const ctx = buildLegSwapContext(workspace, opts, team, gender, merged, results);
   const bestByKey = new Map<string, RelayLegSwap>();
   let candidatesEvaluated = 0;
-
   for (const entry of relayEntries) {
-    const evLower = entry.template.event.toLowerCase();
-    const legDistYards = relayLegDistanceYards(parseRelayDistanceYards(entry.template.event));
-    const onRelay = new Set(entry.legNames.filter(Boolean).map(n => normalizeSwimmerName(n)));
-
-    for (let legIndex = 0; legIndex < entry.legNames.length; legIndex++) {
-      const stroke = relayStrokeForIndex(evLower, legIndex);
-      const outAthlete = entry.legNames[legIndex] ?? '';
-      const outKey = normalizeSwimmerName(outAthlete);
-      // Only a replaceable leg can gain points; healthy scorer legs are no-ops.
-      if (!legIsReplaceable(outAthlete)) continue;
-      const legRow = entry.legRows.find(r => (r.relayLegIndex ?? -1) === legIndex);
-      const outTime = legRow ? displayTimeForRelayLeg(legRow) : undefined;
-      const legKey = `${legDistYards}|${stroke}`;
-
-      // Clock-hold time: the value simulateRoster would treat as this leg's prior
-      // split, so a substitution leaves the team clock unchanged (see CLOCK HOLD).
-      // Mirrors simulateRoster: the departed swimmer's own matching individual time
-      // when it exists (and is finite), else the leg's recorded split.
-      const req = relayLegRequirements(entry.template.event, legIndex);
-      const departedIndiv = results.find(
-        s =>
-          !s.isRelay &&
-          s.name === outAthlete &&
-          eventMatchesStrokeDistance(s.event, req.legDistanceYards, req.keywords)
-      );
-      const departedSec = departedIndiv ? convertTimeToSeconds(departedIndiv.time) : NaN;
-      const rawSplit = legRow?.relayLegSplit;
-      const clockLegTime =
-        departedIndiv && Number.isFinite(departedSec)
-          ? departedIndiv.time
-          : rawSplit && rawSplit !== 'NT'
-            ? rawSplit
-            : undefined;
-
-      // Candidates: stroke/distance-matching individuals not already on this relay.
-      for (const cand of pool) {
-        const candKey = normalizeSwimmerName(cand.name);
-        if (candKey === outKey) continue;
-        if (onRelay.has(candKey)) continue;
-        if (!swimmerMatchesRelayLeg(cand, entry.template.event, legIndex)) continue;
-        if (rosterLookup && !rosterLookup.isScorer(cand.name, team, gender)) continue;
-        if (relayCap < 999) {
-          const counts = countSwimmerEntries(results, team, gender, cand.name);
-          if (counts.relayCount >= relayCap) continue;
-        }
-
-        candidatesEvaluated += 1;
-
-        const bestRef = legTimeIndex.get(candKey)?.get(legKey);
-        const inTime = bestRef?.time ?? cand.time;
-
-        const override: RelayLegOverride = {
-          relayEntryKey: entry.entryKey,
-          legIndex,
-          assigneeName: cand.name,
-          classYear: cand.classYear,
-          ...(clockLegTime ? { manualLegTime: clockLegTime } : {}),
-          source: 'manual',
-        };
-        const modWs: Workspace = {
-          ...workspace,
-          relayLegOverrides: upsertRelayLegOverride(baseOverrides, override),
-        };
-        const newTotal = teamTotal(modWs, gender, team, merged);
-        const deltaPoints = Number((newTotal - baseTotal).toFixed(3));
-        if (deltaPoints <= 0) continue;
-
-        const dedupKey = `${entry.entryKey}|${legIndex}|${candKey}`;
-        const swap: RelayLegSwap = {
-          relayEntryKey: entry.entryKey,
-          relayEvent: entry.template.event,
-          relayRank: Number(entry.template.rank) || 0,
-          roundSwam: entry.template.roundSwam,
-          legIndex,
-          stroke,
-          legDistanceYards: legDistYards,
-          outAthlete,
-          outTime,
-          inAthlete: cand.name,
-          inTime,
-          inTimeConverted: bestRef?.converted ? true : undefined,
-          inTimeStale: bestRef?.stale ? true : undefined,
-          clockLegTime,
-          deltaPoints,
-          newTotal: Number(newTotal.toFixed(3)),
-          baseTotal: baseTotalRounded,
-        };
-        const prior = bestByKey.get(dedupKey);
-        if (!prior || swap.deltaPoints > prior.deltaPoints) bestByKey.set(dedupKey, swap);
-      }
-    }
+    candidatesEvaluated += collectSwapsForEntry(ctx, entry, bestByKey);
   }
 
   const swaps = [...bestByKey.values()].sort((a, b) => b.deltaPoints - a.deltaPoints);
