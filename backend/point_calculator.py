@@ -89,10 +89,33 @@ def _apply_pdf_place_scoring_lock(cfg):
     _apply_pdf_place_neutral_caps(cfg)
 
 
-def _pdf_place_points_for_row(a):
+def _pdf_place_points_for_row(a, cfg=None):
+    """
+    Place points a row earns when the source PDF already prints them.
+
+    The meet's scored program bounds this the same way it bounds the calculated
+    path. `pdf_points` is read off any row whose line ends in a points integer,
+    once a results header sets the meet-wide points latch — the extractor never
+    filters by event number. So a post-program extra session (NSISC events
+    938/939) carries a printed points column even though the meet's own "Team
+    Rankings - Through Event 42" leaves it out of the team totals. That boundary
+    comes from the same official rankings block, so honouring it here makes this
+    path agree with the published totals rather than diverge from them.
+
+    Only `is_outside_scored_program` applies. The rest of
+    `is_unscored_round_or_event` (the `unscoredRounds` list) deliberately does
+    not: this mode trusts the PDF's own points column, and a C final the meet
+    chose to award points to is a meet decision to reproduce, not to override.
+
+    The clause order matches this function's TypeScript twin,
+    `pdfPlacePointsForRow` in `packages/core/src/lib/utils.ts`, which already
+    carried the boundary check. This copy is the one that drifted.
+    """
     if a.get('is_exhibition'):
         return 0.0
     ev_nm = str(a.get('event', '') or '')
+    if is_outside_scored_program(ev_nm, (cfg or {}).get('scoredEventNumberMax')):
+        return 0.0
     if a.get('is_time_trial') and not is_championship_gender_event(ev_nm):
         return 0.0
     pp = a.get('pdf_points')
@@ -1061,7 +1084,7 @@ def calculate_points(athletes, scoring_settings=None):
     if _effective_pdf_place_points_mode(cfg, athletes):
         _apply_pdf_place_scoring_lock(cfg)
         for ath in athletes:
-            ath['calculated_points'] = _pdf_place_points_for_row(ath)
+            ath['calculated_points'] = _pdf_place_points_for_row(ath, cfg)
         return athletes
 
     SCORING = cfg['scoringPoints']

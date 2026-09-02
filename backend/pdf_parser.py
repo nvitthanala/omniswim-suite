@@ -961,14 +961,17 @@ def _parse_relay_leg_line(nxt):
     Returns [] for a line that carries no legs, so the caller keeps its "not a
     swimmer line" branch.
 
-    A leg that still cannot be read on a line whose other legs parsed is
-    reported on stderr, not raised. The individual result row raises because a
-    lost row costs the team its points. A lost leg costs no points — a short
-    relay splits the same team total across the legs present — and the segments
-    that reach this branch are pdfplumber column bleed, e.g. the 2026 Big 12
-    line "3) r:0.37 *Sheikhalizadehkhangh, M4a) rry:0am.17 J RWozniak, Julia
-    SR". Raising there would abort a whole meet over one mangled name, and
-    guessing the name from the wreckage would invent competition data.
+    A leg that still cannot be read on a line whose other legs parsed raises.
+    An earlier revision printed a warning to stderr and returned the shorter
+    relay. That is the silent-gap-filling this parser exists to refuse: stderr
+    is invisible to a coach reading the app, so a relay short one swimmer looks
+    exactly like a complete, correctly-parsed relay. The segments that reach
+    this branch are pdfplumber column bleed, e.g. the 2026 Big 12 line
+    "3) r:0.37 *Sheikhalizadehkhangh, M4a) rry:0am.17 J RWozniak, Julia SR".
+    Neither answer is available: the name cannot be read, and guessing it from
+    the wreckage would invent competition data. So the parse stops and says so,
+    the same as the yearless individual row above. Refuse rather than silently
+    short a meet.
     """
     markers = list(_RELAY_LEG_MARKER.finditer(nxt))
     if not markers:
@@ -1008,11 +1011,10 @@ def _parse_relay_leg_line(nxt):
             legs.append({"name": name, "year": year})
 
     if legs and lost:
-        print(
-            f'WARNING: unreadable relay leg on swimmer line {nxt!r}: {lost!r}. '
-            'The other legs on this line parsed, so this relay is short a '
-            'swimmer.',
-            file=sys.stderr,
+        raise ValueError(
+            f'unreadable relay leg on swimmer line {nxt!r}: {lost!r}. The other '
+            'legs on this line parsed, so this relay would be short a swimmer. '
+            'The name cannot be read and will not be guessed.'
         )
     return legs
 

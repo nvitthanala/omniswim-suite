@@ -25,6 +25,12 @@
  * the line, and treats the class year as optional. An absent year is UNKNOWN,
  * the same sentinel the individual row uses. It is never guessed.
  *
+ * A leg whose name is unreadable is a separate case, and it raises. There is no
+ * third answer: the name cannot be read, and inventing one from the wreckage
+ * would fabricate competition data. Returning the other legs — which this
+ * parser did, behind a stderr WARNING — hands back a relay short one swimmer
+ * that looks complete everywhere a coach can see.
+ *
  * Every fixture below is a verbatim line from one of four archived meet PDFs,
  * as pdfplumber extracts it — including the mangled ones, which is why they
  * look like that. Sources:
@@ -87,13 +93,21 @@ const LINES = {
   page_header: '2026 New South Intercollegiate Swimming Conference',
 };
 
+// Each line is parsed on its own so one raising line cannot mask the rest.
+// An unreadable leg raises, so the harness must report the raise as data.
 const HARNESS = `
 import json, sys
 sys.path.insert(0, 'backend')
 import pdf_parser
 
 lines = json.loads(sys.stdin.read())
-print(json.dumps({k: pdf_parser._parse_relay_leg_line(v) for k, v in lines.items()}))
+ok, errors = {}, {}
+for k, v in lines.items():
+    try:
+        ok[k] = pdf_parser._parse_relay_leg_line(v)
+    except ValueError as exc:
+        errors[k] = f"{type(exc).__name__}: {exc}"
+print(json.dumps({"ok": ok, "errors": errors}))
 `;
 
 function runHarness(payload) {
@@ -116,7 +130,9 @@ if (!run || run.status !== 0) {
   console.error(run?.stderr ?? '');
   process.exit(1);
 }
-const out = JSON.parse(run.stdout.trim().split('\n').pop());
+const parsed = JSON.parse(run.stdout.trim().split('\n').pop());
+const out = parsed.ok;
+const errors = parsed.errors;
 
 // --- The bug: a yearless leg is read, not skipped ------------------------------
 assert.deepEqual(
@@ -179,29 +195,50 @@ assert.deepEqual(
   'reaction times and multi-word surnames: unchanged'
 );
 
-// --- A mangled name is reported lost, never repaired into a plausible one -------
-assert.deepEqual(
+// --- A mangled name raises; it is never repaired into a plausible one ----------
+//
+// These two cases used to return the readable legs and print a WARNING to
+// stderr. A short relay is competition data with a hole in it, and stderr is
+// invisible to a coach reading the app, so the relay looked complete. The
+// parser now refuses the line instead — the same policy as the yearless
+// individual row, which raises rather than lose a result silently.
+assert.equal(
   out.big12_column_bleed,
-  [
-    { name: 'Liya Goupil', year: 'SR' },
-    { name: 'Sienna Bruner', year: 'SO' },
-  ],
-  'column bleed leaves no readable name, so no leg is invented from the wreckage'
+  undefined,
+  'column bleed must not yield a short relay: a leg is missing and nothing says so'
 );
-for (const leg of out.big12_column_bleed) {
-  assert.notEqual(
-    leg.name,
-    'Fresh S Sathianchokwisan',
-    'a name cut mid-word reads as a real swimmer with a middle initial; it is not one'
-  );
-}
-assert.deepEqual(
-  out.glvc_ligature,
-  [{ name: 'Carson Olson', year: 'FR' }],
-  'an unmapped ligature truncates the name, so the leg is lost rather than renamed'
+assert.match(
+  errors.big12_column_bleed ?? '',
+  /^ValueError: unreadable relay leg on swimmer line /,
+  'column bleed raises, and the message names the line it came from'
+);
+assert.match(
+  errors.big12_column_bleed ?? '',
+  /Sathianchokwisan, Fresh S/,
+  'the raw unreadable segment is quoted, so the defect can be found in the PDF'
 );
 assert.ok(
-  !out.glvc_ligature.some(leg => leg.name === 'Kadence Grif'),
+  !/Fresh S Sathianchokwisan/.test(JSON.stringify(out)),
+  'a name cut mid-word reads as a real swimmer with a middle initial; it is not one'
+);
+
+assert.equal(
+  out.glvc_ligature,
+  undefined,
+  'an unmapped ligature truncates the name, so the line is refused rather than shortened'
+);
+assert.match(
+  errors.glvc_ligature ?? '',
+  /^ValueError: unreadable relay leg on swimmer line /,
+  'the ligature line raises'
+);
+assert.match(
+  errors.glvc_ligature ?? '',
+  /Kadence Grif/,
+  'the mangled segment is quoted verbatim in the error'
+);
+assert.ok(
+  !/\{"name":"Kadence Grif"/.test(JSON.stringify(out)),
   '"Kadence Grif" would enter the roster as a swimmer who does not exist'
 );
 
@@ -219,4 +256,13 @@ assert.deepEqual(
 assert.deepEqual(out.split_line, [], 'the split line under every relay carries no legs');
 assert.deepEqual(out.page_header, [], 'page furniture carries no legs');
 
-console.log('PASS  yearless relay legs are recovered, not silently dropped');
+// --- Only the unreadable lines raise ------------------------------------------
+// The raise aborts a whole meet parse, so it must fire on exactly the lines that
+// have no readable answer and on nothing else.
+assert.deepEqual(
+  Object.keys(errors).sort(),
+  ['big12_column_bleed', 'glvc_ligature'],
+  'no readable line may raise — every other fixture here parses clean'
+);
+
+console.log('PASS  yearless relay legs are recovered; an unreadable leg raises');
