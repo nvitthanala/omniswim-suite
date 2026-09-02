@@ -121,7 +121,9 @@ export function WizardShell<T extends string>({
                       break;
                   }
                 }}
-                className={`text-left rounded-xl border px-3.5 py-3 transition-colors min-w-0 ${isDisabled
+                className={`text-left rounded-xl border px-3.5 py-3 transition-[color,background-color,border-color,transform] duration-150 ease-out min-w-0 ${
+                  isDisabled ? '' : 'active:scale-[0.98]'
+                } ${isDisabled
                   ? 'border-theme-soft surface-muted-bg text-theme-muted opacity-60 cursor-not-allowed'
                   : isActive
                     ? 'border-[var(--text-accent)]/50 bg-[var(--text-accent)]/10'

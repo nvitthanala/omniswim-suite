@@ -78,6 +78,11 @@
   --ui-shadow-lg: 0 20px 52px var(--shadow);
   --transition-fast: 150ms ease;
   --transition-base: 200ms ease;
+  /* Strong UI easing curves (Kowalski) — built-in `ease`/`ease-out` read as
+     weak on deliberate press/enter/exit motion. Reused by every new
+     transition added in the animation-craft pass; do not fork a third. */
+  --ui-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ui-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
 }
 
 [data-theme='light'] {
@@ -508,6 +513,7 @@ select {
   background: color-mix(in srgb, var(--text-accent) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--text-accent) 35%, transparent);
   color: var(--text-accent);
+  transition: background 150ms var(--ui-ease-out), transform 150ms var(--ui-ease-out);
 }
 
 .btn-accent-outline:hover:not(:disabled) {
@@ -564,7 +570,7 @@ select {
       color-mix(in srgb, var(--surface-muted) 86%, var(--text-primary)) 100%
     );
   background-size: 220% 100%;
-  animation: skeleton-shimmer 1.4s ease-in-out infinite;
+  animation: skeleton-shimmer 1.4s linear infinite;
 }
 
 @keyframes skeleton-shimmer {
@@ -624,7 +630,7 @@ select {
   letter-spacing: normal;
   padding: 0.75rem 1.5rem;
   border-radius: var(--ui-radius-md);
-  transition: filter var(--transition-base), box-shadow var(--transition-base);
+  transition: filter var(--transition-base), box-shadow var(--transition-base), transform 150ms var(--ui-ease-out);
   cursor: pointer;
   border: none;
 }
@@ -632,6 +638,11 @@ select {
 .btn-primary:hover {
   filter: brightness(1.08);
   box-shadow: 0 0 25px color-mix(in srgb, var(--text-accent) 22%, transparent);
+}
+
+.btn-primary:active,
+.btn-accent-outline:active {
+  transform: scale(0.97);
 }
 
 .btn-secondary {
@@ -1042,18 +1053,19 @@ select {
   box-shadow: var(--ui-shadow-md);
   font-size: 0.875rem;
   line-height: 1.35;
-  animation: toast-in 0.18s ease-out;
+  /* Transition, not keyframes: a toast fires more than once in a burst, and
+     keyframes restart from zero on each retrigger while a transition
+     retargets from wherever it currently is. Entering and exiting share the
+     same translateY(8px) offset so the two read as one reversible motion. */
+  opacity: 1;
+  transform: translateY(0);
+  transition: opacity 200ms var(--ui-ease-out), transform 200ms var(--ui-ease-out);
 }
 
-@keyframes toast-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
+.toast-item[data-state='entering'],
+.toast-item[data-state='exiting'] {
+  opacity: 0;
+  transform: translateY(8px);
 }
 
 .toast-icon {

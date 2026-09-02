@@ -35,7 +35,11 @@ export function Button({
   ...props
 }: ButtonProps) {
   const classes = [
-    'inline-flex items-center justify-center gap-2 font-bold transition-all disabled:cursor-not-allowed disabled:opacity-50',
+    // Named properties, not `transition-all`: color/background/border for
+    // hover, transform for the press-feedback scale below. `.btn-primary`
+    // and `.btn-accent-outline` carry their own (unlayered, higher-priority)
+    // transition in index.css that already includes transform.
+    'inline-flex items-center justify-center gap-2 font-bold transition-[color,background-color,border-color,transform] duration-150 ease-out active:scale-[0.97] disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100',
     VARIANT_CLASSES[variant],
     SIZE_CLASSES[size],
     className,
