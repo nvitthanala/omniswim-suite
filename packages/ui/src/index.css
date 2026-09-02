@@ -573,6 +573,13 @@ select {
   animation: skeleton-shimmer 1.4s linear infinite;
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .skeleton-block {
+    animation: none;
+    background-position: 0%;
+  }
+}
+
 @keyframes skeleton-shimmer {
   from {
     background-position: 120% 0;
@@ -643,6 +650,13 @@ select {
 .btn-primary:active,
 .btn-accent-outline:active {
   transform: scale(0.97);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .btn-primary:active,
+  .btn-accent-outline:active {
+    transform: none;
+  }
 }
 
 .btn-secondary {
@@ -1066,6 +1080,17 @@ select {
 .toast-item[data-state='exiting'] {
   opacity: 0;
   transform: translateY(8px);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .toast-item {
+    transition: opacity 200ms var(--ui-ease-out);
+  }
+
+  .toast-item[data-state='entering'],
+  .toast-item[data-state='exiting'] {
+    transform: none;
+  }
 }
 
 .toast-icon {
