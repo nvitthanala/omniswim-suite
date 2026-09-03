@@ -136,59 +136,53 @@ def _resolve_scoring_settings(scoring_settings=None):
 
     if not scoring_settings:
 
-        try:
+        settings_path = None
 
-            settings_path = None
+        data_dir = os.environ.get('OMNI_DATA_DIR')
 
-            data_dir = os.environ.get('OMNI_DATA_DIR')
+        if data_dir:
 
-            if data_dir:
+            candidate = Path(data_dir) / 'scoring_settings.json'
 
-                candidate = Path(data_dir) / 'scoring_settings.json'
+            if candidate.is_file():
+
+                settings_path = str(candidate)
+
+        if not settings_path:
+
+            repo_root = Path(__file__).resolve().parent.parent
+
+            for candidate in (
+
+                repo_root / 'data' / 'scoring_settings.json',
+
+                repo_root / 'scoring_settings.json',
+
+                Path('scoring_settings.json'),
+
+            ):
 
                 if candidate.is_file():
 
-                    settings_path = str(candidate)
+                    settings_path = str(candidate.resolve())
 
-            if not settings_path:
+                    break
 
-                repo_root = Path(__file__).resolve().parent.parent
+        if settings_path:
 
-                for candidate in (
+            with open(settings_path, 'r', encoding='utf-8') as f:
 
-                    repo_root / 'data' / 'scoring_settings.json',
+                settings_file = json.load(f)
 
-                    repo_root / 'scoring_settings.json',
+            for k, v in settings_file.items():
 
-                    Path('scoring_settings.json'),
+                if isinstance(v, dict) and 'value' in v:
 
-                ):
+                    cfg[k] = v['value']
 
-                    if candidate.is_file():
+                else:
 
-                        settings_path = str(candidate.resolve())
-
-                        break
-
-            if settings_path:
-
-                with open(settings_path, 'r', encoding='utf-8') as f:
-
-                    settings_file = json.load(f)
-
-                for k, v in settings_file.items():
-
-                    if isinstance(v, dict) and 'value' in v:
-
-                        cfg[k] = v['value']
-
-                    else:
-
-                        cfg[k] = v
-
-        except Exception:
-
-            pass
+                    cfg[k] = v
 
     else:
 

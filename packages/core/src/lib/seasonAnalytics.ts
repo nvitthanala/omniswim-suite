@@ -79,13 +79,16 @@ export function buildSeasonTrends(workspaces: Workspace[]): SeasonTrends {
   const teamScoreTrends: TeamScoreTrend[] = workspaces
     .filter(ws => ws.officialTeamScores || (ws.menResults?.length ?? 0) > 0)
     .map(ws => {
-      const menTotal = Object.values(ws.officialTeamScores?.men ?? {}).reduce((a, b) => a + b, 0);
-      const womenTotal = Object.values(ws.officialTeamScores?.women ?? {}).reduce((a, b) => a + b, 0);
+      const officialMenScores = ws.officialTeamScores?.men;
+      const officialWomenScores = ws.officialTeamScores?.women;
       return {
         meetLabel: ws.loadedMeet?.meetLabel ?? ws.name,
-        menTotal: menTotal || (ws.menResults ?? []).reduce((s, r) => s + (Number(r.points) || 0), 0),
-        womenTotal:
-          womenTotal || (ws.womenResults ?? []).reduce((s, r) => s + (Number(r.points) || 0), 0),
+        menTotal: officialMenScores != null
+          ? Object.values(officialMenScores).reduce((a, b) => a + b, 0)
+          : (ws.menResults ?? []).reduce((s, r) => s + (Number(r.points) || 0), 0),
+        womenTotal: officialWomenScores != null
+          ? Object.values(officialWomenScores).reduce((a, b) => a + b, 0)
+          : (ws.womenResults ?? []).reduce((s, r) => s + (Number(r.points) || 0), 0),
       };
     });
 

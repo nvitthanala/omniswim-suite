@@ -45,11 +45,8 @@ _ALIASES_JSON = os.path.normpath(
 
 def _load_abbrev_teams():
     merged = {}
-    try:
-        with open(_ALIASES_JSON, encoding='utf-8') as fh:
-            merged.update(json.load(fh))
-    except OSError:
-        pass
+    with open(_ALIASES_JSON, encoding='utf-8') as fh:
+        merged.update(json.load(fh))
     merged.setdefault('UMSL', 'University of Missouri-St. Louis')
     merged.setdefault('HSU', 'Henderson State University')
     merged.setdefault('DSU', 'Delta State University')
