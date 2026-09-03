@@ -29,6 +29,7 @@ import {
 } from './utils';
 import { parseSwimCloudMultiProfile } from './swimCloudMultiProfile';
 import {
+  aliasNameKey,
   buildAliasResolver,
   IDENTITY_ALIAS_RESOLVER,
   type AthleteAliasResolver,
@@ -1023,6 +1024,50 @@ export function parseSwimCloudPasteDetailed(
   return { swims, format, warnings, detectedName };
 }
 
+/**
+ * Confidence for a roster name that equals the import name after identity
+ * folding (case, whitespace, comma order, diacritics).
+ *
+ * Not a heuristic guess. {@link aliasNameKey} is how this codebase *defines*
+ * athlete identity — `AthleteAliasResolver.areLinked` is literally an
+ * `aliasNameKey` comparison, and every downstream identity grouping keys on it.
+ * Two roster/import spellings that share the key are the same athlete by the
+ * repo's own rule, so this ranks just under a byte-exact hit.
+ */
+export const ROSTER_MATCH_FOLDED_CONFIDENCE = 0.95;
+
+/** Confidence for a one-sided containment hit ("Smith" inside "Smith, John"). */
+export const ROSTER_MATCH_CONTAINMENT_CONFIDENCE = 0.7;
+
+/** Either normalized name contains the other. */
+function namesContainEachOther(a: string, b: string): boolean {
+  if (!a || !b) return false;
+  return a.includes(b) || b.includes(a);
+}
+
+/**
+ * Find the roster name that denotes the same athlete as `name`.
+ *
+ * Four tiers, tried in order, each strictly weaker than the last. The order is
+ * load-bearing: a stronger relation must win the roster name it points at, so a
+ * later, looser tier can never steal the answer from an earlier one.
+ *
+ *  1. `1`    — equal after case/whitespace normalization.
+ *  2. `0.95` — equal after identity folding (see
+ *              {@link ROSTER_MATCH_FOLDED_CONFIDENCE}). This is the tier that
+ *              recognizes "Oliver Pozvai" as the rostered "Olivér Pózvai" and
+ *              "John Smith" as the rostered "Smith, John".
+ *  3. `0.7`  — raw containment. Kept verbatim, and kept ahead of tier 4, so no
+ *              pair that matched before this tier existed can change its answer.
+ *  4. `0.7`  — containment after identity folding.
+ *
+ * A name that relates to a roster name but reaches no tier here returns
+ * `{ match: null }` — deliberately. Anything weaker (a shared surname, a
+ * first-name variant, a token subset like "Alan Gonzalez" inside "Alan Alejan
+ * Gonzalez Mujica") is a *possible* athlete, not a proven one, and this function
+ * must never silently resolve it. Those surface through
+ * `rosterReviewCandidates` in `historyImportRoster` for a human to confirm.
+ */
 export function matchAthleteToRoster(
   name: string,
   rosterNames: string[]
@@ -1031,9 +1076,22 @@ export function matchAthleteToRoster(
   for (const r of rosterNames) {
     if (normalizeSwimmerName(r) === key) return { match: r, confidence: 1 };
   }
+  const foldedKey = aliasNameKey(name);
+  if (foldedKey) {
+    for (const r of rosterNames) {
+      if (aliasNameKey(r) === foldedKey) {
+        return { match: r, confidence: ROSTER_MATCH_FOLDED_CONFIDENCE };
+      }
+    }
+  }
   for (const r of rosterNames) {
-    if (normalizeSwimmerName(r).includes(key) || key.includes(normalizeSwimmerName(r))) {
-      return { match: r, confidence: 0.7 };
+    if (namesContainEachOther(normalizeSwimmerName(r), key)) {
+      return { match: r, confidence: ROSTER_MATCH_CONTAINMENT_CONFIDENCE };
+    }
+  }
+  for (const r of rosterNames) {
+    if (namesContainEachOther(aliasNameKey(r), foldedKey)) {
+      return { match: r, confidence: ROSTER_MATCH_CONTAINMENT_CONFIDENCE };
     }
   }
   return { match: null, confidence: 0 };

@@ -36,12 +36,37 @@ import {
 } from './utils';
 import { createPlannedEntry } from './whatIfProjection';
 import {
+  aliasNameKey,
   buildAliasResolver,
+  classifyAliasNamePair,
   IDENTITY_ALIAS_RESOLVER,
   type AthleteAliasResolver,
 } from './athleteAliases';
 
 export type ImportSwimmerAction = 'new_recruit' | 'add_to_lineup' | 'history_matched' | 'already_recruit';
+
+/**
+ * A roster name that RELATES to an import name without proving the same athlete.
+ *
+ * "Alan Gonzalez" against the rostered "Alan Alejan Gonzalez Mujica" is the
+ * motivating case: every token of the short name appears in the long one, which
+ * the alias engine scores 0.9 — strong, but not proof. Two brothers on one roster
+ * ("John Smith" / "John Michael Smith") produce the identical relation, so
+ * merging on the name alone would silently fuse two people.
+ *
+ * The repo already holds the rule for this: a token-subset pair auto-links only
+ * once `planAutoAliasLinks` finds EVIDENCE for it (an exact shared individual
+ * time, or a competed/import-only asymmetry). The import preview holds no
+ * evidence, so it reports the candidate and resolves nothing.
+ */
+export type RosterReviewCandidate = {
+  /** The roster name, spelled as the roster spells it. */
+  rosterName: string;
+  /** `classifyAliasNamePair` score, 0..1. Higher is a stronger name relation. */
+  score: number;
+  /** Why the two names relate, in the alias engine's own words. */
+  reason: string;
+};
 
 export type ImportSwimmerPreview = {
   name: string;
@@ -49,7 +74,17 @@ export type ImportSwimmerPreview = {
   gender: Gender;
   swimCount: number;
   action: ImportSwimmerAction;
+  /**
+   * The roster name this swimmer was CONFIDENTLY matched to, or null. Never
+   * carries a merely-possible match — see `reviewCandidates` for those.
+   */
   matchedRosterName: string | null;
+  /**
+   * Roster names that relate to this swimmer but were not proof of identity,
+   * best first. Present only when there is no confident match and at least one
+   * candidate exists, so a `new_recruit` badge is never the whole story.
+   */
+  reviewCandidates?: RosterReviewCandidate[];
 };
 
 export type HistoryImportRosterResult = {
@@ -351,7 +386,14 @@ function countExistingEntries(
 }
 
 /** A fuzzy roster match at or above this confidence counts as the same athlete. */
-const ROSTER_MATCH_CONFIDENCE = 0.7;
+export const ROSTER_MATCH_CONFIDENCE = 0.7;
+
+/**
+ * Lowest name-relation score worth showing a human. Mirrors the default
+ * `minScore` of `suggestAliasCandidates`, so the import preview and the
+ * "possible same athlete" panel agree on what counts as related.
+ */
+export const ROSTER_REVIEW_MIN_SCORE = 0.6;
 
 type RosterMatch = { match: string | null; confidence: number };
 
@@ -360,7 +402,45 @@ function isConfidentRosterMatch(m: RosterMatch): m is RosterMatch & { match: str
   return Boolean(m.match) && m.confidence >= ROSTER_MATCH_CONFIDENCE;
 }
 
-/** Alias-resolved name keys of every recruit already on this team's roster. */
+/**
+ * Roster names that relate to `name` but that {@link matchAthleteToRoster}
+ * refused to treat as the same athlete, strongest relation first.
+ *
+ * This is the "absent, not guessed" half of the identity decision. A swimmer who
+ * reaches no match tier is reported as `new_recruit`, and that verdict is only
+ * honest if the near-misses travel with it — otherwise an athlete already on the
+ * roster under a longer spelling is silently duplicated. Returns `[]` when the
+ * name matches confidently (there is nothing left to review) and when nothing
+ * relates.
+ */
+export function rosterReviewCandidates(
+  name: string,
+  rosterNames: string[],
+  opts: { minScore?: number } = {}
+): RosterReviewCandidate[] {
+  const minScore = opts.minScore ?? ROSTER_REVIEW_MIN_SCORE;
+  if (isConfidentRosterMatch(matchAthleteToRoster(name, rosterNames))) return [];
+
+  const out: RosterReviewCandidate[] = [];
+  const seen = new Set<string>();
+  for (const rosterName of rosterNames) {
+    const key = aliasNameKey(rosterName);
+    if (!key || seen.has(key)) continue;
+    const relation = classifyAliasNamePair(rosterName, name);
+    if (!relation || relation.score < minScore) continue;
+    seen.add(key);
+    out.push({ rosterName, score: relation.score, reason: relation.reason });
+  }
+  return out.sort((a, b) => b.score - a.score || a.rosterName.localeCompare(b.rosterName));
+}
+
+/**
+ * Identity keys of every recruit already on this team's roster.
+ *
+ * Keyed by {@link aliasNameKey}, the same fold `matchAthleteToRoster` uses, so a
+ * recruit rostered as "Olivér Pózvai" is recognized by an import that spells the
+ * name "Oliver Pozvai". Keying on the raw normalized name let that pair miss.
+ */
 function recruitNameKeys(
   workspace: Workspace,
   team: string,
@@ -370,7 +450,7 @@ function recruitNameKeys(
   const keys = new Set<string>();
   for (const r of workspace.recruits ?? []) {
     if (r.gender !== gender || r.team !== team) continue;
-    keys.add(normalizeSwimmerName(resolver.resolveAthleteName(r.name, team, gender)));
+    keys.add(aliasNameKey(resolver.resolveAthleteName(r.name, team, gender)));
   }
   return keys;
 }
@@ -390,9 +470,12 @@ function classifyImportAction(
   gender: Gender,
   programEvents: Set<string> | null
 ): ImportSwimmerAction {
-  if (recruitKeys.has(normalizeSwimmerName(resolvedName))) return 'already_recruit';
-  if (match.match && recruitKeys.has(normalizeSwimmerName(match.match))) return 'already_recruit';
+  if (recruitKeys.has(aliasNameKey(resolvedName))) return 'already_recruit';
+  // The confidence gate belongs on this rule too. Reading `match.match` bare
+  // resolved a swimmer onto a recruit row on ANY match the matcher reported,
+  // including one it had already judged too weak to act on.
   if (!isConfidentRosterMatch(match)) return 'new_recruit';
+  if (recruitKeys.has(aliasNameKey(match.match))) return 'already_recruit';
 
   const existingEvents = existingPlanEvents(existingPlans, match.match, team, gender);
   const hasNewEvent = toProgramCandidates(swims, programEvents).some(
@@ -422,6 +505,10 @@ export function previewHistoryImportActions(
     if (sample.team !== team || sample.gender !== gender) continue;
     const resolvedName = resolver.resolveAthleteName(sample.name, team, gender);
     const match = matchAthleteToRoster(resolvedName, rosterNames);
+    const confident = isConfidentRosterMatch(match);
+    // Near-misses travel with the verdict. Without them a "new recruit" badge
+    // hides the fact that the roster already holds a name this one relates to.
+    const review = confident ? [] : rosterReviewCandidates(resolvedName, rosterNames);
     out.push({
       name: sample.name,
       team: sample.team,
@@ -437,7 +524,8 @@ export function previewHistoryImportActions(
         gender,
         programEvents
       ),
-      matchedRosterName: match.match,
+      matchedRosterName: confident ? match.match : null,
+      ...(review.length > 0 ? { reviewCandidates: review } : {}),
     });
   }
   return out;
@@ -513,12 +601,16 @@ function resolveImportIdentity(
   const match = matchAthleteToRoster(resolvedName, rosterNames);
   const matchedName = isConfidentRosterMatch(match) ? match.match : null;
   const displayName = matchedName ?? resolvedName;
-  const displayKey = normalizeSwimmerName(displayName);
+  // Same fold as the roster match, so the two answers cannot disagree about who
+  // this is. Under the raw normalized key, an unmatched import spelled without
+  // diacritics read as "not a recruit" while a recruit row for that very athlete
+  // sat on the roster, and the import wrote a second one.
+  const displayKey = aliasNameKey(displayName);
   const isExistingRecruit = recruits.some(
     r =>
       r.gender === gender &&
       r.team === team &&
-      normalizeSwimmerName(resolver.resolveAthleteName(r.name, team, gender)) === displayKey
+      aliasNameKey(resolver.resolveAthleteName(r.name, team, gender)) === displayKey
   );
   return { displayName, isOnRoster: Boolean(matchedName), isExistingRecruit };
 }
