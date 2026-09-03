@@ -73,6 +73,59 @@ dispatched, agent returned, commit made, test result). Newest entry on top.
   `previewHistoryImportActions` (harmless today).
 - Next: dispatch `executor` for Bug B (entry-limit double count).
 
+## 2026-09-02 — Bug C verified and committed `d24fd3e5` — round complete
+
+- Verified myself before committing: reviewed the full `utils.ts` diff plus
+  the four comment-only auxiliary diffs (`rosterOptimizer.ts`,
+  `test_tie_group_scoring.mjs`, `test_scorer_pool_cap.mjs`,
+  `test_fast_swap_context.mjs` — confirmed no logic changes in any of them).
+  Ran all 6 named arbitrage tests plus the new `test_recruit_placement_grid.mjs`
+  (13/13) directly — all green. **Ran `test_nsisc_team_totals.mjs` myself**
+  specifically to check the executor's "official scoring is untouched" claim:
+  confirmed all seven published NSISC team scores still reproduce exactly
+  (delta 0.00 on every one). Full suite: 75 passed / 1 failed (same
+  pre-existing playwright/no-browser issue) / 3 skipped (pre-existing). Lint
+  clean across all 7 workspaces, build exit 0.
+- Committed `d24fd3e5`. Staged only `utils.ts`, `rosterOptimizer.ts`,
+  `run-tests.mjs` (+1), new `test_recruit_placement_grid.mjs`, and the three
+  comment-only test file updates, plus this progress file.
+- **This finding was bigger than the arbitrage framing suggested.** Root
+  cause was not in the arbitrage layer at all — `rankExactSwaps` and every
+  arbitrage module were already correct. It was in `prepareRecruitsForScoring`
+  (core scoring engine, `calculatePoints`'s recruit-placement step), which
+  ranked each recruit alone against PDF-only comparators, so (a) on a
+  roster-only workspace every recruit tied at rank 1 (whole event = one N-way
+  tie), and (b) on a projected workspace it overwrote the correct placement
+  `projectRanksInField` had already given a recruit row with a wrong one
+  derived from a narrower field. This was previously flagged in
+  `plans/2026-08-14/12` §2 as "STILL OPEN, not destructive" — it WAS
+  destructive, just masked at the time by a separate, since-fixed, more
+  catastrophic bug (total wipeout) that made the fractional-points damage
+  hard to see. Confirmed the specific card the user would have seen:
+  `Avery Henke +400 IM / -100 Fly` read **+8.667** (a fabricated 3-way tie),
+  now reads **+7**.
+- Residual findings from executor, not acted on (out of scope, both
+  documented with a "STILL OPEN" note in the new code): a recruit row can
+  still collide with a MEET row's placement in one narrow unprojected-workspace
+  shape (no saved workspace currently reaches it); `buildFastSwapContext`
+  returns null (falls back to full re-score, correctly slow not wrong) on the
+  primary HSU workspace due to a pre-existing, unrelated shadowed-row gate.
+
+### Round summary — all three bugs fixed and committed
+
+| Bug | Root cause | Commit |
+| --- | --- | --- |
+| A — aliasing misclassified known swimmers as new recruits | `matchAthleteToRoster` had no diacritic/comma-order folding | `a64143fc` |
+| B — entry limits double-charged a prelims+finals relay swim | relay entries keyed on a physical-swim identity (embeds round/rank/clock) instead of event identity | `0efcd602` |
+| C — arbitrage showed non-grid ("wonky") point values | `prepareRecruitsForScoring` fabricated dead heats by ranking recruits without full-field or each-other comparators | `d24fd3e5` |
+
+All three verified independently by the orchestrating session (not just
+trusting agent reports): diff review, targeted test runs, full suite, lint,
+build — before each commit. Pre-existing unrelated uncommitted work
+(`backend/pdf_parser.py`, `backend/point_calculator.py`,
+`packages/core/src/lib/seasonAnalytics.ts`, 4 untracked test scripts) was
+left untouched throughout, as instructed to every agent.
+
 <!-- Append new entries below this line, newest first. -->
 
 ## 2026-09-02 — Bug C done (arbitrage non-grid points), NOT committed
