@@ -35,4 +35,118 @@ dispatched, agent returned, commit made, test result). Newest entry on top.
   seasonAnalytics.ts, run-tests.mjs existing entries) and not to commit.
 - Waiting on this before dispatching Bug B (entry limits) — sequential by plan.
 
+## 2026-09-02 — Bug A done, committed `a64143fc`
+
+- Executor's root cause: **not** a refactor regression. `matchAthleteToRoster` in
+  `athleteHistory.ts` had a pre-existing gap — exact match or raw substring
+  containment only, no diacritic/comma-order folding — so "Oliver Pozvai" never
+  matched the roster's "Olivér Pózvai" despite sharing an `aliasNameKey` (the
+  codebase's own definition of identity elsewhere). Bisected against
+  `3e2738a0~1`/`639af9b5~1`: identical behavior pre/post those refactors, so
+  those commits are cleared as suspects for this bug.
+- Fix: two new match tiers (folded-equality 0.95, folded-containment 0.7)
+  between exact (1.0) and raw containment (0.7), strictly weaker so no existing
+  match's answer changes. `recruitNameKeys`/`isExistingRecruit` now key on the
+  same fold. Fixed a live silent-resolve in `classifyImportAction` (bare
+  `match.match` read, ignoring confidence). Added `rosterReviewCandidates` so a
+  `new_recruit` badge carries near-misses (e.g. Alan Gonzalez → Alan Alejan
+  Gonzalez Mujica, a token-subset relation deliberately NOT auto-merged — two
+  people can share that relation) for the existing alias-suggestions UI to act
+  on.
+- Verified myself (not just trusting the report): reviewed full diff, ran
+  `test_roster_identity_match.mjs` (new, 10/10), `test_history_import_roster.mjs`,
+  `test_athlete_aliases.mjs`, `test_duplicate_athletes.mjs` (all green), full
+  suite via `node scripts/run-tests.mjs` (73 passed / 1 failed / 3 skipped —
+  the 1 failure is playwright e2e, no browser binary installed in this
+  environment, confirmed pre-existing and unrelated), `npm run lint` clean
+  across all 7 workspaces.
+- Committed `a64143fc`. Only `athleteHistory.ts`, `historyImportRoster.ts`,
+  `run-tests.mjs` (+1 line), new `test_roster_identity_match.mjs`, and this
+  plan dir were staged — pre-existing unrelated uncommitted diff (pdf_parser.py,
+  point_calculator.py, seasonAnalytics.ts, 4 other new test scripts) left
+  untouched as instructed.
+- Residual findings from executor, not acted on (out of scope): `athleteAliases.ts`
+  has a literal NUL byte at line 108 (`SCOPE_SEP = '\x00'`) — harmless at
+  runtime but is why git/grep need `--text`/`-a` on this file; a paste with
+  both spellings of one athlete yields two preview rows (cosmetic, write path
+  verified safe); `rosterNames` passed to the matcher unresolved in
+  `previewHistoryImportActions` (harmless today).
+- Next: dispatch `executor` for Bug B (entry-limit double count).
+
 <!-- Append new entries below this line, newest first. -->
+
+## 2026-09-02 — Bug B done (entry-limit double count), NOT committed
+
+- **The plan doc's two guesses were both wrong, and so was the framing.** The
+  double count is in `countSwimmerEntries` itself (`swimmerEntryLimits.ts`) —
+  the very function the plan doc argued was already correct — but on the RELAY
+  branch, not the individual one. It is not a display path, and no import or
+  extraction path forges duplicate rows.
+- Root cause: the relay branch keyed entries on `relayEntryKey(...)`, which is
+  `team|event|roundSwam|rank|clock` (`relaySplits.ts:625`). That key names one
+  physical relay SWIM — correct for landing a leg override on the right heat,
+  wrong for a cap. `backend/pdf_parser.py:1120` keys relay rows on
+  `(school, event, gender, ROUND, finals_time, rank)`, so a squad that swims a
+  relay in prelims and again in the final really does reach the counter as two
+  rows whose round, rank and clock all differ. Every leg swimmer was charged
+  two entries for one relay.
+- Measured repro before touching code: 3 individual events + 4 relays, each
+  swum prelims + final → counted `3 ind + 8 relay = 11/7 OVER CAP`; correct is
+  `3 ind + 4 relay = 7/7 at the cap`.
+- The INDIVIDUAL side was already correct (it keyed on the event alone), which
+  is why the individual half of the repro returns 1. The parser also merges an
+  individual prelims row and finals row into ONE row keyed
+  `(name, event, gender)` — `prelimsTime`/`finalsTime`/`roundSwam` share a row —
+  so individual events never reach the counter twice at all.
+- Fix: one new exported helper, `entryCapKey(r)` — the trimmed event, used by
+  BOTH branches. `relayEntryKey` / `relayTemplateFromLeg` imports dropped, which
+  also removes an O(n) scan per relay row from a function `PERFORMANCE_NOTES.md`
+  flags as hot (the loop is now O(n), not O(n²)).
+- No second implementation needed fixing. `historyImportRoster.ts`'s
+  `countExistingEntries` already dedupes by event across all three planes and is
+  correct as written (read only, not modified). `rosterLineupAudit.ts`,
+  `scoringTheory.ts`, `arbitrage/dropAdd.ts`, `arbitrage/relayLegSwaps.ts` and
+  every UI panel route through `countSwimmerEntries`, so all inherit the fix —
+  no unification was needed and none was forced.
+- Zero silent defaults: a row with no event name is now COUNTED under a
+  `' unlabeled|<id>'` key (leading space, which a trimmed event can never
+  produce) instead of being dropped from the count. That closes a pre-existing
+  silent-empty path on the individual branch. An over-count is visible to the
+  coach; an under-count hides a violation.
+- Proved the new test fails on the old logic (`8 !== 4`) before keeping it.
+- Verified on real data: old key vs new key over all 172 athletes in
+  `data/meets.json` → **0 differing counts**. This meet has no relay contested
+  in two rounds, so the change is a no-op on the primary workspace and only
+  moves the prelims+finals case. Confirmed the HSU lookup returns real rows
+  (167 Henderson State men rows, e.g. Colin Candebat 3 ind + 4 relay = 7/7).
+- Tests: `test_entry_limits.mjs`, `test_entry_limits_aliases.mjs` (9/9),
+  `test_lineup_audit.mjs`, new `test_entry_limits_prelims_finals.mjs` (6/6) all
+  green. Full suite `node scripts/run-tests.mjs` → **74 passed / 1 failed / 3
+  skipped** (baseline was 73/1/3; +1 is the new test, the 1 failure is the
+  pre-existing playwright e2e with no browser binary). `npm run lint` clean
+  across all 7 workspaces, `npm run build` exit 0.
+- Files touched: `packages/core/src/lib/swimmerEntryLimits.ts`,
+  `scripts/run-tests.mjs` (+1 line), new
+  `scripts/test_entry_limits_prelims_finals.mjs`. Pre-existing unrelated
+  uncommitted diff (pdf_parser.py, point_calculator.py, seasonAnalytics.ts,
+  4 other new test scripts) left untouched. No git operations run.
+- API surface added (additive; nothing removed or renamed):
+  `export function entryCapKey(r: Pick<SwimmerResult, 'id' | 'event'>): string`.
+  `SwimmerEntryCounts.relayEvents` now holds relay EVENT names rather than
+  `relayEntryKey` strings; its size still equals `relayCount`, and no consumer
+  reads the members (only tests compare the set to itself).
+- Residual findings, out of scope, NOT acted on:
+  1. `AthleteMeetEntriesPanel.tsx:66-86` merges `meetEntryPlans` into the row
+     array with the plan's RAW event label and no remapper, so a plan for
+     "100 Yard Breaststroke" beside a meet row "Event 26 Men 100 Yard
+     Breaststroke" counts twice. That is an event-label identity bug, not a
+     round bug — `whatIfProjection`'s `makeEventRemapper` /
+     `collapseCrossPlaneDuplicates` is the machinery that already solves it
+     elsewhere, and this panel bypasses it.
+  2. `entryIdentityKey` (`whatIfProjection.ts:107`) keys on `row.event` raw and
+     depends on that same remapper having run first.
+  3. `data/meets.json` "Blank Workspace 1" has one genuinely duplicated
+     individual row: Mark Eberhard, Event 39 Men 200 Yard Breaststroke, two ids,
+     both `A Final` rank 1 DQ. Deduped by the event key, so it costs one entry
+     — but it is a real data defect the duplicate scan should surface.
+- Next: dispatch `executor` for Bug C (arbitrage), per the plan's sequence.
