@@ -126,6 +126,45 @@ build — before each commit. Pre-existing unrelated uncommitted work
 `packages/core/src/lib/seasonAnalytics.ts`, 4 untracked test scripts) was
 left untouched throughout, as instructed to every agent.
 
+## 2026-09-02 — leftover diff merged, everything committed and pushed
+
+- User asked to merge the pre-existing leftover diff (left untouched through
+  Bugs A/B/C per instructions to each agent) with this round's fixes, be
+  mindful, commit, and push.
+- **Found a self-inflicted issue while being mindful**: `git add
+  scripts/run-tests.mjs` in the Bug A commit staged the WHOLE file, including
+  4 test registrations (`test_team_abbreviation_parity.mjs`,
+  `test_pdf_abbreviation_table_required.mjs`,
+  `test_scoring_settings_required.mjs`,
+  `test_season_analytics_official_zero.mjs`) that were sitting unstaged in
+  the working tree from the leftover diff — not yet committed as blobs. So
+  commit `a64143fc` (already pushed) references 4 test files that don't
+  exist anywhere in git history until now. Checking out `a64143fc` in
+  isolation would fail `node scripts/run-tests.mjs` on missing files — a
+  bisectability nit, not a functional bug at HEAD. Did not rewrite already-
+  pushed history to fix it (destructive, not asked for, and the branch is
+  fully consistent at HEAD after this commit); flagging it here and to the
+  user instead.
+- Reviewed the leftover diff in full: `pdf_parser.py` / `point_calculator.py`
+  removed silent `except: pass` fallbacks around loading the team-
+  abbreviation table and scoring settings (now raise loudly on a missing/
+  malformed file, per CLAUDE.md's data-provenance rule), `seasonAnalytics.ts`
+  fixed a `||` fallback that replaced a real official score of 0 with a
+  computed total, plus a new parity test guarding the Python/TypeScript team-
+  abbreviation tables against drift. Confirmed both changed Python functions
+  are each called from exactly one call site and neither relied on the old
+  silent-fallback behavior for a legitimate normal-path case. All 4 new
+  tests pass individually and were already included in every full-suite
+  count this session (73/74/75 passed, since the files existed on disk even
+  before being committed).
+- Ran full suite once more (75 passed / 1 pre-existing failure / 3
+  pre-existing skips), lint clean, build exit 0. Committed `fe6dc211`.
+- Pushed. Branch had no upstream configured (first push this session);
+  `git push -u origin fix-scoring-roster-integrity` set it. All 5 commits
+  from this round (`a64143fc`, `0efcd602`, `d24fd3e5`, `96e6751f`,
+  `fe6dc211`) are on `origin/fix-scoring-roster-integrity`. Working tree is
+  clean (`git status --short` empty).
+
 <!-- Append new entries below this line, newest first. -->
 
 ## 2026-09-02 — Bug C done (arbitrage non-grid points), NOT committed
