@@ -75,6 +75,112 @@ dispatched, agent returned, commit made, test result). Newest entry on top.
 
 <!-- Append new entries below this line, newest first. -->
 
+## 2026-09-02 — Bug C done (arbitrage non-grid points), NOT committed
+
+- **None of the five suspects was the cause.** The arbitrage engine is
+  correct and always was. The wrong number comes from the scoring engine
+  underneath it: `calculatePoints` fabricates dead heats.
+- Root cause: `calculatePoints` (`utils.ts:1446`) re-derives a placement for
+  every `isRecruit` row through `prepareRecruitsForScoring`, which ranks each
+  recruit ALONE against the meet rows in its event. Two consequences, both
+  putting rows with DIFFERENT times on one rank:
+  1. It overwrites the placement `projectRanksInField` already assigned. That
+     pass ranks the whole what-if field — meet rows, plans and recruit rows
+     together — so on a projected workspace every row arrives already placed
+     correctly, and the re-derivation replaces a right answer with a wrong one.
+  2. With no meet rows there are no comparators at all, so EVERY recruit came
+     back rank 1 and a whole event scored as one N-way tie.
+  `scoreIndividualsInEvent` groups by event+round+rank and divides the place
+  ladder across the group, so each fabricated tie pays fractional points.
+- Measured before touching code, on `data/meets.json`:
+
+  | workspace / gender | fabricated ties | team total |
+  | --- | --- | --- |
+  | Blank Workspace 1 / Men | 14 | HSU 1128.5 · OBU 911 · DSU 761 |
+  | HSU 2026-27 Roster Plan / Men | 14 | **1066.3686902422194** |
+  | OBU 2026-27 Roster / Men | 14 | **1114.597072467762** |
+
+  Two of the three live workspaces show a projected team total that is not
+  even a half point. The arbitrage card the user saw: `Avery Henke +400
+  Individual Medley −100 Butterfly` **+8.667**, from a "tie" at 400 IM A-Final
+  rank 7 between three swimmers timed 4:05.95, 4:07.75 and 4:09.18.
+- After: **0** fabricated ties on every workspace, every total on the grid
+  (HSU meet 1076, HSU roster plan 1299, OBU roster 1259), **0** off-grid
+  arbitrage deltas out of 239 across every team and gender. That one card
+  reads **+7**. All 12 HSU cards are now whole numbers.
+- Fix, both halves inside `prepareRecruitsForScoring`: a row that already
+  carries a placement keeps it (rank 0 = unplaced, positive = placed), and
+  rows that still need one are placed against each other as well as the meet
+  rows, sharing a place only on an exact time tie.
+- **Official scoring is untouched.** `prepareRecruitsForScoring` only ever
+  sees recruit rows, so a pure-PDF score never enters it —
+  `test_nsisc_team_totals.mjs` still reproduces all seven published NSISC
+  team scores exactly.
+- Proved the new test fails on the old logic section by section before
+  keeping it (17.667 ×3 instead of 20/17/16; 14 fabricated ties per workspace;
+  the 8.667 card).
+- Files: `packages/core/src/lib/utils.ts`, new
+  `scripts/test_recruit_placement_grid.mjs`, `scripts/run-tests.mjs` (+1),
+  plus comment corrections in `rosterOptimizer.ts`,
+  `test_tie_group_scoring.mjs`, `test_scorer_pool_cap.mjs`,
+  `test_fast_swap_context.mjs` (they described the collapse in the present
+  tense as still-open). Pre-existing unrelated uncommitted diff untouched.
+  No git operations run.
+- Tests: all six arbitrage tests green; full suite **75 passed / 1 failed / 3
+  skipped** (baseline 74/1/3, +1 is the new test, the 1 failure is the
+  pre-existing playwright e2e with no browser binary). `npm run lint` clean
+  across all 7 workspaces, `npm run build` exit 0.
+- Residual findings, out of scope, NOT acted on:
+  1. A recruit can still collide with a MEET row: the meet rows keep their own
+     places, so a recruit placed 7th shares a rank with the real 7th finisher.
+     Unreachable while the field is projected, so no saved workspace hits it —
+     but deleting every planned entry from Blank Workspace 1 does: 18 such
+     placements, e.g. River Paulk 19.42 (recruit) tied with Sam Ragsdell 20.22
+     (meet row) for 18.5 each. Closing it means deciding that injected
+     recruits re-place the meet field, a projection-gating change. Documented
+     as STILL OPEN on the function and in the new test's header.
+  2. `buildFastSwapContext` returns null on the primary workspace — the
+     shadowed-row gate fires (13 collapsed cross-plane duplicates for HSU
+     men), so `rankExactSwaps` runs 849 full re-scores, ~11 s. Fail-closed and
+     correct, pre-existing and independent of this fix, but
+     `test_fast_swap_context.mjs` only asserts engagement on synthetic
+     fixtures, so it does not see this. Performance, not correctness.
+  3. `projectRanksInField` gives equal times sequential ranks, so it never
+     records a dead heat; `prepareRecruitsForScoring` now does. The two
+     disagree on genuine ties. Nothing live depends on it.
+- Next: `finisher` verification pass, then commit.
+
+## 2026-09-02 — Bug B verified and committed `0efcd602`
+
+- Verified myself: reviewed full diff (root cause + fix matches the report
+  exactly — relay branch keyed on `relayEntryKey` embedding round/rank/clock,
+  individual side already correct), ran all 4 relevant tests directly
+  (`test_entry_limits.mjs`, `test_entry_limits_aliases.mjs` 9/9,
+  `test_lineup_audit.mjs`, new `test_entry_limits_prelims_finals.mjs` 6/6,
+  including its explicit "distinct relay events stay distinct, only round
+  collapses" check — confirms keying purely on event name doesn't
+  accidentally merge two genuinely different relay entries). Full suite:
+  74 passed / 1 failed (same pre-existing playwright/no-browser issue) /
+  3 skipped (pre-existing). Lint clean across all 7 workspaces.
+- Committed `0efcd602`. Only `swimmerEntryLimits.ts`, `run-tests.mjs` (+1
+  line), new `test_entry_limits_prelims_finals.mjs`, and this progress file
+  staged.
+- Residual findings from executor, not acted on (out of scope):
+  `AthleteMeetEntriesPanel.tsx` merges `meetEntryPlans` with raw event labels
+  with no remapper, so a plan event label that differs cosmetically from the
+  matching meet-row label could double-count (a label-identity bug, not a
+  round bug — `whatIfProjection`'s remapper already solves this elsewhere but
+  this panel bypasses it); a real data defect in `data/meets.json` (Mark
+  Eberhard, Event 39, two DQ rows same time — costs one entry correctly but
+  worth a duplicate-scan flag).
+- Dispatched `executor` for Bug C, agent id `ae904c538ef5d5823`, running in
+  background. Brief: confirm which of 5 ordered suspects (parallel UI compute
+  path, float/display residue, fast-swap self-validation gate broken,
+  applyScoringTheory/computeScenarioDiff/buildTeamLineupAudit refactor
+  fallout, or Bug A's now-fixed aliasing having inflated one athlete's times)
+  is real before fixing anything; known-good baseline for full suite is
+  74 passed / 1 failed / 3 skipped.
+
 ## 2026-09-02 — Bug B done (entry-limit double count), NOT committed
 
 - **The plan doc's two guesses were both wrong, and so was the framing.** The

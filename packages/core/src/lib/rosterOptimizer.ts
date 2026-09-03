@@ -267,11 +267,13 @@ export function teamTotalForTeam(
  * overrides written here therefore steer WHICH 18 the pool takes — a ranked
  * choice among a capped set — instead of fighting a second, uncapped one.
  *
- * STILL OPEN, and not destructive: `prepareRecruitsForScoring` ranks a recruit
- * against the PDF rows in its event, so with no PDF loaded there are no
- * comparators and EVERY recruit is rank 1 in EVERY event. One event is still
- * scored as a single N-way tie, which is not what a coach is looking at even
- * though it no longer collapses a total. See plans/2026-08-14/12 §2.
+ * CLOSED 2026-09-02. `prepareRecruitsForScoring` used to rank each recruit
+ * against the PDF rows in its event ALONE, so with no PDF loaded there were no
+ * comparators and EVERY recruit came back rank 1 in EVERY event — one event
+ * scored as a single N-way tie, paying every entrant the same fractional share.
+ * Recruit rows are now placed against each other too, and a row that already
+ * carries a projected placement keeps it. See plans/2026-08-14/12 §2 and
+ * scripts/test_recruit_placement_grid.mjs.
  */
 export function optimizeScorersForTeam(
   workspace: Workspace,

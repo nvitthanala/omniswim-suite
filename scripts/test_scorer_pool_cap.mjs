@@ -21,9 +21,12 @@
  *
  * Both hid in PDF-shaped data, where a team almost never holds two swimmers on
  * one placement so the group is a single athlete and `every` reduces to the
- * per-athlete test. They detonate when ranks collapse — with no PDF rows
- * `prepareRecruitsForScoring` has no comparators, every recruit comes back
- * rank 1, and an entire event becomes ONE tie group.
+ * per-athlete test. They detonated when ranks collapsed — with no PDF rows
+ * `prepareRecruitsForScoring` had no comparators, every recruit came back
+ * rank 1, and an entire event became ONE tie group. That collapse is fixed
+ * (2026-09-02, scripts/test_recruit_placement_grid.mjs); the fixtures below
+ * still build a many-per-placement group on purpose, because a real dead heat
+ * produces one and the cap must handle it.
  *
  * MEASURED on the two live roster-only workspaces before the fix: HSU men
  * scored in 9 of 14 events with 31 athletes in an 18 pool; OBU men scored in

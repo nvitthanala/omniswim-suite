@@ -838,10 +838,13 @@ function addSwimmerToPool(pool: Map<string, number>, name: string, event: string
  * A tie group has no internal ranking — that is what makes it a tie — so when
  * the scorer cap cannot admit everyone in it, SOMETHING has to break the tie or
  * the result depends on row order (i.e. on import order, which is not a
- * competition rule). Fastest-first is the tiebreak: it is deterministic, and on
- * a roster-only workspace, where `prepareRecruitsForScoring` collapses a whole
- * event into one rank-1 group, it is also the answer a coach expects — the last
- * scorer slot goes to the faster athlete. Equal times fall back to name order.
+ * competition rule). Fastest-first is the tiebreak: it is deterministic, and it
+ * is the answer a coach expects — the last scorer slot goes to the faster
+ * athlete. Equal times fall back to name order.
+ *
+ * A tie group now only ever holds equal times: `prepareRecruitsForScoring` used
+ * to collapse a whole roster-only event into one rank-1 group, and no longer
+ * does. The tiebreak still matters for a real dead heat that straddles the cap.
  */
 function tieGroupNamesFastestFirst(members: SwimmerResult[]): string[] {
   const best = new Map<string, number>();
@@ -1173,12 +1176,17 @@ function scoreIndividualsInEvent(
       //
       // That is invisible in PDF-shaped data — a team almost never holds two
       // swimmers on one placement, so the group is a single athlete and `every`
-      // reduces to the same test. It is catastrophic when ranks collapse:
-      // `prepareRecruitsForScoring` has no comparators on a roster-only
-      // workspace, so every recruit row returns rank 1 and an entire event
-      // becomes ONE tie group. Turning 14 of 32 athletes off then zeroed every
+      // reduces to the same test. It was catastrophic when ranks collapsed:
+      // `prepareRecruitsForScoring` had no comparators on a roster-only
+      // workspace, so every recruit row came back rank 1 and an entire event
+      // became ONE tie group. Turning 14 of 32 athletes off then zeroed every
       // event any of them entered — 12 of 14 events measured, zero exceptions,
       // and a 1277-point projection went to 0. See plans/2026-08-14/12.
+      //
+      // That collapse is fixed (2026-09-02): recruit rows are placed against
+      // each other, so a group holds equal times only. This per-athlete filter
+      // stays — it is correct on its own terms, and a real dead heat can still
+      // straddle the scoring roster. See scripts/test_recruit_placement_grid.mjs.
       let members = allMembers;
       if (rosterLookup && usesScorerRoster(merged)) {
         members = [];
@@ -1346,30 +1354,127 @@ function pdfPlacePointsForRow(row: SwimmerResult, scoredEventNumberMax?: number)
   return 0;
 }
 
-/** Assign championship-round ranks to injected recruits from time order within each event. */
+/**
+ * Meet rows an injected recruit is placed against: individual swims in the same
+ * event, same gender, that reached a scored round.
+ */
+function recruitComparators(
+  pdfResults: SwimmerResult[],
+  event: string | undefined,
+  gender: Gender | undefined
+): SwimmerResult[] {
+  return pdfResults.filter(
+    r =>
+      !isRelayResult(r) &&
+      r.event === event &&
+      (r.gender == null || gender == null || r.gender === gender) &&
+      ['A', 'B', 'FIN'].includes(classifyRoundTier(r.roundSwam))
+  );
+}
+
+/**
+ * Places one field of rows, fastest first, sharing a place ONLY on an exact
+ * time tie (standard competition ranking: 1, 2, 2, 4). `Infinity` — NT and DQ —
+ * compares equal to itself, so those rows share the tail place exactly as they
+ * did when each was ranked on its own.
+ */
+function placeFieldByTime(field: SwimmerResult[]): Map<SwimmerResult, number> {
+  const sorted = [...field].sort(
+    (a, b) => convertTimeToSeconds(a.time) - convertTimeToSeconds(b.time)
+  );
+  const places = new Map<SwimmerResult, number>();
+  let place = 0;
+  let prevSec = Number.NaN;
+  sorted.forEach((row, i) => {
+    const sec = convertTimeToSeconds(row.time);
+    if (i === 0 || sec !== prevSec) place = i + 1;
+    prevSec = sec;
+    places.set(row, place);
+  });
+  return places;
+}
+
+/**
+ * Assign championship-round placements to injected recruit rows.
+ *
+ * TWO RULES, both about not inventing a dead heat. `scoreIndividualsInEvent`
+ * groups by event + round + rank and splits the place ladder across whatever it
+ * finds there, so any two rows this function puts on one rank are scored as a
+ * tie — and a fabricated tie pays fractional points (thirds, twentieths) that
+ * no scoring table can award.
+ *
+ * 1. A ROW THAT ALREADY CARRIES A PLACEMENT KEEPS IT. `projectRanksInField`
+ *    ranks the whole what-if field — meet rows, plan rows and recruit rows
+ *    together — in one pass, so on a projected workspace every row arrives here
+ *    already placed against the full field. Re-deriving a recruit's place from a
+ *    SUBSET of that field (the meet rows alone) threw that answer away and put
+ *    different times on one place. Rank 0 means "not placed yet"; a positive
+ *    rank means "placed", and placed is not the same as unplaced.
+ *
+ * 2. ROWS THAT STILL NEED A PLACE ARE PLACED AGAINST EACH OTHER, not only
+ *    against the meet rows. Ranking each recruit on its own gave every recruit
+ *    sharing an insertion slot the same place, and on a roster-only workspace —
+ *    no meet rows, so no comparators at all — gave EVERY recruit place 1, so one
+ *    event scored as one N-way tie (plans/2026-08-14/12 §2, open since
+ *    2026-08-16). Only an exact time tie shares a place now.
+ *
+ * `roundSwam: 'A Final'` on a newly placed row is unchanged: for tier A the
+ * scoring index is `rank - 1`, i.e. the rank is read as an overall place, which
+ * is what this function assigns. It agrees with `projectRanksInField`'s
+ * A/B/Preliminaries banding place for place.
+ *
+ * STILL OPEN — a recruit can still collide with a MEET row. The meet rows keep
+ * the places the meet gave them, so a recruit placed 7th shares a rank with the
+ * real 7th finisher and the two are scored as a dead heat. It cannot arise while
+ * the field is projected (`projectRanksInField` re-places everyone, and rule 1
+ * then keeps that answer), so no saved workspace reaches it; deleting every
+ * planned entry from a meet workspace that also holds recruits does — measured
+ * 2026-09-02 on Blank Workspace 1 men, 18 such placements, e.g. River Paulk
+ * 19.42 (recruit) tied with Sam Ragsdell 20.22 (meet row) for 18.5 points each.
+ * Closing it means deciding that injected recruits re-place the meet field,
+ * which is a projection-gating change, not a placement one.
+ */
 export function prepareRecruitsForScoring(
   pdfResults: SwimmerResult[],
   recruits: SwimmerResult[]
 ): SwimmerResult[] {
   if (!recruits.length) return [];
 
+  // Rule 1 — only rows with no placement need one.
+  const unplaced = recruits.filter(r => parseRankInt(r.rank) == null);
+  if (unplaced.length === 0) return recruits;
+
+  // Rule 2 — one field per (event, gender), holding the meet rows AND every
+  // unplaced recruit in it, placed in a single pass.
+  const fields = new Map<string, SwimmerResult[]>();
+  for (const r of unplaced) {
+    const key = `${String(r.event ?? '')}|||${r.gender ?? ''}`;
+    const held = fields.get(key);
+    if (held) held.push(r);
+    else fields.set(key, [r]);
+  }
+
+  const placeByRow = new Map<SwimmerResult, number>();
+  for (const group of fields.values()) {
+    const sample = group[0];
+    const field = [...recruitComparators(pdfResults, sample.event, sample.gender), ...group];
+    for (const [row, place] of placeFieldByTime(field)) {
+      if (!placeByRow.has(row)) placeByRow.set(row, place);
+    }
+  }
+
   return recruits.map(recruit => {
-    const comparators = pdfResults.filter(
-      r =>
-        !isRelayResult(r) &&
-        r.event === recruit.event &&
-        (r.gender == null || recruit.gender == null || r.gender === recruit.gender) &&
-        ['A', 'B', 'FIN'].includes(classifyRoundTier(r.roundSwam))
-    );
-    const field = [...comparators, recruit].sort(
-      (a, b) => convertTimeToSeconds(a.time) - convertTimeToSeconds(b.time)
-    );
-    const rank = field.findIndex(r => r.id === recruit.id) + 1;
-    return {
-      ...recruit,
-      roundSwam: 'A Final',
-      rank: rank > 0 ? rank : 1,
-    };
+    if (parseRankInt(recruit.rank) != null) return recruit;
+    const place = placeByRow.get(recruit);
+    if (place == null) {
+      // Unreachable by construction: every unplaced row is in exactly one field.
+      // Raised rather than defaulted — the old `rank > 0 ? rank : 1` fallback IS
+      // the collapse this function now exists to prevent.
+      throw new Error(
+        `prepareRecruitsForScoring: no place derived for ${recruit.name} in ${recruit.event}`
+      );
+    }
+    return { ...recruit, roundSwam: 'A Final', rank: place };
   });
 }
 
