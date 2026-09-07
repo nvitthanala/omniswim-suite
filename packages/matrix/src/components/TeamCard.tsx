@@ -101,6 +101,136 @@ function relayMissingStrokeLabel(stroke: RelayLegStroke | undefined): string {
   return m[stroke] ?? stroke;
 }
 
+const PODIUM_MEDALS: Record<string, { emoji: string; className: string; label: string }> = {
+  gold: { emoji: '🥇', className: 'text-yellow-400', label: 'Gold' },
+  silver: { emoji: '🥈', className: 'text-theme-secondary', label: 'Silver' },
+  bronze: { emoji: '🥉', className: 'text-orange-400', label: 'Bronze' },
+};
+
+/** Medal glyph for a swimmer's podium finish, or nothing when there isn't one. */
+function PodiumMedal({ podium }: { podium?: string }) {
+  const medal = podium ? PODIUM_MEDALS[podium] : undefined;
+  if (!medal) return null;
+  return (
+    <span className={medal.className} title={medal.label}>
+      {medal.emoji}
+    </span>
+  );
+}
+
+/** A cutline tag plus its near-miss chip, the pairing repeated at every verdict slot. */
+function CutlineVerdict({ result, className }: { result: CutlineTagResult; className?: string }) {
+  return (
+    <>
+      <CutlineTag result={result} compact className={className} />
+      <CutlineNearMissChip nextTier={result.nextTier} compact className={className} />
+    </>
+  );
+}
+
+/** Per-class-year point totals for the class chart's tooltip, top 8 by points. */
+function computeClassTopPerformers(swimmers: SwimmerResult[]): [string, number][] {
+  const swimmerPts: Record<string, number> = {};
+  swimmers.forEach((s) => {
+    if (!swimmerPts[s.name]) swimmerPts[s.name] = 0;
+    swimmerPts[s.name] += typeof s.points === 'number' ? s.points : 0;
+  });
+  return Object.entries(swimmerPts)
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 8);
+}
+
+/** Swimmers for an event chart's tooltip, highest points first. */
+function sortSwimmersByPoints(swimmers: SwimmerResult[]): SwimmerResult[] {
+  return [...swimmers].sort((a: any, b: any) => {
+    const pa = typeof a.points === 'number' ? a.points : 0;
+    const pb = typeof b.points === 'number' ? b.points : 0;
+    return pb - pa;
+  });
+}
+
+/** Chart tooltip title + points, with the event tooltip's optional over/under badge. */
+function TooltipHeader({ isClass, data, showPrelimsPerformance }: { isClass: boolean; data: any; showPrelimsPerformance?: boolean }) {
+  const showOverUnder = !isClass && showPrelimsPerformance && data.overUnder != null && Math.abs(data.overUnder) > 0.05;
+  return (
+    <div className="flex justify-between items-center mb-2 pb-2 border-b border-theme-soft shrink-0">
+      <h4 className="font-bold text-[var(--text-accent)] uppercase tracking-widest" style={{ fontSize: 'clamp(8px, 5cqi, 12px)' }}>
+        {isClass ? `Class of ${data.name}` : <CompactEventLabel event={data.rawEvent} />}
+      </h4>
+      <div className="flex flex-col items-end gap-0.5">
+        <span className="font-mono font-black" style={{ fontSize: 'clamp(9px, 6cqi, 14px)' }}>{data.points.toFixed(1)} PTS</span>
+        {showOverUnder ? <PrelimsOuValue value={data.overUnder} compact /> : null}
+      </div>
+    </div>
+  );
+}
+
+/** The class chart tooltip's "Top Performers" list, or its empty state. */
+function ClassTopPerformersList({ topPerformers }: { topPerformers: [string, number][] }) {
+  if (topPerformers.length === 0) {
+    return <div className="text-theme-muted text-ui-micro italic">No scoring swimmers</div>;
+  }
+  return (
+    <>
+      {topPerformers.map(([name, pts], idx) => (
+        <div key={idx} className="flex items-center justify-between py-0.5 border-b border-theme-soft/50 last:border-0 swimmer-row" style={{ fontSize: 'clamp(8px, 4.5cqi, 11px)' }}>
+          <span className="font-medium text-[var(--text-primary)] truncate pr-2 max-w-[150px]">{name}</span>
+          <span className="font-mono text-points-positive font-bold">{pts.toFixed(1)}</span>
+        </div>
+      ))}
+    </>
+  );
+}
+
+/** The event chart tooltip's swimmer list, or its empty state. */
+function TooltipSwimmerList({
+  swimmers,
+  gender,
+  teamName,
+  showPrelimsPerformance,
+  prelimsOuByEntry,
+  showPsychPerformance,
+  psychOuByEntry,
+}: {
+  swimmers: SwimmerResult[];
+  gender: Gender | string;
+  teamName: string;
+  showPrelimsPerformance?: boolean;
+  prelimsOuByEntry?: Map<string, PrelimsOverUnderEntry>;
+  showPsychPerformance?: boolean;
+  psychOuByEntry?: Map<string, PsychOverUnderEntry>;
+}) {
+  if (swimmers.length === 0) {
+    return <div className="text-theme-muted text-ui-micro italic">No scoring swimmers</div>;
+  }
+  return (
+    <>
+      {swimmers.map((s: any, idx: number) => (
+        <TooltipSwimmerRow
+          key={idx}
+          s={s}
+          gender={gender}
+          teamName={teamName}
+          showPrelimsPerformance={showPrelimsPerformance}
+          prelimsOuByEntry={prelimsOuByEntry}
+          showPsychPerformance={showPsychPerformance}
+          psychOuByEntry={psychOuByEntry}
+        />
+      ))}
+    </>
+  );
+}
+
+/** x/y/width for a chart tooltip anchored to a mouse event, relative to the nearest recharts wrapper. */
+function classChartTooltipPosition(e: any): { x: number; y: number; containerWidth: number } {
+  const rect = (e.target as Element).closest('.recharts-wrapper')?.getBoundingClientRect();
+  return {
+    x: (e as any).clientX - (rect?.left || 0),
+    y: (e as any).clientY - (rect?.top || 0),
+    containerWidth: rect?.width || 500,
+  };
+}
+
 interface Props {
   team: TeamScore;
   index: number;
@@ -124,6 +254,388 @@ interface Props {
   onUpdateTime?: (id: string, newTime: string) => void;
   /** Opens delete confirmation (individual rows only; parent removes swims + marks departed). */
   onRequestDeleteSwimmer?: (name: string) => void;
+}
+
+interface TooltipSwimmerRowProps {
+  s: any;
+  gender: Gender | string;
+  teamName: string;
+  showPrelimsPerformance?: boolean;
+  prelimsOuByEntry?: Map<string, PrelimsOverUnderEntry>;
+  showPsychPerformance?: boolean;
+  psychOuByEntry?: Map<string, PsychOverUnderEntry>;
+}
+
+/** One swimmer row inside the event/class chart tooltip's swimmer list. */
+function TooltipSwimmerRow({
+  s,
+  gender,
+  teamName,
+  showPrelimsPerformance,
+  prelimsOuByEntry,
+  showPsychPerformance,
+  psychOuByEntry,
+}: TooltipSwimmerRowProps) {
+  const rowTags = buildTeamRowCutlineTags(s, gender, teamName, s.finalsTime || s.time);
+  const hasRelaySplit = s.isRelay && (s.relayLegSplitDetail || s.relayLegSplit);
+
+  return (
+    <div className="flex items-center justify-between py-1 border-b border-theme-soft/50 last:border-0 swimmer-row text-ui-caption">
+      <div className="flex items-center gap-2">
+        <span className="w-4 font-mono text-theme-muted">{s.rank || '-'}</span>
+        <span className="w-4 shrink-0 inline-flex justify-center">
+          <PodiumMedal podium={s.podium} />
+        </span>
+        <span className="font-medium text-[var(--text-primary)] truncate max-w-[120px]">{s.name}</span>
+        {hasRelaySplit && (
+          <span className="text-ui-micro text-theme-muted font-mono" title="Relay leg split">Split</span>
+        )}
+        {s.relayMissingLeg && (
+          <span className="text-ui-micro bg-amber-500/15 text-amber-400 px-1 border border-amber-500/30 rounded-sm ml-1" title="Missing relay leg">
+            Missing L{(s.relayMissingLeg.legIndex ?? 0) + 1}: {relayMissingStrokeLabel(s.relayMissingLeg.stroke)}
+          </span>
+        )}
+        {/* Non-relay rows only — a relay's verdicts belong next to the
+            relay team time and the leg split, not the swimmer's name. */}
+        {rowTags.kind === 'single' && <CutlineVerdict result={rowTags.result} className="ml-1" />}
+      </div>
+      <div className="flex gap-3 text-right">
+        <span className="font-mono text-theme-muted">{s.prelimsTime ? `P:${s.prelimsTime}` : ''}</span>
+        <span className="font-mono text-theme-secondary">
+          {hasRelaySplit ? (
+            <>
+              <span className="text-points-positive">{displayTimeForRelayLeg(s)}</span>
+              {/* The leg's own individual verdict, when this leg is
+                  eligible (e.g. a medley relay's backstroke leadoff) —
+                  anchored to the split it actually describes. */}
+              {rowTags.kind === 'relay' && rowTags.tags.legQualification ? (
+                <span className="inline-flex items-center gap-1 ml-1 align-middle no-underline">
+                  <CutlineVerdict result={rowTags.tags.legQualification} />
+                </span>
+              ) : null}
+              {s.relayLegSplitDetail ? (
+                <span className="block text-ui-micro text-theme-muted font-sans">
+                  {formatLegSplitSummary(s.relayLegSplitDetail)}
+                </span>
+              ) : null}
+              <span className="text-theme-muted ml-1">R:{s.relayTeamTime || s.finalsTime || s.time}</span>
+            </>
+          ) : s.finalsTime ? (
+            `F:${s.finalsTime}`
+          ) : (
+            s.time
+          )}
+          {/* The relay's own verdict, next to the relay team time —
+              repeats once per leg row on purpose: legs are sorted by
+              points and are not necessarily adjacent, so this is the
+              only placement that is unambiguous on every row. */}
+          {rowTags.kind === 'relay' ? (
+            <span className="inline-flex items-center gap-1 ml-1 align-middle no-underline">
+              <CutlineVerdict result={rowTags.tags.relay} />
+            </span>
+          ) : null}
+        </span>
+        <span className="font-mono text-points-positive font-bold">{typeof s.points === 'number' ? s.points.toFixed(1) : s.points}</span>
+        <div className="flex flex-col items-end gap-0.5">
+          {showPrelimsPerformance && prelimsOuByEntry ? (
+            <PlacementExpectedValue
+              label="Prelims"
+              value={prelimsOuByEntry.get(entryKey(s))?.expected}
+            />
+          ) : null}
+          {showPsychPerformance && psychOuByEntry ? (
+            <PlacementExpectedValue
+              label="Psych"
+              value={psychExpectedForResult(s, psychOuByEntry)}
+            />
+          ) : null}
+          {showPrelimsPerformance && prelimsOuByEntry ? (
+            <PrelimsOuValue
+              value={prelimsOuOverUnderForDisplay(s, prelimsOuByEntry)}
+              compact
+              className="ml-1"
+            />
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+interface TeamMatrixSwimmerRowProps {
+  res: SwimmerResult;
+  gender: Gender | string;
+  teamName: string;
+  viewMode: 'swimmer' | 'event';
+  onUpdateTime?: (id: string, newTime: string) => void;
+  editingResultId: string | null;
+  editValue: string;
+  onStartEdit: (id: string, time: string) => void;
+  onEditValueChange: (value: string) => void;
+  onCancelEdit: () => void;
+  showPrelimsPerformance?: boolean;
+  prelimsOuByEntry?: Map<string, PrelimsOverUnderEntry>;
+  showPsychPerformance?: boolean;
+  psychOuByEntry?: Map<string, PsychOverUnderEntry>;
+}
+
+interface InlineTimeEditFormProps {
+  res: SwimmerResult;
+  editValue: string;
+  onUpdateTime?: (id: string, newTime: string) => void;
+  onEditValueChange: (value: string) => void;
+  onCancelEdit: () => void;
+}
+
+/** The single time-edit input that replaces a matrix row's time once it's clicked into edit mode. */
+function InlineTimeEditForm({ res, editValue, onUpdateTime, onEditValueChange, onCancelEdit }: InlineTimeEditFormProps) {
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (onUpdateTime && res.id) onUpdateTime(res.id, editValue);
+        onCancelEdit();
+      }}
+      className="flex w-full mt-1 border border-theme-soft rounded overflow-hidden"
+    >
+      <input
+        type="text"
+        autoFocus
+        aria-label={`Edit time for ${res.name}`}
+        value={editValue}
+        onChange={e => onEditValueChange(e.target.value)}
+        className="surface-muted-bg text-ui-micro px-1 py-0.5 outline-none font-mono flex-1 text-[var(--text-primary)]"
+        onBlur={onCancelEdit}
+      />
+    </form>
+  );
+}
+
+interface TeamMatrixTimeCellProps {
+  res: SwimmerResult;
+  rowTags: TeamRowCutlineTags;
+  timeColorClass: string;
+  relaySplitPrimary: any;
+  onStartEdit: () => void;
+  editingResultId: string | null;
+  editValue: string;
+  onUpdateTime?: (id: string, newTime: string) => void;
+  onEditValueChange: (value: string) => void;
+  onCancelEdit: () => void;
+}
+
+/** A matrix row's time column: prelim time, the primary (split/final/plain) time with its
+ * cutline color and click-to-edit, any relay verdict that isn't already anchored to a split,
+ * and the inline edit form when this row is being edited. */
+function TeamMatrixTimeCell({
+  res,
+  rowTags,
+  timeColorClass,
+  relaySplitPrimary,
+  onStartEdit,
+  editingResultId,
+  editValue,
+  onUpdateTime,
+  onEditValueChange,
+  onCancelEdit,
+}: TeamMatrixTimeCellProps) {
+  const timeClassName = `font-mono font-medium cursor-pointer hover:underline ${timeColorClass}`;
+
+  return (
+    <div className="flex flex-col items-end gap-0.5 justify-center w-1/3 text-right">
+      {res.prelimsTime && (
+        <div className="text-ui-micro text-theme-secondary font-mono">
+          Prelim: {res.prelimsTime}
+        </div>
+      )}
+      {relaySplitPrimary && (
+        <div className={timeClassName} onClick={onStartEdit}>
+          <span className="inline-flex items-center gap-1 flex-wrap">
+            <span>Split: {displayTimeForRelayLeg(res)}</span>
+            {/* The leg's own individual verdict — only present when this leg is eligible. */}
+            {rowTags.kind === 'relay' && rowTags.tags.legQualification ? (
+              <span className="inline-flex items-center gap-1 no-underline">
+                <CutlineVerdict result={rowTags.tags.legQualification} />
+              </span>
+            ) : null}
+          </span>
+          {res.relayLegSplitDetail ? (
+            <span className="block text-ui-micro text-theme-muted font-sans">
+              {formatLegSplitSummary(res.relayLegSplitDetail)}
+            </span>
+          ) : null}
+          <span className="block text-ui-micro text-theme-secondary font-normal">
+            <span className="inline-flex items-center gap-1 flex-wrap">
+              <span>Relay {res.relayTeamTime || res.finalsTime || res.time}</span>
+              {/* The relay's own verdict — anchored to the relay team time it
+                  actually describes, not the swimmer's split above. */}
+              {rowTags.kind === 'relay' ? (
+                <span className="inline-flex items-center gap-1 no-underline">
+                  <CutlineVerdict result={rowTags.tags.relay} />
+                </span>
+              ) : null}
+            </span>
+          </span>
+        </div>
+      )}
+      {res.finalsTime && !relaySplitPrimary && (
+        <div className={timeClassName} onClick={onStartEdit}>
+          Final: {res.finalsTime}
+        </div>
+      )}
+      {!res.finalsTime && !res.prelimsTime && !relaySplitPrimary && (
+        <div className={timeClassName} onClick={onStartEdit}>
+          {res.time}
+        </div>
+      )}
+      {/* A relay row without a recorded split still needs its team-time
+          verdict shown somewhere — the two branches above cover the split
+          case inline, this covers the finalsTime/plain-time fallbacks. */}
+      {!relaySplitPrimary && rowTags.kind === 'relay' ? (
+        <div className="flex items-center justify-end gap-1 flex-wrap">
+          <CutlineVerdict result={rowTags.tags.relay} />
+        </div>
+      ) : null}
+      {editingResultId === res.id && (
+        <InlineTimeEditForm
+          res={res}
+          editValue={editValue}
+          onUpdateTime={onUpdateTime}
+          onEditValueChange={onEditValueChange}
+          onCancelEdit={onCancelEdit}
+        />
+      )}
+    </div>
+  );
+}
+
+interface TeamMatrixPointsCellProps {
+  res: SwimmerResult;
+  rowTags: TeamRowCutlineTags;
+  showPrelimsPerformance?: boolean;
+  prelimsOuByEntry?: Map<string, PrelimsOverUnderEntry>;
+  showPsychPerformance?: boolean;
+  psychOuByEntry?: Map<string, PsychOverUnderEntry>;
+}
+
+/** A matrix row's trailing column: the non-relay cutline verdict slot, points, and the
+ * prelims/psych over-under boxes. */
+function TeamMatrixPointsCell({
+  res,
+  rowTags,
+  showPrelimsPerformance,
+  prelimsOuByEntry,
+  showPsychPerformance,
+  psychOuByEntry,
+}: TeamMatrixPointsCellProps) {
+  return (
+    <div className="flex items-center justify-end gap-2 w-1/3 flex-wrap">
+      {/* Relay verdicts are already anchored next to the relay team
+          time / leg split above; only a non-relay row's single verdict
+          belongs in this generic slot. */}
+      {rowTags.kind === 'single' ? <CutlineVerdict result={rowTags.result} /> : null}
+      <div className="flex flex-col items-end gap-0.5">
+        <PointsValue
+          signed={false}
+          value={typeof res.points === 'number' ? res.points : res.points}
+        />
+        {showPrelimsPerformance && prelimsOuByEntry ? (
+          <PlacementExpectedValue
+            label="Prelims"
+            value={prelimsOuByEntry.get(entryKey(res))?.expected}
+          />
+        ) : null}
+        {showPsychPerformance && psychOuByEntry ? (
+          <PlacementExpectedValue
+            label="Psych"
+            value={psychExpectedForResult(res, psychOuByEntry)}
+          />
+        ) : null}
+        {showPrelimsPerformance && prelimsOuByEntry ? (
+          <PrelimsOuValue
+            value={prelimsOuOverUnderForDisplay(res, prelimsOuByEntry)}
+            compact
+          />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+/** One swimmer row inside the expanded team's swimmer/event matrix list. */
+function TeamMatrixSwimmerRow({
+  res,
+  gender,
+  teamName,
+  viewMode,
+  onUpdateTime,
+  editingResultId,
+  editValue,
+  onStartEdit,
+  onEditValueChange,
+  onCancelEdit,
+  showPrelimsPerformance,
+  prelimsOuByEntry,
+  showPsychPerformance,
+  psychOuByEntry,
+}: TeamMatrixSwimmerRowProps) {
+  const rowTags = buildTeamRowCutlineTags(res, gender, teamName, res.time);
+  // Coloring keys off each row's own verdict: the relay's
+  // for a relay leg (never the leg's, which was the bug —
+  // a leadoff's individual split used to silently stand
+  // in for the relay's own result), the single verdict
+  // otherwise.
+  const primaryTagResult = rowTags.kind === 'relay' ? rowTags.tags.relay : rowTags.result;
+  const cutlineTier = primaryTagResult.state === 'tagged' ? primaryTagResult.tag.tier : null;
+  const isACut = cutlineTier === 'A' || cutlineTier === 'Standard' || cutlineTier === 'Qualifying';
+  const isBCut = cutlineTier === 'B' || cutlineTier === 'Provisional' || cutlineTier === 'Invited';
+  const timeColorClass = isACut ? 'text-[var(--text-accent)]' : isBCut ? 'text-amber-400' : 'text-theme-secondary';
+  const relaySplitPrimary = res.isRelay && (res.relayLegSplitDetail || res.relayLegSplit);
+  const startEdit = () => {
+    if (onUpdateTime && res.id) onStartEdit(res.id, res.time);
+  };
+
+  return (
+    <div className="flex items-center justify-between text-ui-caption py-1.5 border-t border-theme-soft">
+      <div className="flex items-center gap-2 text-theme-secondary font-mono w-1/3">
+        <span className="w-4 font-medium text-theme-secondary">{res.rank || '-'}</span>
+        <span className="truncate max-w-[150px]">
+          {viewMode === 'swimmer' ? (
+            <CompactEventLabel event={res.event} className="text-theme-secondary font-mono truncate max-w-[150px] inline-block" />
+          ) : (
+            <AthleteName name={res.name} className="text-theme-secondary font-mono" />
+          )}
+        </span>
+        {res.relayMissingLeg && (
+          <span className="text-ui-micro text-amber-400 shrink-0" title="Missing relay leg">
+            Missing L{(res.relayMissingLeg.legIndex ?? 0) + 1}{' '}
+            {relayMissingStrokeLabel(res.relayMissingLeg.stroke)}
+          </span>
+        )}
+        {res.roundSwam && <span className="text-ui-micro surface-overlay px-1 rounded truncate max-w-[60px]">{res.roundSwam}</span>}
+      </div>
+      <TeamMatrixTimeCell
+        res={res}
+        rowTags={rowTags}
+        timeColorClass={timeColorClass}
+        relaySplitPrimary={relaySplitPrimary}
+        onStartEdit={startEdit}
+        editingResultId={editingResultId}
+        editValue={editValue}
+        onUpdateTime={onUpdateTime}
+        onEditValueChange={onEditValueChange}
+        onCancelEdit={onCancelEdit}
+      />
+      <TeamMatrixPointsCell
+        res={res}
+        rowTags={rowTags}
+        showPrelimsPerformance={showPrelimsPerformance}
+        prelimsOuByEntry={prelimsOuByEntry}
+        showPsychPerformance={showPsychPerformance}
+        psychOuByEntry={psychOuByEntry}
+      />
+    </div>
+  );
 }
 
 function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, conference, searchQuery, actualScore, baselineScore, prelimsProjectedScore, baselineOverUnder, projectedOverUnder, showPrelimsPerformance, prelimsOuByEntry, showPsychPerformance, psychOuByEntry, psychProjectedScore, eventThrough, scoringRefreshKey = 0, onUpdateTime, onRequestDeleteSwimmer }: Props) {
@@ -326,34 +838,67 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
     return list;
   }, [eventsList, normalizedSearchQuery, sortMode, topEventsBase, viewMode]);
 
+  const handleEventChartMouseMove = (state: any) => {
+    if (isDraggingSplitRef.current) return;
+    const idx = state?.activeTooltipIndex;
+    if (idx == null || idx < 0 || !eventData[idx]) {
+      if (lastTooltipIndexRef.current !== null) {
+        lastTooltipIndexRef.current = null;
+        setActiveTooltip(null);
+      }
+      return;
+    }
+    if (lastTooltipIndexRef.current === idx) return;
+    lastTooltipIndexRef.current = idx;
+    const payload = eventData[idx];
+    const x = state.activeCoordinate?.x ?? 0;
+    const y = state.activeCoordinate?.y ?? 0;
+    const w = eventChartSurfaceRef.current?.clientWidth ?? 500;
+    setActiveTooltip({ x, y, payload, containerWidth: w });
+  };
+
+  const handleEventChartMouseLeave = () => {
+    if (!isDraggingSplitRef.current) {
+      lastTooltipIndexRef.current = null;
+      setActiveTooltip(null);
+    }
+  };
+
+  const handleEventChartClick = (state: any) => {
+    if (isDraggingSplitRef.current) return;
+    if (!state || state.activeTooltipIndex == null || state.activeTooltipIndex < 0 || !eventData[state.activeTooltipIndex]) {
+      return;
+    }
+    const payload = eventData[state.activeTooltipIndex];
+    const x = state.activeCoordinate?.x ?? 0;
+    const y = state.activeCoordinate?.y ?? 0;
+    const w = eventChartSurfaceRef.current?.clientWidth ?? 500;
+    setPinnedTooltip({ x, y, payload, containerWidth: w });
+    setActiveTooltip(null);
+  };
+
+  const handleClassBarClick = (data: any, _index: number, e: any) => {
+    setPinnedClassTooltip({ ...classChartTooltipPosition(e), payload: data });
+    setActiveClassTooltip(null);
+  };
+
+  const handleClassBarMouseEnter = (data: any, _index: number, e: any) => {
+    setActiveClassTooltip({ ...classChartTooltipPosition(e), payload: data });
+  };
+
+  const handleClassBarMouseLeave = () => setActiveClassTooltip(null);
+
   // Custom tooltips renderer logic to avoid recharts z-index and positioning issues
   const renderTooltipContent = (data: any, isPinned = false, isClass = false) => {
-    let topPerformers: [string, number][] = [];
-    if (isClass && data.swimmers) {
-      const swimmerPts: Record<string, number> = {};
-      data.swimmers.forEach((s: SwimmerResult) => {
-        if (!swimmerPts[s.name]) swimmerPts[s.name] = 0;
-        swimmerPts[s.name] += typeof s.points === 'number' ? s.points : 0;
-      });
-      topPerformers = Object.entries(swimmerPts)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 8);
-    }
-
-    const swimmersSorted =
-      !isClass && data.swimmers
-        ? [...data.swimmers].sort((a: any, b: any) => {
-            const pa = typeof a.points === 'number' ? a.points : 0;
-            const pb = typeof b.points === 'number' ? b.points : 0;
-            return pb - pa;
-          })
-        : [];
+    const topPerformers = isClass && data.swimmers ? computeClassTopPerformers(data.swimmers) : [];
+    const swimmersSorted = !isClass && data.swimmers ? sortSwimmersByPoints(data.swimmers) : [];
+    const closeTooltip = () => (isClass ? setPinnedClassTooltip(null) : setPinnedTooltip(null));
 
     return (
-      <div 
+      <div
         className="relative theme-popover p-3 z-[999] pointer-events-auto h-full flex flex-col"
-        style={{ 
-          resize: isPinned ? 'both' : 'none', 
+        style={{
+          resize: isPinned ? 'both' : 'none',
           overflow: 'hidden',
           minWidth: '220px',
           minHeight: '120px',
@@ -361,132 +906,28 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
         }}
       >
         {isPinned && (
-          <div className="absolute top-1 right-1 cursor-pointer text-theme-muted hover:text-[var(--text-primary)]" onClick={() => isClass ? setPinnedClassTooltip(null) : setPinnedTooltip(null)}>
+          <div className="absolute top-1 right-1 cursor-pointer text-theme-muted hover:text-[var(--text-primary)]" onClick={closeTooltip}>
             ✕
           </div>
         )}
-        <div className="flex justify-between items-center mb-2 pb-2 border-b border-theme-soft shrink-0">
-          <h4 className="font-bold text-[var(--text-accent)] uppercase tracking-widest" style={{ fontSize: 'clamp(8px, 5cqi, 12px)' }}>
-            {isClass ? `Class of ${data.name}` : <CompactEventLabel event={data.rawEvent} />}
-          </h4>
-          <div className="flex flex-col items-end gap-0.5">
-            <span className="font-mono font-black" style={{ fontSize: 'clamp(9px, 6cqi, 14px)' }}>{data.points.toFixed(1)} PTS</span>
-            {!isClass && showPrelimsPerformance && data.overUnder != null && Math.abs(data.overUnder) > 0.05 ? (
-              <PrelimsOuValue value={data.overUnder} compact />
-            ) : null}
-          </div>
-        </div>
-        
+        <TooltipHeader isClass={isClass} data={data} showPrelimsPerformance={showPrelimsPerformance} />
+
         <div className="space-y-1 mt-2 flex-1 overflow-y-auto custom-scrollbar">
           {isClass ? (
             <>
               <div className="text-theme-muted font-bold uppercase mb-1" style={{ fontSize: 'clamp(7px, 4cqi, 10px)' }}>Top Performers</div>
-              {topPerformers.length > 0 ? topPerformers.map(([name, pts], idx) => (
-                <div key={idx} className="flex items-center justify-between py-0.5 border-b border-theme-soft/50 last:border-0 swimmer-row" style={{ fontSize: 'clamp(8px, 4.5cqi, 11px)' }}>
-                  <span className="font-medium text-[var(--text-primary)] truncate pr-2 max-w-[150px]">{name}</span>
-                  <span className="font-mono text-points-positive font-bold">{pts.toFixed(1)}</span>
-                </div>
-              )) : (
-                <div className="text-theme-muted text-ui-micro italic">No scoring swimmers</div>
-              )}
+              <ClassTopPerformersList topPerformers={topPerformers} />
             </>
           ) : (
-            swimmersSorted.length > 0 ? swimmersSorted.map((s: any, idx: number) => {
-              const rowTags = buildTeamRowCutlineTags(s, gender, team.teamName, s.finalsTime || s.time);
-
-              return (
-                <div key={idx} className="flex items-center justify-between py-1 border-b border-theme-soft/50 last:border-0 swimmer-row text-ui-caption">
-                  <div className="flex items-center gap-2">
-                    <span className="w-4 font-mono text-theme-muted">{s.rank || '-'}</span>
-                    <span className="w-4 shrink-0 inline-flex justify-center">
-                      {s.podium === 'gold' && <span className="text-yellow-400" title="Gold">🥇</span>}
-                      {s.podium === 'silver' && <span className="text-theme-secondary" title="Silver">🥈</span>}
-                      {s.podium === 'bronze' && <span className="text-orange-400" title="Bronze">🥉</span>}
-                    </span>
-                    <span className="font-medium text-[var(--text-primary)] truncate max-w-[120px]">{s.name}</span>
-                    {s.isRelay && (s.relayLegSplitDetail || s.relayLegSplit) && (
-                      <span className="text-ui-micro text-theme-muted font-mono" title="Relay leg split">Split</span>
-                    )}
-                    {s.relayMissingLeg && (
-                      <span className="text-ui-micro bg-amber-500/15 text-amber-400 px-1 border border-amber-500/30 rounded-sm ml-1" title="Missing relay leg">
-                        Missing L{(s.relayMissingLeg.legIndex ?? 0) + 1}: {relayMissingStrokeLabel(s.relayMissingLeg.stroke)}
-                      </span>
-                    )}
-                    {/* Non-relay rows only — a relay's verdicts belong next to the
-                        relay team time and the leg split, not the swimmer's name. */}
-                    {rowTags.kind === 'single' && (
-                      <>
-                        <CutlineTag result={rowTags.result} compact className="ml-1" />
-                        <CutlineNearMissChip nextTier={rowTags.result.nextTier} compact className="ml-1" />
-                      </>
-                    )}
-                  </div>
-                  <div className="flex gap-3 text-right">
-                    <span className="font-mono text-theme-muted">{s.prelimsTime ? `P:${s.prelimsTime}` : ''}</span>
-                    <span className="font-mono text-theme-secondary">
-                      {s.isRelay && (s.relayLegSplitDetail || s.relayLegSplit) ? (
-                        <>
-                          <span className="text-points-positive">{displayTimeForRelayLeg(s)}</span>
-                          {/* The leg's own individual verdict, when this leg is
-                              eligible (e.g. a medley relay's backstroke leadoff) —
-                              anchored to the split it actually describes. */}
-                          {rowTags.kind === 'relay' && rowTags.tags.legQualification ? (
-                            <span className="inline-flex items-center gap-1 ml-1 align-middle no-underline">
-                              <CutlineTag result={rowTags.tags.legQualification} compact />
-                              <CutlineNearMissChip nextTier={rowTags.tags.legQualification.nextTier} compact />
-                            </span>
-                          ) : null}
-                          {s.relayLegSplitDetail ? (
-                            <span className="block text-ui-micro text-theme-muted font-sans">
-                              {formatLegSplitSummary(s.relayLegSplitDetail)}
-                            </span>
-                          ) : null}
-                          <span className="text-theme-muted ml-1">R:{s.relayTeamTime || s.finalsTime || s.time}</span>
-                        </>
-                      ) : s.finalsTime ? (
-                        `F:${s.finalsTime}`
-                      ) : (
-                        s.time
-                      )}
-                      {/* The relay's own verdict, next to the relay team time —
-                          repeats once per leg row on purpose: legs are sorted by
-                          points and are not necessarily adjacent, so this is the
-                          only placement that is unambiguous on every row. */}
-                      {rowTags.kind === 'relay' ? (
-                        <span className="inline-flex items-center gap-1 ml-1 align-middle no-underline">
-                          <CutlineTag result={rowTags.tags.relay} compact />
-                          <CutlineNearMissChip nextTier={rowTags.tags.relay.nextTier} compact />
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="font-mono text-points-positive font-bold">{typeof s.points === 'number' ? s.points.toFixed(1) : s.points}</span>
-                    <div className="flex flex-col items-end gap-0.5">
-                      {showPrelimsPerformance && prelimsOuByEntry ? (
-                        <PlacementExpectedValue
-                          label="Prelims"
-                          value={prelimsOuByEntry.get(entryKey(s))?.expected}
-                        />
-                      ) : null}
-                      {showPsychPerformance && psychOuByEntry ? (
-                        <PlacementExpectedValue
-                          label="Psych"
-                          value={psychExpectedForResult(s, psychOuByEntry)}
-                        />
-                      ) : null}
-                      {showPrelimsPerformance && prelimsOuByEntry ? (
-                        <PrelimsOuValue
-                          value={prelimsOuOverUnderForDisplay(s, prelimsOuByEntry)}
-                          compact
-                          className="ml-1"
-                        />
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              );
-            }) : (
-              <div className="text-theme-muted text-ui-micro italic">No scoring swimmers</div>
-            )
+            <TooltipSwimmerList
+              swimmers={swimmersSorted}
+              gender={gender}
+              teamName={team.teamName}
+              showPrelimsPerformance={showPrelimsPerformance}
+              prelimsOuByEntry={prelimsOuByEntry}
+              showPsychPerformance={showPsychPerformance}
+              psychOuByEntry={psychOuByEntry}
+            />
           )}
         </div>
       </div>
@@ -624,46 +1065,9 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                         responsive={false}
                         data={eventData}
                         margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-                        onMouseMove={(state: any) => {
-                          if (isDraggingSplitRef.current) return;
-                          const idx = state?.activeTooltipIndex;
-                          if (idx == null || idx < 0 || !eventData[idx]) {
-                            if (lastTooltipIndexRef.current !== null) {
-                              lastTooltipIndexRef.current = null;
-                              setActiveTooltip(null);
-                            }
-                            return;
-                          }
-                          if (lastTooltipIndexRef.current === idx) return;
-                          lastTooltipIndexRef.current = idx;
-                          const payload = eventData[idx];
-                          const x = state.activeCoordinate?.x ?? 0;
-                          const y = state.activeCoordinate?.y ?? 0;
-                          const w = eventChartSurfaceRef.current?.clientWidth ?? 500;
-                          setActiveTooltip({ x, y, payload, containerWidth: w });
-                        }}
-                        onMouseLeave={() => {
-                          if (!isDraggingSplitRef.current) {
-                            lastTooltipIndexRef.current = null;
-                            setActiveTooltip(null);
-                          }
-                        }}
-                        onClick={(state: any) => {
-                          if (isDraggingSplitRef.current) return;
-                          if (
-                            state &&
-                            state.activeTooltipIndex != null &&
-                            state.activeTooltipIndex >= 0 &&
-                            eventData[state.activeTooltipIndex]
-                          ) {
-                            const payload = eventData[state.activeTooltipIndex];
-                            const x = state.activeCoordinate?.x ?? 0;
-                            const y = state.activeCoordinate?.y ?? 0;
-                            const w = eventChartSurfaceRef.current?.clientWidth ?? 500;
-                            setPinnedTooltip({ x, y, payload, containerWidth: w });
-                            setActiveTooltip(null);
-                          }
-                        }}
+                        onMouseMove={handleEventChartMouseMove}
+                        onMouseLeave={handleEventChartMouseLeave}
+                        onClick={handleEventChartClick}
                       >
                         <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.chartGrid} vertical={false} />
                         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: chartTheme.chartTick, fontSize: 8, fontStyle: 'bold', fontFamily: 'JetBrains Mono' }} interval="equidistantPreserveStart" minTickGap={20} tickMargin={8} />
@@ -732,26 +1136,9 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                         <Bar 
                           dataKey="points" 
                           radius={[2, 2, 0, 0]}
-                          onClick={(data, index, e) => {
-                            const rect = (e.target as Element).closest('.recharts-wrapper')?.getBoundingClientRect();
-                            setPinnedClassTooltip({ 
-                              x: (e as any).clientX - (rect?.left || 0), 
-                              y: (e as any).clientY - (rect?.top || 0), 
-                              payload: data, 
-                              containerWidth: rect?.width || 500 
-                            });
-                            setActiveClassTooltip(null);
-                          }}
-                          onMouseEnter={(data, index, e) => {
-                            const rect = (e.target as Element).closest('.recharts-wrapper')?.getBoundingClientRect();
-                            setActiveClassTooltip({ 
-                              x: (e as any).clientX - (rect?.left || 0), 
-                              y: (e as any).clientY - (rect?.top || 0), 
-                              payload: data, 
-                              containerWidth: rect?.width || 500 
-                            });
-                          }}
-                          onMouseLeave={() => setActiveClassTooltip(null)}
+                          onClick={handleClassBarClick}
+                          onMouseEnter={handleClassBarMouseEnter}
+                          onMouseLeave={handleClassBarMouseLeave}
                           style={{ cursor: 'pointer' }}
                         >
                           {classData.map((entry, index) => (
@@ -929,165 +1316,25 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                       </div>
 
                       <div className="space-y-1">
-                        {group.swimmers.map((res: SwimmerResult, i: number) => {
-                          const rowTags = buildTeamRowCutlineTags(res, gender, team.teamName, res.time);
-                          // Coloring keys off each row's own verdict: the relay's
-                          // for a relay leg (never the leg's, which was the bug —
-                          // a leadoff's individual split used to silently stand
-                          // in for the relay's own result), the single verdict
-                          // otherwise.
-                          const primaryTagResult = rowTags.kind === 'relay' ? rowTags.tags.relay : rowTags.result;
-                          const cutlineTier =
-                            primaryTagResult.state === 'tagged' ? primaryTagResult.tag.tier : null;
-                          const isACut = cutlineTier === 'A' || cutlineTier === 'Standard' || cutlineTier === 'Qualifying';
-                          const isBCut = cutlineTier === 'B' || cutlineTier === 'Provisional' || cutlineTier === 'Invited';
-
-                          const relaySplitPrimary = res.isRelay && (res.relayLegSplitDetail || res.relayLegSplit);
-
-                          return (
-                            <div key={i} className="flex items-center justify-between text-ui-caption py-1.5 border-t border-theme-soft">
-                              <div className="flex items-center gap-2 text-theme-secondary font-mono w-1/3">
-                                <span className="w-4 font-medium text-theme-secondary">{res.rank || '-'}</span>
-                                <span className="truncate max-w-[150px]">
-                                  {viewMode === 'swimmer' ? (
-                                    <CompactEventLabel event={res.event} className="text-theme-secondary font-mono truncate max-w-[150px] inline-block" />
-                                  ) : (
-                                    <AthleteName name={res.name} className="text-theme-secondary font-mono" />
-                                  )}
-                                </span>
-                                {res.relayMissingLeg && (
-                                  <span className="text-ui-micro text-amber-400 shrink-0" title="Missing relay leg">
-                                    Missing L{(res.relayMissingLeg.legIndex ?? 0) + 1}{' '}
-                                    {relayMissingStrokeLabel(res.relayMissingLeg.stroke)}
-                                  </span>
-                                )}
-                                {res.roundSwam && <span className="text-ui-micro surface-overlay px-1 rounded truncate max-w-[60px]">{res.roundSwam}</span>}
-                              </div>
-                              <div className="flex flex-col items-end gap-0.5 justify-center w-1/3 text-right">
-                                {res.prelimsTime && (
-                                  <div className="text-ui-micro text-theme-secondary font-mono">
-                                    Prelim: {res.prelimsTime}
-                                  </div>
-                                )}
-                                {relaySplitPrimary && (
-                                  <div
-                                    className={`font-mono font-medium cursor-pointer hover:underline ${isACut ? 'text-[var(--text-accent)]' : isBCut ? 'text-amber-400' : 'text-theme-secondary'}`}
-                                    onClick={() => { if(onUpdateTime && res.id) { setEditingResultId(res.id); setEditValue(res.time); } }}
-                                  >
-                                    <span className="inline-flex items-center gap-1 flex-wrap">
-                                      <span>Split: {displayTimeForRelayLeg(res)}</span>
-                                      {/* The leg's own individual verdict — only present when this leg is eligible. */}
-                                      {rowTags.kind === 'relay' && rowTags.tags.legQualification ? (
-                                        <span className="inline-flex items-center gap-1 no-underline">
-                                          <CutlineTag result={rowTags.tags.legQualification} compact />
-                                          <CutlineNearMissChip nextTier={rowTags.tags.legQualification.nextTier} compact />
-                                        </span>
-                                      ) : null}
-                                    </span>
-                                    {res.relayLegSplitDetail ? (
-                                      <span className="block text-ui-micro text-theme-muted font-sans">
-                                        {formatLegSplitSummary(res.relayLegSplitDetail)}
-                                      </span>
-                                    ) : null}
-                                    <span className="block text-ui-micro text-theme-secondary font-normal">
-                                      <span className="inline-flex items-center gap-1 flex-wrap">
-                                        <span>Relay {res.relayTeamTime || res.finalsTime || res.time}</span>
-                                        {/* The relay's own verdict — anchored to the relay team time it
-                                            actually describes, not the swimmer's split above. */}
-                                        {rowTags.kind === 'relay' ? (
-                                          <span className="inline-flex items-center gap-1 no-underline">
-                                            <CutlineTag result={rowTags.tags.relay} compact />
-                                            <CutlineNearMissChip nextTier={rowTags.tags.relay.nextTier} compact />
-                                          </span>
-                                        ) : null}
-                                      </span>
-                                    </span>
-                                  </div>
-                                )}
-                                {res.finalsTime && !relaySplitPrimary && (
-                                  <div
-                                    className={`font-mono font-medium cursor-pointer hover:underline ${isACut ? 'text-[var(--text-accent)]' : isBCut ? 'text-amber-400' : 'text-theme-secondary'}`}
-                                    onClick={() => { if(onUpdateTime && res.id) { setEditingResultId(res.id); setEditValue(res.time); } }}
-                                  >
-                                    Final: {res.finalsTime}
-                                  </div>
-                                )}
-                                {!res.finalsTime && !res.prelimsTime && !relaySplitPrimary && (
-                                  <div
-                                    className={`font-mono font-medium cursor-pointer hover:underline ${isACut ? 'text-[var(--text-accent)]' : isBCut ? 'text-amber-400' : 'text-theme-secondary'}`}
-                                    onClick={() => { if(onUpdateTime && res.id) { setEditingResultId(res.id); setEditValue(res.time); } }}
-                                  >
-                                    {res.time}
-                                  </div>
-                                )}
-                                {/* A relay row without a recorded split still needs its team-time
-                                    verdict shown somewhere — the two branches above cover the split
-                                    case inline, this covers the finalsTime/plain-time fallbacks. */}
-                                {!relaySplitPrimary && rowTags.kind === 'relay' ? (
-                                  <div className="flex items-center justify-end gap-1 flex-wrap">
-                                    <CutlineTag result={rowTags.tags.relay} compact />
-                                    <CutlineNearMissChip nextTier={rowTags.tags.relay.nextTier} compact />
-                                  </div>
-                                ) : null}
-                                {editingResultId === res.id && (
-                                  <form 
-                                    onSubmit={(e) => {
-                                      e.preventDefault();
-                                      if(onUpdateTime && res.id) onUpdateTime(res.id, editValue);
-                                      setEditingResultId(null);
-                                    }}
-                                    className="flex w-full mt-1 border border-theme-soft rounded overflow-hidden"
-                                  >
-                                    <input 
-                                      type="text" 
-                                      autoFocus
-                                      aria-label={`Edit time for ${res.name}`}
-                                      value={editValue} 
-                                      onChange={e => setEditValue(e.target.value)} 
-                                      className="surface-muted-bg text-ui-micro px-1 py-0.5 outline-none font-mono flex-1 text-[var(--text-primary)]" 
-                                      onBlur={() => setEditingResultId(null)}
-                                    />
-                                  </form>
-                                )}
-                              </div>
-                              <div className="flex items-center justify-end gap-2 w-1/3 flex-wrap">
-                                {/* Relay verdicts are already anchored next to the relay team
-                                    time / leg split above; only a non-relay row's single verdict
-                                    belongs in this generic slot. */}
-                                {rowTags.kind === 'single' ? (
-                                  <>
-                                    <CutlineTag result={rowTags.result} compact />
-                                    <CutlineNearMissChip nextTier={rowTags.result.nextTier} compact />
-                                  </>
-                                ) : null}
-                                <div className="flex flex-col items-end gap-0.5">
-                                  <PointsValue
-                                    signed={false}
-                                    value={typeof res.points === 'number' ? res.points : res.points}
-                                  />
-                                  {showPrelimsPerformance && prelimsOuByEntry ? (
-                                    <PlacementExpectedValue
-                                      label="Prelims"
-                                      value={prelimsOuByEntry.get(entryKey(res))?.expected}
-                                    />
-                                  ) : null}
-                                  {showPsychPerformance && psychOuByEntry ? (
-                                    <PlacementExpectedValue
-                                      label="Psych"
-                                      value={psychExpectedForResult(res, psychOuByEntry)}
-                                    />
-                                  ) : null}
-                                  {showPrelimsPerformance && prelimsOuByEntry ? (
-                                    <PrelimsOuValue
-                                      value={prelimsOuOverUnderForDisplay(res, prelimsOuByEntry)}
-                                      compact
-                                    />
-                                  ) : null}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
+                        {group.swimmers.map((res: SwimmerResult, i: number) => (
+                          <TeamMatrixSwimmerRow
+                            key={i}
+                            res={res}
+                            gender={gender}
+                            teamName={team.teamName}
+                            viewMode={viewMode}
+                            onUpdateTime={onUpdateTime}
+                            editingResultId={editingResultId}
+                            editValue={editValue}
+                            onStartEdit={(id, time) => { setEditingResultId(id); setEditValue(time); }}
+                            onEditValueChange={setEditValue}
+                            onCancelEdit={() => setEditingResultId(null)}
+                            showPrelimsPerformance={showPrelimsPerformance}
+                            prelimsOuByEntry={prelimsOuByEntry}
+                            showPsychPerformance={showPsychPerformance}
+                            psychOuByEntry={psychOuByEntry}
+                          />
+                        ))}
                       </div>
                     </div>
                   ))}

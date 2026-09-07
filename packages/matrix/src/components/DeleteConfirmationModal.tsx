@@ -5,9 +5,11 @@ interface Props {
   workspaceName: string;
   onConfirm: () => void;
   onCancel: () => void;
+  /** Optional: a delete is in flight — keeps a second click from re-firing it. */
+  busy?: boolean;
 }
 
-export default function DeleteConfirmationModal({ workspaceName, onConfirm, onCancel }: Props) {
+export default function DeleteConfirmationModal({ workspaceName, onConfirm, onCancel, busy = false }: Props) {
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop backdrop-blur-sm">
       <div className="surface-card border border-[var(--text-accent)]/20 rounded-2xl max-w-md w-full mx-4 shadow-[0_0_40px_rgba(220,38,38,0.1)] p-6">
@@ -33,15 +35,16 @@ export default function DeleteConfirmationModal({ workspaceName, onConfirm, onCa
         </p>
 
         <div className="flex justify-end gap-3 font-medium">
-          <button onClick={onCancel} className="px-5 py-2 border border-theme-soft hover:bg-[var(--surface-strong)] rounded-lg text-[var(--text-primary)] transition-colors">
+          <button onClick={onCancel} disabled={busy} className="px-5 py-2 border border-theme-soft hover:bg-[var(--surface-strong)] rounded-lg text-[var(--text-primary)] transition-colors disabled:opacity-40">
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            className="px-5 py-2 bg-[var(--text-accent)] hover:bg-[var(--text-accent)]/90 text-white rounded-lg flex items-center gap-2 transition-colors shadow-lg shadow-[var(--text-accent)]/20"
+            disabled={busy}
+            className="px-5 py-2 bg-[var(--text-accent)] hover:bg-[var(--text-accent)]/90 text-white rounded-lg flex items-center gap-2 transition-colors shadow-lg shadow-[var(--text-accent)]/20 disabled:opacity-40"
           >
             <Trash2 size={16} />
-            Obliterate Workspace
+            {busy ? 'Deleting...' : 'Obliterate Workspace'}
           </button>
         </div>
       </div>

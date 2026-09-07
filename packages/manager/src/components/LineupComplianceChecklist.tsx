@@ -5,12 +5,13 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
 import type {
   DuplicateAthletePair,
   LineupChecklistItem,
   TeamLineupAudit,
 } from '@omniswim/core/lib/rosterLineupAudit';
+import { ChecklistGroupSection, type ChecklistItemHandlers } from './LineupComplianceChecklistParts';
 
 type Props = {
   audit: TeamLineupAudit;
@@ -55,6 +56,14 @@ export default function LineupComplianceChecklist({
     return map;
   }, [items]);
 
+  const handlers: ChecklistItemHandlers = {
+    onJumpAthlete,
+    onFixItem,
+    onOpenRelays,
+    onLinkDuplicate,
+    onDismissDuplicate,
+  };
+
   const body = (
     <div className="space-y-4">
       {count === 0 ? (
@@ -66,89 +75,14 @@ export default function LineupComplianceChecklist({
           </p>
         </div>
       ) : (
-        (['entries', 'lineups', 'relays', 'roster'] as const).map(group => {
-          const list = grouped[group];
-          if (list.length === 0) return null;
-          return (
-            <div key={group}>
-              <h5 className="text-ui-caption font-semibold text-theme-muted mb-2">
-                {GROUP_LABEL[group]} ({list.length})
-              </h5>
-              <ul className="space-y-2">
-                {list.map(item => (
-                  <li
-                    key={item.id}
-                    className="rounded-lg border border-theme-soft surface-muted-bg px-3 py-2.5 transition-colors hover:border-theme"
-                  >
-                    <p className="text-ui-caption text-[var(--text-primary)] leading-relaxed break-words">
-                      {item.message}
-                    </p>
-                    {item.duplicate ? (
-                      <p className="text-ui-caption text-theme-muted leading-relaxed break-words mt-1">
-                        {item.duplicate.reason}
-                        {item.duplicate.timeMatches.length > 0
-                          ? ` — same ${item.duplicate.timeMatches
-                              .map(t => `${t.event} ${t.time}`)
-                              .join(', ')}`
-                          : ''}
-                      </p>
-                    ) : null}
-                    <div className="flex flex-wrap gap-2 mt-2">
-                      {item.duplicate && onLinkDuplicate ? (
-                        <button
-                          type="button"
-                          className="text-ui-caption text-[var(--text-accent)] hover:underline"
-                          onClick={() => onLinkDuplicate(item.duplicate!, item)}
-                        >
-                          Link
-                        </button>
-                      ) : null}
-                      {item.duplicate && onDismissDuplicate ? (
-                        <button
-                          type="button"
-                          className="text-ui-caption text-theme-secondary hover:text-[var(--text-accent)]"
-                          onClick={() => onDismissDuplicate(item.duplicate!, item)}
-                        >
-                          Not the same person
-                        </button>
-                      ) : null}
-                      {item.athleteName && onJumpAthlete ? (
-                        <button
-                          type="button"
-                          className="text-ui-caption text-[var(--text-accent)] hover:underline"
-                          onClick={() => onJumpAthlete(item.athleteName!, item.athleteKey)}
-                        >
-                          Jump
-                        </button>
-                      ) : null}
-                      {onFixItem &&
-                      (item.type === 'relay_needs_fill' ||
-                        item.type === 'relay_scorer_off' ||
-                        item.type === 'relay_leg_vacant') ? (
-                        <button
-                          type="button"
-                          className="text-ui-caption text-[var(--text-accent)] hover:underline flex items-center gap-1"
-                          onClick={() => onFixItem(item)}
-                        >
-                          Quick fill
-                        </button>
-                      ) : null}
-                      {(item.group === 'relays' || item.type.startsWith('relay')) && onOpenRelays ? (
-                        <button
-                          type="button"
-                          className="text-ui-caption text-theme-secondary hover:text-[var(--text-accent)] flex items-center gap-1"
-                          onClick={onOpenRelays}
-                        >
-                          Relays <ExternalLink size={11} />
-                        </button>
-                      ) : null}
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          );
-        })
+        (['entries', 'lineups', 'relays', 'roster'] as const).map(group => (
+          <ChecklistGroupSection
+            key={group}
+            label={GROUP_LABEL[group]}
+            items={grouped[group]}
+            handlers={handlers}
+          />
+        ))
       )}
     </div>
   );

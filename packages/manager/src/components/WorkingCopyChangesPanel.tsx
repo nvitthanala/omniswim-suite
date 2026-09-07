@@ -10,13 +10,13 @@
  */
 
 import React, { useState } from 'react';
-import { Undo2 } from 'lucide-react';
 import type { Gender, Workspace } from '@omniswim/core/types';
 import {
   countWorkingCopyChanges,
   listRevertibleChanges,
 } from '@omniswim/core/lib/workingCopyChanges';
-import { restoreSwimmerToWorkspace } from '@omniswim/core/lib/swimmerSoftRemove';
+import WorkingCopyChangeRow from './WorkingCopyChangeRow';
+import { changeRowKey, revertChangePatch } from './workingCopyChangesView';
 
 type Props = {
   workspace: Workspace;
@@ -67,59 +67,14 @@ export default function WorkingCopyChangesPanel({ workspace, gender, onUpdate, d
 
       {changes.length > 0 && expanded ? (
         <ul className="mt-3 flex flex-col gap-2">
-          {changes.map(change => {
-            const key = change.kind === 'recruit' ? `recruit:${change.id}` : `removal:${change.name}`;
-            const canRevert = change.kind === 'recruit' || change.fullyRestorable;
-            // An athlete can have several recruit rows (one per event), so the
-            // name alone repeats — include the detail so each button is
-            // distinguishable to a screen reader, not just visually by position.
-            const label =
-              change.kind === 'recruit'
-                ? `Revert recruit ${change.label} — ${change.detail}`
-                : `Revert removal of ${change.label}`;
-            const buttonText =
-              change.kind === 'removal' && !change.fullyRestorable ? 'Restore (rows unavailable)' : 'Revert';
-
-            return (
-              <li
-                key={key}
-                className="flex items-start justify-between gap-3 rounded-lg border border-theme-soft surface-muted-bg px-3 py-2"
-              >
-                <div className="min-w-0">
-                  <p className="text-ui-body font-medium text-[var(--text-primary)] truncate">{change.label}</p>
-                  <p className="text-ui-caption text-theme-secondary mt-0.5">{change.detail}</p>
-                  {change.kind === 'removal' && !change.fullyRestorable ? (
-                    <p className="text-ui-caption text-amber-500 mt-0.5">
-                      Original rows are no longer recoverable — reverting will only clear the removal
-                      marker, not bring back this athlete&apos;s swims.
-                    </p>
-                  ) : null}
-                </div>
-                <button
-                  type="button"
-                  disabled={disabled || !canRevert}
-                  aria-label={label}
-                  title={
-                    change.kind === 'removal' && !change.fullyRestorable
-                      ? "This athlete's original rows can no longer be rebuilt; only the removal marker will be cleared."
-                      : undefined
-                  }
-                  className="flex items-center gap-1.5 text-ui-caption text-[var(--text-accent)] hover:underline shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:no-underline disabled:text-theme-muted"
-                  onClick={() => {
-                    if (disabled) return;
-                    if (change.kind === 'recruit') {
-                      onUpdate({ recruits: (workspace.recruits ?? []).filter(r => r.id !== change.id) });
-                    } else {
-                      onUpdate(restoreSwimmerToWorkspace(workspace, { name: change.name, gender }));
-                    }
-                  }}
-                >
-                  <Undo2 size={12} />
-                  {buttonText}
-                </button>
-              </li>
-            );
-          })}
+          {changes.map(change => (
+            <WorkingCopyChangeRow
+              key={changeRowKey(change)}
+              change={change}
+              disabled={disabled}
+              onRevert={() => onUpdate(revertChangePatch(workspace, gender, change))}
+            />
+          ))}
         </ul>
       ) : null}
 

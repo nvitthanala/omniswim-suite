@@ -15,18 +15,18 @@ import {
   listEligibleRelayLegCandidates,
   relayLegRequirements,
   relayMissingStrokeLabel,
-  relayTemplateFromLeg,
   removeRelayLegOverride,
-  stableRelayEntryKey,
   suggestBestRelayLegFill,
   upsertRelayLegOverride,
 } from '@omniswim/core/lib/relayLegMatching';
-import { convertToSCY, isRelayResult, normalizeSwimmerName } from '@omniswim/core/lib/utils';
+import { canonicalSwimmerName, convertToSCY, isRelayResult, normalizeSwimmerName } from '@omniswim/core/lib/utils';
+import { passesRosterGates } from '@omniswim/core/lib/whatIfProjection';
 import {
   buildRelaysFromIndividualLineup,
   compareRelayLegSplits,
 } from '@omniswim/core/lib/relayBuilder';
 import { useToast } from '@omniswim/ui';
+import { buildRelayGroups, type RelayGroup } from './indRelayGroupsView';
 
 type Props = {
   workspace: Workspace;
@@ -38,17 +38,6 @@ type Props = {
   selectedTeam?: string;
   onSelectTeam?: (team: string) => void;
   hideTeamPicker?: boolean;
-};
-
-type RelayGroup = {
-  key: string;
-  template: SwimmerResult;
-  event: string;
-  roundSwam: string;
-  rank: number;
-  teamTotal: string;
-  legs: SwimmerResult[];
-  teamSplits?: SwimmerResult['relayTeamSplits'];
 };
 
 type DragPayload = {
@@ -95,8 +84,22 @@ export default function IndRelayManagementView({
   const overrides = workspace.relayLegOverrides ?? [];
 
   const activeSwimmers = useMemo(() => {
+    // Same identity key and the same shared senior test the scoring
+    // projection uses (buildWhatIfResults / passesRosterGates), so a
+    // tombstone or a "drop seniors" removal reaches this panel the same
+    // way it reaches the actual scored total. canonicalSwimmerName also
+    // folds "Last, First" to "first last", which plain normalizeSwimmerName
+    // does not — a tombstone recorded in either order still matches.
+    const excluded = new Set(
+      (workspace.deletedSwimmers ?? [])
+        .filter(d => d.gender === gender)
+        .map(d => canonicalSwimmerName(d.name))
+    );
+    const passesGates = (name: string, classYear: string | undefined): boolean =>
+      passesRosterGates(name, classYear, excluded, removeSeniors);
+
     const recruitResults: SwimmerResult[] = (workspace.recruits ?? [])
-      .filter(r => r.gender === gender)
+      .filter(r => r.gender === gender && passesGates(r.name, r.classYear))
       .map(r => ({
         id: r.id,
         rank: 0,
@@ -109,22 +112,9 @@ export default function IndRelayManagementView({
         isRecruit: true,
         gender: r.gender,
       }));
-    const excluded = new Set(
-      (workspace.deletedSwimmers ?? [])
-        .filter(d => d.gender === gender)
-        .map(d => normalizeSwimmerName(d.name))
+    const roster = originalResults.filter(
+      r => !r.isRelay && passesGates(r.name, r.classYear)
     );
-    const roster = originalResults.filter(r => {
-      if (r.isRelay) return false;
-      if (excluded.has(normalizeSwimmerName(r.name))) return false;
-      if (
-        removeSeniors &&
-        (r.classYear === 'SR' || r.classYear === 'Sr' || r.classYear === 'Senior')
-      ) {
-        return false;
-      }
-      return true;
-    });
     return [...roster, ...recruitResults];
   }, [gender, originalResults, removeSeniors, workspace.deletedSwimmers, workspace.recruits]);
 
@@ -171,35 +161,7 @@ export default function IndRelayManagementView({
   const relayGroups = useMemo((): RelayGroup[] => {
     const team = selectedTeam || teams[0];
     if (!team) return [];
-
-    const map = new Map<string, RelayGroup>();
-    for (const r of scoringBundle.allScored) {
-      if (r.gender !== gender || String(r.team ?? '').trim() !== team) continue;
-      if (!isRelayResult(r) || r.name === r.team) continue;
-
-      const key = stableRelayEntryKey(originalResults, r);
-      if (!map.has(key)) {
-        const template = relayTemplateFromLeg(originalResults, r);
-        map.set(key, {
-          key,
-          template,
-          event: r.event,
-          roundSwam: r.roundSwam?.trim() || '—',
-          rank: r.rank,
-          teamTotal: r.relayTeamTime || r.finalsTime || r.time,
-          legs: [],
-          teamSplits: r.relayTeamSplits,
-        });
-      }
-      map.get(key)!.legs.push(r);
-    }
-
-    return [...map.values()]
-      .map(g => ({
-        ...g,
-        legs: [...g.legs].sort((a, b) => (a.relayLegIndex ?? 0) - (b.relayLegIndex ?? 0)),
-      }))
-      .sort((a, b) => a.event.localeCompare(b.event) || a.roundSwam.localeCompare(b.roundSwam));
+    return buildRelayGroups({ allScored: scoringBundle.allScored, originalResults, gender, team });
   }, [gender, originalResults, scoringBundle.allScored, selectedTeam, teams]);
 
   const selectedGroup =

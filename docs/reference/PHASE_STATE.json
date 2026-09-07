@@ -1,0 +1,96 @@
+{
+  "sweep": "phase-2-core-complexity",
+  "description": "Cyclomatic-complexity reduction pass over packages/core scoring/roster-correctness functions, following the safe-UI-layer pass in packages/manager, packages/matrix, packages/metrics, apps/shell, packages/ui. Behavior-preserving only; see the cyclomatic-complexity skill for method and this file's own skill (execution-state) for why this file exists.",
+  "targets": [
+    {
+      "name": "planAutoAliasLinks",
+      "file": "packages/core/src/lib/athleteAliases.ts",
+      "status": "verified-committed",
+      "rawCC": 95,
+      "commit": "639af9b5",
+      "verifiedBy": [
+        "golden-output harness, byte-identical before/after",
+        "npm run lint --workspace=@omniswim/core: clean",
+        "exported surface unchanged"
+      ]
+    },
+    {
+      "name": "importHistoryToRoster",
+      "file": "packages/core/src/lib/historyImportRoster.ts",
+      "status": "verified-committed",
+      "rawCC": 74,
+      "commit": "3e2738a0",
+      "verifiedBy": [
+        "golden-output harness over real HSU/OBU roster pastes and all three data/meets.json workspaces (174 records), re-checked after each of 11 extraction steps",
+        "harness mutation-tested first (5 injected bugs, 4 caught, 1 confirmed inert)",
+        "6 related test scripts byte-identical to baseline",
+        "lint clean, production build succeeds, exported signatures unchanged"
+      ]
+    },
+    {
+      "name": "buildTeamLineupAudit",
+      "file": "packages/core/src/lib/rosterLineupAudit.ts",
+      "status": "verified-committed",
+      "rawCC": 40,
+      "commit": "08e20c20",
+      "verifiedBy": [
+        "golden-output harness over all 3 real workspaces x team/gender/removeSeniors/what-if combinations, 213 scenarios, re-compared after each of 7 extraction steps",
+        "harness mutation-tested first (5/7 caught, 2 misses closed with added scenarios)",
+        "post-refactor mutation check (9/11 caught, 2 confirmed masked by other guards, flagged as findings not defects)",
+        "scripts/test_lineup_audit.mjs output identical to baseline, lint clean, 15 exports unchanged"
+      ]
+    },
+    {
+      "name": "applyScoringTheory",
+      "file": "packages/core/src/lib/scoringTheory.ts",
+      "status": "verified-committed",
+      "rawCC": 48,
+      "commit": "4a83d2c2",
+      "verifiedBy": [
+        "golden-output harness over the real HSU pipeline end to end plus all 3 workspaces, 130 records, compared after each of 8 extraction steps",
+        "harness mutation-tested pre-refactor (15/15 caught after closing 3 harness gaps) and post-refactor (30/32 caught, 2 survivors proven equivalent mutants)",
+        "3 related test scripts + HSU seed dry-run identical to baseline",
+        "lint clean, 5 exported functions and 10 exported types unchanged"
+      ]
+    },
+    {
+      "name": "computeScenarioDiff",
+      "file": "packages/core/src/lib/scenarioDiff.ts",
+      "status": "verified-committed",
+      "rawCC": 46,
+      "commit": "568089cc",
+      "verifiedBy": [
+        "golden-output harness over 1712 real scenario pairs (3 workspaces, both genders, 8 modification kinds, 5 option sets), byte-identical",
+        "harness mutation-tested pre-refactor (36/38 caught after closing 3 gaps) and post-refactor (19/20 caught, 1 survivor proven equivalent)",
+        "test_scenario_diff.mjs identical to baseline, lint clean, exported API unchanged",
+        "deviation noted in the commit: verified against the full corpus as one rewrite, not re-compared after each individual extraction step"
+      ]
+    },
+    {
+      "name": "rankRelayLegSwaps",
+      "file": "packages/core/src/lib/arbitrage/relayLegSwaps.ts",
+      "status": "verified-committed",
+      "rawCC": 50,
+      "commit": "9ce2fcaf",
+      "note": "An earlier in-flight run on this same target reported a larger mutation pass (19/23 caught) before hitting a rate limit. That result was never written to a durably-named file - the scratchpad JSON that looked like a match on inspection turned out to belong to the already-committed computeScenarioDiff target instead. This is the exact failure execution-state.md exists to prevent; the entry below reports only what was independently re-run.",
+      "verifiedBy": [
+        "scripts/test_relay_swaps.mjs: 6/6 groups, output identical before/after modulo a millisecond-scale timing line",
+        "npm run lint --workspace=@omniswim/core: clean",
+        "node scripts/run-tests.mjs: no new failures beyond the pre-existing Playwright browser-install gap",
+        "exported surface (rankRelayLegSwaps, applyRelayLegSwap, 3 types) diffed by name against HEAD: unchanged",
+        "spot mutation: removed the onRelay-membership guard in isEligibleLegCandidate, confirmed the suite fails loudly (4 !== 1), reverted, confirmed passing again"
+      ]
+    }
+  ],
+  "nextTarget": null,
+  "blockers": [],
+  "remainingCandidates": [
+    "rankExactSwaps / rankAddOnly / rankDropOnly (packages/core/src/lib/arbitrage/exactSwaps.ts, dropAdd.ts)",
+    "buildFastSwapContext / collectDroppableEntries (packages/core/src/lib/arbitrage/shared.ts) - excluded earlier this session as fresh/fragile, needs reconsideration before touching",
+    "validateRaceTags (packages/core/src/lib/raceAnalysis/tagStateMachine.ts)",
+    "buildPrelimsDeltaTimeline (packages/core/src/lib/prelimsProjection.ts)",
+    "buildCutlineTag (packages/core/src/lib/cutlineTags.ts)",
+    "buildScorerRosterLookup (packages/core/src/lib/scorerRoster.ts) - excluded earlier this session, needs reconsideration",
+    "raw scoring-math functions in utils.ts and backend/point_calculator.py, pdf_parser.py remain off-limits by standing branch policy"
+  ]
+}

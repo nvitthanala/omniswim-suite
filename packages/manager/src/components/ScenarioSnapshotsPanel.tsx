@@ -12,7 +12,7 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Camera, Loader2 } from 'lucide-react';
+import { Camera } from 'lucide-react';
 import type { Gender, ScoringSettings, Workspace } from '@omniswim/core/types';
 import {
   createSnapshot,
@@ -26,8 +26,8 @@ import {
   type ScenarioDiffResult,
 } from '@omniswim/core/lib/scenarioDiffClient';
 import { useScoringSettled } from '@omniswim/core/lib/useWorkspaceScoring';
-import { Button, useToast } from '@omniswim/ui';
-import { ScenarioDiffView } from './ScenarioDiffView';
+import { useToast } from '@omniswim/ui';
+import { SaveScenarioForm, ScenarioListSection } from './ScenarioSnapshotsPanelParts';
 
 type Props = {
   workspace: Workspace;
@@ -46,33 +46,6 @@ type Props = {
 const SNAPSHOTS_DEFAULT_LIMIT = 8;
 const CONFIRM_WINDOW_MS = 4000;
 const BACKEND_UNSUPPORTED_MESSAGE = 'Snapshots require SQLite or PostgreSQL backend';
-
-/** Label suffix convention written by this panel: "<name> · <points> pts". */
-const LABEL_SUFFIX_RE = / · (-?[\d.]+) pts$/;
-
-function parseSnapshotLabel(label: string): {
-  name: string;
-  points: number | null;
-  hasPointsSuffix: boolean;
-} {
-  const m = LABEL_SUFFIX_RE.exec(label);
-  if (!m) return { name: label, points: null, hasPointsSuffix: false };
-  const points = Number(m[1]);
-  return {
-    name: label.slice(0, m.index),
-    points: Number.isFinite(points) ? points : null,
-    hasPointsSuffix: true,
-  };
-}
-
-function formatCompactDate(ms: number): string {
-  return new Date(ms).toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-}
-
-function formatDiff(diff: number): string {
-  const abs = Math.abs(diff).toFixed(1);
-  return diff >= 0 ? `+${abs}` : `-${abs}`;
-}
 
 export default function ScenarioSnapshotsPanel({
   workspace,
@@ -256,158 +229,39 @@ export default function ScenarioSnapshotsPanel({
       </div>
 
       {editable ? (
-        <div className="mb-3.5">
-          <div className="flex items-center gap-2">
-            <input
-              value={name}
-              onChange={e => setName(e.target.value)}
-              placeholder="Scenario name"
-              className="glass-input flex-1 min-w-0 rounded-lg px-2.5 py-1.5 text-ui-caption"
-              onKeyDown={e => {
-                if (e.key === 'Enter' && !saving && scoringSettled) void handleSave();
-              }}
-            />
-            {/* Gated on the scoring worker settling so a freshly-mounted page can't
-                capture a transient "· N pts" total in the scenario label. */}
-            <span title={scoringSettled ? undefined : 'Waiting for the projected total to finish recalculating'}>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => void handleSave()}
-                disabled={saving || !name.trim() || !scoringSettled}
-              >
-                {saving || !scoringSettled ? (
-                  <Loader2 size={12} className="animate-spin" />
-                ) : (
-                  <Camera size={12} />
-                )}
-                Save
-              </Button>
-            </span>
-          </div>
-          {!scoringSettled ? (
-            <p className="text-ui-micro text-theme-muted mt-1">
-              Recalculating projected total — Save unlocks when it settles.
-            </p>
-          ) : null}
-        </div>
+        <SaveScenarioForm
+          name={name}
+          onNameChange={setName}
+          saving={saving}
+          scoringSettled={scoringSettled}
+          onSave={() => void handleSave()}
+        />
       ) : null}
 
       {listError ? (
         <p className="text-ui-caption text-amber-400/90 leading-relaxed mb-2">{listError}</p>
       ) : null}
 
-      {listLoading && snapshots.length === 0 ? (
-        <p className="text-ui-caption text-theme-muted flex items-center gap-1.5">
-          <Loader2 size={12} className="animate-spin" />
-          Loading scenarios…
-        </p>
-      ) : sorted.length === 0 ? (
-        !listError ? (
-          <p className="text-ui-caption text-theme-secondary leading-relaxed">
-            No scenarios saved yet.
-          </p>
-        ) : null
-      ) : (
-        <>
-          <ul className="space-y-2">
-            {shown.map(snap => {
-              const { name: snapName, points, hasPointsSuffix } = parseSnapshotLabel(snap.label);
-              const diff =
-                hasPointsSuffix && points != null && projectedTotal != null
-                  ? projectedTotal - points
-                  : null;
-              const isConfirming = confirmId === snap.id;
-              const isRestoring = restoringId === snap.id;
-              const isDiffOpen = diffId === snap.id && diffResult != null;
-              const isDiffLoading = diffLoadingId === snap.id;
-              return (
-                <li
-                  key={snap.id}
-                  className="rounded-lg border border-theme-soft surface-muted-bg px-3 py-2.5 transition-colors hover:border-theme"
-                >
-                  <div className="flex items-center justify-between gap-2">
-                    <div className="min-w-0">
-                      <p
-                        className="text-ui-caption font-semibold text-[var(--text-primary)] truncate"
-                        title={snapName}
-                      >
-                        {snapName}
-                      </p>
-                      <p className="text-ui-micro font-mono tabular-nums text-theme-muted mt-0.5">
-                        {formatCompactDate(snap.createdAt)}
-                        {hasPointsSuffix
-                          ? ` · ${points != null ? `${points.toFixed(1)} pts` : '—'}`
-                          : ''}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
-                      {diff != null ? (
-                        <span
-                          className={`text-ui-caption font-mono tabular-nums ${
-                            diff >= 0 ? 'text-points-positive' : 'text-amber-400/80'
-                          }`}
-                          title="vs current projected total"
-                        >
-                          {formatDiff(diff)}
-                        </span>
-                      ) : null}
-                      {diffSupported ? (
-                        <button
-                          type="button"
-                          onClick={() => void handleDiffClick(snap)}
-                          disabled={isDiffLoading || (diffLoadingId != null && !isDiffLoading)}
-                          className="btn-accent-outline rounded-md px-2 py-1 text-ui-micro font-semibold disabled:opacity-50"
-                          title="Per-event / per-swimmer diff vs the current lineup (does not restore)"
-                        >
-                          {isDiffLoading ? (
-                            <Loader2 size={11} className="animate-spin" />
-                          ) : isDiffOpen ? (
-                            'Hide diff'
-                          ) : (
-                            'Diff'
-                          )}
-                        </button>
-                      ) : null}
-                      {editable ? (
-                        <button
-                          type="button"
-                          onClick={() => handleRestoreClick(snap.id)}
-                          disabled={isRestoring}
-                          className="btn-accent-outline rounded-md px-2 py-1 text-ui-micro font-semibold disabled:opacity-50"
-                        >
-                          {isRestoring ? (
-                            <Loader2 size={11} className="animate-spin" />
-                          ) : isConfirming ? (
-                            'Confirm?'
-                          ) : (
-                            'Restore'
-                          )}
-                        </button>
-                      ) : null}
-                    </div>
-                  </div>
-                  {isDiffOpen && diffResult ? (
-                    <ScenarioDiffView
-                      result={diffResult}
-                      emptyMessage="No differences — this scenario matches the current lineup."
-                    />
-                  ) : null}
-                </li>
-              );
-            })}
-          </ul>
-          {sorted.length > SNAPSHOTS_DEFAULT_LIMIT ? (
-            <button
-              type="button"
-              onClick={() => setExpanded(v => !v)}
-              className="mt-2 text-ui-caption text-[var(--text-accent)] hover:underline"
-            >
-              {expanded ? 'Show fewer' : `Show all ${sorted.length}`}
-            </button>
-          ) : null}
-        </>
-      )}
+      <ScenarioListSection
+        listLoading={listLoading}
+        listError={listError}
+        hasSnapshots={snapshots.length > 0}
+        sorted={sorted}
+        shown={shown}
+        expanded={expanded}
+        defaultLimit={SNAPSHOTS_DEFAULT_LIMIT}
+        onToggleExpanded={() => setExpanded(v => !v)}
+        projectedTotal={projectedTotal}
+        editable={editable}
+        diffSupported={diffSupported}
+        confirmId={confirmId}
+        restoringId={restoringId}
+        diffId={diffId}
+        diffLoadingId={diffLoadingId}
+        diffResult={diffResult}
+        onDiffClick={snap => void handleDiffClick(snap)}
+        onRestoreClick={snapshotId => handleRestoreClick(snapshotId)}
+      />
     </div>
   );
 }

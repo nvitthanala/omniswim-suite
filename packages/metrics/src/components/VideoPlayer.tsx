@@ -7,6 +7,26 @@ import { TagTimeline } from './TagTimeline';
 
 const ASSUMED_FPS_OPTIONS = [24, 25, 30, 50, 59.94, 60, 120];
 
+/** KeyboardEvent.code -> sequential operator key, for the tagging shortcuts. */
+const SEQUENTIAL_KEY_CODES: Partial<Record<string, OperatorKey>> = { KeyS: 'S', KeyD: 'D', KeyA: 'A' };
+
+/** KeyboardEvent.code -> one-shot tag kind, for the tagging shortcuts. */
+const ONE_SHOT_KEY_CODES: Partial<Record<string, 'Signal' | 'Flags' | 'Kick'>> = {
+  KeyR: 'Signal',
+  KeyG: 'Flags',
+  KeyK: 'Kick',
+};
+
+/** True while the user is typing into a text field (shortcuts should not fire). */
+function isTypingTarget(el: Element | null): boolean {
+  return el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA';
+}
+
+/** True for the Ctrl/Cmd+Z undo chord. */
+function isUndoShortcut(e: KeyboardEvent): boolean {
+  return (e.ctrlKey || e.metaKey) && e.code === 'KeyZ';
+}
+
 interface VideoPlayerProps {
   videoUrl: string | null;
   tags: readonly RaceTag[];
@@ -119,7 +139,7 @@ export function VideoPlayer({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
+      if (isTypingTarget(document.activeElement)) {
         if (e.code === 'Enter') (document.activeElement as HTMLElement).blur();
         return;
       }
@@ -127,37 +147,23 @@ export function VideoPlayer({
       if (!videoRef.current) return;
       const time = videoRef.current.currentTime;
 
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') {
+      if (isUndoShortcut(e)) {
         e.preventDefault();
         onUndo();
         return;
       }
 
-      switch (e.code) {
-        case 'KeyS':
-          e.preventDefault();
-          onSequentialKey('S', time);
-          break;
-        case 'KeyD':
-          e.preventDefault();
-          onSequentialKey('D', time);
-          break;
-        case 'KeyA':
-          e.preventDefault();
-          onSequentialKey('A', time);
-          break;
-        case 'KeyR':
-          e.preventDefault();
-          onOneShotKey('Signal', time);
-          break;
-        case 'KeyG':
-          e.preventDefault();
-          onOneShotKey('Flags', time);
-          break;
-        case 'KeyK':
-          e.preventDefault();
-          onOneShotKey('Kick', time);
-          break;
+      const sequentialKey = SEQUENTIAL_KEY_CODES[e.code];
+      if (sequentialKey !== undefined) {
+        e.preventDefault();
+        onSequentialKey(sequentialKey, time);
+        return;
+      }
+
+      const oneShotKind = ONE_SHOT_KEY_CODES[e.code];
+      if (oneShotKind !== undefined) {
+        e.preventDefault();
+        onOneShotKey(oneShotKind, time);
       }
     };
 

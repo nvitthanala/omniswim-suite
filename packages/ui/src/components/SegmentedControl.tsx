@@ -1,4 +1,5 @@
-import type { ReactNode } from 'react';
+import { useId, type ReactNode } from 'react';
+import { motion, useReducedMotion } from 'motion/react';
 
 export type SegmentedControlOption<TValue extends string> = {
   value: TValue;
@@ -21,6 +22,9 @@ export function SegmentedControl<TValue extends string>({
   ariaLabel,
   className,
 }: SegmentedControlProps<TValue>) {
+  const indicatorId = useId();
+  const reduce = useReducedMotion();
+
   return (
     <div
       className={[
@@ -46,15 +50,23 @@ export function SegmentedControl<TValue extends string>({
             onClick={() => onChange(option.value)}
             // `basis` gives each option a preferred width; once three no longer
             // fit, they wrap instead of being squeezed into ellipses.
-            className={`flex-1 basis-24 rounded-xl px-2 lg:px-3 py-2 text-ui-label font-bold text-center transition-colors ${
-              selected ? 'nav-tab-active' : 'nav-tab-inactive'
+            className={`relative flex-1 basis-24 rounded-xl px-2 lg:px-3 py-2 text-ui-label font-bold text-center transition-colors ${
+              selected ? 'text-[var(--text-accent)]' : 'nav-tab-inactive'
             }`}
             aria-pressed={selected}
             title={typeof option.label === 'string' ? option.label : undefined}
           >
-            <span className="block">{option.label}</span>
+            {selected ? (
+              <motion.span
+                layoutId={`${indicatorId}-segmented-indicator`}
+                className="absolute inset-0 -z-10 rounded-xl nav-tab-active"
+                transition={reduce ? { duration: 0 } : { duration: 0.2, ease: [0.77, 0, 0.175, 1] }}
+                aria-hidden
+              />
+            ) : null}
+            <span className="relative block">{option.label}</span>
             {option.description ? (
-              <span className="mt-0.5 block text-ui-micro font-medium normal-case tracking-normal">
+              <span className="relative mt-0.5 block text-ui-micro font-medium normal-case tracking-normal">
                 {option.description}
               </span>
             ) : null}

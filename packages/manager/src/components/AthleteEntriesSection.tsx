@@ -31,7 +31,6 @@ import {
   compactEventTitleAttr,
   formatCompactEventLabel,
 } from '@omniswim/core/lib/utils';
-import { createPlannedEntry } from '@omniswim/core/lib/whatIfProjection';
 import {
   canAcceptAnotherEntry,
   countSwimmerEntries,
@@ -49,6 +48,7 @@ import {
 } from '@omniswim/core/lib/swimEditor';
 import { CutlineNearMissChip, CutlineTag, useToast } from '@omniswim/ui';
 import DrawerSection from './DrawerSection';
+import { buildPastePreviewPatch, selectPastePreviewRows } from './athleteEntriesView';
 
 type Props = {
   workspace: Workspace;
@@ -183,27 +183,12 @@ export default function AthleteEntriesSection({
       toast.push('error', parsed.warnings[0] || 'No swims parsed from paste.');
       return;
     }
-    let runningCounts = { individual: counts.individual, relayCount: counts.relayCount };
-    const have = new Set(athletePlans.map(p => p.event));
-    const preview: Array<{ event: string; time: string; selected: boolean }> = [];
-    const sorted = [...parsed.swims].sort((a, b) => {
-      const aRelay = /\brelay\b/i.test(a.event) ? 1 : 0;
-      const bRelay = /\brelay\b/i.test(b.event) ? 1 : 0;
-      return aRelay - bRelay;
+    const preview = selectPastePreviewRows({
+      swims: parsed.swims,
+      existingEvents: new Set(athletePlans.map(p => p.event)),
+      counts,
+      settings,
     });
-    for (const swim of sorted) {
-      if (have.has(swim.event)) continue;
-      const probe = {
-        individual: runningCounts.individual,
-        relayEvents: new Set<string>(),
-        relayCount: runningCounts.relayCount,
-      };
-      if (!canAcceptAnotherEntry(probe, settings, swim.event)) continue;
-      preview.push({ event: swim.event, time: swim.time, selected: true });
-      have.add(swim.event);
-      if (/\brelay\b/i.test(swim.event)) runningCounts.relayCount += 1;
-      else runningCounts.individual += 1;
-    }
     if (preview.length === 0) {
       toast.push('error', 'No entries can be added (all events exist or limits reached).');
       return;
@@ -222,43 +207,16 @@ export default function AthleteEntriesSection({
     });
     const selectedEvents = new Set(selected.map(p => p.event));
     const swims = parsed.swims.filter(s => selectedEvents.has(s.event));
-    const next = [
-      ...athletePlans,
-      ...swims.map(swim =>
-        createPlannedEntry({
-          name: athlete.name,
-          team: athlete.team,
-          gender,
-          classYear: athlete.classYear,
-          event: swim.event,
-          time: swim.time,
-          timeType: swim.timeType ?? 'SCY',
-          source: 'swimcloud',
-          active: true,
-        })
-      ),
-    ];
-    const ws = getWorkspace();
-    const basePlans = ws.meetEntryPlans ?? [];
-    const removedPlanIds = new Set(athletePlans.map(p => p.id));
-    applyRawPatch({
-      meetEntryPlans: [
-        ...basePlans.filter(
-          p =>
-            !(
-              canonicalSwimmerName(p.name) === athleteCanonical &&
-              String(p.team ?? '').trim() === athleteTeamTrim &&
-              p.gender === gender
-            )
-        ),
-        ...next,
-      ],
-      activeEntryIds: [
-        ...(ws.activeEntryIds ?? []).filter(id => !removedPlanIds.has(id)),
-        ...next.filter(p => p.active !== false).map(p => p.id),
-      ],
-      athleteHistory: [...(ws.athleteHistory ?? []), ...swims],
+    const patch = buildPastePreviewPatch({
+      ws: getWorkspace(),
+      athletePlans,
+      selectedSwims: swims,
+      athlete,
+      gender,
+      athleteCanonical,
+      athleteTeamTrim,
     });
+    applyRawPatch(patch);
     toast.push('success', `Added ${selected.length} lineup entr${selected.length === 1 ? 'y' : 'ies'} from paste`);
     setPasteText('');
     setParsePreview([]);

@@ -150,6 +150,62 @@ function DiffBadge({ status, deltaSec }: { status: ImportDiffStatus; deltaSec?: 
   );
 }
 
+type SwimRowTagSpec = {
+  key: string;
+  show: boolean;
+  className: string;
+  title?: string;
+  label: string;
+};
+
+/** The badge-driven tag row for one swim: which chips to show is decided by
+ * the SwimCloud badge stamp plus (for A/B cuts) a locally computed fallback.
+ * Built as data and filtered, rather than five independent JSX `&&` guards. */
+function buildSwimRowTagSpecs(
+  stamp: ReturnType<typeof badgeLabel>,
+  swim: HistoricalSwim,
+  cutTooltip: string | undefined
+): SwimRowTagSpec[] {
+  const showComputedA = swim.computedCut === 'A' && swim.swimcloudBadge !== 'd1_a';
+  const showComputedB = swim.computedCut === 'B' && swim.swimcloudBadge !== 'd1_b';
+  return [
+    {
+      key: 'official',
+      show: stamp === 'Official',
+      className: 'text-ui-micro text-theme-secondary border border-theme-soft px-1.5 rounded-full',
+      title: 'Extracted official result',
+      label: 'Official',
+    },
+    {
+      key: 'manual',
+      show: stamp === 'Manual',
+      className: 'text-ui-micro badge-warning px-1.5 rounded-full',
+      title: 'User-entered time',
+      label: 'Manual',
+    },
+    {
+      key: 'a-cut',
+      show: stamp === 'A CUT' || showComputedA,
+      className: 'text-ui-micro btn-accent-outline px-1.5 rounded-full',
+      title: cutTooltip,
+      label: 'A CUT',
+    },
+    {
+      key: 'b-cut',
+      show: stamp === 'B CUT' || showComputedB,
+      className: 'text-ui-micro bg-amber-400/10 text-amber-400 px-1.5 border border-amber-400/30 rounded-full',
+      title: cutTooltip,
+      label: 'B CUT',
+    },
+    {
+      key: 'tag',
+      show: stamp === 'Tag',
+      className: 'text-ui-micro text-theme-muted border border-theme-soft px-1.5 rounded-full',
+      label: 'Tag',
+    },
+  ];
+}
+
 function SwimRowTags({
   swim,
   diffStatus,
@@ -162,38 +218,16 @@ function SwimRowTags({
   cutTooltip?: string;
 }) {
   const stamp = badgeLabel(swim.swimcloudBadge);
-  const showComputedA = swim.computedCut === 'A' && swim.swimcloudBadge !== 'd1_a';
-  const showComputedB = swim.computedCut === 'B' && swim.swimcloudBadge !== 'd1_b';
+  const tags = buildSwimRowTagSpecs(stamp, swim, cutTooltip).filter(tag => tag.show);
 
   return (
     <div className="flex flex-wrap gap-1 justify-end">
       <DiffBadge status={diffStatus} deltaSec={deltaSec} />
-      {stamp === 'Official' && (
-        <span className="text-ui-micro text-theme-secondary border border-theme-soft px-1.5 rounded-full" title="Extracted official result">
-          Official
+      {tags.map(tag => (
+        <span key={tag.key} className={tag.className} title={tag.title}>
+          {tag.label}
         </span>
-      )}
-      {stamp === 'Manual' && (
-        <span className="text-ui-micro badge-warning px-1.5 rounded-full" title="User-entered time">
-          Manual
-        </span>
-      )}
-      {(stamp === 'A CUT' || showComputedA) && (
-        <span className="text-ui-micro btn-accent-outline px-1.5 rounded-full" title={cutTooltip}>
-          A CUT
-        </span>
-      )}
-      {(stamp === 'B CUT' || showComputedB) && (
-        <span
-          className="text-ui-micro bg-amber-400/10 text-amber-400 px-1.5 border border-amber-400/30 rounded-full"
-          title={cutTooltip}
-        >
-          B CUT
-        </span>
-      )}
-      {stamp === 'Tag' && (
-        <span className="text-ui-micro text-theme-muted border border-theme-soft px-1.5 rounded-full">Tag</span>
-      )}
+      ))}
     </div>
   );
 }

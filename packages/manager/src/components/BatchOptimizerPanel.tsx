@@ -10,16 +10,15 @@ import React, { useMemo, useState, useCallback } from 'react';
 import { X, Sparkles, RefreshCw, TrendingUp, CheckCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Gender, ScoringSettings, Workspace } from '@omniswim/core/types';
-import { optimizeRosterAllTeams, type OptimizerStage } from '@omniswim/core/lib/rosterOptimizer';
+import type { OptimizerStage } from '@omniswim/core/lib/rosterOptimizer';
 import { mergeScoringSettings } from '@omniswim/core/lib/utils';
 import { useToast } from '@omniswim/ui';
-
-type TeamDelta = {
-  teamName: string;
-  previousPoints: number;
-  projectedPoints: number;
-  delta: number;
-};
+import {
+  batchOptimizationToastMessage,
+  computeBatchOptimizationResult,
+  deltaColorClass,
+  type BatchOptimizationResult,
+} from './batchOptimizerView';
 
 type Props = {
   workspace: Workspace;
@@ -39,12 +38,7 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
   const toast = useToast();
   const [stage, setStage] = useState<OptimizerStage>('all');
   const [isRunning, setIsRunning] = useState(false);
-  const [result, setResult] = useState<{
-    overrides: ReturnType<typeof optimizeRosterAllTeams>['overrides'];
-    meetEntryPlans: ReturnType<typeof optimizeRosterAllTeams>['meetEntryPlans'];
-    activeEntryIds: ReturnType<typeof optimizeRosterAllTeams>['activeEntryIds'];
-    teamDeltas: TeamDelta[];
-  } | null>(null);
+  const [result, setResult] = useState<BatchOptimizationResult | null>(null);
 
   const mergedSettings = useMemo(
     () => mergeScoringSettings(scoringSettings, { conference: workspace.conference }),
@@ -56,46 +50,16 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
     // Use setTimeout to yield to the UI thread for the loading indicator
     setTimeout(() => {
       try {
-        const opt = optimizeRosterAllTeams(workspace, gender, false, mergedSettings, stage);
-
-        // Build per-team deltas by scoring the previous vs optimized state
-        const allTeams = new Set<string>();
-        const prevTeams = [...(workspace.menResults ?? []), ...(workspace.womenResults ?? [])]
-          .filter(r => !r.isRelay || r.name !== r.team)
-          .map(r => String(r.team ?? '').trim())
-          .filter(Boolean);
-        for (const t of prevTeams) allTeams.add(t);
-
-        const teamDeltas: TeamDelta[] = [];
-        // Optimizer returns aggregate totals; we show the total per-team by checking what changed
-        const overrideCount = (opt.overrides ?? []).length - (workspace.scorerRosterOverrides ?? []).length;
-        const planCount = (opt.meetEntryPlans ?? []).length - (workspace.meetEntryPlans ?? []).length;
-
-        // Use all teams from the previous results for display
-        const merged = mergeScoringSettings(scoringSettings, { conference: workspace.conference });
-        // We need to calculate per-team totals - optimizer gives aggregate, so we'll show aggregate
-        // as a single row "All Teams" plus the summary stats
-        teamDeltas.push({
-          teamName: 'All Teams',
-          previousPoints: opt.previousTotal,
-          projectedPoints: opt.projectedTotal,
-          delta: opt.projectedTotal - opt.previousTotal,
-        });
-
-        setResult({
-          overrides: opt.overrides,
-          meetEntryPlans: opt.meetEntryPlans,
-          activeEntryIds: opt.activeEntryIds,
-          teamDeltas,
-        });
-        toast.push('success', `Optimization complete — ${overrideCount > 0 ? `${overrideCount} roster changes, ` : ''}${planCount > 0 ? `${planCount} event changes` : 'no event changes'}`);
+        const computed = computeBatchOptimizationResult(workspace, gender, mergedSettings, stage);
+        setResult(computed);
+        toast.push('success', batchOptimizationToastMessage(computed.overrideCount, computed.planCount));
       } catch (err) {
         toast.push('error', `Optimization failed: ${err instanceof Error ? err.message : String(err)}`);
       } finally {
         setIsRunning(false);
       }
     }, 50);
-  }, [workspace, gender, mergedSettings, stage, toast, scoringSettings]);
+  }, [workspace, gender, mergedSettings, stage, toast]);
 
   const handleApply = useCallback(() => {
     if (!result) return;
@@ -235,15 +199,7 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
                       </div>
                     </div>
                     <div className="text-center p-3 rounded-lg surface-muted-bg border border-theme-soft">
-                      <div
-                        className={`text-2xl font-bold tabular-nums ${
-                          (result.teamDeltas[0]?.delta ?? 0) > 0
-                            ? 'text-points-positive'
-                            : (result.teamDeltas[0]?.delta ?? 0) < 0
-                              ? 'text-points-negative'
-                              : 'text-theme-secondary'
-                        }`}
-                      >
+                      <div className={`text-2xl font-bold tabular-nums ${deltaColorClass(result.teamDeltas[0]?.delta ?? 0)}`}>
                         {(result.teamDeltas[0]?.delta ?? 0) > 0 ? '+' : ''}
                         {(result.teamDeltas[0]?.delta ?? 0).toFixed(1)}
                       </div>

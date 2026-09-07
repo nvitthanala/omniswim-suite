@@ -190,7 +190,59 @@ const TIME_RE = /^(\d{1,2}:)?\d{1,2}\.\d{2}$/;
 const EVENT_COL_RE =
   /^\d+\s*(?:Yard\s*)?(?:Free|Fly|Back|Breast|IM|Individual Medley|Diving|Medley)/i;
 const DATE_RE = /^[A-Z][a-z]{2,8}\s+\d{1,2},\s+\d{4}$/;
-const LOCATION_RE = /^.+,\s*[A-Z]{2}$/;
+
+/**
+ * A hometown line in a SwimCloud profile header.
+ *
+ * SwimCloud prints "City, ST" for US athletes and "City, CCC" with a 3-letter
+ * country code for international ones. The 2-letter-only form this replaces
+ * matched "Nevada, TX" but not "Volgograd, RUS" or "Tárnok, HUN" — both real
+ * rows in `oburoster202627.txt` — so those fell through to the person-name test
+ * and opened a phantom athlete block.
+ *
+ * The `[^\t]` head is a deliberate narrowing: a tab-separated data row can reach
+ * this regex, and `\s*` would otherwise let a tab stand in for the space after
+ * the comma.
+ */
+const LOCATION_RE = /^[^\t]+,\s*[A-Z]{2,3}$/;
+
+/** A hometown line reduced to just the country code ("HUN", Stefan DUCA-MIRCEA's row). */
+const BARE_REGION_CODE_RE = /^[A-Z]{2,3}$/;
+
+/**
+ * Club / school / program lines, which sit between the name and the personal-bests
+ * table in a profile paste.
+ *
+ * Vocabulary taken from the lines that actually appear in this repo's two roster
+ * exports and the Blaise Vera fixture: "Metroplex Aquatics", "Northwest Arkansas
+ * Aquatics", "Bison Aquatic Club", "Mansfield Aquatic Club", "CHRISTUS Louisiana
+ * Aquatic Club", "Razorback Aquatic Club Aquahawgs", "Opelika Swim Team", "Spring
+ * Swim Team", "City of Richardson Swim Team", "Florida Elite Swimming",
+ * "Nacogdoches High School", "Mountain Home Senior High School", "Ouachita Baptist
+ * University", "University of Pittsburgh". (`racing` is the one word here not drawn
+ * from those files; it is common club vocabulary and collides with no surname.)
+ *
+ * Deliberately NOT exhaustive, and not trusted to be. A club can be named for a
+ * mascot with no give-away noun at all — "Arkansas Dolphins" appears twice in the
+ * OBU export — and no keyword list reaches that case. {@link splitMultiProfileBlocks}
+ * is what makes those safe; this regex is the cheap first line of defence.
+ */
+const ORG_LINE_RE = /\b(?:universit(?:y|ies)|college|academy|school|swimming|swim|aquatics?|club|team|racing)\b/i;
+
+/**
+ * The social-handle line SwimCloud appends under a profile header: "AJ Alfeo on
+ * Instagram", "Jeronimo Quintero on X", "Tyler Steffan on Facebook Tyler Steffan
+ * on Instagram". Shaped as a real name plus a suffix, so a word-count test alone
+ * reads the short ones as a second athlete.
+ */
+const SOCIAL_HANDLE_RE = /\bon\s+(?:instagram|facebook|x|twitter|tiktok|youtube|linkedin)\b/i;
+
+/** A profile-header hometown line, in either the "City, CC(C)" or bare-code form. */
+function isLocationLine(line: string): boolean {
+  const t = line.trim();
+  if (!t || t.includes('\t')) return false;
+  return LOCATION_RE.test(t) || BARE_REGION_CODE_RE.test(t);
+}
 const SKIP_LINE_RE =
   /^(personal bests|event progression|course|season|sort by|stamp link|event|time|meet|date|name|swimmer)$/i;
 
@@ -428,9 +480,14 @@ function looksLikePersonName(line: string): boolean {
   const t = line.trim();
   if (!t || t.includes('\t')) return false;
   if (SKIP_LINE_RE.test(t)) return false;
-  if (LOCATION_RE.test(t)) return false;
+  if (isLocationLine(t)) return false;
   if (isEventToken(t) || isTimeToken(t)) return false;
-  if (/university|college|school|swimming|team/i.test(t) && t.split(/\s+/).length > 2) return false;
+  // The old form required >2 words before the org test would fire, which let
+  // every two-word club through — "Metroplex Aquatics" was read as a swimmer.
+  // No name on either roster contains one of these words, so the word-count
+  // guard bought nothing and cost the common case.
+  if (ORG_LINE_RE.test(t)) return false;
+  if (SOCIAL_HANDLE_RE.test(t)) return false;
   const parts = t.split(/\s+/);
   return parts.length >= 2 && parts.length <= 5 && /^[A-Za-z]/.test(parts[0]);
 }
@@ -449,7 +506,7 @@ function isHeaderOrJunkLine(line: string): boolean {
   if (!t) return true;
   if (SKIP_LINE_RE.test(t)) return true;
   if (/^event\s+time/i.test(t)) return true;
-  if (LOCATION_RE.test(t)) return true;
+  if (isLocationLine(t)) return true;
   if (/^(personal bests|event progression)$/i.test(t)) return true;
   return false;
 }
@@ -462,25 +519,103 @@ export function isProfileNameLine(line: string): boolean {
   return looksLikePersonName(t);
 }
 
-/** Count bare name lines each followed (within their block) by >=1 personal-bests row. */
-function countProfileBlocks(text: string): number {
-  let blocks = 0;
-  let pending = false;
-  for (const line of text.split(/\r?\n/)) {
-    const t = line.trim();
-    if (!t) continue;
-    if (isProfileNameLine(t)) {
-      pending = true;
+/** A row shaped like a personal-bests entry: event label in column 0, time in column 1. */
+function isSwimDataRow(trimmedLine: string): boolean {
+  const cols = splitRow(trimmedLine);
+  return cols.length >= 2 && isEventToken(cols[0]) && isTimeToken(cols[1]);
+}
+
+/** One athlete's slice of a multi-profile paste. */
+export type MultiProfileBlock = {
+  /** The name line that opened this block, exactly as pasted (diacritics preserved). */
+  name: string;
+  /** Every line after the name, raw and untrimmed, header/junk rows included. */
+  lines: string[];
+  /**
+   * Name-shaped lines folded into this block's header rather than treated as a new
+   * athlete — hometown, club, social handle. Exposed so a caller can say what it
+   * absorbed instead of the lines disappearing silently.
+   */
+  absorbed: string[];
+  /** True once a row shaped `event + time` has been seen inside this block. */
+  hasDataRow: boolean;
+};
+
+export type MultiProfileSplit = {
+  blocks: MultiProfileBlock[];
+  /** Non-blank lines that appeared before any name line, in paste order. */
+  orphanLines: string[];
+};
+
+/**
+ * Split a multi-profile paste into one block per athlete.
+ *
+ * Lexical name detection alone cannot do this. A SwimCloud profile header is
+ * `name / hometown / club / social handle`, and the club line is frequently
+ * indistinguishable from a person — "Arkansas Dolphins" and "Metroplex Aquatics"
+ * have exactly the shape of a two-word name. Splitting on every name-shaped line
+ * turned the 38-athlete OBU export into 37 blocks, 19 of them titled with a club
+ * or an Instagram suffix, with real swims filed under those fake names. Nothing
+ * threw; the import was simply wrong.
+ *
+ * So the paste's own structure decides, not the words. A name-shaped line opens a
+ * NEW athlete only when the paste says a new athlete has started:
+ *
+ *  - nothing is open yet, or
+ *  - the block already open has produced at least one swim row (its table is
+ *    finished, so the next name is the next athlete), or
+ *  - a blank line separated them — SwimCloud emits exactly one between profiles
+ *    and none inside a header, in every export in this repo.
+ *
+ * Any other name-shaped line is header metadata for the block already open. It is
+ * recorded in `absorbed` rather than dropped, so "what happened to that line" is
+ * always answerable.
+ *
+ * A block still yields nothing when it genuinely holds no rows; that stays the
+ * caller's warning to raise. This function never invents a block and never
+ * silently discards a line — every input line lands in `lines`, `absorbed`, or
+ * `orphanLines`.
+ */
+export function splitMultiProfileBlocks(text: string): MultiProfileSplit {
+  const blocks: MultiProfileBlock[] = [];
+  const orphanLines: string[] = [];
+  let current: MultiProfileBlock | null = null;
+  // Start of input behaves like a separator, so the first name always opens a block.
+  let prevWasBlank = true;
+
+  for (const rawLine of text.split(/\r?\n/)) {
+    const t = rawLine.trim();
+    if (!t) {
+      prevWasBlank = true;
       continue;
     }
-    if (isHeaderOrJunkLine(t)) continue;
-    const cols = splitRow(t);
-    if (cols.length >= 2 && isEventToken(cols[0]) && isTimeToken(cols[1]) && pending) {
-      blocks += 1;
-      pending = false;
+    const dataRow = isSwimDataRow(t);
+    if (!dataRow && isProfileNameLine(t)) {
+      if (!current || current.hasDataRow || prevWasBlank) {
+        current = { name: t, lines: [], absorbed: [], hasDataRow: false };
+        blocks.push(current);
+      } else {
+        current.absorbed.push(t);
+        current.lines.push(rawLine);
+      }
+      prevWasBlank = false;
+      continue;
     }
+    prevWasBlank = false;
+    if (!current) {
+      orphanLines.push(rawLine);
+      continue;
+    }
+    current.lines.push(rawLine);
+    if (dataRow) current.hasDataRow = true;
   }
-  return blocks;
+
+  return { blocks, orphanLines };
+}
+
+/** Count athlete blocks that actually carry >=1 personal-bests row. */
+function countProfileBlocks(text: string): number {
+  return splitMultiProfileBlocks(text).blocks.filter(b => b.hasDataRow).length;
 }
 
 export function detectSwimCloudPasteFormat(text: string): SwimCloudPasteFormat {

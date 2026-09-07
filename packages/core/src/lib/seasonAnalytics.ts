@@ -79,13 +79,24 @@ export function buildSeasonTrends(workspaces: Workspace[]): SeasonTrends {
   const teamScoreTrends: TeamScoreTrend[] = workspaces
     .filter(ws => ws.officialTeamScores || (ws.menResults?.length ?? 0) > 0)
     .map(ws => {
-      const menTotal = Object.values(ws.officialTeamScores?.men ?? {}).reduce((a, b) => a + b, 0);
-      const womenTotal = Object.values(ws.officialTeamScores?.women ?? {}).reduce((a, b) => a + b, 0);
+      // `officialTeamScores.men`/`.women` absent (no official totals loaded)
+      // falls back to the calculated sum; present-but-zero is a real official
+      // total and must survive, not be read as falsy and overwritten by the
+      // calculated fallback (the exact absent-vs-empty confusion CLAUDE.md's
+      // provenance rule 4 warns about).
+      const menScores = ws.officialTeamScores?.men;
+      const womenScores = ws.officialTeamScores?.women;
+      const menOfficialTotal = menScores ? Object.values(menScores).reduce((a, b) => a + b, 0) : null;
+      const womenOfficialTotal = womenScores
+        ? Object.values(womenScores).reduce((a, b) => a + b, 0)
+        : null;
       return {
         meetLabel: ws.loadedMeet?.meetLabel ?? ws.name,
-        menTotal: menTotal || (ws.menResults ?? []).reduce((s, r) => s + (Number(r.points) || 0), 0),
+        menTotal:
+          menOfficialTotal ?? (ws.menResults ?? []).reduce((s, r) => s + (Number(r.points) || 0), 0),
         womenTotal:
-          womenTotal || (ws.womenResults ?? []).reduce((s, r) => s + (Number(r.points) || 0), 0),
+          womenOfficialTotal ??
+          (ws.womenResults ?? []).reduce((s, r) => s + (Number(r.points) || 0), 0),
       };
     });
 

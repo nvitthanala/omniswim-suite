@@ -52,10 +52,7 @@ import {
   issueBadgeLabel,
   type LineupAthleteIssue,
 } from '@omniswim/core/lib/rosterLineupAudit';
-import {
-  relayMissingStrokeLabel,
-  stableRelayEntryKey,
-} from '@omniswim/core/lib/relayLegMatching';
+import { buildRelayInvolvement, type RelayInvolvement } from './athleteLineupEditorView';
 import {
   getAthleteCreditedSwims,
   scorerRosterKey,
@@ -64,7 +61,7 @@ import {
 } from '@omniswim/core/lib/scorerRoster';
 import {
   editCreditedSwim,
-  removeCreditedSwim,
+  removeProjectedSwim,
   type WorkspaceEditorPatch,
 } from '@omniswim/core/lib/swimEditor';
 import { addAliasLink, buildAliasResolver, removeAliasLink } from '@omniswim/core/lib/athleteAliases';
@@ -72,14 +69,6 @@ import { CutlineTag, CutlineNearMissChip, useToast } from '@omniswim/ui';
 import AthleteCreditedSwimsPanel, { type EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
 import AthleteRoleTag from './AthleteRoleTag';
 
-
-type RelayInvolvement = {
-  event: string;
-  legIndex: number;
-  status: 'ok' | 'vacant' | 'removed';
-  statusLabel: string;
-  relayEntryKey: string;
-};
 
 type Props = {
   workspace: Workspace;
@@ -248,19 +237,23 @@ export default function AthleteLineupEditorPanel({
     applyPatch(ws => editCreditedSwim(ws, gender, swim.id, changes));
   };
 
+  // `isRecruit` is true for a planned entry as well as a recruit row, so it
+  // cannot pick the plane to delete from. removeProjectedSwim dispatches on
+  // where the id actually lives — the old branch filtered `recruits` by a plan
+  // id, removed nothing, and still reported success.
+  //
+  // It raises on a row the workspace does not own — a Team Roster Catalog swim
+  // is injected at scoring time and has nothing to delete. Say so; the previous
+  // behaviour was a success toast over a patch that changed nothing.
   const handleDeleteCreditedSwim = (swim: AthleteCreditedSwim) => {
-    if (swim.isRecruit) {
-      applyPatch(ws => {
-        const baseRecruits = ws.recruits ?? [];
-        return {
-          patch: { recruits: baseRecruits.filter(r => r.id !== swim.id) },
-          inverse: { recruits: baseRecruits },
-          description: `Remove recruit entry (${swim.event})`,
-        };
-      });
-      return;
+    try {
+      applyPatch(ws => removeProjectedSwim(ws, gender, swim.id));
+    } catch {
+      toast.push(
+        'error',
+        `${swim.event} is not editable here — it comes from the Team Roster Catalog, not this workspace.`
+      );
     }
-    applyPatch(ws => removeCreditedSwim(ws, gender, swim.id));
   };
 
 
@@ -269,81 +262,7 @@ export default function AthleteLineupEditorPanel({
   const relayInvolvement = useMemo((): RelayInvolvement[] => {
     const pdf = gender === Gender.MEN ? workspace.menResults ?? [] : workspace.womenResults ?? [];
     const nameKey = normalizeSwimmerName(athlete.name);
-    const out: RelayInvolvement[] = [];
-    const seen = new Set<string>();
-
-    for (const leg of scoredResults) {
-      if (!isRelayResult(leg) || String(leg.team ?? '').trim() !== athlete.team) continue;
-      if (leg.name === leg.team) continue;
-      const entryKey = stableRelayEntryKey(pdf, leg);
-      const legIdx = leg.relayLegIndex ?? 0;
-      const rowKey = `${entryKey}|${legIdx}`;
-      if (seen.has(rowKey)) continue;
-
-      const isVacant = Boolean(leg.relayLegVacant || leg.relayMissingLeg);
-      const onThisLeg =
-        normalizeSwimmerName(leg.name) === nameKey ||
-        (isVacant &&
-          pdf.some(r => {
-            if (!isRelayResult(r) || r.team !== athlete.team) return false;
-            if (r.event !== leg.event || r.rank !== leg.rank) return false;
-            if ((r.relayLegIndex ?? -1) !== legIdx) return false;
-            return normalizeSwimmerName(r.name) === nameKey;
-          }) ||
-          pdf.some(
-            r =>
-              isRelayResult(r) &&
-              r.team === athlete.team &&
-              r.event === leg.event &&
-              r.relayNames?.[legIdx] &&
-              normalizeSwimmerName(r.relayNames[legIdx].name) === nameKey
-          ));
-
-      if (!onThisLeg && !isVacant) continue;
-      if (!onThisLeg && isVacant) {
-        // Only show vacant if this athlete was the departed name
-        const departed =
-          pdf.find(
-            r =>
-              isRelayResult(r) &&
-              r.team === athlete.team &&
-              r.event === leg.event &&
-              (r.relayLegIndex ?? -1) === legIdx &&
-              normalizeSwimmerName(r.name) === nameKey
-          ) ||
-          pdf.find(
-            r =>
-              isRelayResult(r) &&
-              r.team === athlete.team &&
-              r.event === leg.event &&
-              r.relayNames?.[legIdx] &&
-              normalizeSwimmerName(r.relayNames[legIdx].name) === nameKey
-          );
-        if (!departed) continue;
-      }
-
-      seen.add(rowKey);
-      let status: RelayInvolvement['status'] = 'ok';
-      let statusLabel = 'OK';
-      if (isVacant) {
-        const scorerOff = issues.some(i => i.type === 'relay_scorer_off');
-        status = scorerOff ? 'removed' : 'vacant';
-        const stroke = relayMissingStrokeLabel(leg.relayMissingLeg?.stroke);
-        statusLabel = scorerOff
-          ? 'Removed — not a scorer; fill this leg'
-          : stroke
-            ? `Vacant — needs ${stroke}`
-            : 'Vacant — needs filling';
-      }
-      out.push({
-        event: leg.event,
-        legIndex: legIdx,
-        status,
-        statusLabel,
-        relayEntryKey: entryKey,
-      });
-    }
-    return out;
+    return buildRelayInvolvement(scoredResults, pdf, athlete.team, nameKey, issues);
   }, [athlete.name, athlete.team, gender, scoredResults, workspace.menResults, workspace.womenResults, issues]);
 
   const setScorer = (isScorer: boolean) => {

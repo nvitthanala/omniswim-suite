@@ -1,5 +1,35 @@
 # Omniswim Suite — Claude Code Instructions
 
+## Response & Writing Style
+
+This rule covers three things: chat replies, commit messages, and docs. Use
+plain words. Keep sentences short. Say one thing per sentence. Prefer active
+voice ("the parser drops the row" not "the row is dropped by the parser").
+Use the same term for the same thing every time — do not swap "swimmer" for
+"athlete" for "competitor" in one passage. Spell out an acronym on first use.
+
+Sources: [ASD-STE100 / Simplified Technical English](https://www.asd-ste100.org/)
+and the [Google developer documentation style guide](https://developers.google.com/style).
+
+**Commit messages** — apply both of these on every commit in this repo:
+[tbaggery, "A Note About Git Commit Messages"](https://tbaggery.com/2008/04/19/a-note-about-git-commit-messages.html)
+and [cbea.ms, "How to Write a Git Commit Message"](https://cbea.ms/git-commit/).
+
+1. Subject line first, then a blank line, then the body.
+2. Subject: 50 characters or fewer. No period at the end.
+3. Subject: imperative mood — "Fix the race", not "Fixed the race" or "Fixes the race".
+   Test it by finishing the sentence "If applied, this commit will ___."
+4. Body: wrap at 72 characters.
+5. Body: explain what the change does and why. Skip the how — the diff shows that.
+
+**Docs and chat replies** — apply STE and the Google style guide:
+
+- One idea per sentence. Split any sentence that has "and" joining two instructions.
+- Write steps as commands to the reader: "Run the script," not "The script should be run."
+- Cut filler words — "in order to", "please note that", "it should be noted".
+- Say what the code does, not what you did to it, in commit/PR bodies and doc prose.
+- Skip hedging ("might", "could potentially") when you know the answer.
+
 ## AI Orchestration & Sequencing
 
 **Standing delegation model for this project:**
@@ -88,6 +118,56 @@ model is a step down from Opus. If you want a specific provider, say so with
 
 `fleet route "<task>" --needs <preset>` previews the decision for free. Presets:
 `architect plan implement refactor debug review test docs scout triage research bulk`.
+
+### Long-horizon task state
+
+A task spanning several subagent dispatches, or likely to survive a rate-limit
+resume or a context compaction, keeps its state in one small canonical file —
+not in conversation history. Use the `execution-state` skill and see
+`docs/reference/PHASE_STATE.json` for the running example (the Phase-2
+core-complexity sweep). This is not a style preference: this branch lost a
+subagent's mutation-testing results once already because they lived only in
+an improvised scratchpad filename and got misattributed after a resume. A
+brief to a resumed or fresh subagent points at the state file's entry for its
+target, not at "continue where you left off."
+
+---
+
+## UI craft and design system
+
+Twelve skills from [emilkowalski/skills](https://github.com/emilkowalski/skills)
+are installed project-wide (`npx skills@latest add emilkowalski/skills`,
+symlinked into `.claude/skills/`, canonical copies in `.agents/skills/`).
+Route UI/animation work to them the same way `cyclomatic-complexity` is
+routed for complexity work — they should trigger on their own; invoke
+explicitly if they don't.
+
+Applicable to this repo (a React/Vite web monorepo — `packages/ui`,
+`manager`, `matrix`, `metrics`, `apps/shell`):
+
+| Skill | Use for |
+| --- | --- |
+| `emil-design-eng` | The base philosophy — animation framework, component principles, performance, accessibility. Read this first. |
+| `animate` | Building a specific animation from a request — gates *whether* it should animate before *how*. |
+| `review-animations` | Auditing a diff's motion against the rules before it ships. |
+| `improve-animations` | Read-only codebase-wide audit, prioritized findings, no edits. |
+| `find-animation-opportunities` | Sweeping an interface for places motion is missing, with the same restraint gate. |
+| `animation-vocabulary` | Turning a vague motion description into the precise term. |
+| `pick-ui-library` | Curated picks for toasts, dropdowns, virtualization, drag-and-drop, charts, state, styling — check before hand-rolling or adding a new dependency. |
+| `apple-design` | Interruptible, velocity-aware motion for anything gesture-driven (drag, swipe-to-dismiss); the eight design principles for feature-level decisions. |
+| `prototype` | Building 3-5 genuinely divergent variants of one component behind a picker, in isolation from production code. |
+| `ask-sonner` | This repo doesn't use Sonner today; `pick-ui-library` will surface it if a toast need comes up. |
+
+Installed but not applicable here — kept for completeness, not for use:
+`animate-expo` (React Native/Expo) and `write-swift` (native Swift).
+
+**How to apply to work already done:** route `worker` (sonnet) for
+restyle-shaped application against `packages/ui` and other shared
+primitives, with the acceptance bar from `review-animations` — never apply
+motion changes to `packages/core`, `backend/`, or anything on the scoring
+data-path. Same rule as everywhere else in this file: additive, Dark/Light/
+custom tokens preserved, lint + tests green, no git operations by the
+subagent.
 
 ---
 

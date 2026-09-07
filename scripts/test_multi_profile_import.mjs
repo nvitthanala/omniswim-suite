@@ -8,6 +8,7 @@ import {
   detectSwimCloudPasteFormat,
   parseSwimCloudPasteDetailed,
   isChampionshipProgramEvent,
+  splitMultiProfileBlocks,
 } from '../packages/core/src/lib/athleteHistory.ts';
 import { parseSwimCloudMultiProfile } from '../packages/core/src/lib/swimCloudMultiProfile.ts';
 import { convertSwimToSCY, foldDiacritics, normalizeSwimmerName } from '../packages/core/src/lib/utils.ts';
@@ -179,6 +180,102 @@ function baseWorkspace() {
   const res2 = parseSwimCloudMultiProfile(orphan, { team: TEAM, gender: Gender.MEN });
   assert.ok(res2.warnings.some(w => /before any swimmer name/i.test(w)));
   assert.equal(res2.athletes.length, 1);
+}
+
+// --- three-line profile headers: hometown + club must not become athletes -----
+// Regression for the OBU 2026-27 export, where a `name / hometown / club` header
+// split one swimmer into two or three blocks and filed real swims under a club.
+// Every header line below is copied verbatim from `oburoster202627.txt`.
+{
+  const CHROME = ['PERSONAL BESTS', 'EVENT PROGRESSION', 'Course', 'Season', 'Sort by'];
+  const paste = [
+    'Mikhail Lymar',
+    'Volgograd, RUS',            // 3-letter country code, not a 2-letter US state
+    'Bison Aquatic Club',        // club line shaped exactly like a person name
+    'Mikhail Lymar on Instagram', // social-handle line, also name-shaped
+    ...CHROME,
+    HDR,
+    '50 Free SCY\t22.77\tX\tNT LAC Fall Classic\tNov 9, 2025\t',
+    '100 Free SCY\t49.46\t\tNT COR Senior CUP\tMar 2, 2025\t',
+    '',
+    'Owen Green',
+    'Benton, AR',
+    'Arkansas Dolphins',         // no club keyword at all — only structure catches it
+    ...CHROME,
+    HDR,
+    '500 Free SCY\t4:39.75\t\tSpeedo Sectionals\tMar 6, 2026\t',
+    '',
+    'Stefan DUCA-MIRCEA',
+    'HUN',                       // hometown reduced to a bare country code
+    'Ouachita Baptist University',
+    ...CHROME,
+    HDR,
+    '100 Breast SCY\t1:03.21\t\tNT COR Classic\tDec 1, 2023\t',
+  ].join('\n');
+
+  const res = parseSwimCloudMultiProfile(paste, { team: TEAM, gender: Gender.MEN });
+  assert.deepEqual(
+    res.athletes.map(a => a.name),
+    ['Mikhail Lymar', 'Owen Green', 'Stefan DUCA-MIRCEA'],
+    'three real athletes, no club/hometown/social phantoms'
+  );
+  assert.deepEqual(res.athletes.map(a => a.swims.length), [2, 1, 1], 'swims land on their own swimmer');
+  assert.deepEqual(
+    res.warnings.filter(w => /No swims parsed/.test(w)),
+    [],
+    'no zero-swim phantom blocks'
+  );
+  assert.equal(detectSwimCloudPasteFormat(paste), 'multi_profile', 'detector agrees with the parser');
+
+  // Splitter contract: nothing is invented and nothing vanishes.
+  const { blocks, orphanLines } = splitMultiProfileBlocks(paste);
+  assert.equal(blocks.length, 3);
+  assert.deepEqual(orphanLines, []);
+  assert.deepEqual(blocks[1].absorbed, ['Arkansas Dolphins'], 'mascot club recorded, not dropped');
+  assert.ok(blocks.every(b => b.hasDataRow));
+}
+
+// --- true positives: the new exclusions must not swallow a real name ---------
+{
+  for (const name of [
+    'Tyler Bell',
+    'Stefan DUCA-MIRCEA',
+    'Máté Hosszú',
+    'Ruben Rivera Ayala',
+    'Alan Alejan Gonzalez Mujica',
+    'Coi Call',
+    'Owen McCall',
+    'Sparky Sparks',
+  ]) {
+    const paste = [name, HDR, '50 Free SCY\t21.00\t\tMeet\tFeb 1, 2026\t'].join('\n');
+    const res = parseSwimCloudMultiProfile(paste, { team: TEAM, gender: Gender.MEN });
+    assert.deepEqual(res.athletes.map(a => a.name), [name], `"${name}" is still a name line`);
+    assert.equal(res.athletes[0].swims.length, 1, `"${name}" keeps his swim`);
+  }
+}
+
+// --- a diver is absent, not empty -------------------------------------------
+// Carson Powers on the OBU roster has five diving SCORES and zero times. A diving
+// score is not a competition time; it must never be imported as one, and his
+// absence must stay loud rather than reading as a parse failure.
+{
+  const paste = [
+    'Carson Powers',
+    'Oviedo, FL',
+    'Ouachita Baptist University',
+    'PERSONAL BESTS',
+    HDR,
+    '1 M Diving 6 Dives\t469.55\t\tOBU vs.DSU\tNov 8, 2025\t',
+    '3 M Diving 11 Dives\t484.05\t\tNew South Championships\tFeb 23, 2024\t',
+  ].join('\n');
+
+  const res = parseSwimCloudMultiProfile(paste, { team: TEAM, gender: Gender.MEN });
+  assert.equal(res.athletes.length, 0, 'a diver yields no swims');
+  assert.ok(
+    res.warnings.some(w => /No swims parsed for "Carson Powers"/.test(w)),
+    'and says so out loud'
+  );
+  assert.ok(!JSON.stringify(res.athletes).includes('469.55'), 'diving score never becomes a time');
 }
 
 console.log('multi-profile import tests passed');

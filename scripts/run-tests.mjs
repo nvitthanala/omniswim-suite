@@ -18,6 +18,16 @@ const repoRoot = join(scriptsDir, '..');
 // Each entry: [file, requiredFixture?]. If the fixture is listed and missing,
 // the test is skipped rather than failed. A test may also skip itself by exiting
 // 0 with a leading `SKIP` line (used for checks needing a live database).
+//
+// A test may also report a KNOWN FAILURE by printing a line beginning `XFAIL`
+// and exiting 0. That is for a check whose subject is correct but whose input is
+// not — the case it was built for was the Delta State men total in
+// `test_nsisc_team_totals.mjs`, where the engine was right and the committed
+// fixture was missing four result rows; that fixture has since been re-extracted
+// and the check is a plain assertion again. No test declares an XFAIL today. The
+// summary lists every one, so a known failure stays visible instead of being
+// skipped into silence. A test may not use it to excuse its own defect: the
+// failing case must be named in the test file with what would close it.
 const TESTS = [
   ['test_sqlite_roundtrip.mjs'],
   ['test_pg_roundtrip.mjs'],
@@ -30,7 +40,9 @@ const TESTS = [
   ['test_chart_bundle.mjs'],
   ['test_roster_optimizer.mjs'],
   ['test_optimizer_never_loses.mjs'],
+  ['test_arbitrage_never_loses.mjs'],
   ['test_tie_group_scoring.mjs'],
+  ['test_scorer_pool_cap.mjs'],
   ['test_fast_swap_context.mjs'],
   ['test_entry_limits.mjs'],
   ['test_athlete_history.mjs'],
@@ -57,6 +69,7 @@ const TESTS = [
   ['test_drop_add_analysis.mjs'],
   ['test_relay_swaps.mjs'],
   ['test_roster_removal.mjs'],
+  ['test_projection_roster_gates.mjs'],
   ['test_swim_editor.mjs'],
   ['test_scenario_diff.mjs'],
   ['test_athlete_aliases.mjs'],
@@ -74,9 +87,16 @@ const TESTS = [
   ['test_momentum_series.mjs'],
   ['test_psych_projection.mjs'],
   ['test_team_aliases.mjs'],
+  ['test_team_abbreviation_parity.mjs'],
   ['test_cutlines.mjs'],
   ['test_cutline_tags.mjs'],
   ['test_team_rankings_parser.mjs'],
+  ['test_yearless_result_row.mjs'],
+  ['test_yearless_relay_row.mjs'],
+  ['test_abbreviated_school_column.mjs'],
+  ['test_scored_event_boundary.mjs'],
+  ['test_pdf_place_points_boundary.mjs'],
+  ['test_nsisc_team_totals.mjs'],
   ['test_nsisc_psych.mjs', 'tests/fixtures/nsisc_psych_sheet.pdf'],
   ['test_compact_event_label.mjs'],
   ['test_team_colors.mjs'],
@@ -88,6 +108,7 @@ let passed = 0;
 let failed = 0;
 let skipped = 0;
 const failures = [];
+const knownFailures = [];
 
 for (const [file, fixture] of TESTS) {
   const path = join(scriptsDir, file);
@@ -122,7 +143,13 @@ for (const [file, fixture] of TESTS) {
       console.log(stdout.trim().split('\n')[0]);
       skipped += 1;
     } else {
-      console.log(`PASS  ${file}`);
+      const xfails = stdout.split('\n').filter(l => l.trimStart().startsWith('XFAIL'));
+      if (xfails.length) {
+        console.log(`PASS  ${file} (${xfails.length} known failure${xfails.length > 1 ? 's' : ''})`);
+        for (const line of xfails) knownFailures.push(`${file}: ${line.trim()}`);
+      } else {
+        console.log(`PASS  ${file}`);
+      }
       passed += 1;
     }
   } else {
@@ -156,7 +183,13 @@ if (existsSync(playwrightBin)) {
   skipped += 1;
 }
 
-console.log(`\n${passed} passed, ${failed} failed, ${skipped} skipped`);
+const knownSuffix = knownFailures.length ? `, ${knownFailures.length} known failure${knownFailures.length > 1 ? 's' : ''}` : '';
+console.log(`\n${passed} passed, ${failed} failed, ${skipped} skipped${knownSuffix}`);
+if (knownFailures.length) {
+  // Printed every run so a documented gap cannot fade into a green suite.
+  console.log('\nKNOWN FAILURES (expected, documented in the test file):');
+  for (const k of knownFailures) console.log(`  ${k}`);
+}
 if (failures.length) {
   console.log('\n' + failures.join('\n\n'));
   process.exit(1);

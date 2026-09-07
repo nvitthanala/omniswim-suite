@@ -31,6 +31,7 @@
 import assert from 'node:assert/strict';
 import { buildFastSwapContext, teamTotal } from '../packages/core/src/lib/arbitrage/shared.ts';
 import { rankExactSwaps } from '../packages/core/src/lib/crossCourseArbitrage.ts';
+import { buildWhatIfProjection } from '../packages/core/src/lib/whatIfProjection.ts';
 import { mergeScoringSettings } from '../packages/core/src/lib/scoringDefaults.ts';
 import { Gender } from '../packages/core/src/types.ts';
 
@@ -130,9 +131,8 @@ function plan(id, name, event, time) {
 }
 
 /**
- * THE SHAPE THAT BREAKS A PER-NAME SWEEP. Alpha One is carried as BOTH a
- * recruit row and an active optimizer plan for 50 Freestyle at the same time —
- * the exact shape the live HSU workspace holds for five men.
+ * THE SHAPE THAT BREAKS A PER-NAME SWEEP. Alpha One is carried as TWO recruit
+ * rows for 50 Freestyle at the same time.
  *
  * Why it lands on ONE placement: `prepareRecruitsForScoring` ranks each recruit
  * row INDEPENDENTLY against the PDF comparators only, never against the other
@@ -143,6 +143,16 @@ function plan(id, name, event, time) {
  * (A plain duplicated RESULT row does not reproduce it: projectRanksInField
  * assigns sequential ranks to equal times, splitting the pair across two
  * placements.)
+ *
+ * WHY TWO RECRUIT ROWS AND NOT recruit+plan. This fixture used to pair a recruit
+ * row with an active optimizer plan — "the exact shape the live HSU workspace
+ * holds for five men". That shape was the duplication bug itself: the projection
+ * composed its three planes without reconciling them, so one athlete held two
+ * entries in one event and scored twice. `buildWhatIfProjection` now collapses a
+ * cross-plane duplicate down to the most explicit plane, and
+ * `buildFastSwapContext` refuses to engage when it does (§4 below). Two rows on
+ * ONE plane are deliberately left alone — that is a duplicate import, not a
+ * lineup decision — so this fixture still holds more rows than names.
  */
 function duplicateRowWorkspace(extra = {}) {
   return baseWorkspace({
@@ -159,10 +169,11 @@ function duplicateRowWorkspace(extra = {}) {
       // 200 Backstroke sorts last: Alpha Five arrives with the pool already full.
       result('a5', 'Alpha Five', TEAM, '200 Backstroke', '1:49.00', { rank: 1, roundSwam: 'A Final' }),
     ],
-    // Alpha One twice in 50 Free (recruit + active plan, identical time).
-    recruits: [recruit('r1', 'Alpha One', '50 Freestyle', '20.10')],
-    meetEntryPlans: [plan('p1', 'Alpha One', '50 Freestyle', '20.10')],
-    activeEntryIds: ['p1'],
+    // Alpha One twice in 50 Free (two recruit rows, identical time).
+    recruits: [
+      recruit('r1', 'Alpha One', '50 Freestyle', '20.10'),
+      recruit('r1b', 'Alpha One', '50 Freestyle', '20.10'),
+    ],
     // Candidate add-events for the swap enumeration.
     athleteHistory: [
       hist('Alpha One', '50 Freestyle', '20.10'),
@@ -181,9 +192,11 @@ function duplicateRowWorkspace(extra = {}) {
   });
 }
 
-/** Same workspace with the duplicate collapsed to a single row. */
+/** Same workspace with the duplicate reduced to a single row. */
 function singleRowWorkspace() {
-  return duplicateRowWorkspace({ recruits: [] });
+  return duplicateRowWorkspace({
+    recruits: [recruit('r1', 'Alpha One', '50 Freestyle', '20.10')],
+  });
 }
 
 // --- 1. the context ENGAGES on a duplicated-placement workspace -------------
@@ -265,6 +278,48 @@ function singleRowWorkspace() {
     'the duplicate row must move the team total — otherwise case 1 is vacuous'
   );
   ok(`duplicate row moves the scored team total (${baseB} -> ${baseA}), so case 1 is live`);
+}
+
+// --- 5. a CROSS-plane duplicate makes the context fail closed --------------
+// When a plan and a recruit row cover the same athlete in the same event, the
+// projection keeps only the plan. The incremental model prices a drop as
+// "subtract this row's points from its event group" and cannot see that the
+// hidden recruit row resurfaces the moment the plan is dropped, so it would
+// under-count every drop of a shadowing row. The context must refuse rather
+// than answer, and the full re-score must still work.
+{
+  const ws = duplicateRowWorkspace({
+    recruits: [recruit('r1', 'Alpha One', '50 Freestyle', '20.10')],
+    meetEntryPlans: [plan('p1', 'Alpha One', '50 Freestyle', '20.10')],
+    activeEntryIds: ['p1'],
+  });
+  const merged = mergeScoringSettings(ws.scoringSettings, { conference: ws.conference });
+  const proj = buildWhatIfProjection({ workspace: ws, gender: MEN, removeSeniors: false });
+
+  assert.equal(proj.collapsed.length, 1, 'the recruit row must be the one collapsed');
+  assert.equal(proj.collapsed[0].id, 'r1', 'the PLAN wins the collision, not the recruit row');
+  assert.ok(
+    !proj.rows.some(r => r.id === 'r1'),
+    'the shadowed recruit row must not reach the scoring pool'
+  );
+
+  const ctx = buildFastSwapContext(ws, TEAM, MEN, merged, [...ws.menResults, ...ws.womenResults]);
+  assert.equal(
+    ctx,
+    null,
+    'buildFastSwapContext must fail closed while a row for this team is shadowed'
+  );
+
+  // Failing closed must not fail the caller: the full re-score still answers.
+  const full = rankExactSwaps(ws, {
+    team: TEAM,
+    gender: MEN,
+    settings: POOL_SETTINGS,
+    forceFullRescore: true,
+  });
+  const fallback = rankExactSwaps(ws, { team: TEAM, gender: MEN, settings: POOL_SETTINGS });
+  assert.deepEqual(fallback, full, 'the fallback path must equal an explicit full re-score');
+  ok('a shadowed row makes the context fail closed, and the fallback still answers');
 }
 
 console.log(`\n${n} assertions passed`);
