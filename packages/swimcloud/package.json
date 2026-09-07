@@ -11,7 +11,8 @@
     "./html": "./src/html.ts",
     "./cache": "./src/cache.ts",
     "./fetcher": "./src/fetcher.ts",
-    "./playwrightFetcher": "./src/playwrightFetcher.ts"
+    "./playwrightFetcher": "./src/playwrightFetcher.ts",
+    "./clipboardPayload": "./src/clipboardPayload.ts"
   },
   "scripts": {
     "lint": "tsc --noEmit -p tsconfig.json"

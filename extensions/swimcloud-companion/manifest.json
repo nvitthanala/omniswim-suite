@@ -1,0 +1,15 @@
+{
+  "manifest_version": 3,
+  "name": "Omniswim SwimCloud Companion",
+  "version": "0.1.0",
+  "description": "Adds a button to SwimCloud pages you're already viewing that copies the page for import into Omniswim Suite. Never fetches anything on its own.",
+  "permissions": ["clipboardWrite"],
+  "content_scripts": [
+    {
+      "matches": ["https://www.swimcloud.com/*", "https://swimcloud.com/*"],
+      "js": ["content.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

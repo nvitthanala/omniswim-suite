@@ -181,3 +181,12 @@ export type {
 
 export { PlaywrightSwimCloudFetcher, storageStateArgument } from './playwrightFetcher';
 export type { PlaywrightSwimCloudFetcherOptions } from './playwrightFetcher';
+
+export { readSwimCloudClipboardPayload } from './clipboardPayload';
+export type {
+  SwimCloudClipboardAccepted,
+  SwimCloudClipboardPayload,
+  SwimCloudClipboardReadResult,
+  SwimCloudClipboardRejected,
+  SwimCloudClipboardRejectionReason,
+} from './clipboardPayload';
