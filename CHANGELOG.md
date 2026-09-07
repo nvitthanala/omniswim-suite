@@ -8,6 +8,18 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added
+
+- **Roster import can now pull a swimmer's personal bests straight from
+  SwimCloud.** Install the browser extension in `extensions/swimcloud-companion/`,
+  click "Copy for Omniswim" on a swimmer's SwimCloud profile page, then use
+  the new "From clipboard" button in the roster importer. Requires the
+  extension (a separate, manual install — nothing fetches automatically).
+  Only swimmer profile pages are supported; team-roster and meet-results
+  pages are parsed internally but have no import UI yet. See
+  `plans/2026-09-06/` for the full design and its data-provenance/legal
+  reasoning.
+
 ## 2026-08-16
 
 ### Fixed
