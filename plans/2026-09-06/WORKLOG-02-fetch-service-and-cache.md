@@ -55,22 +55,23 @@ limit, cache semantics) — via 33 tests against a hand-rolled fake
 what's testable without launching Chromium (constructor validation, the
 `storageState` missing-file path resolution).
 
-## If you're resuming this and have a moment to install Chromium
+## Update, 2026-09-07: the local smoke test is done
 
-`npx playwright install chromium` (one-time, downloads a browser binary) would
-unlock two different things, worth keeping separate:
+Installed Chromium (`npx playwright install chromium`) and wrote
+`tests/swimcloudPlaywrightFetcher.local.test.ts` — 3 tests against a
+throwaway local `node:http` server (never SwimCloud): launch+navigate+
+extract, `storageState` persists a real cookie the server set, and a second,
+separate fetcher instance replays that cookie back purely via the file on
+disk. All three passed. This upgrades `PlaywrightSwimCloudFetcher` from
+"written against the documented API, never executed" to "executed,
+mechanics confirmed" — **without** resolving open question 2, which this
+test deliberately does not attempt.
 
-- A **local smoke test** — point `PlaywrightSwimCloudFetcher` at a throwaway
-  local HTTP server (not SwimCloud) serving one of the
-  `tests/fixtures/swimcloud-synthetic-*.html` files, and confirm the class's
-  own mechanics work (browser launches, navigates, extracts `page.content()`,
-  `storageState` round-trips). This is safe to automate — it never touches
-  swimcloud.com — and would upgrade "written against the documented API,
-  never executed" to "executed, mechanics confirmed" without resolving open
-  question 2.
-- The **actual live-site verification** (Phase 2's real acceptance
-  criterion) — still needs the human-present moment described above,
-  regardless of whether the smoke test above has been done.
+**The actual live-site verification (Phase 2's real acceptance criterion)
+is still not done and still needs the human-present moment described
+above.** The mechanism working locally is evidence it's *likely* to work
+against a real Cloudflare-fronted page too, but "likely" is exactly the gap
+a supervised run closes and nothing else can.
 
 ## Log
 

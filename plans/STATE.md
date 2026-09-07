@@ -8,7 +8,7 @@ meet/team/athlete/conference link, get structured data instead of retyping
 it) — plan in [`plans/2026-09-06/`](2026-09-06/README.md), full status/
 history across three worklogs in that folder (`WORKLOG-01` through
 `WORKLOG-03`; **read the most recent one first if resuming this work**).
-Landed on branch `nvitthanala/swimcloud-data-ingest` (11 commits, not yet
+Landed on branch `nvitthanala/swimcloud-data-ingest` (18 commits, not yet
 merged to `main`): an NCAA Rule 7 scoring engine (`packages/core`);
 `packages/swimcloud` — entities, URL classifier, three HTML parsers (team
 roster, meet results, swimmer personal-bests — all against synthetic
@@ -18,20 +18,26 @@ front of a Playwright-backed fetcher; a browser extension
 the clipboard; and a working "From clipboard" import path wired into
 `RosterImportWizard` for the swimmer-profile case specifically (team-roster
 and meet-results captures are parsed but have no UI path — see
-`WORKLOG-03`'s "what Phase 3 does not cover"). 210 tests, lint clean 8/8
-workspaces, and a real `npm run build` of the shell app succeeds.
+`WORKLOG-03`'s "what Phase 3 does not cover"). Also: a `/code-review medium`
+pass found and fixed 3 real correctness bugs (with regression tests proven
+against the pre-fix code — see `WORKLOG-03`'s review section), and a local
+Chromium smoke test proved `PlaywrightSwimCloudFetcher`'s actual mechanism
+(launch, navigate, `storageState` session reuse) works against a throwaway
+local server. 219 tests, lint clean 8/8 workspaces, and a real
+`npm run build` of the shell app succeeds.
 
-**Two things still genuinely unverified, both requiring a human, not more
-code:** (1) the Playwright fetcher (Track B) has never touched a live
-site — no Chromium binary is installed here, and per the plan's own posture
-that's a deliberate, human-present action, not something to automate even
-for testing (Phase 2 worklog); (2) the "From clipboard" button has never
-been clicked in a running app — verified structurally (types + production
-build) but not visually (Phase 3 worklog). Key finding worth knowing before
-touching any of this: SwimCloud's Terms of Use flatly prohibit automated
-access; the plan records an explicit, informed user decision to build one
-compliant track (the browser extension) and one accepted-risk track
-(Playwright fetch-on-paste) side by side — see
+**One thing still genuinely unverified, requiring a human, not more code:**
+whether the Playwright fetcher (Track B) can pass SwimCloud's actual
+Cloudflare challenge — its mechanism is now proven locally, but touching the
+*live* site is, per the plan's own posture, a deliberate human-present
+action, never an automated one, including for testing (Phase 2 worklog).
+Separately, the "From clipboard" button has never been clicked in a running
+app — verified structurally (types + production build) but not visually
+(Phase 3 worklog); lower stakes than the above. Key finding worth knowing
+before touching any of this: SwimCloud's Terms of Use flatly prohibit
+automated access; the plan records an explicit, informed user decision to
+build one compliant track (the browser extension) and one accepted-risk
+track (Playwright fetch-on-paste) side by side — see
 [`01-legal-and-access-strategy.md`](2026-09-06/01-legal-and-access-strategy.md).
 
 Baseline: lint clean (7 packages), `npm test` **61 passed / 0 failed / 3 skipped**,
