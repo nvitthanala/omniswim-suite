@@ -1144,7 +1144,16 @@ export function computeNcaaEventScoring(
     // table with only four entries in the pool never contested places five and six, so
     // they were not "lost". Only a place a known entry vacated is reported — absent
     // rather than assumed, since the caller may simply not have handed us that lane.
-    const lastContested = Math.min(pool.lastPlace, pool.firstPlace + inPool.length - 1);
+    //
+    // Bounded by entries that occupied a lane, which is *not* the same set as
+    // `considered` above. A disqualified or exhibition entry still swam and still
+    // occupied a place — Rule 7-7/7-10's "removed from consideration, others may
+    // advance" presumes a real lane existed to advance into. A `did-not-compete`
+    // entry is the one status that "never occupied a place" (Rule 7-9, see
+    // NcaaEntryStatus's doc comment) — counting it here would fabricate a lost
+    // place for a lane nobody was ever assigned.
+    const contestedInPool = inPool.filter(row => (row.entry.status ?? 'scoring') !== 'did-not-compete');
+    const lastContested = Math.min(pool.lastPlace, pool.firstPlace + contestedInPool.length - 1);
     for (let place = nextPlace; place <= lastContested; place += 1) {
       const value = pointsForPlace(table, place);
       if (value > 0) {

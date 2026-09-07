@@ -137,6 +137,50 @@ describe('parseSwimmerProfileHtml — the happy path', () => {
   });
 });
 
+describe('parseSwimmerProfileHtml — a course column that contradicts the label', () => {
+  // Regression test for a real bug found by code review (2026-09-07): a
+  // "Yard" event label short-circuited straight to SCY without ever
+  // consulting an explicit course column, so a contradictory column value
+  // (stale markup, a copy-pasted row) was silently discarded with no warning.
+  const contradictingHtml = `
+    <div class="c-page">
+      <h1>Regression Fixture</h1>
+      <table>
+        <thead><tr><th>Event</th><th>Time</th><th>Course</th></tr></thead>
+        <tbody>
+          <tr><td>50 Yard Freestyle</td><td>21.40</td><td>LCM</td></tr>
+        </tbody>
+      </table>
+    </div>
+  `;
+  const context = contextFor('https://www.swimcloud.com/swimmer/3646504/');
+
+  it('still resolves to SCY (the label wins) but flags the contradiction rather than discarding it silently', () => {
+    const result = parseSwimmerProfileHtml(contradictingHtml, context);
+    if (!result.ok) throw new Error(`expected success, got ${result.failure.code}`);
+
+    expect(result.data.personalBests[0].course).toBe('SCY');
+
+    const warning = result.warnings.find((w) => w.code === 'course-column-contradicts-label');
+    expect(warning).toBeDefined();
+    expect(warning?.raw).toBe('LCM');
+  });
+
+  it('does not warn when the course column simply agrees with the label', () => {
+    const agreeingHtml = contradictingHtml.replace('<td>LCM</td>', '<td>SCY</td>');
+    const result = parseSwimmerProfileHtml(agreeingHtml, context);
+    if (!result.ok) throw new Error('expected success');
+    expect(result.warnings.some((w) => w.code === 'course-column-contradicts-label')).toBe(false);
+  });
+
+  it('does not warn when the course column is simply empty', () => {
+    const emptyColumnHtml = contradictingHtml.replace('<td>LCM</td>', '<td></td>');
+    const result = parseSwimmerProfileHtml(emptyColumnHtml, context);
+    if (!result.ok) throw new Error('expected success');
+    expect(result.warnings.some((w) => w.code === 'course-column-contradicts-label')).toBe(false);
+  });
+});
+
 describe('parseSwimmerProfileHtml — failure modes', () => {
   it('rejects empty input', () => {
     const result = parseSwimmerProfileHtml('   ', context);

@@ -140,6 +140,8 @@ export type SwimCloudParseWarningCode =
   | 'missing-athlete-link'
   /** A relay row listed no legs. Expected if SwimCloud does not publish them at all. */
   | 'relay-legs-absent'
+  /** A row's event label said "Yard" but an explicit course column disagreed. The label wins; the disagreement is surfaced rather than silently resolved either way. */
+  | 'course-column-contradicts-label'
   /** A diving event's result column holds a judged score, not a time; not stored as `finalTime`. */
   | 'diving-score-not-a-time';
 
@@ -1158,11 +1160,17 @@ function readPlace(
   }
   if (/^\d+$/.test(token)) {
     const value = Number.parseInt(token, 10);
-    return value > 0 ? value : undefined;
+    if (value > 0) {
+      return value;
+    }
+    // "0" is numeric but not a valid place (places start at 1). Falls through
+    // to the same warning below as a non-numeric token, rather than silently
+    // becoming "no place" with no audit trail — a real "no place" always
+    // comes from NO_PLACE_TOKENS above, never from a printed zero.
   }
   warnings.push({
     code: 'unrecognized-place-token',
-    message: `Place cell ${JSON.stringify(token)} is neither an integer nor a known "no place" marker; no place recorded.`,
+    message: `Place cell ${JSON.stringify(token)} is neither a valid place (an integer of 1 or more) nor a known "no place" marker; no place recorded.`,
     eventId: event.eventId,
     rowIndex,
     raw: token,
@@ -1497,6 +1505,21 @@ export function parseSwimmerProfileHtml(
     let course: SwimCloudCourseOrUnknown;
     if (unit === 'yard') {
       course = 'SCY';
+      // "Yard" in the label is about as unambiguous a signal as this domain
+      // has, so it still wins — but an explicit course column that disagrees
+      // is a real anomaly (stale markup, a copy-pasted row) worth a human's
+      // attention, not something to resolve silently either direction.
+      if (courseColumn >= 0) {
+        const rawCourseCell = textAt(cells, courseColumn);
+        if (rawCourseCell.length > 0 && normalizeHeader(rawCourseCell) !== 'scy') {
+          warnings.push({
+            code: 'course-column-contradicts-label',
+            message: `Row for ${JSON.stringify(label)} names a yard event, but its course column reads ${JSON.stringify(rawCourseCell)}. Recorded as SCY (the label); the column is preserved here for review, not silently trusted over the label.`,
+            rowIndex,
+            raw: rawCourseCell,
+          });
+        }
+      }
     } else if (courseColumn >= 0 && textAt(cells, courseColumn).length > 0) {
       const raw = normalizeHeader(textAt(cells, courseColumn));
       course = raw === 'scy' ? 'SCY' : raw === 'scm' ? 'SCM' : raw === 'lcm' ? 'LCM' : 'unknown';

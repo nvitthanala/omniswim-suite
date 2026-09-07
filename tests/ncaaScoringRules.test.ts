@@ -345,6 +345,57 @@ describe('exhibition swims (Rule 7-10-1)', () => {
 });
 
 // ---------------------------------------------------------------------------
+// Failure to compete (Rule 7-9)
+// ---------------------------------------------------------------------------
+
+describe('failure to compete (Rule 7-9)', () => {
+  // Regression test for a real bug found by code review (2026-09-07): a
+  // `did-not-compete` entry was counting toward how many places a pool
+  // "contested" when computing lostPlaces, fabricating lost points for
+  // places nobody ever occupied. Rule 7-9's own text is unambiguous: "No
+  // competitor may score points in an event in which the competitor does not
+  // compete" — a scratch never took a lane, so it can't leave one empty
+  // either. A disqualified or exhibition entry, by contrast, did occupy a
+  // lane (Rule 7-7/7-10's "removed from consideration, others may advance"
+  // presumes a real lane to advance into) and correctly still counts.
+  it('does not fabricate lost places for scratched entries that never occupied a lane', () => {
+    // 9-4-3-2-1 table (Rule 7-2), no trailing zero. Three real finishers, two
+    // scratches. Before the fix, the two scratches inflated the pool's
+    // "contested" size from 3 to 5, and places 4-5 (worth 2 and 1 points) were
+    // reported as lost from the meet — points that were never in play, because
+    // only three swimmers ever raced.
+    const result = computeNcaaEventScoring('double-dual-tri-quad', 'individual', [
+      entry('a1', 'Alpha', 1),
+      entry('b1', 'Bravo', 2),
+      entry('a2', 'Alpha', 3),
+      entry('scratch-1', 'Charlie', 4, { status: 'did-not-compete' }),
+      entry('scratch-2', 'Charlie', 5, { status: 'did-not-compete' }),
+    ]);
+
+    expect(pointsById(result)).toEqual({ a1: 9, b1: 4, a2: 3, 'scratch-1': 0, 'scratch-2': 0 });
+    expect(result.lostPlaces).toEqual([]);
+    expect(result.pointsLost).toBe(0);
+  });
+
+  it('still reports a genuinely lost place behind a scratch, when a real finisher vacated it', () => {
+    // Same table, but this time a DQ (not a scratch) sits behind the three
+    // real finishers, alongside one scratch. The DQ occupied a lane; the
+    // scratch did not. Only the DQ's place should ever be eligible to be
+    // "lost".
+    const result = computeNcaaEventScoring('double-dual-tri-quad', 'individual', [
+      entry('a1', 'Alpha', 1),
+      entry('b1', 'Bravo', 2),
+      entry('a2', 'Alpha', 3),
+      entry('dq-1', 'Charlie', 4, { status: 'disqualified' }),
+      entry('scratch-1', 'Delta', 5, { status: 'did-not-compete' }),
+    ]);
+
+    expect(result.lostPlaces).toEqual([{ place: 4, points: 2, final: null, cause: 'no-eligible-finisher' }]);
+    expect(result.pointsLost).toBe(2);
+  });
+});
+
+// ---------------------------------------------------------------------------
 // 5. Ties
 // ---------------------------------------------------------------------------
 

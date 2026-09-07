@@ -299,6 +299,43 @@ describe('parseMeetResultsHtml — swimcloud-synthetic-meet-results-empty-event.
   });
 });
 
+describe('parseMeetResultsHtml — a printed "0" place', () => {
+  // Regression test for a real bug found by code review (2026-09-07):
+  // readPlace's numeric branch converted "0" straight to `undefined` (places
+  // start at 1) without ever reaching the unrecognized-place-token warning
+  // every other malformed place cell gets — a silent empty with zero audit
+  // trail, in a file whose whole stated discipline is "silent empties are
+  // the top failure mode this repo guards against".
+  const html = `
+    <div class="c-page">
+      <h1>Regression Fixture</h1>
+      <section class="c-event">
+        <h2>Event 1 Women 100 Yard Freestyle</h2>
+        <table>
+          <thead><tr><th>Place</th><th>Name</th><th>Team</th><th>Time</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td><a href="/swimmer/1/">Swimmer One</a></td><td>Team A</td><td>52.10</td></tr>
+            <tr><td>0</td><td><a href="/swimmer/2/">Swimmer Two</a></td><td>Team A</td><td>53.00</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  `;
+  const context = contextFor('https://www.swimcloud.com/results/1/');
+
+  it('records no place for a "0" cell, and warns about it exactly like any other malformed place', () => {
+    const result = parseMeetResultsHtml(html, context);
+    if (!result.ok) throw new Error(`expected success, got ${result.failure.code}`);
+
+    const event = result.data.events[0];
+    expect(event.results[0]).toMatchObject({ place: 1 });
+    expect(event.results[1].place).toBeUndefined();
+
+    const warning = result.warnings.find((w) => w.code === 'unrecognized-place-token' && w.raw === '0');
+    expect(warning).toBeDefined();
+  });
+});
+
 describe('parseTeamRosterHtml / parseMeetResultsHtml — shared failure modes', () => {
   it('rejects empty input for both parsers rather than returning an empty success', () => {
     const context = contextFor('https://www.swimcloud.com/team/633/roster/');
