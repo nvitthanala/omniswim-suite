@@ -118,7 +118,12 @@ export type {
   SwimCloudUrlUnrecognized,
 } from './urlClassifier';
 
-export { SWIMCLOUD_PARSE_CONFIDENCE, parseMeetResultsHtml, parseTeamRosterHtml } from './parser';
+export {
+  SWIMCLOUD_PARSE_CONFIDENCE,
+  parseMeetResultsHtml,
+  parseSwimmerProfileHtml,
+  parseTeamRosterHtml,
+} from './parser';
 
 export type {
   SwimCloudMeetResultsParse,
@@ -133,8 +138,11 @@ export type {
   SwimCloudParseWarning,
   SwimCloudParseWarningCode,
   SwimCloudParsedEvent,
+  SwimCloudPersonalBest,
   SwimCloudRosterParse,
   SwimCloudRosterParseOptions,
+  SwimCloudSwimmerProfileParse,
+  SwimCloudSwimmerProfileParseOptions,
 } from './parser';
 
 export {

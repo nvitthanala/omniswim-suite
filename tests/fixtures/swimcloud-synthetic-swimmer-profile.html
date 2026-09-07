@@ -1,0 +1,84 @@
+<!--
+  ============================================================================
+  SYNTHETIC FIXTURE — HAND-AUTHORED — NOT REAL SWIMCLOUD MARKUP
+  ============================================================================
+
+  Written by hand on 2026-09-07. Nobody has seen a real SwimCloud swimmer
+  profile page's HTML, and it's LESS certain than the roster/results fixtures
+  that this table exists in the page's initial HTML at all — prior-art
+  research found the times view sits behind an "EVENT PROGRESSION" tab that at
+  least one scraper needed real browser interaction to expose. See
+  parseSwimmerProfileHtml's doc comment in packages/swimcloud/src/parser.ts.
+
+  Deliberately exercised edge cases:
+    - a yard event with a clean hundredths-precision time (normal case)
+    - a metric event with an explicit Course column ("LCM")
+    - a metric event with NO course column and no defaultCourse supplied
+      -> ambiguous-metric-course, course stays unknown
+    - a relay-labeled row (should still parse; stroke = a relay stroke)
+    - a row whose time is a tenths-precision value, not hundredths
+      -> unrecognized-time-token, not padded
+    - a row with an empty event cell -> unparsed-row, skipped
+  ============================================================================
+-->
+<div class="c-page">
+  <header class="c-swimmer-header">
+    <h1 class="c-swimmer-header__title">Landon Dehn</h1>
+    <p class="c-swimmer-header__meta">Henderson State University &middot; Sophomore</p>
+  </header>
+
+  <div class="c-tabs">
+    <button class="c-tab c-tab--active">Event Progression</button>
+    <button class="c-tab">Meet History</button>
+  </div>
+
+  <table class="c-table c-table--personal-bests">
+    <thead>
+      <tr><th>Event</th><th>Time</th><th>Course</th><th>Date</th><th>Meet</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td>100 Yard Butterfly</td>
+        <td>49.87</td>
+        <td></td>
+        <td>2026-02-19</td>
+        <td>2026 NSISC Championships</td>
+      </tr>
+      <tr>
+        <td>200 Meter Freestyle</td>
+        <td>1:48.30</td>
+        <td>LCM</td>
+        <td>2025-07-12</td>
+        <td>Summer Nationals</td>
+      </tr>
+      <tr>
+        <td>400 Meter Individual Medley</td>
+        <td>4:22.10</td>
+        <td></td>
+        <td></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td>200 Yard Freestyle Relay</td>
+        <td>1:34.12</td>
+        <td></td>
+        <td>2026-02-18</td>
+        <td>2026 NSISC Championships</td>
+      </tr>
+      <tr>
+        <td>50 Yard Freestyle</td>
+        <td>21.4</td>
+        <td></td>
+        <td></td>
+        <td></td>
+      </tr>
+      <tr>
+        <td></td>
+        <td>1:59.99</td>
+        <td></td>
+        <td></td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+</div>

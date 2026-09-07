@@ -81,8 +81,10 @@ import type {
   SwimCloudResultFlags,
   SwimCloudRuleset,
   SwimCloudStroke,
+  SwimCloudSwimmerId,
   SwimCloudTeam,
   SwimCloudTeamId,
+  SwimCloudTimeString,
 } from './entities';
 import { classifySwimCloudUrl } from './urlClassifier';
 
@@ -1280,4 +1282,326 @@ function readRelayLegs(subjectHtml: string): SwimCloudRelayLeg[] {
     });
   });
   return legs;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Swimmer profile / personal bests                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One personal-best row from a swimmer's profile page.
+ *
+ * **Unverified whether this table exists in a captured page's HTML at all.**
+ * Prior-art research (`plans/2026-09-06/04-phasing.md` open question 2 /
+ * `02-data-model-and-scoring.md` §1) found that SwimCloud's swimmer-page times
+ * view sits behind a tab ("EVENT PROGRESSION") that at least one prior scraper
+ * needed a full browser interaction to expose — meaning the data may not be
+ * present in `document.documentElement.outerHTML` unless a human has already
+ * clicked that tab before Track A's "Copy for Omniswim" button is pressed.
+ * That's a fact about *when* to capture, not a defect in this parser: if the
+ * tab hasn't been opened, this function correctly reports
+ * `expected-table-missing` rather than inventing an empty list.
+ */
+export interface SwimCloudPersonalBest {
+  /** Event exactly as printed, e.g. `'200 Free'` or `'200 Yard Freestyle'`. */
+  readonly label: string;
+  readonly course: SwimCloudCourseOrUnknown;
+  readonly stroke: SwimCloudStroke;
+  readonly distance?: number;
+  /** Absent when the time cell held anything other than a well-formed hundredths-precision time. */
+  readonly time?: SwimCloudTimeString;
+  /** The cell's raw contents, kept whenever {@link time} could not be populated. */
+  readonly rawTimeToken?: string;
+  /** As printed. Never parsed into a Date — a partial/ambiguous date string is not this parser's business to interpret. */
+  readonly date?: string;
+  /** Meet name as printed, when the row names one. */
+  readonly meetName?: string;
+}
+
+export interface SwimCloudSwimmerProfileParseOptions {
+  /** Swimmer id, for captures whose URL cannot be classified (a Wayback snapshot, say). */
+  readonly swimmerId?: SwimCloudSwimmerId;
+  /**
+   * The swimmer's program gender. Never inferred from the page or the name —
+   * same discipline as {@link SwimCloudRosterParseOptions.gender}.
+   */
+  readonly gender?: SwimCloudGender;
+  /**
+   * Default course for a row whose event label carries no explicit unit (a
+   * bare `'200 Free'` rather than `'200 Yard Free'`). SwimCloud's own course
+   * convention for this table is unverified; supplying this is a caller
+   * assertion, same shape as {@link SwimCloudMeetResultsParseOptions.meetCourse}.
+   */
+  readonly defaultCourse?: SwimCloudCourse;
+}
+
+export interface SwimCloudSwimmerProfileParse {
+  readonly swimCloudSwimmerId: SwimCloudSwimmerId;
+  /** From the page's first heading. */
+  readonly name?: string;
+  readonly gender?: SwimCloudGender;
+  /**
+   * Personal-best rows, in page order.
+   *
+   * An empty array here always comes with a `zero-data-rows` warning — the
+   * table existed and listed nothing, a real (if unusual) answer. A missing
+   * table is `ok: false`, per this file's absent-is-never-empty rule.
+   */
+  readonly personalBests: readonly SwimCloudPersonalBest[];
+  readonly rowCount: number;
+}
+
+const EVENT_LABEL_HEADERS = ['event', 'race'] as const;
+const DATE_HEADERS = ['date', 'swam'] as const;
+const MEET_HEADERS = ['meet', 'competition'] as const;
+const COURSE_HEADERS = ['course', 'pool'] as const;
+
+/**
+ * Distance/unit/stroke out of a personal-best row's event label — the same
+ * job {@link parseEventHeading} does for a meet heading, but without an
+ * "Event {n}" prefix or a gender word to strip first.
+ */
+function parsePersonalBestEventLabel(label: string): {
+  readonly distance?: number;
+  readonly unit: 'yard' | 'metric' | 'none';
+  readonly stroke: SwimCloudStroke;
+} {
+  const lower = label.toLowerCase();
+  const distanceMatch = /\b(\d{1,4})\b/.exec(label);
+  const distance = distanceMatch === null ? undefined : Number.parseInt(distanceMatch[1], 10);
+  const unit: 'yard' | 'metric' | 'none' = /\byards?\b/.test(lower)
+    ? 'yard'
+    : /\bmet(?:er|re)s?\b|\bmtr\b/.test(lower)
+      ? 'metric'
+      : 'none';
+  const isRelay = /\brelay\b/.test(lower);
+  return {
+    ...(distance === undefined ? {} : { distance }),
+    unit,
+    stroke: mapStroke(lower, isRelay),
+  };
+}
+
+/**
+ * Parse a SwimCloud swimmer-profile page's personal-bests table.
+ *
+ * **Synthetic-fixture-only** — see this file's header. Additionally
+ * unverified whether the underlying table is ever present without a
+ * tab-click first; see {@link SwimCloudPersonalBest}'s doc comment.
+ *
+ * Locates the first table whose header row carries both an event column and
+ * a time column, then reads rows by header label — same discipline as
+ * {@link parseTeamRosterHtml} and {@link parseMeetResultsHtml}: columns
+ * located by printed label, never by position.
+ */
+export function parseSwimmerProfileHtml(
+  html: string,
+  context: SwimCloudParseContext,
+  options: SwimCloudSwimmerProfileParseOptions = {},
+): SwimCloudParseResult<SwimCloudSwimmerProfileParse> {
+  const warnings: SwimCloudParseWarning[] = [];
+
+  if (collapseWhitespace(html).length === 0) {
+    return fail(context, 'empty-input', 'The captured HTML is empty.');
+  }
+
+  const classification = classifySwimCloudUrl(context.sourceUrl);
+  let swimmerIdFromUrl: SwimCloudSwimmerId | undefined;
+  if (classification.outcome === 'fetchable') {
+    if (classification.resource.kind === 'swimmer') {
+      swimmerIdFromUrl = classification.resource.swimmerId;
+    } else {
+      return fail(
+        context,
+        'source-url-mismatch',
+        `Capture URL ${JSON.stringify(context.sourceUrl)} names a ${classification.resource.kind} resource, not a swimmer.`,
+      );
+    }
+  }
+  const swimCloudSwimmerId = options.swimmerId ?? swimmerIdFromUrl;
+  if (swimCloudSwimmerId === undefined) {
+    return fail(
+      context,
+      'source-url-mismatch',
+      `No swimmer id could be resolved: capture URL ${JSON.stringify(context.sourceUrl)} does not classify as a swimmer and no swimmerId option was supplied.`,
+    );
+  }
+
+  const tables = findTables(html);
+  if (tables.length === 0) {
+    return fail(
+      context,
+      'expected-table-missing',
+      'No <table> element was found; a personal-bests table is expected. If the swimmer page loads times behind a tab, that tab may need to be opened before capturing — see SwimCloudPersonalBest\'s doc comment.',
+    );
+  }
+
+  let headerCells: string[] | null = null;
+  let dataRows: string[][] = [];
+  let eventColumn = -1;
+  let timeColumn = -1;
+  let courseColumn = -1;
+  let dateColumn = -1;
+  let meetColumn = -1;
+
+  for (const table of tables) {
+    const rows = extractTableRows(table.html);
+    if (rows.length === 0) {
+      continue;
+    }
+    const headerIndex = rows.findIndex((row) => isHeaderRow(row));
+    if (headerIndex < 0) {
+      continue;
+    }
+    const headers = extractRowCells(rows[headerIndex]).map((cell) => normalizeHeader(htmlToText(cell)));
+    const candidateEvent = findColumn(headers, EVENT_LABEL_HEADERS);
+    const candidateTime = findColumn(headers, TIME_HEADERS);
+    if (candidateEvent < 0 || candidateTime < 0) {
+      continue;
+    }
+    headerCells = headers;
+    eventColumn = candidateEvent;
+    timeColumn = candidateTime;
+    courseColumn = findColumn(headers, COURSE_HEADERS);
+    dateColumn = findColumn(headers, DATE_HEADERS);
+    meetColumn = findColumn(headers, MEET_HEADERS);
+    dataRows = rows
+      .slice(headerIndex + 1)
+      .filter((row) => !isHeaderRow(row))
+      .map((row) => extractRowCells(row));
+    break;
+  }
+
+  if (headerCells === null) {
+    return fail(
+      context,
+      'expected-header-missing',
+      `No table carried both an event column (${EVENT_LABEL_HEADERS.join(', ')}) and a time column (${TIME_HEADERS.join(', ')}).`,
+    );
+  }
+
+  const personalBests: SwimCloudPersonalBest[] = [];
+  dataRows.forEach((cells, rowIndex) => {
+    const label = textAt(cells, eventColumn);
+    if (label.length === 0) {
+      warnings.push({
+        code: 'unparsed-row',
+        message: 'Personal-best row has an empty event cell and was skipped.',
+        rowIndex,
+      });
+      return;
+    }
+
+    const { distance, unit, stroke } = parsePersonalBestEventLabel(label);
+
+    let course: SwimCloudCourseOrUnknown;
+    if (unit === 'yard') {
+      course = 'SCY';
+    } else if (courseColumn >= 0 && textAt(cells, courseColumn).length > 0) {
+      const raw = normalizeHeader(textAt(cells, courseColumn));
+      course = raw === 'scy' ? 'SCY' : raw === 'scm' ? 'SCM' : raw === 'lcm' ? 'LCM' : 'unknown';
+      if (course === 'unknown') {
+        warnings.push({
+          code: 'ambiguous-metric-course',
+          message: `Course cell ${JSON.stringify(textAt(cells, courseColumn))} on row for ${JSON.stringify(label)} did not match a known course; recorded as unknown.`,
+          rowIndex,
+          raw: textAt(cells, courseColumn),
+        });
+      }
+    } else if (unit === 'metric') {
+      if (options.defaultCourse === undefined) {
+        course = 'unknown';
+        warnings.push({
+          code: 'ambiguous-metric-course',
+          message: `Row for ${JSON.stringify(label)} is metric with no course column and no defaultCourse supplied; recorded as unknown.`,
+          rowIndex,
+          raw: label,
+        });
+      } else {
+        course = options.defaultCourse;
+      }
+    } else if (options.defaultCourse === undefined) {
+      course = 'unknown';
+      warnings.push({
+        code: 'missing-course-declaration',
+        message: `Row for ${JSON.stringify(label)} names no course unit, no course column, and no defaultCourse was supplied.`,
+        rowIndex,
+        raw: label,
+      });
+    } else {
+      course = options.defaultCourse;
+    }
+
+    if (stroke === 'unknown') {
+      warnings.push({
+        code: 'unmapped-stroke',
+        message: `Stroke could not be identified in ${JSON.stringify(label)}; recorded as unknown.`,
+        rowIndex,
+        raw: label,
+      });
+    }
+
+    const time = readTime(textAt(cells, timeColumn), fakeEventFor(label, stroke), rowIndex, warnings);
+    const date = dateColumn >= 0 ? textAt(cells, dateColumn) : '';
+    const meetName = meetColumn >= 0 ? textAt(cells, meetColumn) : '';
+
+    personalBests.push({
+      label,
+      course,
+      stroke,
+      ...(distance === undefined ? {} : { distance }),
+      ...(time.finalTime === undefined ? {} : { time: time.finalTime }),
+      ...(time.rawTimeToken === undefined ? {} : { rawTimeToken: time.rawTimeToken }),
+      ...(date.length === 0 ? {} : { date }),
+      ...(meetName.length === 0 ? {} : { meetName }),
+    });
+  });
+
+  if (dataRows.length === 0) {
+    warnings.push({
+      code: 'zero-data-rows',
+      message: 'The personal-bests table was found and holds no data rows.',
+    });
+  } else if (personalBests.length === 0) {
+    return fail(
+      context,
+      'no-rows-parsed',
+      `The personal-bests table held ${dataRows.length} data row(s) and none could be parsed.`,
+      warnings,
+    );
+  }
+
+  const name = firstHeadingText(html);
+
+  return succeed(
+    context,
+    {
+      swimCloudSwimmerId,
+      ...(name === undefined ? {} : { name }),
+      ...(options.gender === undefined ? {} : { gender: options.gender }),
+      personalBests,
+      rowCount: dataRows.length,
+    },
+    warnings,
+  );
+}
+
+/**
+ * `readTime` takes a {@link SwimCloudEvent} only to read its `stroke` (for the
+ * diving-score-is-not-a-time branch) and its `eventId` (to scope warnings). A
+ * personal-bests row has neither a real event id nor, usually, a diving flag
+ * worth the same branch — this builds the minimal stand-in `readTime` needs
+ * without duplicating its ~40 lines of marker/exhibition logic for a second
+ * table shape.
+ */
+function fakeEventFor(label: string, stroke: SwimCloudStroke): SwimCloudEvent {
+  return {
+    eventId: `personal-best:${label}`,
+    swimCloudMeetId: 'personal-best' as SwimCloudMeetId,
+    label,
+    kind: 'individual',
+    course: 'unknown',
+    gender: 'unknown',
+    stroke,
+  };
 }
