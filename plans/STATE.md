@@ -3,31 +3,35 @@
 Last updated 2026-08-16. **Start here.** 132 KB across 19 files sits behind this
 page; everything below links into it.
 
-**New initiative, Phase 1 + 2 done, Phase 3 not started:** SwimCloud
-ingestion (paste a meet/team/athlete/conference link, get structured data
-instead of retyping it) — plan in [`plans/2026-09-06/`](2026-09-06/README.md),
-full status/history in
-[`WORKLOG-01-phase1-data-model-and-scoring.md`](2026-09-06/WORKLOG-01-phase1-data-model-and-scoring.md)
-and
-[`WORKLOG-02-fetch-service-and-cache.md`](2026-09-06/WORKLOG-02-fetch-service-and-cache.md)
-(**read the most recent worklog first if resuming this work**). Landed on
-branch `nvitthanala/swimcloud-data-ingest`: NCAA Rule 7 scoring engine
-(`packages/core`), and `packages/swimcloud` — entities, URL classifier,
-parser (against synthetic fixtures only), a status-keyed cache, and a Track B
-politeness wrapper (robots.txt denylist, rate limiting, cache read-through) in
-front of a Playwright-backed fetcher. **The Playwright fetcher has never been
-run against a live site** — no Chromium binary is installed in this
-environment, and touching swimcloud.com even once needs a human physically
-present per the plan's own posture (see the Phase 2 worklog's "why" section)
-— everything else is unit-tested. Next up per
-[`04-phasing.md`](2026-09-06/04-phasing.md): Phase 3 (browser extension +
-import-UI wiring), blocked on the Track A transport decision (open question
-1) and, same as Phase 2, on a real human-captured SwimCloud page to confirm
-URL patterns and the relay-leg-split question (open questions 2/4). Key
-finding worth knowing before touching this: SwimCloud's Terms of Use flatly
-prohibit automated access; the plan records an explicit, informed user
-decision to build one compliant track (a human-triggered browser extension)
-and one accepted-risk track (automated fetch-on-paste) side by side — see
+**New initiative, Phases 1–3 done.** SwimCloud ingestion (paste a
+meet/team/athlete/conference link, get structured data instead of retyping
+it) — plan in [`plans/2026-09-06/`](2026-09-06/README.md), full status/
+history across three worklogs in that folder (`WORKLOG-01` through
+`WORKLOG-03`; **read the most recent one first if resuming this work**).
+Landed on branch `nvitthanala/swimcloud-data-ingest` (11 commits, not yet
+merged to `main`): an NCAA Rule 7 scoring engine (`packages/core`);
+`packages/swimcloud` — entities, URL classifier, three HTML parsers (team
+roster, meet results, swimmer personal-bests — all against synthetic
+fixtures only), a status-keyed cache, and a Track B politeness wrapper in
+front of a Playwright-backed fetcher; a browser extension
+(`extensions/swimcloud-companion/`, Track A) that copies a captured page to
+the clipboard; and a working "From clipboard" import path wired into
+`RosterImportWizard` for the swimmer-profile case specifically (team-roster
+and meet-results captures are parsed but have no UI path — see
+`WORKLOG-03`'s "what Phase 3 does not cover"). 210 tests, lint clean 8/8
+workspaces, and a real `npm run build` of the shell app succeeds.
+
+**Two things still genuinely unverified, both requiring a human, not more
+code:** (1) the Playwright fetcher (Track B) has never touched a live
+site — no Chromium binary is installed here, and per the plan's own posture
+that's a deliberate, human-present action, not something to automate even
+for testing (Phase 2 worklog); (2) the "From clipboard" button has never
+been clicked in a running app — verified structurally (types + production
+build) but not visually (Phase 3 worklog). Key finding worth knowing before
+touching any of this: SwimCloud's Terms of Use flatly prohibit automated
+access; the plan records an explicit, informed user decision to build one
+compliant track (the browser extension) and one accepted-risk track
+(Playwright fetch-on-paste) side by side — see
 [`01-legal-and-access-strategy.md`](2026-09-06/01-legal-and-access-strategy.md).
 
 Baseline: lint clean (7 packages), `npm test` **61 passed / 0 failed / 3 skipped**,
