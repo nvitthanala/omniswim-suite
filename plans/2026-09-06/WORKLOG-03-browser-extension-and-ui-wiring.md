@@ -102,6 +102,25 @@ caught a real bug (duplicate React keys in the warnings list, only
 triggered by a multi-event import) that 231 unit tests hadn't exercised.
 Screenshots: `meet-results-bulk-import.png`, `team-roster-reference-capture.png`.
 
+## Update, 2026-09-07 — roster → per-swimmer chaining (the "roster queue")
+
+Further feedback: "when picking a team, pull the roster and then the event
+data for each swimmer in the roster." Commit `c61a3147`. A team-roster
+capture now seeds a visible checklist (`rosterQueue` state); every
+subsequent swimmer-profile capture checks off its matching entry (by
+SwimCloud id, name as fallback) and *accumulates* into the same preview
+instead of replacing it. Track A still can't auto-navigate to each
+swimmer's page — this is the closest the access-track boundary allows: a
+coach clicking "Copy for Omniswim" once per swimmer, watching a progress
+checklist fill in.
+
+Also caught, same click-through-verification pattern: the personal-bests
+converter had no relay exclusion — a swimmer's own profile page apparently
+lists a relay leg's split as if it were a personal best, and it was being
+imported as an individual event time. Fixed to match the meet-results
+converter's existing relay exclusion, with a regression test proven against
+the pre-fix code.
+
 ## What Phase 3 still does *not* cover, on purpose
 
 - **A "bare athlete, no swim yet" concept does not exist anywhere in this
