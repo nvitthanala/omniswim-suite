@@ -23,6 +23,14 @@ import { softRemoveSwimmerFromWorkspace } from '@omniswim/core/lib/swimmerSoftRe
 import { rosterCatalogApi, type CatalogTeamRoster } from '@omniswim/core/api/rosterCatalog';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
 import { useToast, WizardShell, type WizardStep } from '@omniswim/ui';
+// Track A (plans/2026-09-06/). Subpaths only, never the @omniswim/swimcloud
+// package root — see packages/manager/src/lib/swimCloudImportBridge.ts's
+// file header and docs/INVARIANTS.md #7 for why: the root re-exports
+// Node-only fetcher/cache code this UI package must never bundle.
+import { readSwimCloudClipboardPayload } from '@omniswim/swimcloud/clipboardPayload';
+import { classifySwimCloudUrl } from '@omniswim/swimcloud/urlClassifier';
+import { parseMeetResultsHtml } from '@omniswim/swimcloud/parser';
+import { swimCloudMeetResultsToSwimmerResults } from '../lib/swimCloudMeetImportBridge';
 import MeetOperationsView from './MeetOperationsView';
 import SwimmerDeleteConfirmModal from './SwimmerDeleteConfirmModal';
 
@@ -58,6 +66,7 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
   const [removeSeniors, setRemoveSeniors] = useState(false);
   const [isParsingPdf, setIsParsingPdf] = useState(false);
   const [isParsingPsychPdf, setIsParsingPsychPdf] = useState(false);
+  const [isImportingSwimCloud, setIsImportingSwimCloud] = useState(false);
   const [pdfFormat, setPdfFormat] = useState('auto');
   const [swimmerDeleteCandidate, setSwimmerDeleteCandidate] = useState<{ name: string } | null>(null);
   const [suggestedPresetId, setSuggestedPresetId] = useState<string | null>(() =>
@@ -236,6 +245,141 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
 
   const cancelPdfParse = () => {
     parseAbortRef.current?.abort();
+  };
+
+  /**
+   * Track A end-to-end for a "loaded meet" — the same destination
+   * `handleFileUpload` (PDF) writes to, via the same
+   * meetCopyFromParsed/scoring-preset logic, so a SwimCloud-sourced meet is
+   * a first-class loaded meet, not a second-tier import. See
+   * swimCloudMeetImportBridge.ts's file header for the points-trust
+   * reasoning (usePdfPlacePoints, reused as-is — not a new mechanism).
+   *
+   * One real difference from the PDF path: conference isn't re-detected
+   * here. A PDF's own text sometimes names the conference; a SwimCloud
+   * results capture doesn't reliably say so machine-readably, so this
+   * trusts whatever `workspace.conference` already holds (set by an earlier
+   * PDF load, or manually) rather than guessing a new one.
+   */
+  const handleSwimCloudImport = async () => {
+    setIsImportingSwimCloud(true);
+    try {
+      let clipboardText: string;
+      try {
+        clipboardText = await navigator.clipboard.readText();
+      } catch {
+        toast.push(
+          'error',
+          'Could not read the clipboard. Your browser may need permission, or nothing has been copied yet — use the "Copy for Omniswim" button on a SwimCloud meet-results page first.'
+        );
+        return;
+      }
+
+      const payloadResult = readSwimCloudClipboardPayload(clipboardText);
+      if (!payloadResult.ok) {
+        toast.push('error', payloadResult.message);
+        return;
+      }
+
+      const classification = classifySwimCloudUrl(payloadResult.payload.sourceUrl);
+      if (classification.outcome !== 'fetchable' || (classification.resource.kind !== 'meet' && classification.resource.kind !== 'meetEvent')) {
+        toast.push(
+          'error',
+          classification.outcome === 'fetchable'
+            ? `This loads meet results only (got a "${classification.resource.kind}" page). Copy a SwimCloud results page instead.`
+            : 'That clipboard capture is not a recognized SwimCloud page.'
+        );
+        return;
+      }
+
+      const parseResult = parseMeetResultsHtml(payloadResult.payload.html, payloadResult.context, {
+        meetId: classification.resource.meetId,
+      });
+      if (!parseResult.ok) {
+        toast.push('error', `Could not read results from that page: ${parseResult.failure.message}`);
+        return;
+      }
+
+      const converted = swimCloudMeetResultsToSwimmerResults(parseResult.data);
+      const allParsed = [...converted.men, ...converted.women];
+      if (allParsed.length === 0) {
+        toast.push(
+          'error',
+          `No usable results found on that page (${converted.skipped.length} row(s) skipped — see console for reasons).`
+        );
+        // eslint-disable-next-line no-console
+        console.warn('SwimCloud meet import: every row skipped', converted.skipped);
+        return;
+      }
+
+      const conference = workspace.conference;
+      const presetHint = presetIdForConference(conference);
+      if (presetHint) setSuggestedPresetId(presetHint);
+
+      let scoringPatch: ScoringSettings | undefined;
+      if (resultsHavePdfPlacePoints(allParsed)) {
+        scoringPatch = mergeScoringSettings(
+          {
+            ...workspace.scoringSettings,
+            usePdfPlacePoints: true,
+            scorerEligibilityMode: 'points_pool',
+            scorerAutoRules: undefined,
+            ...applyPdfPlacePointsNeutralCaps(mergeScoringSettings(workspace.scoringSettings, { conference })),
+          },
+          { conference, resultsForPdfHint: allParsed }
+        );
+      } else if (presetHint === 'nsisc') {
+        scoringPatch = mergeScoringSettings(
+          { ...workspace.scoringSettings, ...NSISC_PRESET_SETTINGS, scorerEligibilityMode: 'roster' },
+          { conference }
+        );
+      }
+
+      const existingRecruits = workspace.recruits ?? [];
+      let keepRecruits = true;
+      if (existingRecruits.length > 0) {
+        keepRecruits = window.confirm(
+          `${existingRecruits.length} recruit(s) saved in this workspace.\n\nOK = Keep recruits\nCancel = Discard recruits`
+        );
+      }
+
+      await onUpdate({
+        ...meetCopyFromParsed([...converted.men], [...converted.women]),
+        deletedSwimmers: [],
+        scorerRosterOverrides: [],
+        relayLegOverrides: [],
+        recruits: keepRecruits ? existingRecruits : [],
+        loadedMeet: {
+          // pdfFilename doubles, across this app, as the general "what's
+          // loaded" display string — WorkspaceSidebar, LoadMeetHereCard,
+          // RosterSourceStep, and this view's own "Meet results" panel all
+          // read it directly and none of them fall back to meetLabel, so a
+          // SwimCloud import with no PDF filename would otherwise show "No
+          // meet loaded" everywhere despite having genuinely succeeded.
+          // meetLabel is still set too, for the one caller
+          // (workspace-naming) that already prefers it.
+          pdfFilename: `${parseResult.data.meetName ?? 'SwimCloud meet'} (via SwimCloud)`,
+          uploadedAt: Date.now(),
+          conference,
+          meetLabel: parseResult.data.meetName,
+        },
+        ...(conference ? { conference } : {}),
+        ...(scoringPatch ? { scoringSettings: scoringPatch } : {}),
+      });
+      setScoringRefreshKey(k => k + 1);
+
+      const skipNote = converted.skipped.length > 0 ? ` (${converted.skipped.length} row(s) skipped — see console.)` : '';
+      if (converted.skipped.length > 0) {
+        // eslint-disable-next-line no-console
+        console.warn('SwimCloud meet import: some rows skipped', converted.skipped);
+      }
+      toast.push(
+        'success',
+        `Loaded ${allParsed.length} result(s) from ${parseResult.data.meetName ?? 'SwimCloud'}.${skipNote}`
+      );
+    } finally {
+      setIsImportingSwimCloud(false);
+    }
   };
 
   const handlePsychFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -474,6 +618,8 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
             pdfFormat={pdfFormat}
             onPdfFormatChange={setPdfFormat}
             onFileUpload={handleFileUpload}
+            onSwimCloudImport={() => void handleSwimCloudImport()}
+            isImportingSwimCloud={isImportingSwimCloud}
             onPsychFileUpload={handlePsychFileUpload}
             onCancelPdfParse={cancelPdfParse}
             onCancelPsychPdfParse={cancelPsychPdfParse}

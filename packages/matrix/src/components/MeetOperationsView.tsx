@@ -4,7 +4,7 @@
  */
 
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Users, Plus, TrendingUp, Search, X, GitCompareArrows } from 'lucide-react';
+import { Users, Plus, TrendingUp, Search, X, GitCompareArrows, Download } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { ChartFrame, ChartShell, EmptyState } from '@omniswim/ui';
 import { Gender, Recruit, ScoringSettings, TeamScore, Workspace } from '@omniswim/core/types';
@@ -136,6 +136,9 @@ type Props = {
   onPsychFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onCancelPdfParse: () => void;
   onCancelPsychPdfParse: () => void;
+  /** Track A: reads a meet-results capture from the clipboard (extensions/swimcloud-companion). No file/event — the source is always the clipboard. */
+  onSwimCloudImport: () => void;
+  isImportingSwimCloud: boolean;
   onUpdate: (patch: Partial<Workspace>) => void;
   onRequestDeleteSwimmer?: (name: string) => void;
   onSaveScoringSettings: (sets: ScoringSettings) => void;
@@ -173,6 +176,8 @@ export default function MeetOperationsView({
   pdfFormat,
   onPdfFormatChange,
   onFileUpload,
+  onSwimCloudImport,
+  isImportingSwimCloud,
   onPsychFileUpload,
   onCancelPdfParse,
   onCancelPsychPdfParse,
@@ -356,6 +361,16 @@ export default function MeetOperationsView({
                     <label aria-label="Load meet results PDF" className="cursor-pointer flex items-center gap-1.5 px-3 py-1 btn-accent-outline rounded-md text-[10px] uppercase font-medium transition-colors">
                       <Plus size={12} /><span>Load PDF</span><input ref={meetFileInputRef} aria-label="Meet results PDF file" type="file" className="hidden" accept=".pdf" onChange={onFileUpload} />
                     </label>
+                    <button
+                      type="button"
+                      onClick={onSwimCloudImport}
+                      disabled={isImportingSwimCloud}
+                      aria-label="Load meet results from SwimCloud clipboard capture"
+                      title="Read a meet-results capture from the Omniswim SwimCloud Companion browser extension (Copy for Omniswim on a SwimCloud results page)."
+                      className="flex items-center gap-1.5 px-3 py-1 border border-theme-soft rounded-md text-[10px] uppercase font-medium text-theme-secondary hover:text-[var(--text-primary)] transition-colors disabled:opacity-40"
+                    >
+                      <Download size={12} /><span>{isImportingSwimCloud ? 'Reading…' : 'From SwimCloud'}</span>
+                    </button>
                     <label aria-label="Link psych sheet PDF" className="cursor-pointer flex items-center gap-1.5 px-3 py-1 border border-theme-soft rounded-md text-[10px] uppercase font-medium text-theme-secondary hover:text-[var(--text-primary)] transition-colors">
                       <Plus size={12} /><span>Link Psych</span><input aria-label="Psych sheet PDF file" type="file" className="hidden" accept=".pdf" onChange={onPsychFileUpload} />
                     </label>
