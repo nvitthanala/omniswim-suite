@@ -28,12 +28,14 @@ local server. 219 tests, lint clean 8/8 workspaces, and a real
 
 **One thing still genuinely unverified, requiring a human, not more code:**
 whether the Playwright fetcher (Track B) can pass SwimCloud's actual
-Cloudflare challenge — its mechanism is now proven locally, but touching the
-*live* site is, per the plan's own posture, a deliberate human-present
-action, never an automated one, including for testing (Phase 2 worklog).
-Separately, the "From clipboard" button has never been clicked in a running
-app — verified structurally (types + production build) but not visually
-(Phase 3 worklog); lower stakes than the above. Key finding worth knowing
+Cloudflare challenge — its mechanism is now proven locally (a real Chromium
+launch/navigate/session-reuse cycle against a throwaway local server), but
+touching the *live* site is, per the plan's own posture, a deliberate
+human-present action, never an automated one, including for testing (Phase
+2 worklog). Everything else has now been seen working, not just inferred:
+the "From clipboard" button was screenshotted rendering correctly and
+actually firing its click handler against the real running app (Phase 3
+worklog, `verification-screenshots/`). Key finding worth knowing
 before touching any of this: SwimCloud's Terms of Use flatly prohibit
 automated access; the plan records an explicit, informed user decision to
 build one compliant track (the browser extension) and one accepted-risk

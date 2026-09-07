@@ -48,19 +48,32 @@ passes, and — this is the one that actually matters for the cross-package
 bundling concern above — a real production `vite build` of the shell app
 succeeds with no Node-builtin-in-browser-bundle errors.
 
-**Not verified**: the button has never been clicked in a running app. I
-considered using the `run` skill to launch the app and screenshot it, and
-decided against spending the exploration budget that would take (this repo
-has no existing project run-skill for it, and the click path to
-`RosterImportWizard` — open a workspace, find the roster panel, open the
-import wizard — isn't something I could navigate without first exploring
-the app's own routing) against the marginal value, given two independent
-structural checks (types + production build) already passed and the new
-button reuses the exact same CSS classes and layout pattern as the
-adjacent, already-working "SwimCloud" reference-toggle button verbatim. If
-this turns out to have a layout problem, it's a five-minute fix once someone
-actually looks at it — flagged here so that's a known possibility, not a
-silent gap.
+**Update, 2026-09-07 — visually verified too.** Initially deferred this (no
+existing project run-skill, and the click path wasn't obvious without
+exploring the app's own routing first), but came back to it once a
+Chromium binary was installed for the Phase 2 local smoke test anyway.
+Started the real dev server (`npm run dev`), drove it with headless
+Playwright against `http://localhost:3000/manager`, clicked the actual
+"Import roster" button, and screenshotted the result. Screenshots saved in
+[`verification-screenshots/`](verification-screenshots/):
+
+- `import-wizard-with-clipboard-button.png` — the wizard open on its paste
+  step, "From clipboard" rendering cleanly in the tab row next to the
+  existing Paste/CSV/SwimCloud tabs, no layout breakage.
+- `clipboard-button-closeup.png` — close crop, confirms it matches the
+  adjacent "SwimCloud" toggle's styling exactly.
+- `clipboard-button-toast-no-team.png` — clicked "From clipboard" with no
+  team selected; the exact toast text from the handler
+  ("Select or enter a team name first.") appears, confirming the click
+  handler is wired up and actually reads component state, not just that
+  the button exists.
+
+Zero console/page errors across every run. Reaching the next branch (filling
+the team field, then hitting the "could not read clipboard" toast) was
+flaky in the throwaway verification script itself — the typed value didn't
+reliably stick before the next click — not chased further, since the two
+facts that actually mattered (renders correctly; click handler genuinely
+fires and reads real state) are both now confirmed with evidence.
 
 ## What Phase 3 does *not* cover, on purpose
 
