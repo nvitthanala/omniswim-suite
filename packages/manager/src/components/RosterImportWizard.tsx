@@ -2,7 +2,7 @@
  * Enhanced SwimCloud paste import with format detection and merge preview.
  */
 import React, { useMemo, useRef, useState, useEffect } from 'react';
-import { X, ClipboardPaste, FileSpreadsheet, Globe, Undo2 } from 'lucide-react';
+import { X, ClipboardPaste, Download, FileSpreadsheet, Globe, Undo2 } from 'lucide-react';
 import { Gender, HistoricalSwim, Workspace } from '@omniswim/core/types';
 import {
   detectSwimCloudPasteFormat,
@@ -26,6 +26,16 @@ import { parseCsvHistory } from '@omniswim/core/lib/csvImport';
 import { divisionForTeamOrNull } from '@omniswim/core/data/teamDivisions';
 import { useToast } from '@omniswim/ui';
 import AliasSuggestionsPanel from './AliasSuggestionsPanel';
+// Track A (plans/2026-09-06/): the browser extension's clipboard capture,
+// read back here. Deliberately imported from these specific subpaths, not
+// the @omniswim/swimcloud package root — see
+// packages/manager/src/lib/swimCloudImportBridge.ts's file header for why
+// (the root re-exports Node-only fetcher/cache code this UI package must
+// never pull into its bundle).
+import { readSwimCloudClipboardPayload } from '@omniswim/swimcloud/clipboardPayload';
+import { classifySwimCloudUrl } from '@omniswim/swimcloud/urlClassifier';
+import { parseSwimmerProfileHtml } from '@omniswim/swimcloud/parser';
+import { swimCloudPersonalBestsToHistoricalSwims } from '../lib/swimCloudImportBridge';
 
 type ImportMode = 'paste' | 'csv';
 
@@ -75,6 +85,7 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
   const [format, setFormat] = useState<string>('unknown');
   const [step, setStep] = useState<'paste' | 'preview'>('paste');
   const [showReference, setShowReference] = useState(false);
+  const [isImportingFromClipboard, setIsImportingFromClipboard] = useState(false);
   const [dismissedAliasKeys, setDismissedAliasKeys] = useState<Set<string>>(new Set());
   const [lastAliasLink, setLastAliasLink] = useState<{
     inverse: Partial<Workspace>;
@@ -119,6 +130,95 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
     setStep('preview');
     setDismissedAliasKeys(new Set());
     setLastAliasLink(null);
+  };
+
+  /**
+   * Track A end-to-end: clipboard text (from extensions/swimcloud-companion)
+   * -> validated capture payload -> classified URL -> parsed personal bests
+   * -> HistoricalSwim[] -> the same preview step every other import path uses.
+   *
+   * Only swimmer-profile captures are supported here today. A team-roster
+   * capture has no adapter (SwimCloud's roster page carries no times, and
+   * this app's Recruit/HistoricalSwim model requires one — see the Phase 1b/
+   * Phase 3 worklogs) and a meet-results capture isn't wired to this panel at
+   * all (it belongs in a meet-scoring surface, not a roster importer). Both
+   * are reported with a clear, specific message rather than a generic
+   * failure, so a coach knows what page to go copy instead.
+   */
+  const handleClipboardImport = async () => {
+    if (!team.trim()) {
+      toast.push('error', 'Select or enter a team name first.');
+      return;
+    }
+    setIsImportingFromClipboard(true);
+    try {
+      let clipboardText: string;
+      try {
+        clipboardText = await navigator.clipboard.readText();
+      } catch {
+        toast.push(
+          'error',
+          'Could not read the clipboard. Your browser may need permission, or nothing has been copied yet — use the "Copy for Omniswim" button on a SwimCloud swimmer page first.'
+        );
+        return;
+      }
+
+      const payloadResult = readSwimCloudClipboardPayload(clipboardText);
+      if (!payloadResult.ok) {
+        toast.push('error', payloadResult.message);
+        return;
+      }
+
+      const classification = classifySwimCloudUrl(payloadResult.payload.sourceUrl);
+      if (classification.outcome !== 'fetchable' || classification.resource.kind !== 'swimmer') {
+        toast.push(
+          'error',
+          classification.outcome === 'fetchable'
+            ? `This importer only reads swimmer profile pages right now (got a "${classification.resource.kind}" page). Copy from a swimmer's own profile page instead.`
+            : 'That clipboard capture is not a recognized SwimCloud page.'
+        );
+        return;
+      }
+
+      const parseResult = parseSwimmerProfileHtml(payloadResult.payload.html, payloadResult.context, {
+        swimmerId: classification.resource.swimmerId,
+        gender,
+      });
+      if (!parseResult.ok) {
+        toast.push('error', `Could not read personal bests from that page: ${parseResult.failure.message}`);
+        return;
+      }
+
+      const conversion = swimCloudPersonalBestsToHistoricalSwims(parseResult.data, {
+        team: team.trim(),
+        gender,
+      });
+      if (!conversion.ok) {
+        toast.push('error', conversion.message);
+        return;
+      }
+      if (conversion.swims.length === 0) {
+        toast.push(
+          'error',
+          `No usable times found on that page (${conversion.skipped.length} row(s) had no readable time).`
+        );
+        return;
+      }
+
+      setPreview([...conversion.swims]);
+      setWarnings([
+        ...parseResult.warnings.map(w => w.message),
+        ...(conversion.skipped.length > 0
+          ? [`${conversion.skipped.length} row(s) skipped — no usable time.`]
+          : []),
+      ]);
+      setFormat('swimcloud');
+      setStep('preview');
+      setDismissedAliasKeys(new Set());
+      setLastAliasLink(null);
+    } finally {
+      setIsImportingFromClipboard(false);
+    }
   };
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -259,6 +359,15 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
                   className={`ml-auto px-3 py-2 text-ui-micro font-bold uppercase tracking-widest flex items-center gap-1.5 transition-colors ${showReference ? 'text-[var(--text-primary)]' : 'nav-tab-inactive'}`}
                 >
                   <Globe size={13} /> SwimCloud
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void handleClipboardImport()}
+                  disabled={isImportingFromClipboard}
+                  title="Read a capture from the Omniswim SwimCloud Companion browser extension (extensions/swimcloud-companion), copied via its 'Copy for Omniswim' button on a swimmer's profile page."
+                  className="px-3 py-2 text-ui-micro font-bold uppercase tracking-widest flex items-center gap-1.5 nav-tab-inactive hover:text-[var(--text-primary)] transition-colors disabled:opacity-40"
+                >
+                  <Download size={13} /> {isImportingFromClipboard ? 'Reading…' : 'From clipboard'}
                 </button>
               </div>
 
