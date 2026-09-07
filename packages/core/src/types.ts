@@ -260,7 +260,8 @@ export interface HistoricalSwim {
   timeType?: 'SCY' | 'LCM' | 'SCM';
   date?: string;
   meetLabel?: string;
-  source: 'pdf' | 'paste' | 'ocr' | 'csv' | 'manual';
+  /** 'swimcloud' — a personal best converted from packages/swimcloud's parseSwimmerProfileHtml output, either access track. */
+  source: 'pdf' | 'paste' | 'ocr' | 'csv' | 'manual' | 'swimcloud';
   classYear?: string;
   swimcloudBadge?: SwimCloudBadge;
   computedCut?: 'A' | 'B' | null;
