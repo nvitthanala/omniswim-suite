@@ -3,6 +3,26 @@
 Last updated 2026-08-16. **Start here.** 132 KB across 19 files sits behind this
 page; everything below links into it.
 
+**New initiative, Phase 1 done, Phase 2/3 not started:** SwimCloud ingestion
+(paste a meet/team/athlete/conference link, get structured data instead of
+retyping it) — plan in [`plans/2026-09-06/`](2026-09-06/README.md), full
+status/history in
+[`WORKLOG-01-phase1-data-model-and-scoring.md`](2026-09-06/WORKLOG-01-phase1-data-model-and-scoring.md)
+(**read that file first if resuming this work**). Landed on branch
+`nvitthanala/swimcloud-data-ingest`: NCAA Rule 7 scoring engine
+(`packages/core`), and a new `packages/swimcloud` package (entities, URL
+classifier, parser against synthetic fixtures — never validated against a
+real SwimCloud page). Next up per
+[`04-phasing.md`](2026-09-06/04-phasing.md): Phase 2 (Playwright fetch
+service) and Phase 3 (browser extension + import-UI wiring), both blocked on
+open questions in that file (Track A transport; confirming URL patterns and
+the relay-leg-split question against one real, human-captured page). Key
+finding worth knowing before touching this: SwimCloud's Terms of Use flatly
+prohibit automated access; the plan records an explicit, informed user
+decision to build one compliant track (a human-triggered browser extension)
+and one accepted-risk track (automated fetch-on-paste) side by side — see
+[`01-legal-and-access-strategy.md`](2026-09-06/01-legal-and-access-strategy.md).
+
 Baseline: lint clean (7 packages), `npm test` **61 passed / 0 failed / 3 skipped**,
 `npm run build` exit 0.
 
