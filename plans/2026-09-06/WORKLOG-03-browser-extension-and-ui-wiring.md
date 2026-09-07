@@ -79,6 +79,53 @@ silent gap.
   Unrelated to Phase 3's UI work; tracked in the Phase 2 worklog. Nothing in
   Phase 3 changes that status.
 
+## Code review pass (2026-09-07, after Phase 3 landed)
+
+Ran `/code-review medium` against the full branch diff. 8 findings surfaced;
+3 were real, verified bugs and are fixed in commit `1e098d28` (with
+regression tests proven to fail against the pre-fix code, then pass after —
+see that commit for the full account): a `did-not-compete` entry inflating
+`lostPlaces` in the NCAA engine, a silently-dropped place `"0"` in the
+SwimCloud parser, and a `"Yard"`-labeled personal best silently discarding a
+contradictory course column. One more (a Zod schema's `source` enum not
+updated when `HistoricalSwim.source` gained `'swimcloud'`) was a real,
+currently-latent gap, also fixed there.
+
+Four findings reviewed and **deliberately not fixed**, recorded here per
+this repo's "report, don't fix, outside scope" rule:
+
+- **A tie straddling a point table's boundary gets two different per-place
+  `reason` values** (e.g. a 2-way tie for places 6–7 on a 6-place table:
+  place 6 gets `reason: null` — a genuine table zero — place 7 gets
+  `reason: 'place-outside-point-table'`). Reviewed and judged **not a
+  bug**: the two tied swimmers get different numeric `place` values (6 and
+  7), and those two *slots* genuinely have different provenance — one is
+  in the table and worth 0, the other isn't in the table at all. The shared
+  `points` value (0 for both, correctly split) is what actually matters and
+  is correct. Changing `reason` to always agree within a tie would conflate
+  two real, different facts to make the output look tidier — not worth it.
+- **Two non-interoperating scoring engines now coexist in `packages/core`**
+  (this session's new `computeNcaaEventScoring`/`ncaaScoringRules.ts`, and
+  the pre-existing `calculatePoints`/`utils.ts` pipeline `scoringTheory.ts`
+  uses). This was a deliberate Phase 1 design choice, not an accident — see
+  the Phase 1a commit — and reconciling them (or deciding one supersedes
+  the other) is real, separate design work belonging to whichever feature
+  next needs both to agree, not a fix-up here.
+- **The "Meter"-is-ambiguous course-detection rule is independently
+  reimplemented in three places**: `packages/swimcloud/src/parser.ts`
+  (twice — meet-heading and personal-best row parsing) and
+  `packages/core/src/lib/cutlineEventNames.ts`. All three currently agree
+  in practice (compared by hand); consolidating would mean either breaking
+  the deliberate `packages/core` ↔ `packages/swimcloud` isolation
+  (`03-architecture.md` §1) or introducing a new shared micro-package —
+  both bigger calls than this round should make unilaterally.
+- **`urlClassifier.ts`'s five resource-kind branches repeat a similar
+  missing-id/invalid-id validation shape by hand.** A real cleanup
+  candidate, but `classifySwimCloudUrl` already carries 63 tests covering
+  every branch, which is strong regression coverage against exactly the
+  copy-paste-typo risk this finding warns about. Lower priority than the
+  four items above.
+
 ## Log
 
 - **2026-09-07** — All of the above done in one continuous session (no new
