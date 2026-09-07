@@ -1084,6 +1084,7 @@ function parseEventTable(
     const time = readTime(textAt(cells, timeColumn), event, rowIndex, warnings);
 
     let relayId: string | undefined;
+    let teamName: string | undefined;
     if (event.kind === 'relay') {
       relayId = `${event.eventId}:relay:${rowIndex}`;
       const designator = readRelayDesignator(subjectText);
@@ -1097,14 +1098,21 @@ function parseEventTable(
           raw: subjectText,
         });
       }
+      teamName = designator === undefined ? subjectText : designator.teamName;
       relays.push({
         relayId,
         eventId: event.eventId,
         ...(teamId === undefined ? {} : { swimCloudTeamId: teamId }),
-        teamName: designator === undefined ? subjectText : designator.teamName,
+        teamName,
         ...(designator === undefined ? {} : { designator: designator.designator }),
         legs,
       });
+    } else if (teamColumn >= 0) {
+      // Individual event: the subject column is the athlete's name, not the
+      // team — the team's printed name lives in its own column, same one
+      // teamIdFromCell already reads for the id.
+      const rawTeamName = textAt(cells, teamColumn);
+      teamName = rawTeamName.length === 0 ? undefined : rawTeamName;
     }
 
     const swimmerId = event.kind === 'relay' ? undefined : swimmerIdFromCell(subjectHtml);
@@ -1122,8 +1130,10 @@ function parseEventTable(
       entryId,
       eventId: event.eventId,
       ...(swimmerId === undefined ? {} : { swimCloudSwimmerId: swimmerId }),
+      ...(event.kind === 'individual' ? { athleteName: subjectText } : {}),
       ...(relayId === undefined ? {} : { relayId }),
       ...(teamId === undefined ? {} : { swimCloudTeamId: teamId }),
+      ...(teamName === undefined ? {} : { teamName }),
     });
 
     results.push({

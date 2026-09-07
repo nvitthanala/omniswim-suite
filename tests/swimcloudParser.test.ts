@@ -173,6 +173,8 @@ describe('parseMeetResultsHtml — swimcloud-synthetic-meet-results.html', () =>
     expect(first.legs[1].athleteName).toBe('Alan Alejan González Mujica');
     expect(first.legs[1].splitTime).toBe('23.90');
     expect(relayEvent.results[0]).toMatchObject({ place: 1, finalTime: '1:34.12' });
+    // The relay's SwimCloudEntry (not just its SwimCloudRelay) also carries the team name.
+    expect(relayEvent.entries[0].teamName).toBe(first.teamName);
 
     // Second row: no <ol> of legs at all.
     expect(second.designator).toBe('A');
@@ -208,15 +210,20 @@ describe('parseMeetResultsHtml — swimcloud-synthetic-meet-results.html', () =>
     // Clean top two.
     expect(event.results[0]).toMatchObject({ place: 1, finalTime: '49.87' });
     expect(event.entries[0].swimCloudSwimmerId).toBe('3646504');
+    expect(event.entries[0].athleteName).toBe('Landon Dehn');
+    expect(event.entries[0].teamName).toBe('Henderson State');
     expect(event.results[1]).toMatchObject({ place: 2, finalTime: '50.11' });
+    expect(event.entries[1].teamName).toBe('Ouachita Baptist');
 
     // Exhibition: place "X" -> no place; time "X50.44" -> finalTime "50.44" + exhibition flag.
     expect(event.results[2].place).toBeUndefined();
     expect(event.results[2].finalTime).toBe('50.44');
     expect(event.results[2].flags).toEqual({ exhibition: true });
 
-    // No-show, and a plain-text name with no profile link.
+    // No-show, and a plain-text name with no profile link — the name is
+    // still captured even though there's no id to link it to.
     expect(event.entries[3].swimCloudSwimmerId).toBeUndefined();
+    expect(event.entries[3].athleteName).toBe('Casey Nolan');
     expect(event.results[3].flags).toEqual({ noShow: true });
     expect(event.results[3].rawTimeToken).toBe('NS');
     expect(event.results[3].finalTime).toBeUndefined();

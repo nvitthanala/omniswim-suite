@@ -504,10 +504,31 @@ export interface SwimCloudEntry {
   readonly eventId: string;
   /** Set for an individual entry. Mutually exclusive with {@link relayId}. */
   readonly swimCloudSwimmerId?: SwimCloudSwimmerId;
+  /**
+   * Athlete name exactly as printed, individual entries only. Absent for a
+   * relay entry (a relay has no single athlete — see
+   * {@link SwimCloudRelay.legs} for its athletes) and, same as
+   * {@link swimCloudSwimmerId}, absent when the row's subject cell was
+   * empty (already reported as `unparsed-row` and the entry skipped
+   * entirely in that case — so in practice this is present whenever the
+   * entry itself is).
+   */
+  readonly athleteName?: string;
   /** Set for a relay entry. Mutually exclusive with {@link swimCloudSwimmerId}. */
   readonly relayId?: string;
   /** Entering team. */
   readonly swimCloudTeamId?: SwimCloudTeamId;
+  /**
+   * Team name exactly as printed on the row, e.g. `'Henderson State'`.
+   *
+   * Distinct from {@link swimCloudTeamId}: a caller filtering a meet-results
+   * capture down to "just my team" has a plain-text team name typed by a
+   * coach, not a SwimCloud numeric id — this is what makes that filter
+   * possible without a separate id-to-name lookup table this package
+   * deliberately doesn't maintain (`03-architecture.md` §1: no persistence
+   * layer here). Mirrors {@link SwimCloudRelay.teamName}.
+   */
+  readonly teamName?: string;
   /** Seed time as printed. Absent for an unseeded/`NT` entry — never `0`, never `'99:99.99'`. */
   readonly seedTime?: SwimCloudTimeString;
   /** Heat assignment. **Unverified** — see {@link SwimCloudHeat}. */

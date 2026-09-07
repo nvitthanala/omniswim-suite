@@ -34,8 +34,12 @@ import AliasSuggestionsPanel from './AliasSuggestionsPanel';
 // never pull into its bundle).
 import { readSwimCloudClipboardPayload } from '@omniswim/swimcloud/clipboardPayload';
 import { classifySwimCloudUrl } from '@omniswim/swimcloud/urlClassifier';
-import { parseSwimmerProfileHtml } from '@omniswim/swimcloud/parser';
-import { swimCloudPersonalBestsToHistoricalSwims } from '../lib/swimCloudImportBridge';
+import { parseMeetResultsHtml, parseSwimmerProfileHtml, parseTeamRosterHtml } from '@omniswim/swimcloud/parser';
+import {
+  swimCloudMeetResultsToHistoricalSwims,
+  swimCloudPersonalBestsToHistoricalSwims,
+} from '../lib/swimCloudImportBridge';
+import { foldDiacritics, normalizeSwimmerName } from '@omniswim/core/lib/utils';
 
 type ImportMode = 'paste' | 'csv';
 
@@ -134,16 +138,11 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
 
   /**
    * Track A end-to-end: clipboard text (from extensions/swimcloud-companion)
-   * -> validated capture payload -> classified URL -> parsed personal bests
-   * -> HistoricalSwim[] -> the same preview step every other import path uses.
-   *
-   * Only swimmer-profile captures are supported here today. A team-roster
-   * capture has no adapter (SwimCloud's roster page carries no times, and
-   * this app's Recruit/HistoricalSwim model requires one — see the Phase 1b/
-   * Phase 3 worklogs) and a meet-results capture isn't wired to this panel at
-   * all (it belongs in a meet-scoring surface, not a roster importer). Both
-   * are reported with a clear, specific message rather than a generic
-   * failure, so a coach knows what page to go copy instead.
+   * -> validated capture payload -> classified URL -> parsed per the page
+   * kind -> either HistoricalSwim[] into the same preview step every other
+   * import path uses (swimmer profile, meet results) or an informational
+   * summary (team roster — see handleClipboardTeamRoster's own comment for
+   * why that one can't feed the preview grid at all).
    */
   const handleClipboardImport = async () => {
     if (!team.trim()) {
@@ -158,7 +157,7 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
       } catch {
         toast.push(
           'error',
-          'Could not read the clipboard. Your browser may need permission, or nothing has been copied yet — use the "Copy for Omniswim" button on a SwimCloud swimmer page first.'
+          'Could not read the clipboard. Your browser may need permission, or nothing has been copied yet — use the "Copy for Omniswim" button on a SwimCloud page first.'
         );
         return;
       }
@@ -170,56 +169,166 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
       }
 
       const classification = classifySwimCloudUrl(payloadResult.payload.sourceUrl);
-      if (classification.outcome !== 'fetchable' || classification.resource.kind !== 'swimmer') {
+      if (classification.outcome !== 'fetchable') {
+        toast.push('error', 'That clipboard capture is not a recognized SwimCloud page.');
+        return;
+      }
+      const { resource } = classification;
+
+      if (resource.kind === 'swimmer') {
+        handleClipboardSwimmerProfile(payloadResult.payload.html, payloadResult.context, resource.swimmerId);
+      } else if (resource.kind === 'meet' || resource.kind === 'meetEvent') {
+        handleClipboardMeetResults(payloadResult.payload.html, payloadResult.context, resource.meetId);
+      } else if (resource.kind === 'team' || resource.kind === 'teamRoster') {
+        handleClipboardTeamRoster(payloadResult.payload.html, payloadResult.context, resource.teamId);
+      } else {
         toast.push(
           'error',
-          classification.outcome === 'fetchable'
-            ? `This importer only reads swimmer profile pages right now (got a "${classification.resource.kind}" page). Copy from a swimmer's own profile page instead.`
-            : 'That clipboard capture is not a recognized SwimCloud page.'
+          `This importer doesn't read "${resource.kind}" pages. Copy a swimmer profile, a team roster, or a meet results page instead.`
         );
-        return;
       }
-
-      const parseResult = parseSwimmerProfileHtml(payloadResult.payload.html, payloadResult.context, {
-        swimmerId: classification.resource.swimmerId,
-        gender,
-      });
-      if (!parseResult.ok) {
-        toast.push('error', `Could not read personal bests from that page: ${parseResult.failure.message}`);
-        return;
-      }
-
-      const conversion = swimCloudPersonalBestsToHistoricalSwims(parseResult.data, {
-        team: team.trim(),
-        gender,
-      });
-      if (!conversion.ok) {
-        toast.push('error', conversion.message);
-        return;
-      }
-      if (conversion.swims.length === 0) {
-        toast.push(
-          'error',
-          `No usable times found on that page (${conversion.skipped.length} row(s) had no readable time).`
-        );
-        return;
-      }
-
-      setPreview([...conversion.swims]);
-      setWarnings([
-        ...parseResult.warnings.map(w => w.message),
-        ...(conversion.skipped.length > 0
-          ? [`${conversion.skipped.length} row(s) skipped — no usable time.`]
-          : []),
-      ]);
-      setFormat('swimcloud');
-      setStep('preview');
-      setDismissedAliasKeys(new Set());
-      setLastAliasLink(null);
     } finally {
       setIsImportingFromClipboard(false);
     }
   };
+
+  function handleClipboardSwimmerProfile(
+    html: string,
+    context: Parameters<typeof parseSwimmerProfileHtml>[1],
+    swimmerId: string
+  ) {
+    const parseResult = parseSwimmerProfileHtml(html, context, { swimmerId, gender });
+    if (!parseResult.ok) {
+      toast.push('error', `Could not read personal bests from that page: ${parseResult.failure.message}`);
+      return;
+    }
+
+    const conversion = swimCloudPersonalBestsToHistoricalSwims(parseResult.data, {
+      team: team.trim(),
+      gender,
+    });
+    if (!conversion.ok) {
+      toast.push('error', conversion.message);
+      return;
+    }
+    if (conversion.swims.length === 0) {
+      toast.push(
+        'error',
+        `No usable times found on that page (${conversion.skipped.length} row(s) had no readable time).`
+      );
+      return;
+    }
+
+    setPreview([...conversion.swims]);
+    setWarnings([
+      ...new Set(parseResult.warnings.map(w => w.message)),
+      ...(conversion.skipped.length > 0
+        ? [`${conversion.skipped.length} row(s) skipped — no usable time.`]
+        : []),
+    ]);
+    setFormat('swimcloud');
+    setStep('preview');
+    setDismissedAliasKeys(new Set());
+    setLastAliasLink(null);
+  }
+
+  /**
+   * The bulk path — one meet-results capture gives every one of the
+   * selected team's swimmers who competed at that meet, not one swimmer at
+   * a time. Filtered to `team` + `gender`; relay events are never converted
+   * (see swimCloudMeetResultsToHistoricalSwims's file header on why a relay
+   * split isn't a valid individual time).
+   */
+  function handleClipboardMeetResults(
+    html: string,
+    context: Parameters<typeof parseMeetResultsHtml>[1],
+    meetId: string
+  ) {
+    const parseResult = parseMeetResultsHtml(html, context, { meetId });
+    if (!parseResult.ok) {
+      toast.push('error', `Could not read results from that page: ${parseResult.failure.message}`);
+      return;
+    }
+
+    const conversion = swimCloudMeetResultsToHistoricalSwims(parseResult.data, {
+      team: team.trim(),
+      gender,
+    });
+    if (conversion.swims.length === 0) {
+      const teamName = team.trim();
+      toast.push(
+        'error',
+        `No ${gender.toLowerCase()} swims found for "${teamName}" in this meet (${conversion.skipped.length} row(s) skipped — wrong team, wrong gender, relay, or no time). Check the team name matches exactly what SwimCloud printed.`
+      );
+      return;
+    }
+
+    setPreview([...conversion.swims]);
+    const skippedByReason = new Map<string, number>();
+    for (const row of conversion.skipped) {
+      skippedByReason.set(row.reason, (skippedByReason.get(row.reason) ?? 0) + 1);
+    }
+    // De-duplicated: a multi-event meet routinely repeats the exact same
+    // warning text once per event (e.g. "points column ignored" fires per
+    // event, not once for the whole capture) — showing it N times adds
+    // nothing a coach needs to see N times.
+    setWarnings([
+      ...new Set(parseResult.warnings.map(w => w.message)),
+      ...Array.from(skippedByReason.entries()).map(
+        ([reason, count]) => `${count} row(s) skipped — ${reason.replace(/-/g, ' ')}.`
+      ),
+    ]);
+    setFormat('swimcloud');
+    setStep('preview');
+    setDismissedAliasKeys(new Set());
+    setLastAliasLink(null);
+    toast.push('success', `Imported ${conversion.swims.length} swim(s) from ${parseResult.data.meetName ?? 'this meet'}.`);
+  }
+
+  /**
+   * Team-roster pages carry names/class years, never times — and every swim
+   * record in this app (HistoricalSwim, Recruit) requires an event and a
+   * time; there is no "bare athlete" concept to import one into (see
+   * plans/2026-09-06's Phase 3 worklog). So this doesn't touch the preview
+   * grid at all — it stays purely informational: how many swimmers the
+   * roster lists, and which of them aren't already in this workspace, so a
+   * coach knows who's worth visiting individually (or checking a meet
+   * result for). Real, useful signal without pretending to have data this
+   * page doesn't contain.
+   */
+  function handleClipboardTeamRoster(
+    html: string,
+    context: Parameters<typeof parseTeamRosterHtml>[1],
+    teamId: string
+  ) {
+    const parseResult = parseTeamRosterHtml(html, context, { teamId, gender });
+    if (!parseResult.ok) {
+      toast.push('error', `Could not read the roster from that page: ${parseResult.failure.message}`);
+      return;
+    }
+
+    const existingNames = new Set(
+      rosterNamesForTeam(workspace, team.trim(), gender).map(name => foldDiacritics(normalizeSwimmerName(name)))
+    );
+    const newAthletes = parseResult.data.athletes.filter(
+      a => !existingNames.has(foldDiacritics(normalizeSwimmerName(a.name)))
+    );
+
+    const total = parseResult.data.athletes.length;
+    if (newAthletes.length === 0) {
+      toast.push(
+        'success',
+        `Roster captured: all ${total} swimmer(s) are already in this workspace. (SwimCloud roster pages don't include times — visit a swimmer's own profile, or this team's meet results, to bring in swim data.)`
+      );
+      return;
+    }
+    const namesPreview = newAthletes.slice(0, 8).map(a => a.name).join(', ');
+    const overflow = newAthletes.length > 8 ? `, +${newAthletes.length - 8} more` : '';
+    toast.push(
+      'success',
+      `Roster captured: ${total} swimmer(s), ${newAthletes.length} not yet in this workspace: ${namesPreview}${overflow}. SwimCloud roster pages don't include times — visit each swimmer's own profile, or this team's meet results, to bring in swim data.`
+    );
+  }
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -471,8 +580,13 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
               <div className="flex flex-wrap gap-2 text-ui-caption">
                 <span className="badge-info px-2 py-0.5 rounded-full">{format}</span>
                 <span className="text-theme-muted">{preview.length} swims parsed</span>
-                {warnings.map(w => (
-                  <span key={w} className="badge-warning px-2 py-0.5 rounded-full">
+                {warnings.map((w, i) => (
+                  // Index-qualified: `warnings` is plain string[], and two
+                  // genuinely different warnings can print identical text
+                  // (e.g. the same "points column ignored" message recurs
+                  // once per event in a multi-event meet-results import) —
+                  // `key={w}` alone broke on exactly that case.
+                  <span key={`${i}-${w}`} className="badge-warning px-2 py-0.5 rounded-full">
                     {w}
                   </span>
                 ))}

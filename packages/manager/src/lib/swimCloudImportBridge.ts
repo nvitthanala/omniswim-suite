@@ -39,7 +39,12 @@ import type { HistoricalSwim } from '@omniswim/core/types';
 // a browser/webview bundle just to reach two pure types. ./parser has none of
 // that (see packages/swimcloud/src/parser.ts's own file header: string/regex
 // only, no DOM, no Node).
-import type { SwimCloudPersonalBest, SwimCloudSwimmerProfileParse } from '@omniswim/swimcloud/parser';
+import type {
+  SwimCloudMeetResultsParse,
+  SwimCloudParsedEvent,
+  SwimCloudPersonalBest,
+  SwimCloudSwimmerProfileParse,
+} from '@omniswim/swimcloud/parser';
 
 export interface SwimCloudPersonalBestsToHistoricalSwimsOptions {
   readonly team: string;
@@ -116,4 +121,134 @@ export function swimCloudPersonalBestsToHistoricalSwims(
   }
 
   return { ok: true, swims, skipped };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Meet results — bulk import                                                 */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * A meet-results capture is the one SwimCloud source that gives many
+ * swimmers' real times in a single page copy — everyone on a team who swam
+ * that meet, not one swimmer at a time. That's the whole reason this
+ * converter exists alongside {@link swimCloudPersonalBestsToHistoricalSwims}.
+ */
+export interface SwimCloudMeetResultsToHistoricalSwimsOptions {
+  /** Matched against each entry's `teamName`, trimmed and case-insensitive — see the file header on why entries carry a name, not just a `swimCloudTeamId`. */
+  readonly team: string;
+  /** Only events whose SwimCloud gender matches are imported — a meet page mixes both. */
+  readonly gender: Gender;
+  /** Used when `parse.meetName` itself is absent. Never fabricated if this is also omitted. */
+  readonly meetLabelFallback?: string;
+}
+
+export type SwimCloudMeetImportSkipReason =
+  /**
+   * Relay events are excluded entirely, not skipped per missing-time — a
+   * relay split is swum under different starting conditions (a flying start
+   * for every leg but the first) and is not a valid individual time for that
+   * distance. Converting one into a HistoricalSwim row would misrepresent a
+   * swimmer's actual ability at that event, which is exactly the kind of
+   * fabrication `CLAUDE.md`'s data-provenance rules exist to prevent — this
+   * isn't a "some day" TODO, it's a permanent exclusion.
+   */
+  | 'relay-event'
+  /** The event's gender could not be determined from its heading (see `parser.ts`'s `unmapped-gender` warning) — never guessed. */
+  | 'unknown-gender'
+  /** The event's gender is the one the page contested, but not the one requested. */
+  | 'other-gender'
+  /** The entry's team name didn't match the requested team. */
+  | 'other-team'
+  /** The entry has no team name at all to compare (e.g. the results table had no Team column). */
+  | 'no-team-name'
+  /** The row's time cell wasn't a well-formed time — DQ, no-show, scratch, a diving score, or an unrecognized token all land here, since all of them leave `finalTime` absent. */
+  | 'no-time'
+  /** Defensive: the entry has no athlete name at all. Shouldn't occur in practice — `parser.ts` skips a row with an empty subject cell before an entry is ever created for it — but this converter refuses to invent one (`swimCloudPersonalBestsToHistoricalSwims`'s file header explains why a fabricated name is worse than a skipped row) rather than assume it can't happen. */
+  | 'no-name';
+
+export interface SwimCloudMeetResultSkip {
+  readonly reason: SwimCloudMeetImportSkipReason;
+  readonly eventLabel: string;
+  /** Absent for a relay-event skip, which has no single athlete. */
+  readonly athleteName?: string;
+}
+
+export interface SwimCloudMeetResultsConversion {
+  readonly swims: readonly HistoricalSwim[];
+  readonly skipped: readonly SwimCloudMeetResultSkip[];
+}
+
+/**
+ * Converts one meet-results capture into every importable individual swim
+ * for one team and one gender. Always succeeds (there's no data-absence
+ * failure mode analogous to `swimCloudPersonalBestsToHistoricalSwims`'s
+ * missing-swimmer-name case — a meet has a name-per-row, not one name for
+ * the whole capture) — everything that can't convert lands in `skipped`
+ * with a specific reason instead.
+ */
+export function swimCloudMeetResultsToHistoricalSwims(
+  parse: SwimCloudMeetResultsParse,
+  options: SwimCloudMeetResultsToHistoricalSwimsOptions,
+): SwimCloudMeetResultsConversion {
+  const swims: HistoricalSwim[] = [];
+  const skipped: SwimCloudMeetResultSkip[] = [];
+  const requestedTeam = options.team.trim().toLowerCase();
+  const meetLabel = parse.meetName ?? options.meetLabelFallback;
+
+  const skip = (event: SwimCloudParsedEvent, reason: SwimCloudMeetImportSkipReason, athleteName?: string) => {
+    skipped.push({ reason, eventLabel: event.event.label, ...(athleteName === undefined ? {} : { athleteName }) });
+  };
+
+  for (const event of parse.events) {
+    if (event.event.kind === 'relay') {
+      event.entries.forEach(() => skip(event, 'relay-event'));
+      continue;
+    }
+    if (event.event.gender === 'unknown') {
+      for (const entry of event.entries) {
+        skip(event, 'unknown-gender', entry.athleteName);
+      }
+      continue;
+    }
+    if (event.event.gender !== options.gender) {
+      for (const entry of event.entries) {
+        skip(event, 'other-gender', entry.athleteName);
+      }
+      continue;
+    }
+
+    for (const entry of event.entries) {
+      if (entry.teamName === undefined) {
+        skip(event, 'no-team-name', entry.athleteName);
+        continue;
+      }
+      if (entry.teamName.trim().toLowerCase() !== requestedTeam) {
+        skip(event, 'other-team', entry.athleteName);
+        continue;
+      }
+
+      const result = event.results.find((r) => r.entryId === entry.entryId);
+      if (result?.finalTime === undefined) {
+        skip(event, 'no-time', entry.athleteName);
+        continue;
+      }
+      if (entry.athleteName === undefined) {
+        skip(event, 'no-name');
+        continue;
+      }
+
+      swims.push({
+        name: entry.athleteName,
+        team: options.team,
+        gender: options.gender,
+        event: event.event.label,
+        time: result.finalTime,
+        ...(event.event.course === 'unknown' ? {} : { timeType: event.event.course }),
+        ...(meetLabel === undefined ? {} : { meetLabel }),
+        source: 'swimcloud',
+      });
+    }
+  }
+
+  return { swims, skipped };
 }
