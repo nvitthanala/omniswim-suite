@@ -33,9 +33,15 @@ launch/navigate/session-reuse cycle against a throwaway local server), but
 touching the *live* site is, per the plan's own posture, a deliberate
 human-present action, never an automated one, including for testing (Phase
 2 worklog). Everything else has now been seen working, not just inferred:
-the "From clipboard" button was screenshotted rendering correctly and
-actually firing its click handler against the real running app (Phase 3
-worklog, `verification-screenshots/`). Key finding worth knowing
+the "From clipboard" path — swimmer profile, team roster, and (per user
+feedback) meet results too — was click-tested against the real running app
+with a simulated extension capture, not just unit tests (Phase 3 worklog,
+`verification-screenshots/`; this is also what caught a real duplicate-
+React-key bug the unit suite never exercised). Team-roster captures stay
+informational (no times on that page type, and this app's data model has no
+"bare athlete" concept to import one into) while meet-results captures do
+full bulk import — see the Phase 3 worklog's "team-roster and meet-results
+captures now work too" section. Key finding worth knowing
 before touching any of this: SwimCloud's Terms of Use flatly prohibit
 automated access; the plan records an explicit, informed user decision to
 build one compliant track (the browser extension) and one accepted-risk

@@ -75,19 +75,42 @@ reliably stick before the next click — not chased further, since the two
 facts that actually mattered (renders correctly; click handler genuinely
 fires and reads real state) are both now confirmed with evidence.
 
-## What Phase 3 does *not* cover, on purpose
+## Update, 2026-09-07 — team-roster and meet-results captures now work too
 
-- **Team-roster captures have no UI path at all.** `parseTeamRosterHtml`'s
-  output (name/class/hometown, no times) has no adapter to this app's
-  swim-history-shaped model and none is planned — see the
-  `parseSwimmerProfileHtml` commit's rationale. If a "quick add athlete to
-  roster with no times yet" feature is ever wanted, that's a different,
-  new concept in `packages/core`'s types, not something to bolt onto
-  `HistoricalSwim`.
-- **Meet-results captures aren't wired to any UI.** `parseMeetResultsHtml`
-  exists and is tested (Phase 1b) but nothing in `packages/manager` calls
-  it yet. That's a materially bigger piece of work — it needs a scoring-
-  aware surface, not the roster importer — and wasn't in this round's scope.
+User feedback after trying Track A: swimmer-profile-only was too narrow —
+"I want this extension to also be able to pull teams and meets and full
+data of their rosters." Commit `560dcb3c` closes both:
+
+- **Meet results → bulk import.** `swimCloudMeetResultsToHistoricalSwims`
+  pulls every matching swimmer's real time across every individual event in
+  one capture — the actual "full data" ask, and materially more valuable
+  than the swimmer-profile path for a coach who wants their whole team's
+  results from a meet. Relay events are permanently excluded (a relay split
+  isn't a valid individual time — see the commit). Needed two new
+  `SwimCloudEntry` fields (`teamName`, `athleteName`) that individual
+  results had never captured before, only relay entries had.
+- **Team roster → informational cross-reference, not a data import.**
+  SwimCloud roster pages still carry no times, and this app's
+  `HistoricalSwim`/`Recruit` model still has no "bare athlete" concept (see
+  below, unchanged from the original Phase 3 finding) — so this reports
+  "N swimmers, M not yet in your workspace" via a toast and points the
+  coach at meet results or an individual profile for actual data, rather
+  than pretending to import something it can't.
+
+Verified against the real running app (not just unit tests) — this is what
+caught a real bug (duplicate React keys in the warnings list, only
+triggered by a multi-event import) that 231 unit tests hadn't exercised.
+Screenshots: `meet-results-bulk-import.png`, `team-roster-reference-capture.png`.
+
+## What Phase 3 still does *not* cover, on purpose
+
+- **A "bare athlete, no swim yet" concept does not exist anywhere in this
+  app's data model** (`Recruit` and `HistoricalSwim` both require
+  event+time) — this is *why* team-roster captures stay informational
+  rather than feeding the preview grid, not an oversight. Adding one would
+  be a real, cross-cutting data-model change (persistence, scoring, the
+  manual "add one athlete" form all assume it) — out of scope for this
+  round, flagged rather than done unprompted.
 - **Track B (the Playwright fetcher) still has never touched a live site.**
   Unrelated to Phase 3's UI work; tracked in the Phase 2 worklog. Nothing in
   Phase 3 changes that status.
