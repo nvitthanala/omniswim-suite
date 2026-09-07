@@ -78,6 +78,34 @@ function actionLabel(action: ImportSwimmerAction): string {
   }
 }
 
+/**
+ * One name from a captured team-roster page, tracked across a sequence of
+ * subsequent swimmer-profile captures — see `handleClipboardTeamRoster`'s
+ * and `handleClipboardSwimmerProfile`'s comments for why this exists: Track
+ * A can't auto-navigate to each swimmer's page (that would be Track B), so
+ * the roster capture becomes a checklist a coach works through by hand, one
+ * "Copy for Omniswim" click per swimmer, and this is what tracks progress
+ * against it.
+ */
+interface RosterQueueEntry {
+  readonly swimCloudSwimmerId?: string;
+  readonly name: string;
+  readonly captured: boolean;
+}
+interface RosterQueue {
+  readonly teamLabel: string;
+  readonly entries: readonly RosterQueueEntry[];
+}
+
+/** Matches a captured swimmer-profile back to a roster-queue entry: id first (exact), name as a fallback (a roster row with no profile link has no id to match by). */
+function rosterQueueEntryMatches(entry: RosterQueueEntry, swimmerId: string | undefined, name: string | undefined): boolean {
+  if (entry.swimCloudSwimmerId !== undefined && swimmerId !== undefined) {
+    return entry.swimCloudSwimmerId === swimmerId;
+  }
+  if (name === undefined) return false;
+  return foldDiacritics(normalizeSwimmerName(entry.name)) === foldDiacritics(normalizeSwimmerName(name));
+}
+
 export default function RosterImportWizard({ workspace, gender, onClose, onUpdate }: Props) {
   const toast = useToast();
   const teams = useMemo(() => uniqueTeams(workspace, gender), [workspace, gender]);
@@ -90,6 +118,7 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
   const [step, setStep] = useState<'paste' | 'preview'>('paste');
   const [showReference, setShowReference] = useState(false);
   const [isImportingFromClipboard, setIsImportingFromClipboard] = useState(false);
+  const [rosterQueue, setRosterQueue] = useState<RosterQueue | null>(null);
   const [dismissedAliasKeys, setDismissedAliasKeys] = useState<Set<string>>(new Set());
   const [lastAliasLink, setLastAliasLink] = useState<{
     inverse: Partial<Workspace>;
@@ -214,17 +243,49 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
     if (conversion.swims.length === 0) {
       toast.push(
         'error',
-        `No usable times found on that page (${conversion.skipped.length} row(s) had no readable time).`
+        `No usable individual-event times found on that page (${conversion.skipped.length} row(s) skipped — no readable time, or a relay leg rather than an individual event).`
       );
       return;
     }
 
-    setPreview([...conversion.swims]);
+    // When a roster queue is active, this is one checklist item, not a
+    // fresh import: accumulate into the existing preview rather than
+    // replacing it, so capturing swimmer 2 doesn't discard swimmer 1's
+    // swims that are still sitting in the preview waiting to be merged.
+    if (rosterQueue) {
+      setPreview(prev => [...prev, ...conversion.swims]);
+      let matchedNew = false;
+      setRosterQueue(prev => {
+        if (!prev) return prev;
+        let matched = false;
+        const entries = prev.entries.map(e => {
+          if (!matched && rosterQueueEntryMatches(e, swimmerId, parseResult.data.name)) {
+            matched = true;
+            matchedNew = !e.captured;
+            return { ...e, captured: true };
+          }
+          return e;
+        });
+        return { ...prev, entries };
+      });
+      const capturedSoFar = rosterQueue.entries.filter(e => e.captured).length + (matchedNew ? 1 : 0);
+      toast.push(
+        'success',
+        `Added ${conversion.swims.length} swim(s) for ${parseResult.data.name ?? 'this swimmer'}. ${capturedSoFar}/${rosterQueue.entries.length} roster swimmers captured.`
+      );
+    } else {
+      setPreview([...conversion.swims]);
+    }
+
+    const skippedByReason = new Map<string, number>();
+    for (const row of conversion.skipped) {
+      skippedByReason.set(row.reason, (skippedByReason.get(row.reason) ?? 0) + 1);
+    }
     setWarnings([
       ...new Set(parseResult.warnings.map(w => w.message)),
-      ...(conversion.skipped.length > 0
-        ? [`${conversion.skipped.length} row(s) skipped — no usable time.`]
-        : []),
+      ...Array.from(skippedByReason.entries()).map(
+        ([reason, count]) => `${count} row(s) skipped — ${reason.replace(/-/g, ' ')}.`
+      ),
     ]);
     setFormat('swimcloud');
     setStep('preview');
@@ -289,12 +350,21 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
    * Team-roster pages carry names/class years, never times — and every swim
    * record in this app (HistoricalSwim, Recruit) requires an event and a
    * time; there is no "bare athlete" concept to import one into (see
-   * plans/2026-09-06's Phase 3 worklog). So this doesn't touch the preview
-   * grid at all — it stays purely informational: how many swimmers the
-   * roster lists, and which of them aren't already in this workspace, so a
-   * coach knows who's worth visiting individually (or checking a meet
-   * result for). Real, useful signal without pretending to have data this
-   * page doesn't contain.
+   * plans/2026-09-06's Phase 3 worklog). So this never touches the preview
+   * grid *directly*.
+   *
+   * What it does instead: seeds `rosterQueue` — a checklist of every
+   * swimmer the roster page named, each still needing its own profile
+   * capture for times. Track A can't auto-navigate from here to each
+   * swimmer's page (that would be Track B, an automated process choosing
+   * where to go next, not a human clicking a button on a page they're
+   * already viewing) — so the roster becomes something a coach works
+   * through by hand, one "Copy for Omniswim" per swimmer, and
+   * `handleClipboardSwimmerProfile` checks off each one against this queue
+   * as it comes in, accumulating every swim into one running preview
+   * instead of replacing it each time. This is the closest this plan's
+   * Track A/Track B boundary allows to "pull the roster, then the event
+   * data for every swimmer on it."
    */
   function handleClipboardTeamRoster(
     html: string,
@@ -313,20 +383,27 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
     const newAthletes = parseResult.data.athletes.filter(
       a => !existingNames.has(foldDiacritics(normalizeSwimmerName(a.name)))
     );
-
     const total = parseResult.data.athletes.length;
-    if (newAthletes.length === 0) {
-      toast.push(
-        'success',
-        `Roster captured: all ${total} swimmer(s) are already in this workspace. (SwimCloud roster pages don't include times — visit a swimmer's own profile, or this team's meet results, to bring in swim data.)`
-      );
-      return;
-    }
-    const namesPreview = newAthletes.slice(0, 8).map(a => a.name).join(', ');
-    const overflow = newAthletes.length > 8 ? `, +${newAthletes.length - 8} more` : '';
+
+    setRosterQueue({
+      teamLabel: parseResult.data.teamName ?? team.trim(),
+      entries: parseResult.data.athletes.map(a => ({
+        swimCloudSwimmerId: a.swimCloudSwimmerId,
+        name: a.name,
+        captured: false,
+      })),
+    });
+
+    const newSummary =
+      newAthletes.length === 0
+        ? 'all already in this workspace.'
+        : `${newAthletes.length} not yet in this workspace: ${newAthletes
+            .slice(0, 6)
+            .map(a => a.name)
+            .join(', ')}${newAthletes.length > 6 ? `, +${newAthletes.length - 6} more` : ''}.`;
     toast.push(
       'success',
-      `Roster captured: ${total} swimmer(s), ${newAthletes.length} not yet in this workspace: ${namesPreview}${overflow}. SwimCloud roster pages don't include times — visit each swimmer's own profile, or this team's meet results, to bring in swim data.`
+      `Roster captured: ${total} swimmer(s), ${newSummary} Visit each swimmer's own profile and click "Copy for Omniswim," then "Capture next swimmer" below — SwimCloud roster pages carry no times themselves.`
     );
   }
 
@@ -445,6 +522,49 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
         </div>
 
         <div className="p-5 overflow-y-auto flex-1 space-y-4">
+          {rosterQueue ? (
+            <div className="border border-theme-soft rounded-lg p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-ui-caption font-bold">
+                  Roster queue — {rosterQueue.teamLabel} (
+                  {rosterQueue.entries.filter(e => e.captured).length}/{rosterQueue.entries.length} captured)
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleClipboardImport()}
+                    disabled={isImportingFromClipboard || !team.trim()}
+                    title="Copy a swimmer's profile page from SwimCloud (Copy for Omniswim), then click this to pull it in and check them off."
+                    className="px-2.5 py-1 text-ui-micro font-bold uppercase tracking-widest rounded-md nav-tab-inactive hover:text-[var(--text-primary)] transition-colors disabled:opacity-40 flex items-center gap-1"
+                  >
+                    <Download size={12} /> {isImportingFromClipboard ? 'Reading…' : 'Capture next swimmer'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRosterQueue(null)}
+                    className="px-2.5 py-1 text-ui-micro font-bold uppercase tracking-widest rounded-md nav-tab-inactive hover:text-[var(--text-primary)] transition-colors"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {rosterQueue.entries.map(e => (
+                  <span
+                    key={e.swimCloudSwimmerId ?? e.name}
+                    className={`text-ui-micro px-1.5 py-0.5 rounded-full border ${
+                      e.captured
+                        ? 'border-[var(--text-accent)]/40 text-[var(--text-accent)]'
+                        : 'border-theme-soft text-theme-muted'
+                    }`}
+                  >
+                    {e.captured ? '✓ ' : ''}
+                    {e.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
           {step === 'paste' ? (
             <>
               <div className="flex items-center gap-1 border-b border-theme-soft">

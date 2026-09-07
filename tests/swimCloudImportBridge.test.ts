@@ -92,6 +92,31 @@ describe('swimCloudPersonalBestsToHistoricalSwims — never fabricates a require
     expect(result.skipped[0].personalBest.rawTimeToken).toBe('21.4');
   });
 
+  it('excludes a relay-labeled personal best rather than importing a relay split as an individual time', () => {
+    // Regression test: found by inspection of a real (headless-browser)
+    // click-through run, 2026-09-07 — a swimmer's "200 Yard Freestyle
+    // Relay" personal best was being imported as though it were their own
+    // individual 200 free time. A relay split runs under different
+    // starting conditions (a flying start on every leg but the first) and
+    // is not a valid individual time — same principle
+    // swimCloudMeetResultsToHistoricalSwims already applies to relay
+    // events, which this converter had missed.
+    const result = swimCloudPersonalBestsToHistoricalSwims(
+      profile({
+        personalBests: [
+          personalBest({ label: '200 Yard Freestyle', stroke: 'Freestyle' }),
+          personalBest({ label: '200 Yard Freestyle Relay', stroke: 'Freestyle Relay', time: '1:34.12' }),
+          personalBest({ label: '200 Yard Medley Relay', stroke: 'Medley Relay', time: '1:38.00' }),
+        ],
+      }),
+      { team: 'Henderson State', gender: Gender.MEN },
+    );
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.swims).toHaveLength(1);
+    expect(result.swims[0].event).toBe('200 Yard Freestyle');
+    expect(result.skipped.filter((s) => s.reason === 'relay-event')).toHaveLength(2);
+  });
+
   it('converts a row with an unknown course by omitting timeType, not guessing one', () => {
     const result = swimCloudPersonalBestsToHistoricalSwims(
       profile({ personalBests: [personalBest({ course: 'unknown' })] }),

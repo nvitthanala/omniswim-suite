@@ -55,7 +55,20 @@ export interface SwimCloudPersonalBestsToHistoricalSwimsOptions {
 
 export type SwimCloudImportSkipReason =
   /** The row's time cell wasn't a well-formed time; HistoricalSwim.time is required and this converter never invents one. */
-  'no-time';
+  | 'no-time'
+  /**
+   * A personal best labeled as a relay (stroke `'Freestyle Relay'` /
+   * `'Medley Relay'`). Excluded for the same reason
+   * `swimCloudMeetResultsToHistoricalSwims` excludes relay events entirely
+   * — found by inspection (2026-09-07) of this exact converter's own
+   * output, which had been importing a swimmer's relay-leg time as though
+   * it were their personal best for that individual event distance. A
+   * relay split runs under different starting conditions (a flying start
+   * on every leg but the first) and is not a valid individual time; SwimCloud's
+   * personal-bests table apparently lists it anyway, so this converter has
+   * to filter it back out.
+   */
+  | 'relay-event';
 
 export interface SwimCloudImportSkippedRow {
   readonly personalBest: SwimCloudPersonalBest;
@@ -100,6 +113,10 @@ export function swimCloudPersonalBestsToHistoricalSwims(
   const skipped: SwimCloudImportSkippedRow[] = [];
 
   for (const personalBest of parse.personalBests) {
+    if (personalBest.stroke === 'Freestyle Relay' || personalBest.stroke === 'Medley Relay') {
+      skipped.push({ personalBest, reason: 'relay-event' });
+      continue;
+    }
     if (personalBest.time === undefined) {
       skipped.push({ personalBest, reason: 'no-time' });
       continue;
