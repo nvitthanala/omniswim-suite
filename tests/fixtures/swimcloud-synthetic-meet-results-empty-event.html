@@ -1,0 +1,50 @@
+<!--
+  ============================================================================
+  SYNTHETIC FIXTURE — HAND-AUTHORED — NOT REAL SWIMCLOUD MARKUP
+  ============================================================================
+
+  Written by hand on 2026-09-06. Not a capture of anything.
+
+  This is the "results not posted yet" case, and it is deliberately DIFFERENT
+  from the missing-table case in swimcloud-synthetic-team-roster-no-table.html:
+
+    - the event heading is there
+    - the results table is there
+    - the header row is there
+    - and there are genuinely zero result rows
+
+  That is a real answer ("nobody has swum this yet"), not a parse failure. The
+  parser must return ok: true with a `zero-data-rows` warning, so a caller can
+  tell "nothing posted" apart from "we could not read the page".
+
+  A second event on the same page carries a table with NO header row at all, to
+  check that one unreadable event downgrades that event (an `unparsed-event`
+  warning plus a shortfall against `eventHeadingCount`) instead of silently
+  shrinking the meet.
+  ============================================================================
+-->
+<div class="c-page">
+  <header class="c-meet-header">
+    <h1 class="c-meet-header__title">2026 NSISC Championships</h1>
+  </header>
+
+  <section class="c-event">
+    <h2 class="c-event__title">Event 1 Women 200 Yard Medley Relay</h2>
+    <table class="c-table c-table--results">
+      <thead>
+        <tr><th>Place</th><th>Team</th><th>Time</th></tr>
+      </thead>
+      <tbody>
+      </tbody>
+    </table>
+  </section>
+
+  <section class="c-event">
+    <h2 class="c-event__title">Event 2 Men 200 Yard Medley Relay</h2>
+    <table class="c-table c-table--results">
+      <tbody>
+        <tr><td>1</td><td>Henderson State 'A'</td><td>1:31.02</td></tr>
+      </tbody>
+    </table>
+  </section>
+</div>
