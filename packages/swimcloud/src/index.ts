@@ -7,9 +7,15 @@
  * `@omniswim/db` so the domain layer never learns where an Entry or Result came
  * from (`plans/2026-09-06/03-architecture.md` §1).
  *
- * Zero runtime dependencies. No network access. No DOM.
+ * Everything except `./playwrightFetcher` has zero runtime dependencies, no
+ * network access, and no DOM. `./playwrightFetcher` is the one exception: it
+ * depends on `playwright-core` (already present in this repo's tree at the
+ * version `@playwright/test` resolves to, for the root e2e suite — no new
+ * browser-automation dependency was introduced) because launching a real
+ * browser is the only way to pass SwimCloud's Cloudflare challenge. Every
+ * other module stays as it was in Phase 1: pure functions over strings.
  *
- * ## What is in this package today (Phase 1)
+ * ## What is in this package today (Phase 2)
  *
  * - **Entities** (`./entities`) — the typed shape of what a SwimCloud page says.
  * - **URL classifier** (`./urlClassifier`) — pure `string -> classification`,
@@ -19,11 +25,20 @@
  * - **HTML helpers** (`./html`) — the regex-only extraction primitives the
  *   parser is built from, exported because the browser extension will need the
  *   same ones.
+ * - **Status-keyed cache** (`./cache`) — in-memory and filesystem-backed
+ *   stores for captured pages, `'final'` snapshots treated as immutable.
+ * - **Politeness-enforcing fetcher wrapper** (`./fetcher`) — the single choke
+ *   point Track B's requests pass through: robots.txt denylist, rate
+ *   limiting, cache read-through. Framework-agnostic — takes any
+ *   `SwimCloudRawFetcher`.
+ * - **The real Track B raw fetcher** (`./playwrightFetcher`) — a
+ *   `playwright-core`-backed `SwimCloudRawFetcher`. **Never run against a live
+ *   site in this repo's history** — see its file header before using it.
  *
- * Not here yet: the politeness-enforcing fetcher wrapper and the status-keyed
- * cache (Phase 2), and the browser extension (Phase 3).
+ * Not here yet: the browser extension (Phase 3) and any wiring into
+ * `packages/db` persistence (descoped from Phase 1, still descoped).
  *
- * ## Two things every caller must know
+ * ## Three things every caller must know
  *
  * 1. **The URL patterns are believed, not verified.** They come from prior-art
  *    scraper code and search results; SwimCloud's Cloudflare challenge prevented
@@ -32,9 +47,14 @@
  *    was written against hand-authored synthetic fixtures, which is why every
  *    parse result carries `confidence: 'synthetic-fixture-only'`. See the header
  *    of `./parser.ts`.
+ * 3. **`./playwrightFetcher` has never fetched a real page, from SwimCloud or
+ *    anywhere else.** It is type-checked against the real `playwright-core` API
+ *    and unit-tested only where that doesn't require launching a browser. See
+ *    its file header for exactly what still has to happen, and why that step
+ *    is deliberately not something any agent should do unattended.
  *
- * Neither of those is a bug to be fixed by writing more code. Both are resolved
- * by one human capturing one real page each.
+ * None of these is a bug to be fixed by writing more code. All three are
+ * resolved by one human, present, running one real capture each.
  */
 
 export type {
@@ -135,3 +155,29 @@ export {
 } from './html';
 
 export type { HtmlElementSpan, HtmlHeading } from './html';
+
+export type {
+  SwimCloudCacheEntry,
+  SwimCloudCacheStatus,
+  SwimCloudCacheStore,
+} from './cache';
+export { FileSystemSwimCloudCache, InMemorySwimCloudCache } from './cache';
+
+export {
+  SwimCloudFetchPolicyError,
+  SwimCloudFinalEntryImmutableError,
+  SwimCloudForbiddenUrlError,
+  SwimCloudPoliteFetcher,
+  SwimCloudUnfetchableUrlError,
+} from './fetcher';
+export type {
+  SwimCloudPoliteFetchOptions,
+  SwimCloudPoliteFetchResult,
+  SwimCloudPoliteFetcherClock,
+  SwimCloudPoliteFetcherOptions,
+  SwimCloudRawFetchResult,
+  SwimCloudRawFetcher,
+} from './fetcher';
+
+export { PlaywrightSwimCloudFetcher, storageStateArgument } from './playwrightFetcher';
+export type { PlaywrightSwimCloudFetcherOptions } from './playwrightFetcher';

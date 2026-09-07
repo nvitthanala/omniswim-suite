@@ -1,7 +1,11 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "types": []
+    // Phase 2 added node:fs/promises (cache.ts) and playwright-core
+    // (playwrightFetcher.ts), both Node-hosted. entities.ts/urlClassifier.ts/
+    // html.ts/parser.ts/fetcher.ts remain pure — this only widens what's
+    // *available* to import, not what those files use.
+    "types": ["node"]
   },
   "include": ["src/**/*"]
 }

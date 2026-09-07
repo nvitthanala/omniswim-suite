@@ -8,12 +8,19 @@
     "./entities": "./src/entities.ts",
     "./urlClassifier": "./src/urlClassifier.ts",
     "./parser": "./src/parser.ts",
-    "./html": "./src/html.ts"
+    "./html": "./src/html.ts",
+    "./cache": "./src/cache.ts",
+    "./fetcher": "./src/fetcher.ts",
+    "./playwrightFetcher": "./src/playwrightFetcher.ts"
   },
   "scripts": {
     "lint": "tsc --noEmit -p tsconfig.json"
   },
+  "dependencies": {
+    "playwright-core": "1.61.1"
+  },
   "devDependencies": {
+    "@types/node": "^22.14.0",
     "typescript": "~5.8.2"
   }
 }
