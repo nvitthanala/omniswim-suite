@@ -404,32 +404,12 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
       const presetHint = presetIdForConference(conference);
       if (presetHint) setSuggestedPresetId(presetHint);
 
-      let scoringPatch: ScoringSettings | undefined;
-      if (resultsHavePdfPlacePoints(allParsed)) {
-        scoringPatch = mergeScoringSettings(
-          {
-            ...workspace.scoringSettings,
-            usePdfPlacePoints: true,
-            scorerEligibilityMode: 'points_pool',
-            scorerAutoRules: undefined,
-            ...applyPdfPlacePointsNeutralCaps(mergeScoringSettings(workspace.scoringSettings, { conference })),
-          },
-          { conference, resultsForPdfHint: allParsed }
-        );
-      } else if (presetHint === 'nsisc') {
-        scoringPatch = mergeScoringSettings(
-          { ...workspace.scoringSettings, ...NSISC_PRESET_SETTINGS, scorerEligibilityMode: 'roster' },
-          { conference }
-        );
-      }
-
+      // Shared with handleFileUpload (the PDF path) — same inputs, same
+      // trust decision (usePdfPlacePoints), so this reuses that function
+      // rather than keeping a second copy of its logic.
+      const scoringPatch = buildScoringPatchForParsedPdf(workspace, conference, presetHint, allParsed);
       const existingRecruits = workspace.recruits ?? [];
-      let keepRecruits = true;
-      if (existingRecruits.length > 0) {
-        keepRecruits = window.confirm(
-          `${existingRecruits.length} recruit(s) saved in this workspace.\n\nOK = Keep recruits\nCancel = Discard recruits`
-        );
-      }
+      const keepRecruits = resolveKeepRecruits(existingRecruits);
 
       await onUpdate({
         ...meetCopyFromParsed([...converted.men], [...converted.women]),
