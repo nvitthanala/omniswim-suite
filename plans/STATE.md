@@ -3,20 +3,27 @@
 Last updated 2026-08-16. **Start here.** 132 KB across 19 files sits behind this
 page; everything below links into it.
 
-**New initiative, Phase 1 done, Phase 2/3 not started:** SwimCloud ingestion
-(paste a meet/team/athlete/conference link, get structured data instead of
-retyping it) — plan in [`plans/2026-09-06/`](2026-09-06/README.md), full
-status/history in
+**New initiative, Phase 1 + 2 done, Phase 3 not started:** SwimCloud
+ingestion (paste a meet/team/athlete/conference link, get structured data
+instead of retyping it) — plan in [`plans/2026-09-06/`](2026-09-06/README.md),
+full status/history in
 [`WORKLOG-01-phase1-data-model-and-scoring.md`](2026-09-06/WORKLOG-01-phase1-data-model-and-scoring.md)
-(**read that file first if resuming this work**). Landed on branch
-`nvitthanala/swimcloud-data-ingest`: NCAA Rule 7 scoring engine
-(`packages/core`), and a new `packages/swimcloud` package (entities, URL
-classifier, parser against synthetic fixtures — never validated against a
-real SwimCloud page). Next up per
-[`04-phasing.md`](2026-09-06/04-phasing.md): Phase 2 (Playwright fetch
-service) and Phase 3 (browser extension + import-UI wiring), both blocked on
-open questions in that file (Track A transport; confirming URL patterns and
-the relay-leg-split question against one real, human-captured page). Key
+and
+[`WORKLOG-02-fetch-service-and-cache.md`](2026-09-06/WORKLOG-02-fetch-service-and-cache.md)
+(**read the most recent worklog first if resuming this work**). Landed on
+branch `nvitthanala/swimcloud-data-ingest`: NCAA Rule 7 scoring engine
+(`packages/core`), and `packages/swimcloud` — entities, URL classifier,
+parser (against synthetic fixtures only), a status-keyed cache, and a Track B
+politeness wrapper (robots.txt denylist, rate limiting, cache read-through) in
+front of a Playwright-backed fetcher. **The Playwright fetcher has never been
+run against a live site** — no Chromium binary is installed in this
+environment, and touching swimcloud.com even once needs a human physically
+present per the plan's own posture (see the Phase 2 worklog's "why" section)
+— everything else is unit-tested. Next up per
+[`04-phasing.md`](2026-09-06/04-phasing.md): Phase 3 (browser extension +
+import-UI wiring), blocked on the Track A transport decision (open question
+1) and, same as Phase 2, on a real human-captured SwimCloud page to confirm
+URL patterns and the relay-leg-split question (open questions 2/4). Key
 finding worth knowing before touching this: SwimCloud's Terms of Use flatly
 prohibit automated access; the plan records an explicit, informed user
 decision to build one compliant track (a human-triggered browser extension)
