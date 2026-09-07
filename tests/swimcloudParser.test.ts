@@ -172,7 +172,7 @@ describe('parseMeetResultsHtml — swimcloud-synthetic-meet-results.html', () =>
     });
     expect(first.legs[1].athleteName).toBe('Alan Alejan González Mujica');
     expect(first.legs[1].splitTime).toBe('23.90');
-    expect(relayEvent.results[0]).toMatchObject({ place: 1, finalTime: '1:34.12' });
+    expect(relayEvent.results[0]).toMatchObject({ place: 1, finalTime: '1:34.12', points: 40 });
     // The relay's SwimCloudEntry (not just its SwimCloudRelay) also carries the team name.
     expect(relayEvent.entries[0].teamName).toBe(first.teamName);
 
@@ -180,20 +180,23 @@ describe('parseMeetResultsHtml — swimcloud-synthetic-meet-results.html', () =>
     expect(second.designator).toBe('A');
     expect(second.teamName).toBe('Ouachita Baptist');
     expect(second.legs).toHaveLength(0);
-    expect(relayEvent.results[1]).toMatchObject({ place: 2, finalTime: '1:35.60' });
+    expect(relayEvent.results[1]).toMatchObject({ place: 2, finalTime: '1:35.60', points: 34 });
 
     // Third row: the DQ'd 'B' relay — no place, no finalTime, disqualified flag,
-    // and the raw "DQ" token is preserved rather than discarded.
+    // the raw "DQ" token is preserved rather than discarded, and no points
+    // (the fixture's Points cell is empty for this row — an empty cell is
+    // not a warning-worthy case, plenty of DQ'd rows legitimately score
+    // nothing on the printed page too).
     expect(third.designator).toBe('B');
     expect(third.legs).toHaveLength(0);
     expect(relayEvent.results[2].place).toBeUndefined();
     expect(relayEvent.results[2].finalTime).toBeUndefined();
+    expect(relayEvent.results[2].points).toBeUndefined();
     expect(relayEvent.results[2].flags).toEqual({ disqualified: true });
     expect(relayEvent.results[2].rawTimeToken).toBe('DQ');
 
     const codes = warningCodes(result.warnings);
     expect(codes.filter((c) => c === 'relay-legs-absent')).toHaveLength(2);
-    expect(codes).toContain('points-column-ignored');
   });
 
   it('parses the individual event: exhibition, no-show, and an unrecognized time token', () => {
@@ -208,11 +211,11 @@ describe('parseMeetResultsHtml — swimcloud-synthetic-meet-results.html', () =>
     expect(event.results).toHaveLength(5);
 
     // Clean top two.
-    expect(event.results[0]).toMatchObject({ place: 1, finalTime: '49.87' });
+    expect(event.results[0]).toMatchObject({ place: 1, finalTime: '49.87', points: 20 });
     expect(event.entries[0].swimCloudSwimmerId).toBe('3646504');
     expect(event.entries[0].athleteName).toBe('Landon Dehn');
     expect(event.entries[0].teamName).toBe('Henderson State');
-    expect(event.results[1]).toMatchObject({ place: 2, finalTime: '50.11' });
+    expect(event.results[1]).toMatchObject({ place: 2, finalTime: '50.11', points: 17 });
     expect(event.entries[1].teamName).toBe('Ouachita Baptist');
 
     // Exhibition: place "X" -> no place; time "X50.44" -> finalTime "50.44" + exhibition flag.
@@ -339,6 +342,61 @@ describe('parseMeetResultsHtml — a printed "0" place', () => {
     expect(event.results[1].place).toBeUndefined();
 
     const warning = result.warnings.find((w) => w.code === 'unrecognized-place-token' && w.raw === '0');
+    expect(warning).toBeDefined();
+  });
+});
+
+describe('parseMeetResultsHtml — points are captured, not discarded', () => {
+  // Points used to be deliberately dropped by this file (see the Phase 1
+  // commit) on the working assumption that a scraped points column
+  // couldn't be trusted. Overridden 2026-09-07 on the user's direct
+  // confirmation that SwimCloud's printed points are trustworthy — see
+  // SwimCloudResult's doc comment in entities.ts for the full history.
+  // This parser only *captures* the value; whether a caller trusts it for
+  // scoring is that caller's decision, same as packages/core's
+  // usePdfPlacePoints is a caller decision for a PDF import.
+  const html = `
+    <div class="c-page">
+      <h1>Regression Fixture</h1>
+      <section class="c-event">
+        <h2>Event 1 Women 100 Yard Freestyle</h2>
+        <table>
+          <thead><tr><th>Place</th><th>Name</th><th>Team</th><th>Time</th><th>Points</th></tr></thead>
+          <tbody>
+            <tr><td>1</td><td><a href="/swimmer/1/">Swimmer One</a></td><td>Team A</td><td>52.10</td><td>20</td></tr>
+            <tr><td>2</td><td><a href="/swimmer/2/">Swimmer Two</a></td><td>Team A</td><td>53.00</td><td></td></tr>
+            <tr><td>3</td><td><a href="/swimmer/3/">Swimmer Three</a></td><td>Team A</td><td>54.00</td><td>garbage</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  `;
+  const context = contextFor('https://www.swimcloud.com/results/1/');
+
+  it('captures a well-formed points cell verbatim as a number', () => {
+    const result = parseMeetResultsHtml(html, context);
+    if (!result.ok) throw new Error(`expected success, got ${result.failure.code}`);
+    expect(result.data.events[0].results[0].points).toBe(20);
+  });
+
+  it('leaves points absent for an empty cell, without any warning — a real zero-points row is not an error', () => {
+    const result = parseMeetResultsHtml(html, context);
+    if (!result.ok) throw new Error('expected success');
+    expect(result.data.events[0].results[1].points).toBeUndefined();
+    expect(result.data.events[0].results[1].rawPointsToken).toBeUndefined();
+    // Scoped to this row specifically — row 2 (the "garbage" cell, tested
+    // separately below) does legitimately produce this warning code, so an
+    // unscoped `.some()` over the whole warnings array would pass for the
+    // wrong reason.
+    expect(result.warnings.some((w) => w.code === 'unrecognized-points-token' && w.rowIndex === 1)).toBe(false);
+  });
+
+  it('preserves an unparseable points cell verbatim and warns, rather than guessing or silently dropping it', () => {
+    const result = parseMeetResultsHtml(html, context);
+    if (!result.ok) throw new Error('expected success');
+    expect(result.data.events[0].results[2].points).toBeUndefined();
+    expect(result.data.events[0].results[2].rawPointsToken).toBe('garbage');
+    const warning = result.warnings.find((w) => w.code === 'unrecognized-points-token' && w.raw === 'garbage');
     expect(warning).toBeDefined();
   });
 });

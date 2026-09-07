@@ -559,14 +559,25 @@ export interface SwimCloudResultFlags {
 /**
  * The post-meet outcome for an entry.
  *
- * **Points are not a field on this type, and must never become one.**
- * `plans/2026-09-06/02-data-model-and-scoring.md` §2: points are derived from
- * (place, DQ status, exhibition flag, ties, resolved point table) and are
- * "never stored as an authoritative import value". A scraped points column is
- * an *input to a disagreement check* at most, never the answer — the same
- * discipline `CLAUDE.md` applies to `cutlines.ts`. The parser in `./parser.ts`
- * therefore drops any points column it finds and records a warning that it did
- * so, rather than quietly carrying the number forward.
+ * **On `points`, this type's own history is worth knowing.** Phase 1's plan
+ * doc (`02-data-model-and-scoring.md` §2) and this file originally banned a
+ * points field outright: "points are derived from place, DQ status,
+ * exhibition flag, ties, resolved point table... never stored as an
+ * authoritative import value" — the same discipline `CLAUDE.md` applies to
+ * `cutlines.ts`, on the working assumption that a scraped points column
+ * couldn't be trusted. That assumption was overridden 2026-09-07 on the
+ * user's direct, first-hand confirmation that SwimCloud's printed points
+ * *are* trustworthy — new information, not a discipline violation: this repo
+ * already had exactly this escape hatch for HyTek PDFs
+ * (`SwimmerResult.pdfPoints` / `usePdfPlacePoints` in `packages/core`), for
+ * the identical reason (a specific source's own points, once confirmed
+ * trustworthy, beat a table the app would otherwise have to guess the meet's
+ * format to reconstruct). `{@link points}` is this parser's side of that same
+ * exception, captured the same way every other field in this type is —
+ * verbatim, warned-about when unparseable, never fabricated — and it is
+ * still the *caller's* decision whether to actually trust it for scoring,
+ * exactly as `usePdfPlacePoints` is a caller decision for a PDF import, not
+ * something this package decides on a caller's behalf.
  */
 export interface SwimCloudResult {
   readonly resultId: string;
@@ -577,6 +588,15 @@ export interface SwimCloudResult {
    * place cell did not hold a positive integer. Absent is never `0`.
    */
   readonly place?: number;
+  /**
+   * Points exactly as printed in a Points column, when the page has one and
+   * the cell held a non-negative number. See this type's own doc comment for
+   * why this field exists at all. Absent when there's no Points column, the
+   * cell was blank, or it didn't parse — never `0` for "didn't parse."
+   */
+  readonly points?: number;
+  /** The Points cell's raw contents, kept verbatim whenever {@link points} could not be populated from it. */
+  readonly rawPointsToken?: string;
   /**
    * Final time as printed. Absent when the time cell held a non-time marker
    * (`DQ`, `NS`, `SCR`, …) or anything unrecognized.

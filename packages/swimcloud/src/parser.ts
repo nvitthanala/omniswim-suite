@@ -42,11 +42,13 @@
  *   event stays `course: 'unknown'`. An unparseable time is preserved verbatim
  *   in `rawTimeToken` and left out of `finalTime`. An unmapped class year is
  *   `'unknown'`.
- * - **Points are dropped on purpose.** A points column that is found is *not*
- *   read into the model; a `points-column-ignored` warning records that the
- *   column existed and was deliberately discarded. Points are derived from
- *   (place, DQ, exhibition, ties, resolved point table), never imported —
- *   `plans/2026-09-06/02-data-model-and-scoring.md` §2.
+ * - **Points are captured, not computed here.** A points column, when
+ *   present, is read into {@link SwimCloudResult.points} the same way any
+ *   other cell is — verbatim, warned-about when unparseable. This parser
+ *   does not decide whether those points are *trustworthy*; see
+ *   {@link SwimCloudResult}'s own doc comment for that history and for why
+ *   the trust decision belongs to the caller, same as `packages/core`'s
+ *   `usePdfPlacePoints` is a caller decision for a PDF import.
  */
 
 import {
@@ -116,8 +118,6 @@ export const SWIMCLOUD_PARSE_CONFIDENCE: SwimCloudParseConfidence = 'synthetic-f
 export type SwimCloudParseWarningCode =
   /** The expected table was found, with a header row and no data rows. */
   | 'zero-data-rows'
-  /** A points column was present and was deliberately discarded. */
-  | 'points-column-ignored'
   /** A data row could not be turned into an entity and was skipped. */
   | 'unparsed-row'
   /** An event heading was found but its table could not be read; the event is absent from the output. */
@@ -142,6 +142,8 @@ export type SwimCloudParseWarningCode =
   | 'relay-legs-absent'
   /** A row's event label said "Yard" but an explicit course column disagreed. The label wins; the disagreement is surfaced rather than silently resolved either way. */
   | 'course-column-contradicts-label'
+  /** A Points cell held something that isn't a non-negative number. Preserved verbatim in `rawPointsToken`; `points` stays absent rather than guessed. */
+  | 'unrecognized-points-token'
   /** A diving event's result column holds a judged score, not a time; not stored as `finalTime`. */
   | 'diving-score-not-a-time';
 
@@ -1046,14 +1048,6 @@ function parseEventTable(
     return null;
   }
 
-  if (pointsColumn >= 0) {
-    warnings.push({
-      code: 'points-column-ignored',
-      message:
-        'A points column was found and deliberately discarded. Points are derived from place, DQ status, exhibition flag, ties and the resolved point table — never imported.',
-      eventId: event.eventId,
-    });
-  }
 
   const dataRows = rows
     .slice(headerIndex + 1)
@@ -1082,6 +1076,7 @@ function parseEventTable(
       teamColumn >= 0 ? teamIdFromCell(cellAt(cells, teamColumn)) : teamIdFromCell(subjectHtml);
     const place = readPlace(textAt(cells, placeColumn), event, rowIndex, warnings);
     const time = readTime(textAt(cells, timeColumn), event, rowIndex, warnings);
+    const points = pointsColumn >= 0 ? readPoints(textAt(cells, pointsColumn), event, rowIndex, warnings) : {};
 
     let relayId: string | undefined;
     let teamName: string | undefined;
@@ -1141,6 +1136,8 @@ function parseEventTable(
       entryId,
       eventId: event.eventId,
       ...(place === undefined ? {} : { place }),
+      ...(points.points === undefined ? {} : { points: points.points }),
+      ...(points.rawPointsToken === undefined ? {} : { rawPointsToken: points.rawPointsToken }),
       ...(time.finalTime === undefined ? {} : { finalTime: time.finalTime }),
       ...(time.rawTimeToken === undefined ? {} : { rawTimeToken: time.rawTimeToken }),
       ...(time.flags === undefined ? {} : { flags: time.flags }),
@@ -1186,6 +1183,40 @@ function readPlace(
     raw: token,
   });
   return undefined;
+}
+
+interface ReadPoints {
+  readonly points?: number;
+  readonly rawPointsToken?: string;
+}
+
+/**
+ * See {@link SwimCloudResult}'s doc comment for why this field exists at
+ * all — it was not always captured, and still isn't *trusted* by anything
+ * in this file; capturing is all a parser ever does.
+ *
+ * An empty cell is not a warning-worthy case (plenty of rows — DQ, no-show,
+ * exhibition — legitimately score nothing) but anything present that isn't
+ * a clean non-negative number is preserved verbatim and flagged, same
+ * discipline as every other cell in this file.
+ */
+function readPoints(raw: string, event: SwimCloudEvent, rowIndex: number, warnings: SwimCloudParseWarning[]): ReadPoints {
+  const token = raw.trim();
+  if (token.length === 0) {
+    return {};
+  }
+  if (/^\d+(\.\d+)?$/.test(token)) {
+    const value = Number.parseFloat(token);
+    return { points: value };
+  }
+  warnings.push({
+    code: 'unrecognized-points-token',
+    message: `Points cell ${JSON.stringify(token)} is not a non-negative number; no points recorded.`,
+    eventId: event.eventId,
+    rowIndex,
+    raw: token,
+  });
+  return { rawPointsToken: token };
 }
 
 interface ReadTime {
