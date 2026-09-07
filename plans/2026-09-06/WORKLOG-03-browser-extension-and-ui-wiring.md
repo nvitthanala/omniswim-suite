@@ -121,6 +121,42 @@ imported as an individual event time. Fixed to match the meet-results
 converter's existing relay exclusion, with a regression test proven against
 the pre-fix code.
 
+## Update, 2026-09-07 — Matrix meet-loading via SwimCloud, and points are now trusted
+
+Further feedback: "loading a meet in the matrix does not provide an option
+to use the swimcloud link." Two commits close this, and they reverse a
+Phase 1 design decision along the way:
+
+- **`56ae9faa`** — the parser now *captures* a Points column instead of
+  discarding it (`SwimCloudResult.points`/`rawPointsToken`). Phase 1's
+  "points are never imported" rule was a caution made before any real
+  markup existed; the user confirmed directly, having actually looked at
+  real pages, that SwimCloud's printed points are trustworthy. The parser
+  still only captures — it doesn't decide to trust them for scoring, same
+  as `packages/core`'s `usePdfPlacePoints` is a caller decision for a PDF.
+- **`fd37a152`** — `packages/matrix/src/lib/swimCloudMeetImportBridge.ts`
+  converts a SwimCloud meet capture into `SwimmerResult[]` and a "From
+  SwimCloud" button in `OpsModule`'s Load step feeds it through the *exact
+  same* pipeline a PDF upload uses (`meetCopyFromParsed`, conference/preset
+  detection, `usePdfPlacePoints`). Relays are included here (unlike the
+  Manager-side bridge) since `SwimmerResult` already has first-class relay
+  fields. Rank/time/DQ conventions all matched to what `packages/core`'s
+  `calculatePoints` and `backend/pdf_parser.py` already assume, not
+  invented fresh.
+
+Real bug, same click-through-verification pattern: after a successful
+import, the UI showed "No meet loaded" everywhere despite the import having
+worked — `pdfFilename` turned out to be read, unguarded, as the general
+"what's loaded" label in seven places across three packages, none falling
+back to `meetLabel`. Fixed at the one point that's actually mine to fix
+(giving `pdfFilename` an honest non-PDF value for this path) rather than
+touching seven unfamiliar files under time pressure.
+
+Verified end-to-end in the real running app, including confirming the Score
+step actually shows "SUGGESTED PRESET: nsisc" and "PDF PLACE POINTS: AUTO"
+after a SwimCloud import — the same UI a real PDF import produces, not
+just a green test suite. Screenshots in `verification-screenshots/`.
+
 ## What Phase 3 still does *not* cover, on purpose
 
 - **A "bare athlete, no swim yet" concept does not exist anywhere in this
