@@ -385,11 +385,17 @@ path instead of the capture-browsing path.
    pill. Converging them would mean overriding away nearly every one of
    `Badge`'s own default classes, which is not what "convergence" means —
    left as hand-rolled, correctly.
-5. **Modal backdrop convergence (§4e).** Seven hand-rolled overlays, three
-   different backdrop conventions, two hardcoding a non-themed color —
-   directly actionable against the whole-app doc's own "one accent, spent
-   deliberately" principle, and a natural place to decide whether
-   `@omniswim/ui` needs a real `Modal` primitive (it currently has none).
+5. **✅ DONE 2026-09-14.** Modal backdrop convergence (§4e). New `Modal`
+   primitive in `@omniswim/ui` (backdrop, dialog semantics, Escape-to-close;
+   deliberately no prescribed header/footer shape). Converged 5 of the 6
+   remaining hand-rolled overlays (one of the original 7 was already gone,
+   replaced earlier this session): `BatchOptimizerPanel.tsx`,
+   `LoadMeetHereCard.tsx`, `RosterCatalogPanel.tsx`, `RosterImportWizard.tsx`,
+   `SwimmerDeleteConfirmModal.tsx`. Both hardcoded `bg-black/50` instances
+   fixed — one converged into `Modal`, the other
+   (`AthleteLineupEditorPanel.tsx`'s drawer scrim) left as its own
+   responsive-drawer pattern with just the color-token swap, since it is not
+   a centered dialog and forcing it into one would be the wrong shape.
 6. **`AthleteHistoryImportPanel.tsx` (§3).** The largest fully-monolithic
    file in the package — 767 lines with no `Parts`, `Section`, or even a
    logic-only `View.ts` split, unlike every other file of comparable size.
