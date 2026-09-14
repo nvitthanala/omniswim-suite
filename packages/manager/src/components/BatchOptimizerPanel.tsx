@@ -12,7 +12,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Gender, ScoringSettings, Workspace } from '@omniswim/core/types';
 import type { OptimizerStage } from '@omniswim/core/lib/rosterOptimizer';
 import { mergeScoringSettings } from '@omniswim/core/lib/utils';
-import { useToast } from '@omniswim/ui';
+import { Modal, useToast } from '@omniswim/ui';
 import {
   batchOptimizationToastMessage,
   computeBatchOptimizationResult,
@@ -98,12 +98,13 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
   }, [result, workspace.meetEntryPlans]);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm" onClick={onClose}>
-      <div
-        className="surface-card rounded-xl border border-theme-soft w-full max-w-2xl max-h-[80vh] flex flex-col"
-        style={{ boxShadow: 'var(--ui-shadow-lg)' }}
-        onClick={e => e.stopPropagation()}
-      >
+    <Modal
+      onClose={onClose}
+      ariaLabel="Batch Optimizer"
+      closeOnBackdropClick
+      className="rounded-xl border border-theme-soft w-full max-w-2xl max-h-[80vh] flex flex-col"
+      style={{ boxShadow: 'var(--ui-shadow-lg)' }}
+    >
         {/* Header */}
         <div className="flex items-center justify-between p-5 border-b border-theme-soft shrink-0">
           <div className="flex items-center gap-3">
@@ -261,7 +262,6 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
             Apply to Workspace
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

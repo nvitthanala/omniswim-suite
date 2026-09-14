@@ -5,6 +5,7 @@
 
 import React from 'react';
 import { X, Trash2, EyeOff, AlertTriangle } from 'lucide-react';
+import { Modal } from '@omniswim/ui';
 import { Gender } from '@omniswim/core/types';
 
 interface Props {
@@ -25,11 +26,12 @@ export default function SwimmerDeleteConfirmModal({
   onCancel,
 }: Props) {
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop backdrop-blur-sm">
-      <div
-        className="surface-card border border-[var(--text-accent)]/20 rounded-xl max-w-md w-full mx-4 p-6"
-        style={{ boxShadow: 'var(--ui-shadow-lg)' }}
-      >
+    <Modal
+      onClose={onCancel}
+      ariaLabel="Remove swimmer"
+      className="border border-[var(--text-accent)]/20 rounded-xl max-w-md w-full mx-4 p-6"
+      style={{ boxShadow: 'var(--ui-shadow-lg)' }}
+    >
         <div className="flex justify-between items-start mb-5">
           <div className="flex gap-4">
             <div className="w-10 h-10 rounded-full bg-[var(--text-accent)]/15 text-[var(--text-accent)] flex items-center justify-center shrink-0 border border-[var(--text-accent)]/20">
@@ -96,7 +98,6 @@ export default function SwimmerDeleteConfirmModal({
             Cancel
           </button>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }

@@ -300,7 +300,7 @@ export default function AthleteLineupEditorPanel({
           On large screens the roster table must stay clickable beside the drawer
           (one-click athlete switching); Escape / X / re-clicking the row close it. */}
       <div
-        className="fixed inset-0 z-40 bg-black/50 lg:hidden"
+        className="fixed inset-0 z-40 bg-[var(--backdrop)] lg:hidden"
         onClick={onClose}
         aria-hidden="true"
       />

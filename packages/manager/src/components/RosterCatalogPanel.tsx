@@ -16,7 +16,7 @@ import {
   validateRosterCatalogJson,
   type RosterCatalogImportJson,
 } from '@omniswim/core/lib/rosterCatalog';
-import { useToast } from '@omniswim/ui';
+import { Modal, useToast } from '@omniswim/ui';
 import { AthletePane, TeamSidebar } from './RosterCatalogPanelParts';
 
 type Props = {
@@ -145,8 +145,12 @@ export default function RosterCatalogPanel({ onClose, defaultTeamName }: Props) 
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--backdrop)]">
-      <div className="surface-card border border-theme w-full max-w-5xl max-h-[90vh] flex flex-col rounded-lg shadow-xl">
+    <Modal
+      onClose={onClose}
+      ariaLabel="Team Roster Catalog"
+      blur={false}
+      className="border border-theme w-full max-w-5xl max-h-[90vh] flex flex-col rounded-lg shadow-xl"
+    >
         <div className="flex items-center justify-between px-5 py-4 border-b border-theme-soft">
           <div className="flex items-center gap-2">
             <Database size={18} className="text-[var(--text-accent)]" />
@@ -200,8 +204,7 @@ export default function RosterCatalogPanel({ onClose, defaultTeamName }: Props) 
             />
           </section>
         </div>
-      </div>
-    </div>
+    </Modal>
   );
 }
 

@@ -10,6 +10,7 @@ export {
 } from './components/CutlineTag';
 export { Button } from './components/Button';
 export { EmptyState } from './components/EmptyState';
+export { Modal, type ModalProps } from './components/Modal';
 export { ConfirmDeleteModal, type ConfirmDeleteModalProps } from './components/ConfirmDeleteModal';
 export { ChartShell, getChartContentBoxSize, getChartViewportSize, isChartMeasurementReady, resolveChartMeasurement, type ChartShellRenderState, type ChartShellSize } from './components/ChartShell';
 export { ChartFrame } from './components/ChartFrame';

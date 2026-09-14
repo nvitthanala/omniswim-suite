@@ -26,6 +26,7 @@ import { parseCsvHistory } from '@omniswim/core/lib/csvImport';
 import { divisionForTeamOrNull } from '@omniswim/core/data/teamDivisions';
 import {
   Badge,
+  Modal,
   useToast,
   SwimCloudCaptureBrowser,
   type SwimCloudCaptureRosterSelection,
@@ -551,7 +552,9 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
     mode === 'paste' && paste.trim() ? detectSwimCloudPasteFormat(paste) : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--backdrop)]">
+    <>
+      {/* Its own separate FloatingWindow overlay, positioned independently of
+          the wizard's own dialog below — a sibling, never nested inside it. */}
       {showCaptureRosterPanel ? (
         <SwimCloudCaptureBrowser
           mode="roster-history"
@@ -567,8 +570,11 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
           }}
         />
       ) : null}
-      <div
-        className="surface-card border border-theme w-full max-w-2xl max-h-[90vh] flex flex-col rounded-xl"
+      <Modal
+        onClose={onClose}
+        ariaLabel="Import Roster / History"
+        blur={false}
+        className="border border-theme w-full max-w-2xl max-h-[90vh] flex flex-col rounded-xl"
         style={{ boxShadow: 'var(--ui-shadow-lg)' }}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-theme-soft">
@@ -870,7 +876,7 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
             </button>
           )}
         </div>
-      </div>
-    </div>
+      </Modal>
+    </>
   );
 }
