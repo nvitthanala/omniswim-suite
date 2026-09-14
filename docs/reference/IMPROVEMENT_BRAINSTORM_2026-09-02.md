@@ -12,9 +12,17 @@ source at two of the higher-stakes claims, both confirmed accurate.
 
 ## Full list (Codex, ranked by value-per-effort as reported)
 
-1. **Psych-sheet parser fails silently.** `backend/psych_parser.py:parse_psych_pdf`'s
-   chooser returns `[]` as a successful result on an empty/implausible parse — a
-   coach sees a blank seed field, not an error. *Small.*
+1. **✅ Already mitigated, checked 2026-09-13 — no code change needed.**
+   **Psych-sheet parser fails silently.** `backend/psych_parser.py:parse_psych_pdf`'s
+   chooser does return `[]` as a "successful" result on an empty/implausible
+   parse — the claim is real at that function's own boundary. But it is
+   only ever reached as a fallback (`apps/shell/server.ts`'s
+   `/api/parse-psych-pdf` route tries the TypeScript `parsePsychPdfFile`
+   first, which already throws its own specific errors); and that same
+   route checks `results.length === 0` after EITHER path and returns a 422
+   with `'No individual psych entries found'` regardless of which parser
+   produced the empty array. A coach never sees a silent blank field — traced
+   the real call path rather than trusting the function in isolation.
 2. **✅ FIXED 2026-09-13** (commit `fe6dc211`, merged in from
    `fix-scoring-roster-integrity`). **Abbreviation-table load swallows
    failure.** `backend/pdf_parser.py:_load_abbrev_teams` caught `OSError` and
