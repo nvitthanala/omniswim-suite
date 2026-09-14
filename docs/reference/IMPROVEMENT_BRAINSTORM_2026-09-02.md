@@ -100,12 +100,20 @@ source at two of the higher-stakes claims, both confirmed accurate.
     (passes on NaN/loss), `test_conference_pdfs` (continues past errors),
     `test_chart_data` (vacuous), `test_relay_overrides` (an invisible mid-file
     skip), `test_athlete_history` (loose half against live data). *Medium.*
-14. **Two tests are permanently skipped** (`test_individual_scoring.mjs`,
-    `test_relay_scoring.mjs`) for want of a committed `tests/test_nsisc_output.json`
-    fixture — a clean checkout never exercises them. *Medium.*
-15. **Playwright browser binaries were never installed** in this environment —
-    the two e2e failures this whole session has treated as "pre-existing,
-    unrelated" are really "never run at all." *Medium.*
+14. **FIXED 2026-09-14.** ~~Two tests are permanently skipped~~
+    (`test_individual_scoring.mjs`, `test_relay_scoring.mjs`) for want of a
+    committed `tests/test_nsisc_output.json` fixture. Derived that fixture
+    from `data/meets.json[0]` — already the committed, real parsed output
+    of `2026_NSISC_Championships_Final_Results.pdf` — via a lossless
+    field-rename into the snake_case shape these two legacy tests expect
+    from the raw PDF parser. No time, name, or score invented; every value
+    traces back to rows this repo already trusts and uses elsewhere.
+    `scripts/run-tests.mjs` now runs 81 tests (was 79, 3 skipped).
+15. **Already resolved, stale claim — checked 2026-09-14.** ~~Playwright
+    browser binaries were never installed~~ — `npx playwright --version`
+    reports 1.61.1 with chromium present in this environment, and
+    `run-tests.mjs` has shown `PASS playwright e2e (all specs)` throughout
+    this whole session. No action needed.
 16. **Resume the Phase-2 complexity sweep** — `rankExactSwaps`/`rankAddOnly`/
     `rankDropOnly`, then `validateRaceTags`/`buildPrelimsDeltaTimeline`/
     `buildCutlineTag`; reconsider the explicitly-deferred `arbitrage/shared.ts`
