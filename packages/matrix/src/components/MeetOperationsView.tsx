@@ -6,7 +6,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Users, Plus, TrendingUp, Search, X, GitCompareArrows, Download } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
-import { ChartFrame, ChartShell, EmptyState, SegmentedControl } from '@omniswim/ui';
+import { Button, ChartFrame, ChartShell, EmptyState, SegmentedControl } from '@omniswim/ui';
 import { Gender, Recruit, ScoringSettings, TeamScore, Workspace } from '@omniswim/core/types';
 import { assignTeamLineStyles, isRelayResult } from '@omniswim/core/lib/utils';
 import { aggregateSwimmerMeetPoints, scorerRosterKey } from '@omniswim/core/lib/scorerRoster';
@@ -363,9 +363,15 @@ export default function MeetOperationsView({
                 {isParsingPdf || isParsingPsychPdf ? (
                   <div className="flex items-center gap-2">
                     <span className="text-ui-caption text-theme-secondary">{isParsingPsychPdf ? 'Parsing psych PDF...' : 'Parsing meet PDF...'}</span>
-                    <button type="button" onClick={isParsingPsychPdf ? onCancelPsychPdfParse : onCancelPdfParse} aria-label="Cancel PDF parsing" className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded btn-accent-outline text-[10px] uppercase font-medium">
-                      <X size={12} /><span>Cancel</span>
-                    </button>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      onClick={isParsingPsychPdf ? onCancelPsychPdfParse : onCancelPdfParse}
+                      aria-label="Cancel PDF parsing"
+                      leadingIcon={<X size={12} />}
+                    >
+                      Cancel
+                    </Button>
                   </div>
                 ) : (
                   <div className="flex flex-wrap items-center gap-2 border border-theme-soft rounded-lg p-1">

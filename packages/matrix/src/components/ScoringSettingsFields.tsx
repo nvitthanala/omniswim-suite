@@ -32,7 +32,7 @@
  */
 import { useEffect, useMemo, useState } from 'react';
 import { Lock } from 'lucide-react';
-import { SegmentedControl } from '@omniswim/ui';
+import { Button, SegmentedControl } from '@omniswim/ui';
 import { ScoringPresetMeta, ScoringSettings } from '@omniswim/core/types';
 import { fetchScoringPresetList, fetchScoringPresetSettings } from '@omniswim/core/lib/scoringPresets';
 import { GENERIC_TOP16_SETTINGS, mergeScoringSettings, scoringSettingsLock } from '@omniswim/core/lib/scoringDefaults';
@@ -256,20 +256,12 @@ export function ScoringSettingsFields({
                 </option>
               ))}
             </select>
-            <button
-              type="button"
-              onClick={applyGenericTop16}
-              className="px-3 py-1.5 bg-[var(--surface-muted)] hover:bg-[var(--surface-strong)] text-[var(--text-primary)] rounded-lg text-xs transition-colors border border-theme-soft shrink-0"
-            >
+            <Button variant="outline" size="sm" onClick={applyGenericTop16} className="shrink-0">
               Generic Top 16
-            </button>
-            <button
-              type="button"
-              onClick={applyTop24}
-              className="px-3 py-1.5 bg-[var(--surface-muted)] hover:bg-[var(--surface-strong)] text-[var(--text-primary)] rounded-lg text-xs transition-colors border border-theme-soft shrink-0"
-            >
+            </Button>
+            <Button variant="outline" size="sm" onClick={applyTop24} className="shrink-0">
               Top 24 points only
-            </button>
+            </Button>
           </div>
           {selectedPreset && presets.find(p => p.id === selectedPreset)?.description ? (
             <p className="text-[9px] text-theme-secondary mt-1 italic">

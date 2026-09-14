@@ -6,6 +6,7 @@
  * ResponsiveContainer at 100%×100% (blank charts). Prompts a hard reload.
  */
 import { useEffect, useState } from 'react';
+import { Button } from '@omniswim/ui';
 
 const CHART_BUILD_EPOCH = 2;
 
@@ -63,9 +64,10 @@ export default function ChartStaleBundleGuard() {
         The chart area loaded old JavaScript (blank border, no lines). Restart the dev server if you
         just pulled changes, then hard-refresh this page.
       </p>
-      <button
-        type="button"
-        className="mt-3 px-3 py-1.5 rounded btn-accent-outline text-[10px] uppercase font-medium"
+      <Button
+        variant="outline"
+        size="sm"
+        className="mt-3"
         onClick={() => {
           try {
             sessionStorage.setItem('omni-chart-reload', String(Date.now()));
@@ -76,7 +78,7 @@ export default function ChartStaleBundleGuard() {
         }}
       >
         Reload page
-      </button>
+      </Button>
     </div>
   );
 }

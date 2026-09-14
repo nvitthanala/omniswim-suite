@@ -190,7 +190,30 @@ Two visual variants of the same idea, none using `@omniswim/ui`'s `SegmentedCont
    two-choice "hide or remove permanently" picker, not a single
    confirm/cancel), sharing only the outer icon-circle/header shell with the
    other two, not the body this convergence targeted.
-6. **`Button` convergence.** 45 hand-rolled `<button>` elements across 9 of 15 files, 0 using `@omniswim/ui`'s `Button` — lower priority than #3 since most are one-off icon buttons rather than a repeated shape, but the same root cause (design-system adoption confined to charts/tags, not controls) applies.
+6. **✅ DONE 2026-09-14, the real remaining candidates.** Re-checked fresh
+   rather than trusting the original count: earlier work this session (the
+   `ScoringSettings` merge, the `TeamCard.tsx` split, `SegmentedControl`
+   convergence) had already cut this from 45 hand-rolled `<button>`s across
+   9 files down to 17 across 7 — most of the original count was already
+   folded into other convergences, not left behind. Of the remaining 17,
+   converted the 6 that are genuine repeated action-button shapes:
+   `ChartStaleBundleGuard.tsx`'s reload button, `ScoringSettingsFields.tsx`'s
+   "Generic Top 16"/"Top 24 points only" pair, `ScoringSettingsModal.tsx`'s
+   Cancel/"Update scoring model" pair, and `MeetOperationsView.tsx`'s
+   PDF-parsing Cancel button — all now `@omniswim/ui`'s `Button`. **Left
+   alone, correctly:** disclosure/accordion toggles
+   (`SwimCloudImportDiagnosticsPanel.tsx`, `ScoringSettingsPanel.tsx`,
+   `TeamCard.tsx`'s card-expand header), icon-only close/remove buttons, a
+   text-link-style button, a compact header micro-badge
+   (`ScoringSettingsPanel.tsx`'s Save), and `MeetOperationsView.tsx`'s
+   "Add from SwimCloud" button specifically — its two visual siblings
+   ("Load PDF", "Link Psych") are `<label>` elements wrapping a hidden file
+   input and cannot become `Button`, so converting only the middle one
+   would have broken a currently-matched trio instead of fixing it. None of
+   these are "the same repeated shape" `Button` addresses; forcing them in
+   would have been false convergence, the same mistake this session has
+   avoided elsewhere (`AthleteLineupEditorPanel.tsx`'s drawer scrim,
+   `AthleteHistoryImportPanel.tsx`'s wider chip).
 
 ## What this document does not claim
 

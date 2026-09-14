@@ -3,6 +3,7 @@ import { X, Save } from 'lucide-react';
 import { ScoringSettings } from '@omniswim/core/types';
 import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
 import { ScoringSettingsFields } from './ScoringSettingsFields';
+import { Button } from '@omniswim/ui';
 
 interface Props {
   settings: ScoringSettings;
@@ -48,16 +49,12 @@ export default function ScoringSettingsModal({ settings, onSave, onClose, scorin
         </div>
 
         <div className="pt-6 mt-2 border-t border-theme-soft flex justify-end gap-3">
-          <button onClick={onClose} className="px-4 py-2 theme-hover-row rounded-lg text-theme-secondary transition-colors">
+          <Button variant="ghost" onClick={onClose}>
             Cancel
-          </button>
-          <button
-            onClick={() => onSave(draft)}
-            className="px-6 py-2 bg-[var(--text-accent)] border border-[var(--text-accent)]/25 text-white rounded-lg font-medium flex items-center gap-2 transition-colors hover:bg-[var(--btn-action-hover)]"
-          >
-            <Save size={16} />
+          </Button>
+          <Button variant="primary" onClick={() => onSave(draft)} leadingIcon={<Save size={16} />}>
             Update scoring model
-          </button>
+          </Button>
         </div>
       </div>
     </div>
