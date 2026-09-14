@@ -422,9 +422,23 @@ path instead of the capture-browsing path.
    (`AthleteLineupEditorPanel.tsx`'s drawer scrim) left as its own
    responsive-drawer pattern with just the color-token swap, since it is not
    a centered dialog and forcing it into one would be the wrong shape.
-6. **`AthleteHistoryImportPanel.tsx` (§3).** The largest fully-monolithic
-   file in the package — 767 lines with no `Parts`, `Section`, or even a
-   logic-only `View.ts` split, unlike every other file of comparable size.
+6. **✅ DONE 2026-09-14 (§3).** `AthleteHistoryImportPanel.tsx` (767 lines,
+   no `Parts`/`Section`/`View.ts` split at all) now follows the same
+   `X.tsx` + `XParts.tsx` + `XView.ts` convention this doc names every other
+   comparable file by: `athleteHistoryImportView.ts` (143 lines — the pure,
+   no-JSX diff/badge-labeling logic: `actionBadge`, `badgeLabel`,
+   `diffMatchKey`, `buildHistoryBestIndex`, `rosterNameEntriesForTeam`,
+   `buildSwimRowTagSpecs`), `AthleteHistoryImportPanelParts.tsx` (79 lines —
+   `DiffBadge`, `SwimRowTags`, `CLASS_YEAR_OPTIONS`), and the orchestrator
+   itself down to 583 lines (state, handlers, and the main render tree).
+   **Not done, a real remaining follow-up**: the orchestrator's own preview-
+   table JSX block (~90 lines) could become its own `Section`-style
+   component too, matching how other panels of this size go one level
+   further — left as a smaller, lower-risk next step rather than forced
+   under this pass. Verified: `tsc --noEmit` clean,
+   `test_athlete_history.mjs` + `test_history_import_roster.mjs` (the core
+   logic this component calls into) both pass unchanged, production build
+   succeeds.
 
 ## What this document does not claim
 
