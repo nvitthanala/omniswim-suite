@@ -137,21 +137,22 @@ both sides; two different swimmers not falsely grouped; cross-event-id
 grouping by label; `detail` field content; a leadoff never joining the
 group). 37/37 tests in the file pass; full suite 697/697 pass.
 
-## 5. Follow-up: the warning count needs a breakdown (not fixed this pass)
+## 5. Follow-up: the warning count needs a breakdown — ✅ DONE 2026-09-13
 
-`SwimCloudCapturePicker.tsx`'s toast and `OpsModule.tsx`'s console-only
-`console.warn` calls treat every warning and every skip reason as equally
-alarming, and surface skip reasons (including the new
-`'ambiguous-round-duplicate'`) only in the console, never in the UI a coach
-actually looks at. Recommended, not yet built:
-
-- Break the warning list down by code, and separate "expected structural
-  notes" (`relay-legs-absent`, `unrecognized-points-token` on already-DQ'd
-  rows, etc.) from rows that need a human decision.
-- Surface `result.skipped` in the picker/import UI itself, grouped by
-  `reason`, with `'ambiguous-round-duplicate'` given a visible, named list
-  (event, swimmer, detail) rather than a bare count — this is the one a
-  coach must act on to recover the missing points from §4.
+`SwimCloudCapturePicker.tsx`'s toast (since replaced by `SwimCloudCaptureBrowser`)
+and `OpsModule.tsx`'s console-only `console.warn` calls treated every warning
+and every skip reason as equally alarming, and surfaced skip reasons
+(including `'ambiguous-round-duplicate'`) only in the console. Fixed:
+new `SwimCloudImportDiagnosticsPanel` (`packages/matrix/src/components/`)
++ `swimCloudImportDiagnostics.ts`, wired into both `OpsModule.tsx` import
+paths. `result.skipped` is grouped by `reason`, with
+`'ambiguous-round-duplicate'` always shown expanded and named (event,
+swimmer, detail) rather than a bare count. Warnings are grouped by code
+for the clipboard path, which has them structured; the capture-browser
+path only has pre-formatted strings (`/parse`'s own response shape), so it
+gets a flat, still-visible list rather than a by-code split — that would
+need a route-contract change, not attempted this pass. See
+`docs/reference/SWIMCLOUD_CAPTURE_STATE.json` OQ-11.
 
 ## 6. The real fix: parsing the per-event results page — F9 now captured, confirmed
 
