@@ -135,10 +135,21 @@ the entire bug class, not a test that has to imagine the failure.
   `crossCourseArbitrage` split, and behind the full suite.
 - **Payoff:** high. This is the single change that would have prevented four of
   today's defects.
+- **Status 2026-09-13: deliberately deferred, not attempted.** Assessed
+  directly against this doc's own sequencing note — the prerequisite
+  `crossCourseArbitrage` split has not happened (per
+  `plans/2026-09-10/03-MANAGER-DIAGNOSIS.md`'s shortlist item 2,
+  `crossCourseArbitrageSections.tsx` is still 848 lines, bigger than what it
+  replaced), and a 1–2 day, medium-risk, wide-surface structural rewrite is
+  a poor fit for a session with nobody available to visually/functionally
+  re-verify the result. Still the right eventual fix; just not attempted
+  blind.
 
 **Interim (cheap, do now):** one test asserting every `CONVERSION_FACTORS` key
 round-trips through `normalizeEventLabel` unchanged. ~15 minutes, catches the
 exact IM failure. Listed in [06](06-testing-verification.md#4-encode-the-prose-rules-as-tests).
+**✅ Done — already exists.** `scripts/test_conversion_keys.mjs`, registered
+in `scripts/run-tests.mjs`, passing (confirmed 2026-09-13).
 
 ---
 

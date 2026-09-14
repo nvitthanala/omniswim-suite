@@ -63,10 +63,12 @@ Mirror the cutlines treatment exactly:
   directly in `CONVERSION_FACTORS`'s own doc comment
   (`packages/core/src/constants.ts`): the whole table is indicative, not
   official, matching the `converted_estimate` rule already in
-  `cutlineTags.ts`. Step 5 (a reachability test, asserting every key
-  `normalizeEventLabel` can produce resolves in this table) is still real,
-  useful, low-risk work and was not attempted this pass — worth doing on
-  its own.
+  `cutlineTags.ts`. Step 5 (a reachability test) turns out to **already
+  exist** — `scripts/test_conversion_keys.mjs`, registered and passing,
+  asserts every key's canonical form (via `normalizeEventLabel`) is itself
+  a key. This is the exact test the IM bug's own root cause called for, and
+  doc 04 §3's "interim, cheap, do now" step names the identical test — both
+  are satisfied by this one file.
 
 ---
 
