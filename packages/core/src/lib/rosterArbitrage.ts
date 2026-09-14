@@ -293,7 +293,13 @@ export function optimizeWithArbitrage(
       ? relayFirstLineupForTeam(ws, gender, team, merged)
       : optimizeEventLineupForTeam(ws, gender, team, merged);
 
-  const scorerOverrides = optimizeScorersForTeam(workspace, gender, team, removeSeniors, merged);
+  const { overrides: scorerOverrides, rejected: rejectedScorers } = optimizeScorersForTeam(
+    workspace,
+    gender,
+    team,
+    removeSeniors,
+    merged
+  );
 
   const candidates: OptimizerCandidate[] = [];
 
@@ -354,5 +360,5 @@ export function optimizeWithArbitrage(
     merged
   );
 
-  return { ...guarded, mode, cards };
+  return { ...guarded, mode, cards, consideredButRejected: rejectedScorers };
 }

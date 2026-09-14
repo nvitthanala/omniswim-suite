@@ -8,8 +8,10 @@
  * `unguardedTotal`; the toast reported only an aggregate gain. This panel
  * adds the per-athlete detail from `diffOptimizerChanges`, a real diff
  * against the workspace's pre-run state (not "every override the result
- * carries" — see that function's own doc comment). See
- * `plans/2026-09-14/03-OPTIMIZER-TRANSPARENCY.md` piece 1.
+ * carries" — see that function's own doc comment), plus
+ * `OptimizerResult.consideredButRejected` — athletes the scorer-cap ranking
+ * did not select, closest misses first. See
+ * `plans/2026-09-14/03-OPTIMIZER-TRANSPARENCY.md` pieces 1 and 2.
  */
 
 import React from 'react';
@@ -74,10 +76,23 @@ type Props = {
   onDismiss: () => void;
 };
 
+function RejectedCandidateRow({ candidate }: { candidate: NonNullable<GuardedOptimizerResult['consideredButRejected']>[number] }) {
+  return (
+    <li className="text-ui-caption text-[var(--text-primary)]">
+      {candidate.name}{' '}
+      <span className="text-theme-secondary">
+        ({candidate.points.toFixed(1)} pts
+        {candidate.behindByPoints > 0 ? `, ${candidate.behindByPoints.toFixed(1)} behind the cap` : ', tied at the cap'})
+      </span>
+    </li>
+  );
+}
+
 export default function OptimizerChangeSummaryPanel({ summary, onDismiss }: Props) {
   const { label, result, changes } = summary;
   const gain = result.projectedTotal - result.previousTotal;
-  const hasDetail = changes.scorerChanges.length > 0 || changes.entryChanges.length > 0;
+  const rejected = result.consideredButRejected ?? [];
+  const hasDetail = changes.scorerChanges.length > 0 || changes.entryChanges.length > 0 || rejected.length > 0;
 
   return (
     <div className="rounded-xl border border-theme-soft surface-muted-bg p-4 flex flex-col gap-3">
@@ -130,6 +145,21 @@ export default function OptimizerChangeSummaryPanel({ summary, onDismiss }: Prop
                   <EntryChangeRow key={`${c.team}|${c.name}|${c.event}|${i}`} change={c} />
                 ))}
               </ul>
+            </div>
+          ) : null}
+          {rejected.length > 0 ? (
+            <div>
+              <p className="text-ui-caption font-semibold text-theme-muted uppercase tracking-widest mb-1.5">
+                Didn't make the scorer cap ({rejected.length})
+              </p>
+              <ul className="space-y-1">
+                {rejected.slice(0, 10).map(c => (
+                  <RejectedCandidateRow key={`${c.team}|${c.gender}|${c.name}`} candidate={c} />
+                ))}
+              </ul>
+              {rejected.length > 10 ? (
+                <p className="text-ui-caption text-theme-muted mt-1">+{rejected.length - 10} more</p>
+              ) : null}
             </div>
           ) : null}
         </div>

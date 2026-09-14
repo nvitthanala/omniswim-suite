@@ -1,4 +1,7 @@
-# Optimizer transparency — scoping only, not built
+# Optimizer transparency
+
+**Status 2026-09-14: pieces 1 and 2 shipped. Piece 3 (undo) stays scoped**
+— see §5.
 
 **Date:** 2026-09-14
 **Trigger:** `docs/reference/IMPROVEMENT_BRAINSTORM_2026-09-02.md` item 11:
@@ -58,25 +61,46 @@ fit an optimizer run without inventing a new undo architecture — but it
 is genuinely new code, not a rendering change over existing data, since no
 "pre-optimize snapshot" is currently kept anywhere.
 
-## 3. Proposed scope, if taken further
+## 3. Scope, and what shipped 2026-09-14
 
-1. **Small, UI-only:** a persistent (dismissible, not auto-fading) summary
-   panel replacing the current toast for `applyLegacy`/`applyAll`/the
-   guarded-mode apply, listing `appliedStages`, the aggregate gain, and
-   each individual override/entry-plan change from the result object
-   already returned. No `rosterOptimizer.ts` change.
-2. **Medium, one core change:** add a lightweight
-   `consideredButRejected` (or similarly named) field to `OptimizerResult`
-   for the specific case the brainstorm's own example describes — an
-   athlete who would have improved the score but was excluded by a cap —
-   verified with the same golden-output-over-3-workspaces discipline this
-   file's other fixes already used.
-3. **Small, new pattern reused from elsewhere:** one-shot "Undo this
-   optimize" following `lastAliasLink`'s existing shape, scoped to the
-   single most recent optimizer run in that session (not a full history
-   stack).
+1. **✅ SHIPPED — small, UI-only.** `OptimizerChangeSummaryPanel`, a
+   persistent (dismissible, not auto-fading) panel alongside the existing
+   toast (kept, not replaced — a deliberate lower-risk default, see
+   `08-Open-Decisions-For-You.md` item 16 in the Obsidian vault) for
+   `applyTeam`/`applyLegacy`/`applyAll`, listing `appliedStages`, the
+   aggregate gain, and each individual override/entry-plan change from
+   `diffOptimizerChanges` — a real diff against the workspace's pre-run
+   state, not "every override the result carries" (see that function's own
+   doc comment for the accuracy trap this avoided). No `rosterOptimizer.ts`
+   change for this piece.
+2. **✅ SHIPPED — the core change.** `optimizeScorersForTeam` now returns
+   `{ overrides, rejected }` instead of a bare array; `rejected` is computed
+   from the FINAL accepted state (after the local-improvement flip pass,
+   not just the initial rank-and-cap pass, so it never disagrees with who
+   is actually on the roster), each entry carrying `points` and
+   `behindByPoints` (points behind the lowest-scoring athlete who DID make
+   the cap). Threaded onto `OptimizerResult.consideredButRejected` from all
+   three optimizer entry points (`optimizeRosterForTeam`,
+   `optimizeRosterAllTeams`, `optimizeWithArbitrage`) and rendered in
+   `OptimizerChangeSummaryPanel` (closest misses first, capped at 10 shown
+   with a "+N more" note). Diagnostic only — never feeds back into which
+   candidate the guard accepts. Verified against real data
+   (`scripts/test_roster_optimizer.mjs`): a cap wider than the roster
+   rejects nobody, a cap of 1 rejects real candidates, and the rejected set
+   is always disjoint from the actual final scorers.
 
-These three are independent and could ship in any order or subset.
+   **A real finding while testing this**: NSISC's scorer cap is locked by
+   `mergeScoringSettings` whenever `workspace.conference` is NSISC
+   (deliberate — competition rules, not a preference, see
+   `NSISC_LOCKED_SETTING_KEYS`), so a naive test that tried overriding the
+   cap on a real NSISC workspace silently had no effect and produced a
+   confusing false failure. Fixed by cloning the workspace with `conference`
+   cleared for the cap-override tests specifically — not a bug in the new
+   code, but worth recording so nobody re-trips on it.
+3. **Not built — small, new pattern reused from elsewhere.** One-shot "Undo
+   this optimize" following `lastAliasLink`'s existing shape
+   (`RosterImportWizard.tsx`), scoped to the single most recent optimizer
+   run in that session (not a full history stack).
 
 ## 4. Open questions for the user
 
