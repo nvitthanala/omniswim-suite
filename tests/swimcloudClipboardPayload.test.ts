@@ -84,12 +84,23 @@ describe('readSwimCloudClipboardPayload — rejects loudly, never silently guess
   });
 
   it('rejects a payload from a future, incompatible extension version rather than guessing at its shape', () => {
-    const result = readSwimCloudClipboardPayload(realisticPayloadText({ omniswimSwimCloudCapture: 2 }));
+    // Was 2 before 2026-09-08 — version 2 is now real (see the v2 describe
+    // block below), so the "not a version this reader knows" case has moved
+    // to 3. Kept as a separate assertion below that a v1-*shaped* payload
+    // merely claiming version 2 is rejected as wrong-shape, not silently
+    // accepted as if it were really v2.
+    const result = readSwimCloudClipboardPayload(realisticPayloadText({ omniswimSwimCloudCapture: 3 }));
     expect(result.ok).toBe(false);
     if (!result.ok) {
       expect(result.reason).toBe('unsupported-version');
-      expect(result.message).toContain('2');
+      expect(result.message).toContain('3');
     }
+  });
+
+  it('rejects a v1-shaped payload that merely claims to be version 2 (missing the required v2 "subject" field)', () => {
+    const result = readSwimCloudClipboardPayload(realisticPayloadText({ omniswimSwimCloudCapture: 2 }));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe('wrong-shape');
   });
 
   it('rejects a payload missing a required field', () => {
@@ -118,5 +129,87 @@ describe('readSwimCloudClipboardPayload — rejects loudly, never silently guess
     const result = readSwimCloudClipboardPayload(realisticPayloadText({ html: '   ' }));
     expect(result.ok).toBe(false);
     if (!result.ok) expect(result.reason).toBe('wrong-shape');
+  });
+});
+
+/**
+ * v2 — added 2026-09-08 for the capture-store crawl
+ * (`plans/2026-09-08/03-extension-crawler.md`'s "Route contract"). Reuses
+ * this same reader rather than forking a second one; the shared
+ * `unsupported-version` rejection is exactly why.
+ */
+function v2PayloadText(overrides: Record<string, unknown> = {}): string {
+  return JSON.stringify({
+    omniswimSwimCloudCapture: 2,
+    subject: { kind: 'meet', meetId: '356467' },
+    sourceUrl: 'https://www.swimcloud.com/results/356467/team/58/swims/',
+    retrievedAt: '2026-09-08T12:34:56.000Z',
+    track: 'browser-extension',
+    httpStatus: 200,
+    html: '<!doctype html><html><body>fixture</body></html>',
+    ...overrides,
+  });
+}
+
+describe('readSwimCloudClipboardPayload — v2 (a posted crawl page)', () => {
+  it('accepts a well-formed v2 payload with a meet subject', () => {
+    const result = readSwimCloudClipboardPayload(v2PayloadText());
+    if (!result.ok) throw new Error(`expected ok, got rejected: ${result.reason} — ${result.message}`);
+    expect(result.payload.omniswimSwimCloudCapture).toBe(2);
+    if (result.payload.omniswimSwimCloudCapture !== 2) return;
+    expect(result.payload.subject).toStrictEqual({ kind: 'meet', meetId: '356467' });
+    expect(result.payload.httpStatus).toBe(200);
+  });
+
+  it('accepts a team subject, with and without a season', () => {
+    const withSeason = readSwimCloudClipboardPayload(
+      v2PayloadText({ subject: { kind: 'team', teamId: '58', season: '2026-2027' } }),
+    );
+    if (!withSeason.ok) throw new Error('expected ok');
+    if (withSeason.payload.omniswimSwimCloudCapture !== 2) throw new Error('expected v2');
+    expect(withSeason.payload.subject).toStrictEqual({ kind: 'team', teamId: '58', season: '2026-2027' });
+
+    const withoutSeason = readSwimCloudClipboardPayload(
+      v2PayloadText({ subject: { kind: 'team', teamId: '58' } }),
+    );
+    if (!withoutSeason.ok) throw new Error('expected ok');
+    if (withoutSeason.payload.omniswimSwimCloudCapture !== 2) throw new Error('expected v2');
+    expect(withoutSeason.payload.subject).toStrictEqual({ kind: 'team', teamId: '58' });
+  });
+
+  it('accepts a v2 payload with no httpStatus (a successful fetch need not carry one)', () => {
+    const overrides = v2PayloadText();
+    const parsed = JSON.parse(overrides) as Record<string, unknown>;
+    delete parsed.httpStatus;
+    const result = readSwimCloudClipboardPayload(JSON.stringify(parsed));
+    if (!result.ok) throw new Error('expected ok');
+    if (result.payload.omniswimSwimCloudCapture !== 2) throw new Error('expected v2');
+    expect(result.payload.httpStatus).toBeUndefined();
+  });
+
+  it('rejects a v2 payload with a missing subject', () => {
+    const parsed = JSON.parse(v2PayloadText()) as Record<string, unknown>;
+    delete parsed.subject;
+    const result = readSwimCloudClipboardPayload(JSON.stringify(parsed));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe('wrong-shape');
+  });
+
+  it('rejects a v2 payload with an invalid subject.kind rather than guessing which one was meant', () => {
+    const result = readSwimCloudClipboardPayload(v2PayloadText({ subject: { kind: 'swimmer', swimmerId: '1' } }));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe('wrong-shape');
+  });
+
+  it('rejects an unknown version (not 1, not 2)', () => {
+    const result = readSwimCloudClipboardPayload(v2PayloadText({ omniswimSwimCloudCapture: 3 }));
+    expect(result.ok).toBe(false);
+    if (!result.ok) expect(result.reason).toBe('unsupported-version');
+  });
+
+  it('still accepts a v1 payload unchanged — v2 is additive, not a replacement', () => {
+    const result = readSwimCloudClipboardPayload(realisticPayloadText());
+    if (!result.ok) throw new Error('expected ok');
+    expect(result.payload.omniswimSwimCloudCapture).toBe(1);
   });
 });

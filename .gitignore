@@ -27,6 +27,11 @@ build/
 uploads/
 data/backups/
 data/meets.json
+# Pairing token for the SwimCloud capture routes: a per-machine secret that
+# lets the browser extension write into the local capture store.
+data/swimcloud-pairing-token.json
+# Captured SwimCloud pages. Local-only by design — plans/2026-09-06/01-legal-and-access-strategy.md §4.
+data/swimcloud-captures/
 data/*.db
 data/*.db-shm
 data/*.db-wal

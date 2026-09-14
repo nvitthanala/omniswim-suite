@@ -145,6 +145,48 @@ export type SwimCloudCaptureTrack =
   | 'synthetic-fixture';
 
 /**
+ * What a multi-page crawl (`./crawlPlan.ts`, `./captureStore.ts`) is
+ * capturing — a meet, or a team. Deliberately kept here rather than in
+ * `./captureStore.ts`: that module composes `./cache.ts`'s
+ * `FileSystemSwimCloudCache`, which does `await import('node:fs/promises')`
+ * internally. A UI package that needs only this type (e.g.
+ * `./clipboardPayload.ts`, for a v2 posted-page payload's `subject` field)
+ * must never pull that Node-only file into its type-check graph just to
+ * name this shape — `docs/INVARIANTS.md` #7 already exists to prevent
+ * exactly this class of leak for the parser/UI boundary; this is the same
+ * rule applied to the new capture-store boundary.
+ */
+export type SwimCloudCaptureSubject =
+  | { readonly kind: 'meet'; readonly meetId: SwimCloudMeetId }
+  | { readonly kind: 'team'; readonly teamId: SwimCloudTeamId; readonly season?: string };
+
+/**
+ * The id a subject's capture is stored under — deterministic, so re-opening
+ * the same subject always finds the same record.
+ *
+ * Lives here, next to {@link SwimCloudCaptureSubject} and for the same reason:
+ * the id derivation is pure string work over that union, with no Node
+ * dependency, and three callers outside the Node process need it. The capture
+ * store (`./captureStore.ts`, Node-only) re-exports it so its own public API is
+ * unchanged; the browser extension's background service worker
+ * (`extensions/swimcloud-companion/src/background.ts`) imports it from here,
+ * because it must build `POST /api/swimcloud/captures/{captureId}/pages` URLs
+ * and a hand-written second copy of this rule would 404 silently the day this
+ * one changed.
+ *
+ * The shape emitted here is the shape
+ * `apps/shell/lib/swimcloudCaptureRoutes.ts`'s `SWIMCLOUD_CAPTURE_ID_PATTERN`
+ * accepts — `meet-{digits}`, `team-{digits}` or `team-{digits}-{season}`.
+ * `tests/swimCloudExtensionCaptureId.test.ts` pins that agreement.
+ */
+export function captureIdForSubject(subject: SwimCloudCaptureSubject): string {
+  if (subject.kind === 'meet') {
+    return `meet-${subject.meetId}`;
+  }
+  return subject.season === undefined ? `team-${subject.teamId}` : `team-${subject.teamId}-${subject.season}`;
+}
+
+/**
  * Where a parsed page came from. One record per captured page, not per row —
  * duplicating it onto every athlete would invite the two copies to disagree.
  */
@@ -322,12 +364,28 @@ export interface SwimCloudAthlete {
    */
   readonly season?: string;
   /**
-   * Hometown string as printed.
+   * Hometown string as printed, e.g. `'Norco, LA'`.
    *
-   * **Unverified** — SwimCloud may not expose this on every roster layout; do
-   * not assume presence.
+   * Present only when the cell actually named a place. A blank cell, and a cell
+   * holding nothing but a bare country code, both leave this **absent** — see
+   * {@link hometownCountryCode}. Never `''`.
    */
   readonly hometown?: string;
+  /**
+   * The hometown cell's text when the page printed a bare three-letter country
+   * code there and no city — `'USA'`, `'MEX'`, `'HUN'`, `'LTU'` all occur on
+   * the real Henderson State roster capture.
+   *
+   * Held apart from {@link hometown} because `'MEX'` is not a hometown: matching
+   * it against one, or showing it in a "Hometown" column, states something the
+   * page did not. Kept rather than dropped because the page did publish it.
+   *
+   * Only the exact three-uppercase-letter shape is recognized. A two-letter
+   * cell is left in {@link hometown} verbatim rather than assumed to be a
+   * country — SwimCloud prints US state codes in the same cell, and deciding
+   * which a bare `'TX'` is would be a guess.
+   */
+  readonly hometownCountryCode?: string;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -554,6 +612,30 @@ export interface SwimCloudResultFlags {
   readonly scratched?: boolean;
   readonly noShow?: boolean;
   readonly forfeit?: boolean;
+  /**
+   * The swim is a relay **leadoff split** that SwimCloud lists as though it were
+   * an individual swim.
+   *
+   * Confirmed real, not defensive: three of the thirty rows on
+   * `tests/fixtures/swimcloud-real-meet-team-swims-356467-team58-page1.html` are
+   * leadoff splits, and their event cells read `100 Y Free`, `50 Y Back` and
+   * `200 Y Free` — textually identical to a genuine individual swim of the same
+   * event elsewhere in the same table.
+   *
+   * This is not "non-scoring" the way {@link disqualified} is. A leadoff split
+   * carries a real time and real SwimCloud points, and SwimCloud shows both. It
+   * belongs here anyway, for the reason this interface holds separate booleans
+   * at all: it is a state that changes whether a row may be *counted as an
+   * individual entry*, and it co-occurs freely with the others. A leadoff split
+   * never places (SwimCloud prints an en dash) and must never be scored,
+   * ranked or displayed as an individual swim — it is one leg of a relay this
+   * package does not reconstruct from this page type.
+   *
+   * The **only** reliable signal is a `title="Leadoff"` label in the row's flags
+   * cell. Neither the visible `R` glyph nor the event name can be trusted for
+   * it.
+   */
+  readonly relayLeadoff?: boolean;
 }
 
 /**

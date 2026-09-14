@@ -76,6 +76,43 @@ describe('classifySwimCloudUrl — the six documented patterns', () => {
     });
   });
 
+  it('recognizes a swimmer times page as its own kind', () => {
+    // The real capture URL, verbatim from
+    // tests/fixtures/swimcloud-real-swimmer-times-1472365.html (OQ-4).
+    expect(resourceOf(classifySwimCloudUrl(`${BASE}/swimmer/1472365/times/`))).toStrictEqual({
+      kind: 'swimmerTimes',
+      swimmerId: '1472365',
+    });
+  });
+
+  it('gives the swimmer home and times pages different canonical URLs', () => {
+    // canonicalUrl is documented as the status-keyed cache's key. Folding
+    // /times/ into the bare `swimmer` kind would hand two different pages one
+    // key, so a times capture would be served back in place of a home capture.
+    const home = classifySwimCloudUrl(`${BASE}/swimmer/1472365/`);
+    const times = classifySwimCloudUrl(`${BASE}/swimmer/1472365/times/`);
+    if (home.outcome !== 'fetchable' || times.outcome !== 'fetchable') {
+      throw new Error('both are fetchable');
+    }
+    expect(home.canonicalUrl).toBe('https://www.swimcloud.com/swimmer/1472365/');
+    expect(times.canonicalUrl).toBe('https://www.swimcloud.com/swimmer/1472365/times/');
+  });
+
+  it('rebuilds a swimmerTimes resource back to its own path', () => {
+    expect(canonicalPathForResource({ kind: 'swimmerTimes', swimmerId: '1472365' })).toBe(
+      '/swimmer/1472365/times/',
+    );
+  });
+
+  it('does not model the other swimmer sub-pages its nav links', () => {
+    // /meets/, /standards/ and /rankings/ appear in the real capture's nav.
+    // A URL read off a nav bar is a URL nobody has fetched.
+    for (const tab of ['meets', 'standards', 'rankings']) {
+      const classification = classifySwimCloudUrl(`${BASE}/swimmer/1472365/${tab}/`);
+      expect(classification.outcome).toBe('unrecognized');
+    }
+  });
+
   it('recognizes a meet results page', () => {
     expect(resourceOf(classifySwimCloudUrl(`${BASE}/results/193735/`))).toStrictEqual({
       kind: 'meet',
@@ -116,6 +153,178 @@ describe('classifySwimCloudUrl — the six documented patterns', () => {
     expect(resource).toStrictEqual({ kind: 'swimmer', swimmerId: '9007199254740993' });
     // The same value through Number() would round to 9007199254740992.
     expect(Number('9007199254740993').toString()).not.toBe('9007199254740993');
+  });
+});
+
+/**
+ * These four patterns are the only ones in the classifier confirmed against
+ * markup SwimCloud actually served — the 2026-09-08 capture of meet 356467,
+ * archived as `tests/fixtures/swimcloud-real-*.html`. The URLs asserted here
+ * are the real ones from that capture, not invented examples.
+ */
+describe('classifySwimCloudUrl — meet-scoped team and swimmer pages', () => {
+  it('recognizes a team page within a meet', () => {
+    expect(resourceOf(classifySwimCloudUrl(`${BASE}/results/356467/team/58/`))).toStrictEqual({
+      kind: 'meetTeam',
+      meetId: '356467',
+      teamId: '58',
+      query: { raw: {} },
+    });
+  });
+
+  it('recognizes the full swims list with no query', () => {
+    expect(resourceOf(classifySwimCloudUrl(`${BASE}/results/356467/team/58/swims/`))).toStrictEqual({
+      kind: 'meetTeamSwims',
+      meetId: '356467',
+      teamId: '58',
+      query: { raw: {} },
+    });
+  });
+
+  it('carries ?gender= verbatim, without interpreting the encoding', () => {
+    expect(
+      resourceOf(classifySwimCloudUrl(`${BASE}/results/356467/team/58/swims/?gender=F`)),
+    ).toStrictEqual({
+      kind: 'meetTeamSwims',
+      meetId: '356467',
+      teamId: '58',
+      query: { gender: 'F', raw: { gender: 'F' } },
+    });
+  });
+
+  it('carries ?page= verbatim', () => {
+    expect(
+      resourceOf(classifySwimCloudUrl(`${BASE}/results/356467/team/58/swims/?page=3`)),
+    ).toStrictEqual({
+      kind: 'meetTeamSwims',
+      meetId: '356467',
+      teamId: '58',
+      query: { page: '3', raw: { page: '3' } },
+    });
+  });
+
+  it('carries both parameters together', () => {
+    expect(
+      resourceOf(classifySwimCloudUrl(`${BASE}/results/356467/team/58/swims/?gender=F&page=3`)),
+    ).toStrictEqual({
+      kind: 'meetTeamSwims',
+      meetId: '356467',
+      teamId: '58',
+      query: { page: '3', gender: 'F', raw: { gender: 'F', page: '3' } },
+    });
+  });
+
+  it('recognizes the meet-scoped swimmer link every results row uses', () => {
+    expect(resourceOf(classifySwimCloudUrl(`${BASE}/results/356467/swimmer/1330318/`))).toStrictEqual(
+      { kind: 'meetSwimmer', meetId: '356467', swimmerId: '1330318' },
+    );
+  });
+
+  it('round-trips all three through canonicalPathForResource', () => {
+    for (const url of [
+      `${BASE}/results/356467/team/58/`,
+      `${BASE}/results/356467/team/58/swims/`,
+      `${BASE}/results/356467/swimmer/1330318/`,
+    ]) {
+      const classification = classifySwimCloudUrl(url);
+      if (classification.outcome !== 'fetchable') throw new Error(`expected fetchable for ${url}`);
+      expect(`${BASE}${canonicalPathForResource(classification.resource)}`).toBe(url);
+    }
+  });
+
+  /**
+   * `/team/{id}/results/` and `/results/{meetId}/team/{id}/` both pair a team
+   * with results and are genuinely different resources: the first is a team's
+   * own list of meets it swam, the second is one meet narrowed to one team.
+   * Conflating them would send a meet capture to the roster importer.
+   */
+  it('does not collide with the team-owned results list', () => {
+    const teamOwned = resourceOf(classifySwimCloudUrl(`${BASE}/team/58/results/`));
+    expect(teamOwned.kind).toBe('teamResults');
+    expect(teamOwned).not.toHaveProperty('meetId');
+
+    const meetScoped = resourceOf(classifySwimCloudUrl(`${BASE}/results/356467/team/58/`));
+    expect(meetScoped.kind).toBe('meetTeam');
+    expect(meetScoped).toHaveProperty('meetId', '356467');
+
+    expect(teamOwned.kind).not.toBe(meetScoped.kind);
+  });
+
+  it('reports a missing or malformed team id rather than guessing one', () => {
+    const missing = classifySwimCloudUrl(`${BASE}/results/356467/team/`);
+    expect(missing.outcome).toBe('malformed');
+    expect(missing).toMatchObject({ kind: 'meetTeam', reason: 'missing-id' });
+
+    const invalid = classifySwimCloudUrl(`${BASE}/results/356467/team/abc/`);
+    expect(invalid.outcome).toBe('malformed');
+    expect(invalid).toMatchObject({ kind: 'meetTeam', reason: 'invalid-id' });
+  });
+
+  it('leaves the unmodelled team sub-pages unrecognized rather than inventing patterns', () => {
+    // All three are real sibling pages on the captured team-landing page. None
+    // is modelled, and none may be silently treated as the swims list.
+    for (const path of ['swimmers', 'pb', 'sb']) {
+      const classification = classifySwimCloudUrl(`${BASE}/results/356467/team/58/${path}/`);
+      expect(classification.outcome).toBe('unrecognized');
+      expect(classification).toMatchObject({ reason: 'unknown-path' });
+    }
+  });
+});
+
+/**
+ * `/results/{meetId}/topteams/` — confirmed real 2026-09-08 via the meet
+ * root's Teams card "More" link on a 13-team meet
+ * (`tests/fixtures/swimcloud-real-meet-landing-379295-gender-m.html`), and
+ * captured directly on both genders
+ * (`swimcloud-real-meet-topteams-379295-gender-{m,f}.html`). See
+ * `plans/2026-09-08/01-decisions.md`'s OQ-1/OQ-1b findings.
+ */
+describe('classifySwimCloudUrl — meet full team-standings page (topteams)', () => {
+  it('recognizes the bare path with no query', () => {
+    expect(resourceOf(classifySwimCloudUrl(`${BASE}/results/379295/topteams/`))).toStrictEqual({
+      kind: 'meetTopTeams',
+      meetId: '379295',
+      query: { raw: {} },
+    });
+  });
+
+  it('carries ?gender= verbatim, without interpreting the encoding', () => {
+    expect(resourceOf(classifySwimCloudUrl(`${BASE}/results/379295/topteams/?gender=F`))).toStrictEqual({
+      kind: 'meetTopTeams',
+      meetId: '379295',
+      query: { gender: 'F', raw: { gender: 'F' } },
+    });
+  });
+
+  it('carries an unmodelled query param (?sort=) through raw without dropping it', () => {
+    const resource = resourceOf(
+      classifySwimCloudUrl(`${BASE}/results/379295/topteams/?gender=M&sort=score`),
+    );
+    expect(resource).toMatchObject({ kind: 'meetTopTeams', meetId: '379295' });
+    expect((resource as { query: { raw: Record<string, string> } }).query.raw).toStrictEqual({
+      gender: 'M',
+      sort: 'score',
+    });
+  });
+
+  it('round-trips through canonicalPathForResource', () => {
+    const url = `${BASE}/results/379295/topteams/`;
+    const classification = classifySwimCloudUrl(url);
+    if (classification.outcome !== 'fetchable') throw new Error('expected fetchable');
+    expect(`${BASE}${canonicalPathForResource(classification.resource)}`).toBe(url);
+  });
+
+  it('is not confused with the meet root or the meet-scoped team page', () => {
+    const meetRoot = resourceOf(classifySwimCloudUrl(`${BASE}/results/379295/`));
+    const topTeams = resourceOf(classifySwimCloudUrl(`${BASE}/results/379295/topteams/`));
+    const meetTeam = resourceOf(classifySwimCloudUrl(`${BASE}/results/379295/team/337/`));
+    expect(new Set([meetRoot.kind, topTeams.kind, meetTeam.kind]).size).toBe(3);
+  });
+
+  it('leaves an unknown sub-path under topteams unrecognized rather than guessing', () => {
+    const classification = classifySwimCloudUrl(`${BASE}/results/379295/topteams/extra/`);
+    expect(classification.outcome).toBe('unrecognized');
+    expect(classification).toMatchObject({ reason: 'unknown-path' });
   });
 });
 

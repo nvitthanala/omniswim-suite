@@ -1,0 +1,108 @@
+<!--
+  Real capture, PII-scrubbed and trimmed. Companion to
+  swimcloud-real-swimmer-times-1472365.html -- see that file's header for
+  the full provenance note on OQ-4.
+
+  Source: https://www.swimcloud.com/swimmer/1472365/
+  Retrieved: 2026-09-09T03:32:39.435Z, via the browser extension (Track A, clipboard).
+  Swimmer: River Paulk (swimmer 1472365), Auburn University (team 127).
+
+  What THIS page adds beyond the times page:
+  - The swimmer's display name as printed ("River Paulk" -- First Last),
+    which differs in ORDER from the times page's `swimmer-info` JSON
+    ("Paulk, River J" -- Last, First M). A parser needs exactly one source
+    of truth for "the name"; document which page you trust before
+    building against both.
+  - Current team + hometown as rendered text (`/team/127` "Auburn
+    University", "Keller, TX") -- the times page's `swimmer-info` gives
+    city/state separately but not a team NAME, only `team_ids: [127]`.
+  - The nav tab set is IDENTICAL to the times page's (Home/Meets/Times/
+    Standards/Rankings) -- confirmed here as the real, complete tab list
+    for a swimmer subject, not reconstructed from one page alone.
+  - A "Latest Results" panel: a dropdown of the swimmer's own most recent
+    meets (this capture shows 90+ entries, trimmed here to 3), and a
+    small results table for whichever meet is selected -- a THIRD, and
+    narrower, results-table shape (place + time per event for one single
+    meet) distinct from both the times page's "personal bests" table and
+    the team-swims page's full-meet table already parsed elsewhere in
+    this repo. This panel is loaded via a same-page fetch when a
+    different meet is picked from the dropdown (see the page's own
+    inline script) -- the markup for any meet OTHER than the one shown at
+    capture time is unknown and unproven.
+-->
+<html lang="en">
+<head>
+<title>River Paulk | Swimcloud</title>
+<link rel="canonical" href="https://www.swimcloud.com/swimmer/1472365/">
+</head>
+<body>
+<div class="c-toolbar c-toolbar--alt c-toolbar--fluid">
+  <div class="c-toolbar__header-content">
+    <h1 class="c-toolbar__title u-flex u-flex-align-items-center"><span class="u-mr-">River Paulk</span></h1>
+    <div class="c-toolbar__meta hidden-print">
+      <ul class="o-list-inline o-list-inline--dotted">
+        <li>Keller, TX</li>
+        <li><a href="/team/127">Auburn University</a></li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="c-toolbar__nav js-nav-priority u-flex">
+    <nav class="c-nav c-nav--inline u-overflow-hidden">
+      <a class="c-nav__item c-nav__item--active" href="/swimmer/1472365/">Home</a>
+      <a class="c-nav__item" href="/swimmer/1472365/meets/">Meets</a>
+      <a class="c-nav__item" href="/swimmer/1472365/times/">Times</a>
+      <a class="c-nav__item" href="/swimmer/1472365/standards/">Standards</a>
+      <a class="c-nav__item" href="/swimmer/1472365/rankings/">Rankings</a>
+    </nav>
+  </div>
+</div>
+
+<div class="c-card c-card--large c-card--divided">
+  <div class="c-card__item u-flex u-flex-justify-between u-flex-align-items-center">
+    <h2 class="c-title">Latest Results</h2>
+    <a href="/swimmer/1472365/meets/">See all</a>
+  </div>
+  <div id="js-swimmer-profile-latest-times">
+    <div class="c-card__item">
+      <div class="dropdown">
+        <button class="btn btn-default btn-block@palm dropdown-toggle" type="button">
+          <div class="o-media">
+            <div class="o-media__body">
+              <div class="u-text-truncate">James E Martin Invitational</div>
+              <div class="u-color-mute u-text-small u-text-normal">Feb 27-28, 2026</div>
+            </div>
+          </div>
+        </button>
+        <ul class="dropdown-menu">
+          <li class="active"><a href="/swimmer/1472365/times/latest/?meet_id=380448"><div class="u-text-truncate">James E Martin Invitational</div><div class="u-color-mute u-text-small">Feb. 27, 2026</div></a></li>
+          <li><a href="/swimmer/1472365/times/latest/?meet_id=370160"><div class="u-text-truncate">SEC Championships</div><div class="u-color-mute u-text-small">Feb. 17, 2026</div></a></li>
+          <li><a href="/swimmer/1472365/times/latest/?meet_id=377787"><div class="u-text-truncate">Auburn University Invite</div><div class="u-color-mute u-text-small">Feb. 6, 2026</div></a></li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="c-table-clean--responsive">
+      <table class="c-table-clean c-table-clean--middle table table-hover">
+        <thead><tr><th>Event</th><th class="c-table-clean__col-fit u-text-end">Time</th><th class="c-table-clean__col-fit u-text-end">Imp</th><th class="c-table-clean__col-fit u-text-end">Place</th></tr></thead>
+        <tbody>
+          <tr><td><strong>50 Y Free</strong> <span class="u-color-mute">Prelims</span></td><td class="u-text-semi u-text-end"><a href="/results/380448/event/32/?id=172485162#time172485162">20.36</a></td><td class="u-text-end"><span class="u-color-danger" title="-3.0% (19.76)">+0.60</span></td><td class="u-text-end">5th</td></tr>
+          <tr><td><strong>100 Y Free</strong> <span class="u-color-mute">Finals</span></td><td class="u-text-semi u-text-end"><a href="/results/380448/event/14/?id=172485148#time172485148">44.65</a></td><td class="u-text-end"><span class="u-color-danger" title="-1.6% (43.95)">+0.70</span></td><td class="u-text-end">5th</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<div class="c-card c-card--large c-card--divided">
+  <div class="c-card__item"><h2 class="c-title">Teams</h2></div>
+  <div class="c-card__item">
+    <ul class="c-list c-list--multiline">
+      <li class="c-list__item"><h3 class="c-list__title"><a href="/team/127">Auburn University</a></h3><div class="c-list__text">Auburn, AL</div></li>
+    </ul>
+  </div>
+</div>
+
+<button id="omniswim-swimcloud-companion-button" type="button" aria-label="Copy this SwimCloud page for import into Omniswim Suite">Copy for Omniswim</button>
+</body>
+</html>

@@ -1,0 +1,99 @@
+<!--
+  Real capture, PII-scrubbed and trimmed.
+
+  Source: https://www.swimcloud.com/team/58/
+  Retrieved: 2026-09-09T02:08:08.237Z, via the browser extension (Track A, clipboard).
+  Team: Henderson State University (team 58).
+
+  Scrubbed: the page's `auth-info`/`auth-groups` script tags (the logged-in
+  account holder's own email, date of birth, zip code) and the global-search
+  JSON blob removed entirely -- see the roster fixtures' header for the same
+  note in full.
+
+  What this proves: a team landing page's own nav tabs give the real
+  sub-resource URL taxonomy for a team subject --
+  /team/{id}/about/, /results/, /times/, /rankings/, /records-learn-more/,
+  /roster/, /coaches/ -- already reflected in urlClassifier.ts's `team`/
+  `teamRoster`/`teamResults` resource kinds. The page's own "Meets" card
+  lists only the 5 most recent/upcoming meets with a "More meets" link to
+  /team/58/results/ (the full list -- see swimcloud-real-team-results-58.html).
+-->
+<html lang="en">
+<head>
+<title>Henderson State University</title>
+<link rel="canonical" href="https://www.swimcloud.com/team/58/">
+</head>
+<body>
+<div class="c-toolbar__nav js-nav-priority u-flex">
+  <nav class="c-nav c-nav--inline u-overflow-hidden">
+    <a class="c-nav__item c-nav__item--active" href="/team/58/">Home</a>
+    <a class="c-nav__item" href="/team/58/about/">About</a>
+    <a class="c-nav__item" href="/team/58/results/">Meets</a>
+    <a class="c-nav__item" href="/team/58/times/">Times</a>
+    <a class="c-nav__item" href="/team/58/rankings/">Rankings</a>
+    <a class="c-nav__item" href="/team/58/records-learn-more/">Records</a>
+    <a class="c-nav__item" href="/team/58/roster/">Roster</a>
+    <a class="c-nav__item" href="/team/58/coaches/">Coaches</a>
+  </nav>
+</div>
+
+<section class="c-section">
+  <header class="c-section__header"><h2 class="c-section__title">Meets</h2></header>
+  <div class="c-list-grid u-overflow-hidden">
+    <a class="c-list-grid__item" href="/results/390811">
+      <article class="c-list-grid__content">
+        <h3 class="c-list-grid__title">New South Championships</h3>
+        <ul class="c-list-grid__meta o-list-inline o-list-inline--dotted">
+          <li class="u-color-danger">Upcoming</li>
+          <li><time datetime="2027-02-16">Feb 16-20, 2027</time></li>
+          <li>Pensacola, FL</li>
+        </ul>
+      </article>
+    </a>
+    <a class="c-list-grid__item" href="/results/390152">
+      <article class="c-list-grid__content">
+        <h3 class="c-list-grid__title">NCAA Division II Championship</h3>
+        <ul class="c-list-grid__meta o-list-inline o-list-inline--dotted">
+          <li class="u-color-danger">Upcoming</li>
+          <li><time datetime="2027-03-09">Mar 9-13, 2027</time></li>
+          <li>Indianapolis, IN</li>
+        </ul>
+      </article>
+    </a>
+    <a class="c-list-grid__item" href="/results/351192">
+      <article class="c-list-grid__content">
+        <h3 class="c-list-grid__title">NCAA Division II Championship</h3>
+        <ul class="c-list-grid__meta o-list-inline o-list-inline--dotted">
+          <li class="u-color-success">Completed</li>
+          <li><time datetime="2026-03-10">Mar 10-14, 2026</time></li>
+          <li>Evansville, IN</li>
+        </ul>
+      </article>
+    </a>
+    <a class="c-list-grid__item" href="/results/356467">
+      <article class="c-list-grid__content">
+        <h3 class="c-list-grid__title">New South Championships</h3>
+        <ul class="c-list-grid__meta o-list-inline o-list-inline--dotted">
+          <li class="u-color-success">Completed</li>
+          <li><time datetime="2026-02-17">Feb 17-21, 2026</time></li>
+          <li>Pensacola, FL</li>
+        </ul>
+      </article>
+    </a>
+    <a class="c-list-grid__item" href="/results/377410">
+      <article class="c-list-grid__content">
+        <h3 class="c-list-grid__title">Henderson vs. Ouachita - Battle of the Ravine</h3>
+        <ul class="c-list-grid__meta o-list-inline o-list-inline--dotted">
+          <li class="u-color-success">Completed</li>
+          <li><time datetime="2026-02-06">Feb 6, 2026</time></li>
+          <li>Arkadelphia, AR</li>
+        </ul>
+      </article>
+    </a>
+  </div>
+  <footer class="u-text-end"><a class="c-more" href="/team/58/results/">More meets</a></footer>
+</section>
+
+<button id="omniswim-swimcloud-companion-button" type="button" aria-label="Copy this SwimCloud page for import into Omniswim Suite">Copy for Omniswim</button>
+</body>
+</html>

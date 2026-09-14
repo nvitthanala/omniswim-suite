@@ -15,12 +15,40 @@
  * `/swimmer/` all 403 for a plain HTTP client
  * (`plans/2026-09-06/01-legal-and-access-strategy.md` §2).
  *
- * **Nothing in this file has been checked against a live SwimCloud page.** The
- * patterns are consistent across every independent source found, which is
- * evidence, not proof. Confirming them against a real, human-navigated page is
- * open question 2 in `plans/2026-09-06/04-phasing.md` and is still open. Do not
- * downstream-cite this file as "the SwimCloud URL scheme"; cite it as "the
- * scheme we believe SwimCloud uses, pending confirmation".
+ * The patterns are consistent across every independent source found, which is
+ * evidence, not proof. Do not downstream-cite this file as "the SwimCloud URL
+ * scheme"; cite it as "the scheme we believe SwimCloud uses, pending
+ * confirmation".
+ *
+ * ## Four of these patterns ARE now confirmed (2026-09-08)
+ *
+ * A human captured three real pages of meet 356467 with the browser extension
+ * and they are archived as `tests/fixtures/swimcloud-real-*.html`. They confirm,
+ * from markup SwimCloud actually served:
+ *
+ * - `/results/{meetId}/`                            → `meet`
+ * - `/results/{meetId}/team/{teamId}/`              → `meetTeam`
+ * - `/results/{meetId}/team/{teamId}/swims/`        → `meetTeamSwims`
+ * - `/results/{meetId}/swimmer/{swimmerId}/`        → `meetSwimmer` (the athlete
+ *   link shape used by every results row on all three pages)
+ *
+ * plus `?gender=M`/`?gender=F` and `?page=N` on the two team-scoped kinds, and
+ * `/results/{meetId}/event/{n}/` as the target of every row's time link (so
+ * `meetEvent`'s path is confirmed even though no `meetEvent` page was captured).
+ *
+ * ## Three more became confirmed (2026-09-09)
+ *
+ * - `/team/{teamId}/roster/?gender=`               → `teamRoster` (OQ-3)
+ * - `/team/{teamId}/results/`                      → `teamResults`
+ * - `/swimmer/{swimmerId}/times/`                  → `swimmerTimes` (OQ-4)
+ *
+ * `/swimmer/{swimmerId}/` is confirmed alongside `swimmerTimes` — the times
+ * capture's own nav links it, and its page was captured too
+ * (`tests/fixtures/swimcloud-real-swimmer-home-1472365.html`).
+ *
+ * Everything else in this file — the rest of the `/swimmer/` family and the
+ * whole `/conference/` family — remains unconfirmed, and open question 2 in
+ * `plans/2026-09-06/04-phasing.md` stays open for them.
  *
  * ## What the classifier guarantees
  *
@@ -116,8 +144,13 @@ export type SwimCloudResourceKind =
   | 'teamRoster'
   | 'teamResults'
   | 'swimmer'
+  | 'swimmerTimes'
   | 'meet'
   | 'meetEvent'
+  | 'meetTeam'
+  | 'meetTeamSwims'
+  | 'meetTopTeams'
+  | 'meetSwimmer'
   | 'conference';
 
 /**
@@ -154,6 +187,31 @@ export interface SwimCloudTeamResultsQuery {
 }
 
 /**
+ * Query parameters on a meet page scoped to one team
+ * (`/results/{meetId}/team/{teamId}/[swims/]?gender=&page=`).
+ *
+ * `gender` is carried **verbatim and is not interpreted**, exactly as on
+ * {@link SwimCloudTeamRosterQuery}. A real capture
+ * (`tests/fixtures/swimcloud-real-meet-team-swims-356467-team58-page1.html`)
+ * does show `?gender=M` / `?gender=F` next to the printed words `Men` / `Women`
+ * in the page's own gender dropdown, but that is the *page body* saying so.
+ * Reading the semantic gender off this parameter would still be the classifier
+ * deciding an encoding from one sample, so the parser reads the printed word
+ * instead — see `parseTeamMeetSwimsHtml` in `./parser.ts`.
+ *
+ * `page` is the 1-based page of the paginated swims list. Page 1 is addressed
+ * with no `page` parameter at all, so its absence means page 1 — but that
+ * inference belongs to the parser, which can also see the pagination widget,
+ * not here.
+ */
+export interface SwimCloudMeetTeamQuery {
+  readonly page?: string;
+  readonly gender?: string;
+  /** Every query parameter on the URL, verbatim. See {@link SwimCloudTeamRosterQuery.raw}. */
+  readonly raw: Readonly<Record<string, string>>;
+}
+
+/**
  * Which of the two conference URL shapes was matched.
  *
  * `plans/2026-09-06/02-data-model-and-scoring.md` §1 is internally inconsistent
@@ -179,6 +237,30 @@ export type SwimCloudResource =
       readonly query: SwimCloudTeamResultsQuery;
     }
   | { readonly kind: 'swimmer'; readonly swimmerId: SwimCloudSwimmerId }
+  /**
+   * One swimmer's times page — `/swimmer/{id}/times/`.
+   *
+   * Confirmed real 2026-09-09 (`tests/fixtures/swimcloud-real-swimmer-times-1472365.html`),
+   * which resolved OQ-4. Its default "Personal Bests" tab is a real,
+   * server-rendered table — see `parseSwimmerTimesHtml` in `./parser.ts`.
+   *
+   * ## Why this is its own kind rather than `swimmer`
+   *
+   * {@link canonicalPathForResource} rebuilds a `swimmer` resource as
+   * `/swimmer/{id}/`, and {@link SwimCloudUrlFetchable.canonicalUrl} — built
+   * from that path — is documented as the status-keyed cache's key. Classifying
+   * `/swimmer/{id}/times/` as `swimmer` would therefore hand two genuinely
+   * different pages one cache key, so a times capture would overwrite a
+   * home-page capture and be served back in its place. The `team` /
+   * `teamRoster` / `teamResults` split exists for exactly this reason and this
+   * follows it.
+   *
+   * The other three sub-pages the real capture's nav lists — `/meets/`,
+   * `/standards/`, `/rankings/` — are **not** modelled. Their markup has never
+   * been captured, and a URL pattern read off a nav bar is a pattern nobody has
+   * fetched.
+   */
+  | { readonly kind: 'swimmerTimes'; readonly swimmerId: SwimCloudSwimmerId }
   | { readonly kind: 'meet'; readonly meetId: SwimCloudMeetId }
   | {
       readonly kind: 'meetEvent';
@@ -191,6 +273,74 @@ export type SwimCloudResource =
        * conflated by arithmetic before anyone has checked which it is.
        */
       readonly eventRef: string;
+    }
+  /**
+   * One team's page **within a meet** — `/results/{meetId}/team/{teamId}/`.
+   *
+   * **Not the same resource as `teamResults`**, despite both pairing a team
+   * with the word "results". `teamResults` (`/team/{id}/results/`) is a team's
+   * own list of the meets it swam. This is one meet's page, narrowed to one
+   * team: a summary dashboard of that team's performance at that meet.
+   *
+   * Confirmed real (`tests/fixtures/swimcloud-real-meet-team-landing-356467-team58.html`).
+   * It is a **summary**: top-5 swimmers and top-10 swims only, against an
+   * "Entries" count in the hundreds. Its full swim list is
+   * {@link SwimCloudResource} `meetTeamSwims`.
+   */
+  | {
+      readonly kind: 'meetTeam';
+      readonly meetId: SwimCloudMeetId;
+      readonly teamId: SwimCloudTeamId;
+      readonly query: SwimCloudMeetTeamQuery;
+    }
+  /**
+   * One team's **full** swim list within a meet —
+   * `/results/{meetId}/team/{teamId}/swims/`.
+   *
+   * Confirmed real (`tests/fixtures/swimcloud-real-meet-team-swims-356467-team58-page1.html`).
+   * This is the only modelled SwimCloud page that carries a team's complete
+   * results for a meet, and it is paginated at 30 rows per page and split by
+   * gender with no combined view — so a complete capture of one team is
+   * `pages × 2` visits, not one.
+   */
+  | {
+      readonly kind: 'meetTeamSwims';
+      readonly meetId: SwimCloudMeetId;
+      readonly teamId: SwimCloudTeamId;
+      readonly query: SwimCloudMeetTeamQuery;
+    }
+  /**
+   * A meet's full team-standings page — `/results/{meetId}/topteams/`.
+   *
+   * Confirmed real 2026-09-08: the meet root's Teams card truncates on a
+   * real meet (5 of 13 teams shown) and links here via a "More" caption —
+   * the same pattern already confirmed for `topswimmers`/`topswims`. Two
+   * real captures (13-team MPSF Championships, both genders) show this page
+   * lists every competing team, including ones that scored zero (rank and
+   * score both print as an em dash rather than being omitted) — see
+   * `plans/2026-09-08/01-decisions.md`'s OQ-1b resolution and
+   * `tests/fixtures/swimcloud-real-meet-topteams-379295-gender-{m,f}.html`.
+   * Not scoped to a team — unlike `meetTeam`/`meetTeamSwims`, this page
+   * covers the whole meet's field for one gender.
+   */
+  | {
+      readonly kind: 'meetTopTeams';
+      readonly meetId: SwimCloudMeetId;
+      readonly query: SwimCloudMeetTeamQuery;
+    }
+  /**
+   * One swimmer's page within a meet — `/results/{meetId}/swimmer/{swimmerId}/`.
+   *
+   * Modelled because it is the link shape every results **row** uses for its
+   * athlete (confirmed on all three real fixtures) — not because the page
+   * itself is a capture target. Without it, a results row's athlete link
+   * classifies as `unknown-path` and the row loses its SwimCloud swimmer id,
+   * which is the one identifier more reliable than the printed name.
+   */
+  | {
+      readonly kind: 'meetSwimmer';
+      readonly meetId: SwimCloudMeetId;
+      readonly swimmerId: SwimCloudSwimmerId;
     }
   | {
       readonly kind: 'conference';
@@ -322,10 +472,20 @@ export function canonicalPathForResource(resource: SwimCloudResource): string {
       return `/team/${resource.teamId}/results/`;
     case 'swimmer':
       return `/swimmer/${resource.swimmerId}/`;
+    case 'swimmerTimes':
+      return `/swimmer/${resource.swimmerId}/times/`;
     case 'meet':
       return `/results/${resource.meetId}/`;
     case 'meetEvent':
       return `/results/${resource.meetId}/event/${resource.eventRef}/`;
+    case 'meetTeam':
+      return `/results/${resource.meetId}/team/${resource.teamId}/`;
+    case 'meetTeamSwims':
+      return `/results/${resource.meetId}/team/${resource.teamId}/swims/`;
+    case 'meetTopTeams':
+      return `/results/${resource.meetId}/topteams/`;
+    case 'meetSwimmer':
+      return `/results/${resource.meetId}/swimmer/${resource.swimmerId}/`;
     case 'conference':
       if (resource.urlForm === 'short') {
         return `/conference/${resource.slug}/`;
@@ -665,10 +825,16 @@ export function classifySwimCloudUrl(url: string): SwimCloudUrlClassification {
       if (segments.length === 2) {
         return fetchable({ kind: 'swimmer', swimmerId });
       }
+      if (segments.length === 3 && lower[2] === 'times') {
+        // `/swimmer/{id}/times/` — confirmed real 2026-09-09, and the only
+        // swimmer sub-page any capture covers. It carries no query parameters
+        // at all on the real capture, so none are modelled here.
+        return fetchable({ kind: 'swimmerTimes', swimmerId });
+      }
       return unrecognized(
         input,
         'unknown-path',
-        `Swimmer sub-path ${canonicalPath} is not modelled. Swimmer sub-pages exist on SwimCloud but none are documented in plans/2026-09-06/02-data-model-and-scoring.md §1, and this classifier does not invent patterns.`,
+        `Swimmer sub-path ${canonicalPath} is not modelled. The real capture's nav lists /meets/, /standards/ and /rankings/ alongside /times/, but only /times/ has been captured, and this classifier does not model a pattern read off a nav bar.`,
         { canonicalPath, hostname: parsed.hostname },
       );
     }
@@ -714,10 +880,107 @@ export function classifySwimCloudUrl(url: string): SwimCloudUrlClassification {
           return fetchable({ kind: 'meetEvent', meetId, eventRef });
         }
       }
+      if (lower[2] === 'topteams') {
+        // `/results/{meetId}/topteams/` — confirmed real 2026-09-08. No id
+        // segment beyond the meet; gender/sort are query params, same
+        // convention as the meet root itself.
+        if (segments.length === 3) {
+          const raw = readQuery(parsed);
+          const page = nonEmpty(raw['page']);
+          const gender = nonEmpty(raw['gender']);
+          const query: SwimCloudMeetTeamQuery = {
+            ...(page === undefined ? {} : { page }),
+            ...(gender === undefined ? {} : { gender }),
+            raw,
+          };
+          return fetchable({ kind: 'meetTopTeams', meetId, query });
+        }
+        return unrecognized(
+          input,
+          'unknown-path',
+          `Meet topteams sub-path ${canonicalPath} is not the modelled pattern (/results/{meetId}/topteams/).`,
+          { canonicalPath, hostname: parsed.hostname },
+        );
+      }
+      if (lower[2] === 'team') {
+        // `/results/{meetId}/team/{teamId}/` and `.../swims/`. Deliberately not
+        // folded into the `/team/{id}/...` branch above: the team id is the
+        // *third* segment here, and the resource is a meet's page narrowed to a
+        // team, not a team's own page. See `SwimCloudResource`'s `meetTeam`
+        // member for why that distinction is worth two kinds.
+        if (segments.length === 3) {
+          return malformed(
+            input,
+            canonicalPath,
+            'meetTeam',
+            'missing-id',
+            'Meet team URL carries no team id.',
+          );
+        }
+        const teamId = segments[3];
+        if (!NUMERIC_ID.test(teamId)) {
+          return malformed(
+            input,
+            canonicalPath,
+            'meetTeam',
+            'invalid-id',
+            `Team id ${JSON.stringify(teamId)} is not a positive integer without leading zeros.`,
+          );
+        }
+        if (segments.length === 4 || (segments.length === 5 && lower[4] === 'swims')) {
+          const raw = readQuery(parsed);
+          const page = nonEmpty(raw['page']);
+          const gender = nonEmpty(raw['gender']);
+          const query: SwimCloudMeetTeamQuery = {
+            ...(page === undefined ? {} : { page }),
+            ...(gender === undefined ? {} : { gender }),
+            raw,
+          };
+          return fetchable(
+            segments.length === 4
+              ? { kind: 'meetTeam', meetId, teamId, query }
+              : { kind: 'meetTeamSwims', meetId, teamId, query },
+          );
+        }
+        // `/swimmers/`, `/pb/` and `/sb/` are real sibling sub-pages (seen on
+        // the real team-landing capture) and are deliberately left unmodelled:
+        // nothing needs them yet, and inventing a pattern is what this
+        // classifier's header forbids.
+        return unrecognized(
+          input,
+          'unknown-path',
+          `Meet team sub-path ${canonicalPath} is not one of the modelled patterns (/results/{meetId}/team/{teamId}/, /results/{meetId}/team/{teamId}/swims/).`,
+          { canonicalPath, hostname: parsed.hostname },
+        );
+      }
+      if (lower[2] === 'swimmer') {
+        if (segments.length === 3) {
+          return malformed(
+            input,
+            canonicalPath,
+            'meetSwimmer',
+            'missing-id',
+            'Meet swimmer URL carries no swimmer id.',
+          );
+        }
+        const swimmerId = segments[3];
+        if (!NUMERIC_ID.test(swimmerId)) {
+          return malformed(
+            input,
+            canonicalPath,
+            'meetSwimmer',
+            'invalid-id',
+            `Swimmer id ${JSON.stringify(swimmerId)} is not a positive integer without leading zeros.`,
+          );
+        }
+        if (segments.length === 4) {
+          return fetchable({ kind: 'meetSwimmer', meetId, swimmerId });
+        }
+      }
       return unrecognized(
         input,
         'unknown-path',
-        `Meet sub-path ${canonicalPath} is not one of the modelled patterns (/results/{meetId}/, /results/{meetId}/event/{n}/).`,
+        `Meet sub-path ${canonicalPath} is not one of the modelled patterns (/results/{meetId}/, /results/{meetId}/event/{n}/, /results/{meetId}/team/{teamId}/[swims/], /results/{meetId}/swimmer/{id}/).`,
         { canonicalPath, hostname: parsed.hostname },
       );
     }

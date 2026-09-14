@@ -37,6 +37,20 @@ export interface SwimCloudCacheEntry {
   readonly retrievedAt: string;
   readonly track: SwimCloudCaptureTrack;
   readonly sha256?: string;
+  /**
+   * The HTTP status this page was fetched with, when the caller has one.
+   * Added 2026-09-08 for the capture-store crawl (`plans/2026-09-08/02-capture-store.md`)
+   * — a 404 is a real, worth-recording outcome (e.g. a team with no women's
+   * program), not a cache miss. Optional so every existing caller and test
+   * compiles unchanged.
+   */
+  readonly httpStatus?: number;
+  /**
+   * The capture this page belongs to, when it was fetched as part of one.
+   * Added 2026-09-08, same reason as {@link httpStatus} — additive, optional.
+   * See `./captureStore.ts`.
+   */
+  readonly captureId?: string;
 }
 
 /** Storage abstraction so the fetcher wrapper never depends on a concrete backend. */

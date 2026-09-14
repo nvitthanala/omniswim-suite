@@ -1,0 +1,125 @@
+<!--
+REAL SwimCloud capture (not synthetic). Source: https://www.swimcloud.com/results/356467/team/58/
+Captured via the browser extension (Track A), 2026-09-08. Trimmed of unrelated
+boilerplate and PII (<script id="auth-info">/auth-groups>, global-search index JSON)
+same as swimcloud-real-meet-landing-356467.html. Everything below is byte-for-byte
+from the real capture.
+
+FINDING this fixture proves: /results/{meetId}/team/{teamId}/ is ALSO a summary page,
+not the full results. "High point" is top-5 swimmers only; "Performances" is top-10
+swims only (sorted by "Imp" = improvement vs seed, not by event or place). Both cards
+have a "More" link — the full lists live at:
+  /results/{meetId}/team/{teamId}/swimmers/  (full swimmer list)
+  /results/{meetId}/team/{teamId}/swims/     (full swims list — see the sibling fixture
+                                               swimcloud-real-meet-team-swims-356467-team58-page1.html)
+The gender picker here defaults to Men and offers only Men/Women (?gender=M/?gender=F)
+— there is no combined view, so a full team capture needs one visit per gender.
+The "Entries: 134" stat is the true count of this team's swims at this meet — the two
+cards above show 5 and 10 rows respectively, nowhere near the full 134.
+-->
+<html>
+<head><title>New South Championships - Henderson State University</title></head>
+<body>
+
+<h1 id="meet-name" class="c-toolbar__title">New South Championships</h1>
+<ul class="o-list-inline o-list-inline--dotted">
+  <li id="meet-status" class="u-color-success">Completed</li>
+  <li id="meet-date">Feb 17&ndash;21, 2026</li>
+  <li id="meet-course">SCY</li>
+</ul>
+
+<button type="button" data-toggle="dropdown">Men <span class="caret-alt"></span></button>
+<ul class="dropdown-menu">
+  <li class="dropdown-subheader">Gender</li>
+  <li class="active"><a href="https://www.swimcloud.com/results/356467/team/58/?gender=M">Men</a></li>
+  <li><a href="https://www.swimcloud.com/results/356467/team/58/?gender=F">Women</a></li>
+</ul>
+
+<div class="c-card c-card--large">
+  <div class="c-card__item feed-hidden">
+    <div class="o-media o-media--large">
+      <a class="o-media__img" href="/team/58" title="Henderson State University">
+        <img class="c-avatar c-avatar--small u-object-contain" src="https://s3.amazonaws.com/cstest/mb/2019/10/c96318de-3cbf-46.jpeg.220x220_q95.jpg" alt="HSU logo">
+      </a>
+      <div class="o-media__body">
+        <h3 class="c-title"><a href="/team/58">Henderson State University</a></h3>
+        <ul class="c-medals">
+          <li class="c-medals__item is-gold" title="7 Gold Medals"><div class="c-medals__value">7</div></li>
+          <li class="c-medals__item is-silver" title="7 Silver Medals"><div class="c-medals__value">7</div></li>
+          <li class="c-medals__item is-bronze" title="4 Bronze Medals"><div class="c-medals__value">4</div></li>
+        </ul>
+        <span class="u-color-mute">Arkadelphia, AR</span>
+      </div>
+    </div>
+  </div>
+  <ul class="c-splash-stats">
+    <li class="c-splash-stats__item"><div class="c-splash-stats__label">Points scored</div><div class="c-splash-stats__value">1056</div></li>
+    <li class="c-splash-stats__item"><div class="c-splash-stats__label">Avg. performance</div><div class="c-splash-stats__value">591.2</div></li>
+    <li class="c-splash-stats__item hidden-xs"><div class="c-splash-stats__label">Entries</div><div class="c-splash-stats__value">134</div></li>
+    <li class="c-splash-stats__item"><div class="c-splash-stats__label">Personal best</div><div class="c-splash-stats__value"><a href="/results/356467/team/58/pb/">82 <span class="u-color-mute u-text-default">(61%)</span></a></div></li>
+    <li class="c-splash-stats__item"><div class="c-splash-stats__label">Season best</div><div class="c-splash-stats__value"><a href="/results/356467/team/58/sb/">42 <span class="u-color-mute u-text-default">(31%)</span></a></div></li>
+  </ul>
+</div>
+
+<div class="c-card c-card--large">
+  <div class="c-card__item"><h3 class="c-title c-title--small">High point</h3></div>
+  <table class="c-table-clean c-table-clean--middle table table-hover">
+    <thead><tr><th colspan="2">Name</th>
+      <th class="c-table-clean__col-fit u-text-end">Gold</th><th class="c-table-clean__col-fit u-text-end">Silver</th>
+      <th class="c-table-clean__col-fit u-text-end">Bronze</th><th class="c-table-clean__col-fit u-text-end">Score</th>
+      <th class="c-table-clean__col-fit u-text-end" title="Average Swimcloud Points">Pts Avg</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">1</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/2360022/" title="Nojus Skirutis">Nojus Skirutis</a></td>
+        <td class="u-text-end">1</td><td class="u-text-end">3</td><td class="u-text-end">0</td>
+        <td class="u-text-end">69</td><td class="u-text-end">682.5</td>
+      </tr>
+      <!-- rows 2-5 omitted: same shape -->
+    </tbody>
+  </table>
+  <div class="c-table-clean__caption c-table-clean__caption--bottom"><a class="c-more c-more--small" href="/results/356467/team/58/swimmers/">More</a></div>
+</div>
+
+<!-- Same row shape as the meet-root "Performances" card and as the full /swims/ list.
+     This is the confirmation that one row-parsing rule covers all three page types. -->
+<div class="c-card c-card--large u-overflow-hidden">
+  <div class="c-card__item"><h3 class="c-title c-title--small">Performances</h3></div>
+  <table class="c-table-clean c-table-clean--middle table table-hover">
+    <thead><tr><th colspan="2">Name</th><th class="c-table-clean__col-fit">Event</th>
+      <th class="c-table-clean__col-fit u-text-end">Time</th>
+      <th class="c-table-clean__col-fit u-ph0 hidden-xs"><span class="u-is-hidden-visually">Flags</span></th>
+      <th class="c-table-clean__col-fit u-text-end">Imp</th>
+      <th class="c-table-clean__col-fit u-text-end hidden-xs">Place</th>
+      <th class="c-table-clean__col-fit u-text-end hidden-xs" title="Swimcloud Points">Pts</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">1</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/1330318/">Avery Henke</a></td>
+        <td>100 Y Breast</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/26/?id=171560736#time171560736">54.09</a></td>
+        <td class="u-ph0 hidden-xs"><a href="/results/351192"><span class="c-label c-label--royal" title="NCAA Division II Championship">D2 B</span></a></td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+3.0% (55.75)">-1.66</span></td>
+        <td class="u-text-end hidden-xs">1st</td>
+        <td class="u-text-end hidden-xs">767</td>
+      </tr>
+      <!-- row 7 (in the real full capture) is a RELAY LEADOFF SPLIT: event cell reads
+           "100 Y Free" (indistinguishable by text from a real individual 100 Free),
+           Place cell is "&ndash;" (en dash, not a hyphen — unplaced), and the flags
+           cell carries ONLY this span, no cut-standard label:
+             <span class="c-label c-label--neutral u-cursor-help" title="Leadoff">R</span>
+           title="Leadoff" is the reliable signal to exclude/flag this row as a relay
+           split, not an individual swim — the visible "R" text and the event name are
+           NOT reliable signals on their own. See row 18 of the sibling
+           swimcloud-real-meet-team-swims-356467-team58-page1.html fixture for the
+           verbatim markup of this exact case. -->
+      <!-- remaining rows omitted: same shape as the full /swims/ fixture -->
+    </tbody>
+  </table>
+  <div class="c-table-clean__caption c-table-clean__caption--bottom"><a class="c-more c-more--small" href="/results/356467/team/58/swims/">More</a></div>
+</div>
+
+</body>
+</html>

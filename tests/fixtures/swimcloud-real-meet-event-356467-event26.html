@@ -1,0 +1,893 @@
+<!--
+REAL SwimCloud capture (not synthetic). Source:
+https://www.swimcloud.com/results/356467/event/26/  (F9, resolved 2026-09-10)
+Captured via the browser extension's single-page "Copy for Omniswim" button, at the
+user's direction, specifically to resolve the prelims/finals ambiguity documented in
+plans/2026-09-10/01-SWIMCLOUD-SCORING-CORRECTNESS.md. Trimmed of unrelated boilerplate
+(head <script> tags, the full site nav/header, the Events sidebar and its duplicate
+off-canvas nav, Sentry/YUI/jQuery loaders) — none of that is relevant to parsing, same
+trimming already applied to the sibling team-swims fixture. The four result tables,
+their captions, headers, and every row are byte-for-byte from the real capture.
+
+THIS IS THE FIX for the ambiguous-round-duplicate problem `swimCloudMeetImportBridge.ts`
+currently works around by excluding both swims. Confirmed facts a parser must rely on:
+
+1. **One page per "Finals"-labeled event holds every round**, each as its own
+   `<div class="o-table-group"><table>...<caption>ROUND</caption>...</table></div>`,
+   in program order. This page (event 26, "100 Breast Men Finals") has FOUR:
+   "A Final", "B Final", "C Final", "Preliminaries" — in that order, not chronological
+   order (Preliminaries happened first, but prints last). A single-round timed-final
+   event is expected to have exactly one such table and no caption naming a round at
+   all (unconfirmed directly — no such event was captured this round — but the sidebar
+   event-picker list on this same page shows entries with no round suffix at all,
+   consistent with that).
+2. **The caption text maps directly onto this app's own `classifyRoundTier`**
+   (`packages/core/src/lib/utils.ts`) with NO new vocabulary needed: "A Final" -> 'A',
+   "B Final" -> 'B', "C Final" -> 'C', "Preliminaries" -> 'PRE'. Do not invent a
+   separate round-tier enum for this parser — feed the caption text straight into
+   `roundSwam` and let the existing classifier read it, exactly as a PDF-sourced row's
+   `roundSwam` already does.
+3. **A/B Final tables carry the REAL meet Score**, not the SwimCloud power index — in
+   a `<th>Score</th>` / `<td>` pair with class `u-is-hidden` (hidden from the rendered
+   page, NOT absent from the markup: 20/17/16/15/14/13/12/11 for A Final's 8 places,
+   9/7/6/5/4/3/2 for B Final — a real NCAA point table's values). This is the first
+   page type in this pipeline where a real meet score is available for an individual
+   event's finals swims; the team-swims list has no such column at all (see this
+   fixture's sibling). C Final and Preliminaries tables instead carry `Pts` (SwimCloud's
+   power index, `title="Swimcloud Points"`, also `u-is-hidden`) — consistent with a
+   17-swimmer meet at this level not scoring a C final or prelims placement.
+4. **Exhibition is marked in the RANK cell, not the time cell.** Every exhibition row's
+   leading ordinal number is replaced by
+   `<span class="c-label c-label--neutral c-label--outline u-cursor-help"
+   title="Exhibition">X</span>` — a real, confirmed marker, and NOT the leading-`X`-
+   on-a-time-token Hy-Tek convention `packages/swimcloud/src/parser.ts`'s `readTime`
+   currently guesses at (marked "Unverified" there). That guess should be corrected once
+   this page type is parsed: check the rank cell for this exact span/title, not the time
+   cell. The five Henderson State/Ouachita "C Final" swimmers here are ALSO marked
+   Exhibition in the Preliminaries table below — SwimCloud tags a swimmer Exhibition
+   consistently across every round they appear in on this page, not just the one they
+   didn't score in.
+5. **This directly resolves the Avery Henke duplicate this whole investigation started
+   from**: her "A Final" row (54.27, this page's table) and "Preliminaries" row (54.09)
+   are DIFFERENT swims, correctly disambiguated by round, and her real A Final score is
+   20 (1st place). Oskar Cebula's two rows from the team-swims list (55.45, 55.48) are
+   likewise his real A Final (6th, score 13) and Preliminaries (5th) swims here — his
+   THIRD row from that list (54.86, `event/100/`) is NOT on this page at all: it lives
+   under a different, unrelated numeric event id with no "Finals" suffix
+   ("100 Breast Men", not "100 Breast Men Finals") that this meet's own sidebar lists at
+   id 100, alongside similarly-unlabeled ids 101/102/201/202/300/400/402/403/500/501/503
+   /938/939 — all HIGHER than this meet's real numbered program (1-42). This matches
+   `backend/parse_meet.py`'s and `packages/core/src/lib/utils.ts`'s existing, documented
+   finding that HyTek numbers post-meet time-trial sessions above the scored program
+   with no "Time Trial" suffix to give them away (see `isOutsideScoredProgram` /
+   `scoredEventNumberMax`) — Cebula's third swim is very likely one of those, not a
+   genuine second final or prelims swim of the same race, and this fixture does not
+   attempt to resolve that page (it was not captured).
+6. **The gender/event pickers here are confusingly numbered**: the "Men"/"Women" toggle
+   for this SAME labeled event ("100 Breast") points at `event/100/` and `event/400/`
+   respectively — i.e. clicking it does NOT stay on event 26. Do not assume a gender
+   toggle on this page type stays within one round-cluster of event ids; read gender
+   from the active toggle's own label the same way the team-swims parser already does,
+   never from event-id arithmetic.
+-->
+<html class="js-html yui3-js-enabled" lang="en"><head><script id="ga-gtag" async="" src="https://www.googletagmanager.com/gtag/js?id=G-V8NLDKPXH3"></script>
+    
+  <script async="" src="https://www.googletagmanager.com/gtag/js?id=G-V8NLDKPXH3"></script>
+  <script>
+    window.dataLayer = window.dataLayer || [];
+    function gtag(){dataLayer.push(arguments);}
+    gtag('js', new Date());
+
+    
+      
+      gtag('config', 'G-V8NLDKPXH3');
+    
+  </script>
+
+
+
+
+    <meta charset="utf-8">
+    <meta http-equiv="x-ua-compatible" content="ie=edge">
+    <meta name="viewport" content="initial-scale=1.0, width=device-width">
+    <meta name="robots" content="Index, Follow">
+    <title>New South Championships - 100 Breast Men Finals</title>
+    <link rel="canonical" href="https://www.swimcloud.com/results/356467/event/26/">
+    
+  <meta name="description" content="New South Championships results, teams, top swims, personal best, latest news and more.">
+
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin="">
+    <link href="https://fonts.googleapis.com/css2?family=Roboto:ital,wght@0,400;0,500;0,700;1,400;1,500&amp;display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/media/css/main.1788871243.css" media="all">
+    
+      <link rel="shortcut icon" href="/media/img/swimcloud/favicons/favicon.ico">
+      <link rel="icon" type="image/png" sizes="32x32" href="/media/img/swimcloud/favicons/favicon-32x32.png">
+      <link rel="icon" type="image/png" sizes="16x16" href="/media/img/swimcloud/favicons/favicon-16x16.png">
+      <link rel="apple-touch-icon" sizes="180x180" href="/media/img/swimcloud/favicons/apple-touch-icon.png">
+    
+
+    <script type="text/javascript">var _sf_startpt=(new Date()).getTime();</script>
+    
+
+    
+  <meta property="og:site_name" content="Swimcloud">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://swimcloud.com/results/356467">
+  <meta property="og:title" content="New South Championships">
+  <meta property="og:image" content="https://s3.amazonaws.com/cstest/mb/2021/02/NSISClogo.jpg.220x220_q95.jpg">
+  <meta property="og:description" content="Feb 17–21, 2026 UWF Aquatic Center">
+
+<script type="application/ld+json">
+  {
+    "@context": "http://schema.org/",
+    "@type": "SportsEvent",
+    "name": "New South Championships",
+    "description": "New South Championships results, teams, top swims, personal best, latest news and more.",
+    "url": "https://www.swimcloud.com/results/356467",
+    
+      "organizer": {
+        "@type": "Organization",
+        "name":  "Delta State University",
+        "url": "swimcloud.com/team/48"
+      },
+    
+    
+      "startDate": "Feb. 17, 2026",
+    
+    
+      "endDate": "Feb. 21, 2026",
+    
+    "location": {
+      "@type": "Place",
+      "name": "UWF Aquatic Center",
+      "address": {
+        "@type": "PostalAddress",
+        
+          "addressLocality": "Pensacola",
+        
+        
+          "addressRegion": "FL",
+        
+        "addressCountry": "USA"
+      }
+    },
+    
+      "image": ["https://s3.amazonaws.com/cstest/mb/2021/02/NSISClogo.jpg"],
+    
+    "competitor": [
+      
+        {
+          "@type": "SportsTeam",
+          "name": "Delta State University",
+          "sport": "Swimming"
+        }, 
+      
+        {
+          "@type": "SportsTeam",
+          "name": "Henderson State University",
+          "sport": "Swimming"
+        }, 
+      
+        {
+          "@type": "SportsTeam",
+          "name": "Ouachita Baptist University",
+          "sport": "Swimming"
+        }, 
+      
+        {
+          "@type": "SportsTeam",
+          "name": "University of West Florida",
+          "sport": "Swimming"
+        }
+      
+    ],
+    
+      "subEvent": {
+        "@type": "SportsEvent",
+        "name": "100 Breast Men Finals",
+        "description": "New South Championships | 100 Breast Men Finals ranks, teams, times and more.",
+        
+          "startDate": "Feb. 17, 2026",
+        
+        
+          "endDate": "Feb. 21, 2026",
+        
+        "location": {
+          "@type": "Place",
+          "name": "UWF Aquatic Center",
+          "address": {
+            "@type": "PostalAddress",
+            
+              "addressLocality": "Pensacola",
+            
+            
+              "addressRegion": "FL",
+            
+            "addressCountry": "USA"
+          }
+        },
+        
+          "eventStatus": "https://schema.org/EventScheduled"
+        
+      },
+    
+    
+      "eventStatus": "https://schema.org/EventScheduled"
+    
+  }
+</script>
+
+  <style data-emotion="css" data-s=""></style><script charset="utf-8" id="yui_3_5_0_1_1789018496085_1" src="https://www.swimcloud.com/media/js/yui3/build/oop/oop-min.js" async=""></script></head>
+
+  <body class="yui3-skin-sam ">
+    
+      <script id="auth-info" type="application/json">{}</script>
+      <script id="auth-groups" type="application/json">[]</script>
+    
+
+<div class="c-header">placeholder</div>
+
+    
+      <div class="c-layout">
+        <div id="layout-main" class="c-layout__main js-alerts-container">
+<div id="container" class="container">
+  <div class="c-section">
+<div class="c-toolbar c-toolbar--fluid hidden-xs">
+  <div class="c-toolbar__header u-flex">
+    <div class="c-toolbar__header-content">
+        <h1 id="meet-name" class="c-toolbar__title">New South Championships</h1>
+      <div class="c-toolbar__meta hidden-print">
+        <ul class="o-list-inline o-list-inline--dotted">
+          <li id="meet-status" class="u-color-success">Completed</li>
+          <li id="meet-date">Feb 17–21, 2026</li>
+            <li id="meet-course">SCY</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</div>
+
+    <div class="o-meet-layout">
+      <div class="o-meet-layout__main">
+  <div class="u-mb+">
+<ul class="o-list-inline">
+  <li class="dropdown">
+    <button class="btn-link u-text-large u-text-default@xs u-link-text dropdown-toggle" type="button" data-toggle="dropdown">
+      100 Breast <span class="caret-alt"></span>
+    </button>
+    <ul class="dropdown-menu">
+      <li class="dropdown-subheader">Event</li>
+        <li class="active">
+          <a href="/results/356467/event/26/">
+            100 Breast
+          </a>
+        </li>
+    </ul>
+  </li>
+  <li class="dropdown">
+    <button class="btn-link u-text-large u-text-default@xs u-link-text dropdown-toggle" type="button" data-toggle="dropdown">
+      Men <span class="caret-alt"></span>
+    </button>
+      <ul class="dropdown-menu">
+        <li class="dropdown-subheader">Gender</li>
+            <li class="active">
+              <a href="/results/356467/event/100/">
+                Men
+              </a>
+            </li>
+            <li>
+              <a href="/results/356467/event/400/">
+                Women
+              </a>
+            </li>
+      </ul>
+  </li>
+</ul>
+  </div>
+
+            
+              <div class="c-card c-card--large u-overflow-hidden">
+                  <div class="o-table-group">
+  <div class="c-table-clean--responsive o-table-group__item">
+    <table class="c-table-clean c-table-clean--font-large@xs table table-hover c-table-clean--middle">
+        <caption id="round-FIN" class="c-table-clean__caption c-title u-text-semi">
+          A Final
+        </caption>
+      <thead>
+        <tr>
+              <th class="" colspan="2">Name</th>
+              <th class="c-table-clean__col-fit hidden-xs">Team</th>
+              <th class="c-table-clean__col-fit u-text-end">Time</th>
+              <th class="c-table-clean__col-fit hidden-xs"></th>
+              <th class="c-table-clean__col-fit u-text-end u-is-hidden">Score</th>
+              <th class="c-table-clean__col-fit hidden-xs"></th>
+              <th class="c-table-clean__col-fit u-text-end hidden-xs">Imp</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">1</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/1330318/">Avery Henke</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Henderson State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/58/">Henderson State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560737"><a href="/times/171560737/">54.27</a></div></td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end u-is-hidden">20</td>
+              <td class="u-pl0 hidden-xs"><span class="c-label c-label--secondary" title="Season Best">SB</span></td>
+              <td class="u-text-end hidden-xs">-1.48</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">2</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/2392180/">Jacob Hamblen</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Delta State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/48/">Delta State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560721"><a href="/times/171560721/">54.37</a></div></td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end u-is-hidden">17</td>
+              <td class="u-pl0 hidden-xs"><span class="c-label c-label--primary" title="Personal Best">PB</span></td>
+              <td class="u-text-end hidden-xs">-0.09</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">3</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/1570993/">Justin Oulette</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Ouachita Baptist</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/412/">Ouachita Baptist</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560751"><a href="/times/171560751/">55.16</a></div></td>
+              <td class="u-pl0 hidden-xs"><a href="/results/351192"><span class="c-label c-label--royal" title="NCAA Division II Championship">D2 B</span></a></td>
+              <td class="u-text-end u-is-hidden">16</td>
+              <td class="u-pl0 hidden-xs"><span class="c-label c-label--primary" title="Personal Best">PB</span></td>
+              <td class="u-text-end hidden-xs">-0.64</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">4</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/2388708/">Neill Mauss</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Delta State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/48/">Delta State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560725"><a href="/times/171560725/">55.36</a></div></td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end u-is-hidden">15</td>
+              <td class="u-pl0 hidden-xs"><span class="c-label c-label--primary" title="Personal Best">PB</span></td>
+              <td class="u-text-end hidden-xs">-0.68</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">5</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/2948788/">Ethan Baylin</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Delta State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/48/">Delta State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560719"><a href="/times/171560719/">55.39</a></div></td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end u-is-hidden">14</td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end hidden-xs">+0.43</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">6</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/1228311/">Oskar Cebula</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Henderson State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/58/">Henderson State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560731"><a href="/times/171560731/">55.45</a></div></td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end u-is-hidden">13</td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end hidden-xs">+0.59</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">7</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/762325/">Mark Eberhard</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Henderson State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/58/">Henderson State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560733"><a href="/times/171560733/">55.54</a></div></td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end u-is-hidden">12</td>
+              <td class="u-pl0 hidden-xs"><span class="c-label c-label--secondary" title="Season Best">SB</span></td>
+              <td class="u-text-end hidden-xs">-1.24</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">8</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/1336576/">Gavin Kock</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Henderson State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/58/">Henderson State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560741"><a href="/times/171560741/">56.81</a></div></td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end u-is-hidden">11</td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end hidden-xs">+0.37</td>
+          </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+                  <div class="o-table-group">
+  <div class="c-table-clean--responsive o-table-group__item">
+    <table class="c-table-clean c-table-clean--font-large@xs table table-hover c-table-clean--middle">
+        <caption class="c-table-clean__caption c-title u-text-semi">
+          B Final
+        </caption>
+      <thead>
+        <tr>
+              <th class="" colspan="2">Name</th>
+              <th class="c-table-clean__col-fit hidden-xs">Team</th>
+              <th class="c-table-clean__col-fit u-text-end">Time</th>
+              <th class="c-table-clean__col-fit u-text-end u-is-hidden">Score</th>
+              <th class="c-table-clean__col-fit hidden-xs"></th>
+              <th class="c-table-clean__col-fit u-text-end hidden-xs">Imp</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">9</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/2213193/">Reece Achord</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Delta State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/48/">Delta State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560717"><a href="/times/171560717/">56.73</a></div></td>
+              <td class="u-text-end u-is-hidden">9</td>
+              <td class="u-pl0 hidden-xs"><span class="c-label c-label--primary" title="Personal Best">PB</span></td>
+              <td class="u-text-end hidden-xs">-1.32</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">10</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/2948790/">Eudald Tosquella Vilardosa</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Delta State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/48/">Delta State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560729"><a href="/times/171560729/">56.77</a></div></td>
+              <td class="u-text-end u-is-hidden">7</td>
+              <td class="u-pl0 hidden-xs"><span class="c-label c-label--secondary" title="Season Best">SB</span></td>
+              <td class="u-text-end hidden-xs">-0.57</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">11</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/2471960/">Lucas Cagle</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Ouachita Baptist</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/412/">Ouachita Baptist</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560749"><a href="/times/171560749/">57.15</a></div></td>
+              <td class="u-text-end u-is-hidden">6</td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end hidden-xs">+0.27</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">12</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/1124878/">Anthony Paculba</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Ouachita Baptist</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/412/">Ouachita Baptist</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560753"><a href="/times/171560753/">57.71</a></div></td>
+              <td class="u-text-end u-is-hidden">5</td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end hidden-xs">+0.84</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">13</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/3029323/">Kostantin Ilijic</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Delta State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/48/">Delta State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560723"><a href="/times/171560723/">58.24</a></div></td>
+              <td class="u-text-end u-is-hidden">4</td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end hidden-xs">+0.89</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">14</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/2690724/">Sergio Rodriguez Rodriguez</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Delta State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/48/">Delta State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560727"><a href="/times/171560727/">59.58</a></div></td>
+              <td class="u-text-end u-is-hidden">3</td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end hidden-xs">+0.04</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">15</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/1818382/">Tristin Ferguson</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Henderson State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/58/">Henderson State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560735"><a href="/times/171560735/">1:00.06</a></div></td>
+              <td class="u-text-end u-is-hidden">2</td>
+              <td class="u-pl0 hidden-xs"><span class="c-label c-label--primary" title="Personal Best">PB</span></td>
+              <td class="u-text-end hidden-xs">-2.10</td>
+          </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+                  <div class="o-table-group">
+  <div class="c-table-clean--responsive o-table-group__item">
+    <table class="c-table-clean c-table-clean--font-large@xs table table-hover c-table-clean--middle">
+        <caption class="c-table-clean__caption c-title u-text-semi">
+          C Final
+        </caption>
+      <thead>
+        <tr>
+              <th class="" colspan="2">Name</th>
+              <th class="c-table-clean__col-fit hidden-xs">Team</th>
+              <th class="c-table-clean__col-fit u-text-end">Time</th>
+              <th class="c-table-clean__col-fit u-text-end u-is-hidden" title="Swimcloud Points">Pts</th>
+              <th class="c-table-clean__col-fit hidden-xs"></th>
+              <th class="c-table-clean__col-fit u-text-end hidden-xs">Imp</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi"><span class="c-label c-label--neutral c-label--outline u-cursor-help" title="Exhibition">X</span></td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/1163733/">Camden Mask</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Henderson State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/58/">Henderson State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560743"><a href="/times/171560743/">55.52</a></div></td>
+              <td class="u-text-end u-color-mute u-is-hidden">709</td>
+              <td class="u-pl0 hidden-xs"><span class="c-label c-label--primary" title="Personal Best">PB</span></td>
+              <td class="u-text-end hidden-xs">-2.17</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi"><span class="c-label c-label--neutral c-label--outline u-cursor-help" title="Exhibition">X</span></td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/1392257/">Benjamin Skinner</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Henderson State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/58/">Henderson State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560745"><a href="/times/171560745/">57.52</a></div></td>
+              <td class="u-text-end u-color-mute u-is-hidden">638</td>
+              <td class="u-pl0 hidden-xs"><span class="c-label c-label--primary" title="Personal Best">PB</span></td>
+              <td class="u-text-end hidden-xs">-1.71</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi"><span class="c-label c-label--neutral c-label--outline u-cursor-help" title="Exhibition">X</span></td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/1343744/">Theo Scarpino</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Ouachita Baptist</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/412/">Ouachita Baptist</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560755"><a href="/times/171560755/">1:00.53</a></div></td>
+              <td class="u-text-end u-color-mute u-is-hidden">547</td>
+              <td class="u-pl0 hidden-xs"><span class="c-label c-label--secondary" title="Season Best">SB</span></td>
+              <td class="u-text-end hidden-xs">-0.31</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi"><span class="c-label c-label--neutral c-label--outline u-cursor-help" title="Exhibition">X</span></td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/1158003/">Donovan Stangl</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Henderson State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/58/">Henderson State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560747"><a href="/times/171560747/">1:02.30</a></div></td>
+              <td class="u-text-end u-color-mute u-is-hidden">502</td>
+              <td class="u-pl0 hidden-xs"><span class="c-label c-label--primary" title="Personal Best">PB</span></td>
+              <td class="u-text-end hidden-xs">-2.62</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi"><span class="c-label c-label--neutral c-label--outline u-cursor-help" title="Exhibition">X</span></td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/2204587/">Aiden Killackey</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Henderson State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/58/">Henderson State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560739"><a href="/times/171560739/">1:05.90</a></div></td>
+              <td class="u-text-end u-color-mute u-is-hidden">424</td>
+              <td class="u-pl0 hidden-xs"><span class="c-label c-label--primary" title="Personal Best">PB</span></td>
+              <td class="u-text-end hidden-xs">-3.24</td>
+          </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+                  <div class="o-table-group">
+  <div class="c-table-clean--responsive o-table-group__item">
+    <table class="c-table-clean c-table-clean--font-large@xs table table-hover c-table-clean--middle">
+        <caption id="round-PRE" class="c-table-clean__caption c-title u-text-semi">
+          Preliminaries
+        </caption>
+      <thead>
+        <tr>
+              <th class="" colspan="2">Name</th>
+              <th class="c-table-clean__col-fit hidden-xs">Team</th>
+              <th class="c-table-clean__col-fit u-text-end">Time</th>
+              <th class="c-table-clean__col-fit hidden-xs"></th>
+              <th class="c-table-clean__col-fit u-text-end u-is-hidden" title="Swimcloud Points">Pts</th>
+              <th class="c-table-clean__col-fit hidden-xs"></th>
+              <th class="c-table-clean__col-fit u-text-end hidden-xs">Imp</th>
+        </tr>
+      </thead>
+      <tbody>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">1</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/1330318/">Avery Henke</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Henderson State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/58/">Henderson State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560736"><a href="/times/171560736/">54.09</a></div></td>
+              <td class="u-pl0 hidden-xs"><a href="/results/351192"><span class="c-label c-label--royal" title="NCAA Division II Championship">D2 B</span></a></td>
+              <td class="u-text-end u-color-mute u-is-hidden">767</td>
+              <td class="u-pl0 hidden-xs"><span class="c-label c-label--secondary" title="Season Best">SB</span></td>
+              <td class="u-text-end hidden-xs">-1.66</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">2</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/2392180/">Jacob Hamblen</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Delta State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/48/">Delta State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560720"><a href="/times/171560720/">54.62</a></div></td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end u-color-mute u-is-hidden">745</td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end hidden-xs">+0.16</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">3</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/2948788/">Ethan Baylin</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Delta State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/48/">Delta State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560718"><a href="/times/171560718/">55.02</a></div></td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end u-color-mute u-is-hidden">729</td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end hidden-xs">+0.06</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">4</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/1570993/">Justin Oulette</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Ouachita Baptist</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/412/">Ouachita Baptist</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560750"><a href="/times/171560750/">55.29</a></div></td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end u-color-mute u-is-hidden">718</td>
+              <td class="u-pl0 hidden-xs"><span class="c-label c-label--primary" title="Personal Best">PB</span></td>
+              <td class="u-text-end hidden-xs">-0.51</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">5</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/1228311/">Oskar Cebula</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Henderson State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/58/">Henderson State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560730"><a href="/times/171560730/">55.48</a></div></td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end u-color-mute u-is-hidden">711</td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end hidden-xs">+0.62</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">6</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/1336576/">Gavin Kock</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Henderson State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/58/">Henderson State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560740"><a href="/times/171560740/">55.69</a></div></td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end u-color-mute u-is-hidden">703</td>
+              <td class="u-pl0 hidden-xs"><span class="c-label c-label--primary" title="Personal Best">PB</span></td>
+              <td class="u-text-end hidden-xs">-0.75</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">7</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/762325/">Mark Eberhard</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Henderson State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/58/">Henderson State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560732"><a href="/times/171560732/">56.24</a></div></td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end u-color-mute u-is-hidden">682</td>
+              <td class="u-pl0 hidden-xs"><span class="c-label c-label--secondary" title="Season Best">SB</span></td>
+              <td class="u-text-end hidden-xs">-0.54</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">7</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/2388708/">Neill Mauss</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Delta State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/48/">Delta State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560724"><a href="/times/171560724/">56.24</a></div></td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end u-color-mute u-is-hidden">682</td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end hidden-xs">+0.20</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">9</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/2471960/">Lucas Cagle</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Ouachita Baptist</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/412/">Ouachita Baptist</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560748"><a href="/times/171560748/">56.77</a></div></td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end u-color-mute u-is-hidden">663</td>
+              <td class="u-pl0 hidden-xs"><span class="c-label c-label--primary" title="Personal Best">PB</span></td>
+              <td class="u-text-end hidden-xs">-0.11</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">10</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/2948790/">Eudald Tosquella Vilardosa</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Delta State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/48/">Delta State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560728"><a href="/times/171560728/">56.96</a></div></td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end u-color-mute u-is-hidden">657</td>
+              <td class="u-pl0 hidden-xs"><span class="c-label c-label--secondary" title="Season Best">SB</span></td>
+              <td class="u-text-end hidden-xs">-0.38</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">11</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/2213193/">Reece Achord</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Delta State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/48/">Delta State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560716"><a href="/times/171560716/">57.55</a></div></td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end u-color-mute u-is-hidden">637</td>
+              <td class="u-pl0 hidden-xs"><span class="c-label c-label--primary" title="Personal Best">PB</span></td>
+              <td class="u-text-end hidden-xs">-0.50</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">12</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/1124878/">Anthony Paculba</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Ouachita Baptist</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/412/">Ouachita Baptist</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560752"><a href="/times/171560752/">57.65</a></div></td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end u-color-mute u-is-hidden">633</td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end hidden-xs">+0.78</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">13</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/3029323/">Kostantin Ilijic</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Delta State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/48/">Delta State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560722"><a href="/times/171560722/">58.64</a></div></td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end u-color-mute u-is-hidden">602</td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end hidden-xs">+1.29</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">14</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/1818382/">Tristin Ferguson</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Henderson State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/58/">Henderson State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560734"><a href="/times/171560734/">59.68</a></div></td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end u-color-mute u-is-hidden">571</td>
+              <td class="u-pl0 hidden-xs"><span class="c-label c-label--primary" title="Personal Best">PB</span></td>
+              <td class="u-text-end hidden-xs">-2.48</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi">15</td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/2690724/">Sergio Rodriguez Rodriguez</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Delta State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/48/">Delta State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560726"><a href="/times/171560726/">1:00.10</a></div></td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end u-color-mute u-is-hidden">559</td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end hidden-xs">+0.56</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi"><span class="c-label c-label--neutral c-label--outline u-cursor-help" title="Exhibition">X</span></td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/1163733/">Camden Mask</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Henderson State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/58/">Henderson State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560742"><a href="/times/171560742/">55.66</a></div></td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end u-color-mute u-is-hidden">704</td>
+              <td class="u-pl0 hidden-xs"><span class="c-label c-label--primary" title="Personal Best">PB</span></td>
+              <td class="u-text-end hidden-xs">-2.03</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi"><span class="c-label c-label--neutral c-label--outline u-cursor-help" title="Exhibition">X</span></td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/1392257/">Benjamin Skinner</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Henderson State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/58/">Henderson State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560744"><a href="/times/171560744/">57.99</a></div></td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end u-color-mute u-is-hidden">622</td>
+              <td class="u-pl0 hidden-xs"><span class="c-label c-label--primary" title="Personal Best">PB</span></td>
+              <td class="u-text-end hidden-xs">-1.24</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi"><span class="c-label c-label--neutral c-label--outline u-cursor-help" title="Exhibition">X</span></td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/1343744/">Theo Scarpino</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Ouachita Baptist</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/412/">Ouachita Baptist</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560754"><a href="/times/171560754/">1:01.49</a></div></td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end u-color-mute u-is-hidden">522</td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end hidden-xs">+0.65</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi"><span class="c-label c-label--neutral c-label--outline u-cursor-help" title="Exhibition">X</span></td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/1158003/">Donovan Stangl</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Henderson State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/58/">Henderson State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560746"><a href="/times/171560746/">1:01.73</a></div></td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end u-color-mute u-is-hidden">516</td>
+              <td class="u-pl0 hidden-xs"><span class="c-label c-label--primary" title="Personal Best">PB</span></td>
+              <td class="u-text-end hidden-xs">-3.19</td>
+          </tr>
+          <tr>
+              <td class="c-table-clean__col-fit u-text-center u-pr0 u-text-semi"><span class="c-label c-label--neutral c-label--outline u-cursor-help" title="Exhibition">X</span></td>
+              <td class="u-nowrap u-text-semi">
+                  <a href="/results/356467/swimmer/2204587/">Aiden Killackey</a>
+                  <div class="u-color-mute u-text-normal u-text-default visible-xs-block">Henderson State</div>
+              </td>
+              <td class="hidden-xs"><a class="u-flex " href="/results/356467/team/58/">Henderson State</a></td>
+              <td class="u-text-end u-nowrap u-text-semi"><div id="time171560738"><a href="/times/171560738/">1:05.27</a></div></td>
+              <td class="u-pl0 hidden-xs"></td>
+              <td class="u-text-end u-color-mute u-is-hidden">436</td>
+              <td class="u-pl0 hidden-xs"><span class="c-label c-label--primary" title="Personal Best">PB</span></td>
+              <td class="u-text-end hidden-xs">-3.87</td>
+          </tr>
+      </tbody>
+    </table>
+  </div>
+</div>
+              </div>
+      </div>
+      </div>
+    </div>
+  </div>
+</div>
+        </div>
+      </div>
+<button id="omniswim-swimcloud-companion-button" type="button" aria-label="Copy this SwimCloud page for import into Omniswim Suite">Copy for Omniswim</button></body></html>

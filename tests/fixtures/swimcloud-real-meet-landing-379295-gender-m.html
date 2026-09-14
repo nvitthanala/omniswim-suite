@@ -1,0 +1,169 @@
+<!--
+REAL SwimCloud capture (not synthetic). Source: https://www.swimcloud.com/results/379295/?gender=M
+Captured via the browser extension (Track A), 2026-09-08, by the repo's primary user.
+Trimmed of unrelated boilerplate (YUI/jQuery/Sentry <script> tags, the global-search
+index JSON blob, og/ld+json meta) for fixture hygiene. The <script id="auth-info">/
+<script id="auth-groups"> blocks, which carried the capturing user's own email and
+SwimCloud id, are removed entirely (PII, irrelevant to parsing). Everything else below
+is byte-for-byte from the real capture.
+
+This is a 13-team conference championship (Mountain Pacific Sports Federation),
+deliberately captured to settle plans/2026-09-08/08-open-questions.md OQ-1, whose
+question was: does a meet root's Teams card list every competing team, or only the
+leaders? The only prior real capture (meet 356467) had just 4 teams, so its Teams
+card showing "everyone" was indistinguishable from "the card truncates and this meet
+just happens to fit."
+
+FINDING this fixture proves: the Teams card DOES truncate on a real, larger meet — it
+shows exactly 5 of this meet's 13 competing teams (per the page's own <script
+type="application/ld+json"> competitor list, not reproduced here) — and, unlike the
+356467 capture (which had no "More" link on this card because there was nothing more
+to show), THIS capture's Teams card carries a "More" link:
+
+    <a class="c-more c-more--small" href="/results/379295/topteams/?gender=M">More</a>
+
+This is a new, previously-unmodelled resource: a meet's full team-standings page,
+`/results/{meetId}/topteams/?gender={M|F}` — the same "More"-link pattern already
+confirmed for the High point card (-> topswimmers/) and Performances card
+(-> topswims/) on the 356467 capture, now confirmed to exist for Teams too. It has
+NOT yet been captured itself — only this link to it is confirmed real. Its own markup
+(does IT paginate? does it list literally every team, or only those who scored?) is
+still unknown and is a new fixture requirement (F1b in
+plans/2026-09-08/06-testing-and-verification.md), not something this fixture answers.
+
+Secondary finding, unrelated to OQ-1, noted so it isn't lost: this meet's Events
+sidebar contains a nested-id URL shape never seen before —
+`/results/379295/event/41/0/` (50 Free Men) and `/results/379295/event/41/1/`
+(400 Free Relay Men) — two different events sharing printed number "41", disambiguated
+by a second path segment. `packages/swimcloud/src/urlClassifier.ts`'s `meetEvent`
+resource currently models only `/results/{meetId}/event/{n}/` (one segment after
+`event`) and would classify a three-segment event URL as `unrecognized`. Not fixed
+here — the crawl this plan builds never visits meetEvent pages — but recorded as a
+known gap for whoever next touches that resource kind.
+-->
+<html>
+<head><title>Mountain Pacific Sports Federation Championships</title></head>
+<body>
+
+<h1 id="meet-name" class="c-toolbar__title">Mountain Pacific Sports Federation Championships</h1>
+<ul class="o-list-inline o-list-inline--dotted">
+  <li id="meet-status" class="u-color-success">Completed</li>
+  <li id="meet-date">Feb 25&ndash;28, 2026</li>
+  <li id="meet-course">SCY</li>
+  <li><a href="/facility/1842/">City of Pharr-PSJA Natatorium - Pharr, TX, USA</a></li>
+</ul>
+
+<div id="meet-header-actions" data-meet-id="379295"></div>
+
+<!-- Gender picker: default view is Men; ?gender=F for women. No combined view. -->
+<button type="button" data-toggle="dropdown">Men <span class="caret-alt"></span></button>
+<ul class="dropdown-menu">
+  <li class="dropdown-subheader">Gender</li>
+  <li class="active"><a href="https://www.swimcloud.com/results/379295/?gender=M">Men</a></li>
+  <li><a href="https://www.swimcloud.com/results/379295/?gender=F">Women</a></li>
+</ul>
+
+<!-- ==== Teams card: THE finding. 5 rows shown for a 13-team meet, and — unlike the
+     4-team/4-shown 356467 capture — a "More" link is present. This is the direct
+     evidence that the card truncates and that a dedicated full-list page exists. ==== -->
+<div class="c-card c-card--large u-overflow-hidden">
+  <div class="c-card__item"><h2 class="c-title">Teams</h2></div>
+  <table class="c-table-clean c-table-clean--middle table table-hover c-table-clean--font-large@xs">
+    <thead><tr><th colspan="2">Team</th><th class="c-table-clean__col-fit u-text-end">Score</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">1</td>
+        <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/379295/team/337/?gender=M"><span>Air Force</span></a></td>
+        <td class="u-text-end u-text-semi">819.5</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">2</td>
+        <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/379295/team/440/?gender=M"><span>UNLV</span></a></td>
+        <td class="u-text-end u-text-semi">769.5</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">3</td>
+        <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/379295/team/374/?gender=M"><span>Wyoming</span></a></td>
+        <td class="u-text-end u-text-semi">726</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">4</td>
+        <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/379295/team/385/?gender=M"><span>California Baptist</span></a></td>
+        <td class="u-text-end u-text-semi">510</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">5</td>
+        <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/379295/team/413/?gender=M"><span>Pacific</span></a></td>
+        <td class="u-text-end u-text-semi">287</td>
+      </tr>
+      <!-- 8 more competing teams exist (13 total, per the page's own ld+json competitor
+           list) and are NOT in this table: New Mexico State, Northern Arizona,
+           Pepperdine, Idaho, Incarnate Word, Northern Colorado, UT Rio Grande Valley,
+           Utah Tech. This is the truncation. -->
+    </tbody>
+  </table>
+  <div class="c-table-clean__caption c-table-clean__caption--bottom">
+    <a class="c-more c-more--small" href="/results/379295/topteams/?gender=M">More</a>
+  </div>
+</div>
+
+<!-- ==== High point card: top-5 swimmers only, same "More" pattern already confirmed
+     on 356467, reconfirmed here. Not the finding this fixture is for; kept short. ==== -->
+<div class="c-card c-card--large u-overflow-hidden">
+  <div class="c-card__item"><h2 class="c-title">High point</h2></div>
+  <table class="c-table-clean c-table-clean--middle table table-hover">
+    <tbody>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">1</td>
+        <td class="c-table-clean__col-clip" title="Alex Metzler"><a class="u-text-semi" href="/results/379295/swimmer/2328341/">Alex Metzler</a></td>
+        <td class="c-table-clean__col-flex"><a href="/results/379295/team/374/?gender=M" title="University of Wyoming"><div class="hidden-xs u-ml- c-table-clean__col-flex-text">Wyoming</div></a></td>
+        <td class="u-text-end">57</td>
+      </tr>
+      <!-- rows 2-5 omitted: same shape, not needed for this fixture's finding -->
+    </tbody>
+  </table>
+  <div class="c-table-clean__caption c-table-clean__caption--bottom">
+    <a class="c-more c-more--small" href="/results/379295/topswimmers/?gender=M">More</a>
+  </div>
+</div>
+
+<!-- ==== Performances card: top-5 swims only, same pattern, kept short. ==== -->
+<div class="c-card c-card--large u-overflow-hidden">
+  <div class="c-card__item"><h2 class="c-title">Performances</h2></div>
+  <table class="c-table-clean c-table-clean--middle table table-hover">
+    <tbody>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">1</td>
+        <td class="c-table-clean__col-clip" title="Mark Kovacsics"><a class="u-text-semi" href="/results/379295/swimmer/1737142/">Mark Kovacsics</a></td>
+        <td class="c-table-clean__col-flex"><a title="California Baptist University" href="/results/379295/team/385/?gender=M"><div class="hidden-xs u-ml- c-table-clean__col-flex-text">California Baptist</div></a></td>
+        <td>1650 Y Free</td>
+        <td class="u-text-end u-text-semi"><a href="/results/379295/event/30/?id=172146402#time172146402">14:48.77</a></td>
+        <td class="u-text-end">20</td>
+      </tr>
+      <!-- rows 2-5 omitted: same shape -->
+    </tbody>
+  </table>
+  <div class="c-table-clean__caption c-table-clean__caption--bottom">
+    <a class="c-more c-more--small" href="/results/379295/topswims/?gender=M">More</a>
+  </div>
+</div>
+
+<!-- ==== Events sidebar: the nested-id pattern noted in this file's header. Kept as
+     evidence, not fully reproduced (44 events on this meet). ==== -->
+<ul id="meet-events-placeholder" class="c-events c-events--divided c-sticky-filters__list">
+  <li class="c-events__group">
+    <a href="/results/379295/event/41/0/" class="c-events__link js-event-item">
+      <div class="c-events__link-start" title="Scored"><span class="c-event-status c-event-status--scored">41</span></div>
+      <div class="c-events__link-body" title="50 Free Men">50 Free Men</div>
+    </a>
+    <a href="/results/379295/event/41/1/" class="c-events__link js-event-item">
+      <div class="c-events__link-start" title="Scored"><span class="c-event-status c-event-status--scored">41</span></div>
+      <div class="c-events__link-body" title="400 Free Relay Men">400 Free Relay Men</div>
+    </a>
+    <!-- 42+ more <a class="c-events__link js-event-item"> siblings omitted, same shape
+         as the 356467 fixture's events list -->
+  </li>
+</ul>
+
+</body>
+</html>

@@ -1,0 +1,144 @@
+<!--
+  Real capture, PII-scrubbed and trimmed.
+
+  Source: https://www.swimcloud.com/team/58/roster/?page=1&gender=M&season_id=29&sort=name
+  Retrieved: 2026-09-09T02:08:38.793Z, via the browser extension (Track A, clipboard).
+  Team: Henderson State University (team 58), men's roster, season 2025-2026 (season_id=29).
+
+  Scrubbed: the page's `auth-info`/`auth-groups` script tags (the logged-in
+  account holder's own email, date of birth, zip code) and the global-search
+  JSON blob (unrelated third-party swimmer/team/meet records used only to
+  populate the site's search box) are removed entirely -- neither is needed
+  to prove this page's structure, and both are personal data that has no
+  reason to live in a committed test fixture. Site chrome (header, mobile
+  drawer, footer scripts, analytics) trimmed for size; the roster table and
+  the filter form are kept complete and unaltered.
+
+  What this proves (resolves OQ-3, "real roster page markup"):
+  - The roster is one <table> per (season, gender) inside a
+    `.c-card .c-table-clean` — rank, `<a href="/swimmer/{id}">Name</a>`,
+    hometown, class year (FR/SO/JR/SR), and a "power index" link
+    (`/swimmer/{id}/score/?season_id=N&anchor_id=...`) that is NOT a time
+    or a result -- it is a per-swimmer power-index page link, not part of
+    this roster's tabular data model.
+  - The page's own filter form reveals the real query contract:
+    `gender` (M/F radio), `season_id` (a numeric id, NOT a year string --
+    see the <select> options below, which is the full id-to-label table),
+    `sort` (name|perf), and `page`. This resolves OQ-2's "what does the
+    season filter actually take" question for the roster page (the
+    /team/{id}/results/ page's own contract is recorded separately in
+    swimcloud-real-team-results-58.html).
+  - 35 real rows -- a full team, not a truncated sample -- so a "did the
+    parser walk the whole table" test has a real answer (35) to assert.
+-->
+<html lang="en">
+<head>
+<title>Roster - Henderson State University</title>
+<link rel="canonical" href="https://www.swimcloud.com/team/58/roster/">
+</head>
+<body>
+<div class="c-toolbar__nav js-nav-priority u-flex">
+  <nav class="c-nav c-nav--inline u-overflow-hidden">
+    <a class="c-nav__item" href="/team/58/">Home</a>
+    <a class="c-nav__item" href="/team/58/about/">About</a>
+    <a class="c-nav__item" href="/team/58/results/">Meets</a>
+    <a class="c-nav__item" href="/team/58/times/">Times</a>
+    <a class="c-nav__item" href="/team/58/rankings/">Rankings</a>
+    <a class="c-nav__item" href="/team/58/records-learn-more/">Records</a>
+    <a class="c-nav__item c-nav__item--active" href="/team/58/roster/">Roster</a>
+    <a class="c-nav__item" href="/team/58/coaches/">Coaches</a>
+  </nav>
+</div>
+
+<div class="c-card c-card--large u-overflow-hidden">
+  <div class="c-card__item">
+    <h2 class="c-title c-title--small">Season 2025-2026 Men</h2>
+  </div>
+  <div class="c-table-clean--responsive">
+  <table class="c-table-clean c-table-clean--middle table table-hover">
+    <thead>
+      <tr>
+        <th class="u-nowrap" colspan="1"></th>
+        <th class="u-nowrap sortable sortable-header">Name <i class="fa-duotone u-text-xsmall hidden-print fa-sort-up sort-indicator"></i></th>
+        <th class="c-table-clean__col-fit">Hometown</th>
+        <th class="c-table-clean__col-fit">Class</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">1</td><td data-sort-key="Akin, Bartu"><a class="u-text-semi" href="/swimmer/2352628">Bartu Akin</a></td><td class="u-text-truncate">Mersin, TUR</td><td class="c-table-clean__col-fit">FR</td><td class="u-text-end"><a href="/swimmer/2352628/score/?season_id=29&amp;anchor_id=c53b06b#c53b06b" target="_blank">706.85</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">2</td><td data-sort-key="Balistreri, Steven F"><a class="u-text-semi" href="/swimmer/1130590">Steven Balistreri</a></td><td class="u-text-truncate">LEAGUE CITY, TX</td><td class="c-table-clean__col-fit">SR</td><td class="u-text-end"><a href="/swimmer/1130590/score/?season_id=29&amp;anchor_id=816b81d#816b81d" target="_blank">649.40</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">3</td><td data-sort-key="Bauer, Cody M"><a class="u-text-semi" href="/swimmer/1414321">Cody Bauer</a></td><td class="u-text-truncate">Scottsdale, AZ</td><td class="c-table-clean__col-fit">JR</td><td class="u-text-end"><a href="/swimmer/1414321/score/?season_id=29&amp;anchor_id=868c4ac#868c4ac" target="_blank">618.95</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">4</td><td data-sort-key="Bennett, Colton B"><a class="u-text-semi" href="/swimmer/1679982">Colton Bennett</a></td><td class="u-text-truncate">Austin, TX</td><td class="c-table-clean__col-fit">JR</td><td class="u-text-end"><a href="/swimmer/1679982/score/?season_id=29&amp;anchor_id=f30fda3#f30fda3" target="_blank">713.30</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">5</td><td data-sort-key="Callaway, Jason W"><a class="u-text-semi" href="/swimmer/993365">Jase Callaway</a></td><td class="u-text-truncate">Kansas City, MO</td><td class="c-table-clean__col-fit">JR</td><td class="u-text-end"><a href="/swimmer/993365/score/?season_id=29&amp;anchor_id=a932577#a932577" target="_blank">544.60</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">6</td><td data-sort-key="Campanico, Afonso"><a class="u-text-semi" href="/swimmer/2451483">Afonso Campanico</a></td><td class="u-text-truncate">Henderson, NV</td><td class="c-table-clean__col-fit">FR</td><td class="u-text-end"><a href="/swimmer/2451483/score/?season_id=29&amp;anchor_id=7272e42#7272e42" target="_blank">547.15</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">7</td><td data-sort-key="Candebat, Colin J"><a class="u-text-semi" href="/swimmer/1865160">Colin Candebat</a></td><td class="u-text-truncate">Norco, LA</td><td class="c-table-clean__col-fit">SO</td><td class="u-text-end"><a href="/swimmer/1865160/score/?season_id=29&amp;anchor_id=b0af5ed#b0af5ed" target="_blank">727.45</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">8</td><td data-sort-key="Cebula, Oskar"><a class="u-text-semi" href="/swimmer/1228311">Oskar Cebula</a></td><td class="u-text-truncate">Wroclaw, POL</td><td class="c-table-clean__col-fit">SR</td><td class="u-text-end"><a href="/swimmer/1228311/score/?season_id=29&amp;anchor_id=c605463#c605463" target="_blank">726.90</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">9</td><td data-sort-key="Doll, Scott W"><a class="u-text-semi" href="/swimmer/1162441">Scott Doll</a></td><td class="u-text-truncate">Kearney, MO</td><td class="c-table-clean__col-fit">SR</td><td class="u-text-end"><a href="/swimmer/1162441/score/?season_id=29&amp;anchor_id=9fcd3f2#9fcd3f2" target="_blank">656.05</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">10</td><td data-sort-key="Doucet, Mason J"><a class="u-text-semi" href="/swimmer/2366619">Mason Doucet</a></td><td class="u-text-truncate">Denham Springs, LA</td><td class="c-table-clean__col-fit">FR</td><td class="u-text-end"><a href="/swimmer/2366619/score/?season_id=29&amp;anchor_id=5d5799f#5d5799f" target="_blank">488.65</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">11</td><td data-sort-key="Eberhard, Mark W"><a class="u-text-semi" href="/swimmer/762325">Mark Eberhard</a></td><td class="u-text-truncate">Longview, TX</td><td class="c-table-clean__col-fit">SR</td><td class="u-text-end"><a href="/swimmer/762325/score/?season_id=29&amp;anchor_id=cfae424#cfae424" target="_blank">683.70</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">12</td><td data-sort-key="Eckard, Aidan L"><a class="u-text-semi" href="/swimmer/2013296">Aidan Eckard</a></td><td class="u-text-truncate">Little Elm, TX</td><td class="c-table-clean__col-fit">SO</td><td class="u-text-end"><a href="/swimmer/2013296/score/?season_id=29&amp;anchor_id=93952da#93952da" target="_blank">577.65</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">13</td><td data-sort-key="Ferguson, Tristin K"><a class="u-text-semi" href="/swimmer/1818382">Tristin Ferguson</a></td><td class="u-text-truncate">Nassau, BAH</td><td class="c-table-clean__col-fit">SO</td><td class="u-text-end"><a href="/swimmer/1818382/score/?season_id=29&amp;anchor_id=ccdc37d#ccdc37d" target="_blank">617.80</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">14</td><td data-sort-key="Gonzalez Mujica, Alan Alejan"><a class="u-text-semi" href="/swimmer/1863744">Alan Alejan Gonzalez Mujica</a></td><td class="u-text-truncate">MEX</td><td class="c-table-clean__col-fit">SO</td><td class="u-text-end"><a href="/swimmer/1863744/score/?season_id=29&amp;anchor_id=175f6b8#175f6b8" target="_blank">699.85</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">15</td><td data-sort-key="Groce, Jack L"><a class="u-text-semi" href="/swimmer/2679231">Jack Groce</a></td><td class="u-text-truncate">Choudrant, LA</td><td class="c-table-clean__col-fit">FR</td><td class="u-text-end"><a href="/swimmer/2679231/score/?season_id=29&amp;anchor_id=8c0d3c4#8c0d3c4" target="_blank">594.95</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">16</td><td data-sort-key="Henke, Avery D"><a class="u-text-semi" href="/swimmer/1330318">Avery Henke</a></td><td class="u-text-truncate">Lafayette, LA</td><td class="c-table-clean__col-fit">JR</td><td class="u-text-end"><a href="/swimmer/1330318/score/?season_id=29&amp;anchor_id=3a3a077#3a3a077" target="_blank">749.95</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">17</td><td data-sort-key="Johnston, elijah S"><a class="u-text-semi" href="/swimmer/1686440">Elijah Johnston</a></td><td class="u-text-truncate">Hot Springs National Park, AR</td><td class="c-table-clean__col-fit">FR</td><td class="u-text-end"><a href="/swimmer/1686440/score/?season_id=29&amp;anchor_id=09c37c1#09c37c1" target="_blank">340.40</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">18</td><td data-sort-key="Killackey, Aiden T"><a class="u-text-semi" href="/swimmer/2204587">Aiden Killackey</a></td><td class="u-text-truncate">Arkadelphia, AR</td><td class="c-table-clean__col-fit">SO</td><td class="u-text-end"><a href="/swimmer/2204587/score/?season_id=29&amp;anchor_id=e917222#e917222" target="_blank">501.70</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">19</td><td data-sort-key="Kock, Gavin A"><a class="u-text-semi" href="/swimmer/1336576">Gavin Kock</a></td><td class="u-text-truncate">santa cruz, ABW</td><td class="c-table-clean__col-fit">FR</td><td class="u-text-end"><a href="/swimmer/1336576/score/?season_id=29&amp;anchor_id=9a1b620#9a1b620" target="_blank">691.30</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">20</td><td data-sort-key="Landreneau, Thomas A"><a class="u-text-semi" href="/swimmer/2277023">Thomas Landreneau</a></td><td class="u-text-truncate">Youngsville, LA</td><td class="c-table-clean__col-fit">FR</td><td class="u-text-end"><a href="/swimmer/2277023/score/?season_id=29&amp;anchor_id=64a2295#64a2295" target="_blank">677.60</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">21</td><td data-sort-key="Mask, Camden"><a class="u-text-semi" href="/swimmer/1163733">Camden Mask</a></td><td class="u-text-truncate">Auburn, AL</td><td class="c-table-clean__col-fit">FR</td><td class="u-text-end"><a href="/swimmer/1163733/score/?season_id=29&amp;anchor_id=6af39f5#6af39f5" target="_blank">682.05</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">22</td><td data-sort-key="Moore, Kyle D"><a class="u-text-semi" href="/swimmer/1805139">Kyle or K.D. Moore</a></td><td class="u-text-truncate">Iowa Colony, TX</td><td class="c-table-clean__col-fit">SO</td><td class="u-text-end"><a href="/swimmer/1805139/score/?season_id=29&amp;anchor_id=06919c9#06919c9" target="_blank">436.95</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">23</td><td data-sort-key="Pina, Emiliano V"><a class="u-text-semi" href="/swimmer/1500940">Emiliano Pina</a></td><td class="u-text-truncate">Rosarito, Z1</td><td class="c-table-clean__col-fit">JR</td><td class="u-text-end"><a href="/swimmer/1500940/score/?season_id=29&amp;anchor_id=fc86068#fc86068" target="_blank">624.30</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">24</td><td data-sort-key="Pózvai, Olivér"><a class="u-text-semi" href="/swimmer/2253944">Olivér Pózvai</a></td><td class="u-text-truncate">HUN</td><td class="c-table-clean__col-fit">SO</td><td class="u-text-end"><a href="/swimmer/2253944/score/?season_id=29&amp;anchor_id=f4cfe21#f4cfe21" target="_blank">677.40</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">25</td><td data-sort-key="Priddle, Ethan L"><a class="u-text-semi" href="/swimmer/511103">Ethan Priddle</a></td><td class="u-text-truncate">Little Rock, AR</td><td class="c-table-clean__col-fit">FR</td><td class="u-text-end"><a href="/swimmer/511103/score/?season_id=29&amp;anchor_id=6c28396#6c28396" target="_blank">596.05</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">26</td><td data-sort-key="Remmert, William Reid Remmert R"><a class="u-text-semi" href="/swimmer/2852737">Reid Remmert</a></td><td class="u-text-truncate">Missouri City, TX</td><td class="c-table-clean__col-fit">FR</td><td class="u-text-end"><a href="/swimmer/2852737/score/?season_id=29&amp;anchor_id=b92700a#b92700a" target="_blank">649.40</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">27</td><td data-sort-key="Rytting, Hunter S"><a class="u-text-semi" href="/swimmer/2812101">Hunter Rytting</a></td><td class="u-text-truncate">Saint Paul, MN</td><td class="c-table-clean__col-fit">FR</td><td class="u-text-end"><a href="/swimmer/2812101/score/?season_id=29&amp;anchor_id=2814115#2814115" target="_blank">665.50</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">28</td><td data-sort-key="Sa, Vitor M""><a class="u-text-semi" href="/swimmer/2266304">Vitor Sa</a></td><td class="u-text-truncate">Fortaleza, BRA</td><td class="c-table-clean__col-fit">SO</td><td class="u-text-end"><a href="/swimmer/2266304/score/?season_id=29&amp;anchor_id=425e938#425e938" target="_blank">649.10</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">29</td><td data-sort-key="Skinner, Benjamin W"><a class="u-text-semi" href="/swimmer/1392257">Benjamin Skinner</a></td><td class="u-text-truncate">New Braunfels, TX</td><td class="c-table-clean__col-fit">SO</td><td class="u-text-end"><a href="/swimmer/1392257/score/?season_id=29&amp;anchor_id=ec3d1ec#ec3d1ec" target="_blank">593.75</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">30</td><td data-sort-key="Skirutis, Nojus"><a class="u-text-semi" href="/swimmer/2360022">Nojus Skirutis</a></td><td class="u-text-truncate">LTU</td><td class="c-table-clean__col-fit">SR</td><td class="u-text-end"><a href="/swimmer/2360022/score/?season_id=29&amp;anchor_id=233c0ab#233c0ab" target="_blank">711.15</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">31</td><td data-sort-key="Stangl, Donovan S"><a class="u-text-semi" href="/swimmer/1158003">Donovan Stangl</a></td><td class="u-text-truncate">Mckinney, TX</td><td class="c-table-clean__col-fit">SR</td><td class="u-text-end"><a href="/swimmer/1158003/score/?season_id=29&amp;anchor_id=e32d34d#e32d34d" target="_blank">524.90</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">32</td><td data-sort-key="Stewart, Parker L"><a class="u-text-semi" href="/swimmer/1291945">Parker Stewart</a></td><td class="u-text-truncate">League city, TX</td><td class="c-table-clean__col-fit">SR</td><td class="u-text-end"><a href="/swimmer/1291945/score/?season_id=29&amp;anchor_id=bb2a2ca#bb2a2ca" target="_blank">560.00</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">33</td><td data-sort-key="Vitthanala, Nihar"><a class="u-text-semi" href="/swimmer/1355764">Nihar Vitthanala</a></td><td class="u-text-truncate">Flower Mound, TX</td><td class="c-table-clean__col-fit">JR</td><td class="u-text-end"><a href="/swimmer/1355764/score/?season_id=29&amp;anchor_id=1280ab2#1280ab2" target="_blank">542.95</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">34</td><td data-sort-key="Weingartner, Cayden B"><a class="u-text-semi" href="/swimmer/2698712">Cayden Weingartner</a></td><td class="u-text-truncate">Broken Arrow, OK</td><td class="c-table-clean__col-fit">FR</td><td class="u-text-end"><a href="/swimmer/2698712/score/?season_id=29&amp;anchor_id=938ee7d#938ee7d" target="_blank">507.60</a></td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">35</td><td data-sort-key="Westbrook, Eli H"><a class="u-text-semi" href="/swimmer/607866">Eli Westbrook</a></td><td class="u-text-truncate">Lanett, AL</td><td class="c-table-clean__col-fit">JR</td><td class="u-text-end"><a href="/swimmer/607866/score/?season_id=29&amp;anchor_id=faef47e#faef47e" target="_blank">594.20</a></td></tr>
+    </tbody>
+  </table>
+  </div>
+</div>
+
+<form class="form" method="GET">
+  <input type="hidden" name="page" value="1">
+  <div class="btn-group btn-group-primary btn-group-stretch" data-toggle="buttons">
+    <label for="M" class="btn btn-primary active"><input type="radio" id="M" name="gender" value="M" checked="">Men</label>
+    <label for="F" class="btn btn-primary"><input type="radio" id="F" name="gender" value="F">Women</label>
+  </div>
+  <select name="season_id" id="id_season_id">
+    <option value="">----- All Seasons -----</option>
+    <option value="30">2026-2027</option>
+    <option value="29" selected="">2025-2026</option>
+    <option value="28">2024-2025</option>
+    <option value="27">2023-2024</option>
+    <option value="26">2022-2023</option>
+    <option value="25">2021-2022</option>
+    <option value="24">2020-2021</option>
+    <option value="23">2019-2020</option>
+    <option value="22">2018-2019</option>
+    <option value="21">2017-2018</option>
+    <option value="20">2016-2017</option>
+    <option value="19">2015-2016</option>
+    <option value="18">2014-2015</option>
+    <option value="17">2013-2014</option>
+    <option value="16">2012-2013</option>
+    <option value="15">2011-2012</option>
+    <option value="14">2010-2011</option>
+    <option value="13">2009-2010</option>
+    <option value="12">2008-2009</option>
+  </select>
+  <select name="sort" id="id_sort">
+    <option value="name" selected="">Name</option>
+    <option value="perf">Points</option>
+  </select>
+</form>
+
+<button id="omniswim-swimcloud-companion-button" type="button" aria-label="Copy this SwimCloud page for import into Omniswim Suite">Copy for Omniswim</button>
+</body>
+</html>

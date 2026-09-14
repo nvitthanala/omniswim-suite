@@ -40,21 +40,31 @@
  *
  * ## Three things every caller must know
  *
- * 1. **The URL patterns are believed, not verified.** They come from prior-art
+ * 1. **Most URL patterns are believed, not verified.** They come from prior-art
  *    scraper code and search results; SwimCloud's Cloudflare challenge prevented
- *    direct confirmation. See the header of `./urlClassifier.ts`.
- * 2. **The parser has never seen real SwimCloud markup.** Every extraction rule
- *    was written against hand-authored synthetic fixtures, which is why every
- *    parse result carries `confidence: 'synthetic-fixture-only'`. See the header
- *    of `./parser.ts`.
+ *    direct confirmation. The `/results/…` family is the exception — a real
+ *    capture on 2026-09-08 confirmed four of its patterns. See the header of
+ *    `./urlClassifier.ts` for exactly which.
+ * 2. **Two parsers have never seen real SwimCloud markup.**
+ *    `parseMeetResultsHtml` and `parseSwimmerProfileHtml` were written against
+ *    hand-authored synthetic fixtures and report
+ *    `confidence: 'synthetic-fixture-only'`. `parseTeamMeetSwimsHtml`,
+ *    `parseMeetTeamsHtml`, `parseMeetTopTeamsHtml`, `parseTeamRosterHtml` and
+ *    `parseSwimmerTimesHtml` were written against real captures and report
+ *    `confidence: 'real-capture-verified'`. Those captures also proved that
+ *    **both** guessed parsers describe page shapes SwimCloud does not serve —
+ *    read the header of `./parser.ts` before using either for anything. A
+ *    swimmer's own event history is parsed by `parseSwimmerTimesHtml`, against
+ *    the real `/swimmer/{id}/times/` capture, not by `parseSwimmerProfileHtml`.
  * 3. **`./playwrightFetcher` has never fetched a real page, from SwimCloud or
  *    anywhere else.** It is type-checked against the real `playwright-core` API
  *    and unit-tested only where that doesn't require launching a browser. See
  *    its file header for exactly what still has to happen, and why that step
  *    is deliberately not something any agent should do unattended.
  *
- * None of these is a bug to be fixed by writing more code. All three are
- * resolved by one human, present, running one real capture each.
+ * None of these is a bug to be fixed by writing more code. All are resolved by
+ * one human, present, running one real capture each — which is exactly how the
+ * `/results/…` family stopped being a guess.
  */
 
 export type {
@@ -105,6 +115,7 @@ export {
 export type {
   SwimCloudConferenceUrlForm,
   SwimCloudMalformedReason,
+  SwimCloudMeetTeamQuery,
   SwimCloudResource,
   SwimCloudResourceKind,
   SwimCloudRobotsRule,
@@ -120,14 +131,31 @@ export type {
 
 export {
   SWIMCLOUD_PARSE_CONFIDENCE,
+  SWIMCLOUD_REAL_CAPTURE_CONFIDENCE,
+  parseMeetEventResultsHtml,
   parseMeetResultsHtml,
+  parseMeetTeamsHtml,
+  parseMeetTopTeamsHtml,
   parseSwimmerProfileHtml,
+  parseSwimmerTimesHtml,
+  parseTeamMeetSwimsHtml,
   parseTeamRosterHtml,
 } from './parser';
 
 export type {
+  SwimCloudCutStandardLabel,
+  SwimCloudEventRoundPointsColumn,
+  SwimCloudMeetEventResultsParse,
+  SwimCloudMeetEventResultsParseOptions,
+  SwimCloudMeetEventRound,
+  SwimCloudMeetEventSwim,
   SwimCloudMeetResultsParse,
   SwimCloudMeetResultsParseOptions,
+  SwimCloudMeetTeamStanding,
+  SwimCloudMeetTeamsDiscoveryCompleteness,
+  SwimCloudMeetTeamsParse,
+  SwimCloudMeetTeamsParseOptions,
+  SwimCloudPagination,
   SwimCloudParseConfidence,
   SwimCloudParseContext,
   SwimCloudParseFailure,
@@ -139,11 +167,47 @@ export type {
   SwimCloudParseWarningCode,
   SwimCloudParsedEvent,
   SwimCloudPersonalBest,
+  SwimCloudPersonalBestSwim,
+  SwimCloudRosterFieldSource,
   SwimCloudRosterParse,
   SwimCloudRosterParseOptions,
   SwimCloudSwimmerProfileParse,
   SwimCloudSwimmerProfileParseOptions,
+  SwimCloudSwimmerTimesFieldSource,
+  SwimCloudSwimmerTimesParse,
+  SwimCloudSwimmerTimesParseOptions,
+  SwimCloudSwimmerTimesTag,
+  SwimCloudTeamMeetSwim,
+  SwimCloudTeamMeetSwimsParse,
+  SwimCloudTeamMeetSwimsParseOptions,
 } from './parser';
+
+export { captureIdForSubject, FileSystemSwimCloudCaptureStore } from './captureStore';
+export type {
+  SwimCloudCaptureCompleteness,
+  SwimCloudCapturePageOutcome,
+  SwimCloudCapturePageRef,
+  SwimCloudCaptureRecord,
+  SwimCloudCaptureSubject,
+  SwimCloudCaptureTeamDiscovery,
+} from './captureStore';
+
+export {
+  planMeetEventResults,
+  planMeetSwimmerTimes,
+  planMeetTeamDiscovery,
+  planMeetTeamDiscoveryFallback,
+  planMeetTeamRosters,
+  planMeetTeamSwims,
+} from './crawlPlan';
+export type {
+  SwimCloudCrawlGender,
+  SwimCloudCrawlStep,
+  SwimCloudMeetEventResultsCrawlInput,
+  SwimCloudMeetRostersCrawlInput,
+  SwimCloudMeetSwimmerTimesCrawlInput,
+  SwimCloudMeetSwimsCrawlInput,
+} from './crawlPlan';
 
 export {
   collapseWhitespace,
@@ -194,6 +258,7 @@ export { readSwimCloudClipboardPayload } from './clipboardPayload';
 export type {
   SwimCloudClipboardAccepted,
   SwimCloudClipboardPayload,
+  SwimCloudClipboardPayloadV2,
   SwimCloudClipboardReadResult,
   SwimCloudClipboardRejected,
   SwimCloudClipboardRejectionReason,
