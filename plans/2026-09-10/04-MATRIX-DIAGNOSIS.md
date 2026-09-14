@@ -119,7 +119,18 @@ Two visual variants of the same idea, none using `@omniswim/ui`'s `SegmentedCont
 
 ## 5. Prioritized shortlist
 
-1. **Converge the two live `ScoringSettings` editors (§4a).** Highest leverage: not removable dead code like Manager's `editorMode`, but an active two-implementations risk for every future scoring field — reachable from two different navigation paths with no shared source of truth beyond the underlying data module.
+1. **✅ DONE 2026-09-14 (see `docs/reference/UI_REDESIGN_STATE.json`).**
+   Converge the two live `ScoringSettings` editors (§4a). New
+   `ScoringSettingsFields.tsx` owns every field; both hosts are thin chrome
+   around it now. Confirmed the risk was real, not hypothetical, while
+   merging: `usePdfPlacePoints` existed in the Panel only — Suite Settings
+   could never toggle it. One deliberate, visible change to the Panel's own
+   users: points-editing adopts the Modal's array-based UI (places-count
+   select + one input per place) instead of the Panel's free-typed
+   comma-separated string. Found and fixed a real latent bug while merging
+   (`aFinalBracketSize` not recomputing after the "Top 24 points only"
+   quick button, which a naive port would have reproduced). 9 new DOM-render
+   tests.
 2. **✅ DONE 2026-09-10 (see `docs/reference/UI_REDESIGN_STATE.json` turns
    t14–t15).** Split `TeamCard.tsx` (§3). Was 1,351 lines, the single largest
    file in the entire suite, already informally decomposed into 16 private
