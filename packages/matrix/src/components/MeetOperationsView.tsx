@@ -136,9 +136,14 @@ type Props = {
   onPsychFileUpload: (e: React.ChangeEvent<HTMLInputElement>) => void;
   onCancelPdfParse: () => void;
   onCancelPsychPdfParse: () => void;
-  /** Track A: reads a meet-results capture from the clipboard (extensions/swimcloud-companion). No file/event — the source is always the clipboard. */
-  onSwimCloudImport: () => void;
-  isImportingSwimCloud: boolean;
+  /**
+   * Opens the shared `SwimCloudCaptureBrowser` (`@omniswim/ui`) in
+   * `meet-results` mode — browsing and importing from a capture the
+   * extension already fetched. The clipboard path (Track A) is no longer a
+   * peer entry point here; it is the browser's own secondary link, offered
+   * only when no capture exists yet.
+   */
+  onBrowseSwimCloudCaptures: () => void;
   onUpdate: (patch: Partial<Workspace>) => void;
   onRequestDeleteSwimmer?: (name: string) => void;
   onSaveScoringSettings: (sets: ScoringSettings) => void;
@@ -176,8 +181,7 @@ export default function MeetOperationsView({
   pdfFormat,
   onPdfFormatChange,
   onFileUpload,
-  onSwimCloudImport,
-  isImportingSwimCloud,
+  onBrowseSwimCloudCaptures,
   onPsychFileUpload,
   onCancelPdfParse,
   onCancelPsychPdfParse,
@@ -363,13 +367,12 @@ export default function MeetOperationsView({
                     </label>
                     <button
                       type="button"
-                      onClick={onSwimCloudImport}
-                      disabled={isImportingSwimCloud}
-                      aria-label="Load meet results from SwimCloud clipboard capture"
-                      title="Read a meet-results capture from the Omniswim SwimCloud Companion browser extension (Copy for Omniswim on a SwimCloud results page)."
-                      className="flex items-center gap-1.5 px-3 py-1 border border-theme-soft rounded-md text-[10px] uppercase font-medium text-theme-secondary hover:text-[var(--text-primary)] transition-colors disabled:opacity-40"
+                      onClick={onBrowseSwimCloudCaptures}
+                      aria-label="Add meet results from SwimCloud"
+                      title="Browse a meet capture the extension has fetched. Pasting a single page from the clipboard is still offered there when no capture exists yet."
+                      className="flex items-center gap-1.5 px-3 py-1 border border-theme-soft rounded-md text-[10px] uppercase font-medium text-theme-secondary hover:text-[var(--text-primary)] transition-colors"
                     >
-                      <Download size={12} /><span>{isImportingSwimCloud ? 'Reading…' : 'From SwimCloud'}</span>
+                      <Download size={12} /><span>Add from SwimCloud</span>
                     </button>
                     <label aria-label="Link psych sheet PDF" className="cursor-pointer flex items-center gap-1.5 px-3 py-1 border border-theme-soft rounded-md text-[10px] uppercase font-medium text-theme-secondary hover:text-[var(--text-primary)] transition-colors">
                       <Plus size={12} /><span>Link Psych</span><input aria-label="Psych sheet PDF file" type="file" className="hidden" accept=".pdf" onChange={onPsychFileUpload} />

@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom';
-import { Cog, Globe, Settings, TrendingUp } from 'lucide-react';
-import { ThemeToggle, useSwimCloudWindow } from '@omniswim/ui';
+import { Cog, Globe, MoreHorizontal, Search, Settings, TrendingUp, User } from 'lucide-react';
+import { Menu, MenuItem, ThemeToggle, useSwimCloudWindow } from '@omniswim/ui';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
 import { useAuth } from '../context/AuthContext';
 import AppletNav from './AppletNav';
-import { CommandPaletteButton, GenderToggleNav, UserAuthControl } from './SuiteHeaderControls';
+import { GenderToggleNav, shortcutHintLabel } from './SuiteHeaderControls';
 
 type Props = {
   theme: 'dark' | 'light';
@@ -48,41 +48,6 @@ export default function SuiteHeader({
 
         {showWorkspaceControls ? <GenderToggleNav activeGender={activeGender} onChange={setActiveGender} /> : null}
 
-        {onOpenCommandPalette ? <CommandPaletteButton isMac={IS_MAC} onOpen={onOpenCommandPalette} /> : null}
-
-        <Link
-          to="/analytics"
-          className="btn-ghost p-1.5 rounded hidden sm:flex"
-          title="Season analytics"
-          aria-label="Season analytics"
-        >
-          <TrendingUp size={14} />
-        </Link>
-
-        <UserAuthControl user={user} authRequired={authRequired} onLogout={() => void logout()} />
-
-        <ThemeToggle theme={theme} onToggle={onThemeToggle} className="ml-1" />
-
-        <Link
-          to="/settings"
-          className="p-1.5 theme-hover-row rounded-lg btn-accent-outline transition-colors"
-          title="Suite Settings"
-          aria-label="Open suite settings"
-        >
-          <Cog size={14} />
-        </Link>
-
-        <button
-          type="button"
-          onClick={toggleWindow}
-          className={`p-1.5 rounded-lg transition-colors ${open ? 'btn-accent-outline' : 'btn-ghost'}`}
-          title="SwimCloud reference window"
-          aria-label="SwimCloud reference window"
-          aria-pressed={open}
-        >
-          <Globe size={14} />
-        </button>
-
         {showWorkspaceControls && activeWorkspace && onOpenScoringSettings ? (
           <button
             type="button"
@@ -101,7 +66,57 @@ export default function SuiteHeader({
           </div>
         ) : null}
 
-        <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse ml-1" title="System ready" />
+        <ThemeToggle theme={theme} onToggle={onThemeToggle} className="ml-1" />
+
+        <Menu label="More" icon={<MoreHorizontal size={14} />} triggerClassName="btn-ghost p-1.5 rounded-lg">
+          {onOpenCommandPalette ? (
+            <MenuItem
+              icon={<Search size={14} />}
+              onSelect={onOpenCommandPalette}
+              className="justify-between"
+            >
+              Command palette
+              <kbd className="text-ui-micro font-mono text-theme-muted">{shortcutHintLabel(IS_MAC)}</kbd>
+            </MenuItem>
+          ) : null}
+
+          <Link
+            to="/analytics"
+            role="menuitem"
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-ui-caption text-left theme-hover-row transition-colors text-[var(--text-primary)]"
+          >
+            <TrendingUp size={14} />
+            <span className="truncate">Season analytics</span>
+          </Link>
+
+          {user ? (
+            <MenuItem icon={<User size={14} />} onSelect={() => void logout()}>
+              Sign out ({user.displayName})
+            </MenuItem>
+          ) : authRequired ? (
+            <Link
+              to="/login"
+              role="menuitem"
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-ui-caption text-left theme-hover-row transition-colors text-[var(--text-primary)]"
+            >
+              <User size={14} />
+              <span className="truncate">Sign in</span>
+            </Link>
+          ) : null}
+
+          <Link
+            to="/settings"
+            role="menuitem"
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-ui-caption text-left theme-hover-row transition-colors text-[var(--text-primary)]"
+          >
+            <Cog size={14} />
+            <span className="truncate">Suite settings</span>
+          </Link>
+
+          <MenuItem icon={<Globe size={14} />} onSelect={toggleWindow} active={open}>
+            SwimCloud reference window
+          </MenuItem>
+        </Menu>
       </div>
     </header>
   );

@@ -19,3 +19,31 @@ export { Toolbar, ToolbarSpacer } from './components/Toolbar';
 export { FloatingWindow, type FloatingWindowState } from './components/FloatingWindow';
 export { SwimCloudProvider, useSwimCloudWindow } from './components/SwimCloudContext';
 export { WizardShell, type WizardShellProps, type WizardStep } from './components/WizardShell';
+export { Menu, MenuItem, type MenuAlign } from './components/Menu';
+export {
+  SwimCloudCaptureBrowser,
+  subjectLabel as swimCloudCaptureSubjectLabel,
+  captureDisplayLabel as swimCloudCaptureDisplayLabel,
+  capturePagesPhrase as swimCloudCapturePagesPhrase,
+  describeCompleteness as describeSwimCloudCaptureCompleteness,
+  describeRosterCoverage as describeSwimCloudRosterCoverage,
+  groupParses as groupSwimCloudParses,
+  rosterKeyFor as swimCloudRosterKeyFor,
+  rosterTeamLabel as swimCloudRosterTeamLabel,
+  rosterHeading as swimCloudRosterHeading,
+  swimmerTimesLabel as swimCloudSwimmerTimesLabel,
+  type SwimCloudCaptureBrowserMode,
+  type SwimCloudCaptureBrowserProps,
+  type SwimCloudCaptureMeetResultsProps,
+  type SwimCloudCaptureRosterHistoryProps,
+  type SwimCloudCaptureMeetResultsSelection,
+  type SwimCloudCaptureRosterSelection,
+  type SwimCloudCapturePasteFallback,
+  type SwimCloudCaptureCompleteness,
+  type SwimCloudCaptureTeamDiscovery,
+  type SwimCloudCapturePageRef,
+  type SwimCloudCaptureRecord,
+  type SwimCloudCaptureParseResponse,
+  type SwimCloudCaptureRosterCoverage,
+  type SwimCloudCaptureParseGroup,
+} from './components/SwimCloudCaptureBrowser';
