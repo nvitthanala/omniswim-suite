@@ -357,12 +357,24 @@ path instead of the capture-browsing path.
    evidence that "split it into Parts" is necessary but not sufficient —
    this file was split out specifically to shrink a 527-line render tree
    and is now 848 lines, bigger than what it replaced.
-3. **Converge the three recurring "too many peer buttons" rows (§4b)**:
-   `ManagerApp.tsx`'s top toolbar, `RosterImportWizard.tsx`'s import-mode
-   row, `RosterOptimizeStepParts.tsx`'s optimizer row. Same failure mode
-   the 2026-09-09 plan already fixed once for the SwimCloud dropdown,
-   proven to recur at three more of Manager's highest-traffic surfaces
-   (app entry, the import wizard, the optimizer).
+3. **✅ DONE 2026-09-14, 2 of 3 — §4b.** `ManagerApp.tsx`'s top toolbar
+   (5 buttons, 3 different treatments) and `RosterOptimizeStepParts.tsx`'s
+   optimizer row (already the best-behaved of the three) both converged
+   onto `@omniswim/ui`'s `Button` — one `variant="primary"` per row
+   (Import roster; Optimize team), the rest `variant="outline"`, no more
+   ad-hoc `nav-tab-inactive`/bare-border/uppercase-pill mixing.
+   **`RosterImportWizard.tsx`'s row — checked, already resolved by an
+   earlier round not reflected here.** Reading it fresh: it's down to 2 real
+   tabs (Paste/CSV, correctly a different idiom, not a peer-button row) plus
+   2 auxiliary buttons (`SwimCloud` reference toggle, `Add from SwimCloud`)
+   that already share one consistent uppercase-micro-label style
+   (`nav-tab-inactive`, the same convention used throughout this app's other
+   micro-buttons, e.g. the roster-queue row). Converting these 2 to generic
+   `Button` would have DROPPED that convention (`Button` has no
+   uppercase-tracking-widest micro variant) rather than fixed an
+   inconsistency — left alone, correctly, matching this session's own
+   standing rule of not forcing a genuinely-fine pattern into a shared
+   primitive it doesn't fit.
 4. **✅ DONE 2026-09-13 (see `docs/reference/UI_REDESIGN_STATE.json` turn
    t16).** Badge convergence (§4d). Converted at 5 of the 9 files (7 call
    sites): `AthleteCreditedSwimsRow.tsx`, `AthleteRoleTag.tsx`,

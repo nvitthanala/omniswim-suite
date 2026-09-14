@@ -10,6 +10,7 @@
 import React from 'react';
 import { Sparkles, Users } from 'lucide-react';
 import type { ArbitrageCard, ArbitrageCardsResult, ArbitrageMode } from '@omniswim/core/lib/rosterArbitrage';
+import { Button } from '@omniswim/ui';
 import { ArbitrageCardList } from './RosterOptimizeStep';
 
 type OptimizerControlsProps = {
@@ -67,32 +68,24 @@ export function OptimizerControls({
         </select>
       </label>
       <div className="lg:col-span-5 flex flex-wrap gap-2">
-        <button
-          type="button"
+        <Button
           disabled={!whatIfMode || !team}
           onClick={onApplyTeam}
-          className="flex items-center gap-2 px-4 py-2.5 rounded-lg btn-primary text-ui-label font-semibold disabled:opacity-40"
+          leadingIcon={<Sparkles size={14} />}
         >
-          <Sparkles size={14} />
           Optimize team
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="outline"
           disabled={!whatIfMode || !team}
           onClick={onApplyLegacy}
-          className="px-4 py-2.5 rounded-lg border border-theme-soft text-ui-label text-[var(--text-primary)] theme-hover-row disabled:opacity-40"
           title="Classic greedy optimizer"
         >
           Classic
-        </button>
-        <button
-          type="button"
-          disabled={!whatIfMode}
-          onClick={onApplyAll}
-          className="px-4 py-2.5 rounded-lg border border-theme-soft text-ui-label text-[var(--text-primary)] theme-hover-row disabled:opacity-40"
-        >
+        </Button>
+        <Button variant="outline" disabled={!whatIfMode} onClick={onApplyAll}>
           All teams
-        </button>
+        </Button>
       </div>
     </div>
   );

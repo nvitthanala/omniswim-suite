@@ -25,7 +25,7 @@ import {
 } from '@omniswim/core/lib/entryExport';
 import { rosterCatalogApi, type CatalogTeamRoster } from '@omniswim/core/api/rosterCatalog';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
-import { EmptyState, useToast } from '@omniswim/ui';
+import { Button, EmptyState, useToast } from '@omniswim/ui';
 import TeamManagementView from './components/TeamManagementView';
 import SwimmerDeleteConfirmModal from './components/SwimmerDeleteConfirmModal';
 import RosterImportWizard from './components/RosterImportWizard';
@@ -270,46 +270,36 @@ export default function ManagerApp() {
           ) : null}
         </span>
         <div className="sm:ml-auto flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            onClick={() => handleExport('csv')}
-            className="px-3 py-2 text-ui-label rounded-lg nav-tab-inactive hover:text-[var(--text-primary)] border border-theme-soft transition-colors whitespace-nowrap"
-            title="Export active meet entries as CSV"
-          >
+          {/* One consistent secondary style (outline) across every peer
+              action in this row — was 3 different treatments (a tab-style
+              pair, a bare-border button, and a smaller uppercase pill) with
+              no visual logic distinguishing them, per
+              plans/2026-09-10/03-MANAGER-DIAGNOSIS.md §4b. Only "Import
+              roster" keeps the primary emphasis it already had. */}
+          <Button variant="outline" onClick={() => handleExport('csv')} title="Export active meet entries as CSV">
             Export CSV
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="outline"
             onClick={() => handleExport('hytek')}
-            className="px-3 py-2 text-ui-label rounded-lg nav-tab-inactive hover:text-[var(--text-primary)] border border-theme-soft transition-colors whitespace-nowrap"
             title="Export active meet entries as HyTek-style entry list"
           >
             Export HyTek
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowBatchOptimizer(true)}
-            className="px-3 py-2 text-ui-label rounded-lg border border-theme-soft theme-hover-row hover:text-[var(--text-accent)] transition-colors whitespace-nowrap"
-            title="Run batch optimizer across all teams"
-          >
+          </Button>
+          <Button variant="outline" onClick={() => setShowBatchOptimizer(true)} title="Run batch optimizer across all teams">
             Batch optimizer
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="outline"
             onClick={() => setShowCatalogView(true)}
-            className="px-3 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-md border border-theme-soft theme-hover-row hover:text-[var(--text-accent)] transition-colors"
             title="Manage the long-lived Team Roster Catalog"
             data-testid="open-roster-catalog"
           >
             Team Catalog
-          </button>
-          <button
-            type="button"
-            onClick={() => setShowImportWizard(true)}
-            className="px-3 py-2 text-ui-label font-semibold rounded-lg btn-primary transition-colors whitespace-nowrap"
-          >
+          </Button>
+          <Button variant="primary" onClick={() => setShowImportWizard(true)}>
             Import roster
-          </button>
+          </Button>
         </div>
       </div>
       <AnimatePresence mode="wait">
