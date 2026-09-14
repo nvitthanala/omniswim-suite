@@ -4,7 +4,6 @@ import { Gender, OfficialTeamScores, ScorerRosterOverride, ScoringSettings, Swim
 import {
   aggregateSwimmerMeetPoints,
   buildScorerRosterLookup,
-  getAthleteCreditedSwims,
   scorerRosterKey,
   usesScorerRoster,
 } from '@omniswim/core/lib/scorerRoster';
@@ -15,8 +14,7 @@ import { buildTeamScoreLookup, officialScoresForGender } from '@omniswim/core/li
 import { restoreSwimmerToWorkspace } from '@omniswim/core/lib/swimmerSoftRemove';
 import { buildAliasResolver } from '@omniswim/core/lib/athleteAliases';
 import ProjectedActualScore from './ProjectedActualScore';
-import AthleteCreditedSwimsPanel, { type EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
-import AthleteMeetEntriesPanel from './AthleteMeetEntriesPanel';
+import { type EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
 import AthleteLineupEditorPanel from './AthleteLineupEditorPanel';
 import { getAthleteProfile } from '@omniswim/core/lib/athleteHistory';
 import type { AthleteEventProfile } from '@omniswim/core/types';
@@ -43,7 +41,6 @@ function describeStrongestEvents(profile: AthleteEventProfile): string {
 }
 import {
   countSwimmerEntries,
-  formatEntryLimitLabel,
   swimmerExceedsEntryLimits,
 } from '@omniswim/core/lib/swimmerEntryLimits';
 import { optimizeRosterAllTeams, optimizeRosterForTeam } from '@omniswim/core/lib/rosterOptimizer';
@@ -70,8 +67,6 @@ type Props = {
   showTeamSidebar?: boolean;
   /** When `dropdown`, prefer compact team select over sidebar cards. */
   teamPickerMode?: 'sidebar' | 'dropdown';
-  /** Unified athlete editor (Lineup) vs legacy credited + entries panels. */
-  editorMode?: 'unified' | 'legacy';
   lineupAudit?: TeamLineupAudit;
   selectedTeam?: string;
   onSelectTeam?: (team: string) => void;
@@ -104,7 +99,6 @@ export default function TeamRosterPanel({
   baselineByTeam,
   showTeamSidebar = true,
   teamPickerMode,
-  editorMode = 'legacy',
   lineupAudit,
   selectedTeam: controlledTeam,
   onSelectTeam,
@@ -280,17 +274,6 @@ export default function TeamRosterPanel({
     }
     onJumpAthleteHandled?.();
   }, [jumpAthleteName, jumpAthleteKey, teamRows, onAthleteSelect, onJumpAthleteHandled, selectedTeam, toast]);
-
-  const selectedAthleteSwims = useMemo(() => {
-    if (!selectedAthlete) return [];
-    return getAthleteCreditedSwims(
-      scoredResults,
-      selectedAthlete.team,
-      selectedAthlete.name,
-      selectedAthlete.gender,
-      aliasResolver
-    );
-  }, [scoredResults, selectedAthlete, aliasResolver]);
 
   const toggleAthleteSelection = (row: ScorerRosterRow) => {
     if (selectedAthleteKey === row.key) {
@@ -477,9 +460,7 @@ export default function TeamRosterPanel({
       ) : null}
 
       <p className="text-ui-body text-theme-secondary my-3 leading-relaxed">
-        {editorMode === 'unified'
-          ? 'Click an athlete to edit scorers, individual entries, and see relay status.'
-          : 'Click an athlete for credited swims and entry planning.'}
+        Click an athlete to edit scorers, individual entries, and see relay status.
         {editable
           ? ` Toggle scorers for the ${merged.maxIndividualScorersPerTeam}-scorer cap.`
           : ' Enable What-if to edit scorers.'}
@@ -657,46 +638,6 @@ export default function TeamRosterPanel({
           </ul>
         </div>
       ) : null}
-      {selectedAthlete && editorMode !== 'unified' ? (
-        <>
-          <AthleteCreditedSwimsPanel
-            athleteName={selectedAthlete.name}
-            team={selectedAthlete.team}
-            swims={selectedAthleteSwims}
-            totalPoints={pointTotals.get(selectedAthlete.key) ?? 0}
-            gender={gender}
-            onClose={() => {
-              setSelectedAthleteKey(null);
-              onAthleteSelect?.(null);
-            }}
-            deletable={Boolean(onDeleteSwim)}
-            onDeleteSwim={onDeleteSwim}
-            onEditSwim={onEditSwim}
-            entryLimitLabel={formatEntryLimitLabel(
-              countSwimmerEntries(
-                genderResults,
-                selectedAthlete.team,
-                gender,
-                selectedAthlete.name,
-                aliasResolver
-              ),
-              merged
-            )}
-          />
-          {workspace && onWorkspaceUpdate ? (
-            <AthleteMeetEntriesPanel
-              workspace={workspace}
-              settings={merged}
-              gender={gender}
-              athleteName={selectedAthlete.name}
-              team={selectedAthlete.team}
-              classYear={selectedAthlete.classYear}
-              editable={editable}
-              onUpdate={onWorkspaceUpdate}
-            />
-          ) : null}
-        </>
-      ) : null}
       {selectedTeam ? (
         <p className="text-ui-caption text-theme-secondary mt-3 leading-relaxed">
           {editable ? (
@@ -721,7 +662,7 @@ export default function TeamRosterPanel({
   // clipped by the table's scroll container, regardless of which layout branch
   // (sidebar vs. plain card) is active below.
   const drawer =
-    selectedAthlete && editorMode === 'unified' && workspace && onWorkspaceUpdate ? (
+    selectedAthlete && workspace && onWorkspaceUpdate ? (
       <AthleteLineupEditorPanel
         workspace={workspace}
         settings={merged}
