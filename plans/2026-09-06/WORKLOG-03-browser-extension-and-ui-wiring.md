@@ -225,3 +225,10 @@ this repo's "report, don't fix, outside scope" rule:
   moving, interdependent set of changes). Four commits, each independently
   verified (lint + full suite, and a production build for the two that
   touched UI/cross-package imports) before landing.
+- **2026-09-08** — This phase's single-page clipboard transport turned out
+  not to scale: a full meet is dozens of manual captures. New round planned
+  at `plans/2026-09-08/` — auto-fetch crawl in the extension (Track A′),
+  a machine-global capture store, a Matrix picker replacing clipboard paste
+  as the primary path. See `plans/2026-09-08/01-decisions.md` for what
+  changed and why; §4/§5 of `01-legal-and-access-strategy.md` and
+  `03-architecture.md` carry the amendments in place.

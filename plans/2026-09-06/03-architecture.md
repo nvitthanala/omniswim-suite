@@ -117,3 +117,20 @@ file, (c) copy-to-clipboard + an "Import from clipboard" button in-app (no
 new transport at all, but an extra manual step per import). Recorded as an
 open question in [04](04-phasing.md), not resolved here — needs a decision
 before Track A implementation starts.
+
+### Reversed 2026-09-08
+
+Option (c), clipboard, is what shipped for the single-page case (Phase 3;
+see `WORKLOG-03`). It works fine for one page per click. It does not survive
+Track A′'s auto-fetch crawl (`01-legal-and-access-strategy.md` §4
+amendment), which produces 66–300+ pages per click — there is no clipboard
+flow at that volume.
+
+The transport is now (a), reworked: a `POST` route on the existing
+`apps/shell/server.ts` Express server (not a new server, not a new port —
+one it already runs), gated behind a pairing token, registered only when
+`HOST` resolves to loopback, with `captureId` path-traversal validation and
+a tight body-size cap. Full contract in
+`plans/2026-09-08/03-extension-crawler.md`. The clipboard path is not
+removed — it stays the secondary, single-page route, and is what
+`packages/manager`'s swimmer-profile import still uses.

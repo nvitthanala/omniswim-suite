@@ -31,3 +31,147 @@
 #omniswim-swimcloud-companion-button.omniswim-swimcloud-companion-button--error {
   background: #c2372c;
 }
+
+/*
+ * Track A′ — the auto-fetch crawl button and progress panel. Separate rules,
+ * separate ids: the clipboard button and flow above are untouched.
+ */
+
+#omniswim-swimcloud-crawler-button {
+  position: fixed;
+  right: 16px;
+  bottom: 60px;
+  z-index: 2147483647;
+  padding: 10px 16px;
+  border: none;
+  border-radius: 8px;
+  background: #6b21d8;
+  color: #fff;
+  font: 600 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
+}
+
+#omniswim-swimcloud-crawler-button:hover {
+  background: #571ab0;
+}
+
+#omniswim-swimcloud-crawler-panel {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  z-index: 2147483647;
+  width: 320px;
+  padding: 14px 16px;
+  border-radius: 10px;
+  background: #1a1a1a;
+  color: #fff;
+  font: 13px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.4);
+}
+
+.omniswim-crawler-panel__title {
+  font-weight: 700;
+  margin-bottom: 6px;
+}
+
+.omniswim-crawler-panel__line {
+  color: #ddd;
+  margin-bottom: 4px;
+}
+
+/*
+ * The resume note: what an earlier crawl already captured, so a restarted
+ * crawl visibly picks up rather than appearing to skip work. Quieter than the
+ * live progress lines — it is context, not the thing changing every 3 seconds.
+ */
+.omniswim-crawler-panel__resume {
+  color: #a9c9ff;
+  font-size: 12px;
+}
+
+/*
+ * The warning row: something went wrong but the crawl continues. Amber, not
+ * red — red is for a crawl that stopped, and this row's whole job is to make a
+ * degraded crawl distinguishable from a healthy one at a glance. Everything it
+ * reports used to be invisible.
+ */
+.omniswim-crawler-panel__warn {
+  color: #ffd08a;
+  font-size: 12px;
+}
+
+/*
+ * The team-checklist Start button. Styled by id-scoped rule rather than left to
+ * inherit whatever SwimCloud does to a bare `button`: this is the single
+ * control the entire crawl is blocked on.
+ */
+#omniswim-swimcloud-crawler-panel .omniswim-crawler-panel__start {
+  display: block;
+  width: 100%;
+  margin: 8px 0 0;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 6px;
+  background: #6b21d8;
+  color: #fff;
+  font: 600 13px/1.4 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  text-align: center;
+  cursor: pointer;
+  opacity: 1;
+  visibility: visible;
+}
+
+#omniswim-swimcloud-crawler-panel .omniswim-crawler-panel__start:hover {
+  background: #571ab0;
+}
+
+.omniswim-crawler-panel__bar-track {
+  height: 6px;
+  border-radius: 3px;
+  background: #3a3a3a;
+  overflow: hidden;
+  margin: 8px 0;
+}
+
+.omniswim-crawler-panel__bar-fill {
+  height: 100%;
+  width: 0%;
+  background: #6b21d8;
+  transition: width 200ms ease;
+}
+
+.omniswim-crawler-panel__buttons {
+  display: flex;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.omniswim-crawler-panel__buttons button {
+  flex: 1;
+  padding: 6px 10px;
+  border: none;
+  border-radius: 6px;
+  background: #3a3a3a;
+  color: #fff;
+  font: 600 12px/1.4 inherit;
+  cursor: pointer;
+}
+
+.omniswim-crawler-panel__buttons button:hover {
+  background: #4a4a4a;
+}
+
+.omniswim-crawler-panel__team-list {
+  max-height: 160px;
+  overflow-y: auto;
+  margin: 8px 0;
+  padding: 6px;
+  background: #262626;
+  border-radius: 6px;
+}
+
+.omniswim-crawler-panel__team-list label {
+  display: block;
+  padding: 2px 0;
+}

@@ -139,6 +139,32 @@ but because they're the difference between "one coach's personal tool" and
   building track B — it doesn't block track B from shipping, but a "yes" from
   SwimCloud removes the ongoing risk track B otherwise carries indefinitely.
 
+### Amended 2026-09-08: Track A′
+
+Track A above was "human-triggered browser extension... nothing fetches on
+its own; it acts only on an explicit click, on the page currently loaded by
+the human." On 2026-09-08 the user decided, directly and after being shown
+this exact paragraph, that the extension should instead auto-fetch every
+page a full meet/team capture needs after one click — still from the user's
+own logged-in session, never a headless bot, but no longer "acts only on
+the page currently loaded."
+
+That is Track B by this section's own definition, not Track A. The
+extension is now **Track A′**: a browser-session Track B. It carries Track
+B's contract risk (the ToS clause above has no personal-use or
+single-request carve-out), and it adopts Track B's politeness constraints
+in full — `SwimCloudPoliteFetcher`, imported directly rather than
+reimplemented — same rate limiting, same robots.txt denylist, same
+cache-final immutability listed above.
+
+This is a separate, fresh risk acceptance from the Track B one recorded
+above, which covered a different mechanism (the Playwright fetcher, still
+unused). See `plans/2026-09-08/01-decisions.md` D1 for the full record of
+what was shown to the user before deciding, and
+`extensions/swimcloud-companion/README.md`, which must be rewritten in the
+same commit that ships this — its "never fetches anything on its own"
+claim becomes false.
+
 ## 5. What this doc does not decide
 
 Whether track B keeps running long-term, or gets retired if SwimCloud ever
