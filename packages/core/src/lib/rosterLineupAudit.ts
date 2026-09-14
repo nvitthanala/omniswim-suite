@@ -31,6 +31,7 @@ import { relayEntryKey } from './relaySplits';
 import { buildAliasResolver, detectDuplicateAthletes } from './athleteAliases';
 import type { AthleteAliasResolver, DuplicateAthletePair } from './athleteAliases';
 import { isRelayResult, normalizeSwimmerName } from './utils';
+import { programSponsorsGender, resolveTeamDivision } from '../data/teamDivisions';
 
 export type { DuplicateAthletePair } from './athleteAliases';
 export {
@@ -46,7 +47,11 @@ export type LineupIssueType =
   | 'relay_scorer_off'
   | 'relay_needs_fill'
   /** Two name spellings on this team that are probably one athlete. */
-  | 'duplicate_athlete';
+  | 'duplicate_athlete'
+  /** This athlete's team has no known division — cut tags and lineup rules judged against a division may be wrong. */
+  | 'program_division_unknown'
+  /** This athlete's team is not on record as sponsoring their gender's program. */
+  | 'program_gender_unsponsored';
 
 export type LineupAthleteIssue = {
   type: LineupIssueType;
@@ -61,7 +66,7 @@ export type LineupAthleteIssue = {
 export type LineupChecklistItem = {
   id: string;
   type: LineupIssueType;
-  group: 'entries' | 'lineups' | 'relays' | 'roster';
+  group: 'entries' | 'lineups' | 'relays' | 'roster' | 'program';
   message: string;
   athleteName?: string;
   /** ScorerRosterRow.key for the named athlete — lets a Jump match by key, not raw name. */
@@ -386,6 +391,53 @@ function auditDuplicateAthletes(
   }
 }
 
+/**
+ * Flag every athlete on this team whose program's division is unmapped, or
+ * whose team is not on record as sponsoring their gender's program.
+ *
+ * Both are the "unknown", never a guessed default, cases `resolveTeamDivision`/
+ * `programSponsorsGender` exist to make legible (CLAUDE.md's Data provenance
+ * rules 5 and 7). Today those signals surface only on a cut badge, per swim,
+ * wherever one happens to render — a team leaning on entries this uncertain
+ * has no single line a coach reviews before submitting. One checklist item
+ * per affected athlete, not one per team, so "N athletes affected" is a real
+ * count rather than a single team-level line hiding how many entries it touches.
+ */
+function auditProgramProvenance(
+  collector: LineupAuditCollector,
+  opts: { rosterRows: ScorerRosterRow[]; team: string; gender: Gender }
+): void {
+  const { rosterRows, team, gender } = opts;
+  const teamRows = rosterRows.filter(r => r.team === team);
+  if (teamRows.length === 0) return;
+
+  const resolution = resolveTeamDivision(team);
+
+  if (resolution.division == null) {
+    for (const row of teamRows) {
+      collector.pushChecklist({
+        type: 'program_division_unknown',
+        group: 'program',
+        message: `${row.name}: ${team}'s division is not mapped — cut standards and lineup rules for this athlete may be judged against the wrong table`,
+        athleteName: row.name,
+      });
+    }
+    return; // Division unknown already covers "nothing is verified for this program".
+  }
+
+  const sponsoredGender = gender === Gender.WOMEN ? 'Women' : 'Men';
+  if (!programSponsorsGender(resolution, sponsoredGender)) {
+    for (const row of teamRows) {
+      collector.pushChecklist({
+        type: 'program_gender_unsponsored',
+        group: 'program',
+        message: `${row.name}: ${team} is not recorded as sponsoring ${sponsoredGender.toLowerCase()}'s swimming & diving`,
+        athleteName: row.name,
+      });
+    }
+  }
+}
+
 /** Run the per-athlete checks over every athlete this team's audit covers. */
 function auditRosteredAthletes(
   collector: LineupAuditCollector,
@@ -469,6 +521,8 @@ export function buildTeamLineupAudit(input: LineupAuditInput): TeamLineupAudit {
     resolver,
     identityKeyOf,
   });
+
+  auditProgramProvenance(collector, { rosterRows: lookup.rows, team, gender });
 
   // Athletes split across two name spellings. A split divides one human's
   // history into two identities: each sits under the entry cap independently,
@@ -781,6 +835,10 @@ export function issueBadgeLabel(issue: LineupAthleteIssue): string {
       return 'Fill relay';
     case 'duplicate_athlete':
       return 'Duplicate?';
+    case 'program_division_unknown':
+      return 'Division unknown';
+    case 'program_gender_unsponsored':
+      return 'Program unconfirmed';
     default:
       return 'Issue';
   }

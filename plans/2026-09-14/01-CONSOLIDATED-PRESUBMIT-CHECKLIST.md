@@ -1,4 +1,7 @@
-# Consolidated pre-submit checklist — scoping only, not built
+# Consolidated pre-submit checklist
+
+**Status 2026-09-14: the `program` half shipped. The `provenance`
+(conversion-estimate) half stays scoped, not built** — see §5.
 
 **Date:** 2026-09-14
 **Trigger:** `docs/reference/IMPROVEMENT_BRAINSTORM_2026-09-02.md` item 10,
@@ -57,27 +60,44 @@ The brainstorm's other two named categories are **not** gaps:
   diacritics/comma order — see `docs/reference/IMPROVEMENT_BRAINSTORM_2026-09-02.md`
   item 3's sibling finding).
 
-## 3. Proposed scope, if taken further
+## 3. Scope, and what shipped 2026-09-14
 
 Two new `LineupChecklistItem['group']` values — `provenance` and `program`
-— populated by two new functions alongside `buildTeamLineupAudit`'s
-existing checks, each a pure function over the same roster/scoring data the
-audit already reads:
+— each populated by its own pure function alongside `buildTeamLineupAudit`'s
+existing checks:
 
-- **`auditConversionProvenance(...)`**: walks a team's scored swims, finds
-  every `converted_estimate` cutline state currently computed for them
-  (reusing the existing detector, not re-implementing it), and emits one
-  checklist item per affected athlete naming the swim and which cut
-  standard the conversion is indicative for.
-- **`auditProgramProvenance(...)`**: walks the roster for `unknown` division
-  or unset `sponsoredGenders`, emitting one item per affected athlete/team
-  pair.
+- **`auditProgramProvenance(...)` — ✅ SHIPPED.** Walks the roster for
+  `resolveTeamDivision(team).division === null` (unmapped) or
+  `!programSponsorsGender(resolution, gender)` (recorded as not sponsoring
+  this gender), emitting one `program` checklist item per affected
+  athlete/team pair. Both read straight off `data/teamDivisions.ts` — no new
+  scoring logic. 4 new tests in
+  `tests/rosterLineupAuditProgramProvenance.test.ts`.
+- **`auditConversionProvenance(...)` — not built.** Walks a team's scored
+  swims for every `converted_estimate` cutline state and emits a
+  `provenance` checklist item per affected athlete. Deferred because it
+  needs a real per-swim cutline-tag computation
+  (`buildCutlineTagForTeam({ time, gender, event, team })`, one call per
+  scored swim) threaded into the audit, which today only sees
+  `SwimmerResult`/`ScorerRosterRow` — no swim-level cutline pass runs inside
+  `buildTeamLineupAudit` at all; the existing call sites for this function
+  are individual athlete-detail rows (`AthleteCreditedSwimsRow.tsx`,
+  `AthleteEntriesSection.tsx`, `AthleteHistorySection.tsx`), not a team-wide
+  audit. That's a real, if contained, design decision (batch it inline in
+  the audit vs. thread a pre-computed tag map in) worth its own pass rather
+  than folding in alongside the smaller `program` change.
 
-Both slot into `TeamLineupAudit.checklistItems` exactly like the four
-existing groups — `LineupComplianceChecklist.tsx`'s own group-rendering
-loop (`GROUP_LABEL`, `ChecklistGroupSection`) already generalizes over
-`item.group`, so the UI-side change is close to additive (a new label, a
-new icon choice) rather than a rewrite.
+Both groups slot into `TeamLineupAudit.checklistItems` exactly like the
+four pre-existing groups — `LineupComplianceChecklist.tsx`'s own
+group-rendering loop (`GROUP_LABEL`, `ChecklistGroupSection`) already
+generalizes over `item.group`; adding `program` there was a label and a
+render-order entry, not a rewrite. `provenance` is not yet in the type —
+it will be added alongside its producer, not ahead of it.
+
+**Severity decided for `program` (see open question 1 below): informational
+-only**, matching how relay gaps currently read — not a distinct
+must-fix/should-know type distinction. Revisit if `provenance` turns out to
+need the stronger treatment.
 
 ## 4. Open questions for the user
 

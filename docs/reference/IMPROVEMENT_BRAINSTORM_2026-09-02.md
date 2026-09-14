@@ -66,31 +66,38 @@ source at two of the higher-stakes claims, both confirmed accurate.
 9. **No pre-export validation.** `packages/core/src/lib/entryExport.ts` can
    export a non-`WOMEN` gender as `M` and blank/invalid fields as usable-looking
    HyTek output with no review step. *Medium.*
-10. **Scoped 2026-09-14, not built — `plans/2026-09-14/01-CONSOLIDATED-PRESUBMIT-CHECKLIST.md`.**
+10. **Partially FIXED 2026-09-14 — `plans/2026-09-14/01-CONSOLIDATED-PRESUBMIT-CHECKLIST.md`.**
     ~~No consolidated pre-submit review.~~ **Correction: mostly already
     exists** — `LineupComplianceChecklist.tsx` already groups entry-limit,
     empty-lineup, relay-gap, and duplicate-athlete issues into one sticky
-    checklist on the Lineup step. The real, narrower gap: conversion-
-    provenance and unknown-program/division issues aren't checklist items
-    yet. Scoped as two new checklist groups extending the existing type,
-    not a new feature. *Was: Large. Now: small-medium.*
+    checklist on the Lineup step. Of the two named gaps, the `program`
+    half shipped: `auditProgramProvenance` flags every athlete on a team
+    with an unmapped division or an unconfirmed gender sponsorship. The
+    `provenance` half (converted-time cutline estimates) stays scoped, not
+    built — it needs a real per-swim cutline-tag pass threaded into the
+    audit, a bigger design decision than the program check was.
 11. **Scoped 2026-09-14, not built — `plans/2026-09-14/03-OPTIMIZER-TRANSPARENCY.md`.**
     Optimizer runs are opaque. Correction: `OptimizerResult` already
     carries `outcome`/`appliedStages`/`unguardedTotal` — the real gap is
-    that this only reaches a one-line toast. Three independent pieces
-    scoped: a persistent breakdown panel (UI-only, small), surfacing
-    rejected-candidate detail (needs a real, if contained, optimizer
-    change, medium), and a one-shot undo following an existing pattern
-    already used elsewhere (small). *Medium.*
-12. **Scoped 2026-09-14, not built — `plans/2026-09-14/02-MEET-IMPORT-RECONCILIATION.md`.**
+    that this only reaches a one-line toast. Piece 1 (a persistent
+    breakdown panel, UI-only) **shipped 2026-09-14** —
+    `OptimizerChangeSummaryPanel` plus a real `diffOptimizerChanges`
+    against the workspace's pre-run state. Piece 2 (surfacing
+    rejected-candidate detail — needs a real, if contained,
+    `rosterOptimizer.ts` candidate-selection change) and piece 3 (one-shot
+    undo) stay scoped, not built — piece 2 is `executor`-tier work per
+    this repo's own delegation table regardless of size.
+12. **FIXED 2026-09-14 — `plans/2026-09-14/02-MEET-IMPORT-RECONCILIATION.md`.**
     ~~No meet-import reconciliation against official totals.~~
     **Correction: the comparison already exists, per team** —
     `ProjectedActualScore.tsx` already computes and color-codes a
     computed-vs-official delta wherever a team card renders. The real,
-    narrower gap: no single consolidated summary across every team/gender
+    narrower gap — no single consolidated summary across every team/gender
     flags a mismatch without a coach manually checking each team's own
-    card — the ROCK/LU-mapping-bug and Delta-State-discrepancy shape this
-    item was originally named after. *Was: Large. Now: small.*
+    card, the ROCK/LU-mapping-bug and Delta-State-discrepancy shape this
+    item was originally named after — is now closed:
+    `buildMeetReconciliationSummary` + a new `MeetReconciliationBanner` on
+    Matrix's Standings step.
 13. **Seven specific weak/pushover test scripts**, named directly from
     `docs/reference/TEST_COVERAGE_AUDIT.md`: `test_relay_scoring` (zero
     assertions), `test_individual_scoring` (loose ratio), `test_roster_optimizer`

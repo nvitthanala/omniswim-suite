@@ -29,6 +29,7 @@ const GROUP_LABEL: Record<LineupChecklistItem['group'], string> = {
   lineups: 'Empty lineups',
   relays: 'Relay gaps',
   roster: 'Duplicate athletes',
+  program: 'Program provenance',
 };
 
 export default function LineupComplianceChecklist({
@@ -49,6 +50,7 @@ export default function LineupComplianceChecklist({
       lineups: [],
       relays: [],
       roster: [],
+      program: [],
     };
     for (const item of items) {
       map[item.group].push(item);
@@ -75,7 +77,7 @@ export default function LineupComplianceChecklist({
           </p>
         </div>
       ) : (
-        (['entries', 'lineups', 'relays', 'roster'] as const).map(group => (
+        (['entries', 'lineups', 'relays', 'roster', 'program'] as const).map(group => (
           <ChecklistGroupSection
             key={group}
             label={GROUP_LABEL[group]}
