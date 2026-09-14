@@ -54,6 +54,22 @@ function WorkspaceRouteSync() {
   activeGenderRef.current = activeGender;
   const setActiveGenderRef = useRef(setActiveGender);
   setActiveGenderRef.current = setActiveGender;
+  // The state→URL effect below reads the current search params through a ref
+  // too, for the same reason the URL→state effects above read selection
+  // through refs (see the comment there): `setSearchParams` hands back a new
+  // `searchParams` on every call, and depending on it directly re-armed this
+  // effect on its own write, which raced the URL→state effect for who got
+  // the last word — the two writers then swapped the workspace id every
+  // render, forever. Keying this effect only on the state it publishes
+  // (`activeWorkspaceId`, `activeGender`) makes it fire once per real
+  // selection change and never in response to its own output.
+  const searchParamsRef = useRef(searchParams);
+  searchParamsRef.current = searchParams;
+  // Guards the state→URL effect's mount-time deferral below — set once the
+  // effect has run past that first check, so every later mismatch (e.g. a
+  // sidebar/palette workspace switch, where state legitimately leads the
+  // URL) writes through normally instead of deferring forever.
+  const initialSyncDoneRef = useRef(false);
 
   useEffect(() => {
     if (
@@ -73,7 +89,31 @@ function WorkspaceRouteSync() {
 
   useEffect(() => {
     if (!activeWorkspaceId) return;
-    const next = new URLSearchParams(searchParams);
+    const current = searchParamsRef.current;
+    if (!initialSyncDoneRef.current) {
+      initialSyncDoneRef.current = true;
+      const urlWorkspaceParam = current.get('workspace');
+      // Mount-time only: the URL already names a *different*, valid
+      // workspace, so the URL→state effect above is about to reconcile
+      // `activeWorkspaceId` to match it (it fires in this same commit).
+      // Writing this render's — about to be superseded — `activeWorkspaceId`
+      // into the URL right now would win that race instead of losing it
+      // gracefully, handing the URL→state effect a freshly-wrong param to
+      // correct, which corrects back to a param this effect then "corrects"
+      // again: the two writers swap the id forever. Deferring this one write
+      // lets the URL→state effect land first. Every write after this first
+      // one reflects a real, settled selection change (a sidebar/palette
+      // switch, say) and must go through normally, or the URL would stop
+      // tracking the selection after the first render.
+      if (
+        urlWorkspaceParam &&
+        urlWorkspaceParam !== activeWorkspaceId &&
+        workspaces.some(w => w.id === urlWorkspaceParam)
+      ) {
+        return;
+      }
+    }
+    const next = new URLSearchParams(current);
     let changed = false;
     if (next.get('workspace') !== activeWorkspaceId) {
       next.set('workspace', activeWorkspaceId);
@@ -84,7 +124,7 @@ function WorkspaceRouteSync() {
       changed = true;
     }
     if (changed) setSearchParams(next, { replace: true });
-  }, [activeWorkspaceId, activeGender, searchParams, setSearchParams]);
+  }, [activeWorkspaceId, activeGender, setSearchParams, workspaces]);
 
   return null;
 }

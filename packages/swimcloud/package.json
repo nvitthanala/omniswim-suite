@@ -1,0 +1,29 @@
+{
+  "name": "@omniswim/swimcloud",
+  "private": true,
+  "version": "1.0.0",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts",
+    "./entities": "./src/entities.ts",
+    "./urlClassifier": "./src/urlClassifier.ts",
+    "./parser": "./src/parser.ts",
+    "./html": "./src/html.ts",
+    "./cache": "./src/cache.ts",
+    "./fetcher": "./src/fetcher.ts",
+    "./playwrightFetcher": "./src/playwrightFetcher.ts",
+    "./clipboardPayload": "./src/clipboardPayload.ts",
+    "./captureStore": "./src/captureStore.ts",
+    "./crawlPlan": "./src/crawlPlan.ts"
+  },
+  "scripts": {
+    "lint": "tsc --noEmit -p tsconfig.json"
+  },
+  "dependencies": {
+    "playwright-core": "1.61.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.14.0",
+    "typescript": "~5.8.2"
+  }
+}

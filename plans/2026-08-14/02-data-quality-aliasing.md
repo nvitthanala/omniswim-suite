@@ -49,12 +49,26 @@ Mirror the cutlines treatment exactly:
 
 - **Effort:** ~half a day, most of it sourcing the document.
 - **Risk:** low. Values should be unchanged; if any differ, that is the finding.
-- **Open question:** which body's table is authoritative here? USA Swimming
-  publishes conversion factors; the NCAA does not, to my knowledge, publish an
-  official set for championship seeding. **Worth confirming before archiving —
-  if no governing body publishes these, that is itself important to record**, and
-  the honest label for the whole table becomes "indicative, not official",
-  matching the `converted_estimate` rule already in `cutlineTags.ts`.
+- **✅ Open question answered 2026-09-13 (web research, not archived — see
+  why below): no governing body publishes these as a directly citable
+  primary source.** USA Swimming's Times & Recognition Policy Manual covers
+  when a converted time is recognized, but does not itself publish a factor
+  table. The NCAA does not publish its own set for championship seeding. The
+  factors in circulation trace to Colorado Time Systems' internal conversion
+  methodology, embedded in timing software and reproduced by third-party
+  calculators — not a standalone published document with a URL to archive
+  under `data/conversions/sources/` the way cutlines are. Steps 1–4 above
+  (archive + manifest + JSON + `constants.ts` reading it) are therefore not
+  applicable — there is no primary source to point them at. Recorded
+  directly in `CONVERSION_FACTORS`'s own doc comment
+  (`packages/core/src/constants.ts`): the whole table is indicative, not
+  official, matching the `converted_estimate` rule already in
+  `cutlineTags.ts`. Step 5 (a reachability test) turns out to **already
+  exist** — `scripts/test_conversion_keys.mjs`, registered and passing,
+  asserts every key's canonical form (via `normalizeEventLabel`) is itself
+  a key. This is the exact test the IM bug's own root cause called for, and
+  doc 04 §3's "interim, cheap, do now" step names the identical test — both
+  are satisfied by this one file.
 
 ---
 

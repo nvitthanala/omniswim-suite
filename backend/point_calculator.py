@@ -89,10 +89,33 @@ def _apply_pdf_place_scoring_lock(cfg):
     _apply_pdf_place_neutral_caps(cfg)
 
 
-def _pdf_place_points_for_row(a):
+def _pdf_place_points_for_row(a, cfg=None):
+    """
+    Place points a row earns when the source PDF already prints them.
+
+    The meet's scored program bounds this the same way it bounds the calculated
+    path. `pdf_points` is read off any row whose line ends in a points integer,
+    once a results header sets the meet-wide points latch — the extractor never
+    filters by event number. So a post-program extra session (NSISC events
+    938/939) carries a printed points column even though the meet's own "Team
+    Rankings - Through Event 42" leaves it out of the team totals. That boundary
+    comes from the same official rankings block, so honouring it here makes this
+    path agree with the published totals rather than diverge from them.
+
+    Only `is_outside_scored_program` applies. The rest of
+    `is_unscored_round_or_event` (the `unscoredRounds` list) deliberately does
+    not: this mode trusts the PDF's own points column, and a C final the meet
+    chose to award points to is a meet decision to reproduce, not to override.
+
+    The clause order matches this function's TypeScript twin,
+    `pdfPlacePointsForRow` in `packages/core/src/lib/utils.ts`, which already
+    carried the boundary check. This copy is the one that drifted.
+    """
     if a.get('is_exhibition'):
         return 0.0
     ev_nm = str(a.get('event', '') or '')
+    if is_outside_scored_program(ev_nm, (cfg or {}).get('scoredEventNumberMax')):
+        return 0.0
     if a.get('is_time_trial') and not is_championship_gender_event(ev_nm):
         return 0.0
     pp = a.get('pdf_points')
@@ -136,59 +159,53 @@ def _resolve_scoring_settings(scoring_settings=None):
 
     if not scoring_settings:
 
-        try:
+        settings_path = None
 
-            settings_path = None
+        data_dir = os.environ.get('OMNI_DATA_DIR')
 
-            data_dir = os.environ.get('OMNI_DATA_DIR')
+        if data_dir:
 
-            if data_dir:
+            candidate = Path(data_dir) / 'scoring_settings.json'
 
-                candidate = Path(data_dir) / 'scoring_settings.json'
+            if candidate.is_file():
+
+                settings_path = str(candidate)
+
+        if not settings_path:
+
+            repo_root = Path(__file__).resolve().parent.parent
+
+            for candidate in (
+
+                repo_root / 'data' / 'scoring_settings.json',
+
+                repo_root / 'scoring_settings.json',
+
+                Path('scoring_settings.json'),
+
+            ):
 
                 if candidate.is_file():
 
-                    settings_path = str(candidate)
+                    settings_path = str(candidate.resolve())
 
-            if not settings_path:
+                    break
 
-                repo_root = Path(__file__).resolve().parent.parent
+        if settings_path:
 
-                for candidate in (
+            with open(settings_path, 'r', encoding='utf-8') as f:
 
-                    repo_root / 'data' / 'scoring_settings.json',
+                settings_file = json.load(f)
 
-                    repo_root / 'scoring_settings.json',
+            for k, v in settings_file.items():
 
-                    Path('scoring_settings.json'),
+                if isinstance(v, dict) and 'value' in v:
 
-                ):
+                    cfg[k] = v['value']
 
-                    if candidate.is_file():
+                else:
 
-                        settings_path = str(candidate.resolve())
-
-                        break
-
-            if settings_path:
-
-                with open(settings_path, 'r', encoding='utf-8') as f:
-
-                    settings_file = json.load(f)
-
-                for k, v in settings_file.items():
-
-                    if isinstance(v, dict) and 'value' in v:
-
-                        cfg[k] = v['value']
-
-                    else:
-
-                        cfg[k] = v
-
-        except Exception:
-
-            pass
+                    cfg[k] = v
 
     else:
 
@@ -218,6 +235,10 @@ def _resolve_scoring_settings(scoring_settings=None):
     cfg.setdefault('maxRosterSize', 99)
 
     cfg.setdefault('unscoredRounds', ['C FINAL', 'C-FINAL', 'BONUS FINAL', 'D FINAL', 'D-FINAL', 'TIME TRIAL'])
+
+    # Last event number the meet scored, from "Team Rankings - Through Event N".
+    # None means the meet published no boundary, so every event scores.
+    cfg.setdefault('scoredEventNumberMax', None)
 
     cfg.setdefault('exhibitionMarkers', ['x', 'X'])
 
@@ -343,11 +364,37 @@ def is_diving_event(event_name, cfg=None):
 
 
 
+def parse_event_number(event_name):
+    """Event number from a HyTek label ("Event 13 Men 100 Fly" -> 13), else None."""
+    m = re.match(r'\s*Event\s+(\d+)\b', str(event_name or ''), re.IGNORECASE)
+    return int(m.group(1)) if m else None
+
+
+def is_outside_scored_program(event_name, scored_event_number_max):
+    """
+    True when the label names an event past the meet's scored program.
+
+    HyTek numbers post-meet extra sessions above the program and leaves them out
+    of the published team totals. Most carry "Time Trial" in the name, but the
+    host may omit it — the 2026 NSISC results print events 938/939 after the
+    time trials with nothing but the number to give them away. Only a positively
+    out-of-range number excludes a row; an unnumbered label keeps scoring.
+    """
+    if scored_event_number_max is None:
+        return False
+    n = parse_event_number(event_name)
+    return n is not None and n > scored_event_number_max
+
+
 def is_unscored_round_or_event(round_swam, event_name, cfg):
 
     r = (round_swam or '').upper()
 
     e = (event_name or '').upper()
+
+    if is_outside_scored_program(event_name, cfg.get('scoredEventNumberMax')):
+
+        return True
 
     for ur in cfg.get('unscoredRounds', []):
 
@@ -1031,7 +1078,7 @@ def calculate_points(athletes, scoring_settings=None):
     if _effective_pdf_place_points_mode(cfg, athletes):
         _apply_pdf_place_scoring_lock(cfg)
         for ath in athletes:
-            ath['calculated_points'] = _pdf_place_points_for_row(ath)
+            ath['calculated_points'] = _pdf_place_points_for_row(ath, cfg)
         return athletes
 
     SCORING = cfg['scoringPoints']

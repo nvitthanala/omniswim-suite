@@ -5,7 +5,42 @@
  * HyTek psych-sheet / results PDF team abbreviations and meet-name resolution.
  */
 
-/** Uppercase abbreviation → canonical full school name. */
+/**
+ * Uppercase abbreviation → canonical full school name.
+ *
+ * Kept byte-identical to `teamAbbreviations.json`, which `backend/pdf_parser.py`
+ * loads at import time. Edit both together — nothing enforces the pair.
+ *
+ * Two codes were wrong until 2026-09-01, both in the way `CLAUDE.md` § Data
+ * provenance warns about: a plausible name that quietly attributes one school's
+ * swims to another.
+ *
+ * - `ROCK` mapped to the University of Indianapolis. Rockhurst and Indianapolis
+ *   are separate GLVC programs that score separately — the 2026 GLVC
+ *   championships list both, with distinct totals (men: Indianapolis 380,
+ *   Rockhurst 95; women: Indianapolis 514.5, Rockhurst 182). Indianapolis
+ *   already has its own codes below, so `ROCK` was merging Rockhurst's points
+ *   into it.
+ * - `LU` mapped to Lindenwood University, which cannot appear in a current meet:
+ *   see the Lindenwood entry in `teamDivisions.ts` — the program was cut after
+ *   2023-2024. `LU` is Lewis University, confirmed row-for-row rather than
+ *   inferred. `glvc_results26.pdf` prints `19 LU B 1:26.08` in the men's 200
+ *   free relay; the same meet's HyTek web output prints that relay as
+ *   `19 Lewis  'B'  1:26.80  1:26.08  12` — same place, squad and final time.
+ *
+ * Sources:
+ *   https://glvcsports.com/news/2026/2/12/drury-sits-atop-day-two-standings-of-2026-glvc-swimming-and-diving-championships.aspx
+ *   https://swimevansville.org/swimresults/2026-glvc/260210F031.htm
+ *   https://rockhursthawks.com/sports/mens-swimming-and-diving
+ *   https://lewisflyers.com/news/2026/2/14/mens-swimming-swimming-concludes-day-four-of-glvc-championships.aspx
+ *
+ * The map is flat and global on purpose: no caller passes a conference or a
+ * season, and no two schools across the conferences this repo parses (NSISC,
+ * GLVC, ACC, SEC, Big 12) share a code. Lindenwood and Lewis both abbreviate to
+ * `LU`, but Lindenwood no longer competes, so the collision is historical, not
+ * live. A live collision would need this map to become conference-aware; adding
+ * a code that reintroduces one is not a rename.
+ */
 export const TEAM_ABBREVIATIONS: Record<string, string> = {
   // NSISC
   HSU: 'Henderson State University',
@@ -19,7 +54,7 @@ export const TEAM_ABBREVIATIONS: Record<string, string> = {
   SBU: 'Southwest Baptist University',
   WJC: 'William Jewell College',
   MKU: 'McKendree University',
-  ROCK: 'University of Indianapolis',
+  ROCK: 'Rockhurst University',
   UINDY: 'University of Indianapolis',
   INDY: 'University of Indianapolis',
   'MS&T': 'Missouri S&T',
@@ -27,7 +62,7 @@ export const TEAM_ABBREVIATIONS: Record<string, string> = {
   QU: 'Quincy University',
   DRURY: 'Drury University',
   DRUR: 'Drury University',
-  LU: 'Lindenwood University',
+  LU: 'Lewis University',
   MARY: 'University of Mary',
   NSU: 'Northern State University',
   SCAD: 'SCAD Savannah',
@@ -87,30 +122,50 @@ function findMeetTeamByAcronym(abbrev: string, meetTeams: string[]): string | un
   return undefined;
 }
 
+/**
+ * All teams in `meetTeams` a fuzzy tier considers a match, in list order.
+ * Called per tier so ambiguity is judged one tier at a time — a candidate
+ * that matches exactly one team at the containment tier is not made
+ * ambiguous by a *different*, looser tier also matching a second team.
+ */
+function tierMatches(meetTeams: string[], test: (kn: string) => boolean): string[] {
+  const hits: string[] = [];
+  for (const t of meetTeams) {
+    if (test(normalizeTeamKey(t))) hits.push(t);
+  }
+  return hits;
+}
+
 function findMeetTeamBySubstring(candidate: string, meetTeams: string[]): string | undefined {
   const norm = normalizeTeamKey(candidate);
   if (!norm || norm.length < 3) return undefined;
 
-  for (const t of meetTeams) {
-    if (normalizeTeamKey(t) === norm) return t;
-  }
+  const exact = tierMatches(meetTeams, kn => kn === norm);
+  if (exact.length >= 1) return exact[0]; // an exact normalized match is never ambiguous by construction
 
-  for (const t of meetTeams) {
-    const kn = normalizeTeamKey(t);
-    if (kn.length >= 3 && norm.length >= 3 && (kn.includes(norm) || norm.includes(kn))) {
-      return t;
-    }
-  }
+  // Containment tier: two similarly-named teams in the same meet field (e.g.
+  // "Ohio" and "Ohio State") can both legitimately contain one another's
+  // normalized key. Guessing which one a truncated label meant would
+  // silently misattribute a score to the wrong school — the exact failure
+  // this repo's provenance rules exist to prevent. Report "no confident
+  // match" instead of the first hit.
+  const contained = tierMatches(
+    meetTeams,
+    kn => kn.length >= 3 && norm.length >= 3 && (kn.includes(norm) || norm.includes(kn))
+  );
+  if (contained.length === 1) return contained[0];
+  if (contained.length > 1) return undefined;
 
-  // First significant token (e.g. "Henderson" → Henderson State University)
+  // First significant token (e.g. "Henderson" → Henderson State University).
+  // Same ambiguity discipline: only trust it when exactly one team qualifies.
   const firstToken = norm.replace(/university|college|state/g, '').slice(0, 12);
   if (firstToken.length >= 4) {
-    for (const t of meetTeams) {
-      const kn = normalizeTeamKey(t);
-      if (kn.startsWith(firstToken) || firstToken.startsWith(kn.slice(0, firstToken.length))) {
-        return t;
-      }
-    }
+    const byToken = tierMatches(
+      meetTeams,
+      kn => kn.startsWith(firstToken) || firstToken.startsWith(kn.slice(0, firstToken.length))
+    );
+    if (byToken.length === 1) return byToken[0];
+    if (byToken.length > 1) return undefined;
   }
 
   return undefined;

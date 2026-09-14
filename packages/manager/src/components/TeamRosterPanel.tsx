@@ -1,11 +1,9 @@
 import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react';
-import { Users, RotateCcw, Sparkles, Trash2, Undo2 } from 'lucide-react';
+import { Users, RotateCcw, Sparkles, Undo2 } from 'lucide-react';
 import { Gender, OfficialTeamScores, ScorerRosterOverride, ScoringSettings, SwimmerResult, Workspace } from '@omniswim/core/types';
 import {
   aggregateSwimmerMeetPoints,
   buildScorerRosterLookup,
-  getAthleteCreditedSwims,
-  isPlaceholderAthleteName,
   scorerRosterKey,
   usesScorerRoster,
 } from '@omniswim/core/lib/scorerRoster';
@@ -16,11 +14,9 @@ import { buildTeamScoreLookup, officialScoresForGender } from '@omniswim/core/li
 import { restoreSwimmerToWorkspace } from '@omniswim/core/lib/swimmerSoftRemove';
 import { buildAliasResolver } from '@omniswim/core/lib/athleteAliases';
 import ProjectedActualScore from './ProjectedActualScore';
-import AthleteCreditedSwimsPanel, { type EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
-import AthleteMeetEntriesPanel from './AthleteMeetEntriesPanel';
+import { type EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
 import AthleteLineupEditorPanel from './AthleteLineupEditorPanel';
-import AthleteRoleTag from './AthleteRoleTag';
-import { getAthleteProfile } from '@omniswim/core/lib/athleteHistory';
+import { buildHistoryFromWorkspace, getAthleteProfile, mergeHistoryIndex } from '@omniswim/core/lib/athleteHistory';
 import type { AthleteEventProfile } from '@omniswim/core/types';
 
 /**
@@ -45,16 +41,13 @@ function describeStrongestEvents(profile: AthleteEventProfile): string {
 }
 import {
   countSwimmerEntries,
-  formatEntryLimitLabel,
   swimmerExceedsEntryLimits,
 } from '@omniswim/core/lib/swimmerEntryLimits';
 import { optimizeRosterAllTeams, optimizeRosterForTeam } from '@omniswim/core/lib/rosterOptimizer';
-import {
-  applyScorerOffRelayPatch,
-  issueBadgeLabel,
-  type TeamLineupAudit,
-} from '@omniswim/core/lib/rosterLineupAudit';
+import { applyScorerOffRelayPatch, type TeamLineupAudit } from '@omniswim/core/lib/rosterLineupAudit';
 import { useToast } from '@omniswim/ui';
+import TeamRosterRow from './TeamRosterRow';
+import { buildRosterRowWarnings, computeRosterRowIssueFlags, countTeamMembers } from './teamRosterView';
 
 const ROSTER_WINDOW_THRESHOLD = 80;
 const ROSTER_ROW_ESTIMATE_PX = 44;
@@ -74,8 +67,6 @@ type Props = {
   showTeamSidebar?: boolean;
   /** When `dropdown`, prefer compact team select over sidebar cards. */
   teamPickerMode?: 'sidebar' | 'dropdown';
-  /** Unified athlete editor (Lineup) vs legacy credited + entries panels. */
-  editorMode?: 'unified' | 'legacy';
   lineupAudit?: TeamLineupAudit;
   selectedTeam?: string;
   onSelectTeam?: (team: string) => void;
@@ -108,7 +99,6 @@ export default function TeamRosterPanel({
   baselineByTeam,
   showTeamSidebar = true,
   teamPickerMode,
-  editorMode = 'legacy',
   lineupAudit,
   selectedTeam: controlledTeam,
   onSelectTeam,
@@ -143,6 +133,18 @@ export default function TeamRosterPanel({
   // it isn't rebuilt on every render (matches mergeScoringSettings discipline above).
   const aliasResolver = useMemo(() => buildAliasResolver(workspace ?? []), [workspace]);
 
+  // Same discipline for the merged history index getAthleteProfile needs per
+  // row: rebuilding it is O(workspace history size), and without this memo
+  // every visible row redid that full rebuild, every render — expensive for
+  // a recruit-heavy workspace with hundreds of imported SwimCloud history rows.
+  const mergedAthleteHistory = useMemo(
+    () =>
+      workspace
+        ? mergeHistoryIndex(buildHistoryFromWorkspace(workspace), workspace.athleteHistory ?? [])
+        : [],
+    [workspace]
+  );
+
   const pointTotals = useMemo(
     () => aggregateSwimmerMeetPoints(scoredResults, gender, aliasResolver),
     [scoredResults, gender, aliasResolver]
@@ -163,23 +165,10 @@ export default function TeamRosterPanel({
     return Array.from(set).sort((a, b) => a.localeCompare(b));
   }, [genderResults]);
 
-  const memberCounts = useMemo(() => {
-    const counts = new Map<string, number>();
-    const seen = new Map<string, Set<string>>();
-    for (const r of genderResults) {
-      const t = String(r.team ?? '').trim();
-      if (!t || (isRelayResult(r) && r.name === r.team)) continue;
-      // Vacated / placeholder relay legs ("—") are not athletes — don't count them.
-      if (isRelayResult(r) && isPlaceholderAthleteName(r.name)) continue;
-      const key = scorerRosterKey(t, gender, r.name);
-      if (!seen.has(t)) seen.set(t, new Set());
-      if (!seen.get(t)!.has(key)) {
-        seen.get(t)!.add(key);
-        counts.set(t, (counts.get(t) ?? 0) + 1);
-      }
-    }
-    return counts;
-  }, [genderResults, gender]);
+  const memberCounts = useMemo(
+    () => countTeamMembers(genderResults, gender),
+    [genderResults, gender]
+  );
 
   const officialForGender = officialScoresForGender(officialTeamScores, gender);
   const officialLookup = useMemo(
@@ -297,17 +286,6 @@ export default function TeamRosterPanel({
     }
     onJumpAthleteHandled?.();
   }, [jumpAthleteName, jumpAthleteKey, teamRows, onAthleteSelect, onJumpAthleteHandled, selectedTeam, toast]);
-
-  const selectedAthleteSwims = useMemo(() => {
-    if (!selectedAthlete) return [];
-    return getAthleteCreditedSwims(
-      scoredResults,
-      selectedAthlete.team,
-      selectedAthlete.name,
-      selectedAthlete.gender,
-      aliasResolver
-    );
-  }, [scoredResults, selectedAthlete, aliasResolver]);
 
   const toggleAthleteSelection = (row: ScorerRosterRow) => {
     if (selectedAthleteKey === row.key) {
@@ -494,9 +472,7 @@ export default function TeamRosterPanel({
       ) : null}
 
       <p className="text-ui-body text-theme-secondary my-3 leading-relaxed">
-        {editorMode === 'unified'
-          ? 'Click an athlete to edit scorers, individual entries, and see relay status.'
-          : 'Click an athlete for credited swims and entry planning.'}
+        Click an athlete to edit scorers, individual entries, and see relay status.
         {editable
           ? ` Toggle scorers for the ${merged.maxIndividualScorersPerTeam}-scorer cap.`
           : ' Enable What-if to edit scorers.'}
@@ -583,112 +559,37 @@ export default function TeamRosterPanel({
                   lineupAudit?.athleteIssues.get(normalizeSwimmerName(row.name)) ?? [];
                 const profile =
                   workspace && selectedTeam
-                    ? getAthleteProfile(workspace, row.team, gender, row.name, merged)
+                    ? getAthleteProfile(
+                        workspace,
+                        row.team,
+                        gender,
+                        row.name,
+                        merged,
+                        aliasResolver,
+                        mergedAthleteHistory
+                      )
                     : null;
-                const showOver =
-                  entryOver.individualOver ||
-                  entryOver.relayOver ||
-                  entryOver.totalOver ||
-                  athleteIssues.some(i => i.type === 'over_entry_limit');
-                const showEmpty = athleteIssues.some(i => i.type === 'empty_lineup');
-                const relayGapIssue = athleteIssues.find(
-                  i =>
-                    i.type === 'relay_leg_vacant' ||
-                    i.type === 'relay_scorer_off' ||
-                    i.type === 'relay_needs_fill'
+                const { warningMessages, warningLabel } = buildRosterRowWarnings(
+                  computeRosterRowIssueFlags(entryOver, athleteIssues)
                 );
-                // Condense the row's warning pills into a single compact chip — a
-                // sprawl of "Over limit" / "Empty lineup" / relay-gap badges per row
-                // ate too much horizontal space. The chip's title lists every issue.
-                const warningMessages: string[] = [];
-                if (showOver) warningMessages.push('Over entry limit');
-                if (showEmpty) warningMessages.push('Scorer with no individual entries');
-                if (relayGapIssue) warningMessages.push(relayGapIssue.message);
-                const warningLabel = showOver
-                  ? 'Over limit'
-                  : showEmpty
-                    ? 'Empty lineup'
-                    : relayGapIssue
-                      ? issueBadgeLabel(relayGapIssue)
-                      : null;
                 return (
-                  <tr
+                  <TeamRosterRow
                     key={row.key}
-                    id={`roster-row-${row.key}`}
-                    role="option"
-                    aria-selected={isSelected}
-                    onClick={() => {
+                    row={row}
+                    meetPts={meetPts}
+                    isSelected={isSelected}
+                    profile={profile}
+                    describeProfile={describeStrongestEvents}
+                    warningMessages={warningMessages}
+                    warningLabel={warningLabel}
+                    editable={editable}
+                    onRequestDeleteSwimmer={onRequestDeleteSwimmer}
+                    onSelect={() => {
                       toggleAthleteSelection(row);
                       rosterScrollRef.current?.focus();
                     }}
-                    className={`border-b border-theme-soft/50 text-ui-body cursor-pointer transition-colors ${
-                      isSelected ? 'bg-[var(--text-accent)]/10' : 'theme-hover-row'
-                    }`}
-                  >
-                    <td className="py-2.5 px-3" title={row.name}>
-                      <div className="flex items-center gap-2 min-w-0 flex-wrap">
-                        <span
-                          className={`truncate min-w-0 ${
-                            isSelected ? 'text-[var(--text-accent)] font-medium' : ''
-                          }`}
-                        >
-                          {row.name}
-                        </span>
-                        <AthleteRoleTag role={row.athleteRole} isRecruit={row.isRecruit} />
-                        {warningLabel ? (
-                          <span
-                            className="text-ui-caption px-1.5 py-0.5 rounded-full border border-amber-400/40 text-amber-400 shrink-0"
-                            title={warningMessages.join(' · ')}
-                          >
-                            {warningLabel}
-                            {warningMessages.length > 1 ? ` +${warningMessages.length - 1}` : ''}
-                          </span>
-                        ) : null}
-                      </div>
-                      {profile && profile.primaryEvents.length > 0 && !isSelected ? (
-                        <p
-                          className="text-ui-caption text-theme-muted truncate mt-1"
-                          title={describeStrongestEvents(profile)}
-                        >
-                          {profile.primaryEvents.slice(0, 3).join(' · ')}
-                        </p>
-                      ) : null}
-                    </td>
-                    <td className="py-2.5 px-3 text-right text-theme-secondary whitespace-nowrap">
-                      {row.classYear || '—'}
-                    </td>
-                    <td
-                      className={`py-2.5 px-3 text-right font-mono tabular-nums whitespace-nowrap ${
-                        meetPts > 0 ? 'text-[var(--text-accent)]' : 'text-theme-secondary'
-                      }`}
-                    >
-                      {meetPts.toFixed(1)}
-                    </td>
-                    {editable ? (
-                      <td className="py-2.5 px-3 text-center" onClick={e => e.stopPropagation()}>
-                        <input
-                          type="checkbox"
-                          checked={row.isScorer}
-                          onChange={e => setScorer(row, e.target.checked)}
-                          className="accent-[var(--text-accent)]"
-                          aria-label={`${row.name} scorer`}
-                        />
-                      </td>
-                    ) : null}
-                    {editable && onRequestDeleteSwimmer ? (
-                      <td className="py-2.5 px-2 text-center" onClick={e => e.stopPropagation()}>
-                        <button
-                          type="button"
-                          className="p-1.5 rounded-lg text-theme-muted hover:text-rose-400 hover:bg-rose-400/10"
-                          title={`Remove ${row.name} from roster (keeps meet record)`}
-                          aria-label={`Remove ${row.name}`}
-                          onClick={() => onRequestDeleteSwimmer(row.name)}
-                        >
-                          <Trash2 size={14} />
-                        </button>
-                      </td>
-                    ) : null}
-                  </tr>
+                    onSetScorer={isScorer => setScorer(row, isScorer)}
+                  />
                 );
                 })}
                 {rosterWindow.bottomSpacer > 0 ? (
@@ -757,46 +658,6 @@ export default function TeamRosterPanel({
           </ul>
         </div>
       ) : null}
-      {selectedAthlete && editorMode !== 'unified' ? (
-        <>
-          <AthleteCreditedSwimsPanel
-            athleteName={selectedAthlete.name}
-            team={selectedAthlete.team}
-            swims={selectedAthleteSwims}
-            totalPoints={pointTotals.get(selectedAthlete.key) ?? 0}
-            gender={gender}
-            onClose={() => {
-              setSelectedAthleteKey(null);
-              onAthleteSelect?.(null);
-            }}
-            deletable={Boolean(onDeleteSwim)}
-            onDeleteSwim={onDeleteSwim}
-            onEditSwim={onEditSwim}
-            entryLimitLabel={formatEntryLimitLabel(
-              countSwimmerEntries(
-                genderResults,
-                selectedAthlete.team,
-                gender,
-                selectedAthlete.name,
-                aliasResolver
-              ),
-              merged
-            )}
-          />
-          {workspace && onWorkspaceUpdate ? (
-            <AthleteMeetEntriesPanel
-              workspace={workspace}
-              settings={merged}
-              gender={gender}
-              athleteName={selectedAthlete.name}
-              team={selectedAthlete.team}
-              classYear={selectedAthlete.classYear}
-              editable={editable}
-              onUpdate={onWorkspaceUpdate}
-            />
-          ) : null}
-        </>
-      ) : null}
       {selectedTeam ? (
         <p className="text-ui-caption text-theme-secondary mt-3 leading-relaxed">
           {editable ? (
@@ -821,7 +682,7 @@ export default function TeamRosterPanel({
   // clipped by the table's scroll container, regardless of which layout branch
   // (sidebar vs. plain card) is active below.
   const drawer =
-    selectedAthlete && editorMode === 'unified' && workspace && onWorkspaceUpdate ? (
+    selectedAthlete && workspace && onWorkspaceUpdate ? (
       <AthleteLineupEditorPanel
         workspace={workspace}
         settings={merged}

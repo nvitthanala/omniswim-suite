@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Omniswim SwimCloud Companion — Options</title>
+<style>
+  body {
+    font: 14px/1.5 -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+    max-width: 480px;
+    margin: 24px auto;
+    padding: 0 16px;
+    color: #1a1a1a;
+    background: #fff;
+  }
+  h1 { font-size: 16px; }
+  label { display: block; font-weight: 600; margin-top: 16px; margin-bottom: 4px; }
+  input[type="text"], input[type="number"] {
+    width: 100%;
+    padding: 8px;
+    box-sizing: border-box;
+    font: inherit;
+    border: 1px solid #ccc;
+    border-radius: 4px;
+  }
+  .hint { color: #555; font-size: 12px; margin-top: 4px; }
+  button {
+    margin-top: 16px;
+    padding: 8px 16px;
+    border: none;
+    border-radius: 6px;
+    background: #0b5fff;
+    color: #fff;
+    font: 600 13px/1.4 inherit;
+    cursor: pointer;
+  }
+  #status { margin-top: 12px; font-size: 13px; }
+  #status.saved { color: #1a9c56; }
+</style>
+</head>
+<body>
+  <h1>Omniswim SwimCloud Companion</h1>
+  <p>
+    The auto-fetch crawl (Track A′) posts each captured page to Omniswim
+    Suite's local server. That server requires a pairing token so no other
+    page you visit can write into your capture store.
+  </p>
+
+  <label for="token">Pairing token</label>
+  <input id="token" type="text" autocomplete="off" spellcheck="false" placeholder="paste the token here" />
+  <p class="hint">
+    Find it in Omniswim Suite's own startup console banner, under
+    "SwimCloud capture routes" — look for the line starting "Pairing token:".
+    It is also written to <code>data/swimcloud-pairing-token.json</code>.
+  </p>
+
+  <label for="port">App port</label>
+  <input id="port" type="number" min="1" max="65535" placeholder="3000" />
+  <p class="hint">Matches the app's <code>PORT</code>/<code>OMNI_PORT</code>. Defaults to 3000.</p>
+
+  <button id="save">Save</button>
+  <div id="status" role="status"></div>
+
+  <script src="options.js"></script>
+</body>
+</html>

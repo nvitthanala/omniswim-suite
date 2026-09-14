@@ -67,7 +67,27 @@ double-counting them in totals and roster limits. This has already caused a
 live defect; treat a missing resolver argument as a bug, not an oversight, when
 reviewing new call sites.
 
-## 7. `console.assert` does not fail a Node script
+## 7. `@omniswim/swimcloud`'s package root is not safe for a UI package to import
+
+Importing anything from bare `@omniswim/swimcloud` pulls in `cache.ts`,
+`fetcher.ts`, and `playwrightFetcher.ts` too — the package root re-exports
+everything — which means `node:fs/promises` and `playwright-core` end up in
+the TypeScript compilation graph, and would end up in a bundle, of whatever
+imported it. `packages/manager` hit this directly: a bridge module that only
+needed two pure types from `@omniswim/swimcloud` failed `tsc` with
+`Cannot find module 'node:fs/promises'` the moment it imported from the
+package root, because `packages/manager/tsconfig.json` has `"types": []` and
+suddenly needed Node's ambient types transitively. The fix was importing
+from `@omniswim/swimcloud/parser` (or `/entities`, `/urlClassifier`,
+`/clipboardPayload`) instead — all four subpaths are pure, string/regex-only,
+no Node, no DOM. Any future UI-facing import of `packages/swimcloud` should
+use a specific subpath, never the bare package name; a `tsc` pass alone
+won't always catch a UI package doing this wrong (it depends on which
+ambient types that package's own `tsconfig.json` happens to include), so a
+real `npm run build` of `apps/shell` is the check that actually proves a
+Node built-in didn't leak into the browser bundle.
+
+## 8. `console.assert` does not fail a Node script
 
 `console.assert(cond, msg)` logs to stderr on failure and then **returns
 normally** — it does not throw, and the process still exits 0. Three test

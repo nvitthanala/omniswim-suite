@@ -1,0 +1,27 @@
+<!--
+  ============================================================================
+  SYNTHETIC FIXTURE — HAND-AUTHORED — NOT REAL SWIMCLOUD MARKUP
+  ============================================================================
+
+  Written by hand on 2026-09-06. Not a capture of anything.
+
+  This is the "the page shell rendered but the roster did not" case: a team page
+  whose roster table is missing entirely, which is what a client-rendered table
+  looks like if the HTML is grabbed before the data arrives.
+
+  The parser MUST fail loudly on this (`expected-table-missing`) rather than
+  return an empty athlete list. A silent empty here would read to a coach as
+  "this team has no swimmers", which is the exact failure mode CLAUDE.md's
+  data-provenance rules exist to prevent.
+  ============================================================================
+-->
+<div class="c-page">
+  <header class="c-team-header">
+    <h1 class="c-team-header__title">Henderson State University</h1>
+    <p class="c-team-header__meta">NCAA Division II &middot; Great American Conference</p>
+  </header>
+
+  <div class="c-roster" data-state="loading">
+    <p class="c-roster__empty">Loading roster&hellip;</p>
+  </div>
+</div>

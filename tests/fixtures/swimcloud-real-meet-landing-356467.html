@@ -1,0 +1,160 @@
+<!--
+REAL SwimCloud capture (not synthetic). Source: https://www.swimcloud.com/results/356467/
+Captured via the browser extension (Track A), 2026-09-08, by the repo's primary user.
+Trimmed of unrelated boilerplate (YUI/jQuery/Sentry <script> tags, the global-search
+index JSON blob, og/ld+json meta) for fixture hygiene — none of that is relevant to
+parsing. The <script id="auth-info">/<script id="auth-groups"> blocks, which carried
+the capturing user's own email and SwimCloud id, are removed entirely (PII, irrelevant
+to parsing). Everything else below is byte-for-byte from the real capture: the meet
+header, the "Events" sidebar list, the Teams/High point/Performances summary tables.
+
+FINDING this fixture proves: this page (a meet's root /results/{meetId}/ page) is a
+landing/dashboard. It has exactly one heading (<h1 id="meet-name">, the meet's own
+title) and NO per-event headings anywhere. The "Events" list is a flat list of <a>
+links to /results/{meetId}/event/{n}/ — not a results table. The three cards present
+(Teams, High point, Performances) are all summaries (top 3 teams, top 5 swimmers, top
+5 swims) — none of them is the full field. A parser expecting "Event {n} {label}"
+headings followed by full results tables (the old, unverified assumption) finds
+nothing on this page — that assumption is now known-wrong, not merely unconfirmed.
+-->
+<html>
+<head><title>New South Championships</title></head>
+<body>
+
+<h1 id="meet-name" class="c-toolbar__title">New South Championships</h1>
+<ul class="o-list-inline o-list-inline--dotted">
+  <li id="meet-status" class="u-color-success">Completed</li>
+  <li id="meet-date">Feb 17&ndash;21, 2026</li>
+  <li id="meet-course">SCY</li>
+  <li><a href="/facility/247/">UWF Aquatic Center - Pensacola, FL, USA</a></li>
+</ul>
+
+<div id="meet-header-actions" data-meet-id="356467"></div>
+
+<!-- Gender picker: default view is Men; ?gender=F for women. No combined view. -->
+<button type="button" data-toggle="dropdown">Men <span class="caret-alt"></span></button>
+<ul class="dropdown-menu">
+  <li class="dropdown-subheader">Gender</li>
+  <li class="active"><a href="https://www.swimcloud.com/results/356467/?gender=M">Men</a></li>
+  <li><a href="https://www.swimcloud.com/results/356467/?gender=F">Women</a></li>
+</ul>
+
+<div class="c-meet-toolbar">
+  <button class="c-meet-toolbar__button js-drawer-open" type="button">Events</button>
+  <a class="c-meet-toolbar__button" href="/results/356467/swimmer/1355764/">You</a>
+</div>
+
+<!-- ==== Teams card: summary only (top 3 + a "&ndash;" row for a team with 0 score) ==== -->
+<div class="c-card c-card--large u-overflow-hidden">
+  <div class="c-card__item"><h2 class="c-title">Teams</h2></div>
+  <table class="c-table-clean c-table-clean--middle table table-hover c-table-clean--font-large@xs">
+    <thead><tr><th colspan="2">Team</th><th class="c-table-clean__col-fit u-text-end">Score</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">1</td>
+        <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/356467/team/58/"><span>Henderson State</span></a></td>
+        <td class="u-text-end u-text-semi">1056</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">2</td>
+        <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/356467/team/412/"><span>Ouachita Baptist</span></a></td>
+        <td class="u-text-end u-text-semi">1029.5</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">3</td>
+        <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/356467/team/48/"><span>Delta State</span></a></td>
+        <td class="u-text-end u-text-semi">875.5</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">&ndash;</td>
+        <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/356467/team/10002824/"><span>West Florida</span></a></td>
+        <td class="u-text-end u-text-semi">&ndash;</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ==== High point card: top-5 swimmers only, NOT the full meet ==== -->
+<div class="c-card c-card--large u-overflow-hidden">
+  <div class="c-card__item"><h2 class="c-title">High point</h2></div>
+  <table class="c-table-clean c-table-clean--middle table table-hover">
+    <thead><tr><th colspan="2">Name</th><th>Team</th>
+      <th class="c-table-clean__col-fit u-text-end hidden-xs">Gold</th>
+      <th class="c-table-clean__col-fit u-text-end hidden-xs">Silver</th>
+      <th class="c-table-clean__col-fit u-text-end hidden-xs">Bronze</th>
+      <th class="c-table-clean__col-fit u-text-end">Score</th>
+      <th class="c-table-clean__col-fit u-text-end" title="Average Swimcloud Points">Pts Avg</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">1</td>
+        <td class="c-table-clean__col-clip" title="Mateus Franco"><a class="u-text-semi" href="/results/356467/swimmer/1992102/">Mateus Franco</a></td>
+        <td class="c-table-clean__col-flex"><a href="/results/356467/team/48/" title="Delta State University"><div class="hidden-xs u-ml- c-table-clean__col-flex-text">Delta State</div></a></td>
+        <td class="u-text-end hidden-xs">3</td><td class="u-text-end hidden-xs">&ndash;</td><td class="u-text-end hidden-xs">1</td>
+        <td class="u-text-end">73</td><td class="u-text-end">724.0</td>
+      </tr>
+      <!-- rows 2-5 omitted from fixture: same shape, not needed for the finding this fixture demonstrates -->
+    </tbody>
+  </table>
+  <div class="c-table-clean__caption c-table-clean__caption--bottom"><a class="c-more c-more--small" href="/results/356467/topswimmers/">More</a></div>
+</div>
+
+<!-- ==== Performances card: top-5 SWIMS only. Note: no per-event heading anywhere on
+     this page, ever — "Event" as event grouping is a table cell/link body, never a
+     heading element. This is the row shape that recurs on every SwimCloud results
+     page (meet root, team landing, team swims list): ==== -->
+<div class="c-card c-card--large u-overflow-hidden">
+  <div class="c-card__item"><h2 class="c-title">Performances</h2></div>
+  <table class="c-table-clean c-table-clean--middle table table-hover">
+    <thead><tr><th colspan="2">Name</th><th>Team</th><th>Event</th>
+      <th class="c-table-clean__col-fit u-text-end">Time</th>
+      <th class="c-table-clean__col-fit u-ph0"><span class="u-is-hidden-visually">Flags</span></th>
+      <th class="c-table-clean__col-fit u-text-end">Score</th>
+      <th class="c-table-clean__col-fit u-text-end" title="Swimcloud Points">Pts</th>
+    </tr></thead>
+    <tbody>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">1</td>
+        <td class="c-table-clean__col-clip" title="Mateus Franco"><a class="u-text-semi" href="/results/356467/swimmer/1992102/">Mateus Franco</a></td>
+        <td class="c-table-clean__col-flex"><a class="u-flex u-flex-align-items-center" title="Delta State University" href="/results/356467/team/48/"><div class="hidden-xs u-ml- c-table-clean__col-flex-text">Delta State</div></a></td>
+        <td>1000 Y Free</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/4/?id=171560646#time171560646">9:03.37</a></td>
+        <td class="u-ph0"><a href="/results/351192"><span class="c-label c-label--royal" title="NCAA Division II Championship">D2 B</span></a></td>
+        <td class="u-text-end">20</td>
+        <td class="u-text-end">846</td>
+      </tr>
+      <!-- rows 2-5 omitted: same shape -->
+    </tbody>
+  </table>
+</div>
+
+<!-- ==== Events sidebar: this IS the full event list for the meet (event number, gender,
+     distance, stroke, and whether it has "Finals" as a session tag), but it is a link
+     list to per-event pages, not a results table. Row shape, verbatim: ==== -->
+<ul id="meet-events-placeholder" class="c-events c-events--divided c-sticky-filters__list">
+  <li class="c-events__group">
+    <a href="/results/356467/event/1/" class="c-events__link js-event-item">
+      <div class="c-events__link-start" style="min-width: 40px" title="Scored"><span class="c-event-status c-event-status--scored">1</span></div>
+      <div class="c-events__link-body" title="800 Free Relay Women">
+        <div class="visible-md-block visible-lg-block u-text-truncate">800 Free Relay Women</div>
+        <div class="c-events__link-meta visible-xs-block visible-sm-block"><ul class="o-list-inline o-list-inline--dotted"></ul></div>
+      </div>
+    </a>
+    <a href="/results/356467/event/5/" class="c-events__link js-event-item">
+      <div class="c-events__link-start" style="min-width: 40px" title="Scored"><span class="c-event-status c-event-status--scored">5</span></div>
+      <div class="c-events__link-body" title="200 IM Women Finals">
+        <div class="visible-md-block visible-lg-block u-text-truncate">200 IM Women Finals</div>
+        <div class="c-events__link-meta visible-xs-block visible-sm-block"><ul class="o-list-inline o-list-inline--dotted"><li>Finals</li></ul></div>
+      </div>
+    </a>
+    <!-- ... 40+ more <a class="c-events__link js-event-item"> siblings, same shape,
+         omitted from this fixture: event numbers up to 939 (SwimCloud event numbers
+         are NOT sequential/contiguous — 1,2,3...42, then 100,101,102, then
+         201,202,300,400,402,403,404,500,501,503,938,939). Full list is in the real
+         capture pasted into the conversation this fixture was extracted from, if a
+         complete event-list fixture is ever needed. -->
+  </li>
+</ul>
+
+</body>
+</html>

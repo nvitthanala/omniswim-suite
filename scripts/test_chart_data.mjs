@@ -24,12 +24,21 @@ const assert = (cond, msg) => {
   }
 };
 
+// Was: `if (!hasData) continue` with no record of whether the assertion
+// block below ever actually ran — every workspace losing its results would
+// skip every iteration and this file would still print "chart data tests
+// passed" (docs/reference/TEST_COVERAGE_AUDIT.md, "Weak": "lets the whole
+// file pass vacuously"). checkedCount makes that impossible: it is asserted
+// non-zero after the loop.
+let checkedCount = 0;
+
 for (const ws of meets) {
   for (const gender of [Gender.MEN, Gender.WOMEN]) {
     const { projected, baseline } = buildScoringSnapshot(ws, gender, false);
     const results = gender === Gender.MEN ? ws.menResults : ws.womenResults;
     const hasData = Array.isArray(results) && results.length > 0;
     if (!hasData) continue;
+    checkedCount += 1;
 
     console.log(`\n[${ws.name} / ${gender}] results=${results.length}`);
 
@@ -61,8 +70,10 @@ for (const ws of meets) {
   }
 }
 
+assert(checkedCount > 0, 'at least one workspace/gender combination had real results to check — a workspace losing its results must fail loudly, not pass vacuously');
+
 if (failures > 0) {
   console.error(`\nchart data test FAILED (${failures} assertion failures)`);
   process.exit(1);
 }
-console.log('\nchart data tests passed');
+console.log(`\nchart data tests passed (${checkedCount} workspace/gender combinations checked)`);

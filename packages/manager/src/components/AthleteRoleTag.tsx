@@ -10,6 +10,13 @@
 
 import React from 'react';
 import type { ScorerRosterAthleteRole } from '@omniswim/core/lib/scorerRoster';
+import { Badge } from '@omniswim/ui';
+
+// `Badge`'s own defaults are an uppercase, bold, `text-ui-micro` pill --
+// this tag renders its labels in normal case at `text-ui-caption`/`font-medium`,
+// so every use below overrides those three plus the padding to keep this
+// component's original size and case exactly as they were.
+const SIZE_OVERRIDE = 'shrink-0 px-1.5 py-0.5 text-ui-caption font-medium normal-case tracking-normal';
 
 export default function AthleteRoleTag({
   role,
@@ -19,20 +26,18 @@ export default function AthleteRoleTag({
   isRecruit?: boolean;
 }) {
   if (isRecruit) {
+    // The accent tone's own `bg-[var(--text-accent)]/10` fill is dropped here --
+    // this pill was always border-and-text-only, no fill.
     return (
-      <span className="shrink-0 px-1.5 py-0.5 rounded-full text-ui-caption font-medium text-[var(--text-accent)] border border-[var(--text-accent)]/30">
+      <Badge tone="accent" className={`${SIZE_OVERRIDE} bg-transparent`}>
         Recruit
-      </span>
+      </Badge>
     );
   }
   const isDiver = role === 'diver';
   return (
-    <span
-      className={`shrink-0 px-1.5 py-0.5 rounded-full text-ui-caption font-medium ${
-        isDiver ? 'badge-warning' : 'badge-info'
-      }`}
-    >
+    <Badge tone={isDiver ? 'warning' : 'info'} className={SIZE_OVERRIDE}>
       {isDiver ? 'Diver' : 'Swimmer'}
-    </span>
+    </Badge>
   );
 }

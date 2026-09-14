@@ -3,18 +3,137 @@
 Last updated 2026-08-16. **Start here.** 132 KB across 19 files sits behind this
 page; everything below links into it.
 
+**New initiative, Phases 1–3 done.** SwimCloud ingestion (paste a
+meet/team/athlete/conference link, get structured data instead of retyping
+it) — plan in [`plans/2026-09-06/`](2026-09-06/README.md), full status/
+history across three worklogs in that folder (`WORKLOG-01` through
+`WORKLOG-03`; **read the most recent one first if resuming this work**).
+Landed on branch `nvitthanala/swimcloud-data-ingest` (18 commits, not yet
+merged to `main`): an NCAA Rule 7 scoring engine (`packages/core`);
+`packages/swimcloud` — entities, URL classifier, three HTML parsers (team
+roster, meet results, swimmer personal-bests — all against synthetic
+fixtures only), a status-keyed cache, and a Track B politeness wrapper in
+front of a Playwright-backed fetcher; a browser extension
+(`extensions/swimcloud-companion/`, Track A) that copies a captured page to
+the clipboard; and a working "From clipboard" import path wired into
+`RosterImportWizard` for the swimmer-profile case specifically (team-roster
+and meet-results captures are parsed but have no UI path — see
+`WORKLOG-03`'s "what Phase 3 does not cover"). Also: a `/code-review medium`
+pass found and fixed 3 real correctness bugs (with regression tests proven
+against the pre-fix code — see `WORKLOG-03`'s review section), and a local
+Chromium smoke test proved `PlaywrightSwimCloudFetcher`'s actual mechanism
+(launch, navigate, `storageState` session reuse) works against a throwaway
+local server. 219 tests, lint clean 8/8 workspaces, and a real
+`npm run build` of the shell app succeeds.
+
+**One thing still genuinely unverified, requiring a human, not more code:**
+whether the Playwright fetcher (Track B) can pass SwimCloud's actual
+Cloudflare challenge — its mechanism is now proven locally (a real Chromium
+launch/navigate/session-reuse cycle against a throwaway local server), but
+touching the *live* site is, per the plan's own posture, a deliberate
+human-present action, never an automated one, including for testing (Phase
+2 worklog). Everything else has now been seen working, not just inferred:
+the "From clipboard" path — swimmer profile, team roster, and (per user
+feedback) meet results too — was click-tested against the real running app
+with a simulated extension capture, not just unit tests (Phase 3 worklog,
+`verification-screenshots/`; this is also what caught a real duplicate-
+React-key bug the unit suite never exercised). Team-roster captures stay
+informational (no times on that page type, and this app's data model has no
+"bare athlete" concept to import one into) while meet-results captures do
+full bulk import — see the Phase 3 worklog's "team-roster and meet-results
+captures now work too" section. Key finding worth knowing
+before touching any of this: SwimCloud's Terms of Use flatly prohibit
+automated access; the plan records an explicit, informed user decision to
+build one compliant track (the browser extension) and one accepted-risk
+track (Playwright fetch-on-paste) side by side — see
+[`01-legal-and-access-strategy.md`](2026-09-06/01-legal-and-access-strategy.md).
+
 Baseline: lint clean (7 packages), `npm test` **61 passed / 0 failed / 3 skipped**,
 `npm run build` exit 0.
+
+**2026-09-08 — full-capture round planned, not yet built.** The single-page
+clipboard import doesn't scale (a full meet is dozens of manual captures),
+and the one path that routed a meet capture through a single paste
+(`parseMeetResultsHtml`, in Manager's roster wizard) targets a page shape
+proven not to exist on SwimCloud. Plan at
+[`plans/2026-09-08/`](2026-09-08/README.md): the extension auto-fetches a
+whole meet or team after one click (amends Track A to "Track A′" — see
+`2026-09-06/01-legal-and-access-strategy.md` §4), captures land in a new
+machine-global local store (amends the open transport question in
+`2026-09-06/03-architecture.md` §5, clipboard → localhost route), and
+Matrix gets a picker reading that store.
+
+**Update 2026-09-08, same day:** OQ-1 and its follow-up OQ-1b are both
+resolved (real captures of a 13-team meet proved the meet-root Teams card
+truncates, and that its "More" link's target, `topteams`, lists every team
+including zero-scoring ones). **Phase 1 is done** — `packages/swimcloud`'s
+capture store, crawl planner, and the two new meet-team parsers are built,
+verified (lint clean across all 8 workspaces, 363/363 tests, production
+build succeeds), and reported in
+`plans/2026-09-08/WORKLOG-01-phase1-capture-store-and-parsers.md`. Built
+directly (no subagent) against a 26%-of-5-hour quota budget, deliberately
+scoped to one package so a forced stop would never leave it half-broken.
+Uncommitted — diffs only, per the standing no-git-ops rule. Phase 2
+(`apps/shell/server.ts` capture routes) is next and unblocked. State
+tracked at `docs/reference/SWIMCLOUD_CAPTURE_STATE.json`.
+
+**Update 2026-09-09/10 — the whole pipeline built, then real-world tested,
+then a UI plan.** Phases 2 through 4c all landed: capture routes, the
+Manifest V3 auto-fetch crawler (roster + swimmer-times passes, bounded
+concurrency for the swimmer-times leaf pages specifically), a server-side
+`/parse` extension surfacing rosters and swimmer times alongside meet
+results, and a genuine new capability in Manager — importing a whole
+roster's event history from one completed capture in one action instead of
+one clipboard paste per swimmer. An adversarial review along the way found
+and fixed a real Manifest V3 message-hang bug and a capture-store race.
+Then the user hand-tested a real 234-page crawl and hit a real friction bug
+— every page silently falling back to 234 separate `chrome.downloads`
+calls with zero warning — root-caused and fixed (batched into one file,
+plus a pre-flight pairing check) in
+[`plans/2026-09-09/WORKLOG-13-friction-fix-download-batching.md`](2026-09-09/WORKLOG-13-friction-fix-download-batching.md).
+The user then asked for a full UI-redesign plan given "the ui looks very
+complex/cluttered" — not yet built, plan only, at
+[`plans/2026-09-09/01-UI-REDESIGN-PLAN.md`](2026-09-09/01-UI-REDESIGN-PLAN.md).
+Full phase history in `docs/reference/SWIMCLOUD_CAPTURE_STATE.json`; also
+mirrored in the Obsidian vault
+(`Documents/Obsidian Vault/omniswim-suite/Sessions/oyster-2026-09-09-74cdc90a.md`).
+
+**Update 2026-09-13/14 — the 60+ uncommitted files above are now committed
+and pushed, and this same session built substantially more on top.** The
+UI-redesign plan turned into 17 tracked implementation turns (SwimCloud
+capture browser unified, Badge/toggle convergence, a real scoring bug and a
+real team-matching bug fixed along the way — `docs/reference/UI_REDESIGN_STATE.json`
+turns `t1`–`t17`), then a whole-app improvement sweep on explicit request
+(happy-dom RCE fix, the two `ScoringSettings` editors merged into one,
+a `Modal` primitive converging 6 of Manager's overlay dialogs, three
+feature-scoping docs — turn `t18`), then a triaged partial build of those
+three scoped features under a stated quota constraint: a whole-meet
+official-score reconciliation banner (shipped), an optimizer-change
+breakdown panel (shipped, piece 1 of 3), and a program-provenance checklist
+group (shipped, sibling conversion-provenance group stays scoped — turn
+`t19`). `nvitthanala/swimcloud-data-ingest` is now 102 commits ahead of
+`main`, still no PR. Full detail: `docs/reference/UI_REDESIGN_STATE.json`,
+`docs/reference/IMPROVEMENT_BRAINSTORM_2026-09-02.md`,
+`plans/2026-09-14/*.md`. Obsidian vault refreshed the same day — see that
+session note's own "Update — 2026-09-13/14" section, plus
+`05-GitHub-Commit-Timeline.md` Era 10 and `08-Open-Decisions-For-You.md`.
 
 ---
 
 ## Do this next
 
+**Update 2026-09-13: items 1–3 below are resolved.** #1's underlying defect
+closed without the PDF ever landing (see [13](2026-08-14/13-official-score-mismatch.md)'s
+resolution note — `test_nsisc_team_totals.mjs` now passes byte-exact,
+registered and green). #2 closed the same way, at the scoring-boundary
+layer rather than the parser layer. #3 closed via `prepareRecruitsForScoring`
+ranking a recruit against every other unplaced recruit, not PDF rows alone
+(commit `d24fd3e5`, merged in today from a sibling branch). The PDF itself
+is still not in the repo — worth getting for its own sake (two remaining
+judgment calls in 13 need it) but no longer blocking. Remaining open:
+
 | # | Item | Why now |
 | - | ---- | ------- |
-| 1 | **Commit the meet results PDF** — [13](2026-08-14/13-official-score-mismatch.md) | `loadedMeet.pdfFilename` names `2026_NSISC_Championships_Final_Results.pdf`; the file is not in the repo. It blocks **all three** inactive scoring checks and every open question in 13. Five minutes of answer, currently unreachable. |
-| 2 | **Time-trial tagging in `backend/pdf_parser.py`** — [13](2026-08-14/13-official-score-mismatch.md) | Two untagged time-trial rows invent 20 points each. Three modules re-derive "is this a time trial" from the event label and all three were defeated by one bad label. Fix the label, not the readers. |
-| 3 | **Rank collapse on roster-only workspaces** — [12 §2](2026-08-14/12-optimizer-destroys-score.md) | `prepareRecruitsForScoring` returns every recruit at rank 1 when there are no comparators, so an event scores as a 281-way tie. No longer destructive, but it is not what a coach is looking at. |
 | 4 | Branded `CanonicalEvent` — [04 §3](2026-08-14/04-architecture-complexity.md) | The structural bet. Four defects were the same bug: a value keyed on one identity, looked up by another. |
 | 5 | Conversion-factor provenance — [02 §1](2026-08-14/02-data-quality-aliasing.md) | **Blocked on an open question**: does any governing body publish these factors? If not, the whole table is indicative, not official. |
 
@@ -83,8 +202,10 @@ ranked by nothing.
 version stamp, unattended backups · [04 §2](2026-08-14/04-architecture-complexity.md)
 `utils.ts` junk drawer.
 
-**Reported, not fixed** — two untagged time-trial rows score 20 points each
-([13](2026-08-14/13-official-score-mismatch.md)) · a duplicated row in Event 39 ·
+**Reported, not fixed** — ~~two untagged time-trial rows score 20 points
+each~~ **fixed 2026-09-13, see [13](2026-08-14/13-official-score-mismatch.md)'s
+resolution note** (closed at the scoring-boundary layer, `isTimeTrial`
+itself may still be wrong on these rows but no longer matters) · a duplicated row in Event 39 ·
 the `Boys`/`Girls` carve-out in `utils.ts` makes HyTek gender-token events score,
 unadjudicable without the PDF · dead `npById` per fast-swap context ·
 `CapVoidSummary.byAthlete` dead · `individualStrokeDistance` lacks label hygiene

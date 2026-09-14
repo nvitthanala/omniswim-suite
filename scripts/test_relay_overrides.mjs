@@ -145,7 +145,16 @@ const exclude = new Set(
   legNames.map(l => normalizeSwimmerName(l.name)).filter(Boolean)
 );
 const fill = suggestBestRelayLegFill(activePool, template, seniorIdx, new Set(), exclude);
+// Was: this whole block's two assertions never ran when no eligible
+// candidate existed, and the file still printed nothing at exit to say so —
+// a silent, permanent no-op looked identical to a real pass
+// (docs/reference/TEST_COVERAGE_AUDIT.md, "Weak": "the mid-file skip that
+// still reports PASS"). autofillChecked makes that visible in the final
+// summary line, without hard-failing a state that can legitimately depend
+// on the committed data's own roster shape.
+let autofillChecked = false;
 if (fill) {
+  autofillChecked = true;
   const autofillSim = simulateRoster(men, [], true, new Set(), [fill.override]);
   const filledLeg = autofillSim.find(
     x =>
@@ -182,4 +191,4 @@ if (failed > 0) {
   console.error(`${failed} test(s) failed`);
   process.exit(1);
 }
-console.log('relay override tests passed');
+console.log(`relay override tests passed (autofill/double-book sub-check ${autofillChecked ? 'ran' : 'SKIPPED — no eligible candidate in this data'})`);

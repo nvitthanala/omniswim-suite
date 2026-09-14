@@ -11,14 +11,18 @@
  * wizard step titled "Find more points" took Henderson State men from
  * **1277.00 to 0.00**, with no warning and no undo path in the UI.
  *
- * Mechanism, for anyone tempted to "simplify" the guard away: the optimizer
- * enforces `maxIndividualScorersPerTeam` by writing `isScorer: false` overrides,
- * while the engine's automatic scorer set does not enforce it (a recruit row
- * defaults to scorer). On a workspace with no PDF rows every recruit is ranked 1
- * in every event, so one event is one tie group — and
- * `scoreIndividualsInEvent` zeroes a whole tie group if ANY member is a
- * non-scorer. Turning 14 of 32 athletes off therefore does not cost 14
- * athletes' points, it zeroes every event they entered.
+ * Mechanism, for anyone tempted to "simplify" the guard away: on a workspace
+ * with no PDF rows every recruit is ranked 1 in every event, so one event is
+ * one tie group. Two all-or-nothing gates over that group each turned a
+ * per-athlete eligibility question into a whole-event one — the roster gate
+ * (fixed 2026-08-16) and the scorer-pool gate (fixed 2026-08-30) — and either
+ * of them could take a stage's candidate to 0.
+ *
+ * BOTH ARE FIXED, and the guard still earns its place: this file proves it by
+ * checking `unguardedTotal` on a live candidate that STILL loses points. A
+ * stage can lower a total for ordinary reasons — benching an athlete forfeits
+ * their share, and a swap can be worse than what it replaced — so "the stages
+ * are safe now" is not a reason to drop the comparison.
  *
  * Fixtures here are hermetic and generated in-process. They must NOT read
  * data/omniswim.db or data/meets.json — the point is that CI fails when the
@@ -110,9 +114,20 @@ function buildMeetWorkspace() {
   for (const [e, event] of MEET_EVENTS.entries()) {
     // Both teams contest every event, so the whole program is enterable and the
     // field is deep enough that an added swim has to earn its place.
+    //
+    // INTERLEAVED, and that is load-bearing. `seconds` below is a function of
+    // the index in THIS array, so pushing all of HSU and then all of OBU handed
+    // HSU places 1-4 of 8 in every event — a clean sweep. Stage B could then
+    // improve nothing by placement, and the only "gain" the optimizer could
+    // report was the phantom one it used to get from entering each athlete
+    // twice (272.00 -> 484.00 on this fixture before the projection reconciled
+    // its planes). Alternating the two teams gives HSU the odd places, so a
+    // faster history time has somewhere real to move.
     const field = [];
-    for (let i = 0; i < 4; i++) field.push({ team: TEAM, i });
-    for (let i = 0; i < 4; i++) field.push({ team: RIVAL, i });
+    for (let i = 0; i < 4; i++) {
+      field.push({ team: TEAM, i });
+      field.push({ team: RIVAL, i });
+    }
     field
       .map((entry, k) => ({
         ...entry,
@@ -136,8 +151,10 @@ function buildMeetWorkspace() {
       });
   }
 
-  // History the meet does not know about: three HSU athletes are faster in
-  // events they were not entered in. Stage B is what surfaces these.
+  // History the meet does not know about: every HSU athlete is faster than the
+  // time the meet has for them, and faster than the OBU swimmer placed directly
+  // above them. Stage B is what surfaces these, and the gain is a real change of
+  // places — HSU moves from the odd places to a sweep.
   const athleteHistory = [];
   for (let i = 0; i < 4; i++) {
     for (const [e, event] of MEET_EVENTS.entries()) {
@@ -222,11 +239,18 @@ if (rosterResult.outcome === 'unchanged') {
 // Not a half-applied hybrid: the overrides the scorers stage proposed must not
 // leak out alongside the original plans.
 const guardedWs = buildRosterOnlyWorkspace();
-// 'scorers' in isolation is the stage that destroys this workspace, so it is the
-// one candidate guaranteed to be refused — which is exactly what makes it the
-// right probe for what a refusal hands back.
-const held = optimizeRosterForTeam(guardedWs, Gender.MEN, TEAM, false, rosterSettings, 'scorers');
-assert.equal(held.outcome, 'unchanged', 'scorers-only on a recruit roster must be refused');
+// 'events' in isolation is the stage that still produces a losing candidate on
+// this workspace, so it is the one refusal guaranteed to happen — which is what
+// makes it the right probe for what a refusal hands back.
+//
+// It used to be 'scorers', because the scorers stage destroyed this workspace:
+// it wrote 4 OFF overrides against an engine that had never capped the roster,
+// and one non-poolable athlete then zeroed every teammate in the event. Since
+// the scorer pool started admitting per athlete (2026-08-30) that stage neither
+// gains nor loses here — it ties at previousTotal — so probing with it would
+// assert nothing. The guard is unchanged; only which candidate exercises it is.
+const held = optimizeRosterForTeam(guardedWs, Gender.MEN, TEAM, false, rosterSettings, 'events');
+assert.equal(held.outcome, 'unchanged', 'the losing stage must be refused');
 assert.equal(held.appliedStages, 'none');
 assert.equal(held.projectedTotal, held.previousTotal);
 assert.deepEqual(

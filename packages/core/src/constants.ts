@@ -5,6 +5,25 @@
 
 import { ConversionFactors } from './types';
 
+/**
+ * Course-conversion factors (SCY ↔ LCM/SCM). Researched 2026-09-13, per
+ * `plans/2026-08-14/02-data-quality-aliasing.md` §1's open question: **no
+ * governing body publishes a directly citable, archivable primary source
+ * for these values.** USA Swimming's Times & Recognition Policy Manual
+ * covers when a converted time is (and is not) recognized, but does not
+ * itself publish a factor table; the NCAA does not publish its own set for
+ * championship seeding. The factors in circulation (this table included)
+ * trace to Colorado Time Systems' internal conversion methodology, embedded
+ * in timing software and reproduced by third-party calculators — not a
+ * standalone published document with a URL/sha256 to archive the way
+ * `data/cutlines/sources/` does for cut standards.
+ *
+ * This table is therefore **indicative, not official**, per this repo's own
+ * `converted_estimate` cutline-tag state (`cutlineTags.ts`), which already
+ * treats any conversion-derived cut comparison as visibly non-authoritative
+ * rather than a real cut — the code-level consequence of the same finding.
+ * Do not present a value derived from this table as an official time.
+ */
 export const CONVERSION_FACTORS: ConversionFactors = {
   '50 Freestyle': { men_lcm: 0.87, women_lcm: 0.881, both_scm: 0.906 },
   '100 Freestyle': { men_lcm: 0.873, women_lcm: 0.884, both_scm: 0.906 },

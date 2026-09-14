@@ -100,7 +100,8 @@ export function rowSuggestsScorer(swim: SwimmerResult, rules?: ScorerAutoRules):
 function deriveAutoScorerKeys(
   results: SwimmerResult[],
   rules: ScorerAutoRules | undefined,
-  resolver: AthleteAliasResolver
+  resolver: AthleteAliasResolver,
+  genderFilter: Gender | undefined
 ): Set<string> {
   const keys = new Set<string>();
   if (!rules) return keys;
@@ -108,7 +109,14 @@ function deriveAutoScorerKeys(
     if (r.isRecruit) continue;
     if (rowSuggestsScorer(r, rules)) {
       const team = String(r.team ?? '').trim() || 'Unknown';
-      const g = r.gender ?? Gender.MEN;
+      // Same fallback order buildScorerRosterLookup's own meta-building loop
+      // uses below (r.gender, then the call's own genderFilter, then Men as
+      // the last resort). Defaulting straight to Men here regardless of
+      // genderFilter was a real bug: a Women's-scoped call processing a row
+      // with no explicit gender built this key under Men, so it could never
+      // match the meta entry the loop below correctly keyed under Women —
+      // the auto-scorer flag silently failed to attach for exactly that row.
+      const g = r.gender ?? genderFilter ?? Gender.MEN;
       keys.add(scorerRosterKey(team, g, resolver.resolveAthleteName(r.name, team, g)));
     }
   }
@@ -145,7 +153,7 @@ export function buildScorerRosterLookup(
   resolver: AthleteAliasResolver = IDENTITY_ALIAS_RESOLVER
 ): ScorerRosterLookup {
   const rules = effectiveAutoRules(settings);
-  const autoKeys = deriveAutoScorerKeys(results, rules, resolver);
+  const autoKeys = deriveAutoScorerKeys(results, rules, resolver, genderFilter);
   const manual = overrideMap(overrides, resolver);
 
   const diverPatterns = settings.diverEventPattern;

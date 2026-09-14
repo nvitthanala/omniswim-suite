@@ -1,0 +1,405 @@
+{
+  "initiative": "swimcloud-full-capture",
+  "description": "One click on a SwimCloud meet/team page auto-fetches the entire relevant dataset into a local capture store; Matrix's + from SwimCloud button reads from that store. Plan: plans/2026-09-08/. See CLAUDE.md 'Long-horizon task state' for why this file exists, and docs/reference/PHASE_STATE.json for the unrelated phase-2 core-complexity sweep this file must not be folded into.",
+  "phases": [
+    {
+      "id": "0",
+      "name": "Real page captures F1-F5",
+      "owner": "human",
+      "status": "partially-complete",
+      "blockedBy": [],
+      "acceptance": "F1-F5 archived under tests/fixtures/swimcloud-real-*.html with finding headers, per plans/2026-09-08/06-testing-and-verification.md",
+      "note": "F1 and F1b captured and archived 2026-09-08 (resolved OQ-1 and OQ-1b, the two blocking questions). F2-F5 remain open but are no longer hard-blocking Phase 1.",
+      "verifiedBy": [],
+      "commit": null
+    },
+    {
+      "id": "0b",
+      "name": "Retire parseMeetResultsHtml's last live call site",
+      "owner": "executor",
+      "status": "verified-uncommitted",
+      "blockedBy": [],
+      "acceptance": "RosterImportWizard.handleClipboardMeetResults routes through parseTeamMeetSwimsHtml; parseMeetResultsHtml marked @deprecated",
+      "note": "DONE 2026-09-08, direct execution, against 13% of the 5hr quota window. New swimCloudTeamMeetSwimsToHistoricalSwims in packages/manager/src/lib/swimCloudImportBridge.ts; RosterImportWizard.tsx's dispatcher now routes meetTeam/meetTeamSwims (not meet/meetEvent) to it. A real bug was found and fixed, not invented for the test: the first draft matched team names by exact equality, which fails on every real page because SwimCloud prints full institutional names (\"Henderson State University\") against a coach's short-form input (\"Henderson State\") -- fixed to a substring check in both directions. Both parseMeetResultsHtml and the old swimCloudMeetResultsToHistoricalSwims marked @deprecated, kept for one round rather than deleted. Full writeup: plans/2026-09-08/WORKLOG-02-phase0b-retire-parseMeetResultsHtml-call-site.md. A resumed session should NOT redo this phase; start at Phase 2.",
+      "verifiedBy": [
+        "npm run lint --workspaces --if-present: all 8 workspaces clean",
+        "npx vitest run: 369 passed / 0 failed (up from 363; 6 new tests against the real fixture swimcloud-real-meet-team-swims-356467-team58-page1.html)",
+        "npm run build -w @omniswim/shell: succeeds"
+      ],
+      "commit": null
+    },
+    {
+      "id": "1",
+      "name": "Capture store, crawl planner, parseMeetTeamsHtml, parseMeetTopTeamsHtml",
+      "owner": "executor",
+      "status": "verified-uncommitted",
+      "blockedBy": [],
+      "acceptance": "packages/swimcloud: captureStore.ts, crawlPlan.ts, parseMeetTeamsHtml, parseMeetTopTeamsHtml, new meetTopTeams urlClassifier resource kind, additive SwimCloudCacheEntry fields, clipboardPayload v2. Full API surface reported for Phase 3/4 to build against.",
+      "note": "DONE 2026-09-08, direct execution (no subagent). Full API surface and a real bug found+fixed mid-build (a Node-only-code leak into browser packages via a type-only import) are recorded in plans/2026-09-08/WORKLOG-01-phase1-capture-store-and-parsers.md. status is 'verified-uncommitted', not 'verified-committed', because no git operations were performed (diffs only, per every agent's standing rule) -- these are real, uncommitted working-tree changes. A resumed session should NOT redo this phase; start at Phase 2.",
+      "verifiedBy": [
+        "npm run lint --workspaces --if-present: all 8 workspaces clean",
+        "npx vitest run: 363 passed / 0 failed (up from 316; 47 new tests, mostly against real fixtures)",
+        "npm run build -w @omniswim/shell: succeeds (2936 modules, vite + esbuild)"
+      ],
+      "commit": null
+    },
+    {
+      "id": "2",
+      "name": "Local capture HTTP route on apps/shell/server.ts",
+      "owner": "executor",
+      "status": "verified-uncommitted",
+      "blockedBy": [],
+      "acceptance": "Pairing-token auth, loopback-only registration, path-traversal guard on captureId, body size cap. See plans/2026-09-08/03-extension-crawler.md security requirements.",
+      "note": "DONE 2026-09-08, direct execution. Routes live in apps/shell/lib/swimcloudCaptureRoutes.ts (server.ts registers them; the module exists so the five security guards are testable -- server.ts starts its server at import time and nothing in it can be exercised in isolation). isLoopbackHost moved verbatim to apps/shell/lib/loopbackHost.ts so the registration gate and the exposure warning share one implementation. /parse deliberately NOT built (no consumer until Phase 4). Two real ordering traps found and fixed, not invented for the test: (1) body-parser is a no-op once req.body is set, so a route-level express.json mounted below server.ts's app-wide 50mb one would have silently inherited 50mb -- the router is mounted BEFORE the global parser AND carries its own Content-Length guard, with a test that mounts it in the wrong order and asserts the 2mb cap still holds; (2) captureIdForSubject interpolates a team subject's `season` straight into a filename, and clipboardPayload.ts validates season only as `typeof === 'string'`, so a hostile season would have produced a traversing captureId the server derived itself -- the derived id is validated exactly like a path parameter, plus a SEASON_PATTERN charset guard. CORS decision: NO headers by default. 03-extension-crawler.md's 'Where the crawl loop actually runs' puts the localhost POST in the MV3 background service worker with host_permissions for http://127.0.0.1/*, which is not subject to page CORS -- an Access-Control-Allow-Origin there would be decoration on a security header. OMNI_SWIMCLOUD_EXTENSION_ORIGIN opts in to a narrowly-scoped origin if an extension build ever posts from a content script instead; no placeholder id is invented. A resumed session should NOT redo this phase; Phase 3 and Phase 4 are both unblocked.",
+      "apiSurface": {
+        "module": "apps/shell/lib/swimcloudCaptureRoutes.ts",
+        "routes": [
+          "POST   /api/swimcloud/captures            -> 201 new | 200 updated | 400 -- SwimCloudCaptureRecord",
+          "GET    /api/swimcloud/captures            -> 200 SwimCloudCaptureRecord[] (newest updatedAt first)",
+          "GET    /api/swimcloud/captures/:id        -> 200 SwimCloudCaptureRecord | 404",
+          "POST   /api/swimcloud/captures/:id/pages  -> 200 { captureId, page, capture } | 400 | 404 | 409 | 413",
+          "DELETE /api/swimcloud/captures/:id        -> 200 { success, captureId, pagesDeleted } | 404"
+        ],
+        "authHeader": "X-Omniswim-Capture-Token",
+        "tokenFile": "data/swimcloud-pairing-token.json -> { token: 48 hex chars, createdAt: ISO-8601, note }",
+        "captureIdPattern": "^[a-z0-9][a-z0-9-]{0,127}$",
+        "captureRoot": "data/swimcloud-captures",
+        "envVars": ["OMNI_SWIMCLOUD_EXTENSION_ORIGIN (optional, chrome-extension://<id>)"]
+      },
+      "verifiedBy": [
+        "npm run lint --workspaces --if-present: all 8 workspaces clean",
+        "npx vitest run: 403 passed / 0 failed (up from 369; 34 new tests in tests/swimcloudCaptureRoutes.test.ts)",
+        "npm run build -w @omniswim/shell: succeeds",
+        "npx tsx scripts/test_server_binding.mjs: all assertions passed (the isLoopbackHost move did not break its source-text checks)",
+        "Live smoke test against the built production server: banner prints the token, 401 without a token, 403 with a wrong one, 201/200/200/200 for the happy path, 400 for ..%2F..%2Fpwned"
+      ],
+      "commit": null
+    },
+    {
+      "id": "2c",
+      "name": "Server-side /parse route (deferred out of Phase 2 for lack of a consumer; Phase 4 is that consumer)",
+      "owner": "executor",
+      "status": "verified-uncommitted",
+      "blockedBy": ["2"],
+      "acceptance": "POST /api/swimcloud/captures/:id/parse -> { captureId, subject, parses: SwimCloudTeamMeetSwimsParse[], warnings: string[] }, one parse per stored page whose resourceKind is meetTeamSwims, reusing parseTeamMeetSwimsHtml unchanged. Same auth/security guards as the rest of swimcloudCaptureRoutes.ts.",
+      "note": "DONE 2026-09-08 (post-reset), executor, in parallel with 3 and 4. Shipped exactly the contract given to Phase 4's worker in parallel (see apiSurface below) -- 5 deliberate, documented deviations from the brief (readonly arrays; bytes read only for outcome:'ok' pages so a stale re-fetch's old bytes never get presented as the new attempt's content; a throwing parser is caught into a warning instead of 500ing the whole capture; no synthesized fourth warning kind; no parser options passed since canonicalUrl already carries meetId/teamId). New exports: SwimCloudCaptureParseResponse, parseSwimCloudCapture(store, capture). At verification time, npm run lint failed on exactly one error (OpsModule.tsx importing './SwimCloudCapturePicker', which Phase 4 had not yet landed) -- confirmed not caused by this phase by isolating a tsc check to apps/shell/lib + server.ts (exit 0) and to every other workspace (all clean). Lint goes fully green once Phase 4 lands.",
+      "apiSurface": {
+        "route": "POST /api/swimcloud/captures/:id/parse",
+        "response": "{ captureId: string, subject: SwimCloudCaptureSubject, parses: readonly SwimCloudTeamMeetSwimsParse[], warnings: readonly string[] }",
+        "statusCodes": "200 (including empty parses -- a legitimate fact, not an error), 400 invalid capture id, 401/403 token, 404 unknown capture, 413 oversized body, 500 store failure",
+        "warningShapes": [
+          "Could not parse ${canonicalUrl}: ${failure.message}",
+          "No stored content for ${canonicalUrl} (outcome: ${outcome})",
+          "${canonicalUrl}${row suffix}: ${code} — ${message}  (that separator is space-emdash-space)"
+        ]
+      },
+      "verifiedBy": [
+        "npx vitest run: 431 passed / 0 failed (42 tests in tests/swimcloudCaptureRoutes.test.ts, 8 new)",
+        "npm run build -w @omniswim/shell: succeeds, run twice",
+        "isolated tsc check of apps/shell/lib/**/*.ts + server.ts against apps/shell/tsconfig.json: exit 0",
+        "npm run lint --workspaces: every workspace but packages/matrix/apps/shell clean, and that one failure is Phase 4's in-flight import, not this phase's code (see note)"
+      ],
+      "commit": null
+    },
+    {
+      "id": "3",
+      "name": "Extension auto-fetch crawler",
+      "owner": "worker",
+      "status": "verified-uncommitted",
+      "blockedBy": ["1", "2"],
+      "acceptance": "esbuild bundle, background service-worker crawl driver executing crawlPlan output, progress/cancel panel, options page pairing-token entry, chrome.downloads fallback, README rewritten Track A -> Track A'.",
+      "note": "DONE 2026-09-08 (post-reset), worker, in parallel with 2c and 4. Pure logic (crawlRequest.ts, crawlErrorPolicy.ts, progress.ts) split out and unit-tested for real -- 20 tests, no chrome.* mocking. crawler.js is esbuild-bundled from the real @omniswim/swimcloud/crawlPlan module, not hand-copied. manifest.json diff added 'storage' permission and 'options_page' beyond 03-extension-crawler.md's snippet -- both genuinely required for the options page to work, not scope creep. Existing content.js (Track A, clipboard) untouched. `npm run lint --workspaces` does not reach extensions/ (not an npm workspace member) -- `npx tsc --noEmit -p extensions/swimcloud-companion/tsconfig.json` is the equivalent check and is clean. UPDATE 2026-09-09: an adversarial review (see id 6b's sibling worklogs) found 4 real bugs in this phase's deliverable -- stale plannedPageCount, unsent teamDiscovery, no resume-dedup (contradicting this phase's own design-doc claim), and a hand-duplicated captureIdForSubject in background.js. All 4 fixed -- see plans/2026-09-08/WORKLOG-07-fix-crawler-review-findings.md for the full account, including the one deliberate remaining deviation (page 1 of each team+gender is always re-fetched on resume, since only a fresh fetch's pagination is trustworthy) and two items surfaced but not chased (team-discovery pages not relayed into the store; a cosmetic type-mirroring duplication in the picker). background.js is now itself an esbuild artifact of src/background.ts, not hand-written. The impure crawl loop, background relay, and options page remain NOT automated -- no headless-extension harness exists in this repo; manual checklist in plans/2026-09-08/PHASE3-MANUAL-VERIFICATION.md, not yet run by a human. UPDATE 2026-09-09: a real live crawl (user-run, meet 379295) hung indefinitely right after team-list confirmation -- root cause found and fixed (extensions/swimcloud-companion/src/backgroundRoundTrip.ts's sendWithTimeout, see WORKLOG-08): a Manifest V3 listener returning true then never calling sendResponse on a rejection path hangs the sender forever with no error and no timeout. Every background round trip now has a bounded timeout and a defined failure outcome. Survived a second quota-reset interruption with zero data loss (agent had finished, was only mid-report).",
+      "verifiedBy": [
+        "npx tsc --noEmit -p extensions/swimcloud-companion/tsconfig.json: clean",
+        "node extensions/swimcloud-companion/build.mjs: crawler.js 90.3kb, background.js 9.7kb, both built",
+        "npx vitest run: 481 passed / 0 failed (independently re-confirmed after both parallel review-fix agents landed)",
+        "npm run lint --workspaces --if-present: all 8 workspaces clean",
+        "npm run build -w @omniswim/shell: succeeds, 2937 modules, server.js 360.8kb"
+      ],
+      "commit": null
+    },
+    {
+      "id": "4",
+      "name": "Matrix capture picker",
+      "owner": "worker",
+      "status": "verified-uncommitted",
+      "blockedBy": ["1", "2", "2c"],
+      "acceptance": "SwimCloudCapturePicker.tsx, OpsModule two-item menu, applySwimCloudRows extraction shared with the clipboard path.",
+      "note": "DONE 2026-09-08 (post-reset), worker, in parallel with 2c and 3, against 2c's contract reported ahead of 2c actually landing (see 2c's note) -- built with the endpoint mocked in tests. The worker EXPLICITLY FLAGGED a real integration gap on completion rather than hiding it: the picker had no way to obtain the X-Omniswim-Capture-Token every capture route requires, so it would 401 against the real server. Fixed directly (not delegated) immediately after: added GET /api/swimcloud/pairing-token to server.ts (gated by this app's own auth -- requireAuth/optionalAuth per AUTH_REQUIRED, same as every workspace route -- registered only when the capture routes themselves were, and emitting no CORS header so the token stays opaque to any page but this app's own same-origin frontend); the picker now fetches it once on open and attaches it to every capture-route call, showing an explicit error and never sending a request it knows will fail if that fetch fails. This is the reconciliation the state file's Phase 2c note asked for ('verify the two actually agree once both report back') -- they did not agree until this fix. Verified against the real built production server, not just mocked tests: 200 from /pairing-token with no auth needed (AUTH_REQUIRED=false locally), 401 from /captures with no capture header, 200 with the fetched token, a real create+delete round trip, residue confirmed cleaned up afterward.",
+      "verifiedBy": [
+        "npx vitest run: 445 passed / 0 failed (up from 431; 7 tests in tests/swimCloudCapturePicker.test.ts, including a new one asserting the picker shows the token error and calls no capture route when the token fetch fails)",
+        "npm run lint --workspaces --if-present: all 8 workspaces clean",
+        "npm run build -w @omniswim/shell: succeeds",
+        "Live smoke test against the real built production server (NODE_ENV=production, port 3911): GET /api/swimcloud/pairing-token -> 200 with a real token; GET /api/swimcloud/captures with no header -> 401; same call with the fetched token -> 200; POST create -> 201; DELETE -> 200, pagesDeleted 0; data/swimcloud-captures left empty afterward"
+      ],
+      "commit": null
+    },
+    {
+      "id": "5",
+      "name": "Team-subject capture (roster + swimmer profiles + season)",
+      "owner": "executor",
+      "status": "in-progress",
+      "blockedBy": [],
+      "acceptance": "parseTeamRosterHtml and parseSwimmerProfileHtml rewritten against real markup; new parseTeamResultsHtml; season definition resolved (OQ-2); crawlPlan extended for the team subject.",
+      "note": "DONE 2026-09-09, both halves. Roster half: parseTeamRosterHtml + planMeetTeamRosters, real-capture-verified against F6 (see WORKLOG-08). Swimmer half: parseSwimmerTimesHtml (mutation-tested, 5 deliberate breaks all caught) + planMeetSwimmerTimes + a new swimmerTimes urlClassifier resource kind (closed a real gap: /swimmer/{id}/ and /swimmer/{id}/times/ would have shared one cache key) + a bounded-concurrency (3 lanes, 400ms stagger) fetch pool wired into the actual crawl loop, which had never called the roster planner until this round (see WORKLOG-09). The concurrency change is a stated, knowing departure from this repo's 'never concurrent' politeness rule, scoped only to swimmer-times leaf pages -- the core team-swims/roster loop's pacing is untouched. season_id deliberately never stored/computed/reversed anywhere. parseTeamResultsHtml explicitly NOT built -- the user's scope pivot (roster + swimmer events, not a team's full season history) makes it low-priority. Both quota-reset interruptions this round lost zero work -- agents had finished and were only mid-report both times.",
+      "verifiedBy": [
+        "npx vitest run: 618 passed / 0 failed",
+        "npm run lint --workspaces --if-present: all 8 workspaces clean",
+        "npx tsc --noEmit -p extensions/swimcloud-companion/tsconfig.json: clean",
+        "node extensions/swimcloud-companion/build.mjs: crawler.js 133.4kb, background.js 12.5kb",
+        "npm run build -w @omniswim/shell: succeeds"
+      ],
+      "commit": null
+    },
+    {
+      "id": "6",
+      "name": "Lint, typecheck, full suite, production build",
+      "owner": "finisher",
+      "status": "verified-uncommitted",
+      "blockedBy": ["3", "4"],
+      "acceptance": "Clean across packages/swimcloud, packages/matrix, apps/shell, extensions/; npm run build exit 0.",
+      "note": "DONE 2026-09-08. finisher ran the full sweep tree-wide and cross-checked all 58 changed/new files in `git status --short` against this state file's phase notes -- every file accounted for by a phase, no phase claiming a file git doesn't show as changed. One unmentioned file (packages/core/src/lib/scoringDefaults.ts) confirmed legitimate: part of Phase 4's applySwimCloudRows extraction. No mechanical fixes were needed. An independent adversarial security/correctness review ran in parallel (not a numbered phase -- see WORKLOG-04 and the state-file update once it reports).",
+      "verifiedBy": [
+        "npm run lint --workspaces --if-present: 8/8 workspaces, 0 errors",
+        "npx vitest run: 445 passed / 0 failed",
+        "npm run build -w @omniswim/shell: 2937 modules, server.js 357.7kb",
+        "npx tsc --noEmit -p extensions/swimcloud-companion/tsconfig.json: 0 errors",
+        "node extensions/swimcloud-companion/build.mjs: crawler.js 84.5kb, valid IIFE"
+      ],
+      "commit": null
+    },
+    {
+      "id": "6b",
+      "name": "Fix capture-store concurrent-write race (adversarial review finding #4)",
+      "owner": "executor",
+      "status": "verified-uncommitted",
+      "blockedBy": ["1"],
+      "acceptance": "Concurrent putPage/upsertCapture/deleteCapture calls against the same captureId never drop a page ref; different captureIds are not serialized against each other.",
+      "note": "DONE 2026-09-09 (after a quota-reset interruption that touched zero files -- see WORKLOG-05/06). Private KeyedAsyncMutex in packages/swimcloud/src/captureStore.ts, no public API change. Scope stated explicitly in its own doc comment: protects one Node process's concurrent handlers (the real deployment shape), not multiple OS processes on the same directory. A second, smaller race in rebuildIndex was found and deliberately left alone -- self-healing derived cache, documented rather than silently absorbed. Verification was unusually rigorous: the 4 new tests were confirmed red against the unmodified store first (20 concurrent writes -> 1 surviving ref), the independence test was adversarially checked by temporarily hard-coding a global lock and confirming only that one test fails, and margin was measured (0-1 vs a global-lock value of 20 across 10 runs) rather than assumed. Full writeup: plans/2026-09-08/WORKLOG-06-fix-capture-store-race.md.",
+      "verifiedBy": [
+        "npx vitest run: 449 passed / 0 failed (up from 445; 4 new, red-verified pre-fix)",
+        "npm run lint --workspaces --if-present: all 8 workspaces clean",
+        "npm run build -w @omniswim/shell: succeeds"
+      ],
+      "commit": null
+    },
+    {
+      "id": "2d",
+      "name": "Extend server-side /parse to surface roster and swimmer-times pages, not just meet results",
+      "owner": "executor",
+      "status": "verified-uncommitted",
+      "blockedBy": [],
+      "acceptance": "SwimCloudCaptureParseResponse gains `rosters: SwimCloudRosterParse[]` and `swimmerTimes: SwimCloudSwimmerTimesParse[]` alongside the existing `parses`; all three parseable kinds share the same one-bad-page-does-not-lose-the-others and absent-not-empty discipline the route already has for meetTeamSwims.",
+      "note": "DONE 2026-09-09. Mutation-proven (dropping a kind from the parseable list, and collecting-but-discarding a parse, both independently fail 4 tests). meetTeamSwims behavior byte-for-byte unchanged (dispatch via a kind-tagged union rather than branching inside the existing try, specifically to preserve that). Immediate mechanical follow-up done in the same round, no subagent: un-staled SwimCloudCapturePicker.tsx's local type mirror (4 precise spots, all flagged exactly by the route work's own report) and its now-wrong 'nothing parseable' toast. See plans/2026-09-08/WORKLOG-10-parse-route-extension.md. Deliberately NOT built: any UI surfacing rosters/swimmerTimes to a user -- that's a real product-shape decision (what does a coach do with this?), recorded with three candidate shapes in plans/2026-09-08/NEXT-STEPS-post-parse-extension.md, none chosen. Do not guess at this.",
+      "verifiedBy": [
+        "npx vitest run: 625 passed / 0 failed",
+        "npm run lint --workspaces --if-present: all 8 workspaces clean",
+        "npm run build -w @omniswim/shell: succeeds"
+      ],
+      "commit": null
+    },
+    {
+      "id": "0c",
+      "name": "Retire synthetic-fixture-only parseSwimmerProfileHtml, fix the live clipboard bug it causes",
+      "owner": "executor",
+      "status": "in-progress",
+      "blockedBy": [],
+      "acceptance": "New swimCloudSwimmerTimesToHistoricalSwims (using the real, mutation-tested parseSwimmerTimesHtml) replaces the old converter at RosterImportWizard's live call site; the bare /swimmer/{id}/ page gets a redirect message instead of a parse attempt with the deprecated parser.",
+      "note": "DONE 2026-09-09. New swimCloudSwimmerTimesToHistoricalSwims (uses the real relayLeadoff boolean, not stroke-name string-matching). Dispatcher now routes the new swimmerTimes url-classifier kind correctly; a bare /swimmer/{id}/ capture gets a redirect message. Old parser+converter @deprecated, kept. TWO real bugs found in the process: (1) the two SwimCloud-name converters now disagree on name order (Last-First vs First-Last) -- not silently normalized, the alias-suggestion system catches it for a human to confirm, flagged as a real residual gap; (2) rosterQueueEntryMatches's name fallback broke against the new name order for any roster row with no swimmer id -- fixed by switching to canonicalSwimmerName. A fabricated test value (spot-check times written from memory) was caught by its own failing test before shipping -- see WORKLOG-11.",
+      "verifiedBy": [
+        "npx vitest run: 647 passed / 0 failed",
+        "npm run lint --workspaces --if-present: all 8 workspaces clean",
+        "npm run build -w @omniswim/shell: succeeds"
+      ],
+      "commit": null
+    },
+    {
+      "id": "4b",
+      "name": "Read-only browse of captured rosters and swimmer-times in the Matrix picker",
+      "owner": "worker",
+      "status": "verified-uncommitted",
+      "blockedBy": [],
+      "acceptance": "SwimCloudCapturePicker.tsx shows expandable, read-only sections for rosters and swimmerTimes from a parsed capture, omitted entirely when empty -- no import actions.",
+      "note": "DONE 2026-09-09. Two collapsed-by-default sections below the existing import checklist -- 'Rosters in this capture' (team/gender/season/count, expands to the athlete list) and 'Swimmer times in this capture' (name/count, expands to the personal-bests table). Both fully omitted when their array is empty. Swimmer name rendered verbatim in its real 'Last, First M' order with a title tooltip explaining why, not silently reformatted. No import actions added, per scope. Theming: reused existing tokens/utility classes only, no hardcoded colors.",
+      "verifiedBy": [
+        "npx vitest run: 627 passed / 0 failed (9 new, real-shaped fixtures)",
+        "npm run lint --workspaces --if-present: all 8 workspaces clean",
+        "npm run build -w @omniswim/shell: succeeds"
+      ],
+      "commit": null
+    },
+    {
+      "id": "4c",
+      "name": "Roster + swimmer-history import directly from a completed capture (packages/manager)",
+      "owner": "executor",
+      "status": "verified-uncommitted",
+      "blockedBy": [],
+      "acceptance": "A coach can pick a capture + team + gender and import that whole roster's swimmers' event histories in one action, reusing RosterImportWizard's existing rosterQueue/preview/handleMerge state -- swimmers with no matching swimmerTimes parse stay in the queue for manual capture, exactly like today's partial-completion handling.",
+      "note": "DONE 2026-09-09. Genuine refactor, not a third copy: handleClipboardTeamRoster/handleClipboardSwimmerTimes rewritten to call the new packages/manager/src/lib/rosterQueueImport.ts shared functions (seedRosterQueueFromAthletes, convertAndAccountSwimmerTimes, markRosterQueueCaptured, buildRosterImportFromCapture), confirmed by removing their old inline logic entirely, not adding alongside it. New SwimCloudCaptureRosterImportPanel.tsx: 'Browse captures' entry point next to (not replacing) 'From clipboard'; shows honest per-roster coverage before committing ('1 of 35 athletes have captured times'); each swimmer-times match consumed at most once so a name-fallback match can't double-claim; gender disagreement between the roster and the wizard's scope surfaced three ways (badge, 'Import anyway' button text, warning line) rather than silently resolved either way. See plans/2026-09-08/WORKLOG-12-roster-import-from-capture.md, including a disclosed test-construction note (real fixture values re-paired across two real swimmers specifically to prove id-based matching).",
+      "verifiedBy": [
+        "npx vitest run: 683 passed / 0 failed (36 new)",
+        "npm run lint --workspaces --if-present: all 8 workspaces clean",
+        "npm run build -w @omniswim/shell: succeeds"
+      ],
+      "commit": null
+    },
+    {
+      "id": "2e",
+      "name": "Friction fix: batch the chrome.downloads fallback, pre-flight pairing check",
+      "owner": "human-directed, direct execution (no subagent)",
+      "status": "verified-uncommitted",
+      "blockedBy": [],
+      "acceptance": "A real 234-page crawl against an unpaired extension no longer produces 234 chrome.downloads popups with zero warning; it blocks pre-flight with a clear choice, shows a live running count if the coach proceeds anyway, and combines every fallback page into one file at the end.",
+      "note": "User hand-tested a real crawl and reported '234 pop ups'. Root-caused from the real code, not guessed: (1) background.ts's relayPage treated a chrome.downloads fallback as an unqualified success identical to a real app save, so totalFailures never incremented and no warning ever fired; (2) formatResumeDegradationLine had a typed 'app-unreachable' case with no message, falling through to empty string. Fixed: a pre-flight gate reusing the crawl's existing first round trip (no new network cost), a live downloadsFallbackCount distinct from totalFailures, and background.ts accumulating fallback pages in chrome.storage.local (not memory, since an MV3 service worker can be killed between messages) keyed per-page with a small index, flushed into ONE combined download by finishCrawl on every one of the crawl's 6 exit paths, not just the happy one. manifest.json gained unlimitedStorage. Full writeup: plans/2026-09-09/WORKLOG-13-friction-fix-download-batching.md. Real Chrome+extension click-through remains unverified -- no headless-extension harness exists in this repo, stated honestly per every prior worklog's same boundary.",
+      "verifiedBy": [
+        "npx tsc --noEmit -p extensions/swimcloud-companion/tsconfig.json: clean",
+        "node extensions/swimcloud-companion/build.mjs: crawler.js 136.8kb, background.js 14.1kb",
+        "npx vitest run: 690 passed / 0 failed (683 baseline + 7 new, pinning the exact new strings including the original bug's symptom)",
+        "npm run lint --workspaces --if-present: all 8 workspaces clean"
+      ],
+      "commit": null
+    },
+    {
+      "id": "9",
+      "name": "UI/architecture redesign plan (not yet built -- plan only, per explicit user minimum bar)",
+      "owner": "fable (direct, no subagent)",
+      "status": "plan-complete",
+      "blockedBy": [],
+      "acceptance": "A thorough, detailed plan diagnosing the real UI clutter (grounded in actual file sizes/duplication, not a general critique), proposing a shared capture-browsing component to replace two independently-built, near-duplicate pickers, preserving theming/accessibility explicitly, and surfacing genuinely open product questions rather than deciding them unilaterally.",
+      "note": "User instruction: 'brainstorm how to reorganize the ui... a full refresh... be extremely thorough... at the very least build a thorough, detailed, solid plan' -- given as the explicit minimum deliverable against a 7-day quota down to ~12%. Full plan at plans/2026-09-09/01-UI-REDESIGN-PLAN.md. Grounded in real numbers: 3,550 lines across 5 components, 2 of which (SwimCloudCapturePicker.tsx and SwimCloudCaptureRosterImportPanel.tsx) independently duplicate the same pairing-token/capture-list/parse plumbing for two different downstream consumers -- the same class of duplication WORKLOG-09 already caught once at the logic layer, now found again at the UI layer. Recommends (not decides) reusing the existing @omniswim/ui FloatingWindow/SwimCloudContext pattern (already backing apps/shell/src/components/SwimCloudWindow.tsx) rather than inventing a new modal paradigm or a new package. Four genuinely open questions left for the user, not resolved silently. Phased build plan mapped to this repo's own executor/worker/finisher delegation model. Nothing in the plan has been built.",
+      "verifiedBy": [],
+      "commit": null
+    },
+    {
+      "id": "2f",
+      "name": "Server crash-visibility fix: global process.on('unhandledRejection'/'uncaughtException') handlers",
+      "owner": "human-directed, direct execution",
+      "status": "verified-uncommitted",
+      "blockedBy": [],
+      "acceptance": "An unhandled promise rejection anywhere in the server process is logged clearly and the server stays up, instead of Node's default fatal-crash-with-no-log behavior taking down the whole app.",
+      "note": "User reported 'failed to update workspace' during a real roster import. Reproduced the ACTUAL import pipeline (parseTeamRosterHtml + parseSwimmerTimesHtml + buildRosterImportFromCapture + importHistoryToRoster + a real PUT /api/workspaces/:id) against the live server at both toy scale (1 swimmer) and realistic whole-team scale (35 swimmers, 280 swims) -- both succeeded cleanly (200, 22ms). The import pipeline itself is NOT the bug. Separately confirmed apps/shell/server.ts had ZERO global process-level error handlers, and this exact server process had already died silently twice earlier this same session with no log line explaining why (Node v15+ treats an unhandled rejection as fatal by default) -- most likely explanation for the user's error: a transient server crash/restart window coincided with their PATCH request, surfacing as a generic connection-failure message. This fix does not identify the specific rejection (none could be reproduced) -- it ensures the NEXT one is visible and does not take the whole server down with it. Also clarified for the user: their main GitHub clone (C:\\Users\\nihar\\Documents\\GitHub\\omniswim-suite, branch fix/scoring-roster-integrity) and this oyster worktree are genuinely separate working directories of the same repo -- confirmed via `git worktree list` that all of this session's work exists ONLY in oyster, and the main clone was not implicated in this specific failure (the server that crashed was correctly running from oyster the whole time).",
+      "verifiedBy": [
+        "Direct reproduction script against the live server: toy-scale (1 swimmer, 8 swims) and realistic-scale (35 swimmers, 280 swims) roster-history imports both succeed, 200, <25ms -- the import pipeline is not the bug",
+        "grep confirmed zero process.on('unhandledRejection'|'uncaughtException') handlers existed before this fix",
+        "npx vitest run: 690 passed / 0 failed (no regression)",
+        "npm run lint -w @omniswim/shell: clean",
+        "npm run build -w @omniswim/shell: succeeds",
+        "Dev server restarted with the fix; confirmed stable and serving current code"
+      ],
+      "commit": null
+    },
+    {
+      "id": "7",
+      "name": "Manual verification + worklog + doc amendments",
+      "owner": "human",
+      "status": "not-started",
+      "blockedBy": ["6"],
+      "acceptance": "plans/2026-09-08/06-testing-and-verification.md checklist screenshots captured; WORKLOG-01 written; plans/2026-09-06/ amendments and plans/STATE.md updated.",
+      "verifiedBy": [],
+      "commit": null
+    },
+    {
+      "id": "10",
+      "name": "Scoring-correctness fix: exclude ambiguous prelims/finals duplicates from SwimCloud meet import",
+      "owner": "human-directed, direct execution (no subagent)",
+      "status": "verified-uncommitted",
+      "blockedBy": [],
+      "acceptance": "A swimmer with more than one swim of the same labeled event on a swims-list page is never scored twice; every excluded swim is named in a new skip reason rather than dropped silently.",
+      "note": "User reported a real import as '188 warnings... not clean... does not identify prelims vs finals... make sure the point numbers are correct.' Full diagnosis and fix in plans/2026-09-10/01-SWIMCLOUD-SCORING-CORRECTNESS.md. Root cause confirmed against the real fixture, not guessed: the swims-list page has no round/session column, so a swimmer who swam both prelims and finals of one event gets two (sometimes three) undifferentiated rows -- 6 groups, 13 of 30 rows (43%) on the one archived page. swimCloudMeetImportBridge.ts never set roundSwam on these rows, so packages/core's classifyRoundTier saw tier 'UNK', which canScoreAthlete treats as fully scoring (correct default for the PDF pipeline, wrong here) -- every duplicate was being scored as an independent finish using SwimCloud's Place column, which is itself proven to be a per-round placement, not the event's true field place (Nojus Skirutis: a faster swim marked '2nd', a slower one marked '1st', on two different swim ids). Also found: SwimCloud's numeric event/{n} id does not identify a labeled event 1:1 (Oskar Cebula's '100 Y Breast' splits across event/26/ and event/100/), so any fix must group duplicates by event LABEL, not event id. Fix: swimCloudTeamMeetSwimsToSwimmerResults now groups by (athlete, team, event label) and excludes every swim in a group of more than one, reporting each via a new 'ambiguous-round-duplicate' skip reason with a detail field (time/place/swim id) -- no guess is made about which swim is prelims vs finals, per CLAUDE.md's provenance rules. Also audited (no code change needed): exhibition-swim handling is correctly isolated end to end (ncaaScoringRules.ts's Rule 7-10-1 removal; the Hy-Tek leading-X time-token marker kept distinct from the unrelated 'Extracted' X badge chip) but the Hy-Tek detector remains unverified against real SwimCloud markup -- no real exhibition swim has been captured yet. '188 warnings' itself is not a defect: confirmed to be a raw per-page-warning-line count aggregated across an entire multi-page capture, dominated by expected/benign codes like relay-legs-absent; flagged as a UI follow-up (breakdown by code/severity, surface skip reasons visibly), not fixed this pass. The real, non-interim fix -- parsing /results/{meetId}/event/{n}/, which SwimCloud does label Preliminaries/Finals -- is scoped in the plan doc's section 6 but not started; it needs fixture F9 captured first.",
+      "verifiedBy": [
+        "tests/swimCloudMeetImportBridge.test.ts: 37/37 passed (6 real-capture assertions rewritten against the corrected counts, 7 new synthetic unit tests for the grouping logic)",
+        "npx vitest run (full suite): 697 passed / 0 failed (up from 690)",
+        "npx tsc --noEmit -p packages/matrix/tsconfig.json: clean"
+      ],
+      "commit": null
+    },
+    {
+      "id": "11",
+      "name": "Real prelims/finals resolution: parse the per-event results page instead of excluding duplicates",
+      "owner": "executor",
+      "status": "verified-uncommitted",
+      "blockedBy": [],
+      "acceptance": "New parser for /results/{meetId}/event/{n}/ (F9 fixture) extracting round-labeled results (A/B/C Final, Preliminaries) and the real A/B-Final meet Score; meet-scoped parallel fetching of every unique event id a crawl encounters (once per meet, not once per team); swimCloudTeamMeetSwimsToSwimmerResults resolves roundSwam/meetScore from the event page instead of excluding the ambiguous-round-duplicate group, falling back to phase 10's exclusion only when the event page wasn't captured.",
+      "note": "User pushed back directly on phase 10's 'we can't know which round this is' and captured the missing page themselves 2026-09-10 (fixture F9, see its entry above). CONFIRMED: one page per Finals-labeled event holds every round as separate <table><caption>ROUND</caption> blocks; caption text maps directly onto the existing classifyRoundTier vocabulary; A/B Final tables carry the real meet Score in a u-is-hidden (rendered-hidden, markup-present) column -- the first page type in this pipeline with genuine per-swim meet points; exhibition is marked by a <span title=\"Exhibition\">X</span> REPLACING the rank-cell ordinal, not the leading-X-on-time-token Hy-Tek guess parser.ts's readTime currently makes -- that guess needs correcting. Also confirmed: SwimCloud's numeric event id is a results-PAGE id, not a round id -- a swimmer's third team-swims-list row (Oskar Cebula, 100 Y Breast, event/100/) sits under a wholly separate, unlabeled event id this meet's own sidebar groups with other suffix-less high-numbered ids (100-939), matching packages/core/src/lib/utils.ts's already-documented post-meet-time-trial numbering finding (isOutsideScoredProgram/scoredEventNumberMax) -- treat it as a likely time trial, not a third real round, until that page is captured. User's explicit requirement: parallelized, fast per-event fetching that scales to a big meet without becoming slow -- reuse the existing bounded-concurrency pool (extensions/swimcloud-companion/src/boundedFetchPool.ts, 3 lanes/400ms stagger, wired for swimmer-times in Phase 5/WORKLOG-09) rather than inventing a second mechanism. Full scoped build plan in plans/2026-09-10/01-SWIMCLOUD-SCORING-CORRECTNESS.md section 6.\n\nDONE 2026-09-10, executor, across two sittings split by a session rate limit (the limit hit between the last route test being identified and being written; zero work was lost -- the resumed session found the parser, bridge and crawl wiring already on disk and compiling, and wrote only the one missing test). FIVE LAYERS BUILT, all against the real F9 capture and nothing else:\n\n(1) PARSER -- parseMeetEventResultsHtml in packages/swimcloud/src/parser.ts, confidence 'real-capture-verified', 40/40 rows and 0 warnings on the real page. Splits the page into its four <caption>-labelled round tables in PRINTED (program) order, not chronological -- Preliminaries swam first and prints last, and nothing re-sorts it. Caption text is kept VERBATIM ('A Final' / 'Preliminaries') rather than mapped to a tier here, because packages/core's classifyRoundTier already owns that vocabulary and a second copy could only drift from the first.\n\n(2) THE POINTS DISTINCTION, which is the correctness core of this phase. A/B Final tables carry a 'Score' header (real meet points: 20/17/16/15/14/13/12/11 and 9/7/6/5/4/3/2 on the real page); C Final and Preliminaries carry 'Pts' (SwimCloud's 0-1000 power index, title='Swimcloud Points'). These are different quantities and the page prints both. Each round records which it had via SwimCloudEventRoundPointsColumn ('score' | 'pts' | 'none'), meetScore is populated ONLY from a 'score' column, and a non-scoring round's meetScore is ABSENT rather than zero. Storing a 709 power index as meet points would have multiplied a team score.\n\n(3) EXHIBITION, read from the rank cell as F9 showed, NOT from the leading-X-on-time-token Hy-Tek guess. The marker REPLACES the ordinal, so an exhibition row legitimately has no place at all -- absent, never 0, and never a parse failure. readTime's separate Hy-Tek guess was left alone rather than 'corrected' as the fixture note anticipated: it is a different page family's convention, no real SwimCloud page has yet been captured that exercises it, and changing it on this evidence would be a guess. All five C Final swimmers are exhibition on the real page and the same five reappear marked in Preliminaries, so SwimCloud tags a swimmer consistently across every round on one page.\n\n(4) THE JOIN. parseMeetEventResultsHtml builds the SAME '{meetId}:swim:{id}' swimKey shape parseTeamMeetSwimsHtml builds, deliberately, so the two page types join on SwimCloud's own swim id with no normalization. buildSwimCloudEventRoundIndex turns a capture's event parses into that lookup, and swimCloudTeamMeetSwimsToSwimmerResults consults it BEFORE the phase-10 duplicate test -- a resolved swim is no longer ambiguous, so it is scored with its real roundSwam instead of excluded. Name+team+time was explicitly NOT offered as a fallback join: a swimmer who goes the same time in prelims and finals is exactly the hardest case, and such a match would be broken by map iteration order -- a coin flip deciding whether a swim scores. A swim with no id on either side stays unresolved and keeps phase 10's visible exclusion.\n\n(5) CRAWL. planMeetEventResults is MEET-scoped, not team-scoped, and dedupes repeated event refs: one event page holds every team's swimmers, so a per-team plan on a 40-team/42-event meet would fetch 1,680 pages to learn what 42 pages say. It takes no gender parameter -- an /event/{n}/ page is already one gender's event, and the page's own gender toggle points at a DIFFERENT event id (100/400 here) rather than a ?gender= variant, so a gender parameter would be inventing one. The crawler collects refs from each parsed swims list (swims[].event.eventRef, the only place a swims row names its results page) and runs the resulting steps through the EXISTING boundedFetchPool at 3 lanes / 400ms stagger, per the user's speed requirement -- no second concurrency mechanism was invented.\n\nDEVIATIONS AND OPEN GAPS, stated plainly rather than papered over:\n- DIVING: no diving event has been captured. A diving page's 'Score' could plausibly be the judged score (a 300.15) rather than meet points, and storing that as meet points would silently multiply a team score. So a diving event's Score column is read, reported as the warning 'diving-score-column-unverified', and deliberately NOT stored in meetScore. Nothing about diving-row markup is invented.\n- SINGLE-ROUND TIMED FINALS: expected to print one table with NO round caption, but never captured. An absent caption raises 'missing-round-caption' and the round stays absent -- it is never renamed 'Finals' on a guess. That round then contributes nothing to the join index, so its swims keep phase 10's exclusion behavior.\n- DQ / SCRATCH: F9 contains NO DQ, NS or SCR row, so no assertion in this phase claims to cover one. Such a time cell goes through the same shared readTime path every other page uses; that path is not newly verified here.\n- RELAYS: F9 is an individual event. A relay event's per-event page is unseen. A title='Leadoff' badge is still read if one appears, rather than assumed absent.\n- PAGINATION: F9 carries no c-pagination widget -- all four rounds and 40 rows arrived on one page. Whether a very large event's page ever paginates is UNPROVEN, so planMeetEventResults plans no page range.\n- The OpsModule clipboard path passes NO eventResults (a single pasted swims page has no event pages with it), so it keeps phase 10's exclusion behavior unchanged. Only the capture-picker path resolves rounds. This is correct, not an oversight -- but it means a coach pasting one page still sees ambiguous-round-duplicate skips.\n- OQ-9 (the nested /event/{n}/{subIndex}/ URL shape) is still unmodelled and still not blocking: nothing in this crawl produces such a URL.",
+      "apiSurface": {
+        "parser": {
+          "module": "packages/swimcloud/src/parser.ts (re-exported from packages/swimcloud/src/index.ts)",
+          "function": "parseMeetEventResultsHtml(html: string, context: SwimCloudParseContext, options: SwimCloudMeetEventResultsParseOptions = {}): SwimCloudParseResult<SwimCloudMeetEventResultsParse>",
+          "types": [
+            "SwimCloudMeetEventResultsParse { swimCloudMeetId, eventRef, meetName?, meet, event, eventLabel?, gender, rounds: readonly SwimCloudMeetEventRound[], rowCount }",
+            "SwimCloudMeetEventRound { round?, pointsColumn: SwimCloudEventRoundPointsColumn, swims: readonly SwimCloudMeetEventSwim[], rowCount }",
+            "SwimCloudMeetEventSwim { swimKey, swimCloudSwimId?, roundLabel?, entry, result, exhibition: boolean, relayLeadoff: boolean, cutStandards: readonly SwimCloudCutStandardLabel[], meetScore? }",
+            "SwimCloudEventRoundPointsColumn = 'score' | 'pts' | 'none'",
+            "SwimCloudMeetEventResultsParseOptions { meetId?, eventRef?, gender?, meetCourse?, meetFormat?, meetRuleset? }"
+          ],
+          "notes": "swimKey is '{meetId}:swim:{swimCloudSwimId}' -- the SAME shape parseTeamMeetSwimsHtml builds, which is what makes the two page types joinable. meetScore is populated only when the owning round's pointsColumn is 'score'; a 'pts' round's power index stays in result.points. An exhibition row has result.place absent."
+        },
+        "route": {
+          "module": "apps/shell/lib/swimcloudCaptureRoutes.ts",
+          "change": "SwimCloudCaptureParseResponse gains `readonly eventResults: readonly SwimCloudMeetEventResultsParse[]` -- a fourth sibling list alongside parses/rosters/swimmerTimes, additive, no existing field changed. 'meetEvent' added to PARSEABLE_RESOURCE_KINDS.",
+          "absentVsEmpty": "eventResults: [] means 'this capture holds no per-event page', which a caller reads as 'prelims and finals cannot be told apart in it' -- never as 'there were no finals'. A capture stored before this route read event pages answers [] with no warning, because it genuinely holds none."
+        },
+        "bridge": {
+          "module": "packages/matrix/src/lib/swimCloudMeetImportBridge.ts",
+          "newExports": [
+            "SwimCloudTeamMeetSwimsImportOptions.eventResults?: readonly SwimCloudMeetEventResultsParse[]  (new optional field; omitted/empty reproduces the pre-existing behavior exactly)",
+            "SwimCloudResolvedRound { roundSwam: string, meetScore?: number, place?: number, exhibition: boolean, eventRef: string }",
+            "SwimCloudEventRoundIndex = ReadonlyMap<string, SwimCloudResolvedRound>  (keyed by swimKey)",
+            "buildSwimCloudEventRoundIndex(parses: readonly SwimCloudMeetEventResultsParse[]): SwimCloudEventRoundIndex"
+          ],
+          "unchangedSignatures": "swimCloudTeamMeetSwimsToSwimmerResults(parse, options = {}) and applySwimCloudRows(parses, workspace, onUpdate, options = {}) keep their existing signatures; eventResults arrives through the options bag (ApplySwimCloudRowsOptions extends SwimCloudTeamMeetSwimsImportOptions), so every existing call site compiles untouched.",
+          "behavior": "A swim found in the index is scored with its real roundSwam (straight into SwimmerResult.roundSwam, where classifyRoundTier reads it) and, for an A/B Final row, its real meet Score. A swim not found keeps phase 10's exclusion. Resolving one member of a duplicate pair does NOT license guessing at the other."
+        },
+        "crawl": {
+          "module": "packages/swimcloud/src/crawlPlan.ts",
+          "newExports": [
+            "planMeetEventResults(input: SwimCloudMeetEventResultsCrawlInput): readonly SwimCloudCrawlStep[]",
+            "SwimCloudMeetEventResultsCrawlInput { meetId: SwimCloudMeetId, eventRefs: readonly string[] }"
+          ],
+          "extension": "extensions/swimcloud-companion/src/eventResults.ts -- EVENT_RESULTS_CONCURRENCY (3), EVENT_RESULTS_STAGGER_MS (400), planEventResultsSteps, collectEventRefs, classifyEventResultsOutcome, SwimCloudSwimEventRef, SwimCloudEventResultsPlan, SwimCloudEventRefCollection, SwimCloudEventResultsVerdict. Wired into crawler-content.ts through the EXISTING runBoundedFetchPool, not a second scheduler.",
+          "picker": "packages/matrix/src/components/SwimCloudCapturePicker.tsx passes parseResponse?.eventResults ?? [] into applySwimCloudRows."
+        }
+      },
+      "verifiedBy": [
+        "npx vitest run (full suite): 747 passed / 0 failed across 38 files -- up from the 697 phase 10 left, +50 tests",
+        "tests/swimcloudParser.test.ts: 63/63 passed, 14 of them the new 'parseMeetEventResultsHtml -- real capture, per-event results (F9)' block asserting hand-read ground truth (40 rows, 0 warnings, the four round row-counts 8/7/5/20, the A/B Final score arrays, Avery Henke's 171560736/171560737 split across Preliminaries and A Final)",
+        "tests/swimCloudMeetImportBridge.test.ts: 50/50 passed (up from phase 10's 37; 13 new covering the round index, the resolve-before-exclude order, and the no-event-page fallback)",
+        "tests/swimcloudCaptureRoutes.test.ts: 51/51 passed -- 2 new, added in the resumed sitting: the meetEvent positive path through the real POST /api/swimcloud/captures/:id/parse route (real rounds, real scores, real exhibition rows) and a meetEvent-plus-meetTeamSwims capture proving the two kinds join on swimKey",
+        "tests/swimCloudExtensionEventResults.test.ts: 13/13 passed (new file, event-ref collection and the bounded-pool plan)",
+        "tests/swimcloudCrawlPlan.test.ts: 36/36 passed (planMeetEventResults dedupe and meet-scoping)",
+        "npm run lint --workspaces --if-present: all 8 workspaces clean (shell, core, db, manager, matrix, metrics, swimcloud, ui)",
+        "npx tsc --noEmit -p packages/swimcloud/tsconfig.json: exit 0; packages/matrix/tsconfig.json: exit 0; apps/shell/tsconfig.json: exit 0",
+        "npx tsc --noEmit -p extensions/swimcloud-companion/tsconfig.json: clean",
+        "node extensions/swimcloud-companion/build.mjs: crawler.js 147.9kb, background.js 14.1kb, both built",
+        "npm run build -w @omniswim/shell: succeeds, dist/server.js 405.1kb"
+      ],
+      "commit": null
+    }
+  ],
+  "fixtures": [
+    { "id": "F1", "description": "Large meet root (13 teams, meet 379295 MPSF), ?gender=M and ?gender=F", "path": "tests/fixtures/swimcloud-real-meet-landing-379295-gender-m.html, tests/fixtures/swimcloud-real-meet-landing-379295-gender-f.html", "status": "captured", "unblocks": "OQ-1 (resolved 2026-09-08): confirmed the Teams card truncates and links to a new topteams resource" },
+    { "id": "F1b", "description": "/results/379295/topteams/?gender=M and ?gender=F (the page F1's More link points to)", "path": "tests/fixtures/swimcloud-real-meet-topteams-379295-gender-m.html, tests/fixtures/swimcloud-real-meet-topteams-379295-gender-f.html", "status": "captured", "unblocks": "OQ-1b (resolved 2026-09-08): all 13 teams present including zero-scoring ones; parseMeetTopTeamsHtml buildable at real-capture-verified confidence" },
+    { "id": "F2", "description": "/results/356467/?gender=F", "path": null, "status": "not-captured", "unblocks": "gender-difference confirmation (superseded in practice by F1's -gender-f capture on a different meet)" },
+    { "id": "F3", "description": "Swims list page 2 and last page", "path": null, "status": "not-captured", "unblocks": "OQ-6, phase 1" },
+    { "id": "F4", "description": "Swims list ?gender=F page 1", "path": null, "status": "not-captured", "unblocks": "women's branch coverage" },
+    { "id": "F5", "description": "A team+gender with only one page", "path": null, "status": "not-captured", "unblocks": "absent-pagination branch, phase 1" },
+    { "id": "F6", "description": "/team/58/roster/, both genders", "path": "tests/fixtures/swimcloud-real-team-roster-58-gender-m.html, tests/fixtures/swimcloud-real-team-roster-58-gender-f.html", "status": "captured", "unblocks": "OQ-3 (resolved 2026-09-09): full real roster markup, 35 men + 16 women, real season/gender/sort filter contract" },
+    { "id": "F7", "description": "/swimmer/{id}/ and /swimmer/{id}/times/", "path": "tests/fixtures/swimcloud-real-swimmer-home-1472365.html, tests/fixtures/swimcloud-real-swimmer-times-1472365.html", "status": "captured", "unblocks": "OQ-4 (resolved 2026-09-09): real markup for both pages. The times page's 'Personal Bests' table (29 real rows, one per course-qualified event) is the real, buildable 'swimmer event history' data -- the sibling 'Event Progression' tab is NOT captured and its markup stays unknown, do not assume it. Home page's 'Latest Results' dropdown+table is a THIRD, narrower results-table shape (one meet's rows only), also real but not the target data for the crawl-scope extension." },
+    { "id": "F8", "description": "/team/58/ (landing) and /team/58/results/ (all-seasons meets list)", "path": "tests/fixtures/swimcloud-real-team-landing-58.html, tests/fixtures/swimcloud-real-team-results-58.html", "status": "captured", "unblocks": "OQ-2 (resolved 2026-09-09): the season filter is `season_id` (a numeric id, real id-to-label table captured), not `?year=`. No page-number pagination observed on /results/ in this capture; unproven whether it ever paginates." },
+    { "id": "F9", "description": "/results/356467/event/26/ (100 Breast Men Finals) -- the exact event Avery Henke's duplicate rows came from", "path": "tests/fixtures/swimcloud-real-meet-event-356467-event26.html", "status": "captured", "unblocks": "phase 11 (real prelims/finals fix). CONFIRMED 2026-09-10 by the user's own live capture: one page per 'Finals'-labeled event id holds ALL rounds as separate <table><caption>ROUND</caption> blocks in program order (A Final, B Final, C Final, Preliminaries here) -- caption text maps directly onto the app's existing classifyRoundTier vocabulary, no new enum needed. A/B Final tables carry the REAL meet Score in a u-is-hidden <td> (rendered-hidden, not markup-absent) -- the first page type in this pipeline with real per-swim meet points. C Final/Preliminaries carry the SwimCloud Pts power index instead (title='Swimcloud Points'), consistent with those rounds not scoring here. Exhibition is marked by replacing the RANK-cell ordinal with <span title='Exhibition'>X</span> -- NOT the leading-X-on-time-token Hy-Tek guess parser.ts's readTime currently makes; that guess needs correcting once this page is parsed. Full analysis in the fixture's own header comment and plans/2026-09-10/01-SWIMCLOUD-SCORING-CORRECTNESS.md section 6." }
+  ],
+  "openQuestions": [
+    { "id": "OQ-1", "summary": "Does the meet root Teams card list every competing team?", "status": "resolved-2026-09-08", "blocks": [], "resolution": "No, it truncates on real meets. It links to a new topteams resource via a More link, discovered from a 13-team meet capture (F1)." },
+    { "id": "OQ-1b", "summary": "Does /results/{meetId}/topteams/?gender= itself list every team, and what is its markup?", "status": "resolved-2026-09-08", "blocks": [], "resolution": "Yes, both gender variants show all 13 teams including 7/3 zero-scoring ones (rank/score '-', not omitted). Same table shape as the meet-root Teams card. parseMeetTopTeamsHtml buildable at real-capture-verified confidence." },
+    { "id": "OQ-2", "summary": "What does /team/{id}/results/ look like and what does ?year= take?", "status": "resolved-2026-09-09", "blocks": [], "resolution": "Real param is `season_id` (numeric id), not `year`. Real id-to-label table captured (30=2026-2027 down to 11='2008 and Under'). No formula for this mapping is trusted or hardcoded anywhere -- omit season_id and let the server default to current, per F6/F8." },
+    { "id": "OQ-3", "summary": "Real roster page markup", "status": "resolved-2026-09-09", "blocks": [], "resolution": "Real markup captured, both genders (F6). parseTeamRosterHtml buildable at real-capture-verified confidence." },
+    { "id": "OQ-4", "summary": "Real swimmer-profile page markup", "status": "resolved-2026-09-09", "blocks": [], "resolution": "Both /swimmer/{id}/ and /swimmer/{id}/times/ captured (F7). parseSwimmerTimesHtml built and mutation-tested against the real fixture (real-capture-verified). New urlClassifier resource kind 'swimmerTimes' added (a real gap found: reusing the existing 'swimmer' kind would have collided /swimmer/{id}/ and /swimmer/{id}/times/ onto the same cache key). Name-order decision: swimmer-info JSON ('Paulk, River J') is the trusted source, not the page's own <h1> ('River Paulk') -- documented, tested. Date kept verbatim, never parsed into a Date -- the fixture itself proves a swim's date can differ from its meet's own date. /swimmer/{id}/meets/, /standards/, /rankings/ remain unmodelled (nobody has fetched them)." },
+    { "id": "OQ-10", "summary": "User scope clarification 2026-09-09: meet crawls should also fetch each team's roster; swimmer-subject crawls should fetch only the swimmer + their events; extend to every swimmer's event history within a captured meet, and make it efficient/parallel enough for a large meet.", "status": "resolved-2026-09-09", "blocks": [], "resolution": "All addressed. Roster-fetch wired into the meet crawl (WORKLOG-08/09). parseSwimmerTimesHtml built and mutation-tested (WORKLOG-09). The crawl now fetches every rostered swimmer's times page through a bounded 3-lane/400ms-stagger pool -- a real, stated departure from the repo's 'never concurrent' rule, scoped only to this leaf-page category; the core meet-results loop's pacing is unchanged. Not yet composed end-to-end on a real meet by a human -- see PHASE3-MANUAL-VERIFICATION.md section 6c. OQ-7 (permission email) answered by the user: not sending one, accepting the risk." },
+    { "id": "OQ-5", "summary": "Do extension fetches carry the SwimCloud session?", "status": "resolved-by-design-2026-09-08", "blocks": [], "resolution": "Crawl loop runs in the content script (same page, same session), not the background service worker -- this was a wrong assumption in the original draft, corrected in 03-extension-crawler.md. Residual, genuinely-open question: could SwimCloud's anti-automation detection distinguish fetch() bursts from a loaded page vs normal navigation? Only the first real crawl can answer that." },
+    { "id": "OQ-6", "summary": "Does the pagination widget shape change on the last page?", "status": "open", "blocks": ["phase 1"] },
+    { "id": "OQ-7", "summary": "Send the SwimCloud permission email?", "status": "open", "blocks": [] },
+    { "id": "OQ-8", "summary": "Hard per-crawl page cap?", "status": "open", "blocks": ["phase 3"] },
+    { "id": "OQ-9", "summary": "New: /results/{meetId}/event/{n}/{subIndex}/ nested-id URL shape unmodelled by urlClassifier's meetEvent resource", "status": "open", "blocks": [], "note": "non-blocking, this crawl never visits meetEvent pages" },
+    { "id": "OQ-11", "summary": "2026-09-10: the 'N warning(s) -- see console' toast and the skip list are both console-only and give no severity/code breakdown, so a real defect and expected structural noise (e.g. relay-legs-absent) look equally alarming, and the new 'ambiguous-round-duplicate' skip reason -- the one a coach must act on to recover missing points -- is invisible in the UI entirely.", "status": "resolved-2026-09-13", "blocks": [], "note": "New packages/matrix/src/components/SwimCloudImportDiagnosticsPanel.tsx + packages/matrix/src/lib/swimCloudImportDiagnostics.ts, wired into both OpsModule.tsx import paths (clipboard, capture browser). Skip reasons grouped by reason, 'ambiguous-round-duplicate' always expanded and named. Warnings grouped by code for the clipboard path (structured data available); the capture-browser path only gets a flat list, since /parse's warnings arrive pre-formatted, not {code, message} -- a full by-code split there would need a route-contract change, not attempted this pass." }
+  ]
+}

@@ -1,5 +1,22 @@
 # 13 — Computed totals disagree with the published official scores
 
+> **✅ RESOLVED — confirmed 2026-09-13, found already fixed.**
+> `test_nsisc_team_totals.mjs` is now registered in `scripts/run-tests.mjs`
+> and passes byte-exact on all 8 rows (`node -e` spot-check: Women Delta
+> State 916.00 = official 916, Men Delta State 875.50 = official 875.5 —
+> both were the two failures this doc diagnosed). The fix landed via
+> `packages/core/src/lib/utils.ts`'s `isOutsideScoredProgram`, driven by
+> `workspace.officialTeamScores.eventThrough` (set to 42 for this meet) —
+> **not** by fixing the label at the parser layer as this doc's "What to do
+> next" originally prescribed. This closes the underlying scoring defect
+> regardless of the `isTimeTrial` flag's own accuracy (it is still `false`
+> on the live Event 938/939 rows — the fix no longer depends on it). See
+> commit `b301ea12` ("stop the scorer pool cap leaking and the optimizer
+> losing"). The PDF this doc's step 1 asked for is still not in the repo,
+> and would still be needed to adjudicate the two residual judgment calls
+> below (the "Boys" carve-out, Event 13 rank 9) — but neither blocks the
+> published-score reconciliation any more; it passes regardless.
+
 **Severity: P1. Pre-existing.** Found 2026-08-16, by an agent noticing a test
 nobody runs. **Diagnosed 2026-08-16.**
 
@@ -195,27 +212,26 @@ Note the parallel with the `console.assert` finding in
 [06](06-testing-verification.md): the suite's most valuable checks were the ones
 not actually running. Two independent instances of the same failure mode.
 
-## What to do next
+## What to do next (historical — items 2–3 done a different way, see the resolution note above)
 
-1. **Get the results PDF into the repo.** `loadedMeet.pdfFilename` records
-   `2026_NSISC_Championships_Final_Results.pdf`, but the file is not committed —
-   only cutline sources and a psych-sheet fixture are. Every remaining question
-   here (is the "Boys" carve-out right? whose row is Event 13 rank 9?) is
-   answerable in five minutes with the PDF and not at all without it. This is
-   the single highest-value unblock in the folder.
-2. **Then fix the time-trial tagging at the source**, in `backend/pdf_parser.py`
-   — where the event header is scanned. Downstream is the wrong layer: three
-   separate modules re-derive "is this a time trial" from the label, and all
-   three were defeated by one bad label. The parser should refuse to emit a row
-   whose event number falls outside the numbering it has already seen, per the
-   `CLAUDE.md` rule that parsers fail loudly.
-3. **Then register the test.** Once the extraction defects are fixed, either it
-   passes or the remaining gap is understood and annotated with its reason.
+1. **Get the results PDF into the repo.** Still not done, and still worth
+   doing for its own sake (it would resolve the "Boys" carve-out and Event
+   13 rank 9 questions below in five minutes) — but no longer the blocker
+   this item originally called it, since the scoring defect itself closed
+   without it.
+2. ~~Fix the time-trial tagging at the source, in `backend/pdf_parser.py`.~~
+   **Not done this way.** The actual fix closed the defect one layer down,
+   in the scoring engine's own event-number boundary
+   (`isOutsideScoredProgram`/`scoredEventNumberMax`), which does not need
+   the label to be right. The Python extraction bug this item describes may
+   still exist unverified — nobody has gone back to confirm whether
+   `isTimeTrial` itself was ever corrected — but it is no longer load-bearing.
+3. ~~Register the test.~~ **Done** — `test_nsisc_team_totals.mjs` is in
+   `scripts/run-tests.mjs` and passes.
 4. **Do not "fix" it by adjusting the expected values to match the engine.**
-   That inverts the test — it would pin whatever the app currently does, which
-   is the trap [06 §1](06-testing-verification.md) already flags for the skipped
-   `test_nsisc_output.json` fixture. It is now doubly wrong: the engine has been
-   measured and is *not* where the error is.
+   Still the right caution, and it did not happen here: the test's
+   published-official-score expectations were never touched, only the
+   engine's own scoring boundary was.
 
 ## Related
 

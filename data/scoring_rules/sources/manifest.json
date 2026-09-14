@@ -1,0 +1,34 @@
+{
+  "description": "Primary-source rulebooks for meet scoring point tables. Every point table in packages/core/src/lib/ncaaScoringRules.ts traces to one of these by sourceId + sha256, per CLAUDE.md § 'Data provenance'. ncaascoring.rule7.txt is a verbatim pdfplumber text extraction of the PDF of the same name, checked in so the transcription can be diffed without a PDF toolchain. Note the PDF renders the rule-number period as U+FFFD in text extraction (e.g. 'ARTICLE 1�'); that is an extraction artifact of the source font, not a transcription error.",
+  "generatedAt": "2026-09-06T00:00:00Z",
+  "sources": [
+    {
+      "id": "ncaa-rule7-scoring",
+      "governingBody": "NCAA",
+      "document": "NCAA Swimming & Diving Rules — Rule 7, Scoring",
+      "url": "https://meets.swimdna.org/media/ncaascoring.pdf",
+      "filename": "ncaascoring.pdf",
+      "textExtraction": "ncaascoring.rule7.txt",
+      "sha256": "5b98f8f69470606ea179b053b86d7fb4451f61a874c0fff5d8d18b369d6bb92e",
+      "bytes": 120928,
+      "pageCount": 4,
+      "retrievedAt": "2026-09-06T00:00:00Z",
+      "coversSections": [
+        "7-1 Dual Meets (six lanes or more; five lanes or fewer; no contest/forfeit; diving dual meets)",
+        "7-2 Double-Dual, Triangular or Quadrangular Meets",
+        "7-3 Relay Meets",
+        "7-4 Invitational Meets (host-published table — not fixed by rule)",
+        "7-6 Championships Meets (6/8/12/16/18/24 competitors; consolation limits)",
+        "7-7 Disqualifications",
+        "7-8 Ties",
+        "7-9 Failure to Compete",
+        "7-10 Nonscoring Competition (exhibition swims)"
+      ],
+      "notSourcedHere": [
+        "Rule 7-6-6 (24 competitors): the point table is published, but the rule does not state which place range each final contests. Modelled as an unsourced finals split — see NCAA_FORMAT_RULESETS['championship-24'].",
+        "Rule 7-6-7 (more than 24 competitors): 'shall model the pattern reflected in Rules 7-6-3, 7-6-4, 7-6-5 and 7-6-6' — no table is published, so none is implemented.",
+        "NAIA and NFHS point tables — different governing bodies, different documents, not fetched."
+      ]
+    }
+  ]
+}

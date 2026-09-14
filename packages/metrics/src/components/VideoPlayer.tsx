@@ -1,11 +1,32 @@
 import React, { useRef, useState, useEffect } from 'react';
 import { tagsOfKind } from '@omniswim/core/lib/raceAnalysis';
-import { formatTime } from '../lib/utils';
-import { Play, Pause, Maximize, SkipBack, SkipForward, Volume2, VolumeX } from 'lucide-react';
 import type { OperatorKey, RaceTag } from '../types';
-import { TagTimeline } from './TagTimeline';
+import {
+  VideoPlayerEmptyState,
+  VideoTelemetryOverlay,
+  VideoScrubber,
+  VideoTransportControls,
+} from './VideoPlayerParts';
 
-const ASSUMED_FPS_OPTIONS = [24, 25, 30, 50, 59.94, 60, 120];
+/** KeyboardEvent.code -> sequential operator key, for the tagging shortcuts. */
+const SEQUENTIAL_KEY_CODES: Partial<Record<string, OperatorKey>> = { KeyS: 'S', KeyD: 'D', KeyA: 'A' };
+
+/** KeyboardEvent.code -> one-shot tag kind, for the tagging shortcuts. */
+const ONE_SHOT_KEY_CODES: Partial<Record<string, 'Signal' | 'Flags' | 'Kick'>> = {
+  KeyR: 'Signal',
+  KeyG: 'Flags',
+  KeyK: 'Kick',
+};
+
+/** True while the user is typing into a text field (shortcuts should not fire). */
+function isTypingTarget(el: Element | null): boolean {
+  return el?.tagName === 'INPUT' || el?.tagName === 'TEXTAREA';
+}
+
+/** True for the Ctrl/Cmd+Z undo chord. */
+function isUndoShortcut(e: KeyboardEvent): boolean {
+  return (e.ctrlKey || e.metaKey) && e.code === 'KeyZ';
+}
 
 interface VideoPlayerProps {
   videoUrl: string | null;
@@ -119,7 +140,7 @@ export function VideoPlayer({
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if (document.activeElement?.tagName === 'INPUT' || document.activeElement?.tagName === 'TEXTAREA') {
+      if (isTypingTarget(document.activeElement)) {
         if (e.code === 'Enter') (document.activeElement as HTMLElement).blur();
         return;
       }
@@ -127,37 +148,23 @@ export function VideoPlayer({
       if (!videoRef.current) return;
       const time = videoRef.current.currentTime;
 
-      if ((e.ctrlKey || e.metaKey) && e.code === 'KeyZ') {
+      if (isUndoShortcut(e)) {
         e.preventDefault();
         onUndo();
         return;
       }
 
-      switch (e.code) {
-        case 'KeyS':
-          e.preventDefault();
-          onSequentialKey('S', time);
-          break;
-        case 'KeyD':
-          e.preventDefault();
-          onSequentialKey('D', time);
-          break;
-        case 'KeyA':
-          e.preventDefault();
-          onSequentialKey('A', time);
-          break;
-        case 'KeyR':
-          e.preventDefault();
-          onOneShotKey('Signal', time);
-          break;
-        case 'KeyG':
-          e.preventDefault();
-          onOneShotKey('Flags', time);
-          break;
-        case 'KeyK':
-          e.preventDefault();
-          onOneShotKey('Kick', time);
-          break;
+      const sequentialKey = SEQUENTIAL_KEY_CODES[e.code];
+      if (sequentialKey !== undefined) {
+        e.preventDefault();
+        onSequentialKey(sequentialKey, time);
+        return;
+      }
+
+      const oneShotKind = ONE_SHOT_KEY_CODES[e.code];
+      if (oneShotKind !== undefined) {
+        e.preventDefault();
+        onOneShotKey(oneShotKind, time);
       }
     };
 
@@ -170,15 +177,7 @@ export function VideoPlayer({
   return (
     <div className="relative group w-full h-full flex items-center justify-center bg-transparent">
       {!videoUrl ? (
-        <div className="text-center p-8 surface-card rounded-2xl max-w-sm shadow-[var(--ui-shadow-lg)] transition-colors">
-          <div className="inline-flex items-center justify-center w-16 h-16 rounded-full bg-[var(--surface-muted)] mb-4 text-accent-500">
-            <Play className="w-8 h-8 ml-1" />
-          </div>
-          <h3 className="text-lg font-medium text-[var(--text-primary)]">Upload a video</h3>
-          <p className="text-ui-body text-theme-secondary mt-2">
-            Select a raw video of a swimming performance. All analysis is performed entirely locally on your device.
-          </p>
-        </div>
+        <VideoPlayerEmptyState />
       ) : (
         <>
           <video
@@ -190,118 +189,37 @@ export function VideoPlayer({
             onClick={togglePlay}
           />
 
-          <div className="absolute top-4 right-4 z-30 bg-black/80 backdrop-blur-md border border-accent-500/50 p-3 rounded-xl shadow-2xl min-w-[180px] text-ui-micro font-mono text-slate-300">
-            <div className="flex justify-between items-center">
-              <span className="opacity-60 uppercase tracking-widest">Live tempo</span>
-              <span className="text-accent-400 font-bold">
-                {liveSpm > 0 ? liveSpm.toFixed(1) : '—'} <span className="text-white/50">cycles/min</span>
-              </span>
-            </div>
-            <div className="flex justify-between items-center mt-1.5 pt-1.5 border-t border-white/10">
-              <span className="opacity-60 uppercase tracking-widest">Frame rate</span>
-              <span className={measuredFps ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
-                {measuredFps ? `${measuredFps} measured` : 'not measured'}
-              </span>
-            </div>
-          </div>
+          <VideoTelemetryOverlay liveSpm={liveSpm} measuredFps={measuredFps} />
 
           <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 via-slate-900/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-20">
             <div className="flex flex-col gap-2">
-              <div className="relative w-full h-2 group/progress cursor-pointer flex items-center">
-                <input
-                  type="range"
-                  min="0"
-                  max="100"
-                  value={progress}
-                  onChange={handleSeek}
-                  aria-label="Video progress"
-                  className="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10"
-                />
-                <div className="w-full h-1.5 bg-white/30 dark:bg-slate-800 rounded-full overflow-hidden backdrop-blur-sm border border-black/20">
-                  <div
-                    className="h-full bg-accent-500 rounded-full transition-all duration-100 ease-linear shadow-[0_0_8px_var(--accent-500)]"
-                    style={{ width: `${progress}%` }}
-                  />
-                </div>
-                <TagTimeline
-                  tags={tags}
-                  duration={duration}
-                  frameSeconds={frameSeconds}
-                  onSeek={seekTo}
-                  onTagTimeChange={onTagDragCommit}
-                />
-              </div>
+              <VideoScrubber
+                progress={progress}
+                onSeek={handleSeek}
+                tags={tags}
+                duration={duration}
+                frameSeconds={frameSeconds}
+                onTagSeek={seekTo}
+                onTagDragCommit={onTagDragCommit}
+              />
 
-              <div className="flex items-center justify-between text-white flex-wrap gap-y-2 mt-1">
-                <div className="flex items-center gap-3">
-                  <button onClick={() => stepFrame(-1)} disabled={effectiveFps === null} className="hover:text-accent-400 transition-colors focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed" title="Previous Frame" aria-label="Previous frame">
-                    <SkipBack className="w-4 h-4 fill-current opacity-80 hover:opacity-100" />
-                  </button>
-                  <button onClick={togglePlay} aria-label={isPlaying ? 'Pause video' : 'Play video'} className="hover:text-accent-400 transition-colors focus:outline-none bg-accent-500/20 p-1.5 rounded-full backdrop-blur-sm border border-accent-500/30 text-accent-100">
-                    {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
-                  </button>
-                  <button onClick={() => stepFrame(1)} disabled={effectiveFps === null} className="hover:text-accent-400 transition-colors focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed" title="Next Frame" aria-label="Next frame">
-                    <SkipForward className="w-4 h-4 fill-current opacity-80 hover:opacity-100" />
-                  </button>
-
-                  <div className="text-xs font-mono font-medium tracking-wide opacity-90 drop-shadow-md ml-2 border-l border-white/20 pl-4 py-0.5 flex items-center gap-4">
-                    <span>{formatTime(currentTime)} / {formatTime(duration)}</span>
-                    <span className="text-accent-300">FR: {effectiveFps !== null ? Math.floor(currentTime * effectiveFps) : '—'}</span>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-4 text-xs font-mono">
-                  <div className="bg-black/40 backdrop-blur-sm rounded border border-white/10 px-2 flex items-center h-8">
-                    <span className="text-ui-micro text-white/60 mr-2 uppercase">FPS:</span>
-                    <select
-                      value={fpsOverride ?? ''}
-                      onChange={(e) => onFpsOverrideChange(e.target.value ? parseFloat(e.target.value) : null)}
-                      aria-label="Frames per second"
-                      className="bg-transparent text-white focus:outline-none cursor-pointer appearance-none pr-3"
-                    >
-                      <option value="" className="bg-slate-900 text-white">
-                        {measuredFps ? `Measured (${measuredFps})` : 'Not measured — select'}
-                      </option>
-                      {ASSUMED_FPS_OPTIONS.map((f) => (
-                        <option key={f} value={f} className="bg-slate-900 text-white">
-                          {f}
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-                  <div className="bg-black/40 backdrop-blur-sm rounded border border-white/10 px-2 flex items-center h-8">
-                    <span className="text-ui-micro text-white/60 mr-2 uppercase">Speed:</span>
-                    <select value={playbackRate} onChange={changePlaybackRate} aria-label="Playback speed" className="bg-transparent text-white focus:outline-none cursor-pointer appearance-none pr-3">
-                      <option value={0.1} className="bg-slate-900 text-white">0.1x</option>
-                      <option value={0.25} className="bg-slate-900 text-white">0.25x</option>
-                      <option value={0.5} className="bg-slate-900 text-white">0.5x</option>
-                      <option value={1} className="bg-slate-900 text-white">1.0x</option>
-                      <option value={1.5} className="bg-slate-900 text-white">1.5x</option>
-                      <option value={2} className="bg-slate-900 text-white">2.0x</option>
-                    </select>
-                  </div>
-
-                  <div className="hidden md:flex items-center gap-2 border-l border-white/20 pl-4 ml-2 h-8 group">
-                    <button onClick={toggleMute} aria-label={isMuted || volume === 0 ? 'Unmute video' : 'Mute video'} className="hover:text-accent-400 transition-colors focus:outline-none">
-                      {isMuted || volume === 0 ? <VolumeX className="w-4 h-4 drop-shadow-md" /> : <Volume2 className="w-4 h-4 drop-shadow-md" />}
-                    </button>
-                    <input
-                      type="range"
-                      min="0"
-                      max="1"
-                      step="0.01"
-                      value={isMuted ? 0 : volume}
-                      onChange={handleVolumeChange}
-                      aria-label="Volume"
-                      className="w-0 opacity-0 group-hover:w-16 group-hover:opacity-100 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer hover:bg-white/40 transition-all duration-300 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full focus:outline-none"
-                    />
-                  </div>
-
-                  <button aria-label="Maximize video" className="hover:text-accent-400 transition-colors ml-2 border-l border-white/20 pl-4">
-                    <Maximize className="w-4 h-4 drop-shadow-md" />
-                  </button>
-                </div>
-              </div>
+              <VideoTransportControls
+                effectiveFps={effectiveFps}
+                onStepFrame={stepFrame}
+                isPlaying={isPlaying}
+                onTogglePlay={togglePlay}
+                currentTime={currentTime}
+                duration={duration}
+                fpsOverride={fpsOverride}
+                measuredFps={measuredFps}
+                onFpsOverrideChange={onFpsOverrideChange}
+                playbackRate={playbackRate}
+                onPlaybackRateChange={changePlaybackRate}
+                isMuted={isMuted}
+                volume={volume}
+                onToggleMute={toggleMute}
+                onVolumeChange={handleVolumeChange}
+              />
             </div>
           </div>
         </>

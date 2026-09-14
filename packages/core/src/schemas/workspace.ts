@@ -43,7 +43,7 @@ export const historicalSwimSchema = z
     gender: genderSchema,
     event: z.string(),
     time: z.string(),
-    source: z.enum(['pdf', 'paste', 'ocr', 'csv', 'manual']),
+    source: z.enum(['pdf', 'paste', 'ocr', 'csv', 'manual', 'swimcloud']),
   })
   .passthrough();
 

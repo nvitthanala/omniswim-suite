@@ -1,0 +1,73 @@
+<!--
+  Real capture, PII-scrubbed and trimmed.
+
+  Source: https://www.swimcloud.com/team/58/results/
+  Retrieved: 2026-09-09T02:08:19.836Z, via the browser extension (Track A, clipboard).
+  Team: Henderson State University (team 58), all seasons (no season_id given
+  -> defaults to the current one, "2025-2026" per the filter form's own
+  `selected` option below).
+
+  Resolves OQ-2 ("what does /team/{id}/results/ look like and what does the
+  season filter take"): it is a GET form filter, not a "?year=" query param
+  as originally guessed -- the real parameter is `season_id`, a numeric id
+  (see the <select> below for the full id-to-label table this page itself
+  publishes), plus `meettype` (a small fixed set: Conference Championship,
+  National Championship, ...). There is no visible page-number pagination
+  widget in this capture; a hidden `page` input exists in the filter form
+  but nothing on the rendered page links to page 2, so whether this list
+  ever paginates for a team with more meets in one season is still unproven.
+
+  This capture happens to default to the 2025-2026 season and lists every
+  meet season-to-date (12 rows) -- not a truncated sample.
+-->
+<html lang="en">
+<head>
+<title>Results - Henderson State University</title>
+<link rel="canonical" href="https://www.swimcloud.com/team/58/results/">
+</head>
+<body>
+<div class="c-toolbar__nav js-nav-priority u-flex">
+  <nav class="c-nav c-nav--inline u-overflow-hidden">
+    <a class="c-nav__item" href="/team/58/">Home</a>
+    <a class="c-nav__item" href="/team/58/about/">About</a>
+    <a class="c-nav__item c-nav__item--active" href="/team/58/results/">Meets</a>
+    <a class="c-nav__item" href="/team/58/times/">Times</a>
+    <a class="c-nav__item" href="/team/58/rankings/">Rankings</a>
+    <a class="c-nav__item" href="/team/58/records-learn-more/">Records</a>
+    <a class="c-nav__item" href="/team/58/roster/">Roster</a>
+    <a class="c-nav__item" href="/team/58/coaches/">Coaches</a>
+  </nav>
+</div>
+
+<section class="c-list-grid u-overflow-hidden">
+  <a class="c-list-grid__item" href="/results/351192"><article class="c-list-grid__content"><h3 class="c-list-grid__title">NCAA Division II Championship</h3><ul class="c-list-grid__meta o-list-inline o-list-inline--dotted"><li class="u-color-success">Completed</li><li><time datetime="2026-03-10">Mar 10-14, 2026</time></li><li>Evansville, IN</li></ul></article></a>
+  <a class="c-list-grid__item" href="/results/356467"><article class="c-list-grid__content"><h3 class="c-list-grid__title">New South Championships</h3><ul class="c-list-grid__meta o-list-inline o-list-inline--dotted"><li class="u-color-success">Completed</li><li><time datetime="2026-02-17">Feb 17-21, 2026</time></li><li>Pensacola, FL</li></ul></article></a>
+  <a class="c-list-grid__item" href="/results/377410"><article class="c-list-grid__content"><h3 class="c-list-grid__title">Henderson vs. Ouachita - Battle of the Ravine</h3><ul class="c-list-grid__meta o-list-inline o-list-inline--dotted"><li class="u-color-success">Completed</li><li><time datetime="2026-02-06">Feb 6, 2026</time></li><li>Arkadelphia, AR</li></ul></article></a>
+  <a class="c-list-grid__item" href="/results/373069"><article class="c-list-grid__content"><h3 class="c-list-grid__title">UMSL vs. HSU</h3><ul class="c-list-grid__meta o-list-inline o-list-inline--dotted"><li class="u-color-success">Completed</li><li><time datetime="2026-01-17">Jan 17, 2026</time></li><li>St Louis, MO</li></ul></article></a>
+  <a class="c-list-grid__item" href="/results/365308"><article class="c-list-grid__content"><h3 class="c-list-grid__title">Henderson State vs. Ouachita Baptist</h3><ul class="c-list-grid__meta o-list-inline o-list-inline--dotted"><li class="u-color-success">Completed</li><li><time datetime="2025-12-05">Dec 5, 2025</time></li><li>Duke wells, AR</li></ul></article></a>
+  <a class="c-list-grid__item" href="/results/363781"><article class="c-list-grid__content"><h3 class="c-list-grid__title">Delta State Thanksgiving Invitational</h3><ul class="c-list-grid__meta o-list-inline o-list-inline--dotted"><li class="u-color-success">Completed</li><li><time datetime="2025-11-20">Nov 20-23, 2025</time></li><li>Cleveland, MS</li></ul></article></a>
+  <a class="c-list-grid__item" href="/results/360921"><article class="c-list-grid__content"><h3 class="c-list-grid__title">Henderson State vs. Delta State</h3><ul class="c-list-grid__meta o-list-inline o-list-inline--dotted"><li class="u-color-success">Completed</li><li><time datetime="2025-11-07">Nov 7, 2025</time></li><li>Duke wells, AR</li></ul></article></a>
+  <a class="c-list-grid__item" href="/results/358976"><article class="c-list-grid__content"><h3 class="c-list-grid__title">Henderson State vs. Truman State</h3><ul class="c-list-grid__meta o-list-inline o-list-inline--dotted"><li class="u-color-success">Completed</li><li><time datetime="2025-10-25">Oct 25, 2025</time></li><li>Duke wells, AR</li></ul></article></a>
+  <a class="c-list-grid__item" href="/results/357619"><article class="c-list-grid__content"><h3 class="c-list-grid__title">Henderson State vs. Oklahoma Christian</h3><ul class="c-list-grid__meta o-list-inline o-list-inline--dotted"><li class="u-color-success">Completed</li><li><time datetime="2025-10-16">Oct 16, 2025</time></li><li>Duke Wells, AR</li></ul></article></a>
+  <a class="c-list-grid__item" href="/results/357416"><article class="c-list-grid__content"><h3 class="c-list-grid__title">Little Rock Fall Invite</h3><ul class="c-list-grid__meta o-list-inline o-list-inline--dotted"><li class="u-color-success">Completed</li><li><time datetime="2025-10-10">Oct 10-11, 2025</time></li><li>Little Rock, AR</li></ul></article></a>
+  <a class="c-list-grid__item" href="/results/353916"><article class="c-list-grid__content"><h3 class="c-list-grid__title">All Arkansas Invite</h3><ul class="c-list-grid__meta o-list-inline o-list-inline--dotted"><li class="u-color-success">Completed</li><li><time datetime="2025-09-20">Sep 20, 2025</time></li><li>Little Rock, AR</li></ul></article></a>
+</section>
+
+<form class="form" method="GET">
+  <input type="hidden" name="page" value="1">
+  <select name="meettype">
+    <option value="" selected="">All</option>
+    <option value="120">Conference Championship</option>
+    <option value="210">National Championship</option>
+  </select>
+  <select name="season">
+    <option value="30">2026-2027</option>
+    <option value="29" selected="">2025-2026</option>
+    <option value="28">2024-2025</option>
+    <option value="11">2008 and Under</option>
+  </select>
+</form>
+
+<button id="omniswim-swimcloud-companion-button" type="button" aria-label="Copy this SwimCloud page for import into Omniswim Suite">Copy for Omniswim</button>
+</body>
+</html>

@@ -4,13 +4,17 @@
   "version": "1.0.0",
   "type": "module",
   "exports": {
-    ".": "./src/ManagerApp.tsx"
+    ".": "./src/ManagerApp.tsx",
+    "./components/RosterImportWizard": "./src/components/RosterImportWizard.tsx",
+    "./lib/rosterQueueImport": "./src/lib/rosterQueueImport.ts",
+    "./lib/swimCloudImportBridge": "./src/lib/swimCloudImportBridge.ts"
   },
   "scripts": {
     "lint": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
     "@omniswim/core": "*",
+    "@omniswim/swimcloud": "*",
     "@omniswim/ui": "*",
     "lucide-react": "^0.546.0",
     "motion": "^12.23.24",

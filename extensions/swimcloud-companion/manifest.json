@@ -1,0 +1,18 @@
+{
+  "manifest_version": 3,
+  "name": "Omniswim SwimCloud Companion",
+  "version": "0.2.0",
+  "description": "Adds a button to SwimCloud pages you're already viewing that copies the page for import into Omniswim Suite (Track A), and a second button that auto-fetches a full meet's results into the app (Track A′). Never fetches on a timer or in the background — only in response to a click.",
+  "permissions": ["clipboardWrite", "downloads", "storage", "unlimitedStorage"],
+  "host_permissions": ["http://127.0.0.1/*"],
+  "background": { "service_worker": "background.js" },
+  "options_page": "options.html",
+  "content_scripts": [
+    {
+      "matches": ["https://www.swimcloud.com/*", "https://swimcloud.com/*"],
+      "js": ["content.js", "crawler.js"],
+      "css": ["content.css"],
+      "run_at": "document_idle"
+    }
+  ]
+}

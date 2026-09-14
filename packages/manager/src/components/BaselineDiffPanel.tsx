@@ -6,14 +6,14 @@
  */
 
 import React, { useEffect, useRef, useState } from 'react';
-import { Loader2 } from 'lucide-react';
 import type { Gender, ScoringSettings, Workspace } from '@omniswim/core/types';
 import {
   requestScenarioDiff,
   type ScenarioDiffResult,
 } from '@omniswim/core/lib/scenarioDiffClient';
 import { useToast } from '@omniswim/ui';
-import { ScenarioDiffView } from './ScenarioDiffView';
+import { DiffPanelBody, DiffToggleButton } from './BaselineDiffPanelParts';
+import { matchesInputs, resolveDiffViewState, type DiffInputs } from './baselineDiffView';
 
 type Props = {
   workspace: Workspace;
@@ -22,24 +22,7 @@ type Props = {
   scoringSettings: ScoringSettings;
 };
 
-type DiffInputs = {
-  workspace: Workspace;
-  gender: Gender;
-  team: string;
-  scoringSettings: ScoringSettings;
-};
-
 const BACKEND_UNSUPPORTED_MESSAGE = 'Snapshots require SQLite or PostgreSQL backend';
-
-function matchesInputs(inputs: DiffInputs | null, current: DiffInputs): boolean {
-  if (!inputs) return false;
-  return (
-    inputs.workspace === current.workspace &&
-    inputs.gender === current.gender &&
-    inputs.team === current.team &&
-    inputs.scoringSettings === current.scoringSettings
-  );
-}
 
 export default function BaselineDiffPanel({ workspace, gender, team, scoringSettings }: Props) {
   const { push } = useToast();
@@ -98,6 +81,7 @@ export default function BaselineDiffPanel({ workspace, gender, team, scoringSett
 
   const hasCurrentResult = result !== null && !stale && matchesInputs(resultInputsRef.current, currentInputs);
   const hasTeam = team.trim().length > 0;
+  const viewState = resolveDiffViewState({ hasTeam, expanded, loading, hasCurrentResult });
 
   if (backendUnsupported) {
     return (
@@ -116,46 +100,19 @@ export default function BaselineDiffPanel({ workspace, gender, team, scoringSett
     <section className="surface-card rounded-xl border border-theme-soft p-4 sm:p-5">
       <div className="flex items-center justify-between gap-3">
         <h4 className="text-ui-label font-semibold text-[var(--text-primary)]">Changes from loaded meet</h4>
-        <button
-          type="button"
-          onClick={() => setExpanded(value => !value)}
+        <DiffToggleButton
+          loading={loading}
+          expanded={expanded}
           disabled={loading || !hasTeam}
-          className="btn-accent-outline rounded-md px-2.5 py-1.5 text-ui-caption font-semibold disabled:opacity-50"
-        >
-          {loading ? (
-            <>
-              <Loader2 size={12} className="animate-spin" />
-              Calculating…
-            </>
-          ) : expanded ? (
-            'Hide changes'
-          ) : (
-            'Show changes from the loaded meet'
-          )}
-        </button>
+          onClick={() => setExpanded(value => !value)}
+        />
       </div>
 
       {/* A diff is scoped to one team. With no team chosen the comparison matches
           no rows, which would render as "no differences" — a confident, false
           statement that the working copy equals the loaded meet. Say what is
           actually missing instead; an empty match is not a real result. */}
-      {!hasTeam ? (
-        <p className="text-ui-caption text-theme-secondary leading-relaxed mt-2.5">
-          Choose a team above to compare it against the loaded meet.
-        </p>
-      ) : null}
-      {expanded && hasTeam && loading ? (
-        <p className="text-ui-caption text-theme-muted flex items-center gap-1.5 mt-2.5">
-          <Loader2 size={12} className="animate-spin" />
-          Calculating changes…
-        </p>
-      ) : null}
-      {expanded && hasTeam && hasCurrentResult && result ? (
-        <ScenarioDiffView
-          result={result}
-          emptyMessage="No differences — the working copy matches the loaded meet."
-        />
-      ) : null}
+      <DiffPanelBody state={viewState} result={result} />
     </section>
   );
 }

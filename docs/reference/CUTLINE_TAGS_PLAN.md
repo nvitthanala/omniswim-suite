@@ -404,15 +404,23 @@ Avery Henke   A Final
 
 ## Part H — Open decisions for the user
 
-1. **Time trials.** `Event 300 Men 50 Yard Freestyle Time Trial` currently gets
-   tagged like any other swim. NCAA cuts generally must be achieved in sanctioned
-   competition, so this may emit a confident, wrong badge a coach could plan on.
-   **Recommendation: exclude.** Not implemented — it is a rules question, not a
-   parsing one. `SwimmerResult.isTimeTrial` already exists to thread it.
-2. **`relaySplitQualificationCutEvent`** (`packages/core/src/lib/utils.ts:1749`)
-   gates on `/\b400\b/` against the **raw** label. HyTek writes the 400 medley
-   relay as `Event 20 Men 4x100 Yard Medley Relay` — no literal `400` — so the
-   backstroke-leadoff split rule never fires on real meet data.
+1. **✅ RESOLVED 2026-09-13 — keep tagging time trials.** `Event 300 Men 50
+   Yard Freestyle Time Trial` gets tagged like any other swim, and this plan
+   originally recommended excluding it on the assumption that NCAA cuts must
+   be achieved in sanctioned competition. **User correction: time trials
+   don't score meet points, but the times themselves are legal for cutline
+   purposes** — so a cut badge on a time-trial swim is correct, not a false
+   positive. No code change needed; the plan's own recommendation above was
+   wrong, kept struck through rather than deleted per this repo's "record
+   corrections in place" convention.
+2. **✅ ALREADY FIXED (found already resolved 2026-09-13, no code change
+   needed).** `relaySplitQualificationCutEvent` (`packages/core/src/lib/utils.ts:2073`)
+   now reads the distance off `normalizeEventForCutline`'s normalized event
+   name (which folds `4x100 … Medley Relay` into `400 Medley Relay`) before
+   falling back to the raw-label `/\b400\b/` test this item originally
+   flagged as broken. The old raw-only test is kept as a documented,
+   never-narrowing fallback. Covered by `scripts/test_cutlines.mjs` and
+   `scripts/test_cutline_tags.mjs`, both passing.
 3. **Manager rollout is thin.** In overlay mode the panels that got tags
    ("Individual entries", "Supplemental history") are empty for this workspace;
    the panel holding the times (**Credited swims**) was skipped as too dense.

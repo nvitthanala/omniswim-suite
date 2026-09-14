@@ -1,0 +1,82 @@
+<!--
+REAL SwimCloud capture (not synthetic). Source: https://www.swimcloud.com/results/379295/?gender=F
+Captured via the browser extension (Track A), 2026-09-08, by the repo's primary user.
+Same trimming/PII rules as swimcloud-real-meet-landing-379295-gender-m.html — see that
+file's header for the full explanation. This is the ?gender=F sibling of the same
+meet, captured to confirm the Teams-card-truncates-with-a-More-link finding holds on
+both gender views, not just one.
+
+FINDING this fixture proves: the pattern is symmetric across gender. This page's Teams
+card also shows 5 rows (of the same 13-team field) and also carries a "More" link, at
+the gender-scoped path:
+
+    <a class="c-more c-more--small" href="/results/379295/topteams/?gender=F">More</a>
+
+The teams and scores differ from the men's view (as expected — same meet, different
+gender's standings): Northern Arizona leads at 1350, not Air Force. This confirms the
+`topteams` resource is itself gender-scoped, exactly like `topswimmers`/`topswims`
+already were.
+-->
+<html>
+<head><title>Mountain Pacific Sports Federation Championships</title></head>
+<body>
+
+<h1 id="meet-name" class="c-toolbar__title">Mountain Pacific Sports Federation Championships</h1>
+<ul class="o-list-inline o-list-inline--dotted">
+  <li id="meet-status" class="u-color-success">Completed</li>
+  <li id="meet-date">Feb 25&ndash;28, 2026</li>
+  <li id="meet-course">SCY</li>
+</ul>
+
+<button type="button" data-toggle="dropdown">Women <span class="caret-alt"></span></button>
+<ul class="dropdown-menu">
+  <li class="dropdown-subheader">Gender</li>
+  <li><a href="https://www.swimcloud.com/results/379295/?gender=M">Men</a></li>
+  <li class="active"><a href="https://www.swimcloud.com/results/379295/?gender=F">Women</a></li>
+</ul>
+
+<!-- ==== Teams card: same truncation, same More link, gender-scoped. ==== -->
+<div class="c-card c-card--large u-overflow-hidden">
+  <div class="c-card__item"><h2 class="c-title">Teams</h2></div>
+  <table class="c-table-clean c-table-clean--middle table table-hover c-table-clean--font-large@xs">
+    <thead><tr><th colspan="2">Team</th><th class="c-table-clean__col-fit u-text-end">Score</th></tr></thead>
+    <tbody>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">1</td>
+        <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/379295/team/398/?gender=F"><span>Northern Arizona</span></a></td>
+        <td class="u-text-end u-text-semi">1350</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">2</td>
+        <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/379295/team/444/?gender=F"><span>New Mexico State</span></a></td>
+        <td class="u-text-end u-text-semi">1227</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">3</td>
+        <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/379295/team/399/?gender=F"><span>Northern Colorado</span></a></td>
+        <td class="u-text-end u-text-semi">1171.5</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">4</td>
+        <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/379295/team/385/?gender=F"><span>California Baptist</span></a></td>
+        <td class="u-text-end u-text-semi">980.5</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">5</td>
+        <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/379295/team/519/?gender=F"><span>Idaho</span></a></td>
+        <td class="u-text-end u-text-semi">942</td>
+      </tr>
+      <!-- 8 more competing teams exist and are not in this table, same truncation
+           as the men's view. -->
+    </tbody>
+  </table>
+  <div class="c-table-clean__caption c-table-clean__caption--bottom">
+    <a class="c-more c-more--small" href="/results/379295/topteams/?gender=F">More</a>
+  </div>
+</div>
+
+<!-- High point / Performances cards omitted from this fixture: same shape as the
+     men's sibling file, nothing new to prove by repeating them here. -->
+
+</body>
+</html>

@@ -1,10 +1,10 @@
 import { Link } from 'react-router-dom';
-import { Cog, Globe, LogOut, Search, Settings, TrendingUp, User } from 'lucide-react';
-import { Gender } from '@omniswim/core/types';
-import { ThemeToggle, useSwimCloudWindow } from '@omniswim/ui';
+import { Cog, Globe, MoreHorizontal, Search, Settings, TrendingUp, User } from 'lucide-react';
+import { Menu, MenuItem, ThemeToggle, useSwimCloudWindow } from '@omniswim/ui';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
 import { useAuth } from '../context/AuthContext';
 import AppletNav from './AppletNav';
+import { GenderToggleNav, shortcutHintLabel } from './SuiteHeaderControls';
 
 type Props = {
   theme: 'dark' | 'light';
@@ -46,86 +46,7 @@ export default function SuiteHeader({
       <div className="flex items-center gap-2">
         <AppletNav />
 
-        {showWorkspaceControls ? (
-          <nav className="hidden md:flex gap-1 bg-[var(--surface)] p-1 rounded-lg border border-[var(--border)] ml-2">
-            <button
-              type="button"
-              onClick={() => setActiveGender(Gender.MEN)}
-              className={`px-3 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-md transition-colors ${
-                activeGender === Gender.MEN ? 'nav-tab-active' : 'nav-tab-inactive'
-              }`}
-            >
-              Men
-            </button>
-            <button
-              type="button"
-              onClick={() => setActiveGender(Gender.WOMEN)}
-              className={`px-3 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-md transition-colors ${
-                activeGender === Gender.WOMEN ? 'nav-tab-active' : 'nav-tab-inactive'
-              }`}
-            >
-              Women
-            </button>
-          </nav>
-        ) : null}
-
-        {onOpenCommandPalette ? (
-          <button
-            type="button"
-            onClick={onOpenCommandPalette}
-            className="btn-ghost hidden sm:flex items-center gap-2 px-2.5 py-1.5 rounded-lg border border-theme-soft text-theme-muted hover:text-[var(--text-primary)] transition-colors"
-            title="Command palette"
-            aria-label="Open command palette"
-          >
-            <Search size={12} />
-            <kbd className="text-ui-micro font-mono">{IS_MAC ? '⌘K' : 'Ctrl K'}</kbd>
-          </button>
-        ) : null}
-
-        <Link
-          to="/analytics"
-          className="btn-ghost p-1.5 rounded hidden sm:flex"
-          title="Season analytics"
-          aria-label="Season analytics"
-        >
-          <TrendingUp size={14} />
-        </Link>
-
-        {user ? (
-          <div className="hidden md:flex items-center gap-2 px-2 py-1 rounded-full border border-theme-soft text-ui-caption">
-            <User size={12} className="text-theme-muted" />
-            <span className="truncate max-w-[100px]">{user.displayName}</span>
-            <button type="button" onClick={() => void logout()} className="p-1 theme-hover-row rounded" title="Sign out">
-              <LogOut size={12} />
-            </button>
-          </div>
-        ) : authRequired ? (
-          <Link to="/login" className="btn-ghost px-3 py-1.5 rounded text-ui-caption font-semibold">
-            Sign in
-          </Link>
-        ) : null}
-
-        <ThemeToggle theme={theme} onToggle={onThemeToggle} className="ml-1" />
-
-        <Link
-          to="/settings"
-          className="p-1.5 theme-hover-row rounded-lg btn-accent-outline transition-colors"
-          title="Suite Settings"
-          aria-label="Open suite settings"
-        >
-          <Cog size={14} />
-        </Link>
-
-        <button
-          type="button"
-          onClick={toggleWindow}
-          className={`p-1.5 rounded-lg transition-colors ${open ? 'btn-accent-outline' : 'btn-ghost'}`}
-          title="SwimCloud reference window"
-          aria-label="SwimCloud reference window"
-          aria-pressed={open}
-        >
-          <Globe size={14} />
-        </button>
+        {showWorkspaceControls ? <GenderToggleNav activeGender={activeGender} onChange={setActiveGender} /> : null}
 
         {showWorkspaceControls && activeWorkspace && onOpenScoringSettings ? (
           <button
@@ -145,7 +66,57 @@ export default function SuiteHeader({
           </div>
         ) : null}
 
-        <div className="w-2.5 h-2.5 rounded-full bg-green-500 animate-pulse ml-1" title="System ready" />
+        <ThemeToggle theme={theme} onToggle={onThemeToggle} className="ml-1" />
+
+        <Menu label="More" icon={<MoreHorizontal size={14} />} triggerClassName="btn-ghost p-1.5 rounded-lg">
+          {onOpenCommandPalette ? (
+            <MenuItem
+              icon={<Search size={14} />}
+              onSelect={onOpenCommandPalette}
+              className="justify-between"
+            >
+              Command palette
+              <kbd className="text-ui-micro font-mono text-theme-muted">{shortcutHintLabel(IS_MAC)}</kbd>
+            </MenuItem>
+          ) : null}
+
+          <Link
+            to="/analytics"
+            role="menuitem"
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-ui-caption text-left theme-hover-row transition-colors text-[var(--text-primary)]"
+          >
+            <TrendingUp size={14} />
+            <span className="truncate">Season analytics</span>
+          </Link>
+
+          {user ? (
+            <MenuItem icon={<User size={14} />} onSelect={() => void logout()}>
+              Sign out ({user.displayName})
+            </MenuItem>
+          ) : authRequired ? (
+            <Link
+              to="/login"
+              role="menuitem"
+              className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-ui-caption text-left theme-hover-row transition-colors text-[var(--text-primary)]"
+            >
+              <User size={14} />
+              <span className="truncate">Sign in</span>
+            </Link>
+          ) : null}
+
+          <Link
+            to="/settings"
+            role="menuitem"
+            className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-ui-caption text-left theme-hover-row transition-colors text-[var(--text-primary)]"
+          >
+            <Cog size={14} />
+            <span className="truncate">Suite settings</span>
+          </Link>
+
+          <MenuItem icon={<Globe size={14} />} onSelect={toggleWindow} active={open}>
+            SwimCloud reference window
+          </MenuItem>
+        </Menu>
       </div>
     </header>
   );

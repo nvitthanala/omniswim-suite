@@ -12,7 +12,7 @@ import { AlertTriangle, ArrowLeftRight, X } from 'lucide-react';
 import { Workspace } from '@omniswim/core/types';
 import { copyMeetIntoWorkspace, type CopyMeetResult } from '@omniswim/core/lib/swimEditor';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
-import { useToast } from '@omniswim/ui';
+import { Modal, useToast } from '@omniswim/ui';
 
 type Props = {
   workspace: Workspace;
@@ -102,11 +102,12 @@ export default function LoadMeetHereCard({ workspace, onUpdate, whatIfMode }: Pr
       )}
 
       {pending ? (
-        <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop backdrop-blur-sm">
-          <div
-            className="surface-card border border-[var(--text-accent)]/20 rounded-xl max-w-md w-full mx-4 p-6"
-            style={{ boxShadow: 'var(--ui-shadow-lg)' }}
-          >
+        <Modal
+          onClose={() => setPending(null)}
+          ariaLabel="Load this meet here?"
+          className="border border-[var(--text-accent)]/20 rounded-xl max-w-md w-full mx-4 p-6"
+          style={{ boxShadow: 'var(--ui-shadow-lg)' }}
+        >
             <div className="flex justify-between items-start mb-6">
               <div className="flex gap-4">
                 <div className="w-10 h-10 rounded-full bg-[var(--text-accent)]/15 text-[var(--text-accent)] flex items-center justify-center shrink-0 border border-[var(--text-accent)]/20">
@@ -155,8 +156,7 @@ export default function LoadMeetHereCard({ workspace, onUpdate, whatIfMode }: Pr
                 Confirm copy
               </button>
             </div>
-          </div>
-        </div>
+        </Modal>
       ) : null}
     </section>
   );

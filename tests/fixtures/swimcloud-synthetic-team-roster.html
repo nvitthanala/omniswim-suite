@@ -1,0 +1,74 @@
+<!--
+  ============================================================================
+  SYNTHETIC FIXTURE — HAND-AUTHORED — NOT REAL SWIMCLOUD MARKUP
+  ============================================================================
+
+  This file was written by hand on 2026-09-06. Nobody has seen a real SwimCloud
+  team-roster page's HTML. Network access to swimcloud.com was blocked in the
+  environment this was authored in, and SwimCloud serves a Cloudflare JS
+  challenge (HTTP 403) to any client without a JS engine anyway — see
+  plans/2026-09-06/01-legal-and-access-strategy.md §2.
+
+  The structure below is a BEST GUESS assembled from the prose description in
+  plans/2026-09-06/02-data-model-and-scoring.md. Class names, element nesting,
+  column labels and column order are all invented. Do NOT cite this file as
+  evidence of what SwimCloud publishes, and do NOT treat a test passing against
+  it as evidence that the parser works on a real page.
+
+  Replace this file with a real, human-captured page (Track A, Phase 1) as soon
+  as one exists, then correct the parser against the difference.
+
+  Deliberately exercised edge cases:
+    - an athlete with a /swimmer/{id}/ profile link (the normal case)
+    - a long-form name with HTML entities (the Alan Gonzalez ↔ Alan Alejan
+      Gonzalez Mujica aliasing case from CLAUDE.md's round-3 notes)
+    - an athlete row with NO profile link  -> missing-athlete-link warning
+    - a class-year value outside the vocabulary -> unmapped-class-year warning
+    - a nested table inside the page (a sidebar) that must NOT be mistaken for
+      the roster
+  ============================================================================
+-->
+<div class="c-page">
+  <header class="c-team-header">
+    <h1 class="c-team-header__title">Henderson State University</h1>
+    <p class="c-team-header__meta">NCAA Division II &middot; Great American Conference</p>
+  </header>
+
+  <aside class="c-sidebar">
+    <table class="c-sidebar__table">
+      <thead>
+        <tr><th>Season</th><th>Meets</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>2026-2027</td><td>11</td></tr>
+      </tbody>
+    </table>
+  </aside>
+
+  <table class="c-table c-table--roster">
+    <thead>
+      <tr>
+        <th>Name</th>
+        <th>Class</th>
+        <th>Hometown</th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><a href="/swimmer/3646504/">Landon Dehn</a></td>
+        <td>SO</td>
+        <td>Little Rock, AR</td>
+      </tr>
+      <tr>
+        <td><a href="https://www.swimcloud.com/swimmer/3646511/">Alan Alejan Gonz&aacute;lez Mujica</a></td>
+        <td>Junior</td>
+        <td>Caracas, VE</td>
+      </tr>
+      <tr>
+        <td>Jordan Pike</td>
+        <td>FY</td>
+        <td></td>
+      </tr>
+    </tbody>
+  </table>
+</div>

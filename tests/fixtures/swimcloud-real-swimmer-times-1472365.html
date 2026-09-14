@@ -1,0 +1,94 @@
+<!--
+  Real capture, PII-scrubbed and trimmed.
+
+  Source: https://www.swimcloud.com/swimmer/1472365/times/
+  Retrieved: 2026-09-09T03:32:55.480Z, via the browser extension (Track A, clipboard).
+  Swimmer: River Paulk (swimmer 1472365), Auburn University (team 127).
+
+  Scrubbed: the page's `auth-info`/`auth-groups` script tags (the logged-in
+  account holder's own email/DOB/zip) and the global-search JSON blob are
+  removed entirely, same as every other real fixture in this initiative.
+  The `swimmer-info` script tag (this swimmer's OWN public bio data, not the
+  account holder's) is kept but trimmed of `dateofbirth` and `zipcode` --
+  not needed by any parser and not worth keeping in a committed fixture on
+  a third party even though the source page itself is public.
+
+  What this proves (resolves OQ-4, "real swimmer-profile page markup"):
+  - `/swimmer/{id}/times/`'s "PERSONAL BESTS" tab renders one row per event
+    (a course-qualified label like "50 Free SCY" and "50 Free LCM" are
+    DIFFERENT rows for the same stroke/distance -- course is part of event
+    identity here, matching this repo's existing SwimCloudEvent.course
+    convention) inside one real, server-rendered <table> -- no
+    tab/AJAX-only content in the "Personal Bests" default view. The
+    "EVENT PROGRESSION" tab is a second, sibling view this capture does
+    NOT include -- it is client-rendered separately and its markup remains
+    unknown; do not assume its shape.
+  - Each row: event label, a linked time (`/results/{meetId}/event/{n}/?id={resultId}#time{resultId}`),
+    an optional small "chip" tag (`NCAA B`, `WIN JRS`, `X` = "Extracted",
+    `R` = "Leadoff" -- title attribute spells out the meaning, the visible
+    text is a 1-4 char code), a linked meet name (`/results/{meetId}`), and
+    a date ("Mon D, YYYY" -- note this is a DIFFERENT date format than the
+    meet-team-swims pages' own date fields, which this repo's parser
+    already handles; do not assume they share a formatter).
+  - `#swimmer-profile-times`'s own `data-season-ids` attribute
+    (`[30, 29, 28, ..., 18]`) is a second independent real season-id
+    listing for this swimmer's career -- consistent with (same numbering
+    as) the team-roster page's own season <select>, reinforcing (not
+    proving beyond doubt) that the id space is global/shared across the
+    site rather than per-team.
+  - A row can have NO chip cell content at all (most rows) -- the chip is
+    optional per-row, not always present, so a parser must not assume one.
+  - This table is a "personal bests," i.e. the swimmer's single fastest
+    time per event, not a full swim-by-swim log -- 29 rows here across
+    every SCY/LCM event this swimmer has ever swum a best time in, not one
+    row per meet attended. Do not conflate this with a per-meet results
+    page's row count.
+-->
+<html lang="en">
+<head>
+<title>River Paulk | Swimcloud</title>
+<link rel="canonical" href="https://www.swimcloud.com/swimmer/1472365/times/">
+</head>
+<body>
+<script id="swimmer-info" type="application/json">{"id": 1472365, "name": "Paulk, River J", "gradhs": 2024, "gender": "M", "photo": "https://s3.amazonaws.com/cstest/mb/2024/02/adeff6c2-e3ba-4a25-9d43-7d0243b74850.jpg", "city": "Keller", "state": "TX", "country": "USA", "primary_team": null, "gradcollege": 2028, "year_born": null, "has_public_goals": false, "has_swimcloud_plus": false, "team_ids": [127]}</script>
+
+<div class="c-toolbar__nav js-nav-priority u-flex">
+  <nav class="c-nav c-nav--inline u-overflow-hidden">
+    <a class="c-nav__item" href="/swimmer/1472365/">Home</a>
+    <a class="c-nav__item" href="/swimmer/1472365/meets/">Meets</a>
+    <a class="c-nav__item c-nav__item--active" href="/swimmer/1472365/times/">Times</a>
+    <a class="c-nav__item" href="/swimmer/1472365/standards/">Standards</a>
+    <a class="c-nav__item" href="/swimmer/1472365/rankings/">Rankings</a>
+  </nav>
+</div>
+
+<div id="swimmer-profile-times" data-swimmer-id="1472365" data-season-ids="[30, 29, 28, 27, 26, 25, 24, 23, 22, 21, 20, 19, 18]">
+  <div class="c-card c-card--large c-card--divided">
+    <ul class="c-tabs u-mb">
+      <li class="c-tabs__item active"><button class="c-tabs__link u-text-truncate" type="button">PERSONAL BESTS</button></li>
+      <li class="c-tabs__item"><button class="c-tabs__link u-text-truncate" type="button">EVENT PROGRESSION</button></li>
+    </ul>
+    <div class="c-table-clean--responsive">
+      <table class="c-table-clean c-table-clean--middle table table-hover">
+        <thead>
+          <tr><th>Event</th><th class="c-table-clean__col-fit u-text-end">Time</th><th class="c-table-clean__col-fit hidden-xs"></th><th class="hidden-xs">Meet</th><th class="c-table-clean__col-fit">Date</th></tr>
+        </thead>
+        <tbody>
+          <tr><td class="u-text-truncate"><button type="button" class="btn-link">50 Free SCY</button></td><td class="u-text-end u-text-semi"><a href="/results/338673/event/32/?id=147489244#time147489244">19.42</a></td><td class="u-pl0 u-nowrap hidden-xs"><span class="c-label c-label--energized" title="NCAA Division I Men's Championships">NCAA B</span></td><td class="hidden-xs"><a target="_blank" rel="noreferrer" href="/results/338673">James E Martin Invitational</a></td><td class="u-text-truncate">Mar 1, 2025</td></tr>
+          <tr><td class="u-text-truncate"><button type="button" class="btn-link">50 Free LCM</button></td><td class="u-text-end u-text-semi"><a href="/results/308419/event/36/?id=156364433#time156364433">22.33</a></td><td class="u-pl0 u-nowrap hidden-xs"></td><td class="hidden-xs"><a target="_blank" rel="noreferrer" href="/results/308419">USA Swimming Futures Championship - Ocala</a></td><td class="u-text-truncate">Jul 26, 2025</td></tr>
+          <tr><td class="u-text-truncate"><button type="button" class="btn-link">100 Free SCY</button></td><td class="u-text-end u-text-semi"><a href="/results/338673/event/14/?id=147489261#time147489261">42.99</a></td><td class="u-pl0 u-nowrap hidden-xs"><span class="c-label c-label--energized" title="NCAA Division I Men's Championships">NCAA B</span></td><td class="hidden-xs"><a target="_blank" rel="noreferrer" href="/results/338673">James E Martin Invitational</a></td><td class="u-text-truncate">Feb 28, 2025</td></tr>
+          <tr><td class="u-text-truncate"><button type="button" class="btn-link">100 Free LCM</button></td><td class="u-text-end u-text-semi"><a href="/results/308419/event/14/?id=156364313#time156364313">50.24</a></td><td class="u-pl0 u-nowrap hidden-xs"></td><td class="hidden-xs"><a target="_blank" rel="noreferrer" href="/results/308419">USA Swimming Futures Championship - Ocala</a></td><td class="u-text-truncate">Jul 24, 2025</td></tr>
+          <tr><td class="u-text-truncate"><button type="button" class="btn-link">200 Free SCY</button></td><td class="u-text-end u-text-semi"><a href="/results/262126/event/18/?id=112286839#time112286839">1:37.77</a></td><td class="u-pl0 u-nowrap hidden-xs"></td><td class="hidden-xs"><a target="_blank" rel="noreferrer" href="/results/262126">Speedo Winter Junior Championship West</a></td><td class="u-text-truncate">Dec 8, 2023</td></tr>
+          <tr><td class="u-text-truncate"><button type="button" class="btn-link">1000 Free SCY</button></td><td class="u-text-end u-text-semi"><a href="/results/178789/event/6/?id=34759758#time34759758">10:37.48</a></td><td class="u-pl0 u-nowrap hidden-xs"><span class="c-label c-label--neutral u-cursor-help" title="Extracted">X</span></td><td class="hidden-xs"><a target="_blank" rel="noreferrer" href="/results/178789">2020 WT COM Syntal Capital Partners Invitational</a></td><td class="u-text-truncate">Jan 17, 2020</td></tr>
+          <tr><td class="u-text-truncate"><button type="button" class="btn-link">50 Back SCY</button></td><td class="u-text-end u-text-semi"><a href="/results/212643/event/104/?id=60219448#time60219448">25.99</a></td><td class="u-pl0 u-nowrap hidden-xs"><span class="c-label c-label--neutral u-cursor-help" title="Leadoff">R</span></td><td class="hidden-xs"><a target="_blank" rel="noreferrer" href="/results/212643">Speedo Sectionals - College Station</a></td><td class="u-text-truncate">Mar 4, 2022</td></tr>
+          <tr><td class="u-text-truncate"><button type="button" class="btn-link">200 IM LCM</button></td><td class="u-text-end u-text-semi"><a href="/results/232356/event/38/?id=66844821#time66844821">2:15.09</a></td><td class="u-pl0 u-nowrap hidden-xs"></td><td class="hidden-xs"><a target="_blank" rel="noreferrer" href="/results/232356">NT MARS 14th Annual Bill Nixon Meet</a></td><td class="u-text-truncate">Jun 17, 2022</td></tr>
+          <tr><td class="u-text-truncate"><button type="button" class="btn-link">400 IM SCY</button></td><td class="u-text-end u-text-semi"><a href="/results/178791/event/8/?id=34896174#time34896174">4:29.35</a></td><td class="u-pl0 u-nowrap hidden-xs"></td><td class="hidden-xs"><a target="_blank" rel="noreferrer" href="/results/178791">West Texas Champs</a></td><td class="u-text-truncate">Feb 21, 2020</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+</div>
+
+<button id="omniswim-swimcloud-companion-button" type="button" aria-label="Copy this SwimCloud page for import into Omniswim Suite">Copy for Omniswim</button>
+</body>
+</html>

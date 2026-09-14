@@ -195,7 +195,6 @@ export default function RosterLineupStep({
             baselineByTeam={baselineByTeam}
             showTeamSidebar={false}
             teamPickerMode="dropdown"
-            editorMode="unified"
             lineupAudit={audit}
             expanded
             selectedTeam={selectedTeam || undefined}

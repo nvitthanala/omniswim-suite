@@ -15,91 +15,24 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, CartesianGrid } from 'recharts';
-import { ChartFrame, ChartShell, CutlineTag, CutlineNearMissChip } from '@omniswim/ui';
-import { TeamScore, SwimmerResult, Gender, RelayLegStroke } from '@omniswim/core/types';
-import { convertTimeToSeconds, relaySplitQualificationCutEvent, formatEventChartAxisLabel, colorForChartStroke } from '@omniswim/core/lib/utils';
+import { ChartFrame, ChartShell, SegmentedControl } from '@omniswim/ui';
+import { TeamScore, SwimmerResult, Gender } from '@omniswim/core/types';
+import { formatEventChartAxisLabel, colorForChartStroke } from '@omniswim/core/lib/utils';
 import type { PrelimsOverUnderEntry } from '@omniswim/core/lib/prelimsProjection';
 import {
   buildMomentumSeriesForTeam,
-  entryKey,
-  prelimsOuOverUnderForDisplay,
   sumPrelimsOuForSwimmers,
 } from '@omniswim/core/lib/prelimsProjection';
 import type { PsychOverUnderEntry } from '@omniswim/core/lib/psychProjection';
-import { psychExpectedForResult } from '@omniswim/core/lib/psychProjection';
-import { isRelayResult } from '@omniswim/core/lib/utils';
-import { displayTimeForRelayLeg, formatLegSplitSummary } from '@omniswim/core/lib/relaySplits';
-import { normalizeEventForCutline } from '@omniswim/core/lib/cutlineUtils';
-import {
-  buildCutlineTagForTeam,
-  buildRelaySwimTagsForTeam,
-  type CutlineTagResult,
-  type RelaySwimTagResults,
-} from '@omniswim/core/lib/cutlineTags';
 import { useThemeColors } from '@omniswim/core/lib/useThemeColors';
-import { AthleteName, CompactEventLabel, PlacementExpectedValue, PointsValue, PrelimsOuValue, SwimTimeCell } from './matrixPresentation';
+import { CompactEventLabel, PrelimsOuValue } from './matrixPresentation';
 import ProjectedActualScore from './ProjectedActualScore';
 import MomentumChartCard from './MomentumChartCard';
+import { TeamMatrixSwimmerRow } from './TeamCardMatrixRow';
+import { TeamCardChartTooltip } from './TeamCardTooltips';
+import { classChartTooltipPosition } from './teamCardView';
 
 const EMPTY_EVENTS_LIST: string[] = [];
-
-type TeamRowCutlineTags =
-  | { kind: 'relay'; tags: RelaySwimTagResults }
-  | { kind: 'single'; result: CutlineTagResult };
-
-/**
- * One cutline verdict per row, except a relay leg carries TWO independent
- * ones: the relay team's own result, and — only for an eligible leg, e.g. a
- * medley relay's backstroke leadoff — the leg split judged as an individual
- * swim. Building both here, once, keeps the two `TeamCard` render sites
- * (event-view tooltip, swimmer-view list) from resolving eligibility
- * differently.
- *
- * `individualTime` is supplied by the caller rather than resolved here so
- * each call site keeps its own pre-existing time fallback for a *non-relay*
- * row (they differ today; this only unifies the relay side, per the actual
- * bug report).
- */
-function buildTeamRowCutlineTags(
-  res: SwimmerResult,
-  gender: Gender | string,
-  teamName: string,
-  individualTime: string
-): TeamRowCutlineTags {
-  // normalizeEventForCutline strips course words, the HyTek "Event N <Gender>"
-  // prefix and Time Trial suffixes itself.
-  const cleanEventBase = res.event.replace(' (Avg Split)', '').trim();
-
-  if (res.isRelay) {
-    return {
-      kind: 'relay',
-      tags: buildRelaySwimTagsForTeam({
-        gender,
-        team: teamName,
-        relayEvent: cleanEventBase,
-        relayTeamTime: res.relayTeamTime || res.finalsTime || res.time,
-        legQualificationEvent: relaySplitQualificationCutEvent(res),
-        legSplit: res.relayLegSplit,
-      }),
-    };
-  }
-
-  return {
-    kind: 'single',
-    result: buildCutlineTagForTeam({
-      timeSec: convertTimeToSeconds(individualTime),
-      gender,
-      event: normalizeEventForCutline(cleanEventBase),
-      team: teamName,
-    }),
-  };
-}
-
-function relayMissingStrokeLabel(stroke: RelayLegStroke | undefined): string {
-  if (!stroke) return '';
-  const m: Record<RelayLegStroke, string> = { back: 'Back', breast: 'Breast', fly: 'Fly', free: 'Free' };
-  return m[stroke] ?? stroke;
-}
 
 interface Props {
   team: TeamScore;
@@ -326,172 +259,55 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
     return list;
   }, [eventsList, normalizedSearchQuery, sortMode, topEventsBase, viewMode]);
 
-  // Custom tooltips renderer logic to avoid recharts z-index and positioning issues
-  const renderTooltipContent = (data: any, isPinned = false, isClass = false) => {
-    let topPerformers: [string, number][] = [];
-    if (isClass && data.swimmers) {
-      const swimmerPts: Record<string, number> = {};
-      data.swimmers.forEach((s: SwimmerResult) => {
-        if (!swimmerPts[s.name]) swimmerPts[s.name] = 0;
-        swimmerPts[s.name] += typeof s.points === 'number' ? s.points : 0;
-      });
-      topPerformers = Object.entries(swimmerPts)
-        .sort((a, b) => b[1] - a[1])
-        .slice(0, 8);
+  const handleEventChartMouseMove = (state: any) => {
+    if (isDraggingSplitRef.current) return;
+    const idx = state?.activeTooltipIndex;
+    if (idx == null || idx < 0 || !eventData[idx]) {
+      if (lastTooltipIndexRef.current !== null) {
+        lastTooltipIndexRef.current = null;
+        setActiveTooltip(null);
+      }
+      return;
     }
-
-    const swimmersSorted =
-      !isClass && data.swimmers
-        ? [...data.swimmers].sort((a: any, b: any) => {
-            const pa = typeof a.points === 'number' ? a.points : 0;
-            const pb = typeof b.points === 'number' ? b.points : 0;
-            return pb - pa;
-          })
-        : [];
-
-    return (
-      <div 
-        className="relative theme-popover p-3 z-[999] pointer-events-auto h-full flex flex-col"
-        style={{ 
-          resize: isPinned ? 'both' : 'none', 
-          overflow: 'hidden',
-          minWidth: '220px',
-          minHeight: '120px',
-          containerType: 'size', // Container queries for dynamic resizing
-        }}
-      >
-        {isPinned && (
-          <div className="absolute top-1 right-1 cursor-pointer text-theme-muted hover:text-[var(--text-primary)]" onClick={() => isClass ? setPinnedClassTooltip(null) : setPinnedTooltip(null)}>
-            ✕
-          </div>
-        )}
-        <div className="flex justify-between items-center mb-2 pb-2 border-b border-theme-soft shrink-0">
-          <h4 className="font-bold text-[var(--text-accent)] uppercase tracking-widest" style={{ fontSize: 'clamp(8px, 5cqi, 12px)' }}>
-            {isClass ? `Class of ${data.name}` : <CompactEventLabel event={data.rawEvent} />}
-          </h4>
-          <div className="flex flex-col items-end gap-0.5">
-            <span className="font-mono font-black" style={{ fontSize: 'clamp(9px, 6cqi, 14px)' }}>{data.points.toFixed(1)} PTS</span>
-            {!isClass && showPrelimsPerformance && data.overUnder != null && Math.abs(data.overUnder) > 0.05 ? (
-              <PrelimsOuValue value={data.overUnder} compact />
-            ) : null}
-          </div>
-        </div>
-        
-        <div className="space-y-1 mt-2 flex-1 overflow-y-auto custom-scrollbar">
-          {isClass ? (
-            <>
-              <div className="text-theme-muted font-bold uppercase mb-1" style={{ fontSize: 'clamp(7px, 4cqi, 10px)' }}>Top Performers</div>
-              {topPerformers.length > 0 ? topPerformers.map(([name, pts], idx) => (
-                <div key={idx} className="flex items-center justify-between py-0.5 border-b border-theme-soft/50 last:border-0 swimmer-row" style={{ fontSize: 'clamp(8px, 4.5cqi, 11px)' }}>
-                  <span className="font-medium text-[var(--text-primary)] truncate pr-2 max-w-[150px]">{name}</span>
-                  <span className="font-mono text-points-positive font-bold">{pts.toFixed(1)}</span>
-                </div>
-              )) : (
-                <div className="text-theme-muted text-ui-micro italic">No scoring swimmers</div>
-              )}
-            </>
-          ) : (
-            swimmersSorted.length > 0 ? swimmersSorted.map((s: any, idx: number) => {
-              const rowTags = buildTeamRowCutlineTags(s, gender, team.teamName, s.finalsTime || s.time);
-
-              return (
-                <div key={idx} className="flex items-center justify-between py-1 border-b border-theme-soft/50 last:border-0 swimmer-row text-ui-caption">
-                  <div className="flex items-center gap-2">
-                    <span className="w-4 font-mono text-theme-muted">{s.rank || '-'}</span>
-                    <span className="w-4 shrink-0 inline-flex justify-center">
-                      {s.podium === 'gold' && <span className="text-yellow-400" title="Gold">🥇</span>}
-                      {s.podium === 'silver' && <span className="text-theme-secondary" title="Silver">🥈</span>}
-                      {s.podium === 'bronze' && <span className="text-orange-400" title="Bronze">🥉</span>}
-                    </span>
-                    <span className="font-medium text-[var(--text-primary)] truncate max-w-[120px]">{s.name}</span>
-                    {s.isRelay && (s.relayLegSplitDetail || s.relayLegSplit) && (
-                      <span className="text-ui-micro text-theme-muted font-mono" title="Relay leg split">Split</span>
-                    )}
-                    {s.relayMissingLeg && (
-                      <span className="text-ui-micro bg-amber-500/15 text-amber-400 px-1 border border-amber-500/30 rounded-sm ml-1" title="Missing relay leg">
-                        Missing L{(s.relayMissingLeg.legIndex ?? 0) + 1}: {relayMissingStrokeLabel(s.relayMissingLeg.stroke)}
-                      </span>
-                    )}
-                    {/* Non-relay rows only — a relay's verdicts belong next to the
-                        relay team time and the leg split, not the swimmer's name. */}
-                    {rowTags.kind === 'single' && (
-                      <>
-                        <CutlineTag result={rowTags.result} compact className="ml-1" />
-                        <CutlineNearMissChip nextTier={rowTags.result.nextTier} compact className="ml-1" />
-                      </>
-                    )}
-                  </div>
-                  <div className="flex gap-3 text-right">
-                    <span className="font-mono text-theme-muted">{s.prelimsTime ? `P:${s.prelimsTime}` : ''}</span>
-                    <span className="font-mono text-theme-secondary">
-                      {s.isRelay && (s.relayLegSplitDetail || s.relayLegSplit) ? (
-                        <>
-                          <span className="text-points-positive">{displayTimeForRelayLeg(s)}</span>
-                          {/* The leg's own individual verdict, when this leg is
-                              eligible (e.g. a medley relay's backstroke leadoff) —
-                              anchored to the split it actually describes. */}
-                          {rowTags.kind === 'relay' && rowTags.tags.legQualification ? (
-                            <span className="inline-flex items-center gap-1 ml-1 align-middle no-underline">
-                              <CutlineTag result={rowTags.tags.legQualification} compact />
-                              <CutlineNearMissChip nextTier={rowTags.tags.legQualification.nextTier} compact />
-                            </span>
-                          ) : null}
-                          {s.relayLegSplitDetail ? (
-                            <span className="block text-ui-micro text-theme-muted font-sans">
-                              {formatLegSplitSummary(s.relayLegSplitDetail)}
-                            </span>
-                          ) : null}
-                          <span className="text-theme-muted ml-1">R:{s.relayTeamTime || s.finalsTime || s.time}</span>
-                        </>
-                      ) : s.finalsTime ? (
-                        `F:${s.finalsTime}`
-                      ) : (
-                        s.time
-                      )}
-                      {/* The relay's own verdict, next to the relay team time —
-                          repeats once per leg row on purpose: legs are sorted by
-                          points and are not necessarily adjacent, so this is the
-                          only placement that is unambiguous on every row. */}
-                      {rowTags.kind === 'relay' ? (
-                        <span className="inline-flex items-center gap-1 ml-1 align-middle no-underline">
-                          <CutlineTag result={rowTags.tags.relay} compact />
-                          <CutlineNearMissChip nextTier={rowTags.tags.relay.nextTier} compact />
-                        </span>
-                      ) : null}
-                    </span>
-                    <span className="font-mono text-points-positive font-bold">{typeof s.points === 'number' ? s.points.toFixed(1) : s.points}</span>
-                    <div className="flex flex-col items-end gap-0.5">
-                      {showPrelimsPerformance && prelimsOuByEntry ? (
-                        <PlacementExpectedValue
-                          label="Prelims"
-                          value={prelimsOuByEntry.get(entryKey(s))?.expected}
-                        />
-                      ) : null}
-                      {showPsychPerformance && psychOuByEntry ? (
-                        <PlacementExpectedValue
-                          label="Psych"
-                          value={psychExpectedForResult(s, psychOuByEntry)}
-                        />
-                      ) : null}
-                      {showPrelimsPerformance && prelimsOuByEntry ? (
-                        <PrelimsOuValue
-                          value={prelimsOuOverUnderForDisplay(s, prelimsOuByEntry)}
-                          compact
-                          className="ml-1"
-                        />
-                      ) : null}
-                    </div>
-                  </div>
-                </div>
-              );
-            }) : (
-              <div className="text-theme-muted text-ui-micro italic">No scoring swimmers</div>
-            )
-          )}
-        </div>
-      </div>
-    );
+    if (lastTooltipIndexRef.current === idx) return;
+    lastTooltipIndexRef.current = idx;
+    const payload = eventData[idx];
+    const x = state.activeCoordinate?.x ?? 0;
+    const y = state.activeCoordinate?.y ?? 0;
+    const w = eventChartSurfaceRef.current?.clientWidth ?? 500;
+    setActiveTooltip({ x, y, payload, containerWidth: w });
   };
+
+  const handleEventChartMouseLeave = () => {
+    if (!isDraggingSplitRef.current) {
+      lastTooltipIndexRef.current = null;
+      setActiveTooltip(null);
+    }
+  };
+
+  const handleEventChartClick = (state: any) => {
+    if (isDraggingSplitRef.current) return;
+    if (!state || state.activeTooltipIndex == null || state.activeTooltipIndex < 0 || !eventData[state.activeTooltipIndex]) {
+      return;
+    }
+    const payload = eventData[state.activeTooltipIndex];
+    const x = state.activeCoordinate?.x ?? 0;
+    const y = state.activeCoordinate?.y ?? 0;
+    const w = eventChartSurfaceRef.current?.clientWidth ?? 500;
+    setPinnedTooltip({ x, y, payload, containerWidth: w });
+    setActiveTooltip(null);
+  };
+
+  const handleClassBarClick = (data: any, _index: number, e: any) => {
+    setPinnedClassTooltip({ ...classChartTooltipPosition(e), payload: data });
+    setActiveClassTooltip(null);
+  };
+
+  const handleClassBarMouseEnter = (data: any, _index: number, e: any) => {
+    setActiveClassTooltip({ ...classChartTooltipPosition(e), payload: data });
+  };
+
+  const handleClassBarMouseLeave = () => setActiveClassTooltip(null);
 
   return (
     <div className={`neon-card rounded-xl overflow-hidden mb-4`} style={{ borderLeftColor: teamChartColor }}>
@@ -563,24 +379,16 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                       {chartView === 'event' ? 'Points by Event' : 'Points by Class'}
                     </span>
                   </div>
-                  <div className="flex items-center surface-overlay border border-theme-soft rounded-md p-0.5">
-                    <button
-                      type="button"
-                      onClick={() => { setChartView('event'); clearChartTooltips(); }}
-                      aria-label="Show points chart by event"
-                      className={`text-ui-micro px-2 py-1 uppercase tracking-widest rounded transition-colors ${chartView === 'event' ? 'bg-[var(--surface-strong)]/60 text-[var(--text-primary)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}
-                    >
-                      By Event
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setChartView('class'); clearChartTooltips(); }}
-                      aria-label="Show points chart by class year"
-                      className={`text-ui-micro px-2 py-1 uppercase tracking-widest rounded transition-colors ${chartView === 'class' ? 'bg-[var(--surface-strong)]/60 text-[var(--text-primary)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}
-                    >
-                      By Class
-                    </button>
-                  </div>
+                  <SegmentedControl
+                    layout="inline"
+                    ariaLabel="Points chart grouping"
+                    value={chartView}
+                    onChange={next => { setChartView(next); clearChartTooltips(); }}
+                    options={[
+                      { value: 'event', label: 'By Event', ariaLabel: 'Show points chart by event' },
+                      { value: 'class', label: 'By Class', ariaLabel: 'Show points chart by class year' },
+                    ]}
+                  />
                 </div>
                 
                 <ChartShell size="lg" className="surface-overlay p-2 rounded-lg border border-theme-soft group/chart">
@@ -597,7 +405,16 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                           zIndex: 999 
                         }}
                       >
-                        {renderTooltipContent(activeTooltip.payload)}
+                        <TeamCardChartTooltip
+                          data={activeTooltip.payload}
+                          gender={gender}
+                          teamName={team.teamName}
+                          showPrelimsPerformance={showPrelimsPerformance}
+                          prelimsOuByEntry={prelimsOuByEntry}
+                          showPsychPerformance={showPsychPerformance}
+                          psychOuByEntry={psychOuByEntry}
+                          onClose={() => setPinnedTooltip(null)}
+                        />
                       </div>
                     )}
                     
@@ -611,7 +428,17 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                           top: `${Math.max(10, pinnedTooltip.y - 140)}px`
                         }}
                       >
-                        {renderTooltipContent(pinnedTooltip.payload, true)}
+                        <TeamCardChartTooltip
+                          data={pinnedTooltip.payload}
+                          isPinned
+                          gender={gender}
+                          teamName={team.teamName}
+                          showPrelimsPerformance={showPrelimsPerformance}
+                          prelimsOuByEntry={prelimsOuByEntry}
+                          showPsychPerformance={showPsychPerformance}
+                          psychOuByEntry={psychOuByEntry}
+                          onClose={() => setPinnedTooltip(null)}
+                        />
                       </motion.div>
                     )}
 
@@ -624,46 +451,9 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                         responsive={false}
                         data={eventData}
                         margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-                        onMouseMove={(state: any) => {
-                          if (isDraggingSplitRef.current) return;
-                          const idx = state?.activeTooltipIndex;
-                          if (idx == null || idx < 0 || !eventData[idx]) {
-                            if (lastTooltipIndexRef.current !== null) {
-                              lastTooltipIndexRef.current = null;
-                              setActiveTooltip(null);
-                            }
-                            return;
-                          }
-                          if (lastTooltipIndexRef.current === idx) return;
-                          lastTooltipIndexRef.current = idx;
-                          const payload = eventData[idx];
-                          const x = state.activeCoordinate?.x ?? 0;
-                          const y = state.activeCoordinate?.y ?? 0;
-                          const w = eventChartSurfaceRef.current?.clientWidth ?? 500;
-                          setActiveTooltip({ x, y, payload, containerWidth: w });
-                        }}
-                        onMouseLeave={() => {
-                          if (!isDraggingSplitRef.current) {
-                            lastTooltipIndexRef.current = null;
-                            setActiveTooltip(null);
-                          }
-                        }}
-                        onClick={(state: any) => {
-                          if (isDraggingSplitRef.current) return;
-                          if (
-                            state &&
-                            state.activeTooltipIndex != null &&
-                            state.activeTooltipIndex >= 0 &&
-                            eventData[state.activeTooltipIndex]
-                          ) {
-                            const payload = eventData[state.activeTooltipIndex];
-                            const x = state.activeCoordinate?.x ?? 0;
-                            const y = state.activeCoordinate?.y ?? 0;
-                            const w = eventChartSurfaceRef.current?.clientWidth ?? 500;
-                            setPinnedTooltip({ x, y, payload, containerWidth: w });
-                            setActiveTooltip(null);
-                          }
-                        }}
+                        onMouseMove={handleEventChartMouseMove}
+                        onMouseLeave={handleEventChartMouseLeave}
+                        onClick={handleEventChartClick}
                       >
                         <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.chartGrid} vertical={false} />
                         <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: chartTheme.chartTick, fontSize: 8, fontStyle: 'bold', fontFamily: 'JetBrains Mono' }} interval="equidistantPreserveStart" minTickGap={20} tickMargin={8} />
@@ -698,7 +488,17 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                           zIndex: 999 
                         }}
                       >
-                        {renderTooltipContent(activeClassTooltip.payload, false, true)}
+                        <TeamCardChartTooltip
+                          data={activeClassTooltip.payload}
+                          isClass
+                          gender={gender}
+                          teamName={team.teamName}
+                          showPrelimsPerformance={showPrelimsPerformance}
+                          prelimsOuByEntry={prelimsOuByEntry}
+                          showPsychPerformance={showPsychPerformance}
+                          psychOuByEntry={psychOuByEntry}
+                          onClose={() => setPinnedClassTooltip(null)}
+                        />
                       </div>
                     )}
                     
@@ -712,7 +512,18 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                           top: `${Math.max(10, pinnedClassTooltip.y - 120)}px`
                         }}
                       >
-                        {renderTooltipContent(pinnedClassTooltip.payload, true, true)}
+                        <TeamCardChartTooltip
+                          data={pinnedClassTooltip.payload}
+                          isPinned
+                          isClass
+                          gender={gender}
+                          teamName={team.teamName}
+                          showPrelimsPerformance={showPrelimsPerformance}
+                          prelimsOuByEntry={prelimsOuByEntry}
+                          showPsychPerformance={showPsychPerformance}
+                          psychOuByEntry={psychOuByEntry}
+                          onClose={() => setPinnedClassTooltip(null)}
+                        />
                       </motion.div>
                     )}
 
@@ -732,26 +543,9 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                         <Bar 
                           dataKey="points" 
                           radius={[2, 2, 0, 0]}
-                          onClick={(data, index, e) => {
-                            const rect = (e.target as Element).closest('.recharts-wrapper')?.getBoundingClientRect();
-                            setPinnedClassTooltip({ 
-                              x: (e as any).clientX - (rect?.left || 0), 
-                              y: (e as any).clientY - (rect?.top || 0), 
-                              payload: data, 
-                              containerWidth: rect?.width || 500 
-                            });
-                            setActiveClassTooltip(null);
-                          }}
-                          onMouseEnter={(data, index, e) => {
-                            const rect = (e.target as Element).closest('.recharts-wrapper')?.getBoundingClientRect();
-                            setActiveClassTooltip({ 
-                              x: (e as any).clientX - (rect?.left || 0), 
-                              y: (e as any).clientY - (rect?.top || 0), 
-                              payload: data, 
-                              containerWidth: rect?.width || 500 
-                            });
-                          }}
-                          onMouseLeave={() => setActiveClassTooltip(null)}
+                          onClick={handleClassBarClick}
+                          onMouseEnter={handleClassBarMouseEnter}
+                          onMouseLeave={handleClassBarMouseLeave}
                           style={{ cursor: 'pointer' }}
                         >
                           {classData.map((entry, index) => (
@@ -791,31 +585,17 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                 {(showPrelimsPerformance || showPsychPerformance) ? (
                   <div className="mt-3">
                     {showPrelimsPerformance && showPsychPerformance ? (
-                      <div className="flex items-center gap-1 mb-2">
-                        <button
-                          type="button"
-                          onClick={() => setMomentumAnchor('prelims')}
-                          aria-label="Show team momentum versus prelims"
-                          className={`text-[9px] uppercase tracking-widest px-2 py-0.5 rounded ${
-                            momentumAnchor === 'prelims'
-                              ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
-                              : 'text-theme-muted hover:text-theme-secondary'
-                          }`}
-                        >
-                          vs Prelims
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setMomentumAnchor('psych')}
-                          aria-label="Show team momentum versus psych sheet"
-                          className={`text-[9px] uppercase tracking-widest px-2 py-0.5 rounded ${
-                            momentumAnchor === 'psych'
-                              ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
-                              : 'text-theme-muted hover:text-theme-secondary'
-                          }`}
-                        >
-                          vs Psych
-                        </button>
+                      <div className="mb-2">
+                        <SegmentedControl
+                          layout="inline"
+                          ariaLabel="Team momentum anchor"
+                          value={momentumAnchor}
+                          onChange={setMomentumAnchor}
+                          options={[
+                            { value: 'prelims', label: 'vs Prelims', ariaLabel: 'Show team momentum versus prelims' },
+                            { value: 'psych', label: 'vs Psych', ariaLabel: 'Show team momentum versus psych sheet' },
+                          ]}
+                        />
                       </div>
                     ) : null}
                     <MomentumChartCard
@@ -869,24 +649,19 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                       {viewMode === 'swimmer' && <option value="swimmerAsc">Low to High</option>}
                     </select>
 
-                    <div className="flex items-center surface-overlay border border-theme-soft rounded-md p-0.5">
-                      <button 
-                        type="button"
-                        onClick={() => { setViewMode('event'); setSortMode('eventDesc'); }}
-                        aria-label="Group team matrix by event"
-                        className={`text-ui-micro px-2 py-1 uppercase tracking-widest rounded transition-colors ${viewMode === 'event' ? 'bg-[var(--surface-strong)]/60 text-[var(--text-primary)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}
-                      >
-                        By Event
-                      </button>
-                      <button 
-                        type="button"
-                        onClick={() => { setViewMode('swimmer'); setSortMode('swimmerDesc'); }}
-                        aria-label="Group team matrix by swimmer"
-                        className={`text-ui-micro px-2 py-1 uppercase tracking-widest rounded transition-colors ${viewMode === 'swimmer' ? 'bg-[var(--surface-strong)]/60 text-[var(--text-primary)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}
-                      >
-                        By Swimmer
-                      </button>
-                    </div>
+                    <SegmentedControl
+                      layout="inline"
+                      ariaLabel="Team matrix grouping"
+                      value={viewMode}
+                      onChange={next => {
+                        setViewMode(next);
+                        setSortMode(next === 'event' ? 'eventDesc' : 'swimmerDesc');
+                      }}
+                      options={[
+                        { value: 'event', label: 'By Event', ariaLabel: 'Group team matrix by event' },
+                        { value: 'swimmer', label: 'By Swimmer', ariaLabel: 'Group team matrix by swimmer' },
+                      ]}
+                    />
                   </div>
                 </div>
 
@@ -929,165 +704,25 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                       </div>
 
                       <div className="space-y-1">
-                        {group.swimmers.map((res: SwimmerResult, i: number) => {
-                          const rowTags = buildTeamRowCutlineTags(res, gender, team.teamName, res.time);
-                          // Coloring keys off each row's own verdict: the relay's
-                          // for a relay leg (never the leg's, which was the bug —
-                          // a leadoff's individual split used to silently stand
-                          // in for the relay's own result), the single verdict
-                          // otherwise.
-                          const primaryTagResult = rowTags.kind === 'relay' ? rowTags.tags.relay : rowTags.result;
-                          const cutlineTier =
-                            primaryTagResult.state === 'tagged' ? primaryTagResult.tag.tier : null;
-                          const isACut = cutlineTier === 'A' || cutlineTier === 'Standard' || cutlineTier === 'Qualifying';
-                          const isBCut = cutlineTier === 'B' || cutlineTier === 'Provisional' || cutlineTier === 'Invited';
-
-                          const relaySplitPrimary = res.isRelay && (res.relayLegSplitDetail || res.relayLegSplit);
-
-                          return (
-                            <div key={i} className="flex items-center justify-between text-ui-caption py-1.5 border-t border-theme-soft">
-                              <div className="flex items-center gap-2 text-theme-secondary font-mono w-1/3">
-                                <span className="w-4 font-medium text-theme-secondary">{res.rank || '-'}</span>
-                                <span className="truncate max-w-[150px]">
-                                  {viewMode === 'swimmer' ? (
-                                    <CompactEventLabel event={res.event} className="text-theme-secondary font-mono truncate max-w-[150px] inline-block" />
-                                  ) : (
-                                    <AthleteName name={res.name} className="text-theme-secondary font-mono" />
-                                  )}
-                                </span>
-                                {res.relayMissingLeg && (
-                                  <span className="text-ui-micro text-amber-400 shrink-0" title="Missing relay leg">
-                                    Missing L{(res.relayMissingLeg.legIndex ?? 0) + 1}{' '}
-                                    {relayMissingStrokeLabel(res.relayMissingLeg.stroke)}
-                                  </span>
-                                )}
-                                {res.roundSwam && <span className="text-ui-micro surface-overlay px-1 rounded truncate max-w-[60px]">{res.roundSwam}</span>}
-                              </div>
-                              <div className="flex flex-col items-end gap-0.5 justify-center w-1/3 text-right">
-                                {res.prelimsTime && (
-                                  <div className="text-ui-micro text-theme-secondary font-mono">
-                                    Prelim: {res.prelimsTime}
-                                  </div>
-                                )}
-                                {relaySplitPrimary && (
-                                  <div
-                                    className={`font-mono font-medium cursor-pointer hover:underline ${isACut ? 'text-[var(--text-accent)]' : isBCut ? 'text-amber-400' : 'text-theme-secondary'}`}
-                                    onClick={() => { if(onUpdateTime && res.id) { setEditingResultId(res.id); setEditValue(res.time); } }}
-                                  >
-                                    <span className="inline-flex items-center gap-1 flex-wrap">
-                                      <span>Split: {displayTimeForRelayLeg(res)}</span>
-                                      {/* The leg's own individual verdict — only present when this leg is eligible. */}
-                                      {rowTags.kind === 'relay' && rowTags.tags.legQualification ? (
-                                        <span className="inline-flex items-center gap-1 no-underline">
-                                          <CutlineTag result={rowTags.tags.legQualification} compact />
-                                          <CutlineNearMissChip nextTier={rowTags.tags.legQualification.nextTier} compact />
-                                        </span>
-                                      ) : null}
-                                    </span>
-                                    {res.relayLegSplitDetail ? (
-                                      <span className="block text-ui-micro text-theme-muted font-sans">
-                                        {formatLegSplitSummary(res.relayLegSplitDetail)}
-                                      </span>
-                                    ) : null}
-                                    <span className="block text-ui-micro text-theme-secondary font-normal">
-                                      <span className="inline-flex items-center gap-1 flex-wrap">
-                                        <span>Relay {res.relayTeamTime || res.finalsTime || res.time}</span>
-                                        {/* The relay's own verdict — anchored to the relay team time it
-                                            actually describes, not the swimmer's split above. */}
-                                        {rowTags.kind === 'relay' ? (
-                                          <span className="inline-flex items-center gap-1 no-underline">
-                                            <CutlineTag result={rowTags.tags.relay} compact />
-                                            <CutlineNearMissChip nextTier={rowTags.tags.relay.nextTier} compact />
-                                          </span>
-                                        ) : null}
-                                      </span>
-                                    </span>
-                                  </div>
-                                )}
-                                {res.finalsTime && !relaySplitPrimary && (
-                                  <div
-                                    className={`font-mono font-medium cursor-pointer hover:underline ${isACut ? 'text-[var(--text-accent)]' : isBCut ? 'text-amber-400' : 'text-theme-secondary'}`}
-                                    onClick={() => { if(onUpdateTime && res.id) { setEditingResultId(res.id); setEditValue(res.time); } }}
-                                  >
-                                    Final: {res.finalsTime}
-                                  </div>
-                                )}
-                                {!res.finalsTime && !res.prelimsTime && !relaySplitPrimary && (
-                                  <div
-                                    className={`font-mono font-medium cursor-pointer hover:underline ${isACut ? 'text-[var(--text-accent)]' : isBCut ? 'text-amber-400' : 'text-theme-secondary'}`}
-                                    onClick={() => { if(onUpdateTime && res.id) { setEditingResultId(res.id); setEditValue(res.time); } }}
-                                  >
-                                    {res.time}
-                                  </div>
-                                )}
-                                {/* A relay row without a recorded split still needs its team-time
-                                    verdict shown somewhere — the two branches above cover the split
-                                    case inline, this covers the finalsTime/plain-time fallbacks. */}
-                                {!relaySplitPrimary && rowTags.kind === 'relay' ? (
-                                  <div className="flex items-center justify-end gap-1 flex-wrap">
-                                    <CutlineTag result={rowTags.tags.relay} compact />
-                                    <CutlineNearMissChip nextTier={rowTags.tags.relay.nextTier} compact />
-                                  </div>
-                                ) : null}
-                                {editingResultId === res.id && (
-                                  <form 
-                                    onSubmit={(e) => {
-                                      e.preventDefault();
-                                      if(onUpdateTime && res.id) onUpdateTime(res.id, editValue);
-                                      setEditingResultId(null);
-                                    }}
-                                    className="flex w-full mt-1 border border-theme-soft rounded overflow-hidden"
-                                  >
-                                    <input 
-                                      type="text" 
-                                      autoFocus
-                                      aria-label={`Edit time for ${res.name}`}
-                                      value={editValue} 
-                                      onChange={e => setEditValue(e.target.value)} 
-                                      className="surface-muted-bg text-ui-micro px-1 py-0.5 outline-none font-mono flex-1 text-[var(--text-primary)]" 
-                                      onBlur={() => setEditingResultId(null)}
-                                    />
-                                  </form>
-                                )}
-                              </div>
-                              <div className="flex items-center justify-end gap-2 w-1/3 flex-wrap">
-                                {/* Relay verdicts are already anchored next to the relay team
-                                    time / leg split above; only a non-relay row's single verdict
-                                    belongs in this generic slot. */}
-                                {rowTags.kind === 'single' ? (
-                                  <>
-                                    <CutlineTag result={rowTags.result} compact />
-                                    <CutlineNearMissChip nextTier={rowTags.result.nextTier} compact />
-                                  </>
-                                ) : null}
-                                <div className="flex flex-col items-end gap-0.5">
-                                  <PointsValue
-                                    signed={false}
-                                    value={typeof res.points === 'number' ? res.points : res.points}
-                                  />
-                                  {showPrelimsPerformance && prelimsOuByEntry ? (
-                                    <PlacementExpectedValue
-                                      label="Prelims"
-                                      value={prelimsOuByEntry.get(entryKey(res))?.expected}
-                                    />
-                                  ) : null}
-                                  {showPsychPerformance && psychOuByEntry ? (
-                                    <PlacementExpectedValue
-                                      label="Psych"
-                                      value={psychExpectedForResult(res, psychOuByEntry)}
-                                    />
-                                  ) : null}
-                                  {showPrelimsPerformance && prelimsOuByEntry ? (
-                                    <PrelimsOuValue
-                                      value={prelimsOuOverUnderForDisplay(res, prelimsOuByEntry)}
-                                      compact
-                                    />
-                                  ) : null}
-                                </div>
-                              </div>
-                            </div>
-                          );
-                        })}
+                        {group.swimmers.map((res: SwimmerResult, i: number) => (
+                          <TeamMatrixSwimmerRow
+                            key={i}
+                            res={res}
+                            gender={gender}
+                            teamName={team.teamName}
+                            viewMode={viewMode}
+                            onUpdateTime={onUpdateTime}
+                            editingResultId={editingResultId}
+                            editValue={editValue}
+                            onStartEdit={(id, time) => { setEditingResultId(id); setEditValue(time); }}
+                            onEditValueChange={setEditValue}
+                            onCancelEdit={() => setEditingResultId(null)}
+                            showPrelimsPerformance={showPrelimsPerformance}
+                            prelimsOuByEntry={prelimsOuByEntry}
+                            showPsychPerformance={showPsychPerformance}
+                            psychOuByEntry={psychOuByEntry}
+                          />
+                        ))}
                       </div>
                     </div>
                   ))}

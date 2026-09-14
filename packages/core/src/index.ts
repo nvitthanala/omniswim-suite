@@ -98,6 +98,46 @@ export {
   type MeetDivisionResolution,
 } from './data/teamDivisions';
 
+/* --- NCAA Rule 7 scoring. Point tables transcribed from the archived rulebook PDF
+       (data/scoring_rules/sources/); parallel to, and independent of, the
+       ScoringSettings pipeline below. --- */
+export {
+  NCAA_MEET_FORMATS,
+  NCAA_CHAMPIONSHIP_FIELD_SIZES,
+  NCAA_FORMAT_RULESETS,
+  NcaaScoringError,
+  NcaaUnsourcedRuleError,
+  NcaaScoringInputError,
+  ncaaChampionshipFormatForFieldSize,
+  ncaaRulesetForFormat,
+  resolveNcaaPointTable,
+  resolveNcaaFinalPools,
+  isNcaaHostPublishedTable,
+  computeNcaaEventScoring,
+  resolveNcaaDualMeetOutcome,
+  aggregateNcaaTeamTotals,
+  type NcaaMeetFormat,
+  type NcaaChampionshipFieldSize,
+  type NcaaEventKind,
+  type NcaaPointTable,
+  type NcaaHostPublishedTable,
+  type NcaaTableSlot,
+  type NcaaFinalTier,
+  type NcaaFinalPool,
+  type NcaaFinalsStructure,
+  type NcaaFormatRuleset,
+  type NcaaEntryStatus,
+  type NcaaScoringEntry,
+  type NcaaScoringOptions,
+  type NcaaScoringReason,
+  type NcaaScoredEntry,
+  type NcaaLostPlace,
+  type NcaaTeamTotal,
+  type NcaaEventScore,
+  type NcaaDualMeetOutcomeInput,
+  type NcaaDualMeetOutcome,
+} from './lib/ncaaScoringRules';
+
 export * from './lib/swimCloudMultiProfile';
 export * from './lib/scoringTheory';
 export * from './lib/crossCourseArbitrage';

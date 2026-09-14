@@ -44,12 +44,13 @@ _ALIASES_JSON = os.path.normpath(
 
 
 def _load_abbrev_teams():
+    # Fails loudly on purpose: a missing or unreadable teamAbbreviations.json
+    # means every team code below silently degrades to the tiny hardcoded
+    # fallback, misattributing points for every school not in that short
+    # list. A broken deploy should not start up able to score meets wrong.
     merged = {}
-    try:
-        with open(_ALIASES_JSON, encoding='utf-8') as fh:
-            merged.update(json.load(fh))
-    except OSError:
-        pass
+    with open(_ALIASES_JSON, encoding='utf-8') as fh:
+        merged.update(json.load(fh))
     merged.setdefault('UMSL', 'University of Missouri-St. Louis')
     merged.setdefault('HSU', 'Henderson State University')
     merged.setdefault('DSU', 'Delta State University')
@@ -312,14 +313,43 @@ def parse_meet_data(lines, conference="NSISC"):
         else:
             rest_line = stripped
         
-        # Find year token
+        # Find year token. A missing one is not automatically noise: HyTek omits
+        # the class year for an athlete who has none on file, and dropping the
+        # line loses a real result. Recover off the school, and raise when a row
+        # that plainly is a result cannot be recovered rather than losing it
+        # silently — a short meet reads as a scoring defect, not a parse defect.
         yr_match = re.search(YEAR_PATTERN, rest_line)
-        if not yr_match:
-            continue
-        
-        yr = yr_match.group(1).upper()
-        before_yr = rest_line[:yr_match.start()].strip()
-        after_yr = rest_line[yr_match.end():].strip()
+        if yr_match:
+            yr = yr_match.group(1).upper()
+            before_yr = rest_line[:yr_match.start()].strip()
+            after_yr = rest_line[yr_match.end():].strip()
+        else:
+            recovered = _split_yearless_individual_line(rest_line)
+            if recovered is None:
+                if _looks_like_relay_entry_row(rest_line):
+                    # A relay entry row reached the individual branch. The event
+                    # in hand is an individual event, so this relay's own header
+                    # is not the one being tracked — the source PDF prints two
+                    # result columns and pdfplumber interleaves them. Filing the
+                    # row under `current_event` would put a relay under a diving
+                    # event. Say it was dropped; never guess its event.
+                    print(
+                        f'WARNING: relay entry row {stripped!r} arrived under '
+                        f'{current_event!r}, which is not a relay event. The '
+                        'source PDF prints two columns and the extraction '
+                        'interleaved them, so this row has no event to be filed '
+                        'under and is dropped.',
+                        file=sys.stderr,
+                    )
+                    continue
+                if _looks_like_lost_result_row(rest_line):
+                    raise ValueError(
+                        'unparseable individual result row in '
+                        f'{current_event!r} ({current_round}): no class year and '
+                        f'no known school to split on: {stripped!r}'
+                    )
+                continue
+            yr, before_yr, after_yr = recovered
         
         rank = None
         name = None
@@ -884,6 +914,112 @@ def _relay_leg_stroke_for_event(event_name, leg_index):
     return 'free'
 
 
+# A leg marker opens the segment: "1)", "2)" ... It follows the line start, a
+# space, or a letter — pdfplumber runs the marker onto the previous class year
+# often enough ("... Tanish SR4) r:0.18 Nunez, Javier FR") that requiring
+# whitespace loses the leg. A digit, "(" or "." before it means the ")" closes a
+# split time such as "(20.63)", not a leg.
+_RELAY_LEG_MARKER = re.compile(r'(?<![(\d.:\-])(\d+)\)')
+# HyTek prints a reaction time before the name on every leg but the first.
+_RELAY_LEG_REACTION = re.compile(r'^r:[\+\-]?\d*\.\d+\s+')
+_RELAY_LEG_NAME_YEAR = re.compile(
+    r'^([A-Za-z\-\',\.\s\*#xX%]+?)\s+(FR|SO|JR|SR|5Y|FY|GS|GR)\b'
+)
+# Yearless leg: take the leading run of name characters and stop where the name
+# plainly ends — the end of the segment, a clock, a bracketed split, or the next
+# reaction time. GLVC prints "1) Briley Larcom 2) r:0.35 Kayden Cooper r:+0.77
+# 27.57 58.53", so a leg's own splits can share the segment with its swimmer.
+_RELAY_LEG_NAME_ONLY = re.compile(r'^([A-Za-z][A-Za-z\-\',\.\s\*#xX%]*?)\s*(?=$|[\d(]|r:)')
+
+
+def _looks_like_lost_relay_leg(segment):
+    """True when a leg segment plainly carries a swimmer name yet did not parse."""
+    return sum(
+        1 for t in segment.split() if re.match(r"^[A-Za-z][A-Za-z\-\'\.,]*$", t)
+    ) >= 2
+
+
+def _parse_relay_leg_line(nxt):
+    """
+    Read "1) Name YR 2) Name YR 3) Name YR 4) Name YR" into one entry per leg.
+
+    The class year is optional. This line had the same defect as the individual
+    result row: the old regex required a trailing year token, so a swimmer with
+    no class year on file was not merely missing a year, he was missing from the
+    relay. In `2026_NSISC_Championships_Final_Results.pdf` that dropped
+    Alessandro Giustolisi (Delta State) from three relays; in the 2026 ACC
+    results it dropped Claire Curzan from four.
+
+    A dropped leg also shifts the legs after it. `_build_relay_split_payload`
+    pairs `relay_names[i]` with split i, so a three-name list against four splits
+    credits leg 4's swim to leg 3's swimmer.
+
+    Each leg runs from its marker to the next marker, or to the end of the line.
+    That boundary — not the year token — separates one leg from the next. When no
+    year is printed the year is UNKNOWN. It is never guessed: a class year is
+    competition data that drives senior-removal projections.
+
+    Returns [] for a line that carries no legs, so the caller keeps its "not a
+    swimmer line" branch.
+
+    A leg that still cannot be read on a line whose other legs parsed raises.
+    An earlier revision printed a warning to stderr and returned the shorter
+    relay. That is the silent-gap-filling this parser exists to refuse: stderr
+    is invisible to a coach reading the app, so a relay short one swimmer looks
+    exactly like a complete, correctly-parsed relay. The segments that reach
+    this branch are pdfplumber column bleed, e.g. the 2026 Big 12 line
+    "3) r:0.37 *Sheikhalizadehkhangh, M4a) rry:0am.17 J RWozniak, Julia SR".
+    Neither answer is available: the name cannot be read, and guessing it from
+    the wreckage would invent competition data. So the parse stops and says so,
+    the same as the yearless individual row above. Refuse rather than silently
+    short a meet.
+    """
+    markers = list(_RELAY_LEG_MARKER.finditer(nxt))
+    if not markers:
+        return []
+
+    legs = []
+    lost = []
+    for idx, marker in enumerate(markers):
+        end = markers[idx + 1].start() if idx + 1 < len(markers) else len(nxt)
+        segment = _RELAY_LEG_REACTION.sub('', nxt[marker.end():end].lstrip(), count=1)
+
+        year_match = _RELAY_LEG_NAME_YEAR.match(segment)
+        if year_match:
+            name_raw, year = year_match.group(1), year_match.group(2).upper()
+        else:
+            name_match = _RELAY_LEG_NAME_ONLY.match(segment)
+            # Two words minimum: HyTek prints "First Last" or "Last, First", and
+            # a lone token is stray furniture rather than a swimmer.
+            #
+            # The name must also end where a word ends. A run that stops inside
+            # one is a mangled name, not a shorter name: the GLVC ligature
+            # "Kadence Grif(cid:976)in SR" would otherwise enter the roster as
+            # "Kadence Grif", which reads as a real swimmer and is not one.
+            # Report the leg lost instead of inventing a name for it.
+            if (
+                not name_match
+                or len(name_match.group(1).split()) < 2
+                or segment[name_match.end(1):name_match.end(1) + 1].strip()
+            ):
+                if _looks_like_lost_relay_leg(segment):
+                    lost.append(segment.strip())
+                continue
+            name_raw, year = name_match.group(1), 'UNKNOWN'
+
+        name = normalize_name(re.sub(r'^[\*xX#%]\s*', '', name_raw.strip()))
+        if name:
+            legs.append({"name": name, "year": year})
+
+    if legs and lost:
+        raise ValueError(
+            f'unreadable relay leg on swimmer line {nxt!r}: {lost!r}. The other '
+            'legs on this line parsed, so this relay would be short a swimmer. '
+            'The name cannot be read and will not be guessed.'
+        )
+    return legs
+
+
 def _parse_nsisc_relay(
     stripped,
     lines,
@@ -963,13 +1099,10 @@ def _parse_nsisc_relay(
         if not nxt:
             continue
         # Swimmer line: "1) Shannah Dillman SR 2) Tori Johnston SR ..."
-        # Handle optional reaction times like r:0.12 or r:+0.55
-        swimmers = re.findall(r'(\d+)\)\s*((?:r:[\+\-]?\d*\.\d+\s+)?)([A-Za-z\-\',\.\s\*#xX%]+?)\s+(FR|SO|JR|SR|5Y|FY|GS|GR)', nxt)
+        # Optional reaction times (r:0.12, r:+0.55) and optional class years.
+        swimmers = _parse_relay_leg_line(nxt)
         if swimmers:
-            for num, _rt, sname, syear in swimmers:
-                sname_clean = re.sub(r'^[\*xX#%]\s*', '', sname.strip())
-                sname_clean = normalize_name(sname_clean)
-                relay_names.append({"name": sname_clean, "year": syear.upper()})
+            relay_names.extend(swimmers)
             continue
         if nxt.startswith('r:') or (re.match(r'^[\d:\.]+\s', nxt) and '(' in nxt):
             split_lines = _collect_relay_split_lines(lines, j - 1)
@@ -1055,6 +1188,203 @@ def _school_guess_after_year(after_yr):
         else:
             school_words.append(t)
     return ' '.join(school_words).strip()
+
+
+# A HyTek team code as the school column prints it: "SBU", "DRUR", "MS&T".
+# All caps in the source, which is what separates a code from a swimmer's name.
+_TEAM_CODE_TOKEN = re.compile(r'^[A-Z][A-Z0-9&\.\-]{1,9}$')
+# HyTek labels a school's entries A, B, C, D in entry order.
+_RELAY_SQUAD_LETTER = re.compile(r'^[A-D]$')
+# A title-case word that can be part of a printed swimmer name.
+_NAME_WORD = re.compile(r"^[A-Z][a-z][A-Za-z\-\'\.]*$")
+# A bare place number. "4." (the team score table) is deliberately excluded.
+_PLACE_NUMBER = re.compile(r'^\d{1,3}$')
+
+
+def _resolve_team_code(token):
+    """
+    Expand one HyTek team code through the archived abbreviation table,
+    `packages/core/src/data/teamAbbreviations.json`.
+
+    Strict where `match_abbrev_team` is loose. That one accepts a code as a
+    suffix of any word, so a swimmer named Baker can resolve as a school. Here
+    the whole token must BE the code, and the code must already be in the table:
+    an unrecorded code returns None and the caller refuses the row, which is how
+    a new conference's abbreviation gets added with a source instead of guessed.
+    """
+    t = (token or '').strip()
+    if not _TEAM_CODE_TOKEN.match(t):
+        return None
+    return ABBREV_TEAMS.get(t.upper())
+
+
+def _is_school_column_boundary(token):
+    """The school column ends at the first clock or scratch code."""
+    t = (token or '').lstrip('Xx*#')
+    return is_time(t) or t.upper() in ('NT', 'DQ', 'DFS', 'SCR', 'NS', 'NP')
+
+
+def _looks_like_relay_entry_row(rest_line):
+    """
+    True for a relay entry row: "<place> <TEAM> <A|B|C|D> <clock>", e.g.
+    "16 UMSL B 6:53.13".
+
+    These are not individual results and must never be parsed as one. They reach
+    the individual branch only through column bleed: the source PDF prints two
+    result columns, pdfplumber reads them into one line stream, and a relay row
+    can land while an individual event header is the one in hand.
+
+    `_looks_like_lost_result_row` used to call them lost results, because its
+    two-name-word test counted the team code and the squad letter as names. In
+    `glvc_results26.pdf` that made eleven relay rows raise, and the first one
+    aborted the whole meet.
+    """
+    tokens = rest_line.strip().split()
+    if len(tokens) < 4:
+        return False
+    if not re.match(r'^\*?\d+$', tokens[0]):
+        return False
+    if not _RELAY_SQUAD_LETTER.match(tokens[2]):
+        return False
+    if not is_time(tokens[3].lstrip('Xx*#')):
+        return False
+    return _resolve_team_code(tokens[1]) is not None
+
+
+def _looks_like_lost_result_row(rest_line):
+    """
+    True when a line carries the unmistakable shape of an individual result row
+    — a leading place, at least one clock, and a name — yet could not be parsed.
+
+    Deliberately narrow. Page furniture ("2026 New South Intercollegiate
+    Swimming Conference") leads with a number too, but carries no time token, so
+    it never reaches the raise. A relay entry row is excluded outright: it is a
+    real row, but it is not an individual result and forcing it through this
+    branch would file a relay squad as a swimmer.
+    """
+    if _looks_like_relay_entry_row(rest_line):
+        return False
+    if not re.match(r'^(\*?\d+)\s+[A-Za-z]', rest_line.strip()):
+        return False
+    tokens = rest_line.split()
+    if not any(is_time(t.lstrip('Xx*#')) for t in tokens):
+        return False
+    return sum(1 for t in tokens if re.match(r'^[A-Za-z][A-Za-z\-\'\.]*$', t)) >= 2
+
+
+def _split_yearless_individual_line(rest_line):
+    """
+    Split "<place> <Name> <School> <times...>" when HyTek printed no class year.
+
+    The standard layout is "<place> <Name> <YR> <School> <times...>" and the
+    whole downstream parse pivots on the year token. A roster entry with no
+    class year on file prints without one, and every row for that athlete was
+    silently dropped — in the 2026 NSISC results, all 11 rows for Alessandro
+    Giustolisi (Delta State), including four scoring finishes worth 21 points.
+
+    Recovery pivots on the school instead. Returns
+    (year, before_school, school_and_times) shaped exactly like the year-token
+    split so the caller is unchanged, with the year reported as UNKNOWN. The
+    class year is never guessed: it is competition data that drives
+    senior-removal projections, and this PDF does not carry one.
+
+    Two pivots, in order:
+
+    1. The team cache built out of this same PDF, which holds the school names
+       the PDF spells out in full.
+    2. A HyTek team code — the school column prints an abbreviation. GLVC does
+       this throughout: "52 Drew E Baker SBU 2:00.60". The cache cannot hold
+       SBU, because it harvests school names from rows that carry a class year
+       and Southwest Baptist prints none, so every SBU row was unrecoverable and
+       the first one aborted the meet.
+
+    The code is expanded through `ABBREV_TEAMS`, the same archived table
+    `match_abbrev_team` already uses to resolve the school on every year-bearing
+    row in this PDF. No second table, and no code is invented here: an
+    unrecorded code returns None and the caller raises.
+    """
+    hit = _split_yearless_on_cached_team(rest_line)
+    if hit is None:
+        hit = _split_yearless_on_team_code(rest_line)
+    return hit
+
+
+def _split_yearless_on_cached_team(rest_line):
+    """Pivot on a school name the PDF spells out in full."""
+    if not _team_cache:
+        return None
+    for team in _team_cache:  # longest first, so the fullest school name wins
+        idx = rest_line.find(team)
+        if idx <= 0:
+            continue
+        before = rest_line[:idx].strip()
+        after = rest_line[idx:].strip()
+        if not before or not after:
+            continue
+        if not _is_recoverable_name(before):
+            continue
+        return 'UNKNOWN', before, _trim_recovered_tail(after)
+    return None
+
+
+def _split_yearless_on_team_code(rest_line):
+    """Pivot on an abbreviated school column, e.g. the SBU in "52 Drew E Baker SBU 2:00.60"."""
+    tokens = rest_line.split()
+    for i in range(1, len(tokens) - 1):  # never token 0, which is the place
+        if _resolve_team_code(tokens[i]) is None:
+            continue
+        # The school column sits directly before the clock. Requiring that keeps
+        # a code out of the middle of a name and off the qualifying-standard
+        # tail ("... 20.31 B"), where a bare letter is a cut tag, not a school.
+        if not _is_school_column_boundary(tokens[i + 1]):
+            continue
+        before = ' '.join(tokens[:i])
+        if not _is_recoverable_name(before):
+            continue
+        return 'UNKNOWN', before, _trim_recovered_tail(' '.join(tokens[i:]))
+    return None
+
+
+def _is_recoverable_name(before):
+    """
+    True when what precedes the school is a place and a real athlete name.
+
+    Guards the team score table ("1 University of West Florida University of
+    West Florida 1,239"), where nothing but the place precedes the school.
+
+    The comma is not optional in practice: HyTek prints "Last, First" in every
+    conference PDF archived here bar NSISC. Without it the ACC's
+    "4 Clark, Kayleigh Florida State University 296.85 300.15 26" is not
+    recovered, and the caller raises on it — one yearless diver aborting the
+    whole meet.
+    """
+    name_part = re.sub(r'^(\*?\d+)\s+', '', before.strip()).strip()
+    if len(name_part.split()) < 2:
+        return False
+    return bool(re.match(r"^[A-Za-z][A-Za-z\-\',\.\s]*$", name_part))
+
+
+def _trim_recovered_tail(after):
+    """
+    Cut a recovered row where the next result column starts on the same line.
+
+    pdfplumber reads this PDF's two result columns into one line often enough
+    that a recovered row would otherwise take the next column's clock as its
+    own finals time. "41 Eliana Barone SBU 1:18.26 18 Marco Flores MS&T 55.88"
+    is one line holding two swims, and Barone's 100 breaststroke would come out
+    55.88 — Marco Flores's time, in another event.
+
+    A HyTek result tail carries clocks, qualifying tags and a points column. It
+    never prints "<place> <Name>", so that pair is where the next column begins.
+    The row keeps its own clock and the rest is dropped: the second swim has no
+    event header of its own here, and inventing one would file a real time
+    against the wrong race.
+    """
+    tokens = after.split()
+    for i in range(1, len(tokens) - 1):
+        if _PLACE_NUMBER.match(tokens[i]) and _NAME_WORD.match(tokens[i + 1]):
+            return ' '.join(tokens[:i])
+    return after  # unchanged: keep the original spacing byte for byte
 
 
 def _build_team_cache(lines):
@@ -1212,7 +1542,7 @@ def parse_pdf(file_path, format_type='auto'):
     conference = None
     if 'NSISC' in full_text.upper():
         conference = 'NSISC'
-    elif 'ACC' in full_text.upper() or 'ATLANTIC COAST' in full_text.upper():
+    elif re.search(r'\bACC\b', full_text.upper()) or 'ATLANTIC COAST' in full_text.upper():
         conference = 'ACC'
     elif re.search(r'\bSEC\b', full_text.upper()) or 'SOUTHEASTERN CONFERENCE' in full_text.upper():
         conference = 'SEC'

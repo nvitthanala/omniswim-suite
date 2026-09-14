@@ -2,7 +2,7 @@
  * Enhanced SwimCloud paste import with format detection and merge preview.
  */
 import React, { useMemo, useRef, useState, useEffect } from 'react';
-import { X, ClipboardPaste, FileSpreadsheet, Globe, Undo2 } from 'lucide-react';
+import { X, ClipboardPaste, Download, FileSpreadsheet, Globe, Undo2, Boxes } from 'lucide-react';
 import { Gender, HistoricalSwim, Workspace } from '@omniswim/core/types';
 import {
   detectSwimCloudPasteFormat,
@@ -24,8 +24,43 @@ import {
 } from '@omniswim/core/lib/athleteAliases';
 import { parseCsvHistory } from '@omniswim/core/lib/csvImport';
 import { divisionForTeamOrNull } from '@omniswim/core/data/teamDivisions';
-import { useToast } from '@omniswim/ui';
+import {
+  Badge,
+  Modal,
+  useToast,
+  SwimCloudCaptureBrowser,
+  type SwimCloudCaptureRosterSelection,
+} from '@omniswim/ui';
 import AliasSuggestionsPanel from './AliasSuggestionsPanel';
+// Track A (plans/2026-09-06/): the browser extension's clipboard capture,
+// read back here. Deliberately imported from these specific subpaths, not
+// the @omniswim/swimcloud package root — see
+// packages/manager/src/lib/swimCloudImportBridge.ts's file header for why
+// (the root re-exports Node-only fetcher/cache code this UI package must
+// never pull into its bundle).
+import { readSwimCloudClipboardPayload } from '@omniswim/swimcloud/clipboardPayload';
+import { classifySwimCloudUrl } from '@omniswim/swimcloud/urlClassifier';
+import { parseSwimmerTimesHtml, parseTeamMeetSwimsHtml, parseTeamRosterHtml } from '@omniswim/swimcloud/parser';
+import { swimCloudTeamMeetSwimsToHistoricalSwims } from '../lib/swimCloudImportBridge';
+// The two halves of a roster import — seed-a-queue and convert-and-check-off —
+// live in one module because there are now two callers for each: this file's
+// clipboard handlers, and this file's own `handleCaptureBrowserRosterImport`,
+// which runs the same steps N times over an already-completed
+// browser-extension capture (via the shared `SwimCloudCaptureBrowser` in
+// `@omniswim/ui`, not a Manager-only component anymore). See that module's
+// file header on why they were extracted rather than copied.
+import {
+  buildRosterImportFromCapture,
+  convertAndAccountSwimmerTimes,
+  describeNewAthletes,
+  formatSkipWarnings,
+  markRosterQueueCaptured,
+  rosterCaptureCoverage,
+  seedRosterQueueFromAthletes,
+  type RosterQueue,
+  type SwimCloudCaptureRosterImport,
+} from '../lib/rosterQueueImport';
+
 
 type ImportMode = 'paste' | 'csv';
 
@@ -68,6 +103,16 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
   const toast = useToast();
   const teams = useMemo(() => uniqueTeams(workspace, gender), [workspace, gender]);
   const [team, setTeam] = useState('');
+  /**
+   * Every name already on this workspace's roster for the selected team and
+   * gender. Both roster-seeding paths read it, so "N not yet in this workspace"
+   * counts the same swimmers however the roster arrived — clipboard capture or
+   * bulk capture import.
+   */
+  const existingRosterNames = useMemo(
+    () => (team.trim() ? rosterNamesForTeam(workspace, team.trim(), gender) : []),
+    [workspace, team, gender]
+  );
   const [mode, setMode] = useState<ImportMode>('paste');
   const [paste, setPaste] = useState('');
   const [preview, setPreview] = useState<HistoricalSwim[]>([]);
@@ -75,6 +120,9 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
   const [format, setFormat] = useState<string>('unknown');
   const [step, setStep] = useState<'paste' | 'preview'>('paste');
   const [showReference, setShowReference] = useState(false);
+  const [isImportingFromClipboard, setIsImportingFromClipboard] = useState(false);
+  const [showCaptureRosterPanel, setShowCaptureRosterPanel] = useState(false);
+  const [rosterQueue, setRosterQueue] = useState<RosterQueue | null>(null);
   const [dismissedAliasKeys, setDismissedAliasKeys] = useState<Set<string>>(new Set());
   const [lastAliasLink, setLastAliasLink] = useState<{
     inverse: Partial<Workspace>;
@@ -119,6 +167,292 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
     setStep('preview');
     setDismissedAliasKeys(new Set());
     setLastAliasLink(null);
+  };
+
+  /**
+   * Track A end-to-end: clipboard text (from extensions/swimcloud-companion)
+   * -> validated capture payload -> classified URL -> parsed per the page
+   * kind -> either HistoricalSwim[] into the same preview step every other
+   * import path uses (swimmer profile, meet results) or an informational
+   * summary (team roster — see handleClipboardTeamRoster's own comment for
+   * why that one can't feed the preview grid at all).
+   */
+  const handleClipboardImport = async () => {
+    if (!team.trim()) {
+      toast.push('error', 'Select or enter a team name first.');
+      return;
+    }
+    setIsImportingFromClipboard(true);
+    try {
+      let clipboardText: string;
+      try {
+        clipboardText = await navigator.clipboard.readText();
+      } catch {
+        toast.push(
+          'error',
+          'Could not read the clipboard. Your browser may need permission, or nothing has been copied yet — use the "Copy for Omniswim" button on a SwimCloud page first.'
+        );
+        return;
+      }
+
+      const payloadResult = readSwimCloudClipboardPayload(clipboardText);
+      if (!payloadResult.ok) {
+        toast.push('error', payloadResult.message);
+        return;
+      }
+
+      const classification = classifySwimCloudUrl(payloadResult.payload.sourceUrl);
+      if (classification.outcome !== 'fetchable') {
+        toast.push('error', 'That clipboard capture is not a recognized SwimCloud page.');
+        return;
+      }
+      const { resource } = classification;
+
+      if (resource.kind === 'swimmerTimes') {
+        handleClipboardSwimmerTimes(payloadResult.payload.html, payloadResult.context, resource.swimmerId);
+      } else if (resource.kind === 'swimmer') {
+        // The swimmer's profile root carries a "Latest Results" panel for one
+        // meet at a time, not a personal-bests table — parseSwimmerTimesHtml
+        // refuses it by design (packages/swimcloud/src/parser.ts, "refuses
+        // shapes that are not this table"). Say which page to capture instead
+        // of failing on the markup, matching the meet-root branch below.
+        toast.push(
+          'error',
+          `That page is a swimmer's profile summary, not their full times list. Open their Times tab and capture that instead: swimcloud.com/swimmer/${resource.swimmerId}/times/`
+        );
+      } else if (resource.kind === 'meetTeam' || resource.kind === 'meetTeamSwims') {
+        handleClipboardMeetResults(payloadResult.payload.html, payloadResult.context);
+      } else if (resource.kind === 'meet' || resource.kind === 'meetEvent') {
+        // The meet root and per-event pages cannot answer "this team's
+        // results" — parseMeetResultsHtml's page shape (the one that would
+        // have read a bare meet capture) was proven not to exist on
+        // SwimCloud (packages/swimcloud/src/parser.ts's file header;
+        // plans/2026-09-08/04-parsers-and-fixtures.md's "Retired" section).
+        // Say what to capture instead of failing on the markup, matching
+        // packages/matrix/src/components/OpsModule.tsx's identical message.
+        toast.push(
+          'error',
+          `That page only shows a summary of the meet. Open your team's full results and capture that instead: swimcloud.com/results/${resource.meetId}/team/{teamId}/swims/ — open the meet, click your team, then "More" under Performances.`
+        );
+      } else if (resource.kind === 'team' || resource.kind === 'teamRoster') {
+        handleClipboardTeamRoster(payloadResult.payload.html, payloadResult.context, resource.teamId);
+      } else {
+        toast.push(
+          'error',
+          `This importer doesn't read "${resource.kind}" pages. Copy a swimmer's times page, a team roster, or a meet results page instead.`
+        );
+      }
+    } finally {
+      setIsImportingFromClipboard(false);
+    }
+  };
+
+  /**
+   * The per-swimmer path — one `/swimmer/{id}/times/` capture gives that
+   * swimmer's whole personal-bests table. Re-pointed 2026-09-09 from
+   * `parseSwimmerProfileHtml` + `swimCloudPersonalBestsToHistoricalSwims`,
+   * which read a `Synthetic-fixture-only` page shape real captures proved
+   * SwimCloud does not serve — see that parser's own doc comment.
+   *
+   * The roster-queue check-off and preview accumulation below are unchanged by
+   * that move: they were never the bug, and a capture still identifies its
+   * swimmer by id first, name second.
+   *
+   * The conversion, the skip tally and the check-off itself now live in
+   * `../lib/rosterQueueImport` — `convertAndAccountSwimmerTimes` and
+   * `markRosterQueueCaptured`. This handler and the bulk capture path call the
+   * same two functions, so there is one implementation of "what one swimmer's
+   * times page becomes", not one per entry point.
+   */
+  function handleClipboardSwimmerTimes(
+    html: string,
+    context: Parameters<typeof parseSwimmerTimesHtml>[1],
+    swimmerId: string
+  ) {
+    const parseResult = parseSwimmerTimesHtml(html, context, { swimmerId });
+    if (!parseResult.ok) {
+      toast.push('error', `Could not read personal bests from that page: ${parseResult.failure.message}`);
+      return;
+    }
+
+    const accounted = convertAndAccountSwimmerTimes(parseResult.data, { team: team.trim(), gender });
+    if (!accounted.ok) {
+      toast.push('error', accounted.message);
+      return;
+    }
+
+    // When a roster queue is active, this is one checklist item, not a
+    // fresh import: accumulate into the existing preview rather than
+    // replacing it, so capturing swimmer 2 doesn't discard swimmer 1's
+    // swims that are still sitting in the preview waiting to be merged.
+    if (rosterQueue) {
+      setPreview(prev => [...prev, ...accounted.swims]);
+      // `accounted.match.swimmerId` is the id passed in above: the parser's
+      // `swimmerId` option outranks both `#swimmer-info` and the capture URL
+      // (see its own doc comment), so the parse carries that exact id back out.
+      // Matching on the parse's own field keeps this one source, not two.
+      const marked = markRosterQueueCaptured(rosterQueue, accounted.match);
+      setRosterQueue(marked.queue);
+      const capturedSoFar = rosterQueue.entries.filter(e => e.captured).length + (marked.matchedNew ? 1 : 0);
+      toast.push(
+        'success',
+        `Added ${accounted.swims.length} swim(s) for ${accounted.name ?? 'this swimmer'}. ${capturedSoFar}/${rosterQueue.entries.length} roster swimmers captured.`
+      );
+    } else {
+      setPreview([...accounted.swims]);
+    }
+
+    setWarnings([...new Set(parseResult.warnings.map(w => w.message)), ...accounted.skipWarnings]);
+    setFormat('swimcloud');
+    setStep('preview');
+    setDismissedAliasKeys(new Set());
+    setLastAliasLink(null);
+  }
+
+  /**
+   * The bulk path — one team-swims-list capture gives every one of the
+   * selected team's swimmers who competed at that meet, not one swimmer at
+   * a time. The page is already scoped to one team and one gender by its
+   * own URL (`/results/{meetId}/team/{teamId}/swims/?gender=`); relay
+   * events are never converted (see
+   * swimCloudTeamMeetSwimsToHistoricalSwims's file header on why a relay
+   * leadoff split isn't a valid individual time). Re-pointed 2026-09-08 from
+   * parseMeetResultsHtml, whose page shape a real capture proved does not
+   * exist on SwimCloud — see that parser's own file header.
+   */
+  function handleClipboardMeetResults(
+    html: string,
+    context: Parameters<typeof parseTeamMeetSwimsHtml>[1]
+  ) {
+    const parseResult = parseTeamMeetSwimsHtml(html, context);
+    if (!parseResult.ok) {
+      toast.push('error', `Could not read results from that page: ${parseResult.failure.message}`);
+      return;
+    }
+
+    const conversion = swimCloudTeamMeetSwimsToHistoricalSwims(parseResult.data, {
+      team: team.trim(),
+      gender,
+    });
+    if (conversion.swims.length === 0) {
+      const teamName = team.trim();
+      toast.push(
+        'error',
+        `No ${gender.toLowerCase()} swims found for "${teamName}" in this meet (${conversion.skipped.length} row(s) skipped — wrong team, wrong gender, relay, or no time). Check the team name matches exactly what SwimCloud printed.`
+      );
+      return;
+    }
+
+    setPreview([...conversion.swims]);
+    const skippedByReason = new Map<string, number>();
+    for (const row of conversion.skipped) {
+      skippedByReason.set(row.reason, (skippedByReason.get(row.reason) ?? 0) + 1);
+    }
+    // De-duplicated: a multi-event meet routinely repeats the exact same
+    // warning text once per event (e.g. "points column ignored" fires per
+    // event, not once for the whole capture) — showing it N times adds
+    // nothing a coach needs to see N times.
+    setWarnings([...new Set(parseResult.warnings.map(w => w.message)), ...formatSkipWarnings(skippedByReason)]);
+    setFormat('swimcloud');
+    setStep('preview');
+    setDismissedAliasKeys(new Set());
+    setLastAliasLink(null);
+    toast.push('success', `Imported ${conversion.swims.length} swim(s) from ${parseResult.data.meetName ?? 'this meet'}.`);
+  }
+
+  /**
+   * Team-roster pages carry names/class years, never times — and every swim
+   * record in this app (HistoricalSwim, Recruit) requires an event and a
+   * time; there is no "bare athlete" concept to import one into (see
+   * plans/2026-09-06's Phase 3 worklog). So this never touches the preview
+   * grid *directly*.
+   *
+   * What it does instead: seeds `rosterQueue` — a checklist of every
+   * swimmer the roster page named, each still needing its own
+   * `/swimmer/{id}/times/` capture for times. Track A can't auto-navigate from here to each
+   * swimmer's page (that would be Track B, an automated process choosing
+   * where to go next, not a human clicking a button on a page they're
+   * already viewing) — so the roster becomes something a coach works
+   * through by hand, one "Copy for Omniswim" per swimmer, and
+   * `handleClipboardSwimmerTimes` checks off each one against this queue
+   * as it comes in, accumulating every swim into one running preview
+   * instead of replacing it each time. This is the closest this plan's
+   * Track A/Track B boundary allows to "pull the roster, then the event
+   * data for every swimmer on it."
+   *
+   * When the browser extension has already crawled the whole team, the
+   * "Browse captures" path does all of that in one action instead — see
+   * `handleCaptureRosterImport` below. Both seed the queue through the same
+   * `seedRosterQueueFromAthletes`, so "who is new to this workspace" is
+   * answered one way, not two.
+   */
+  function handleClipboardTeamRoster(
+    html: string,
+    context: Parameters<typeof parseTeamRosterHtml>[1],
+    teamId: string
+  ) {
+    const parseResult = parseTeamRosterHtml(html, context, { teamId, gender });
+    if (!parseResult.ok) {
+      toast.push('error', `Could not read the roster from that page: ${parseResult.failure.message}`);
+      return;
+    }
+
+    const seed = seedRosterQueueFromAthletes(
+      parseResult.data.teamName ?? team.trim(),
+      parseResult.data.athletes,
+      { existingRosterNames }
+    );
+    setRosterQueue(seed.queue);
+
+    toast.push(
+      'success',
+      `Roster captured: ${seed.totalCount} swimmer(s), ${describeNewAthletes(seed)} Open each swimmer's Times tab (swimcloud.com/swimmer/{id}/times/) and click "Copy for Omniswim," then "Capture next swimmer" below — SwimCloud roster pages carry no times themselves, and a swimmer's profile summary carries only their latest meet.`
+    );
+  }
+
+  /**
+   * The bulk path: one already-completed capture, one roster in it, every
+   * swimmer it holds times for imported at once.
+   *
+   * `SwimCloudCaptureBrowser` (`@omniswim/ui`, `mode="roster-history"`) only
+   * browses — it hands back the roster the coach picked plus every
+   * swimmer-times page the same capture holds, and never converts either.
+   * `buildRosterImportFromCapture` is the same conversion this component's
+   * clipboard handlers already run, computed here rather than inside the
+   * browser so this file stays the one place that decides what a completed
+   * capture does to this workspace.
+   */
+  const handleCaptureBrowserRosterImport = (selection: SwimCloudCaptureRosterSelection) => {
+    const result: SwimCloudCaptureRosterImport = buildRosterImportFromCapture({
+      roster: selection.roster,
+      swimmerTimes: selection.swimmerTimes,
+      team: team.trim(),
+      gender,
+      existingRosterNames,
+    });
+
+    setRosterQueue(result.rosterQueue);
+    setWarnings([...result.warnings]);
+    setShowCaptureRosterPanel(false);
+
+    if (result.swims.length === 0) {
+      // Same landing as a clipboard roster capture: the checklist is seeded and
+      // the coach works through it. Advancing to an empty preview would read as
+      // "0 swims found in these swimmers' times" rather than "this capture holds
+      // no times pages for them" — the panel has already said which it is.
+      toast.push(
+        'error',
+        `No importable times in this capture for ${result.teamLabel}. The roster is on the checklist below — capture each swimmer’s Times tab with "Copy for Omniswim."`
+      );
+      return;
+    }
+
+    setPreview([...result.swims]);
+    setFormat('swimcloud');
+    setStep('preview');
+    setDismissedAliasKeys(new Set());
+    setLastAliasLink(null);
+    toast.push('success', result.summary);
   };
 
   const handleFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -218,9 +552,29 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
     mode === 'paste' && paste.trim() ? detectSwimCloudPasteFormat(paste) : null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-[var(--backdrop)]">
-      <div
-        className="surface-card border border-theme w-full max-w-2xl max-h-[90vh] flex flex-col rounded-xl"
+    <>
+      {/* Its own separate FloatingWindow overlay, positioned independently of
+          the wizard's own dialog below — a sibling, never nested inside it. */}
+      {showCaptureRosterPanel ? (
+        <SwimCloudCaptureBrowser
+          mode="roster-history"
+          team={team.trim()}
+          genderLabel={gender === Gender.MEN ? 'Men' : 'Women'}
+          rosterCoverage={(roster, swimmerTimes) => rosterCaptureCoverage(roster.athletes, swimmerTimes)}
+          onImportRoster={selection => handleCaptureBrowserRosterImport(selection)}
+          onClose={() => setShowCaptureRosterPanel(false)}
+          pasteFallback={{
+            label: 'or paste a single swimmer instead',
+            hint: 'Reads one SwimCloud roster, or one swimmer’s Times page, from the clipboard ("Copy for Omniswim" on that page first).',
+            onPaste: () => void handleClipboardImport(),
+          }}
+        />
+      ) : null}
+      <Modal
+        onClose={onClose}
+        ariaLabel="Import Roster / History"
+        blur={false}
+        className="border border-theme w-full max-w-2xl max-h-[90vh] flex flex-col rounded-xl"
         style={{ boxShadow: 'var(--ui-shadow-lg)' }}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-theme-soft">
@@ -236,6 +590,49 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
         </div>
 
         <div className="p-5 overflow-y-auto flex-1 space-y-4">
+          {rosterQueue ? (
+            <div className="border border-theme-soft rounded-lg p-3 space-y-2">
+              <div className="flex items-center justify-between gap-2 flex-wrap">
+                <span className="text-ui-caption font-bold">
+                  Roster queue — {rosterQueue.teamLabel} (
+                  {rosterQueue.entries.filter(e => e.captured).length}/{rosterQueue.entries.length} captured)
+                </span>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => void handleClipboardImport()}
+                    disabled={isImportingFromClipboard || !team.trim()}
+                    title="Copy a swimmer's Times page from SwimCloud — swimcloud.com/swimmer/{id}/times/, via Copy for Omniswim — then click this to pull it in and check them off."
+                    className="px-2.5 py-1 text-ui-micro font-bold uppercase tracking-widest rounded-md nav-tab-inactive hover:text-[var(--text-primary)] transition-colors disabled:opacity-40 flex items-center gap-1"
+                  >
+                    <Download size={12} /> {isImportingFromClipboard ? 'Reading…' : 'Capture next swimmer'}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setRosterQueue(null)}
+                    className="px-2.5 py-1 text-ui-micro font-bold uppercase tracking-widest rounded-md nav-tab-inactive hover:text-[var(--text-primary)] transition-colors"
+                  >
+                    Clear
+                  </button>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-1">
+                {rosterQueue.entries.map(e => (
+                  <span
+                    key={e.swimCloudSwimmerId ?? e.name}
+                    className={`text-ui-micro px-1.5 py-0.5 rounded-full border ${
+                      e.captured
+                        ? 'border-[var(--text-accent)]/40 text-[var(--text-accent)]'
+                        : 'border-theme-soft text-theme-muted'
+                    }`}
+                  >
+                    {e.captured ? '✓ ' : ''}
+                    {e.name}
+                  </span>
+                ))}
+              </div>
+            </div>
+          ) : null}
           {step === 'paste' ? (
             <>
               <div className="flex items-center gap-1 border-b border-theme-soft">
@@ -259,6 +656,18 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
                   className={`ml-auto px-3 py-2 text-ui-micro font-bold uppercase tracking-widest flex items-center gap-1.5 transition-colors ${showReference ? 'text-[var(--text-primary)]' : 'nav-tab-inactive'}`}
                 >
                   <Globe size={13} /> SwimCloud
+                </button>
+                {/* One entry point, not two peers: "From clipboard" is now the
+                    capture browser's own secondary link, offered only when no
+                    capture exists yet — see plans/2026-09-10/02-UI-REDESIGN-WHOLE-APP.md §0. */}
+                <button
+                  type="button"
+                  onClick={() => setShowCaptureRosterPanel(true)}
+                  disabled={!team.trim()}
+                  title="Import a whole roster's times from a capture the Omniswim SwimCloud Companion extension has already fetched — every swimmer it captured, in one action. Pasting a single page from the clipboard is still offered there when no capture exists yet."
+                  className="px-3 py-2 text-ui-micro font-bold uppercase tracking-widest flex items-center gap-1.5 nav-tab-inactive hover:text-[var(--text-primary)] transition-colors disabled:opacity-40"
+                >
+                  <Boxes size={13} /> Add from SwimCloud
                 </button>
               </div>
 
@@ -360,12 +769,23 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
           ) : (
             <>
               <div className="flex flex-wrap gap-2 text-ui-caption">
-                <span className="badge-info px-2 py-0.5 rounded-full">{format}</span>
+                <Badge tone="info" className="px-2 py-0.5 font-normal normal-case tracking-normal">
+                  {format}
+                </Badge>
                 <span className="text-theme-muted">{preview.length} swims parsed</span>
-                {warnings.map(w => (
-                  <span key={w} className="badge-warning px-2 py-0.5 rounded-full">
+                {warnings.map((w, i) => (
+                  // Index-qualified: `warnings` is plain string[], and two
+                  // genuinely different warnings can print identical text
+                  // (e.g. the same "points column ignored" message recurs
+                  // once per event in a multi-event meet-results import) —
+                  // `key={w}` alone broke on exactly that case.
+                  <Badge
+                    key={`${i}-${w}`}
+                    tone="warning"
+                    className="px-2 py-0.5 font-normal normal-case tracking-normal"
+                  >
                     {w}
-                  </span>
+                  </Badge>
                 ))}
               </div>
               {swimmerActions.length > 0 ? (
@@ -456,7 +876,7 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
             </button>
           )}
         </div>
-      </div>
-    </div>
+      </Modal>
+    </>
   );
 }

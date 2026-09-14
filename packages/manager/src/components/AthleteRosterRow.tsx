@@ -7,6 +7,7 @@ import React, { useState } from 'react';
 import { ChevronDown, ChevronUp, UserMinus, ToggleLeft, ToggleRight } from 'lucide-react';
 import type { CatalogAthlete, CatalogEventTime } from '@omniswim/core/lib/rosterCatalog';
 import { sortedTimesByScy } from '@omniswim/core/lib/rosterCatalog';
+import { Badge } from '@omniswim/ui';
 
 type Props = {
   athlete: CatalogAthlete & { times: CatalogEventTime[] };
@@ -53,7 +54,9 @@ export default function AthleteRosterRow({ athlete, onToggleEligibility, onDelet
             {athlete.fullName}
           </span>
           {athlete.classYear ? (
-            <span className="badge-info px-2 py-0.5 rounded text-[10px]">{athlete.classYear}</span>
+            <Badge tone="info" className="rounded px-2 py-0.5 text-[10px] font-normal normal-case tracking-normal">
+              {athlete.classYear}
+            </Badge>
           ) : null}
           <span className="text-ui-caption text-theme-muted">
             {eligibleCount}/{sortedTimes.length} events eligible

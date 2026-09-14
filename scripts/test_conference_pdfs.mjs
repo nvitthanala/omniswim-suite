@@ -35,6 +35,17 @@ const env = {
   OMNI_DATA_DIR: path.join(root, 'data'),
 };
 
+// Every PDF actually present must parse and score — a failure here is a
+// real defect, not a missing-fixture skip. Was: the loop logged
+// PARSE FAIL/SCORE FAIL and continued with no effect on the exit code, so a
+// parser that failed on all four present PDFs still reported nothing wrong
+// (docs/reference/TEST_COVERAGE_AUDIT.md, "Weak"). A PDF that is simply
+// ABSENT from this checkout is a legitimate skip, not a failure — these are
+// local-only fixtures, not committed (same reason the runner gates
+// test_individual_scoring.mjs/test_relay_scoring.mjs on a fixture path).
+let presentCount = 0;
+const realFailures = [];
+
 for (const pdf of pdfs) {
   const pdfPath = path.join(root, pdf);
   console.log(`\n=== ${pdf} ===`);
@@ -42,6 +53,7 @@ for (const pdf of pdfs) {
     console.log('  SKIP — file not found');
     continue;
   }
+  presentCount += 1;
 
   let parsed;
   try {
@@ -54,6 +66,7 @@ for (const pdf of pdfs) {
     parsed = JSON.parse(out.trim());
   } catch (e) {
     console.log('  PARSE FAIL:', e.message?.slice(0, 200));
+    realFailures.push(`${pdf}: parse failed`);
     continue;
   }
 
@@ -69,6 +82,13 @@ for (const pdf of pdfs) {
     scored = JSON.parse(out.trim());
   } catch (e) {
     console.log('  SCORE FAIL:', e.message?.slice(0, 200));
+    realFailures.push(`${pdf}: score failed`);
+    continue;
+  }
+
+  if (parsed.length === 0) {
+    console.log('  PARSE FAIL: 0 rows from a PDF that exists — a real defect, not a clean parse of an empty meet');
+    realFailures.push(`${pdf}: parsed to 0 rows`);
     continue;
   }
 
@@ -121,8 +141,25 @@ if (fs.existsSync(secPdf)) {
   console.log(`  mismatches: ${mismatches.length}`);
   if (mismatches.length > 0) {
     console.error('  FAIL — first mismatch:', mismatches[0].name, mismatches[0].event);
-    process.exitCode = 1;
+    realFailures.push('SEC + NSISC-shaped settings: pdf_points mismatch');
   } else {
     console.log('  OK — all pdf_points rows match calculated_points');
   }
+}
+
+console.log('');
+if (presentCount === 0) {
+  // These four conference PDFs are local-only fixtures, not committed (see
+  // plans/STATE.md's long-standing "commit the meet results PDF" item) — an
+  // empty checkout with none of them present has nothing to test, which is a
+  // legitimate skip, not a failure.
+  console.log('SKIP — no conference PDFs present in this checkout (local-only fixtures, not committed)');
+  process.exit(0);
+}
+if (realFailures.length > 0) {
+  console.error(`FAIL — ${realFailures.length} real failure(s) against ${presentCount} present PDF(s):`);
+  for (const f of realFailures) console.error(`  - ${f}`);
+  process.exitCode = 1;
+} else {
+  console.log(`OK — ${presentCount} present PDF(s), 0 failures`);
 }

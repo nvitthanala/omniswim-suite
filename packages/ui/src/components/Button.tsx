@@ -1,4 +1,5 @@
 import type { ButtonHTMLAttributes, ReactNode } from 'react';
+import { cn } from '../lib/cn';
 
 type ButtonVariant = 'primary' | 'outline' | 'ghost' | 'danger';
 type ButtonSize = 'sm' | 'md' | 'lg';
@@ -34,14 +35,19 @@ export function Button({
   type = 'button',
   ...props
 }: ButtonProps) {
-  const classes = [
-    'inline-flex items-center justify-center gap-2 font-bold transition-all disabled:cursor-not-allowed disabled:opacity-50',
+  const classes = cn(
+    // Named properties, not `transition-all`: color/background/border for
+    // hover, transform for the press-feedback scale below. `.btn-primary`
+    // and `.btn-accent-outline` carry their own (unlayered, higher-priority)
+    // transition in index.css that already includes transform, guarded for
+    // reduced motion there too. `motion-reduce:active:scale-100` covers the
+    // `ghost`/`danger` variants, which have no such override and would
+    // otherwise press-scale unconditionally.
+    'inline-flex items-center justify-center gap-2 font-bold transition-[color,background-color,border-color,transform] duration-150 ease-out active:scale-[0.97] motion-reduce:active:scale-100 disabled:cursor-not-allowed disabled:opacity-50 disabled:active:scale-100',
     VARIANT_CLASSES[variant],
     SIZE_CLASSES[size],
-    className,
-  ]
-    .filter(Boolean)
-    .join(' ');
+    className
+  );
 
   return (
     <button type={type} className={classes} {...props}>

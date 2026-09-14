@@ -28,11 +28,14 @@
   "devDependencies": {
     "@playwright/test": "^1.61.1",
     "@tauri-apps/cli": "^2.6.2",
-    "happy-dom": "^18.0.1",
+    "happy-dom": "^20.14.5",
     "react-dom": "^19.0.1",
     "vitest": "^3.2.4"
   },
   "engines": {
     "node": ">=20"
+  },
+  "overrides": {
+    "qs": "^6.16.0"
   }
 }

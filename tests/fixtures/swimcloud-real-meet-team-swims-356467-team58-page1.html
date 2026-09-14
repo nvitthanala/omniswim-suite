@@ -1,0 +1,429 @@
+<!--
+REAL SwimCloud capture (not synthetic). Source:
+https://www.swimcloud.com/results/356467/team/58/swims/  (page 1 of 8, gender defaults
+to Men — no gender param on this URL, confirmed by the active "Men" li below)
+Captured via the browser extension (Track A), 2026-09-08. Trimmed of unrelated
+boilerplate and PII (<script id="auth-info">/auth-groups>, global-search index JSON,
+YUI/jQuery/Sentry scripts, the full Events sidebar and its duplicate off-canvas nav)
+— none of that is relevant to parsing. The table, its header, the team splash-stats,
+the gender dropdown, and the pagination widget below are byte-for-byte from the real
+capture, all 30 rows included.
+
+THIS IS THE PRIMARY PARSE TARGET for a meet-results import. Confirmed facts a parser
+must rely on (do not re-derive from a different assumption):
+
+1. One <tr> per swim, no per-event heading grouping anywhere — event name is the 3rd
+   <td>'s plain text: "{distance} {course letter} {stroke}", e.g. "100 Y Breast",
+   "1650 Y Free", "200 Y IM". No "Event N" prefix ever appears.
+2. Place (7th <td>, class contains "hidden-xs") is ordinal text — "1st".."30th" — OR
+   the literal en dash "&ndash;" (U+2013, NOT a hyphen "-") when the swim did not
+   score/place. Never a bare integer.
+3. Points (8th <td>) is a plain integer, e.g. "767". This is the SwimCloud Points
+   value the app has separately been told to trust for scoring.
+4. The 4th <td> (Flags) can hold ZERO, ONE, or TWO inline items:
+     - a cut-standard label, e.g. <span class="c-label c-label--royal" title="NCAA
+       Division II Championship">D2 B</span> (wrapped in <a href="/results/{id}">) —
+       informational only, not needed for scoring.
+     - a relay-leadoff marker: <span class="c-label c-label--neutral u-cursor-help"
+       title="Leadoff">R</span> — THIS is the reliable signal that the row is a relay
+       leadoff split, not an individual swim (its event-name text alone,
+       e.g. "100 Y Free", is indistinguishable from a real individual swim of the same
+       event). Match on title="Leadoff", not on the visible "R" text. See row 7
+       (swimmer 1865160, "100 Y Free") and row 18 (swimmer 1330318, "50 Y Back") below
+       for the two real cases.
+   Both can appear together (row 21, swimmer 2360022, "200 Y Free").
+5. DQ'd and scratched swims are ABSENT from this page entirely (confirmed directly by
+   the user who captured it, from first-hand knowledge of this team's real meet
+   results — several DQs are known to have occurred at this meet and none appear
+   here). They exist only on the per-event page (/results/{meetId}/event/{n}/), which
+   is out of scope for the page type this fixture documents. A parser for this page
+   type must NOT claim DQ/scratch coverage it doesn't have.
+6. Pagination: this team+gender has 134 "Entries" (see the splash-stats value on the
+   sibling team-landing fixture) but the swims list itself paginates at exactly 30
+   rows/page and reports 8 total pages here — i.e. "swims" (per-attempt rows, prelims
+   AND finals both counted) outnumbers "Entries" (distinct event entries). Do not
+   conflate the two counts. The <ul class="c-pagination"> markup at the bottom of this
+   fixture is the real, verbatim shape — note it can be ABSENT entirely when a
+   capture has only one page, so its absence must not be treated as a parse error.
+7. The gender dropdown here offers Men/Women only, no combined view — a full team
+   capture requires one visit per gender, both potentially multi-page.
+-->
+<html>
+<head><title>New South Championships - Henderson State University</title></head>
+<body>
+
+<h1 id="meet-name" class="c-toolbar__title">New South Championships</h1>
+<ul class="o-list-inline o-list-inline--dotted">
+  <li id="meet-status" class="u-color-success">Completed</li>
+  <li id="meet-date">Feb 17&ndash;21, 2026</li>
+  <li id="meet-course">SCY</li>
+</ul>
+
+<button type="button" data-toggle="dropdown">Men <span class="caret-alt"></span></button>
+<ul class="dropdown-menu">
+  <li class="dropdown-subheader">Gender</li>
+  <li class="active"><a href="https://www.swimcloud.com/results/356467/team/58/swims/?gender=M">Men</a></li>
+  <li><a href="https://www.swimcloud.com/results/356467/team/58/swims/?gender=F">Women</a></li>
+</ul>
+
+<div class="c-card c-card--large">
+  <div class="c-card__item feed-hidden">
+    <h3 class="c-title"><a href="/team/58">Henderson State University</a></h3>
+    <span class="u-color-mute">Arkadelphia, AR</span>
+  </div>
+  <ul class="c-splash-stats">
+    <li class="c-splash-stats__item"><div class="c-splash-stats__label">Points scored</div><div class="c-splash-stats__value">1056</div></li>
+    <li class="c-splash-stats__item"><div class="c-splash-stats__label">Avg. performance</div><div class="c-splash-stats__value">591.2</div></li>
+    <li class="c-splash-stats__item hidden-xs"><div class="c-splash-stats__label">Entries</div><div class="c-splash-stats__value">134</div></li>
+  </ul>
+</div>
+
+<div class="c-card c-card--large u-overflow-hidden">
+  <div class="c-card__item"><h3 class="c-title c-title--small">Performances</h3></div>
+  <table class="c-table-clean c-table-clean--middle table table-hover">
+    <thead>
+      <tr>
+        <th colspan="2"><a class="u-nowrap u-color-mute" href="?sort=name">Name <i class="fa-regular fa-sm fa-arrow-down"></i></a></th>
+        <th class="c-table-clean__col-fit">Event</th>
+        <th class="c-table-clean__col-fit u-text-end">Time</th>
+        <th class="c-table-clean__col-fit u-ph0 hidden-xs"><span class="u-is-hidden-visually">Flags</span></th>
+        <th class="c-table-clean__col-fit u-text-end"><a class="u-nowrap u-color-mute" href="?sort=improvement">Imp <i class="fa-regular fa-sm fa-arrow-down"></i></a></th>
+        <th class="c-table-clean__col-fit u-text-end hidden-xs">Place</th>
+        <th class="c-table-clean__col-fit u-text-end hidden-xs" title="Swimcloud Points"><a class="u-nowrap u-pointer-events-none" href="?sort=perf_points">Pts <i class="fa-regular fa-sm fa-arrow-down"></i></a></th>
+      </tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">1</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/1330318/">Avery Henke</a></td>
+        <td>100 Y Breast</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/26/?id=171560736#time171560736">54.09</a></td>
+        <td class="u-ph0 hidden-xs"><a href="/results/351192"><span class="c-label c-label--royal" title="NCAA Division II Championship">D2 B</span></a></td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+3.0% (55.75)">-1.66</span></td>
+        <td class="u-text-end hidden-xs">1st</td>
+        <td class="u-text-end hidden-xs">767</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">2</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/1330318/">Avery Henke</a></td>
+        <td>100 Y Breast</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/26/?id=171560737#time171560737">54.27</a></td>
+        <td class="u-ph0 hidden-xs"></td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+2.7% (55.75)">-1.48</span></td>
+        <td class="u-text-end hidden-xs">1st</td>
+        <td class="u-text-end hidden-xs">759</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">3</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/1679982/">Colton Bennett</a></td>
+        <td>1000 Y Free</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/4/?id=171560650#time171560650">9:26.63</a></td>
+        <td class="u-ph0 hidden-xs"></td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+1.7% (9:36.30)">-9.67</span></td>
+        <td class="u-text-end hidden-xs">3rd</td>
+        <td class="u-text-end hidden-xs">746</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">4</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/1228311/">Oskar Cebula</a></td>
+        <td>100 Y Breast</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/100/?id=171561833#time171561833">54.86</a></td>
+        <td class="u-ph0 hidden-xs"><a href="/results/351192"><span class="c-label c-label--royal" title="NCAA Division II Championship">D2 B</span></a></td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+1.8% (55.86)">-1.00</span></td>
+        <td class="u-text-end hidden-xs">1st</td>
+        <td class="u-text-end hidden-xs">735</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">5</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/1865160/">Colin Candebat</a></td>
+        <td>200 Y IM</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/6/?id=171560679#time171560679">1:46.74</a></td>
+        <td class="u-ph0 hidden-xs"><a href="/results/351192"><span class="c-label c-label--royal" title="NCAA Division II Championship">D2 B</span></a></td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+3.5% (1:50.58)">-3.84</span></td>
+        <td class="u-text-end hidden-xs">1st</td>
+        <td class="u-text-end hidden-xs">735</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">6</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/2352628/">Bartu Akin</a></td>
+        <td>1000 Y Free</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/4/?id=171560649#time171560649">9:30.37</a></td>
+        <td class="u-ph0 hidden-xs"></td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+2.0% (9:41.85)">-11.48</span></td>
+        <td class="u-text-end hidden-xs">4th</td>
+        <td class="u-text-end hidden-xs">732</td>
+      </tr>
+      <tr>
+        <!-- RELAY LEADOFF SPLIT — see fixture header note #4. Event text alone
+             ("100 Y Free") is indistinguishable from a real individual swim; the
+             title="Leadoff" span and Place="&ndash;" are the only signals. -->
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">7</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/1865160/">Colin Candebat</a></td>
+        <td>100 Y Free</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/42/?id=171561828#time171561828">44.32</a></td>
+        <td class="u-ph0 hidden-xs">
+          <a href="/results/351192"><span class="c-label c-label--royal" title="NCAA Division II Championship">D2 B</span></a>
+          <span class="c-label c-label--neutral u-cursor-help" title="Leadoff">R</span>
+        </td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+1.6% (45.04)">-0.72</span></td>
+        <td class="u-text-end hidden-xs">&ndash;</td>
+        <td class="u-text-end hidden-xs">726</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">8</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/2360022/">Nojus Skirutis</a></td>
+        <td>200 Y Fly</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/28/?id=171561460#time171561460">1:47.40</a></td>
+        <td class="u-ph0 hidden-xs"><a href="/results/351192"><span class="c-label c-label--royal" title="NCAA Division II Championship">D2 B</span></a></td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+1.7% (1:49.26)">-1.86</span></td>
+        <td class="u-text-end hidden-xs">2nd</td>
+        <td class="u-text-end hidden-xs">724</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">9</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/2253944/">Oliv&eacute;r P&oacute;zvai</a></td>
+        <td>100 Y Free</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/35/?id=171560864#time171560864">44.44</a></td>
+        <td class="u-ph0 hidden-xs"></td>
+        <td class="u-text-end"><span class="u-color-danger js-bs-tooltip" title="" data-original-title="-0.4% (44.28)">+0.16</span></td>
+        <td class="u-text-end hidden-xs">2nd</td>
+        <td class="u-text-end hidden-xs">720</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">10</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/1865160/">Colin Candebat</a></td>
+        <td>100 Y Fly</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/13/?id=171561402#time171561402">47.82</a></td>
+        <td class="u-ph0 hidden-xs"><a href="/results/351192"><span class="c-label c-label--royal" title="NCAA Division II Championship">D2 B</span></a></td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+3.1% (49.33)">-1.51</span></td>
+        <td class="u-text-end hidden-xs">1st</td>
+        <td class="u-text-end hidden-xs">717</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">11</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/2360022/">Nojus Skirutis</a></td>
+        <td>200 Y Fly</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/28/?id=171561459#time171561459">1:47.77</a></td>
+        <td class="u-ph0 hidden-xs"></td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+1.4% (1:49.26)">-1.49</span></td>
+        <td class="u-text-end hidden-xs">1st</td>
+        <td class="u-text-end hidden-xs">716</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">12</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/1863744/">Alan Alejan Gonzalez Mujica</a></td>
+        <td>1000 Y Free</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/4/?id=171560652#time171560652">9:34.46</a></td>
+        <td class="u-ph0 hidden-xs"></td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+1.3% (9:41.83)">-7.37</span></td>
+        <td class="u-text-end hidden-xs">6th</td>
+        <td class="u-text-end hidden-xs">716</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">13</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/1865160/">Colin Candebat</a></td>
+        <td>100 Y Fly</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/13/?id=171561403#time171561403">47.86</a></td>
+        <td class="u-ph0 hidden-xs"></td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+3.0% (49.33)">-1.47</span></td>
+        <td class="u-text-end hidden-xs">1st</td>
+        <td class="u-text-end hidden-xs">715</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">14</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/1228311/">Oskar Cebula</a></td>
+        <td>100 Y Breast</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/26/?id=171560731#time171560731">55.45</a></td>
+        <td class="u-ph0 hidden-xs"></td>
+        <td class="u-text-end"><span class="u-color-danger js-bs-tooltip" title="" data-original-title="-1.1% (54.86)">+0.59</span></td>
+        <td class="u-text-end hidden-xs">6th</td>
+        <td class="u-text-end hidden-xs">712</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">15</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/1228311/">Oskar Cebula</a></td>
+        <td>100 Y Breast</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/26/?id=171560730#time171560730">55.48</a></td>
+        <td class="u-ph0 hidden-xs"></td>
+        <td class="u-text-end"><span class="u-color-danger js-bs-tooltip" title="" data-original-title="-1.1% (54.86)">+0.62</span></td>
+        <td class="u-text-end hidden-xs">5th</td>
+        <td class="u-text-end hidden-xs">711</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">16</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/1163733/">Camden Mask</a></td>
+        <td>100 Y Breast</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/26/?id=171560743#time171560743">55.52</a></td>
+        <td class="u-ph0 hidden-xs"></td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+3.8% (57.69)">-2.17</span></td>
+        <td class="u-text-end hidden-xs">17th</td>
+        <td class="u-text-end hidden-xs">709</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">17</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/762325/">Mark Eberhard</a></td>
+        <td>100 Y Breast</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/26/?id=171560733#time171560733">55.54</a></td>
+        <td class="u-ph0 hidden-xs"></td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+2.2% (56.78)">-1.24</span></td>
+        <td class="u-text-end hidden-xs">7th</td>
+        <td class="u-text-end hidden-xs">708</td>
+      </tr>
+      <tr>
+        <!-- RELAY LEADOFF SPLIT, second real example. No cut-standard label this time
+             — the Leadoff span is the ONLY thing in the flags cell. -->
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">18</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/1330318/">Avery Henke</a></td>
+        <td>50 Y Back</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/11/?id=171561786#time171561786">22.53</a></td>
+        <td class="u-ph0 hidden-xs"><span class="c-label c-label--neutral u-cursor-help" title="Leadoff">R</span></td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+4.3% (23.55)">-1.02</span></td>
+        <td class="u-text-end hidden-xs">&ndash;</td>
+        <td class="u-text-end hidden-xs">707</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">19</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/2277023/">Thomas Landreneau</a></td>
+        <td>1000 Y Free</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/4/?id=171560653#time171560653">9:37.44</a></td>
+        <td class="u-ph0 hidden-xs"></td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+1.8% (9:48.02)">-10.58</span></td>
+        <td class="u-text-end hidden-xs">7th</td>
+        <td class="u-text-end hidden-xs">705</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">20</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/1163733/">Camden Mask</a></td>
+        <td>100 Y Breast</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/26/?id=171560742#time171560742">55.66</a></td>
+        <td class="u-ph0 hidden-xs"></td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+3.5% (57.69)">-2.03</span></td>
+        <td class="u-text-end hidden-xs">&ndash;</td>
+        <td class="u-text-end hidden-xs">704</td>
+      </tr>
+      <tr>
+        <!-- Third real example, and the only row with BOTH a cut-standard label AND
+             the Leadoff span together. -->
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">21</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/2360022/">Nojus Skirutis</a></td>
+        <td>200 Y Free</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/2/?id=171561772#time171561772">1:39.28</a></td>
+        <td class="u-ph0 hidden-xs">
+          <a href="/results/351192"><span class="c-label c-label--royal" title="NCAA Division II Championship">D2 B</span></a>
+          <span class="c-label c-label--neutral u-cursor-help" title="Leadoff">R</span>
+        </td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+3.4% (1:42.80)">-3.52</span></td>
+        <td class="u-text-end hidden-xs">&ndash;</td>
+        <td class="u-text-end hidden-xs">704</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">22</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/1336576/">Gavin Kock</a></td>
+        <td>100 Y Breast</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/26/?id=171560740#time171560740">55.69</a></td>
+        <td class="u-ph0 hidden-xs"></td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+1.3% (56.44)">-0.75</span></td>
+        <td class="u-text-end hidden-xs">6th</td>
+        <td class="u-text-end hidden-xs">703</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">23</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/1865160/">Colin Candebat</a></td>
+        <td>200 Y Fly</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/28/?id=171561454#time171561454">1:48.47</a></td>
+        <td class="u-ph0 hidden-xs"><a href="/results/351192"><span class="c-label c-label--royal" title="NCAA Division II Championship">D2 B</span></a></td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+4.0% (1:52.94)">-4.47</span></td>
+        <td class="u-text-end hidden-xs">3rd</td>
+        <td class="u-text-end hidden-xs">703</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">24</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/2360022/">Nojus Skirutis</a></td>
+        <td>400 Y IM</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/15/?id=171561663#time171561663">3:55.11</a></td>
+        <td class="u-ph0 hidden-xs"><a href="/results/351192"><span class="c-label c-label--royal" title="NCAA Division II Championship">D2 B</span></a></td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+2.2% (4:00.36)">-5.25</span></td>
+        <td class="u-text-end hidden-xs">1st</td>
+        <td class="u-text-end hidden-xs">701</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">25</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/2253944/">Oliv&eacute;r P&oacute;zvai</a></td>
+        <td>100 Y Free</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/35/?id=171560863#time171560863">44.91</a></td>
+        <td class="u-ph0 hidden-xs"></td>
+        <td class="u-text-end"><span class="u-color-danger js-bs-tooltip" title="" data-original-title="-1.4% (44.28)">+0.63</span></td>
+        <td class="u-text-end hidden-xs">4th</td>
+        <td class="u-text-end hidden-xs">698</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">26</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/2352628/">Bartu Akin</a></td>
+        <td>1650 Y Free</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/33/?id=171561625#time171561625">16:00.67</a></td>
+        <td class="u-ph0 hidden-xs"></td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+0.2% (16:02.40)">-1.73</span></td>
+        <td class="u-text-end hidden-xs">3rd</td>
+        <td class="u-text-end hidden-xs">698</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">27</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/1679982/">Colton Bennett</a></td>
+        <td>500 Y Free</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/22/?id=171561599#time171561599">4:33.41</a></td>
+        <td class="u-ph0 hidden-xs"></td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+1.3% (4:36.95)">-3.54</span></td>
+        <td class="u-text-end hidden-xs">4th</td>
+        <td class="u-text-end hidden-xs">696</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">28</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/1863744/">Alan Alejan Gonzalez Mujica</a></td>
+        <td>500 Y Free</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/22/?id=171561605#time171561605">4:33.77</a></td>
+        <td class="u-ph0 hidden-xs"></td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+1.2% (4:37.01)">-3.24</span></td>
+        <td class="u-text-end hidden-xs">5th</td>
+        <td class="u-text-end hidden-xs">693</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">29</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/2360022/">Nojus Skirutis</a></td>
+        <td>200 Y IM</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/6/?id=171560701#time171560701">1:48.93</a></td>
+        <td class="u-ph0 hidden-xs"><a href="/results/351192"><span class="c-label c-label--royal" title="NCAA Division II Championship">D2 B</span></a></td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+2.1% (1:51.23)">-2.30</span></td>
+        <td class="u-text-end hidden-xs">2nd</td>
+        <td class="u-text-end hidden-xs">692</td>
+      </tr>
+      <tr>
+        <td class="c-table-clean__col-fit u-pr0 u-text-center">30</td>
+        <td><a class="u-text-semi" href="/results/356467/swimmer/762325/">Mark Eberhard</a></td>
+        <td>200 Y Breast</td>
+        <td class="u-text-end u-text-semi"><a href="/results/356467/event/39/?id=171560766#time171560766">2:00.21</a></td>
+        <td class="u-ph0 hidden-xs"><a href="/results/351192"><span class="c-label c-label--royal" title="NCAA Division II Championship">D2 B</span></a></td>
+        <td class="u-text-end"><span class="u-color-success js-bs-tooltip" title="" data-original-title="+5.1% (2:06.72)">-6.51</span></td>
+        <td class="u-text-end hidden-xs">1st</td>
+        <td class="u-text-end hidden-xs">692</td>
+      </tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- Pagination widget: real, verbatim shape. Absent entirely on a capture with only
+     one page — must not be treated as required or as a parse error when missing. -->
+<ul class="c-pagination">
+  <li class="c-pagination__item"><button class="c-pagination__action c-pagination__action--active" type="button">1</button></li>
+  <li class="c-pagination__item"><a class="c-pagination__action" href="?page=2">2</a></li>
+  <li class="c-pagination__item"><a class="c-pagination__action" href="?page=3">3</a></li>
+  <li class="c-pagination__item"><a class="c-pagination__action" href="?page=4">4</a></li>
+  <li class="c-pagination__item"><a class="c-pagination__action" href="?page=5">5</a></li>
+  <li class="c-pagination__item"><a class="c-pagination__action" href="?page=6">6</a></li>
+  <li class="c-pagination__item"><a class="c-pagination__action" href="?page=7">7</a></li>
+  <li class="c-pagination__item"><a class="c-pagination__action" href="?page=8">8</a></li>
+  <li class="c-pagination__item c-pagination__control"><a class="c-pagination__action" href="?page=2" aria-label="Next page"><span class="visible-xs-inline u-mr--">Next</span></a></li>
+  <li class="c-pagination__item c-pagination__control"><a class="c-pagination__action" href="?page=8" aria-label="Last page"><span class="visible-xs-inline u-mr--">Last</span></a></li>
+</ul>
+
+</body>
+</html>

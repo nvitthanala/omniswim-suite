@@ -1,0 +1,116 @@
+<!--
+REAL SwimCloud capture (not synthetic). Source: https://www.swimcloud.com/results/379295/topteams/?gender=M
+Captured via the browser extension (Track A), 2026-09-08, by the repo's primary user.
+Same trimming/PII rules as the sibling meet-landing fixtures for this meet — YUI/
+jQuery/Sentry scripts, the global-search JSON blob, and the auth-info/auth-groups
+PII blocks removed; everything else byte-for-byte.
+
+This settles **OQ-1b** (see plans/2026-09-08/08-open-questions.md and
+01-decisions.md's OQ-1 update): does the `topteams` page — discovered via the
+meet-root Teams card's "More" link — actually list every competing team, and what
+is its markup?
+
+FINDING this fixture proves: YES. This table has **13 rows** — every team from the
+meet's own <script type="application/ld+json"> competitor list (not reproduced
+here), zero missing. Six teams have a numeric rank (1-6) and a real score; the
+remaining seven have rank "–" and score "–" — **they are still listed**, not
+omitted, even though they scored nothing. This is the opposite failure mode from
+the meet-root card: that card drops teams below a cutoff; this page does not.
+
+Markup shape: structurally identical to the meet-root Teams card
+(`swimcloud-real-meet-landing-379295-gender-m.html`) — same table classes, same
+row shape (rank cell, `<a href="/results/{meetId}/team/{teamId}/?gender=G">`,
+team name `<span>`, score cell). The only structural differences: no "More"
+caption at the bottom (this IS the full list), the URL is
+`/results/{meetId}/topteams/?gender=G` instead of `/results/{meetId}/?gender=G`,
+and the gender-dropdown / sort-dropdown links on this page point back to
+`/topteams/?gender=` rather than the bare meet root. `parseMeetTopTeamsHtml` can
+reuse the same row-extraction logic `parseMeetTeamsHtml` already has for the
+landing-page Teams card — this is the same table, on a different page.
+
+Confidence for `parseMeetTopTeamsHtml` once written: `real-capture-verified`.
+Completeness claim it may report: for THIS meet, row count (13) exactly matches
+the independently-sourced ld+json competitor count (13) — the strongest evidence
+available without a second, differently-sized meet to cross-check.
+-->
+<html>
+<head><title>Mountain Pacific Sports Federation Championships</title></head>
+<body>
+
+<h1 id="meet-name" class="c-toolbar__title">Mountain Pacific Sports Federation Championships</h1>
+<ul class="o-list-inline o-list-inline--dotted">
+  <li id="meet-status" class="u-color-success">Completed</li>
+  <li id="meet-date">Feb 25&ndash;28, 2026</li>
+  <li id="meet-course">SCY</li>
+</ul>
+
+<!-- Breadcrumb back to the meet root — confirms topteams is a sub-page, not a
+     standalone resource. -->
+<ol class="breadcrumb hidden-print u-mb+ hidden-xs">
+  <li><a href="/results/379295"><i class="far fa-angle-left u-mr-"></i>Meet Dashboard</a></li>
+</ol>
+
+<!-- Gender picker: on THIS page, both options point at /topteams/?gender=, not
+     the bare meet root. -->
+<button type="button" data-toggle="dropdown">Men <span class="caret-alt"></span></button>
+<ul class="dropdown-menu">
+  <li class="dropdown-subheader">Gender</li>
+  <li class="active"><a href="https://www.swimcloud.com/results/379295/topteams/?gender=M">Men</a></li>
+  <li><a href="https://www.swimcloud.com/results/379295/topteams/?gender=F">Women</a></li>
+</ul>
+
+<!-- ==== Teams table: THE finding. All 13 teams, 6 scoring + 7 zero-score, no
+     truncation, no "More" caption (this page IS the full list). ==== -->
+<div class="c-card c-card--large u-overflow-hidden">
+  <div class="c-card__item"><h2 class="c-title">Teams</h2></div>
+  <table class="c-table-clean c-table-clean--middle table table-hover c-table-clean--font-large@xs">
+    <thead><tr><th colspan="2">Team</th><th class="c-table-clean__col-fit u-text-end">Score</th></tr></thead>
+    <tbody>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">1</td>
+          <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/379295/team/337/?gender=M"><span>Air Force</span></a></td>
+          <td class="u-text-end u-text-semi">819.5</td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">2</td>
+          <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/379295/team/440/?gender=M"><span>UNLV</span></a></td>
+          <td class="u-text-end u-text-semi">769.5</td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">3</td>
+          <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/379295/team/374/?gender=M"><span>Wyoming</span></a></td>
+          <td class="u-text-end u-text-semi">726</td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">4</td>
+          <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/379295/team/385/?gender=M"><span>California Baptist</span></a></td>
+          <td class="u-text-end u-text-semi">510</td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">5</td>
+          <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/379295/team/413/?gender=M"><span>Pacific</span></a></td>
+          <td class="u-text-end u-text-semi">287</td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">6</td>
+          <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/379295/team/154/?gender=M"><span>Incarnate Word</span></a></td>
+          <td class="u-text-end u-text-semi">195</td></tr>
+      <!-- Zero-score teams below: rank AND score both render as an em dash. Still
+           present as rows, never omitted. -->
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">&ndash;</td>
+          <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/379295/team/398/?gender=M"><span>Northern Arizona</span></a></td>
+          <td class="u-text-end u-text-semi">&ndash;</td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">&ndash;</td>
+          <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/379295/team/399/?gender=M"><span>Northern Colorado</span></a></td>
+          <td class="u-text-end u-text-semi">&ndash;</td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">&ndash;</td>
+          <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/379295/team/417/?gender=M"><span>Pepperdine</span></a></td>
+          <td class="u-text-end u-text-semi">&ndash;</td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">&ndash;</td>
+          <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/379295/team/444/?gender=M"><span>New Mexico State</span></a></td>
+          <td class="u-text-end u-text-semi">&ndash;</td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">&ndash;</td>
+          <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/379295/team/519/?gender=M"><span>Idaho</span></a></td>
+          <td class="u-text-end u-text-semi">&ndash;</td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">&ndash;</td>
+          <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/379295/team/10008406/?gender=M"><span>Utah Tech</span></a></td>
+          <td class="u-text-end u-text-semi">&ndash;</td></tr>
+      <tr><td class="c-table-clean__col-fit u-pr0 u-text-center">&ndash;</td>
+          <td class="u-pr+"><a class="u-text-semi u-nowrap" href="/results/379295/team/10036961/?gender=M"><span>UTRGV</span></a></td>
+          <td class="u-text-end u-text-semi">&ndash;</td></tr>
+    </tbody>
+  </table>
+  <!-- No "More" caption here — this page is the full list. -->
+</div>
+
+</body>
+</html>

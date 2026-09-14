@@ -5,14 +5,12 @@
 
 import React, { useEffect, useMemo, useRef, useState, useTransition } from 'react';
 import { ClipboardPaste, Info, Undo2, Upload } from 'lucide-react';
-import { ClassYear, Gender, HistoricalSwim, SwimCloudBadge, Workspace } from '@omniswim/core/types';
-import { normalizeEventLabel, parseSwimCloudPasteDetailed } from '@omniswim/core/lib/athleteHistory';
+import { ClassYear, Gender, HistoricalSwim, Workspace } from '@omniswim/core/types';
+import { parseSwimCloudPasteDetailed } from '@omniswim/core/lib/athleteHistory';
 import {
   formatHistoryImportSummary,
   importHistoryToRoster,
   previewHistoryImportActions,
-  rosterNamesForTeam,
-  type ImportSwimmerAction,
 } from '@omniswim/core/lib/historyImportRoster';
 import {
   addAliasLink,
@@ -20,13 +18,21 @@ import {
   suggestAliasCandidates,
   type AliasNameEntry,
   type AliasSuggestion,
-  type AthleteAliasResolver,
 } from '@omniswim/core/lib/athleteAliases';
 import { divisionForTeamOrNull } from '@omniswim/core/data/teamDivisions';
-import { convertTimeToSeconds, foldDiacritics, normalizeSwimmerName } from '@omniswim/core/lib/utils';
+import { convertTimeToSeconds } from '@omniswim/core/lib/utils';
 import { getCutlinesForSwim } from '@omniswim/core/lib/cutlineUtils';
 import { useToast } from '@omniswim/ui';
 import AliasSuggestionsPanel from './AliasSuggestionsPanel';
+import { CLASS_YEAR_OPTIONS, SwimRowTags } from './AthleteHistoryImportPanelParts';
+import {
+  actionBadge,
+  buildHistoryBestIndex,
+  diffMatchKey,
+  rosterNameEntriesForTeam,
+  type ImportDiffStatus,
+  type RowMeta,
+} from './athleteHistoryImportView';
 
 type Props = {
   workspace: Workspace;
@@ -41,162 +47,6 @@ type Props = {
   /** Notifies parent of the class years picked in the preview (normalized-name keyed). */
   onClassYearsChange?: (overrides: Record<string, ClassYear>) => void;
 };
-
-const CLASS_YEAR_OPTIONS: ClassYear[] = [
-  ClassYear.FR,
-  ClassYear.SO,
-  ClassYear.JR,
-  ClassYear.SR,
-  ClassYear.HS,
-];
-
-function actionBadge(action: ImportSwimmerAction): { label: string; className: string } {
-  switch (action) {
-    case 'new_recruit':
-      return { label: 'New recruit', className: 'text-[var(--text-accent)] border-[var(--text-accent)]/30' };
-    case 'add_to_lineup':
-      return { label: 'Add to lineup', className: 'badge-info' };
-    case 'already_recruit':
-      return { label: 'Already recruit', className: 'badge-warning' };
-    case 'history_matched':
-    default:
-      return { label: 'History only (matched)', className: 'text-theme-muted border-theme-soft' };
-  }
-}
-
-function badgeLabel(badge?: SwimCloudBadge): string | null {
-  switch (badge) {
-    case 'extracted':
-      return 'Official';
-    case 'user_input':
-      return 'Manual';
-    case 'd1_a':
-      return 'A CUT';
-    case 'd1_b':
-      return 'B CUT';
-    case 'other':
-      return 'Tag';
-    default:
-      return null;
-  }
-}
-
-/** Diacritic/course-insensitive-name + event + course key used to diff a parsed swim against athleteHistory. */
-function diffMatchKey(name: string, team: string, event: string, timeType?: string): string {
-  const foldedName = foldDiacritics(normalizeSwimmerName(name));
-  const normEvent = normalizeEventLabel(event).toLowerCase();
-  return `${foldedName}|${team.trim().toLowerCase()}|${normEvent}|${timeType ?? 'SCY'}`;
-}
-
-/**
- * Best (fastest) existing seconds per athlete+event+course, from the workspace's
- * athleteHistory. Names are resolved through the alias resolver first so a
- * confirmed link ("Stevie" -> "Steven") unifies the diff onto one identity.
- */
-function buildHistoryBestIndex(history: HistoricalSwim[], resolver: AthleteAliasResolver): Map<string, number> {
-  const map = new Map<string, number>();
-  for (const h of history) {
-    const resolvedName = resolver.resolveAthleteName(h.name, h.team, h.gender);
-    const key = diffMatchKey(resolvedName, h.team, h.event, h.timeType);
-    const sec = convertTimeToSeconds(h.time);
-    const prev = map.get(key);
-    if (prev == null || sec < prev) map.set(key, sec);
-  }
-  return map;
-}
-
-/** Roster names (results + recruits) for a team/gender — the "existing" side of alias suggestions. */
-function rosterNameEntriesForTeam(workspace: Workspace, team: string, gender: Gender): AliasNameEntry[] {
-  return rosterNamesForTeam(workspace, team, gender).map(name => ({ name, team, gender }));
-}
-
-type ImportDiffStatus = 'new' | 'improved' | 'same';
-
-type RowMeta = {
-  diffStatus: ImportDiffStatus;
-  deltaSec?: number;
-  cutTooltip?: string;
-};
-
-function DiffBadge({ status, deltaSec }: { status: ImportDiffStatus; deltaSec?: number }) {
-  if (status === 'new') {
-    return (
-      <span
-        className="text-ui-micro text-[var(--text-accent)] border border-[var(--text-accent)]/30 px-1.5 rounded-full"
-        title="No existing time for this event/course"
-      >
-        NEW
-      </span>
-    );
-  }
-  if (status === 'improved') {
-    const label = deltaSec != null ? deltaSec.toFixed(2) : '0.00';
-    return (
-      <span
-        className="text-ui-micro border border-emerald-400/30 bg-emerald-400/10 text-emerald-300 px-1.5 rounded-full"
-        title={`${label}s faster than the existing recorded best`}
-      >
-        -{label}s
-      </span>
-    );
-  }
-  return (
-    <span
-      className="text-ui-micro text-theme-muted border border-theme-soft px-1.5 rounded-full"
-      title="Not faster than the existing recorded best for this event/course"
-    >
-      SAME
-    </span>
-  );
-}
-
-function SwimRowTags({
-  swim,
-  diffStatus,
-  deltaSec,
-  cutTooltip,
-}: {
-  swim: HistoricalSwim;
-  diffStatus: ImportDiffStatus;
-  deltaSec?: number;
-  cutTooltip?: string;
-}) {
-  const stamp = badgeLabel(swim.swimcloudBadge);
-  const showComputedA = swim.computedCut === 'A' && swim.swimcloudBadge !== 'd1_a';
-  const showComputedB = swim.computedCut === 'B' && swim.swimcloudBadge !== 'd1_b';
-
-  return (
-    <div className="flex flex-wrap gap-1 justify-end">
-      <DiffBadge status={diffStatus} deltaSec={deltaSec} />
-      {stamp === 'Official' && (
-        <span className="text-ui-micro text-theme-secondary border border-theme-soft px-1.5 rounded-full" title="Extracted official result">
-          Official
-        </span>
-      )}
-      {stamp === 'Manual' && (
-        <span className="text-ui-micro badge-warning px-1.5 rounded-full" title="User-entered time">
-          Manual
-        </span>
-      )}
-      {(stamp === 'A CUT' || showComputedA) && (
-        <span className="text-ui-micro btn-accent-outline px-1.5 rounded-full" title={cutTooltip}>
-          A CUT
-        </span>
-      )}
-      {(stamp === 'B CUT' || showComputedB) && (
-        <span
-          className="text-ui-micro bg-amber-400/10 text-amber-400 px-1.5 border border-amber-400/30 rounded-full"
-          title={cutTooltip}
-        >
-          B CUT
-        </span>
-      )}
-      {stamp === 'Tag' && (
-        <span className="text-ui-micro text-theme-muted border border-theme-soft px-1.5 rounded-full">Tag</span>
-      )}
-    </div>
-  );
-}
 
 export default function AthleteHistoryImportPanel({
   workspace,

@@ -4,9 +4,15 @@
  */
 
 import React, { useEffect, useMemo, useState } from 'react';
-import { FileWarning, Sparkles, Users } from 'lucide-react';
+import { FileWarning } from 'lucide-react';
 import { Gender, ScoringSettings, Workspace } from '@omniswim/core/types';
-import { optimizeRosterForTeam, optimizeRosterAllTeams } from '@omniswim/core/lib/rosterOptimizer';
+import {
+  diffOptimizerChanges,
+  optimizeRosterForTeam,
+  optimizeRosterAllTeams,
+  type GuardedOptimizerResult,
+  type OptimizerChangeSummary,
+} from '@omniswim/core/lib/rosterOptimizer';
 import {
   buildArbitrageCardsResult,
   type ArbitrageCardsResult,
@@ -16,6 +22,8 @@ import {
 } from '@omniswim/core/lib/rosterArbitrage';
 import { EmptyState, useToast } from '@omniswim/ui';
 import TeamPickerEmptyState from './TeamPickerEmptyState';
+import { ArbitragePreviewSection, OptimizerControls } from './RosterOptimizeStepParts';
+import OptimizerChangeSummaryPanel, { type OptimizerRunSummary } from './OptimizerChangeSummaryPanel';
 
 type Props = {
   workspace: Workspace;
@@ -29,7 +37,7 @@ type Props = {
   onUpdate: (patch: Partial<Workspace>) => void;
 };
 
-function ArbitrageCardList({
+export function ArbitrageCardList({
   cards,
   pointsMeaningful = true,
   reason,
@@ -131,11 +139,59 @@ export default function RosterOptimizeStep({
   // the cost explicit and keeps the step instant to open.
   const [preview, setPreview] = useState<ArbitrageCardsResult | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [lastRunSummary, setLastRunSummary] = useState<OptimizerRunSummary | null>(null);
+  // One-shot undo for the single most recent APPLIED optimizer run, following
+  // RosterImportWizard.tsx's lastAliasLink/handleUndoAliasLink shape: a
+  // component-local snapshot of the pre-run state plus one dedicated Undo
+  // action, not a full history stack. Lost on refresh, same scope as that
+  // pattern's own today.
+  const [lastOptimizeUndo, setLastOptimizeUndo] = useState<{
+    label: string;
+    patch: Partial<Workspace>;
+  } | null>(null);
 
   // A stale scan is worse than none — it would describe a roster that no longer exists.
   useEffect(() => {
     setPreview(null);
   }, [workspace, gender, team, scoringSettings]);
+
+  // A summary (and its undo) from a previous team's run stays visible under
+  // the old team's controls otherwise — dismissible on its own is not enough
+  // once the coach has moved on to a different team, and undoing a stale
+  // snapshot against the WRONG team's current state would be actively wrong.
+  useEffect(() => {
+    setLastRunSummary(null);
+    setLastOptimizeUndo(null);
+  }, [team]);
+
+  /** The three optimizer-owned fields, as they read right now — the only
+   *  state `diffOptimizerChanges` can honestly compare against, and exactly
+   *  what one-shot undo needs to snapshot before an apply call overwrites it. */
+  const captureBeforeState = () => ({
+    overrides: workspace.scorerRosterOverrides ?? [],
+    plans: workspace.meetEntryPlans ?? [],
+    activeIds: workspace.activeEntryIds ?? [],
+  });
+
+  const recordRunSummary = (
+    label: string,
+    result: GuardedOptimizerResult,
+    before: ReturnType<typeof captureBeforeState>
+  ) => {
+    const changes: OptimizerChangeSummary = diffOptimizerChanges(before, {
+      overrides: result.overrides,
+      plans: result.meetEntryPlans,
+    });
+    setLastRunSummary({ label, result, changes });
+  };
+
+  const handleUndoOptimize = () => {
+    if (!lastOptimizeUndo) return;
+    onUpdate(lastOptimizeUndo.patch);
+    toast.push('success', `Undid: ${lastOptimizeUndo.label} optimize`);
+    setLastOptimizeUndo(null);
+    setLastRunSummary(null);
+  };
 
   const runScan = () => {
     if (!team) return;
@@ -154,6 +210,7 @@ export default function RosterOptimizeStep({
 
   const applyTeam = () => {
     if (!whatIfMode || !team) return;
+    const before = captureBeforeState();
     const result = optimizeWithArbitrage(
       workspace,
       gender,
@@ -162,27 +219,19 @@ export default function RosterOptimizeStep({
       scoringSettings,
       mode
     );
-    onUpdate({
-      scorerRosterOverrides: result.overrides,
-      meetEntryPlans: result.meetEntryPlans,
-      activeEntryIds: result.activeEntryIds,
-    });
+    // The cards describe the lineup that came back, so they are worth showing
+    // whether or not that lineup was applied.
     setCards(result.cards);
-    const delta = result.projectedTotal - result.previousTotal;
-    toast.push(
-      'success',
-      `${team}: ${delta >= 0 ? '+' : ''}${delta.toFixed(1)} pts (${mode.replace('_', ' ')})`
-    );
-  };
-
-  const applyLegacy = () => {
-    if (!whatIfMode || !team) return;
-    const result = optimizeRosterForTeam(workspace, gender, team, removeSeniors, scoringSettings);
-    // "Found nothing better" is not success. The optimiser now refuses to apply a
-    // result that would lower the team total — on a recruit-driven workspace the
-    // unguarded run took 1277 points to 0 — so the toast must distinguish the two
-    // rather than reporting a win for a no-op.
+    recordRunSummary(team, result, before);
+    // Same rule as applyLegacy below. This path is guarded too now: it refuses a
+    // candidate that would lower the team total, and on a recruit-driven
+    // workspace it does refuse. A "+0.0 pts" success toast over an untouched
+    // lineup would report a win for a no-op.
     if (result.outcome === 'unchanged') {
+      // The most recent run superseded whatever the prior one applied — a
+      // dangling Undo here would revert a change this summary no longer
+      // describes.
+      setLastOptimizeUndo(null);
       toast.push(
         'info',
         `${team}: already the best lineup found — nothing changed (${result.previousTotal.toFixed(1)} pts).`
@@ -194,6 +243,51 @@ export default function RosterOptimizeStep({
       meetEntryPlans: result.meetEntryPlans,
       activeEntryIds: result.activeEntryIds,
     });
+    setLastOptimizeUndo({
+      label: team,
+      patch: {
+        scorerRosterOverrides: before.overrides,
+        meetEntryPlans: before.plans,
+        activeEntryIds: before.activeIds,
+      },
+    });
+    const gain = result.projectedTotal - result.previousTotal;
+    toast.push(
+      'success',
+      `${team}: +${gain.toFixed(1)} pts (${mode.replace('_', ' ')})`
+    );
+  };
+
+  const applyLegacy = () => {
+    if (!whatIfMode || !team) return;
+    const before = captureBeforeState();
+    const result = optimizeRosterForTeam(workspace, gender, team, removeSeniors, scoringSettings);
+    recordRunSummary(team, result, before);
+    // "Found nothing better" is not success. The optimiser now refuses to apply a
+    // result that would lower the team total — on a recruit-driven workspace the
+    // unguarded run took 1277 points to 0 — so the toast must distinguish the two
+    // rather than reporting a win for a no-op.
+    if (result.outcome === 'unchanged') {
+      setLastOptimizeUndo(null);
+      toast.push(
+        'info',
+        `${team}: already the best lineup found — nothing changed (${result.previousTotal.toFixed(1)} pts).`
+      );
+      return;
+    }
+    onUpdate({
+      scorerRosterOverrides: result.overrides,
+      meetEntryPlans: result.meetEntryPlans,
+      activeEntryIds: result.activeEntryIds,
+    });
+    setLastOptimizeUndo({
+      label: team,
+      patch: {
+        scorerRosterOverrides: before.overrides,
+        meetEntryPlans: before.plans,
+        activeEntryIds: before.activeIds,
+      },
+    });
     const gain = result.projectedTotal - result.previousTotal;
     toast.push(
       'success',
@@ -203,11 +297,14 @@ export default function RosterOptimizeStep({
 
   const applyAll = () => {
     if (!whatIfMode) return;
+    const before = captureBeforeState();
     const result = optimizeRosterAllTeams(workspace, gender, removeSeniors, scoringSettings);
+    recordRunSummary('All teams', result, before);
     // Same rule as applyLegacy. The all-teams path guards on the aggregate, because
     // per-team gains can cancel once chained — measured +307 and +18 individually
     // netting to +16 across the meet.
     if (result.outcome === 'unchanged') {
+      setLastOptimizeUndo(null);
       toast.push('info', 'No lineup change improved the field — nothing was applied.');
       return;
     }
@@ -215,6 +312,14 @@ export default function RosterOptimizeStep({
       scorerRosterOverrides: result.overrides,
       meetEntryPlans: result.meetEntryPlans,
       activeEntryIds: result.activeEntryIds,
+    });
+    setLastOptimizeUndo({
+      label: 'All teams',
+      patch: {
+        scorerRosterOverrides: before.overrides,
+        meetEntryPlans: before.plans,
+        activeEntryIds: before.activeIds,
+      },
     });
     const gain = result.projectedTotal - result.previousTotal;
     toast.push('success', `All teams: +${gain.toFixed(1)} pts across the field`);
@@ -245,65 +350,17 @@ export default function RosterOptimizeStep({
 
   return (
     <div className="surface-card rounded-xl p-4 sm:p-5 flex flex-col gap-5">
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
-        <label className="lg:col-span-4 flex flex-col gap-1.5 min-w-0">
-          <span className="text-ui-caption text-theme-muted flex items-center gap-1.5">
-            <Users size={14} /> Team to optimize
-          </span>
-          <select
-            value={team}
-            onChange={e => onSelectTeam(e.target.value)}
-            className="glass-input w-full rounded-lg px-3 py-2.5 text-ui-body"
-          >
-            <option value="">Select a team…</option>
-            {teams.map(t => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
-        </label>
-        <label className="lg:col-span-3 flex flex-col gap-1.5 min-w-0">
-          <span className="text-ui-caption text-theme-muted">Strategy</span>
-          <select
-            value={mode}
-            disabled={!whatIfMode}
-            onChange={e => setMode(e.target.value as ArbitrageMode)}
-            className="glass-input w-full rounded-lg px-3 py-2.5 text-ui-body disabled:opacity-50"
-          >
-            <option value="individual_first">Individuals first, then relays</option>
-            <option value="relay_first">Relays first, then individuals</option>
-          </select>
-        </label>
-        <div className="lg:col-span-5 flex flex-wrap gap-2">
-          <button
-            type="button"
-            disabled={!whatIfMode || !team}
-            onClick={applyTeam}
-            className="flex items-center gap-2 px-4 py-2.5 rounded-lg btn-primary text-ui-label font-semibold disabled:opacity-40"
-          >
-            <Sparkles size={14} />
-            Optimize team
-          </button>
-          <button
-            type="button"
-            disabled={!whatIfMode || !team}
-            onClick={applyLegacy}
-            className="px-4 py-2.5 rounded-lg border border-theme-soft text-ui-label text-[var(--text-primary)] theme-hover-row disabled:opacity-40"
-            title="Classic greedy optimizer"
-          >
-            Classic
-          </button>
-          <button
-            type="button"
-            disabled={!whatIfMode}
-            onClick={applyAll}
-            className="px-4 py-2.5 rounded-lg border border-theme-soft text-ui-label text-[var(--text-primary)] theme-hover-row disabled:opacity-40"
-          >
-            All teams
-          </button>
-        </div>
-      </div>
+      <OptimizerControls
+        team={team}
+        teams={teams}
+        onSelectTeam={onSelectTeam}
+        mode={mode}
+        onModeChange={setMode}
+        whatIfMode={whatIfMode}
+        onApplyTeam={applyTeam}
+        onApplyLegacy={applyLegacy}
+        onApplyAll={applyAll}
+      />
 
       {!whatIfMode ? (
         <p className="text-ui-caption rounded-lg border border-theme-soft surface-muted-bg px-3 py-2 text-theme-secondary">
@@ -311,39 +368,22 @@ export default function RosterOptimizeStep({
         </p>
       ) : null}
 
-      <div>
-        <h4 className="text-ui-label font-semibold text-[var(--text-primary)] mb-3">
-          Point arbitrage
-          {team ? (
-            <span className="font-normal text-theme-secondary"> · {team}</span>
-          ) : null}
-        </h4>
-        {displayCards.length === 0 && !preview && cards.length === 0 ? (
-          <div className="rounded-xl border border-dashed border-theme-soft px-4 py-8 text-center">
-            <p className="text-ui-body text-theme-secondary leading-relaxed max-w-md mx-auto">
-              Scanning every event swap re-scores the meet once per candidate, so it
-              runs on request rather than on open.
-            </p>
-            <button
-              type="button"
-              onClick={runScan}
-              disabled={!team || scanning}
-              className="mt-4 px-4 py-2 text-ui-label font-semibold rounded-lg btn-primary transition-colors disabled:opacity-60"
-            >
-              {scanning ? 'Scanning…' : 'Find point opportunities'}
-            </button>
-            {!team ? (
-              <p className="text-ui-caption text-theme-muted mt-2">Choose a team first.</p>
-            ) : null}
-          </div>
-        ) : (
-          <ArbitrageCardList
-            cards={displayCards}
-            pointsMeaningful={cards.length > 0 ? true : preview?.pointsMeaningful ?? true}
-            reason={preview?.reason}
-          />
-        )}
-      </div>
+      {lastRunSummary ? (
+        <OptimizerChangeSummaryPanel
+          summary={lastRunSummary}
+          onDismiss={() => setLastRunSummary(null)}
+          onUndo={lastOptimizeUndo ? handleUndoOptimize : undefined}
+        />
+      ) : null}
+
+      <ArbitragePreviewSection
+        team={team}
+        scanning={scanning}
+        onScan={runScan}
+        displayCards={displayCards}
+        cards={cards}
+        preview={preview}
+      />
     </div>
   );
 }
