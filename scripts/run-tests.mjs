@@ -76,6 +76,7 @@ const TESTS = [
   ['test_athlete_aliases.mjs'],
   ['test_duplicate_athletes.mjs'],
   ['test_alias_scorer_roster.mjs'],
+  ['test_scorer_gender_default.mjs'],
   ['test_entry_limits_aliases.mjs'],
   ['test_entry_limits_prelims_finals.mjs'],
   ['test_parse_plausibility.mjs'],
