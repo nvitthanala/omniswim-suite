@@ -12,7 +12,40 @@
  */
 
 import React, { useState } from 'react';
-import { ArrowLeftRight, ChevronDown, ChevronUp } from 'lucide-react';
+import { ArrowLeftRight, ChevronDown, ChevronUp, Undo2 } from 'lucide-react';
+import type { ExactSwap } from '@omniswim/core/lib/crossCourseArbitrage';
+
+/** How a dropped current entry was sourced, for the row's own caption. Shared
+ *  by every section that renders a drop (exact-swap, drop-only). */
+export const DROP_SOURCE_LABEL: Record<ExactSwap['dropSource'], string> = {
+  plan: 'planned',
+  result: 'meet entry',
+  recruit: 'recruit',
+};
+
+export type LastApplied = { inverse: unknown; description: string } | null;
+
+/** Repeated "Undo: <description>" affordance shown at the top of every applyable section. */
+export function UndoLastSwapButton({
+  lastApplied,
+  onUndo,
+}: {
+  lastApplied: LastApplied;
+  onUndo: () => void;
+}) {
+  if (!lastApplied) return null;
+  return (
+    <button
+      type="button"
+      onClick={onUndo}
+      title={lastApplied.description}
+      className="mb-3 flex w-full items-center gap-1.5 truncate rounded-lg border border-theme-soft surface-muted-bg px-3 py-1.5 text-left text-ui-caption text-theme-muted transition-colors hover:text-theme-secondary"
+    >
+      <Undo2 size={12} className="shrink-0" />
+      <span className="truncate">Undo: {lastApplied.description}</span>
+    </button>
+  );
+}
 
 /** Tiny muted pill flagging a best time older than the recency window. */
 export function StalePill() {

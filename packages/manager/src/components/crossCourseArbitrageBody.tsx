@@ -21,14 +21,10 @@ import type {
 } from '@omniswim/core/lib/crossCourseArbitrage';
 import type { RelayAlternatePromotion } from '@omniswim/core/lib/scoringTheory';
 import type { ArbitrageExpandedState, buildArbitrageViewModel } from './crossCourseArbitrageView';
-import {
-  ConvertedTimeUpgradesSection,
-  CoverageGapsSection,
-  DropFlagsSection,
-  LineupOptimizationSection,
-  OpenSlotAddsSection,
-  RelayOptimizationSection,
-} from './crossCourseArbitrageSections';
+import { ConvertedTimeUpgradesSection, CoverageGapsSection } from './crossCourseArbitrageAnalysisSections';
+import { DropFlagsSection, OpenSlotAddsSection } from './crossCourseArbitrageDropAddSections';
+import { LineupOptimizationSection } from './crossCourseArbitrageExactSwapSection';
+import { RelayOptimizationSection } from './crossCourseArbitrageRelaySection';
 
 type ViewModel = ReturnType<typeof buildArbitrageViewModel>;
 

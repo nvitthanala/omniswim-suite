@@ -352,11 +352,25 @@ path instead of the capture-browsing path.
    still thread from `TeamManagementView.tsx` through `RosterLineupStep.tsx`
    into `TeamRosterPanel.tsx` unused — confirmed already-inert (not newly
    broken by this fix), left alone as a scope boundary, see t13's own note.
-2. **`crossCourseArbitrageSections.tsx` (§2, §3).** The single largest file
-   in the package with zero `@omniswim/ui` import, and the clearest
-   evidence that "split it into Parts" is necessary but not sufficient —
-   this file was split out specifically to shrink a 527-line render tree
-   and is now 848 lines, bigger than what it replaced.
+2. **✅ DONE 2026-09-14 (§2, §3).** `crossCourseArbitrageSections.tsx` (848
+   lines, the single largest file in the package, zero `@omniswim/ui`
+   import) split by FAMILY, not by an arbitrary line count: the four
+   section groups it had accumulated (exact-swap, drop/add, relay, and the
+   two read-only analysis sections) were genuinely independent — no
+   section's own row/list helpers were shared with another's — except
+   `UndoLastSwapButton` and the `DROP_SOURCE_LABEL` map, both used by 3+
+   sections, which moved to the already-existing shared
+   `crossCourseArbitrageParts.tsx` rather than being duplicated.
+   `crossCourseArbitrageExactSwapSection.tsx` (164 lines),
+   `crossCourseArbitrageDropAddSections.tsx` (283),
+   `crossCourseArbitrageRelaySection.tsx` (297, the new largest — still a
+   third of the original), `crossCourseArbitrageAnalysisSections.tsx` (134).
+   `crossCourseArbitrageBody.tsx`'s import updated across the four new
+   files; the old file deleted entirely, no re-export shim. Verified:
+   `npx tsc --noEmit` clean, `scripts/test_cross_course_arbitrage.mjs`
+   (15 groups), `test_cross_course_arbitrage_view.mjs` (10 checks),
+   `test_drop_add_analysis.mjs` (6 groups) all pass unchanged, production
+   build succeeds.
 3. **✅ DONE 2026-09-14, 2 of 3 — §4b.** `ManagerApp.tsx`'s top toolbar
    (5 buttons, 3 different treatments) and `RosterOptimizeStepParts.tsx`'s
    optimizer row (already the best-behaved of the three) both converged
