@@ -7,6 +7,7 @@
     ".": "./src/MatrixApp.tsx",
     "./components/DeleteConfirmationModal": "./src/components/DeleteConfirmationModal.tsx",
     "./components/ScoringSettingsModal": "./src/components/ScoringSettingsModal.tsx",
+    "./components/ScoringSettingsFields": "./src/components/ScoringSettingsFields.tsx",
     "./lib/swimCloudMeetImportBridge": "./src/lib/swimCloudMeetImportBridge.ts",
     "./lib/swimCloudImportDiagnostics": "./src/lib/swimCloudImportDiagnostics.ts"
   },
