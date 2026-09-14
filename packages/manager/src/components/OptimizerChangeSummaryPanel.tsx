@@ -74,6 +74,10 @@ function EntryChangeRow({ change }: { change: OptimizerChangeSummary['entryChang
 type Props = {
   summary: OptimizerRunSummary;
   onDismiss: () => void;
+  /** Present only when this run is the single most recent APPLIED optimizer
+   *  run this session — undone once, or superseded by the next run, and it's
+   *  gone. See RosterOptimizeStep.tsx's own doc comment on this pattern. */
+  onUndo?: () => void;
 };
 
 function RejectedCandidateRow({ candidate }: { candidate: NonNullable<GuardedOptimizerResult['consideredButRejected']>[number] }) {
@@ -88,7 +92,7 @@ function RejectedCandidateRow({ candidate }: { candidate: NonNullable<GuardedOpt
   );
 }
 
-export default function OptimizerChangeSummaryPanel({ summary, onDismiss }: Props) {
+export default function OptimizerChangeSummaryPanel({ summary, onDismiss, onUndo }: Props) {
   const { label, result, changes } = summary;
   const gain = result.projectedTotal - result.previousTotal;
   const rejected = result.consideredButRejected ?? [];
@@ -111,14 +115,25 @@ export default function OptimizerChangeSummaryPanel({ summary, onDismiss }: Prop
               : `Already the best lineup found (${result.previousTotal.toFixed(1)} pts) — nothing changed.`}
           </p>
         </div>
-        <button
-          type="button"
-          onClick={onDismiss}
-          aria-label="Dismiss optimizer summary"
-          className="shrink-0 p-1 rounded text-theme-secondary hover:text-[var(--text-primary)]"
-        >
-          <X size={14} />
-        </button>
+        <div className="shrink-0 flex items-center gap-2">
+          {onUndo ? (
+            <button
+              type="button"
+              onClick={onUndo}
+              className="px-3 py-1.5 text-ui-caption font-medium rounded-lg border border-theme-soft theme-hover-row hover:text-[var(--text-accent)] transition-colors whitespace-nowrap"
+            >
+              Undo this optimize
+            </button>
+          ) : null}
+          <button
+            type="button"
+            onClick={onDismiss}
+            aria-label="Dismiss optimizer summary"
+            className="p-1 rounded text-theme-secondary hover:text-[var(--text-primary)]"
+          >
+            <X size={14} />
+          </button>
+        </div>
       </div>
 
       {hasDetail ? (

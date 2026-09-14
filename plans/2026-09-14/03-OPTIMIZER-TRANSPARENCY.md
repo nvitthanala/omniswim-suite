@@ -1,7 +1,6 @@
 # Optimizer transparency
 
-**Status 2026-09-14: pieces 1 and 2 shipped. Piece 3 (undo) stays scoped**
-— see §5.
+**Status 2026-09-14: all three pieces shipped.** See §3.
 
 **Date:** 2026-09-14
 **Trigger:** `docs/reference/IMPROVEMENT_BRAINSTORM_2026-09-02.md` item 11:
@@ -97,10 +96,22 @@ is genuinely new code, not a rendering change over existing data, since no
    confusing false failure. Fixed by cloning the workspace with `conference`
    cleared for the cap-override tests specifically — not a bug in the new
    code, but worth recording so nobody re-trips on it.
-3. **Not built — small, new pattern reused from elsewhere.** One-shot "Undo
-   this optimize" following `lastAliasLink`'s existing shape
-   (`RosterImportWizard.tsx`), scoped to the single most recent optimizer
-   run in that session (not a full history stack).
+3. **✅ SHIPPED — small, new pattern reused from elsewhere.** One-shot "Undo
+   this optimize" in `OptimizerChangeSummaryPanel`, following
+   `lastAliasLink`/`handleUndoAliasLink`'s exact shape
+   (`RosterImportWizard.tsx`): a component-local snapshot of the
+   pre-run state (`captureBeforeState()`) plus one dedicated Undo button,
+   scoped to the single most recent APPLIED run in that session — lost on
+   refresh, not a history stack, same as the pattern it follows.
+
+   **A real design bug caught and fixed before shipping, not after**: the
+   undo snapshot and the displayed change summary are set together on every
+   *applied* run, but a coach can run the optimizer again and get
+   `outcome: 'unchanged'` without applying anything — if the undo slot were
+   left alone on that path, the panel would show "no change" while still
+   offering to undo an EARLIER, different, already-superseded run, which is
+   exactly backwards. Fixed by clearing the undo slot on every `unchanged`
+   branch, not just on team switch.
 
 ## 4. Open questions for the user
 

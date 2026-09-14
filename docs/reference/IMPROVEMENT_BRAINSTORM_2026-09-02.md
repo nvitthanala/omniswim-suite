@@ -76,15 +76,13 @@ source at two of the higher-stakes claims, both confirmed accurate.
     flags every individual swim resting on a converted-time cutline
     estimate rather than an earned cut (relays scoped out — a bigger design
     decision, see the plan doc).
-11. **Pieces 1-2 FIXED 2026-09-14, piece 3 scoped — `plans/2026-09-14/03-OPTIMIZER-TRANSPARENCY.md`.**
-    Optimizer runs are opaque. Correction: `OptimizerResult` already
-    carries `outcome`/`appliedStages`/`unguardedTotal` — the real gap was
-    that this only reached a one-line toast. Piece 1 (a persistent
-    breakdown panel) and piece 2 (rejected-candidate surfacing) both
-    shipped: `OptimizerChangeSummaryPanel` now shows a real diff of what
-    changed plus every athlete the scorer cap excluded, closest misses
-    first, from a new `optimizeScorersForTeam` return shape carrying
-    `rejected` candidates. Piece 3 (one-shot undo) stays scoped, not built.
+11. **FIXED 2026-09-14 — `plans/2026-09-14/03-OPTIMIZER-TRANSPARENCY.md`.**
+    Optimizer runs were opaque. Correction: `OptimizerResult` already
+    carried `outcome`/`appliedStages`/`unguardedTotal` — the real gap was
+    that this only reached a one-line toast. All three pieces now shipped:
+    `OptimizerChangeSummaryPanel` shows a real diff of what changed, every
+    athlete the scorer cap excluded (closest misses first), and a one-shot
+    "Undo this optimize" following the existing `lastAliasLink` pattern.
 12. **FIXED 2026-09-14 — `plans/2026-09-14/02-MEET-IMPORT-RECONCILIATION.md`.**
     ~~No meet-import reconciliation against official totals.~~
     **Correction: the comparison already exists, per team** —
