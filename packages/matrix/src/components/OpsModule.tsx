@@ -34,13 +34,14 @@ import {
 import { readSwimCloudClipboardPayload } from '@omniswim/swimcloud/clipboardPayload';
 import { classifySwimCloudUrl } from '@omniswim/swimcloud/urlClassifier';
 import { parseTeamMeetSwimsHtml } from '@omniswim/swimcloud/parser';
-import type { SwimCloudTeamMeetSwimsParse } from '@omniswim/swimcloud/parser';
+import type { SwimCloudParseWarning, SwimCloudTeamMeetSwimsParse } from '@omniswim/swimcloud/parser';
 import {
   applySwimCloudRows,
   type SwimCloudMeetImportSkip,
 } from '../lib/swimCloudMeetImportBridge';
 import MeetOperationsView from './MeetOperationsView';
 import SwimmerDeleteConfirmModal from './SwimmerDeleteConfirmModal';
+import { SwimCloudImportDiagnosticsPanel } from './SwimCloudImportDiagnosticsPanel';
 
 interface Props {
   workspace: Workspace;
@@ -195,6 +196,11 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
   const [isParsingPsychPdf, setIsParsingPsychPdf] = useState(false);
   const [isImportingSwimCloud, setIsImportingSwimCloud] = useState(false);
   const [showSwimCloudCaptureBrowser, setShowSwimCloudCaptureBrowser] = useState(false);
+  const [importDiagnostics, setImportDiagnostics] = useState<{
+    skipped: readonly SwimCloudMeetImportSkip[];
+    warnings?: readonly SwimCloudParseWarning[];
+    rawWarnings?: readonly string[];
+  } | null>(null);
   const [pdfFormat, setPdfFormat] = useState('auto');
   const [swimmerDeleteCandidate, setSwimmerDeleteCandidate] = useState<{ name: string } | null>(null);
   const [suggestedPresetId, setSuggestedPresetId] = useState<string | null>(() =>
@@ -441,23 +447,17 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
       if (result.appliedRowCount === 0) {
         toast.push(
           'error',
-          `No usable results found on that page (${result.skipped.length} row(s) skipped — see console for reasons).`
+          `No usable results found on that page (${result.skipped.length} row(s) skipped — see "Import notes" below).`
         );
-        // eslint-disable-next-line no-console
-        console.warn('SwimCloud meet import: every row skipped', result.skipped);
+        setImportDiagnostics({ skipped: result.skipped, warnings: parseResult.warnings });
         return;
       }
 
       if (result.presetHint) setSuggestedPresetId(result.presetHint);
       setScoringRefreshKey(k => k + 1);
 
-      if (result.skipped.length > 0) {
-        // eslint-disable-next-line no-console
-        console.warn('SwimCloud meet import: some rows skipped', result.skipped);
-      }
-      if (parseResult.warnings.length > 0) {
-        // eslint-disable-next-line no-console
-        console.warn('SwimCloud meet import: parser warnings', parseResult.warnings);
+      if (result.skipped.length > 0 || parseResult.warnings.length > 0) {
+        setImportDiagnostics({ skipped: result.skipped, warnings: parseResult.warnings });
       }
       toast.push(
         'success',
@@ -487,15 +487,13 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
       if (result.appliedRowCount === 0) {
         toast.push(
           'error',
-          `No usable results in the selected pages (${result.skipped.length} row(s) skipped — see console).`
+          `No usable results in the selected pages (${result.skipped.length} row(s) skipped — see "Import notes" below).`
         );
-        // eslint-disable-next-line no-console
-        console.warn('SwimCloud capture import: every row skipped', result.skipped);
+        setImportDiagnostics({ skipped: result.skipped, rawWarnings: selection.warnings });
         return;
       }
-      if (result.skipped.length > 0) {
-        // eslint-disable-next-line no-console
-        console.warn('SwimCloud capture import: some rows skipped', result.skipped);
+      if (result.skipped.length > 0 || selection.warnings.length > 0) {
+        setImportDiagnostics({ skipped: result.skipped, rawWarnings: selection.warnings });
       }
       if (result.presetHint) setSuggestedPresetId(result.presetHint);
       setScoringRefreshKey(k => k + 1);
@@ -631,6 +629,16 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
 
   return (
     <>
+      {importDiagnostics ? (
+        <div className="mb-3">
+          <SwimCloudImportDiagnosticsPanel
+            skipped={importDiagnostics.skipped}
+            warnings={importDiagnostics.warnings}
+            rawWarnings={importDiagnostics.rawWarnings}
+            onDismiss={() => setImportDiagnostics(null)}
+          />
+        </div>
+      ) : null}
       <WizardShell
         steps={MATRIX_STEPS}
         eyebrow="Meet workflow"

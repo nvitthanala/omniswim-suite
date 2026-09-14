@@ -391,6 +391,14 @@ export interface SwimCloudCaptureMeetResultsSelection {
   readonly pageCount: number;
   /** The checked groups themselves, in list order. */
   readonly groups: readonly SwimCloudCaptureParseGroup[];
+  /**
+   * Every warning `/parse` reported for this capture, already formatted by
+   * the route (not `{code, message}` pairs — see that route's own doc
+   * comment). Not filtered by the checked groups, same reasoning as
+   * `eventResults`: a coach reading these wants to know what the whole
+   * capture reported, not just the pages they happened to check.
+   */
+  readonly warnings: readonly string[];
 }
 
 /** What `roster-history` mode hands back when the coach commits. */
@@ -836,6 +844,7 @@ export function SwimCloudCaptureBrowser(props: SwimCloudCaptureBrowserProps) {
         eventResults: parseResponse.eventResults ?? [],
         pageCount: selectedParses.length,
         groups: chosen,
+        warnings: parseResponse.warnings,
       });
     } catch (err) {
       toast.push('error', `Could not apply the selected results: ${String(err)}`);
