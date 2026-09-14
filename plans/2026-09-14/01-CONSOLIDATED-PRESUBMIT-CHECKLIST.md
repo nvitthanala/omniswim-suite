@@ -1,7 +1,9 @@
 # Consolidated pre-submit checklist
 
-**Status 2026-09-14: the `program` half shipped. The `provenance`
-(conversion-estimate) half stays scoped, not built** — see §5.
+**Status 2026-09-14: both halves shipped.** The `program` group landed
+first; the `provenance` (conversion-estimate) group landed the same day,
+after resolving the "needs a per-swim cutline-tag pass" gap §3 originally
+flagged — see the updated §3 for how.
 
 **Date:** 2026-09-14
 **Trigger:** `docs/reference/IMPROVEMENT_BRAINSTORM_2026-09-02.md` item 10,
@@ -73,19 +75,21 @@ existing checks:
   athlete/team pair. Both read straight off `data/teamDivisions.ts` — no new
   scoring logic. 4 new tests in
   `tests/rosterLineupAuditProgramProvenance.test.ts`.
-- **`auditConversionProvenance(...)` — not built.** Walks a team's scored
-  swims for every `converted_estimate` cutline state and emits a
-  `provenance` checklist item per affected athlete. Deferred because it
-  needs a real per-swim cutline-tag computation
-  (`buildCutlineTagForTeam({ time, gender, event, team })`, one call per
-  scored swim) threaded into the audit, which today only sees
-  `SwimmerResult`/`ScorerRosterRow` — no swim-level cutline pass runs inside
-  `buildTeamLineupAudit` at all; the existing call sites for this function
-  are individual athlete-detail rows (`AthleteCreditedSwimsRow.tsx`,
-  `AthleteEntriesSection.tsx`, `AthleteHistorySection.tsx`), not a team-wide
-  audit. That's a real, if contained, design decision (batch it inline in
-  the audit vs. thread a pre-computed tag map in) worth its own pass rather
-  than folding in alongside the smaller `program` change.
+- **`auditConversionProvenance(...)` — ✅ SHIPPED 2026-09-14.** Walks a
+  team's scored INDIVIDUAL swims (relays deliberately out of scope for this
+  pass — a relay carries two independent verdicts via
+  `buildRelaySwimTagsForTeam`, a bigger design decision than this change),
+  calls `buildCutlineTagForTeam({ team, gender, event: r.event, time: r.time })`
+  per swim exactly as every existing per-athlete detail row already does
+  (`AthleteCreditedSwimsRow.tsx` et al. — no new cutline logic, no new
+  course-of-record defaulting), and emits a `provenance` checklist item for
+  every swim in `state: 'converted_estimate'`. `SwimmerResult` carries no
+  `timeType`, so this only fires when the event label itself states an
+  explicit course code or "meter(s)" — same as every other caller. 5 new
+  tests in `tests/rosterLineupAuditConversionProvenance.test.ts`, including
+  the exact division/time pair `scripts/test_cutline_tags.mjs` already
+  proves produces `converted_estimate` (D2 men's 50 Free, 22.00 LCM → 19.14
+  yards, inside the 19.39 A standard).
 
 Both groups slot into `TeamLineupAudit.checklistItems` exactly like the
 four pre-existing groups — `LineupComplianceChecklist.tsx`'s own

@@ -66,16 +66,16 @@ source at two of the higher-stakes claims, both confirmed accurate.
 9. **No pre-export validation.** `packages/core/src/lib/entryExport.ts` can
    export a non-`WOMEN` gender as `M` and blank/invalid fields as usable-looking
    HyTek output with no review step. *Medium.*
-10. **Partially FIXED 2026-09-14 — `plans/2026-09-14/01-CONSOLIDATED-PRESUBMIT-CHECKLIST.md`.**
+10. **FIXED 2026-09-14 — `plans/2026-09-14/01-CONSOLIDATED-PRESUBMIT-CHECKLIST.md`.**
     ~~No consolidated pre-submit review.~~ **Correction: mostly already
     exists** — `LineupComplianceChecklist.tsx` already groups entry-limit,
     empty-lineup, relay-gap, and duplicate-athlete issues into one sticky
-    checklist on the Lineup step. Of the two named gaps, the `program`
-    half shipped: `auditProgramProvenance` flags every athlete on a team
-    with an unmapped division or an unconfirmed gender sponsorship. The
-    `provenance` half (converted-time cutline estimates) stays scoped, not
-    built — it needs a real per-swim cutline-tag pass threaded into the
-    audit, a bigger design decision than the program check was.
+    checklist on the Lineup step. Both named gaps now closed:
+    `auditProgramProvenance` flags every athlete on a team with an unmapped
+    division or an unconfirmed gender sponsorship; `auditConversionProvenance`
+    flags every individual swim resting on a converted-time cutline
+    estimate rather than an earned cut (relays scoped out — a bigger design
+    decision, see the plan doc).
 11. **Scoped 2026-09-14, not built — `plans/2026-09-14/03-OPTIMIZER-TRANSPARENCY.md`.**
     Optimizer runs are opaque. Correction: `OptimizerResult` already
     carries `outcome`/`appliedStages`/`unguardedTotal` — the real gap is

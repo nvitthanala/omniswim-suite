@@ -32,6 +32,7 @@ import { buildAliasResolver, detectDuplicateAthletes } from './athleteAliases';
 import type { AthleteAliasResolver, DuplicateAthletePair } from './athleteAliases';
 import { isRelayResult, normalizeSwimmerName } from './utils';
 import { programSponsorsGender, resolveTeamDivision } from '../data/teamDivisions';
+import { buildCutlineTagForTeam } from './cutlineTags';
 
 export type { DuplicateAthletePair } from './athleteAliases';
 export {
@@ -51,7 +52,9 @@ export type LineupIssueType =
   /** This athlete's team has no known division — cut tags and lineup rules judged against a division may be wrong. */
   | 'program_division_unknown'
   /** This athlete's team is not on record as sponsoring their gender's program. */
-  | 'program_gender_unsponsored';
+  | 'program_gender_unsponsored'
+  /** This swim's cut standing rests on a converted-time estimate, not an earned cut. */
+  | 'conversion_estimate';
 
 export type LineupAthleteIssue = {
   type: LineupIssueType;
@@ -66,7 +69,7 @@ export type LineupAthleteIssue = {
 export type LineupChecklistItem = {
   id: string;
   type: LineupIssueType;
-  group: 'entries' | 'lineups' | 'relays' | 'roster' | 'program';
+  group: 'entries' | 'lineups' | 'relays' | 'roster' | 'program' | 'provenance';
   message: string;
   athleteName?: string;
   /** ScorerRosterRow.key for the named athlete — lets a Jump match by key, not raw name. */
@@ -438,6 +441,46 @@ function auditProgramProvenance(
   }
 }
 
+/**
+ * Flag every individual swim on this team currently resting on a
+ * converted-time cutline estimate (`state: 'converted_estimate'` — a metric
+ * swim whose converted yards equivalent clears a published standard,
+ * informative but never an earned cut; see `cutlineTags.ts`'s own doc
+ * comment for the full rule). Today that signal only ever renders per-swim,
+ * on whichever detail row happens to show a cut badge — this is the first
+ * place it reaches a team-wide, pre-submit view: a team leaning heavily on
+ * indicative-only swims for its entry decisions has no single line
+ * summarizing how many.
+ *
+ * Scoped to individual swims, matching the plan this implements — a relay
+ * carries two independent verdicts (`buildRelaySwimTagsForTeam`), a real
+ * design decision left for its own pass rather than folded in here.
+ *
+ * Reuses `buildCutlineTagForTeam` exactly as every existing per-athlete
+ * detail row already does (`AthleteCreditedSwimsRow.tsx` et al.) — same
+ * division resolution, same course-of-record defaulting, no new cutline
+ * logic. `SwimmerResult` carries no `timeType`, so course is read off the
+ * event label same as everywhere else that already accepts this default.
+ */
+function auditConversionProvenance(
+  collector: LineupAuditCollector,
+  opts: { teamScored: SwimmerResult[]; team: string; gender: Gender }
+): void {
+  const { teamScored, team, gender } = opts;
+  for (const r of teamScored) {
+    if (isRelayResult(r) || !r.time) continue;
+    const result = buildCutlineTagForTeam({ team, gender, event: r.event, time: r.time });
+    if (result.state !== 'converted_estimate') continue;
+    const { indicative } = result;
+    collector.pushChecklist({
+      type: 'conversion_estimate',
+      group: 'provenance',
+      message: `${r.name}: ${indicative.event} rests on a converted-time estimate (${indicative.recordedTime} ${indicative.swimCourse} → ${indicative.convertedTime} converted), not an earned ${indicative.tierLabel}`,
+      athleteName: r.name,
+    });
+  }
+}
+
 /** Run the per-athlete checks over every athlete this team's audit covers. */
 function auditRosteredAthletes(
   collector: LineupAuditCollector,
@@ -523,6 +566,7 @@ export function buildTeamLineupAudit(input: LineupAuditInput): TeamLineupAudit {
   });
 
   auditProgramProvenance(collector, { rosterRows: lookup.rows, team, gender });
+  auditConversionProvenance(collector, { teamScored, team, gender });
 
   // Athletes split across two name spellings. A split divides one human's
   // history into two identities: each sits under the entry cap independently,
@@ -839,6 +883,8 @@ export function issueBadgeLabel(issue: LineupAthleteIssue): string {
       return 'Division unknown';
     case 'program_gender_unsponsored':
       return 'Program unconfirmed';
+    case 'conversion_estimate':
+      return 'Converted cut';
     default:
       return 'Issue';
   }
