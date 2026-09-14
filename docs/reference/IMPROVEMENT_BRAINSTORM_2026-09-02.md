@@ -15,42 +15,46 @@ source at two of the higher-stakes claims, both confirmed accurate.
 1. **Psych-sheet parser fails silently.** `backend/psych_parser.py:parse_psych_pdf`'s
    chooser returns `[]` as a successful result on an empty/implausible parse — a
    coach sees a blank seed field, not an error. *Small.*
-2. **Abbreviation-table load swallows failure.** `backend/pdf_parser.py:_load_abbrev_teams`
-   catches `OSError` and silently falls back to a 2-entry hardcoded map.
-   **Spot-checked and confirmed** — `except OSError: pass` at line 51, exactly as
-   described. A moved/renamed/corrupted `teamAbbreviations.json` degrades team
-   attribution silently instead of raising. *Small.*
-3. **First-hit substring team matching is ambiguity-blind.**
-   `packages/core/src/data/teamAliases.ts:findMeetTeamBySubstring` and
-   `packages/core/src/lib/teamScoreMatching.ts:matchOfficialTeamScore` take the
-   first match rather than checking for a second, so a shortened label can
-   attach to the wrong similarly-named team. *Medium.*
-4. **No CI parity check between the two abbreviation files.** Exactly the gap
-   this session's own audit flagged (see `docs/reference/AUDIT_2026-09-02.md`) —
-   `teamAbbreviations.json` and `teamAliases.ts`'s `TEAM_ABBREVIATIONS` are
-   hand-duplicated with nothing enforcing they match. *Small.*
+2. **✅ FIXED 2026-09-13** (commit `fe6dc211`, merged in from
+   `fix-scoring-roster-integrity`). **Abbreviation-table load swallows
+   failure.** `backend/pdf_parser.py:_load_abbrev_teams` caught `OSError` and
+   silently fell back to a 2-entry hardcoded map; now raises at import time.
+3. **✅ FIXED 2026-09-13.** **First-hit substring team matching is
+   ambiguity-blind.** `findMeetTeamBySubstring` and `matchOfficialTeamScore`
+   took the first match rather than checking for a second. Both now collect
+   every match per fuzzy tier and return "no confident match" (`undefined`,
+   or `matchMeetTeamName`'s own original-label fallback) when a tier finds
+   more than one candidate — an exact or genuinely unambiguous match is
+   unaffected. `test_team_matching_ambiguity.mjs` confirmed red against the
+   prior code (an "Ohio" vs. "Ohio State University"/"Ohio University"
+   ambiguity silently resolved to whichever was listed first) before being
+   kept.
+4. **✅ FIXED — already done before this brainstorm's own writing, confirmed
+   2026-09-13.** **No CI parity check between the two abbreviation files.**
+   `scripts/test_team_abbreviation_parity.mjs` exists, is registered, and
+   passes — imports `TEAM_ABBREVIATIONS` directly rather than regex-scraping
+   the source file.
 5. **Two abbreviation sources instead of one.** Generate/import one canonical
    map for both the Python and TypeScript sides instead of maintaining two by
-   hand — the root cause behind #4. *Medium.*
-6. **Scoring-settings load broad-excepts into defaults.**
-   `backend/point_calculator.py:_resolve_scoring_settings` can swallow a
-   corrupt/unreadable settings object into silent NCAA-D2 defaults instead of
-   raising — malformed configuration scores under the wrong rules with no signal.
-   *Small.*
-7. **Gender defaults to Men on ambiguity.**
-   `packages/core/src/lib/scorerRoster.ts` (`deriveAutoScorerKeys`,
-   `buildScorerRosterLookup`) defaults an unclassified row to Men rather than
-   `unknown`, so a misclassified women's row can consume a men's scorer slot.
-   **Spot-checked function names — both real, at the claimed lines** (100,
-   140); did not verify the default-to-Men behavior itself line-by-line. If
-   real, this is the same class of bug as CLAUDE.md's gender-sponsorship rule
-   (rule 7) — worth a careful look before scheduling. *Medium.*
-8. **Absent vs. zero collapsed in season trends.**
-   `packages/core/src/lib/seasonAnalytics.ts:buildSeasonTrends` uses
-   `menTotal || calculated` / `womenTotal || calculated`, which reads a
-   genuine published zero as "absent, use the calculated value instead" — the
-   exact absent-vs-empty confusion CLAUDE.md's provenance rule 4 warns about.
-   *Small.*
+   hand — the root cause behind #4, itself resolved by a parity *test*, not a
+   single source. Still genuinely two files; not attempted.
+6. **✅ FIXED 2026-09-13** (commit `fe6dc211`). **Scoring-settings load
+   broad-excepts into defaults.** `backend/point_calculator.py:_resolve_scoring_settings`
+   could swallow a corrupt/unreadable settings object into silent NCAA-D2
+   defaults; now raises.
+7. **✅ FIXED 2026-09-13, verified line-by-line this time (not just
+   spot-checked).** **Gender defaults to Men on ambiguity.** Confirmed real:
+   `buildScorerRosterLookup`'s own meta-building loop correctly fell back to
+   the call's `genderFilter` before Men, but `deriveAutoScorerKeys` (called
+   earlier in the same function) skipped `genderFilter` entirely and went
+   straight to Men — so an ungendered Women's-scoped row's auto-scorer key
+   could never match its own roster entry. Fixed by passing `genderFilter`
+   through; new `test_scorer_gender_default.mjs` confirmed red against the
+   prior code before being kept.
+8. **✅ FIXED 2026-09-13** (commit `fe6dc211`). **Absent vs. zero collapsed
+   in season trends.** `packages/core/src/lib/seasonAnalytics.ts:buildSeasonTrends`
+   used `menTotal || calculated` / `womenTotal || calculated`, reading a
+   genuine published zero as absent; now checks `!= null` explicitly.
 9. **No pre-export validation.** `packages/core/src/lib/entryExport.ts` can
    export a non-`WOMEN` gender as `M` and blank/invalid fields as usable-looking
    HyTek output with no review step. *Medium.*

@@ -103,11 +103,18 @@ Still uncommitted — on the order of 60+ files, diffs only.
 
 ## Do this next
 
+**Update 2026-09-13: items 1–3 below are resolved.** #1's underlying defect
+closed without the PDF ever landing (see [13](2026-08-14/13-official-score-mismatch.md)'s
+resolution note — `test_nsisc_team_totals.mjs` now passes byte-exact,
+registered and green). #2 closed the same way, at the scoring-boundary
+layer rather than the parser layer. #3 closed via `prepareRecruitsForScoring`
+ranking a recruit against every other unplaced recruit, not PDF rows alone
+(commit `d24fd3e5`, merged in today from a sibling branch). The PDF itself
+is still not in the repo — worth getting for its own sake (two remaining
+judgment calls in 13 need it) but no longer blocking. Remaining open:
+
 | # | Item | Why now |
 | - | ---- | ------- |
-| 1 | **Commit the meet results PDF** — [13](2026-08-14/13-official-score-mismatch.md) | `loadedMeet.pdfFilename` names `2026_NSISC_Championships_Final_Results.pdf`; the file is not in the repo. It blocks **all three** inactive scoring checks and every open question in 13. Five minutes of answer, currently unreachable. |
-| 2 | **Time-trial tagging in `backend/pdf_parser.py`** — [13](2026-08-14/13-official-score-mismatch.md) | Two untagged time-trial rows invent 20 points each. Three modules re-derive "is this a time trial" from the event label and all three were defeated by one bad label. Fix the label, not the readers. |
-| 3 | **Rank collapse on roster-only workspaces** — [12 §2](2026-08-14/12-optimizer-destroys-score.md) | `prepareRecruitsForScoring` returns every recruit at rank 1 when there are no comparators, so an event scores as a 281-way tie. No longer destructive, but it is not what a coach is looking at. |
 | 4 | Branded `CanonicalEvent` — [04 §3](2026-08-14/04-architecture-complexity.md) | The structural bet. Four defects were the same bug: a value keyed on one identity, looked up by another. |
 | 5 | Conversion-factor provenance — [02 §1](2026-08-14/02-data-quality-aliasing.md) | **Blocked on an open question**: does any governing body publish these factors? If not, the whole table is indicative, not official. |
 
@@ -176,8 +183,10 @@ ranked by nothing.
 version stamp, unattended backups · [04 §2](2026-08-14/04-architecture-complexity.md)
 `utils.ts` junk drawer.
 
-**Reported, not fixed** — two untagged time-trial rows score 20 points each
-([13](2026-08-14/13-official-score-mismatch.md)) · a duplicated row in Event 39 ·
+**Reported, not fixed** — ~~two untagged time-trial rows score 20 points
+each~~ **fixed 2026-09-13, see [13](2026-08-14/13-official-score-mismatch.md)'s
+resolution note** (closed at the scoring-boundary layer, `isTimeTrial`
+itself may still be wrong on these rows but no longer matters) · a duplicated row in Event 39 ·
 the `Boys`/`Girls` carve-out in `utils.ts` makes HyTek gender-token events score,
 unadjudicable without the PDF · dead `npById` per fast-swap context ·
 `CapVoidSummary.byAthlete` dead · `individualStrokeDistance` lacks label hygiene

@@ -92,14 +92,18 @@ eligibility decision into an all-or-nothing *event* decision whenever ranks
 collapse. Fixing #1 alone would leave that landmine for any workspace where a tie
 group spans a scorer and a non-scorer.
 
-> #3 is fixed (see above). **#1 and #2 still stand** and are still worth closing:
-> the engine's automatic scorer set ignores `maxIndividualScorersPerTeam` while
-> the optimizer enforces it, so the two components still disagree about who
-> scores; and `prepareRecruitsForScoring` still returns every recruit at rank 1
-> when there are no comparators, which is why a whole event can be one tie group
-> at all. Neither is destructive any more — but #2 means a roster-only workspace
-> is still scoring an event as a 281-way tie, which is not what a coach is
-> looking at.
+> **✅ #1 and #2 now also closed (confirmed 2026-09-13).** #1 by commit
+> `b301ea12` ("stop the scorer pool cap leaking and the optimizer losing") —
+> the pool now admits a tie group member-by-member instead of gating on
+> "every name fits," so the engine's automatic set and the optimizer's cap
+> agree. #2 by commit `d24fd3e5` ("stop recruit placement from fabricating
+> dead heats") — `prepareRecruitsForScoring` now ranks an unplaced recruit
+> against every OTHER unplaced recruit in its event as well as the meet
+> rows, not against PDF rows alone, so a roster-only workspace no longer
+> scores a whole event as one N-way tie (measured there: 14 fabricated ties
+> per gender/workspace before, 0 after). Both commits landed on a sibling
+> branch (`fix-scoring-roster-integrity`) and were merged into
+> `nvitthanala/swimcloud-data-ingest` 2026-09-13.
 
 ---
 
