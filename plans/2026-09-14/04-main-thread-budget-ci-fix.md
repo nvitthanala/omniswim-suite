@@ -75,6 +75,37 @@ fully reverted each round, never committed):
   more than a handful of identity changes per load, never the 100+ pattern
   from before the fix.
 
+## Update — the secondary overage is a real render-count issue, not noise
+
+Confirmed against actual CI (not just local runs): PR #5's CI failed again
+after the oscillation fix landed, on the same assertion, at `Received: 2999`
+(budget 2500) — this rules out "just local flakiness."
+
+Fixed one contributor: `TeamRosterPanel` called `getAthleteProfile` once per
+visible row without its optional alias-resolver argument, and the function
+always rebuilt the merged workspace history index from scratch internally.
+Every row redid an O(workspace history size) rebuild, every render. Fixed
+in commit `55926587` (`getAthleteProfile` now accepts a precomputed merged
+history array; `TeamRosterPanel` builds it once and passes it through).
+Verified safe (lint clean, 803/803 tests) but did **not** meaningfully move
+the local repro numbers (still ~2700-2900ms on HSU's Lineup step).
+
+Added a plain render counter to `ManagerApp` (reverted before commit, not
+shipped) to size the real problem: **~900-1000 renders of `ManagerApp`
+during a single workspace's full 4-step test pass** (~15s wall time) — a
+rate consistent with a 60fps loop, not ordinary state-driven re-rendering.
+Searched for an obvious cause (`useAnimationFrame`, a continuous
+`requestAnimationFrame` loop, `setInterval`, a worker progress-message loop)
+across `packages/manager` and the scoring worker — found none. The one
+`requestAnimationFrame` call in `TeamRosterPanel` is a one-shot smooth-scroll
+after a jump, not a loop.
+
+This means the remaining cost is a genuine, still-unexplained render-rate
+issue, not a simple missing-memo bug reachable by more `console.log` rounds.
+Pinning it down needs an actual profiler trace (React DevTools Profiler or
+Chrome's Performance panel across a real interaction), which local
+grep-and-`console.log` diagnostics cannot substitute for.
+
 ## Open question
 
 The marginal, intermittent overage on HSU's Lineup step (214 recruits, zero
