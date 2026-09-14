@@ -1103,11 +1103,19 @@ export function getAthleteProfile(
   gender: Gender,
   name: string,
   settings: ScoringSettings,
-  resolver?: AthleteAliasResolver
+  resolver?: AthleteAliasResolver,
+  // Rebuilding the merged history index is O(workspace history size), and a
+  // roster panel calls this once per visible row — recruit-heavy workspaces
+  // with hundreds of imported SwimCloud history rows were redoing that full
+  // rebuild for every row, on every render. Callers that render many
+  // athletes against the same workspace should build it once (via
+  // `buildHistoryFromWorkspace` + `mergeHistoryIndex`) and pass it here.
+  precomputedMergedHistory?: HistoricalSwim[]
 ): AthleteEventProfile {
   const alias = resolver ?? buildAliasResolver(workspace);
-  const pdfHistory = buildHistoryFromWorkspace(workspace);
-  const merged = mergeHistoryIndex(pdfHistory, workspace.athleteHistory ?? []);
+  const merged =
+    precomputedMergedHistory ??
+    mergeHistoryIndex(buildHistoryFromWorkspace(workspace), workspace.athleteHistory ?? []);
   const results = gender === Gender.MEN ? workspace.menResults ?? [] : workspace.womenResults ?? [];
   const relays = relayEventsForAthlete(results, team, gender, name, alias);
   // Constrain the profile to what the loaded meet actually contests, read from the

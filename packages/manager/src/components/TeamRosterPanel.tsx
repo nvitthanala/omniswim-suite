@@ -16,7 +16,7 @@ import { buildAliasResolver } from '@omniswim/core/lib/athleteAliases';
 import ProjectedActualScore from './ProjectedActualScore';
 import { type EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
 import AthleteLineupEditorPanel from './AthleteLineupEditorPanel';
-import { getAthleteProfile } from '@omniswim/core/lib/athleteHistory';
+import { buildHistoryFromWorkspace, getAthleteProfile, mergeHistoryIndex } from '@omniswim/core/lib/athleteHistory';
 import type { AthleteEventProfile } from '@omniswim/core/types';
 
 /**
@@ -132,6 +132,18 @@ export default function TeamRosterPanel({
   // buildAliasResolver walks workspace.athleteAliases; memoize on workspace so
   // it isn't rebuilt on every render (matches mergeScoringSettings discipline above).
   const aliasResolver = useMemo(() => buildAliasResolver(workspace ?? []), [workspace]);
+
+  // Same discipline for the merged history index getAthleteProfile needs per
+  // row: rebuilding it is O(workspace history size), and without this memo
+  // every visible row redid that full rebuild, every render — expensive for
+  // a recruit-heavy workspace with hundreds of imported SwimCloud history rows.
+  const mergedAthleteHistory = useMemo(
+    () =>
+      workspace
+        ? mergeHistoryIndex(buildHistoryFromWorkspace(workspace), workspace.athleteHistory ?? [])
+        : [],
+    [workspace]
+  );
 
   const pointTotals = useMemo(
     () => aggregateSwimmerMeetPoints(scoredResults, gender, aliasResolver),
@@ -547,7 +559,15 @@ export default function TeamRosterPanel({
                   lineupAudit?.athleteIssues.get(normalizeSwimmerName(row.name)) ?? [];
                 const profile =
                   workspace && selectedTeam
-                    ? getAthleteProfile(workspace, row.team, gender, row.name, merged)
+                    ? getAthleteProfile(
+                        workspace,
+                        row.team,
+                        gender,
+                        row.name,
+                        merged,
+                        aliasResolver,
+                        mergedAthleteHistory
+                      )
                     : null;
                 const { warningMessages, warningLabel } = buildRosterRowWarnings(
                   computeRosterRowIssueFlags(entryOver, athleteIssues)
