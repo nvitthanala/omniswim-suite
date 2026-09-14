@@ -6,7 +6,13 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { FileWarning } from 'lucide-react';
 import { Gender, ScoringSettings, Workspace } from '@omniswim/core/types';
-import { optimizeRosterForTeam, optimizeRosterAllTeams } from '@omniswim/core/lib/rosterOptimizer';
+import {
+  diffOptimizerChanges,
+  optimizeRosterForTeam,
+  optimizeRosterAllTeams,
+  type GuardedOptimizerResult,
+  type OptimizerChangeSummary,
+} from '@omniswim/core/lib/rosterOptimizer';
 import {
   buildArbitrageCardsResult,
   type ArbitrageCardsResult,
@@ -17,6 +23,7 @@ import {
 import { EmptyState, useToast } from '@omniswim/ui';
 import TeamPickerEmptyState from './TeamPickerEmptyState';
 import { ArbitragePreviewSection, OptimizerControls } from './RosterOptimizeStepParts';
+import OptimizerChangeSummaryPanel, { type OptimizerRunSummary } from './OptimizerChangeSummaryPanel';
 
 type Props = {
   workspace: Workspace;
@@ -132,11 +139,33 @@ export default function RosterOptimizeStep({
   // the cost explicit and keeps the step instant to open.
   const [preview, setPreview] = useState<ArbitrageCardsResult | null>(null);
   const [scanning, setScanning] = useState(false);
+  const [lastRunSummary, setLastRunSummary] = useState<OptimizerRunSummary | null>(null);
 
   // A stale scan is worse than none — it would describe a roster that no longer exists.
   useEffect(() => {
     setPreview(null);
   }, [workspace, gender, team, scoringSettings]);
+
+  // A summary from a previous team's run stays visible under the old team's
+  // controls otherwise — dismissible on its own is not enough once the coach
+  // has moved on to a different team.
+  useEffect(() => {
+    setLastRunSummary(null);
+  }, [team]);
+
+  /** `before` is the workspace state as it read immediately before this run —
+   *  the only state `diffOptimizerChanges` can honestly compare against. */
+  const recordRunSummary = (label: string, result: GuardedOptimizerResult) => {
+    const before = {
+      overrides: workspace.scorerRosterOverrides ?? [],
+      plans: workspace.meetEntryPlans ?? [],
+    };
+    const changes: OptimizerChangeSummary = diffOptimizerChanges(before, {
+      overrides: result.overrides,
+      plans: result.meetEntryPlans,
+    });
+    setLastRunSummary({ label, result, changes });
+  };
 
   const runScan = () => {
     if (!team) return;
@@ -166,6 +195,7 @@ export default function RosterOptimizeStep({
     // The cards describe the lineup that came back, so they are worth showing
     // whether or not that lineup was applied.
     setCards(result.cards);
+    recordRunSummary(team, result);
     // Same rule as applyLegacy below. This path is guarded too now: it refuses a
     // candidate that would lower the team total, and on a recruit-driven
     // workspace it does refuse. A "+0.0 pts" success toast over an untouched
@@ -192,6 +222,7 @@ export default function RosterOptimizeStep({
   const applyLegacy = () => {
     if (!whatIfMode || !team) return;
     const result = optimizeRosterForTeam(workspace, gender, team, removeSeniors, scoringSettings);
+    recordRunSummary(team, result);
     // "Found nothing better" is not success. The optimiser now refuses to apply a
     // result that would lower the team total — on a recruit-driven workspace the
     // unguarded run took 1277 points to 0 — so the toast must distinguish the two
@@ -218,6 +249,7 @@ export default function RosterOptimizeStep({
   const applyAll = () => {
     if (!whatIfMode) return;
     const result = optimizeRosterAllTeams(workspace, gender, removeSeniors, scoringSettings);
+    recordRunSummary('All teams', result);
     // Same rule as applyLegacy. The all-teams path guards on the aggregate, because
     // per-team gains can cancel once chained — measured +307 and +18 individually
     // netting to +16 across the meet.
@@ -275,6 +307,10 @@ export default function RosterOptimizeStep({
         <p className="text-ui-caption rounded-lg border border-theme-soft surface-muted-bg px-3 py-2 text-theme-secondary">
           Enable What-if to apply optimizer changes.
         </p>
+      ) : null}
+
+      {lastRunSummary ? (
+        <OptimizerChangeSummaryPanel summary={lastRunSummary} onDismiss={() => setLastRunSummary(null)} />
       ) : null}
 
       <ArbitragePreviewSection
