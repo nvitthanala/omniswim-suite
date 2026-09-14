@@ -15,7 +15,14 @@ import {
   softRemoveSwimmerFromWorkspace,
 } from '@omniswim/core/lib/swimmerSoftRemove';
 import { ScoringSettledContext, useWorkspaceScoring } from '@omniswim/core/lib/useWorkspaceScoring';
-import { exportEntriesCsv, exportEntriesHytek, type EntryExport } from '@omniswim/core/lib/entryExport';
+import {
+  exportEntriesCsv,
+  exportEntriesHytek,
+  selectActiveEntries,
+  validateEntriesForExport,
+  type EntryExport,
+  type EntryExportIssue,
+} from '@omniswim/core/lib/entryExport';
 import { rosterCatalogApi, type CatalogTeamRoster } from '@omniswim/core/api/rosterCatalog';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
 import { EmptyState, useToast } from '@omniswim/ui';
@@ -24,6 +31,7 @@ import SwimmerDeleteConfirmModal from './components/SwimmerDeleteConfirmModal';
 import RosterImportWizard from './components/RosterImportWizard';
 import RosterCatalogPanel from './components/RosterCatalogPanel';
 import BatchOptimizerPanel from './components/BatchOptimizerPanel';
+import ExportReviewModal from './components/ExportReviewModal';
 
 /** Human-readable breakdown for the "Modified copy" badge's title/aria-label, e.g. "2 recruits, 1 removal". */
 function workingCopyChangeSummary(counts: ReturnType<typeof countWorkingCopyChanges>): string {
@@ -67,6 +75,10 @@ export default function ManagerApp() {
   const [scoringRefreshKey, setScoringRefreshKey] = useState(0);
   const [showImportWizard, setShowImportWizard] = useState(false);
   const [showBatchOptimizer, setShowBatchOptimizer] = useState(false);
+  const [pendingExport, setPendingExport] = useState<{
+    kind: 'csv' | 'hytek';
+    issues: EntryExportIssue[];
+  } | null>(null);
   const [showCatalogView, setShowCatalogView] = useState(false);
   const [catalogInfo, setCatalogInfo] = useState<{ team?: string; gender?: Gender } | null>(null);
   const [catalogRoster, setCatalogRoster] = useState<CatalogTeamRoster | null>(null);
@@ -172,14 +184,26 @@ export default function ManagerApp() {
     void updateWorkspace(patch);
   };
 
-  const handleExport = (kind: 'csv' | 'hytek') => {
+  const runExport = (kind: 'csv' | 'hytek') => {
     const exp = kind === 'csv' ? exportEntriesCsv(activeWorkspace) : exportEntriesHytek(activeWorkspace);
-    if (exp.count === 0) {
+    downloadExport(exp);
+    toast.push('success', `Exported ${exp.count} entr${exp.count === 1 ? 'y' : 'ies'} → ${exp.filename}`);
+  };
+
+  const handleExport = (kind: 'csv' | 'hytek') => {
+    const entries = selectActiveEntries(activeWorkspace);
+    if (entries.length === 0) {
       toast.push('info', 'No active meet entries to export. Add entries in the planner first.');
       return;
     }
-    downloadExport(exp);
-    toast.push('success', `Exported ${exp.count} entr${exp.count === 1 ? 'y' : 'ies'} → ${exp.filename}`);
+    // A wrong gender letter or a blank required field would otherwise export
+    // as usable-looking output with no review step — see entryExport.ts.
+    const issues = validateEntriesForExport(entries);
+    if (issues.length > 0) {
+      setPendingExport({ kind, issues });
+      return;
+    }
+    runExport(kind);
   };
 
   const hideSwimmer = () => {
@@ -316,6 +340,16 @@ export default function ManagerApp() {
           />
         </motion.div>
       </AnimatePresence>
+      {pendingExport && (
+        <ExportReviewModal
+          issues={pendingExport.issues}
+          onCancel={() => setPendingExport(null)}
+          onExportAnyway={() => {
+            runExport(pendingExport.kind);
+            setPendingExport(null);
+          }}
+        />
+      )}
       {showImportWizard && (
         <RosterImportWizard
           workspace={activeWorkspace}
