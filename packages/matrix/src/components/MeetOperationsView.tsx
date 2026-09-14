@@ -11,11 +11,13 @@ import { Gender, Recruit, ScoringSettings, TeamScore, Workspace } from '@omniswi
 import { assignTeamLineStyles, isRelayResult } from '@omniswim/core/lib/utils';
 import { aggregateSwimmerMeetPoints, scorerRosterKey } from '@omniswim/core/lib/scorerRoster';
 import { buildTeamScoreLookup, officialScoresForGender } from '@omniswim/core/lib/teamScoreMatching';
+import { buildMeetReconciliationSummary } from '@omniswim/core/lib/meetReconciliation';
 import type { PrelimsDeltaTimelinePoint, PrelimsOverUnderEntry } from '@omniswim/core/lib/prelimsProjection';
 import { buildMeetMomentumChartDataFromLookup, buildPrelimsOverUnderByEntryKey } from '@omniswim/core/lib/prelimsProjection';
 import type { PsychOverUnderEntry } from '@omniswim/core/lib/psychProjection';
 import type { ScoringBundle } from '@omniswim/core/lib/useWorkspaceScoring';
 import TeamCard from './TeamCard';
+import MeetReconciliationBanner from './MeetReconciliationBanner';
 import ScoringSettingsPanel from './ScoringSettingsPanel';
 import MeetDiffTable from './MeetDiffTable';
 import PrelimsDiffTable from './PrelimsDiffTable';
@@ -212,6 +214,11 @@ export default function MeetOperationsView({
   const officialLookup = useMemo(() => {
     const teams = teamsWithLineStyles.map(t => t.teamName);
     return buildTeamScoreLookup(teams, officialScoresForGender(workspace.officialTeamScores, gender));
+  }, [teamsWithLineStyles, workspace.officialTeamScores, gender]);
+
+  const reconciliationSummary = useMemo(() => {
+    const computedTotals = new Map(teamsWithLineStyles.map(t => [t.teamName, t.totalPoints]));
+    return buildMeetReconciliationSummary(computedTotals, workspace.officialTeamScores, gender);
   }, [teamsWithLineStyles, workspace.officialTeamScores, gender]);
 
   const topContributors = useMemo(() => {
@@ -595,6 +602,7 @@ export default function MeetOperationsView({
 
         {activeStep === 'standings' ? (
         <>
+        <MeetReconciliationBanner summary={reconciliationSummary} />
         <div className="surface-card rounded-xl p-5">
           <div className="flex justify-between items-end mb-6">
             <div>
