@@ -91,6 +91,7 @@ const TESTS = [
   ['test_momentum_series.mjs'],
   ['test_psych_projection.mjs'],
   ['test_team_aliases.mjs'],
+  ['test_team_matching_ambiguity.mjs'],
   ['test_team_abbreviation_parity.mjs'],
   ['test_pdf_abbreviation_table_required.mjs'],
   ['test_scoring_settings_required.mjs'],

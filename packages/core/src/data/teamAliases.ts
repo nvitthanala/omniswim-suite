@@ -122,30 +122,50 @@ function findMeetTeamByAcronym(abbrev: string, meetTeams: string[]): string | un
   return undefined;
 }
 
+/**
+ * All teams in `meetTeams` a fuzzy tier considers a match, in list order.
+ * Called per tier so ambiguity is judged one tier at a time — a candidate
+ * that matches exactly one team at the containment tier is not made
+ * ambiguous by a *different*, looser tier also matching a second team.
+ */
+function tierMatches(meetTeams: string[], test: (kn: string) => boolean): string[] {
+  const hits: string[] = [];
+  for (const t of meetTeams) {
+    if (test(normalizeTeamKey(t))) hits.push(t);
+  }
+  return hits;
+}
+
 function findMeetTeamBySubstring(candidate: string, meetTeams: string[]): string | undefined {
   const norm = normalizeTeamKey(candidate);
   if (!norm || norm.length < 3) return undefined;
 
-  for (const t of meetTeams) {
-    if (normalizeTeamKey(t) === norm) return t;
-  }
+  const exact = tierMatches(meetTeams, kn => kn === norm);
+  if (exact.length >= 1) return exact[0]; // an exact normalized match is never ambiguous by construction
 
-  for (const t of meetTeams) {
-    const kn = normalizeTeamKey(t);
-    if (kn.length >= 3 && norm.length >= 3 && (kn.includes(norm) || norm.includes(kn))) {
-      return t;
-    }
-  }
+  // Containment tier: two similarly-named teams in the same meet field (e.g.
+  // "Ohio" and "Ohio State") can both legitimately contain one another's
+  // normalized key. Guessing which one a truncated label meant would
+  // silently misattribute a score to the wrong school — the exact failure
+  // this repo's provenance rules exist to prevent. Report "no confident
+  // match" instead of the first hit.
+  const contained = tierMatches(
+    meetTeams,
+    kn => kn.length >= 3 && norm.length >= 3 && (kn.includes(norm) || norm.includes(kn))
+  );
+  if (contained.length === 1) return contained[0];
+  if (contained.length > 1) return undefined;
 
-  // First significant token (e.g. "Henderson" → Henderson State University)
+  // First significant token (e.g. "Henderson" → Henderson State University).
+  // Same ambiguity discipline: only trust it when exactly one team qualifies.
   const firstToken = norm.replace(/university|college|state/g, '').slice(0, 12);
   if (firstToken.length >= 4) {
-    for (const t of meetTeams) {
-      const kn = normalizeTeamKey(t);
-      if (kn.startsWith(firstToken) || firstToken.startsWith(kn.slice(0, firstToken.length))) {
-        return t;
-      }
-    }
+    const byToken = tierMatches(
+      meetTeams,
+      kn => kn.startsWith(firstToken) || firstToken.startsWith(kn.slice(0, firstToken.length))
+    );
+    if (byToken.length === 1) return byToken[0];
+    if (byToken.length > 1) return undefined;
   }
 
   return undefined;
