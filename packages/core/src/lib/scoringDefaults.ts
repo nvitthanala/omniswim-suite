@@ -233,3 +233,59 @@ export function settingsFromPresetPayload(raw: Record<string, unknown>): Scoring
   const { id: _id, label: _label, description: _desc, ...rest } = raw;
   return mergeScoringSettings(rest as Partial<ScoringSettings>);
 }
+
+/**
+ * The scoring-settings patch a freshly parsed meet (PDF or SwimCloud) needs,
+ * if any. `undefined` means the workspace's existing settings already apply
+ * — the caller should leave `scoringSettings` out of its update patch rather
+ * than write back an unchanged value.
+ *
+ * Extracted 2026-09-08 from `OpsModule.tsx` (`packages/matrix`), which
+ * originally defined this privately and called it from both `handleFileUpload`
+ * (PDF path) and `handleSwimCloudImport` (SwimCloud path) — the same inputs,
+ * the same trust decision, one copy. It has zero React or UI dependency and
+ * zero SwimCloud-specific knowledge (`allParsed` is already plain
+ * `SwimmerResult[]` by the time this runs), so it belongs here, next to the
+ * `presetIdForConference`/`resultsHavePdfPlacePoints`/`NSISC_PRESET_SETTINGS`
+ * it composes — not in a component only the browser UI can import. This is
+ * what makes a non-UI caller (a script, a future server-side import route)
+ * able to reproduce the real "load a meet" write path exactly, instead of
+ * only being able to call the pure parse/convert steps and leave scoring
+ * unconfigured.
+ *
+ * Takes the workspace's current `ScoringSettings` directly rather than the
+ * whole `Workspace` — the only field this ever read — so this module never
+ * needs to import the `Workspace` type.
+ */
+export function buildScoringPatchForParsedPdf(
+  currentScoringSettings: ScoringSettings | undefined,
+  conference: string | undefined,
+  presetHint: string | null,
+  allParsed: SwimmerResult[]
+): ScoringSettings | undefined {
+  if (resultsHavePdfPlacePoints(allParsed)) {
+    return mergeScoringSettings(
+      {
+        ...currentScoringSettings,
+        usePdfPlacePoints: true,
+        scorerEligibilityMode: 'points_pool',
+        scorerAutoRules: undefined,
+        ...applyPdfPlacePointsNeutralCaps(
+          mergeScoringSettings(currentScoringSettings, { conference })
+        ),
+      },
+      { conference, resultsForPdfHint: allParsed }
+    );
+  }
+  if (presetHint === 'nsisc') {
+    return mergeScoringSettings(
+      {
+        ...currentScoringSettings,
+        ...NSISC_PRESET_SETTINGS,
+        scorerEligibilityMode: 'roster',
+      },
+      { conference }
+    );
+  }
+  return undefined;
+}
