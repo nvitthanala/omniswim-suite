@@ -43,7 +43,10 @@ import type {
   SwimCloudMeetResultsParse,
   SwimCloudParsedEvent,
   SwimCloudPersonalBest,
+  SwimCloudPersonalBestSwim,
   SwimCloudSwimmerProfileParse,
+  SwimCloudSwimmerTimesParse,
+  SwimCloudTeamMeetSwimsParse,
 } from '@omniswim/swimcloud/parser';
 
 export interface SwimCloudPersonalBestsToHistoricalSwimsOptions {
@@ -95,6 +98,14 @@ export type SwimCloudPersonalBestsConversionResult =
  * this app's alias-suggestion system, which matches on names — a synthetic
  * name is exactly the kind of thing that system exists to catch as a
  * near-duplicate of nothing.
+ *
+ * @deprecated Since 2026-09-09. Its source parser, `parseSwimmerProfileHtml`,
+ * is `Synthetic-fixture-only` and models a personal-bests table (bare event
+ * label plus a course *column*) that real captures prove SwimCloud does not
+ * serve. No longer called from `RosterImportWizard.tsx` — see
+ * {@link swimCloudSwimmerTimesToHistoricalSwims} below, which replaced it at
+ * that call site. Kept for one round, same convention as
+ * {@link swimCloudMeetResultsToHistoricalSwims}.
  */
 export function swimCloudPersonalBestsToHistoricalSwims(
   parse: SwimCloudSwimmerProfileParse,
@@ -202,6 +213,12 @@ export interface SwimCloudMeetResultsConversion {
  * missing-swimmer-name case — a meet has a name-per-row, not one name for
  * the whole capture) — everything that can't convert lands in `skipped`
  * with a specific reason instead.
+ *
+ * @deprecated Since 2026-09-08. Its source parser, `parseMeetResultsHtml`,
+ * targets a page shape proven not to exist on SwimCloud. No longer called
+ * from `RosterImportWizard.tsx` — see `swimCloudTeamMeetSwimsToHistoricalSwims`
+ * below, which replaced it at that call site. Kept for one round per
+ * `plans/2026-09-08/04-parsers-and-fixtures.md`'s "Retired" section.
  */
 export function swimCloudMeetResultsToHistoricalSwims(
   parse: SwimCloudMeetResultsParse,
@@ -268,4 +285,260 @@ export function swimCloudMeetResultsToHistoricalSwims(
   }
 
   return { swims, skipped };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Team meet-swims — bulk import against the page shape that actually exists  */
+/* -------------------------------------------------------------------------- */
+
+export interface SwimCloudTeamMeetSwimsToHistoricalSwimsOptions {
+  /** Checked against `parse.teamName`, trimmed and case-insensitive — a mismatch means the coach captured the wrong team's page. */
+  readonly team: string;
+  /** Checked against `parse.gender` — a mismatch means the coach captured the wrong gender's page. */
+  readonly gender: Gender;
+  /** Used when `parse.meetName` itself is absent. Never fabricated if this is also omitted. */
+  readonly meetLabelFallback?: string;
+}
+
+export interface SwimCloudTeamMeetSwimsConversion {
+  readonly swims: readonly HistoricalSwim[];
+  readonly skipped: readonly SwimCloudMeetResultSkip[];
+}
+
+/**
+ * Converts one team-swims-list capture — `parseTeamMeetSwimsHtml`,
+ * `real-capture-verified`, the page shape that actually exists on SwimCloud
+ * — into every importable individual swim for one team and one gender.
+ *
+ * Replaces `swimCloudMeetResultsToHistoricalSwims` at this app's one bulk
+ * meet-import call site (`RosterImportWizard.tsx`'s `handleClipboardMeetResults`,
+ * 2026-09-08). That converter's source parser, `parseMeetResultsHtml`,
+ * targets an `"Event {n} {Gender} {Distance} {Unit} {Stroke}"` heading shape
+ * a real capture proved does not exist on SwimCloud — see
+ * `packages/swimcloud/src/parser.ts`'s file header and
+ * `plans/2026-09-08/04-parsers-and-fixtures.md`'s "Retired" section. Kept
+ * (not deleted) alongside this one, per that section's step 2: still
+ * exercised by the synthetic fixtures, `@deprecated`, one round from removal.
+ *
+ * Unlike the old converter's source page, this one is already scoped to one
+ * team and one gender by the URL it was captured from
+ * (`/results/{meetId}/team/{teamId}/swims/?gender=`) — so there is no
+ * per-row team/gender filtering to do, only a page-level check that the
+ * capture actually matches what the coach selected before pasting (a wrong
+ * team or gender here means "captured the wrong page", not "some rows don't
+ * belong" — the whole page is one team, one gender, or it says `'unknown'`
+ * and nothing can be checked). What's left, per row: exclude relay-leadoff
+ * splits — `SwimCloudResultFlags.relayLeadoff`'s own doc comment explains
+ * why a leadoff is not an individual swim — and exclude a row with no time.
+ */
+export function swimCloudTeamMeetSwimsToHistoricalSwims(
+  parse: SwimCloudTeamMeetSwimsParse,
+  options: SwimCloudTeamMeetSwimsToHistoricalSwimsOptions,
+): SwimCloudTeamMeetSwimsConversion {
+  const swims: HistoricalSwim[] = [];
+  const skipped: SwimCloudMeetResultSkip[] = [];
+  const requestedTeam = options.team.trim().toLowerCase();
+  const meetLabel = parse.meetName ?? options.meetLabelFallback;
+
+  const genderMismatch = parse.gender !== 'unknown' && (parse.gender as string) !== (options.gender as string);
+  // Substring, not exact equality, in either direction — checked against a
+  // real capture (2026-09-08): SwimCloud prints the full institutional name
+  // ("Henderson State University"), not the short form a coach's own
+  // roster-plan workspace uses ("Henderson State"). An exact match here
+  // would make this option unusable for the realistic case; both directions
+  // are checked so either the short or the full name, typed either way,
+  // matches.
+  const printedTeam = parse.teamName?.trim().toLowerCase();
+  const teamMismatch =
+    printedTeam !== undefined && !printedTeam.includes(requestedTeam) && !requestedTeam.includes(printedTeam);
+
+  for (const swim of parse.swims) {
+    const eventLabel = swim.event.label;
+    const athleteName = swim.entry.athleteName;
+    const skip = (reason: SwimCloudMeetImportSkipReason) =>
+      skipped.push({ reason, eventLabel, ...(athleteName === undefined ? {} : { athleteName }) });
+
+    if (swim.relayLeadoff) {
+      skip('relay-event');
+      continue;
+    }
+    if (genderMismatch) {
+      skip('other-gender');
+      continue;
+    }
+    if (teamMismatch) {
+      skip('other-team');
+      continue;
+    }
+    if (swim.result.finalTime === undefined) {
+      skip('no-time');
+      continue;
+    }
+    if (athleteName === undefined) {
+      skipped.push({ reason: 'no-name', eventLabel });
+      continue;
+    }
+
+    swims.push({
+      name: athleteName,
+      team: options.team,
+      gender: options.gender,
+      event: eventLabel,
+      time: swim.result.finalTime,
+      ...(swim.event.course === 'unknown' ? {} : { timeType: swim.event.course }),
+      ...(meetLabel === undefined ? {} : { meetLabel }),
+      source: 'swimcloud',
+    });
+  }
+
+  return { swims, skipped };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Swimmer times — personal bests off the page shape that actually exists      */
+/* -------------------------------------------------------------------------- */
+
+export interface SwimCloudSwimmerTimesToHistoricalSwimsOptions {
+  /** The workspace team these swims are being imported under. Never read from the page — a bests table names meets, not the swimmer's own team. */
+  readonly team: string;
+  /** The workspace gender these swims are being imported under. Never inferred — see `parseSwimmerTimesHtml`'s note on why `#swimmer-info`'s one-letter `gender` code is not read. */
+  readonly gender: Gender;
+  /** Used for a row whose own `meetName` is absent. Never fabricated if this is also omitted. */
+  readonly meetLabelFallback?: string;
+}
+
+export type SwimCloudSwimmerTimesSkipReason =
+  /** The row's time cell wasn't a well-formed time; `HistoricalSwim.time` is required and this converter never invents one. */
+  | 'no-time'
+  /**
+   * The row is a relay leadoff split, flagged by the page's own `R` chip
+   * (`title="Leadoff"`).
+   *
+   * Named for what it is, rather than reusing the meet converters'
+   * `'relay-event'`: this table lists one row per event and never lists a relay
+   * as an event, so the only relay-shaped row it can produce is a leadoff. The
+   * reason string reaches a coach verbatim in the import warnings, and "relay
+   * leadoff" says which row was dropped where "relay event" would not.
+   *
+   * Detected from {@link SwimCloudPersonalBestSwim.relayLeadoff} — a real
+   * boolean the parser read from a real chip — not by string-matching a stroke
+   * name, which is what the deprecated
+   * {@link swimCloudPersonalBestsToHistoricalSwims} had to do against a table
+   * shape that does not exist.
+   */
+  | 'relay-leadoff';
+
+export interface SwimCloudSwimmerTimesSkippedRow {
+  readonly personalBest: SwimCloudPersonalBestSwim;
+  readonly reason: SwimCloudSwimmerTimesSkipReason;
+}
+
+export type SwimCloudSwimmerTimesConversionResult =
+  | {
+      readonly ok: true;
+      readonly swims: readonly HistoricalSwim[];
+      readonly skipped: readonly SwimCloudSwimmerTimesSkippedRow[];
+    }
+  | {
+      readonly ok: false;
+      readonly reason: 'missing-swimmer-name';
+      readonly message: string;
+    };
+
+/**
+ * Converts one `/swimmer/{id}/times/` capture — `parseSwimmerTimesHtml`,
+ * `real-capture-verified`, the page shape that actually exists on SwimCloud —
+ * into that swimmer's importable personal bests.
+ *
+ * Replaces {@link swimCloudPersonalBestsToHistoricalSwims} at this app's one
+ * per-swimmer import call site (`RosterImportWizard.tsx`, 2026-09-09). That
+ * converter's source parser, `parseSwimmerProfileHtml`, is
+ * `Synthetic-fixture-only` and reads a course *column* off a bare `/swimmer/{id}/`
+ * page. Real captures settled both halves of that: the base page carries a
+ * narrower "Latest Results" panel for one meet, not a bests list, and the real
+ * bests table (on `/times/`) publishes no course column at all — the course is
+ * a suffix of the printed event label. Kept (not deleted) alongside this one,
+ * same one-round convention as the `parseMeetResultsHtml` retirement
+ * (`plans/2026-09-08/WORKLOG-02-phase0b-retire-parseMeetResultsHtml-call-site.md`).
+ *
+ * ## Relay leadoffs are excluded, and the page says so itself
+ *
+ * The old converter had to infer "this is a relay leg" by string-matching a
+ * stroke name (`'Freestyle Relay'` / `'Medley Relay'`). This one reads
+ * {@link SwimCloudPersonalBestSwim.relayLeadoff}, which the parser sets from a
+ * chip whose tooltip literally reads `Leadoff` — a fact the page published,
+ * not a guess about a label. The real capture carries exactly one such row
+ * (50 Back SCY), so this branch is exercised by real data rather than by a
+ * synthetic case.
+ *
+ * ## `name` is used verbatim, in the order the page prints it
+ *
+ * `parse.name` is `'Paulk, River J'` — family name first, from `#swimmer-info`
+ * — and this converter passes it through unchanged, exactly as
+ * {@link swimCloudPersonalBestsToHistoricalSwims} passes its own parser's name
+ * through unchanged. Reordering it here would mean deciding by heuristic which
+ * token is the family name, which is the guess `parseSwimmerTimesHtml`'s "One
+ * name, one source" note refuses to make, and this converter is not the place
+ * to overrule it.
+ *
+ * **Known consequence, stated plainly:** the other converter in this file,
+ * {@link swimCloudTeamMeetSwimsToHistoricalSwims}, takes its name from a meet
+ * results row, which prints display order (`'Colin Candebat'`). So the two
+ * SwimCloud-sourced converters here now emit **different name orders**, and the
+ * same swimmer imported through both paths produces two rows whose
+ * `normalizeSwimmerName` keys differ — `historyImportRoster.ts` keys on that,
+ * not on `canonicalSwimmerName`, so the merge does not fold them on its own.
+ * This app's alias system is what closes the gap: `athleteAliases.ts` keys on
+ * `canonicalSwimmerName`, which folds `"Last, First"` into `"first last"`, so
+ * `suggestAliasCandidates` surfaces the pair for a coach to link. That is the
+ * designed answer to two sources spelling one swimmer two ways, and it is a
+ * suggestion a human confirms — not a silent rename either converter performs.
+ */
+export function swimCloudSwimmerTimesToHistoricalSwims(
+  parse: SwimCloudSwimmerTimesParse,
+  options: SwimCloudSwimmerTimesToHistoricalSwimsOptions,
+): SwimCloudSwimmerTimesConversionResult {
+  if (parse.name === undefined || parse.name.trim().length === 0) {
+    return {
+      ok: false,
+      reason: 'missing-swimmer-name',
+      message:
+        "The captured SwimCloud page has no swimmer name (parseSwimmerTimesHtml found no readable #swimmer-info block). Refusing to import under a placeholder name.",
+    };
+  }
+
+  const swims: HistoricalSwim[] = [];
+  const skipped: SwimCloudSwimmerTimesSkippedRow[] = [];
+
+  for (const personalBest of parse.personalBests) {
+    if (personalBest.relayLeadoff) {
+      skipped.push({ personalBest, reason: 'relay-leadoff' });
+      continue;
+    }
+    if (personalBest.time === undefined) {
+      skipped.push({ personalBest, reason: 'no-time' });
+      continue;
+    }
+
+    const meetLabel = personalBest.meetName ?? options.meetLabelFallback;
+
+    swims.push({
+      name: parse.name,
+      team: options.team,
+      gender: options.gender,
+      // Carries the course as a suffix (`'50 Free SCY'`) because this page
+      // publishes no course column — see SwimCloudPersonalBestSwim.eventLabel.
+      event: personalBest.eventLabel,
+      time: personalBest.time,
+      ...(personalBest.course === 'unknown' ? {} : { timeType: personalBest.course }),
+      // Verbatim, e.g. `'Mar 1, 2025'`. Never reformatted or reparsed — see
+      // SwimCloudPersonalBestSwim.date on why this string is a per-swim date in
+      // the page's own format and not something to normalize on the way past.
+      ...(personalBest.date === undefined ? {} : { date: personalBest.date }),
+      ...(meetLabel === undefined ? {} : { meetLabel }),
+      source: 'swimcloud',
+    });
+  }
+
+  return { ok: true, swims, skipped };
 }

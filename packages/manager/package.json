@@ -5,6 +5,8 @@
   "type": "module",
   "exports": {
     ".": "./src/ManagerApp.tsx",
+    "./components/RosterImportWizard": "./src/components/RosterImportWizard.tsx",
+    "./lib/rosterQueueImport": "./src/lib/rosterQueueImport.ts",
     "./lib/swimCloudImportBridge": "./src/lib/swimCloudImportBridge.ts"
   },
   "scripts": {
