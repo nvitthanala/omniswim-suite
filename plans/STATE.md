@@ -51,6 +51,54 @@ track (Playwright fetch-on-paste) side by side — see
 Baseline: lint clean (7 packages), `npm test` **61 passed / 0 failed / 3 skipped**,
 `npm run build` exit 0.
 
+**2026-09-08 — full-capture round planned, not yet built.** The single-page
+clipboard import doesn't scale (a full meet is dozens of manual captures),
+and the one path that routed a meet capture through a single paste
+(`parseMeetResultsHtml`, in Manager's roster wizard) targets a page shape
+proven not to exist on SwimCloud. Plan at
+[`plans/2026-09-08/`](2026-09-08/README.md): the extension auto-fetches a
+whole meet or team after one click (amends Track A to "Track A′" — see
+`2026-09-06/01-legal-and-access-strategy.md` §4), captures land in a new
+machine-global local store (amends the open transport question in
+`2026-09-06/03-architecture.md` §5, clipboard → localhost route), and
+Matrix gets a picker reading that store.
+
+**Update 2026-09-08, same day:** OQ-1 and its follow-up OQ-1b are both
+resolved (real captures of a 13-team meet proved the meet-root Teams card
+truncates, and that its "More" link's target, `topteams`, lists every team
+including zero-scoring ones). **Phase 1 is done** — `packages/swimcloud`'s
+capture store, crawl planner, and the two new meet-team parsers are built,
+verified (lint clean across all 8 workspaces, 363/363 tests, production
+build succeeds), and reported in
+`plans/2026-09-08/WORKLOG-01-phase1-capture-store-and-parsers.md`. Built
+directly (no subagent) against a 26%-of-5-hour quota budget, deliberately
+scoped to one package so a forced stop would never leave it half-broken.
+Uncommitted — diffs only, per the standing no-git-ops rule. Phase 2
+(`apps/shell/server.ts` capture routes) is next and unblocked. State
+tracked at `docs/reference/SWIMCLOUD_CAPTURE_STATE.json`.
+
+**Update 2026-09-09/10 — the whole pipeline built, then real-world tested,
+then a UI plan.** Phases 2 through 4c all landed: capture routes, the
+Manifest V3 auto-fetch crawler (roster + swimmer-times passes, bounded
+concurrency for the swimmer-times leaf pages specifically), a server-side
+`/parse` extension surfacing rosters and swimmer times alongside meet
+results, and a genuine new capability in Manager — importing a whole
+roster's event history from one completed capture in one action instead of
+one clipboard paste per swimmer. An adversarial review along the way found
+and fixed a real Manifest V3 message-hang bug and a capture-store race.
+Then the user hand-tested a real 234-page crawl and hit a real friction bug
+— every page silently falling back to 234 separate `chrome.downloads`
+calls with zero warning — root-caused and fixed (batched into one file,
+plus a pre-flight pairing check) in
+[`plans/2026-09-09/WORKLOG-13-friction-fix-download-batching.md`](2026-09-09/WORKLOG-13-friction-fix-download-batching.md).
+The user then asked for a full UI-redesign plan given "the ui looks very
+complex/cluttered" — not yet built, plan only, at
+[`plans/2026-09-09/01-UI-REDESIGN-PLAN.md`](2026-09-09/01-UI-REDESIGN-PLAN.md).
+Full phase history in `docs/reference/SWIMCLOUD_CAPTURE_STATE.json`; also
+now mirrored in the Obsidian vault
+(`Documents/Obsidian Vault/omniswim-suite/Sessions/oyster-2026-09-09-74cdc90a.md`).
+Still uncommitted — on the order of 60+ files, diffs only.
+
 ---
 
 ## Do this next
