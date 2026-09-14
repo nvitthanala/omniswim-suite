@@ -80,12 +80,34 @@
         "exported surface (rankRelayLegSwaps, applyRelayLegSwap, 3 types) diffed by name against HEAD: unchanged",
         "spot mutation: removed the onRelay-membership guard in isEligibleLegCandidate, confirmed the suite fails loudly (4 !== 1), reverted, confirmed passing again"
       ]
+    },
+    {
+      "name": "rankExactSwaps",
+      "file": "packages/core/src/lib/arbitrage/exactSwaps.ts",
+      "status": "verified-committed",
+      "rawCC": 26,
+      "postCC": {
+        "rankExactSwaps": 16,
+        "evaluateSwapCandidate": 9,
+        "tagConversionConfidence": 6
+      },
+      "verifiedBy": [
+        "scripts/test_cross_course_arbitrage.mjs (15 groups, incl. fast===full equivalence on synthetic + real NSISC workspace data): byte-identical before/after modulo millisecond timing",
+        "npm run lint --workspace=@omniswim/core: clean",
+        "node scripts/run-tests.mjs: 81 passed / 0 failed / 1 skipped, unchanged",
+        "npm run build -w @omniswim/shell: succeeds",
+        "exported surface (rankExactSwaps, applyExactSwap, ExactSwap, SwapRanking) unchanged",
+        "spot mutation: removed the deltaPoints <= 0 filter in the extracted evaluateSwapCandidate -- suite did NOT catch it on the first pass (candidatesEvaluated/swaps.length both compare the same unfiltered universe either way), so a real pre-existing test gap was found and closed with a new blanket deltaPoints > 0 assertion across full.swaps/fast.swaps in test group 13 before re-mutating to confirm the new assertion fails loudly, then reverting to confirm passing again"
+      ],
+      "findings": [
+        "tagConversionConfidence (the extracted confidence-tagging function) has ZERO test coverage in test_cross_course_arbitrage.mjs -- confirmed real and active via a one-off manual check against the real NSISC workspace (43 converted-time swaps, 31 tagged), not fixed here: pre-existing gap, unrelated to this extraction (the function's logic did not change), reported per this sweep's own \"report, don't fix, outside scope\" discipline rather than expanding scope under time pressure."
+      ]
     }
   ],
-  "nextTarget": null,
+  "nextTarget": "rankAddOnly / rankDropOnly, or one of the other remainingCandidates -- not yet decided",
   "blockers": [],
   "remainingCandidates": [
-    "rankExactSwaps / rankAddOnly / rankDropOnly (packages/core/src/lib/arbitrage/exactSwaps.ts, dropAdd.ts)",
+    "rankAddOnly / rankDropOnly (packages/core/src/lib/arbitrage/dropAdd.ts) - measured 2026-09-14 at roughly CC 12-14 each (moderate, not yet refactored); rankExactSwaps in the sibling file was done first as the highest-complexity target",
     "buildFastSwapContext / collectDroppableEntries (packages/core/src/lib/arbitrage/shared.ts) - excluded earlier this session as fresh/fragile, needs reconsideration before touching",
     "validateRaceTags (packages/core/src/lib/raceAnalysis/tagStateMachine.ts)",
     "buildPrelimsDeltaTimeline (packages/core/src/lib/prelimsProjection.ts)",

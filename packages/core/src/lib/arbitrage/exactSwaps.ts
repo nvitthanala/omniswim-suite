@@ -119,6 +119,89 @@ function buildSwapWorkspace(
   };
 }
 
+/** One athlete's SCY-converted best time for a candidate add-event, as `bestIndex` stores it. */
+type BestEntryForEvent = { time: string; stale?: boolean; converted?: boolean };
+
+/**
+ * Compute one (athlete, addEvent, drop) candidate's exact swap, or `null`
+ * when it does not beat the baseline. Extracted from {@link rankExactSwaps}'s
+ * innermost loop body — same logic, same field-by-field construction, no
+ * behavior change — so the triple-nested enumeration in the caller reads as
+ * "for each candidate, evaluate it" instead of carrying the full newTotal/
+ * deltaPoints/object-literal machinery inline three loops deep.
+ */
+function evaluateSwapCandidate(opts: {
+  workspace: Workspace;
+  team: string;
+  gender: Gender;
+  merged: ScoringSettings;
+  field: 'menResults' | 'womenResults';
+  fastCtx: ReturnType<typeof buildFastSwapContext> | null;
+  baseTotal: number;
+  baseTotalRounded: number;
+  addEvent: string;
+  best: BestEntryForEvent;
+  drop: DroppableEntry;
+}): ExactSwap | null {
+  const { workspace, team, gender, merged, field, fastCtx, baseTotal, baseTotalRounded, addEvent, best, drop } =
+    opts;
+
+  // The added entry is the same across drop sources (best-per-event pool).
+  const newEntry = createPlannedEntry({
+    name: drop.name,
+    team,
+    gender,
+    classYear: drop.classYear,
+    event: addEvent,
+    time: best.time,
+    timeType: 'SCY',
+    source: 'optimizer',
+    active: true,
+  });
+
+  // Incremental fast scorer when available/safe; otherwise a full re-score
+  // of the delete-credited-swim + add-plan simulation.
+  let newTotal = fastCtx ? fastCtx.newTotalFor(drop, newEntry, addEvent) : null;
+  if (newTotal == null) {
+    const modWs = buildSwapWorkspace(workspace, drop, newEntry, field);
+    newTotal = teamTotal(modWs, gender, team, merged);
+  }
+  const deltaPoints = Number((newTotal - baseTotal).toFixed(3));
+  if (deltaPoints <= 0) return null;
+
+  return {
+    athlete: drop.name,
+    addEvent,
+    addTime: best.time,
+    addTimeStale: best.stale ? true : undefined,
+    dropEvent: drop.event,
+    dropEntryId: drop.id,
+    dropResultId: drop.source === 'result' ? drop.id : undefined,
+    dropRecruitId: drop.source === 'recruit' ? drop.id : undefined,
+    dropSource: drop.source,
+    dropTime: drop.time,
+    addTimeConverted: best.converted ? true : undefined,
+    deltaPoints,
+    newTotal: Number(newTotal.toFixed(3)),
+    baseTotal: baseTotalRounded,
+  };
+}
+
+/**
+ * Conversion confidence bands: additive tagging only, run AFTER ranking so
+ * sort and filter behavior stay byte-identical to before this was its own
+ * function. Mutates `swaps` in place (same as the inline loop it replaces).
+ */
+function tagConversionConfidence(swaps: ExactSwap[], workspace: Workspace, gender: Gender): void {
+  let timeIndex: Map<string, EventTimeRef[]> | null = null;
+  for (const s of swaps) {
+    if (!s.addTimeConverted) continue;
+    if (!timeIndex) timeIndex = buildEventTimeIndex(workspace, gender);
+    const conf = conversionConfidence(timeIndex, s.addEvent, s.athlete, convertTimeToSeconds(s.addTime));
+    if (conf) s.confidence = conf;
+  }
+}
+
 /**
  * Exact team-points delta of each 1-for-1 swap: add a candidate program event
  * (using the athlete's SCY-converted best) in place of one of the athlete's
@@ -199,46 +282,22 @@ export function rankExactSwaps(
         if (addEvent === drop.event) continue; // never swap an event for itself
         candidatesEvaluated += 1;
 
-        // The added entry is the same across drop sources (best-per-event pool).
-        const newEntry = createPlannedEntry({
-          name: drop.name,
+        const swap = evaluateSwapCandidate({
+          workspace,
           team,
           gender,
-          classYear: drop.classYear,
-          event: addEvent,
-          time: best.time,
-          timeType: 'SCY',
-          source: 'optimizer',
-          active: true,
+          merged,
+          field,
+          fastCtx,
+          baseTotal,
+          baseTotalRounded,
+          addEvent,
+          best,
+          drop,
         });
-
-        // Incremental fast scorer when available/safe; otherwise a full
-        // re-score of the delete-credited-swim + add-plan simulation.
-        let newTotal = fastCtx ? fastCtx.newTotalFor(drop, newEntry, addEvent) : null;
-        if (newTotal == null) {
-          const modWs = buildSwapWorkspace(workspace, drop, newEntry, field);
-          newTotal = teamTotal(modWs, gender, team, merged);
-        }
-        const deltaPoints = Number((newTotal - baseTotal).toFixed(3));
-        if (deltaPoints <= 0) continue;
+        if (!swap) continue;
 
         const dedupKey = `${athleteKey}|${addEvent}|${drop.event}`;
-        const swap: ExactSwap = {
-          athlete: drop.name,
-          addEvent,
-          addTime: best.time,
-          addTimeStale: best.stale ? true : undefined,
-          dropEvent: drop.event,
-          dropEntryId: drop.id,
-          dropResultId: drop.source === 'result' ? drop.id : undefined,
-          dropRecruitId: drop.source === 'recruit' ? drop.id : undefined,
-          dropSource: drop.source,
-          dropTime: drop.time,
-          addTimeConverted: best.converted ? true : undefined,
-          deltaPoints,
-          newTotal: Number(newTotal.toFixed(3)),
-          baseTotal: baseTotalRounded,
-        };
         const prior = bestByKey.get(dedupKey);
         if (!prior || swap.deltaPoints > prior.deltaPoints) bestByKey.set(dedupKey, swap);
       }
@@ -246,21 +305,7 @@ export function rankExactSwaps(
   }
 
   const swaps = [...bestByKey.values()].sort((a, b) => b.deltaPoints - a.deltaPoints);
-
-  // Conversion confidence bands: additive tagging only, AFTER ranking, so sort
-  // and filter behavior are byte-identical to before.
-  let timeIndex: Map<string, EventTimeRef[]> | null = null;
-  for (const s of swaps) {
-    if (!s.addTimeConverted) continue;
-    if (!timeIndex) timeIndex = buildEventTimeIndex(workspace, gender);
-    const conf = conversionConfidence(
-      timeIndex,
-      s.addEvent,
-      s.athlete,
-      convertTimeToSeconds(s.addTime)
-    );
-    if (conf) s.confidence = conf;
-  }
+  tagConversionConfidence(swaps, workspace, gender);
 
   return { pointsMeaningful: true, swaps, candidatesEvaluated };
 }

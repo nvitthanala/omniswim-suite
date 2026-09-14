@@ -498,6 +498,19 @@ function baseWorkspace(overrides = {}) {
     assert.ok(full.candidatesEvaluated >= 40, 'realistic workspace enumerates many candidates');
     assert.equal(fast.candidatesEvaluated, full.candidatesEvaluated, 'same candidate count');
     assert.equal(fast.swaps.length, full.swaps.length, 'same surfaced swap count');
+    // "Beneficial swaps only" is documented on rankExactSwaps itself but was
+    // never actually asserted across the whole array — found 2026-09-14 via
+    // a deliberate mutation (removing the deltaPoints <= 0 filter) that this
+    // test suite did not catch: candidatesEvaluated and swaps.length both
+    // still matched between full/fast (both count the SAME unfiltered
+    // universe either way), so the filter's absence was invisible to every
+    // existing assertion. This closes that gap.
+    for (const s of full.swaps) {
+      assert.ok(s.deltaPoints > 0, `full.swaps entry ${s.athlete}/${s.addEvent} is beneficial (deltaPoints > 0)`);
+    }
+    for (const s of fast.swaps) {
+      assert.ok(s.deltaPoints > 0, `fast.swaps entry ${s.athlete}/${s.addEvent} is beneficial (deltaPoints > 0)`);
+    }
 
     // Compare at least 40 evenly-sampled surfaced swaps (all of them here) fast === full.
     const key = s => `${s.athlete}|${s.addEvent}|${s.dropEvent}|${s.dropSource}`;
