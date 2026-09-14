@@ -31,7 +31,7 @@ import {
   type AliasSuggestion,
 } from '@omniswim/core/lib/athleteAliases';
 import type { AthleteAliasLink, Gender, Workspace } from '@omniswim/core/types';
-import { useToast } from '@omniswim/ui';
+import { Badge, useToast } from '@omniswim/ui';
 
 type Props = {
   workspace: Workspace;
@@ -49,10 +49,14 @@ const TIER_LABEL: Record<string, string> = {
   moderate: 'Likely',
 };
 
-const TIER_CLASS: Record<string, string> = {
-  conclusive: 'border-emerald-400/30 bg-emerald-400/10 text-emerald-300',
-  strong: 'border-[var(--text-accent)]/30 bg-[var(--text-accent)]/10 text-[var(--text-accent)]',
-  moderate: 'badge-warning',
+// These three combinations are exactly Badge's success/accent/warning tones
+// (same colors, same classes) under different tier names -- converged onto
+// Badge directly below instead of keeping a second, hand-rolled copy of its
+// tone system.
+const TIER_TONE: Record<string, 'success' | 'accent' | 'warning'> = {
+  conclusive: 'success',
+  strong: 'accent',
+  moderate: 'warning',
 };
 
 function sameTeam(a?: string, b?: string): boolean {
@@ -190,13 +194,12 @@ export default function DuplicateAthletesPanel({
                     <div className="min-w-0">
                       <Pair alias={d.aliasName} canonical={d.canonicalName} />
                       <p className="text-ui-caption text-theme-muted truncate">
-                        <span
-                          className={`mr-1.5 inline-block rounded-sm border px-1 text-ui-micro uppercase ${
-                            TIER_CLASS[d.tier] ?? ''
-                          }`}
+                        <Badge
+                          tone={TIER_TONE[d.tier] ?? 'neutral'}
+                          className="mr-1.5 rounded-sm px-1 py-0 font-normal tracking-normal"
                         >
                           {TIER_LABEL[d.tier] ?? d.tier}
-                        </span>
+                        </Badge>
                         {d.reason}
                         {d.timeMatches.length > 0 && (
                           <span className="text-theme-muted/70">

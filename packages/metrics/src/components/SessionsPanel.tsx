@@ -1,5 +1,6 @@
 import React from 'react';
 import { Trash2, X } from 'lucide-react';
+import { Badge } from '@omniswim/ui';
 import type { SessionSummary } from '../lib/sessionStore';
 
 interface SessionsPanelProps {
@@ -51,9 +52,9 @@ function SessionRow({
       <button type="button" onClick={() => onLoad(session.id)} className="flex-1 text-left hover:text-[var(--text-accent)]">
         <span className="font-bold">{session.label}</span>
         {session.legacy ? (
-          <span className="ml-2 px-1.5 py-0.5 rounded text-ui-micro uppercase tracking-widest bg-[var(--surface-muted)] text-theme-muted">
+          <Badge tone="neutral" className="ml-2 rounded border-0 px-1.5 py-0.5 font-normal text-theme-muted">
             Legacy
-          </span>
+          </Badge>
         ) : null}
         <span className="text-theme-muted ml-2">{session.updatedAt ? new Date(session.updatedAt).toLocaleString() : ''}</span>
       </button>

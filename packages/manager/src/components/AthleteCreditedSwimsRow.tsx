@@ -15,7 +15,7 @@ import { formatLegSplitSummary } from '@omniswim/core/lib/relaySplits';
 import { compactEventTitleAttr, formatCompactEventLabel } from '@omniswim/core/lib/utils';
 import { ALL_PLAN_EVENTS } from '@omniswim/core/lib/eventCatalog';
 import { buildCutlineTagForTeam } from '@omniswim/core/lib/cutlineTags';
-import { CutlineTag, CutlineNearMissChip } from '@omniswim/ui';
+import { Badge, CutlineTag, CutlineNearMissChip } from '@omniswim/ui';
 import type { EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
 
 type AnchorExpected = { prelims?: number; psych?: number };
@@ -284,13 +284,12 @@ export default function AthleteCreditedSwimsRow({
         {swim.rank > 0 ? swim.rank : '—'}
       </td>
       <td className="py-1.5 px-2 text-center">
-        <span
-          className={`text-ui-micro uppercase tracking-wide px-1.5 py-0.5 rounded-full ${
-            swim.kind === 'relay' ? 'badge-warning' : 'badge-info'
-          }`}
+        <Badge
+          tone={swim.kind === 'relay' ? 'warning' : 'info'}
+          className="px-1.5 py-0.5 font-normal tracking-wide"
         >
           {swim.kind === 'relay' ? 'Relay' : 'Ind'}
-        </span>
+        </Badge>
       </td>
       <td
         className={`py-1.5 px-2 text-right font-mono tabular-nums font-medium ${

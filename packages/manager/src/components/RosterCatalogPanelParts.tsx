@@ -8,7 +8,13 @@
 import React from 'react';
 import { Plus, Trash2, ClipboardPaste, FileJson } from 'lucide-react';
 import type { CatalogTeam, CatalogTeamRoster } from '@omniswim/core/lib/rosterCatalog';
+import { Badge } from '@omniswim/ui';
 import AthleteRosterRow from './AthleteRosterRow';
+
+// Same override as AthleteRosterRow's identical class-year pill: Badge's own
+// default is an uppercase, bold, rounded-full, text-ui-micro pill; these two
+// badges are a smaller, sharp-cornered, non-uppercase chip.
+const SIZE_OVERRIDE = 'rounded px-2 py-0.5 text-[10px] font-normal normal-case tracking-normal';
 
 type ImportMode = 'none' | 'paste' | 'json';
 
@@ -210,9 +216,13 @@ function AthletePaneHeader({
     <header className="px-5 py-3 border-b border-theme-soft">
       <div className="flex flex-wrap items-center gap-3 mb-2">
         <h4 className="text-ui-body font-bold text-[var(--text-primary)]">{roster.team.name}</h4>
-        <span className="badge-info px-2 py-0.5 rounded text-[10px]">{roster.team.gender}</span>
+        <Badge tone="info" className={SIZE_OVERRIDE}>
+          {roster.team.gender}
+        </Badge>
         {roster.team.division ? (
-          <span className="badge-warning px-2 py-0.5 rounded text-[10px]">{roster.team.division}</span>
+          <Badge tone="warning" className={SIZE_OVERRIDE}>
+            {roster.team.division}
+          </Badge>
         ) : null}
         <span className="text-ui-caption text-theme-muted">
           {roster.athletes.length} athletes · {roster.athletes.reduce((s, a) => s + a.times.length, 0)} events
