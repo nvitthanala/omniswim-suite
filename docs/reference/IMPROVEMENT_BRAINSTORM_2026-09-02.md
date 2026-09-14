@@ -94,12 +94,23 @@ source at two of the higher-stakes claims, both confirmed accurate.
     item was originally named after — is now closed:
     `buildMeetReconciliationSummary` + a new `MeetReconciliationBanner` on
     Matrix's Standings step.
-13. **Seven specific weak/pushover test scripts**, named directly from
-    `docs/reference/TEST_COVERAGE_AUDIT.md`: `test_relay_scoring` (zero
-    assertions), `test_individual_scoring` (loose ratio), `test_roster_optimizer`
-    (passes on NaN/loss), `test_conference_pdfs` (continues past errors),
-    `test_chart_data` (vacuous), `test_relay_overrides` (an invisible mid-file
-    skip), `test_athlete_history` (loose half against live data). *Medium.*
+13. **FIXED 2026-09-14 — all seven, named directly from
+    `docs/reference/TEST_COVERAGE_AUDIT.md`.** `test_relay_scoring` (was zero
+    assertions — added real invariants: 4-leg relay groups, identical
+    per-leg points, exact pins against the real NSISC data). `test_individual_scoring`
+    (was a loose ratio — replaced with the actual directional invariant plus
+    exact pins). `test_roster_optimizer` (was `Array.isArray` +
+    `typeof === 'number'`, both true for `{overrides: [], projectedTotal: NaN}`
+    — now asserts finite, non-losing, and exact-pinned). `test_conference_pdfs`
+    (continued past PARSE FAIL/SCORE FAIL with no effect on exit code — now
+    tracks real failures and exits 1, while a checkout with none of the four
+    external PDFs present still exits 0 as a legitimate skip).
+    `test_chart_data` (the `if (!hasData) continue` vacuous-pass gap closed
+    with a `checkedCount > 0` assertion). `test_relay_overrides` (the
+    invisible mid-file autofill/double-book skip is now named in the final
+    summary line). `test_athlete_history` (the loose `history[0]` positional
+    check — measured to land on an athlete with zero qualifying swims —
+    replaced with exact pins and a real, known athlete's profile).
 14. **FIXED 2026-09-14.** ~~Two tests are permanently skipped~~
     (`test_individual_scoring.mjs`, `test_relay_scoring.mjs`) for want of a
     committed `tests/test_nsisc_output.json` fixture. Derived that fixture

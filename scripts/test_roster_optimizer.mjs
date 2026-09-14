@@ -11,8 +11,24 @@ const settings = mergeScoringSettings(ws.scoringSettings, { conference: 'NSISC' 
 const team = 'Ouachita Baptist University';
 const result = optimizeRosterForTeam(ws, Gender.MEN, team, false, settings, 'scorers');
 
+// Was: Array.isArray(result.overrides) + typeof result.projectedTotal ===
+// 'number' — both pass for { overrides: [], projectedTotal: NaN }, since
+// NaN's typeof IS 'number' (docs/reference/TEST_COVERAGE_AUDIT.md,
+// "Pushover"). Hardened 2026-09-14 with real, finite, non-losing, exact-pinned
+// assertions against this real committed workspace.
 assert.ok(Array.isArray(result.overrides), 'overrides array');
-assert.equal(typeof result.projectedTotal, 'number', 'projected total');
+assert.ok(Number.isFinite(result.projectedTotal), 'projected total is a real finite number, not NaN');
+assert.ok(Number.isFinite(result.previousTotal), 'previous total is a real finite number, not NaN');
+assert.ok(
+  result.projectedTotal >= result.previousTotal - 1e-6,
+  `the optimizer must never return a total (${result.projectedTotal}) below the one it started from (${result.previousTotal})`
+);
+assert.equal(result.outcome, 'improved', 'this real roster has real headroom for the scorers stage to find');
+// Exact pins against this real, committed workspace — a regression here
+// means a real scoring number moved, not a plausible reshuffling.
+assert.equal(result.previousTotal.toFixed(1), '913.0', 'previous total pinned to the committed NSISC data');
+assert.equal(result.projectedTotal.toFixed(1), '930.0', 'projected total pinned to the committed NSISC data');
+assert.equal(result.overrides.length, 38, 'override count pinned to the committed NSISC data');
 console.log(
   'optimizer',
   team,

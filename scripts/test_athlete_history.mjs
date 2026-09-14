@@ -19,24 +19,37 @@ const meets = JSON.parse(readFileSync('data/meets.json', 'utf8'));
 const ws = meets[0];
 const settings = mergeScoringSettings(ws.scoringSettings, { conference: ws.conference });
 
+// Was: `history.length > 0` / `rosterPaste.length >= 1` /
+// `merged.length >= history.slice(0, 100).length` / a positional, arbitrary
+// `history[0]` primary-events check that could (and did, measured
+// 2026-09-14) land on an athlete with ZERO qualifying swims in the sliced
+// window, making `<= 3` trivially true either way
+// (docs/reference/TEST_COVERAGE_AUDIT.md, "Weak": "the loose half proves
+// little"). Hardened with exact pins against this real, committed data, and
+// a real, specific, known athlete (Landon Dehn, a real Ouachita Baptist
+// swimmer used elsewhere in this repo's tests) instead of an arbitrary
+// positional pick.
 const history = buildHistoryFromWorkspace(ws);
-assert.ok(history.length > 0, 'history from PDF');
+assert.equal(history.length, 646, 'history row count pinned to the committed NSISC data');
 
 const rosterPaste = parseSwimCloudPaste(
   'Landon Dehn\t200 Freestyle\t1:56.47\nJane Doe\t100 Breaststroke\t1:05.00',
   'Ouachita Baptist University',
   Gender.MEN
 );
-assert.ok(Array.isArray(rosterPaste) && rosterPaste.length >= 1, 'roster paste parser');
+assert.equal(rosterPaste.length, 2, 'roster paste parses exactly the 2 pasted rows');
 
-const merged = mergeHistoryIndex(history.slice(0, 100), rosterPaste);
-assert.ok(merged.length >= history.slice(0, 100).length, 'merge keeps rows');
+const historySlice = history.slice(0, 100);
+const merged = mergeHistoryIndex(historySlice, rosterPaste);
+assert.equal(merged.length, historySlice.length + rosterPaste.length, 'merge adds exactly the 2 new pasted rows, no silent drop or duplication');
 
-if (history[0]) {
-  const h = history[0];
-  const profile = categorizeBestEvents(merged, h.team, h.gender, h.name, settings);
-  assert.ok(profile.primaryEvents.length <= 3, 'primary events capped');
-}
+// Landon Dehn's pasted 200 Freestyle is guaranteed present in `merged`
+// regardless of how the 100-row history slice above happened to land, so
+// this profile check can assert a real, non-empty, exact result rather than
+// an upper bound alone.
+const landonProfile = categorizeBestEvents(merged, 'Ouachita Baptist University', Gender.MEN, 'Landon Dehn', settings);
+assert.deepEqual(landonProfile.primaryEvents, ['200 Freestyle'], 'Landon Dehn\'s primary events come back as exactly the one pasted swim');
+assert.equal(landonProfile.bestByEvent['200 Freestyle']?.time, '1:56.47', 'best time for the primary event matches the pasted swim exactly');
 
 const blaiseFixture = readFileSync(
   'tests/fixtures/swimcloud/blaise_vera_personal_bests.txt',
