@@ -6,7 +6,13 @@ export type SegmentedControlOption<TValue extends string> = {
   value: TValue;
   label: ReactNode;
   description?: ReactNode;
+  /** Per-option tooltip. Falls back to `label` (if it's a string) when omitted. */
+  title?: string;
+  /** Per-option accessible name. Falls back to `label` (if it's a string) when omitted — set this explicitly when `label` is an icon+text node. */
+  ariaLabel?: string;
 };
+
+type SegmentedControlLayout = 'fill' | 'inline';
 
 type SegmentedControlProps<TValue extends string> = {
   options: Array<SegmentedControlOption<TValue>>;
@@ -14,6 +20,24 @@ type SegmentedControlProps<TValue extends string> = {
   onChange: (value: TValue) => void;
   ariaLabel: string;
   className?: string;
+  /**
+   * `'fill'` (default) is this component's original shape: full width,
+   * options share the row equally, a `nav-tab-active` indicator slides
+   * between them. Built for a sidebar-style tab strip (its first real
+   * consumer, `RosterLineupStep.tsx`'s side panel) — unchanged here.
+   *
+   * `'inline'` matches the compact, accent-tinted toggle hand-rolled at
+   * several two/three-option sites across Matrix before this convergence
+   * (Diff/Prelims, Merged/PDF only, By Event/By Class, vs Prelims/vs
+   * Psych) — sized to its content next to a heading, not stretched to
+   * fill a row, with a static (non-animated) accent background on the
+   * selected option rather than a sliding indicator. See
+   * `plans/2026-09-10/04-MATRIX-DIAGNOSIS.md` §4b/§5 item 3 for why a
+   * single new layout, rather than a `size` prop alone, was needed: none
+   * of those sites are full-width, and forcing them to be would be a
+   * real layout change, not a size tweak.
+   */
+  layout?: SegmentedControlLayout;
 };
 
 export function SegmentedControl<TValue extends string>({
@@ -22,9 +46,45 @@ export function SegmentedControl<TValue extends string>({
   onChange,
   ariaLabel,
   className,
+  layout = 'fill',
 }: SegmentedControlProps<TValue>) {
   const indicatorId = useId();
   const reduce = useReducedMotion();
+
+  if (layout === 'inline') {
+    return (
+      <div
+        className={cn(
+          'inline-flex items-center rounded-md border border-theme-soft surface-overlay p-1',
+          className
+        )}
+        role="group"
+        aria-label={ariaLabel}
+      >
+        {options.map(option => {
+          const selected = option.value === value;
+          return (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => onChange(option.value)}
+              className={cn(
+                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] uppercase font-medium transition-colors',
+                selected
+                  ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
+                  : 'text-theme-secondary hover:text-[var(--text-primary)]'
+              )}
+              aria-pressed={selected}
+              aria-label={option.ariaLabel}
+              title={option.title ?? (typeof option.label === 'string' ? option.label : undefined)}
+            >
+              {option.label}
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -54,7 +114,8 @@ export function SegmentedControl<TValue extends string>({
               selected ? 'text-[var(--text-accent)]' : 'nav-tab-inactive'
             )}
             aria-pressed={selected}
-            title={typeof option.label === 'string' ? option.label : undefined}
+            aria-label={option.ariaLabel}
+            title={option.title ?? (typeof option.label === 'string' ? option.label : undefined)}
           >
             {selected ? (
               <motion.span

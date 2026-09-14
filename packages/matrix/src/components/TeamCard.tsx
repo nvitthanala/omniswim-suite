@@ -15,7 +15,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, CartesianGrid } from 'recharts';
-import { ChartFrame, ChartShell } from '@omniswim/ui';
+import { ChartFrame, ChartShell, SegmentedControl } from '@omniswim/ui';
 import { TeamScore, SwimmerResult, Gender } from '@omniswim/core/types';
 import { formatEventChartAxisLabel, colorForChartStroke } from '@omniswim/core/lib/utils';
 import type { PrelimsOverUnderEntry } from '@omniswim/core/lib/prelimsProjection';
@@ -379,24 +379,16 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                       {chartView === 'event' ? 'Points by Event' : 'Points by Class'}
                     </span>
                   </div>
-                  <div className="flex items-center surface-overlay border border-theme-soft rounded-md p-0.5">
-                    <button
-                      type="button"
-                      onClick={() => { setChartView('event'); clearChartTooltips(); }}
-                      aria-label="Show points chart by event"
-                      className={`text-ui-micro px-2 py-1 uppercase tracking-widest rounded transition-colors ${chartView === 'event' ? 'bg-[var(--surface-strong)]/60 text-[var(--text-primary)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}
-                    >
-                      By Event
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => { setChartView('class'); clearChartTooltips(); }}
-                      aria-label="Show points chart by class year"
-                      className={`text-ui-micro px-2 py-1 uppercase tracking-widest rounded transition-colors ${chartView === 'class' ? 'bg-[var(--surface-strong)]/60 text-[var(--text-primary)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}
-                    >
-                      By Class
-                    </button>
-                  </div>
+                  <SegmentedControl
+                    layout="inline"
+                    ariaLabel="Points chart grouping"
+                    value={chartView}
+                    onChange={next => { setChartView(next); clearChartTooltips(); }}
+                    options={[
+                      { value: 'event', label: 'By Event', ariaLabel: 'Show points chart by event' },
+                      { value: 'class', label: 'By Class', ariaLabel: 'Show points chart by class year' },
+                    ]}
+                  />
                 </div>
                 
                 <ChartShell size="lg" className="surface-overlay p-2 rounded-lg border border-theme-soft group/chart">
@@ -593,31 +585,17 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                 {(showPrelimsPerformance || showPsychPerformance) ? (
                   <div className="mt-3">
                     {showPrelimsPerformance && showPsychPerformance ? (
-                      <div className="flex items-center gap-1 mb-2">
-                        <button
-                          type="button"
-                          onClick={() => setMomentumAnchor('prelims')}
-                          aria-label="Show team momentum versus prelims"
-                          className={`text-[9px] uppercase tracking-widest px-2 py-0.5 rounded ${
-                            momentumAnchor === 'prelims'
-                              ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
-                              : 'text-theme-muted hover:text-theme-secondary'
-                          }`}
-                        >
-                          vs Prelims
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setMomentumAnchor('psych')}
-                          aria-label="Show team momentum versus psych sheet"
-                          className={`text-[9px] uppercase tracking-widest px-2 py-0.5 rounded ${
-                            momentumAnchor === 'psych'
-                              ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
-                              : 'text-theme-muted hover:text-theme-secondary'
-                          }`}
-                        >
-                          vs Psych
-                        </button>
+                      <div className="mb-2">
+                        <SegmentedControl
+                          layout="inline"
+                          ariaLabel="Team momentum anchor"
+                          value={momentumAnchor}
+                          onChange={setMomentumAnchor}
+                          options={[
+                            { value: 'prelims', label: 'vs Prelims', ariaLabel: 'Show team momentum versus prelims' },
+                            { value: 'psych', label: 'vs Psych', ariaLabel: 'Show team momentum versus psych sheet' },
+                          ]}
+                        />
                       </div>
                     ) : null}
                     <MomentumChartCard
@@ -671,24 +649,19 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                       {viewMode === 'swimmer' && <option value="swimmerAsc">Low to High</option>}
                     </select>
 
-                    <div className="flex items-center surface-overlay border border-theme-soft rounded-md p-0.5">
-                      <button 
-                        type="button"
-                        onClick={() => { setViewMode('event'); setSortMode('eventDesc'); }}
-                        aria-label="Group team matrix by event"
-                        className={`text-ui-micro px-2 py-1 uppercase tracking-widest rounded transition-colors ${viewMode === 'event' ? 'bg-[var(--surface-strong)]/60 text-[var(--text-primary)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}
-                      >
-                        By Event
-                      </button>
-                      <button 
-                        type="button"
-                        onClick={() => { setViewMode('swimmer'); setSortMode('swimmerDesc'); }}
-                        aria-label="Group team matrix by swimmer"
-                        className={`text-ui-micro px-2 py-1 uppercase tracking-widest rounded transition-colors ${viewMode === 'swimmer' ? 'bg-[var(--surface-strong)]/60 text-[var(--text-primary)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}
-                      >
-                        By Swimmer
-                      </button>
-                    </div>
+                    <SegmentedControl
+                      layout="inline"
+                      ariaLabel="Team matrix grouping"
+                      value={viewMode}
+                      onChange={next => {
+                        setViewMode(next);
+                        setSortMode(next === 'event' ? 'eventDesc' : 'swimmerDesc');
+                      }}
+                      options={[
+                        { value: 'event', label: 'By Event', ariaLabel: 'Group team matrix by event' },
+                        { value: 'swimmer', label: 'By Swimmer', ariaLabel: 'Group team matrix by swimmer' },
+                      ]}
+                    />
                   </div>
                 </div>
 

@@ -6,7 +6,7 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Users, Plus, TrendingUp, Search, X, GitCompareArrows, Download } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
-import { ChartFrame, ChartShell, EmptyState } from '@omniswim/ui';
+import { ChartFrame, ChartShell, EmptyState, SegmentedControl } from '@omniswim/ui';
 import { Gender, Recruit, ScoringSettings, TeamScore, Workspace } from '@omniswim/core/types';
 import { assignTeamLineStyles, isRelayResult } from '@omniswim/core/lib/utils';
 import { aggregateSwimmerMeetPoints, scorerRosterKey } from '@omniswim/core/lib/scorerRoster';
@@ -522,31 +522,25 @@ export default function MeetOperationsView({
         {(showPrelimsPerformance || showPsychPerformance) ? (
           <div className="mb-6">
             {showPrelimsPerformance && showPsychPerformance ? (
-              <div className="flex items-center gap-1 mb-2 px-1">
-                <button
-                  type="button"
-                  onClick={() => setMeetMomentumAnchor('prelims')}
-                  aria-label="Show meet momentum versus prelims"
-                  className={`text-[9px] uppercase tracking-widest px-2 py-0.5 rounded ${
-                    meetMomentumAnchor === 'prelims'
-                      ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
-                      : 'text-theme-muted hover:text-theme-secondary'
-                  }`}
-                >
-                  vs Prelims
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMeetMomentumAnchor('psych')}
-                  aria-label="Show meet momentum versus psych sheet"
-                  className={`text-[9px] uppercase tracking-widest px-2 py-0.5 rounded ${
-                    meetMomentumAnchor === 'psych'
-                      ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
-                      : 'text-theme-muted hover:text-theme-secondary'
-                  }`}
-                >
-                  vs Psych
-                </button>
+              <div className="mb-2 px-1">
+                <SegmentedControl
+                  layout="inline"
+                  ariaLabel="Meet momentum anchor"
+                  value={meetMomentumAnchor}
+                  onChange={setMeetMomentumAnchor}
+                  options={[
+                    {
+                      value: 'prelims',
+                      label: 'vs Prelims',
+                      ariaLabel: 'Show meet momentum versus prelims',
+                    },
+                    {
+                      value: 'psych',
+                      label: 'vs Psych',
+                      ariaLabel: 'Show meet momentum versus psych sheet',
+                    },
+                  ]}
+                />
               </div>
             ) : null}
             <MomentumChartCard
@@ -564,10 +558,36 @@ export default function MeetOperationsView({
         <div className="surface-card rounded-xl p-5">
           <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
             <div><h3 className="text-lg font-medium text-[var(--text-primary)] uppercase tracking-tight">Score differences</h3><p className="text-xs text-theme-secondary">Compare the projection with the loaded meet and prelims.</p></div>
-            <div className="inline-flex items-center rounded-md border border-theme-soft surface-overlay p-1">
-              <button type="button" onClick={() => setAnalysisView('diff')} aria-label="Show projected versus baseline score differences" aria-pressed={analysisView === 'diff'} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] uppercase font-medium transition-colors ${analysisView === 'diff' ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}><GitCompareArrows size={12} /><span>Diff</span></button>
-              {showPrelimsPerformance ? <button type="button" onClick={() => setAnalysisView('prelims')} aria-label="Show score differences versus prelims" aria-pressed={analysisView === 'prelims'} className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] uppercase font-medium transition-colors ${analysisView === 'prelims' ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]' : 'text-theme-secondary hover:text-[var(--text-primary)]'}`}><TrendingUp size={12} /><span>Prelims</span></button> : null}
-            </div>
+            <SegmentedControl
+              layout="inline"
+              ariaLabel="Score differences view"
+              value={analysisView}
+              onChange={setAnalysisView}
+              options={[
+                {
+                  value: 'diff',
+                  label: (
+                    <span className="inline-flex items-center gap-1.5">
+                      <GitCompareArrows size={12} /> Diff
+                    </span>
+                  ),
+                  ariaLabel: 'Show projected versus baseline score differences',
+                },
+                ...(showPrelimsPerformance
+                  ? [
+                      {
+                        value: 'prelims' as const,
+                        label: (
+                          <span className="inline-flex items-center gap-1.5">
+                            <TrendingUp size={12} /> Prelims
+                          </span>
+                        ),
+                        ariaLabel: 'Show score differences versus prelims',
+                      },
+                    ]
+                  : []),
+              ]}
+            />
           </div>
           {analysisView === 'prelims' && showPrelimsPerformance ? <PrelimsDiffTable projectedTeams={teamsWithLineStyles} baselineTeams={baselineBundle.sortedTeams} prelimsTeams={prelimsProjectedBundle.sortedTeams} searchQuery={searchQuery} /> : <MeetDiffTable projectedTeams={teamsWithLineStyles} baselineTeams={baselineBundle.sortedTeams} searchQuery={searchQuery} />}
         </div>

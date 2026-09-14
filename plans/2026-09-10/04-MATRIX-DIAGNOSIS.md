@@ -133,32 +133,33 @@ Two visual variants of the same idea, none using `@omniswim/ui`'s `SegmentedCont
    recovered by reading the four sibling files' real exports and
    reconciling `TeamCard.tsx` against them. `npx tsc --noEmit -p
    packages/matrix/tsconfig.json` clean; full suite green (748/748).
-3. **⚠️ INVESTIGATED, NOT CONVERTED 2026-09-13 (see
-   `docs/reference/UI_REDESIGN_STATE.json` turn t16).** `SegmentedControl`
-   convergence (§4b). This item's own premise does not survive a close read
-   of the actual markup: the 6 sites are **not** one shape with cosmetic
-   differences, they are **two** visually distinct, internally-consistent
-   variants — Variant A (`MeetOperationsView.tsx`'s Diff/Prelims,
+3. **✅ DONE 2026-09-13 (see `docs/reference/UI_REDESIGN_STATE.json` turns
+   t16–t17).** `SegmentedControl` convergence (§4b). Investigated first,
+   not assumed mechanical: the flagged sites turned out to be **two**
+   visually distinct, internally-consistent variants (Variant A —
+   `MeetOperationsView.tsx`'s Diff/Prelims and vs Prelims/vs Psych,
    `ScoringSettingsPanel.tsx`/`ScoringSettingsModal.tsx`'s Merged/PDF only:
-   `inline-flex` sized-to-content, `bg-[var(--text-accent)]/15
-   text-[var(--text-accent)]` active state) and Variant B (`TeamCard.tsx`'s
-   two toggles: `flex` sized-to-content, `bg-[var(--surface-strong)]/60
-   text-[var(--text-primary)]` active state) — and **neither** matches
-   `SegmentedControl`'s own built-in active-state treatment
-   (`.nav-tab-active`: a solid, theme-neutral background, `#eef1f6`/`#1f2937`
-   etc., confirmed by reading `packages/ui/src/index.css` directly — not an
-   accent or surface tint at all), nor its `w-full` sized-to-fill-the-row
-   layout (every site here is `inline-flex`/`flex`, sized to its content,
-   next to a heading — not a full-width row). Converging any of the 6 sites
-   as-is would silently change its active-state color scheme and its width
-   behavior — a real, user-visible design change, not the "mechanical,
-   low-risk" swap this item originally claimed. Left as hand-rolled, and
-   this item recategorized as **blocked on a design decision**: does
-   `SegmentedControl` gain a themeable active-state/width override (and
-   which of the 3 now-known looks becomes the one true style), or do these
-   sites stay hand-rolled. Not the diagnosis's call to make alone.
-   `SegmentedControl.tsx` itself did gain one safe, unrelated improvement in
-   the same turn — see item 4d's note below.
+   `bg-[var(--text-accent)]/15` active state; Variant B — `TeamCard.tsx`'s
+   By Event/By Class, By Event/By Swimmer, and vs Prelims/vs Psych:
+   `bg-[var(--surface-strong)]/60` active state), plus 2 more "freestanding"
+   sites with no shared border at all — **7 real call sites across 4 files
+   in total**, not 6. Neither variant matched `SegmentedControl`'s own
+   built-in look (a solid theme-neutral background, confirmed by reading
+   `packages/ui/src/index.css` directly) or its full-width layout.
+   User's call on which look wins: asked directly, deferred to this
+   session's judgment. Chose Variant A as the one true style — it already
+   covered more of the 7 sites unchanged, so fewer sites actually change
+   appearance. Added a new `layout="inline"` mode to `SegmentedControl`
+   (sized-to-content, static accent-tint active state, no sliding
+   indicator — matching a hand-rolled toggle next to a heading rather than
+   a full-width tab strip) plus per-option `title`/`ariaLabel` overrides so
+   each site's original tooltip and accessible name survive the
+   conversion. All 7 sites now render through it; the 2 `TeamCard.tsx`
+   Variant-B sites are the only ones with a real (small, deliberate) visual
+   change — their active state moves from a surface tint to the accent
+   tint the other 5 sites already used, and the 2 "freestanding" sites gain
+   a subtle bordered container they previously lacked, for one consistent
+   look instead of three.
 4. **✅ DONE 2026-09-10 (see `docs/reference/UI_REDESIGN_STATE.json` turn
    t13).** Delete `WorkspaceTabs.tsx` (§1). 41 lines, zero import sites
    anywhere in the repo — the cheapest possible cleanup, worth doing

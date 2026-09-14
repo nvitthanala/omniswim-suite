@@ -274,13 +274,24 @@ alone — a different chip shape, not Badge's). New `ConfirmDeleteModal` in
 size-override `className` reliably beats a shared component's own
 conflicting class — the plain string-join `Badge`/`Button` used before
 could not guarantee that.
-**SegmentedControl convergence investigated and declined** (Matrix's 6
-sites, Metrics' 1): none of the 7 hand-rolled sites share the shared
-component's own active-state look, and there are 3 real distinct designs
-in play, not cosmetic variants of one. Blocked on a real design decision,
-not mechanical — see `04-MATRIX-DIAGNOSIS.md` §5 item 3 and
-`05-METRICS-DIAGNOSIS.md` §5 item 2 for the full finding. Full record in
-`docs/reference/UI_REDESIGN_STATE.json` turn t16.
+**SegmentedControl convergence — investigated, decided, and done
+2026-09-13** (Matrix's 7 real sites across 4 files; Metrics' 1 site
+investigated separately and left alone — see below). None of the 7
+hand-rolled Matrix sites shared the shared component's own active-state
+look, and they turned out to be 2 real distinct designs, not cosmetic
+variants of one — a real design decision, not a mechanical swap, so it
+was asked rather than guessed. Decided: converge onto the more common of
+the two existing looks (an accent-tint, sized-to-content treatment), via
+a new `layout="inline"` mode on `SegmentedControl` (plus per-option
+`title`/`ariaLabel` overrides so no tooltip or accessible name was lost
+in the conversion). All 7 sites now render through the shared component;
+2 of them have a real, deliberate, small active-state color change as a
+result. Metrics' 1 flagged site (`RaceSetupFormFields.tsx`'s
+`EventTypeSection`) is left hand-rolled — it is a third, structurally
+different pattern (two separately bordered boxes in a grid, not one
+shared-border toggle), which this decision did not cover. Full record in
+`docs/reference/UI_REDESIGN_STATE.json` turns t16–t17;
+`05-METRICS-DIAGNOSIS.md` §5 item 2 still describes its own item as open.
 
 **Phase 3 — Matrix Panel+Parts normalization** (`worker`, mechanical
 restructuring against an already-existing convention, not a new one to

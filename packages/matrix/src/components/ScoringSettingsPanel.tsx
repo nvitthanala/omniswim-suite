@@ -1,5 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { ChevronDown, Lock, Settings, Save } from 'lucide-react';
+import { SegmentedControl } from '@omniswim/ui';
 import { ScoringPresetMeta, ScoringSettings } from '@omniswim/core/types';
 import { fetchScoringPresetList, fetchScoringPresetSettings } from '@omniswim/core/lib/scoringPresets';
 import { mergeScoringSettings, scoringSettingsLock } from '@omniswim/core/lib/scoringDefaults';
@@ -117,36 +118,26 @@ export default function ScoringSettingsPanel({
       <label className="block text-[10px] text-theme-secondary uppercase tracking-widest font-medium mb-2">
         Scoring view
       </label>
-      <div className="inline-flex items-center rounded-md border border-theme-soft surface-overlay p-1">
-        <button
-          type="button"
-          onClick={() => onScoringViewChange('merged')}
-          aria-label="Use merged scoring view"
-          aria-pressed={resolvedScoringView === 'merged'}
-          className={`px-3 py-1.5 rounded text-[10px] uppercase font-medium transition-colors ${
-            resolvedScoringView === 'merged'
-              ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
-              : 'text-theme-secondary hover:text-[var(--text-primary)]'
-          }`}
-          title="Imported/planned/recruit entries remap onto the loaded meet's events and compete for points"
-        >
-          Merged
-        </button>
-        <button
-          type="button"
-          onClick={() => onScoringViewChange('pdf_only')}
-          aria-label="Use PDF-only scoring view"
-          aria-pressed={resolvedScoringView === 'pdf_only'}
-          className={`px-3 py-1.5 rounded text-[10px] uppercase font-medium transition-colors ${
-            resolvedScoringView === 'pdf_only'
-              ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
-              : 'text-theme-secondary hover:text-[var(--text-primary)]'
-          }`}
-          title="Plans and recruits are excluded from scoring — original PDF-base scoring only"
-        >
-          PDF only
-        </button>
-      </div>
+      <SegmentedControl
+        layout="inline"
+        ariaLabel="Scoring view"
+        value={resolvedScoringView}
+        onChange={onScoringViewChange}
+        options={[
+          {
+            value: 'merged',
+            label: 'Merged',
+            ariaLabel: 'Use merged scoring view',
+            title: "Imported/planned/recruit entries remap onto the loaded meet's events and compete for points",
+          },
+          {
+            value: 'pdf_only',
+            label: 'PDF only',
+            ariaLabel: 'Use PDF-only scoring view',
+            title: 'Plans and recruits are excluded from scoring — original PDF-base scoring only',
+          },
+        ]}
+      />
       <p className="text-[9px] text-theme-muted mt-2 normal-case tracking-normal">
         {resolvedScoringView === 'merged'
           ? 'Plans, imports, and recruits remap onto the loaded meet and compete for points.'
