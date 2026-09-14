@@ -134,11 +134,14 @@ function plan(id, name, event, time) {
  * THE SHAPE THAT BREAKS A PER-NAME SWEEP. Alpha One is carried as TWO recruit
  * rows for 50 Freestyle at the same time.
  *
- * Why it lands on ONE placement: `prepareRecruitsForScoring` ranks each recruit
- * row INDEPENDENTLY against the PDF comparators only, never against the other
- * recruit rows, so two rows with the same time receive the SAME rank. That
- * placement then holds two rows and one distinct name — `calculatePoints` pays
- * both rows, the scorer pool charges one name.
+ * Why it lands on ONE placement: `prepareRecruitsForScoring` places recruit rows
+ * fastest first and shares a place on an exact time tie, so two rows at 20.10
+ * receive the SAME rank. That placement then holds two rows and one distinct
+ * name — `calculatePoints` pays both rows, the scorer pool charges one name.
+ * (Before 2026-09-02 they collided for a different reason — each row was ranked
+ * against the PDF comparators alone, so ANY two recruits sharing an insertion
+ * slot tied, whatever their times. Equal times are the only cause now; see
+ * scripts/test_recruit_placement_grid.mjs.)
  *
  * (A plain duplicated RESULT row does not reproduce it: projectRanksInField
  * assigns sequential ranks to equal times, splitting the pair across two

@@ -5,6 +5,11 @@
  *
  * Test: npx tsx scripts/test_entry_limits.mjs
  *       npx tsx scripts/test_entry_limits_aliases.mjs
+ *       npx tsx scripts/test_entry_limits_prelims_finals.mjs
+ *
+ * WHAT AN ENTRY IS. One per distinct EVENT, per athlete — never one per swim.
+ * Prelims and the final of one event are two swims of one entry; see
+ * {@link entryCapKey}, which is the single place that rule is written down.
  *
  * ALIAS RESOLUTION. `countSwimmerEntries` takes a trailing
  * `resolver: AthleteAliasResolver = IDENTITY_ALIAS_RESOLVER`, the same convention
@@ -35,25 +40,73 @@
 import { Gender, ScoringSettings, SwimmerResult } from '../types';
 import { mergeScoringSettings } from './scoringDefaults';
 import { isRelayResult, normalizeSwimmerName } from './utils';
-import { relayEntryKey } from './relaySplits';
-import { relayTemplateFromLeg } from './relayLegMatching';
 import { IDENTITY_ALIAS_RESOLVER, type AthleteAliasResolver } from './athleteAliases';
 
 export type SwimmerEntryCounts = {
   individual: number;
+  /**
+   * The distinct relay EVENTS this athlete occupies — one member per relay entry
+   * charged against the cap. Before 2026-09-02 these were `relayEntryKey` strings,
+   * which embed the round; see {@link entryCapKey}.
+   */
   relayEvents: Set<string>;
   relayCount: number;
   total?: number; // individual + relayCount
 };
 
 /**
+ * Fallback key prefix for a row that carries no event name.
+ *
+ * It opens with a single leading SPACE, and that one character is load-bearing:
+ * it makes the fallback distinct from every real key by CONSTRUCTION rather than
+ * by luck. A real key is `event.trim()`, so it can never begin with whitespace,
+ * whatever a meet chooses to call an event. Do not "tidy" the leading blank away
+ * — `test_entry_limits_prelims_finals.mjs` block 6 fails if two unlabeled rows
+ * can collide, but nothing catches a collision with a real event name.
+ */
+const UNLABELED_ENTRY_PREFIX = ' unlabeled|';
+
+/**
+ * The key one result row occupies against a per-swimmer entry cap.
+ *
+ * ONE ENTRY PER DISTINCT EVENT, REGARDLESS OF ROUND. A swimmer who swims prelims
+ * and then swims the final of that same event used ONE meet entry: the entry is
+ * the event, and prelims/finals are how that one entry is contested. The same
+ * holds in the other direction — a prelims-only swim (missed the final) and a
+ * timed-final-only swim are each one entry too. So the key must be the event and
+ * nothing else; anything round-shaped in it splits one entry in two.
+ *
+ * WHY THIS FUNCTION EXISTS. The relay side used to key on `relayEntryKey`, which
+ * is `team|event|roundSwam|rank|clock`. That key is right for what it was built
+ * for — naming one physical relay SWIM so a leg override lands on the correct
+ * heat — and wrong as a cap key, because a squad that swims a relay in prelims
+ * and again in the final produces two rows whose round, rank and clock all
+ * differ. Every leg swimmer was then charged two entries for one relay, and under
+ * the NSISC cap of 7 that reads as an over-entered swimmer who is not. The
+ * individual side already keyed on the event alone and was already correct.
+ *
+ * UNLABELED ROWS ARE COUNTED, NEVER DROPPED. A row with no event name is a data
+ * defect. Skipping it would remove an entry from a competition-rule count with no
+ * trace, which is the silent-empty failure this module exists to prevent, so it
+ * falls back to the row id: it still costs one entry and can never merge with
+ * another. An over-count is visible to the coach; an under-count is not.
+ */
+export function entryCapKey(r: Pick<SwimmerResult, 'id' | 'event'>): string {
+  const ev = r.event?.trim();
+  if (ev) return ev;
+  return `${UNLABELED_ENTRY_PREFIX}${r.id}`;
+}
+
+/**
  * Count one athlete's distinct meet entries (individual events + relay entries).
  *
  * With a resolver, BOTH the queried `name` and each scanned row's name are
  * resolved before keying, so either spelling of a linked athlete returns the same
- * merged count. Relay entries are keyed by `relayEntryKey`, so two spellings that
- * appear as legs of the SAME relay entry still count once — which is correct: one
- * human occupies one relay slot however the leg was spelled.
+ * merged count. Individual and relay entries are both keyed by {@link entryCapKey}
+ * — the event — so two spellings that appear as legs of the SAME relay entry still
+ * count once, which is correct: one human occupies one relay slot however the leg
+ * was spelled. That same key is what collapses a prelims row and a finals row for
+ * one event into the single entry they are.
  *
  * The key function stays `normalizeSwimmerName` (not `canonicalSwimmerName` and
  * not `aliasNameKey`) so the identity default is unchanged: nothing folds comma
@@ -79,14 +132,13 @@ export function countSwimmerEntries(
     if (normalizeSwimmerName(resolver.resolveAthleteName(r.name, team, gender)) !== nameKey) continue;
 
     if (isRelayResult(r) && r.name !== r.team) {
-      const key = relayEntryKey(relayTemplateFromLeg(results, r));
-      relayEvents.add(key);
+      relayEvents.add(entryCapKey(r));
       continue;
     }
     if (!r.isRelay) {
-      const ev = r.event?.trim();
-      if (ev && !indEvents.has(ev)) {
-        indEvents.add(ev);
+      const key = entryCapKey(r);
+      if (!indEvents.has(key)) {
+        indEvents.add(key);
         individual += 1;
       }
     }

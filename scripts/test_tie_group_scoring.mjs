@@ -14,11 +14,16 @@
  *
  * Why it hid for so long: in PDF-shaped data a team almost never holds two
  * swimmers on a single placement, so the group is one athlete and `every`
- * reduces to the per-athlete test. It only detonates when ranks collapse —
- * `prepareRecruitsForScoring` has no comparators on a roster-only workspace, so
- * every recruit row comes back rank 1 and an entire event becomes ONE tie
+ * reduces to the per-athlete test. It only detonated when ranks collapsed —
+ * `prepareRecruitsForScoring` had no comparators on a roster-only workspace, so
+ * every recruit row came back rank 1 and an entire event became ONE tie
  * group. Turning 14 of 32 athletes off then zeroed 12 of the 14 events they
  * entered, with zero exceptions.
+ *
+ * That collapse is fixed (2026-09-02, scripts/test_recruit_placement_grid.mjs),
+ * so a real workspace no longer reaches this shape by accident. The fixture
+ * below still builds it on purpose: a genuine dead heat produces the same shape,
+ * and this test is about what the engine does once it has one.
  *
  * The optimizer guard (test_optimizer_never_loses.mjs) makes the BUTTON safe.
  * This test is about the engine underneath it, which the guard does not fix.
