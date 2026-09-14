@@ -95,9 +95,28 @@ The user then asked for a full UI-redesign plan given "the ui looks very
 complex/cluttered" — not yet built, plan only, at
 [`plans/2026-09-09/01-UI-REDESIGN-PLAN.md`](2026-09-09/01-UI-REDESIGN-PLAN.md).
 Full phase history in `docs/reference/SWIMCLOUD_CAPTURE_STATE.json`; also
-now mirrored in the Obsidian vault
+mirrored in the Obsidian vault
 (`Documents/Obsidian Vault/omniswim-suite/Sessions/oyster-2026-09-09-74cdc90a.md`).
-Still uncommitted — on the order of 60+ files, diffs only.
+
+**Update 2026-09-13/14 — the 60+ uncommitted files above are now committed
+and pushed, and this same session built substantially more on top.** The
+UI-redesign plan turned into 17 tracked implementation turns (SwimCloud
+capture browser unified, Badge/toggle convergence, a real scoring bug and a
+real team-matching bug fixed along the way — `docs/reference/UI_REDESIGN_STATE.json`
+turns `t1`–`t17`), then a whole-app improvement sweep on explicit request
+(happy-dom RCE fix, the two `ScoringSettings` editors merged into one,
+a `Modal` primitive converging 6 of Manager's overlay dialogs, three
+feature-scoping docs — turn `t18`), then a triaged partial build of those
+three scoped features under a stated quota constraint: a whole-meet
+official-score reconciliation banner (shipped), an optimizer-change
+breakdown panel (shipped, piece 1 of 3), and a program-provenance checklist
+group (shipped, sibling conversion-provenance group stays scoped — turn
+`t19`). `nvitthanala/swimcloud-data-ingest` is now 102 commits ahead of
+`main`, still no PR. Full detail: `docs/reference/UI_REDESIGN_STATE.json`,
+`docs/reference/IMPROVEMENT_BRAINSTORM_2026-09-02.md`,
+`plans/2026-09-14/*.md`. Obsidian vault refreshed the same day — see that
+session note's own "Update — 2026-09-13/14" section, plus
+`05-GitHub-Commit-Timeline.md` Era 10 and `08-Open-Decisions-For-You.md`.
 
 ---
 
