@@ -59,3 +59,10 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      # The extension bundles are committed artifacts. This does not
+      # regenerate them for the build -- tests/swimCloudExtensionBuildFreshness.test.ts
+      # already fails when a committed bundle is stale. This step proves the
+      # build script itself still runs on a clean checkout.
+      - name: Build browser extension
+        run: npm run build:extension

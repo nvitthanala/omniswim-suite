@@ -178,6 +178,20 @@
       ],
       "consequence": "Cosmetic only - an unlisted school falls back to the NEON_COLORS rotation. Worth making user-editable eventually; not a blocker.",
       "status": "open - low priority"
+    },
+    {
+      "id": "f10",
+      "severity": "P1-production-readiness",
+      "title": "Workspace backup works but is unreachable and never automatic",
+      "evidence": [
+        "POST /api/workspaces/backup exists (apps/shell/server.ts:570) and repo.backup() is implemented correctly for both SqliteRepo and PgRepo - it calls writeJsonBackup(exportAll()), reading THROUGH the database rather than copying files, so it is write-ahead-log safe.",
+        "That route has exactly one caller: itself. grep across packages/ and apps/ for 'workspaces/backup' returns no UI call site. A coach cannot back up from inside the app.",
+        "Nothing schedules a backup. repo.backup() is never invoked on startup, before an import, before an optimizer apply, or before a delete.",
+        "data/backups/ holds exactly 4 files, all from 2026-09-08, and they are raw .db/.db-shm/.db-wal copies - made by a script, not by this route.",
+        "Live state today: data/omniswim.db is 4096 bytes while data/omniswim.db-wal is 3.5MB. Anything that naively copied only the .db file would capture an almost-empty database. The implemented backup does not have this bug; a hand-rolled one would."
+      ],
+      "consequence": "The user's stated goal is a suite 'ready to be properly used in an actual setting'. Losing a roster the night before a meet is the worst realistic failure this app has, and today nothing prevents it. The mechanism already exists and is correct - it just has no trigger and no button. This is a small amount of work for a large amount of safety.",
+      "status": "open - drives new phase P7"
     }
   ],
   "phases": [
@@ -308,6 +322,30 @@
       "owner": "worker",
       "status": "todo",
       "items": []
+    },
+    {
+      "id": "P7",
+      "name": "Data safety - reachable and automatic backups",
+      "owner": "worker (UI) + executor (triggers)",
+      "status": "todo",
+      "items": [
+        {
+          "what": "Call POST /api/workspaces/backup from the UI - an explicit 'Back up now' action with success/failure feedback",
+          "status": "todo"
+        },
+        {
+          "what": "Automatic backup on server start, and before destructive operations (roster import, optimizer apply, workspace delete)",
+          "status": "todo"
+        },
+        {
+          "what": "Retention - do not let data/backups/ grow without bound",
+          "status": "todo"
+        },
+        {
+          "what": "A restore path, or at minimum a documented manual one in the P6 user guide",
+          "status": "todo"
+        }
+      ]
     }
   ],
   "openDecisions": [
@@ -325,6 +363,14 @@
       "blocks": "nothing yet, needed before P6",
       "question": "Which runtime to recommend for real use (dev launcher / production build / Tauri desktop)?",
       "status": "user asked for a recommendation; to be answered after P0 verifies the production path end to end (docs/INVARIANTS.md item 2 records that prod has historically 404'd where dev worked)"
+    },
+    {
+      "id": "od3",
+      "blocks": "P7",
+      "question": "How aggressive should automatic backups be?",
+      "options": "On server start only (cheapest, one per session) / start + before each destructive operation (safest, more files) / plus a periodic timer while running.",
+      "recommendation": "Start + before destructive operations, with retention capped at N most recent. A backup is a JSON export of all workspaces; the current meets.json is 3MB, so retention matters.",
+      "status": "will recommend and proceed unless the user objects"
     }
   ],
   "log": [
@@ -343,6 +389,10 @@
     {
       "at": "2026-09-20",
       "what": "Hardcoding audit while P1 ran. Found f7 (dead unsourced NCAA_CUTS - a provenance-rule violation), f8 (event catalog fixed to SCY NCAA program, UI-picker scope only), f9 (team colours/aliases). Confirmed the applet nav and suite home are simple; the navigability problem is inside Manager, per the 2026-09-10 diagnosis."
+    },
+    {
+      "at": "2026-09-20",
+      "what": "Found f10: the backup route is correct but unreachable from the UI and never automatic. Added phase P7 (data safety) and od3. Dispatched P4 (UI convergence) to a worker in parallel with P1, with explicit instructions not to touch P1's five files and not to run Playwright (port 3000 collision)."
     }
   ]
 }

@@ -10,6 +10,7 @@
   "scripts": {
     "dev": "npm run dev -w @omniswim/shell",
     "build": "npm run build -w @omniswim/shell",
+    "build:extension": "node extensions/swimcloud-companion/build.mjs",
     "start": "npm run start -w @omniswim/shell",
     "lint": "npm run lint --workspaces --if-present",
     "test": "node scripts/run-tests.mjs",
