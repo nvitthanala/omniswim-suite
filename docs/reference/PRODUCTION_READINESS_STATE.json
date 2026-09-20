@@ -394,6 +394,14 @@
       "options": "On server start only (cheapest, one per session) / start + before each destructive operation (safest, more files) / plus a periodic timer while running.",
       "recommendation": "Start + before destructive operations, with retention capped at N most recent. A backup is a JSON export of all workspaces; the current meets.json is 3MB, so retention matters.",
       "status": "will recommend and proceed unless the user objects"
+    },
+    {
+      "id": "od4",
+      "blocks": "P6 (and any thought of a second user)",
+      "question": "Is data/meets.json a curated demo seed, or a snapshot of live working state? Today it is both.",
+      "context": "docs/INVARIANTS.md item 1: data/meets.json is gitignored BUT tracked, and SqliteRepo.init() seeds data/omniswim.db from it on a fresh checkout. It currently holds the real HSU/OBU workspaces - 3MB, 871-1029 athlete-history rows each. Anyone who clones this repo boots into the user's actual roster data. Carried over from plans/STATE.md's own open question 5, still unanswered.",
+      "whyItMatters": "Only matters if anyone but the user ever runs this. If the app stays single-user it is a non-issue and the seed is a feature. If a second coach ever uses it, they should boot into an empty or demo workspace, not someone else's roster.",
+      "status": "ask the user; not a deadline blocker"
     }
   ],
   "log": [
@@ -420,6 +428,10 @@
     {
       "at": "2026-09-20",
       "what": "P4 returned and was verified independently (not trusted from its report): TeamSelect landed and all 6 duplicate dropdowns are gone, Metrics is marked on 3 surfaces, 400 Freestyle added. Its zero button conversions surfaced f11 - Button bakes font-bold and disabled:opacity-50 into its base class, so it cannot express the app's prevailing button style. Low adoption is a fit problem, not a discipline problem."
+    },
+    {
+      "at": "2026-09-20",
+      "what": "Dispatched P3a (crawl scope profiles) to an executor, scoped to packages/swimcloud + extensions + swimcloudCaptureRoutes.ts, explicitly excluding apps/shell/server.ts which P1 holds. Implemented and committed the d2 reconciliation gate myself with 3 mutations. Noted od4 (meets.json is both demo seed and live data). Confirmed both applets have clean 4-step top-level flows; the navigability complaint is about density inside the steps, not the structure."
     }
   ]
 }
