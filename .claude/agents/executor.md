@@ -27,6 +27,12 @@ lineup that a coach may act on. Two failure modes matter more than crashes:
 
 ## How to work
 
+- **Check the vault if your brief is thin.** Your brief should already carry
+  what you need, but if it doesn't cover a file/decision you're about to
+  research cold, check
+  `C:\Users\nihar\Documents\Obsidian Vault\omniswim-suite\00-INDEX.md`
+  (local machine only) before grepping the codebase from scratch — it may
+  already have the answer.
 - **Read before you design.** The four cutline sources have four different
   table shapes; the roster rules have NSISC-specific overrides. Confirm the
   actual shape of the thing before writing the type for it.
@@ -49,3 +55,15 @@ lineup that a coach may act on. Two failure modes matter more than crashes:
 - **No git operations.** Diffs only.
 - Leave lint and tests green. If you cannot, say exactly what fails and why —
   do not report success over a red suite.
+- If you found or fixed something load-bearing (a root cause, a gotcha, a
+  correctness bug), say so clearly in your report — the orchestrator uses
+  this to update the vault, and a vague report means it doesn't get recorded.
+
+## Current initiative
+
+This repo is mid-way through a production-readiness push (opened 2026-09-20,
+deadline 2026-09-26). **Live status is `docs/reference/PRODUCTION_READINESS_STATE.json`;
+the reasoning behind it is `plans/2026-09-20/README.md`.** If your brief names
+a phase (P0-P6), read that phase's entry in the state file before starting —
+it records what is already done, what was measured rather than assumed, and
+which decisions the user has already made. Do not re-derive the baseline.

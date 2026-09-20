@@ -1,5 +1,40 @@
 # Omniswim Suite — Claude Code Instructions
 
+## Start here: check the Obsidian vault before the codebase
+
+Before reading source files cold, `grep`-ing for context, or re-deriving how
+this project works: **check the Obsidian second brain first.** It lives at
+`C:\Users\nihar\Documents\Obsidian Vault\omniswim-suite\` (local to this
+machine, not part of this git repo — start at its `00-INDEX.md`). It is a
+synthesized knowledge base built from every Claude Code and Cursor session on
+this project, cross-checked against GitHub: architecture, load-bearing
+gotchas, the agent-delegation model below, current known issues (including
+live branch-topology state — which work has actually merged and which has
+not), a full commit timeline, and the project's lineage back to its
+pre-monorepo predecessor. It exists so no session has to get reacquainted
+with the codebase from scratch. If the vault path does not exist on the
+machine you are running on, say so plainly and fall back to the codebase —
+do not silently skip this step and do not fabricate vault content that is not
+there.
+
+**The vault can go stale; the repo is still ground truth.** When the vault
+and a repo file (`plans/STATE.md`, `docs/INVARIANTS.md`, the code itself)
+disagree, the repo file wins — go fix the vault, do not trust the stale
+claim. This mirrors the vault's own stated rule about itself.
+
+**After finishing a feature, a bug fix, or any change worth remembering —
+update the vault, do not leave that to someone else.** At minimum: add or
+extend a note under `omniswim-suite/Sessions/` describing what changed and
+why, and touch whichever of `04-Known-Issues-and-Current-State.md`,
+`02-Invariants-and-Gotchas.md`, or `05-GitHub-Commit-Timeline.md` your work
+actually affects. The vault's own `00-INDEX.md` has the full ground rules
+for anyone adding to it (cite your source, do not fork repo docs silently out
+of sync, flag gaps instead of smoothing them over) — follow those the same
+way you follow this file. Treat "the vault reflects what I just did" as part
+of finishing the work, not an optional follow-up.
+
+---
+
 ## Response & Writing Style
 
 This rule covers three things: chat replies, commit messages, and docs. Use
@@ -72,52 +107,31 @@ API it may rely on, the acceptance test, and the scope boundary. `executor` must
 report its final API surface (exports, types, signatures) because `worker` builds
 against that report without reading the diff.
 
-### Cross-provider delegation (the fleet)
+### Delegation is Claude-only
 
-The table above is the **Claude-internal** layer: those agents share this session's
-context and are the right call for anything that depends on the conversation so far.
+Everything this project delegates goes through the four agents above. They
+share this session's context and are the right call for any work that depends
+on the conversation so far.
 
-The **fleet** is the cross-provider layer. It reaches Codex (GPT-5.6-Terra, Luna,
-GPT-5.5, GPT-5.4-Mini) and Cursor alongside Claude, and it is quota-aware: it knows
-what every subscription has already spent today and routes around whatever is
-cooling down. Harness lives at `C:/Users/nihar/superintelligent`.
+**There is no cross-provider layer any more.** An earlier version of this file
+described a "fleet" that routed work to Codex and Cursor alongside Claude,
+driven by a `fleet-routing` skill and a `.fleet.json` in this repo. That
+harness is superseded — it was a self-built precursor to the Orca orchestrator
+— and the user retired it on 2026-09-20. **Disregard `fleet-routing`,
+`.fleet.json`, and any `fleet route` / `fleet_apply_patch` instruction you find
+in this repo or in an older plan document.** Do not route work to another
+provider. If a stale reference to the fleet survives somewhere, treat it as
+documentation debt and say so; do not act on it.
 
-**Use the `fleet-routing` skill for every non-trivial task in this repo.** It is
-installed globally and should trigger on its own; if it has not, invoke it.
+The two rules the fleet used to enforce mechanically still apply, and now
+depend on you keeping them:
 
-When to reach for the fleet instead of the agents above:
-
-| Situation | Why the fleet |
-| --- | --- |
-| Independent scopes (`packages/core` and `packages/manager`) | Real parallelism across providers, not queued Claude turns |
-| Data-provenance review — cutlines, `teamDivisions.ts`, parsers | A second provider fails differently. Send the same prompt to Claude *and* Codex and compare; disagreement is the finding |
-| Bulk mechanical work — renames, test scaffolding, doc sweeps | Spend Luna/Mini/Haiku, keep the deep headroom for scoring logic |
-| Opus pool cooling or near its window cap | Codex and Cursor are paid for and idle |
-| Very large reads across the monorepo | `needs: research` routes to the 400k-context models |
-
-**Fleet rules in this repo** (encoded in `.fleet.json`, not just prose):
-
-- `isolateByDefault: true` — every delegated assignment runs in its own git
-  worktree and returns a **patch**. This is the mechanical enforcement of the
-  "no git operations — agents work on diffs only" rule above. A delegated agent
-  cannot reach this working tree or this branch.
-- Never apply a returned patch unprompted. Surface the path and the
-  `fleet_apply_patch` call.
-- `codex/mini` and `claude/haiku` are restricted to `formatter`/`scout` roles here,
-  so they are ineligible for review-shaped work on provenance code. This is a role
-  filter, not a ranking — see below.
-- Prompts you delegate must stand alone, same rule as the subagents: the receiving
-  model has none of this conversation.
-
-**On ranking:** the Claude ladder above orders work by stakes within one provider.
-The fleet deliberately does **not** rank models against each other — it scores
-declared traits against declared task needs, then balances load across
-subscriptions. Do not carry the stakes ladder across providers by assuming a Codex
-model is a step down from Opus. If you want a specific provider, say so with
-`only:` rather than implying a hierarchy.
-
-`fleet route "<task>" --needs <preset>` previews the decision for free. Presets:
-`architect plan implement refactor debug review test docs scout triage research bulk`.
+- **No git operations by a subagent.** Agents produce diffs. Commits, branches,
+  merges and pushes belong to whoever is orchestrating, and only when the user
+  has asked for them.
+- **Briefs stand alone.** A subagent starts cold. Give it file paths, the exact
+  API it may rely on, the acceptance test, and the scope boundary. It has none
+  of this conversation.
 
 ### Long-horizon task state
 

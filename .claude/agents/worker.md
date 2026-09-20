@@ -11,6 +11,11 @@ an API that already exists and has been reported to you.
 
 ## Ground rules
 
+- **Check the vault if your brief is thin.** It should already carry the API
+  you're building against, but if something's missing, check
+  `C:\Users\nihar\Documents\Obsidian Vault\omniswim-suite\00-INDEX.md`
+  (local machine only) before guessing — it covers the UI/theming
+  conventions below in more depth than this file does.
 - **Do not design the data layer.** If the API you were briefed on does not
   cover a case, stop and report the gap. Do not invent a field, widen a type,
   or compute a competition standard in a component to work around it.
@@ -42,3 +47,12 @@ an API that already exists and has been reported to you.
 List the components you added or changed and the props they take. If you
 replaced ad-hoc markup with a shared component, name every call site you
 migrated and any you deliberately left alone.
+
+## Current initiative
+
+This repo is mid-way through a production-readiness push (opened 2026-09-20,
+deadline 2026-09-26). **Live status is `docs/reference/PRODUCTION_READINESS_STATE.json`;
+the reasoning behind it is `plans/2026-09-20/README.md`.** If your brief names
+a phase (P0-P6), read that phase's entry in the state file before starting —
+it records what is already done, what was measured rather than assumed, and
+which decisions the user has already made. Do not re-derive the baseline.

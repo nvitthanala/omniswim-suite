@@ -1,0 +1,151 @@
+{
+  "initiative": "production-readiness-2026-09",
+  "description": "Make the Omniswim suite minus Metrics genuinely usable in a real coaching setting: generalised scoring rules (all divisions/formats, nothing hardcoded), sorted SwimCloud ingest, a faster crawler, a navigable UI, real bug testing, and a user-facing guide. Opened 2026-09-20 against a self-imposed 2026-09-26 deadline.",
+  "planDoc": "plans/2026-09-20/README.md",
+  "readThisFirstOnResume": "This file, then plans/2026-09-20/README.md. Do NOT re-derive the baseline or the findings - both are recorded below with the commands that produced them. A brief to a fresh or resumed subagent points at this file's phase entry for its target, never at 'continue where you left off'.",
+  "delegation": {
+    "model": "claude-only",
+    "note": "User decision 2026-09-20: the cross-provider 'fleet' (.fleet.json, fleet-routing skill) is a superseded self-built tool. Disregard it entirely. Use the .claude/agents/ definitions: orchestrator, executor, worker, finisher.",
+    "supersedes": "CLAUDE.md 'Cross-provider delegation (the fleet)' section - to be rewritten in P0."
+  },
+  "userDecisions": [
+    { "id": "d1", "q": "What must work by the deadline", "a": "Pre-meet lineup planning; opponent scouting/projection; post-meet reconciliation. Live in-meet scoring explicitly NOT required - this lowers the meet-day hardening bar." },
+    { "id": "d2", "q": "Reconciliation behaviour", "a": "Enable comparison ONLY when official results and pulled team/swimmer history are both present. Gate it; never compare against half the data." },
+    { "id": "d3", "q": "Crawl speed posture", "a": "Caching and fewer pages first. Do NOT relax the 3000ms sequential floor on structural pages. Pooling structural pages was offered and declined." },
+    { "id": "d4", "q": "Scoring formats", "a": "Full in-app preset authoring AND ship more built-in presets. Researched collegiate formats." },
+    { "id": "d5", "q": "Metrics applet", "a": "Stays visible, clearly marked experimental / not meet-ready. Do not hide, do not work on it." },
+    { "id": "d6", "q": "Runtime for real use", "a": "User asked for a recommendation. Not yet answered - see openDecisions od2." },
+    { "id": "d7", "q": "Repo visibility", "a": "Private. DONE 2026-09-20 via gh repo edit; verified visibility=PRIVATE." }
+  ],
+  "baseline": {
+    "measuredAt": "2026-09-20",
+    "branch": "nvitthanala/swimcloud-data-ingest",
+    "headAtBaseline": "dfbd4737",
+    "lint": { "cmd": "npm run lint --workspaces --if-present", "result": "clean, 8 workspaces, exit 0", "note": "'lint' is tsc --noEmit only. There is no ESLint in this repo - a real gap, logged as a finding." },
+    "vitest": { "cmd": "npx vitest run", "result": "803 passed / 0 failed, 45 files" },
+    "scriptSuite": { "cmd": "node scripts/run-tests.mjs", "result": "81 passed / 0 failed / 1 skipped (Postgres, needs PG_TEST_URL); includes Playwright e2e" },
+    "branchTopology": "All branches already merged to main. main is 1 commit ahead of this branch (the PR #5 merge, 9105cbd1). Only uncommitted work anywhere: 5 files in the chinook worktree."
+  },
+  "findings": [
+    {
+      "id": "f1",
+      "severity": "P0-for-this-initiative",
+      "title": "The NCAA Rule 7 scoring engine is fully built, sourced, tested - and wired to nothing",
+      "evidence": [
+        "packages/core/src/lib/ncaaScoringRules.ts is 1401 lines: 14 meet formats, exhibition isolation (7-10-1), DQ place advancement (7-7), tie division (7-8), lost-place accounting, per-format maxScorersPerTeam.",
+        "tests/ncaaScoringRules.test.ts is 864 lines.",
+        "grep across the monorepo for every export returns exactly two consumers: its own test file and a re-export in packages/core/src/index.ts. Zero product code calls it.",
+        "The product scores via calculatePoints in packages/core/src/lib/utils.ts against the legacy ScoringSettings shape (consumers: scoringEngine, rosterOptimizer, arbitrage/*, scenarioDiff, matrix swimCloudMeetImportBridge).",
+        "Provenance verified this session: data/scoring_rules/sources/ncaascoring.pdf sha256 5b98f8f69470606ea179b053b86d7fb4451f61a874c0fff5d8d18b369d6bb92e is byte-identical to a fresh fetch of https://meets.swimdna.org/media/ncaascoring.pdf and matches the manifest."
+      ],
+      "consequence": "ScoringSettings models relay points as a scalar relayMultiplier. That is exactly correct for all six championship field sizes (relay table is 2x individual at 6/8/12/16/18/24 - all verified against the rulebook). It is structurally WRONG for every non-championship format: dual 6+ lanes is individual 9-4-3-2-1 with relays 11-4-2 (11 is not 2x9); dual <=5 lanes is 5-3-1 with relays 7 (7 is not 2x5). The three dual diving tables (7-1-4) are also inexpressible - diving is modelled only as diverScorerWeight, not as its own place-value table. A dual meet is the most common format in college swimming and the app cannot represent one today.",
+      "status": "open, drives P1"
+    },
+    {
+      "id": "f2",
+      "severity": "P1",
+      "title": "Every captured page is cacheStatus 'provisional'; a re-crawl re-fetches all of it",
+      "evidence": [
+        "data/swimcloud-captures/captures/meet-356467.json: 234/234 pages cacheStatus='provisional'. No page is ever promoted to durable.",
+        "Measured wall time from retrievedAt timestamps: meetTeamSwims 42 pages/122s (2981ms observed gap), teamRoster 8 pages/21s (3002ms gap), swimmerTimes 184 pages/75s (409ms gap, pooled 3 lanes). Total ~218s for 4 teams."
+      ],
+      "consequence": "50 sequential pages cost more wall-clock than 184 pooled ones, so the 3000ms floor dominates - and the user has ruled out relaxing it (d3). Durable caching is therefore the main available speedup, and it strictly REDUCES traffic rather than adding detection surface.",
+      "status": "open, drives P3"
+    },
+    {
+      "id": "f3",
+      "severity": "P1",
+      "title": "SwimCloud import silently drops the best swimmers (prelims/finals ambiguity)",
+      "evidence": [
+        "plans/2026-09-10/01-SWIMCLOUD-SCORING-CORRECTNESS.md, still current.",
+        "SwimCloud team-swims pages carry no round column; a finalist appears as 2+ near-identical rows whose Place is a per-round placement (proven: a 1:47.40 marked 2nd vs a 1:47.77 marked 1st).",
+        "The landed fix excludes the entire ambiguous group from the import rather than guessing a winner - correct per the provenance rules, but 13 of 30 rows (43%) on the one measured page were in such a group."
+      ],
+      "consequence": "The better a swimmer is, the more likely they vanish from an opponent-scouting import. Directly undermines user decision d1's scouting/projection requirement. Candidate fix: use meetEvent pages, which do carry round context, as a disambiguation SOURCE (not a guess).",
+      "status": "open, drives P3"
+    },
+    {
+      "id": "f4",
+      "severity": "P2",
+      "title": "UI convergence partially done; three items confirmed still open",
+      "evidence": [
+        "Re-measured 2026-09-20 against plans/2026-09-10/03-MANAGER-DIAGNOSIS.md rather than trusting it.",
+        "ALREADY FIXED since that doc: badge-warning/badge-info hand-rolling 9 files -> 1; crossCourseArbitrageSections.tsx (848 lines) deleted; SwimCloudCaptureRosterImportPanel consolidated.",
+        "STILL OPEN: 122 hand-rolled <button> elements across packages/manager/src/components; the team <select> duplicated across 11 files; four stacked navigation idioms (boolean-flag modal / wizard step / segmented tab / slide-over drawer)."
+      ],
+      "status": "open, drives P4"
+    },
+    {
+      "id": "f5",
+      "severity": "P2",
+      "title": "There is no ESLint - 'npm run lint' is tsc --noEmit only",
+      "evidence": ["Every workspace's lint script is 'tsc --noEmit -p tsconfig.json'. No eslint config or dependency in the repo."],
+      "consequence": "Type errors are caught; unused vars, exhaustive-deps, accessibility and React-hooks violations are not. Relevant to the 'code is not hodgepodged' requirement.",
+      "status": "open, candidate for P5"
+    }
+  ],
+  "phases": [
+    {
+      "id": "P0",
+      "name": "Consolidation and governance",
+      "owner": "direct (no subagent)",
+      "status": "in-progress",
+      "items": [
+        { "what": "Make repo private", "status": "done", "how": "gh repo edit --visibility private; verified isPrivate=true" },
+        { "what": "Write plan doc + this state file", "status": "done" },
+        { "what": "Land chinook worktree's 5 uncommitted files (Obsidian-vault instructions + 4 agent defs)", "status": "todo" },
+        { "what": "Prune merged branches and stale worktrees", "status": "todo" },
+        { "what": "Rewrite CLAUDE.md delegation section to drop the superseded fleet layer (d6)", "status": "todo" },
+        { "what": "Refresh the 4 agent definitions for this round", "status": "todo" }
+      ]
+    },
+    {
+      "id": "P1",
+      "name": "Scoring generalisation",
+      "owner": "executor",
+      "status": "blocked",
+      "blockedOn": "od1 - the convergence decision",
+      "items": [
+        { "what": "Let ScoringSettings express every Rule 7 format, with NCAA_FORMAT_RULESETS as the single source of the numbers", "status": "todo" },
+        { "what": "Generate built-in presets for all 14 formats from that constant", "status": "todo" },
+        { "what": "Preset CRUD API on apps/shell/server.ts with zod validation", "status": "todo" },
+        { "what": "Remove presetIdForConference's hardcoded conference string matching", "status": "todo" },
+        { "what": "Regression: NSISC team totals must stay byte-exact (test_nsisc_team_totals.mjs)", "status": "todo" }
+      ]
+    },
+    { "id": "P2", "name": "Preset authoring UI", "owner": "worker", "status": "blocked", "blockedOn": "P1 reporting its API surface", "items": [] },
+    { "id": "P3", "name": "SwimCloud ingest and crawl speed", "owner": "executor", "status": "todo", "items": [
+      { "what": "Durable capture cache + skip-unchanged on re-crawl (f2)", "status": "todo" },
+      { "what": "Job-scoped page selection - do not fetch swimmerTimes for a meet-results-only job", "status": "todo" },
+      { "what": "Re-open prelims/finals disambiguation using meetEvent round context (f3)", "status": "todo" },
+      { "what": "Gate reconciliation on both sources present (d2)", "status": "todo" }
+    ] },
+    { "id": "P4", "name": "UI navigability", "owner": "worker", "status": "todo", "items": [
+      { "what": "Button convergence (122 hand-rolled)", "status": "todo" },
+      { "what": "Shared TeamSelect (11 duplicates)", "status": "todo" },
+      { "what": "Mark Metrics experimental (d5)", "status": "todo" }
+    ] },
+    { "id": "P5", "name": "Adversarial bug hunt", "owner": "executor + finisher", "status": "todo", "items": [] },
+    { "id": "P6", "name": "User guide", "owner": "worker", "status": "todo", "items": [] }
+  ],
+  "openDecisions": [
+    {
+      "id": "od1",
+      "blocks": "P1",
+      "question": "How should the Rule 7 engine (ncaaScoringRules.ts) and the legacy ScoringSettings converge?",
+      "optionA": "Replace: make calculatePoints delegate to computeNcaaEventScoring. One engine, no duplication, every format correct by construction. But it rewrites the scoring data path that NSISC totals are byte-exact verified against, and that optimizer/arbitrage/scenario-diff all depend on. Highest risk before a deadline.",
+      "optionB": "Extend: add optional relayPoints[] / divingPoints[] / per-team per-event place caps to ScoringSettings, and GENERATE the built-in presets from NCAA_FORMAT_RULESETS so the tables still live in exactly one place. calculatePoints keeps its structure and learns to prefer relayPoints over relayMultiplier when present. Additive, every existing verified behaviour preserved, every format expressible. Recommended.",
+      "recommendation": "B, with A recorded as the longer-term convergence once the deadline passes.",
+      "status": "awaiting user"
+    },
+    {
+      "id": "od2",
+      "blocks": "nothing yet, needed before P6",
+      "question": "Which runtime to recommend for real use (dev launcher / production build / Tauri desktop)?",
+      "status": "user asked for a recommendation; to be answered after P0 verifies the production path end to end (docs/INVARIANTS.md item 2 records that prod has historically 404'd where dev worked)"
+    }
+  ],
+  "log": [
+    { "at": "2026-09-20", "what": "Session opened. Read plans/STATE.md, PHASE_STATE.json, UI_REDESIGN_STATE.json, the 2026-09-10 diagnosis docs and INVARIANTS.md. Measured a fresh baseline rather than inheriting one. Confirmed all branches already merged to main. Made the repo private. Researched collegiate scoring formats, verified the archived NCAA Rule 7 PDF by hash against a live fetch, and found f1 (the unwired engine). Wrote plans/2026-09-20/README.md and this file." }
+  ]
+}

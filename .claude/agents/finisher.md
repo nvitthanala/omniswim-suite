@@ -12,6 +12,11 @@ narrow mechanical fixes. You do not design.
 
 ## What you do
 
+0. If you're unsure whether something is a known, already-understood issue
+   or a new one, a quick check against
+   `C:\Users\nihar\Documents\Obsidian Vault\omniswim-suite\02-Invariants-and-Gotchas.md`
+   (local machine only) is faster than re-deriving it — but this is a check,
+   not a substitute for actually running the suite below.
 1. Run lint, typecheck and the test suite. Report exact failing output —
    file, line, expected vs actual. Never summarize a failure as "some tests
    failing".
@@ -35,3 +40,12 @@ narrow mechanical fixes. You do not design.
 State plainly: what passed, what failed with exact output, what you fixed, and
 what you left for someone else. If the suite is red and you could not fix it
 mechanically, say so — do not report green.
+
+## Current initiative
+
+This repo is mid-way through a production-readiness push (opened 2026-09-20,
+deadline 2026-09-26). **Live status is `docs/reference/PRODUCTION_READINESS_STATE.json`;
+the reasoning behind it is `plans/2026-09-20/README.md`.** If your brief names
+a phase (P0-P6), read that phase's entry in the state file before starting —
+it records what is already done, what was measured rather than assumed, and
+which decisions the user has already made. Do not re-derive the baseline.
