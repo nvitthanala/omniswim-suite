@@ -112,11 +112,14 @@
     {
       "id": "f4",
       "severity": "P2",
-      "title": "UI convergence partially done; three items confirmed still open",
+      "title": "UI convergence is further along than the 2026-09-10 diagnosis says; re-measured",
       "evidence": [
-        "Re-measured 2026-09-20 against plans/2026-09-10/03-MANAGER-DIAGNOSIS.md rather than trusting it.",
-        "ALREADY FIXED since that doc: badge-warning/badge-info hand-rolling 9 files -> 1; crossCourseArbitrageSections.tsx (848 lines) deleted; SwimCloudCaptureRosterImportPanel consolidated.",
-        "STILL OPEN: 122 hand-rolled <button> elements across packages/manager/src/components; the team <select> duplicated across 11 files; four stacked navigation idioms (boolean-flag modal / wizard step / segmented tab / slide-over drawer)."
+        "RE-MEASURED 2026-09-20. The 2026-09-10 diagnosis doc is partly stale - same lesson as f6.",
+        "ALREADY FIXED since that doc: badge hand-rolling 9 files -> 1; crossCourseArbitrageSections.tsx (848 lines) deleted; SwimCloudCaptureRosterImportPanel consolidated; and ManagerApp's top toolbar (diagnosis section 4b, 'the very first row a coach sees') now uses a consistent <Button variant=\"outline\"> with variant=\"primary\" only on Import roster, with a comment citing the diagnosis.",
+        "STILL OPEN, verified today: 122 raw <button> elements vs 9 <Button> components across packages/manager/src; Button imported by only 4 files.",
+        "STILL OPEN, verified today: the team dropdown '<option value=\"\">Select a team...</option>' is duplicated in exactly 6 files - IndRelayManagementView.tsx, RosterImportWizard.tsx, RosterOptimizeStepParts.tsx, RosterRelayStep.tsx, TeamRosterPanel.tsx, AthleteHistoryImportPanel.tsx. (An earlier count of 11 in this session was wrong - it counted prose strings like 'Select a team before parsing.' The diagnosis doc's original figure of 6 was correct.)",
+        "packages/ui already exports 21 primitives including Button, Modal, SegmentedControl, EmptyState, FloatingWindow, WizardShell. No TeamSelect.",
+        "RosterImportWizard.tsx has the most raw buttons (13) and is the file the diagnosis flags for mixing tab and button idioms in one row."
       ],
       "status": "open, drives P4"
     },
@@ -140,6 +143,41 @@
       ],
       "consequence": "Treat every plans/*.md claim as a lead to verify, not a fact. Check the code before briefing an agent on a doc's finding. Both corrections here were caught before any agent was dispatched on them.",
       "status": "open - the stale docs should get status headers in P6"
+    },
+    {
+      "id": "f7",
+      "severity": "P2-provenance",
+      "title": "NCAA_CUTS: 40 hand-typed, unsourced competition times in constants.ts, dead but importable",
+      "evidence": [
+        "packages/core/src/constants.ts line 74. 10 events x men/women x A/B cut = 40 hand-typed times.",
+        "Zero consumers: grep across packages, apps, tests and scripts returns only the declaration itself.",
+        "Not re-exported from packages/core/src/index.ts."
+      ],
+      "consequence": "CLAUDE.md's provenance section states outright: 'No competition time is ever hand-typed into a .ts file.' This is a survivor of the original cutlines.ts incident that same section documents (D2 data labelled D1, invented proj_* columns). It is inert today but it is exported from a module every package imports, so one import makes it live again with no provenance and no test guarding it. Delete it; the sourced replacement is data/cutlines/ + cutlineTags.ts.",
+      "status": "open - delete in P5 cleanup once P1 is out of packages/core"
+    },
+    {
+      "id": "f8",
+      "severity": "P2",
+      "title": "The event catalog is a fixed short-course-yards NCAA program",
+      "evidence": [
+        "packages/core/src/lib/eventCatalog.ts hardcodes 17 INDIVIDUAL_EVENTS plus 2 relay-split events.",
+        "Consumers are 4 Manager UI components only (AthleteEntriesSection, AthleteHistorySection, AthleteCreditedSwimsRow, AthleteLineupEditorPanel) - it is an entry-planning picker list, not a scoring gate. Severity is bounded by that.",
+        "CONVERSION_FACTORS in constants.ts covers 400 Freestyle and 1500 Freestyle; INDIVIDUAL_EVENTS does not list 400 Freestyle at all."
+      ],
+      "consequence": "A coach planning a long-course or non-standard meet cannot pick an event the program actually contests - notably 400 Freestyle, which the conversion table already knows about. Relevant to the 'usable for all divisions/formats' requirement, but lower priority than scoring formats because it only limits the planning picker.",
+      "status": "open - candidate for P4"
+    },
+    {
+      "id": "f9",
+      "severity": "P3-cosmetic",
+      "title": "Team colours and aliases hardcode four specific schools",
+      "evidence": [
+        "packages/core/src/constants.ts TEAM_COLORS_MAP hardcodes Henderson State, Ouachita Baptist, Delta State, Oklahoma Baptist.",
+        "packages/core/src/data/teamAliases.ts hardcodes HSU/OBU/OUAC acronyms, though it also has a generic acronym builder that degrades gracefully for unknown schools."
+      ],
+      "consequence": "Cosmetic only - an unlisted school falls back to the NEON_COLORS rotation. Worth making user-editable eventually; not a blocker.",
+      "status": "open - low priority"
     }
   ],
   "phases": [
@@ -301,6 +339,10 @@
     {
       "at": "2026-09-20",
       "what": "Corrected finding f3: the prelims/finals round resolution is already implemented and wired end-to-end (crawl pass -> server parse -> OpsModule -> bridge). The 2026-09-10 plan doc that reported it as broken is stale. Added f6 recording that plan docs lag code. P3's scope shrinks accordingly; its page-count baseline must be re-measured because the archived capture predates the event-results pass."
+    },
+    {
+      "at": "2026-09-20",
+      "what": "Hardcoding audit while P1 ran. Found f7 (dead unsourced NCAA_CUTS - a provenance-rule violation), f8 (event catalog fixed to SCY NCAA program, UI-picker scope only), f9 (team colours/aliases). Confirmed the applet nav and suite home are simple; the navigability problem is inside Manager, per the 2026-09-10 diagnosis."
     }
   ]
 }
