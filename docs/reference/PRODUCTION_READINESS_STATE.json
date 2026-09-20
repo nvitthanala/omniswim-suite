@@ -219,6 +219,18 @@
       ],
       "consequence": "Fixed in 1e7d0220. Recorded because it is the same shape as f10 and the extension-build finding: two implementations of one concept where only the less-used one was correct.",
       "status": "closed 2026-09-20"
+    },
+    {
+      "id": "f13",
+      "severity": "P1-fixed",
+      "title": "Selecting the invitational scoring preset crashed with an unhandled promise rejection",
+      "evidence": [
+        "packages/core/src/lib/scoringPresets.ts:113 rethrows HostPublishedTableRequiredError for a format the NCAA publishes no table for (Rule 7-4 leaves it to the host).",
+        "ScoringSettingsFields.tsx called fetchScoringPresetSettings with no catch for it, so choosing ncaa-invitational-host-published produced an unhandled rejection.",
+        "Found by the P2 worker while verifying what already worked, BEFORE building anything - the brief's step 1."
+      ],
+      "consequence": "Instructive shape: the provenance rule working correctly (refuse to invent a table) met a caller that did not expect a throw. Correct core behaviour can still crash an unprepared UI. Fixed in d66a725c with a mutation proving the crash returns if the catch is removed.",
+      "status": "closed 2026-09-20"
     }
   ],
   "phases": [
@@ -335,9 +347,16 @@
       "id": "P2",
       "name": "Preset authoring UI",
       "owner": "worker",
-      "status": "in progress (worker dispatched)",
+      "status": "done",
       "blockedOn": "P1 reporting its API surface",
-      "items": []
+      "items": [],
+      "done": [
+        "Editors for relayPoints, divingPoints, per-team per-event caps, overCapPlaceBehavior",
+        "ScoringPresetManagerModal: create/duplicate/edit/delete/import/export user presets",
+        "relayMultiplier now routed through scoringSettingsLock so it is disabled-and-explained when an explicit relay table supersedes it - it was previously editable and silently discarded",
+        "Fixed an unhandled promise rejection: selecting the invitational preset threw HostPublishedTableRequiredError with no catch. It now asks the coach for the host's table; duplicating it seeds a BLANK table, never invented numbers."
+      ],
+      "knownGap": "No DOM test for the manager modal's create/edit/delete flow (would need the 4 HTTP routes mocked). The agent flagged this itself rather than shipping it silently. Candidate for P5."
     },
     {
       "id": "P3",
@@ -410,7 +429,7 @@
       "id": "P7",
       "name": "Data safety - reachable and automatic backups",
       "owner": "worker (UI) + executor (triggers)",
-      "status": "server side done; UI button still open",
+      "status": "done",
       "items": [
         {
           "what": "Call POST /api/workspaces/backup from the UI - an explicit 'Back up now' action with success/failure feedback",
@@ -433,10 +452,10 @@
         "Automatic backup on server start (verified live: SQLite boot wrote a 2.9MB export of all 3 workspaces)",
         "Automatic backup before a workspace delete, best-effort and logged, never blocking the delete",
         "Retention bounded at 20 (OMNI_BACKUP_KEEP overrides; values < 1 ignored as a likely typo)",
-        "Retention only ever deletes files the backup writer produced - the hand-made .bak copies in data/backups/ are provably untouchable"
+        "Retention only ever deletes files the backup writer produced - the hand-made .bak copies in data/backups/ are provably untouchable",
+        "'Back up now' in the workspace sidebar; the toast names the written file. Verified live: POST returned meets-manual-2026-09-20T23-09-19-059Z.json"
       ],
       "stillOpen": [
-        "A 'Back up now' button in the UI. The route POST /api/workspaces/backup works and is still UI-unreachable.",
         "A restore path, or a documented manual one in the P6 guide."
       ]
     }
@@ -515,6 +534,10 @@
     {
       "at": "2026-09-20T23:00Z",
       "what": "After the quota reset: committed P1 (e20f8608), re-dispatched P3a to finish (it was partial), implemented and committed the P7 server-side backup safety (1e7d0220) with live verification, and dispatched P2 (preset authoring UI) to a worker. Mutation testing again found a real gap - this time in my own retention test, where a single-file case hid a negative-slice bug."
+    },
+    {
+      "at": "2026-09-20T23:12Z",
+      "what": "P2 landed and was verified independently. Closed f10 completely by adding the 'Back up now' sidebar button (verified live against the running server). Recorded f13, the invitational-preset crash P2 found. Only P3a remains in flight."
     }
   ],
   "RESUME_HERE": {
@@ -531,7 +554,9 @@
       "292f2682 Compare against official totals only when both sides exist (d2, 3 mutations)",
       "77d84846 Record the crawl-scope dispatch and the seed-data question",
       "e20f8608 Score every NCAA meet format, not just championships (P1 - COMPLETE and verified: lint clean 8 workspaces, vitest 838 pass, script suite 82/0/1, NSISC byte-exact held, shell build exit 0, relayPoints mutation proven)",
-      "1e7d0220 Back up on start and before a delete, and bound the history (P7 server side - COMPLETE, verified against the real server, 3 mutations incl. one that exposed a gap in its own test)"
+      "1e7d0220 Back up on start and before a delete, and bound the history (P7 server side - COMPLETE, verified against the real server, 3 mutations incl. one that exposed a gap in its own test)",
+      "d66a725c Let a coach author and manage scoring rule sets (P2 - COMPLETE, verified: 28 tests green, 4 mutations, fixed a real unhandled-rejection crash on the invitational preset and a relay-multiplier control the engine was discarding)",
+      "69788f68 Let a coach back up from the workspace sidebar (P7 UI half - verified against the running server)"
     ],
     "inFlightUncommitted": {
       "P3a_crawl_scopes_PARTIAL": {
@@ -551,11 +576,6 @@
         ],
         "currentTreeState": "vitest 838 passed / 1 failed; the single failure is the stale extension bundle, caused entirely by the above.",
         "howToFinish": "Re-dispatch an executor with the original P3a brief (recorded in the log entry below and in plans/2026-09-20/README.md phase P3), telling it the model/persistence/resume layers already exist and only the crawler-content.ts wiring, the UI radios, the incompleteness surfacing, the tests and the extension rebuild remain."
-      },
-      "P2_preset_authoring_UI": {
-        "status": "dispatched to a worker after P1 landed; may have written nothing yet",
-        "scope": "packages/matrix/src/components/ScoringSettingsFields.tsx + new preset-authoring components. Builds against P1's API (see phase P1 landedApi).",
-        "mustNotTouch": "anything SwimCloud-related (the other agent holds it), and apps/shell/server.ts (already complete)"
       }
     },
     "nextActionsInPriorityOrder": [
