@@ -180,4 +180,120 @@ describe('ScoringSettingsFields', () => {
     expect(input).toBeTruthy();
     expect(input!.disabled).toBe(true);
   });
+
+  describe('relay points table', () => {
+    it('selecting the NCAA dual (6+ lanes) preset shows the real 11-4-2 relay table, not 18-8-6 (2x the individual table)', async () => {
+      await render();
+      const select = container.querySelector<HTMLSelectElement>('select[aria-label="Scoring preset"]');
+      expect(select).toBeTruthy();
+      await act(async () => setNativeValue(select!, 'ncaa-dual-six-lanes-or-more'));
+      await flush();
+      expect(latest?.relayPoints).toStrictEqual([11, 4, 2, 0]);
+      // The bug this table exists to fix: relayMultiplier x individual would give 18-8-6-4-2-0.
+      expect(latest?.relayPoints).not.toStrictEqual(latest?.scoringPoints.map(p => p * (latest?.relayMultiplier ?? 1)));
+    });
+
+    it('once a relay table is present, the relay-multiplier input is disabled and explained, not silently discarded', async () => {
+      await render();
+      const select = container.querySelector<HTMLSelectElement>('select[aria-label="Scoring preset"]');
+      await act(async () => setNativeValue(select!, 'ncaa-dual-six-lanes-or-more'));
+      await flush();
+      const multiplierInput = container.querySelector<HTMLInputElement>('input[aria-label="Relay multiplier"]');
+      expect(multiplierInput).toBeTruthy();
+      expect(multiplierInput!.disabled).toBe(true);
+      expect(container.textContent).toContain('relay multiplier is ignored');
+    });
+
+    it('switching the segmented control to "Multiplier" clears the relay table and re-enables the multiplier', async () => {
+      await render();
+      const select = container.querySelector<HTMLSelectElement>('select[aria-label="Scoring preset"]');
+      await act(async () => setNativeValue(select!, 'ncaa-dual-six-lanes-or-more'));
+      await flush();
+      const multiplierButton = [...container.querySelectorAll('button')].find(
+        b => b.getAttribute('aria-label') === 'Score relays from the relay multiplier'
+      );
+      expect(multiplierButton).toBeTruthy();
+      await act(async () => multiplierButton!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      expect(latest?.relayPoints).toBeUndefined();
+      const multiplierInput = container.querySelector<HTMLInputElement>('input[aria-label="Relay multiplier"]');
+      expect(multiplierInput!.disabled).toBe(false);
+    });
+
+    it('switching to "Explicit table" from a plain workspace seeds an editable table the coach fills in', async () => {
+      await render();
+      const tableButton = [...container.querySelectorAll('button')].find(
+        b => b.getAttribute('aria-label') === 'Score relays from an explicit relay place table'
+      );
+      expect(tableButton).toBeTruthy();
+      await act(async () => tableButton!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      expect(latest?.relayPoints).toStrictEqual([0]);
+      const placeInput = container.querySelector<HTMLInputElement>('input[aria-label="Relay points for place 1"]');
+      expect(placeInput).toBeTruthy();
+      await act(async () => setNativeValue(placeInput!, '11'));
+      expect(latest?.relayPoints).toStrictEqual([11]);
+    });
+  });
+
+  describe('diving points table', () => {
+    it('is off by default and turning it on adds an editable place table plus a diving-only per-team cap', async () => {
+      await render();
+      expect(container.querySelector('input[aria-label="Diving points for place 1"]')).toBeNull();
+      const tableButton = [...container.querySelectorAll('button')].find(
+        b => b.getAttribute('aria-label') === 'Score diving from its own place table'
+      );
+      expect(tableButton).toBeTruthy();
+      await act(async () => tableButton!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
+      expect(latest?.divingPoints).toStrictEqual([0]);
+      const capInput = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Maximum scoring divers per team per diving event"]'
+      );
+      expect(capInput).toBeTruthy();
+      await act(async () => setNativeValue(capInput!, '2'));
+      expect(latest?.divingMaxScorersPerTeamPerEvent).toBe(2);
+    });
+  });
+
+  describe('per-team, per-event scoring caps', () => {
+    it('an empty per-event cap input reports undefined, not a fabricated 0 or NaN', async () => {
+      await render();
+      const capInput = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Maximum individual scorers per team per event"]'
+      );
+      expect(capInput).toBeTruthy();
+      await act(async () => setNativeValue(capInput!, '3'));
+      expect(latest?.maxIndividualScorersPerTeamPerEvent).toBe(3);
+      await act(async () => setNativeValue(capInput!, ''));
+      expect(latest?.maxIndividualScorersPerTeamPerEvent).toBeUndefined();
+    });
+
+    it('warns, rather than silently accepting, a per-event cap combined with a full-meet scorer pool — the server rejects this combination', async () => {
+      await render({
+        settings: mergeScoringSettings({
+          ...BASE,
+          scorerCapScope: 'meet',
+          maxIndividualScorersPerTeam: 18,
+        }),
+      });
+      const capInput = container.querySelector<HTMLInputElement>(
+        'input[aria-label="Maximum individual scorers per team per event"]'
+      );
+      await act(async () => setNativeValue(capInput!, '2'));
+      expect(container.textContent).toContain('cannot be combined with a full-meet scorer pool');
+    });
+  });
+
+  describe('host-published table (NCAA Rule 7-4 invitational)', () => {
+    it('selecting the invitational preset applies nothing, shows the citation and the prompt to enter the host table, and never crashes', async () => {
+      await render();
+      const select = container.querySelector<HTMLSelectElement>('select[aria-label="Scoring preset"]');
+      const before = latest;
+      await act(async () => setNativeValue(select!, 'ncaa-invitational-host-published'));
+      await flush();
+      // Nothing applied — `onChange` never fired for this selection.
+      expect(latest).toBe(before);
+      expect(container.textContent).toContain('No points table applied');
+      expect(container.textContent).toContain('NCAA Rule 7-4');
+      expect(container.textContent).toContain('Host publishes this table');
+    });
+  });
 });

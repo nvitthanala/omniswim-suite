@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { ChevronDown, Settings, Save } from 'lucide-react';
+import { ChevronDown, Settings, Settings2, Save } from 'lucide-react';
 import { ScoringSettings } from '@omniswim/core/types';
 import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
 import { ScoringSettingsFields } from './ScoringSettingsFields';
+import { ScoringPresetManagerModal } from './ScoringPresetManagerModal';
 
 type Props = {
   settings: ScoringSettings;
@@ -39,6 +40,8 @@ export default function ScoringSettingsPanel({
 }: Props) {
   const [open, setOpen] = useState(defaultOpen);
   const [draft, setDraft] = useState<ScoringSettings>(() => mergeScoringSettings(settings));
+  const [manageOpen, setManageOpen] = useState(false);
+  const [presetListRefreshToken, setPresetListRefreshToken] = useState(0);
 
   const headerTitle = (
     <h4 className="text-ui-label font-medium text-theme-secondary uppercase tracking-widest flex items-center gap-2">
@@ -74,6 +77,18 @@ export default function ScoringSettingsPanel({
     </div>
   );
 
+  const manageRuleSetsButton = (
+    <button
+      type="button"
+      onClick={() => setManageOpen(true)}
+      aria-label="Manage scoring rule sets"
+      className="text-[9px] text-theme-secondary hover:text-[var(--text-primary)] uppercase tracking-widest flex items-center gap-1 shrink-0"
+    >
+      <Settings2 size={10} aria-hidden />
+      Manage rule sets
+    </button>
+  );
+
   const body = (
     <ScoringSettingsFields
       settings={settings}
@@ -83,8 +98,17 @@ export default function ScoringSettingsPanel({
       onScoringViewChange={onScoringViewChange}
       suggestedPresetId={suggestedPresetId}
       onApplyAndSaveSuggestedPreset={onSave}
+      presetPickerExtra={manageRuleSetsButton}
+      presetListRefreshToken={presetListRefreshToken}
     />
   );
+
+  const manageModal = manageOpen ? (
+    <ScoringPresetManagerModal
+      onClose={() => setManageOpen(false)}
+      onPresetsChanged={() => setPresetListRefreshToken(v => v + 1)}
+    />
+  ) : null;
 
   if (collapsible) {
     return (
@@ -102,6 +126,7 @@ export default function ScoringSettingsPanel({
           {open ? saveButton : null}
         </div>
         {open ? <div className="px-5 pb-5 border-t border-theme-soft pt-4">{body}</div> : null}
+        {manageModal}
       </div>
     );
   }
@@ -113,6 +138,7 @@ export default function ScoringSettingsPanel({
         {saveButton}
       </div>
       {body}
+      {manageModal}
     </div>
   );
 }

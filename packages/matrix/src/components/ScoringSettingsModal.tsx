@@ -1,8 +1,9 @@
 import React, { useState } from 'react';
-import { X, Save } from 'lucide-react';
+import { X, Save, Settings2 } from 'lucide-react';
 import { ScoringSettings } from '@omniswim/core/types';
 import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
 import { ScoringSettingsFields } from './ScoringSettingsFields';
+import { ScoringPresetManagerModal } from './ScoringPresetManagerModal';
 import { Button } from '@omniswim/ui';
 
 interface Props {
@@ -27,6 +28,8 @@ interface Props {
  */
 export default function ScoringSettingsModal({ settings, onSave, onClose, scoringView, onScoringViewChange, conference }: Props) {
   const [draft, setDraft] = useState<ScoringSettings>(() => mergeScoringSettings(settings));
+  const [manageOpen, setManageOpen] = useState(false);
+  const [presetListRefreshToken, setPresetListRefreshToken] = useState(0);
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop backdrop-blur-sm">
@@ -45,6 +48,18 @@ export default function ScoringSettingsModal({ settings, onSave, onClose, scorin
             conference={conference}
             scoringView={scoringView}
             onScoringViewChange={onScoringViewChange}
+            presetPickerExtra={
+              <button
+                type="button"
+                onClick={() => setManageOpen(true)}
+                aria-label="Manage scoring rule sets"
+                className="text-[9px] text-theme-secondary hover:text-[var(--text-primary)] uppercase tracking-widest flex items-center gap-1 shrink-0"
+              >
+                <Settings2 size={10} aria-hidden />
+                Manage rule sets
+              </button>
+            }
+            presetListRefreshToken={presetListRefreshToken}
           />
         </div>
 
@@ -57,6 +72,13 @@ export default function ScoringSettingsModal({ settings, onSave, onClose, scorin
           </Button>
         </div>
       </div>
+
+      {manageOpen ? (
+        <ScoringPresetManagerModal
+          onClose={() => setManageOpen(false)}
+          onPresetsChanged={() => setPresetListRefreshToken(v => v + 1)}
+        />
+      ) : null}
     </div>
   );
 }

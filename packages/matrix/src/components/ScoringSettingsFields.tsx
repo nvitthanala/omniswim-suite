@@ -30,12 +30,17 @@
  * for the Panel's own users, not a silent one — recorded here rather than
  * left implicit.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { Lock } from 'lucide-react';
-import { Button, SegmentedControl } from '@omniswim/ui';
+import { Badge, Button, SegmentedControl } from '@omniswim/ui';
 import { ScoringPresetMeta, ScoringSettings } from '@omniswim/core/types';
 import { fetchScoringPresetList, fetchScoringPresetSettings } from '@omniswim/core/lib/scoringPresets';
-import { GENERIC_TOP16_SETTINGS, mergeScoringSettings, scoringSettingsLock } from '@omniswim/core/lib/scoringDefaults';
+import {
+  GENERIC_TOP16_SETTINGS,
+  HostPublishedTableRequiredError,
+  mergeScoringSettings,
+  scoringSettingsLock,
+} from '@omniswim/core/lib/scoringDefaults';
 
 const PLACE_COUNT_OPTIONS = [8, 12, 16, 20, 24];
 const TOP_24_POINTS = [32, 28, 27, 26, 25, 24, 23, 22, 20, 17, 16, 15, 14, 13, 12, 11, 9, 7, 6, 5, 4, 3, 2, 1];
@@ -65,6 +70,12 @@ export interface ScoringSettingsFieldsProps {
   suggestedPresetId?: string | null;
   /** "Load & save": applies the suggested preset AND asks the host to persist immediately, in one action — the one place this component's edits bypass the normal "wait for the host's own Save" flow, matching the Panel's original one-click convenience. */
   onApplyAndSaveSuggestedPreset?: (next: ScoringSettings) => void;
+  /** Hides the "Scoring preset" picker and its quick-preset buttons — set when this form is embedded inside the preset-authoring editor itself, where a nested picker would be confusing (editing preset B by picking preset A makes no sense). */
+  hidePresetPicker?: boolean;
+  /** Rendered next to the preset picker's label, e.g. a "Manage rule sets…" link into full CRUD. Ignored when `hidePresetPicker` is set. */
+  presetPickerExtra?: ReactNode;
+  /** Bump to refetch the preset list — e.g. after `ScoringPresetManagerModal` saves or deletes one. Ignored on initial mount (that fetch always runs). */
+  presetListRefreshToken?: number;
 }
 
 export function ScoringSettingsFields({
@@ -75,10 +86,22 @@ export function ScoringSettingsFields({
   onScoringViewChange,
   suggestedPresetId,
   onApplyAndSaveSuggestedPreset,
+  hidePresetPicker = false,
+  presetPickerExtra,
+  presetListRefreshToken,
 }: ScoringSettingsFieldsProps) {
   const [local, setLocal] = useState<ScoringSettings>(() => mergeScoringSettings(settings));
   const [presets, setPresets] = useState<ScoringPresetMeta[]>([]);
   const [selectedPreset, setSelectedPreset] = useState('');
+  /**
+   * Set when the chosen preset is an NCAA invitational format (Rule 7-4): the
+   * NCAA publishes no table for it, so there is nothing to apply. `local`
+   * stays exactly as it was — the coach edits the points fields below by hand
+   * from the host's own published sheet, never from an invented default.
+   */
+  const [hostTableRequired, setHostTableRequired] = useState<{ citation: string; message: string } | null>(
+    null
+  );
 
   useEffect(() => {
     setLocal(mergeScoringSettings(settings));
@@ -86,7 +109,7 @@ export function ScoringSettingsFields({
 
   useEffect(() => {
     fetchScoringPresetList().then(setPresets).catch(() => setPresets([]));
-  }, []);
+  }, [presetListRefreshToken]);
 
   // Which controls the engine will overwrite regardless of what's edited here.
   const lock = useMemo(() => scoringSettingsLock(local, { conference }), [local, conference]);
@@ -115,14 +138,26 @@ export function ScoringSettingsFields({
   };
 
   const applyPreset = async (presetId: string) => {
-    const s = await fetchScoringPresetSettings(presetId);
-    applySettings(s);
-    setSelectedPreset(presetId);
+    try {
+      const s = await fetchScoringPresetSettings(presetId);
+      setHostTableRequired(null);
+      applySettings(s);
+      setSelectedPreset(presetId);
+    } catch (err) {
+      if (err instanceof HostPublishedTableRequiredError) {
+        // Nothing to apply — leave `local` untouched and say why instead.
+        setSelectedPreset(presetId);
+        setHostTableRequired({ citation: err.citation, message: err.message });
+        return;
+      }
+      throw err;
+    }
   };
 
   const applyGenericTop16 = () => {
     applySettings(GENERIC_TOP16_SETTINGS);
     setSelectedPreset('');
+    setHostTableRequired(null);
   };
 
   const applyTop24 = () => {
@@ -132,6 +167,7 @@ export function ScoringSettingsFields({
       halfRateRelaySwimmer: true,
     });
     setSelectedPreset('');
+    setHostTableRequired(null);
   };
 
   const handlePlacesChange = (count: number) => {
@@ -145,6 +181,31 @@ export function ScoringSettingsFields({
     nextPoints[index] = value;
     update({ scoringPoints: nextPoints });
   };
+
+  /** Reader/writer pair for an optional points table field (`relayPoints`, `divingPoints`). */
+  function optionalPointsField(key: 'relayPoints' | 'divingPoints') {
+    const points = local[key] ?? [];
+    const setPoints = (next: number[] | undefined) => update({ [key]: next } as Partial<ScoringSettings>);
+    return {
+      points,
+      enabled: (local[key]?.length ?? 0) > 0,
+      enable: () => setPoints(points.length ? points : [0]),
+      disable: () => setPoints(undefined),
+      setCount: (count: number) => {
+        const next = [...points];
+        while (next.length < count) next.push(0);
+        setPoints(next.slice(0, Math.max(1, count)));
+      },
+      setPoint: (index: number, value: number) => {
+        const next = [...points];
+        next[index] = value;
+        setPoints(next);
+      },
+    };
+  }
+
+  const relayTable = optionalPointsField('relayPoints');
+  const divingTable = optionalPointsField('divingPoints');
 
   const resolvedScoringView = scoringView ?? 'merged';
 
@@ -236,39 +297,66 @@ export function ScoringSettingsFields({
           </select>
         </div>
 
-        <div>
-          <label className="block text-[10px] text-theme-secondary uppercase mb-1">Scoring preset</label>
-          <div className="flex flex-wrap gap-2 items-start">
-            <select
-              className="glass-input flex-1 min-w-[10rem] text-xs uppercase"
-              aria-label="Scoring preset"
-              value={selectedPreset}
-              onChange={e => {
-                const id = e.target.value;
-                setSelectedPreset(id);
-                if (id) void applyPreset(id);
-              }}
-            >
-              <option value="">Custom (current fields)</option>
-              {presets.map(p => (
-                <option key={p.id} value={p.id}>
-                  {p.label}
-                </option>
-              ))}
-            </select>
-            <Button variant="outline" size="sm" onClick={applyGenericTop16} className="shrink-0">
-              Generic Top 16
-            </Button>
-            <Button variant="outline" size="sm" onClick={applyTop24} className="shrink-0">
-              Top 24 points only
-            </Button>
+        {!hidePresetPicker ? (
+          <div>
+            <div className="flex items-center justify-between gap-2 mb-1">
+              <label className="block text-[10px] text-theme-secondary uppercase">Scoring preset</label>
+              {presetPickerExtra}
+            </div>
+            <div className="flex flex-wrap gap-2 items-start">
+              <select
+                className="glass-input flex-1 min-w-[10rem] text-xs uppercase"
+                aria-label="Scoring preset"
+                value={selectedPreset}
+                onChange={e => {
+                  const id = e.target.value;
+                  setSelectedPreset(id);
+                  if (id) void applyPreset(id);
+                  else setHostTableRequired(null);
+                }}
+              >
+                <option value="">Custom (current fields)</option>
+                {presets.map(p => (
+                  <option key={p.id} value={p.id}>
+                    {p.label}
+                    {p.builtIn ? '' : ' (saved)'}
+                  </option>
+                ))}
+              </select>
+              <Button variant="outline" size="sm" onClick={applyGenericTop16} className="shrink-0">
+                Generic Top 16
+              </Button>
+              <Button variant="outline" size="sm" onClick={applyTop24} className="shrink-0">
+                Top 24 points only
+              </Button>
+            </div>
+            {(() => {
+              const selected = presets.find(p => p.id === selectedPreset);
+              if (!selectedPreset || !selected) return null;
+              return (
+                <div className="mt-1.5 space-y-1">
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    {selected.builtIn ? <Badge tone="neutral">Built-in</Badge> : <Badge tone="accent">Saved</Badge>}
+                    {selected.citation ? <Badge tone="info">{selected.citation}</Badge> : null}
+                    {selected.requiresHostPublishedTable ? (
+                      <Badge tone="warning">Host publishes this table</Badge>
+                    ) : null}
+                  </div>
+                  {selected.description ? (
+                    <p className="text-[9px] text-theme-secondary italic">{selected.description}</p>
+                  ) : null}
+                  {hostTableRequired ? (
+                    <div className="p-2 rounded-lg badge-warning text-[10px] normal-case tracking-normal leading-relaxed">
+                      <span className="font-medium">No points table applied.</span> {hostTableRequired.citation}{' '}
+                      leaves this format&apos;s scoring to the host institution — the NCAA publishes no table for
+                      it. Enter the host&apos;s published points below; nothing here is a guess.
+                    </div>
+                  ) : null}
+                </div>
+              );
+            })()}
           </div>
-          {selectedPreset && presets.find(p => p.id === selectedPreset)?.description ? (
-            <p className="text-[9px] text-theme-secondary mt-1 italic">
-              {presets.find(p => p.id === selectedPreset)?.description}
-            </p>
-          ) : null}
-        </div>
+        ) : null}
 
         <div>
           <div className="flex items-center gap-3 mb-1">
@@ -387,7 +475,7 @@ export function ScoringSettingsFields({
               aria-label="Relay multiplier"
               value={local.relayMultiplier}
               onChange={e => update({ relayMultiplier: parseFloat(e.target.value) || 1 })}
-              className="glass-input w-full text-xs"
+              {...lockProps('relayMultiplier')}
             />
           </div>
           <div className="flex items-end">
@@ -420,6 +508,185 @@ export function ScoringSettingsFields({
               Relays only if all legs are in individual scorer pool
             </label>
           </div>
+        </div>
+
+        <div className="p-3 rounded-lg border border-theme-soft surface-overlay">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <label className="text-[10px] text-theme-secondary uppercase font-medium">Relay scoring</label>
+            <SegmentedControl
+              layout="inline"
+              ariaLabel="Relay scoring mode"
+              value={relayTable.enabled ? 'table' : 'multiplier'}
+              onChange={v => (v === 'table' ? relayTable.enable() : relayTable.disable())}
+              options={[
+                { value: 'multiplier', label: 'Multiplier', ariaLabel: 'Score relays from the relay multiplier' },
+                { value: 'table', label: 'Explicit table', ariaLabel: 'Score relays from an explicit relay place table' },
+              ]}
+            />
+          </div>
+          {relayTable.enabled ? (
+            <>
+              <p className="text-[9px] text-theme-muted mb-2 normal-case tracking-normal">
+                This rule set carries its own relay place table — relays score from these values directly, and the
+                relay multiplier above is ignored (shown disabled). Right for a dual meet: NCAA Rule 7-1-1 scores
+                relays 11-4-2, not individual 9-4-3-2-1 doubled.
+              </p>
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-[9px] text-theme-secondary font-mono">Relay places</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={24}
+                  aria-label="Number of relay scoring places"
+                  value={relayTable.points.length}
+                  onChange={e => relayTable.setCount(parseInt(e.target.value, 10) || 1)}
+                  className="glass-input w-20 font-mono text-xs"
+                />
+              </div>
+              <div className="grid grid-cols-4 md:grid-cols-6 gap-3">
+                {relayTable.points.map((pt, i) => (
+                  <div key={i} className="flex flex-col gap-1">
+                    <span className="text-[9px] text-theme-secondary font-mono">Place {i + 1}</span>
+                    <input
+                      type="number"
+                      aria-label={`Relay points for place ${i + 1}`}
+                      value={pt || ''}
+                      onChange={e => relayTable.setPoint(i, parseFloat(e.target.value) || 0)}
+                      className="glass-input w-full font-mono text-xs"
+                    />
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <p className="text-[9px] text-theme-muted normal-case tracking-normal">
+              Relays score as {`scoringPoints[place] × relayMultiplier`} (correct for championship formats, where
+              the relay table is exactly double the individual one). Switch to an explicit table for a dual meet or
+              any format whose relay values are not simply doubled.
+            </p>
+          )}
+        </div>
+
+        <div className="p-3 rounded-lg border border-theme-soft surface-overlay">
+          <div className="flex items-center justify-between gap-2 mb-1">
+            <label className="text-[10px] text-theme-secondary uppercase font-medium">Diving points table</label>
+            <SegmentedControl
+              layout="inline"
+              ariaLabel="Diving points table"
+              value={divingTable.enabled ? 'table' : 'none'}
+              onChange={v => (v === 'table' ? divingTable.enable() : divingTable.disable())}
+              options={[
+                { value: 'none', label: 'None', ariaLabel: 'No separate diving points table' },
+                { value: 'table', label: 'Explicit table', ariaLabel: 'Score diving from its own place table' },
+              ]}
+            />
+          </div>
+          {divingTable.enabled ? (
+            <>
+              <p className="text-[9px] text-theme-muted mb-2 normal-case tracking-normal">
+                Diving scores from this table by place instead of the diver scorer weight below (e.g. NCAA Rule
+                7-1-4 dual diving: 7-1 for three or fewer divers, 12-1 for six or more).
+              </p>
+              <div className="flex items-center gap-3 mb-2">
+                <span className="text-[9px] text-theme-secondary font-mono">Diving places</span>
+                <input
+                  type="number"
+                  min={1}
+                  max={24}
+                  aria-label="Number of diving scoring places"
+                  value={divingTable.points.length}
+                  onChange={e => divingTable.setCount(parseInt(e.target.value, 10) || 1)}
+                  className="glass-input w-20 font-mono text-xs"
+                />
+              </div>
+              <div className="grid grid-cols-4 md:grid-cols-6 gap-3">
+                {divingTable.points.map((pt, i) => (
+                  <div key={i} className="flex flex-col gap-1">
+                    <span className="text-[9px] text-theme-secondary font-mono">Place {i + 1}</span>
+                    <input
+                      type="number"
+                      aria-label={`Diving points for place ${i + 1}`}
+                      value={pt || ''}
+                      onChange={e => divingTable.setPoint(i, parseFloat(e.target.value) || 0)}
+                      className="glass-input w-full font-mono text-xs"
+                    />
+                  </div>
+                ))}
+              </div>
+              <div className="mt-3">
+                <label className="block text-[10px] text-theme-secondary uppercase mb-1">
+                  Max scoring divers / team / event
+                </label>
+                <input
+                  type="number"
+                  aria-label="Maximum scoring divers per team per diving event"
+                  value={local.divingMaxScorersPerTeamPerEvent ?? ''}
+                  placeholder="No separate cap"
+                  onChange={e => {
+                    const raw = e.target.value;
+                    update({ divingMaxScorersPerTeamPerEvent: raw === '' ? undefined : parseInt(raw, 10) || undefined });
+                  }}
+                  className="glass-input w-full font-mono text-xs"
+                />
+              </div>
+            </>
+          ) : null}
+        </div>
+
+        <div className="p-3 rounded-lg border border-theme-soft surface-overlay">
+          <label className="block text-[10px] text-theme-secondary uppercase font-medium mb-2">
+            Per-team, per-event scoring caps
+          </label>
+          <p className="text-[9px] text-theme-muted mb-2 normal-case tracking-normal">
+            Independent of the meet/event scorer pool above — this caps how many of one team&apos;s swimmers can
+            score places in a single event, per NCAA Rule 7-2 (e.g. best 2 per team in a dual). Cannot be combined
+            with a full-meet scorer pool scope; the server rejects that combination.
+          </p>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <label className="block text-[10px] text-theme-secondary uppercase mb-1">
+                Max individual scorers / team / event
+              </label>
+              <input
+                type="number"
+                aria-label="Maximum individual scorers per team per event"
+                value={local.maxIndividualScorersPerTeamPerEvent ?? ''}
+                placeholder="No per-event cap"
+                onChange={e => {
+                  const raw = e.target.value;
+                  update({
+                    maxIndividualScorersPerTeamPerEvent: raw === '' ? undefined : parseInt(raw, 10) || undefined,
+                  });
+                }}
+                className="glass-input w-full font-mono text-xs"
+              />
+            </div>
+            <div>
+              <label className="block text-[10px] text-theme-secondary uppercase mb-1">
+                Over-cap swimmer behavior
+              </label>
+              <select
+                className="glass-input w-full text-xs uppercase"
+                aria-label="Behavior for a swimmer over the per-team place cap"
+                value={local.overCapPlaceBehavior ?? 'holds-place'}
+                onChange={e =>
+                  update({ overCapPlaceBehavior: e.target.value as 'holds-place' | 'removed-from-consideration' })
+                }
+              >
+                <option value="holds-place">Holds place (later teammates still move up)</option>
+                <option value="removed-from-consideration">Removed from consideration</option>
+              </select>
+            </div>
+          </div>
+          {local.maxIndividualScorersPerTeamPerEvent != null &&
+          local.scorerCapScope === 'meet' &&
+          local.maxIndividualScorersPerTeam < 999 ? (
+            <p className="mt-2 p-2 rounded-lg badge-warning text-[9px] normal-case tracking-normal">
+              A per-event place cap cannot be combined with a full-meet scorer pool (&quot;Scorer cap scope&quot; =
+              Full meet, with the max individual scorers below 999). Saving this will be rejected — switch scorer
+              cap scope to &quot;Per event&quot; or clear the meet-wide cap.
+            </p>
+          ) : null}
         </div>
       </div>
     </>
