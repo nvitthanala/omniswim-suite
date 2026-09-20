@@ -23,7 +23,12 @@ function formatDelta(delta: number): string {
 }
 
 export default function MeetReconciliationBanner({ summary }: Props) {
-  if (!summary.hasOfficialScores) return null;
+  // Gated on `comparable`, not on `hasOfficialScores`. A workspace holding
+  // official scores with nothing imported yet puts every official team into
+  // `officialOnly`, which this banner would otherwise announce as "0 of N teams
+  // match official totals — N to review" — a total-failure reading of what is
+  // really an empty workspace.
+  if (!summary.comparable) return null;
 
   const mismatched = summary.entries.filter(e => e.status === 'mismatched');
   const officialOnly = summary.entries.filter(e => e.status === 'officialOnly');

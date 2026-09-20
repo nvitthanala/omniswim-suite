@@ -87,10 +87,25 @@ describe('buildMeetReconciliationSummary', () => {
   });
 
   it('flags an official row nothing computed matched as officialOnly, distinct from a mismatch', () => {
-    const summary = buildMeetReconciliationSummary(new Map(), official, Gender.MEN);
+    // Exercised against a populated computed side on purpose. This case used to
+    // pass an empty Map, which produced officialOnly rows only because NOTHING
+    // had been imported -- conflating "this team was not matched" with "no data
+    // at all". Those are now distinct states (see the gating describe block
+    // below), and the behaviour worth asserting is the first one: with real
+    // imported teams present, an official row that matches none of them is
+    // officialOnly rather than a mismatch. That is a stronger assertion than
+    // the empty-Map version, which could not tell the two apart.
+    const summary = buildMeetReconciliationSummary(
+      new Map([['Home University', 500], ['Rival College', 420]]),
+      official,
+      Gender.MEN
+    );
     const departed = summary.entries.find(e => e.team === 'Departed Program');
     expect(departed).toMatchObject({ status: 'officialOnly', official: 100 });
     expect(departed!.computed).toBeUndefined();
+    // The teams that DID match must not be dragged into officialOnly with it.
+    expect(summary.entries.find(e => e.team === 'Home University')?.status).toBe('matched');
+    expect(summary.entries.find(e => e.team === 'Rival College')?.status).toBe('matched');
   });
 
   it('never double-counts an official row already consumed by a matched/mismatched team', () => {
@@ -114,5 +129,76 @@ describe('buildMeetReconciliationSummary', () => {
     );
     // Home University (matched) + Rival College (officialOnly) + Departed Program (officialOnly) + New Program (computedOnly)
     expect(summary.totalCount).toBe(4);
+  });
+});
+
+describe('buildMeetReconciliationSummary — comparison gating', () => {
+  /**
+   * The user requirement this encodes (2026-09-20): compare only when official
+   * results AND pulled team/swimmer history are both present.
+   *
+   * Without the gate, official scores plus an un-imported workspace puts every
+   * official team into `officialOnly`, and the banner reports
+   * "0 of N teams match official totals — N to review". That is the loudest
+   * possible way to say "you have not imported anything yet".
+   */
+  const officialOnlySide: OfficialTeamScores = {
+    men: { 'Home University': 500, 'Rival College': 420 },
+    women: {},
+  };
+
+  it('is not comparable when official scores exist but nothing has been imported', () => {
+    const summary = buildMeetReconciliationSummary(new Map(), officialOnlySide, Gender.MEN);
+
+    expect(summary.hasOfficialScores).toBe(true);
+    expect(summary.hasComputedTotals).toBe(false);
+    expect(summary.comparable).toBe(false);
+
+    // The load-bearing assertion. Before the gate this was 2 officialOnly
+    // entries and totalCount 2, which the banner rendered as a full mismatch.
+    expect(summary.entries).toStrictEqual([]);
+    expect(summary.totalCount).toBe(0);
+  });
+
+  it('is not comparable when results are imported but no official scores exist', () => {
+    const summary = buildMeetReconciliationSummary(
+      new Map([['Home University', 500]]),
+      undefined,
+      Gender.MEN
+    );
+
+    expect(summary.hasOfficialScores).toBe(false);
+    expect(summary.hasComputedTotals).toBe(true);
+    expect(summary.comparable).toBe(false);
+    expect(summary.entries).toStrictEqual([]);
+  });
+
+  it('distinguishes the two empty sides rather than collapsing them', () => {
+    const noComputed = buildMeetReconciliationSummary(new Map(), officialOnlySide, Gender.MEN);
+    const noOfficial = buildMeetReconciliationSummary(
+      new Map([['Home University', 500]]),
+      undefined,
+      Gender.MEN
+    );
+
+    // Both are non-comparable and both render nothing, but a consumer must be
+    // able to tell a coach WHICH side is missing. CLAUDE.md: absent is not empty.
+    expect(noComputed.hasOfficialScores).not.toBe(noOfficial.hasOfficialScores);
+    expect(noComputed.hasComputedTotals).not.toBe(noOfficial.hasComputedTotals);
+  });
+
+  it('is comparable, and still reports real findings, when both sides carry data', () => {
+    const summary = buildMeetReconciliationSummary(
+      new Map([['Home University', 500], ['Rival College', 999]]),
+      officialOnlySide,
+      Gender.MEN
+    );
+
+    expect(summary.comparable).toBe(true);
+    expect(summary.hasOfficialScores).toBe(true);
+    expect(summary.hasComputedTotals).toBe(true);
+    // The gate must not suppress a genuine disagreement.
+    expect(summary.entries.find(e => e.team === 'Rival College')?.status).toBe('mismatched');
+    expect(summary.entries.find(e => e.team === 'Home University')?.status).toBe('matched');
   });
 });

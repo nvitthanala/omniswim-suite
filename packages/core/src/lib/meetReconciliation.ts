@@ -48,6 +48,28 @@ export type MeetReconciliationSummary = {
   totalCount: number;
   /** False when the workspace carries no official scores for this gender at all — the summary has nothing to say. */
   hasOfficialScores: boolean;
+  /**
+   * False when nothing has been imported or scored for this gender yet, so
+   * there is no computed side to compare against.
+   *
+   * Separate from {@link hasOfficialScores} because the two absences look
+   * identical in the entry list but mean opposite things to a coach, and only
+   * one of them is a finding.
+   */
+  hasComputedTotals: boolean;
+  /**
+   * True only when BOTH sides carry data, which is the only state in which a
+   * computed-vs-official comparison means anything.
+   *
+   * Consumers must gate on this rather than on `hasOfficialScores` alone. With
+   * official scores loaded but nothing imported yet, every official team falls
+   * into `officialOnly` and a naive renderer reports "0 of N teams match
+   * official totals — N to review". That reads as a total scoring failure when
+   * the real state is "you have not imported any results yet". This repo's
+   * standing rule that absent is not the same as empty (`CLAUDE.md`, data
+   * provenance) applied to the reconciliation view.
+   */
+  comparable: boolean;
 };
 
 /**
@@ -73,8 +95,20 @@ export function buildMeetReconciliationSummary(
 ): MeetReconciliationSummary {
   const officialForGender = officialScoresForGender(official, gender);
   const hasOfficialScores = Object.keys(officialForGender ?? {}).length > 0;
-  if (!hasOfficialScores) {
-    return { entries: [], matchedCount: 0, totalCount: 0, hasOfficialScores: false };
+  const hasComputedTotals = computedTotals.size > 0;
+
+  // Both absences return an empty summary, but they are reported distinctly so
+  // a consumer can say which side is missing instead of showing a comparison
+  // against nothing. See `comparable` on the return type.
+  if (!hasOfficialScores || !hasComputedTotals) {
+    return {
+      entries: [],
+      matchedCount: 0,
+      totalCount: 0,
+      hasOfficialScores,
+      hasComputedTotals,
+      comparable: false,
+    };
   }
 
   const entries: MeetReconciliationEntry[] = [];
@@ -108,5 +142,7 @@ export function buildMeetReconciliationSummary(
     matchedCount: entries.filter(e => e.status === 'matched').length,
     totalCount: entries.length,
     hasOfficialScores: true,
+    hasComputedTotals: true,
+    comparable: true,
   };
 }
