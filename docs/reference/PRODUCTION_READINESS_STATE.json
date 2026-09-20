@@ -397,11 +397,12 @@
     },
     {
       "id": "od4",
-      "blocks": "P6 (and any thought of a second user)",
+      "blocks": "release, not the deadline",
       "question": "Is data/meets.json a curated demo seed, or a snapshot of live working state? Today it is both.",
       "context": "docs/INVARIANTS.md item 1: data/meets.json is gitignored BUT tracked, and SqliteRepo.init() seeds data/omniswim.db from it on a fresh checkout. It currently holds the real HSU/OBU workspaces - 3MB, 871-1029 athlete-history rows each. Anyone who clones this repo boots into the user's actual roster data. Carried over from plans/STATE.md's own open question 5, still unanswered.",
       "whyItMatters": "Only matters if anyone but the user ever runs this. If the app stays single-user it is a non-issue and the seed is a feature. If a second coach ever uses it, they should boot into an empty or demo workspace, not someone else's roster.",
-      "status": "ask the user; not a deadline blocker"
+      "status": "ANSWERED 2026-09-20",
+      "answer": "User: 'currently its a personal/my coach's tool but we will make this a tool that should be shareable later on when i am confident in releasing this.' So: TWO users today (the user and their coach), not one. The seed data is acceptable now and is NOT a deadline blocker. It becomes a RELEASE BLOCKER: before any public/shared release, data/meets.json must stop being both the live working store and the fresh-install seed. A new installation must boot into an empty or curated demo workspace, never into a real team's roster. Record this in the P6 guide's release-readiness section."
     }
   ],
   "log": [
@@ -432,6 +433,72 @@
     {
       "at": "2026-09-20",
       "what": "Dispatched P3a (crawl scope profiles) to an executor, scoped to packages/swimcloud + extensions + swimcloudCaptureRoutes.ts, explicitly excluding apps/shell/server.ts which P1 holds. Implemented and committed the d2 reconciliation gate myself with 3 mutations. Noted od4 (meets.json is both demo seed and live data). Confirmed both applets have clean 4-step top-level flows; the navigability complaint is about density inside the steps, not the structure."
+    },
+    {
+      "at": "2026-09-20T19:09Z",
+      "what": "User reported 86% of the 5-hour quota used, ~3h31m to refresh. Switched to preservation mode: answered od4 (personal/coach tool now, shareable later - seed data becomes a release blocker, not a deadline blocker), wrote the RESUME_HERE block, and stopped starting new work. Two executor agents still in flight."
     }
-  ]
+  ],
+  "RESUME_HERE": {
+    "writtenAt": "2026-09-20T19:09Z",
+    "why": "The user flagged 86% of the 5-hour quota used with ~3h31m to refresh. This block exists so a resumed or fresh session can continue without re-deriving anything. READ THIS FIRST.",
+    "branch": "nvitthanala/production-readiness",
+    "mainIs": "fast-forwarded through the P0 commit only; catch it up with: git -C C:/Users/nihar/Documents/GitHub/omniswim-suite merge --ff-only nvitthanala/production-readiness",
+    "committedAndVerified": [
+      "681a89d3 Retire the fleet layer and add a bug-hunter agent (P0)",
+      "79e37192 Correct two findings before briefing work on them (f2, f3 were WRONG - see correctionNote on each)",
+      "85535649 Re-measure the UI findings against current code (f4)",
+      "79525723 Fail the suite when an extension bundle is stale (mutation-proven)",
+      "24b14e41 Share one team picker and flag Metrics as experimental (P4, verified independently)",
+      "292f2682 Compare against official totals only when both sides exist (d2, 3 mutations)",
+      "77d84846 Record the crawl-scope dispatch and the seed-data question"
+    ],
+    "inFlightUncommitted": {
+      "warning": "These are subagent edits sitting UNCOMMITTED in the working tree. They may be complete or partial. Do NOT assume they are finished. Verify before committing.",
+      "P1_scoring_generalisation": {
+        "agent": "executor, dispatched with the full brief recorded in phase P1",
+        "files": [
+          "packages/core/src/types.ts",
+          "packages/core/src/lib/scoringDefaults.ts",
+          "packages/core/src/lib/utils.ts",
+          "packages/core/src/lib/scoringPresets.ts",
+          "apps/shell/server.ts"
+        ],
+        "sizeWhenLastSeen": "~1038 insertions across 5 files",
+        "howToVerify": [
+          "npm run lint --workspaces --if-present (expect clean, 8 workspaces)",
+          "npx vitest run (baseline was 803 passed / 0 failed before this session; P4 added none, d2 added 4, build-freshness added 3)",
+          "node scripts/run-tests.mjs (baseline 81 passed / 0 failed / 1 skipped)",
+          "CRITICAL: scripts/test_nsisc_team_totals.mjs must stay byte-exact. If it moved, something is broken - do not adjust the test.",
+          "npm run build -w @omniswim/shell must exit 0"
+        ],
+        "ifIncomplete": "The brief is fully recorded in this file's P1 phase entry plus plans/2026-09-20/README.md. Re-dispatch an executor with the same brief rather than trying to finish a half-done design by hand."
+      },
+      "P3a_crawl_scopes": {
+        "agent": "executor, dispatched later; may have written nothing yet",
+        "files": [
+          "packages/swimcloud/src/**",
+          "extensions/swimcloud-companion/**",
+          "apps/shell/lib/swimcloudCaptureRoutes.ts",
+          "capture-browsing UI components"
+        ],
+        "mustNotForget": "If extension TypeScript changed, npm run build:extension MUST be run or tests/swimCloudExtensionBuildFreshness.test.ts fails. That is by design."
+      }
+    },
+    "nextActionsInPriorityOrder": [
+      "1. Verify + commit P1 (scoring generalisation). It is the single highest-value item: it makes dual meets and every NCAA format representable, which is the core of the user's 'not hardcoded' requirement.",
+      "2. Verify + commit P3a (crawl scopes). Biggest crawl speedup - swimmerTimes is 78.6% of pages and a meet-results job needs none of them.",
+      "3. P7 data safety (f10) - backup is correct but unreachable from the UI and never automatic. Small work, large safety win. Needs apps/shell/server.ts, so it was blocked behind P1.",
+      "4. P2 preset authoring UI - needs P1's reported API surface first.",
+      "5. P5 adversarial bug hunt via the new bug-hunter agent. Aim it at the pattern that produced the two best finds today: 'the mechanism exists and is correct, but nothing triggers it'.",
+      "6. P6 user guide + add status headers to the stale plans/*.md docs (f6).",
+      "7. ESLint (f5) - user approved adding it and fixing findings. Deliberately deferred: it needs npm install, which is unsafe while agents run tests."
+    ],
+    "doNotRepeat": [
+      "Do not re-derive the baseline - it is in this file's baseline block.",
+      "Do not trust plans/*.md claims without checking the code (f6). Three separate claims were already fixed: the prelims/finals import bug, the Manager toolbar, the badge duplication.",
+      "Do not relax any crawl pacing constant. User decision d3, explicit.",
+      "Do not run two agents that both run the full suite - Playwright binds port 3000 (INVARIANTS item 4)."
+    ]
+  }
 }
