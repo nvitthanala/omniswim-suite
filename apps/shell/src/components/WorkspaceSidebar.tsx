@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Plus, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { Plus, PanelLeftClose, PanelLeftOpen, DatabaseBackup } from 'lucide-react';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
 import { createSnapshot as createSnapshotApi, listSnapshots as listSnapshotsApi, restoreSnapshot as restoreSnapshotApi } from '@omniswim/core/api/snapshots';
 import type { Snapshot } from '@omniswim/core/api/snapshots';
@@ -22,6 +22,7 @@ export default function WorkspaceSidebar() {
   } = useSuiteWorkspace();
 
   const toast = useToast();
+  const [isBackingUp, setIsBackingUp] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
     if (typeof window === 'undefined') return false;
     return window.localStorage.getItem('omni-sidebar-collapsed') === 'true';
@@ -157,6 +158,33 @@ export default function WorkspaceSidebar() {
     undoTimeoutRef.current = setTimeout(() => setDeletedWorkspaceBackup(null), 15000);
   };
 
+  /**
+   * Write a backup of every workspace on demand.
+   *
+   * `POST /api/workspaces/backup` has existed since the beginning and nothing
+   * in the app ever called it, so the only copies on disk were made by hand.
+   * The server also backs up on start and before a delete, but neither helps a
+   * coach who is about to try something risky and wants a restore point first.
+   */
+  const handleBackupNow = useCallback(async () => {
+    if (isBackingUp) return;
+    setIsBackingUp(true);
+    try {
+      const res = await fetch('/api/workspaces/backup', { method: 'POST' });
+      if (!res.ok) throw new Error(`Backup failed (${res.status})`);
+      const body = (await res.json()) as { file?: string };
+      // Name the file. "Backed up" with nothing to point at is not something a
+      // coach can verify, and this is the one action whose whole value is that
+      // it definitely happened.
+      const name = typeof body.file === 'string' ? body.file.split(/[\/]/).pop() : undefined;
+      toast.push('success', name ? `Backup saved: ${name}` : 'Backup saved');
+    } catch (err) {
+      toast.push('error', `Backup failed: ${String(err instanceof Error ? err.message : err)}`);
+    } finally {
+      setIsBackingUp(false);
+    }
+  }, [isBackingUp, toast]);
+
   return (
     <>
       <aside
@@ -177,6 +205,18 @@ export default function WorkspaceSidebar() {
                 aria-label="New workspace"
               >
                 <Plus size={14} />
+              </button>
+            ) : null}
+            {!sidebarCollapsed ? (
+              <button
+                type="button"
+                onClick={() => void handleBackupNow()}
+                disabled={isBackingUp}
+                className="p-1 theme-hover-row rounded text-theme-secondary hover:text-[var(--text-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
+                title="Back up every workspace now"
+                aria-label="Back up every workspace now"
+              >
+                <DatabaseBackup size={14} />
               </button>
             ) : null}
             <button
