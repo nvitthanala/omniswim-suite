@@ -372,3 +372,353 @@ export function planMeetSwimmerTimes(
   }
   return steps;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Crawl scope — which passes a crawl commits to before it starts              */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One optional pass of a meet crawl, named by the resource kind its pages are.
+ *
+ * Team discovery is deliberately **not** in this union. Every crawl fetches the
+ * two `meetTopTeams` pages (or their `meet` fallback) because that is how the
+ * team list a coach confirms is produced; there is no crawl without it, so
+ * offering it as a choice would be offering a choice that does not exist. The
+ * four below are the ones a crawl can honestly decline.
+ *
+ * Typed as a subset of {@link SwimCloudResourceKind} rather than as its own
+ * string union: a pass name that is not a real resource kind would not compile,
+ * so the scope table and the classifier cannot drift apart.
+ */
+export type SwimCloudCrawlPass = Extract<
+  SwimCloudResourceKind,
+  'meetTeamSwims' | 'meetEvent' | 'teamRoster' | 'swimmerTimes'
+>;
+
+/**
+ * Every pass, in the order a crawl runs them. Also the canonical order any
+ * recorded pass list is written in, so two records that plan the same passes
+ * serialize identically.
+ */
+export const SWIMCLOUD_CRAWL_PASSES: readonly SwimCloudCrawlPass[] = [
+  'meetTeamSwims',
+  'meetEvent',
+  'teamRoster',
+  'swimmerTimes',
+];
+
+/**
+ * The pass whose *content* another pass is planned from.
+ *
+ * Neither of these is a preference. A `meetEvent` page's URL is only knowable
+ * from an `/event/{n}/` reference printed on a swims list, and a `swimmerTimes`
+ * page's URL is only knowable from a swimmer id printed on a roster. A scope
+ * that asked for the dependent pass without its prerequisite would plan zero
+ * pages for it and report that as success — the silent empty this whole module
+ * is written against. {@link crawlScopeDependencyGaps} is the check; a test
+ * runs it over every built-in scope.
+ */
+export const SWIMCLOUD_CRAWL_PASS_PREREQUISITE: Readonly<
+  Partial<Record<SwimCloudCrawlPass, SwimCloudCrawlPass>>
+> = {
+  meetEvent: 'meetTeamSwims',
+  swimmerTimes: 'teamRoster',
+};
+
+/**
+ * Which job a crawl is for. Chosen before the first request, on the same panel
+ * that confirms the team list.
+ *
+ * The three map onto the three things this app is used for, not onto the four
+ * passes — a coach picks a job, not a page kind. `'everything'` is the default
+ * and is exactly what every crawl did before scopes existed.
+ */
+export type SwimCloudCrawlScopeId = 'meet-results' | 'roster-and-season-bests' | 'everything';
+
+export interface SwimCloudCrawlScope {
+  readonly id: SwimCloudCrawlScopeId;
+  /** Radio-button text. Short enough for a panel a coach reads once. */
+  readonly label: string;
+  /** One sentence saying what the scope is for and what it therefore skips. */
+  readonly summary: string;
+  /** The passes this scope plans, in {@link SWIMCLOUD_CRAWL_PASSES} order. */
+  readonly passes: readonly SwimCloudCrawlPass[];
+}
+
+/**
+ * The scope table. Pure data — no DOM, no network, no clock — so "does the
+ * meet-results scope plan a swimmer-times page" is a unit test, exactly as
+ * "does the planner emit a denylisted URL" already is.
+ */
+export const SWIMCLOUD_CRAWL_SCOPES: readonly SwimCloudCrawlScope[] = [
+  {
+    id: 'meet-results',
+    label: 'Meet results only',
+    summary:
+      'Every team’s swims at this meet, plus the per-event pages that say which round each swim was. Skips team rosters and swimmers’ personal-best pages.',
+    passes: ['meetTeamSwims', 'meetEvent'],
+  },
+  {
+    id: 'roster-and-season-bests',
+    label: 'Rosters and season bests only',
+    summary:
+      'Every team’s roster, plus one personal-bests page per rostered swimmer. Skips this meet’s own results.',
+    passes: ['teamRoster', 'swimmerTimes'],
+  },
+  {
+    id: 'everything',
+    label: 'Everything',
+    summary:
+      'Meet results, per-event rounds, rosters and every rostered swimmer’s personal bests. The most requests, and the longest.',
+    passes: ['meetTeamSwims', 'meetEvent', 'teamRoster', 'swimmerTimes'],
+  },
+];
+
+/**
+ * What a crawl runs when nobody chose. Identical to the four passes every
+ * crawl ran before scopes existed, so an un-chosen scope changes nothing.
+ */
+export const DEFAULT_SWIMCLOUD_CRAWL_SCOPE_ID: SwimCloudCrawlScopeId = 'everything';
+
+/**
+ * The scope with this id.
+ *
+ * Throws on an id that is not in the table rather than returning a default.
+ * A caller holding a `SwimCloudCrawlScopeId` got it from the type system or
+ * from {@link readSwimCloudCrawlScopeId}; an id that reaches here and is not
+ * known means the table and the union disagree, which is a bug to surface, not
+ * to paper over with "everything".
+ */
+export function swimCloudCrawlScope(id: SwimCloudCrawlScopeId): SwimCloudCrawlScope {
+  const found = SWIMCLOUD_CRAWL_SCOPES.find((scope) => scope.id === id);
+  if (found === undefined) {
+    throw new Error(`swimCloudCrawlScope: no scope is defined for id ${JSON.stringify(id)}.`);
+  }
+  return found;
+}
+
+/** The default scope as a value. */
+export function defaultSwimCloudCrawlScope(): SwimCloudCrawlScope {
+  return swimCloudCrawlScope(DEFAULT_SWIMCLOUD_CRAWL_SCOPE_ID);
+}
+
+/**
+ * A scope id read off an untrusted value (an HTTP body, a stored record, an
+ * `<input>` value), or `undefined`.
+ *
+ * `undefined` means **not stated**, never "everything". The difference is the
+ * whole point of recording a scope: a capture that predates scopes must read as
+ * "scope not recorded", not as a full crawl it was never proved to be.
+ */
+export function readSwimCloudCrawlScopeId(value: unknown): SwimCloudCrawlScopeId | undefined {
+  if (typeof value !== 'string') return undefined;
+  return SWIMCLOUD_CRAWL_SCOPES.find((scope) => scope.id === value)?.id;
+}
+
+/** A pass name read off an untrusted value, or `undefined`. Same rule as above. */
+export function readSwimCloudCrawlPass(value: unknown): SwimCloudCrawlPass | undefined {
+  if (typeof value !== 'string') return undefined;
+  return SWIMCLOUD_CRAWL_PASSES.find((pass) => pass === value);
+}
+
+/** Whether `scope` plans `pass` at all. */
+export function crawlScopePlansPass(scope: SwimCloudCrawlScope, pass: SwimCloudCrawlPass): boolean {
+  return scope.passes.includes(pass);
+}
+
+/**
+ * The passes `scope` does **not** plan, in canonical order.
+ *
+ * This is the list a UI must be able to name. A capture narrowed to meet
+ * results holds zero roster pages and reports `'every-planned-page-fetched'`,
+ * which at the manifest level is indistinguishable from a full crawl. The
+ * difference is exactly this list.
+ */
+export function passesOutsideCrawlScope(scope: SwimCloudCrawlScope): readonly SwimCloudCrawlPass[] {
+  return SWIMCLOUD_CRAWL_PASSES.filter((pass) => !crawlScopePlansPass(scope, pass));
+}
+
+/**
+ * Passes `scope` plans whose prerequisite it does not — empty for a coherent
+ * scope. See {@link SWIMCLOUD_CRAWL_PASS_PREREQUISITE}.
+ */
+export function crawlScopeDependencyGaps(scope: SwimCloudCrawlScope): readonly SwimCloudCrawlPass[] {
+  return scope.passes.filter((pass) => {
+    const needs = SWIMCLOUD_CRAWL_PASS_PREREQUISITE[pass];
+    return needs !== undefined && !crawlScopePlansPass(scope, needs);
+  });
+}
+
+/**
+ * Pages per team this scope commits to **before a single page is read**.
+ *
+ * Two per included structural pass, one per gender: page 1 of each team+gender's
+ * swims, and each team+gender's roster. `meetEvent` and `swimmerTimes`
+ * contribute **nothing** here, and that is not an oversight — their page counts
+ * are not knowable until a swims list or a roster has been parsed, and quoting
+ * a guess for them is precisely what this panel line exists to stop.
+ */
+export function crawlScopeFloorPagesPerTeam(scope: SwimCloudCrawlScope): number {
+  let perTeam = 0;
+  if (crawlScopePlansPass(scope, 'meetTeamSwims')) perTeam += 2;
+  if (crawlScopePlansPass(scope, 'teamRoster')) perTeam += 2;
+  return perTeam;
+}
+
+/**
+ * What a capture record remembers about the crawls that filled it.
+ *
+ * Two fields because they answer two different questions and a single one would
+ * answer neither honestly:
+ *
+ * - {@link latestScopeId} — the scope the most recent crawl ran under. What the
+ *   panel showed the coach who started it.
+ * - {@link plannedPasses} — every pass **any** crawl of this capture has
+ *   planned, unioned. A capture is cumulative: pages merge by canonical URL
+ *   across runs, so a meet-results crawl followed by a full one holds both
+ *   sets, and only the union is a true statement about what the stored pages
+ *   cover. This is the field a consumer reads before telling a coach that an
+ *   empty roster list means "never fetched".
+ */
+export interface SwimCloudCaptureCrawlScope {
+  readonly latestScopeId: SwimCloudCrawlScopeId;
+  readonly plannedPasses: readonly SwimCloudCrawlPass[];
+}
+
+/** Put a pass list in {@link SWIMCLOUD_CRAWL_PASSES} order, dropping duplicates. */
+export function orderCrawlPasses(passes: readonly SwimCloudCrawlPass[]): readonly SwimCloudCrawlPass[] {
+  return SWIMCLOUD_CRAWL_PASSES.filter((pass) => passes.includes(pass));
+}
+
+/** The record one crawl under `scope` posts to the capture store. */
+export function crawlScopeRecordFor(scope: SwimCloudCrawlScope): SwimCloudCaptureCrawlScope {
+  return { latestScopeId: scope.id, plannedPasses: orderCrawlPasses(scope.passes) };
+}
+
+/**
+ * Merge a newly-posted scope record into whatever the capture already held.
+ *
+ * `plannedPasses` unions — a second crawl never un-plans what a first one
+ * already fetched, and claiming it did would make a capture that genuinely
+ * holds roster pages report that rosters were never planned. `latestScopeId`
+ * takes the incoming value, because it is by definition about the latest crawl.
+ */
+export function mergeCaptureCrawlScopes(
+  existing: SwimCloudCaptureCrawlScope | undefined,
+  incoming: SwimCloudCaptureCrawlScope,
+): SwimCloudCaptureCrawlScope {
+  return {
+    latestScopeId: incoming.latestScopeId,
+    plannedPasses: orderCrawlPasses([...(existing?.plannedPasses ?? []), ...incoming.plannedPasses]),
+  };
+}
+
+/**
+ * Whether a stored capture is known to have planned `pass`.
+ *
+ * Three answers, not two. `'not-recorded'` is a capture written before scopes
+ * existed (`data/swimcloud-captures/` holds a real one): nothing on disk says
+ * which passes it planned, so "it has no roster pages" and "it never asked for
+ * roster pages" cannot be told apart, and a UI must say that rather than pick
+ * one. `CLAUDE.md`'s "absent is not empty", one level up from a parser.
+ */
+export function capturePlannedPassStatus(
+  recorded: SwimCloudCaptureCrawlScope | undefined,
+  pass: SwimCloudCrawlPass,
+): 'planned' | 'not-planned' | 'not-recorded' {
+  if (recorded === undefined) return 'not-recorded';
+  return recorded.plannedPasses.includes(pass) ? 'planned' : 'not-planned';
+}
+
+/**
+ * Passes `next` plans that the stored capture has never planned — what a
+ * re-crawl under a wider scope will newly fetch.
+ *
+ * Empty for a re-run at the same or a narrower scope. Not a resume decision:
+ * resume is decided per URL by the extension's `captureResume.ts`, which
+ * already re-fetches anything the store holds no bytes for. This exists so the
+ * panel can say what widening the scope is about to add, before the coach
+ * commits to the wait.
+ */
+export function passesNewlyPlannedBy(
+  recorded: SwimCloudCaptureCrawlScope | undefined,
+  next: SwimCloudCrawlScope,
+): readonly SwimCloudCrawlPass[] {
+  if (recorded === undefined) return orderCrawlPasses(next.passes);
+  return orderCrawlPasses(next.passes).filter((pass) => !recorded.plannedPasses.includes(pass));
+}
+
+/* -------------------------------------------------------------------------- */
+/* The scoped plan a crawl actually commits to                                 */
+/* -------------------------------------------------------------------------- */
+
+export interface SwimCloudScopedMeetCrawlInput {
+  readonly meetId: SwimCloudMeetId;
+  /** Teams the coach confirmed, in the order the discovery step returned them. */
+  readonly teamIds: readonly SwimCloudTeamId[];
+  readonly scope: SwimCloudCrawlScope;
+  /** Passed straight through to {@link planMeetTeamSwims}; see that input's doc comment. */
+  readonly knownTotalPages?: Readonly<Record<string, number>>;
+}
+
+/**
+ * Every up-front decision one scope makes, as one value.
+ *
+ * The two step arrays are **empty**, not absent, when the scope declines that
+ * pass. An empty array is what the crawl loop then iterates zero times, so a
+ * declined pass costs no request and needs no second branch at the call site.
+ *
+ * The two booleans are flags rather than step arrays because neither pass's
+ * steps exist yet: a `meetEvent` URL is only knowable once a swims list has
+ * been parsed, and a `swimmerTimes` URL only once a roster has been. They say
+ * whether to run the pass at all, which is the decision this type owns.
+ */
+export interface SwimCloudScopedMeetCrawlPlan {
+  readonly scope: SwimCloudCrawlScope;
+  /** Page 1 of every confirmed team+gender's swims, or every known page when `knownTotalPages` is given. */
+  readonly swimsSteps: readonly SwimCloudCrawlStep[];
+  readonly rosterSteps: readonly SwimCloudCrawlStep[];
+  readonly plansEventResults: boolean;
+  readonly plansSwimmerTimes: boolean;
+}
+
+/**
+ * The structural plan for one meet crawl under one scope.
+ *
+ * This is the single place a scope turns into "which requests happen", so the
+ * question "does the meet-results scope fetch a roster page" is answered by a
+ * pure function and a unit test rather than by reading a 250-line crawl loop.
+ * The crawl loop calls this twice — once before any page count is known and
+ * again with `knownTotalPages` — and both calls go through the same gate, so a
+ * pass cannot be declined up front and then quietly re-planned later.
+ *
+ * Throws on an incoherent scope (one that plans a dependent pass without its
+ * prerequisite — see {@link crawlScopeDependencyGaps}) rather than planning it
+ * anyway. Such a scope would plan zero pages for the dependent pass and let the
+ * capture report every planned page as fetched, which is the silent empty this
+ * module exists to prevent.
+ */
+export function planScopedMeetCrawl(input: SwimCloudScopedMeetCrawlInput): SwimCloudScopedMeetCrawlPlan {
+  const gaps = crawlScopeDependencyGaps(input.scope);
+  if (gaps.length > 0) {
+    throw new Error(
+      `planScopedMeetCrawl: scope ${JSON.stringify(input.scope.id)} plans ${gaps.join(', ')} ` +
+        'without the pass each one is planned from, so those passes would silently plan zero pages.',
+    );
+  }
+  return {
+    scope: input.scope,
+    swimsSteps: crawlScopePlansPass(input.scope, 'meetTeamSwims')
+      ? planMeetTeamSwims({
+          meetId: input.meetId,
+          teamIds: input.teamIds,
+          ...(input.knownTotalPages === undefined ? {} : { knownTotalPages: input.knownTotalPages }),
+        })
+      : [],
+    rosterSteps: crawlScopePlansPass(input.scope, 'teamRoster')
+      ? planMeetTeamRosters({ meetId: input.meetId, teamIds: input.teamIds })
+      : [],
+    plansEventResults: crawlScopePlansPass(input.scope, 'meetEvent'),
+    plansSwimmerTimes: crawlScopePlansPass(input.scope, 'swimmerTimes'),
+  };
+}

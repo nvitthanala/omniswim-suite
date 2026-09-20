@@ -25,7 +25,14 @@
  * skip set dressed up as a verified one.
  */
 
-import type { SwimCloudCrawlStep } from '@omniswim/swimcloud/crawlPlan';
+import {
+  readSwimCloudCrawlPass,
+  readSwimCloudCrawlScopeId,
+  orderCrawlPasses,
+  type SwimCloudCaptureCrawlScope,
+  type SwimCloudCrawlPass,
+  type SwimCloudCrawlStep,
+} from '@omniswim/swimcloud/crawlPlan';
 
 /**
  * The subset of `captureStore.ts`'s `SwimCloudCapturePageRef` this module
@@ -48,6 +55,46 @@ export interface SwimCloudStoredPageRef {
 export interface SwimCloudStoredCapture {
   readonly captureId: string;
   readonly pages: readonly SwimCloudStoredPageRef[];
+  /**
+   * What the stored record says about which passes earlier crawls planned, or
+   * `undefined` when the record does not say.
+   *
+   * **Never used to decide what to skip.** Resume is decided per canonical URL
+   * by {@link alreadyCapturedUrls}, which asks only whether real bytes are
+   * stored — so a crawl widened from "meet results" to "everything" re-plans
+   * the roster and swimmer-times pages automatically, because the store holds
+   * no bytes for them and they were never in the skip set. Trusting a recorded
+   * scope instead would be trusting a claim about a *plan* to decide what is on
+   * *disk*, and a capture whose crawl died mid-pass would then have its
+   * unfetched pages skipped forever.
+   *
+   * It is read for one thing only: so the panel can say what widening the scope
+   * is about to add. See {@link passesNewlyPlannedBy}.
+   */
+  readonly crawlScope?: SwimCloudCaptureCrawlScope;
+}
+
+/**
+ * Read a stored `crawlScope`, or `undefined` if the record does not carry a
+ * readable one.
+ *
+ * Same validator-not-cast rule as the rest of this module, and the same
+ * fail-safe direction: an unreadable scope reads as *not recorded*, which makes
+ * a UI say "this capture does not record what it planned" rather than assert a
+ * scope nobody wrote. An unknown pass string is dropped rather than kept, so a
+ * future build's extra pass never reaches this one as a bare string.
+ */
+function readStoredCrawlScope(value: unknown): SwimCloudCaptureCrawlScope | undefined {
+  if (!isRecordLike(value)) return undefined;
+  const latestScopeId = readSwimCloudCrawlScopeId(value.latestScopeId);
+  if (latestScopeId === undefined) return undefined;
+  if (!Array.isArray(value.plannedPasses)) return undefined;
+  const passes: SwimCloudCrawlPass[] = [];
+  for (const raw of value.plannedPasses) {
+    const pass = readSwimCloudCrawlPass(raw);
+    if (pass !== undefined) passes.push(pass);
+  }
+  return { latestScopeId, plannedPasses: orderCrawlPasses(passes) };
 }
 
 function isRecordLike(value: unknown): value is Record<string, unknown> {
@@ -96,7 +143,12 @@ export function readStoredCapture(value: unknown): SwimCloudStoredCapture | unde
       ...(typeof raw.page === 'number' && Number.isSafeInteger(raw.page) ? { page: raw.page } : {}),
     });
   }
-  return { captureId: value.captureId, pages };
+  const crawlScope = readStoredCrawlScope(value.crawlScope);
+  return {
+    captureId: value.captureId,
+    pages,
+    ...(crawlScope === undefined ? {} : { crawlScope }),
+  };
 }
 
 /** Canonical URLs the store already holds bytes for. Empty when there is no stored capture. */
@@ -182,6 +234,15 @@ export interface SwimCloudResumeDecision {
   /** Canonical URLs whose bytes are already stored. Empty unless the reply was fully readable. */
   readonly alreadyCaptured: ReadonlySet<string>;
   readonly degradation: SwimCloudResumeDegradation;
+  /**
+   * What the stored capture says earlier crawls planned, when it says anything.
+   *
+   * Absent means the app had no record, could not be asked, or holds a record
+   * written before crawl scopes existed. All three are honestly "not recorded",
+   * and none of them changes what this run fetches — see
+   * {@link SwimCloudStoredCapture.crawlScope}.
+   */
+  readonly storedScope?: SwimCloudCaptureCrawlScope;
 }
 
 const NOTHING_CAPTURED: ReadonlySet<string> = new Set<string>();
@@ -221,5 +282,11 @@ export function decideResumeFromRoundTrip(trip: SwimCloudReadCaptureRoundTrip): 
   if (stored === undefined) {
     return { available: true, found: true, alreadyCaptured: NOTHING_CAPTURED, degradation: 'unreadable-reply' };
   }
-  return { available: true, found: true, alreadyCaptured: alreadyCapturedUrls(stored), degradation: 'none' };
+  return {
+    available: true,
+    found: true,
+    alreadyCaptured: alreadyCapturedUrls(stored),
+    degradation: 'none',
+    ...(stored.crawlScope === undefined ? {} : { storedScope: stored.crawlScope }),
+  };
 }

@@ -56,6 +56,14 @@ import {
   type SwimCloudCaptureSubject,
   type SwimCloudCaptureTeamDiscovery,
 } from '../../../packages/swimcloud/src/captureStore.ts';
+import {
+  mergeCaptureCrawlScopes,
+  readSwimCloudCrawlPass,
+  readSwimCloudCrawlScopeId,
+  orderCrawlPasses,
+  type SwimCloudCaptureCrawlScope,
+  type SwimCloudCrawlPass,
+} from '../../../packages/swimcloud/src/crawlPlan.ts';
 import type { SwimCloudCacheEntry } from '../../../packages/swimcloud/src/cache.ts';
 import type { SwimCloudCaptureTrack } from '../../../packages/swimcloud/src/entities.ts';
 import { readSwimCloudClipboardPayload } from '../../../packages/swimcloud/src/clipboardPayload.ts';
@@ -348,6 +356,43 @@ function readOptionalLabel(value: unknown): Read<string | undefined> {
   if (value === undefined) return { ok: true, value: undefined };
   if (typeof value === 'string' && value.length <= 512) return { ok: true, value };
   return fail('"label" must be a string of at most 512 characters.');
+}
+
+/**
+ * The crawl scope a client states, validated field by field.
+ *
+ * Invalid input is a 400, never a silent drop to `undefined`. The two are not
+ * interchangeable here: `undefined` means *the crawl did not say what it
+ * planned*, and every consumer downstream is required to render that as "scope
+ * not recorded" rather than assume a full crawl. Quietly turning a malformed
+ * scope into that value would put a false "nobody recorded this" on a capture
+ * whose crawler did record it, which is the same class of lie as inventing the
+ * scope outright.
+ *
+ * An unknown pass name is likewise rejected rather than filtered out. A build
+ * that learns a fifth pass must fail loudly against an older app, not have its
+ * extra pass silently dropped and then report the remainder as the whole plan.
+ */
+function readOptionalCrawlScope(value: unknown): Read<SwimCloudCaptureCrawlScope | undefined> {
+  if (value === undefined) return { ok: true, value: undefined };
+  if (!isPlainObject(value)) return fail('"crawlScope" must be an object.');
+
+  const latestScopeId = readSwimCloudCrawlScopeId(value.latestScopeId);
+  if (latestScopeId === undefined) {
+    return fail('"crawlScope.latestScopeId" must be a known crawl scope id.');
+  }
+  if (!Array.isArray(value.plannedPasses)) {
+    return fail('"crawlScope.plannedPasses" must be an array of crawl pass names.');
+  }
+  const passes: SwimCloudCrawlPass[] = [];
+  for (const raw of value.plannedPasses) {
+    const pass = readSwimCloudCrawlPass(raw);
+    if (pass === undefined) {
+      return fail(`"crawlScope.plannedPasses" holds an unknown pass ${JSON.stringify(raw)}.`);
+    }
+    passes.push(pass);
+  }
+  return { ok: true, value: { latestScopeId, plannedPasses: orderCrawlPasses(passes) } };
 }
 
 function readOptionalTeamDiscovery(value: unknown): Read<SwimCloudCaptureTeamDiscovery | undefined> {
@@ -977,6 +1022,11 @@ export function createSwimCloudCaptureRouter(options: SwimCloudCaptureRouterOpti
         return res.status(400).json({ error: 'Invalid teamDiscovery', details: teamDiscovery.message });
       }
 
+      const crawlScope = readOptionalCrawlScope(body.crawlScope);
+      if (!crawlScope.ok) {
+        return res.status(400).json({ error: 'Invalid crawlScope', details: crawlScope.message });
+      }
+
       // Every field is a partial update: an omitted field keeps whatever the
       // stored record holds, so a progress ping that carries only
       // `{ subject, completeness }` cannot wipe a plannedPageCount or a label
@@ -985,6 +1035,16 @@ export function createSwimCloudCaptureRouter(options: SwimCloudCaptureRouterOpti
       const now = new Date().toISOString();
       const resolvedLabel = label.value ?? existing?.label;
       const resolvedDiscovery = teamDiscovery.value ?? existing?.teamDiscovery;
+      // Unioned, not overwritten. A capture is cumulative — pages merge by
+      // canonical URL across crawls — so a meet-results crawl followed by a
+      // full one holds both sets of pages, and only the union of their planned
+      // passes is a true statement about what the stored pages cover. An
+      // omitted `crawlScope` keeps whatever the record already held, the same
+      // partial-update rule every other field here follows.
+      const resolvedCrawlScope =
+        crawlScope.value === undefined
+          ? existing?.crawlScope
+          : mergeCaptureCrawlScopes(existing?.crawlScope, crawlScope.value);
       const record: SwimCloudCaptureRecord = {
         captureId,
         subject: subject.value,
@@ -998,6 +1058,7 @@ export function createSwimCloudCaptureRouter(options: SwimCloudCaptureRouterOpti
         track: track.value ?? existing?.track ?? 'browser-extension',
         completeness: completeness.value ?? existing?.completeness ?? 'in-progress',
         ...(resolvedDiscovery === undefined ? {} : { teamDiscovery: resolvedDiscovery }),
+        ...(resolvedCrawlScope === undefined ? {} : { crawlScope: resolvedCrawlScope }),
         // `0` here means "no plan committed yet", which is what a capture looks
         // like before the crawler has read `pagination.totalPages`. It is not a
         // claim that zero pages exist — `completeness` is what carries that,

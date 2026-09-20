@@ -566,6 +566,99 @@
     }
     return steps;
   }
+  var SWIMCLOUD_CRAWL_PASSES = [
+    "meetTeamSwims",
+    "meetEvent",
+    "teamRoster",
+    "swimmerTimes"
+  ];
+  var SWIMCLOUD_CRAWL_PASS_PREREQUISITE = {
+    meetEvent: "meetTeamSwims",
+    swimmerTimes: "teamRoster"
+  };
+  var SWIMCLOUD_CRAWL_SCOPES = [
+    {
+      id: "meet-results",
+      label: "Meet results only",
+      summary: "Every team\u2019s swims at this meet, plus the per-event pages that say which round each swim was. Skips team rosters and swimmers\u2019 personal-best pages.",
+      passes: ["meetTeamSwims", "meetEvent"]
+    },
+    {
+      id: "roster-and-season-bests",
+      label: "Rosters and season bests only",
+      summary: "Every team\u2019s roster, plus one personal-bests page per rostered swimmer. Skips this meet\u2019s own results.",
+      passes: ["teamRoster", "swimmerTimes"]
+    },
+    {
+      id: "everything",
+      label: "Everything",
+      summary: "Meet results, per-event rounds, rosters and every rostered swimmer\u2019s personal bests. The most requests, and the longest.",
+      passes: ["meetTeamSwims", "meetEvent", "teamRoster", "swimmerTimes"]
+    }
+  ];
+  var DEFAULT_SWIMCLOUD_CRAWL_SCOPE_ID = "everything";
+  function swimCloudCrawlScope(id) {
+    const found = SWIMCLOUD_CRAWL_SCOPES.find((scope) => scope.id === id);
+    if (found === void 0) {
+      throw new Error(`swimCloudCrawlScope: no scope is defined for id ${JSON.stringify(id)}.`);
+    }
+    return found;
+  }
+  function readSwimCloudCrawlScopeId(value) {
+    if (typeof value !== "string") return void 0;
+    return SWIMCLOUD_CRAWL_SCOPES.find((scope) => scope.id === value)?.id;
+  }
+  function readSwimCloudCrawlPass(value) {
+    if (typeof value !== "string") return void 0;
+    return SWIMCLOUD_CRAWL_PASSES.find((pass) => pass === value);
+  }
+  function crawlScopePlansPass(scope, pass) {
+    return scope.passes.includes(pass);
+  }
+  function passesOutsideCrawlScope(scope) {
+    return SWIMCLOUD_CRAWL_PASSES.filter((pass) => !crawlScopePlansPass(scope, pass));
+  }
+  function crawlScopeDependencyGaps(scope) {
+    return scope.passes.filter((pass) => {
+      const needs = SWIMCLOUD_CRAWL_PASS_PREREQUISITE[pass];
+      return needs !== void 0 && !crawlScopePlansPass(scope, needs);
+    });
+  }
+  function crawlScopeFloorPagesPerTeam(scope) {
+    let perTeam = 0;
+    if (crawlScopePlansPass(scope, "meetTeamSwims")) perTeam += 2;
+    if (crawlScopePlansPass(scope, "teamRoster")) perTeam += 2;
+    return perTeam;
+  }
+  function orderCrawlPasses(passes) {
+    return SWIMCLOUD_CRAWL_PASSES.filter((pass) => passes.includes(pass));
+  }
+  function crawlScopeRecordFor(scope) {
+    return { latestScopeId: scope.id, plannedPasses: orderCrawlPasses(scope.passes) };
+  }
+  function passesNewlyPlannedBy(recorded, next) {
+    if (recorded === void 0) return orderCrawlPasses(next.passes);
+    return orderCrawlPasses(next.passes).filter((pass) => !recorded.plannedPasses.includes(pass));
+  }
+  function planScopedMeetCrawl(input) {
+    const gaps = crawlScopeDependencyGaps(input.scope);
+    if (gaps.length > 0) {
+      throw new Error(
+        `planScopedMeetCrawl: scope ${JSON.stringify(input.scope.id)} plans ${gaps.join(", ")} without the pass each one is planned from, so those passes would silently plan zero pages.`
+      );
+    }
+    return {
+      scope: input.scope,
+      swimsSteps: crawlScopePlansPass(input.scope, "meetTeamSwims") ? planMeetTeamSwims({
+        meetId: input.meetId,
+        teamIds: input.teamIds,
+        ...input.knownTotalPages === void 0 ? {} : { knownTotalPages: input.knownTotalPages }
+      }) : [],
+      rosterSteps: crawlScopePlansPass(input.scope, "teamRoster") ? planMeetTeamRosters({ meetId: input.meetId, teamIds: input.teamIds }) : [],
+      plansEventResults: crawlScopePlansPass(input.scope, "meetEvent"),
+      plansSwimmerTimes: crawlScopePlansPass(input.scope, "swimmerTimes")
+    };
+  }
 
   // packages/swimcloud/src/html.ts
   var NAMED_ENTITIES = {
@@ -2058,6 +2151,18 @@
   }
 
   // extensions/swimcloud-companion/src/captureResume.ts
+  function readStoredCrawlScope(value) {
+    if (!isRecordLike(value)) return void 0;
+    const latestScopeId = readSwimCloudCrawlScopeId(value.latestScopeId);
+    if (latestScopeId === void 0) return void 0;
+    if (!Array.isArray(value.plannedPasses)) return void 0;
+    const passes = [];
+    for (const raw of value.plannedPasses) {
+      const pass = readSwimCloudCrawlPass(raw);
+      if (pass !== void 0) passes.push(pass);
+    }
+    return { latestScopeId, plannedPasses: orderCrawlPasses(passes) };
+  }
   function isRecordLike(value) {
     return typeof value === "object" && value !== null && !Array.isArray(value);
   }
@@ -2081,7 +2186,12 @@
         ...typeof raw.page === "number" && Number.isSafeInteger(raw.page) ? { page: raw.page } : {}
       });
     }
-    return { captureId: value.captureId, pages };
+    const crawlScope = readStoredCrawlScope(value.crawlScope);
+    return {
+      captureId: value.captureId,
+      pages,
+      ...crawlScope === void 0 ? {} : { crawlScope }
+    };
   }
   function alreadyCapturedUrls(capture) {
     if (capture === void 0) return /* @__PURE__ */ new Set();
@@ -2113,7 +2223,13 @@
     if (stored === void 0) {
       return { available: true, found: true, alreadyCaptured: NOTHING_CAPTURED, degradation: "unreadable-reply" };
     }
-    return { available: true, found: true, alreadyCaptured: alreadyCapturedUrls(stored), degradation: "none" };
+    return {
+      available: true,
+      found: true,
+      alreadyCaptured: alreadyCapturedUrls(stored),
+      degradation: "none",
+      ...stored.crawlScope === void 0 ? {} : { storedScope: stored.crawlScope }
+    };
   }
 
   // extensions/swimcloud-companion/src/crawlErrorPolicy.ts
@@ -2490,9 +2606,45 @@
   function estimateCrawlVolume(pageCount, minDelayMs) {
     return { pages: pageCount, etaLabel: formatEtaLabel(pageCount, minDelayMs) };
   }
-  function formatCrawlVolumeFloorLine(teamCount, minDelayMs) {
-    const floor = estimateCrawlVolume(teamCount * 4, minDelayMs);
-    return `${teamCount} teams \xB7 at least ${floor.pages} requests (page 1 of each team's swims and each team's roster, both genders), ${floor.etaLabel}. The rest is not knowable yet: extra swims pages appear once page 1 is read, and one page per rostered swimmer is added once the rosters are read.`;
+  function formatCrawlVolumeFloorLineForScope(teamCount, minDelayMs, scope) {
+    const floor = estimateCrawlVolume(teamCount * crawlScopeFloorPagesPerTeam(scope), minDelayMs);
+    const known = [];
+    if (crawlScopePlansPass(scope, "meetTeamSwims")) known.push("page 1 of each team's swims");
+    if (crawlScopePlansPass(scope, "teamRoster")) known.push("each team's roster");
+    const unknown = [];
+    if (crawlScopePlansPass(scope, "meetTeamSwims")) {
+      unknown.push("extra swims pages appear once page 1 is read");
+    }
+    if (crawlScopePlansPass(scope, "meetEvent")) {
+      unknown.push("one page per distinct event is added once the swims lists are read");
+    }
+    if (crawlScopePlansPass(scope, "swimmerTimes")) {
+      unknown.push("one page per rostered swimmer is added once the rosters are read");
+    }
+    const head = known.length === 0 ? `${teamCount} teams \xB7 ${scope.label} \xB7 no structural pages to fetch up front` : `${teamCount} teams \xB7 ${scope.label} \xB7 at least ${floor.pages} requests (${known.join(" and ")}, both genders), ${floor.etaLabel}`;
+    const tail = unknown.length === 0 ? " Nothing further is added to this plan." : ` The rest is not knowable yet: ${unknown.join(", and ")}.`;
+    const skipped = passesOutsideCrawlScope(scope);
+    const skippedTail = skipped.length === 0 ? "" : ` Skipped by this scope: ${skipped.map(crawlPassLabel).join(", ")}.`;
+    return `${head}.${tail}${skippedTail}`;
+  }
+  function crawlPassLabel(pass) {
+    switch (pass) {
+      case "meetTeamSwims":
+        return "team swims at this meet";
+      case "meetEvent":
+        return "per-event round pages";
+      case "teamRoster":
+        return "team rosters";
+      case "swimmerTimes":
+        return "swimmer personal bests";
+    }
+  }
+  function formatCrawlScopeNote(scope) {
+    const skipped = passesOutsideCrawlScope(scope);
+    if (skipped.length === 0) {
+      return `Scope: ${scope.label} \u2014 every pass is planned. Nothing is being skipped.`;
+    }
+    return `Scope: ${scope.label} \u2014 not fetched by this crawl: ${skipped.map(crawlPassLabel).join(", ")}. The capture will hold none of those pages, because this crawl never asks for them.`;
   }
 
   // extensions/swimcloud-companion/src/crawler-content.ts
@@ -2548,6 +2700,9 @@
     line1.className = "omniswim-crawler-panel__line";
     const line2 = document.createElement("div");
     line2.className = "omniswim-crawler-panel__line";
+    const scopeLine = document.createElement("div");
+    scopeLine.className = "omniswim-crawler-panel__line omniswim-crawler-panel__resume";
+    scopeLine.hidden = true;
     const resumeLine = document.createElement("div");
     resumeLine.className = "omniswim-crawler-panel__line omniswim-crawler-panel__resume";
     resumeLine.hidden = true;
@@ -2576,13 +2731,14 @@
     continueAnywayButton.textContent = "Continue anyway (save to Downloads)";
     continueAnywayButton.hidden = true;
     buttons.append(pauseButton, cancelButton, retryButton, continueAnywayButton);
-    root.append(title, line1, line2, resumeLine, warnLine, barTrack, buttons);
+    root.append(title, line1, line2, scopeLine, resumeLine, warnLine, barTrack, buttons);
     document.body.appendChild(root);
     return {
       root,
       title,
       line1,
       line2,
+      scopeLine,
       resumeLine,
       warnLine,
       bar,
@@ -2623,6 +2779,10 @@
   function renderMessage(panel, message) {
     panel.line1.textContent = message;
     panel.line2.textContent = "";
+  }
+  function renderScopeNote(panel, message) {
+    panel.scopeLine.textContent = message;
+    panel.scopeLine.hidden = message.length === 0;
   }
   function renderResumeNote(panel, message) {
     panel.resumeLine.textContent = message;
@@ -2755,6 +2915,18 @@
       return void 0;
     }
   }
+  var PASS_NOT_IN_SCOPE_EVENT_RESULTS = {
+    total: 0,
+    done: 0,
+    stoppedMessage: "",
+    stopped: false
+  };
+  var PASS_NOT_IN_SCOPE_SWIMMER_TIMES = {
+    total: 0,
+    done: 0,
+    completeness: "every-planned-page-fetched",
+    stoppedMessage: ""
+  };
   async function runCrawl(meetId, panel, control) {
     const subject = { kind: "meet", meetId };
     const retrievedAt = () => (/* @__PURE__ */ new Date()).toISOString();
@@ -2771,19 +2943,24 @@
       renderMessage(panel, "Could not discover any teams for this meet. Nothing to crawl.");
       return;
     }
-    const confirmedTeamIds = await confirmTeamList(panel, discovery.teamIds);
-    if (confirmedTeamIds === void 0) {
+    const confirmation = await confirmTeamList(panel, discovery.teamIds, resumeDecision.storedScope);
+    if (confirmation === void 0) {
       renderMessage(panel, "Cancelled before fetching started.");
       return;
     }
+    const confirmedTeamIds = confirmation.teamIds;
+    const scope = confirmation.scope;
+    const crawlScope = crawlScopeRecordFor(scope);
     const teamDiscovery = {
       source: discovery.source,
       genders: discovery.genders,
       teamIds: confirmedTeamIds,
       completeness: "user-confirmed"
     };
-    const page1Steps = planMeetTeamSwims({ meetId, teamIds: confirmedTeamIds });
-    const rosterSteps = planMeetTeamRosters({ meetId, teamIds: confirmedTeamIds });
+    const structural = planScopedMeetCrawl({ meetId, teamIds: confirmedTeamIds, scope });
+    const page1Steps = structural.swimsSteps;
+    const rosterSteps = structural.rosterSteps;
+    renderScopeNote(panel, formatCrawlScopeNote(scope));
     const fetchedUrls = /* @__PURE__ */ new Set();
     const knownTotalPages = {};
     const swimsEventRefs = [];
@@ -2793,7 +2970,8 @@
       type: "omniswim-swimcloud-open-capture",
       subject,
       plannedPageCount: page1Steps.length + rosterSteps.length,
-      teamDiscovery
+      teamDiscovery,
+      crawlScope
     });
     if (!isRoundTripOk(opened)) {
       renderWarning(
@@ -2827,14 +3005,20 @@
         if (parsed.ok) swimsEventRefs.push(eventRefsOf(parsed.data));
       }
     }
-    const fullSteps = planMeetTeamSwims({ meetId, teamIds: confirmedTeamIds, knownTotalPages });
+    const fullSteps = planScopedMeetCrawl({
+      meetId,
+      teamIds: confirmedTeamIds,
+      scope,
+      knownTotalPages
+    }).swimsSteps;
     const pagesTotal = fullSteps.length;
-    renderMessage(panel, formatPassTwoHeadline(fetchedUrls.size, pagesTotal));
+    if (pagesTotal > 0) renderMessage(panel, formatPassTwoHeadline(fetchedUrls.size, pagesTotal));
     const corrected = await sendToBackground({
       type: "omniswim-swimcloud-open-capture",
       subject,
       plannedPageCount: pagesTotal + rosterSteps.length,
-      teamDiscovery
+      teamDiscovery,
+      crawlScope
     });
     if (!isRoundTripOk(corrected)) {
       renderWarning(
@@ -2844,14 +3028,16 @@
     }
     const thisRunRemaining = stepsStillNeeded(fullSteps, fetchedUrls);
     const resume = partitionResumableSteps(thisRunRemaining, alreadyCaptured);
-    renderResumeNote(
-      panel,
-      formatResumeSkipLine({
-        skippedPages: resume.alreadyCaptured.length,
-        pagesTotal,
-        storedPageCount: alreadyCaptured.size
-      })
-    );
+    if (pagesTotal > 0) {
+      renderResumeNote(
+        panel,
+        formatResumeSkipLine({
+          skippedPages: resume.alreadyCaptured.length,
+          pagesTotal,
+          storedPageCount: alreadyCaptured.size
+        })
+      );
+    }
     let pagesDone = fetchedUrls.size + resume.alreadyCaptured.length;
     for (const step of resume.toFetch) {
       if (control.cancelled) {
@@ -2877,7 +3063,7 @@
       pagesDone += 1;
       renderProgress(panel, progressStateFor(step, confirmedTeamIds, pagesDone, pagesTotal, knownTotalPages));
     }
-    const eventPagesDone = await runEventResultsPass({
+    const eventPagesDone = structural.plansEventResults ? await runEventResultsPass({
       meetId,
       swimsPages: swimsEventRefs,
       swimsPagesResumeSkipped: resume.alreadyCaptured.length,
@@ -2885,29 +3071,31 @@
       plannedBeforeThisPass: pagesTotal + rosterSteps.length,
       subject,
       teamDiscovery,
+      crawlScope,
       panel,
       retrievedAt,
       relay,
       control
-    });
+    }) : PASS_NOT_IN_SCOPE_EVENT_RESULTS;
     if (control.cancelled) {
       await finishCrawl(panel, subject, "partial", relay);
       return;
     }
     const rosterAthletes = await runRosterPass(rosterSteps, confirmedTeamIds, panel, subject, retrievedAt, relay, control);
     if (rosterAthletes === void 0) return;
-    const swimmerPagesDone = await runSwimmerTimesPass({
+    const swimmerPagesDone = structural.plansSwimmerTimes ? await runSwimmerTimesPass({
       meetId,
       rosters: rosterAthletes,
       alreadyCaptured,
       plannedBeforeThisPass: pagesTotal + rosterSteps.length + eventPagesDone.total,
       subject,
       teamDiscovery,
+      crawlScope,
       panel,
       retrievedAt,
       relay,
       control
-    });
+    }) : PASS_NOT_IN_SCOPE_SWIMMER_TIMES;
     const totalPlanned = pagesTotal + rosterSteps.length + eventPagesDone.total + swimmerPagesDone.total;
     const totalDone = pagesDone + rosterSteps.length + eventPagesDone.done + swimmerPagesDone.done;
     const completeness = swimmerPagesDone.completeness === "partial" || eventPagesDone.stopped ? "partial" : "every-planned-page-fetched";
@@ -2950,7 +3138,8 @@
       type: "omniswim-swimcloud-open-capture",
       subject,
       plannedPageCount: input.plannedBeforeThisPass + plan.steps.length,
-      teamDiscovery: input.teamDiscovery
+      teamDiscovery: input.teamDiscovery,
+      crawlScope: input.crawlScope
     });
     if (!isRoundTripOk(corrected)) {
       renderWarning(
@@ -3079,7 +3268,8 @@
       type: "omniswim-swimcloud-open-capture",
       subject,
       plannedPageCount: input.plannedBeforeThisPass + plan.steps.length,
-      teamDiscovery: input.teamDiscovery
+      teamDiscovery: input.teamDiscovery,
+      crawlScope: input.crawlScope
     });
     if (!isRoundTripOk(corrected)) {
       renderWarning(
@@ -3256,7 +3446,7 @@
       await sleep(250);
     }
   }
-  function confirmTeamList(panel, teamIds) {
+  function confirmTeamList(panel, teamIds, storedScope) {
     return new Promise((resolve) => {
       panel.line1.textContent = `${teamIds.length} team(s) discovered. Confirm before fetching:`;
       panel.line2.textContent = "";
@@ -3272,19 +3462,52 @@
         list.appendChild(label);
         checkboxes.push({ id, input });
       }
+      const scopeList = document.createElement("div");
+      scopeList.className = "omniswim-crawler-panel__scope-list";
+      const scopeRadios = [];
+      for (const scope of SWIMCLOUD_CRAWL_SCOPES) {
+        const label = document.createElement("label");
+        const input = document.createElement("input");
+        input.type = "radio";
+        input.name = "omniswim-crawl-scope";
+        input.value = scope.id;
+        input.checked = scope.id === DEFAULT_SWIMCLOUD_CRAWL_SCOPE_ID;
+        label.append(input, document.createTextNode(` ${scope.label}`));
+        const summary = document.createElement("span");
+        summary.className = "omniswim-crawler-panel__scope-summary";
+        summary.textContent = scope.summary;
+        scopeList.append(label, summary);
+        scopeRadios.push({ scope, input });
+      }
       const estimateLine = document.createElement("div");
       estimateLine.className = "omniswim-crawler-panel__line";
-      estimateLine.textContent = formatCrawlVolumeFloorLine(teamIds.length, MIN_DELAY_MS);
+      const scopeNoteLine = document.createElement("div");
+      scopeNoteLine.className = "omniswim-crawler-panel__line omniswim-crawler-panel__resume";
+      const selectedScope = () => scopeRadios.find((radio) => radio.input.checked)?.scope ?? swimCloudCrawlScope(DEFAULT_SWIMCLOUD_CRAWL_SCOPE_ID);
+      const refreshEstimate = () => {
+        const scope = selectedScope();
+        const selectedTeams = checkboxes.filter((c) => c.input.checked).length;
+        estimateLine.textContent = formatCrawlVolumeFloorLineForScope(selectedTeams, MIN_DELAY_MS, scope);
+        const added = passesNewlyPlannedBy(storedScope, scope);
+        scopeNoteLine.textContent = storedScope === void 0 || added.length === 0 ? "" : `This capture has not planned ${added.map(crawlPassLabel).join(" or ")} before. Widening to ${scope.label} adds those pages to it.`;
+      };
+      for (const { input } of checkboxes) input.addEventListener("change", refreshEstimate);
+      for (const { input } of scopeRadios) input.addEventListener("change", refreshEstimate);
+      refreshEstimate();
       const startButton = document.createElement("button");
       startButton.type = "button";
       startButton.textContent = "Start crawl";
       startButton.className = "omniswim-crawler-panel__start";
       panel.root.insertBefore(list, panel.bar.parentElement);
+      panel.root.insertBefore(scopeList, panel.bar.parentElement);
       panel.root.insertBefore(estimateLine, panel.bar.parentElement);
+      panel.root.insertBefore(scopeNoteLine, panel.bar.parentElement);
       panel.root.insertBefore(startButton, panel.bar.parentElement);
       const cleanup = () => {
         list.remove();
+        scopeList.remove();
         estimateLine.remove();
+        scopeNoteLine.remove();
         startButton.remove();
       };
       panel.cancelButton.addEventListener(
@@ -3297,8 +3520,9 @@
       );
       startButton.addEventListener("click", () => {
         const selected = checkboxes.filter((c) => c.input.checked).map((c) => c.id);
+        const scope = selectedScope();
         cleanup();
-        resolve(selected);
+        resolve({ teamIds: selected, scope });
       });
     });
   }

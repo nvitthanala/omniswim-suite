@@ -175,3 +175,29 @@
   display: block;
   padding: 2px 0;
 }
+
+/*
+ * Crawl-scope radios: which passes this crawl commits to, chosen on the same
+ * panel that confirms the team list. Same card look as the team list, without
+ * its scroll cap — there are only three, and a coach has to be able to read
+ * every summary before committing to the wait.
+ */
+.omniswim-crawler-panel__scope-list {
+  margin: 8px 0;
+  padding: 6px;
+  background: #262626;
+  border-radius: 6px;
+}
+
+.omniswim-crawler-panel__scope-list label {
+  display: block;
+  padding: 3px 0;
+}
+
+.omniswim-crawler-panel__scope-summary {
+  display: block;
+  margin: 0 0 6px 20px;
+  color: #aaa;
+  font-size: 12px;
+  line-height: 1.35;
+}

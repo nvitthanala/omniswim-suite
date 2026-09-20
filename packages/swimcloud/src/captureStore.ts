@@ -22,8 +22,16 @@
 
 import type { SwimCloudCaptureSubject, SwimCloudCaptureTrack, SwimCloudMeetId, SwimCloudTeamId } from './entities';
 import type { SwimCloudResourceKind } from './urlClassifier';
+import type { SwimCloudCaptureCrawlScope } from './crawlPlan';
 import type { SwimCloudCacheEntry } from './cache';
 import { FileSystemSwimCloudCache } from './cache';
+
+/** Re-exported from `./crawlPlan` — see {@link SwimCloudCaptureRecord.crawlScope}. */
+export type {
+  SwimCloudCaptureCrawlScope,
+  SwimCloudCrawlPass,
+  SwimCloudCrawlScopeId,
+} from './crawlPlan';
 
 /** Re-exported from `./entities` — see that type's doc comment for why it
  * lives there and not here (this file pulls in `./cache`'s Node-only code;
@@ -71,6 +79,15 @@ export interface SwimCloudCapturePageRef {
  * `parseMeetTeamsHtml`'s `discoveryCompleteness: 'unproven'`) can fetch
  * every page it planned and still not be the whole meet. A UI showing this
  * value must render it as exactly that qualified claim, never as "Complete."
+ *
+ * ## The plan itself can be narrow — read {@link SwimCloudCaptureRecord.crawlScope}
+ *
+ * Since 2026-09-20 a coach can narrow *the plan* before the crawl starts, so a
+ * meet-results-only capture legitimately reports `'every-planned-page-fetched'`
+ * while holding **zero** roster and swimmer-times pages. At this field alone it
+ * is indistinguishable from a full crawl. Any UI that offers to import rosters
+ * or swimmer histories from a capture must read `crawlScope` as well, or it
+ * will show an empty list that reads as "this meet has no rostered swimmers".
  */
 export type SwimCloudCaptureCompleteness =
   | 'in-progress'
@@ -96,6 +113,21 @@ export interface SwimCloudCaptureRecord {
   readonly track: SwimCloudCaptureTrack;
   readonly completeness: SwimCloudCaptureCompleteness;
   readonly teamDiscovery?: SwimCloudCaptureTeamDiscovery;
+  /**
+   * Which passes the crawls that filled this capture actually planned.
+   *
+   * **Optional, and absent is not "everything".** Every capture written before
+   * 2026-09-20 has no such field — `data/swimcloud-captures/` holds a real
+   * 234-page one — and nothing on disk says whether those crawls planned all
+   * four passes or only some. A reader must report that as *scope not
+   * recorded*, never assume a full crawl. `capturePlannedPassStatus` in
+   * `./crawlPlan.ts` is the three-valued answer; use it rather than a truthiness
+   * check on this field.
+   *
+   * Cumulative across crawls of the same capture — see
+   * {@link SwimCloudCaptureCrawlScope.plannedPasses}.
+   */
+  readonly crawlScope?: SwimCloudCaptureCrawlScope;
   readonly plannedPageCount: number;
   readonly pages: readonly SwimCloudCapturePageRef[];
   readonly notes: readonly string[];

@@ -74,6 +74,19 @@ import { AlertTriangle, ChevronDown, ChevronRight, ClipboardPaste, RefreshCw, Tr
 // entity subpaths below are browser-safe and are imported directly, the same
 // discipline every other consumer follows: never the package root.
 import type { SwimCloudCaptureSubject } from '@omniswim/swimcloud/entities';
+// `crawlPlan` is pure planning data — it imports only `./entities` and
+// `./urlClassifier`, both browser-safe — so unlike `./captureStore` it can be
+// imported here rather than mirrored. Mirroring the scope rules would be worse
+// than mirroring a shape: two copies of "which passes did this capture plan"
+// that can disagree is exactly the silent wrongness they exist to prevent.
+import {
+  SWIMCLOUD_CRAWL_PASSES,
+  capturePlannedPassStatus,
+  readSwimCloudCrawlScopeId,
+  swimCloudCrawlScope,
+  type SwimCloudCaptureCrawlScope,
+  type SwimCloudCrawlPass,
+} from '@omniswim/swimcloud/crawlPlan';
 import type {
   SwimCloudMeetEventResultsParse,
   SwimCloudRosterParse,
@@ -123,6 +136,11 @@ export interface SwimCloudCaptureRecord {
   readonly updatedAt: string;
   readonly completeness: SwimCloudCaptureCompleteness;
   readonly teamDiscovery?: SwimCloudCaptureTeamDiscovery;
+  /**
+   * Which passes the crawls that filled this capture planned, when the record
+   * says. **Absent is not "everything"** — see {@link describeCaptureScope}.
+   */
+  readonly crawlScope?: SwimCloudCaptureCrawlScope;
   readonly plannedPageCount: number;
   readonly pages: readonly SwimCloudCapturePageRef[];
   readonly notes: readonly string[];
@@ -286,6 +304,107 @@ export function describeCompleteness(capture: SwimCloudCaptureRecord): string {
   return `${pagesPhrase(capture)} fetched · ${discoveryPhrase}`;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Crawl scope — absent is not empty                                          */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Whether a capture is known to have planned one pass.
+ *
+ * Three values, not two. `'not-recorded'` is a capture stored before crawl
+ * scopes existed — `data/swimcloud-captures/` holds a real 234-page one — and
+ * nothing on disk says which passes its crawl planned. "It holds no roster
+ * pages" and "it never asked for roster pages" cannot be told apart for such a
+ * capture, and this UI must say so rather than pick whichever reads better.
+ */
+export type SwimCloudCapturePassStatus = 'planned' | 'not-planned' | 'not-recorded';
+
+/** {@link SwimCloudCapturePassStatus} for one pass of one capture. */
+export function capturePassStatus(
+  capture: SwimCloudCaptureRecord | null | undefined,
+  pass: SwimCloudCrawlPass,
+): SwimCloudCapturePassStatus {
+  return capturePlannedPassStatus(capture?.crawlScope, pass);
+}
+
+/** What a coach calls each pass's pages. */
+const PASS_NOUN: Readonly<Record<SwimCloudCrawlPass, string>> = {
+  meetTeamSwims: 'this meet’s team results',
+  meetEvent: 'per-event round pages',
+  teamRoster: 'team rosters',
+  swimmerTimes: 'swimmers’ personal-best pages',
+};
+
+/** The scope's own label, or `undefined` when the record names a scope this build does not know. */
+function recordedScopeLabel(capture: SwimCloudCaptureRecord): string | undefined {
+  const id = readSwimCloudCrawlScopeId(capture.crawlScope?.latestScopeId);
+  return id === undefined ? undefined : swimCloudCrawlScope(id).label;
+}
+
+/**
+ * One line saying what this capture's crawl set out to fetch — rendered under
+ * the completeness sentence, for every capture.
+ *
+ * This exists because `'every-planned-page-fetched'` is a claim about a plan,
+ * and since 2026-09-20 the plan itself can be narrow. A meet-results capture
+ * legitimately reports every planned page fetched while holding zero roster and
+ * zero swimmer-times pages; at the completeness field alone it is
+ * indistinguishable from a full crawl. This line is the difference.
+ *
+ * Never returns an empty string. A capture that records no scope gets a
+ * sentence saying that, because "we do not know" is a fact a coach acts on
+ * differently from "everything was fetched", and a blank row would be read as
+ * the latter.
+ */
+export function describeCaptureScope(capture: SwimCloudCaptureRecord): string {
+  const scope = capture.crawlScope;
+  if (scope === undefined) {
+    return 'Crawl scope not recorded — this capture was stored before crawls recorded what they planned, so pages it does not hold cannot be told apart from pages it never asked for.';
+  }
+  const label = recordedScopeLabel(capture);
+  // Derived from the recorded `plannedPasses`, never from the scope id's own
+  // table. The two agree for a capture crawled once, and only `plannedPasses`
+  // is right for one crawled twice at different scopes — it is the union the
+  // route stores, and the union is what the pages on disk actually cover.
+  const skipped = SWIMCLOUD_CRAWL_PASSES.filter(pass => !scope.plannedPasses.includes(pass));
+  const named = label === undefined ? 'an unrecognised scope' : `“${label}”`;
+  if (skipped.length === 0) {
+    return `Crawled as ${named} — every pass was planned.`;
+  }
+  return `Crawled as ${named} — never planned: ${skipped.map(pass => PASS_NOUN[pass]).join(', ')}. Those pages are absent by plan, not missing from the meet.`;
+}
+
+/**
+ * What an empty section means, beyond the fact that it is empty.
+ *
+ * **Qualifies a caller's own sentence; never replaces it.** The observed fact
+ * — "this capture holds no team-roster page" — is true under every status and
+ * stays the first thing a coach reads. What changes is what that fact is
+ * evidence of, and that is what this adds.
+ *
+ * `null` when the pass **was** planned: the capture asked for rosters, got
+ * none, and there is nothing further to say.
+ *
+ * `CLAUDE.md`'s "absent is not empty", one level above a parser: an empty
+ * roster list that reads as "this meet has no rostered swimmers" is the exact
+ * failure this repo names as its most expensive.
+ */
+export function describeUnplannedPass(
+  capture: SwimCloudCaptureRecord | null | undefined,
+  pass: SwimCloudCrawlPass,
+): string | null {
+  if (capture === null || capture === undefined) return null;
+  const status = capturePassStatus(capture, pass);
+  if (status === 'planned') return null;
+  const noun = PASS_NOUN[pass];
+  if (status === 'not-recorded') {
+    return `This capture does not record which passes its crawl planned, so an empty list here could mean ${noun} were never requested, or that none exist. Re-crawl this meet in the extension to settle it.`;
+  }
+  const label = recordedScopeLabel(capture);
+  const named = label === undefined ? 'a narrower scope' : `“${label}”`;
+  return `This capture was crawled as ${named}, which never plans ${noun}. None were fetched and none are missing — re-crawl this meet with a wider scope to add them.`;
+}
+
 /**
  * The coverage sentence, in full. Says what is missing as plainly as what is
  * present — a coach reading "31 of 35" must not have to infer the other 4.
@@ -408,6 +527,16 @@ export interface SwimCloudCaptureRosterSelection {
   readonly swimmerTimes: readonly SwimCloudSwimmerTimesParse[];
   /** Exactly what was shown to the coach before they committed. */
   readonly coverage: SwimCloudCaptureRosterCoverage;
+  /**
+   * Whether the capture is known to have planned the swimmer-times pass.
+   *
+   * Handed to the consumer because the consumer owns the message a coach reads
+   * when the import yields no swims. "No importable times in this capture" is
+   * true under every status, but it means three different things: the pages
+   * were fetched and held nothing, the crawl never asked for them, or nobody
+   * recorded which. Only the second is fixed by re-crawling with a wider scope.
+   */
+  readonly swimmerTimesPass: SwimCloudCapturePassStatus;
   /** True when the roster page states a gender the consumer is not scoped to. Stated, never resolved here. */
   readonly genderMismatch: boolean;
 }
@@ -765,11 +894,18 @@ export function SwimCloudCaptureBrowser(props: SwimCloudCaptureBrowserProps) {
         console.warn('SwimCloud capture parse: warnings', data.warnings);
         toast.push('info', `Parsed with ${data.warnings.length} warning(s) — see console.`);
       }
+      // Looked up by id rather than read off `selectedCapture`: this closure
+      // was created before `setSelectedCaptureId` above, so the memo still
+      // points at whatever was selected previously.
+      const justSelected = captures?.find(c => c.captureId === captureId) ?? null;
       if (mode === 'roster-history') {
         if (data.rosters.length === 0) {
+          const why = describeUnplannedPass(justSelected, 'teamRoster');
           toast.push(
             'info',
-            'This capture holds no team-roster page. Crawl the team’s roster in the extension, or capture swimmers one at a time from the clipboard.'
+            why === null
+              ? 'This capture holds no team-roster page. Crawl the team’s roster in the extension, or capture swimmers one at a time from the clipboard.'
+              : `This capture holds no team-roster page. ${why}`
           );
         }
       } else if (
@@ -777,7 +913,13 @@ export function SwimCloudCaptureBrowser(props: SwimCloudCaptureBrowserProps) {
         data.rosters.length === 0 &&
         data.swimmerTimes.length === 0
       ) {
-        toast.push('info', 'This capture has no parseable team-results pages yet.');
+        const why = describeUnplannedPass(justSelected, 'meetTeamSwims');
+        toast.push(
+          'info',
+          why === null
+            ? 'This capture has no parseable team-results pages yet.'
+            : `This capture has no parseable team-results pages. ${why}`
+        );
       }
     } catch (err) {
       toast.push('error', `Could not parse that capture: ${String(err)}`);
@@ -866,6 +1008,7 @@ export function SwimCloudCaptureBrowser(props: SwimCloudCaptureBrowserProps) {
           withoutCapturedTimes: selectedRoster.roster.athletes.length,
         },
         genderMismatch: selectedRoster.genderMismatch,
+        swimmerTimesPass: capturePassStatus(selectedCapture, 'swimmerTimes'),
       });
     } catch (err) {
       toast.push('error', `Could not import that roster: ${String(err)}`);
@@ -887,6 +1030,16 @@ export function SwimCloudCaptureBrowser(props: SwimCloudCaptureBrowserProps) {
     if (!isLead && parseResponse.rosters.length === 0) return null;
 
     const count = parseResponse.rosters.length;
+    // Each roster's coverage sentence ("0 of 35 athletes have captured times")
+    // is true whether or not the crawl planned the swimmer-times pass, but it
+    // reads as a gap in the capture. When the pass was definitely never planned
+    // it is not a gap, and that decides whether re-crawling would help. An
+    // unrecorded scope is left to the status line rather than repeated over
+    // every roster — it says nothing this specific.
+    const rosterTimesCaveat =
+      capturePassStatus(selectedCapture, 'swimmerTimes') === 'not-planned'
+        ? describeUnplannedPass(selectedCapture, 'swimmerTimes')
+        : null;
     const action =
       isLead && props.mode === 'roster-history' ? (
         <button
@@ -923,10 +1076,14 @@ export function SwimCloudCaptureBrowser(props: SwimCloudCaptureBrowserProps) {
         onToggle={() => toggleSection('rosters')}
         action={action}
       >
+        {count > 0 && rosterTimesCaveat !== null ? (
+          <p className="text-ui-body text-theme-muted mb-2">{rosterTimesCaveat}</p>
+        ) : null}
         {count === 0 ? (
           <p className="text-ui-body text-theme-muted">
-            This capture holds no team-roster page, so there is no roster to import. The clipboard path
-            still works for one swimmer at a time.
+            This capture holds no team-roster page, so there is no roster to import.{' '}
+            {describeUnplannedPass(selectedCapture, 'teamRoster') ??
+              'The clipboard path still works for one swimmer at a time.'}
           </p>
         ) : isLead ? (
           <ul className="space-y-1.5">
@@ -1012,15 +1169,27 @@ export function SwimCloudCaptureBrowser(props: SwimCloudCaptureBrowserProps) {
   })();
 
   const swimmerTimesSection = (() => {
-    if (!parseResponse || parseResponse.swimmerTimes.length === 0) return null;
+    if (!parseResponse) return null;
     const count = parseResponse.swimmerTimes.length;
+    // An empty swimmer-times list normally means nothing worth a section, and
+    // a capture that merely does not record its scope has already said so on
+    // the status line above. A capture that *definitely* declined the pass is
+    // different: there, a missing section reads as "there was nothing here",
+    // which is the one reading that is wrong. So the section is conjured for
+    // 'not-planned' only — a statement, never an uncertainty.
+    const unplanned =
+      count === 0 && capturePassStatus(selectedCapture, 'swimmerTimes') === 'not-planned'
+        ? describeUnplannedPass(selectedCapture, 'swimmerTimes')
+        : null;
+    if (count === 0 && unplanned === null) return null;
     return (
       <CaptureSection
         id="swimmerTimes"
         title={`Swimmer times in this capture (${count} swimmer${count === 1 ? '' : 's'})`}
-        expanded={expandedSections.swimmerTimes}
+        expanded={expandedSections.swimmerTimes || unplanned !== null}
         onToggle={() => toggleSection('swimmerTimes')}
       >
+        {unplanned !== null ? <p className="text-ui-body text-theme-muted">{unplanned}</p> : null}
         <ul className="space-y-1.5">
           {parseResponse.swimmerTimes.map(swimmer => {
             const key = swimmer.swimCloudSwimmerId;
@@ -1114,7 +1283,10 @@ export function SwimCloudCaptureBrowser(props: SwimCloudCaptureBrowserProps) {
         action={action}
       >
         {groups.length === 0 ? (
-          <p className="text-ui-body text-theme-muted">Nothing parseable in this capture yet.</p>
+          <p className="text-ui-body text-theme-muted">
+            Nothing parseable in this capture yet.{' '}
+            {describeUnplannedPass(selectedCapture, 'meetTeamSwims') ?? ''}
+          </p>
         ) : isLead ? (
           <ul className="space-y-1.5">
             {groups.map(group => (
@@ -1259,6 +1431,11 @@ export function SwimCloudCaptureBrowser(props: SwimCloudCaptureBrowserProps) {
             <p className="text-ui-caption text-theme-secondary">
               {isParsing ? 'Parsing…' : describeCompleteness(selectedCapture)}
             </p>
+            {/* Rendered for every capture, including ones that record no scope.
+                `every-planned-page-fetched` above is a claim about a plan, and
+                the plan can be narrow — this line is the only thing separating
+                a full crawl from a meet-results-only one. */}
+            <p className="text-ui-caption text-theme-muted">{describeCaptureScope(selectedCapture)}</p>
             {selectedCapture.completeness === 'partial' ? (
               <span
                 className="inline-flex items-center gap-1 text-ui-micro text-theme-muted border border-theme-soft rounded px-1.5 py-0.5 opacity-70"

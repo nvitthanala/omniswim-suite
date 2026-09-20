@@ -441,9 +441,21 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
       // the coach works through it. Advancing to an empty preview would read as
       // "0 swims found in these swimmers' times" rather than "this capture holds
       // no times pages for them" — the panel has already said which it is.
+      //
+      // `swimmerTimesPass` is why those are not the same sentence. A crawl
+      // narrowed to meet results never asked for a single personal-best page,
+      // so "no importable times" is the plan working, not the capture falling
+      // short — and re-crawling wider fixes it, where working the checklist by
+      // hand is the answer in every other case.
+      const scopeClause =
+        selection.swimmerTimesPass === 'not-planned'
+          ? ' This capture’s crawl never planned swimmers’ personal-best pages, so it holds none — re-crawl the meet with a wider scope to get them in one pass.'
+          : selection.swimmerTimesPass === 'not-recorded'
+            ? ' This capture does not record whether its crawl planned swimmers’ personal-best pages, so it is not known whether re-crawling would add any.'
+            : '';
       toast.push(
         'error',
-        `No importable times in this capture for ${result.teamLabel}. The roster is on the checklist below — capture each swimmer’s Times tab with "Copy for Omniswim."`
+        `No importable times in this capture for ${result.teamLabel}. The roster is on the checklist below — capture each swimmer’s Times tab with "Copy for Omniswim."${scopeClause}`
       );
       return;
     }

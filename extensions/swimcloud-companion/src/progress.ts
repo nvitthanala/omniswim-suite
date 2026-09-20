@@ -9,6 +9,13 @@
  * screenshot can confirm.
  */
 
+import {
+  crawlScopeFloorPagesPerTeam,
+  crawlScopePlansPass,
+  passesOutsideCrawlScope,
+  type SwimCloudCrawlPass,
+  type SwimCloudCrawlScope,
+} from '@omniswim/swimcloud/crawlPlan';
 import type { SwimCloudResumeDegradation } from './captureResume';
 
 export type SwimCloudCrawlGenderLabel = 'Men' | 'Women';
@@ -456,4 +463,95 @@ export function estimateCrawlVolume(pageCount: number, minDelayMs: number): Swim
 export function formatCrawlVolumeFloorLine(teamCount: number, minDelayMs: number): string {
   const floor = estimateCrawlVolume(teamCount * 4, minDelayMs);
   return `${teamCount} teams · at least ${floor.pages} requests (page 1 of each team's swims and each team's roster, both genders), ${floor.etaLabel}. The rest is not knowable yet: extra swims pages appear once page 1 is read, and one page per rostered swimmer is added once the rosters are read.`;
+}
+
+/**
+ * The same sentence, for a crawl the coach has narrowed to one job.
+ *
+ * Supersedes {@link formatCrawlVolumeFloorLine}, which is kept unchanged for
+ * callers that have no scope to give. The difference is not cosmetic: a
+ * meet-results crawl of a four-team meet plans neither of the two roster pages
+ * per team nor any of the ~184 swimmer-times pages that follow them, and a line
+ * still promising "one page per rostered swimmer" would be describing a crawl
+ * that is not about to run. The estimate is the only place a coach sees the
+ * cost of the choice before committing to it, so it has to move with the
+ * choice.
+ *
+ * Still a **floor**, for exactly the reasons the older function documents, and
+ * now per-scope: `meetEvent` and `swimmerTimes` contribute nothing to the
+ * number because neither count exists until a swims list or a roster has been
+ * parsed. What is unknown is named rather than guessed at.
+ */
+export function formatCrawlVolumeFloorLineForScope(
+  teamCount: number,
+  minDelayMs: number,
+  scope: SwimCloudCrawlScope,
+): string {
+  const floor = estimateCrawlVolume(teamCount * crawlScopeFloorPagesPerTeam(scope), minDelayMs);
+
+  const known: string[] = [];
+  if (crawlScopePlansPass(scope, 'meetTeamSwims')) known.push("page 1 of each team's swims");
+  if (crawlScopePlansPass(scope, 'teamRoster')) known.push("each team's roster");
+
+  const unknown: string[] = [];
+  if (crawlScopePlansPass(scope, 'meetTeamSwims')) {
+    unknown.push('extra swims pages appear once page 1 is read');
+  }
+  if (crawlScopePlansPass(scope, 'meetEvent')) {
+    unknown.push('one page per distinct event is added once the swims lists are read');
+  }
+  if (crawlScopePlansPass(scope, 'swimmerTimes')) {
+    unknown.push('one page per rostered swimmer is added once the rosters are read');
+  }
+
+  const head =
+    known.length === 0
+      ? `${teamCount} teams · ${scope.label} · no structural pages to fetch up front`
+      : `${teamCount} teams · ${scope.label} · at least ${floor.pages} requests (${known.join(' and ')}, both genders), ${floor.etaLabel}`;
+  const tail =
+    unknown.length === 0
+      ? ' Nothing further is added to this plan.'
+      : ` The rest is not knowable yet: ${unknown.join(', and ')}.`;
+
+  const skipped = passesOutsideCrawlScope(scope);
+  const skippedTail =
+    skipped.length === 0 ? '' : ` Skipped by this scope: ${skipped.map(crawlPassLabel).join(', ')}.`;
+
+  return `${head}.${tail}${skippedTail}`;
+}
+
+/** A pass named the way a coach would recognise it on the panel. */
+export function crawlPassLabel(pass: SwimCloudCrawlPass): string {
+  switch (pass) {
+    case 'meetTeamSwims':
+      return 'team swims at this meet';
+    case 'meetEvent':
+      return 'per-event round pages';
+    case 'teamRoster':
+      return 'team rosters';
+    case 'swimmerTimes':
+      return 'swimmer personal bests';
+  }
+}
+
+/**
+ * The one sentence that stays on the panel for the whole crawl: which job this
+ * crawl is for, and which passes it therefore never asks SwimCloud for.
+ *
+ * Separate from {@link formatCrawlVolumeFloorLineForScope}, which is a
+ * pre-flight estimate and disappears once fetching starts. This is the line a
+ * coach reads an hour later, when the capture is done and holds no roster
+ * pages, and has to be able to tell "the crawl never asked" from "this meet's
+ * teams have no rosters". Naming the skipped passes is the whole content; a
+ * scope that skips nothing says so rather than staying silent, because a blank
+ * row is not a statement.
+ */
+export function formatCrawlScopeNote(scope: SwimCloudCrawlScope): string {
+  const skipped = passesOutsideCrawlScope(scope);
+  if (skipped.length === 0) {
+    return `Scope: ${scope.label} — every pass is planned. Nothing is being skipped.`;
+  }
+  return `Scope: ${scope.label} — not fetched by this crawl: ${skipped
+    .map(crawlPassLabel)
+    .join(', ')}. The capture will hold none of those pages, because this crawl never asks for them.`;
 }

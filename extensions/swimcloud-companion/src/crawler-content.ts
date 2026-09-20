@@ -52,11 +52,17 @@
  */
 
 import {
+  DEFAULT_SWIMCLOUD_CRAWL_SCOPE_ID,
+  SWIMCLOUD_CRAWL_SCOPES,
+  crawlScopeRecordFor,
+  passesNewlyPlannedBy,
   planMeetTeamDiscovery,
   planMeetTeamDiscoveryFallback,
-  planMeetTeamRosters,
-  planMeetTeamSwims,
+  planScopedMeetCrawl,
+  swimCloudCrawlScope,
+  type SwimCloudCaptureCrawlScope,
   type SwimCloudCrawlGender,
+  type SwimCloudCrawlScope,
   type SwimCloudCrawlStep,
 } from '@omniswim/swimcloud/crawlPlan';
 import { classifySwimCloudUrl } from '@omniswim/swimcloud/urlClassifier';
@@ -100,7 +106,9 @@ import {
   type BackgroundRoundTrip,
 } from './backgroundRoundTrip';
 import {
-  formatCrawlVolumeFloorLine,
+  crawlPassLabel,
+  formatCrawlScopeNote,
+  formatCrawlVolumeFloorLineForScope,
   formatDownloadsFallbackNote,
   formatDownloadsFallbackSummary,
   formatEventResultsLine1,
@@ -174,6 +182,20 @@ interface OpenCaptureMessage {
   readonly subject: SwimCloudCaptureSubject;
   readonly plannedPageCount: number;
   readonly teamDiscovery?: SwimCloudCrawlTeamDiscovery;
+  /**
+   * Which passes this crawl committed to.
+   *
+   * Sent on **every** open-capture message, not only the first, for the same
+   * reason `plannedPageCount` is: each is a partial update, and a later message
+   * that omitted the scope would leave a record whose page total had moved but
+   * whose plan had not been stated. The route unions `plannedPasses` across
+   * crawls, so re-sending the same scope is idempotent.
+   *
+   * Without this field a meet-results capture ends up reporting
+   * `'every-planned-page-fetched'` with zero roster pages in it, and nothing
+   * downstream can tell that apart from a meet whose teams have no rosters.
+   */
+  readonly crawlScope?: SwimCloudCaptureCrawlScope;
 }
 
 interface MarkCaptureMessage {
@@ -311,6 +333,14 @@ interface PanelHandles {
   readonly title: HTMLElement;
   readonly line1: HTMLElement;
   readonly line2: HTMLElement;
+  /**
+   * What this crawl's scope is, and which passes it therefore never plans.
+   * Written once, right after the coach confirms, and never overwritten — the
+   * progress lines and the resume note both churn every few seconds, and the
+   * one sentence explaining why this capture will hold no roster pages has to
+   * outlive both of them.
+   */
+  readonly scopeLine: HTMLElement;
   /** Persistent resume note. Stays visible under the changing progress lines. */
   readonly resumeLine: HTMLElement;
   /**
@@ -343,6 +373,10 @@ function createPanel(subjectTitle: string): PanelHandles {
   line1.className = 'omniswim-crawler-panel__line';
   const line2 = document.createElement('div');
   line2.className = 'omniswim-crawler-panel__line';
+
+  const scopeLine = document.createElement('div');
+  scopeLine.className = 'omniswim-crawler-panel__line omniswim-crawler-panel__resume';
+  scopeLine.hidden = true;
 
   const resumeLine = document.createElement('div');
   resumeLine.className = 'omniswim-crawler-panel__line omniswim-crawler-panel__resume';
@@ -380,7 +414,7 @@ function createPanel(subjectTitle: string): PanelHandles {
   continueAnywayButton.hidden = true;
 
   buttons.append(pauseButton, cancelButton, retryButton, continueAnywayButton);
-  root.append(title, line1, line2, resumeLine, warnLine, barTrack, buttons);
+  root.append(title, line1, line2, scopeLine, resumeLine, warnLine, barTrack, buttons);
   document.body.appendChild(root);
 
   return {
@@ -388,6 +422,7 @@ function createPanel(subjectTitle: string): PanelHandles {
     title,
     line1,
     line2,
+    scopeLine,
     resumeLine,
     warnLine,
     bar,
@@ -439,6 +474,15 @@ function renderBar(panel: PanelHandles, pagesDone: number, pagesTotal: number): 
 function renderMessage(panel: PanelHandles, message: string): void {
   panel.line1.textContent = message;
   panel.line2.textContent = '';
+}
+
+/**
+ * Show the crawl-scope sentence. Written once per crawl; nothing else touches
+ * this row, so a narrowed crawl keeps saying it is narrowed for the whole run.
+ */
+function renderScopeNote(panel: PanelHandles, message: string): void {
+  panel.scopeLine.textContent = message;
+  panel.scopeLine.hidden = message.length === 0;
 }
 
 /** Show (or clear) the persistent resume note. An empty string hides the row entirely. */
@@ -731,6 +775,32 @@ async function fetchPageForPool(url: string): Promise<FetchedPage | undefined> {
   }
 }
 
+/**
+ * What a pass this crawl's scope declined contributes to the totals: nothing
+ * fetched, nothing planned, and **not** a partial capture.
+ *
+ * `'every-planned-page-fetched'` is the honest completeness for a declined
+ * pass, because completeness is a claim about the plan and this pass was never
+ * in it. Reporting `'partial'` instead would mark every narrowed capture as
+ * broken; reporting a non-zero `total` would make the panel promise pages that
+ * were never going to be fetched. The thing that keeps this honest downstream
+ * is the capture's recorded `crawlScope`, not this value.
+ */
+const PASS_NOT_IN_SCOPE_EVENT_RESULTS: EventResultsPassResult = {
+  total: 0,
+  done: 0,
+  stoppedMessage: '',
+  stopped: false,
+};
+
+/** The same, for pass 4. See {@link PASS_NOT_IN_SCOPE_EVENT_RESULTS}. */
+const PASS_NOT_IN_SCOPE_SWIMMER_TIMES: SwimmerTimesPassResult = {
+  total: 0,
+  done: 0,
+  completeness: 'every-planned-page-fetched',
+  stoppedMessage: '',
+};
+
 async function runCrawl(meetId: SwimCloudMeetId, panel: PanelHandles, control: CrawlControl): Promise<void> {
   const subject: SwimCloudCaptureSubject = { kind: 'meet', meetId };
   const retrievedAt = () => new Date().toISOString();
@@ -754,11 +824,18 @@ async function runCrawl(meetId: SwimCloudMeetId, panel: PanelHandles, control: C
     return;
   }
 
-  const confirmedTeamIds = await confirmTeamList(panel, discovery.teamIds);
-  if (confirmedTeamIds === undefined) {
+  const confirmation = await confirmTeamList(panel, discovery.teamIds, resumeDecision.storedScope);
+  if (confirmation === undefined) {
     renderMessage(panel, 'Cancelled before fetching started.');
     return;
   }
+  const confirmedTeamIds = confirmation.teamIds;
+  const scope = confirmation.scope;
+  // Posted on every open-capture message from here on. The route unions
+  // `plannedPasses` across crawls, so a capture that was narrowed once and
+  // widened later reports the union — the only statement about the stored
+  // pages that is true.
+  const crawlScope = crawlScopeRecordFor(scope);
 
   // `'user-confirmed'` is the honest value the moment the coach clicks through
   // the checklist above: a human looked at this exact team list and accepted
@@ -773,14 +850,22 @@ async function runCrawl(meetId: SwimCloudMeetId, panel: PanelHandles, control: C
     completeness: 'user-confirmed',
   };
 
-  // Step 1 of the paged fetch: page 1 of every team+gender, to learn each
-  // one's total page count before committing to the full plan.
-  const page1Steps = planMeetTeamSwims({ meetId, teamIds: confirmedTeamIds });
-  // Planned up front, fetched in pass 3. Its size is known now (`teamCount × 2`),
-  // which is why the very first `plannedPageCount` can include it — a capture
-  // record whose planned total climbs as passes are discovered is fine, but one
-  // that ends up below the pages actually filed against it is not.
-  const rosterSteps = planMeetTeamRosters({ meetId, teamIds: confirmedTeamIds });
+  // The whole up-front plan, in one gated value. Every pass this scope declined
+  // arrives as an empty step array or a false flag, so a declined pass costs no
+  // request and cannot be re-planned further down by a second branch that
+  // forgot about the scope.
+  //
+  // Step 1 of the paged fetch is `swimsSteps`: page 1 of every team+gender, to
+  // learn each one's total page count before committing to the full plan.
+  const structural = planScopedMeetCrawl({ meetId, teamIds: confirmedTeamIds, scope });
+  const page1Steps = structural.swimsSteps;
+  // Planned up front, fetched in pass 3. Its size is known now (`teamCount × 2`,
+  // or zero when the scope declines rosters), which is why the very first
+  // `plannedPageCount` can include it — a capture record whose planned total
+  // climbs as passes are discovered is fine, but one that ends up below the
+  // pages actually filed against it is not.
+  const rosterSteps = structural.rosterSteps;
+  renderScopeNote(panel, formatCrawlScopeNote(scope));
   const fetchedUrls = new Set<string>();
   const knownTotalPages: Record<string, number> = {};
   // Every swims-list page read this run, reduced to just its event references —
@@ -800,6 +885,7 @@ async function runCrawl(meetId: SwimCloudMeetId, panel: PanelHandles, control: C
     subject,
     plannedPageCount: page1Steps.length + rosterSteps.length,
     teamDiscovery,
+    crawlScope,
   });
   if (!isRoundTripOk(opened)) {
     // The crawl continues. Pages whose capture record was never opened are
@@ -850,18 +936,26 @@ async function runCrawl(meetId: SwimCloudMeetId, panel: PanelHandles, control: C
   }
 
   // Step 2: the full plan, now that every team+gender's page count is known.
-  const fullSteps = planMeetTeamSwims({ meetId, teamIds: confirmedTeamIds, knownTotalPages });
+  // Through the same scope gate as step 1, so a scope that declined the swims
+  // pass cannot acquire one here.
+  const fullSteps = planScopedMeetCrawl({
+    meetId,
+    teamIds: confirmedTeamIds,
+    scope,
+    knownTotalPages,
+  }).swimsSteps;
   const pagesTotal = fullSteps.length;
 
   // The corrected total, sent before the bulk fetch rather than after it, so
   // the panel's bar and a Matrix picker open in another window both see the
   // real denominator while the crawl is still running.
-  renderMessage(panel, formatPassTwoHeadline(fetchedUrls.size, pagesTotal));
+  if (pagesTotal > 0) renderMessage(panel, formatPassTwoHeadline(fetchedUrls.size, pagesTotal));
   const corrected = await sendToBackground({
     type: 'omniswim-swimcloud-open-capture',
     subject,
     plannedPageCount: pagesTotal + rosterSteps.length,
     teamDiscovery,
+    crawlScope,
   });
   if (!isRoundTripOk(corrected)) {
     renderWarning(
@@ -872,14 +966,16 @@ async function runCrawl(meetId: SwimCloudMeetId, panel: PanelHandles, control: C
 
   const thisRunRemaining = stepsStillNeeded(fullSteps, fetchedUrls);
   const resume = partitionResumableSteps(thisRunRemaining, alreadyCaptured);
-  renderResumeNote(
-    panel,
-    formatResumeSkipLine({
-      skippedPages: resume.alreadyCaptured.length,
-      pagesTotal,
-      storedPageCount: alreadyCaptured.size,
-    }),
-  );
+  if (pagesTotal > 0) {
+    renderResumeNote(
+      panel,
+      formatResumeSkipLine({
+        skippedPages: resume.alreadyCaptured.length,
+        pagesTotal,
+        storedPageCount: alreadyCaptured.size,
+      }),
+    );
+  }
 
   // A skipped page is still a page of this crawl: it counts toward progress
   // and it is named on the panel. A crawl that quietly fetched a handful of
@@ -919,19 +1015,22 @@ async function runCrawl(meetId: SwimCloudMeetId, panel: PanelHandles, control: C
   // Pass 2b: per-event results — the round labels and the real meet Score. Runs
   // before the rosters because its input is complete now and what it fetches
   // finishes the meet results; see `runEventResultsPass`.
-  const eventPagesDone = await runEventResultsPass({
-    meetId,
-    swimsPages: swimsEventRefs,
-    swimsPagesResumeSkipped: resume.alreadyCaptured.length,
-    alreadyCaptured,
-    plannedBeforeThisPass: pagesTotal + rosterSteps.length,
-    subject,
-    teamDiscovery,
-    panel,
-    retrievedAt,
-    relay,
-    control,
-  });
+  const eventPagesDone = structural.plansEventResults
+    ? await runEventResultsPass({
+        meetId,
+        swimsPages: swimsEventRefs,
+        swimsPagesResumeSkipped: resume.alreadyCaptured.length,
+        alreadyCaptured,
+        plannedBeforeThisPass: pagesTotal + rosterSteps.length,
+        subject,
+        teamDiscovery,
+        crawlScope,
+        panel,
+        retrievedAt,
+        relay,
+        control,
+      })
+    : PASS_NOT_IN_SCOPE_EVENT_RESULTS;
   if (control.cancelled) {
     await finishCrawl(panel, subject, 'partial', relay);
     return;
@@ -944,18 +1043,21 @@ async function runCrawl(meetId: SwimCloudMeetId, panel: PanelHandles, control: C
   if (rosterAthletes === undefined) return;
 
   // Pass 4: swimmer times. The other pass that overlaps its fetches.
-  const swimmerPagesDone = await runSwimmerTimesPass({
-    meetId,
-    rosters: rosterAthletes,
-    alreadyCaptured,
-    plannedBeforeThisPass: pagesTotal + rosterSteps.length + eventPagesDone.total,
-    subject,
-    teamDiscovery,
-    panel,
-    retrievedAt,
-    relay,
-    control,
-  });
+  const swimmerPagesDone = structural.plansSwimmerTimes
+    ? await runSwimmerTimesPass({
+        meetId,
+        rosters: rosterAthletes,
+        alreadyCaptured,
+        plannedBeforeThisPass: pagesTotal + rosterSteps.length + eventPagesDone.total,
+        subject,
+        teamDiscovery,
+        crawlScope,
+        panel,
+        retrievedAt,
+        relay,
+        control,
+      })
+    : PASS_NOT_IN_SCOPE_SWIMMER_TIMES;
 
   const totalPlanned = pagesTotal + rosterSteps.length + eventPagesDone.total + swimmerPagesDone.total;
   const totalDone = pagesDone + rosterSteps.length + eventPagesDone.done + swimmerPagesDone.done;
@@ -1020,6 +1122,8 @@ interface EventResultsPassInput {
   readonly plannedBeforeThisPass: number;
   readonly subject: SwimCloudCaptureSubject;
   readonly teamDiscovery: SwimCloudCrawlTeamDiscovery;
+  /** Re-sent with this pass's corrected page total; see {@link OpenCaptureMessage.crawlScope}. */
+  readonly crawlScope: SwimCloudCaptureCrawlScope;
   readonly panel: PanelHandles;
   readonly retrievedAt: () => string;
   readonly relay: RelayState;
@@ -1100,6 +1204,7 @@ async function runEventResultsPass(input: EventResultsPassInput): Promise<EventR
     subject,
     plannedPageCount: input.plannedBeforeThisPass + plan.steps.length,
     teamDiscovery: input.teamDiscovery,
+    crawlScope: input.crawlScope,
   });
   if (!isRoundTripOk(corrected)) {
     renderWarning(
@@ -1284,6 +1389,8 @@ interface SwimmerTimesPassInput {
   readonly plannedBeforeThisPass: number;
   readonly subject: SwimCloudCaptureSubject;
   readonly teamDiscovery: SwimCloudCrawlTeamDiscovery;
+  /** Re-sent with this pass's corrected page total; see {@link OpenCaptureMessage.crawlScope}. */
+  readonly crawlScope: SwimCloudCaptureCrawlScope;
   readonly panel: PanelHandles;
   readonly retrievedAt: () => string;
   readonly relay: RelayState;
@@ -1336,6 +1443,7 @@ async function runSwimmerTimesPass(input: SwimmerTimesPassInput): Promise<Swimme
     subject,
     plannedPageCount: input.plannedBeforeThisPass + plan.steps.length,
     teamDiscovery: input.teamDiscovery,
+    crawlScope: input.crawlScope,
   });
   if (!isRoundTripOk(corrected)) {
     renderWarning(
@@ -1635,16 +1743,37 @@ async function waitWhilePaused(control: CrawlControl): Promise<void> {
   }
 }
 
+/** What the coach settled on before the first bulk request: which teams, and which passes. */
+interface TeamListConfirmation {
+  readonly teamIds: readonly SwimCloudTeamId[];
+  readonly scope: SwimCloudCrawlScope;
+}
+
 /**
  * The team checklist described in the design doc: show discovered teams,
  * wait for the user to confirm or amend before any bulk fetching starts.
  * Renders directly into the panel — deliberately minimal (checkboxes plus a
  * Start button), matching this extension's existing plain-DOM style.
+ *
+ * ## The scope radios
+ *
+ * Added 2026-09-20 beside the team checkboxes rather than on a separate step,
+ * because the two choices trade against each other: a coach dropping teams to
+ * shorten a crawl and a coach dropping passes to shorten it are doing the same
+ * arithmetic, and the estimate line under both must answer it with one number.
+ * That line is re-rendered on **every** change to either control — an estimate
+ * that did not move when the scope did would be worse than no estimate, since
+ * the whole point of the choice is seeing what it costs before committing.
+ *
+ * `storedScope` is read for one line of text and never to decide what is
+ * fetched: it says what widening the scope is about to add to a capture that
+ * already exists. Resume stays a per-URL decision in `captureResume.ts`.
  */
 function confirmTeamList(
   panel: PanelHandles,
   teamIds: readonly SwimCloudTeamId[],
-): Promise<readonly SwimCloudTeamId[] | undefined> {
+  storedScope: SwimCloudCaptureCrawlScope | undefined,
+): Promise<TeamListConfirmation | undefined> {
   return new Promise((resolve) => {
     panel.line1.textContent = `${teamIds.length} team(s) discovered. Confirm before fetching:`;
     panel.line2.textContent = '';
@@ -1662,9 +1791,51 @@ function confirmTeamList(
       checkboxes.push({ id, input });
     }
 
+    const scopeList = document.createElement('div');
+    scopeList.className = 'omniswim-crawler-panel__scope-list';
+    const scopeRadios: Array<{ scope: SwimCloudCrawlScope; input: HTMLInputElement }> = [];
+    for (const scope of SWIMCLOUD_CRAWL_SCOPES) {
+      const label = document.createElement('label');
+      const input = document.createElement('input');
+      input.type = 'radio';
+      // One shared name so the browser enforces single selection for us. The
+      // id is namespaced because this markup lives in SwimCloud's document,
+      // where a bare `crawl-scope` could collide with the site's own form.
+      input.name = 'omniswim-crawl-scope';
+      input.value = scope.id;
+      input.checked = scope.id === DEFAULT_SWIMCLOUD_CRAWL_SCOPE_ID;
+      label.append(input, document.createTextNode(` ${scope.label}`));
+      const summary = document.createElement('span');
+      summary.className = 'omniswim-crawler-panel__scope-summary';
+      summary.textContent = scope.summary;
+      scopeList.append(label, summary);
+      scopeRadios.push({ scope, input });
+    }
+
     const estimateLine = document.createElement('div');
     estimateLine.className = 'omniswim-crawler-panel__line';
-    estimateLine.textContent = formatCrawlVolumeFloorLine(teamIds.length, MIN_DELAY_MS);
+
+    const scopeNoteLine = document.createElement('div');
+    scopeNoteLine.className = 'omniswim-crawler-panel__line omniswim-crawler-panel__resume';
+
+    const selectedScope = (): SwimCloudCrawlScope =>
+      scopeRadios.find((radio) => radio.input.checked)?.scope ??
+      swimCloudCrawlScope(DEFAULT_SWIMCLOUD_CRAWL_SCOPE_ID);
+
+    const refreshEstimate = (): void => {
+      const scope = selectedScope();
+      const selectedTeams = checkboxes.filter((c) => c.input.checked).length;
+      estimateLine.textContent = formatCrawlVolumeFloorLineForScope(selectedTeams, MIN_DELAY_MS, scope);
+      const added = passesNewlyPlannedBy(storedScope, scope);
+      scopeNoteLine.textContent =
+        storedScope === undefined || added.length === 0
+          ? ''
+          : `This capture has not planned ${added.map(crawlPassLabel).join(' or ')} before. Widening to ${scope.label} adds those pages to it.`;
+    };
+
+    for (const { input } of checkboxes) input.addEventListener('change', refreshEstimate);
+    for (const { input } of scopeRadios) input.addEventListener('change', refreshEstimate);
+    refreshEstimate();
 
     const startButton = document.createElement('button');
     startButton.type = 'button';
@@ -1678,12 +1849,16 @@ function confirmTeamList(
     startButton.className = 'omniswim-crawler-panel__start';
 
     panel.root.insertBefore(list, panel.bar.parentElement);
+    panel.root.insertBefore(scopeList, panel.bar.parentElement);
     panel.root.insertBefore(estimateLine, panel.bar.parentElement);
+    panel.root.insertBefore(scopeNoteLine, panel.bar.parentElement);
     panel.root.insertBefore(startButton, panel.bar.parentElement);
 
     const cleanup = () => {
       list.remove();
+      scopeList.remove();
       estimateLine.remove();
+      scopeNoteLine.remove();
       startButton.remove();
     };
 
@@ -1698,8 +1873,9 @@ function confirmTeamList(
 
     startButton.addEventListener('click', () => {
       const selected = checkboxes.filter((c) => c.input.checked).map((c) => c.id);
+      const scope = selectedScope();
       cleanup();
-      resolve(selected);
+      resolve({ teamIds: selected, scope });
     });
   });
 }

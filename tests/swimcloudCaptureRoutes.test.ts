@@ -1514,3 +1514,218 @@ describe('capture parse route — rosters and swimmer times', () => {
     }
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Crawl scope on the capture record                                           */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The route's half of the "a narrowed capture must stay visibly narrowed"
+ * rule. `completeness: 'every-planned-page-fetched'` is a claim about a plan,
+ * and since crawl scopes exist the plan can be narrow — so the plan itself has
+ * to reach disk, or nothing downstream can tell a meet-results capture from a
+ * full one.
+ */
+describe('POST /api/swimcloud/captures — crawlScope', () => {
+  const scopeSubject = { kind: 'meet', meetId: '356467' };
+
+  it('round-trips a stated scope onto the capture record', async () => {
+    const harness = await startHarness();
+    try {
+      const res = await call(harness, 'POST', BASE, {
+        body: {
+          subject: scopeSubject,
+          crawlScope: { latestScopeId: 'meet-results', plannedPasses: ['meetTeamSwims', 'meetEvent'] },
+        },
+      });
+      expect(res.status).toBe(201);
+      const stored = await harness.store.getCapture('meet-356467');
+      expect(stored?.crawlScope).toStrictEqual({
+        latestScopeId: 'meet-results',
+        plannedPasses: ['meetTeamSwims', 'meetEvent'],
+      });
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('leaves the field absent for a crawl that states no scope', async () => {
+    const harness = await startHarness();
+    try {
+      // Every capture written before 2026-09-20 is this shape, including the
+      // real 234-page one in `data/swimcloud-captures/`. Absent has to stay
+      // absent: a default of "everything" here would put a full-crawl claim on
+      // a record whose crawler never made one.
+      const res = await call(harness, 'POST', BASE, { body: { subject: scopeSubject } });
+      expect(res.status).toBe(201);
+      const stored = await harness.store.getCapture('meet-356467');
+      expect(stored?.crawlScope).toBeUndefined();
+      expect(Object.prototype.hasOwnProperty.call(stored ?? {}, 'crawlScope')).toBe(false);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('unions plannedPasses when the same capture is crawled again, wider', async () => {
+    const harness = await startHarness();
+    try {
+      await call(harness, 'POST', BASE, {
+        body: {
+          subject: scopeSubject,
+          crawlScope: { latestScopeId: 'meet-results', plannedPasses: ['meetTeamSwims', 'meetEvent'] },
+        },
+      });
+      const second = await call(harness, 'POST', BASE, {
+        body: {
+          subject: scopeSubject,
+          crawlScope: {
+            latestScopeId: 'roster-and-season-bests',
+            plannedPasses: ['teamRoster', 'swimmerTimes'],
+          },
+        },
+      });
+      expect(second.status).toBe(200);
+      const stored = await harness.store.getCapture('meet-356467');
+      // The capture now holds both sets of pages, so only the union is true
+      // about what it covers. `latestScopeId` is the newer crawl's.
+      expect(stored?.crawlScope).toStrictEqual({
+        latestScopeId: 'roster-and-season-bests',
+        plannedPasses: ['meetTeamSwims', 'meetEvent', 'teamRoster', 'swimmerTimes'],
+      });
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('never un-plans a pass when a later crawl is narrower', async () => {
+    const harness = await startHarness();
+    try {
+      await call(harness, 'POST', BASE, {
+        body: {
+          subject: scopeSubject,
+          crawlScope: {
+            latestScopeId: 'everything',
+            plannedPasses: ['meetTeamSwims', 'meetEvent', 'teamRoster', 'swimmerTimes'],
+          },
+        },
+      });
+      await call(harness, 'POST', BASE, {
+        body: {
+          subject: scopeSubject,
+          crawlScope: { latestScopeId: 'meet-results', plannedPasses: ['meetTeamSwims', 'meetEvent'] },
+        },
+      });
+      const stored = await harness.store.getCapture('meet-356467');
+      expect(stored?.crawlScope?.plannedPasses).toStrictEqual([
+        'meetTeamSwims',
+        'meetEvent',
+        'teamRoster',
+        'swimmerTimes',
+      ]);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('keeps the stored scope when a later progress ping omits it', async () => {
+    const harness = await startHarness();
+    try {
+      await call(harness, 'POST', BASE, {
+        body: {
+          subject: scopeSubject,
+          crawlScope: { latestScopeId: 'meet-results', plannedPasses: ['meetTeamSwims', 'meetEvent'] },
+        },
+      });
+      await call(harness, 'POST', BASE, { body: { subject: scopeSubject, plannedPageCount: 42 } });
+      const stored = await harness.store.getCapture('meet-356467');
+      expect(stored?.plannedPageCount).toBe(42);
+      expect(stored?.crawlScope?.latestScopeId).toBe('meet-results');
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('writes the scope back in canonical pass order', async () => {
+    const harness = await startHarness();
+    try {
+      await call(harness, 'POST', BASE, {
+        body: {
+          subject: scopeSubject,
+          crawlScope: { latestScopeId: 'everything', plannedPasses: ['swimmerTimes', 'meetTeamSwims'] },
+        },
+      });
+      const stored = await harness.store.getCapture('meet-356467');
+      expect(stored?.crawlScope?.plannedPasses).toStrictEqual(['meetTeamSwims', 'swimmerTimes']);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('rejects a malformed scope rather than storing "not recorded"', async () => {
+    const harness = await startHarness();
+    try {
+      // Dropping a bad scope to `undefined` would be a lie in the other
+      // direction: the record would claim nobody recorded what was planned,
+      // when the crawler did record it and got it wrong.
+      for (const crawlScope of [
+        'everything',
+        42,
+        { latestScopeId: 'not-a-scope', plannedPasses: [] },
+        { plannedPasses: ['teamRoster'] },
+        { latestScopeId: 'everything' },
+        { latestScopeId: 'everything', plannedPasses: 'teamRoster' },
+        { latestScopeId: 'everything', plannedPasses: ['meetVideo'] },
+      ]) {
+        const res = await call(harness, 'POST', BASE, { body: { subject: scopeSubject, crawlScope } });
+        expect(res.status, JSON.stringify(crawlScope)).toBe(400);
+        expect((res.json as { error?: string } | undefined)?.error).toBe('Invalid crawlScope');
+      }
+      expect(await harness.store.getCapture('meet-356467')).toBeUndefined();
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('survives a page being posted against the capture', async () => {
+    const harness = await startHarness();
+    try {
+      await call(harness, 'POST', BASE, {
+        body: {
+          subject: scopeSubject,
+          crawlScope: { latestScopeId: 'meet-results', plannedPasses: ['meetTeamSwims', 'meetEvent'] },
+        },
+      });
+      // `putPage` does its own read-modify-write of the record. A scope that
+      // vanished on the first fetched page would leave every finished capture
+      // reporting "not recorded".
+      await call(harness, 'POST', `${BASE}/meet-356467/pages`, { body: pagePayload() });
+      const stored = await harness.store.getCapture('meet-356467');
+      expect(stored?.pages).toHaveLength(1);
+      expect(stored?.crawlScope?.latestScopeId).toBe('meet-results');
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('serves the scope back on the list route the picker reads', async () => {
+    const harness = await startHarness();
+    try {
+      await call(harness, 'POST', BASE, {
+        body: {
+          subject: scopeSubject,
+          crawlScope: { latestScopeId: 'meet-results', plannedPasses: ['meetTeamSwims', 'meetEvent'] },
+        },
+      });
+      const listed = await call(harness, 'GET', BASE);
+      expect(listed.status).toBe(200);
+      const records = listed.json as Array<{ captureId: string; crawlScope?: unknown }>;
+      expect(records).toHaveLength(1);
+      expect(records[0].crawlScope).toStrictEqual({
+        latestScopeId: 'meet-results',
+        plannedPasses: ['meetTeamSwims', 'meetEvent'],
+      });
+    } finally {
+      await harness.close();
+    }
+  });
+});
