@@ -536,6 +536,21 @@ async function startServer() {
     console.log('Storage backend: JSON (data/meets.json)');
   }
 
+  // One backup per server start. The backup route existed from the beginning
+  // but nothing ever called it -- not the UI, not a schedule -- so the only
+  // copies on disk were hand-made months apart. A coach losing a roster is the
+  // worst realistic failure this app has, and a start-up snapshot costs one
+  // JSON write. Retention keeps it bounded (see DEFAULT_BACKUP_KEEP).
+  //
+  // Never fatal: a suite that will not boot because it could not write a
+  // backup is worse than one running without today's snapshot.
+  try {
+    const startupBackup = await repo.backup('startup');
+    console.log(`Startup backup written: ${path.basename(startupBackup)}`);
+  } catch (err) {
+    console.warn('Startup backup failed; continuing without one:', err);
+  }
+
   const optionalAuth = createAuthMiddleware(auth, false);
   const requireAuth = createAuthMiddleware(auth, true);
 
@@ -700,6 +715,15 @@ async function startServer() {
   app.delete('/api/workspaces/:id', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     try {
       applyRepoScope(req);
+      // Back up before the only irreversible workspace operation there is.
+      // Deliberately best-effort: a backup that cannot be written must not
+      // block a delete the user asked for, but it must say so loudly rather
+      // than failing silently.
+      try {
+        await repo.backup('pre-delete');
+      } catch (backupErr) {
+        console.warn('Pre-delete backup failed; deleting anyway:', backupErr);
+      }
       await repo.remove(req.params.id);
       res.json({ success: true });
     } catch (err) {

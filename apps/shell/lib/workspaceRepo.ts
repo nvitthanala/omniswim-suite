@@ -34,6 +34,46 @@ export interface WorkspaceRepo {
   setScope?(scope: WorkspaceScope): void;
 }
 
+/**
+ * How many generated backups to keep. Matches `JsonStore`'s own limit so the
+ * two storage backends do not age their history differently.
+ *
+ * Override with `OMNI_BACKUP_KEEP`. A value below 1 is ignored rather than
+ * honoured: "keep zero backups" is far more likely to be a typo than an
+ * intention, and acting on it would delete the file that was just written.
+ */
+export const DEFAULT_BACKUP_KEEP = 20;
+
+function backupKeepCount(): number {
+  const raw = Number(process.env.OMNI_BACKUP_KEEP);
+  return Number.isInteger(raw) && raw >= 1 ? raw : DEFAULT_BACKUP_KEEP;
+}
+
+/**
+ * Filename this module generates, and the only shape {@link pruneGeneratedBackups}
+ * will ever delete.
+ *
+ * Deliberately narrow. `data/backups/` also holds hand-made copies from manual
+ * maintenance (`meets.json.pre-swimcloud-verify.20260908-131351.bak`,
+ * `omniswim.db-wal.…bak`). A prune that matched on `.json` alone, or on a bare
+ * prefix, would eventually delete a human's deliberate safety copy to make room
+ * for an automatic one. Retention may only ever remove files this function
+ * itself wrote.
+ */
+const GENERATED_BACKUP_PATTERN = /^meets-.+-\d{4}-\d{2}-\d{2}T[\dZ-]+\.json$/;
+
+/** Delete the oldest generated backups beyond `keep`. Never throws. */
+async function pruneGeneratedBackups(backupDir: string, keep: number): Promise<void> {
+  try {
+    const generated = (await fsp.readdir(backupDir)).filter(f => GENERATED_BACKUP_PATTERN.test(f)).sort();
+    if (generated.length <= keep) return;
+    const stale = generated.slice(0, generated.length - keep);
+    await Promise.all(stale.map(f => fsp.unlink(path.join(backupDir, f)).catch(() => undefined)));
+  } catch {
+    /* Retention is best-effort. Failing to prune must never fail the backup. */
+  }
+}
+
 async function writeJsonBackup(
   backupDir: string,
   workspaces: Workspace[],
@@ -43,8 +83,14 @@ async function writeJsonBackup(
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const dest = path.join(backupDir, `meets-${label}-${stamp}.json`);
   await fsp.writeFile(dest, JSON.stringify(workspaces, null, 2), 'utf-8');
+  // After the write, never before: a prune that ran first could take the count
+  // to the limit and then add one, leaving `keep + 1` on disk.
+  await pruneGeneratedBackups(backupDir, backupKeepCount());
   return dest;
 }
+
+/** Exported for tests. Same rules as the private caller above. */
+export const __backupRetentionInternals = { GENERATED_BACKUP_PATTERN, pruneGeneratedBackups, backupKeepCount };
 
 export class JsonRepo implements WorkspaceRepo {
   readonly kind = 'json' as const;
