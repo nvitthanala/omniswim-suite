@@ -22,7 +22,7 @@ import {
 import { divisionForTeamOrNull } from '@omniswim/core/data/teamDivisions';
 import { convertTimeToSeconds } from '@omniswim/core/lib/utils';
 import { getCutlinesForSwim } from '@omniswim/core/lib/cutlineUtils';
-import { useToast } from '@omniswim/ui';
+import { TeamSelect, useToast } from '@omniswim/ui';
 import AliasSuggestionsPanel from './AliasSuggestionsPanel';
 import { CLASS_YEAR_OPTIONS, SwimRowTags } from './AthleteHistoryImportPanelParts';
 import {
@@ -355,21 +355,14 @@ export default function AthleteHistoryImportPanel({
         {teamOptions.length > 0 ? (
           <label className="flex flex-col gap-1.5 min-w-0">
             <span className="text-ui-caption text-theme-muted">Team</span>
-            <select
+            <TeamSelect
+              teams={teamOptions}
               value={team && teamOptions.includes(team) ? team : ''}
               disabled={busy}
               onChange={e => onTeamChange?.(e.target.value)}
               className="glass-input w-full rounded-lg px-3 py-2.5 text-ui-body appearance-none"
-            >
-              <option value="" disabled>
-                Select a team…
-              </option>
-              {teamOptions.map(t => (
-                <option key={t} value={t}>
-                  {t}
-                </option>
-              ))}
-            </select>
+              placeholderDisabled
+            />
           </label>
         ) : null}
         <label className="flex flex-col gap-1.5 min-w-0">

@@ -10,7 +10,7 @@
 import React from 'react';
 import { Sparkles, Users } from 'lucide-react';
 import type { ArbitrageCard, ArbitrageCardsResult, ArbitrageMode } from '@omniswim/core/lib/rosterArbitrage';
-import { Button } from '@omniswim/ui';
+import { Button, TeamSelect } from '@omniswim/ui';
 import { ArbitrageCardList } from './RosterOptimizeStep';
 
 type OptimizerControlsProps = {
@@ -42,18 +42,12 @@ export function OptimizerControls({
         <span className="text-ui-caption text-theme-muted flex items-center gap-1.5">
           <Users size={14} /> Team to optimize
         </span>
-        <select
+        <TeamSelect
+          teams={teams}
           value={team}
           onChange={e => onSelectTeam(e.target.value)}
           className="glass-input w-full rounded-lg px-3 py-2.5 text-ui-body"
-        >
-          <option value="">Select a team…</option>
-          {teams.map(t => (
-            <option key={t} value={t}>
-              {t}
-            </option>
-          ))}
-        </select>
+        />
       </label>
       <label className="lg:col-span-3 flex flex-col gap-1.5 min-w-0">
         <span className="text-ui-caption text-theme-muted">Strategy</span>

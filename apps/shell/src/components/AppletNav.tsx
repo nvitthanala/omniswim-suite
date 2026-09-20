@@ -1,10 +1,11 @@
 import { NavLink } from 'react-router-dom';
+import { Badge } from '@omniswim/ui';
 import { prefetchApplet } from '../lib/appletPrefetch';
 
 const APPLETS = [
-  { id: 'manager' as const, to: '/manager', label: 'Manager' },
-  { id: 'matrix' as const, to: '/matrix', label: 'Matrix' },
-  { id: 'metrics' as const, to: '/metrics', label: 'Metrics' },
+  { id: 'manager' as const, to: '/manager', label: 'Manager', experimental: false },
+  { id: 'matrix' as const, to: '/matrix', label: 'Matrix', experimental: false },
+  { id: 'metrics' as const, to: '/metrics', label: 'Metrics', experimental: true },
 ];
 
 export default function AppletNav() {
@@ -26,6 +27,14 @@ export default function AppletNav() {
           }
         >
           {applet.label}
+          {applet.experimental ? (
+            <Badge
+              tone="warning"
+              className="ml-1.5 px-1.5 py-0.5 text-[9px] normal-case tracking-normal align-middle"
+            >
+              Experimental
+            </Badge>
+          ) : null}
         </NavLink>
       ))}
     </nav>

@@ -2,6 +2,7 @@ import { Link } from 'react-router-dom';
 import { motion } from 'motion/react';
 import { BarChart3, Users, Activity, ArrowRight, Zap, TrendingUp } from 'lucide-react';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
+import { Badge } from '@omniswim/ui';
 import { prefetchApplet } from '../lib/appletPrefetch';
 
 const CARDS = [
@@ -13,6 +14,7 @@ const CARDS = [
     icon: Users,
     accent: 'text-[var(--color-info)]',
     borderHover: 'group-hover:border-[var(--color-info)]/40',
+    experimental: false,
   },
   {
     id: 'matrix' as const,
@@ -22,6 +24,7 @@ const CARDS = [
     icon: BarChart3,
     accent: 'text-[var(--text-accent)]',
     borderHover: 'group-hover:border-[var(--text-accent)]/40',
+    experimental: false,
   },
   {
     id: 'metrics' as const,
@@ -31,14 +34,15 @@ const CARDS = [
     icon: Activity,
     accent: 'text-[var(--color-success)]',
     borderHover: 'group-hover:border-[var(--color-success)]/40',
+    experimental: true,
   },
 ] as const;
 
 const STEPS = [
-  { n: '1', title: 'Load meet', desc: 'Upload a HyTek PDF in Matrix.' },
-  { n: '2', title: 'Shape roster', desc: 'Edit scorers and entries in Manager.' },
-  { n: '3', title: 'Simulate', desc: 'Charts update from roster changes.' },
-  { n: '4', title: 'Analyze', desc: 'Review trends or tag race video.' },
+  { n: '1', title: 'Load meet', desc: 'Upload a HyTek PDF in Matrix.', experimental: false },
+  { n: '2', title: 'Shape roster', desc: 'Edit scorers and entries in Manager.', experimental: false },
+  { n: '3', title: 'Simulate', desc: 'Charts update from roster changes.', experimental: false },
+  { n: '4', title: 'Analyze', desc: 'Review trends or tag race video.', experimental: true },
 ];
 
 export default function SuiteHome() {
@@ -104,7 +108,10 @@ export default function SuiteHome() {
                     <Icon size={20} />
                   </div>
                   <div>
-                    <h3 className="font-black text-[var(--text-primary)] group-hover:text-[var(--text-accent)]">{card.title}</h3>
+                    <h3 className="font-black text-[var(--text-primary)] group-hover:text-[var(--text-accent)] flex items-center gap-2">
+                      {card.title}
+                      {card.experimental ? <Badge tone="warning">Experimental</Badge> : null}
+                    </h3>
                     <p className="text-ui-caption text-theme-muted mt-1">{card.subtitle}</p>
                   </div>
                 </Link>
@@ -122,7 +129,10 @@ export default function SuiteHome() {
                   {s.n}
                 </span>
                 <div>
-                  <div className="font-bold text-[var(--text-primary)]">{s.title}</div>
+                  <div className="font-bold text-[var(--text-primary)] flex items-center gap-2">
+                    {s.title}
+                    {s.experimental ? <Badge tone="warning">Experimental</Badge> : null}
+                  </div>
                   <div className="text-ui-caption text-theme-muted">{s.desc}</div>
                 </div>
               </li>

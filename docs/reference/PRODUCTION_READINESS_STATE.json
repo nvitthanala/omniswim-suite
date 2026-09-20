@@ -192,6 +192,20 @@
       ],
       "consequence": "The user's stated goal is a suite 'ready to be properly used in an actual setting'. Losing a roster the night before a meet is the worst realistic failure this app has, and today nothing prevents it. The mechanism already exists and is correct - it just has no trigger and no button. This is a small amount of work for a large amount of safety.",
       "status": "open - drives new phase P7"
+    },
+    {
+      "id": "f11",
+      "severity": "P2-design-system",
+      "title": "Button adoption is low because the primitive cannot express the app's prevailing button style, not because nobody tried",
+      "evidence": [
+        "packages/ui/src/components/Button.tsx line 46 bakes 'font-bold' and 'disabled:opacity-50' into the BASE class, applied to every variant and size, with no prop to vary either.",
+        "Sizes fix the radius too: sm=rounded-lg + text-ui-micro, md=rounded-xl + text-ui-label, lg=rounded-2xl + text-ui-body.",
+        "The real call sites in packages/manager use combinations the primitive has no way to produce - e.g. rounded-lg + font-medium + disabled:opacity-40, or rounded-lg + font-semibold + disabled:opacity-60.",
+        "P4 (worker) audited all 28 raw <button> elements across the six files it touched and converted ZERO, because every conversion would have visibly changed corner radius, font weight, or disabled opacity - and the brief's bar was zero visual change. Its per-file reasoning is in the P4 agent report.",
+        "Adoption today: Button imported by 4 of 55 files; 122 raw <button> vs 9 <Button>."
+      ],
+      "consequence": "The 2026-09-10 diagnosis framed low Button adoption as a discipline problem. It is a fit problem: the primitive is more opinionated than the app it serves. Converging on it requires a DECISION first - either relax Button (make weight, radius and disabled opacity variant-controlled) or restyle the app to Button's look (a real, visible change needing sign-off). Doing a mass conversion without that decision would silently restyle ~120 controls.",
+      "status": "open - needs a user decision before any mass conversion; NOT a blocker for the deadline"
     }
   ],
   "phases": [
@@ -293,7 +307,7 @@
       "id": "P4",
       "name": "UI navigability",
       "owner": "worker",
-      "status": "todo",
+      "status": "partially-done",
       "items": [
         {
           "what": "Button convergence (122 hand-rolled)",
@@ -307,6 +321,15 @@
           "what": "Mark Metrics experimental (d5)",
           "status": "todo"
         }
+      ],
+      "done": [
+        "Shared TeamSelect primitive in packages/ui, all 6 duplicate team dropdowns migrated, zero raw dupes remain - verified independently",
+        "Metrics marked Experimental via Badge tone=warning with literal text (not colour-only) on AppletNav, SuiteHome cards + steps, and CommandPalette - verified",
+        "'400 Freestyle' added to eventCatalog.ts in correct stroke-then-distance position - verified"
+      ],
+      "deferred": [
+        "Button convergence - blocked on f11's design decision, correctly not forced",
+        "Manager's stacked navigation idioms and the RosterImportWizard control row - deliberately out of P4 scope, pending a human look at the running app"
       ]
     },
     {
@@ -393,6 +416,10 @@
     {
       "at": "2026-09-20",
       "what": "Found f10: the backup route is correct but unreachable from the UI and never automatic. Added phase P7 (data safety) and od3. Dispatched P4 (UI convergence) to a worker in parallel with P1, with explicit instructions not to touch P1's five files and not to run Playwright (port 3000 collision)."
+    },
+    {
+      "at": "2026-09-20",
+      "what": "P4 returned and was verified independently (not trusted from its report): TeamSelect landed and all 6 duplicate dropdowns are gone, Metrics is marked on 3 surfaces, 400 Freestyle added. Its zero button conversions surfaced f11 - Button bakes font-bold and disabled:opacity-50 into its base class, so it cannot express the app's prevailing button style. Low adoption is a fit problem, not a discipline problem."
     }
   ]
 }

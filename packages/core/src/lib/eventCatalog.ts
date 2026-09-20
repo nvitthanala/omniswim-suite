@@ -7,6 +7,7 @@ export const INDIVIDUAL_EVENTS = [
   '50 Freestyle',
   '100 Freestyle',
   '200 Freestyle',
+  '400 Freestyle',
   '500 Freestyle',
   '1000 Freestyle',
   '1650 Freestyle',

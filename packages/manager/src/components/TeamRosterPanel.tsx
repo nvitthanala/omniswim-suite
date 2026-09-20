@@ -45,7 +45,7 @@ import {
 } from '@omniswim/core/lib/swimmerEntryLimits';
 import { optimizeRosterAllTeams, optimizeRosterForTeam } from '@omniswim/core/lib/rosterOptimizer';
 import { applyScorerOffRelayPatch, type TeamLineupAudit } from '@omniswim/core/lib/rosterLineupAudit';
-import { useToast } from '@omniswim/ui';
+import { TeamSelect, useToast } from '@omniswim/ui';
 import TeamRosterRow from './TeamRosterRow';
 import { buildRosterRowWarnings, computeRosterRowIssueFlags, countTeamMembers } from './teamRosterView';
 
@@ -485,27 +485,15 @@ export default function TeamRosterPanel({
       {useDropdown ? (
         <label className="block mb-3">
           <span className="block text-ui-caption text-theme-muted mb-1.5">Team</span>
-          <select
+          <TeamSelect
+            teams={teams}
             className="glass-input w-full rounded-lg px-3 py-2 text-ui-body"
             value={selectedTeam}
             onChange={e => selectTeam(e.target.value)}
             disabled={!teams.length}
-          >
-            {!teams.length ? (
-              <option value="">No teams in matrix</option>
-            ) : (
-              <>
-                {!controlledTeam || !teams.includes(controlledTeam) ? (
-                  <option value="">Select a team…</option>
-                ) : null}
-                {teams.map(t => (
-                  <option key={t} value={t}>
-                    {t}
-                  </option>
-                ))}
-              </>
-            )}
-          </select>
+            emptyTeamsLabel="No teams in matrix"
+            showPlaceholder={!controlledTeam || !teams.includes(controlledTeam)}
+          />
         </label>
       ) : null}
 

@@ -25,7 +25,7 @@ import {
   buildRelaysFromIndividualLineup,
   compareRelayLegSplits,
 } from '@omniswim/core/lib/relayBuilder';
-import { useToast } from '@omniswim/ui';
+import { TeamSelect, useToast } from '@omniswim/ui';
 import { buildRelayGroups, type RelayGroup } from './indRelayGroupsView';
 
 type Props = {
@@ -332,18 +332,12 @@ export default function IndRelayManagementView({
             {!hideTeamPicker && teams.length > 0 ? (
               <label className="flex flex-col gap-1">
                 <span className="text-ui-caption text-theme-muted">Team</span>
-                <select
+                <TeamSelect
+                  teams={teams}
                   value={selectedTeam}
                   onChange={e => setSelectedTeam(e.target.value)}
                   className="glass-input rounded-lg px-3 py-2 text-ui-body min-w-[12rem]"
-                >
-                  <option value="">Select a team…</option>
-                  {teams.map(team => (
-                    <option key={team} value={team}>
-                      {team}
-                    </option>
-                  ))}
-                </select>
+                />
               </label>
             ) : null}
           </div>

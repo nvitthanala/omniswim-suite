@@ -27,6 +27,7 @@ import { divisionForTeamOrNull } from '@omniswim/core/data/teamDivisions';
 import {
   Badge,
   Modal,
+  TeamSelect,
   useToast,
   SwimCloudCaptureBrowser,
   type SwimCloudCaptureRosterSelection,
@@ -696,20 +697,13 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <label className="flex flex-col gap-1">
                   <span className="label-caps">Team</span>
-                  <select
+                  <TeamSelect
+                    teams={teams}
                     value={team && teams.includes(team) ? team : ''}
                     onChange={e => setTeam(e.target.value)}
                     className="glass-input px-3 py-2 rounded-lg text-ui-body appearance-none"
-                  >
-                    <option value="" disabled>
-                      Select a team…
-                    </option>
-                    {teams.map(t => (
-                      <option key={t} value={t}>
-                        {t}
-                      </option>
-                    ))}
-                  </select>
+                    placeholderDisabled
+                  />
                   {teams.length === 0 ? (
                     <span className="text-ui-caption text-theme-muted">
                       Load a meet PDF first, or type a custom team below.

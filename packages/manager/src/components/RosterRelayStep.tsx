@@ -8,7 +8,7 @@ import React from 'react';
 import { FileWarning, Users } from 'lucide-react';
 import { Gender, Workspace } from '@omniswim/core/types';
 import type { ScoringBundle } from '@omniswim/core/lib/useWorkspaceScoring';
-import { EmptyState } from '@omniswim/ui';
+import { EmptyState, TeamSelect } from '@omniswim/ui';
 import IndRelayManagementView from './IndRelayManagementView';
 import TeamPickerEmptyState from './TeamPickerEmptyState';
 
@@ -73,18 +73,12 @@ export default function RosterRelayStep({
         </p>
         <label className="flex flex-col gap-1.5 max-w-md">
           <span className="text-ui-caption text-theme-muted">Team</span>
-          <select
+          <TeamSelect
+            teams={teams}
             value={selectedTeam}
             onChange={e => onSelectTeam(e.target.value)}
             className="glass-input w-full rounded-lg px-3 py-2.5 text-ui-body"
-          >
-            <option value="">Select a team…</option>
-            {teams.map(t => (
-              <option key={t} value={t}>
-                {t}
-              </option>
-            ))}
-          </select>
+          />
         </label>
         {!whatIfMode ? (
           <p className="text-ui-caption text-theme-secondary rounded-lg border border-theme-soft surface-muted-bg px-3 py-2">

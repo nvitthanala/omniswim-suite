@@ -9,6 +9,7 @@ export {
   NEAR_MISS_RELATIVE_THRESHOLD,
 } from './components/CutlineTag';
 export { Button } from './components/Button';
+export { TeamSelect, type TeamSelectProps } from './components/TeamSelect';
 export { EmptyState } from './components/EmptyState';
 export { Modal, type ModalProps } from './components/Modal';
 export { ConfirmDeleteModal, type ConfirmDeleteModalProps } from './components/ConfirmDeleteModal';

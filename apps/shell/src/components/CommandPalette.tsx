@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { CornerDownLeft, FileText, Home, Search, Settings, TrendingUp, User, Users } from 'lucide-react';
+import { Badge } from '@omniswim/ui';
 import { Gender } from '@omniswim/core/types';
 import type { Recruit, SwimmerResult } from '@omniswim/core/types';
 import { foldDiacritics } from '@omniswim/core/lib/utils';
@@ -23,6 +24,8 @@ type PaletteItem = {
   hint?: string;
   /** Extra text matched by search but not displayed. */
   keywords?: string;
+  /** Marks the item as experimental / not meet-ready (e.g. the Metrics page). */
+  experimental?: boolean;
   icon: React.ReactNode;
   run: () => void;
 };
@@ -131,11 +134,23 @@ export default function CommandPalette({ open, onClose }: Props) {
       navigate({ pathname, search: location.search });
       onClose();
     };
-    const pages: Array<{ to: string; label: string; keywords: string; icon: React.ReactNode }> = [
+    const pages: Array<{
+      to: string;
+      label: string;
+      keywords: string;
+      icon: React.ReactNode;
+      experimental?: boolean;
+    }> = [
       { to: '/', label: 'Suite home', keywords: 'home start overview', icon: <Home size={14} /> },
       { to: '/manager', label: 'Manager', keywords: 'roster lineup team entries', icon: <Users size={14} /> },
       { to: '/matrix', label: 'Matrix', keywords: 'scoring matrix meet', icon: <FileText size={14} /> },
-      { to: '/metrics', label: 'Metrics', keywords: 'charts momentum analytics', icon: <TrendingUp size={14} /> },
+      {
+        to: '/metrics',
+        label: 'Metrics',
+        keywords: 'charts momentum analytics',
+        icon: <TrendingUp size={14} />,
+        experimental: true,
+      },
       { to: '/analytics', label: 'Season analytics', keywords: 'season trends', icon: <TrendingUp size={14} /> },
       { to: '/settings', label: 'Settings', keywords: 'preferences theme suite', icon: <Settings size={14} /> },
     ];
@@ -145,6 +160,7 @@ export default function CommandPalette({ open, onClose }: Props) {
       label: p.label,
       hint: location.pathname === p.to ? 'Current' : p.to,
       keywords: p.keywords,
+      experimental: p.experimental,
       icon: p.icon,
       run: () => go(p.to),
     }));
@@ -328,7 +344,14 @@ export default function CommandPalette({ open, onClose }: Props) {
                       <span className={isSelected ? 'text-[var(--text-accent)]' : 'text-theme-muted'}>
                         {item.icon}
                       </span>
-                      <span className="flex-1 truncate">{item.label}</span>
+                      <span className="flex-1 truncate flex items-center gap-2">
+                        {item.label}
+                        {item.experimental ? (
+                          <Badge tone="warning" className="shrink-0">
+                            Experimental
+                          </Badge>
+                        ) : null}
+                      </span>
                       {item.hint ? (
                         <span className="text-ui-micro text-theme-muted shrink-0">{item.hint}</span>
                       ) : null}
