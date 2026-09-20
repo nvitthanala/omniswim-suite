@@ -1,4 +1,5 @@
 import type { RaceConfig, RaceTag } from './lib/raceAnalysis';
+import type { NcaaMeetFormat } from './lib/ncaaScoringRules';
 
 /**
  * @license
@@ -167,6 +168,121 @@ export interface ScoringSettings {
   maxRelayEntriesPerSwimmer?: number;
   /** Max total events (individual + relay combined) a swimmer may enter. When set, overrides separate limits. */
   maxTotalEntriesPerSwimmer?: number;
+
+  /**
+   * The relay place-value table, place 1 first — used instead of
+   * `scoringPoints[place] * relayMultiplier`.
+   *
+   * `relayMultiplier` is exactly right for every championship field size: the
+   * rulebook's relay table is precisely 2x its individual table at 6, 8, 12, 16,
+   * 18 and 24 qualifiers. It cannot express a non-championship format at all.
+   * NCAA Rule 7-1-1 scores a six-lane dual 9-4-3-2-1-0 for individuals and
+   * **11-4-2-0** for relays; 11 is not twice 9. Rule 7-1-2 pairs 5-3-1-0 with
+   * **7-0**. Rule 7-3 scores a relay meet 14-10-8-6-4-2. A scalar multiplier
+   * turns each of those into a plausible, wrong team total.
+   *
+   * Absent (the default, and the shape of every preset saved before 2026-09-20)
+   * keeps the multiplier path byte-for-byte. Present, it wins, and
+   * `relayMultiplier` is not consulted. The table may be shorter than
+   * `scoringPoints` — a relay placing past its end scores 0, which is how
+   * 11-4-2-0 stops a fourth-place relay from scoring in a six-lane dual.
+   *
+   * Source: NCAA Rule 7, archived at `data/scoring_rules/sources/ncaascoring.pdf`.
+   * Never hand-type one of these; generate it from `NCAA_FORMAT_RULESETS`.
+   */
+  relayPoints?: number[];
+
+  /**
+   * The diving place-value table, place 1 first — used instead of
+   * `scoringPoints` for any event `diverEventPattern` matches.
+   *
+   * NCAA Rule 7-1-4 gives dual-meet diving its own three tables, chosen by how
+   * many divers the teams field: 7-5-4-3-2-1 (a team with three or fewer),
+   * 9-7-6-5-3-2-1 (four or five), 16-13-12-11-10-9-7-5-4-3-2-1 (both with six or
+   * more). Those differ from the swimming table in the same meet, so a dual meet
+   * needs two tables at once. Before this field the only diving-specific knob was
+   * `diverScorerWeight`, which changes how much of the scorer pool a diver
+   * consumes and nothing about what a dive is worth.
+   *
+   * Absent (the default) scores diving from `scoringPoints`, unchanged.
+   *
+   * Source: NCAA Rule 7-1-4. Generate it from `NCAA_FORMAT_RULESETS`.
+   */
+  divingPoints?: number[];
+
+  /**
+   * How many contestants from one team may take a scoring place in a single
+   * event — NCAA Rule 7-1-1's "with only the best three contestants from each
+   * team scoring" (7-1-2: two; 7-2: three; 7-1-4: three, four or six).
+   *
+   * This is **not** `maxIndividualScorersPerTeam`, which caps scorer *units* — a
+   * pool of athletes a team may score with across the meet (NSISC's 18), spent
+   * fractionally by divers via `diverScorerWeight`. That pool asks "how many
+   * athletes may score at all"; this asks "how many of them may finish in the
+   * places of one event". A meet can apply both, and a dual meet applies only
+   * this one.
+   *
+   * Counts distinct athletes, in place order, per team, per event. Absent (the
+   * default) means no cap and no behaviour change. What happens to the entries
+   * behind an over-cap finisher is {@link ScoringSettings.overCapPlaceBehavior}.
+   */
+  maxIndividualScorersPerTeamPerEvent?: number;
+
+  /**
+   * `maxIndividualScorersPerTeamPerEvent` for events `diverEventPattern` matches,
+   * when diving caps differently from swimming in the same meet.
+   *
+   * It does in every NCAA dual meet. Rule 7-1-1 scores three contestants per team
+   * in a six-lane swimming event; Rule 7-1-4 scores three, four or six in the
+   * diving event alongside it, chosen by how many divers the teams field. One
+   * scalar cannot say both, and using the swimming cap for diving silently drops
+   * a team's fourth through sixth divers.
+   *
+   * Pairs with {@link ScoringSettings.divingPoints} exactly as
+   * `maxIndividualScorersPerTeamPerEvent` pairs with `scoringPoints`. Absent, the
+   * swimming cap applies to diving too — which is right whenever the meet states
+   * one cap, and is the behaviour of every preset that sets neither field.
+   */
+  divingMaxScorersPerTeamPerEvent?: number;
+
+  /**
+   * What an over-`maxIndividualScorersPerTeamPerEvent` finisher does to the
+   * entries behind them.
+   *
+   * - `'holds-place'` (the default) — the over-cap contestant keeps the place
+   *   they achieved and scores 0. Nobody moves up, and that place's points are
+   *   lost from the meet.
+   * - `'removed-from-consideration'` — the over-cap contestant is dropped before
+   *   places are awarded, exactly as an exhibition swim is, so every contestant
+   *   behind them in the same round advances one place.
+   *
+   * The rulebook does not settle this. Rule 7-1-1 says only "with only the best
+   * three contestants from each team scoring". Rules 7-7-1 and 7-10-1 use the
+   * phrase "removed from consideration", and say "all other competitors may
+   * advance in position", precisely where they do intend re-ranking — and
+   * Rule 7-1 does not use it. `holds-place` is therefore the literal reading and
+   * the default, matching {@link NcaaScoringOptions.overCapBehavior} in
+   * `ncaaScoringRules.ts`, which is this repo's transcribed source of truth.
+   * Set `'removed-from-consideration'` deliberately, against a host's published
+   * meet rules — do not leave it to chance, because the two readings give
+   * different team totals whenever a team out-depths the field.
+   *
+   * Advancement never crosses a finals round: a consolation finisher cannot be
+   * promoted into a place the championship final contested (Rule 7-6-8).
+   */
+  overCapPlaceBehavior?: 'holds-place' | 'removed-from-consideration';
+
+  /**
+   * The NCAA Rule 7 meet format this settings object was generated from.
+   *
+   * Provenance only — it records which `NCAA_FORMAT_RULESETS` entry produced
+   * these numbers so a UI can name the rule and a reviewer can re-derive them.
+   * The scoring engine never branches on it: two settings objects with identical
+   * tables score identically whatever this says, and a hand-authored preset may
+   * leave it absent. Conference presets (NSISC) are not NCAA formats and carry
+   * no value here.
+   */
+  meetFormat?: NcaaMeetFormat;
 }
 
 export interface ScorerAutoRules {
@@ -191,6 +307,32 @@ export interface ScoringPresetMeta {
   id: string;
   label: string;
   description?: string;
+  /**
+   * True for a preset the app ships and derives from `NCAA_FORMAT_RULESETS` (or
+   * the hand-defined conference presets). Built-ins are immutable: the write
+   * routes reject their ids rather than accepting an edit they would discard.
+   * Absent is treated as false — a preset read off disk.
+   */
+  builtIn?: boolean;
+  /** Rule citation the numbers came from, e.g. `'NCAA Rule 7-1-1'`. Absent for a user preset. */
+  citation?: string;
+  /** The `NCAA_FORMAT_RULESETS` key this was generated from. Absent for conference and user presets. */
+  meetFormat?: NcaaMeetFormat;
+  /**
+   * True when the governing body publishes no point table for this format and the
+   * user must supply one — NCAA Rule 7-4 leaves invitational tables to the host.
+   * Such a preset carries **no** `scoringPoints`; fetching its settings fails
+   * rather than handing back an invented default. See CLAUDE.md § Data provenance.
+   */
+  requiresHostPublishedTable?: boolean;
+  /** Heading a picker can group by, e.g. `'NCAA dual meets'`. Presentation only. */
+  group?: string;
+  /**
+   * Uppercased substrings that select this preset from a workspace's conference
+   * name. Replaces the conference names that used to be hardcoded inside
+   * `presetIdForConference`. See `conferencePresetBindings` in `scoringDefaults.ts`.
+   */
+  conferenceMatches?: string[];
 }
 
 /** HyTek official team totals from PDF Team Rankings pages. */

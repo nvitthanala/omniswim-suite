@@ -637,24 +637,73 @@ function scoringRowIndexBFinal(rank: number, bracket: number, ptsLength: number)
   return idx >= 0 && idx < ptsLength ? idx : null;
 }
 
-/** 0-based index into scoringPoints, or null if this swim does not earn place points. */
+/**
+ * The place-value table one individual event scores from.
+ *
+ * `divingPoints` exists because NCAA Rule 7-1-4 gives dual-meet diving its own
+ * table, different from the swimming table in the same meet. Absent — every
+ * preset written before 2026-09-20 — this returns `scoringPoints` and every
+ * caller behaves exactly as it did.
+ */
+export function individualPlaceTable(
+  event: string | undefined,
+  settings: ScoringSettings
+): number[] {
+  const diving = settings.divingPoints;
+  if (diving?.length && isDivingForSettings(event, settings)) return diving;
+  return settings.scoringPoints;
+}
+
+/**
+ * The place-value table one relay event scores from, or `null` to keep the
+ * `scoringPoints[place] * relayMultiplier` path.
+ *
+ * Rule 7-1-1's relay table is 11-4-2-0 against an individual 9-4-3-2-1-0 — not a
+ * multiple of it — so a scalar cannot express a dual meet. See
+ * {@link ScoringSettings.relayPoints}.
+ */
+function relayPlaceTable(settings: ScoringSettings): number[] | null {
+  const relay = settings.relayPoints;
+  return relay?.length ? relay : null;
+}
+
+/**
+ * A/B bracket boundary, which describes the meet's finals structure and not any
+ * one table. Anchored to `scoringPoints` so a diving or relay table of a
+ * different length cannot move where the B final starts.
+ */
+function aFinalBracket(settings: ScoringSettings): number {
+  return settings.aFinalBracketSize ?? Math.floor(settings.scoringPoints.length / 2);
+}
+
+/** 0-based index into `table`, or null if this swim does not earn place points. */
+function placeRowIndex(
+  roundSwam: string | undefined,
+  rank: number,
+  event: string | undefined,
+  settings: ScoringSettings,
+  table: number[]
+): number | null {
+  if (!canScoreAthlete(roundSwam, event, settings)) return null;
+  if (!rank || rank < 1) return null;
+  if (!table.length) return null;
+  const bracket = aFinalBracket(settings);
+  const tier = classifyRoundTier(roundSwam);
+  if (tier === 'B') {
+    return scoringRowIndexBFinal(rank, bracket, table.length);
+  }
+  const idx = rank - 1;
+  return idx >= 0 && idx < table.length ? idx : null;
+}
+
+/** 0-based index into the event's individual table, or null if this swim does not earn place points. */
 function scoringRowIndex(
   roundSwam: string | undefined,
   rank: number,
   event: string | undefined,
   settings: ScoringSettings
 ): number | null {
-  if (!canScoreAthlete(roundSwam, event, settings)) return null;
-  if (!rank || rank < 1) return null;
-  const pts = settings.scoringPoints;
-  if (!pts.length) return null;
-  const bracket = settings.aFinalBracketSize ?? Math.floor(pts.length / 2);
-  const tier = classifyRoundTier(roundSwam);
-  if (tier === 'B') {
-    return scoringRowIndexBFinal(rank, bracket, pts.length);
-  }
-  const idx = rank - 1;
-  return idx >= 0 && idx < pts.length ? idx : null;
+  return placeRowIndex(roundSwam, rank, event, settings, individualPlaceTable(event, settings));
 }
 
 /** Single-place team points for a round + rank (no tie splits or scorer caps). */
@@ -664,9 +713,10 @@ export function pointsForPlacement(
   event: string | undefined,
   settings: ScoringSettings
 ): number {
-  const idx = scoringRowIndex(roundSwam, rank, event, settings);
+  const table = individualPlaceTable(event, settings);
+  const idx = placeRowIndex(roundSwam, rank, event, settings, table);
   if (idx == null) return 0;
-  return settings.scoringPoints[idx] ?? 0;
+  return table[idx] ?? 0;
 }
 
 function scoringRowIndexForRelay(
@@ -675,7 +725,22 @@ function scoringRowIndexForRelay(
   event: string | undefined,
   settings: ScoringSettings
 ): number | null {
+  const explicit = relayPlaceTable(settings);
+  if (explicit) return placeRowIndex(roundSwam, rank, event, settings, explicit);
   return scoringRowIndex(roundSwam, rank, event, settings);
+}
+
+/**
+ * Team points a relay entry earns for the place at `idx`.
+ *
+ * `relayPoints` wins when present; otherwise the historical
+ * `scoringPoints[idx] * relayMultiplier`, which is exact for every championship
+ * field size and wrong for every other format.
+ */
+function relayTeamPointsForIndex(settings: ScoringSettings, idx: number): number {
+  const explicit = relayPlaceTable(settings);
+  if (explicit) return explicit[idx] ?? 0;
+  return (settings.scoringPoints[idx] ?? 0) * settings.relayMultiplier;
 }
 
 function roundTierSort(roundSwam: string | undefined): number {
@@ -984,7 +1049,9 @@ function scoreTimedFinalIndividualsInEvent(
   useMeetWidePool: boolean,
   rosterLookup?: ScorerRosterLookup
 ): SwimmerResult[] {
-  const pts = merged.scoringPoints;
+  // One event per call, so one table: `individuals[0].event` names it. Diving
+  // scores from `divingPoints` when the preset carries one (Rule 7-1-4).
+  const pts = individualPlaceTable(individuals[0]?.event, merged);
   const cap = merged.maxIndividualScorersPerTeam ?? 999;
   const teamIndivScorers: Record<string, number> = {};
   const indivOut: SwimmerResult[] = [];
@@ -1089,6 +1156,229 @@ function scoreTimedFinalIndividualsInEvent(
   return indivOut;
 }
 
+// ---------------------------------------------------------------------------
+// Per-team place cap — NCAA Rules 7-1-1, 7-1-2, 7-1-4, 7-2
+// ---------------------------------------------------------------------------
+
+export type OverCapPlaceBehavior = NonNullable<ScoringSettings['overCapPlaceBehavior']>;
+
+type TeamPlaceCapRule = { max: number; behavior: OverCapPlaceBehavior };
+
+/**
+ * The per-team place cap in force for this meet, or `null` when the setting is
+ * absent — which is every preset written before 2026-09-20, and the path that
+ * must stay byte-identical.
+ *
+ * Throws rather than coercing. A preset whose competition rule cannot be read is
+ * a defect in the preset; scoring around it produces a plausible, wrong total,
+ * which is the failure mode this repo cares about most.
+ */
+function resolveTeamPlaceCap(
+  settings: ScoringSettings,
+  event: string | undefined
+): TeamPlaceCapRule | null {
+  // Diving caps separately from swimming in the same dual meet (Rule 7-1-4 vs
+  // 7-1-1), so the event decides which number applies.
+  const diving = settings.divingMaxScorersPerTeamPerEvent;
+  const field =
+    diving != null && isDivingForSettings(event, settings)
+      ? 'divingMaxScorersPerTeamPerEvent'
+      : 'maxIndividualScorersPerTeamPerEvent';
+  const raw = settings[field];
+  if (raw == null) return null;
+  if (!Number.isInteger(raw) || raw < 1) {
+    throw new Error(
+      `ScoringSettings.${field} must be a positive integer — ` +
+        `NCAA Rule 7-1-1 reads "with only the best three contestants from each team ` +
+        `scoring". Got ${String(raw)}. Omit the field for no cap.`
+    );
+  }
+  const meetWidePool =
+    settings.scorerCapScope === 'meet' && (settings.maxIndividualScorersPerTeam ?? 999) < 999;
+  if (meetWidePool) {
+    // Under 'holds-place' an over-cap contestant still occupies a place, so it must
+    // stay in its tie group for the split — which means it has already been admitted
+    // to the meet-wide scorer pool by the time its points are struck. It would then
+    // burn one of the team's pool slots while scoring nothing. Rather than pick a
+    // silent answer, refuse the combination: no built-in preset produces it, and a
+    // meet that really needs both should be modelled once, deliberately, with a
+    // published rule to cite.
+    throw new Error(
+      `ScoringSettings combines maxIndividualScorersPerTeamPerEvent ` +
+        `(${raw}) with a meet-wide scorer pool (maxIndividualScorersPerTeam=` +
+        `${settings.maxIndividualScorersPerTeam}, scorerCapScope='meet'). Those two rules ` +
+        `disagree about whether a contestant who takes a place but scores nothing spends a ` +
+        `pool slot, and the NCAA rulebook settles neither. Use one or the other.`
+    );
+  }
+  return { max: raw, behavior: settings.overCapPlaceBehavior ?? 'holds-place' };
+}
+
+/**
+ * True when this row occupies a scoring place in its event, and therefore spends
+ * one of its team's cap slots.
+ *
+ * Mirrors `computeNcaaEventScoring`'s step 1: an exhibition swim, a DQ, a time
+ * trial and a round that earns no points are all "removed from consideration"
+ * and never held a place to begin with. A place past the end of the point table
+ * still counts — Rule 7-1-1 caps the team's best three *contestants*, not its
+ * best three scorers.
+ */
+function takesAScoringPlace(
+  r: SwimmerResult,
+  eventRows: SwimmerResult[],
+  settings: ScoringSettings
+): boolean {
+  if (!isScoringSwimResult(r)) return false;
+  if (r.isExhibition) return false;
+  if (r.isTimeTrial && !isChampionshipGenderEvent(r.event)) return false;
+  if (!canScoreAthlete(r.roundSwam, r.event, settings)) return false;
+  if ((parseRankInt(r.rank) ?? 0) < 1) return false;
+  // A prelim dive by a diver who also dove in the final scores nothing there, so
+  // it holds no place here either — same exclusion `scoreIndividualsInEvent` makes.
+  if (classifyRoundTier(r.roundSwam) === 'PRE' && isDivingForSettings(r.event, settings)) {
+    const team = String(r.team ?? 'Unknown').trim() || 'Unknown';
+    if (athleteHasFinalsDiveInEvent(eventRows, r.name, team, settings)) return false;
+  }
+  return true;
+}
+
+/** Finish order within one event: round tier first (A before B before prelims), then place. */
+function placeOrderCompare(a: SwimmerResult, b: SwimmerResult): number {
+  const tw = roundTierSort(a.roundSwam) - roundTierSort(b.roundSwam);
+  if (tw !== 0) return tw;
+  const ra = parseRankInt(a.rank) ?? 9999;
+  const rb = parseRankInt(b.rank) ?? 9999;
+  if (ra !== rb) return ra - rb;
+  const ta = convertTimeToSeconds(a.time);
+  const tb = convertTimeToSeconds(b.time);
+  if (ta !== tb) return ta - tb;
+  return String(a.name).localeCompare(String(b.name));
+}
+
+/**
+ * Row ids beyond their team's cap in this event, chosen in finish order.
+ *
+ * Counts distinct athletes, not rows: a diver with both a prelim and a final row
+ * in one event is one contestant and spends one slot. Applied per event, which
+ * is the only scope Rule 7 states — the caller passes one event's rows.
+ */
+function overCapRowIds(
+  individuals: SwimmerResult[],
+  settings: ScoringSettings,
+  cap: number
+): Set<string> {
+  const contenders = individuals
+    .filter(r => takesAScoringPlace(r, individuals, settings))
+    .sort(placeOrderCompare);
+  const admittedByTeam = new Map<string, Set<string>>();
+  const over = new Set<string>();
+  for (const r of contenders) {
+    const team = String(r.team ?? 'Unknown').trim() || 'Unknown';
+    let admitted = admittedByTeam.get(team);
+    if (!admitted) {
+      admitted = new Set<string>();
+      admittedByTeam.set(team, admitted);
+    }
+    const key = normalizeSwimmerName(r.name);
+    if (admitted.has(key)) continue;
+    if (admitted.size < cap) {
+      admitted.add(key);
+      continue;
+    }
+    over.add(r.id);
+  }
+  return over;
+}
+
+/**
+ * Advance every contestant behind a removed one, by rewriting the rank the
+ * scorer reads places from.
+ *
+ * The shift never crosses a round: a consolation finisher must not be promoted
+ * into a place the championship final contested (Rule 7-6-8). Within a round the
+ * new place is the old one less the number of removed contestants who finished
+ * strictly ahead — the standard competition-ranking compaction, so a removed
+ * contestant's surviving tie-mate keeps the place and takes its full value
+ * rather than splitting it with nobody.
+ *
+ * The rewritten rank is internal. `runIndividualScoringForEvent` restores each
+ * row's source rank before returning, so nothing downstream sees a finish
+ * position the meet did not record.
+ */
+function shiftRanksAfterRemoval(
+  survivors: SwimmerResult[],
+  removed: SwimmerResult[]
+): SwimmerResult[] {
+  const removedRanksByTier = new Map<string, number[]>();
+  for (const r of removed) {
+    const rank = parseRankInt(r.rank);
+    if (rank == null) continue;
+    const tier = classifyRoundTier(r.roundSwam);
+    const list = removedRanksByTier.get(tier);
+    if (list) list.push(rank);
+    else removedRanksByTier.set(tier, [rank]);
+  }
+  if (removedRanksByTier.size === 0) return survivors;
+  return survivors.map(r => {
+    const rank = parseRankInt(r.rank);
+    if (rank == null) return r;
+    const removedRanks = removedRanksByTier.get(classifyRoundTier(r.roundSwam));
+    if (!removedRanks?.length) return r;
+    const ahead = removedRanks.reduce((n, x) => (x < rank ? n + 1 : n), 0);
+    return ahead > 0 ? { ...r, rank: rank - ahead } : r;
+  });
+}
+
+/**
+ * Score one event's individual rows, applying the per-team place cap when the
+ * preset declares one.
+ *
+ * With no cap this is exactly the previous dispatch between the two scorers, and
+ * the cap branches are unreachable.
+ */
+function runIndividualScoringForEvent(
+  individuals: SwimmerResult[],
+  merged: ScoringSettings,
+  meetStates: Map<string, TeamMeetState>,
+  useMeetWidePool: boolean,
+  rosterLookup?: ScorerRosterLookup
+): SwimmerResult[] {
+  const scoreFn = isTimedFinalDistanceSession(individuals)
+    ? scoreTimedFinalIndividualsInEvent
+    : scoreIndividualsInEvent;
+
+  const capRule = resolveTeamPlaceCap(merged, individuals[0]?.event);
+  if (!capRule) return scoreFn(individuals, merged, meetStates, useMeetWidePool, rosterLookup);
+
+  const overCap = overCapRowIds(individuals, merged, capRule.max);
+  if (overCap.size === 0) {
+    return scoreFn(individuals, merged, meetStates, useMeetWidePool, rosterLookup);
+  }
+
+  if (capRule.behavior === 'holds-place') {
+    // The over-cap contestant keeps the place they achieved, so they stay in the
+    // field, stay in their tie group's denominator, and stay in the place ladder.
+    // Only their points are struck; that place's value is lost from the meet, the
+    // way Rule 7-7 loses a trailing place nobody was left to fill.
+    return scoreFn(individuals, merged, meetStates, useMeetWidePool, rosterLookup).map(r =>
+      overCap.has(r.id) ? { ...r, points: 0 } : r
+    );
+  }
+
+  const removed = individuals.filter(r => overCap.has(r.id));
+  const survivors = shiftRanksAfterRemoval(
+    individuals.filter(r => !overCap.has(r.id)),
+    removed
+  );
+  const sourceRankById = new Map(individuals.map(r => [r.id, r.rank] as const));
+  const scored = scoreFn(survivors, merged, meetStates, useMeetWidePool, rosterLookup).map(r => {
+    const sourceRank = sourceRankById.get(r.id);
+    return sourceRank === undefined || sourceRank === r.rank ? r : { ...r, rank: sourceRank };
+  });
+  return [...scored, ...removed.map(r => ({ ...r, points: 0 }))];
+}
+
 function scoreIndividualsInEvent(
   individuals: SwimmerResult[],
   merged: ScoringSettings,
@@ -1147,7 +1437,7 @@ function scoreIndividualsInEvent(
       continue;
     }
 
-    const pts = merged.scoringPoints;
+    const pts = individualPlaceTable(sample.event, merged);
     const gLen = eligible.length;
     const avail = pts.length - baseIdx;
     const take = Math.min(gLen, avail);
@@ -1327,7 +1617,7 @@ function scoreRelaysInEvent(
       }
     }
 
-    const teamPts = merged.scoringPoints[idx] * merged.relayMultiplier;
+    const teamPts = relayTeamPointsForIndex(merged, idx);
     const n = group.length;
     // halfRateRelaySwimmer: each leg earns 1/n of team relay points (typically n=4 → 1/4 share).
     let swimmerPts = teamPts / (n > 0 ? n : 1);
@@ -1571,10 +1861,13 @@ export function calculatePoints(
     const runIndividuals = (event: string) => {
       const evRows = byEvent.get(event)!;
       const indiv = evRows.filter(r => !isRelayResult(r));
-      const scoreFn = isTimedFinalDistanceSession(indiv)
-        ? scoreTimedFinalIndividualsInEvent
-        : scoreIndividualsInEvent;
-      for (const row of scoreFn(indiv, merged, meetStates, useMeetWideIndividualPool, rosterLookup)) {
+      for (const row of runIndividualScoringForEvent(
+        indiv,
+        merged,
+        meetStates,
+        useMeetWideIndividualPool,
+        rosterLookup
+      )) {
         scoredById.set(row.id, row);
       }
     };
@@ -1617,10 +1910,7 @@ export function calculatePoints(
       const evRows = byEvent.get(event)!;
       const indiv = evRows.filter(r => !isRelayResult(r));
       const relays = evRows.filter(r => isRelayResult(r));
-      const scoreFn = isTimedFinalDistanceSession(indiv)
-        ? scoreTimedFinalIndividualsInEvent
-        : scoreIndividualsInEvent;
-      for (const row of scoreFn(indiv, merged, meetStates, false, rosterLookup)) {
+      for (const row of runIndividualScoringForEvent(indiv, merged, meetStates, false, rosterLookup)) {
         scoredById.set(row.id, row);
       }
       for (const row of scoreRelaysInEvent(relays, merged, meetStates, false, rosterLookup)) {
