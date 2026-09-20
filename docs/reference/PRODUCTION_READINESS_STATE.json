@@ -9,21 +9,59 @@
     "supersedes": "CLAUDE.md 'Cross-provider delegation (the fleet)' section - to be rewritten in P0."
   },
   "userDecisions": [
-    { "id": "d1", "q": "What must work by the deadline", "a": "Pre-meet lineup planning; opponent scouting/projection; post-meet reconciliation. Live in-meet scoring explicitly NOT required - this lowers the meet-day hardening bar." },
-    { "id": "d2", "q": "Reconciliation behaviour", "a": "Enable comparison ONLY when official results and pulled team/swimmer history are both present. Gate it; never compare against half the data." },
-    { "id": "d3", "q": "Crawl speed posture", "a": "Caching and fewer pages first. Do NOT relax the 3000ms sequential floor on structural pages. Pooling structural pages was offered and declined." },
-    { "id": "d4", "q": "Scoring formats", "a": "Full in-app preset authoring AND ship more built-in presets. Researched collegiate formats." },
-    { "id": "d5", "q": "Metrics applet", "a": "Stays visible, clearly marked experimental / not meet-ready. Do not hide, do not work on it." },
-    { "id": "d6", "q": "Runtime for real use", "a": "User asked for a recommendation. Not yet answered - see openDecisions od2." },
-    { "id": "d7", "q": "Repo visibility", "a": "Private. DONE 2026-09-20 via gh repo edit; verified visibility=PRIVATE." }
+    {
+      "id": "d1",
+      "q": "What must work by the deadline",
+      "a": "Pre-meet lineup planning; opponent scouting/projection; post-meet reconciliation. Live in-meet scoring explicitly NOT required - this lowers the meet-day hardening bar."
+    },
+    {
+      "id": "d2",
+      "q": "Reconciliation behaviour",
+      "a": "Enable comparison ONLY when official results and pulled team/swimmer history are both present. Gate it; never compare against half the data."
+    },
+    {
+      "id": "d3",
+      "q": "Crawl speed posture",
+      "a": "Caching and fewer pages first. Do NOT relax the 3000ms sequential floor on structural pages. Pooling structural pages was offered and declined."
+    },
+    {
+      "id": "d4",
+      "q": "Scoring formats",
+      "a": "Full in-app preset authoring AND ship more built-in presets. Researched collegiate formats."
+    },
+    {
+      "id": "d5",
+      "q": "Metrics applet",
+      "a": "Stays visible, clearly marked experimental / not meet-ready. Do not hide, do not work on it."
+    },
+    {
+      "id": "d6",
+      "q": "Runtime for real use",
+      "a": "User asked for a recommendation. Not yet answered - see openDecisions od2."
+    },
+    {
+      "id": "d7",
+      "q": "Repo visibility",
+      "a": "Private. DONE 2026-09-20 via gh repo edit; verified visibility=PRIVATE."
+    }
   ],
   "baseline": {
     "measuredAt": "2026-09-20",
     "branch": "nvitthanala/swimcloud-data-ingest",
     "headAtBaseline": "dfbd4737",
-    "lint": { "cmd": "npm run lint --workspaces --if-present", "result": "clean, 8 workspaces, exit 0", "note": "'lint' is tsc --noEmit only. There is no ESLint in this repo - a real gap, logged as a finding." },
-    "vitest": { "cmd": "npx vitest run", "result": "803 passed / 0 failed, 45 files" },
-    "scriptSuite": { "cmd": "node scripts/run-tests.mjs", "result": "81 passed / 0 failed / 1 skipped (Postgres, needs PG_TEST_URL); includes Playwright e2e" },
+    "lint": {
+      "cmd": "npm run lint --workspaces --if-present",
+      "result": "clean, 8 workspaces, exit 0",
+      "note": "'lint' is tsc --noEmit only. There is no ESLint in this repo - a real gap, logged as a finding."
+    },
+    "vitest": {
+      "cmd": "npx vitest run",
+      "result": "803 passed / 0 failed, 45 files"
+    },
+    "scriptSuite": {
+      "cmd": "node scripts/run-tests.mjs",
+      "result": "81 passed / 0 failed / 1 skipped (Postgres, needs PG_TEST_URL); includes Playwright e2e"
+    },
     "branchTopology": "All branches already merged to main. main is 1 commit ahead of this branch (the PR #5 merge, 9105cbd1). Only uncommitted work anywhere: 5 files in the chinook worktree."
   },
   "findings": [
@@ -44,25 +82,32 @@
     {
       "id": "f2",
       "severity": "P1",
-      "title": "Every captured page is cacheStatus 'provisional'; a re-crawl re-fetches all of it",
+      "title": "Crawl resume is per-capture; the global page store is not consulted across meets",
       "evidence": [
-        "data/swimcloud-captures/captures/meet-356467.json: 234/234 pages cacheStatus='provisional'. No page is ever promoted to durable.",
-        "Measured wall time from retrievedAt timestamps: meetTeamSwims 42 pages/122s (2981ms observed gap), teamRoster 8 pages/21s (3002ms gap), swimmerTimes 184 pages/75s (409ms gap, pooled 3 lanes). Total ~218s for 4 teams."
+        "data/swimcloud-captures/pages/ is keyed GLOBALLY by canonicalUrl (123 files on disk), so page bytes are already shared across captures.",
+        "But crawler-content.ts readAlreadyCaptured() builds its skip set from a single SUBJECT's capture record (GET /api/swimcloud/captures/{id}), not from the global page store. A different meet re-fetches pages whose bytes are already on disk.",
+        "Page-kind breakdown of the real 234-page capture: swimmerTimes 184 (78.6%), meetTeamSwims 42 (17.9%), teamRoster 8 (3.4%).",
+        "A swimmer's personal-bests page is the SAME canonicalUrl regardless of which meet is being crawled, so it is the page kind that repeats most across a season's crawls.",
+        "Measured wall time: meetTeamSwims 42 pages/122s (2981ms gap), teamRoster 8 pages/21s (3002ms gap), swimmerTimes 184 pages/75s (409ms gap, pooled). Total ~218s for 4 teams."
       ],
-      "consequence": "50 sequential pages cost more wall-clock than 184 pooled ones, so the 3000ms floor dominates - and the user has ruled out relaxing it (d3). Durable caching is therefore the main available speedup, and it strictly REDUCES traffic rather than adding detection surface.",
-      "status": "open, drives P3"
+      "consequence": "Two real speedups remain available WITHOUT touching the 3000ms floor the user ruled out (d3): (1) Job-scoped page selection - swimmerTimes is 78.6% of all pages fetched, and a meet-results-only job does not need any of them. (2) Cross-capture reuse - consult the global pages/ store when building the skip set, gated by a real freshness policy, since a personal-bests page legitimately changes as a swimmer races. The existing provisional/final cacheStatus is the right mechanism: a finished meet's pages are immutable and can be promoted to 'final'; provisional pages need a TTL. Both reduce traffic rather than increasing it.",
+      "status": "open, drives P3",
+      "correctionNote": "An earlier reading of this finding in the same session was WRONG and was corrected before any work was briefed on it. The wrong version said 'every page is provisional, so a re-crawl re-fetches everything'. That is false: extensions/swimcloud-companion/src/captureResume.ts implements a real, unit-tested, fail-safe resume, and re-crawling the SAME meet correctly skips pages already stored. The cacheStatus field belongs to the server-side Track B Playwright cache (packages/swimcloud/src/cache.ts), not to the extension's resume path. Recorded here so nobody re-derives the wrong conclusion from the raw cacheStatus counts."
     },
     {
       "id": "f3",
-      "severity": "P1",
-      "title": "SwimCloud import silently drops the best swimmers (prelims/finals ambiguity)",
+      "severity": "resolved-before-this-session",
+      "title": "RESOLVED ALREADY - prelims/finals rounds are resolved from meetEvent pages",
       "evidence": [
-        "plans/2026-09-10/01-SWIMCLOUD-SCORING-CORRECTNESS.md, still current.",
-        "SwimCloud team-swims pages carry no round column; a finalist appears as 2+ near-identical rows whose Place is a per-round placement (proven: a 1:47.40 marked 2nd vs a 1:47.77 marked 1st).",
-        "The landed fix excludes the entire ambiguous group from the import rather than guessing a winner - correct per the provenance rules, but 13 of 30 rows (43%) on the one measured page were in such a group."
+        "packages/matrix/src/lib/swimCloudMeetImportBridge.ts resolves a swim's round from /results/{meetId}/event/{n}/ pages, which print one caption-labelled table per round plus the real meet Score column. Its own comment: 'This is what turns \"excluded as ambiguous\" into \"scored as the round it actually was\".'",
+        "The eventResults option is genuinely supplied, not an optional-and-never-passed parameter: apps/shell/lib/swimcloudCaptureRoutes.ts parses them (line ~713/735) and packages/matrix/src/components/OpsModule.tsx:485 passes selection.eventResults into the bridge.",
+        "The crawl actually fetches them: crawler-content.ts runs runEventResultsPass (line ~922), planned by planEventResultsSteps -> planMeetEventResults, pooled at EVENT_RESULTS_CONCURRENCY=3 / EVENT_RESULTS_STAGGER_MS=400.",
+        "Exclusion via 'ambiguous-round-duplicate' still exists as the correct fallback for a swim whose event page is absent, did not parse, or carried no round caption - absence of data, never a guess. That is right and stays."
       ],
       "consequence": "The better a swimmer is, the more likely they vanish from an opponent-scouting import. Directly undermines user decision d1's scouting/projection requirement. Candidate fix: use meetEvent pages, which do carry round context, as a disambiguation SOURCE (not a guess).",
-      "status": "open, drives P3"
+      "status": "closed; verified end-to-end 2026-09-20",
+      "correctionNote": "An earlier reading of this finding in the same session was WRONG. It was taken from plans/2026-09-10/01-SWIMCLOUD-SCORING-CORRECTNESS.md, which describes the problem and an interim fix that EXCLUDED ambiguous prelims/finals groups wholesale. A later change resolved it properly and the plan doc was never updated. Do not re-open this from that doc. Lesson recorded: verify a plan doc's claim against the code before briefing work on it - this repo's docs lag its code.",
+      "consequenceForP3": "Important knock-on for the crawl-speed work: the archived 234-page capture (2026-09-10) PREDATES the event-results pass and contains zero meetEvent pages. A crawl run today therefore fetches MORE pages than that sample - one meetEvent page per distinct event on top of the 234. The user's 'data pulling is very slow' impression is likely of a post-eventResults crawl, so the real current page count is higher than the measured baseline. Re-measure against a current crawl before claiming any speedup percentage."
     },
     {
       "id": "f4",
@@ -79,9 +124,22 @@
       "id": "f5",
       "severity": "P2",
       "title": "There is no ESLint - 'npm run lint' is tsc --noEmit only",
-      "evidence": ["Every workspace's lint script is 'tsc --noEmit -p tsconfig.json'. No eslint config or dependency in the repo."],
+      "evidence": [
+        "Every workspace's lint script is 'tsc --noEmit -p tsconfig.json'. No eslint config or dependency in the repo."
+      ],
       "consequence": "Type errors are caught; unused vars, exhaustive-deps, accessibility and React-hooks violations are not. Relevant to the 'code is not hodgepodged' requirement.",
       "status": "open, candidate for P5"
+    },
+    {
+      "id": "f6",
+      "severity": "process",
+      "title": "The plan docs in plans/ lag the code, and two findings this session were initially wrong because of it",
+      "evidence": [
+        "f2 was initially read as 'resume is broken' from raw cacheStatus counts; captureResume.ts implements a working, unit-tested resume.",
+        "f3 was initially read as 'the import drops the best swimmers' from plans/2026-09-10/01-SWIMCLOUD-SCORING-CORRECTNESS.md; the proper fix landed after that doc was written and the doc was never updated."
+      ],
+      "consequence": "Treat every plans/*.md claim as a lead to verify, not a fact. Check the code before briefing an agent on a doc's finding. Both corrections here were caught before any agent was dispatched on them.",
+      "status": "open - the stale docs should get status headers in P6"
     }
   ],
   "phases": [
@@ -91,12 +149,31 @@
       "owner": "direct (no subagent)",
       "status": "in-progress",
       "items": [
-        { "what": "Make repo private", "status": "done", "how": "gh repo edit --visibility private; verified isPrivate=true" },
-        { "what": "Write plan doc + this state file", "status": "done" },
-        { "what": "Land chinook worktree's 5 uncommitted files (Obsidian-vault instructions + 4 agent defs)", "status": "todo" },
-        { "what": "Prune merged branches and stale worktrees", "status": "todo" },
-        { "what": "Rewrite CLAUDE.md delegation section to drop the superseded fleet layer (d6)", "status": "todo" },
-        { "what": "Refresh the 4 agent definitions for this round", "status": "todo" }
+        {
+          "what": "Make repo private",
+          "status": "done",
+          "how": "gh repo edit --visibility private; verified isPrivate=true"
+        },
+        {
+          "what": "Write plan doc + this state file",
+          "status": "done"
+        },
+        {
+          "what": "Land chinook worktree's 5 uncommitted files (Obsidian-vault instructions + 4 agent defs)",
+          "status": "todo"
+        },
+        {
+          "what": "Prune merged branches and stale worktrees",
+          "status": "todo"
+        },
+        {
+          "what": "Rewrite CLAUDE.md delegation section to drop the superseded fleet layer (d6)",
+          "status": "todo"
+        },
+        {
+          "what": "Refresh the 4 agent definitions for this round",
+          "status": "todo"
+        }
       ]
     },
     {
@@ -106,27 +183,94 @@
       "status": "blocked",
       "blockedOn": "od1 - the convergence decision",
       "items": [
-        { "what": "Let ScoringSettings express every Rule 7 format, with NCAA_FORMAT_RULESETS as the single source of the numbers", "status": "todo" },
-        { "what": "Generate built-in presets for all 14 formats from that constant", "status": "todo" },
-        { "what": "Preset CRUD API on apps/shell/server.ts with zod validation", "status": "todo" },
-        { "what": "Remove presetIdForConference's hardcoded conference string matching", "status": "todo" },
-        { "what": "Regression: NSISC team totals must stay byte-exact (test_nsisc_team_totals.mjs)", "status": "todo" }
+        {
+          "what": "Let ScoringSettings express every Rule 7 format, with NCAA_FORMAT_RULESETS as the single source of the numbers",
+          "status": "todo"
+        },
+        {
+          "what": "Generate built-in presets for all 14 formats from that constant",
+          "status": "todo"
+        },
+        {
+          "what": "Preset CRUD API on apps/shell/server.ts with zod validation",
+          "status": "todo"
+        },
+        {
+          "what": "Remove presetIdForConference's hardcoded conference string matching",
+          "status": "todo"
+        },
+        {
+          "what": "Regression: NSISC team totals must stay byte-exact (test_nsisc_team_totals.mjs)",
+          "status": "todo"
+        }
       ]
     },
-    { "id": "P2", "name": "Preset authoring UI", "owner": "worker", "status": "blocked", "blockedOn": "P1 reporting its API surface", "items": [] },
-    { "id": "P3", "name": "SwimCloud ingest and crawl speed", "owner": "executor", "status": "todo", "items": [
-      { "what": "Durable capture cache + skip-unchanged on re-crawl (f2)", "status": "todo" },
-      { "what": "Job-scoped page selection - do not fetch swimmerTimes for a meet-results-only job", "status": "todo" },
-      { "what": "Re-open prelims/finals disambiguation using meetEvent round context (f3)", "status": "todo" },
-      { "what": "Gate reconciliation on both sources present (d2)", "status": "todo" }
-    ] },
-    { "id": "P4", "name": "UI navigability", "owner": "worker", "status": "todo", "items": [
-      { "what": "Button convergence (122 hand-rolled)", "status": "todo" },
-      { "what": "Shared TeamSelect (11 duplicates)", "status": "todo" },
-      { "what": "Mark Metrics experimental (d5)", "status": "todo" }
-    ] },
-    { "id": "P5", "name": "Adversarial bug hunt", "owner": "executor + finisher", "status": "todo", "items": [] },
-    { "id": "P6", "name": "User guide", "owner": "worker", "status": "todo", "items": [] }
+    {
+      "id": "P2",
+      "name": "Preset authoring UI",
+      "owner": "worker",
+      "status": "blocked",
+      "blockedOn": "P1 reporting its API surface",
+      "items": []
+    },
+    {
+      "id": "P3",
+      "name": "SwimCloud ingest and crawl speed",
+      "owner": "executor",
+      "status": "todo",
+      "items": [
+        {
+          "what": "Durable capture cache + skip-unchanged on re-crawl (f2)",
+          "status": "todo"
+        },
+        {
+          "what": "Job-scoped page selection - do not fetch swimmerTimes for a meet-results-only job",
+          "status": "todo"
+        },
+        {
+          "what": "Re-open prelims/finals disambiguation using meetEvent round context (f3)",
+          "status": "todo"
+        },
+        {
+          "what": "Gate reconciliation on both sources present (d2)",
+          "status": "todo"
+        }
+      ]
+    },
+    {
+      "id": "P4",
+      "name": "UI navigability",
+      "owner": "worker",
+      "status": "todo",
+      "items": [
+        {
+          "what": "Button convergence (122 hand-rolled)",
+          "status": "todo"
+        },
+        {
+          "what": "Shared TeamSelect (11 duplicates)",
+          "status": "todo"
+        },
+        {
+          "what": "Mark Metrics experimental (d5)",
+          "status": "todo"
+        }
+      ]
+    },
+    {
+      "id": "P5",
+      "name": "Adversarial bug hunt",
+      "owner": "executor + finisher",
+      "status": "todo",
+      "items": []
+    },
+    {
+      "id": "P6",
+      "name": "User guide",
+      "owner": "worker",
+      "status": "todo",
+      "items": []
+    }
   ],
   "openDecisions": [
     {
@@ -146,6 +290,17 @@
     }
   ],
   "log": [
-    { "at": "2026-09-20", "what": "Session opened. Read plans/STATE.md, PHASE_STATE.json, UI_REDESIGN_STATE.json, the 2026-09-10 diagnosis docs and INVARIANTS.md. Measured a fresh baseline rather than inheriting one. Confirmed all branches already merged to main. Made the repo private. Researched collegiate scoring formats, verified the archived NCAA Rule 7 PDF by hash against a live fetch, and found f1 (the unwired engine). Wrote plans/2026-09-20/README.md and this file." }
+    {
+      "at": "2026-09-20",
+      "what": "Session opened. Read plans/STATE.md, PHASE_STATE.json, UI_REDESIGN_STATE.json, the 2026-09-10 diagnosis docs and INVARIANTS.md. Measured a fresh baseline rather than inheriting one. Confirmed all branches already merged to main. Made the repo private. Researched collegiate scoring formats, verified the archived NCAA Rule 7 PDF by hash against a live fetch, and found f1 (the unwired engine). Wrote plans/2026-09-20/README.md and this file."
+    },
+    {
+      "at": "2026-09-20",
+      "what": "Corrected finding f2 before briefing P3. The initial reading of cacheStatus counts as 'resume is broken' was wrong; resume exists and works per-capture. The real gap is cross-capture reuse plus job-scoped page selection. P1 (scoring generalisation) dispatched to an executor agent."
+    },
+    {
+      "at": "2026-09-20",
+      "what": "Corrected finding f3: the prelims/finals round resolution is already implemented and wired end-to-end (crawl pass -> server parse -> OpsModule -> bridge). The 2026-09-10 plan doc that reported it as broken is stale. Added f6 recording that plan docs lag code. P3's scope shrinks accordingly; its page-count baseline must be re-measured because the archived capture predates the event-results pass."
+    }
   ]
 }
