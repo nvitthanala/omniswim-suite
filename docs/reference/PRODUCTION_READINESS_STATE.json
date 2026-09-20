@@ -206,6 +206,19 @@
       ],
       "consequence": "The 2026-09-10 diagnosis framed low Button adoption as a discipline problem. It is a fit problem: the primitive is more opinionated than the app it serves. Converging on it requires a DECISION first - either relax Button (make weight, radius and disabled opacity variant-controlled) or restyle the app to Button's look (a real, visible change needing sign-off). Doing a mass conversion without that decision would silently restyle ~120 controls.",
       "status": "open - needs a user decision before any mass conversion; NOT a blocker for the deadline"
+    },
+    {
+      "id": "f12",
+      "severity": "P2-test-quality",
+      "title": "writeJsonBackup had no retention while JsonStore did - the production default was the unbounded one",
+      "evidence": [
+        "apps/shell/lib/jsonStore.ts pruned to 20 from the start.",
+        "apps/shell/lib/workspaceRepo.ts writeJsonBackup - used by BOTH SqliteRepo and PgRepo - pruned nothing.",
+        "OMNI_DB defaults to sqlite in Start-OmniSwim-Suite-Prod.bat, so the shipped path was the unbounded one.",
+        "A full export is ~3MB (data/meets.json size), so a backup per server start would have grown without bound."
+      ],
+      "consequence": "Fixed in 1e7d0220. Recorded because it is the same shape as f10 and the extension-build finding: two implementations of one concept where only the less-used one was correct.",
+      "status": "closed 2026-09-20"
     }
   ],
   "phases": [
@@ -322,7 +335,7 @@
       "id": "P2",
       "name": "Preset authoring UI",
       "owner": "worker",
-      "status": "blocked",
+      "status": "in progress (worker dispatched)",
       "blockedOn": "P1 reporting its API surface",
       "items": []
     },
@@ -397,7 +410,7 @@
       "id": "P7",
       "name": "Data safety - reachable and automatic backups",
       "owner": "worker (UI) + executor (triggers)",
-      "status": "todo",
+      "status": "server side done; UI button still open",
       "items": [
         {
           "what": "Call POST /api/workspaces/backup from the UI - an explicit 'Back up now' action with success/failure feedback",
@@ -415,6 +428,16 @@
           "what": "A restore path, or at minimum a documented manual one in the P6 user guide",
           "status": "todo"
         }
+      ],
+      "done": [
+        "Automatic backup on server start (verified live: SQLite boot wrote a 2.9MB export of all 3 workspaces)",
+        "Automatic backup before a workspace delete, best-effort and logged, never blocking the delete",
+        "Retention bounded at 20 (OMNI_BACKUP_KEEP overrides; values < 1 ignored as a likely typo)",
+        "Retention only ever deletes files the backup writer produced - the hand-made .bak copies in data/backups/ are provably untouchable"
+      ],
+      "stillOpen": [
+        "A 'Back up now' button in the UI. The route POST /api/workspaces/backup works and is still UI-unreachable.",
+        "A restore path, or a documented manual one in the P6 guide."
       ]
     }
   ],
@@ -488,6 +511,10 @@
     {
       "at": "2026-09-20T22:55Z",
       "what": "Quota reset. Both agents had been killed mid-task by the session limit. Assessed partial work rather than trusting it (repo rule 6): everything compiled. P1 was essentially complete - verified lint/vitest/script-suite/NSISC-byte-exact/build, found and fixed one real gap (test_scoring_preset_routes.mjs passed standalone but was never registered in run-tests.mjs, the decorative-test pattern), spot-mutated the relayPoints path (disabling it produced 18-8-6-4, the old doubled table, instead of 11-4-2-0), and committed it as e20f8608. P3a is genuinely partial; its exact state is recorded above. The build-freshness guard added earlier today correctly caught P3a's stale bundle - the guard proved itself within hours."
+    },
+    {
+      "at": "2026-09-20T23:00Z",
+      "what": "After the quota reset: committed P1 (e20f8608), re-dispatched P3a to finish (it was partial), implemented and committed the P7 server-side backup safety (1e7d0220) with live verification, and dispatched P2 (preset authoring UI) to a worker. Mutation testing again found a real gap - this time in my own retention test, where a single-file case hid a negative-slice bug."
     }
   ],
   "RESUME_HERE": {
@@ -503,7 +530,8 @@
       "24b14e41 Share one team picker and flag Metrics as experimental (P4, verified independently)",
       "292f2682 Compare against official totals only when both sides exist (d2, 3 mutations)",
       "77d84846 Record the crawl-scope dispatch and the seed-data question",
-      "e20f8608 Score every NCAA meet format, not just championships (P1 - COMPLETE and verified: lint clean 8 workspaces, vitest 838 pass, script suite 82/0/1, NSISC byte-exact held, shell build exit 0, relayPoints mutation proven)"
+      "e20f8608 Score every NCAA meet format, not just championships (P1 - COMPLETE and verified: lint clean 8 workspaces, vitest 838 pass, script suite 82/0/1, NSISC byte-exact held, shell build exit 0, relayPoints mutation proven)",
+      "1e7d0220 Back up on start and before a delete, and bound the history (P7 server side - COMPLETE, verified against the real server, 3 mutations incl. one that exposed a gap in its own test)"
     ],
     "inFlightUncommitted": {
       "P3a_crawl_scopes_PARTIAL": {
@@ -523,6 +551,11 @@
         ],
         "currentTreeState": "vitest 838 passed / 1 failed; the single failure is the stale extension bundle, caused entirely by the above.",
         "howToFinish": "Re-dispatch an executor with the original P3a brief (recorded in the log entry below and in plans/2026-09-20/README.md phase P3), telling it the model/persistence/resume layers already exist and only the crawler-content.ts wiring, the UI radios, the incompleteness surfacing, the tests and the extension rebuild remain."
+      },
+      "P2_preset_authoring_UI": {
+        "status": "dispatched to a worker after P1 landed; may have written nothing yet",
+        "scope": "packages/matrix/src/components/ScoringSettingsFields.tsx + new preset-authoring components. Builds against P1's API (see phase P1 landedApi).",
+        "mustNotTouch": "anything SwimCloud-related (the other agent holds it), and apps/shell/server.ts (already complete)"
       }
     },
     "nextActionsInPriorityOrder": [
