@@ -10,6 +10,62 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- **Every published NCAA meet format can now be scored.** Built-in rule sets go
+  from 2 to 22: dual meets (six lanes or more, and five or fewer), the three
+  dual-diving tables, double-dual/triangular/quadrangular, relay meets,
+  invitationals, and championships at all six published field sizes, plus six
+  dual-plus-diving combinations. Point tables are generated from the archived
+  NCAA rulebook rather than transcribed. A dual meet was previously impossible
+  to represent, because relay points were modelled as a multiple of the
+  individual table and a dual meet scores individuals 9-4-3-2-1 with relays
+  11-4-2.
+- **Rule sets can be created and edited in the app.** Matrix → Score → *Manage
+  rule sets* duplicates a built-in, edits the places table, caps, entry limits,
+  relay and diving tables, and imports or exports a rule set as a file so a
+  format can be handed to another coach. Built-ins stay read-only.
+- **Invitational meets ask for the host's point table.** NCAA Rule 7-4 leaves
+  that table to the host, so none is shipped and none is invented.
+- **Crawls can fetch only what the job needs.** A SwimCloud meet crawl now
+  offers *Meet results only*, *Team rosters only*, or *Everything*, with the
+  page count and rough time shown before it starts. On a real four-team meet,
+  meet results alone was 42 pages against 234.
+- **Backups happen on their own.** One is written when the app starts and
+  again before a workspace is deleted, and a backup button sits in the
+  workspace sidebar. History is capped at 20 (`OMNI_BACKUP_KEEP` to change it),
+  and retention only ever removes files the app itself wrote.
+- **A user guide**, at `docs/USER_GUIDE.md`.
+
+### Changed
+
+- **Crawls no longer request swimmer personal-best pages.** That page builds
+  its table in the browser, so a fetched copy contains no times — measured
+  across every one of the 73 pages that returned successfully in a real crawl.
+  Those requests were 184 of 234 and produced nothing. Personal bests still
+  come from the extension's clipboard button, which reads the rendered page.
+- **Comparison against official results waits for both sides.** With official
+  totals loaded and nothing imported, Matrix used to report "0 of N teams
+  match" — a total-failure reading of an empty workspace. It now stays quiet
+  until there is something real to compare.
+- **The Metrics applet is marked Experimental** everywhere it appears. It is
+  not meet-ready and is not covered by this round of work.
+
+### Fixed
+
+- **Creating your first workspace no longer crashes Manager.** A hook was
+  called after an early return, so going from no workspace to one changed the
+  number of hooks React saw on a mounted component. Deleting the last
+  workspace did the same in reverse.
+- **Choosing the invitational rule set no longer throws.** It correctly
+  refuses to invent a point table, and nothing caught the resulting error.
+- **The relay multiplier no longer accepts edits the engine discards.** When an
+  explicit relay table is set, the multiplier is ignored; the control now says
+  so instead of taking the value.
+- **A narrowed capture no longer reads as an empty meet.** A capture explains
+  which passes its crawl planned, so "no rosters here" is distinguishable from
+  "this meet has no swimmers".
+
+### Added
+
 - **Roster import can now pull a swimmer's personal bests straight from
   SwimCloud.** Install the browser extension in `extensions/swimcloud-companion/`,
   click "Copy for Omniswim" on a swimmer's SwimCloud profile page, then use
