@@ -7,7 +7,6 @@ import {
   Gender,
   ScorerRosterOverride,
   SwimmerResult,
-  Recruit,
   ClassYear,
   ScoringSettings,
   TeamScore,
@@ -22,11 +21,11 @@ import {
   ScorerRosterLookup,
   usesScorerRoster,
 } from './scorerRoster';
-import { CONVERSION_FACTORS, SCORING_POINTS } from '../constants';
+import { CONVERSION_FACTORS } from '../constants';
 // Dependency-free by design — see the module header there. Importing
 // `cutlineUtils` here instead would create a cycle (it imports this file).
 import { normalizeEventForCutline } from './cutlineEventNames';
-import { DEFAULT_SCORING_SETTINGS, effectivePdfPlacePointsMode, mergeScoringSettings } from './scoringDefaults';
+import { effectivePdfPlacePointsMode, mergeScoringSettings } from './scoringDefaults';
 import {
   buildSyntheticLegSplitDetail,
   normalizeRelayLegSplitDetail,
@@ -305,9 +304,9 @@ export function calculateProjectedTime(timeSec: number, classYear: string, overa
   if (classYear === 'SO') yearsRemaining = 2;
   if (classYear === 'JR') yearsRemaining = 1;
   if (classYear === 'HS') yearsRemaining = 4;
-  
+
   if (yearsRemaining === 0) return timeSec;
-  
+
   // Apply a drop of overallDropPercent% over the 4 years, mathematically prorated.
   const dropFraction = (overallDropPercent / 100) * (yearsRemaining / 4);
   return timeSec * (1 + dropFraction);
@@ -845,7 +844,7 @@ export function formatEventChartAxisLabel(
   options?: { abbreviate?: boolean; maxLength?: number }
 ): string {
   const { abbreviate = true, maxLength } = options ?? {};
-  let label = abbreviate ? formatCompactEventLabel(event) : stripEventGenderMarker(event);
+  const label = abbreviate ? formatCompactEventLabel(event) : stripEventGenderMarker(event);
   if (maxLength != null && label.length > maxLength) {
     return label.substring(0, maxLength);
   }
@@ -1047,7 +1046,7 @@ function scoreTimedFinalIndividualsInEvent(
   merged: ScoringSettings,
   meetStates: Map<string, TeamMeetState>,
   useMeetWidePool: boolean,
-  rosterLookup?: ScorerRosterLookup
+  _rosterLookup?: ScorerRosterLookup
 ): SwimmerResult[] {
   // One event per call, so one table: `individuals[0].event` names it. Diving
   // scores from `divingPoints` when the preset carries one (Rule 7-1-4).

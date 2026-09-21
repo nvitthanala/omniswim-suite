@@ -67,8 +67,46 @@ function downloadExport(exp: EntryExport) {
   URL.revokeObjectURL(url);
 }
 
+/**
+ * Workspace gate.
+ *
+ * This wrapper exists so the "no workspace yet" branch is taken **before** any
+ * other hook runs. The empty state and the working view used to live in one
+ * component with the guard in the middle, which meant `useWorkspaceScoring`
+ * was called only when a workspace existed -- a conditional hook.
+ *
+ * That is not a style violation, it is a crash. The empty state's own "New
+ * workspace" button takes `activeWorkspace` from absent to present on the same
+ * mounted component, so the next render called more hooks than the previous
+ * one and React throws. Deleting the last workspace does the same in reverse.
+ * Found by `react-hooks/rules-of-hooks` the day ESLint was added.
+ */
 export default function ManagerApp() {
-  const { activeWorkspace, activeGender, createWorkspace, updateWorkspace } = useSuiteWorkspace();
+  const { activeWorkspace, createWorkspace } = useSuiteWorkspace();
+
+  if (!activeWorkspace) {
+    return (
+      <EmptyState
+        icon={<Users size={28} />}
+        eyebrow="Manager"
+        title="Create a workspace to build your roster"
+        description="Manager needs a workspace before it can import swimmers, tune scorer eligibility, or plan entries."
+        actionLabel="New workspace"
+        onAction={() => void createWorkspace()}
+      />
+    );
+  }
+
+  return <ManagerWorkspaceView activeWorkspace={activeWorkspace} />;
+}
+
+/**
+ * Everything below here is guaranteed a workspace, so every hook it declares
+ * runs on every render of this component. Do not add an early return above a
+ * hook in this file again.
+ */
+function ManagerWorkspaceView({ activeWorkspace }: { activeWorkspace: Workspace }) {
+  const { activeGender, updateWorkspace } = useSuiteWorkspace();
   const toast = useToast();
   const [removeSeniors, setRemoveSeniors] = useState(false);
   const [whatIfMode, setWhatIfMode] = useState(true);
@@ -80,7 +118,9 @@ export default function ManagerApp() {
     issues: EntryExportIssue[];
   } | null>(null);
   const [showCatalogView, setShowCatalogView] = useState(false);
-  const [catalogInfo, setCatalogInfo] = useState<{ team?: string; gender?: Gender } | null>(null);
+  // Only the setter is read today; the value is kept so the catalog fetch has
+  // somewhere to record what it resolved. Prefixed to say that deliberately.
+  const [_catalogInfo, setCatalogInfo] = useState<{ team?: string; gender?: Gender } | null>(null);
   const [catalogRoster, setCatalogRoster] = useState<CatalogTeamRoster | null>(null);
   const [catalogRankedTeam, setCatalogRankedTeam] = useState<{
     team: string;
@@ -131,19 +171,6 @@ export default function ManagerApp() {
     };
   }, [showCatalogView, activeGender]);
 
-  if (!activeWorkspace) {
-    return (
-      <EmptyState
-        icon={<Users size={28} />}
-        eyebrow="Manager"
-        title="Create a workspace to build your roster"
-        description="Manager needs a workspace before it can import swimmers, tune scorer eligibility, or plan entries."
-        actionLabel="New workspace"
-        onAction={() => void createWorkspace()}
-      />
-    );
-  }
-
   // Scoring bundle (with optional catalog rotation). The catalog is opt-in:
   // only when the user picks a catalog team from the new toolbar button does
   // the roster flow through `buildCategorizedScoringInputs`.
@@ -153,8 +180,6 @@ export default function ManagerApp() {
     baselineByTeam,
     scoringSettings,
     scoringSettled,
-    prelimsByTeam,
-    psychByTeam,
   } = useWorkspaceScoring({
     workspace: activeWorkspace,
     gender: useCatalog ? catalogRankedTeam!.gender : activeGender,

@@ -89,7 +89,7 @@
       } catch (error) {
         button.textContent = 'Copy failed — see console';
         button.classList.add('omniswim-swimcloud-companion-button--error');
-        // eslint-disable-next-line no-console
+
         console.error('Omniswim SwimCloud Companion: clipboard write failed.', error);
       }
       resetTimer = setTimeout(() => {

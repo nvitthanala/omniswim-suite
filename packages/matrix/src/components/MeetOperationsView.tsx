@@ -7,7 +7,7 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Users, Plus, TrendingUp, Search, X, GitCompareArrows, Download } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { Button, ChartFrame, ChartShell, EmptyState, SegmentedControl } from '@omniswim/ui';
-import { Gender, Recruit, ScoringSettings, TeamScore, Workspace } from '@omniswim/core/types';
+import { Gender, ScoringSettings, TeamScore, Workspace } from '@omniswim/core/types';
 import { assignTeamLineStyles, isRelayResult } from '@omniswim/core/lib/utils';
 import { aggregateSwimmerMeetPoints, scorerRosterKey } from '@omniswim/core/lib/scorerRoster';
 import { buildTeamScoreLookup, officialScoresForGender } from '@omniswim/core/lib/teamScoreMatching';
@@ -163,12 +163,12 @@ export default function MeetOperationsView({
   scoringBundle,
   baselineBundle,
   prelimsProjectedBundle,
-  psychProjectedBundle,
+  psychProjectedBundle: _psychProjectedBundle,
   baselineByTeam,
   prelimsByTeam,
   psychByTeam,
   prelimsDeltaTimeline,
-  psychDeltaTimeline,
+  psychDeltaTimeline: _psychDeltaTimeline,
   showPrelimsPerformance,
   showPsychPerformance,
   prelimsOuByEntry,
@@ -208,6 +208,11 @@ export default function MeetOperationsView({
 
   const teamsWithLineStyles = useMemo(
     () => assignTeamLineStyles(scoringBundle.sortedTeams, { chartTheme: chartTheme.isDark ? 'dark' : 'light' }),
+    // Deliberate: depends on teamStyleSignature, which is `name:points:color`
+    // per team (see prelimsProjection.ts), so it changes whenever anything read
+    // here changes. sortedTeams is a fresh array on every worker response, so
+    // depending on it would rebuild this for identical data every recompute.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [scoringBundle.teamStyleSignature, chartTheme.isDark]
   );
 
@@ -249,6 +254,9 @@ export default function MeetOperationsView({
       )
       .sort((a, b) => b.meetPts - a.meetPts || a.name.localeCompare(b.name))
       .slice(0, 10);
+  // Deliberate: scoringRefreshKey is a cache-buster. It is not read in the
+  // body; bumping it is how a caller forces a recompute.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scoringBundle.allScored, gender, searchQuery, scoringRefreshKey]);
 
   const prelimsOuByEntryLocal = useMemo(

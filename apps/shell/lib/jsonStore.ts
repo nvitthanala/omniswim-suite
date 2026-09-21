@@ -41,7 +41,7 @@ export class JsonStore<T> {
       const parsed = JSON.parse(raw) as T;
       this.cache = parsed;
       return parsed;
-    } catch (err) {
+    } catch (_err) {
       if (this.cache != null) return this.cache;
       const seed = this.fallback();
       this.cache = seed;

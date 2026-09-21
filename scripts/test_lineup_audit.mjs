@@ -298,7 +298,7 @@ function baseWorkspace(overrides = {}) {
   });
   // Clear Delta individual so empty_lineup can fire — remove his 100 Free from pool via soft remove? 
   // Simpler: mark a recruit-only scorer with no entries.
-  const ws2 = {
+  const _ws2 = {
     ...ws,
     recruits: [
       {

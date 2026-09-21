@@ -12,7 +12,10 @@
     "build": "npm run build -w @omniswim/shell",
     "build:extension": "node extensions/swimcloud-companion/build.mjs",
     "start": "npm run start -w @omniswim/shell",
-    "lint": "npm run lint --workspaces --if-present",
+    "lint": "npm run lint:types && npm run lint:extension && npm run lint:eslint",
+    "lint:types": "npm run lint --workspaces --if-present",
+    "lint:extension": "tsc --noEmit -p extensions/swimcloud-companion/tsconfig.json",
+    "lint:eslint": "eslint .",
     "test": "node scripts/run-tests.mjs",
     "test:e2e": "playwright test",
     "test:unit": "vitest run",
@@ -29,8 +32,13 @@
   "devDependencies": {
     "@playwright/test": "^1.61.1",
     "@tauri-apps/cli": "^2.6.2",
+    "eslint": "^9.39.5",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.26",
+    "globals": "^17.12.0",
     "happy-dom": "^20.14.5",
     "react-dom": "^19.0.1",
+    "typescript-eslint": "^8.70.0",
     "vitest": "^3.2.4"
   },
   "engines": {

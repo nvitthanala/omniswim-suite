@@ -23,12 +23,11 @@ import {
   isRelayResult,
   isScoringSwimTime,
   looksLikeInstitutionTeamName,
-  normalizeSwimmerName,
   parseRankInt,
   sortEventsByMeetOrder,
   stripEventGenderMarker,
 } from './utils';
-import { matchMeetTeamName, expandTeamAbbrev } from '../data/teamAliases';
+import { matchMeetTeamName } from '../data/teamAliases';
 
 export type PsychOverUnderEntry = PrelimsOverUnderEntry;
 

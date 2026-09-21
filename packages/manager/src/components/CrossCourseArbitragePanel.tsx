@@ -221,7 +221,7 @@ export default function CrossCourseArbitragePanel({
     }, DEBOUNCE_MS);
 
     return () => clearTimeout(timer);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+
   }, [
     workspace.menResults,
     workspace.womenResults,

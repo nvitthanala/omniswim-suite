@@ -225,6 +225,9 @@ export function useWorkspaceScoring({
           ...(workspace.psychWomenResults ?? []),
         ],
       }),
+    // Deliberate: scoringRefreshKey is a cache-buster. It is not read in the
+    // body; bumping it is how a caller forces a recompute.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [
       workspace.scoringSettings,
       workspace.conference,
@@ -242,6 +245,11 @@ export function useWorkspaceScoring({
       map.set(t.teamName, t.totalPoints);
     }
     return map;
+  // Deliberate: depends on teamStyleSignature, which is `name:points:color`
+  // per team (see prelimsProjection.ts), so it changes whenever anything read
+  // here changes. sortedTeams is a fresh array on every worker response, so
+  // depending on it would rebuild this for identical data every recompute.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshot.baseline.teamStyleSignature]);
 
   const prelimsByTeam = useMemo(() => {
@@ -250,6 +258,11 @@ export function useWorkspaceScoring({
       map.set(t.teamName, t.totalPoints);
     }
     return map;
+  // Deliberate: depends on teamStyleSignature, which is `name:points:color`
+  // per team (see prelimsProjection.ts), so it changes whenever anything read
+  // here changes. sortedTeams is a fresh array on every worker response, so
+  // depending on it would rebuild this for identical data every recompute.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshot.prelimsProjected.teamStyleSignature]);
 
   const psychByTeam = useMemo(() => {
@@ -258,6 +271,11 @@ export function useWorkspaceScoring({
       map.set(t.teamName, t.totalPoints);
     }
     return map;
+  // Deliberate: depends on teamStyleSignature, which is `name:points:color`
+  // per team (see prelimsProjection.ts), so it changes whenever anything read
+  // here changes. sortedTeams is a fresh array on every worker response, so
+  // depending on it would rebuild this for identical data every recompute.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [snapshot.psychProjected.teamStyleSignature]);
 
   const prelimsDeltaTimeline = useMemo(

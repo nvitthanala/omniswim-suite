@@ -8,7 +8,7 @@
  * Mirrors the structure of `workspaceRepo.ts` so adopted users get feature
  * parity across both backends without any code change at the call site.
  */
-import { promises as fsp, existsSync } from 'node:fs';
+import { promises as existsSync } from 'node:fs';
 import path from 'node:path';
 import { JsonStore } from './jsonStore.ts';
 import { RosterCatalogService } from '../../../packages/db/src/RosterCatalogService.ts';

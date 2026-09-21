@@ -176,7 +176,7 @@ export default function WorkspaceSidebar() {
       // Name the file. "Backed up" with nothing to point at is not something a
       // coach can verify, and this is the one action whose whole value is that
       // it definitely happened.
-      const name = typeof body.file === 'string' ? body.file.split(/[\/]/).pop() : undefined;
+      const name = typeof body.file === 'string' ? body.file.split(/[\\/]/).pop() : undefined;
       toast.push('success', name ? `Backup saved: ${name}` : 'Backup saved');
     } catch (err) {
       toast.push('error', `Backup failed: ${String(err instanceof Error ? err.message : err)}`);

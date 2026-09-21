@@ -31,7 +31,7 @@ function chromiumIsInstalled(): boolean {
   try {
     // playwright-core can report where it *expects* the binary without
     // launching anything — a synchronous, side-effect-free check.
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
+
     const { chromium } = require('playwright-core') as typeof import('playwright-core');
     return existsSync(chromium.executablePath());
   } catch {

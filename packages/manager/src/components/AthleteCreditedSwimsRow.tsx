@@ -16,7 +16,6 @@ import { compactEventTitleAttr, formatCompactEventLabel } from '@omniswim/core/l
 import { ALL_PLAN_EVENTS } from '@omniswim/core/lib/eventCatalog';
 import { buildCutlineTagForTeam } from '@omniswim/core/lib/cutlineTags';
 import { Badge, CutlineTag, CutlineNearMissChip } from '@omniswim/ui';
-import type { EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
 
 type AnchorExpected = { prelims?: number; psych?: number };
 

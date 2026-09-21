@@ -68,7 +68,7 @@ export interface CatalogTeamRoster {
   athletes: (CatalogAthlete & { times: CatalogEventTime[] })[];
 }
 
-function parseJson<T>(value: unknown, fallback: T): T {
+function _parseJson<T>(value: unknown, fallback: T): T {
   if (typeof value !== 'string' || value.length === 0) return fallback;
   try {
     return JSON.parse(value) as T;

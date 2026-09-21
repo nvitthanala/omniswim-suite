@@ -7,8 +7,6 @@ import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { 
   ChevronDown, 
   ChevronUp, 
-  User, 
-  Award,
   BarChart3,
   List,
   Trash2

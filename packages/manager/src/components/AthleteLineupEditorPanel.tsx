@@ -31,20 +31,13 @@ import {
   SwimmerResult,
   Workspace,
 } from '@omniswim/core/types';
-import { ALL_PLAN_EVENTS } from '@omniswim/core/lib/eventCatalog';
-import { createPlannedEntry } from '@omniswim/core/lib/whatIfProjection';
 import {
   countSwimmerEntries,
   formatEntryLimitLabel,
-  swimmerExceedsEntryLimits,
 } from '@omniswim/core/lib/swimmerEntryLimits';
-import { parseSwimCloudPasteDetailed } from '@omniswim/core/lib/athleteHistory';
-import { divisionForTeamOrNull } from '@omniswim/core/data/teamDivisions';
-import { buildCutlineTagForTeam } from '@omniswim/core/lib/cutlineTags';
 import {
   canonicalSwimmerName,
   formatCompactEventLabel,
-  isRelayResult,
   normalizeSwimmerName,
 } from '@omniswim/core/lib/utils';
 import {
@@ -65,7 +58,7 @@ import {
   type WorkspaceEditorPatch,
 } from '@omniswim/core/lib/swimEditor';
 import { addAliasLink, buildAliasResolver, removeAliasLink } from '@omniswim/core/lib/athleteAliases';
-import { CutlineTag, CutlineNearMissChip, useToast } from '@omniswim/ui';
+import { useToast } from '@omniswim/ui';
 import AthleteCreditedSwimsPanel, { type EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
 import AthleteRoleTag from './AthleteRoleTag';
 

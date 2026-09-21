@@ -79,8 +79,14 @@ export default function IndRelayManagementView({
   const [manualTimes, setManualTimes] = useState<Record<string, string>>({});
   const [dragOverLeg, setDragOverLeg] = useState<string | null>(null);
 
-  const originalResults =
-    gender === Gender.MEN ? workspace.menResults ?? [] : workspace.womenResults ?? [];
+  // Memoised because `?? []` builds a NEW empty array on every render when the
+  // gender's results are absent, which made every downstream useMemo that
+  // depends on `originalResults` re-run every time -- the memoisation was
+  // silently inert. Found by react-hooks/exhaustive-deps.
+  const originalResults = useMemo(
+    () => (gender === Gender.MEN ? workspace.menResults ?? [] : workspace.womenResults ?? []),
+    [gender, workspace.menResults, workspace.womenResults]
+  );
   const overrides = workspace.relayLegOverrides ?? [];
 
   const activeSwimmers = useMemo(() => {
@@ -226,7 +232,7 @@ export default function IndRelayManagementView({
     if (!whatIfMode) return;
     const exclude = new Set<string>();
     const origNames = group.template.relayNames ?? group.legs.map(l => ({ name: l.name, year: '' }));
-    origNames.forEach((ln, i) => {
+    origNames.forEach((ln, _i) => {
       if (ln.name) exclude.add(normalizeSwimmerName(ln.name));
     });
     group.legs.forEach((ln, i) => {

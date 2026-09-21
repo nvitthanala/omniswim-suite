@@ -107,7 +107,7 @@ function TeamListItem({
 /** Team list body: loading / empty / populated states. */
 function TeamList({
   teams,
-  selectedTeamId,
+  selectedTeamId: _selectedTeamId,
   onSelectTeam,
   onDeleteTeam,
 }: {

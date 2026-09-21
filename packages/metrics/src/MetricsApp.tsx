@@ -231,6 +231,13 @@ export default function MetricsApp() {
 
   const comparisonTime = useMemo(
     () => computeComparisonTime(activeWorkspace, swimmerName, raceConfig),
+    // Depends on the two raceConfig fields computeComparisonTime actually
+    // reads rather than the whole object. Suppressed rather than widened
+    // because Metrics is the video-analysis applet, explicitly out of scope
+    // for this production-readiness round and marked Experimental in the UI.
+    // If computeComparisonTime ever reads another raceConfig field, this goes
+    // stale -- recorded as a finding rather than fixed blind.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
     [activeWorkspace, swimmerName, raceConfig.raceDistance, raceConfig.strokePerLength],
   );
 

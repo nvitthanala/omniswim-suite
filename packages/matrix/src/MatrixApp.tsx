@@ -1,6 +1,5 @@
 import { AnimatePresence, motion } from 'motion/react';
 import { BarChart3 } from 'lucide-react';
-import { Gender, type Workspace } from '@omniswim/core/types';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
 import { EmptyState } from '@omniswim/ui';
 import OpsModule from './components/OpsModule';

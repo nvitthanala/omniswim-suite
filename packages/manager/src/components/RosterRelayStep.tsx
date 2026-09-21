@@ -5,7 +5,7 @@
  */
 
 import React from 'react';
-import { FileWarning, Users } from 'lucide-react';
+import { FileWarning } from 'lucide-react';
 import { Gender, Workspace } from '@omniswim/core/types';
 import type { ScoringBundle } from '@omniswim/core/lib/useWorkspaceScoring';
 import { EmptyState, TeamSelect } from '@omniswim/ui';

@@ -114,6 +114,9 @@ export function sendWithTimeout<T>(
 ): Promise<BackgroundRoundTrip<T>> {
   return new Promise<BackgroundRoundTrip<T>>((resolve) => {
     let settled = false;
+    // Declared here and assigned below, so it cannot be `const`: the timer is
+    // created after `finish` closes over this binding.
+    // eslint-disable-next-line prefer-const
     let handle: unknown;
     const finish = (trip: BackgroundRoundTrip<T>): void => {
       if (settled) return;

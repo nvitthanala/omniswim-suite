@@ -4,7 +4,7 @@
  */
 
 import { Gender, OfficialTeamScores } from '../types';
-import { matchMeetTeamName, normalizeTeamKey } from '../data/teamAliases';
+import { normalizeTeamKey } from '../data/teamAliases';
 
 export {
   TEAM_ABBREVIATIONS,

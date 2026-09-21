@@ -280,7 +280,7 @@ describe('parseMeetResultsHtml — swimcloud-synthetic-meet-results.html', () =>
     expect(event.event.stroke).toBe('Breaststroke');
     expect(event.event.distance).toBe(200);
 
-    const codes = warningCodes(result.warnings);
+    const _codes = warningCodes(result.warnings);
     expect(
       result.warnings.some((w) => w.code === 'ambiguous-metric-course' && w.eventId === '193735:event:12'),
     ).toBe(true);

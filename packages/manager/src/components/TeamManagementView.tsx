@@ -76,10 +76,20 @@ export default function TeamManagementView({
       map.set(t.teamName, t.totalPoints);
     }
     return map;
+  // Deliberate: depends on teamStyleSignature, which is `name:points:color`
+  // per team (see prelimsProjection.ts), so it changes whenever anything read
+  // here changes. sortedTeams is a fresh array on every worker response, so
+  // depending on it would rebuild this for identical data every recompute.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scoringBundle.teamStyleSignature]);
 
   const teams = useMemo(() => {
     return [...scoringBundle.sortedTeams.map(t => t.teamName)].sort((a, b) => a.localeCompare(b));
+  // Deliberate: depends on teamStyleSignature, which is `name:points:color`
+  // per team (see prelimsProjection.ts), so it changes whenever anything read
+  // here changes. sortedTeams is a fresh array on every worker response, so
+  // depending on it would rebuild this for identical data every recompute.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [scoringBundle.teamStyleSignature]);
   const [selectedTeam, setSelectedTeam] = useState<string>('');
   const [recruitPrefill, setRecruitPrefill] = useState<RecruitAthletePrefill | null>(null);

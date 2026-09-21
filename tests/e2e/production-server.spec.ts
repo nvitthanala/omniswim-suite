@@ -79,7 +79,7 @@ test.describe('production server (dist/server.js)', () => {
 
     serverProcess.on('exit', (code, signal) => {
       if (code !== null && code !== 0) {
-        // eslint-disable-next-line no-console
+
         console.error(`production server exited early with code ${code} (signal ${signal})`);
       }
     });

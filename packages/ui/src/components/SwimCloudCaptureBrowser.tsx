@@ -890,7 +890,7 @@ export function SwimCloudCaptureBrowser(props: SwimCloudCaptureBrowserProps) {
       setCheckedGroups(nextChecked);
       if (data.rosters.length === 1) setSelectedRosterKey(rosterKeyFor(data.rosters[0], 0));
       if (data.warnings.length > 0) {
-        // eslint-disable-next-line no-console
+
         console.warn('SwimCloud capture parse: warnings', data.warnings);
         toast.push('info', `Parsed with ${data.warnings.length} warning(s) — see console.`);
       }

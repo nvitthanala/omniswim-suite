@@ -92,12 +92,12 @@ test.describe('Manager step main-thread budget', () => {
       }
     }
 
-    // eslint-disable-next-line no-console
+
     console.log('\nMain-thread budget by workspace/step:');
-    // eslint-disable-next-line no-console
+
     console.log('workspace'.padEnd(24) + 'step'.padEnd(10) + 'totalBlocked'.padEnd(14) + 'worstTask'.padEnd(12) + 'tasks');
     for (const r of results) {
-      // eslint-disable-next-line no-console
+
       console.log(
         r.workspaceId.slice(0, 22).padEnd(24) +
           r.step.padEnd(10) +

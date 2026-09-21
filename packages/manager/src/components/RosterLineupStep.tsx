@@ -14,7 +14,7 @@ import {
   suggestQuickFillForVacantLeg,
   type LineupChecklistItem,
 } from '@omniswim/core/lib/rosterLineupAudit';
-import { FileWarning, Users } from 'lucide-react';
+import { FileWarning } from 'lucide-react';
 import { EmptyState, SegmentedControl, useToast } from '@omniswim/ui';
 import TeamRosterPanel from './TeamRosterPanel';
 import DuplicateAthletesPanel from './DuplicateAthletesPanel';

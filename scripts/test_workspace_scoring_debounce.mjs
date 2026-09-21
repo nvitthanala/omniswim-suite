@@ -168,7 +168,7 @@ async function flushEffects(rounds = 2) {
   }
 }
 
-function wait(ms) {
+function _wait(ms) {
   return new Promise(resolve => realSetTimeout(resolve, ms));
 }
 

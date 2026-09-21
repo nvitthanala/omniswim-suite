@@ -30,7 +30,6 @@ import {
 } from './lib/swimcloudCaptureRoutes.ts';
 import {
   createAuthMiddleware,
-  getSessionToken,
   setSessionCookie,
   clearSessionCookie,
   type AuthedRequest,
@@ -622,7 +621,7 @@ async function startServer() {
       const session = await auth.login(String(email ?? ''), String(password ?? ''));
       setSessionCookie(res, session.token, session.expiresAt);
       res.json({ user: session.user });
-    } catch (err) {
+    } catch (_err) {
       res.status(401).json({ error: 'Invalid credentials' });
     }
   });
@@ -1375,7 +1374,7 @@ async function startServer() {
         return res.json(result);
       }
       if (typeof imageBase64 === 'string' && imageBase64.trim() && AI_ENABLED && process.env.GEMINI_API_KEY) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
         let GoogleGenAI: any;
         try {
           // @ts-expect-error — @google/genai is an optional runtime dep; omitted from package.json intentionally

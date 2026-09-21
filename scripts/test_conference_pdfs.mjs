@@ -110,7 +110,7 @@ for (const pdf of pdfs) {
 const secPdf = path.join(root, '2026_sec_complete_results.pdf');
 if (fs.existsSync(secPdf)) {
   console.log('\n=== SEC + NSISC-shaped settings (usePdfPlacePoints: true) ===');
-  const nsiscSettings = {
+  const _nsiscSettings = {
     scoringPoints: [20, 17, 16, 15, 14, 13, 12, 11, 9, 7, 6, 5, 4, 3, 2, 1],
     relayMultiplier: 2,
     halfRateRelaySwimmer: true,
@@ -124,7 +124,7 @@ if (fs.existsSync(secPdf)) {
   const parsed = JSON.parse(
     execFileSync(py, [parser, secPdf], { encoding: 'utf8', cwd: root, env, maxBuffer: 64 * 1024 * 1024 }).trim()
   );
-  const scored = JSON.parse(
+  const _scored = JSON.parse(
     execFileSync(py, [calc], {
       input: JSON.stringify(parsed),
       encoding: 'utf8',

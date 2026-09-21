@@ -24,7 +24,7 @@ interface MetricsHeaderProps {
  */
 export function MetricsHeader({
   sessionCount,
-  showSessions,
+  showSessions: _showSessions,
   onToggleSessions,
   canSave,
   onSaveSession,

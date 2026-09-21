@@ -5,7 +5,6 @@
 import {
   DeletedSwimmerRef,
   Gender,
-  HistoricalSwim,
   PlannedSwimEntry,
   Recruit,
   RelayLegOverride,

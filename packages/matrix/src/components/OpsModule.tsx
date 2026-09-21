@@ -8,7 +8,6 @@ import { AnimatePresence, motion } from 'motion/react';
 import { BarChart3, ClipboardPaste, Database, ExternalLink, Trophy } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Gender, OfficialTeamScores, SwimmerResult, ScoringSettings, Workspace } from '@omniswim/core/types';
-import { mergeScoringSettings } from '@omniswim/core/lib/utils';
 import {
   buildScoringPatchForParsedPdf,
   presetIdForConference,
@@ -191,10 +190,10 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
   const toast = useToast();
   const { workspaces } = useSuiteWorkspace();
   const [searchQuery, setSearchQuery] = useState('');
-  const [removeSeniors, setRemoveSeniors] = useState(false);
+  const [removeSeniors, _setRemoveSeniors] = useState(false);
   const [isParsingPdf, setIsParsingPdf] = useState(false);
   const [isParsingPsychPdf, setIsParsingPsychPdf] = useState(false);
-  const [isImportingSwimCloud, setIsImportingSwimCloud] = useState(false);
+  const [_isImportingSwimCloud, setIsImportingSwimCloud] = useState(false);
   const [showSwimCloudCaptureBrowser, setShowSwimCloudCaptureBrowser] = useState(false);
   const [importDiagnostics, setImportDiagnostics] = useState<{
     skipped: readonly SwimCloudMeetImportSkip[];
@@ -206,7 +205,7 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
   const [suggestedPresetId, setSuggestedPresetId] = useState<string | null>(() =>
     presetIdForConference(workspace.conference)
   );
-  const [whatIfMode, setWhatIfMode] = useState(false);
+  const [whatIfMode, _setWhatIfMode] = useState(false);
   const [step, setStep] = useState<MatrixStepId>('load');
   const [scoringRefreshKey, setScoringRefreshKey] = useState(0);
   const parseAbortRef = useRef<AbortController | null>(null);

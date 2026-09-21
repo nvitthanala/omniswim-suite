@@ -66,7 +66,7 @@ import { Gender } from '../packages/core/src/types.ts';
 
 const MEN = Gender.MEN;
 const TEAM = 'Henderson State University';
-const RIVAL = 'Ouachita Baptist University';
+const _RIVAL = 'Ouachita Baptist University';
 const EVENT = 'Event 8 Men 50 Yard Freestyle';
 
 let n = 0;

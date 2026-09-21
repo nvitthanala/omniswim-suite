@@ -101,6 +101,9 @@ export default function AthleteHistoryImportPanel({
     if (incomingNames.length === 0) return [];
     const resolver = buildAliasResolver(workspace.athleteAliases ?? []);
     return suggestAliasCandidates(existingNames, incomingNames, { resolver });
+  // Deliberate: depends on the individual workspace fields this reads, not the
+  // whole object, so an unrelated workspace edit does not re-run the scan.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
     workspace.menResults,
     workspace.womenResults,
@@ -247,7 +250,7 @@ export default function AthleteHistoryImportPanel({
     });
   };
 
-  const parseText = () => parseLocal();
+  const _parseText = () => parseLocal();
 
   const parseImage = async (file: File) => {
     setBusy(true);

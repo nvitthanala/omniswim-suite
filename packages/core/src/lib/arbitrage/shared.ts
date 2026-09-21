@@ -915,7 +915,7 @@ export function buildFastSwapContext(
   const newTotalFor = (
     drop: DroppableEntry,
     newEntry: PlannedSwimEntry,
-    addEvent: string
+    _addEvent: string
   ): number | null => {
     const dropRow = rById.get(drop.id);
     if (!dropRow) return null; // e.g. a plan that replaced a result row — fall back.

@@ -127,6 +127,11 @@ export function stripHtmlTags(html: string): string {
 
 /** Collapse all whitespace runs (including `&nbsp;`) to single spaces and trim. */
 export function collapseWhitespace(text: string): string {
+  // The second character in the class is a literal U+00A0. `\s` already matches
+  // it in JavaScript, so it is redundant -- but it is deliberate and documented
+  // above, and this parser's whole job is HTML whitespace. Kept rather than
+  // silently narrowed to satisfy a linter.
+  // eslint-disable-next-line no-irregular-whitespace
   return text.replace(/[\s ]+/g, ' ').trim();
 }
 
