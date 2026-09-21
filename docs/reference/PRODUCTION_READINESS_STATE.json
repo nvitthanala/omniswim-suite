@@ -518,13 +518,16 @@
       "id": "P5",
       "name": "Adversarial bug hunt",
       "owner": "executor + finisher",
-      "status": "partial - ESLint pass done; adversarial bug-hunt not yet run",
+      "status": "done",
       "items": [],
       "done": [
         "ESLint added (correctness-only config), wired into npm run lint, CI picks it up automatically",
         "Fixed a conditional-hook crash: ManagerApp called useWorkspaceScoring after an early return, so creating the first workspace or deleting the last changed the hook count on a mounted component",
         "Fixed an inert memo: IndRelayManagementView built originalResults with ?? [], a new array every render, so every dependent useMemo re-ran every time",
-        "Closed a real gap: the extension's TypeScript was never typechecked (it is not an npm workspace). npm run lint now does it."
+        "Closed a real gap: the extension's TypeScript was never typechecked (it is not an npm workspace). npm run lint now does it.",
+        "Adversarial hunt run by the bug-hunter agent: found f16 (a 2-month-old crash in a file no tsconfig covered), f17 (time trials double-counting against the entry cap), f18 (the scoring net leans on scripts/), f19 (a latent alias mismatch).",
+        "Fixed: the rosterCatalogRepo crash, the tsconfig gap, and two unregistered test scripts. Script suite 82 to 84.",
+        "Deleted NCAA_CUTS: 42 hand-typed unsourced competition times with no consumers (f7)."
       ]
     },
     {
@@ -567,11 +570,10 @@
         "Automatic backup before a workspace delete, best-effort and logged, never blocking the delete",
         "Retention bounded at 20 (OMNI_BACKUP_KEEP overrides; values < 1 ignored as a likely typo)",
         "Retention only ever deletes files the backup writer produced - the hand-made .bak copies in data/backups/ are provably untouchable",
-        "'Back up now' in the workspace sidebar; the toast names the written file. Verified live: POST returned meets-manual-2026-09-20T23-09-19-059Z.json"
+        "'Back up now' in the workspace sidebar; the toast names the written file. Verified live: POST returned meets-manual-2026-09-20T23-09-19-059Z.json",
+        "Real restore path: GET /api/workspaces/backups lists, POST /api/workspaces/restore restores, on all three storage backends. Takes a pre-restore backup first; validates file contents before replacing anything; resolves the caller-supplied filename through three independent gates (pattern, basename, containment). 11 tests, 3 mutations, one of which exposed and closed a coverage hole."
       ],
-      "stillOpen": [
-        "A restore path, or a documented manual one in the P6 guide."
-      ]
+      "stillOpen": []
     }
   ],
   "openDecisions": [
@@ -678,6 +680,10 @@
     {
       "at": "2026-09-21 (overnight)",
       "what": "P5 bug-hunter returned. Verified both headline findings independently rather than trusting the report: the rosterCatalogRepo crash is real (confirmed from git history) and the subsystem has 13 client calls against 0 server handlers; the time-trial double-count reproduces exactly, 13 flagged and 8 false. Committed the crash fix, the tsconfig widening and the script-registration guard as 4bf18712. f17 and f16 both need user rulings and were correctly not guessed."
+    },
+    {
+      "at": "2026-09-21 (overnight, final)",
+      "what": "Completed every phase that does not need a user ruling. Added the real backup restore path with a three-gate filename boundary (3 mutations; one exposed a coverage hole where the pattern's wildcard let a path be smuggled through the label). Deleted NCAA_CUTS. Committed and verified the bug-hunter's fixes. Final: 963 vitest, 84 script tests, lint clean on all three gates, everything merged to main and pushed. Remaining work is three user decisions and one unconfirmed latent bug."
     }
   ],
   "RESUME_HERE": {
@@ -743,5 +749,22 @@
     "backups": {
       "POST /api/workspaces/backup": "200, returned the written filename; a 2.9MB export of all 3 workspaces appeared in data/backups/ and the 4 hand-made .bak files were untouched"
     }
+  },
+  "statusSummary": {
+    "at": "2026-09-21",
+    "phasesComplete": "P0, P1, P2, P3, P4 (partial by design), P5, P6, P7",
+    "suite": "963 vitest passed / 0 failed; 84 script tests passed / 0 failed / 1 skipped (Postgres, needs PG_TEST_URL); lint clean across all three gates (workspace types, extension types, ESLint)",
+    "branch": "nvitthanala/production-readiness, merged to main and pushed after every step",
+    "whatIsLeft": "Three user decisions and one unconfirmed latent bug. No further code work is possible without a ruling.",
+    "blockedOnUser": [
+      "f17 - do time trials count against a swimmer's entry limit? 8 of 13 over-cap warnings on real data are false until this is answered. Three options recorded on the finding.",
+      "f16 - the Roster Catalog subsystem: wire up its 13 missing server routes, or delete roughly 3,289 lines plus 8 unused schemas.",
+      "f11 - the Button primitive cannot express the app's prevailing button style, so 122 raw buttons remain. Either relax Button or restyle the app; both are visible changes."
+    ],
+    "openNotBlocking": [
+      "f19 - computeVacateRelayLegNames builds its lookup before the alias collapse. Not reproducible against today's data; a new alias would expose it. Reported, not fixed, per this repo's rule 4.",
+      "f18 - the unreachable aFinalBracket fallback, flagged because a future preset omitting the field would take an untested path.",
+      "od4 - meets.json is both the live store and the fresh-install seed. A release blocker, not a deadline one."
+    ]
   }
 }
