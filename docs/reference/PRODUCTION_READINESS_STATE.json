@@ -265,6 +265,68 @@
       ],
       "consequence": "Fixed by splitting the guard into a wrapper component so every hook below it runs unconditionally. This is the finding that justified adding ESLint on its own.",
       "status": "closed 2026-09-20"
+    },
+    {
+      "id": "f16",
+      "severity": "P1-partly-fixed",
+      "title": "The Roster Catalog subsystem is unreachable, and its JSON backend crashed on its first line",
+      "evidence": [
+        "apps/shell/lib/rosterCatalogRepo.ts line 11 imported node:fs promises under the name existsSync and then called it, so JsonRosterCatalog.init() threw unconditionally. Verified by reading the pre-fix file out of git history.",
+        "It survived two months because the file was in NO tsconfig program: apps/shell/tsconfig.json included src, server.ts and vite.config.ts, so lib/ was typechecked only transitively through server.ts's imports, and server.ts does not import this file. Reported as the only .ts/.tsx file in the monorepo outside all seven programs.",
+        "The two scripts that exercise it (test_roster_catalog.mjs, test_eligibility_toggle.mjs) were registered in no runner, so neither had ever run.",
+        "VERIFIED INDEPENDENTLY: packages/core/src/api/rosterCatalog.ts makes 13 calls to /api/roster/*; grep of apps/shell/server.ts finds ZERO handlers. The feature's own commit 63321628 touches 21 files and never touches server.ts.",
+        "packages/manager/src/ManagerApp.tsx still renders RosterCatalogPanel, but setShowCatalogView(true) is called nowhere: the button that opened it was removed later.",
+        "docs/reference/ROSTER_CATALOG_NOTES.md still documents routes that never existed."
+      ],
+      "fixed": "Crash and its dead branch removed. apps/shell/tsconfig.json now covers lib. Both scripts registered. tests/scriptSuiteRegistration.test.ts fails when a test script is neither registered nor excused with a written reason. Commit 4bf18712. Script suite 82 to 84 passing.",
+      "stillOpenNeedsDecision": "Whether to wire up the roughly 3,289-line subsystem (write the 13 missing routes) or delete it. Not taken: a product decision, not a defect. Collateral if deleted: 7 unused zod schemas in packages/core/src/schemas/workspace.ts, plus importCsvSchema, since POST /api/import-csv does not exist either.",
+      "status": "crash fixed; subsystem fate is an open user decision"
+    },
+    {
+      "id": "f17",
+      "severity": "P1-BLOCKED-ON-USER",
+      "title": "Time trials double-count against the entry cap: 8 of 13 over-limit warnings on real data are false",
+      "evidence": [
+        "REPRODUCED INDEPENDENTLY against data/meets.json, workspace Blank Workspace 1 (NSISC, maxTotalEntriesPerSwimmer 7).",
+        "Oskar Cebula has 8 rows including BOTH 'Event 26 Men 100 Yard Breaststroke' AND 'Event 100 Men 100 Yard Breaststroke Time Trial'. The same 100 Breaststroke counts twice: 8/7 flagged, 7/7 once the time trial is excluded.",
+        "Across the real meet: 13 athletes flagged over the cap, 8 of them false once time trials are excluded. Men 1 (Cebula). Women 7 (Cleasant, Shipp, Mikayla Kloth, Hite, Murphy, Tankersley, Jordon Kloth). The other 5 are genuinely over: real data, not a counting bug.",
+        "Roughly 62% of the compliance warnings a coach sees on this meet are wrong.",
+        "The rows already carry isTimeTrial true. The data distinguishes them; the counting does not look.",
+        "Root cause: entryCapKey (packages/core/src/lib/swimmerEntryLimits.ts:94) keys on the raw HyTek event string, which is docs/INVARIANTS.md item 3. It collapses prelims/finals only because HyTek repeats the identical label; a time trial gets a new event number and a Time Trial suffix, so it never collapses.",
+        "The same count gates canAcceptAnotherEntry, so an affected swimmer is also blocked from adding a legitimate entry.",
+        "Everywhere else treats a time trial as outside the program: canonicalProgramEvent returns null for them, buildMeetEventLabelIndex skips them, computeVisibleEvents hides them, and they score 0. Entry counting is the one place that does not."
+      ],
+      "whyNotFixed": "Whether a time trial counts against a 7-event entry limit is a competition-rules question. CLAUDE.md forbids inventing one, and a test written now would pin whichever answer was guessed.",
+      "optionsForUser": [
+        "(a) Skip isTimeTrial rows in countSwimmerEntries. Matches how the rest of the codebase models time trials. Simplest.",
+        "(b) Key entryCapKey through canonicalProgramEvent so one program event is one entry however it was labelled. Narrower: a time trial of an event the swimmer did not otherwise enter would still cost an entry.",
+        "(c) Leave as is, if NSISC really does count a time trial against the 7."
+      ],
+      "status": "OPEN - needs the user's ruling before any code changes"
+    },
+    {
+      "id": "f18",
+      "severity": "P2",
+      "title": "The scoring safety net leans on scripts/, which vitest does not see",
+      "evidence": [
+        "A 12-mutation sweep: 11 caught. Four scoring mutations were each caught by exactly one check, and in three cases that check was a scripts/ test invisible to npx vitest run: entryCapKey collapse, alias-resolved override keys, deriveAutoScorerKeys genderFilter, and buildMeetEventLabelIndex skipping time trials.",
+        "All four passed under a full vitest run.",
+        "aFinalBracket's Math.floor(len/2) fallback is unreachable: all 21 built-in presets carrying settings define aFinalBracketSize, and mergeScoringSettings always spreads DEFAULT_SCORING_SETTINGS, which sets 8. Mutating the fallback survived everything; mutating the reachable half was caught loudly by test_nsisc_team_totals."
+      ],
+      "consequence": "An unregistered script in scripts/ is a hole in the primary guard of the scoring path, not a tidiness issue. That is why f16's registration guard matters structurally. The unreachable aFinalBracket fallback is flagged because a future preset omitting the field would silently take an untested path.",
+      "status": "registration guard shipped; the vitest/scripts coverage split is recorded, not restructured"
+    },
+    {
+      "id": "f19",
+      "severity": "P3-latent",
+      "title": "computeVacateRelayLegNames builds its lookup before the alias collapse",
+      "evidence": [
+        "packages/core/src/lib/rosterLineupAudit.ts:174 uses the identity resolver; whatIfProjection.ts:400 calls it before aliases are collapsed.",
+        "An override recorded under the canonical spelling cannot match a relay leg carrying an alias spelling, so a swimmer toggled off as a scorer would keep their relay leg in the what-if projection.",
+        "NOT REPRODUCED against today's data: Blank Workspace 1 happens to carry overrides under both spellings for all three aliased athletes, and every relay leg uses the canonical one."
+      ],
+      "consequence": "Latent identity mismatch of the exact class INVARIANTS item 6 describes. A new alias would expose it.",
+      "status": "open, unconfirmed - reported not fixed"
     }
   ],
   "phases": [
@@ -612,6 +674,10 @@
     {
       "at": "2026-09-21 (overnight)",
       "what": "End-to-end verification of the headline features over real HTTP against a production build, not the dev server. The dual-meet preset serves exactly the archived Rule 7-1-1 values; preset CRUD works; built-in immutability returns 409 on both POST-shadow and DELETE; and the validator rejects an ascending place table with a competition-rule message. Recorded under endToEndVerification."
+    },
+    {
+      "at": "2026-09-21 (overnight)",
+      "what": "P5 bug-hunter returned. Verified both headline findings independently rather than trusting the report: the rosterCatalogRepo crash is real (confirmed from git history) and the subsystem has 13 client calls against 0 server handlers; the time-trial double-count reproduces exactly, 13 flagged and 8 false. Committed the crash fix, the tsconfig widening and the script-registration guard as 4bf18712. f17 and f16 both need user rulings and were correctly not guessed."
     }
   ],
   "RESUME_HERE": {
@@ -634,16 +700,18 @@
       "7491d2e2 Let a crawl fetch only the pages the job needs (P3a - COMPLETE: 944 tests pass / 0 failed, lint clean 8/8, 14 mutations, extension rebuilt and freshness guard green)",
       "316e9bb5 Add ESLint and fix what it found (P5 partial: found and fixed a conditional-hook crash in ManagerApp and an inert memo in IndRelayManagementView; extension TypeScript is now typechecked for the first time)",
       "df19e310 Write the user guide and stamp the stale plan docs (P6)",
-      "4f75bf50 Stop fetching a page whose table only exists in the browser (f14 RESOLVED - removes 78.6% of crawl traffic that produced zero data)"
+      "4f75bf50 Stop fetching a page whose table only exists in the browser (f14 RESOLVED - removes 78.6% of crawl traffic that produced zero data)",
+      "4bf18712 Typecheck apps/shell/lib and run every test script (P5 - fixes a 2-month-old crash; script suite 82 to 84)"
     ],
     "inFlightUncommitted": {},
     "nextActionsInPriorityOrder": [
-      "1. Await/integrate the bug-hunter agent (P5). It holds packages/core, manager, matrix, db, apps/shell/server.ts, apps/shell/src, workspaceRepo, jsonStore, scripts, tests.",
-      "2. f7 - delete NCAA_CUTS from packages/core/src/constants.ts (40 hand-typed unsourced times, zero consumers). BLOCKED while bug-hunter holds packages/core.",
-      "3. A restore path for backups. BLOCKED while bug-hunter holds workspaceRepo/server.ts.",
-      "4. f11 - Button design-system decision. NEEDS THE USER; do not guess.",
-      "5. P2's known gap - no DOM test for the preset manager's create/edit/delete flow.",
-      "6. od4 before any release - meets.json is both live store and fresh-install seed."
+      "1. ASK THE USER about f17 (time trials vs the entry cap). 62% of compliance warnings on real data are false. Cannot be fixed without a rules ruling.",
+      "2. ASK THE USER about f16 (Roster Catalog: wire up 13 missing routes, or delete roughly 3,289 lines).",
+      "3. ASK THE USER about f11 (Button design system) before any mass button conversion.",
+      "4. f7 - delete NCAA_CUTS from packages/core/src/constants.ts. Safe and unblocked.",
+      "5. A restore path for backups (today it is a documented manual file swap).",
+      "6. f19 - latent alias mismatch in computeVacateRelayLegNames; unconfirmed.",
+      "7. od4 before any release - meets.json is both live store and fresh-install seed."
     ],
     "doNotRepeat": [
       "Do not re-derive the baseline - it is in this file's baseline block.",
