@@ -49,6 +49,15 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - **The Metrics applet is marked Experimental** everywhere it appears. It is
   not meet-ready and is not covered by this round of work.
 
+### Removed
+
+- **The Team Roster Catalog is gone.** It never worked: its client called 13
+  server routes that were never written, so every request returned "API route
+  not found". Manager's "Team Catalog" button opened a panel whose every call
+  failed silently, and Matrix's "Catalog:" dropdown could only ever offer
+  "(off — PDF only)". Removed rather than finished, because nothing depended on
+  it and a control that silently fails is worse than no control.
+
 ### Fixed
 
 - **Creating your first workspace no longer crashes Manager.** A hook was
