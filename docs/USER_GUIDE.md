@@ -148,12 +148,27 @@ which teams you want, then pick **how much** to pull:
 | Scope | Pulls | Use it when |
 | --- | --- | --- |
 | **Meet results only** | Team swims and per-event results | You want to score or scout this meet. **Much the fastest.** |
-| **Rosters and season bests only** | Team rosters and each swimmer's personal bests | You want season-best data, not this meet's results |
-| **Everything** | All of the above | You want both and do not mind the wait |
+| **Rosters and season bests only** | Team rosters | You want the roster for a team |
+| **Everything** | Both of the above | You want the meet and the rosters |
+
+> **Season bests do not come from a crawl.** A swimmer's personal-bests page
+> builds its table in your browser after the page loads, so a downloaded copy
+> of it contains no times — only the page frame. The crawler therefore does not
+> request those pages at all, and says so in the panel rather than fetching
+> hundreds of empty ones.
+>
+> To get a swimmer's personal bests, open their SwimCloud page yourself and use
+> the extension's clipboard button, then **From clipboard** in Manager. That
+> path reads the table off the rendered page, so it works.
+>
+> This was measured, not assumed: on a real crawl, those pages were **184 of
+> 234 requests and produced zero usable rows**. Removing them is most of why a
+> crawl is now much faster.
 
 The panel tells you the page count and rough time before you start. On a real
-four-team meet, *Meet results only* was **42 pages against 234** for
-*Everything* — so choose the narrow scope unless you need the rest.
+four-team meet, *Meet results only* was **42 pages against 234** for what
+*Everything* used to fetch — so choose the narrow scope unless you need the
+rosters too.
 
 Crawls are paced on purpose, a few seconds per page. It is not stuck. You can
 pause and resume, and re-running a crawl skips pages already stored.
@@ -295,6 +310,7 @@ number, which is worse than a gap.
 | --- | --- |
 | Team totals look wrong | The rule set (section 3). A championship table at a dual meet inflates relays badly. |
 | A swimmer is missing after an import | Did the crawl use a narrow scope? The capture panel says which pages it pulled. |
+| A swimmer has no season-best times | Crawls do not fetch those. Use the extension's clipboard button on that swimmer's page — see section 4. |
 | Cut tags say "unknown" | That team is not mapped to a division, or the school does not sponsor that gender. |
 | A relay scores nothing | A vacant leg, or legs that are not eligible under the rule set. |
 | A crawl seems frozen | It is paced on purpose. The panel shows progress and lets you pause. |
