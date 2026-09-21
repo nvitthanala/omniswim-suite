@@ -98,14 +98,9 @@ function ScanPrompt({ team, scanning, onScan }: ScanPromptProps) {
         Scanning every event swap re-scores the meet once per candidate, so it runs on
         request rather than on open.
       </p>
-      <button
-        type="button"
-        onClick={onScan}
-        disabled={!team || scanning}
-        className="mt-4 px-4 py-2 text-ui-label font-semibold rounded-lg btn-primary transition-colors disabled:opacity-60"
-      >
+      <Button variant="primary" size="md" onClick={onScan} disabled={!team || scanning} className="mt-4">
         {scanning ? 'Scanning…' : 'Find point opportunities'}
-      </button>
+      </Button>
       {!team ? <p className="text-ui-caption text-theme-muted mt-2">Choose a team first.</p> : null}
     </div>
   );

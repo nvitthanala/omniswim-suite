@@ -19,6 +19,7 @@
  */
 import type { ReactNode } from 'react';
 import { X, Trash2, AlertTriangle } from 'lucide-react';
+import { Button } from './Button';
 
 export interface ConfirmDeleteModalProps {
   title: ReactNode;
@@ -59,14 +60,14 @@ export function ConfirmDeleteModal({
               <p className="text-sm text-theme-secondary mt-1">{description}</p>
             </div>
           </div>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="md"
             onClick={onCancel}
-            className="text-theme-muted hover:text-[var(--text-primary)] transition-colors"
+            className="text-theme-muted hover:text-[var(--text-primary)]"
             aria-label="Close"
-          >
-            <X size={20} />
-          </button>
+            leadingIcon={<X size={20} />}
+          />
         </div>
 
         <p className="text-xs text-theme-secondary bg-[var(--text-accent)]/10 border border-[var(--text-accent)]/15 p-3 rounded-lg mb-8">
@@ -74,23 +75,19 @@ export function ConfirmDeleteModal({
         </p>
 
         <div className="flex justify-end gap-3 font-medium">
-          <button
-            type="button"
-            onClick={onCancel}
-            disabled={busy}
-            className="px-5 py-2 border border-theme-soft hover:bg-[var(--surface-strong)] rounded-lg text-[var(--text-primary)] transition-colors disabled:opacity-40"
-          >
+          <Button variant="outline" size="md" onClick={onCancel} disabled={busy}>
             {cancelLabel}
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="danger"
+            size="md"
             onClick={onConfirm}
             disabled={busy}
-            className="px-5 py-2 bg-[var(--text-accent)] hover:bg-[var(--text-accent)]/90 text-white rounded-lg flex items-center gap-2 transition-colors shadow-lg shadow-[var(--text-accent)]/20 disabled:opacity-40"
+            className="shadow-lg shadow-[var(--text-accent)]/20"
+            leadingIcon={<Trash2 size={16} />}
           >
-            <Trash2 size={16} />
             {confirmLabel}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

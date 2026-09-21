@@ -10,6 +10,7 @@
 
 import React, { useState } from 'react';
 import { Link2, X } from 'lucide-react';
+import { Button } from '@omniswim/ui';
 import type { AliasSuggestion } from '@omniswim/core/lib/athleteAliases';
 
 const VISIBLE_CAP = 8;
@@ -61,34 +62,31 @@ export default function AliasSuggestionsPanel({ suggestions, dismissed, onLink, 
                 </p>
               </div>
               <div className="flex items-center gap-1.5 shrink-0">
-                <button
-                  type="button"
-                  onClick={() => onLink(s)}
-                  className="text-ui-caption px-2.5 py-1 btn-accent-outline rounded-lg font-medium"
-                >
+                <Button variant="outline" size="sm" onClick={() => onLink(s)} className="px-2.5 py-1">
                   Link
-                </button>
-                <button
-                  type="button"
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => onDismiss(key)}
-                  className="p-1.5 rounded-lg text-theme-muted hover:text-[var(--text-primary)]"
+                  className="p-1.5 text-theme-muted hover:text-[var(--text-primary)]"
                   aria-label={`Dismiss suggestion for ${s.incoming.name}`}
-                >
-                  <X size={13} />
-                </button>
+                  leadingIcon={<X size={13} />}
+                />
               </div>
             </li>
           );
         })}
       </ul>
       {remaining > 0 ? (
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => setExpanded(true)}
-          className="text-ui-caption text-[var(--text-accent)] hover:underline mt-2"
+          className="p-0 text-[var(--text-accent)] hover:underline mt-2"
         >
           Show {remaining} more
-        </button>
+        </Button>
       ) : null}
     </div>
   );

@@ -45,7 +45,7 @@ import {
 } from '@omniswim/core/lib/swimmerEntryLimits';
 import { optimizeRosterAllTeams, optimizeRosterForTeam } from '@omniswim/core/lib/rosterOptimizer';
 import { applyScorerOffRelayPatch, type TeamLineupAudit } from '@omniswim/core/lib/rosterLineupAudit';
-import { TeamSelect, useToast } from '@omniswim/ui';
+import { Button, TeamSelect, useToast } from '@omniswim/ui';
 import TeamRosterRow from './TeamRosterRow';
 import { buildRosterRowWarnings, computeRosterRowIssueFlags, countTeamMembers } from './teamRosterView';
 
@@ -429,35 +429,38 @@ export default function TeamRosterPanel({
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 shrink-0">
           {editable && workspace && onWorkspaceUpdate ? (
             <>
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => runOptimizer(false)}
                 disabled={!selectedTeam}
-                className="text-ui-caption text-[var(--text-accent)] hover:underline flex items-center gap-1 whitespace-nowrap"
+                className="text-[var(--text-accent)] hover:underline whitespace-nowrap"
                 title="Optimize scorers and event lineup for selected team"
+                leadingIcon={<Sparkles size={12} />}
               >
-                <Sparkles size={12} />
                 Best roster
-              </button>
-              <button
-                type="button"
+              </Button>
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => runOptimizer(true)}
-                className="text-ui-caption text-theme-secondary hover:text-[var(--text-accent)] flex items-center gap-1 whitespace-nowrap"
+                className="text-theme-secondary hover:text-[var(--text-accent)] whitespace-nowrap"
               >
                 All teams
-              </button>
+              </Button>
             </>
           ) : null}
           {editable ? (
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={resetTeamManual}
-              className="text-ui-caption text-theme-secondary hover:text-[var(--text-accent)] flex items-center gap-1 whitespace-nowrap"
+              className="text-theme-secondary hover:text-[var(--text-accent)] whitespace-nowrap"
               title="Revert manual edits for this team"
+              leadingIcon={<RotateCcw size={12} />}
             >
-              <RotateCcw size={12} />
               Reset team
-            </button>
+            </Button>
           ) : null}
         </div>
       </div>
@@ -622,25 +625,26 @@ export default function TeamRosterPanel({
                       {d.mode === 'removed' ? 'Removed' : 'Hidden'}
                     </span>
                   </span>
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     disabled={!editable || !onWorkspaceUpdate}
                     title={
                       editable && onWorkspaceUpdate
                         ? undefined
                         : 'Enable What-if to restore'
                     }
-                    className="flex items-center gap-1.5 text-ui-caption text-[var(--text-accent)] hover:underline shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:no-underline disabled:text-theme-muted"
+                    className="text-[var(--text-accent)] hover:underline shrink-0 disabled:no-underline"
                     onClick={() =>
                       editable &&
                       onWorkspaceUpdate?.(
                         restoreSwimmerToWorkspace(workspace, { name: d.name, gender })
                       )
                     }
+                    leadingIcon={<Undo2 size={12} />}
                   >
-                    <Undo2 size={12} />
                     Restore
-                  </button>
+                  </Button>
                 </li>
               ))}
           </ul>

@@ -10,6 +10,7 @@
 
 import React from 'react';
 import { Repeat } from 'lucide-react';
+import { Button } from '@omniswim/ui';
 import {
   AthleteButton,
   Section,
@@ -65,13 +66,9 @@ function RelaySwapRow({
             {formatPoints(swap.deltaPoints)}
           </span>
           {canApplySwaps ? (
-            <button
-              type="button"
-              onClick={() => onApplyRelaySwap(swap)}
-              className="btn-accent-outline rounded-md px-2 py-1 text-ui-micro font-semibold"
-            >
+            <Button variant="outline" size="sm" onClick={() => onApplyRelaySwap(swap)} className="px-2 py-1">
               Apply
-            </button>
+            </Button>
           ) : null}
         </div>
       </div>
@@ -132,13 +129,14 @@ function RelayPromotionRow({
         {promotion.primary} — {RELAY_ALTERNATE_REASON_LABEL[promotion.reason]}
       </span>
       {canApplySwaps ? (
-        <button
-          type="button"
+        <Button
+          variant="outline"
+          size="sm"
           onClick={() => onApplyRelayPromotion(promotion)}
-          className="btn-accent-outline rounded-md px-2 py-1 text-ui-micro font-semibold shrink-0"
+          className="px-2 py-1 shrink-0"
         >
           Apply
-        </button>
+        </Button>
       ) : null}
     </li>
   );

@@ -1,5 +1,6 @@
 import { useMemo } from 'react';
 import { Trash2, ChevronUp, ChevronDown } from 'lucide-react';
+import { Button } from '@omniswim/ui';
 import { validateRaceTags } from '@omniswim/core/lib/raceAnalysis';
 import type { Problem, ProblemSeverity, RaceConfig, RaceTag, RaceTagKind } from '../types';
 import { ALL_TAG_KINDS, TAG_KIND_COLOR, TAG_KIND_LABEL } from './TagTimeline';
@@ -98,32 +99,32 @@ export function TagTable({ config, tags, frameSeconds, onChange }: TagTableProps
                 <span className="font-mono text-theme-muted text-center">{tag.lengthIndex ?? '—'}</span>
                 <span className="font-mono tabular-nums text-[var(--text-primary)]">{tag.time.toFixed(3)}s</span>
                 <div className="flex items-center justify-end gap-1">
-                  <button
-                    type="button"
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => nudge(index, -1)}
                     disabled={frameSeconds === null}
                     title={frameSeconds === null ? 'Set frame rate to nudge by frame' : 'Nudge back 1 frame'}
-                    className="p-1 rounded theme-hover-row text-theme-muted hover:text-[var(--text-primary)] disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <ChevronDown size={14} />
-                  </button>
-                  <button
-                    type="button"
+                    className="p-1"
+                    leadingIcon={<ChevronDown size={14} />}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => nudge(index, 1)}
                     disabled={frameSeconds === null}
                     title={frameSeconds === null ? 'Set frame rate to nudge by frame' : 'Nudge forward 1 frame'}
-                    className="p-1 rounded theme-hover-row text-theme-muted hover:text-[var(--text-primary)] disabled:opacity-40 disabled:cursor-not-allowed"
-                  >
-                    <ChevronUp size={14} />
-                  </button>
-                  <button
-                    type="button"
+                    className="p-1"
+                    leadingIcon={<ChevronUp size={14} />}
+                  />
+                  <Button
+                    variant="ghost"
+                    size="sm"
                     onClick={() => deleteRow(index)}
                     title="Delete tag"
-                    className="p-1 rounded theme-hover-row text-theme-muted hover:text-red-400"
-                  >
-                    <Trash2 size={14} />
-                  </button>
+                    className="p-1 hover:text-red-400"
+                    leadingIcon={<Trash2 size={14} />}
+                  />
                 </div>
               </div>
             ))

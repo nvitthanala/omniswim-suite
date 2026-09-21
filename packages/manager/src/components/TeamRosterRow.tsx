@@ -10,6 +10,7 @@
 
 import React from 'react';
 import { Trash2 } from 'lucide-react';
+import { Button } from '@omniswim/ui';
 import type { ScorerRosterRow } from '@omniswim/core/lib/scorerRoster';
 import type { AthleteEventProfile } from '@omniswim/core/types';
 import AthleteRoleTag from './AthleteRoleTag';
@@ -100,15 +101,15 @@ export default function TeamRosterRow({
       ) : null}
       {editable && onRequestDeleteSwimmer ? (
         <td className="py-2.5 px-2 text-center" onClick={e => e.stopPropagation()}>
-          <button
-            type="button"
-            className="p-1.5 rounded-lg text-theme-muted hover:text-rose-400 hover:bg-rose-400/10"
+          <Button
+            variant="danger"
+            size="sm"
+            className="p-1.5 border-transparent bg-transparent text-theme-muted hover:text-rose-400 hover:bg-rose-400/10"
             title={`Remove ${row.name} from roster (keeps meet record)`}
             aria-label={`Remove ${row.name}`}
             onClick={() => onRequestDeleteSwimmer(row.name)}
-          >
-            <Trash2 size={14} />
-          </button>
+            leadingIcon={<Trash2 size={14} />}
+          />
         </td>
       ) : null}
     </tr>

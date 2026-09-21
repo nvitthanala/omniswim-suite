@@ -1,4 +1,5 @@
 import { FileText, Trash2 } from 'lucide-react';
+import { Button } from '@omniswim/ui';
 import type { Workspace } from '@omniswim/core/types';
 
 interface ExpandedWorkspaceListProps {
@@ -97,18 +98,18 @@ function ExpandedWorkspaceRow({
           {new Date(w.createdAt).toLocaleDateString()}
         </span>
       </button>
-      <button
-        type="button"
+      <Button
+        variant="danger"
+        size="sm"
         onClick={(e) => {
           e.stopPropagation();
           onDeleteRequest(w.id);
         }}
-        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 opacity-0 group-hover:opacity-100 hover:bg-[var(--text-accent)]/15 text-theme-muted hover:text-[var(--text-accent)] rounded"
+        className="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 opacity-0 group-hover:opacity-100 border-transparent bg-transparent hover:bg-[var(--text-accent)]/15 text-theme-muted hover:text-[var(--text-accent)]"
         aria-label={`Delete workspace ${w.name}`}
         title={`Delete workspace ${w.name}`}
-      >
-        <Trash2 size={12} />
-      </button>
+        leadingIcon={<Trash2 size={12} />}
+      />
     </div>
   );
 }
@@ -124,19 +125,19 @@ export function CollapsedWorkspaceList({ workspaces, activeWorkspaceId, onSelect
   return (
     <>
       {workspaces.map((w) => (
-        <button
+        <Button
           key={w.id}
-          type="button"
+          variant="ghost"
+          size="sm"
           onClick={() => onSelect(w.id)}
-          className={`w-9 h-9 rounded-md border flex items-center justify-center ${
+          className={`w-9 h-9 p-0 rounded-md border ${
             activeWorkspaceId === w.id
               ? 'border-[var(--text-accent)]/50 bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
-              : 'border-theme-soft theme-hover-row'
+              : 'border-theme-soft'
           }`}
           title={w.name}
-        >
-          <FileText size={14} />
-        </button>
+          leadingIcon={<FileText size={14} />}
+        />
       ))}
     </>
   );

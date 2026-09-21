@@ -58,7 +58,7 @@ import {
   type WorkspaceEditorPatch,
 } from '@omniswim/core/lib/swimEditor';
 import { addAliasLink, buildAliasResolver, removeAliasLink } from '@omniswim/core/lib/athleteAliases';
-import { useToast } from '@omniswim/ui';
+import { Button, useToast } from '@omniswim/ui';
 import AthleteCreditedSwimsPanel, { type EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
 import AthleteRoleTag from './AthleteRoleTag';
 
@@ -319,14 +319,14 @@ export default function AthleteLineupEditorPanel({
                 <AthleteRoleTag role={athlete.athleteRole} isRecruit={athlete.isRecruit} />
               </p>
             </div>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={onClose}
-              className="p-1.5 rounded-lg text-theme-muted hover:text-[var(--text-primary)] shrink-0"
+              className="p-1.5 text-theme-muted hover:text-[var(--text-primary)] shrink-0"
               aria-label="Close athlete editor"
-            >
-              <X size={18} />
-            </button>
+              leadingIcon={<X size={18} />}
+            />
           </div>
 
           {issues.length > 0 ? (
@@ -386,14 +386,14 @@ export default function AthleteLineupEditorPanel({
                           {link.aliasName} → {link.canonicalName}
                         </span>
                         {editable ? (
-                          <button
-                            type="button"
+                          <Button
+                            variant="ghost"
+                            size="sm"
                             onClick={() => handleRemoveAlias(link.id)}
-                            className="p-1 rounded-md text-theme-muted hover:text-amber-400 transition-colors shrink-0"
+                            className="p-1 hover:text-amber-400 shrink-0"
                             aria-label={`Remove alias ${link.aliasName}`}
-                          >
-                            <Trash2 size={12} />
-                          </button>
+                            leadingIcon={<Trash2 size={12} />}
+                          />
                         ) : null}
                       </li>
                     ))}
@@ -415,14 +415,15 @@ export default function AthleteLineupEditorPanel({
                       placeholder="Add alias spelling…"
                       className="flex-1 min-w-0 glass-input rounded-lg px-2 py-1.5 text-ui-caption"
                     />
-                    <button
-                      type="button"
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={handleAddAlias}
                       disabled={!newAliasText.trim()}
-                      className="text-ui-caption px-2 py-1.5 border border-theme-soft rounded-lg disabled:opacity-40 shrink-0"
+                      className="px-2 py-1.5 shrink-0"
                     >
                       Link
-                    </button>
+                    </Button>
                   </div>
                 ) : null}
               </div>
@@ -432,15 +433,16 @@ export default function AthleteLineupEditorPanel({
 
         <div className="flex-1 overflow-y-auto custom-scrollbar">
           {lastApplied ? (
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={handleUndo}
               title={lastApplied.description}
-              className="flex w-full items-center gap-1.5 truncate border-b border-theme-soft surface-muted-bg px-4 py-1.5 text-left text-ui-caption text-theme-muted transition-colors hover:text-theme-secondary"
+              className="w-full truncate border-b border-theme-soft surface-muted-bg text-left text-theme-muted hover:text-theme-secondary"
+              leadingIcon={<Undo2 size={12} className="shrink-0" />}
             >
-              <Undo2 size={12} className="shrink-0" />
               <span className="truncate">Undo: {lastApplied.description}</span>
-            </button>
+            </Button>
           ) : null}
 
           {/* Keyed on athlete.key so each newly-selected athlete opens with the

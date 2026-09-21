@@ -44,16 +44,16 @@ export function SnapshotsPanel({
           <Database size={10} />
           Snapshots
         </h3>
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={onToggleCreate}
-          className="p-1 theme-hover-row rounded text-theme-secondary hover:text-[var(--text-primary)]"
+          className="p-1"
           title="Take a workspace snapshot"
           aria-label="Take a workspace snapshot"
           aria-expanded={showCreateSnapshot}
-        >
-          <Camera size={12} />
-        </button>
+          leadingIcon={<Camera size={12} />}
+        />
       </div>
 
       {showCreateSnapshot ? (
@@ -183,16 +183,16 @@ function SnapshotRow({
         </p>
         <p className="text-ui-micro text-theme-muted">{new Date(snap.createdAt).toLocaleString()}</p>
       </div>
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={() => onRestore(snap.id)}
         disabled={restoringSnapshotId === snap.id}
-        className="p-1 opacity-0 group-hover:opacity-100 rounded theme-hover-row text-theme-secondary hover:text-[var(--text-accent)] disabled:opacity-40"
+        className="p-1 opacity-0 group-hover:opacity-100 hover:text-[var(--text-accent)]"
         title="Restore this snapshot"
         aria-label={`Restore snapshot ${snap.label || new Date(snap.createdAt).toLocaleString()}`}
-      >
-        {restoringSnapshotId === snap.id ? <Loader2 size={10} className="animate-spin" /> : <RotateCcw size={10} />}
-      </button>
+        leadingIcon={restoringSnapshotId === snap.id ? <Loader2 size={10} className="animate-spin" /> : <RotateCcw size={10} />}
+      />
     </div>
   );
 }

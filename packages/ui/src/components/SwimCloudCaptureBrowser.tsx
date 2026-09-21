@@ -94,6 +94,7 @@ import type {
   SwimCloudSwimmerTimesParse,
   SwimCloudTeamMeetSwimsParse,
 } from '@omniswim/swimcloud/parser';
+import { Button } from './Button';
 import { FloatingWindow, type FloatingWindowState } from './FloatingWindow';
 import { useToast } from './Toast';
 
@@ -1050,8 +1051,9 @@ export function SwimCloudCaptureBrowser(props: SwimCloudCaptureBrowserProps) {
         : null;
     const action =
       isLead && props.mode === 'roster-history' ? (
-        <button
-          type="button"
+        <Button
+          variant="primary"
+          size="sm"
           onClick={() => void importRoster()}
           disabled={isImporting || selectedRoster === null || props.team.trim() === ''}
           aria-label={
@@ -1066,14 +1068,14 @@ export function SwimCloudCaptureBrowser(props: SwimCloudCaptureBrowserProps) {
                   selectedRoster.coverage?.withoutCapturedTimes ?? 0
                 } stay on the checklist.`
           }
-          className="px-3 py-1.5 btn-primary rounded-lg text-ui-micro font-bold uppercase tracking-widest disabled:opacity-40 shrink-0"
+          className="shrink-0"
         >
           {isImporting
             ? 'Importing…'
             : selectedRoster?.genderMismatch
               ? 'Import anyway'
               : 'Import this roster'}
-        </button>
+        </Button>
       ) : undefined;
 
     return (
@@ -1271,15 +1273,16 @@ export function SwimCloudCaptureBrowser(props: SwimCloudCaptureBrowserProps) {
     if (!isLead && parseResponse.parses.length === 0) return null;
 
     const action = isLead ? (
-      <button
-        type="button"
+      <Button
+        variant="primary"
+        size="sm"
         onClick={() => void importMeetResults()}
         disabled={isImporting || groups.length === 0}
         aria-label="Import the checked teams and genders"
-        className="px-3 py-1.5 btn-primary rounded-lg text-ui-micro font-bold uppercase tracking-widest disabled:opacity-40 shrink-0"
+        className="shrink-0"
       >
         {isImporting ? 'Importing…' : 'Import selected'}
-      </button>
+      </Button>
     ) : undefined;
 
     return (
@@ -1390,45 +1393,47 @@ export function SwimCloudCaptureBrowser(props: SwimCloudCaptureBrowserProps) {
                 );
               })}
             </select>
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={() => void refresh()}
               aria-label="Refresh capture list"
               title="Re-read the local capture store."
-              className="btn-ghost p-2 rounded-lg shrink-0"
-            >
-              <RefreshCw size={16} />
-            </button>
+              className="p-2 shrink-0"
+              leadingIcon={<RefreshCw size={16} />}
+            />
             {selectedCapture !== null ? (
               confirmingForget ? (
                 <span className="flex items-center gap-1 shrink-0">
-                  <button
-                    type="button"
+                  <Button
+                    variant="danger"
+                    size="sm"
                     onClick={() => void forgetSelectedCapture()}
                     aria-label={`Confirm forgetting capture ${captureDisplayLabel(selectedCapture)}`}
-                    className="px-2 py-1 btn-primary rounded text-ui-micro font-bold uppercase tracking-widest"
+                    className="px-2 py-1"
                   >
                     Confirm
-                  </button>
-                  <button
-                    type="button"
+                  </Button>
+                  <Button
+                    variant="outline"
+                    size="sm"
                     onClick={() => setConfirmingForget(false)}
                     aria-label="Keep this capture"
-                    className="px-2 py-1 border border-theme-soft rounded text-ui-micro font-bold uppercase tracking-widest text-theme-secondary"
+                    className="px-2 py-1"
                   >
                     Cancel
-                  </button>
+                  </Button>
                 </span>
               ) : (
-                <button
-                  type="button"
+                <Button
+                  variant="danger"
+                  size="sm"
                   onClick={() => setConfirmingForget(true)}
                   aria-label={`Forget capture ${captureDisplayLabel(selectedCapture)}`}
                   title="Forget this capture (deletes its stored pages). The only way to make a final page re-fetchable."
-                  className="btn-ghost p-2 rounded-lg shrink-0"
-                >
-                  <Trash2 size={16} />
-                </button>
+                  className="p-2 border-transparent bg-transparent shrink-0"
+                  leadingIcon={<Trash2 size={16} />}
+                />
               )
             ) : null}
           </div>
@@ -1474,15 +1479,16 @@ export function SwimCloudCaptureBrowser(props: SwimCloudCaptureBrowserProps) {
             </p>
             {pasteFallback ? (
               <div className="space-y-1">
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={pasteFallback.onPaste}
                   aria-label={pasteFallback.label}
-                  className="inline-flex items-center gap-1.5 text-ui-caption text-[var(--text-accent)] hover:underline"
+                  className="text-[var(--text-accent)] hover:underline"
+                  leadingIcon={<ClipboardPaste size={13} />}
                 >
-                  <ClipboardPaste size={13} />
                   {pasteFallback.label}
-                </button>
+                </Button>
                 {pasteFallback.hint !== undefined ? (
                   <p className="text-ui-micro text-theme-muted">{pasteFallback.hint}</p>
                 ) : null}

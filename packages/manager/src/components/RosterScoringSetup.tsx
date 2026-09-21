@@ -5,6 +5,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { ChevronDown, ChevronUp, Save, Settings } from 'lucide-react';
+import { Button } from '@omniswim/ui';
 import { ScoringPresetMeta, ScoringSettings, Workspace } from '@omniswim/core/types';
 import { fetchScoringPresetList, fetchScoringPresetSettings } from '@omniswim/core/lib/scoringPresets';
 import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
@@ -93,13 +94,15 @@ export default function RosterScoringSetup({ workspace, settings, onSave }: Prop
               />
             ))}
           </div>
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="md"
             onClick={save}
-            className="text-ui-label px-3 py-2 rounded-lg border border-[var(--text-accent)]/40 text-[var(--text-accent)] flex items-center gap-2 font-medium"
+            className="border-[var(--text-accent)]/40"
+            leadingIcon={<Save size={14} />}
           >
-            <Save size={14} /> Save scoring settings
-          </button>
+            Save scoring settings
+          </Button>
         </div>
       ) : null}
     </div>

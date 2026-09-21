@@ -386,15 +386,16 @@ export default function MeetOperationsView({
                     <label aria-label="Load meet results PDF" className="cursor-pointer flex items-center gap-1.5 px-3 py-1 btn-accent-outline rounded-md text-[10px] uppercase font-medium transition-colors">
                       <Plus size={12} /><span>Load PDF</span><input ref={meetFileInputRef} aria-label="Meet results PDF file" type="file" className="hidden" accept=".pdf" onChange={onFileUpload} />
                     </label>
-                    <button
-                      type="button"
+                    <Button
+                      variant="outline"
+                      size="sm"
                       onClick={onBrowseSwimCloudCaptures}
                       aria-label="Add meet results from SwimCloud"
                       title="Browse a meet capture the extension has fetched. Pasting a single page from the clipboard is still offered there when no capture exists yet."
-                      className="flex items-center gap-1.5 px-3 py-1 border border-theme-soft rounded-md text-[10px] uppercase font-medium text-theme-secondary hover:text-[var(--text-primary)] transition-colors"
+                      leadingIcon={<Download size={12} />}
                     >
-                      <Download size={12} /><span>Add from SwimCloud</span>
-                    </button>
+                      Add from SwimCloud
+                    </Button>
                     <label aria-label="Link psych sheet PDF" className="cursor-pointer flex items-center gap-1.5 px-3 py-1 border border-theme-soft rounded-md text-[10px] uppercase font-medium text-theme-secondary hover:text-[var(--text-primary)] transition-colors">
                       <Plus size={12} /><span>Link Psych</span><input aria-label="Psych sheet PDF file" type="file" className="hidden" accept=".pdf" onChange={onPsychFileUpload} />
                     </label>

@@ -5,6 +5,7 @@
 
 import React, { useState } from 'react';
 import { X, Waves } from 'lucide-react';
+import { Button } from '@omniswim/ui';
 import type { Gender } from '@omniswim/core/types';
 import type { AthleteCreditedSwim } from '@omniswim/core/lib/scorerRoster';
 import AthleteCreditedSwimsRow from './AthleteCreditedSwimsRow';
@@ -128,14 +129,14 @@ export default function AthleteCreditedSwimsPanel({
             {totalPoints.toFixed(1)} pts
           </span>
           {onClose ? (
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={onClose}
-              className="text-theme-muted hover:text-[var(--text-primary)] transition-colors"
+              className="p-0 text-theme-muted hover:text-[var(--text-primary)]"
               aria-label="Close swim breakdown"
-            >
-              <X size={14} />
-            </button>
+              leadingIcon={<X size={14} />}
+            />
           ) : null}
         </div>
       </div>

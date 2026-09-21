@@ -12,6 +12,7 @@
 
 import React from 'react';
 import { AlertTriangle, Plus } from 'lucide-react';
+import { Button } from '@omniswim/ui';
 import {
   AthleteButton,
   DROP_SOURCE_LABEL,
@@ -58,13 +59,9 @@ function DropRow({
             {formatPoints(drop.deltaPoints)}
           </span>
           {canApplySwaps ? (
-            <button
-              type="button"
-              onClick={() => onApplyDrop(drop)}
-              className="btn-accent-outline rounded-md px-2 py-1 text-ui-micro font-semibold"
-            >
+            <Button variant="outline" size="sm" onClick={() => onApplyDrop(drop)} className="px-2 py-1">
               Apply
-            </button>
+            </Button>
           ) : null}
         </div>
       </div>
@@ -179,13 +176,9 @@ function AddRow({
             {formatPoints(add.deltaPoints)}
           </span>
           {canApplySwaps ? (
-            <button
-              type="button"
-              onClick={() => onApplyAdd(add)}
-              className="btn-accent-outline rounded-md px-2 py-1 text-ui-micro font-semibold"
-            >
+            <Button variant="outline" size="sm" onClick={() => onApplyAdd(add)} className="px-2 py-1">
               Apply
-            </button>
+            </Button>
           ) : null}
         </div>
       </div>

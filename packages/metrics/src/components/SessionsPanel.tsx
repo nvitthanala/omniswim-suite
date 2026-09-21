@@ -1,6 +1,6 @@
 import React from 'react';
 import { Trash2, X } from 'lucide-react';
-import { Badge } from '@omniswim/ui';
+import { Badge, Button } from '@omniswim/ui';
 import type { SessionSummary } from '../lib/sessionStore';
 
 interface SessionsPanelProps {
@@ -21,9 +21,7 @@ export function SessionsPanel({ sessions, onClose, onLoad, onDelete }: SessionsP
     <div className="mx-4 mt-4 border border-theme-soft rounded-lg overflow-hidden shrink-0">
       <div className="flex items-center justify-between px-3 py-2 bg-[var(--surface-strong)]">
         <span className="text-ui-micro font-bold uppercase tracking-widest text-theme-muted">Saved Sessions</span>
-        <button type="button" onClick={onClose} className="p-1 theme-hover-row rounded" aria-label="Close">
-          <X size={14} />
-        </button>
+        <Button variant="ghost" size="sm" onClick={onClose} className="p-1" aria-label="Close" leadingIcon={<X size={14} />} />
       </div>
       {sessions.length === 0 ? (
         <div className="p-4 text-ui-caption text-theme-muted">No saved sessions yet.</div>
@@ -58,14 +56,14 @@ function SessionRow({
         ) : null}
         <span className="text-theme-muted ml-2">{session.updatedAt ? new Date(session.updatedAt).toLocaleString() : ''}</span>
       </button>
-      <button
-        type="button"
+      <Button
+        variant="danger"
+        size="sm"
         onClick={() => onDelete(session.id)}
-        className="p-1 theme-hover-row rounded text-theme-muted hover:text-red-400"
+        className="p-1 border-transparent bg-transparent text-theme-muted hover:text-red-400"
         aria-label="Delete session"
-      >
-        <Trash2 size={14} />
-      </button>
+        leadingIcon={<Trash2 size={14} />}
+      />
     </li>
   );
 }

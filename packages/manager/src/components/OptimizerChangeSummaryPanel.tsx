@@ -16,6 +16,7 @@
 
 import React from 'react';
 import { X } from 'lucide-react';
+import { Button } from '@omniswim/ui';
 import type {
   GuardedOptimizerResult,
   OptimizerChangeSummary,
@@ -117,22 +118,23 @@ export default function OptimizerChangeSummaryPanel({ summary, onDismiss, onUndo
         </div>
         <div className="shrink-0 flex items-center gap-2">
           {onUndo ? (
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="sm"
               onClick={onUndo}
-              className="px-3 py-1.5 text-ui-caption font-medium rounded-lg border border-theme-soft theme-hover-row hover:text-[var(--text-accent)] transition-colors whitespace-nowrap"
+              className="px-3 py-1.5 hover:text-[var(--text-accent)] whitespace-nowrap"
             >
               Undo this optimize
-            </button>
+            </Button>
           ) : null}
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={onDismiss}
             aria-label="Dismiss optimizer summary"
-            className="p-1 rounded text-theme-secondary hover:text-[var(--text-primary)]"
-          >
-            <X size={14} />
-          </button>
+            className="p-1 text-theme-secondary hover:text-[var(--text-primary)]"
+            leadingIcon={<X size={14} />}
+          />
         </div>
       </div>
 

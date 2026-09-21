@@ -11,7 +11,7 @@ import {
   parseScoringTheory,
   type ParsedScoringTheory,
 } from '@omniswim/core/lib/scoringTheory';
-import { useToast } from '@omniswim/ui';
+import { Button, useToast } from '@omniswim/ui';
 import {
   RelaySquadsSection,
   SwimmerMatchesSection,
@@ -90,14 +90,9 @@ export default function ScoringTheoryPanel({
       </label>
 
       <div className="flex flex-wrap gap-2 mb-3">
-        <button
-          type="button"
-          disabled={!canParseTheory(text, team)}
-          onClick={parseLocal}
-          className="text-ui-label px-4 py-2 btn-accent-outline rounded-lg font-medium disabled:opacity-40"
-        >
+        <Button variant="outline" size="md" disabled={!canParseTheory(text, team)} onClick={parseLocal}>
           Parse theory
-        </button>
+        </Button>
       </div>
 
       {shouldShowTeamRequiredWarning(text, team) ? (

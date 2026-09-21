@@ -5,6 +5,7 @@
 
 import React, { useState, useEffect } from 'react';
 import { Play } from 'lucide-react';
+import { Button } from '@omniswim/ui';
 import { Gender, ClassYear, Recruit } from '@omniswim/core/types';
 import { v4 as uuidv4 } from 'uuid';
 
@@ -234,14 +235,16 @@ export default function RecruitForm({
               placeholder="00:00.00"
             />
           </div>
-          <button
+          <Button
             type="submit"
+            variant="primary"
+            size="md"
             disabled={disabled}
-            className="flex-1 py-2.5 btn-recruit font-semibold text-ui-label rounded-lg transition-all flex items-center justify-center gap-2"
+            className="flex-1 btn-recruit"
+            leadingIcon={<Play size={12} fill="currentColor" />}
           >
-            <Play size={12} fill="currentColor" />
-            <span>Inject recruit</span>
-          </button>
+            Inject recruit
+          </Button>
         </div>
       </form>
     );
@@ -337,14 +340,16 @@ export default function RecruitForm({
         />
       </div>
 
-      <button
+      <Button
         type="submit"
+        variant="primary"
+        size="lg"
         disabled={disabled}
-        className="w-full py-3 mt-2 btn-recruit font-black text-ui-caption uppercase tracking-[0.2em] rounded-lg transition-all flex items-center justify-center gap-2"
+        className="w-full mt-2 btn-recruit uppercase tracking-[0.2em]"
+        leadingIcon={<Play size={12} fill="currentColor" />}
       >
-        <Play size={12} fill="currentColor" />
-        <span>Inject Recruit Into Matrix</span>
-      </button>
+        Inject Recruit Into Matrix
+      </Button>
     </form>
   );
 }

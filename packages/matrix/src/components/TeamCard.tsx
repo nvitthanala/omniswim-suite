@@ -13,7 +13,7 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, CartesianGrid } from 'recharts';
-import { ChartFrame, ChartShell, SegmentedControl } from '@omniswim/ui';
+import { Button, ChartFrame, ChartShell, SegmentedControl } from '@omniswim/ui';
 import { TeamScore, SwimmerResult, Gender } from '@omniswim/core/types';
 import { formatEventChartAxisLabel, colorForChartStroke } from '@omniswim/core/lib/utils';
 import type { PrelimsOverUnderEntry } from '@omniswim/core/lib/prelimsProjection';
@@ -677,15 +677,15 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                             </span>
                           )}
                           {viewMode === 'swimmer' && onRequestDeleteSwimmer && (
-                            <button
-                              type="button"
+                            <Button
+                              variant="outline"
+                              size="sm"
                               title="Remove swimmer from workspace"
                               aria-label={`Remove ${group.name} from workspace`}
-                              className="p-1 rounded border border-theme-soft text-theme-secondary hover:text-[var(--text-accent)] hover:border-[var(--text-accent)]/40 transition-colors"
+                              className="p-1"
                               onClick={() => onRequestDeleteSwimmer(group.name)}
-                            >
-                              <Trash2 size={12} />
-                            </button>
+                              leadingIcon={<Trash2 size={12} />}
+                            />
                           )}
                         </div>
                         <div className="text-right flex flex-col items-end gap-0.5">

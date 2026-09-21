@@ -13,6 +13,7 @@
 
 import React, { useState } from 'react';
 import { ArrowLeftRight, ChevronDown, ChevronUp, Undo2 } from 'lucide-react';
+import { Button } from '@omniswim/ui';
 import type { ExactSwap } from '@omniswim/core/lib/crossCourseArbitrage';
 
 /** How a dropped current entry was sourced, for the row's own caption. Shared
@@ -35,15 +36,16 @@ export function UndoLastSwapButton({
 }) {
   if (!lastApplied) return null;
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
+      size="sm"
       onClick={onUndo}
       title={lastApplied.description}
-      className="mb-3 flex w-full items-center gap-1.5 truncate rounded-lg border border-theme-soft surface-muted-bg px-3 py-1.5 text-left text-ui-caption text-theme-muted transition-colors hover:text-theme-secondary"
+      className="mb-3 w-full truncate rounded-lg border border-theme-soft surface-muted-bg text-left text-theme-muted hover:text-theme-secondary"
+      leadingIcon={<Undo2 size={12} className="shrink-0" />}
     >
-      <Undo2 size={12} className="shrink-0" />
       <span className="truncate">Undo: {lastApplied.description}</span>
-    </button>
+    </Button>
   );
 }
 
@@ -91,14 +93,15 @@ export function AthleteButton({
     );
   }
   return (
-    <button
-      type="button"
-      className={`truncate text-[var(--text-accent)] font-semibold hover:underline transition-colors ${className}`}
+    <Button
+      variant="ghost"
+      size="sm"
+      className={`p-0 truncate text-[var(--text-accent)] font-semibold hover:underline ${className}`}
       title={name}
       onClick={() => onJumpAthlete(name)}
     >
       {name}
-    </button>
+    </Button>
   );
 }
 
@@ -181,12 +184,13 @@ export function ShowAllToggle({
 }) {
   if (total <= shown) return null;
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
+      size="sm"
       onClick={onToggle}
-      className="mt-2 text-ui-caption text-[var(--text-accent)] hover:underline"
+      className="mt-2 p-0 text-[var(--text-accent)] hover:underline"
     >
       {expanded ? 'Show fewer' : `Show all ${total}`}
-    </button>
+    </Button>
   );
 }

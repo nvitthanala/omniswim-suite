@@ -154,11 +154,12 @@ export default function SettingsPage() {
                 >
                   <div className="grid gap-3 sm:grid-cols-2">
                     {THEME_PRESETS.map(preset => (
-                      <button
+                      <Button
                         key={preset.id}
-                        type="button"
+                        variant="ghost"
+                        size="md"
                         onClick={() => setPreset(preset.id)}
-                        className={`surface-interactive rounded-2xl border p-4 text-left transition-all ${
+                        className={`block w-full surface-interactive rounded-2xl border p-4 text-left font-normal normal-case tracking-normal ${
                           preferences.themePreset === preset.id
                             ? 'border-[var(--text-accent)] bg-[var(--text-accent)]/10'
                             : 'border-theme-soft bg-[var(--surface-muted)] hover:border-[var(--text-accent)]'
@@ -175,7 +176,7 @@ export default function SettingsPage() {
                           </span>
                         </span>
                         <span className="mt-3 block text-ui-caption text-theme-secondary">{preset.description}</span>
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 </SettingsSection>
@@ -186,11 +187,12 @@ export default function SettingsPage() {
                 >
                   <div className="flex flex-wrap gap-2">
                     {ACCENT_SWATCHES.map(color => (
-                      <button
+                      <Button
                         key={color}
-                        type="button"
+                        variant="ghost"
+                        size="sm"
                         onClick={() => updatePreferences({ themePreset: 'custom', accentColor: color })}
-                        className="h-10 w-10 rounded-full border-2 border-[var(--border)] focus:outline-none focus:ring-4 focus:ring-[var(--focus)]"
+                        className="h-10 w-10 p-0 rounded-full border-2 border-[var(--border)] focus:outline-none focus:ring-4 focus:ring-[var(--focus)]"
                         style={{ backgroundColor: color }}
                         aria-label={`Use accent ${color}`}
                       />
@@ -211,18 +213,19 @@ export default function SettingsPage() {
                 <SettingsSection title="Light or dark base" description="Flip the suite between bright deck mode and a darker analytics board.">
                   <div className="grid gap-3 sm:grid-cols-2">
                     {(['dark', 'light'] as const).map(mode => (
-                      <button
+                      <Button
                         key={mode}
-                        type="button"
+                        variant="ghost"
+                        size="md"
                         onClick={() => setMode(mode)}
-                        className={`rounded-xl border px-4 py-3 text-left font-bold capitalize ${
+                        className={`block w-full rounded-xl border px-4 py-3 text-left capitalize ${
                           preferences.colorMode === mode
                             ? 'border-[var(--text-accent)] bg-[var(--text-accent)]/10 text-[var(--text-accent)]'
                             : 'border-theme-soft bg-[var(--surface-muted)] text-theme-secondary'
                         }`}
                       >
                         {mode} base
-                      </button>
+                      </Button>
                     ))}
                   </div>
                 </SettingsSection>

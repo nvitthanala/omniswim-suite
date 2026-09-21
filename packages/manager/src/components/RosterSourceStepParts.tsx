@@ -10,6 +10,7 @@
 
 import React from 'react';
 import { FileCheck2, FileWarning } from 'lucide-react';
+import { Button } from '@omniswim/ui';
 import { ClassYear, Gender, Recruit, Workspace } from '@omniswim/core/types';
 import RecruitForm, { type RecruitAthletePrefill } from './RecruitForm';
 import AthleteHistoryImportPanel from './AthleteHistoryImportPanel';
@@ -33,19 +34,20 @@ function MethodButton({
 }) {
   const copy = METHOD_COPY[method];
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
+      size="md"
       aria-pressed={active}
       onClick={onSelect}
-      className={`rounded-lg border px-3 py-3 text-left transition-colors ${
+      className={`block w-full rounded-lg border px-3 py-3 text-left font-normal normal-case tracking-normal ${
         active
           ? 'border-[var(--text-accent)] bg-[var(--text-accent)]/10 text-[var(--text-primary)]'
-          : 'border-theme-soft surface-muted-bg text-theme-secondary theme-hover-row'
+          : 'border-theme-soft surface-muted-bg text-theme-secondary'
       }`}
     >
       <span className="block text-ui-label font-semibold">{copy.label}</span>
       <span className="block text-ui-caption mt-1">{copy.description}</span>
-    </button>
+    </Button>
   );
 }
 
@@ -150,13 +152,9 @@ export function AddAthletesSection({
             <p className="text-ui-body text-theme-secondary leading-relaxed">
               Import a list of athletes with the roster import wizard.
             </p>
-            <button
-              type="button"
-              onClick={onOpenImportWizard}
-              className="mt-3 px-3 py-2 text-ui-label font-semibold rounded-lg btn-primary transition-colors"
-            >
+            <Button variant="primary" size="md" onClick={onOpenImportWizard} className="mt-3">
               Open roster import
-            </button>
+            </Button>
           </div>
         ) : null}
       </div>

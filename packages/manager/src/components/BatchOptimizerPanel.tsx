@@ -12,7 +12,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { Gender, ScoringSettings, Workspace } from '@omniswim/core/types';
 import type { OptimizerStage } from '@omniswim/core/lib/rosterOptimizer';
 import { mergeScoringSettings } from '@omniswim/core/lib/utils';
-import { Modal, useToast } from '@omniswim/ui';
+import { Button, Modal, useToast } from '@omniswim/ui';
 import {
   batchOptimizationToastMessage,
   computeBatchOptimizationResult,
@@ -118,13 +118,13 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
               </p>
             </div>
           </div>
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={onClose}
-            className="p-2 theme-hover-row rounded-lg text-theme-secondary hover:text-[var(--text-primary)] transition-colors"
-          >
-            <X size={16} />
-          </button>
+            className="p-2 text-theme-secondary hover:text-[var(--text-primary)]"
+            leadingIcon={<X size={16} />}
+          />
         </div>
 
         {/* Body */}
@@ -136,31 +136,33 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
             </label>
             <div className="grid grid-cols-3 gap-2">
               {STAGES.map(s => (
-                <button
+                <Button
                   key={s.value}
-                  type="button"
+                  variant="ghost"
+                  size="md"
                   onClick={() => setStage(s.value)}
-                  className={`p-3 rounded-lg border text-left transition-all ${
+                  className={`block w-full p-3 rounded-lg border text-left font-normal normal-case tracking-normal ${
                     stage === s.value
                       ? 'border-[var(--text-accent)]/50 bg-[var(--text-accent)]/10'
-                      : 'border-theme-soft theme-hover-row'
+                      : 'border-theme-soft'
                   }`}
                 >
                   <div className="text-ui-label font-bold uppercase tracking-wider text-[var(--text-primary)]">
                     {s.label}
                   </div>
                   <div className="text-ui-micro text-theme-secondary mt-1 leading-relaxed">{s.desc}</div>
-                </button>
+                </Button>
               ))}
             </div>
           </div>
 
           {/* Run button */}
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="md"
             onClick={runOptimizer}
             disabled={isRunning}
-            className="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-lg btn-primary text-ui-label font-bold uppercase tracking-widest transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+            className="w-full uppercase tracking-widest"
           >
             {isRunning ? (
               <>
@@ -175,7 +177,7 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
                 <span>Run Optimizer</span>
               </>
             )}
-          </button>
+          </Button>
 
           {/* Results */}
           <AnimatePresence>
@@ -246,21 +248,23 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
 
         {/* Footer actions */}
         <div className="flex items-center justify-end gap-3 p-4 border-t border-theme-soft shrink-0">
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="md"
             onClick={onClose}
-            className="px-4 py-2 rounded-lg border border-theme-soft text-ui-caption font-bold uppercase tracking-widest text-theme-secondary hover:text-[var(--text-primary)] transition-colors"
+            className="uppercase tracking-widest text-theme-secondary hover:text-[var(--text-primary)]"
           >
             Cancel
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant="primary"
+            size="md"
             onClick={handleApply}
             disabled={!result}
-            className="px-4 py-2 rounded-lg btn-primary text-ui-caption font-bold uppercase tracking-widest transition-all disabled:opacity-40 disabled:cursor-not-allowed"
+            className="uppercase tracking-widest"
           >
             Apply to Workspace
-          </button>
+          </Button>
         </div>
     </Modal>
   );

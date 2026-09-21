@@ -5,7 +5,7 @@
 
 import React from 'react';
 import { Users } from 'lucide-react';
-import { EmptyState } from '@omniswim/ui';
+import { Button, EmptyState } from '@omniswim/ui';
 
 type Props = {
   /** Step name shown as the eyebrow, e.g. "Lineup". */
@@ -58,14 +58,15 @@ export default function TeamPickerEmptyState({
         aria-label={`Choose a team for ${eyebrow}`}
       >
         {teams.map(team => (
-          <button
+          <Button
             key={team}
-            type="button"
+            variant="outline"
+            size="md"
             onClick={() => onSelectTeam(team)}
-            className="px-4 py-2 rounded-lg border border-theme-soft theme-hover-row text-ui-label text-[var(--text-primary)] hover:text-[var(--text-accent)] hover:border-[var(--text-accent)] transition-colors"
+            className="text-[var(--text-primary)] hover:text-[var(--text-accent)] hover:border-[var(--text-accent)]"
           >
             {team}
-          </button>
+          </Button>
         ))}
       </div>
     </div>

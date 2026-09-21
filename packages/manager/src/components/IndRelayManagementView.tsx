@@ -25,7 +25,7 @@ import {
   buildRelaysFromIndividualLineup,
   compareRelayLegSplits,
 } from '@omniswim/core/lib/relayBuilder';
-import { TeamSelect, useToast } from '@omniswim/ui';
+import { Button, TeamSelect, useToast } from '@omniswim/ui';
 import { buildRelayGroups, type RelayGroup } from './indRelayGroupsView';
 
 type Props = {
@@ -374,15 +374,16 @@ export default function IndRelayManagementView({
           ) : null}
 
           <div className="mt-3 flex flex-wrap gap-2">
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="sm"
               disabled={!whatIfMode || !selectedTeam}
               onClick={buildFromLineup}
-              className="text-ui-caption px-3 py-1.5 rounded-lg border border-theme-soft theme-hover-row transition-colors disabled:opacity-40 uppercase font-bold tracking-widest"
+              className="uppercase tracking-widest"
               title="Fill vacant relay legs using active meet entry plans, then roster bests"
             >
               Build relays from individual lineup
-            </button>
+            </Button>
           </div>
         </div>
 
@@ -443,16 +444,17 @@ export default function IndRelayManagementView({
                       </div>
                       <div className="flex items-center gap-2">
                         {whatIfMode && vacantCount > 0 ? (
-                          <button
-                            type="button"
-                            className="text-ui-micro px-2 py-0.5 rounded-md border border-theme-soft hover:border-[var(--text-accent)] text-theme-secondary transition-colors"
+                          <Button
+                            variant="outline"
+                            size="sm"
+                            className="px-2 py-0.5 text-theme-secondary"
                             onClick={e => {
                               e.stopPropagation();
                               autofillAllVacant(group);
                             }}
                           >
                             Auto-fill all
-                          </button>
+                          </Button>
                         ) : null}
                         <p className="text-ui-caption font-mono text-[var(--text-accent)] tabular-nums">
                           Team {group.teamTotal}
@@ -524,13 +526,14 @@ export default function IndRelayManagementView({
                             </p>
                             {whatIfMode && isVacant ? (
                               <div className="mt-2 space-y-1.5 border-t border-theme-soft/40 pt-2">
-                                <button
-                                  type="button"
-                                  className="text-ui-micro text-[var(--text-accent)] hover:underline"
+                                <Button
+                                  variant="ghost"
+                                  size="sm"
+                                  className="text-[var(--text-accent)] hover:underline"
                                   onClick={() => autofillLeg(group, legIndex)}
                                 >
                                   Auto-fill best
-                                </button>
+                                </Button>
                                 <div className="flex gap-1">
                                   <input
                                     type="text"
@@ -541,24 +544,26 @@ export default function IndRelayManagementView({
                                     }
                                     className="flex-1 min-w-0 surface-muted-bg border border-theme-soft rounded-md px-1.5 py-0.5 text-ui-micro font-mono"
                                   />
-                                  <button
-                                    type="button"
-                                    className="text-ui-micro px-1.5 py-0.5 rounded-md border border-theme-soft transition-colors"
+                                  <Button
+                                    variant="outline"
+                                    size="sm"
+                                    className="px-1.5 py-0.5"
                                     onClick={() => saveManualLeg(group, legIndex)}
                                   >
                                     Set
-                                  </button>
+                                  </Button>
                                 </div>
                                 {overrides.some(
                                   o => o.relayEntryKey === group.key && o.legIndex === legIndex
                                 ) ? (
-                                  <button
-                                    type="button"
-                                    className="text-ui-micro text-theme-muted hover:text-amber-400"
+                                  <Button
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-theme-muted hover:text-amber-400"
                                     onClick={() => clearLegOverride(group, legIndex)}
                                   >
                                     Clear override
-                                  </button>
+                                  </Button>
                                 ) : null}
                               </div>
                             ) : null}

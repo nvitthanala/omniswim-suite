@@ -6,6 +6,7 @@
 
 import React from 'react';
 import { Loader2 } from 'lucide-react';
+import { Button } from '@omniswim/ui';
 import type { ScenarioDiffResult } from '@omniswim/core/lib/scenarioDiffClient';
 import { ScenarioDiffView } from './ScenarioDiffView';
 import type { DiffViewState } from './baselineDiffView';
@@ -22,12 +23,7 @@ export function DiffToggleButton({
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
-      onClick={onClick}
-      disabled={disabled}
-      className="btn-accent-outline rounded-md px-2.5 py-1.5 text-ui-caption font-semibold disabled:opacity-50"
-    >
+    <Button variant="outline" size="sm" onClick={onClick} disabled={disabled} className="px-2.5 py-1.5">
       {loading ? (
         <>
           <Loader2 size={12} className="animate-spin" />
@@ -38,7 +34,7 @@ export function DiffToggleButton({
       ) : (
         'Show changes from the loaded meet'
       )}
-    </button>
+    </Button>
   );
 }
 

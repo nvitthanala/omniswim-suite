@@ -262,8 +262,9 @@ export function ScoringSettingsFields({
         <div className="mb-4 p-3 rounded badge-warning text-[10px]">
           <span className="uppercase tracking-widest font-medium">Suggested preset: </span>
           {suggestedPresetId}
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             className="ml-2 underline hover:text-[var(--text-primary)]"
             onClick={() => {
               void fetchScoringPresetSettings(suggestedPresetId).then(s => {
@@ -275,7 +276,7 @@ export function ScoringSettingsFields({
             aria-label={`Load and save suggested ${suggestedPresetId} scoring preset`}
           >
             Load & save
-          </button>
+          </Button>
         </div>
       ) : null}
 

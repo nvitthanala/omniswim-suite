@@ -36,9 +36,14 @@ export default function ScoringSettingsModal({ settings, onSave, onClose, scorin
       <div className="surface-card rounded-2xl p-6 max-w-2xl w-full mx-4 shadow-2xl max-h-[90vh] flex flex-col">
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-lg font-medium text-[var(--text-primary)] uppercase tracking-tight">Scoring Matrix Configuration</h2>
-          <button onClick={onClose} className="text-theme-secondary hover:text-[var(--text-primary)] transition-colors" aria-label="Close">
-            <X size={20} />
-          </button>
+          <Button
+            variant="ghost"
+            size="md"
+            onClick={onClose}
+            className="text-theme-secondary hover:text-[var(--text-primary)]"
+            aria-label="Close"
+            leadingIcon={<X size={20} />}
+          />
         </div>
 
         <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6 text-sm">
@@ -49,15 +54,16 @@ export default function ScoringSettingsModal({ settings, onSave, onClose, scorin
             scoringView={scoringView}
             onScoringViewChange={onScoringViewChange}
             presetPickerExtra={
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => setManageOpen(true)}
                 aria-label="Manage scoring rule sets"
-                className="text-[9px] text-theme-secondary hover:text-[var(--text-primary)] uppercase tracking-widest flex items-center gap-1 shrink-0"
+                className="uppercase tracking-widest shrink-0"
+                leadingIcon={<Settings2 size={10} aria-hidden />}
               >
-                <Settings2 size={10} aria-hidden />
                 Manage rule sets
-              </button>
+              </Button>
             }
             presetListRefreshToken={presetListRefreshToken}
           />

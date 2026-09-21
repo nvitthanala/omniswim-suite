@@ -14,7 +14,7 @@ import {
   consumePendingAthleteJump,
   type AthleteJumpDetail,
 } from '@omniswim/core/lib/athleteJumpSignal';
-import { useToast } from '@omniswim/ui';
+import { Button, useToast } from '@omniswim/ui';
 import type { RecruitAthletePrefill } from './RecruitForm';
 import type { EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
 import RosterWizardShell, { type RosterWizardStepId } from './RosterWizardShell';
@@ -225,39 +225,42 @@ export default function TeamManagementView({
           What-if
         </span>
       </label>
-      <button
-        type="button"
+      <Button
+        variant="outline"
+        size="md"
         onClick={() => whatIfMode && onRemoveSeniorsChange(!removeSeniors)}
         disabled={!whatIfMode}
-        className={`flex items-center gap-2 px-3 py-2 border rounded-lg text-ui-label transition-all disabled:opacity-40 disabled:cursor-not-allowed whitespace-nowrap ${
+        className={`whitespace-nowrap ${
           removeSeniors
             ? 'bg-[var(--text-accent)]/20 border-[var(--text-accent)]/40 text-[var(--text-accent)]'
-            : 'surface-muted-bg border-theme-soft text-theme-secondary hover:text-[var(--text-primary)]'
+            : 'surface-muted-bg text-theme-secondary hover:text-[var(--text-primary)]'
         }`}
         title="Remove graduating seniors and simulate relay replacements"
+        leadingIcon={<UserMinus size={14} />}
       >
-        <UserMinus size={14} />
         Drop seniors
-      </button>
-      <button
-        type="button"
+      </Button>
+      <Button
+        variant="outline"
+        size="md"
         onClick={onReloadScoring}
-        className="flex items-center gap-2 px-3 py-2 btn-accent-outline rounded-lg text-ui-label font-medium whitespace-nowrap"
+        className="whitespace-nowrap"
         title="Recalculate projected scores"
+        leadingIcon={<RefreshCw size={14} />}
       >
-        <RefreshCw size={14} />
         Recalc
-      </button>
+      </Button>
       {lastSwimEdit ? (
-        <button
-          type="button"
+        <Button
+          variant="outline"
+          size="md"
           onClick={handleUndoSwimEdit}
           title={lastSwimEdit.description}
-          className="flex items-center gap-1.5 px-3 py-2 border border-theme-soft rounded-lg text-ui-label text-theme-secondary hover:text-[var(--text-primary)] transition-colors whitespace-nowrap max-w-[16rem] truncate"
+          className="text-theme-secondary hover:text-[var(--text-primary)] whitespace-nowrap max-w-[16rem] truncate"
+          leadingIcon={<Undo2 size={14} className="shrink-0" />}
         >
-          <Undo2 size={14} className="shrink-0" />
           <span className="truncate">Undo: {lastSwimEdit.description}</span>
-        </button>
+        </Button>
       ) : null}
     </div>
   );

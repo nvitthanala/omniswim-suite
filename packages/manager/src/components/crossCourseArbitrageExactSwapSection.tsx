@@ -11,6 +11,7 @@
 
 import React from 'react';
 import { Repeat2 } from 'lucide-react';
+import { Button } from '@omniswim/ui';
 import {
   AthleteButton,
   DROP_SOURCE_LABEL,
@@ -53,13 +54,9 @@ function SwapRow({
             {formatPoints(swap.deltaPoints)}
           </span>
           {canApplySwaps ? (
-            <button
-              type="button"
-              onClick={() => onApplySwap(swap)}
-              className="btn-accent-outline rounded-md px-2 py-1 text-ui-micro font-semibold"
-            >
+            <Button variant="outline" size="sm" onClick={() => onApplySwap(swap)} className="px-2 py-1">
               Apply
-            </button>
+            </Button>
           ) : null}
         </div>
       </div>

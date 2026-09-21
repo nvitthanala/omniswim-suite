@@ -7,7 +7,7 @@ import React, { useState } from 'react';
 import { ChevronDown, ChevronUp, UserMinus, ToggleLeft, ToggleRight } from 'lucide-react';
 import type { CatalogAthlete, CatalogEventTime } from '@omniswim/core/lib/rosterCatalog';
 import { sortedTimesByScy } from '@omniswim/core/lib/rosterCatalog';
-import { Badge } from '@omniswim/ui';
+import { Badge, Button } from '@omniswim/ui';
 
 type Props = {
   athlete: CatalogAthlete & { times: CatalogEventTime[] };
@@ -103,15 +103,15 @@ function SwimPills({
               : 'border-theme-soft bg-[var(--surface-muted)] opacity-50 hover:opacity-90'
           }`}
         >
-          <button
-            type="button"
+          <Button
+            variant="ghost"
+            size="sm"
             onClick={() => onToggleEligibility(t.id, !t.isEligible)}
             title={t.isEligible ? 'Drop from scoring pool' : 'Add back to scoring pool'}
-            className="p-0.5 hover:text-[var(--text-accent)]"
+            className="p-0.5"
             aria-label={t.isEligible ? 'Disable event' : 'Enable event'}
-          >
-            {t.isEligible ? <ToggleRight size={14} className="text-[var(--text-accent)]" /> : <ToggleLeft size={14} />}
-          </button>
+            leadingIcon={t.isEligible ? <ToggleRight size={14} className="text-[var(--text-accent)]" /> : <ToggleLeft size={14} />}
+          />
           <span className="font-bold">{t.event}</span>
           <span className="font-mono">{t.timeText}</span>
           <span className="text-[10px] text-theme-muted">{TIME_TYPE_LABEL[t.timeType] ?? t.timeType}</span>
@@ -128,15 +128,15 @@ function SwimPills({
               {t.swimcloudBadge}
             </span>
           ) : null}
-          <button
-            type="button"
+          <Button
+            variant="danger"
+            size="sm"
             onClick={() => onDeleteTime(t.id)}
-            className="p-0.5 text-theme-secondary hover:text-red-400"
+            className="p-0.5 border-transparent bg-transparent text-theme-secondary hover:text-red-400"
             aria-label={`Delete ${t.event} ${t.timeText}`}
             title="Delete this record"
-          >
-            <UserMinus size={12} />
-          </button>
+            leadingIcon={<UserMinus size={12} />}
+          />
         </li>
       ))}
     </ul>

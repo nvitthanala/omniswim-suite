@@ -1,4 +1,5 @@
 import { Activity, Ruler, Target, User, Waves } from 'lucide-react';
+import { Button } from '@omniswim/ui';
 import type { CycleDefinition, ImProposal, RaceConfig, RaceCourse, Stroke } from '../types';
 import { INPUT_CLASS, SELECT_CLASS, STROKE_LABEL, STROKES } from './raceSetupShared';
 
@@ -115,20 +116,22 @@ export function EventTypeSection({
           <Activity className="w-3 h-3" /> Event
         </label>
         <div className="grid grid-cols-2 gap-2">
-          <button
-            type="button"
+          <Button
+            variant={eventType === 'single' ? 'outline' : 'ghost'}
+            size="sm"
             onClick={() => onEventTypeChange('single')}
-            className={`px-3 py-2 rounded text-ui-caption font-bold uppercase tracking-wide border ${eventType === 'single' ? 'border-[var(--text-accent)] text-[var(--text-accent)]' : 'border-theme-soft text-theme-muted'}`}
+            className="w-full uppercase tracking-wide"
           >
             Single Stroke
-          </button>
-          <button
-            type="button"
+          </Button>
+          <Button
+            variant={eventType === 'im' ? 'outline' : 'ghost'}
+            size="sm"
             onClick={() => onEventTypeChange('im')}
-            className={`px-3 py-2 rounded text-ui-caption font-bold uppercase tracking-wide border ${eventType === 'im' ? 'border-[var(--text-accent)] text-[var(--text-accent)]' : 'border-theme-soft text-theme-muted'}`}
+            className="w-full uppercase tracking-wide"
           >
             IM
-          </button>
+          </Button>
         </div>
       </div>
 
@@ -185,14 +188,15 @@ function ImOrderPanel({
               </span>
             ))}
           </div>
-          <button
-            type="button"
+          <Button
+            variant="primary"
+            size="sm"
             onClick={onConfirmImProposal}
             disabled={imConfirmedForLengthCount === lengthCountForRows}
-            className="px-3 py-1.5 rounded text-ui-caption font-bold uppercase tracking-wide bg-accent-600 hover:bg-accent-500 text-white disabled:opacity-50 disabled:cursor-not-allowed"
+            className="uppercase tracking-wide"
           >
             {imConfirmedForLengthCount === lengthCountForRows ? 'Confirmed' : 'Confirm IM Order'}
-          </button>
+          </Button>
         </>
       ) : (
         <p className="text-ui-caption text-red-500 dark:text-red-400">
@@ -360,14 +364,15 @@ interface ConfirmFooterProps {
 export function ConfirmFooter({ canConfirm, lengthCountValid, onConfirm }: ConfirmFooterProps) {
   return (
     <div className="mt-auto pt-6 border-t border-theme-soft shrink-0">
-      <button
+      <Button
+        variant="primary"
+        size="lg"
         onClick={onConfirm}
         disabled={!canConfirm}
-        className={`w-full py-3 rounded-lg text-ui-body font-bold uppercase tracking-wider transition-colors shadow-sm flex items-center justify-center gap-2
-          ${canConfirm ? 'bg-accent-600 hover:bg-accent-500 text-white shadow-[0_0_15px_var(--accent-500)] shadow-accent-500/20' : 'bg-[var(--surface-muted)] text-theme-muted cursor-not-allowed'}`}
+        className="w-full uppercase tracking-wider shadow-sm"
       >
         Start Tagging
-      </button>
+      </Button>
       {!canConfirm ? (
         <p className="text-ui-micro text-center text-theme-muted mt-2">
           {!lengthCountValid ? 'Fix the distance/course mismatch above.' : 'Confirm the IM stroke order above.'}

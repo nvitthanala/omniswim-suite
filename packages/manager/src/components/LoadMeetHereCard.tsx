@@ -12,7 +12,7 @@ import { AlertTriangle, ArrowLeftRight, X } from 'lucide-react';
 import { Workspace } from '@omniswim/core/types';
 import { copyMeetIntoWorkspace, type CopyMeetResult } from '@omniswim/core/lib/swimEditor';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
-import { Modal, useToast } from '@omniswim/ui';
+import { Button, Modal, useToast } from '@omniswim/ui';
 
 type Props = {
   workspace: Workspace;
@@ -86,14 +86,15 @@ export default function LoadMeetHereCard({ workspace, onUpdate, whatIfMode }: Pr
               </option>
             ))}
           </select>
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="md"
             disabled={!whatIfMode || !sourceId}
             onClick={requestCopy}
-            className="text-ui-label px-4 py-2 btn-accent-outline rounded-lg font-medium disabled:opacity-40 whitespace-nowrap shrink-0"
+            className="whitespace-nowrap shrink-0"
           >
             Copy meet results into this workspace
-          </button>
+          </Button>
         </div>
       ) : (
         <p className="text-ui-caption text-theme-muted">
@@ -120,14 +121,14 @@ export default function LoadMeetHereCard({ workspace, onUpdate, whatIfMode }: Pr
                   </p>
                 </div>
               </div>
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="md"
                 onClick={() => setPending(null)}
-                className="text-theme-muted hover:text-[var(--text-primary)] transition-colors"
+                className="text-theme-muted hover:text-[var(--text-primary)]"
                 aria-label="Close"
-              >
-                <X size={20} />
-              </button>
+                leadingIcon={<X size={20} />}
+              />
             </div>
 
             {pending.warnings.length > 0 ? (
@@ -141,20 +142,12 @@ export default function LoadMeetHereCard({ workspace, onUpdate, whatIfMode }: Pr
             ) : null}
 
             <div className="flex justify-end gap-3 font-medium">
-              <button
-                type="button"
-                onClick={() => setPending(null)}
-                className="px-5 py-2 border border-theme-soft hover:bg-[var(--surface-strong)] rounded-lg text-[var(--text-primary)] transition-colors"
-              >
+              <Button variant="outline" size="md" onClick={() => setPending(null)}>
                 Cancel
-              </button>
-              <button
-                type="button"
-                onClick={confirmCopy}
-                className="px-5 py-2 bg-[var(--text-accent)] hover:bg-[var(--text-accent)]/90 text-white rounded-lg transition-colors"
-              >
+              </Button>
+              <Button variant="primary" size="md" onClick={confirmCopy}>
                 Confirm copy
-              </button>
+              </Button>
             </div>
         </Modal>
       ) : null}

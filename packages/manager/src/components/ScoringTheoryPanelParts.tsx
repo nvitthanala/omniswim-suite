@@ -6,6 +6,7 @@
 
 import React from 'react';
 import { Wand2 } from 'lucide-react';
+import { Button } from '@omniswim/ui';
 import type { ScoringTheoryApplyResult, ParsedScoringTheory } from '@omniswim/core/lib/scoringTheory';
 
 /** One resolved-swimmer-match chip: styling, tooltip, and body text all key
@@ -101,14 +102,15 @@ export function TheoryApplyFooter({
     );
   }
   return (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
+      size="md"
       onClick={onApply}
-      className="text-ui-label text-[var(--text-accent)] hover:underline font-semibold flex items-center gap-1.5"
+      className="p-0 text-[var(--text-accent)] hover:underline font-semibold"
+      leadingIcon={<Wand2 size={14} />}
     >
-      <Wand2 size={14} />
       Apply theory ({preview.summary.entriesAdded} entries · {preview.summary.relayLegsAssigned} relay
       legs)
-    </button>
+    </Button>
   );
 }

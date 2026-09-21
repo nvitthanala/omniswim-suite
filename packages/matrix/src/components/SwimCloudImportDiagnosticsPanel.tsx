@@ -14,7 +14,7 @@
  */
 import { useState } from 'react';
 import { ChevronDown, ChevronRight, X } from 'lucide-react';
-import { Badge } from '@omniswim/ui';
+import { Badge, Button } from '@omniswim/ui';
 import type { SwimCloudParseWarning } from '@omniswim/swimcloud/parser';
 import type { SwimCloudMeetImportSkip } from '../lib/swimCloudMeetImportBridge';
 import {
@@ -54,11 +54,12 @@ function SkipGroupRow({ group }: { group: SkipReasonGroup }) {
   const alwaysOpen = group.reason === 'ambiguous-round-duplicate';
   return (
     <li className="border border-theme-soft rounded-lg">
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={() => !alwaysOpen && setExpanded(e => !e)}
         aria-expanded={expanded}
-        className="w-full flex items-center gap-2 px-3 py-2 text-left disabled:cursor-default"
+        className="w-full justify-start px-3 py-2 text-left disabled:cursor-default"
         disabled={alwaysOpen}
       >
         {alwaysOpen ? null : expanded ? (
@@ -70,7 +71,7 @@ function SkipGroupRow({ group }: { group: SkipReasonGroup }) {
           {skipReasonLabel(group.reason)}
         </span>
         <SizeTag n={group.count} />
-      </button>
+      </Button>
       {expanded ? (
         <ul className="px-3 pb-2 space-y-1">
           {group.items.map((item, i) => (
@@ -90,11 +91,12 @@ function WarningGroupRow({ group }: { group: WarningCodeGroup }) {
   const [expanded, setExpanded] = useState(false);
   return (
     <li className="border border-theme-soft rounded-lg">
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={() => setExpanded(e => !e)}
         aria-expanded={expanded}
-        className="w-full flex items-center gap-2 px-3 py-2 text-left"
+        className="w-full justify-start px-3 py-2 text-left"
       >
         {expanded ? (
           <ChevronDown size={13} className="text-theme-secondary shrink-0" />
@@ -103,7 +105,7 @@ function WarningGroupRow({ group }: { group: WarningCodeGroup }) {
         )}
         <span className="text-ui-caption text-[var(--text-primary)] flex-1 font-mono">{group.code}</span>
         <SizeTag n={group.count} />
-      </button>
+      </Button>
       {expanded ? (
         <ul className="px-3 pb-2 space-y-1">
           {group.examples.map((msg, i) => (
@@ -144,9 +146,14 @@ export function SwimCloudImportDiagnosticsPanel({
         <span className="text-ui-caption font-bold uppercase tracking-widest text-theme-secondary">
           Import notes
         </span>
-        <button type="button" onClick={onDismiss} aria-label="Dismiss import notes" className="p-1 theme-hover-row rounded">
-          <X size={14} />
-        </button>
+        <Button
+          variant="ghost"
+          size="sm"
+          onClick={onDismiss}
+          aria-label="Dismiss import notes"
+          className="p-1"
+          leadingIcon={<X size={14} />}
+        />
       </div>
 
       {reviewSkips.length === 0 && reviewWarnings.length === 0 && rawWarnings === undefined ? (
@@ -187,14 +194,15 @@ export function SwimCloudImportDiagnosticsPanel({
       ) : null}
 
       {structuralCount > 0 ? (
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => setShowStructural(s => !s)}
-          className="text-ui-micro text-theme-muted hover:text-theme-secondary underline"
+          className="text-theme-muted hover:text-theme-secondary underline"
         >
           {showStructural ? 'Hide' : 'Show'} {structuralCount} expected structural note
           {structuralCount === 1 ? '' : 's'} (e.g. relay legs SwimCloud does not publish)
-        </button>
+        </Button>
       ) : null}
       {showStructural && (structuralSkips.length > 0 || structuralWarnings.length > 0) ? (
         <ul className="space-y-1.5">

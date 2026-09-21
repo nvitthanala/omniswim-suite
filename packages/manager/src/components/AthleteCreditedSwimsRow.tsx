@@ -15,7 +15,7 @@ import { formatLegSplitSummary } from '@omniswim/core/lib/relaySplits';
 import { compactEventTitleAttr, formatCompactEventLabel } from '@omniswim/core/lib/utils';
 import { ALL_PLAN_EVENTS } from '@omniswim/core/lib/eventCatalog';
 import { buildCutlineTagForTeam } from '@omniswim/core/lib/cutlineTags';
-import { Badge, CutlineTag, CutlineNearMissChip } from '@omniswim/ui';
+import { Badge, Button, CutlineTag, CutlineNearMissChip } from '@omniswim/ui';
 
 type AnchorExpected = { prelims?: number; psych?: number };
 
@@ -158,24 +158,24 @@ function EditingActions({
 }) {
   return (
     <div className="flex items-center justify-center gap-1">
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={() => onCommitEdit(swim)}
-        className="p-1 rounded-md text-theme-muted hover:text-points-positive hover:bg-points-positive/10 transition-colors"
+        className="p-1 hover:text-points-positive hover:bg-points-positive/10"
         title="Save edit"
         aria-label={`Save ${swim.event}`}
-      >
-        <Check size={12} />
-      </button>
-      <button
-        type="button"
+        leadingIcon={<Check size={12} />}
+      />
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={onCancelEdit}
-        className="p-1 rounded-md text-theme-muted hover:text-[var(--text-accent)] hover:bg-[var(--text-accent)]/10 transition-colors"
+        className="p-1 hover:bg-[var(--text-accent)]/10"
         title="Cancel edit"
         aria-label={`Cancel edit ${swim.event}`}
-      >
-        <X size={12} />
-      </button>
+        leadingIcon={<X size={12} />}
+      />
     </div>
   );
 }
@@ -195,25 +195,25 @@ function IdleActions({
   return (
     <div className="flex items-center justify-center gap-1">
       {showEdit ? (
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={() => onStartEdit(swim)}
-          className="p-1 rounded-md text-theme-muted hover:text-[var(--text-accent)] hover:bg-[var(--text-accent)]/10 transition-colors"
+          className="p-1 hover:bg-[var(--text-accent)]/10"
           title="Edit time/event"
           aria-label={`Edit ${swim.event}`}
-        >
-          <Pencil size={12} />
-        </button>
+          leadingIcon={<Pencil size={12} />}
+        />
       ) : null}
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         onClick={() => onDeleteSwim?.(swim)}
-        className="p-1 rounded-md text-theme-muted hover:text-[var(--text-accent)] hover:bg-[var(--text-accent)]/10 transition-colors"
+        className="p-1 hover:bg-[var(--text-accent)]/10"
         title={swim.isRecruit ? 'Remove recruit entry' : 'Remove this swim from projection'}
         aria-label={`Remove ${swim.event}`}
-      >
-        <Trash2 size={12} />
-      </button>
+        leadingIcon={<Trash2 size={12} />}
+      />
     </div>
   );
 }

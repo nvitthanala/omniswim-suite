@@ -9,6 +9,7 @@
 
 import React from 'react';
 import { Loader2 } from 'lucide-react';
+import { Button } from '@omniswim/ui';
 import type { Snapshot } from '@omniswim/core/api/snapshots';
 import type { ScenarioDiffResult } from '@omniswim/core/lib/scenarioDiffClient';
 import { ScenarioDiffView } from './ScenarioDiffView';
@@ -88,25 +89,27 @@ export default function ScenarioSnapshotRow({
             </span>
           ) : null}
           {diffSupported ? (
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="sm"
               onClick={onDiffClick}
               disabled={diffButtonDisabled}
-              className="btn-accent-outline rounded-md px-2 py-1 text-ui-micro font-semibold disabled:opacity-50"
+              className="px-2 py-1"
               title="Per-event / per-swimmer diff vs the current lineup (does not restore)"
             >
               <DiffButtonLabel isDiffLoading={isDiffLoading} isDiffOpen={isDiffOpen} />
-            </button>
+            </Button>
           ) : null}
           {editable ? (
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="sm"
               onClick={onRestoreClick}
               disabled={isRestoring}
-              className="btn-accent-outline rounded-md px-2 py-1 text-ui-micro font-semibold disabled:opacity-50"
+              className="px-2 py-1"
             >
               <RestoreButtonLabel isRestoring={isRestoring} isConfirming={isConfirming} />
-            </button>
+            </Button>
           ) : null}
         </div>
       </div>

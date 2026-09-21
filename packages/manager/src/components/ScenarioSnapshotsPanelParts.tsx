@@ -131,13 +131,14 @@ export function ScenarioListSection({
         ))}
       </ul>
       {sorted.length > defaultLimit ? (
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="sm"
           onClick={onToggleExpanded}
-          className="mt-2 text-ui-caption text-[var(--text-accent)] hover:underline"
+          className="mt-2 p-0 text-[var(--text-accent)] hover:underline"
         >
           {expanded ? 'Show fewer' : `Show all ${sorted.length}`}
-        </button>
+        </Button>
       ) : null}
     </>
   );

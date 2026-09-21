@@ -4,6 +4,7 @@ import { ScoringSettings } from '@omniswim/core/types';
 import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
 import { ScoringSettingsFields } from './ScoringSettingsFields';
 import { ScoringPresetManagerModal } from './ScoringPresetManagerModal';
+import { Button } from '@omniswim/ui';
 
 type Props = {
   settings: ScoringSettings;
@@ -51,14 +52,16 @@ export default function ScoringSettingsPanel({
   );
 
   const saveButton = (
-    <button
-      type="button"
+    <Button
+      variant="primary"
+      size="sm"
       onClick={() => onSave(draft)}
       aria-label="Save scoring settings"
-      className="text-ui-micro badge-info px-2 py-1 rounded hover:opacity-90 transition-colors uppercase font-medium flex items-center gap-1 shrink-0"
+      className="shrink-0"
+      leadingIcon={<Save size={10} />}
     >
-      <Save size={10} /> Save
-    </button>
+      Save
+    </Button>
   );
 
   const header = (
@@ -78,15 +81,16 @@ export default function ScoringSettingsPanel({
   );
 
   const manageRuleSetsButton = (
-    <button
-      type="button"
+    <Button
+      variant="ghost"
+      size="sm"
       onClick={() => setManageOpen(true)}
       aria-label="Manage scoring rule sets"
-      className="text-[9px] text-theme-secondary hover:text-[var(--text-primary)] uppercase tracking-widest flex items-center gap-1 shrink-0"
+      className="uppercase tracking-widest shrink-0"
+      leadingIcon={<Settings2 size={10} aria-hidden />}
     >
-      <Settings2 size={10} aria-hidden />
       Manage rule sets
-    </button>
+    </Button>
   );
 
   const body = (

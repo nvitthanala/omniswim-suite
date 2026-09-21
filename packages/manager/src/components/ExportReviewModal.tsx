@@ -10,7 +10,7 @@
 
 import React from 'react';
 import { AlertTriangle, X } from 'lucide-react';
-import { Modal } from '@omniswim/ui';
+import { Button, Modal } from '@omniswim/ui';
 import type { EntryExportIssue } from '@omniswim/core/lib/entryExport';
 
 type Props = {
@@ -40,14 +40,14 @@ export default function ExportReviewModal({ issues, onExportAnyway, onCancel }: 
             </p>
           </div>
         </div>
-        <button
-          type="button"
+        <Button
+          variant="ghost"
+          size="md"
           onClick={onCancel}
-          className="text-theme-muted hover:text-[var(--text-primary)] transition-colors"
+          className="text-theme-muted hover:text-[var(--text-primary)]"
           aria-label="Close"
-        >
-          <X size={20} />
-        </button>
+          leadingIcon={<X size={20} />}
+        />
       </div>
 
       <ul className="space-y-2 overflow-y-auto custom-scrollbar mb-6 -mr-2 pr-2">
@@ -62,20 +62,17 @@ export default function ExportReviewModal({ issues, onExportAnyway, onCancel }: 
       </ul>
 
       <div className="flex justify-end gap-3 font-medium">
-        <button
-          type="button"
-          onClick={onCancel}
-          className="px-5 py-2 border border-theme-soft hover:bg-[var(--surface-strong)] rounded-lg text-[var(--text-primary)] transition-colors"
-        >
+        <Button variant="outline" size="md" onClick={onCancel}>
           Cancel
-        </button>
-        <button
-          type="button"
+        </Button>
+        <Button
+          variant="outline"
+          size="md"
           onClick={onExportAnyway}
-          className="px-5 py-2 border border-amber-400/40 hover:border-amber-400/70 hover:bg-amber-400/10 rounded-lg text-amber-400 transition-colors"
+          className="border-amber-400/40 hover:border-amber-400/70 hover:bg-amber-400/10 text-amber-400"
         >
           Export anyway
-        </button>
+        </Button>
       </div>
     </Modal>
   );

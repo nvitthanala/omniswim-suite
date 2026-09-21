@@ -22,7 +22,7 @@ import {
 import { divisionForTeamOrNull } from '@omniswim/core/data/teamDivisions';
 import { convertTimeToSeconds } from '@omniswim/core/lib/utils';
 import { getCutlinesForSwim } from '@omniswim/core/lib/cutlineUtils';
-import { TeamSelect, useToast } from '@omniswim/ui';
+import { Button, TeamSelect, useToast } from '@omniswim/ui';
 import AliasSuggestionsPanel from './AliasSuggestionsPanel';
 import { CLASS_YEAR_OPTIONS, SwimRowTags } from './AthleteHistoryImportPanelParts';
 import {
@@ -321,14 +321,14 @@ export default function AthleteHistoryImportPanel({
             events for athletes already on the team.
           </p>
         </div>
-        <button
-          type="button"
-          className="p-2 rounded-lg border border-theme-soft text-theme-secondary hover:text-[var(--text-accent)] hover:border-[var(--text-accent)]/40 transition-colors shrink-0"
+        <Button
+          variant="outline"
+          size="sm"
+          className="p-2 text-theme-secondary hover:text-[var(--text-accent)] shrink-0"
           aria-label="How to copy from SwimCloud"
           onClick={() => setShowInfo(v => !v)}
-        >
-          <Info size={16} />
-        </button>
+          leadingIcon={<Info size={16} />}
+        />
         {showInfo ? (
           <div className="theme-popover absolute right-0 top-full mt-2 z-20 w-full max-w-md p-4 rounded-xl shadow-lg text-ui-body">
             <p className="text-ui-label font-semibold text-[var(--text-primary)] mb-2">
@@ -399,14 +399,9 @@ export default function AthleteHistoryImportPanel({
       </label>
 
       <div className="flex flex-wrap gap-2 mb-4">
-        <button
-          type="button"
-          disabled={busy || !paste.trim()}
-          onClick={parseLocal}
-          className="text-ui-label px-4 py-2 btn-accent-outline rounded-lg font-medium disabled:opacity-40"
-        >
+        <Button variant="outline" size="md" disabled={busy || !paste.trim()} onClick={parseLocal}>
           Parse text
-        </button>
+        </Button>
         <label className="text-ui-label px-4 py-2 border border-theme-soft rounded-lg cursor-pointer flex items-center gap-2 hover:bg-[var(--hover-overlay)]">
           <Upload size={14} />
           Screenshot
@@ -541,15 +536,16 @@ export default function AthleteHistoryImportPanel({
               />
             ) : null}
             {lastAliasLink ? (
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={handleUndoAliasLink}
                 title={lastAliasLink.description}
-                className="mb-2 flex w-full items-center gap-1.5 truncate rounded-lg border border-theme-soft px-2.5 py-1.5 text-left text-ui-caption text-theme-muted transition-colors hover:text-theme-secondary"
+                className="mb-2 w-full truncate rounded-lg border border-theme-soft text-left text-theme-muted hover:text-theme-secondary"
+                leadingIcon={<Undo2 size={12} className="shrink-0" />}
               >
-                <Undo2 size={12} className="shrink-0" />
                 <span className="truncate">Undo: {lastAliasLink.description}</span>
-              </button>
+              </Button>
             ) : null}
             <p className="text-ui-caption text-theme-secondary mb-2">
               {diffSummary.newCount} new · {diffSummary.improvedCount} improved ·{' '}
@@ -563,13 +559,14 @@ export default function AthleteHistoryImportPanel({
             ) : !team.trim() ? (
               <p className="text-ui-caption text-amber-400/90">Select a team above before importing.</p>
             ) : (
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="md"
                 onClick={confirmImport}
-                className="text-ui-label text-[var(--text-accent)] hover:underline font-semibold"
+                className="p-0 text-[var(--text-accent)] hover:underline font-semibold"
               >
                 Import & add to roster ({preview.length} swims)
-              </button>
+              </Button>
             )}
           </div>
         </div>

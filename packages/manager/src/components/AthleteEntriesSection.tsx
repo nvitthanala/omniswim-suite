@@ -46,7 +46,7 @@ import {
   updatePlannedEntry,
   type WorkspaceEditorPatch,
 } from '@omniswim/core/lib/swimEditor';
-import { CutlineNearMissChip, CutlineTag, useToast } from '@omniswim/ui';
+import { Button, CutlineNearMissChip, CutlineTag, useToast } from '@omniswim/ui';
 import DrawerSection from './DrawerSection';
 import { buildPastePreviewPatch, selectPastePreviewRows } from './athleteEntriesView';
 
@@ -310,14 +310,14 @@ export default function AthleteEntriesSection({
                 className="hidden sm:inline-flex"
               />
               {editable ? (
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={() => removeEntry(p.id)}
-                  className="p-1 rounded-md text-theme-muted hover:text-amber-400 transition-colors"
+                  className="p-1 hover:text-amber-400"
                   aria-label={`Remove ${p.event}`}
-                >
-                  <Trash2 size={14} />
-                </button>
+                  leadingIcon={<Trash2 size={14} />}
+                />
               ) : null}
             </li>
             );
@@ -347,17 +347,19 @@ export default function AthleteEntriesSection({
               onChange={e => setNewTime(e.target.value)}
               className="w-24 font-mono glass-input rounded-lg px-2 py-2 text-ui-body"
             />
-            <button
-              type="button"
+            <Button
+              variant="outline"
+              size="md"
               onClick={addEntry}
               disabled={!canAddSelected || !newTime.trim()}
               title={!canAddSelected ? 'Entry limit reached for this type' : undefined}
-              className="text-ui-label px-3 py-2 border border-theme-soft rounded-lg flex items-center gap-1.5 disabled:opacity-40"
+              leadingIcon={<Plus size={14} />}
             >
-              <Plus size={14} /> Add
-            </button>
-            <button
-              type="button"
+              Add
+            </Button>
+            <Button
+              variant="outline"
+              size="md"
               onClick={() => {
                 if (pasteOpen && pastePreview.length === 0) {
                   setPasteOpen(false);
@@ -365,10 +367,10 @@ export default function AthleteEntriesSection({
                   setPasteOpen(true);
                 }
               }}
-              className="text-ui-label px-3 py-2 border border-theme-soft rounded-lg flex items-center gap-1.5"
+              leadingIcon={<ClipboardPaste size={14} />}
             >
-              <ClipboardPaste size={14} /> Paste
-            </button>
+              Paste
+            </Button>
           </div>
           {pasteOpen ? (
             <div className="space-y-2">
@@ -381,14 +383,9 @@ export default function AthleteEntriesSection({
                     placeholder="Paste SwimCloud Personal Bests for this swimmer…"
                     className="w-full font-mono glass-input rounded-lg px-3 py-2 text-ui-caption resize-y"
                   />
-                  <button
-                    type="button"
-                    onClick={previewPaste}
-                    disabled={!pasteText.trim()}
-                    className="text-ui-label px-3 py-2 btn-accent-outline rounded-lg disabled:opacity-40"
-                  >
+                  <Button variant="outline" size="md" onClick={previewPaste} disabled={!pasteText.trim()}>
                     Preview suggested entries
-                  </button>
+                  </Button>
                 </>
               ) : (
                 <>
@@ -423,24 +420,25 @@ export default function AthleteEntriesSection({
                     ))}
                   </ul>
                   <div className="flex gap-2">
-                    <button
-                      type="button"
+                    <Button
+                      variant="outline"
+                      size="md"
                       onClick={confirmPastePreview}
                       disabled={pastePreview.every(p => !p.selected)}
-                      className="flex-1 text-ui-label px-3 py-2 btn-accent-outline rounded-lg disabled:opacity-40"
+                      className="flex-1"
                     >
                       Add selected
-                    </button>
-                    <button
-                      type="button"
+                    </Button>
+                    <Button
+                      variant="outline"
+                      size="md"
                       onClick={() => {
                         setParsePreview([]);
                         setPasteText('');
                       }}
-                      className="text-ui-label px-3 py-2 border border-theme-soft rounded-lg"
                     >
                       Cancel
-                    </button>
+                    </Button>
                   </div>
                 </>
               )}

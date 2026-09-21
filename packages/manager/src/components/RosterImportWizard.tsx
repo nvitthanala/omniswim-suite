@@ -26,6 +26,7 @@ import { parseCsvHistory } from '@omniswim/core/lib/csvImport';
 import { divisionForTeamOrNull } from '@omniswim/core/data/teamDivisions';
 import {
   Badge,
+  Button,
   Modal,
   TeamSelect,
   useToast,
@@ -600,9 +601,7 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
               Paste SwimCloud Personal Bests or roster table text
             </p>
           </div>
-          <button type="button" onClick={onClose} className="p-2 theme-hover-row rounded-lg transition-colors" aria-label="Close">
-            <X size={18} />
-          </button>
+          <Button variant="ghost" size="md" onClick={onClose} className="p-2" aria-label="Close" leadingIcon={<X size={18} />} />
         </div>
 
         <div className="p-5 overflow-y-auto flex-1 space-y-4">
@@ -744,13 +743,14 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
                   {mode === 'csv' ? <FileSpreadsheet size={14} /> : <ClipboardPaste size={14} />}
                   {mode === 'csv' ? 'CSV content' : 'Paste text'}
                   {mode === 'csv' ? (
-                    <button
-                      type="button"
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => fileInputRef.current?.click()}
-                      className="text-[var(--text-accent)] normal-case hover:underline ml-1"
+                      className="text-[var(--text-accent)] normal-case hover:underline ml-1 p-0"
                     >
                       (choose file…)
-                    </button>
+                    </Button>
                   ) : detectedFormat && detectedFormat !== 'unknown' ? (
                     <span className="text-[var(--text-accent)] normal-case">({detectedFormat.replace('_', ' ')})</span>
                   ) : null}
@@ -818,15 +818,16 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
                 />
               ) : null}
               {lastAliasLink ? (
-                <button
-                  type="button"
+                <Button
+                  variant="ghost"
+                  size="sm"
                   onClick={handleUndoAliasLink}
                   title={lastAliasLink.description}
-                  className="flex w-full items-center gap-1.5 truncate rounded-lg border border-theme-soft px-2.5 py-1.5 text-left text-ui-caption text-theme-muted transition-colors hover:text-theme-secondary"
+                  className="w-full truncate rounded-lg border border-theme-soft text-left text-theme-muted hover:text-theme-secondary"
+                  leadingIcon={<Undo2 size={12} className="shrink-0" />}
                 >
-                  <Undo2 size={12} className="shrink-0" />
                   <span className="truncate">Undo: {lastAliasLink.description}</span>
-                </button>
+                </Button>
               ) : null}
               <div className="border border-theme-soft rounded-lg max-h-64 overflow-y-auto custom-scrollbar">
                 <table className="w-full text-ui-caption">
@@ -866,23 +867,13 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
             Cancel
           </button>
           {step === 'paste' ? (
-            <button
-              type="button"
-              onClick={handleParse}
-              disabled={!paste.trim()}
-              className="px-4 py-2 btn-primary rounded-lg text-ui-micro font-bold uppercase tracking-widest disabled:opacity-40"
-            >
+            <Button variant="primary" size="md" onClick={handleParse} disabled={!paste.trim()}>
               Preview
-            </button>
+            </Button>
           ) : (
-            <button
-              type="button"
-              onClick={() => void handleMerge()}
-              disabled={preview.length === 0}
-              className="px-4 py-2 btn-primary rounded-lg text-ui-micro font-bold uppercase tracking-widest disabled:opacity-40"
-            >
+            <Button variant="primary" size="md" onClick={() => void handleMerge()} disabled={preview.length === 0}>
               Import & add to roster
-            </button>
+            </Button>
           )}
         </div>
       </Modal>

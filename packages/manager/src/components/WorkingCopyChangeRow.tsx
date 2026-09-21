@@ -9,6 +9,7 @@
 
 import React from 'react';
 import { Undo2 } from 'lucide-react';
+import { Button } from '@omniswim/ui';
 import type { RevertibleChange } from '@omniswim/core/lib/workingCopyChanges';
 import { changeRowAriaLabel, changeRowButtonText, canRevertChange } from './workingCopyChangesView';
 
@@ -42,20 +43,21 @@ export default function WorkingCopyChangeRow({ change, disabled, onRevert }: Pro
         <p className="text-ui-caption text-theme-secondary mt-0.5">{change.detail}</p>
         <UnrestorableWarning change={change} />
       </div>
-      <button
-        type="button"
+      <Button
+        variant="ghost"
+        size="sm"
         disabled={disabled || !canRevert}
         aria-label={changeRowAriaLabel(change)}
         title={title}
-        className="flex items-center gap-1.5 text-ui-caption text-[var(--text-accent)] hover:underline shrink-0 disabled:opacity-40 disabled:cursor-not-allowed disabled:no-underline disabled:text-theme-muted"
+        className="text-[var(--text-accent)] hover:underline shrink-0 disabled:no-underline"
         onClick={() => {
           if (disabled) return;
           onRevert();
         }}
+        leadingIcon={<Undo2 size={12} />}
       >
-        <Undo2 size={12} />
         {changeRowButtonText(change)}
-      </button>
+      </Button>
     </li>
   );
 }

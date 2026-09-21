@@ -3,7 +3,7 @@ import { Plus, PanelLeftClose, PanelLeftOpen, DatabaseBackup } from 'lucide-reac
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
 import { createSnapshot as createSnapshotApi, listSnapshots as listSnapshotsApi, restoreSnapshot as restoreSnapshotApi } from '@omniswim/core/api/snapshots';
 import type { Snapshot } from '@omniswim/core/api/snapshots';
-import { useToast } from '@omniswim/ui';
+import { Button, useToast } from '@omniswim/ui';
 import DeleteConfirmationModal from '@omniswim/matrix/components/DeleteConfirmationModal';
 import { ExpandedWorkspaceList, CollapsedWorkspaceList } from './workspace-sidebar/WorkspaceListItems';
 import { SnapshotsPanel } from './workspace-sidebar/SnapshotsPanel';
@@ -197,38 +197,38 @@ export default function WorkspaceSidebar() {
           ) : null}
           <div className={`flex items-center gap-1 ${sidebarCollapsed ? 'w-full justify-center' : 'ml-auto'}`}>
             {!sidebarCollapsed ? (
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => void handleCreateWorkspace()}
-                className="p-1 theme-hover-row rounded text-theme-secondary hover:text-[var(--text-primary)]"
+                className="p-1 text-theme-secondary hover:text-[var(--text-primary)]"
                 title="New workspace"
                 aria-label="New workspace"
-              >
-                <Plus size={14} />
-              </button>
+                leadingIcon={<Plus size={14} />}
+              />
             ) : null}
             {!sidebarCollapsed ? (
-              <button
-                type="button"
+              <Button
+                variant="ghost"
+                size="sm"
                 onClick={() => void handleBackupNow()}
                 disabled={isBackingUp}
-                className="p-1 theme-hover-row rounded text-theme-secondary hover:text-[var(--text-primary)] disabled:opacity-50 disabled:cursor-not-allowed"
+                className="p-1 text-theme-secondary hover:text-[var(--text-primary)]"
                 title="Back up every workspace now"
                 aria-label="Back up every workspace now"
-              >
-                <DatabaseBackup size={14} />
-              </button>
+                leadingIcon={<DatabaseBackup size={14} />}
+              />
             ) : null}
-            <button
-              type="button"
+            <Button
+              variant="ghost"
+              size="sm"
               onClick={toggleCollapsed}
-              className="p-1.5 theme-hover-row rounded text-theme-secondary"
+              className="p-1.5 text-theme-secondary"
               aria-expanded={!sidebarCollapsed}
               aria-label={sidebarCollapsed ? 'Expand workspace sidebar' : 'Collapse workspace sidebar'}
               title={sidebarCollapsed ? 'Expand workspace sidebar' : 'Collapse workspace sidebar'}
-            >
-              {sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
-            </button>
+              leadingIcon={sidebarCollapsed ? <PanelLeftOpen size={16} /> : <PanelLeftClose size={16} />}
+            />
           </div>
         </div>
 
@@ -245,9 +245,14 @@ export default function WorkspaceSidebar() {
           />
         ) : (
           <div className="flex flex-col items-center gap-2 p-2 flex-1">
-            <button type="button" onClick={() => void handleCreateWorkspace()} className="p-2 theme-hover-row rounded" title="New">
-              <Plus size={16} />
-            </button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => void handleCreateWorkspace()}
+              className="p-2"
+              title="New"
+              leadingIcon={<Plus size={16} />}
+            />
             <CollapsedWorkspaceList workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} onSelect={setActiveWorkspaceId} />
           </div>
         )}

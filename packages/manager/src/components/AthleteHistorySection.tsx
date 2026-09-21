@@ -11,7 +11,7 @@
 
 import React, { useEffect, useState } from 'react';
 import { Check, History, Pencil, Plus, Trash2, X } from 'lucide-react';
-import { CutlineNearMissChip, CutlineTag } from '@omniswim/ui';
+import { Button, CutlineNearMissChip, CutlineTag } from '@omniswim/ui';
 import { Gender, HistoricalSwim, Workspace } from '@omniswim/core/types';
 import { ALL_PLAN_EVENTS } from '@omniswim/core/lib/eventCatalog';
 import { buildCutlineTagForTeam } from '@omniswim/core/lib/cutlineTags';
@@ -186,22 +186,22 @@ export default function AthleteHistorySection({ rows, athlete, gender, editable,
                         </option>
                       ))}
                     </select>
-                    <button
-                      type="button"
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={() => commitHistoryEdit(row)}
-                      className="p-1 rounded-md text-theme-muted hover:text-points-positive hover:bg-points-positive/10 transition-colors"
+                      className="p-1 hover:text-points-positive hover:bg-points-positive/10"
                       aria-label={`Save history ${row.event}`}
-                    >
-                      <Check size={14} />
-                    </button>
-                    <button
-                      type="button"
+                      leadingIcon={<Check size={14} />}
+                    />
+                    <Button
+                      variant="ghost"
+                      size="sm"
                       onClick={cancelHistoryEdit}
-                      className="p-1 rounded-md text-theme-muted hover:text-[var(--text-accent)] hover:bg-[var(--text-accent)]/10 transition-colors"
+                      className="p-1"
                       aria-label={`Cancel history edit ${row.event}`}
-                    >
-                      <X size={14} />
-                    </button>
+                      leadingIcon={<X size={14} />}
+                    />
                   </>
                 ) : (
                   <>
@@ -235,22 +235,22 @@ export default function AthleteHistorySection({ rows, athlete, gender, editable,
                     />
                     {editable ? (
                       <>
-                        <button
-                          type="button"
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => startHistoryEdit(row)}
-                          className="p-1 rounded-md text-theme-muted hover:text-[var(--text-accent)] hover:bg-[var(--text-accent)]/10 transition-colors shrink-0"
+                          className="p-1 hover:bg-[var(--text-accent)]/10 shrink-0"
                           aria-label={`Edit history ${row.event}`}
-                        >
-                          <Pencil size={12} />
-                        </button>
-                        <button
-                          type="button"
+                          leadingIcon={<Pencil size={12} />}
+                        />
+                        <Button
+                          variant="ghost"
+                          size="sm"
                           onClick={() => removeHistoryRow(row)}
-                          className="p-1 rounded-md text-theme-muted hover:text-amber-400 transition-colors shrink-0"
+                          className="p-1 hover:text-amber-400 shrink-0"
                           aria-label={`Remove history ${row.event}`}
-                        >
-                          <Trash2 size={12} />
-                        </button>
+                          leadingIcon={<Trash2 size={12} />}
+                        />
                       </>
                     ) : null}
                   </>
@@ -309,14 +309,15 @@ export default function AthleteHistorySection({ rows, athlete, gender, editable,
             onChange={e => setNewHistoryDate(e.target.value)}
             className="w-28 glass-input rounded-lg px-2 py-2 text-ui-body"
           />
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="md"
             onClick={addHistoryRow}
             disabled={!newHistoryTime.trim()}
-            className="text-ui-label px-3 py-2 border border-theme-soft rounded-lg flex items-center gap-1.5 disabled:opacity-40"
+            leadingIcon={<Plus size={14} />}
           >
-            <Plus size={14} /> Add
-          </button>
+            Add
+          </Button>
         </div>
       ) : null}
     </DrawerSection>

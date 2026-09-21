@@ -31,7 +31,7 @@ import {
   type AliasSuggestion,
 } from '@omniswim/core/lib/athleteAliases';
 import type { AthleteAliasLink, Gender, Workspace } from '@omniswim/core/types';
-import { Badge, useToast } from '@omniswim/ui';
+import { Badge, Button, useToast } from '@omniswim/ui';
 
 type Props = {
   workspace: Workspace;
@@ -180,9 +180,9 @@ export default function DuplicateAthletesPanel({
                   Same swimmer under two spellings — evidence-backed
                 </p>
                 {editable && pending.length > 1 && (
-                  <button type="button" onClick={linkAll} className="btn-accent-outline px-2 py-1 text-ui-micro rounded-md">
+                  <Button variant="outline" size="sm" onClick={linkAll} className="px-2 py-1">
                     Link all {pending.length}
-                  </button>
+                  </Button>
                 )}
               </div>
               <ul className="space-y-1.5">
@@ -211,14 +211,15 @@ export default function DuplicateAthletesPanel({
                       </p>
                     </div>
                     {editable && (
-                      <button
-                        type="button"
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => linkOne(d)}
-                        className="btn-accent-outline px-2 py-1 text-ui-micro rounded-md shrink-0"
+                        className="px-2 py-1 shrink-0"
+                        leadingIcon={<Link2 size={11} />}
                       >
-                        <Link2 size={11} className="inline mr-1" />
                         Link
-                      </button>
+                      </Button>
                     )}
                   </li>
                 ))}
@@ -243,22 +244,19 @@ export default function DuplicateAthletesPanel({
                     </div>
                     {editable && (
                       <div className="flex gap-1.5 shrink-0">
-                        <button
-                          type="button"
-                          onClick={() => linkSuggestion(s)}
-                          className="btn-accent-outline px-2 py-1 text-ui-micro rounded-md"
-                        >
+                        <Button variant="outline" size="sm" onClick={() => linkSuggestion(s)} className="px-2 py-1">
                           Link
-                        </button>
-                        <button
-                          type="button"
+                        </Button>
+                        <Button
+                          variant="outline"
+                          size="sm"
                           onClick={() =>
                             setDismissed(prev => new Set(prev).add(`${s.existing.name}|${s.incoming.name}`))
                           }
-                          className="px-2 py-1 text-ui-micro rounded-md border border-theme-soft text-theme-muted"
+                          className="px-2 py-1 text-theme-muted"
                         >
                           Not the same
-                        </button>
+                        </Button>
                       </div>
                     )}
                   </li>
@@ -286,15 +284,16 @@ export default function DuplicateAthletesPanel({
                       )}
                     </div>
                     {editable && (
-                      <button
-                        type="button"
+                      <Button
+                        variant="outline"
+                        size="sm"
                         onClick={() => unlink(l)}
                         title="Unlink and never suggest this pair again"
-                        className="px-2 py-1 text-ui-micro rounded-md border border-theme-soft text-theme-muted shrink-0"
+                        className="px-2 py-1 text-theme-muted shrink-0"
+                        leadingIcon={<Unlink size={11} />}
                       >
-                        <Unlink size={11} className="inline mr-1" />
                         Not the same
-                      </button>
+                      </Button>
                     )}
                   </li>
                 ))}

@@ -10,6 +10,7 @@
  */
 
 import React, { useState } from 'react';
+import { Button } from '@omniswim/ui';
 import type { Gender, Workspace } from '@omniswim/core/types';
 import {
   countWorkingCopyChanges,
@@ -47,8 +48,9 @@ export default function WorkingCopyChangesPanel({ workspace, gender, onUpdate, d
       <div className="flex items-center justify-between gap-3">
         <h4 className="text-ui-label font-semibold text-[var(--text-primary)]">Working copy edits</h4>
         {changes.length > 0 ? (
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="sm"
             onClick={() => setExpanded(value => !value)}
             aria-expanded={expanded}
             aria-label={
@@ -56,12 +58,12 @@ export default function WorkingCopyChangesPanel({ workspace, gender, onUpdate, d
                 ? 'Hide the list of revertible working copy edits'
                 : `Show ${changes.length} revertible working copy ${changes.length === 1 ? 'edit' : 'edits'}`
             }
-            className="btn-accent-outline rounded-md px-2.5 py-1.5 text-ui-caption font-semibold shrink-0"
+            className="px-2.5 py-1.5 shrink-0"
           >
             {expanded
               ? 'Hide edits'
               : `Show ${changes.length} ${changes.length === 1 ? 'edit' : 'edits'}`}
-          </button>
+          </Button>
         ) : null}
       </div>
 

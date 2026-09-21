@@ -1,6 +1,6 @@
 import { Link } from 'react-router-dom';
 import { Cog, Globe, MoreHorizontal, Search, Settings, TrendingUp, User } from 'lucide-react';
-import { Menu, MenuItem, ThemeToggle, useSwimCloudWindow } from '@omniswim/ui';
+import { Button, Menu, MenuItem, ThemeToggle, useSwimCloudWindow } from '@omniswim/ui';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
 import { useAuth } from '../context/AuthContext';
 import AppletNav from './AppletNav';
@@ -49,15 +49,15 @@ export default function SuiteHeader({
         {showWorkspaceControls ? <GenderToggleNav activeGender={activeGender} onChange={setActiveGender} /> : null}
 
         {showWorkspaceControls && activeWorkspace && onOpenScoringSettings ? (
-          <button
-            type="button"
+          <Button
+            variant="outline"
+            size="sm"
             onClick={onOpenScoringSettings}
-            className="p-1.5 theme-hover-row rounded-lg btn-accent-outline transition-colors"
+            className="p-1.5"
             title="Configure Scoring Model"
             aria-label="Configure Scoring Model"
-          >
-            <Settings size={14} />
-          </button>
+            leadingIcon={<Settings size={14} />}
+          />
         ) : null}
 
         {showWorkspaceControls && activeWorkspace ? (

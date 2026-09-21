@@ -9,6 +9,7 @@
 
 import React from 'react';
 import { ExternalLink } from 'lucide-react';
+import { Button } from '@omniswim/ui';
 import type {
   DuplicateAthletePair,
   LineupChecklistItem,
@@ -118,9 +119,9 @@ export function ChecklistItemActions({
   return (
     <div className="flex flex-wrap gap-2 mt-2">
       {actions.map(action => (
-        <button key={action.key} type="button" className={action.className} onClick={action.onClick}>
+        <Button key={action.key} variant="ghost" size="sm" className={`p-0 ${action.className}`} onClick={action.onClick}>
           {action.label}
-        </button>
+        </Button>
       ))}
     </div>
   );
