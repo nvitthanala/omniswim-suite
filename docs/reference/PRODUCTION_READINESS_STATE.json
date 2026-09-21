@@ -205,7 +205,8 @@
         "Adoption today: Button imported by 4 of 55 files; 122 raw <button> vs 9 <Button>."
       ],
       "consequence": "The 2026-09-10 diagnosis framed low Button adoption as a discipline problem. It is a fit problem: the primitive is more opinionated than the app it serves. Converging on it requires a DECISION first - either relax Button (make weight, radius and disabled opacity variant-controlled) or restyle the app to Button's look (a real, visible change needing sign-off). Doing a mass conversion without that decision would silently restyle ~120 controls.",
-      "status": "open - needs a user decision before any mass conversion; NOT a blocker for the deadline"
+      "status": "IN PROGRESS 2026-09-21 - user chose to restyle the app",
+      "userDecision": "Restyle the app to Button, not relax Button. The visual change is accepted: corners rounder, labels bolder, disabled states lighter. Dispatched to a worker covering 167 raw <button> elements across manager (111), ui (22), apps/shell (21), metrics (20) and matrix (13). Tab strips and SegmentedControl are excluded - they are a navigation idiom with an active-underline affordance Button cannot express."
     },
     {
       "id": "f12",
@@ -280,7 +281,20 @@
       ],
       "fixed": "Crash and its dead branch removed. apps/shell/tsconfig.json now covers lib. Both scripts registered. tests/scriptSuiteRegistration.test.ts fails when a test script is neither registered nor excused with a written reason. Commit 4bf18712. Script suite 82 to 84 passing.",
       "stillOpenNeedsDecision": "Whether to wire up the roughly 3,289-line subsystem (write the 13 missing routes) or delete it. Not taken: a product decision, not a defect. Collateral if deleted: 7 unused zod schemas in packages/core/src/schemas/workspace.ts, plus importCsvSchema, since POST /api/import-csv does not exist either.",
-      "status": "crash fixed; subsystem fate is an open user decision"
+      "status": "CLOSED 2026-09-21 - subsystem deleted (commit e90f6fa3)",
+      "userDecision": "Delete it. User chose deletion over wiring up the 13 missing routes.",
+      "correctionToTheHuntReport": "The hunt reported that Manager's Team Catalog button had been removed and the panel was unreachable. That was WRONG. A live `Team Catalog` button existed in Manager's toolbar and did open the panel. That is worse than unreachable: a coach could click it and get a panel whose every request 404'd silently. Matrix also carried a visible 'Catalog:' dropdown wired to the same dead routes, which the hunt did not mention at all. Both were found by deleting the client and letting tsc name every caller.",
+      "whatWasDeleted": [
+        "packages/core/src/api/rosterCatalog.ts (the 13-route HTTP client)",
+        "apps/shell/lib/rosterCatalogRepo.ts",
+        "packages/db/src/RosterCatalogService.ts (and its export from packages/db/src/index.ts)",
+        "packages/manager/src/components/RosterCatalogPanel.tsx + RosterCatalogPanelParts.tsx",
+        "Manager's Team Catalog button and panel render",
+        "Matrix's OpsModule catalog dropdown, state and fetch effect",
+        "scripts/test_roster_catalog.mjs, scripts/test_eligibility_toggle.mjs",
+        "docs/reference/ROSTER_CATALOG_NOTES.md"
+      ],
+      "whatWasKept": "packages/core/src/lib/rosterCatalog.ts. Despite sharing the name it is types and pure helpers imported by scoringEngine, utils, rosterOptimizer, athleteHistory, scoringWorker and useWorkspaceScoring. Deleting it meant surgery on the scoring path for no gain. The scoring engine still accepts an optional rosterCatalog argument that nothing now supplies; removing that means editing calculatePoints and its callers, which the byte-exact NSISC check guards, and there is no benefit to justify the risk. Recorded as known dead-but-harmless."
     },
     {
       "id": "f17",
@@ -302,7 +316,9 @@
         "(b) Key entryCapKey through canonicalProgramEvent so one program event is one entry however it was labelled. Narrower: a time trial of an event the swimmer did not otherwise enter would still cost an entry.",
         "(c) Leave as is, if NSISC really does count a time trial against the 7."
       ],
-      "status": "OPEN - needs the user's ruling before any code changes"
+      "status": "CLOSED 2026-09-21 - implemented (commit 01ac492c)",
+      "userRuling": "Time trials do NOT count against a swimmer's entry limit.",
+      "implementation": "countSwimmerEntries skips rows with isTimeTrial. Chosen over keying entryCapKey through canonicalProgramEvent, because that narrower fix would still charge an entry for a time trial of an event the swimmer did not otherwise swim, and the ruling is that a time trial never costs one. Verified through the real function against data/meets.json: Oskar Cebula now counts 7 of 7, not 8 of 7. Guarded by scripts/test_entry_limits_time_trials.mjs (6 cases, registered), with two mutations proven and the under-count case checked in isolation because it would otherwise die on an earlier assertion."
     },
     {
       "id": "f18",
@@ -684,6 +700,10 @@
     {
       "at": "2026-09-21 (overnight, final)",
       "what": "Completed every phase that does not need a user ruling. Added the real backup restore path with a three-gate filename boundary (3 mutations; one exposed a coverage hole where the pattern's wildcard let a path be smuggled through the label). Deleted NCAA_CUTS. Committed and verified the bug-hunter's fixes. Final: 963 vitest, 84 script tests, lint clean on all three gates, everything merged to main and pushed. Remaining work is three user decisions and one unconfirmed latent bug."
+    },
+    {
+      "at": "2026-09-21",
+      "what": "User answered all three open decisions. Time trials do not count against the entry limit - implemented and verified against real data. Roster Catalog deleted (and the hunt's claim that its button was gone proved wrong - it was live and silently 404ing, as was an unmentioned Matrix dropdown). Button: restyle the app, dispatched. Separately diagnosed the CI failure as an exhausted Actions quota caused by a hanging test script I registered, fixed it three ways, and made the repo public again at the user's direction."
     }
   ],
   "RESUME_HERE": {
@@ -751,20 +771,17 @@
     }
   },
   "statusSummary": {
-    "at": "2026-09-21",
+    "at": "2026-09-21 (all three decisions answered)",
     "phasesComplete": "P0, P1, P2, P3, P4 (partial by design), P5, P6, P7",
     "suite": "963 vitest passed / 0 failed; 84 script tests passed / 0 failed / 1 skipped (Postgres, needs PG_TEST_URL); lint clean across all three gates (workspace types, extension types, ESLint)",
     "branch": "nvitthanala/production-readiness, merged to main and pushed after every step",
-    "whatIsLeft": "Three user decisions and one unconfirmed latent bug. No further code work is possible without a ruling.",
-    "blockedOnUser": [
-      "f17 - do time trials count against a swimmer's entry limit? 8 of 13 over-cap warnings on real data are false until this is answered. Three options recorded on the finding.",
-      "f16 - the Roster Catalog subsystem: wire up its 13 missing server routes, or delete roughly 3,289 lines plus 8 unused schemas.",
-      "f11 - the Button primitive cannot express the app's prevailing button style, so 122 raw buttons remain. Either relax Button or restyle the app; both are visible changes."
-    ],
+    "whatIsLeft": "Nothing blocked. f17 shipped, f16 deleted, f11 in progress. Remaining open items are f19 (a latent, unreproducible alias mismatch), f18 (an unreachable aFinalBracket fallback), and od4 (meets.json is both live store and fresh-install seed) - a release blocker, not a deadline one.",
+    "blockedOnUser": [],
     "openNotBlocking": [
       "f19 - computeVacateRelayLegNames builds its lookup before the alias collapse. Not reproducible against today's data; a new alias would expose it. Reported, not fixed, per this repo's rule 4.",
       "f18 - the unreachable aFinalBracket fallback, flagged because a future preset omitting the field would take an untested path.",
       "od4 - meets.json is both the live store and the fresh-install seed. A release blocker, not a deadline one."
-    ]
+    ],
+    "ciAndBilling": "CI was failing because jobs would not start: the account's Actions quota was exhausted. Cause chain: registering test_scoring_preset_routes.mjs (commit e20f8608) introduced a script that hangs on Linux, so 15 runs each burned GitHub's 6-hour ceiling; the repo had just been made private, where Actions minutes are billed. Fixed three ways (script exits properly, per-script and e2e timeouts in the runner, job timeout-minutes 25 plus cancel-in-progress). The user then chose to make the repo PUBLIC again, which restores unlimited free Actions minutes. Repo visibility is PUBLIC as of 2026-09-21."
   }
 }
