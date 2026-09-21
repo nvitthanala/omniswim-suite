@@ -730,6 +730,41 @@ async function startServer() {
     }
   });
 
+  app.get('/api/workspaces/backups', AUTH_REQUIRED ? requireAuth : optionalAuth, async (_req: AuthedRequest, res) => {
+    try {
+      res.json(await repo.listBackups());
+    } catch (err) {
+      res.status(500).json({ error: 'Could not list backups', details: String(err) });
+    }
+  });
+
+  /**
+   * Replace every workspace with the contents of one backup.
+   *
+   * The body names a file, so this is where a hostile name has to be refused.
+   * `restoreBackup` resolves it through `resolveBackupPath`, which requires the
+   * name to match the pattern this app's own writer produces, to survive
+   * `path.basename` unchanged, and to resolve inside the backup directory.
+   * A refusal is a 400 naming the file, never a 500 with a stack.
+   */
+  app.post('/api/workspaces/restore', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
+    const file = (req.body ?? {}).file;
+    if (typeof file !== 'string' || file.length === 0) {
+      return res.status(400).json({ error: 'A backup file name is required.' });
+    }
+    try {
+      applyRepoScope(req);
+      const restored = await repo.restoreBackup(file);
+      res.json({ success: true, file, workspaces: restored });
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      // A rejected name and a corrupt file are both the caller's problem, not a
+      // server fault; anything else is ours.
+      const isCallerError = /Not a backup this app wrote|Backup file/.test(message);
+      res.status(isCallerError ? 400 : 500).json({ error: 'Restore failed', details: message });
+    }
+  });
+
   app.post('/api/workspaces/backup', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     try {
       applyRepoScope(req);

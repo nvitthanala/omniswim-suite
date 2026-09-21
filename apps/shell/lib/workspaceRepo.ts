@@ -26,6 +26,9 @@ export interface WorkspaceRepo {
   update(id: string, patch: Partial<Workspace>, expectedVersion?: number): Promise<Workspace | undefined>;
   remove(id: string): Promise<void>;
   backup(label?: string): Promise<string>;
+  listBackups(): Promise<BackupFileMeta[]>;
+  /** Replace every workspace with the contents of a generated backup. Returns how many were restored. */
+  restoreBackup(file: string): Promise<number>;
   snapshot(id: string, label: string): Promise<SnapshotMeta | undefined>;
   listSnapshots(id: string): Promise<SnapshotMeta[]>;
   /** Read-only snapshot content (no restore). Undefined on JSON backend / unknown id. */
@@ -89,15 +92,108 @@ async function writeJsonBackup(
   return dest;
 }
 
+/** One generated backup on disk, newest first when listed. */
+export interface BackupFileMeta {
+  /** Bare filename. The only thing a caller may pass back to restore. */
+  readonly file: string;
+  readonly bytes: number;
+  /** ISO instant, parsed from the filename rather than from mtime, which a copy rewrites. */
+  readonly writtenAt: string | null;
+  /** The label the backup was written under: startup, pre-delete, manual, pre-restore. */
+  readonly label: string | null;
+}
+
+function parseGeneratedBackupName(file: string): { label: string | null; writtenAt: string | null } {
+  const m = /^meets-(.+)-(\d{4}-\d{2}-\d{2}T[\dZ-]+)\.json$/.exec(file);
+  if (!m) return { label: null, writtenAt: null };
+  // The stamp was written with ':' and '.' replaced by '-'; put them back so it parses.
+  const iso = m[2].replace(
+    /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/,
+    '$1T$2:$3:$4.$5Z',
+  );
+  const d = new Date(iso);
+  return { label: m[1], writtenAt: Number.isNaN(d.getTime()) ? null : d.toISOString() };
+}
+
+/** Newest first. Only ever lists backups this app generated. */
+export async function listGeneratedBackups(backupDir: string): Promise<BackupFileMeta[]> {
+  let names: string[];
+  try {
+    names = await fsp.readdir(backupDir);
+  } catch {
+    return [];
+  }
+  const out: BackupFileMeta[] = [];
+  for (const file of names) {
+    if (!GENERATED_BACKUP_PATTERN.test(file)) continue;
+    let bytes = 0;
+    try {
+      bytes = (await fsp.stat(path.join(backupDir, file))).size;
+    } catch {
+      continue;
+    }
+    out.push({ file, bytes, ...parseGeneratedBackupName(file) });
+  }
+  // Sorted on the parsed instant, NOT on the filename. The name starts with the
+  // label ("meets-manual-…", "meets-startup-…"), so a lexicographic sort orders
+  // by label and only then by time — which puts a January "manual" above a
+  // December "startup". A backup list in the wrong order is how somebody
+  // restores the wrong file.
+  return out.sort((a, b) => {
+    if (a.writtenAt !== null && b.writtenAt !== null) return b.writtenAt.localeCompare(a.writtenAt);
+    if (a.writtenAt !== null) return -1;
+    if (b.writtenAt !== null) return 1;
+    return b.file.localeCompare(a.file);
+  });
+}
+
+/**
+ * Turn a caller-supplied name into a path inside `backupDir`, or refuse.
+ *
+ * A restore endpoint takes a filename from outside the process, so this is the
+ * boundary where `../../../etc/passwd` has to die. Three independent gates, all
+ * required: the name must match the pattern this app's own writer produces
+ * (which admits no slashes, dots-dot, or drive letters), `path.basename` must
+ * return it unchanged, and the resolved path must still sit inside the resolved
+ * backup directory. Any one of them would stop traversal; all three are cheap.
+ */
+export function resolveBackupPath(backupDir: string, file: string): string | null {
+  if (typeof file !== 'string' || file.length === 0) return null;
+  if (!GENERATED_BACKUP_PATTERN.test(file)) return null;
+  if (path.basename(file) !== file) return null;
+  const root = path.resolve(backupDir);
+  const resolved = path.resolve(root, file);
+  const withSep = root.endsWith(path.sep) ? root : root + path.sep;
+  if (!resolved.startsWith(withSep)) return null;
+  return resolved;
+}
+
+/** Read a backup and validate it really is a workspace array before anything is replaced. */
+export async function readBackupWorkspaces(fullPath: string): Promise<Workspace[]> {
+  const raw = await fsp.readFile(fullPath, 'utf-8');
+  const parsed = JSON.parse(raw) as unknown;
+  if (!Array.isArray(parsed)) {
+    throw new Error('Backup file is not a workspace array.');
+  }
+  for (const ws of parsed) {
+    if (typeof ws !== 'object' || ws === null || typeof (ws as Workspace).id !== 'string') {
+      throw new Error('Backup file contains an entry with no workspace id.');
+    }
+  }
+  return parsed as Workspace[];
+}
+
 /** Exported for tests. Same rules as the private caller above. */
 export const __backupRetentionInternals = { GENERATED_BACKUP_PATTERN, pruneGeneratedBackups, backupKeepCount };
 
 export class JsonRepo implements WorkspaceRepo {
   readonly kind = 'json' as const;
   private store: JsonStore<Workspace[]>;
+  private backupDir: string;
 
   constructor(filePath: string, backupDir: string, seed: () => Workspace[]) {
     this.store = new JsonStore<Workspace[]>(filePath, seed, backupDir);
+    this.backupDir = backupDir;
   }
 
   init() {
@@ -126,6 +222,28 @@ export class JsonRepo implements WorkspaceRepo {
   }
   backup(label = 'manual') {
     return this.store.backup(label);
+  }
+
+  async listBackups() {
+    return listGeneratedBackups(this.backupDir);
+  }
+
+  /**
+   * Replace every workspace with a backup's contents.
+   *
+   * Takes its own `pre-restore` backup first, always. A restore is the one
+   * operation that destroys more than a delete does, and a coach who restores
+   * the wrong file must still have a way back. The file is read and validated
+   * BEFORE anything is replaced, so a corrupt backup fails with nothing
+   * touched rather than halfway through.
+   */
+  async restoreBackup(file: string) {
+    const full = resolveBackupPath(this.backupDir, file);
+    if (full === null) throw new Error(`Not a backup this app wrote: ${file}`);
+    const workspaces = await readBackupWorkspaces(full);
+    await this.backup('pre-restore');
+    await this.store.mutate(() => workspaces);
+    return workspaces.length;
   }
   async snapshot() {
     return undefined;
@@ -196,6 +314,28 @@ export class SqliteRepo implements WorkspaceRepo {
   async backup(label = 'manual') {
     return writeJsonBackup(this.backupDir, this.service.exportAll(), label);
   }
+
+  async listBackups() {
+    return listGeneratedBackups(this.backupDir);
+  }
+
+  /**
+   * Replace every workspace with a backup's contents.
+   *
+   * Takes its own `pre-restore` backup first, always. A restore is the one
+   * operation that destroys more than a delete does, and a coach who restores
+   * the wrong file must still have a way back. The file is read and validated
+   * BEFORE anything is replaced, so a corrupt backup fails with nothing
+   * touched rather than halfway through.
+   */
+  async restoreBackup(file: string) {
+    const full = resolveBackupPath(this.backupDir, file);
+    if (full === null) throw new Error(`Not a backup this app wrote: ${file}`);
+    const workspaces = await readBackupWorkspaces(full);
+    await this.backup('pre-restore');
+    this.service.replaceAll(workspaces);
+    return workspaces.length;
+  }
   async snapshot(id: string, label: string) {
     const res = this.service.createSnapshot(id, label);
     if (!res) return undefined;
@@ -243,6 +383,28 @@ export class PgRepo implements WorkspaceRepo {
   }
   async backup(label = 'manual') {
     return writeJsonBackup(this.backupDir, await this.service.exportAll(), label);
+  }
+
+  async listBackups() {
+    return listGeneratedBackups(this.backupDir);
+  }
+
+  /**
+   * Replace every workspace with a backup's contents.
+   *
+   * Takes its own `pre-restore` backup first, always. A restore is the one
+   * operation that destroys more than a delete does, and a coach who restores
+   * the wrong file must still have a way back. The file is read and validated
+   * BEFORE anything is replaced, so a corrupt backup fails with nothing
+   * touched rather than halfway through.
+   */
+  async restoreBackup(file: string) {
+    const full = resolveBackupPath(this.backupDir, file);
+    if (full === null) throw new Error(`Not a backup this app wrote: ${file}`);
+    const workspaces = await readBackupWorkspaces(full);
+    await this.backup('pre-restore');
+    await this.service.replaceAll(workspaces);
+    return workspaces.length;
   }
   async snapshot(id: string, label: string) {
     const res = await this.service.createSnapshot(id, label);
