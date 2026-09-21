@@ -71,46 +71,4 @@ export const TEAM_COLORS_MAP: Record<string, string> = {
   'Oklahoma Baptist University': '#00F5FF',
 };
 
-export const NCAA_CUTS: Record<string, { men: { a: number, b: number }, women: { a: number, b: number } }> = {
-  '50 Freestyle': {
-    men: { a: 19.48, b: 20.46 },
-    women: { a: 22.72, b: 23.86 }
-  },
-  '100 Freestyle': {
-    men: { a: 43.12, b: 45.23 },
-    women: { a: 49.58, b: 52.06 }
-  },
-  '200 Freestyle': {
-    men: { a: 95.45, b: 100.22 }, // 1:35.45 -> 95.45
-    women: { a: 107.70, b: 113.08 }
-  },
-  '500 Freestyle': {
-    men: { a: 261.76, b: 274.84 },
-    women: { a: 290.30, b: 304.82 }
-  },
-  '100 Backstroke': {
-    men: { a: 46.47, b: 48.79 },
-    women: { a: 53.51, b: 56.18 }
-  },
-  '200 Backstroke': {
-    men: { a: 102.78, b: 107.92 },
-    women: { a: 117.00, b: 122.85 }
-  },
-  '100 Breaststroke': {
-    men: { a: 52.91, b: 55.56 },
-    women: { a: 61.03, b: 64.08 }
-  },
-  '200 Breaststroke': {
-    men: { a: 115.12, b: 120.87 },
-    women: { a: 133.06, b: 139.71 }
-  },
-  '100 Butterfly': {
-    men: { a: 46.45, b: 48.77 },
-    women: { a: 53.37, b: 56.04 }
-  },
-  '200 Butterfly': {
-    men: { a: 104.66, b: 110.89 },
-    women: { a: 119.30, b: 125.26 }
-  },
-};
 
