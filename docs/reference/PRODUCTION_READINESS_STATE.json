@@ -608,6 +608,10 @@
     {
       "at": "2026-09-21 (overnight)",
       "what": "Made the crawl scope labels honest (they still promised season bests). Verified the production runtime end to end after a real build - / , /api/workspaces and the /manager SPA deep route all 200, closing od2 with evidence rather than assumption. Corrected a commit that had accidentally swept in the concurrent agent's in-flight work."
+    },
+    {
+      "at": "2026-09-21 (overnight)",
+      "what": "End-to-end verification of the headline features over real HTTP against a production build, not the dev server. The dual-meet preset serves exactly the archived Rule 7-1-1 values; preset CRUD works; built-in immutability returns 409 on both POST-shadow and DELETE; and the validator rejects an ascending place table with a competition-rule message. Recorded under endToEndVerification."
     }
   ],
   "RESUME_HERE": {
@@ -647,5 +651,29 @@
       "Do not relax any crawl pacing constant. User decision d3, explicit.",
       "Do not run two agents that both run the full suite - Playwright binds port 3000 (INVARIANTS item 4)."
     ]
+  },
+  "endToEndVerification": {
+    "at": "2026-09-21, against a real production build (npm run build, node apps/shell/dist/server.js, OMNI_DB=sqlite)",
+    "why": "Unit tests prove functions; these probes prove the product. Run over HTTP against the built server, not the dev server.",
+    "runtime": {
+      "GET /": "200, 2925 bytes",
+      "GET /api/workspaces": "200",
+      "GET /manager (SPA deep route)": "200 - the case docs/INVARIANTS.md item 2 records as historically 404-ing in production",
+      "startup": "logged 'Storage backend: SQLite' and wrote its startup backup automatically"
+    },
+    "scoringPresets": {
+      "GET list": "22 presets, all flagged builtIn",
+      "GET ncaa-dual-six-lanes-or-more": "scoringPoints [9,4,3,2,1,0], relayPoints [11,4,2,0], maxIndividualScorersPerTeamPerEvent 3 - exactly NCAA Rule 7-1-1 as archived",
+      "POST user preset": "200, returned builtIn:false, group 'Saved rule sets'; list grew to 23",
+      "GET it back": "200, settings intact",
+      "DELETE it": "200, data/scoring_presets/ back to the 2 committed files",
+      "POST claiming a built-in id": "409 - 'built-in ... generated from the published rulebook and are immutable; save this under a different id'",
+      "DELETE a built-in": "409 - refused",
+      "PUT with an ascending table [1,2,3]": "400 - 'place 2 is worth 2 but place 1 is worth 1. A place table must not increase as places get worse.' A competition-rule check, not merely a schema check.",
+      "nsisc after all of the above": "unchanged - [20,17,16,15,...], 18 scorers"
+    },
+    "backups": {
+      "POST /api/workspaces/backup": "200, returned the written filename; a 2.9MB export of all 3 workspaces appeared in data/backups/ and the 4 hand-made .bak files were untouched"
+    }
   }
 }
