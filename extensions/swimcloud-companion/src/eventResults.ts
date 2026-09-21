@@ -61,7 +61,31 @@ import type { SwimCloudMeetId } from '@omniswim/swimcloud/entities';
  * swimmer-times pass, at 400+ pages, is the one that takes minutes; this pass
  * is not the bottleneck and does not need to be treated as one.
  */
-export const EVENT_RESULTS_CONCURRENCY = 3;
+/**
+ * **Lowered to 1 on 2026-09-21, because a real crawl answered OQ-5.**
+ *
+ * `docs/reference/SWIMCLOUD_CAPTURE_STATE.json`'s OQ-5 asked whether SwimCloud's
+ * anti-automation detection can tell a `fetch()` burst from a loaded page, and
+ * recorded that only a real crawl could answer it. The archived capture of meet
+ * 356467 is that crawl, and it is a clean natural experiment because the same
+ * run used both pacings:
+ *
+ *   sequential, 3000 ms   meetTeamSwims 42 + teamRoster 8   =  50/50  HTTP 200
+ *   pooled, 3x / 400 ms   swimmerTimes 184                  = 111/184 HTTP 429
+ *
+ * Sixty per cent of the concurrent pass was rate-limited. None of the sequential
+ * one was. The burst is distinguishable, and this is what that looks like.
+ *
+ * This pass carries the round labels, which is the difference between a
+ * prelims/finals pair resolving and being excluded, so it is the wrong place to
+ * spend a 60% failure rate to save two minutes. At the sequential floor a
+ * 51-event meet takes about 2.5 minutes and is reliable.
+ *
+ * Raise it again only with evidence that the limit has moved -- and note there
+ * is still no 429 handling anywhere in this extension, so a throttled page is
+ * simply a page that never arrives.
+ */
+export const EVENT_RESULTS_CONCURRENCY = 1;
 
 /**
  * Minimum gap between the *start* of one event-results fetch and the next.
@@ -80,7 +104,13 @@ export const EVENT_RESULTS_CONCURRENCY = 3;
  * seconds on a pass that already takes under a minute would spend the one thing
  * that question is about, for nothing.
  */
-export const EVENT_RESULTS_STAGGER_MS = 400;
+/**
+ * **Raised to the 3000 ms sequential floor on 2026-09-21.** See
+ * {@link EVENT_RESULTS_CONCURRENCY}: with one lane, the stagger *is* the pacing,
+ * and 3000 ms is the floor the two passes that were never throttled used. The
+ * 400 ms value belonged to a pool that the measurement above discredits.
+ */
+export const EVENT_RESULTS_STAGGER_MS = 3000;
 
 /* -------------------------------------------------------------------------- */
 /* Targets                                                                     */

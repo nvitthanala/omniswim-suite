@@ -118,15 +118,25 @@ describe('planEventResultsSteps', () => {
 });
 
 describe('pacing', () => {
-  it('reuses the swimmer-times pool shape rather than inventing a wider one', () => {
-    // Both pooled passes run one after the other, so the peak in-flight depth
-    // this extension ever reaches is whichever of these is larger. Keeping them
-    // equal keeps that peak at three. A change to either number should have to
-    // argue with this test.
-    expect(EVENT_RESULTS_CONCURRENCY).toBe(SWIMMER_TIMES_CONCURRENCY);
-    expect(EVENT_RESULTS_STAGGER_MS).toBe(SWIMMER_TIMES_STAGGER_MS);
-    expect(EVENT_RESULTS_CONCURRENCY).toBe(3);
-    expect(EVENT_RESULTS_STAGGER_MS).toBe(400);
+  it('runs one lane at the sequential floor, because the pooled shape was rate-limited', () => {
+    // This case used to require the event pass to match the swimmer-times pool
+    // exactly (3 lanes, 400 ms), and said a change should have to argue with
+    // it. Here is the argument, from the archived capture of meet 356467, where
+    // one run used both pacings:
+    //
+    //   sequential, 3000 ms   42 swims + 8 roster pages  =  50/50  HTTP 200
+    //   pooled, 3x / 400 ms   184 swimmer-times pages    = 111/184 HTTP 429
+    //
+    // Sixty per cent of the concurrent pass was throttled and none of the
+    // sequential one was. This pass carries the round labels that decide
+    // whether a prelims/finals pair resolves, so reliability wins over the two
+    // minutes concurrency would save.
+    expect(EVENT_RESULTS_CONCURRENCY).toBe(1);
+    expect(EVENT_RESULTS_STAGGER_MS).toBe(3000);
+    // The original intent survives: the peak in-flight depth across the whole
+    // crawl must not grow. One lane cannot raise a ceiling of three.
+    expect(EVENT_RESULTS_CONCURRENCY).toBeLessThanOrEqual(SWIMMER_TIMES_CONCURRENCY);
+    expect(EVENT_RESULTS_STAGGER_MS).toBeGreaterThanOrEqual(SWIMMER_TIMES_STAGGER_MS);
   });
 
   it('keeps a politeness floor at all — the stagger is never zero', () => {

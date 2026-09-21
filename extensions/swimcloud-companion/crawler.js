@@ -2389,8 +2389,8 @@
   }
 
   // extensions/swimcloud-companion/src/eventResults.ts
-  var EVENT_RESULTS_CONCURRENCY = 3;
-  var EVENT_RESULTS_STAGGER_MS = 400;
+  var EVENT_RESULTS_CONCURRENCY = 1;
+  var EVENT_RESULTS_STAGGER_MS = 3e3;
   function planEventResultsSteps(meetId, swimsPages) {
     const collected = collectEventRefs(swimsPages);
     return {
