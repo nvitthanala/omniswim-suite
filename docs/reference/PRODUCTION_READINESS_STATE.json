@@ -334,7 +334,7 @@
     },
     {
       "id": "f19",
-      "severity": "P3-latent",
+      "severity": "P1-fixed",
       "title": "computeVacateRelayLegNames builds its lookup before the alias collapse",
       "evidence": [
         "packages/core/src/lib/rosterLineupAudit.ts:174 uses the identity resolver; whatIfProjection.ts:400 calls it before aliases are collapsed.",
@@ -342,7 +342,10 @@
         "NOT REPRODUCED against today's data: Blank Workspace 1 happens to carry overrides under both spellings for all three aliased athletes, and every relay leg uses the canonical one."
       ],
       "consequence": "Latent identity mismatch of the exact class INVARIANTS item 6 describes. A new alias would expose it.",
-      "status": "open, unconfirmed - reported not fixed"
+      "status": "CLOSED 2026-09-21 - reproduced, fixed and mutation-proven (commit f83173af)",
+      "reproduction": "Built the case the hunt could not: four relay LEG rows (a row whose name equals its team is the aggregate entry and is skipped by the audit, so a team-named fixture produces no relay template at all), the first leg printed under an alias spelling, and a scorerRosterOverride filed under the canonical spelling marking that swimmer a non-scorer. Without a resolver the leg is not vacated; with one it is.",
+      "fix": "computeVacateRelayLegNames takes an optional resolver and passes it to buildScorerRosterLookup; whatIfProjection builds one from the workspace and passes it down. Existing callers that omit it keep the identity default, so nothing else changed.",
+      "testingNote": "The first version of the guard asserted only that SOMETHING was vacated. It stayed green under the mutation, because the other three legs are non-scorers regardless. Caught by mutation before it was trusted; the guard now names the swimmer and carries a control case pinning the identity default."
     }
   ],
   "phases": [
@@ -704,6 +707,10 @@
     {
       "at": "2026-09-21",
       "what": "User answered all three open decisions. Time trials do not count against the entry limit - implemented and verified against real data. Roster Catalog deleted (and the hunt's claim that its button was gone proved wrong - it was live and silently 404ing, as was an unmentioned Matrix dropdown). Button: restyle the app, dispatched. Separately diagnosed the CI failure as an exhausted Actions quota caused by a hanging test script I registered, fixed it three ways, and made the repo public again at the user's direction."
+    },
+    {
+      "at": "2026-09-21",
+      "what": "Closed f19, the last open bug. Reproduced it (the hunt could not), fixed it by threading the alias resolver from whatIfProjection through computeVacateRelayLegNames, and mutation-proved it - after mutation caught that my own first guard was a vanity test satisfied by unrelated legs. Confirmed CI is green again."
     }
   ],
   "RESUME_HERE": {
@@ -782,6 +789,6 @@
       "f18 - the unreachable aFinalBracket fallback, flagged because a future preset omitting the field would take an untested path.",
       "od4 - meets.json is both the live store and the fresh-install seed. A release blocker, not a deadline one."
     ],
-    "ciAndBilling": "CI was failing because jobs would not start: the account's Actions quota was exhausted. Cause chain: registering test_scoring_preset_routes.mjs (commit e20f8608) introduced a script that hangs on Linux, so 15 runs each burned GitHub's 6-hour ceiling; the repo had just been made private, where Actions minutes are billed. Fixed three ways (script exits properly, per-script and e2e timeouts in the runner, job timeout-minutes 25 plus cancel-in-progress). The user then chose to make the repo PUBLIC again, which restores unlimited free Actions minutes. Repo visibility is PUBLIC as of 2026-09-21."
+    "ciAndBilling": "CI was failing because jobs would not start: the account's Actions quota was exhausted. Cause chain: registering test_scoring_preset_routes.mjs (commit e20f8608) introduced a script that hangs on Linux, so 15 runs each burned GitHub's 6-hour ceiling; the repo had just been made private, where Actions minutes are billed. Fixed three ways (script exits properly, per-script and e2e timeouts in the runner, job timeout-minutes 25 plus cancel-in-progress). The user then chose to make the repo PUBLIC again, which restores unlimited free Actions minutes. Repo visibility is PUBLIC as of 2026-09-21. VERIFIED 2026-09-21: after making the repo public and landing the three fixes, a CI run completed with conclusion 'success' - the first green run since the hang began. An older superseded run was auto-cancelled by the new cancel-in-progress rule, which is the intended behaviour."
   }
 }
