@@ -1,5 +1,12 @@
 # Manager applet diagnosis — screens, `@omniswim/ui` adoption, Panel+Parts adherence, duplication
 
+> **Status, 2026-09-20: partly stale.** Re-measured against the code: the badge
+> hand-rolling (9 files, now 1), `crossCourseArbitrageSections.tsx` (deleted),
+> the duplicated team dropdown (now the shared `TeamSelect`), and Manager's top
+> toolbar (now one consistent `Button` treatment) are all fixed. The stacked
+> navigation idioms and the raw-`<button>` count are still open. Verify any
+> claim here against the code before acting on it.
+
 **Status: diagnosis only, per Phase 0 of
 [`02-UI-REDESIGN-WHOLE-APP.md`](02-UI-REDESIGN-WHOLE-APP.md) §6.
 Nothing in this document has been built, and it does not propose any new

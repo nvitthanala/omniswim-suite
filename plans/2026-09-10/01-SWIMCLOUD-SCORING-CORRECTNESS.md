@@ -1,5 +1,12 @@
 # SwimCloud meet import: scoring correctness audit and fix
 
+> **Status, 2026-09-20: the defect described below is FIXED.** The import now
+> resolves a swim's round from the per-event results page, and the whole chain
+> is wired -- the crawl fetches those pages, the server parses them, and
+> `OpsModule` passes them in. Wholesale exclusion of ambiguous groups remains
+> only as the correct fallback when an event page is absent or unparseable.
+> Read this document for the reasoning, not for current behaviour.
+
 **Date:** 2026-09-10
 **Trigger:** user report after a real crawl-and-import: "said 188 warnings,
 populates but it is not clean, does not identify prelims vs finals results

@@ -3,6 +3,12 @@
 Root-level docs (`README.md`, `CLAUDE.md`, `SUITE_ROADMAP.md`, `CHANGELOG.md`) stay
 in the repository root. Everything else lives here.
 
+## Start here
+
+| Doc | Covers |
+| --- | --- |
+| [USER_GUIDE.md](USER_GUIDE.md) | **How to use the app.** Written for a coach: workspaces, choosing a scoring rule set, getting swimmers in, lineups, relays, optimising, scoring a meet, reconciling against official results, and backups. |
+
 ## Reference — current
 
 Living documents that describe how a part of the system works today.
