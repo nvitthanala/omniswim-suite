@@ -13,5 +13,5 @@
       "@omniswim/metrics": ["../../packages/metrics/src/MetricsApp.tsx"]
     }
   },
-  "include": ["src/**/*", "server.ts", "vite.config.ts"]
+  "include": ["src/**/*", "lib/**/*", "server.ts", "vite.config.ts"]
 }

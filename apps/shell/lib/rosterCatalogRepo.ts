@@ -8,7 +8,6 @@
  * Mirrors the structure of `workspaceRepo.ts` so adopted users get feature
  * parity across both backends without any code change at the call site.
  */
-import { promises as existsSync } from 'node:fs';
 import path from 'node:path';
 import { JsonStore } from './jsonStore.ts';
 import { RosterCatalogService } from '../../../packages/db/src/RosterCatalogService.ts';
@@ -92,10 +91,6 @@ export class JsonRosterCatalog implements RosterCatalogRepo {
 
   async init(): Promise<void> {
     await this.store.init();
-    // Refresh `touched` flag in case multiple write paths race in tests.
-    if (!existsSync(this.filePath)) {
-      // store.init handles seeding; this is just a no-op fallback.
-    }
   }
 
   private async read(): Promise<RosterCatalogJson> {
