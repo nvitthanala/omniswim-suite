@@ -330,10 +330,19 @@ the failure mode this app is built to avoid.
 
 ---
 
-## Before sharing this with anyone else
+## Sharing this with someone else
 
-Today this suite is a personal tool for one or two coaches, and the sample
-data shipped with it is a real roster. Before handing it to anybody outside
-that circle, a new installation must start from an empty or demo workspace
-instead of live team data. See `docs/reference/PRODUCTION_READINESS_STATE.json`
-(`od4`) for the detail.
+A fresh installation starts from **`data/demo-seed.json`** — one workspace
+called *"Demo meet (sample data — not real results)"*, with two invented
+schools and sixteen invented swimmers. Nobody else's real roster is shipped.
+
+Your own data lives in `data/meets.json`, which is local to your machine and
+not part of the repository. Copying the project to another computer does not
+copy your workspaces; move `data/` yourself if that is what you want, or use
+a backup (section 10).
+
+One thing to know if you ever publish this: the repository's **history** still
+contains the older `meets.json`, from when the live store and the seed were the
+same file. New clones no longer receive it as data, but it remains readable in
+past commits. Rewriting that history is a deliberate, destructive operation —
+decide whether it matters before sharing the repository widely.

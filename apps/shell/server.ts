@@ -114,8 +114,31 @@ function findProjectRoot(start: string): string {
 }
 
 const PROJECT_ROOT = findProjectRoot(SHELL_ROOT);
-const DATA_DIR = path.join(PROJECT_ROOT, 'data');
+/**
+ * Where workspaces, backups, presets and captures live.
+ *
+ * `OMNI_DATA_DIR` overrides it. That exists so a fresh-install path can be
+ * exercised against a throwaway directory without moving anybody's real data
+ * aside -- the seeding behaviour below decides what a brand-new user sees, and
+ * it was previously impossible to check without risking the live store.
+ */
+const DATA_DIR = process.env.OMNI_DATA_DIR
+  ? path.resolve(process.env.OMNI_DATA_DIR)
+  : path.join(PROJECT_ROOT, 'data');
 const MEETS_FILE = path.join(DATA_DIR, 'meets.json');
+/**
+ * The workspace a fresh install starts from.
+ *
+ * `data/meets.json` is this machine's LIVE working store. It used to be tracked
+ * in git as well, so cloning the repo handed you somebody else's real roster --
+ * real athlete names, recruit lists and history -- as your starting data. That
+ * is fine for one person's own checkout and wrong for anybody else's.
+ *
+ * So the two roles are now separate files. `meets.json` is local and untracked;
+ * `demo-seed.json` is small, committed, and entirely invented. Seeding prefers a
+ * local `meets.json` when one exists, so an existing install keeps its own data.
+ */
+const DEMO_SEED_FILE = path.join(DATA_DIR, 'demo-seed.json');
 const DB_FILE = path.join(DATA_DIR, 'omniswim.db');
 const BACKUP_DIR = path.join(DATA_DIR, 'backups');
 const STORAGE_BACKEND = (process.env.OMNI_DB ?? 'sqlite').toLowerCase();
@@ -492,7 +515,7 @@ async function startServer() {
 
   app.use(express.json({ limit: '50mb' }));
 
-  const seedWorkspaces = (): Workspace[] => [
+  const blankWorkspace = (): Workspace[] => [
     {
       id: uuidv4(),
       name: 'Blank Workspace 1',
@@ -504,6 +527,29 @@ async function startServer() {
       scoringSettings: defaultScoringSettings,
     },
   ];
+
+  /**
+   * What a store with nothing in it should contain.
+   *
+   * The committed demo when it is readable, otherwise one empty workspace. A
+   * demo that fails to parse must not take the server down or leave a new user
+   * staring at an error -- it degrades to the blank workspace and says why,
+   * because the demo is a convenience and the app is not.
+   *
+   * Every id is regenerated per install. The file ships fixed ids so it stays
+   * byte-stable in git, and two installs must not share a workspace id.
+   */
+  const seedWorkspaces = (): Workspace[] => {
+    if (!fs.existsSync(DEMO_SEED_FILE)) return blankWorkspace();
+    try {
+      const parsed = JSON.parse(fs.readFileSync(DEMO_SEED_FILE, 'utf-8')) as Workspace[];
+      if (!Array.isArray(parsed) || parsed.length === 0) return blankWorkspace();
+      return parsed.map(ws => ({ ...ws, id: uuidv4(), createdAt: Date.now() }));
+    } catch (err) {
+      console.warn(`Demo seed at ${DEMO_SEED_FILE} could not be read; starting empty instead:`, err);
+      return blankWorkspace();
+    }
+  };
 
   let repo: WorkspaceRepo;
   let auth: AuthService | null = null;

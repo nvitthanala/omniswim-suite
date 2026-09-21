@@ -4,17 +4,37 @@ True facts about this codebase that are not obvious from reading any single file
 each of which has already cost real debugging time. Each entry explains the
 consequence of not knowing it, not just the fact itself.
 
-## 1. `data/meets.json` is gitignored but tracked
+## 1. `data/meets.json` is local only; the seed is `data/demo-seed.json`
 
-`data/meets.json` appears in `.gitignore` (so routine edits from a running app
-don't show up as diffs to commit) but the file itself is already tracked in git —
-`git ls-files` includes it. `SqliteRepo.init()` in `apps/shell/lib/workspaceRepo.ts`
-reads this exact file to seed `data/omniswim.db` the first time a fresh clone
-runs with `OMNI_DB=sqlite` (the default) and finds zero workspaces in the
-database; `JsonRepo` uses it directly as the JSON-mode store. Deleting it from
-git to "clean up the gitignore" would silently remove all demo/seed data from
-every new checkout — a fresh clone would boot to a single empty "Blank
-Workspace 1" instead of the real seeded roster, with no error to say why.
+**Changed 2026-09-21. This entry used to say the opposite** — that `meets.json`
+was gitignored *but tracked*, and that deleting it from git would strip the seed
+data from every new checkout. That was true, and it was the problem: a clone
+handed you somebody else's real roster as your starting data. Roughly 170 named
+athletes, 1,900 history entries and 500 recruits, in a 3 MB file, in a public
+repository.
+
+The two roles are now separate files:
+
+- **`data/meets.json`** — this machine's live working store. Untracked and
+  gitignored. Nothing distributes it.
+- **`data/demo-seed.json`** — what a fresh install starts from. Committed,
+  ~29 KB, and entirely invented: two made-up schools, sixteen made-up swimmers,
+  and a workspace named "Demo meet (sample data — not real results)" so nobody
+  can mistake a row for a result. Regenerate with
+  `node scripts/build-demo-seed.mjs`.
+
+`seedWorkspaces()` in `apps/shell/server.ts` reads the demo file, regenerating
+every workspace id per install so two installs never collide, and falls back to
+a single blank workspace if the file is missing or unreadable. `SqliteRepo` still
+migrates from a local `meets.json` when one exists, so an existing install keeps
+its own data and sees no change.
+
+`tests/demoSeed.test.ts` fails if `meets.json` is ever tracked again, if the seed
+grows past 200 KB, if its workspace name stops declaring itself a sample, or if
+any name or team in it also appears in the live store.
+
+`DATA_DIR` is overridable with `OMNI_DATA_DIR`, which is how the fresh-install
+path is exercised without moving real data aside.
 
 ## 2. Dev and prod resolve the project root from different depths
 

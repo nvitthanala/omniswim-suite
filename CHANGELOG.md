@@ -58,6 +58,17 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   headers and row selectors are deliberately unchanged — those are layout, not
   buttons.
 
+### Changed
+
+- **A fresh installation no longer starts from somebody else's roster.**
+  `data/meets.json` was both the live working store and the seed committed to
+  the repository, so cloning the project handed you real athlete names, history
+  and recruit lists as your starting data. The two roles are now separate files:
+  `meets.json` is local and untracked, and a new install seeds from
+  `data/demo-seed.json` — one clearly-labelled sample workspace with invented
+  schools and swimmers. Existing installations keep their own data and see no
+  change.
+
 ### Removed
 
 - **The Team Roster Catalog is gone.** It never worked: its client called 13
