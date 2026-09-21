@@ -76,11 +76,27 @@ async function json(method, url, body) {
 
 if (fs.existsSync(TEST_FILE)) fs.rmSync(TEST_FILE);
 
-const server = spawn('npx', ['tsx', path.join('apps', 'shell', 'server.ts')], {
+/**
+ * Run the server directly, not through `npx`.
+ *
+ * `npx tsx server.ts` puts the real server one level down as a grandchild of
+ * npx. Killing npx leaves it running: it keeps the port, keeps the inherited
+ * stdio pipes open, and so keeps this script's event loop from draining. The
+ * script then never exits. On GitHub Actions that stalls `npm test` until the
+ * job's own six-hour ceiling kills it -- which happened fifteen times in
+ * September 2026 before anyone read the run times, and on a private repo those
+ * are billed minutes.
+ *
+ * `process.execPath --import tsx` is the same thing one process shallower, and
+ * it is exactly how `scripts/run-tests.mjs` launches every other script here.
+ * `detached` puts it in its own process group so the teardown below can take
+ * the whole group down, not just the leader.
+ */
+const server = spawn(process.execPath, ['--import', 'tsx', path.join('apps', 'shell', 'server.ts')], {
   cwd: REPO_ROOT,
   env: { ...process.env, OMNI_PORT: String(PORT), OMNI_HOST: '127.0.0.1' },
   stdio: ['ignore', 'pipe', 'pipe'],
-  shell: process.platform === 'win32',
+  detached: process.platform !== 'win32',
 });
 let serverLog = '';
 server.stdout.on('data', d => {
@@ -89,6 +105,30 @@ server.stdout.on('data', d => {
 server.stderr.on('data', d => {
   serverLog += d.toString();
 });
+
+/**
+ * Kill the server and everything it started.
+ *
+ * On POSIX the negative pid targets the whole process group, which is why the
+ * spawn above is `detached`. Without that, a grandchild survives and holds the
+ * port. Wrapped because the group may already be gone, and a teardown that
+ * throws would mask whatever the test actually found.
+ */
+function stopServer() {
+  try {
+    if (process.platform !== 'win32' && server.pid !== undefined) {
+      process.kill(-server.pid, 'SIGKILL');
+      return;
+    }
+    server.kill('SIGKILL');
+  } catch {
+    /* already gone */
+  }
+}
+
+// Belt and braces: if an assertion throws past the finally block, or the runner
+// kills this script, do not leave a server holding the port.
+process.on('exit', stopServer);
 
 let failed = null;
 try {
@@ -301,8 +341,8 @@ try {
   failed = err;
 } finally {
   if (fs.existsSync(TEST_FILE)) fs.rmSync(TEST_FILE);
-  server.kill();
-  // Give the child a moment to release the port before the process exits.
+  stopServer();
+  // Give the port a moment to be released before this process exits.
   await new Promise(r => setTimeout(r, 300));
 }
 

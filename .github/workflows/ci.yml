@@ -6,9 +6,24 @@ on:
   pull_request:
     branches: [main, master]
 
+# Only the newest run per branch survives. Pushing several commits in a row used
+# to leave every earlier run grinding to completion, and on a private repo each
+# one bills minutes.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-test:
     runs-on: ubuntu-latest
+
+    # The real ceiling. GitHub's default is SIX HOURS, and in September 2026 a
+    # test script that started a server and never exited hit it fifteen times in
+    # a row -- ninety hours of billed minutes on a private repo, which exhausted
+    # the account's quota and stopped jobs starting at all. The suite finishes in
+    # well under ten minutes; twenty-five is generous and bounds the damage.
+    # scripts/run-tests.mjs now also caps each script individually.
+    timeout-minutes: 25
 
     # Throwaway database so the Postgres round-trip test runs for real instead of
     # skipping. Without it, PgWorkspaceService is only ever checked structurally.

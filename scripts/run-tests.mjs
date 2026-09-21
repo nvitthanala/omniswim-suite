@@ -12,6 +12,14 @@ import { existsSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
+/**
+ * Per-script ceiling. Override with OMNI_TEST_TIMEOUT_MS for a slow machine.
+ * See the `timeout` note at the spawn site for why this exists.
+ */
+const SCRIPT_TIMEOUT_MS = Number(process.env.OMNI_TEST_TIMEOUT_MS ?? 300_000);
+/** The e2e run is one spawn covering every spec, so it gets a larger ceiling. */
+const E2E_TIMEOUT_MS = Number(process.env.OMNI_E2E_TIMEOUT_MS ?? 900_000);
+
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(scriptsDir, '..');
 
@@ -139,10 +147,25 @@ for (const [file, fixture] of TESTS) {
   // console.assert writes "Assertion failed" to stderr and then keeps going,
   // leaving the exit code at 0. Three test files used it, so they reported PASS
   // no matter what they found. Exit status alone is not enough evidence.
+  const startedAt = Date.now();
   const run = spawnSync(process.execPath, ['--import', 'tsx', path], {
     cwd: repoRoot,
     stdio: 'pipe',
+    // No script may hang the suite. Without this, one that never exits stalls
+    // `npm test` until the CI job's own ceiling kills it -- which on GitHub
+    // Actions is SIX HOURS, per run, billed. test_scoring_preset_routes.mjs did
+    // exactly that in September 2026: it starts a server through `npx tsx`, and
+    // killing `npx` left the real server running as a grandchild holding the
+    // stdio pipes open, so the script's event loop never drained. Fifteen runs
+    // burned six hours each before anyone looked.
+    //
+    // A timeout here turns that into one loud failure instead of a silent,
+    // expensive stall. It is deliberately generous: the slowest legitimate
+    // script in this suite finishes well inside a minute.
+    timeout: SCRIPT_TIMEOUT_MS,
+    killSignal: 'SIGKILL',
   });
+  const elapsedMs = Date.now() - startedAt;
   const stdout = run.stdout?.toString() ?? '';
   const stderr = run.stderr?.toString() ?? '';
   const combined = stdout + stderr;
@@ -165,10 +188,25 @@ for (const [file, fixture] of TESTS) {
       passed += 1;
     }
   } else {
-    console.log(`FAIL  ${file}`);
-    const why = silentAssertion && run.status === 0
-      ? 'console.assert tripped but exited 0 — use node:assert/strict so the failure is real\n'
-      : '';
+    // Detected by elapsed time, not by the exit shape. How a timed-out
+    // spawnSync reports itself is platform-dependent and not worth trusting:
+    // POSIX gives status null with signal SIGKILL, while Windows was observed
+    // giving status 13, no signal and no error at all. Wall time is the same
+    // everywhere. Saying "timed out" matters because a bare "FAIL" over the
+    // tail of a stalled script reads like an assertion failure and sends the
+    // next person hunting in the wrong place.
+    // The small tolerance absorbs timer granularity: the kill lands a few
+    // milliseconds either side of the ceiling, and at a short ceiling that was
+    // enough to leave a genuinely-stalled script labelled as a plain failure.
+    const timedOut = run.error?.code === 'ETIMEDOUT' || elapsedMs >= SCRIPT_TIMEOUT_MS - 250;
+    console.log(`FAIL  ${file}${timedOut ? ` (timed out after ${SCRIPT_TIMEOUT_MS} ms)` : ''}`);
+    const why = timedOut
+      ? `Timed out after ${SCRIPT_TIMEOUT_MS} ms and was killed. The script did not exit on its own.\n` +
+        'A common cause here is spawning a server through `npx`: killing npx leaves the real\n' +
+        'server running as a grandchild, holding the stdio pipes open so the event loop never drains.\n'
+      : silentAssertion && run.status === 0
+        ? 'console.assert tripped but exited 0 — use node:assert/strict so the failure is real\n'
+        : '';
     failures.push(`--- ${file} ---\n${why}${combined.trim().split('\n').slice(-8).join('\n')}`);
     failed += 1;
   }
@@ -180,6 +218,10 @@ if (existsSync(playwrightBin)) {
     cwd: repoRoot,
     stdio: 'pipe',
     env: { ...process.env, NODE_OPTIONS: process.env.NODE_OPTIONS ?? '--use-system-ca' },
+    // Same ceiling, same reason as the per-script timeout above. Playwright's
+    // own webServer will wait indefinitely for a port that never opens.
+    timeout: E2E_TIMEOUT_MS,
+    killSignal: 'SIGKILL',
   });
   if (e2e.status === 0) {
     console.log('PASS  playwright e2e (all specs)');
