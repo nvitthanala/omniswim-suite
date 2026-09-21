@@ -280,8 +280,16 @@ roster by hand.
 Backups go to `data/backups/`. The app keeps the 20 most recent of its own and
 **never touches files you put there yourself**, so your own copies are safe.
 
-To restore, replace `data/meets.json` with a backup file and restart. Copy the
-current one somewhere first.
+To restore, use **`GET /api/workspaces/backups`** to list what exists and
+**`POST /api/workspaces/restore`** with `{"file": "<name from that list>"}`.
+A restore replaces **every** workspace, so it takes its own `pre-restore`
+backup first — if you restore the wrong file, the state you just left is still
+on disk. A backup that is corrupt or not a real export is refused before
+anything is replaced.
+
+Only files the app itself wrote can be restored. Anything you copied into
+`data/backups/` yourself is left alone and cannot be restored through the app;
+swap it in by hand if you need it.
 
 ---
 
