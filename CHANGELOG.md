@@ -49,6 +49,15 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - **The Metrics applet is marked Experimental** everywhere it appears. It is
   not meet-ready and is not covered by this round of work.
 
+### Changed
+
+- **Buttons across the app now share one definition.** 143 controls moved onto
+  the shared `Button` primitive, so corners, weight, spacing and disabled states
+  are consistent instead of hand-rolled per screen. Corners are slightly
+  rounder and labels slightly bolder than before. Tab strips, disclosure
+  headers and row selectors are deliberately unchanged — those are layout, not
+  buttons.
+
 ### Removed
 
 - **The Team Roster Catalog is gone.** It never worked: its client called 13

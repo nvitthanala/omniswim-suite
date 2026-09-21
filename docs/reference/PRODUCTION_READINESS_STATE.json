@@ -195,7 +195,7 @@
     },
     {
       "id": "f11",
-      "severity": "P2-design-system",
+      "severity": "P2-fixed",
       "title": "Button adoption is low because the primitive cannot express the app's prevailing button style, not because nobody tried",
       "evidence": [
         "packages/ui/src/components/Button.tsx line 46 bakes 'font-bold' and 'disabled:opacity-50' into the BASE class, applied to every variant and size, with no prop to vary either.",
@@ -205,8 +205,17 @@
         "Adoption today: Button imported by 4 of 55 files; 122 raw <button> vs 9 <Button>."
       ],
       "consequence": "The 2026-09-10 diagnosis framed low Button adoption as a discipline problem. It is a fit problem: the primitive is more opinionated than the app it serves. Converging on it requires a DECISION first - either relax Button (make weight, radius and disabled opacity variant-controlled) or restyle the app to Button's look (a real, visible change needing sign-off). Doing a mass conversion without that decision would silently restyle ~120 controls.",
-      "status": "IN PROGRESS 2026-09-21 - user chose to restyle the app",
-      "userDecision": "Restyle the app to Button, not relax Button. The visual change is accepted: corners rounder, labels bolder, disabled states lighter. Dispatched to a worker covering 167 raw <button> elements across manager (111), ui (22), apps/shell (21), metrics (20) and matrix (13). Tab strips and SegmentedControl are excluded - they are a navigation idiom with an active-underline affordance Button cannot express."
+      "status": "CLOSED 2026-09-21 - app restyled onto Button (commit db298ad0)",
+      "userDecision": "Restyle the app to Button, not relax Button. The visual change is accepted: corners rounder, labels bolder, disabled states lighter. Dispatched to a worker covering 167 raw <button> elements across manager (111), ui (22), apps/shell (21), metrics (20) and matrix (13). Tab strips and SegmentedControl are excluded - they are a navigation idiom with an active-underline affordance Button cannot express.",
+      "result": "Raw <button> 187 -> 44; <Button> usages 30 -> 173. 143 controls converted. Verified with the Playwright e2e suite, which clicks these controls for real: 963 unit tests, 84 script tests, lint clean on all three gates, production build green. No behaviour changed and no test selector needed touching.",
+      "deliberatelyLeftRaw": [
+        "Tab strips (nav-tab-*) and WizardShell's ARIA tablist - a navigation idiom with an active-underline affordance Button cannot express.",
+        "Disclosure headers and full-width row selectors - laid out by their container rather than styled as controls.",
+        "VideoPlayerParts transport bar - deliberately overrides theme colours for legibility over footage.",
+        "Menu's trigger - its className prop REPLACES rather than merges, so wrapping it would change that contract for every caller.",
+        "Toast's close button - a bespoke CSS class that would fight Button's utilities at equal specificity."
+      ],
+      "primitiveFindings": "cn() uses tailwind-merge, so className reliably overrides Button's own display/padding/rounding utilities - conversions were more tractable than expected. Four variants and three sizes covered every genuine action button, so the primitive did NOT need widening. Its real gaps are narrow: no way to express a replace-not-merge className contract, a bespoke equal-specificity CSS class, or a theme-invariant control."
     },
     {
       "id": "f12",
@@ -508,7 +517,7 @@
       "id": "P4",
       "name": "UI navigability",
       "owner": "worker",
-      "status": "partially-done",
+      "status": "done",
       "items": [
         {
           "what": "Button convergence (122 hand-rolled)",
@@ -526,12 +535,10 @@
       "done": [
         "Shared TeamSelect primitive in packages/ui, all 6 duplicate team dropdowns migrated, zero raw dupes remain - verified independently",
         "Metrics marked Experimental via Badge tone=warning with literal text (not colour-only) on AppletNav, SuiteHome cards + steps, and CommandPalette - verified",
-        "'400 Freestyle' added to eventCatalog.ts in correct stroke-then-distance position - verified"
+        "'400 Freestyle' added to eventCatalog.ts in correct stroke-then-distance position - verified",
+        "Button restyle complete: 187 raw buttons -> 44, Button usages 30 -> 173 (commit db298ad0)."
       ],
-      "deferred": [
-        "Button convergence - blocked on f11's design decision, correctly not forced",
-        "Manager's stacked navigation idioms and the RosterImportWizard control row - deliberately out of P4 scope, pending a human look at the running app"
-      ]
+      "deferred": []
     },
     {
       "id": "P5",
@@ -711,6 +718,10 @@
     {
       "at": "2026-09-21",
       "what": "Closed f19, the last open bug. Reproduced it (the hunt could not), fixed it by threading the alias resolver from whatIfProjection through computeVacateRelayLegNames, and mutation-proved it - after mutation caught that my own first guard was a vanity test satisfied by unrelated legs. Confirmed CI is green again."
+    },
+    {
+      "at": "2026-09-21 (final)",
+      "what": "Button restyle landed and verified, closing f11 and P4. Every phase P0-P7 is now complete and every decision answered. Final state: 963 unit tests, 84 script tests including Playwright e2e, lint clean on three gates, production build green, CI green, repo public, everything merged to main and pushed."
     }
   ],
   "RESUME_HERE": {
@@ -778,11 +789,11 @@
     }
   },
   "statusSummary": {
-    "at": "2026-09-21 (all three decisions answered)",
-    "phasesComplete": "P0, P1, P2, P3, P4 (partial by design), P5, P6, P7",
-    "suite": "963 vitest passed / 0 failed; 84 script tests passed / 0 failed / 1 skipped (Postgres, needs PG_TEST_URL); lint clean across all three gates (workspace types, extension types, ESLint)",
+    "at": "2026-09-21 (all phases complete)",
+    "phasesComplete": "P0 through P7, all of them",
+    "suite": "963 vitest passed / 0 failed; 84 script tests passed / 0 failed / 1 skipped (Postgres, needs PG_TEST_URL), including the Playwright e2e specs; lint clean across workspace types, extension types and ESLint; production build green; CI green on GitHub.",
     "branch": "nvitthanala/production-readiness, merged to main and pushed after every step",
-    "whatIsLeft": "Nothing blocked. f17 shipped, f16 deleted, f11 in progress. Remaining open items are f19 (a latent, unreproducible alias mismatch), f18 (an unreachable aFinalBracket fallback), and od4 (meets.json is both live store and fresh-install seed) - a release blocker, not a deadline one.",
+    "whatIsLeft": "Nothing blocked and no known open defect. Remaining items are advisory: f18 (an unreachable aFinalBracket fallback, flagged because a future preset omitting the field would take an untested path) and od4 (data/meets.json is both the live store and the fresh-install seed - a RELEASE blocker, not a deadline one, and only relevant when someone outside the user and their coach runs this).",
     "blockedOnUser": [],
     "openNotBlocking": [
       "f19 - computeVacateRelayLegNames builds its lookup before the alias collapse. Not reproducible against today's data; a new alias would expose it. Reported, not fixed, per this repo's rule 4.",
