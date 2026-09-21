@@ -271,7 +271,12 @@ async function readCapture(subject: SwimCloudCaptureSubject): Promise<ReadCaptur
     captureId = captureIdForSubject(subject);
     const { token, port } = await loadOptions();
     if (!token) return { captureId, available: false, found: false };
-    const result = await getJson(`${captureBase(port)}/${captureId}`, token);
+    // withEventRefs=1 asks the app to also derive which events the STORED swims
+    // pages name. Without it a re-crawl of a complete capture collects no event
+    // references at all -- resume skips the swims pages, so nothing is parsed
+    // this run -- and the event-results pass plans nothing, leaving every
+    // prelims/finals pair unresolved. The app can see bytes the crawler cannot.
+    const result = await getJson(`${captureBase(port)}/${captureId}?withEventRefs=1`, token);
     if (result.status === 404) return { captureId, available: true, found: false };
     if (!result.ok || result.json === undefined) return { captureId, available: false, found: false };
     return { captureId, available: true, found: true, capture: result.json };

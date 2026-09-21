@@ -233,6 +233,22 @@ export interface SwimCloudResumeDecision {
   readonly found: boolean;
   /** Canonical URLs whose bytes are already stored. Empty unless the reply was fully readable. */
   readonly alreadyCaptured: ReadonlySet<string>;
+  /**
+   * Event references the app derived from the swims pages it already holds.
+   *
+   * The crawl's event-results pass plans from the swims pages it parsed *this
+   * run*, and resume skips a swims page whose bytes are already stored. A
+   * re-crawl of a complete capture therefore collected nothing, planned no
+   * `meetEvent` pages, and left every prelims/finals pair unresolved — while
+   * reporting success, because it genuinely had nothing new to fetch.
+   *
+   * Only the app can see those stored bytes, so it parses them and sends the
+   * references back. Empty when the app could not be asked, held no record, or
+   * is an older build that does not send them; in every one of those cases the
+   * run falls back to the references it gathers itself, which is what it did
+   * before.
+   */
+  readonly storedEventRefs: readonly string[];
   readonly degradation: SwimCloudResumeDegradation;
   /**
    * What the stored capture says earlier crawls planned, when it says anything.
@@ -248,7 +264,7 @@ export interface SwimCloudResumeDecision {
 const NOTHING_CAPTURED: ReadonlySet<string> = new Set<string>();
 
 function degraded(degradation: SwimCloudResumeDegradation): SwimCloudResumeDecision {
-  return { available: false, found: false, alreadyCaptured: NOTHING_CAPTURED, degradation };
+  return { available: false, found: false, alreadyCaptured: NOTHING_CAPTURED, storedEventRefs: [], degradation };
 }
 
 /**
@@ -266,6 +282,21 @@ function degraded(degradation: SwimCloudResumeDegradation): SwimCloudResumeDecis
  * never answering at all, a reply that carries an `error` string must read as
  * "could not ask" — not as a capture record with no pages in it.
  */
+/**
+ * `knownEventRefs` from the app, or an empty list.
+ *
+ * Validated rather than cast, same rule as {@link readStoredCapture}: this
+ * arrives over HTTP from a process the script does not version-lock against,
+ * and a malformed entry must contribute nothing rather than become a planned
+ * URL. An app that predates this field simply omits it.
+ */
+function readStoredEventRefs(capture: unknown): readonly string[] {
+  if (!isRecordLike(capture)) return [];
+  const refs = (capture as { knownEventRefs?: unknown }).knownEventRefs;
+  if (!Array.isArray(refs)) return [];
+  return refs.filter((r): r is string => typeof r === 'string' && r.length > 0);
+}
+
 export function decideResumeFromRoundTrip(trip: SwimCloudReadCaptureRoundTrip): SwimCloudResumeDecision {
   if (trip.kind === 'timeout') return degraded('timed-out');
   if (trip.kind === 'error') return degraded('errored');
@@ -275,17 +306,18 @@ export function decideResumeFromRoundTrip(trip: SwimCloudReadCaptureRoundTrip): 
   if (typeof response.error === 'string' && response.error.length > 0) return degraded('worker-error-reply');
   if (response.available !== true) return degraded('app-unreachable');
   if (response.found !== true) {
-    return { available: true, found: false, alreadyCaptured: NOTHING_CAPTURED, degradation: 'none' };
+    return { available: true, found: false, alreadyCaptured: NOTHING_CAPTURED, storedEventRefs: [], degradation: 'none' };
   }
 
   const stored = readStoredCapture(response.capture);
   if (stored === undefined) {
-    return { available: true, found: true, alreadyCaptured: NOTHING_CAPTURED, degradation: 'unreadable-reply' };
+    return { available: true, found: true, alreadyCaptured: NOTHING_CAPTURED, storedEventRefs: [], degradation: 'unreadable-reply' };
   }
   return {
     available: true,
     found: true,
     alreadyCaptured: alreadyCapturedUrls(stored),
+    storedEventRefs: readStoredEventRefs(response.capture),
     degradation: 'none',
     ...(stored.crawlScope === undefined ? {} : { storedScope: stored.crawlScope }),
   };

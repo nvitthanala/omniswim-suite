@@ -1091,6 +1091,55 @@ export function createSwimCloudCaptureRouter(options: SwimCloudCaptureRouterOpti
   });
 
   /* --- GET /api/swimcloud/captures/:id ------------------------------------ */
+  /**
+   * Event references the STORED swims pages already name.
+   *
+   * ## Why this exists
+   *
+   * The crawler's event-results pass plans from the swims pages it fetched
+   * *this run*. Resume skips a swims page whose bytes are already stored, so a
+   * re-crawl of a complete capture collects no references at all, plans zero
+   * `meetEvent` pages, and leaves every prelims/finals pair unresolved — while
+   * reporting success, because it genuinely had nothing new to fetch. The
+   * crawler warns about this in one line and then cannot do anything about it,
+   * since only the app can see the stored bytes.
+   *
+   * So the app derives them. The pages are already on disk; reading them costs
+   * no request to SwimCloud, and only the `meetEvent` pages themselves are
+   * fetched afterwards.
+   *
+   * A page that does not parse contributes nothing and is not an error here:
+   * this is a best-effort enrichment of a resume decision, and a capture whose
+   * swims pages are unreadable has larger problems that the parse route
+   * reports properly.
+   */
+  async function storedEventRefs(captureId: string): Promise<string[]> {
+    const record = await store.getCapture(captureId);
+    if (record === undefined) return [];
+    const refs = new Set<string>();
+    for (const page of record.pages) {
+      if (page.resourceKind !== 'meetTeamSwims' || page.outcome !== 'ok') continue;
+      const entry = await store.readPage(page.canonicalUrl);
+      if (entry?.html === undefined) continue;
+      let parsed;
+      try {
+        parsed = parseTeamMeetSwimsHtml(entry.html, {
+          sourceUrl: page.canonicalUrl,
+          retrievedAt: page.retrievedAt,
+          track: record.track,
+        });
+      } catch {
+        continue;
+      }
+      if (!parsed.ok) continue;
+      for (const swim of parsed.data.swims) {
+        const ref = swim.event.eventRef;
+        if (typeof ref === 'string' && ref.length > 0) refs.add(ref);
+      }
+    }
+    return [...refs].sort();
+  }
+
   router.get('/:id', async (req, res) => {
     const captureId = guardCaptureId(req.params.id, res);
     if (captureId === undefined) return undefined;
@@ -1098,6 +1147,12 @@ export function createSwimCloudCaptureRouter(options: SwimCloudCaptureRouterOpti
       const record = await store.getCapture(captureId);
       if (record === undefined) {
         return res.status(404).json({ error: `Capture not found: ${captureId}` });
+      }
+      // Opt-in, because deriving them parses every stored swims page and the
+      // ordinary read of a capture record must stay cheap. The crawler asks for
+      // them; the capture browser does not need them.
+      if (req.query.withEventRefs === '1') {
+        return res.json({ ...record, knownEventRefs: await storedEventRefs(captureId) });
       }
       return res.json(record);
     } catch (err) {

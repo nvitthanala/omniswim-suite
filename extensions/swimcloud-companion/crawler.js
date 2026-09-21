@@ -2247,7 +2247,13 @@
   }
   var NOTHING_CAPTURED = /* @__PURE__ */ new Set();
   function degraded(degradation) {
-    return { available: false, found: false, alreadyCaptured: NOTHING_CAPTURED, degradation };
+    return { available: false, found: false, alreadyCaptured: NOTHING_CAPTURED, storedEventRefs: [], degradation };
+  }
+  function readStoredEventRefs(capture) {
+    if (!isRecordLike(capture)) return [];
+    const refs = capture.knownEventRefs;
+    if (!Array.isArray(refs)) return [];
+    return refs.filter((r) => typeof r === "string" && r.length > 0);
   }
   function decideResumeFromRoundTrip(trip) {
     if (trip.kind === "timeout") return degraded("timed-out");
@@ -2257,16 +2263,17 @@
     if (typeof response.error === "string" && response.error.length > 0) return degraded("worker-error-reply");
     if (response.available !== true) return degraded("app-unreachable");
     if (response.found !== true) {
-      return { available: true, found: false, alreadyCaptured: NOTHING_CAPTURED, degradation: "none" };
+      return { available: true, found: false, alreadyCaptured: NOTHING_CAPTURED, storedEventRefs: [], degradation: "none" };
     }
     const stored = readStoredCapture(response.capture);
     if (stored === void 0) {
-      return { available: true, found: true, alreadyCaptured: NOTHING_CAPTURED, degradation: "unreadable-reply" };
+      return { available: true, found: true, alreadyCaptured: NOTHING_CAPTURED, storedEventRefs: [], degradation: "unreadable-reply" };
     }
     return {
       available: true,
       found: true,
       alreadyCaptured: alreadyCapturedUrls(stored),
+      storedEventRefs: readStoredEventRefs(response.capture),
       degradation: "none",
       ...stored.crawlScope === void 0 ? {} : { storedScope: stored.crawlScope }
     };
@@ -3117,7 +3124,16 @@
     }
     const eventPagesDone = structural.plansEventResults ? await runEventResultsPass({
       meetId,
-      swimsPages: swimsEventRefs,
+      // Refs gathered this run, plus the ones the app derived from swims
+      // pages it already holds. Without the second half, a re-crawl of a
+      // complete capture gathers nothing -- resume skips every swims page, so
+      // none is parsed here -- and this pass plans zero pages, leaving every
+      // prelims/finals pair unresolved while the crawl reports success.
+      // Deduplicated downstream by planEventResultsSteps.
+      swimsPages: [
+        ...swimsEventRefs,
+        resumeDecision.storedEventRefs.map((eventRef) => ({ event: { eventRef } }))
+      ],
       swimsPagesResumeSkipped: resume.alreadyCaptured.length,
       alreadyCaptured,
       plannedBeforeThisPass: pagesTotal + rosterSteps.length,

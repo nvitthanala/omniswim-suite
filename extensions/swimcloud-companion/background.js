@@ -91,7 +91,7 @@
       captureId = captureIdForSubject(subject);
       const { token, port } = await loadOptions();
       if (!token) return { captureId, available: false, found: false };
-      const result = await getJson(`${captureBase(port)}/${captureId}`, token);
+      const result = await getJson(`${captureBase(port)}/${captureId}?withEventRefs=1`, token);
       if (result.status === 404) return { captureId, available: true, found: false };
       if (!result.ok || result.json === void 0) return { captureId, available: false, found: false };
       return { captureId, available: true, found: true, capture: result.json };
