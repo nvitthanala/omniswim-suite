@@ -1,0 +1,59 @@
+{
+  "investigation": "why-a-recrawl-produces-no-new-pages",
+  "opened": "2026-09-21",
+  "readThisFirstOnResume": "This file. Do not re-derive the observations below; they are measured, with the command that produced each. Add to 'timeline' as you go. The user is away and asked explicitly that progress not be lost to a rate limit.",
+  "userReport": [
+    "Re-crawled meet 356467 to fix prelims/finals resolution. 'same issue' -- no change.",
+    "Asked to re-establish how each page in a meet is read, how prelims/finals are identified, and how not to get blocked by Cloudflare."
+  ],
+  "hardConstraint": {
+    "rule": "This session must NOT fetch swimcloud.com. plans/STATE.md records that touching the live site is 'a deliberate human-present action, never an automated one, including for testing', and the user has stepped away, which is exactly the condition that rule guards.",
+    "consequence": "Every conclusion here must come from the stored capture, the code, or committed fixtures. Anything needing a live request is written up as a step for the user to run, not performed."
+  },
+  "observation1": {
+    "what": "The re-crawl never reached the capture store.",
+    "evidence": "data/swimcloud-captures/captures/meet-356467.json is unchanged: updatedAt 2026-09-10T04:37:36.491Z, 234 pages, kinds {meetTeamSwims:42, teamRoster:8, swimmerTimes:184}, ZERO meetEvent, crawlScope undefined. File mtime is Sep 9, not today.",
+    "meaning": "This is not a parsing bug and not a round-resolution bug. The round resolution is proven working against the real F9 fixture (50/50 bridge tests pass, including the Avery Henke and Oskar Cebula cases). The new pages simply never arrived."
+  },
+  "observation2": {
+    "what": "The stored crawl already shows heavy rate limiting.",
+    "evidence": "Of 234 stored pages: 123 HTTP 200, 111 HTTP 429. Every 429 is a swimmerTimes page (the pooled 3-concurrent pass); meetTeamSwims (42) and teamRoster (8) are 200 across the board.",
+    "meaning": "The sequential 3000ms passes were never throttled. Only the concurrent pass was. Relevant to the user's Cloudflare question."
+  },
+  "candidateCauses": [
+    "A. Extension not reloaded, so the old bundle ran -- no scope radios, no event-results pass. Would explain zero meetEvent pages exactly.",
+    "B. Extension not paired with the running app, so the crawl ran but had nowhere to post. The capture store would be untouched, which matches.",
+    "C. The app was not running, or was on a different port than the extension expects.",
+    "D. Cloudflare blocked the crawl early, so nothing was fetched to post.",
+    "E. The crawl posted to a DIFFERENT capture id and the meet-356467 record is stale."
+  ],
+  "ruledOut": [
+    "E: no second capture, no page written since 2026-09-09.",
+    "Parsing/round-resolution logic: proven working against fixture F9.",
+    "A/B/C/D remain possible for OTHER runs, but are not needed to explain this one -- the resume-starvation path explains it completely and is visible in the code."
+  ],
+  "timeline": [
+    {
+      "at": "2026-09-21",
+      "what": "Confirmed the capture store is untouched. Opened this file. Beginning to narrow the candidates from stored state and code only."
+    },
+    {
+      "at": "2026-09-21",
+      "what": "Root cause identified from code + stored state, no network used. The event-results pass is starved by resume. Recorded before attempting a fix."
+    }
+  ],
+  "nextStep": "Check E first (cheapest, purely local): is there any other capture id, or any page stored outside the meet-356467 record? Then B (pairing state on disk). Then A/C/D, which need evidence only the user's browser has.",
+  "ROOT_CAUSE": {
+    "found": "2026-09-21",
+    "summary": "A re-crawl can never produce meetEvent pages, because the event-results pass derives its event refs ONLY from swims pages fetched during that run, and resume skips swims pages that are already stored.",
+    "evidence": [
+      "extensions/swimcloud-companion/src/crawler-content.ts, inside the page-1 fetch loop: `if (parsed.ok) swimsEventRefs.push(eventRefsOf(parsed.data));` -- refs come only from freshly-fetched pages.",
+      "runEventResultsPass is then called with `swimsPages: swimsEventRefs` (line ~1021) and plans from that alone: `planEventResultsSteps(input.meetId, input.swimsPages)`.",
+      "The code already warns about it at line ~1195: '<N> swims page(s) were skipped as already captured, so any event only they referenced is not fetched this run. Those swims import with their round unresolved, never with a guessed one.'",
+      "The stored capture has all 42 meetTeamSwims pages, so on a re-crawl resume skips ALL of them, swimsEventRefs is empty, and zero meetEvent pages are planned."
+    ],
+    "whyItLooksLikeNothingHappened": "The crawl completes normally and reports success. It simply had nothing new to fetch, so the capture store is untouched -- which is exactly what was observed.",
+    "consequence": "Round resolution is not broken; it is starved. The bridge resolves rounds correctly against a real event page (50/50 tests pass, including the Avery Henke and Oskar Cebula cases). It has never been given one for this meet."
+  },
+  "fixDirection": "Derive event refs from the STORED swims pages as well as freshly-fetched ones. The bytes are already on disk -- 42 meetTeamSwims pages in the capture store -- so no extra fetching is needed to learn the refs; only the meetEvent pages themselves get fetched. Candidate: have the crawler ask the app for the stored capture's event refs (the /parse route already parses stored pages server-side), union them with the refs gathered this run, and plan from the union."
+}
