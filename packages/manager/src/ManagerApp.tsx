@@ -3,10 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { Loader2, Users } from 'lucide-react';
-import { Gender, Recruit, Workspace } from '@omniswim/core/types';
+import { Recruit, Workspace } from '@omniswim/core/types';
 import { mergeScoringSettings } from '@omniswim/core/lib/utils';
 import { usesScorerRoster, scorerRosterKey } from '@omniswim/core/lib/scorerRoster';
 import { countWorkingCopyChanges } from '@omniswim/core/lib/workingCopyChanges';
@@ -23,13 +23,11 @@ import {
   type EntryExport,
   type EntryExportIssue,
 } from '@omniswim/core/lib/entryExport';
-import { rosterCatalogApi, type CatalogTeamRoster } from '@omniswim/core/api/rosterCatalog';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
 import { Button, EmptyState, useToast } from '@omniswim/ui';
 import TeamManagementView from './components/TeamManagementView';
 import SwimmerDeleteConfirmModal from './components/SwimmerDeleteConfirmModal';
 import RosterImportWizard from './components/RosterImportWizard';
-import RosterCatalogPanel from './components/RosterCatalogPanel';
 import BatchOptimizerPanel from './components/BatchOptimizerPanel';
 import ExportReviewModal from './components/ExportReviewModal';
 
@@ -117,15 +115,6 @@ function ManagerWorkspaceView({ activeWorkspace }: { activeWorkspace: Workspace 
     kind: 'csv' | 'hytek';
     issues: EntryExportIssue[];
   } | null>(null);
-  const [showCatalogView, setShowCatalogView] = useState(false);
-  // Only the setter is read today; the value is kept so the catalog fetch has
-  // somewhere to record what it resolved. Prefixed to say that deliberately.
-  const [_catalogInfo, setCatalogInfo] = useState<{ team?: string; gender?: Gender } | null>(null);
-  const [catalogRoster, setCatalogRoster] = useState<CatalogTeamRoster | null>(null);
-  const [catalogRankedTeam, setCatalogRankedTeam] = useState<{
-    team: string;
-    gender: Gender;
-  } | null>(null);
   const [swimmerDeleteCandidate, setSwimmerDeleteCandidate] = useState<{ name: string } | null>(null);
 
   // Working-copy change count for the persistent "Modified copy" badge — a pure
@@ -137,44 +126,8 @@ function ManagerWorkspaceView({ activeWorkspace }: { activeWorkspace: Workspace 
     [activeWorkspace, activeGender]
   );
 
-  // Load the catalog roster lazily — only re-fetches when the user opens
-  // the panel or toggles the catalog team to score.
-  useEffect(() => {
-    if (!showCatalogView) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const teams = await rosterCatalogApi.listTeams();
-        if (cancelled) return;
-        if (teams.length === 0) {
-          setCatalogRoster(null);
-          setCatalogInfo({ team: undefined, gender: activeGender });
-          return;
-        }
-        const preferred =
-          teams.find(t => t.gender === (activeGender === Gender.WOMEN ? 'Women' : 'Men')) ?? teams[0];
-        const gender = preferred.gender === 'Women' ? Gender.WOMEN : Gender.MEN;
-        const roster = await rosterCatalogApi.getRoster(preferred.id);
-        if (cancelled) return;
-        setCatalogRoster(roster);
-        setCatalogInfo({ team: preferred.name, gender });
-        setCatalogRankedTeam({ team: preferred.name, gender });
-      } catch (err) {
-        if (!cancelled) {
-          setCatalogInfo({ team: undefined, gender: activeGender });
-        }
-        void err;
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [showCatalogView, activeGender]);
 
-  // Scoring bundle (with optional catalog rotation). The catalog is opt-in:
-  // only when the user picks a catalog team from the new toolbar button does
-  // the roster flow through `buildCategorizedScoringInputs`.
-  const useCatalog = Boolean(catalogRankedTeam && catalogRoster);
+  // Scoring bundle for the active workspace.
   const {
     projected,
     baselineByTeam,
@@ -182,10 +135,9 @@ function ManagerWorkspaceView({ activeWorkspace }: { activeWorkspace: Workspace 
     scoringSettled,
   } = useWorkspaceScoring({
     workspace: activeWorkspace,
-    gender: useCatalog ? catalogRankedTeam!.gender : activeGender,
+    gender: activeGender,
     removeSeniors,
     scoringRefreshKey,
-    rosterCatalog: useCatalog ? catalogRoster ?? undefined : undefined,
   });
 
   const handleAddRecruit = (recruit: Recruit) => {
@@ -314,14 +266,6 @@ function ManagerWorkspaceView({ activeWorkspace }: { activeWorkspace: Workspace 
           <Button variant="outline" onClick={() => setShowBatchOptimizer(true)} title="Run batch optimizer across all teams">
             Batch optimizer
           </Button>
-          <Button
-            variant="outline"
-            onClick={() => setShowCatalogView(true)}
-            title="Manage the long-lived Team Roster Catalog"
-            data-testid="open-roster-catalog"
-          >
-            Team Catalog
-          </Button>
           <Button variant="primary" onClick={() => setShowImportWizard(true)}>
             Import roster
           </Button>
@@ -384,16 +328,6 @@ function ManagerWorkspaceView({ activeWorkspace }: { activeWorkspace: Workspace 
             setShowBatchOptimizer(false);
           }}
           onClose={() => setShowBatchOptimizer(false)}
-        />
-      )}
-      {showCatalogView && (
-        <RosterCatalogPanel
-          onClose={() => setShowCatalogView(false)}
-          defaultTeamName={
-            (activeWorkspace.menResults?.[0]?.team ??
-              activeWorkspace.womenResults?.[0]?.team ??
-              '') as string
-          }
         />
       )}
       {swimmerDeleteCandidate && (

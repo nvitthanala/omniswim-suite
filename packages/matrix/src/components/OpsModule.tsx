@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { BarChart3, ClipboardPaste, Database, ExternalLink, Trophy } from 'lucide-react';
+import { BarChart3, ClipboardPaste, ExternalLink, Trophy } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Gender, OfficialTeamScores, SwimmerResult, ScoringSettings, Workspace } from '@omniswim/core/types';
 import {
@@ -17,7 +17,6 @@ import { alignPsychResultsToMeetTeams } from '@omniswim/core/lib/psychProjection
 import { meetCopyFromParsed } from '@omniswim/core/lib/meetSource';
 import { workspaceNameForLoadedMeet } from '@omniswim/core/lib/workspaceNaming';
 import { softRemoveSwimmerFromWorkspace } from '@omniswim/core/lib/swimmerSoftRemove';
-import { rosterCatalogApi, type CatalogTeamRoster } from '@omniswim/core/api/rosterCatalog';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
 import {
   useToast,
@@ -212,30 +211,6 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
   const psychParseAbortRef = useRef<AbortController | null>(null);
 
   // === Team Roster Catalog opt-in ===
-  const [catalogTeams, setCatalogTeams] = useState<
-    { id: string; name: string; gender: Gender; division?: string | null }[]
-  >([]);
-  const [catalogRoster, setCatalogRoster] = useState<CatalogTeamRoster | null>(null);
-  const enableCatalog = catalogRoster != null;
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const teams = await rosterCatalogApi.listTeams();
-        setCatalogTeams(
-          teams.map(t => ({
-            id: t.id,
-            name: t.name,
-            gender: t.gender === 'Women' ? Gender.WOMEN : Gender.MEN,
-            division: t.division,
-          }))
-        );
-      } catch {
-        setCatalogTeams([]);
-      }
-    })();
-  }, []);
-
   const {
     projected,
     baseline,
@@ -256,7 +231,6 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
     gender,
     removeSeniors,
     scoringRefreshKey,
-    rosterCatalog: enableCatalog ? catalogRoster ?? undefined : undefined,
   });
 
   const confirmDeleteSwimmer = () => {
@@ -654,41 +628,6 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
               <ExternalLink size={12} />
             </Link>
           ) : null}
-          <div className="flex items-center gap-2">
-          <Database size={14} className="text-[var(--text-accent)]" />
-          <span className="text-ui-caption text-theme-secondary">Catalog:</span>
-          <select
-            value={catalogRoster?.team?.id ?? ''}
-            onChange={e => {
-              const id = e.target.value;
-              if (!id) {
-                setCatalogRoster(null);
-                return;
-              }
-              void rosterCatalogApi.getRoster(id).then(setCatalogRoster);
-            }}
-            className="text-[10px] surface-muted-bg border border-theme-soft rounded px-2 py-1"
-            title="Layer catalog roster opt-in events into the scoring pool"
-            aria-label="Catalog roster for scoring"
-          >
-            <option value="">(off — PDF only)</option>
-            {catalogTeams
-              .filter(t => t.gender === gender)
-              .map(t => (
-                <option key={t.id} value={t.id}>
-                  {t.name}
-                  {t.division ? ` · ${t.division}` : ''}
-                </option>
-              ))}
-          </select>
-          {catalogRoster ? (
-            <span className="text-[10px] text-theme-muted">
-              {catalogRoster.athletes.length} athletes ·{' '}
-              {catalogRoster.athletes.reduce((s, a) => s + a.times.filter(t => t.isEligible).length, 0)}{' '}
-              eligible events
-            </span>
-          ) : null}
-          </div>
         </>}
       >
         <AnimatePresence mode="wait">

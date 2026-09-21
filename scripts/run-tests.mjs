@@ -41,8 +41,6 @@ const TESTS = [
   ['test_pg_roundtrip.mjs'],
   ['test_persistence_parity.mjs'],
   ['test_workspace_scope.mjs'],
-  ['test_roster_catalog.mjs'],
-  ['test_eligibility_toggle.mjs'],
   ['test_chart_data.mjs'],
   ['test_chart_shell.mjs'],
   ['test_chart_render.mjs'],

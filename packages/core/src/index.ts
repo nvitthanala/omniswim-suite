@@ -147,7 +147,6 @@ export { buildMeetEventLabelIndex, computeVisibleEvents } from './lib/eventIdent
 export * from './lib/raceAnalysis';
 
 /* --- Cross-workspace team roster catalog. --- */
-export { rosterCatalogApi } from './api/rosterCatalog';
 export * from './lib/rosterCatalog';
 export {
   buildEventProfileFromCatalog,
