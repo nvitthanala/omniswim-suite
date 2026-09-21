@@ -1833,10 +1833,20 @@ function readRelayLegs(subjectHtml: string): SwimCloudRelayLeg[] {
  * One personal-best row from a swimmer's profile page.
  *
  * **This is the guessed shape, not the real one.** The 2026-09-09 capture of
- * `/swimmer/{id}/times/` settled it: the real Personal Bests table is the
- * default tab, fully server-rendered (no click needed, contrary to the
- * prior-art research in `plans/2026-09-06/04-phasing.md` open question 2), and
- * it carries **no course column** — the course is a suffix of the event label.
+ * `/swimmer/{id}/times/` settled the table's *shape*: the real Personal Bests
+ * table is the default tab (no click needed, contrary to the prior-art research
+ * in `plans/2026-09-06/04-phasing.md` open question 2), and it carries **no
+ * course column** — the course is a suffix of the event label.
+ *
+ * **Corrected 2026-09-20 — that capture did not show the table is
+ * server-rendered, and this comment previously said it did.** The fixture's own
+ * header records that it was taken "via the browser extension (Track A,
+ * clipboard)", which copies the *rendered DOM* after the page's JavaScript has
+ * run. A `fetch` of the same URL returns a 15-17 KB shell with zero `<table>`
+ * elements that loads `/media/webpack/swimmerProfileTimes/index.*.js` — proven
+ * across all 73 successfully-fetched bodies in the archived capture. The
+ * mistaken inference is what justified a fetch-based crawl pass that could
+ * never parse a row; see `SWIMCLOUD_DOM_RENDERED_PASSES` in `./crawlPlan.ts`.
  * This type models a course column and a bare event label, so it describes a
  * table SwimCloud does not serve. Use {@link SwimCloudPersonalBestSwim} and
  * {@link parseSwimmerTimesHtml} for the real page.

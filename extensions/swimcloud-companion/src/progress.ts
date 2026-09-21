@@ -13,6 +13,7 @@ import {
   crawlScopeFloorPagesPerTeam,
   crawlScopePlansPass,
   passesOutsideCrawlScope,
+  scopePassesNeedingRenderedDom,
   type SwimCloudCrawlPass,
   type SwimCloudCrawlScope,
 } from '@omniswim/swimcloud/crawlPlan';
@@ -548,10 +549,27 @@ export function crawlPassLabel(pass: SwimCloudCrawlPass): string {
  */
 export function formatCrawlScopeNote(scope: SwimCloudCrawlScope): string {
   const skipped = passesOutsideCrawlScope(scope);
-  if (skipped.length === 0) {
+  const declined = scopePassesNeedingRenderedDom(scope);
+
+  const parts: string[] = [];
+  if (skipped.length > 0) {
+    parts.push(
+      `not fetched by this crawl: ${skipped.map(crawlPassLabel).join(', ')}. ` +
+        'The capture will hold none of those pages, because this crawl never asks for them.',
+    );
+  }
+  // A pass the scope DID ask for, that a fetch cannot satisfy. Distinct from
+  // "skipped", and the more important of the two to state: the coach chose it,
+  // so silence here would read as a failed crawl rather than a known limit.
+  if (declined.length > 0) {
+    parts.push(
+      `${declined.map(crawlPassLabel).join(', ')} cannot be fetched at all. ` +
+        'That page builds its table in the browser, so a fetched copy contains no data. ' +
+        'Capture those swimmers one at a time with the clipboard button instead.',
+    );
+  }
+  if (parts.length === 0) {
     return `Scope: ${scope.label} — every pass is planned. Nothing is being skipped.`;
   }
-  return `Scope: ${scope.label} — not fetched by this crawl: ${skipped
-    .map(crawlPassLabel)
-    .join(', ')}. The capture will hold none of those pages, because this crawl never asks for them.`;
+  return `Scope: ${scope.label} — ${parts.join(' ')}`;
 }

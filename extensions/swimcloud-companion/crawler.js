@@ -576,6 +576,13 @@
     meetEvent: "meetTeamSwims",
     swimmerTimes: "teamRoster"
   };
+  var SWIMCLOUD_DOM_RENDERED_PASSES = ["swimmerTimes"];
+  function passRequiresRenderedDom(pass) {
+    return SWIMCLOUD_DOM_RENDERED_PASSES.includes(pass);
+  }
+  function scopePassesNeedingRenderedDom(scope) {
+    return scope.passes.filter(passRequiresRenderedDom);
+  }
   var SWIMCLOUD_CRAWL_SCOPES = [
     {
       id: "meet-results",
@@ -656,7 +663,14 @@
       }) : [],
       rosterSteps: crawlScopePlansPass(input.scope, "teamRoster") ? planMeetTeamRosters({ meetId: input.meetId, teamIds: input.teamIds }) : [],
       plansEventResults: crawlScopePlansPass(input.scope, "meetEvent"),
-      plansSwimmerTimes: crawlScopePlansPass(input.scope, "swimmerTimes")
+      // Planned only when the scope asks for it AND a fetched page could actually
+      // carry the data. See SWIMCLOUD_DOM_RENDERED_PASSES: the swimmer-times page
+      // builds its table in the browser, so fetching it spends requests to store
+      // a shell. On the one measured crawl that was 184 of 234 pages -- 78.6% of
+      // all traffic -- for zero parsed rows.
+      plansSwimmerTimes: crawlScopePlansPass(input.scope, "swimmerTimes") && !passRequiresRenderedDom("swimmerTimes"),
+      /** Asked for by the scope but skipped because a fetch cannot satisfy them. */
+      declinedNeedingRenderedDom: scopePassesNeedingRenderedDom(input.scope)
     };
   }
 
@@ -2641,10 +2655,22 @@
   }
   function formatCrawlScopeNote(scope) {
     const skipped = passesOutsideCrawlScope(scope);
-    if (skipped.length === 0) {
+    const declined = scopePassesNeedingRenderedDom(scope);
+    const parts = [];
+    if (skipped.length > 0) {
+      parts.push(
+        `not fetched by this crawl: ${skipped.map(crawlPassLabel).join(", ")}. The capture will hold none of those pages, because this crawl never asks for them.`
+      );
+    }
+    if (declined.length > 0) {
+      parts.push(
+        `${declined.map(crawlPassLabel).join(", ")} cannot be fetched at all. That page builds its table in the browser, so a fetched copy contains no data. Capture those swimmers one at a time with the clipboard button instead.`
+      );
+    }
+    if (parts.length === 0) {
       return `Scope: ${scope.label} \u2014 every pass is planned. Nothing is being skipped.`;
     }
-    return `Scope: ${scope.label} \u2014 not fetched by this crawl: ${skipped.map(crawlPassLabel).join(", ")}. The capture will hold none of those pages, because this crawl never asks for them.`;
+    return `Scope: ${scope.label} \u2014 ${parts.join(" ")}`;
   }
 
   // extensions/swimcloud-companion/src/crawler-content.ts

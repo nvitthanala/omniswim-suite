@@ -171,12 +171,46 @@ describe('the default scope', () => {
 describe('planScopedMeetCrawl', () => {
   it('under the default scope, emits exactly what the ungated planners always did', () => {
     // The behaviour-preservation test. `everything` must not be "close to"
-    // the old crawl; it must be the old crawl, step for step.
+    // the old crawl for the passes a fetch can actually satisfy; it must be the
+    // old crawl, step for step.
     const plan = planScopedMeetCrawl({ meetId: MEET, teamIds: TEAMS, scope: defaultSwimCloudCrawlScope() });
     expect(plan.swimsSteps).toStrictEqual(planMeetTeamSwims({ meetId: MEET, teamIds: TEAMS }));
     expect(plan.rosterSteps).toStrictEqual(planMeetTeamRosters({ meetId: MEET, teamIds: TEAMS }));
     expect(plan.plansEventResults).toBe(true);
-    expect(plan.plansSwimmerTimes).toBe(true);
+  });
+
+  it('declines the swimmer-times pass even under "everything", and says why', () => {
+    // Deliberate behaviour change, 2026-09-20. The swimmer-times page builds its
+    // table in the browser: all 73 successfully-fetched bodies in the archived
+    // capture contain zero <table> elements and load the swimmerProfileTimes
+    // bundle. Fetching it spent 184 of 234 requests on shells. The pass is
+    // declined rather than silently dropped, so a UI can explain the gap.
+    const plan = planScopedMeetCrawl({ meetId: MEET, teamIds: TEAMS, scope: defaultSwimCloudCrawlScope() });
+    expect(plan.plansSwimmerTimes).toBe(false);
+    expect(plan.declinedNeedingRenderedDom).toStrictEqual(['swimmerTimes']);
+  });
+
+  it('declines it under the scope whose whole point was season bests, rather than pretending', () => {
+    const plan = planScopedMeetCrawl({
+      meetId: MEET,
+      teamIds: TEAMS,
+      scope: swimCloudCrawlScope('roster-and-season-bests'),
+    });
+    // Rosters still fetch -- that half works.
+    expect(plan.rosterSteps).toStrictEqual(planMeetTeamRosters({ meetId: MEET, teamIds: TEAMS }));
+    // The season-bests half cannot, and the plan must say so rather than
+    // returning an empty result that reads as "this team has no swimmers".
+    expect(plan.plansSwimmerTimes).toBe(false);
+    expect(plan.declinedNeedingRenderedDom).toStrictEqual(['swimmerTimes']);
+  });
+
+  it('declines nothing for a scope that asks only for fetchable passes', () => {
+    const plan = planScopedMeetCrawl({
+      meetId: MEET,
+      teamIds: TEAMS,
+      scope: swimCloudCrawlScope('meet-results'),
+    });
+    expect(plan.declinedNeedingRenderedDom).toStrictEqual([]);
   });
 
   it('passes knownTotalPages through unchanged under the default scope', () => {
@@ -210,7 +244,14 @@ describe('planScopedMeetCrawl', () => {
     expect(plan.swimsSteps).toStrictEqual([]);
     expect(plan.rosterSteps).toStrictEqual(planMeetTeamRosters({ meetId: MEET, teamIds: TEAMS }));
     expect(plan.plansEventResults).toBe(false);
-    expect(plan.plansSwimmerTimes).toBe(true);
+    // Was `true` until 2026-09-20. The scope still ASKS for swimmer times --
+    // that is what the coach picked -- but the plan declines to fetch them,
+    // because the page builds its table in the browser and a fetched copy is a
+    // shell. Asserted as a pair so "declined" can never become "silently
+    // dropped": see the dedicated case below.
+    expect(plan.plansSwimmerTimes).toBe(false);
+    expect(plan.declinedNeedingRenderedDom).toStrictEqual(['swimmerTimes']);
+    expect(crawlScopePlansPass(scope('roster-and-season-bests'), 'swimmerTimes')).toBe(true);
   });
 
   it('ignores knownTotalPages for a scope that declined the swims pass', () => {

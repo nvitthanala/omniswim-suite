@@ -175,13 +175,18 @@ describe('re-crawling a narrowed capture under a wider scope', () => {
     expect(partition.toFetch).toStrictEqual(widened.rosterSteps);
   });
 
-  it('runs the swimmer-times pass the narrow crawl declined', () => {
+  it('still declines the swimmer-times pass when widened, because a fetch cannot satisfy it', () => {
     const widened = planScopedMeetCrawl({
       meetId: MEET,
       teamIds: TEAMS,
       scope: defaultSwimCloudCrawlScope(),
     });
-    expect(widened.plansSwimmerTimes).toBe(true);
+    // Changed 2026-09-20. Widening the scope no longer makes this pass run: the
+    // swimmer-times page builds its table in the browser, so every fetched copy
+    // is a shell. The resume machinery below is still asserted, because it must
+    // keep working for the day the pass becomes fetchable again.
+    expect(widened.plansSwimmerTimes).toBe(false);
+    expect(widened.declinedNeedingRenderedDom).toStrictEqual(['swimmerTimes']);
 
     // Rosters the re-crawl would parse on this run. Their swimmer-times pages
     // were never fetched, so every one of them is still to fetch.
@@ -294,10 +299,26 @@ describe('formatCrawlScopeNote', () => {
     expect(note).toContain('never asks for them');
   });
 
-  it('says so out loud when nothing is skipped, rather than going blank', () => {
+  it('never goes blank, and omits the skipped clause when a scope skips nothing', () => {
+    // The original case here asserted the "every pass is planned" wording for
+    // the default scope. That branch is unreachable as of 2026-09-20: the only
+    // scope that skips nothing is `everything`, and it now always declines the
+    // swimmer-times pass, so it always has something to report. The branch is
+    // kept in the formatter as defensive code for the day that pass becomes
+    // fetchable again; what is asserted here is the part that is still true and
+    // still matters -- a scope skipping nothing must not claim it skipped
+    // something, and no scope may produce an empty row.
     const note = formatCrawlScopeNote(defaultSwimCloudCrawlScope());
     expect(note.length).toBeGreaterThan(0);
-    expect(note).toContain('every pass is planned');
+    expect(note).not.toContain('not fetched by this crawl');
+  });
+
+  it('tells a coach that swimmer times cannot be fetched, and what to do instead', () => {
+    const note = formatCrawlScopeNote(defaultSwimCloudCrawlScope());
+    expect(note).toContain('cannot be fetched at all');
+    expect(note).toContain('builds its table in the browser');
+    // An explanation with no next step is a dead end.
+    expect(note).toContain('clipboard');
   });
 
   it('gives every scope a non-empty note', () => {

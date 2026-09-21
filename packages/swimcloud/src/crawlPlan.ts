@@ -426,6 +426,67 @@ export const SWIMCLOUD_CRAWL_PASS_PREREQUISITE: Readonly<
 };
 
 /**
+ * Passes whose page builds its table **in the browser**, so a fetched copy of
+ * the HTML never contains the data.
+ *
+ * ## The evidence, measured 2026-09-20 against the archived capture
+ *
+ * `data/swimcloud-captures/` holds a real 234-page crawl of meet 356467. Of its
+ * 184 `swimmerTimes` requests, 111 returned HTTP 429 and **73 returned HTTP
+ * 200**. Every one of those 73 stored bodies:
+ *
+ *   - is a complete document (ends `</html>`), 15-17 KB;
+ *   - contains **zero** `<table>` elements;
+ *   - loads `/media/webpack/swimmerProfileTimes/index.*.js`;
+ *   - renders only the shell — nav, the swimmer's name and school, and the
+ *     Home / Meets / Times / Rankings tab strip.
+ *
+ * For contrast, 10 of 10 sampled `meetTeamSwims` bodies from the same crawl do
+ * contain their tables. Those pages are server-rendered; this one is not.
+ *
+ * ## Why the codebase previously believed otherwise
+ *
+ * `parser.ts` asserted the Personal Bests table was "fully server-rendered (no
+ * click needed)", citing a real 2026-09-09 capture. That capture is
+ * `tests/fixtures/swimcloud-real-swimmer-times-1472365.html`, and its own header
+ * records how it was taken: *"via the browser extension (Track A, clipboard)"*.
+ * Track A copies the **rendered DOM** out of a live tab, after the page's
+ * JavaScript has run. It is therefore evidence that the table exists on screen,
+ * and no evidence at all about what the server sends. Building a `fetch`-based
+ * pass on that inference is what produced 184 requests that could not succeed.
+ *
+ * ## What this means
+ *
+ * Pacing is not the issue. A crawl that hit zero rate limits would still parse
+ * zero rows from this pass, because the bytes do not contain the table. The
+ * data is reachable only by reading the DOM of a rendered page — which is what
+ * the clipboard path already does, one swimmer at a time, with a human present.
+ *
+ * Listed here rather than deleted so the planner can *explain* the gap instead
+ * of silently planning nothing, and so a future capture that proves the server
+ * has started sending the table can remove the entry with evidence.
+ */
+export const SWIMCLOUD_DOM_RENDERED_PASSES: readonly SwimCloudCrawlPass[] = ['swimmerTimes'];
+
+/** True when a fetched copy of this pass's page cannot contain its data. */
+export function passRequiresRenderedDom(pass: SwimCloudCrawlPass): boolean {
+  return SWIMCLOUD_DOM_RENDERED_PASSES.includes(pass);
+}
+
+/**
+ * The passes a scope asks for that a fetch-based crawl cannot satisfy.
+ *
+ * Reported, never silently dropped: a coach who picked a scope naming season
+ * bests has to be told why none arrived, and "0 swimmers captured" on its own
+ * reads as "this team has no swimmers".
+ */
+export function scopePassesNeedingRenderedDom(
+  scope: SwimCloudCrawlScope,
+): readonly SwimCloudCrawlPass[] {
+  return scope.passes.filter(passRequiresRenderedDom);
+}
+
+/**
  * Which job a crawl is for. Chosen before the first request, on the same panel
  * that confirms the team list.
  *
@@ -680,6 +741,14 @@ export interface SwimCloudScopedMeetCrawlPlan {
   readonly rosterSteps: readonly SwimCloudCrawlStep[];
   readonly plansEventResults: boolean;
   readonly plansSwimmerTimes: boolean;
+  /**
+   * Passes the scope named that a fetch-based crawl cannot satisfy, so a UI can
+   * say which data will not arrive and why, instead of reporting an empty
+   * result as though the source had nothing to give.
+   *
+   * See {@link SWIMCLOUD_DOM_RENDERED_PASSES}.
+   */
+  readonly declinedNeedingRenderedDom: readonly SwimCloudCrawlPass[];
 }
 
 /**
@@ -719,6 +788,14 @@ export function planScopedMeetCrawl(input: SwimCloudScopedMeetCrawlInput): SwimC
       ? planMeetTeamRosters({ meetId: input.meetId, teamIds: input.teamIds })
       : [],
     plansEventResults: crawlScopePlansPass(input.scope, 'meetEvent'),
-    plansSwimmerTimes: crawlScopePlansPass(input.scope, 'swimmerTimes'),
+    // Planned only when the scope asks for it AND a fetched page could actually
+    // carry the data. See SWIMCLOUD_DOM_RENDERED_PASSES: the swimmer-times page
+    // builds its table in the browser, so fetching it spends requests to store
+    // a shell. On the one measured crawl that was 184 of 234 pages -- 78.6% of
+    // all traffic -- for zero parsed rows.
+    plansSwimmerTimes:
+      crawlScopePlansPass(input.scope, 'swimmerTimes') && !passRequiresRenderedDom('swimmerTimes'),
+    /** Asked for by the scope but skipped because a fetch cannot satisfy them. */
+    declinedNeedingRenderedDom: scopePassesNeedingRenderedDom(input.scope),
   };
 }
