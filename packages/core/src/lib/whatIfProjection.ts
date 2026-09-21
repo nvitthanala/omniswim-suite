@@ -25,6 +25,7 @@ import {
 } from '../types';
 import { relayEntryKey } from './relaySplits';
 import { relayTemplateFromLeg } from './relayLegMatching';
+import { buildAliasResolver } from './athleteAliases';
 import { computeVacateRelayLegNames } from './rosterLineupAudit';
 import { mergeScoringSettings } from './scoringDefaults';
 import { buildMeetEventLabelIndex, canonicalProgramEvent } from './eventIdentity';
@@ -401,7 +402,13 @@ export function buildWhatIfProjection({
     currentResults,
     gender,
     mergeScoringSettings(workspace.scoringSettings),
-    workspace.scorerRosterOverrides ?? []
+    workspace.scorerRosterOverrides ?? [],
+    // These are raw workspace rows: nothing has collapsed alias spellings onto
+    // the canonical name yet. Without the resolver, a swimmer marked a
+    // non-scorer under their canonical spelling is not recognised on a relay
+    // leg printed under an alias, so the leg is not vacated and this projection
+    // keeps a relay a non-scorer cannot legally swim.
+    buildAliasResolver(workspace)
   );
 
   let base = simulateRoster(

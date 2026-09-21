@@ -29,6 +29,7 @@ import {
 } from './relayLegMatching';
 import { relayEntryKey } from './relaySplits';
 import { buildAliasResolver, detectDuplicateAthletes } from './athleteAliases';
+import { IDENTITY_ALIAS_RESOLVER } from './athleteAliases';
 import type { AthleteAliasResolver, DuplicateAthletePair } from './athleteAliases';
 import { isRelayResult, normalizeSwimmerName } from './utils';
 import { programSponsorsGender, resolveTeamDivision } from '../data/teamDivisions';
@@ -165,13 +166,25 @@ export function computeVacateRelayLegNames(
   results: SwimmerResult[],
   gender: Gender,
   settings: ScoringSettings,
-  overrides: ScorerRosterOverride[] = []
+  overrides: ScorerRosterOverride[] = [],
+  /**
+   * Pass the workspace's resolver. Without one this falls back to identity, and
+   * a swimmer marked a non-scorer under their canonical spelling is not
+   * recognised on a relay leg printed under an alias — so the leg is not
+   * vacated and the projection keeps a relay a non-scorer cannot legally swim.
+   *
+   * `whatIfProjection` calls this on raw workspace rows, before anything
+   * collapses alias spellings, which is exactly where that bites. See
+   * `docs/INVARIANTS.md` item 6: the resolver is opt-in, and a call site that
+   * omits it treats two spellings of one athlete as two people.
+   */
+  resolver: AthleteAliasResolver = IDENTITY_ALIAS_RESOLVER
 ): Set<string> {
   const merged = mergeScoringSettings(settings);
   if (!usesScorerRoster(merged)) return new Set();
 
   const genderResults = results.filter(r => r.gender == null || r.gender === gender);
-  const lookup = buildScorerRosterLookup(genderResults, merged, overrides, gender);
+  const lookup = buildScorerRosterLookup(genderResults, merged, overrides, gender, resolver);
   const vacate = new Set<string>();
 
   for (const template of relayTemplatesByEntry(genderResults).values()) {

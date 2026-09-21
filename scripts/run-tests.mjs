@@ -94,6 +94,7 @@ const TESTS = [
   ['test_roster_identity_match.mjs'],
   ['test_event_identity_scoring.mjs'],
   ['test_lineup_audit.mjs'],
+  ['test_vacate_relay_alias.mjs'],
   ['test_relay_splits.mjs'],
   ['test_relay_overrides.mjs'],
   ['test_dq_scoring.mjs'],
