@@ -249,6 +249,18 @@
         "Why do the 73 successful fetches carry no table? Possibly a soft-block/challenge page rather than the real page, or a page-shape change. Worth parsing one stored body to see what actually came back."
       ],
       "status": "open - highest-value P5 target"
+    },
+    {
+      "id": "f15",
+      "severity": "P1-fixed",
+      "title": "ManagerApp called a hook after an early return - a reachable React crash",
+      "evidence": [
+        "packages/manager/src/ManagerApp.tsx declared hooks at lines 71-102, returned early at line 133 when no workspace was active, then called useWorkspaceScoring at line 158.",
+        "The EmptyState rendered by that early return has a 'New workspace' button, so activeWorkspace goes absent -> present on the SAME mounted component and the next render calls more hooks than the previous one. Deleting the last workspace does it in reverse.",
+        "Invisible to tsc. Found by react-hooks/rules-of-hooks within minutes of ESLint being added."
+      ],
+      "consequence": "Fixed by splitting the guard into a wrapper component so every hook below it runs unconditionally. This is the finding that justified adding ESLint on its own.",
+      "status": "closed 2026-09-20"
     }
   ],
   "phases": [
@@ -440,15 +452,26 @@
       "id": "P5",
       "name": "Adversarial bug hunt",
       "owner": "executor + finisher",
-      "status": "todo",
-      "items": []
+      "status": "partial - ESLint pass done; adversarial bug-hunt not yet run",
+      "items": [],
+      "done": [
+        "ESLint added (correctness-only config), wired into npm run lint, CI picks it up automatically",
+        "Fixed a conditional-hook crash: ManagerApp called useWorkspaceScoring after an early return, so creating the first workspace or deleting the last changed the hook count on a mounted component",
+        "Fixed an inert memo: IndRelayManagementView built originalResults with ?? [], a new array every render, so every dependent useMemo re-ran every time",
+        "Closed a real gap: the extension's TypeScript was never typechecked (it is not an npm workspace). npm run lint now does it."
+      ]
     },
     {
       "id": "P6",
       "name": "User guide",
       "owner": "worker",
-      "status": "todo",
-      "items": []
+      "status": "done",
+      "items": [],
+      "done": [
+        "docs/USER_GUIDE.md - coach-facing, format-agnostic, 12 sections; every UI string in it verified against the code",
+        "docs/README.md gained a 'Start here' entry pointing at it",
+        "The two 2026-09-10 plan docs that misled this session now carry status banners (finding f6)"
+      ]
     },
     {
       "id": "P7",
@@ -567,10 +590,14 @@
     {
       "at": "2026-09-20T23:20Z",
       "what": "P3a landed and was verified independently: 944 tests pass / 0 failed, lint clean 8/8, extension rebuilt, freshness guard green. Recorded f14, the session's most important defect: the swimmer-times pass returns 111 HTTP 429s and 73 table-less 200s, so all 184 pages produced nothing usable, while the two sequential passes were 100% clean. Verified by reading the capture myself rather than trusting the report. All phases except P5/P6 are now done."
+    },
+    {
+      "at": "2026-09-20 (final)",
+      "what": "Added ESLint (correctness-only), fixed the two real defects it found plus 50 dead bindings, and discovered the extension TypeScript was never typechecked - now wired into npm run lint alongside eslint. Wrote docs/USER_GUIDE.md and stamped the two stale plan docs. Final state: 944 vitest + 82 script tests + e2e green, lint clean across all three gates. Six of eight phases complete; P5's adversarial hunt and f14 remain."
     }
   ],
   "RESUME_HERE": {
-    "writtenAt": "2026-09-20T22:55Z (updated after the quota reset)",
+    "writtenAt": "2026-09-20 (final for this session)",
     "why": "The user flagged 86% of the 5-hour quota used with ~3h31m to refresh. This block exists so a resumed or fresh session can continue without re-deriving anything. READ THIS FIRST.",
     "branch": "nvitthanala/production-readiness",
     "mainIs": "fast-forwarded through the P0 commit only; catch it up with: git -C C:/Users/nihar/Documents/GitHub/omniswim-suite merge --ff-only nvitthanala/production-readiness",
@@ -586,15 +613,19 @@
       "1e7d0220 Back up on start and before a delete, and bound the history (P7 server side - COMPLETE, verified against the real server, 3 mutations incl. one that exposed a gap in its own test)",
       "d66a725c Let a coach author and manage scoring rule sets (P2 - COMPLETE, verified: 28 tests green, 4 mutations, fixed a real unhandled-rejection crash on the invitational preset and a relay-multiplier control the engine was discarding)",
       "69788f68 Let a coach back up from the workspace sidebar (P7 UI half - verified against the running server)",
-      "7491d2e2 Let a crawl fetch only the pages the job needs (P3a - COMPLETE: 944 tests pass / 0 failed, lint clean 8/8, 14 mutations, extension rebuilt and freshness guard green)"
+      "7491d2e2 Let a crawl fetch only the pages the job needs (P3a - COMPLETE: 944 tests pass / 0 failed, lint clean 8/8, 14 mutations, extension rebuilt and freshness guard green)",
+      "316e9bb5 Add ESLint and fix what it found (P5 partial: found and fixed a conditional-hook crash in ManagerApp and an inert memo in IndRelayManagementView; extension TypeScript is now typechecked for the first time)",
+      "df19e310 Write the user guide and stamp the stale plan docs (P6)"
     ],
     "inFlightUncommitted": {},
     "nextActionsInPriorityOrder": [
-      "1. P5 bug hunt, starting with f14 (the swimmer-times 429 finding) - it is the highest-value open defect and explains the user's speed complaint.",
-      "2. ESLint (f5) - user approved adding it AND fixing findings. No agents running now, so npm install is safe.",
-      "3. P6 user guide + status headers on the stale plans/*.md docs (f6) + the od4 release-readiness note.",
-      "4. Delete the dead NCAA_CUTS constant (f7) - 40 hand-typed unsourced times, zero consumers, violates the provenance rule.",
-      "5. Optional: f11 Button design-system decision; f8 event catalog beyond 400 Free; restore path for backups."
+      "1. f14 -- the swimmer-times pass returns 111 HTTP 429s and 73 table-less 200s, so all 184 pages produce nothing. Highest-value open defect. Needs a human-present test against the live site: does sequential pacing clear the 429? What are the 73 table-less bodies actually returning (soft block? challenge page?). Read one stored body first; it needs no network.",
+      "2. P5 proper -- run the bug-hunter agent at the pattern that produced every good find today: 'the mechanism exists and is correct, but nothing triggers it'. Four instances so far (extension build, backup, retention, an unregistered test script).",
+      "3. f7 -- delete NCAA_CUTS from packages/core/src/constants.ts. 40 hand-typed unsourced competition times, zero consumers, violates the provenance rule.",
+      "4. f11 -- Button design-system decision. It bakes font-bold and disabled:opacity-50 into its base class, so it cannot express the app's prevailing button style; 122 raw <button> remain. Needs a user decision: relax Button, or restyle the app.",
+      "5. P2's known gap -- no DOM test for the preset manager's create/edit/delete flow (needs the 4 HTTP routes mocked).",
+      "6. A restore path for backups (today it is a documented manual file swap in the user guide).",
+      "7. od4 before any release -- data/meets.json is both the live store and the fresh-install seed."
     ],
     "doNotRepeat": [
       "Do not re-derive the baseline - it is in this file's baseline block.",
