@@ -592,14 +592,20 @@
     },
     {
       id: "roster-and-season-bests",
-      label: "Rosters and season bests only",
-      summary: "Every team\u2019s roster, plus one personal-bests page per rostered swimmer. Skips this meet\u2019s own results.",
+      // The id keeps its original spelling so stored captures stay readable. The
+      // label does not promise season bests any more: the pass is declined (see
+      // SWIMCLOUD_DOM_RENDERED_PASSES), and a radio button offering data no crawl
+      // can return is the kind of plausible-but-false claim this repo exists to
+      // avoid. The summary states the limit at the point of choosing, rather than
+      // leaving a coach to discover it an hour later.
+      label: "Team rosters only",
+      summary: "Every team\u2019s roster. Skips this meet\u2019s own results. Personal-best times are not fetched by any crawl \u2014 that page builds its table in the browser, so capture those swimmers with the extension\u2019s clipboard button instead.",
       passes: ["teamRoster", "swimmerTimes"]
     },
     {
       id: "everything",
       label: "Everything",
-      summary: "Meet results, per-event rounds, rosters and every rostered swimmer\u2019s personal bests. The most requests, and the longest.",
+      summary: "Meet results, per-event rounds and team rosters. The most requests, and the longest. Personal-best times are not fetched by any crawl \u2014 use the extension\u2019s clipboard button for those.",
       passes: ["meetTeamSwims", "meetEvent", "teamRoster", "swimmerTimes"]
     }
   ];
