@@ -288,7 +288,19 @@ describe('SwimCloudCaptureBrowser — a narrowed capture never reads as empty', 
     await mount(capture, emptyParse(capture.captureId, capture.subject), 'roster-history');
     const text = container.textContent ?? '';
     expect(text).toContain('Swimmer times in this capture (0 swimmers)');
-    expect(text).toContain('which never plans swimmers’ personal-best pages');
+    // Changed 2026-09-20. The old wording blamed the chosen scope and told the
+    // coach to re-crawl wider. That advice cannot work for this pass: the page
+    // builds its table in the browser, so no scope will ever fetch it. The
+    // message must give the cause and the one path that does work.
+    expect(text).toContain('No crawl fetches swimmers’ personal-best pages, whatever scope it uses');
+    expect(text).toContain('builds its table in the browser');
+    expect(text).toContain('clipboard button');
+    // And it must NOT send them somewhere useless. Scoped to the swimmer-times
+    // section on purpose: the roster section above it still offers a wider
+    // re-crawl, and that advice is correct there, because rosters ARE fetchable.
+    const swimmerTimesSection = text.slice(text.indexOf('Swimmer times in this capture'));
+    expect(swimmerTimesSection).not.toContain('re-crawl this meet with a wider scope');
+    expect(text).toContain('re-crawl this meet with a wider scope to add them.');
   });
 
   it('says "not recorded" for the real capture shape on disk today', async () => {

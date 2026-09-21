@@ -86,6 +86,7 @@ import {
   swimCloudCrawlScope,
   type SwimCloudCaptureCrawlScope,
   type SwimCloudCrawlPass,
+  passRequiresRenderedDom,
 } from '@omniswim/swimcloud/crawlPlan';
 import type {
   SwimCloudMeetEventResultsParse,
@@ -399,6 +400,13 @@ export function describeUnplannedPass(
   const noun = PASS_NOUN[pass];
   if (status === 'not-recorded') {
     return `This capture does not record which passes its crawl planned, so an empty list here could mean ${noun} were never requested, or that none exist. Re-crawl this meet in the extension to settle it.`;
+  }
+  // A pass no scope can ever deliver needs different advice. Telling a coach to
+  // "re-crawl with a wider scope" would send them to do something that cannot
+  // work: the swimmer personal-bests page builds its table in the browser, so
+  // every fetched copy is a shell. See SWIMCLOUD_DOM_RENDERED_PASSES.
+  if (passRequiresRenderedDom(pass)) {
+    return `No crawl fetches ${noun}, whatever scope it uses. That page builds its table in the browser after loading, so a fetched copy holds none of it. Capture those swimmers one at a time with the extension's clipboard button instead — that reads the rendered page.`;
   }
   const label = recordedScopeLabel(capture);
   const named = label === undefined ? 'a narrower scope' : `“${label}”`;
