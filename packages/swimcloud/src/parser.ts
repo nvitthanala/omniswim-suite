@@ -182,6 +182,12 @@ export const SWIMCLOUD_REAL_CAPTURE_CONFIDENCE: SwimCloudParseConfidence = 'real
 export type SwimCloudParseWarningCode =
   /** The expected table was found, with a header row and no data rows. */
   | 'zero-data-rows'
+  /**
+   * The page rendered SwimCloud's own "No rosters found" empty state instead of
+   * a table. That is an answer, not a failure: the school does not field this
+   * gender, or has posted no roster for the season being asked for.
+   */
+  | 'no-roster-posted'
   /** A data row could not be turned into an entity and was skipped. */
   | 'unparsed-row'
   /** An event heading was found but its table could not be read; the event is absent from the output. */
@@ -587,6 +593,17 @@ export interface SwimCloudRosterParse {
  * future disagreement raises `contradicted-page-declaration` instead of being
  * resolved silently.
  */
+/**
+ * SwimCloud's own words when a team+gender+season combination has no roster.
+ *
+ * Taken verbatim from a real capture: `/team/10002824/roster/?gender=M`, the
+ * men's roster of a school that fields only a women's programme. The page
+ * returns HTTP 200 with the full chrome and this message where the table would
+ * be. Matching on the site's rendered copy rather than on "the table is
+ * missing" is what separates a real answer from a broken parse.
+ */
+const ROSTER_EMPTY_STATE = /no\s+rosters?\s+found/i;
+
 export function parseTeamRosterHtml(
   html: string,
   context: SwimCloudParseContext,
@@ -614,10 +631,34 @@ export function parseTeamRosterHtml(
   const cleaned = stripNonContent(html);
   const tables = findTables(cleaned);
   if (tables.length === 0) {
+    // A missing table is only a failure if the page did not tell us why it is
+    // missing. SwimCloud renders "No rosters found" when a school does not
+    // field this gender -- University of West Florida's men's roster is the
+    // case this was written against -- and reporting that as a parse error
+    // makes a correct answer look like a bug, then hides the real signal in a
+    // list of failures. `CLAUDE.md`: absent is not the same as empty, and an
+    // unsponsored gender must render as unknown rather than as nothing.
+    if (ROSTER_EMPTY_STATE.test(cleaned)) {
+      warnings.push({
+        code: 'no-roster-posted',
+        message:
+          'SwimCloud returned its "No rosters found" empty state, so this team publishes no roster for this gender and season. This is a real answer, not a missing table.',
+      });
+      return succeed(
+        context,
+        {
+          ...(swimCloudTeamId === undefined ? {} : { swimCloudTeamId }),
+          athletes: [],
+          rowCount: 0,
+        },
+        warnings,
+        confidence,
+      );
+    }
     return fail(
       context,
       'expected-table-missing',
-      'No <table> element was found; a roster page is expected to contain one.',
+      'No <table> element was found, and the page did not render SwimCloud\'s "No rosters found" empty state either, so this is a genuine parse failure rather than an empty roster.',
       warnings,
       confidence,
     );
@@ -942,6 +983,14 @@ function readRosterClassYear(
   const rawClass = textAt(cells, classColumn);
   if (rawClass.length === 0) {
     // No class cell is a real "the page did not say", never a defaulted year.
+    return {};
+  }
+  // SwimCloud prints a dash when it has no class year for an athlete. That is
+  // the same statement as an empty cell -- "the page did not say" -- so it is
+  // treated identically and not reported as an unknown vocabulary word. Covers
+  // the hyphen, the non-breaking hyphen, and the en and em dashes, because the
+  // real capture that prompted this used U+2013 rather than a plain '-'.
+  if (/^[-‐‑‒–—―]+$/.test(rawClass)) {
     return {};
   }
   const mapped = CLASS_YEARS[normalizeHeader(rawClass)];

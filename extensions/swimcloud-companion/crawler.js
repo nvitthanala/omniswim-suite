@@ -939,6 +939,7 @@
     // Rule 7 treats a DQ and a non-swim differently.
     dfs: { scratched: true }
   };
+  var ROSTER_EMPTY_STATE = /no\s+rosters?\s+found/i;
   function parseTeamRosterHtml(html, context, options = {}) {
     const warnings = [];
     const confidence = SWIMCLOUD_REAL_CAPTURE_CONFIDENCE;
@@ -959,10 +960,26 @@
     const cleaned = stripNonContent(html);
     const tables = findTables(cleaned);
     if (tables.length === 0) {
+      if (ROSTER_EMPTY_STATE.test(cleaned)) {
+        warnings.push({
+          code: "no-roster-posted",
+          message: 'SwimCloud returned its "No rosters found" empty state, so this team publishes no roster for this gender and season. This is a real answer, not a missing table.'
+        });
+        return succeed(
+          context,
+          {
+            ...swimCloudTeamId === void 0 ? {} : { swimCloudTeamId },
+            athletes: [],
+            rowCount: 0
+          },
+          warnings,
+          confidence
+        );
+      }
       return fail(
         context,
         "expected-table-missing",
-        "No <table> element was found; a roster page is expected to contain one.",
+        `No <table> element was found, and the page did not render SwimCloud's "No rosters found" empty state either, so this is a genuine parse failure rather than an empty roster.`,
         warnings,
         confidence
       );
@@ -1184,6 +1201,9 @@
     }
     const rawClass = textAt(cells, classColumn);
     if (rawClass.length === 0) {
+      return {};
+    }
+    if (/^[-‐‑‒–—―]+$/.test(rawClass)) {
       return {};
     }
     const mapped = CLASS_YEARS[normalizeHeader(rawClass)];
