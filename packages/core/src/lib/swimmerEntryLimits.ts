@@ -125,6 +125,24 @@ export function countSwimmerEntries(
   const indEvents = new Set<string>();
 
   for (const r of results) {
+    // A time trial is not an entry in the meet's program, so it does not consume
+    // one of the swimmer's entries. User ruling, 2026-09-21.
+    //
+    // This is the only place that needed telling. The rest of the codebase
+    // already treats a time trial as outside the program: `canonicalProgramEvent`
+    // returns null for one, `buildMeetEventLabelIndex` skips it,
+    // `computeVisibleEvents` hides it, and it scores zero. Entry counting was
+    // the sole holdout, because `entryCapKey` keys on the raw HyTek label and a
+    // time trial arrives with its own event number AND a " Time Trial" suffix —
+    // so it never collapsed onto the real swim the way a prelims row collapses
+    // onto its final.
+    //
+    // Measured on the real meet in `data/meets.json` before this landed: 13
+    // athletes were flagged over the NSISC 7-event cap and 8 of them were not
+    // over it. Oskar Cebula's 100 Breaststroke counted twice because he also
+    // swam it as a time trial. The same count gates `canAcceptAnotherEntry`, so
+    // those swimmers were also blocked from adding a legitimate entry.
+    if (r.isTimeTrial) continue;
     if (r.gender != null && r.gender !== gender) continue;
     if (String(r.team ?? '').trim() !== team) continue;
     // Resolve the ROW's name too. Rows reaching here already passed the team and

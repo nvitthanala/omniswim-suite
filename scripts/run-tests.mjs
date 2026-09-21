@@ -48,6 +48,7 @@ const TESTS = [
   ['test_scorer_pool_cap.mjs'],
   ['test_fast_swap_context.mjs'],
   ['test_entry_limits.mjs'],
+  ['test_entry_limits_time_trials.mjs'],
   ['test_athlete_history.mjs'],
   ['test_course_conversion.mjs'],
   ['test_conversion_keys.mjs'],
