@@ -634,8 +634,10 @@
       "question": "Is data/meets.json a curated demo seed, or a snapshot of live working state? Today it is both.",
       "context": "docs/INVARIANTS.md item 1: data/meets.json is gitignored BUT tracked, and SqliteRepo.init() seeds data/omniswim.db from it on a fresh checkout. It currently holds the real HSU/OBU workspaces - 3MB, 871-1029 athlete-history rows each. Anyone who clones this repo boots into the user's actual roster data. Carried over from plans/STATE.md's own open question 5, still unanswered.",
       "whyItMatters": "Only matters if anyone but the user ever runs this. If the app stays single-user it is a non-issue and the seed is a feature. If a second coach ever uses it, they should boot into an empty or demo workspace, not someone else's roster.",
-      "status": "ANSWERED 2026-09-20",
-      "answer": "User: 'currently its a personal/my coach's tool but we will make this a tool that should be shareable later on when i am confident in releasing this.' So: TWO users today (the user and their coach), not one. The seed data is acceptable now and is NOT a deadline blocker. It becomes a RELEASE BLOCKER: before any public/shared release, data/meets.json must stop being both the live working store and the fresh-install seed. A new installation must boot into an empty or curated demo workspace, never into a real team's roster. Record this in the P6 guide's release-readiness section."
+      "status": "CLOSED 2026-09-21 - fixed (commit f9d63c4b)",
+      "answer": "User: 'currently its a personal/my coach's tool but we will make this a tool that should be shareable later on when i am confident in releasing this.' So: TWO users today (the user and their coach), not one. The seed data is acceptable now and is NOT a deadline blocker. It becomes a RELEASE BLOCKER: before any public/shared release, data/meets.json must stop being both the live working store and the fresh-install seed. A new installation must boot into an empty or curated demo workspace, never into a real team's roster. Record this in the P6 guide's release-readiness section.",
+      "resolution": "data/meets.json is untracked and local; a fresh install seeds from the committed data/demo-seed.json - 29KB, two invented schools, sixteen invented swimmers, workspace named 'Demo meet (sample data - not real results)'. Workspace ids regenerate per install. An unreadable seed degrades to a blank workspace. Existing installs unaffected: SqliteRepo still migrates from a local meets.json, verified by booting the real data dir and seeing all three workspaces. DATA_DIR now takes an OMNI_DATA_DIR override, which is how the fresh-install path was tested without touching real data. tests/demoSeed.test.ts (7 cases, 2 mutations) fails if meets.json is ever tracked again, if the seed grows past 200KB, if its name stops declaring itself a sample, or if any name or team in it appears in the live store. INVARIANTS item 1 rewritten - it documented the behaviour this removes.",
+      "residualRisk": "The repository HISTORY still contains the old meets.json. New clones no longer receive it as data, but it is readable in past commits and the repo is public. Removing it requires rewriting history, which is destructive and was not done unilaterally. Flagged to the user."
     }
   ],
   "log": [
@@ -722,6 +724,10 @@
     {
       "at": "2026-09-21 (final)",
       "what": "Button restyle landed and verified, closing f11 and P4. Every phase P0-P7 is now complete and every decision answered. Final state: 963 unit tests, 84 script tests including Playwright e2e, lint clean on three gates, production build green, CI green, repo public, everything merged to main and pushed."
+    },
+    {
+      "at": "2026-09-21",
+      "what": "Closed od4, the last item. Split the live store from the fresh-install seed: meets.json untracked, demo-seed.json committed and entirely invented. Verified both directions - a fresh install boots into the demo workspace, the real install still shows all three of its own. Added OMNI_DATA_DIR so that could be tested without risking live data. Flagged that the repo history still contains the old file."
     }
   ],
   "RESUME_HERE": {
@@ -791,9 +797,9 @@
   "statusSummary": {
     "at": "2026-09-21 (all phases complete)",
     "phasesComplete": "P0 through P7, all of them",
-    "suite": "963 vitest passed / 0 failed; 84 script tests passed / 0 failed / 1 skipped (Postgres, needs PG_TEST_URL), including the Playwright e2e specs; lint clean across workspace types, extension types and ESLint; production build green; CI green on GitHub.",
+    "suite": "970 vitest passed / 0 failed; 84 script tests passed / 0 failed / 1 skipped, including Playwright e2e; lint clean across workspace types, extension types and ESLint; production build green; CI green.",
     "branch": "nvitthanala/production-readiness, merged to main and pushed after every step",
-    "whatIsLeft": "Nothing blocked and no known open defect. Remaining items are advisory: f18 (an unreachable aFinalBracket fallback, flagged because a future preset omitting the field would take an untested path) and od4 (data/meets.json is both the live store and the fresh-install seed - a RELEASE blocker, not a deadline one, and only relevant when someone outside the user and their coach runs this).",
+    "whatIsLeft": "Nothing blocked and no known open defect. One advisory item: f18, an unreachable aFinalBracket fallback, flagged because a future preset omitting the field would take an untested path. One residual risk the user must decide on: the repo history still contains the old meets.json (see od4.residualRisk).",
     "blockedOnUser": [],
     "openNotBlocking": [
       "f19 - computeVacateRelayLegNames builds its lookup before the alias collapse. Not reproducible against today's data; a new alias would expose it. Reported, not fixed, per this repo's rule 4.",
