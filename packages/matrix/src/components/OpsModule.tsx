@@ -456,6 +456,10 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
       // labels for exactly the swimmers being imported.
       const result = await applySwimCloudRows(selection.parses, workspace, onUpdate, {
         eventResults: selection.eventResults,
+        // The class-year join. Every roster in the capture, not only the
+        // checked teams' — an event page covers the whole field, so a row
+        // being imported may belong to a team the coach did not check.
+        rosters: selection.rosters,
       });
       if (result.appliedRowCount === 0) {
         toast.push(

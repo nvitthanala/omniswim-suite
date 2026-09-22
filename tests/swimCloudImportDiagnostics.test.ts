@@ -44,8 +44,22 @@ describe('classifySkipSeverity', () => {
 });
 
 describe('classifyWarningSeverity', () => {
+  it('marks relay-legs-absent as review — SwimCloud does publish relay legs', () => {
+    // It used to be structural, folded away as expected, on the stated premise
+    // that "SwimCloud does not publish relay legs at all". That premise was
+    // wrong: a per-event results page serves every leg — name, swimmer id,
+    // split and swim id — in a table behind its own "Show names" toggle, which
+    // is CSS and not a request. So a relay row with no legs is a real gap in
+    // what was captured, and a coach can act on it by capturing that event's
+    // page.
+    expect(classifyWarningSeverity('relay-legs-absent')).toBe('review');
+  });
+
+  it('marks event-index-absent as review — a page with no event index is an unseen shape', () => {
+    expect(classifyWarningSeverity('event-index-absent')).toBe('review');
+  });
+
   it('marks known-benign structural codes as structural', () => {
-    expect(classifyWarningSeverity('relay-legs-absent')).toBe('structural');
     expect(classifyWarningSeverity('unmapped-class-year')).toBe('structural');
     expect(classifyWarningSeverity('unmapped-stroke')).toBe('structural');
     expect(classifyWarningSeverity('diving-score-not-a-time')).toBe('structural');
@@ -99,7 +113,9 @@ describe('groupWarningsByCode', () => {
       warning({ code: 'missing-round-caption', message: 'event C' }),
     ]);
 
-    expect(groups.map(g => g.severity)).toStrictEqual(['review', 'structural']);
+    // Both 'review' now: see the relay-legs-absent test above for why that
+    // code stopped being classified as an expected structural absence.
+    expect(groups.map(g => g.severity)).toStrictEqual(['review', 'review']);
     const byCode = Object.fromEntries(groups.map(g => [g.code, g]));
     expect(byCode['relay-legs-absent'].count).toBe(3); // count is every row, not de-duplicated
     expect(byCode['relay-legs-absent'].examples).toStrictEqual(['event A', 'event B']); // examples ARE de-duplicated

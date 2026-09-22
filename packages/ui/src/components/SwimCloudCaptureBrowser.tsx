@@ -515,6 +515,17 @@ export interface SwimCloudCaptureMeetResultsSelection {
    * imported.
    */
   readonly eventResults: readonly SwimCloudMeetEventResultsParse[];
+  /**
+   * Every parsed roster page in the capture, for the class-year join — see
+   * `buildSwimCloudClassYearIndex`.
+   *
+   * Unfiltered by the team selection, same reasoning as `eventResults`: an
+   * event page holds the whole field, so the swimmers being imported can
+   * belong to teams the coach did not check, and their class year is on their
+   * own team's roster. Empty means no roster is in this capture, and every
+   * row's class year reads unknown with that stated as the reason.
+   */
+  readonly rosters: readonly SwimCloudRosterParse[];
   /** `parses.length`, named for the "Loaded N swim(s) from M page(s)" sentence. */
   readonly pageCount: number;
   /** The checked groups themselves, in list order. */
@@ -993,6 +1004,7 @@ export function SwimCloudCaptureBrowser(props: SwimCloudCaptureBrowserProps) {
         // a response that omits the field entirely is treated the same way,
         // never as "there were no finals".
         eventResults: parseResponse.eventResults ?? [],
+        rosters: parseResponse.rosters,
         pageCount: selectedParses.length,
         groups: chosen,
         warnings: parseResponse.warnings,

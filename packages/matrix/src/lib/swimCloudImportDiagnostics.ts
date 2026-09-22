@@ -38,19 +38,28 @@ export function classifySkipSeverity(reason: SwimCloudMeetImportSkipReason): Dia
 /**
  * Warning codes whose own doc comments in `@omniswim/swimcloud/parser`
  * describe them as an expected structural absence rather than a sign
- * something is missing or wrong — relay legs SwimCloud does not publish at
- * all, a cosmetic class-year/stroke/season label outside the known
- * vocabulary, or a case the parser already handles safely by design (a
- * diving score kept out of `meetScore` rather than guessed, an unreadable
- * embedded JSON block falling back to another source). Every other code
- * means a row, an event, or a fact about one was not read and defaults to
+ * something is missing or wrong — a cosmetic class-year/stroke/season label
+ * outside the known vocabulary, or a case the parser already handles safely by
+ * design (a diving score kept out of `meetScore` rather than guessed, an
+ * unreadable embedded JSON block falling back to another source). Every other
+ * code means a row, an event, or a fact about one was not read and defaults to
  * review — including `'unrecognized-points-token'`, which this repo's own
  * scoring-correctness doc named as "usually benign, on an already-DQ'd row"
  * but that condition cannot be told apart from a real loss by the warning
  * code alone, so it is not assumed here.
+ *
+ * ## `'relay-legs-absent'` was removed from this set on 2026-09-22
+ *
+ * It was listed here on the stated premise that "SwimCloud does not publish
+ * relay legs at all", so every relay row's warning was folded away as
+ * expected. That premise was wrong. A per-event results page serves every
+ * leg — name, swimmer id, split and swim id — in a table behind its own "Show
+ * names" toggle, which is CSS rather than a request. A relay row with no legs
+ * is therefore a real gap in what was captured, and a coach can act on it by
+ * capturing that event's page. It defaults to review, like any other missing
+ * fact.
  */
 const STRUCTURAL_WARNING_CODES: ReadonlySet<SwimCloudParseWarningCode> = new Set([
-  'relay-legs-absent',
   'unmapped-class-year',
   'unmapped-stroke',
   'unrecognized-season-label',
@@ -133,5 +142,7 @@ export function skipReasonLabel(reason: SwimCloudMeetImportSkipReason): string {
       return 'Relay leadoff split (correctly excluded)';
     case 'ambiguous-round-duplicate':
       return 'Prelims/finals could not be told apart';
+    case 'missing-round-caption':
+      return 'Event page round table had no round name';
   }
 }

@@ -4739,7 +4739,17 @@ function readEventRound(
 
     const teamCellHtml = table.team === undefined ? '' : cellAt(cells, table.team.start);
     const rowTeamName = htmlToText(teamCellHtml);
-    const teamId = teamIdFromCell(teamCellHtml);
+    // A relay event's table has NO Team column — its header is a single
+    // `<th colspan=2>Name</th>` — and the team is stated only as a link inside
+    // the name cell: `<a href="/results/{meetId}/team/58/">…Henderson State
+    // (A)</a>`. Reading it there is the page's own statement about which team
+    // the entry belongs to, so a relay row is no longer team-less. Without
+    // this, every relay on the page was dropped for having no team, which
+    // silently removed the double-weighted relay events from a team score.
+    //
+    // The Team column still wins where one exists: on an individual event it
+    // holds the team name as well as the id, and this is only the fallback.
+    const teamId = teamIdFromCell(teamCellHtml) ?? teamIdFromCell(nameCellHtml);
 
     // The same key shape the swims list builds, so one swim carries one key on
     // both pages. The composite fallback is capture-local and joins nothing.

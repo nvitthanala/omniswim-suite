@@ -987,7 +987,17 @@ describe('swimCloudTeamMeetSwimsToSwimmerResults — round resolution against F9
       },
       { eventResults: [eventTwentySix()], resolveKeepRecruits: () => true },
     );
-    expect(result.appliedRowCount).toBe(20);
+    // 52, not 20, since 2026-09-22: an event page is now converted into rows
+    // itself rather than only consulted for round labels. 20 swims-derived
+    // rows + 40 from event 26, of which 8 are the same swims under the same
+    // SwimCloud swim ids, so they merge rather than double-count: 20 + 40 - 8.
+    //
+    // The 32 new rows are Delta State and Ouachita Baptist swimmers in that
+    // same 100 Breast Men event. They were always in this capture's bytes and
+    // were discarded. One event page covers every team in the field, which is
+    // the whole reason event-first is cheaper AND more complete — and a meet
+    // score cannot be computed from one team's swims anyway.
+    expect(result.appliedRowCount).toBe(52);
     const men = patches[0].menResults ?? [];
     const henkeA = men.find(row => row.name === 'Avery Henke' && row.roundSwam === 'A Final');
     expect(henkeA).toMatchObject({ pdfPoints: 20, time: '54.27' });
