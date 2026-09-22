@@ -620,14 +620,31 @@ export function crawlScopeDependencyGaps(scope: SwimCloudCrawlScope): readonly S
  * Pages per team this scope commits to **before a single page is read**.
  *
  * Two per included structural pass, one per gender: page 1 of each team+gender's
- * swims, and each team+gender's roster. `meetEvent` and `swimmerTimes`
- * contribute **nothing** here, and that is not an oversight — their page counts
- * are not knowable until a swims list or a roster has been parsed, and quoting
- * a guess for them is precisely what this panel line exists to stop.
+ * swims, and each team+gender's roster. `swimmerTimes` contributes **nothing**
+ * here, and that is not an oversight — its page count is not knowable until a
+ * roster has been parsed, and quoting a guess for it is precisely what this
+ * panel line exists to stop.
+ *
+ * `meetEvent` contributes nothing here either, but for a different reason now:
+ * it is not per-team at all. One event page holds every team in the field, so
+ * its count scales with the meet's program rather than with the team list. When
+ * the event list is already known the caller adds it as a flat number — see
+ * `formatCrawlVolumeFloorLineForScope`.
+ *
+ * `eventListAlreadyKnown` removes the swims pages, exactly as
+ * {@link planScopedMeetCrawl} does. Quoting two pages per team for a pass that
+ * will plan none of them would overstate the crawl by `teamCount × 2` — which
+ * is precisely the number event-first removes, so the estimate would hide the
+ * saving it exists to show.
  */
-export function crawlScopeFloorPagesPerTeam(scope: SwimCloudCrawlScope): number {
+export function crawlScopeFloorPagesPerTeam(
+  scope: SwimCloudCrawlScope,
+  options: { readonly eventListAlreadyKnown?: boolean } = {},
+): number {
   let perTeam = 0;
-  if (crawlScopePlansPass(scope, 'meetTeamSwims')) perTeam += 2;
+  if (crawlScopePlansPass(scope, 'meetTeamSwims') && options.eventListAlreadyKnown !== true) {
+    perTeam += 2;
+  }
   if (crawlScopePlansPass(scope, 'teamRoster')) perTeam += 2;
   return perTeam;
 }

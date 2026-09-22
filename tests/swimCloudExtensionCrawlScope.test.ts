@@ -29,6 +29,7 @@ import {
   defaultSwimCloudCrawlScope,
   passesNewlyPlannedBy,
   planMeetTeamRosters,
+  crawlScopeFloorPagesPerTeam,
   planScopedMeetCrawl,
   swimCloudCrawlScope,
   type SwimCloudCrawlScopeId,
@@ -334,5 +335,80 @@ describe('crawlPassLabel', () => {
     expect(crawlPassLabel('meetEvent')).toBe('per-event round pages');
     expect(crawlPassLabel('teamRoster')).toBe('team rosters');
     expect(crawlPassLabel('swimmerTimes')).toBe('swimmer personal bests');
+  });
+});
+
+describe('formatCrawlVolumeFloorLineForScope — a meet that publishes its own event index', () => {
+  it('counts the events and stops counting the swims pages', () => {
+    // 4 teams, 57 events. Event-first fetches the 57 event pages and NONE of
+    // the 8 swims page-1s, so the floor is 57 and not 8, and not 65.
+    //
+    // Both halves of that matter. Leaving the swims pages in would overstate
+    // the crawl by teamCount*2 — which is exactly the saving event-first
+    // delivers, so the estimate would hide the thing it exists to show.
+    const line = formatCrawlVolumeFloorLineForScope(4, MIN_DELAY_MS, scope('meet-results'), 57);
+    expect(line).toContain('at least 57 requests');
+    expect(line).toContain("all 57 of this meet's events");
+    expect(line).not.toContain("page 1 of each team's swims");
+  });
+
+  it('stops calling the event count an unknown, because it is now known', () => {
+    const line = formatCrawlVolumeFloorLineForScope(4, MIN_DELAY_MS, scope('meet-results'), 57);
+    expect(line).not.toContain('one page per distinct event is added');
+    expect(line).not.toContain('extra swims pages appear');
+  });
+
+  it('adds the rosters on the wider scope, and still drops the swims pages', () => {
+    // 4 teams: 57 event pages + 8 roster pages = 65.
+    const line = formatCrawlVolumeFloorLineForScope(4, MIN_DELAY_MS, scope('everything'), 57);
+    expect(line).toContain('at least 65 requests');
+    expect(line).toContain("each team's roster");
+    expect(line).not.toContain("page 1 of each team's swims");
+  });
+
+  it('falls back to the swims-derived estimate when no page carried an index', () => {
+    // Zero is "no discovery page printed one", not "this meet has no events".
+    // The crawl then runs exactly as it did before, and so must the estimate.
+    const line = formatCrawlVolumeFloorLineForScope(4, MIN_DELAY_MS, scope('meet-results'), 0);
+    expect(line).toContain('at least 8 requests');
+    expect(line).toContain("page 1 of each team's swims");
+    expect(line).toContain('one page per distinct event is added');
+  });
+
+  it('ignores a known event count on a scope that does not fetch event pages', () => {
+    // roster-and-season-bests plans no meetEvent pass, so the meet's event
+    // count is not a cost it is about to pay.
+    const line = formatCrawlVolumeFloorLineForScope(4, MIN_DELAY_MS, scope('roster-and-season-bests'), 57);
+    expect(line).not.toContain("all 57 of this meet's events");
+    expect(line).toContain('at least 8 requests');
+  });
+});
+
+describe('crawlScopeFloorPagesPerTeam — event list already known', () => {
+  it('drops the swims pages, matching what planScopedMeetCrawl plans', () => {
+    // The two must agree. If the estimate counts pages the planner will not
+    // plan, the coach is quoted a crawl that does not happen.
+    expect(crawlScopeFloorPagesPerTeam(scope('meet-results'))).toBe(2);
+    expect(crawlScopeFloorPagesPerTeam(scope('meet-results'), { eventListAlreadyKnown: true })).toBe(0);
+    expect(crawlScopeFloorPagesPerTeam(scope('everything'))).toBe(4);
+    expect(crawlScopeFloorPagesPerTeam(scope('everything'), { eventListAlreadyKnown: true })).toBe(2);
+  });
+
+  it('agrees with planScopedMeetCrawl on the actual swims step count', () => {
+    // The assertion that keeps the two in step rather than merely looking
+    // similar: same scope, same flag, and the planner's own output.
+    for (const id of ['meet-results', 'everything'] as const) {
+      const s = scope(id);
+      const planned = planScopedMeetCrawl({
+        meetId: MEET,
+        teamIds: TEAMS,
+        scope: s,
+        eventListAlreadyKnown: true,
+      });
+      expect(planned.swimsSteps).toStrictEqual([]);
+      expect(crawlScopeFloorPagesPerTeam(s, { eventListAlreadyKnown: true }) * TEAMS.length).toBe(
+        planned.swimsSteps.length + planned.rosterSteps.length,
+      );
+    }
   });
 });

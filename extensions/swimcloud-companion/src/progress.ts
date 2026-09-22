@@ -504,18 +504,32 @@ export function formatCrawlVolumeFloorLineForScope(
   teamCount: number,
   minDelayMs: number,
   scope: SwimCloudCrawlScope,
+  knownEventCount = 0,
 ): string {
-  const floor = estimateCrawlVolume(teamCount * crawlScopeFloorPagesPerTeam(scope), minDelayMs);
+  // A meet that publishes its own event index turns the event pass from an
+  // unknown into the one number this line can state exactly — and turns the
+  // swims pass into nothing at all. Both halves matter: without the first the
+  // estimate understates the crawl, and without the second it overstates it by
+  // two pages per team, which is the saving event-first exists to deliver.
+  const eventListKnown = knownEventCount > 0 && crawlScopePlansPass(scope, 'meetEvent');
+  const perTeam = crawlScopeFloorPagesPerTeam(scope, { eventListAlreadyKnown: eventListKnown });
+  const floor = estimateCrawlVolume(
+    teamCount * perTeam + (eventListKnown ? knownEventCount : 0),
+    minDelayMs,
+  );
 
   const known: string[] = [];
-  if (crawlScopePlansPass(scope, 'meetTeamSwims')) known.push("page 1 of each team's swims");
+  if (crawlScopePlansPass(scope, 'meetTeamSwims') && !eventListKnown) {
+    known.push("page 1 of each team's swims");
+  }
+  if (eventListKnown) known.push(`all ${knownEventCount} of this meet's events`);
   if (crawlScopePlansPass(scope, 'teamRoster')) known.push("each team's roster");
 
   const unknown: string[] = [];
-  if (crawlScopePlansPass(scope, 'meetTeamSwims')) {
+  if (crawlScopePlansPass(scope, 'meetTeamSwims') && !eventListKnown) {
     unknown.push('extra swims pages appear once page 1 is read');
   }
-  if (crawlScopePlansPass(scope, 'meetEvent')) {
+  if (crawlScopePlansPass(scope, 'meetEvent') && !eventListKnown) {
     unknown.push('one page per distinct event is added once the swims lists are read');
   }
   if (crawlScopePlansPass(scope, 'swimmerTimes')) {

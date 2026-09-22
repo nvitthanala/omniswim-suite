@@ -849,7 +849,12 @@ async function runCrawl(meetId: SwimCloudMeetId, panel: PanelHandles, control: C
     return;
   }
 
-  const confirmation = await confirmTeamList(panel, discovery.teamIds, resumeDecision.storedScope);
+  const confirmation = await confirmTeamList(
+    panel,
+    discovery.teamIds,
+    resumeDecision.storedScope,
+    discovery.eventRefs.length,
+  );
   if (confirmation === undefined) {
     renderMessage(panel, 'Cancelled before fetching started.');
     return;
@@ -1917,6 +1922,12 @@ function confirmTeamList(
   panel: PanelHandles,
   teamIds: readonly SwimCloudTeamId[],
   storedScope: SwimCloudCaptureCrawlScope | undefined,
+  /**
+   * How many events the meet published, when a discovery page printed its own
+   * index. Zero means no page did, and the estimate falls back to describing a
+   * swims-derived crawl.
+   */
+  knownEventCount = 0,
 ): Promise<TeamListConfirmation | undefined> {
   return new Promise((resolve) => {
     panel.line1.textContent = `${teamIds.length} team(s) discovered. Confirm before fetching:`;
@@ -1969,7 +1980,12 @@ function confirmTeamList(
     const refreshEstimate = (): void => {
       const scope = selectedScope();
       const selectedTeams = checkboxes.filter((c) => c.input.checked).length;
-      estimateLine.textContent = formatCrawlVolumeFloorLineForScope(selectedTeams, MIN_DELAY_MS, scope);
+      estimateLine.textContent = formatCrawlVolumeFloorLineForScope(
+        selectedTeams,
+        MIN_DELAY_MS,
+        scope,
+        knownEventCount,
+      );
       const added = passesNewlyPlannedBy(storedScope, scope);
       scopeNoteLine.textContent =
         storedScope === undefined || added.length === 0

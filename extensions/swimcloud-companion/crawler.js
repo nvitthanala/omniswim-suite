@@ -637,9 +637,11 @@
       return needs !== void 0 && !crawlScopePlansPass(scope, needs);
     });
   }
-  function crawlScopeFloorPagesPerTeam(scope) {
+  function crawlScopeFloorPagesPerTeam(scope, options = {}) {
     let perTeam = 0;
-    if (crawlScopePlansPass(scope, "meetTeamSwims")) perTeam += 2;
+    if (crawlScopePlansPass(scope, "meetTeamSwims") && options.eventListAlreadyKnown !== true) {
+      perTeam += 2;
+    }
     if (crawlScopePlansPass(scope, "teamRoster")) perTeam += 2;
     return perTeam;
   }
@@ -2768,16 +2770,24 @@
   function estimateCrawlVolume(pageCount, minDelayMs) {
     return { pages: pageCount, etaLabel: formatEtaLabel(pageCount, minDelayMs) };
   }
-  function formatCrawlVolumeFloorLineForScope(teamCount, minDelayMs, scope) {
-    const floor = estimateCrawlVolume(teamCount * crawlScopeFloorPagesPerTeam(scope), minDelayMs);
+  function formatCrawlVolumeFloorLineForScope(teamCount, minDelayMs, scope, knownEventCount = 0) {
+    const eventListKnown = knownEventCount > 0 && crawlScopePlansPass(scope, "meetEvent");
+    const perTeam = crawlScopeFloorPagesPerTeam(scope, { eventListAlreadyKnown: eventListKnown });
+    const floor = estimateCrawlVolume(
+      teamCount * perTeam + (eventListKnown ? knownEventCount : 0),
+      minDelayMs
+    );
     const known = [];
-    if (crawlScopePlansPass(scope, "meetTeamSwims")) known.push("page 1 of each team's swims");
+    if (crawlScopePlansPass(scope, "meetTeamSwims") && !eventListKnown) {
+      known.push("page 1 of each team's swims");
+    }
+    if (eventListKnown) known.push(`all ${knownEventCount} of this meet's events`);
     if (crawlScopePlansPass(scope, "teamRoster")) known.push("each team's roster");
     const unknown = [];
-    if (crawlScopePlansPass(scope, "meetTeamSwims")) {
+    if (crawlScopePlansPass(scope, "meetTeamSwims") && !eventListKnown) {
       unknown.push("extra swims pages appear once page 1 is read");
     }
-    if (crawlScopePlansPass(scope, "meetEvent")) {
+    if (crawlScopePlansPass(scope, "meetEvent") && !eventListKnown) {
       unknown.push("one page per distinct event is added once the swims lists are read");
     }
     if (crawlScopePlansPass(scope, "swimmerTimes")) {
@@ -3122,7 +3132,12 @@
       renderMessage(panel, "Could not discover any teams for this meet. Nothing to crawl.");
       return;
     }
-    const confirmation = await confirmTeamList(panel, discovery.teamIds, resumeDecision.storedScope);
+    const confirmation = await confirmTeamList(
+      panel,
+      discovery.teamIds,
+      resumeDecision.storedScope,
+      discovery.eventRefs.length
+    );
     if (confirmation === void 0) {
       renderMessage(panel, "Cancelled before fetching started.");
       return;
@@ -3683,7 +3698,7 @@
       await sleep(250);
     }
   }
-  function confirmTeamList(panel, teamIds, storedScope) {
+  function confirmTeamList(panel, teamIds, storedScope, knownEventCount = 0) {
     return new Promise((resolve) => {
       panel.line1.textContent = `${teamIds.length} team(s) discovered. Confirm before fetching:`;
       panel.line2.textContent = "";
@@ -3724,7 +3739,12 @@
       const refreshEstimate = () => {
         const scope = selectedScope();
         const selectedTeams = checkboxes.filter((c) => c.input.checked).length;
-        estimateLine.textContent = formatCrawlVolumeFloorLineForScope(selectedTeams, MIN_DELAY_MS, scope);
+        estimateLine.textContent = formatCrawlVolumeFloorLineForScope(
+          selectedTeams,
+          MIN_DELAY_MS,
+          scope,
+          knownEventCount
+        );
         const added = passesNewlyPlannedBy(storedScope, scope);
         scopeNoteLine.textContent = storedScope === void 0 || added.length === 0 ? "" : `This capture has not planned ${added.map(crawlPassLabel).join(" or ")} before. Widening to ${scope.label} adds those pages to it.`;
       };
