@@ -1739,3 +1739,111 @@ describe('POST /api/swimcloud/captures — crawlScope', () => {
     }
   });
 });
+
+/**
+ * An event page carrying the meet's own event index, minimal but real in shape.
+ *
+ * The committed F9 fixture was trimmed of the Events sidebar, so it cannot
+ * exercise this. The markup below is the shape the real page serves, reduced to
+ * what `readMeetEventIndex` reads: a `js-event-item` anchor per event, its
+ * label in the body div's `title`.
+ *
+ * Event 9 is the load-bearing one. It is "1M Diving Men Finals", and it appears
+ * on NO team's swims list at any page count, because a diver has no swims.
+ */
+function eventIndexHtml(refs: readonly [string, string][]): string {
+  const items = refs
+    .map(
+      ([ref, label]) =>
+        `<a href="/results/356467/event/${ref}/" class="c-events__link js-event-item">` +
+        `<div class="c-events__link-start" title="Scored"><span class="c-event-status c-event-status--scored">${ref}</span></div>` +
+        `<div class="c-events__link-body" title="${label}"><div>${label}</div></div></a>`,
+    )
+    .join('');
+  return (
+    '<html><body><ul id="meet-events-placeholder" class="c-events">' +
+    items +
+    '</ul>' +
+    // A round table, so the page still parses as a per-event results page.
+    '<table><caption>Timed Finals</caption><thead><tr><th>Name</th><th>Time</th></tr></thead>' +
+    '<tbody><tr><td>1</td><td><a href="/results/356467/swimmer/1330318/">Avery Henke</a></td>' +
+    '<td>Henderson State</td><td>54.27</td></tr></tbody></table>' +
+    '</body></html>'
+  );
+}
+
+describe('GET /api/swimcloud/captures/:id?withEventRefs=1', () => {
+  it('derives event refs from a stored event page\'s own index, not only from swims pages', async () => {
+    // ## The bug this pins
+    //
+    // A re-crawl of a complete capture fetches nothing: every page it plans is
+    // already stored, so no page is fetched, so no page's index is read, so the
+    // events the swims lists never named are never discovered. The crawl's
+    // in-pass expansion cannot help -- expansion reads a page it just fetched,
+    // and on a full re-crawl it fetches none.
+    //
+    // Only the app can see the stored bytes. So it reads the index off a stored
+    // event page and hands the refs back with the resume reply, costing no
+    // request to SwimCloud.
+    const harness = await startHarness();
+    try {
+      await openCapture(harness, '356467');
+      // A swims page naming exactly one event, and an event page whose index
+      // names three -- including a diving event no swims row can carry.
+      await seedPage(harness, '356467', SWIMS_PAGE_1, SWIMS_HTML);
+      await seedPage(
+        harness,
+        '356467',
+        EVENT_26_URL,
+        eventIndexHtml([
+          ['26', '100 Breast Men Finals'],
+          ['9', '1M Diving Men Finals'],
+          ['403', '50 Free Mixed'],
+        ]),
+      );
+
+      const res = await call(harness, 'GET', `${BASE}/meet-356467?withEventRefs=1`);
+      expect(res.status).toBe(200);
+      const refs = (res.json as { knownEventRefs: string[] }).knownEventRefs;
+
+      // The diving event is the whole point: it is in the index and in no
+      // swims list.
+      expect(refs).toContain('9');
+      expect(refs).toContain('403');
+      expect(refs).toContain('26');
+      // And the swims-derived refs are still there -- the index adds, it does
+      // not replace.
+      expect(refs.length).toBeGreaterThanOrEqual(3);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('still answers from swims pages alone when no event page is stored', async () => {
+    const harness = await startHarness();
+    try {
+      await openCapture(harness, '356467');
+      await seedPage(harness, '356467', SWIMS_PAGE_1, SWIMS_HTML);
+      const res = await call(harness, 'GET', `${BASE}/meet-356467?withEventRefs=1`);
+      expect(res.status).toBe(200);
+      expect((res.json as Record<string, unknown>).knownEventRefs.length).toBeGreaterThan(0);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('omits the refs unless they are asked for', async () => {
+    // Deriving them parses every stored page, so an ordinary capture read must
+    // stay cheap. The crawler asks; the capture browser does not.
+    const harness = await startHarness();
+    try {
+      await openCapture(harness, '356467');
+      await seedPage(harness, '356467', SWIMS_PAGE_1, SWIMS_HTML);
+      const res = await call(harness, 'GET', `${BASE}/meet-356467`);
+      expect(res.status).toBe(200);
+      expect((res.json as Record<string, unknown>).knownEventRefs).toBeUndefined();
+    } finally {
+      await harness.close();
+    }
+  });
+});

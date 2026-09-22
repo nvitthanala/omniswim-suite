@@ -70,6 +70,7 @@ import { readSwimCloudClipboardPayload } from '../../../packages/swimcloud/src/c
 import {
   parseMeetEventResultsHtml,
   parseSwimmerTimesHtml,
+  readMeetEventIndex,
   parseTeamMeetSwimsHtml,
   parseTeamRosterHtml,
   type SwimCloudMeetEventResultsParse,
@@ -1137,6 +1138,41 @@ export function createSwimCloudCaptureRouter(options: SwimCloudCaptureRouterOpti
         if (typeof ref === 'string' && ref.length > 0) refs.add(ref);
       }
     }
+
+    // ## Why the stored EVENT pages are read too
+    //
+    // Swims pages alone are not enough, and on a re-crawl they are not enough
+    // in a way that never resolves itself. A per-event page prints the meet's
+    // own index of every event; a swims list names only the events its own
+    // team's swimmers swam. Measured on meet 356467: 51 refs from all 42 swims
+    // pages, 57 from any single event page. The six missing were four diving
+    // events and two mixed relays, and the diving four could never appear on a
+    // swims list at any page count, because a diver has no swims.
+    //
+    // The crawl also expands its own plan from each event page it fetches, but
+    // that cannot close this gap: on a re-crawl of a complete capture every
+    // planned page is already stored, so nothing is fetched, so no index is
+    // read. Only the app can see the stored bytes. Reading them here costs no
+    // request to SwimCloud.
+    //
+    // Every stored event page is read rather than just the first. All 51 of the
+    // real capture print the identical 57-entry index, so one would do — but
+    // "one would do" rests on that single meet, and a union cannot be wrong
+    // where an early exit could. `readMeetEventIndex` is one regex pass, not a
+    // full parse, so the cost is small.
+    for (const page of record.pages) {
+      if (page.resourceKind !== 'meetEvent' || page.outcome !== 'ok') continue;
+      const entry = await store.readPage(page.canonicalUrl);
+      if (entry?.html === undefined) continue;
+      // The page's own meet, not the capture subject's. readMeetEventIndex
+      // matches it against every href, so an index item naming another meet is
+      // rejected rather than planned.
+      if (page.meetId === undefined) continue;
+      for (const indexEntry of readMeetEventIndex(entry.html, page.meetId)) {
+        refs.add(indexEntry.eventRef);
+      }
+    }
+
     return [...refs].sort();
   }
 
