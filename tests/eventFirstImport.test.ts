@@ -97,10 +97,14 @@ describe.skipIf(!HAVE_CAPTURE)('event-first import against the real capture', ()
   const rows = converted.flatMap((c) => [...c.men, ...c.women]);
   const skips = converted.flatMap((c) => c.skipped);
 
-  it('converts every row on every stored event page, skipping none', () => {
-    // Zero skips is the claim. Any non-zero count here is a row that a coach's
-    // scoreboard is missing, and the reason names which kind.
-    expect(skips).toStrictEqual([]);
+  it('converts every row it should, skipping only the mixed events', () => {
+    // Updated 2026-09-22, when the full-field crawl took the capture from 51
+    // event pages to 57. The six new ones are four diving events and two mixed
+    // relays, and the mixed pair is the only thing that may be skipped: a
+    // mixed event scores to neither team, so excluding it is the right answer
+    // rather than a gap. Every other reason would be a row missing from a
+    // coach's scoreboard.
+    expect(new Set(skips.map((s) => s.reason))).toStrictEqual(new Set(['mixed-gender-event']));
     expect(events).toHaveLength(EVENT_PAGES.length);
     expect(rows.length).toBeGreaterThan(1000);
   });
@@ -182,12 +186,16 @@ describe.skipIf(!HAVE_CAPTURE)('event-first import against the real capture', ()
   });
 
   it('joins a class year onto all but eight individual rows', () => {
-    // 1081 of 1089 individual rows. The eight are rows whose roster entry
-    // prints no year; they are reported as such, never defaulted.
+    // Exactly eight individual rows lack a year, and that count is the
+    // invariant -- it is the number of roster entries that print no year. The
+    // totals moved from 1089/1081 to 1136/1128 when the full-field crawl added
+    // the four diving events, and every one of those 47 diving rows joined a
+    // year, so the gap stayed at eight.
     const individual = rows.filter((r) => r.isRelay !== true);
     const known = individual.filter((r) => r.classYear !== 'unknown');
-    expect(individual).toHaveLength(1089);
-    expect(known).toHaveLength(1081);
+    expect(individual.length - known.length).toBe(8);
+    expect(individual).toHaveLength(1136);
+    expect(known).toHaveLength(1128);
     for (const row of known) expect(row.classYear).toMatch(/^(?:FR|SO|JR|SR|GR)$/);
   });
 

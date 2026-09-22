@@ -4293,7 +4293,15 @@ interface LocatedEventRoundTable {
    */
   readonly relayLegsByRow: readonly (readonly SwimCloudRelayLeg[])[];
   readonly name: SwimsHeaderColumn;
-  readonly time: SwimsHeaderColumn;
+  /**
+   * The Time column. **Absent on a diving round**, which has none.
+   *
+   * A diving table's header is `Name | Team | Pts | Score`: the result is a
+   * judged score, not a time. Requiring this column is what made all four of
+   * meet 356467's diving events fail to parse at all, so their points were
+   * missing from every team total with nothing to show for it.
+   */
+  readonly time?: SwimsHeaderColumn;
   readonly team?: SwimsHeaderColumn;
   readonly score?: SwimsHeaderColumn;
   readonly points?: SwimsHeaderColumn;
@@ -4340,12 +4348,19 @@ function locateEventRoundTables(tables: readonly HtmlElementSpan[]): LocatedEven
     const columns = readHeaderColumns(rows[headerIndex]);
     const name = columnFor(columns, NAME_HEADERS);
     const time = columnFor(columns, SWIMS_TIME_HEADERS);
-    if (name === undefined || time === undefined) {
-      continue;
-    }
     const team = columnFor(columns, TEAM_HEADERS);
     const score = columnFor(columns, SWIMS_SCORE_HEADERS);
     const points = columnFor(columns, SWIMS_POINTS_HEADERS);
+    // A round table names its subject and reports a result. The result is
+    // usually a time, but a diving round reports a judged score in `Pts` and
+    // its meet points in `Score` and has no Time column at all. Demanding one
+    // rejected every diving page outright.
+    //
+    // A table with a name and NO result column of any kind is still rejected:
+    // that is a roster or a nav block, not a round.
+    if (name === undefined || (time === undefined && score === undefined && points === undefined)) {
+      continue;
+    }
 
     const unlabeled: number[] = [];
     for (const column of columns) {
@@ -4374,7 +4389,7 @@ function locateEventRoundTables(tables: readonly HtmlElementSpan[]): LocatedEven
       ...(caption === undefined ? {} : { caption }),
       relayLegsByRow,
       name,
-      time,
+      ...(time === undefined ? {} : { time }),
       ...(team === undefined ? {} : { team }),
       ...(score === undefined ? {} : { score }),
       ...(points === undefined ? {} : { points }),
@@ -4510,6 +4525,19 @@ interface ParsedEventPageLabel {
 function readEventPageEventLabel(label: string): ParsedEventPageLabel {
   const lower = label.toLowerCase();
   const isRelay = /\brelay\b/.test(lower);
+  // A diving event is named by its board, not by a distance: "1M Diving",
+  // "3M Diving", "Platform Diving". None of those is malformed and none has a
+  // distance to read, so reporting unrecognized-event-label on them warned
+  // about a perfectly well-formed label. Four of meet 356467 events are
+  // diving, so that was four review-severity notes per import saying nothing.
+  //
+  // distance stays ABSENT rather than taking the board size. A 1M board is not
+  // a 1-metre swim, and putting it in a distance field would make it sortable
+  // and comparable against one.
+  if (/\bdiving\b|\bdive\b|\bdives\b/.test(lower)) {
+    return { stroke: mapStroke(lower, isRelay), isRelay, matchedShape: true };
+  }
+
   const match = EVENT_PAGE_EVENT_LABEL.exec(label.trim());
   if (match === null) {
     return { stroke: mapStroke(lower, isRelay), isRelay, matchedShape: false };
@@ -4674,18 +4702,18 @@ function readEventRound(
     });
   }
 
-  // A diving page has never been captured. `Score` there could plausibly be the
-  // judged score rather than meet points, and a judged 300.15 stored as meet
-  // points would silently multiply a team's total. The column is read and
-  // reported; it is not stored.
-  const divingScoreUnverified = pointsColumn === 'score' && event.stroke === 'Diving';
-  if (divingScoreUnverified) {
-    ctx.warnings.push({
-      code: 'diving-score-column-unverified',
-      message: `The ${JSON.stringify(table.caption ?? 'uncaptioned')} table of this diving event carries a "Score" column, but no diving page has been captured and a diving "Score" may be the judged score rather than meet points. It is preserved in the row's rawPointsToken and not stored as meetScore.`,
-      eventId,
-    });
-  }
+  // **Resolved 2026-09-22 against four real diving pages.** This used to warn
+  // that a diving `Score` might be the judged score and refuse to store it.
+  // The full-field crawl of meet 356467 settles it: on events 9, 18, 29 and 40
+  // the `Pts` column holds the judged score (503.95, 431.25, ...) and the
+  // hidden `Score` column holds 20, 17, 16, 15, 14, 13, 12, 11 — the
+  // championship individual table, place for place. `data/meets.json`, built
+  // from the meet's own PDF, independently gives Santiago Santodomingo
+  // `"points": 20` for that same 1M final.
+  //
+  // So a diving `Score` is meet points, exactly like a swimming one, and is
+  // stored. Refusing it left every diving event contributing nothing to a team
+  // total.
 
   table.dataRows.forEach((cells, rowIndex) => {
     const nameIndex = subjectCellIndex(cells, table.name);
@@ -4705,9 +4733,12 @@ function readEventRound(
       ? readEventRankCell(cellAt(cells, table.name.start), event, rowIndex, ctx.warnings)
       : { exhibition: false };
 
-    const timeCellHtml = cellAt(cells, table.time.start);
-    const swimId = readEventPageSwimId(timeCellHtml);
-    if (swimId === undefined) {
+    const timeCellHtml = table.time === undefined ? '' : cellAt(cells, table.time.start);
+    const swimId = table.time === undefined ? undefined : readEventPageSwimId(timeCellHtml);
+    // Only a round that HAS a time cell can be missing a link in it. A diving
+    // round prints no time cell and no /times/ link anywhere, so its swims
+    // legitimately carry no SwimCloud swim id and fall back to a composite key.
+    if (table.time !== undefined && swimId === undefined) {
       ctx.warnings.push({
         code: 'missing-swim-link',
         message: `Time cell for ${JSON.stringify(athleteName)} carries neither a /times/{id}/ link nor a <div id="time{id}"> wrapper; the swim has no SwimCloud swim id, so it cannot be joined against a team's swims list.`,
@@ -4716,7 +4747,20 @@ function readEventRound(
       });
     }
 
-    const time = readTime(htmlToText(timeCellHtml), event, rowIndex, ctx.warnings);
+    // A diving result is the judged score in the `Pts` column, preserved
+    // verbatim in `rawTimeToken` because it is emphatically not a time. That
+    // is where `data/meets.json` already carries it for this very meet:
+    // Santiago Santodomingo's 1M final reads `"time": "503.95"`.
+    const judgedScore =
+      table.time !== undefined || table.points === undefined
+        ? undefined
+        : collapseWhitespace(textAt(cells, table.points.start));
+    const time =
+      table.time === undefined
+        ? judgedScore === undefined || judgedScore.length === 0
+          ? {}
+          : { rawTimeToken: judgedScore }
+        : readTime(htmlToText(timeCellHtml), event, rowIndex, ctx.warnings);
     const score =
       table.score === undefined
         ? {}
@@ -4816,7 +4860,7 @@ function readEventRound(
       exhibition: rank.exhibition,
       relayLeadoff,
       cutStandards,
-      ...(score.points === undefined || divingScoreUnverified ? {} : { meetScore: score.points }),
+      ...(score.points === undefined ? {} : { meetScore: score.points }),
     });
   });
 
