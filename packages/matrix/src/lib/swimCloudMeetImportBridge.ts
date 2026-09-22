@@ -936,6 +936,21 @@ export interface SwimCloudEventResultsImportOptions {
    * `'no-team-name'` — never scored under its "(A)"-bearing entry label.
    */
   readonly teamNames?: SwimCloudTeamNameIndex;
+  /**
+   * The meet's last scored event number, from
+   * `ScoringSettings.scoredEventNumberMax`.
+   *
+   * A meet numbers its programme 1..N and numbers post-meet time trials above
+   * it. Meet 356467 scores "Through Event 42" and prints events 100 to 939
+   * afterwards; 13 of its 51 captured event pages are in that range.
+   *
+   * With this set, a swim on an event above the boundary is marked
+   * `isTimeTrial`, which is what stops it scoring team points and what keeps
+   * it out of a swimmer's entry count. Omitted means the workspace has not
+   * stated a boundary, and **no row is marked** — the number is a property of
+   * the meet, so guessing one here would invent the very fact it encodes.
+   */
+  readonly scoredEventNumberMax?: number;
 }
 
 /** {@link swimCloudEventResultsToSwimmerResults}'s result, plus the class-year gaps it hit. */
@@ -1008,6 +1023,20 @@ export function swimCloudEventResultsToSwimmerResults(
 
   const eventLabel = parse.event.label;
   const isRelay = parse.event.kind === 'relay';
+
+  // A post-meet time trial is a real swim that scores nothing and counts
+  // against nothing. `swimmerEntryLimits` already skips a row flagged this way
+  // — a 2026 measurement found 8 of 13 athletes wrongly flagged over the NSISC
+  // seven-event cap because a time trial counted twice — and `utils.ts` already
+  // scores one at zero. Neither could act on a SwimCloud import, because
+  // nothing on this path ever set the flag: the SwimCloud event label is
+  // "100 Breast", so `parseEventNumber` finds no "Event N" prefix and
+  // `isOutsideScoredProgram` answers false for every row.
+  const programmeNumber = eventProgrammeNumber(parse);
+  const isTimeTrial =
+    options.scoredEventNumberMax !== undefined &&
+    programmeNumber !== undefined &&
+    programmeNumber > options.scoredEventNumberMax;
 
   // The page states its own gender on its gender dropdown's active item, and
   // that is a statement about every row on it — so it is read once here rather
@@ -1106,12 +1135,33 @@ export function swimCloudEventResultsToSwimmerResults(
               relayNames: legs.map((leg) => ({ name: leg.athleteName ?? '', year: '' })),
             }),
         ...(swim.exhibition ? { isExhibition: true } : {}),
+        ...(isTimeTrial ? { isTimeTrial: true } : {}),
         ...(pdfPoints === undefined ? {} : { pdfPoints }),
       });
     }
   }
 
   return { men, women, skipped, classYearGaps };
+}
+
+/**
+ * This event's number in the meet programme, as the page itself prints it.
+ *
+ * Read from the meet's event index, where each entry carries the number shown
+ * in its own status badge — not from the `/event/{n}/` URL. The two are equal
+ * on all 51 captured pages of meet 356467, and that is exactly why the URL is
+ * not used: an id that happens to match a printed number is not the same fact
+ * as the number, and the day they diverge the URL would quietly mis-classify
+ * every event.
+ *
+ * `undefined` when the page carried no index, or no entry for itself, or a
+ * non-numeric badge. The caller then marks nothing.
+ */
+function eventProgrammeNumber(parse: SwimCloudMeetEventResultsParse): number | undefined {
+  const entry = parse.eventIndex?.find((e) => e.eventRef === parse.eventRef);
+  const printed = entry?.printedNumber;
+  if (printed === undefined || !/^\d+$/.test(printed)) return undefined;
+  return Number(printed);
 }
 
 /**
@@ -1290,6 +1340,11 @@ export async function applySwimCloudRows(
     swimCloudEventResultsToSwimmerResults(p, {
       pointsTrust: options.pointsTrust,
       teamNames,
+      // From the workspace's own scoring settings, never a literal. The
+      // boundary differs per meet and per format.
+      ...(workspace.scoringSettings?.scoredEventNumberMax === undefined
+        ? {}
+        : { scoredEventNumberMax: workspace.scoringSettings.scoredEventNumberMax }),
       ...(options.rosters === undefined ? {} : { rosters: options.rosters }),
     }),
   );

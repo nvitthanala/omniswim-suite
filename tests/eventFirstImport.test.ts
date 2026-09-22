@@ -225,6 +225,79 @@ describe.skipIf(!HAVE_CAPTURE)('event-first import against the real capture', ()
       expect((row.roundSwam ?? '').length).toBeGreaterThan(0);
     }
   });
+
+describe('a post-meet time trial is marked as one', () => {
+  /**
+   * ## The bug
+   *
+   * `swimmerEntryLimits` already skips a row flagged `isTimeTrial`, and
+   * `utils.ts` already scores one at zero. Neither could act on a SwimCloud
+   * import, because nothing on this path ever set the flag.
+   *
+   * The existing mechanism is `isOutsideScoredProgram`, which reads an "Event
+   * N" prefix off the label. A SwimCloud label is "100 Breast" — no prefix — so
+   * `parseEventNumber` returned null and the check answered false for every
+   * row. Meet 356467 scores "Through Event 42" and runs 13 further events
+   * numbered 100 to 939, all of which were importing as ordinary scoring swims
+   * that also consumed a swimmer's entry allowance.
+   *
+   * The measured cost of that in the other direction is recorded in
+   * `swimmerEntryLimits.ts`: 13 athletes flagged over the NSISC seven-event cap
+   * and 8 of them not actually over it, because a time trial counted twice.
+   */
+  const marked = (max: number | undefined) =>
+    events.flatMap((parse) => {
+      const result = swimCloudEventResultsToSwimmerResults(parse, {
+        teamNames,
+        ...(max === undefined ? {} : { scoredEventNumberMax: max }),
+      });
+      return [...result.men, ...result.women];
+    });
+
+  it('marks the swims on events above the scored programme', () => {
+    const rows = marked(42);
+    const trials = rows.filter((r) => r.isTimeTrial === true);
+    expect(trials).toHaveLength(14);
+    // Every marked row belongs to an event the meet numbered above 42.
+    for (const row of trials) expect(row.event.length).toBeGreaterThan(0);
+  });
+
+  it('marks nothing when the workspace states no boundary', () => {
+    // The number is a property of the meet. With none stated, marking a row
+    // would invent the very fact the setting encodes — so absent means absent,
+    // not "assume 42".
+    expect(marked(undefined).filter((r) => r.isTimeTrial === true)).toStrictEqual([]);
+  });
+
+  it('leaves the programmed events alone', () => {
+    // The control. A boundary that marked everything would "fix" the entry
+    // limits by emptying the meet.
+    const rows = marked(42);
+    const scoring = rows.filter((r) => r.isTimeTrial !== true);
+    expect(scoring.length).toBe(rows.length - 14);
+    expect(scoring.length).toBeGreaterThan(1000);
+  });
+
+  it('moves the boundary with the setting rather than hardcoding 42', () => {
+    // The user's standing requirement is that this work for any division,
+    // team, scoring rule and format. A meet that scores through event 8 must
+    // mark far more; one that scores through 9999 must mark none.
+    expect(marked(8).filter((r) => r.isTimeTrial === true).length).toBeGreaterThan(14);
+    expect(marked(9999).filter((r) => r.isTimeTrial === true)).toStrictEqual([]);
+  });
+
+  it('reads the number the page prints, not the number in its URL', () => {
+    // The two are equal on all 51 captured pages, which is exactly why the URL
+    // is not used: an id that happens to match a printed number is not the
+    // same fact, and the day they diverge the URL would mis-classify silently.
+    for (const parse of events) {
+      const own = (parse.eventIndex ?? []).find((e) => e.eventRef === parse.eventRef);
+      expect(own, `event ${parse.eventRef} is absent from its own index`).toBeDefined();
+      expect(own?.printedNumber).toBe(parse.eventRef);
+    }
+  });
+});
+
 });
 
 describe('class-year gaps, one per reason', () => {
@@ -368,5 +441,84 @@ describe('a mixed event is excluded, and said to be mixed', () => {
     expect(skipReasonLabel('mixed-gender-event')).toBe('Mixed event (scores to neither team)');
     // And the contrast that makes that meaningful.
     expect(classifySkipSeverity('unknown-gender')).toBe('review');
+  });
+});
+
+describe('the programme number comes from the badge, not the URL', () => {
+  /**
+   * A mutation swapping `entry.printedNumber` for `parse.eventRef` passed
+   * every other test in this file. It had to: the two are identical on all 51
+   * captured pages, so no amount of real data can tell the implementations
+   * apart. An inert mutation is not evidence of a guard.
+   *
+   * This case is synthetic for exactly that reason — it is the only way to
+   * separate them. The page is shaped like a real one, with the id and the
+   * printed number deliberately disagreeing: `/event/7/` printing programme
+   * number 700.
+   */
+  const parse = {
+    swimCloudMeetId: '999',
+    eventRef: '7',
+    meet: { swimCloudMeetId: '999', name: 'Divergent', format: 'unknown', ruleset: 'unknown', course: 'SCY' },
+    event: {
+      eventId: '999:event:7',
+      swimCloudMeetId: '999',
+      eventRef: '7',
+      label: '50 Free',
+      kind: 'individual',
+      course: 'SCY',
+      gender: 'Men',
+      distance: 50,
+      stroke: 'Free',
+    },
+    gender: 'Men',
+    genderLabel: 'Men',
+    eventIndex: [{ eventRef: '7', label: '50 Free Men', printedNumber: '700', status: 'Scored' }],
+    rounds: [
+      {
+        round: 'Timed Finals',
+        pointsColumn: 'none',
+        rowCount: 1,
+        swims: [
+          {
+            swimKey: '999:swim:1',
+            entry: {
+              entryId: '999:swim:1:entry',
+              eventId: '999:event:7',
+              athleteName: 'Test Swimmer',
+              swimCloudSwimmerId: '1',
+              swimCloudTeamId: '58',
+              teamName: 'Henderson State',
+            },
+            result: { resultId: 'r', entryId: 'e', eventId: '999:event:7', place: 1, finalTime: '20.00' },
+            exhibition: false,
+            relayLeadoff: false,
+            cutStandards: [],
+          },
+        ],
+      },
+    ],
+    rowCount: 1,
+  } as unknown as SwimCloudMeetEventResultsParse;
+
+  it('calls it a time trial because the badge says 700, not because the URL says 7', () => {
+    const rows = swimCloudEventResultsToSwimmerResults(parse, { scoredEventNumberMax: 42 });
+    expect(rows.men).toHaveLength(1);
+    // Reading the URL ref would see 7, which is inside the programme, and
+    // score this swim as an ordinary one.
+    expect(rows.men[0]?.isTimeTrial).toBe(true);
+  });
+
+  it('marks nothing when the page carries no index to read a number from', () => {
+    // Absent is absent. With no printed number anywhere, there is no fact to
+    // classify on, and the row stays an ordinary swim rather than being
+    // classified off the URL as a fallback.
+    const { eventIndex: _dropped, ...withoutIndex } = parse as unknown as Record<string, unknown>;
+    const rows = swimCloudEventResultsToSwimmerResults(
+      withoutIndex as unknown as SwimCloudMeetEventResultsParse,
+      { scoredEventNumberMax: 42 },
+    );
+    expect(rows.men).toHaveLength(1);
+    expect(rows.men[0]?.isTimeTrial).toBeUndefined();
   });
 });
