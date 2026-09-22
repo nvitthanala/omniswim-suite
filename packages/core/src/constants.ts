@@ -53,22 +53,14 @@ export const CONVERSION_FACTORS: ConversionFactors = {
 
 export const SCORING_POINTS = [20, 17, 16, 15, 14, 13, 12, 11, 9, 7, 6, 5, 4, 3, 2, 1];
 
-export const NEON_COLORS = [
-  '#00F5FF', // Neon Cyan
-  '#FF00FF', // Neon Magenta
-  '#39FF14', // Neon Lime
-  '#FFD700', // Gold
-  '#FF4444', // Neon Red
-  '#8A2BE2', // Neon Violet
-  '#FF8C00', // Neon Orange
-  '#7FFF00', // Chartreuse
-];
-
-export const TEAM_COLORS_MAP: Record<string, string> = {
-  'Henderson State University': '#FF4444',
-  'Ouachita Baptist University': '#8A2BE2',
-  'Delta State University': '#39FF14',
-  'Oklahoma Baptist University': '#00F5FF',
-};
+// NEON_COLORS and TEAM_COLORS_MAP were removed on 2026-09-22. Both were dead:
+// nothing in the repo imported either. Team colours come from
+// `team_colors.json` through `teamColorLookup.ts`, which is keyed by data and
+// works for a school nobody has heard of. The map that lived here named four
+// specific programs, which is the shape this app must not have -- it has to
+// work for any division and any team. Logged as finding f9 in
+// docs/reference/PRODUCTION_READINESS_STATE.json, whose "falls back to the
+// NEON_COLORS rotation" consequence was already out of date: neither constant
+// was reachable to fall back to.
 
 

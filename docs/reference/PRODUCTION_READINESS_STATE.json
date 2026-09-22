@@ -177,7 +177,8 @@
         "packages/core/src/data/teamAliases.ts hardcodes HSU/OBU/OUAC acronyms, though it also has a generic acronym builder that degrades gracefully for unknown schools."
       ],
       "consequence": "Cosmetic only - an unlisted school falls back to the NEON_COLORS rotation. Worth making user-editable eventually; not a blocker.",
-      "status": "open - low priority"
+      "status": "resolved 2026-09-22",
+      "resolution": "NEON_COLORS and TEAM_COLORS_MAP were both dead code -- nothing imported either -- and are deleted. The recorded consequence (\"an unlisted school falls back to the NEON_COLORS rotation\") was already wrong: neither constant was reachable. Team colours come from team_colors.json through teamColorLookup.ts, which is data-keyed and works for any school. teamAliases.ts keeps its acronym entries and its generic builder, which already degrades gracefully."
     },
     {
       "id": "f10",

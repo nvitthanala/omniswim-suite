@@ -43,35 +43,26 @@
     {
       "commit": "bf58e166",
       "what": "n2: the pre-crawl estimate counted swims pages the planner no longer plans and called the event count unknown when the meet had published it. A 4-team 57-event meet now quotes 57 requests, not 8. A test asserts the estimate and planScopedMeetCrawl agree rather than merely looking similar."
+    },
+    {
+      "commit": "93cc5161",
+      "what": "n3: USER_GUIDE.md section 4 rewritten. It described a crawl that no longer happens. Now covers event-by-event crawling, why diving appears for the first time, the class-year column and its four unknown reasons, and the endpoint-report button."
+    },
+    {
+      "commit": "29c7a227",
+      "what": "n6: a Mixed event (403, 503) reported \"Gender could not be determined\", which reads like a parse failure on a page that parsed fine. The parse result now keeps the printed gender word verbatim and the converter has a distinct, expected-severity skip reason. A control test pins that an unrecognised word still reports unknown-gender."
+    },
+    {
+      "commit": "e877acce",
+      "what": "n5 part 1: getCutlinesForSwim/compareTimeToCutline defaulted division to D1, and isACut/isBCut took it as optional and passed it through -- so isACut(sec,gender,event) measured any swim against the D1 table. CLAUDE.md rule 5 forbids exactly that. No caller omitted it, so nothing shipped wrong; the fix makes tsc enforce the rule. Stated honestly in the test that restoring the default fails nothing today."
     }
   ],
   "nextUp": [
-    {
-      "id": "n3",
-      "title": "Update USER_GUIDE.md section 4 (SwimCloud)",
-      "why": "The guide now describes a crawl that no longer happens. It tells the coach the crawl reads each team's swims pages; the default path reads event pages and may fetch no swims page at all. A doc that misdescribes the tool is worse than no doc, and the user asked for this guide specifically.",
-      "how": "Rewrite the SwimCloud subsection: what the crawl fetches now, why diving events appear for the first time, what the class-year column means and the four reasons it can read unknown, and the new 'Copy times endpoint' button and what to do with it.",
-      "status": "next"
-    },
     {
       "id": "n4",
       "title": "429 backoff and retry in the extension",
       "why": "There is no 429 handling anywhere: a throttled page is simply a page that never arrives, recorded as http-error. It has not bitten at the sequential floor (0 of 50, then 51 of 51 clean), so this is insurance rather than a fix for an observed failure -- which is why it sits below the items above.",
       "how": "Honour Retry-After when present, else exponential backoff with a cap, bounded attempts, and surface the wait on the panel. Backoff only ever makes the traffic gentler, so it does not conflict with decision d3 ('caching + fewer pages first'). Do NOT raise any concurrency or lower any delay.",
-      "status": "todo"
-    },
-    {
-      "id": "n5",
-      "title": "Sweep for anything still hardcoded that must be configurable",
-      "why": "A direct standing instruction: 'remember to not hardcode certain things because i need this to be usable for all divisions/teams/scoring rules and formats'. Worth one deliberate pass now that the data path has changed shape.",
-      "how": "Grep for team ids, meet ids, conference names, division literals and point tables outside the preset/config layer and outside tests and fixtures. Anything found either moves to configuration or gets a comment saying why it is genuinely fixed.",
-      "status": "todo"
-    },
-    {
-      "id": "n6",
-      "title": "Name a Mixed event as Mixed when skipping its rows",
-      "why": "Events 403 and 503 are Mixed. The parser records gender unknown (correct -- it is neither side of the meet) but loses the printed word, so the import tells the coach \"Gender could not be determined\", which reads like a parse failure on a page that parsed perfectly. Not scoring a mixed event to a mens or womens total is right; saying it that way is the fix.",
-      "how": "Carry the printed gender word verbatim on the parse result, then give the converter a distinct skip reason for it. Do NOT start scoring mixed events.",
       "status": "todo"
     }
   ],
@@ -88,6 +79,14 @@
     {
       "at": "2026-09-22T05:05Z",
       "what": "n1 and n2 done, pushed to branch and main. 1030 vitest, 84 script tests, lint clean. Also noted during review: a Mixed-gender event (403, 503) parses as gender unknown, so every row on it skips with the reason label \"Gender could not be determined\" -- misleading, since the gender IS determined and is Mixed. Recorded as n6."
+    },
+    {
+      "at": "2026-09-22T06:05Z",
+      "what": "n3, n5, n6 done. Hardcode sweep results: NO hardcoded SwimCloud team or meet ids in production code. Rule 7 point tables and SCORING_POINTS are legitimate domain data behind the preset layer. Two real findings: the D1 division default (fixed, e877acce) and dead hardcoded constants NEON_COLORS/TEAM_COLORS_MAP naming four specific schools (deleted; readiness finding f9 marked resolved, its recorded consequence was already stale)."
     }
+  ],
+  "notesForTheUser": [
+    "divisionForTeam and registerTeamsFromList are exported, deprecated, and answer D1 for an unknown team. Nothing in the repo calls them, but scripts/test_cutline_tags.mjs deliberately pins the legacy behaviour, so they were left alone. Deleting exported API is your call -- say the word and they go.",
+    "Readiness finding f8 is still open and is a real limit on \"usable for all formats\": INDIVIDUAL_EVENTS does not list 400 Freestyle, though the conversion table already knows it. A coach planning a long-course meet cannot pick an event the program actually contests."
   ]
 }
