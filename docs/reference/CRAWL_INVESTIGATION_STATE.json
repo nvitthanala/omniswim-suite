@@ -48,6 +48,10 @@
     {
       "at": "2026-09-22",
       "what": "Real crawl confirmed both earlier fixes (51/51 event pages, zero 429s). Investigated the user's event-first proposal against stored pages: it is viable and strictly better. Found that relay legs ARE published but hidden, and that the swims-derived event list missed 6 events. Queued four changes."
+    },
+    {
+      "at": "2026-09-22",
+      "what": "Answered three user decisions (d8-d10) and cleared the work queue. Event-first is now the crawl AND the import: readMeetEventIndex reads the 57-event index every event page prints, the event pass expands from it in rounds, and swimCloudEventResultsToSwimmerResults converts event pages into rows directly. Found and fixed two defects the conversion exposed: every relay was being dropped (no Team column on a relay table), and class year was hardcoded unknown. 1020 vitest, 84 script tests, lint clean."
     }
   ],
   "nextStep": "Check E first (cheapest, purely local): is there any other capture id, or any page stored outside the meet-356467 record? Then B (pairing state on disk). Then A/C/D, which need evidence only the user's browser has.",
@@ -127,5 +131,56 @@
     "A. Parse the hidden relay-leg list. Highest data value: recovers leg names, swimmer ids and split times, and removes the false 'legs absent' premise.",
     "B. Enumerate events from an event page rather than from swims pages. Fixes the 6 missed events and is the step that makes event-first possible.",
     "C. Join class year from roster pages by swimCloudSwimmerId."
+  ],
+  "USER_DECISIONS": {
+    "d8": {
+      "question": "Drop the 42 per-team swims pages now that event pages give everything?",
+      "answer": "Drop them — event pages only.",
+      "howItLanded": "The scope still DECLARES meetTeamSwims, because it is the fallback for a page shape that prints no index, but planScopedMeetCrawl plans none of its pages when the event list is already known. So the requests stop happening without breaking the dependency invariant crawlScopeDependencyGaps enforces."
+    },
+    "d9": {
+      "question": "How should swimmer season bests be pulled, given the page renders client-side?",
+      "answer": "Find the endpoint its JavaScript calls.",
+      "howItLanded": "Discovered, not hardcoded. This session may not fetch swimcloud.com, so the bundle could not be read — and hardcoding it would break on any deploy that rehashes the bundle. extensions/swimcloud-companion/src/timesEndpointDiscovery.ts reads the request out of Resource Timing on a page the coach opened, and a button on the swimmer page copies the report. NOTHING IS FETCHED FROM IT YET: the method and response shape are unobserved. See NEXT_STEP_FOR_THE_USER."
+    },
+    "d10": {
+      "question": "What should a swimmer with no roster entry show for class year?",
+      "answer": "Unknown, and say why.",
+      "howItLanded": "buildSwimCloudClassYearIndex joins by swimCloudSwimmerId (an id join, never a name match — INVARIANTS item 6). SwimCloudClassYearGap names four distinct kinds of unknown: no-roster-captured, not-on-the-roster, roster-prints-no-class-year, no-swimmer-id-to-join-on. A roster that parsed and listed nobody (UWF men) is still recorded as covered, because the capture DID answer the question and the answer was no."
+    }
+  },
+  "WORK_QUEUE_CLEARED": {
+    "A. relay legs": "DONE 02f22903. 4 legs per relay with names, swimmer ids and splits, from the hidden list.",
+    "D. dash points": "DONE 02f22903. A \"-\" in a Points cell is absent, not an unrecognized-points-token warning.",
+    "B. event enumeration": "DONE 63be4500. 57 events from the index vs 51 from swims. The 6 missed were four diving events and two mixed relays.",
+    "C. class year join": "DONE 8cf719f2. 1081 of 1089 individual rows carry a real year."
+  },
+  "MEASURED_AFTER": {
+    "eventIndex": "57 events, identical on all 51 stored event pages. Any one event page enumerates the meet.",
+    "missedBySwimsLists": [
+      "9 1M Diving Men",
+      "18 3M Diving Women",
+      "29 3M Diving Men",
+      "40 1M Diving Women",
+      "403 50 Free Mixed",
+      "503 200 Fly Mixed"
+    ],
+    "whyDivingCouldNeverWork": "A diver has no swims, so a diver appears on no team swims list at any page count. Diving points count toward the team score, so those meets imported with whole scoring events absent.",
+    "rowsFromEventPagesAlone": "1160 (585 men, 575 women), zero skips",
+    "relayRowsRecovered": "71, all with legs. Previously all 71 were skipped as no-team-name.",
+    "classYearKnown": "1081 of 1089 individual rows. The 8 are rows whose roster entry prints no year.",
+    "importCountChange": "applySwimCloudRows over 1 swims page + event 26 went 20 rows -> 52. 20 + 40 - 8 shared swim ids. The 32 new rows are other teams in that event, always in the bytes and previously discarded."
+  },
+  "NEXT_STEP_FOR_THE_USER": [
+    "Reload the extension (chrome://extensions -> reload). crawler.js was rebuilt for all three commits.",
+    "Re-crawl meet 356467. Watch the panel: if it says the meet publishes its own list of events, the topteams page carries the index and ZERO swims pages are fetched. If it does not, the swims pass runs as before and the event pass still expands to 57 from the first event page it reads. Either branch is correct; which one happens is UNVERIFIED because it needs a live fetch.",
+    "Expect ~57 event pages at about 3s each, so roughly 3 minutes, and diving events present for the first time.",
+    "For season bests: open one swimmer's times page, click around the season/course tabs, then click \"Copy times endpoint for Omniswim\" and paste the report. That answers what the endpoint is. Until it is pasted, no season-best pass exists."
+  ],
+  "STILL_OPEN": [
+    "No 429 handling anywhere in the extension. A throttled page is simply a page that never arrives, recorded as http-error. The sequential floor held for 51/51 event pages, so this has not bitten yet; it is the obvious next improvement and changes the traffic pattern, so it needs the user's call.",
+    "No diving event page has ever been captured, so a diving row's Score column stays unverified and is NOT stored in meetScore (diving-score-column-unverified). The event-first crawl will fetch the four diving pages for the first time — read that warning in the import notes and decide whether the column is meet points or a judged score.",
+    "A relay leg's class year is left empty rather than joined, deliberately: it would put a second, separately-sourced year on the same page as the individual rows' one.",
+    "The swimmer-times endpoint is discovered but never called. See d9."
   ]
 }
