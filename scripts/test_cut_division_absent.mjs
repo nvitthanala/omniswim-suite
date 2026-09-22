@@ -155,4 +155,46 @@ const parse = (paste, team, division) =>
   assert.equal(lcm.computedCut, null, 'a metric swim is never stamped with a cut');
 }
 
+
+// --- 8. The lookup itself no longer defaults to D1 --------------------------
+{
+  // `getCutlinesForSwim` and `compareTimeToCutline` took `division: NcaaDivision
+  // = 'D1'`, and `isACut`/`isBCut` took it as optional and passed it straight
+  // through. So `isACut(sec, gender, event)` -- the natural way to call it --
+  // measured every swim against the D1 table regardless of who swam it.
+  //
+  // Nothing in this repo called them that way, so no shipped number was wrong.
+  // The point of removing the default is that the rule stops depending on five
+  // call sites remembering it: `npm run lint` now fails on a caller that has no
+  // division, instead of the caller silently getting the strictest table in the
+  // repo.
+  //
+  // ## What this section does and does not prove
+  //
+  // Measured, not assumed: putting the ` = 'D1'` defaults back fails NOTHING --
+  // not this script, not `npm run lint`. No caller in the repo omits the
+  // division today, so there is nothing for either gate to catch. The type
+  // change guards the NEXT caller, and a test cannot stand in for it: `tsc` is
+  // what enforces it, at the moment somebody writes `isACut(sec, gender, event)`.
+  //
+  // What the assertions below DO prove is that the argument is load-bearing --
+  // the two divisions publish different tables and disagree about this exact
+  // time. Without that, "required" would be ceremony and the old default would
+  // have been harmless.
+  const d1 = compareTimeToCutline(20.0, Gender.MEN, '50 Freestyle', 'D1');
+  const d2 = compareTimeToCutline(20.0, Gender.MEN, '50 Freestyle', 'D2');
+  assert.equal(d1.status, 'ok', 'D1 publishes a 50 Free standard');
+  assert.equal(d2.status, 'ok', 'D2 publishes a 50 Free standard');
+  assert.notDeepEqual(
+    { a: d1.aCutSec, b: d1.bCutSec },
+    { a: d2.aCutSec, b: d2.bCutSec },
+    'D1 and D2 must not share a table, or the division argument decides nothing',
+  );
+  assert.notEqual(
+    d1.achieved,
+    d2.achieved,
+    'this time is chosen to straddle the two divisions, which is what made the old default dangerous',
+  );
+}
+
 console.log('cut division absent: all assertions passed');

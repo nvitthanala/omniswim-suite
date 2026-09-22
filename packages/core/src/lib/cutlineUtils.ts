@@ -269,6 +269,11 @@ function secondsForTier(tiers: CutlineTierValue[], ...wanted: CutlineTier[]): nu
 /**
  * Find the published standards for one swim.
  *
+ * `division` is required. It defaulted to `'D1'`, which silently measured
+ * every swim whose division a caller had not resolved against the D1 table —
+ * the precise thing `CLAUDE.md`'s "Unknown division != D1" rule forbids. A
+ * caller that does not know the division resolves it and handles the null.
+ *
  * @param season Defaults to the newest season published for `division` — not to
  *   a hardcoded season, because different divisions publish on different cycles
  *   (D1 is on 2025-2026 here; D2/D3/NAIA on 2026-2027).
@@ -276,7 +281,7 @@ function secondsForTier(tiers: CutlineTierValue[], ...wanted: CutlineTier[]): nu
 export function getCutlinesForSwim(
   gender: Gender | string,
   event: string,
-  division: NcaaDivision = 'D1',
+  division: NcaaDivision,
   season?: CutlineSeason,
   course: CutlineCourse = DEFAULT_CUTLINE_COURSE
 ): CutlineLookup {
@@ -384,7 +389,7 @@ export function compareTimeToCutline(
   timeSec: number,
   gender: Gender | string,
   event: string,
-  division: NcaaDivision = 'D1',
+  division: NcaaDivision,
   season?: CutlineSeason,
   course: CutlineCourse = DEFAULT_CUTLINE_COURSE
 ): CutlineComparison {
@@ -410,20 +415,41 @@ export function compareTimeToCutline(
   return { ...base, achieved, tier: met.tier };
 }
 
+/**
+ * ## `division` is required, and was not always
+ *
+ * These two took `division?: NcaaDivision` and passed it straight into
+ * {@link compareTimeToCutline}, which defaulted it to `'D1'`. So
+ * `isACut(sec, gender, event)` — the natural way to call it — compared a swim
+ * against the D1 table whatever division the swimmer actually swims in.
+ *
+ * `CLAUDE.md` states the rule this broke: "Unknown division != D1. An unmapped
+ * team surfaces as unknown rather than quietly scoring against the wrong
+ * table." A D2 swimmer measured against D1 standards reads as having missed
+ * cuts they in fact made, which is a plausible, wrong answer of exactly the
+ * kind this repo exists to refuse.
+ *
+ * Nothing inside this repo called them without a division, so no shipped
+ * number was wrong. Requiring it makes that a fact the compiler enforces
+ * rather than a habit five call sites happened to keep. A caller that does not
+ * know the division must resolve it (`divisionForTeamOrNull`) and handle the
+ * null, not pass a guess.
+ */
 export function isACut(
   timeSec: number,
   gender: Gender | string,
   event: string,
-  division?: NcaaDivision
+  division: NcaaDivision
 ): boolean {
   return compareTimeToCutline(timeSec, gender, event, division).achieved === 'A';
 }
 
+/** See {@link isACut} on why `division` is required. */
 export function isBCut(
   timeSec: number,
   gender: Gender | string,
   event: string,
-  division?: NcaaDivision
+  division: NcaaDivision
 ): boolean {
   return compareTimeToCutline(timeSec, gender, event, division).achieved === 'B';
 }
