@@ -67,22 +67,23 @@
     {
       "commit": "2bf5f7fd",
       "what": "800 and 1500 Freestyle were convertible but not plannable, so a long-course meet could not be planned. Added, with the missing invariant: every event CONVERSION_FACTORS knows must be in the catalogue. Readiness f8 was half stale."
+    },
+    {
+      "commit": "b97c8594",
+      "what": "n7 first finding: the Rule 7 relationship that a championship relay table is exactly twice its individual table was true in all six field-size presets but asserted nowhere. A single mistyped relay value would have passed every test while mis-scoring a double-weighted event. Now asserted as a relationship between the tables, with the dual-meet exception (11-4-2 is not twice 9-4-3-2-1) asserted in the same file so nobody tidies it away."
+    },
+    {
+      "commit": "(vault, not git)",
+      "what": "Obsidian vault updated per the refreshed CLAUDE.md: new Sessions note, 02-Invariants gained a section 3 on the event-first invariants, 05-Timeline gained Era 9, and the stale branch-divergence claim in 04 and 08 was corrected -- main now contains both previously-diverged branch tips, verified with git merge-base rather than assumed."
     }
   ],
   "nextUp": [
-    {
-      "id": "n7",
-      "title": "Adversarial bug hunt over the app, not the crawler",
-      "why": "The user asked for real bug testing in plain terms: \"no bullshit tests just just give me a large number of successes but it still has bugs\". Tonight found five real defects by reading code rather than running tests (re-crawl index starvation, every relay dropped, hardcoded D1 default, Date.parse accepting junk, unplannable convertible events). The same reading has not been done on the scoring and lineup paths.",
-      "how": "Pick one path at a time. Read for: a default that stands in for a missing fact, two tables that must agree with nothing asserting it, an absent value treated as zero, an early return that hides a partial result. Write the failing test before the fix.",
-      "status": "next"
-    },
     {
       "id": "n8",
       "title": "Check UI navigability against the stated priority",
       "why": "The user named it a priority: \"UI must be easy to navigate and handle\". docs/reference/UI_REDESIGN_STATE.json records what was planned; it has not been re-read since the data path changed shape.",
       "how": "Read UI_REDESIGN_STATE.json, check what is actually outstanding, and fix what is cheap and clearly right. Do not restyle anything the user has not asked for.",
-      "status": "todo"
+      "status": "next"
     }
   ],
   "blockedNeedsTheUser": [
@@ -106,6 +107,10 @@
     {
       "at": "2026-09-22T06:40Z",
       "what": "Queue n1-n6 cleared plus f8. 1053 vitest, 84 script tests, lint clean, all pushed to branch and main. Every new guard mutation-tested; three mutations were inert on the first attempt and were redone rather than counted."
+    },
+    {
+      "at": "2026-09-22T07:20Z",
+      "what": "Resumed after the 5h limit reset. Finished the relay-doubling test that was mid-mutation when the limit hit: the inert mutation was itself a finding (double-dual-tri-quad was covered by no test at all) and that format is now covered. Four mutations proven lethal. 1066 vitest, 84 script tests, lint clean. Then honoured the Obsidian vault instruction that arrived with the refreshed CLAUDE.md."
     }
   ],
   "notesForTheUser": [
