@@ -2390,6 +2390,59 @@
     return { started, notStarted: items.length - started, peakInFlight };
   }
 
+  // extensions/swimcloud-companion/src/timesEndpointDiscovery.ts
+  var SWIMMER_ID_PLACEHOLDER = "{swimmerId}";
+  var SWIMCLOUD_HOSTS = /* @__PURE__ */ new Set(["www.swimcloud.com", "swimcloud.com"]);
+  var DATA_INITIATORS = /* @__PURE__ */ new Set(["fetch", "xmlhttprequest"]);
+  var ASSET_SUFFIX = /\.(?:js|mjs|css|png|jpe?g|gif|svg|webp|woff2?|ttf|eot|ico|map)$/i;
+  function discoverSwimmerTimesEndpoints(entries, swimmerId) {
+    if (swimmerId.length === 0) return [];
+    const out = [];
+    const seen = /* @__PURE__ */ new Set();
+    for (const entry of entries) {
+      if (!DATA_INITIATORS.has(entry.initiatorType)) continue;
+      let parsed;
+      try {
+        parsed = new URL(entry.name);
+      } catch {
+        continue;
+      }
+      if (!SWIMCLOUD_HOSTS.has(parsed.host)) continue;
+      if (ASSET_SUFFIX.test(parsed.pathname)) continue;
+      if (!entry.name.includes(swimmerId)) continue;
+      if (seen.has(entry.name)) continue;
+      seen.add(entry.name);
+      out.push({
+        url: entry.name,
+        template: entry.name.split(swimmerId).join(SWIMMER_ID_PLACEHOLDER),
+        initiatorType: entry.initiatorType
+      });
+    }
+    return out;
+  }
+  function swimmerTimesEndpointReport(observation) {
+    const lines = [
+      "SwimCloud swimmer-times endpoint observation",
+      `page:        ${observation.pageUrl}`,
+      `swimmer id:  ${observation.swimmerId}`,
+      ...observation.seasonIds === void 0 ? [] : [`season ids:  ${observation.seasonIds}`],
+      `requests seen: ${observation.entriesSeen}`,
+      ""
+    ];
+    if (observation.candidates.length === 0) {
+      lines.push(
+        observation.entriesSeen === 0 ? "No resource timing entries were recorded. The page may have loaded before the extension, or the buffer was cleared \u2014 reload the page with the extension already installed." : "No request to SwimCloud carried this swimmer's id. The page may pass the id in a POST body, which resource timing cannot show. Read the Network tab directly and send the request URL plus its payload."
+      );
+      return lines.join("\n");
+    }
+    lines.push(`${observation.candidates.length} candidate request(s):`);
+    for (const candidate of observation.candidates) {
+      lines.push(`  [${candidate.initiatorType}] ${candidate.url}`);
+      lines.push(`      template: ${candidate.template}`);
+    }
+    return lines.join("\n");
+  }
+
   // extensions/swimcloud-companion/src/swimmerTimes.ts
   var SWIMMER_TIMES_CONCURRENCY = 3;
   var SWIMMER_TIMES_STAGGER_MS = 400;
@@ -3730,7 +3783,42 @@
     );
     return button;
   }
+  var TIMES_ENDPOINT_BUTTON_ID = "omniswim-times-endpoint-button";
+  function mountTimesEndpointProbe() {
+    if (document.getElementById(TIMES_ENDPOINT_BUTTON_ID)) return;
+    const mount = document.getElementById("swimmer-profile-times");
+    if (mount === null) return;
+    const swimmerId = mount.getAttribute("data-swimmer-id") ?? "";
+    if (!/^\d+$/.test(swimmerId)) return;
+    const button = document.createElement("button");
+    button.id = TIMES_ENDPOINT_BUTTON_ID;
+    button.type = "button";
+    button.textContent = "Copy times endpoint for Omniswim";
+    button.style.cssText = "position:fixed;right:16px;bottom:64px;z-index:2147483646;padding:8px 12px;font:600 13px system-ui,sans-serif;color:#fff;background:#1f6feb;border:0;border-radius:6px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3)";
+    button.addEventListener("click", () => {
+      const entries = performance.getEntriesByType("resource").map((entry) => ({
+        name: entry.name,
+        initiatorType: entry.initiatorType
+      }));
+      const seasonIds = mount.getAttribute("data-season-ids");
+      const report = swimmerTimesEndpointReport({
+        pageUrl: location.href,
+        swimmerId,
+        ...seasonIds === null ? {} : { seasonIds },
+        candidates: discoverSwimmerTimesEndpoints(entries, swimmerId),
+        entriesSeen: entries.length
+      });
+      void navigator.clipboard.writeText(report).then(() => {
+        button.textContent = "Copied \u2014 paste it into Omniswim";
+      }).catch(() => {
+        button.textContent = "Clipboard refused \u2014 see the console";
+        console.info(report);
+      });
+    });
+    document.body.appendChild(button);
+  }
   function main() {
+    mountTimesEndpointProbe();
     if (document.getElementById(BUTTON_ID)) return;
     const meetId = meetIdFromCurrentPage();
     if (meetId === void 0) return;
@@ -4091,6 +4179,59 @@
  * `tests/swimCloudExtensionBoundedFetchPool.test.ts` therefore asserts the
  * actual concurrency behaviour (peak in-flight, start ordering, one failing
  * item not killing the pool) with no real delays and no browser.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Learning, rather than hardcoding, the request a swimmer's times page makes
+ * for its own data.
+ *
+ * ## The problem this solves
+ *
+ * `/swimmer/{id}/times/` builds its table in the browser. Fetching it returns a
+ * 15-17 KB shell — measured on all 73 of the stored pages that returned HTTP
+ * 200 — carrying nothing but a mount point:
+ *
+ *     <div id="swimmer-profile-times"
+ *          data-swimmer-id="1028842"
+ *          data-season-ids="[30, 29, 28, 27, 26, 25, 24, 23, 22]">
+ *
+ * and a loader for `/media/webpack/swimmerProfileTimes/index.{hash}.js`. That
+ * bundle then requests the times from somewhere. Fetching the page will never
+ * return them, at any pacing.
+ *
+ * ## Why the endpoint is discovered and never written down
+ *
+ * The obvious move is to read the bundle, find the URL, and put it in a
+ * constant. Two reasons not to:
+ *
+ * 1. A hashed bundle can change its endpoint on any deploy, and a constant
+ *    would then fetch a 404 on every swimmer — silently, since this pipeline
+ *    treats a missing page as a missing page.
+ * 2. `CLAUDE.md` is explicit that nothing about a source is written into a
+ *    `.ts` file on inference. The endpoint the page actually calls is a fact
+ *    about the page, so it comes from observing the page.
+ *
+ * So the endpoint is read out of the **Resource Timing** entries the browser
+ * already recorded for a page the coach is looking at. No request is
+ * intercepted, no script is injected into the page, and no new extension
+ * permission is needed: `performance.getEntriesByType('resource')` lists every
+ * URL the page fetched, `initiatorType` included, and a content script shares
+ * the page's `performance` timeline.
+ *
+ * It also means discovery only ever happens on a page a human opened, which is
+ * the rule `plans/STATE.md` sets for this site: touching it is "a deliberate
+ * human-present action, never an automated one".
+ *
+ * ## Unverified, and honest about it
+ *
+ * **No observation has been made yet.** The endpoint's shape, its method, and
+ * its response format are all unknown, and nothing here guesses at them. This
+ * module decides which observed requests are *candidates* and how to turn one
+ * into a reusable template; it does not claim to know what SwimCloud serves.
+ * {@link swimmerTimesEndpointReport} is written to be pasted back, so the first
+ * run answers the question with evidence.
  */
 /**
  * @license

@@ -80,6 +80,10 @@ import { decideResumeFromRoundTrip, partitionResumableSteps, type SwimCloudResum
 import { classifyCrawlPageOutcome } from './crawlErrorPolicy';
 import { runBoundedFetchPool } from './boundedFetchPool';
 import {
+  discoverSwimmerTimesEndpoints,
+  swimmerTimesEndpointReport,
+} from './timesEndpointDiscovery';
+import {
   SWIMMER_TIMES_CONCURRENCY,
   SWIMMER_TIMES_STAGGER_MS,
   classifySwimmerTimesOutcome,
@@ -2046,7 +2050,93 @@ function createCrawlerButton(): HTMLButtonElement {
   return button;
 }
 
+
+/* -------------------------------------------------------------------------- */
+/* Swimmer-times endpoint: observe, on a page the coach opened                 */
+/* -------------------------------------------------------------------------- */
+
+const TIMES_ENDPOINT_BUTTON_ID = 'omniswim-times-endpoint-button';
+
+/**
+ * On a swimmer's `/times/` page, offer one button that copies what the page
+ * asked for its own data.
+ *
+ * ## Why a button and not part of the crawl
+ *
+ * That page renders in the browser, so fetching it stores a 15-17 KB shell —
+ * 184 of 285 pages of the one measured crawl, 78.6% of all its traffic, for
+ * zero parsed rows. The data comes from a request the page's bundle makes, and
+ * nothing in this repo knows what that request is yet.
+ *
+ * This reads it from Resource Timing, which the browser has already recorded
+ * for the page in front of the coach. No request is intercepted, no script is
+ * injected, no new permission is needed — and, because it only runs on a page a
+ * human opened, it respects the rule that touching this site is a deliberate
+ * human-present action.
+ *
+ * The result is copied for a human to read rather than acted on. Building a
+ * crawl pass against a guessed endpoint shape would fetch nothing while
+ * reporting success, which is the failure the swimmer-times pass already has.
+ * See `timesEndpointDiscovery.ts`.
+ */
+function mountTimesEndpointProbe(): void {
+  if (document.getElementById(TIMES_ENDPOINT_BUTTON_ID)) return;
+
+  const mount = document.getElementById('swimmer-profile-times');
+  if (mount === null) return;
+  const swimmerId = mount.getAttribute('data-swimmer-id') ?? '';
+  if (!/^\d+$/.test(swimmerId)) return;
+
+  const button = document.createElement('button');
+  button.id = TIMES_ENDPOINT_BUTTON_ID;
+  button.type = 'button';
+  button.textContent = 'Copy times endpoint for Omniswim';
+  button.style.cssText =
+    'position:fixed;right:16px;bottom:64px;z-index:2147483646;padding:8px 12px;' +
+    'font:600 13px system-ui,sans-serif;color:#fff;background:#1f6feb;border:0;' +
+    'border-radius:6px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3)';
+
+  button.addEventListener('click', () => {
+    // Read at click time, not at load time: the table re-requests when the
+    // coach switches season or course tab, so a click after they have clicked
+    // around sees more of what the page really asks for.
+    const entries = performance
+      .getEntriesByType('resource')
+      .map((entry) => ({
+        name: entry.name,
+        initiatorType: (entry as PerformanceResourceTiming).initiatorType,
+      }));
+    const seasonIds = mount.getAttribute('data-season-ids');
+    const report = swimmerTimesEndpointReport({
+      pageUrl: location.href,
+      swimmerId,
+      ...(seasonIds === null ? {} : { seasonIds }),
+      candidates: discoverSwimmerTimesEndpoints(entries, swimmerId),
+      entriesSeen: entries.length,
+    });
+
+    void navigator.clipboard
+      .writeText(report)
+      .then(() => {
+        button.textContent = 'Copied — paste it into Omniswim';
+      })
+      .catch(() => {
+        // Clipboard can be refused when the document is not focused. The
+        // report is still worth having, so it goes to the console rather than
+        // being lost.
+        button.textContent = 'Clipboard refused — see the console';
+        console.info(report);
+      });
+  });
+
+  document.body.appendChild(button);
+}
+
 function main(): void {
+  // Runs first, and on a different kind of page: a swimmer profile is not
+  // meet-scoped, so the early return below would skip it.
+  mountTimesEndpointProbe();
+
   if (document.getElementById(BUTTON_ID)) return; // Already injected.
 
   const meetId = meetIdFromCurrentPage();
