@@ -208,8 +208,10 @@ export type SwimCloudParseWarningCode =
   | 'unmapped-stroke'
   /** A roster/results row named an athlete with no `/swimmer/{id}/` link. */
   | 'missing-athlete-link'
-  /** A relay row listed no legs. Expected if SwimCloud does not publish them at all. */
+  /** A relay row listed no legs. SwimCloud does publish them — a per-event page serves them in a table behind its own "Show names" toggle — so this is a genuine gap, not the expected state. */
   | 'relay-legs-absent'
+  /** A per-event page carried no `js-event-item` event index, so it cannot enumerate the rest of the meet. Never read as "the meet has no events". */
+  | 'event-index-absent'
   /** A row's event label said "Yard" but an explicit course column disagreed. The label wins; the disagreement is surfaced rather than silently resolved either way. */
   | 'course-column-contradicts-label'
   /** A Points cell held something that isn't a non-negative number. Preserved verbatim in `rawPointsToken`; `points` stays absent rather than guessed. */
@@ -3887,6 +3889,141 @@ export interface SwimCloudMeetEventRound {
   readonly rowCount: number;
 }
 
+/** One entry of a meet's own event index — see {@link readMeetEventIndex}. */
+export interface SwimCloudMeetEventIndexEntry {
+  /** The `/event/{n}/` reference, as printed in the anchor's href. */
+  readonly eventRef: string;
+  /**
+   * The event's printed name, verbatim from the anchor's own `title`
+   * attribute, e.g. `'1M Diving Men Finals'`.
+   *
+   * **Not a key.** Three pairs of the 57 entries on the real capture share a
+   * label (`event/400/` and `event/938/` are both "100 Breast Women"),
+   * because SwimCloud numbers a post-meet time-trial session above the meet's
+   * program and labels it the same as the programmed event. Only
+   * {@link eventRef} identifies an entry.
+   */
+  readonly label: string;
+  /**
+   * The number printed in the entry's own status badge, e.g. `'9'`.
+   *
+   * Recorded verbatim, never used to derive a ref. On the real capture it
+   * equals the ref for all 57 entries, but nothing here depends on that: the
+   * ref comes from the href alone.
+   */
+  readonly printedNumber?: string;
+  /**
+   * The status word on the entry, verbatim — `'Scored'` on all 57 entries of
+   * the real capture.
+   *
+   * Recorded rather than interpreted. Nothing here decides an event was
+   * unscored from this field, because no capture has shown any other value, so
+   * the vocabulary is unknown. A second word appearing is a finding to read,
+   * not a condition to branch on.
+   */
+  readonly status?: string;
+}
+
+const EVENT_INDEX_ITEM_MARKER = /\bjs-event-item\b/;
+const EVENT_INDEX_ANCHOR = /<a\b([^>]*)>([\s\S]*?)<\/a>/g;
+const EVENT_INDEX_HREF = /href="\/results\/(\d+)\/event\/(\d+)\/?"/;
+const EVENT_INDEX_LABEL = /class="c-events__link-body"\s+title="([^"]*)"/;
+const EVENT_INDEX_STATUS = /class="c-events__link-start"[^>]*title="([^"]*)"/;
+const EVENT_INDEX_NUMBER = /class="c-event-status[^"]*"\s*>([\s\S]*?)<\/span>/;
+
+/**
+ * Every event of a meet, read from the event index a results page prints for
+ * itself.
+ *
+ * ## Why this exists: the swims-derived event list was incomplete
+ *
+ * Until now the crawler learned a meet's events by parsing all 42 per-team
+ * swims pages and collecting `swims[].event.eventRef`. Measured against the
+ * archived crawl of meet 356467, that produced **51** refs. Every one of the
+ * 51 stored event pages prints an index of **57**, and the six it never
+ * mentioned are real events that were simply never fetched:
+ *
+ *     9    1M Diving Men Finals
+ *     29   3M Diving Men Finals
+ *     18   3M Diving Women Finals
+ *     40   1M Diving Women Finals
+ *     403  50 Free Mixed
+ *     503  200 Fly Mixed
+ *
+ * Four diving events and two mixed relays. Diving points count toward the team
+ * score in every format this repo models, so a meet imported from the swims
+ * lists was missing scoring events outright — not mis-scoring them, missing
+ * them. A diver does not appear on a swims list, so no number of swims pages
+ * would ever have found those four.
+ *
+ * ## Why an anchor's `title`, not its text
+ *
+ * The anchor repeats its label in a desktop `<div>` and a mobile one, so its
+ * flattened text reads "1 1M Diving Men Finals 1M Diving Men Finals". The
+ * `title` attribute on `c-events__link-body` carries it once. Reading the
+ * attribute is not a shortcut around the text — it is the only place the label
+ * appears exactly once.
+ *
+ * ## Scope of what is proven
+ *
+ * All 51 stored event pages of meet 356467 print the identical 57-entry index,
+ * so **any one event page enumerates the whole meet**. Nothing here assumes
+ * the index appears on other page types; a caller hands this whatever HTML it
+ * has and reads the length of the result. An empty array means this page
+ * carried no index — which a caller must not read as "this meet has no
+ * events", and {@link SwimCloudMeetEventResultsParse.eventIndex} keeps that
+ * distinction by warning instead of returning a silent empty.
+ *
+ * `meetId` is required and matched against each href, so a link to another
+ * meet's event — a "related meets" card, say — can never enter the list.
+ */
+export function readMeetEventIndex(
+  html: string,
+  meetId: SwimCloudMeetId,
+): readonly SwimCloudMeetEventIndexEntry[] {
+  const entries: SwimCloudMeetEventIndexEntry[] = [];
+  const seen = new Set<string>();
+  const cleaned = stripNonContent(html);
+
+  for (const match of cleaned.matchAll(EVENT_INDEX_ANCHOR)) {
+    const attrs = match[1] ?? '';
+    const inner = match[2] ?? '';
+    if (!EVENT_INDEX_ITEM_MARKER.test(attrs)) {
+      continue;
+    }
+
+    const href = EVENT_INDEX_HREF.exec(attrs);
+    // An index item whose href names another meet is not this meet's event.
+    if (href === null || href[1] !== meetId) {
+      continue;
+    }
+    const eventRef = href[2] as string;
+    if (seen.has(eventRef)) {
+      continue;
+    }
+    seen.add(eventRef);
+
+    const labelMatch = EVENT_INDEX_LABEL.exec(inner);
+    const statusMatch = EVENT_INDEX_STATUS.exec(inner);
+    const numberMatch = EVENT_INDEX_NUMBER.exec(inner);
+    const label =
+      labelMatch === null ? '' : collapseWhitespace(decodeHtmlEntities(labelMatch[1] as string));
+    const status =
+      statusMatch === null ? undefined : collapseWhitespace(decodeHtmlEntities(statusMatch[1] as string));
+    const printedNumber =
+      numberMatch === null ? undefined : collapseWhitespace(htmlToText(numberMatch[1] as string));
+
+    entries.push({
+      eventRef,
+      label,
+      ...(printedNumber === undefined || printedNumber.length === 0 ? {} : { printedNumber }),
+      ...(status === undefined || status.length === 0 ? {} : { status }),
+    });
+  }
+
+  return entries;
+}
+
 /** What {@link parseMeetEventResultsHtml} extracts. */
 export interface SwimCloudMeetEventResultsParse {
   readonly swimCloudMeetId: SwimCloudMeetId;
@@ -3901,6 +4038,17 @@ export interface SwimCloudMeetEventResultsParse {
   readonly eventLabel?: string;
   /** From the printed word on the gender dropdown's active item — never from the event id. */
   readonly gender: SwimCloudGenderOrUnknown;
+  /**
+   * Every event of this meet, from the index the page prints for itself —
+   * see {@link readMeetEventIndex}. This page is one of them.
+   *
+   * This is what makes an event-first crawl possible: one fetched event page
+   * names all 57 events of the real meet, where collecting refs from all 42
+   * per-team swims pages named only 51 and silently omitted every diving
+   * event. Absent when the page carried no index, which is reported as
+   * `event-index-absent` rather than returned as an empty list.
+   */
+  readonly eventIndex?: readonly SwimCloudMeetEventIndexEntry[];
   /** One per round table, in printed order (which is program order, not chronological order). */
   readonly rounds: readonly SwimCloudMeetEventRound[];
   /** Data rows seen across every round table, including any that failed to parse. */
@@ -4021,6 +4169,18 @@ export function parseMeetEventResultsHtml(
   const meetCourse = readPrintedCourse(cleaned) ?? options.meetCourse;
   const dates = readMeetDateRange(cleaned, warnings);
 
+  // Read from the RAW html, not from `cleaned`: the index lives outside the round
+  // tables and nothing about it needs stripping. readMeetEventIndex strips
+  // comments and scripts itself.
+  const eventIndex = readMeetEventIndex(html, meetId);
+  if (eventIndex.length === 0) {
+    warnings.push({
+      code: 'event-index-absent',
+      message:
+        'This per-event page prints no js-event-item event index, so it cannot enumerate the rest of the meet. All 51 stored pages of the real capture print one, so a page without it is an unseen page shape rather than a meet with no events.',
+    });
+  }
+
   const eventId = `${meetId}:event:${eventRef}`;
   const parsedLabel = readEventPageEventLabel(eventLabel ?? '');
   const event: SwimCloudEvent = {
@@ -4084,6 +4244,7 @@ export function parseMeetEventResultsHtml(
       event,
       ...(eventLabel === undefined ? {} : { eventLabel }),
       gender,
+      ...(eventIndex.length === 0 ? {} : { eventIndex }),
       rounds,
       rowCount,
     },

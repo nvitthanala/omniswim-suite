@@ -153,6 +153,17 @@ export interface SwimCloudEventResultsPlan {
   readonly withoutEventRef: number;
   /** Rows naming an event reference already seen. This is the large number, and it is the point — see the module header. */
   readonly duplicates: number;
+  /**
+   * How many of {@link steps} came from the meet's own printed event index
+   * rather than from a swims row.
+   *
+   * Equal to `steps.length` on a meet whose pages print an index, because the
+   * index is a superset of what the swims rows name: measured on meet 356467
+   * it holds all 51 swims-derived refs plus six the rows never mentioned (four
+   * diving events and two mixed relays). Zero means no page carried an index
+   * and the plan is swims-derived, which is the pre-2026-09-22 behaviour.
+   */
+  readonly fromEventIndex: number;
 }
 
 /**
@@ -167,13 +178,23 @@ export interface SwimCloudEventResultsPlan {
 export function planEventResultsSteps(
   meetId: SwimCloudMeetId,
   swimsPages: readonly (readonly SwimCloudSwimEventRef[])[],
+  indexEventRefs: readonly string[] = [],
 ): SwimCloudEventResultsPlan {
   const collected = collectEventRefs(swimsPages);
+  // Index refs first, so the fetch order is the meet's own program order when
+  // an index exists. `planMeetEventResults` dedupes with first occurrence
+  // winning, so a ref in both sources keeps its index position and the swims
+  // rows only ever append what the index did not name.
+  const deduplicatedIndexRefs = [...new Set(indexEventRefs)];
   return {
-    steps: planMeetEventResults({ meetId, eventRefs: collected.eventRefs }),
+    steps: planMeetEventResults({
+      meetId,
+      eventRefs: [...deduplicatedIndexRefs, ...collected.eventRefs],
+    }),
     swimsSeen: collected.swimsSeen,
     withoutEventRef: collected.withoutEventRef,
     duplicates: collected.duplicates,
+    fromEventIndex: deduplicatedIndexRefs.length,
   };
 }
 

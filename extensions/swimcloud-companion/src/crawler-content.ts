@@ -71,6 +71,7 @@ import {
   parseMeetTopTeamsHtml,
   parseTeamMeetSwimsHtml,
   parseTeamRosterHtml,
+  readMeetEventIndex,
 } from '@omniswim/swimcloud/parser';
 import type { SwimCloudTeamMeetSwimsParse } from '@omniswim/swimcloud/parser';
 import type { SwimCloudCaptureSubject, SwimCloudMeetId, SwimCloudTeamId } from '@omniswim/swimcloud/entities';
@@ -623,6 +624,18 @@ interface TeamDiscoveryOutcome {
    * rather than implying both were read.
    */
   readonly genders: readonly string[];
+  /**
+   * Every `/event/{n}/` reference the discovery pages printed in their own
+   * event index, in printed order.
+   *
+   * Empty when neither discovery page carried one. That is not a claim that
+   * the meet has no events — it is the signal to fall back to the swims pass
+   * for discovery, which is what `eventListAlreadyKnown` decides.
+   *
+   * Free to collect: these pages are fetched for their team links regardless,
+   * and this reads the bytes already in hand.
+   */
+  readonly eventRefs: readonly string[];
 }
 
 /**
@@ -635,6 +648,10 @@ interface TeamDiscoveryOutcome {
 async function discoverTeams(meetId: SwimCloudMeetId, retrievedAt: () => string): Promise<TeamDiscoveryOutcome> {
   const primarySteps = planMeetTeamDiscovery(meetId);
   const primaryByGender: Array<{ gender: string; teamIds: string[] }> = [];
+  // Whichever discovery page happens to print the meet's event index. A Set
+  // because both genders' pages print the same 57 entries when they print any,
+  // and the union across page shapes is the honest read.
+  const eventRefs = new Set<string>();
   let primaryFailed = false;
 
   for (const step of primarySteps) {
@@ -653,6 +670,7 @@ async function discoverTeams(meetId: SwimCloudMeetId, retrievedAt: () => string)
       primaryFailed = true;
       break;
     }
+    for (const entry of readMeetEventIndex(page.html, meetId)) eventRefs.add(entry.eventRef);
     primaryByGender.push({
       gender: step.gender ?? '',
       teamIds: parsed.data.teams.map((t) => t.swimCloudTeamId),
@@ -664,6 +682,7 @@ async function discoverTeams(meetId: SwimCloudMeetId, retrievedAt: () => string)
       teamIds: unionTeamIds(primaryByGender[0]?.teamIds ?? [], primaryByGender[1]?.teamIds ?? []),
       source: 'topteams',
       genders: primaryByGender.map((g) => g.gender).filter((g) => g.length > 0),
+      eventRefs: [...eventRefs],
     };
   }
 
@@ -682,6 +701,7 @@ async function discoverTeams(meetId: SwimCloudMeetId, retrievedAt: () => string)
       track: 'browser-extension',
     });
     if (!parsed.ok) continue;
+    for (const entry of readMeetEventIndex(page.html, meetId)) eventRefs.add(entry.eventRef);
     fallbackByGender.push({
       gender: step.gender ?? '',
       teamIds: parsed.data.teams.map((t) => t.swimCloudTeamId),
@@ -691,6 +711,7 @@ async function discoverTeams(meetId: SwimCloudMeetId, retrievedAt: () => string)
     teamIds: unionTeamIds(fallbackByGender[0]?.teamIds ?? [], fallbackByGender[1]?.teamIds ?? []),
     source: 'meet-root-links-fallback',
     genders: fallbackByGender.map((g) => g.gender).filter((g) => g.length > 0),
+    eventRefs: [...eventRefs],
   };
 }
 
@@ -857,7 +878,24 @@ async function runCrawl(meetId: SwimCloudMeetId, panel: PanelHandles, control: C
   //
   // Step 1 of the paged fetch is `swimsSteps`: page 1 of every team+gender, to
   // learn each one's total page count before committing to the full plan.
-  const structural = planScopedMeetCrawl({ meetId, teamIds: confirmedTeamIds, scope });
+  // The meet's own event index, if a discovery page printed one. When it did,
+  // the swims pass has nothing left to discover and `planScopedMeetCrawl` plans
+  // none of its 42 pages; when it did not, the swims pass runs exactly as
+  // before and this stays empty. Either way nothing is guessed.
+  const indexEventRefs = discovery.eventRefs;
+  const eventListAlreadyKnown = indexEventRefs.length > 0;
+  const structural = planScopedMeetCrawl({
+    meetId,
+    teamIds: confirmedTeamIds,
+    scope,
+    eventListAlreadyKnown,
+  });
+  if (eventListAlreadyKnown) {
+    renderResumeNote(
+      panel,
+      `This meet publishes its own list of ${indexEventRefs.length} events, so the per-team swims pages are not fetched — the event pages carry the same swims plus the round and the meet score. That is ${indexEventRefs.length} pages instead of ${confirmedTeamIds.length * 2} swims pages and ${indexEventRefs.length} event pages.`,
+    );
+  }
   const page1Steps = structural.swimsSteps;
   // Planned up front, fetched in pass 3. Its size is known now (`teamCount × 2`,
   // or zero when the scope declines rosters), which is why the very first
@@ -939,6 +977,7 @@ async function runCrawl(meetId: SwimCloudMeetId, panel: PanelHandles, control: C
   // Through the same scope gate as step 1, so a scope that declined the swims
   // pass cannot acquire one here.
   const fullSteps = planScopedMeetCrawl({
+    eventListAlreadyKnown,
     meetId,
     teamIds: confirmedTeamIds,
     scope,
@@ -1028,6 +1067,7 @@ async function runCrawl(meetId: SwimCloudMeetId, panel: PanelHandles, control: C
           ...swimsEventRefs,
           resumeDecision.storedEventRefs.map((eventRef: string) => ({ event: { eventRef } })),
         ],
+        indexEventRefs,
         swimsPagesResumeSkipped: resume.alreadyCaptured.length,
         alreadyCaptured,
         plannedBeforeThisPass: pagesTotal + rosterSteps.length,
@@ -1126,6 +1166,14 @@ interface EventResultsPassInput {
   readonly swimsPages: readonly (readonly SwimCloudSwimEventRef[])[];
   /** How many swims-list pages this run skipped because the store already held them. */
   readonly swimsPagesResumeSkipped: number;
+  /**
+   * Event references the meet printed in its own index on a page this crawl
+   * already fetched for another reason — see `readMeetEventIndex`.
+   *
+   * Empty when no such page carried one, in which case this pass behaves
+   * exactly as it did before: swims-derived refs only.
+   */
+  readonly indexEventRefs: readonly string[];
   readonly alreadyCaptured: ReadonlySet<string>;
   /** Pages the plan already committed to before this pass, so the corrected total is additive. */
   readonly plannedBeforeThisPass: number;
@@ -1171,54 +1219,76 @@ interface EventResultsPassResult {
  * crawl a coach cancels halfway should have the scoring data, not the
  * enrichment.
  *
+ * ## Discovery is part of the pass
+ *
+ * **Changed 2026-09-22.** The list of events is no longer fixed when the pass
+ * starts. Every per-event page prints the meet's own event index — all 57
+ * entries of meet 356467, identically, on each of the 51 stored pages — so the
+ * pass runs in rounds: fetch what is known, read each page's index, queue
+ * anything new, repeat until a round adds nothing. It converges in two rounds,
+ * because the first page to land names them all.
+ *
+ * This is what closes a real gap rather than merely saving requests. Collecting
+ * refs from the 42 swims lists produced 51 events; the index names 57. The six
+ * missing were four diving events and two mixed relays, and the diving four
+ * could never have been found that way at any cost, because **a diver has no
+ * swims** and so appears on no team's swims list. Diving points count toward
+ * the team score in every format this repo models, so those meets were
+ * importing with whole scoring events absent — which is worse than scoring one
+ * wrong, because no total looks suspicious.
+ *
+ * The refs in `indexEventRefs` are the head start: a discovery page that
+ * already printed the index means round 1 is the complete list and no swims
+ * page is fetched at all.
+ *
  * ## What a resumed crawl sees, and what it does not
  *
- * Event references come from swims-list pages **read in this run**. A resumed
- * crawl skips the pages the store already holds, so their references are not in
- * this run's memory and their event pages are not planned. That is stated on
- * the panel rather than hidden, and it degrades safely: an event page that was
- * never fetched simply leaves those swims unresolved, and the import excludes
- * them with a named reason — exactly the behaviour that existed before this
- * pass. It never produces a wrong round.
+ * On a swims-derived plan, event references come from swims-list pages **read
+ * in this run**. A resumed crawl skips the pages the store already holds, so
+ * their references are not in this run's memory. That is stated on the panel
+ * rather than hidden, and it degrades safely: an event page that was never
+ * fetched leaves those swims unresolved, and the import excludes them with a
+ * named reason. It never produces a wrong round.
  *
  * Re-reading every swims page to close that gap is not the same trade
  * {@link runRosterPass} takes. A roster pass is `teamCount × 2` pages; a swims
  * pass is that many times the page count of every team, and at 3 s a page a
  * resumed crawl would pay for the whole original crawl again.
+ *
+ * The index removes the problem instead of trading against it. One event page —
+ * stored refs are enough to fetch one — re-establishes the full list, so a
+ * resumed crawl no longer depends on what this run happened to read.
  */
 async function runEventResultsPass(input: EventResultsPassInput): Promise<EventResultsPassResult> {
   const { panel, subject, relay, control } = input;
 
-  const plan = planEventResultsSteps(input.meetId, input.swimsPages);
-  const partition = partitionResumableSteps(plan.steps, input.alreadyCaptured);
-  if (plan.steps.length === 0) {
+  // Every ref this pass knows about. It grows: each fetched event page prints
+  // the meet's whole event index, so the first page that lands can add events
+  // no swims row ever named. See the "Discovery is part of the pass" section
+  // above.
+  const knownRefs = new Set<string>(input.indexEventRefs);
+  const initialPlan = planEventResultsSteps(input.meetId, input.swimsPages, input.indexEventRefs);
+  for (const step of initialPlan.steps) {
+    if (step.eventRef !== undefined) knownRefs.add(step.eventRef);
+  }
+
+  if (initialPlan.steps.length === 0) {
     renderResumeNote(
       panel,
-      'No swim on this meet\'s lists carried an event link, so no per-event results pages were planned. Prelims and finals cannot be told apart in this capture.',
+      'No page carried this meet\'s event index and no swim on its lists carried an event link, so no per-event results pages were planned. Prelims and finals cannot be told apart in this capture.',
     );
     return { total: 0, done: 0, stoppedMessage: '', stopped: false };
   }
 
-  const planLine = formatEventResultsPlanLine(plan);
+  const planLine = formatEventResultsPlanLine(initialPlan);
   if (planLine.length > 0) renderResumeNote(panel, planLine);
-  if (input.swimsPagesResumeSkipped > 0) {
+  if (input.swimsPagesResumeSkipped > 0 && initialPlan.fromEventIndex === 0) {
+    // Only a concern on a swims-derived plan. When the meet's own index supplied
+    // the list, a skipped swims page cannot hide an event from this pass —
+    // which is the second reason event-first is better, not just cheaper.
     renderWarning(
       panel,
       `${input.swimsPagesResumeSkipped} swims page(s) were skipped as already captured, so any event only they referenced is not fetched this run. Those swims import with their round unresolved, never with a guessed one.`,
-    );
-  }
-
-  const corrected = await sendToBackground({
-    type: 'omniswim-swimcloud-open-capture',
-    subject,
-    plannedPageCount: input.plannedBeforeThisPass + plan.steps.length,
-    teamDiscovery: input.teamDiscovery,
-    crawlScope: input.crawlScope,
-  });
-  if (!isRoundTripOk(corrected)) {
-    renderWarning(
-      panel,
-      `${roundTripFailureText('Correcting the planned page count', corrected)} The crawl continues; the app may show a stale page total.`,
     );
   }
 
@@ -1226,68 +1296,129 @@ async function runEventResultsPass(input: EventResultsPassInput): Promise<EventR
   let failed = 0;
   let notServed = 0;
   let stoppedMessage = '';
+  let planTotal = initialPlan.steps.length;
+  let resumeSkipped = 0;
+  let announcedTotal = 0;
+  // Keyed by URL, so a ref that arrives from both the index and a swims row is
+  // fetched once, and a ref discovered mid-pass is never re-queued.
+  const attempted = new Set<string>();
+
   const progress = (): SwimCloudSwimmerTimesProgressState => ({
     fetched,
-    total: plan.steps.length,
-    alreadyCaptured: partition.alreadyCaptured.length,
+    total: planTotal,
+    alreadyCaptured: resumeSkipped,
     failed,
     notServed,
     concurrency: EVENT_RESULTS_CONCURRENCY,
     staggerMs: EVENT_RESULTS_STAGGER_MS,
   });
-  renderEventResults(panel, progress());
 
-  await runBoundedFetchPool<SwimCloudCrawlStep>({
-    items: partition.toFetch,
-    concurrency: EVENT_RESULTS_CONCURRENCY,
-    staggerMs: EVENT_RESULTS_STAGGER_MS,
-    sleep,
-    shouldStop: () => control.cancelled || stoppedMessage.length > 0,
-    beforeStart: () => waitWhilePaused(control),
-    run: async (step) => {
-      const page = await fetchPageForPool(step.canonicalUrl);
-      fetched += 1;
-
-      if (page === undefined) {
-        failed += 1;
-      } else {
-        if (page.httpStatus >= 400) notServed += 1;
-        const relayOutcome = await relayFetchedPage(
-          panel,
-          subject,
-          step.canonicalUrl,
-          page,
-          input.retrievedAt(),
-          relay,
-        );
-        if (relayOutcome !== 'landed') failed += 1;
-        if (relayOutcome === 'streak-stop') {
-          stoppedMessage =
-            'Stopped fetching event results: several pages in a row could not be handed to the Omniswim app. The meet results already captured are unaffected.';
-        }
-      }
-
-      // Same reasoning as pass 4's: `classifyCrawlPageOutcome` would stop the
-      // whole crawl on a 5xx, which is right for a results page and wrong for
-      // one event's round labels. `classifyEventResultsOutcome` owns that call.
-      const verdict = classifyEventResultsOutcome(
-        page === undefined ? { kind: 'network-error' } : { kind: 'http-status', httpStatus: page.httpStatus },
+  const announceTotal = async (): Promise<void> => {
+    if (planTotal === announcedTotal) return;
+    announcedTotal = planTotal;
+    const corrected = await sendToBackground({
+      type: 'omniswim-swimcloud-open-capture',
+      subject,
+      plannedPageCount: input.plannedBeforeThisPass + planTotal,
+      teamDiscovery: input.teamDiscovery,
+      crawlScope: input.crawlScope,
+    });
+    if (!isRoundTripOk(corrected)) {
+      renderWarning(
+        panel,
+        `${roundTripFailureText('Correcting the planned page count', corrected)} The crawl continues; the app may show a stale page total.`,
       );
-      if (verdict.action === 'record-and-stop-phase') {
-        stoppedMessage = verdict.message;
-        panel.retryButton.hidden = false;
-      }
+    }
+  };
 
-      renderEventResults(panel, progress());
-    },
-  });
+  // Rounds, not one pool: a page fetched in round 1 can name events that were
+  // not in the plan when round 1 started. Terminating because `attempted` only
+  // grows and a ref is queued at most once, so each round is strictly smaller
+  // than the set of refs still unattempted. In practice it converges in two:
+  // the first event page to land names all of them.
+  while (!control.cancelled && stoppedMessage.length === 0) {
+    const refsThisRound = [...knownRefs];
+    const planned = planEventResultsSteps(input.meetId, input.swimsPages, refsThisRound);
+    const outstanding = planned.steps.filter((step) => !attempted.has(step.canonicalUrl));
+    if (outstanding.length === 0) break;
 
-  const done = partition.alreadyCaptured.length + fetched;
+    const partition = partitionResumableSteps(outstanding, input.alreadyCaptured);
+    for (const step of outstanding) attempted.add(step.canonicalUrl);
+    resumeSkipped += partition.alreadyCaptured.length;
+    planTotal = planned.steps.length;
+    await announceTotal();
+    renderEventResults(panel, progress());
+
+    await runBoundedFetchPool<SwimCloudCrawlStep>({
+      items: partition.toFetch,
+      concurrency: EVENT_RESULTS_CONCURRENCY,
+      staggerMs: EVENT_RESULTS_STAGGER_MS,
+      sleep,
+      shouldStop: () => control.cancelled || stoppedMessage.length > 0,
+      beforeStart: () => waitWhilePaused(control),
+      run: async (step) => {
+        const page = await fetchPageForPool(step.canonicalUrl);
+        fetched += 1;
+
+        if (page === undefined) {
+          failed += 1;
+        } else {
+          if (page.httpStatus >= 400) notServed += 1;
+          // Read the index before relaying: this is the only moment the content
+          // script holds the bytes. A 4xx/5xx body carries no index, and
+          // readMeetEventIndex returns nothing for it rather than guessing.
+          if (page.httpStatus < 400) {
+            for (const entry of readMeetEventIndex(page.html, input.meetId)) {
+              knownRefs.add(entry.eventRef);
+            }
+          }
+          const relayOutcome = await relayFetchedPage(
+            panel,
+            subject,
+            step.canonicalUrl,
+            page,
+            input.retrievedAt(),
+            relay,
+          );
+          if (relayOutcome !== 'landed') failed += 1;
+          if (relayOutcome === 'streak-stop') {
+            stoppedMessage =
+              'Stopped fetching event results: several pages in a row could not be handed to the Omniswim app. The meet results already captured are unaffected.';
+          }
+        }
+
+        // Same reasoning as pass 4's: `classifyCrawlPageOutcome` would stop the
+        // whole crawl on a 5xx, which is right for a results page and wrong for
+        // one event's round labels. `classifyEventResultsOutcome` owns that call.
+        const verdict = classifyEventResultsOutcome(
+          page === undefined ? { kind: 'network-error' } : { kind: 'http-status', httpStatus: page.httpStatus },
+        );
+        if (verdict.action === 'record-and-stop-phase') {
+          stoppedMessage = verdict.message;
+          panel.retryButton.hidden = false;
+        }
+
+        renderEventResults(panel, progress());
+      },
+    });
+  }
+
+  // Said out loud, because it is the whole point of reading the index: a coach
+  // who ran this before should see the number go up, and know why.
+  const discovered = planTotal - initialPlan.steps.length;
+  if (discovered > 0) {
+    renderResumeNote(
+      panel,
+      `${discovered} further event page(s) were found on the event pages themselves and fetched. A per-team swims list never names a diving event, because a diver has no swims, so those events were previously missed entirely.`,
+    );
+  }
+
+  const done = resumeSkipped + fetched;
   return {
-    total: plan.steps.length,
+    total: planTotal,
     done,
     stoppedMessage,
-    stopped: stoppedMessage.length > 0 || control.cancelled || done !== plan.steps.length,
+    stopped: stoppedMessage.length > 0 || control.cancelled || done !== planTotal,
   };
 }
 

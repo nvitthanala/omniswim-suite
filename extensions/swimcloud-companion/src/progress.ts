@@ -404,8 +404,25 @@ export function formatEventResultsPlanLine(plan: {
   readonly swimsSeen: number;
   readonly withoutEventRef: number;
   readonly duplicates: number;
+  /** Steps that came from the meet's own event index. Absent on a swims-derived plan. */
+  readonly fromEventIndex?: number;
 }): string {
+  // An event-first plan has no swims rows to explain, so every branch below is
+  // empty and the coach would be shown nothing at all before a 3-minute pass.
+  // Say where the list came from instead, and name the events the swims lists
+  // would have missed, because "57 pages" against a 42-event program looks
+  // wrong until you know the meet also ran time trials.
+  const fromIndex = plan.fromEventIndex ?? 0;
+  if (fromIndex > 0 && plan.swimsSeen === 0) {
+    return `${plan.steps.length} event results pages, from the meet's own event index — every event it lists, diving and time trials included, not only the ones a team's swims list names.`;
+  }
+
   const parts: string[] = [];
+  if (fromIndex > 0) {
+    parts.push(
+      `${fromIndex} came from the meet's own event index, which names events no swims row does`,
+    );
+  }
   if (plan.withoutEventRef > 0) {
     parts.push(
       `${plan.withoutEventRef} ${plan.withoutEventRef === 1 ? 'swim carries' : 'swims carry'} no event link, so ${plan.withoutEventRef === 1 ? 'its round cannot' : 'their rounds cannot'} be resolved`,

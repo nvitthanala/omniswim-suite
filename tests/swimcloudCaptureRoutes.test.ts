@@ -1015,7 +1015,12 @@ describe('capture parse route', () => {
       expect(body.parses).toStrictEqual([]);
       expect(body.rosters).toStrictEqual([]);
       expect(body.swimmerTimes).toStrictEqual([]);
-      expect(body.warnings).toStrictEqual([]);
+      // The stored bytes are the trimmed F9 fixture, which carries no Events
+      // sidebar, so the parser correctly reports that this page cannot
+      // enumerate the meet. Pinned exactly: any other warning still fails.
+      expect(body.warnings).toStrictEqual([
+        'https://www.swimcloud.com/results/356467/event/26/: event-index-absent — This per-event page prints no js-event-item event index, so it cannot enumerate the rest of the meet. All 51 stored pages of the real capture print one, so a page without it is an unseen page shape rather than a meet with no events.',
+      ]);
 
       const [event] = body.eventResults;
       expect(event.swimCloudMeetId).toBe('356467');
@@ -1097,7 +1102,12 @@ describe('capture parse route', () => {
       expect(status).toBe(200);
       expect(body.parses).toHaveLength(1);
       expect(body.eventResults).toHaveLength(1);
-      expect(body.warnings).toStrictEqual([]);
+      // The trimmed F9 fixture carries no Events sidebar, so the event page
+      // reports that it cannot enumerate the meet. Pinned exactly: any other
+      // warning still fails this test.
+      expect(body.warnings).toStrictEqual([
+        'https://www.swimcloud.com/results/356467/event/26/: event-index-absent — This per-event page prints no js-event-item event index, so it cannot enumerate the rest of the meet. All 51 stored pages of the real capture print one, so a page without it is an unseen page shape rather than a meet with no events.',
+      ]);
 
       // Avery Henke's two "100 Y Breast" rows on the swims list. Both read
       // "1st", in two different pools, which is why the swims list's own Place

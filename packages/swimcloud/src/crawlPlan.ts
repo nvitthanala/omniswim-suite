@@ -726,6 +726,33 @@ export interface SwimCloudScopedMeetCrawlInput {
   readonly scope: SwimCloudCrawlScope;
   /** Passed straight through to {@link planMeetTeamSwims}; see that input's doc comment. */
   readonly knownTotalPages?: Readonly<Record<string, number>>;
+  /**
+   * True when the meet's own event list is already in hand, so the swims pass
+   * is not needed to discover it.
+   *
+   * ## Why this makes 42 requests disappear
+   *
+   * The swims pass had two jobs: carry the swim rows, and name the events so
+   * the `meetEvent` pass could be planned. A per-event page does the first job
+   * strictly better — it also names the round and the real meet `Score`, which
+   * a swims row never does — so the only job left was discovery. A meet page
+   * that prints its own event index does that job for free, and 42 requests
+   * stop happening.
+   *
+   * ## Why the pass stays declared in the scope
+   *
+   * The scope still names `meetTeamSwims` and {@link crawlScopeDependencyGaps}
+   * still checks it, because it is the fallback: a page shape that prints no
+   * index leaves this false and the swims pass runs exactly as before,
+   * discovering the 51 refs its rows name. Declaring the prerequisite and then
+   * planning none of its pages is the honest encoding of "there is a cheaper
+   * source this time".
+   *
+   * **Never set this true on a guess.** An empty index means the page carried
+   * none; planning zero swims pages on that basis would crawl a meet whose
+   * event list nothing ever supplied.
+   */
+  readonly eventListAlreadyKnown?: boolean;
 }
 
 /**
@@ -783,7 +810,13 @@ export function planScopedMeetCrawl(input: SwimCloudScopedMeetCrawlInput): SwimC
   }
   return {
     scope: input.scope,
-    swimsSteps: crawlScopePlansPass(input.scope, 'meetTeamSwims')
+    // Planned only when the scope asks for it AND the event list is not
+    // already known — see {@link SwimCloudScopedMeetCrawlInput.eventListAlreadyKnown}.
+    // On the one measured crawl this pass was 42 of 285 pages whose only
+    // remaining purpose was naming events, and it named 51 where the meet's own
+    // index names 57.
+    swimsSteps:
+      crawlScopePlansPass(input.scope, 'meetTeamSwims') && input.eventListAlreadyKnown !== true
       ? planMeetTeamSwims({
           meetId: input.meetId,
           teamIds: input.teamIds,

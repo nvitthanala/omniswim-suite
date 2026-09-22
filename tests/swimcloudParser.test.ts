@@ -893,12 +893,19 @@ describe('parseMeetEventResultsHtml — real capture, per-event results (F9)', (
     return result;
   }
 
-  it('reads all four rounds and all 40 rows with no warnings at all', () => {
+  it('reads all four rounds and all 40 rows, warning only that the fixture is trimmed', () => {
     const result = parsed();
     expect(result.data.rowCount).toBe(40);
-    // Not "few warnings" — none. Every column, cell and link on a real page is
-    // accounted for, so any warning here is a genuine regression.
-    expect(warningCodes(result.warnings)).toStrictEqual([]);
+    // Every column, cell and link on a real page is accounted for, so any
+    // warning beyond the one below is a genuine regression.
+    //
+    // `event-index-absent` is that one, and it is correct: this fixture was
+    // trimmed of the Events sidebar, which is where a real page prints its
+    // event index. Asserted as an exact single-element list rather than
+    // relaxed to "non-empty", so the guard keeps its full strength — a second
+    // warning appearing still fails here. The index itself is proven against
+    // the 51 untrimmed stored pages in tests/meetEventIndex.test.ts.
+    expect(warningCodes(result.warnings)).toStrictEqual(['event-index-absent']);
     expect(result.confidence).toBe('real-capture-verified');
   });
 

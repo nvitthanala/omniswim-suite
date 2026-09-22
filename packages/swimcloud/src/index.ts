@@ -133,6 +133,7 @@ export {
   SWIMCLOUD_PARSE_CONFIDENCE,
   SWIMCLOUD_REAL_CAPTURE_CONFIDENCE,
   parseMeetEventResultsHtml,
+  readMeetEventIndex,
   parseMeetResultsHtml,
   parseMeetTeamsHtml,
   parseMeetTopTeamsHtml,
@@ -145,6 +146,7 @@ export {
 export type {
   SwimCloudCutStandardLabel,
   SwimCloudEventRoundPointsColumn,
+  SwimCloudMeetEventIndexEntry,
   SwimCloudMeetEventResultsParse,
   SwimCloudMeetEventResultsParseOptions,
   SwimCloudMeetEventRound,

@@ -662,7 +662,12 @@
     }
     return {
       scope: input.scope,
-      swimsSteps: crawlScopePlansPass(input.scope, "meetTeamSwims") ? planMeetTeamSwims({
+      // Planned only when the scope asks for it AND the event list is not
+      // already known — see {@link SwimCloudScopedMeetCrawlInput.eventListAlreadyKnown}.
+      // On the one measured crawl this pass was 42 of 285 pages whose only
+      // remaining purpose was naming events, and it named 51 where the meet's own
+      // index names 57.
+      swimsSteps: crawlScopePlansPass(input.scope, "meetTeamSwims") && input.eventListAlreadyKnown !== true ? planMeetTeamSwims({
         meetId: input.meetId,
         teamIds: input.teamIds,
         ...input.knownTotalPages === void 0 ? {} : { knownTotalPages: input.knownTotalPages }
@@ -1615,6 +1620,46 @@
   function parseMeetTopTeamsHtml(html, context, options = {}) {
     return parseTeamStandingsPage(html, context, options, "Teams", "verified-complete-for-this-capture");
   }
+  var EVENT_INDEX_ITEM_MARKER = /\bjs-event-item\b/;
+  var EVENT_INDEX_ANCHOR = /<a\b([^>]*)>([\s\S]*?)<\/a>/g;
+  var EVENT_INDEX_HREF = /href="\/results\/(\d+)\/event\/(\d+)\/?"/;
+  var EVENT_INDEX_LABEL = /class="c-events__link-body"\s+title="([^"]*)"/;
+  var EVENT_INDEX_STATUS = /class="c-events__link-start"[^>]*title="([^"]*)"/;
+  var EVENT_INDEX_NUMBER = /class="c-event-status[^"]*"\s*>([\s\S]*?)<\/span>/;
+  function readMeetEventIndex(html, meetId) {
+    const entries = [];
+    const seen = /* @__PURE__ */ new Set();
+    const cleaned = stripNonContent(html);
+    for (const match of cleaned.matchAll(EVENT_INDEX_ANCHOR)) {
+      const attrs = match[1] ?? "";
+      const inner = match[2] ?? "";
+      if (!EVENT_INDEX_ITEM_MARKER.test(attrs)) {
+        continue;
+      }
+      const href = EVENT_INDEX_HREF.exec(attrs);
+      if (href === null || href[1] !== meetId) {
+        continue;
+      }
+      const eventRef = href[2];
+      if (seen.has(eventRef)) {
+        continue;
+      }
+      seen.add(eventRef);
+      const labelMatch = EVENT_INDEX_LABEL.exec(inner);
+      const statusMatch = EVENT_INDEX_STATUS.exec(inner);
+      const numberMatch = EVENT_INDEX_NUMBER.exec(inner);
+      const label = labelMatch === null ? "" : collapseWhitespace(decodeHtmlEntities(labelMatch[1]));
+      const status = statusMatch === null ? void 0 : collapseWhitespace(decodeHtmlEntities(statusMatch[1]));
+      const printedNumber = numberMatch === null ? void 0 : collapseWhitespace(htmlToText(numberMatch[1]));
+      entries.push({
+        eventRef,
+        label,
+        ...printedNumber === void 0 || printedNumber.length === 0 ? {} : { printedNumber },
+        ...status === void 0 || status.length === 0 ? {} : { status }
+      });
+    }
+    return entries;
+  }
   function escapeRegExp(text) {
     return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
   }
@@ -2394,13 +2439,18 @@
   // extensions/swimcloud-companion/src/eventResults.ts
   var EVENT_RESULTS_CONCURRENCY = 1;
   var EVENT_RESULTS_STAGGER_MS = 3e3;
-  function planEventResultsSteps(meetId, swimsPages) {
+  function planEventResultsSteps(meetId, swimsPages, indexEventRefs = []) {
     const collected = collectEventRefs(swimsPages);
+    const deduplicatedIndexRefs = [...new Set(indexEventRefs)];
     return {
-      steps: planMeetEventResults({ meetId, eventRefs: collected.eventRefs }),
+      steps: planMeetEventResults({
+        meetId,
+        eventRefs: [...deduplicatedIndexRefs, ...collected.eventRefs]
+      }),
       swimsSeen: collected.swimsSeen,
       withoutEventRef: collected.withoutEventRef,
-      duplicates: collected.duplicates
+      duplicates: collected.duplicates,
+      fromEventIndex: deduplicatedIndexRefs.length
     };
   }
   function collectEventRefs(swimsPages) {
@@ -2634,7 +2684,16 @@
     return `${state.concurrency} at a time, ${state.staggerMs} ms apart \xB7 ${formatEtaLabel(remaining, state.staggerMs)}`;
   }
   function formatEventResultsPlanLine(plan) {
+    const fromIndex = plan.fromEventIndex ?? 0;
+    if (fromIndex > 0 && plan.swimsSeen === 0) {
+      return `${plan.steps.length} event results pages, from the meet's own event index \u2014 every event it lists, diving and time trials included, not only the ones a team's swims list names.`;
+    }
     const parts = [];
+    if (fromIndex > 0) {
+      parts.push(
+        `${fromIndex} came from the meet's own event index, which names events no swims row does`
+      );
+    }
     if (plan.withoutEventRef > 0) {
       parts.push(
         `${plan.withoutEventRef} ${plan.withoutEventRef === 1 ? "swim carries" : "swims carry"} no event link, so ${plan.withoutEventRef === 1 ? "its round cannot" : "their rounds cannot"} be resolved`
@@ -2901,6 +2960,7 @@
   async function discoverTeams(meetId, retrievedAt) {
     const primarySteps = planMeetTeamDiscovery(meetId);
     const primaryByGender = [];
+    const eventRefs = /* @__PURE__ */ new Set();
     let primaryFailed = false;
     for (const step of primarySteps) {
       const { url } = crawlStepToFetchRequest(step);
@@ -2918,6 +2978,7 @@
         primaryFailed = true;
         break;
       }
+      for (const entry of readMeetEventIndex(page.html, meetId)) eventRefs.add(entry.eventRef);
       primaryByGender.push({
         gender: step.gender ?? "",
         teamIds: parsed.data.teams.map((t) => t.swimCloudTeamId)
@@ -2927,7 +2988,8 @@
       return {
         teamIds: unionTeamIds(primaryByGender[0]?.teamIds ?? [], primaryByGender[1]?.teamIds ?? []),
         source: "topteams",
-        genders: primaryByGender.map((g) => g.gender).filter((g) => g.length > 0)
+        genders: primaryByGender.map((g) => g.gender).filter((g) => g.length > 0),
+        eventRefs: [...eventRefs]
       };
     }
     const fallbackSteps = planMeetTeamDiscoveryFallback(meetId);
@@ -2942,6 +3004,7 @@
         track: "browser-extension"
       });
       if (!parsed.ok) continue;
+      for (const entry of readMeetEventIndex(page.html, meetId)) eventRefs.add(entry.eventRef);
       fallbackByGender.push({
         gender: step.gender ?? "",
         teamIds: parsed.data.teams.map((t) => t.swimCloudTeamId)
@@ -2950,7 +3013,8 @@
     return {
       teamIds: unionTeamIds(fallbackByGender[0]?.teamIds ?? [], fallbackByGender[1]?.teamIds ?? []),
       source: "meet-root-links-fallback",
-      genders: fallbackByGender.map((g) => g.gender).filter((g) => g.length > 0)
+      genders: fallbackByGender.map((g) => g.gender).filter((g) => g.length > 0),
+      eventRefs: [...eventRefs]
     };
   }
   var lastFetchAtMs;
@@ -3019,7 +3083,20 @@
       teamIds: confirmedTeamIds,
       completeness: "user-confirmed"
     };
-    const structural = planScopedMeetCrawl({ meetId, teamIds: confirmedTeamIds, scope });
+    const indexEventRefs = discovery.eventRefs;
+    const eventListAlreadyKnown = indexEventRefs.length > 0;
+    const structural = planScopedMeetCrawl({
+      meetId,
+      teamIds: confirmedTeamIds,
+      scope,
+      eventListAlreadyKnown
+    });
+    if (eventListAlreadyKnown) {
+      renderResumeNote(
+        panel,
+        `This meet publishes its own list of ${indexEventRefs.length} events, so the per-team swims pages are not fetched \u2014 the event pages carry the same swims plus the round and the meet score. That is ${indexEventRefs.length} pages instead of ${confirmedTeamIds.length * 2} swims pages and ${indexEventRefs.length} event pages.`
+      );
+    }
     const page1Steps = structural.swimsSteps;
     const rosterSteps = structural.rosterSteps;
     renderScopeNote(panel, formatCrawlScopeNote(scope));
@@ -3068,6 +3145,7 @@
       }
     }
     const fullSteps = planScopedMeetCrawl({
+      eventListAlreadyKnown,
       meetId,
       teamIds: confirmedTeamIds,
       scope,
@@ -3137,6 +3215,7 @@
         ...swimsEventRefs,
         resumeDecision.storedEventRefs.map((eventRef) => ({ event: { eventRef } }))
       ],
+      indexEventRefs,
       swimsPagesResumeSkipped: resume.alreadyCaptured.length,
       alreadyCaptured,
       plannedBeforeThisPass: pagesTotal + rosterSteps.length,
@@ -3188,93 +3267,127 @@
   }
   async function runEventResultsPass(input) {
     const { panel, subject, relay, control } = input;
-    const plan = planEventResultsSteps(input.meetId, input.swimsPages);
-    const partition = partitionResumableSteps(plan.steps, input.alreadyCaptured);
-    if (plan.steps.length === 0) {
+    const knownRefs = new Set(input.indexEventRefs);
+    const initialPlan = planEventResultsSteps(input.meetId, input.swimsPages, input.indexEventRefs);
+    for (const step of initialPlan.steps) {
+      if (step.eventRef !== void 0) knownRefs.add(step.eventRef);
+    }
+    if (initialPlan.steps.length === 0) {
       renderResumeNote(
         panel,
-        "No swim on this meet's lists carried an event link, so no per-event results pages were planned. Prelims and finals cannot be told apart in this capture."
+        "No page carried this meet's event index and no swim on its lists carried an event link, so no per-event results pages were planned. Prelims and finals cannot be told apart in this capture."
       );
       return { total: 0, done: 0, stoppedMessage: "", stopped: false };
     }
-    const planLine = formatEventResultsPlanLine(plan);
+    const planLine = formatEventResultsPlanLine(initialPlan);
     if (planLine.length > 0) renderResumeNote(panel, planLine);
-    if (input.swimsPagesResumeSkipped > 0) {
+    if (input.swimsPagesResumeSkipped > 0 && initialPlan.fromEventIndex === 0) {
       renderWarning(
         panel,
         `${input.swimsPagesResumeSkipped} swims page(s) were skipped as already captured, so any event only they referenced is not fetched this run. Those swims import with their round unresolved, never with a guessed one.`
-      );
-    }
-    const corrected = await sendToBackground({
-      type: "omniswim-swimcloud-open-capture",
-      subject,
-      plannedPageCount: input.plannedBeforeThisPass + plan.steps.length,
-      teamDiscovery: input.teamDiscovery,
-      crawlScope: input.crawlScope
-    });
-    if (!isRoundTripOk(corrected)) {
-      renderWarning(
-        panel,
-        `${roundTripFailureText("Correcting the planned page count", corrected)} The crawl continues; the app may show a stale page total.`
       );
     }
     let fetched = 0;
     let failed = 0;
     let notServed = 0;
     let stoppedMessage = "";
+    let planTotal = initialPlan.steps.length;
+    let resumeSkipped = 0;
+    let announcedTotal = 0;
+    const attempted = /* @__PURE__ */ new Set();
     const progress = () => ({
       fetched,
-      total: plan.steps.length,
-      alreadyCaptured: partition.alreadyCaptured.length,
+      total: planTotal,
+      alreadyCaptured: resumeSkipped,
       failed,
       notServed,
       concurrency: EVENT_RESULTS_CONCURRENCY,
       staggerMs: EVENT_RESULTS_STAGGER_MS
     });
-    renderEventResults(panel, progress());
-    await runBoundedFetchPool({
-      items: partition.toFetch,
-      concurrency: EVENT_RESULTS_CONCURRENCY,
-      staggerMs: EVENT_RESULTS_STAGGER_MS,
-      sleep,
-      shouldStop: () => control.cancelled || stoppedMessage.length > 0,
-      beforeStart: () => waitWhilePaused(control),
-      run: async (step) => {
-        const page = await fetchPageForPool(step.canonicalUrl);
-        fetched += 1;
-        if (page === void 0) {
-          failed += 1;
-        } else {
-          if (page.httpStatus >= 400) notServed += 1;
-          const relayOutcome = await relayFetchedPage(
-            panel,
-            subject,
-            step.canonicalUrl,
-            page,
-            input.retrievedAt(),
-            relay
-          );
-          if (relayOutcome !== "landed") failed += 1;
-          if (relayOutcome === "streak-stop") {
-            stoppedMessage = "Stopped fetching event results: several pages in a row could not be handed to the Omniswim app. The meet results already captured are unaffected.";
-          }
-        }
-        const verdict = classifyEventResultsOutcome(
-          page === void 0 ? { kind: "network-error" } : { kind: "http-status", httpStatus: page.httpStatus }
+    const announceTotal = async () => {
+      if (planTotal === announcedTotal) return;
+      announcedTotal = planTotal;
+      const corrected = await sendToBackground({
+        type: "omniswim-swimcloud-open-capture",
+        subject,
+        plannedPageCount: input.plannedBeforeThisPass + planTotal,
+        teamDiscovery: input.teamDiscovery,
+        crawlScope: input.crawlScope
+      });
+      if (!isRoundTripOk(corrected)) {
+        renderWarning(
+          panel,
+          `${roundTripFailureText("Correcting the planned page count", corrected)} The crawl continues; the app may show a stale page total.`
         );
-        if (verdict.action === "record-and-stop-phase") {
-          stoppedMessage = verdict.message;
-          panel.retryButton.hidden = false;
-        }
-        renderEventResults(panel, progress());
       }
-    });
-    const done = partition.alreadyCaptured.length + fetched;
+    };
+    while (!control.cancelled && stoppedMessage.length === 0) {
+      const refsThisRound = [...knownRefs];
+      const planned = planEventResultsSteps(input.meetId, input.swimsPages, refsThisRound);
+      const outstanding = planned.steps.filter((step) => !attempted.has(step.canonicalUrl));
+      if (outstanding.length === 0) break;
+      const partition = partitionResumableSteps(outstanding, input.alreadyCaptured);
+      for (const step of outstanding) attempted.add(step.canonicalUrl);
+      resumeSkipped += partition.alreadyCaptured.length;
+      planTotal = planned.steps.length;
+      await announceTotal();
+      renderEventResults(panel, progress());
+      await runBoundedFetchPool({
+        items: partition.toFetch,
+        concurrency: EVENT_RESULTS_CONCURRENCY,
+        staggerMs: EVENT_RESULTS_STAGGER_MS,
+        sleep,
+        shouldStop: () => control.cancelled || stoppedMessage.length > 0,
+        beforeStart: () => waitWhilePaused(control),
+        run: async (step) => {
+          const page = await fetchPageForPool(step.canonicalUrl);
+          fetched += 1;
+          if (page === void 0) {
+            failed += 1;
+          } else {
+            if (page.httpStatus >= 400) notServed += 1;
+            if (page.httpStatus < 400) {
+              for (const entry of readMeetEventIndex(page.html, input.meetId)) {
+                knownRefs.add(entry.eventRef);
+              }
+            }
+            const relayOutcome = await relayFetchedPage(
+              panel,
+              subject,
+              step.canonicalUrl,
+              page,
+              input.retrievedAt(),
+              relay
+            );
+            if (relayOutcome !== "landed") failed += 1;
+            if (relayOutcome === "streak-stop") {
+              stoppedMessage = "Stopped fetching event results: several pages in a row could not be handed to the Omniswim app. The meet results already captured are unaffected.";
+            }
+          }
+          const verdict = classifyEventResultsOutcome(
+            page === void 0 ? { kind: "network-error" } : { kind: "http-status", httpStatus: page.httpStatus }
+          );
+          if (verdict.action === "record-and-stop-phase") {
+            stoppedMessage = verdict.message;
+            panel.retryButton.hidden = false;
+          }
+          renderEventResults(panel, progress());
+        }
+      });
+    }
+    const discovered = planTotal - initialPlan.steps.length;
+    if (discovered > 0) {
+      renderResumeNote(
+        panel,
+        `${discovered} further event page(s) were found on the event pages themselves and fetched. A per-team swims list never names a diving event, because a diver has no swims, so those events were previously missed entirely.`
+      );
+    }
+    const done = resumeSkipped + fetched;
     return {
-      total: plan.steps.length,
+      total: planTotal,
       done,
       stoppedMessage,
-      stopped: stoppedMessage.length > 0 || control.cancelled || done !== plan.steps.length
+      stopped: stoppedMessage.length > 0 || control.cancelled || done !== planTotal
     };
   }
   async function runRosterPass(rosterSteps, teamIds, panel, subject, retrievedAt, relay, control) {

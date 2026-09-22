@@ -5,9 +5,28 @@ Captured via the browser extension's single-page "Copy for Omniswim" button, at 
 user's direction, specifically to resolve the prelims/finals ambiguity documented in
 plans/2026-09-10/01-SWIMCLOUD-SCORING-CORRECTNESS.md. Trimmed of unrelated boilerplate
 (head <script> tags, the full site nav/header, the Events sidebar and its duplicate
-off-canvas nav, Sentry/YUI/jQuery loaders) — none of that is relevant to parsing, same
-trimming already applied to the sibling team-swims fixture. The four result tables,
-their captions, headers, and every row are byte-for-byte from the real capture.
+off-canvas nav, Sentry/YUI/jQuery loaders), same trimming already applied to the sibling
+team-swims fixture. The four result tables, their captions, headers, and every row are
+byte-for-byte from the real capture.
+
+CORRECTION (2026-09-22): "none of that is relevant to parsing" was wrong about ONE of
+the trimmed regions. The Events sidebar — the <ul id="meet-events-placeholder"> list of
+<a class="c-events__link js-event-item"> anchors — is the meet's own event index, and it
+is now the crawler's source for which event pages exist. The real page lists 57 events
+there; collecting refs from all 42 per-team swims lists finds 51, missing four diving
+events and two mixed relays. A diver has no swims, so no swims list could ever name a
+diving event. See `readMeetEventIndex` in packages/swimcloud/src/parser.ts.
+
+Point 5 below already recorded that this sidebar named ids the swims lists did not —
+including 403 and 503, two of the six — so the evidence was in this file all along and
+was read as a curiosity rather than as a gap.
+
+The sidebar is NOT restored here: it is 74 KB of repeated nav markup against this
+fixture's 52 KB, and the index is proven instead against all 51 full pages in
+data/swimcloud-captures/ by tests/meetEventIndex.test.ts. What follows from the trim is
+that parsing THIS fixture emits exactly one warning, `event-index-absent`, which is the
+honest output for a page that carries no index. Tests assert that single code exactly,
+never a non-empty list, so any other warning is still a regression.
 
 THIS IS THE FIX for the ambiguous-round-duplicate problem `swimCloudMeetImportBridge.ts`
 currently works around by excluding both swims. Confirmed facts a parser must rely on:
