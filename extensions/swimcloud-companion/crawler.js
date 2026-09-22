@@ -2392,6 +2392,50 @@
     return { started, notStarted: items.length - started, peakInFlight };
   }
 
+  // extensions/swimcloud-companion/src/rateLimitBackoff.ts
+  var RATE_LIMITED_STATUS = 429;
+  var MAX_RATE_LIMIT_RETRIES = 3;
+  var BASE_BACKOFF_MS = 3e3;
+  var MAX_BACKOFF_MS = 6e4;
+  function parseRetryAfterMs(header, nowMs) {
+    if (header === null || header === void 0) return void 0;
+    const trimmed = header.trim();
+    if (trimmed.length === 0) return void 0;
+    if (/^\d+$/.test(trimmed)) {
+      return Number(trimmed) * 1e3;
+    }
+    if (!/[a-z]/i.test(trimmed)) return void 0;
+    const at = Date.parse(trimmed);
+    if (Number.isNaN(at)) return void 0;
+    return Math.max(0, at - nowMs);
+  }
+  function decideRateLimitRetry(attempt, retryAfterHeader, nowMs) {
+    if (attempt >= MAX_RATE_LIMIT_RETRIES + 1) {
+      return {
+        action: "give-up",
+        reason: `SwimCloud rate-limited this page ${attempt} times. It is recorded as not served rather than retried further.`
+      };
+    }
+    const fromHeader = parseRetryAfterMs(retryAfterHeader, nowMs);
+    if (fromHeader !== void 0) {
+      if (fromHeader > MAX_BACKOFF_MS) {
+        return {
+          action: "give-up",
+          reason: `SwimCloud asked for a ${Math.round(fromHeader / 1e3)}s wait, which is longer than this crawl will hold for one page. It is recorded as not served.`
+        };
+      }
+      return { action: "retry", waitMs: Math.max(BASE_BACKOFF_MS, fromHeader), fromRetryAfter: true };
+    }
+    const backoff = BASE_BACKOFF_MS * 2 ** (attempt - 1);
+    return { action: "retry", waitMs: Math.min(MAX_BACKOFF_MS, backoff), fromRetryAfter: false };
+  }
+  function formatRateLimitWaitLine(url, decision) {
+    if (decision.action === "give-up") return decision.reason;
+    const seconds = Math.round(decision.waitMs / 1e3);
+    const source = decision.fromRetryAfter ? "SwimCloud asked for" : "backing off";
+    return `Rate-limited on ${url} \u2014 ${source} ${seconds}s, then retrying. The crawl has not stalled.`;
+  }
+
   // extensions/swimcloud-companion/src/timesEndpointDiscovery.ts
   var SWIMMER_ID_PLACEHOLDER = "{swimmerId}";
   var SWIMCLOUD_HOSTS = /* @__PURE__ */ new Set(["www.swimcloud.com", "swimcloud.com"]);
@@ -2860,7 +2904,12 @@
     try {
       const response = await fetch(url, { credentials: "include", signal: deadline.signal });
       const html = await response.text();
-      return { html, httpStatus: response.status };
+      const retryAfter = response.headers.get("Retry-After");
+      return {
+        html,
+        httpStatus: response.status,
+        ...retryAfter === null ? {} : { retryAfter }
+      };
     } catch (error) {
       if (deadline.expired()) {
         throw new SwimCloudCrawlNetworkError(
@@ -3080,8 +3129,24 @@
       eventRefs: [...eventRefs]
     };
   }
+  async function fetchPageWithRateLimitRetry(url, fetchOnce, onWait) {
+    let attempt = 0;
+    let last;
+    for (; ; ) {
+      attempt += 1;
+      last = await fetchOnce(url);
+      if (last === void 0 || last.httpStatus !== RATE_LIMITED_STATUS) return last;
+      const decision = decideRateLimitRetry(attempt, last.retryAfter, Date.now());
+      onWait(formatRateLimitWaitLine(url, decision));
+      if (decision.action === "give-up") return last;
+      await sleep(decision.waitMs);
+    }
+  }
   var lastFetchAtMs;
-  async function fetchPageWithDelay(url) {
+  async function fetchPageWithDelay(url, onWait = reportWaitToConsole) {
+    return fetchPageWithRateLimitRetry(url, fetchPageOncePaced, onWait);
+  }
+  async function fetchPageOncePaced(url) {
     const now = Date.now();
     if (lastFetchAtMs !== void 0) {
       const elapsed = now - lastFetchAtMs;
@@ -3096,7 +3161,13 @@
       return void 0;
     }
   }
-  async function fetchPageForPool(url) {
+  function reportWaitToConsole(line) {
+    console.info("[omniswim]", line);
+  }
+  async function fetchPageForPool(url, onWait = reportWaitToConsole) {
+    return fetchPageWithRateLimitRetry(url, fetchPageOnceForPool, onWait);
+  }
+  async function fetchPageOnceForPool(url) {
     lastFetchAtMs = Date.now();
     try {
       return await fetchPage(url);
@@ -3408,7 +3479,10 @@
         shouldStop: () => control.cancelled || stoppedMessage.length > 0,
         beforeStart: () => waitWhilePaused(control),
         run: async (step) => {
-          const page = await fetchPageForPool(step.canonicalUrl);
+          const page = await fetchPageForPool(
+            step.canonicalUrl,
+            (line) => renderWarning(panel, line)
+          );
           fetched += 1;
           if (page === void 0) {
             failed += 1;
@@ -3551,7 +3625,10 @@
       shouldStop: () => control.cancelled || stoppedMessage.length > 0,
       beforeStart: () => waitWhilePaused(control),
       run: async (step) => {
-        const page = await fetchPageForPool(step.canonicalUrl);
+        const page = await fetchPageForPool(
+          step.canonicalUrl,
+          (line) => renderWarning(input.panel, line)
+        );
         fetched += 1;
         if (page === void 0) {
           failed += 1;
@@ -4199,6 +4276,40 @@
  * `tests/swimCloudExtensionBoundedFetchPool.test.ts` therefore asserts the
  * actual concurrency behaviour (peak in-flight, start ordering, one failing
  * item not killing the pool) with no real delays and no browser.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * What to do when SwimCloud answers HTTP 429.
+ *
+ * ## Why this exists
+ *
+ * Until now there was no 429 handling anywhere in this extension. A throttled
+ * page was simply a page that never arrived, filed as `http-error` alongside a
+ * 404 — and the two mean opposite things. A 404 is "this page does not exist,
+ * stop asking". A 429 is "this page exists, you asked too fast, ask again in a
+ * moment". Treating the second as the first throws away data the site was
+ * willing to give.
+ *
+ * The archived crawl of meet 356467 shows both halves of the problem. Its
+ * pooled pass — three lanes, 400 ms apart — took **111 of 184** requests as
+ * HTTP 429, and every one of those pages was lost with no retry. The two
+ * sequential passes at 3000 ms were 50 of 50 clean, and a later run fetched
+ * 51 of 51 event pages clean at the same pacing.
+ *
+ * So this is insurance, not a fix for a failure the current pacing produces.
+ * That is deliberate, and it is why **nothing here speeds anything up**: the
+ * concurrency and stagger constants are untouched, and every path below only
+ * ever waits *longer* than the crawl already would.
+ *
+ * ## Why the wait is capped, and what happens past the cap
+ *
+ * A server is allowed to say "come back in an hour". Honouring that literally
+ * would leave a coach staring at a frozen panel through a meet. Past
+ * {@link MAX_BACKOFF_MS} this stops retrying and reports the page as not
+ * served, which is the same honest outcome as before — but now with the reason
+ * named, rather than a bare `http-error`.
  */
 /**
  * @license

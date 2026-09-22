@@ -80,6 +80,11 @@ import { decideResumeFromRoundTrip, partitionResumableSteps, type SwimCloudResum
 import { classifyCrawlPageOutcome } from './crawlErrorPolicy';
 import { runBoundedFetchPool } from './boundedFetchPool';
 import {
+  RATE_LIMITED_STATUS,
+  decideRateLimitRetry,
+  formatRateLimitWaitLine,
+} from './rateLimitBackoff';
+import {
   discoverSwimmerTimesEndpoints,
   swimmerTimesEndpointReport,
 } from './timesEndpointDiscovery';
@@ -296,6 +301,15 @@ function sleep(ms: number): Promise<void> {
 interface FetchedPage {
   readonly html: string;
   readonly httpStatus: number;
+  /**
+   * The `Retry-After` header, when the response carried one.
+   *
+   * Kept only because a 429 is the one status this crawl can do something
+   * about, and the header is the site telling us exactly what it wants. It was
+   * previously discarded along with every other header, which is why nothing
+   * could act on it. See `rateLimitBackoff.ts`.
+   */
+  readonly retryAfter?: string;
 }
 
 class SwimCloudCrawlNetworkError extends Error {}
@@ -316,7 +330,12 @@ async function fetchPage(url: string): Promise<FetchedPage> {
   try {
     const response = await fetch(url, { credentials: 'include', signal: deadline.signal });
     const html = await response.text();
-    return { html, httpStatus: response.status };
+    const retryAfter = response.headers.get('Retry-After');
+    return {
+      html,
+      httpStatus: response.status,
+      ...(retryAfter === null ? {} : { retryAfter }),
+    };
   } catch (error) {
     if (deadline.expired()) {
       throw new SwimCloudCrawlNetworkError(
@@ -753,10 +772,56 @@ interface RelayState {
   downloadsFallbackCount: number;
 }
 
+
+/**
+ * One page, re-requested while SwimCloud is answering 429.
+ *
+ * Wraps a fetch function rather than replacing one, so both call paths — the
+ * 3 s sequential gate and the bounded pool — get the same behaviour without
+ * either losing its own pacing. `fetchOnce` is expected to apply whatever
+ * pacing its caller uses; this only ever adds waiting on top.
+ *
+ * Returns the last response when the retries are exhausted, so a page that
+ * stays rate-limited is still recorded as the 429 it is rather than vanishing.
+ * `undefined` means the fetch itself failed, exactly as before.
+ *
+ * Every other status returns immediately. A 404 is not a pacing problem and
+ * retrying it would spend the crawl's time asking again for a page that does
+ * not exist. See `rateLimitBackoff.ts` on why 429 is the one status worth
+ * separating out.
+ */
+async function fetchPageWithRateLimitRetry(
+  url: string,
+  fetchOnce: (url: string) => Promise<FetchedPage | undefined>,
+  onWait: (line: string) => void,
+): Promise<FetchedPage | undefined> {
+  let attempt = 0;
+  let last: FetchedPage | undefined;
+
+  for (;;) {
+    attempt += 1;
+    last = await fetchOnce(url);
+    if (last === undefined || last.httpStatus !== RATE_LIMITED_STATUS) return last;
+
+    const decision = decideRateLimitRetry(attempt, last.retryAfter, Date.now());
+    onWait(formatRateLimitWaitLine(url, decision));
+    if (decision.action === 'give-up') return last;
+    await sleep(decision.waitMs);
+  }
+}
+
 let lastFetchAtMs: number | undefined;
 
 /** Enforces the 3s politeness delay across every fetch this loop issues, same discipline as `SwimCloudPoliteFetcher`. */
-async function fetchPageWithDelay(url: string): Promise<FetchedPage | undefined> {
+async function fetchPageWithDelay(
+  url: string,
+  onWait: (line: string) => void = reportWaitToConsole,
+): Promise<FetchedPage | undefined> {
+  return fetchPageWithRateLimitRetry(url, fetchPageOncePaced, onWait);
+}
+
+/** One paced request, with no retry logic — {@link fetchPageWithDelay}'s inner call. */
+async function fetchPageOncePaced(url: string): Promise<FetchedPage | undefined> {
   const now = Date.now();
   if (lastFetchAtMs !== undefined) {
     const elapsed = now - lastFetchAtMs;
@@ -771,6 +836,18 @@ async function fetchPageWithDelay(url: string): Promise<FetchedPage | undefined>
     return undefined;
   }
 }
+
+/**
+ * Where a rate-limit wait is reported when the caller has no panel to write to.
+ *
+ * Discovery runs before the panel exists in any useful form, so its waits go to
+ * the console rather than nowhere. A silent wait is the thing this whole module
+ * exists to stop.
+ */
+function reportWaitToConsole(line: string): void {
+  console.info('[omniswim]', line);
+}
+
 
 /**
  * One swimmer-times fetch, issued from the bounded pool.
@@ -791,7 +868,15 @@ async function fetchPageWithDelay(url: string): Promise<FetchedPage | undefined>
  * Timeout-bounded like every other fetch, through `fetchPage`'s
  * `createFetchDeadline`: a stalled swimmer page must not hold a lane forever.
  */
-async function fetchPageForPool(url: string): Promise<FetchedPage | undefined> {
+async function fetchPageForPool(
+  url: string,
+  onWait: (line: string) => void = reportWaitToConsole,
+): Promise<FetchedPage | undefined> {
+  return fetchPageWithRateLimitRetry(url, fetchPageOnceForPool, onWait);
+}
+
+/** One pooled request, with no retry logic — {@link fetchPageForPool}'s inner call. */
+async function fetchPageOnceForPool(url: string): Promise<FetchedPage | undefined> {
   lastFetchAtMs = Date.now();
   try {
     return await fetchPage(url);
@@ -1366,7 +1451,9 @@ async function runEventResultsPass(input: EventResultsPassInput): Promise<EventR
       shouldStop: () => control.cancelled || stoppedMessage.length > 0,
       beforeStart: () => waitWhilePaused(control),
       run: async (step) => {
-        const page = await fetchPageForPool(step.canonicalUrl);
+        const page = await fetchPageForPool(step.canonicalUrl, (line) =>
+          renderWarning(panel, line),
+        );
         fetched += 1;
 
         if (page === undefined) {
@@ -1624,7 +1711,9 @@ async function runSwimmerTimesPass(input: SwimmerTimesPassInput): Promise<Swimme
     shouldStop: () => control.cancelled || stoppedMessage.length > 0,
     beforeStart: () => waitWhilePaused(control),
     run: async (step) => {
-      const page = await fetchPageForPool(step.canonicalUrl);
+      const page = await fetchPageForPool(step.canonicalUrl, (line) =>
+        renderWarning(input.panel, line),
+      );
       fetched += 1;
 
       if (page === undefined) {
