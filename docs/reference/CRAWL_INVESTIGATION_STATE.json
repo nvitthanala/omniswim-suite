@@ -52,6 +52,10 @@
     {
       "at": "2026-09-22",
       "what": "Answered three user decisions (d8-d10) and cleared the work queue. Event-first is now the crawl AND the import: readMeetEventIndex reads the 57-event index every event page prints, the event pass expands from it in rounds, and swimCloudEventResultsToSwimmerResults converts event pages into rows directly. Found and fixed two defects the conversion exposed: every relay was being dropped (no Team column on a relay table), and class year was hardcoded unknown. 1020 vitest, 84 script tests, lint clean."
+    },
+    {
+      "at": "2026-09-22",
+      "what": "User ran the full-field crawl. Capture now holds 57 meetEvent pages (was 51) -- all six previously-missed events present: 9, 18, 29, 40 diving and 403, 503 mixed. Event-first enumeration confirmed working against the live site."
     }
   ],
   "nextStep": "Check E first (cheapest, purely local): is there any other capture id, or any page stored outside the meet-356467 record? Then B (pairing state on disk). Then A/C/D, which need evidence only the user's browser has.",
@@ -179,8 +183,19 @@
   ],
   "STILL_OPEN": [
     "No 429 handling anywhere in the extension. A throttled page is simply a page that never arrives, recorded as http-error. The sequential floor held for 51/51 event pages, so this has not bitten yet; it is the obvious next improvement and changes the traffic pattern, so it needs the user's call.",
-    "No diving event page has ever been captured, so a diving row's Score column stays unverified and is NOT stored in meetScore (diving-score-column-unverified). The event-first crawl will fetch the four diving pages for the first time — read that warning in the import notes and decide whether the column is meet points or a judged score.",
     "A relay leg's class year is left empty rather than joined, deliberately: it would put a second, separately-sourced year on the same page as the individual rows' one.",
     "The swimmer-times endpoint is discovered but never called. See d9."
-  ]
+  ],
+  "DIVING_RESOLVED": {
+    "at": "2026-09-22",
+    "question": "Is a diving Score column meet points or the judged score?",
+    "answer": "Meet points. The Pts column is the judged score.",
+    "evidence": [
+      "Full-field crawl stored all four diving pages (events 9, 18, 29, 40) for the first time.",
+      "On every one: Pts = 503.95, 431.25, 416.85 ... and the hidden Score = 20, 17, 16, 15, 14, 13, 12, 11 -- the championship individual table place for place.",
+      "data/meets.json, built from the meet PDF, independently gives Santiago Santodomingo points 20 and time 503.95 for the same 1M final.",
+      "The 9th-place prelims diver scores 9; the eight finalists take nothing from the prelims table."
+    ],
+    "biggerFinding": "The pages did not parse AT ALL. locateEventRoundTables required a Time column and a diving table has none (Name | Team | Pts | Score). All four events failed with expected-header-missing: 47 rows and 360 meet points absent from team totals. Fixed in 4955ec9b."
+  }
 }

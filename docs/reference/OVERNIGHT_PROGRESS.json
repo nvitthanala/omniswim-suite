@@ -83,6 +83,10 @@
     {
       "commit": "68f311a6",
       "what": "Found by continuing the n7 hunt after the queue emptied, and the most consequential defect of the night: nothing on the SwimCloud path ever set isTimeTrial, so meet 356467s 13 post-programme events (14 swims in the capture) imported as ordinary scoring swims AND counted against every swimmers entry limit -- breaking the users own explicit ruling on the new primary import path. Boundary read from ScoringSettings.scoredEventNumberMax, never a literal. Programme number read from the badge the event index prints, not the URL."
+    },
+    {
+      "commit": "4955ec9b",
+      "what": "Diving events parsed for the first time. The pages had never been fetched, and when they were, they failed outright: a diving table has no Time column. 47 rows, 360 meet points, cross-checked row by row against data/meets.json. Also settles the long-open question -- a diving Score IS meet points."
     }
   ],
   "nextUp": [
@@ -97,7 +101,7 @@
   "blockedNeedsTheUser": [
     "Which discovery page carries the event index. Deciding it needs one live fetch, which this session may not make. Both branches are implemented and correct; the panel says which one ran.",
     "The swimmer-times endpoint's method and response shape. The user clicks 'Copy times endpoint for Omniswim' on one swimmer page and pastes the report. No season-best pass can exist before that.",
-    "Whether a diving event's Score column is meet points or a judged score. No diving page has ever been captured; the event-first crawl will fetch the four of them for the first time. Until then the column is read, reported as diving-score-column-unverified, and NOT stored in meetScore."
+    "RULING NEEDED: a SwimCloud \"Extracted\" time is a mid-race split (Avery Henke 50 Breast 25.16 shares its swim id with the 100 Breast 54.09). It currently imports as a genuine personal best, while a relay Leadoff -- which IS a legal start from the blocks -- is excluded. That is arguably backwards. Decide whether Extracted splits should count as bests, and whether Leadoff should."
   ],
   "timeline": [
     {
@@ -127,6 +131,10 @@
     {
       "at": "2026-09-22T08:15Z",
       "what": "Queue was empty so kept hunting rather than idling, and found the isTimeTrial gap. Three mutations run; the third was inert because the printed number and the URL ref are identical on all 51 captured pages, so a synthetic case where they diverge was added to separate them. 1077 vitest, 84 script tests, lint clean."
+    },
+    {
+      "at": "2026-09-22T14:45Z",
+      "what": "User ran the full-field crawl and pasted a rendered swimmer-times page. Verified the capture (57 event pages), answered and fixed diving, and found the Extracted-vs-Leadoff asymmetry. Also noted the local workspace went from 550 menResults at 14:05 to 0 from 14:25 -- recoverable from data/backups/meets-startup-2026-09-22T14-05-01-773Z.json -- which is why two e2e tests now fail."
     }
   ],
   "notesForTheUser": [
