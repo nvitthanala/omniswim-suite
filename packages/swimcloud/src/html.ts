@@ -312,6 +312,7 @@ export function extractRowCells(rowHtml: string): string[] {
   return splitRepeatedElements(rowHtml, ['td', 'th']);
 }
 
+
 /** True when the row's cells are `<th>` — used to find a table's header row. */
 export function isHeaderRow(rowHtml: string): boolean {
   return /<th\b/i.test(rowHtml);

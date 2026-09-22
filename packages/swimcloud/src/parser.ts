@@ -1613,7 +1613,7 @@ function parseEventTable(
       if (legs.length === 0) {
         warnings.push({
           code: 'relay-legs-absent',
-          message: `Relay row for ${JSON.stringify(subjectText)} lists no legs. If SwimCloud does not publish relay leg splits at all, this is the permanent, expected state — see plans/2026-09-06/04-phasing.md open question 4.`,
+          message: `Relay row for ${JSON.stringify(subjectText)} lists no legs. SwimCloud does publish them — a per-event results page carries them in a hidden table behind its own "Show names" toggle — so this row is genuinely missing them rather than expected to lack them.`,
           eventId: event.eventId,
           rowIndex,
           raw: subjectText,
@@ -1729,6 +1729,15 @@ interface ReadPoints {
 function readPoints(raw: string, event: SwimCloudEvent, rowIndex: number, warnings: SwimCloudParseWarning[]): ReadPoints {
   const token = raw.trim();
   if (token.length === 0) {
+    return {};
+  }
+  // SwimCloud prints a dash in the Score column for a swim that scored nothing
+  // -- a consolation heat below the scoring places, an exhibition, a relay B
+  // squad. That is the page stating "no points", which is the same thing an
+  // empty cell states, so it is recorded as absent rather than flagged as a
+  // token nobody recognises. Covers the hyphen, non-breaking hyphen, and the en
+  // and em dashes; the real capture uses U+2013.
+  if (/^[-‐‑‒–—―]+$/.test(token)) {
     return {};
   }
   if (/^\d+(\.\d+)?$/.test(token)) {
@@ -1851,7 +1860,94 @@ function readRelayDesignator(text: string): { teamName: string; designator: stri
  * are never reconstructed by subtracting cumulative times: that arithmetic would
  * manufacture a competition value the page never published.
  */
+/**
+ * The relay's leg table, hidden behind the page's own "Show names" button.
+ *
+ * **Corrected 2026-09-22.** This file previously recorded that SwimCloud may
+ * not publish relay legs at all, and raised `relay-legs-absent` on every relay
+ * row to say so. That was wrong, and it was wrong because the legs are not
+ * where the old reader looked. A real capture of `/results/356467/event/11/`
+ * carries, inside the same cell as the team link:
+ *
+ *     <div class="u-is-hidden js-hidden-list">
+ *       <table>
+ *         <tr><td><a href="/results/356467/swimmer/1330318/">Avery Henke</a></td>
+ *             <td><a href="/times/171561951/">22.53</a></td></tr>
+ *         ... one row per leg, in leg order
+ *
+ * Name, swimmer id, split and swim id, all four, already served. The button is
+ * a CSS toggle (`js-toggle-hidden-list`), not a request — so the data is in the
+ * HTML a plain fetch returns. 25 distinct swimmer links appear on a page with
+ * about 24 legs.
+ *
+ * The old `<li>` reader stays below it: nothing proves every relay row on every
+ * page uses the table shape, and a list-shaped one must keep working. Splits
+ * are still never reconstructed by subtracting cumulative times — that
+ * arithmetic would manufacture a competition value the page never printed.
+ */
+/**
+ * Every hidden relay-leg list in a table, in document order, parsed.
+ *
+ * One entry per `js-hidden-list` the table contains. The caller decides whether
+ * the count lines up with its data rows; this function only reads what is
+ * there.
+ */
+function readHiddenLegListsInOrder(tableHtml: string): SwimCloudRelayLeg[][] {
+  const out: SwimCloudRelayLeg[][] = [];
+  let from = 0;
+  for (;;) {
+    const at = tableHtml.indexOf('js-hidden-list', from);
+    if (at < 0) break;
+    const next = tableHtml.indexOf('js-hidden-list', at + 1);
+    const region = tableHtml.slice(at, next < 0 ? undefined : next);
+    out.push(readRelayLegsFromHiddenTable(region));
+    from = at + 1;
+  }
+  return out;
+}
+
+function readRelayLegsFromHiddenTable(rowHtml: string): SwimCloudRelayLeg[] {
+  // Located by the page's own marker class, not by walking cells.
+  // `extractRowCells` is not nesting-aware: the leg table's own <td>s end the
+  // outer cell early, truncating it to a few hundred characters and losing
+  // exactly the markup wanted here. Making that splitter nesting-aware would
+  // change a helper every parser in this file leans on, for one caller.
+  const listStart = rowHtml.indexOf('js-hidden-list');
+  if (listStart < 0) return [];
+  const region = rowHtml.slice(listStart);
+
+  // Legs are a swimmer link followed by that leg's split link, repeating in leg
+  // order. Paired positionally within the region rather than by table shape,
+  // because the shape is what the cell splitter cannot be trusted to preserve.
+  const swimmers = [...region.matchAll(/href="[^"]*\/swimmer\/(\d+)\/?"[^>]*>([^<]*)</g)];
+  const splits = [...region.matchAll(/href="\/times\/(\d+)\/?"[^>]*>([^<]*)</g)];
+
+  const legs: SwimCloudRelayLeg[] = [];
+  swimmers.forEach((swimmer, index) => {
+    const athleteName = collapseWhitespace(decodeHtmlEntities(swimmer[2] ?? ''));
+    const split = splits[index];
+    const splitText = split === undefined ? '' : collapseWhitespace(decodeHtmlEntities(split[2] ?? ''));
+    // Only a well-formed time counts as a split. Never reconstructed by
+    // subtracting cumulative times: that would manufacture a competition value
+    // the page never printed.
+    const splitTime = TRAILING_TIME.test(splitText) ? splitText : undefined;
+    if (athleteName.length === 0 && swimmer[1] === undefined) return;
+    legs.push({
+      order: index + 1,
+      ...(swimmer[1] === undefined ? {} : { swimCloudSwimmerId: swimmer[1] }),
+      ...(athleteName.length === 0 ? {} : { athleteName }),
+      ...(splitTime === undefined ? {} : { splitTime }),
+    });
+  });
+  return legs;
+}
+
 function readRelayLegs(subjectHtml: string): SwimCloudRelayLeg[] {
+  // The served shape first. Falls through to the list reader when the cell
+  // holds no leg table, so a page that uses the older markup still parses.
+  const fromTable = readRelayLegsFromHiddenTable(subjectHtml);
+  if (fromTable.length > 0) return fromTable;
+
   const items = extractListItems(subjectHtml);
   const legs: SwimCloudRelayLeg[] = [];
   items.forEach((item, index) => {
@@ -3724,6 +3820,18 @@ export interface SwimCloudMeetEventSwim {
   /** SwimCloud's own id for this swim, from the time cell's `/times/{id}/` link. Absent when the row carried no such link. */
   readonly swimCloudSwimId?: string;
   /**
+   * The relay's legs, when this row is a relay entry and the page served them.
+   *
+   * A per-event results page carries them in a table hidden behind its own
+   * "Show names" toggle, inside the same cell as the team link — name, swimmer
+   * id, split and swim id per leg, in leg order. The toggle is CSS, not a
+   * request, so a plain fetch already has them.
+   *
+   * Absent on an individual row, and on a relay row whose page did not serve
+   * them. Absent is never an empty relay.
+   */
+  readonly relayLegs?: readonly SwimCloudRelayLeg[];
+  /**
    * The round this swim was contested in, **verbatim** from the owning table's
    * `<caption>` — `'A Final'`, `'B Final'`, `'C Final'`, `'Preliminaries'`.
    *
@@ -3990,6 +4098,22 @@ export function parseMeetEventResultsHtml(
 interface LocatedEventRoundTable {
   /** The `<caption>` text, verbatim. Absent when the table carried none. */
   readonly caption?: string;
+  /**
+   * Relay legs, one entry per data row, read from the RAW table before its
+   * nested tables were stripped.
+   *
+   * `extractTableRows` deletes nested tables on purpose, so that an inner
+   * table's rows are never mistaken for the outer table's. That is right, and
+   * it also destroys the relay leg list, which SwimCloud serves as a nested
+   * table hidden behind its own "Show names" toggle. By the time a caller has
+   * `dataRows`, the legs are gone.
+   *
+   * So they are collected here, while the raw markup is still in hand, and
+   * carried alongside. Paired by position: a relay entry has exactly one hidden
+   * list, so the Nth list belongs to the Nth data row. An empty array means
+   * that row had none, which is the normal case for an individual swim.
+   */
+  readonly relayLegsByRow: readonly (readonly SwimCloudRelayLeg[])[];
   readonly name: SwimsHeaderColumn;
   readonly time: SwimsHeaderColumn;
   readonly team?: SwimsHeaderColumn;
@@ -4054,8 +4178,23 @@ function locateEventRoundTables(tables: readonly HtmlElementSpan[]): LocatedEven
     }
 
     const caption = readTableCaption(table.html);
+    // Relay legs, paired by occurrence rather than by row index.
+    //
+    // Splitting the raw body on <tr> cannot be indexed against `dataRows`: the
+    // hidden leg tables contain their own <tr>s, so a four-leg relay yields
+    // five entries where the flattened split yields one. Instead every hidden
+    // list in the table is read in document order, and paired 1:1 with the data
+    // rows ONLY when the counts match exactly -- which is what a relay round
+    // looks like, since every relay entry carries one. Any other shape is left
+    // unpaired rather than guessed at: attaching the wrong swimmers to the
+    // wrong relay would be a plausible, silent, wrong answer.
+    const dataRowHtml = rows.slice(headerIndex + 1).filter((row) => !isHeaderRow(row));
+    const hiddenLists = readHiddenLegListsInOrder(table.html);
+    const relayLegsByRow =
+      hiddenLists.length === dataRowHtml.length ? hiddenLists : dataRowHtml.map(() => []);
     located.push({
       ...(caption === undefined ? {} : { caption }),
+      relayLegsByRow,
       name,
       time,
       ...(team === undefined ? {} : { team }),
@@ -4071,13 +4210,23 @@ function locateEventRoundTables(tables: readonly HtmlElementSpan[]): LocatedEven
   return located;
 }
 
-/** The first `<caption>`'s text inside a table's own source. Absent when there is none, or it is blank. */
+/**
+ * The first `<caption>`'s text inside a table's own source. Absent when there
+ * is none, or it is blank.
+ *
+ * A relay round's caption carries the page's own "Show names" button inside the
+ * `<caption>` element, so the raw text reads `"Timed Finals Show names"`. That
+ * string became the round label and would have been compared against round
+ * vocabulary, matched nothing, and left a relay round unidentifiable. Buttons
+ * are stripped before the text is read: they are controls the page draws, not
+ * part of what it says.
+ */
 function readTableCaption(tableHtml: string): string | undefined {
   const captions = findElementSpans(tableHtml, 'caption');
   if (captions.length === 0) {
     return undefined;
   }
-  const text = htmlToText(captions[0].inner);
+  const text = htmlToText(stripElements(captions[0].inner, ['button']));
   return text.length === 0 ? undefined : text;
 }
 
@@ -4411,7 +4560,13 @@ function readEventRound(
     }
 
     const swimmerId = swimmerIdFromCell(nameCellHtml);
-    if (swimmerId === undefined) {
+    // A relay row names a team, not a person, so it legitimately carries no
+    // swimmer link — the swimmers are in the hidden leg table in this same
+    // cell. Reading those first means the warning below can tell "a relay,
+    // correctly identified" from "an individual row that lost its link", which
+    // it previously could not: every relay row raised it.
+    const relayLegs = table.relayLegsByRow[rowIndex] ?? [];
+    if (swimmerId === undefined && relayLegs.length === 0) {
       ctx.warnings.push({
         code: 'missing-athlete-link',
         message: `Per-event results row for ${athleteName} carries no /swimmer/{id}/ link; the athlete has no SwimCloud id from this capture.`,
@@ -4466,6 +4621,7 @@ function readEventRound(
     swims.push({
       swimKey,
       ...(swimId === undefined ? {} : { swimCloudSwimId: swimId }),
+      ...(relayLegs.length === 0 ? {} : { relayLegs }),
       ...(table.caption === undefined ? {} : { roundLabel: table.caption }),
       entry,
       result,

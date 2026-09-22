@@ -1350,6 +1350,9 @@
     if (token.length === 0) {
       return {};
     }
+    if (/^[-‐‑‒–—―]+$/.test(token)) {
+      return {};
+    }
     if (/^\d+(\.\d+)?$/.test(token)) {
       const value = Number.parseFloat(token);
       return { points: value };
