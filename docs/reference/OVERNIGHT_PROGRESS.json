@@ -55,14 +55,33 @@
     {
       "commit": "e877acce",
       "what": "n5 part 1: getCutlinesForSwim/compareTimeToCutline defaulted division to D1, and isACut/isBCut took it as optional and passed it through -- so isACut(sec,gender,event) measured any swim against the D1 table. CLAUDE.md rule 5 forbids exactly that. No caller omitted it, so nothing shipped wrong; the fix makes tsc enforce the rule. Stated honestly in the test that restoring the default fails nothing today."
+    },
+    {
+      "commit": "ab60c08e",
+      "what": "n5 part 2: deleted NEON_COLORS and TEAM_COLORS_MAP, dead constants naming four specific schools. Readiness f9 marked resolved; its recorded consequence was already stale."
+    },
+    {
+      "commit": "ba5af5ad",
+      "what": "n4: 429 backoff and retry on both fetch paths. Honours Retry-After, else 3s/6s/12s, gives up past 60s or three tries, reports the wait on the panel. Nothing speeds up -- a Retry-After under the 3s floor is raised to it. Writing the tests found a real bug: Date.parse accepts \"1.5\" and returned a 2001 timestamp, collapsing the wait to zero."
+    },
+    {
+      "commit": "2bf5f7fd",
+      "what": "800 and 1500 Freestyle were convertible but not plannable, so a long-course meet could not be planned. Added, with the missing invariant: every event CONVERSION_FACTORS knows must be in the catalogue. Readiness f8 was half stale."
     }
   ],
   "nextUp": [
     {
-      "id": "n4",
-      "title": "429 backoff and retry in the extension",
-      "why": "There is no 429 handling anywhere: a throttled page is simply a page that never arrives, recorded as http-error. It has not bitten at the sequential floor (0 of 50, then 51 of 51 clean), so this is insurance rather than a fix for an observed failure -- which is why it sits below the items above.",
-      "how": "Honour Retry-After when present, else exponential backoff with a cap, bounded attempts, and surface the wait on the panel. Backoff only ever makes the traffic gentler, so it does not conflict with decision d3 ('caching + fewer pages first'). Do NOT raise any concurrency or lower any delay.",
+      "id": "n7",
+      "title": "Adversarial bug hunt over the app, not the crawler",
+      "why": "The user asked for real bug testing in plain terms: \"no bullshit tests just just give me a large number of successes but it still has bugs\". Tonight found five real defects by reading code rather than running tests (re-crawl index starvation, every relay dropped, hardcoded D1 default, Date.parse accepting junk, unplannable convertible events). The same reading has not been done on the scoring and lineup paths.",
+      "how": "Pick one path at a time. Read for: a default that stands in for a missing fact, two tables that must agree with nothing asserting it, an absent value treated as zero, an early return that hides a partial result. Write the failing test before the fix.",
+      "status": "next"
+    },
+    {
+      "id": "n8",
+      "title": "Check UI navigability against the stated priority",
+      "why": "The user named it a priority: \"UI must be easy to navigate and handle\". docs/reference/UI_REDESIGN_STATE.json records what was planned; it has not been re-read since the data path changed shape.",
+      "how": "Read UI_REDESIGN_STATE.json, check what is actually outstanding, and fix what is cheap and clearly right. Do not restyle anything the user has not asked for.",
       "status": "todo"
     }
   ],
@@ -83,6 +102,10 @@
     {
       "at": "2026-09-22T06:05Z",
       "what": "n3, n5, n6 done. Hardcode sweep results: NO hardcoded SwimCloud team or meet ids in production code. Rule 7 point tables and SCORING_POINTS are legitimate domain data behind the preset layer. Two real findings: the D1 division default (fixed, e877acce) and dead hardcoded constants NEON_COLORS/TEAM_COLORS_MAP naming four specific schools (deleted; readiness finding f9 marked resolved, its recorded consequence was already stale)."
+    },
+    {
+      "at": "2026-09-22T06:40Z",
+      "what": "Queue n1-n6 cleared plus f8. 1053 vitest, 84 script tests, lint clean, all pushed to branch and main. Every new guard mutation-tested; three mutations were inert on the first attempt and were redone rather than counted."
     }
   ],
   "notesForTheUser": [
