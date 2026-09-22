@@ -79,9 +79,21 @@
     {
       "commit": "0bf3d192",
       "what": "n8: navigability. Checked every internal link target against the shell routes -- all seven resolve, nothing dead, Metrics reachable from the applet switcher marked experimental. Added the guard, because the routes live in JSX and the targets live across three packages with nothing comparing them: deleting a route leaves every link to it apparently working, since the catch-all redirects to \"/\"."
+    },
+    {
+      "commit": "68f311a6",
+      "what": "Found by continuing the n7 hunt after the queue emptied, and the most consequential defect of the night: nothing on the SwimCloud path ever set isTimeTrial, so meet 356467s 13 post-programme events (14 swims in the capture) imported as ordinary scoring swims AND counted against every swimmers entry limit -- breaking the users own explicit ruling on the new primary import path. Boundary read from ScoringSettings.scoredEventNumberMax, never a literal. Programme number read from the badge the event index prints, not the URL."
     }
   ],
-  "nextUp": [],
+  "nextUp": [
+    {
+      "id": "n9",
+      "title": "Keep the n7 hunt going on paths not yet read",
+      "why": "Six real defects tonight were found by reading code in an already-green suite, the last one after the queue was empty. The arbitrage, rosterOptimizer and relay-construction paths have not been read this way.",
+      "how": "One path at a time. Write the failing test before the fix. Mutation-test every guard and treat an inert mutation as a finding about the test, not a pass.",
+      "status": "next"
+    }
+  ],
   "blockedNeedsTheUser": [
     "Which discovery page carries the event index. Deciding it needs one live fetch, which this session may not make. Both branches are implemented and correct; the panel says which one ran.",
     "The swimmer-times endpoint's method and response shape. The user clicks 'Copy times endpoint for Omniswim' on one swimmer page and pastes the report. No season-best pass can exist before that.",
@@ -111,6 +123,10 @@
     {
       "at": "2026-09-22T07:45Z",
       "what": "n8 done and the queue is empty. Three mutations proven lethal on the navigation guard, one of which reproduced a blind spot my own manual sweep had had (object-literal to: entries). 1070 vitest, 84 script tests, lint clean, pushed to branch and main."
+    },
+    {
+      "at": "2026-09-22T08:15Z",
+      "what": "Queue was empty so kept hunting rather than idling, and found the isTimeTrial gap. Three mutations run; the third was inert because the printed number and the URL ref are identical on all 51 captured pages, so a synthetic case where they diverge was added to separate them. 1077 vitest, 84 script tests, lint clean."
     }
   ],
   "notesForTheUser": [
@@ -118,5 +134,5 @@
     "Readiness finding f8 is still open and is a real limit on \"usable for all formats\": INDIVIDUAL_EVENTS does not list 400 Freestyle, though the conversion table already knows it. A coach planning a long-course meet cannot pick an event the program actually contests.",
     "The UI redesign initiative (docs/reference/UI_REDESIGN_STATE.json, 19 turns) has three items the 2026-09-14 session DEFERRED on purpose rather than rushed: optimizer rejected-candidate surfacing (a real rosterOptimizer candidate-selection change, executor-tier), optimizer undo, and the converted-time cutline half of the pre-submit checklist. I did not start any of them overnight -- each is a design decision, not a fix, and starting one on limited quota while you were asleep was the wrong call. They are yours to sequence."
   ],
-  "queueState": "EMPTY as of 2026-09-22T07:45Z. Everything queued overnight is done. What remains needs either the user at a browser (see blockedNeedsTheUser) or a design decision that is the users to make (see notesForTheUser)."
+  "queueState": "EMPTY as of 2026-09-22T08:15Z, but the n7-style hunt keeps paying: it found the isTimeTrial gap after the queue was already clear. If resuming with quota to spare, keep reading a path at a time rather than inventing queue items -- the pattern that works is looking for a default standing in for a missing fact, two tables that must agree with nothing asserting it, and an absent value treated as zero."
 }
