@@ -35,29 +35,23 @@
     {
       "commit": "b2e1dd9b",
       "what": "Recorded all of the above in CRAWL_INVESTIGATION_STATE.json. Pushed to the branch and fast-forwarded main."
+    },
+    {
+      "commit": "efda8f76",
+      "what": "n1 found a real defect by reading the loop, not the tests: a re-crawl of a complete capture fetches nothing, so no page index is ever read, so the four diving events would stay missing forever. storedEventRefs now reads the index off stored meetEvent pages too. Two mutations proven lethal (one was inert on the first attempt and was redone)."
+    },
+    {
+      "commit": "bf58e166",
+      "what": "n2: the pre-crawl estimate counted swims pages the planner no longer plans and called the event count unknown when the meet had published it. A 4-team 57-event meet now quotes 57 requests, not 8. A test asserts the estimate and planScopedMeetCrawl agree rather than merely looking similar."
     }
   ],
   "nextUp": [
-    {
-      "id": "n1",
-      "title": "Self-review today's four commits for real defects",
-      "why": "The user's standing instruction is explicit: 'no bullshit tests just just give me a large number of successes but it still has bugs'. Today changed the crawl loop, the parser and the import bridge. 1020 green tests is not evidence that the new code is right, and one defect is already suspected -- see n2.",
-      "how": "Read the new code adversarially, not the tests. Focus on the rounds loop in runEventResultsPass (progress accounting, termination, early-stop paths), swimCloudEventResultsToSwimmerResults (gender/round/points edge cases), and applySwimCloudRows (the merge order and the event-only path). Write a failing test for anything found before fixing it.",
-      "status": "next"
-    },
-    {
-      "id": "n2",
-      "title": "crawlScopeFloorPagesPerTeam still counts the swims pass",
-      "why": "Spotted while wiring event-first. It adds 2 pages per team for meetTeamSwims, but planScopedMeetCrawl now plans none of those pages when the event list is already known. So the page estimate shown before a crawl overstates it by teamCount*2, which is exactly the number the change was supposed to remove.",
-      "how": "Thread the same eventListAlreadyKnown flag through, or take the floor from the plan rather than from the scope. Check every caller of the estimate.",
-      "status": "todo"
-    },
     {
       "id": "n3",
       "title": "Update USER_GUIDE.md section 4 (SwimCloud)",
       "why": "The guide now describes a crawl that no longer happens. It tells the coach the crawl reads each team's swims pages; the default path reads event pages and may fetch no swims page at all. A doc that misdescribes the tool is worse than no doc, and the user asked for this guide specifically.",
       "how": "Rewrite the SwimCloud subsection: what the crawl fetches now, why diving events appear for the first time, what the class-year column means and the four reasons it can read unknown, and the new 'Copy times endpoint' button and what to do with it.",
-      "status": "todo"
+      "status": "next"
     },
     {
       "id": "n4",
@@ -72,6 +66,13 @@
       "why": "A direct standing instruction: 'remember to not hardcode certain things because i need this to be usable for all divisions/teams/scoring rules and formats'. Worth one deliberate pass now that the data path has changed shape.",
       "how": "Grep for team ids, meet ids, conference names, division literals and point tables outside the preset/config layer and outside tests and fixtures. Anything found either moves to configuration or gets a comment saying why it is genuinely fixed.",
       "status": "todo"
+    },
+    {
+      "id": "n6",
+      "title": "Name a Mixed event as Mixed when skipping its rows",
+      "why": "Events 403 and 503 are Mixed. The parser records gender unknown (correct -- it is neither side of the meet) but loses the printed word, so the import tells the coach \"Gender could not be determined\", which reads like a parse failure on a page that parsed perfectly. Not scoring a mixed event to a mens or womens total is right; saying it that way is the fix.",
+      "how": "Carry the printed gender word verbatim on the parse result, then give the converter a distinct skip reason for it. Do NOT start scoring mixed events.",
+      "status": "todo"
     }
   ],
   "blockedNeedsTheUser": [
@@ -83,6 +84,10 @@
     {
       "at": "2026-09-22T04:30Z",
       "what": "Opened this file. Hourly cron job 146cdc7e created to re-enter the work if a rate limit interrupts it. Cron jobs are session-only and auto-expire after 7 days -- if Claude exits, the schedule is gone and the user must restart it."
+    },
+    {
+      "at": "2026-09-22T05:05Z",
+      "what": "n1 and n2 done, pushed to branch and main. 1030 vitest, 84 script tests, lint clean. Also noted during review: a Mixed-gender event (403, 503) parses as gender unknown, so every row on it skips with the reason label \"Gender could not be determined\" -- misleading, since the gender IS determined and is Mixed. Recorded as n6."
     }
   ]
 }

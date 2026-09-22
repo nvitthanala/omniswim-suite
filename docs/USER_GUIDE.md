@@ -147,36 +147,83 @@ which teams you want, then pick **how much** to pull:
 
 | Scope | Pulls | Use it when |
 | --- | --- | --- |
-| **Meet results only** | Team swims and per-event results | You want to score or scout this meet. **Much the fastest.** |
+| **Meet results only** | Every event's own results page | You want to score or scout this meet. **Much the fastest.** |
 | **Rosters and season bests only** | Team rosters | You want the roster for a team |
 | **Everything** | Both of the above | You want the meet and the rosters |
 
-> **Season bests do not come from a crawl.** A swimmer's personal-bests page
-> builds its table in your browser after the page loads, so a downloaded copy
-> of it contains no times — only the page frame. The crawler therefore does not
-> request those pages at all, and says so in the panel rather than fetching
-> hundreds of empty ones.
->
-> To get a swimmer's personal bests, open their SwimCloud page yourself and use
-> the extension's clipboard button, then **From clipboard** in Manager. That
-> path reads the table off the rendered page, so it works.
->
-> This was measured, not assumed: on a real crawl, those pages were **184 of
-> 234 requests and produced zero usable rows**. Removing them is most of why a
-> crawl is now much faster.
+#### The crawl goes event by event
 
-The panel tells you the page count and rough time before you start. On a real
-four-team meet, *Meet results only* was **42 pages against 234** for what
-*Everything* used to fetch — so choose the narrow scope unless you need the
-rosters too.
+A meet page publishes a list of every event it ran. The crawler reads that
+list and fetches one results page per event. Each of those pages holds **every
+team** in that event, so it does not matter how many teams are in the field —
+a 57-event meet is 57 pages whether four teams entered or forty.
 
-Crawls are paced on purpose, a few seconds per page. It is not stuck. You can
-pause and resume, and re-running a crawl skips pages already stored.
+This replaced an older approach that read each team's "swims" list instead.
+The difference is not only speed:
+
+- **Diving now appears.** A diver has no swims, so a diving event never showed
+  up on any team's swims list. On the one real meet that was four events —
+  1M and 3M for both genders — missing from the score entirely. Not
+  mis-scored: absent, with nothing in the total to hint at it.
+- **Prelims and finals are told apart.** An event page groups its rows under
+  the round they were swum in. A swims list has no round column at all, so a
+  swimmer who made finals appeared twice with nothing to separate the rows.
+- **Relay legs come through.** Each relay entry carries its four swimmers and
+  their splits.
+- **Real meet points.** A finals table publishes the actual score.
+
+The panel tells you before you start how many pages it will fetch and roughly
+how long that takes. Crawls are paced on purpose, a few seconds per page — it
+is not stuck. You can pause and resume, and re-running a crawl skips pages
+already stored.
 
 > A capture always tells you which scope produced it. If you pull *Meet
 > results only* and later go looking for rosters, the app says the crawl never
 > asked for them — rather than showing an empty list that looks like the meet
 > had no swimmers.
+
+#### Class year
+
+Class year comes from the team rosters in the same capture, matched to each
+swim by SwimCloud's own swimmer id — never by name, because two spellings of
+one swimmer's name are common and a name match would have to guess.
+
+So the column reads **unknown** when the capture cannot answer, and the import
+notes say which of four reasons applies:
+
+| It says | It means | What to do |
+| --- | --- | --- |
+| No roster captured | No roster for that swimmer's team is in this capture | Re-crawl with *Everything* |
+| Not on the roster | The team's roster was read and does not list them | Nothing — they may have joined mid-season |
+| Roster prints no class year | The roster lists them with the year blank | Nothing; SwimCloud does not have it |
+| No swimmer id to join on | The row is a relay entry, which names a team, not a person | Nothing; this is expected |
+
+A blank is never filled in with a guess.
+
+#### Season bests
+
+**Season bests do not come from a crawl.** A swimmer's times page builds its
+table in your browser after the page loads, so a downloaded copy of it contains
+no times — only the page frame. The crawler does not request those pages, and
+says so in the panel rather than fetching hundreds of empty ones.
+
+This was measured, not assumed: on a real crawl those pages were **184 of 234
+requests and produced zero usable rows**.
+
+To get one swimmer's bests today, open their SwimCloud page yourself and use
+the extension's clipboard button, then **From clipboard** in Manager. That path
+reads the table off the rendered page, so it works.
+
+**To make this automatic**, the app needs to know which request that page makes
+for its own data. Find out once:
+
+1. Open any swimmer's SwimCloud times page.
+2. Click through a couple of the season or course tabs, so the page fetches.
+3. Click **Copy times endpoint for Omniswim**, bottom right.
+4. Paste what it copied into an issue or hand it to whoever maintains this.
+
+The button reads what your browser already recorded for that page. It does not
+intercept anything, and it only runs on a page you opened yourself.
 
 ---
 
@@ -304,6 +351,8 @@ number, which is worse than a gap.
   final, it excludes the swim and says so instead of picking one.
 - **It will not assume a team's division.** An unmapped team reads as unknown,
   never as a default.
+- **It will not guess a class year.** It is matched from a roster by SwimCloud
+  id, never by name, and reads unknown with a stated reason otherwise.
 - **It will not treat missing data as zero.** "No cut achieved" and "we have no
   data" are shown differently everywhere.
 - **Converted times are marked as estimates.** No governing body publishes an
@@ -319,6 +368,8 @@ number, which is worse than a gap.
 | Team totals look wrong | The rule set (section 3). A championship table at a dual meet inflates relays badly. |
 | A swimmer is missing after an import | Did the crawl use a narrow scope? The capture panel says which pages it pulled. |
 | A swimmer has no season-best times | Crawls do not fetch those. Use the extension's clipboard button on that swimmer's page — see section 4. |
+| Class year reads "unknown" | The import notes say which of four reasons — see section 4. A relay row never has one. |
+| A diving event is missing | Re-crawl. Older captures were built from team swims lists, which no diving event appears on. |
 | Cut tags say "unknown" | That team is not mapped to a division, or the school does not sponsor that gender. |
 | A relay scores nothing | A vacant leg, or legs that are not eligible under the rule set. |
 | A crawl seems frozen | It is paced on purpose. The panel shows progress and lets you pause. |
