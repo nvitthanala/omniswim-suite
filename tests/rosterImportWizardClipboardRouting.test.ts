@@ -189,9 +189,9 @@ describe('RosterImportWizard — clipboard dispatcher routing', () => {
     expect(container.textContent).toContain('Paulk, River J');
     expect(container.textContent).toContain('50 Free SCY');
     expect(container.textContent).toContain('19.42');
-    // The leadoff split never reaches the preview.
-    expect(container.textContent).not.toContain('50 Back SCY');
-    expect(container.textContent).toContain('1 row(s) skipped — relay leadoff.');
+    // The leadoff reaches the preview like any other swim.
+    expect(container.textContent).toContain('50 Back SCY');
+    expect(container.textContent).not.toContain('row(s) skipped — relay leadoff.');
   });
 
   it('does not attempt a parse of the bare swimmer profile root — it says which page to capture', async () => {
@@ -255,7 +255,7 @@ describe('RosterImportWizard — clipboard dispatcher routing', () => {
     expect(errors).toStrictEqual([]);
     // The real times fixture is an Auburn swimmer, so nobody on this roster is
     // checked off — and the count says so rather than guessing at a match.
-    expect(logs[1]).toContain('Added 8 swim(s) for Paulk, River J. 0/35 roster swimmers captured.');
+    expect(logs[1]).toContain('Added 9 swim(s) for Paulk, River J. 0/35 roster swimmers captured.');
     expect(container.textContent).toContain('Roster queue — Henderson State University (0/35 captured)');
     // The swims still reached the preview, under the wizard's own team.
     expect(container.textContent).toContain('50 Free SCY');

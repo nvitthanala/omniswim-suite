@@ -424,6 +424,27 @@ export interface HistoricalSwim {
   classYear?: string;
   swimcloudBadge?: SwimCloudBadge;
   computedCut?: 'A' | 'B' | null;
+  /**
+   * The time was taken out of a longer swim's splits, not swum as a race of
+   * this distance.
+   *
+   * SwimCloud marks these `X` / `title="Extracted"`. Avery Henke's "50 Breast
+   * SCY 25.16" and "100 Breast SCY 54.09" share one swim id: the 25.16 is the
+   * first half of the 100, never a 50 Breast he stood up and swam.
+   *
+   * **Not a personal best**, so it is kept out of
+   * {@link AthleteEventProfile.bestByEvent} and never cut-tagged, ranked or
+   * planned as an entry. It is kept, tagged, in
+   * {@link AthleteEventProfile.extractedByEvent}, where it stands in for a
+   * relay leg when the swimmer has no standalone time at that distance —
+   * a real measured half of a race is a far better estimate of a relay split
+   * than nothing.
+   *
+   * A relay **leadoff** is the opposite case and carries no flag: it starts
+   * from the blocks and finishes to the hand, so it is the individual swim and
+   * is imported as one.
+   */
+  isExtractedSplit?: boolean;
 }
 
 export interface AthleteEventProfile {
@@ -431,6 +452,16 @@ export interface AthleteEventProfile {
   team: string;
   gender: Gender;
   bestByEvent: Record<string, { time: string; timeSec: number; source: string }>;
+  /**
+   * Times taken out of a longer swim's splits, keyed like
+   * {@link bestByEvent} and deliberately kept apart from it.
+   *
+   * These are placeholders, not bests. They fill a relay leg the swimmer has
+   * no standalone time for — see `findCalculatedSplit` — and are excluded from
+   * every place a best is treated as a real result: rankings, cut tags,
+   * entry planning. See {@link HistoricalSwim.isExtractedSplit}.
+   */
+  extractedByEvent: Record<string, { time: string; timeSec: number; source: string }>;
   primaryEvents: string[];
   relayEvents: string[];
   /**

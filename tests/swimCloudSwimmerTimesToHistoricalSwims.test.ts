@@ -59,23 +59,36 @@ function convertFixture() {
 }
 
 describe('swimCloudSwimmerTimesToHistoricalSwims — real capture (swimmer 1472365, River Paulk)', () => {
-  it('converts 8 of the 9 real rows, excluding the one relay-leadoff split', () => {
+  it('converts all 9 real rows, the relay leadoff included', () => {
+    // **Changed 2026-09-22 on the coach's ruling.** This used to convert 8 and
+    // skip the leadoff. See the test below for why that was backwards.
     const conversion = convertFixture();
-    expect(conversion.swims).toHaveLength(8);
-    expect(conversion.skipped).toHaveLength(1);
+    expect(conversion.swims).toHaveLength(9);
+    expect(conversion.skipped).toStrictEqual([]);
   });
 
-  it('excludes the 50 Back SCY row because the page itself flags it "Leadoff"', () => {
-    // The real row carries an `R` chip whose tooltip reads `Leadoff`. This is
-    // read from `relayLeadoff`, a boolean the parser set from that chip — not
-    // by string-matching a stroke name, which is what the deprecated
-    // personal-bests converter had to do against a table shape SwimCloud does
-    // not serve. A leadoff split is not an individual swim.
+  it('keeps the 50 Back SCY row even though the page flags it "Leadoff"', () => {
+    // The real row carries an `R` chip whose tooltip reads `Leadoff`, read
+    // from `relayLeadoff` — a boolean the parser set from that chip, never by
+    // string-matching a stroke name.
+    //
+    // It is imported as an ordinary individual swim. A leadoff starts from the
+    // blocks, not a flying takeover, and finishes to the hand: it is the
+    // individual event, swum inside a relay. Dropping it threw away a real
+    // 50 Back.
+    //
+    // This is not the same question as whether a leadoff SCORES as an
+    // individual entry at the meet it was swum in. It does not, and
+    // swimCloudMeetImportBridge still excludes it there.
+    const real = parsedFixture();
+    const leadoff = real.personalBests.find((b) => b.relayLeadoff);
+    expect(leadoff?.eventLabel).toBe('50 Back SCY');
+
     const conversion = convertFixture();
-    expect(conversion.swims.map((s) => s.event)).not.toContain('50 Back SCY');
-    expect(conversion.skipped[0].reason).toBe('relay-leadoff');
-    expect(conversion.skipped[0].personalBest.eventLabel).toBe('50 Back SCY');
-    expect(conversion.skipped[0].personalBest.relayLeadoff).toBe(true);
+    expect(conversion.swims.map((s) => s.event)).toContain('50 Back SCY');
+    expect(conversion.swims.find((s) => s.event === '50 Back SCY')?.time).toBe('25.99');
+    // And it is a real swim, not a relay-split placeholder.
+    expect(conversion.swims.find((s) => s.event === '50 Back SCY')?.isExtractedSplit).toBeUndefined();
   });
 
   it('converts the 50 Free SCY row exactly as the page prints it', () => {
@@ -103,6 +116,9 @@ describe('swimCloudSwimmerTimesToHistoricalSwims — real capture (swimmer 14723
       '100 Free LCM 50.24 LCM',
       '200 Free SCY 1:37.77 SCY',
       '1000 Free SCY 10:37.48 SCY',
+      // The relay leadoff, in its own page position. Imported since
+      // 2026-09-22: it is the individual event swum inside a relay.
+      '50 Back SCY 25.99 SCY',
       '200 IM LCM 2:15.09 LCM',
       '400 IM SCY 4:29.35 SCY',
     ]);
@@ -125,6 +141,7 @@ describe('swimCloudSwimmerTimesToHistoricalSwims — real capture (swimmer 14723
       'Jul 24, 2025',
       'Dec 8, 2023',
       'Jan 17, 2020',
+      'Mar 4, 2022',
       'Jun 17, 2022',
       'Feb 21, 2020',
     ]);
@@ -245,11 +262,15 @@ describe('swimCloudSwimmerTimesToHistoricalSwims — meet label fallback', () =>
 
 describe('swimCloudSwimmerTimesToHistoricalSwims — an all-skipped capture is still ok:true', () => {
   it('reports zero swims with every row accounted for, not a failure', () => {
+    // A row with no time. This used to use the leadoff row, which is no
+    // longer skipped -- a leadoff is a real individual swim as of 2026-09-22.
+    // "No time at all" is now the only per-row skip this converter has.
     const real = parsedFixture();
-    const leadoff = real.personalBests.find((b) => b.relayLeadoff);
-    if (leadoff === undefined) throw new Error('fixture no longer carries a relay-leadoff row');
+    const first = real.personalBests[0];
+    if (first === undefined) throw new Error('fixture carries no rows');
+    const timeless = { ...first, time: undefined };
 
-    const conversion = swimCloudSwimmerTimesToHistoricalSwims({ ...real, personalBests: [leadoff] }, OPTIONS);
+    const conversion = swimCloudSwimmerTimesToHistoricalSwims({ ...real, personalBests: [timeless] }, OPTIONS);
     if (!conversion.ok) throw new Error('expected ok');
     expect(conversion.swims).toStrictEqual([]);
     expect(conversion.skipped).toHaveLength(1);

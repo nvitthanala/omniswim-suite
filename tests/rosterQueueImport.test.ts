@@ -158,18 +158,19 @@ describe('seedRosterQueueFromAthletes', () => {
 });
 
 describe('convertAndAccountSwimmerTimes', () => {
-  it('converts the real times capture into its 8 importable swims and skips the leadoff split', () => {
+  it('converts the real times capture into all 9 of its swims', () => {
     const parse = realSwimmerTimes();
     const result = convertAndAccountSwimmerTimes(parse, { team: 'Auburn', gender: Gender.MEN });
     if (!result.ok) throw new Error(`expected a conversion, got: ${result.message}`);
 
-    // 9 real rows on the page, less the one row the page's own chip flags as a
-    // relay leadoff (50 Back SCY).
+    // All 9 real rows, the relay leadoff included. **Changed 2026-09-22 on the
+    // coach's ruling**: a leadoff starts from the blocks and finishes to the
+    // hand, so it is the individual event swum inside a relay.
     expect(parse.personalBests).toHaveLength(9);
-    expect(result.swims).toHaveLength(8);
-    expect(result.skippedCount).toBe(1);
-    expect(result.skipWarnings).toStrictEqual(['1 row(s) skipped — relay leadoff.']);
-    expect(result.swims.map(s => s.event)).not.toContain('50 Back SCY');
+    expect(result.swims).toHaveLength(9);
+    expect(result.skippedCount).toBe(0);
+    expect(result.skipWarnings).toStrictEqual([]);
+    expect(result.swims.map(s => s.event)).toContain('50 Back SCY');
 
     const fifty = result.swims.find(s => s.event === '50 Free SCY');
     expect(fifty).toStrictEqual({
@@ -201,13 +202,18 @@ describe('convertAndAccountSwimmerTimes', () => {
   });
 
   it('distinguishes "nothing importable here" from an empty success', () => {
-    const leadoffOnly: SwimCloudSwimmerTimesParse = {
+    // A row with no time. This used to use the leadoff row; a leadoff is a
+    // real individual swim as of 2026-09-22, so "no time at all" is the only
+    // per-row skip left.
+    const first = realSwimmerTimes().personalBests[0];
+    if (first === undefined) throw new Error('fixture carries no rows');
+    const timelessOnly: SwimCloudSwimmerTimesParse = {
       ...realSwimmerTimes(),
-      personalBests: realSwimmerTimes().personalBests.filter(pb => pb.relayLeadoff),
+      personalBests: [{ ...first, time: undefined }],
     };
-    expect(leadoffOnly.personalBests).toHaveLength(1);
+    expect(timelessOnly.personalBests).toHaveLength(1);
 
-    const result = convertAndAccountSwimmerTimes(leadoffOnly, { team: 'HSU', gender: Gender.MEN });
+    const result = convertAndAccountSwimmerTimes(timelessOnly, { team: 'HSU', gender: Gender.MEN });
     expect(result.ok).toBe(false);
     if (result.ok) return;
     expect(result.reason).toBe('no-usable-times');
@@ -330,7 +336,7 @@ describe('buildRosterImportFromCapture', () => {
     expect(result.teamLabel).toBe('Henderson State University');
 
     // The swims are the real ones off the real times capture.
-    expect(result.swims).toHaveLength(8);
+    expect(result.swims).toHaveLength(9);
     expect(result.swims.every(s => s.team === 'Henderson State' && s.gender === Gender.MEN)).toBe(true);
     expect(result.swims.find(s => s.event === '50 Free SCY')?.time).toBe('19.42');
     expect(result.swims.find(s => s.event === '1000 Free SCY')?.time).toBe('10:37.48');
@@ -343,8 +349,9 @@ describe('buildRosterImportFromCapture', () => {
     expect(result.importedSwimmerCount).toBe(1);
     expect(result.newAthleteCount).toBe(35);
     expect(result.genderMismatch).toBe(false);
-    expect(result.warnings).toStrictEqual(['1 row(s) skipped — relay leadoff.']);
-    expect(result.summary).toContain('imported 8 swim(s) for 1 of 35 roster swimmer(s)');
+    // No leadoff warning: a leadoff is imported as the individual swim it is.
+    expect(result.warnings).toStrictEqual([]);
+    expect(result.summary).toContain('imported 9 swim(s) for 1 of 35 roster swimmer(s)');
     expect(result.summary).toContain('34 still need a "Copy for Omniswim" capture');
   });
 
@@ -362,9 +369,9 @@ describe('buildRosterImportFromCapture', () => {
     });
 
     expect(result.importedSwimmerCount).toBe(2);
-    expect(result.swims).toHaveLength(16);
-    // Two swimmers, one leadoff row each, one line.
-    expect(result.warnings).toStrictEqual(['2 row(s) skipped — relay leadoff.']);
+    expect(result.swims).toHaveLength(18);
+    // Two swimmers, nine rows each, nothing skipped.
+    expect(result.warnings).toStrictEqual([]);
   });
 
   it('leaves a swimmer whose page held nothing importable unchecked, and names them', () => {
@@ -372,14 +379,19 @@ describe('buildRosterImportFromCapture', () => {
     const colin = roster.athletes.find(a => a.swimCloudSwimmerId === COLIN_ID);
     if (colin === undefined) throw new Error('Colin Candebat missing from the roster fixture');
 
-    const leadoffOnly: SwimCloudSwimmerTimesParse = {
+    // A row with no time. This used to use the leadoff row; a leadoff is a
+    // real individual swim as of 2026-09-22, so "no time at all" is the only
+    // per-row skip left.
+    const firstBest = realSwimmerTimes().personalBests[0];
+    if (firstBest === undefined) throw new Error('fixture carries no rows');
+    const timelessOnly: SwimCloudSwimmerTimesParse = {
       ...timesFor(COLIN_ID),
-      personalBests: realSwimmerTimes().personalBests.filter(pb => pb.relayLeadoff),
+      personalBests: [{ ...firstBest, time: undefined }],
     };
 
     const result = buildRosterImportFromCapture({
       roster,
-      swimmerTimes: [leadoffOnly],
+      swimmerTimes: [timelessOnly],
       team: 'Henderson State',
       gender: Gender.MEN,
       existingRosterNames: [],
@@ -426,7 +438,7 @@ describe('buildRosterImportFromCapture', () => {
     });
 
     expect(result.genderMismatch).toBe(true);
-    expect(result.swims).toHaveLength(8);
+    expect(result.swims).toHaveLength(9);
     // The wizard's scope wins for what gets written; the disagreement is stated,
     // never resolved silently.
     expect(result.swims.every(s => s.gender === Gender.MEN)).toBe(true);

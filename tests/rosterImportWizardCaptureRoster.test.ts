@@ -351,20 +351,21 @@ describe('RosterImportWizard — bulk roster import from a completed capture', (
     expect(container.textContent).toContain('✓ Colin Candebat');
     expect(container.textContent).toContain('Bartu Akin');
 
-    // The preview holds the real swims off the real times capture — 9 rows on
-    // the page, less the one the page's own chip flags as a relay leadoff.
-    expect(container.textContent).toContain('8 swims parsed');
+    // The preview holds all 9 real swims off the real times capture. The
+    // relay leadoff is one of them as of 2026-09-22: it is the individual
+    // event swum inside a relay.
+    expect(container.textContent).toContain('9 swims parsed');
     expect(container.textContent).toContain('Paulk, River J');
     expect(container.textContent).toContain('50 Free SCY');
     expect(container.textContent).toContain('19.42');
     expect(container.textContent).toContain('1000 Free SCY');
     expect(container.textContent).toContain('10:37.48');
-    expect(container.textContent).not.toContain('50 Back SCY');
-    expect(container.textContent).toContain('1 row(s) skipped — relay leadoff.');
+    expect(container.textContent).toContain('50 Back SCY');
+    expect(container.textContent).not.toContain('row(s) skipped — relay leadoff.');
 
     // And the toast said what was and was not imported.
-    const summary = logs.find(line => line.includes('imported 8 swim(s)'));
-    expect(summary).toContain('Henderson State University: imported 8 swim(s) for 1 of 35 roster swimmer(s).');
+    const summary = logs.find(line => line.includes('imported 9 swim(s)'));
+    expect(summary).toContain('Henderson State University: imported 9 swim(s) for 1 of 35 roster swimmer(s).');
     expect(summary).toContain('34 still need a "Copy for Omniswim" capture');
     expect(summary).toContain('35 not yet in this workspace:');
   });

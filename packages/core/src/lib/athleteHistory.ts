@@ -134,6 +134,12 @@ export function categorizeBestEvents(
   const nameKey = normalizeSwimmerName(resolver.resolveAthleteName(name, team, gender));
 
   const bestByEvent: AthleteEventProfile['bestByEvent'] = {};
+  // Kept apart from bestByEvent on purpose. An extracted time was taken out of
+  // a longer swim's splits, so it is not a result at this distance and must
+  // never be ranked, cut-tagged or planned as an entry. It is still the best
+  // available estimate of what the swimmer would split on a relay leg, which
+  // is the one place it is read. See HistoricalSwim.isExtractedSplit.
+  const extractedByEvent: AthleteEventProfile['extractedByEvent'] = {};
   for (const s of history) {
     if (s.gender !== gender || s.team !== team) continue;
     if (normalizeSwimmerName(resolver.resolveAthleteName(s.name, team, gender)) !== nameKey) continue;
@@ -157,6 +163,13 @@ export function categorizeBestEvents(
 
     const sec = convertTimeToSeconds(programTime);
     if (!Number.isFinite(sec) || sec <= 0) continue;
+    if (s.isExtractedSplit === true) {
+      const prevExtracted = extractedByEvent[programEvent];
+      if (!prevExtracted || sec < prevExtracted.timeSec) {
+        extractedByEvent[programEvent] = { time: programTime, timeSec: sec, source: s.source };
+      }
+      continue;
+    }
     const prev = bestByEvent[programEvent];
     if (!prev || sec < prev.timeSec) {
       bestByEvent[programEvent] = { time: programTime, timeSec: sec, source: s.source };
@@ -176,6 +189,7 @@ export function categorizeBestEvents(
     team,
     gender,
     bestByEvent,
+    extractedByEvent,
     primaryEvents,
     relayEvents: relayList,
     qualityByEvent: quality.ratioByEvent,
@@ -1198,6 +1212,12 @@ export function buildEventProfileFromCatalog(
     team: roster.team.name,
     gender,
     bestByEvent,
+    // Empty because this profile is built from the roster catalog, which
+    // records no split provenance. That is "this source cannot say", not "the
+    // swimmer has none" -- a relay leg falling through to it simply finds
+    // nothing and stays unfilled, rather than borrowing a best that was never
+    // marked as extracted.
+    extractedByEvent: {},
     primaryEvents,
     relayEvents: dedupedRelays,
     qualityByEvent: quality.ratioByEvent,

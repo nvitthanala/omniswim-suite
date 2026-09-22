@@ -33,13 +33,34 @@ function parsedFixture() {
 }
 
 describe('swimCloudTeamMeetSwimsToHistoricalSwims — real capture (356467, Henderson State, men, page 1/8)', () => {
-  it('converts 27 of 30 real swims, excluding the 3 relay-leadoff splits', () => {
+  it('converts all 30 real swims, the 3 relay leadoffs included', () => {
+    // **Changed 2026-09-22 on the coach's ruling.** This used to convert 27
+    // and skip the 3 leadoff rows as 'relay-event'. A leadoff starts from the
+    // blocks, not a flying takeover, and finishes to the hand, so it is the
+    // individual event swum inside a relay.
+    //
+    // The page agrees: its leadoff rows are labelled with the INDIVIDUAL event
+    // ("50 Y Back 22.53" for Avery Henke), not the relay, and that same swim
+    // appears on his times page under "50 Back SCY".
+    //
+    // Whether a leadoff SCORES as an individual entry at this meet is a
+    // different question with the opposite answer -- swimCloudMeetImportBridge
+    // still excludes it there.
     const conversion = swimCloudTeamMeetSwimsToHistoricalSwims(parsedFixture(), {
       team: 'Henderson State',
       gender: Gender.MEN,
     });
-    expect(conversion.swims).toHaveLength(27);
-    expect(conversion.skipped.filter((s) => s.reason === 'relay-event')).toHaveLength(3);
+    expect(conversion.swims).toHaveLength(30);
+    expect(conversion.skipped.filter((s) => s.reason === 'relay-event')).toHaveLength(0);
+
+    // The three are really there, and really leadoffs on the page.
+    const leadoffEvents = parsedFixture()
+      .swims.filter((s) => s.relayLeadoff)
+      .map((s) => s.event.label);
+    expect(leadoffEvents).toStrictEqual(['100 Y Free', '50 Y Back', '200 Y Free']);
+    for (const label of leadoffEvents) {
+      expect(conversion.swims.some((s) => s.event === label)).toBe(true);
+    }
   });
 
   it('matches team name case-insensitively and trims it', () => {
@@ -47,7 +68,7 @@ describe('swimCloudTeamMeetSwimsToHistoricalSwims — real capture (356467, Hend
       team: '  henderson state  ',
       gender: Gender.MEN,
     });
-    expect(conversion.swims).toHaveLength(27);
+    expect(conversion.swims).toHaveLength(30);
   });
 
   it('rejects the whole page as other-team when the coach picked the wrong team', () => {

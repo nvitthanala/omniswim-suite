@@ -23,9 +23,31 @@ export type RelaySplitComparison = {
   knownSplit: string | null;
   calculatedSplit: string | null;
   deltaSec: number | null;
-  source: 'pdf' | 'history' | 'lineup' | 'none';
+  /**
+   * Where the calculated split came from.
+   *
+   * `'extracted-split'` is a **placeholder**, not a result: the swimmer has no
+   * standalone time at the leg distance, so the best available estimate is a
+   * time SwimCloud took out of a longer swim's splits. Named separately from
+   * `'history'` so a coach can see which legs rest on an estimate.
+   */
+  source: 'pdf' | 'history' | 'lineup' | 'extracted-split' | 'none';
 };
 
+/**
+ * A leg's time from what the swimmer has already done, in order of authority.
+ *
+ * 1. A real standalone swim at the leg distance (`'history'`).
+ * 2. A time the meet's entry plan already commits them to (`'lineup'`).
+ * 3. A time extracted from a longer swim's splits (`'extracted-split'`).
+ *
+ * Three is last and is a placeholder. It is offered at all because a measured
+ * half of a 100 is a far better estimate of what a swimmer splits on a relay
+ * leg than an empty cell — and because it is the only thing many swimmers have
+ * at 50 yards. It is never allowed to look like the first two: it carries its
+ * own source so the caller can mark it, and it never enters
+ * `bestByEvent`, so it is never ranked, cut-tagged or planned as an entry.
+ */
 function findCalculatedSplit(
   workspace: Workspace,
   team: string,
@@ -33,7 +55,7 @@ function findCalculatedSplit(
   name: string,
   relayEvent: string,
   legIndex: number
-): { time: string; source: 'history' | 'lineup' } | null {
+): { time: string; source: 'history' | 'lineup' | 'extracted-split' } | null {
   const req = relayLegRequirements(relayEvent, legIndex);
   const settings = mergeScoringSettings(workspace.scoringSettings, {
     conference: workspace.conference,
@@ -58,6 +80,19 @@ function findCalculatedSplit(
       p.event.includes(String(req.legDistanceYards))
   );
   if (plan) return { time: plan.time, source: 'lineup' };
+
+  // Last resort. Matched exactly as bestByEvent is, so a leg only ever takes a
+  // placeholder at its own distance and stroke.
+  const extractedEvent = Object.keys(profile.extractedByEvent).find(ev => {
+    const lower = ev.toLowerCase();
+    return (
+      lower.includes(String(req.legDistanceYards)) &&
+      req.keywords.some(kw => lower.includes(kw))
+    );
+  });
+  if (extractedEvent && profile.extractedByEvent[extractedEvent]) {
+    return { time: profile.extractedByEvent[extractedEvent].time, source: 'extracted-split' };
+  }
   return null;
 }
 

@@ -151,6 +151,17 @@ export function swimCloudPersonalBestsToHistoricalSwims(
   return { ok: true, swims, skipped };
 }
 
+/**
+ * Whether a row's chips mark it as taken out of a longer swim's splits.
+ *
+ * Matched on the tooltip, never on the visible `X`. The same letter is the
+ * Hy-Tek exhibition marker elsewhere in this codebase, and the two mean
+ * entirely different things -- see `SwimCloudSwimmerTimesTag`.
+ */
+function isExtractedSplit(personalBest: { readonly tags: readonly { readonly title?: string }[] }): boolean {
+  return personalBest.tags.some(tag => tag.title === 'Extracted');
+}
+
 /* -------------------------------------------------------------------------- */
 /* Meet results — bulk import                                                 */
 /* -------------------------------------------------------------------------- */
@@ -358,10 +369,11 @@ export function swimCloudTeamMeetSwimsToHistoricalSwims(
     const skip = (reason: SwimCloudMeetImportSkipReason) =>
       skipped.push({ reason, eventLabel, ...(athleteName === undefined ? {} : { athleteName }) });
 
-    if (swim.relayLeadoff) {
-      skip('relay-event');
-      continue;
-    }
+    // Kept, not skipped. See the leadoff note in
+    // `swimCloudPersonalBestsToHistoricalSwims`: a leadoff starts from the
+    // blocks and finishes to the hand, so it is the individual event. This
+    // page labels it as one too -- Avery Henke's leadoff row reads "50 Y Back
+    // 22.53", the same swim the times page lists under "50 Back SCY".
     if (genderMismatch) {
       skip('other-gender');
       continue;
@@ -511,10 +523,16 @@ export function swimCloudSwimmerTimesToHistoricalSwims(
   const skipped: SwimCloudSwimmerTimesSkippedRow[] = [];
 
   for (const personalBest of parse.personalBests) {
-    if (personalBest.relayLeadoff) {
-      skipped.push({ personalBest, reason: 'relay-leadoff' });
-      continue;
-    }
+    // A relay leadoff is imported as a real individual swim. **Changed
+    // 2026-09-22 on the user's ruling**, and the reasoning is the rules: a
+    // leadoff starts from the blocks, not a flying takeover, and finishes to
+    // the hand. It is the individual event, swum inside a relay. Avery Henke's
+    // 22.53 leadoff is his 50 Back.
+    //
+    // This is NOT the same question as whether a leadoff scores as an
+    // individual entry at the meet it was swum in -- it does not, and
+    // `swimCloudMeetImportBridge` still excludes it there. That bridge is
+    // about one meet's placings; this one is about what a swimmer has done.
     if (personalBest.time === undefined) {
       skipped.push({ personalBest, reason: 'no-time' });
       continue;
@@ -536,6 +554,12 @@ export function swimCloudSwimmerTimesToHistoricalSwims(
       // the page's own format and not something to normalize on the way past.
       ...(personalBest.date === undefined ? {} : { date: personalBest.date }),
       ...(meetLabel === undefined ? {} : { meetLabel }),
+      // A time SwimCloud took out of a longer swim's splits, marked `X` /
+      // `title="Extracted"`. Kept, because it is the only 50 many swimmers
+      // have and it estimates a relay leg well -- but flagged, because it is
+      // not a race at this distance and must never be ranked, cut-tagged or
+      // entered. See HistoricalSwim.isExtractedSplit.
+      ...(isExtractedSplit(personalBest) ? { isExtractedSplit: true } : {}),
       source: 'swimcloud',
     });
   }
