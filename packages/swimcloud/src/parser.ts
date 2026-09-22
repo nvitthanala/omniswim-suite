@@ -4039,6 +4039,19 @@ export interface SwimCloudMeetEventResultsParse {
   /** From the printed word on the gender dropdown's active item — never from the event id. */
   readonly gender: SwimCloudGenderOrUnknown;
   /**
+   * That same dropdown word, **verbatim** — `'Men'`, `'Women'`, `'Mixed'`.
+   *
+   * {@link gender} maps it, and the map has only two destinations plus
+   * `'unknown'`. So a Mixed event and a page whose dropdown could not be read
+   * both arrive as `'unknown'`, and a caller cannot tell "this event is
+   * genuinely neither side of the meet" from "this page did not parse". They
+   * deserve different words in front of a coach: the first is a fact about the
+   * meet, the second is a fault.
+   *
+   * Absent when the page carried no gender dropdown at all.
+   */
+  readonly genderLabel?: string;
+  /**
    * Every event of this meet, from the index the page prints for itself —
    * see {@link readMeetEventIndex}. This page is one of them.
    *
@@ -4164,6 +4177,9 @@ export function parseMeetEventResultsHtml(
   }
 
   const gender = options.gender ?? readEventPageGender(cleaned);
+  // Read separately from `gender`, and deliberately not derived from it: the
+  // mapping is lossy in exactly the case that matters. See `genderLabel`.
+  const genderLabel = readDropdownActiveText(cleaned, 'gender');
   const eventLabel = readDropdownActiveText(cleaned, 'event');
   const meetName = elementTextById(cleaned, 'meet-name') ?? firstHeadingText(cleaned);
   const meetCourse = readPrintedCourse(cleaned) ?? options.meetCourse;
@@ -4244,6 +4260,7 @@ export function parseMeetEventResultsHtml(
       event,
       ...(eventLabel === undefined ? {} : { eventLabel }),
       gender,
+      ...(genderLabel === undefined ? {} : { genderLabel }),
       ...(eventIndex.length === 0 ? {} : { eventIndex }),
       rounds,
       rowCount,

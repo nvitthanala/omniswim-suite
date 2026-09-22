@@ -29,7 +29,12 @@ export type DiagnosticSeverity = 'review' | 'structural';
  * resolve it) and must never be folded into "expected." Every other skip
  * reason reflects missing or unreadable source data and defaults to review.
  */
-const STRUCTURAL_SKIP_REASONS: ReadonlySet<SwimCloudMeetImportSkipReason> = new Set(['relay-leadoff']);
+const STRUCTURAL_SKIP_REASONS: ReadonlySet<SwimCloudMeetImportSkipReason> = new Set([
+  'relay-leadoff',
+  // Correctly excluded, always, like a leadoff: a mixed event belongs to
+  // neither team's score and there is nothing for a coach to act on.
+  'mixed-gender-event',
+]);
 
 export function classifySkipSeverity(reason: SwimCloudMeetImportSkipReason): DiagnosticSeverity {
   return STRUCTURAL_SKIP_REASONS.has(reason) ? 'structural' : 'review';
@@ -144,5 +149,7 @@ export function skipReasonLabel(reason: SwimCloudMeetImportSkipReason): string {
       return 'Prelims/finals could not be told apart';
     case 'missing-round-caption':
       return 'Event page round table had no round name';
+    case 'mixed-gender-event':
+      return 'Mixed event (scores to neither team)';
   }
 }

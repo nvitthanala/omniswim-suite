@@ -39,6 +39,10 @@ import {
   buildSwimCloudTeamNameIndex,
   swimCloudEventResultsToSwimmerResults,
 } from '../packages/matrix/src/lib/swimCloudMeetImportBridge';
+import {
+  classifySkipSeverity,
+  skipReasonLabel,
+} from '../packages/matrix/src/lib/swimCloudImportDiagnostics';
 
 const PAGES = path.resolve(__dirname, '..', 'data', 'swimcloud-captures', 'pages');
 
@@ -266,5 +270,103 @@ describe('class-year gaps, one per reason', () => {
     ]);
     expect(coverage.index.get('9')?.classYear).toBe('SO');
     expect(coverage.teamsWithRosters).toStrictEqual(['58', '48']);
+  });
+});
+
+describe('a mixed event is excluded, and said to be mixed', () => {
+  /**
+   * A per-event parse, hand-built.
+   *
+   * Events 403 ("50 Free Mixed") and 503 ("200 Fly Mixed") of meet 356467 are
+   * real and have never been fetched — they are two of the six the swims lists
+   * never named, so the archived capture has no page for either. The shape
+   * below is what `parseMeetEventResultsHtml` produces for one: a gender that
+   * maps to `unknown`, and the printed word kept beside it.
+   */
+  const parse = (genderLabel: string | undefined) =>
+    ({
+      swimCloudMeetId: '356467',
+      eventRef: '403',
+      meet: { swimCloudMeetId: '356467', name: 'New South Championships', format: 'unknown', ruleset: 'unknown', course: 'SCY' },
+      event: {
+        eventId: '356467:event:403',
+        swimCloudMeetId: '356467',
+        eventRef: '403',
+        label: '50 Free',
+        kind: 'individual',
+        course: 'SCY',
+        gender: 'unknown',
+        distance: 50,
+        stroke: 'Free',
+      },
+      gender: 'unknown',
+      ...(genderLabel === undefined ? {} : { genderLabel }),
+      rounds: [
+        {
+          round: 'Timed Finals',
+          pointsColumn: 'none',
+          rowCount: 1,
+          swims: [
+            {
+              swimKey: '356467:swim:1',
+              entry: {
+                entryId: '356467:swim:1:entry',
+                eventId: '356467:event:403',
+                athleteName: 'Avery Henke',
+                swimCloudSwimmerId: '1330318',
+                swimCloudTeamId: '58',
+                teamName: 'Henderson State',
+              },
+              result: { resultId: 'r', entryId: 'e', eventId: '356467:event:403', place: 1, finalTime: '23.10' },
+              exhibition: false,
+              relayLeadoff: false,
+              cutStandards: [],
+            },
+          ],
+        },
+      ],
+      rowCount: 1,
+    }) as unknown as SwimCloudMeetEventResultsParse;
+
+  it('reports a mixed event as mixed, not as an unreadable gender', () => {
+    // The two are opposites. Here the page stated its gender perfectly clearly
+    // and the answer was "both"; 'unknown-gender' means the page did not say.
+    // Reporting this one as "gender could not be determined" reads like a parse
+    // failure on a page that parsed fine, and sends a coach hunting a bug.
+    const result = swimCloudEventResultsToSwimmerResults(parse('Mixed'));
+    expect(result.men).toStrictEqual([]);
+    expect(result.women).toStrictEqual([]);
+    expect(result.skipped.map((s) => s.reason)).toStrictEqual(['mixed-gender-event']);
+  });
+
+  it('still reports a genuinely unreadable gender as unknown', () => {
+    // The control. Without it, the test above would pass just as well if every
+    // gender-less row were relabelled mixed.
+    expect(swimCloudEventResultsToSwimmerResults(parse(undefined)).skipped.map((s) => s.reason)).toStrictEqual([
+      'unknown-gender',
+    ]);
+    expect(swimCloudEventResultsToSwimmerResults(parse('Nonbinary')).skipped.map((s) => s.reason)).toStrictEqual([
+      'unknown-gender',
+    ]);
+  });
+
+  it('never scores a mixed event to either side of the meet', () => {
+    // SwimmerResult carries one gender per row, so a mixed relay put on both
+    // totals would award the same swim twice. Excluding it is the correct
+    // outcome, not a limitation.
+    for (const label of ['Mixed', 'mixed', ' Mixed ']) {
+      const result = swimCloudEventResultsToSwimmerResults(parse(label));
+      expect(result.men.length + result.women.length, label).toBe(0);
+    }
+  });
+
+  it('is classified as expected rather than as something to review', () => {
+    // Same standing as a relay leadoff: correctly excluded, always, with
+    // nothing for a coach to act on. It must not sit in the review list next
+    // to real data loss.
+    expect(classifySkipSeverity('mixed-gender-event')).toBe('structural');
+    expect(skipReasonLabel('mixed-gender-event')).toBe('Mixed event (scores to neither team)');
+    // And the contrast that makes that meaningful.
+    expect(classifySkipSeverity('unknown-gender')).toBe('review');
   });
 });

@@ -152,7 +152,24 @@ export type SwimCloudMeetImportSkipReason =
    * final. Same rule, and the same reason, as
    * {@link buildSwimCloudEventRoundIndex} skipping such a round.
    */
-  | 'missing-round-caption';
+  | 'missing-round-caption'
+  /**
+   * The event is contested by men and women together, so it belongs to
+   * neither team's score.
+   *
+   * A real meet runs these: meet 356467 has a "50 Free Mixed" and a "200 Fly
+   * Mixed", both in the time-trial range above its numbered program. Not
+   * scoring them to a men's or women's total is correct — `SwimmerResult` has
+   * one gender per row, and splitting a mixed relay across both totals would
+   * award the same swim twice.
+   *
+   * It is a separate reason from `'unknown-gender'` because the two are
+   * opposites. Here the page stated its gender perfectly clearly and the
+   * answer was "both"; there, the page did not say. Reporting a Mixed event as
+   * "gender could not be determined" reads like a parse failure on a page that
+   * parsed fine, and sends a coach looking for a bug.
+   */
+  | 'mixed-gender-event';
 
 export interface SwimCloudMeetImportSkip {
   readonly reason: SwimCloudMeetImportSkipReason;
@@ -1023,7 +1040,8 @@ export function swimCloudEventResultsToSwimmerResults(
 
       if (gender === undefined) {
         skipped.push({
-          reason: 'unknown-gender',
+          // The page said "Mixed" is not the page failing to say anything.
+          reason: isMixedGenderLabel(parse.genderLabel) ? 'mixed-gender-event' : 'unknown-gender',
           eventLabel,
           ...(swim.entry.athleteName === undefined ? {} : { subject: swim.entry.athleteName }),
         });
@@ -1094,6 +1112,19 @@ export function swimCloudEventResultsToSwimmerResults(
   }
 
   return { men, women, skipped, classYearGaps };
+}
+
+/**
+ * Whether a per-event page's own gender word means "both genders together".
+ *
+ * Matched on the printed word rather than on the absence of a mapped gender,
+ * because absence covers two unrelated cases — see
+ * `SwimCloudMeetEventResultsParse.genderLabel`. An unrecognised word is not
+ * treated as mixed: it falls through to `'unknown-gender'`, which is the
+ * honest report for a word nothing here understands.
+ */
+function isMixedGenderLabel(label: string | undefined): boolean {
+  return label !== undefined && /^\s*mixed\b/i.test(label);
 }
 
 /**
