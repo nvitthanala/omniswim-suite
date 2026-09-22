@@ -44,6 +44,10 @@
     {
       "at": "2026-09-21",
       "what": "Landed the resume-starvation fix and moved the event pass to the sequential floor on the strength of the 429 evidence. 978 vitest, 84 script tests, lint clean."
+    },
+    {
+      "at": "2026-09-22",
+      "what": "Real crawl confirmed both earlier fixes (51/51 event pages, zero 429s). Investigated the user's event-first proposal against stored pages: it is viable and strictly better. Found that relay legs ARE published but hidden, and that the swims-derived event list missed 6 events. Queued four changes."
     }
   ],
   "nextStep": "Check E first (cheapest, purely local): is there any other capture id, or any page stored outside the meet-356467 record? Then B (pairing state on disk). Then A/C/D, which need evidence only the user's browser has.",
@@ -83,5 +87,45 @@
     "Re-crawl to confirm. Reload the extension first (chrome://extensions -> reload): crawler.js was rebuilt again for these fixes.",
     "Expect the event pass to fetch ~51 pages at roughly 3s each, about 2.5 minutes, and prelims/finals to resolve afterwards.",
     "If 429s still appear on the event pass, the sequential floor is not enough and backoff is needed - send the parse output."
+  ],
+  "FIXES_VERIFIED_BY_REAL_CRAWL": {
+    "at": "2026-09-22",
+    "capture": "285 pages, updatedAt 2026-09-22T00:28:50Z",
+    "eventPages": "51 of 51 fetched, ALL HTTP 200 - the sequential floor held where the 3-lane pool failed 60% of the time.",
+    "conclusion": "Both fixes work. The resume-starvation fix planned the event pages; the pacing change fetched them without a single 429."
+  },
+  "ARCHITECTURE_FINDINGS": {
+    "context": "User proposed going event-by-event instead of per-team swims pages, pulling swimmer times from the swimmer's times tab, and asked about class year. All four points below were measured against stored pages, no network.",
+    "1_event_page_is_sufficient": {
+      "evidence": "parseMeetEventResultsHtml on the real event-26 fixture yields event{label,kind,course,GENDER,distance,stroke} and rounds[] = 'A Final','B Final','C Final',(Preliminaries), each row carrying swimCloudSwimmerId, athleteName, swimCloudTeamId, teamName, place, finalTime, meetScore, exhibition, relayLeadoff, cutStandards.",
+      "meaning": "Name, team, gender, round, place and points all come from the event page. The per-team swims pass is not needed for any of them."
+    },
+    "2_one_event_page_enumerates_the_meet": {
+      "evidence": "The stored event/26 page links to 57 distinct /results/356467/event/N/ refs. The swims-derived enumeration produced 51.",
+      "missed": [
+        "9",
+        "29",
+        "18",
+        "40",
+        "403",
+        "503"
+      ],
+      "meaning": "The current swims-derived list is INCOMPLETE - it missed 6 events. One event page is a better and cheaper source of the event list than 42 swims pages."
+    },
+    "3_relay_legs_ARE_published": {
+      "evidence": "Event 11's stored HTML contains <div class='u-is-hidden js-hidden-list'> holding a table per relay entry: per leg an <a href='/results/356467/swimmer/{id}/'>Name</a> and an <a href='/times/{swimId}/'>split</a>. 25 distinct swimmer ids on a page with ~24 legs.",
+      "meaning": "The 'relay-legs-absent' warning and its doc comment ('SwimCloud does not publish them at all') are a FALSE PREMISE. Legs, swimmer ids, split times and swim ids are all in the served HTML, merely hidden behind a 'Show names' toggle (js-toggle-hidden-list). This also explains the missing-athlete-link warnings on relay rows."
+    },
+    "4_class_year": {
+      "onlySource": "Roster pages. The event page carries no class year.",
+      "plan": "Join class year onto event rows by swimCloudSwimmerId, which BOTH sources carry - a real id join, not a name match, so it is immune to the aliasing problems INVARIANTS item 6 describes. Costs 8 roster pages (one per team per gender), which the crawl already fetches.",
+      "honestGap": "A team+gender with no roster posted (UWF men) yields no class year for its athletes. That must render as unknown, never defaulted."
+    }
+  },
+  "WORK_QUEUE": [
+    "D. Points cell '-' should be absent, not an unrecognized-points-token warning. Same dash-vocabulary fix already applied to class year. Cheapest, removes a large share of the log noise.",
+    "A. Parse the hidden relay-leg list. Highest data value: recovers leg names, swimmer ids and split times, and removes the false 'legs absent' premise.",
+    "B. Enumerate events from an event page rather than from swims pages. Fixes the 6 missed events and is the step that makes event-first possible.",
+    "C. Join class year from roster pages by swimCloudSwimmerId."
   ]
 }
