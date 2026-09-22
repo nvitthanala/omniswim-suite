@@ -87,6 +87,10 @@
     {
       "commit": "4955ec9b",
       "what": "Diving events parsed for the first time. The pages had never been fetched, and when they were, they failed outright: a diving table has no Time column. 47 rows, 360 meet points, cross-checked row by row against data/meets.json. Also settles the long-open question -- a diving Score IS meet points."
+    },
+    {
+      "commit": "d4bd313b",
+      "what": "Coach's ruling on the two non-ordinary SwimCloud row kinds. A relay leadoff is now imported as the individual swim it is (starts from the blocks, finishes to the hand); the real capture went from 8 imported swims to 9. An extracted time is now tagged and routed to extractedByEvent, where it fills a relay leg the swimmer has no standalone time for, and is kept out of bestByEvent so it is never ranked, cut-tagged or entered. Four mutations run; two were inert on the first attempt -- one patched the wrong converter, the other could not be distinguished by the real fixture -- and both were redone or covered by a synthetic case."
     }
   ],
   "nextUp": [
@@ -100,8 +104,7 @@
   ],
   "blockedNeedsTheUser": [
     "Which discovery page carries the event index. Deciding it needs one live fetch, which this session may not make. Both branches are implemented and correct; the panel says which one ran.",
-    "The swimmer-times endpoint's method and response shape. The user clicks 'Copy times endpoint for Omniswim' on one swimmer page and pastes the report. No season-best pass can exist before that.",
-    "RULING NEEDED: a SwimCloud \"Extracted\" time is a mid-race split (Avery Henke 50 Breast 25.16 shares its swim id with the 100 Breast 54.09). It currently imports as a genuine personal best, while a relay Leadoff -- which IS a legal start from the blocks -- is excluded. That is arguably backwards. Decide whether Extracted splits should count as bests, and whether Leadoff should."
+    "The swimmer-times endpoint's method and response shape. The user clicks 'Copy times endpoint for Omniswim' on one swimmer page and pastes the report. No season-best pass can exist before that."
   ],
   "timeline": [
     {
@@ -135,6 +138,10 @@
     {
       "at": "2026-09-22T14:45Z",
       "what": "User ran the full-field crawl and pasted a rendered swimmer-times page. Verified the capture (57 event pages), answered and fixed diving, and found the Extracted-vs-Leadoff asymmetry. Also noted the local workspace went from 550 menResults at 14:05 to 0 from 14:25 -- recoverable from data/backups/meets-startup-2026-09-22T14-05-01-773Z.json -- which is why two e2e tests now fail."
+    },
+    {
+      "at": "2026-09-22T15:30Z",
+      "what": "Implemented the extracted/leadoff ruling. 16 existing assertions across 5 files encoded the old behaviour and were updated with their reasoning, not just their numbers. 1097 vitest, lint clean. The 2 playwright failures are unchanged and environmental: the local workspace DB holds one empty workspace, so the seed test and the chart test have nothing to work with."
     }
   ],
   "notesForTheUser": [
