@@ -497,7 +497,16 @@ export function buildRosterImportFromCapture(
 
   for (const { entry, parse } of pairings) {
     if (parse === undefined) continue;
-    const accounted = convertAndAccountSwimmerTimes(parse, { team: trimmedTeam, gender });
+    // The times JSON (`parseSwimmerFastestTimesJson`) names no swimmer. When
+    // the pairing was an id match, the roster row's name is the same swimmer's
+    // name from a page the same capture holds -- an id join, not a guess.
+    const named =
+      parse.name === undefined &&
+      entry.swimCloudSwimmerId !== undefined &&
+      entry.swimCloudSwimmerId === parse.swimCloudSwimmerId
+        ? { ...parse, name: entry.name }
+        : parse;
+    const accounted = convertAndAccountSwimmerTimes(named, { team: trimmedTeam, gender });
     if (!accounted.ok) {
       // Graceful degradation, one swimmer at a time: a page that converted to
       // nothing leaves that athlete unchecked and says why, rather than taking

@@ -4,6 +4,11 @@
 "use strict";
 (() => {
   // packages/swimcloud/src/urlClassifier.ts
+  function exemptSwimmerFastestTimesId(lower) {
+    if (lower.length !== 4) return void 0;
+    if (lower[0] !== "api" || lower[1] !== "swimmers" || lower[3] !== "profile_fastest_times") return void 0;
+    return NUMERIC_ID.test(lower[2]) ? lower[2] : void 0;
+  }
   var SWIMCLOUD_CANONICAL_HOST = "www.swimcloud.com";
   var SWIMCLOUD_APEX_HOST = "swimcloud.com";
   function isSwimCloudHost(hostname) {
@@ -22,6 +27,8 @@
         return `/swimmer/${resource.swimmerId}/`;
       case "swimmerTimes":
         return `/swimmer/${resource.swimmerId}/times/`;
+      case "swimmerFastestTimes":
+        return `/api/swimmers/${resource.swimmerId}/profile_fastest_times/`;
       case "meet":
         return `/results/${resource.meetId}/`;
       case "meetEvent":
@@ -137,7 +144,8 @@
     const segments = splitSegments(parsed.pathname);
     const lower = segments.map((segment) => segment.toLowerCase());
     const canonicalPath = canonicalPathOf(lower);
-    const rule = robotsRuleFor(segments);
+    const exemptSwimmerId = exemptSwimmerFastestTimesId(lower);
+    const rule = exemptSwimmerId === void 0 ? robotsRuleFor(segments) : null;
     if (rule !== null) {
       return {
         outcome: "forbidden",
@@ -164,6 +172,9 @@
         resource
       };
     };
+    if (exemptSwimmerId !== void 0) {
+      return fetchable({ kind: "swimmerFastestTimes", swimmerId: exemptSwimmerId });
+    }
     switch (lower[0]) {
       case "team": {
         if (segments.length === 1) {
@@ -473,7 +484,7 @@
     return `https://${SWIMCLOUD_CANONICAL_HOST}/team/${teamId}/roster/?gender=${gender}`;
   }
   function swimmerTimesUrl(swimmerId) {
-    return `https://${SWIMCLOUD_CANONICAL_HOST}/swimmer/${swimmerId}/times/`;
+    return `https://${SWIMCLOUD_CANONICAL_HOST}/api/swimmers/${swimmerId}/profile_fastest_times/`;
   }
   function eventResultsUrl(meetId, eventRef) {
     return `https://${SWIMCLOUD_CANONICAL_HOST}/results/${meetId}/event/${eventRef}/`;
@@ -559,7 +570,7 @@
       seen.add(swimmerId);
       steps.push({
         canonicalUrl: swimmerTimesUrl(swimmerId),
-        resourceKind: "swimmerTimes",
+        resourceKind: "swimmerFastestTimes",
         meetId: input.meetId,
         swimmerId
       });
@@ -576,7 +587,7 @@
     meetEvent: "meetTeamSwims",
     swimmerTimes: "teamRoster"
   };
-  var SWIMCLOUD_DOM_RENDERED_PASSES = ["swimmerTimes"];
+  var SWIMCLOUD_DOM_RENDERED_PASSES = [];
   function passRequiresRenderedDom(pass) {
     return SWIMCLOUD_DOM_RENDERED_PASSES.includes(pass);
   }
@@ -593,19 +604,16 @@
     {
       id: "roster-and-season-bests",
       // The id keeps its original spelling so stored captures stay readable. The
-      // label does not promise season bests any more: the pass is declined (see
-      // SWIMCLOUD_DOM_RENDERED_PASSES), and a radio button offering data no crawl
-      // can return is the kind of plausible-but-false claim this repo exists to
-      // avoid. The summary states the limit at the point of choosing, rather than
-      // leaving a coach to discover it an hour later.
-      label: "Team rosters only",
-      summary: "Every team\u2019s roster. Skips this meet\u2019s own results. Personal-best times are not fetched by any crawl \u2014 that page builds its table in the browser, so capture those swimmers with the extension\u2019s clipboard button instead.",
+      // pass fetches the times JSON since 2026-09-22, so the label promises
+      // personal bests again.
+      label: "Rosters and personal bests",
+      summary: "Every team\u2019s roster and each rostered swimmer\u2019s personal-best times. Skips this meet\u2019s own results.",
       passes: ["teamRoster", "swimmerTimes"]
     },
     {
       id: "everything",
       label: "Everything",
-      summary: "Meet results, per-event rounds and team rosters. The most requests, and the longest. Personal-best times are not fetched by any crawl \u2014 use the extension\u2019s clipboard button for those.",
+      summary: "Meet results, per-event rounds, team rosters and every rostered swimmer\u2019s personal bests. The most requests, and the longest.",
       passes: ["meetTeamSwims", "meetEvent", "teamRoster", "swimmerTimes"]
     }
   ];
@@ -2490,8 +2498,8 @@
   }
 
   // extensions/swimcloud-companion/src/swimmerTimes.ts
-  var SWIMMER_TIMES_CONCURRENCY = 3;
-  var SWIMMER_TIMES_STAGGER_MS = 400;
+  var SWIMMER_TIMES_CONCURRENCY = 1;
+  var SWIMMER_TIMES_STAGGER_MS = 3e3;
   function planSwimmerTimesSteps(meetId, rosters) {
     const collected = collectSwimmerIds(rosters);
     return {

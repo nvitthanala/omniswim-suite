@@ -1847,3 +1847,44 @@ describe('GET /api/swimcloud/captures/:id?withEventRefs=1', () => {
     }
   });
 });
+
+describe('capture parse route — swimmer times JSON (2026-09-22)', () => {
+  it('accepts a relayed profile_fastest_times page and parses it into swimmerTimes', async () => {
+    const harness = await startHarness();
+    try {
+      await openTeamCapture(harness);
+      await seedTeamPage(harness, ROSTER_MEN_URL, ROSTER_MEN_HTML);
+      await seedTeamPage(
+        harness,
+        'https://www.swimcloud.com/api/swimmers/1330318/profile_fastest_times/',
+        fixture('profile_fastest_times-1330318.json'),
+      );
+      const { status, body } = await parseCapture(harness, TEAM_CAPTURE_ID);
+      expect(status).toBe(200);
+      expect(body.warnings).toStrictEqual([]);
+      expect(body.rosters).toHaveLength(1);
+      expect(body.swimmerTimes).toHaveLength(1);
+      expect(body.swimmerTimes[0].swimCloudSwimmerId).toBe('1330318');
+      expect(body.swimmerTimes[0].personalBests).toHaveLength(35);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('still refuses any other /api/ page', async () => {
+    const harness = await startHarness();
+    try {
+      await openTeamCapture(harness);
+      const res = await call(harness, 'POST', `${BASE}/${TEAM_CAPTURE_ID}/pages`, {
+        body: pagePayload({
+          subject: TEAM_SUBJECT,
+          sourceUrl: 'https://www.swimcloud.com/api/swimmers/1330318/times_by_event/?event=1%7C50%7CY%7C1',
+          html: '[]',
+        }),
+      });
+      expect(res.status).toBe(400);
+    } finally {
+      await harness.close();
+    }
+  });
+});

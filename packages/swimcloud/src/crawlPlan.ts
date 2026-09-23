@@ -89,8 +89,14 @@ function teamRosterUrl(teamId: SwimCloudTeamId, gender: SwimCloudCrawlGender): s
   return `https://${SWIMCLOUD_CANONICAL_HOST}/team/${teamId}/roster/?gender=${gender}`;
 }
 
+/**
+ * The JSON the swimmer times page builds its table from, not the page itself.
+ * The page's own HTML is a shell; see {@link SWIMCLOUD_DOM_RENDERED_PASSES}.
+ * This path sits under robots.txt's `/api/` rule and is fetched by the user's
+ * decision — see `SWIMCLOUD_ROBOTS_USER_EXEMPTIONS` in `./urlClassifier.ts`.
+ */
 function swimmerTimesUrl(swimmerId: SwimCloudSwimmerId): string {
-  return `https://${SWIMCLOUD_CANONICAL_HOST}/swimmer/${swimmerId}/times/`;
+  return `https://${SWIMCLOUD_CANONICAL_HOST}/api/swimmers/${swimmerId}/profile_fastest_times/`;
 }
 
 function eventResultsUrl(meetId: SwimCloudMeetId, eventRef: string): string {
@@ -365,7 +371,7 @@ export function planMeetSwimmerTimes(
     seen.add(swimmerId);
     steps.push({
       canonicalUrl: swimmerTimesUrl(swimmerId),
-      resourceKind: 'swimmerTimes' as const,
+      resourceKind: 'swimmerFastestTimes' as const,
       meetId: input.meetId,
       swimmerId,
     });
@@ -466,7 +472,12 @@ export const SWIMCLOUD_CRAWL_PASS_PREREQUISITE: Readonly<
  * of silently planning nothing, and so a future capture that proves the server
  * has started sending the table can remove the entry with evidence.
  */
-export const SWIMCLOUD_DOM_RENDERED_PASSES: readonly SwimCloudCrawlPass[] = ['swimmerTimes'];
+export const SWIMCLOUD_DOM_RENDERED_PASSES: readonly SwimCloudCrawlPass[] = [];
+// Emptied 2026-09-22. The `swimmerTimes` pass no longer fetches the rendered
+// page: it fetches `/api/swimmers/{id}/profile_fastest_times/`, the JSON the
+// page renders from (verified against
+// `tests/fixtures/profile_fastest_times-1330318.json`). The evidence above
+// still stands for the HTML page itself.
 
 /** True when a fetched copy of this pass's page cannot contain its data. */
 export function passRequiresRenderedDom(pass: SwimCloudCrawlPass): boolean {
@@ -522,21 +533,18 @@ export const SWIMCLOUD_CRAWL_SCOPES: readonly SwimCloudCrawlScope[] = [
   {
     id: 'roster-and-season-bests',
     // The id keeps its original spelling so stored captures stay readable. The
-    // label does not promise season bests any more: the pass is declined (see
-    // SWIMCLOUD_DOM_RENDERED_PASSES), and a radio button offering data no crawl
-    // can return is the kind of plausible-but-false claim this repo exists to
-    // avoid. The summary states the limit at the point of choosing, rather than
-    // leaving a coach to discover it an hour later.
-    label: 'Team rosters only',
+    // pass fetches the times JSON since 2026-09-22, so the label promises
+    // personal bests again.
+    label: 'Rosters and personal bests',
     summary:
-      'Every team’s roster. Skips this meet’s own results. Personal-best times are not fetched by any crawl — that page builds its table in the browser, so capture those swimmers with the extension’s clipboard button instead.',
+      'Every team’s roster and each rostered swimmer’s personal-best times. Skips this meet’s own results.',
     passes: ['teamRoster', 'swimmerTimes'],
   },
   {
     id: 'everything',
     label: 'Everything',
     summary:
-      'Meet results, per-event rounds and team rosters. The most requests, and the longest. Personal-best times are not fetched by any crawl — use the extension’s clipboard button for those.',
+      'Meet results, per-event rounds, team rosters and every rostered swimmer’s personal bests. The most requests, and the longest.',
     passes: ['meetTeamSwims', 'meetEvent', 'teamRoster', 'swimmerTimes'],
   },
 ];

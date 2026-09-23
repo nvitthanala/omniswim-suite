@@ -139,6 +139,7 @@ export {
   parseMeetTopTeamsHtml,
   parseSwimmerProfileHtml,
   parseSwimmerTimesHtml,
+  parseSwimmerFastestTimesJson,
   parseTeamMeetSwimsHtml,
   parseTeamRosterHtml,
 } from './parser';

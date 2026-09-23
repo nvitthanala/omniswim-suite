@@ -179,18 +179,16 @@ describe('planScopedMeetCrawl', () => {
     expect(plan.plansEventResults).toBe(true);
   });
 
-  it('declines the swimmer-times pass even under "everything", and says why', () => {
-    // Deliberate behaviour change, 2026-09-20. The swimmer-times page builds its
-    // table in the browser: all 73 successfully-fetched bodies in the archived
-    // capture contain zero <table> elements and load the swimmerProfileTimes
-    // bundle. Fetching it spent 184 of 234 requests on shells. The pass is
-    // declined rather than silently dropped, so a UI can explain the gap.
+  it('plans the swimmer-times pass under "everything"', () => {
+    // Declined 2026-09-20 (the rendered page is a shell); planned again
+    // 2026-09-22, when the pass moved to the profile_fastest_times JSON the
+    // page renders from. See tests/swimmerFastestTimes.test.ts.
     const plan = planScopedMeetCrawl({ meetId: MEET, teamIds: TEAMS, scope: defaultSwimCloudCrawlScope() });
-    expect(plan.plansSwimmerTimes).toBe(false);
-    expect(plan.declinedNeedingRenderedDom).toStrictEqual(['swimmerTimes']);
+    expect(plan.plansSwimmerTimes).toBe(true);
+    expect(plan.declinedNeedingRenderedDom).toStrictEqual([]);
   });
 
-  it('declines it under the scope whose whole point was season bests, rather than pretending', () => {
+  it('plans it under the scope whose whole point is season bests', () => {
     const plan = planScopedMeetCrawl({
       meetId: MEET,
       teamIds: TEAMS,
@@ -198,10 +196,8 @@ describe('planScopedMeetCrawl', () => {
     });
     // Rosters still fetch -- that half works.
     expect(plan.rosterSteps).toStrictEqual(planMeetTeamRosters({ meetId: MEET, teamIds: TEAMS }));
-    // The season-bests half cannot, and the plan must say so rather than
-    // returning an empty result that reads as "this team has no swimmers".
-    expect(plan.plansSwimmerTimes).toBe(false);
-    expect(plan.declinedNeedingRenderedDom).toStrictEqual(['swimmerTimes']);
+    expect(plan.plansSwimmerTimes).toBe(true);
+    expect(plan.declinedNeedingRenderedDom).toStrictEqual([]);
   });
 
   it('declines nothing for a scope that asks only for fetchable passes', () => {
@@ -244,13 +240,10 @@ describe('planScopedMeetCrawl', () => {
     expect(plan.swimsSteps).toStrictEqual([]);
     expect(plan.rosterSteps).toStrictEqual(planMeetTeamRosters({ meetId: MEET, teamIds: TEAMS }));
     expect(plan.plansEventResults).toBe(false);
-    // Was `true` until 2026-09-20. The scope still ASKS for swimmer times --
-    // that is what the coach picked -- but the plan declines to fetch them,
-    // because the page builds its table in the browser and a fetched copy is a
-    // shell. Asserted as a pair so "declined" can never become "silently
-    // dropped": see the dedicated case below.
-    expect(plan.plansSwimmerTimes).toBe(false);
-    expect(plan.declinedNeedingRenderedDom).toStrictEqual(['swimmerTimes']);
+    // Declined 2026-09-20 to 2026-09-22 while only the rendered page was
+    // known; the pass now fetches the JSON that page renders from.
+    expect(plan.plansSwimmerTimes).toBe(true);
+    expect(plan.declinedNeedingRenderedDom).toStrictEqual([]);
     expect(crawlScopePlansPass(scope('roster-and-season-bests'), 'swimmerTimes')).toBe(true);
   });
 

@@ -184,7 +184,7 @@
   "STILL_OPEN": [
     "No 429 handling anywhere in the extension. A throttled page is simply a page that never arrives, recorded as http-error. The sequential floor held for 51/51 event pages, so this has not bitten yet; it is the obvious next improvement and changes the traffic pattern, so it needs the user's call.",
     "A relay leg's class year is left empty rather than joined, deliberately: it would put a second, separately-sourced year on the same page as the individual rows' one.",
-    "The swimmer-times endpoint is discovered but never called. See d9."
+    "Season-bests pass built 2026-09-22 against the real JSON; needs one live crawl with the rebuilt extension to confirm."
   ],
   "DIVING_RESOLVED": {
     "at": "2026-09-22",
@@ -197,5 +197,38 @@
       "The 9th-place prelims diver scores 9; the eight finalists take nothing from the prelims table."
     ],
     "biggerFinding": "The pages did not parse AT ALL. locateEventRoundTables required a Time column and a diving table has none (Name | Team | Pts | Score). All four events failed with expected-header-missing: 47 rows and 360 meet points absent from team totals. Fixed in 4955ec9b."
+  },
+  "TIMES_ENDPOINT_OBSERVED": {
+    "at": "2026-09-22",
+    "source": "User pasted the Copy times endpoint for Omniswim report from https://www.swimcloud.com/swimmer/1330318/times/ (24 requests seen).",
+    "seasonIds": [
+      30,
+      29,
+      28,
+      27,
+      26,
+      25,
+      24,
+      23,
+      22,
+      21,
+      20,
+      19
+    ],
+    "candidates": [
+      {
+        "kind": "xmlhttprequest",
+        "template": "https://www.swimcloud.com/api/swimmers/{swimmerId}/profile_fastest_times/"
+      },
+      {
+        "kind": "xmlhttprequest",
+        "template": "https://www.swimcloud.com/api/swimmers/{swimmerId}/times_by_event/?event=1%7C50%7CY%7C1",
+        "note": "event param decodes to 1|50|Y|1. Field meanings are NOT confirmed; do not infer them."
+      }
+    ],
+    "stillUnknown": [
+      "Whether the endpoint rate-limits at 1 request / 3 s (unverified until one live crawl)"
+    ],
+    "resolved": "2026-09-22: response shape saved as tests/fixtures/profile_fastest_times-1330318.json. The swimmerTimes pass now fetches profile_fastest_times under a user-approved robots.txt exemption for that one path (SWIMCLOUD_ROBOTS_USER_EXEMPTIONS). Parser: parseSwimmerFastestTimesJson. Pool: 1 lane, 3000 ms."
   }
 }

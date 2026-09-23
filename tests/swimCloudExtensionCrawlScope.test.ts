@@ -176,18 +176,15 @@ describe('re-crawling a narrowed capture under a wider scope', () => {
     expect(partition.toFetch).toStrictEqual(widened.rosterSteps);
   });
 
-  it('still declines the swimmer-times pass when widened, because a fetch cannot satisfy it', () => {
+  it('plans the swimmer-times pass when widened, and fetches every page the narrow crawl never did', () => {
     const widened = planScopedMeetCrawl({
       meetId: MEET,
       teamIds: TEAMS,
       scope: defaultSwimCloudCrawlScope(),
     });
-    // Changed 2026-09-20. Widening the scope no longer makes this pass run: the
-    // swimmer-times page builds its table in the browser, so every fetched copy
-    // is a shell. The resume machinery below is still asserted, because it must
-    // keep working for the day the pass becomes fetchable again.
-    expect(widened.plansSwimmerTimes).toBe(false);
-    expect(widened.declinedNeedingRenderedDom).toStrictEqual(['swimmerTimes']);
+    // Declined 2026-09-20; planned again 2026-09-22 against the times JSON.
+    expect(widened.plansSwimmerTimes).toBe(true);
+    expect(widened.declinedNeedingRenderedDom).toStrictEqual([]);
 
     // Rosters the re-crawl would parse on this run. Their swimmer-times pages
     // were never fetched, so every one of them is still to fetch.
@@ -314,12 +311,10 @@ describe('formatCrawlScopeNote', () => {
     expect(note).not.toContain('not fetched by this crawl');
   });
 
-  it('tells a coach that swimmer times cannot be fetched, and what to do instead', () => {
+  it('says every pass is planned under "everything", swimmer times included', () => {
     const note = formatCrawlScopeNote(defaultSwimCloudCrawlScope());
-    expect(note).toContain('cannot be fetched at all');
-    expect(note).toContain('builds its table in the browser');
-    // An explanation with no next step is a dead end.
-    expect(note).toContain('clipboard');
+    expect(note).toContain('every pass is planned');
+    expect(note).not.toContain('cannot be fetched');
   });
 
   it('gives every scope a non-empty note', () => {

@@ -281,26 +281,19 @@ describe('SwimCloudCaptureBrowser — a narrowed capture never reads as empty', 
     expect(text).not.toContain('The clipboard path still works for one swimmer at a time.');
   });
 
-  it('renders a swimmer-times section purely to say the pass was declined', async () => {
+  it('renders a swimmer-times section purely to say the scope never planned it', async () => {
     // Before this, an empty swimmer-times list rendered no section at all, and
     // a missing section reads as "there was nothing of this kind here".
     const capture = captureRecord({ crawlScope: MEET_RESULTS_SCOPE });
     await mount(capture, emptyParse(capture.captureId, capture.subject), 'roster-history');
     const text = container.textContent ?? '';
     expect(text).toContain('Swimmer times in this capture (0 swimmers)');
-    // Changed 2026-09-20. The old wording blamed the chosen scope and told the
-    // coach to re-crawl wider. That advice cannot work for this pass: the page
-    // builds its table in the browser, so no scope will ever fetch it. The
-    // message must give the cause and the one path that does work.
-    expect(text).toContain('No crawl fetches swimmers’ personal-best pages, whatever scope it uses');
-    expect(text).toContain('builds its table in the browser');
-    expect(text).toContain('clipboard button');
-    // And it must NOT send them somewhere useless. Scoped to the swimmer-times
-    // section on purpose: the roster section above it still offers a wider
-    // re-crawl, and that advice is correct there, because rosters ARE fetchable.
+    // Changed 2026-09-22. From 2026-09-20 no scope could fetch this pass, and
+    // the section said so. The pass now fetches the times JSON, so a wider
+    // re-crawl does add them, and that is the advice the section gives.
     const swimmerTimesSection = text.slice(text.indexOf('Swimmer times in this capture'));
-    expect(swimmerTimesSection).not.toContain('re-crawl this meet with a wider scope');
-    expect(text).toContain('re-crawl this meet with a wider scope to add them.');
+    expect(swimmerTimesSection).toContain('re-crawl this meet with a wider scope to add them.');
+    expect(text).not.toContain('No crawl fetches swimmers’ personal-best pages');
   });
 
   it('says "not recorded" for the real capture shape on disk today', async () => {

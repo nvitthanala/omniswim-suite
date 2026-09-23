@@ -184,21 +184,21 @@ describe('planMeetSwimmerTimes', () => {
   it('plans one times page per swimmer', () => {
     const steps = planMeetSwimmerTimes({ meetId: '356467', swimmerIds: ['1472365', '1330318'] });
     expect(steps).toHaveLength(2);
-    expect(steps.every((s) => s.resourceKind === 'swimmerTimes')).toBe(true);
+    expect(steps.every((s) => s.resourceKind === 'swimmerFastestTimes')).toBe(true);
     expect(steps.map((s) => s.swimmerId)).toStrictEqual(['1472365', '1330318']);
   });
 
-  it('emits the real /swimmer/{id}/times/ URL shape', () => {
+  it('emits the profile_fastest_times JSON URL the times page renders from', () => {
     const [first] = planMeetSwimmerTimes({ meetId: '356467', swimmerIds: ['1472365'] });
-    expect(first.canonicalUrl).toBe('https://www.swimcloud.com/swimmer/1472365/times/');
+    expect(first.canonicalUrl).toBe('https://www.swimcloud.com/api/swimmers/1472365/profile_fastest_times/');
   });
 
-  it('every emitted URL round-trips through classifySwimCloudUrl as swimmerTimes', () => {
+  it('every emitted URL round-trips through classifySwimCloudUrl as swimmerFastestTimes', () => {
     for (const step of planMeetSwimmerTimes({ meetId: '356467', swimmerIds: ['1472365', '1330318'] })) {
       const classification = classifySwimCloudUrl(step.canonicalUrl);
       expect(classification.outcome).toBe('fetchable');
-      if (classification.outcome !== 'fetchable' || classification.resource.kind !== 'swimmerTimes') {
-        throw new Error(`expected swimmerTimes for ${step.canonicalUrl}`);
+      if (classification.outcome !== 'fetchable' || classification.resource.kind !== 'swimmerFastestTimes') {
+        throw new Error(`expected swimmerFastestTimes for ${step.canonicalUrl}`);
       }
       expect(classification.resource.swimmerId).toBe(step.swimmerId);
     }

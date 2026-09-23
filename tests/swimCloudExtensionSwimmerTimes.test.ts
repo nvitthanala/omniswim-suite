@@ -37,16 +37,13 @@ const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const MEET_ID = '356467';
 
 describe('the URL the pool actually fetches', () => {
-  it('matches the canonical URL the real archived page declares for itself', () => {
-    // The pin that makes upstream drift break CI instead of drifting silently.
-    // Asserted end-to-end from a roster row, not against a pattern written down
-    // here: this is the exact string `runSwimmerTimesPass` hands to `fetch()`.
-    const html = readFileSync(join(fixturesDir, 'swimcloud-real-swimmer-times-1472365.html'), 'utf8');
-    const canonical = /<link[^>]*rel="canonical"[^>]*href="([^"]+)"/.exec(html)?.[1];
-
-    const plan = planSwimmerTimesSteps(MEET_ID, [[{ swimCloudSwimmerId: '1472365', name: 'River Paulk' }]]);
-    expect(plan.steps[0].canonicalUrl).toBe(canonical);
-    expect(plan.steps[0].resourceKind).toBe('swimmerTimes');
+  it('fetches the JSON the times page renders from, as the real page requested it', () => {
+    // The template is verbatim from the user's times-endpoint report for
+    // swimmer 1330318 (2026-09-22). This is the exact string
+    // `runSwimmerTimesPass` hands to `fetch()`.
+    const plan = planSwimmerTimesSteps(MEET_ID, [[{ swimCloudSwimmerId: '1330318', name: 'Avery Henke' }]]);
+    expect(plan.steps[0].canonicalUrl).toBe('https://www.swimcloud.com/api/swimmers/1330318/profile_fastest_times/');
+    expect(plan.steps[0].resourceKind).toBe('swimmerFastestTimes');
   });
 
   it('is a leaf page: the real capture carries no pagination widget to follow', () => {
@@ -129,8 +126,8 @@ describe('planSwimmerTimesSteps', () => {
     ]);
 
     expect(plan.steps.map((s) => s.canonicalUrl)).toEqual([
-      'https://www.swimcloud.com/swimmer/11/times/',
-      'https://www.swimcloud.com/swimmer/12/times/',
+      'https://www.swimcloud.com/api/swimmers/11/profile_fastest_times/',
+      'https://www.swimcloud.com/api/swimmers/12/profile_fastest_times/',
     ]);
     expect(plan.rosterRowsSeen).toBe(4);
     expect(plan.withoutSwimmerId).toBe(1);
@@ -162,12 +159,17 @@ describe('resuming the swimmer-times pass', () => {
     const plan = planSwimmerTimesSteps(MEET_ID, [
       [{ swimCloudSwimmerId: '11' }, { swimCloudSwimmerId: '12' }, { swimCloudSwimmerId: '13' }],
     ]);
-    const stored = new Set(['https://www.swimcloud.com/swimmer/12/times/']);
+    // An old rendered-page capture of swimmer 11 is a shell, not a stored
+    // answer, so it must not count as already captured.
+    const stored = new Set([
+      'https://www.swimcloud.com/api/swimmers/12/profile_fastest_times/',
+      'https://www.swimcloud.com/swimmer/11/times/',
+    ]);
 
     const partition = partitionResumableSteps(plan.steps, stored);
     expect(partition.toFetch.map((s) => s.canonicalUrl)).toEqual([
-      'https://www.swimcloud.com/swimmer/11/times/',
-      'https://www.swimcloud.com/swimmer/13/times/',
+      'https://www.swimcloud.com/api/swimmers/11/profile_fastest_times/',
+      'https://www.swimcloud.com/api/swimmers/13/profile_fastest_times/',
     ]);
     expect(partition.alreadyCaptured).toHaveLength(1);
   });
@@ -200,15 +202,14 @@ describe('pacing constants', () => {
   it('are bounded, and pinned', () => {
     // Pinned so a later "make it faster" edit has to argue with a test rather
     // than move a number. The tradeoff is documented on both constants.
-    expect(SWIMMER_TIMES_CONCURRENCY).toBe(3);
-    expect(SWIMMER_TIMES_STAGGER_MS).toBe(400);
+    // Lowered 2026-09-22 from 3 lanes / 400 ms, which drew HTTP 429 on 111 of
+    // 184 requests, when the pass moved to the robots-exempt /api/ endpoint.
+    expect(SWIMMER_TIMES_CONCURRENCY).toBe(1);
+    expect(SWIMMER_TIMES_STAGGER_MS).toBe(3000);
   });
 
-  it('stays far slower than the sequential loop is fast — the gain is real but bounded', () => {
+  it('is never faster than the sequential passes', () => {
     const sequentialMinDelayMs = 3000;
-    // The pass's rate floor is one request per stagger, so the speed-up for this
-    // category is exactly this ratio and nothing larger, however fast SwimCloud
-    // answers.
-    expect(sequentialMinDelayMs / SWIMMER_TIMES_STAGGER_MS).toBe(7.5);
+    expect(SWIMMER_TIMES_STAGGER_MS).toBeGreaterThanOrEqual(sequentialMinDelayMs);
   });
 });

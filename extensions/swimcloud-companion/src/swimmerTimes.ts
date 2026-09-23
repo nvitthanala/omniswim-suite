@@ -54,7 +54,11 @@ import type { SwimCloudMeetId, SwimCloudSwimmerId } from '@omniswim/swimcloud/en
  * keep the sequential 3 s pacing; see `./boundedFetchPool.ts` for the full
  * argument and the constraint it relaxes.
  */
-export const SWIMMER_TIMES_CONCURRENCY = 3;
+// Lowered to 1 on 2026-09-22, when the pass moved to the `/api/` JSON
+// endpoint. The one crawl run at 3 lanes drew HTTP 429 on 111 of 184
+// requests, and this endpoint is fetched by exemption from robots.txt, so it
+// gets the most conservative pacing the crawl has, not the least.
+export const SWIMMER_TIMES_CONCURRENCY = 1;
 
 /**
  * Minimum gap between the *start* of one swimmer-times fetch and the next.
@@ -77,7 +81,9 @@ export const SWIMMER_TIMES_CONCURRENCY = 3;
  * risk-free. It is bounded, it is confined to leaf pages that carry no
  * meet-results data, and the core capture is unaffected either way.
  */
-export const SWIMMER_TIMES_STAGGER_MS = 400;
+// Raised to the sequential passes' 3 s floor on 2026-09-22; see
+// SWIMMER_TIMES_CONCURRENCY.
+export const SWIMMER_TIMES_STAGGER_MS = 3000;
 
 /* -------------------------------------------------------------------------- */
 /* Targets                                                                     */

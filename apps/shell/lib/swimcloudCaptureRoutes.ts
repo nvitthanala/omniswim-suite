@@ -70,6 +70,7 @@ import { readSwimCloudClipboardPayload } from '../../../packages/swimcloud/src/c
 import {
   parseMeetEventResultsHtml,
   parseSwimmerTimesHtml,
+  parseSwimmerFastestTimesJson,
   readMeetEventIndex,
   parseTeamMeetSwimsHtml,
   parseTeamRosterHtml,
@@ -498,6 +499,8 @@ function pageFacetsFor(resource: SwimCloudResource): PageFacets {
       // swimmer-times URL has neither. The swimmer id stays in `canonicalUrl`,
       // which is what identifies the page.
       return { resourceKind: 'swimmerTimes' };
+    case 'swimmerFastestTimes':
+      return { resourceKind: 'swimmerFastestTimes' };
     case 'conference':
       return { resourceKind: 'conference' };
   }
@@ -545,6 +548,7 @@ const PARSEABLE_RESOURCE_KINDS = [
   'meetEvent',
   'teamRoster',
   'swimmerTimes',
+  'swimmerFastestTimes',
 ] as const satisfies readonly SwimCloudResourceKind[];
 
 /** One of the {@link PARSEABLE_RESOURCE_KINDS}. */
@@ -648,6 +652,10 @@ function parsePageOfKind(
       return { kind, result: parseTeamRosterHtml(html, context) };
     case 'swimmerTimes':
       return { kind, result: parseSwimmerTimesHtml(html, context) };
+    // The JSON the times page renders from. Same parse shape as the HTML page,
+    // so it joins the same `swimmerTimes` list and every consumer reads both.
+    case 'swimmerFastestTimes':
+      return { kind: 'swimmerTimes', result: parseSwimmerFastestTimesJson(html, context) };
   }
 }
 

@@ -109,6 +109,29 @@ export const SWIMCLOUD_ROBOTS_DISALLOW_RULES = [
   '/tz_detect/',
 ] as const;
 
+/**
+ * Paths under a `Disallow:` rule that this app fetches anyway, **by the
+ * user's explicit decision on 2026-09-22**.
+ *
+ * The swimmer times page builds its table in the browser from
+ * `/api/swimmers/{id}/profile_fastest_times/`, so no robots-compliant fetch
+ * can read a swimmer's bests (see `SWIMCLOUD_DOM_RENDERED_PASSES` history in
+ * `./crawlPlan.ts`). The user chose to call that one endpoint, knowing it
+ * departs from robots.txt and from `01-legal-and-access-strategy.md` §4.
+ *
+ * The exemption is one exact path shape. Every other `/api/` and `/jsonapi/`
+ * path stays forbidden, and the crawler calls this one sequentially, paced
+ * like every other pass.
+ */
+export const SWIMCLOUD_ROBOTS_USER_EXEMPTIONS = ['/api/swimmers/{id}/profile_fastest_times/'] as const;
+
+/** The swimmer id when `lower` is exactly the exempt path shape, else undefined. */
+function exemptSwimmerFastestTimesId(lower: readonly string[]): SwimCloudSwimmerId | undefined {
+  if (lower.length !== 4) return undefined;
+  if (lower[0] !== 'api' || lower[1] !== 'swimmers' || lower[3] !== 'profile_fastest_times') return undefined;
+  return NUMERIC_ID.test(lower[2]) ? (lower[2] as SwimCloudSwimmerId) : undefined;
+}
+
 /** One of the four robots.txt `Disallow:` lines. */
 export type SwimCloudRobotsRule = (typeof SWIMCLOUD_ROBOTS_DISALLOW_RULES)[number];
 
@@ -145,6 +168,7 @@ export type SwimCloudResourceKind =
   | 'teamResults'
   | 'swimmer'
   | 'swimmerTimes'
+  | 'swimmerFastestTimes'
   | 'meet'
   | 'meetEvent'
   | 'meetTeam'
@@ -261,6 +285,12 @@ export type SwimCloudResource =
    * fetched.
    */
   | { readonly kind: 'swimmerTimes'; readonly swimmerId: SwimCloudSwimmerId }
+  /**
+   * The JSON a swimmer's times page loads its Personal Bests table from —
+   * `/api/swimmers/{id}/profile_fastest_times/`. The one `/api/` path that is
+   * fetchable; see {@link SWIMCLOUD_ROBOTS_USER_EXEMPTIONS}.
+   */
+  | { readonly kind: 'swimmerFastestTimes'; readonly swimmerId: SwimCloudSwimmerId }
   | { readonly kind: 'meet'; readonly meetId: SwimCloudMeetId }
   | {
       readonly kind: 'meetEvent';
@@ -474,6 +504,8 @@ export function canonicalPathForResource(resource: SwimCloudResource): string {
       return `/swimmer/${resource.swimmerId}/`;
     case 'swimmerTimes':
       return `/swimmer/${resource.swimmerId}/times/`;
+    case 'swimmerFastestTimes':
+      return `/api/swimmers/${resource.swimmerId}/profile_fastest_times/`;
     case 'meet':
       return `/results/${resource.meetId}/`;
     case 'meetEvent':
@@ -711,7 +743,8 @@ export function classifySwimCloudUrl(url: string): SwimCloudUrlClassification {
   // recognized SwimCloud path whose answer is "no" — it must never fall through
   // to pattern matching, and a malformed id inside it must not downgrade it to
   // a softer outcome.
-  const rule = robotsRuleFor(segments);
+  const exemptSwimmerId = exemptSwimmerFastestTimesId(lower);
+  const rule = exemptSwimmerId === undefined ? robotsRuleFor(segments) : null;
   if (rule !== null) {
     return {
       outcome: 'forbidden',
@@ -740,6 +773,10 @@ export function classifySwimCloudUrl(url: string): SwimCloudUrlClassification {
       resource,
     };
   };
+
+  if (exemptSwimmerId !== undefined) {
+    return fetchable({ kind: 'swimmerFastestTimes', swimmerId: exemptSwimmerId });
+  }
 
   switch (lower[0]) {
     case 'team': {
