@@ -6,23 +6,34 @@
 import { ConversionFactors } from './types';
 
 /**
- * Course-conversion factors (SCY ↔ LCM/SCM). Researched 2026-09-13, per
+ * Course-conversion factors (SCY ↔ LCM/SCM).
+ *
+ * **LCM (`men_lcm`, `women_lcm`).** Researched 2026-09-13, per
  * `plans/2026-08-14/02-data-quality-aliasing.md` §1's open question: **no
  * governing body publishes a directly citable, archivable primary source
  * for these values.** USA Swimming's Times & Recognition Policy Manual
  * covers when a converted time is (and is not) recognized, but does not
- * itself publish a factor table; the NCAA does not publish its own set for
- * championship seeding. The factors in circulation (this table included)
- * trace to Colorado Time Systems' internal conversion methodology, embedded
- * in timing software and reproduced by third-party calculators — not a
- * standalone published document with a URL/sha256 to archive the way
- * `data/cutlines/sources/` does for cut standards.
+ * itself publish a factor table. The NCAA publishes no LCM factor either:
+ * its D2 sheet says "No times achieved in 50-meter courses will be eligible
+ * for selection" (`2026-27D2MSW_QualStandards.pdf`, p. 2). The LCM factors in
+ * circulation (this table included) trace to Colorado Time Systems' internal
+ * conversion methodology, embedded in timing software and reproduced by
+ * third-party calculators — not a standalone published document with a
+ * URL/sha256 to archive the way `data/cutlines/sources/` does for cut
+ * standards.
  *
- * This table is therefore **indicative, not official**, per this repo's own
- * `converted_estimate` cutline-tag state (`cutlineTags.ts`), which already
- * treats any conversion-derived cut comparison as visibly non-authoritative
- * rather than a real cut — the code-level consequence of the same finding.
- * Do not present a value derived from this table as an official time.
+ * **SCM (`both_scm`).** Corrected 2026-09-22: the NCAA *does* publish SCM→SCY
+ * factors, and they differ by division. See {@link NCAA_SCM_CONVERSION_TABLES}
+ * below, which `convertToSCY` now reads. `both_scm` holds the NCAA **D1**
+ * 2025-26 values only; it is kept so the row shape stays additive, and a test
+ * pins it to the D1 table. Do not read it for a D2, D3, NAIA or unknown team.
+ *
+ * Every value derived from this table is **indicative, not official**, per
+ * this repo's own `converted_estimate` cutline-tag state (`cutlineTags.ts`),
+ * which treats any conversion-derived cut comparison as visibly
+ * non-authoritative rather than a real cut. Even the NCAA's own SCM factors
+ * only *convert* a time; a converted time is not a yards swim. Do not present
+ * a value derived from this table as an official time.
  */
 export const CONVERSION_FACTORS: ConversionFactors = {
   '50 Freestyle': { men_lcm: 0.87, women_lcm: 0.881, both_scm: 0.906 },
@@ -49,6 +60,143 @@ export const CONVERSION_FACTORS: ConversionFactors = {
   '400 IM': { men_lcm: 0.875, women_lcm: 0.886, both_scm: 0.906 },
   '200 Individual Medley': { men_lcm: 0.867, women_lcm: 0.877, both_scm: 0.906 },
   '400 Individual Medley': { men_lcm: 0.875, women_lcm: 0.886, both_scm: 0.906 },
+};
+
+/* -------------------------------------------------------------------------- */
+/* NCAA short-course-metres → short-course-yards factors (primary source)      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One row of the NCAA "Short-Course Conversion Factors (Men and Women)" table.
+ *
+ * The NCAA publishes exactly four rows, keyed by the **metric** event:
+ * "400 meters to 500 yards", "800 meters to 1000 yards", "1500 meters to 1650
+ * yards" and "All other events". Nothing finer is published, so nothing finer
+ * is modelled.
+ */
+export type NcaaScmConversionRow =
+  | 'free400To500'
+  | 'free800To1000'
+  | 'free1500To1650'
+  | 'allOtherEvents';
+
+/** The two distinct SCM tables the NCAA publishes today. */
+export type NcaaScmConversionTableId = 'ncaa-rules-book-a2-2026-27' | 'ncaa-d1-2025-26';
+
+/** Where an NCAA SCM table was read, so a caller can cite it. */
+export type NcaaScmConversionSource = {
+  /** `id` of each archived PDF in `data/cutlines/sources/manifest.json` (holds url + sha256). */
+  manifestIds: readonly string[];
+  /** Archived PDF filenames under `data/cutlines/sources/`. */
+  filenames: readonly string[];
+  /** 1-based PDF page that prints the table. */
+  page: number;
+  /** Section heading on that page. */
+  section: 'Conversions';
+  /** The sheet's own sentence about which rulebook the table follows, verbatim. */
+  statement: string;
+};
+
+export type NcaaScmConversionTable = {
+  id: NcaaScmConversionTableId;
+  /** Short display name for a UI, e.g. `NCAA Rules Book A-2 (2026-27)`. */
+  label: string;
+  /** The published factor for each row, verbatim. */
+  factors: Readonly<Record<NcaaScmConversionRow, number>>;
+  source: NcaaScmConversionSource;
+};
+
+/**
+ * Official NCAA SCM→SCY conversion factors, transcribed from the archived
+ * qualifying-standard PDFs on 2026-09-22 and checked against
+ * `pdftotext -layout` output of each page (see
+ * `tests/courseConversionDivision.test.ts`, which re-reads the PDFs when
+ * `pdftotext` is installed).
+ *
+ * - `ncaa-rules-book-a2-2026-27` — `2026-27D2MSW_QualStandards.pdf` and
+ *   `2026-27D2WSW_QualStandards.pdf` (identical tables), page 2, section
+ *   "Conversions". The sheet says the table "reflects what is included in the
+ *   2026-27 NCAA Swimming and Diving Rules Book, Appendix A-2". It is the
+ *   **default**: D2 uses it, and so does every team whose division publishes
+ *   no table of its own.
+ * - `ncaa-d1-2025-26` — `2025-26D1XSW_QUALSTANDARDS.pdf`, page 3, section
+ *   "Conversions". The sheet says the table "does not reflect what is included
+ *   in the NCAA Swimming and Diving Rules Book". It applies to D1 only.
+ *
+ * Not published, and therefore not here:
+ * - D3: `2026-27D3XSW_QualifyingStandards.pdf` prints no conversion table.
+ * - NAIA: `2026-27-SD-Qualifying-Standards-wo-Relays.pdf` prints separate
+ *   meter standards and no factor.
+ * Both fall back to the Rules Book table, and the conversion reports that
+ * choice (`reason: 'division_publishes_none'`) instead of hiding it.
+ *
+ * Both sheets state the same procedure: "(a) transform the achieved metric
+ * time into seconds; (b) carrying the calculation out to five decimal places,
+ * multiply ... by the appropriate following conversion factor; (c) drop,
+ * without rounding, all units smaller than a hundredth of a second; and (d)
+ * ... transform the resultant value in seconds back into minutes and
+ * seconds". `convertToSCY` therefore truncates an SCM conversion; it never
+ * rounds one.
+ */
+export const NCAA_SCM_CONVERSION_TABLES: Readonly<
+  Record<NcaaScmConversionTableId, NcaaScmConversionTable>
+> = {
+  'ncaa-rules-book-a2-2026-27': {
+    id: 'ncaa-rules-book-a2-2026-27',
+    label: 'NCAA Rules Book A-2 (2026-27)',
+    factors: {
+      free400To500: 1.143,
+      free800To1000: 1.143,
+      free1500To1650: 1.003,
+      allOtherEvents: 0.896,
+    },
+    source: {
+      manifestIds: ['ncaa-d2-men-2026-27', 'ncaa-d2-women-2026-27'],
+      filenames: ['2026-27D2MSW_QualStandards.pdf', '2026-27D2WSW_QualStandards.pdf'],
+      page: 2,
+      section: 'Conversions',
+      statement:
+        'Please note that the conversion table above reflects what is included in the ' +
+        '2026-27 NCAA Swimming and Diving Rules Book, Appendix A-2.',
+    },
+  },
+  'ncaa-d1-2025-26': {
+    id: 'ncaa-d1-2025-26',
+    label: 'NCAA Division I (2025-26)',
+    factors: {
+      free400To500: 1.153,
+      free800To1000: 1.153,
+      free1500To1650: 1.013,
+      allOtherEvents: 0.906,
+    },
+    source: {
+      manifestIds: ['ncaa-d1-2025-26'],
+      filenames: ['2025-26D1XSW_QUALSTANDARDS.pdf'],
+      page: 3,
+      section: 'Conversions',
+      statement:
+        'Please note the conversion table above does not reflect what is included in the ' +
+        'NCAA Swimming and Diving Rules Book.',
+    },
+  },
+};
+
+/**
+ * The `CONVERSION_FACTORS` keys that take a distance row of the NCAA SCM
+ * table. Every other key takes `allOtherEvents`.
+ *
+ * The metric keys (400/800/1500) are the NCAA's own rows. The yards keys
+ * (500/1000/1650) are the SCY slots those metric swims convert into; they sat
+ * on the same distance factor in the old `both_scm` column, and they stay on
+ * the same row here so no existing lookup changes row.
+ */
+export const NCAA_SCM_DISTANCE_ROWS: Readonly<Record<string, NcaaScmConversionRow>> = {
+  '400 Freestyle': 'free400To500',
+  '500 Freestyle': 'free400To500',
+  '800 Freestyle': 'free800To1000',
+  '1000 Freestyle': 'free800To1000',
+  '1500 Freestyle': 'free1500To1650',
+  '1650 Freestyle': 'free1500To1650',
 };
 
 export const SCORING_POINTS = [20, 17, 16, 15, 14, 13, 12, 11, 9, 7, 6, 5, 4, 3, 2, 1];

@@ -107,7 +107,11 @@ export function buildStoredSwim(args: {
   const now = Date.now();
   const event = stripCourseSuffix(args.event);
   const sec = convertTimeToSeconds(args.timeText);
-  const scyText = convertToSCY(args.timeText, event, args.gender as Gender, args.timeType);
+  // SCM converts with the NCAA table of `args.division`; absent means unknown,
+  // which takes the Rules Book table — never the D1 one.
+  const scyText = convertToSCY(args.timeText, event, args.gender as Gender, args.timeType, {
+    division: args.division ?? null,
+  });
   const secScy = convertTimeToSeconds(scyText);
 
   // Only compute a cut for SCY-or-converted-to-SCY times; LCM/SCM should be

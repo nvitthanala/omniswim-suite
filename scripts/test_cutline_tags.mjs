@@ -732,7 +732,8 @@ for (const [team, division] of [
     fail('converted estimate is missing its provenance URL');
   }
 
-  // 21.00 SCM converts to 19.03 yards — same refusal.
+  // 21.00 SCM converts to 18.81 yards on the D2 (Rules Book) table — 21.00 x
+  // 0.896 = 18.816, truncated per the NCAA procedure — same refusal.
   const scm = buildCutlineTag({ ...base, time: '21.00', swimCourse: 'SCM' });
   eq(scm.state, 'converted_estimate', 'an SCM swim under the converted standard is never tagged');
   eq(cutlineTagRenderMode(scm), 'indicative', 'SCM converted estimate render mode');

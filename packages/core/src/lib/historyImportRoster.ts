@@ -245,7 +245,10 @@ function canStateInSCY(swim: HistoricalSwim, relay: boolean): boolean {
 /** The SCY program event and time for a swim. Relays keep their own event and time. */
 function toSCYProgramSwim(swim: HistoricalSwim, relay: boolean): { event: string; time: string } {
   if (relay) return { event: swim.event, time: swim.time };
-  return convertSwimToSCY(swim.event, swim.time, swim.gender, swim.timeType ?? 'SCY');
+  // An SCM swim converts with the NCAA table of the swim's own team's division.
+  return convertSwimToSCY(swim.event, swim.time, swim.gender, swim.timeType ?? 'SCY', {
+    team: swim.team,
+  });
 }
 
 /**

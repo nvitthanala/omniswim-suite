@@ -127,6 +127,7 @@ export function buildCrossCourseTable(
         sourceTime: s.time,
         sourceCourse: timeType,
         sourceEvent: s.event,
+        basis: converted.basis,
       });
     }
   }

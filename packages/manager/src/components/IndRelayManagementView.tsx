@@ -112,7 +112,7 @@ export default function IndRelayManagementView({
         name: r.name,
         classYear: r.classYear,
         team: r.team,
-        time: convertToSCY(r.time, r.event, r.gender, r.timeType),
+        time: convertToSCY(r.time, r.event, r.gender, r.timeType, { team: r.team }),
         points: 0,
         event: r.event,
         isRecruit: true,

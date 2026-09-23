@@ -13,6 +13,7 @@ import {
   RelayMissingLeg,
   RelayLegOverride,
   Workspace,
+  type NcaaDivision,
 } from '../types';
 import {
   buildScorerRosterLookup,
@@ -21,7 +22,17 @@ import {
   ScorerRosterLookup,
   usesScorerRoster,
 } from './scorerRoster';
-import { CONVERSION_FACTORS } from '../constants';
+import {
+  CONVERSION_FACTORS,
+  NCAA_SCM_CONVERSION_TABLES,
+  NCAA_SCM_DISTANCE_ROWS,
+  type NcaaScmConversionRow,
+  type NcaaScmConversionTable,
+  type NcaaScmConversionTableId,
+} from '../constants';
+// Strict lookup only: an unmapped team is `null`, never the legacy D1 default.
+// `data/teamDivisions` imports nothing from `lib/`, so this adds no cycle.
+import { divisionForTeamOrNull } from '../data/teamDivisions';
 // Dependency-free by design — see the module header there. Importing
 // `cutlineUtils` here instead would create a cycle (it imports this file).
 import { normalizeEventForCutline } from './cutlineEventNames';
@@ -312,66 +323,314 @@ export function calculateProjectedTime(timeSec: number, classYear: string, overa
   return timeSec * (1 + dropFraction);
 }
 
+/* -------------------------------------------------------------------------- */
+/* Course conversion (LCM/SCM → SCY)                                            */
+/* -------------------------------------------------------------------------- */
+
+/** `"100 Freestyle (Relay split)"` → `"100 Freestyle"`. */
+function stripRelaySplitSuffix(event: string): string {
+  return event.replace(/\s*\(Relay split\)\s*$/i, '').trim();
+}
+
 /**
- * Look up the published conversion factors for an event, trying the spellings a
- * caller may legitimately arrive with. Returns `undefined` when the event has no
- * published factor — never a stand-in from a different event.
+ * The `CONVERSION_FACTORS` key for one exact spelling, trying only the
+ * spellings that name the same event. `undefined` when the table does not
+ * publish it — never a stand-in from a different event.
  */
-function lookupConversionFactors(baseEvent: string) {
-  const direct = CONVERSION_FACTORS[baseEvent];
-  if (direct) return direct;
+function factorKeyForSpelling(label: string): string | undefined {
+  if (CONVERSION_FACTORS[label]) return label;
 
   // "200 IM" and "200 Individual Medley" are the same event under two labels;
   // `normalizeEventLabel` emits the long form, most published tables use the short.
-  if (/\bIM\b/.test(baseEvent)) {
-    const long = CONVERSION_FACTORS[baseEvent.replace(/\bIM\b/, 'Individual Medley')];
-    if (long) return long;
+  if (/\bIM\b/.test(label)) {
+    const long = label.replace(/\bIM\b/, 'Individual Medley');
+    if (CONVERSION_FACTORS[long]) return long;
   }
-  if (/individual medley/i.test(baseEvent)) {
-    const short = CONVERSION_FACTORS[baseEvent.replace(/individual medley/i, 'IM')];
-    if (short) return short;
+  if (/individual medley/i.test(label)) {
+    const short = label.replace(/individual medley/i, 'IM');
+    if (CONVERSION_FACTORS[short]) return short;
   }
 
   // A 50 of a stroke shares the 100's factor — the only sanctioned substitution here.
-  if (baseEvent.startsWith('50 ')) {
-    const hundred = CONVERSION_FACTORS[baseEvent.replace(/^50\s+/, '100 ')];
-    if (hundred) return hundred;
+  if (label.startsWith('50 ')) {
+    const hundred = label.replace(/^50\s+/, '100 ');
+    if (CONVERSION_FACTORS[hundred]) return hundred;
   }
   return undefined;
 }
 
-/** True when a metric swim in this event can be expressed in SCY at all. */
-export function hasConversionFactor(event: string): boolean {
-  const baseEvent = event.replace(/\s*\(Relay split\)\s*$/i, '').trim();
-  return lookupConversionFactors(baseEvent) != null;
+/**
+ * The `CONVERSION_FACTORS` key whose factor converts `event`, or `null` when no
+ * published factor covers it.
+ *
+ * Two passes. The label is tried as given first, exactly as before, so no label
+ * that already converted changes factor. Only a label that misses is then
+ * normalized with `normalizeEventForCutline` and tried again. That second pass
+ * is what lets a SwimCloud label reach the table: SwimCloud writes
+ * `"50 Free LCM"`, `"100 Back SCM"`, `"400 IM LCM"` — distance, abbreviated
+ * stroke, course token — and the table is keyed `"50 Freestyle"`. Before
+ * 2026-09-22 every such swim missed, and `convertedHistorySwims` skipped it
+ * without a word, so no international recruit time was ever projected.
+ *
+ * Relays and diving still resolve to `null`: no relay or diving factor is
+ * published, and normalizing cannot invent one.
+ */
+export function resolveConversionFactorKey(event: string): string | null {
+  const base = stripRelaySplitSuffix(String(event ?? ''));
+  if (!base) return null;
+  const direct = factorKeyForSpelling(base);
+  if (direct) return direct;
+  if (/\brelay\b/i.test(base)) return null;
+  const canonical = normalizeEventForCutline(base);
+  if (!canonical || canonical === base) return null;
+  return factorKeyForSpelling(canonical) ?? null;
 }
 
-export function convertToSCY(timeStr: string, event: string, gender: Gender, type: 'LCM' | 'SCM' | 'SCY'): string {
-  if (type === 'SCY') return timeStr;
+/** True when a metric swim in this event can be expressed in SCY at all. */
+export function hasConversionFactor(event: string): boolean {
+  return resolveConversionFactorKey(event) != null;
+}
+
+/**
+ * What decides the SCM table for a conversion. Every field is optional, and a
+ * call with no options is the old call shape.
+ *
+ * LCM conversion ignores both fields: no governing body publishes an LCM
+ * factor, so there is no per-division LCM table to pick.
+ */
+export type ScyConversionOptions = {
+  /**
+   * The division whose NCAA SCM table applies. Wins over `team`. Pass `null`
+   * when the caller already knows the division is unknown.
+   */
+  division?: NcaaDivision | null;
+  /**
+   * A team whose **current** division picks the SCM table. Resolved strictly
+   * with `divisionForTeamOrNull`, so an unmapped or discontinued program is
+   * unknown — never the legacy D1 default.
+   */
+  team?: string | null;
+};
+
+/**
+ * Why a conversion used the SCM table it did.
+ *
+ * - `division_table` — the division publishes this table (D1; D2, whose sheet
+ *   prints the Rules Book table).
+ * - `division_publishes_none` — the division is known but prints no factor
+ *   (D3, NAIA), so the Rules Book table applies.
+ * - `division_unknown` — no division was supplied or the team did not resolve,
+ *   so the Rules Book table applies. Never D1.
+ */
+export type ScmConversionTableReason =
+  | 'division_table'
+  | 'division_publishes_none'
+  | 'division_unknown';
+
+export type ScmConversionTableChoice = {
+  table: NcaaScmConversionTable;
+  /** The division the choice was made for. `null` when unknown. */
+  division: NcaaDivision | null;
+  reason: ScmConversionTableReason;
+};
+
+/** The default SCM table: the one the NCAA Rules Book, Appendix A-2 prints. */
+const RULES_BOOK_SCM_TABLE = NCAA_SCM_CONVERSION_TABLES['ncaa-rules-book-a2-2026-27'];
+
+/**
+ * The NCAA SCM→SCY table for a division, and why.
+ *
+ * D1 publishes its own table. Every other case — D2, D3, NAIA and unknown —
+ * uses the Rules Book table, and `reason` says which case it was. An unknown
+ * division is never treated as D1.
+ */
+export function scmConversionTableFor(
+  division: NcaaDivision | null | undefined
+): ScmConversionTableChoice {
+  switch (division) {
+    case 'D1':
+      return {
+        table: NCAA_SCM_CONVERSION_TABLES['ncaa-d1-2025-26'],
+        division,
+        reason: 'division_table',
+      };
+    case 'D2':
+      return { table: RULES_BOOK_SCM_TABLE, division, reason: 'division_table' };
+    case 'D3':
+    case 'NAIA':
+      return { table: RULES_BOOK_SCM_TABLE, division, reason: 'division_publishes_none' };
+    default:
+      return { table: RULES_BOOK_SCM_TABLE, division: null, reason: 'division_unknown' };
+  }
+}
+
+/** Which NCAA SCM row a `CONVERSION_FACTORS` key takes. */
+export function ncaaScmConversionRow(factorEvent: string): NcaaScmConversionRow {
+  return NCAA_SCM_DISTANCE_ROWS[factorEvent] ?? 'allOtherEvents';
+}
+
+/**
+ * The NCAA SCM procedure, steps (b) and (c): multiply "carrying the
+ * calculation out to five decimal places", then "drop, without rounding, all
+ * units smaller than a hundredth of a second".
+ *
+ * Integer arithmetic on purpose. `54.49 × 0.906` is `49.36794`; a float
+ * product can land a hair under an exact hundredth and a naive floor would then
+ * lose a hundredth the procedure keeps. Rounding once at the fifth decimal
+ * removes only float noise; the truncation happens after it.
+ *
+ * Non-finite input (`NT`, `DQ`) passes through as the plain product, which
+ * `formatSecondsToTime` renders as before.
+ */
+export function ncaaScmConvertedSeconds(seconds: number, factor: number): number {
+  const product = seconds * factor;
+  if (!Number.isFinite(product)) return product;
+  const hundredThousandths = Math.round(product * 100_000);
+  return Math.floor(hundredThousandths / 1000) / 100;
+}
+
+/**
+ * How a time reached SCY.
+ *
+ * - `identity` — no factor was applied. `reason` says why: the swim was
+ *   recorded in SCY, it is a relay (no relay factor is published, so the time
+ *   is returned as recorded), or the course was not one of SCY/SCM/LCM (legacy
+ *   rows; the time is only reformatted, as it always was).
+ * - `lcm_factor_table` — the gendered LCM factor in `CONVERSION_FACTORS`
+ *   (Colorado Time Systems; indicative only). Rounded to hundredths.
+ * - `ncaa_scm_table` — an official NCAA SCM table, chosen by division.
+ *   Truncated to hundredths, as the NCAA procedure requires.
+ */
+export type ScyConversionBasis =
+  | {
+      method: 'identity';
+      reason: 'recorded_in_scy' | 'relay_not_converted' | 'course_not_recognized';
+    }
+  | { method: 'lcm_factor_table'; factor: number; factorEvent: string }
+  | {
+      method: 'ncaa_scm_table';
+      factor: number;
+      factorEvent: string;
+      row: NcaaScmConversionRow;
+      tableId: NcaaScmConversionTableId;
+      /** The division the table was chosen for. `null` when unknown. */
+      division: NcaaDivision | null;
+      reason: ScmConversionTableReason;
+    };
+
+/** A swim stated in SCY, with the basis of the statement. */
+export type ScyConversion = {
+  /** SCY program event label. See {@link convertSwimToSCY}. */
+  event: string;
+  /** SCY time. For a converted swim this is an estimate, not a yards swim. */
+  time: string;
+  /** The course the swim was recorded in. */
+  sourceCourse: 'SCY' | 'SCM' | 'LCM';
+  basis: ScyConversionBasis;
+};
+
+/** Bounded cache: `divisionForTeamOrNull` is pure over a static registry. */
+const conversionDivisionCache = new Map<string, NcaaDivision | null>();
+const CONVERSION_DIVISION_CACHE_LIMIT = 2000;
+
+function conversionDivision(options: ScyConversionOptions | undefined): NcaaDivision | null {
+  if (!options) return null;
+  if (options.division !== undefined) return options.division;
+  const team = String(options.team ?? '').trim();
+  if (!team) return null;
+  const cached = conversionDivisionCache.get(team);
+  if (cached !== undefined) return cached;
+  const division = divisionForTeamOrNull(team);
+  if (conversionDivisionCache.size >= CONVERSION_DIVISION_CACHE_LIMIT) {
+    conversionDivisionCache.clear();
+  }
+  conversionDivisionCache.set(team, division);
+  return division;
+}
+
+/** The time half of a conversion, with its basis. Throws when no factor is published. */
+function convertTimeWithBasis(
+  timeStr: string,
+  event: string,
+  gender: Gender,
+  type: 'LCM' | 'SCM' | 'SCY',
+  options: ScyConversionOptions | undefined
+): { time: string; basis: ScyConversionBasis } {
+  if (type === 'SCY') return { time: timeStr, basis: { method: 'identity', reason: 'recorded_in_scy' } };
 
   const seconds = convertTimeToSeconds(timeStr);
-  const baseEvent = event.replace(/\s*\(Relay split\)\s*$/i, '').trim();
-  const factors = lookupConversionFactors(baseEvent);
+  const baseEvent = stripRelaySplitSuffix(event);
+  const factorEvent = resolveConversionFactorKey(baseEvent);
 
   // No published factor means the swim cannot be expressed in SCY. Substituting
   // another event's factor (this used to silently borrow 50 Freestyle's) invents a
   // competition time that looks real — the exact failure this codebase forbids.
   // Raise instead, so a missing factor is added from a source rather than guessed.
-  if (!factors) {
+  if (!factorEvent) {
     throw new Error(
       `No published ${type}→SCY conversion factor for "${baseEvent}". ` +
         `Add the event to CONVERSION_FACTORS from a primary source rather than converting it with another event's factor.`
     );
   }
+  const factors = CONVERSION_FACTORS[factorEvent];
 
-  let factor = 1.0;
   if (type === 'LCM') {
-    factor = gender === Gender.MEN ? factors.men_lcm : factors.women_lcm;
-  } else if (type === 'SCM') {
-    factor = factors.both_scm;
+    const factor = gender === Gender.MEN ? factors.men_lcm : factors.women_lcm;
+    return {
+      time: formatSecondsToTime(seconds * factor),
+      basis: { method: 'lcm_factor_table', factor, factorEvent },
+    };
   }
 
-  return formatSecondsToTime(seconds * factor);
+  if (type === 'SCM') {
+    const choice = scmConversionTableFor(conversionDivision(options));
+    const row = ncaaScmConversionRow(factorEvent);
+    const factor = choice.table.factors[row];
+    return {
+      time: formatSecondsToTime(ncaaScmConvertedSeconds(seconds, factor)),
+      basis: {
+        method: 'ncaa_scm_table',
+        factor,
+        factorEvent,
+        row,
+        tableId: choice.table.id,
+        division: choice.division,
+        reason: choice.reason,
+      },
+    };
+  }
+
+  // Not a course the type allows. Kept exactly as before (the time is
+  // reformatted with no factor), and now said out loud in the basis.
+  return {
+    time: formatSecondsToTime(seconds),
+    basis: { method: 'identity', reason: 'course_not_recognized' },
+  };
+}
+
+/**
+ * A swim's time stated in SCY.
+ *
+ * - SCY returns the time untouched.
+ * - LCM multiplies by the gendered `CONVERSION_FACTORS` factor and rounds to
+ *   hundredths (unchanged).
+ * - SCM multiplies by the NCAA table for the division in `options` and
+ *   **truncates** to hundredths, as the NCAA procedure requires. With no
+ *   division (no options, an unmapped team, `division: null`) the Rules Book
+ *   table applies — see {@link scmConversionTableFor}. Use
+ *   {@link convertSwimToSCYDetailed} when the caller must show which table.
+ *
+ * Throws when no published factor covers the event.
+ */
+export function convertToSCY(
+  timeStr: string,
+  event: string,
+  gender: Gender,
+  type: 'LCM' | 'SCM' | 'SCY',
+  options?: ScyConversionOptions
+): string {
+  if (type === 'SCY') return timeStr;
+  return convertTimeWithBasis(timeStr, event, gender, type, options).time;
 }
 
 /** Freestyle metric distances map to their SCY program-event distance (400→500, 800→1000, 1500→1650). */
@@ -385,27 +644,97 @@ function remapMetricFreestyleEvent(event: string): string {
   return event;
 }
 
+/** SwimCloud's own label shape: `"50 Free LCM"` — distance first, course token last. */
+const SWIMCLOUD_METRIC_LABEL = /^(\d+\s.*?)\s+(?:LCM|SCM)$/i;
+
+/**
+ * The SCY program-event label for a converted swim.
+ *
+ * Three label families reach here, and each keeps its own shape so a converted
+ * swim lands on the same label an actual SCY swim of that event carries from
+ * the same source:
+ *
+ * 1. A label the factor table knows as spelled (`"400 Freestyle"`, `"200 IM"`)
+ *    keeps the pre-2026-09-22 behaviour: only the distance remap.
+ * 2. A SwimCloud label (`"400 Free LCM"`) swaps its course token for `SCY`
+ *    (`"500 Free SCY"`). SwimCloud's real SCY swims are imported as
+ *    `"50 Free SCY"`, and the best-time folds in `categorizeBestEvents` and
+ *    `importHistoryToRoster` key on the label. A converted swim labelled
+ *    `"50 Freestyle"` would sit beside the swimmer's `"50 Free SCY"` as a
+ *    second, phantom event and could take a second entry slot.
+ * 3. Anything else that only resolved through normalization (a HyTek label, a
+ *    bare abbreviation) takes the canonical label, e.g. `"500 Freestyle"`.
+ */
+function scyProgramEventLabel(event: string): string {
+  const base = stripRelaySplitSuffix(event);
+  if (factorKeyForSpelling(base)) return remapMetricFreestyleEvent(event);
+  const swimCloud = base.match(SWIMCLOUD_METRIC_LABEL);
+  if (swimCloud) return remapMetricFreestyleEvent(`${swimCloud[1]} SCY`);
+  return remapMetricFreestyleEvent(normalizeEventForCutline(base));
+}
+
 /**
  * SCY-equivalent event *and* time for a swim. Unlike {@link convertToSCY} (time only),
  * this also remaps distance-event identity so a 400 Free (LCM/SCM) competes in the 500
- * Free SCY slot (800→1000, 1500→1650). Non-metric swims are returned unchanged.
+ * Free SCY slot (800→1000, 1500→1650). Non-metric swims are returned unchanged. See
+ * `scyProgramEventLabel` for the label each input shape comes back with.
  *
  * Relays pass through untouched. No governing body publishes a relay conversion
  * factor, and a relay is not one stroke over one distance — a 400 Medley Relay is
  * four different strokes. Every caller in this package already special-cases relays
  * to passthrough before calling here; doing it once, here, keeps the primitive from
  * being the odd one out (it used to convert relays with the 50 Freestyle factor).
+ *
+ * `options` picks the NCAA SCM table; see {@link convertToSCY}.
  */
 export function convertSwimToSCY(
   event: string,
   time: string,
   gender: Gender,
-  timeType: 'SCY' | 'SCM' | 'LCM'
+  timeType: 'SCY' | 'SCM' | 'LCM',
+  options?: ScyConversionOptions
 ): { event: string; time: string } {
   if (timeType === 'SCY') return { event, time };
   if (/\brelay\b/i.test(event)) return { event, time };
-  const scyTime = convertToSCY(time, event, gender, timeType);
-  return { event: remapMetricFreestyleEvent(event), time: scyTime };
+  const scyTime = convertToSCY(time, event, gender, timeType, options);
+  return { event: scyProgramEventLabel(event), time: scyTime };
+}
+
+/**
+ * {@link convertSwimToSCY}, plus the basis of the conversion: which factor,
+ * which NCAA table and why. Same event and time as `convertSwimToSCY` for the
+ * same arguments. Throws when no published factor covers the event.
+ */
+export function convertSwimToSCYDetailed(
+  event: string,
+  time: string,
+  gender: Gender,
+  timeType: 'SCY' | 'SCM' | 'LCM',
+  options?: ScyConversionOptions
+): ScyConversion {
+  if (timeType === 'SCY') {
+    return {
+      event,
+      time,
+      sourceCourse: 'SCY',
+      basis: { method: 'identity', reason: 'recorded_in_scy' },
+    };
+  }
+  if (/\brelay\b/i.test(event)) {
+    return {
+      event,
+      time,
+      sourceCourse: timeType,
+      basis: { method: 'identity', reason: 'relay_not_converted' },
+    };
+  }
+  const converted = convertTimeWithBasis(time, event, gender, timeType, options);
+  return {
+    event: scyProgramEventLabel(event),
+    time: converted.time,
+    sourceCourse: timeType,
+    basis: converted.basis,
+  };
 }
 
 /** Strip combining diacritical marks for accent-insensitive name comparisons. */

@@ -193,11 +193,13 @@ function collapseCrossPlaneDuplicates(
 }
 
 export function planToResult(entry: PlannedSwimEntry): SwimmerResult {
+  // An SCM plan converts with the NCAA table of the plan's team's division.
   const time = convertToSCY(
     entry.time,
     entry.event,
     entry.gender,
-    entry.timeType ?? 'SCY'
+    entry.timeType ?? 'SCY',
+    { team: entry.team }
   );
   return {
     id: entry.id,
@@ -256,7 +258,9 @@ function applyOverlayPlans(
     if (patch) {
       replaced.add(r.id);
       patchedIds.add(r.id);
-      const time = convertToSCY(patch.time, patch.event, patch.gender, patch.timeType ?? 'SCY');
+      const time = convertToSCY(patch.time, patch.event, patch.gender, patch.timeType ?? 'SCY', {
+        team: patch.team,
+      });
       out.push({
         ...r,
         event: remapEvent(patch.event),
@@ -383,7 +387,7 @@ export function buildWhatIfProjection({
           name: r.name,
           classYear: r.classYear,
           team: r.team,
-          time: convertToSCY(r.time, r.event, r.gender, r.timeType),
+          time: convertToSCY(r.time, r.event, r.gender, r.timeType, { team: r.team }),
           points: 0,
           event: remapEvent(r.event),
           isRecruit: true,

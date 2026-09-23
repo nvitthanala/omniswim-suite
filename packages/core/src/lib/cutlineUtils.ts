@@ -27,7 +27,13 @@ import {
 } from '../cutlines';
 import { Gender, NcaaDivision } from '../types';
 import { CONVERSION_FACTORS } from '../constants';
-import { convertSwimToSCY, convertTimeToSeconds, formatSecondsToTime } from './utils';
+import {
+  convertSwimToSCYDetailed,
+  convertTimeToSeconds,
+  formatSecondsToTime,
+  type ScyConversionBasis,
+  type ScyConversionOptions,
+} from './utils';
 import {
   courseOfRecordFromEventLabel,
   cutlineEventCategory,
@@ -140,6 +146,12 @@ export type ScyEquivalentSwim = {
   factorEvent: string;
   /** The course the swim was recorded in. Never `'SCY'` for a converted result. */
   swimCourse: SwimCourseOfRecord;
+  /**
+   * How the time reached yards: the factor, and for SCM the NCAA table and why
+   * it was chosen. `method: 'identity'` for an SCY swim. Optional only so the
+   * type stays additive; {@link scyEquivalentForCutline} always sets it.
+   */
+  basis?: ScyConversionBasis;
 };
 
 /**
@@ -174,14 +186,19 @@ export function conversionFactorEventKey(canonicalEvent: string): string | null 
  *
  * Returns `null` when no published conversion factor covers the event — the
  * honest answer, never an estimate. Delegates the arithmetic to the single
- * existing implementation (`convertSwimToSCY` → `convertToSCY` in `lib/utils`);
- * there is deliberately no second conversion in this codebase.
+ * existing implementation (`convertSwimToSCYDetailed` in `lib/utils`); there is
+ * deliberately no second conversion in this codebase.
+ *
+ * `options` picks the NCAA SCM table (`{ division }` or `{ team }`). Pass the
+ * division whose standards the converted time will be judged against. Without
+ * it an SCM swim takes the Rules Book table, and `basis` says so.
  */
 export function scyEquivalentForCutline(
   event: string,
   swimSeconds: number,
   gender: Gender | string,
-  swimCourse: SwimCourseOfRecord
+  swimCourse: SwimCourseOfRecord,
+  options?: ScyConversionOptions
 ): ScyEquivalentSwim | null {
   if (!Number.isFinite(swimSeconds) || swimSeconds <= 0) return null;
   const canonical = normalizeEventForCutline(event);
@@ -192,16 +209,18 @@ export function scyEquivalentForCutline(
       seconds: swimSeconds,
       factorEvent: canonical,
       swimCourse,
+      basis: { method: 'identity', reason: 'recorded_in_scy' },
     };
   }
   const factorEvent = conversionFactorEventKey(canonical);
   if (!factorEvent) return null;
   const g = genderKey(gender) === 'Women' ? Gender.WOMEN : Gender.MEN;
-  const converted = convertSwimToSCY(
+  const converted = convertSwimToSCYDetailed(
     factorEvent,
     formatSecondsToTime(swimSeconds),
     g,
-    swimCourse
+    swimCourse,
+    options
   );
   const seconds = convertTimeToSeconds(converted.time);
   if (!Number.isFinite(seconds) || seconds <= 0) return null;
@@ -211,6 +230,7 @@ export function scyEquivalentForCutline(
     seconds,
     factorEvent,
     swimCourse,
+    basis: converted.basis,
   };
 }
 

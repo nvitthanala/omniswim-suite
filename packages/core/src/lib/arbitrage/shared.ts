@@ -50,7 +50,7 @@ import {
 import {
   calculatePoints,
   classifyRoundTier,
-  convertSwimToSCY,
+  convertSwimToSCYDetailed,
   convertTimeToSeconds,
   convertToSCY,
   eventMeetSortKey,
@@ -60,6 +60,8 @@ import {
   normalizeSwimmerName,
   parseRankInt,
   sortEventsByMeetOrder,
+  type ScyConversion,
+  type ScyConversionBasis,
 } from '../utils';
 
 // --- recency window ---------------------------------------------------------
@@ -158,10 +160,12 @@ export type ProjectedHistorySwim = {
   /** Course as recorded, defaulted to SCY. */
   timeType: 'SCY' | 'LCM' | 'SCM';
   /**
-   * convertSwimToSCY output — SCY event label + SCY time. Identity for SCY rows;
-   * for LCM/SCM this also remaps distance identity (400→500, 800→1000, 1500→1650).
+   * convertSwimToSCYDetailed output — SCY event label + SCY time, plus the
+   * conversion `basis` (factor, NCAA SCM table, and why that table). Identity
+   * for SCY rows; for LCM/SCM this also remaps distance identity (400→500,
+   * 800→1000, 1500→1650). Still readable as `{ event, time }`.
    */
-  converted: { event: string; time: string };
+  converted: ScyConversion;
 };
 
 /**
@@ -169,6 +173,9 @@ export type ProjectedHistorySwim = {
  * courses with no published conversion factor, then convert to SCY. The CALLER
  * classifies the converted event (canonical program event vs relay-leg
  * distance+stroke) — those classifiers differ by design, see the module header.
+ *
+ * An SCM swim converts with the NCAA table of the swim's own team's division
+ * (`{ team: s.team }`), so a D2 roster is not projected on the D1 table.
  */
 export function* convertedHistorySwims(
   history: HistoricalSwim[]
@@ -177,9 +184,12 @@ export function* convertedHistorySwims(
     if (/\brelay\b/i.test(s.event)) continue;
     const timeType = s.timeType ?? 'SCY';
     // No published factor → the swim has no SCY equivalent. These are non-program
-    // events (25s, 100 IM) that the caller's classifier rejects regardless.
+    // events (25s, 100 IM) and diving, which the caller's classifier rejects
+    // regardless. SwimCloud labels ("50 Free LCM") do resolve since 2026-09-22.
     if (timeType !== 'SCY' && !hasConversionFactor(s.event)) continue;
-    const converted = convertSwimToSCY(s.event, s.time, s.gender, timeType);
+    const converted = convertSwimToSCYDetailed(s.event, s.time, s.gender, timeType, {
+      team: s.team,
+    });
     yield { swim: s, timeType, converted };
   }
 }
@@ -201,6 +211,12 @@ export type CrossCourseConvertedRef = CrossCourseTimeRef & {
   sourceCourse: 'LCM' | 'SCM';
   /** Original event as swum (e.g. "400 Freestyle" for a 500 Free SCY slot). */
   sourceEvent: string;
+  /**
+   * How the time reached SCY: the factor, and for SCM the NCAA table and why
+   * it was chosen (e.g. `reason: 'division_unknown'`). Optional so existing
+   * constructors keep compiling; `buildCrossCourseTable` always sets it.
+   */
+  basis?: ScyConversionBasis;
 };
 
 export type CrossCourseRow = {
@@ -302,7 +318,9 @@ export function buildEventTimeIndex(
     push(
       p.event,
       p.name,
-      convertTimeToSeconds(convertToSCY(p.time, p.event, p.gender, p.timeType ?? 'SCY'))
+      convertTimeToSeconds(
+        convertToSCY(p.time, p.event, p.gender, p.timeType ?? 'SCY', { team: p.team })
+      )
     );
   }
   for (const rec of workspace.recruits ?? []) {
@@ -310,7 +328,9 @@ export function buildEventTimeIndex(
     push(
       rec.event,
       rec.name,
-      convertTimeToSeconds(convertToSCY(rec.time, rec.event, rec.gender, rec.timeType))
+      convertTimeToSeconds(
+        convertToSCY(rec.time, rec.event, rec.gender, rec.timeType, { team: rec.team })
+      )
     );
   }
   return out;

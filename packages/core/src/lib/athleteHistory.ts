@@ -153,11 +153,13 @@ export function categorizeBestEvents(
     // competes in the 500 Free slot (800→1000, 1500→1650). Keying on the raw
     // label left "400 Freestyle" and "1500 Freestyle" sitting in the profile as
     // if they were events a meet could enter you in.
+    // An SCM swim converts with the NCAA table of this team's division.
     const { event: programEvent, time: programTime } = convertSwimToSCY(
       s.event,
       s.time,
       s.gender,
-      s.timeType ?? 'SCY'
+      s.timeType ?? 'SCY',
+      { team }
     );
     if (!isEventOffered(programEvent, allowedEvents)) continue;
 

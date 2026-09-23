@@ -597,7 +597,7 @@ function programSwimFromHistory(s: HistoricalSwim): { event: string; time: strin
   if (!relay && (s.timeType ?? 'SCY') !== 'SCY' && !hasConversionFactor(s.event)) return null;
   const { event, time } = relay
     ? { event: s.event, time: s.time }
-    : convertSwimToSCY(s.event, s.time, s.gender, s.timeType ?? 'SCY');
+    : convertSwimToSCY(s.event, s.time, s.gender, s.timeType ?? 'SCY', { team: s.team });
   if (!isChampionshipProgramEvent(event)) return null;
   return { event, time };
 }

@@ -85,7 +85,7 @@ import {
   type ScyEquivalentSwim,
   type SwimCourseOfRecord,
 } from './cutlineUtils';
-import { convertTimeToSeconds, formatSecondsToTime } from './utils';
+import { convertTimeToSeconds, formatSecondsToTime, type ScyConversionBasis } from './utils';
 
 /* -------------------------------------------------------------------------- */
 /* The tag                                                                     */
@@ -185,6 +185,12 @@ export type CutlineIndicativeComparison = {
   convertedSeconds: number;
   /** The `CONVERSION_FACTORS` key that produced the conversion. Provenance. */
   factorEvent: string;
+  /**
+   * How the time reached yards. For SCM: the NCAA table (the judged
+   * division's own, or the Rules Book default) and why. Optional so the type
+   * stays additive; `buildCutlineTag` always sets it.
+   */
+  conversionBasis?: ScyConversionBasis;
   /** Canonical event the converted swim was judged against. */
   event: string;
   /** The published standard, verbatim from the source. */
@@ -767,7 +773,11 @@ export function buildCutlineTag(input: CutlineTagInput): CutlineTagResult {
         nextTier: null,
       };
     }
-    converted = scyEquivalentForCutline(input.event, swimSeconds, gender, swimCourse);
+    // An SCM swim converts with the NCAA table of the division it is judged
+    // against, so a D2 standard is never compared with a D1-converted time.
+    converted = scyEquivalentForCutline(input.event, swimSeconds, gender, swimCourse, {
+      division,
+    });
     if (!converted) {
       return {
         state: 'conversion_unavailable',
@@ -883,6 +893,7 @@ export function buildCutlineTag(input: CutlineTagInput): CutlineTagResult {
       convertedTime: converted.time,
       convertedSeconds: converted.seconds,
       factorEvent: converted.factorEvent,
+      ...(converted.basis ? { conversionBasis: converted.basis } : {}),
       event: lookup.event,
       standardTime: met.time,
       standardSeconds: met.seconds,

@@ -631,6 +631,14 @@ export interface ConversionFactors {
   [event: string]: {
     men_lcm: number;
     women_lcm: number;
+    /**
+     * The NCAA **D1** 2025-26 SCM factor for this event.
+     *
+     * @deprecated Since 2026-09-22. The NCAA publishes different SCM factors
+     * per division, so one column cannot be right for every team. Convert with
+     * `convertToSCY(..., { division })` or `{ team }`, which reads
+     * `NCAA_SCM_CONVERSION_TABLES`. Kept so the row shape stays additive.
+     */
     both_scm: number;
   };
 }

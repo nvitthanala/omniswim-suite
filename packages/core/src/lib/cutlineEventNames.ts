@@ -170,8 +170,8 @@ const EXPLICIT_COURSE_CODE = /\b(SCY|LCM|SCM)\b/i;
  *
  * `'METRIC_UNSPECIFIED'` is returned for `50 Meter Freestyle`: the label proves
  * the swim was **not** yards, but "meters" does not say whether the pool was 25 m
- * or 50 m, and the LCM and SCM conversion factors differ materially (0.870 vs
- * 0.906 for men's 50 Freestyle). Picking one would be fabricating the pool
+ * or 50 m, and the LCM and SCM conversion factors differ materially (0.870 LCM
+ * vs 0.896 or 0.906 SCM, by division, for men's 50 Freestyle). Picking one would be fabricating the pool
  * length, so we report the ambiguity instead and let the caller supply
  * `HistoricalSwim.timeType`.
  *

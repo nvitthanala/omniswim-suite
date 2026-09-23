@@ -1,0 +1,96 @@
+{
+  "purpose": "Progress log for plans/2026-09-22/01-CONVERSION-AND-IMPROVEMENTS-PLAN.md. Canonical state; survives rate limits and compaction. Update after every phase.",
+  "updatedAt": "2026-09-22",
+  "branch": "nvitthanala/production-readiness",
+  "baseline": {
+    "commit": "98bb59d8",
+    "vitest": 1115,
+    "lint": "clean",
+    "build": "ok"
+  },
+  "quotaAtPlanning": "user reported 91% of 5h and 9% of 7d remaining",
+  "userDecisions": {
+    "conversionTable": "Claude researches and picks the most accurate; show the table. Include NCAA altitude; SwimCloud tags altitude-adjusted times.",
+    "projections": "Converted recruit time vs the real published SCY cut, labelled as an estimate. No invented future cuts.",
+    "userInputtedTimes": "Import, badge, never a best (like extracted splits).",
+    "dataLossGuard": "Warn and offer backup; never block a deliberate clear.",
+    "divisionAware": "Identify each team division (teamDivisions.ts) and use that division conversion table. Altitude: NCAA official table, the going standard, even though statistically imperfect."
+  },
+  "sources": {
+    "scmD2": "data/cutlines/sources/2026-27D2MSW_QualStandards.pdf p2 'Conversions' (states it reflects NCAA Rules Book Appendix A-2)",
+    "scmD1": "data/cutlines/sources/2025-26D1XSW_QUALSTANDARDS.pdf 'Conversions' (states it does NOT reflect the Rules Book)",
+    "altitude": "same two PDFs, 'Altitude' table; row alignment confirmed with pdftotext -table",
+    "lcm": "packages/core/src/constants.ts CONVERSION_FACTORS (Colorado Time Systems); NCAA publishes no LCM factor",
+    "swimcloudAltitudeTag": "https://support.swimcloud.com/hc/en-us/articles/360016124593-Altitude-Adjustments (search summary: 'A' tag, NCAA table). Page itself returned 403 to WebFetch; confirm with a live fixture in P2."
+  },
+  "phases": {
+    "P0": {
+      "status": "in-progress (executor, dispatched with P1)",
+      "what": "Normalize SwimCloud labels ('50 Free LCM') so lookupConversionFactors finds them.",
+      "evidence": "Probe 2026-09-22: hasConversionFactor('50 Free LCM') === false; convertSwimToSCY throws. shared.ts:181 skips the swim silently."
+    },
+    "P1": {
+      "status": "in-progress (executor)",
+      "what": "NCAA SCM factors by division: Rules Book default 0.896/1.143/1.003, D1 override 0.906/1.153/1.013. Truncate to hundredths."
+    },
+    "P2": {
+      "status": "unblocked: fixture captured, ready to brief after P0+P1 land",
+      "what": "NCAA altitude table in core; parse SwimCloud 'A' tag. First capture a live swim carrying 'A' (try a Wyoming or Air Force swimmer) to learn whether eventtime is actual or adjusted.",
+      "evidence": {
+        "fixture": "tests/fixtures/profile_fastest_times-1401610-altitude.json (35 rows, saved 2026-09-22 via Orca embedded browser, same-origin fetch after Cloudflare cleared)",
+        "row": "swimmer 1401610 (Simon Casey, Wyoming), 400 Free LCM, CSI Long Course Open (meet 386418, event 68), 2026-06-14, eventtime 247.11, flag \"A\", flags[{label:\"A\",title:\"Altitude Adjusted\"}], row id 180371296 but url ?id=179094351",
+        "actualTime": "Meet results page /results/386418/event/68/ row for swim 179094351: \"2 Simon Casey Wyoming Aquatics 4:12.11\" = 252.11 s",
+        "conclusion": "profile_fastest_times eventtime is the ALTITUDE-ADJUSTED time, not the swim. 252.11 - 247.11 = 5.00 = NCAA 400 m value for 4,251-6,500 ft. The actual time is NOT in the JSON; only the adjusted one. SwimCloud chose the elevation class; do not re-derive it.",
+        "implications": [
+          "Do not apply the NCAA altitude table again to an A-tagged time (double adjustment).",
+          "Label A-tagged times as altitude-adjusted everywhere; the swum time is not available from this endpoint.",
+          "Apply the NCAA table only to times known to be swum at altitude and NOT already adjusted (e.g. PDF/manual imports with a known elevation)."
+        ]
+      }
+    },
+    "P3": {
+      "status": "implemented, reviewed; awaiting combined suite + commit",
+      "what": "Warn when a save drops a gender's results sharply (e.g. 550 -> 0); offer restore from data/backups.",
+      "result": "apps/shell/lib/dataLossGuard.ts (isSharpDrop: prev>=20 && (next===0 || next<prev/2)); PUT /api/workspaces/:id takes a pre-shrink backup then saves; response.dataLossWarning; apps/shell/src/lib/dataLossWatcher.ts shows a persistent toast with Restore. Toast.push gained optional {persistent, action}. +23 tests (worker run: 1138 green)."
+    },
+    "P4": {
+      "status": "planned",
+      "what": "HistoricalSwim.isUserInputted from the SwimCloud 'U' tag; excluded from bestByEvent, cut tags and entries, like isExtractedSplit."
+    },
+    "P5": {
+      "status": "planned",
+      "what": "Season vs lifetime toggle, using seasonId on each swim. Display filter only."
+    },
+    "P6": {
+      "status": "planned",
+      "what": "Badges for R (leadoff), U (self-reported), X (extracted), A (altitude)."
+    },
+    "P7": {
+      "status": "planned",
+      "what": "Show when each swimmer's bests were last pulled (capture retrievedAt)."
+    },
+    "P8": {
+      "status": "planned",
+      "what": "Compare two captures by swim id; list improvements."
+    },
+    "P9": {
+      "status": "planned",
+      "what": "Rerun only the personal-bests pass for one roster."
+    },
+    "P10": {
+      "status": "planned",
+      "what": "Research: does SwimCloud course code '6' mean a 6-dive list and 'B' an 11-dive list? Needs a second confirmed example."
+    },
+    "P11": {
+      "status": "planned",
+      "what": "times_by_event per swimmer on demand only (about 15x the requests of the bests pass)."
+    }
+  },
+  "log": [
+    "2026-09-22 planning: research done, plan written, awaiting user approval of the factor table before P0.",
+    "2026-09-22 user approved factors; dispatched executor(P0+P1, packages/core + IndRelayManagementView) and worker(P3, apps/shell + save UI) in parallel. Orchestrator does P2 live altitude probe meanwhile.",
+    "2026-09-22 P2 probe: Wyoming roster and API both 403 (Cloudflare) to curl. Stopped; asked user for a browser-saved fixture.",
+    "2026-09-22 P3 worker done. Orchestrator review: watcher clones response and swallows errors; push is stable; restore uses same-origin fetch like all workspace calls. Brief error noted: 550->300 does not meet the <half rule; worker kept the rule.",
+    "2026-09-22 P2 evidence captured: SwimCloud A = Altitude Adjusted; JSON holds the adjusted time (4:07.11) while the swim was 4:12.11; diff 5.00 = NCAA class II 400m."
+  ]
+}
