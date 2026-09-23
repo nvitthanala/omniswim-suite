@@ -1103,6 +1103,24 @@ select {
   word-break: break-word;
 }
 
+.toast-action {
+  flex-shrink: 0;
+  color: var(--text-accent);
+  background: transparent;
+  border: 1px solid var(--border-soft);
+  cursor: pointer;
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  transition: color 0.15s, background 0.15s, border-color 0.15s;
+}
+
+.toast-action:hover {
+  background: var(--surface-muted);
+  border-color: var(--text-accent);
+}
+
 .toast-close {
   flex-shrink: 0;
   color: var(--text-secondary);

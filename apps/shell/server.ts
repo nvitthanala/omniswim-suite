@@ -21,6 +21,7 @@ import {
   parseAthleteHistorySchema,
 } from '../../packages/core/src/schemas/workspace.ts';
 import { JsonRepo, SqliteRepo, PgRepo, type WorkspaceRepo } from './lib/workspaceRepo.ts';
+import { applyWorkspaceUpdateWithGuard } from './lib/dataLossGuard.ts';
 import { isLoopbackHost } from './lib/loopbackHost.ts';
 import { FileSystemSwimCloudCaptureStore } from '../../packages/swimcloud/src/captureStore.ts';
 import {
@@ -746,9 +747,26 @@ async function startServer() {
       typeof req.body?.version === 'number' ? (req.body.version as number) : undefined;
     try {
       applyRepoScope(req);
-      const updated = await repo.update(req.params.id, parsed.data as Partial<Workspace>, expectedVersion);
+      const patch = parsed.data as Partial<Workspace>;
+
+      // Data-loss guard (2026-09-22 incident): a save that sharply shrinks
+      // menResults/womenResults/athleteHistory gets a `pre-shrink` backup
+      // BEFORE the write, and the response says so. This never blocks the
+      // save — a coach's deliberate trim must still go through — it only
+      // makes sure a silent wipe is never silent again. See
+      // `apps/shell/lib/dataLossGuard.ts` for the detection rule and the
+      // best-effort backup handling.
+      const { updated, dataLossWarning } = await applyWorkspaceUpdateWithGuard(
+        repo,
+        req.params.id,
+        patch,
+        expectedVersion
+      );
+      if (dataLossWarning?.backupError) {
+        console.warn('Pre-shrink backup failed; saving anyway:', dataLossWarning.backupError);
+      }
       if (!updated) return res.status(404).json({ error: 'Workspace not found' });
-      res.json(updated);
+      res.json(dataLossWarning ? { ...updated, dataLossWarning } : updated);
     } catch (err) {
       if (err instanceof Error && (err as Error & { code?: string }).code === 'VERSION_CONFLICT') {
         return res.status(409).json({ error: 'Version conflict — refresh and retry' });

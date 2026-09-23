@@ -18,6 +18,7 @@ import SwimCloudWindow from './components/SwimCloudWindow';
 import CommandPalette from './components/CommandPalette';
 import { AuthProvider } from './context/AuthContext';
 import { ManagerAppLazy, MatrixAppLazy, MetricsAppLazy, prefetchLastApplet } from './lib/appletPrefetch';
+import { installDataLossWatcher } from './lib/dataLossWatcher';
 
 const ManagerApp = ManagerAppLazy;
 const MatrixApp = MatrixAppLazy;
@@ -260,6 +261,15 @@ function ShellLayout() {
 
 export default function App() {
   const toast = useToast();
+
+  // Data-loss guard (2026-09-22 incident): surface a `dataLossWarning` on any
+  // PUT /api/workspaces/:id response as a persistent toast with a Restore
+  // action. See apps/shell/src/lib/dataLossWatcher.ts for why this patches
+  // fetch instead of wiring through SuiteWorkspaceProvider's onNotify.
+  useEffect(() => {
+    installDataLossWatcher(toast.push);
+  }, [toast.push]);
+
   return (
     <BrowserRouter>
       <SuitePreferencesProvider>

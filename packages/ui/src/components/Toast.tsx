@@ -15,15 +15,28 @@ const TOAST_EXIT_MS = 200;
 
 export type ToastKind = 'error' | 'success' | 'info';
 
+export type ToastAction = {
+  label: string;
+  onClick: () => void;
+};
+
+export type ToastOptions = {
+  /** Skip the auto-dismiss timer. For a warning the user must act on, not just read. */
+  persistent?: boolean;
+  /** An inline action button, e.g. "Restore" on a data-loss warning. */
+  action?: ToastAction;
+};
+
 export type Toast = {
   id: string;
   kind: ToastKind;
   message: string;
+  action?: ToastAction;
 };
 
 type ToastContextValue = {
   toasts: Toast[];
-  push: (kind: ToastKind, message: string) => void;
+  push: (kind: ToastKind, message: string, options?: ToastOptions) => string;
   dismiss: (id: string) => void;
 };
 
@@ -44,11 +57,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const push = useCallback(
-    (kind: ToastKind, message: string) => {
+    (kind: ToastKind, message: string, options?: ToastOptions) => {
       const id = `toast-${++counter.current}`;
-      setToasts(list => [...list, { id, kind, message }]);
-      const ttl = kind === 'error' ? 7000 : 4000;
-      window.setTimeout(() => dismiss(id), ttl);
+      setToasts(list => [...list, { id, kind, message, action: options?.action }]);
+      if (!options?.persistent) {
+        const ttl = kind === 'error' ? 7000 : 4000;
+        window.setTimeout(() => dismiss(id), ttl);
+      }
+      return id;
     },
     [dismiss]
   );
@@ -140,6 +156,17 @@ function ToastItem({
     <div className={`toast-item toast-${toast.kind}`} data-state={state} role="status">
       <Icon size={16} className="toast-icon" />
       <span className="toast-message">{toast.message}</span>
+      {toast.action && (
+        <button
+          type="button"
+          className="toast-action"
+          onClick={() => {
+            toast.action?.onClick();
+          }}
+        >
+          {toast.action.label}
+        </button>
+      )}
       <button
         type="button"
         className="toast-close"
@@ -158,7 +185,10 @@ export function useToast(): ToastContextValue {
     // Fall back to console so applets used outside the provider don't crash.
     return {
       toasts: [],
-      push: (kind, message) => console[kind === 'error' ? 'error' : 'log'](message),
+      push: (kind, message) => {
+        console[kind === 'error' ? 'error' : 'log'](message);
+        return '';
+      },
       dismiss: () => undefined,
     };
   }

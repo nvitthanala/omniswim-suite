@@ -1,6 +1,13 @@
 export { ThemeToggle } from './components/ThemeToggle';
 export { LoadingSpinner } from './components/LoadingSpinner';
-export { ToastProvider, useToast, type Toast, type ToastKind } from './components/Toast';
+export {
+  ToastProvider,
+  useToast,
+  type Toast,
+  type ToastKind,
+  type ToastAction,
+  type ToastOptions,
+} from './components/Toast';
 export { AppletSkeleton } from './components/AppletSkeleton';
 export { Badge } from './components/Badge';
 export {
