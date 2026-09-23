@@ -533,12 +533,30 @@ export function swimCloudSwimmerTimesToHistoricalSwims(
     // individual entry at the meet it was swum in -- it does not, and
     // `swimCloudMeetImportBridge` still excludes it there. That bridge is
     // about one meet's placings; this one is about what a swimmer has done.
+    const meetLabel = personalBest.meetName ?? options.meetLabelFallback;
+
+    // A dive is kept with its judged score in `time`, exactly as the meet data
+    // stores one (`data/meets.json`: "1 mtr Diving", "503.95"). The diving label
+    // is what keeps it out of best-time ranking (`canonicalMeetEventLabel`) and
+    // cut tagging (`cutlineTags`), which both refuse a diving event outright.
+    if (personalBest.stroke === 'Diving' && personalBest.divingScore !== undefined) {
+      swims.push({
+        name: parse.name,
+        team: options.team,
+        gender: options.gender,
+        event: personalBest.eventLabel,
+        time: personalBest.divingScore,
+        ...(personalBest.date === undefined ? {} : { date: personalBest.date }),
+        ...(meetLabel === undefined ? {} : { meetLabel }),
+        source: 'swimcloud',
+      });
+      continue;
+    }
+
     if (personalBest.time === undefined) {
       skipped.push({ personalBest, reason: 'no-time' });
       continue;
     }
-
-    const meetLabel = personalBest.meetName ?? options.meetLabelFallback;
 
     swims.push({
       name: parse.name,

@@ -23,6 +23,10 @@ import {
   type SwimCloudMeetId,
 } from '@omniswim/swimcloud';
 import { buildRosterImportFromCapture } from '@omniswim/manager/lib/rosterQueueImport';
+import { swimCloudSwimmerTimesToHistoricalSwims } from '@omniswim/manager/lib/swimCloudImportBridge';
+import type { ScoringSettings } from '@omniswim/core/types';
+import { categorizeBestEvents } from '../packages/core/src/lib/athleteHistory';
+import { cutlineEventCategory } from '../packages/core/src/lib/cutlineEventNames';
 
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
 const fixture = (name: string): string => readFileSync(join(fixturesDir, name), 'utf8');
@@ -135,14 +139,51 @@ describe('rows first seen in live responses (2026-09-22)', () => {
     return result;
   };
 
-  it('keeps a diver’s rows as diving, with the score as a raw token and no time', () => {
+  it('keeps a diver’s rows as diving, with the score recorded and no time', () => {
     const { data, warnings } = parseLive('profile_fastest_times-2508045-diver.json', '2508045');
     expect(data.personalBests).toHaveLength(9);
     const diving = data.personalBests.filter((pb) => pb.stroke === 'Diving');
-    expect(diving.map((pb) => pb.eventLabel).sort()).toStrictEqual(['1M Diving', '1M Diving', '3M Diving', '3M Diving']);
-    expect(diving.every((pb) => pb.time === undefined && pb.rawTimeToken !== undefined)).toBe(true);
-    expect(diving.find((pb) => pb.rawTimeToken === '318.05')?.meetName).toBe('New South Championships');
+    expect(diving.map((pb) => pb.eventLabel).sort()).toStrictEqual([
+      '1 mtr Diving',
+      '1 mtr Diving',
+      '3 mtr Diving',
+      '3 mtr Diving',
+    ]);
+    expect(diving.map((pb) => pb.divingScore).sort()).toStrictEqual(['170.45', '176.90', '249.45', '318.05']);
+    expect(diving.every((pb) => pb.time === undefined)).toBe(true);
+    expect(diving.find((pb) => pb.divingScore === '318.05')?.meetName).toBe('New South Championships');
     expect(warnings.map((w) => w.code)).toStrictEqual(Array(4).fill('diving-score-not-a-time'));
+  });
+
+  it('imports every dive score, and keeps dives out of best times and cut tags', () => {
+    const { data } = parseLive('profile_fastest_times-2508045-diver.json', '2508045');
+    const conversion = swimCloudSwimmerTimesToHistoricalSwims({ ...data, name: 'Test Diver' }, {
+      team: 'Henderson State',
+      gender: Gender.WOMEN,
+    });
+    if (!conversion.ok) throw new Error(conversion.message);
+    expect(conversion.skipped).toStrictEqual([]);
+    expect(conversion.swims).toHaveLength(9);
+    const dives = conversion.swims.filter((s) => /Diving/.test(s.event));
+    expect(dives.map((s) => [s.event, s.time, s.meetLabel])).toContainEqual([
+      '1 mtr Diving',
+      '318.05',
+      'New South Championships',
+    ]);
+    expect(dives).toHaveLength(4);
+    // A score is higher-is-better. It must never be ranked as a time...
+    const profile = categorizeBestEvents(
+      [...conversion.swims],
+      'Henderson State',
+      Gender.WOMEN,
+      'Test Diver',
+      {} as ScoringSettings,
+    );
+    // The diver's swims do rank, so the check below is not vacuous.
+    expect(Object.keys(profile.bestByEvent).length).toBeGreaterThan(0);
+    expect(Object.keys(profile.bestByEvent).some((e) => /div/i.test(e))).toBe(false);
+    // ...or judged against a swim standard.
+    expect(cutlineEventCategory('1 mtr Diving')).toBe('diving');
   });
 
   it('reads the swim id from #time on a user-inputted row with a non-numeric event ref', () => {

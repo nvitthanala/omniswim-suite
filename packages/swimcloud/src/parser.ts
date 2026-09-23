@@ -2455,6 +2455,12 @@ export interface SwimCloudPersonalBestSwim {
    */
   readonly seasonId?: string;
   /**
+   * A diving row's judged score, e.g. `'318.05'`. Diving only, and never in
+   * {@link time}: a score is higher-is-better and must not rank as a time.
+   * Set by {@link parseSwimmerFastestTimesJson}; absent on every swim row.
+   */
+  readonly divingScore?: string;
+  /**
    * True when a chip's tooltip reads `Leadoff`.
    *
    * Matched on `title="Leadoff"` and never on the visible `R`, exactly as
@@ -3396,11 +3402,13 @@ export function parseSwimmerFastestTimesJson(
     if (strokeCode === FASTEST_TIMES_DIVING_STROKE && distance !== undefined) {
       // Same treatment as the HTML path's `diving-score-not-a-time`: the row is
       // kept, the score is not a time, and the importer skips it as no-time.
-      const eventLabel = `${distance}M Diving`;
+      // `1 mtr Diving`, the label the meet data already uses (data/meets.json),
+      // so a diver's bests and meet results name the event the same way.
+      const eventLabel = `${distance} mtr Diving`;
       const rawScore = jsonString(row['eventtime']) ?? '';
       warnings.push({
         code: 'diving-score-not-a-time',
-        message: `${eventLabel} ${JSON.stringify(rawScore)} is a judged score, not a time; no time recorded.`,
+        message: `${eventLabel} ${JSON.stringify(rawScore)} is a judged score, not a time; recorded as divingScore.`,
         rowIndex,
         raw: rawScore,
       });
@@ -3426,6 +3434,7 @@ export function parseSwimmerFastestTimesJson(
         ...(meetId === undefined ? {} : { swimCloudMeetId: meetId }),
         ...(meetName.length === 0 ? {} : { meetName }),
         ...(rawScore.length === 0 ? {} : { rawTimeToken: rawScore }),
+        ...(/^\d{1,4}\.\d{1,2}$/.test(rawScore) ? { divingScore: rawScore } : {}),
         ...(date.length === 0 ? {} : { date }),
         tags: readFastestTimesFlags(row['flags']).tags,
         ...(seasonId === undefined ? {} : { seasonId }),
