@@ -222,3 +222,16 @@ describe('roster import from a JSON capture', () => {
     expect(result.rosterQueue.entries.filter((e) => e.captured).map((e) => e.name)).toStrictEqual([rosterName]);
   });
 });
+
+describe('season and capture date on imported swims', () => {
+  it('stamps each swim with its SwimCloud season and the capture instant', () => {
+    const conversion = swimCloudSwimmerTimesToHistoricalSwims(
+      { ...parseFixture().data, name: 'Avery Henke' },
+      { team: 'Henderson State', gender: Gender.MEN, retrievedAt: CONTEXT.retrievedAt },
+    );
+    if (!conversion.ok) throw new Error(conversion.message);
+    const back50 = conversion.swims.find((s) => s.event === '50 Back SCY');
+    expect(back50).toMatchObject({ seasonId: '29', retrievedAt: '2026-09-22T12:02:00.000Z' });
+    expect(conversion.swims.every((s) => s.seasonId !== undefined && s.retrievedAt === CONTEXT.retrievedAt)).toBe(true);
+  });
+});

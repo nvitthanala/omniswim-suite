@@ -237,6 +237,8 @@ export interface ConvertSwimmerTimesOptions {
   readonly team: string;
   /** The workspace gender these swims are imported under. Never inferred — `/swimmer/{id}/times/` states no gender for a swim. */
   readonly gender: Gender;
+  /** When the capture was taken. Stamped on every imported swim. */
+  readonly retrievedAt?: string;
 }
 
 /**
@@ -268,6 +270,7 @@ export function convertAndAccountSwimmerTimes(
   const conversion = swimCloudSwimmerTimesToHistoricalSwims(parse, {
     team: options.team.trim(),
     gender: options.gender,
+    ...(options.retrievedAt === undefined ? {} : { retrievedAt: options.retrievedAt }),
   });
   if (!conversion.ok) {
     return { ok: false, message: conversion.message, reason: 'missing-swimmer-name', match };

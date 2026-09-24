@@ -541,6 +541,13 @@ export interface HistoricalSwim {
    * before 2026-09-24 carries only `swimcloudBadge: 'user_input'`.
    */
   isUserInputted?: true;
+  /**
+   * SwimCloud's `season_id` for this swim, verbatim (e.g. `'29'` = 2025-26).
+   * Only the times JSON states it. Absent on pasted, PDF and CSV rows.
+   */
+  seasonId?: string;
+  /** ISO instant the source page was captured. Absent when the import did not record one. */
+  retrievedAt?: string;
 }
 
 /**

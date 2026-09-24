@@ -277,7 +277,11 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
       return;
     }
 
-    const accounted = convertAndAccountSwimmerTimes(parseResult.data, { team: team.trim(), gender });
+    const accounted = convertAndAccountSwimmerTimes(parseResult.data, {
+      team: team.trim(),
+      gender,
+      retrievedAt: parseResult.provenance.retrievedAt,
+    });
     if (!accounted.ok) {
       toast.push('error', accounted.message);
       return;

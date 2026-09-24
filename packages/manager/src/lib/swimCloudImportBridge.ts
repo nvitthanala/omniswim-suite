@@ -438,6 +438,8 @@ export interface SwimCloudSwimmerTimesToHistoricalSwimsOptions {
   readonly gender: Gender;
   /** Used for a row whose own `meetName` is absent. Never fabricated if this is also omitted. */
   readonly meetLabelFallback?: string;
+  /** When the capture was taken (the parse's `provenance.retrievedAt`). Stamped on every swim. */
+  readonly retrievedAt?: string;
 }
 
 export type SwimCloudSwimmerTimesSkipReason =
@@ -569,6 +571,8 @@ export function swimCloudSwimmerTimesToHistoricalSwims(
         time: personalBest.divingScore,
         ...(personalBest.date === undefined ? {} : { date: personalBest.date }),
         ...(meetLabel === undefined ? {} : { meetLabel }),
+        ...(personalBest.seasonId === undefined ? {} : { seasonId: personalBest.seasonId }),
+        ...(options.retrievedAt === undefined ? {} : { retrievedAt: options.retrievedAt }),
         source: 'swimcloud',
       });
       continue;
@@ -606,6 +610,8 @@ export function swimCloudSwimmerTimesToHistoricalSwims(
       // A self-reported time. Imported and kept, never a best. See
       // HistoricalSwim.isUserInputted.
       ...(isUserInputted(personalBest) ? { isUserInputted: true as const } : {}),
+      ...(personalBest.seasonId === undefined ? {} : { seasonId: personalBest.seasonId }),
+      ...(options.retrievedAt === undefined ? {} : { retrievedAt: options.retrievedAt }),
       source: 'swimcloud',
     });
   }
