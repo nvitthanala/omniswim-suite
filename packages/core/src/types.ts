@@ -1,5 +1,6 @@
 import type { RaceConfig, RaceTag } from './lib/raceAnalysis';
 import type { NcaaMeetFormat } from './lib/ncaaScoringRules';
+import type { ScyConversionBasis } from './lib/utils';
 
 /**
  * @license
@@ -86,6 +87,42 @@ export interface SwimmerResult {
   pdfPoints?: number;
   /** Row imported from a psych sheet PDF (seed time projection). */
   isPsychSheet?: boolean;
+  /**
+   * Set when `time` is an SCY estimate converted from a metric swim — a recruit
+   * row or planned entry `buildWhatIfProjection` projected. Absent on meet
+   * rows, which are always yards. A cut tag must judge the recorded swim, not
+   * this row's time: pass the row through `cutlineSwimOfRecord`.
+   */
+  convertedFrom?: ScyConversionProvenance;
+}
+
+/**
+ * Where a converted SCY time came from.
+ *
+ * A metric (LCM/SCM) swim can be stated in SCY, but the result is an estimate,
+ * not a yards swim, and only a yards swim earns an NCAA cut. A row that holds a
+ * converted time carries this record so every reader can tell, and so a cut tag
+ * can judge the swim as it was recorded (`state: 'converted_estimate'`) instead
+ * of treating the estimate as a real yards time.
+ *
+ * The row's own `time` stays the SCY estimate and its `timeType` stays `'SCY'`,
+ * because `time` is what scoring reads. This record never changes a score.
+ */
+export interface ScyConversionProvenance {
+  /** Course the swim was recorded in. Never `'SCY'`. */
+  sourceCourse: 'LCM' | 'SCM';
+  /** Event label as recorded, e.g. `'400 Free LCM'` for a 500 Free SCY slot. */
+  sourceEvent: string;
+  /** Time as recorded, in {@link ScyConversionProvenance.sourceCourse}. */
+  sourceTime: string;
+  /**
+   * The SCY time the conversion produced. A row whose `time` no longer equals
+   * this was edited after import, so this record no longer describes it and
+   * readers ignore it (see `cutlineSwimOfRecord`).
+   */
+  scyTime: string;
+  /** How the time reached SCY: the factor, and for SCM the NCAA table and why. */
+  basis: ScyConversionBasis;
 }
 
 /** Swimmers removed from the workspace; excluded from individuals and treated as departed relay legs. */
@@ -391,6 +428,19 @@ export interface PlannedSwimEntry {
   active?: boolean;
   projectedRank?: number;
   projectedRound?: string;
+  /**
+   * Set when `time` is an SCY estimate converted from a metric swim, e.g. an
+   * entry `importHistoryToRoster` built from a `400 Free LCM`. `timeType` stays
+   * `'SCY'` because `time` is in yards. See {@link ScyConversionProvenance}.
+   * `updatePlannedEntry` drops it when the time, event or course is edited.
+   */
+  convertedFrom?: ScyConversionProvenance;
+  /**
+   * The time is an altitude-adjusted time, carried from
+   * {@link HistoricalSwim.isAltitudeAdjusted}. Display only; it never changes
+   * the time. Dropped with `convertedFrom` when the time is edited.
+   */
+  isAltitudeAdjusted?: true;
 }
 
 export type SwimCloudBadge =
@@ -445,13 +495,67 @@ export interface HistoricalSwim {
    * is imported as one.
    */
   isExtractedSplit?: boolean;
+  /**
+   * The time is an **altitude-adjusted** time, not the time on the clock.
+   *
+   * SwimCloud marks these `A` / `title="Altitude Adjusted"` and publishes only
+   * the adjusted time. Verified 2026-09-22 on swimmer 1401610: the 400 Free LCM
+   * reads 247.11 (4:07.11) in `profile_fastest_times`, while the meet results
+   * page shows the swim as 4:12.11. The 5.00 difference is the NCAA figure for
+   * a 400 m at 4,251-6,500 ft. The swum time is not in that response.
+   *
+   * **Still a best.** The NCAA itself enters the adjusted time ("This is the
+   * time to be used on the entry form"), so the swim ranks, cut-tags and
+   * enters like any other. The flag exists so a UI can show that the time was
+   * adjusted.
+   *
+   * **Never adjusted again.** No code path may subtract the NCAA altitude
+   * chart from a time carrying this flag; `adjustSwimForAltitude` refuses one.
+   * The elevation SwimCloud used is not published either, so it is never
+   * re-derived.
+   */
+  isAltitudeAdjusted?: true;
+  /**
+   * The time was typed in by the swimmer or a coach, not taken from a meet
+   * result.
+   *
+   * SwimCloud marks these `U` / `title="User Inputted"`. Seen live on swimmer
+   * 2352628 (three SCM rows) and 1401610 (three SCY rows). User ruling
+   * (2026-09-22): import it and badge it, but **never treat it as a best**.
+   *
+   * So it is kept out of {@link AthleteEventProfile.bestByEvent} and out of
+   * every place a best is read: cut tags, entry candidates
+   * (`importHistoryToRoster`), cross-course arbitrage and relay-leg times,
+   * theory entry plans, and season analytics. It is **not** a relay-leg
+   * stand-in either, unlike an extracted split: nothing about it was measured.
+   * It stays stored in `athleteHistory`, where `mergeHistoryIndex` keeps it in
+   * its own lane so it neither displaces a real swim nor is displaced by one,
+   * and it is listed in {@link AthleteEventProfile.userInputtedByEvent}.
+   */
+  isUserInputted?: true;
+}
+
+/**
+ * One best time in an {@link AthleteEventProfile}, stated in SCY.
+ *
+ * `time` is the SCY program time. For a metric swim it is a converted
+ * estimate, and {@link AthleteEventBest.convertedFrom} says so.
+ */
+export interface AthleteEventBest {
+  time: string;
+  timeSec: number;
+  source: string;
+  /** Present when `time` was converted from a metric swim. */
+  convertedFrom?: ScyConversionProvenance;
+  /** The best is an altitude-adjusted time. See {@link HistoricalSwim.isAltitudeAdjusted}. */
+  altitudeAdjusted?: true;
 }
 
 export interface AthleteEventProfile {
   name: string;
   team: string;
   gender: Gender;
-  bestByEvent: Record<string, { time: string; timeSec: number; source: string }>;
+  bestByEvent: Record<string, AthleteEventBest>;
   /**
    * Times taken out of a longer swim's splits, keyed like
    * {@link bestByEvent} and deliberately kept apart from it.
@@ -462,6 +566,16 @@ export interface AthleteEventProfile {
    * entry planning. See {@link HistoricalSwim.isExtractedSplit}.
    */
   extractedByEvent: Record<string, { time: string; timeSec: number; source: string }>;
+  /**
+   * Self-reported times (SwimCloud `U`), keyed like {@link bestByEvent} and
+   * kept apart from it. Listed so a UI can show them with a badge; read by
+   * nothing that ranks, cut-tags, enters or projects. Not a relay-leg
+   * stand-in. See {@link HistoricalSwim.isUserInputted}.
+   *
+   * Optional only so the type stays additive: `categorizeBestEvents` and
+   * `buildEventProfileFromCatalog` always set it.
+   */
+  userInputtedByEvent?: Record<string, { time: string; timeSec: number; source: string }>;
   primaryEvents: string[];
   relayEvents: string[];
   /**
@@ -624,7 +738,18 @@ export interface Recruit {
   time: string;
   gender: Gender;
   classYear: ClassYear;
+  /** The course of `time`. A converted row keeps `'SCY'`; see `convertedFrom`. */
   timeType: 'SCY' | 'LCM' | 'SCM';
+  /**
+   * Set when `time` is an SCY estimate converted from a metric swim, e.g. a
+   * recruit row `importHistoryToRoster` built from a `400 Free LCM`. Before
+   * 2026-09-22 such a row carried `timeType: 'SCY'` and nothing else, so it
+   * read as a real yards swim everywhere downstream and could earn a cut
+   * badge. See {@link ScyConversionProvenance}.
+   */
+  convertedFrom?: ScyConversionProvenance;
+  /** The time is altitude-adjusted. See {@link HistoricalSwim.isAltitudeAdjusted}. Display only. */
+  isAltitudeAdjusted?: true;
 }
 
 export interface ConversionFactors {

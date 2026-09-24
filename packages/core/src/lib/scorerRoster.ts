@@ -28,6 +28,7 @@ import {
   type ScorerAutoRules,
   type ScorerRosterOverride,
   type ScoringSettings,
+  type ScyConversionProvenance,
   type SwimmerResult,
 } from '../types';
 import { DEFAULT_SCORER_AUTO_RULES } from './scoringDefaults';
@@ -313,6 +314,11 @@ export type AthleteCreditedSwim = {
   relayLegIndex?: number;
   relayLegSplitDetail?: RelayLegSplitDetail;
   relayTeamSplits?: RelayTeamSplitSummary;
+  /**
+   * Carried from `SwimmerResult.convertedFrom`: `time` is an SCY estimate from
+   * a metric swim. Build its cut tag through `cutlineSwimOfRecord`.
+   */
+  convertedFrom?: ScyConversionProvenance;
 };
 
 /**
@@ -359,6 +365,7 @@ export function getAthleteCreditedSwims(
       relayLegIndex: r.relayLegIndex,
       relayLegSplitDetail: r.relayLegSplitDetail,
       relayTeamSplits: r.relayTeamSplits,
+      ...(r.convertedFrom ? { convertedFrom: r.convertedFrom } : {}),
     });
   }
 

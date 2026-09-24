@@ -13,7 +13,13 @@
  * Test: npx tsx scripts/test_cross_course_arbitrage.mjs
  */
 
-import { Gender, PlannedSwimEntry, ScoringSettings, Workspace } from '../../types';
+import {
+  Gender,
+  PlannedSwimEntry,
+  ScoringSettings,
+  Workspace,
+  type ScyConversionProvenance,
+} from '../../types';
 import { mergeScoringSettings } from '../scoringDefaults';
 import { createPlannedEntry } from '../whatIfProjection';
 import { convertTimeToSeconds } from '../utils';
@@ -53,6 +59,12 @@ export type ExactSwap = {
   dropTime?: string;
   /** True when addTime came from a converted LCM/SCM swim (not swum SCY). */
   addTimeConverted?: boolean;
+  /**
+   * The recorded metric swim behind a converted `addTime`. `applyExactSwap`
+   * writes it onto the new plan as `convertedFrom`, so the plan stays marked
+   * as an estimate and its cut tag judges the metric swim.
+   */
+  addTimeConvertedFrom?: ScyConversionProvenance;
   /**
    * 'verify' when the swap's outcome hinges on a converted time whose nearest
    * field time is within CONVERSION_VERIFY_MARGIN (~1%) of it — the placement
@@ -120,7 +132,12 @@ function buildSwapWorkspace(
 }
 
 /** One athlete's SCY-converted best time for a candidate add-event, as `bestIndex` stores it. */
-type BestEntryForEvent = { time: string; stale?: boolean; converted?: boolean };
+type BestEntryForEvent = {
+  time: string;
+  stale?: boolean;
+  converted?: boolean;
+  convertedFrom?: ScyConversionProvenance;
+};
 
 /**
  * Compute one (athlete, addEvent, drop) candidate's exact swap, or `null`
@@ -181,6 +198,7 @@ function evaluateSwapCandidate(opts: {
     dropSource: drop.source,
     dropTime: drop.time,
     addTimeConverted: best.converted ? true : undefined,
+    ...(best.convertedFrom ? { addTimeConvertedFrom: best.convertedFrom } : {}),
     deltaPoints,
     newTotal: Number(newTotal.toFixed(3)),
     baseTotal: baseTotalRounded,
@@ -340,6 +358,7 @@ export function applyExactSwap(
     timeType: 'SCY',
     source: 'optimizer',
     active: true,
+    ...(swap.addTimeConvertedFrom ? { convertedFrom: swap.addTimeConvertedFrom } : {}),
   });
 
   const basePlans = workspace.meetEntryPlans ?? [];

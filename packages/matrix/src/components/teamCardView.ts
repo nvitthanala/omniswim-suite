@@ -18,6 +18,7 @@ import { normalizeEventForCutline } from '@omniswim/core/lib/cutlineUtils';
 import {
   buildCutlineTagForTeam,
   buildRelaySwimTagsForTeam,
+  convertedSwimOfRecord,
   type CutlineTagResult,
   type RelaySwimTagResults,
 } from '@omniswim/core/lib/cutlineTags';
@@ -60,6 +61,17 @@ export function buildTeamRowCutlineTags(
         legQualificationEvent: relaySplitQualificationCutEvent(res),
         legSplit: res.relayLegSplit,
       }),
+    };
+  }
+
+  // A recruit row or plan holding a converted SCY estimate is judged as the
+  // metric swim it came from, so it can reach "indicative" but never a cut
+  // badge. Every other row keeps its caller's time exactly as before.
+  const converted = convertedSwimOfRecord(res);
+  if (converted) {
+    return {
+      kind: 'single',
+      result: buildCutlineTagForTeam({ gender, team: teamName, ...converted }),
     };
   }
 

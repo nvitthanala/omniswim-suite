@@ -14,6 +14,7 @@ import {
   RelayLegOverride,
   Workspace,
   type NcaaDivision,
+  type ScyConversionProvenance,
 } from '../types';
 import {
   buildScorerRosterLookup,
@@ -734,6 +735,29 @@ export function convertSwimToSCYDetailed(
     time: converted.time,
     sourceCourse: timeType,
     basis: converted.basis,
+  };
+}
+
+/**
+ * The {@link ScyConversionProvenance} a row must carry when its time came out
+ * of `conversion`, or `undefined` when no factor was applied (an SCY swim, a
+ * relay passed through, a course the converter did not recognise).
+ *
+ * `recorded` is the swim as recorded: the same event and time that were passed
+ * to {@link convertSwimToSCYDetailed}.
+ */
+export function scyConversionProvenance(
+  recorded: { event: string; time: string },
+  conversion: ScyConversion
+): ScyConversionProvenance | undefined {
+  if (conversion.sourceCourse === 'SCY') return undefined;
+  if (conversion.basis.method === 'identity') return undefined;
+  return {
+    sourceCourse: conversion.sourceCourse,
+    sourceEvent: recorded.event,
+    sourceTime: recorded.time,
+    scyTime: conversion.time,
+    basis: conversion.basis,
   };
 }
 

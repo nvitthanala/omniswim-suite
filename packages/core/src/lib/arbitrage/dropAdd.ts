@@ -13,6 +13,7 @@ import {
   ScoringSettings,
   SwimmerResult,
   Workspace,
+  type ScyConversionProvenance,
 } from '../../types';
 import { mergeScoringSettings } from '../scoringDefaults';
 import {
@@ -133,6 +134,11 @@ export type AddOnlyRow = {
   addTimeStale?: boolean;
   /** True when addTime came from a converted LCM/SCM swim (not swum SCY). */
   addTimeConverted?: boolean;
+  /**
+   * The recorded metric swim behind a converted `addTime`. `applyEntryAdd`
+   * writes it onto the new plan as `convertedFrom`.
+   */
+  addTimeConvertedFrom?: ScyConversionProvenance;
   /** 'verify' when the projected gain sits inside conversion-factor noise (see ExactSwap.confidence). */
   confidence?: EntryConfidence;
   /** Class year carried onto the created plan entry (when known). */
@@ -484,6 +490,7 @@ export function rankAddOnly(workspace: Workspace, opts: AddOnlyOptions): AddOnly
         addTime: best.time,
         addTimeStale: best.stale ? true : undefined,
         addTimeConverted: best.converted ? true : undefined,
+        ...(best.convertedFrom ? { addTimeConvertedFrom: best.convertedFrom } : {}),
         classYear,
         deltaPoints,
         newTotal: Number(newTotal.toFixed(3)),
@@ -554,6 +561,7 @@ export function applyEntryAdd(
     timeType: 'SCY',
     source: 'optimizer',
     active: true,
+    ...(add.addTimeConvertedFrom ? { convertedFrom: add.addTimeConvertedFrom } : {}),
   });
   const { patch, inverse } = entryAddPatch(workspace, newEntry);
   const description = `${add.athlete}: +${add.addEvent} (${add.addTime}) — open-slot add`;

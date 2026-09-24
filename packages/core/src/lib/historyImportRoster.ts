@@ -16,12 +16,14 @@ import {
   ScorerRosterOverride,
   SwimmerResult,
   Workspace,
+  type ScyConversionProvenance,
 } from '../types';
 import {
   mergeHistoryIndex,
   matchAthleteToRoster,
   categorizeBestEvents,
   isChampionshipProgramEvent,
+  isUserInputtedSwim,
   meetProgramEvents,
   normalizeEventLabel,
 } from './athleteHistory';
@@ -29,10 +31,11 @@ import { mergeScoringSettings } from './scoringDefaults';
 import { usesScorerRoster, scorerRosterKey } from './scorerRoster';
 import {
   convertTimeToSeconds,
-  convertSwimToSCY,
+  convertSwimToSCYDetailed,
   foldDiacritics,
   hasConversionFactor,
   normalizeSwimmerName,
+  scyConversionProvenance,
 } from './utils';
 import { createPlannedEntry } from './whatIfProjection';
 import {
@@ -242,14 +245,41 @@ function canStateInSCY(swim: HistoricalSwim, relay: boolean): boolean {
   return hasConversionFactor(swim.event);
 }
 
-/** The SCY program event and time for a swim. Relays keep their own event and time. */
-function toSCYProgramSwim(swim: HistoricalSwim, relay: boolean): { event: string; time: string } {
+/**
+ * The SCY program event and time for a swim, and — when a factor was applied —
+ * where the time came from. Relays keep their own event and time.
+ */
+function toSCYProgramSwim(
+  swim: HistoricalSwim,
+  relay: boolean
+): { event: string; time: string; convertedFrom?: ScyConversionProvenance } {
   if (relay) return { event: swim.event, time: swim.time };
   // An SCM swim converts with the NCAA table of the swim's own team's division.
-  return convertSwimToSCY(swim.event, swim.time, swim.gender, swim.timeType ?? 'SCY', {
-    team: swim.team,
-  });
+  const conversion = convertSwimToSCYDetailed(
+    swim.event,
+    swim.time,
+    swim.gender,
+    swim.timeType ?? 'SCY',
+    { team: swim.team }
+  );
+  const convertedFrom = scyConversionProvenance({ event: swim.event, time: swim.time }, conversion);
+  return {
+    event: conversion.event,
+    time: conversion.time,
+    ...(convertedFrom ? { convertedFrom } : {}),
+  };
 }
+
+/**
+ * A lineup candidate: a swim restated as its SCY program event and time.
+ *
+ * `timeType` is always `'SCY'` because `time` is in yards. `convertedFrom`
+ * keeps the fact that the yards time is an estimate from a metric swim, so the
+ * recruit row or planned entry written from it says so too. Before 2026-09-22
+ * the candidate carried only `timeType: 'SCY'`, and a recruit built from a
+ * `400 Free LCM` read downstream as a real yards swim.
+ */
+type ProgramCandidate = HistoricalSwim & { convertedFrom?: ScyConversionProvenance };
 
 /**
  * Whether the program contests this event. The loaded meet decides its own program;
@@ -269,9 +299,9 @@ function isEventContested(
 
 /** Keep the fastest swim per program event. Ties keep the incumbent. */
 function keepIfFastest(
-  best: Map<string, HistoricalSwim>,
+  best: Map<string, ProgramCandidate>,
   event: string,
-  candidate: HistoricalSwim
+  candidate: ProgramCandidate
 ): void {
   const prev = best.get(event);
   if (!prev || convertTimeToSeconds(candidate.time) < convertTimeToSeconds(prev.time)) {
@@ -282,14 +312,23 @@ function keepIfFastest(
 function toProgramCandidates(
   swims: HistoricalSwim[],
   allowedEvents: ReadonlySet<string> | null = null
-): HistoricalSwim[] {
-  const best = new Map<string, HistoricalSwim>();
+): ProgramCandidate[] {
+  const best = new Map<string, ProgramCandidate>();
   for (const s of swims) {
+    // A self-reported time is never a best, so it is never an entry candidate.
+    // It is still merged into athleteHistory (see importHistoryToRoster).
+    if (isUserInputtedSwim(s)) continue;
     const relay = isRelayEventName(s.event);
     if (!canStateInSCY(s, relay)) continue;
-    const { event, time } = toSCYProgramSwim(s, relay);
+    const { event, time, convertedFrom } = toSCYProgramSwim(s, relay);
     if (!isEventContested(event, relay, allowedEvents)) continue;
-    keepIfFastest(best, event, { ...s, event, time, timeType: 'SCY' });
+    keepIfFastest(best, event, {
+      ...s,
+      event,
+      time,
+      timeType: 'SCY',
+      ...(convertedFrom ? { convertedFrom } : {}),
+    });
   }
   return [...best.values()].sort(
     (a, b) => convertTimeToSeconds(a.time) - convertTimeToSeconds(b.time)
@@ -543,9 +582,9 @@ export function previewHistoryImportActions(
  * Falls back to every ranked event of the matching kind when the profile names none.
  */
 function orderCandidateSwims(
-  ranked: HistoricalSwim[],
+  ranked: ProgramCandidate[],
   profile: { primaryEvents: string[]; relayEvents: string[] }
-): HistoricalSwim[] {
+): ProgramCandidate[] {
   const eventsOfKind = (relay: boolean) =>
     ranked.filter(s => isRelayEventName(s.event) === relay).map(s => s.event);
   const preferredIndividual = profile.primaryEvents.length
@@ -553,7 +592,7 @@ function orderCandidateSwims(
     : eventsOfKind(false);
   const preferredRelay = profile.relayEvents.length ? profile.relayEvents : eventsOfKind(true);
 
-  const candidates: HistoricalSwim[] = [];
+  const candidates: ProgramCandidate[] = [];
   const alreadyQueued = (event: string) => candidates.some(c => c.event === event);
   const queueRemainingOfKind = (relay: boolean) => {
     for (const swim of ranked) {
@@ -703,13 +742,27 @@ type RowContext = {
 };
 
 /**
+ * The marks a candidate's time carries onto the row written from it: that it
+ * was converted from a metric swim, and that it is altitude-adjusted. Neither
+ * changes the time.
+ */
+function candidateTimeMarks(
+  swim: ProgramCandidate
+): Pick<Recruit, 'convertedFrom' | 'isAltitudeAdjusted'> {
+  return {
+    ...(swim.convertedFrom ? { convertedFrom: swim.convertedFrom } : {}),
+    ...(swim.isAltitudeAdjusted === true ? { isAltitudeAdjusted: true as const } : {}),
+  };
+}
+
+/**
  * Add a planned lineup entry for a swimmer already on the roster.
  * Returns false when a plan for that event already exists, so nothing was written.
  */
 function appendLineupEntry(
   acc: ImportAccumulator,
   ctx: RowContext,
-  swim: HistoricalSwim
+  swim: ProgramCandidate
 ): boolean {
   const existingEvents = existingPlanEvents(
     acc.meetEntryPlans,
@@ -728,6 +781,7 @@ function appendLineupEntry(
     timeType: swim.timeType ?? 'SCY',
     source: 'swimcloud',
     active: true,
+    ...candidateTimeMarks(swim),
   });
   acc.meetEntryPlans.push(entry);
   acc.activeEntryIds.push(entry.id);
@@ -742,7 +796,7 @@ function appendLineupEntry(
 function appendRecruitRow(
   acc: ImportAccumulator,
   ctx: RowContext,
-  swim: HistoricalSwim,
+  swim: ProgramCandidate,
   markAsScorer: boolean
 ): boolean {
   const key = recruitEventKey(ctx.displayName, ctx.team, ctx.gender, swim.event);
@@ -756,6 +810,7 @@ function appendRecruitRow(
     gender: ctx.gender,
     classYear: ctx.classYear,
     timeType: swim.timeType ?? 'SCY',
+    ...candidateTimeMarks(swim),
   };
   acc.recruits.push(recruit);
   acc.existingRecruitEventKeys.add(key);

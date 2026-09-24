@@ -13,18 +13,21 @@ import {
   SwimCloudBadge,
   Workspace,
   AthleteEventProfile,
+  type AthleteEventBest,
+  type PlannedSwimEntry,
 } from '../types';
 import { divisionForTeamOrNull } from '../data/teamDivisions';
 import { compareTimeToCutline } from './cutlineUtils';
 import { mergeScoringSettings } from './scoringDefaults';
 import {
-  convertSwimToSCY,
+  convertSwimToSCYDetailed,
   convertTimeToSeconds,
   convertToSCY,
   hasConversionFactor,
   isDivingEvent,
   isRelayResult,
   normalizeSwimmerName,
+  scyConversionProvenance,
   stripEventGenderMarker,
 } from './utils';
 import { parseSwimCloudMultiProfile } from './swimCloudMultiProfile';
@@ -66,6 +69,31 @@ export function buildHistoryFromWorkspace(workspace: Workspace): HistoricalSwim[
   return out;
 }
 
+/**
+ * The swim is self-reported (SwimCloud `U`), not a meet result. Such a swim is
+ * never a best: every reader that picks a best, a cut, an entry or a
+ * projection skips it. See {@link HistoricalSwim.isUserInputted}.
+ */
+export function isUserInputtedSwim(swim: Pick<HistoricalSwim, 'isUserInputted'>): boolean {
+  return swim.isUserInputted === true;
+}
+
+/**
+ * The marks a profile best carries onto a planned entry or recruit row written
+ * from it: `convertedFrom` (the time is an SCY estimate from a metric swim) and
+ * `isAltitudeAdjusted`. Empty for an ordinary yards best. Spread it into
+ * `createPlannedEntry` so an estimate never lands in a plan unmarked.
+ */
+export function eventBestTimeMarks(
+  best: AthleteEventBest | undefined
+): Pick<PlannedSwimEntry, 'convertedFrom' | 'isAltitudeAdjusted'> {
+  if (!best) return {};
+  return {
+    ...(best.convertedFrom ? { convertedFrom: best.convertedFrom } : {}),
+    ...(best.altitudeAdjusted === true ? { isAltitudeAdjusted: true as const } : {}),
+  };
+}
+
 export function mergeHistoryIndex(
   existing: HistoricalSwim[],
   incoming: HistoricalSwim[]
@@ -74,7 +102,12 @@ export function mergeHistoryIndex(
   for (const s of [...existing, ...incoming]) {
     // Best per event PER COURSE: an actual SCY swim and its LCM/SCM counterparts are
     // distinct facts — the cross-course arbitrage view needs both to compare.
-    const key = `${swimKey(s.name, s.team, s.gender, s.event)}|${s.timeType ?? 'SCY'}`;
+    // A self-reported time keeps its own lane on top of that. It is not a result,
+    // so it must not evict a slower real swim (which would leave the swimmer with
+    // no best at all), and a real swim must not evict it (it stays stored and
+    // visible). Every other swim keys exactly as before.
+    const lane = isUserInputtedSwim(s) ? '|user_inputted' : '';
+    const key = `${swimKey(s.name, s.team, s.gender, s.event)}|${s.timeType ?? 'SCY'}${lane}`;
     // Raw seconds, deliberately: the key already pins both the event and the
     // course, so every swim compared here shares one conversion factor and the
     // conversion cancels out of the ordering. Converting first would also drag
@@ -140,6 +173,9 @@ export function categorizeBestEvents(
   // available estimate of what the swimmer would split on a relay leg, which
   // is the one place it is read. See HistoricalSwim.isExtractedSplit.
   const extractedByEvent: AthleteEventProfile['extractedByEvent'] = {};
+  // Self-reported times: listed, never a best, never a relay-leg stand-in.
+  // See HistoricalSwim.isUserInputted.
+  const userInputtedByEvent: NonNullable<AthleteEventProfile['userInputtedByEvent']> = {};
   for (const s of history) {
     if (s.gender !== gender || s.team !== team) continue;
     if (normalizeSwimmerName(resolver.resolveAthleteName(s.name, team, gender)) !== nameKey) continue;
@@ -154,13 +190,14 @@ export function categorizeBestEvents(
     // label left "400 Freestyle" and "1500 Freestyle" sitting in the profile as
     // if they were events a meet could enter you in.
     // An SCM swim converts with the NCAA table of this team's division.
-    const { event: programEvent, time: programTime } = convertSwimToSCY(
+    const conversion = convertSwimToSCYDetailed(
       s.event,
       s.time,
       s.gender,
       s.timeType ?? 'SCY',
       { team }
     );
+    const { event: programEvent, time: programTime } = conversion;
     if (!isEventOffered(programEvent, allowedEvents)) continue;
 
     const sec = convertTimeToSeconds(programTime);
@@ -172,9 +209,25 @@ export function categorizeBestEvents(
       }
       continue;
     }
+    if (isUserInputtedSwim(s)) {
+      const prevUser = userInputtedByEvent[programEvent];
+      if (!prevUser || sec < prevUser.timeSec) {
+        userInputtedByEvent[programEvent] = { time: programTime, timeSec: sec, source: s.source };
+      }
+      continue;
+    }
     const prev = bestByEvent[programEvent];
     if (!prev || sec < prev.timeSec) {
-      bestByEvent[programEvent] = { time: programTime, timeSec: sec, source: s.source };
+      // A converted best says so, and an altitude-adjusted one says so, so a UI
+      // can mark either. Neither changes the time that ranks.
+      const convertedFrom = scyConversionProvenance({ event: s.event, time: s.time }, conversion);
+      bestByEvent[programEvent] = {
+        time: programTime,
+        timeSec: sec,
+        source: s.source,
+        ...(convertedFrom ? { convertedFrom } : {}),
+        ...(s.isAltitudeAdjusted === true ? { altitudeAdjusted: true as const } : {}),
+      };
     }
   }
 
@@ -192,6 +245,7 @@ export function categorizeBestEvents(
     gender,
     bestByEvent,
     extractedByEvent,
+    userInputtedByEvent,
     primaryEvents,
     relayEvents: relayList,
     qualityByEvent: quality.ratioByEvent,
@@ -1220,6 +1274,9 @@ export function buildEventProfileFromCatalog(
     // nothing and stays unfilled, rather than borrowing a best that was never
     // marked as extracted.
     extractedByEvent: {},
+    // Empty for the same reason: the catalog records no "User Inputted" flag
+    // in a form this profile reads (see HistoricalSwim.isUserInputted).
+    userInputtedByEvent: {},
     primaryEvents,
     relayEvents: dedupedRelays,
     qualityByEvent: quality.ratioByEvent,

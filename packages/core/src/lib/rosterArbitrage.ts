@@ -13,7 +13,7 @@ import {
   Workspace,
 } from '../types';
 import { mergeScoringSettings } from './scoringDefaults';
-import { getAthleteProfile } from './athleteHistory';
+import { eventBestTimeMarks, getAthleteProfile } from './athleteHistory';
 import { rankExactSwaps } from './crossCourseArbitrage';
 import { buildWhatIfResults, createPlannedEntry } from './whatIfProjection';
 import { buildScorerRosterLookup } from './scorerRoster';
@@ -207,6 +207,7 @@ export function relayFirstLineupForTeam(
         classYear: athlete.classYear,
         event,
         time: best?.time ?? 'NT',
+        ...eventBestTimeMarks(best),
         source: 'optimizer',
         active: true,
       });
@@ -225,6 +226,7 @@ export function relayFirstLineupForTeam(
         classYear: athlete.classYear,
         event,
         time: best?.time ?? 'NT',
+        ...eventBestTimeMarks(best),
         source: 'optimizer',
         active: true,
       });

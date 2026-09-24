@@ -138,6 +138,9 @@ export {
   type NcaaDualMeetOutcome,
 } from './lib/ncaaScoringRules';
 
+/* --- NCAA altitude chart. Never applied to a time a source already adjusted. --- */
+export * from './lib/altitude';
+
 export * from './lib/swimCloudMultiProfile';
 export * from './lib/scoringTheory';
 export * from './lib/crossCourseArbitrage';

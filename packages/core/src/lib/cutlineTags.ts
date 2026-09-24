@@ -24,6 +24,7 @@
  * | no usable time on the swim                | `no_time`               | show "unknown" |
  * | program was cut before the season         | `program_discontinued`  | show "unknown" |
  * | school fields no team of that gender      | `gender_not_sponsored`  | show "unknown" |
+ * | self-reported time, not a meet result     | `user_inputted`         | show "unknown" |
  *
  * Collapsing the bottom rows into "no cut" is the exact silent-empty failure
  * this round exists to eliminate. Use {@link cutlineTagRenderMode} to get the
@@ -61,7 +62,7 @@ import {
   type CutlineTier,
   type SwimCutline,
 } from '../cutlines';
-import { Gender, NcaaDivision } from '../types';
+import { Gender, NcaaDivision, type ScyConversionProvenance } from '../types';
 import {
   programCompetedInSeason,
   programSponsorsGender,
@@ -154,7 +155,14 @@ export type CutlineTagState =
    * (relays have none), or the label says "meters" without stating the pool
    * length. Not a miss — we could not put it on the same scale at all.
    */
-  | 'conversion_unavailable';
+  | 'conversion_unavailable'
+  /**
+   * The time was typed in by the swimmer or a coach (SwimCloud `U`, "User
+   * Inputted"), not taken from a meet result. User ruling (2026-09-22): such a
+   * time is never a best, so no standard is applied to it — not a cut, and not
+   * a miss. See `HistoricalSwim.isUserInputted`.
+   */
+  | 'user_inputted';
 
 /**
  * A converted-time comparison that deliberately falls short of being a cut.
@@ -522,6 +530,12 @@ export type CutlineTagInput = {
    * result is `state: 'program_discontinued'` and no badge is emitted.
    */
   program?: CutlineTagProgram | null;
+  /**
+   * The time is self-reported (`HistoricalSwim.isUserInputted`). When `true`
+   * the result is `state: 'user_inputted'`: no standard is applied, and the
+   * swim renders as unknown rather than as a cut or a miss.
+   */
+  userInputted?: boolean;
 };
 
 function normalizeGender(gender: Gender | string): CutlineGender {
@@ -697,6 +711,26 @@ export function buildCutlineTag(input: CutlineTagInput): CutlineTagResult {
         nextTier: null,
       };
     }
+  }
+
+  // A self-reported time is not a result, so it is not judged at all. Checked
+  // before the division so the answer does not depend on whether the team maps.
+  if (input.userInputted === true) {
+    return {
+      state: 'user_inputted',
+      tag: null,
+      division,
+      season: seasonUnderComparison(division, input.season),
+      ...courseFields,
+      gender,
+      event: input.event,
+      swimSeconds,
+      lookupStatus: null,
+      reason:
+        'Self-reported time (SwimCloud "User Inputted"), not a meet result. No standard is applied to it.',
+      program,
+      nextTier: null,
+    };
   }
 
   if (!division) {
@@ -968,6 +1002,69 @@ export function buildCutlineTagForTeam(input: CutlineTagForTeamInput): CutlineTa
     division: division ?? resolved.division,
     program: resolved.program,
   });
+}
+
+/* -------------------------------------------------------------------------- */
+/* The swim a stored row stands for                                            */
+/* -------------------------------------------------------------------------- */
+
+/** The swim fields of a {@link CutlineTagInput}: what was swum, in which course. */
+export type CutlineSwimOfRecord = {
+  event: string;
+  time: string;
+  /** Present when the row states its course. See {@link CutlineTagInput.swimCourse}. */
+  swimCourse?: SwimCourseOfRecord;
+};
+
+/**
+ * Any stored row a cut tag can be built for: a `Recruit`, a
+ * `PlannedSwimEntry`, a `SwimmerResult` or an `AthleteCreditedSwim`.
+ */
+export type CutlineRecordRow = {
+  event: string;
+  time: string;
+  /** The course of `time`. Absent on meet rows, whose label decides. */
+  timeType?: SwimCourseOfRecord;
+  convertedFrom?: ScyConversionProvenance;
+};
+
+/**
+ * The recorded metric swim behind a converted row, or `null` when the row does
+ * not hold a converted time.
+ *
+ * `null` also when the row's `time` no longer equals `convertedFrom.scyTime`:
+ * the time was edited after import, so the provenance no longer describes it
+ * and the row is judged as it now stands.
+ */
+export function convertedSwimOfRecord(
+  row: Pick<CutlineRecordRow, 'time' | 'convertedFrom'>
+): (CutlineSwimOfRecord & { swimCourse: 'LCM' | 'SCM' }) | null {
+  const from = row.convertedFrom;
+  if (!from) return null;
+  if (String(row.time ?? '').trim() !== String(from.scyTime ?? '').trim()) return null;
+  return { event: from.sourceEvent, time: from.sourceTime, swimCourse: from.sourceCourse };
+}
+
+/**
+ * The swim a cut tag must judge for a stored row.
+ *
+ * A row holding a converted SCY estimate is judged as the metric swim it came
+ * from, so the best it can reach is `converted_estimate` — never `tagged`. Any
+ * other row is judged on its own event and time, in the course its `timeType`
+ * states (or, when it states none, the course its label states).
+ *
+ * Spread the result into {@link buildCutlineTagForTeam} or
+ * {@link buildCutlineTag}:
+ * `buildCutlineTagForTeam({ team, gender, ...cutlineSwimOfRecord(row) })`.
+ */
+export function cutlineSwimOfRecord(row: CutlineRecordRow): CutlineSwimOfRecord {
+  const converted = convertedSwimOfRecord(row);
+  if (converted) return converted;
+  return {
+    event: row.event,
+    time: row.time,
+    ...(row.timeType ? { swimCourse: row.timeType } : {}),
+  };
 }
 
 /**

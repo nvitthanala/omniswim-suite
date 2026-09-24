@@ -111,12 +111,14 @@ export function buildCrossCourseTable(
 
     const nameKey = normalizeSwimmerName(s.name);
     const buckets = getBuckets(nameKey, s.name, programEvent);
+    const altitude = s.isAltitudeAdjusted === true ? { altitudeAdjusted: true as const } : {};
     if (timeType === 'SCY') {
       buckets.scy.push({
         time: converted.time,
         timeSec,
         meetLabel: s.meetLabel,
         date: s.date,
+        ...altitude,
       });
     } else {
       buckets.converted.push({
@@ -128,6 +130,7 @@ export function buildCrossCourseTable(
         sourceCourse: timeType,
         sourceEvent: s.event,
         basis: converted.basis,
+        ...altitude,
       });
     }
   }

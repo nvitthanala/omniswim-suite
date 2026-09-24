@@ -22,6 +22,7 @@ import {
   RelayLegOverride,
   SwimmerResult,
   Workspace,
+  type ScyConversionProvenance,
 } from '../types';
 import { relayEntryKey } from './relaySplits';
 import { relayTemplateFromLeg } from './relayLegMatching';
@@ -31,10 +32,12 @@ import { mergeScoringSettings } from './scoringDefaults';
 import { buildMeetEventLabelIndex, canonicalProgramEvent } from './eventIdentity';
 import {
   canonicalSwimmerName,
+  convertSwimToSCYDetailed,
   convertTimeToSeconds,
   convertToSCY,
   isGraduatingClassYear,
   isRelayResult,
+  scyConversionProvenance,
   simulateRoster,
 } from './utils';
 
@@ -192,15 +195,47 @@ function collapseCrossPlaneDuplicates(
   return { rows: kept, collapsed };
 }
 
-export function planToResult(entry: PlannedSwimEntry): SwimmerResult {
-  // An SCM plan converts with the NCAA table of the plan's team's division.
-  const time = convertToSCY(
-    entry.time,
-    entry.event,
-    entry.gender,
-    entry.timeType ?? 'SCY',
-    { team: entry.team }
+/**
+ * The SCY time a recruit row or planned entry scores on, and where it came from.
+ *
+ * `time` is exactly what `convertToSCY` returned before `convertedFrom`
+ * existed, so no score changes. `convertedFrom` keeps the projected row marked
+ * as an estimate: carried over when the row already holds a converted SCY time
+ * (an `importHistoryToRoster` row), derived here when the row stores the
+ * recorded metric time and is converted on read.
+ *
+ * `course` is passed by the caller, not read here, so each plane keeps the
+ * defaulting it always had (a plan defaults to SCY; a recruit row passes its
+ * `timeType` as stored).
+ */
+function scoredTimeOf(
+  row: {
+    event: string;
+    time: string;
+    gender: Gender;
+    team: string;
+    convertedFrom?: ScyConversionProvenance;
+  },
+  course: 'SCY' | 'LCM' | 'SCM'
+): { time: string; convertedFrom?: ScyConversionProvenance } {
+  // An SCM row converts with the NCAA table of the row's team's division.
+  const time = convertToSCY(row.time, row.event, row.gender, course, { team: row.team });
+  if (course !== 'LCM' && course !== 'SCM') {
+    // Kept only while the row still holds the time the conversion produced; a
+    // time edited after import is the coach's own and is not an estimate.
+    const from = row.convertedFrom;
+    const stillConverted = from && String(from.scyTime).trim() === String(row.time).trim();
+    return stillConverted ? { time, convertedFrom: from } : { time };
+  }
+  const convertedFrom = scyConversionProvenance(
+    { event: row.event, time: row.time },
+    convertSwimToSCYDetailed(row.event, row.time, row.gender, course, { team: row.team })
   );
+  return convertedFrom ? { time, convertedFrom } : { time };
+}
+
+export function planToResult(entry: PlannedSwimEntry): SwimmerResult {
+  const { time, convertedFrom } = scoredTimeOf(entry, entry.timeType ?? 'SCY');
   return {
     id: entry.id,
     rank: entry.projectedRank ?? 0,
@@ -214,6 +249,7 @@ export function planToResult(entry: PlannedSwimEntry): SwimmerResult {
     event: entry.event,
     gender: entry.gender,
     isRecruit: entry.source === 'manual' || entry.source === 'swimcloud' || entry.source === 'optimizer',
+    ...(convertedFrom ? { convertedFrom } : {}),
   };
 }
 
@@ -258,9 +294,7 @@ function applyOverlayPlans(
     if (patch) {
       replaced.add(r.id);
       patchedIds.add(r.id);
-      const time = convertToSCY(patch.time, patch.event, patch.gender, patch.timeType ?? 'SCY', {
-        team: patch.team,
-      });
+      const { time, convertedFrom } = scoredTimeOf(patch, patch.timeType ?? 'SCY');
       out.push({
         ...r,
         event: remapEvent(patch.event),
@@ -268,6 +302,7 @@ function applyOverlayPlans(
         finalsTime: time,
         rank: patch.projectedRank ?? r.rank,
         roundSwam: patch.projectedRound ?? r.roundSwam,
+        ...(convertedFrom ? { convertedFrom } : {}),
       });
       continue;
     }
@@ -381,18 +416,22 @@ export function buildWhatIfProjection({
           r =>
             r.gender === gender && passesRosterGates(r.name, r.classYear, excluded, removeSeniors)
         )
-        .map(r => ({
-          id: r.id,
-          rank: 0,
-          name: r.name,
-          classYear: r.classYear,
-          team: r.team,
-          time: convertToSCY(r.time, r.event, r.gender, r.timeType, { team: r.team }),
-          points: 0,
-          event: remapEvent(r.event),
-          isRecruit: true,
-          gender: r.gender,
-        }));
+        .map(r => {
+          const { time, convertedFrom } = scoredTimeOf(r, r.timeType);
+          return {
+            id: r.id,
+            rank: 0,
+            name: r.name,
+            classYear: r.classYear,
+            team: r.team,
+            time,
+            points: 0,
+            event: remapEvent(r.event),
+            isRecruit: true,
+            gender: r.gender,
+            ...(convertedFrom ? { convertedFrom } : {}),
+          };
+        });
 
   const relayKeysForGender = new Set<string>();
   for (const row of currentResults.filter(x => x.isRelay)) {

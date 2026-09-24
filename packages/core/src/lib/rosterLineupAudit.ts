@@ -33,7 +33,7 @@ import { IDENTITY_ALIAS_RESOLVER } from './athleteAliases';
 import type { AthleteAliasResolver, DuplicateAthletePair } from './athleteAliases';
 import { isRelayResult, normalizeSwimmerName } from './utils';
 import { programSponsorsGender, resolveTeamDivision } from '../data/teamDivisions';
-import { buildCutlineTagForTeam } from './cutlineTags';
+import { buildCutlineTagForTeam, cutlineSwimOfRecord } from './cutlineTags';
 
 export type { DuplicateAthletePair } from './athleteAliases';
 export {
@@ -473,7 +473,11 @@ function auditProgramProvenance(
  * detail row already does (`AthleteCreditedSwimsRow.tsx` et al.) — same
  * division resolution, same course-of-record defaulting, no new cutline
  * logic. `SwimmerResult` carries no `timeType`, so course is read off the
- * event label same as everywhere else that already accepts this default.
+ * event label same as everywhere else that already accepts this default —
+ * except for a row holding a converted SCY estimate (`convertedFrom`, set on
+ * recruit rows and plans built from a metric swim). Before 2026-09-22 such a
+ * row read as a yards swim here, so exactly the rows this check exists for
+ * never reached it. `cutlineSwimOfRecord` judges them as the metric swim.
  */
 function auditConversionProvenance(
   collector: LineupAuditCollector,
@@ -482,7 +486,7 @@ function auditConversionProvenance(
   const { teamScored, team, gender } = opts;
   for (const r of teamScored) {
     if (isRelayResult(r) || !r.time) continue;
-    const result = buildCutlineTagForTeam({ team, gender, event: r.event, time: r.time });
+    const result = buildCutlineTagForTeam({ team, gender, ...cutlineSwimOfRecord(r) });
     if (result.state !== 'converted_estimate') continue;
     const { indicative } = result;
     collector.pushChecklist({

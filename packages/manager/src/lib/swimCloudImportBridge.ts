@@ -162,6 +162,27 @@ function isExtractedSplit(personalBest: { readonly tags: readonly { readonly tit
   return personalBest.tags.some(tag => tag.title === 'Extracted');
 }
 
+/**
+ * Whether a row's chips mark its time as altitude-adjusted: `A` /
+ * `title="Altitude Adjusted"`, seen live on swimmer 1401610's 400 Free LCM.
+ *
+ * Matched on the tooltip, never on the visible `A` -- the same rule as
+ * {@link isExtractedSplit}. The time on such a row is the adjusted one; the
+ * swum time is not in the response. See HistoricalSwim.isAltitudeAdjusted.
+ */
+function isAltitudeAdjusted(personalBest: { readonly tags: readonly { readonly title?: string }[] }): boolean {
+  return personalBest.tags.some(tag => tag.title === 'Altitude Adjusted');
+}
+
+/**
+ * Whether a row's chips mark its time as typed in rather than swum at a meet:
+ * `U` / `title="User Inputted"`, seen live on swimmers 2352628 and 1401610.
+ * Matched on the tooltip, never the letter. See HistoricalSwim.isUserInputted.
+ */
+function isUserInputted(personalBest: { readonly tags: readonly { readonly title?: string }[] }): boolean {
+  return personalBest.tags.some(tag => tag.title === 'User Inputted');
+}
+
 /* -------------------------------------------------------------------------- */
 /* Meet results — bulk import                                                 */
 /* -------------------------------------------------------------------------- */
@@ -578,6 +599,13 @@ export function swimCloudSwimmerTimesToHistoricalSwims(
       // not a race at this distance and must never be ranked, cut-tagged or
       // entered. See HistoricalSwim.isExtractedSplit.
       ...(isExtractedSplit(personalBest) ? { isExtractedSplit: true } : {}),
+      // An altitude-adjusted time, kept exactly as published. It is still a
+      // best (the NCAA enters the adjusted time) and is never adjusted again.
+      // See HistoricalSwim.isAltitudeAdjusted.
+      ...(isAltitudeAdjusted(personalBest) ? { isAltitudeAdjusted: true as const } : {}),
+      // A self-reported time. Imported and kept, never a best. See
+      // HistoricalSwim.isUserInputted.
+      ...(isUserInputted(personalBest) ? { isUserInputted: true as const } : {}),
       source: 'swimcloud',
     });
   }

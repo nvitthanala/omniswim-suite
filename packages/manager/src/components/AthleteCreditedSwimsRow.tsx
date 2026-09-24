@@ -14,7 +14,7 @@ import type { AthleteCreditedSwim } from '@omniswim/core/lib/scorerRoster';
 import { formatLegSplitSummary } from '@omniswim/core/lib/relaySplits';
 import { compactEventTitleAttr, formatCompactEventLabel } from '@omniswim/core/lib/utils';
 import { ALL_PLAN_EVENTS } from '@omniswim/core/lib/eventCatalog';
-import { buildCutlineTagForTeam } from '@omniswim/core/lib/cutlineTags';
+import { buildCutlineTagForTeam, cutlineSwimOfRecord } from '@omniswim/core/lib/cutlineTags';
 import { Badge, Button, CutlineTag, CutlineNearMissChip } from '@omniswim/ui';
 
 type AnchorExpected = { prelims?: number; psych?: number };
@@ -90,7 +90,8 @@ function TimeDisplay({ swim, team, gender }: { swim: AthleteCreditedSwim; team: 
 }
 
 function SwimCutlineTag({ swim, team, gender }: { swim: AthleteCreditedSwim; team: string; gender: Gender }) {
-  const cutlineResult = buildCutlineTagForTeam({ time: swim.time, gender, event: swim.event, team });
+  // A converted recruit/plan swim is judged as the metric swim it came from.
+  const cutlineResult = buildCutlineTagForTeam({ gender, team, ...cutlineSwimOfRecord(swim) });
   return (
     <span className="hidden sm:inline-flex items-center gap-1 shrink-0">
       <CutlineTag compact result={cutlineResult} />

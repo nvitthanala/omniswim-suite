@@ -147,6 +147,8 @@ export default function AthleteHistorySection({ rows, athlete, gender, editable,
               event: row.event,
               team: athlete.team,
               swimCourse: (row.timeType as TimeType) ?? 'SCY',
+              // A self-reported (SwimCloud "U") time is never judged.
+              userInputted: row.isUserInputted === true,
             });
             return (
               <li key={rowKey} className="flex items-center gap-2 text-ui-body">

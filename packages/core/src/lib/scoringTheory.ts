@@ -16,7 +16,7 @@ import {
   SwimmerResult,
   Workspace,
 } from '../types';
-import { isChampionshipProgramEvent, normalizeEventLabel } from './athleteHistory';
+import { isChampionshipProgramEvent, isUserInputtedSwim, normalizeEventLabel } from './athleteHistory';
 import { mergeScoringSettings } from './scoringDefaults';
 import { scorerRosterKey, usesScorerRoster } from './scorerRoster';
 import { relayEntryKey, parseRelayDistanceYards } from './relaySplits';
@@ -25,12 +25,13 @@ import { countSwimmerEntries, swimmerExceedsEntryLimits } from './swimmerEntryLi
 import { buildAliasResolver } from './athleteAliases';
 import { buildWhatIfResults } from './whatIfProjection';
 import {
-  convertSwimToSCY,
+  convertSwimToSCYDetailed,
   convertTimeToSeconds,
   foldDiacritics,
   hasConversionFactor,
   isRelayResult,
   normalizeSwimmerName,
+  scyConversionProvenance,
 } from './utils';
 import { createPlannedEntry } from './whatIfProjection';
 
@@ -590,17 +591,37 @@ function existingIndividualEvents(
  *
  * A non-SCY swim with no published conversion factor has no SCY equivalent, so it is
  * dropped rather than estimated. An event outside the championship program is dropped
- * too — it is not an entry candidate.
+ * too — it is not an entry candidate. So is a self-reported time: it is never a best
+ * (see HistoricalSwim.isUserInputted).
  */
-function programSwimFromHistory(s: HistoricalSwim): { event: string; time: string } | null {
+function programSwimFromHistory(s: HistoricalSwim): { event: string; best: HistoryBestTime } | null {
+  if (isUserInputtedSwim(s)) return null;
   const relay = /\brelay\b/i.test(s.event);
   if (!relay && (s.timeType ?? 'SCY') !== 'SCY' && !hasConversionFactor(s.event)) return null;
-  const { event, time } = relay
-    ? { event: s.event, time: s.time }
-    : convertSwimToSCY(s.event, s.time, s.gender, s.timeType ?? 'SCY', { team: s.team });
-  if (!isChampionshipProgramEvent(event)) return null;
-  return { event, time };
+  if (relay) {
+    if (!isChampionshipProgramEvent(s.event)) return null;
+    return { event: s.event, best: { time: s.time } };
+  }
+  const conversion = convertSwimToSCYDetailed(s.event, s.time, s.gender, s.timeType ?? 'SCY', {
+    team: s.team,
+  });
+  if (!isChampionshipProgramEvent(conversion.event)) return null;
+  const convertedFrom = scyConversionProvenance({ event: s.event, time: s.time }, conversion);
+  return {
+    event: conversion.event,
+    best: {
+      time: conversion.time,
+      ...(convertedFrom ? { convertedFrom } : {}),
+      ...(s.isAltitudeAdjusted === true ? { isAltitudeAdjusted: true as const } : {}),
+    },
+  };
 }
+
+/**
+ * One history best a theory entry is planned on. The marks travel onto the
+ * planned entry, so a time converted from a metric swim stays an estimate.
+ */
+type HistoryBestTime = Pick<PlannedSwimEntry, 'time' | 'convertedFrom' | 'isAltitudeAdjusted'>;
 
 /**
  * Best SCY-converted program time per `${normalizedName}|${event}` from athleteHistory.
@@ -610,16 +631,16 @@ function buildHistoryBestTimes(
   workspace: Workspace,
   team: string,
   gender: Gender
-): Map<string, string> {
-  const best = new Map<string, string>();
+): Map<string, HistoryBestTime> {
+  const best = new Map<string, HistoryBestTime>();
   for (const s of workspace.athleteHistory ?? []) {
     if (s.gender !== gender || String(s.team ?? '').trim() !== team) continue;
     const swim = programSwimFromHistory(s);
     if (!swim) continue;
     const key = `${normalizeSwimmerName(s.name)}|${swim.event}`;
     const prev = best.get(key);
-    if (!prev || convertTimeToSeconds(swim.time) < convertTimeToSeconds(prev)) {
-      best.set(key, swim.time);
+    if (!prev || convertTimeToSeconds(swim.best.time) < convertTimeToSeconds(prev.time)) {
+      best.set(key, swim.best);
     }
   }
   return best;
@@ -648,7 +669,7 @@ type TheoryApplyContext = {
   rosterMode: boolean;
   results: SwimmerResult[];
   rosterNames: string[];
-  historyBest: Map<string, string>;
+  historyBest: Map<string, HistoryBestTime>;
   /** Class year for a planned entry: caller override first, then the recruit row. */
   classYearForEntry: (name: string) => ClassYear | undefined;
   /**
@@ -761,7 +782,8 @@ function addTheoryEntries(
   const nameKey = normalizeSwimmerName(displayName);
 
   for (const event of events) {
-    const time = ctx.historyBest.get(`${nameKey}|${event}`);
+    const best = ctx.historyBest.get(`${nameKey}|${event}`);
+    const time = best?.time;
     const blocked = theoryEntryBlocker(displayName, event, already, ctx.indCap, time);
     if (blocked) {
       draft.warnings.push(blocked);
@@ -778,6 +800,8 @@ function addTheoryEntries(
       timeType: 'SCY',
       source: 'optimizer',
       active: true,
+      ...(best?.convertedFrom ? { convertedFrom: best.convertedFrom } : {}),
+      ...(best?.isAltitudeAdjusted ? { isAltitudeAdjusted: true as const } : {}),
     });
     draft.meetEntryPlans.push(entry);
     draft.activeEntryIds.push(entry.id);

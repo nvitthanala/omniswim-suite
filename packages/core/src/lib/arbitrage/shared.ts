@@ -37,8 +37,10 @@ import {
   ScoringSettings,
   SwimmerResult,
   Workspace,
+  type ScyConversionProvenance,
 } from '../../types';
 import { buildMeetEventLabelIndex, canonicalProgramEvent } from '../eventIdentity';
+import { isUserInputtedSwim } from '../athleteHistory';
 import { effectivePdfPlacePointsMode } from '../scoringDefaults';
 import { buildScorerRosterLookup, usesScorerRoster, type ScorerRosterLookup } from '../scorerRoster';
 import {
@@ -182,6 +184,9 @@ export function* convertedHistorySwims(
 ): Generator<ProjectedHistorySwim> {
   for (const s of history) {
     if (/\brelay\b/i.test(s.event)) continue;
+    // A self-reported time is never a best, so it is never projected: not as
+    // an event best and not as a relay-leg time. See HistoricalSwim.isUserInputted.
+    if (isUserInputtedSwim(s)) continue;
     const timeType = s.timeType ?? 'SCY';
     // No published factor → the swim has no SCY equivalent. These are non-program
     // events (25s, 100 IM) and diving, which the caller's classifier rejects
@@ -203,6 +208,11 @@ export type CrossCourseTimeRef = {
   date?: string;
   /** True when this best is older than the recency window (kept as a fallback). */
   stale?: boolean;
+  /**
+   * The swim's time is altitude-adjusted (`HistoricalSwim.isAltitudeAdjusted`).
+   * Display only: the adjusted time is the one the NCAA enters, so it ranks as is.
+   */
+  altitudeAdjusted?: true;
 };
 
 export type CrossCourseConvertedRef = CrossCourseTimeRef & {
@@ -240,7 +250,27 @@ export type EffectiveBestRef = {
   stale?: boolean;
   /** True when the effective best came from a converted LCM/SCM swim. */
   converted?: boolean;
+  /**
+   * The recorded metric swim behind a converted best, so a plan written from
+   * it stays marked as an estimate. Set whenever `converted` is and the table
+   * row carries its conversion basis (`buildCrossCourseTable` always does).
+   */
+  convertedFrom?: ScyConversionProvenance;
+  /** The effective best's swim was altitude-adjusted. Display only. */
+  altitudeAdjusted?: true;
 };
+
+/** The provenance of a converted cross-course best, or undefined without a basis. */
+function crossCourseProvenance(ref: CrossCourseConvertedRef): ScyConversionProvenance | undefined {
+  if (!ref.basis) return undefined;
+  return {
+    sourceCourse: ref.sourceCourse,
+    sourceEvent: ref.sourceEvent,
+    sourceTime: ref.sourceTime,
+    scyTime: ref.time,
+    basis: ref.basis,
+  };
+}
 
 /** effective (recommended) SCY best per (athlete, program event) from a table. */
 export function effectiveBestIndex(
@@ -256,11 +286,17 @@ export function effectiveBestIndex(
       m = new Map();
       out.set(key, m);
     }
+    const convertedFrom =
+      row.effectiveBest === 'converted' && row.convertedBest
+        ? crossCourseProvenance(row.convertedBest)
+        : undefined;
     m.set(row.event, {
       time: ref.time,
       timeSec: ref.timeSec,
       stale: ref.stale,
       converted: row.effectiveBest === 'converted' ? true : undefined,
+      ...(convertedFrom ? { convertedFrom } : {}),
+      ...(ref.altitudeAdjusted === true ? { altitudeAdjusted: true as const } : {}),
     });
   }
   return out;

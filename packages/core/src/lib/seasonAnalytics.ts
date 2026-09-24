@@ -55,6 +55,9 @@ export function buildSeasonTrends(workspaces: Workspace[]): SeasonTrends {
     }
     for (const h of ws.athleteHistory ?? []) {
       if (!h.name || !h.event || !h.time) continue;
+      // A self-reported time is not a race: it is never a best and is no point
+      // on a progression. See HistoricalSwim.isUserInputted.
+      if (h.isUserInputted === true) continue;
       const key = `${h.name.toLowerCase()}::${h.event}`;
       const existing = swimmerMap.get(key);
       const entry = { label: 'history', time: h.time };

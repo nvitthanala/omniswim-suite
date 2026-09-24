@@ -199,6 +199,110 @@ export const NCAA_SCM_DISTANCE_ROWS: Readonly<Record<string, NcaaScmConversionRo
   '1650 Freestyle': 'free1500To1650',
 };
 
+/* -------------------------------------------------------------------------- */
+/* NCAA altitude adjustment (primary source)                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The three elevation columns of the NCAA "Altitude" chart, under the sheet's
+ * own Roman numerals: I is 3,000-4,250 ft, II is 4,251-6,500 ft, III is above
+ * 6,500 ft. Below 3,000 ft the chart does not apply.
+ */
+export type NcaaAltitudeElevationClass = 'I' | 'II' | 'III';
+
+/**
+ * One row of the NCAA altitude chart. The sheet prints exactly five rows, each
+ * for individual events, and pairs a yards distance with a metres distance:
+ * "100 Yards/Meters", "200 Yards/Meters", "500 Yards/400 Meters", "1,000
+ * Yards/800 Meters" and "1,650 Yards/1,500 Meters". There is no 50 row and no
+ * 400-yard row, so nothing is modelled for either.
+ */
+export type NcaaAltitudeRow =
+  | 'y100m100'
+  | 'y200m200'
+  | 'y500m400'
+  | 'y1000m800'
+  | 'y1650m1500';
+
+/** Where the altitude chart was read, one entry per archived PDF. */
+export type NcaaAltitudeSourceDocument = {
+  /** `id` in `data/cutlines/sources/manifest.json` (holds url + sha256). */
+  manifestId: string;
+  /** Archived PDF filename under `data/cutlines/sources/`. */
+  filename: string;
+  /** 1-based PDF page that prints the chart. */
+  page: number;
+};
+
+export type NcaaAltitudeAdjustmentTable = {
+  id: 'ncaa-altitude-2026-27';
+  label: string;
+  /** Elevation band of each column, in feet, as printed. `maxFeet: null` is "Above 6,500 Ft." */
+  elevationClasses: Readonly<
+    Record<NcaaAltitudeElevationClass, { minFeet: number; maxFeet: number | null; label: string }>
+  >;
+  /** The lowest elevation at which the chart applies: "3,000 feet or higher". */
+  thresholdFeet: number;
+  /**
+   * Seconds subtracted from the actual time, per row and column, verbatim.
+   * `0` in class I for the 100 is the sheet's own printed `.0`, not an absence.
+   */
+  seconds: Readonly<Record<NcaaAltitudeRow, Readonly<Record<NcaaAltitudeElevationClass, number>>>>;
+  /** "A relay team may use a conversion that is four times the appropriate figures listed above." */
+  relayMultiplier: 4;
+  source: {
+    documents: readonly NcaaAltitudeSourceDocument[];
+    section: 'Altitude';
+    /** The sheet's instruction under the chart, verbatim. */
+    statement: string;
+  };
+};
+
+/**
+ * The official NCAA altitude adjustment chart, transcribed on 2026-09-22 from
+ * the archived qualifying-standard PDFs and checked against
+ * `pdftotext -table` output (the `-layout` mode misaligns the rows). The D2
+ * 2026-27 men's and women's sheets (page 2) and the D1 2025-26 sheet (page 3)
+ * print identical figures. `tests/altitudeAdjustment.test.ts` snapshots every
+ * value and re-reads the PDFs when `pdftotext` is installed. The D3 and NAIA
+ * sheets print no altitude chart.
+ *
+ * The chart is for a time **swum** at altitude and **not yet adjusted**. It
+ * must never be applied to a time a source has already adjusted: SwimCloud
+ * marks those `A` / "Altitude Adjusted" and publishes only the adjusted time
+ * (see `HistoricalSwim.isAltitudeAdjusted`). The one function that applies it
+ * is `ncaaAltitudeAdjustment` in `lib/altitude.ts`.
+ */
+export const NCAA_ALTITUDE_ADJUSTMENT_TABLE: NcaaAltitudeAdjustmentTable = {
+  id: 'ncaa-altitude-2026-27',
+  label: 'NCAA altitude adjustment (2026-27 D2 / 2025-26 D1 sheets)',
+  elevationClasses: {
+    I: { minFeet: 3000, maxFeet: 4250, label: '3,000-4,250 Ft.' },
+    II: { minFeet: 4251, maxFeet: 6500, label: '4,251-6,500 Ft.' },
+    III: { minFeet: 6501, maxFeet: null, label: 'Above 6,500 Ft.' },
+  },
+  thresholdFeet: 3000,
+  seconds: {
+    y100m100: { I: 0, II: 0.1, III: 0.15 },
+    y200m200: { I: 0.5, II: 1.2, III: 1.6 },
+    y500m400: { I: 2.5, II: 5.0, III: 7.0 },
+    y1000m800: { I: 6.3, II: 11.4, III: 18.5 },
+    y1650m1500: { I: 11.0, II: 20.0, III: 32.5 },
+  },
+  relayMultiplier: 4,
+  source: {
+    documents: [
+      { manifestId: 'ncaa-d2-men-2026-27', filename: '2026-27D2MSW_QualStandards.pdf', page: 2 },
+      { manifestId: 'ncaa-d2-women-2026-27', filename: '2026-27D2WSW_QualStandards.pdf', page: 2 },
+      { manifestId: 'ncaa-d1-2025-26', filename: '2025-26D1XSW_QUALSTANDARDS.pdf', page: 3 },
+    ],
+    section: 'Altitude',
+    statement:
+      'Subtract the time above from the actual time achieved. A relay team may use a ' +
+      'conversion that is four times the appropriate figures listed above.',
+  },
+};
+
 export const SCORING_POINTS = [20, 17, 16, 15, 14, 13, 12, 11, 9, 7, 6, 5, 4, 3, 2, 1];
 
 // NEON_COLORS and TEAM_COLORS_MAP were removed on 2026-09-22. Both were dead:

@@ -137,8 +137,22 @@ export function updatePlannedEntry(
   if (changes.timeType !== undefined) applied.timeType = changes.timeType;
   if (changes.active !== undefined) applied.active = changes.active;
 
+  // An edited time, event or course is the coach's own statement. The import
+  // marks describe the swim the entry was built from, so they go with it: a
+  // typed yards time must not keep judging as a converted metric swim.
+  const restatesTime =
+    changes.event !== undefined || changes.time !== undefined || changes.timeType !== undefined;
+  const edit = (p: PlannedSwimEntry): PlannedSwimEntry => {
+    const next: PlannedSwimEntry = { ...p, ...applied };
+    if (restatesTime) {
+      delete next.convertedFrom;
+      delete next.isAltitudeAdjusted;
+    }
+    return next;
+  };
+
   const patch: Partial<Workspace> = {
-    meetEntryPlans: basePlans.map(p => (p.id === planId ? { ...p, ...applied } : p)),
+    meetEntryPlans: basePlans.map(p => (p.id === planId ? edit(p) : p)),
   };
   const inverse: Partial<Workspace> = { meetEntryPlans: basePlans };
 

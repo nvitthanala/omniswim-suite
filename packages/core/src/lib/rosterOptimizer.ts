@@ -39,6 +39,7 @@ import { buildAliasResolver } from './athleteAliases';
 import { mergeScoringSettings } from './scoringDefaults';
 import {
   buildEventProfileFromCatalog,
+  eventBestTimeMarks,
   getAthleteProfile,
   meetProgramEvents,
 } from './athleteHistory';
@@ -553,6 +554,8 @@ export function optimizeEventLineupForTeam(
         time: best?.time ?? 'NT',
         source: 'optimizer',
         active: true,
+        // A converted best stays marked as an estimate on the plan.
+        ...eventBestTimeMarks(best),
       });
       plans.push(entry);
       activeEntryIds.push(entry.id);

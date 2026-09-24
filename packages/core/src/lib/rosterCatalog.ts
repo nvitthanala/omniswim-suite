@@ -114,11 +114,14 @@ export function buildStoredSwim(args: {
   });
   const secScy = convertTimeToSeconds(scyText);
 
-  // Only compute a cut for SCY-or-converted-to-SCY times; LCM/SCM should be
-  // compared against cutlines in their native course where the table forbids
-  // cross-course equivalents.
+  // Only a yards swim earns a cut. A converted LCM/SCM time is an estimate
+  // (`converted_estimate` in cutlineTags.ts), so it gets no `computedCut` badge.
+  // Before 2026-09-22 this judged the converted time, and an LCM swim could
+  // show an "A" badge it never earned. `timeType` and `timeText` are kept, so a
+  // reader can still build the indicative comparison with `buildCutlineTag`
+  // and `swimCourse: timeType`.
   const cut =
-    args.division && Number.isFinite(secScy) && secScy > 0
+    args.timeType === 'SCY' && args.division && Number.isFinite(secScy) && secScy > 0
       ? compareTimeToCutline(secScy, args.gender as Gender, event, args.division).achieved
       : null;
 

@@ -24,7 +24,7 @@ import {
   Workspace,
 } from '@omniswim/core/types';
 import { ALL_PLAN_EVENTS } from '@omniswim/core/lib/eventCatalog';
-import { buildCutlineTagForTeam } from '@omniswim/core/lib/cutlineTags';
+import { buildCutlineTagForTeam, cutlineSwimOfRecord } from '@omniswim/core/lib/cutlineTags';
 import { divisionForTeamOrNull } from '@omniswim/core/data/teamDivisions';
 import {
   canonicalSwimmerName,
@@ -236,11 +236,12 @@ export default function AthleteEntriesSection({
       {athletePlans.length > 0 ? (
         <ul className="space-y-1.5 mb-3">
           {athletePlans.map(p => {
+            // A converted entry is judged as the metric swim it came from, so
+            // it can show "indicative" but never a cut badge.
             const cutlineResult = buildCutlineTagForTeam({
-              time: p.time,
               gender,
-              event: p.event,
               team: athlete.team,
+              ...cutlineSwimOfRecord(p),
             });
             return (
             <li key={p.id} className="flex items-center gap-2 text-ui-body">
