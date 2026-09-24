@@ -9,9 +9,9 @@
  * keeps the undo chip and the compose-ref in one place.
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { Check, History, Pencil, Plus, Trash2, X } from 'lucide-react';
-import { Button, CutlineNearMissChip, CutlineTag } from '@omniswim/ui';
+import { Button, CutlineNearMissChip, CutlineTag, ProvenanceBadges, SegmentedControl } from '@omniswim/ui';
 import { Gender, HistoricalSwim, Workspace } from '@omniswim/core/types';
 import { ALL_PLAN_EVENTS } from '@omniswim/core/lib/eventCatalog';
 import { buildCutlineTagForTeam } from '@omniswim/core/lib/cutlineTags';
@@ -26,6 +26,15 @@ import {
   type WorkspaceEditorPatch,
 } from '@omniswim/core/lib/swimEditor';
 import DrawerSection from './DrawerSection';
+import {
+  formatCaptureDate,
+  highestSeasonId,
+  latestRetrievedAt,
+  rowsInSeason,
+  rowsWithoutSeason,
+  seasonDateRangeLabel,
+  type HistoryRangeMode,
+} from './athleteHistorySeasonView';
 
 type TimeType = 'SCY' | 'LCM' | 'SCM';
 const TIME_TYPES: TimeType[] = ['SCY', 'LCM', 'SCM'];
@@ -41,6 +50,23 @@ type Props = {
 export default function AthleteHistorySection({ rows, athlete, gender, editable, applyPatch }: Props) {
   // Kept under the original name so the moved JSX below is unchanged.
   const athleteHistoryRows = rows;
+
+  // P5: "This season | Lifetime" toggle. Lifetime (the pre-existing
+  // behaviour) is the default — this is a display filter only, never fed
+  // into scoring or entries. See athleteHistorySeasonView.ts.
+  const [rangeMode, setRangeMode] = useState<HistoryRangeMode>('lifetime');
+  const currentSeasonId = useMemo(() => highestSeasonId(athleteHistoryRows), [athleteHistoryRows]);
+  const seasonRows = useMemo(
+    () => (currentSeasonId ? rowsInSeason(athleteHistoryRows, currentSeasonId) : []),
+    [athleteHistoryRows, currentSeasonId]
+  );
+  const excludedFromSeason = useMemo(() => rowsWithoutSeason(athleteHistoryRows).length, [athleteHistoryRows]);
+  const seasonRangeLabel = useMemo(() => seasonDateRangeLabel(seasonRows), [seasonRows]);
+  const visibleRows = rangeMode === 'season' && currentSeasonId ? seasonRows : athleteHistoryRows;
+
+  // P7: "Bests pulled <date>" — the most recent SwimCloud capture among this
+  // athlete's swims. Hidden when no swim carries a retrievedAt.
+  const pulledAt = useMemo(() => latestRetrievedAt(athleteHistoryRows), [athleteHistoryRows]);
 
   const [newHistoryEvent, setNewHistoryEvent] = useState<string>(ALL_PLAN_EVENTS[0]);
   const [newHistoryTime, setNewHistoryTime] = useState('');
@@ -137,9 +163,40 @@ export default function AthleteHistorySection({ rows, athlete, gender, editable,
         Supplemental bests (not from the loaded meet) that feed cross-course arbitrage and
         optimizer profiles.
       </p>
-      {athleteHistoryRows.length > 0 ? (
+      {currentSeasonId ? (
+        <div className="flex flex-wrap items-center justify-between gap-2 mb-2">
+          <SegmentedControl
+            layout="inline"
+            ariaLabel="Best-times range"
+            options={[
+              { value: 'lifetime', label: 'Lifetime' },
+              {
+                value: 'season',
+                label: 'This season',
+                title: seasonRangeLabel ?? undefined,
+              },
+            ]}
+            value={rangeMode}
+            onChange={setRangeMode}
+          />
+          {rangeMode === 'season' ? (
+            <span className="text-ui-micro text-theme-muted">
+              {seasonRangeLabel ?? 'No dated swims in this season'}
+              {excludedFromSeason > 0
+                ? ` · ${excludedFromSeason} without a season excluded`
+                : ''}
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      {pulledAt ? (
+        <p className="text-ui-micro text-theme-muted mb-2">
+          Bests pulled {formatCaptureDate(pulledAt)}
+        </p>
+      ) : null}
+      {visibleRows.length > 0 ? (
         <ul className="space-y-1.5 mb-3">
-          {athleteHistoryRows.map(row => {
+          {visibleRows.map(row => {
             const rowKey = row.id ?? `${row.name}|${row.event}|${row.time}`;
             const isEditing = editingHistoryId === rowKey;
             const cutlineResult = buildCutlineTagForTeam({
@@ -239,6 +296,7 @@ export default function AthleteHistorySection({ rows, athlete, gender, editable,
                       compact
                       nextTier={cutlineResult.nextTier}
                     />
+                    <ProvenanceBadges className="hidden sm:inline-flex" compact swim={row} />
                     {editable ? (
                       <>
                         <Button
@@ -267,7 +325,9 @@ export default function AthleteHistorySection({ rows, athlete, gender, editable,
         </ul>
       ) : (
         <p className="text-ui-caption text-theme-muted mb-3 italic">
-          No supplemental history for this athlete.
+          {athleteHistoryRows.length > 0
+            ? 'No supplemental history in this season.'
+            : 'No supplemental history for this athlete.'}
         </p>
       )}
       {editable ? (

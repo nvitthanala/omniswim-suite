@@ -9,8 +9,21 @@ import type { Gender, HistoricalSwim, PlannedSwimEntry, ScoringSettings, Workspa
 import { canonicalSwimmerName } from '@omniswim/core/lib/utils';
 import { createPlannedEntry } from '@omniswim/core/lib/whatIfProjection';
 import { canAcceptAnotherEntry, countSwimmerEntries } from '@omniswim/core/lib/swimmerEntryLimits';
+import { isExtractedSplitSwim, isRankableSwim } from '@omniswim/core/lib/bestTimeEligibility';
 
-export type PastePreviewRow = { event: string; time: string; selected: boolean };
+export type PastePreviewRow = {
+  event: string;
+  time: string;
+  selected: boolean;
+  /**
+   * An extracted split (X) or a self-reported time (U) is not a race result
+   * (`isRankableSwim`). It must stay visible in the preview — hiding it would
+   * silently drop a swim the coach just pasted and could not tell was
+   * ineligible — but it can never become a planned entry.
+   */
+  disabled?: boolean;
+  disabledReason?: string;
+};
 
 function isRelayEventName(event: string): boolean {
   return /\brelay\b/i.test(event);
@@ -38,6 +51,25 @@ export function selectPastePreviewRows(params: {
 
   for (const swim of sortSwimsRelayLast(swims)) {
     if (have.has(swim.event)) continue;
+
+    if (!isRankableSwim(swim)) {
+      // Shown so the coach can see it was pasted, but never selectable: it
+      // does not consume an entry-limit slot and is never added on confirm
+      // (AthleteEntriesSection filters on `selected`, which this starts
+      // false and the checkbox stays disabled).
+      preview.push({
+        event: swim.event,
+        time: swim.time,
+        selected: false,
+        disabled: true,
+        disabledReason: isExtractedSplitSwim(swim)
+          ? "Extracted split — not swum as its own race, can't be an entry."
+          : 'Self-reported time — not a meet result, can\'t be an entry.',
+      });
+      have.add(swim.event);
+      continue;
+    }
+
     const probe = {
       individual: running.individual,
       relayEvents: new Set<string>(),

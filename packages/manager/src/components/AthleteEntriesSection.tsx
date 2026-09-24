@@ -46,9 +46,9 @@ import {
   updatePlannedEntry,
   type WorkspaceEditorPatch,
 } from '@omniswim/core/lib/swimEditor';
-import { Button, CutlineNearMissChip, CutlineTag, useToast } from '@omniswim/ui';
+import { Button, CutlineNearMissChip, CutlineTag, ProvenanceBadges, useToast } from '@omniswim/ui';
 import DrawerSection from './DrawerSection';
-import { buildPastePreviewPatch, selectPastePreviewRows } from './athleteEntriesView';
+import { buildPastePreviewPatch, selectPastePreviewRows, type PastePreviewRow } from './athleteEntriesView';
 
 type Props = {
   workspace: Workspace;
@@ -103,7 +103,7 @@ export default function AthleteEntriesSection({
   const [pasteText, setPasteText] = useState('');
   const [editingTimeId, setEditingTimeId] = useState<string | null>(null);
   const [editingTimeValue, setEditingTimeValue] = useState('');
-  const [pastePreview, setParsePreview] = useState<Array<{ event: string; time: string; selected: boolean }>>([]);
+  const [pastePreview, setParsePreview] = useState<PastePreviewRow[]>([]);
 
   const addEntry = () => {
     if (!editable || !newTime.trim()) return;
@@ -310,6 +310,7 @@ export default function AthleteEntriesSection({
                 compact
                 className="hidden sm:inline-flex"
               />
+              <ProvenanceBadges swim={p} compact className="hidden sm:inline-flex" />
               {editable ? (
                 <Button
                   variant="ghost"
@@ -397,12 +398,15 @@ export default function AthleteEntriesSection({
                     {pastePreview.map((item, idx) => (
                       <li
                         key={`${item.event}|${idx}`}
-                        className="flex items-center gap-2 text-ui-body"
+                        className={`flex items-center gap-2 text-ui-body ${item.disabled ? 'opacity-60' : ''}`}
                       >
                         <input
                           type="checkbox"
                           checked={item.selected}
+                          disabled={item.disabled}
+                          title={item.disabledReason}
                           onChange={() => {
+                            if (item.disabled) return;
                             setParsePreview(prev =>
                               prev.map((p, i) =>
                                 i === idx ? { ...p, selected: !p.selected } : p
@@ -417,6 +421,14 @@ export default function AthleteEntriesSection({
                         <span className="font-mono text-ui-caption text-theme-secondary">
                           {item.time}
                         </span>
+                        {item.disabled ? (
+                          <span
+                            className="text-ui-micro text-theme-muted border border-theme-soft px-1.5 rounded-full shrink-0"
+                            title={item.disabledReason}
+                          >
+                            Not an entry
+                          </span>
+                        ) : null}
                       </li>
                     ))}
                   </ul>

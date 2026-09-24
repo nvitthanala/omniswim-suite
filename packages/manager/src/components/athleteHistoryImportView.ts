@@ -32,9 +32,12 @@ export function actionBadge(action: ImportSwimmerAction): { label: string; class
 export function badgeLabel(badge?: SwimCloudBadge): string | null {
   switch (badge) {
     case 'extracted':
-      return 'Official';
+      // Not a meet result: taken from a longer swim's splits. See P6,
+      // plans/2026-09-20 — this used to read "Official", which is the
+      // opposite of what an extracted split is.
+      return 'Extracted';
     case 'user_input':
-      return 'Manual';
+      return 'Self-reported';
     case 'd1_a':
       return 'A CUT';
     case 'd1_b':
@@ -106,18 +109,18 @@ export function buildSwimRowTagSpecs(
   const showComputedB = swim.computedCut === 'B' && swim.swimcloudBadge !== 'd1_b';
   return [
     {
-      key: 'official',
-      show: stamp === 'Official',
+      key: 'extracted',
+      show: stamp === 'Extracted',
       className: 'text-ui-micro text-theme-secondary border border-theme-soft px-1.5 rounded-full',
-      title: 'Extracted official result',
-      label: 'Official',
+      title: "Taken from a longer swim's splits — not a standalone race result.",
+      label: 'Extracted',
     },
     {
-      key: 'manual',
-      show: stamp === 'Manual',
+      key: 'self-reported',
+      show: stamp === 'Self-reported',
       className: 'text-ui-micro badge-warning px-1.5 rounded-full',
-      title: 'User-entered time',
-      label: 'Manual',
+      title: 'Typed in by the swimmer or a coach — not taken from a meet result.',
+      label: 'Self-reported',
     },
     {
       key: 'a-cut',

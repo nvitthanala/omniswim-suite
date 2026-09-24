@@ -15,7 +15,7 @@ import { formatLegSplitSummary } from '@omniswim/core/lib/relaySplits';
 import { compactEventTitleAttr, formatCompactEventLabel } from '@omniswim/core/lib/utils';
 import { ALL_PLAN_EVENTS } from '@omniswim/core/lib/eventCatalog';
 import { buildCutlineTagForTeam, cutlineSwimOfRecord } from '@omniswim/core/lib/cutlineTags';
-import { Badge, Button, CutlineTag, CutlineNearMissChip } from '@omniswim/ui';
+import { Badge, Button, CutlineTag, CutlineNearMissChip, ProvenanceBadges } from '@omniswim/ui';
 
 type AnchorExpected = { prelims?: number; psych?: number };
 
@@ -76,6 +76,7 @@ function TimeDisplay({ swim, team, gender }: { swim: AthleteCreditedSwim; team: 
       <div className="flex items-center gap-1">
         <span>{swim.displayTime || swim.time || '—'}</span>
         {showCutline ? <SwimCutlineTag swim={swim} team={team} gender={gender as Gender} /> : null}
+        <ProvenanceBadges swim={swim} compact />
       </div>
       {swim.kind === 'relay' && swim.relayLegSplitDetail ? (
         <div

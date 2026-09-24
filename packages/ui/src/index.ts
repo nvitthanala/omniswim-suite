@@ -15,6 +15,14 @@ export {
   CutlineNearMissChip,
   NEAR_MISS_RELATIVE_THRESHOLD,
 } from './components/CutlineTag';
+export {
+  ProvenanceBadges,
+  buildProvenanceBadges,
+  describeConversionBasis,
+  type ProvenanceBadgeInput,
+  type ProvenanceBadgeKey,
+  type ProvenanceBadgeSpec,
+} from './components/ProvenanceBadge';
 export { Button } from './components/Button';
 export { TeamSelect, type TeamSelectProps } from './components/TeamSelect';
 export { EmptyState } from './components/EmptyState';
