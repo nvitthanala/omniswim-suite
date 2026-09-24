@@ -56,7 +56,7 @@ import {
   convertTimeToSeconds,
   convertToSCY,
   eventMeetSortKey,
-  hasConversionFactor,
+  hasConversionFactorForCourse,
   isDivingEvent,
   isRelayResult,
   normalizeSwimmerName,
@@ -190,10 +190,12 @@ export function* convertedHistorySwims(
     // every best-picking caller drops it with `isRankableSwim`.
     if (isUserInputtedSwim(s)) continue;
     const timeType = s.timeType ?? 'SCY';
-    // No published factor → the swim has no SCY equivalent. These are non-program
-    // events (25s, 100 IM) and diving, which the caller's classifier rejects
-    // regardless. SwimCloud labels ("50 Free LCM") do resolve since 2026-09-22.
-    if (timeType !== 'SCY' && !hasConversionFactor(s.event)) continue;
+    // No published factor → the swim has no SCY equivalent: diving, and an LCM
+    // swim outside CONVERSION_FACTORS (an LCM 25 or 100 IM). An SCM 25 or 100 IM
+    // converts on the NCAA "All other events" row since 2026-09-24; the caller's
+    // classifier still rejects it as a non-program event. SwimCloud labels
+    // ("50 Free LCM") resolve since 2026-09-22.
+    if (!hasConversionFactorForCourse(s.event, timeType)) continue;
     const converted = convertSwimToSCYDetailed(s.event, s.time, s.gender, timeType, {
       team: s.team,
     });

@@ -30,6 +30,7 @@ import { swimCloudSwimmerTimesToHistoricalSwims } from '@omniswim/manager/lib/sw
 import { NCAA_ALTITUDE_ADJUSTMENT_TABLE, type NcaaAltitudeRow } from '../packages/core/src/constants';
 import { Gender, type HistoricalSwim, type Workspace } from '../packages/core/src/types';
 import {
+  ALTITUDE_400_YARD_IM_USER_DECISION,
   adjustSwimForAltitude,
   ncaaAltitudeAdjustment,
   ncaaAltitudeElevationClass,
@@ -200,25 +201,125 @@ describe('ncaaAltitudeAdjustment', () => {
     });
   });
 
-  it('prints nothing for a 50, a 400-yard event, a 25 or diving', () => {
+  it('prints nothing for a 50, a 400-yard freestyle, a 25 or diving', () => {
     const miss = (event: string, course: 'SCY' | 'SCM' | 'LCM') =>
       ncaaAltitudeAdjustment({ event, time: '30.00', course, elevation: { elevationClass: 'III' } }).status;
     expect(miss('50 Free SCY', 'SCY')).toBe('event_not_in_table');
     expect(miss('50 Free LCM', 'LCM')).toBe('event_not_in_table');
-    expect(miss('400 IM SCY', 'SCY')).toBe('event_not_in_table');
+    // The 400-yard IM decision covers the IM only.
+    expect(miss('400 Free SCY', 'SCY')).toBe('event_not_in_table');
     expect(miss('25 Fly SCY', 'SCY')).toBe('event_not_in_table');
     expect(miss('1 mtr Diving', 'SCM')).toBe('event_not_in_table');
     // A metric 400 IM is a "400 Meters (Individual Events)" swim.
     expect(miss('400 IM LCM', 'LCM')).toBe('adjusted');
   });
 
+  it('reads the chart rows as the NCAA prints them', () => {
+    const at = (event: string, course: 'SCY' | 'SCM' | 'LCM') =>
+      ncaaAltitudeAdjustment({ event, time: '4:30.00', course, elevation: { elevationClass: 'II' } });
+    for (const [event, course] of [
+      ['500 Freestyle', 'SCY'],
+      ['400 IM LCM', 'LCM'],
+      ['400 Free SCM', 'SCM'],
+      ['200 Back SCY', 'SCY'],
+    ] as const) {
+      const got = at(event, course);
+      expect(got, event).toMatchObject({ status: 'adjusted', rowBasis: 'ncaa_chart' });
+      expect(got, event).not.toHaveProperty('userDecision');
+    }
+  });
+
+  /*
+   * User decision, 2026-09-24: a 400-yard IM takes the "500 Yards/400 Meters"
+   * row. The chart prints no 400-yard row, so this is the user's reading and
+   * not the NCAA's. The result must say so.
+   */
+  it('gives a 400-yard IM the 500 y / 400 m row, marked as a user decision', () => {
+    expect(ALTITUDE_400_YARD_IM_USER_DECISION).toMatchObject({
+      id: 'user-decision-2026-09-24-altitude-400y-im',
+      decidedOn: '2026-09-24',
+      event: '400 Individual Medley',
+      course: 'SCY',
+      row: 'y500m400',
+    });
+    expect(ALTITUDE_400_YARD_IM_USER_DECISION.statement).toMatch(/not the NCAA/);
+    expect(Object.isFrozen(ALTITUDE_400_YARD_IM_USER_DECISION)).toBe(true);
+
+    // Class II, 500 y / 400 m row: 5.0 s.
+    for (const label of ['400 IM SCY', '400 Individual Medley', 'Event 15 Men 400 Yard IM']) {
+      const got = ncaaAltitudeAdjustment({
+        event: label,
+        time: '3:58.24',
+        course: 'SCY',
+        elevation: { elevationClass: 'II' },
+      });
+      expect(got, label).toStrictEqual({
+        status: 'adjusted',
+        event: '400 Individual Medley',
+        course: 'SCY',
+        elevationClass: 'II',
+        row: 'y500m400',
+        rowBasis: 'user_decision',
+        userDecision: ALTITUDE_400_YARD_IM_USER_DECISION,
+        relay: false,
+        secondsSubtracted: 5,
+        actualTime: '3:58.24',
+        actualSeconds: 238.24,
+        adjustedTime: '3:53.24',
+        adjustedSeconds: 233.24,
+        table: 'ncaa-altitude-2026-27',
+      });
+    }
+    // Each column reads the same row's figure.
+    const figure = (elevationClass: 'I' | 'II' | 'III') =>
+      ncaaAltitudeAdjustment({ event: '400 IM SCY', time: '4:00.00', course: 'SCY', elevation: { elevationClass } });
+    expect(figure('I')).toMatchObject({ secondsSubtracted: NCAA_ALTITUDE_ADJUSTMENT_TABLE.seconds.y500m400.I });
+    expect(figure('III')).toMatchObject({ secondsSubtracted: NCAA_ALTITUDE_ADJUSTMENT_TABLE.seconds.y500m400.III });
+    // The decision adds nothing to the sourced table.
+    expect(Object.keys(NCAA_ALTITUDE_ADJUSTMENT_TABLE.seconds)).toStrictEqual([
+      'y100m100',
+      'y200m200',
+      'y500m400',
+      'y1000m800',
+      'y1650m1500',
+    ]);
+  });
+
+  it('refuses the 400-yard IM decision below 3,000 ft and on a stored swim already adjusted', () => {
+    expect(
+      ncaaAltitudeAdjustment({ event: '400 IM SCY', time: '4:00.00', course: 'SCY', elevation: { feet: 2500 } }).status
+    ).toBe('below_threshold');
+    expect(() =>
+      adjustSwimForAltitude(
+        { event: '400 IM SCY', time: '4:00.00', timeType: 'SCY', isAltitudeAdjusted: true },
+        { elevationClass: 'II' }
+      )
+    ).toThrow(/already altitude-adjusted/);
+  });
+
+  /*
+   * Relays: "four times the appropriate figures" is read as four times the
+   * figure for one leg's distance. The user confirmed this reading on
+   * 2026-09-24. A 200 relay (50 legs) gets none, because the chart prints no 50.
+   */
   it('gives a relay four times its leg distance’s figure', () => {
     const relay = (event: string) =>
       ncaaAltitudeAdjustment({ event, time: '3:00.00', course: 'SCY', elevation: { elevationClass: 'II' } });
-    expect(relay('400 Medley Relay')).toMatchObject({ relay: true, row: 'y100m100', secondsSubtracted: 0.4 });
+    expect(relay('400 Medley Relay')).toMatchObject({
+      relay: true,
+      row: 'y100m100',
+      rowBasis: 'ncaa_chart',
+      secondsSubtracted: 0.4,
+    });
+    expect(relay('400 Freestyle Relay')).toMatchObject({ relay: true, row: 'y100m100', secondsSubtracted: 0.4 });
     expect(relay('800 Freestyle Relay')).toMatchObject({ relay: true, row: 'y200m200', secondsSubtracted: 4.8 });
+    expect(relay('Event 20 Men 4x100 Yard Medley Relay')).toMatchObject({ relay: true, row: 'y100m100' });
     // 50-yard legs: the chart prints no 50, so four times nothing is nothing.
     expect(relay('200 Freestyle Relay').status).toBe('event_not_in_table');
+    expect(relay('200 Medley Relay').status).toBe('event_not_in_table');
+    expect(relay('Event 11 Men 4x50 Yard Medley Relay').status).toBe('event_not_in_table');
+    // Not the relay's total distance: a 400 relay is not read on the 400 m row.
+    expect(relay('400 Freestyle Relay')).not.toMatchObject({ row: 'y500m400' });
   });
 
   it('throws on a time that is not a time', () => {

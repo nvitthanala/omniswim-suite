@@ -542,6 +542,18 @@ export interface HistoricalSwim {
    */
   isUserInputted?: true;
   /**
+   * The swim was a time trial at a loaded meet (`SwimmerResult.isTimeTrial`).
+   * Set only by `historicalSwimFromResult`.
+   *
+   * A time trial is swum at the meet but is not the program event, so it is
+   * never an athlete-profile best. A HyTek label already says so
+   * (`Event 100 Men 100 Yard Breaststroke Time Trial`); a SwimCloud meet
+   * import does not (its label is `100 Breast`, flagged by event number), so
+   * this flag carries the fact across. `mergeHistoryIndex` keeps it in its own
+   * lane so it never displaces the program swim of the same event.
+   */
+  isTimeTrial?: true;
+  /**
    * SwimCloud's `season_id` for this swim, verbatim (e.g. `'29'` = 2025-26).
    * Only the times JSON states it. Absent on pasted, PDF and CSV rows.
    */

@@ -33,7 +33,7 @@ import {
   convertTimeToSeconds,
   convertSwimToSCYDetailed,
   foldDiacritics,
-  hasConversionFactor,
+  hasConversionFactorForCourse,
   normalizeSwimmerName,
   scyConversionProvenance,
 } from './utils';
@@ -241,8 +241,7 @@ function groupPreviewBySwimmer(
  */
 function canStateInSCY(swim: HistoricalSwim, relay: boolean): boolean {
   if (relay) return true;
-  if ((swim.timeType ?? 'SCY') === 'SCY') return true;
-  return hasConversionFactor(swim.event);
+  return hasConversionFactorForCourse(swim.event, swim.timeType ?? 'SCY');
 }
 
 /**

@@ -10,7 +10,9 @@ import {
   implausibleSwimRowWarning,
   parseSwimCloudPersonalBestsDetailed,
   splitMultiProfileBlocks,
+  unreadSwimCloudStampWarning,
   type RejectedSwimRow,
+  type UnreadSwimCloudStampRow,
 } from './athleteHistory';
 
 export type ParseMultiProfileOptions = {
@@ -33,6 +35,11 @@ export type ParseMultiProfileResult = {
    * `warnings` one-per-row; exposed structured so a caller can count or group them.
    */
   rejected: RejectedSwimRow[];
+  /**
+   * Kept rows whose stamp the reader could not read, across every block.
+   * Already rendered into `warnings` one-per-row.
+   */
+  unreadStamps: UnreadSwimCloudStampRow[];
 };
 
 /**
@@ -59,6 +66,7 @@ export function parseSwimCloudMultiProfile(
 
   const athletes: MultiProfileAthlete[] = [];
   const rejected: RejectedSwimRow[] = [];
+  const unreadStamps: UnreadSwimCloudStampRow[] = [];
   for (const block of blocks) {
     const parsed = parseSwimCloudPersonalBestsDetailed(
       block.lines.join('\n'),
@@ -71,6 +79,8 @@ export function parseSwimCloudMultiProfile(
     // implausible would be reported as "nothing parsed" with no reason attached.
     rejected.push(...parsed.rejected);
     warnings.push(...parsed.rejected.map(implausibleSwimRowWarning));
+    unreadStamps.push(...(parsed.unreadStamps ?? []));
+    warnings.push(...(parsed.unreadStamps ?? []).map(unreadSwimCloudStampWarning));
     if (parsed.swims.length === 0) {
       const folded =
         block.absorbed.length > 0
@@ -86,5 +96,5 @@ export function parseSwimCloudMultiProfile(
     warnings.push('No athlete profiles parsed — check the paste includes name + Personal Bests rows');
   }
 
-  return { athletes, warnings, rejected };
+  return { athletes, warnings, rejected, unreadStamps };
 }

@@ -47,9 +47,23 @@ assert.equal(merged.length, historySlice.length + rosterPaste.length, 'merge add
 // regardless of how the 100-row history slice above happened to land, so
 // this profile check can assert a real, non-empty, exact result rather than
 // an upper bound alone.
+//
+// His NSISC 50 Free (`Event 8 Men 50 Yard Freestyle`, 21.58) also sits in the
+// 100-row slice. Until 2026-09-24 a HyTek label never reached a profile
+// (plans/2026-09-22/01 P14 item a), so this check read only the pasted swim.
+// The meet swim now ranks beside it, under the label it was recorded with.
 const landonProfile = categorizeBestEvents(merged, 'Ouachita Baptist University', Gender.MEN, 'Landon Dehn', settings);
-assert.deepEqual(landonProfile.primaryEvents, ['200 Freestyle'], 'Landon Dehn\'s primary events come back as exactly the one pasted swim');
+assert.deepEqual(
+  [...landonProfile.primaryEvents].sort(),
+  ['200 Freestyle', 'Event 8 Men 50 Yard Freestyle'],
+  'Landon Dehn\'s primary events are the pasted 200 Free and his NSISC 50 Free'
+);
 assert.equal(landonProfile.bestByEvent['200 Freestyle']?.time, '1:56.47', 'best time for the primary event matches the pasted swim exactly');
+assert.equal(
+  landonProfile.bestByEvent['Event 8 Men 50 Yard Freestyle']?.time,
+  '21.58',
+  'the loaded-meet 50 Free ranks under its HyTek label'
+);
 
 const blaiseFixture = readFileSync(
   'tests/fixtures/swimcloud/blaise_vera_personal_bests.txt',

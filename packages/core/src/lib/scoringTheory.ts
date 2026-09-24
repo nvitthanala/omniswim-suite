@@ -29,7 +29,7 @@ import {
   convertSwimToSCYDetailed,
   convertTimeToSeconds,
   foldDiacritics,
-  hasConversionFactor,
+  hasConversionFactorForCourse,
   isRelayResult,
   normalizeSwimmerName,
   scyConversionProvenance,
@@ -624,7 +624,7 @@ function heldEventCount(held: HeldEvents): number {
 function programSwimFromHistory(s: HistoricalSwim): { event: string; best: HistoryBestTime } | null {
   if (!isRankableSwim(s)) return null;
   const relay = /\brelay\b/i.test(s.event);
-  if (!relay && (s.timeType ?? 'SCY') !== 'SCY' && !hasConversionFactor(s.event)) return null;
+  if (!relay && !hasConversionFactorForCourse(s.event, s.timeType ?? 'SCY')) return null;
   if (relay) {
     if (!isChampionshipProgramEvent(s.event)) return null;
     return { event: s.event, best: { time: s.time } };

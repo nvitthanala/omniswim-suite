@@ -1,6 +1,10 @@
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import { buildSeasonTrends } from '../packages/core/src/lib/seasonAnalytics';
-import type { Workspace } from '../packages/core/src/types';
+import { parseSwimCloudPasteDetailed } from '../packages/core/src/lib/athleteHistory';
+import { Gender, type HistoricalSwim, type Workspace } from '../packages/core/src/types';
 
 /**
  * The original single case was named "aggregates swimmer bests across workspaces"
@@ -110,5 +114,105 @@ describe('seasonAnalytics', () => {
     ]);
 
     expect(trends.swimmerTrends.map(t => t.name)).toEqual(['Alice Swimmer']);
+  });
+});
+
+/**
+ * Plans/2026-09-22/01, P14 item d. A trend keyed on `name::rawLabel` did two
+ * wrong things at once:
+ *
+ * - It mixed courses. A pasted row stores its course in `timeType`, not in
+ *   the label, so Gavin Kock's `100 IM SCM 58.25` and `100 IM SCY 52.57`
+ *   (`hsuroster26-27.txt` lines 180 and 200) were one trend whose "best" was
+ *   a yards time beside a metres time.
+ * - It split one event across labels. A meet row
+ *   (`Event 35 Men 100 Yard Freestyle`) and a SwimCloud row (`100 Free SCY`)
+ *   of the same swimmer were two trends.
+ *
+ * Trends now key on the swimmer, `swimEventIdentity` and the course.
+ */
+describe('seasonAnalytics keys trends by event identity and course', () => {
+  const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+  const gavinKock = (() => {
+    const lines = readFileSync(join(repoRoot, 'hsuroster26-27.txt'), 'utf8').split(/\r?\n/);
+    const block = lines.slice(160, 200);
+    expect(block[0]).toBe('Gavin Kock');
+    return parseSwimCloudPasteDetailed(block.join('\n'), { team: 'Henderson State', gender: Gender.MEN }).swims;
+  })();
+
+  function historyWorkspace(athleteHistory: HistoricalSwim[], menResults: unknown[] = []): Workspace {
+    return { ...workspace('w-hist', 'History', menResults), athleteHistory } as Workspace;
+  }
+
+  it('keeps a yards swim and a metres swim of one event apart (Gavin Kock, HSU)', () => {
+    const trends = buildSeasonTrends([historyWorkspace(gavinKock)]).swimmerTrends;
+    const im = trends.filter(t => t.name === 'Gavin Kock' && t.event === '100 Individual Medley');
+    expect(im.map(t => [t.course, t.bestTime, t.meetCount])).toStrictEqual([
+      ['SCM', '58.25', 1],
+      ['SCY', '52.57', 1],
+    ]);
+    // 50 Free: 20.46 SCY, 23.39 SCM, 23.84 LCM — three courses, three trends.
+    const fifty = trends.filter(t => t.name === 'Gavin Kock' && t.event === '50 Freestyle');
+    expect(fifty.map(t => [t.course, t.bestTime]).sort()).toStrictEqual([
+      ['LCM', '23.84'],
+      ['SCM', '23.39'],
+      ['SCY', '20.46'],
+    ]);
+  });
+
+  it('folds a meet label and a SwimCloud label of one event into one trend', () => {
+    const meetRow = {
+      ...swim('r1', 'Alessandro Giustolisi', 'Event 35 Men 100 Yard Freestyle', '47.83'),
+      team: 'Delta State University',
+    };
+    const history: HistoricalSwim = {
+      name: 'Alessandro Giustolisi',
+      team: 'Delta State University',
+      gender: Gender.MEN,
+      event: '100 Free SCY',
+      time: '48.10',
+      timeType: 'SCY',
+      source: 'swimcloud',
+    };
+    const trends = buildSeasonTrends([historyWorkspace([history], [meetRow])]).swimmerTrends;
+    expect(trends).toHaveLength(1);
+    expect(trends[0]).toMatchObject({ course: 'SCY', bestTime: '47.83', meetCount: 2 });
+    // A time trial of that event is its own trend.
+    const trial = { ...swim('r2', 'Alessandro Giustolisi', 'Event 201 Men 100 Yard Freestyle Time Trial', '47.00') };
+    const withTrial = buildSeasonTrends([historyWorkspace([history], [meetRow, trial])]).swimmerTrends;
+    expect(withTrial.map(t => [t.event, t.bestTime]).sort()).toStrictEqual([
+      ['Event 201 Men 100 Yard Freestyle Time Trial', '47.00'],
+      ['Event 35 Men 100 Yard Freestyle', '47.83'],
+    ]);
+  });
+
+  it('reads the course off a SwimCloud label when the row states no timeType', () => {
+    const row = (event: string, time: string): HistoricalSwim => ({
+      name: 'Test Swimmer',
+      team: 'Home',
+      gender: Gender.MEN,
+      event,
+      time,
+      source: 'swimcloud',
+    });
+    const trends = buildSeasonTrends([historyWorkspace([row('50 Free LCM', '24.10'), row('50 Free SCY', '21.00')])])
+      .swimmerTrends;
+    expect(trends.map(t => [t.course, t.bestTime]).sort()).toStrictEqual([
+      ['LCM', '24.10'],
+      ['SCY', '21.00'],
+    ]);
+  });
+
+  it('takes the higher score as a diver’s best', () => {
+    const dive = (id: string, time: string) => ({
+      ...swim(id, 'Santiago Santodomingo', 'Event 9 Men 1 mtr Diving', time),
+      team: 'Delta State University',
+    });
+    const trends = buildSeasonTrends([
+      workspace('w1', 'Meet One', [dive('d1', '431.25')]),
+      workspace('w2', 'Meet Two', [dive('d2', '503.95')]),
+    ]).swimmerTrends;
+    expect(trends).toHaveLength(1);
+    expect(trends[0].bestTime).toBe('503.95');
   });
 });

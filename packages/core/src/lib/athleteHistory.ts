@@ -23,7 +23,7 @@ import {
   convertSwimToSCYDetailed,
   convertTimeToSeconds,
   convertToSCY,
-  hasConversionFactor,
+  hasConversionFactorForCourse,
   isDivingEvent,
   isRelayResult,
   normalizeSwimmerName,
@@ -44,7 +44,7 @@ import {
   isRankableSwim,
   readSwimCloudStamp,
   swimEventIdentity,
-  type BestTimeLane,
+  type SwimCloudStampReading,
 } from './bestTimeEligibility';
 
 // The best-time rules live in one leaf module so every reader shares them.
@@ -57,6 +57,7 @@ export {
   isSameSwimEvent,
   isUserInputtedSwim,
   readSwimCloudStamp,
+  SWIMCLOUD_CUT_CHIP_LABELS,
   swimEventIdentity,
   type BestTimeLane,
   type BestTimeProvenance,
@@ -79,6 +80,8 @@ export function historicalSwimFromResult(r: SwimmerResult, meetLabel?: string): 
     source: 'pdf',
     classYear: String(r.classYear ?? ''),
     meetLabel,
+    // A SwimCloud meet import flags a time trial by event number, not label.
+    ...(r.isTimeTrial === true ? { isTimeTrial: true as const } : {}),
   };
 }
 
@@ -108,9 +111,15 @@ export function eventBestTimeMarks(
   };
 }
 
-/** The history-merge key suffix for a lane. A result keys with no suffix, as it always has. */
-function mergeLaneSuffix(lane: BestTimeLane): string {
-  return lane === 'result' ? '' : `|${lane}`;
+/**
+ * The history-merge key suffix for a swim's lane. A result keys with no
+ * suffix, as it always has. A time trial keys apart from the program swim of
+ * the same label (see `HistoricalSwim.isTimeTrial`).
+ */
+function mergeLaneSuffix(swim: HistoricalSwim): string {
+  const lane = bestTimeLane(swim);
+  const laneSuffix = lane === 'result' ? '' : `|${lane}`;
+  return swim.isTimeTrial === true ? `${laneSuffix}|time_trial` : laneSuffix;
 }
 
 export function mergeHistoryIndex(
@@ -127,28 +136,42 @@ export function mergeHistoryIndex(
     // not evict either (both stay stored and visible). Every other swim keys
     // exactly as before.
     //
-    // The event half of the key is still the raw label, on purpose. A HyTek
-    // meet label must not fold into a history label here: the profile reads
-    // only history labels, so a faster meet row that won the fold would take
-    // the swimmer's best with it. Every reader that picks a best folds labels
-    // itself (see swimEventIdentity).
-    const lane = mergeLaneSuffix(bestTimeLane(s));
+    // The event half of the key is still the raw label, on purpose: this is a
+    // store, not a best picker. Every reader that picks a best folds labels
+    // itself (see swimEventIdentity), so keeping both a HyTek meet row and a
+    // history row of one event loses nothing, and folding here would drop
+    // whichever row a reader could not yet read.
+    const lane = mergeLaneSuffix(s);
     const key = `${swimKey(s.name, s.team, s.gender, s.event)}|${s.timeType ?? 'SCY'}${lane}`;
     // Raw seconds, deliberately: the key already pins both the event and the
     // course, so every swim compared here shares one conversion factor and the
     // conversion cancels out of the ordering. Converting first would also drag
     // non-program events (25s, 100 IM) through a factor table that does not
     // publish them, for a comparison that does not need it.
-    const sec = convertTimeToSeconds(s.time);
     const prev = best.get(key);
     if (!prev) {
       best.set(key, s);
       continue;
     }
-    const prevSec = convertTimeToSeconds(prev.time);
-    if (sec < prevSec) best.set(key, s);
+    if (isBetterStoredMark(s, prev)) best.set(key, s);
   }
   return [...best.values()];
+}
+
+/**
+ * True when `candidate` should replace `held` under one merge key.
+ *
+ * A swim keeps the lower time. A dive keeps the higher score: its `time`
+ * holds the judged points (`'318.05'`), and more points is the better dive.
+ * Keeping the lower number, as this merge used to, kept a diver's worst dive.
+ * A value that is not a number (`DQ`, `NS`) never replaces a real one.
+ */
+function isBetterStoredMark(candidate: HistoricalSwim, held: HistoricalSwim): boolean {
+  const next = convertTimeToSeconds(candidate.time);
+  const prev = convertTimeToSeconds(held.time);
+  if (!isDivingEvent(candidate.event)) return next < prev;
+  if (!Number.isFinite(next)) return false;
+  return !Number.isFinite(prev) || next > prev;
 }
 
 export function relayEventsForAthlete(
@@ -238,10 +261,14 @@ export function categorizeBestEvents(
     if (s.gender !== gender || s.team !== team) continue;
     if (normalizeSwimmerName(resolver.resolveAthleteName(s.name, team, gender)) !== nameKey) continue;
     if (s.event.toLowerCase().includes('relay')) continue;
+    // A time trial is not the program event. A HyTek label says so and
+    // `isEventOffered` refuses it; a SwimCloud meet import says so only
+    // through the flag.
+    if (s.isTimeTrial === true) continue;
     // A metric swim in an event with no published conversion factor cannot be
     // stated in SCY. Skip it rather than let it into the ranking under another
     // event's factor.
-    if ((s.timeType ?? 'SCY') !== 'SCY' && !hasConversionFactor(s.event)) continue;
+    if (!hasConversionFactorForCourse(s.event, s.timeType ?? 'SCY')) continue;
 
     // Key on the SCY *program* event, not the raw history label: a 400 Free LCM
     // competes in the 500 Free slot (800→1000, 1500→1650). Keying on the raw
@@ -489,11 +516,24 @@ export function meetProgramEvents(results: SwimmerResult[] | undefined): Set<str
   return set;
 }
 
-/** Is `event` one this profile may offer, given the meet program (or the fallback)? */
+/**
+ * Is `event` one this profile may offer, given the meet program (or the fallback)?
+ *
+ * The label is read with {@link canonicalMeetEventLabel}, the same reader
+ * {@link meetProgramEvents} builds the program with. It used to be read with
+ * `normalizeEventLabel`, which leaves a HyTek label's scaffolding in place:
+ * `Event 4 Men 1000 Yard Freestyle` never equalled the program's
+ * `1000 Freestyle`, so no swim from a loaded meet ever reached a profile.
+ *
+ * Still refused: a relay or a dive (the reader returns `null`), and a time
+ * trial, whose label keeps its `Time Trial` words and so names no program
+ * event. {@link meetProgramEvents} leaves time trials out of the program.
+ */
 function isEventOffered(event: string, allowed: ReadonlySet<string> | null): boolean {
-  const norm = normalizeEventLabel(event);
-  if (allowed && allowed.size > 0) return allowed.has(norm);
-  return isChampionshipProgramEvent(norm) && !/\brelay\b/i.test(norm);
+  const canonical = canonicalMeetEventLabel(event);
+  if (!canonical) return false;
+  if (allowed && allowed.size > 0) return allowed.has(canonical);
+  return isChampionshipProgramEvent(canonical) && !/\brelay\b/i.test(canonical);
 }
 
 export type EventQualityRanking = {
@@ -865,6 +905,29 @@ export function implausibleSwimRowWarning(row: RejectedSwimRow): string {
 }
 
 /**
+ * A pasted row whose stamp column held text {@link readSwimCloudStamp} could
+ * not read. The row is still imported (its meet and date come from their own
+ * columns), with `swimcloudBadge: 'other'` and no flag. Reported because the
+ * stamp may carry an `X` or `U` chip the reader could not split off.
+ */
+export type UnreadSwimCloudStampRow = {
+  /** The paste line verbatim (trimmed). */
+  raw: string;
+  /** The stamp column's text, verbatim. */
+  stamp: string;
+  /** Normalized event label of the row. */
+  event: string;
+};
+
+/** Operator-facing text for one unread stamp. Names the stamp and the raw row. */
+export function unreadSwimCloudStampWarning(row: UnreadSwimCloudStampRow): string {
+  return (
+    `Unrecognized SwimCloud stamp "${row.stamp}" on ${row.event} — imported as a result. ` +
+    `If the stamp ends in an X (extracted split) or U (self-reported) chip, mark the swim by hand. Raw row: ${row.raw}`
+  );
+}
+
+/**
  * A paste parse split into what was kept and what the plausibility gate refused.
  *
  * `rejected` is never dropped on the floor: `parseSwimCloudPasteDetailed` and
@@ -875,7 +938,79 @@ export function implausibleSwimRowWarning(row: RejectedSwimRow): string {
 export type ParseSwimRowsResult = {
   swims: HistoricalSwim[];
   rejected: RejectedSwimRow[];
+  /**
+   * Kept rows whose stamp column the reader could not read, one per row.
+   * Set by the personal-bests parser; absent from the roster parser, whose
+   * rows carry no stamp column.
+   */
+  unreadStamps?: UnreadSwimCloudStampRow[];
 };
+
+/** The meet, date and stamp columns of one pasted personal-bests row. */
+type PastedRowColumns = { stamp: string; meet: string; date: string };
+
+/**
+ * The stamp, meet and date columns of a row in SwimCloud's own tab layout
+ * (`Event \t Time \t Stamp \t Meet \t Date \t`), or `null` for any other
+ * shape.
+ *
+ * Read by position, because the column says what the text is. A cut chip
+ * (`D2 B`, `WIN JRS`) and a meet name are both free text, and the reader
+ * this replaces told them apart by length, so a multi-word chip became the
+ * meet name and the real one was lost. The date column anchors the layout: a
+ * row whose fifth column is not a date (or empty) is left to the text-based
+ * reader.
+ */
+function pastedRowColumns(line: string, cols: string[]): PastedRowColumns | null {
+  if (!line.includes('\t') || cols.length < 5) return null;
+  const [, , stamp, meet, date] = cols;
+  if (date !== '' && !DATE_RE.test(date)) return null;
+  if (DATE_RE.test(stamp) || DATE_RE.test(meet)) return null;
+  return { stamp, meet, date };
+}
+
+/** The stamp fields a row gets from a reading. */
+function stampFields(
+  stamp: SwimCloudStampReading
+): Pick<HistoricalSwim, 'swimcloudBadge' | 'isExtractedSplit' | 'isUserInputted'> {
+  return {
+    swimcloudBadge: stamp.badge,
+    // The same facts the JSON bridge records from the chip tooltips. A pasted
+    // row carries only the chip letters, so the stamp reading is the one
+    // source here. See HistoricalSwim.isExtractedSplit/isUserInputted.
+    ...(stamp.extractedSplit ? { isExtractedSplit: true } : {}),
+    ...(stamp.userInputted ? { isUserInputted: true as const } : {}),
+  };
+}
+
+/**
+ * Stamp, meet and date of a row that is not in the tab layout, read by text
+ * as before: a leading stamp token, then the first date, then the first
+ * longer text as the meet.
+ */
+function textRowFields(
+  rest: string[]
+): { stampFields: ReturnType<typeof stampFields>; meetLabel: string; date: string } {
+  let fields: ReturnType<typeof stampFields> = { swimcloudBadge: 'none' };
+  let remaining = rest;
+  if (remaining.length > 0) {
+    const stamp = readSwimCloudStamp(remaining[0]);
+    if (stamp) {
+      fields = stampFields(stamp);
+      remaining = remaining.slice(1);
+    }
+  }
+  let meetLabel = '';
+  let date = '';
+  for (const c of remaining) {
+    if (!date && DATE_RE.test(c)) {
+      date = c;
+    } else if (!meetLabel && c.length > 3 && !DATE_RE.test(c)) {
+      meetLabel = c;
+    }
+  }
+  return { stampFields: fields, meetLabel, date };
+}
 
 /**
  * `division` may be passed `null` to state outright that the team's division is
@@ -893,8 +1028,9 @@ export function parseSwimCloudPersonalBestsDetailed(
 ): ParseSwimRowsResult {
   const out: HistoricalSwim[] = [];
   const rejected: RejectedSwimRow[] = [];
+  const unreadStamps: UnreadSwimCloudStampRow[] = [];
   const name = swimmerName.trim();
-  if (!name) return { swims: out, rejected };
+  if (!name) return { swims: out, rejected, unreadStamps };
 
   for (const line of text.split(/\r?\n/)) {
     const t = line.trim();
@@ -914,33 +1050,27 @@ export function parseSwimCloudPersonalBestsDetailed(
     }
     const time = cols[1];
     const timeType = parseCourseFromEvent(rawEvent) ?? 'SCY';
-    let rest = cols.slice(2).filter(c => c.length > 0);
 
-    let swimcloudBadge: SwimCloudBadge = 'none';
-    let stampFlags: Pick<HistoricalSwim, 'isExtractedSplit' | 'isUserInputted'> = {};
-    if (rest.length > 0) {
-      const stamp = readSwimCloudStamp(rest[0]);
-      if (stamp) {
-        swimcloudBadge = stamp.badge;
-        // The same facts the JSON bridge records from the chip tooltips. A
-        // pasted row carries only the chip letters, so the stamp reading is
-        // the one source here. See HistoricalSwim.isExtractedSplit/isUserInputted.
-        stampFlags = {
-          ...(stamp.extractedSplit ? { isExtractedSplit: true } : {}),
-          ...(stamp.userInputted ? { isUserInputted: true as const } : {}),
-        };
-        rest = rest.slice(1);
+    let fields: ReturnType<typeof stampFields>;
+    let meetLabel: string;
+    let date: string;
+    const columns = pastedRowColumns(t, cols);
+    if (columns) {
+      // SwimCloud's own layout: each column is what its header says.
+      meetLabel = columns.meet;
+      date = columns.date;
+      fields = { swimcloudBadge: 'none' };
+      if (columns.stamp) {
+        const stamp = readSwimCloudStamp(columns.stamp);
+        if (stamp) {
+          fields = stampFields(stamp);
+        } else {
+          fields = { swimcloudBadge: 'other' };
+          unreadStamps.push({ raw: t, stamp: columns.stamp, event });
+        }
       }
-    }
-
-    let meetLabel = '';
-    let date = '';
-    for (const c of rest) {
-      if (!date && DATE_RE.test(c)) {
-        date = c;
-      } else if (!meetLabel && c.length > 3 && !DATE_RE.test(c)) {
-        meetLabel = c;
-      }
+    } else {
+      ({ stampFields: fields, meetLabel, date } = textRowFields(cols.slice(2).filter(c => c.length > 0)));
     }
 
     out.push({
@@ -953,12 +1083,11 @@ export function parseSwimCloudPersonalBestsDetailed(
       meetLabel: meetLabel || undefined,
       date: date || undefined,
       source: 'paste',
-      swimcloudBadge,
-      ...stampFlags,
+      ...fields,
     });
   }
 
-  return { swims: enrichWithComputedCut(out, team, division), rejected };
+  return { swims: enrichWithComputedCut(out, team, division), rejected, unreadStamps };
 }
 
 /**
@@ -1121,6 +1250,7 @@ export function parseSwimCloudPasteDetailed(
     // One warning per rejected row, so the count an operator sees is the count of
     // rows that were actually dropped.
     warnings.push(...parsed.rejected.map(implausibleSwimRowWarning));
+    warnings.push(...(parsed.unreadStamps ?? []).map(unreadSwimCloudStampWarning));
     if (swims.some(s => s.timeType === 'LCM' || s.timeType === 'SCM')) {
       warnings.push('LCM/SCM times included — cut comparison uses SCY conversion where applicable');
     }

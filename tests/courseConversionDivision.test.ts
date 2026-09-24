@@ -107,7 +107,10 @@ describe('P0: SwimCloud event labels resolve to a published factor', () => {
   );
 
   it.each(['1 mtr Diving', '3 mtr Diving', '400 Free Relay LCM', '200 Medley Relay SCM', '100 IM LCM', '25 Free SCM'])(
-    'hasConversionFactor(%s) stays false — nothing is published for it',
+    // Course-blind: no CONVERSION_FACTORS key covers these. An SCM 25 or 100 IM
+    // still converts on the NCAA "All other events" row — see
+    // scmAllOtherEventsConversion.test.ts and hasConversionFactorForCourse.
+    'hasConversionFactor(%s) stays false — no factor-table key covers it',
     (label) => {
       expect(hasConversionFactor(label)).toBe(false);
     }

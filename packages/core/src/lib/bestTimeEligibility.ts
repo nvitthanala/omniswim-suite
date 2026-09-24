@@ -103,16 +103,76 @@ export type SwimCloudStampReading = {
   extractedSplit: boolean;
   /** The stamp carries the `U` ("User Inputted") chip. */
   userInputted: boolean;
+  /**
+   * The cut chip the stamp carries, spelled as in
+   * {@link SWIMCLOUD_CUT_CHIP_LABELS}. Absent when it carries none. SwimCloud's
+   * claim, for display only: a cut is decided by the archived tables
+   * (`computedCut`, `cutlineTags.ts`), never by this label.
+   */
+  cutLabel?: string;
+  /** The stamp carries the `R` ("Leadoff") chip: a relay leadoff split. */
+  relayLeadoff?: true;
 };
 
-const EXACT_STAMPS: Record<string, SwimCloudStampReading> = {
+/**
+ * The cut chips SwimCloud is known to print, each seen in a real capture.
+ * A pasted row loses the chip's type, and cut labels end in the flag letters
+ * too (`FTR-18U` is a Futures 18-and-under cut; `5A` a high-school class), so
+ * a cut chip with a flag chip glued on (`NCSAX`) is split only against a
+ * label listed here. A label not listed is never split; see
+ * {@link readSwimCloudStamp}.
+ *
+ * Sources:
+ * - SwimCloud times JSON, chips with `type: "cut"`:
+ *   `tests/fixtures/profile_fastest_times-1330318.json` (`US OPEN`, `D2 B`,
+ *   `WIN JRS`) and `profile_fastest_times-1401610-altitude.json` (`JRS`).
+ * - Pasted exports, stamp column: `hsuroster26-27.txt` (`D2 B`, `NCAA B`,
+ *   `WIN JRS`, `NCSA`, `FTR-18U`, `FTR-19O`, `5A`), `oburoster202627.txt`
+ *   (`YMCA-LC`, `6A`, `C`, and the rest again), and
+ *   `tests/fixtures/swimcloud/blaise_vera_personal_bests.txt` (`D1-B`, `B`).
+ * - `D1-A`: read as the D1 A cut before this list existed; kept.
+ */
+export const SWIMCLOUD_CUT_CHIP_LABELS: readonly string[] = Object.freeze([
+  'D1-A',
+  'D1-B',
+  'B',
+  'D2 B',
+  'NCAA B',
+  'WIN JRS',
+  'JRS',
+  'US OPEN',
+  'NCSA',
+  'FTR-18U',
+  'FTR-19O',
+  'YMCA-LC',
+  '5A',
+  '6A',
+  'C',
+]);
+
+/** The badge each cut label has always had: the D1 labels keep theirs, every other cut is `other`. */
+function cutChipBadge(label: string): SwimCloudBadge {
+  const key = label.toLowerCase();
+  if (key === 'd1-a') return 'd1_a';
+  if (key === 'd1-b' || key === 'b') return 'd1_b';
+  return 'other';
+}
+
+const CUT_CHIP_BY_KEY: ReadonlyMap<string, string> = new Map(
+  SWIMCLOUD_CUT_CHIP_LABELS.map(label => [label.toLowerCase(), label])
+);
+
+/**
+ * Flag chips glued after a cut chip, in the order SwimCloud prints them:
+ * `X` or `U`, then `R` (`XR` and `UR` in the pastes, `["X","R"]` in the JSON).
+ */
+const TRAILING_FLAG_CHIPS = /^([xu])?(r)?$/;
+
+const FLAG_ONLY_STAMPS: Record<string, SwimCloudStampReading> = {
   x: { badge: 'extracted', extractedSplit: true, userInputted: false },
   extracted: { badge: 'extracted', extractedSplit: true, userInputted: false },
   u: { badge: 'user_input', extractedSplit: false, userInputted: true },
   user_input: { badge: 'user_input', extractedSplit: false, userInputted: true },
-  b: { badge: 'd1_b', extractedSplit: false, userInputted: false },
-  'd1-b': { badge: 'd1_b', extractedSplit: false, userInputted: false },
-  'd1-a': { badge: 'd1_a', extractedSplit: false, userInputted: false },
   // A bare `A` is not a cut. SwimCloud's altitude chip is a bare `A` (title
   // "Altitude Adjusted" in the times JSON) and its cut chips name the division
   // (`D2 B`). But the paste has also printed cuts as bare letters (the Blaise
@@ -121,6 +181,36 @@ const EXACT_STAMPS: Record<string, SwimCloudStampReading> = {
   a: { badge: 'other', extractedSplit: false, userInputted: false },
 };
 
+/** A reading for a cut chip, with any flag chips that followed it. */
+function cutChipReading(label: string, flag: 'x' | 'u' | undefined, leadoff: boolean): SwimCloudStampReading {
+  const extractedSplit = flag === 'x';
+  const userInputted = flag === 'u';
+  const badge: SwimCloudBadge = userInputted ? 'user_input' : extractedSplit ? 'extracted' : cutChipBadge(label);
+  return {
+    badge,
+    extractedSplit,
+    userInputted,
+    cutLabel: label,
+    ...(leadoff ? { relayLeadoff: true as const } : {}),
+  };
+}
+
+/**
+ * A cut chip with flag chips glued on (`NCSAX`, `D2 BR`, `FTR-18UR`), or
+ * `null`. The cut part must be a listed label, and exactly one split may fit;
+ * two different fits would be a guess, so they return `null`.
+ */
+function gluedCutChipReading(key: string): SwimCloudStampReading | null {
+  const fits: SwimCloudStampReading[] = [];
+  for (const [labelKey, label] of CUT_CHIP_BY_KEY) {
+    if (!key.startsWith(labelKey) || key.length === labelKey.length) continue;
+    const flags = TRAILING_FLAG_CHIPS.exec(key.slice(labelKey.length));
+    if (!flags) continue;
+    fits.push(cutChipReading(label, flags[1] as 'x' | 'u' | undefined, flags[2] === 'r'));
+  }
+  return fits.length === 1 ? fits[0] : null;
+}
+
 /**
  * Read one stamp as SwimCloud prints it in a pasted row, or as the roster
  * catalog stores it. Returns `null` for text that is not a stamp.
@@ -128,26 +218,39 @@ const EXACT_STAMPS: Record<string, SwimCloudStampReading> = {
  * SwimCloud prints a row's chips with no separator between them: an extracted
  * split of a relay leadoff reads `XR`, a self-reported leadoff `UR`. A token
  * made only of the single-letter chips `X`, `U` and `R`, each at most once, is
- * read chip by chip. A cut label with a chip appended (`D2 BR`, `NCSAX`) is not
- * decoded: cut names end in those letters too (`FTR-18U`), so the split point
- * is not provable.
+ * read chip by chip.
+ *
+ * A cut chip is read against {@link SWIMCLOUD_CUT_CHIP_LABELS}, alone
+ * (`D2 B`, `WIN JRS`) or with flag chips glued on (`D2 BR`, `NCSAX`,
+ * `FTR-18UR`). Only a listed label is split: cut names end in the flag
+ * letters too (`FTR-18U`), so for an unlisted label the split point is not
+ * provable and the answer is `null`. A caller that knows the text sits in the
+ * stamp column reports that `null` rather than guessing.
  */
 export function readSwimCloudStamp(raw: string | null | undefined): SwimCloudStampReading | null {
   const key = String(raw ?? '').trim().toLowerCase();
   if (!key) return null;
-  const exact = EXACT_STAMPS[key];
-  if (exact) return { ...exact };
+  const flagOnly = FLAG_ONLY_STAMPS[key];
+  if (flagOnly) return { ...flagOnly };
+  const cut = CUT_CHIP_BY_KEY.get(key);
+  if (cut) return cutChipReading(cut, undefined, false);
   if (/^d1-?[ab]$/.test(key)) {
-    return { badge: key.endsWith('a') ? 'd1_a' : 'd1_b', extractedSplit: false, userInputted: false };
+    return cutChipReading(key.endsWith('a') ? 'D1-A' : 'D1-B', undefined, false);
   }
-  if (/^(r|rcon|pb)$/.test(key)) return { badge: 'other', extractedSplit: false, userInputted: false };
+  if (key === 'r') return { badge: 'other', extractedSplit: false, userInputted: false, relayLeadoff: true };
+  if (/^(rcon|pb)$/.test(key)) return { badge: 'other', extractedSplit: false, userInputted: false };
   if (/^[xur]{2,3}$/.test(key) && new Set(key).size === key.length) {
     const extractedSplit = key.includes('x');
     const userInputted = key.includes('u');
     const badge: SwimCloudBadge = userInputted ? 'user_input' : 'extracted';
-    return { badge, extractedSplit, userInputted };
+    return {
+      badge,
+      extractedSplit,
+      userInputted,
+      ...(key.includes('r') ? { relayLeadoff: true as const } : {}),
+    };
   }
-  return null;
+  return gluedCutChipReading(key);
 }
 
 /**

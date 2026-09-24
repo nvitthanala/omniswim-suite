@@ -390,8 +390,97 @@ export function resolveConversionFactorKey(event: string): string | null {
   return factorKeyForSpelling(canonical) ?? null;
 }
 
-/** True when a metric swim in this event can be expressed in SCY at all. */
+/**
+ * True when `CONVERSION_FACTORS` covers this event, so a swim in it converts
+ * from **either** metric course.
+ *
+ * Course-blind on purpose, and unchanged in meaning. Since 2026-09-24 an SCM
+ * swim can convert without a `CONVERSION_FACTORS` key (the NCAA "All other
+ * events" row covers a 100 IM or a 25), while an LCM swim still cannot. Ask
+ * {@link hasConversionFactorForCourse} when the course is known.
+ */
 export function hasConversionFactor(event: string): boolean {
+  return resolveConversionFactorKey(event) != null;
+}
+
+/** A canonical individual swim: a distance, then one of the five strokes. */
+const INDIVIDUAL_SWIM_EVENT = /^(\d+) (?:Freestyle|Backstroke|Breaststroke|Butterfly|Individual Medley)$/;
+
+/**
+ * The canonical individual swim `event` names, or `null` for a relay, a dive,
+ * or a label that names no stroke and distance.
+ *
+ * The distance must be a whole number of 25 m lengths: every race swum in a
+ * 25 m pool is. That is arithmetic about the pool, not a list of events.
+ */
+function individualSwimEventForScm(event: string): string | null {
+  const base = stripRelaySplitSuffix(String(event ?? ''));
+  if (!base || /\brelay\b/i.test(base)) return null;
+  const canonical = normalizeEventForCutline(base);
+  const match = INDIVIDUAL_SWIM_EVENT.exec(canonical);
+  if (!match) return null;
+  const distance = Number.parseInt(match[1], 10);
+  if (!(distance > 0) || distance % 25 !== 0) return null;
+  return canonical;
+}
+
+/**
+ * How an SCM swim reaches the NCAA SCM table.
+ *
+ * - `factor_table` — a `CONVERSION_FACTORS` key covers the event. The row is
+ *   the one {@link ncaaScmConversionRow} gives it, exactly as before
+ *   2026-09-24.
+ * - `all_other_events` — no key covers the event, and it is an individual
+ *   swim. The NCAA table's fourth row is headed "All other events", and it
+ *   covers this event by that wording (user decision, 2026-09-24). Examples:
+ *   the 100 IM and every 25.
+ */
+export type NcaaScmConversionCoverage = 'factor_table' | 'all_other_events';
+
+export type NcaaScmConversionEvent = {
+  /**
+   * The `CONVERSION_FACTORS` key when `coverage` is `factor_table`. The
+   * canonical event (`normalizeEventForCutline`) when it is
+   * `all_other_events`: there is no key to name.
+   */
+  factorEvent: string;
+  row: NcaaScmConversionRow;
+  coverage: NcaaScmConversionCoverage;
+};
+
+/**
+ * The NCAA SCM row an SCM swim in `event` converts with, or `null` when the
+ * NCAA table covers nothing about it (a relay, a dive, a label with no stroke).
+ *
+ * SCM only. No governing body publishes an LCM factor, so an LCM swim outside
+ * `CONVERSION_FACTORS` stays unconverted: absent, not guessed.
+ */
+export function ncaaScmConversionEvent(event: string): NcaaScmConversionEvent | null {
+  const key = resolveConversionFactorKey(event);
+  if (key) return { factorEvent: key, row: ncaaScmConversionRow(key), coverage: 'factor_table' };
+  const individual = individualSwimEventForScm(event);
+  if (!individual) return null;
+  return { factorEvent: individual, row: 'allOtherEvents', coverage: 'all_other_events' };
+}
+
+/**
+ * True when a swim in `event`, recorded in `course`, can be stated in SCY.
+ *
+ * - `SCY` — always: the time is already yards.
+ * - `SCM` — when the NCAA SCM table covers the event, including through its
+ *   "All other events" row (see {@link ncaaScmConversionEvent}).
+ * - `LCM` — only when `CONVERSION_FACTORS` covers the event.
+ *
+ * A relay in a metric course is `false`: no relay factor is published. The
+ * converters pass a relay through unchanged, and callers handle that first.
+ */
+export function hasConversionFactorForCourse(
+  event: string,
+  course: 'SCY' | 'SCM' | 'LCM'
+): boolean {
+  if (course === 'SCY') return true;
+  if (/\brelay\b/i.test(String(event ?? ''))) return false;
+  if (course === 'SCM') return ncaaScmConversionEvent(event) != null;
   return resolveConversionFactorKey(event) != null;
 }
 
@@ -503,7 +592,10 @@ export function ncaaScmConvertedSeconds(seconds: number, factor: number): number
  * - `lcm_factor_table` — the gendered LCM factor in `CONVERSION_FACTORS`
  *   (Colorado Time Systems; indicative only). Rounded to hundredths.
  * - `ncaa_scm_table` — an official NCAA SCM table, chosen by division.
- *   Truncated to hundredths, as the NCAA procedure requires.
+ *   Truncated to hundredths, as the NCAA procedure requires. `factorEvent` is
+ *   the `CONVERSION_FACTORS` key when one covers the event; for an event only
+ *   the "All other events" row covers (a 100 IM, a 25) it is the canonical
+ *   event, and `row` is `'allOtherEvents'`. See {@link ncaaScmConversionEvent}.
  */
 export type ScyConversionBasis =
   | {
@@ -564,39 +656,31 @@ function convertTimeWithBasis(
 
   const seconds = convertTimeToSeconds(timeStr);
   const baseEvent = stripRelaySplitSuffix(event);
-  const factorEvent = resolveConversionFactorKey(baseEvent);
 
   // No published factor means the swim cannot be expressed in SCY. Substituting
   // another event's factor (this used to silently borrow 50 Freestyle's) invents a
   // competition time that looks real — the exact failure this codebase forbids.
   // Raise instead, so a missing factor is added from a source rather than guessed.
-  if (!factorEvent) {
-    throw new Error(
+  const noFactor = () =>
+    new Error(
       `No published ${type}→SCY conversion factor for "${baseEvent}". ` +
         `Add the event to CONVERSION_FACTORS from a primary source rather than converting it with another event's factor.`
     );
-  }
-  const factors = CONVERSION_FACTORS[factorEvent];
-
-  if (type === 'LCM') {
-    const factor = gender === Gender.MEN ? factors.men_lcm : factors.women_lcm;
-    return {
-      time: formatSecondsToTime(seconds * factor),
-      basis: { method: 'lcm_factor_table', factor, factorEvent },
-    };
-  }
 
   if (type === 'SCM') {
+    // The NCAA table covers every individual event: three distance rows, then
+    // "All other events". A 100 IM or a 25 takes that last row by its wording.
+    const scm = ncaaScmConversionEvent(baseEvent);
+    if (!scm) throw noFactor();
     const choice = scmConversionTableFor(conversionDivision(options));
-    const row = ncaaScmConversionRow(factorEvent);
-    const factor = choice.table.factors[row];
+    const factor = choice.table.factors[scm.row];
     return {
       time: formatSecondsToTime(ncaaScmConvertedSeconds(seconds, factor)),
       basis: {
         method: 'ncaa_scm_table',
         factor,
-        factorEvent,
-        row,
+        factorEvent: scm.factorEvent,
+        row: scm.row,
         tableId: choice.table.id,
         division: choice.division,
         reason: choice.reason,
@@ -604,8 +688,23 @@ function convertTimeWithBasis(
     };
   }
 
-  // Not a course the type allows. Kept exactly as before (the time is
-  // reformatted with no factor), and now said out loud in the basis.
+  if (type === 'LCM') {
+    // No governing body publishes an LCM factor. `CONVERSION_FACTORS` holds an
+    // indicative one per event, and an event it does not hold stays absent.
+    const factorEvent = resolveConversionFactorKey(baseEvent);
+    if (!factorEvent) throw noFactor();
+    const factors = CONVERSION_FACTORS[factorEvent];
+    const factor = gender === Gender.MEN ? factors.men_lcm : factors.women_lcm;
+    return {
+      time: formatSecondsToTime(seconds * factor),
+      basis: { method: 'lcm_factor_table', factor, factorEvent },
+    };
+  }
+
+  // Not a course the type allows. Kept exactly as before: it still raises for
+  // an event with no factor, and otherwise the time is reformatted with no
+  // factor, now said out loud in the basis.
+  if (!resolveConversionFactorKey(baseEvent)) throw noFactor();
   return {
     time: formatSecondsToTime(seconds),
     basis: { method: 'identity', reason: 'course_not_recognized' },
@@ -623,8 +722,11 @@ function convertTimeWithBasis(
  *   division (no options, an unmapped team, `division: null`) the Rules Book
  *   table applies — see {@link scmConversionTableFor}. Use
  *   {@link convertSwimToSCYDetailed} when the caller must show which table.
+ *   An individual event with no `CONVERSION_FACTORS` key (a 100 IM, a 25)
+ *   takes the table's "All other events" row — see {@link ncaaScmConversionEvent}.
  *
- * Throws when no published factor covers the event.
+ * Throws when no published factor covers the event: every LCM event outside
+ * `CONVERSION_FACTORS`, and every SCM relay, dive or unreadable label.
  */
 export function convertToSCY(
   timeStr: string,

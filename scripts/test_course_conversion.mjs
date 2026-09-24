@@ -65,8 +65,18 @@ import { NSISC_PRESET_SETTINGS } from '../packages/core/src/lib/scoringDefaults.
     /No published LCM→SCY conversion factor/,
     'an unpublished event must raise, not borrow another event\'s factor'
   );
+  // An LCM 100 IM stays unconverted: no LCM factor is published for it.
   assert.throws(
-    () => convertToSCY('1:02.00', '100 Individual Medley', Gender.MEN, 'SCM'),
+    () => convertToSCY('1:02.00', '100 Individual Medley', Gender.MEN, 'LCM'),
+    /No published LCM→SCY conversion factor/
+  );
+  // An SCM 100 IM takes the NCAA "All other events" row (user decision
+  // 2026-09-24): 62.00 x 0.896 = 55.552, truncated to 55.55. That row is
+  // published, so this is not a borrowed factor.
+  assert.equal(convertToSCY('1:02.00', '100 Individual Medley', Gender.MEN, 'SCM'), '55.55');
+  // An SCM event that names no stroke still raises.
+  assert.throws(
+    () => convertToSCY('2:10.00', '200 Sidestroke', Gender.MEN, 'SCM'),
     /No published SCM→SCY conversion factor/
   );
 

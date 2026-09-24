@@ -31,6 +31,7 @@ import {
   convertSwimToSCYDetailed,
   convertTimeToSeconds,
   formatSecondsToTime,
+  ncaaScmConversionEvent,
   type ScyConversionBasis,
   type ScyConversionOptions,
 } from './utils';
@@ -142,6 +143,9 @@ export type ScyEquivalentSwim = {
   /**
    * The `CONVERSION_FACTORS` key that produced it. Provenance, so a caller can
    * see which published factor was applied rather than trusting a number.
+   * For an SCM swim only the NCAA "All other events" row covers (a 100 IM, a
+   * 25), there is no key: this is the canonical event, and `basis.row` is
+   * `'allOtherEvents'`.
    */
   factorEvent: string;
   /** The course the swim was recorded in. Never `'SCY'` for a converted result. */
@@ -212,7 +216,12 @@ export function scyEquivalentForCutline(
       basis: { method: 'identity', reason: 'recorded_in_scy' },
     };
   }
-  const factorEvent = conversionFactorEventKey(canonical);
+  // An SCM swim with no factor-table key still converts when the NCAA "All
+  // other events" row covers it (user decision, 2026-09-24). LCM has no such
+  // row, so an LCM swim outside the table stays unconverted.
+  const factorEvent =
+    conversionFactorEventKey(canonical) ??
+    (swimCourse === 'SCM' ? ncaaScmConversionEvent(canonical)?.factorEvent ?? null : null);
   if (!factorEvent) return null;
   const g = genderKey(gender) === 'Women' ? Gender.WOMEN : Gender.MEN;
   const converted = convertSwimToSCYDetailed(

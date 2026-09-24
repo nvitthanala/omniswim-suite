@@ -4,8 +4,9 @@
  * Compare known PDF relay splits vs calculated splits from individual bests / history.
  */
 
-import { Gender, SwimmerResult, Workspace } from '../types';
+import { Gender, RelayLegStroke, SwimmerResult, Workspace } from '../types';
 import { getAthleteProfile } from './athleteHistory';
+import { swimEventIdentity } from './bestTimeEligibility';
 import { mergeScoringSettings } from './scoringDefaults';
 import {
   relayLegRequirements,
@@ -48,6 +49,26 @@ export type RelaySplitComparison = {
  * own source so the caller can mark it, and it never enters
  * `bestByEvent`, so it is never ranked, cut-tagged or planned as an entry.
  */
+const LEG_STROKE_EVENT: Record<RelayLegStroke, string> = {
+  back: 'Backstroke',
+  breast: 'Breaststroke',
+  fly: 'Butterfly',
+  free: 'Freestyle',
+};
+
+/**
+ * True when `event` is the individual event one leg swims: the leg's own
+ * distance and stroke.
+ *
+ * Compared by event identity, not by substring. The substring test this
+ * replaces read `1000 Freestyle` as a 100 free leg and `500 Free SCY` as a
+ * 50 free leg, because `"1000"` contains `"100"` and `"500"` contains `"50"`.
+ * A HyTek label (`Event 4 Men 1000 Yard Freestyle`) failed the same way.
+ */
+function isLegEvent(event: string, legDistance: number, stroke: RelayLegStroke): boolean {
+  return swimEventIdentity(event) === swimEventIdentity(`${legDistance} ${LEG_STROKE_EVENT[stroke]}`);
+}
+
 function findCalculatedSplit(
   workspace: Workspace,
   team: string,
@@ -57,17 +78,12 @@ function findCalculatedSplit(
   legIndex: number
 ): { time: string; source: 'history' | 'lineup' | 'extracted-split' } | null {
   const req = relayLegRequirements(relayEvent, legIndex);
+  const isThisLeg = (event: string) => isLegEvent(event, req.legDistanceYards, req.stroke);
   const settings = mergeScoringSettings(workspace.scoringSettings, {
     conference: workspace.conference,
   });
   const profile = getAthleteProfile(workspace, team, gender, name, settings);
-  const matchEvent = Object.keys(profile.bestByEvent).find(ev => {
-    const lower = ev.toLowerCase();
-    return (
-      lower.includes(String(req.legDistanceYards)) &&
-      req.keywords.some(kw => lower.includes(kw))
-    );
-  });
+  const matchEvent = Object.keys(profile.bestByEvent).find(isThisLeg);
   if (matchEvent && profile.bestByEvent[matchEvent]) {
     return { time: profile.bestByEvent[matchEvent].time, source: 'history' };
   }
@@ -76,20 +92,13 @@ function findCalculatedSplit(
       p.team === team &&
       p.gender === gender &&
       normalizeSwimmerName(p.name) === normalizeSwimmerName(name) &&
-      req.keywords.some(kw => p.event.toLowerCase().includes(kw)) &&
-      p.event.includes(String(req.legDistanceYards))
+      isThisLeg(p.event)
   );
   if (plan) return { time: plan.time, source: 'lineup' };
 
   // Last resort. Matched exactly as bestByEvent is, so a leg only ever takes a
   // placeholder at its own distance and stroke.
-  const extractedEvent = Object.keys(profile.extractedByEvent).find(ev => {
-    const lower = ev.toLowerCase();
-    return (
-      lower.includes(String(req.legDistanceYards)) &&
-      req.keywords.some(kw => lower.includes(kw))
-    );
-  });
+  const extractedEvent = Object.keys(profile.extractedByEvent).find(isThisLeg);
   if (extractedEvent && profile.extractedByEvent[extractedEvent]) {
     return { time: profile.extractedByEvent[extractedEvent].time, source: 'extracted-split' };
   }
