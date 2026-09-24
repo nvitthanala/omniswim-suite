@@ -1,6 +1,6 @@
 {
   "purpose": "Progress log for plans/2026-09-22/01-CONVERSION-AND-IMPROVEMENTS-PLAN.md. Canonical state; survives rate limits and compaction. Update after every phase.",
-  "updatedAt": "2026-09-22",
+  "updatedAt": "2026-09-24",
   "branch": "nvitthanala/production-readiness",
   "baseline": {
     "commit": "98bb59d8",
@@ -14,7 +14,11 @@
     "projections": "Converted recruit time vs the real published SCY cut, labelled as an estimate. No invented future cuts.",
     "userInputtedTimes": "Import, badge, never a best (like extracted splits).",
     "dataLossGuard": "Warn and offer backup; never block a deliberate clear.",
-    "divisionAware": "Identify each team division (teamDivisions.ts) and use that division conversion table. Altitude: NCAA official table, the going standard, even though statistically imperfect."
+    "divisionAware": "Identify each team division (teamDivisions.ts) and use that division conversion table. Altitude: NCAA official table, the going standard, even though statistically imperfect.",
+    "altitudeRelays": "Keep: 4x the leg-distance figure; 200 relay (4x50) gets none.",
+    "altitude400yIM": "User decision 2026-09-24: a 400 y IM uses the 500 y/400 m row. NOT stated by the NCAA chart; label it as a user decision in code.",
+    "scmAllOtherEvents": "Yes: 100 IM and 25s convert with the NCAA all-other-events row (0.896 Rules Book, 0.906 D1).",
+    "naiaMeters": "NAIA metric swims are judged against NAIA published meter standards directly (exact, not an estimate)."
   },
   "sources": {
     "scmD2": "data/cutlines/sources/2026-27D2MSW_QualStandards.pdf p2 'Conversions' (states it reflects NCAA Rules Book Appendix A-2)",
@@ -25,16 +29,18 @@
   },
   "phases": {
     "P0": {
-      "status": "in-progress (executor, dispatched with P1)",
+      "status": "done faeb4956",
       "what": "Normalize SwimCloud labels ('50 Free LCM') so lookupConversionFactors finds them.",
-      "evidence": "Probe 2026-09-22: hasConversionFactor('50 Free LCM') === false; convertSwimToSCY throws. shared.ts:181 skips the swim silently."
+      "evidence": "Probe 2026-09-22: hasConversionFactor('50 Free LCM') === false; convertSwimToSCY throws. shared.ts:181 skips the swim silently.",
+      "result": "convertSwimToSCYDetailed/ScyConversionBasis; NCAA_SCM_CONVERSION_TABLES; scmConversionTableFor(division); truncation. 1180 vitest green, lint clean, build ok."
     },
     "P1": {
-      "status": "in-progress (executor)",
-      "what": "NCAA SCM factors by division: Rules Book default 0.896/1.143/1.003, D1 override 0.906/1.153/1.013. Truncate to hundredths."
+      "status": "done faeb4956",
+      "what": "NCAA SCM factors by division: Rules Book default 0.896/1.143/1.003, D1 override 0.906/1.153/1.013. Truncate to hundredths.",
+      "result": "convertSwimToSCYDetailed/ScyConversionBasis; NCAA_SCM_CONVERSION_TABLES; scmConversionTableFor(division); truncation. 1180 vitest green, lint clean, build ok."
     },
     "P2": {
-      "status": "unblocked: fixture captured, ready to brief after P0+P1 land",
+      "status": "done 850d8957",
       "what": "NCAA altitude table in core; parse SwimCloud 'A' tag. First capture a live swim carrying 'A' (try a Wyoming or Air Force swimmer) to learn whether eventtime is actual or adjusted.",
       "evidence": {
         "fixture": "tests/fixtures/profile_fastest_times-1401610-altitude.json (35 rows, saved 2026-09-22 via Orca embedded browser, same-origin fetch after Cloudflare cleared)",
@@ -46,28 +52,35 @@
           "Label A-tagged times as altitude-adjusted everywhere; the swum time is not available from this endpoint.",
           "Apply the NCAA table only to times known to be swum at altitude and NOT already adjusted (e.g. PDF/manual imports with a known elevation)."
         ]
-      }
+      },
+      "result": "NCAA_ALTITUDE_ADJUSTMENT_TABLE + lib/altitude.ts (ncaaAltitudeAdjustment, adjustSwimForAltitude throws on isAltitudeAdjusted). Bridge sets isAltitudeAdjusted from title Altitude Adjusted."
     },
     "P3": {
-      "status": "implemented, reviewed; awaiting combined suite + commit",
+      "status": "done 1ac6fb1e",
       "what": "Warn when a save drops a gender's results sharply (e.g. 550 -> 0); offer restore from data/backups.",
       "result": "apps/shell/lib/dataLossGuard.ts (isSharpDrop: prev>=20 && (next===0 || next<prev/2)); PUT /api/workspaces/:id takes a pre-shrink backup then saves; response.dataLossWarning; apps/shell/src/lib/dataLossWatcher.ts shows a persistent toast with Restore. Toast.push gained optional {persistent, action}. +23 tests (worker run: 1138 green)."
     },
     "P4": {
-      "status": "planned",
-      "what": "HistoricalSwim.isUserInputted from the SwimCloud 'U' tag; excluded from bestByEvent, cut tags and entries, like isExtractedSplit."
+      "status": "done 850d8957",
+      "what": "HistoricalSwim.isUserInputted from the SwimCloud 'U' tag; excluded from bestByEvent, cut tags and entries, like isExtractedSplit.",
+      "result": "isUserInputted; excluded from bests/cuts/entries/projections; mergeHistoryIndex keeps a separate lane; cut state user_inputted."
     },
     "P5": {
-      "status": "planned",
-      "what": "Season vs lifetime toggle, using seasonId on each swim. Display filter only."
+      "status": "done (see log)",
+      "what": "Season vs lifetime toggle, using seasonId on each swim. Display filter only.",
+      "fieldsReady": "HistoricalSwim.seasonId and retrievedAt added in commit (see log)",
+      "result": "athleteHistorySeasonView.ts; Lifetime/This season toggle in AthleteHistorySection; label from swim dates; excluded count."
     },
     "P6": {
-      "status": "planned",
-      "what": "Badges for R (leadoff), U (self-reported), X (extracted), A (altitude)."
+      "status": "done (see log)",
+      "what": "Badges for R (leadoff), U (self-reported), X (extracted), A (altitude).",
+      "result": "packages/ui ProvenanceBadges + buildProvenanceBadges/describeConversionBasis; wired in AthleteHistorySection, AthleteEntriesSection, AthleteCreditedSwimsRow; badgeLabel fix; drawer paste-preview guard via isRankableSwim."
     },
     "P7": {
-      "status": "planned",
-      "what": "Show when each swimmer's bests were last pulled (capture retrievedAt)."
+      "status": "done (see log)",
+      "what": "Show when each swimmer's bests were last pulled (capture retrievedAt).",
+      "fieldsReady": "HistoricalSwim.seasonId and retrievedAt added in commit (see log)",
+      "result": "Bests pulled <date> from max retrievedAt."
     },
     "P8": {
       "status": "planned",
@@ -84,6 +97,37 @@
     "P11": {
       "status": "planned",
       "what": "times_by_event per swimmer on demand only (about 15x the requests of the bests pass)."
+    },
+    "P1b": {
+      "status": "done 850d8957",
+      "what": "importHistoryToRoster stamps timeType SCY on converted swims, so a recruit built from an LCM/SCM swim looks like a real SCY swim downstream. Keep the estimate flag through.",
+      "result": "convertedFrom: ScyConversionProvenance on Recruit/PlannedSwimEntry/SwimmerResult/AthleteEventBest; cut tags -> converted_estimate; catalog no longer stamps computedCut on metric times."
+    },
+    "P12": {
+      "status": "done 2f9889e6",
+      "what": "Correctness sweep from P1b/P2/P4 executor findings: (1) extracted splits leak into history-import entry candidates, cross-course SCY best, theory history bests, mergeHistoryIndex replacement, AthleteHistorySection cut tag; (2) raw-label best picking: 50 Free SCY vs 50 Freestyle two entries; theory 100 Back SCY vs 100 Backstroke never match; (3) paste: U stamp -> swimcloudBadge user_input not isUserInputted; bare A stamp mapped to D1 A cut collides with altitude A; (4) catalog bestTimesByEvent/buildCategorizedScoringInputs do not exclude U.",
+      "result": "bestTimeEligibility.ts: isRankableSwim (flags + badge), swimEventIdentity; cut state extracted_split; bare A -> other; XR/UR decode; catalog excludes X/U. 1281 vitest.",
+      "storedDataNotRepaired": "HSU plan: Fabio Capocci 100 Back 48.15 built from U swim; OBU 10 recruit rows from X/U; 13 HSU + 2 OBU stored bare-A rows keep d1_a; 2 HSU + 4 OBU XR/UR rows marked none. Needs re-import or a repair tool (user decision)."
+    },
+    "P13": {
+      "status": "done except NAIA (stopped: sheet never states SCM/LCM; lead: NAIA 2025-26 Swimming & Diving Coaches Manual, not archived)",
+      "what": "Implement the four 2026-09-24 decisions: altitude 400y IM row (user decision), SCM all-other-events coverage, NAIA meter-standard comparison (check data/cutlines for NAIA meter columns; add from the archived NAIA PDF with provenance if absent)."
+    },
+    "P14": {
+      "status": "done",
+      "what": "Core defects from P12 report: (a) meet results never reach athlete profile (HyTek labels fail isEventOffered; getAthleteProfile returns {} for a Delta State swimmer); (b) multi-word cut chips (D2 B, NCAA B, WIN JRS) become meetLabel, NCSAX not decoded; (c) mergeHistoryIndex keeps the LOWER diving score; (d) season trends key raw label and mix courses. Excluded: buildCategorizedScoringInputs sprint bias (design question)."
+    },
+    "P15": {
+      "status": "needs user OK (changes SCY scoring)",
+      "what": "relayLegMatching.ts eventMatchesStrokeDistance substring bug (1000 contains 100) feeds simulateRoster and resolveClockHoldTime: a 1000 Free can stand in for a 100 split on the scoring path."
+    },
+    "P16": {
+      "status": "planned (UI)",
+      "what": "Compact display of HyTek profile labels in TeamRosterPanel; course column on analytics page; show 400y IM altitude user-decision statement; optional structured unreadStamps list in import panels."
+    },
+    "P17": {
+      "status": "needs user decision",
+      "what": "Stored-data repair: rows saved before the fixes (U/X-built recruit rows and plans, bare-A d1_a badges, D2 B meetLabels, NCSAX unflagged). Re-import vs a one-time reviewed repair tool."
     }
   },
   "log": [
@@ -91,6 +135,25 @@
     "2026-09-22 user approved factors; dispatched executor(P0+P1, packages/core + IndRelayManagementView) and worker(P3, apps/shell + save UI) in parallel. Orchestrator does P2 live altitude probe meanwhile.",
     "2026-09-22 P2 probe: Wyoming roster and API both 403 (Cloudflare) to curl. Stopped; asked user for a browser-saved fixture.",
     "2026-09-22 P3 worker done. Orchestrator review: watcher clones response and swallows errors; push is stable; restore uses same-origin fetch like all workspace calls. Brief error noted: 550->300 does not meet the <half rule; worker kept the rule.",
-    "2026-09-22 P2 evidence captured: SwimCloud A = Altitude Adjusted; JSON holds the adjusted time (4:07.11) while the swim was 4:12.11; diff 5.00 = NCAA class II 400m."
+    "2026-09-22 P2 evidence captured: SwimCloud A = Altitude Adjusted; JSON holds the adjusted time (4:07.11) while the swim was 4:12.11; diff 5.00 = NCAA class II 400m.",
+    "2026-09-22 P0+P1 executor done; orchestrator verified 1180 green, lint, build; committed 1ac6fb1e (P3) and faeb4956 (P0+P1). Dispatched executor for P1b+P2+P4.",
+    "2026-09-22 executor (P1b+P2+P4) hit the weekly limit (HTTP 429, resets 2026-09-24 11am CT) after writing code, before its tests. Partial tree: 22 files, +654/-70, new packages/core/src/lib/altitude.ts; lint clean; 1180 existing tests green; no new tests yet.",
+    "2026-09-24 quota reset per user. Resuming the same executor to finish P1b+P2+P4 with tests.",
+    "2026-09-24 P1b+P2+P4 verified by orchestrator (lint, 1233 vitest, build, 84 script tests incl. playwright) and committed 850d8957. Dispatched P12 correctness sweep (executor). P5-P7 UI waits for P12 (shared manager components).",
+    "2026-09-24 user answered 4 rule questions; recorded as P13.",
+    "2026-09-24 P12 verified (lint, 1281, build, 84 scripts) and committed 2f9889e6. Orchestrator added HistoricalSwim.seasonId/retrievedAt (1282 green) for P5/P7.",
+    "2026-09-24 dispatched in parallel: executor P13+P14 (packages/core+tests only) and worker P5+P6+P7 plus import-preview mislabel and drawer X/U guard (manager/ui/matrix+tests only).",
+    "2026-09-24 both agents (P13+P14 executor, P5-P7 worker) hit the 5h session limit while still exploring; no code changes left behind (tree clean, 1282 green). Resumed both after the reset.",
+    "2026-09-24 worker P5-P7 verified (lint 0, 1315 vitest incl. in-progress executor tests, build ok) and committed UI files only. Executor P13+P14 still running.",
+    "2026-09-24 P13+P14 verified (lint 0, 1372 vitest, build, 84 scripts; script-test edits reviewed: strengthened) and committed."
+  ],
+  "executorFollowUpsNotTaken": [
+    "raw-label best picking: paste 50 Freestyle and JSON 50 Free SCY give two bestByEvent entries (pre-existing)",
+    "100 IM and 25s in SCM have no factor (NCAA all-other row would cover them) - user decision",
+    "NAIA meter-standard direct comparison not built",
+    "D1 table is 2025-26; refresh when 2026-27 D1 sheet is archived"
+  ],
+  "behaviourChanges": [
+    "On meet-loaded workspaces the lineup optimizers now propose individual entries for meet athletes (their profiles used to be empty). Never-loses guard still applies."
   ]
 }
