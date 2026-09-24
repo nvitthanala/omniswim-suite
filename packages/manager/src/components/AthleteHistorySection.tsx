@@ -15,6 +15,7 @@ import { Button, CutlineNearMissChip, CutlineTag } from '@omniswim/ui';
 import { Gender, HistoricalSwim, Workspace } from '@omniswim/core/types';
 import { ALL_PLAN_EVENTS } from '@omniswim/core/lib/eventCatalog';
 import { buildCutlineTagForTeam } from '@omniswim/core/lib/cutlineTags';
+import { isExtractedSplitSwim, isUserInputtedSwim } from '@omniswim/core/lib/bestTimeEligibility';
 import { compactEventTitleAttr, formatCompactEventLabel } from '@omniswim/core/lib/utils';
 import type { ScorerRosterRow } from '@omniswim/core/lib/scorerRoster';
 import {
@@ -147,8 +148,11 @@ export default function AthleteHistorySection({ rows, athlete, gender, editable,
               event: row.event,
               team: athlete.team,
               swimCourse: (row.timeType as TimeType) ?? 'SCY',
-              // A self-reported (SwimCloud "U") time is never judged.
-              userInputted: row.isUserInputted === true,
+              // Neither a self-reported (SwimCloud "U") time nor an extracted
+              // split ("X") is a result, so neither is judged. Both predicates
+              // also read a pasted row's badge.
+              userInputted: isUserInputtedSwim(row),
+              extractedSplit: isExtractedSplitSwim(row),
             });
             return (
               <li key={rowKey} className="flex items-center gap-2 text-ui-body">

@@ -186,6 +186,8 @@ export function* convertedHistorySwims(
     if (/\brelay\b/i.test(s.event)) continue;
     // A self-reported time is never a best, so it is never projected: not as
     // an event best and not as a relay-leg time. See HistoricalSwim.isUserInputted.
+    // An extracted split IS projected, because a relay leg may fall back on it;
+    // every best-picking caller drops it with `isRankableSwim`.
     if (isUserInputtedSwim(s)) continue;
     const timeType = s.timeType ?? 'SCY';
     // No published factor → the swim has no SCY equivalent. These are non-program

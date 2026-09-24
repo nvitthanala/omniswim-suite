@@ -38,7 +38,30 @@ import {
   type AthleteAliasResolver,
 } from './athleteAliases';
 import type { CatalogAthlete, CatalogEventTime, CatalogTeamRoster } from './rosterCatalog';
-import { bestTimesByEvent } from './rosterCatalog';
+import { bestTimesByEvent, bestTimesByEventInLane } from './rosterCatalog';
+import {
+  bestTimeLane,
+  isRankableSwim,
+  readSwimCloudStamp,
+  swimEventIdentity,
+  type BestTimeLane,
+} from './bestTimeEligibility';
+
+// The best-time rules live in one leaf module so every reader shares them.
+// Re-exported here because this is where callers already import them from.
+export {
+  bestTimeLane,
+  isExtractedSplitSwim,
+  isRankableSwim,
+  isRankableSwimCloudStamp,
+  isSameSwimEvent,
+  isUserInputtedSwim,
+  readSwimCloudStamp,
+  swimEventIdentity,
+  type BestTimeLane,
+  type BestTimeProvenance,
+  type SwimCloudStampReading,
+} from './bestTimeEligibility';
 
 function swimKey(name: string, team: string, gender: Gender, event: string): string {
   return `${normalizeSwimmerName(name)}|${team}|${gender}|${event}`;
@@ -70,15 +93,6 @@ export function buildHistoryFromWorkspace(workspace: Workspace): HistoricalSwim[
 }
 
 /**
- * The swim is self-reported (SwimCloud `U`), not a meet result. Such a swim is
- * never a best: every reader that picks a best, a cut, an entry or a
- * projection skips it. See {@link HistoricalSwim.isUserInputted}.
- */
-export function isUserInputtedSwim(swim: Pick<HistoricalSwim, 'isUserInputted'>): boolean {
-  return swim.isUserInputted === true;
-}
-
-/**
  * The marks a profile best carries onto a planned entry or recruit row written
  * from it: `convertedFrom` (the time is an SCY estimate from a metric swim) and
  * `isAltitudeAdjusted`. Empty for an ordinary yards best. Spread it into
@@ -94,6 +108,11 @@ export function eventBestTimeMarks(
   };
 }
 
+/** The history-merge key suffix for a lane. A result keys with no suffix, as it always has. */
+function mergeLaneSuffix(lane: BestTimeLane): string {
+  return lane === 'result' ? '' : `|${lane}`;
+}
+
 export function mergeHistoryIndex(
   existing: HistoricalSwim[],
   incoming: HistoricalSwim[]
@@ -102,11 +121,18 @@ export function mergeHistoryIndex(
   for (const s of [...existing, ...incoming]) {
     // Best per event PER COURSE: an actual SCY swim and its LCM/SCM counterparts are
     // distinct facts — the cross-course arbitrage view needs both to compare.
-    // A self-reported time keeps its own lane on top of that. It is not a result,
-    // so it must not evict a slower real swim (which would leave the swimmer with
-    // no best at all), and a real swim must not evict it (it stays stored and
-    // visible). Every other swim keys exactly as before.
-    const lane = isUserInputtedSwim(s) ? '|user_inputted' : '';
+    // A self-reported time and an extracted split each keep their own lane on
+    // top of that. Neither is a result, so neither may evict a slower real swim
+    // (which would leave the swimmer with no best at all), and a real swim must
+    // not evict either (both stay stored and visible). Every other swim keys
+    // exactly as before.
+    //
+    // The event half of the key is still the raw label, on purpose. A HyTek
+    // meet label must not fold into a history label here: the profile reads
+    // only history labels, so a faster meet row that won the fold would take
+    // the swimmer's best with it. Every reader that picks a best folds labels
+    // itself (see swimEventIdentity).
+    const lane = mergeLaneSuffix(bestTimeLane(s));
     const key = `${swimKey(s.name, s.team, s.gender, s.event)}|${s.timeType ?? 'SCY'}${lane}`;
     // Raw seconds, deliberately: the key already pins both the event and the
     // course, so every swim compared here shares one conversion factor and the
@@ -145,6 +171,32 @@ export function relayEventsForAthlete(
   return [...events];
 }
 
+/** A best-per-event record that folds every label of one event onto one entry. */
+type EventBestRecord<T extends { timeSec: number }> = {
+  /**
+   * Keep `value` under `label` when it is faster than the entry already held
+   * for the same event. A tie keeps the incumbent. A winner recorded under a
+   * different label replaces the old key, so the record never holds two
+   * labels of one event.
+   */
+  offer(label: string, value: T): void;
+};
+
+function eventBestRecord<T extends { timeSec: number }>(record: Record<string, T>): EventBestRecord<T> {
+  const labelByIdentity = new Map<string, string>();
+  return {
+    offer(label, value) {
+      const identity = swimEventIdentity(label);
+      const heldLabel = labelByIdentity.get(identity);
+      const held = heldLabel === undefined ? undefined : record[heldLabel];
+      if (held && value.timeSec >= held.timeSec) return;
+      if (heldLabel !== undefined && heldLabel !== label) delete record[heldLabel];
+      record[label] = value;
+      labelByIdentity.set(identity, label);
+    },
+  };
+}
+
 export function categorizeBestEvents(
   history: HistoricalSwim[],
   team: string,
@@ -176,6 +228,12 @@ export function categorizeBestEvents(
   // Self-reported times: listed, never a best, never a relay-leg stand-in.
   // See HistoricalSwim.isUserInputted.
   const userInputtedByEvent: NonNullable<AthleteEventProfile['userInputtedByEvent']> = {};
+  // One best per event, not per label: '50 Free SCY' (SwimCloud JSON) and
+  // '50 Freestyle' (paste) are one event. Each lane folds on the event
+  // identity and keys its entry under the label of the swim that holds it.
+  const bests = eventBestRecord(bestByEvent);
+  const extracted = eventBestRecord(extractedByEvent);
+  const userInputted = eventBestRecord(userInputtedByEvent);
   for (const s of history) {
     if (s.gender !== gender || s.team !== team) continue;
     if (normalizeSwimmerName(resolver.resolveAthleteName(s.name, team, gender)) !== nameKey) continue;
@@ -202,33 +260,22 @@ export function categorizeBestEvents(
 
     const sec = convertTimeToSeconds(programTime);
     if (!Number.isFinite(sec) || sec <= 0) continue;
-    if (s.isExtractedSplit === true) {
-      const prevExtracted = extractedByEvent[programEvent];
-      if (!prevExtracted || sec < prevExtracted.timeSec) {
-        extractedByEvent[programEvent] = { time: programTime, timeSec: sec, source: s.source };
-      }
+    const lane = bestTimeLane(s);
+    if (lane !== 'result') {
+      const record = lane === 'extracted_split' ? extracted : userInputted;
+      record.offer(programEvent, { time: programTime, timeSec: sec, source: s.source });
       continue;
     }
-    if (isUserInputtedSwim(s)) {
-      const prevUser = userInputtedByEvent[programEvent];
-      if (!prevUser || sec < prevUser.timeSec) {
-        userInputtedByEvent[programEvent] = { time: programTime, timeSec: sec, source: s.source };
-      }
-      continue;
-    }
-    const prev = bestByEvent[programEvent];
-    if (!prev || sec < prev.timeSec) {
-      // A converted best says so, and an altitude-adjusted one says so, so a UI
-      // can mark either. Neither changes the time that ranks.
-      const convertedFrom = scyConversionProvenance({ event: s.event, time: s.time }, conversion);
-      bestByEvent[programEvent] = {
-        time: programTime,
-        timeSec: sec,
-        source: s.source,
-        ...(convertedFrom ? { convertedFrom } : {}),
-        ...(s.isAltitudeAdjusted === true ? { altitudeAdjusted: true as const } : {}),
-      };
-    }
+    // A converted best says so, and an altitude-adjusted one says so, so a UI
+    // can mark either. Neither changes the time that ranks.
+    const convertedFrom = scyConversionProvenance({ event: s.event, time: s.time }, conversion);
+    bests.offer(programEvent, {
+      time: programTime,
+      timeSec: sec,
+      source: s.source,
+      ...(convertedFrom ? { convertedFrom } : {}),
+      ...(s.isAltitudeAdjusted === true ? { altitudeAdjusted: true as const } : {}),
+    });
   }
 
   // Quality first, then anything we hold no standard for. Unrankable events stay
@@ -317,15 +364,6 @@ function isLocationLine(line: string): boolean {
 const SKIP_LINE_RE =
   /^(personal bests|event progression|course|season|sort by|stamp link|event|time|meet|date|name|swimmer)$/i;
 
-const STAMP_BADGE_MAP: Record<string, SwimCloudBadge> = {
-  x: 'extracted',
-  u: 'user_input',
-  b: 'd1_b',
-  'd1-b': 'd1_b',
-  a: 'd1_a',
-  'd1-a': 'd1_a',
-};
-
 function splitRow(line: string): string[] {
   if (line.includes('\t')) {
     return line.split('\t').map(c => c.trim());
@@ -342,12 +380,7 @@ function isEventToken(s: string): boolean {
 }
 
 function parseStampToken(raw: string): SwimCloudBadge | null {
-  const key = raw.trim().toLowerCase();
-  if (!key) return null;
-  if (STAMP_BADGE_MAP[key]) return STAMP_BADGE_MAP[key];
-  if (/^d1-?[ab]$/i.test(raw)) return raw.toLowerCase().includes('a') ? 'd1_a' : 'd1_b';
-  if (/^(r|rcon|pb)$/i.test(raw)) return 'other';
-  return null;
+  return readSwimCloudStamp(raw)?.badge ?? null;
 }
 
 function parseCourseFromEvent(raw: string): 'SCY' | 'LCM' | 'SCM' | undefined {
@@ -721,8 +754,9 @@ export function detectSwimCloudPasteFormat(text: string): SwimCloudPasteFormat {
  * reports the same case as `status: 'no_table_for_division'`.
  *
  * One consequence to carry downstream: `computedCut: null` is under-determined
- * on its own — it covers both "we hold no table" and "missed every published
- * standard". Per `CutlineLookupStatus`, only `status: 'ok'` licenses the
+ * on its own — it covers "we hold no table", "missed every published
+ * standard" and "not a result" (an extracted split or a self-reported time,
+ * which are never judged). Per `CutlineLookupStatus`, only `status: 'ok'` licenses the
  * statement "did not achieve a cut", so a caller rendering that phrase must
  * re-check `divisionForTeamOrNull(team)` (or the lookup status) first rather
  * than reading a null here as a miss.
@@ -734,6 +768,9 @@ function enrichWithComputedCut(
 ): HistoricalSwim[] {
   const div = division !== undefined ? division : divisionForTeamOrNull(team);
   return swims.map(s => {
+    // An extracted split or a self-reported time is not a result, so it is
+    // never judged: no cut, and no miss either. See isRankableSwim.
+    if (!isRankableSwim(s)) return { ...s, computedCut: null };
     // Two swims we hold no standard for: a metric swim (the NCAA publishes SCY
     // standards only) and any swim whose division did not resolve. Neither may
     // be given a verdict here; a value the caller arrived with is theirs to keep.
@@ -880,10 +917,18 @@ export function parseSwimCloudPersonalBestsDetailed(
     let rest = cols.slice(2).filter(c => c.length > 0);
 
     let swimcloudBadge: SwimCloudBadge = 'none';
+    let stampFlags: Pick<HistoricalSwim, 'isExtractedSplit' | 'isUserInputted'> = {};
     if (rest.length > 0) {
-      const stamp = parseStampToken(rest[0]);
+      const stamp = readSwimCloudStamp(rest[0]);
       if (stamp) {
-        swimcloudBadge = stamp;
+        swimcloudBadge = stamp.badge;
+        // The same facts the JSON bridge records from the chip tooltips. A
+        // pasted row carries only the chip letters, so the stamp reading is
+        // the one source here. See HistoricalSwim.isExtractedSplit/isUserInputted.
+        stampFlags = {
+          ...(stamp.extractedSplit ? { isExtractedSplit: true } : {}),
+          ...(stamp.userInputted ? { isUserInputted: true as const } : {}),
+        };
         rest = rest.slice(1);
       }
     }
@@ -909,6 +954,7 @@ export function parseSwimCloudPersonalBestsDetailed(
       date: date || undefined,
       source: 'paste',
       swimcloudBadge,
+      ...stampFlags,
     });
   }
 
@@ -1235,20 +1281,31 @@ export function buildEventProfileFromCatalog(
   if (!athlete) return null;
   void teamName;
 
-  const bestMap = bestTimesByEvent(athlete.times);
+  // `bestTimesByEvent` holds results only: a time stamped `U` (self-reported)
+  // or `X` (an extracted split) is never a best. Those two are listed apart,
+  // exactly as the history-backed profile lists them.
   const bestByEvent: AthleteEventProfile['bestByEvent'] = {};
-  for (const [event, t] of bestMap.entries()) {
-    if (event.toLowerCase().includes('relay')) continue;
-    // Same gate as the history-backed profile: only events the loaded meet
-    // contests (or the championship program when no meet is loaded). Without it
-    // a catalog 50 Butterfly became a scoring "opportunity" in a meet that
-    // contests no 50s of stroke.
-    if (!isEventOffered(event, allowedEvents)) continue;
-    bestByEvent[event] = {
-      time: t.timeText,
-      timeSec: t.timeSecondsScy,
-      source: t.source,
-    };
+  const extractedByEvent: AthleteEventProfile['extractedByEvent'] = {};
+  const userInputtedByEvent: NonNullable<AthleteEventProfile['userInputtedByEvent']> = {};
+  const lanes: [Record<string, AthleteEventBest>, Map<string, CatalogEventTime>][] = [
+    [bestByEvent, bestTimesByEvent(athlete.times)],
+    [extractedByEvent, bestTimesByEventInLane(athlete.times, 'extracted_split')],
+    [userInputtedByEvent, bestTimesByEventInLane(athlete.times, 'user_inputted')],
+  ];
+  for (const [record, bestMap] of lanes) {
+    for (const [event, t] of bestMap.entries()) {
+      if (event.toLowerCase().includes('relay')) continue;
+      // Same gate as the history-backed profile: only events the loaded meet
+      // contests (or the championship program when no meet is loaded). Without it
+      // a catalog 50 Butterfly became a scoring "opportunity" in a meet that
+      // contests no 50s of stroke.
+      if (!isEventOffered(event, allowedEvents)) continue;
+      record[event] = {
+        time: t.timeText,
+        timeSec: t.timeSecondsScy,
+        source: t.source,
+      };
+    }
   }
   // Same quality ranking as the history-backed profile — raw seconds here would
   // have ordered a catalog athlete's events by length just as it did there.
@@ -1268,15 +1325,11 @@ export function buildEventProfileFromCatalog(
     team: roster.team.name,
     gender,
     bestByEvent,
-    // Empty because this profile is built from the roster catalog, which
-    // records no split provenance. That is "this source cannot say", not "the
-    // swimmer has none" -- a relay leg falling through to it simply finds
-    // nothing and stays unfilled, rather than borrowing a best that was never
-    // marked as extracted.
-    extractedByEvent: {},
-    // Empty for the same reason: the catalog records no "User Inputted" flag
-    // in a form this profile reads (see HistoricalSwim.isUserInputted).
-    userInputtedByEvent: {},
+    // Read from each time's stored SwimCloud stamp (`X`/`U`, or the paste's
+    // `extracted`/`user_input`). A time with no stamp is a result: the catalog
+    // cannot say more than its stamp does.
+    extractedByEvent,
+    userInputtedByEvent,
     primaryEvents,
     relayEvents: dedupedRelays,
     qualityByEvent: quality.ratioByEvent,

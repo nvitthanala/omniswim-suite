@@ -16,6 +16,7 @@
 
 import { Gender, ScoringSettings, Workspace } from '../../types';
 import { canonicalProgramEvent } from '../eventIdentity';
+import { isRankableSwim } from '../bestTimeEligibility';
 import { mergeScoringSettings } from '../scoringDefaults';
 import { convertTimeToSeconds, isRelayResult, normalizeSwimmerName } from '../utils';
 import {
@@ -104,6 +105,10 @@ export function buildCrossCourseTable(
   };
 
   for (const { swim: s, timeType, converted } of convertedHistorySwims(history)) {
+    // A best only: an extracted split is part of a longer swim, never a best.
+    // (convertedHistorySwims keeps it because a relay leg may use it; a
+    // self-reported time never reaches here at all.) See isRankableSwim.
+    if (!isRankableSwim(s)) continue;
     const programEvent = canonicalProgramEvent(converted.event);
     if (!programEvent) continue;
     const timeSec = convertTimeToSeconds(converted.time);

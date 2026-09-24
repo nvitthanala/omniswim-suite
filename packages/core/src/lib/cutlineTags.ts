@@ -162,7 +162,13 @@ export type CutlineTagState =
    * time is never a best, so no standard is applied to it — not a cut, and not
    * a miss. See `HistoricalSwim.isUserInputted`.
    */
-  | 'user_inputted';
+  | 'user_inputted'
+  /**
+   * The time was taken out of a longer swim's splits (SwimCloud `X`,
+   * "Extracted"), not swum as a race at this distance. Such a time is never a
+   * best, so no standard is applied to it. See `HistoricalSwim.isExtractedSplit`.
+   */
+  | 'extracted_split';
 
 /**
  * A converted-time comparison that deliberately falls short of being a cut.
@@ -536,6 +542,13 @@ export type CutlineTagInput = {
    * swim renders as unknown rather than as a cut or a miss.
    */
   userInputted?: boolean;
+  /**
+   * The time is an extracted split (`HistoricalSwim.isExtractedSplit`, or a
+   * pasted `'extracted'` badge). When `true` the result is
+   * `state: 'extracted_split'`: no standard is applied, and the swim renders
+   * as unknown. `isExtractedSplitSwim(swim)` gives the value for a history row.
+   */
+  extractedSplit?: boolean;
 };
 
 function normalizeGender(gender: Gender | string): CutlineGender {
@@ -728,6 +741,26 @@ export function buildCutlineTag(input: CutlineTagInput): CutlineTagResult {
       lookupStatus: null,
       reason:
         'Self-reported time (SwimCloud "User Inputted"), not a meet result. No standard is applied to it.',
+      program,
+      nextTier: null,
+    };
+  }
+
+  // Same rule for an extracted split: part of a longer swim, not a race at
+  // this distance, so it is not judged either.
+  if (input.extractedSplit === true) {
+    return {
+      state: 'extracted_split',
+      tag: null,
+      division,
+      season: seasonUnderComparison(division, input.season),
+      ...courseFields,
+      gender,
+      event: input.event,
+      swimSeconds,
+      lookupStatus: null,
+      reason:
+        'Split taken from a longer swim (SwimCloud "Extracted"), not a race at this distance. No standard is applied to it.',
       program,
       nextTier: null,
     };

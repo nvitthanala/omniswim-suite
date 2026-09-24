@@ -16,7 +16,8 @@ import {
   SwimmerResult,
   Workspace,
 } from '../types';
-import { isChampionshipProgramEvent, isUserInputtedSwim, normalizeEventLabel } from './athleteHistory';
+import { isChampionshipProgramEvent, normalizeEventLabel } from './athleteHistory';
+import { isRankableSwim, swimEventIdentity } from './bestTimeEligibility';
 import { mergeScoringSettings } from './scoringDefaults';
 import { scorerRosterKey, usesScorerRoster } from './scorerRoster';
 import { relayEntryKey, parseRelayDistanceYards } from './relaySplits';
@@ -573,16 +574,42 @@ function existingIndividualEvents(
   team: string,
   gender: Gender,
   name: string
-): Set<string> {
+): HeldEvents {
   const nameKey = normalizeSwimmerName(name);
-  const events = new Set<string>();
+  const held: HeldEvents = { resultEvents: new Set<string>(), planEvents: new Set<string>() };
   for (const r of results) {
-    if (isIndividualResultFor(r, team, gender, nameKey) && r.event) events.add(r.event);
+    if (isIndividualResultFor(r, team, gender, nameKey) && r.event) held.resultEvents.add(r.event);
   }
   for (const p of plans) {
-    if (isIndividualPlanFor(p, team, gender, nameKey)) events.add(p.event);
+    if (isIndividualPlanFor(p, team, gender, nameKey)) holdEvent(held, p.event);
   }
-  return events;
+  return held;
+}
+
+/**
+ * The individual events an athlete holds, split by where each came from.
+ *
+ * - `planEvents` — event identities (see `swimEventIdentity`) of planned entries,
+ *   so a plan recorded as '100 Back SCY' occupies the theory's '100 Backstroke'.
+ * - `resultEvents` — raw labels of loaded-meet results, matched by label exactly as
+ *   before. Not folded on purpose: a plan in an event the athlete swam at the
+ *   loaded meet overrides that result in the projection (and is the athlete's only
+ *   entry in `plan_sheet` mode), so whether a HyTek-labelled result should block a
+ *   theory plan is a lineup question this change does not answer.
+ */
+type HeldEvents = { resultEvents: Set<string>; planEvents: Set<string> };
+
+function holdsEvent(held: HeldEvents, event: string): boolean {
+  return held.resultEvents.has(event) || held.planEvents.has(swimEventIdentity(event));
+}
+
+/** Record a planned event. An event already held is not counted twice. */
+function holdEvent(held: HeldEvents, event: string): void {
+  if (!holdsEvent(held, event)) held.planEvents.add(swimEventIdentity(event));
+}
+
+function heldEventCount(held: HeldEvents): number {
+  return held.resultEvents.size + held.planEvents.size;
 }
 
 /**
@@ -591,11 +618,11 @@ function existingIndividualEvents(
  *
  * A non-SCY swim with no published conversion factor has no SCY equivalent, so it is
  * dropped rather than estimated. An event outside the championship program is dropped
- * too — it is not an entry candidate. So is a self-reported time: it is never a best
- * (see HistoricalSwim.isUserInputted).
+ * too — it is not an entry candidate. So are a self-reported time and an extracted
+ * split: neither is ever a best (see isRankableSwim).
  */
 function programSwimFromHistory(s: HistoricalSwim): { event: string; best: HistoryBestTime } | null {
-  if (isUserInputtedSwim(s)) return null;
+  if (!isRankableSwim(s)) return null;
   const relay = /\brelay\b/i.test(s.event);
   if (!relay && (s.timeType ?? 'SCY') !== 'SCY' && !hasConversionFactor(s.event)) return null;
   if (relay) {
@@ -624,8 +651,18 @@ function programSwimFromHistory(s: HistoricalSwim): { event: string; best: Histo
 type HistoryBestTime = Pick<PlannedSwimEntry, 'time' | 'convertedFrom' | 'isAltitudeAdjusted'>;
 
 /**
- * Best SCY-converted program time per `${normalizedName}|${event}` from athleteHistory.
- * On an exact tie the first row encountered wins — the fold keeps the incumbent.
+ * The history-best key for a swimmer and event. Keyed on the event identity, so
+ * a theory's '100 Backstroke' finds a best recorded as '100 Back SCY' (SwimCloud
+ * JSON) as well as one recorded as '100 Backstroke' (paste).
+ */
+function historyBestKey(name: string, event: string): string {
+  return `${normalizeSwimmerName(name)}|${swimEventIdentity(event)}`;
+}
+
+/**
+ * Best SCY-converted program time per swimmer and event from athleteHistory, keyed
+ * by {@link historyBestKey}. On an exact tie the first row encountered wins — the
+ * fold keeps the incumbent.
  */
 function buildHistoryBestTimes(
   workspace: Workspace,
@@ -637,7 +674,7 @@ function buildHistoryBestTimes(
     if (s.gender !== gender || String(s.team ?? '').trim() !== team) continue;
     const swim = programSwimFromHistory(s);
     if (!swim) continue;
-    const key = `${normalizeSwimmerName(s.name)}|${swim.event}`;
+    const key = historyBestKey(s.name, swim.event);
     const prev = best.get(key);
     if (!prev || convertTimeToSeconds(swim.best.time) < convertTimeToSeconds(prev.time)) {
       best.set(key, swim.best);
@@ -728,17 +765,17 @@ function buildTheoryApplyContext(
 function theoryEntryBlocker(
   displayName: string,
   event: string,
-  already: Set<string>,
+  already: HeldEvents,
   indCap: number,
   time: string | undefined
 ): string | null {
   if (!isChampionshipProgramEvent(event)) {
     return `Skipped non-program event "${event}" for ${displayName}`;
   }
-  if (already.has(event)) {
+  if (holdsEvent(already, event)) {
     return `${displayName} already has a plan for ${event} — skipped`;
   }
-  if (already.size >= indCap) {
+  if (heldEventCount(already) >= indCap) {
     return `${displayName} at individual entry cap (${indCap}) — skipped ${event}`;
   }
   if (!time) {
@@ -779,10 +816,8 @@ function addTheoryEntries(
     ctx.gender,
     displayName
   );
-  const nameKey = normalizeSwimmerName(displayName);
-
   for (const event of events) {
-    const best = ctx.historyBest.get(`${nameKey}|${event}`);
+    const best = ctx.historyBest.get(historyBestKey(displayName, event));
     const time = best?.time;
     const blocked = theoryEntryBlocker(displayName, event, already, ctx.indCap, time);
     if (blocked) {
@@ -805,7 +840,7 @@ function addTheoryEntries(
     });
     draft.meetEntryPlans.push(entry);
     draft.activeEntryIds.push(entry.id);
-    already.add(event);
+    holdEvent(already, event);
     draft.summary.entriesAdded += 1;
   }
 }

@@ -1,4 +1,5 @@
 import type { Workspace } from '../types';
+import { isRankableSwim } from './bestTimeEligibility';
 
 export type SwimmerTrend = {
   name: string;
@@ -55,9 +56,10 @@ export function buildSeasonTrends(workspaces: Workspace[]): SeasonTrends {
     }
     for (const h of ws.athleteHistory ?? []) {
       if (!h.name || !h.event || !h.time) continue;
-      // A self-reported time is not a race: it is never a best and is no point
-      // on a progression. See HistoricalSwim.isUserInputted.
-      if (h.isUserInputted === true) continue;
+      // A self-reported time or an extracted split is not a race: it is never a
+      // best and is no point on a progression. Both are read from the flag or
+      // from a pasted row's badge. See isRankableSwim.
+      if (!isRankableSwim(h)) continue;
       const key = `${h.name.toLowerCase()}::${h.event}`;
       const existing = swimmerMap.get(key);
       const entry = { label: 'history', time: h.time };

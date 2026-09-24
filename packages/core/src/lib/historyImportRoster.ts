@@ -23,10 +23,10 @@ import {
   matchAthleteToRoster,
   categorizeBestEvents,
   isChampionshipProgramEvent,
-  isUserInputtedSwim,
   meetProgramEvents,
   normalizeEventLabel,
 } from './athleteHistory';
+import { isRankableSwim, isSameSwimEvent, swimEventIdentity } from './bestTimeEligibility';
 import { mergeScoringSettings } from './scoringDefaults';
 import { usesScorerRoster, scorerRosterKey } from './scorerRoster';
 import {
@@ -297,15 +297,18 @@ function isEventContested(
   return isChampionshipProgramEvent(event);
 }
 
-/** Keep the fastest swim per program event. Ties keep the incumbent. */
-function keepIfFastest(
-  best: Map<string, ProgramCandidate>,
-  event: string,
-  candidate: ProgramCandidate
-): void {
-  const prev = best.get(event);
+/**
+ * Keep the fastest swim per program event. Ties keep the incumbent.
+ *
+ * Keyed on the event identity, not the label: the same swimmer's
+ * '50 Free SCY' (SwimCloud JSON) and '50 Freestyle' (paste) are one event and
+ * yield one candidate. The candidate keeps the label its swim was recorded with.
+ */
+function keepIfFastest(best: Map<string, ProgramCandidate>, candidate: ProgramCandidate): void {
+  const identity = swimEventIdentity(candidate.event);
+  const prev = best.get(identity);
   if (!prev || convertTimeToSeconds(candidate.time) < convertTimeToSeconds(prev.time)) {
-    best.set(event, candidate);
+    best.set(identity, candidate);
   }
 }
 
@@ -315,14 +318,15 @@ function toProgramCandidates(
 ): ProgramCandidate[] {
   const best = new Map<string, ProgramCandidate>();
   for (const s of swims) {
-    // A self-reported time is never a best, so it is never an entry candidate.
-    // It is still merged into athleteHistory (see importHistoryToRoster).
-    if (isUserInputtedSwim(s)) continue;
+    // A self-reported time or an extracted split is never a best, so it is
+    // never an entry candidate. Both are still merged into athleteHistory (see
+    // importHistoryToRoster). See isRankableSwim.
+    if (!isRankableSwim(s)) continue;
     const relay = isRelayEventName(s.event);
     if (!canStateInSCY(s, relay)) continue;
     const { event, time, convertedFrom } = toSCYProgramSwim(s, relay);
     if (!isEventContested(event, relay, allowedEvents)) continue;
-    keepIfFastest(best, event, {
+    keepIfFastest(best, {
       ...s,
       event,
       time,
@@ -350,14 +354,16 @@ function workspaceProgramEvents(workspace: Workspace, gender: Gender): Set<strin
   return program.size > 0 ? program : null;
 }
 
+/** Keyed on the event identity, so two labels of one event are one plan slot. */
 function planKey(name: string, team: string, gender: Gender, event: string): string {
-  return `${normalizeSwimmerName(name)}|${team}|${gender}|${event}`;
+  return `${normalizeSwimmerName(name)}|${team}|${gender}|${swimEventIdentity(event)}`;
 }
 
 function recruitEventKey(name: string, team: string, gender: Gender, event: string): string {
   return planKey(name, team, gender, event);
 }
 
+/** The event identities (see `swimEventIdentity`) this swimmer already holds a plan for. */
 function existingPlanEvents(
   plans: PlannedSwimEntry[],
   name: string,
@@ -369,13 +375,39 @@ function existingPlanEvents(
   for (const p of plans) {
     if (p.gender !== gender || p.team !== team) continue;
     if (normalizeSwimmerName(p.name) !== nameKey) continue;
-    set.add(p.event);
+    set.add(swimEventIdentity(p.event));
   }
   return set;
 }
 
-/** Entries already charged against a swimmer's caps, and the events they occupy. */
-type EntryCounts = { individual: number; relay: number; events: Set<string> };
+/**
+ * Entries already charged against a swimmer's caps, and the events they occupy.
+ * Read the occupancy through {@link occupiesEvent}.
+ */
+type EntryCounts = {
+  individual: number;
+  relay: number;
+  /**
+   * Event identities (see `swimEventIdentity`) of the swimmer's plans, recruit
+   * rows and accepted candidates, so a plan for '50 Freestyle' occupies the
+   * event a '50 Free SCY' candidate would enter.
+   */
+  events: Set<string>;
+  /**
+   * Raw labels of the swimmer's loaded-meet results, matched by label exactly as
+   * before. Deliberately not folded: a plan in an event the swimmer swam at the
+   * loaded meet collapses onto that result in the overlay projection, and in
+   * `plan_sheet` mode it is the only way the swimmer keeps the event. Whether a
+   * HyTek-labelled result should block such a plan is a lineup question, not a
+   * best-time one, and folding it here would change it silently.
+   */
+  resultEvents: Set<string>;
+};
+
+/** The swimmer already holds an entry in `event`. */
+function occupiesEvent(counts: EntryCounts, event: string): boolean {
+  return counts.resultEvents.has(event) || counts.events.has(swimEventIdentity(event));
+}
 
 /**
  * Roster-plane rows (planned entries and recruit rows) share one exact team/gender/name
@@ -400,11 +432,14 @@ function countExistingEntries(
   gender: Gender
 ): EntryCounts {
   const nameKey = normalizeSwimmerName(name);
-  const counts: EntryCounts = { individual: 0, relay: 0, events: new Set<string>() };
+  const counts: EntryCounts = {
+    individual: 0,
+    relay: 0,
+    events: new Set<string>(),
+    resultEvents: new Set<string>(),
+  };
 
-  const consider = (event: string, isRelay: boolean) => {
-    if (counts.events.has(event)) return;
-    counts.events.add(event);
+  const charge = (isRelay: boolean) => {
     if (isRelay) counts.relay += 1;
     else counts.individual += 1;
   };
@@ -415,13 +450,17 @@ function countExistingEntries(
     const relayish = Boolean(r.isRelay) || isRelayEventName(r.event);
     // A relay aggregate row standing in for the squad is not this swimmer's entry.
     if (relayish && r.name === team) continue;
-    consider(r.event, relayish);
+    if (counts.resultEvents.has(r.event)) continue;
+    counts.resultEvents.add(r.event);
+    charge(relayish);
   }
-  // Plans first, then recruits — the original visit order, which `consider` dedupes by
-  // event anyway, so the attribution is the same either way.
+  // Plans first, then recruits — the original visit order. Deduped by event, so the
+  // attribution is the same either way.
   for (const row of [...plans, ...recruits]) {
     if (!rosterRowMatchesSwimmer(row, nameKey, team, gender)) continue;
-    consider(row.event, isRelayEventName(row.event));
+    if (occupiesEvent(counts, row.event)) continue;
+    counts.events.add(swimEventIdentity(row.event));
+    charge(isRelayEventName(row.event));
   }
 
   return counts;
@@ -521,7 +560,7 @@ function classifyImportAction(
 
   const existingEvents = existingPlanEvents(existingPlans, match.match, team, gender);
   const hasNewEvent = toProgramCandidates(swims, programEvents).some(
-    s => !existingEvents.has(s.event)
+    s => !existingEvents.has(swimEventIdentity(s.event))
   );
   return hasNewEvent ? 'add_to_lineup' : 'history_matched';
 }
@@ -580,6 +619,7 @@ export function previewHistoryImportActions(
  * is spent strictly top-down, so the first events listed are the ones that get in.
  *
  * Falls back to every ranked event of the matching kind when the profile names none.
+ * Events are matched by identity (see `swimEventIdentity`), never by label.
  */
 function orderCandidateSwims(
   ranked: ProgramCandidate[],
@@ -593,7 +633,7 @@ function orderCandidateSwims(
   const preferredRelay = profile.relayEvents.length ? profile.relayEvents : eventsOfKind(true);
 
   const candidates: ProgramCandidate[] = [];
-  const alreadyQueued = (event: string) => candidates.some(c => c.event === event);
+  const alreadyQueued = (event: string) => candidates.some(c => isSameSwimEvent(c.event, event));
   const queueRemainingOfKind = (relay: boolean) => {
     for (const swim of ranked) {
       if (isRelayEventName(swim.event) !== relay) continue;
@@ -605,12 +645,12 @@ function orderCandidateSwims(
   // Preferred individual events. No dedupe test here: this writes into an empty list,
   // and a repeated event is absorbed downstream by the per-event guard on the budget.
   for (const ev of preferredIndividual) {
-    const swim = ranked.find(s => s.event === ev);
+    const swim = ranked.find(s => isSameSwimEvent(s.event, ev));
     if (swim) candidates.push(swim);
   }
   queueRemainingOfKind(false);
   for (const ev of preferredRelay) {
-    const swim = ranked.find(s => s.event === ev);
+    const swim = ranked.find(s => isSameSwimEvent(s.event, ev));
     if (swim && !alreadyQueued(swim.event)) candidates.push(swim);
   }
   queueRemainingOfKind(true);
@@ -698,7 +738,7 @@ function spendBudget(
   event: string,
   relayish: boolean
 ): void {
-  counts.events.add(event);
+  counts.events.add(swimEventIdentity(event));
   budget.total -= 1;
   if (relayish) {
     budget.relay -= 1;
@@ -770,7 +810,7 @@ function appendLineupEntry(
     ctx.team,
     ctx.gender
   );
-  if (existingEvents.has(swim.event)) return false;
+  if (existingEvents.has(swimEventIdentity(swim.event))) return false;
   const entry = createPlannedEntry({
     name: ctx.displayName,
     team: ctx.team,
@@ -888,7 +928,7 @@ function importSwimmerGroup(
 
   for (const swim of orderCandidateSwims(ranked, profile)) {
     const relayish = isRelayEventName(swim.event);
-    if (counts.events.has(swim.event)) continue;
+    if (occupiesEvent(counts, swim.event)) continue;
     if (!budgetHasRoom(budget, relayish)) continue;
 
     // A swimmer already known to the team joins the lineup; a new one becomes a

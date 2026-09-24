@@ -493,6 +493,10 @@ export interface HistoricalSwim {
    * A relay **leadoff** is the opposite case and carries no flag: it starts
    * from the blocks and finishes to the hand, so it is the individual swim and
    * is imported as one.
+   *
+   * Read it through `isExtractedSplitSwim` / `isRankableSwim`
+   * (`lib/bestTimeEligibility.ts`), never this field alone: a pasted row stored
+   * before 2026-09-24 carries only `swimcloudBadge: 'extracted'`.
    */
   isExtractedSplit?: boolean;
   /**
@@ -531,6 +535,10 @@ export interface HistoricalSwim {
    * It stays stored in `athleteHistory`, where `mergeHistoryIndex` keeps it in
    * its own lane so it neither displaces a real swim nor is displaced by one,
    * and it is listed in {@link AthleteEventProfile.userInputtedByEvent}.
+   *
+   * Read it through `isUserInputtedSwim` / `isRankableSwim`
+   * (`lib/bestTimeEligibility.ts`), never this field alone: a pasted row stored
+   * before 2026-09-24 carries only `swimcloudBadge: 'user_input'`.
    */
   isUserInputted?: true;
 }

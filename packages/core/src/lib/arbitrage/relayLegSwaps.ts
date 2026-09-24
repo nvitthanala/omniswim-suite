@@ -35,6 +35,7 @@ import {
 import { countSwimmerEntries } from '../swimmerEntryLimits';
 import { computeVacateRelayLegNames } from '../rosterLineupAudit';
 import { convertTimeToSeconds, isRelayResult, normalizeSwimmerName } from '../utils';
+import { isExtractedSplitSwim } from '../bestTimeEligibility';
 import {
   convertedHistorySwims,
   pickRecencyBest,
@@ -77,6 +78,11 @@ import {
 type RelayLegTimeRef = CrossCourseTimeRef & {
   /** True when the best came from a converted LCM/SCM swim (not swum SCY). */
   converted?: boolean;
+  /**
+   * True when the time is an extracted split (SwimCloud `X`). Used only when
+   * the athlete has no standalone time at the leg's distance and stroke.
+   */
+  extractedSplit?: boolean;
 };
 
 export type RelayLegSwap = {
@@ -103,6 +109,12 @@ export type RelayLegSwap = {
   inTimeConverted?: boolean;
   /** True when inTime is older than the recency window (only stale times existed). */
   inTimeStale?: boolean;
+  /**
+   * True when inTime is an extracted split (SwimCloud `X`): part of a longer
+   * swim, used because the swimmer has no standalone time at the leg's
+   * distance and stroke. A placeholder, never a result.
+   */
+  inTimeExtractedSplit?: boolean;
   /**
    * manualLegTime the override carries so the relay team clock is held constant
    * (the departed leg's split). Points are placement-based; holding the clock
@@ -206,31 +218,48 @@ function bestRefPerLegKey(
   return chosen;
 }
 
-/** Per athlete → `${legDistanceYards}|${stroke}` → best SCY-converted leg time (recency-weighted). */
+/**
+ * Per athlete → `${legDistanceYards}|${stroke}` → best SCY-converted leg time (recency-weighted).
+ *
+ * A standalone swim always wins. An extracted split (SwimCloud `X`) fills a leg
+ * key only when the athlete has no standalone swim for it, even a slower one:
+ * it is part of a longer race, so it may stand in for a relay leg but never
+ * outrank a real swim. See HistoricalSwim.isExtractedSplit.
+ */
 function buildRelayLegTimeIndex(
   workspace: Workspace,
   opts: { team: string; gender: Gender; recencyMonths?: number }
 ): Map<string, Map<string, RelayLegTimeRef>> {
   const { history, cutoffMs } = teamHistoryWindow(workspace, opts);
 
-  // athlete → legKey → all candidate refs
+  // athlete → legKey → all candidate refs, standalone swims and extracted splits apart
   const buckets = new Map<string, Map<string, RelayLegTimeRef[]>>();
+  const extractedBuckets = new Map<string, Map<string, RelayLegTimeRef[]>>();
   for (const { swim: s, timeType, converted } of convertedHistorySwims(history)) {
     const sd = individualStrokeDistance(converted.event);
     if (!sd) continue;
     const timeSec = convertTimeToSeconds(converted.time);
     if (!Number.isFinite(timeSec)) continue;
-    addLegTimeRef(buckets, normalizeSwimmerName(s.name), `${sd.dist}|${sd.stroke}`, {
+    const extracted = isExtractedSplitSwim(s);
+    addLegTimeRef(extracted ? extractedBuckets : buckets, normalizeSwimmerName(s.name), `${sd.dist}|${sd.stroke}`, {
       time: converted.time,
       timeSec,
       meetLabel: s.meetLabel,
       date: s.date,
       converted: timeType !== 'SCY',
+      ...(extracted ? { extractedSplit: true } : {}),
     });
   }
 
   const out = new Map<string, Map<string, RelayLegTimeRef>>();
-  for (const [nameKey, legs] of buckets) out.set(nameKey, bestRefPerLegKey(legs, cutoffMs));
+  for (const nameKey of new Set([...buckets.keys(), ...extractedBuckets.keys()])) {
+    const chosen = bestRefPerLegKey(buckets.get(nameKey) ?? new Map(), cutoffMs);
+    const fallback = bestRefPerLegKey(extractedBuckets.get(nameKey) ?? new Map(), cutoffMs);
+    for (const [legKey, ref] of fallback) {
+      if (!chosen.has(legKey)) chosen.set(legKey, ref);
+    }
+    out.set(nameKey, chosen);
+  }
   return out;
 }
 
@@ -548,6 +577,7 @@ function buildRelayLegSwap(
     inTime: bestRef?.time ?? cand.time,
     inTimeConverted: bestRef?.converted ? true : undefined,
     inTimeStale: bestRef?.stale ? true : undefined,
+    inTimeExtractedSplit: bestRef?.extractedSplit ? true : undefined,
     clockLegTime: target.clockLegTime,
     deltaPoints,
     newTotal: Number(newTotal.toFixed(3)),

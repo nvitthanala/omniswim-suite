@@ -58,6 +58,9 @@ import {
 export { DEFAULT_SCORING_SETTINGS, mergeScoringSettings } from './scoringDefaults';
 import teamColorsData from '../team_colors.json';
 import type { CatalogEventTime, CatalogTeamRoster } from './rosterCatalog';
+// A leaf module (types + cutlineEventNames only), so no cycle. `rosterCatalog`
+// itself imports this file, which is why its helpers are not used here.
+import { isRankableSwimCloudStamp, swimEventIdentity } from './bestTimeEligibility';
 import {
   colorForChartStroke,
   parseTeamColorEntry,
@@ -2772,6 +2775,21 @@ export function buildCatalogEntryResult(
   };
 }
 
+/**
+ * The fastest time per event, folding labels of one event (`'50 Free'`,
+ * `'50 Freestyle'`) together. A tie keeps the time seen first. Order follows
+ * the first appearance of each event.
+ */
+function fastestCatalogTimePerEvent(times: CatalogEventTime[]): CatalogEventTime[] {
+  const best = new Map<string, CatalogEventTime>();
+  for (const t of times) {
+    const identity = swimEventIdentity(t.event);
+    const held = best.get(identity);
+    if (!held || t.timeSecondsScy < held.timeSecondsScy) best.set(identity, t);
+  }
+  return [...best.values()];
+}
+
 export interface CategorizedScoringInputArgs {
   workspace: Workspace;
   gender: Gender;
@@ -2823,9 +2841,14 @@ export function buildCategorizedScoringInputs(
   for (const athlete of args.rosterCatalog.athletes) {
     if (athlete.gender !== (args.gender === Gender.WOMEN ? 'Women' : 'Men')) continue;
     // Cap to top-N best times per swimmer by SCY ΓÇö keeps within entry limits.
-    const eligibleTimes = athlete.times
-      .filter(t => t.isEligible)
-      .filter(t => !t.event.toLowerCase().includes('relay'))
+    // Only a result is scored: a self-reported time or an extracted split
+    // (stamp `U`/`X`) is never an entry. One row per event: the fastest.
+    const eligibleTimes = fastestCatalogTimePerEvent(
+      athlete.times
+        .filter(t => t.isEligible)
+        .filter(t => !t.event.toLowerCase().includes('relay'))
+        .filter(t => isRankableSwimCloudStamp(t.swimcloudBadge))
+    )
       .sort((a, b) => a.timeSecondsScy - b.timeSecondsScy)
       .slice(0, indCap);
 
@@ -2846,12 +2869,15 @@ export function buildCategorizedScoringInputs(
   }
 
   // Merge without duplicating an event for a swimmer that already has a PDF row.
+  // Keyed on the event identity: a catalog '50 Free' and a HyTek
+  // 'Event 8 Men 50 Yard Freestyle' are one event, and matching the raw labels
+  // let both rows score.
   const taken = new Set(
-    rosterRows.map(r => `${normalizeSwimmerName(r.name)}|${r.event}`)
+    rosterRows.map(r => `${normalizeSwimmerName(r.name)}|${swimEventIdentity(r.event)}`)
   );
   const pdfOnly = pdfRows.filter(r => {
     if (r.isRelay) return true;
-    const key = `${normalizeSwimmerName(r.name)}|${r.event}`;
+    const key = `${normalizeSwimmerName(r.name)}|${swimEventIdentity(r.event)}`;
     return !taken.has(key);
   });
 

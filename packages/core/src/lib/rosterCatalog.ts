@@ -13,6 +13,14 @@
 import { Gender, NcaaDivision } from '../types';
 import { convertTimeToSeconds, convertToSCY, normalizeSwimmerName } from './utils';
 import { compareTimeToCutline } from './cutlineUtils';
+import {
+  bestTimeLaneOfStamp,
+  isRankableSwimCloudStamp,
+  swimEventIdentity,
+  type BestTimeLane,
+} from './bestTimeEligibility';
+
+export { bestTimeLaneOfStamp, isRankableSwimCloudStamp } from './bestTimeEligibility';
 
 export type CatalogGender = 'Men' | 'Women';
 export type CatalogTimeType = 'SCY' | 'LCM' | 'SCM';
@@ -120,8 +128,14 @@ export function buildStoredSwim(args: {
   // show an "A" badge it never earned. `timeType` and `timeText` are kept, so a
   // reader can still build the indicative comparison with `buildCutlineTag`
   // and `swimCourse: timeType`.
+  // A self-reported time or an extracted split (stamp `U`/`X`) is not a result,
+  // so it is never judged either.
   const cut =
-    args.timeType === 'SCY' && args.division && Number.isFinite(secScy) && secScy > 0
+    args.timeType === 'SCY' &&
+    args.division &&
+    isRankableSwimCloudStamp(args.swimcloudBadge) &&
+    Number.isFinite(secScy) &&
+    secScy > 0
       ? compareTimeToCutline(secScy, args.gender as Gender, event, args.division).achieved
       : null;
 
@@ -155,16 +169,44 @@ export function athleteNameKey(name: string): string {
   return normalizeSwimmerName(name);
 }
 
-/** Pick the single best event per `event` (lowest SCY time). */
-export function bestTimesByEvent(times: CatalogEventTime[]): Map<string, CatalogEventTime> {
+/** The best-time lane of a catalog time, read from its stored stamp. */
+export function catalogTimeLane(time: Pick<CatalogEventTime, 'swimcloudBadge'>): BestTimeLane {
+  return bestTimeLaneOfStamp(time.swimcloudBadge);
+}
+
+/**
+ * The single fastest time (lowest SCY time) per event among the times in one
+ * {@link BestTimeLane}. Labels of one event (`'50 Free'`, `'50 Freestyle'`)
+ * fold together (see `swimEventIdentity`); the map key is the label of the
+ * winning time. A tie keeps the time seen first.
+ */
+export function bestTimesByEventInLane(
+  times: CatalogEventTime[],
+  lane: BestTimeLane
+): Map<string, CatalogEventTime> {
   const map = new Map<string, CatalogEventTime>();
+  const labelByIdentity = new Map<string, string>();
   for (const t of times) {
-    const cur = map.get(t.event);
-    if (!cur || t.timeSecondsScy < cur.timeSecondsScy) {
-      map.set(t.event, t);
-    }
+    if (catalogTimeLane(t) !== lane) continue;
+    const identity = swimEventIdentity(t.event);
+    const heldLabel = labelByIdentity.get(identity);
+    const held = heldLabel === undefined ? undefined : map.get(heldLabel);
+    if (held && t.timeSecondsScy >= held.timeSecondsScy) continue;
+    if (heldLabel !== undefined) map.delete(heldLabel);
+    map.set(t.event, t);
+    labelByIdentity.set(identity, t.event);
   }
   return map;
+}
+
+/**
+ * Pick the single best time per event (lowest SCY time).
+ *
+ * Only results compete. A time stamped `U` (self-reported) or `X` (an extracted
+ * split) is never a best; see {@link bestTimesByEventInLane} to list those.
+ */
+export function bestTimesByEvent(times: CatalogEventTime[]): Map<string, CatalogEventTime> {
+  return bestTimesByEventInLane(times, 'result');
 }
 
 /** Count of unique events the athlete has stored (any course/version). */
