@@ -17,9 +17,10 @@ Where a screen needs a real example, it says so.
 7. [Optimize](#7-optimize)
 8. [Score a meet](#8-score-a-meet)
 9. [Check your work against official results](#9-check-your-work-against-official-results)
-10. [Back up your data](#10-back-up-your-data)
-11. [What the app will not do](#11-what-the-app-will-not-do)
-12. [When something looks wrong](#12-when-something-looks-wrong)
+10. [Where a time came from](#10-where-a-time-came-from)
+11. [Back up your data](#11-back-up-your-data)
+12. [What the app will not do](#12-what-the-app-will-not-do)
+13. [When something looks wrong](#13-when-something-looks-wrong)
 
 ---
 
@@ -200,6 +201,56 @@ notes say which of four reasons applies:
 
 A blank is never filled in with a guess.
 
+#### Refreshing one team's personal bests
+
+Re-running a crawl skips any page it already has, so by default a repeat
+crawl will not re-pull times you already captured. To pull fresh times for
+one team — after a meet, for example — check **Refresh personal bests
+already captured** in the crawl panel, keep only that team checked, and pick
+**Rosters and personal bests** as the scope. The panel states how many
+already-stored pages it is about to refresh before it starts.
+
+#### Reviewing what changed on a re-import
+
+When you import a SwimCloud roster or swimmer again, the import preview
+compares the new times against what this workspace already has stored for
+that swimmer and shows **"N swimmers improved in M events"**, which expands
+to each swim, for example "100 Back SCY 49.58 -> 48.90 (-0.68)." Only real
+results count — an extracted split or a self-reported time is never counted
+as an improvement, and a dive is compared by the higher score.
+
+#### Merging vs. replacing on reimport
+
+Every SwimCloud import screen asks **Import as**:
+
+- **Merge into existing data** (the default) — adds these swims. Nothing
+  already on the roster is removed.
+- **Replace this team's SwimCloud data** — removes this team and gender's
+  SwimCloud history, recruit rows and lineup entries first, then imports.
+  Manual and PDF data stay. A backup is taken first.
+
+Pick **Replace** when older imported data is wrong in a way a merge will
+not fix — for example, a recruit time that was built from a self-reported
+swim before that was corrected.
+
+Before anything changes, a preview shows:
+
+- How many history rows, recruit rows, and lineup entries will be removed,
+  and how many rows are kept.
+- Each removed recruit row and lineup entry, and why — either it came
+  straight from a SwimCloud import, or its own time matches a swim being
+  removed.
+- **These swimmers lose data and are not in this capture** — anyone who
+  loses rows but is missing from the new capture, so you are not surprised
+  later.
+- If any lineup entries removed were scoring-theory (optimizer) plans, a
+  warning to **re-run the scoring theory afterward** to refill any slots
+  the replace leaves open.
+
+Confirm with **Replace SwimCloud data?**. The button reads **Back up &
+replace**; it takes a backup before removing or importing anything, and
+stops if the backup fails.
+
 #### Season bests
 
 **Season bests do not come from a crawl.** A swimmer's times page builds its
@@ -313,7 +364,43 @@ name that did not match between two sources.
 
 ---
 
-## 10. Back up your data
+## 10. Where a time came from
+
+Every swim in an athlete's history carries a small badge stating what kind
+of time it is:
+
+| Badge | Means |
+| --- | --- |
+| **Extracted** | Pulled out of a longer swim's splits — not a race at that distance on its own. |
+| **Self-reported** | The swimmer or someone else typed this time in; it was not pulled from an official result. |
+| **Altitude-adj.** | SwimCloud already adjusted this time for the pool's altitude. |
+| **Est. from LCM** or **Est. from SCM** | Converted from a metric time to yards. Hover the badge for the source time and which table converted it — for example "SCM 54.49 -> 48.82, NCAA Rules Book A-2 (D2)." |
+
+An **Extracted**, **Self-reported**, or estimated time is never used as a
+swimmer's best, never earns a cut badge on its own, and never becomes a
+lineup entry. It is shown so you have the full picture, not hidden.
+
+### Converted times and cut standards
+
+A time converted from LCM or SCM to SCY is marked as an estimate wherever a
+cut standard would apply to it — the badge above, plus a dashed, italic
+version of the cut badge rather than a solid one. It is a loose fit for
+planning, never proof a standard was met. The one exception: an **NAIA**
+swimmer's short-course-meters time is judged directly against NAIA's own
+published meter standard, because NAIA's sheet publishes that standard
+itself rather than only a yards standard to estimate against.
+
+### Lifetime and this season
+
+An athlete's swim history has a **Lifetime / This season** toggle. It only
+changes what you see — it never changes scoring, cuts, or entries. The
+season's date range comes from that season's own swims. Above the history,
+**"Bests pulled \<date\>"** shows when this athlete's SwimCloud times were
+last captured, when known.
+
+---
+
+## 11. Back up your data
 
 Your data lives on your machine, in `data/`. Losing it means rebuilding a
 roster by hand.
@@ -338,9 +425,18 @@ Only files the app itself wrote can be restored. Anything you copied into
 `data/backups/` yourself is left alone and cannot be restored through the app;
 swap it in by hand if you need it.
 
+### Keeping cut tables current
+
+At startup, the server checks each division's archived cut table against
+the current season and logs a line for any table that is behind. If the
+server log says a division's cut table is behind the current season, run
+`scripts/fetch-cutlines.py` once the governing body has published the new
+season's standards, then re-extract with `scripts/extract-cutlines.py`.
+This is a report only — the app never fetches a new table on its own.
+
 ---
 
-## 11. What the app will not do
+## 12. What the app will not do
 
 These are deliberate. Each exists because the alternative is a plausible wrong
 number, which is worse than a gap.
@@ -361,7 +457,7 @@ number, which is worse than a gap.
 
 ---
 
-## 12. When something looks wrong
+## 13. When something looks wrong
 
 | Symptom | Check |
 | --- | --- |
@@ -390,7 +486,7 @@ schools and sixteen invented swimmers. Nobody else's real roster is shipped.
 Your own data lives in `data/meets.json`, which is local to your machine and
 not part of the repository. Copying the project to another computer does not
 copy your workspaces; move `data/` yourself if that is what you want, or use
-a backup (section 10).
+a backup (section 11).
 
 One thing to know if you ever publish this: the repository's **history** still
 contains the older `meets.json`, from when the live store and the seed were the

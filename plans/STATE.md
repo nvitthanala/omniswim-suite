@@ -1,5 +1,23 @@
 # Current state — one page
 
+**Updated 2026-09-25.** Active work is the production-readiness push on
+branch `nvitthanala/production-readiness`, plan
+[`plans/2026-09-24/01-NEXT-ROUND-PLAN.md`](2026-09-24/01-NEXT-ROUND-PLAN.md),
+progress log `docs/reference/NEXT_ROUND_2026-09-24_STATE.json` — read the log
+before resuming. It follows
+[`plans/2026-09-22/01-CONVERSION-AND-IMPROVEMENTS-PLAN.md`](2026-09-22/01-CONVERSION-AND-IMPROVEMENTS-PLAN.md)
+(progress log `docs/reference/IMPROVEMENTS_2026-09-22_STATE.json`), which
+landed course-conversion provenance, altitude handling, the bests-correctness
+sweep, and NAIA SCM verdicts. `CHANGELOG.md`'s `[Unreleased]` section has the
+user-visible summary of both rounds.
+
+Everything below this point predates both rounds and describes the
+`nvitthanala/swimcloud-data-ingest` branch's history; it has not been
+refreshed for the current push. Treat the section above as current, and the
+rest as historical background until a later pass folds it in.
+
+---
+
 Last updated 2026-08-16. **Start here.** 132 KB across 19 files sits behind this
 page; everything below links into it.
 

@@ -431,6 +431,94 @@ Avery Henke   A Final
 
 ---
 
+## Part K — Conversion, provenance and NAIA course round (2026-09-22 to 2026-09-24)
+
+Plan: `plans/2026-09-22/01-CONVERSION-AND-IMPROVEMENTS-PLAN.md`. Progress log:
+`docs/reference/IMPROVEMENTS_2026-09-22_STATE.json`.
+
+### New cut-tag states
+
+Three states were added to the tag model, all for a swim that must never be
+confused with an earned cut:
+
+- **`converted_estimate`** — a swim converted from LCM or SCM to SCY clears a
+  yards standard. Already existed as a concept (Part I item 4, "loose fit");
+  it now also names the exact conversion basis (`ScyConversionProvenance`:
+  the table id, the source time, and the truncation) so the badge's tooltip
+  can cite it, e.g. "SCM 54.49 -> 48.82, NCAA Rules Book A-2 (D2)."
+- **`user_inputted`** — a SwimCloud self-reported (`U`-tagged) time. Shown,
+  never a cut, never a best, never an entry.
+- **`extracted_split`** — a time taken out of a longer swim's splits
+  (`X`-tagged). Same treatment as `user_inputted`.
+
+Both `user_inputted` and `extracted_split` route through
+`isRankableSwim` (`packages/core/src/lib/bestTimeEligibility.ts`; see
+`docs/INVARIANTS.md` #8), the one gate every best-time reader now shares.
+
+### Division SCM conversion tables and their PDF sources
+
+`NCAA_SCM_CONVERSION_TABLES` (`packages/core/src/constants.ts`) holds two
+tables, both transcribed 2026-09-22 from the archived qualifying-standards
+PDFs and cross-checked against `pdftotext -layout` output
+(`tests/courseConversionDivision.test.ts` re-reads the PDFs when `pdftotext`
+is installed):
+
+| Table id | Source PDF(s) (manifest id) | Page | Applies to |
+| --- | --- | --- | --- |
+| `ncaa-rules-book-a2-2026-27` | `2026-27D2MSW_QualStandards.pdf` / `2026-27D2WSW_QualStandards.pdf` (`ncaa-d2-men-2026-27`, `ncaa-d2-women-2026-27`) | 2, "Conversions" | D2, D3, NAIA, and any team of unresolved division (default) |
+| `ncaa-d1-2025-26` | `2025-26D1XSW_QUALSTANDARDS.pdf` (`ncaa-d1-2025-26`) | 3, "Conversions" | Division I only |
+
+Both sheets publish the same four rows (`free400To500`, `free800To1000`,
+`free1500To1650`, `allOtherEvents`) and the same procedure: convert to
+seconds, multiply by the factor to five decimal places, **truncate** (never
+round) below the hundredth, convert back. `convertSwimToSCYDetailed`
+implements exactly this and reports which table it used
+(`NcaaScmConversionTableId`). D3 and NAIA publish no factor table of their
+own, so both fall back to the Rules Book table, and the conversion result
+says so (`reason: 'division_publishes_none'`) rather than hiding the choice.
+100 IM and 25-yard/meter events, which sit outside the three named distance
+rows, take `allOtherEvents` (user decision 2026-09-24, `scmAllOtherEvents` in
+the state log) — guarded by `tests/scmAllOtherEventsConversion.test.ts`.
+
+### NCAA altitude table
+
+`NCAA_ALTITUDE_ADJUSTMENT_TABLE` (`packages/core/src/lib/altitude.ts`), five
+rows pairing a yards distance with a metres distance (100, 200, 500y/400m,
+1000y/800m, 1650y/1500m), sourced from the same archived PDFs' "Altitude"
+section. `adjustSwimForAltitude` applies it only to a swim that states its
+own elevation and gives an unadjusted time — never to a SwimCloud swim
+already flagged `isAltitudeAdjusted` (see `docs/INVARIANTS.md` #9). A 50 is
+not in the chart (`event_not_in_table`, never a zero adjustment). A 400-yard
+IM taking the "500 Yards/400 Meters" row is `ALTITUDE_400_YARD_IM_USER_DECISION`
+— a user decision dated 2026-09-24, not an NCAA reading, and every adjustment
+made this way reports `rowBasis: 'user_decision'` so it never passes as a
+sourced table value. Guarded by `tests/altitudeAdjustment.test.ts`.
+
+### NAIA meters-as-SCM decision
+
+The NAIA 2026-27 qualifying-standards sheet
+(`2026-27-SD-Qualifying-Standards-wo-Relays.pdf`, manifest id `naia-2026-27`)
+heads its metric column "METERS" and never states a pool length. NAIA's own
+2020-21 sheet heads the identical column "SCM" — archived as evidence only,
+manifest id **`naia-2020-21-course-evidence`**, under
+`data/cutlines/sources/manifest.json`. Per the user's 2026-09-24 decision,
+NAIA metric standards are read as short-course meters.
+
+The generated cutline data is untouched; only the loader's interpretation
+changed. The named decision constant **`NAIA_2026_27_METERS_AS_SCM`**
+(`packages/core/src/cutlines.ts`) records this, and the loader refuses to
+load a metric record that has no matching named decision — so a future
+re-fetch of the NAIA sheet needs a new, explicit decision rather than
+silently inheriting this one. `cutlineTableCourseForSwim` reads the decision
+so an NAIA team's SCM swim gets a direct verdict against the NAIA table,
+while its LCM swims still convert to yards as a `converted_estimate` (see
+`docs/INVARIANTS.md` #11). `scripts/fetch-cutlines.py` carries the
+evidence-only entry forward on a re-fetch, and `scripts/extract-cutlines.py`
+skips it, so re-extraction still works. Guarded by
+`tests/naiaMeterCourseAsScm.test.ts`.
+
+---
+
 ## Part E — Open risk
 
 The NCAA may republish a PDF at the same URL with revised times (the D1 file

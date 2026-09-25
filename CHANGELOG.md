@@ -10,6 +10,83 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Added
 
+- **A swimmer's personal bests can now come straight from SwimCloud's own
+  data, not just the rendered page.** The extension reads the JSON a
+  swimmer's times page fetches for its own table
+  (`/api/swimmers/{id}/profile_fastest_times/`), under a robots.txt
+  exemption for that one path (user decision — every other `/api/` path
+  stays off-limits). This lands every recorded swim, not only what the page
+  happens to render.
+- **Diving scores are recorded and merged correctly.** A dive result comes in
+  with its score, and a history merge keeps the *higher* of two stored
+  scores for the same dive instead of the lower.
+- **A save that would wipe out real data now warns you first.** If a save
+  would drop a team's men's results, women's results, or athlete history
+  from 20 or more rows to zero, or to under half, the app takes a backup
+  before saving and shows a persistent message naming the drop and the
+  backup file, with a **Restore** button (confirms before it replaces
+  anything). A failed backup never blocks the save.
+- **Course conversions now use the right table for a team's division.**
+  Short-course-meters times convert to yards with the NCAA's own table for
+  that team's division — Division I's own factors, or the NCAA Rules Book
+  Appendix A-2 factors for D2, D3, NAIA, and any team whose division is
+  unknown. Division I is never applied to a team that is not Division I.
+  Every conversion is truncated to the hundredth of a second, matching the
+  NCAA's published procedure (no rounding).
+- **Converted times, altitude-adjusted times, and self-reported times are
+  now marked and handled differently from a real result.** A time converted
+  from LCM or SCM to SCY is tagged as an estimate everywhere it appears — cut
+  badge, recruit projection, entry — never presented as an achieved yards
+  time. A SwimCloud time already marked "Altitude Adjusted" is shown as
+  such and is never run through the NCAA altitude table again (that would
+  adjust it twice). A "User Inputted" (self-reported) SwimCloud time is kept
+  and shown, but never becomes a best time, a cut badge, an entry, or a
+  projection.
+- **Provenance badges on every swim.** Athlete views now show a small badge
+  next to a time: **Extracted** (pulled from a longer swim's splits),
+  **Self-reported**, **Altitude-adj.**, or **Est. from LCM/SCM** for a
+  converted time. A converted time's tooltip states the source time and the
+  table used, for example "SCM 54.49 -> 48.82, NCAA Rules Book A-2 (D2)".
+- **A Lifetime / This season toggle on an athlete's swim history.** Season
+  is labelled by the date range of that season's own swims; the toggle is
+  display-only and never changes scoring or entries.
+- **"Bests pulled" date.** An athlete's history shows the most recent date
+  its SwimCloud data was captured, when known.
+- **Refreshing one team's personal bests without a full crawl.** The
+  SwimCloud crawl panel gains a "Refresh personal bests already captured"
+  option. Checked, with only one team selected and scope set to "Rosters and
+  personal bests," it re-fetches every rostered swimmer on that team instead
+  of skipping pages the capture already holds.
+- **A before/after preview when re-importing from SwimCloud.** Re-importing
+  a roster or a single swimmer now shows "N swimmers improved in M events",
+  expandable to each swim, for example "100 Back SCY 49.58 -> 48.90
+  (-0.68)". The comparison uses the workspace's own stored SwimCloud history
+  as the "before," matches by event and course, and never counts an
+  extracted split or a self-reported time as an improvement.
+- **A SwimCloud reimport can replace a team's SwimCloud data instead of
+  merging into it.** Both SwimCloud import screens now offer **Merge into
+  existing data** (the default, unchanged) or **Replace this team's
+  SwimCloud data**. Replace removes that team and gender's SwimCloud-sourced
+  history (swims with source `swimcloud` or `paste`), the recruit rows built
+  from it, and the SwimCloud and scoring-theory (optimizer) lineup entries
+  built from it, then imports fresh — so a row written under an older,
+  since-fixed rule (for example a recruit time built from a self-reported
+  swim) does not survive a reimport by accident. Manual and PDF data are
+  never touched. Before anything changes, a preview lists what would be
+  removed, why, and which swimmers lose data but are missing from the new
+  capture; confirming takes a backup first and stops if the backup fails. A
+  recruit typed in by hand is now marked `manual` so a replace can never
+  remove it.
+- **The server reports when a cut table is out of date.** At startup, it
+  logs each division whose archived cut table is older than the current
+  season — for example, the Division I table, still 2025-26. It only
+  reports; it never fetches a new one automatically.
+- **NAIA short-course-meters swims now get a direct cut verdict** instead of
+  an estimate. NAIA's published sheet heads its metric column "METERS" with
+  no stated pool length; per a 2026-09-24 user decision, those times are
+  read as short-course meters and judged directly against the NAIA
+  standard. NAIA long-course-meters swims still convert to yards as an
+  estimate, same as before.
 - **Every published NCAA meet format can now be scored.** Built-in rule sets go
   from 2 to 22: dual meets (six lanes or more, and five or fewer), the three
   dual-diving tables, double-dual/triangular/quadrangular, relay meets,
@@ -34,6 +111,21 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   workspace sidebar. History is capped at 20 (`OMNI_BACKUP_KEEP` to change it),
   and retention only ever removes files the app itself wrote.
 - **A user guide**, at `docs/USER_GUIDE.md`.
+
+### Changed
+
+- **Roster event labels are compact and readable.** A swimmer's event list
+  used to print the raw meet-result label ("Event 4 Men 1000 Yard
+  Freestyle"). It now shows "1000 Free (SCY)". The underlying data is
+  unchanged; only the display shortens.
+- **Paste import panels report unread rows in one line.** Instead of one
+  warning per row, a paste that could not read some rows' stamps now names
+  the affected events in a single summary line.
+- **The analytics table splits an event by course and shows how many meets
+  were swum.** A swimmer with both an SCY and an SCM time in the same event
+  now gets two rows instead of one colliding row. The table gained a
+  **Course** column, and the column that showed a meet count — mislabeled
+  "Points" — is now headed **Meets**.
 
 ### Changed
 
@@ -80,6 +172,37 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- **Relay legs no longer get filled from the wrong swim.** A relay leg used
+  to match an individual swim by checking whether one event name contained
+  another, so a swimmer's 1000 Free could stand in for a 100 split, and a
+  500 could stand in for a 50. This produced impossible relay times (a
+  400 Free Relay computed at -373.17) and offered distance swimmers for
+  sprint relay legs. Legs now match on the exact canonical event, so HyTek,
+  SwimCloud, and short display labels ("100 Free") all still match
+  correctly. Under this app's default NSISC rules no team's final score
+  changes, because relays there score by stored place; relay times, the
+  autofill suggestions, and swap rankings do change.
+- **Extracted splits and self-reported times can no longer become a
+  swimmer's "best."** They used to leak into entry suggestions, the
+  cross-course comparison table, theory-plan history, season charts, and
+  history merges — meaning splits pulled out of a longer swim, and times a
+  swimmer typed in themselves, could outrank or replace a real result.
+  One rule now decides eligibility everywhere. Best times are also now
+  matched by the swim's actual event and course, not by whichever label
+  happened to import it, so "50 Free SCY" and "50 Freestyle" are correctly
+  treated as the same event instead of two.
+- **A meet's results were sometimes invisible on the athlete's own
+  profile.** A HyTek result label could fail the check for "is this event
+  offered," so the swim never reached that athlete's profile at all. Fixing
+  this surfaced two more: a relay-split time trial could be ranked as a
+  real best, and a relay leg could be matched to an individual swim by
+  overlapping numbers rather than the exact event (see the relay-leg fix
+  above).
+- **Pasted meet rows no longer lose their meet name to a multi-word cut
+  label.** A row containing a chip like "D2 B" or a glued chip like
+  "NCSAX" could overwrite the meet name or import as a spurious result.
+  Rows are now read column by column, and a glued chip is only split when
+  it matches a known cut label.
 - **Creating your first workspace no longer crashes Manager.** A hook was
   called after an early return, so going from no workspace to one changed the
   number of hooks React saw on a mounted component. Deleting the last

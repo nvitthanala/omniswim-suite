@@ -1,21 +1,48 @@
 {
   "purpose": "Progress log for plans/2026-09-24/01-NEXT-ROUND-PLAN.md. Canonical state; update after every item.",
-  "updatedAt": "2026-09-24",
+  "updatedAt": "2026-09-25",
   "branch": "nvitthanala/production-readiness",
   "limitProtocol": "User 2026-09-24: on any usage limit, FIRST activate /low-priority (a real Claude Code command that stays hidden until a limit is hit; invoke via Skill tool if it appears in the list, else ask the user to type it). Then: log the resume point here; check what stopped agents left; resume them with SendMessage after reset; ONE background agent at a time, prefer Sonnet/Haiku unless scoring/data-correctness; commit per phase; report usage-report proxy numbers. Also in user memory.",
   "openQuestions": [],
   "items": {
     "A1": {
-      "status": "planned"
+      "status": "done (core cea1d9af + UI); docs merge in D0",
+      "coreResult": {
+        "api": "packages/core/src/lib/swimCloudReplace.ts planSwimCloudReplace/applySwimCloudReplacePlan; historyImportRoster previewSwimCloudReplace, mode 'replace', SwimCloudReplaceRefusedError; Recruit.source",
+        "findings": [
+          "All 870 HSU history rows are source 'paste' (SwimCloud paste parsers) - replace treats swimcloud+paste as SwimCloud",
+          "Tracing also recognizes pre-2026-09-22 SCM conversions (D1 factor, rounded); without it 8/214 recruits + 3/67 plans would survive",
+          "HSU Men replace removes 870/870 history, 214/214 recruits, 67/67 plans (plans are scoring-theory output); coach must re-apply scoring theory; Capocci 100 Back becomes 48.77 (from SCM) not 48.15"
+        ],
+        "pendingDocs": {
+          "invariants": "A replace reimport never touches manual or PDF data; the caller backs up first (full text in agent report; orchestrator to merge with D0)",
+          "changelog": "Added: replace reimport (land with A1-UI)"
+        },
+        "uiNotes": [
+          "preview via previewSwimCloudReplace",
+          "POST /api/workspaces/backup before save",
+          "catch SwimCloudReplaceRefusedError",
+          "set source 'manual' in ManagerApp.handleAddRecruit"
+        ],
+        "notChanged": [
+          "appendLineupEntry tags CSV/OCR-derived plans 'swimcloud' so replace removes them",
+          "scorer overrides and relay-leg overrides survive a replace"
+        ]
+      },
+      "pendingDocs": {
+        "changelog": "Added: replace reimport (text in A1-core report + UI copy)",
+        "userGuide": "Merge vs Replace, what replace removes, backup, re-apply scoring theory",
+        "invariants": "replace never touches manual/PDF data; caller backs up first"
+      }
     },
     "A2": {
-      "status": "planned"
+      "status": "done (code); CHANGELOG/USER_GUIDE lines go in the D0 docs commit"
     },
     "A3": {
       "status": "planned"
     },
     "A4": {
-      "status": "planned"
+      "status": "done (code); CHANGELOG/USER_GUIDE lines go in the D0 docs commit"
     },
     "B1": {
       "status": "planned"
@@ -54,7 +81,7 @@
       "status": "planned"
     },
     "D0": {
-      "status": "planned (wave 1)",
+      "status": "partial, resume after A1",
       "what": "Docs catch-up for 98bb59d8..now: CHANGELOG, INVARIANTS, CUTLINE_TAGS_PLAN, USER_GUIDE, plans/STATE.md; vault 02/05/06/08."
     },
     "Dfinal": {
@@ -76,7 +103,11 @@
     "2026-09-24 plan double-checked against code at dfe3f455 and rewritten with gates, waves, scopes, hazards and per-item anchors; user chose .hy3.",
     "2026-09-24 user: hold .hy3; C3 approved; B5 for other users; C2 dropped. Plan updated.",
     "2026-09-24 user: add vault + docs updates to the plan. Added gate 7, section 4 (doc map + per-item rows), D0 catch-up in wave 1, D-final in wave 5.",
-    "2026-09-24 P15 committed; relay follow-ups logged as R1."
+    "2026-09-24 P15 committed; relay follow-ups logged as R1.",
+    "2026-09-25 5h session limit hit (resets 2:10am CT) during wave 1. /low-priority not in the command list; user opened /rate-limit-options. Left in tree: A1-core nothing (was researching optimizer/recruit writers); A2+A4 code done (vitest 1486 green), needed scripts+build; D0 mid-USER_GUIDE (CHANGELOG, INVARIANTS, CUTLINE_TAGS_PLAN, USER_GUIDE modified). Resume plan (slow pace): orchestrator finishes A2+A4 gates; resume A1-core (Opus, data correctness) alone; then resume D0.",
+    "2026-09-25 orchestrator finished A2+A4 gates (eslint, 21 tests, scripts 84/0/1, build) and committed code. A1-core resumed alone.",
+    "2026-09-25 A1-core verified (lint, 1518, 84 scripts, build) and committed. Next (one agent at a time): A1-UI worker, then resume D0.",
+    "2026-09-25 A1-UI verified (lint, 1529, 84 scripts, build; backup route returns {file}) and committed. Resuming D0 with A1/A2/A4 doc text."
   ],
   "userDecisions": {
     "A1": "Replace reimport may delete the team's SwimCloud-sourced history + recruit rows + plan entries (after preview + pre-shrink backup). Manual/PDF data untouched.",
