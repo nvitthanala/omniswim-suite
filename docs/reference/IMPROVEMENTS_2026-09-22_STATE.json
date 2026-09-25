@@ -87,7 +87,7 @@
       "what": "Compare two captures by swim id; list improvements."
     },
     "P9": {
-      "status": "planned",
+      "status": "done (see log): forceRefetch option + panel checkbox; refresh one team by unchecking others + Rosters and personal bests scope. Not verified in a live browser.",
       "what": "Rerun only the personal-bests pass for one roster."
     },
     "P10": {
@@ -110,7 +110,7 @@
       "storedDataNotRepaired": "HSU plan: Fabio Capocci 100 Back 48.15 built from U swim; OBU 10 recruit rows from X/U; 13 HSU + 2 OBU stored bare-A rows keep d1_a; 2 HSU + 4 OBU XR/UR rows marked none. Needs re-import or a repair tool (user decision)."
     },
     "P13": {
-      "status": "done except NAIA (stopped: sheet never states SCM/LCM; lead: NAIA 2025-26 Swimming & Diving Coaches Manual, not archived)",
+      "status": "done (NAIA SCM wired; see log)",
       "what": "Implement the four 2026-09-24 decisions: altitude 400y IM row (user decision), SCM all-other-events coverage, NAIA meter-standard comparison (check data/cutlines for NAIA meter columns; add from the archived NAIA PDF with provenance if absent)."
     },
     "P14": {
@@ -122,7 +122,7 @@
       "what": "relayLegMatching.ts eventMatchesStrokeDistance substring bug (1000 contains 100) feeds simulateRoster and resolveClockHoldTime: a 1000 Free can stand in for a 100 split on the scoring path."
     },
     "P16": {
-      "status": "planned (UI)",
+      "status": "done 3c122145 + 534aec93 (analytics course column + Meets header, orchestrator). Altitude user-decision display skipped: no UI shows altitude adjustments yet.",
       "what": "Compact display of HyTek profile labels in TeamRosterPanel; course column on analytics page; show 400y IM altitude user-decision statement; optional structured unreadStamps list in import panels."
     },
     "P17": {
@@ -145,7 +145,10 @@
     "2026-09-24 dispatched in parallel: executor P13+P14 (packages/core+tests only) and worker P5+P6+P7 plus import-preview mislabel and drawer X/U guard (manager/ui/matrix+tests only).",
     "2026-09-24 both agents (P13+P14 executor, P5-P7 worker) hit the 5h session limit while still exploring; no code changes left behind (tree clean, 1282 green). Resumed both after the reset.",
     "2026-09-24 worker P5-P7 verified (lint 0, 1315 vitest incl. in-progress executor tests, build ok) and committed UI files only. Executor P13+P14 still running.",
-    "2026-09-24 P13+P14 verified (lint 0, 1372 vitest, build, 84 scripts; script-test edits reviewed: strengthened) and committed."
+    "2026-09-24 P13+P14 verified (lint 0, 1372 vitest, build, 84 scripts; script-test edits reviewed: strengthened) and committed.",
+    "2026-09-24 NAIA manual (naia.org) 404; archived official 2020-21 NAIA sheet (metric column headed SCM) as course evidence with user approval. Dispatched executor (NAIA SCM wiring, core), worker P16 (UI), worker P9 (extension). P16 worker stalled (watchdog, no changes) and was resumed.",
+    "2026-09-24 P16 and P9 verified and committed separately; analytics course column done by orchestrator. NAIA SCM wiring (executor) still running.",
+    "2026-09-24 NAIA SCM verified (lint, 1431, build, 84 scripts) and committed; orchestrator fixed extract-cutlines.py (skip evidenceOnly) and fetch-cutlines.py (carry evidence entry)."
   ],
   "executorFollowUpsNotTaken": [
     "raw-label best picking: paste 50 Freestyle and JSON 50 Free SCY give two bestByEvent entries (pre-existing)",
@@ -155,5 +158,11 @@
   ],
   "behaviourChanges": [
     "On meet-loaded workspaces the lineup optimizers now propose individual entries for meet athletes (their profiles used to be empty). Never-loses guard still applies."
+  ],
+  "limitProtocol": "User 2026-09-24: on any usage limit, FIRST activate /low-priority (a real Claude Code command that stays hidden until a limit is hit; invoke via Skill tool if it appears in the list, else ask the user to type it). Then: log the resume point here; check what stopped agents left; resume them with SendMessage after reset; ONE background agent at a time, prefer Sonnet/Haiku unless scoring/data-correctness; commit per phase; report usage-report proxy numbers. Also in user memory.",
+  "followUps": [
+    "NAIA SCM: computedCut in athleteHistory enrichWithComputedCut and rosterCatalog buildStoredSwim still give no badge for metric swims; AthleteHistoryImportPanel cut tooltip uses the SCY lookup",
+    "Stale comments in AthleteEntriesSection.tsx and teamCardView.ts say a converted row never shows a cut badge (no longer true for NAIA SCM)",
+    "No NAIA team in the team registry; NAIA only via workspace overrides"
   ]
 }
