@@ -22,6 +22,7 @@ import {
 } from '../../packages/core/src/schemas/workspace.ts';
 import { JsonRepo, SqliteRepo, PgRepo, type WorkspaceRepo } from './lib/workspaceRepo.ts';
 import { applyWorkspaceUpdateWithGuard } from './lib/dataLossGuard.ts';
+import { staleCutTableLines } from './lib/cutTableFreshness.ts';
 import { isLoopbackHost } from './lib/loopbackHost.ts';
 import { FileSystemSwimCloudCaptureStore } from '../../packages/swimcloud/src/captureStore.ts';
 import {
@@ -595,6 +596,22 @@ async function startServer() {
     console.log(`Startup backup written: ${path.basename(startupBackup)}`);
   } catch (err) {
     console.warn('Startup backup failed; continuing without one:', err);
+  }
+
+  // A4 (production-readiness, 2026-09-24): report-only staleness check for
+  // the archived cut-standard tables. Never fetches anything -- it only logs
+  // which divisions' newest table is behind the current season, so a coach
+  // knows to re-run scripts/fetch-cutlines.py once the NCAA/NAIA publish.
+  // Never fatal: a missing or malformed manifest logs a warning, same
+  // posture as the startup backup above.
+  try {
+    const manifestPath = path.join(PROJECT_ROOT, 'data', 'cutlines', 'sources', 'manifest.json');
+    const manifestJson = fs.readFileSync(manifestPath, 'utf-8');
+    for (const line of staleCutTableLines(manifestJson, new Date())) {
+      console.log(line);
+    }
+  } catch (err) {
+    console.warn('Cut-table freshness check failed; continuing without it:', err);
   }
 
   const optionalAuth = createAuthMiddleware(auth, false);
