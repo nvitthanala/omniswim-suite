@@ -34,6 +34,7 @@ import {
   type SwimCloudCaptureRosterSelection,
 } from '@omniswim/ui';
 import AliasSuggestionsPanel from './AliasSuggestionsPanel';
+import SwimCloudImprovementsSummary from './SwimCloudImprovementsSummary';
 import { splitUnreadStampWarnings } from './athleteHistoryImportView';
 // Track A (plans/2026-09-06/): the browser extension's clipboard capture,
 // read back here. Deliberately imported from these specific subpaths, not
@@ -63,6 +64,7 @@ import {
   type RosterQueue,
   type SwimCloudCaptureRosterImport,
 } from '../lib/rosterQueueImport';
+import type { SwimCloudSwimmerImprovements } from '../lib/swimCloudImprovementDiff';
 
 
 type ImportMode = 'paste' | 'csv';
@@ -133,6 +135,24 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
     inverse: Partial<Workspace>;
     description: string;
   } | null>(null);
+  /**
+   * Swimmers this import improved on, against what the workspace already
+   * stored for them (P8: "after a re-crawl, show who improved"). Set by the
+   * bulk capture path and the single-swimmer clipboard path alike; cleared
+   * whenever a new preview replaces the last one so a stale diff can't linger
+   * on unrelated swims.
+   */
+  const [improvements, setImprovements] = useState<readonly SwimCloudSwimmerImprovements[]>([]);
+  /**
+   * True only on the two paths that actually run the diff (single-swimmer
+   * clipboard capture, bulk capture-browser import) — both convert through
+   * `convertAndAccountSwimmerTimes`/`buildRosterImportFromCapture` with
+   * `existingHistory` supplied. Paste, CSV and the meet-results bulk path
+   * never compute one, so this stays false there and the panel stays hidden
+   * rather than claiming "nothing improved" about a diff nobody ran.
+   */
+  const [improvementsComputed, setImprovementsComputed] = useState(false);
+  const [showImprovements, setShowImprovements] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   // If gender/meet changes and current team is no longer in the list, clear it.
@@ -160,6 +180,8 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
       setStep('preview');
       setDismissedAliasKeys(new Set());
       setLastAliasLink(null);
+      setImprovements([]);
+      setImprovementsComputed(false);
       return;
     }
     const result = parseSwimCloudPasteDetailed(paste, {
@@ -178,6 +200,8 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
     setStep('preview');
     setDismissedAliasKeys(new Set());
     setLastAliasLink(null);
+    setImprovements([]);
+    setImprovementsComputed(false);
   };
 
   /**
@@ -290,6 +314,7 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
       team: team.trim(),
       gender,
       retrievedAt: parseResult.provenance.retrievedAt,
+      existingHistory: workspace.athleteHistory ?? [],
     });
     if (!accounted.ok) {
       toast.push('error', accounted.message);
@@ -313,9 +338,21 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
         'success',
         `Added ${accounted.swims.length} swim(s) for ${accounted.name ?? 'this swimmer'}. ${capturedSoFar}/${rosterQueue.entries.length} roster swimmers captured.`
       );
+      if (accounted.improvements.length > 0) {
+        setImprovements(prev => [
+          ...prev,
+          { name: accounted.name ?? 'This swimmer', improvements: accounted.improvements },
+        ]);
+      }
     } else {
       setPreview([...accounted.swims]);
+      setImprovements(
+        accounted.improvements.length > 0
+          ? [{ name: accounted.name ?? 'This swimmer', improvements: accounted.improvements }]
+          : []
+      );
     }
+    setImprovementsComputed(true);
 
     setWarnings([...new Set(parseResult.warnings.map(w => w.message)), ...accounted.skipWarnings]);
     setUnreadStampSummary(null);
@@ -374,6 +411,8 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
     setStep('preview');
     setDismissedAliasKeys(new Set());
     setLastAliasLink(null);
+    setImprovements([]);
+    setImprovementsComputed(false);
     toast.push('success', `Imported ${conversion.swims.length} swim(s) from ${parseResult.data.meetName ?? 'this meet'}.`);
   }
 
@@ -446,12 +485,16 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
       team: team.trim(),
       gender,
       existingRosterNames,
+      existingHistory: workspace.athleteHistory ?? [],
     });
 
     setRosterQueue(result.rosterQueue);
     setWarnings([...result.warnings]);
     setUnreadStampSummary(null);
     setShowCaptureRosterPanel(false);
+    setImprovements(result.improvements);
+    setImprovementsComputed(true);
+    setShowImprovements(false);
 
     if (result.swims.length === 0) {
       // Same landing as a clipboard roster capture: the checklist is seeded and
@@ -815,6 +858,13 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
               </div>
               {unreadStampSummary ? (
                 <p className="text-ui-caption text-theme-secondary break-words">{unreadStampSummary}</p>
+              ) : null}
+              {improvementsComputed ? (
+                <SwimCloudImprovementsSummary
+                  improvements={improvements}
+                  expanded={showImprovements}
+                  onToggle={() => setShowImprovements(v => !v)}
+                />
               ) : null}
               {swimmerActions.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">

@@ -7,7 +7,8 @@
     ".": "./src/ManagerApp.tsx",
     "./components/RosterImportWizard": "./src/components/RosterImportWizard.tsx",
     "./lib/rosterQueueImport": "./src/lib/rosterQueueImport.ts",
-    "./lib/swimCloudImportBridge": "./src/lib/swimCloudImportBridge.ts"
+    "./lib/swimCloudImportBridge": "./src/lib/swimCloudImportBridge.ts",
+    "./lib/swimCloudImprovementDiff": "./src/lib/swimCloudImprovementDiff.ts"
   },
   "scripts": {
     "lint": "tsc --noEmit -p tsconfig.json"

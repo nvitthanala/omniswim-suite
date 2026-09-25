@@ -37,6 +37,12 @@ import { canonicalSwimmerName, foldDiacritics, normalizeSwimmerName } from '@omn
 import type { SwimCloudAthlete } from '@omniswim/swimcloud/entities';
 import type { SwimCloudRosterParse, SwimCloudSwimmerTimesParse } from '@omniswim/swimcloud/parser';
 import { swimCloudSwimmerTimesToHistoricalSwims } from './swimCloudImportBridge';
+import {
+  diffSwimCloudPersonalBests,
+  existingSwimCloudHistoryFor,
+  type SwimCloudEventImprovement,
+  type SwimCloudSwimmerImprovements,
+} from './swimCloudImprovementDiff';
 
 /* -------------------------------------------------------------------------- */
 /* The queue                                                                   */
@@ -216,6 +222,13 @@ export interface SwimmerTimesAccounting {
   readonly match: RosterQueueMatchKey;
   /** The name the page printed, verbatim — family name first. Absent when the page named nobody. */
   readonly name?: string;
+  /**
+   * Events this capture improved on what the workspace already stored for
+   * this swimmer — see `swimCloudImprovementDiff.ts`. Empty when
+   * `ConvertSwimmerTimesOptions.existingHistory` was not supplied, or when
+   * nothing improved.
+   */
+  readonly improvements: readonly SwimCloudEventImprovement[];
 }
 
 export interface SwimmerTimesAccountingFailure {
@@ -239,6 +252,13 @@ export interface ConvertSwimmerTimesOptions {
   readonly gender: Gender;
   /** When the capture was taken. Stamped on every imported swim. */
   readonly retrievedAt?: string;
+  /**
+   * The workspace's full stored history (`workspace.athleteHistory`), for the
+   * "who improved" diff — see `swimCloudImprovementDiff.ts`. Additive: when
+   * omitted, `SwimmerTimesAccounting.improvements` is always empty, exactly
+   * the behavior before this option existed.
+   */
+  readonly existingHistory?: readonly HistoricalSwim[];
 }
 
 /**
@@ -289,6 +309,14 @@ export function convertAndAccountSwimmerTimes(
     skippedByReason.set(row.reason, (skippedByReason.get(row.reason) ?? 0) + 1);
   }
 
+  const improvements =
+    options.existingHistory !== undefined && parse.name !== undefined
+      ? diffSwimCloudPersonalBests(
+          existingSwimCloudHistoryFor(options.existingHistory, parse.name, options.team.trim(), options.gender),
+          conversion.swims,
+        )
+      : [];
+
   return {
     ok: true,
     swims: conversion.swims,
@@ -296,6 +324,7 @@ export function convertAndAccountSwimmerTimes(
     skippedByReason,
     skippedCount: conversion.skipped.length,
     match,
+    improvements,
     ...(parse.name === undefined ? {} : { name: parse.name }),
   };
 }
@@ -433,6 +462,14 @@ export interface SwimCloudCaptureRosterImport {
   readonly genderMismatch: boolean;
   /** One line for the success toast. */
   readonly summary: string;
+  /**
+   * Every swimmer this capture improved on, against what the workspace
+   * already stored for them — empty when `BuildRosterImportOptions.existingHistory`
+   * was not supplied, or when nothing improved. See `swimCloudImprovementDiff.ts`.
+   */
+  readonly improvements: readonly SwimCloudSwimmerImprovements[];
+  /** `improvements.reduce((n, s) => n + s.improvements.length, 0)` — kept alongside so a caller doesn't recompute it. */
+  readonly improvedEventCount: number;
 }
 
 export interface BuildRosterImportOptions {
@@ -446,6 +483,12 @@ export interface BuildRosterImportOptions {
   readonly gender: Gender;
   /** `rosterNamesForTeam(workspace, team, gender)` — see {@link SeedRosterQueueOptions.existingRosterNames}. */
   readonly existingRosterNames: readonly string[];
+  /**
+   * The workspace's full stored history (`workspace.athleteHistory`), for the
+   * "who improved" diff. Additive: when omitted, `improvements` is always
+   * empty, exactly the behavior before this option existed.
+   */
+  readonly existingHistory?: readonly HistoricalSwim[];
 }
 
 /**
@@ -476,7 +519,7 @@ export interface BuildRosterImportOptions {
 export function buildRosterImportFromCapture(
   options: BuildRosterImportOptions,
 ): SwimCloudCaptureRosterImport {
-  const { roster, swimmerTimes, team, gender, existingRosterNames } = options;
+  const { roster, swimmerTimes, team, gender, existingRosterNames, existingHistory } = options;
   const trimmedTeam = team.trim();
   const teamLabel = roster.teamName ?? trimmedTeam;
 
@@ -496,6 +539,7 @@ export function buildRosterImportFromCapture(
   const swims: HistoricalSwim[] = [];
   const refusals: string[] = [];
   const skippedByReason = new Map<string, number>();
+  const swimmerImprovements: SwimCloudSwimmerImprovements[] = [];
   let importedSwimmerCount = 0;
 
   for (const { entry, parse } of pairings) {
@@ -523,6 +567,18 @@ export function buildRosterImportFromCapture(
     }
     queue = markRosterQueueCaptured(queue, accounted.match).queue;
     importedSwimmerCount += 1;
+
+    if (existingHistory !== undefined) {
+      // The roster page's own name — never `accounted`'s, which may carry
+      // the times page's family-first order — since it is guaranteed present
+      // and is exactly the name `existingRosterNames`/the workspace roster
+      // already spells this swimmer with.
+      const priorSwims = existingSwimCloudHistoryFor(existingHistory, entry.name, trimmedTeam, gender);
+      const improvements = diffSwimCloudPersonalBests(priorSwims, accounted.swims);
+      if (improvements.length > 0) {
+        swimmerImprovements.push({ name: entry.name, improvements });
+      }
+    }
   }
 
   warnings.push(...refusals, ...formatSkipWarnings(skippedByReason));
@@ -547,5 +603,7 @@ export function buildRosterImportFromCapture(
     newAthleteCount: seed.newAthletes.length,
     genderMismatch,
     summary,
+    improvements: swimmerImprovements,
+    improvedEventCount: swimmerImprovements.reduce((n, s) => n + s.improvements.length, 0),
   };
 }
