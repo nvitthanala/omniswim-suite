@@ -28,14 +28,15 @@ import type { AthleteEventProfile } from '@omniswim/core/types';
 function describeStrongestEvents(profile: AthleteEventProfile): string {
   const ratios = profile.qualityByEvent ?? {};
   const lines = profile.primaryEvents.map(event => {
+    const label = formatEventLabelForDisplay(event);
     const r = ratios[event];
-    return r ? `${event} — ${(r * 100).toFixed(1)}% of the standard` : `${event} — no published standard`;
+    return r ? `${label} — ${(r * 100).toFixed(1)}% of the standard` : `${label} — no published standard`;
   });
   const header = profile.rankingDivision
     ? `Strongest first, vs the published ${profile.rankingDivision} standard (lower is better):`
     : 'Division unknown, so these are not ranked against a standard:';
   const unranked = profile.unrankedEvents?.length
-    ? `\n\nNo published standard to judge: ${profile.unrankedEvents.join(', ')}`
+    ? `\n\nNo published standard to judge: ${profile.unrankedEvents.map(formatEventLabelForDisplay).join(', ')}`
     : '';
   return `${header}\n${lines.join('\n')}${unranked}`;
 }
@@ -47,7 +48,12 @@ import { optimizeRosterAllTeams, optimizeRosterForTeam } from '@omniswim/core/li
 import { applyScorerOffRelayPatch, type TeamLineupAudit } from '@omniswim/core/lib/rosterLineupAudit';
 import { Button, TeamSelect, useToast } from '@omniswim/ui';
 import TeamRosterRow from './TeamRosterRow';
-import { buildRosterRowWarnings, computeRosterRowIssueFlags, countTeamMembers } from './teamRosterView';
+import {
+  buildRosterRowWarnings,
+  computeRosterRowIssueFlags,
+  countTeamMembers,
+  formatEventLabelForDisplay,
+} from './teamRosterView';
 
 const ROSTER_WINDOW_THRESHOLD = 80;
 const ROSTER_ROW_ESTIMATE_PX = 44;

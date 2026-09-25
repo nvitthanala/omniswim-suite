@@ -34,6 +34,7 @@ import {
   type SwimCloudCaptureRosterSelection,
 } from '@omniswim/ui';
 import AliasSuggestionsPanel from './AliasSuggestionsPanel';
+import { splitUnreadStampWarnings } from './athleteHistoryImportView';
 // Track A (plans/2026-09-06/): the browser extension's clipboard capture,
 // read back here. Deliberately imported from these specific subpaths, not
 // the @omniswim/swimcloud package root — see
@@ -119,6 +120,8 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
   const [paste, setPaste] = useState('');
   const [preview, setPreview] = useState<HistoricalSwim[]>([]);
   const [warnings, setWarnings] = useState<string[]>([]);
+  /** Compact summary of unreadable-stamp rows in the last paste parse, pulled out of `warnings`. */
+  const [unreadStampSummary, setUnreadStampSummary] = useState<string | null>(null);
   const [format, setFormat] = useState<string>('unknown');
   const [step, setStep] = useState<'paste' | 'preview'>('paste');
   const [showReference, setShowReference] = useState(false);
@@ -152,6 +155,7 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
       }
       setPreview(result.swims);
       setWarnings(result.warnings);
+      setUnreadStampSummary(null);
       setFormat('csv');
       setStep('preview');
       setDismissedAliasKeys(new Set());
@@ -163,8 +167,13 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
       gender,
       division: divisionForTeamOrNull(team.trim()) ?? undefined,
     });
+    // Pull the per-row "Unrecognized SwimCloud stamp" sentences out of the
+    // flat warnings list and collapse them into one line below — a paste
+    // with a dozen unreadable stamps otherwise buries every other warning.
+    const { otherWarnings, unreadStampSummary: summary } = splitUnreadStampWarnings(result.warnings);
     setPreview(result.swims);
-    setWarnings(result.warnings);
+    setWarnings(otherWarnings);
+    setUnreadStampSummary(summary);
     setFormat(result.format);
     setStep('preview');
     setDismissedAliasKeys(new Set());
@@ -309,6 +318,7 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
     }
 
     setWarnings([...new Set(parseResult.warnings.map(w => w.message)), ...accounted.skipWarnings]);
+    setUnreadStampSummary(null);
     setFormat('swimcloud');
     setStep('preview');
     setDismissedAliasKeys(new Set());
@@ -359,6 +369,7 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
     // event, not once for the whole capture) — showing it N times adds
     // nothing a coach needs to see N times.
     setWarnings([...new Set(parseResult.warnings.map(w => w.message)), ...formatSkipWarnings(skippedByReason)]);
+    setUnreadStampSummary(null);
     setFormat('swimcloud');
     setStep('preview');
     setDismissedAliasKeys(new Set());
@@ -439,6 +450,7 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
 
     setRosterQueue(result.rosterQueue);
     setWarnings([...result.warnings]);
+    setUnreadStampSummary(null);
     setShowCaptureRosterPanel(false);
 
     if (result.swims.length === 0) {
@@ -801,6 +813,9 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
                   </Badge>
                 ))}
               </div>
+              {unreadStampSummary ? (
+                <p className="text-ui-caption text-theme-secondary break-words">{unreadStampSummary}</p>
+              ) : null}
               {swimmerActions.length > 0 ? (
                 <div className="flex flex-wrap gap-1.5">
                   {swimmerActions.map(s => (

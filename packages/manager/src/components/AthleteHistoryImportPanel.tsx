@@ -30,6 +30,7 @@ import {
   buildHistoryBestIndex,
   diffMatchKey,
   rosterNameEntriesForTeam,
+  splitUnreadStampWarnings,
   type ImportDiffStatus,
   type RowMeta,
 } from './athleteHistoryImportView';
@@ -162,6 +163,11 @@ export default function AthleteHistoryImportPanel({
     }
     return { newCount, improvedCount, unchangedCount };
   }, [rowMeta]);
+
+  const { otherWarnings, unreadStampSummary } = useMemo(
+    () => splitUnreadStampWarnings(warnings),
+    [warnings]
+  );
 
   const previewNames = useMemo(() => {
     const names: string[] = [];
@@ -426,14 +432,18 @@ export default function AthleteHistoryImportPanel({
         </p>
       ) : null}
 
-      {warnings.length > 0 ? (
+      {otherWarnings.length > 0 ? (
         <ul className="text-ui-caption text-amber-400/90 mb-2 list-disc list-inside space-y-1">
-          {warnings.map((w, i) => (
+          {otherWarnings.map((w, i) => (
             <li key={i} className="break-words">
               {w}
             </li>
           ))}
         </ul>
+      ) : null}
+
+      {unreadStampSummary ? (
+        <p className="text-ui-caption text-theme-secondary mb-2 break-words">{unreadStampSummary}</p>
       ) : null}
 
       {error ? <p className="text-ui-caption text-amber-400 mb-2 break-words">{error}</p> : null}

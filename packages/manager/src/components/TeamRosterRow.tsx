@@ -14,6 +14,7 @@ import { Button } from '@omniswim/ui';
 import type { ScorerRosterRow } from '@omniswim/core/lib/scorerRoster';
 import type { AthleteEventProfile } from '@omniswim/core/types';
 import AthleteRoleTag from './AthleteRoleTag';
+import { formatEventLabelForDisplay } from './teamRosterView';
 
 type Props = {
   row: ScorerRosterRow;
@@ -76,7 +77,10 @@ export default function TeamRosterRow({
         </div>
         {showProfileHint && profile ? (
           <p className="text-ui-caption text-theme-muted truncate mt-1" title={describeProfile(profile)}>
-            {profile.primaryEvents.slice(0, 3).join(' · ')}
+            {profile.primaryEvents
+              .slice(0, 3)
+              .map(formatEventLabelForDisplay)
+              .join(' · ')}
           </p>
         ) : null}
       </td>

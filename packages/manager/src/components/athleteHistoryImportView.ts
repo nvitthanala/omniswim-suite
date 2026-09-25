@@ -89,6 +89,43 @@ export type RowMeta = {
   cutTooltip?: string;
 };
 
+const UNREAD_STAMP_WARNING_RE = /^Unrecognized SwimCloud stamp "(.*?)" on (.*?) — imported as a result\./;
+
+export type SplitUnreadStampWarnings = {
+  /** `warnings` with every per-row unread-stamp sentence pulled out. */
+  otherWarnings: string[];
+  /** One compact line covering every row pulled out, or `null` when there were none. */
+  unreadStampSummary: string | null;
+};
+
+/**
+ * `parseSwimCloudPasteDetailed` (and the multi-profile parser under it) bakes
+ * one full sentence per unreadable stamp into its flat `warnings: string[]`
+ * (`unreadSwimCloudStampWarning` in `@omniswim/core/lib/athleteHistory`). A
+ * paste with a dozen such rows then buries every other warning under a dozen
+ * near-identical sentences. This pulls those specific sentences back out and
+ * collapses them into one line, so the two import panels can show the rest of
+ * `warnings` as-is plus a short summary underneath — without core exposing a
+ * separate structured field through `ParseSwimCloudResult` for it.
+ */
+export function splitUnreadStampWarnings(warnings: string[]): SplitUnreadStampWarnings {
+  const otherWarnings: string[] = [];
+  const events: string[] = [];
+  for (const w of warnings) {
+    const match = UNREAD_STAMP_WARNING_RE.exec(w);
+    if (match) {
+      events.push(match[2]);
+    } else {
+      otherWarnings.push(w);
+    }
+  }
+  if (events.length === 0) return { otherWarnings, unreadStampSummary: null };
+  const shown = events.slice(0, 5).join(', ');
+  const more = events.length > 5 ? `, +${events.length - 5} more` : '';
+  const unreadStampSummary = `${events.length} row${events.length === 1 ? '' : 's'} had a stamp we couldn't read: ${shown}${more}`;
+  return { otherWarnings, unreadStampSummary };
+}
+
 export type SwimRowTagSpec = {
   key: string;
   show: boolean;

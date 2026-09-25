@@ -9,6 +9,54 @@ import type { Gender, SwimmerResult } from '@omniswim/core/types';
 import { isPlaceholderAthleteName, scorerRosterKey } from '@omniswim/core/lib/scorerRoster';
 import { isRelayResult } from '@omniswim/core/lib/utils';
 import { issueBadgeLabel, type LineupAthleteIssue } from '@omniswim/core/lib/rosterLineupAudit';
+import { canonicalMeetEventLabel, normalizeEventLabel } from '@omniswim/core/lib/athleteHistory';
+
+/**
+ * Course suffix read directly off the raw HyTek event label ("Event 4 Men
+ * 1000 Yard Freestyle" -> "SCY"). Display-only — it never decides which best
+ * a swim counts toward, only whether an unambiguous course tag prints next
+ * to the compact event name. "Meters" alone is genuinely ambiguous (SCM or
+ * LCM) and is left untagged rather than guessed, per this repo's data
+ * provenance rule against inventing a value that was not published.
+ */
+function courseSuffixFromRawEvent(raw: string): string {
+  if (/\byards?\b/i.test(raw)) return 'SCY';
+  if (/\blcm\b/i.test(raw) || /\blong course meters?\b/i.test(raw)) return 'LCM';
+  if (/\bscm\b/i.test(raw) || /\bshort course meters?\b/i.test(raw)) return 'SCM';
+  return '';
+}
+
+const STROKE_ABBREVIATIONS: [string, string][] = [
+  ['Freestyle', 'Free'],
+  ['Backstroke', 'Back'],
+  ['Breaststroke', 'Breast'],
+  ['Butterfly', 'Fly'],
+  ['Individual Medley', 'IM'],
+];
+
+/**
+ * Compact display label for a meet-event string as recorded on an
+ * AthleteEventProfile ("Event 4 Men 1000 Yard Freestyle" -> "1000 Free
+ * (SCY)"). Built on core's own canonicalizer (`canonicalMeetEventLabel`) so
+ * this never re-derives what counts as the same event — it only shortens the
+ * stroke name and appends a course tag when the raw label states one
+ * unambiguously. Falls back to `normalizeEventLabel`, then the raw string
+ * itself, for relay/dive labels `canonicalMeetEventLabel` declines to touch,
+ * so a profile's event list never prints raw "Event N ... Yard ..."
+ * scaffolding.
+ */
+export function formatEventLabelForDisplay(raw: string): string {
+  const canonical = canonicalMeetEventLabel(raw) ?? normalizeEventLabel(raw) ?? raw;
+  let compact = canonical;
+  for (const [long, short] of STROKE_ABBREVIATIONS) {
+    if (compact.endsWith(long)) {
+      compact = `${compact.slice(0, compact.length - long.length)}${short}`;
+      break;
+    }
+  }
+  const course = courseSuffixFromRawEvent(raw);
+  return course ? `${compact} (${course})` : compact;
+}
 
 /**
  * Distinct-athlete count per team. Relay-only placeholder rows ("—" vacant
