@@ -4,6 +4,7 @@
  */
 
 import { ClassYear, RelayLegOverride, RelayLegStroke, SwimmerResult } from '../types';
+import { normalizeEventForCutline } from './cutlineEventNames';
 import { parseRelayDistanceYards, relayEntryKey, relayLegDistanceYards } from './relaySplits';
 
 function normalizeName(name: string): string {
@@ -34,14 +35,94 @@ export function inferRelayStrokeDistance(event: string): number {
   return relayLegDistanceYards(parseRelayDistanceYards(event));
 }
 
+/** The individual event each relay-leg stroke swims, spelled as the canonical event name. */
+const LEG_STROKE_EVENT: Record<RelayLegStroke, string> = {
+  back: 'Backstroke',
+  breast: 'Breaststroke',
+  fly: 'Butterfly',
+  free: 'Freestyle',
+};
+
+/** The stroke each keyword from {@link strokeKeywordsForRelayLeg} names. */
+const STROKE_BY_KEYWORD: Record<string, RelayLegStroke> = {
+  backstroke: 'back',
+  back: 'back',
+  breaststroke: 'breast',
+  breast: 'breast',
+  butterfly: 'fly',
+  fly: 'fly',
+  freestyle: 'free',
+  free: 'free',
+};
+
+/** The label suffix a relay-split row carries: `100 Freestyle (relay split)`. */
+const RELAY_SPLIT_SUFFIX = /\s*\(relay split\)\s*$/i;
+
+/**
+ * The individual event one relay leg swims, as a canonical event name:
+ * `relayLegEventName(100, 'free')` is `100 Freestyle`.
+ */
+export function relayLegEventName(legDistanceYards: number, stroke: RelayLegStroke): string {
+  return normalizeEventForCutline(`${legDistanceYards} ${LEG_STROKE_EVENT[stroke]}`);
+}
+
+/**
+ * True when `eventRaw` is the individual event one relay leg swims: the leg's
+ * own distance and stroke, and nothing else.
+ *
+ * Compared as canonical event names (`normalizeEventForCutline`), never by
+ * substring. The substring test this replaces read `1000 Freestyle` as a 100
+ * Free, `500 Free` and `1650 Free` as a 50 Free, and the HyTek entry number in
+ * `Event 500 Women 100 Yard Butterfly Time Trial` as a 50 Fly. On the scoring
+ * path that let a distance swim fill a sprint leg, and let `simulateRoster`
+ * measure a substitute against a 1000 Free (IMPROVEMENTS_2026-09-22 P15).
+ *
+ * Every spelling of the leg event matches: canonical (`100 Freestyle`), short
+ * (`100 Free`), SwimCloud (`100 Free SCY`), HyTek (`Event 35 Men 100 Yard
+ * Freestyle`), and a relay-split row (`100 Freestyle (relay split)`).
+ *
+ * A time trial of the leg event matches. It is the same swim over the same
+ * distance and stroke, and the substring test always accepted it. This is
+ * where the leg test differs from `swimEventIdentity`, which keeps a time
+ * trial apart because a time trial never occupies the program event.
+ *
+ * Course is not tested, exactly as before. On the scoring path every row's
+ * time is already stated in yards (`buildWhatIfProjection` converts each
+ * recruit row with `scoredTimeOf` before it reaches `simulateRoster`), while
+ * its label may still name the course it was swum in. Rejecting on the label
+ * would drop converted times.
+ */
+export function isRelayLegEvent(
+  eventRaw: string,
+  legDistanceYards: number,
+  stroke: RelayLegStroke
+): boolean {
+  const label = String(eventRaw ?? '').replace(RELAY_SPLIT_SUFFIX, '').trim();
+  if (!label) return false;
+  const want = relayLegEventName(legDistanceYards, stroke).toLowerCase();
+  return normalizeEventForCutline(label).toLowerCase() === want;
+}
+
+/**
+ * Keyword form of {@link isRelayLegEvent}, kept for existing callers.
+ *
+ * `strokeKeywords` names the leg's stroke the way
+ * {@link strokeKeywordsForRelayLeg} does (`['backstroke', 'back']`). The
+ * event matches when it is the leg event for any stroke the keywords name. A
+ * keyword that names no stroke is ignored; keywords that name none match
+ * nothing.
+ */
 export function eventMatchesStrokeDistance(
   eventRaw: string,
   distance: number,
   strokeKeywords: string[]
 ): boolean {
-  const evNorm = eventRaw.replace(/\s*\(relay split\)\s*$/i, '').toLowerCase();
-  if (!evNorm.includes(String(distance))) return false;
-  return strokeKeywords.some(kw => evNorm.includes(kw));
+  const strokes = new Set<RelayLegStroke>();
+  for (const kw of strokeKeywords) {
+    const stroke = STROKE_BY_KEYWORD[kw.trim().toLowerCase()];
+    if (stroke) strokes.add(stroke);
+  }
+  return [...strokes].some(stroke => isRelayLegEvent(eventRaw, distance, stroke));
 }
 
 export function relayStrokeForIndex(eventLower: string, legIndex: number): RelayLegStroke {
@@ -66,8 +147,8 @@ export function relayEventAssignmentKey(team: string, gender: string | undefined
 
 export function swimmerMatchesRelayLeg(swimmer: SwimmerResult, event: string, legIndex: number): boolean {
   if (swimmer.isRelay) return false;
-  const { legDistanceYards, keywords } = relayLegRequirements(event, legIndex);
-  return eventMatchesStrokeDistance(swimmer.event, legDistanceYards, keywords);
+  const { legDistanceYards, stroke } = relayLegRequirements(event, legIndex);
+  return isRelayLegEvent(swimmer.event, legDistanceYards, stroke);
 }
 
 export function listEligibleRelayLegCandidates(

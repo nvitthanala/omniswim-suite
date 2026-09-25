@@ -1,0 +1,2443 @@
+{
+  "_provenance": {
+    "source": "data/meets.json, workspace \"Blank Workspace 1\" (id 8fc8e12e-7fea-4dfc-923f-394361232f94), loadedMeet.pdfFilename 2026_NSISC_Championships_Final_Results.pdf",
+    "extractedAt": "2026-09-24",
+    "selection": "Rows copied verbatim and in their original array order: four relay entries (HSU women 4x50 Free Relay B Final rank 12; HSU men 4x100 Medley Relay A Final rank 2; HSU men 4x100 Free Relay B Final rank 10; Delta State men 4x100 Free Relay A Final) and every individual row of the named swimmers on those teams.",
+    "why": "P15 relay-leg event matching. The relays hold swimmers whose longer free swim (500/1000/1650) the old substring matcher read as the leg distance, and a medley leg holder (Oskar Cebula) with both a program 100 Breast and a 100 Breast time trial."
+  },
+  "womenResults": [
+    {
+      "id": "d5a04b58-f09d-42c5-9e86-80ce1c4bcd77",
+      "rank": 14,
+      "name": "Daniella Ruiz",
+      "classYear": "SO",
+      "team": "Henderson State University",
+      "time": "10:56.87",
+      "prelimsTime": null,
+      "finalsTime": "10:56.87",
+      "roundSwam": "Finals",
+      "points": 3,
+      "event": "Event 3 Women 1000 Yard Freestyle",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "e1e16f9b-b920-42cc-9ebb-0b846847df58",
+      "rank": 16,
+      "name": "Ryann Grasser",
+      "classYear": "SR",
+      "team": "Henderson State University",
+      "time": "2:14.87",
+      "prelimsTime": "2:14.40",
+      "finalsTime": "2:14.87",
+      "roundSwam": "B Final",
+      "points": 1,
+      "event": "Event 5 Women 200 Yard IM",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "f878916b-fe0b-4aa6-9517-ebad8182ee7c",
+      "rank": 10,
+      "name": "Shelby Travis",
+      "classYear": "SO",
+      "team": "Henderson State University",
+      "time": "24.33",
+      "prelimsTime": "24.26",
+      "finalsTime": "24.33",
+      "roundSwam": "B Final",
+      "points": 7,
+      "event": "Event 7 Women 50 Yard Freestyle",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "853fe47a-83d5-4cfb-b14a-84743279316a",
+      "rank": 23,
+      "name": "Allie Grace Rhodes",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "25.99",
+      "prelimsTime": "25.99",
+      "finalsTime": null,
+      "roundSwam": "Preliminaries",
+      "points": 0,
+      "event": "Event 7 Women 50 Yard Freestyle",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "764cc4c3-8226-45ca-a182-9932628f8d0e",
+      "rank": 19,
+      "name": "Ryleigh Wells",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "25.55",
+      "prelimsTime": "25.53",
+      "finalsTime": "25.55",
+      "roundSwam": "C Final",
+      "points": 0,
+      "event": "Event 7 Women 50 Yard Freestyle",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "b7993633-0174-46dd-9b26-dc07e3ce87ae",
+      "rank": 13,
+      "name": "Allie Grace Rhodes",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "1:02.13",
+      "prelimsTime": "1:01.71",
+      "finalsTime": "1:02.13",
+      "roundSwam": "B Final",
+      "points": 4,
+      "event": "Event 12 Women 100 Yard Butterfly",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "0db4d04e-a4fb-44ff-ad71-b5fbd69982ad",
+      "rank": 11,
+      "name": "Daniella Ruiz",
+      "classYear": "SO",
+      "team": "Henderson State University",
+      "time": "4:48.54",
+      "prelimsTime": "4:48.45",
+      "finalsTime": "4:48.54",
+      "roundSwam": "B Final",
+      "points": 6,
+      "event": "Event 14 Women 400 Yard IM",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "189b4fbc-64d9-43ed-9ec0-cf96fd407efb",
+      "rank": 11,
+      "name": "Ryann Grasser",
+      "classYear": "SR",
+      "team": "Henderson State University",
+      "time": "1:56.32",
+      "prelimsTime": "1:56.08",
+      "finalsTime": "1:56.32",
+      "roundSwam": "B Final",
+      "points": 6,
+      "event": "Event 16 Women 200 Yard Freestyle",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "18b44631-78c5-4973-bcd8-e580a462b9ee",
+      "rank": 18,
+      "name": "Iris McNamara",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "1:57.62",
+      "prelimsTime": "1:58.48",
+      "finalsTime": "1:57.62",
+      "roundSwam": "C Final",
+      "points": 0,
+      "event": "Event 16 Women 200 Yard Freestyle",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "c20b7862-3a24-4789-b9c0-6ea525ccda04",
+      "rank": 24,
+      "name": "Shelby Travis",
+      "classYear": "SO",
+      "team": "Henderson State University",
+      "time": "2:04.07",
+      "prelimsTime": "2:00.67",
+      "finalsTime": "2:04.07",
+      "roundSwam": "C Final",
+      "points": 0,
+      "event": "Event 16 Women 200 Yard Freestyle",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "51b8d0ef-037a-410e-94fb-501145f244d4",
+      "rank": 13,
+      "name": "Iris McNamara",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "5:18.73",
+      "prelimsTime": "5:26.73",
+      "finalsTime": "5:18.73",
+      "roundSwam": "B Final",
+      "points": 4,
+      "event": "Event 21 Women 500 Yard Freestyle",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "04cf44a3-fea2-4049-8dbb-eee592ae8491",
+      "rank": 16,
+      "name": "Ryann Grasser",
+      "classYear": "SR",
+      "team": "Henderson State University",
+      "time": "5:23.54",
+      "prelimsTime": "5:23.54",
+      "finalsTime": null,
+      "roundSwam": "Preliminaries",
+      "points": 0,
+      "event": "Event 21 Women 500 Yard Freestyle",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "0efdb8b1-b4ee-4c91-86f6-e90029108b59",
+      "rank": 22,
+      "name": "Allie Grace Rhodes",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "1:04.01",
+      "prelimsTime": "1:04.30",
+      "finalsTime": "1:04.01",
+      "roundSwam": "C Final",
+      "points": 0,
+      "event": "Event 23 Women 100 Yard Backstroke",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "b32e0ef8-4fd5-48e2-b1ba-c9b05f48d5fc",
+      "rank": 12,
+      "name": "Ryleigh Wells",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "1:10.52",
+      "prelimsTime": "1:09.37",
+      "finalsTime": "1:10.52",
+      "roundSwam": "B Final",
+      "points": 5,
+      "event": "Event 25 Women 100 Yard Breaststroke",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "60368f0a-a272-4272-9fe3-adc8a693d526",
+      "rank": 8,
+      "name": "Daniella Ruiz",
+      "classYear": "SO",
+      "team": "Henderson State University",
+      "time": "2:14.94",
+      "prelimsTime": "2:16.36",
+      "finalsTime": "2:14.94",
+      "roundSwam": "A Final",
+      "points": 11,
+      "event": "Event 27 Women 200 Yard Butterfly",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "ee8b182d-21ca-460e-9624-bb266c0f5acb",
+      "rank": 12,
+      "name": "Ryann Grasser",
+      "classYear": "SR",
+      "team": "Henderson State University",
+      "time": "1:39.74",
+      "prelimsTime": null,
+      "finalsTime": "1:39.74",
+      "roundSwam": "B Final",
+      "points": 2.5,
+      "event": "Event 30 Women 4x50 Yard Freestyle Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Ryann Grasser",
+          "year": "SR"
+        },
+        {
+          "name": "Ryleigh Wells",
+          "year": "FR"
+        },
+        {
+          "name": "Allie Grace Rhodes",
+          "year": "FR"
+        },
+        {
+          "name": "Iris McNamara",
+          "year": "FR"
+        }
+      ],
+      "relayLegIndex": 0,
+      "relayLegStroke": "free",
+      "relayLegSplit": "25.17",
+      "relayLegSplitDetail": {
+        "legIndex": 0,
+        "stroke": "free",
+        "legDistanceYards": 50,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "25.17",
+            "cumulativeLeg": "25.17"
+          }
+        ],
+        "legTotal": "25.17"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "25.17",
+          "25.01",
+          "25.45",
+          "24.11"
+        ],
+        "firstHalf": "50.18",
+        "secondHalf": "49.56",
+        "teamTotal": "1:39.74"
+      },
+      "relayTeamTime": "1:39.74"
+    },
+    {
+      "id": "d4a2533d-7fd0-4b69-add2-b6e3b79f34ca",
+      "rank": 12,
+      "name": "Ryleigh Wells",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "1:39.74",
+      "prelimsTime": null,
+      "finalsTime": "1:39.74",
+      "roundSwam": "B Final",
+      "points": 2.5,
+      "event": "Event 30 Women 4x50 Yard Freestyle Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Ryann Grasser",
+          "year": "SR"
+        },
+        {
+          "name": "Ryleigh Wells",
+          "year": "FR"
+        },
+        {
+          "name": "Allie Grace Rhodes",
+          "year": "FR"
+        },
+        {
+          "name": "Iris McNamara",
+          "year": "FR"
+        }
+      ],
+      "relayLegIndex": 1,
+      "relayLegStroke": "free",
+      "relayLegSplit": "25.01",
+      "relayLegSplitDetail": {
+        "legIndex": 1,
+        "stroke": "free",
+        "legDistanceYards": 50,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "25.01",
+            "cumulativeLeg": "50.18"
+          }
+        ],
+        "legTotal": "25.01"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "25.17",
+          "25.01",
+          "25.45",
+          "24.11"
+        ],
+        "firstHalf": "50.18",
+        "secondHalf": "49.56",
+        "teamTotal": "1:39.74"
+      },
+      "relayTeamTime": "1:39.74"
+    },
+    {
+      "id": "5e7616ad-a25a-4316-ac3d-242e3d183a22",
+      "rank": 12,
+      "name": "Allie Grace Rhodes",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "1:39.74",
+      "prelimsTime": null,
+      "finalsTime": "1:39.74",
+      "roundSwam": "B Final",
+      "points": 2.5,
+      "event": "Event 30 Women 4x50 Yard Freestyle Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Ryann Grasser",
+          "year": "SR"
+        },
+        {
+          "name": "Ryleigh Wells",
+          "year": "FR"
+        },
+        {
+          "name": "Allie Grace Rhodes",
+          "year": "FR"
+        },
+        {
+          "name": "Iris McNamara",
+          "year": "FR"
+        }
+      ],
+      "relayLegIndex": 2,
+      "relayLegStroke": "free",
+      "relayLegSplit": "25.45",
+      "relayLegSplitDetail": {
+        "legIndex": 2,
+        "stroke": "free",
+        "legDistanceYards": 50,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "25.45",
+            "cumulativeLeg": "1:15.63"
+          }
+        ],
+        "legTotal": "25.45"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "25.17",
+          "25.01",
+          "25.45",
+          "24.11"
+        ],
+        "firstHalf": "50.18",
+        "secondHalf": "49.56",
+        "teamTotal": "1:39.74"
+      },
+      "relayTeamTime": "1:39.74"
+    },
+    {
+      "id": "4ad9f233-4b90-47cf-83f7-5b15f59d59ea",
+      "rank": 12,
+      "name": "Iris McNamara",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "1:39.74",
+      "prelimsTime": null,
+      "finalsTime": "1:39.74",
+      "roundSwam": "B Final",
+      "points": 2.5,
+      "event": "Event 30 Women 4x50 Yard Freestyle Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Ryann Grasser",
+          "year": "SR"
+        },
+        {
+          "name": "Ryleigh Wells",
+          "year": "FR"
+        },
+        {
+          "name": "Allie Grace Rhodes",
+          "year": "FR"
+        },
+        {
+          "name": "Iris McNamara",
+          "year": "FR"
+        }
+      ],
+      "relayLegIndex": 3,
+      "relayLegStroke": "free",
+      "relayLegSplit": "24.11",
+      "relayLegSplitDetail": {
+        "legIndex": 3,
+        "stroke": "free",
+        "legDistanceYards": 50,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "24.11",
+            "cumulativeLeg": "1:39.74"
+          }
+        ],
+        "legTotal": "24.11"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "25.17",
+          "25.01",
+          "25.45",
+          "24.11"
+        ],
+        "firstHalf": "50.18",
+        "secondHalf": "49.56",
+        "teamTotal": "1:39.74"
+      },
+      "relayTeamTime": "1:39.74"
+    },
+    {
+      "id": "36af2a33-1b50-4f2c-91a0-e91d7d812457",
+      "rank": 8,
+      "name": "Daniella Ruiz",
+      "classYear": "SO",
+      "team": "Henderson State University",
+      "time": "18:00.63",
+      "prelimsTime": null,
+      "finalsTime": "18:00.63",
+      "roundSwam": "Finals",
+      "points": 11,
+      "event": "Event 32 Women 1650 Yard Freestyle",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "26b8865d-7bd1-4d06-9cba-a5168e08278d",
+      "rank": 7,
+      "name": "Shelby Travis",
+      "classYear": "SO",
+      "team": "Henderson State University",
+      "time": "52.69",
+      "prelimsTime": "53.12",
+      "finalsTime": "52.69",
+      "roundSwam": "A Final",
+      "points": 12,
+      "event": "Event 34 Women 100 Yard Freestyle",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "b9d67628-4471-48e1-b369-7554e2bb1cf5",
+      "rank": 9,
+      "name": "Iris McNamara",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "53.66",
+      "prelimsTime": "53.51",
+      "finalsTime": "53.66",
+      "roundSwam": "B Final",
+      "points": 8,
+      "event": "Event 34 Women 100 Yard Freestyle",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "e1d65cf1-c646-4ede-9c12-a896eedc9611",
+      "rank": 16,
+      "name": "Allie Grace Rhodes",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "DQ",
+      "prelimsTime": "56.76",
+      "finalsTime": "DQ",
+      "roundSwam": "B Final",
+      "points": 0,
+      "event": "Event 34 Women 100 Yard Freestyle",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "d80871b6-61a7-4dc0-a638-bbe13e2e8ced",
+      "rank": 13,
+      "name": "Ryann Grasser",
+      "classYear": "SR",
+      "team": "Henderson State University",
+      "time": "2:12.64",
+      "prelimsTime": "2:12.64",
+      "finalsTime": null,
+      "roundSwam": "Preliminaries",
+      "points": 0,
+      "event": "Event 36 Women 200 Yard Backstroke",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "5705970d-ed55-4be2-b2b4-4291f3db69c3",
+      "rank": 11,
+      "name": "Ryleigh Wells",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "2:33.21",
+      "prelimsTime": "2:36.47",
+      "finalsTime": "2:33.21",
+      "roundSwam": "B Final",
+      "points": 6,
+      "event": "Event 38 Women 200 Yard Breaststroke",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    }
+  ],
+  "menResults": [
+    {
+      "id": "52f6f53a-3d5e-44e1-893e-7c8cf2a8cf1b",
+      "rank": 3,
+      "name": "Colton Bennett",
+      "classYear": "JR",
+      "team": "Henderson State University",
+      "time": "9:26.63",
+      "prelimsTime": null,
+      "finalsTime": "9:26.63",
+      "roundSwam": "Finals",
+      "points": 16,
+      "event": "Event 4 Men 1000 Yard Freestyle",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "47924051-d47f-4b2c-8b1f-3825f283c41c",
+      "rank": 11,
+      "name": "Austin Huffhines",
+      "classYear": "JR",
+      "team": "Delta State University",
+      "time": "10:00.10",
+      "prelimsTime": null,
+      "finalsTime": "10:00.10",
+      "roundSwam": "Finals",
+      "points": 6,
+      "event": "Event 4 Men 1000 Yard Freestyle",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "ae744073-dd47-4c2d-9593-334615118b8c",
+      "rank": 1,
+      "name": "Colin Candebat",
+      "classYear": "SO",
+      "team": "Henderson State University",
+      "time": "1:46.74",
+      "prelimsTime": "1:50.13",
+      "finalsTime": "1:46.74",
+      "roundSwam": "A Final",
+      "points": 20,
+      "event": "Event 6 Men 200 Yard IM",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "198677c2-25a3-404e-b9f7-90a661978212",
+      "rank": 2,
+      "name": "Nojus Skirutis",
+      "classYear": "SR",
+      "team": "Henderson State University",
+      "time": "1:48.93",
+      "prelimsTime": "1:52.11",
+      "finalsTime": "1:48.93",
+      "roundSwam": "A Final",
+      "points": 17,
+      "event": "Event 6 Men 200 Yard IM",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "21566558-d2b1-4718-9f80-515283d67628",
+      "rank": 3,
+      "name": "Riley Oakes",
+      "classYear": "JR",
+      "team": "Delta State University",
+      "time": "1:50.37",
+      "prelimsTime": "1:50.26",
+      "finalsTime": "1:50.37",
+      "roundSwam": "A Final",
+      "points": 16,
+      "event": "Event 6 Men 200 Yard IM",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "f1ac6a90-15c8-4bc5-a21c-dfda64f2952d",
+      "rank": 4,
+      "name": "Avery Henke",
+      "classYear": "JR",
+      "team": "Henderson State University",
+      "time": "1:50.63",
+      "prelimsTime": "1:50.75",
+      "finalsTime": "1:50.63",
+      "roundSwam": "A Final",
+      "points": 15,
+      "event": "Event 6 Men 200 Yard IM",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "8d6b00db-2cd1-4918-afa7-aa93a129024e",
+      "rank": 8,
+      "name": "Oskar Cebula",
+      "classYear": "SR",
+      "team": "Henderson State University",
+      "time": "2:00.57",
+      "prelimsTime": "1:52.17",
+      "finalsTime": "2:00.57",
+      "roundSwam": "A Final",
+      "points": 11,
+      "event": "Event 6 Men 200 Yard IM",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "084123cc-57b6-4811-8ea9-d9037e0079e8",
+      "rank": 0,
+      "name": "Cam Mask",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "1:56.87",
+      "prelimsTime": "1:58.88",
+      "finalsTime": "1:56.87",
+      "roundSwam": "C Final",
+      "points": 0,
+      "event": "Event 6 Men 200 Yard IM",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "0bbf3928-e8cd-444d-a730-4df943afb852",
+      "rank": 2,
+      "name": "Oliver Pozvai",
+      "classYear": "SO",
+      "team": "Henderson State University",
+      "time": "20.28",
+      "prelimsTime": "20.35",
+      "finalsTime": "20.28",
+      "roundSwam": "A Final",
+      "points": 17,
+      "event": "Event 8 Men 50 Yard Freestyle",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "8b9c89a6-080b-450f-b0af-345bb08140ca",
+      "rank": 3,
+      "name": "Ethan Baylin",
+      "classYear": "JR",
+      "team": "Delta State University",
+      "time": "20.36",
+      "prelimsTime": "20.45",
+      "finalsTime": "20.36",
+      "roundSwam": "A Final",
+      "points": 16,
+      "event": "Event 8 Men 50 Yard Freestyle",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "89fc0bde-48be-45cb-9d18-deb93547b385",
+      "rank": 4,
+      "name": "Gavin Kock",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "20.47",
+      "prelimsTime": "20.51",
+      "finalsTime": "20.47",
+      "roundSwam": "A Final",
+      "points": 15,
+      "event": "Event 8 Men 50 Yard Freestyle",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "0b98d35f-8140-4873-b103-29f9d9c02071",
+      "rank": 6,
+      "name": "Tristen Fergunson",
+      "classYear": "SO",
+      "team": "Henderson State University",
+      "time": "20.59",
+      "prelimsTime": "20.96",
+      "finalsTime": "20.59",
+      "roundSwam": "A Final",
+      "points": 13,
+      "event": "Event 8 Men 50 Yard Freestyle",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "6cebc4a2-9e49-43b4-a39f-f26c64f74003",
+      "rank": 11,
+      "name": "Lars Hetzel",
+      "classYear": "JR",
+      "team": "Delta State University",
+      "time": "21.03",
+      "prelimsTime": "21.00",
+      "finalsTime": "21.03",
+      "roundSwam": "B Final",
+      "points": 6,
+      "event": "Event 8 Men 50 Yard Freestyle",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "33c6fd63-fbb3-4cf9-9584-fd4def0bb335",
+      "rank": 12,
+      "name": "Sergio Rodriguez Rodriguez",
+      "classYear": "JR",
+      "team": "Delta State University",
+      "time": "21.22",
+      "prelimsTime": "21.55",
+      "finalsTime": "21.22",
+      "roundSwam": "B Final",
+      "points": 5,
+      "event": "Event 8 Men 50 Yard Freestyle",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "d3b9985a-0cd6-469b-a261-cf543e72c03a",
+      "rank": 0,
+      "name": "Reid Remmert",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "21.00",
+      "prelimsTime": "21.15",
+      "finalsTime": "21.00",
+      "roundSwam": "C Final",
+      "points": 0,
+      "event": "Event 8 Men 50 Yard Freestyle",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "bd74fbb1-a115-4982-8c58-5ef2133b6188",
+      "rank": 1,
+      "name": "Colin Candebat",
+      "classYear": "SO",
+      "team": "Henderson State University",
+      "time": "47.86",
+      "prelimsTime": "47.82",
+      "finalsTime": "47.86",
+      "roundSwam": "A Final",
+      "points": 20,
+      "event": "Event 13 Men 100 Yard Butterfly",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "f4eb512a-e03c-4a3d-bfcb-969957002af4",
+      "rank": 7,
+      "name": "Gavin Kock",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "50.31",
+      "prelimsTime": "50.08",
+      "finalsTime": "50.31",
+      "roundSwam": "A Final",
+      "points": 12,
+      "event": "Event 13 Men 100 Yard Butterfly",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "5c29124f-8f59-4c1f-9feb-7833f9b65fbb",
+      "rank": 8,
+      "name": "Avery Henke",
+      "classYear": "JR",
+      "team": "Henderson State University",
+      "time": "52.61",
+      "prelimsTime": "49.29",
+      "finalsTime": "52.61",
+      "roundSwam": "A Final",
+      "points": 11,
+      "event": "Event 13 Men 100 Yard Butterfly",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "2f89fe3c-d5c2-458c-b8c6-59c8cb4c4b49",
+      "rank": 16,
+      "name": "Tristen Fergunson",
+      "classYear": "SO",
+      "team": "Henderson State University",
+      "time": "53.08",
+      "prelimsTime": "52.20",
+      "finalsTime": "53.08",
+      "roundSwam": "B Final",
+      "points": 1,
+      "event": "Event 13 Men 100 Yard Butterfly",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "7a380bd3-8d15-4f3b-9f53-376a20f3becf",
+      "rank": 17,
+      "name": "Reid Remmert",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "49.78",
+      "prelimsTime": "50.37",
+      "finalsTime": "49.78",
+      "roundSwam": "C Final",
+      "points": 0,
+      "event": "Event 13 Men 100 Yard Butterfly",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "2ceb9524-562e-4d72-a76e-b2586f2cec4d",
+      "rank": 1,
+      "name": "Nojus Skirutis",
+      "classYear": "SR",
+      "team": "Henderson State University",
+      "time": "3:55.11",
+      "prelimsTime": "4:00.16",
+      "finalsTime": "3:55.11",
+      "roundSwam": "A Final",
+      "points": 20,
+      "event": "Event 15 Men 400 Yard IM",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "d83e314c-4c03-4cda-931a-1aca910252c8",
+      "rank": 2,
+      "name": "Riley Oakes",
+      "classYear": "JR",
+      "team": "Delta State University",
+      "time": "3:57.33",
+      "prelimsTime": "4:00.54",
+      "finalsTime": "3:57.33",
+      "roundSwam": "A Final",
+      "points": 17,
+      "event": "Event 15 Men 400 Yard IM",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "acd8beef-63ef-4738-8da1-a30f8a6d514d",
+      "rank": 14,
+      "name": "Oskar Cebula",
+      "classYear": "SR",
+      "team": "Henderson State University",
+      "time": "4:24.95",
+      "prelimsTime": "4:07.27",
+      "finalsTime": "4:24.95",
+      "roundSwam": "B Final",
+      "points": 3,
+      "event": "Event 15 Men 400 Yard IM",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "5fe7ee0a-d891-4801-8876-8a3232962164",
+      "rank": 2,
+      "name": "Austin Huffhines",
+      "classYear": "JR",
+      "team": "Delta State University",
+      "time": "1:38.62",
+      "prelimsTime": "1:38.66",
+      "finalsTime": "1:38.62",
+      "roundSwam": "A Final",
+      "points": 17,
+      "event": "Event 17 Men 200 Yard Freestyle",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "ddc46aed-6067-44b1-8a3d-51799c19a3b4",
+      "rank": 9,
+      "name": "Lars Hetzel",
+      "classYear": "JR",
+      "team": "Delta State University",
+      "time": "1:40.49",
+      "prelimsTime": "1:41.93",
+      "finalsTime": "1:40.49",
+      "roundSwam": "B Final",
+      "points": 9,
+      "event": "Event 17 Men 200 Yard Freestyle",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "3f239836-ef80-4a17-8aa0-3eefded503d8",
+      "rank": 15,
+      "name": "Sergio Rodriguez Rodriguez",
+      "classYear": "JR",
+      "team": "Delta State University",
+      "time": "1:46.22",
+      "prelimsTime": "1:45.87",
+      "finalsTime": "1:46.22",
+      "roundSwam": "B Final",
+      "points": 2,
+      "event": "Event 17 Men 200 Yard Freestyle",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "8da561d0-760a-43b7-ba00-599851baeec8",
+      "rank": 2,
+      "name": "Avery Henke",
+      "classYear": "JR",
+      "team": "Henderson State University",
+      "time": "3:15.24",
+      "prelimsTime": null,
+      "finalsTime": "3:15.24",
+      "roundSwam": "A Final",
+      "points": 8.5,
+      "event": "Event 20 Men 4x100 Yard Medley Relay",
+      "gender": "Men",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Avery Henke",
+          "year": "JR"
+        },
+        {
+          "name": "Oskar Cebula",
+          "year": "SR"
+        },
+        {
+          "name": "Colin Candebat",
+          "year": "SO"
+        },
+        {
+          "name": "Oliver Pozvai",
+          "year": "SO"
+        }
+      ],
+      "relayLegIndex": 0,
+      "relayLegStroke": "back",
+      "relayLegSplit": "49.58",
+      "relayLegSplitDetail": {
+        "legIndex": 0,
+        "stroke": "back",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "23.68",
+            "cumulativeLeg": "23.68"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "25.90",
+            "cumulativeLeg": "49.58"
+          }
+        ],
+        "legTotal": "49.58"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "49.58",
+          "54.11",
+          "47.26",
+          "44.29"
+        ],
+        "firstHalf": "1:43.69",
+        "secondHalf": "1:31.55",
+        "teamTotal": "3:15.24"
+      },
+      "relayTeamTime": "3:15.24"
+    },
+    {
+      "id": "1f29bd1e-97fb-4fcf-a9da-1f1650488c36",
+      "rank": 2,
+      "name": "Oskar Cebula",
+      "classYear": "SR",
+      "team": "Henderson State University",
+      "time": "3:15.24",
+      "prelimsTime": null,
+      "finalsTime": "3:15.24",
+      "roundSwam": "A Final",
+      "points": 8.5,
+      "event": "Event 20 Men 4x100 Yard Medley Relay",
+      "gender": "Men",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Avery Henke",
+          "year": "JR"
+        },
+        {
+          "name": "Oskar Cebula",
+          "year": "SR"
+        },
+        {
+          "name": "Colin Candebat",
+          "year": "SO"
+        },
+        {
+          "name": "Oliver Pozvai",
+          "year": "SO"
+        }
+      ],
+      "relayLegIndex": 1,
+      "relayLegStroke": "breast",
+      "relayLegSplit": "54.11",
+      "relayLegSplitDetail": {
+        "legIndex": 1,
+        "stroke": "breast",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "25.20",
+            "cumulativeLeg": "1:14.78"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "28.91",
+            "cumulativeLeg": "1:43.69"
+          }
+        ],
+        "legTotal": "54.11"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "49.58",
+          "54.11",
+          "47.26",
+          "44.29"
+        ],
+        "firstHalf": "1:43.69",
+        "secondHalf": "1:31.55",
+        "teamTotal": "3:15.24"
+      },
+      "relayTeamTime": "3:15.24"
+    },
+    {
+      "id": "bd2969d9-20b2-4272-b19c-7930c7bf462d",
+      "rank": 2,
+      "name": "Colin Candebat",
+      "classYear": "SO",
+      "team": "Henderson State University",
+      "time": "3:15.24",
+      "prelimsTime": null,
+      "finalsTime": "3:15.24",
+      "roundSwam": "A Final",
+      "points": 8.5,
+      "event": "Event 20 Men 4x100 Yard Medley Relay",
+      "gender": "Men",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Avery Henke",
+          "year": "JR"
+        },
+        {
+          "name": "Oskar Cebula",
+          "year": "SR"
+        },
+        {
+          "name": "Colin Candebat",
+          "year": "SO"
+        },
+        {
+          "name": "Oliver Pozvai",
+          "year": "SO"
+        }
+      ],
+      "relayLegIndex": 2,
+      "relayLegStroke": "fly",
+      "relayLegSplit": "47.26",
+      "relayLegSplitDetail": {
+        "legIndex": 2,
+        "stroke": "fly",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "21.81",
+            "cumulativeLeg": "2:05.50"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "25.45",
+            "cumulativeLeg": "2:30.95"
+          }
+        ],
+        "legTotal": "47.26"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "49.58",
+          "54.11",
+          "47.26",
+          "44.29"
+        ],
+        "firstHalf": "1:43.69",
+        "secondHalf": "1:31.55",
+        "teamTotal": "3:15.24"
+      },
+      "relayTeamTime": "3:15.24"
+    },
+    {
+      "id": "b471233b-e7ea-4dda-9533-6798433e84b4",
+      "rank": 2,
+      "name": "Oliver Pozvai",
+      "classYear": "SO",
+      "team": "Henderson State University",
+      "time": "3:15.24",
+      "prelimsTime": null,
+      "finalsTime": "3:15.24",
+      "roundSwam": "A Final",
+      "points": 8.5,
+      "event": "Event 20 Men 4x100 Yard Medley Relay",
+      "gender": "Men",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Avery Henke",
+          "year": "JR"
+        },
+        {
+          "name": "Oskar Cebula",
+          "year": "SR"
+        },
+        {
+          "name": "Colin Candebat",
+          "year": "SO"
+        },
+        {
+          "name": "Oliver Pozvai",
+          "year": "SO"
+        }
+      ],
+      "relayLegIndex": 3,
+      "relayLegStroke": "free",
+      "relayLegSplit": "44.29",
+      "relayLegSplitDetail": {
+        "legIndex": 3,
+        "stroke": "free",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "20.25",
+            "cumulativeLeg": "2:51.20"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "24.04",
+            "cumulativeLeg": "3:15.24"
+          }
+        ],
+        "legTotal": "44.29"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "49.58",
+          "54.11",
+          "47.26",
+          "44.29"
+        ],
+        "firstHalf": "1:43.69",
+        "secondHalf": "1:31.55",
+        "teamTotal": "3:15.24"
+      },
+      "relayTeamTime": "3:15.24"
+    },
+    {
+      "id": "02cd9e9d-aad2-4f92-9c6f-a4eb476c585b",
+      "rank": 4,
+      "name": "Colton Bennett",
+      "classYear": "JR",
+      "team": "Henderson State University",
+      "time": "4:33.41",
+      "prelimsTime": "4:37.33",
+      "finalsTime": "4:33.41",
+      "roundSwam": "A Final",
+      "points": 15,
+      "event": "Event 22 Men 500 Yard Freestyle",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "bc5b8d5f-b3dd-4c6b-9585-9b132e3fb0e6",
+      "rank": 6,
+      "name": "Austin Huffhines",
+      "classYear": "JR",
+      "team": "Delta State University",
+      "time": "4:38.12",
+      "prelimsTime": "4:36.88",
+      "finalsTime": "4:38.12",
+      "roundSwam": "A Final",
+      "points": 13,
+      "event": "Event 22 Men 500 Yard Freestyle",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "a864fc15-d758-433b-aac6-086b74a52b99",
+      "rank": 2,
+      "name": "Riley Oakes",
+      "classYear": "JR",
+      "team": "Delta State University",
+      "time": "49.55",
+      "prelimsTime": "49.76",
+      "finalsTime": "49.55",
+      "roundSwam": "A Final",
+      "points": 17,
+      "event": "Event 24 Men 100 Yard Backstroke",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "c3e0f42e-97f6-4c2f-83a5-1559b3889f41",
+      "rank": 8,
+      "name": "Oliver Pozvai",
+      "classYear": "SO",
+      "team": "Henderson State University",
+      "time": "56.34",
+      "prelimsTime": "51.94",
+      "finalsTime": "56.34",
+      "roundSwam": "A Final",
+      "points": 11,
+      "event": "Event 24 Men 100 Yard Backstroke",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "093aae60-6374-4a53-9ee2-626a9864b219",
+      "rank": 1,
+      "name": "Avery Henke",
+      "classYear": "JR",
+      "team": "Henderson State University",
+      "time": "54.27",
+      "prelimsTime": "54.09",
+      "finalsTime": "54.27",
+      "roundSwam": "A Final",
+      "points": 20,
+      "event": "Event 26 Men 100 Yard Breaststroke",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "3ad398dd-21fe-490f-aece-f8db0f7c452d",
+      "rank": 5,
+      "name": "Ethan Baylin",
+      "classYear": "JR",
+      "team": "Delta State University",
+      "time": "55.39",
+      "prelimsTime": "55.02",
+      "finalsTime": "55.39",
+      "roundSwam": "A Final",
+      "points": 14,
+      "event": "Event 26 Men 100 Yard Breaststroke",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "2996f0e8-6d7c-48c5-b48b-9e8a0bb9da29",
+      "rank": 6,
+      "name": "Oskar Cebula",
+      "classYear": "SR",
+      "team": "Henderson State University",
+      "time": "55.45",
+      "prelimsTime": "55.48",
+      "finalsTime": "55.45",
+      "roundSwam": "A Final",
+      "points": 13,
+      "event": "Event 26 Men 100 Yard Breaststroke",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "a6afbd06-a4ed-43ee-a861-952698a17404",
+      "rank": 8,
+      "name": "Gavin Kock",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "56.81",
+      "prelimsTime": "55.69",
+      "finalsTime": "56.81",
+      "roundSwam": "A Final",
+      "points": 11,
+      "event": "Event 26 Men 100 Yard Breaststroke",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "4fbb5c16-a67f-421e-b1c0-d21f05e6eee4",
+      "rank": 14,
+      "name": "Sergio Rodriguez Rodriguez",
+      "classYear": "JR",
+      "team": "Delta State University",
+      "time": "59.58",
+      "prelimsTime": "1:00.10",
+      "finalsTime": "59.58",
+      "roundSwam": "B Final",
+      "points": 3,
+      "event": "Event 26 Men 100 Yard Breaststroke",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "d27a2bc5-b2a1-4525-9440-6fd7cbc7eae2",
+      "rank": 15,
+      "name": "Tristen Fergunson",
+      "classYear": "SO",
+      "team": "Henderson State University",
+      "time": "1:00.06",
+      "prelimsTime": "59.68",
+      "finalsTime": "1:00.06",
+      "roundSwam": "B Final",
+      "points": 2,
+      "event": "Event 26 Men 100 Yard Breaststroke",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "b7f3ee74-f38e-4063-a5e9-7a7ab645dc2e",
+      "rank": 17,
+      "name": "Cam Mask",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "55.52",
+      "prelimsTime": "55.66",
+      "finalsTime": "55.52",
+      "roundSwam": "C Final",
+      "points": 0,
+      "event": "Event 26 Men 100 Yard Breaststroke",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "fc4648ea-1499-41a9-a5c3-ef5b4b053d63",
+      "rank": 2,
+      "name": "Nojus Skirutis",
+      "classYear": "SR",
+      "team": "Henderson State University",
+      "time": "1:47.40",
+      "prelimsTime": "1:47.77",
+      "finalsTime": "1:47.40",
+      "roundSwam": "A Final",
+      "points": 17,
+      "event": "Event 28 Men 200 Yard Butterfly",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "81e8794b-478f-4425-8d2c-8b23d1496369",
+      "rank": 3,
+      "name": "Colin Candebat",
+      "classYear": "SO",
+      "team": "Henderson State University",
+      "time": "1:48.47",
+      "prelimsTime": "1:50.72",
+      "finalsTime": "1:48.47",
+      "roundSwam": "A Final",
+      "points": 16,
+      "event": "Event 28 Men 200 Yard Butterfly",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "30ac9f9e-f365-43b5-a94d-de78954d3cd8",
+      "rank": 8,
+      "name": "Colton Bennett",
+      "classYear": "JR",
+      "team": "Henderson State University",
+      "time": "1:55.26",
+      "prelimsTime": "1:50.61",
+      "finalsTime": "1:55.26",
+      "roundSwam": "A Final",
+      "points": 11,
+      "event": "Event 28 Men 200 Yard Butterfly",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "3097eae9-bc74-4b18-8b14-b7c1fdcbaa73",
+      "rank": 5,
+      "name": "Colton Bennett",
+      "classYear": "JR",
+      "team": "Henderson State University",
+      "time": "16:10.60",
+      "prelimsTime": null,
+      "finalsTime": "16:10.60",
+      "roundSwam": "Finals",
+      "points": 14,
+      "event": "Event 33 Men 1650 Yard Freestyle",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "e89b8f05-1fa0-48fc-b597-1da026734c2e",
+      "rank": 1,
+      "name": "Ethan Baylin",
+      "classYear": "JR",
+      "team": "Delta State University",
+      "time": "44.03",
+      "prelimsTime": "44.17",
+      "finalsTime": "44.03",
+      "roundSwam": "A Final",
+      "points": 20,
+      "event": "Event 35 Men 100 Yard Freestyle",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "2e709336-388e-4647-8679-d6215ffebd39",
+      "rank": 2,
+      "name": "Oliver Pozvai",
+      "classYear": "SO",
+      "team": "Henderson State University",
+      "time": "44.44",
+      "prelimsTime": "44.91",
+      "finalsTime": "44.44",
+      "roundSwam": "A Final",
+      "points": 17,
+      "event": "Event 35 Men 100 Yard Freestyle",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "12939253-2b83-4b49-b8b5-203e19154395",
+      "rank": 7,
+      "name": "Lars Hetzel",
+      "classYear": "JR",
+      "team": "Delta State University",
+      "time": "45.62",
+      "prelimsTime": "45.84",
+      "finalsTime": "45.62",
+      "roundSwam": "A Final",
+      "points": 12,
+      "event": "Event 35 Men 100 Yard Freestyle",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "267e1f37-a8a3-4959-93f2-50fcdc384ce9",
+      "rank": 9,
+      "name": "Gavin Kock",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "45.52",
+      "prelimsTime": "46.47",
+      "finalsTime": "45.52",
+      "roundSwam": "B Final",
+      "points": 9,
+      "event": "Event 35 Men 100 Yard Freestyle",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "4d48f843-0f0d-48ea-81c6-f75c6f888a2b",
+      "rank": 11,
+      "name": "Austin Huffhines",
+      "classYear": "JR",
+      "team": "Delta State University",
+      "time": "45.85",
+      "prelimsTime": "45.89",
+      "finalsTime": "45.85",
+      "roundSwam": "B Final",
+      "points": 6,
+      "event": "Event 35 Men 100 Yard Freestyle",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "fb18894e-6e3e-4b8b-b382-84b21f01dd11",
+      "rank": 12,
+      "name": "Tristen Fergunson",
+      "classYear": "SO",
+      "team": "Henderson State University",
+      "time": "46.50",
+      "prelimsTime": "46.66",
+      "finalsTime": "46.50",
+      "roundSwam": "B Final",
+      "points": 5,
+      "event": "Event 35 Men 100 Yard Freestyle",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "0c1bbff0-8813-4f75-9324-c68651d92a6d",
+      "rank": 13,
+      "name": "Sergio Rodriguez Rodriguez",
+      "classYear": "JR",
+      "team": "Delta State University",
+      "time": "46.73",
+      "prelimsTime": "46.77",
+      "finalsTime": "46.73",
+      "roundSwam": "B Final",
+      "points": 4,
+      "event": "Event 35 Men 100 Yard Freestyle",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "8498d793-6579-4937-999a-011a9d335e79",
+      "rank": 17,
+      "name": "Reid Remmert",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "46.12",
+      "prelimsTime": "46.09",
+      "finalsTime": "46.12",
+      "roundSwam": "C Final",
+      "points": 0,
+      "event": "Event 35 Men 100 Yard Freestyle",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "7a52d034-565c-46fd-bcf9-a74f80f0f61f",
+      "rank": 3,
+      "name": "Riley Oakes",
+      "classYear": "JR",
+      "team": "Delta State University",
+      "time": "1:48.50",
+      "prelimsTime": "1:50.23",
+      "finalsTime": "1:48.50",
+      "roundSwam": "A Final",
+      "points": 16,
+      "event": "Event 37 Men 200 Yard Backstroke",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "2b0a416c-12b7-404e-b2ab-dd0bc7eb2cd3",
+      "rank": 4,
+      "name": "Nojus Skirutis",
+      "classYear": "SR",
+      "team": "Henderson State University",
+      "time": "1:49.10",
+      "prelimsTime": "1:49.86",
+      "finalsTime": "1:49.10",
+      "roundSwam": "A Final",
+      "points": 15,
+      "event": "Event 37 Men 200 Yard Backstroke",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "e84d9e55-7ba2-4588-85c4-9cdaddd6a0b0",
+      "rank": 4,
+      "name": "Avery Henke",
+      "classYear": "JR",
+      "team": "Henderson State University",
+      "time": "2:03.44",
+      "prelimsTime": "2:02.58",
+      "finalsTime": "2:03.44",
+      "roundSwam": "A Final",
+      "points": 15,
+      "event": "Event 39 Men 200 Yard Breaststroke",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "e17e2613-1ebc-4ec9-b513-b1e6e697efa9",
+      "rank": 7,
+      "name": "Oskar Cebula",
+      "classYear": "SR",
+      "team": "Henderson State University",
+      "time": "2:04.66",
+      "prelimsTime": "2:03.41",
+      "finalsTime": "2:04.66",
+      "roundSwam": "A Final",
+      "points": 12,
+      "event": "Event 39 Men 200 Yard Breaststroke",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "9629aad5-1817-4414-9a1e-e36c5c6206bb",
+      "rank": 17,
+      "name": "Cam Mask",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "2:02.69",
+      "prelimsTime": "2:03.98",
+      "finalsTime": "2:02.69",
+      "roundSwam": "C Final",
+      "points": 0,
+      "event": "Event 39 Men 200 Yard Breaststroke",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "f9c248d8-c9fa-428e-b9ce-e169f6127c2a",
+      "rank": 0,
+      "name": "Ethan Baylin",
+      "classYear": "JR",
+      "team": "Delta State University",
+      "time": "3:00.20",
+      "prelimsTime": null,
+      "finalsTime": "3:00.20",
+      "roundSwam": "A Final",
+      "points": 0,
+      "event": "Event 42 Men 4x100 Yard Freestyle Relay",
+      "gender": "Men",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Ethan Baylin",
+          "year": "JR"
+        },
+        {
+          "name": "Riley Oakes",
+          "year": "JR"
+        },
+        {
+          "name": "Lars Hetzel",
+          "year": "JR"
+        },
+        {
+          "name": "Austin Huffhines",
+          "year": "JR"
+        }
+      ],
+      "relayLegIndex": 0,
+      "relayLegStroke": "free",
+      "relayLegSplit": "43.86",
+      "relayLegSplitDetail": {
+        "legIndex": 0,
+        "stroke": "free",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "20.85",
+            "cumulativeLeg": "20.85"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "23.01",
+            "cumulativeLeg": "43.86"
+          }
+        ],
+        "legTotal": "43.86"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "43.86",
+          "44.85",
+          "45.44",
+          "21.04"
+        ],
+        "firstHalf": "1:28.71",
+        "secondHalf": "1:06.48",
+        "teamTotal": "3:00.20"
+      },
+      "relayTeamTime": "3:00.20"
+    },
+    {
+      "id": "81cec48a-34bb-43fa-a2ae-0b629463431a",
+      "rank": 0,
+      "name": "Riley Oakes",
+      "classYear": "JR",
+      "team": "Delta State University",
+      "time": "3:00.20",
+      "prelimsTime": null,
+      "finalsTime": "3:00.20",
+      "roundSwam": "A Final",
+      "points": 0,
+      "event": "Event 42 Men 4x100 Yard Freestyle Relay",
+      "gender": "Men",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Ethan Baylin",
+          "year": "JR"
+        },
+        {
+          "name": "Riley Oakes",
+          "year": "JR"
+        },
+        {
+          "name": "Lars Hetzel",
+          "year": "JR"
+        },
+        {
+          "name": "Austin Huffhines",
+          "year": "JR"
+        }
+      ],
+      "relayLegIndex": 1,
+      "relayLegStroke": "free",
+      "relayLegSplit": "44.85",
+      "relayLegSplitDetail": {
+        "legIndex": 1,
+        "stroke": "free",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "21.46",
+            "cumulativeLeg": "1:05.32"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "23.39",
+            "cumulativeLeg": "1:28.71"
+          }
+        ],
+        "legTotal": "44.85"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "43.86",
+          "44.85",
+          "45.44",
+          "21.04"
+        ],
+        "firstHalf": "1:28.71",
+        "secondHalf": "1:06.48",
+        "teamTotal": "3:00.20"
+      },
+      "relayTeamTime": "3:00.20"
+    },
+    {
+      "id": "78cadd4b-f3d9-4028-9afc-3512b32446be",
+      "rank": 0,
+      "name": "Lars Hetzel",
+      "classYear": "JR",
+      "team": "Delta State University",
+      "time": "3:00.20",
+      "prelimsTime": null,
+      "finalsTime": "3:00.20",
+      "roundSwam": "A Final",
+      "points": 0,
+      "event": "Event 42 Men 4x100 Yard Freestyle Relay",
+      "gender": "Men",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Ethan Baylin",
+          "year": "JR"
+        },
+        {
+          "name": "Riley Oakes",
+          "year": "JR"
+        },
+        {
+          "name": "Lars Hetzel",
+          "year": "JR"
+        },
+        {
+          "name": "Austin Huffhines",
+          "year": "JR"
+        }
+      ],
+      "relayLegIndex": 2,
+      "relayLegStroke": "free",
+      "relayLegSplit": "45.44",
+      "relayLegSplitDetail": {
+        "legIndex": 2,
+        "stroke": "free",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "21.65",
+            "cumulativeLeg": "1:50.36"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "23.79",
+            "cumulativeLeg": "2:14.15"
+          }
+        ],
+        "legTotal": "45.44"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "43.86",
+          "44.85",
+          "45.44",
+          "21.04"
+        ],
+        "firstHalf": "1:28.71",
+        "secondHalf": "1:06.48",
+        "teamTotal": "3:00.20"
+      },
+      "relayTeamTime": "3:00.20"
+    },
+    {
+      "id": "203f0a8f-889b-4908-b013-b142db5e6869",
+      "rank": 0,
+      "name": "Austin Huffhines",
+      "classYear": "JR",
+      "team": "Delta State University",
+      "time": "3:00.20",
+      "prelimsTime": null,
+      "finalsTime": "3:00.20",
+      "roundSwam": "A Final",
+      "points": 0,
+      "event": "Event 42 Men 4x100 Yard Freestyle Relay",
+      "gender": "Men",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Ethan Baylin",
+          "year": "JR"
+        },
+        {
+          "name": "Riley Oakes",
+          "year": "JR"
+        },
+        {
+          "name": "Lars Hetzel",
+          "year": "JR"
+        },
+        {
+          "name": "Austin Huffhines",
+          "year": "JR"
+        }
+      ],
+      "relayLegIndex": 3,
+      "relayLegStroke": "free",
+      "relayLegSplit": "44.52",
+      "relayLegSplitDetail": {
+        "legIndex": 3,
+        "stroke": "free",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "44.52",
+            "cumulativeLeg": "44.52"
+          }
+        ],
+        "legTotal": "21.04"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "43.86",
+          "44.85",
+          "45.44",
+          "21.04"
+        ],
+        "firstHalf": "1:28.71",
+        "secondHalf": "1:06.48",
+        "teamTotal": "3:00.20"
+      },
+      "relayTeamTime": "3:00.20"
+    },
+    {
+      "id": "a4585fbd-8ca3-4ec8-8405-4577b88e330b",
+      "rank": 10,
+      "name": "Nojus Skirutis",
+      "classYear": "SR",
+      "team": "Henderson State University",
+      "time": "3:06.60",
+      "prelimsTime": null,
+      "finalsTime": "3:06.60",
+      "roundSwam": "B Final",
+      "points": 3.5,
+      "event": "Event 42 Men 4x100 Yard Freestyle Relay",
+      "gender": "Men",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Nojus Skirutis",
+          "year": "SR"
+        },
+        {
+          "name": "Gavin Kock",
+          "year": "FR"
+        },
+        {
+          "name": "Tristen Fergunson",
+          "year": "SO"
+        },
+        {
+          "name": "Colton Bennett",
+          "year": "JR"
+        }
+      ],
+      "relayLegIndex": 0,
+      "relayLegStroke": "free",
+      "relayLegSplit": "46.45",
+      "relayLegSplitDetail": {
+        "legIndex": 0,
+        "stroke": "free",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "21.88",
+            "cumulativeLeg": "21.88"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "24.57",
+            "cumulativeLeg": "46.45"
+          }
+        ],
+        "legTotal": "46.45"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "46.45",
+          "46.53",
+          "46.38",
+          "47.24"
+        ],
+        "firstHalf": "1:32.98",
+        "secondHalf": "1:33.62",
+        "teamTotal": "3:06.60"
+      },
+      "relayTeamTime": "3:06.60"
+    },
+    {
+      "id": "3f497af2-04ca-4e7b-8baa-06bc67a779bf",
+      "rank": 10,
+      "name": "Gavin Kock",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "3:06.60",
+      "prelimsTime": null,
+      "finalsTime": "3:06.60",
+      "roundSwam": "B Final",
+      "points": 3.5,
+      "event": "Event 42 Men 4x100 Yard Freestyle Relay",
+      "gender": "Men",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Nojus Skirutis",
+          "year": "SR"
+        },
+        {
+          "name": "Gavin Kock",
+          "year": "FR"
+        },
+        {
+          "name": "Tristen Fergunson",
+          "year": "SO"
+        },
+        {
+          "name": "Colton Bennett",
+          "year": "JR"
+        }
+      ],
+      "relayLegIndex": 1,
+      "relayLegStroke": "free",
+      "relayLegSplit": "46.53",
+      "relayLegSplitDetail": {
+        "legIndex": 1,
+        "stroke": "free",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "22.32",
+            "cumulativeLeg": "1:08.77"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "24.21",
+            "cumulativeLeg": "1:32.98"
+          }
+        ],
+        "legTotal": "46.53"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "46.45",
+          "46.53",
+          "46.38",
+          "47.24"
+        ],
+        "firstHalf": "1:32.98",
+        "secondHalf": "1:33.62",
+        "teamTotal": "3:06.60"
+      },
+      "relayTeamTime": "3:06.60"
+    },
+    {
+      "id": "1bdde41a-faea-4838-944c-f84454cd6d93",
+      "rank": 10,
+      "name": "Tristen Fergunson",
+      "classYear": "SO",
+      "team": "Henderson State University",
+      "time": "3:06.60",
+      "prelimsTime": null,
+      "finalsTime": "3:06.60",
+      "roundSwam": "B Final",
+      "points": 3.5,
+      "event": "Event 42 Men 4x100 Yard Freestyle Relay",
+      "gender": "Men",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Nojus Skirutis",
+          "year": "SR"
+        },
+        {
+          "name": "Gavin Kock",
+          "year": "FR"
+        },
+        {
+          "name": "Tristen Fergunson",
+          "year": "SO"
+        },
+        {
+          "name": "Colton Bennett",
+          "year": "JR"
+        }
+      ],
+      "relayLegIndex": 2,
+      "relayLegStroke": "free",
+      "relayLegSplit": "46.38",
+      "relayLegSplitDetail": {
+        "legIndex": 2,
+        "stroke": "free",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "21.59",
+            "cumulativeLeg": "1:54.57"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "24.79",
+            "cumulativeLeg": "2:19.36"
+          }
+        ],
+        "legTotal": "46.38"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "46.45",
+          "46.53",
+          "46.38",
+          "47.24"
+        ],
+        "firstHalf": "1:32.98",
+        "secondHalf": "1:33.62",
+        "teamTotal": "3:06.60"
+      },
+      "relayTeamTime": "3:06.60"
+    },
+    {
+      "id": "fc0edc4f-b034-4725-a88c-2bdf9e3c8dbb",
+      "rank": 10,
+      "name": "Colton Bennett",
+      "classYear": "JR",
+      "team": "Henderson State University",
+      "time": "3:06.60",
+      "prelimsTime": null,
+      "finalsTime": "3:06.60",
+      "roundSwam": "B Final",
+      "points": 3.5,
+      "event": "Event 42 Men 4x100 Yard Freestyle Relay",
+      "gender": "Men",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Nojus Skirutis",
+          "year": "SR"
+        },
+        {
+          "name": "Gavin Kock",
+          "year": "FR"
+        },
+        {
+          "name": "Tristen Fergunson",
+          "year": "SO"
+        },
+        {
+          "name": "Colton Bennett",
+          "year": "JR"
+        }
+      ],
+      "relayLegIndex": 3,
+      "relayLegStroke": "free",
+      "relayLegSplit": "47.24",
+      "relayLegSplitDetail": {
+        "legIndex": 3,
+        "stroke": "free",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "23.05",
+            "cumulativeLeg": "2:42.41"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "24.19",
+            "cumulativeLeg": "3:06.60"
+          }
+        ],
+        "legTotal": "47.24"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "46.45",
+          "46.53",
+          "46.38",
+          "47.24"
+        ],
+        "firstHalf": "1:32.98",
+        "secondHalf": "1:33.62",
+        "teamTotal": "3:06.60"
+      },
+      "relayTeamTime": "3:06.60"
+    },
+    {
+      "id": "e02d0e86-7ae9-4bb1-9234-1b950250edce",
+      "rank": 1,
+      "name": "Oskar Cebula",
+      "classYear": "SR",
+      "team": "Henderson State University",
+      "time": "54.86R",
+      "prelimsTime": "NT",
+      "finalsTime": "54.86R",
+      "roundSwam": "Time Trial",
+      "points": 0,
+      "event": "Event 100 Men 100 Yard Breaststroke Time Trial",
+      "gender": "Men",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": true,
+      "relayNames": []
+    }
+  ]
+}

@@ -46,12 +46,11 @@ import {
   relayLegDistanceYards,
 } from './relaySplits';
 import {
-  eventMatchesStrokeDistance,
   findRelayLegOverride,
-  inferRelayStrokeDistance,
+  isRelayLegEvent,
+  relayLegRequirements,
   relayStrokeForIndex,
   resolveOverrideAssignee,
-  strokeKeywordsForRelayLeg,
   swimmerMatchesRelayLeg,
 } from './relayLegMatching';
 
@@ -2525,6 +2524,37 @@ export function assignTeamLineStyles(
   return out;
 }
 
+/**
+ * The departed leg holder's own individual swim at the leg's distance and
+ * stroke, or `undefined` when they have none.
+ *
+ * `simulateRoster` measures a substitute against this swim's time when it
+ * exists, and against the leg's recorded split otherwise. The relay-leg swap's
+ * clock hold (`resolveClockHoldTime` in `arbitrage/relayLegSwaps.ts`) must pick
+ * the same time, or the held clock moves. Both call this function so the two
+ * cannot drift apart again.
+ *
+ * The event must be the leg event exactly (`isRelayLegEvent`): a departed
+ * swimmer's 1000 Free is not their 100 Free. Names compare by
+ * `canonicalSwimmerName`. Rows are searched in `results` order and the first
+ * match wins.
+ */
+export function findDepartedLegSwim(
+  results: SwimmerResult[],
+  legName: string,
+  relayEvent: string,
+  legIndex: number
+): SwimmerResult | undefined {
+  const { legDistanceYards, stroke } = relayLegRequirements(relayEvent, legIndex);
+  const nameKey = canonicalSwimmerName(legName);
+  return results.find(
+    s =>
+      !s.isRelay &&
+      canonicalSwimmerName(s.name) === nameKey &&
+      isRelayLegEvent(s.event, legDistanceYards, stroke)
+  );
+}
+
 export function simulateRoster(
   results: SwimmerResult[],
   recruits: SwimmerResult[],
@@ -2569,7 +2599,6 @@ export function simulateRoster(
 
     const template = group[0];
     const evLower = template.event.toLowerCase();
-    const distance = inferRelayStrokeDistance(template.event);
 
     const ordered = [...group].sort((a, b) => (a.relayLegIndex ?? 0) - (b.relayLegIndex ?? 0));
 
@@ -2622,7 +2651,6 @@ export function simulateRoster(
         continue;
       }
 
-      const strokes = strokeKeywordsForRelayLeg(evLower, index);
       const legRowForSplit =
         ordered.find(row => (row.relayLegIndex ?? -1) === index) ?? ordered[index];
       const oldSplitSec =
@@ -2630,13 +2658,7 @@ export function simulateRoster(
           ? convertTimeToSeconds(legRowForSplit.relayLegSplit)
           : null;
 
-      const legNameCanonical = canonicalSwimmerName(leg.name);
-      const departedIndiv = results.find(
-        s =>
-          !s.isRelay &&
-          canonicalSwimmerName(s.name) === legNameCanonical &&
-          eventMatchesStrokeDistance(s.event, distance, strokes)
-      );
+      const departedIndiv = findDepartedLegSwim(results, leg.name, template.event, index);
 
       const stroke = relayStrokeForIndex(evLower, index);
       const override = findRelayLegOverride(overrideList, template, index);

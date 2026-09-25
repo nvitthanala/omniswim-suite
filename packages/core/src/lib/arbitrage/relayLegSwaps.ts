@@ -25,8 +25,6 @@ import {
   relayLegDistanceYards,
 } from '../relaySplits';
 import {
-  eventMatchesStrokeDistance,
-  relayLegRequirements,
   relayStrokeForIndex,
   relayTemplateFromLeg,
   swimmerMatchesRelayLeg,
@@ -34,7 +32,12 @@ import {
 } from '../relayLegMatching';
 import { countSwimmerEntries } from '../swimmerEntryLimits';
 import { computeVacateRelayLegNames } from '../rosterLineupAudit';
-import { convertTimeToSeconds, isRelayResult, normalizeSwimmerName } from '../utils';
+import {
+  convertTimeToSeconds,
+  findDepartedLegSwim,
+  isRelayResult,
+  normalizeSwimmerName,
+} from '../utils';
 import { isExtractedSplitSwim } from '../bestTimeEligibility';
 import {
   convertedHistorySwims,
@@ -446,6 +449,11 @@ function buildReplaceableLegTest(
  * the departed swimmer's own matching individual time when it exists and parses,
  * and only then falls back to the leg's recorded split. Swapping the two changes
  * which clock the relay holds, and with it the re-scored delta.
+ *
+ * The departed swim comes from `findDepartedLegSwim`, the lookup simulateRoster
+ * itself uses, so the held time is the time simulateRoster subtracts. This
+ * function used to carry its own copy of the lookup, with the substring event
+ * match and an exact-spelling name test.
  */
 function resolveClockHoldTime(
   results: SwimmerResult[],
@@ -454,13 +462,7 @@ function resolveClockHoldTime(
   outAthlete: string,
   legRow: SwimmerResult | undefined
 ): string | undefined {
-  const req = relayLegRequirements(relayEvent, legIndex);
-  const departedIndiv = results.find(
-    s =>
-      !s.isRelay &&
-      s.name === outAthlete &&
-      eventMatchesStrokeDistance(s.event, req.legDistanceYards, req.keywords)
-  );
+  const departedIndiv = findDepartedLegSwim(results, outAthlete, relayEvent, legIndex);
   if (departedIndiv && Number.isFinite(convertTimeToSeconds(departedIndiv.time))) {
     return departedIndiv.time;
   }
