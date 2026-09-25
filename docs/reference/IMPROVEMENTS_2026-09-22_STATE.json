@@ -83,7 +83,7 @@
       "result": "Bests pulled <date> from max retrievedAt."
     },
     "P8": {
-      "status": "planned",
+      "status": "done (see log): diff vs workspace SwimCloud history at import time; SwimCloudImprovementsSummary in RosterImportWizard",
       "what": "Compare two captures by swim id; list improvements."
     },
     "P9": {
@@ -148,7 +148,8 @@
     "2026-09-24 P13+P14 verified (lint 0, 1372 vitest, build, 84 scripts; script-test edits reviewed: strengthened) and committed.",
     "2026-09-24 NAIA manual (naia.org) 404; archived official 2020-21 NAIA sheet (metric column headed SCM) as course evidence with user approval. Dispatched executor (NAIA SCM wiring, core), worker P16 (UI), worker P9 (extension). P16 worker stalled (watchdog, no changes) and was resumed.",
     "2026-09-24 P16 and P9 verified and committed separately; analytics course column done by orchestrator. NAIA SCM wiring (executor) still running.",
-    "2026-09-24 NAIA SCM verified (lint, 1431, build, 84 scripts) and committed; orchestrator fixed extract-cutlines.py (skip evidenceOnly) and fetch-cutlines.py (carry evidence entry)."
+    "2026-09-24 NAIA SCM verified (lint, 1431, build, 84 scripts) and committed; orchestrator fixed extract-cutlines.py (skip evidenceOnly) and fetch-cutlines.py (carry evidence entry).",
+    "2026-09-24 P8 verified (lint, 1441, build, 84 scripts) and committed. UI phases complete. Remaining: P10 research, P11, P15/P17 user decisions, push."
   ],
   "executorFollowUpsNotTaken": [
     "raw-label best picking: paste 50 Freestyle and JSON 50 Free SCY give two bestByEvent entries (pre-existing)",
