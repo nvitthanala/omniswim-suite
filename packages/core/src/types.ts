@@ -453,6 +453,19 @@ export type SwimCloudBadge =
 
 export type NcaaDivision = 'D1' | 'D2' | 'D3' | 'NAIA';
 
+/**
+ * Where a {@link HistoricalSwim} came from.
+ *
+ * - `'swimcloud'` — the SwimCloud JSON/HTML bridge.
+ * - `'paste'` — the SwimCloud paste parsers. They are the only writers of
+ *   `'paste'`, so a `'paste'` row is SwimCloud data too (see
+ *   `SWIMCLOUD_HISTORY_SOURCES` in `lib/swimCloudReplace.ts`).
+ * - `'pdf'` — a loaded meet's results (`historicalSwimFromResult`).
+ * - `'manual'` — typed in the swim editor or a scoring theory.
+ * - `'csv'`, `'ocr'` — a CSV file and an image read by OCR.
+ */
+export type HistoricalSwimSource = 'pdf' | 'paste' | 'ocr' | 'csv' | 'manual' | 'swimcloud';
+
 export interface HistoricalSwim {
   /**
    * Stable id. Optional and additive: rows imported before this field existed
@@ -469,8 +482,8 @@ export interface HistoricalSwim {
   timeType?: 'SCY' | 'LCM' | 'SCM';
   date?: string;
   meetLabel?: string;
-  /** 'swimcloud' — a personal best converted from packages/swimcloud's parseSwimmerProfileHtml output, either access track. */
-  source: 'pdf' | 'paste' | 'ocr' | 'csv' | 'manual' | 'swimcloud';
+  /** 'swimcloud' — a personal best converted from packages/swimcloud's parseSwimmerProfileHtml output, either access track. See {@link HistoricalSwimSource}. */
+  source: HistoricalSwimSource;
   classYear?: string;
   swimcloudBadge?: SwimCloudBadge;
   computedCut?: 'A' | 'B' | null;
@@ -777,6 +790,18 @@ export interface Recruit {
   convertedFrom?: ScyConversionProvenance;
   /** The time is altitude-adjusted. See {@link HistoricalSwim.isAltitudeAdjusted}. Display only. */
   isAltitudeAdjusted?: true;
+  /**
+   * Where the row's time came from: the `source` of the history swim the
+   * import built it from, or `'manual'` for a row a coach typed in.
+   *
+   * `importHistoryToRoster` sets it on every row it writes since 2026-09-25.
+   * **Absent means unknown, never `'manual'`**: every row written before then
+   * has none, and so does a row from any writer that does not set it. A
+   * replace reimport (`planSwimCloudReplace`) removes a row whose source is
+   * SwimCloud (`'swimcloud'` or `'paste'`), keeps a row with any other
+   * source, and traces a row with none to the history it came from.
+   */
+  source?: HistoricalSwimSource;
 }
 
 export interface ConversionFactors {

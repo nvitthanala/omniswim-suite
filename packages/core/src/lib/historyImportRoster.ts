@@ -45,6 +45,11 @@ import {
   IDENTITY_ALIAS_RESOLVER,
   type AthleteAliasResolver,
 } from './athleteAliases';
+import {
+  applySwimCloudReplacePlan,
+  planSwimCloudReplace,
+  type SwimCloudReplacePlan,
+} from './swimCloudReplace';
 
 export type ImportSwimmerAction = 'new_recruit' | 'add_to_lineup' | 'history_matched' | 'already_recruit';
 
@@ -101,7 +106,22 @@ export type HistoryImportRosterResult = {
   };
   /** True when preview was empty or team blank — patch should not be applied (or is identity). */
   noop: boolean;
+  /**
+   * Present only for `mode: 'replace'` when the import ran: the rows the
+   * replace removed before importing, and what it kept. The patch already
+   * reflects the removals. See {@link previewSwimCloudReplace}.
+   */
+  replaced?: SwimCloudReplacePreview;
 };
+
+/**
+ * - `'merge'` (default) — add to what the workspace holds; never delete.
+ * - `'replace'` — first remove this team and gender's SwimCloud-sourced
+ *   history, recruit rows and plans (see `planSwimCloudReplace`), then import
+ *   as a merge would. Manual and PDF data stay. The caller must preview the
+ *   removals and back the workspace up before saving the patch.
+ */
+export type HistoryImportMode = 'merge' | 'replace';
 
 export type HistoryImportRosterOpts = {
   team: string;
@@ -120,6 +140,8 @@ export type HistoryImportRosterOpts = {
    * a resolver built from `workspace.athleteAliases`.
    */
   resolver?: AthleteAliasResolver;
+  /** Defaults to `'merge'`. See {@link HistoryImportMode}. */
+  mode?: HistoryImportMode;
 };
 
 /** Diacritic-insensitive class-year override lookup keyed by normalized name. */
@@ -850,6 +872,9 @@ function appendRecruitRow(
     classYear: ctx.classYear,
     timeType: swim.timeType ?? 'SCY',
     ...candidateTimeMarks(swim),
+    // Last, so every other field keeps its place. A replace reimport reads it
+    // (see planSwimCloudReplace) instead of tracing the row back to history.
+    ...(swim.source ? { source: swim.source } : {}),
   };
   acc.recruits.push(recruit);
   acc.existingRecruitEventKeys.add(key);
@@ -982,8 +1007,125 @@ function appendHistorySource(
 }
 
 /**
+ * A {@link SwimCloudReplacePlan} plus the athletes the replace would leave with
+ * no SwimCloud data: they lose rows and the incoming import has no swim for
+ * them, so nothing puts their rows back.
+ */
+export type SwimCloudReplacePreview = SwimCloudReplacePlan & {
+  /**
+   * Display names, sorted. An incoming swim counts for an athlete when its
+   * alias-resolved name has the same `aliasNameKey`, or when it matches the
+   * athlete's name confidently (`matchAthleteToRoster` at or above
+   * {@link ROSTER_MATCH_CONFIDENCE}), the identity rule the import itself uses.
+   */
+  athletesAbsentFromIncoming: string[];
+};
+
+/**
+ * Thrown by a replace whose incoming swims hold none for its team and gender.
+ * Such a replace would only delete, so it is refused rather than run.
+ */
+export class SwimCloudReplaceRefusedError extends Error {
+  readonly team: string;
+  readonly gender: Gender;
+
+  constructor(team: string, gender: Gender) {
+    super(
+      `Replace refused: the import holds no swim for ${team} (${gender}). ` +
+        "A replace with nothing to import would only delete that team's SwimCloud data."
+    );
+    this.name = 'SwimCloudReplaceRefusedError';
+    this.team = team;
+    this.gender = gender;
+  }
+}
+
+/** Display name per athlete key: a recruit or plan spelling first, then a history one. */
+function replacedAthleteNames(
+  plan: SwimCloudReplacePlan,
+  keyOf: (name: string) => string
+): Map<string, string> {
+  const names = new Map<string, string>();
+  const rosterRows = [...plan.recruitsToRemove, ...plan.plansToRemove].map(r => r.row.name);
+  for (const name of [...rosterRows, ...plan.historyToRemove.map(h => h.name)]) {
+    const key = keyOf(name);
+    if (key && !names.has(key)) names.set(key, name);
+  }
+  return names;
+}
+
+function athletesAbsentFromIncoming(
+  plan: SwimCloudReplacePlan,
+  incoming: readonly HistoricalSwim[],
+  resolver: AthleteAliasResolver
+): string[] {
+  const { team, gender } = plan;
+  const keyOf = (name: string) => aliasNameKey(resolver.resolveAthleteName(name, team, gender));
+  const names = replacedAthleteNames(plan, keyOf);
+  const replacedNames = [...names.values()];
+  const present = new Set<string>();
+  const seen = new Set<string>();
+  for (const swim of incoming) {
+    // The same test importSwimmerGroup applies before it imports a swimmer.
+    if (swim.team !== team || swim.gender !== gender) continue;
+    const resolved = resolver.resolveAthleteName(swim.name, team, gender);
+    if (seen.has(resolved)) continue;
+    seen.add(resolved);
+    present.add(aliasNameKey(resolved));
+    const match = matchAthleteToRoster(resolved, replacedNames);
+    if (isConfidentRosterMatch(match)) present.add(keyOf(match.match));
+  }
+  return [...names]
+    .filter(([key]) => !present.has(key))
+    .map(([, name]) => name)
+    .sort((a, b) => a.localeCompare(b));
+}
+
+/**
+ * What a replace reimport of `incoming` would remove and keep, for a preview.
+ * Pure. `importHistoryToRoster(..., { mode: 'replace' })` makes this same plan
+ * and returns it as `replaced`.
+ */
+export function previewSwimCloudReplace(
+  workspace: Workspace,
+  incoming: readonly HistoricalSwim[],
+  opts: Pick<HistoryImportRosterOpts, 'team' | 'gender' | 'resolver'>
+): SwimCloudReplacePreview {
+  const resolver = opts.resolver ?? buildAliasResolver(workspace);
+  const plan = planSwimCloudReplace(workspace, {
+    team: opts.team,
+    gender: opts.gender,
+    resolver,
+  });
+  return { ...plan, athletesAbsentFromIncoming: athletesAbsentFromIncoming(plan, incoming, resolver) };
+}
+
+/** Remove the team's SwimCloud rows, then import into what is left. */
+function importReplacingSwimCloudData(
+  workspace: Workspace,
+  preview: HistoricalSwim[],
+  opts: HistoryImportRosterOpts & { team: string }
+): HistoryImportRosterResult {
+  const { team, gender } = opts;
+  if (!preview.some(s => s.team === team && s.gender === gender)) {
+    throw new SwimCloudReplaceRefusedError(team, gender);
+  }
+  const resolver = opts.resolver ?? buildAliasResolver(workspace);
+  const replaced = previewSwimCloudReplace(workspace, preview, { team, gender, resolver });
+  const pruned: Workspace = { ...workspace, ...applySwimCloudReplacePlan(workspace, replaced) };
+  const merged = importHistoryToRoster(pruned, preview, { ...opts, mode: 'merge', resolver });
+  return { ...merged, replaced };
+}
+
+/**
  * Merge preview into athleteHistory and bridge new/existing athletes onto the roster
  * via recruits and meetEntryPlans. Does not mutate menResults/womenResults.
+ *
+ * With `mode: 'replace'`, first removes the team and gender's SwimCloud-sourced
+ * rows (see {@link previewSwimCloudReplace}), then imports as a merge. An empty
+ * preview or a blank team is still a no-op that removes nothing. Throws
+ * {@link SwimCloudReplaceRefusedError} when no incoming swim is for the team
+ * and gender.
  */
 export function importHistoryToRoster(
   workspace: Workspace,
@@ -1003,6 +1145,9 @@ export function importHistoryToRoster(
         swimmers: [] as ImportSwimmerPreview[],
       },
     };
+  }
+  if (opts.mode === 'replace') {
+    return importReplacingSwimCloudData(workspace, preview, { ...opts, team });
   }
 
   const gender = opts.gender;
