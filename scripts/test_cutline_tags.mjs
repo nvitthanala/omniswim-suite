@@ -296,17 +296,34 @@ eq(naia.tag?.tier, 'A', 'NAIA automatic maps to the A slot');
 eq(naia.tag?.label, 'NAIA AUTO', 'NAIA label uses the sheet vocabulary, not NCAA A/B');
 eq(naia.tag?.title, 'NAIA 2026-2027 automatic standard — 19.91', 'NAIA tooltip');
 
+// An NAIA SCM swim is judged against the NAIA metres column, which the loader
+// reads as SCM by the recorded decision of 2026-09-24. The table course is
+// chosen from the swim's own course; the caller does not name it.
 const naiaMetric = buildCutlineTag({
   timeSec: 22.0,
   gender: 'Men',
   event: '50 Free',
   division: 'NAIA',
-  course: 'METRIC_UNSPECIFIED',
+  swimCourse: 'SCM',
 });
-eq(naiaMetric.tag?.course, 'METRIC_UNSPECIFIED', 'NAIA metric course is preserved');
-if (naiaMetric.tag && !naiaMetric.tag.title.includes('metres')) {
+eq(naiaMetric.state, 'tagged', 'NAIA SCM swim is judged against the SCM column');
+eq(naiaMetric.tag?.course, 'SCM', 'NAIA metres course is SCM');
+eq(naiaMetric.tag?.standardTime, '22.27', 'NAIA SCM automatic standard');
+if (!naiaMetric.tag || !naiaMetric.tag.title.includes('metres')) {
   fail('a non-yards tag must name its course in the tooltip');
 }
+// A table course must match the swim course. Before 2026-09-24 this SCY swim
+// was tagged against the metres column because a non-yards table was read
+// whatever the swim's course.
+const yardsSwimVsMetres = buildCutlineTag({
+  timeSec: 22.0,
+  gender: 'Men',
+  event: '50 Free',
+  division: 'NAIA',
+  tableCourse: 'SCM',
+});
+eq(yardsSwimVsMetres.state, 'conversion_unavailable', 'an SCY swim is never judged against the SCM column');
+eq(yardsSwimVsMetres.tag, null, 'an SCY swim gets no tag from the SCM column');
 
 /* ------------------------------------------------------------------ */
 /* 6. Team-driven tags                                                 */

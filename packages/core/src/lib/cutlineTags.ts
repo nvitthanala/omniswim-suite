@@ -40,6 +40,13 @@
  * loose fit while making it visibly not a badge — never `tagged`, and never
  * silently folded into `unknown`.
  *
+ * NAIA is the one exception, because NAIA publishes a metric column. User
+ * decision (2026-09-24): read the NAIA 2026-27 "METERS" column as short-course
+ * metres, on the evidence of the official NAIA 2020-21 sheet, which heads it
+ * "SCM" (`NAIA_2026_27_METERS_AS_SCM` in `cutlines.ts`). So an NAIA team's SCM
+ * swim is judged directly against that column and can be `tagged` or
+ * `no_cut`. An NAIA LCM swim has no LCM standard and still converts to yards.
+ *
  * `program_discontinued` is the anachronism guard. Lindenwood's last season was
  * 2023-2024; the newest D2 table we hold is 2026-2027. Judging that swim against
  * it would emit a confident badge for a standard the program never faced, so the
@@ -75,6 +82,7 @@ import {
 import {
   courseOfRecordFromEventLabel,
   cutlineEventCategory,
+  cutlineTableCourseForSwim,
   DEFAULT_CUTLINE_COURSE,
   getCutlinesForSwim,
   normalizeEventForCutline,
@@ -153,7 +161,9 @@ export type CutlineTagState =
   /**
    * The swim was recorded in metres and no published conversion factor covers it
    * (relays have none), or the label says "meters" without stating the pool
-   * length. Not a miss — we could not put it on the same scale at all.
+   * length, or the caller named a metric table for a swim in another course
+   * (no published factor converts into metres). Not a miss — we could not put
+   * it on the same scale at all.
    */
   | 'conversion_unavailable'
   /**
@@ -180,7 +190,7 @@ export type CutlineTagState =
 export type CutlineIndicativeComparison = {
   /** Course the swim was actually recorded in. Never `'SCY'`. */
   swimCourse: Exclude<SwimCourseOfRecord, 'SCY'>;
-  /** Course of the table it was compared against (always `'SCY'` today). */
+  /** Course of the table it was compared against. Always `'SCY'`: only a yards table converts. */
   tableCourse: CutlineCourse;
   /** The strictest tier the **converted** time would have cleared. */
   tier: CutlineTier;
@@ -309,7 +319,7 @@ type CutlineTagResultBase = {
   season: CutlineSeason | null;
   /**
    * Course of the **published table** that was consulted. Every NCAA table is
-   * `SCY`; `METRIC_UNSPECIFIED` is the NAIA metric column.
+   * `SCY`; `SCM` is the NAIA metric column, consulted for an NAIA SCM swim.
    *
    * @deprecated Ambiguous name — it never meant the swim's own course. Use
    * {@link CutlineTagResultBase.tableCourse} (identical value) and
@@ -417,6 +427,30 @@ export function governingBodyLabel(division: NcaaDivision): string {
   return division === 'NAIA' ? 'NAIA' : `NCAA ${division}`;
 }
 
+const TABLE_COURSES: readonly string[] = ['SCY', 'SCM', 'LCM'] satisfies CutlineCourse[];
+
+/**
+ * A table course must be one a loaded record can carry. `METRIC_UNSPECIFIED`
+ * was one until 2026-09-24; a caller that still passes it (untyped JS) gets an
+ * error, not a lookup that silently matches nothing.
+ */
+function assertTableCourse(course: string): asserts course is CutlineCourse {
+  if (!TABLE_COURSES.includes(course)) {
+    throw new TypeError(
+      `Unknown cutline table course ${JSON.stringify(course)}; expected one of ${TABLE_COURSES.join(', ')}.`
+    );
+  }
+}
+
+function swimCourseLabel(course: SwimCourseOfRecord | 'METRIC_UNSPECIFIED'): string {
+  return course === 'METRIC_UNSPECIFIED' ? 'metres with no stated pool length' : courseLabel(course);
+}
+
+/** ` short-course metres` for a table outside yards; empty for the yards default. */
+function tableCourseSuffix(course: CutlineCourse): string {
+  return course === DEFAULT_CUTLINE_COURSE ? '' : ` ${courseLabel(course)}`;
+}
+
 function courseLabel(course: CutlineCourse): string {
   switch (course) {
     case 'SCY':
@@ -425,8 +459,6 @@ function courseLabel(course: CutlineCourse): string {
       return 'short-course metres';
     case 'LCM':
       return 'long-course metres';
-    case 'METRIC_UNSPECIFIED':
-      return 'metres';
   }
 }
 
@@ -497,9 +529,9 @@ export type CutlineTagInput = {
   /** Defaults to the newest season published for `division`. */
   season?: CutlineSeason;
   /**
-   * Course of the **published table to look up**. Defaults to `SCY` — every NCAA
-   * table is short-course yards. Use `METRIC_UNSPECIFIED` for the NAIA metric
-   * column.
+   * Course of the **published table to look up**. Omit it: the default is
+   * {@link cutlineTableCourseForSwim} — the swim's own course when its division
+   * publishes the event in that course (an NAIA SCM swim), `SCY` otherwise.
    *
    * @deprecated Ambiguous name: it is the table's course, never the swim's. Use
    * {@link CutlineTagInput.tableCourse} together with
@@ -507,14 +539,19 @@ export type CutlineTagInput = {
    * site. Still honoured when `tableCourse` is absent.
    */
   course?: CutlineCourse;
-  /** Course of the **published table to look up**. Defaults to `SCY`. */
+  /**
+   * Course of the **published table to look up**. Omit it to get
+   * {@link cutlineTableCourseForSwim}. A metric table named here for a swim in
+   * another course yields `state: 'conversion_unavailable'`, never a verdict.
+   */
   tableCourse?: CutlineCourse;
   /**
    * Course the swim was actually **recorded** in — `HistoricalSwim.timeType`.
    *
    * This is the eligibility axis, not the lookup axis. Only an `SCY` swim can
    * earn an NCAA cut; an `LCM`/`SCM` swim gets `state: 'converted_estimate'` at
-   * best.
+   * best. The exception is NAIA, which publishes an SCM column: an NAIA SCM
+   * swim is judged against it directly.
    *
    * Omit it and the course is read off the event label
    * (`courseOfRecordFromEventLabel`); a label that states nothing defaults to
@@ -673,12 +710,19 @@ function genderNotSponsoredReason(
 
 export function buildCutlineTag(input: CutlineTagInput): CutlineTagResult {
   const gender = normalizeGender(input.gender);
-  // `tableCourse` is the new, unambiguous name; `course` is the legacy field and
-  // still wins nothing over it. Both are reported back so old readers keep working.
-  const tableCourse = input.tableCourse ?? input.course ?? DEFAULT_CUTLINE_COURSE;
   const swimCourse = resolveSwimCourse(input);
-  const courseFields = { course: tableCourse, tableCourse, swimCourse };
   const division = input.division ?? null;
+  // `tableCourse` is the new, unambiguous name; `course` is the legacy field and
+  // still wins nothing over it. With neither, the swim is judged in its own
+  // course when its division publishes the event in that course (an NAIA SCM
+  // swim), and against yards otherwise. Both fields are reported back so old
+  // readers keep working.
+  const tableCourse =
+    input.tableCourse ??
+    input.course ??
+    cutlineTableCourseForSwim(gender, input.event, division, swimCourse, input.season);
+  assertTableCourse(tableCourse);
+  const courseFields = { course: tableCourse, tableCourse, swimCourse };
   const swimSeconds = resolveSeconds(input);
   const program = input.program ?? null;
 
@@ -806,19 +850,43 @@ export function buildCutlineTag(input: CutlineTagInput): CutlineTagResult {
    *
    * A cut belongs to the course it was published in. `tableCourse` says which
    * table we are reading; `swimCourse` says which pool the swim happened in.
-   * When they are the same, nothing below changes and the swim is judged
-   * directly — that is every existing caller, because `swimCourse` defaults to
-   * SCY and `tableCourse` defaults to SCY.
+   * When they are the same, the swim is judged directly: an SCY swim against
+   * a yards table, and an NAIA SCM swim against the NAIA SCM column.
    *
    * When a metric swim meets a yards table, we convert **for information only**.
    * The converted time can reach `converted_estimate`; it can never reach
    * `tagged`. Diving is left to the normal path so it still answers
    * `not_applicable` rather than a conversion complaint.
+   *
+   * Any other pairing is refused. A metric table is never read for a swim in
+   * another course: no published factor converts into metres, and a yards or
+   * LCM time read against an SCM standard would be a wrong verdict, not a
+   * loose fit.
    */
+  const isSwimEvent = cutlineEventCategory(input.event) === 'swim';
+  if (isSwimEvent && tableCourse !== DEFAULT_CUTLINE_COURSE && swimCourse !== tableCourse) {
+    return {
+      state: 'conversion_unavailable',
+      tag: null,
+      division,
+      season: seasonUnderComparison(division, input.season),
+      ...courseFields,
+      gender,
+      event: normalizeEventForCutline(input.event),
+      swimSeconds,
+      lookupStatus: null,
+      reason: `A ${courseLabel(tableCourse)} standard applies only to a ${courseLabel(
+        tableCourse
+      )} swim. This swim is ${swimCourseLabel(
+        swimCourse
+      )}, and no published factor converts it to ${courseLabel(tableCourse)}.`,
+      program,
+      nextTier: null,
+    };
+  }
+
   const convertingToYards =
-    tableCourse === DEFAULT_CUTLINE_COURSE &&
-    swimCourse !== 'SCY' &&
-    cutlineEventCategory(input.event) === 'swim';
+    tableCourse === DEFAULT_CUTLINE_COURSE && swimCourse !== 'SCY' && isSwimEvent;
 
   let converted: ScyEquivalentSwim | null = null;
   if (convertingToYards) {
@@ -918,9 +986,9 @@ export function buildCutlineTag(input: CutlineTagInput): CutlineTagResult {
       ...base,
       state: 'event_not_in_table',
       tag: null,
-      reason: `${governingBodyLabel(division)} ${lookup.season ?? ''} does not publish a standard for ${
-        lookup.event
-      }.`.replace(/\s+/g, ' '),
+      reason: `${governingBodyLabel(division)} ${lookup.season ?? ''} does not publish a${tableCourseSuffix(
+        tableCourse
+      )} standard for ${lookup.event}.`.replace(/\s+/g, ' '),
     };
   }
 
@@ -939,9 +1007,9 @@ export function buildCutlineTag(input: CutlineTagInput): CutlineTagResult {
       ...base,
       state: 'no_cut',
       tag: null,
-      reason: `Judged against ${governingBodyLabel(division)} ${
-        season ?? ''
-      }${how} — no standard cleared.`.replace(/\s+/g, ' '),
+      reason: `Judged against ${governingBodyLabel(division)} ${season ?? ''}${tableCourseSuffix(
+        tableCourse
+      )}${how} — no standard cleared.`.replace(/\s+/g, ' '),
     };
   }
 
@@ -1082,7 +1150,9 @@ export function convertedSwimOfRecord(
  * The swim a cut tag must judge for a stored row.
  *
  * A row holding a converted SCY estimate is judged as the metric swim it came
- * from, so the best it can reach is `converted_estimate` — never `tagged`. Any
+ * from, so against a yards table the best it can reach is `converted_estimate`
+ * — never `tagged`. (An NAIA SCM swim is judged against the NAIA SCM column
+ * directly; see {@link cutlineTableCourseForSwim}.) Any
  * other row is judged on its own event and time, in the course its `timeType`
  * states (or, when it states none, the course its label states).
  *

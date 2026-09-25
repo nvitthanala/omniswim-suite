@@ -61,6 +61,20 @@
       "bytes": 169011,
       "pageCount": 1,
       "retrievedAt": "2026-07-26T05:30:06Z"
+    },
+    {
+      "id": "naia-2020-21-course-evidence",
+      "division": "NAIA",
+      "season": "2020-2021",
+      "genders": "MW",
+      "url": "https://www.gomotionapp.com/cantbt/UserFiles/Image/QuickUpload/naia-qualifying-times_088712.pdf",
+      "filename": "2020-21-NAIA-SD-Qualifying-Standards.pdf",
+      "sha256": "c672d8bcbbdcf2b69b94dc6fbfe701cf6a724fb738cdd14de0fda4a18022b132",
+      "bytes": 402986,
+      "pageCount": 1,
+      "retrievedAt": "2026-09-25T02:01:53Z",
+      "purpose": "Course evidence only, no values used. The official NAIA 2020-21 sheet heads its metric column \"SCM\". The 2026-27 sheet heads it \"METERS\" with no course. User decision 2026-09-24: read NAIA METERS as SCM on this evidence. Hosted by a club (gomotionapp), not naia.org; the naia.org coaches manual URL returned 404 on 2026-09-24.",
+      "evidenceOnly": true
     }
   ]
 }

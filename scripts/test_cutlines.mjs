@@ -207,20 +207,30 @@ function findOne(query, label) {
     eq(scy.aStandard, '19.91', 'NAIA men 50 Free yards automatic');
     eq(scy.bStandard, '21.55', 'NAIA men 50 Free yards provisional');
   }
+  // The sheet heads this column "METERS" only. The loader reads it as SCM by
+  // the recorded user decision of 2026-09-24 (NAIA_2026_27_METERS_AS_SCM);
+  // tests/naiaMeterCourseAsScm.test.ts pins the evidence.
   const metric = findOne(
     {
       division: 'NAIA',
       gender: 'Men',
       event: '50 Freestyle',
       kind: 'individual',
-      course: 'METRIC_UNSPECIFIED',
+      course: 'SCM',
     },
     'NAIA men 50 Free metres'
   );
   if (metric) {
     eq(metric.aStandard, '22.27', 'NAIA men 50 Free metres automatic');
     eq(metric.bStandard, '24.13', 'NAIA men 50 Free metres provisional');
+    eq(metric.courseDecision?.id, 'naia-2026-27-meters-as-scm', 'NAIA metres course carries its decision');
+    eq(metric.source.sourceId, 'naia-2026-27', 'NAIA metres values still cite the 2026-27 sheet');
   }
+  eq(
+    publishedCutlines().filter(e => e.course === 'METRIC_UNSPECIFIED').length,
+    0,
+    'no loaded record may carry METRIC_UNSPECIFIED'
+  );
   // "500/400 FREESTYLE" is 500 yards OR 400 metres — different distances.
   const fiveHundred = findOne(
     { division: 'NAIA', gender: 'Women', event: '500 Freestyle', course: 'SCY' },
@@ -228,12 +238,12 @@ function findOne(query, label) {
   );
   if (fiveHundred) eq(fiveHundred.aStandard, '5:02.09', 'NAIA women 500 Free yards automatic');
   const fourHundred = findOne(
-    { division: 'NAIA', gender: 'Women', event: '400 Freestyle', course: 'METRIC_UNSPECIFIED' },
+    { division: 'NAIA', gender: 'Women', event: '400 Freestyle', course: 'SCM' },
     'NAIA women 400 Free metres'
   );
   if (fourHundred) eq(fourHundred.aStandard, '4:25.22', 'NAIA women 400 Free metres automatic');
   eq(
-    findCutlines({ division: 'NAIA', event: '500 Freestyle', course: 'METRIC_UNSPECIFIED' }).length,
+    findCutlines({ division: 'NAIA', event: '500 Freestyle', course: 'SCM' }).length,
     0,
     'NAIA must not publish a 500 Freestyle in metres'
   );
@@ -365,8 +375,8 @@ eq(compareTimeToCutline(20.02, 'Men', '50 Free', 'D3').tier, 'Invited', 'D3 20.0
 eq(compareTimeToCutline(20.02, 'Men', '50 Free', 'D3').achieved, 'B', 'D3 Invited maps to legacy B slot');
 eq(compareTimeToCutline(20.2, 'Men', '50 Free', 'D3').tier, 'B', 'D3 20.20 only makes the B cut');
 
-const naiaMetric = getCutlinesForSwim('Men', '50 Freestyle', 'NAIA', undefined, 'METRIC_UNSPECIFIED');
-eq(naiaMetric.aCutSec, 22.27, 'NAIA metric lookup uses the metric column');
+const naiaMetric = getCutlinesForSwim('Men', '50 Freestyle', 'NAIA', undefined, 'SCM');
+eq(naiaMetric.aCutSec, 22.27, 'NAIA SCM lookup uses the metric column');
 eq(getCutlinesForSwim('Men', '50 Freestyle', 'NAIA').aCutSec, 19.91, 'NAIA default lookup is yards');
 
 /* ------------------------------------------------------------------ */

@@ -45,7 +45,7 @@ USER_AGENT = (
 
 # Every source we archive. `id` is the stable key used by extract-cutlines.py and
 # by the `sourceId` provenance field on every emitted record.
-SOURCES: list[dict[str, str]] = [
+SOURCES: list[dict[str, Any]] = [
     {
         "id": "ncaa-d1-2025-26",
         "division": "D1",
@@ -85,6 +85,20 @@ SOURCES: list[dict[str, str]] = [
         "genders": "MW",
         "filename": "2026-27-SD-Qualifying-Standards-wo-Relays.pdf",
         "url": "https://www.naia.org/wp-content/uploads/2026/05/2026-27-SD-Qualifying-Standards-wo-Relays.pdf",
+    },
+    {
+        # Evidence only: no values are extracted from this sheet. It is the
+        # source for reading the 2026-27 NAIA "METERS" column as SCM (user
+        # decision 2026-09-24; see NAIA_2026_27_METERS_AS_SCM in
+        # packages/core/src/cutlines.ts). extract-cutlines.py skips it.
+        "id": "naia-2020-21-course-evidence",
+        "division": "NAIA",
+        "season": "2020-2021",
+        "genders": "MW",
+        "filename": "2020-21-NAIA-SD-Qualifying-Standards.pdf",
+        "url": "https://www.gomotionapp.com/cantbt/UserFiles/Image/QuickUpload/naia-qualifying-times_088712.pdf",
+        "evidenceOnly": True,
+        "purpose": "Course evidence only, no values used. The official NAIA 2020-21 sheet heads its metric column \"SCM\". The 2026-27 sheet heads it \"METERS\" with no course. User decision 2026-09-24: read NAIA METERS as SCM on this evidence. Hosted by a club (gomotionapp), not naia.org; the naia.org coaches manual URL returned 404 on 2026-09-24.",
     },
 ]
 
@@ -174,6 +188,7 @@ def main() -> int:
             "genders": src["genders"],
             "url": src["url"],
             "filename": src["filename"],
+            **({"evidenceOnly": True, "purpose": src["purpose"]} if src.get("evidenceOnly") else {}),
             "sha256": digest,
             "bytes": len(payload),
             "pageCount": page_count(dest),

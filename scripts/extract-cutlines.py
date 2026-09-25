@@ -917,6 +917,10 @@ def main() -> int:
     failures: list[str] = []
 
     for src in sources:
+        # An evidence-only source supplies a fact about another sheet (the
+        # 2020-21 NAIA sheet's "SCM" heading), never values. Nothing to parse.
+        if src.get("evidenceOnly"):
+            continue
         parse = PARSERS.get(src["id"])
         if parse is None:
             failures.append(f"{src['id']}: no parser registered for this source")

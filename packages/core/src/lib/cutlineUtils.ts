@@ -391,6 +391,37 @@ export function getCutlinesForSwim(
   };
 }
 
+/**
+ * The course of the published table a swim is judged against when the caller
+ * names none.
+ *
+ * A standard belongs to the course it is published in. So a metric swim is
+ * judged in its own course when its division publishes a standard for that
+ * event in that course: today that is an NAIA short-course metres swim, read
+ * against the NAIA 2026-27 column the loader reads as SCM
+ * (`NAIA_2026_27_METERS_AS_SCM`). Every other swim goes to the yards table,
+ * where a metric swim can reach at best a converted estimate.
+ *
+ * `SCY` for an unknown division, a yards swim, a metric label with no pool
+ * length (`METRIC_UNSPECIFIED`), diving, and any metric event the division
+ * does not publish in that course. No LCM table is held anywhere, so an LCM
+ * swim always gets `SCY`.
+ */
+export function cutlineTableCourseForSwim(
+  gender: Gender | string,
+  event: string,
+  division: NcaaDivision | null | undefined,
+  swimCourse: SwimCourseOfRecord | 'METRIC_UNSPECIFIED',
+  season?: CutlineSeason
+): CutlineCourse {
+  if (!division) return DEFAULT_CUTLINE_COURSE;
+  if (swimCourse === DEFAULT_CUTLINE_COURSE || swimCourse === 'METRIC_UNSPECIFIED') {
+    return DEFAULT_CUTLINE_COURSE;
+  }
+  const ownCourse = getCutlinesForSwim(gender, event, division, season, swimCourse);
+  return ownCourse.status === 'ok' ? swimCourse : DEFAULT_CUTLINE_COURSE;
+}
+
 export type CutlineComparison = {
   /** Legacy two-tier verdict. `A` = met the strict tier, `B` = met the permissive one. */
   achieved: 'A' | 'B' | null;

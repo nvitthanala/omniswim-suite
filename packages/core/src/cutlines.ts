@@ -18,10 +18,16 @@
  * | D1       | single `standard` | qualifying + provisional | SCY           |
  * | D2       | A + B             | provisional only         | SCY           |
  * | D3       | A + B + Invited   | provisional + Invited    | SCY           |
- * | NAIA     | A + B             | **absent from source**   | SCY + metric  |
+ * | NAIA     | A + B             | **absent from source**   | SCY + SCM *   |
  *
  * NAIA relays are absent because the published file is explicitly
  * "...-wo-Relays". Absent is modelled as absent — never as zero, never invented.
+ *
+ * \* The NAIA 2026-27 sheet heads its second column "METERS" and never states
+ * the pool length, so the generated file records that column as
+ * `METRIC_UNSPECIFIED`. This loader reads it as SCM by a recorded decision,
+ * {@link NAIA_2026_27_METERS_AS_SCM}, and stamps the decision on every record
+ * it applies to (`courseDecision`). The values stay the 2026-27 sheet's.
  */
 
 import type { NcaaDivision } from './types';
@@ -36,13 +42,104 @@ import rawSeason2026_2027 from '../../../data/cutlines/2026-2027.json';
 export type CutlineSeason = '2025-2026' | '2026-2027';
 
 /**
- * Racing course a standard applies to.
+ * Racing course a loaded standard applies to.
  *
- * `METRIC_UNSPECIFIED` exists for the NAIA sheet, whose second column is headed
- * only "METERS" and never states the pool length. We do not assert SCM or LCM
- * on its behalf.
+ * Every loaded record carries one of these three. A record whose source never
+ * states its course is not loaded with a guess: it carries the course of a
+ * recorded {@link CutlineCourseDecision}, or the loader throws.
+ *
+ * `METRIC_UNSPECIFIED` was a member until 2026-09-24. It survives only in the
+ * generated files ({@link ExtractedCutlineCourse}); no loaded record, query or
+ * tag uses it, so a query for it cannot come back silently empty.
  */
-export type CutlineCourse = 'SCY' | 'SCM' | 'LCM' | 'METRIC_UNSPECIFIED';
+export type CutlineCourse = 'SCY' | 'SCM' | 'LCM';
+
+/**
+ * Course as `scripts/extract-cutlines.py` records it in `data/cutlines/*.json`.
+ *
+ * `METRIC_UNSPECIFIED` is what extraction can prove from a sheet that heads a
+ * column "METERS" and states no pool length (the NAIA 2026-27 sheet). The
+ * extractor stays faithful to the sheet; the course reading is a separate,
+ * recorded decision applied at load time.
+ */
+export type ExtractedCutlineCourse = CutlineCourse | 'METRIC_UNSPECIFIED';
+
+/**
+ * A recorded reading of a course the values sheet does not state.
+ *
+ * This is a decision, not a fact the values sheet prints. It names both
+ * sources: the sheet the **values** come from, and the archived document the
+ * **course** reading rests on. No value is ever taken from the evidence
+ * document. The decision covers only the exact bytes of the values sheet
+ * (`valuesSha256`); a re-fetched sheet needs its own decision.
+ */
+export type CutlineCourseDecision = {
+  /** Stable name of the decision. */
+  id: string;
+  division: NcaaDivision;
+  season: CutlineSeason;
+  /** Manifest id of the sheet the values come from, verbatim. */
+  valuesSourceId: string;
+  /** sha256 of that sheet. The decision applies to these bytes only. */
+  valuesSha256: string;
+  /** What the values sheet prints over the column, verbatim. */
+  valuesSheetHeading: string;
+  /** What extraction could prove from the values sheet alone. */
+  extractedCourse: 'METRIC_UNSPECIFIED';
+  /** The course the decision reads the column as. */
+  course: CutlineCourse;
+  /** The archived document the course reading rests on. No values come from it. */
+  evidence: {
+    /** Manifest id in `data/cutlines/sources/manifest.json`. */
+    sourceId: string;
+    season: string;
+    url: string;
+    sha256: string;
+    /** What the evidence shows. */
+    finding: string;
+    /** What a reader should know about the evidence copy. */
+    caveat: string;
+  };
+  decidedBy: 'user';
+  /** ISO date of the decision. */
+  decidedOn: string;
+};
+
+/**
+ * User decision, 2026-09-24: read the NAIA 2026-27 "METERS" column as short
+ * course metres (SCM).
+ *
+ * - Values: `data/cutlines/sources/2026-27-SD-Qualifying-Standards-wo-Relays.pdf`
+ *   (manifest id `naia-2026-27`). That sheet heads the column "METERS" and
+ *   never says SCM or LCM.
+ * - Course: `data/cutlines/sources/2020-21-NAIA-SD-Qualifying-Standards.pdf`
+ *   (manifest id `naia-2020-21-course-evidence`). The official NAIA 2020-21
+ *   sheet heads the same column "SCM". Only that heading is used.
+ *
+ * `tests/naiaMeterCourseAsScm.test.ts` re-reads both headings from the PDFs
+ * and pins both hashes against the manifest.
+ */
+export const NAIA_2026_27_METERS_AS_SCM: Readonly<CutlineCourseDecision> = Object.freeze({
+  id: 'naia-2026-27-meters-as-scm',
+  division: 'NAIA',
+  season: '2026-2027',
+  valuesSourceId: 'naia-2026-27',
+  valuesSha256: '395be842a2fde60a25348ed9d534cbdf65024fb831626ccfa908ca00c130c166',
+  valuesSheetHeading: 'METERS',
+  extractedCourse: 'METRIC_UNSPECIFIED',
+  course: 'SCM',
+  evidence: Object.freeze({
+    sourceId: 'naia-2020-21-course-evidence',
+    season: '2020-2021',
+    url: 'https://www.gomotionapp.com/cantbt/UserFiles/Image/QuickUpload/naia-qualifying-times_088712.pdf',
+    sha256: 'c672d8bcbbdcf2b69b94dc6fbfe701cf6a724fb738cdd14de0fda4a18022b132',
+    finding: 'The official NAIA 2020-21 qualifying sheet heads its metric column "SCM".',
+    caveat:
+      'Hosted by a club site (gomotionapp), not naia.org. The naia.org coaches manual URL returned 404 on 2026-09-24.',
+  }),
+  decidedBy: 'user',
+  decidedOn: '2026-09-24',
+} satisfies CutlineCourseDecision);
 
 export type CutlineGender = 'Men' | 'Women';
 
@@ -71,7 +168,14 @@ type CutlineCommon = {
   /** Canonical long-form event name, e.g. "100 Backstroke", "200 Medley Relay". */
   event: string;
   course: CutlineCourse;
+  /** Where the values came from. Always the values sheet, never the course evidence. */
   source: CutlineSourceRef;
+  /**
+   * Present only when the values sheet does not state this record's course and
+   * `course` comes from a recorded decision instead. Absent means `course` is
+   * the one the extractor read off the values sheet itself.
+   */
+  courseDecision?: Readonly<CutlineCourseDecision>;
 };
 
 /* -------------------------------------------------------------------------- */
@@ -169,6 +273,10 @@ export type CutlineSourceSummary = {
   pageCount: number | null;
 };
 
+/**
+ * A season file as loaded: the generated file with every recorded course
+ * decision applied to its records. See {@link cutlineDataFiles}.
+ */
 export type CutlineDataFile = {
   version: string;
   season: CutlineSeason;
@@ -179,10 +287,75 @@ export type CutlineDataFile = {
   cutlines: CutlineEntry[];
 };
 
+type WithExtractedCourse<E> = E extends CutlineEntry
+  ? Omit<E, 'course' | 'courseDecision'> & { course: ExtractedCutlineCourse }
+  : never;
+
+/** One record exactly as `data/cutlines/<season>.json` holds it. */
+export type GeneratedCutlineEntry = WithExtractedCourse<CutlineEntry>;
+
+type GeneratedCutlineDataFile = Omit<CutlineDataFile, 'cutlines'> & {
+  cutlines: GeneratedCutlineEntry[];
+};
+
+/* -------------------------------------------------------------------------- */
+/* Course decisions                                                            */
+/* -------------------------------------------------------------------------- */
+
+const COURSE_DECISIONS: readonly Readonly<CutlineCourseDecision>[] = Object.freeze([
+  NAIA_2026_27_METERS_AS_SCM,
+]);
+
+/** Every recorded course decision the loader applies. */
+export function cutlineCourseDecisions(): readonly Readonly<CutlineCourseDecision>[] {
+  return COURSE_DECISIONS;
+}
+
+/**
+ * The loaded form of one generated record.
+ *
+ * A record whose course the extractor could read passes through unchanged. A
+ * `METRIC_UNSPECIFIED` record takes the course of the one decision that names
+ * its values source, division and season **and** its exact source bytes, and
+ * carries that decision as `courseDecision`.
+ *
+ * Throws when no decision matches. A record with an unstated course is never
+ * loaded under a guess, and never dropped in silence: a new or re-fetched
+ * sheet needs its own recorded decision before the tables load.
+ */
+export function resolveCutlineCourse(
+  entry: GeneratedCutlineEntry,
+  decisions: readonly Readonly<CutlineCourseDecision>[] = COURSE_DECISIONS
+): CutlineEntry {
+  if (entry.course !== 'METRIC_UNSPECIFIED') return entry as CutlineEntry;
+  const where = `${entry.division} ${entry.season} ${entry.gender} ${entry.event} (source ${entry.source.sourceId})`;
+  const decision = decisions.find(d => d.valuesSourceId === entry.source.sourceId);
+  if (!decision) {
+    throw new Error(
+      `Cutline ${where} does not state its course, and no recorded course decision names source ${entry.source.sourceId}.`
+    );
+  }
+  if (decision.valuesSha256 !== entry.source.sha256) {
+    throw new Error(
+      `Cutline ${where} cites sha256 ${entry.source.sha256}; course decision ${decision.id} covers only ${decision.valuesSha256}. Record a decision for the new sheet.`
+    );
+  }
+  if (decision.division !== entry.division || decision.season !== entry.season) {
+    throw new Error(
+      `Cutline ${where} does not match course decision ${decision.id} (${decision.division} ${decision.season}).`
+    );
+  }
+  return { ...entry, course: decision.course, courseDecision: decision } as CutlineEntry;
+}
+
+function loadDataFile(file: GeneratedCutlineDataFile): CutlineDataFile {
+  return { ...file, cutlines: file.cutlines.map(entry => resolveCutlineCourse(entry)) };
+}
+
 const DATA_FILES: readonly CutlineDataFile[] = [
-  rawSeason2025_2026 as unknown as CutlineDataFile,
-  rawSeason2026_2027 as unknown as CutlineDataFile,
-];
+  rawSeason2025_2026 as unknown as GeneratedCutlineDataFile,
+  rawSeason2026_2027 as unknown as GeneratedCutlineDataFile,
+].map(loadDataFile);
 
 const ALL_ENTRIES: readonly CutlineEntry[] = DATA_FILES.flatMap(file => file.cutlines);
 
@@ -215,7 +388,10 @@ export function publishedCutlines(): readonly CutlineEntry[] {
   return ALL_ENTRIES;
 }
 
-/** The generated files themselves, including their provenance blocks. */
+/**
+ * The generated files with their provenance blocks, as loaded: every recorded
+ * course decision is applied, so no record carries `METRIC_UNSPECIFIED`.
+ */
 export function cutlineDataFiles(): readonly CutlineDataFile[] {
   return DATA_FILES;
 }
