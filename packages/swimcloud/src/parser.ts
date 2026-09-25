@@ -3084,6 +3084,123 @@ function swimmerTimesRowEvent(
   };
 }
 
+/**
+ * Every non-time warning a personal-best row can raise: the meet-id
+ * disagreement between the time link and the meet-name link, the event
+ * label's shape/course/stroke, and a missing swim link. Extracted from
+ * {@link readSwimmerTimesRows} so that function's own branching stays under
+ * the complexity ceiling; behaviour, codes and messages are unchanged.
+ */
+function pushSwimmerTimesRowWarnings(
+  eventLabel: string,
+  parsed: ParsedSwimmerTimesEventLabel,
+  link: SwimmerTimesRowLink | undefined,
+  meetLinkId: SwimCloudMeetId | undefined,
+  eventId: string,
+  rowIndex: number,
+  warnings: SwimCloudParseWarning[],
+): void {
+  if (link !== undefined && meetLinkId !== undefined && link.meetId !== meetLinkId) {
+    warnings.push({
+      code: 'contradicted-page-declaration',
+      message: `Row for ${JSON.stringify(eventLabel)} links its time to meet ${link.meetId} and its meet name to meet ${meetLinkId}. The time link wins, because it is the link that also names the event and the swim; the disagreement is reported rather than resolved silently.`,
+      eventId,
+      rowIndex,
+      raw: `time-link=${link.meetId} meet-link=${meetLinkId}`,
+    });
+  }
+
+  if (!parsed.matchedShape) {
+    warnings.push({
+      code: 'unrecognized-event-label',
+      message: `Event cell ${JSON.stringify(eventLabel)} does not match the expected "{distance} {stroke} {COURSE}" shape; course was not read from it and is recorded as unknown.`,
+      eventId,
+      rowIndex,
+      raw: eventLabel,
+    });
+  } else if (parsed.course === 'unknown') {
+    warnings.push({
+      code: 'unrecognized-course-token',
+      message: `Course token ${JSON.stringify(parsed.courseToken ?? '')} in ${JSON.stringify(eventLabel)} is outside SCY/SCM/LCM; course recorded as unknown rather than assumed.`,
+      eventId,
+      rowIndex,
+      raw: eventLabel,
+    });
+  }
+
+  if (parsed.stroke === 'unknown') {
+    warnings.push({
+      code: 'unmapped-stroke',
+      message: `Stroke could not be identified in ${JSON.stringify(eventLabel)}; recorded as unknown.`,
+      eventId,
+      rowIndex,
+      raw: eventLabel,
+    });
+  }
+
+  if (link === undefined) {
+    warnings.push({
+      code: 'missing-swim-link',
+      message: `Time cell for ${JSON.stringify(eventLabel)} carries no /results/{meetId}/event/{n}/ link; the swim has no SwimCloud swim id, meet id or event reference, and a composite key derived from the row's own values is used instead.`,
+      eventId,
+      rowIndex,
+    });
+  } else if (link.swimId === undefined) {
+    warnings.push({
+      code: 'missing-swim-link',
+      message: `Time cell for ${JSON.stringify(eventLabel)} links to event ${link.eventRef} of meet ${link.meetId} but carries no "?id=" swim id; a composite key derived from the row's own values is used instead.`,
+      eventId,
+      rowIndex,
+    });
+  }
+}
+
+/**
+ * Build one {@link SwimCloudPersonalBestSwim} from an already-parsed row.
+ * Extracted from {@link readSwimmerTimesRows} so the omitted-when-absent
+ * spreads (one ternary per optional field) don't count against that
+ * function's complexity; the fields and their absence rules are unchanged.
+ */
+function buildSwimmerTimesPersonalBest(
+  cells: readonly string[],
+  table: LocatedSwimmerTimesTable,
+  eventId: string,
+  meetId: SwimCloudMeetId | undefined,
+  eventLabel: string,
+  parsed: ParsedSwimmerTimesEventLabel,
+  link: SwimmerTimesRowLink | undefined,
+  time: ReturnType<typeof readTime>,
+  meetCellHtml: string,
+  rowIndex: number,
+): SwimCloudPersonalBestSwim {
+  const swimKey =
+    link?.swimId === undefined
+      ? `${eventId}:swim:${time.finalTime ?? time.rawTimeToken ?? `row${rowIndex}`}`
+      : `${link.meetId}:swim:${link.swimId}`;
+
+  const meetName = htmlToText(meetCellHtml);
+  const date = textAt(cells, table.date);
+  const chips = readSwimmerTimesTagCells(table.tagColumns.map((column) => cellAt(cells, column)));
+
+  return {
+    swimKey,
+    ...(link?.swimId === undefined ? {} : { swimCloudSwimId: link.swimId }),
+    eventId,
+    ...(link === undefined ? {} : { eventRef: link.eventRef }),
+    eventLabel,
+    ...(parsed.distance === undefined ? {} : { distance: parsed.distance }),
+    course: parsed.course,
+    stroke: parsed.stroke,
+    ...(meetId === undefined ? {} : { swimCloudMeetId: meetId }),
+    ...(meetName.length === 0 ? {} : { meetName }),
+    ...(time.finalTime === undefined ? {} : { time: time.finalTime }),
+    ...(time.rawTimeToken === undefined ? {} : { rawTimeToken: time.rawTimeToken }),
+    ...(date.length === 0 ? {} : { date }),
+    tags: chips.tags,
+    relayLeadoff: chips.relayLeadoff,
+  };
+}
+
 function readSwimmerTimesRows(
   table: LocatedSwimmerTimesTable,
   warnings: SwimCloudParseWarning[],
@@ -3117,59 +3234,7 @@ function readSwimmerTimesRows(
         ? `swimmer-times:event-label:${normalizeHeader(eventLabel)}`
         : `${link.meetId}:event:${link.eventRef}`;
 
-    if (link !== undefined && meetLinkId !== undefined && link.meetId !== meetLinkId) {
-      warnings.push({
-        code: 'contradicted-page-declaration',
-        message: `Row for ${JSON.stringify(eventLabel)} links its time to meet ${link.meetId} and its meet name to meet ${meetLinkId}. The time link wins, because it is the link that also names the event and the swim; the disagreement is reported rather than resolved silently.`,
-        eventId,
-        rowIndex,
-        raw: `time-link=${link.meetId} meet-link=${meetLinkId}`,
-      });
-    }
-
-    if (!parsed.matchedShape) {
-      warnings.push({
-        code: 'unrecognized-event-label',
-        message: `Event cell ${JSON.stringify(eventLabel)} does not match the expected "{distance} {stroke} {COURSE}" shape; course was not read from it and is recorded as unknown.`,
-        eventId,
-        rowIndex,
-        raw: eventLabel,
-      });
-    } else if (parsed.course === 'unknown') {
-      warnings.push({
-        code: 'unrecognized-course-token',
-        message: `Course token ${JSON.stringify(parsed.courseToken ?? '')} in ${JSON.stringify(eventLabel)} is outside SCY/SCM/LCM; course recorded as unknown rather than assumed.`,
-        eventId,
-        rowIndex,
-        raw: eventLabel,
-      });
-    }
-
-    if (parsed.stroke === 'unknown') {
-      warnings.push({
-        code: 'unmapped-stroke',
-        message: `Stroke could not be identified in ${JSON.stringify(eventLabel)}; recorded as unknown.`,
-        eventId,
-        rowIndex,
-        raw: eventLabel,
-      });
-    }
-
-    if (link === undefined) {
-      warnings.push({
-        code: 'missing-swim-link',
-        message: `Time cell for ${JSON.stringify(eventLabel)} carries no /results/{meetId}/event/{n}/ link; the swim has no SwimCloud swim id, meet id or event reference, and a composite key derived from the row's own values is used instead.`,
-        eventId,
-        rowIndex,
-      });
-    } else if (link.swimId === undefined) {
-      warnings.push({
-        code: 'missing-swim-link',
-        message: `Time cell for ${JSON.stringify(eventLabel)} links to event ${link.eventRef} of meet ${link.meetId} but carries no "?id=" swim id; a composite key derived from the row's own values is used instead.`,
-        eventId,
-        rowIndex,
-      });
-    }
+    pushSwimmerTimesRowWarnings(eventLabel, parsed, link, meetLinkId, eventId, rowIndex, warnings);
 
     const time = readTime(
       htmlToText(timeCellHtml),
@@ -3178,32 +3243,9 @@ function readSwimmerTimesRows(
       warnings,
     );
 
-    const swimKey =
-      link?.swimId === undefined
-        ? `${eventId}:swim:${time.finalTime ?? time.rawTimeToken ?? `row${rowIndex}`}`
-        : `${link.meetId}:swim:${link.swimId}`;
-
-    const meetName = htmlToText(meetCellHtml);
-    const date = textAt(cells, table.date);
-    const chips = readSwimmerTimesTagCells(table.tagColumns.map((column) => cellAt(cells, column)));
-
-    personalBests.push({
-      swimKey,
-      ...(link?.swimId === undefined ? {} : { swimCloudSwimId: link.swimId }),
-      eventId,
-      ...(link === undefined ? {} : { eventRef: link.eventRef }),
-      eventLabel,
-      ...(parsed.distance === undefined ? {} : { distance: parsed.distance }),
-      course: parsed.course,
-      stroke: parsed.stroke,
-      ...(meetId === undefined ? {} : { swimCloudMeetId: meetId }),
-      ...(meetName.length === 0 ? {} : { meetName }),
-      ...(time.finalTime === undefined ? {} : { time: time.finalTime }),
-      ...(time.rawTimeToken === undefined ? {} : { rawTimeToken: time.rawTimeToken }),
-      ...(date.length === 0 ? {} : { date }),
-      tags: chips.tags,
-      relayLeadoff: chips.relayLeadoff,
-    });
+    personalBests.push(
+      buildSwimmerTimesPersonalBest(cells, table, eventId, meetId, eventLabel, parsed, link, time, meetCellHtml, rowIndex),
+    );
   });
 
   return personalBests;
@@ -3297,6 +3339,199 @@ function readFastestTimesFlags(value: unknown): { tags: SwimCloudSwimmerTimesTag
     if (title === 'Leadoff') relayLeadoff = true;
   }
   return { tags, relayLeadoff };
+}
+
+/**
+ * Build one diving {@link SwimCloudPersonalBestSwim} from a
+ * `profile_fastest_times` row whose stroke code is `H` (diving). Extracted
+ * from {@link parseSwimmerFastestTimesJson}'s row loop so that loop's own
+ * branching stays under the complexity ceiling; the shape, the
+ * `diving-score-not-a-time` warning and every field's absence rule are
+ * unchanged.
+ *
+ * Same treatment as the HTML path's `diving-score-not-a-time`: the row is
+ * kept, the score is not a time, and the importer skips it as no-time.
+ * `1 mtr Diving`, the label the meet data already uses (data/meets.json),
+ * so a diver's bests and meet results name the event the same way.
+ */
+function buildFastestTimesDivingRow(
+  row: Record<string, unknown>,
+  rowIndex: number,
+  distance: number,
+  warnings: SwimCloudParseWarning[],
+): SwimCloudPersonalBestSwim {
+  const eventLabel = `${distance} mtr Diving`;
+  const rawScore = jsonString(row['eventtime']) ?? '';
+  warnings.push({
+    code: 'diving-score-not-a-time',
+    message: `${eventLabel} ${JSON.stringify(rawScore)} is a judged score, not a time; recorded as divingScore.`,
+    rowIndex,
+    raw: rawScore,
+  });
+  const urlMatch = FASTEST_TIMES_ROW_URL.exec(jsonString(row['url']) ?? '');
+  const meetId = (urlMatch?.[1] ?? jsonString(row['meet_id'])) as SwimCloudMeetId | undefined;
+  const swimId = urlMatch?.[3] ?? urlMatch?.[4];
+  const eventId =
+    meetId !== undefined && urlMatch?.[2] !== undefined
+      ? `${meetId}:event:${urlMatch[2]}`
+      : `swimmer-times:event-label:${normalizeHeader(eventLabel)}`;
+  const seasonId = jsonString(row['season_id']);
+  const meetName = typeof row['name'] === 'string' ? collapseWhitespace(row['name']) : '';
+  const date = typeof row['dateofswim'] === 'string' ? row['dateofswim'].trim() : '';
+  return {
+    swimKey:
+      swimId !== undefined && meetId !== undefined
+        ? `${meetId}:swim:${swimId}`
+        : `${eventId}:swim:${jsonString(row['id']) ?? `row${rowIndex}`}`,
+    ...(swimId === undefined ? {} : { swimCloudSwimId: swimId }),
+    eventId,
+    ...(urlMatch?.[2] === undefined ? {} : { eventRef: urlMatch[2] }),
+    eventLabel,
+    distance,
+    course: 'unknown',
+    stroke: 'Diving',
+    ...(meetId === undefined ? {} : { swimCloudMeetId: meetId }),
+    ...(meetName.length === 0 ? {} : { meetName }),
+    ...(rawScore.length === 0 ? {} : { rawTimeToken: rawScore }),
+    ...(/^\d{1,4}\.\d{1,2}$/.test(rawScore) ? { divingScore: rawScore } : {}),
+    ...(date.length === 0 ? {} : { date }),
+    tags: readFastestTimesFlags(row['flags']).tags,
+    ...(seasonId === undefined ? {} : { seasonId }),
+    relayLeadoff: false,
+  };
+}
+
+/**
+ * Build one non-diving {@link SwimCloudPersonalBestSwim} from a
+ * `profile_fastest_times` row whose stroke/course/distance codes all
+ * resolved. Extracted from {@link parseSwimmerFastestTimesJson}'s row loop
+ * for the same reason as {@link buildFastestTimesDivingRow}; the
+ * `unrecognized-time-token` warning and every field's absence rule are
+ * unchanged.
+ */
+/**
+ * Push the `unrecognized-time-token` warning for a regular fastest-times row
+ * whose time could not be read, if any. Split out of
+ * {@link buildFastestTimesRegularRow} purely to keep that function's own
+ * complexity down; the code, message and conditions are unchanged.
+ */
+function pushFastestTimesRegularRowWarning(
+  time: SwimCloudTimeString | undefined,
+  legal: boolean,
+  rawTime: string,
+  eventLabel: string,
+  eventId: string,
+  rowIndex: number,
+  warnings: SwimCloudParseWarning[],
+): void {
+  if (time !== undefined) return;
+  warnings.push({
+    code: 'unrecognized-time-token',
+    message: legal
+      ? `Time ${JSON.stringify(rawTime)} for ${eventLabel} is not plain seconds; no time recorded.`
+      : `The ${eventLabel} swim is marked not legal; no time recorded.`,
+    eventId,
+    rowIndex,
+    raw: rawTime,
+  });
+}
+
+/**
+ * Assemble the final {@link SwimCloudPersonalBestSwim} object for a regular
+ * fastest-times row from its already-resolved fields. Split out of
+ * {@link buildFastestTimesRegularRow} purely so the per-field "omit when
+ * absent" spreads don't count against that function's complexity; every
+ * field and its absence rule is unchanged.
+ */
+function assembleFastestTimesRegularRow(fields: {
+  readonly swimKey: string;
+  readonly swimId: string | undefined;
+  readonly eventId: string;
+  readonly eventRef: string | undefined;
+  readonly eventLabel: string;
+  readonly distance: number;
+  readonly course: SwimCloudCourse;
+  readonly stroke: SwimCloudStroke;
+  readonly meetId: SwimCloudMeetId | undefined;
+  readonly meetName: string;
+  readonly time: SwimCloudTimeString | undefined;
+  readonly rawTime: string;
+  readonly date: string;
+  readonly tags: readonly SwimCloudSwimmerTimesTag[];
+  readonly seasonId: string | undefined;
+  readonly relayLeadoff: boolean;
+}): SwimCloudPersonalBestSwim {
+  return {
+    swimKey: fields.swimKey,
+    ...(fields.swimId === undefined ? {} : { swimCloudSwimId: fields.swimId }),
+    eventId: fields.eventId,
+    ...(fields.eventRef === undefined ? {} : { eventRef: fields.eventRef }),
+    eventLabel: fields.eventLabel,
+    distance: fields.distance,
+    course: fields.course,
+    stroke: fields.stroke,
+    ...(fields.meetId === undefined ? {} : { swimCloudMeetId: fields.meetId }),
+    ...(fields.meetName.length === 0 ? {} : { meetName: fields.meetName }),
+    ...(fields.time === undefined ? {} : { time: fields.time }),
+    ...(fields.time === undefined && fields.rawTime.length > 0 ? { rawTimeToken: fields.rawTime } : {}),
+    ...(fields.date.length === 0 ? {} : { date: fields.date }),
+    tags: fields.tags,
+    ...(fields.seasonId === undefined ? {} : { seasonId: fields.seasonId }),
+    relayLeadoff: fields.relayLeadoff,
+  };
+}
+
+function buildFastestTimesRegularRow(
+  row: Record<string, unknown>,
+  rowIndex: number,
+  strokeInfo: { readonly stroke: SwimCloudStroke; readonly label: string },
+  course: SwimCloudCourse,
+  distance: number,
+  warnings: SwimCloudParseWarning[],
+): SwimCloudPersonalBestSwim {
+  const eventLabel = `${distance} ${strokeInfo.label} ${course}`;
+
+  const urlMatch = FASTEST_TIMES_ROW_URL.exec(jsonString(row['url']) ?? '');
+  const meetId = (urlMatch?.[1] ?? jsonString(row['meet_id'])) as SwimCloudMeetId | undefined;
+  const eventRef = urlMatch?.[2];
+  const swimId = urlMatch?.[3] ?? urlMatch?.[4];
+  const eventId =
+    meetId !== undefined && eventRef !== undefined
+      ? `${meetId}:event:${eventRef}`
+      : `swimmer-times:event-label:${normalizeHeader(eventLabel)}`;
+
+  const rawTime = jsonString(row['eventtime']) ?? '';
+  const legal = row['legal'] !== false;
+  const time = legal ? fastestTimesSecondsToTime(rawTime) : undefined;
+  pushFastestTimesRegularRowWarning(time, legal, rawTime, eventLabel, eventId, rowIndex, warnings);
+
+  const swimKey =
+    swimId !== undefined && meetId !== undefined
+      ? `${meetId}:swim:${swimId}`
+      : `${eventId}:swim:${jsonString(row['id']) ?? `row${rowIndex}`}`;
+  const meetName = typeof row['name'] === 'string' ? collapseWhitespace(row['name']) : '';
+  const date = typeof row['dateofswim'] === 'string' ? row['dateofswim'].trim() : '';
+  const seasonId = jsonString(row['season_id']);
+  const flags = readFastestTimesFlags(row['flags']);
+
+  return assembleFastestTimesRegularRow({
+    swimKey,
+    swimId,
+    eventId,
+    eventRef,
+    eventLabel,
+    distance,
+    course,
+    stroke: strokeInfo.stroke,
+    meetId,
+    meetName,
+    time,
+    rawTime,
+    date,
+    tags: flags.tags,
+    seasonId,
+    relayLeadoff: flags.relayLeadoff,
+  });
 }
 
 /**
@@ -3400,46 +3635,7 @@ export function parseSwimmerFastestTimesJson(
     const distanceText = jsonString(row['eventdistance']) ?? '';
     const distance = /^[1-9]\d{0,3}$/.test(distanceText) ? Number.parseInt(distanceText, 10) : undefined;
     if (strokeCode === FASTEST_TIMES_DIVING_STROKE && distance !== undefined) {
-      // Same treatment as the HTML path's `diving-score-not-a-time`: the row is
-      // kept, the score is not a time, and the importer skips it as no-time.
-      // `1 mtr Diving`, the label the meet data already uses (data/meets.json),
-      // so a diver's bests and meet results name the event the same way.
-      const eventLabel = `${distance} mtr Diving`;
-      const rawScore = jsonString(row['eventtime']) ?? '';
-      warnings.push({
-        code: 'diving-score-not-a-time',
-        message: `${eventLabel} ${JSON.stringify(rawScore)} is a judged score, not a time; recorded as divingScore.`,
-        rowIndex,
-        raw: rawScore,
-      });
-      const urlMatch = FASTEST_TIMES_ROW_URL.exec(jsonString(row['url']) ?? '');
-      const meetId = (urlMatch?.[1] ?? jsonString(row['meet_id'])) as SwimCloudMeetId | undefined;
-      const swimId = urlMatch?.[3] ?? urlMatch?.[4];
-      const eventId =
-        meetId !== undefined && urlMatch?.[2] !== undefined
-          ? `${meetId}:event:${urlMatch[2]}`
-          : `swimmer-times:event-label:${normalizeHeader(eventLabel)}`;
-      const seasonId = jsonString(row['season_id']);
-      const meetName = typeof row['name'] === 'string' ? collapseWhitespace(row['name']) : '';
-      const date = typeof row['dateofswim'] === 'string' ? row['dateofswim'].trim() : '';
-      personalBests.push({
-        swimKey: swimId !== undefined && meetId !== undefined ? `${meetId}:swim:${swimId}` : `${eventId}:swim:${jsonString(row['id']) ?? `row${rowIndex}`}`,
-        ...(swimId === undefined ? {} : { swimCloudSwimId: swimId }),
-        eventId,
-        ...(urlMatch?.[2] === undefined ? {} : { eventRef: urlMatch[2] }),
-        eventLabel,
-        distance,
-        course: 'unknown',
-        stroke: 'Diving',
-        ...(meetId === undefined ? {} : { swimCloudMeetId: meetId }),
-        ...(meetName.length === 0 ? {} : { meetName }),
-        ...(rawScore.length === 0 ? {} : { rawTimeToken: rawScore }),
-        ...(/^\d{1,4}\.\d{1,2}$/.test(rawScore) ? { divingScore: rawScore } : {}),
-        ...(date.length === 0 ? {} : { date }),
-        tags: readFastestTimesFlags(row['flags']).tags,
-        ...(seasonId === undefined ? {} : { seasonId }),
-        relayLeadoff: false,
-      });
+      personalBests.push(buildFastestTimesDivingRow(row, rowIndex, distance, warnings));
       return;
     }
     const strokeInfo = FASTEST_TIMES_STROKES[strokeCode];
@@ -3453,59 +3649,9 @@ export function parseSwimmerFastestTimesJson(
       });
       return;
     }
-    const eventLabel = `${distance} ${strokeInfo.label} ${course}`;
-
-    const urlMatch = FASTEST_TIMES_ROW_URL.exec(jsonString(row['url']) ?? '');
-    const meetId = (urlMatch?.[1] ?? jsonString(row['meet_id'])) as SwimCloudMeetId | undefined;
-    const eventRef = urlMatch?.[2];
-    const swimId = urlMatch?.[3] ?? urlMatch?.[4];
-    const eventId =
-      meetId !== undefined && eventRef !== undefined
-        ? `${meetId}:event:${eventRef}`
-        : `swimmer-times:event-label:${normalizeHeader(eventLabel)}`;
-
-    const rawTime = jsonString(row['eventtime']) ?? '';
-    const legal = row['legal'] !== false;
-    const time = legal ? fastestTimesSecondsToTime(rawTime) : undefined;
-    if (time === undefined) {
-      warnings.push({
-        code: 'unrecognized-time-token',
-        message: legal
-          ? `Time ${JSON.stringify(rawTime)} for ${eventLabel} is not plain seconds; no time recorded.`
-          : `The ${eventLabel} swim is marked not legal; no time recorded.`,
-        eventId,
-        rowIndex,
-        raw: rawTime,
-      });
-    }
-
-    const swimKey =
-      swimId !== undefined && meetId !== undefined
-        ? `${meetId}:swim:${swimId}`
-        : `${eventId}:swim:${jsonString(row['id']) ?? `row${rowIndex}`}`;
-    const meetName = typeof row['name'] === 'string' ? collapseWhitespace(row['name']) : '';
-    const date = typeof row['dateofswim'] === 'string' ? row['dateofswim'].trim() : '';
-    const seasonId = jsonString(row['season_id']);
-    const flags = readFastestTimesFlags(row['flags']);
-
-    personalBests.push({
-      swimKey,
-      ...(swimId === undefined ? {} : { swimCloudSwimId: swimId }),
-      eventId,
-      ...(eventRef === undefined ? {} : { eventRef }),
-      eventLabel,
-      distance,
-      course,
-      stroke: strokeInfo.stroke,
-      ...(meetId === undefined ? {} : { swimCloudMeetId: meetId }),
-      ...(meetName.length === 0 ? {} : { meetName }),
-      ...(time === undefined ? {} : { time }),
-      ...(time === undefined && rawTime.length > 0 ? { rawTimeToken: rawTime } : {}),
-      ...(date.length === 0 ? {} : { date }),
-      tags: flags.tags,
-      ...(seasonId === undefined ? {} : { seasonId }),
-      relayLeadoff: flags.relayLeadoff,
-    });
+    personalBests.push(
+      buildFastestTimesRegularRow(row, rowIndex, strokeInfo, course, distance, warnings),
+    );
   });
 
   if (parsed.length === 0) {
@@ -3735,6 +3881,47 @@ export interface SwimCloudTeamMeetSwimsParse {
  * and looks exactly like an individual swim except for one `title="Leadoff"`
  * badge — see {@link SwimCloudResultFlags.relayLeadoff}.
  */
+/**
+ * Assemble the {@link SwimCloudTeamMeetSwimsParse} success payload from its
+ * already-resolved parts. Split out of {@link parseTeamMeetSwimsHtml} purely
+ * so the per-field "omit when absent" spreads, and the `team` object's own
+ * three-way guard, don't count against that function's complexity; every
+ * field and its absence rule is unchanged.
+ */
+function buildTeamMeetSwimsPayload(fields: {
+  readonly meetId: SwimCloudMeetId;
+  readonly meetName: string | undefined;
+  readonly meet: SwimCloudMeet;
+  readonly teamId: SwimCloudTeamId | undefined;
+  readonly teamName: string | undefined;
+  readonly gender: SwimCloudGenderOrUnknown;
+  readonly entryCount: number | undefined;
+  readonly swims: readonly SwimCloudTeamMeetSwim[];
+  readonly events: readonly SwimCloudEvent[];
+  readonly rowCount: number;
+  readonly pagination: SwimCloudPagination | undefined;
+}): SwimCloudTeamMeetSwimsParse {
+  const team: SwimCloudTeam | undefined =
+    fields.teamId !== undefined && fields.teamName !== undefined && fields.gender !== 'unknown'
+      ? { swimCloudTeamId: fields.teamId, gender: fields.gender, name: fields.teamName }
+      : undefined;
+
+  return {
+    swimCloudMeetId: fields.meetId,
+    ...(fields.meetName === undefined ? {} : { meetName: fields.meetName }),
+    meet: fields.meet,
+    ...(fields.teamId === undefined ? {} : { swimCloudTeamId: fields.teamId }),
+    ...(fields.teamName === undefined ? {} : { teamName: fields.teamName }),
+    ...(team === undefined ? {} : { team }),
+    gender: fields.gender,
+    ...(fields.entryCount === undefined ? {} : { entryCount: fields.entryCount }),
+    swims: fields.swims,
+    events: fields.events,
+    rowCount: fields.rowCount,
+    ...(fields.pagination === undefined ? {} : { pagination: fields.pagination }),
+  };
+}
+
 export function parseTeamMeetSwimsHtml(
   html: string,
   context: SwimCloudParseContext,
@@ -3829,29 +4016,23 @@ export function parseTeamMeetSwimsHtml(
     ...(dates.endDate === undefined ? {} : { endDate: dates.endDate }),
   };
 
-  const team: SwimCloudTeam | undefined =
-    teamId !== undefined && teamName !== undefined && gender !== 'unknown'
-      ? { swimCloudTeamId: teamId, gender, name: teamName }
-      : undefined;
-
   const pagination = readPagination(cleaned, fromUrl.page);
 
   return succeed(
     context,
-    {
-      swimCloudMeetId: meetId,
-      ...(meetName === undefined ? {} : { meetName }),
+    buildTeamMeetSwimsPayload({
+      meetId,
+      meetName,
       meet,
-      ...(teamId === undefined ? {} : { swimCloudTeamId: teamId }),
-      ...(teamName === undefined ? {} : { teamName }),
-      ...(team === undefined ? {} : { team }),
+      teamId,
+      teamName,
       gender,
-      ...(entryCount === undefined ? {} : { entryCount }),
+      entryCount,
       swims: rows.swims,
       events,
       rowCount: rows.rowCount,
-      ...(pagination === undefined ? {} : { pagination }),
-    },
+      pagination,
+    }),
     warnings,
     confidence,
   );
@@ -4443,6 +4624,93 @@ export interface SwimCloudMeetEventResultsParse {
  *   is unseen; a `title="Leadoff"` badge is still read if one appears, rather
  *   than assumed absent.
  */
+/**
+ * Build the per-event page's single {@link SwimCloudEvent} and push its
+ * `unrecognized-event-label` / `missing-course-declaration` warnings.
+ * Extracted from {@link parseMeetEventResultsHtml} purely to keep that
+ * function's own complexity down; both warnings and every field's absence
+ * rule are unchanged.
+ */
+function buildMeetEventResultsEvent(
+  meetId: SwimCloudMeetId,
+  eventRef: string,
+  eventId: string,
+  eventLabel: string | undefined,
+  meetCourse: SwimCloudCourse | undefined,
+  gender: SwimCloudGenderOrUnknown,
+  warnings: SwimCloudParseWarning[],
+): { readonly event: SwimCloudEvent; readonly parsedLabel: ReturnType<typeof readEventPageEventLabel> } {
+  const parsedLabel = readEventPageEventLabel(eventLabel ?? '');
+  const event: SwimCloudEvent = {
+    eventId,
+    swimCloudMeetId: meetId,
+    eventRef,
+    label: eventLabel ?? '',
+    kind: parsedLabel.isRelay ? 'relay' : 'individual',
+    course: meetCourse ?? 'unknown',
+    gender,
+    ...(parsedLabel.distance === undefined ? {} : { distance: parsedLabel.distance }),
+    stroke: parsedLabel.stroke,
+  };
+
+  if (!parsedLabel.matchedShape) {
+    warnings.push({
+      code: 'unrecognized-event-label',
+      message: `Event dropdown label ${JSON.stringify(eventLabel ?? '')} does not match the expected "{distance} {stroke}" shape this page type prints; distance was not read from it.`,
+      eventId,
+      raw: eventLabel ?? '',
+    });
+  }
+  if (meetCourse === undefined) {
+    // The event label on this page type carries no course letter — the course
+    // is a page-level fact (`<li id="meet-course">SCY</li>`). With neither that
+    // element nor a caller-supplied course, the course stays unknown; it is
+    // never defaulted to yards.
+    warnings.push({
+      code: 'missing-course-declaration',
+      message:
+        'The page printed no <li id="meet-course"> and no meetCourse option was supplied; the event\'s course is recorded as "unknown" rather than assumed.',
+      eventId,
+    });
+  }
+
+  return { event, parsedLabel };
+}
+
+/**
+ * Assemble the {@link SwimCloudMeetEventResultsParse} success payload from
+ * its already-resolved parts. Split out of {@link parseMeetEventResultsHtml}
+ * purely so the per-field "omit when absent" spreads don't count against
+ * that function's complexity; every field and its absence rule is unchanged.
+ */
+function buildMeetEventResultsPayload(fields: {
+  readonly meetId: SwimCloudMeetId;
+  readonly eventRef: string;
+  readonly meetName: string | undefined;
+  readonly meet: SwimCloudMeet;
+  readonly event: SwimCloudEvent;
+  readonly eventLabel: string | undefined;
+  readonly gender: SwimCloudGenderOrUnknown;
+  readonly genderLabel: string | undefined;
+  readonly eventIndex: readonly SwimCloudMeetEventIndexEntry[];
+  readonly rounds: readonly SwimCloudMeetEventRound[];
+  readonly rowCount: number;
+}): SwimCloudMeetEventResultsParse {
+  return {
+    swimCloudMeetId: fields.meetId,
+    eventRef: fields.eventRef,
+    ...(fields.meetName === undefined ? {} : { meetName: fields.meetName }),
+    meet: fields.meet,
+    event: fields.event,
+    ...(fields.eventLabel === undefined ? {} : { eventLabel: fields.eventLabel }),
+    gender: fields.gender,
+    ...(fields.genderLabel === undefined ? {} : { genderLabel: fields.genderLabel }),
+    ...(fields.eventIndex.length === 0 ? {} : { eventIndex: fields.eventIndex }),
+    rounds: fields.rounds,
+    rowCount: fields.rowCount,
+  };
+}
+
 export function parseMeetEventResultsHtml(
   html: string,
   context: SwimCloudParseContext,
@@ -4527,39 +4795,7 @@ export function parseMeetEventResultsHtml(
   }
 
   const eventId = `${meetId}:event:${eventRef}`;
-  const parsedLabel = readEventPageEventLabel(eventLabel ?? '');
-  const event: SwimCloudEvent = {
-    eventId,
-    swimCloudMeetId: meetId,
-    eventRef,
-    label: eventLabel ?? '',
-    kind: parsedLabel.isRelay ? 'relay' : 'individual',
-    course: meetCourse ?? 'unknown',
-    gender,
-    ...(parsedLabel.distance === undefined ? {} : { distance: parsedLabel.distance }),
-    stroke: parsedLabel.stroke,
-  };
-
-  if (!parsedLabel.matchedShape) {
-    warnings.push({
-      code: 'unrecognized-event-label',
-      message: `Event dropdown label ${JSON.stringify(eventLabel ?? '')} does not match the expected "{distance} {stroke}" shape this page type prints; distance was not read from it.`,
-      eventId,
-      raw: eventLabel ?? '',
-    });
-  }
-  if (meetCourse === undefined) {
-    // The event label on this page type carries no course letter — the course
-    // is a page-level fact (`<li id="meet-course">SCY</li>`). With neither that
-    // element nor a caller-supplied course, the course stays unknown; it is
-    // never defaulted to yards.
-    warnings.push({
-      code: 'missing-course-declaration',
-      message:
-        'The page printed no <li id="meet-course"> and no meetCourse option was supplied; the event\'s course is recorded as "unknown" rather than assumed.',
-      eventId,
-    });
-  }
+  const { event } = buildMeetEventResultsEvent(meetId, eventRef, eventId, eventLabel, meetCourse, gender, warnings);
 
   const rounds: SwimCloudMeetEventRound[] = [];
   let rowCount = 0;
@@ -4581,19 +4817,19 @@ export function parseMeetEventResultsHtml(
 
   return succeed(
     context,
-    {
-      swimCloudMeetId: meetId,
+    buildMeetEventResultsPayload({
+      meetId,
       eventRef,
-      ...(meetName === undefined ? {} : { meetName }),
+      meetName,
       meet,
       event,
-      ...(eventLabel === undefined ? {} : { eventLabel }),
+      eventLabel,
       gender,
-      ...(genderLabel === undefined ? {} : { genderLabel }),
-      ...(eventIndex.length === 0 ? {} : { eventIndex }),
+      genderLabel,
+      eventIndex,
       rounds,
       rowCount,
-    },
+    }),
     warnings,
     confidence,
   );
@@ -4999,6 +5235,213 @@ function readEventRankCell(
   return { ...(place === undefined ? {} : { place }), exhibition: false };
 }
 
+/** The time/judged-score/points/score readers for one per-event round row. */
+interface EventRoundMeasurements {
+  readonly time: ReadTime;
+  readonly score: ReturnType<typeof readPoints> | Record<string, never>;
+  readonly points: ReturnType<typeof readPoints> | Record<string, never>;
+}
+
+/**
+ * Read the time (or, for a diving round with no time column, the judged
+ * score), score and points cells of one per-event round row, and push
+ * `missing-swim-link` when a timed round's row carries none. Extracted from
+ * {@link readEventRound} purely to keep that function's own complexity down;
+ * every reader call and the judged-score fallback are unchanged.
+ *
+ * A diving result is the judged score in the `Pts` column, preserved
+ * verbatim in `rawTimeToken` because it is emphatically not a time. That
+ * is where `data/meets.json` already carries it for this very meet:
+ * Santiago Santodomingo's 1M final reads `"time": "503.95"`.
+ */
+function readEventRoundMeasurements(
+  cells: readonly string[],
+  table: LocatedEventRoundTable,
+  event: SwimCloudEvent,
+  timeCellHtml: string,
+  athleteName: string,
+  eventId: string,
+  rowIndex: number,
+  warnings: SwimCloudParseWarning[],
+): EventRoundMeasurements {
+  const swimId = table.time === undefined ? undefined : readEventPageSwimId(timeCellHtml);
+  // Only a round that HAS a time cell can be missing a link in it. A diving
+  // round prints no time cell and no /times/ link anywhere, so its swims
+  // legitimately carry no SwimCloud swim id and fall back to a composite key.
+  if (table.time !== undefined && swimId === undefined) {
+    warnings.push({
+      code: 'missing-swim-link',
+      message: `Time cell for ${JSON.stringify(athleteName)} carries neither a /times/{id}/ link nor a <div id="time{id}"> wrapper; the swim has no SwimCloud swim id, so it cannot be joined against a team's swims list.`,
+      eventId,
+      rowIndex,
+    });
+  }
+
+  const judgedScore =
+    table.time !== undefined || table.points === undefined
+      ? undefined
+      : collapseWhitespace(textAt(cells, table.points.start));
+  const time =
+    table.time === undefined
+      ? judgedScore === undefined || judgedScore.length === 0
+        ? {}
+        : { rawTimeToken: judgedScore }
+      : readTime(htmlToText(timeCellHtml), event, rowIndex, warnings);
+  const score =
+    table.score === undefined ? {} : readPoints(textAt(cells, table.score.start), event, rowIndex, warnings);
+  const points =
+    table.points === undefined ? {} : readPoints(textAt(cells, table.points.start), event, rowIndex, warnings);
+
+  return { time, score, points };
+}
+
+/** Badge-cell tally for one per-event round row: leadoff flag and cut-standard chips. */
+function readEventRoundBadges(
+  cells: readonly string[],
+  table: LocatedEventRoundTable,
+): { readonly relayLeadoff: boolean; readonly cutStandards: SwimCloudCutStandardLabel[] } {
+  let relayLeadoff = false;
+  const cutStandards: SwimCloudCutStandardLabel[] = [];
+  for (const index of table.unlabeled) {
+    const flags = readFlagsCell(cellAt(cells, index));
+    if (flags.relayLeadoff) relayLeadoff = true;
+    cutStandards.push(...flags.cutStandards);
+  }
+  return { relayLeadoff, cutStandards };
+}
+
+/** The athlete/team facts a per-event round row's `entry` is built from. */
+interface EventRoundAthlete {
+  readonly swimmerId: SwimCloudSwimmerId | undefined;
+  readonly relayLegs: readonly SwimCloudRelayLeg[];
+  readonly teamId: SwimCloudTeamId | undefined;
+  readonly rowTeamName: string;
+}
+
+/**
+ * Resolve a per-event round row's swimmer id, relay legs and team, and push
+ * `missing-athlete-link` when neither a swimmer link nor relay legs are
+ * present. Extracted from {@link readEventRound} for the same reason as
+ * {@link readEventRoundMeasurements}.
+ *
+ * A relay row names a team, not a person, so it legitimately carries no
+ * swimmer link — the swimmers are in the hidden leg table in this same
+ * cell. Reading those first means the warning can tell "a relay,
+ * correctly identified" from "an individual row that lost its link", which
+ * it previously could not: every relay row raised it.
+ */
+function resolveEventRoundAthlete(
+  nameCellHtml: string,
+  teamCellHtml: string,
+  athleteName: string,
+  table: LocatedEventRoundTable,
+  rowIndex: number,
+  eventId: string,
+  warnings: SwimCloudParseWarning[],
+): EventRoundAthlete {
+  const swimmerId = swimmerIdFromCell(nameCellHtml);
+  const relayLegs = table.relayLegsByRow[rowIndex] ?? [];
+  if (swimmerId === undefined && relayLegs.length === 0) {
+    warnings.push({
+      code: 'missing-athlete-link',
+      message: `Per-event results row for ${athleteName} carries no /swimmer/{id}/ link; the athlete has no SwimCloud id from this capture.`,
+      eventId,
+      rowIndex,
+      raw: athleteName,
+    });
+  }
+
+  const rowTeamName = htmlToText(teamCellHtml);
+  // A relay event's table has NO Team column — its header is a single
+  // `<th colspan=2>Name</th>` — and the team is stated only as a link inside
+  // the name cell: `<a href="/results/{meetId}/team/58/">…Henderson State
+  // (A)</a>`. Reading it there is the page's own statement about which team
+  // the entry belongs to, so a relay row is no longer team-less. Without
+  // this, every relay on the page was dropped for having no team, which
+  // silently removed the double-weighted relay events from a team score.
+  //
+  // The Team column still wins where one exists: on an individual event it
+  // holds the team name as well as the id, and this is only the fallback.
+  const teamId = teamIdFromCell(teamCellHtml) ?? teamIdFromCell(nameCellHtml);
+
+  return { swimmerId, relayLegs, teamId, rowTeamName };
+}
+
+/**
+ * Assemble one {@link SwimCloudMeetEventSwim} from a round row's
+ * already-resolved parts. Extracted from {@link readEventRound} purely so
+ * the per-field "omit when absent" spreads don't count against that
+ * function's complexity; every field and its absence rule is unchanged.
+ */
+function assembleEventRoundSwim(fields: {
+  readonly eventId: string;
+  readonly meetId: SwimCloudMeetId;
+  readonly swimId: string | undefined;
+  readonly athlete: EventRoundAthlete;
+  readonly athleteName: string;
+  readonly rank: EventRankCell;
+  readonly measurements: EventRoundMeasurements;
+  readonly relayLeadoff: boolean;
+  readonly cutStandards: readonly SwimCloudCutStandardLabel[];
+  readonly roundCaption: string | undefined;
+  readonly rowIndex: number;
+}): SwimCloudMeetEventSwim {
+  const { eventId, meetId, swimId, athlete, athleteName, rank, measurements, relayLeadoff, cutStandards, roundCaption, rowIndex } =
+    fields;
+  const { time, score, points } = measurements;
+
+  // The same key shape the swims list builds, so one swim carries one key on
+  // both pages. The composite fallback is capture-local and joins nothing.
+  const roundKey = roundCaption === undefined ? 'uncaptioned' : normalizeHeader(roundCaption);
+  const swimKey =
+    swimId === undefined
+      ? `${eventId}:round:${roundKey}:swim:${athlete.swimmerId ?? `row${rowIndex}`}:${time.finalTime ?? time.rawTimeToken ?? `row${rowIndex}`}`
+      : `${meetId}:swim:${swimId}`;
+
+  const resultFlags: SwimCloudResultFlags | undefined =
+    time.flags === undefined && !rank.exhibition && !relayLeadoff
+      ? undefined
+      : {
+          ...(time.flags ?? {}),
+          ...(rank.exhibition ? { exhibition: true } : {}),
+          ...(relayLeadoff ? { relayLeadoff: true } : {}),
+        };
+
+  const entry: SwimCloudEntry = {
+    entryId: `${swimKey}:entry`,
+    eventId,
+    ...(athlete.swimmerId === undefined ? {} : { swimCloudSwimmerId: athlete.swimmerId }),
+    athleteName,
+    ...(athlete.teamId === undefined ? {} : { swimCloudTeamId: athlete.teamId }),
+    ...(athlete.rowTeamName.length === 0 ? {} : { teamName: athlete.rowTeamName }),
+  };
+
+  const result: SwimCloudResult = {
+    resultId: `${swimKey}:result`,
+    entryId: entry.entryId,
+    eventId,
+    ...(rank.place === undefined ? {} : { place: rank.place }),
+    ...(points.points === undefined ? {} : { points: points.points }),
+    ...(points.rawPointsToken === undefined ? {} : { rawPointsToken: points.rawPointsToken }),
+    ...(time.finalTime === undefined ? {} : { finalTime: time.finalTime }),
+    ...(time.rawTimeToken === undefined ? {} : { rawTimeToken: time.rawTimeToken }),
+    ...(resultFlags === undefined ? {} : { flags: resultFlags }),
+  };
+
+  return {
+    swimKey,
+    ...(swimId === undefined ? {} : { swimCloudSwimId: swimId }),
+    ...(athlete.relayLegs.length === 0 ? {} : { relayLegs: athlete.relayLegs }),
+    ...(roundCaption === undefined ? {} : { roundLabel: roundCaption }),
+    entry,
+    result,
+    exhibition: rank.exhibition,
+    relayLeadoff,
+    cutStandards,
+    ...(score.points === undefined ? {} : { meetScore: score.points }),
+  };
+}
+
 function readEventRound(
   table: LocatedEventRoundTable,
   ctx: EventRoundContext,
@@ -5064,133 +5507,44 @@ function readEventRound(
 
     const timeCellHtml = table.time === undefined ? '' : cellAt(cells, table.time.start);
     const swimId = table.time === undefined ? undefined : readEventPageSwimId(timeCellHtml);
-    // Only a round that HAS a time cell can be missing a link in it. A diving
-    // round prints no time cell and no /times/ link anywhere, so its swims
-    // legitimately carry no SwimCloud swim id and fall back to a composite key.
-    if (table.time !== undefined && swimId === undefined) {
-      ctx.warnings.push({
-        code: 'missing-swim-link',
-        message: `Time cell for ${JSON.stringify(athleteName)} carries neither a /times/{id}/ link nor a <div id="time{id}"> wrapper; the swim has no SwimCloud swim id, so it cannot be joined against a team's swims list.`,
-        eventId,
-        rowIndex,
-      });
-    }
-
-    // A diving result is the judged score in the `Pts` column, preserved
-    // verbatim in `rawTimeToken` because it is emphatically not a time. That
-    // is where `data/meets.json` already carries it for this very meet:
-    // Santiago Santodomingo's 1M final reads `"time": "503.95"`.
-    const judgedScore =
-      table.time !== undefined || table.points === undefined
-        ? undefined
-        : collapseWhitespace(textAt(cells, table.points.start));
-    const time =
-      table.time === undefined
-        ? judgedScore === undefined || judgedScore.length === 0
-          ? {}
-          : { rawTimeToken: judgedScore }
-        : readTime(htmlToText(timeCellHtml), event, rowIndex, ctx.warnings);
-    const score =
-      table.score === undefined
-        ? {}
-        : readPoints(textAt(cells, table.score.start), event, rowIndex, ctx.warnings);
-    const points =
-      table.points === undefined
-        ? {}
-        : readPoints(textAt(cells, table.points.start), event, rowIndex, ctx.warnings);
-
-    // Badge cells: every unlabeled body column, filtered by readFlagsCell's own
-    // `c-label--royal` / `title="Leadoff"` tests. A cell holding a PB/SB chip or
-    // nothing at all contributes nothing.
-    let relayLeadoff = false;
-    const cutStandards: SwimCloudCutStandardLabel[] = [];
-    for (const index of table.unlabeled) {
-      const flags = readFlagsCell(cellAt(cells, index));
-      if (flags.relayLeadoff) relayLeadoff = true;
-      cutStandards.push(...flags.cutStandards);
-    }
-
-    const swimmerId = swimmerIdFromCell(nameCellHtml);
-    // A relay row names a team, not a person, so it legitimately carries no
-    // swimmer link — the swimmers are in the hidden leg table in this same
-    // cell. Reading those first means the warning below can tell "a relay,
-    // correctly identified" from "an individual row that lost its link", which
-    // it previously could not: every relay row raised it.
-    const relayLegs = table.relayLegsByRow[rowIndex] ?? [];
-    if (swimmerId === undefined && relayLegs.length === 0) {
-      ctx.warnings.push({
-        code: 'missing-athlete-link',
-        message: `Per-event results row for ${athleteName} carries no /swimmer/{id}/ link; the athlete has no SwimCloud id from this capture.`,
-        eventId,
-        rowIndex,
-        raw: athleteName,
-      });
-    }
+    const measurements = readEventRoundMeasurements(
+      cells,
+      table,
+      event,
+      timeCellHtml,
+      athleteName,
+      eventId,
+      rowIndex,
+      ctx.warnings,
+    );
+    const { relayLeadoff, cutStandards } = readEventRoundBadges(cells, table);
 
     const teamCellHtml = table.team === undefined ? '' : cellAt(cells, table.team.start);
-    const rowTeamName = htmlToText(teamCellHtml);
-    // A relay event's table has NO Team column — its header is a single
-    // `<th colspan=2>Name</th>` — and the team is stated only as a link inside
-    // the name cell: `<a href="/results/{meetId}/team/58/">…Henderson State
-    // (A)</a>`. Reading it there is the page's own statement about which team
-    // the entry belongs to, so a relay row is no longer team-less. Without
-    // this, every relay on the page was dropped for having no team, which
-    // silently removed the double-weighted relay events from a team score.
-    //
-    // The Team column still wins where one exists: on an individual event it
-    // holds the team name as well as the id, and this is only the fallback.
-    const teamId = teamIdFromCell(teamCellHtml) ?? teamIdFromCell(nameCellHtml);
-
-    // The same key shape the swims list builds, so one swim carries one key on
-    // both pages. The composite fallback is capture-local and joins nothing.
-    const roundKey = table.caption === undefined ? 'uncaptioned' : normalizeHeader(table.caption);
-    const swimKey =
-      swimId === undefined
-        ? `${eventId}:round:${roundKey}:swim:${swimmerId ?? `row${rowIndex}`}:${time.finalTime ?? time.rawTimeToken ?? `row${rowIndex}`}`
-        : `${ctx.meetId}:swim:${swimId}`;
-
-    const resultFlags: SwimCloudResultFlags | undefined =
-      time.flags === undefined && !rank.exhibition && !relayLeadoff
-        ? undefined
-        : {
-            ...(time.flags ?? {}),
-            ...(rank.exhibition ? { exhibition: true } : {}),
-            ...(relayLeadoff ? { relayLeadoff: true } : {}),
-          };
-
-    const entry: SwimCloudEntry = {
-      entryId: `${swimKey}:entry`,
-      eventId,
-      ...(swimmerId === undefined ? {} : { swimCloudSwimmerId: swimmerId }),
+    const athlete = resolveEventRoundAthlete(
+      nameCellHtml,
+      teamCellHtml,
       athleteName,
-      ...(teamId === undefined ? {} : { swimCloudTeamId: teamId }),
-      ...(rowTeamName.length === 0 ? {} : { teamName: rowTeamName }),
-    };
-
-    const result: SwimCloudResult = {
-      resultId: `${swimKey}:result`,
-      entryId: entry.entryId,
+      table,
+      rowIndex,
       eventId,
-      ...(rank.place === undefined ? {} : { place: rank.place }),
-      ...(points.points === undefined ? {} : { points: points.points }),
-      ...(points.rawPointsToken === undefined ? {} : { rawPointsToken: points.rawPointsToken }),
-      ...(time.finalTime === undefined ? {} : { finalTime: time.finalTime }),
-      ...(time.rawTimeToken === undefined ? {} : { rawTimeToken: time.rawTimeToken }),
-      ...(resultFlags === undefined ? {} : { flags: resultFlags }),
-    };
+      ctx.warnings,
+    );
 
-    swims.push({
-      swimKey,
-      ...(swimId === undefined ? {} : { swimCloudSwimId: swimId }),
-      ...(relayLegs.length === 0 ? {} : { relayLegs }),
-      ...(table.caption === undefined ? {} : { roundLabel: table.caption }),
-      entry,
-      result,
-      exhibition: rank.exhibition,
-      relayLeadoff,
-      cutStandards,
-      ...(score.points === undefined ? {} : { meetScore: score.points }),
-    });
+    swims.push(
+      assembleEventRoundSwim({
+        eventId,
+        meetId: ctx.meetId,
+        swimId,
+        athlete,
+        athleteName,
+        rank,
+        measurements,
+        relayLeadoff,
+        cutStandards,
+        roundCaption: table.caption,
+        rowIndex,
+      }),
+    );
   });
 
   if (table.dataRows.length === 0) {
@@ -5953,6 +6307,237 @@ interface SwimRowsContext {
   readonly warnings: SwimCloudParseWarning[];
 }
 
+/**
+ * Build one row's {@link SwimCloudEvent} and push its label/course warnings.
+ * Extracted from {@link readSwimRows} purely to keep that function's own
+ * complexity down; the three-way `unrecognized-event-label` /
+ * `unrecognized-course-token` / `course-column-contradicts-label` chain and
+ * every field's absence rule are unchanged.
+ */
+function buildSwimRowEvent(
+  ctx: SwimRowsContext,
+  eventLabel: string,
+  link: SwimLink | undefined,
+  eventId: string,
+  parsedLabel: ParsedSwimsEventLabel,
+  rowIndex: number,
+): SwimCloudEvent {
+  const course: SwimCloudCourseOrUnknown =
+    parsedLabel.course !== 'unknown' ? parsedLabel.course : (ctx.meetCourse ?? 'unknown');
+
+  const event: SwimCloudEvent = {
+    eventId,
+    swimCloudMeetId: ctx.meetId,
+    ...(link === undefined ? {} : { eventRef: link.eventRef }),
+    label: eventLabel,
+    kind: parsedLabel.isRelay ? 'relay' : 'individual',
+    course,
+    gender: ctx.gender,
+    ...(parsedLabel.distance === undefined ? {} : { distance: parsedLabel.distance }),
+    stroke: parsedLabel.stroke,
+  };
+
+  if (!parsedLabel.matchedShape) {
+    ctx.warnings.push({
+      code: 'unrecognized-event-label',
+      message: `Event cell ${JSON.stringify(eventLabel)} does not match the expected "{distance} {course letter} {stroke}" shape; distance and course were not read from it.`,
+      eventId,
+      rowIndex,
+      raw: eventLabel,
+    });
+  } else if (parsedLabel.course === 'unknown') {
+    ctx.warnings.push({
+      code: 'unrecognized-course-token',
+      message: `Course letter ${JSON.stringify(parsedLabel.courseLetter ?? '')} in ${JSON.stringify(eventLabel)} is outside Y/L/S; course recorded as ${JSON.stringify(course)} rather than assumed.`,
+      eventId,
+      rowIndex,
+      raw: eventLabel,
+    });
+  } else if (ctx.meetCourse !== undefined && parsedLabel.course !== ctx.meetCourse) {
+    ctx.warnings.push({
+      code: 'course-column-contradicts-label',
+      message: `Event ${JSON.stringify(eventLabel)} is ${parsedLabel.course} by its course letter, but the page declares the meet as ${ctx.meetCourse}. The label wins; the disagreement is reported rather than resolved silently.`,
+      eventId,
+      rowIndex,
+      raw: eventLabel,
+    });
+  }
+
+  return event;
+}
+
+/**
+ * Push the `missing-swim-link` warning for a swims-list row, if any.
+ * Extracted from {@link readSwimRows} for the same reason as
+ * {@link buildSwimRowEvent}; both messages are unchanged.
+ */
+function pushSwimRowLinkWarning(
+  link: SwimLink | undefined,
+  athleteName: string,
+  meetId: SwimCloudMeetId,
+  eventId: string,
+  rowIndex: number,
+  warnings: SwimCloudParseWarning[],
+): void {
+  if (link === undefined) {
+    warnings.push({
+      code: 'missing-swim-link',
+      message: `Time cell for ${JSON.stringify(athleteName)} carries no /results/${meetId}/event/{n}/ link; the swim has no SwimCloud swim id or event reference, and a composite key derived from the row's own values is used instead.`,
+      eventId,
+      rowIndex,
+    });
+  } else if (link.swimId === undefined) {
+    warnings.push({
+      code: 'missing-swim-link',
+      message: `Time cell for ${JSON.stringify(athleteName)} links to event ${link.eventRef} but carries no "?id=" swim id; a composite key derived from the row's own values is used instead.`,
+      eventId,
+      rowIndex,
+    });
+  }
+}
+
+/** The place/time/points/score/flags readers for one swims-list row. */
+interface SwimRowMeasurements {
+  readonly place: number | undefined;
+  readonly time: ReturnType<typeof readTime>;
+  readonly points: ReturnType<typeof readPoints> | Record<string, never>;
+  readonly score: ReturnType<typeof readPoints> | Record<string, never>;
+  readonly flagsCell: SwimFlagsCell;
+}
+
+/**
+ * Read the place/time/points/score/flags cells of one swims-list row.
+ * Extracted from {@link readSwimRows} purely to keep that function's own
+ * complexity down; which columns are optional, and how each reader is
+ * called, is unchanged.
+ */
+function readSwimRowMeasurements(
+  cells: readonly string[],
+  table: LocatedSwimsTable,
+  event: SwimCloudEvent,
+  timeCellHtml: string,
+  rowIndex: number,
+  warnings: SwimCloudParseWarning[],
+): SwimRowMeasurements {
+  const place =
+    table.place === undefined
+      ? undefined
+      : readOrdinalPlace(textAt(cells, table.place.start), event, rowIndex, warnings);
+  const time = readTime(htmlToText(timeCellHtml), event, rowIndex, warnings);
+  const points =
+    table.points === undefined ? {} : readPoints(textAt(cells, table.points.start), event, rowIndex, warnings);
+  // The Score column, when the table has one. Read with the same reader as
+  // Pts — both are plain non-negative numbers — but kept in its own field,
+  // because they measure different things. See SwimCloudTeamMeetSwim.meetScore.
+  const score =
+    table.score === undefined ? {} : readPoints(textAt(cells, table.score.start), event, rowIndex, warnings);
+  const flagsCell = readFlagsCell(table.flags === undefined ? '' : cellAt(cells, table.flags.start));
+
+  return { place, time, points, score, flagsCell };
+}
+
+/** The athlete/team facts a swims-list row's `entry` is built from. */
+interface SwimRowAthlete {
+  readonly swimmerId: SwimCloudSwimmerId | undefined;
+  readonly teamId: SwimCloudTeamId | undefined;
+  readonly teamName: string | undefined;
+}
+
+/**
+ * Resolve a row's swimmer id and team, and push `missing-athlete-link` when
+ * the athlete cell carries no `/swimmer/{id}/` link. Extracted from
+ * {@link readSwimRows} for the same reason as {@link buildSwimRowEvent}.
+ */
+function resolveSwimRowAthlete(
+  nameCellHtml: string,
+  teamCellHtml: string,
+  athleteName: string,
+  ctx: SwimRowsContext,
+  eventId: string,
+  rowIndex: number,
+): SwimRowAthlete {
+  const swimmerId = swimmerIdFromCell(nameCellHtml);
+  if (swimmerId === undefined) {
+    ctx.warnings.push({
+      code: 'missing-athlete-link',
+      message: `Results row for ${athleteName} carries no /swimmer/{id}/ link; the athlete has no SwimCloud id from this capture.`,
+      eventId,
+      rowIndex,
+      raw: athleteName,
+    });
+  }
+
+  const rowTeamName = htmlToText(teamCellHtml);
+  const teamId = teamIdFromCell(teamCellHtml) ?? ctx.fallbackTeamId;
+  const teamName = rowTeamName.length > 0 ? rowTeamName : ctx.fallbackTeamName;
+
+  return { swimmerId, teamId, teamName };
+}
+
+/**
+ * Assemble one {@link SwimCloudTeamMeetSwim} from a row's already-resolved
+ * parts. Extracted from {@link readSwimRows} purely so the per-field
+ * "omit when absent" spreads don't count against that function's
+ * complexity; every field and its absence rule is unchanged.
+ */
+function assembleSwimRow(fields: {
+  readonly eventId: string;
+  readonly meetId: SwimCloudMeetId;
+  readonly link: SwimLink | undefined;
+  readonly athlete: SwimRowAthlete;
+  readonly athleteName: string;
+  readonly event: SwimCloudEvent;
+  readonly measurements: SwimRowMeasurements;
+  readonly rowOrdinal: number | undefined;
+  readonly rowIndex: number;
+}): SwimCloudTeamMeetSwim {
+  const { eventId, meetId, link, athlete, athleteName, event, measurements, rowOrdinal, rowIndex } = fields;
+  const { place, time, points, score, flagsCell } = measurements;
+
+  const swimKey =
+    link?.swimId === undefined
+      ? `${eventId}:swim:${athlete.swimmerId ?? `row${rowIndex}`}:${time.finalTime ?? time.rawTimeToken ?? `row${rowIndex}`}`
+      : `${meetId}:swim:${link.swimId}`;
+
+  const flags: SwimCloudResultFlags | undefined =
+    time.flags === undefined && !flagsCell.relayLeadoff
+      ? undefined
+      : { ...(time.flags ?? {}), ...(flagsCell.relayLeadoff ? { relayLeadoff: true } : {}) };
+
+  const entry: SwimCloudEntry = {
+    entryId: `${swimKey}:entry`,
+    eventId,
+    ...(athlete.swimmerId === undefined ? {} : { swimCloudSwimmerId: athlete.swimmerId }),
+    athleteName,
+    ...(athlete.teamId === undefined ? {} : { swimCloudTeamId: athlete.teamId }),
+    ...(athlete.teamName === undefined ? {} : { teamName: athlete.teamName }),
+  };
+
+  const result: SwimCloudResult = {
+    resultId: `${swimKey}:result`,
+    entryId: entry.entryId,
+    eventId,
+    ...(place === undefined ? {} : { place }),
+    ...(points.points === undefined ? {} : { points: points.points }),
+    ...(points.rawPointsToken === undefined ? {} : { rawPointsToken: points.rawPointsToken }),
+    ...(time.finalTime === undefined ? {} : { finalTime: time.finalTime }),
+    ...(time.rawTimeToken === undefined ? {} : { rawTimeToken: time.rawTimeToken }),
+    ...(flags === undefined ? {} : { flags }),
+  };
+
+  return {
+    swimKey,
+    ...(link?.swimId === undefined ? {} : { swimCloudSwimId: link.swimId }),
+    ...(rowOrdinal === undefined ? {} : { rowOrdinal }),
+    event,
+    entry,
+    result,
+    relayLeadoff: flagsCell.relayLeadoff,
+    cutStandards: flagsCell.cutStandards,
+    ...(score.points === undefined ? {} : { meetScore: score.points }),
+  };
+}
+
 function readSwimRows(
   table: LocatedSwimsTable,
   ctx: SwimRowsContext,
@@ -5985,127 +6570,11 @@ function readSwimRows(
         ? `${ctx.meetId}:event-label:${normalizeHeader(eventLabel)}`
         : `${ctx.meetId}:event:${link.eventRef}`;
 
-    const course: SwimCloudCourseOrUnknown =
-      parsedLabel.course !== 'unknown' ? parsedLabel.course : (ctx.meetCourse ?? 'unknown');
+    const event = buildSwimRowEvent(ctx, eventLabel, link, eventId, parsedLabel, rowIndex);
+    pushSwimRowLinkWarning(link, athleteName, ctx.meetId, eventId, rowIndex, ctx.warnings);
 
-    const event: SwimCloudEvent = {
-      eventId,
-      swimCloudMeetId: ctx.meetId,
-      ...(link === undefined ? {} : { eventRef: link.eventRef }),
-      label: eventLabel,
-      kind: parsedLabel.isRelay ? 'relay' : 'individual',
-      course,
-      gender: ctx.gender,
-      ...(parsedLabel.distance === undefined ? {} : { distance: parsedLabel.distance }),
-      stroke: parsedLabel.stroke,
-    };
-
-    if (!parsedLabel.matchedShape) {
-      ctx.warnings.push({
-        code: 'unrecognized-event-label',
-        message: `Event cell ${JSON.stringify(eventLabel)} does not match the expected "{distance} {course letter} {stroke}" shape; distance and course were not read from it.`,
-        eventId,
-        rowIndex,
-        raw: eventLabel,
-      });
-    } else if (parsedLabel.course === 'unknown') {
-      ctx.warnings.push({
-        code: 'unrecognized-course-token',
-        message: `Course letter ${JSON.stringify(parsedLabel.courseLetter ?? '')} in ${JSON.stringify(eventLabel)} is outside Y/L/S; course recorded as ${JSON.stringify(course)} rather than assumed.`,
-        eventId,
-        rowIndex,
-        raw: eventLabel,
-      });
-    } else if (ctx.meetCourse !== undefined && parsedLabel.course !== ctx.meetCourse) {
-      ctx.warnings.push({
-        code: 'course-column-contradicts-label',
-        message: `Event ${JSON.stringify(eventLabel)} is ${parsedLabel.course} by its course letter, but the page declares the meet as ${ctx.meetCourse}. The label wins; the disagreement is reported rather than resolved silently.`,
-        eventId,
-        rowIndex,
-        raw: eventLabel,
-      });
-    }
-
-    if (link === undefined) {
-      ctx.warnings.push({
-        code: 'missing-swim-link',
-        message: `Time cell for ${JSON.stringify(athleteName)} carries no /results/${ctx.meetId}/event/{n}/ link; the swim has no SwimCloud swim id or event reference, and a composite key derived from the row's own values is used instead.`,
-        eventId,
-        rowIndex,
-      });
-    } else if (link.swimId === undefined) {
-      ctx.warnings.push({
-        code: 'missing-swim-link',
-        message: `Time cell for ${JSON.stringify(athleteName)} links to event ${link.eventRef} but carries no "?id=" swim id; a composite key derived from the row's own values is used instead.`,
-        eventId,
-        rowIndex,
-      });
-    }
-
-    const place =
-      table.place === undefined
-        ? undefined
-        : readOrdinalPlace(textAt(cells, table.place.start), event, rowIndex, ctx.warnings);
-    const time = readTime(htmlToText(timeCellHtml), event, rowIndex, ctx.warnings);
-    const points =
-      table.points === undefined
-        ? {}
-        : readPoints(textAt(cells, table.points.start), event, rowIndex, ctx.warnings);
-    // The Score column, when the table has one. Read with the same reader as
-    // Pts — both are plain non-negative numbers — but kept in its own field,
-    // because they measure different things. See SwimCloudTeamMeetSwim.meetScore.
-    const score =
-      table.score === undefined
-        ? {}
-        : readPoints(textAt(cells, table.score.start), event, rowIndex, ctx.warnings);
-    const flagsCell = readFlagsCell(table.flags === undefined ? '' : cellAt(cells, table.flags.start));
-
-    const swimmerId = swimmerIdFromCell(nameCellHtml);
-    if (swimmerId === undefined) {
-      ctx.warnings.push({
-        code: 'missing-athlete-link',
-        message: `Results row for ${athleteName} carries no /swimmer/{id}/ link; the athlete has no SwimCloud id from this capture.`,
-        eventId,
-        rowIndex,
-        raw: athleteName,
-      });
-    }
-
-    const teamCellHtml = table.team === undefined ? '' : cellAt(cells, table.team.start);
-    const rowTeamName = htmlToText(teamCellHtml);
-    const teamId = teamIdFromCell(teamCellHtml) ?? ctx.fallbackTeamId;
-    const teamName = rowTeamName.length > 0 ? rowTeamName : ctx.fallbackTeamName;
-
-    const swimKey =
-      link?.swimId === undefined
-        ? `${eventId}:swim:${swimmerId ?? `row${rowIndex}`}:${time.finalTime ?? time.rawTimeToken ?? `row${rowIndex}`}`
-        : `${ctx.meetId}:swim:${link.swimId}`;
-
-    const flags: SwimCloudResultFlags | undefined =
-      time.flags === undefined && !flagsCell.relayLeadoff
-        ? undefined
-        : { ...(time.flags ?? {}), ...(flagsCell.relayLeadoff ? { relayLeadoff: true } : {}) };
-
-    const entry: SwimCloudEntry = {
-      entryId: `${swimKey}:entry`,
-      eventId,
-      ...(swimmerId === undefined ? {} : { swimCloudSwimmerId: swimmerId }),
-      athleteName,
-      ...(teamId === undefined ? {} : { swimCloudTeamId: teamId }),
-      ...(teamName === undefined ? {} : { teamName }),
-    };
-
-    const result: SwimCloudResult = {
-      resultId: `${swimKey}:result`,
-      entryId: entry.entryId,
-      eventId,
-      ...(place === undefined ? {} : { place }),
-      ...(points.points === undefined ? {} : { points: points.points }),
-      ...(points.rawPointsToken === undefined ? {} : { rawPointsToken: points.rawPointsToken }),
-      ...(time.finalTime === undefined ? {} : { finalTime: time.finalTime }),
-      ...(time.rawTimeToken === undefined ? {} : { rawTimeToken: time.rawTimeToken }),
-      ...(flags === undefined ? {} : { flags }),
-    };
+    const measurements = readSwimRowMeasurements(cells, table, event, timeCellHtml, rowIndex, ctx.warnings);
+    const athlete = resolveSwimRowAthlete(nameCellHtml, table.team === undefined ? '' : cellAt(cells, table.team.start), athleteName, ctx, eventId, rowIndex);
 
     // The printed ordinal only exists when the Name header spans the column
     // before it. Read from that leading cell, never from the row's position:
@@ -6116,17 +6585,19 @@ function readSwimRows(
         : '';
     const rowOrdinal = /^\d+$/.test(ordinalText) ? Number.parseInt(ordinalText, 10) : undefined;
 
-    swims.push({
-      swimKey,
-      ...(link?.swimId === undefined ? {} : { swimCloudSwimId: link.swimId }),
-      ...(rowOrdinal === undefined ? {} : { rowOrdinal }),
-      event,
-      entry,
-      result,
-      relayLeadoff: flagsCell.relayLeadoff,
-      cutStandards: flagsCell.cutStandards,
-      ...(score.points === undefined ? {} : { meetScore: score.points }),
-    });
+    swims.push(
+      assembleSwimRow({
+        eventId,
+        meetId: ctx.meetId,
+        link,
+        athlete,
+        athleteName,
+        event,
+        measurements,
+        rowOrdinal,
+        rowIndex,
+      }),
+    );
   });
 
   if (table.dataRows.length === 0) {

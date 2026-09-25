@@ -683,6 +683,387 @@ function malformed(
 }
 
 /* -------------------------------------------------------------------------- */
+/* Per-keyword path classifiers                                                */
+/*                                                                              */
+/* Each of these mirrors one `switch (lower[0])` case that used to live inline */
+/* in `classifySwimCloudUrl`. They are pure extractions — same branches, same  */
+/* order, same messages — pulled out only so each one is independently under  */
+/* the complexity ceiling. `fetchable` is threaded through as a parameter      */
+/* rather than closed over, since these functions no longer sit inside the    */
+/* body that defines it.                                                       */
+/* -------------------------------------------------------------------------- */
+
+/** Shared shape every path classifier below is called with. */
+interface PathClassifyArgs {
+  readonly input: string;
+  readonly segments: readonly string[];
+  readonly lower: readonly string[];
+  readonly canonicalPath: string;
+  readonly parsed: URL;
+  readonly fetchable: (resource: SwimCloudResource) => SwimCloudUrlFetchable;
+}
+
+/** `/team/{id}/`, `/team/{id}/roster/`, `/team/{id}/results/`. */
+function classifyTeamPath(args: PathClassifyArgs): SwimCloudUrlClassification {
+  const { input, segments, lower, canonicalPath, parsed, fetchable } = args;
+  // `/team/` is a real page on the site, but it is not a team resource. It is
+  // reported as a malformed team URL rather than as an unknown path because
+  // that is the more useful message in the paste-import UI ("this looks like
+  // a team link but carries no team id"), and because both outcomes are
+  // equally un-fetchable.
+  if (segments.length === 1) {
+    return malformed(input, canonicalPath, 'team', 'missing-id', 'Team URL carries no team id.');
+  }
+  const teamId = segments[1];
+  if (!NUMERIC_ID.test(teamId)) {
+    return malformed(
+      input,
+      canonicalPath,
+      'team',
+      'invalid-id',
+      `Team id ${JSON.stringify(teamId)} is not a positive integer without leading zeros.`,
+    );
+  }
+  if (segments.length === 2) {
+    return fetchable({ kind: 'team', teamId });
+  }
+  if (segments.length === 3 && lower[2] === 'roster') {
+    const raw = readQuery(parsed);
+    const page = nonEmpty(raw['page']);
+    const gender = nonEmpty(raw['gender']);
+    const seasonId = nonEmpty(raw['season_id']);
+    return fetchable({
+      kind: 'teamRoster',
+      teamId,
+      query: {
+        ...(page === undefined ? {} : { page }),
+        ...(gender === undefined ? {} : { gender }),
+        ...(seasonId === undefined ? {} : { seasonId }),
+        raw,
+      },
+    });
+  }
+  if (segments.length === 3 && lower[2] === 'results') {
+    const raw = readQuery(parsed);
+    const page = nonEmpty(raw['page']);
+    const year = nonEmpty(raw['year']);
+    return fetchable({
+      kind: 'teamResults',
+      teamId,
+      query: {
+        ...(page === undefined ? {} : { page }),
+        ...(year === undefined ? {} : { year }),
+        raw,
+      },
+    });
+  }
+  return unrecognized(
+    input,
+    'unknown-path',
+    `Team sub-path ${canonicalPath} is not one of the modelled patterns (/team/{id}/, /team/{id}/roster/, /team/{id}/results/).`,
+    { canonicalPath, hostname: parsed.hostname },
+  );
+}
+
+/** `/swimmer/{id}/`, `/swimmer/{id}/times/`. */
+function classifySwimmerPath(args: PathClassifyArgs): SwimCloudUrlClassification {
+  const { input, segments, lower, canonicalPath, parsed, fetchable } = args;
+  if (segments.length === 1) {
+    return malformed(input, canonicalPath, 'swimmer', 'missing-id', 'Swimmer URL carries no swimmer id.');
+  }
+  const swimmerId = segments[1];
+  if (!NUMERIC_ID.test(swimmerId)) {
+    return malformed(
+      input,
+      canonicalPath,
+      'swimmer',
+      'invalid-id',
+      `Swimmer id ${JSON.stringify(swimmerId)} is not a positive integer without leading zeros.`,
+    );
+  }
+  if (segments.length === 2) {
+    return fetchable({ kind: 'swimmer', swimmerId });
+  }
+  if (segments.length === 3 && lower[2] === 'times') {
+    // `/swimmer/{id}/times/` — confirmed real 2026-09-09, and the only
+    // swimmer sub-page any capture covers. It carries no query parameters
+    // at all on the real capture, so none are modelled here.
+    return fetchable({ kind: 'swimmerTimes', swimmerId });
+  }
+  return unrecognized(
+    input,
+    'unknown-path',
+    `Swimmer sub-path ${canonicalPath} is not modelled. The real capture's nav lists /meets/, /standards/ and /rankings/ alongside /times/, but only /times/ has been captured, and this classifier does not model a pattern read off a nav bar.`,
+    { canonicalPath, hostname: parsed.hostname },
+  );
+}
+
+/** `/results/{meetId}/event/{n}/`, the `lower[2] === 'event'` arm of `classifyResultsPath`. */
+function classifyMeetEventSubPath(
+  args: PathClassifyArgs,
+  meetId: SwimCloudMeetId,
+): SwimCloudUrlClassification | undefined {
+  const { input, segments, canonicalPath, fetchable } = args;
+  if (segments.length === 3) {
+    return malformed(
+      input,
+      canonicalPath,
+      'meetEvent',
+      'missing-event-ref',
+      'Meet event URL carries no event reference.',
+    );
+  }
+  const eventRef = segments[3];
+  if (!NUMERIC_ID.test(eventRef)) {
+    return malformed(
+      input,
+      canonicalPath,
+      'meetEvent',
+      'invalid-event-ref',
+      `Event reference ${JSON.stringify(eventRef)} is not a positive integer without leading zeros.`,
+    );
+  }
+  if (segments.length === 4) {
+    return fetchable({ kind: 'meetEvent', meetId, eventRef });
+  }
+  // Falls through to the caller's final "not one of the modelled patterns"
+  // outcome when there are extra segments past `{n}`, same as before.
+  return undefined;
+}
+
+/** `/results/{meetId}/topteams/`, the `lower[2] === 'topteams'` arm. */
+function classifyMeetTopTeamsSubPath(
+  args: PathClassifyArgs,
+  meetId: SwimCloudMeetId,
+): SwimCloudUrlClassification {
+  const { input, segments, canonicalPath, parsed, fetchable } = args;
+  // `/results/{meetId}/topteams/` — confirmed real 2026-09-08. No id
+  // segment beyond the meet; gender/sort are query params, same
+  // convention as the meet root itself.
+  if (segments.length === 3) {
+    const raw = readQuery(parsed);
+    const page = nonEmpty(raw['page']);
+    const gender = nonEmpty(raw['gender']);
+    const query: SwimCloudMeetTeamQuery = {
+      ...(page === undefined ? {} : { page }),
+      ...(gender === undefined ? {} : { gender }),
+      raw,
+    };
+    return fetchable({ kind: 'meetTopTeams', meetId, query });
+  }
+  return unrecognized(
+    input,
+    'unknown-path',
+    `Meet topteams sub-path ${canonicalPath} is not the modelled pattern (/results/{meetId}/topteams/).`,
+    { canonicalPath, hostname: parsed.hostname },
+  );
+}
+
+/** `/results/{meetId}/team/{teamId}/` and `.../swims/`, the `lower[2] === 'team'` arm. */
+function classifyMeetTeamSubPath(args: PathClassifyArgs, meetId: SwimCloudMeetId): SwimCloudUrlClassification {
+  const { input, segments, lower, canonicalPath, parsed, fetchable } = args;
+  // Deliberately not folded into the `/team/{id}/...` branch above: the team id
+  // is the *third* segment here, and the resource is a meet's page narrowed to
+  // a team, not a team's own page. See `SwimCloudResource`'s `meetTeam` member
+  // for why that distinction is worth two kinds.
+  if (segments.length === 3) {
+    return malformed(input, canonicalPath, 'meetTeam', 'missing-id', 'Meet team URL carries no team id.');
+  }
+  const teamId = segments[3];
+  if (!NUMERIC_ID.test(teamId)) {
+    return malformed(
+      input,
+      canonicalPath,
+      'meetTeam',
+      'invalid-id',
+      `Team id ${JSON.stringify(teamId)} is not a positive integer without leading zeros.`,
+    );
+  }
+  if (segments.length === 4 || (segments.length === 5 && lower[4] === 'swims')) {
+    const raw = readQuery(parsed);
+    const page = nonEmpty(raw['page']);
+    const gender = nonEmpty(raw['gender']);
+    const query: SwimCloudMeetTeamQuery = {
+      ...(page === undefined ? {} : { page }),
+      ...(gender === undefined ? {} : { gender }),
+      raw,
+    };
+    return fetchable(
+      segments.length === 4
+        ? { kind: 'meetTeam', meetId, teamId, query }
+        : { kind: 'meetTeamSwims', meetId, teamId, query },
+    );
+  }
+  // `/swimmers/`, `/pb/` and `/sb/` are real sibling sub-pages (seen on
+  // the real team-landing capture) and are deliberately left unmodelled:
+  // nothing needs them yet, and inventing a pattern is what this
+  // classifier's header forbids.
+  return unrecognized(
+    input,
+    'unknown-path',
+    `Meet team sub-path ${canonicalPath} is not one of the modelled patterns (/results/{meetId}/team/{teamId}/, /results/{meetId}/team/{teamId}/swims/).`,
+    { canonicalPath, hostname: parsed.hostname },
+  );
+}
+
+/** `/results/{meetId}/swimmer/{swimmerId}/`, the `lower[2] === 'swimmer'` arm. */
+function classifyMeetSwimmerSubPath(
+  args: PathClassifyArgs,
+  meetId: SwimCloudMeetId,
+): SwimCloudUrlClassification | undefined {
+  const { input, segments, canonicalPath, fetchable } = args;
+  if (segments.length === 3) {
+    return malformed(
+      input,
+      canonicalPath,
+      'meetSwimmer',
+      'missing-id',
+      'Meet swimmer URL carries no swimmer id.',
+    );
+  }
+  const swimmerId = segments[3];
+  if (!NUMERIC_ID.test(swimmerId)) {
+    return malformed(
+      input,
+      canonicalPath,
+      'meetSwimmer',
+      'invalid-id',
+      `Swimmer id ${JSON.stringify(swimmerId)} is not a positive integer without leading zeros.`,
+    );
+  }
+  if (segments.length === 4) {
+    return fetchable({ kind: 'meetSwimmer', meetId, swimmerId });
+  }
+  // Falls through to the caller's final "not one of the modelled patterns"
+  // outcome, same as before.
+  return undefined;
+}
+
+/** `/results/{meetId}/...` — meet root, event, topteams, team and swimmer sub-paths. */
+function classifyResultsPath(args: PathClassifyArgs): SwimCloudUrlClassification {
+  const { input, segments, lower, canonicalPath, parsed, fetchable } = args;
+  if (segments.length === 1) {
+    return malformed(input, canonicalPath, 'meet', 'missing-id', 'Meet URL carries no meet id.');
+  }
+  const meetId = segments[1] as SwimCloudMeetId;
+  if (!NUMERIC_ID.test(meetId)) {
+    return malformed(
+      input,
+      canonicalPath,
+      'meet',
+      'invalid-id',
+      `Meet id ${JSON.stringify(meetId)} is not a positive integer without leading zeros.`,
+    );
+  }
+  if (segments.length === 2) {
+    return fetchable({ kind: 'meet', meetId });
+  }
+  if (lower[2] === 'event') {
+    const result = classifyMeetEventSubPath(args, meetId);
+    if (result !== undefined) return result;
+  }
+  if (lower[2] === 'topteams') {
+    return classifyMeetTopTeamsSubPath(args, meetId);
+  }
+  if (lower[2] === 'team') {
+    return classifyMeetTeamSubPath(args, meetId);
+  }
+  if (lower[2] === 'swimmer') {
+    const result = classifyMeetSwimmerSubPath(args, meetId);
+    if (result !== undefined) return result;
+  }
+  return unrecognized(
+    input,
+    'unknown-path',
+    `Meet sub-path ${canonicalPath} is not one of the modelled patterns (/results/{meetId}/, /results/{meetId}/event/{n}/, /results/{meetId}/team/{teamId}/[swims/], /results/{meetId}/swimmer/{id}/).`,
+    { canonicalPath, hostname: parsed.hostname },
+  );
+}
+
+/** `/country/{country}/{level}/conference/{slug}/`. */
+function classifyCountryPath(args: PathClassifyArgs): SwimCloudUrlClassification {
+  const { input, segments, lower, canonicalPath, parsed, fetchable } = args;
+  if (lower[3] === 'conference') {
+    if (segments.length === 4) {
+      return malformed(
+        input,
+        canonicalPath,
+        'conference',
+        'missing-slug',
+        'Conference URL carries no conference slug.',
+      );
+    }
+    const slug = segments[4];
+    if (!CONFERENCE_SLUG.test(slug)) {
+      return malformed(
+        input,
+        canonicalPath,
+        'conference',
+        'invalid-slug',
+        `Conference slug ${JSON.stringify(slug)} is not of the accepted slug shape.`,
+      );
+    }
+    if (segments.length === 5) {
+      return fetchable({
+        kind: 'conference',
+        urlForm: 'country-scoped',
+        slug,
+        country: lower[1],
+        level: lower[2],
+      });
+    }
+  }
+  return unrecognized(
+    input,
+    'unknown-path',
+    `Country path ${canonicalPath} is not the modelled conference pattern (/country/{country}/{level}/conference/{slug}/).`,
+    { canonicalPath, hostname: parsed.hostname },
+  );
+}
+
+/** `/conference/{slug}/`. */
+function classifyConferencePath(args: PathClassifyArgs): SwimCloudUrlClassification {
+  const { input, segments, canonicalPath, parsed, fetchable } = args;
+  if (segments.length === 1) {
+    return malformed(
+      input,
+      canonicalPath,
+      'conference',
+      'missing-slug',
+      'Conference URL carries no conference slug.',
+    );
+  }
+  const slug = segments[1];
+  if (!CONFERENCE_SLUG.test(slug)) {
+    return malformed(
+      input,
+      canonicalPath,
+      'conference',
+      'invalid-slug',
+      `Conference slug ${JSON.stringify(slug)} is not of the accepted slug shape.`,
+    );
+  }
+  if (segments.length === 2) {
+    return fetchable({ kind: 'conference', urlForm: 'short', slug });
+  }
+  return unrecognized(input, 'unknown-path', `Conference sub-path ${canonicalPath} is not modelled.`, {
+    canonicalPath,
+    hostname: parsed.hostname,
+  });
+}
+
+/** Lookup table of the top-level keyword segments this classifier models. */
+const PATH_CLASSIFIERS: Readonly<
+  Record<string, (args: PathClassifyArgs) => SwimCloudUrlClassification>
+> = {
+  team: classifyTeamPath,
+  swimmer: classifySwimmerPath,
+  results: classifyResultsPath,
+  country: classifyCountryPath,
+  conference: classifyConferencePath,
+};
+
+/* -------------------------------------------------------------------------- */
 /* Public API                                                                  */
 /* -------------------------------------------------------------------------- */
 
@@ -778,327 +1159,14 @@ export function classifySwimCloudUrl(url: string): SwimCloudUrlClassification {
     return fetchable({ kind: 'swimmerFastestTimes', swimmerId: exemptSwimmerId });
   }
 
-  switch (lower[0]) {
-    case 'team': {
-      // `/team/` is a real page on the site, but it is not a team resource. It is
-      // reported as a malformed team URL rather than as an unknown path because
-      // that is the more useful message in the paste-import UI ("this looks like
-      // a team link but carries no team id"), and because both outcomes are
-      // equally un-fetchable.
-      if (segments.length === 1) {
-        return malformed(input, canonicalPath, 'team', 'missing-id', 'Team URL carries no team id.');
-      }
-      const teamId = segments[1];
-      if (!NUMERIC_ID.test(teamId)) {
-        return malformed(
-          input,
-          canonicalPath,
-          'team',
-          'invalid-id',
-          `Team id ${JSON.stringify(teamId)} is not a positive integer without leading zeros.`,
-        );
-      }
-      if (segments.length === 2) {
-        return fetchable({ kind: 'team', teamId });
-      }
-      if (segments.length === 3 && lower[2] === 'roster') {
-        const raw = readQuery(parsed);
-        const page = nonEmpty(raw['page']);
-        const gender = nonEmpty(raw['gender']);
-        const seasonId = nonEmpty(raw['season_id']);
-        return fetchable({
-          kind: 'teamRoster',
-          teamId,
-          query: {
-            ...(page === undefined ? {} : { page }),
-            ...(gender === undefined ? {} : { gender }),
-            ...(seasonId === undefined ? {} : { seasonId }),
-            raw,
-          },
-        });
-      }
-      if (segments.length === 3 && lower[2] === 'results') {
-        const raw = readQuery(parsed);
-        const page = nonEmpty(raw['page']);
-        const year = nonEmpty(raw['year']);
-        return fetchable({
-          kind: 'teamResults',
-          teamId,
-          query: {
-            ...(page === undefined ? {} : { page }),
-            ...(year === undefined ? {} : { year }),
-            raw,
-          },
-        });
-      }
-      return unrecognized(
-        input,
-        'unknown-path',
-        `Team sub-path ${canonicalPath} is not one of the modelled patterns (/team/{id}/, /team/{id}/roster/, /team/{id}/results/).`,
-        { canonicalPath, hostname: parsed.hostname },
-      );
-    }
-
-    case 'swimmer': {
-      if (segments.length === 1) {
-        return malformed(
-          input,
-          canonicalPath,
-          'swimmer',
-          'missing-id',
-          'Swimmer URL carries no swimmer id.',
-        );
-      }
-      const swimmerId = segments[1];
-      if (!NUMERIC_ID.test(swimmerId)) {
-        return malformed(
-          input,
-          canonicalPath,
-          'swimmer',
-          'invalid-id',
-          `Swimmer id ${JSON.stringify(swimmerId)} is not a positive integer without leading zeros.`,
-        );
-      }
-      if (segments.length === 2) {
-        return fetchable({ kind: 'swimmer', swimmerId });
-      }
-      if (segments.length === 3 && lower[2] === 'times') {
-        // `/swimmer/{id}/times/` — confirmed real 2026-09-09, and the only
-        // swimmer sub-page any capture covers. It carries no query parameters
-        // at all on the real capture, so none are modelled here.
-        return fetchable({ kind: 'swimmerTimes', swimmerId });
-      }
-      return unrecognized(
-        input,
-        'unknown-path',
-        `Swimmer sub-path ${canonicalPath} is not modelled. The real capture's nav lists /meets/, /standards/ and /rankings/ alongside /times/, but only /times/ has been captured, and this classifier does not model a pattern read off a nav bar.`,
-        { canonicalPath, hostname: parsed.hostname },
-      );
-    }
-
-    case 'results': {
-      if (segments.length === 1) {
-        return malformed(input, canonicalPath, 'meet', 'missing-id', 'Meet URL carries no meet id.');
-      }
-      const meetId = segments[1];
-      if (!NUMERIC_ID.test(meetId)) {
-        return malformed(
-          input,
-          canonicalPath,
-          'meet',
-          'invalid-id',
-          `Meet id ${JSON.stringify(meetId)} is not a positive integer without leading zeros.`,
-        );
-      }
-      if (segments.length === 2) {
-        return fetchable({ kind: 'meet', meetId });
-      }
-      if (lower[2] === 'event') {
-        if (segments.length === 3) {
-          return malformed(
-            input,
-            canonicalPath,
-            'meetEvent',
-            'missing-event-ref',
-            'Meet event URL carries no event reference.',
-          );
-        }
-        const eventRef = segments[3];
-        if (!NUMERIC_ID.test(eventRef)) {
-          return malformed(
-            input,
-            canonicalPath,
-            'meetEvent',
-            'invalid-event-ref',
-            `Event reference ${JSON.stringify(eventRef)} is not a positive integer without leading zeros.`,
-          );
-        }
-        if (segments.length === 4) {
-          return fetchable({ kind: 'meetEvent', meetId, eventRef });
-        }
-      }
-      if (lower[2] === 'topteams') {
-        // `/results/{meetId}/topteams/` — confirmed real 2026-09-08. No id
-        // segment beyond the meet; gender/sort are query params, same
-        // convention as the meet root itself.
-        if (segments.length === 3) {
-          const raw = readQuery(parsed);
-          const page = nonEmpty(raw['page']);
-          const gender = nonEmpty(raw['gender']);
-          const query: SwimCloudMeetTeamQuery = {
-            ...(page === undefined ? {} : { page }),
-            ...(gender === undefined ? {} : { gender }),
-            raw,
-          };
-          return fetchable({ kind: 'meetTopTeams', meetId, query });
-        }
-        return unrecognized(
-          input,
-          'unknown-path',
-          `Meet topteams sub-path ${canonicalPath} is not the modelled pattern (/results/{meetId}/topteams/).`,
-          { canonicalPath, hostname: parsed.hostname },
-        );
-      }
-      if (lower[2] === 'team') {
-        // `/results/{meetId}/team/{teamId}/` and `.../swims/`. Deliberately not
-        // folded into the `/team/{id}/...` branch above: the team id is the
-        // *third* segment here, and the resource is a meet's page narrowed to a
-        // team, not a team's own page. See `SwimCloudResource`'s `meetTeam`
-        // member for why that distinction is worth two kinds.
-        if (segments.length === 3) {
-          return malformed(
-            input,
-            canonicalPath,
-            'meetTeam',
-            'missing-id',
-            'Meet team URL carries no team id.',
-          );
-        }
-        const teamId = segments[3];
-        if (!NUMERIC_ID.test(teamId)) {
-          return malformed(
-            input,
-            canonicalPath,
-            'meetTeam',
-            'invalid-id',
-            `Team id ${JSON.stringify(teamId)} is not a positive integer without leading zeros.`,
-          );
-        }
-        if (segments.length === 4 || (segments.length === 5 && lower[4] === 'swims')) {
-          const raw = readQuery(parsed);
-          const page = nonEmpty(raw['page']);
-          const gender = nonEmpty(raw['gender']);
-          const query: SwimCloudMeetTeamQuery = {
-            ...(page === undefined ? {} : { page }),
-            ...(gender === undefined ? {} : { gender }),
-            raw,
-          };
-          return fetchable(
-            segments.length === 4
-              ? { kind: 'meetTeam', meetId, teamId, query }
-              : { kind: 'meetTeamSwims', meetId, teamId, query },
-          );
-        }
-        // `/swimmers/`, `/pb/` and `/sb/` are real sibling sub-pages (seen on
-        // the real team-landing capture) and are deliberately left unmodelled:
-        // nothing needs them yet, and inventing a pattern is what this
-        // classifier's header forbids.
-        return unrecognized(
-          input,
-          'unknown-path',
-          `Meet team sub-path ${canonicalPath} is not one of the modelled patterns (/results/{meetId}/team/{teamId}/, /results/{meetId}/team/{teamId}/swims/).`,
-          { canonicalPath, hostname: parsed.hostname },
-        );
-      }
-      if (lower[2] === 'swimmer') {
-        if (segments.length === 3) {
-          return malformed(
-            input,
-            canonicalPath,
-            'meetSwimmer',
-            'missing-id',
-            'Meet swimmer URL carries no swimmer id.',
-          );
-        }
-        const swimmerId = segments[3];
-        if (!NUMERIC_ID.test(swimmerId)) {
-          return malformed(
-            input,
-            canonicalPath,
-            'meetSwimmer',
-            'invalid-id',
-            `Swimmer id ${JSON.stringify(swimmerId)} is not a positive integer without leading zeros.`,
-          );
-        }
-        if (segments.length === 4) {
-          return fetchable({ kind: 'meetSwimmer', meetId, swimmerId });
-        }
-      }
-      return unrecognized(
-        input,
-        'unknown-path',
-        `Meet sub-path ${canonicalPath} is not one of the modelled patterns (/results/{meetId}/, /results/{meetId}/event/{n}/, /results/{meetId}/team/{teamId}/[swims/], /results/{meetId}/swimmer/{id}/).`,
-        { canonicalPath, hostname: parsed.hostname },
-      );
-    }
-
-    case 'country': {
-      // `/country/{country}/{level}/conference/{slug}/`
-      if (lower[3] === 'conference') {
-        if (segments.length === 4) {
-          return malformed(
-            input,
-            canonicalPath,
-            'conference',
-            'missing-slug',
-            'Conference URL carries no conference slug.',
-          );
-        }
-        const slug = segments[4];
-        if (!CONFERENCE_SLUG.test(slug)) {
-          return malformed(
-            input,
-            canonicalPath,
-            'conference',
-            'invalid-slug',
-            `Conference slug ${JSON.stringify(slug)} is not of the accepted slug shape.`,
-          );
-        }
-        if (segments.length === 5) {
-          return fetchable({
-            kind: 'conference',
-            urlForm: 'country-scoped',
-            slug,
-            country: lower[1],
-            level: lower[2],
-          });
-        }
-      }
-      return unrecognized(
-        input,
-        'unknown-path',
-        `Country path ${canonicalPath} is not the modelled conference pattern (/country/{country}/{level}/conference/{slug}/).`,
-        { canonicalPath, hostname: parsed.hostname },
-      );
-    }
-
-    case 'conference': {
-      if (segments.length === 1) {
-        return malformed(
-          input,
-          canonicalPath,
-          'conference',
-          'missing-slug',
-          'Conference URL carries no conference slug.',
-        );
-      }
-      const slug = segments[1];
-      if (!CONFERENCE_SLUG.test(slug)) {
-        return malformed(
-          input,
-          canonicalPath,
-          'conference',
-          'invalid-slug',
-          `Conference slug ${JSON.stringify(slug)} is not of the accepted slug shape.`,
-        );
-      }
-      if (segments.length === 2) {
-        return fetchable({ kind: 'conference', urlForm: 'short', slug });
-      }
-      return unrecognized(
-        input,
-        'unknown-path',
-        `Conference sub-path ${canonicalPath} is not modelled.`,
-        { canonicalPath, hostname: parsed.hostname },
-      );
-    }
-
-    default:
-      return unrecognized(
-        input,
-        'unknown-path',
-        `Path ${canonicalPath} matches none of the modelled SwimCloud patterns.`,
-        { canonicalPath, hostname: parsed.hostname },
-      );
+  const classifyPath = PATH_CLASSIFIERS[lower[0]];
+  if (classifyPath === undefined) {
+    return unrecognized(
+      input,
+      'unknown-path',
+      `Path ${canonicalPath} matches none of the modelled SwimCloud patterns.`,
+      { canonicalPath, hostname: parsed.hostname },
+    );
   }
+  return classifyPath({ input, segments, lower, canonicalPath, parsed, fetchable });
 }

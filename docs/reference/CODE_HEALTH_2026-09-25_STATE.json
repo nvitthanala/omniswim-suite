@@ -1,0 +1,58 @@
+{
+  "purpose": "Progress log for plans/2026-09-25/01-CODE-HEALTH-PLAN.md",
+  "updatedAt": "2026-09-25",
+  "limitProtocol": "User 2026-09-24: on any usage limit, FIRST activate /low-priority (a real Claude Code command that stays hidden until a limit is hit; invoke via Skill tool if it appears in the list, else ask the user to type it). Then: log the resume point here; check what stopped agents left; resume them with SendMessage after reset; ONE background agent at a time, prefer Sonnet/Haiku unless scoring/data-correctness; commit per phase; report usage-report proxy numbers. Also in user memory.",
+  "baseline": {
+    "commit": "9568db5b",
+    "complexityOver25": 33,
+    "functionsOver200Lines": 33,
+    "duplicationPct": 0.5,
+    "clones": 12
+  },
+  "model": "Sonnet worker only (user request), one agent at a time",
+  "items": {
+    "H1": {
+      "status": "done",
+      "result": {
+        "classifySwimCloudUrl": "62/353 lines -> 10/66",
+        "fastestTimesRowLoop": "65 -> ~10",
+        "readSwimRows": "48 -> <25",
+        "readEventRound": "45 -> <25",
+        "parseMeetEventResultsHtml": "34 -> <25",
+        "parseTeamMeetSwimsHtml": "30 -> <25",
+        "readSwimmerTimesRows": "27 -> 5"
+      },
+      "golden": "sha256 7a9cc78a... identical before/after (~100 URLs + 4 parsers over real fixtures)",
+      "coverageProof": "all 7 functions had failing existing tests when broken",
+      "verifiedBy": "orchestrator: eslint package 0, tsc swimcloud + extension 0, 828 swimcloud/extension tests; full scripts/build deferred until B3 lands"
+    },
+    "H2": {
+      "status": "planned"
+    },
+    "H3": {
+      "status": "planned"
+    },
+    "H4": {
+      "status": "planned"
+    },
+    "H5": {
+      "status": "planned"
+    },
+    "H6": {
+      "status": "planned"
+    },
+    "H7": {
+      "status": "planned"
+    },
+    "H8": {
+      "status": "planned"
+    },
+    "H9": {
+      "status": "planned"
+    }
+  },
+  "log": [
+    "2026-09-25 measured and planned; H7/H8 wait for B3 and R1 (core).",
+    "2026-09-25 H1 verified and committed. Next health item after B3: H2 (apps/shell, packages/db)."
+  ]
+}

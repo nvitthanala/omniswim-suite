@@ -120,6 +120,310 @@
   function malformed(input, canonicalPath, kind, reason, detail) {
     return { outcome: "malformed", input, canonicalPath, kind, reason, detail };
   }
+  function classifyTeamPath(args) {
+    const { input, segments, lower, canonicalPath, parsed, fetchable } = args;
+    if (segments.length === 1) {
+      return malformed(input, canonicalPath, "team", "missing-id", "Team URL carries no team id.");
+    }
+    const teamId = segments[1];
+    if (!NUMERIC_ID.test(teamId)) {
+      return malformed(
+        input,
+        canonicalPath,
+        "team",
+        "invalid-id",
+        `Team id ${JSON.stringify(teamId)} is not a positive integer without leading zeros.`
+      );
+    }
+    if (segments.length === 2) {
+      return fetchable({ kind: "team", teamId });
+    }
+    if (segments.length === 3 && lower[2] === "roster") {
+      const raw = readQuery(parsed);
+      const page = nonEmpty(raw["page"]);
+      const gender = nonEmpty(raw["gender"]);
+      const seasonId = nonEmpty(raw["season_id"]);
+      return fetchable({
+        kind: "teamRoster",
+        teamId,
+        query: {
+          ...page === void 0 ? {} : { page },
+          ...gender === void 0 ? {} : { gender },
+          ...seasonId === void 0 ? {} : { seasonId },
+          raw
+        }
+      });
+    }
+    if (segments.length === 3 && lower[2] === "results") {
+      const raw = readQuery(parsed);
+      const page = nonEmpty(raw["page"]);
+      const year = nonEmpty(raw["year"]);
+      return fetchable({
+        kind: "teamResults",
+        teamId,
+        query: {
+          ...page === void 0 ? {} : { page },
+          ...year === void 0 ? {} : { year },
+          raw
+        }
+      });
+    }
+    return unrecognized(
+      input,
+      "unknown-path",
+      `Team sub-path ${canonicalPath} is not one of the modelled patterns (/team/{id}/, /team/{id}/roster/, /team/{id}/results/).`,
+      { canonicalPath, hostname: parsed.hostname }
+    );
+  }
+  function classifySwimmerPath(args) {
+    const { input, segments, lower, canonicalPath, parsed, fetchable } = args;
+    if (segments.length === 1) {
+      return malformed(input, canonicalPath, "swimmer", "missing-id", "Swimmer URL carries no swimmer id.");
+    }
+    const swimmerId = segments[1];
+    if (!NUMERIC_ID.test(swimmerId)) {
+      return malformed(
+        input,
+        canonicalPath,
+        "swimmer",
+        "invalid-id",
+        `Swimmer id ${JSON.stringify(swimmerId)} is not a positive integer without leading zeros.`
+      );
+    }
+    if (segments.length === 2) {
+      return fetchable({ kind: "swimmer", swimmerId });
+    }
+    if (segments.length === 3 && lower[2] === "times") {
+      return fetchable({ kind: "swimmerTimes", swimmerId });
+    }
+    return unrecognized(
+      input,
+      "unknown-path",
+      `Swimmer sub-path ${canonicalPath} is not modelled. The real capture's nav lists /meets/, /standards/ and /rankings/ alongside /times/, but only /times/ has been captured, and this classifier does not model a pattern read off a nav bar.`,
+      { canonicalPath, hostname: parsed.hostname }
+    );
+  }
+  function classifyMeetEventSubPath(args, meetId) {
+    const { input, segments, canonicalPath, fetchable } = args;
+    if (segments.length === 3) {
+      return malformed(
+        input,
+        canonicalPath,
+        "meetEvent",
+        "missing-event-ref",
+        "Meet event URL carries no event reference."
+      );
+    }
+    const eventRef = segments[3];
+    if (!NUMERIC_ID.test(eventRef)) {
+      return malformed(
+        input,
+        canonicalPath,
+        "meetEvent",
+        "invalid-event-ref",
+        `Event reference ${JSON.stringify(eventRef)} is not a positive integer without leading zeros.`
+      );
+    }
+    if (segments.length === 4) {
+      return fetchable({ kind: "meetEvent", meetId, eventRef });
+    }
+    return void 0;
+  }
+  function classifyMeetTopTeamsSubPath(args, meetId) {
+    const { input, segments, canonicalPath, parsed, fetchable } = args;
+    if (segments.length === 3) {
+      const raw = readQuery(parsed);
+      const page = nonEmpty(raw["page"]);
+      const gender = nonEmpty(raw["gender"]);
+      const query = {
+        ...page === void 0 ? {} : { page },
+        ...gender === void 0 ? {} : { gender },
+        raw
+      };
+      return fetchable({ kind: "meetTopTeams", meetId, query });
+    }
+    return unrecognized(
+      input,
+      "unknown-path",
+      `Meet topteams sub-path ${canonicalPath} is not the modelled pattern (/results/{meetId}/topteams/).`,
+      { canonicalPath, hostname: parsed.hostname }
+    );
+  }
+  function classifyMeetTeamSubPath(args, meetId) {
+    const { input, segments, lower, canonicalPath, parsed, fetchable } = args;
+    if (segments.length === 3) {
+      return malformed(input, canonicalPath, "meetTeam", "missing-id", "Meet team URL carries no team id.");
+    }
+    const teamId = segments[3];
+    if (!NUMERIC_ID.test(teamId)) {
+      return malformed(
+        input,
+        canonicalPath,
+        "meetTeam",
+        "invalid-id",
+        `Team id ${JSON.stringify(teamId)} is not a positive integer without leading zeros.`
+      );
+    }
+    if (segments.length === 4 || segments.length === 5 && lower[4] === "swims") {
+      const raw = readQuery(parsed);
+      const page = nonEmpty(raw["page"]);
+      const gender = nonEmpty(raw["gender"]);
+      const query = {
+        ...page === void 0 ? {} : { page },
+        ...gender === void 0 ? {} : { gender },
+        raw
+      };
+      return fetchable(
+        segments.length === 4 ? { kind: "meetTeam", meetId, teamId, query } : { kind: "meetTeamSwims", meetId, teamId, query }
+      );
+    }
+    return unrecognized(
+      input,
+      "unknown-path",
+      `Meet team sub-path ${canonicalPath} is not one of the modelled patterns (/results/{meetId}/team/{teamId}/, /results/{meetId}/team/{teamId}/swims/).`,
+      { canonicalPath, hostname: parsed.hostname }
+    );
+  }
+  function classifyMeetSwimmerSubPath(args, meetId) {
+    const { input, segments, canonicalPath, fetchable } = args;
+    if (segments.length === 3) {
+      return malformed(
+        input,
+        canonicalPath,
+        "meetSwimmer",
+        "missing-id",
+        "Meet swimmer URL carries no swimmer id."
+      );
+    }
+    const swimmerId = segments[3];
+    if (!NUMERIC_ID.test(swimmerId)) {
+      return malformed(
+        input,
+        canonicalPath,
+        "meetSwimmer",
+        "invalid-id",
+        `Swimmer id ${JSON.stringify(swimmerId)} is not a positive integer without leading zeros.`
+      );
+    }
+    if (segments.length === 4) {
+      return fetchable({ kind: "meetSwimmer", meetId, swimmerId });
+    }
+    return void 0;
+  }
+  function classifyResultsPath(args) {
+    const { input, segments, lower, canonicalPath, parsed, fetchable } = args;
+    if (segments.length === 1) {
+      return malformed(input, canonicalPath, "meet", "missing-id", "Meet URL carries no meet id.");
+    }
+    const meetId = segments[1];
+    if (!NUMERIC_ID.test(meetId)) {
+      return malformed(
+        input,
+        canonicalPath,
+        "meet",
+        "invalid-id",
+        `Meet id ${JSON.stringify(meetId)} is not a positive integer without leading zeros.`
+      );
+    }
+    if (segments.length === 2) {
+      return fetchable({ kind: "meet", meetId });
+    }
+    if (lower[2] === "event") {
+      const result = classifyMeetEventSubPath(args, meetId);
+      if (result !== void 0) return result;
+    }
+    if (lower[2] === "topteams") {
+      return classifyMeetTopTeamsSubPath(args, meetId);
+    }
+    if (lower[2] === "team") {
+      return classifyMeetTeamSubPath(args, meetId);
+    }
+    if (lower[2] === "swimmer") {
+      const result = classifyMeetSwimmerSubPath(args, meetId);
+      if (result !== void 0) return result;
+    }
+    return unrecognized(
+      input,
+      "unknown-path",
+      `Meet sub-path ${canonicalPath} is not one of the modelled patterns (/results/{meetId}/, /results/{meetId}/event/{n}/, /results/{meetId}/team/{teamId}/[swims/], /results/{meetId}/swimmer/{id}/).`,
+      { canonicalPath, hostname: parsed.hostname }
+    );
+  }
+  function classifyCountryPath(args) {
+    const { input, segments, lower, canonicalPath, parsed, fetchable } = args;
+    if (lower[3] === "conference") {
+      if (segments.length === 4) {
+        return malformed(
+          input,
+          canonicalPath,
+          "conference",
+          "missing-slug",
+          "Conference URL carries no conference slug."
+        );
+      }
+      const slug = segments[4];
+      if (!CONFERENCE_SLUG.test(slug)) {
+        return malformed(
+          input,
+          canonicalPath,
+          "conference",
+          "invalid-slug",
+          `Conference slug ${JSON.stringify(slug)} is not of the accepted slug shape.`
+        );
+      }
+      if (segments.length === 5) {
+        return fetchable({
+          kind: "conference",
+          urlForm: "country-scoped",
+          slug,
+          country: lower[1],
+          level: lower[2]
+        });
+      }
+    }
+    return unrecognized(
+      input,
+      "unknown-path",
+      `Country path ${canonicalPath} is not the modelled conference pattern (/country/{country}/{level}/conference/{slug}/).`,
+      { canonicalPath, hostname: parsed.hostname }
+    );
+  }
+  function classifyConferencePath(args) {
+    const { input, segments, canonicalPath, parsed, fetchable } = args;
+    if (segments.length === 1) {
+      return malformed(
+        input,
+        canonicalPath,
+        "conference",
+        "missing-slug",
+        "Conference URL carries no conference slug."
+      );
+    }
+    const slug = segments[1];
+    if (!CONFERENCE_SLUG.test(slug)) {
+      return malformed(
+        input,
+        canonicalPath,
+        "conference",
+        "invalid-slug",
+        `Conference slug ${JSON.stringify(slug)} is not of the accepted slug shape.`
+      );
+    }
+    if (segments.length === 2) {
+      return fetchable({ kind: "conference", urlForm: "short", slug });
+    }
+    return unrecognized(input, "unknown-path", `Conference sub-path ${canonicalPath} is not modelled.`, {
+      canonicalPath,
+      hostname: parsed.hostname
+    });
+  }
+  var PATH_CLASSIFIERS = {
+    team: classifyTeamPath,
+    swimmer: classifySwimmerPath,
+    results: classifyResultsPath,
+    country: classifyCountryPath,
+    conference: classifyConferencePath
+  };
   function classifySwimCloudUrl(url) {
     const input = url;
     const parsed = parseInput(input);
@@ -175,301 +479,16 @@
     if (exemptSwimmerId !== void 0) {
       return fetchable({ kind: "swimmerFastestTimes", swimmerId: exemptSwimmerId });
     }
-    switch (lower[0]) {
-      case "team": {
-        if (segments.length === 1) {
-          return malformed(input, canonicalPath, "team", "missing-id", "Team URL carries no team id.");
-        }
-        const teamId = segments[1];
-        if (!NUMERIC_ID.test(teamId)) {
-          return malformed(
-            input,
-            canonicalPath,
-            "team",
-            "invalid-id",
-            `Team id ${JSON.stringify(teamId)} is not a positive integer without leading zeros.`
-          );
-        }
-        if (segments.length === 2) {
-          return fetchable({ kind: "team", teamId });
-        }
-        if (segments.length === 3 && lower[2] === "roster") {
-          const raw = readQuery(parsed);
-          const page = nonEmpty(raw["page"]);
-          const gender = nonEmpty(raw["gender"]);
-          const seasonId = nonEmpty(raw["season_id"]);
-          return fetchable({
-            kind: "teamRoster",
-            teamId,
-            query: {
-              ...page === void 0 ? {} : { page },
-              ...gender === void 0 ? {} : { gender },
-              ...seasonId === void 0 ? {} : { seasonId },
-              raw
-            }
-          });
-        }
-        if (segments.length === 3 && lower[2] === "results") {
-          const raw = readQuery(parsed);
-          const page = nonEmpty(raw["page"]);
-          const year = nonEmpty(raw["year"]);
-          return fetchable({
-            kind: "teamResults",
-            teamId,
-            query: {
-              ...page === void 0 ? {} : { page },
-              ...year === void 0 ? {} : { year },
-              raw
-            }
-          });
-        }
-        return unrecognized(
-          input,
-          "unknown-path",
-          `Team sub-path ${canonicalPath} is not one of the modelled patterns (/team/{id}/, /team/{id}/roster/, /team/{id}/results/).`,
-          { canonicalPath, hostname: parsed.hostname }
-        );
-      }
-      case "swimmer": {
-        if (segments.length === 1) {
-          return malformed(
-            input,
-            canonicalPath,
-            "swimmer",
-            "missing-id",
-            "Swimmer URL carries no swimmer id."
-          );
-        }
-        const swimmerId = segments[1];
-        if (!NUMERIC_ID.test(swimmerId)) {
-          return malformed(
-            input,
-            canonicalPath,
-            "swimmer",
-            "invalid-id",
-            `Swimmer id ${JSON.stringify(swimmerId)} is not a positive integer without leading zeros.`
-          );
-        }
-        if (segments.length === 2) {
-          return fetchable({ kind: "swimmer", swimmerId });
-        }
-        if (segments.length === 3 && lower[2] === "times") {
-          return fetchable({ kind: "swimmerTimes", swimmerId });
-        }
-        return unrecognized(
-          input,
-          "unknown-path",
-          `Swimmer sub-path ${canonicalPath} is not modelled. The real capture's nav lists /meets/, /standards/ and /rankings/ alongside /times/, but only /times/ has been captured, and this classifier does not model a pattern read off a nav bar.`,
-          { canonicalPath, hostname: parsed.hostname }
-        );
-      }
-      case "results": {
-        if (segments.length === 1) {
-          return malformed(input, canonicalPath, "meet", "missing-id", "Meet URL carries no meet id.");
-        }
-        const meetId = segments[1];
-        if (!NUMERIC_ID.test(meetId)) {
-          return malformed(
-            input,
-            canonicalPath,
-            "meet",
-            "invalid-id",
-            `Meet id ${JSON.stringify(meetId)} is not a positive integer without leading zeros.`
-          );
-        }
-        if (segments.length === 2) {
-          return fetchable({ kind: "meet", meetId });
-        }
-        if (lower[2] === "event") {
-          if (segments.length === 3) {
-            return malformed(
-              input,
-              canonicalPath,
-              "meetEvent",
-              "missing-event-ref",
-              "Meet event URL carries no event reference."
-            );
-          }
-          const eventRef = segments[3];
-          if (!NUMERIC_ID.test(eventRef)) {
-            return malformed(
-              input,
-              canonicalPath,
-              "meetEvent",
-              "invalid-event-ref",
-              `Event reference ${JSON.stringify(eventRef)} is not a positive integer without leading zeros.`
-            );
-          }
-          if (segments.length === 4) {
-            return fetchable({ kind: "meetEvent", meetId, eventRef });
-          }
-        }
-        if (lower[2] === "topteams") {
-          if (segments.length === 3) {
-            const raw = readQuery(parsed);
-            const page = nonEmpty(raw["page"]);
-            const gender = nonEmpty(raw["gender"]);
-            const query = {
-              ...page === void 0 ? {} : { page },
-              ...gender === void 0 ? {} : { gender },
-              raw
-            };
-            return fetchable({ kind: "meetTopTeams", meetId, query });
-          }
-          return unrecognized(
-            input,
-            "unknown-path",
-            `Meet topteams sub-path ${canonicalPath} is not the modelled pattern (/results/{meetId}/topteams/).`,
-            { canonicalPath, hostname: parsed.hostname }
-          );
-        }
-        if (lower[2] === "team") {
-          if (segments.length === 3) {
-            return malformed(
-              input,
-              canonicalPath,
-              "meetTeam",
-              "missing-id",
-              "Meet team URL carries no team id."
-            );
-          }
-          const teamId = segments[3];
-          if (!NUMERIC_ID.test(teamId)) {
-            return malformed(
-              input,
-              canonicalPath,
-              "meetTeam",
-              "invalid-id",
-              `Team id ${JSON.stringify(teamId)} is not a positive integer without leading zeros.`
-            );
-          }
-          if (segments.length === 4 || segments.length === 5 && lower[4] === "swims") {
-            const raw = readQuery(parsed);
-            const page = nonEmpty(raw["page"]);
-            const gender = nonEmpty(raw["gender"]);
-            const query = {
-              ...page === void 0 ? {} : { page },
-              ...gender === void 0 ? {} : { gender },
-              raw
-            };
-            return fetchable(
-              segments.length === 4 ? { kind: "meetTeam", meetId, teamId, query } : { kind: "meetTeamSwims", meetId, teamId, query }
-            );
-          }
-          return unrecognized(
-            input,
-            "unknown-path",
-            `Meet team sub-path ${canonicalPath} is not one of the modelled patterns (/results/{meetId}/team/{teamId}/, /results/{meetId}/team/{teamId}/swims/).`,
-            { canonicalPath, hostname: parsed.hostname }
-          );
-        }
-        if (lower[2] === "swimmer") {
-          if (segments.length === 3) {
-            return malformed(
-              input,
-              canonicalPath,
-              "meetSwimmer",
-              "missing-id",
-              "Meet swimmer URL carries no swimmer id."
-            );
-          }
-          const swimmerId = segments[3];
-          if (!NUMERIC_ID.test(swimmerId)) {
-            return malformed(
-              input,
-              canonicalPath,
-              "meetSwimmer",
-              "invalid-id",
-              `Swimmer id ${JSON.stringify(swimmerId)} is not a positive integer without leading zeros.`
-            );
-          }
-          if (segments.length === 4) {
-            return fetchable({ kind: "meetSwimmer", meetId, swimmerId });
-          }
-        }
-        return unrecognized(
-          input,
-          "unknown-path",
-          `Meet sub-path ${canonicalPath} is not one of the modelled patterns (/results/{meetId}/, /results/{meetId}/event/{n}/, /results/{meetId}/team/{teamId}/[swims/], /results/{meetId}/swimmer/{id}/).`,
-          { canonicalPath, hostname: parsed.hostname }
-        );
-      }
-      case "country": {
-        if (lower[3] === "conference") {
-          if (segments.length === 4) {
-            return malformed(
-              input,
-              canonicalPath,
-              "conference",
-              "missing-slug",
-              "Conference URL carries no conference slug."
-            );
-          }
-          const slug = segments[4];
-          if (!CONFERENCE_SLUG.test(slug)) {
-            return malformed(
-              input,
-              canonicalPath,
-              "conference",
-              "invalid-slug",
-              `Conference slug ${JSON.stringify(slug)} is not of the accepted slug shape.`
-            );
-          }
-          if (segments.length === 5) {
-            return fetchable({
-              kind: "conference",
-              urlForm: "country-scoped",
-              slug,
-              country: lower[1],
-              level: lower[2]
-            });
-          }
-        }
-        return unrecognized(
-          input,
-          "unknown-path",
-          `Country path ${canonicalPath} is not the modelled conference pattern (/country/{country}/{level}/conference/{slug}/).`,
-          { canonicalPath, hostname: parsed.hostname }
-        );
-      }
-      case "conference": {
-        if (segments.length === 1) {
-          return malformed(
-            input,
-            canonicalPath,
-            "conference",
-            "missing-slug",
-            "Conference URL carries no conference slug."
-          );
-        }
-        const slug = segments[1];
-        if (!CONFERENCE_SLUG.test(slug)) {
-          return malformed(
-            input,
-            canonicalPath,
-            "conference",
-            "invalid-slug",
-            `Conference slug ${JSON.stringify(slug)} is not of the accepted slug shape.`
-          );
-        }
-        if (segments.length === 2) {
-          return fetchable({ kind: "conference", urlForm: "short", slug });
-        }
-        return unrecognized(
-          input,
-          "unknown-path",
-          `Conference sub-path ${canonicalPath} is not modelled.`,
-          { canonicalPath, hostname: parsed.hostname }
-        );
-      }
-      default:
-        return unrecognized(
-          input,
-          "unknown-path",
-          `Path ${canonicalPath} matches none of the modelled SwimCloud patterns.`,
-          { canonicalPath, hostname: parsed.hostname }
-        );
+    const classifyPath = PATH_CLASSIFIERS[lower[0]];
+    if (classifyPath === void 0) {
+      return unrecognized(
+        input,
+        "unknown-path",
+        `Path ${canonicalPath} matches none of the modelled SwimCloud patterns.`,
+        { canonicalPath, hostname: parsed.hostname }
+      );
     }
+    return classifyPath({ input, segments, lower, canonicalPath, parsed, fetchable });
   }
 
   // packages/swimcloud/src/crawlPlan.ts
@@ -1423,6 +1442,23 @@
     });
     return { rawTimeToken: token };
   }
+  function buildTeamMeetSwimsPayload(fields) {
+    const team = fields.teamId !== void 0 && fields.teamName !== void 0 && fields.gender !== "unknown" ? { swimCloudTeamId: fields.teamId, gender: fields.gender, name: fields.teamName } : void 0;
+    return {
+      swimCloudMeetId: fields.meetId,
+      ...fields.meetName === void 0 ? {} : { meetName: fields.meetName },
+      meet: fields.meet,
+      ...fields.teamId === void 0 ? {} : { swimCloudTeamId: fields.teamId },
+      ...fields.teamName === void 0 ? {} : { teamName: fields.teamName },
+      ...team === void 0 ? {} : { team },
+      gender: fields.gender,
+      ...fields.entryCount === void 0 ? {} : { entryCount: fields.entryCount },
+      swims: fields.swims,
+      events: fields.events,
+      rowCount: fields.rowCount,
+      ...fields.pagination === void 0 ? {} : { pagination: fields.pagination }
+    };
+  }
   function parseTeamMeetSwimsHtml(html, context, options = {}) {
     const warnings = [];
     const confidence = SWIMCLOUD_REAL_CAPTURE_CONFIDENCE;
@@ -1500,24 +1536,22 @@
       ...dates.startDate === void 0 ? {} : { startDate: dates.startDate },
       ...dates.endDate === void 0 ? {} : { endDate: dates.endDate }
     };
-    const team = teamId !== void 0 && teamName !== void 0 && gender !== "unknown" ? { swimCloudTeamId: teamId, gender, name: teamName } : void 0;
     const pagination = readPagination(cleaned, fromUrl.page);
     return succeed(
       context,
-      {
-        swimCloudMeetId: meetId,
-        ...meetName === void 0 ? {} : { meetName },
+      buildTeamMeetSwimsPayload({
+        meetId,
+        meetName,
         meet,
-        ...teamId === void 0 ? {} : { swimCloudTeamId: teamId },
-        ...teamName === void 0 ? {} : { teamName },
-        ...team === void 0 ? {} : { team },
+        teamId,
+        teamName,
         gender,
-        ...entryCount === void 0 ? {} : { entryCount },
+        entryCount,
         swims: rows.swims,
         events,
         rowCount: rows.rowCount,
-        ...pagination === void 0 ? {} : { pagination }
-      },
+        pagination
+      }),
       warnings,
       confidence
     );
@@ -2095,6 +2129,123 @@
     }
     return { relayLeadoff, cutStandards };
   }
+  function buildSwimRowEvent(ctx, eventLabel, link, eventId, parsedLabel, rowIndex) {
+    const course = parsedLabel.course !== "unknown" ? parsedLabel.course : ctx.meetCourse ?? "unknown";
+    const event = {
+      eventId,
+      swimCloudMeetId: ctx.meetId,
+      ...link === void 0 ? {} : { eventRef: link.eventRef },
+      label: eventLabel,
+      kind: parsedLabel.isRelay ? "relay" : "individual",
+      course,
+      gender: ctx.gender,
+      ...parsedLabel.distance === void 0 ? {} : { distance: parsedLabel.distance },
+      stroke: parsedLabel.stroke
+    };
+    if (!parsedLabel.matchedShape) {
+      ctx.warnings.push({
+        code: "unrecognized-event-label",
+        message: `Event cell ${JSON.stringify(eventLabel)} does not match the expected "{distance} {course letter} {stroke}" shape; distance and course were not read from it.`,
+        eventId,
+        rowIndex,
+        raw: eventLabel
+      });
+    } else if (parsedLabel.course === "unknown") {
+      ctx.warnings.push({
+        code: "unrecognized-course-token",
+        message: `Course letter ${JSON.stringify(parsedLabel.courseLetter ?? "")} in ${JSON.stringify(eventLabel)} is outside Y/L/S; course recorded as ${JSON.stringify(course)} rather than assumed.`,
+        eventId,
+        rowIndex,
+        raw: eventLabel
+      });
+    } else if (ctx.meetCourse !== void 0 && parsedLabel.course !== ctx.meetCourse) {
+      ctx.warnings.push({
+        code: "course-column-contradicts-label",
+        message: `Event ${JSON.stringify(eventLabel)} is ${parsedLabel.course} by its course letter, but the page declares the meet as ${ctx.meetCourse}. The label wins; the disagreement is reported rather than resolved silently.`,
+        eventId,
+        rowIndex,
+        raw: eventLabel
+      });
+    }
+    return event;
+  }
+  function pushSwimRowLinkWarning(link, athleteName, meetId, eventId, rowIndex, warnings) {
+    if (link === void 0) {
+      warnings.push({
+        code: "missing-swim-link",
+        message: `Time cell for ${JSON.stringify(athleteName)} carries no /results/${meetId}/event/{n}/ link; the swim has no SwimCloud swim id or event reference, and a composite key derived from the row's own values is used instead.`,
+        eventId,
+        rowIndex
+      });
+    } else if (link.swimId === void 0) {
+      warnings.push({
+        code: "missing-swim-link",
+        message: `Time cell for ${JSON.stringify(athleteName)} links to event ${link.eventRef} but carries no "?id=" swim id; a composite key derived from the row's own values is used instead.`,
+        eventId,
+        rowIndex
+      });
+    }
+  }
+  function readSwimRowMeasurements(cells, table, event, timeCellHtml, rowIndex, warnings) {
+    const place = table.place === void 0 ? void 0 : readOrdinalPlace(textAt(cells, table.place.start), event, rowIndex, warnings);
+    const time = readTime(htmlToText(timeCellHtml), event, rowIndex, warnings);
+    const points = table.points === void 0 ? {} : readPoints(textAt(cells, table.points.start), event, rowIndex, warnings);
+    const score = table.score === void 0 ? {} : readPoints(textAt(cells, table.score.start), event, rowIndex, warnings);
+    const flagsCell = readFlagsCell(table.flags === void 0 ? "" : cellAt(cells, table.flags.start));
+    return { place, time, points, score, flagsCell };
+  }
+  function resolveSwimRowAthlete(nameCellHtml, teamCellHtml, athleteName, ctx, eventId, rowIndex) {
+    const swimmerId = swimmerIdFromCell(nameCellHtml);
+    if (swimmerId === void 0) {
+      ctx.warnings.push({
+        code: "missing-athlete-link",
+        message: `Results row for ${athleteName} carries no /swimmer/{id}/ link; the athlete has no SwimCloud id from this capture.`,
+        eventId,
+        rowIndex,
+        raw: athleteName
+      });
+    }
+    const rowTeamName = htmlToText(teamCellHtml);
+    const teamId = teamIdFromCell(teamCellHtml) ?? ctx.fallbackTeamId;
+    const teamName = rowTeamName.length > 0 ? rowTeamName : ctx.fallbackTeamName;
+    return { swimmerId, teamId, teamName };
+  }
+  function assembleSwimRow(fields) {
+    const { eventId, meetId, link, athlete, athleteName, event, measurements, rowOrdinal, rowIndex } = fields;
+    const { place, time, points, score, flagsCell } = measurements;
+    const swimKey = link?.swimId === void 0 ? `${eventId}:swim:${athlete.swimmerId ?? `row${rowIndex}`}:${time.finalTime ?? time.rawTimeToken ?? `row${rowIndex}`}` : `${meetId}:swim:${link.swimId}`;
+    const flags = time.flags === void 0 && !flagsCell.relayLeadoff ? void 0 : { ...time.flags ?? {}, ...flagsCell.relayLeadoff ? { relayLeadoff: true } : {} };
+    const entry = {
+      entryId: `${swimKey}:entry`,
+      eventId,
+      ...athlete.swimmerId === void 0 ? {} : { swimCloudSwimmerId: athlete.swimmerId },
+      athleteName,
+      ...athlete.teamId === void 0 ? {} : { swimCloudTeamId: athlete.teamId },
+      ...athlete.teamName === void 0 ? {} : { teamName: athlete.teamName }
+    };
+    const result = {
+      resultId: `${swimKey}:result`,
+      entryId: entry.entryId,
+      eventId,
+      ...place === void 0 ? {} : { place },
+      ...points.points === void 0 ? {} : { points: points.points },
+      ...points.rawPointsToken === void 0 ? {} : { rawPointsToken: points.rawPointsToken },
+      ...time.finalTime === void 0 ? {} : { finalTime: time.finalTime },
+      ...time.rawTimeToken === void 0 ? {} : { rawTimeToken: time.rawTimeToken },
+      ...flags === void 0 ? {} : { flags }
+    };
+    return {
+      swimKey,
+      ...link?.swimId === void 0 ? {} : { swimCloudSwimId: link.swimId },
+      ...rowOrdinal === void 0 ? {} : { rowOrdinal },
+      event,
+      entry,
+      result,
+      relayLeadoff: flagsCell.relayLeadoff,
+      cutStandards: flagsCell.cutStandards,
+      ...score.points === void 0 ? {} : { meetScore: score.points }
+    };
+  }
   function readSwimRows(table, ctx) {
     const swims = [];
     table.dataRows.forEach((cells, rowIndex) => {
@@ -2114,111 +2265,25 @@
       const link = readSwimLink(timeCellHtml, ctx.meetId);
       const parsedLabel = readSwimsEventLabel(eventLabel);
       const eventId = link === void 0 ? `${ctx.meetId}:event-label:${normalizeHeader(eventLabel)}` : `${ctx.meetId}:event:${link.eventRef}`;
-      const course = parsedLabel.course !== "unknown" ? parsedLabel.course : ctx.meetCourse ?? "unknown";
-      const event = {
-        eventId,
-        swimCloudMeetId: ctx.meetId,
-        ...link === void 0 ? {} : { eventRef: link.eventRef },
-        label: eventLabel,
-        kind: parsedLabel.isRelay ? "relay" : "individual",
-        course,
-        gender: ctx.gender,
-        ...parsedLabel.distance === void 0 ? {} : { distance: parsedLabel.distance },
-        stroke: parsedLabel.stroke
-      };
-      if (!parsedLabel.matchedShape) {
-        ctx.warnings.push({
-          code: "unrecognized-event-label",
-          message: `Event cell ${JSON.stringify(eventLabel)} does not match the expected "{distance} {course letter} {stroke}" shape; distance and course were not read from it.`,
-          eventId,
-          rowIndex,
-          raw: eventLabel
-        });
-      } else if (parsedLabel.course === "unknown") {
-        ctx.warnings.push({
-          code: "unrecognized-course-token",
-          message: `Course letter ${JSON.stringify(parsedLabel.courseLetter ?? "")} in ${JSON.stringify(eventLabel)} is outside Y/L/S; course recorded as ${JSON.stringify(course)} rather than assumed.`,
-          eventId,
-          rowIndex,
-          raw: eventLabel
-        });
-      } else if (ctx.meetCourse !== void 0 && parsedLabel.course !== ctx.meetCourse) {
-        ctx.warnings.push({
-          code: "course-column-contradicts-label",
-          message: `Event ${JSON.stringify(eventLabel)} is ${parsedLabel.course} by its course letter, but the page declares the meet as ${ctx.meetCourse}. The label wins; the disagreement is reported rather than resolved silently.`,
-          eventId,
-          rowIndex,
-          raw: eventLabel
-        });
-      }
-      if (link === void 0) {
-        ctx.warnings.push({
-          code: "missing-swim-link",
-          message: `Time cell for ${JSON.stringify(athleteName)} carries no /results/${ctx.meetId}/event/{n}/ link; the swim has no SwimCloud swim id or event reference, and a composite key derived from the row's own values is used instead.`,
-          eventId,
-          rowIndex
-        });
-      } else if (link.swimId === void 0) {
-        ctx.warnings.push({
-          code: "missing-swim-link",
-          message: `Time cell for ${JSON.stringify(athleteName)} links to event ${link.eventRef} but carries no "?id=" swim id; a composite key derived from the row's own values is used instead.`,
-          eventId,
-          rowIndex
-        });
-      }
-      const place = table.place === void 0 ? void 0 : readOrdinalPlace(textAt(cells, table.place.start), event, rowIndex, ctx.warnings);
-      const time = readTime(htmlToText(timeCellHtml), event, rowIndex, ctx.warnings);
-      const points = table.points === void 0 ? {} : readPoints(textAt(cells, table.points.start), event, rowIndex, ctx.warnings);
-      const score = table.score === void 0 ? {} : readPoints(textAt(cells, table.score.start), event, rowIndex, ctx.warnings);
-      const flagsCell = readFlagsCell(table.flags === void 0 ? "" : cellAt(cells, table.flags.start));
-      const swimmerId = swimmerIdFromCell(nameCellHtml);
-      if (swimmerId === void 0) {
-        ctx.warnings.push({
-          code: "missing-athlete-link",
-          message: `Results row for ${athleteName} carries no /swimmer/{id}/ link; the athlete has no SwimCloud id from this capture.`,
-          eventId,
-          rowIndex,
-          raw: athleteName
-        });
-      }
-      const teamCellHtml = table.team === void 0 ? "" : cellAt(cells, table.team.start);
-      const rowTeamName = htmlToText(teamCellHtml);
-      const teamId = teamIdFromCell(teamCellHtml) ?? ctx.fallbackTeamId;
-      const teamName = rowTeamName.length > 0 ? rowTeamName : ctx.fallbackTeamName;
-      const swimKey = link?.swimId === void 0 ? `${eventId}:swim:${swimmerId ?? `row${rowIndex}`}:${time.finalTime ?? time.rawTimeToken ?? `row${rowIndex}`}` : `${ctx.meetId}:swim:${link.swimId}`;
-      const flags = time.flags === void 0 && !flagsCell.relayLeadoff ? void 0 : { ...time.flags ?? {}, ...flagsCell.relayLeadoff ? { relayLeadoff: true } : {} };
-      const entry = {
-        entryId: `${swimKey}:entry`,
-        eventId,
-        ...swimmerId === void 0 ? {} : { swimCloudSwimmerId: swimmerId },
-        athleteName,
-        ...teamId === void 0 ? {} : { swimCloudTeamId: teamId },
-        ...teamName === void 0 ? {} : { teamName }
-      };
-      const result = {
-        resultId: `${swimKey}:result`,
-        entryId: entry.entryId,
-        eventId,
-        ...place === void 0 ? {} : { place },
-        ...points.points === void 0 ? {} : { points: points.points },
-        ...points.rawPointsToken === void 0 ? {} : { rawPointsToken: points.rawPointsToken },
-        ...time.finalTime === void 0 ? {} : { finalTime: time.finalTime },
-        ...time.rawTimeToken === void 0 ? {} : { rawTimeToken: time.rawTimeToken },
-        ...flags === void 0 ? {} : { flags }
-      };
+      const event = buildSwimRowEvent(ctx, eventLabel, link, eventId, parsedLabel, rowIndex);
+      pushSwimRowLinkWarning(link, athleteName, ctx.meetId, eventId, rowIndex, ctx.warnings);
+      const measurements = readSwimRowMeasurements(cells, table, event, timeCellHtml, rowIndex, ctx.warnings);
+      const athlete = resolveSwimRowAthlete(nameCellHtml, table.team === void 0 ? "" : cellAt(cells, table.team.start), athleteName, ctx, eventId, rowIndex);
       const ordinalText = table.name.span > 1 && nameIndex !== table.name.start ? textAt(cells, table.name.start) : "";
       const rowOrdinal = /^\d+$/.test(ordinalText) ? Number.parseInt(ordinalText, 10) : void 0;
-      swims.push({
-        swimKey,
-        ...link?.swimId === void 0 ? {} : { swimCloudSwimId: link.swimId },
-        ...rowOrdinal === void 0 ? {} : { rowOrdinal },
-        event,
-        entry,
-        result,
-        relayLeadoff: flagsCell.relayLeadoff,
-        cutStandards: flagsCell.cutStandards,
-        ...score.points === void 0 ? {} : { meetScore: score.points }
-      });
+      swims.push(
+        assembleSwimRow({
+          eventId,
+          meetId: ctx.meetId,
+          link,
+          athlete,
+          athleteName,
+          event,
+          measurements,
+          rowOrdinal,
+          rowIndex
+        })
+      );
     });
     if (table.dataRows.length === 0) {
       ctx.warnings.push({
