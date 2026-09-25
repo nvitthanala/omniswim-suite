@@ -604,3 +604,49 @@ export function formatCrawlScopeNote(scope: SwimCloudCrawlScope): string {
   }
   return `Scope: ${scope.label} — ${parts.join(' ')}`;
 }
+
+/* -------------------------------------------------------------------------- */
+/* Refreshing personal bests without re-crawling the meet                      */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The checkbox summary next to "Refresh personal bests already captured" on
+ * the team-confirmation panel.
+ *
+ * States what the option does (re-fetch, not skip) and roughly how long that
+ * costs, in the same "rate, not a guessed total" shape every other pre-flight
+ * line in this module uses — the swimmer count is not known until the rosters
+ * are read, so this names the pace rather than a page count it cannot yet
+ * state honestly.
+ */
+export function formatRefreshPersonalBestsOptionLine(staggerMs: number): string {
+  const seconds = Math.round(staggerMs / 1000);
+  return (
+    'Re-fetches every rostered swimmer’s personal-best times, even ones this app already has, ' +
+    `at one swimmer every ${seconds}s. Only affects the personal-bests pass; rosters are always re-read either way.`
+  );
+}
+
+/**
+ * Said on the panel once the personal-bests pass actually starts under a
+ * refresh, naming how many pages this run is re-fetching that an ordinary
+ * (non-refresh) crawl would have skipped as already stored.
+ *
+ * Silent otherwise would read as a bug report waiting to happen: a coach who
+ * asked for a refresh and watched the pass finish in the same few seconds an
+ * ordinary re-run would have taken has no way to tell "it worked and nothing
+ * changed" from "the refresh checkbox did nothing". Returns `''` when nothing
+ * was already stored, since there is then no difference to explain.
+ */
+export function formatRefreshPersonalBestsAppliedLine(
+  alreadyStoredCount: number,
+  staggerMs: number,
+): string {
+  if (alreadyStoredCount <= 0) return '';
+  const seconds = Math.round(staggerMs / 1000);
+  return (
+    `Refreshing: ${alreadyStoredCount} of these swimmers already have a stored personal-bests page, ` +
+    `and this run re-fetches ${alreadyStoredCount === 1 ? 'it' : 'them'} anyway, at one swimmer every ${seconds}s, ` +
+    'instead of skipping them as already captured.'
+  );
+}

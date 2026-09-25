@@ -2295,7 +2295,10 @@
     if (capture === void 0) return /* @__PURE__ */ new Set();
     return new Set(capture.pages.filter(storedPageIsAlreadyCaptured).map((p) => p.canonicalUrl));
   }
-  function partitionResumableSteps(steps, alreadyCaptured) {
+  function partitionResumableSteps(steps, alreadyCaptured, options = {}) {
+    if (options.forceRefetch === true) {
+      return { toFetch: [...steps], alreadyCaptured: [] };
+    }
     const toFetch = [];
     const skipped = [];
     for (const step of steps) {
@@ -2882,6 +2885,15 @@
     }
     return `Scope: ${scope.label} \u2014 ${parts.join(" ")}`;
   }
+  function formatRefreshPersonalBestsOptionLine(staggerMs) {
+    const seconds = Math.round(staggerMs / 1e3);
+    return `Re-fetches every rostered swimmer\u2019s personal-best times, even ones this app already has, at one swimmer every ${seconds}s. Only affects the personal-bests pass; rosters are always re-read either way.`;
+  }
+  function formatRefreshPersonalBestsAppliedLine(alreadyStoredCount, staggerMs) {
+    if (alreadyStoredCount <= 0) return "";
+    const seconds = Math.round(staggerMs / 1e3);
+    return `Refreshing: ${alreadyStoredCount} of these swimmers already have a stored personal-bests page, and this run re-fetches ${alreadyStoredCount === 1 ? "it" : "them"} anyway, at one swimmer every ${seconds}s, instead of skipping them as already captured.`;
+  }
 
   // extensions/swimcloud-companion/src/crawler-content.ts
   var MIN_DELAY_MS = 3e3;
@@ -3223,6 +3235,7 @@
     }
     const confirmedTeamIds = confirmation.teamIds;
     const scope = confirmation.scope;
+    const refreshPersonalBests = confirmation.refreshPersonalBests;
     const crawlScope = crawlScopeRecordFor(scope);
     const teamDiscovery = {
       source: discovery.source,
@@ -3384,6 +3397,7 @@
       meetId,
       rosters: rosterAthletes,
       alreadyCaptured,
+      refreshPersonalBests,
       plannedBeforeThisPass: pagesTotal + rosterSteps.length + eventPagesDone.total,
       subject,
       teamDiscovery,
@@ -3591,13 +3605,16 @@
   async function runSwimmerTimesPass(input) {
     const { panel, subject, relay, control } = input;
     const plan = planSwimmerTimesSteps(input.meetId, input.rosters);
-    const partition = partitionResumableSteps(plan.steps, input.alreadyCaptured);
+    const unforcedPartition = partitionResumableSteps(plan.steps, input.alreadyCaptured);
+    const partition = input.refreshPersonalBests ? partitionResumableSteps(plan.steps, input.alreadyCaptured, { forceRefetch: true }) : unforcedPartition;
+    const refreshLine = input.refreshPersonalBests ? formatRefreshPersonalBestsAppliedLine(unforcedPartition.alreadyCaptured.length, SWIMMER_TIMES_STAGGER_MS) : "";
     if (plan.steps.length === 0) {
       renderResumeNote(panel, "No rostered swimmer carried a SwimCloud profile link, so no swimmer times pages were planned.");
       return { total: 0, done: 0, completeness: "every-planned-page-fetched", stoppedMessage: "" };
     }
     const planLine = formatSwimmerTimesPlanLine(plan);
-    if (planLine.length > 0) renderResumeNote(panel, planLine);
+    const resumeLines = [planLine, refreshLine].filter((line) => line.length > 0);
+    if (resumeLines.length > 0) renderResumeNote(panel, resumeLines.join(" "));
     const corrected = await sendToBackground({
       type: "omniswim-swimcloud-open-capture",
       subject,
@@ -3816,6 +3833,20 @@
         scopeList.append(label, summary);
         scopeRadios.push({ scope, input });
       }
+      const refreshBox = document.createElement("div");
+      refreshBox.className = "omniswim-crawler-panel__scope-list";
+      const refreshLabel = document.createElement("label");
+      const refreshInput = document.createElement("input");
+      refreshInput.type = "checkbox";
+      refreshInput.checked = false;
+      refreshLabel.append(
+        refreshInput,
+        document.createTextNode(" Refresh personal bests already captured")
+      );
+      const refreshSummary = document.createElement("span");
+      refreshSummary.className = "omniswim-crawler-panel__scope-summary";
+      refreshSummary.textContent = formatRefreshPersonalBestsOptionLine(SWIMMER_TIMES_STAGGER_MS);
+      refreshBox.append(refreshLabel, refreshSummary);
       const estimateLine = document.createElement("div");
       estimateLine.className = "omniswim-crawler-panel__line";
       const scopeNoteLine = document.createElement("div");
@@ -3832,6 +3863,10 @@
         );
         const added = passesNewlyPlannedBy(storedScope, scope);
         scopeNoteLine.textContent = storedScope === void 0 || added.length === 0 ? "" : `This capture has not planned ${added.map(crawlPassLabel).join(" or ")} before. Widening to ${scope.label} adds those pages to it.`;
+        const scopePlansSwimmerTimes = scope.passes.includes("swimmerTimes");
+        refreshInput.disabled = !scopePlansSwimmerTimes;
+        if (!scopePlansSwimmerTimes) refreshInput.checked = false;
+        refreshLabel.style.opacity = scopePlansSwimmerTimes ? "" : "0.5";
       };
       for (const { input } of checkboxes) input.addEventListener("change", refreshEstimate);
       for (const { input } of scopeRadios) input.addEventListener("change", refreshEstimate);
@@ -3842,12 +3877,14 @@
       startButton.className = "omniswim-crawler-panel__start";
       panel.root.insertBefore(list, panel.bar.parentElement);
       panel.root.insertBefore(scopeList, panel.bar.parentElement);
+      panel.root.insertBefore(refreshBox, panel.bar.parentElement);
       panel.root.insertBefore(estimateLine, panel.bar.parentElement);
       panel.root.insertBefore(scopeNoteLine, panel.bar.parentElement);
       panel.root.insertBefore(startButton, panel.bar.parentElement);
       const cleanup = () => {
         list.remove();
         scopeList.remove();
+        refreshBox.remove();
         estimateLine.remove();
         scopeNoteLine.remove();
         startButton.remove();
@@ -3863,8 +3900,9 @@
       startButton.addEventListener("click", () => {
         const selected = checkboxes.filter((c) => c.input.checked).map((c) => c.id);
         const scope = selectedScope();
+        const refreshPersonalBests = refreshInput.checked && !refreshInput.disabled;
         cleanup();
-        resolve({ teamIds: selected, scope });
+        resolve({ teamIds: selected, scope, refreshPersonalBests });
       });
     });
   }

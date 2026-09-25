@@ -17,6 +17,8 @@ import {
   formatEtaLabel,
   formatProgressLine1,
   formatProgressLine2,
+  formatRefreshPersonalBestsAppliedLine,
+  formatRefreshPersonalBestsOptionLine,
   formatResumeDegradationLine,
   formatResumeSkipLine,
   formatRosterSweepLine1,
@@ -287,6 +289,31 @@ describe('formatSwimmerTimesPlanLine', () => {
     ).toBe(
       '34 swimmer times pages from 35 roster rows: 1 roster row carries no SwimCloud profile link, so that swimmer has no times page to fetch.',
     );
+  });
+});
+
+describe('formatRefreshPersonalBestsOptionLine', () => {
+  it('states the pace, not a page count, since the swimmer count is not yet known', () => {
+    const line = formatRefreshPersonalBestsOptionLine(3000);
+    expect(line).toContain('one swimmer every 3s');
+    expect(line).toContain('rosters are always re-read');
+  });
+});
+
+describe('formatRefreshPersonalBestsAppliedLine', () => {
+  it('is empty when nothing was already stored — there is no difference to explain', () => {
+    expect(formatRefreshPersonalBestsAppliedLine(0, 3000)).toBe('');
+  });
+
+  it('names how many stored pages this run is re-fetching anyway', () => {
+    const line = formatRefreshPersonalBestsAppliedLine(37, 3000);
+    expect(line).toContain('37');
+    expect(line).toContain('one swimmer every 3s');
+    expect(line).not.toBe('');
+  });
+
+  it('uses singular phrasing for exactly one', () => {
+    expect(formatRefreshPersonalBestsAppliedLine(1, 3000)).toContain('re-fetches it anyway');
   });
 });
 

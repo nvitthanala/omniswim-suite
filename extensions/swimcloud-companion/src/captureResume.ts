@@ -164,6 +164,27 @@ export interface SwimCloudResumePartition {
   readonly alreadyCaptured: readonly SwimCloudCrawlStep[];
 }
 
+export interface SwimCloudPartitionResumableStepsOptions {
+  /**
+   * Treat every step as needing a fetch, regardless of what `alreadyCaptured`
+   * holds.
+   *
+   * This is the whole of what a "refresh" crawl changes about resume. A coach
+   * asking to refresh a swimmer's personal bests wants the stored
+   * `profile_fastest_times` page replaced with a fresh one — a swimmer can add
+   * a best time between two crawls of the same meet — and the ordinary resume
+   * rule ("bytes already on disk means skip it") exists precisely to avoid
+   * that fetch. `forceRefetch` is the one escape hatch, and it is per-call
+   * rather than a global switch: a refresh crawl still resumes normally for
+   * every other pass, because only the personal-bests pass has "the swimmer
+   * may have swum something new since" as a reason to re-ask.
+   *
+   * Defaults to `false`, so every existing call site keeps its current
+   * behaviour unchanged.
+   */
+  readonly forceRefetch?: boolean;
+}
+
 /**
  * Split a plan into what must be fetched and what a previous crawl already
  * captured.
@@ -176,11 +197,18 @@ export interface SwimCloudResumePartition {
  * This filters the planner's output rather than changing what the planner
  * emits — `crawlPlan.ts` stays a pure function of the meet and the team list,
  * with no knowledge of any store.
+ *
+ * With `{ forceRefetch: true }` every step lands in `toFetch` and
+ * `alreadyCaptured` is empty — see {@link SwimCloudPartitionResumableStepsOptions}.
  */
 export function partitionResumableSteps(
   steps: readonly SwimCloudCrawlStep[],
   alreadyCaptured: ReadonlySet<string>,
+  options: SwimCloudPartitionResumableStepsOptions = {},
 ): SwimCloudResumePartition {
+  if (options.forceRefetch === true) {
+    return { toFetch: [...steps], alreadyCaptured: [] };
+  }
   const toFetch: SwimCloudCrawlStep[] = [];
   const skipped: SwimCloudCrawlStep[] = [];
   for (const step of steps) {

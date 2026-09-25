@@ -128,6 +128,8 @@ import {
   formatPassTwoHeadline,
   formatProgressLine1,
   formatProgressLine2,
+  formatRefreshPersonalBestsAppliedLine,
+  formatRefreshPersonalBestsOptionLine,
   formatResumeDegradationLine,
   formatResumeSkipLine,
   formatRosterSweepLine1,
@@ -946,6 +948,7 @@ async function runCrawl(meetId: SwimCloudMeetId, panel: PanelHandles, control: C
   }
   const confirmedTeamIds = confirmation.teamIds;
   const scope = confirmation.scope;
+  const refreshPersonalBests = confirmation.refreshPersonalBests;
   // Posted on every open-capture message from here on. The route unions
   // `plannedPasses` across crawls, so a capture that was narrowed once and
   // widened later reports the union — the only statement about the stored
@@ -1191,6 +1194,7 @@ async function runCrawl(meetId: SwimCloudMeetId, panel: PanelHandles, control: C
         meetId,
         rosters: rosterAthletes,
         alreadyCaptured,
+        refreshPersonalBests,
         plannedBeforeThisPass: pagesTotal + rosterSteps.length + eventPagesDone.total,
         subject,
         teamDiscovery,
@@ -1621,6 +1625,11 @@ interface SwimmerTimesPassInput {
   readonly meetId: SwimCloudMeetId;
   readonly rosters: readonly (readonly SwimCloudRosterAthleteRef[])[];
   readonly alreadyCaptured: ReadonlySet<string>;
+  /**
+   * Re-fetch every planned page in this pass, even ones `alreadyCaptured`
+   * already holds — see {@link TeamListConfirmation.refreshPersonalBests}.
+   */
+  readonly refreshPersonalBests: boolean;
   /** Pages the plan already committed to before this pass, so the corrected total is additive. */
   readonly plannedBeforeThisPass: number;
   readonly subject: SwimCloudCaptureSubject;
@@ -1660,7 +1669,16 @@ async function runSwimmerTimesPass(input: SwimmerTimesPassInput): Promise<Swimme
   // The same partition every other pass uses. A swimmer-times page's URL is
   // knowable without its content — unlike a roster page, whose content this run
   // needs — so this is where a resumed crawl's saving on this pass actually is.
-  const partition = partitionResumableSteps(plan.steps, input.alreadyCaptured);
+  // `refreshPersonalBests` is the one deliberate override: see
+  // `captureResume.ts`'s `forceRefetch` doc comment for why this pass, alone
+  // among all of them, has a reason to re-ask for a page it already has.
+  const unforcedPartition = partitionResumableSteps(plan.steps, input.alreadyCaptured);
+  const partition = input.refreshPersonalBests
+    ? partitionResumableSteps(plan.steps, input.alreadyCaptured, { forceRefetch: true })
+    : unforcedPartition;
+  const refreshLine = input.refreshPersonalBests
+    ? formatRefreshPersonalBestsAppliedLine(unforcedPartition.alreadyCaptured.length, SWIMMER_TIMES_STAGGER_MS)
+    : '';
   if (plan.steps.length === 0) {
     // Distinguishable from "the pass ran and fetched nothing": an empty plan
     // means no roster named a swimmer with a profile link, which is a fact
@@ -1669,8 +1687,13 @@ async function runSwimmerTimesPass(input: SwimmerTimesPassInput): Promise<Swimme
     return { total: 0, done: 0, completeness: 'every-planned-page-fetched', stoppedMessage: '' };
   }
 
+  // Both lines matter and neither may clobber the other: `renderResumeNote`
+  // replaces the whole row, so a second call here would erase whichever line
+  // came first — the same reasoning `finishCrawl` documents for its own two
+  // messages.
   const planLine = formatSwimmerTimesPlanLine(plan);
-  if (planLine.length > 0) renderResumeNote(panel, planLine);
+  const resumeLines = [planLine, refreshLine].filter((line) => line.length > 0);
+  if (resumeLines.length > 0) renderResumeNote(panel, resumeLines.join(' '));
 
   // The last correction to the planned total, now that the swimmer count is
   // real. Sent before the pass rather than after it, same rule as pass 2's.
@@ -1985,6 +2008,19 @@ async function waitWhilePaused(control: CrawlControl): Promise<void> {
 interface TeamListConfirmation {
   readonly teamIds: readonly SwimCloudTeamId[];
   readonly scope: SwimCloudCrawlScope;
+  /**
+   * Re-fetch every rostered swimmer's personal-bests page even when this run's
+   * own store already holds one, instead of skipping it as already captured.
+   *
+   * This is what turns "crawl one team under Rosters and personal bests" into
+   * an actual refresh rather than a no-op re-run: without it, a second crawl
+   * of the same team finds every `profile_fastest_times` URL already in the
+   * capture and fetches nothing new. See
+   * `captureResume.ts`'s `SwimCloudPartitionResumableStepsOptions.forceRefetch`.
+   * Has no effect when the chosen scope does not include the personal-bests
+   * pass at all.
+   */
+  readonly refreshPersonalBests: boolean;
 }
 
 /**
@@ -2056,6 +2092,28 @@ function confirmTeamList(
       scopeRadios.push({ scope, input });
     }
 
+    // The refresh option. Independent of which scope is chosen — it is stated
+    // in terms of the personal-bests pass because that is the only pass resume
+    // ever skips pages of; see `captureResume.ts`'s "why a roster page is never
+    // resume-skipped" for the pass this checkbox deliberately does not touch.
+    // Wrapped in the same box styling as the scope radios above, rather than a
+    // new class, so it reads as one more choice in that group and not a
+    // visually distinct afterthought.
+    const refreshBox = document.createElement('div');
+    refreshBox.className = 'omniswim-crawler-panel__scope-list';
+    const refreshLabel = document.createElement('label');
+    const refreshInput = document.createElement('input');
+    refreshInput.type = 'checkbox';
+    refreshInput.checked = false;
+    refreshLabel.append(
+      refreshInput,
+      document.createTextNode(' Refresh personal bests already captured'),
+    );
+    const refreshSummary = document.createElement('span');
+    refreshSummary.className = 'omniswim-crawler-panel__scope-summary';
+    refreshSummary.textContent = formatRefreshPersonalBestsOptionLine(SWIMMER_TIMES_STAGGER_MS);
+    refreshBox.append(refreshLabel, refreshSummary);
+
     const estimateLine = document.createElement('div');
     estimateLine.className = 'omniswim-crawler-panel__line';
 
@@ -2080,6 +2138,10 @@ function confirmTeamList(
         storedScope === undefined || added.length === 0
           ? ''
           : `This capture has not planned ${added.map(crawlPassLabel).join(' or ')} before. Widening to ${scope.label} adds those pages to it.`;
+      const scopePlansSwimmerTimes = scope.passes.includes('swimmerTimes');
+      refreshInput.disabled = !scopePlansSwimmerTimes;
+      if (!scopePlansSwimmerTimes) refreshInput.checked = false;
+      refreshLabel.style.opacity = scopePlansSwimmerTimes ? '' : '0.5';
     };
 
     for (const { input } of checkboxes) input.addEventListener('change', refreshEstimate);
@@ -2099,6 +2161,7 @@ function confirmTeamList(
 
     panel.root.insertBefore(list, panel.bar.parentElement);
     panel.root.insertBefore(scopeList, panel.bar.parentElement);
+    panel.root.insertBefore(refreshBox, panel.bar.parentElement);
     panel.root.insertBefore(estimateLine, panel.bar.parentElement);
     panel.root.insertBefore(scopeNoteLine, panel.bar.parentElement);
     panel.root.insertBefore(startButton, panel.bar.parentElement);
@@ -2106,6 +2169,7 @@ function confirmTeamList(
     const cleanup = () => {
       list.remove();
       scopeList.remove();
+      refreshBox.remove();
       estimateLine.remove();
       scopeNoteLine.remove();
       startButton.remove();
@@ -2123,8 +2187,9 @@ function confirmTeamList(
     startButton.addEventListener('click', () => {
       const selected = checkboxes.filter((c) => c.input.checked).map((c) => c.id);
       const scope = selectedScope();
+      const refreshPersonalBests = refreshInput.checked && !refreshInput.disabled;
       cleanup();
-      resolve({ teamIds: selected, scope });
+      resolve({ teamIds: selected, scope, refreshPersonalBests });
     });
   });
 }

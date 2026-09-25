@@ -189,4 +189,38 @@ describe('partitionResumableSteps', () => {
     const { toFetch } = partitionResumableSteps(steps, alreadyCapturedUrls(record));
     expect(toFetch).toEqual([]);
   });
+
+  describe('with { forceRefetch: true }', () => {
+    // The whole point of a refresh crawl: a coach re-running the personal-bests
+    // pass on a team whose store already holds every one of those pages must
+    // still re-fetch all of them, not skip a plan that is fully "already
+    // captured". This is `P9`'s refresh feature's one behavioral change.
+    it('fetches every planned page even when the store already holds all of them', () => {
+      const steps = planMeetTeamSwims({ meetId: '356467', teamIds: ['58', '59'] });
+      const captured = new Set(steps.map((s) => s.canonicalUrl));
+
+      const { toFetch, alreadyCaptured } = partitionResumableSteps(steps, captured, { forceRefetch: true });
+
+      expect(toFetch).toEqual(steps);
+      expect(alreadyCaptured).toEqual([]);
+    });
+
+    it('still fetches every page when nothing at all is stored', () => {
+      const steps = planMeetTeamSwims({ meetId: '356467', teamIds: ['58'] });
+      const { toFetch, alreadyCaptured } = partitionResumableSteps(steps, new Set(), { forceRefetch: true });
+      expect(toFetch).toEqual(steps);
+      expect(alreadyCaptured).toEqual([]);
+    });
+
+    it('does not mutate the ordinary (non-forced) behaviour of the same call site', () => {
+      // An explicit `{}` and an omitted third argument must agree — a caller
+      // that upgrades to pass options for one branch must not accidentally
+      // change behaviour for every other branch that still omits them.
+      const steps = planMeetTeamSwims({ meetId: '356467', teamIds: ['58'] });
+      const captured = new Set([steps[0].canonicalUrl]);
+      const withDefaultOptions = partitionResumableSteps(steps, captured, {});
+      const withNoOptions = partitionResumableSteps(steps, captured);
+      expect(withDefaultOptions).toEqual(withNoOptions);
+    });
+  });
 });

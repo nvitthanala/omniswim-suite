@@ -173,6 +173,20 @@ describe('resuming the swimmer-times pass', () => {
     ]);
     expect(partition.alreadyCaptured).toHaveLength(1);
   });
+
+  it('a refresh (forceRefetch) re-fetches every swimmer even when all are already captured', () => {
+    // P9: refreshing one team's personal bests must actually re-fetch, not
+    // silently no-op because resume sees every page already on disk.
+    const plan = planSwimmerTimesSteps(MEET_ID, [
+      [{ swimCloudSwimmerId: '11' }, { swimCloudSwimmerId: '12' }, { swimCloudSwimmerId: '13' }],
+    ]);
+    const stored = new Set(plan.steps.map((s) => s.canonicalUrl));
+
+    const partition = partitionResumableSteps(plan.steps, stored, { forceRefetch: true });
+
+    expect(partition.toFetch).toEqual(plan.steps);
+    expect(partition.alreadyCaptured).toEqual([]);
+  });
 });
 
 describe('classifySwimmerTimesOutcome', () => {
