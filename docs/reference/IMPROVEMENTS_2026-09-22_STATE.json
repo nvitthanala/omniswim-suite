@@ -118,7 +118,7 @@
       "what": "Core defects from P12 report: (a) meet results never reach athlete profile (HyTek labels fail isEventOffered; getAthleteProfile returns {} for a Delta State swimmer); (b) multi-word cut chips (D2 B, NCAA B, WIN JRS) become meetLabel, NCSAX not decoded; (c) mergeHistoryIndex keeps the LOWER diving score; (d) season trends key raw label and mix courses. Excluded: buildCategorizedScoringInputs sprint bias (design question)."
     },
     "P15": {
-      "status": "needs user OK (changes SCY scoring)",
+      "status": "done (see NEXT_ROUND log)",
       "what": "relayLegMatching.ts eventMatchesStrokeDistance substring bug (1000 contains 100) feeds simulateRoster and resolveClockHoldTime: a 1000 Free can stand in for a 100 split on the scoring path."
     },
     "P16": {
@@ -126,7 +126,7 @@
       "what": "Compact display of HyTek profile labels in TeamRosterPanel; course column on analytics page; show 400y IM altitude user-decision statement; optional structured unreadStamps list in import panels."
     },
     "P17": {
-      "status": "needs user decision",
+      "status": "closed: user decision 2026-09-24 - stored rows will be fixed by a full lineup reimport; no repair tool",
       "what": "Stored-data repair: rows saved before the fixes (U/X-built recruit rows and plans, bare-A d1_a badges, D2 B meetLabels, NCSAX unflagged). Re-import vs a one-time reviewed repair tool."
     }
   },
@@ -149,7 +149,9 @@
     "2026-09-24 NAIA manual (naia.org) 404; archived official 2020-21 NAIA sheet (metric column headed SCM) as course evidence with user approval. Dispatched executor (NAIA SCM wiring, core), worker P16 (UI), worker P9 (extension). P16 worker stalled (watchdog, no changes) and was resumed.",
     "2026-09-24 P16 and P9 verified and committed separately; analytics course column done by orchestrator. NAIA SCM wiring (executor) still running.",
     "2026-09-24 NAIA SCM verified (lint, 1431, build, 84 scripts) and committed; orchestrator fixed extract-cutlines.py (skip evidenceOnly) and fetch-cutlines.py (carry evidence entry).",
-    "2026-09-24 P8 verified (lint, 1441, build, 84 scripts) and committed. UI phases complete. Remaining: P10 research, P11, P15/P17 user decisions, push."
+    "2026-09-24 P8 verified (lint, 1441, build, 84 scripts) and committed. UI phases complete. Remaining: P10 research, P11, P15/P17 user decisions, push.",
+    "2026-09-24 user: fix P15; P17 handled by full reimport; push branch + fast-forward main after P15; then brainstorm and plan next round.",
+    "2026-09-24 P15 verified (lint, 1465, 84 scripts, build) and committed. Round continues in NEXT_ROUND_2026-09-24_STATE.json."
   ],
   "executorFollowUpsNotTaken": [
     "raw-label best picking: paste 50 Freestyle and JSON 50 Free SCY give two bestByEvent entries (pre-existing)",

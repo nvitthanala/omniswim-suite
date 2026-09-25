@@ -1,0 +1,99 @@
+{
+  "purpose": "Progress log for plans/2026-09-24/01-NEXT-ROUND-PLAN.md. Canonical state; update after every item.",
+  "updatedAt": "2026-09-24",
+  "branch": "nvitthanala/production-readiness",
+  "limitProtocol": "User 2026-09-24: on any usage limit, FIRST activate /low-priority (a real Claude Code command that stays hidden until a limit is hit; invoke via Skill tool if it appears in the list, else ask the user to type it). Then: log the resume point here; check what stopped agents left; resume them with SendMessage after reset; ONE background agent at a time, prefer Sonnet/Haiku unless scoring/data-correctness; commit per phase; report usage-report proxy numbers. Also in user memory.",
+  "openQuestions": [],
+  "items": {
+    "A1": {
+      "status": "planned"
+    },
+    "A2": {
+      "status": "planned"
+    },
+    "A3": {
+      "status": "planned"
+    },
+    "A4": {
+      "status": "planned"
+    },
+    "B1": {
+      "status": "planned"
+    },
+    "B2": {
+      "status": "held: reproduce first"
+    },
+    "B3": {
+      "status": "planned"
+    },
+    "B4": {
+      "status": "planned"
+    },
+    "B5": {
+      "status": "planned"
+    },
+    "B6": {
+      "status": "held: data"
+    },
+    "C1": {
+      "status": "planned"
+    },
+    "C2": {
+      "status": "dropped"
+    },
+    "C3": {
+      "status": "planned (approved)"
+    },
+    "C4": {
+      "status": "C4-print planned; C4-hy3 held (no sample)"
+    },
+    "C5": {
+      "status": "folded into D0 + per-item docs rows"
+    },
+    "C6": {
+      "status": "planned"
+    },
+    "D0": {
+      "status": "planned (wave 1)",
+      "what": "Docs catch-up for 98bb59d8..now: CHANGELOG, INVARIANTS, CUTLINE_TAGS_PLAN, USER_GUIDE, plans/STATE.md; vault 02/05/06/08."
+    },
+    "Dfinal": {
+      "status": "planned (wave 5)",
+      "what": "Re-read all docs against shipped app; full vault pass."
+    },
+    "P15": {
+      "status": "done",
+      "result": "relay legs match exact canonical event; findDepartedLegSwim shared; no team total change under NSISC defaults; 24 impossible relay times fixed; 5 autofill picks and 156 swap lists changed. Stricter-eligibility setting only: 5 totals drop (empty 200 Medley legs)."
+    },
+    "R1": {
+      "status": "planned (core, after B-items)",
+      "what": "Relay follow-ups from P15: (a) relay candidates not gender-checked (Mixed time-trial rows in men's results); (b) parseRelayDistanceYards reads 'Event 102 ... 200 Yard Medley Relay' as 102 and silently falls back to 200; (c) relayLegSwaps.individualStrokeDistance reads HyTek event numbers as distance (display only); (d) isGraduatingClassYear ignores GS; (e) relay candidates come only from meet/recruit rows, not history (Colton Bennett 22.93 50 Free not offered); (f) departed-swimmer lookup has no team filter; (g) time trials still match relay legs - user decision."
+    }
+  },
+  "log": [
+    "2026-09-24 plan written while P15 executor runs; awaiting answers to 4 questions.",
+    "2026-09-24 user answered A1/B3/B4/C4.",
+    "2026-09-24 plan double-checked against code at dfe3f455 and rewritten with gates, waves, scopes, hazards and per-item anchors; user chose .hy3.",
+    "2026-09-24 user: hold .hy3; C3 approved; B5 for other users; C2 dropped. Plan updated.",
+    "2026-09-24 user: add vault + docs updates to the plan. Added gate 7, section 4 (doc map + per-item rows), D0 catch-up in wave 1, D-final in wave 5.",
+    "2026-09-24 P15 committed; relay follow-ups logged as R1."
+  ],
+  "userDecisions": {
+    "A1": "Replace reimport may delete the team's SwimCloud-sourced history + recruit rows + plan entries (after preview + pre-shrink backup). Manual/PDF data untouched.",
+    "B3": "Strongest events: rank by place vs the loaded meet when a meet is loaded; otherwise by percentage distance to the team's division cut. Raw seconds only as a last-resort tiebreak.",
+    "B4": "There is no 1000 in SCM (never swum). A 1000 Freestyle recorded SCM is an invalid event: flag it, never convert it. Consider the same check for other events that do not exist in a course, only against a sourced event list.",
+    "C4": "Printable sheet/PDF plus a real Hy-Tek .hy3 entry file (user, 2026-09-24).",
+    "C4hy3": "Held: user has no .hy3 sample file (2026-09-24). C4-print stays.",
+    "C3": "Approved: second robots exemption for /api/swimmers/{id}/times_by_event/ (on-demand only).",
+    "B5": "HSU has no NAIA opponents, but other users may: add sourced NAIA programs to the registry.",
+    "C2": "Dropped: any PB is a PB regardless of age."
+  },
+  "planChecks": [
+    "A2 already covered by existing code (all repos write JSON backups; guard in shared PUT): reduced to one SqliteRepo test",
+    "C4 partly exists: entryExport.ts CSV + HY-ENTRIES text approximation (not real .hy3), ExportReviewModal",
+    "C3 blocked: times_by_event is robots-forbidden",
+    "B2 unconfirmed: each result row becomes its own history swim; reproduce first",
+    "A1: Recruit has no source field; derive from removed history rows, add Recruit.source going forward"
+  ],
+  "docsRule": "Gate 7: an item is done only when its repo docs (same commit) and vault rows (right after) are updated. See plan section 4."
+}
