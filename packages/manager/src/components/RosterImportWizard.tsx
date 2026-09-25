@@ -10,11 +10,13 @@ import {
 } from '@omniswim/core/lib/athleteHistory';
 import {
   formatHistoryImportSummary,
-  importHistoryToRoster,
   previewHistoryImportActions,
+  previewSwimCloudReplace,
   rosterNamesForTeam,
+  SwimCloudReplaceRefusedError,
   type ImportSwimmerAction,
 } from '@omniswim/core/lib/historyImportRoster';
+import { backupWorkspaces } from '@omniswim/core/api/workspaces';
 import {
   addAliasLink,
   buildAliasResolver,
@@ -36,6 +38,10 @@ import {
 import AliasSuggestionsPanel from './AliasSuggestionsPanel';
 import SwimCloudImprovementsSummary from './SwimCloudImprovementsSummary';
 import { splitUnreadStampWarnings } from './athleteHistoryImportView';
+import SwimCloudImportModePicker from './SwimCloudImportModePicker';
+import SwimCloudReplacePreviewPanel from './SwimCloudReplacePreviewPanel';
+import SwimCloudReplaceConfirmModal from './SwimCloudReplaceConfirmModal';
+import { performSwimCloudImport, type SwimCloudImportMode } from '../lib/swimCloudReplaceFlow';
 // Track A (plans/2026-09-06/): the browser extension's clipboard capture,
 // read back here. Deliberately imported from these specific subpaths, not
 // the @omniswim/swimcloud package root — see
@@ -154,6 +160,10 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
   const [improvementsComputed, setImprovementsComputed] = useState(false);
   const [showImprovements, setShowImprovements] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  /** Defaults to 'merge' — see SwimCloudImportModePicker. */
+  const [importMode, setImportMode] = useState<SwimCloudImportMode>('merge');
+  const [showReplaceConfirm, setShowReplaceConfirm] = useState(false);
+  const [replaceBusy, setReplaceBusy] = useState(false);
 
   // If gender/meet changes and current team is no longer in the list, clear it.
   useEffect(() => {
@@ -179,6 +189,7 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
       setFormat('csv');
       setStep('preview');
       setDismissedAliasKeys(new Set());
+    setImportMode('merge');
       setLastAliasLink(null);
       setImprovements([]);
       setImprovementsComputed(false);
@@ -199,6 +210,7 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
     setFormat(result.format);
     setStep('preview');
     setDismissedAliasKeys(new Set());
+    setImportMode('merge');
     setLastAliasLink(null);
     setImprovements([]);
     setImprovementsComputed(false);
@@ -359,6 +371,7 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
     setFormat('swimcloud');
     setStep('preview');
     setDismissedAliasKeys(new Set());
+    setImportMode('merge');
     setLastAliasLink(null);
   }
 
@@ -410,6 +423,7 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
     setFormat('swimcloud');
     setStep('preview');
     setDismissedAliasKeys(new Set());
+    setImportMode('merge');
     setLastAliasLink(null);
     setImprovements([]);
     setImprovementsComputed(false);
@@ -524,6 +538,7 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
     setFormat('swimcloud');
     setStep('preview');
     setDismissedAliasKeys(new Set());
+    setImportMode('merge');
     setLastAliasLink(null);
     toast.push('success', result.summary);
   };
@@ -542,19 +557,78 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
     }
   };
 
+  /** Returns whether the import committed, so a confirm dialog knows whether it can close. */
+  const runImport = async (importOpts: { mode: SwimCloudImportMode }): Promise<boolean> => {
+    let backedUp = true;
+    try {
+      const result = await performSwimCloudImport(
+        workspace,
+        preview,
+        {
+          team: team.trim(),
+          gender,
+          sourceType: mode === 'csv' ? 'csv_import' : 'swimcloud_paste',
+          sourceLabel: `${format} import (${team})`,
+          mode: importOpts.mode,
+        },
+        {
+          backup: async () => {
+            try {
+              await backupWorkspaces();
+            } catch (err) {
+              backedUp = false;
+              throw err;
+            }
+          },
+        }
+      );
+      if (result.noop) return true;
+      await onUpdate(result.patch);
+      toast.push('success', formatHistoryImportSummary(result.summary));
+      onClose();
+      return true;
+    } catch (err) {
+      if (err instanceof SwimCloudReplaceRefusedError) {
+        toast.push('error', err.message);
+        return false;
+      }
+      if (!backedUp) {
+        toast.push(
+          'error',
+          `Could not back up the workspace, so the replace was not run: ${err instanceof Error ? err.message : String(err)}`
+        );
+        return false;
+      }
+      toast.push('error', `Import failed: ${err instanceof Error ? err.message : String(err)}`);
+      return false;
+    }
+  };
+
   const handleMerge = async () => {
     if (preview.length === 0 || !team.trim()) return;
-    const result = importHistoryToRoster(workspace, preview, {
-      team: team.trim(),
-      gender,
-      sourceType: mode === 'csv' ? 'csv_import' : 'swimcloud_paste',
-      sourceLabel: `${format} import (${team})`,
-    });
-    if (result.noop) return;
-    await onUpdate(result.patch);
-    toast.push('success', formatHistoryImportSummary(result.summary));
-    onClose();
+    if (importMode === 'replace') {
+      setShowReplaceConfirm(true);
+      return;
+    }
+    await runImport({ mode: 'merge' });
   };
+
+  const handleConfirmReplace = async () => {
+    setReplaceBusy(true);
+    const committed = await runImport({ mode: 'replace' });
+    setReplaceBusy(false);
+    // Left open on failure (a refusal or a failed backup) so the coach can
+    // see why and retry, rather than losing the dialog mid-error.
+    if (committed) setShowReplaceConfirm(false);
+  };
+
+  const replacePreview = useMemo(
+    () =>
+      importMode === 'replace' && team.trim() && preview.length > 0
+        ? previewSwimCloudReplace(workspace, preview, { team: team.trim(), gender })
+        : null,
+    [importMode, workspace, preview, team, gender]
+  );
 
   const swimmerActions = useMemo(
     () =>
@@ -859,6 +933,12 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
               {unreadStampSummary ? (
                 <p className="text-ui-caption text-theme-secondary break-words">{unreadStampSummary}</p>
               ) : null}
+              {team.trim() ? (
+                <div className="border border-theme-soft rounded-lg p-3 space-y-3">
+                  <SwimCloudImportModePicker mode={importMode} onChange={setImportMode} />
+                  {replacePreview ? <SwimCloudReplacePreviewPanel preview={replacePreview} /> : null}
+                </div>
+              ) : null}
               {improvementsComputed ? (
                 <SwimCloudImprovementsSummary
                   improvements={improvements}
@@ -941,11 +1021,19 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
             </Button>
           ) : (
             <Button variant="primary" size="md" onClick={() => void handleMerge()} disabled={preview.length === 0}>
-              Import & add to roster
+              {importMode === 'replace' ? 'Review replace…' : 'Import & add to roster'}
             </Button>
           )}
         </div>
       </Modal>
+      {showReplaceConfirm && replacePreview ? (
+        <SwimCloudReplaceConfirmModal
+          preview={replacePreview}
+          busy={replaceBusy}
+          onCancel={() => setShowReplaceConfirm(false)}
+          onConfirm={() => void handleConfirmReplace()}
+        />
+      ) : null}
     </>
   );
 }

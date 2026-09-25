@@ -25,6 +25,7 @@ import {
 } from '@omniswim/core/lib/entryExport';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
 import { Button, EmptyState, useToast } from '@omniswim/ui';
+import { withManualSource } from './lib/swimCloudReplaceFlow';
 import TeamManagementView from './components/TeamManagementView';
 import SwimmerDeleteConfirmModal from './components/SwimmerDeleteConfirmModal';
 import RosterImportWizard from './components/RosterImportWizard';
@@ -141,10 +142,15 @@ function ManagerWorkspaceView({ activeWorkspace }: { activeWorkspace: Workspace 
   });
 
   const handleAddRecruit = (recruit: Recruit) => {
+    // A coach typing a recruit in by hand — never a SwimCloud/CSV/PDF import
+    // path, those set their own `source`. Tagged 'manual' so a later SwimCloud
+    // replace (packages/core/src/lib/swimCloudReplace.ts) can never trace this
+    // row to a removed SwimCloud swim and delete it.
+    const manualRecruit = withManualSource(recruit);
     const settings = mergeScoringSettings(activeWorkspace.scoringSettings, {
       conference: activeWorkspace.conference,
     });
-    const nextRecruits = [...(activeWorkspace.recruits ?? []), recruit];
+    const nextRecruits = [...(activeWorkspace.recruits ?? []), manualRecruit];
     const patch: Partial<Workspace> = { recruits: nextRecruits };
 
     if (usesScorerRoster(settings)) {

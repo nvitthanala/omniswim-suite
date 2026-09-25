@@ -62,6 +62,24 @@ export async function updateWorkspaceApi(id: string, patch: Partial<Workspace>):
   return res.json();
 }
 
+/**
+ * Take a manual, on-demand backup of every workspace, before a caller runs a
+ * change that can delete rows a coach cannot get back any other way (e.g. a
+ * SwimCloud replace reimport). Same route the server takes at startup and
+ * before a pre-shrink or pre-delete write; `'manual'` is this call's own
+ * reason label. Throws on a non-OK response — a caller must never run a
+ * destructive change believing an unwritten backup exists.
+ */
+export async function backupWorkspaces(): Promise<{ file: string }> {
+  const res = await fetch(`${API_BASE}/api/workspaces/backup`, { method: 'POST' });
+  if (!res.ok) await raise(res, 'Failed to back up workspaces');
+  const data = (await res.json()) as { file?: string };
+  if (typeof data.file !== 'string') {
+    throw new Error('Failed to back up workspaces (malformed response)');
+  }
+  return { file: data.file };
+}
+
 export async function deleteWorkspaceApi(id: string): Promise<void> {
   const res = await fetch(`${API_BASE}/api/workspaces/${id}`, { method: 'DELETE' });
   if (!res.ok) await raise(res, 'Failed to delete workspace');

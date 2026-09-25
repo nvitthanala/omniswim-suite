@@ -9,9 +9,11 @@ import { ClassYear, Gender, HistoricalSwim, Workspace } from '@omniswim/core/typ
 import { parseSwimCloudPasteDetailed } from '@omniswim/core/lib/athleteHistory';
 import {
   formatHistoryImportSummary,
-  importHistoryToRoster,
   previewHistoryImportActions,
+  previewSwimCloudReplace,
+  SwimCloudReplaceRefusedError,
 } from '@omniswim/core/lib/historyImportRoster';
+import { backupWorkspaces } from '@omniswim/core/api/workspaces';
 import {
   addAliasLink,
   buildAliasResolver,
@@ -25,6 +27,10 @@ import { getCutlinesForSwim } from '@omniswim/core/lib/cutlineUtils';
 import { Button, TeamSelect, useToast } from '@omniswim/ui';
 import AliasSuggestionsPanel from './AliasSuggestionsPanel';
 import { CLASS_YEAR_OPTIONS, SwimRowTags } from './AthleteHistoryImportPanelParts';
+import SwimCloudImportModePicker from './SwimCloudImportModePicker';
+import SwimCloudReplacePreviewPanel from './SwimCloudReplacePreviewPanel';
+import SwimCloudReplaceConfirmModal from './SwimCloudReplaceConfirmModal';
+import { performSwimCloudImport, type SwimCloudImportMode } from '../lib/swimCloudReplaceFlow';
 import {
   actionBadge,
   buildHistoryBestIndex,
@@ -69,6 +75,10 @@ export default function AthleteHistoryImportPanel({
   const [error, setError] = useState('');
   const [showInfo, setShowInfo] = useState(false);
   const [classYears, setClassYears] = useState<Record<string, ClassYear>>({});
+  /** Defaults to 'merge' — see SwimCloudImportModePicker. */
+  const [importMode, setImportMode] = useState<SwimCloudImportMode>('merge');
+  const [showReplaceConfirm, setShowReplaceConfirm] = useState(false);
+  const [replaceBusy, setReplaceBusy] = useState(false);
   const [dismissedAliasKeys, setDismissedAliasKeys] = useState<Set<string>>(new Set());
   const [lastAliasLink, setLastAliasLink] = useState<{
     inverse: Partial<Workspace>;
@@ -81,6 +91,14 @@ export default function AthleteHistoryImportPanel({
   const swimmerActions = useMemo(
     () => previewHistoryImportActions(workspace, preview, { team, gender }),
     [workspace, preview, team, gender]
+  );
+
+  const replacePreview = useMemo(
+    () =>
+      importMode === 'replace' && team.trim() && preview.length > 0
+        ? previewSwimCloudReplace(workspace, preview, { team, gender })
+        : null,
+    [importMode, workspace, preview, team, gender]
   );
 
   // Suggestions compare unmatched incoming swimmers (previewHistoryImportActions
@@ -253,6 +271,7 @@ export default function AthleteHistoryImportPanel({
       setFormatLabel(result.format);
       setDismissedAliasKeys(new Set());
       setLastAliasLink(null);
+      setImportMode('merge');
     });
   };
 
@@ -286,6 +305,7 @@ export default function AthleteHistoryImportPanel({
       setWarnings(data.warnings ?? []);
       setDismissedAliasKeys(new Set());
       setLastAliasLink(null);
+      setImportMode('merge');
     } catch (e) {
       setError(String(e));
     } finally {
@@ -293,25 +313,76 @@ export default function AthleteHistoryImportPanel({
     }
   };
 
+  /** Returns whether the import committed, so a confirm dialog knows whether it can close. */
+  const runImport = async (importOpts: { mode: SwimCloudImportMode }): Promise<boolean> => {
+    let backedUp = true;
+    try {
+      const result = await performSwimCloudImport(
+        workspace,
+        preview,
+        {
+          team,
+          gender,
+          sourceType: 'paste',
+          sourceLabel: `Import ${preview.length} swims${swimmerName ? ` (${swimmerName})` : ''}`,
+          classYearOverrides: Object.keys(classYears).length > 0 ? classYears : undefined,
+          mode: importOpts.mode,
+        },
+        {
+          backup: async () => {
+            try {
+              await backupWorkspaces();
+            } catch (err) {
+              backedUp = false;
+              throw err;
+            }
+          },
+        }
+      );
+      if (result.noop) return true;
+      onUpdate(result.patch);
+      toast.push('success', formatHistoryImportSummary(result.summary));
+      setPreview([]);
+      setPaste('');
+      setWarnings([]);
+      setFormatLabel('');
+      setClassYears({});
+      setDismissedAliasKeys(new Set());
+      setLastAliasLink(null);
+      setImportMode('merge');
+      return true;
+    } catch (err) {
+      if (err instanceof SwimCloudReplaceRefusedError) {
+        toast.push('error', err.message);
+        return false;
+      }
+      if (!backedUp) {
+        toast.push(
+          'error',
+          `Could not back up the workspace, so the replace was not run: ${err instanceof Error ? err.message : String(err)}`
+        );
+        return false;
+      }
+      toast.push('error', `Import failed: ${err instanceof Error ? err.message : String(err)}`);
+      return false;
+    }
+  };
+
   const confirmImport = () => {
     if (!preview.length || !team.trim()) return;
-    const result = importHistoryToRoster(workspace, preview, {
-      team,
-      gender,
-      sourceType: 'paste',
-      sourceLabel: `Import ${preview.length} swims${swimmerName ? ` (${swimmerName})` : ''}`,
-      classYearOverrides: Object.keys(classYears).length > 0 ? classYears : undefined,
-    });
-    if (result.noop) return;
-    onUpdate(result.patch);
-    toast.push('success', formatHistoryImportSummary(result.summary));
-    setPreview([]);
-    setPaste('');
-    setWarnings([]);
-    setFormatLabel('');
-    setClassYears({});
-    setDismissedAliasKeys(new Set());
-    setLastAliasLink(null);
+    if (importMode === 'replace') {
+      setShowReplaceConfirm(true);
+      return;
+    }
+    void runImport({ mode: 'merge' });
+  };
+
+  const handleConfirmReplace = async () => {
+    setReplaceBusy(true);
+    const committed = await runImport({ mode: 'replace' });
+    setReplaceBusy(false);
+    // Left open on failure so the coach can see why and retry.
+    if (committed) setShowReplaceConfirm(false);
   };
 
   return (
@@ -569,17 +640,33 @@ export default function AthleteHistoryImportPanel({
             ) : !team.trim() ? (
               <p className="text-ui-caption text-amber-400/90">Select a team above before importing.</p>
             ) : (
-              <Button
-                variant="ghost"
-                size="md"
-                onClick={confirmImport}
-                className="p-0 text-[var(--text-accent)] hover:underline font-semibold"
-              >
-                Import & add to roster ({preview.length} swims)
-              </Button>
+              <>
+                <div className="border border-theme-soft rounded-lg p-3 space-y-3 mb-3">
+                  <SwimCloudImportModePicker mode={importMode} onChange={setImportMode} />
+                  {replacePreview ? <SwimCloudReplacePreviewPanel preview={replacePreview} /> : null}
+                </div>
+                <Button
+                  variant="ghost"
+                  size="md"
+                  onClick={confirmImport}
+                  className="p-0 text-[var(--text-accent)] hover:underline font-semibold"
+                >
+                  {importMode === 'replace'
+                    ? `Review replace… (${preview.length} swims)`
+                    : `Import & add to roster (${preview.length} swims)`}
+                </Button>
+              </>
             )}
           </div>
         </div>
+      ) : null}
+      {showReplaceConfirm && replacePreview ? (
+        <SwimCloudReplaceConfirmModal
+          preview={replacePreview}
+          busy={replaceBusy}
+          onCancel={() => setShowReplaceConfirm(false)}
+          onConfirm={() => void handleConfirmReplace()}
+        />
       ) : null}
     </div>
   );
