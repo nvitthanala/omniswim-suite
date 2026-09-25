@@ -267,3 +267,35 @@ SCY default is an assumption, not a record. An LCM swim is not flagged: no
 archived source lists the long-course events. Add a pair or a course only
 with an archived source that states it. Guarded by
 `tests/courseEventMismatch.test.ts`.
+
+## 17. Every entry suggestion ranks events with `rankEventsByStrength`
+
+A swimmer's events are ranked strongest first by three rules, each one
+breaking the ties of the one before it (user decision, 2026-09-24):
+
+1. With a meet loaded, the place the time would take in that meet's
+   results for the event and gender. The swimmer's own rows are left out.
+2. The distance to the team's division cut (`swim / cut`, one tier for the
+   whole profile). With no meet loaded this is the first rule.
+3. Raw seconds, only as the last resort.
+
+Raw seconds alone measure event length: a 50 beats a 1650 for every swimmer.
+Before 2026-09-25 the catalog scoring path still ranked that way, and on the
+HSU roster it entered a distance swimmer in the 50 Free, 50 Fly and 100 Free,
+and entered swimmers in 25s and 50s of stroke that no championship contests.
+
+`rankEventsByStrength` (`packages/core/src/lib/eventStrength.ts`) is the one
+ranking. `categorizeBestEvents`, `getAthleteProfile`,
+`buildEventProfileFromCatalog`, the import's entry budget and
+`buildCategorizedScoringInputs` all use it. The place is the scoring
+engine's own placement of an injected row (`buildMeetPlaceField` in
+`utils.ts`, built on `recruitComparators` and `placeFieldByTime`), read
+from the frozen source results. No place is invented for an event the meet
+did not contest, and no cut for an event the division does not publish:
+each event records which rule placed it (`EventStrength.basis`).
+
+`utils.ts` sits below the cut lookup, so `buildCategorizedScoringInputs`
+takes the order as its `eventOrder` argument. Without it the order is raw
+seconds, so every caller must pass `catalogEventOrderByStrength(...)`.
+Guarded by `tests/eventStrengthRanking.test.ts` (including a scan that fails
+on any caller without `eventOrder`) and `scripts/test_event_quality_ranking.mjs`.

@@ -24,7 +24,12 @@
 
 import { SwimmerResult } from '../types';
 import { isChampionshipProgramEvent, normalizeEventLabel } from './athleteHistory';
-import { eventMeetSortKey, isDivingEvent, isRelayResult, stripEventGenderMarker } from './utils';
+import {
+  chooseMeetEventLabels,
+  isDivingEvent,
+  isRelayResult,
+  stripEventGenderMarker,
+} from './utils';
 
 /**
  * Canonical SCY individual program-event label for an arbitrary event string
@@ -57,41 +62,11 @@ export function canonicalProgramEvent(raw: string): string | null {
  * never become a remap target.
  */
 export function buildMeetEventLabelIndex(results: SwimmerResult[]): Map<string, string> {
-  // canonical -> (meet label -> row count)
-  const counts = new Map<string, Map<string, number>>();
-  for (const r of results ?? []) {
-    if (isRelayResult(r)) continue;
-    if (r.isTimeTrial) continue;
-    const canon = canonicalProgramEvent(r.event);
-    if (!canon) continue;
-    let byLabel = counts.get(canon);
-    if (!byLabel) {
-      byLabel = new Map();
-      counts.set(canon, byLabel);
-    }
-    byLabel.set(r.event, (byLabel.get(r.event) ?? 0) + 1);
-  }
-
-  const index = new Map<string, string>();
-  for (const [canon, byLabel] of counts) {
-    let bestLabel: string | undefined;
-    let bestCount = -1;
-    let bestSortKey = Number.POSITIVE_INFINITY;
-    for (const [label, count] of byLabel) {
-      const sortKey = eventMeetSortKey(label);
-      const better =
-        count > bestCount ||
-        (count === bestCount && sortKey < bestSortKey) ||
-        (count === bestCount && sortKey === bestSortKey && (bestLabel == null || label < bestLabel));
-      if (better) {
-        bestLabel = label;
-        bestCount = count;
-        bestSortKey = sortKey;
-      }
-    }
-    if (bestLabel != null) index.set(canon, bestLabel);
-  }
-  return index;
+  // The label rule lives in `chooseMeetEventLabels` so the meet place field
+  // (`buildMeetPlaceField`) picks the same label for an event as this remap.
+  return chooseMeetEventLabels(results, r =>
+    isRelayResult(r) || r.isTimeTrial ? null : canonicalProgramEvent(r.event)
+  );
 }
 
 /**

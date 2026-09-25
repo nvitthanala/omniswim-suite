@@ -23,6 +23,7 @@ import { buildWhatIfResults } from './whatIfProjection';
 import { getSourceResults } from './meetSource';
 import { buildAliasResolver } from './athleteAliases';
 import type { CatalogTeamRoster } from './rosterCatalog';
+import { catalogEventOrderByStrength } from './eventStrength';
 
 export type ScoringBundle = {
   allResults: SwimmerResult[];
@@ -48,7 +49,8 @@ export type BuildOptions = {
   applyWhatIf: boolean;
   scorerRosterOverrides: Workspace['scorerRosterOverrides'];
   /** Optional long-lived Team Roster Catalog: opt-in events injected per
-   *  athlete, sorted by SCY-normalized best, capped to entry limits. */
+   *  athlete, strongest event first (place in the loaded meet, then distance
+   *  to the division cut, then SCY seconds), capped to entry limits. */
   rosterCatalog?: CatalogTeamRoster;
 };
 
@@ -75,6 +77,10 @@ export function buildScoringBundle({
 
   let allResults: SwimmerResult[];
   let overrides = scorerRosterOverrides ?? [];
+  // Built from the real workspace: the what-if copy below replaces its results.
+  const eventOrder = rosterCatalog
+    ? catalogEventOrderByStrength({ workspace, gender, team: rosterCatalog.team.name })
+    : undefined;
 
   if (applyWhatIf) {
     const base = buildWhatIfResults({ workspace, gender, removeSeniors });
@@ -83,11 +89,12 @@ export function buildScoringBundle({
           workspace: { ...workspace, menResults: base, womenResults: gender === Gender.WOMEN ? base : [] },
           gender,
           rosterCatalog,
+          eventOrder,
         })
       : base;
   } else {
     allResults = rosterCatalog
-      ? buildCategorizedScoringInputs({ workspace, gender, rosterCatalog })
+      ? buildCategorizedScoringInputs({ workspace, gender, rosterCatalog, eventOrder })
       : currentResults;
     overrides = [];
   }

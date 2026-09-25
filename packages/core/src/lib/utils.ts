@@ -36,7 +36,7 @@ import {
 import { divisionForTeamOrNull } from '../data/teamDivisions';
 // Dependency-free by design — see the module header there. Importing
 // `cutlineUtils` here instead would create a cycle (it imports this file).
-import { normalizeEventForCutline } from './cutlineEventNames';
+import { courseOfRecordFromEventLabel, normalizeEventForCutline } from './cutlineEventNames';
 // A leaf module (types + cutlineEventNames only), so no cycle.
 import {
   eventNotSwumInCourse,
@@ -2313,6 +2313,168 @@ export function prepareRecruitsForScoring(
   });
 }
 
+/**
+ * One meet label per event key, from one gender's meet rows.
+ *
+ * Several labels can name one event: a separately numbered prelims or finals
+ * variant, or a post-meet extra such as `Event 939 Boys 100 Yard Breaststroke`
+ * beside the program's `Event 26 Men 100 Yard Breaststroke`. The rule: the label
+ * with the MOST rows (the fuller field, the scored final), then the LOWEST
+ * HyTek event number, then the lexicographically smallest label. The choice
+ * does not depend on row order.
+ *
+ * `keyOf` returns `null` for a row that names no event of interest. This is the
+ * rule `buildMeetEventLabelIndex` (eventIdentity.ts) applies with the canonical
+ * program label as the key, and the one {@link buildMeetPlaceField} applies with
+ * the event identity; both call this function so the two cannot drift.
+ */
+export function chooseMeetEventLabels(
+  results: readonly SwimmerResult[] | undefined,
+  keyOf: (row: SwimmerResult) => string | null
+): Map<string, string> {
+  // key -> (meet label -> row count)
+  const counts = new Map<string, Map<string, number>>();
+  for (const r of results ?? []) {
+    const key = keyOf(r);
+    if (!key) continue;
+    let byLabel = counts.get(key);
+    if (!byLabel) {
+      byLabel = new Map();
+      counts.set(key, byLabel);
+    }
+    byLabel.set(r.event, (byLabel.get(r.event) ?? 0) + 1);
+  }
+
+  const index = new Map<string, string>();
+  for (const [key, byLabel] of counts) {
+    let bestLabel: string | undefined;
+    let bestCount = -1;
+    let bestSortKey = Number.POSITIVE_INFINITY;
+    for (const [label, count] of byLabel) {
+      const sortKey = eventMeetSortKey(label);
+      const better =
+        count > bestCount ||
+        (count === bestCount && sortKey < bestSortKey) ||
+        (count === bestCount && sortKey === bestSortKey && (bestLabel == null || label < bestLabel));
+      if (better) {
+        bestLabel = label;
+        bestCount = count;
+        bestSortKey = sortKey;
+      }
+    }
+    if (bestLabel != null) index.set(key, bestLabel);
+  }
+  return index;
+}
+
+/** Where a time would finish in a loaded meet's results for one event. */
+export interface MeetPlace {
+  /**
+   * Standard competition ranking against the event's scored field: one more
+   * than the number of rows strictly faster, so an exact tie shares the place.
+   */
+  place: number;
+  /** Rows the time was placed against. */
+  fieldSize: number;
+  /** The meet's own label for the event. */
+  meetEvent: string;
+}
+
+/** A loaded meet's scored fields, ready to answer "where would this time finish?". */
+export interface MeetPlaceField {
+  /** Event identities (see `swimEventIdentity`) the meet holds a scored field for. */
+  readonly events: ReadonlySet<string>;
+  /**
+   * The place `seconds` (SCY) would take in the meet's field for `event`, or
+   * `null` when the meet holds no scored field for that event, when every row
+   * of the field is excluded, or when `seconds` is not a usable time.
+   *
+   * `isSameSwimmer` leaves the swimmer's own meet rows out of the field: a
+   * swimmer does not race their own result, and the scoring path drops that
+   * row too once another row for the same swimmer and event enters.
+   */
+  placeFor(
+    event: string,
+    seconds: number,
+    isSameSwimmer?: (row: SwimmerResult) => boolean
+  ): MeetPlace | null;
+}
+
+/**
+ * The event a meet row can place a time in, or `null`.
+ *
+ * Relays, dives and time trials never do. Neither does a row whose label names
+ * a metric course: the times this field is asked about are SCY, and an SCY time
+ * among metre swims has no place. Meet rows are yards in every meet this repo
+ * has loaded, so this refuses a case rather than handling one.
+ */
+function meetPlaceEventKey(row: SwimmerResult): string | null {
+  if (isRelayResult(row) || row.isTimeTrial) return null;
+  if (isDivingEvent(row.event)) return null;
+  const course = courseOfRecordFromEventLabel(row.event);
+  if (course != null && course !== 'SCY') return null;
+  return swimEventIdentity(row.event);
+}
+
+/**
+ * Index one gender's loaded meet results so a time can be placed in them.
+ *
+ * This is the placement an injected recruit row gets in
+ * {@link prepareRecruitsForScoring}, asked for one time at a time: the field
+ * is {@link recruitComparators} (individual rows of that gender in a scored
+ * round: A final, B final or a timed final), and the place comes from
+ * {@link placeFieldByTime}. An event is matched by `swimEventIdentity`, so
+ * `50 Free`, `50 Freestyle` and `Event 8 Men 50 Yard Freestyle` are one event;
+ * when two meet labels share an identity, {@link chooseMeetEventLabels} picks
+ * one, as the what-if remap does.
+ *
+ * `null` when the rows hold no scored individual field at all: no meet is
+ * loaded, or the loaded meet's rounds are all unscored. That is "no meet to
+ * rank against", never "last place".
+ */
+export function buildMeetPlaceField(
+  results: readonly SwimmerResult[] | undefined,
+  gender: Gender
+): MeetPlaceField | null {
+  const rows = [...(results ?? [])];
+  const fields = new Map<string, { meetEvent: string; rows: SwimmerResult[] }>();
+  for (const [identity, meetEvent] of chooseMeetEventLabels(rows, meetPlaceEventKey)) {
+    const field = recruitComparators(rows, meetEvent, gender);
+    if (field.length > 0) fields.set(identity, { meetEvent, rows: field });
+  }
+  if (fields.size === 0) return null;
+
+  return {
+    events: new Set(fields.keys()),
+    placeFor(event, seconds, isSameSwimmer) {
+      if (!Number.isFinite(seconds) || seconds <= 0) return null;
+      const held = fields.get(swimEventIdentity(event));
+      if (!held) return null;
+      const field = isSameSwimmer ? held.rows.filter(r => !isSameSwimmer(r)) : held.rows;
+      if (field.length === 0) return null;
+      // The probe is built the way `buildCatalogEntryResult` builds a scored
+      // catalog row: its time is the SCY seconds, formatted.
+      const probe: SwimmerResult = {
+        id: 'meet-place-probe',
+        rank: 0,
+        name: '',
+        classYear: 'UNKNOWN',
+        team: '',
+        time: formatSecondsToTime(seconds),
+        points: 0,
+        event: held.meetEvent,
+        gender,
+      };
+      const place = placeFieldByTime([...field, probe]).get(probe);
+      if (place == null) {
+        // Unreachable: the probe is in the field it was placed in.
+        throw new Error(`buildMeetPlaceField: no place derived for ${event}`);
+      }
+      return { place, fieldSize: field.length, meetEvent: held.meetEvent };
+    },
+  };
+}
+
 export function calculatePoints(
   results: SwimmerResult[],
   settings?: ScoringSettings,
@@ -3003,6 +3165,20 @@ function fastestCatalogTimePerEvent(times: CatalogEventTime[]): CatalogEventTime
   return [...best.values()];
 }
 
+/**
+ * Orders one catalog athlete's eligible times, strongest event first. Gets one
+ * time per event and returns the same times, reordered.
+ *
+ * The production order is `catalogEventOrderByStrength` (eventStrength.ts):
+ * place in the loaded meet, then distance to the division cut, then raw
+ * seconds. It is passed in, not imported, because this module sits below the
+ * cut-table lookup (`cutlineUtils` imports this file).
+ */
+export type CatalogEventOrder = (
+  athleteName: string,
+  times: readonly CatalogEventTime[]
+) => CatalogEventTime[];
+
 export interface CategorizedScoringInputArgs {
   workspace: Workspace;
   gender: Gender;
@@ -3011,6 +3187,13 @@ export interface CategorizedScoringInputArgs {
   rosterCatalog?: CatalogTeamRoster;
   /** Max individual entries per swimmer (default: scoring preset or 3). */
   maxIndividualEntriesPerSwimmer?: number;
+  /**
+   * Which of an athlete's events fill the entry cap first. Every production
+   * caller passes `catalogEventOrderByStrength(...)`. Absent, the order is raw
+   * SCY seconds, which is only the last-resort rule: it always prefers the
+   * shortest events.
+   */
+  eventOrder?: CatalogEventOrder;
 }
 
 /**
@@ -3021,7 +3204,7 @@ export interface CategorizedScoringInputArgs {
  * they slot beside the existing recruit injection pathway (rank-by-time, A
  * Final). The `maxIndividualEntriesPerSwimmer` cap is enforced here so the
  * recruiter's per-swimmer entry limit is honored when toggling additional
- * events on.
+ * events on. Which events fill that cap is decided by `eventOrder`.
  */
 export function buildCategorizedScoringInputs(
   args: CategorizedScoringInputArgs
@@ -3053,19 +3236,27 @@ export function buildCategorizedScoringInputs(
   const rosterRows: SwimmerResult[] = [];
   for (const athlete of args.rosterCatalog.athletes) {
     if (athlete.gender !== (args.gender === Gender.WOMEN ? 'Women' : 'Men')) continue;
-    // Cap to top-N best times per swimmer by SCY ΓÇö keeps within entry limits.
+    // Cap to the swimmer's N strongest events, to keep within entry limits.
     // Only a result is scored: a self-reported time or an extracted split
     // (stamp `U`/`X`) is never an entry. Nor is an event its course does not
     // swim (a 1000 Free SCM): it has no SCY time. One row per event: the fastest.
-    const eligibleTimes = fastestCatalogTimePerEvent(
+    const oneTimePerEvent = fastestCatalogTimePerEvent(
       athlete.times
         .filter(t => t.isEligible)
         .filter(t => !t.event.toLowerCase().includes('relay'))
         .filter(t => isRankableSwimCloudStamp(t.swimcloudBadge))
         .filter(t => !eventNotSwumInCourse(t.event, t.timeType))
-    )
-      .sort((a, b) => a.timeSecondsScy - b.timeSecondsScy)
-      .slice(0, indCap);
+    );
+    const strongestFirst = args.eventOrder
+      ? args.eventOrder(athlete.fullName, oneTimePerEvent)
+      : [...oneTimePerEvent].sort((a, b) => a.timeSecondsScy - b.timeSecondsScy);
+    if (strongestFirst.length !== oneTimePerEvent.length) {
+      // An order that drops or invents a time would change the entries silently.
+      throw new Error(
+        `buildCategorizedScoringInputs: eventOrder returned ${strongestFirst.length} times for ${athlete.fullName}, expected ${oneTimePerEvent.length}`
+      );
+    }
+    const eligibleTimes = strongestFirst.slice(0, indCap);
 
     const pdfMatch = pdfByName.get(normalizeSwimmerName(athlete.fullName));
     const classYear = athlete.classYear ?? pdfMatch?.classYear;

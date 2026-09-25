@@ -591,6 +591,56 @@ export interface AthleteEventBest {
   altitudeAdjusted?: true;
 }
 
+/**
+ * Which rule placed an event in a swimmer's strongest-first order. The rules
+ * apply in this order, and each one breaks the ties of the one before it:
+ *
+ * - `meet_place`: the place the time would take in the loaded meet's results
+ *   for that event. Only when a meet is loaded and it has a scored field for
+ *   the event.
+ * - `cut_distance`: how far the time is from the team's division cut for the
+ *   event (`swim ÷ cut`). Only when that division publishes a cut for it.
+ * - `time`: raw seconds. The last resort: no meet place and no published cut.
+ *
+ * See `rankEventsByStrength` in `lib/eventStrength.ts`.
+ */
+export type EventStrengthBasis = 'meet_place' | 'cut_distance' | 'time';
+
+/**
+ * How strong one of a swimmer's events is, with the evidence for it. Every
+ * optional field is absent when its source says nothing: no place is invented
+ * for an event the loaded meet did not contest, and no cut for an event the
+ * division does not publish.
+ */
+export interface EventStrength {
+  event: string;
+  /** The SCY seconds that were ranked. For a metric swim, its SCY equivalent. */
+  timeSec: number;
+  /** The first rule that had a value for this event. */
+  basis: EventStrengthBasis;
+  /**
+   * The place this time would take in the loaded meet's scored field for the
+   * event (standard competition ranking: an exact tie shares the place). The
+   * swimmer's own rows in that meet are left out of the field.
+   */
+  meetPlace?: number;
+  /** How many meet rows the time was placed against. */
+  meetFieldSize?: number;
+  /** The loaded meet's own label for the event, e.g. `Event 8 Men 50 Yard Freestyle`. */
+  meetEvent?: string;
+  /**
+   * `swimSeconds / cutSeconds` against the profile's one ranking tier of the
+   * team's division. Lower is better; 1.0 is exactly on the cut. The percentage
+   * distance to the cut is `(cutRatio - 1) * 100`.
+   */
+  cutRatio?: number;
+  /**
+   * The ranked time is the SCY equivalent of a metric swim. It ranks, and it
+   * stays an estimate: never a cut, never a result at this course.
+   */
+  estimate?: true;
+}
+
 export interface AthleteEventProfile {
   name: string;
   team: string;
@@ -616,15 +666,32 @@ export interface AthleteEventProfile {
    * `buildEventProfileFromCatalog` always set it.
    */
   userInputtedByEvent?: Record<string, { time: string; timeSec: number; source: string }>;
+  /**
+   * The swimmer's events, strongest first, capped at the individual-entry
+   * limit. Ordered by {@link AthleteEventProfile.strengthByEvent}: place in the
+   * loaded meet, then distance to the division cut, then raw seconds.
+   */
   primaryEvents: string[];
   relayEvents: string[];
   /**
    * How good each swim is relative to the published standard for that event —
    * `swimSeconds / standardSeconds`, so lower is better and 1.0 is exactly on the
-   * mark. This is what `primaryEvents` is ordered by. Absent for events with no
-   * published standard; see {@link AthleteEventProfile.unrankedEvents}.
+   * mark. The second ranking rule (see {@link EventStrengthBasis}); the first
+   * rule when no meet is loaded. Absent for events with no published standard;
+   * see {@link AthleteEventProfile.unrankedEvents}.
    */
   qualityByEvent?: Record<string, number>;
+  /**
+   * The evidence behind the order of `primaryEvents`, for every event in
+   * `bestByEvent`. Optional only so the type stays additive:
+   * `categorizeBestEvents` and `buildEventProfileFromCatalog` always set it.
+   */
+  strengthByEvent?: Record<string, EventStrength>;
+  /**
+   * True when a loaded meet's results ranked the events (rule 1). False when no
+   * meet is loaded, or the loaded meet has no scored field to place a time in.
+   */
+  rankedAgainstMeet?: boolean;
   /**
    * Events held but not rankable: no published standard for this division, or the
    * team's division is unknown. Listed rather than silently ordered last as though

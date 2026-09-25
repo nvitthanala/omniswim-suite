@@ -163,3 +163,22 @@ export {
   toggleSwimEligibility,
   findAthleteInRoster,
 } from './lib/athleteHistory';
+
+/* --- Strongest-event ranking for entry suggestions: place in the loaded meet,
+       then distance to the division cut, then raw seconds. --- */
+export {
+  rankEventsByStrength,
+  rankEventsByQuality,
+  compareEventStrength,
+  catalogEventOrderByStrength,
+  meetPlaceFieldForWorkspace,
+  sameSwimmerPredicate,
+  buildMeetPlaceField,
+  type EventStrengthRanking,
+  type EventStrengthOptions,
+  type EventBestForRanking,
+  type EventQualityRanking,
+  type MeetPlace,
+  type MeetPlaceField,
+  type CatalogEventOrder,
+} from './lib/eventStrength';

@@ -46,6 +46,7 @@ import {
 import { buildWhatIfResults, createPlannedEntry } from './whatIfProjection';
 import { buildCategorizedScoringInputs, calculatePoints } from './utils';
 import type { CatalogTeamRoster } from './rosterCatalog';
+import { catalogEventOrderByStrength, meetPlaceFieldForWorkspace } from './eventStrength';
 
 export type OptimizerStage = 'scorers' | 'events' | 'hypothetical' | 'all';
 
@@ -306,6 +307,8 @@ function teamTotalsForState(
         workspace: { ...ws, menResults: base, womenResults: gender === Gender.WOMEN ? base : [] },
         gender,
         rosterCatalog,
+        // Strongest events fill the cap first, judged against the real meet.
+        eventOrder: catalogEventOrderByStrength({ workspace, gender, team: rosterCatalog.team.name }),
       })
     : base;
   const scored = calculatePoints(results, settings, {
@@ -405,7 +408,12 @@ export function optimizeScorersForTeam(
   const merged = mergeScoringSettings(settings, { conference: workspace.conference });
   const base = buildWhatIfResults({ workspace, gender, removeSeniors });
   const results = rosterCatalog
-    ? buildCategorizedScoringInputs({ workspace, gender, rosterCatalog })
+    ? buildCategorizedScoringInputs({
+        workspace,
+        gender,
+        rosterCatalog,
+        eventOrder: catalogEventOrderByStrength({ workspace, gender, team: rosterCatalog.team.name }),
+      })
     : base;
   const scored = calculatePoints(results, merged, {
     scorerRosterOverrides: workspace.scorerRosterOverrides ?? [],
@@ -537,11 +545,20 @@ export function optimizeEventLineupForTeam(
       : workspace.sourceWomenResults ?? workspace.womenResults;
   const program = meetProgramEvents(sourceResults);
   const allowedEvents = program.size > 0 ? program : null;
+  // Same frozen copy: events rank by the place they would take in the meet.
+  const meetField = meetPlaceFieldForWorkspace(workspace, gender);
 
   for (const athlete of teamAthletes) {
     const profile =
-      buildEventProfileFromCatalog(rosterCatalog, team, gender, athlete.name, merged, allowedEvents) ??
-      getAthleteProfile(workspace, team, gender, athlete.name, merged);
+      buildEventProfileFromCatalog(
+        rosterCatalog,
+        team,
+        gender,
+        athlete.name,
+        merged,
+        allowedEvents,
+        meetField
+      ) ?? getAthleteProfile(workspace, team, gender, athlete.name, merged);
     if (!profile) continue;
     for (const event of profile.primaryEvents) {
       const best = profile.bestByEvent[event];

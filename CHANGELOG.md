@@ -114,6 +114,19 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Changed
 
+- **A swimmer's strongest events are ranked by how well they would do, not
+  by how short the event is.** With a meet loaded, each event ranks by the
+  place the swimmer's best time would take in that meet's results for that
+  event. The swimmer's own swims at that meet are left out of the field.
+  With no meet loaded, each event ranks by how close the time is to the
+  team's division cut. Raw time only breaks a tie, or ranks an event that
+  has no place and no published cut. A time converted from LCM or SCM ranks
+  on its yards equivalent and stays marked as an estimate. This order sets
+  the event list on a roster row, which events an import enters first when
+  a swimmer runs out of entries, and which events the optimizer enters when
+  a conference caps individual events per swimmer. On the 2026 NSISC
+  results, 39 of 88 men and 29 of 78 women get a different top three. A
+  workspace with no meet loaded keeps the order it already had.
 - **Roster event labels are compact and readable.** A swimmer's event list
   used to print the raw meet-result label ("Event 4 Men 1000 Yard
   Freestyle"). It now shows "1000 Free (SCY)". The underlying data is

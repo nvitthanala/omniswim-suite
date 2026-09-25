@@ -39,6 +39,7 @@ import {
   scyConversionProvenance,
 } from './utils';
 import { createPlannedEntry } from './whatIfProjection';
+import { meetPlaceFieldForWorkspace, type MeetPlaceField } from './eventStrength';
 import {
   aliasNameKey,
   buildAliasResolver,
@@ -934,6 +935,8 @@ type ImportContext = {
   rosterNames: string[];
   results: SwimmerResult[];
   programEvents: Set<string> | null;
+  /** The loaded meet's scored fields, so events rank by place there. Null: no meet. */
+  meetField: MeetPlaceField | null;
   classYearOverrides: Map<string, ClassYear>;
   markNewRecruitsAsScorers: boolean;
 };
@@ -969,7 +972,8 @@ function importSwimmerGroup(
     ctx.settings,
     ranked.filter(s => isRelayEventName(s.event)).map(s => s.event),
     undefined,
-    ctx.programEvents
+    ctx.programEvents,
+    ctx.meetField
   );
 
   const counts = countExistingEntries(
@@ -1211,6 +1215,7 @@ export function importHistoryToRoster(
     rosterNames: rosterNamesForTeam(workspace, team, gender),
     results: resultsForGender(workspace, gender),
     programEvents: workspaceProgramEvents(workspace, gender),
+    meetField: meetPlaceFieldForWorkspace(workspace, gender),
     classYearOverrides: buildClassYearOverrideLookup(opts.classYearOverrides),
     markNewRecruitsAsScorers: usesScorerRoster(settings),
   };
