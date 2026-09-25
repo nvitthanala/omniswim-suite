@@ -100,15 +100,17 @@ export default function AnalyticsPage() {
               <tr className="text-theme-muted border-b border-theme-soft">
                 <th className="text-left py-2 pr-4">Swimmer</th>
                 <th className="text-left py-2 pr-4">Event</th>
+                <th className="text-left py-2 pr-4">Course</th>
                 <th className="text-left py-2 pr-4">Best</th>
-                <th className="text-left py-2">Points</th>
+                <th className="text-left py-2">Meets</th>
               </tr>
             </thead>
             <tbody>
               {trends.swimmerTrends.slice(0, 40).map(t => (
-                <tr key={`${t.name}-${t.event}`} className="border-b border-theme-soft/50">
+                <tr key={`${t.name}-${t.event}-${t.course}`} className="border-b border-theme-soft/50">
                   <td className="py-2 pr-4 font-medium">{t.name}</td>
                   <td className="py-2 pr-4 text-theme-muted">{t.event}</td>
+                  <td className="py-2 pr-4 text-theme-muted">{t.course === 'METRIC_UNSPECIFIED' ? 'Meters' : t.course}</td>
                   <td className="py-2 pr-4 font-mono tabular-nums text-[var(--text-accent)]">{t.bestTime}</td>
                   <td className="py-2 text-theme-muted">{t.meetCount}</td>
                 </tr>
