@@ -124,7 +124,9 @@ JSON bridge sets (`isExtractedSplit`, `isUserInputted`) and the
 `swimcloudBadge` a pasted row carries, because every workspace stored before
 2026-09-24 holds pasted rows with the badge and no flag. Any new reader of
 best times must call it rather than re-deriving eligibility from a flag or a
-badge directly. Guarded by `tests/extractedSplitNeverBest.test.ts` and
+badge directly. Given the swim's `event` and `timeType`, it also refuses an
+event its course does not swim (see #16). Guarded by
+`tests/extractedSplitNeverBest.test.ts` and
 `tests/athleteEntriesPastePreviewGuard.test.ts`.
 
 The same module's `swimEventIdentity` is the one key for "is this the same
@@ -179,7 +181,10 @@ yards table as a `converted_estimate`, never a direct verdict. Feeding a
 swim's own course into a table lookup instead of the resolved table course
 was a live bug: `AthleteLineupEditorPanel` once fed an LCM swim's course
 straight into the table parameter, rendering every LCM history row
-"unknown." Guarded by `tests/naiaMeterCourseAsScm.test.ts`.
+"unknown." The stored `computedCut` badge follows the same rule through
+`computedCutInOwnCourse`, and its tooltip through `computedCutTooltip`: both
+read the table in the swim's own course. Guarded by
+`tests/naiaMeterCourseAsScm.test.ts` and `tests/naiaScmComputedCut.test.ts`.
 
 ## 12. A robots.txt exemption is an exact path shape, not a pattern
 
@@ -231,3 +236,34 @@ CI while silently failing every assertion. Use `node:assert/strict` in new test
 scripts. `scripts/run-tests.mjs` now also greps subprocess output for a tripped
 `console.assert` and fails the run if it finds one, as a backstop for scripts
 that still use it.
+
+## 16. An event its course does not swim is never converted or ranked
+
+Yards and short-course meters swim different distances for three freestyle
+events: the yards 500, 1000 and 1650 against the SCM 400, 800 and 1500. So a
+500, 1000 or 1650 Freestyle recorded SCM, or a 400, 800 or 1500 Freestyle
+recorded SCY, names an event that course does not swim. User decision
+(2026-09-24): "there is no such event, the 1000 is never swum in SCM." Before
+2026-09-25 an SCM "1000 Freestyle" took the NCAA "800 meters to 1000 yards"
+factor, which the NCAA prints for an 800 m swim, and ranked like a real yards
+time.
+
+Such a swim is kept and flagged. It is never converted, ranked, cut-tagged or
+entered. `convertToSCY`, `convertSwimToSCY` and `convertSwimToSCYDetailed`
+throw `EventNotSwumInCourseError`; `scyConversionOutcome` returns
+`status: 'event_not_swum_in_course'`; `isRankableSwim` returns false; the cut
+tag state is `event_not_swum_in_course`. A stored recruit row or plan like it
+is left out of the what-if projection and named on the lineup checklist.
+
+The pairs live in `COURSE_DISTANCE_PAIRS`
+(`packages/core/src/lib/courseEvents.ts`), each cited to archived PDFs: the
+NCAA "Short-Course Conversion Factors" rows (`ncaa-d2-men-2026-27` and
+`ncaa-d2-women-2026-27` page 2, `ncaa-d1-2025-26` page 3), and the NAIA
+"500/400 FREESTYLE" and "1650/1500 FREESTYLE" labels (`naia-2026-27`, and
+`naia-2020-21-course-evidence`, which heads the column "SCM"). Two cases are
+never flagged. A swim whose course nobody recorded (no `timeType`, a label
+that states no course, or "meters" with no pool length) is not flagged: the
+SCY default is an assumption, not a record. An LCM swim is not flagged: no
+archived source lists the long-course events. Add a pair or a course only
+with an archived source that states it. Guarded by
+`tests/courseEventMismatch.test.ts`.

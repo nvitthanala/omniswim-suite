@@ -23,7 +23,7 @@ import {
 } from '@omniswim/core/lib/athleteAliases';
 import { divisionForTeamOrNull } from '@omniswim/core/data/teamDivisions';
 import { convertTimeToSeconds } from '@omniswim/core/lib/utils';
-import { getCutlinesForSwim } from '@omniswim/core/lib/cutlineUtils';
+import { computedCutTooltip } from '@omniswim/core/lib/cutlineTags';
 import { Button, TeamSelect, useToast } from '@omniswim/ui';
 import AliasSuggestionsPanel from './AliasSuggestionsPanel';
 import { CLASS_YEAR_OPTIONS, SwimRowTags } from './AthleteHistoryImportPanelParts';
@@ -156,11 +156,9 @@ export default function AthleteHistoryImportPanel({
       if (s.computedCut === 'A' || s.computedCut === 'B') {
         const division = divisionForTeamOrNull(s.team);
         if (division) {
-          const { aCut, bCut } = getCutlinesForSwim(s.gender, s.event, division);
-          const standard = s.computedCut === 'A' ? aCut : bCut;
-          if (standard) {
-            cutTooltip = `Beats NCAA ${division} ${s.computedCut} cut (${standard.time_25_26})`;
-          }
+          // Quote the table in the swim's own course: an NAIA SCM badge was
+          // judged against the NAIA metre standard, not the yards one.
+          cutTooltip = computedCutTooltip(s, division) ?? undefined;
         } else {
           cutTooltip = "This team's division is unknown, so the cut standard shown may not be the right table.";
         }

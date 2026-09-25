@@ -172,6 +172,27 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- **A distance freestyle swim recorded in the wrong course is flagged, not
+  converted.** There is no 1000 Freestyle in short-course meters: that course
+  swims the 800 in its place. An SCM "1000 Freestyle" used to convert to
+  yards with the NCAA's 800-meter factor, then rank, earn a cut badge and
+  become an entry like a real time. Now a 500, 1000 or 1650 Freestyle
+  recorded SCM, and a 400, 800 or 1500 Freestyle recorded SCY, stays in the
+  swimmer's history but is never converted, ranked, cut-tagged or entered.
+  Its cut tag shows "Unknown" with the reason. The import names the swim in
+  a warning. A recruit row or planned entry like it is left out of scoring
+  and listed on the lineup checklist. The pairing comes from the archived
+  NCAA conversion tables and NAIA sheets. Long-course meters is not checked,
+  because no archived source lists its events.
+- **NAIA short-course-meters swims now show their cut badge.** The cut tag
+  already judged an NAIA team's SCM swim against the NAIA meters standard,
+  but the badge stored with pasted history and roster-catalog times skipped
+  every metric swim, so it was missing. Both badges now use the NAIA SCM
+  standard. The import panel's badge tooltip now quotes the standard in the
+  swim's own course, for example "Beats NAIA 2026-2027 automatic standard —
+  22.27 (short-course metres)", instead of a yards time, and no longer
+  reads "NCAA NAIA". Every other metric swim still gets no badge: its
+  converted time is an estimate.
 - **Relay legs no longer get filled from the wrong swim.** A relay leg used
   to match an individual swim by checking whether one event name contained
   another, so a swimmer's 1000 Free could stand in for a 100 split, and a

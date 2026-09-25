@@ -30,6 +30,7 @@ import { buildAliasResolver } from './athleteAliases';
 import { computeVacateRelayLegNames } from './rosterLineupAudit';
 import { mergeScoringSettings } from './scoringDefaults';
 import { buildMeetEventLabelIndex, canonicalProgramEvent } from './eventIdentity';
+import { swimEventNotSwumInCourse } from './courseEvents';
 import {
   canonicalSwimmerName,
   convertSwimToSCYDetailed,
@@ -68,6 +69,17 @@ function planEntryActive(entry: PlannedSwimEntry, activeIds?: string[]): boolean
   if (entry.active === false) return false;
   if (activeIds && activeIds.length > 0) return activeIds.includes(entry.id);
   return true;
+}
+
+/**
+ * A stored recruit row or plan can be scored: its event exists in the course
+ * it is recorded in. A hand-entered "1000 Freestyle" recorded SCM has no SCY
+ * time (no such event is swum in SCM), so it never enters the projection, and
+ * a plan like it never patches a meet row. The row stays stored; the lineup
+ * audit lists it (`event_not_swum_in_course`). See courseEvents.ts.
+ */
+function isScorableStoredRow(row: { event: string; timeType?: 'SCY' | 'SCM' | 'LCM' }): boolean {
+  return swimEventNotSwumInCourse(row) === null;
 }
 
 /**
@@ -414,7 +426,9 @@ export function buildWhatIfProjection({
     : (workspace.recruits ?? [])
         .filter(
           r =>
-            r.gender === gender && passesRosterGates(r.name, r.classYear, excluded, removeSeniors)
+            r.gender === gender &&
+            passesRosterGates(r.name, r.classYear, excluded, removeSeniors) &&
+            isScorableStoredRow(r)
         )
         .map(r => {
           const { time, convertedFrom } = scoredTimeOf(r, r.timeType);
@@ -472,8 +486,8 @@ export function buildWhatIfProjection({
   // a scoring plane, and a gate that reaches only the PDF rows is not a gate.
   const plans = pdfOnly
     ? []
-    : (workspace.meetEntryPlans ?? []).filter(p =>
-        passesRosterGates(p.name, p.classYear, excluded, removeSeniors)
+    : (workspace.meetEntryPlans ?? []).filter(
+        p => passesRosterGates(p.name, p.classYear, excluded, removeSeniors) && isScorableStoredRow(p)
       );
   const activeIds = workspace.activeEntryIds;
   const mode = workspace.entryPlanMode ?? 'overlay';

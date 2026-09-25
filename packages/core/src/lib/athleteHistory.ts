@@ -17,12 +17,15 @@ import {
   type PlannedSwimEntry,
 } from '../types';
 import { divisionForTeamOrNull } from '../data/teamDivisions';
-import { compareTimeToCutline } from './cutlineUtils';
+import {
+  compareTimeToCutline,
+  computedCutInOwnCourse,
+  cutlineTableCourseForSwim,
+} from './cutlineUtils';
 import { mergeScoringSettings } from './scoringDefaults';
 import {
   convertSwimToSCYDetailed,
   convertTimeToSeconds,
-  convertToSCY,
   hasConversionFactorForCourse,
   isDivingEvent,
   isRelayResult,
@@ -31,6 +34,11 @@ import {
   stripEventGenderMarker,
 } from './utils';
 import { parseSwimCloudMultiProfile } from './swimCloudMultiProfile';
+import {
+  findSwimsNotSwumInCourse,
+  swimEventNotSwumInCourse,
+  type EventNotSwumInCourse,
+} from './courseEvents';
 import {
   aliasNameKey,
   buildAliasResolver,
@@ -265,6 +273,10 @@ export function categorizeBestEvents(
     // `isEventOffered` refuses it; a SwimCloud meet import says so only
     // through the flag.
     if (s.isTimeTrial === true) continue;
+    // An event its course does not swim (a 1000 Freestyle recorded SCM, a 400
+    // Freestyle recorded SCY) is in no lane: not a best, not a split, not a
+    // self-reported time. It stays in athleteHistory. See courseEvents.ts.
+    if (swimEventNotSwumInCourse(s)) continue;
     // A metric swim in an event with no published conversion factor cannot be
     // stated in SCY. Skip it rather than let it into the ranking under another
     // event's factor.
@@ -800,6 +812,12 @@ export function detectSwimCloudPasteFormat(text: string): SwimCloudPasteFormat {
  * statement "did not achieve a cut", so a caller rendering that phrase must
  * re-check `divisionForTeamOrNull(team)` (or the lookup status) first rather
  * than reading a null here as a miss.
+ *
+ * A metric swim is judged in its own course when its division publishes a
+ * table there: an NAIA team's SCM swim is judged against the NAIA SCM column
+ * (`computedCutInOwnCourse`). Before 2026-09-25 every metric swim was skipped
+ * here, so an NAIA SCM swim that cleared the NAIA standard carried no badge,
+ * while its cut tag (`buildCutlineTag`) said it did.
  */
 function enrichWithComputedCut(
   swims: HistoricalSwim[],
@@ -811,14 +829,21 @@ function enrichWithComputedCut(
     // An extracted split or a self-reported time is not a result, so it is
     // never judged: no cut, and no miss either. See isRankableSwim.
     if (!isRankableSwim(s)) return { ...s, computedCut: null };
-    // Two swims we hold no standard for: a metric swim (the NCAA publishes SCY
-    // standards only) and any swim whose division did not resolve. Neither may
-    // be given a verdict here; a value the caller arrived with is theirs to keep.
-    if (!div || (s.timeType && s.timeType !== 'SCY')) {
+    const course = s.timeType ?? 'SCY';
+    // Two swims we hold no standard for: a metric swim whose division
+    // publishes no table in its course (every NCAA metric swim, an NAIA LCM
+    // swim), and any swim whose division did not resolve. Neither may be given
+    // a verdict here; a value the caller arrived with is theirs to keep.
+    if (!div || (course !== 'SCY' && cutlineTableCourseForSwim(s.gender, s.event, div, course) !== course)) {
       return { ...s, computedCut: s.computedCut ?? null };
     }
-    const sec = convertTimeToSeconds(convertToSCY(s.time, s.event, s.gender, s.timeType ?? 'SCY'));
-    const { achieved } = compareTimeToCutline(sec, s.gender, s.event, div);
+    const achieved = computedCutInOwnCourse({
+      seconds: convertTimeToSeconds(s.time),
+      gender: s.gender,
+      event: s.event,
+      division: div,
+      swimCourse: course,
+    });
     return { ...s, computedCut: achieved };
   });
 }
@@ -894,6 +919,27 @@ export type RejectedSwimRow = {
   /** Distance read off the label, or `null` if none was readable. */
   distance: number | null;
 };
+
+/**
+ * A pasted row whose event does not exist in its recorded course (a "1000
+ * Free SCM"). The row is kept, unlike an implausible one: the swim may be
+ * real and only mislabelled. It is never ranked, converted or cut-tagged.
+ * See `courseEvents.ts`.
+ */
+export function courseMismatchSwimRowWarning(swim: HistoricalSwim, mismatch: EventNotSwumInCourse): string {
+  return (
+    `Kept, never ranked — ${swim.name}: ${swim.event} ${mismatch.course} ${swim.time}. ` +
+    `There is no ${mismatch.event} in ${mismatch.course}; that course swims the ${mismatch.courseEvent}. ` +
+    `Check the event and course.`
+  );
+}
+
+/** One {@link courseMismatchSwimRowWarning} per kept swim whose event its course does not swim. */
+function courseMismatchWarnings(swims: readonly HistoricalSwim[]): string[] {
+  return findSwimsNotSwumInCourse(swims).map(({ swim, mismatch }) =>
+    courseMismatchSwimRowWarning(swim, mismatch)
+  );
+}
 
 /** Operator-facing text for one rejected row. Names the raw row, never just the count. */
 export function implausibleSwimRowWarning(row: RejectedSwimRow): string {
@@ -1224,6 +1270,7 @@ export function parseSwimCloudPasteDetailed(
     swims = multi.athletes.flatMap(a => a.swims);
     // multi.warnings already carries one implausible-row warning per rejected row.
     warnings.push(...multi.warnings);
+    warnings.push(...courseMismatchWarnings(swims));
     warnings.push(`Multi-profile paste: ${multi.athletes.length} athlete(s) parsed`);
     if (swims.some(s => s.timeType === 'LCM' || s.timeType === 'SCM')) {
       warnings.push('LCM/SCM times included — cut comparison uses SCY conversion where applicable');
@@ -1262,6 +1309,7 @@ export function parseSwimCloudPasteDetailed(
     swims = parsed.swims;
     warnings.push(...parsed.rejected.map(implausibleSwimRowWarning));
   }
+  warnings.push(...courseMismatchWarnings(swims));
 
   if (swims.length === 0) {
     warnings.push('No swim rows parsed — check copy includes the Personal Bests table');

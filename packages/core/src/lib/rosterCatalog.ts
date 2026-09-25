@@ -12,13 +12,14 @@
  */
 import { Gender, NcaaDivision } from '../types';
 import { convertTimeToSeconds, convertToSCY, normalizeSwimmerName } from './utils';
-import { compareTimeToCutline } from './cutlineUtils';
+import { computedCutInOwnCourse } from './cutlineUtils';
 import {
   bestTimeLaneOfStamp,
   isRankableSwimCloudStamp,
   swimEventIdentity,
   type BestTimeLane,
 } from './bestTimeEligibility';
+import { eventNotSwumInCourse } from './courseEvents';
 
 export { bestTimeLaneOfStamp, isRankableSwimCloudStamp } from './bestTimeEligibility';
 
@@ -115,28 +116,42 @@ export function buildStoredSwim(args: {
   const now = Date.now();
   const event = stripCourseSuffix(args.event);
   const sec = convertTimeToSeconds(args.timeText);
+  // An event its course does not swim (a 1000 Free SCM) is kept but never
+  // converted: it has no SCY time, so `timeSecondsScy` holds the same 0 an NT
+  // row holds, and `isRankableCatalogTime` keeps it out of every best.
+  const notSwumInCourse = eventNotSwumInCourse(event, args.timeType);
   // SCM converts with the NCAA table of `args.division`; absent means unknown,
   // which takes the Rules Book table — never the D1 one.
-  const scyText = convertToSCY(args.timeText, event, args.gender as Gender, args.timeType, {
-    division: args.division ?? null,
-  });
-  const secScy = convertTimeToSeconds(scyText);
+  const scyText = notSwumInCourse
+    ? null
+    : convertToSCY(args.timeText, event, args.gender as Gender, args.timeType, {
+        division: args.division ?? null,
+      });
+  const secScy = scyText === null ? Number.NaN : convertTimeToSeconds(scyText);
 
-  // Only a yards swim earns a cut. A converted LCM/SCM time is an estimate
-  // (`converted_estimate` in cutlineTags.ts), so it gets no `computedCut` badge.
-  // Before 2026-09-22 this judged the converted time, and an LCM swim could
-  // show an "A" badge it never earned. `timeType` and `timeText` are kept, so a
-  // reader can still build the indicative comparison with `buildCutlineTag`
-  // and `swimCourse: timeType`.
+  // A swim earns a cut only in its own course, against the recorded time. A
+  // converted LCM/SCM time is an estimate (`converted_estimate` in
+  // cutlineTags.ts), so it gets no `computedCut` badge. Before 2026-09-22 this
+  // judged the converted time, and an LCM swim could show an "A" badge it
+  // never earned. The one metric exception is an NAIA SCM swim, judged
+  // against the NAIA SCM column (since 2026-09-25; `computedCutInOwnCourse`).
+  // `timeType` and `timeText` are kept, so a reader can still build the
+  // indicative comparison with `buildCutlineTag` and `swimCourse: timeType`.
   // A self-reported time or an extracted split (stamp `U`/`X`) is not a result,
   // so it is never judged either.
   const cut =
-    args.timeType === 'SCY' &&
+    !notSwumInCourse &&
     args.division &&
     isRankableSwimCloudStamp(args.swimcloudBadge) &&
-    Number.isFinite(secScy) &&
-    secScy > 0
-      ? compareTimeToCutline(secScy, args.gender as Gender, event, args.division).achieved
+    Number.isFinite(sec) &&
+    sec > 0
+      ? computedCutInOwnCourse({
+          seconds: sec,
+          gender: args.gender,
+          event,
+          division: args.division,
+          swimCourse: args.timeType,
+        })
       : null;
 
   return {
@@ -175,10 +190,24 @@ export function catalogTimeLane(time: Pick<CatalogEventTime, 'swimcloudBadge'>):
 }
 
 /**
+ * A catalog time may be a best: its stamp says it is a result, and its event
+ * exists in its course. A 1000 Free recorded SCM is neither ranked nor listed
+ * in any lane (see `courseEvents.ts`).
+ */
+export function isRankableCatalogTime(
+  time: Pick<CatalogEventTime, 'swimcloudBadge' | 'event' | 'timeType'>
+): boolean {
+  return catalogTimeLane(time) === 'result' && !eventNotSwumInCourse(time.event, time.timeType);
+}
+
+/**
  * The single fastest time (lowest SCY time) per event among the times in one
  * {@link BestTimeLane}. Labels of one event (`'50 Free'`, `'50 Freestyle'`)
  * fold together (see `swimEventIdentity`); the map key is the label of the
  * winning time. A tie keeps the time seen first.
+ *
+ * A time in an event its course does not swim is in no lane: it has no SCY
+ * time to compare.
  */
 export function bestTimesByEventInLane(
   times: CatalogEventTime[],
@@ -188,6 +217,7 @@ export function bestTimesByEventInLane(
   const labelByIdentity = new Map<string, string>();
   for (const t of times) {
     if (catalogTimeLane(t) !== lane) continue;
+    if (eventNotSwumInCourse(t.event, t.timeType)) continue;
     const identity = swimEventIdentity(t.event);
     const heldLabel = labelByIdentity.get(identity);
     const held = heldLabel === undefined ? undefined : map.get(heldLabel);

@@ -25,6 +25,7 @@
  * | program was cut before the season         | `program_discontinued`  | show "unknown" |
  * | school fields no team of that gender      | `gender_not_sponsored`  | show "unknown" |
  * | self-reported time, not a meet result     | `user_inputted`         | show "unknown" |
+ * | event its course does not swim (1000 SCM) | `event_not_swum_in_course` | show "unknown" |
  *
  * Collapsing the bottom rows into "no cut" is the exact silent-empty failure
  * this round exists to eliminate. Use {@link cutlineTagRenderMode} to get the
@@ -95,6 +96,7 @@ import {
   type SwimCourseOfRecord,
 } from './cutlineUtils';
 import { convertTimeToSeconds, formatSecondsToTime, type ScyConversionBasis } from './utils';
+import { eventNotSwumInCourse, type EventNotSwumInCourse } from './courseEvents';
 
 /* -------------------------------------------------------------------------- */
 /* The tag                                                                     */
@@ -178,7 +180,15 @@ export type CutlineTagState =
    * "Extracted"), not swum as a race at this distance. Such a time is never a
    * best, so no standard is applied to it. See `HistoricalSwim.isExtractedSplit`.
    */
-  | 'extracted_split';
+  | 'extracted_split'
+  /**
+   * The swim names an event its recorded course does not swim: a 500, 1000
+   * or 1650 Freestyle recorded SCM, or a 400, 800 or 1500 Freestyle recorded
+   * SCY. User decision (2026-09-24): flag it, never convert it. No standard
+   * applies, so it is neither a cut nor a miss. The result carries
+   * `courseMismatch`; the sources are in `courseEvents.ts`.
+   */
+  | 'event_not_swum_in_course';
 
 /**
  * A converted-time comparison that deliberately falls short of being a cut.
@@ -367,6 +377,12 @@ type CutlineTagResultBase = {
    * a zero-second gap.
    */
   nextTier: CutlineNextTierGap | null;
+  /**
+   * Present only on `state: 'event_not_swum_in_course'`: the event, the
+   * course, the event that course swims in its place, and the sourced pair
+   * that says so.
+   */
+  courseMismatch?: EventNotSwumInCourse;
 };
 
 export type CutlineTagResult = CutlineTagResultBase &
@@ -507,6 +523,37 @@ function buildTitle(
   const { long } = cutlineTierNaming(division, tier);
   const base = `${governingBodyLabel(division)} ${season} ${long} standard — ${standardTime}`;
   return course === DEFAULT_CUTLINE_COURSE ? base : `${base} (${courseLabel(course)})`;
+}
+
+/**
+ * Tooltip for a stored `computedCut` badge (`HistoricalSwim.computedCut`):
+ * the published standard the swim beat, read from the table in the swim's
+ * **own** course, e.g. `Beats NAIA 2026-2027 automatic standard — 3:56.40
+ * (short-course metres)` for an NAIA SCM swim.
+ *
+ * `null` when the swim carries no computed cut, or when no table in its own
+ * course publishes the event (a computed cut never comes from a converted
+ * time, so there is no standard to quote). Before 2026-09-25 the import
+ * panel read the yards table for every swim, so an NAIA SCM badge quoted a
+ * yards time it was never judged against.
+ */
+export function computedCutTooltip(
+  swim: {
+    gender: Gender | string;
+    event: string;
+    timeType?: SwimCourseOfRecord;
+    computedCut?: 'A' | 'B' | null;
+  },
+  division: NcaaDivision
+): string | null {
+  if (swim.computedCut !== 'A' && swim.computedCut !== 'B') return null;
+  const swimCourse = swim.timeType ?? 'SCY';
+  const tableCourse = cutlineTableCourseForSwim(swim.gender, swim.event, division, swimCourse);
+  if (tableCourse !== swimCourse) return null;
+  const lookup = getCutlinesForSwim(swim.gender, swim.event, division, undefined, tableCourse);
+  const standard = swim.computedCut === 'A' ? lookup.aCut : lookup.bCut;
+  if (lookup.status !== 'ok' || !standard || !lookup.season) return null;
+  return `Beats ${buildTitle(division, lookup.season, tableCourse, standard.tier, standard.time)}`;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -807,6 +854,32 @@ export function buildCutlineTag(input: CutlineTagInput): CutlineTagResult {
         'Split taken from a longer swim (SwimCloud "Extracted"), not a race at this distance. No standard is applied to it.',
       program,
       nextTier: null,
+    };
+  }
+
+  // An event the recorded course does not swim (a 1000 Freestyle recorded
+  // SCM) is not judged at all, and does not depend on the division either.
+  // Only a course the swim states counts: the SCY default for a silent label
+  // is an assumption, and an assumption cannot prove an event absent.
+  const courseMismatch = eventNotSwumInCourse(
+    input.event,
+    input.swimCourse ?? courseOfRecordFromEventLabel(input.event)
+  );
+  if (courseMismatch) {
+    return {
+      state: 'event_not_swum_in_course',
+      tag: null,
+      division,
+      season: seasonUnderComparison(division, input.season),
+      ...courseFields,
+      gender,
+      event: courseMismatch.event,
+      swimSeconds,
+      lookupStatus: null,
+      reason: courseMismatch.reason,
+      program,
+      nextTier: null,
+      courseMismatch,
     };
   }
 

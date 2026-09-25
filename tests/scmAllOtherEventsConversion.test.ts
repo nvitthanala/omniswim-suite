@@ -116,7 +116,15 @@ describe('an SCM swim outside CONVERSION_FACTORS takes the "All other events" ro
   });
 
   it('leaves every factor-table key on the row it had before', () => {
+    // Except the yards distance keys. A 500, 1000 or 1650 Freestyle is not
+    // swum in SCM (user decision 2026-09-24, courseEvents.ts), so no SCM row
+    // covers it. See courseEventMismatch.test.ts.
+    const yardsOnly = new Set(['500 Freestyle', '1000 Freestyle', '1650 Freestyle']);
     for (const key of Object.keys(CONVERSION_FACTORS)) {
+      if (yardsOnly.has(key)) {
+        expect(ncaaScmConversionEvent(key), key).toBeNull();
+        continue;
+      }
       expect(ncaaScmConversionEvent(key), key).toStrictEqual({
         factorEvent: key,
         row: ncaaScmConversionRow(key),

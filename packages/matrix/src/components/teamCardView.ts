@@ -65,8 +65,10 @@ export function buildTeamRowCutlineTags(
   }
 
   // A recruit row or plan holding a converted SCY estimate is judged as the
-  // metric swim it came from, so it can reach "indicative" but never a cut
-  // badge. Every other row keeps its caller's time exactly as before.
+  // metric swim it came from: against the yards table it can reach
+  // "indicative" but never a cut badge, while an NAIA team's SCM swim is
+  // judged against the NAIA SCM column and can earn one. Every other row
+  // keeps its caller's time exactly as before.
   const converted = convertedSwimOfRecord(res);
   if (converted) {
     return {

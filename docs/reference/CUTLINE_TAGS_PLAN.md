@@ -519,6 +519,69 @@ skips it, so re-extraction still works. Guarded by
 
 ---
 
+## Part L — Next-round follow-ups (2026-09-25)
+
+Plan: `plans/2026-09-24/01-NEXT-ROUND-PLAN.md`. Progress log:
+`docs/reference/NEXT_ROUND_2026-09-24_STATE.json`.
+
+### Events a course does not swim (item B4)
+
+User decision (2026-09-24): "there is no such event, the 1000 is never swum
+in SCM." A new cut-tag state, **`event_not_swum_in_course`**, covers a swim
+whose event its recorded course does not swim. It renders as `unknown`, with
+the reason as its tooltip, and the result carries `courseMismatch` (the
+event, the course, the event that course swims instead, and the sourced
+pair). It is checked before the division, because the answer does not
+depend on the division. No standard applies: it is neither a cut nor a miss.
+
+The rule rests on one sourced pairing, `COURSE_DISTANCE_PAIRS` in
+`packages/core/src/lib/courseEvents.ts`. No event list is hand-typed. Each
+pair cites the archived PDFs that print it, verbatim:
+
+| Pair | Yards (SCY) | SCM | Printed as (manifest id, page) |
+| --- | --- | --- | --- |
+| `free-500y-400m` | 500 Freestyle | 400 Freestyle | "400 meters to 500 yards" (`ncaa-d2-men-2026-27` p2, `ncaa-d2-women-2026-27` p2, `ncaa-d1-2025-26` p3); "500/400 FREESTYLE" (`naia-2026-27` p1, `naia-2020-21-course-evidence` p1) |
+| `free-1000y-800m` | 1000 Freestyle | 800 Freestyle | "800 meters to 1000 yards" (D2 men's and women's p2); "800 meters to 1,000 yards" (D1 p3). NAIA contests no 1000/800. |
+| `free-1650y-1500m` | 1650 Freestyle | 1500 Freestyle | "1500 meters to 1650 yards" (D2 p2); "1,500 meters to 1,650 yards" (D1 p3); "1650/1500 FREESTYLE" (both NAIA sheets) |
+
+The NCAA table converts "a metric time achieved in a 25-meter racing course"
+to "a 25-yard racing course", so its metric side is SCM. The NAIA 2020-21
+sheet heads its metric column "SCM". The NCAA D1, D2 and D3 25-yard event
+lists corroborate the yards side: none names an individual 400, 800 or 1500
+Freestyle. `tests/courseEventMismatch.test.ts` snapshots every label and
+re-reads each PDF page when `pdftotext` is installed.
+
+What the rule does not cover, because no archived source states it:
+
+- **LCM.** No archived sheet lists the long-course events, so a 1000
+  Freestyle recorded LCM still converts with the indicative
+  `CONVERSION_FACTORS` row. A source such as a USA Swimming long-course
+  time-standards sheet would be needed to flag it.
+- **Other events**, for example a 100 IM or a 50 of stroke in LCM. The
+  championship lists name the events a body contests, not every event that
+  exists in a course, so they cannot prove a negative.
+- **A course nobody recorded.** The SCY default for a silent label is an
+  assumption, and an assumption cannot prove an event absent.
+
+### Computed cut and tooltip for an NAIA SCM swim (item B1)
+
+The cut tag has judged an NAIA team's SCM swim against the NAIA SCM column
+since 2026-09-24 (Part K). The stored `computedCut` badge did not: both of
+its writers, `enrichWithComputedCut` (`athleteHistory.ts`, the paste
+parsers) and `buildStoredSwim` (`rosterCatalog.ts`, the roster catalog),
+skipped every metric swim. Both now call `computedCutInOwnCourse`
+(`cutlineUtils.ts`), which judges the recorded time only in a table of the
+swim's own course (`cutlineTableCourseForSwim`). An NAIA SCM swim gets its
+NAIA verdict; every other metric swim still gets `null`, because its
+converted time is an estimate. The import panel's badge tooltip now comes
+from `computedCutTooltip` (`cutlineTags.ts`), which quotes the standard in
+the swim's own course and names the governing body correctly ("NAIA", not
+"NCAA NAIA"). Guarded by `tests/naiaScmComputedCut.test.ts`, which also
+checks that the badge and the cut tag agree on every row of a real
+swimmer's block.
+
+---
+
 ## Part E — Open risk
 
 The NCAA may republish a PDF at the same URL with revised times (the D1 file

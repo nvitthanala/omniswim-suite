@@ -27,6 +27,7 @@ import {
   normalizeEventLabel,
 } from './athleteHistory';
 import { isRankableSwim, isSameSwimEvent, swimEventIdentity } from './bestTimeEligibility';
+import { findSwimsNotSwumInCourse, type CourseWithSourcedEvents } from './courseEvents';
 import { mergeScoringSettings } from './scoringDefaults';
 import { usesScorerRoster, scorerRosterKey } from './scorerRoster';
 import {
@@ -95,6 +96,39 @@ export type ImportSwimmerPreview = {
   reviewCandidates?: RosterReviewCandidate[];
 };
 
+/**
+ * An incoming swim the import kept in `athleteHistory` but will never rank,
+ * convert or enter: its event does not exist in its recorded course (a 1000
+ * Freestyle recorded SCM). See `courseEvents.ts`.
+ */
+export type ImportCourseMismatchWarning = {
+  name: string;
+  team: string;
+  /** The event as recorded. */
+  event: string;
+  time: string;
+  course: CourseWithSourcedEvents;
+  /** The event that course swims in its place, e.g. `800 Freestyle`. */
+  courseEvent: string;
+  /** Plain-English explanation: the `reason` of the `EventNotSwumInCourse`. */
+  reason: string;
+};
+
+/** One warning per incoming swim whose event does not exist in its course, in input order. */
+export function importCourseMismatchWarnings(
+  swims: readonly HistoricalSwim[]
+): ImportCourseMismatchWarning[] {
+  return findSwimsNotSwumInCourse(swims).map(({ swim, mismatch }) => ({
+    name: swim.name,
+    team: swim.team,
+    event: swim.event,
+    time: swim.time,
+    course: mismatch.course,
+    courseEvent: mismatch.courseEvent,
+    reason: mismatch.reason,
+  }));
+}
+
 export type HistoryImportRosterResult = {
   /** Full workspace patch to apply in one onUpdate. Empty preview → no-op fields match input. */
   patch: Partial<Workspace>;
@@ -103,6 +137,13 @@ export type HistoryImportRosterResult = {
     newRecruits: number;
     lineupEntriesAdded: number;
     swimmers: ImportSwimmerPreview[];
+    /**
+     * Present only when at least one incoming swim names an event its course
+     * does not swim. Each such swim is kept in `athleteHistory` and counted in
+     * `swimsMerged`, but it is never a best, a recruit row or a plan.
+     * {@link formatHistoryImportSummary} states the count.
+     */
+    courseMismatches?: ImportCourseMismatchWarning[];
   };
   /** True when preview was empty or team blank — patch should not be applied (or is identity). */
   noop: boolean;
@@ -1190,6 +1231,10 @@ export function importHistoryToRoster(
     patch.scorerRosterOverrides = acc.overrides;
   }
 
+  // Kept in history (they are merged above), never ranked: said out loud here
+  // so the coach can fix the event or course. See courseEvents.ts.
+  const courseMismatches = importCourseMismatchWarnings(preview);
+
   return {
     noop: false,
     patch,
@@ -1198,9 +1243,13 @@ export function importHistoryToRoster(
       newRecruits: acc.newRecruits,
       lineupEntriesAdded: acc.lineupEntriesAdded,
       swimmers: swimmerPreviews,
+      ...(courseMismatches.length > 0 ? { courseMismatches } : {}),
     },
   };
 }
+
+/** How many mismatches the summary line names before it says "and N more". */
+const COURSE_MISMATCHES_NAMED = 3;
 
 export function formatHistoryImportSummary(summary: HistoryImportRosterResult['summary']): string {
   const parts = [`${summary.swimsMerged} swim(s) merged`];
@@ -1208,5 +1257,17 @@ export function formatHistoryImportSummary(summary: HistoryImportRosterResult['s
   if (summary.lineupEntriesAdded > 0) {
     parts.push(`${summary.lineupEntriesAdded} lineup entr${summary.lineupEntriesAdded === 1 ? 'y' : 'ies'} added`);
   }
-  return parts.join(', ');
+  const line = parts.join(', ');
+  const mismatches = summary.courseMismatches ?? [];
+  if (mismatches.length === 0) return line;
+  const named = mismatches
+    .slice(0, COURSE_MISMATCHES_NAMED)
+    .map(m => `${m.name} ${m.event} ${m.course}`)
+    .join('; ');
+  const more =
+    mismatches.length > COURSE_MISMATCHES_NAMED
+      ? `; and ${mismatches.length - COURSE_MISMATCHES_NAMED} more`
+      : '';
+  const count = mismatches.length === 1 ? '1 swim names' : `${mismatches.length} swims name`;
+  return `${line}. Warning: ${count} an event its course does not swim, so it is kept but never ranked (${named}${more}). Check the event and course.`;
 }

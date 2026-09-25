@@ -34,6 +34,7 @@ import type { AthleteAliasResolver, DuplicateAthletePair } from './athleteAliase
 import { isRelayResult, normalizeSwimmerName } from './utils';
 import { programSponsorsGender, resolveTeamDivision } from '../data/teamDivisions';
 import { buildCutlineTagForTeam, cutlineSwimOfRecord } from './cutlineTags';
+import { swimEventNotSwumInCourse } from './courseEvents';
 
 export type { DuplicateAthletePair } from './athleteAliases';
 export {
@@ -55,7 +56,12 @@ export type LineupIssueType =
   /** This athlete's team is not on record as sponsoring their gender's program. */
   | 'program_gender_unsponsored'
   /** This swim's cut standing rests on a converted-time estimate, not an earned cut. */
-  | 'conversion_estimate';
+  | 'conversion_estimate'
+  /**
+   * A recruit row or plan names an event its recorded course does not swim
+   * (a 1000 Freestyle recorded SCM). It is not scored; see `courseEvents.ts`.
+   */
+  | 'event_not_swum_in_course';
 
 export type LineupAthleteIssue = {
   type: LineupIssueType;
@@ -498,6 +504,37 @@ function auditConversionProvenance(
   }
 }
 
+/**
+ * Recruit rows and plans that name an event their recorded course does not
+ * swim (a hand-entered 1000 Freestyle recorded SCM). The what-if projection
+ * leaves them out, because such a row has no SCY time. Without this item the
+ * row would drop out of the lineup with no word; here it is named, with the
+ * event that course swims in its place.
+ *
+ * Reads the stored rows, not `teamScored`: the projection never holds them.
+ */
+function auditStoredRowCourseMismatches(
+  collector: LineupAuditCollector,
+  opts: { workspace: Workspace; team: string; gender: Gender }
+): void {
+  const { workspace, team, gender } = opts;
+  const rows = [
+    ...(workspace.recruits ?? []).map(r => ({ row: r, kind: 'recruit row' })),
+    ...(workspace.meetEntryPlans ?? []).map(p => ({ row: p, kind: 'planned entry' })),
+  ];
+  for (const { row, kind } of rows) {
+    if (row.gender !== gender || teamFrom(row.team) !== team) continue;
+    const mismatch = swimEventNotSwumInCourse(row);
+    if (!mismatch) continue;
+    collector.pushChecklist({
+      type: 'event_not_swum_in_course',
+      group: 'provenance',
+      message: `${row.name}: the ${kind} ${mismatch.event} ${mismatch.course} is not scored. There is no ${mismatch.event} in ${mismatch.course}; that course swims the ${mismatch.courseEvent}. Check the event and course.`,
+      athleteName: row.name,
+    });
+  }
+}
+
 /** Run the per-athlete checks over every athlete this team's audit covers. */
 function auditRosteredAthletes(
   collector: LineupAuditCollector,
@@ -584,6 +621,7 @@ export function buildTeamLineupAudit(input: LineupAuditInput): TeamLineupAudit {
 
   auditProgramProvenance(collector, { rosterRows: lookup.rows, team, gender });
   auditConversionProvenance(collector, { teamScored, team, gender });
+  auditStoredRowCourseMismatches(collector, { workspace, team, gender });
 
   // Athletes split across two name spellings. A split divides one human's
   // history into two identities: each sits under the entry cap independently,

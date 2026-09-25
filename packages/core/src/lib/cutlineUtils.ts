@@ -35,6 +35,7 @@ import {
   type ScyConversionBasis,
   type ScyConversionOptions,
 } from './utils';
+import { eventNotSwumInCourse } from './courseEvents';
 import {
   courseOfRecordFromEventLabel,
   cutlineEventCategory,
@@ -189,7 +190,9 @@ export function conversionFactorEventKey(canonicalEvent: string): string | null 
  * Convert a metric swim to its yards equivalent for an indicative comparison.
  *
  * Returns `null` when no published conversion factor covers the event — the
- * honest answer, never an estimate. Delegates the arithmetic to the single
+ * honest answer, never an estimate. `null` too for an SCM swim in a yards
+ * distance freestyle event (500, 1000, 1650): no such event is swum in SCM
+ * (`courseEvents.ts`). Delegates the arithmetic to the single
  * existing implementation (`convertSwimToSCYDetailed` in `lib/utils`); there is
  * deliberately no second conversion in this codebase.
  *
@@ -216,6 +219,10 @@ export function scyEquivalentForCutline(
       basis: { method: 'identity', reason: 'recorded_in_scy' },
     };
   }
+  // An event the swim's course does not swim is never converted. The factor
+  // table holds a "1000 Freestyle" key for the yards slot, so this must come
+  // before the key lookup below.
+  if (eventNotSwumInCourse(canonical, swimCourse)) return null;
   // An SCM swim with no factor-table key still converts when the NCAA "All
   // other events" row covers it (user decision, 2026-09-24). LCM has no such
   // row, so an LCM swim outside the table stays unconverted.
@@ -420,6 +427,38 @@ export function cutlineTableCourseForSwim(
   }
   const ownCourse = getCutlinesForSwim(gender, event, division, season, swimCourse);
   return ownCourse.status === 'ok' ? swimCourse : DEFAULT_CUTLINE_COURSE;
+}
+
+/**
+ * The legacy two-tier cut (`computedCut`) a swim earned **in its own
+ * course**, or `null` when no table in that course applies to it.
+ *
+ * - An SCY swim is judged against its division's yards table, as always.
+ * - A metric swim is judged only when its division publishes the event in
+ *   that course ({@link cutlineTableCourseForSwim}). Today that is an NAIA
+ *   SCM swim, against the NAIA column read as SCM
+ *   (`NAIA_2026_27_METERS_AS_SCM`).
+ * - Every other metric swim gets `null`. Its converted time is an estimate,
+ *   and an estimate never earns a cut (`converted_estimate` in
+ *   `cutlineTags.ts`).
+ *
+ * `seconds` is the swim as recorded. It is never a converted time.
+ *
+ * `null` covers "no table in this course" and "missed every tier" alike, as
+ * `computedCut` always has. A caller that must tell them apart uses
+ * `buildCutlineTag`.
+ */
+export function computedCutInOwnCourse(args: {
+  seconds: number;
+  gender: Gender | string;
+  event: string;
+  division: NcaaDivision;
+  swimCourse: SwimCourseOfRecord;
+}): 'A' | 'B' | null {
+  const { seconds, gender, event, division, swimCourse } = args;
+  const tableCourse = cutlineTableCourseForSwim(gender, event, division, swimCourse);
+  if (tableCourse !== swimCourse) return null;
+  return compareTimeToCutline(seconds, gender, event, division, undefined, tableCourse).achieved;
 }
 
 export type CutlineComparison = {

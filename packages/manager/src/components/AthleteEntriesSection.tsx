@@ -236,8 +236,10 @@ export default function AthleteEntriesSection({
       {athletePlans.length > 0 ? (
         <ul className="space-y-1.5 mb-3">
           {athletePlans.map(p => {
-            // A converted entry is judged as the metric swim it came from, so
-            // it can show "indicative" but never a cut badge.
+            // A converted entry is judged as the metric swim it came from:
+            // against the yards table it can show "indicative" but never a
+            // cut badge. An NAIA team's SCM swim is judged against the NAIA
+            // SCM column instead, so it can show a real cut.
             const cutlineResult = buildCutlineTagForTeam({
               gender,
               team: athlete.team,

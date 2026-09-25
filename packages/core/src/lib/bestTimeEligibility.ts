@@ -12,6 +12,8 @@
  *    reads both places the fact can live: the flags the SwimCloud JSON bridge
  *    sets, and the `swimcloudBadge` a pasted row carries. Every workspace
  *    stored before 2026-09-24 holds pasted rows with the badge and no flag.
+ *    A swim in an event its recorded course does not swim (a 1000 Freestyle
+ *    recorded SCM) is not a result either; see `courseEvents.ts`.
  *
  * 2. **Do these two swims compete for the same best?** One event reaches this
  *    app under several labels: `'50 Free SCY'` (SwimCloud JSON),
@@ -30,16 +32,24 @@
 
 import type { HistoricalSwim, SwimCloudBadge } from '../types';
 import { normalizeEventForCutline } from './cutlineEventNames';
+import { swimEventNotSwumInCourse } from './courseEvents';
 
 /* -------------------------------------------------------------------------- */
 /* May this swim be a best?                                                    */
 /* -------------------------------------------------------------------------- */
 
-/** The fields that say whether a swim is a result. */
+/**
+ * The fields that say whether a swim is a result.
+ *
+ * `event` and `timeType` are optional so a caller that holds only the flags
+ * still type-checks. When `event` is present, {@link isRankableSwim} also
+ * refuses an event that does not exist in the swim's recorded course.
+ */
 export type BestTimeProvenance = Pick<
   HistoricalSwim,
   'isExtractedSplit' | 'isUserInputted' | 'swimcloudBadge'
->;
+> &
+  Partial<Pick<HistoricalSwim, 'event' | 'timeType'>>;
 
 /**
  * Where a swim belongs when bests are picked.
@@ -87,9 +97,23 @@ export function bestTimeLane(swim: BestTimeProvenance): BestTimeLane {
  * The swim may be a best: ranked, cut-tagged, entered, projected. False for
  * an extracted split and for a self-reported time. An altitude-adjusted time
  * is still a best.
+ *
+ * Also false for an event that does not exist in the swim's recorded course:
+ * a 1000 Freestyle recorded SCM, a 400 Freestyle recorded SCY (see
+ * `courseEvents.ts`, which cites the sources). Such a row stays stored and
+ * listed; it is never a best. This gate, not only the conversion gate, owns
+ * that rule for two reasons. A yards-side mismatch (400 Freestyle SCY) never
+ * reaches a converter, so a conversion check cannot see it. And every reader
+ * that picks a best already asks this function, so none can miss the rule.
+ * The converters refuse the metric side on their own as well
+ * (`EventNotSwumInCourseError`), so a direct caller cannot convert one either.
+ *
+ * A caller that passes no `event` gets the flag-only answer, as before.
  */
 export function isRankableSwim(swim: BestTimeProvenance): boolean {
-  return bestTimeLane(swim) === 'result';
+  if (bestTimeLane(swim) !== 'result') return false;
+  if (swim.event === undefined) return true;
+  return swimEventNotSwumInCourse({ event: swim.event, timeType: swim.timeType }) === null;
 }
 
 /* -------------------------------------------------------------------------- */

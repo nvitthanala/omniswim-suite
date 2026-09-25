@@ -37,6 +37,12 @@ import { divisionForTeamOrNull } from '../data/teamDivisions';
 // Dependency-free by design — see the module header there. Importing
 // `cutlineUtils` here instead would create a cycle (it imports this file).
 import { normalizeEventForCutline } from './cutlineEventNames';
+// A leaf module (types + cutlineEventNames only), so no cycle.
+import {
+  eventNotSwumInCourse,
+  EventNotSwumInCourseError,
+  type EventNotSwumInCourse,
+} from './courseEvents';
 import { effectivePdfPlacePointsMode, mergeScoringSettings } from './scoringDefaults';
 import {
   buildSyntheticLegSplitDetail,
@@ -74,6 +80,23 @@ export {
   resolveTeamColorKey,
   scoreTeamColorKeyMatch,
 } from './teamColorLookup';
+
+// Re-exported beside the converters that raise it. `courseEvents.ts` is the home.
+export {
+  COURSE_DISTANCE_PAIRS,
+  eventNotSwumInCourse,
+  EventNotSwumInCourseError,
+  findSwimsNotSwumInCourse,
+  recordedCourseOfSwim,
+  swimEventNotSwumInCourse,
+  type CourseDistancePair,
+  type CourseDistancePairId,
+  type CourseDistanceSourceDocument,
+  type CourseWithSourcedEvents,
+  type EventNotSwumInCourse,
+  type RecordedSwim,
+  type SwimNotSwumInCourse,
+} from './courseEvents';
 
 /** Curated secondary accents where many programs share the same primary in data. */
 const MANUAL_TEAM_SECONDARY: Record<string, string> = {
@@ -451,10 +474,16 @@ export type NcaaScmConversionEvent = {
  * The NCAA SCM row an SCM swim in `event` converts with, or `null` when the
  * NCAA table covers nothing about it (a relay, a dive, a label with no stroke).
  *
+ * `null` too for a yards distance freestyle event (500, 1000, 1650): no such
+ * event is swum in SCM. The table's distance rows name the metric swim ("800
+ * meters to 1000 yards"), so a "1000 Freestyle" recorded SCM is not covered
+ * by any row. User decision, 2026-09-24; see `courseEvents.ts`.
+ *
  * SCM only. No governing body publishes an LCM factor, so an LCM swim outside
  * `CONVERSION_FACTORS` stays unconverted: absent, not guessed.
  */
 export function ncaaScmConversionEvent(event: string): NcaaScmConversionEvent | null {
+  if (eventNotSwumInCourse(stripRelaySplitSuffix(String(event ?? '')), 'SCM')) return null;
   const key = resolveConversionFactorKey(event);
   if (key) return { factorEvent: key, row: ncaaScmConversionRow(key), coverage: 'factor_table' };
   const individual = individualSwimEventForScm(event);
@@ -465,9 +494,12 @@ export function ncaaScmConversionEvent(event: string): NcaaScmConversionEvent | 
 /**
  * True when a swim in `event`, recorded in `course`, can be stated in SCY.
  *
- * - `SCY` — always: the time is already yards.
+ * - `SCY` — always: the time is already yards. (A 400 Freestyle recorded SCY
+ *   names no yards event, but nothing is converted; `isRankableSwim` keeps it
+ *   out of every ranking.)
  * - `SCM` — when the NCAA SCM table covers the event, including through its
- *   "All other events" row (see {@link ncaaScmConversionEvent}).
+ *   "All other events" row (see {@link ncaaScmConversionEvent}). Never for a
+ *   500, 1000 or 1650 Freestyle: no such event is swum in SCM.
  * - `LCM` — only when `CONVERSION_FACTORS` covers the event.
  *
  * A relay in a metric course is `false`: no relay factor is published. The
@@ -667,6 +699,11 @@ function convertTimeWithBasis(
     );
 
   if (type === 'SCM') {
+    // A yards distance (500, 1000, 1650 Freestyle) is not swum in SCM. It is
+    // refused by name, never converted: the "800 meters to 1000 yards" row is
+    // for an 800 m swim. See courseEvents.ts.
+    const mismatch = eventNotSwumInCourse(baseEvent, 'SCM');
+    if (mismatch) throw new EventNotSwumInCourseError(mismatch);
     // The NCAA table covers every individual event: three distance rows, then
     // "All other events". A 100 IM or a 25 takes that last row by its wording.
     const scm = ncaaScmConversionEvent(baseEvent);
@@ -725,7 +762,10 @@ function convertTimeWithBasis(
  *   takes the table's "All other events" row — see {@link ncaaScmConversionEvent}.
  *
  * Throws when no published factor covers the event: every LCM event outside
- * `CONVERSION_FACTORS`, and every SCM relay, dive or unreadable label.
+ * `CONVERSION_FACTORS`, and every SCM relay, dive or unreadable label. Throws
+ * {@link EventNotSwumInCourseError} for a 500, 1000 or 1650 Freestyle recorded
+ * SCM: no such event is swum in SCM, so it is never converted. Use
+ * {@link scyConversionOutcome} to get either refusal as a value.
  */
 export function convertToSCY(
   timeStr: string,
@@ -808,7 +848,8 @@ export function convertSwimToSCY(
 /**
  * {@link convertSwimToSCY}, plus the basis of the conversion: which factor,
  * which NCAA table and why. Same event and time as `convertSwimToSCY` for the
- * same arguments. Throws when no published factor covers the event.
+ * same arguments. Throws when no published factor covers the event, and
+ * {@link EventNotSwumInCourseError} for an event SCM does not swim.
  */
 export function convertSwimToSCYDetailed(
   event: string,
@@ -839,6 +880,54 @@ export function convertSwimToSCYDetailed(
     time: converted.time,
     sourceCourse: timeType,
     basis: converted.basis,
+  };
+}
+
+/**
+ * What {@link scyConversionOutcome} found. Only `converted` carries a time.
+ *
+ * - `converted` — the swim is stated in SCY: `conversion` is exactly what
+ *   {@link convertSwimToSCYDetailed} returns (an SCY swim and a relay come
+ *   back unchanged, with an `identity` basis).
+ * - `event_not_swum_in_course` — the event does not exist in the recorded
+ *   course: a 500, 1000 or 1650 Freestyle recorded SCM, or a 400, 800 or
+ *   1500 Freestyle recorded SCY. Absent: never converted, never a time. See
+ *   `courseEvents.ts` for the sources.
+ * - `no_published_factor` — a metric swim no published factor covers (an LCM
+ *   100 IM, a dive, a label with no stroke). Absent, as before.
+ */
+export type ScyConversionOutcome =
+  | { status: 'converted'; conversion: ScyConversion }
+  | { status: 'event_not_swum_in_course'; mismatch: EventNotSwumInCourse }
+  | { status: 'no_published_factor'; event: string; sourceCourse: 'LCM' | 'SCM' };
+
+/**
+ * A swim stated in SCY, or the reason it cannot be. Never throws on either
+ * refusal: this is the explicit-outcome form of
+ * {@link convertSwimToSCYDetailed}, with the same arguments.
+ *
+ * Checks the recorded course of `timeType` only. A caller holding a stored row
+ * whose `timeType` may be absent resolves the course first (see
+ * `recordedCourseOfSwim`).
+ */
+export function scyConversionOutcome(
+  event: string,
+  time: string,
+  gender: Gender,
+  timeType: 'SCY' | 'SCM' | 'LCM',
+  options?: ScyConversionOptions
+): ScyConversionOutcome {
+  const relay = /\brelay\b/i.test(event);
+  if (!relay) {
+    const mismatch = eventNotSwumInCourse(stripRelaySplitSuffix(event), timeType);
+    if (mismatch) return { status: 'event_not_swum_in_course', mismatch };
+    if (timeType !== 'SCY' && !hasConversionFactorForCourse(event, timeType)) {
+      return { status: 'no_published_factor', event, sourceCourse: timeType };
+    }
+  }
+  return {
+    status: 'converted',
+    conversion: convertSwimToSCYDetailed(event, time, gender, timeType, options),
   };
 }
 
@@ -2966,12 +3055,14 @@ export function buildCategorizedScoringInputs(
     if (athlete.gender !== (args.gender === Gender.WOMEN ? 'Women' : 'Men')) continue;
     // Cap to top-N best times per swimmer by SCY ΓÇö keeps within entry limits.
     // Only a result is scored: a self-reported time or an extracted split
-    // (stamp `U`/`X`) is never an entry. One row per event: the fastest.
+    // (stamp `U`/`X`) is never an entry. Nor is an event its course does not
+    // swim (a 1000 Free SCM): it has no SCY time. One row per event: the fastest.
     const eligibleTimes = fastestCatalogTimePerEvent(
       athlete.times
         .filter(t => t.isEligible)
         .filter(t => !t.event.toLowerCase().includes('relay'))
         .filter(t => isRankableSwimCloudStamp(t.swimcloudBadge))
+        .filter(t => !eventNotSwumInCourse(t.event, t.timeType))
     )
       .sort((a, b) => a.timeSecondsScy - b.timeSecondsScy)
       .slice(0, indCap);

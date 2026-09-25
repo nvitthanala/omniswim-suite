@@ -19,7 +19,13 @@ import {
   suggestBestRelayLegFill,
   upsertRelayLegOverride,
 } from '@omniswim/core/lib/relayLegMatching';
-import { canonicalSwimmerName, convertToSCY, isRelayResult, normalizeSwimmerName } from '@omniswim/core/lib/utils';
+import {
+  canonicalSwimmerName,
+  convertToSCY,
+  isRelayResult,
+  normalizeSwimmerName,
+  swimEventNotSwumInCourse,
+} from '@omniswim/core/lib/utils';
 import { passesRosterGates } from '@omniswim/core/lib/whatIfProjection';
 import {
   buildRelaysFromIndividualLineup,
@@ -106,6 +112,10 @@ export default function IndRelayManagementView({
 
     const recruitResults: SwimmerResult[] = (workspace.recruits ?? [])
       .filter(r => r.gender === gender && passesGates(r.name, r.classYear))
+      // An event the recorded course does not swim (e.g. a 1000 Freestyle
+      // recorded SCM) has no SCY equivalent, and convertToSCY throws on it.
+      // Such a row never enters a relay pool; the lineup checklist names it.
+      .filter(r => swimEventNotSwumInCourse(r) === null)
       .map(r => ({
         id: r.id,
         rank: 0,

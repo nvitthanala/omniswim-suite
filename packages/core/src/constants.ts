@@ -189,6 +189,13 @@ export const NCAA_SCM_CONVERSION_TABLES: Readonly<
  * (500/1000/1650) are the SCY slots those metric swims convert into; they sat
  * on the same distance factor in the old `both_scm` column, and they stay on
  * the same row here so no existing lookup changes row.
+ *
+ * Since 2026-09-25 no SCM conversion reaches a yards key. A 500, 1000 or 1650
+ * Freestyle recorded SCM names an event SCM does not swim (user decision,
+ * 2026-09-24; sources in `lib/courseEvents.ts`), so `convertToSCY` refuses it
+ * with `EventNotSwumInCourseError` before any row is read. Before that date a
+ * "1000 Freestyle" recorded SCM took `free800To1000`, a factor the NCAA
+ * prints for an 800 m swim.
  */
 export const NCAA_SCM_DISTANCE_ROWS: Readonly<Record<string, NcaaScmConversionRow>> = {
   '400 Freestyle': 'free400To500',

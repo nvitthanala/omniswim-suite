@@ -41,6 +41,7 @@ import {
 } from '../../types';
 import { buildMeetEventLabelIndex, canonicalProgramEvent } from '../eventIdentity';
 import { isUserInputtedSwim } from '../athleteHistory';
+import { swimEventNotSwumInCourse } from '../courseEvents';
 import { effectivePdfPlacePointsMode } from '../scoringDefaults';
 import { buildScorerRosterLookup, usesScorerRoster, type ScorerRosterLookup } from '../scorerRoster';
 import {
@@ -189,6 +190,9 @@ export function* convertedHistorySwims(
     // An extracted split IS projected, because a relay leg may fall back on it;
     // every best-picking caller drops it with `isRankableSwim`.
     if (isUserInputtedSwim(s)) continue;
+    // An event its course does not swim (a 1000 Free SCM) has no SCY
+    // equivalent and is no relay-leg time either. See courseEvents.ts.
+    if (swimEventNotSwumInCourse(s)) continue;
     const timeType = s.timeType ?? 'SCY';
     // No published factor → the swim has no SCY equivalent: diving, and an LCM
     // swim outside CONVERSION_FACTORS (an LCM 25 or 100 IM). An SCM 25 or 100 IM
@@ -353,8 +357,12 @@ export function buildEventTimeIndex(
     if (isRelayResult(r) || r.isExhibition || r.isTimeTrial) continue;
     push(r.event, r.name, convertTimeToSeconds(r.time));
   }
+  // A stored row in an event its course does not swim (a hand-entered 1000
+  // Freestyle SCM recruit) has no SCY time and is no competitor. Skipped, not
+  // converted: the converter would refuse it.
   for (const p of workspace.meetEntryPlans ?? []) {
     if (p.gender !== gender || !planIsActive(p, workspace.activeEntryIds)) continue;
+    if (swimEventNotSwumInCourse(p)) continue;
     push(
       p.event,
       p.name,
@@ -365,6 +373,7 @@ export function buildEventTimeIndex(
   }
   for (const rec of workspace.recruits ?? []) {
     if (rec.gender !== gender) continue;
+    if (swimEventNotSwumInCourse(rec)) continue;
     push(
       rec.event,
       rec.name,

@@ -21,11 +21,19 @@
  */
 import assert from 'node:assert/strict';
 import { CONVERSION_FACTORS } from '../packages/core/src/constants.ts';
-import { hasConversionFactor, convertToSCY, convertTimeToSeconds } from '../packages/core/src/lib/utils.ts';
+import {
+  hasConversionFactor,
+  convertToSCY,
+  convertTimeToSeconds,
+  EventNotSwumInCourseError,
+} from '../packages/core/src/lib/utils.ts';
 import { normalizeEventLabel } from '../packages/core/src/lib/athleteHistory.ts';
 import { Gender } from '../packages/core/src/types.ts';
 
 const KEYS = Object.keys(CONVERSION_FACTORS);
+
+/** The yards slots of the distance pairs: keyed for LCM, never an SCM event. */
+const YARDS_ONLY_KEYS = new Set(['500 Freestyle', '1000 Freestyle', '1650 Freestyle']);
 
 // --- 1. Every key is reachable under its canonical label --------------------
 {
@@ -71,6 +79,17 @@ const KEYS = Object.keys(CONVERSION_FACTORS);
     // `convertToSCY` refuses to borrow another event's factor.
     for (const gender of [Gender.MEN, Gender.WOMEN]) {
       for (const course of ['LCM', 'SCM']) {
+        // A yards distance key (500/1000/1650 Freestyle) names no SCM event
+        // (user decision 2026-09-24, courseEvents.ts). It must raise the
+        // typed refusal, never convert. Its LCM row still converts.
+        if (course === 'SCM' && YARDS_ONLY_KEYS.has(canonical)) {
+          assert.throws(
+            () => convertToSCY('1:00.00', canonical, gender, course),
+            err => err instanceof EventNotSwumInCourseError,
+            `converting SCM "${canonical}" must raise EventNotSwumInCourseError`
+          );
+          continue;
+        }
         assert.doesNotThrow(
           () => convertToSCY('1:00.00', canonical, gender, course),
           `converting ${course} "${canonical}" (${gender}) must find a published factor`
