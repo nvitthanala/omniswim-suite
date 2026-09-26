@@ -63,6 +63,31 @@ function genderResultsField(gender: Gender): 'menResults' | 'womenResults' {
   return gender === Gender.MEN ? 'menResults' : 'womenResults';
 }
 
+/**
+ * Append one freshly-built plan entry as an active what-if plan — the shared
+ * step behind `addPlannedEntry` and `editCreditedSwim` (which appends a
+ * `replacesResultId` plan the same way). When the workspace uses an explicit
+ * `activeEntryIds` allowlist (non-empty) the new id is added so the plan
+ * reads as active there too; with an empty/absent allowlist, the plan's own
+ * `active: true` flag governs.
+ */
+function appendActivePlanPatch(
+  workspace: Workspace,
+  entry: PlannedSwimEntry
+): { patch: Partial<Workspace>; inverse: Partial<Workspace> } {
+  const basePlans = workspace.meetEntryPlans ?? [];
+  const patch: Partial<Workspace> = { meetEntryPlans: [...basePlans, entry] };
+  const inverse: Partial<Workspace> = { meetEntryPlans: basePlans };
+
+  const baseActiveIds = workspace.activeEntryIds;
+  if (baseActiveIds && baseActiveIds.length > 0) {
+    patch.activeEntryIds = [...baseActiveIds, entry.id];
+    inverse.activeEntryIds = baseActiveIds;
+  }
+
+  return { patch, inverse };
+}
+
 // --- 1. planned entries -----------------------------------------------------
 
 export type AddPlannedEntryInput = {
@@ -97,16 +122,7 @@ export function addPlannedEntry(
     active: true,
   });
 
-  const basePlans = workspace.meetEntryPlans ?? [];
-  const patch: Partial<Workspace> = { meetEntryPlans: [...basePlans, entry] };
-  const inverse: Partial<Workspace> = { meetEntryPlans: basePlans };
-
-  const baseActiveIds = workspace.activeEntryIds;
-  if (baseActiveIds && baseActiveIds.length > 0) {
-    patch.activeEntryIds = [...baseActiveIds, entry.id];
-    inverse.activeEntryIds = baseActiveIds;
-  }
-
+  const { patch, inverse } = appendActivePlanPatch(workspace, entry);
   return { patch, inverse, description: `Add ${input.name}: ${input.event} (${input.time})` };
 }
 
@@ -356,16 +372,7 @@ export function editCreditedSwim(
     replacesResultId: resultRowId,
   });
 
-  const basePlans = workspace.meetEntryPlans ?? [];
-  const patch: Partial<Workspace> = { meetEntryPlans: [...basePlans, entry] };
-  const inverse: Partial<Workspace> = { meetEntryPlans: basePlans };
-
-  const baseActiveIds = workspace.activeEntryIds;
-  if (baseActiveIds && baseActiveIds.length > 0) {
-    patch.activeEntryIds = [...baseActiveIds, entry.id];
-    inverse.activeEntryIds = baseActiveIds;
-  }
-
+  const { patch, inverse } = appendActivePlanPatch(workspace, entry);
   return { patch, inverse, description: `Edit credited swim ${row.name}: ${row.event}` };
 }
 

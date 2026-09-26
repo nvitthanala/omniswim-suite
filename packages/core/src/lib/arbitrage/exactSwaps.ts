@@ -29,9 +29,8 @@ import {
   buildFastSwapContext,
   collectDroppableEntries,
   conversionConfidence,
-  distinctIndividualResultTeams,
   effectiveBestIndex,
-  fieldNotMeaningfulReason,
+  fieldMeaningfulnessGuard,
   teamTotal,
   type CrossCourseTable,
   type DroppableEntry,
@@ -250,12 +249,12 @@ export function rankExactSwaps(
   });
 
   const results = gender === Gender.MEN ? workspace.menResults ?? [] : workspace.womenResults ?? [];
-  const teamsWithResults = distinctIndividualResultTeams(results, gender);
+  const notMeaningfulReason = fieldMeaningfulnessGuard(results, gender);
 
-  if (teamsWithResults.size < 2) {
+  if (notMeaningfulReason) {
     return {
       pointsMeaningful: false,
-      reason: fieldNotMeaningfulReason(teamsWithResults, gender),
+      reason: notMeaningfulReason,
       swaps: [],
       candidatesEvaluated: 0,
     };

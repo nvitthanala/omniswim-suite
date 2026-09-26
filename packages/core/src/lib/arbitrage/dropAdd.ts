@@ -29,15 +29,16 @@ import {
   buildFastSwapContext,
   collectDroppableEntries,
   conversionConfidence,
-  distinctIndividualResultTeams,
   effectiveBestIndex,
-  fieldNotMeaningfulReason,
+  fieldMeaningfulnessGuard,
   scoreWorkspaceRows,
   sumTeamPoints,
   type CrossCourseTable,
   type DroppableEntry,
+  type EffectiveBestRef,
   type EntryConfidence,
   type EventTimeRef,
+  type FastSwapContext,
 } from './shared';
 
 // --- drop-only / add-only analysis ------------------------------------------
@@ -291,11 +292,11 @@ export function rankDropOnly(workspace: Workspace, opts: DropOnlyOptions): DropO
   });
 
   const results = gender === Gender.MEN ? workspace.menResults ?? [] : workspace.womenResults ?? [];
-  const teamsWithResults = distinctIndividualResultTeams(results, gender);
-  if (teamsWithResults.size < 2) {
+  const notMeaningfulReason = fieldMeaningfulnessGuard(results, gender);
+  if (notMeaningfulReason) {
     return {
       pointsMeaningful: false,
-      reason: fieldNotMeaningfulReason(teamsWithResults, gender),
+      reason: notMeaningfulReason,
       drops: [],
       candidatesEvaluated: 0,
     };
@@ -380,6 +381,123 @@ export function rankDropOnly(workspace: Workspace, opts: DropOnlyOptions): DropO
  * row applies as one active optimizer plan (applyEntryAdd). Positive only,
  * sorted descending; converted-time rows are confidence-tagged.
  */
+/** The one classYear carried by any of an athlete's current droppable entries, if any. */
+function classYearFromDroppableEntries(
+  dropInfo: { display: string; byEvent: Map<string, DroppableEntry> } | undefined
+): string | undefined {
+  if (!dropInfo) return undefined;
+  for (const e of dropInfo.byEvent.values()) {
+    if (e.classYear) return e.classYear;
+  }
+  return undefined;
+}
+
+/** One athlete's add-only candidacy: their open (not-yet-entered) events, gated by entry caps — or `null` to skip them. */
+type AddCandidateAthlete = {
+  display: string;
+  openEvents: string[];
+  classYear: string | undefined;
+};
+
+function resolveAddCandidateAthlete(
+  bests: Map<string, EffectiveBestRef>,
+  display: string | undefined,
+  dropInfo: { display: string; byEvent: Map<string, DroppableEntry> } | undefined,
+  teamRows: SwimmerResult[],
+  team: string,
+  gender: Gender,
+  merged: ScoringSettings
+): AddCandidateAthlete | null {
+  if (!display) return null;
+
+  const entered = dropInfo?.byEvent ?? new Map<string, DroppableEntry>();
+  const openEvents = [...bests.keys()].filter(ev => !entered.has(ev));
+  if (openEvents.length === 0) return null;
+
+  // Entry caps over the CURRENT scored what-if rows (plans + results +
+  // recruits + relay legs) — an at-cap swimmer gets no add suggestions.
+  const counts = countSwimmerEntries(teamRows, team, gender, display);
+  if (!canAcceptAnotherEntry(counts, merged, openEvents[0])) return null;
+
+  return { display, openEvents, classYear: classYearFromDroppableEntries(dropInfo) };
+}
+
+/** Effective (cap-void-aware) team total after adding one candidate entry — fast path first, full re-score otherwise. */
+function computeAddEffectiveTotal(
+  workspace: Workspace,
+  newEntry: PlannedSwimEntry,
+  fastCtx: FastSwapContext | null,
+  team: string,
+  gender: Gender,
+  merged: ScoringSettings
+): { newTotal: number; newEffective: number } {
+  const fastTotal = fastCtx ? fastCtx.addOnlyTotalFor(newEntry) : null;
+  if (fastTotal != null) {
+    // fastCtx only exists when baseVoids.total === 0; the add is cap-gated,
+    // so it cannot create a violation — effective equals engine.
+    return { newTotal: fastTotal, newEffective: fastTotal };
+  }
+  const modWs: Workspace = { ...workspace, ...entryAddPatch(workspace, newEntry).patch };
+  const scoredMod = scoreWorkspaceRows(modWs, gender, merged);
+  const newTotal = sumTeamPoints(scoredMod, team, gender);
+  const newEffective = newTotal - computeCapVoids(scoredMod, team, gender, merged).total;
+  return { newTotal, newEffective };
+}
+
+/** Add-only rows for ONE athlete's open events — one row per event with a positive effective delta. */
+function buildAddOnlyRowsForAthlete(
+  workspace: Workspace,
+  candidate: AddCandidateAthlete,
+  bests: Map<string, EffectiveBestRef>,
+  fastCtx: FastSwapContext | null,
+  team: string,
+  gender: Gender,
+  merged: ScoringSettings,
+  baseEffective: number,
+  baseTotalRounded: number
+): { rows: AddOnlyRow[]; candidatesEvaluated: number } {
+  const { display, openEvents, classYear } = candidate;
+  const rows: AddOnlyRow[] = [];
+  let candidatesEvaluated = 0;
+
+  for (const addEvent of openEvents) {
+    const best = bests.get(addEvent)!;
+    candidatesEvaluated += 1;
+
+    const newEntry = createPlannedEntry({
+      name: display,
+      team,
+      gender,
+      classYear,
+      event: addEvent,
+      time: best.time,
+      timeType: 'SCY',
+      source: 'optimizer',
+      active: true,
+    });
+
+    const { newTotal, newEffective } = computeAddEffectiveTotal(workspace, newEntry, fastCtx, team, gender, merged);
+
+    const deltaPoints = Number((newEffective - baseEffective).toFixed(3));
+    if (deltaPoints <= 0) continue;
+
+    rows.push({
+      athlete: display,
+      addEvent,
+      addTime: best.time,
+      addTimeStale: best.stale ? true : undefined,
+      addTimeConverted: best.converted ? true : undefined,
+      ...(best.convertedFrom ? { addTimeConvertedFrom: best.convertedFrom } : {}),
+      classYear,
+      deltaPoints,
+      newTotal: Number(newTotal.toFixed(3)),
+      baseTotal: baseTotalRounded,
+    });
+  }
+
+  return { rows, candidatesEvaluated };
+}
+
 export function rankAddOnly(workspace: Workspace, opts: AddOnlyOptions): AddOnlyRanking {
   const team = opts.team.trim();
   const gender = opts.gender;
@@ -388,11 +506,11 @@ export function rankAddOnly(workspace: Workspace, opts: AddOnlyOptions): AddOnly
   });
 
   const results = gender === Gender.MEN ? workspace.menResults ?? [] : workspace.womenResults ?? [];
-  const teamsWithResults = distinctIndividualResultTeams(results, gender);
-  if (teamsWithResults.size < 2) {
+  const notMeaningfulReason = fieldMeaningfulnessGuard(results, gender);
+  if (notMeaningfulReason) {
     return {
       pointsMeaningful: false,
-      reason: fieldNotMeaningfulReason(teamsWithResults, gender),
+      reason: notMeaningfulReason,
       adds: [],
       candidatesEvaluated: 0,
     };
@@ -429,74 +547,30 @@ export function rankAddOnly(workspace: Workspace, opts: AddOnlyOptions): AddOnly
   let candidatesEvaluated = 0;
 
   for (const [athleteKey, bests] of bestIndex) {
-    const display = displayByKey.get(athleteKey);
-    if (!display) continue;
+    const candidate = resolveAddCandidateAthlete(
+      bests,
+      displayByKey.get(athleteKey),
+      droppableByAthlete.get(athleteKey),
+      teamRows,
+      team,
+      gender,
+      merged
+    );
+    if (!candidate) continue;
 
-    const dropInfo = droppableByAthlete.get(athleteKey);
-    const entered = dropInfo?.byEvent ?? new Map<string, DroppableEntry>();
-    const openEvents = [...bests.keys()].filter(ev => !entered.has(ev));
-    if (openEvents.length === 0) continue;
-
-    // Entry caps over the CURRENT scored what-if rows (plans + results +
-    // recruits + relay legs) — an at-cap swimmer gets no add suggestions.
-    const counts = countSwimmerEntries(teamRows, team, gender, display);
-    if (!canAcceptAnotherEntry(counts, merged, openEvents[0])) continue;
-
-    let classYear: string | undefined;
-    if (dropInfo) {
-      for (const e of dropInfo.byEvent.values()) {
-        if (e.classYear) {
-          classYear = e.classYear;
-          break;
-        }
-      }
-    }
-
-    for (const addEvent of openEvents) {
-      const best = bests.get(addEvent)!;
-      candidatesEvaluated += 1;
-
-      const newEntry = createPlannedEntry({
-        name: display,
-        team,
-        gender,
-        classYear,
-        event: addEvent,
-        time: best.time,
-        timeType: 'SCY',
-        source: 'optimizer',
-        active: true,
-      });
-
-      let newTotal = fastCtx ? fastCtx.addOnlyTotalFor(newEntry) : null;
-      let newEffective: number;
-      if (newTotal == null) {
-        const modWs: Workspace = { ...workspace, ...entryAddPatch(workspace, newEntry).patch };
-        const scoredMod = scoreWorkspaceRows(modWs, gender, merged);
-        newTotal = sumTeamPoints(scoredMod, team, gender);
-        newEffective = newTotal - computeCapVoids(scoredMod, team, gender, merged).total;
-      } else {
-        // fastCtx only exists when baseVoids.total === 0; the add is cap-gated,
-        // so it cannot create a violation — effective equals engine.
-        newEffective = newTotal;
-      }
-
-      const deltaPoints = Number((newEffective - baseEffective).toFixed(3));
-      if (deltaPoints <= 0) continue;
-
-      rows.push({
-        athlete: display,
-        addEvent,
-        addTime: best.time,
-        addTimeStale: best.stale ? true : undefined,
-        addTimeConverted: best.converted ? true : undefined,
-        ...(best.convertedFrom ? { addTimeConvertedFrom: best.convertedFrom } : {}),
-        classYear,
-        deltaPoints,
-        newTotal: Number(newTotal.toFixed(3)),
-        baseTotal: baseTotalRounded,
-      });
-    }
+    const forAthlete = buildAddOnlyRowsForAthlete(
+      workspace,
+      candidate,
+      bests,
+      fastCtx,
+      team,
+      gender,
+      merged,
+      baseEffective,
+      baseTotalRounded
+    );
+    rows.push(...forAthlete.rows);
+    candidatesEvaluated += forAthlete.candidatesEvaluated;
   }
 
   rows.sort((a, b) => b.deltaPoints - a.deltaPoints);

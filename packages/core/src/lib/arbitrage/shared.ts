@@ -478,6 +478,22 @@ export function distinctIndividualResultTeams(
   return teams;
 }
 
+/**
+ * The shared "field not meaningful" early-out for `rankDropOnly`, `rankAddOnly`
+ * and `rankExactSwaps`: with fewer than two teams carrying individual results,
+ * point deltas are not meaningful and enumeration never starts. Returns the
+ * reason string to report when that is the case, `null` when the field is
+ * meaningful and the caller should proceed.
+ */
+export function fieldMeaningfulnessGuard(
+  results: SwimmerResult[],
+  gender: Gender
+): string | null {
+  const teamsWithResults = distinctIndividualResultTeams(results, gender);
+  if (teamsWithResults.size >= 2) return null;
+  return fieldNotMeaningfulReason(teamsWithResults, gender);
+}
+
 // --- droppable current entries ----------------------------------------------
 
 /** One currently-entered individual entry an athlete could drop in a 1-for-1 swap. */
@@ -780,6 +796,119 @@ function roundTierSortForSweep(roundSwam: string | undefined): number {
 }
 
 /**
+ * Gate: unsupported scoring regimes fall back wholesale to a full re-score.
+ * `cap` is threaded in rather than recomputed so the caller can reuse the
+ * same value the sweep is built against.
+ */
+function isFastSwapRegimeSupported(
+  workspace: Workspace,
+  merged: ScoringSettings,
+  hint: SwimmerResult[],
+  cap: number
+): boolean {
+  if (effectivePdfPlacePointsMode(merged, hint)) return false;
+  if (merged.relayEligibleFromScorerPool === true) return false;
+  if ((workspace.entryPlanMode ?? 'overlay') === 'plan_sheet') return false;
+  // pdf_only excludes the added optimizer plan from scoring; the incremental add
+  // model assumes the added row scores, so fall back to a full re-score.
+  if ((workspace.scoringView ?? 'merged') === 'pdf_only') return false;
+  const capBinds = cap < 999;
+  if (capBinds && merged.scorerCapScope !== 'meet') return false;
+  return true;
+}
+
+/**
+ * A shadowed row would resurface when its shadower is dropped.
+ * `buildWhatIfProjection` collapses one athlete's duplicate entries in an
+ * event down to the most explicit plane, so a plan can be hiding a recruit
+ * row for the same event. The incremental model here prices a DROP as
+ * "remove this row's points from its event group" — it has no way to know
+ * the hidden row comes back, and would under-count the drop. Fail closed:
+ * the caller's full re-score rebuilds the projection and gets it right.
+ */
+function hasShadowedRowForTeam(collapsed: SwimmerResult[], team: string, gender: Gender): boolean {
+  return collapsed.some(r => String(r.team ?? '').trim() === team && (r.gender === gender || r.gender == null));
+}
+
+/** Team individual/relay point totals from a fully scored result set. */
+function sumTeamPointsBySwimType(
+  scored: SwimmerResult[],
+  isTeam: (r: SwimmerResult) => boolean
+): { individual: number; relay: number } {
+  let individual = 0;
+  let relay = 0;
+  for (const r of scored) {
+    if (!isTeam(r)) continue;
+    if (isRelayResult(r)) relay += Number(r.points ?? 0);
+    else individual += Number(r.points ?? 0);
+  }
+  return { individual, relay };
+}
+
+/**
+ * Event insertion order exactly as `calculatePoints` sees it: non-recruit
+ * rows first, then recruit rows, deduped; then sorted by meet order (stable).
+ * `seen` is returned too — callers below re-use it to tell an already-seen
+ * event apart from a brand-new canonical add-event.
+ */
+function buildFastSwapEventOrder(R: SwimmerResult[]): { eventsOrder: string[]; seen: Set<string> } {
+  const insertionOrder: string[] = [];
+  const seen = new Set<string>();
+  for (const r of R) {
+    if (r.isRecruit) continue;
+    if (!seen.has(r.event)) {
+      seen.add(r.event);
+      insertionOrder.push(r.event);
+    }
+  }
+  for (const r of R) {
+    if (!r.isRecruit) continue;
+    if (!seen.has(r.event)) {
+      seen.add(r.event);
+      insertionOrder.push(r.event);
+    }
+  }
+  return { eventsOrder: sortEventsByMeetOrder(insertionOrder), seen };
+}
+
+/** The team's own individual rows from no-pool scoring, grouped per event. */
+function groupNoPoolTeamRowsByEvent(
+  npScored: SwimmerResult[],
+  isTeam: (r: SwimmerResult) => boolean
+): Map<string, SwimmerResult[]> {
+  const npTeamByEvent = new Map<string, SwimmerResult[]>();
+  for (const r of npScored) {
+    if (isRelayResult(r) || !isTeam(r)) continue;
+    if (!npTeamByEvent.has(r.event)) npTeamByEvent.set(r.event, []);
+    npTeamByEvent.get(r.event)!.push(r);
+  }
+  return npTeamByEvent;
+}
+
+/** Baseline team pool-sweep groups per event, from the no-pool scoring. */
+function buildBaseGroupsByEvent(
+  npTeamByEvent: Map<string, SwimmerResult[]>,
+  diverPattern: string[] | undefined,
+  diverWeight: number
+): Map<string, TeamScoreGroup[]> {
+  const baseGroupsByEvent = new Map<string, TeamScoreGroup[]>();
+  for (const [ev, rows] of npTeamByEvent) {
+    baseGroupsByEvent.set(ev, buildTeamGroupsForEvent(rows, ev, diverPattern, diverWeight));
+  }
+  return baseGroupsByEvent;
+}
+
+/** All projected rows grouped by event — fast subset assembly for a drop/add candidate. */
+function groupRowsByEvent(R: SwimmerResult[]): Map<string, SwimmerResult[]> {
+  const rRowsByEvent = new Map<string, SwimmerResult[]>();
+  for (const r of R) {
+    if (!rRowsByEvent.has(r.event)) rRowsByEvent.set(r.event, []);
+    rRowsByEvent.get(r.event)!.push(r);
+  }
+  return rRowsByEvent;
+}
+
+/**
  * Build the fast (incremental) swap scorer for a workspace/gender/team, or null
  * when the regime is unsupported (falls back to full re-score). See the
  * invariance analysis above.
@@ -791,16 +920,8 @@ export function buildFastSwapContext(
   merged: ScoringSettings,
   hint: SwimmerResult[]
 ): FastSwapContext | null {
-  // --- gate: unsupported scoring regimes fall back wholesale.
-  if (effectivePdfPlacePointsMode(merged, hint)) return null;
-  if (merged.relayEligibleFromScorerPool === true) return null;
-  if ((workspace.entryPlanMode ?? 'overlay') === 'plan_sheet') return null;
-  // pdf_only excludes the added optimizer plan from scoring; the incremental add
-  // model assumes the added row scores, so fall back to a full re-score.
-  if ((workspace.scoringView ?? 'merged') === 'pdf_only') return null;
   const cap = merged.maxIndividualScorersPerTeam ?? 999;
-  const capBinds = cap < 999;
-  if (capBinds && merged.scorerCapScope !== 'meet') return null;
+  if (!isFastSwapRegimeSupported(workspace, merged, hint, cap)) return null;
 
   const overrides = workspace.scorerRosterOverrides ?? [];
   const diverWeight = merged.diverScorerWeight ?? 1;
@@ -824,19 +945,7 @@ export function buildFastSwapContext(
   const projection = buildWhatIfProjection({ workspace, gender, removeSeniors: false });
 
   // --- gate: a shadowed row would resurface when its shadower is dropped.
-  // buildWhatIfProjection collapses one athlete's duplicate entries in an event
-  // down to the most explicit plane, so a plan can be hiding a recruit row for
-  // the same event. The incremental model here prices a DROP as "remove this
-  // row's points from its event group" — it has no way to know the hidden row
-  // comes back, and would under-count the drop. Fail closed: the caller's full
-  // re-score rebuilds the projection and gets it right.
-  if (
-    projection.collapsed.some(
-      r => String(r.team ?? '').trim() === team && (r.gender === gender || r.gender == null)
-    )
-  ) {
-    return null;
-  }
+  if (hasShadowedRowForTeam(projection.collapsed, team, gender)) return null;
 
   const R = projectRanksInField(projection.rows);
   const realScored = calculatePoints(R, merged, {
@@ -847,13 +956,7 @@ export function buildFastSwapContext(
 
   const isTeam = (r: SwimmerResult) =>
     String(r.team ?? '').trim() === team && (r.gender === gender || r.gender == null);
-  let realIndivT = 0;
-  let baseRelayT = 0;
-  for (const r of realScored) {
-    if (!isTeam(r)) continue;
-    if (isRelayResult(r)) baseRelayT += Number(r.points ?? 0);
-    else realIndivT += Number(r.points ?? 0);
-  }
+  const { individual: realIndivT, relay: baseRelayT } = sumTeamPointsBySwimType(realScored, isTeam);
 
   // No-pool scoring => per-row "points if the pool allowed it". conference is
   // dropped so the NSISC merge cannot re-force the meet cap we just lifted.
@@ -868,37 +971,11 @@ export function buildFastSwapContext(
     resultsForPdfHint: hint,
   });
 
-  // Event insertion order exactly as calculatePoints sees it: non-recruit rows
-  // first, then recruit rows, deduped; then sorted by meet order (stable).
-  const insertionOrder: string[] = [];
-  const seen = new Set<string>();
-  for (const r of R) {
-    if (r.isRecruit) continue;
-    if (!seen.has(r.event)) {
-      seen.add(r.event);
-      insertionOrder.push(r.event);
-    }
-  }
-  for (const r of R) {
-    if (!r.isRecruit) continue;
-    if (!seen.has(r.event)) {
-      seen.add(r.event);
-      insertionOrder.push(r.event);
-    }
-  }
-  const eventsOrder = sortEventsByMeetOrder(insertionOrder);
+  const { eventsOrder, seen } = buildFastSwapEventOrder(R);
 
   // Baseline team groups per event, from the no-pool scoring.
-  const npTeamByEvent = new Map<string, SwimmerResult[]>();
-  for (const r of npScored) {
-    if (isRelayResult(r) || !isTeam(r)) continue;
-    if (!npTeamByEvent.has(r.event)) npTeamByEvent.set(r.event, []);
-    npTeamByEvent.get(r.event)!.push(r);
-  }
-  const baseGroupsByEvent = new Map<string, TeamScoreGroup[]>();
-  for (const [ev, rows] of npTeamByEvent) {
-    baseGroupsByEvent.set(ev, buildTeamGroupsForEvent(rows, ev, diverPattern, diverWeight));
-  }
+  const npTeamByEvent = groupNoPoolTeamRowsByEvent(npScored, isTeam);
+  const baseGroupsByEvent = buildBaseGroupsByEvent(npTeamByEvent, diverPattern, diverWeight);
 
   // SELF-VALIDATION: the sweep must reproduce the real baseline exactly.
   // This is the only gate that can silently disable the fast path on a regime
@@ -920,11 +997,7 @@ export function buildFastSwapContext(
 
   // Rows grouped by event for fast subset assembly, and the roster lookup for
   // the X-eligibility gate + override pinning.
-  const rRowsByEvent = new Map<string, SwimmerResult[]>();
-  for (const r of R) {
-    if (!rRowsByEvent.has(r.event)) rRowsByEvent.set(r.event, []);
-    rRowsByEvent.get(r.event)!.push(r);
-  }
+  const rRowsByEvent = groupRowsByEvent(R);
   const rById = new Map(R.map(r => [r.id, r]));
   const rosterLookup: ScorerRosterLookup = buildScorerRosterLookup(R, merged, overrides);
   const rosterMode = usesScorerRoster(merged);

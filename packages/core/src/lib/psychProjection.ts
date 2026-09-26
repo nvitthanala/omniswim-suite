@@ -5,10 +5,10 @@
  * Placement-based psych-sheet projection: rank psych seed times per event,
  * assign expected placement points, compare to actual baseline scoring.
  */
-import { Gender, ScoringSettings, SwimmerResult, TeamScore, Workspace } from '../types';
+import { Gender, ScoringSettings, SwimmerResult, Workspace } from '../types';
 import { mergeScoringSettings } from './scoringDefaults';
-import { computeVisibleEvents } from './eventIdentity';
 import type { ScoringBundle } from './scoringEngine';
+import { buildProjectedScoringBundle, gatherBaselineScoredByEntry } from './scoringBundleAggregation';
 import {
   entryKey,
   pointsForPrelimsSeedRank,
@@ -18,14 +18,10 @@ import {
 } from './prelimsProjection';
 import {
   convertTimeToSeconds,
-  formatEventChartAxisLabel,
-  getTeamColors,
   isRelayResult,
   isScoringSwimTime,
   looksLikeInstitutionTeamName,
   parseRankInt,
-  sortEventsByMeetOrder,
-  stripEventGenderMarker,
 } from './utils';
 import { matchMeetTeamName } from '../data/teamAliases';
 
@@ -135,17 +131,6 @@ export function buildPsychExpectedRows(
   return out;
 }
 
-function gatherBaselineScoredByEntry(baselineScored: SwimmerResult[]): Map<string, SwimmerResult[]> {
-  const byKey = new Map<string, SwimmerResult[]>();
-  for (const r of baselineScored) {
-    if (r.isExhibition || r.isTimeTrial) continue;
-    const key = entryKey(r);
-    if (!byKey.has(key)) byKey.set(key, []);
-    byKey.get(key)!.push(r);
-  }
-  return byKey;
-}
-
 function baselineActualPointsForEntry(rows: SwimmerResult[], key: string): number {
   const relayKey = key.endsWith('|relay');
   if (relayKey) {
@@ -217,7 +202,7 @@ export function buildPsychOverUnderByEntryKey(
 
   const actualByKey = new Map<string, number>();
   const actualByEventName = new Map<string, number>();
-  for (const [key, rows] of gatherBaselineScoredByEntry(baselineScored)) {
+  for (const [key, rows] of gatherBaselineScoredByEntry(baselineScored, entryKey)) {
     const pts = baselineActualPointsForEntry(rows, key);
     actualByKey.set(key, pts);
     const eventNameKey = entryKeyEventName(key);
@@ -245,74 +230,6 @@ export function psychExpectedForResult(
   return lookup.get(entryKey(r))?.expected;
 }
 
-function aggregateBundle(allResults: SwimmerResult[], allScored: SwimmerResult[]): ScoringBundle {
-  const scoredById = new Map(allScored.map(r => [r.id, r]));
-  const events = sortEventsByMeetOrder(Array.from(new Set(allResults.map(r => r.event))));
-
-  const teamsMap: Record<string, TeamScore> = {};
-  const timelineData: Record<string, unknown>[] = [];
-  const runningTotals: Record<string, number> = {};
-
-  events.forEach(event => {
-    const eventResults = allResults.filter(r => r.event === event);
-    const isTimeTrial = eventResults.some(r => r.isTimeTrial);
-    const scored = eventResults.map(r => scoredById.get(r.id) ?? { ...r, points: 0 });
-
-    scored.forEach(res => {
-      const tName = String(res.name ?? '')
-        .trim()
-        .toLowerCase();
-      const tTeam = String(res.team ?? '')
-        .trim()
-        .toLowerCase();
-      if (tName && tTeam === tName && !looksLikeInstitutionTeamName(res.team)) {
-        return;
-      }
-      const teamKey = String(res.team ?? 'Unknown').trim() || 'Unknown';
-      if (!teamsMap[teamKey]) {
-        teamsMap[teamKey] = {
-          teamName: teamKey,
-          totalPoints: 0,
-          swimmers: [],
-          color: getTeamColors(teamKey).primary,
-        };
-        runningTotals[teamKey] = 0;
-      }
-      const pts = typeof res.points === 'number' ? res.points : 0;
-      teamsMap[teamKey].totalPoints += pts;
-      teamsMap[teamKey].swimmers.push(res);
-      runningTotals[teamKey] += pts;
-    });
-
-    if (!isTimeTrial) {
-      const timelinePoint: Record<string, unknown> = {
-        name: formatEventChartAxisLabel(event, { maxLength: 24 }),
-        fullEvent: stripEventGenderMarker(event),
-      };
-      Object.keys(runningTotals).forEach(team => {
-        timelinePoint[team] = runningTotals[team];
-      });
-      if (Object.keys(runningTotals).length > 0) {
-        timelineData.push(timelinePoint);
-      }
-    }
-  });
-
-  const sortedTeams = Object.values(teamsMap).sort((a, b) => b.totalPoints - a.totalPoints);
-  const teamStyleSignature = sortedTeams
-    .map(t => `${t.teamName}:${t.totalPoints}:${t.color}`)
-    .join('|');
-
-  return {
-    allResults,
-    allScored,
-    events,
-    visibleEvents: computeVisibleEvents(events, allResults, allResults, {}),
-    sortedTeams,
-    timelineData,
-    teamStyleSignature,
-  };
-}
 
 export type PsychProjectedOptions = {
   workspace: Workspace;
@@ -352,7 +269,7 @@ export function buildPsychProjectedBundle({
   const meetRows = [...(workspace.menResults ?? []), ...(workspace.womenResults ?? [])];
   const alignedPsych = alignPsychResultsToMeetTeams(currentResults, meetRows);
   const expectedRows = buildPsychExpectedRows(alignedPsych, scoringSettings);
-  return aggregateBundle(expectedRows, expectedRows);
+  return buildProjectedScoringBundle(expectedRows, expectedRows);
 }
 
 export type PsychDeltaTimelinePoint = PrelimsDeltaTimelinePoint;

@@ -14,7 +14,7 @@ import type {
   TagPressResult,
   TagPreview,
 } from './types';
-import { enteredDistanceForLength } from './segment';
+import { enteredDistanceForLength, type LengthSegment, type RaceSegments } from './segment';
 
 function problem(
   code: ProblemCode,
@@ -199,42 +199,61 @@ export function createTagStateMachine(config: RaceConfig, initialTags: readonly 
   };
 }
 
-export function validateRaceTags(config: RaceConfig, tags: readonly RaceTag[]): Problem[] {
-  const problems: Problem[] = [];
+/** `LENGTH_COUNT_MISMATCH`: raceDistance/pool length must match strokePerLength's own length. */
+function checkLengthCountMismatch(config: RaceConfig): Problem[] {
   const computedLengthCount = raceLengthCount(config);
   if (!Number.isInteger(computedLengthCount) || Math.round(computedLengthCount) !== config.strokePerLength.length) {
-    problems.push(
+    return [
       problem(
         'LENGTH_COUNT_MISMATCH',
         'error',
         'raceDistance divided by pool length must match strokePerLength length',
       ),
-    );
+    ];
   }
+  return [];
+}
 
+/** `FIFTEEN_METRE_UNAVAILABLE`: SCY has no confirmed metric reference for the 15 m mark. */
+function checkFifteenMetreAvailability(config: RaceConfig): Problem[] {
   if (config.course === 'SCY' && !config.fifteenMetreReferenceConfirmed) {
-    problems.push(
+    return [
       problem(
         'FIFTEEN_METRE_UNAVAILABLE',
         'info',
         '15 m metrics are unavailable for SCY without a confirmed metric reference',
       ),
-    );
+    ];
   }
+  return [];
+}
 
+/** `NON_MONOTONIC_TAGS`: tag times must not decrease by input order. */
+function checkMonotonicTags(tags: readonly RaceTag[]): Problem[] {
   for (let index = 1; index < tags.length; index += 1) {
     if (tags[index].time < tags[index - 1].time) {
-      problems.push(problem('NON_MONOTONIC_TAGS', 'error', 'tag times must be monotonic by input order'));
-      break;
+      return [problem('NON_MONOTONIC_TAGS', 'error', 'tag times must be monotonic by input order')];
     }
   }
+  return [];
+}
 
-  const segments = buildRaceSegments(config, tags);
+/** `LENGTHS_UNRESOLVED`: `buildRaceSegments` could not re-derive missing length indexes. */
+function checkLengthsResolved(segments: RaceSegments): Problem[] {
   if (!segments.lengthsResolved) {
-    problems.push(problem('LENGTHS_UNRESOLVED', 'error', 'length indexes cannot be re-derived from non-monotonic tag times'));
+    return [
+      problem('LENGTHS_UNRESOLVED', 'error', 'length indexes cannot be re-derived from non-monotonic tag times'),
+    ];
   }
+  return [];
+}
 
-  const resolvedTags = segments.allTags;
+/** `MISSING_START` / `MISSING_FINISH` / `FINISH_BEFORE_LAST_LENGTH`, plus the resolved start/finish tags for later checks. */
+function checkStartAndFinish(
+  resolvedTags: readonly RaceTag[],
+  segments: RaceSegments,
+): { problems: Problem[]; start: RaceTag | undefined; finish: RaceTag | undefined } {
+  const problems: Problem[] = [];
   const start = firstTag(resolvedTags, 'Start');
   const finish = firstTag(resolvedTags, 'Finish');
   if (start === undefined) {
@@ -247,6 +266,16 @@ export function validateRaceTags(config: RaceConfig, tags: readonly RaceTag[]): 
     problems.push(problem('FINISH_BEFORE_LAST_LENGTH', 'error', 'finish must be on the final length', finish.lengthIndex));
   }
 
+  return { problems, start, finish };
+}
+
+/** `FLAGS_NOT_ON_FINAL_LENGTH` / `FLAGS_AFTER_FINISH` for every Flags tag. */
+function checkFlags(
+  resolvedTags: readonly RaceTag[],
+  segments: RaceSegments,
+  finish: RaceTag | undefined,
+): Problem[] {
+  const problems: Problem[] = [];
   const flags = tagsOfKind(resolvedTags, 'Flags');
   for (const flag of flags) {
     if (flag.lengthIndex !== segments.lengthCount) {
@@ -256,71 +285,90 @@ export function validateRaceTags(config: RaceConfig, tags: readonly RaceTag[]): 
       problems.push(problem('FLAGS_AFTER_FINISH', 'error', 'flags tag must occur before finish', flag.lengthIndex));
     }
   }
+  return problems;
+}
 
-  for (const length of segments.lengths) {
-    const breakout = firstTag(length.tags, 'Breakout');
-    if (breakout === undefined) {
-      problems.push(problem('MISSING_BREAKOUT', 'warning', 'breakout tag is required for length metrics', length.lengthIndex));
+/**
+ * Every per-length check for one length segment: `MISSING_BREAKOUT`,
+ * `INSUFFICIENT_STROKE_TAGS`, `STROKE_BEFORE_BREAKOUT`, `KICK_OUTSIDE_UNDERWATER`
+ * (in-window variant), `TURN_ON_LAST_LENGTH`, `UNPAIRED_TURN` and
+ * `BREAKOUT_EXCEEDS_15M`.
+ */
+function checkOneLength(
+  length: LengthSegment,
+  config: RaceConfig,
+  segments: RaceSegments,
+  start: RaceTag | undefined,
+): Problem[] {
+  const problems: Problem[] = [];
+  const breakout = firstTag(length.tags, 'Breakout');
+  if (breakout === undefined) {
+    problems.push(problem('MISSING_BREAKOUT', 'warning', 'breakout tag is required for length metrics', length.lengthIndex));
+  }
+
+  const strokes = tagsOfKind(length.tags, 'Stroke');
+  if (strokes.length < 2) {
+    problems.push(problem('INSUFFICIENT_STROKE_TAGS', 'info', 'at least two stroke tags are required for stroke rate', length.lengthIndex));
+  }
+
+  if (breakout !== undefined) {
+    const strokeBeforeBreakout = strokes.find((stroke) => stroke.time < breakout.time);
+    if (strokeBeforeBreakout !== undefined) {
+      problems.push(problem('STROKE_BEFORE_BREAKOUT', 'warning', 'stroke tag occurs before breakout', length.lengthIndex));
     }
+  }
 
-    const strokes = tagsOfKind(length.tags, 'Stroke');
-    if (strokes.length < 2) {
-      problems.push(problem('INSUFFICIENT_STROKE_TAGS', 'info', 'at least two stroke tags are required for stroke rate', length.lengthIndex));
-    }
-
-    if (breakout !== undefined) {
-      const strokeBeforeBreakout = strokes.find((stroke) => stroke.time < breakout.time);
-      if (strokeBeforeBreakout !== undefined) {
-        problems.push(problem('STROKE_BEFORE_BREAKOUT', 'warning', 'stroke tag occurs before breakout', length.lengthIndex));
-      }
-    }
-
-    const lengthStart =
-      length.lengthIndex === 1
-        ? start
-        : firstTag(
-            segments.lengths.find((candidate) => candidate.lengthIndex === length.lengthIndex - 1)?.tags ?? [],
-            'TurnEnd',
-          );
-    for (const kick of tagsOfKind(length.tags, 'Kick')) {
-      if (lengthStart === undefined || breakout === undefined || kick.time < lengthStart.time || kick.time > breakout.time) {
-        problems.push(
-          problem(
-            'KICK_OUTSIDE_UNDERWATER',
-            'warning',
-            'kick tag must lie between the length start boundary and breakout',
-            length.lengthIndex,
-          ),
+  const lengthStart =
+    length.lengthIndex === 1
+      ? start
+      : firstTag(
+          segments.lengths.find((candidate) => candidate.lengthIndex === length.lengthIndex - 1)?.tags ?? [],
+          'TurnEnd',
         );
-      }
-    }
-
-    const turnStarts = tagsOfKind(length.tags, 'TurnStart');
-    const turnEnds = tagsOfKind(length.tags, 'TurnEnd');
-    if (length.lengthIndex === segments.lengthCount && (turnStarts.length > 0 || turnEnds.length > 0)) {
-      problems.push(problem('TURN_ON_LAST_LENGTH', 'warning', 'turn tags are not expected on the final length', length.lengthIndex));
-    }
-
-    if (length.lengthIndex < segments.lengthCount && turnStarts.length !== turnEnds.length) {
-      problems.push(problem('UNPAIRED_TURN', 'warning', 'turn start and turn end tags are not paired', length.lengthIndex));
-    }
-
-    const breakoutDistance = enteredDistanceForLength(config, length.lengthIndex);
-    if (
-      breakoutDistance !== undefined &&
-      courseDistanceToMetres(breakoutDistance, config.course) > UNDERWATER_LEGAL_LIMIT_METRES
-    ) {
+  for (const kick of tagsOfKind(length.tags, 'Kick')) {
+    if (lengthStart === undefined || breakout === undefined || kick.time < lengthStart.time || kick.time > breakout.time) {
       problems.push(
         problem(
-          'BREAKOUT_EXCEEDS_15M',
+          'KICK_OUTSIDE_UNDERWATER',
           'warning',
-          'entered breakout distance exceeds the legal 15 m underwater limit',
+          'kick tag must lie between the length start boundary and breakout',
           length.lengthIndex,
         ),
       );
     }
   }
 
+  const turnStarts = tagsOfKind(length.tags, 'TurnStart');
+  const turnEnds = tagsOfKind(length.tags, 'TurnEnd');
+  if (length.lengthIndex === segments.lengthCount && (turnStarts.length > 0 || turnEnds.length > 0)) {
+    problems.push(problem('TURN_ON_LAST_LENGTH', 'warning', 'turn tags are not expected on the final length', length.lengthIndex));
+  }
+
+  if (length.lengthIndex < segments.lengthCount && turnStarts.length !== turnEnds.length) {
+    problems.push(problem('UNPAIRED_TURN', 'warning', 'turn start and turn end tags are not paired', length.lengthIndex));
+  }
+
+  const breakoutDistance = enteredDistanceForLength(config, length.lengthIndex);
+  if (
+    breakoutDistance !== undefined &&
+    courseDistanceToMetres(breakoutDistance, config.course) > UNDERWATER_LEGAL_LIMIT_METRES
+  ) {
+    problems.push(
+      problem(
+        'BREAKOUT_EXCEEDS_15M',
+        'warning',
+        'entered breakout distance exceeds the legal 15 m underwater limit',
+        length.lengthIndex,
+      ),
+    );
+  }
+
+  return problems;
+}
+
+/** `KICK_OUTSIDE_UNDERWATER` for a kick tagged on a length index no configured segment covers. */
+function checkKicksOutsideConfiguredLengths(resolvedTags: readonly RaceTag[], segments: RaceSegments): Problem[] {
+  const problems: Problem[] = [];
   for (const kick of tagsOfKind(resolvedTags, 'Kick')) {
     if (!segments.lengths.some((length) => length.lengthIndex === kick.lengthIndex)) {
       problems.push(
@@ -333,8 +381,24 @@ export function validateRaceTags(config: RaceConfig, tags: readonly RaceTag[]): 
       );
     }
   }
-
   return problems;
+}
+
+export function validateRaceTags(config: RaceConfig, tags: readonly RaceTag[]): Problem[] {
+  const segments = buildRaceSegments(config, tags);
+  const resolvedTags = segments.allTags;
+  const { problems: startAndFinishProblems, start, finish } = checkStartAndFinish(resolvedTags, segments);
+
+  return [
+    ...checkLengthCountMismatch(config),
+    ...checkFifteenMetreAvailability(config),
+    ...checkMonotonicTags(tags),
+    ...checkLengthsResolved(segments),
+    ...startAndFinishProblems,
+    ...checkFlags(resolvedTags, segments, finish),
+    ...segments.lengths.flatMap((length) => checkOneLength(length, config, segments, start)),
+    ...checkKicksOutsideConfiguredLengths(resolvedTags, segments),
+  ];
 }
 
 export function proposeStandardImStrokeOrder(lengthCount: number): import('./types').ImProposal {

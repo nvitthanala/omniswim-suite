@@ -755,245 +755,266 @@ function genderNotSponsoredReason(
   return `${program.team} does not sponsor ${gender.toLowerCase()}’s swimming & diving — ${instead}, so there is no program for this swim to be judged against.`;
 }
 
-export function buildCutlineTag(input: CutlineTagInput): CutlineTagResult {
-  const gender = normalizeGender(input.gender);
-  const swimCourse = resolveSwimCourse(input);
-  const division = input.division ?? null;
-  // `tableCourse` is the new, unambiguous name; `course` is the legacy field and
-  // still wins nothing over it. With neither, the swim is judged in its own
-  // course when its division publishes the event in that course (an NAIA SCM
-  // swim), and against yards otherwise. Both fields are reported back so old
-  // readers keep working.
-  const tableCourse =
-    input.tableCourse ??
-    input.course ??
-    cutlineTableCourseForSwim(gender, input.event, division, swimCourse, input.season);
-  assertTableCourse(tableCourse);
-  const courseFields = { course: tableCourse, tableCourse, swimCourse };
-  const swimSeconds = resolveSeconds(input);
-  const program = input.program ?? null;
+/** Everything every early guard in `buildCutlineTag` needs, computed once. */
+type CutlineTagContext = {
+  gender: CutlineGender;
+  swimCourse: SwimCourseOfRecord | 'METRIC_UNSPECIFIED';
+  division: NcaaDivision | null;
+  tableCourse: CutlineCourse;
+  courseFields: { course: CutlineCourse; tableCourse: CutlineCourse; swimCourse: SwimCourseOfRecord | 'METRIC_UNSPECIFIED' };
+  swimSeconds: number | null;
+  program: CutlineTagProgram | null;
+};
 
-  // Anachronism guard, ahead of everything else: a program that no longer
-  // exists cannot be measured against a season it never swam, and saying so is
-  // more useful than "division unknown".
-  if (program) {
-    const comparisonSeason = seasonUnderComparison(division, input.season);
-    if (!programCompetedInSeason(program, comparisonSeason ?? '')) {
-      return {
-        state: 'program_discontinued',
-        tag: null,
-        division,
-        season: comparisonSeason,
-        ...courseFields,
-        gender,
-        event: input.event,
-        swimSeconds,
-        lookupStatus: null,
-        reason: programDiscontinuedReason(program, comparisonSeason),
-        program,
-        nextTier: null,
-      };
-    }
+/**
+ * Anachronism guard, ahead of everything else: a program that no longer
+ * exists cannot be measured against a season it never swam, and saying so is
+ * more useful than "division unknown". The same refusal along the gender
+ * axis: a school can be unambiguously active and still field no team for this
+ * swim's gender — UWF sponsors women's swimming & diving only — and the men's
+ * table has nothing to say about a men's program that does not exist.
+ */
+function checkProgramEligibility(input: CutlineTagInput, ctx: CutlineTagContext): CutlineTagResult | null {
+  if (!ctx.program) return null;
+  const comparisonSeason = seasonUnderComparison(ctx.division, input.season);
 
-    // The same refusal along the gender axis. A school can be unambiguously
-    // active and still field no team for this swim's gender — UWF sponsors
-    // women's swimming & diving only — and the men's table has nothing to say
-    // about a men's program that does not exist.
-    if (!programSponsorsGender(program, gender)) {
-      return {
-        state: 'gender_not_sponsored',
-        tag: null,
-        division,
-        season: comparisonSeason,
-        ...courseFields,
-        gender,
-        event: input.event,
-        swimSeconds,
-        lookupStatus: null,
-        reason: genderNotSponsoredReason(program, gender),
-        program,
-        nextTier: null,
-      };
-    }
-  }
-
-  // A self-reported time is not a result, so it is not judged at all. Checked
-  // before the division so the answer does not depend on whether the team maps.
-  if (input.userInputted === true) {
+  if (!programCompetedInSeason(ctx.program, comparisonSeason ?? '')) {
     return {
-      state: 'user_inputted',
+      state: 'program_discontinued',
       tag: null,
-      division,
-      season: seasonUnderComparison(division, input.season),
-      ...courseFields,
-      gender,
+      division: ctx.division,
+      season: comparisonSeason,
+      ...ctx.courseFields,
+      gender: ctx.gender,
       event: input.event,
-      swimSeconds,
+      swimSeconds: ctx.swimSeconds,
       lookupStatus: null,
-      reason:
-        'Self-reported time (SwimCloud "User Inputted"), not a meet result. No standard is applied to it.',
-      program,
+      reason: programDiscontinuedReason(ctx.program, comparisonSeason),
+      program: ctx.program,
       nextTier: null,
     };
   }
 
-  // Same rule for an extracted split: part of a longer swim, not a race at
-  // this distance, so it is not judged either.
-  if (input.extractedSplit === true) {
+  if (!programSponsorsGender(ctx.program, ctx.gender)) {
     return {
-      state: 'extracted_split',
+      state: 'gender_not_sponsored',
       tag: null,
-      division,
-      season: seasonUnderComparison(division, input.season),
-      ...courseFields,
-      gender,
+      division: ctx.division,
+      season: comparisonSeason,
+      ...ctx.courseFields,
+      gender: ctx.gender,
       event: input.event,
-      swimSeconds,
+      swimSeconds: ctx.swimSeconds,
       lookupStatus: null,
-      reason:
-        'Split taken from a longer swim (SwimCloud "Extracted"), not a race at this distance. No standard is applied to it.',
-      program,
+      reason: genderNotSponsoredReason(ctx.program, ctx.gender),
+      program: ctx.program,
       nextTier: null,
     };
   }
 
-  // An event the recorded course does not swim (a 1000 Freestyle recorded
-  // SCM) is not judged at all, and does not depend on the division either.
-  // Only a course the swim states counts: the SCY default for a silent label
-  // is an assumption, and an assumption cannot prove an event absent.
+  return null;
+}
+
+/** A self-reported time is not a result, so it is not judged at all. */
+function checkUserInputted(input: CutlineTagInput, ctx: CutlineTagContext): CutlineTagResult | null {
+  if (input.userInputted !== true) return null;
+  return {
+    state: 'user_inputted',
+    tag: null,
+    division: ctx.division,
+    season: seasonUnderComparison(ctx.division, input.season),
+    ...ctx.courseFields,
+    gender: ctx.gender,
+    event: input.event,
+    swimSeconds: ctx.swimSeconds,
+    lookupStatus: null,
+    reason:
+      'Self-reported time (SwimCloud "User Inputted"), not a meet result. No standard is applied to it.',
+    program: ctx.program,
+    nextTier: null,
+  };
+}
+
+/** Same rule for an extracted split: part of a longer swim, not a race at this distance. */
+function checkExtractedSplit(input: CutlineTagInput, ctx: CutlineTagContext): CutlineTagResult | null {
+  if (input.extractedSplit !== true) return null;
+  return {
+    state: 'extracted_split',
+    tag: null,
+    division: ctx.division,
+    season: seasonUnderComparison(ctx.division, input.season),
+    ...ctx.courseFields,
+    gender: ctx.gender,
+    event: input.event,
+    swimSeconds: ctx.swimSeconds,
+    lookupStatus: null,
+    reason:
+      'Split taken from a longer swim (SwimCloud "Extracted"), not a race at this distance. No standard is applied to it.',
+    program: ctx.program,
+    nextTier: null,
+  };
+}
+
+/**
+ * An event the recorded course does not swim (a 1000 Freestyle recorded SCM)
+ * is not judged at all, and does not depend on the division either. Only a
+ * course the swim states counts: the SCY default for a silent label is an
+ * assumption, and an assumption cannot prove an event absent.
+ */
+function checkEventCourseMismatch(input: CutlineTagInput, ctx: CutlineTagContext): CutlineTagResult | null {
   const courseMismatch = eventNotSwumInCourse(
     input.event,
     input.swimCourse ?? courseOfRecordFromEventLabel(input.event)
   );
-  if (courseMismatch) {
-    return {
-      state: 'event_not_swum_in_course',
-      tag: null,
-      division,
-      season: seasonUnderComparison(division, input.season),
-      ...courseFields,
-      gender,
-      event: courseMismatch.event,
-      swimSeconds,
-      lookupStatus: null,
-      reason: courseMismatch.reason,
-      program,
-      nextTier: null,
-      courseMismatch,
-    };
+  if (!courseMismatch) return null;
+  return {
+    state: 'event_not_swum_in_course',
+    tag: null,
+    division: ctx.division,
+    season: seasonUnderComparison(ctx.division, input.season),
+    ...ctx.courseFields,
+    gender: ctx.gender,
+    event: courseMismatch.event,
+    swimSeconds: ctx.swimSeconds,
+    lookupStatus: null,
+    reason: courseMismatch.reason,
+    program: ctx.program,
+    nextTier: null,
+    courseMismatch,
+  };
+}
+
+function checkDivisionKnown(input: CutlineTagInput, ctx: CutlineTagContext): CutlineTagResult | null {
+  if (ctx.division) return null;
+  return {
+    state: 'division_unknown',
+    tag: null,
+    division: null,
+    season: null,
+    ...ctx.courseFields,
+    gender: ctx.gender,
+    event: input.event,
+    swimSeconds: ctx.swimSeconds,
+    lookupStatus: null,
+    reason: "This team's division is not known, so there is no table to judge this swim against.",
+    program: ctx.program,
+    nextTier: null,
+  };
+}
+
+function checkHasTime(input: CutlineTagInput, ctx: CutlineTagContext): CutlineTagResult | null {
+  if (ctx.swimSeconds !== null) return null;
+  return {
+    state: 'no_time',
+    tag: null,
+    division: ctx.division,
+    season: null,
+    ...ctx.courseFields,
+    gender: ctx.gender,
+    event: input.event,
+    swimSeconds: null,
+    lookupStatus: null,
+    reason: 'No usable time on this swim, so no standard can be applied.',
+    program: ctx.program,
+    nextTier: null,
+  };
+}
+
+/**
+ * Course eligibility. A cut belongs to the course it was published in.
+ * `tableCourse` says which table we are reading; `swimCourse` says which pool
+ * the swim happened in. When they are the same, the swim is judged directly:
+ * an SCY swim against a yards table, and an NAIA SCM swim against the NAIA
+ * SCM column. Any other pairing (besides the "convert a metric swim to
+ * yards" case `resolveConversion` handles next) is refused here: a metric
+ * table is never read for a swim in another course — no published factor
+ * converts into metres, and a yards or LCM time read against an SCM standard
+ * would be a wrong verdict, not a loose fit.
+ */
+function checkCourseEligibility(
+  input: CutlineTagInput,
+  ctx: CutlineTagContext,
+  isSwimEvent: boolean
+): CutlineTagResult | null {
+  if (!isSwimEvent || ctx.tableCourse === DEFAULT_CUTLINE_COURSE || ctx.swimCourse === ctx.tableCourse) {
+    return null;
   }
+  return {
+    state: 'conversion_unavailable',
+    tag: null,
+    division: ctx.division,
+    season: seasonUnderComparison(ctx.division, input.season),
+    ...ctx.courseFields,
+    gender: ctx.gender,
+    event: normalizeEventForCutline(input.event),
+    swimSeconds: ctx.swimSeconds,
+    lookupStatus: null,
+    reason: `A ${courseLabel(ctx.tableCourse)} standard applies only to a ${courseLabel(
+      ctx.tableCourse
+    )} swim. This swim is ${swimCourseLabel(
+      ctx.swimCourse
+    )}, and no published factor converts it to ${courseLabel(ctx.tableCourse)}.`,
+    program: ctx.program,
+    nextTier: null,
+  };
+}
 
-  if (!division) {
+/**
+ * When a metric swim meets a yards table, convert it **for information
+ * only** — the converted time can reach `converted_estimate`; it can never
+ * reach `tagged`. Diving never reaches here (`checkCourseEligibility` already
+ * let it through, but `isSwimEvent` is false for it, so `convertingToYards`
+ * is too) so it still answers `not_applicable` rather than a conversion
+ * complaint. Returns the early refusal when no factor covers the swim, or the
+ * `ScyEquivalentSwim` to judge against the table instead of the raw time.
+ */
+function resolveConversion(
+  input: CutlineTagInput,
+  ctx: CutlineTagContext,
+  isSwimEvent: boolean,
+  swimSeconds: number,
+  division: NcaaDivision
+): { early: CutlineTagResult | null; converted: ScyEquivalentSwim | null } {
+  const swimCourse = ctx.swimCourse;
+  const convertingToYards = ctx.tableCourse === DEFAULT_CUTLINE_COURSE && swimCourse !== 'SCY' && isSwimEvent;
+  if (!convertingToYards) return { early: null, converted: null };
+
+  if (swimCourse === 'METRIC_UNSPECIFIED') {
+    // The label proves the swim was not yards but not which pool length, and
+    // the LCM and SCM factors differ materially. Refuse rather than pick one.
     return {
-      state: 'division_unknown',
-      tag: null,
-      division: null,
-      season: null,
-      ...courseFields,
-      gender,
-      event: input.event,
-      swimSeconds,
-      lookupStatus: null,
-      reason:
-        "This team's division is not known, so there is no table to judge this swim against.",
-      program,
-      nextTier: null,
-    };
-  }
-
-  if (swimSeconds === null) {
-    return {
-      state: 'no_time',
-      tag: null,
-      division,
-      season: null,
-      ...courseFields,
-      gender,
-      event: input.event,
-      swimSeconds: null,
-      lookupStatus: null,
-      reason: 'No usable time on this swim, so no standard can be applied.',
-      program,
-      nextTier: null,
-    };
-  }
-
-  /*
-   * Course eligibility.
-   *
-   * A cut belongs to the course it was published in. `tableCourse` says which
-   * table we are reading; `swimCourse` says which pool the swim happened in.
-   * When they are the same, the swim is judged directly: an SCY swim against
-   * a yards table, and an NAIA SCM swim against the NAIA SCM column.
-   *
-   * When a metric swim meets a yards table, we convert **for information only**.
-   * The converted time can reach `converted_estimate`; it can never reach
-   * `tagged`. Diving is left to the normal path so it still answers
-   * `not_applicable` rather than a conversion complaint.
-   *
-   * Any other pairing is refused. A metric table is never read for a swim in
-   * another course: no published factor converts into metres, and a yards or
-   * LCM time read against an SCM standard would be a wrong verdict, not a
-   * loose fit.
-   */
-  const isSwimEvent = cutlineEventCategory(input.event) === 'swim';
-  if (isSwimEvent && tableCourse !== DEFAULT_CUTLINE_COURSE && swimCourse !== tableCourse) {
-    return {
-      state: 'conversion_unavailable',
-      tag: null,
-      division,
-      season: seasonUnderComparison(division, input.season),
-      ...courseFields,
-      gender,
-      event: normalizeEventForCutline(input.event),
-      swimSeconds,
-      lookupStatus: null,
-      reason: `A ${courseLabel(tableCourse)} standard applies only to a ${courseLabel(
-        tableCourse
-      )} swim. This swim is ${swimCourseLabel(
-        swimCourse
-      )}, and no published factor converts it to ${courseLabel(tableCourse)}.`,
-      program,
-      nextTier: null,
-    };
-  }
-
-  const convertingToYards =
-    tableCourse === DEFAULT_CUTLINE_COURSE && swimCourse !== 'SCY' && isSwimEvent;
-
-  let converted: ScyEquivalentSwim | null = null;
-  if (convertingToYards) {
-    if (swimCourse === 'METRIC_UNSPECIFIED') {
-      // The label proves the swim was not yards but not which pool length, and
-      // the LCM and SCM factors differ materially. Refuse rather than pick one.
-      return {
+      early: {
         state: 'conversion_unavailable',
         tag: null,
-        division,
-        season: seasonUnderComparison(division, input.season),
-        ...courseFields,
-        gender,
+        division: ctx.division,
+        season: seasonUnderComparison(ctx.division, input.season),
+        ...ctx.courseFields,
+        gender: ctx.gender,
         event: normalizeEventForCutline(input.event),
         swimSeconds,
         lookupStatus: null,
         reason: `"${input.event}" is recorded in metres but does not state the pool length, so there is no published factor to convert it to yards. Record the swim's course (LCM or SCM) for an indicative comparison.`,
-        program,
+        program: ctx.program,
         nextTier: null,
-      };
-    }
-    // An SCM swim converts with the NCAA table of the division it is judged
-    // against, so a D2 standard is never compared with a D1-converted time.
-    converted = scyEquivalentForCutline(input.event, swimSeconds, gender, swimCourse, {
-      division,
-    });
-    if (!converted) {
-      return {
+      },
+      converted: null,
+    };
+  }
+
+  // An SCM swim converts with the NCAA table of the division it is judged
+  // against, so a D2 standard is never compared with a D1-converted time.
+  const converted = scyEquivalentForCutline(input.event, swimSeconds, ctx.gender, swimCourse, {
+    division: ctx.division,
+  });
+  if (!converted) {
+    return {
+      early: {
         state: 'conversion_unavailable',
         tag: null,
-        division,
-        season: seasonUnderComparison(division, input.season),
-        ...courseFields,
-        gender,
+        division: ctx.division,
+        season: seasonUnderComparison(ctx.division, input.season),
+        ...ctx.courseFields,
+        gender: ctx.gender,
         event: normalizeEventForCutline(input.event),
         swimSeconds,
         lookupStatus: null,
@@ -1002,43 +1023,31 @@ export function buildCutlineTag(input: CutlineTagInput): CutlineTagResult {
         )}, so this ${swimCourse} swim cannot be compared to the ${governingBodyLabel(
           division
         )} yards table.`,
-        program,
+        program: ctx.program,
         nextTier: null,
-      };
-    }
+      },
+      converted: null,
+    };
   }
 
-  // The event to look up, and the seconds to judge, both follow the conversion.
-  // A metric 400 Freestyle competes in the yards 500 Freestyle slot.
-  const lookupEvent = converted ? converted.event : input.event;
-  const judgedSeconds = converted ? converted.seconds : swimSeconds;
+  return { early: null, converted };
+}
 
-  const lookup = getCutlinesForSwim(gender, lookupEvent, division, input.season, tableCourse);
-  const base: CutlineTagResultBase = {
-    division,
-    season: lookup.season,
-    ...courseFields,
-    gender,
-    event: lookup.event,
-    swimSeconds,
-    lookupStatus: lookup.status,
-    reason: '',
-    program,
-    // One computation serves all three judged outcomes: on `tagged` the slowest
-    // unreached tier *is* the next tier up, on `no_cut` it is the easiest tier
-    // published, and on `converted_estimate` it is the same question asked of the
-    // converted time (`judgedSeconds` already follows the conversion). Returns
-    // `null`, never `0`, when every tier was cleared or no table was reached.
-    nextTier: buildNextTierGap(lookup, division, judgedSeconds),
-  };
-
+/** `no_table_for_division` / `not_applicable` (diving) / `event_not_in_table` — the three unjudgeable lookup verdicts. */
+function checkLookupStatus(
+  lookup: CutlineLookup,
+  base: CutlineTagResultBase,
+  division: NcaaDivision,
+  tableCourse: CutlineCourse,
+  inputSeason: CutlineTagInput['season']
+): CutlineTagResult | null {
   if (lookup.status === 'no_table_for_division') {
     return {
       ...base,
       state: 'no_table_for_division',
       tag: null,
       reason: `No published qualifying table is held for ${governingBodyLabel(division)}${
-        input.season ? ` ${input.season}` : ''
+        inputSeason ? ` ${inputSeason}` : ''
       }.`,
     };
   }
@@ -1065,6 +1074,19 @@ export function buildCutlineTag(input: CutlineTagInput): CutlineTagResult {
     };
   }
 
+  return null;
+}
+
+/** `no_cut`, `converted_estimate` or `tagged` — the three judged outcomes once a table lookup succeeded. */
+function buildCutlineVerdict(
+  lookup: CutlineLookup,
+  base: CutlineTagResultBase,
+  judgedSeconds: number,
+  swimSeconds: number,
+  converted: ScyEquivalentSwim | null,
+  division: NcaaDivision,
+  tableCourse: CutlineCourse
+): CutlineTagResult {
   // `tiers` is ordered strictest first, so the first cleared tier is the best.
   const met = lookup.tiers.find(t => t.seconds > 0 && judgedSeconds <= t.seconds);
   const season = lookup.season;
@@ -1129,7 +1151,7 @@ export function buildCutlineTag(input: CutlineTagInput): CutlineTagResult {
     // `CutlineTag.course` is the table's course. A tag only exists when the swim
     // was eligible for that table, so there is no second course to carry here.
     course: tableCourse,
-    gender,
+    gender: base.gender,
     event: lookup.event,
     label: buildLabel(division, met.tier),
     title: buildTitle(division, season, tableCourse, met.tier, met.time),
@@ -1143,6 +1165,85 @@ export function buildCutlineTag(input: CutlineTagInput): CutlineTagResult {
   };
 
   return { ...base, state: 'tagged', tag };
+}
+
+export function buildCutlineTag(input: CutlineTagInput): CutlineTagResult {
+  const gender = normalizeGender(input.gender);
+  const swimCourse = resolveSwimCourse(input);
+  const division = input.division ?? null;
+  // `tableCourse` is the new, unambiguous name; `course` is the legacy field and
+  // still wins nothing over it. With neither, the swim is judged in its own
+  // course when its division publishes the event in that course (an NAIA SCM
+  // swim), and against yards otherwise. Both fields are reported back so old
+  // readers keep working.
+  const tableCourse =
+    input.tableCourse ??
+    input.course ??
+    cutlineTableCourseForSwim(gender, input.event, division, swimCourse, input.season);
+  assertTableCourse(tableCourse);
+  const courseFields = { course: tableCourse, tableCourse, swimCourse };
+  const swimSeconds = resolveSeconds(input);
+  const program = input.program ?? null;
+  const ctx: CutlineTagContext = { gender, swimCourse, division, tableCourse, courseFields, swimSeconds, program };
+
+  const programResult = checkProgramEligibility(input, ctx);
+  if (programResult) return programResult;
+
+  const userInputtedResult = checkUserInputted(input, ctx);
+  if (userInputtedResult) return userInputtedResult;
+
+  const extractedSplitResult = checkExtractedSplit(input, ctx);
+  if (extractedSplitResult) return extractedSplitResult;
+
+  const courseMismatchResult = checkEventCourseMismatch(input, ctx);
+  if (courseMismatchResult) return courseMismatchResult;
+
+  const divisionResult = checkDivisionKnown(input, ctx);
+  if (divisionResult) return divisionResult;
+
+  const timeResult = checkHasTime(input, ctx);
+  if (timeResult) return timeResult;
+
+  // Every guard above refused a null division / null time; both are settled now.
+  const knownDivision = division as NcaaDivision;
+  const knownSwimSeconds = swimSeconds as number;
+  const isSwimEvent = cutlineEventCategory(input.event) === 'swim';
+
+  const courseEligibilityResult = checkCourseEligibility(input, ctx, isSwimEvent);
+  if (courseEligibilityResult) return courseEligibilityResult;
+
+  const conversion = resolveConversion(input, ctx, isSwimEvent, knownSwimSeconds, knownDivision);
+  if (conversion.early) return conversion.early;
+  const { converted } = conversion;
+
+  // The event to look up, and the seconds to judge, both follow the conversion.
+  // A metric 400 Freestyle competes in the yards 500 Freestyle slot.
+  const lookupEvent = converted ? converted.event : input.event;
+  const judgedSeconds = converted ? converted.seconds : knownSwimSeconds;
+
+  const lookup = getCutlinesForSwim(gender, lookupEvent, knownDivision, input.season, tableCourse);
+  const base: CutlineTagResultBase = {
+    division: knownDivision,
+    season: lookup.season,
+    ...courseFields,
+    gender,
+    event: lookup.event,
+    swimSeconds: knownSwimSeconds,
+    lookupStatus: lookup.status,
+    reason: '',
+    program,
+    // One computation serves all three judged outcomes: on `tagged` the slowest
+    // unreached tier *is* the next tier up, on `no_cut` it is the easiest tier
+    // published, and on `converted_estimate` it is the same question asked of the
+    // converted time (`judgedSeconds` already follows the conversion). Returns
+    // `null`, never `0`, when every tier was cleared or no table was reached.
+    nextTier: buildNextTierGap(lookup, knownDivision, judgedSeconds),
+  };
+
+  const lookupStatusResult = checkLookupStatus(lookup, base, knownDivision, tableCourse, input.season);
+  if (lookupStatusResult) return lookupStatusResult;
+
+  return buildCutlineVerdict(lookup, base, judgedSeconds, knownSwimSeconds, converted, knownDivision, tableCourse);
 }
 
 export type CutlineTagForTeamInput = Omit<CutlineTagInput, 'division'> & {

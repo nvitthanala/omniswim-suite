@@ -145,33 +145,35 @@ function overrideMap(
   return m;
 }
 
-/** Collect roster rows for display and build lookup for scoring. */
-export function buildScorerRosterLookup(
-  results: SwimmerResult[],
-  settings: ScoringSettings,
-  overrides?: ScorerRosterOverride[],
-  genderFilter?: Gender,
-  resolver: AthleteAliasResolver = IDENTITY_ALIAS_RESOLVER
-): ScorerRosterLookup {
-  const rules = effectiveAutoRules(settings);
-  const autoKeys = deriveAutoScorerKeys(results, rules, resolver, genderFilter);
-  const manual = overrideMap(overrides, resolver);
+/** True when a row's own gender is recorded and disagrees with a caller's gender scope. */
+function excludedByGenderFilter(rowGender: Gender | undefined, genderFilter: Gender | undefined): boolean {
+  return genderFilter != null && rowGender != null && rowGender !== genderFilter;
+}
 
-  const diverPatterns = settings.diverEventPattern;
-  const meta = new Map<
-    string,
-    {
-      name: string;
-      team: string;
-      gender: Gender;
-      classYear: string;
-      athleteRole: ScorerRosterAthleteRole;
-      isRecruit?: boolean;
-    }
-  >();
+type RosterMetaEntry = {
+  name: string;
+  team: string;
+  gender: Gender;
+  classYear: string;
+  athleteRole: ScorerRosterAthleteRole;
+  isRecruit?: boolean;
+};
+
+/**
+ * One roster-row candidate per athlete key: the canonical name/team/gender/
+ * class year, plus diver/recruit flags folded in from every row sharing that
+ * key (a diver row upgrades `athleteRole`; a recruit row sets `isRecruit`).
+ */
+function buildRosterMeta(
+  results: SwimmerResult[],
+  genderFilter: Gender | undefined,
+  diverPatterns: ScoringSettings['diverEventPattern'],
+  resolver: AthleteAliasResolver
+): Map<string, RosterMetaEntry> {
+  const meta = new Map<string, RosterMetaEntry>();
 
   for (const r of results) {
-    if (genderFilter != null && r.gender != null && r.gender !== genderFilter) continue;
+    if (excludedByGenderFilter(r.gender, genderFilter)) continue;
     if (!r.isRecruit && isRelayResult(r) && r.name === r.team) continue;
     // Skip vacated / placeholder relay-leg names ("—", empty) — they are not athletes.
     if (!r.isRecruit && isRelayResult(r) && isPlaceholderAthleteName(r.name)) continue;
@@ -201,32 +203,70 @@ export function buildScorerRosterLookup(
     }
   }
 
+  return meta;
+}
+
+/** Athlete keys with at least one recruit row — a recruit scores by default (see `resolveIsScorer`). */
+function collectRecruitKeys(
+  results: SwimmerResult[],
+  genderFilter: Gender | undefined,
+  resolver: AthleteAliasResolver
+): Set<string> {
   const recruitKeys = new Set<string>();
   for (const r of results) {
     if (!r.isRecruit) continue;
-    if (genderFilter != null && r.gender != null && r.gender !== genderFilter) continue;
+    if (excludedByGenderFilter(r.gender, genderFilter)) continue;
     const team = String(r.team ?? '').trim() || 'Unknown';
     const g = (r.gender ?? genderFilter ?? Gender.MEN) as Gender;
     recruitKeys.add(scorerRosterKey(team, g, resolver.resolveAthleteName(r.name, team, g)));
   }
+  return recruitKeys;
+}
 
+/**
+ * A manual override always wins. Absent one: a recruit scores by default
+ * (they carry no auto-scorer evidence of their own); anyone else follows the
+ * auto-derived flag.
+ */
+function resolveIsScorer(isRecruit: boolean, manualVal: boolean | undefined, autoVal: boolean): boolean {
+  if (manualVal !== undefined) return manualVal;
+  return isRecruit ? true : autoVal;
+}
+
+/** One display/scoring row per roster-meta entry, manual-override-aware, team/name sorted. */
+function buildRosterRows(
+  meta: Map<string, RosterMetaEntry>,
+  manual: Map<string, boolean>,
+  autoKeys: Set<string>
+): ScorerRosterRow[] {
   const rows: ScorerRosterRow[] = [];
   for (const [key, info] of meta) {
     const manualVal = manual.get(key);
     const autoVal = autoKeys.has(key);
-    const isRecruit = Boolean(info.isRecruit);
-    const isScorer = isRecruit
-      ? manualVal !== undefined
-        ? manualVal
-        : true
-      : manualVal !== undefined
-        ? manualVal
-        : autoVal;
+    const isScorer = resolveIsScorer(Boolean(info.isRecruit), manualVal, autoVal);
     const source: ScorerRosterRowSource = manualVal !== undefined ? 'manual' : 'auto';
     rows.push({ key, ...info, isScorer, source });
   }
-
   rows.sort((a, b) => a.team.localeCompare(b.team) || a.name.localeCompare(b.name));
+  return rows;
+}
+
+/** Collect roster rows for display and build lookup for scoring. */
+export function buildScorerRosterLookup(
+  results: SwimmerResult[],
+  settings: ScoringSettings,
+  overrides?: ScorerRosterOverride[],
+  genderFilter?: Gender,
+  resolver: AthleteAliasResolver = IDENTITY_ALIAS_RESOLVER
+): ScorerRosterLookup {
+  const rules = effectiveAutoRules(settings);
+  const autoKeys = deriveAutoScorerKeys(results, rules, resolver, genderFilter);
+  const manual = overrideMap(overrides, resolver);
+  const diverPatterns = settings.diverEventPattern;
+
+  const meta = buildRosterMeta(results, genderFilter, diverPatterns, resolver);
+  const recruitKeys = collectRecruitKeys(results, genderFilter, resolver);
+  const rows = buildRosterRows(meta, manual, autoKeys);
 
   return {
     rows,

@@ -5,16 +5,15 @@
  * Placement-based prelims over/under: each swimmer's expected points from their
  * prelims placement (scored as if finals) vs actual baseline finals points.
  */
-import { Gender, ScoringSettings, SwimmerResult, TeamScore, Workspace } from '../types';
+import { Gender, ScoringSettings, SwimmerResult, Workspace } from '../types';
 import { mergeScoringSettings } from './scoringDefaults';
-import { computeVisibleEvents } from './eventIdentity';
 import type { ScoringBundle } from './scoringEngine';
+import { buildProjectedScoringBundle, gatherBaselineScoredByEntry } from './scoringBundleAggregation';
 import {
   classifyRoundTier,
   convertTimeToSeconds,
   eventScoringStage,
   formatEventChartAxisLabel,
-  getTeamColors,
   isFinalsRound,
   isPrelimsFinalsEvent,
   isRelayResult,
@@ -238,17 +237,6 @@ function baselineActualPointsForEntry(rows: SwimmerResult[], key: string): numbe
   return rows.reduce((sum, r) => sum + (typeof r.points === 'number' ? r.points : 0), 0);
 }
 
-function gatherBaselineScoredByEntry(baselineScored: SwimmerResult[]): Map<string, SwimmerResult[]> {
-  const byKey = new Map<string, SwimmerResult[]>();
-  for (const r of baselineScored) {
-    if (r.isExhibition || r.isTimeTrial) continue;
-    const key = entryKey(r);
-    if (!byKey.has(key)) byKey.set(key, []);
-    byKey.get(key)!.push(r);
-  }
-  return byKey;
-}
-
 /** Per entry (event+team+swimmer/relay): actual baseline pts vs prelims-placement expected. */
 export function buildPrelimsOverUnderByEntryKey(
   baselineScored: SwimmerResult[],
@@ -264,7 +252,7 @@ export function buildPrelimsOverUnderByEntryKey(
   }
 
   const actualByKey = new Map<string, number>();
-  for (const [key, rows] of gatherBaselineScoredByEntry(baselineScored)) {
+  for (const [key, rows] of gatherBaselineScoredByEntry(baselineScored, entryKey)) {
     actualByKey.set(key, baselineActualPointsForEntry(rows, key));
   }
 
@@ -433,74 +421,6 @@ export function buildMeetMomentumChartData(
   });
 }
 
-function aggregateBundle(allResults: SwimmerResult[], allScored: SwimmerResult[]): ScoringBundle {
-  const scoredById = new Map(allScored.map(r => [r.id, r]));
-  const events = sortEventsByMeetOrder(Array.from(new Set(allResults.map(r => r.event))));
-
-  const teamsMap: Record<string, TeamScore> = {};
-  const timelineData: Record<string, unknown>[] = [];
-  const runningTotals: Record<string, number> = {};
-
-  events.forEach(event => {
-    const eventResults = allResults.filter(r => r.event === event);
-    const isTimeTrial = eventResults.some(r => r.isTimeTrial);
-    const scored = eventResults.map(r => scoredById.get(r.id) ?? { ...r, points: 0 });
-
-    scored.forEach(res => {
-      const tName = String(res.name ?? '')
-        .trim()
-        .toLowerCase();
-      const tTeam = String(res.team ?? '')
-        .trim()
-        .toLowerCase();
-      if (tName && tTeam === tName && !looksLikeInstitutionTeamName(res.team)) {
-        return;
-      }
-      const teamKey = String(res.team ?? 'Unknown').trim() || 'Unknown';
-      if (!teamsMap[teamKey]) {
-        teamsMap[teamKey] = {
-          teamName: teamKey,
-          totalPoints: 0,
-          swimmers: [],
-          color: getTeamColors(teamKey).primary,
-        };
-        runningTotals[teamKey] = 0;
-      }
-      const pts = typeof res.points === 'number' ? res.points : 0;
-      teamsMap[teamKey].totalPoints += pts;
-      teamsMap[teamKey].swimmers.push(res);
-      runningTotals[teamKey] += pts;
-    });
-
-    if (!isTimeTrial) {
-      const timelinePoint: Record<string, unknown> = {
-        name: formatEventChartAxisLabel(event, { maxLength: 24 }),
-        fullEvent: stripEventGenderMarker(event),
-      };
-      Object.keys(runningTotals).forEach(team => {
-        timelinePoint[team] = runningTotals[team];
-      });
-      if (Object.keys(runningTotals).length > 0) {
-        timelineData.push(timelinePoint);
-      }
-    }
-  });
-
-  const sortedTeams = Object.values(teamsMap).sort((a, b) => b.totalPoints - a.totalPoints);
-  const teamStyleSignature = sortedTeams
-    .map(t => `${t.teamName}:${t.totalPoints}:${t.color}`)
-    .join('|');
-
-  return {
-    allResults,
-    allScored,
-    events,
-    visibleEvents: computeVisibleEvents(events, allResults, allResults, {}),
-    sortedTeams,
-    timelineData,
-    teamStyleSignature,
-  };
-}
 
 export type PrelimsProjectedOptions = {
   workspace: Workspace;
@@ -535,7 +455,7 @@ export function buildPrelimsProjectedBundle({
   }
 
   const expectedRows = buildPrelimsExpectedRows(currentResults, scoringSettings);
-  return aggregateBundle(expectedRows, expectedRows);
+  return buildProjectedScoringBundle(expectedRows, expectedRows);
 }
 
 export type PrelimsDeltaTimelinePoint = {
@@ -546,27 +466,25 @@ export type PrelimsDeltaTimelinePoint = {
 };
 
 /** Merge baseline/projected timelines with prelims timeline for per-event over/under. */
-export function buildPrelimsDeltaTimeline(
+function timelineEventKey(pt: Record<string, unknown>): string {
+  return String(pt.fullEvent ?? pt.name ?? '').trim();
+}
+
+function indexTimelineByEvent(timeline: Record<string, unknown>[]): Map<string, Record<string, unknown>> {
+  const map = new Map<string, Record<string, unknown>>();
+  for (const pt of timeline) {
+    const key = timelineEventKey(pt);
+    if (key) map.set(key, pt);
+  }
+  return map;
+}
+
+/** Every event across the three timelines, first-seen order (baseline, then prelims, then projected). */
+function buildPrelimsTimelineEventOrder(
   baselineTimeline: Record<string, unknown>[],
-  projectedTimeline: Record<string, unknown>[],
-  prelimsTimeline: Record<string, unknown>[]
-): PrelimsDeltaTimelinePoint[] {
-  const timelineEventKey = (pt: Record<string, unknown>): string =>
-    String(pt.fullEvent ?? pt.name ?? '').trim();
-
-  const indexByEvent = (timeline: Record<string, unknown>[]): Map<string, Record<string, unknown>> => {
-    const map = new Map<string, Record<string, unknown>>();
-    for (const pt of timeline) {
-      const key = timelineEventKey(pt);
-      if (key) map.set(key, pt);
-    }
-    return map;
-  };
-
-  const baselineByEvent = indexByEvent(baselineTimeline);
-  const projectedByEvent = indexByEvent(projectedTimeline);
-  const prelimsByEvent = indexByEvent(prelimsTimeline);
-
+  prelimsTimeline: Record<string, unknown>[],
+  projectedTimeline: Record<string, unknown>[]
+): string[] {
   const eventOrder: string[] = [];
   const seen = new Set<string>();
   for (const timeline of [baselineTimeline, prelimsTimeline, projectedTimeline]) {
@@ -578,6 +496,71 @@ export function buildPrelimsDeltaTimeline(
       }
     }
   }
+  return eventOrder;
+}
+
+/**
+ * Teams to compute a delta for at this event: every team key any of the three
+ * timeline points carries here, plus every team a PRIOR event already carried
+ * (`lastBase`/`lastPrelim`/`lastProj` so a team stops applying to fewer teams
+ * as the timeline goes on, once it has ever appeared).
+ */
+function timelineTeamsAtEvent(
+  points: (Record<string, unknown> | undefined)[],
+  lastBase: Record<string, number>,
+  lastPrelim: Record<string, number>,
+  lastProj: Record<string, number>
+): Set<string> {
+  const teams = new Set<string>();
+  for (const pt of points) {
+    if (!pt) continue;
+    for (const k of Object.keys(pt)) {
+      if (k !== 'name' && k !== 'fullEvent') teams.add(k);
+    }
+  }
+  for (const k of Object.keys(lastBase)) teams.add(k);
+  for (const k of Object.keys(lastPrelim)) teams.add(k);
+  for (const k of Object.keys(lastProj)) teams.add(k);
+  return teams;
+}
+
+/**
+ * Per-team baseline/projected deltas against the prelims anchor for one event.
+ * Mutates `lastBase`/`lastPrelim`/`lastProj` (carry-forward running totals) —
+ * same running-total contract `buildPrelimsDeltaTimeline`'s loop always had.
+ */
+function computeTimelineDeltasForEvent(
+  basePt: Record<string, unknown> | undefined,
+  projPt: Record<string, unknown> | undefined,
+  prelimPt: Record<string, unknown> | undefined,
+  lastBase: Record<string, number>,
+  lastPrelim: Record<string, number>,
+  lastProj: Record<string, number>
+): { baselineDelta: Record<string, number>; projectedDelta: Record<string, number> } {
+  const teams = timelineTeamsAtEvent([basePt, projPt, prelimPt], lastBase, lastPrelim, lastProj);
+  const baselineDelta: Record<string, number> = {};
+  const projectedDelta: Record<string, number> = {};
+  for (const team of teams) {
+    if (basePt && typeof basePt[team] === 'number') lastBase[team] = basePt[team] as number;
+    if (projPt && typeof projPt[team] === 'number') lastProj[team] = projPt[team] as number;
+    if (prelimPt && typeof prelimPt[team] === 'number') lastPrelim[team] = prelimPt[team] as number;
+
+    baselineDelta[team] = (lastBase[team] ?? 0) - (lastPrelim[team] ?? 0);
+    projectedDelta[team] = (lastProj[team] ?? 0) - (lastPrelim[team] ?? 0);
+  }
+  return { baselineDelta, projectedDelta };
+}
+
+export function buildPrelimsDeltaTimeline(
+  baselineTimeline: Record<string, unknown>[],
+  projectedTimeline: Record<string, unknown>[],
+  prelimsTimeline: Record<string, unknown>[]
+): PrelimsDeltaTimelinePoint[] {
+  const baselineByEvent = indexTimelineByEvent(baselineTimeline);
+  const projectedByEvent = indexTimelineByEvent(projectedTimeline);
+  const prelimsByEvent = indexTimelineByEvent(prelimsTimeline);
+
+  const eventOrder = buildPrelimsTimelineEventOrder(baselineTimeline, prelimsTimeline, projectedTimeline);
 
   const lastBase: Record<string, number> = {};
   const lastProj: Record<string, number> = {};
@@ -589,27 +572,14 @@ export function buildPrelimsDeltaTimeline(
     const projPt = projectedByEvent.get(eventKey);
     const prelimPt = prelimsByEvent.get(eventKey);
 
-    const teams = new Set<string>();
-    for (const pt of [basePt, projPt, prelimPt]) {
-      if (!pt) continue;
-      for (const k of Object.keys(pt)) {
-        if (k !== 'name' && k !== 'fullEvent') teams.add(k);
-      }
-    }
-    for (const k of Object.keys(lastBase)) teams.add(k);
-    for (const k of Object.keys(lastPrelim)) teams.add(k);
-    for (const k of Object.keys(lastProj)) teams.add(k);
-
-    const baselineDelta: Record<string, number> = {};
-    const projectedDelta: Record<string, number> = {};
-    for (const team of teams) {
-      if (basePt && typeof basePt[team] === 'number') lastBase[team] = basePt[team] as number;
-      if (projPt && typeof projPt[team] === 'number') lastProj[team] = projPt[team] as number;
-      if (prelimPt && typeof prelimPt[team] === 'number') lastPrelim[team] = prelimPt[team] as number;
-
-      baselineDelta[team] = (lastBase[team] ?? 0) - (lastPrelim[team] ?? 0);
-      projectedDelta[team] = (lastProj[team] ?? 0) - (lastPrelim[team] ?? 0);
-    }
+    const { baselineDelta, projectedDelta } = computeTimelineDeltasForEvent(
+      basePt,
+      projPt,
+      prelimPt,
+      lastBase,
+      lastPrelim,
+      lastProj
+    );
 
     out.push({
       name: String(basePt?.name ?? prelimPt?.name ?? projPt?.name ?? eventKey),
