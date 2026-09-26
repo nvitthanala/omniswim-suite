@@ -1604,24 +1604,10 @@ function isTimedFinalDistanceSession(individuals: SwimmerResult[]): boolean {
   return individuals.length > 0 && individuals.every(r => isTimedFinalDistanceHeat(r.event, r.roundSwam));
 }
 
-/**
- * Timed-finals distance: place points follow scoring order among finishers who actually earn
- * points (exhibition, non-roster, and pool-blocked swimmers do not consume ladder slots).
- */
-function scoreTimedFinalIndividualsInEvent(
-  individuals: SwimmerResult[],
-  merged: ScoringSettings,
-  meetStates: Map<string, TeamMeetState>,
-  useMeetWidePool: boolean,
-  _rosterLookup?: ScorerRosterLookup
-): SwimmerResult[] {
-  // One event per call, so one table: `individuals[0].event` names it. Diving
-  // scores from `divingPoints` when the preset carries one (Rule 7-1-4).
-  const pts = individualPlaceTable(individuals[0]?.event, merged);
-  const cap = merged.maxIndividualScorersPerTeam ?? 999;
-  const teamIndivScorers: Record<string, number> = {};
-  const indivOut: SwimmerResult[] = [];
-
+/** One event's rows, grouped by finish rank (ties by exact time+name), in scoring order. */
+function buildTimedFinalRankGroups(
+  individuals: SwimmerResult[]
+): { byRank: Map<string, SwimmerResult[]>; sortedKeys: string[] } {
   const byRank = new Map<string, SwimmerResult[]>();
   for (const r of individuals) {
     const rk = parseRankInt(r.rank);
@@ -1640,83 +1626,154 @@ function scoreTimedFinalIndividualsInEvent(
     );
   });
 
+  return { byRank, sortedKeys };
+}
+
+/**
+ * Timed-finals distance: split one rank/tie group into the rows that may still
+ * earn ladder points, pushing every zero-point row (a non-finish result, an
+ * exhibition swim, a time trial, or an unscored round/event) straight into
+ * `indivOut`. Place ladder follows meet finish order among the legal swims that
+ * remain; roster caps apply via the meet-wide pool in
+ * {@link awardTimedFinalPointEligibleGroup}, not by skipping ladder slots here.
+ */
+function splitTimedFinalGroupEligibility(
+  group: SwimmerResult[],
+  merged: ScoringSettings,
+  indivOut: SwimmerResult[]
+): SwimmerResult[] {
+  const ineligible = group.filter(r => !isScoringSwimResult(r));
+  ineligible.forEach(r => indivOut.push({ ...r, points: 0 }));
+
+  const eligible = group.filter(r => isScoringSwimResult(r));
+  const pointEligible: SwimmerResult[] = [];
+  for (const r of eligible) {
+    const ex = r.isExhibition;
+    const tt = r.isTimeTrial && !isChampionshipGenderEvent(r.event);
+    if (ex || tt || !canScoreAthlete(r.roundSwam, r.event, merged)) {
+      indivOut.push({ ...r, points: 0 });
+      continue;
+    }
+    pointEligible.push(r);
+  }
+  return pointEligible;
+}
+
+/**
+ * Timed-finals distance: award one point-eligible tie group its ladder slice,
+ * split per team by whichever cap rule is active, pushing every row (awarded
+ * or zero) into `indivOut`. Mutates `teamIndivScorers` (the per-event cap's
+ * running count) and `meetStates` (the meet-wide pool) exactly as the caller's
+ * loop did inline. Returns how many ladder places this group consumed — 0
+ * when nothing was awarded, so the ladder does not advance.
+ */
+function awardTimedFinalPointEligibleGroup(
+  pointEligible: SwimmerResult[],
+  sampleEvent: string,
+  pts: number[],
+  scoringPlace: number,
+  cap: number,
+  useMeetWidePool: boolean,
+  teamIndivScorers: Record<string, number>,
+  meetStates: Map<string, TeamMeetState>,
+  merged: ScoringSettings,
+  indivOut: SwimmerResult[]
+): number {
+  const avail = pts.length - scoringPlace;
+  const take = Math.min(pointEligible.length, avail);
+  const slice = pts.slice(scoringPlace, scoringPlace + take);
+  if (!slice.length) {
+    pointEligible.forEach(r => indivOut.push({ ...r, points: 0 }));
+    return 0;
+  }
+  const each = slice.reduce((s, p) => s + p, 0) / pointEligible.length;
+
+  const byTeam = new Map<string, SwimmerResult[]>();
+  for (const r of pointEligible) {
+    const t = String(r.team ?? 'Unknown').trim() || 'Unknown';
+    if (!byTeam.has(t)) byTeam.set(t, []);
+    byTeam.get(t)!.push(r);
+  }
+
+  let anyAwarded = false;
+  for (const [team, members] of byTeam) {
+    const meetState = getOrCreateMeetState(meetStates, team, members[0].gender);
+
+    // Cap admission is per athlete and accumulates — see admitTieGroupToMeetPool.
+    if (useMeetWidePool) {
+      const admitted = admitTieGroupToMeetPool(
+        meetState.poolWeights,
+        members,
+        sampleEvent,
+        merged
+      );
+      for (const r of members) {
+        const award = admitted.has(r.name) ? each : 0;
+        indivOut.push({ ...r, points: award });
+        if (award > 0) anyAwarded = true;
+      }
+    } else if (cap < 999) {
+      const used = teamIndivScorers[team] || 0;
+      const allowed = admitTieGroupToEventCap(members, used, cap);
+      for (const r of members) {
+        const award = allowed.has(r.name) ? each : 0;
+        indivOut.push({ ...r, points: award });
+        if (award > 0) anyAwarded = true;
+      }
+      teamIndivScorers[team] = used + allowed.size;
+    } else {
+      for (const r of members) {
+        indivOut.push({ ...r, points: each });
+      }
+      anyAwarded = true;
+    }
+  }
+
+  return anyAwarded ? take : 0;
+}
+
+/**
+ * Timed-finals distance: place points follow scoring order among finishers who actually earn
+ * points (exhibition, non-roster, and pool-blocked swimmers do not consume ladder slots).
+ */
+function scoreTimedFinalIndividualsInEvent(
+  individuals: SwimmerResult[],
+  merged: ScoringSettings,
+  meetStates: Map<string, TeamMeetState>,
+  useMeetWidePool: boolean,
+  _rosterLookup?: ScorerRosterLookup
+): SwimmerResult[] {
+  // One event per call, so one table: `individuals[0].event` names it. Diving
+  // scores from `divingPoints` when the preset carries one (Rule 7-1-4).
+  const pts = individualPlaceTable(individuals[0]?.event, merged);
+  const cap = merged.maxIndividualScorersPerTeam ?? 999;
+  const teamIndivScorers: Record<string, number> = {};
+  const indivOut: SwimmerResult[] = [];
+
+  const { byRank, sortedKeys } = buildTimedFinalRankGroups(individuals);
+
   let scoringPlace = 0;
 
   for (const key of sortedKeys) {
     const group = byRank.get(key)!;
-    const ineligible = group.filter(r => !isScoringSwimResult(r));
-    ineligible.forEach(r => indivOut.push({ ...r, points: 0 }));
-
-    const eligible = group.filter(r => isScoringSwimResult(r));
-    if (eligible.length === 0) continue;
-
-    const sample = eligible[0];
-    const pointEligible: SwimmerResult[] = [];
-    for (const r of eligible) {
-      const ex = r.isExhibition;
-      const tt = r.isTimeTrial && !isChampionshipGenderEvent(r.event);
-      if (ex || tt || !canScoreAthlete(r.roundSwam, r.event, merged)) {
-        indivOut.push({ ...r, points: 0 });
-        continue;
-      }
-      // Timed-finals distance: place ladder follows meet finish order among legal swims;
-      // roster caps apply via meet-wide pool below, not by skipping ladder slots.
-      pointEligible.push(r);
-    }
-
+    const pointEligible = splitTimedFinalGroupEligibility(group, merged, indivOut);
     if (pointEligible.length === 0) continue;
 
-    const avail = pts.length - scoringPlace;
-    const take = Math.min(pointEligible.length, avail);
-    const slice = pts.slice(scoringPlace, scoringPlace + take);
-    if (!slice.length) {
-      pointEligible.forEach(r => indivOut.push({ ...r, points: 0 }));
-      continue;
-    }
-    const each = slice.reduce((s, p) => s + p, 0) / pointEligible.length;
-
-    const byTeam = new Map<string, SwimmerResult[]>();
-    for (const r of pointEligible) {
-      const t = String(r.team ?? 'Unknown').trim() || 'Unknown';
-      if (!byTeam.has(t)) byTeam.set(t, []);
-      byTeam.get(t)!.push(r);
-    }
-
-    let anyAwarded = false;
-    for (const [team, members] of byTeam) {
-      const meetState = getOrCreateMeetState(meetStates, team, members[0].gender);
-
-      // Cap admission is per athlete and accumulates — see admitTieGroupToMeetPool.
-      if (useMeetWidePool) {
-        const admitted = admitTieGroupToMeetPool(
-          meetState.poolWeights,
-          members,
-          sample.event,
-          merged
-        );
-        for (const r of members) {
-          const award = admitted.has(r.name) ? each : 0;
-          indivOut.push({ ...r, points: award });
-          if (award > 0) anyAwarded = true;
-        }
-      } else if (cap < 999) {
-        const used = teamIndivScorers[team] || 0;
-        const allowed = admitTieGroupToEventCap(members, used, cap);
-        for (const r of members) {
-          const award = allowed.has(r.name) ? each : 0;
-          indivOut.push({ ...r, points: award });
-          if (award > 0) anyAwarded = true;
-        }
-        teamIndivScorers[team] = used + allowed.size;
-      } else {
-        for (const r of members) {
-          indivOut.push({ ...r, points: each });
-        }
-        anyAwarded = true;
-      }
-    }
-
-    if (anyAwarded) scoringPlace += take;
+    // Single-event call (see above): every row in the group shares one event,
+    // so the first point-eligible row names it exactly as the first eligible
+    // row did before this split.
+    scoringPlace += awardTimedFinalPointEligibleGroup(
+      pointEligible,
+      pointEligible[0].event,
+      pts,
+      scoringPlace,
+      cap,
+      useMeetWidePool,
+      teamIndivScorers,
+      meetStates,
+      merged,
+      indivOut
+    );
   }
 
   return indivOut;
@@ -1945,13 +2002,11 @@ function runIndividualScoringForEvent(
   return [...scored, ...removed.map(r => ({ ...r, points: 0 }))];
 }
 
-function scoreIndividualsInEvent(
-  individuals: SwimmerResult[],
-  merged: ScoringSettings,
-  meetStates: Map<string, TeamMeetState>,
-  useMeetWidePool: boolean,
-  rosterLookup?: ScorerRosterLookup
-): SwimmerResult[] {
+/** One event's rows, grouped by round + finish rank (ties by exact time+name),
+ *  in scoring order (round tier, then rank, then time). */
+function buildIndividualEventGroups(
+  individuals: SwimmerResult[]
+): { indivGroups: Map<string, SwimmerResult[]>; indivSortedKeys: string[] } {
   const indivGroups = new Map<string, SwimmerResult[]>();
   for (const r of individuals) {
     const rk = parseRankInt(r.rank) ?? 0;
@@ -1975,46 +2030,177 @@ function scoreIndividualsInEvent(
     return convertTimeToSeconds(ga.time) - convertTimeToSeconds(gb.time);
   });
 
+  return { indivGroups, indivSortedKeys };
+}
+
+/**
+ * Individual event group: rows that never earn place points are zeroed and
+ * pushed into `indivOut`. Ineligible rows (a non-finish result) are zeroed
+ * per-row; if any row of the remaining eligible rows is exhibition or a
+ * non-championship time trial, or the round/event is unscored, the WHOLE
+ * eligible group is zeroed together (this differs from the timed-final
+ * distance scorer, which zeroes per-row — a dead heat in a prelims/A-B-final
+ * event is one field, so one swimmer's exhibition designation removes the
+ * whole tie group from the ladder, not just that swimmer).
+ *
+ * Returns `null` once the group is fully accounted for; otherwise the rows
+ * still in play.
+ */
+function eligibleIndividualGroupOrNull(
+  group: SwimmerResult[],
+  merged: ScoringSettings,
+  indivOut: SwimmerResult[]
+): SwimmerResult[] | null {
+  const ineligible = group.filter(r => !isScoringSwimResult(r));
+  const eligible = group.filter(r => isScoringSwimResult(r));
+  ineligible.forEach(r => indivOut.push({ ...r, points: 0 }));
+  if (eligible.length === 0) return null;
+
+  const sample = eligible[0];
+  const ex = eligible.some(r => r.isExhibition);
+  const tt = eligible.some(r => r.isTimeTrial) && !isChampionshipGenderEvent(sample.event);
+
+  if (ex || tt || !canScoreAthlete(sample.roundSwam, sample.event, merged)) {
+    eligible.forEach(r => indivOut.push({ ...r, points: 0 }));
+    return null;
+  }
+  return eligible;
+}
+
+/**
+ * Individual event group: the ladder share each eligible row earns, and
+ * whether the group is a prelims diving round (for the finals-dive block in
+ * {@link awardIndividualEventTeamGroup}). `null` when the rank/table lookup
+ * fails — the rows are already zeroed into `indivOut` by then.
+ */
+function resolveIndividualGroupLadderShare(
+  eligible: SwimmerResult[],
+  merged: ScoringSettings,
+  indivOut: SwimmerResult[]
+): { each: number; isPrelimDiving: boolean } | null {
+  const sample = eligible[0];
+  const rk = parseRankInt(sample.rank);
+  const isPrelimDiving =
+    classifyRoundTier(sample.roundSwam) === 'PRE' && isDivingForSettings(sample.event, merged);
+  const baseIdx = rk != null ? scoringRowIndex(sample.roundSwam, rk, sample.event, merged) : null;
+  if (baseIdx == null) {
+    eligible.forEach(r => indivOut.push({ ...r, points: 0 }));
+    return null;
+  }
+
+  const pts = individualPlaceTable(sample.event, merged);
+  const gLen = eligible.length;
+  const avail = pts.length - baseIdx;
+  const take = Math.min(gLen, avail);
+  const slice = pts.slice(baseIdx, baseIdx + take);
+  if (!slice.length) {
+    eligible.forEach(r => indivOut.push({ ...r, points: 0 }));
+    return null;
+  }
+  const each = slice.reduce((s, p) => s + p, 0) / gLen;
+  return { each, isPrelimDiving };
+}
+
+/**
+ * Individual event group, one team: roster eligibility, the prelim-dive
+ * block, and whichever cap rule is active, pushing every row into `indivOut`.
+ * Mutates `teamIndivScorers` (the per-event cap's running count) exactly as
+ * the caller's loop did inline.
+ */
+function awardIndividualEventTeamGroup(
+  team: string,
+  allMembers: SwimmerResult[],
+  each: number,
+  isPrelimDiving: boolean,
+  individuals: SwimmerResult[],
+  sampleEvent: string,
+  cap: number,
+  useMeetWidePool: boolean,
+  teamIndivScorers: Record<string, number>,
+  meetStates: Map<string, TeamMeetState>,
+  merged: ScoringSettings,
+  rosterLookup: ScorerRosterLookup | undefined,
+  indivOut: SwimmerResult[]
+): void {
+  const meetState = getOrCreateMeetState(meetStates, team, allMembers[0].gender);
+  const gender = allMembers[0].gender;
+
+  // Roster eligibility is a per-ATHLETE decision, so it is applied per
+  // athlete. It used to be `uniqueNames.every(...)`, which zeroed the whole
+  // team group the moment one member was off the scoring roster.
+  //
+  // That is invisible in PDF-shaped data — a team almost never holds two
+  // swimmers on one placement, so the group is a single athlete and `every`
+  // reduces to the same test. It was catastrophic when ranks collapsed:
+  // `prepareRecruitsForScoring` had no comparators on a roster-only
+  // workspace, so every recruit row came back rank 1 and an entire event
+  // became ONE tie group. Turning 14 of 32 athletes off then zeroed every
+  // event any of them entered — 12 of 14 events measured, zero exceptions,
+  // and a 1277-point projection went to 0. See plans/2026-08-14/12.
+  //
+  // That collapse is fixed (2026-09-02): recruit rows are placed against
+  // each other, so a group holds equal times only. This per-athlete filter
+  // stays — it is correct on its own terms, and a real dead heat can still
+  // straddle the scoring roster. See scripts/test_recruit_placement_grid.mjs.
+  let members = allMembers;
+  if (rosterLookup && usesScorerRoster(merged)) {
+    members = [];
+    for (const r of allMembers) {
+      if (rosterLookup.isScorer(r.name, team, gender)) members.push(r);
+      else indivOut.push({ ...r, points: 0 });
+    }
+    if (members.length === 0) return;
+  }
+
+  const prelimDiveBlocked = (r: SwimmerResult) =>
+    isPrelimDiving && athleteHasFinalsDiveInEvent(individuals, r.name, team, merged);
+
+  // A prelims dive by someone with a finals dive in the same event scores
+  // nothing, so it must not consume a scorer slot either — such rows are
+  // held out of admission exactly as the previous `.filter(...)` did.
+  // `prelimDiveBlocked` depends only on name/team/event, so it is constant
+  // per name within a group and this cannot split one athlete's rows.
+  const poolCandidates = members.filter(r => !prelimDiveBlocked(r));
+
+  // Cap admission is per athlete and accumulates — see admitTieGroupToMeetPool.
+  if (useMeetWidePool) {
+    const admitted = admitTieGroupToMeetPool(meetState.poolWeights, poolCandidates, sampleEvent, merged);
+    for (const r of members) {
+      indivOut.push({ ...r, points: admitted.has(r.name) && !prelimDiveBlocked(r) ? each : 0 });
+    }
+  } else if (cap < 999) {
+    const used = teamIndivScorers[team] || 0;
+    const allowed = admitTieGroupToEventCap(poolCandidates, used, cap);
+    for (const r of members) {
+      indivOut.push({ ...r, points: allowed.has(r.name) && !prelimDiveBlocked(r) ? each : 0 });
+    }
+    teamIndivScorers[team] = used + allowed.size;
+  } else {
+    members.forEach(r => indivOut.push({ ...r, points: prelimDiveBlocked(r) ? 0 : each }));
+  }
+}
+
+function scoreIndividualsInEvent(
+  individuals: SwimmerResult[],
+  merged: ScoringSettings,
+  meetStates: Map<string, TeamMeetState>,
+  useMeetWidePool: boolean,
+  rosterLookup?: ScorerRosterLookup
+): SwimmerResult[] {
+  const { indivGroups, indivSortedKeys } = buildIndividualEventGroups(individuals);
+
+  const cap = merged.maxIndividualScorersPerTeam ?? 999;
   const teamIndivScorers: Record<string, number> = {};
   const indivOut: SwimmerResult[] = [];
 
   for (const key of indivSortedKeys) {
     const group = indivGroups.get(key)!;
-    const ineligible = group.filter(r => !isScoringSwimResult(r));
-    const eligible = group.filter(r => isScoringSwimResult(r));
-    ineligible.forEach(r => indivOut.push({ ...r, points: 0 }));
-    if (eligible.length === 0) continue;
+    const eligible = eligibleIndividualGroupOrNull(group, merged, indivOut);
+    if (!eligible) continue;
 
-    const sample = eligible[0];
-    const ex = eligible.some(r => r.isExhibition);
-    const tt = eligible.some(r => r.isTimeTrial) && !isChampionshipGenderEvent(sample.event);
+    const share = resolveIndividualGroupLadderShare(eligible, merged, indivOut);
+    if (!share) continue;
 
-    if (ex || tt || !canScoreAthlete(sample.roundSwam, sample.event, merged)) {
-      eligible.forEach(r => indivOut.push({ ...r, points: 0 }));
-      continue;
-    }
-
-    const rk = parseRankInt(sample.rank);
-    const isPrelimDiving =
-      classifyRoundTier(sample.roundSwam) === 'PRE' && isDivingForSettings(sample.event, merged);
-    const baseIdx = rk != null ? scoringRowIndex(sample.roundSwam, rk, sample.event, merged) : null;
-    if (baseIdx == null) {
-      eligible.forEach(r => indivOut.push({ ...r, points: 0 }));
-      continue;
-    }
-
-    const pts = individualPlaceTable(sample.event, merged);
-    const gLen = eligible.length;
-    const avail = pts.length - baseIdx;
-    const take = Math.min(gLen, avail);
-    const slice = pts.slice(baseIdx, baseIdx + take);
-    if (!slice.length) {
-      eligible.forEach(r => indivOut.push({ ...r, points: 0 }));
-      continue;
-    }
-    const each = slice.reduce((s, p) => s + p, 0) / gLen;
-
-    const cap = merged.maxIndividualScorersPerTeam ?? 999;
     const byTeam = new Map<string, SwimmerResult[]>();
     for (const r of eligible) {
       const t = String(r.team ?? 'Unknown').trim() || 'Unknown';
@@ -2023,67 +2209,21 @@ function scoreIndividualsInEvent(
     }
 
     for (const [team, allMembers] of byTeam) {
-      const meetState = getOrCreateMeetState(meetStates, team, allMembers[0].gender);
-      const gender = allMembers[0].gender;
-
-      // Roster eligibility is a per-ATHLETE decision, so it is applied per
-      // athlete. It used to be `uniqueNames.every(...)`, which zeroed the whole
-      // team group the moment one member was off the scoring roster.
-      //
-      // That is invisible in PDF-shaped data — a team almost never holds two
-      // swimmers on one placement, so the group is a single athlete and `every`
-      // reduces to the same test. It was catastrophic when ranks collapsed:
-      // `prepareRecruitsForScoring` had no comparators on a roster-only
-      // workspace, so every recruit row came back rank 1 and an entire event
-      // became ONE tie group. Turning 14 of 32 athletes off then zeroed every
-      // event any of them entered — 12 of 14 events measured, zero exceptions,
-      // and a 1277-point projection went to 0. See plans/2026-08-14/12.
-      //
-      // That collapse is fixed (2026-09-02): recruit rows are placed against
-      // each other, so a group holds equal times only. This per-athlete filter
-      // stays — it is correct on its own terms, and a real dead heat can still
-      // straddle the scoring roster. See scripts/test_recruit_placement_grid.mjs.
-      let members = allMembers;
-      if (rosterLookup && usesScorerRoster(merged)) {
-        members = [];
-        for (const r of allMembers) {
-          if (rosterLookup.isScorer(r.name, team, gender)) members.push(r);
-          else indivOut.push({ ...r, points: 0 });
-        }
-        if (members.length === 0) continue;
-      }
-
-      const prelimDiveBlocked = (r: SwimmerResult) =>
-        isPrelimDiving && athleteHasFinalsDiveInEvent(individuals, r.name, team, merged);
-
-      // A prelims dive by someone with a finals dive in the same event scores
-      // nothing, so it must not consume a scorer slot either — such rows are
-      // held out of admission exactly as the previous `.filter(...)` did.
-      // `prelimDiveBlocked` depends only on name/team/event, so it is constant
-      // per name within a group and this cannot split one athlete's rows.
-      const poolCandidates = members.filter(r => !prelimDiveBlocked(r));
-
-      // Cap admission is per athlete and accumulates — see admitTieGroupToMeetPool.
-      if (useMeetWidePool) {
-        const admitted = admitTieGroupToMeetPool(
-          meetState.poolWeights,
-          poolCandidates,
-          sample.event,
-          merged
-        );
-        for (const r of members) {
-          indivOut.push({ ...r, points: admitted.has(r.name) && !prelimDiveBlocked(r) ? each : 0 });
-        }
-      } else if (cap < 999) {
-        const used = teamIndivScorers[team] || 0;
-        const allowed = admitTieGroupToEventCap(poolCandidates, used, cap);
-        for (const r of members) {
-          indivOut.push({ ...r, points: allowed.has(r.name) && !prelimDiveBlocked(r) ? each : 0 });
-        }
-        teamIndivScorers[team] = used + allowed.size;
-      } else {
-        members.forEach(r => indivOut.push({ ...r, points: prelimDiveBlocked(r) ? 0 : each }));
-      }
+      awardIndividualEventTeamGroup(
+        team,
+        allMembers,
+        share.each,
+        share.isPrelimDiving,
+        individuals,
+        eligible[0].event,
+        cap,
+        useMeetWidePool,
+        teamIndivScorers,
+        meetStates,
+        merged,
+        rosterLookup,
+        indivOut
+      );
     }
   }
 
@@ -2496,145 +2636,105 @@ export function buildMeetPlaceField(
   };
 }
 
-export function calculatePoints(
+/**
+ * PDF place-points mode (`usePdfPlacePoints`): score every non-recruit row
+ * straight from its own `pdfPoints` column and never through the scorer
+ * functions below, then interleave recruit rows into the display order by
+ * time — recruits always score 0 in this mode.
+ */
+function scoreWithPdfPlacePoints(
   results: SwimmerResult[],
-  settings?: ScoringSettings,
-  options?: CalculatePointsOptions
+  pdfResultsPre: SwimmerResult[],
+  merged: ScoringSettings
 ): SwimmerResult[] {
-  const pdfResultsPre = results.filter(r => !r.isRecruit);
-  const hint = options?.resultsForPdfHint ?? pdfResultsPre;
-  const merged = mergeScoringSettings(settings, {
-    conference: options?.conferenceForMerge,
-    resultsForPdfHint: hint,
+  const recruitResults = results.filter(r => r.isRecruit);
+  const pdfResults = pdfResultsPre;
+  const sortedPdf = [...pdfResults].sort((a, b) => {
+    const tw = roundTierSort(a.roundSwam) - roundTierSort(b.roundSwam);
+    if (tw !== 0) return tw;
+    const ra = parseRankInt(a.rank) ?? 9999;
+    const rb = parseRankInt(b.rank) ?? 9999;
+    if (ra !== rb) return ra - rb;
+    return convertTimeToSeconds(a.time) - convertTimeToSeconds(b.time);
   });
-  // Meet-scoped, so it arrives with the call rather than with the conference
-  // preset. An explicit option wins over a value already on the settings.
-  if (options?.scoredEventNumberMax != null) {
-    merged.scoredEventNumberMax = options.scoredEventNumberMax;
+  const scoredById = new Map<string, SwimmerResult>();
+  for (const r of pdfResults) {
+    scoredById.set(r.id, { ...r, points: pdfPlacePointsForRow(r, merged.scoredEventNumberMax) });
   }
-  const usePdfScoring = effectivePdfPlacePointsMode(merged, hint);
-
-  if (usePdfScoring) {
-    const recruitResults = results.filter(r => r.isRecruit);
-    const pdfResults = pdfResultsPre;
-    const sortedPdf = [...pdfResults].sort((a, b) => {
-      const tw = roundTierSort(a.roundSwam) - roundTierSort(b.roundSwam);
-      if (tw !== 0) return tw;
-      const ra = parseRankInt(a.rank) ?? 9999;
-      const rb = parseRankInt(b.rank) ?? 9999;
-      if (ra !== rb) return ra - rb;
-      return convertTimeToSeconds(a.time) - convertTimeToSeconds(b.time);
-    });
-    const scoredById = new Map<string, SwimmerResult>();
-    for (const r of pdfResults) {
-      scoredById.set(r.id, { ...r, points: pdfPlacePointsForRow(r, merged.scoredEventNumberMax) });
-    }
-    const sorted: SwimmerResult[] = [];
-    let pdfIdx = 0;
-    recruitResults.sort((a, b) => convertTimeToSeconds(a.time) - convertTimeToSeconds(b.time));
-    for (const recruit of recruitResults) {
-      const recTime = convertTimeToSeconds(recruit.time);
-      while (pdfIdx < sortedPdf.length && convertTimeToSeconds(sortedPdf[pdfIdx].time) <= recTime) {
-        const p = sortedPdf[pdfIdx];
-        sorted.push(scoredById.get(p.id) ?? { ...p, points: 0 });
-        pdfIdx++;
-      }
-      sorted.push({ ...recruit, rank: 0, points: 0 });
-    }
-    while (pdfIdx < sortedPdf.length) {
+  const sorted: SwimmerResult[] = [];
+  let pdfIdx = 0;
+  recruitResults.sort((a, b) => convertTimeToSeconds(a.time) - convertTimeToSeconds(b.time));
+  for (const recruit of recruitResults) {
+    const recTime = convertTimeToSeconds(recruit.time);
+    while (pdfIdx < sortedPdf.length && convertTimeToSeconds(sortedPdf[pdfIdx].time) <= recTime) {
       const p = sortedPdf[pdfIdx];
       sorted.push(scoredById.get(p.id) ?? { ...p, points: 0 });
       pdfIdx++;
     }
-    return sorted;
+    sorted.push({ ...recruit, rank: 0, points: 0 });
   }
+  while (pdfIdx < sortedPdf.length) {
+    const p = sortedPdf[pdfIdx];
+    sorted.push(scoredById.get(p.id) ?? { ...p, points: 0 });
+    pdfIdx++;
+  }
+  return sorted;
+}
 
+type CalculatePointsEventMode = {
+  useMeetWideIndividualPool: boolean;
+  relayPoolRule: boolean;
+  processEventsChronologically: boolean;
+};
+
+/**
+ * Which event-scoring dispatch `calculatePoints` needs. A meet-wide scorer
+ * pool (`scorerCapScope: 'meet'`), a per-event individual/relay cap, a
+ * roster-gated meet, or relay-pool eligibility all require scoring every
+ * event in meet order (chronological); every preset written before
+ * 2026-09-20 has none of these set and takes the independent per-event path.
+ */
+function resolveEventProcessingMode(merged: ScoringSettings): CalculatePointsEventMode {
   const maxIndivCap = merged.maxIndividualScorersPerTeam ?? 999;
   const maxRelayCap = merged.maxRelaysScoringPerTeam ?? 999;
   /** 18-scorer pool across the full meet (NSISC); only when scorerCapScope is 'meet'. */
-  const useMeetWideIndividualPool =
-    merged.scorerCapScope === 'meet' && maxIndivCap < 999;
-  const relayPoolRule =
-    merged.relayEligibleFromScorerPool === true && !usesScorerRoster(merged);
-  /** Score each event in meet order (required for meet pool, relay caps, roster relays, or per-event individual cap). */
+  const useMeetWideIndividualPool = merged.scorerCapScope === 'meet' && maxIndivCap < 999;
+  const relayPoolRule = merged.relayEligibleFromScorerPool === true && !usesScorerRoster(merged);
   const processEventsChronologically =
     useMeetWideIndividualPool ||
     relayPoolRule ||
     maxRelayCap < 999 ||
     maxIndivCap < 999 ||
     usesScorerRoster(merged);
+  return { useMeetWideIndividualPool, relayPoolRule, processEventsChronologically };
+}
 
-  const pdfResults = results.filter(r => !r.isRecruit);
-  const recruitResults = results.filter(r => r.isRecruit);
-  const preparedRecruits = prepareRecruitsForScoring(pdfResults, recruitResults);
-  const scoringPool = [...pdfResults, ...preparedRecruits];
-
-  const rosterLookup = usesScorerRoster(merged)
-    ? buildScorerRosterLookup(scoringPool, merged, options?.scorerRosterOverrides)
-    : undefined;
-
-  const meetStates = new Map<string, TeamMeetState>();
+/**
+ * Score every event in `scoringPool`, in meet order. The independent path
+ * (no meet-wide pool, no caps, no roster gate — every preset written before
+ * 2026-09-20) scores each event's individuals and relays back to back with
+ * no shared pool. The chronological path scores ALL of an event's
+ * individuals before its relays, and — when relay legs draw from the
+ * meet-wide pool too — seeds A/B relay legs into that pool between the two,
+ * so an early relay is never evaluated against a still-empty pool.
+ */
+function scoreScoringPoolByEvent(
+  scoringPool: SwimmerResult[],
+  merged: ScoringSettings,
+  meetStates: Map<string, TeamMeetState>,
+  mode: CalculatePointsEventMode,
+  rosterLookup: ScorerRosterLookup | undefined
+): Map<string, SwimmerResult> {
   const scoredById = new Map<string, SwimmerResult>();
+  const byEvent = new Map<string, SwimmerResult[]>();
+  for (const r of scoringPool) {
+    if (!byEvent.has(r.event)) byEvent.set(r.event, []);
+    byEvent.get(r.event)!.push(r);
+  }
+  const sortedEvents = sortEventsByMeetOrder(Array.from(byEvent.keys()));
 
-  if (processEventsChronologically) {
-    const byEvent = new Map<string, SwimmerResult[]>();
-    for (const r of scoringPool) {
-      if (!byEvent.has(r.event)) byEvent.set(r.event, []);
-      byEvent.get(r.event)!.push(r);
-    }
-    const sortedEvents = sortEventsByMeetOrder(Array.from(byEvent.keys()));
-
-    // When relays must use the meet-wide individual scorer pool, score ALL individuals first
-    // so early relay events are not evaluated against an empty pool.
-    const runIndividuals = (event: string) => {
-      const evRows = byEvent.get(event)!;
-      const indiv = evRows.filter(r => !isRelayResult(r));
-      for (const row of runIndividualScoringForEvent(
-        indiv,
-        merged,
-        meetStates,
-        useMeetWideIndividualPool,
-        rosterLookup
-      )) {
-        scoredById.set(row.id, row);
-      }
-    };
-    const runRelays = (event: string) => {
-      const evRows = byEvent.get(event)!;
-      for (const row of scoreRelaysInEvent(
-        evRows.filter(r => isRelayResult(r)),
-        merged,
-        meetStates,
-        useMeetWideIndividualPool,
-        rosterLookup
-      )) {
-        scoredById.set(row.id, row);
-      }
-    };
-
-    if (relayPoolRule) {
-      for (const event of sortedEvents) {
-        runIndividuals(event);
-        seedAbRelayLegsIntoPool(
-          (byEvent.get(event) ?? []).filter(r => isRelayResult(r)),
-          merged,
-          meetStates
-        );
-        runRelays(event);
-      }
-    } else {
-      for (const event of sortedEvents) {
-        runIndividuals(event);
-        runRelays(event);
-      }
-    }
-  } else {
-    const byEvent = new Map<string, SwimmerResult[]>();
-    for (const r of scoringPool) {
-      if (!byEvent.has(r.event)) byEvent.set(r.event, []);
-      byEvent.get(r.event)!.push(r);
-    }
-    for (const event of sortEventsByMeetOrder(Array.from(byEvent.keys()))) {
+  if (!mode.processEventsChronologically) {
+    for (const event of sortedEvents) {
       const evRows = byEvent.get(event)!;
       const indiv = evRows.filter(r => !isRelayResult(r));
       const relays = evRows.filter(r => isRelayResult(r));
@@ -2645,15 +2745,65 @@ export function calculatePoints(
         scoredById.set(row.id, row);
       }
     }
+    return scoredById;
   }
 
-  for (const r of scoringPool) {
-    if (!scoredById.has(r.id)) scoredById.set(r.id, { ...r, points: 0 });
+  const runIndividuals = (event: string) => {
+    const evRows = byEvent.get(event)!;
+    const indiv = evRows.filter(r => !isRelayResult(r));
+    for (const row of runIndividualScoringForEvent(
+      indiv,
+      merged,
+      meetStates,
+      mode.useMeetWideIndividualPool,
+      rosterLookup
+    )) {
+      scoredById.set(row.id, row);
+    }
+  };
+  const runRelays = (event: string) => {
+    const evRows = byEvent.get(event)!;
+    for (const row of scoreRelaysInEvent(
+      evRows.filter(r => isRelayResult(r)),
+      merged,
+      meetStates,
+      mode.useMeetWideIndividualPool,
+      rosterLookup
+    )) {
+      scoredById.set(row.id, row);
+    }
+  };
+
+  if (mode.relayPoolRule) {
+    for (const event of sortedEvents) {
+      runIndividuals(event);
+      seedAbRelayLegsIntoPool(
+        (byEvent.get(event) ?? []).filter(r => isRelayResult(r)),
+        merged,
+        meetStates
+      );
+      runRelays(event);
+    }
+  } else {
+    for (const event of sortedEvents) {
+      runIndividuals(event);
+      runRelays(event);
+    }
   }
 
-  const byId = scoredById;
+  return scoredById;
+}
 
-  // Preserve recruit interleave order (by time vs PDF) for display; recruits score 0
+/**
+ * Preserve recruit interleave order (by time vs PDF) for display; recruits
+ * score 0 unless `scoringPool` (in the caller) already carried them through
+ * the event dispatch above.
+ */
+function interleaveRecruitsWithScoredResults(
+  pdfResults: SwimmerResult[],
+  recruitResults: SwimmerResult[],
+  scoredById: Map<string, SwimmerResult>
+): SwimmerResult[] {
   const sortedPdf = [...pdfResults].sort((a, b) => {
     const tw = roundTierSort(a.roundSwam) - roundTierSort(b.roundSwam);
     if (tw !== 0) return tw;
@@ -2677,11 +2827,54 @@ export function calculatePoints(
   }
   while (pdfIdx < sortedPdf.length) {
     const p = sortedPdf[pdfIdx];
-    sorted.push(byId.get(p.id) ?? { ...p, points: 0 });
+    sorted.push(scoredById.get(p.id) ?? { ...p, points: 0 });
     pdfIdx++;
   }
 
   return sorted;
+}
+
+export function calculatePoints(
+  results: SwimmerResult[],
+  settings?: ScoringSettings,
+  options?: CalculatePointsOptions
+): SwimmerResult[] {
+  const pdfResultsPre = results.filter(r => !r.isRecruit);
+  const hint = options?.resultsForPdfHint ?? pdfResultsPre;
+  const merged = mergeScoringSettings(settings, {
+    conference: options?.conferenceForMerge,
+    resultsForPdfHint: hint,
+  });
+  // Meet-scoped, so it arrives with the call rather than with the conference
+  // preset. An explicit option wins over a value already on the settings.
+  if (options?.scoredEventNumberMax != null) {
+    merged.scoredEventNumberMax = options.scoredEventNumberMax;
+  }
+  const usePdfScoring = effectivePdfPlacePointsMode(merged, hint);
+
+  if (usePdfScoring) {
+    return scoreWithPdfPlacePoints(results, pdfResultsPre, merged);
+  }
+
+  const mode = resolveEventProcessingMode(merged);
+
+  const pdfResults = results.filter(r => !r.isRecruit);
+  const recruitResults = results.filter(r => r.isRecruit);
+  const preparedRecruits = prepareRecruitsForScoring(pdfResults, recruitResults);
+  const scoringPool = [...pdfResults, ...preparedRecruits];
+
+  const rosterLookup = usesScorerRoster(merged)
+    ? buildScorerRosterLookup(scoringPool, merged, options?.scorerRosterOverrides)
+    : undefined;
+
+  const meetStates = new Map<string, TeamMeetState>();
+  const scoredById = scoreScoringPoolByEvent(scoringPool, merged, meetStates, mode, rosterLookup);
+
+  for (const r of scoringPool) {
+    if (!scoredById.has(r.id)) scoredById.set(r.id, { ...r, points: 0 });
+  }
+
+  return interleaveRecruitsWithScoredResults(pdfResults, recruitResults, scoredById);
 }
 
 export function getYearsRemaining(year: ClassYear): number {
@@ -2832,6 +3025,381 @@ export function findDepartedLegSwim(
   );
 }
 
+/** One relay leg's canonical name/class-year, as `relayNames` (or a fallback
+ *  built from the ordered rows) records it. */
+type RelayLegCanonical = { name: string; year: string };
+
+type ResolvedRelayLegs = {
+  outLegs: RelayLegCanonical[];
+  newTimeSecs: number;
+  modified: boolean;
+  legReplacements: Map<number, SwimmerResult>;
+  legMissingByIndex: Map<number, RelayMissingLeg>;
+  legVacantByIndex: Map<number, boolean>;
+};
+
+/**
+ * Resolve every leg of one relay group: a leg whose holder stays untouched
+ * keeps their spot; a leg whose holder departs (dropped, excluded, or a
+ * non-scorer vacate) is filled by its override's assignee or manual time, or
+ * left vacant with a 3-second penalty and a reason the lineup audit can name.
+ *
+ * `legPool` is the swims an override may resolve onto — `simulateRoster`'s
+ * caller mixes in the history leg-only pool there. `findDepartedLegSwim`'s
+ * clock-hold time is shared with the relay-leg swap ranking
+ * (`arbitrage/relayLegSwaps.ts`'s `resolveClockHoldTime`) so the two cannot
+ * drift apart; see that function's own doc comment.
+ */
+function resolveRelayLegs(
+  legsCanonical: RelayLegCanonical[],
+  ordered: SwimmerResult[],
+  template: SwimmerResult,
+  evLower: string,
+  results: SwimmerResult[],
+  legPool: SwimmerResult[],
+  overrideList: RelayLegOverride[],
+  removeSeniors: boolean,
+  excluded: Set<string>,
+  vacateLegs: Set<string>
+): ResolvedRelayLegs {
+  const outLegs = legsCanonical.map(l => ({ ...l }));
+  let newTimeSecs = convertTimeToSeconds(template.time);
+  let modified = false;
+  const legReplacements = new Map<number, SwimmerResult>();
+  const legMissingByIndex = new Map<number, RelayMissingLeg>();
+  const legVacantByIndex = new Map<number, boolean>();
+  const relayGender = relayEntryGender(template);
+  const assignedInRelay = new Set<string>();
+
+  const applyLegTimeDelta = (
+    index: number,
+    newLegTimeSec: number,
+    oldSplitSec: number | null,
+    departedIndiv: SwimmerResult | undefined
+  ) => {
+    let delta = newLegTimeSec - (oldSplitSec ?? newLegTimeSec);
+    if (departedIndiv && Number.isFinite(convertTimeToSeconds(departedIndiv.time))) {
+      delta = newLegTimeSec - convertTimeToSeconds(departedIndiv.time);
+    } else if (oldSplitSec != null && Number.isFinite(oldSplitSec)) {
+      delta = newLegTimeSec - oldSplitSec;
+    }
+    newTimeSecs += delta;
+  };
+
+  const legNeedsReplace = (leg: RelayLegCanonical): boolean =>
+    (removeSeniors && isGraduatingClassYear(leg.year)) ||
+    excluded.has(canonicalSwimmerName(leg.name)) ||
+    vacateLegs.has(normalizeSwimmerName(leg.name));
+
+  // Every leg holder who stays is on the relay before any override is
+  // resolved. Collected while walking the legs, a holder of a LATER leg was
+  // not yet known when an earlier leg's override named them, so one swimmer
+  // could swim two legs (real case: HSU 200 Free Relay A with Gavin Kock
+  // removed and Oliver Pozvai, its anchor, named for leg 1).
+  for (const leg of outLegs) {
+    if (legNeedsReplace(leg)) continue;
+    const nm = leg.name?.trim();
+    if (nm && nm !== '—' && nm !== 'Unknown') assignedInRelay.add(normalizeSwimmerName(nm));
+  }
+
+  for (let index = 0; index < outLegs.length; index++) {
+    const leg = outLegs[index];
+    if (!legNeedsReplace(leg)) continue;
+    const isNonScorerLeg = vacateLegs.has(normalizeSwimmerName(leg.name));
+
+    const legRowForSplit =
+      ordered.find(row => (row.relayLegIndex ?? -1) === index) ?? ordered[index];
+    const oldSplitSec =
+      legRowForSplit?.relayLegSplit && legRowForSplit.relayLegSplit !== 'NT'
+        ? convertTimeToSeconds(legRowForSplit.relayLegSplit)
+        : null;
+
+    const departedIndiv = findDepartedLegSwim(
+      results,
+      leg.name,
+      template.event,
+      index,
+      template.team
+    );
+
+    const stroke = relayStrokeForIndex(evLower, index);
+    const override = findRelayLegOverride(overrideList, template, index);
+    const departedNameKey = normalizeSwimmerName(leg.name);
+
+    const markVacant = (reason: RelayMissingLeg['reason']) => {
+      modified = true;
+      newTimeSecs += 3.0;
+      outLegs[index] = { name: '—', year: '' };
+      legVacantByIndex.set(index, true);
+      legMissingByIndex.set(index, { legIndex: index, stroke, reason });
+      legReplacements.set(index, {
+        ...template,
+        id: `vacant-${index}`,
+        name: '—',
+        classYear: '',
+        time: formatSecondsToTime((oldSplitSec ?? 30) + 3),
+        isRelay: false,
+      });
+    };
+
+    if (!override) {
+      markVacant(isNonScorerLeg ? 'no_replacement' : 'vacant');
+      continue;
+    }
+
+    const assignee = resolveOverrideAssignee(
+      override,
+      legPool,
+      template.team,
+      template.event,
+      index,
+      relayGender
+    );
+    const manualTime = override.manualLegTime?.trim();
+
+    if (assignee) {
+      if (normalizeSwimmerName(assignee.name) === departedNameKey) {
+        markVacant('vacant');
+        continue;
+      }
+      if (!swimmerMatchesRelayLeg(assignee, template.event, index)) {
+        markVacant('stroke_mismatch');
+        continue;
+      }
+      const assigneeKey = normalizeSwimmerName(assignee.name);
+      if (assignedInRelay.has(assigneeKey)) {
+        markVacant('stroke_mismatch');
+        continue;
+      }
+
+      modified = true;
+      legReplacements.set(index, assignee);
+      assignedInRelay.add(assigneeKey);
+      const legTimeSec = convertTimeToSeconds(manualTime || assignee.time);
+      applyLegTimeDelta(index, legTimeSec, oldSplitSec, departedIndiv);
+      outLegs[index] = {
+        name: assignee.name,
+        year: String(override.classYear ?? assignee.classYear),
+      };
+      continue;
+    }
+
+    if (manualTime) {
+      modified = true;
+      const legTimeSec = convertTimeToSeconds(manualTime);
+      applyLegTimeDelta(index, legTimeSec, oldSplitSec, departedIndiv);
+      outLegs[index] = { name: '—', year: '' };
+      legReplacements.set(index, {
+        ...template,
+        id: `manual-${index}`,
+        name: '—',
+        classYear: '',
+        time: manualTime,
+        isRelay: false,
+      });
+      continue;
+    }
+
+    markVacant('vacant');
+  }
+
+  return { outLegs, newTimeSecs, modified, legReplacements, legMissingByIndex, legVacantByIndex };
+}
+
+type RelayLegSplitDetails = {
+  legTotals: (string | null)[];
+  legDetailsByIndex: Map<number, SwimmerResult['relayLegSplitDetail']>;
+  /** Replaced legs of a relay with no readable distance: time, no detail. */
+  undetailedLegTimes: Map<number, string>;
+};
+
+/**
+ * Build each leg's split total from the resolved legs: a replaced leg with no
+ * readable distance carries its time only; a replaced leg with a readable
+ * distance gets a synthesized split detail; an unreplaced leg keeps its
+ * recorded split (normalized) exactly.
+ */
+function buildRelayLegSplitDetails(
+  outLegs: RelayLegCanonical[],
+  ordered: SwimmerResult[],
+  evLower: string,
+  legReplacements: Map<number, SwimmerResult>,
+  legDistYards: number | null
+): RelayLegSplitDetails {
+  const legTotals: (string | null)[] = [];
+  const legDetailsByIndex = new Map<number, SwimmerResult['relayLegSplitDetail']>();
+  const undetailedLegTimes = new Map<number, string>();
+
+  for (let index = 0; index < outLegs.length; index++) {
+    const legRowForSplit =
+      ordered.find(row => (row.relayLegIndex ?? -1) === index) ?? ordered[index];
+    const stroke = legRowForSplit?.relayLegStroke ?? relayStrokeForIndex(evLower, index);
+
+    if (legReplacements.has(index) && legDistYards == null) {
+      // No leg distance to build a split detail on: carry the leg time only.
+      const legTime = legReplacements.get(index)!.time;
+      undetailedLegTimes.set(index, legTime);
+      legTotals.push(legTime);
+    } else if (legReplacements.has(index) && legDistYards != null) {
+      const replacement = legReplacements.get(index)!;
+      const prior = normalizeRelayLegSplitDetail(legRowForSplit?.relayLegSplitDetail);
+      const detail = buildSyntheticLegSplitDetail(
+        index,
+        stroke,
+        legDistYards,
+        replacement.time,
+        prior?.segments
+      );
+      legDetailsByIndex.set(index, detail);
+      legTotals.push(detail.legTotal ?? replacement.time);
+    } else if (legRowForSplit?.relayLegSplitDetail) {
+      const normalizedDetail = normalizeRelayLegSplitDetail(legRowForSplit.relayLegSplitDetail);
+      if (normalizedDetail) legDetailsByIndex.set(index, normalizedDetail);
+      legTotals.push(
+        normalizedDetail?.legTotal ?? legRowForSplit.relayLegSplit ?? null
+      );
+    } else {
+      legTotals.push(legRowForSplit?.relayLegSplit ?? null);
+    }
+  }
+
+  return { legTotals, legDetailsByIndex, undetailedLegTimes };
+}
+
+/**
+ * Compute the team split summary and push this relay group's final rows —
+ * rewritten if any leg changed, unchanged (as `ordered`) otherwise.
+ */
+function emitRelayGroupRows(
+  ordered: SwimmerResult[],
+  resolved: ResolvedRelayLegs,
+  legTotals: (string | null)[],
+  legDetailsByIndex: Map<number, SwimmerResult['relayLegSplitDetail']>,
+  undetailedLegTimes: Map<number, string>,
+  finalResults: SwimmerResult[]
+): void {
+  const { outLegs, modified, legMissingByIndex, legVacantByIndex } = resolved;
+  const newTeamStr = formatSecondsToTime(resolved.newTimeSecs);
+
+  const teamSplits =
+    modified || ordered.some(r => r.relayTeamSplits)
+      ? rebuildTeamSplitSummary(legTotals, newTeamStr)
+      : ordered[0]?.relayTeamSplits;
+
+  if (!modified) {
+    ordered.forEach(row => finalResults.push(row));
+    return;
+  }
+
+  ordered.forEach(row => {
+    const idx =
+      row.relayLegIndex != null
+        ? Math.min(Math.max(0, row.relayLegIndex), outLegs.length - 1)
+        : Math.min(Math.max(0, ordered.indexOf(row)), outLegs.length - 1);
+    const legMeta = outLegs[idx];
+    const legDetail = legDetailsByIndex.get(idx);
+    finalResults.push({
+      ...row,
+      name: legMeta.name,
+      classYear: legMeta.year,
+      time: newTeamStr,
+      finalsTime: newTeamStr,
+      relayNames: outLegs,
+      relayTeamTime: newTeamStr,
+      relayLegSplit: undetailedLegTimes.get(idx) ?? legDetail?.legTotal ?? row.relayLegSplit,
+      relayLegSplitDetail: legDetail,
+      relayTeamSplits: teamSplits,
+      relayMissingLeg: legMissingByIndex.get(idx),
+      relayLegVacant: legVacantByIndex.get(idx) ?? false,
+    });
+  });
+}
+
+/**
+ * One relay group from `simulateRoster`'s per-row dispatch: find its original
+ * rows (by `key`, computed from the ORIGINAL, unmodified rows — see BUG 2 in
+ * {@link reAddUnprocessedRelayGroups}), resolve every leg, rebuild the leg
+ * splits, and push the resulting rows into `finalResults`. A relay with no
+ * canonical legs to compare against (`legsCanonical` empty) is pushed
+ * unchanged.
+ */
+function processRelayGroupForRosterSim(
+  key: string,
+  results: SwimmerResult[],
+  legPool: SwimmerResult[],
+  overrideList: RelayLegOverride[],
+  removeSeniors: boolean,
+  excluded: Set<string>,
+  vacateLegs: Set<string>,
+  finalResults: SwimmerResult[]
+): void {
+  const group = results.filter(x => x.isRelay && relayGroupKey(x) === key);
+  if (group.length === 0) return;
+
+  const template = group[0];
+  const evLower = template.event.toLowerCase();
+  const ordered = [...group].sort((a, b) => (a.relayLegIndex ?? 0) - (b.relayLegIndex ?? 0));
+
+  const legsCanonical: RelayLegCanonical[] =
+    template.relayNames && template.relayNames.length > 0
+      ? template.relayNames.map(n => ({ name: n.name, year: n.year }))
+      : ordered.map(row => ({ name: row.name, year: String(row.classYear) }));
+
+  if (legsCanonical.length === 0) {
+    ordered.forEach(row => finalResults.push(row));
+    return;
+  }
+
+  const resolved = resolveRelayLegs(
+    legsCanonical,
+    ordered,
+    template,
+    evLower,
+    results,
+    legPool,
+    overrideList,
+    removeSeniors,
+    excluded,
+    vacateLegs
+  );
+
+  // Null when the relay's label names no distance. No swim then matches a
+  // leg (`isRelayLegEvent`), so a departing leg holder leaves the leg vacant;
+  // the lineup audit names the label (`relay_distance_unreadable`).
+  const legDistYards = relayLegDistanceYardsOfEvent(template.event);
+  const { legTotals, legDetailsByIndex, undetailedLegTimes } = buildRelayLegSplitDetails(
+    resolved.outLegs,
+    ordered,
+    evLower,
+    resolved.legReplacements,
+    legDistYards
+  );
+
+  emitRelayGroupRows(ordered, resolved, legTotals, legDetailsByIndex, undetailedLegTimes, finalResults);
+}
+
+/**
+ * Safety: re-add only relay groups the main loop never processed. Compare against
+ * the ORIGINAL-row keys in `processedRelayKeys` — a modified relay carries a changed
+ * team clock, so recomputing keys from the emitted (modified) rows would never match
+ * the original group and would re-add the pre-modification legs (including a removed
+ * swimmer's leg under their original name, double-counting the relay). See BUG 2.
+ */
+function reAddUnprocessedRelayGroups(
+  results: SwimmerResult[],
+  processedRelayKeys: Set<string>,
+  finalResults: SwimmerResult[]
+): void {
+  for (const r of results) {
+    if (!r.isRelay) continue;
+    const k = relayGroupKey(r);
+    if (processedRelayKeys.has(k)) continue;
+    const group = results.filter(x => x.isRelay && relayGroupKey(x) === k);
+    group.forEach(row => finalResults.push(row));
+    processedRelayKeys.add(k);
+  }
+}
+
 /**
  * Apply the roster what-if to a gender's results: drop removed and (with
  * `removeSeniors`) graduating swimmers, and rebuild each relay whose legs they
@@ -2887,255 +3455,19 @@ export function simulateRoster(
     if (processedRelayKeys.has(k)) continue;
     processedRelayKeys.add(k);
 
-    const group = results.filter(x => x.isRelay && relayGroupKey(x) === k);
-    if (group.length === 0) continue;
-
-    const template = group[0];
-    const evLower = template.event.toLowerCase();
-
-    const ordered = [...group].sort((a, b) => (a.relayLegIndex ?? 0) - (b.relayLegIndex ?? 0));
-
-    const legsCanonical =
-      template.relayNames && template.relayNames.length > 0
-        ? template.relayNames.map(n => ({ name: n.name, year: n.year }))
-        : ordered.map(row => ({ name: row.name, year: String(row.classYear) }));
-
-    if (legsCanonical.length === 0) {
-      ordered.forEach(row => finalResults.push(row));
-      continue;
-    }
-
-    const outLegs = legsCanonical.map(l => ({ ...l }));
-    let newTimeSecs = convertTimeToSeconds(template.time);
-    let modified = false;
-    const legReplacements = new Map<number, SwimmerResult>();
-    const legMissingByIndex = new Map<number, RelayMissingLeg>();
-    const legVacantByIndex = new Map<number, boolean>();
-    // Null when the relay's label names no distance. No swim then matches a
-    // leg (`isRelayLegEvent`), so a departing leg holder leaves the leg vacant;
-    // the lineup audit names the label (`relay_distance_unreadable`).
-    const legDistYards = relayLegDistanceYardsOfEvent(template.event);
-    const relayGender = relayEntryGender(template);
-    const assignedInRelay = new Set<string>();
-
-    const applyLegTimeDelta = (
-      index: number,
-      newLegTimeSec: number,
-      oldSplitSec: number | null,
-      departedIndiv: SwimmerResult | undefined
-    ) => {
-      let delta = newLegTimeSec - (oldSplitSec ?? newLegTimeSec);
-      if (departedIndiv && Number.isFinite(convertTimeToSeconds(departedIndiv.time))) {
-        delta = newLegTimeSec - convertTimeToSeconds(departedIndiv.time);
-      } else if (oldSplitSec != null && Number.isFinite(oldSplitSec)) {
-        delta = newLegTimeSec - oldSplitSec;
-      }
-      newTimeSecs += delta;
-    };
-
-    const legNeedsReplace = (leg: { name: string; year: string }): boolean =>
-      (removeSeniors && isGraduatingClassYear(leg.year)) ||
-      excluded.has(canonicalSwimmerName(leg.name)) ||
-      vacateLegs.has(normalizeSwimmerName(leg.name));
-
-    // Every leg holder who stays is on the relay before any override is
-    // resolved. Collected while walking the legs, a holder of a LATER leg was
-    // not yet known when an earlier leg's override named them, so one swimmer
-    // could swim two legs (real case: HSU 200 Free Relay A with Gavin Kock
-    // removed and Oliver Pozvai, its anchor, named for leg 1).
-    for (const leg of outLegs) {
-      if (legNeedsReplace(leg)) continue;
-      const nm = leg.name?.trim();
-      if (nm && nm !== '—' && nm !== 'Unknown') assignedInRelay.add(normalizeSwimmerName(nm));
-    }
-
-    for (let index = 0; index < outLegs.length; index++) {
-      const leg = outLegs[index];
-      if (!legNeedsReplace(leg)) continue;
-      const isNonScorerLeg = vacateLegs.has(normalizeSwimmerName(leg.name));
-
-      const legRowForSplit =
-        ordered.find(row => (row.relayLegIndex ?? -1) === index) ?? ordered[index];
-      const oldSplitSec =
-        legRowForSplit?.relayLegSplit && legRowForSplit.relayLegSplit !== 'NT'
-          ? convertTimeToSeconds(legRowForSplit.relayLegSplit)
-          : null;
-
-      const departedIndiv = findDepartedLegSwim(
-        results,
-        leg.name,
-        template.event,
-        index,
-        template.team
-      );
-
-      const stroke = relayStrokeForIndex(evLower, index);
-      const override = findRelayLegOverride(overrideList, template, index);
-      const departedNameKey = normalizeSwimmerName(leg.name);
-
-      const markVacant = (reason: RelayMissingLeg['reason']) => {
-        modified = true;
-        newTimeSecs += 3.0;
-        outLegs[index] = { name: '—', year: '' };
-        legVacantByIndex.set(index, true);
-        legMissingByIndex.set(index, { legIndex: index, stroke, reason });
-        legReplacements.set(index, {
-          ...template,
-          id: `vacant-${index}`,
-          name: '—',
-          classYear: '',
-          time: formatSecondsToTime((oldSplitSec ?? 30) + 3),
-          isRelay: false,
-        });
-      };
-
-      if (!override) {
-        markVacant(isNonScorerLeg ? 'no_replacement' : 'vacant');
-        continue;
-      }
-
-      const assignee = resolveOverrideAssignee(
-        override,
-        legPool,
-        template.team,
-        template.event,
-        index,
-        relayGender
-      );
-      const manualTime = override.manualLegTime?.trim();
-
-      if (assignee) {
-        if (normalizeSwimmerName(assignee.name) === departedNameKey) {
-          markVacant('vacant');
-          continue;
-        }
-        if (!swimmerMatchesRelayLeg(assignee, template.event, index)) {
-          markVacant('stroke_mismatch');
-          continue;
-        }
-        const assigneeKey = normalizeSwimmerName(assignee.name);
-        if (assignedInRelay.has(assigneeKey)) {
-          markVacant('stroke_mismatch');
-          continue;
-        }
-
-        modified = true;
-        legReplacements.set(index, assignee);
-        assignedInRelay.add(assigneeKey);
-        const legTimeSec = convertTimeToSeconds(manualTime || assignee.time);
-        applyLegTimeDelta(index, legTimeSec, oldSplitSec, departedIndiv);
-        outLegs[index] = {
-          name: assignee.name,
-          year: String(override.classYear ?? assignee.classYear),
-        };
-        continue;
-      }
-
-      if (manualTime) {
-        modified = true;
-        const legTimeSec = convertTimeToSeconds(manualTime);
-        applyLegTimeDelta(index, legTimeSec, oldSplitSec, departedIndiv);
-        outLegs[index] = { name: '—', year: '' };
-        legReplacements.set(index, {
-          ...template,
-          id: `manual-${index}`,
-          name: '—',
-          classYear: '',
-          time: manualTime,
-          isRelay: false,
-        });
-        continue;
-      }
-
-      markVacant('vacant');
-    }
-
-    const newTeamStr = formatSecondsToTime(newTimeSecs);
-
-    const legTotals: (string | null)[] = [];
-    const legDetailsByIndex = new Map<number, SwimmerResult['relayLegSplitDetail']>();
-    /** Replaced legs of a relay with no readable distance: time, no detail. */
-    const undetailedLegTimes = new Map<number, string>();
-
-    for (let index = 0; index < outLegs.length; index++) {
-      const legRowForSplit =
-        ordered.find(row => (row.relayLegIndex ?? -1) === index) ?? ordered[index];
-      const stroke = legRowForSplit?.relayLegStroke ?? relayStrokeForIndex(evLower, index);
-
-      if (legReplacements.has(index) && legDistYards == null) {
-        // No leg distance to build a split detail on: carry the leg time only.
-        const legTime = legReplacements.get(index)!.time;
-        undetailedLegTimes.set(index, legTime);
-        legTotals.push(legTime);
-      } else if (legReplacements.has(index) && legDistYards != null) {
-        const replacement = legReplacements.get(index)!;
-        const prior = normalizeRelayLegSplitDetail(legRowForSplit?.relayLegSplitDetail);
-        const detail = buildSyntheticLegSplitDetail(
-          index,
-          stroke,
-          legDistYards,
-          replacement.time,
-          prior?.segments
-        );
-        legDetailsByIndex.set(index, detail);
-        legTotals.push(detail.legTotal ?? replacement.time);
-      } else if (legRowForSplit?.relayLegSplitDetail) {
-        const normalizedDetail = normalizeRelayLegSplitDetail(legRowForSplit.relayLegSplitDetail);
-        if (normalizedDetail) legDetailsByIndex.set(index, normalizedDetail);
-        legTotals.push(
-          normalizedDetail?.legTotal ?? legRowForSplit.relayLegSplit ?? null
-        );
-      } else {
-        legTotals.push(legRowForSplit?.relayLegSplit ?? null);
-      }
-    }
-
-    const teamSplits =
-      modified || ordered.some(r => r.relayTeamSplits)
-        ? rebuildTeamSplitSummary(legTotals, newTeamStr)
-        : ordered[0]?.relayTeamSplits;
-
-    if (modified) {
-      ordered.forEach(row => {
-        const idx =
-          row.relayLegIndex != null
-            ? Math.min(Math.max(0, row.relayLegIndex), outLegs.length - 1)
-            : Math.min(Math.max(0, ordered.indexOf(row)), outLegs.length - 1);
-        const legMeta = outLegs[idx];
-        const legDetail = legDetailsByIndex.get(idx);
-        finalResults.push({
-          ...row,
-          name: legMeta.name,
-          classYear: legMeta.year,
-          time: newTeamStr,
-          finalsTime: newTeamStr,
-          relayNames: outLegs,
-          relayTeamTime: newTeamStr,
-          relayLegSplit: undetailedLegTimes.get(idx) ?? legDetail?.legTotal ?? row.relayLegSplit,
-          relayLegSplitDetail: legDetail,
-          relayTeamSplits: teamSplits,
-          relayMissingLeg: legMissingByIndex.get(idx),
-          relayLegVacant: legVacantByIndex.get(idx) ?? false,
-        });
-      });
-    } else {
-      ordered.forEach(row => finalResults.push(row));
-    }
+    processRelayGroupForRosterSim(
+      k,
+      results,
+      legPool,
+      overrideList,
+      removeSeniors,
+      excluded,
+      vacateLegs,
+      finalResults
+    );
   }
 
-  // Safety: re-add only relay groups the main loop never processed. Compare against
-  // the ORIGINAL-row keys in `processedRelayKeys` — a modified relay carries a changed
-  // team clock, so recomputing keys from the emitted (modified) rows would never match
-  // the original group and would re-add the pre-modification legs (including a removed
-  // swimmer's leg under their original name, double-counting the relay). See BUG 2.
-  for (const r of results) {
-    if (!r.isRelay) continue;
-    const k = relayGroupKey(r);
-    if (processedRelayKeys.has(k)) continue;
-    const group = results.filter(x => x.isRelay && relayGroupKey(x) === k);
-    group.forEach(row => finalResults.push(row));
-    processedRelayKeys.add(k);
-  }
+  reAddUnprocessedRelayGroups(results, processedRelayKeys, finalResults);
 
   return finalResults;
 }

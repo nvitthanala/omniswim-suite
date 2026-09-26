@@ -1004,49 +1004,21 @@ interface RankedRow {
   readonly index: number;
 }
 
-/**
- * Score one event under an NCAA Rule 7 point table.
- *
- * Pure and network-free. The pipeline, in the order the rulebook applies it:
- *
- * 1. **Remove from consideration** every entry that is not `scoring` — exhibition
- *    swims (Rule 7-10-1), disqualifications (Rule 7-7) and non-competitors (Rule 7-9).
- *    All three use the same mechanism: the rulebook says the remaining competitors
- *    "score according to the places they achieve with [them] removed from
- *    consideration". An exhibition swim therefore never consumes a scoring slot, and a
- *    DQ does not freeze the field behind it.
- * 2. **Split by final.** Each pool is ranked and awarded independently; places are never
- *    merged or re-ranked by raw time across two finals (Rules 7-6-3, 7-6-4). A
- *    consolation swimmer can therefore never reach a place the championship final
- *    contests, which is Rule 7-6-8's consolation cap falling straight out of the model
- *    rather than being bolted on.
- * 3. **Award places** within each pool from that pool's `firstPlace`, splitting ties
- *    evenly across the places they occupy (Rule 7-8).
- * 4. **Apply the per-team scorer cap** (Rule 7-1-1, 7-1-2, 7-1-4, 7-2), see
- *    {@link NcaaScoringOptions.overCapBehavior}.
- * 5. **Record lost places** — contested places nobody received points for.
- *
- * @throws {NcaaScoringInputError} on duplicate ids, a non-positive finish rank, a
- *   missing or contradictory `final`, or a relay event in a diving-dual format.
- * @throws {NcaaUnsourcedRuleError} when the format's table or finals split is not
- *   published by the NCAA.
- */
-export function computeNcaaEventScoring(
-  format: NcaaMeetFormat,
-  eventKind: NcaaEventKind,
-  entries: readonly NcaaScoringEntry[],
-  opts: NcaaScoringOptions = {}
-): NcaaEventScore {
-  const ruleset = ncaaRulesetForFormat(format);
-  const table = resolveNcaaPointTable(format, eventKind, opts.hostPublishedTable);
-  const pools = resolveNcaaFinalPools(format, {
-    timeFinal: opts.timeFinal,
-    placeCount: table.places.length,
-  });
-  const splitsFinals = pools.length > 1;
-  const overCapBehavior = opts.overCapBehavior ?? 'holds-place';
+type NcaaAward = { place: number; tiedPlaces: number[]; rawPoints: number };
 
-  // --- Validate input. Fail loudly; never repair. ---
+/**
+ * Fail loudly; never repair. Every entry must have a unique id, a positive
+ * finish rank, and — only when the format splits finals — a `final` that
+ * names one of the contested pools and is never inferred from the rank.
+ */
+function validateNcaaScoringEntries(
+  format: NcaaMeetFormat,
+  ruleset: NcaaFormatRuleset,
+  pools: readonly NcaaFinalPool[],
+  splitsFinals: boolean,
+  timeFinal: boolean | undefined,
+  entries: readonly NcaaScoringEntry[]
+): void {
   const seenIds = new Set<string>();
   for (const entry of entries) {
     if (seenIds.has(entry.id)) {
@@ -1082,15 +1054,42 @@ export function computeNcaaEventScoring(
     } else if (entry.final !== undefined && entry.final !== 'championship') {
       throw new NcaaScoringInputError(
         `Entry "${entry.id}" declares final "${entry.final}", but ` +
-          (opts.timeFinal === true
+          (timeFinal === true
             ? `this event was scored as a time final (Rule 5-7-4-a), which has one pool.`
             : `format "${format}" (${ruleset.label}) contests a single pool of places.`)
       );
     }
   }
+}
 
-  // --- Award places, pool by pool. ---
-  const awarded = new Map<string, { place: number; tiedPlaces: number[]; rawPoints: number }>();
+/**
+ * Step 1 (remove from consideration — Rules 7-7, 7-9, 7-10-1) and Step 3
+ * (award places from each pool's `firstPlace`, splitting ties evenly — Rule
+ * 7-8), pool by pool. Also computes the part of Step 5 ("lost places") that
+ * can be known before the per-team cap is applied: places a pool contested
+ * that nobody was left to fill.
+ *
+ * Bounded by the entries actually presented, not by the table alone: a
+ * six-place table with only four entries in the pool never contested places
+ * five and six, so they were not "lost". Only a place a known entry vacated
+ * is reported — absent rather than assumed, since the caller may simply not
+ * have handed us that lane.
+ *
+ * Bounded by entries that occupied a lane, which is *not* the same set as
+ * `considered` below. A disqualified or exhibition entry still swam and
+ * still occupied a place — Rule 7-7/7-10's "removed from consideration,
+ * others may advance" presumes a real lane existed to advance into. A
+ * `did-not-compete` entry is the one status that "never occupied a place"
+ * (Rule 7-9, see NcaaEntryStatus's doc comment) — counting it here would
+ * fabricate a lost place for a lane nobody was ever assigned.
+ */
+function awardPlacesAcrossPools(
+  pools: readonly NcaaFinalPool[],
+  entries: readonly NcaaScoringEntry[],
+  table: NcaaPointTable,
+  splitsFinals: boolean
+): { awarded: Map<string, NcaaAward>; lostPlaces: NcaaLostPlace[] } {
+  const awarded = new Map<string, NcaaAward>();
   const lostPlaces: NcaaLostPlace[] = [];
   const poolLabel = (pool: NcaaFinalPool): NcaaFinalTier | null => (splitsFinals ? pool.final : null);
 
@@ -1100,10 +1099,7 @@ export function computeNcaaEventScoring(
       .filter(row => (splitsFinals ? row.entry.final === pool.final : true));
     if (inPool.length === 0) continue;
 
-    // Step 1 — remove from consideration.
     const considered = inPool.filter(row => (row.entry.status ?? 'scoring') === 'scoring');
-
-    // Step 3 — award places from the pool's first place, splitting ties.
     considered.sort((a, b) => a.entry.finishRank - b.entry.finishRank || a.index - b.index);
 
     let nextPlace = pool.firstPlace;
@@ -1138,20 +1134,6 @@ export function computeNcaaEventScoring(
       cursor = end + 1;
     }
 
-    // Step 5 (part 1) — places this pool contested that nobody was left to fill.
-    //
-    // Bounded by the entries actually presented, not by the table alone: a six-place
-    // table with only four entries in the pool never contested places five and six, so
-    // they were not "lost". Only a place a known entry vacated is reported — absent
-    // rather than assumed, since the caller may simply not have handed us that lane.
-    //
-    // Bounded by entries that occupied a lane, which is *not* the same set as
-    // `considered` above. A disqualified or exhibition entry still swam and still
-    // occupied a place — Rule 7-7/7-10's "removed from consideration, others may
-    // advance" presumes a real lane existed to advance into. A `did-not-compete`
-    // entry is the one status that "never occupied a place" (Rule 7-9, see
-    // NcaaEntryStatus's doc comment) — counting it here would fabricate a lost
-    // place for a lane nobody was ever assigned.
     const contestedInPool = inPool.filter(row => (row.entry.status ?? 'scoring') !== 'did-not-compete');
     const lastContested = Math.min(pool.lastPlace, pool.firstPlace + contestedInPool.length - 1);
     for (let place = nextPlace; place <= lastContested; place += 1) {
@@ -1167,55 +1149,85 @@ export function computeNcaaEventScoring(
     }
   }
 
-  // Step 4 — per-team scorer cap. Applied after places are awarded, in place order, so
-  // "best N" means best by place and not by input order.
+  return { awarded, lostPlaces };
+}
+
+/**
+ * Step 4 — the per-team scorer cap (Rule 7-1-1, 7-1-2, 7-1-4, 7-2). Applied
+ * after places are awarded, in place order, so "best N" means best by place
+ * and not by input order.
+ */
+function computeOverCapEntryIds(
+  entries: readonly NcaaScoringEntry[],
+  awarded: Map<string, NcaaAward>,
+  table: NcaaPointTable
+): Set<string> {
   const capped = new Set<string>();
-  if (table.maxScorersPerTeam !== null) {
-    const byTeam = new Map<string, RankedRow[]>();
-    entries.forEach((entry, index) => {
-      if (!awarded.has(entry.id)) return;
-      const list = byTeam.get(entry.team);
-      if (list) list.push({ entry, index });
-      else byTeam.set(entry.team, [{ entry, index }]);
-    });
+  if (table.maxScorersPerTeam === null) return capped;
 
-    for (const rows of byTeam.values()) {
-      rows.sort((a, b) => {
-        const pa = awarded.get(a.entry.id)!.place;
-        const pb = awarded.get(b.entry.id)!.place;
-        return pa - pb || a.index - b.index;
-      });
-      for (const row of rows.slice(table.maxScorersPerTeam)) capped.add(row.entry.id);
-    }
+  const byTeam = new Map<string, RankedRow[]>();
+  entries.forEach((entry, index) => {
+    if (!awarded.has(entry.id)) return;
+    const list = byTeam.get(entry.team);
+    if (list) list.push({ entry, index });
+    else byTeam.set(entry.team, [{ entry, index }]);
+  });
+
+  for (const rows of byTeam.values()) {
+    rows.sort((a, b) => {
+      const pa = awarded.get(a.entry.id)!.place;
+      const pb = awarded.get(b.entry.id)!.place;
+      return pa - pb || a.index - b.index;
+    });
+    for (const row of rows.slice(table.maxScorersPerTeam)) capped.add(row.entry.id);
   }
 
-  if (capped.size > 0 && overCapBehavior === 'removed-from-consideration') {
-    // Re-run with the over-cap entries demoted to non-scoring, so the field behind them
-    // advances. One extra pass is enough: an entry promoted into a scoring place by the
-    // re-run belongs to a team that was, by construction, under its cap.
-    const demoted = entries.map(entry =>
-      capped.has(entry.id) ? { ...entry, status: 'did-not-compete' as NcaaEntryStatus } : entry
-    );
-    const rerun = computeNcaaEventScoring(format, eventKind, demoted, {
-      ...opts,
-      overCapBehavior: 'holds-place',
-    });
-    return {
-      ...rerun,
-      entries: rerun.entries.map(scored =>
-        capped.has(scored.id)
-          ? {
-              ...scored,
-              status: entries.find(e => e.id === scored.id)?.status ?? 'scoring',
-              reason: 'over-team-scorer-cap',
-            }
-          : scored
-      ),
-    };
-  }
+  return capped;
+}
 
-  // --- Assemble output rows in input order. ---
-  const scored: NcaaScoredEntry[] = entries.map(entry => {
+/**
+ * The `overCapBehavior: 'removed-from-consideration'` reading: re-run with
+ * the over-cap entries demoted to non-scoring, so the field behind them
+ * advances. One extra pass is enough: an entry promoted into a scoring place
+ * by the re-run belongs to a team that was, by construction, under its cap.
+ */
+function demoteOverCapEntries(
+  format: NcaaMeetFormat,
+  eventKind: NcaaEventKind,
+  entries: readonly NcaaScoringEntry[],
+  opts: NcaaScoringOptions,
+  capped: Set<string>
+): NcaaEventScore {
+  const demoted = entries.map(entry =>
+    capped.has(entry.id) ? { ...entry, status: 'did-not-compete' as NcaaEntryStatus } : entry
+  );
+  const rerun = computeNcaaEventScoring(format, eventKind, demoted, {
+    ...opts,
+    overCapBehavior: 'holds-place',
+  });
+  return {
+    ...rerun,
+    entries: rerun.entries.map(scored =>
+      capped.has(scored.id)
+        ? {
+            ...scored,
+            status: entries.find(e => e.id === scored.id)?.status ?? 'scoring',
+            reason: 'over-team-scorer-cap',
+          }
+        : scored
+    ),
+  };
+}
+
+/** Assemble output rows in input order, from the awards and the cap set. */
+function assembleScoredEntries(
+  entries: readonly NcaaScoringEntry[],
+  awarded: Map<string, NcaaAward>,
+  capped: Set<string>,
+  splitsFinals: boolean,
+  table: NcaaPointTable
+): NcaaScoredEntry[] {
+  return entries.map(entry => {
     const status = entry.status ?? 'scoring';
     const final = splitsFinals ? (entry.final ?? null) : null;
     const award = awarded.get(entry.id);
@@ -1257,28 +1269,104 @@ export function computeNcaaEventScoring(
       reason: outsideTable ? 'place-outside-point-table' : null,
     };
   });
+}
 
-  // Step 5 (part 2) — points forfeited to the per-team cap are also lost from the meet.
-  if (overCapBehavior === 'holds-place') {
-    for (const entry of scored) {
-      if (entry.reason !== 'over-team-scorer-cap' || entry.place === null) continue;
-      const value = pointsForPlace(table, entry.place);
-      if (value > 0) {
-        lostPlaces.push({
-          place: entry.place,
-          points: value,
-          final: entry.final,
-          cause: 'over-team-scorer-cap',
-        });
-      }
+/**
+ * Step 5 (part 2) — points forfeited to the per-team cap are also lost from
+ * the meet. Mutates `lostPlaces` (already holding Step 5 part 1's entries
+ * from {@link awardPlacesAcrossPools}) so the two parts stay in one list.
+ */
+function appendCapLostPlaces(
+  scored: readonly NcaaScoredEntry[],
+  table: NcaaPointTable,
+  overCapBehavior: 'holds-place' | 'removed-from-consideration',
+  lostPlaces: NcaaLostPlace[]
+): void {
+  if (overCapBehavior !== 'holds-place') return;
+  for (const entry of scored) {
+    if (entry.reason !== 'over-team-scorer-cap' || entry.place === null) continue;
+    const value = pointsForPlace(table, entry.place);
+    if (value > 0) {
+      lostPlaces.push({
+        place: entry.place,
+        points: value,
+        final: entry.final,
+        cause: 'over-team-scorer-cap',
+      });
     }
   }
+}
 
+function computeNcaaTeamTotals(scored: readonly NcaaScoredEntry[]): NcaaTeamTotal[] {
   const totals = new Map<string, number>();
   for (const entry of scored) totals.set(entry.team, (totals.get(entry.team) ?? 0) + entry.points);
-  const teamTotals: NcaaTeamTotal[] = [...totals.entries()]
+  return [...totals.entries()]
     .map(([team, points]) => ({ team, points: roundPoints(points) }))
     .sort((a, b) => b.points - a.points || a.team.localeCompare(b.team));
+}
+
+/**
+ * Score one event under an NCAA Rule 7 point table.
+ *
+ * Pure and network-free. The pipeline, in the order the rulebook applies it:
+ *
+ * 1. **Remove from consideration** every entry that is not `scoring` — exhibition
+ *    swims (Rule 7-10-1), disqualifications (Rule 7-7) and non-competitors (Rule 7-9).
+ *    All three use the same mechanism: the rulebook says the remaining competitors
+ *    "score according to the places they achieve with [them] removed from
+ *    consideration". An exhibition swim therefore never consumes a scoring slot, and a
+ *    DQ does not freeze the field behind it.
+ * 2. **Split by final.** Each pool is ranked and awarded independently; places are never
+ *    merged or re-ranked by raw time across two finals (Rules 7-6-3, 7-6-4). A
+ *    consolation swimmer can therefore never reach a place the championship final
+ *    contests, which is Rule 7-6-8's consolation cap falling straight out of the model
+ *    rather than being bolted on.
+ * 3. **Award places** within each pool from that pool's `firstPlace`, splitting ties
+ *    evenly across the places they occupy (Rule 7-8).
+ * 4. **Apply the per-team scorer cap** (Rule 7-1-1, 7-1-2, 7-1-4, 7-2), see
+ *    {@link NcaaScoringOptions.overCapBehavior}.
+ * 5. **Record lost places** — contested places nobody received points for.
+ *
+ * Each step above is one helper: {@link validateNcaaScoringEntries},
+ * {@link awardPlacesAcrossPools} (steps 1-3 and 5 part 1),
+ * {@link computeOverCapEntryIds} / {@link demoteOverCapEntries} (step 4),
+ * {@link assembleScoredEntries}, {@link appendCapLostPlaces} (step 5 part 2).
+ *
+ * @throws {NcaaScoringInputError} on duplicate ids, a non-positive finish rank, a
+ *   missing or contradictory `final`, or a relay event in a diving-dual format.
+ * @throws {NcaaUnsourcedRuleError} when the format's table or finals split is not
+ *   published by the NCAA.
+ */
+export function computeNcaaEventScoring(
+  format: NcaaMeetFormat,
+  eventKind: NcaaEventKind,
+  entries: readonly NcaaScoringEntry[],
+  opts: NcaaScoringOptions = {}
+): NcaaEventScore {
+  const ruleset = ncaaRulesetForFormat(format);
+  const table = resolveNcaaPointTable(format, eventKind, opts.hostPublishedTable);
+  const pools = resolveNcaaFinalPools(format, {
+    timeFinal: opts.timeFinal,
+    placeCount: table.places.length,
+  });
+  const splitsFinals = pools.length > 1;
+  const overCapBehavior = opts.overCapBehavior ?? 'holds-place';
+
+  validateNcaaScoringEntries(format, ruleset, pools, splitsFinals, opts.timeFinal, entries);
+
+  const { awarded, lostPlaces } = awardPlacesAcrossPools(pools, entries, table, splitsFinals);
+
+  const capped = computeOverCapEntryIds(entries, awarded, table);
+
+  if (capped.size > 0 && overCapBehavior === 'removed-from-consideration') {
+    return demoteOverCapEntries(format, eventKind, entries, opts, capped);
+  }
+
+  const scored = assembleScoredEntries(entries, awarded, capped, splitsFinals, table);
+
+  appendCapLostPlaces(scored, table, overCapBehavior, lostPlaces);
+
+  const teamTotals = computeNcaaTeamTotals(scored);
 
   lostPlaces.sort((a, b) => a.place - b.place);
 
