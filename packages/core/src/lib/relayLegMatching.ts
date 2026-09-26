@@ -3,9 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ClassYear, RelayLegOverride, RelayLegStroke, SwimmerResult } from '../types';
+import { ClassYear, Gender, RelayLegOverride, RelayLegStroke, SwimmerResult } from '../types';
 import { normalizeEventForCutline } from './cutlineEventNames';
-import { parseRelayDistanceYards, relayEntryKey, relayLegDistanceYards } from './relaySplits';
+import { relayEntryKey, relayLegDistanceYardsOfEvent } from './relaySplits';
+import { canonicalSwimmerName } from './utils';
 
 function normalizeName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -31,8 +32,13 @@ export function strokeKeywordsForRelayLeg(eventLower: string, legIndex: number):
   return ['freestyle', 'free'];
 }
 
-export function inferRelayStrokeDistance(event: string): number {
-  return relayLegDistanceYards(parseRelayDistanceYards(event));
+/**
+ * The distance one leg of the relay swims, or `null` when the relay's label
+ * names no distance (`relayLegDistanceYardsOfEvent`). A `null` leg distance
+ * matches no swim: no candidate, no departed swim, no fill.
+ */
+export function inferRelayStrokeDistance(event: string): number | null {
+  return relayLegDistanceYardsOfEvent(event);
 }
 
 /** The individual event each relay-leg stroke swims, spelled as the canonical event name. */
@@ -66,6 +72,37 @@ export function relayLegEventName(legDistanceYards: number, stroke: RelayLegStro
   return normalizeEventForCutline(`${legDistanceYards} ${LEG_STROKE_EVENT[stroke]}`);
 }
 
+/** The relay-leg stroke each canonical single-stroke event name swims. */
+const STROKE_BY_EVENT_WORD: Record<string, RelayLegStroke> = {
+  backstroke: 'back',
+  breaststroke: 'breast',
+  butterfly: 'fly',
+  freestyle: 'free',
+};
+
+/** A canonical single-stroke individual event: `100 Butterfly`. Nothing before or after. */
+const SINGLE_STROKE_EVENT = /^(\d{2,4}) (Freestyle|Backstroke|Breaststroke|Butterfly)$/i;
+
+/**
+ * The distance and relay-leg stroke of a single-stroke individual event, or
+ * `null` for a relay, an individual medley, a relay split, a dive, or a label
+ * with no readable distance.
+ *
+ * Read from the canonical event name (`normalizeEventForCutline`), so the
+ * distance is the event's own `<n> Yard` / `<n> Meter` token, never a HyTek
+ * entry number: `Event 500 Women 100 Yard Butterfly Time Trial` is a 100
+ * Butterfly, and `Event 35 Men 100 Yard Freestyle` a 100 Freestyle. Every
+ * spelling {@link isRelayLegEvent} accepts reads the same way (`100 Free`,
+ * `100 Free SCY`, `100 Freestyle`).
+ */
+export function individualEventDistanceStroke(
+  event: string
+): { distance: number; stroke: RelayLegStroke } | null {
+  const match = SINGLE_STROKE_EVENT.exec(normalizeEventForCutline(String(event ?? '')));
+  if (!match) return null;
+  return { distance: Number(match[1]), stroke: STROKE_BY_EVENT_WORD[match[2].toLowerCase()] };
+}
+
 /**
  * True when `eventRaw` is the individual event one relay leg swims: the leg's
  * own distance and stroke, and nothing else.
@@ -91,16 +128,32 @@ export function relayLegEventName(legDistanceYards: number, stroke: RelayLegStro
  * recruit row with `scoredTimeOf` before it reaches `simulateRoster`), while
  * its label may still name the course it was swum in. Rejecting on the label
  * would drop converted times.
+ *
+ * A `null` leg distance (a relay label that names no distance, see
+ * `parseRelayDistanceYardsOrNull`) matches nothing.
  */
 export function isRelayLegEvent(
   eventRaw: string,
-  legDistanceYards: number,
+  legDistanceYards: number | null,
   stroke: RelayLegStroke
 ): boolean {
+  if (legDistanceYards == null) return false;
+  const key = relayLegEventKey(eventRaw);
+  if (!key) return false;
+  return key === relayLegEventName(legDistanceYards, stroke).toLowerCase();
+}
+
+/**
+ * The key {@link isRelayLegEvent} compares: the canonical event name of a
+ * label, lower-cased, with a relay-split suffix dropped. Empty for an empty
+ * label. `isRelayLegEvent(label, d, s)` is exactly
+ * `relayLegEventKey(label) === relayLegEventName(d, s).toLowerCase()`, so a
+ * caller testing one label against many legs can read the key once.
+ */
+export function relayLegEventKey(eventRaw: string): string {
   const label = String(eventRaw ?? '').replace(RELAY_SPLIT_SUFFIX, '').trim();
-  if (!label) return false;
-  const want = relayLegEventName(legDistanceYards, stroke).toLowerCase();
-  return normalizeEventForCutline(label).toLowerCase() === want;
+  if (!label) return '';
+  return normalizeEventForCutline(label).toLowerCase();
 }
 
 /**
@@ -145,28 +198,185 @@ export function relayEventAssignmentKey(team: string, gender: string | undefined
   return `${(team || '').trim()}|${gender ?? ''}|${event}`;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Who may swim a leg: the swimmer's gender                                    */
+/* -------------------------------------------------------------------------- */
+
+/** The gender word a HyTek label opens with, after its entry number. */
+const LABEL_GENDER_WORD = /^\s*(?:event\s+\d+\s+)?(men|women|boys|girls|mixed)\b/i;
+
+const GENDER_BY_LABEL_WORD: Record<string, Gender | 'mixed'> = {
+  men: Gender.MEN,
+  boys: Gender.MEN,
+  women: Gender.WOMEN,
+  girls: Gender.WOMEN,
+  mixed: 'mixed',
+};
+
+/**
+ * The gender an event label names, or `null` when it names none.
+ *
+ * `Event 31 Men 4x50 Yard Freestyle Relay` is `Gender.MEN`; `Event 403 Mixed
+ * 50 Yard Freestyle Time Trial` is `'mixed'`; `50 Free SCY` is `null`. Boys
+ * and Girls (high-school exports) read as Men and Women.
+ */
+export function eventLabelGender(event: string): Gender | 'mixed' | null {
+  const match = LABEL_GENDER_WORD.exec(String(event ?? ''));
+  return match ? GENDER_BY_LABEL_WORD[match[1].toLowerCase()] : null;
+}
+
+/**
+ * The swimmer's gender as one row records it, or `undefined`.
+ *
+ * - A gendered label (Men, Women, Boys, Girls) records it.
+ * - A Mixed label records nothing. HyTek files a mixed time trial under one
+ *   gender's results, and the parser stamps the row with that gender, so the
+ *   row's `gender` names the results it was filed under, not the swimmer.
+ * - A label with no gender word records the row's `gender` field: a SwimCloud
+ *   meet row, a recruit row, a history swim.
+ */
+function genderRecordedByRow(row: Pick<SwimmerResult, 'event' | 'gender'>): Gender | undefined {
+  const fromLabel = eventLabelGender(row.event);
+  if (fromLabel === 'mixed') return undefined;
+  return fromLabel ?? row.gender ?? undefined;
+}
+
+/** One swimmer: team and canonical name, whichever order the rows spell it in. */
+function swimmerGenderKey(row: Pick<SwimmerResult, 'team' | 'name'>): string {
+  return `${String(row.team ?? '').trim()}|${canonicalSwimmerName(row.name)}`;
+}
+
+/**
+ * The genders each swimmer's rows record, keyed by team and canonical name.
+ * Built by {@link buildRelayCandidateGenderIndex}.
+ */
+export type RelayCandidateGenderIndex = ReadonlyMap<string, ReadonlySet<Gender>>;
+
+/** Index the genders a pool's rows record, once per pool. Mixed rows record none. */
+export function buildRelayCandidateGenderIndex(
+  rows: readonly SwimmerResult[]
+): RelayCandidateGenderIndex {
+  const index = new Map<string, Set<Gender>>();
+  for (const row of rows) {
+    const gender = genderRecordedByRow(row);
+    if (!gender) continue;
+    const key = swimmerGenderKey(row);
+    const genders = index.get(key) ?? new Set<Gender>();
+    genders.add(gender);
+    index.set(key, genders);
+  }
+  return index;
+}
+
+/**
+ * The swimmer's gender for relay purposes, or `undefined` when no row on
+ * record states it.
+ *
+ * A Mixed-event row belongs to the swimmer, not the event: it takes the one
+ * gender the same swimmer's other rows record (same team, same canonical
+ * name). No such row, or rows that disagree, leave it `undefined`.
+ */
+export function relayCandidateGender(
+  row: SwimmerResult,
+  index: RelayCandidateGenderIndex
+): Gender | undefined {
+  if (eventLabelGender(row.event) !== 'mixed') return genderRecordedByRow(row);
+  const genders = index.get(swimmerGenderKey(row));
+  return genders && genders.size === 1 ? [...genders][0] : undefined;
+}
+
+/**
+ * True when `row` may swim a leg of a relay for `relayGender`.
+ *
+ * A Mixed-event row qualifies only when the swimmer's gender is on record and
+ * equals the relay's. Real case (2026 NSISC final results): Event 403 "Mixed
+ * 50 Yard Freestyle Time Trial" is filed in the men's results and holds Ave
+ * Owens of Delta State, who swims the women's program. Her 23.19 was offered
+ * for a leg of Delta State's men's 200 Free Relay. The same event holds
+ * Landon Dehn of Ouachita Baptist, who swims the men's program; his row still
+ * qualifies.
+ *
+ * Any other row qualifies unless its recorded gender contradicts the relay's.
+ * A row with no recorded gender sits in a single-gender pool and is that
+ * pool's, as before. An unknown relay gender (a Mixed relay, or a label and
+ * row with no gender) rules out only Mixed-event rows.
+ */
+export function isRelayCandidateOfGender(
+  row: SwimmerResult,
+  relayGender: Gender | undefined,
+  index: RelayCandidateGenderIndex
+): boolean {
+  const gender = relayCandidateGender(row, index);
+  if (eventLabelGender(row.event) === 'mixed') {
+    return gender != null && relayGender != null && gender === relayGender;
+  }
+  return gender == null || relayGender == null || gender === relayGender;
+}
+
+/**
+ * The gender a relay entry is for: the gender word of its label, else its
+ * row's `gender`. A Mixed relay is for neither.
+ */
+export function relayEntryGender(
+  template: Pick<SwimmerResult, 'event' | 'gender'>
+): Gender | undefined {
+  const fromLabel = eventLabelGender(template.event);
+  if (fromLabel === 'mixed') return undefined;
+  return fromLabel ?? template.gender ?? undefined;
+}
+
+const EMPTY_GENDER_INDEX: RelayCandidateGenderIndex = new Map();
+
+/**
+ * Keep the rows that pass {@link isRelayCandidateOfGender}. The gender index
+ * is built from `pool` only when a Mixed-event row needs it.
+ */
+function keepRelayGender(
+  rows: SwimmerResult[],
+  relayGender: Gender | undefined,
+  pool: readonly SwimmerResult[]
+): SwimmerResult[] {
+  if (!rows.some(r => eventLabelGender(r.event) === 'mixed')) {
+    return rows.filter(r => isRelayCandidateOfGender(r, relayGender, EMPTY_GENDER_INDEX));
+  }
+  const index = buildRelayCandidateGenderIndex(pool);
+  return rows.filter(r => isRelayCandidateOfGender(r, relayGender, index));
+}
+
 export function swimmerMatchesRelayLeg(swimmer: SwimmerResult, event: string, legIndex: number): boolean {
   if (swimmer.isRelay) return false;
   const { legDistanceYards, stroke } = relayLegRequirements(event, legIndex);
   return isRelayLegEvent(swimmer.event, legDistanceYards, stroke);
 }
 
+/**
+ * The swims on `team` that may fill leg `legIndex` of `relayEvent`, fastest
+ * first: the leg's exact event (`swimmerMatchesRelayLeg`), a swimmer not
+ * already on the relay, and a swimmer of the relay's gender
+ * (`isRelayCandidateOfGender`).
+ *
+ * `relayGender` defaults to the gender word of `relayEvent`. Pass it when the
+ * label has none (a SwimCloud `200 Free Relay`).
+ */
 export function listEligibleRelayLegCandidates(
   activeSwimmers: SwimmerResult[],
   relayEvent: string,
   legIndex: number,
   assignedInEvent: Set<string>,
-  team: string
+  team: string,
+  relayGender?: Gender
 ): SwimmerResult[] {
-  return activeSwimmers
-    .filter(
-      s =>
-        !s.isRelay &&
-        s.team === team &&
-        !assignedInEvent.has(normalizeName(s.name)) &&
-        swimmerMatchesRelayLeg(s, relayEvent, legIndex)
-    )
-    .sort((a, b) => timeToSec(a.time) - timeToSec(b.time));
+  const legSwims = activeSwimmers.filter(
+    s =>
+      !s.isRelay &&
+      s.team === team &&
+      !assignedInEvent.has(normalizeName(s.name)) &&
+      swimmerMatchesRelayLeg(s, relayEvent, legIndex)
+  );
+  const gender = relayGender ?? relayEntryGender({ event: relayEvent });
+  return keepRelayGender(legSwims, gender, activeSwimmers).sort(
+    (a, b) => timeToSec(a.time) - timeToSec(b.time)
+  );
 }
 
 export function relayTemplateFromLeg(results: SwimmerResult[], leg: SwimmerResult): SwimmerResult {
@@ -196,22 +406,36 @@ export function findRelayLegOverride(
   return overrides.find(o => o.relayEntryKey === key && o.legIndex === legIndex);
 }
 
+/**
+ * The swim an override puts on a leg, or `null` when none of the pool's swims
+ * may take it.
+ *
+ * Only a swim of the relay's gender resolves (`isRelayCandidateOfGender`):
+ * naming a woman whose only swim at the leg event is a Mixed time trial filed
+ * in the men's results leaves a men's leg unresolved. `relayGender` defaults
+ * to the gender word of `relayEvent`; pass it when the label has none.
+ */
 export function resolveOverrideAssignee(
   override: RelayLegOverride,
   activeSwimmers: SwimmerResult[],
   team: string,
   relayEvent?: string,
-  legIndex?: number
+  legIndex?: number,
+  relayGender?: Gender
 ): SwimmerResult | null {
+  const gender = relayGender ?? (relayEvent != null ? relayEntryGender({ event: relayEvent }) : undefined);
   if (override.recruitId) {
     const hit = activeSwimmers.find(s => !s.isRelay && s.id === override.recruitId);
-    if (hit && hit.team === team) return hit;
+    if (hit && hit.team === team && keepRelayGender([hit], gender, activeSwimmers).length > 0) {
+      return hit;
+    }
   }
   if (override.assigneeName) {
     const key = normalizeName(override.assigneeName);
-    const matches = activeSwimmers.filter(
+    const named = activeSwimmers.filter(
       s => !s.isRelay && s.team === team && normalizeName(s.name) === key
     );
+    const matches = keepRelayGender(named, gender, named);
     if (matches.length === 0) return null;
     if (relayEvent != null && legIndex != null) {
       const strokeMatches = matches.filter(m => swimmerMatchesRelayLeg(m, relayEvent, legIndex));
@@ -249,7 +473,8 @@ export function suggestBestRelayLegFill(
     template.event,
     legIndex,
     blocked,
-    template.team
+    template.team,
+    relayEntryGender(template)
   );
   if (candidates.length === 0) return null;
   const swimmer = candidates[0];

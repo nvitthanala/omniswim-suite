@@ -20,7 +20,7 @@ import { isChampionshipProgramEvent, normalizeEventLabel } from './athleteHistor
 import { isRankableSwim, swimEventIdentity } from './bestTimeEligibility';
 import { mergeScoringSettings } from './scoringDefaults';
 import { scorerRosterKey, usesScorerRoster } from './scorerRoster';
-import { relayEntryKey, parseRelayDistanceYards } from './relaySplits';
+import { relayEntryKey, parseRelayDistanceYardsOrNull } from './relaySplits';
 import { relayTemplateFromLeg, upsertRelayLegOverride } from './relayLegMatching';
 import { countSwimmerEntries, swimmerExceedsEntryLimits } from './swimmerEntryLimits';
 import { buildAliasResolver } from './athleteAliases';
@@ -516,8 +516,14 @@ function rosterNamesForTeam(workspace: Workspace, team: string, gender: Gender):
   return [...names];
 }
 
-function relaySignature(event: string): string {
-  const dist = parseRelayDistanceYards(event);
+/**
+ * Distance and kind of a relay (`200 mr`), or `null` when the label names no
+ * distance. A null signature matches nothing: before R1 an unreadable label
+ * read as a 200 and could attach a theory squad to the wrong relay.
+ */
+function relaySignature(event: string): string | null {
+  const dist = parseRelayDistanceYardsOrNull(event);
+  if (dist == null) return null;
   const kind = /medley/i.test(event) ? 'mr' : 'fr';
   return `${dist} ${kind}`;
 }
@@ -894,6 +900,7 @@ function indexRelayTemplatesBySignature(
     if (seenKeys.has(key)) continue;
     seenKeys.add(key);
     const sig = relaySignature(template.event);
+    if (sig == null) continue;
     const list = bySig.get(sig) ?? [];
     list.push(template);
     bySig.set(sig, list);
@@ -969,7 +976,14 @@ function applyTheoryRelay(
   templatesBySig: Map<string, SwimmerResult[]>,
   relay: TheoryRelay
 ): void {
-  const list = templatesBySig.get(relaySignature(relay.event)) ?? [];
+  const sig = relaySignature(relay.event);
+  if (sig == null) {
+    draft.warnings.push(
+      `Relay ${relay.event} names no distance — squad ${relay.squad} leg assignments skipped`
+    );
+    return;
+  }
+  const list = templatesBySig.get(sig) ?? [];
   const template = relay.squad === 'A' ? list[0] : list[1];
   if (!template) {
     draft.warnings.push(

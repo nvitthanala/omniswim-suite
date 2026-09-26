@@ -47,13 +47,13 @@ import { effectivePdfPlacePointsMode, mergeScoringSettings } from './scoringDefa
 import {
   buildSyntheticLegSplitDetail,
   normalizeRelayLegSplitDetail,
-  parseRelayDistanceYards,
   rebuildTeamSplitSummary,
-  relayLegDistanceYards,
+  relayLegDistanceYardsOfEvent,
 } from './relaySplits';
 import {
   findRelayLegOverride,
   isRelayLegEvent,
+  relayEntryGender,
   relayLegRequirements,
   relayStrokeForIndex,
   resolveOverrideAssignee,
@@ -317,14 +317,35 @@ export function canonicalSwimmerName(name: string): string {
 }
 
 /**
- * Case-insensitive test for a graduating class year: senior or grad-student.
- * Matches SR / SENIOR / GR / GRAD in any case (and blank-tolerant). Shared by the
- * individual and relay-leg "drop seniors" filters so they stay in lockstep.
+ * The class-year labels "drop seniors" removes: a senior or a graduate
+ * student.
+ *
+ * - `SR`, `SENIOR` — senior.
+ * - `GR`, `GRAD` — graduate student. SwimCloud's roster vocabulary maps
+ *   `gr`, `grad` and `graduate` to `GR` (`packages/swimcloud/src/parser.ts`).
+ * - `GS` — graduate student as a HyTek results file prints it. The PDF parser
+ *   reads `GS` as a class year (`backend/pdf_parser.py`, `YEAR_TOKENS`), and
+ *   the 2026 NSISC final results list Mark Eberhard (Henderson State) as `GS`.
+ *   Before R1 (plans/2026-09-24) "drop seniors" kept him because only the
+ *   SwimCloud spelling was listed.
+ *
+ * Deliberately NOT listed: `5Y` and `FY`, the parser's other two year tokens.
+ * `FY` reads as "first year" in some exports and "fifth year" in others, and
+ * no loaded file prints either, so neither is guessed at. An unlisted label
+ * stays on the roster, the same as an absent one.
+ */
+const GRADUATING_CLASS_YEARS: ReadonlySet<string> = new Set(['SR', 'SENIOR', 'GR', 'GRAD', 'GS']);
+
+/**
+ * Case-insensitive test for a graduating class year: senior or graduate
+ * student (see {@link GRADUATING_CLASS_YEARS}). Blank-tolerant: an absent year
+ * is not graduating. Shared by the individual and relay-leg "drop seniors"
+ * filters so they stay in lockstep.
  */
 export function isGraduatingClassYear(year: string | undefined | null): boolean {
   const y = String(year ?? '').trim().toUpperCase();
   if (!y) return false;
-  return y === 'SR' || y === 'SENIOR' || y === 'GR' || y === 'GRAD';
+  return GRADUATING_CLASS_YEARS.has(y);
 }
 
 function relayGroupKey(r: SwimmerResult): string {
@@ -2786,33 +2807,50 @@ export function assignTeamLineStyles(
  * cannot drift apart again.
  *
  * The event must be the leg event exactly (`isRelayLegEvent`): a departed
- * swimmer's 1000 Free is not their 100 Free. Names compare by
- * `canonicalSwimmerName`. Rows are searched in `results` order and the first
- * match wins.
+ * swimmer's 1000 Free is not their 100 Free. The swim must be the relay team's
+ * own (`team`, compared trimmed): a namesake on another team is a different
+ * swimmer, and before R1 (plans/2026-09-24) the first one in `results` order
+ * won. Names compare by `canonicalSwimmerName`. Rows are searched in `results`
+ * order and the first match wins.
  */
 export function findDepartedLegSwim(
   results: SwimmerResult[],
   legName: string,
   relayEvent: string,
-  legIndex: number
+  legIndex: number,
+  team: string
 ): SwimmerResult | undefined {
   const { legDistanceYards, stroke } = relayLegRequirements(relayEvent, legIndex);
   const nameKey = canonicalSwimmerName(legName);
+  const teamKey = String(team ?? '').trim();
   return results.find(
     s =>
       !s.isRelay &&
+      String(s.team ?? '').trim() === teamKey &&
       canonicalSwimmerName(s.name) === nameKey &&
       isRelayLegEvent(s.event, legDistanceYards, stroke)
   );
 }
 
+/**
+ * Apply the roster what-if to a gender's results: drop removed and (with
+ * `removeSeniors`) graduating swimmers, and rebuild each relay whose legs they
+ * held from `relayLegOverrides`.
+ *
+ * `relayLegOnlyPool` holds swims that may fill a relay leg named by an
+ * override but are never an individual entry: the history candidates
+ * `relayLegHistoryCandidates` builds (R1, plans/2026-09-24). They are searched
+ * with the results and recruits when an override is resolved, and never
+ * emitted.
+ */
 export function simulateRoster(
   results: SwimmerResult[],
   recruits: SwimmerResult[],
   removeSeniors: boolean,
   excludedSwimmerNames?: Set<string>,
   relayLegOverrides: RelayLegOverride[] = [],
-  vacateRelayLegNames: Set<string> = new Set()
+  vacateRelayLegNames: Set<string> = new Set(),
+  relayLegOnlyPool: SwimmerResult[] = []
 ): SwimmerResult[] {
   const excluded = excludedSwimmerNames ?? new Set<string>();
   const overrideList = relayLegOverrides ?? [];
@@ -2823,14 +2861,18 @@ export function simulateRoster(
     return [...results, ...recruits];
   }
 
-  const basePool = results.filter(r => {
-    if (r.isRelay) return true;
+  const staysOnRoster = (r: SwimmerResult): boolean => {
     if (excluded.has(canonicalSwimmerName(r.name))) return false;
     if (removeSeniors && isGraduatingClassYear(r.classYear)) return false;
     return true;
-  });
+  };
+  const basePool = results.filter(r => r.isRelay || staysOnRoster(r));
 
   const activeSwimmers = [...basePool, ...recruits];
+  // The swims an override may resolve onto. The leg-only rows pass the same
+  // roster gates, and never reach `finalResults`.
+  const legOnly = (relayLegOnlyPool ?? []).filter(r => !r.isRelay && staysOnRoster(r));
+  const legPool = legOnly.length > 0 ? [...activeSwimmers, ...legOnly] : activeSwimmers;
 
   const finalResults: SwimmerResult[] = [];
   const processedRelayKeys = new Set<string>();
@@ -2869,8 +2911,11 @@ export function simulateRoster(
     const legReplacements = new Map<number, SwimmerResult>();
     const legMissingByIndex = new Map<number, RelayMissingLeg>();
     const legVacantByIndex = new Map<number, boolean>();
-    const relayDist = parseRelayDistanceYards(template.event);
-    const legDistYards = relayLegDistanceYards(relayDist);
+    // Null when the relay's label names no distance. No swim then matches a
+    // leg (`isRelayLegEvent`), so a departing leg holder leaves the leg vacant;
+    // the lineup audit names the label (`relay_distance_unreadable`).
+    const legDistYards = relayLegDistanceYardsOfEvent(template.event);
+    const relayGender = relayEntryGender(template);
     const assignedInRelay = new Set<string>();
 
     const applyLegTimeDelta = (
@@ -2888,19 +2933,26 @@ export function simulateRoster(
       newTimeSecs += delta;
     };
 
+    const legNeedsReplace = (leg: { name: string; year: string }): boolean =>
+      (removeSeniors && isGraduatingClassYear(leg.year)) ||
+      excluded.has(canonicalSwimmerName(leg.name)) ||
+      vacateLegs.has(normalizeSwimmerName(leg.name));
+
+    // Every leg holder who stays is on the relay before any override is
+    // resolved. Collected while walking the legs, a holder of a LATER leg was
+    // not yet known when an earlier leg's override named them, so one swimmer
+    // could swim two legs (real case: HSU 200 Free Relay A with Gavin Kock
+    // removed and Oliver Pozvai, its anchor, named for leg 1).
+    for (const leg of outLegs) {
+      if (legNeedsReplace(leg)) continue;
+      const nm = leg.name?.trim();
+      if (nm && nm !== '—' && nm !== 'Unknown') assignedInRelay.add(normalizeSwimmerName(nm));
+    }
+
     for (let index = 0; index < outLegs.length; index++) {
       const leg = outLegs[index];
-      const isSeniorLeg = isGraduatingClassYear(leg.year);
-      const isDeletedLeg = excluded.has(canonicalSwimmerName(leg.name));
+      if (!legNeedsReplace(leg)) continue;
       const isNonScorerLeg = vacateLegs.has(normalizeSwimmerName(leg.name));
-      const needsReplace = (removeSeniors && isSeniorLeg) || isDeletedLeg || isNonScorerLeg;
-      if (!needsReplace) {
-        const nm = leg.name?.trim();
-        if (nm && nm !== '—' && nm !== 'Unknown') {
-          assignedInRelay.add(normalizeSwimmerName(nm));
-        }
-        continue;
-      }
 
       const legRowForSplit =
         ordered.find(row => (row.relayLegIndex ?? -1) === index) ?? ordered[index];
@@ -2909,7 +2961,13 @@ export function simulateRoster(
           ? convertTimeToSeconds(legRowForSplit.relayLegSplit)
           : null;
 
-      const departedIndiv = findDepartedLegSwim(results, leg.name, template.event, index);
+      const departedIndiv = findDepartedLegSwim(
+        results,
+        leg.name,
+        template.event,
+        index,
+        template.team
+      );
 
       const stroke = relayStrokeForIndex(evLower, index);
       const override = findRelayLegOverride(overrideList, template, index);
@@ -2938,10 +2996,11 @@ export function simulateRoster(
 
       const assignee = resolveOverrideAssignee(
         override,
-        activeSwimmers,
+        legPool,
         template.team,
         template.event,
-        index
+        index,
+        relayGender
       );
       const manualTime = override.manualLegTime?.trim();
 
@@ -2995,13 +3054,20 @@ export function simulateRoster(
 
     const legTotals: (string | null)[] = [];
     const legDetailsByIndex = new Map<number, SwimmerResult['relayLegSplitDetail']>();
+    /** Replaced legs of a relay with no readable distance: time, no detail. */
+    const undetailedLegTimes = new Map<number, string>();
 
     for (let index = 0; index < outLegs.length; index++) {
       const legRowForSplit =
         ordered.find(row => (row.relayLegIndex ?? -1) === index) ?? ordered[index];
       const stroke = legRowForSplit?.relayLegStroke ?? relayStrokeForIndex(evLower, index);
 
-      if (legReplacements.has(index)) {
+      if (legReplacements.has(index) && legDistYards == null) {
+        // No leg distance to build a split detail on: carry the leg time only.
+        const legTime = legReplacements.get(index)!.time;
+        undetailedLegTimes.set(index, legTime);
+        legTotals.push(legTime);
+      } else if (legReplacements.has(index) && legDistYards != null) {
         const replacement = legReplacements.get(index)!;
         const prior = normalizeRelayLegSplitDetail(legRowForSplit?.relayLegSplitDetail);
         const detail = buildSyntheticLegSplitDetail(
@@ -3045,7 +3111,7 @@ export function simulateRoster(
           finalsTime: newTeamStr,
           relayNames: outLegs,
           relayTeamTime: newTeamStr,
-          relayLegSplit: legDetail?.legTotal ?? row.relayLegSplit,
+          relayLegSplit: undetailedLegTimes.get(idx) ?? legDetail?.legTotal ?? row.relayLegSplit,
           relayLegSplitDetail: legDetail,
           relayTeamSplits: teamSplits,
           relayMissingLeg: legMissingByIndex.get(idx),

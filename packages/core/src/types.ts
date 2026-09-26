@@ -94,6 +94,31 @@ export interface SwimmerResult {
    * this row's time: pass the row through `cutlineSwimOfRecord`.
    */
   convertedFrom?: ScyConversionProvenance;
+  /**
+   * Set only on a relay-leg candidate built from athlete history
+   * (`relayLegHistoryCandidates`, `lib/relayLegHistoryCandidates.ts`). Its
+   * presence marks the row history-sourced: it may fill a relay leg, and it is
+   * never an individual entry, never scored and never ranked. `time` is the
+   * swim stated in SCY; this record is the swim as recorded.
+   */
+  relayLegHistory?: RelayLegHistoryOrigin;
+}
+
+/**
+ * The athlete-history swim a relay-leg candidate was built from, as recorded.
+ * See {@link SwimmerResult.relayLegHistory}.
+ */
+export interface RelayLegHistoryOrigin {
+  /** Event label as recorded in history, e.g. `'50 Freestyle'`. */
+  event: string;
+  /** Time as recorded, in {@link RelayLegHistoryOrigin.timeType}. */
+  time: string;
+  /** Course the swim was recorded in. */
+  timeType: 'SCY' | 'LCM' | 'SCM';
+  meetLabel?: string;
+  date?: string;
+  /** Where the history row came from (`'paste'`, `'swimcloud'`, ...). */
+  source: HistoricalSwimSource;
 }
 
 /**

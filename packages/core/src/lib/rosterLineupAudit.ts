@@ -27,7 +27,8 @@ import {
   suggestBestRelayLegFill,
   upsertRelayLegOverride,
 } from './relayLegMatching';
-import { relayEntryKey } from './relaySplits';
+import { parseRelayDistanceYardsOrNull, relayEntryKey } from './relaySplits';
+import { relayLegHistoryCandidates } from './relayLegHistoryCandidates';
 import { buildAliasResolver, detectDuplicateAthletes } from './athleteAliases';
 import { IDENTITY_ALIAS_RESOLVER } from './athleteAliases';
 import type { AthleteAliasResolver, DuplicateAthletePair } from './athleteAliases';
@@ -61,7 +62,13 @@ export type LineupIssueType =
    * A recruit row or plan names an event its recorded course does not swim
    * (a 1000 Freestyle recorded SCM). It is not scored; see `courseEvents.ts`.
    */
-  | 'event_not_swum_in_course';
+  | 'event_not_swum_in_course'
+  /**
+   * A relay's event label names no distance (`parseRelayDistanceYardsOrNull`
+   * is null). No swim matches its legs, so a departing leg holder cannot be
+   * replaced and no split can be checked. Nothing guesses a distance.
+   */
+  | 'relay_distance_unreadable';
 
 export type LineupAthleteIssue = {
   type: LineupIssueType;
@@ -535,6 +542,30 @@ function auditStoredRowCourseMismatches(
   }
 }
 
+/**
+ * Relays of this team whose event label names no distance. Such a relay has
+ * no leg any swim matches: a departing leg holder leaves the leg empty, and
+ * autofill offers nobody. The label is named once per event so the coach can
+ * correct it; no distance is guessed (the old parser silently took 200).
+ */
+function auditUnreadableRelayDistances(
+  collector: LineupAuditCollector,
+  opts: { pdfResults: SwimmerResult[]; team: string }
+): void {
+  const named = new Set<string>();
+  for (const row of opts.pdfResults) {
+    if (!isRelayResult(row) || teamFrom(row.team) !== opts.team) continue;
+    if (named.has(row.event) || parseRelayDistanceYardsOrNull(row.event) != null) continue;
+    named.add(row.event);
+    collector.pushChecklist({
+      type: 'relay_distance_unreadable',
+      group: 'relays',
+      message: `Relay ${row.event}: the event label names no distance, so its legs cannot be matched, filled or split-checked. Check the relay's event label.`,
+      relayEvent: row.event,
+    });
+  }
+}
+
 /** Run the per-athlete checks over every athlete this team's audit covers. */
 function auditRosteredAthletes(
   collector: LineupAuditCollector,
@@ -647,6 +678,8 @@ export function buildTeamLineupAudit(input: LineupAuditInput): TeamLineupAudit {
     vacateNames,
     removeSeniors,
   });
+
+  auditUnreadableRelayDistances(collector, { pdfResults, team });
 
   // Runs AFTER the leg sweep on purpose: it skips anyone that sweep already
   // flagged, so the two are an ordered pair, not two independent checks.
@@ -895,8 +928,11 @@ export function suggestQuickFillForVacantLeg(
   const template = findTeamRelayTemplateByEntryKey(results, team, relayEntryKeyStr);
   if (!template) return null;
 
+  // A roster swimmer with no swim at the leg's event may fill it from athlete
+  // history (R1 e); a pool swim at the event always wins.
+  const teamPool = activeSwimmers.filter(s => s.team === team && !s.isRelay);
   const hit = suggestBestRelayLegFill(
-    activeSwimmers.filter(s => s.team === team && !s.isRelay),
+    [...teamPool, ...relayLegHistoryCandidates(workspace, teamPool, gender)],
     template,
     legIndex,
     individualEntrantNames(activeSwimmers, team),
@@ -940,6 +976,8 @@ export function issueBadgeLabel(issue: LineupAthleteIssue): string {
       return 'Program unconfirmed';
     case 'conversion_estimate':
       return 'Converted cut';
+    case 'relay_distance_unreadable':
+      return 'Relay label';
     default:
       return 'Issue';
   }

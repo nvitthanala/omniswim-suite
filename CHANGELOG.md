@@ -185,6 +185,38 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ### Fixed
 
+- **A woman's Mixed time trial no longer fills a men's relay leg.** HyTek
+  files a Mixed time trial under one gender's results. At the 2026 NSISC
+  championships Ave Owens (Delta State) swam a Mixed 50 Free time trial that
+  was filed with the men, and she was offered for Delta State's men's
+  200 Free Relay. A Mixed swim now counts only for the gender the swimmer's
+  other swims show. If no other swim shows it, the Mixed swim fills no leg.
+- **A relay's distance is read from its own distance, never guessed.** A
+  label such as "Event 102 Women 200 Yard Medley Relay" was read as a
+  102-yard relay, and a label with no distance was silently treated as a
+  200. A relay whose label names no distance now fills no leg. The lineup
+  checklist names it so the label can be corrected.
+- **"Drop seniors" now drops graduate students listed as GS.** HyTek results
+  list a graduate student as GS. The rule knew only SR and GR, so Mark
+  Eberhard (Henderson State, GS) stayed on the roster and on two relays.
+- **A relay leg can be filled from a swimmer's history.** A swimmer with no
+  swim at a leg's event in the loaded meet was never offered for the leg:
+  Colton Bennett's 22.93 50 Free never reached a 50 leg. The relay-leg swap
+  list, the lineup checklist's quick fill, and a relay leg you assign now
+  use the swimmer's fastest real history swim at that event, marked as from
+  history. A swim from the meet or a recruit row always comes first, even a
+  slower one. Extracted splits and self-reported times are never used.
+- **One swimmer can no longer swim two legs of one relay.** Naming a
+  relay's later-leg swimmer for an earlier leg put them on both legs. On
+  the stored 2026 NSISC workspace, HSU's 400 Free Relay A showed Oliver
+  Pozvai twice. The earlier leg now stays empty.
+- **The departed swimmer's time comes from their own team.** When a relay
+  leg is refilled, the time taken off the relay is the departed swimmer's
+  own swim at the leg's event. It could come from a swimmer of the same
+  name on another team.
+- **The relay-leg swap list shows a history time at its own distance.** A
+  history swim with a HyTek label such as "Event 35 Men 100 Yard
+  Freestyle" was read as a 35-yard swim and did not show for its leg.
 - **A distance freestyle swim recorded in the wrong course is flagged, not
   converted.** There is no 1000 Freestyle in short-course meters: that course
   swims the 800 in its place. An SCM "1000 Freestyle" used to convert to

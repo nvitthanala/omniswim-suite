@@ -28,6 +28,7 @@ import { relayEntryKey } from './relaySplits';
 import { relayTemplateFromLeg } from './relayLegMatching';
 import { buildAliasResolver } from './athleteAliases';
 import { computeVacateRelayLegNames } from './rosterLineupAudit';
+import { relayLegHistoryCandidates } from './relayLegHistoryCandidates';
 import { mergeScoringSettings } from './scoringDefaults';
 import { buildMeetEventLabelIndex, canonicalProgramEvent } from './eventIdentity';
 import { swimEventNotSwumInCourse } from './courseEvents';
@@ -468,13 +469,32 @@ export function buildWhatIfProjection({
     buildAliasResolver(workspace)
   );
 
+  // History swims may fill a leg an override names (R1 e,
+  // relayLegHistoryCandidates.ts). They matter only when an override exists,
+  // and are not PDF-native, so pdf_only leaves them out like the recruits.
+  const relayLegOnlyPool =
+    pdfOnly || relayOverrides.length === 0
+      ? []
+      : relayLegHistoryCandidates(
+          workspace,
+          [
+            ...currentResults.filter(
+              r =>
+                !isRelayResult(r) && passesRosterGates(r.name, r.classYear, excluded, removeSeniors)
+            ),
+            ...recruitResults,
+          ],
+          gender
+        );
+
   let base = simulateRoster(
     currentResults,
     recruitResults,
     removeSeniors,
     excluded,
     relayOverrides,
-    vacateRelayLegs
+    vacateRelayLegs,
+    relayLegOnlyPool
   );
 
   // pdf_only: exclude meet entry plans + recruits from scoring entirely. The

@@ -20,16 +20,20 @@ import { mergeScoringSettings } from '../scoringDefaults';
 import { buildScorerRosterLookup, usesScorerRoster, type ScorerRosterLookup } from '../scorerRoster';
 import {
   displayTimeForRelayLeg,
-  parseRelayDistanceYards,
   relayEntryKey,
-  relayLegDistanceYards,
+  relayLegDistanceYardsOfEvent,
 } from '../relaySplits';
 import {
+  buildRelayCandidateGenderIndex,
+  individualEventDistanceStroke,
+  isRelayCandidateOfGender,
   relayStrokeForIndex,
   relayTemplateFromLeg,
   swimmerMatchesRelayLeg,
   upsertRelayLegOverride,
+  type RelayCandidateGenderIndex,
 } from '../relayLegMatching';
+import { relayLegHistoryCandidates } from '../relayLegHistoryCandidates';
 import { countSwimmerEntries } from '../swimmerEntryLimits';
 import { computeVacateRelayLegNames } from '../rosterLineupAudit';
 import {
@@ -119,6 +123,12 @@ export type RelayLegSwap = {
    */
   inTimeExtractedSplit?: boolean;
   /**
+   * True when the incoming swimmer qualified for the leg only through athlete
+   * history: no meet or recruit row of theirs is at the leg's event, and a
+   * history swim is (`relayLegHistoryCandidates`, R1 e).
+   */
+  inFromHistory?: true;
+  /**
    * manualLegTime the override carries so the relay team clock is held constant
    * (the departed leg's split). Points are placement-based; holding the clock
    * keeps the delta free of simulateRoster's leg re-add artifact. Undefined when
@@ -147,45 +157,22 @@ export type RelayLegSwapOptions = {
 };
 
 // --- event-label classification ---------------------------------------------
-//
-// These regexes are module constants rather than inline literals so they carry
-// names. It also keeps them measurable: a regex literal in call-argument position
-// (`s.match(/.../)`) makes `lizard` silently drop the enclosing function from its
-// report, which hid this function's complexity from the metric entirely.
-
-/** Relay event labels — never an individual leg-time source. */
-const RELAY_LABEL_RE = /\brelay\b/;
-/** Medley / individual-medley labels — never a single-stroke leg-time source. */
-const MEDLEY_LABEL_RE = /\bim\b|individual medley|medley/;
-/** First 2-4 digit run in a label — the event distance. */
-const EVENT_DISTANCE_RE = /(\d{2,4})/;
 
 /**
- * Relay-leg stroke named by a lowercased individual event label, or null.
+ * Parse an individual event label to its (distance yards, relay-leg stroke),
+ * or null for a relay, an individual medley, or a label with no single stroke.
  *
- * ORDERED CHAIN, not a lookup table: this is a first-match-wins scan, so a label
- * naming more than one stroke resolves to the earlier test. Reordering it changes
- * which stroke a mixed label reports.
+ * Reads the event's own distance token (`individualEventDistanceStroke`). The
+ * first-2-to-4-digit scan this replaces read a HyTek entry number as the
+ * distance: `Event 35 Men 100 Yard Freestyle` keyed as a 35 Free, so a
+ * history swim with a HyTek label never reached its leg (R1 c). Display only:
+ * the key picks the `inTime` a swap shows.
  */
-function strokeFromEventLabel(lower: string): RelayLegStroke | null {
-  if (/back/.test(lower)) return 'back';
-  if (/breast/.test(lower)) return 'breast';
-  if (/butterfly|\bfly\b/.test(lower)) return 'fly';
-  if (/free/.test(lower)) return 'free';
-  return null;
-}
-
-/** Parse an individual event label to its (distance yards, relay-leg stroke), or null. */
 function individualStrokeDistance(
   event: string
 ): { dist: number; stroke: RelayLegStroke } | null {
-  const lower = event.toLowerCase();
-  if (RELAY_LABEL_RE.test(lower) || MEDLEY_LABEL_RE.test(lower)) return null;
-  const m = lower.match(EVENT_DISTANCE_RE);
-  if (!m) return null;
-  const stroke = strokeFromEventLabel(lower);
-  if (!stroke) return null;
-  return { dist: parseInt(m[1], 10), stroke };
+  const leg = individualEventDistanceStroke(event);
+  return leg ? { dist: leg.distance, stroke: leg.stroke } : null;
 }
 
 /** Append a ref to the (athlete, legKey) bucket, creating the nested maps on demand. */
@@ -358,13 +345,20 @@ function recruitAsLegCandidate(rec: Recruit): SwimmerResult {
   };
 }
 
-/** Individuals (results + recruits) an override could actually resolve onto a leg. */
+/**
+ * Individuals an override could actually resolve onto a leg: the team's
+ * result rows and recruit rows, plus the history candidates
+ * `relayLegHistoryCandidates` builds for those swimmers (R1 e). The scoring
+ * projection passes the same history rows to `simulateRoster`, so a swap to a
+ * history-sourced swimmer resolves when it is re-scored.
+ */
 function resolvableLegPool(workspace: Workspace, team: string, gender: Gender): SwimmerResult[] {
   const results = gender === Gender.MEN ? workspace.menResults ?? [] : workspace.womenResults ?? [];
   const recruits = (workspace.recruits ?? []).filter(
     rec => rec.gender === gender && String(rec.team ?? '').trim() === team
   );
-  return [...teamIndividualResults(results, team, gender), ...recruits.map(recruitAsLegCandidate)];
+  const pool = [...teamIndividualResults(results, team, gender), ...recruits.map(recruitAsLegCandidate)];
+  return [...pool, ...relayLegHistoryCandidates(workspace, pool, gender)];
 }
 
 // --- ranking internals --------------------------------------------------------
@@ -378,6 +372,8 @@ type LegSwapContext = {
   gender: Gender;
   settings: ScoringSettings;
   pool: SwimmerResult[];
+  /** Genders the pool's rows record; resolves a Mixed-event row (R1 a). */
+  poolGenders: RelayCandidateGenderIndex;
   legTimeIndex: Map<string, Map<string, RelayLegTimeRef>>;
   rosterLookup: ScorerRosterLookup | null;
   relayCap: number;
@@ -460,9 +456,10 @@ function resolveClockHoldTime(
   relayEvent: string,
   legIndex: number,
   outAthlete: string,
-  legRow: SwimmerResult | undefined
+  legRow: SwimmerResult | undefined,
+  team: string
 ): string | undefined {
-  const departedIndiv = findDepartedLegSwim(results, outAthlete, relayEvent, legIndex);
+  const departedIndiv = findDepartedLegSwim(results, outAthlete, relayEvent, legIndex, team);
   if (departedIndiv && Number.isFinite(convertTimeToSeconds(departedIndiv.time))) {
     return departedIndiv.time;
   }
@@ -498,7 +495,8 @@ function buildLegTarget(
       entry.template.event,
       legIndex,
       outAthlete,
-      legRow
+      legRow,
+      entry.template.team
     ),
   };
 }
@@ -530,6 +528,7 @@ function isEligibleLegCandidate(
   if (candKey === target.outKey) return false;
   if (target.onRelay.has(candKey)) return false;
   if (!swimmerMatchesRelayLeg(cand, target.entry.template.event, target.legIndex)) return false;
+  if (!isRelayCandidateOfGender(cand, ctx.gender, ctx.poolGenders)) return false;
   if (ctx.rosterLookup && !ctx.rosterLookup.isScorer(cand.name, ctx.team, ctx.gender)) return false;
   return !isAtRelayEntryCap(cand, ctx);
 }
@@ -580,6 +579,7 @@ function buildRelayLegSwap(
     inTimeConverted: bestRef?.converted ? true : undefined,
     inTimeStale: bestRef?.stale ? true : undefined,
     inTimeExtractedSplit: bestRef?.extractedSplit ? true : undefined,
+    ...(cand.relayLegHistory ? { inFromHistory: true as const } : {}),
     clockLegTime: target.clockLegTime,
     deltaPoints,
     newTotal: Number(newTotal.toFixed(3)),
@@ -627,7 +627,10 @@ function collectSwapsForEntry(
   bestByKey: Map<string, RelayLegSwap>
 ): number {
   const evLower = entry.template.event.toLowerCase();
-  const legDistanceYards = relayLegDistanceYards(parseRelayDistanceYards(entry.template.event));
+  const legDistanceYards = relayLegDistanceYardsOfEvent(entry.template.event);
+  // A relay whose label names no distance has no leg any swim matches, so
+  // nothing can be scored against it; the lineup audit names the label.
+  if (legDistanceYards == null) return 0;
   const onRelay = new Set(entry.legNames.filter(Boolean).map(n => normalizeSwimmerName(n)));
 
   let evaluated = 0;
@@ -650,13 +653,15 @@ function buildLegSwapContext(
   results: SwimmerResult[]
 ): LegSwapContext {
   const baseTotal = teamTotal(workspace, gender, team, merged);
+  const pool = resolvableLegPool(workspace, team, gender);
   return {
     workspace,
     results,
     team,
     gender,
     settings: merged,
-    pool: resolvableLegPool(workspace, team, gender),
+    pool,
+    poolGenders: buildRelayCandidateGenderIndex(pool),
     legTimeIndex: buildRelayLegTimeIndex(workspace, {
       team,
       gender,
@@ -680,8 +685,11 @@ function buildLegSwapContext(
  * (same pipeline as rankExactSwaps). Only positive deltas, de-duped per
  * (relayEntryKey, legIndex, inAthlete), sorted descending.
  *
- * Candidates are drawn from the team's individuals (result/recruit rows) that
+ * Candidates are drawn from the team's individuals (result/recruit rows, plus
+ * the history candidates for those swimmers, flagged `inFromHistory`) that
  * stroke- and distance-match the leg (medley legs by index; free relays use free)
+ * and are of the relay's gender (a Mixed time-trial row counts only for the
+ * swimmer's own gender)
  * — the pool a RelayLegOverride can actually resolve a name onto — enriched with
  * the athlete's SCY-converted cross-course best for the leg (converted/stale
  * flags reused from the recency machinery). Eligibility mirrors what the scorer

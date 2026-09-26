@@ -22,6 +22,8 @@ import {
 
 } from '../types';
 
+import { normalizeEventForCutline } from './cutlineEventNames';
+
 import { convertTimeToSeconds, formatSecondsToTime } from './utils';
 
 
@@ -30,25 +32,137 @@ export type RelayKind = 'medley' | 'freestyle';
 
 
 
-/** Total relay distance in yards from event name (e.g. 800 for 4×200). */
+/**
+
+ * A relay event label names no distance that can be read.
+
+ *
+
+ * Thrown by {@link parseRelayDistanceYards}. Before R1 (plans/2026-09-24) that
+
+ * function returned 200 for such a label, so a relay of unknown distance
+
+ * silently took 50-yard legs. Callers that must not throw use
+
+ * {@link parseRelayDistanceYardsOrNull} and treat `null` as "no leg can be
+
+ * matched".
+
+ */
+
+export class RelayDistanceUnreadableError extends Error {
+
+  /** The label that could not be read. */
+
+  readonly event: string;
+
+
+
+  constructor(event: string) {
+
+    super(`Relay event label names no distance: "${event}"`);
+
+    this.name = 'RelayDistanceUnreadableError';
+
+    this.event = event;
+
+  }
+
+}
+
+
+
+/**
+
+ * The relay's own distance token in a canonical event name: the number
+
+ * directly before `Freestyle Relay` or `Medley Relay` (`200 Medley Relay`,
+
+ * `800 Freestyle Relay`). A bare `200 Relay` names a distance too.
+
+ */
+
+const RELAY_DISTANCE_TOKEN = /\b(\d{2,4}) (?:(?:Freestyle|Medley) )?Relay\b/i;
+
+
+
+/**
+
+ * Total relay distance from the relay's own distance token, or `null` when
+
+ * the label names none.
+
+ *
+
+ * Read from the canonical event name (`normalizeEventForCutline`), which first
+
+ * strips a HyTek label's entry number and gender word, folds `4x50` to
+
+ * `200`, and drops the course word:
+
+ *
+
+ *     Event 30 Women 4x50 Yard Freestyle Relay              -> 200
+
+ *     Event 102 Women 200 Yard Medley Relay                 -> 200
+
+ *     200 Free Relay                                        -> 200 (SwimCloud)
+
+ *     Event 202 Women 4x200 Yard Freestyle Relay Time Trial -> 800
+
+ *
+
+ * A four-leg relay's total is four times its leg distance, so a total that
+
+ * does not divide by four is not a relay distance and returns `null`.
+
+ *
+
+ * The parser this replaces took the first 3-4 digit number in the label and
+
+ * returned 200 when it found none. It read the HyTek entry number of
+
+ * `Event 102 Women 200 Yard Medley Relay` as a 102-yard relay (25.5-yard
+
+ * legs), and gave every unreadable label 50-yard legs without a word.
+
+ */
+
+export function parseRelayDistanceYardsOrNull(event: string): number | null {
+
+  const match = RELAY_DISTANCE_TOKEN.exec(normalizeEventForCutline(String(event ?? '')));
+
+  if (!match) return null;
+
+  const total = Number(match[1]);
+
+  return total > 0 && total % 4 === 0 ? total : null;
+
+}
+
+
+
+/**
+
+ * Total relay distance in yards from the event name (800 for 4x200). Reads
+
+ * the label exactly as {@link parseRelayDistanceYardsOrNull} does.
+
+ *
+
+ * @throws RelayDistanceUnreadableError when the label names no distance. It
+
+ *   never guesses one.
+
+ */
 
 export function parseRelayDistanceYards(event: string): number {
 
-  const ev = event.toLowerCase();
+  const total = parseRelayDistanceYardsOrNull(event);
 
-  const fourX = ev.match(/4\s*[x×]\s*(\d+)/);
+  if (total == null) throw new RelayDistanceUnreadableError(event);
 
-  if (fourX) return parseInt(fourX[1], 10) * 4;
-
-  const m = ev.match(/\b(\d{3,4})\b/);
-
-  if (m) return parseInt(m[1], 10);
-
-  if (/\b200\b/.test(ev)) return 200;
-
-  if (/\b400\b/.test(ev)) return 400;
-
-  return 200;
+  return total;
 
 }
 
@@ -57,6 +171,24 @@ export function parseRelayDistanceYards(event: string): number {
 export function relayLegDistanceYards(relayDistanceYards: number): number {
 
   return relayDistanceYards / 4;
+
+}
+
+
+
+/**
+
+ * The distance one leg of this relay swims (50 for `Event 31 Men 4x50 Yard
+
+ * Freestyle Relay`), or `null` when the label names no distance.
+
+ */
+
+export function relayLegDistanceYardsOfEvent(event: string): number | null {
+
+  const total = parseRelayDistanceYardsOrNull(event);
+
+  return total == null ? null : relayLegDistanceYards(total);
 
 }
 
@@ -224,9 +356,13 @@ export function displayTimeForRelayLeg(row: SwimmerResult): string {
 
   const detail = normalizeRelayLegSplitDetail(row.relayLegSplitDetail);
 
-  const legDist =
+  const legDist = detail?.legDistanceYards ?? relayLegDistanceYardsOfEvent(row.event || '');
 
-    detail?.legDistanceYards ?? relayLegDistanceYards(parseRelayDistanceYards(row.event || ''));
+  // No leg distance, no plausibility test: a split could not be told apart
+
+  // from the team clock, so no split is shown rather than a guessed one.
+
+  if (legDist == null) return '—';
 
   const teamClock = relayTeamClock(row);
 

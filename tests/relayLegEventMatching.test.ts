@@ -312,21 +312,21 @@ describe('the relay-leg swap ranking', () => {
 describe('findDepartedLegSwim', () => {
   it('finds the leg event, not the first longer swim of the stroke', () => {
     // Huffhines's 1000 Free is his first row; his 100 Free is the leg event.
-    const hit = findDepartedLegSwim(menResults, 'Austin Huffhines', M_400FR, 3);
+    const hit = findDepartedLegSwim(menResults, 'Austin Huffhines', M_400FR, 3, DSU);
     expect([hit?.event, hit?.time]).toStrictEqual(['Event 35 Men 100 Yard Freestyle', '45.85']);
   });
 
   it('is absent when the swimmer never swam the leg event', () => {
-    expect(findDepartedLegSwim(menResults, 'Colton Bennett', M_400FR, 3)).toBeUndefined();
-    expect(findDepartedLegSwim(womenResults, 'Ryann Grasser', W_200FR, 0)).toBeUndefined();
+    expect(findDepartedLegSwim(menResults, 'Colton Bennett', M_400FR, 3, HSU)).toBeUndefined();
+    expect(findDepartedLegSwim(womenResults, 'Ryann Grasser', W_200FR, 0, HSU)).toBeUndefined();
   });
 
   it('reads the stroke of a medley leg from its index', () => {
     // Oskar Cebula (HSU) swims the breaststroke leg (index 1) of the 400 Medley Relay.
-    expect(findDepartedLegSwim(menResults, 'Oskar Cebula', M_400MR, 1)?.event).toBe(
+    expect(findDepartedLegSwim(menResults, 'Oskar Cebula', M_400MR, 1, HSU)?.event).toBe(
       'Event 26 Men 100 Yard Breaststroke'
     );
-    expect(findDepartedLegSwim(menResults, 'Oskar Cebula', M_400MR, 0)).toBeUndefined();
+    expect(findDepartedLegSwim(menResults, 'Oskar Cebula', M_400MR, 0, HSU)).toBeUndefined();
   });
 
   it('takes the first matching row: the program swim before the later time trial', () => {
@@ -337,12 +337,12 @@ describe('findDepartedLegSwim', () => {
       ['Event 26 Men 100 Yard Breaststroke', '55.45'],
       ['Event 100 Men 100 Yard Breaststroke Time Trial', '54.86R'],
     ]);
-    expect(findDepartedLegSwim(menResults, 'Oskar Cebula', M_400MR, 1)?.time).toBe('55.45');
+    expect(findDepartedLegSwim(menResults, 'Oskar Cebula', M_400MR, 1, HSU)?.time).toBe('55.45');
   });
 
   it('compares names the way simulateRoster does', () => {
-    expect(findDepartedLegSwim(menResults, 'Huffhines, Austin', M_400FR, 3)?.time).toBe('45.85');
-    expect(findDepartedLegSwim(menResults, '  austin  HUFFHINES ', M_400FR, 3)?.time).toBe('45.85');
+    expect(findDepartedLegSwim(menResults, 'Huffhines, Austin', M_400FR, 3, DSU)?.time).toBe('45.85');
+    expect(findDepartedLegSwim(menResults, '  austin  HUFFHINES ', M_400FR, 3, DSU)?.time).toBe('45.85');
   });
 });
 

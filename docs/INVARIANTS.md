@@ -299,3 +299,46 @@ takes the order as its `eventOrder` argument. Without it the order is raw
 seconds, so every caller must pass `catalogEventOrderByStrength(...)`.
 Guarded by `tests/eventStrengthRanking.test.ts` (including a scan that fails
 on any caller without `eventOrder`) and `scripts/test_event_quality_ranking.mjs`.
+
+## 18. A relay's distance is read from its own distance token, never guessed
+
+`parseRelayDistanceYardsOrNull` (`packages/core/src/lib/relaySplits.ts`)
+reads the number directly before `Freestyle Relay` / `Medley Relay` in the
+canonical event name, after `normalizeEventForCutline` has stripped the
+HyTek entry number and gender word and folded `4x50` to `200`. A total that
+does not divide by four is not a relay distance. A label that names none
+returns `null`; `parseRelayDistanceYards` throws
+`RelayDistanceUnreadableError` for it.
+
+The parser this replaced took the first 3-4 digit number, so
+`Event 102 Women 200 Yard Medley Relay` was a 102-yard relay, and it returned
+200 when it found no number, so an unreadable label silently took 50-yard
+legs. A `null` distance matches no swim (`isRelayLegEvent`): no candidate,
+no departed swim, no fill. The lineup audit names the label
+(`relay_distance_unreadable`). Never add a fallback distance.
+
+Individual events follow the same rule: `individualEventDistanceStroke`
+(`relayLegMatching.ts`) reads the event's own distance token, never the
+entry number. Guarded by `tests/relayFollowUpsR1.test.ts`.
+
+## 19. Who may fill a relay leg
+
+A swim fills a leg only when all of these hold (R1, plans/2026-09-24):
+
+1. It is the leg's exact event (invariant 13).
+2. The swimmer is of the relay's gender (`isRelayCandidateOfGender`). A
+   Mixed-event row records the gender of the results it was filed under,
+   not the swimmer's, so it counts only for the one gender the swimmer's
+   other rows record. None recorded: it fills no leg.
+3. The swimmer holds no other leg of the same relay. `simulateRoster`
+   collects every leg holder who stays before it resolves any override.
+4. A history swim reaches a leg only through `relayLegHistoryCandidates`
+   (`relayLegHistoryCandidates.ts`): a swimmer the pool already holds,
+   `isRankableSwim`, a recorded course, the leg's exact event, and never
+   where the pool holds a meet or recruit swim at that event. The row is
+   marked `relayLegHistory` and is never an individual entry.
+   `simulateRoster` takes such rows only as `relayLegOnlyPool`.
+
+The departed swimmer's swim comes from the relay's own team
+(`findDepartedLegSwim`'s `team`). Guarded by
+`tests/relayFollowUpsR1.test.ts`.

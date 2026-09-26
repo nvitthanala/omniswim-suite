@@ -17,6 +17,7 @@ import {
 } from './relayLegMatching';
 import { convertTimeToSeconds, isRelayResult, normalizeSwimmerName } from './utils';
 import { displayTimeForRelayLeg } from './relaySplits';
+import { relayLegHistoryCandidates } from './relayLegHistoryCandidates';
 
 export type RelaySplitComparison = {
   legIndex: number;
@@ -78,7 +79,10 @@ function findCalculatedSplit(
   legIndex: number
 ): { time: string; source: 'history' | 'lineup' | 'extracted-split' } | null {
   const req = relayLegRequirements(relayEvent, legIndex);
-  const isThisLeg = (event: string) => isLegEvent(event, req.legDistanceYards, req.stroke);
+  // A relay label that names no distance has no leg event to calculate from.
+  const legDistance = req.legDistanceYards;
+  if (legDistance == null) return null;
+  const isThisLeg = (event: string) => isLegEvent(event, legDistance, req.stroke);
   const settings = mergeScoringSettings(workspace.scoringSettings, {
     conference: workspace.conference,
   });
@@ -140,7 +144,9 @@ export function compareRelayLegSplits(
 
 /**
  * Propose relay leg fills from active individual lineup (meetEntryPlans) first,
- * then fall back to fastest eligible roster swimmers.
+ * then fall back to fastest eligible roster swimmers. A roster swimmer with no
+ * swim at a leg's event in the pool may still fill it from athlete history
+ * (`relayLegHistoryCandidates`, R1 e); a pool swim at the event always wins.
  */
 export function buildRelaysFromIndividualLineup(
   workspace: Workspace,
@@ -163,7 +169,8 @@ export function buildRelaysFromIndividualLineup(
     event: p.event,
     gender: p.gender,
   }));
-  const pool = [...planAsSwimmers, ...activeSwimmers];
+  const lineupPool = [...planAsSwimmers, ...activeSwimmers];
+  const pool = [...lineupPool, ...relayLegHistoryCandidates(workspace, lineupPool, gender)];
   const teamRelayLegs = relayLegs.filter(
     r => isRelayResult(r) && String(r.team ?? '').trim() === team
   );
