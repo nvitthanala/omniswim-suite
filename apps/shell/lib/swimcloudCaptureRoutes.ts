@@ -941,6 +941,168 @@ export interface SwimCloudCaptureRouterOptions {
  *   4. Handlers.
  *   5. Error handler, translating parser failures.
  */
+/**
+ * Every field `POST /` accepts, once each has been individually validated.
+ * `undefined` on an optional field means "not supplied" (keep whatever the
+ * stored record already holds) — see `buildMergedCaptureRecord`. Module-level
+ * (not a closure inside `createSwimCloudCaptureRouter`) purely to keep that
+ * factory function under the repo's line-count ceiling.
+ */
+type CaptureOpenFields = {
+  subject: SwimCloudCaptureSubject;
+  captureId: string;
+  track: SwimCloudCaptureTrack | undefined;
+  completeness: SwimCloudCaptureCompleteness | undefined;
+  plannedPageCount: number | undefined;
+  notes: readonly string[] | undefined;
+  label: string | undefined;
+  teamDiscovery: SwimCloudCaptureTeamDiscovery | undefined;
+  crawlScope: SwimCloudCaptureCrawlScope | undefined;
+};
+
+/**
+ * Validates every field of a `POST /` body in turn, writing the 400
+ * response itself the moment one fails. Returns `undefined` once a
+ * response has been sent, so the caller reads as
+ * `const fields = validateCaptureOpenBody(...); if (!fields) return;`.
+ * `guardCaptureId` is passed in rather than closed over, since this
+ * function lives outside `createSwimCloudCaptureRouter` (see above).
+ */
+function validateCaptureOpenBody(
+  body: Record<string, unknown>,
+  res: Response,
+  guardCaptureId: (candidate: unknown, res: Response) => string | undefined
+): CaptureOpenFields | undefined {
+  const subject = readCaptureSubject(body.subject);
+  if (!subject.ok) {
+    res.status(400).json({ error: 'Invalid capture subject', details: subject.message });
+    return undefined;
+  }
+
+  // A client-supplied captureId is honoured (it lets a caller re-open a
+  // record it already holds) but is validated exactly as a path parameter
+  // is. The derived id is validated too: `season` reaches
+  // `captureIdForSubject` from the request body, so "we computed it
+  // ourselves" is not the same as "it is safe".
+  const captureId = guardCaptureId(
+    body.captureId === undefined ? captureIdForSubject(subject.value) : body.captureId,
+    res,
+  );
+  if (captureId === undefined) return undefined;
+
+  if (Array.isArray(body.pages) && body.pages.length > 0) {
+    res.status(400).json({
+      error: 'Capture pages are not accepted here',
+      details: `Post each fetched page to ${SWIMCLOUD_CAPTURE_ROUTE_BASE}/${captureId}/pages. This route owns the record, not its pages.`,
+    });
+    return undefined;
+  }
+
+  const track = readOptionalEnum(body.track, CAPTURE_TRACKS, 'track');
+  if (!track.ok) {
+    res.status(400).json({ error: 'Invalid capture track', details: track.message });
+    return undefined;
+  }
+
+  const completeness = readOptionalEnum(body.completeness, CAPTURE_COMPLETENESS, 'completeness');
+  if (!completeness.ok) {
+    res.status(400).json({ error: 'Invalid capture completeness', details: completeness.message });
+    return undefined;
+  }
+
+  const plannedPageCount = readOptionalCount(body.plannedPageCount, 'plannedPageCount');
+  if (!plannedPageCount.ok) {
+    res.status(400).json({ error: 'Invalid plannedPageCount', details: plannedPageCount.message });
+    return undefined;
+  }
+
+  const notes = readOptionalStringArray(body.notes, 'notes');
+  if (!notes.ok) {
+    res.status(400).json({ error: 'Invalid notes', details: notes.message });
+    return undefined;
+  }
+
+  const label = readOptionalLabel(body.label);
+  if (!label.ok) {
+    res.status(400).json({ error: 'Invalid label', details: label.message });
+    return undefined;
+  }
+
+  const teamDiscovery = readOptionalTeamDiscovery(body.teamDiscovery);
+  if (!teamDiscovery.ok) {
+    res.status(400).json({ error: 'Invalid teamDiscovery', details: teamDiscovery.message });
+    return undefined;
+  }
+
+  const crawlScope = readOptionalCrawlScope(body.crawlScope);
+  if (!crawlScope.ok) {
+    res.status(400).json({ error: 'Invalid crawlScope', details: crawlScope.message });
+    return undefined;
+  }
+
+  return {
+    subject: subject.value,
+    captureId,
+    track: track.value,
+    completeness: completeness.value,
+    plannedPageCount: plannedPageCount.value,
+    notes: notes.value,
+    label: label.value,
+    teamDiscovery: teamDiscovery.value,
+    crawlScope: crawlScope.value,
+  };
+}
+
+/**
+ * Merges validated `POST /` fields onto whatever record is already stored.
+ * Every field is a partial update: an omitted field keeps whatever the
+ * stored record holds, so a progress ping that carries only
+ * `{ subject, completeness }` cannot wipe a plannedPageCount or a label
+ * that an earlier request established.
+ */
+function buildMergedCaptureRecord(
+  fields: CaptureOpenFields,
+  existing: SwimCloudCaptureRecord | undefined,
+  now: string
+): SwimCloudCaptureRecord {
+  const resolvedLabel = fields.label ?? existing?.label;
+  const resolvedDiscovery = fields.teamDiscovery ?? existing?.teamDiscovery;
+  // Unioned, not overwritten. A capture is cumulative — pages merge by
+  // canonical URL across crawls — so a meet-results crawl followed by a
+  // full one holds both sets of pages, and only the union of their planned
+  // passes is a true statement about what the stored pages cover. An
+  // omitted `crawlScope` keeps whatever the record already held, the same
+  // partial-update rule every other field here follows.
+  const resolvedCrawlScope =
+    fields.crawlScope === undefined
+      ? existing?.crawlScope
+      : mergeCaptureCrawlScopes(existing?.crawlScope, fields.crawlScope);
+  return {
+    captureId: fields.captureId,
+    subject: fields.subject,
+    ...(resolvedLabel === undefined ? {} : { label: resolvedLabel }),
+    createdAt: existing?.createdAt ?? now,
+    updatedAt: now,
+    // This route is the extension's transport, so an unstated track is
+    // `'browser-extension'` — the truth about how the bytes arrived, not a
+    // guess. A stated track outside the three known values is rejected
+    // above rather than silently replaced.
+    track: fields.track ?? existing?.track ?? 'browser-extension',
+    completeness: fields.completeness ?? existing?.completeness ?? 'in-progress',
+    ...(resolvedDiscovery === undefined ? {} : { teamDiscovery: resolvedDiscovery }),
+    ...(resolvedCrawlScope === undefined ? {} : { crawlScope: resolvedCrawlScope }),
+    // `0` here means "no plan committed yet", which is what a capture looks
+    // like before the crawler has read `pagination.totalPages`. It is not a
+    // claim that zero pages exist — `completeness` is what carries that,
+    // and a fresh record is `'in-progress'`.
+    plannedPageCount: fields.plannedPageCount ?? existing?.plannedPageCount ?? 0,
+    // Pages arrive through the pages route only. `upsertCapture` merges by
+    // canonicalUrl, so an empty list preserves everything already stored.
+    pages: [],
+    notes: fields.notes ?? existing?.notes ?? [],
+  };
+}
+
 export function createSwimCloudCaptureRouter(options: SwimCloudCaptureRouterOptions): Router {
   const { store, captureRoot, pairingToken } = options;
   const bodyLimitBytes = options.bodyLimitBytes ?? SWIMCLOUD_CAPTURE_BODY_LIMIT_BYTES;
@@ -984,100 +1146,12 @@ export function createSwimCloudCaptureRouter(options: SwimCloudCaptureRouterOpti
         return res.status(400).json({ error: 'Capture body must be a JSON object' });
       }
 
-      const subject = readCaptureSubject(body.subject);
-      if (!subject.ok) {
-        return res.status(400).json({ error: 'Invalid capture subject', details: subject.message });
-      }
+      const fields = validateCaptureOpenBody(body, res, guardCaptureId);
+      if (fields === undefined) return undefined;
 
-      // A client-supplied captureId is honoured (it lets a caller re-open a
-      // record it already holds) but is validated exactly as a path parameter
-      // is. The derived id is validated too: `season` reaches
-      // `captureIdForSubject` from the request body, so "we computed it
-      // ourselves" is not the same as "it is safe".
-      const captureId = guardCaptureId(
-        body.captureId === undefined ? captureIdForSubject(subject.value) : body.captureId,
-        res,
-      );
-      if (captureId === undefined) return undefined;
-
-      if (Array.isArray(body.pages) && body.pages.length > 0) {
-        return res.status(400).json({
-          error: 'Capture pages are not accepted here',
-          details: `Post each fetched page to ${SWIMCLOUD_CAPTURE_ROUTE_BASE}/${captureId}/pages. This route owns the record, not its pages.`,
-        });
-      }
-
-      const track = readOptionalEnum(body.track, CAPTURE_TRACKS, 'track');
-      if (!track.ok) return res.status(400).json({ error: 'Invalid capture track', details: track.message });
-
-      const completeness = readOptionalEnum(body.completeness, CAPTURE_COMPLETENESS, 'completeness');
-      if (!completeness.ok) {
-        return res.status(400).json({ error: 'Invalid capture completeness', details: completeness.message });
-      }
-
-      const plannedPageCount = readOptionalCount(body.plannedPageCount, 'plannedPageCount');
-      if (!plannedPageCount.ok) {
-        return res.status(400).json({ error: 'Invalid plannedPageCount', details: plannedPageCount.message });
-      }
-
-      const notes = readOptionalStringArray(body.notes, 'notes');
-      if (!notes.ok) return res.status(400).json({ error: 'Invalid notes', details: notes.message });
-
-      const label = readOptionalLabel(body.label);
-      if (!label.ok) return res.status(400).json({ error: 'Invalid label', details: label.message });
-
-      const teamDiscovery = readOptionalTeamDiscovery(body.teamDiscovery);
-      if (!teamDiscovery.ok) {
-        return res.status(400).json({ error: 'Invalid teamDiscovery', details: teamDiscovery.message });
-      }
-
-      const crawlScope = readOptionalCrawlScope(body.crawlScope);
-      if (!crawlScope.ok) {
-        return res.status(400).json({ error: 'Invalid crawlScope', details: crawlScope.message });
-      }
-
-      // Every field is a partial update: an omitted field keeps whatever the
-      // stored record holds, so a progress ping that carries only
-      // `{ subject, completeness }` cannot wipe a plannedPageCount or a label
-      // that an earlier request established.
-      const existing = await store.getCapture(captureId);
+      const existing = await store.getCapture(fields.captureId);
       const now = new Date().toISOString();
-      const resolvedLabel = label.value ?? existing?.label;
-      const resolvedDiscovery = teamDiscovery.value ?? existing?.teamDiscovery;
-      // Unioned, not overwritten. A capture is cumulative — pages merge by
-      // canonical URL across crawls — so a meet-results crawl followed by a
-      // full one holds both sets of pages, and only the union of their planned
-      // passes is a true statement about what the stored pages cover. An
-      // omitted `crawlScope` keeps whatever the record already held, the same
-      // partial-update rule every other field here follows.
-      const resolvedCrawlScope =
-        crawlScope.value === undefined
-          ? existing?.crawlScope
-          : mergeCaptureCrawlScopes(existing?.crawlScope, crawlScope.value);
-      const record: SwimCloudCaptureRecord = {
-        captureId,
-        subject: subject.value,
-        ...(resolvedLabel === undefined ? {} : { label: resolvedLabel }),
-        createdAt: existing?.createdAt ?? now,
-        updatedAt: now,
-        // This route is the extension's transport, so an unstated track is
-        // `'browser-extension'` — the truth about how the bytes arrived, not a
-        // guess. A stated track outside the three known values is rejected
-        // above rather than silently replaced.
-        track: track.value ?? existing?.track ?? 'browser-extension',
-        completeness: completeness.value ?? existing?.completeness ?? 'in-progress',
-        ...(resolvedDiscovery === undefined ? {} : { teamDiscovery: resolvedDiscovery }),
-        ...(resolvedCrawlScope === undefined ? {} : { crawlScope: resolvedCrawlScope }),
-        // `0` here means "no plan committed yet", which is what a capture looks
-        // like before the crawler has read `pagination.totalPages`. It is not a
-        // claim that zero pages exist — `completeness` is what carries that,
-        // and a fresh record is `'in-progress'`.
-        plannedPageCount: plannedPageCount.value ?? existing?.plannedPageCount ?? 0,
-        // Pages arrive through the pages route only. `upsertCapture` merges by
-        // canonicalUrl, so an empty list preserves everything already stored.
-        pages: [],
-        notes: notes.value ?? existing?.notes ?? [],
-      };
+      const record = buildMergedCaptureRecord(fields, existing, now);
 
       const saved = await store.upsertCapture(record);
       return res.status(existing === undefined ? 201 : 200).json(saved);

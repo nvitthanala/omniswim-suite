@@ -322,6 +322,20 @@ export class WorkspaceService {
         vals.version
       );
 
+    this.deleteWorkspaceChildRows(ws.id);
+    this.insertMeetResultRows(ws);
+    this.insertSourceMeetResultRows(ws);
+    this.insertPsychResultRows(ws);
+    this.insertWithIdChildRows(ws);
+    this.insertPositionalChildRows(ws);
+  }
+
+  /**
+   * Every workspace child table, wiped for one workspace before its rows are
+   * reinserted below. `writeWorkspaceUnsafe` always rewrites a workspace's
+   * children in full rather than diffing them.
+   */
+  private deleteWorkspaceChildRows(workspaceId: string): void {
     for (const table of [
       'meet_results',
       'source_meet_results',
@@ -335,9 +349,11 @@ export class WorkspaceService {
       'race_analyses',
       'athlete_aliases',
     ]) {
-      this.db.prepare(`DELETE FROM ${table} WHERE workspace_id = ?`).run(ws.id);
+      this.db.prepare(`DELETE FROM ${table} WHERE workspace_id = ?`).run(workspaceId);
     }
+  }
 
+  private insertMeetResultRows(ws: Workspace): void {
     const insertResult = this.db.prepare(
       'INSERT INTO meet_results(id, workspace_id, gender, position, data) VALUES(?, ?, ?, ?, ?)'
     );
@@ -347,7 +363,9 @@ export class WorkspaceService {
     for (const row of insertResultsRows(ws.id, ws.womenResults ?? [], 'Women')) {
       insertResult.run(row.id, row.workspace_id, row.gender, row.position, row.data);
     }
+  }
 
+  private insertSourceMeetResultRows(ws: Workspace): void {
     const insertSource = this.db.prepare(
       'INSERT INTO source_meet_results(id, workspace_id, gender, position, data) VALUES(?, ?, ?, ?, ?)'
     );
@@ -359,7 +377,9 @@ export class WorkspaceService {
     for (const row of insertResultsRows(ws.id, sourceWomen, 'Women')) {
       insertSource.run(`src-${row.id}`, row.workspace_id, row.gender, row.position, row.data);
     }
+  }
 
+  private insertPsychResultRows(ws: Workspace): void {
     const insertPsych = this.db.prepare(
       'INSERT INTO psych_results(id, workspace_id, gender, position, data) VALUES(?, ?, ?, ?, ?)'
     );
@@ -369,7 +389,9 @@ export class WorkspaceService {
     for (const row of insertResultsRows(ws.id, ws.psychWomenResults ?? [], 'Women')) {
       insertPsych.run(row.id, row.workspace_id, row.gender, row.position, row.data);
     }
+  }
 
+  private insertWithIdChildRows(ws: Workspace): void {
     const insertWithId = (table: string) =>
       this.db.prepare(`INSERT INTO ${table}(id, workspace_id, position, data) VALUES(?, ?, ?, ?)`);
     for (const row of insertWithIdRows('recruits', ws.id, ws.recruits ?? [])) {
@@ -381,7 +403,9 @@ export class WorkspaceService {
     for (const row of insertWithIdRows('athlete_aliases', ws.id, ws.athleteAliases ?? [])) {
       insertWithId('athlete_aliases').run(row.id, row.workspace_id, row.position, row.data);
     }
+  }
 
+  private insertPositionalChildRows(ws: Workspace): void {
     const insertPos = (table: string) =>
       this.db.prepare(`INSERT INTO ${table}(workspace_id, position, data) VALUES(?, ?, ?)`);
     for (const row of insertPositionalRows(ws.id, ws.scorerRosterOverrides ?? [])) {

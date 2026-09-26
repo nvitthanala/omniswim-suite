@@ -183,6 +183,33 @@ export async function readBackupWorkspaces(fullPath: string): Promise<Workspace[
   return parsed as Workspace[];
 }
 
+/**
+ * Shared by `SqliteRepo.restoreBackup` and `PgRepo.restoreBackup` — the two
+ * were an identical 14-line clone (H2, code-health refactor, 2026-09-25).
+ * `JsonRepo.restoreBackup` is left as its own method (it mutates through
+ * `store.mutate`, not a `service.replaceAll`, so folding it in here would be
+ * merging genuinely different code, not deduplicating identical code).
+ *
+ * Takes its own `pre-restore` backup first, always. A restore is the one
+ * operation that destroys more than a delete does, and a coach who restores
+ * the wrong file must still have a way back. The file is read and validated
+ * BEFORE anything is replaced, so a corrupt backup fails with nothing
+ * touched rather than halfway through.
+ */
+async function restoreBackupIntoService(
+  backupDir: string,
+  file: string,
+  backupBeforeRestore: () => Promise<string>,
+  replaceAll: (workspaces: Workspace[]) => void | Promise<void>
+): Promise<number> {
+  const full = resolveBackupPath(backupDir, file);
+  if (full === null) throw new Error(`Not a backup this app wrote: ${file}`);
+  const workspaces = await readBackupWorkspaces(full);
+  await backupBeforeRestore();
+  await replaceAll(workspaces);
+  return workspaces.length;
+}
+
 /** Exported for tests. Same rules as the private caller above. */
 export const __backupRetentionInternals = { GENERATED_BACKUP_PATTERN, pruneGeneratedBackups, backupKeepCount };
 
@@ -329,12 +356,12 @@ export class SqliteRepo implements WorkspaceRepo {
    * touched rather than halfway through.
    */
   async restoreBackup(file: string) {
-    const full = resolveBackupPath(this.backupDir, file);
-    if (full === null) throw new Error(`Not a backup this app wrote: ${file}`);
-    const workspaces = await readBackupWorkspaces(full);
-    await this.backup('pre-restore');
-    this.service.replaceAll(workspaces);
-    return workspaces.length;
+    return restoreBackupIntoService(
+      this.backupDir,
+      file,
+      () => this.backup('pre-restore'),
+      workspaces => this.service.replaceAll(workspaces)
+    );
   }
   async snapshot(id: string, label: string) {
     const res = this.service.createSnapshot(id, label);
@@ -399,12 +426,12 @@ export class PgRepo implements WorkspaceRepo {
    * touched rather than halfway through.
    */
   async restoreBackup(file: string) {
-    const full = resolveBackupPath(this.backupDir, file);
-    if (full === null) throw new Error(`Not a backup this app wrote: ${file}`);
-    const workspaces = await readBackupWorkspaces(full);
-    await this.backup('pre-restore');
-    await this.service.replaceAll(workspaces);
-    return workspaces.length;
+    return restoreBackupIntoService(
+      this.backupDir,
+      file,
+      () => this.backup('pre-restore'),
+      workspaces => this.service.replaceAll(workspaces)
+    );
   }
   async snapshot(id: string, label: string) {
     const res = await this.service.createSnapshot(id, label);

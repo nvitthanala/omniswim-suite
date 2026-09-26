@@ -29,6 +29,15 @@ const REPO_ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..
 const SERVER_PATH = path.join(REPO_ROOT, 'apps', 'shell', 'server.ts');
 const src = fs.readFileSync(SERVER_PATH, 'utf8');
 
+// H2 (code-health refactor, 2026-09-25): `startServer`'s route registrations
+// were split into `apps/shell/lib/routes/*.ts`, same routes/methods/order,
+// registered from `server.ts`. `/api/analyze-video` now lives in
+// `parsingRoutes.ts`, so assertion 3 below reads both files rather than only
+// `server.ts` — `createVideoUpload`/`ALLOWED_VIDEO_MIMETYPES` were not moved
+// and still live in `server.ts`.
+const PARSING_ROUTES_PATH = path.join(REPO_ROOT, 'apps', 'shell', 'lib', 'routes', 'parsingRoutes.ts');
+const parsingRoutesSrc = fs.readFileSync(PARSING_ROUTES_PATH, 'utf8');
+
 // --- 1. The server binds loopback by default -------------------------------
 {
   const listenCalls = [...src.matchAll(/\.listen\(([^)]*)\)/g)].map(m => m[1]);
@@ -187,13 +196,14 @@ const src = fs.readFileSync(SERVER_PATH, 'utf8');
 
 // --- 3. No upload middleware is mounted while the route returns 501 ---------
 {
-  const routeIdx = src.indexOf("app.post('/api/analyze-video'");
+  const routeSrc = parsingRoutesSrc.includes("app.post('/api/analyze-video'") ? parsingRoutesSrc : src;
+  const routeIdx = routeSrc.indexOf("app.post('/api/analyze-video'");
   assert.notEqual(routeIdx, -1, '/api/analyze-video route must exist');
 
-  const arrowIdx = src.indexOf('=>', routeIdx);
+  const arrowIdx = routeSrc.indexOf('=>', routeIdx);
   assert.notEqual(arrowIdx, -1, 'could not find the /api/analyze-video handler');
-  const head = src.slice(routeIdx, arrowIdx); // everything before the handler body
-  const body = src.slice(routeIdx, src.indexOf('});', arrowIdx));
+  const head = routeSrc.slice(routeIdx, arrowIdx); // everything before the handler body
+  const body = routeSrc.slice(routeIdx, routeSrc.indexOf('});', arrowIdx));
 
   const returns501 = /status\(501\)/.test(body);
   if (returns501) {
@@ -209,7 +219,7 @@ const src = fs.readFileSync(SERVER_PATH, 'utf8');
 
   // The old vulnerable filename scheme must never come back.
   assert.ok(
-    !/\$\{Date\.now\(\)\}-\$\{file\.originalname\}/.test(src),
+    !/\$\{Date\.now\(\)\}-\$\{file\.originalname\}/.test(src + parsingRoutesSrc),
     'the stored filename must never interpolate the client-supplied originalname'
   );
 

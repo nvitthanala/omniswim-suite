@@ -331,6 +331,20 @@ export class PgWorkspaceService {
       ]
     );
 
+    await this.deleteWorkspaceChildRows(client, ws.id);
+    await this.insertMeetResultRows(client, ws);
+    await this.insertSourceMeetResultRows(client, ws);
+    await this.insertPsychResultRows(client, ws);
+    await this.insertWithIdChildRows(client, ws);
+    await this.insertPositionalChildRows(client, ws);
+  }
+
+  /**
+   * Every workspace child table, wiped for one workspace before its rows are
+   * reinserted below. `writeWorkspaceUnsafe` always rewrites a workspace's
+   * children in full rather than diffing them.
+   */
+  private async deleteWorkspaceChildRows(client: pg.PoolClient, workspaceId: string): Promise<void> {
     for (const table of [
       'meet_results',
       'source_meet_results',
@@ -344,9 +358,11 @@ export class PgWorkspaceService {
       'race_analyses',
       'athlete_aliases',
     ]) {
-      await client.query(`DELETE FROM ${table} WHERE workspace_id = $1`, [ws.id]);
+      await client.query(`DELETE FROM ${table} WHERE workspace_id = $1`, [workspaceId]);
     }
+  }
 
+  private async insertMeetResultRows(client: pg.PoolClient, ws: Workspace): Promise<void> {
     for (const row of insertResultsRows(ws.id, ws.menResults ?? [], 'Men')) {
       await client.query(
         'INSERT INTO meet_results(id, workspace_id, gender, position, data) VALUES($1,$2,$3,$4,$5)',
@@ -359,6 +375,9 @@ export class PgWorkspaceService {
         [row.id, row.workspace_id, row.gender, row.position, row.data]
       );
     }
+  }
+
+  private async insertSourceMeetResultRows(client: pg.PoolClient, ws: Workspace): Promise<void> {
     const sourceMen = ws.sourceMenResults ?? ws.menResults ?? [];
     const sourceWomen = ws.sourceWomenResults ?? ws.womenResults ?? [];
     for (const row of insertResultsRows(ws.id, sourceMen, 'Men')) {
@@ -373,6 +392,9 @@ export class PgWorkspaceService {
         [`src-${row.id}`, row.workspace_id, row.gender, row.position, row.data]
       );
     }
+  }
+
+  private async insertPsychResultRows(client: pg.PoolClient, ws: Workspace): Promise<void> {
     for (const row of insertResultsRows(ws.id, ws.psychMenResults ?? [], 'Men')) {
       await client.query(
         'INSERT INTO psych_results(id, workspace_id, gender, position, data) VALUES($1,$2,$3,$4,$5)',
@@ -385,6 +407,9 @@ export class PgWorkspaceService {
         [row.id, row.workspace_id, row.gender, row.position, row.data]
       );
     }
+  }
+
+  private async insertWithIdChildRows(client: pg.PoolClient, ws: Workspace): Promise<void> {
     for (const row of insertWithIdRows('recruits', ws.id, ws.recruits ?? [])) {
       await client.query(
         'INSERT INTO recruits(id, workspace_id, position, data) VALUES($1,$2,$3,$4)',
@@ -403,6 +428,9 @@ export class PgWorkspaceService {
         [row.id, row.workspace_id, row.position, row.data]
       );
     }
+  }
+
+  private async insertPositionalChildRows(client: pg.PoolClient, ws: Workspace): Promise<void> {
     for (const row of insertPositionalRows(ws.id, ws.scorerRosterOverrides ?? [])) {
       await client.query(
         'INSERT INTO roster_overrides(workspace_id, position, data) VALUES($1,$2,$3)',
