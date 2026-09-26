@@ -70,6 +70,98 @@ const EVENTS = [
   '50 Butterfly (Relay split)', '100 Butterfly (Relay split)',
 ];
 
+type SelectOption = { value: string; label: string };
+
+/** Shared `<select>` shape behind both the "Team"/"Committed Team" fields
+ *  (compact vs full layout use different wrapper markup and label text, so
+ *  only the select itself — identical in both — is extracted). */
+function TeamSelect({
+  value,
+  onChange,
+  options,
+  className,
+}: {
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  options: SelectOption[];
+  className: string;
+}) {
+  return (
+    <select value={value} onChange={onChange} className={className}>
+      {options.map(o => (
+        <option key={o.value} value={o.value}>
+          {o.label}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/** Shared `<select>` shape behind both "Event"/"Event Selection" fields. */
+function EventSelect({
+  value,
+  onChange,
+  className,
+}: {
+  value: string;
+  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  className: string;
+}) {
+  return (
+    <select value={value} onChange={onChange} className={className}>
+      {EVENTS.map(ev => (
+        <option key={ev} value={ev}>
+          {ev}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+type ClassYearLabels = Record<ClassYear, string>;
+
+/** Compact layout's option text ("FR"). */
+const SHORT_CLASS_YEAR_LABELS: ClassYearLabels = {
+  [ClassYear.FR]: 'FR',
+  [ClassYear.SO]: 'SO',
+  [ClassYear.JR]: 'JR',
+  [ClassYear.SR]: 'SR',
+  [ClassYear.HS]: 'HS',
+};
+
+/** Full layout's option text ("Freshman (FR)"). */
+const LONG_CLASS_YEAR_LABELS: ClassYearLabels = {
+  [ClassYear.FR]: 'Freshman (FR)',
+  [ClassYear.SO]: 'Sophomore (SO)',
+  [ClassYear.JR]: 'Junior (JR)',
+  [ClassYear.SR]: 'Senior (SR)',
+  [ClassYear.HS]: 'High School (HS)',
+};
+
+/** Shared `<select>` shape behind both "Year"/class-year fields; option text
+ *  differs by layout (short vs long form), passed in as `labels`. */
+function ClassYearSelect({
+  value,
+  onChange,
+  className,
+  labels,
+}: {
+  value: ClassYear;
+  onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
+  className: string;
+  labels: ClassYearLabels;
+}) {
+  return (
+    <select value={value} onChange={onChange} className={className}>
+      <option value={ClassYear.FR}>{labels[ClassYear.FR]}</option>
+      <option value={ClassYear.SO}>{labels[ClassYear.SO]}</option>
+      <option value={ClassYear.JR}>{labels[ClassYear.JR]}</option>
+      <option value={ClassYear.SR}>{labels[ClassYear.SR]}</option>
+      <option value={ClassYear.HS}>{labels[ClassYear.HS]}</option>
+    </select>
+  );
+}
+
 export default function RecruitForm({
   gender,
   teams,
@@ -169,31 +261,20 @@ export default function RecruitForm({
           </div>
           <div className="min-w-0 sm:col-span-2">
             <label className={labelClass}>Team</label>
-            <select
+            <TeamSelect
               value={formData.team}
               onChange={e => setFormData({ ...formData, team: e.target.value })}
+              options={teamOptions}
               className={`${inputClass} appearance-none`}
-            >
-              {teamOptions.map(o => (
-                <option key={o.value} value={o.value}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
+            />
           </div>
           <div className="min-w-0">
             <label className={labelClass}>Event</label>
-            <select
+            <EventSelect
               value={formData.event}
               onChange={e => setFormData({ ...formData, event: e.target.value })}
               className={`${inputClass} appearance-none`}
-            >
-              {EVENTS.map(ev => (
-                <option key={ev} value={ev}>
-                  {ev}
-                </option>
-              ))}
-            </select>
+            />
           </div>
           <div className="grid grid-cols-2 gap-3 min-w-0">
             <div>
@@ -210,17 +291,12 @@ export default function RecruitForm({
             </div>
             <div>
               <label className={labelClass}>Year</label>
-              <select
+              <ClassYearSelect
                 value={formData.classYear}
                 onChange={e => setFormData({ ...formData, classYear: e.target.value as ClassYear })}
                 className={`${inputClass} appearance-none`}
-              >
-                <option value={ClassYear.FR}>FR</option>
-                <option value={ClassYear.SO}>SO</option>
-                <option value={ClassYear.JR}>JR</option>
-                <option value={ClassYear.SR}>SR</option>
-                <option value={ClassYear.HS}>HS</option>
-              </select>
+                labels={SHORT_CLASS_YEAR_LABELS}
+              />
             </div>
           </div>
         </div>
@@ -275,17 +351,12 @@ export default function RecruitForm({
       <div className="grid grid-cols-2 gap-3">
         <div>
           <label className={labelClass}>Committed Team</label>
-          <select
+          <TeamSelect
             value={formData.team}
             onChange={e => setFormData({ ...formData, team: e.target.value })}
+            options={teamOptions}
             className={`${inputClass} appearance-none`}
-          >
-            {teamOptions.map(o => (
-              <option key={o.value} value={o.value}>
-                {o.label}
-              </option>
-            ))}
-          </select>
+          />
         </div>
         <div>
           <label className={labelClass}>Course</label>
@@ -304,28 +375,17 @@ export default function RecruitForm({
       <div>
         <label className={labelClass}>Event Selection</label>
         <div className="grid grid-cols-2 gap-3">
-          <select
+          <EventSelect
             value={formData.event}
             onChange={e => setFormData({ ...formData, event: e.target.value })}
             className={`${inputClass} appearance-none`}
-          >
-            {EVENTS.map(ev => (
-              <option key={ev} value={ev}>
-                {ev}
-              </option>
-            ))}
-          </select>
-          <select
+          />
+          <ClassYearSelect
             value={formData.classYear}
             onChange={e => setFormData({ ...formData, classYear: e.target.value as ClassYear })}
             className={`${inputClass} appearance-none`}
-          >
-            <option value={ClassYear.FR}>Freshman (FR)</option>
-            <option value={ClassYear.SO}>Sophomore (SO)</option>
-            <option value={ClassYear.JR}>Junior (JR)</option>
-            <option value={ClassYear.SR}>Senior (SR)</option>
-            <option value={ClassYear.HS}>High School (HS)</option>
-          </select>
+            labels={LONG_CLASS_YEAR_LABELS}
+          />
         </div>
       </div>
 

@@ -25,6 +25,73 @@ import TeamPickerEmptyState from './TeamPickerEmptyState';
 import { ArbitragePreviewSection, OptimizerControls } from './RosterOptimizeStepParts';
 import OptimizerChangeSummaryPanel, { type OptimizerRunSummary } from './OptimizerChangeSummaryPanel';
 
+/** Snapshot shape from `captureBeforeState`, shared by `applyOptimizerResult`. */
+type OptimizerBeforeState = {
+  overrides: NonNullable<Workspace['scorerRosterOverrides']>;
+  plans: NonNullable<Workspace['meetEntryPlans']>;
+  activeIds: NonNullable<Workspace['activeEntryIds']>;
+};
+
+/**
+ * Shared "run guarded optimizer, branch on outcome" logic for the per-team
+ * arbitrage (`applyTeam`) and legacy (`applyLegacy`) optimize buttons —
+ * jscpd's flagged 24-line clone between them (2026-09-25 code-health pass).
+ * `applyAll` below applies to the whole field instead of one team and keeps
+ * its own copy: its unguarded-toast wording and label differ enough that
+ * sharing would blur both messages.
+ */
+function applyOptimizerResult({
+  team,
+  result,
+  before,
+  buildSuccessMessage,
+  recordRunSummary,
+  onUpdate,
+  setLastOptimizeUndo,
+  toast,
+}: {
+  team: string;
+  result: GuardedOptimizerResult;
+  before: OptimizerBeforeState;
+  buildSuccessMessage: (result: GuardedOptimizerResult, gain: number) => string;
+  recordRunSummary: (label: string, result: GuardedOptimizerResult, before: OptimizerBeforeState) => void;
+  onUpdate: (patch: Partial<Workspace>) => void;
+  setLastOptimizeUndo: (value: { label: string; patch: Partial<Workspace> } | null) => void;
+  toast: ReturnType<typeof useToast>;
+}) {
+  recordRunSummary(team, result, before);
+  // "Found nothing better" is not success. The optimiser now refuses to apply a
+  // result that would lower the team total — on a recruit-driven workspace the
+  // unguarded run took 1277 points to 0 — so the toast must distinguish the two
+  // rather than reporting a win for a no-op.
+  if (result.outcome === 'unchanged') {
+    // The most recent run superseded whatever the prior one applied — a
+    // dangling Undo here would revert a change this summary no longer
+    // describes.
+    setLastOptimizeUndo(null);
+    toast.push(
+      'info',
+      `${team}: already the best lineup found — nothing changed (${result.previousTotal.toFixed(1)} pts).`
+    );
+    return;
+  }
+  onUpdate({
+    scorerRosterOverrides: result.overrides,
+    meetEntryPlans: result.meetEntryPlans,
+    activeEntryIds: result.activeEntryIds,
+  });
+  setLastOptimizeUndo({
+    label: team,
+    patch: {
+      scorerRosterOverrides: before.overrides,
+      meetEntryPlans: before.plans,
+      activeEntryIds: before.activeIds,
+    },
+  });
+  const gain = result.projectedTotal - result.previousTotal;
+  toast.push('success', buildSuccessMessage(result, gain));
+}
+
 type Props = {
   workspace: Workspace;
   gender: Gender;
@@ -222,77 +289,37 @@ export default function RosterOptimizeStep({
     // The cards describe the lineup that came back, so they are worth showing
     // whether or not that lineup was applied.
     setCards(result.cards);
-    recordRunSummary(team, result, before);
-    // Same rule as applyLegacy below. This path is guarded too now: it refuses a
-    // candidate that would lower the team total, and on a recruit-driven
-    // workspace it does refuse. A "+0.0 pts" success toast over an untouched
-    // lineup would report a win for a no-op.
-    if (result.outcome === 'unchanged') {
-      // The most recent run superseded whatever the prior one applied — a
-      // dangling Undo here would revert a change this summary no longer
-      // describes.
-      setLastOptimizeUndo(null);
-      toast.push(
-        'info',
-        `${team}: already the best lineup found — nothing changed (${result.previousTotal.toFixed(1)} pts).`
-      );
-      return;
-    }
-    onUpdate({
-      scorerRosterOverrides: result.overrides,
-      meetEntryPlans: result.meetEntryPlans,
-      activeEntryIds: result.activeEntryIds,
+    // Same guard as applyLegacy — see applyOptimizerResult above. This path is
+    // guarded too now: it refuses a candidate that would lower the team total,
+    // and on a recruit-driven workspace it does refuse. A "+0.0 pts" success
+    // toast over an untouched lineup would report a win for a no-op.
+    applyOptimizerResult({
+      team,
+      result,
+      before,
+      buildSuccessMessage: (_result, gain) => `${team}: +${gain.toFixed(1)} pts (${mode.replace('_', ' ')})`,
+      recordRunSummary,
+      onUpdate,
+      setLastOptimizeUndo,
+      toast,
     });
-    setLastOptimizeUndo({
-      label: team,
-      patch: {
-        scorerRosterOverrides: before.overrides,
-        meetEntryPlans: before.plans,
-        activeEntryIds: before.activeIds,
-      },
-    });
-    const gain = result.projectedTotal - result.previousTotal;
-    toast.push(
-      'success',
-      `${team}: +${gain.toFixed(1)} pts (${mode.replace('_', ' ')})`
-    );
   };
 
   const applyLegacy = () => {
     if (!whatIfMode || !team) return;
     const before = captureBeforeState();
     const result = optimizeRosterForTeam(workspace, gender, team, removeSeniors, scoringSettings);
-    recordRunSummary(team, result, before);
-    // "Found nothing better" is not success. The optimiser now refuses to apply a
-    // result that would lower the team total — on a recruit-driven workspace the
-    // unguarded run took 1277 points to 0 — so the toast must distinguish the two
-    // rather than reporting a win for a no-op.
-    if (result.outcome === 'unchanged') {
-      setLastOptimizeUndo(null);
-      toast.push(
-        'info',
-        `${team}: already the best lineup found — nothing changed (${result.previousTotal.toFixed(1)} pts).`
-      );
-      return;
-    }
-    onUpdate({
-      scorerRosterOverrides: result.overrides,
-      meetEntryPlans: result.meetEntryPlans,
-      activeEntryIds: result.activeEntryIds,
+    applyOptimizerResult({
+      team,
+      result,
+      before,
+      buildSuccessMessage: (result, gain) =>
+        `${team}: +${gain.toFixed(1)} pts → ${result.projectedTotal.toFixed(1)} (${result.appliedStages?.replace('+', ' + ') ?? 'optimised'})`,
+      recordRunSummary,
+      onUpdate,
+      setLastOptimizeUndo,
+      toast,
     });
-    setLastOptimizeUndo({
-      label: team,
-      patch: {
-        scorerRosterOverrides: before.overrides,
-        meetEntryPlans: before.plans,
-        activeEntryIds: before.activeIds,
-      },
-    });
-    const gain = result.projectedTotal - result.previousTotal;
-    toast.push(
-      'success',
-      `${team}: +${gain.toFixed(1)} pts → ${result.projectedTotal.toFixed(1)} (${result.appliedStages?.replace('+', ' + ') ?? 'optimised'})`
-    );
   };
 
   const applyAll = () => {
