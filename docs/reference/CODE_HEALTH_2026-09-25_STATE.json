@@ -27,7 +27,18 @@
       "verifiedBy": "orchestrator: eslint package 0, tsc swimcloud + extension 0, 828 swimcloud/extension tests; full scripts/build deferred until B3 lands"
     },
     "H2": {
-      "status": "planned"
+      "status": "done",
+      "result": {
+        "startServer": "917 lines/26 -> split into apps/shell/lib/routes/* ; server.ts 1675 -> 585 lines",
+        "captureOpenHandler": "40 -> not flagged (createSwimCloudCaptureRouter still 221 lines, left on purpose)",
+        "restoreClone": "extracted restoreBackupIntoService",
+        "writeWorkspaceUnsafe": "32/33 -> six named steps each, SQL unchanged"
+      },
+      "proof": "route dump (45 routes, method+path+middleware, order) identical before/after",
+      "addedTests": [
+        "tests/workspaceRepoRestoreBackup.test.ts"
+      ],
+      "verifiedBy": "orchestrator: lint 0, 1633 vitest, 84/0/1 scripts incl. e2e, build"
     },
     "H3": {
       "status": "planned"
@@ -53,6 +64,8 @@
   },
   "log": [
     "2026-09-25 measured and planned; H7/H8 wait for B3 and R1 (core).",
-    "2026-09-25 H1 verified and committed. Next health item after B3: H2 (apps/shell, packages/db)."
+    "2026-09-25 H1 verified and committed. Next health item after B3: H2 (apps/shell, packages/db).",
+    "2026-09-25 5h limit (resets 8:20pm CT) stopped H2 and R1; /low-priority 'not available'. Resume order (one at a time): H2 then R1.",
+    "2026-09-25 H2 verified and committed. Resuming R1 (core) next, then H3."
   ]
 }

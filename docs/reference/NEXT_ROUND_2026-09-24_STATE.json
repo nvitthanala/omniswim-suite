@@ -6,7 +6,7 @@
   "openQuestions": [],
   "items": {
     "A1": {
-      "status": "done (core cea1d9af + UI); docs merge in D0",
+      "status": "done",
       "coreResult": {
         "api": "packages/core/src/lib/swimCloudReplace.ts planSwimCloudReplace/applySwimCloudReplacePlan; historyImportRoster previewSwimCloudReplace, mode 'replace', SwimCloudReplaceRefusedError; Recruit.source",
         "findings": [
@@ -36,25 +36,38 @@
       }
     },
     "A2": {
-      "status": "done (code); CHANGELOG/USER_GUIDE lines go in the D0 docs commit"
+      "status": "done"
     },
     "A3": {
       "status": "planned"
     },
     "A4": {
-      "status": "done (code); CHANGELOG/USER_GUIDE lines go in the D0 docs commit"
+      "status": "done"
     },
     "B1": {
-      "status": "planned"
+      "status": "done (one commit; shared files not split by hunk)"
     },
     "B2": {
       "status": "held: reproduce first"
     },
     "B3": {
-      "status": "planned"
+      "status": "done",
+      "followUps": [
+        "UI: TeamRosterPanel describeStrongestEvents tooltip still says 'vs the published D2 standard'; should read strengthByEvent basis/meetPlace/cutRatio/estimate",
+        "Catalog path scores 25s and 50s of stroke (no program filter) - phantom points; not in any shipped screen (catalog UI removed)",
+        "With a meet loaded, catalog rows not moved onto meet labels (duplicate events)",
+        "rosterOptimizer.ts has 2 literal NUL bytes in overrideKey template (pre-existing)"
+      ]
     },
     "B4": {
-      "status": "planned"
+      "status": "done (one commit; shared files not split by hunk)",
+      "notes": [
+        "SCM 500/1000/1650 and SCY 400/800/1500 flagged, sourced to NCAA/NAIA sheets",
+        "LCM unchecked: no archived LCM event source",
+        "Orchestrator fixed IndRelayManagementView crash (filter swimEventNotSwumInCourse)",
+        "Follow-up UI: RecruitForm should offer per-course events or warn on save",
+        "catalog mismatch rows store timeSecondsScy 0; sortedTimesByScy lists them first (display)"
+      ]
     },
     "B5": {
       "status": "planned"
@@ -81,7 +94,7 @@
       "status": "planned"
     },
     "D0": {
-      "status": "partial, resume after A1",
+      "status": "done 49b2f9ee",
       "what": "Docs catch-up for 98bb59d8..now: CHANGELOG, INVARIANTS, CUTLINE_TAGS_PLAN, USER_GUIDE, plans/STATE.md; vault 02/05/06/08."
     },
     "Dfinal": {
@@ -93,8 +106,18 @@
       "result": "relay legs match exact canonical event; findDepartedLegSwim shared; no team total change under NSISC defaults; 24 impossible relay times fixed; 5 autofill picks and 156 swap lists changed. Stricter-eligibility setting only: 5 totals drop (empty 200 Medley legs)."
     },
     "R1": {
-      "status": "planned (core, after B-items)",
-      "what": "Relay follow-ups from P15: (a) relay candidates not gender-checked (Mixed time-trial rows in men's results); (b) parseRelayDistanceYards reads 'Event 102 ... 200 Yard Medley Relay' as 102 and silently falls back to 200; (c) relayLegSwaps.individualStrokeDistance reads HyTek event numbers as distance (display only); (d) isGraduatingClassYear ignores GS; (e) relay candidates come only from meet/recruit rows, not history (Colton Bennett 22.93 50 Free not offered); (f) departed-swimmer lookup has no team filter; (g) time trials still match relay legs - user decision."
+      "status": "done cc89035f (core)",
+      "what": "Relay follow-ups from P15: (a) relay candidates not gender-checked (Mixed time-trial rows in men's results); (b) parseRelayDistanceYards reads 'Event 102 ... 200 Yard Medley Relay' as 102 and silently falls back to 200; (c) relayLegSwaps.individualStrokeDistance reads HyTek event numbers as distance (display only); (d) isGraduatingClassYear ignores GS; (e) relay candidates come only from meet/recruit rows, not history (Colton Bennett 22.93 50 Free not offered); (f) departed-swimmer lookup has no team filter; (g) time trials still match relay legs - user decision.",
+      "notFixed": [
+        "autofill 'already on this relay' check ignores alias links (two spellings of one swimmer)",
+        "normalizeRelayLegSplitDetail silently assumes 50-yard legs",
+        "HSU men score 0 in the stored NSISC workspace (pre-existing, uninvestigated)",
+        "projection cost with overrides 9.3 -> 11.6 ms"
+      ]
+    },
+    "R1UI": {
+      "status": "done",
+      "what": "IndRelayManagementView: add relayLegHistoryCandidates to activeSwimmers pool + badge relayLegHistory rows; pass gender to listEligibleRelayLegCandidates; null legDistanceYards renders 'null' at lines ~519/550 and crossCourseArbitrageRelaySection ~61; show inFromHistory on swaps; render relay_distance_unreadable checklist item"
     }
   },
   "log": [
@@ -107,7 +130,13 @@
     "2026-09-25 5h session limit hit (resets 2:10am CT) during wave 1. /low-priority not in the command list; user opened /rate-limit-options. Left in tree: A1-core nothing (was researching optimizer/recruit writers); A2+A4 code done (vitest 1486 green), needed scripts+build; D0 mid-USER_GUIDE (CHANGELOG, INVARIANTS, CUTLINE_TAGS_PLAN, USER_GUIDE modified). Resume plan (slow pace): orchestrator finishes A2+A4 gates; resume A1-core (Opus, data correctness) alone; then resume D0.",
     "2026-09-25 orchestrator finished A2+A4 gates (eslint, 21 tests, scripts 84/0/1, build) and committed code. A1-core resumed alone.",
     "2026-09-25 A1-core verified (lint, 1518, 84 scripts, build) and committed. Next (one agent at a time): A1-UI worker, then resume D0.",
-    "2026-09-25 A1-UI verified (lint, 1529, 84 scripts, build; backup route returns {file}) and committed. Resuming D0 with A1/A2/A4 doc text."
+    "2026-09-25 A1-UI verified (lint, 1529, 84 scripts, build; backup route returns {file}) and committed. Resuming D0 with A1/A2/A4 doc text.",
+    "2026-09-25 wave 1 complete and pushed (main 49b2f9ee); vault updated. Wave 2 started: executor B4+B1.",
+    "2026-09-25 5h limit hit again during wave 2; /low-priority said 'not available right now' (twice). Resumed by hand at slow pace. B4+B1 verified (lint, 1600, 84 scripts, build) and committed with the relay-screen crash fix. Next: B3 (executor), then R1.",
+    "2026-09-25 B3 verified (core tsc, eslint, 1631 vitest; agent ran scripts+build green) and committed. Next core: R1 (executor).",
+    "2026-09-25 R1 stopped by 5h limit before edits; resumes after H2.",
+    "2026-09-25 R1 verified (lint, 1663, 84 scripts, build) and committed cc89035f. Dispatched R1-UI worker.",
+    "2026-09-25 R1-UI verified (lint, 1668, 84 scripts, build) and committed. Wave 2 complete (B1, B3, B4, R1, R1-UI); pushed. Next: code-health H3."
   ],
   "userDecisions": {
     "A1": "Replace reimport may delete the team's SwimCloud-sourced history + recruit rows + plan entries (after preview + pre-shrink backup). Manual/PDF data untouched.",
@@ -126,5 +155,9 @@
     "B2 unconfirmed: each result row becomes its own history swim; reproduce first",
     "A1: Recruit has no source field; derive from removed history rows, add Recruit.source going forward"
   ],
-  "docsRule": "Gate 7: an item is done only when its repo docs (same commit) and vault rows (right after) are updated. See plan section 4."
+  "docsRule": "Gate 7: an item is done only when its repo docs (same commit) and vault rows (right after) are updated. See plan section 4.",
+  "userQuestions": [
+    "(g) Should time trials fill relay legs? (unchanged: yes)",
+    "Converted metric estimates beat real SCY swims for relay leg times (Colton Bennett 100 Free leg 48.98 from LCM vs real 49.27 SCY). Keep, or prefer real SCY swims?"
+  ]
 }
