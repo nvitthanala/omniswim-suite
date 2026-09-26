@@ -51,19 +51,82 @@
       "verifiedBy": "orchestrator: lint 0, 1676, 84 scripts, build; no zz* files left"
     },
     "H5": {
-      "status": "in-progress"
+      "status": "done",
+      "result": {
+        "TeamRosterPanel": "53/628 -> 20/403",
+        "RosterImportWizard": "34/738 -> 9/520",
+        "AthleteHistoryImportPanel": "29/564 -> 6/346",
+        "IndRelayManagementView": "24/565 -> 22/339"
+      },
+      "proof": "16 DOM cases byte-identical; PERFORMANCE_NOTES memos untouched; main-thread-budget e2e green",
+      "tests": "+11 (teamRosterViewH5)"
     },
     "H6": {
-      "status": "planned"
+      "status": "done",
+      "result": {
+        "TeamCard": "37/631 -> <25/404",
+        "ScoringSettingsFields": "31/583 -> <25/211",
+        "MeetOperationsView": "35/580 -> <25/231",
+        "SwimCloudCaptureBrowser": "36/725 -> <25/638",
+        "TooltipSwimmerRow": "26 -> <25"
+      },
+      "proof": "23 DOM cases byte-identical",
+      "deferred": [
+        "OpsModule.tsx 429 lines",
+        "ScoringPresetManagerModal.tsx 418 lines",
+        "swimCloudMeetImportBridge.ts complexity (matrix lib)"
+      ]
     },
     "H7": {
-      "status": "planned"
+      "status": "done",
+      "model": "executor role on Sonnet (worker role declined scoring per CLAUDE.md)",
+      "result": {
+        "computeNcaaEventScoring": "36 -> 5",
+        "calculatePoints": "45 -> 11",
+        "scoreIndividualsInEvent": "38 -> 10",
+        "scoreTimedFinalIndividualsInEvent": "32 -> 5",
+        "simulateRoster": "68 -> 16"
+      },
+      "golden": {
+        "ncaa": "21438a90",
+        "calculatePoints": "48efcca3",
+        "simulateRoster": "5e556fda",
+        "scoringBundle": "2ae54803"
+      },
+      "coverageGap": "scoreTimedFinalIndividualsInEvent point values not asserted by any named test - add a permanent real-data test (in H8 brief)"
     },
     "H8": {
-      "status": "planned"
+      "status": "done b0ea6e80",
+      "result": {
+        "validateRaceTags": "38 -> 1",
+        "buildCutlineTag": "37/312 -> 16",
+        "buildScorerRosterLookup": "37 -> 2",
+        "buildPrelimsDeltaTimeline": "37 -> 14",
+        "buildFastSwapContext": "36 -> 11",
+        "rankAddOnly": "33 -> 19",
+        "clones": "projection aggregation -> scoringBundleAggregation.ts; arbitrage guard; swimEditor append"
+      },
+      "golden": "8 sections byte-identical every step",
+      "newTests": [
+        "timedFinalScoringPoints",
+        "scorerRosterRecruitDefault (mutation passed every existing test)"
+      ]
     },
     "H9": {
-      "status": "planned"
+      "status": "done",
+      "after": {
+        "complexityOver25": 2,
+        "functionsOver200Lines": 26,
+        "duplicationPct": 0.13,
+        "clones": 6
+      },
+      "before": {
+        "complexityOver25": 33,
+        "functionsOver200Lines": 33,
+        "duplicationPct": 0.5,
+        "clones": 12
+      },
+      "guard": "eslint complexity warn 25 in eslint.config.mjs (warning, lint still exit 0)"
     }
   },
   "log": [
@@ -73,6 +136,18 @@
     "2026-09-25 H2 verified and committed. Resuming R1 (core) next, then H3.",
     "2026-09-25 H3 verified (lint, 1676, 84 scripts, build) and committed. H4 started.",
     "2026-09-26 5h limit stopped H4; /low-priority not in list. Resuming same agent.",
-    "2026-09-26 H4 verified and committed. H5 started."
+    "2026-09-26 H4 verified and committed. H5 started.",
+    "2026-09-26 H5 verified (lint, 1687, 84 scripts incl. e2e, build) and committed. H6 started.",
+    "2026-09-26 H6 verified (lint, 1687, 84 scripts incl. e2e, build) and committed. H7 (core scoring) started with golden-snapshot requirement.",
+    "2026-09-26 H7 verified (lint, 1687, 84 scripts, build; export text unchanged) and committed. H8 started (executor on Sonnet).",
+    "2026-09-26 5h limit stopped H8 mid projection-clone merge; resuming same agent.",
+    "2026-09-26 H8 verified and committed; H9 re-measured (33->2 complex functions, 0.5%->0.13% duplication) and added complexity warn 25. Round complete."
+  ],
+  "followUps": [
+    "packages/matrix/src/lib/swimCloudMeetImportBridge.ts swimCloudEventResultsToSwimmerResults (31) and swimCloudMeetResultsToSwimmerResults (29) - the only two lint warnings",
+    "useWorkspaceScoring hook 220 lines (review against PERFORMANCE_NOTES before splitting)",
+    "new clones AthleteHistoryImportPanel <-> RosterImportWizard (26 and 20 lines; replace-mode wiring)",
+    "OpsModule 429 lines, ScoringPresetManagerModal 418 lines",
+    "gotcha: per-file eslint does not catch tsc cross-function null narrowing; only npm run lint is the real type gate"
   ]
 }

@@ -76,6 +76,12 @@ export default tseslint.config(
       'no-self-compare': 'error',
       'no-template-curly-in-string': 'error',
       'no-unmodified-loop-condition': 'error',
+
+      // A ceiling, not a target (code-health round, 2026-09-26). 33 functions
+      // were over 25 before that round and 2 after; a warning keeps new ones
+      // visible without failing the build. Refactor with the cyclomatic-
+      // complexity skill and plans/2026-09-25/01-CODE-HEALTH-PLAN.md section 2.
+      complexity: ['warn', 25],
       // Off, deliberately. Every finding it produced in this repo was the same
       // false positive: assigning to a per-request or module-local binding after
       // an `await`, where no second caller exists to race with. Express handlers
