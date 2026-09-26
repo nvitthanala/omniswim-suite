@@ -31,6 +31,12 @@ export type ProvenanceBadgeInput = {
   /** `AthleteEventBest`'s spelling. */
   altitudeAdjusted?: boolean;
   convertedFrom?: ScyConversionProvenance;
+  /**
+   * True for a relay-leg candidate built from athlete history rather than a
+   * loaded meet or recruit swim (`SwimmerResult.relayLegHistory`,
+   * `RelayLegSwap.inFromHistory`). Renders "From history".
+   */
+  fromHistory?: boolean;
 };
 
 export type ProvenanceBadgeKey =
@@ -38,7 +44,8 @@ export type ProvenanceBadgeKey =
   | 'self_reported'
   | 'altitude_adjusted'
   | 'converted_lcm'
-  | 'converted_scm';
+  | 'converted_scm'
+  | 'from_history';
 
 export type ProvenanceBadgeSpec = {
   key: ProvenanceBadgeKey;
@@ -102,6 +109,14 @@ export function buildProvenanceBadges(input: ProvenanceBadgeInput): ProvenanceBa
       key: course === 'LCM' ? 'converted_lcm' : 'converted_scm',
       label: `Est. from ${course}`,
       tooltip: describeConversionBasis(input.convertedFrom),
+    });
+  }
+
+  if (input.fromHistory) {
+    specs.push({
+      key: 'from_history',
+      label: 'From history',
+      tooltip: 'No meet or recruit swim at this event — filled from the athlete’s recorded history.',
     });
   }
 

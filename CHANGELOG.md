@@ -206,6 +206,17 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   use the swimmer's fastest real history swim at that event, marked as from
   history. A swim from the meet or a recruit row always comes first, even a
   slower one. Extracted splits and self-reported times are never used.
+- **The Relay Management panel now shows history-sourced relay-leg
+  candidates.** The "eligible swimmers" drag list for a vacant leg now
+  includes a swimmer's history swim when the meet holds none, badged "From
+  history" (the relay-leg swap list already showed this badge; the
+  drag-and-drop panel and its auto-fill buttons did not). A history swim is
+  still never offered as an individual entry. A relay whose label names no
+  distance now shows "Missing — distance unreadable" instead of "Missing —
+  free nully" and offers no leg-time box, instead of a broken placeholder. A
+  relay label with no gender word (a SwimCloud-style "200 Free Relay") now
+  filters its eligible-swimmer list by the relay's actual gender, so a Mixed
+  swim from the other program is not offered for it.
 - **One swimmer can no longer swim two legs of one relay.** Naming a
   relay's later-leg swimmer for an earlier leg put them on both legs. On
   the stored 2026 NSISC workspace, HSU's 400 Free Relay A showed Oliver

@@ -10,7 +10,7 @@
 
 import React from 'react';
 import { Repeat } from 'lucide-react';
-import { Button } from '@omniswim/ui';
+import { Button, ProvenanceBadges } from '@omniswim/ui';
 import {
   AthleteButton,
   Section,
@@ -96,6 +96,9 @@ function RelaySwapRow({
           {swap.inTimeConverted ? 'c' : ''})
         </span>
         {swap.inTimeStale ? <StalePill /> : null}
+        {swap.inFromHistory ? (
+          <ProvenanceBadges swim={{ fromHistory: true }} compact />
+        ) : null}
       </p>
       {otherCandidates > 0 ? (
         <p className="text-ui-micro text-theme-muted mt-0.5 truncate">

@@ -19,6 +19,7 @@ import {
   suggestBestRelayLegFill,
   upsertRelayLegOverride,
 } from '@omniswim/core/lib/relayLegMatching';
+import { relayLegHistoryCandidates } from '@omniswim/core/lib/relayLegHistoryCandidates';
 import {
   canonicalSwimmerName,
   convertToSCY,
@@ -31,7 +32,7 @@ import {
   buildRelaysFromIndividualLineup,
   compareRelayLegSplits,
 } from '@omniswim/core/lib/relayBuilder';
-import { Button, TeamSelect, useToast } from '@omniswim/ui';
+import { Button, ProvenanceBadges, TeamSelect, useToast } from '@omniswim/ui';
 import { buildRelayGroups, type RelayGroup } from './indRelayGroupsView';
 
 type Props = {
@@ -134,6 +135,20 @@ export default function IndRelayManagementView({
     return [...roster, ...recruitResults];
   }, [gender, originalResults, removeSeniors, workspace.deletedSwimmers, workspace.recruits]);
 
+  // Athlete-history swims that may fill a relay leg the pool holds no meet or
+  // recruit swim for (relayLegHistoryCandidates, plans/2026-09-24 R1 e). Kept
+  // out of `activeSwimmers` itself: a history row must never become an
+  // individual entry, only a relay-leg candidate, matching how core's
+  // `simulateRoster` takes it as a separate `relayLegOnlyPool`.
+  const legHistoryPool = useMemo(
+    () => relayLegHistoryCandidates(workspace, activeSwimmers, gender),
+    [workspace, activeSwimmers, gender]
+  );
+  const relayLegCandidatePool = useMemo(
+    () => (legHistoryPool.length > 0 ? [...activeSwimmers, ...legHistoryPool] : activeSwimmers),
+    [activeSwimmers, legHistoryPool]
+  );
+
   const stats = useMemo(() => {
     const team = selectedTeam || teams[0];
     if (!team) {
@@ -205,11 +220,12 @@ export default function IndRelayManagementView({
     for (const leg of vacantLegs) {
       const idx = leg.relayLegIndex ?? 0;
       for (const swimmer of listEligibleRelayLegCandidates(
-        activeSwimmers,
+        relayLegCandidatePool,
         selectedGroup.event,
         idx,
         assignedInSelectedRelay,
-        selectedTeam
+        selectedTeam,
+        gender
       )) {
         const k = normalizeSwimmerName(swimmer.name);
         if (seen.has(k)) continue;
@@ -218,7 +234,7 @@ export default function IndRelayManagementView({
       }
     }
     return out.sort((a, b) => a.name.localeCompare(b.name));
-  }, [activeSwimmers, assignedInSelectedRelay, selectedGroup, selectedTeam]);
+  }, [relayLegCandidatePool, assignedInSelectedRelay, selectedGroup, selectedTeam, gender]);
 
   const patchOverrides = (next: RelayLegOverride[]) => {
     onUpdate({ relayLegOverrides: next });
@@ -253,7 +269,7 @@ export default function IndRelayManagementView({
       }
     });
     const fill = suggestBestRelayLegFill(
-      activeSwimmers,
+      relayLegCandidatePool,
       group.template,
       legIndex,
       assignedInSelectedRelay,
@@ -279,7 +295,7 @@ export default function IndRelayManagementView({
         }
       });
       const fill = suggestBestRelayLegFill(
-        activeSwimmers,
+        relayLegCandidatePool,
         group.template,
         legIndex,
         assigned,
@@ -515,8 +531,9 @@ export default function IndRelayManagementView({
                                 L{legIndex + 1}{' '}
                                 {isVacant && (!leg.name || leg.name === '—') ? (
                                   <span className="text-amber-400">
-                                    Missing — {relayMissingStrokeLabel(req.stroke)}{' '}
-                                    {req.legDistanceYards}
+                                    {req.legDistanceYards == null
+                                      ? 'Missing — distance unreadable'
+                                      : `Missing — ${relayMissingStrokeLabel(req.stroke)} ${req.legDistanceYards}`}
                                   </span>
                                 ) : (
                                   leg.name
@@ -544,25 +561,31 @@ export default function IndRelayManagementView({
                                 >
                                   Auto-fill best
                                 </Button>
-                                <div className="flex gap-1">
-                                  <input
-                                    type="text"
-                                    placeholder={`Leg time (${req.legDistanceYards}y)`}
-                                    value={manualTimes[fieldKey] ?? ''}
-                                    onChange={e =>
-                                      setManualTimes(prev => ({ ...prev, [fieldKey]: e.target.value }))
-                                    }
-                                    className="flex-1 min-w-0 surface-muted-bg border border-theme-soft rounded-md px-1.5 py-0.5 text-ui-micro font-mono"
-                                  />
-                                  <Button
-                                    variant="outline"
-                                    size="sm"
-                                    className="px-1.5 py-0.5"
-                                    onClick={() => saveManualLeg(group, legIndex)}
-                                  >
-                                    Set
-                                  </Button>
-                                </div>
+                                {req.legDistanceYards == null ? (
+                                  <p className="text-ui-micro text-theme-muted italic">
+                                    Distance unreadable — fix the relay's event label to enter a leg time.
+                                  </p>
+                                ) : (
+                                  <div className="flex gap-1">
+                                    <input
+                                      type="text"
+                                      placeholder={`Leg time (${req.legDistanceYards}y)`}
+                                      value={manualTimes[fieldKey] ?? ''}
+                                      onChange={e =>
+                                        setManualTimes(prev => ({ ...prev, [fieldKey]: e.target.value }))
+                                      }
+                                      className="flex-1 min-w-0 surface-muted-bg border border-theme-soft rounded-md px-1.5 py-0.5 text-ui-micro font-mono"
+                                    />
+                                    <Button
+                                      variant="outline"
+                                      size="sm"
+                                      className="px-1.5 py-0.5"
+                                      onClick={() => saveManualLeg(group, legIndex)}
+                                    >
+                                      Set
+                                    </Button>
+                                  </div>
+                                )}
                                 {overrides.some(
                                   o => o.relayEntryKey === group.key && o.legIndex === legIndex
                                 ) ? (
@@ -625,6 +648,16 @@ export default function IndRelayManagementView({
                       {swimmer.classYear}
                       {swimmer.isRecruit ? ' · recruit' : ''} · {swimmer.event} {swimmer.time}
                     </p>
+                    {swimmer.relayLegHistory || swimmer.convertedFrom ? (
+                      <ProvenanceBadges
+                        swim={{
+                          fromHistory: !!swimmer.relayLegHistory,
+                          convertedFrom: swimmer.convertedFrom,
+                        }}
+                        compact
+                        className="mt-1"
+                      />
+                    ) : null}
                   </li>
               ))}
             </ul>
