@@ -2,7 +2,7 @@
  * Enhanced SwimCloud paste import with format detection and merge preview.
  */
 import React, { useMemo, useRef, useState, useEffect } from 'react';
-import { X, ClipboardPaste, Download, FileSpreadsheet, Globe, Undo2, Boxes } from 'lucide-react';
+import { X } from 'lucide-react';
 import { Gender, HistoricalSwim, Workspace } from '@omniswim/core/types';
 import {
   detectSwimCloudPasteFormat,
@@ -14,7 +14,6 @@ import {
   previewSwimCloudReplace,
   rosterNamesForTeam,
   SwimCloudReplaceRefusedError,
-  type ImportSwimmerAction,
 } from '@omniswim/core/lib/historyImportRoster';
 import { backupWorkspaces } from '@omniswim/core/api/workspaces';
 import {
@@ -27,21 +26,19 @@ import {
 import { parseCsvHistory } from '@omniswim/core/lib/csvImport';
 import { divisionForTeamOrNull } from '@omniswim/core/data/teamDivisions';
 import {
-  Badge,
   Button,
   Modal,
-  TeamSelect,
   useToast,
   SwimCloudCaptureBrowser,
   type SwimCloudCaptureRosterSelection,
 } from '@omniswim/ui';
-import AliasSuggestionsPanel from './AliasSuggestionsPanel';
-import SwimCloudImprovementsSummary from './SwimCloudImprovementsSummary';
 import { splitUnreadStampWarnings } from './athleteHistoryImportView';
-import SwimCloudImportModePicker from './SwimCloudImportModePicker';
-import SwimCloudReplacePreviewPanel from './SwimCloudReplacePreviewPanel';
 import SwimCloudReplaceConfirmModal from './SwimCloudReplaceConfirmModal';
 import { performSwimCloudImport, type SwimCloudImportMode } from '../lib/swimCloudReplaceFlow';
+import RosterQueueBanner from './RosterQueueBanner';
+import RosterImportPasteStep from './RosterImportPasteStep';
+import RosterImportPreviewStep from './RosterImportPreviewStep';
+import RosterImportFooterActions from './RosterImportFooterActions';
 // Track A (plans/2026-09-06/): the browser extension's clipboard capture,
 // read back here. Deliberately imported from these specific subpaths, not
 // the @omniswim/swimcloud package root — see
@@ -94,20 +91,6 @@ function uniqueTeams(workspace: Workspace, gender: Gender): string[] {
 /** Roster names (results + recruits) for a team/gender — the "existing" side of alias suggestions. */
 function rosterNameEntriesForTeam(workspace: Workspace, team: string, gender: Gender): AliasNameEntry[] {
   return rosterNamesForTeam(workspace, team, gender).map(name => ({ name, team, gender }));
-}
-
-function actionLabel(action: ImportSwimmerAction): string {
-  switch (action) {
-    case 'new_recruit':
-      return 'New recruit';
-    case 'add_to_lineup':
-      return 'Add to lineup';
-    case 'already_recruit':
-      return 'Already recruit';
-    case 'history_matched':
-    default:
-      return 'History only (matched)';
-  }
 }
 
 export default function RosterImportWizard({ workspace, gender, onClose, onUpdate }: Props) {
@@ -739,292 +722,66 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
 
         <div className="p-5 overflow-y-auto flex-1 space-y-4">
           {rosterQueue ? (
-            <div className="border border-theme-soft rounded-lg p-3 space-y-2">
-              <div className="flex items-center justify-between gap-2 flex-wrap">
-                <span className="text-ui-caption font-bold">
-                  Roster queue — {rosterQueue.teamLabel} (
-                  {rosterQueue.entries.filter(e => e.captured).length}/{rosterQueue.entries.length} captured)
-                </span>
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => void handleClipboardImport()}
-                    disabled={isImportingFromClipboard || !team.trim()}
-                    title="Copy a swimmer's Times page from SwimCloud — swimcloud.com/swimmer/{id}/times/, via Copy for Omniswim — then click this to pull it in and check them off."
-                    className="px-2.5 py-1 text-ui-micro font-bold uppercase tracking-widest rounded-md nav-tab-inactive hover:text-[var(--text-primary)] transition-colors disabled:opacity-40 flex items-center gap-1"
-                  >
-                    <Download size={12} /> {isImportingFromClipboard ? 'Reading…' : 'Capture next swimmer'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => setRosterQueue(null)}
-                    className="px-2.5 py-1 text-ui-micro font-bold uppercase tracking-widest rounded-md nav-tab-inactive hover:text-[var(--text-primary)] transition-colors"
-                  >
-                    Clear
-                  </button>
-                </div>
-              </div>
-              <div className="flex flex-wrap gap-1">
-                {rosterQueue.entries.map(e => (
-                  <span
-                    key={e.swimCloudSwimmerId ?? e.name}
-                    className={`text-ui-micro px-1.5 py-0.5 rounded-full border ${
-                      e.captured
-                        ? 'border-[var(--text-accent)]/40 text-[var(--text-accent)]'
-                        : 'border-theme-soft text-theme-muted'
-                    }`}
-                  >
-                    {e.captured ? '✓ ' : ''}
-                    {e.name}
-                  </span>
-                ))}
-              </div>
-            </div>
+            <RosterQueueBanner
+              rosterQueue={rosterQueue}
+              isImportingFromClipboard={isImportingFromClipboard}
+              team={team}
+              onCaptureNext={() => void handleClipboardImport()}
+              onClear={() => setRosterQueue(null)}
+            />
           ) : null}
           {step === 'paste' ? (
-            <>
-              <div className="flex items-center gap-1 border-b border-theme-soft">
-                <button
-                  type="button"
-                  onClick={() => setMode('paste')}
-                  className={`px-3 py-2 text-ui-micro font-bold uppercase tracking-widest flex items-center gap-1.5 border-b-2 -mb-px transition-colors ${mode === 'paste' ? 'border-[var(--text-accent)] text-[var(--text-primary)]' : 'border-transparent nav-tab-inactive'}`}
-                >
-                  <ClipboardPaste size={13} /> Paste
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setMode('csv')}
-                  className={`px-3 py-2 text-ui-micro font-bold uppercase tracking-widest flex items-center gap-1.5 border-b-2 -mb-px transition-colors ${mode === 'csv' ? 'border-[var(--text-accent)] text-[var(--text-primary)]' : 'border-transparent nav-tab-inactive'}`}
-                >
-                  <FileSpreadsheet size={13} /> CSV
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setShowReference(s => !s)}
-                  className={`ml-auto px-3 py-2 text-ui-micro font-bold uppercase tracking-widest flex items-center gap-1.5 transition-colors ${showReference ? 'text-[var(--text-primary)]' : 'nav-tab-inactive'}`}
-                >
-                  <Globe size={13} /> SwimCloud
-                </button>
-                {/* One entry point, not two peers: "From clipboard" is now the
-                    capture browser's own secondary link, offered only when no
-                    capture exists yet — see plans/2026-09-10/02-UI-REDESIGN-WHOLE-APP.md §0. */}
-                <button
-                  type="button"
-                  onClick={() => setShowCaptureRosterPanel(true)}
-                  disabled={!team.trim()}
-                  title="Import a whole roster's times from a capture the Omniswim SwimCloud Companion extension has already fetched — every swimmer it captured, in one action. Pasting a single page from the clipboard is still offered there when no capture exists yet."
-                  className="px-3 py-2 text-ui-micro font-bold uppercase tracking-widest flex items-center gap-1.5 nav-tab-inactive hover:text-[var(--text-primary)] transition-colors disabled:opacity-40"
-                >
-                  <Boxes size={13} /> Add from SwimCloud
-                </button>
-              </div>
-
-              {showReference ? (
-                <div className="border border-theme-soft rounded-lg overflow-hidden">
-                  <div className="px-3 py-1.5 bg-[var(--surface-strong)] text-ui-caption text-theme-muted flex items-center justify-between">
-                    <span>Reference panel — open SwimCloud, then copy/paste into the importer.</span>
-                    <a
-                      href="https://www.swimcloud.com/"
-                      target="_blank"
-                      rel="noreferrer"
-                      className="text-[var(--text-accent)] hover:underline"
-                    >
-                      Open in new tab ↗
-                    </a>
-                  </div>
-                  <iframe
-                    title="SwimCloud reference"
-                    src="https://www.swimcloud.com/"
-                    className="w-full h-64 bg-white"
-                    sandbox="allow-scripts allow-same-origin allow-popups allow-forms"
-                  />
-                </div>
-              ) : null}
-
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                <label className="flex flex-col gap-1">
-                  <span className="label-caps">Team</span>
-                  <TeamSelect
-                    teams={teams}
-                    value={team && teams.includes(team) ? team : ''}
-                    onChange={e => setTeam(e.target.value)}
-                    className="glass-input px-3 py-2 rounded-lg text-ui-body appearance-none"
-                    placeholderDisabled
-                  />
-                  {teams.length === 0 ? (
-                    <span className="text-ui-caption text-theme-muted">
-                      Load a meet PDF first, or type a custom team below.
-                    </span>
-                  ) : null}
-                  <input
-                    value={team}
-                    onChange={e => setTeam(e.target.value)}
-                    className="glass-input px-3 py-2 rounded-lg text-ui-body mt-1"
-                    placeholder="Or type a team name…"
-                    aria-label="Custom team name"
-                  />
-                </label>
-                <label className="flex flex-col gap-1">
-                  <span className="label-caps">Gender</span>
-                  <div className="px-3 py-2 rounded-lg border border-theme-soft text-ui-body bg-[var(--surface-muted)]">
-                    {gender}
-                  </div>
-                </label>
-              </div>
-              <label className="flex flex-col gap-1">
-                <span className="label-caps flex items-center gap-2">
-                  {mode === 'csv' ? <FileSpreadsheet size={14} /> : <ClipboardPaste size={14} />}
-                  {mode === 'csv' ? 'CSV content' : 'Paste text'}
-                  {mode === 'csv' ? (
-                    <Button
-                      variant="ghost"
-                      size="sm"
-                      onClick={() => fileInputRef.current?.click()}
-                      className="text-[var(--text-accent)] normal-case hover:underline ml-1 p-0"
-                    >
-                      (choose file…)
-                    </Button>
-                  ) : detectedFormat && detectedFormat !== 'unknown' ? (
-                    <span className="text-[var(--text-accent)] normal-case">({detectedFormat.replace('_', ' ')})</span>
-                  ) : null}
-                </span>
-                <input
-                  ref={fileInputRef}
-                  type="file"
-                  accept=".csv,.tsv,.txt,text/csv"
-                  onChange={handleFile}
-                  className="hidden"
-                />
-                <textarea
-                  value={paste}
-                  onChange={e => setPaste(e.target.value)}
-                  rows={10}
-                  className="glass-input px-3 py-2 rounded-lg text-ui-body font-mono text-sm resize-y"
-                  placeholder={
-                    mode === 'csv'
-                      ? 'Paste CSV with header row: name,event,time[,team,gender,date,meet]'
-                      : 'Paste Personal Bests or roster table from SwimCloud…'
-                  }
-                />
-              </label>
-            </>
+            <RosterImportPasteStep
+              mode={mode}
+              onSetMode={setMode}
+              showReference={showReference}
+              onToggleReference={() => setShowReference(s => !s)}
+              onShowCaptureRosterPanel={() => setShowCaptureRosterPanel(true)}
+              team={team}
+              teams={teams}
+              onSetTeam={setTeam}
+              gender={gender}
+              paste={paste}
+              onSetPaste={setPaste}
+              fileInputRef={fileInputRef}
+              onFile={handleFile}
+              detectedFormat={detectedFormat}
+            />
           ) : (
-            <>
-              <div className="flex flex-wrap gap-2 text-ui-caption">
-                <Badge tone="info" className="px-2 py-0.5 font-normal normal-case tracking-normal">
-                  {format}
-                </Badge>
-                <span className="text-theme-muted">{preview.length} swims parsed</span>
-                {warnings.map((w, i) => (
-                  // Index-qualified: `warnings` is plain string[], and two
-                  // genuinely different warnings can print identical text
-                  // (e.g. the same "points column ignored" message recurs
-                  // once per event in a multi-event meet-results import) —
-                  // `key={w}` alone broke on exactly that case.
-                  <Badge
-                    key={`${i}-${w}`}
-                    tone="warning"
-                    className="px-2 py-0.5 font-normal normal-case tracking-normal"
-                  >
-                    {w}
-                  </Badge>
-                ))}
-              </div>
-              {unreadStampSummary ? (
-                <p className="text-ui-caption text-theme-secondary break-words">{unreadStampSummary}</p>
-              ) : null}
-              {team.trim() ? (
-                <div className="border border-theme-soft rounded-lg p-3 space-y-3">
-                  <SwimCloudImportModePicker mode={importMode} onChange={setImportMode} />
-                  {replacePreview ? <SwimCloudReplacePreviewPanel preview={replacePreview} /> : null}
-                </div>
-              ) : null}
-              {improvementsComputed ? (
-                <SwimCloudImprovementsSummary
-                  improvements={improvements}
-                  expanded={showImprovements}
-                  onToggle={() => setShowImprovements(v => !v)}
-                />
-              ) : null}
-              {swimmerActions.length > 0 ? (
-                <div className="flex flex-wrap gap-1.5">
-                  {swimmerActions.map(s => (
-                    <span
-                      key={`${s.name}|${s.action}`}
-                      className="text-ui-micro px-1.5 py-0.5 rounded-full border border-theme-soft"
-                    >
-                      {s.name}: {actionLabel(s.action)}
-                    </span>
-                  ))}
-                </div>
-              ) : null}
-              {aliasSuggestions.length > 0 ? (
-                <AliasSuggestionsPanel
-                  suggestions={aliasSuggestions}
-                  dismissed={dismissedAliasKeys}
-                  onLink={handleLinkAlias}
-                  onDismiss={handleDismissAlias}
-                />
-              ) : null}
-              {lastAliasLink ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={handleUndoAliasLink}
-                  title={lastAliasLink.description}
-                  className="w-full truncate rounded-lg border border-theme-soft text-left text-theme-muted hover:text-theme-secondary"
-                  leadingIcon={<Undo2 size={12} className="shrink-0" />}
-                >
-                  <span className="truncate">Undo: {lastAliasLink.description}</span>
-                </Button>
-              ) : null}
-              <div className="border border-theme-soft rounded-lg max-h-64 overflow-y-auto custom-scrollbar">
-                <table className="w-full text-ui-caption">
-                  <thead className="sticky top-0 bg-[var(--surface-strong)]">
-                    <tr className="text-left text-theme-muted uppercase tracking-wider">
-                      <th className="p-2">Name</th>
-                      <th className="p-2">Event</th>
-                      <th className="p-2">Time</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {preview.map((s, i) => (
-                      <tr key={i} className="border-t border-theme-soft theme-hover-row transition-colors">
-                        <td className="p-2">{s.name}</td>
-                        <td className="p-2">{s.event}</td>
-                        <td className="p-2 font-mono tabular-nums">{s.time}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </>
+            <RosterImportPreviewStep
+              format={format}
+              preview={preview}
+              warnings={warnings}
+              unreadStampSummary={unreadStampSummary}
+              team={team}
+              importMode={importMode}
+              onSetImportMode={setImportMode}
+              replacePreview={replacePreview}
+              improvementsComputed={improvementsComputed}
+              improvements={improvements}
+              showImprovements={showImprovements}
+              onToggleImprovements={() => setShowImprovements(v => !v)}
+              swimmerActions={swimmerActions}
+              aliasSuggestions={aliasSuggestions}
+              dismissedAliasKeys={dismissedAliasKeys}
+              onLinkAlias={handleLinkAlias}
+              onDismissAlias={handleDismissAlias}
+              lastAliasLink={lastAliasLink}
+              onUndoAliasLink={handleUndoAliasLink}
+            />
           )}
         </div>
 
-        <div className="flex justify-end gap-2 px-5 py-4 border-t border-theme-soft">
-          {step === 'preview' ? (
-            <button
-              type="button"
-              onClick={() => setStep('paste')}
-              className="px-4 py-2 text-ui-micro font-bold uppercase tracking-widest nav-tab-inactive hover:text-[var(--text-primary)]"
-            >
-              Back
-            </button>
-          ) : null}
-          <button type="button" onClick={onClose} className="px-4 py-2 text-ui-micro font-bold uppercase tracking-widest nav-tab-inactive">
-            Cancel
-          </button>
-          {step === 'paste' ? (
-            <Button variant="primary" size="md" onClick={handleParse} disabled={!paste.trim()}>
-              Preview
-            </Button>
-          ) : (
-            <Button variant="primary" size="md" onClick={() => void handleMerge()} disabled={preview.length === 0}>
-              {importMode === 'replace' ? 'Review replace…' : 'Import & add to roster'}
-            </Button>
-          )}
-        </div>
+        <RosterImportFooterActions
+          step={step}
+          onBack={() => setStep('paste')}
+          onClose={onClose}
+          onParse={handleParse}
+          pasteEmpty={!paste.trim()}
+          onMerge={() => void handleMerge()}
+          previewEmpty={preview.length === 0}
+          isReplaceMode={importMode === 'replace'}
+        />
       </Modal>
       {showReplaceConfirm && replacePreview ? (
         <SwimCloudReplaceConfirmModal

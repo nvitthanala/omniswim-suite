@@ -5,11 +5,37 @@
  * Pure view-model helpers for TeamRosterPanel — none of this touches React.
  */
 
-import type { Gender, SwimmerResult } from '@omniswim/core/types';
-import { isPlaceholderAthleteName, scorerRosterKey } from '@omniswim/core/lib/scorerRoster';
-import { isRelayResult } from '@omniswim/core/lib/utils';
-import { issueBadgeLabel, type LineupAthleteIssue } from '@omniswim/core/lib/rosterLineupAudit';
-import { canonicalMeetEventLabel, normalizeEventLabel } from '@omniswim/core/lib/athleteHistory';
+import { Gender } from '@omniswim/core/types';
+import type {
+  AthleteEventProfile,
+  HistoricalSwim,
+  ScoringSettings,
+  SwimmerResult,
+  Workspace,
+} from '@omniswim/core/types';
+
+const GENDER_MEN = Gender.MEN;
+import {
+  isPlaceholderAthleteName,
+  scorerRosterKey,
+  type ScorerRosterRow,
+} from '@omniswim/core/lib/scorerRoster';
+import { isRelayResult, normalizeSwimmerName } from '@omniswim/core/lib/utils';
+import {
+  issueBadgeLabel,
+  type LineupAthleteIssue,
+  type TeamLineupAudit,
+} from '@omniswim/core/lib/rosterLineupAudit';
+import {
+  canonicalMeetEventLabel,
+  getAthleteProfile,
+  normalizeEventLabel,
+} from '@omniswim/core/lib/athleteHistory';
+import type { buildAliasResolver } from '@omniswim/core/lib/athleteAliases';
+import {
+  countSwimmerEntries,
+  swimmerExceedsEntryLimits,
+} from '@omniswim/core/lib/swimmerEntryLimits';
 
 /**
  * Course suffix read directly off the raw HyTek event label ("Event 4 Men
@@ -128,4 +154,102 @@ export function buildRosterRowWarnings(flags: RosterRowIssueFlags): RosterRowWar
   else if (relayGapIssue) warningLabel = issueBadgeLabel(relayGapIssue);
 
   return { warningMessages, warningLabel };
+}
+
+/**
+ * Tooltip for the per-athlete event list. The list is ordered by how good each
+ * swim is against the published standard for the team's division, so say so and
+ * show the number — otherwise the order looks arbitrary, and it used to be
+ * (raw elapsed seconds, which just ranks the shortest events first).
+ */
+export function describeStrongestEvents(profile: AthleteEventProfile): string {
+  const ratios = profile.qualityByEvent ?? {};
+  const lines = profile.primaryEvents.map(event => {
+    const label = formatEventLabelForDisplay(event);
+    const r = ratios[event];
+    return r ? `${label} — ${(r * 100).toFixed(1)}% of the standard` : `${label} — no published standard`;
+  });
+  const header = profile.rankingDivision
+    ? `Strongest first, vs the published ${profile.rankingDivision} standard (lower is better):`
+    : 'Division unknown, so these are not ranked against a standard:';
+  const unranked = profile.unrankedEvents?.length
+    ? `\n\nNo published standard to judge: ${profile.unrankedEvents.map(formatEventLabelForDisplay).join(', ')}`
+    : '';
+  return `${header}\n${lines.join('\n')}${unranked}`;
+}
+
+export type RosterRowContext = {
+  genderResults: SwimmerResult[];
+  gender: Gender;
+  aliasResolver: ReturnType<typeof buildAliasResolver>;
+  settings: ScoringSettings;
+  lineupAudit?: TeamLineupAudit;
+  workspace?: Workspace;
+  /** Same truthiness gate the row previously read directly (`workspace && selectedTeam`). */
+  hasSelectedTeam: boolean;
+  mergedAthleteHistory: HistoricalSwim[];
+  pointTotals: Map<string, number>;
+};
+
+export type RosterRowViewModel = {
+  meetPts: number;
+  athleteIssues: LineupAthleteIssue[];
+  profile: AthleteEventProfile | null;
+  warningMessages: string[];
+  warningLabel: string | null;
+};
+
+/**
+ * Per-row derived state for the roster table: meet points, the athlete's
+ * event profile (for the strongest-events tooltip), and the condensed
+ * warning chip. Pulled out of TeamRosterPanel's JSX so the row map isn't
+ * where this branching lives.
+ */
+export function buildRosterRowViewModel(row: ScorerRosterRow, ctx: RosterRowContext): RosterRowViewModel {
+  const meetPts = ctx.pointTotals.get(row.key) ?? 0;
+  const entryCounts = countSwimmerEntries(ctx.genderResults, row.team, ctx.gender, row.name, ctx.aliasResolver);
+  const entryOver = swimmerExceedsEntryLimits(entryCounts, ctx.settings);
+  const athleteIssues = ctx.lineupAudit?.athleteIssues.get(normalizeSwimmerName(row.name)) ?? [];
+  const profile =
+    ctx.workspace && ctx.hasSelectedTeam
+      ? getAthleteProfile(
+          ctx.workspace,
+          row.team,
+          ctx.gender,
+          row.name,
+          ctx.settings,
+          ctx.aliasResolver,
+          ctx.mergedAthleteHistory
+        )
+      : null;
+  const { warningMessages, warningLabel } = buildRosterRowWarnings(
+    computeRosterRowIssueFlags(entryOver, athleteIssues)
+  );
+  return { meetPts, athleteIssues, profile, warningMessages, warningLabel };
+}
+
+/** "Men's" / "Women's" for the roster header — kept as a named lookup rather
+ * than an inline ternary in the panel body. */
+export function genderLabelFor(gender: Gender): string {
+  return gender === GENDER_MEN ? "Men's" : "Women's";
+}
+
+/** Extra header column count for the roster table: the scorer toggle column
+ * (when editable) and the remove column (when a delete handler is wired). */
+export function rosterColSpan(editable: boolean, hasDeleteHandler: boolean): number {
+  if (!editable) return 2;
+  return hasDeleteHandler ? 4 : 3;
+}
+
+export type TeamPickerMode = 'sidebar' | 'dropdown';
+
+/** Resolves the sidebar-vs-dropdown team picker from the panel's `showTeamSidebar`
+ * / `teamPickerMode` props into the two booleans the render logic switches on. */
+export function resolveTeamPickerMode(
+  showTeamSidebar: boolean,
+  teamPickerMode: TeamPickerMode | undefined
+): { useDropdown: boolean; useSidebar: boolean } {
+  const useDropdown = teamPickerMode === 'dropdown' || (!showTeamSidebar && teamPickerMode !== 'sidebar');
+  const useSidebar = showTeamSidebar && !useDropdown;
+  return { useDropdown, useSidebar };
 }

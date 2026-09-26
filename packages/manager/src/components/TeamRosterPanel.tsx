@@ -1,5 +1,5 @@
 import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react';
-import { Users, RotateCcw, Sparkles, Undo2 } from 'lucide-react';
+import { Users } from 'lucide-react';
 import { Gender, OfficialTeamScores, ScorerRosterOverride, ScoringSettings, SwimmerResult, Workspace } from '@omniswim/core/types';
 import {
   aggregateSwimmerMeetPoints,
@@ -11,49 +11,18 @@ import type { AthleteCreditedSwim, ScorerRosterRow } from '@omniswim/core/lib/sc
 import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
 import { canonicalSwimmerName, isRelayResult, normalizeSwimmerName } from '@omniswim/core/lib/utils';
 import { buildTeamScoreLookup, officialScoresForGender } from '@omniswim/core/lib/teamScoreMatching';
-import { restoreSwimmerToWorkspace } from '@omniswim/core/lib/swimmerSoftRemove';
 import { buildAliasResolver } from '@omniswim/core/lib/athleteAliases';
-import ProjectedActualScore from './ProjectedActualScore';
 import { type EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
-import AthleteLineupEditorPanel from './AthleteLineupEditorPanel';
-import { buildHistoryFromWorkspace, getAthleteProfile, mergeHistoryIndex } from '@omniswim/core/lib/athleteHistory';
-import type { AthleteEventProfile } from '@omniswim/core/types';
-
-/**
- * Tooltip for the per-athlete event list. The list is ordered by how good each
- * swim is against the published standard for the team's division, so say so and
- * show the number — otherwise the order looks arbitrary, and it used to be
- * (raw elapsed seconds, which just ranks the shortest events first).
- */
-function describeStrongestEvents(profile: AthleteEventProfile): string {
-  const ratios = profile.qualityByEvent ?? {};
-  const lines = profile.primaryEvents.map(event => {
-    const label = formatEventLabelForDisplay(event);
-    const r = ratios[event];
-    return r ? `${label} — ${(r * 100).toFixed(1)}% of the standard` : `${label} — no published standard`;
-  });
-  const header = profile.rankingDivision
-    ? `Strongest first, vs the published ${profile.rankingDivision} standard (lower is better):`
-    : 'Division unknown, so these are not ranked against a standard:';
-  const unranked = profile.unrankedEvents?.length
-    ? `\n\nNo published standard to judge: ${profile.unrankedEvents.map(formatEventLabelForDisplay).join(', ')}`
-    : '';
-  return `${header}\n${lines.join('\n')}${unranked}`;
-}
-import {
-  countSwimmerEntries,
-  swimmerExceedsEntryLimits,
-} from '@omniswim/core/lib/swimmerEntryLimits';
+import { buildHistoryFromWorkspace, mergeHistoryIndex } from '@omniswim/core/lib/athleteHistory';
 import { optimizeRosterAllTeams, optimizeRosterForTeam } from '@omniswim/core/lib/rosterOptimizer';
 import { applyScorerOffRelayPatch, type TeamLineupAudit } from '@omniswim/core/lib/rosterLineupAudit';
-import { Button, TeamSelect, useToast } from '@omniswim/ui';
-import TeamRosterRow from './TeamRosterRow';
-import {
-  buildRosterRowWarnings,
-  computeRosterRowIssueFlags,
-  countTeamMembers,
-  formatEventLabelForDisplay,
-} from './teamRosterView';
+import { useToast } from '@omniswim/ui';
+import { countTeamMembers, genderLabelFor, resolveTeamPickerMode, rosterColSpan } from './teamRosterView';
+import TeamRosterHeader from './TeamRosterHeader';
+import TeamRosterTable from './TeamRosterTable';
+import TeamRosterLayoutShell from './TeamRosterLayoutShell';
+import RemovedSwimmersSection from './RemovedSwimmersSection';
+import AthleteLineupDrawer from './AthleteLineupDrawer';
 
 const ROSTER_WINDOW_THRESHOLD = 80;
 const ROSTER_ROW_ESTIMATE_PX = 44;
@@ -126,9 +95,7 @@ export default function TeamRosterPanel({
   // every workspace patch / keystroke that re-renders this panel.
   const merged = useMemo(() => mergeScoringSettings(settings), [settings]);
   const rosterMode = usesScorerRoster(merged);
-  const useDropdown =
-    teamPickerMode === 'dropdown' || (!showTeamSidebar && teamPickerMode !== 'sidebar');
-  const useSidebar = showTeamSidebar && !useDropdown;
+  const { useDropdown, useSidebar } = resolveTeamPickerMode(showTeamSidebar, teamPickerMode);
 
   const genderResults = useMemo(
     () => results.filter(r => r.gender == null || r.gender === gender),
@@ -419,92 +386,31 @@ export default function TeamRosterPanel({
     );
   }
 
-  const genderLabel = gender === Gender.MEN ? "Men's" : "Women's";
-  const colSpan = editable ? (onRequestDeleteSwimmer ? 4 : 3) : 2;
+  const genderLabel = genderLabelFor(gender);
+  const colSpan = rosterColSpan(editable, Boolean(onRequestDeleteSwimmer));
+
+  const canOptimize = Boolean(editable && workspace && onWorkspaceUpdate);
 
   const rosterTable = (
     <div className={expanded ? 'flex flex-col flex-1 min-h-0' : undefined}>
-      <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between mb-3">
-        <h4 className="text-ui-label font-semibold text-[var(--text-primary)] flex items-center gap-2 min-w-0">
-          <Users size={16} className="shrink-0 text-[var(--text-accent)]" />
-          <span className="truncate" title={selectedTeam || 'Team roster'}>
-            {selectedTeam || 'Team roster'}
-          </span>
-          <span className="text-theme-muted font-normal shrink-0">{genderLabel}</span>
-        </h4>
-        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 shrink-0">
-          {editable && workspace && onWorkspaceUpdate ? (
-            <>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => runOptimizer(false)}
-                disabled={!selectedTeam}
-                className="text-[var(--text-accent)] hover:underline whitespace-nowrap"
-                title="Optimize scorers and event lineup for selected team"
-                leadingIcon={<Sparkles size={12} />}
-              >
-                Best roster
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => runOptimizer(true)}
-                className="text-theme-secondary hover:text-[var(--text-accent)] whitespace-nowrap"
-              >
-                All teams
-              </Button>
-            </>
-          ) : null}
-          {editable ? (
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={resetTeamManual}
-              className="text-theme-secondary hover:text-[var(--text-accent)] whitespace-nowrap"
-              title="Revert manual edits for this team"
-              leadingIcon={<RotateCcw size={12} />}
-            >
-              Reset team
-            </Button>
-          ) : null}
-        </div>
-      </div>
-
-      {selectedTeam ? (
-        <ProjectedActualScore
-          actual={selectedActual}
-          baseline={selectedBaseline}
-          projected={selectedProjected}
-          eventThrough={officialTeamScores?.eventThrough}
-        />
-      ) : null}
-
-      <p className="text-ui-body text-theme-secondary my-3 leading-relaxed">
-        Click an athlete to edit scorers, individual entries, and see relay status.
-        {editable
-          ? ` Toggle scorers for the ${merged.maxIndividualScorersPerTeam}-scorer cap.`
-          : ' Enable What-if to edit scorers.'}
-        {' '}
-        <kbd className="px-1 rounded border border-theme-soft bg-[var(--surface-muted)] text-ui-micro font-mono">
-          ↑↓
-        </kbd>{' '}
-        to navigate.
-      </p>
-      {useDropdown ? (
-        <label className="block mb-3">
-          <span className="block text-ui-caption text-theme-muted mb-1.5">Team</span>
-          <TeamSelect
-            teams={teams}
-            className="glass-input w-full rounded-lg px-3 py-2 text-ui-body"
-            value={selectedTeam}
-            onChange={e => selectTeam(e.target.value)}
-            disabled={!teams.length}
-            emptyTeamsLabel="No teams in matrix"
-            showPlaceholder={!controlledTeam || !teams.includes(controlledTeam)}
-          />
-        </label>
-      ) : null}
+      <TeamRosterHeader
+        selectedTeam={selectedTeam}
+        genderLabel={genderLabel}
+        editable={editable}
+        canOptimize={canOptimize}
+        onOptimizeTeam={() => runOptimizer(false)}
+        onOptimizeAll={() => runOptimizer(true)}
+        onResetTeam={resetTeamManual}
+        maxIndividualScorersPerTeam={merged.maxIndividualScorersPerTeam}
+        selectedActual={selectedActual}
+        selectedBaseline={selectedBaseline}
+        selectedProjected={selectedProjected}
+        eventThrough={officialTeamScores?.eventThrough}
+        useDropdown={useDropdown}
+        teams={teams}
+        controlledTeam={controlledTeam}
+        onSelectTeam={selectTeam}
+      />
 
       <div
         ref={rosterScrollRef}
@@ -517,144 +423,37 @@ export default function TeamRosterPanel({
           expanded ? 'flex-1 min-h-[20rem]' : 'max-h-80'
         }`}
       >
-        <table className="w-full">
-          <thead className="sticky top-0 surface-muted-bg z-[1]">
-            <tr className="text-ui-caption text-theme-muted border-b border-theme-soft">
-              <th className="text-left py-2.5 px-3 font-medium">Athlete</th>
-              <th className="text-right py-2.5 px-3 font-medium w-20">Class</th>
-              <th className="text-right py-2.5 px-3 font-medium w-24">Meet pts</th>
-              {editable ? (
-                <th className="text-center py-2.5 px-3 font-medium w-20">Scorer</th>
-              ) : null}
-              {editable && onRequestDeleteSwimmer ? (
-                <th className="text-center py-2.5 px-2 font-medium w-12">
-                  <span className="sr-only">Remove</span>
-                </th>
-              ) : null}
-            </tr>
-          </thead>
-          <tbody>
-            {!selectedTeam || teamRows.length === 0 ? (
-              <tr>
-                <td colSpan={colSpan + 1} className="py-4 text-center text-ui-caption text-theme-muted italic">
-                  {teams.length ? 'No athletes for this team' : 'Upload results to populate teams'}
-                </td>
-              </tr>
-            ) : (
-              <>
-                {rosterWindow.topSpacer > 0 ? (
-                  <tr aria-hidden="true">
-                    <td colSpan={colSpan + 1} style={{ height: rosterWindow.topSpacer }} />
-                  </tr>
-                ) : null}
-                {rosterWindow.rows.map(row => {
-                const meetPts = pointTotals.get(row.key) ?? 0;
-                const isSelected = selectedAthleteKey === row.key;
-                const entryCounts = countSwimmerEntries(genderResults, row.team, gender, row.name, aliasResolver);
-                const entryOver = swimmerExceedsEntryLimits(entryCounts, merged);
-                const athleteIssues =
-                  lineupAudit?.athleteIssues.get(normalizeSwimmerName(row.name)) ?? [];
-                const profile =
-                  workspace && selectedTeam
-                    ? getAthleteProfile(
-                        workspace,
-                        row.team,
-                        gender,
-                        row.name,
-                        merged,
-                        aliasResolver,
-                        mergedAthleteHistory
-                      )
-                    : null;
-                const { warningMessages, warningLabel } = buildRosterRowWarnings(
-                  computeRosterRowIssueFlags(entryOver, athleteIssues)
-                );
-                return (
-                  <TeamRosterRow
-                    key={row.key}
-                    row={row}
-                    meetPts={meetPts}
-                    isSelected={isSelected}
-                    profile={profile}
-                    describeProfile={describeStrongestEvents}
-                    warningMessages={warningMessages}
-                    warningLabel={warningLabel}
-                    editable={editable}
-                    onRequestDeleteSwimmer={onRequestDeleteSwimmer}
-                    onSelect={() => {
-                      toggleAthleteSelection(row);
-                      rosterScrollRef.current?.focus();
-                    }}
-                    onSetScorer={isScorer => setScorer(row, isScorer)}
-                  />
-                );
-                })}
-                {rosterWindow.bottomSpacer > 0 ? (
-                  <tr aria-hidden="true">
-                    <td colSpan={colSpan + 1} style={{ height: rosterWindow.bottomSpacer }} />
-                  </tr>
-                ) : null}
-              </>
-            )}
-          </tbody>
-        </table>
+        <TeamRosterTable
+          teams={teams}
+          selectedTeam={selectedTeam}
+          teamRows={teamRows}
+          rosterWindow={rosterWindow}
+          colSpan={colSpan}
+          editable={editable}
+          onRequestDeleteSwimmer={onRequestDeleteSwimmer}
+          selectedAthleteKey={selectedAthleteKey}
+          pointTotals={pointTotals}
+          genderResults={genderResults}
+          gender={gender}
+          aliasResolver={aliasResolver}
+          settings={merged}
+          lineupAudit={lineupAudit}
+          workspace={workspace}
+          mergedAthleteHistory={mergedAthleteHistory}
+          onSelectRow={row => {
+            toggleAthleteSelection(row);
+            rosterScrollRef.current?.focus();
+          }}
+          onSetScorer={(row, isScorer) => setScorer(row, isScorer)}
+        />
       </div>
-      {workspace && (workspace.deletedSwimmers ?? []).some(d => d.gender === gender) ? (
-        <div className="mt-3 border border-theme-soft rounded-xl p-3.5 surface-muted-bg">
-          <h5 className="text-ui-caption font-semibold text-theme-secondary mb-2">
-            Removed from roster
-          </h5>
-          <ul className="space-y-2">
-            {(workspace.deletedSwimmers ?? [])
-              .filter(d => d.gender === gender)
-              .map(d => (
-                <li
-                  key={`${d.gender}|${normalizeSwimmerName(d.name)}`}
-                  className="flex items-center justify-between gap-3 text-ui-body"
-                >
-                  <span className="flex items-center gap-2 min-w-0">
-                    <span className="text-[var(--text-primary)] truncate min-w-0" title={d.name}>
-                      {d.name}
-                    </span>
-                    <span
-                      className={`shrink-0 px-1.5 py-0.5 rounded-full text-ui-caption font-medium ${
-                        d.mode === 'removed'
-                          ? 'border border-rose-400/40 text-rose-400'
-                          : 'border border-theme-soft text-theme-secondary'
-                      }`}
-                      title={
-                        d.mode === 'removed'
-                          ? 'Permanently removed from the working roster (source PDF kept)'
-                          : 'Hidden from the What-if projection only'
-                      }
-                    >
-                      {d.mode === 'removed' ? 'Removed' : 'Hidden'}
-                    </span>
-                  </span>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    disabled={!editable || !onWorkspaceUpdate}
-                    title={
-                      editable && onWorkspaceUpdate
-                        ? undefined
-                        : 'Enable What-if to restore'
-                    }
-                    className="text-[var(--text-accent)] hover:underline shrink-0 disabled:no-underline"
-                    onClick={() =>
-                      editable &&
-                      onWorkspaceUpdate?.(
-                        restoreSwimmerToWorkspace(workspace, { name: d.name, gender })
-                      )
-                    }
-                    leadingIcon={<Undo2 size={12} />}
-                  >
-                    Restore
-                  </Button>
-                </li>
-              ))}
-          </ul>
-        </div>
+      {workspace ? (
+        <RemovedSwimmersSection
+          workspace={workspace}
+          gender={gender}
+          editable={editable}
+          onWorkspaceUpdate={onWorkspaceUpdate}
+        />
       ) : null}
       {selectedTeam ? (
         <p className="text-ui-caption text-theme-secondary mt-3 leading-relaxed">
@@ -675,104 +474,48 @@ export default function TeamRosterPanel({
     </div>
   );
 
+  const drawerAthleteIssues = selectedAthlete
+    ? lineupAudit?.athleteIssues.get(normalizeSwimmerName(selectedAthlete.name)) ?? []
+    : [];
+  const drawerAutoIsScorer = Boolean(
+    selectedAthlete && autoLookup.isScorer(selectedAthlete.name, selectedAthlete.team, selectedAthlete.gender)
+  );
+
   // The unified athlete editor is a fixed-position slide-over drawer, not part
   // of the roster table's document flow — render it as a sibling so it isn't
   // clipped by the table's scroll container, regardless of which layout branch
   // (sidebar vs. plain card) is active below.
-  const drawer =
-    selectedAthlete && workspace && onWorkspaceUpdate ? (
-      <AthleteLineupEditorPanel
-        workspace={workspace}
-        settings={merged}
-        gender={gender}
-        athlete={selectedAthlete}
-        issues={lineupAudit?.athleteIssues.get(normalizeSwimmerName(selectedAthlete.name)) ?? []}
-        scoredResults={scoredResults}
-        allResults={results}
-        editable={editable}
-        onUpdate={onWorkspaceUpdate}
-        onClose={() => {
-          setSelectedAthleteKey(null);
-          onAthleteSelect?.(null);
-        }}
-        autoIsScorer={autoLookup.isScorer(
-          selectedAthlete.name,
-          selectedAthlete.team,
-          selectedAthlete.gender
-        )}
-      />
-    ) : null;
-
-  if (!useSidebar) {
-    return (
-      <>
-        <div className={`surface-card rounded-xl p-4 sm:p-5 ${expanded ? 'flex flex-col flex-1 min-h-0' : ''}`}>
-          {rosterTable}
-        </div>
-        {drawer}
-      </>
-    );
-  }
+  const drawer = (
+    <AthleteLineupDrawer
+      selectedAthlete={selectedAthlete}
+      workspace={workspace}
+      onWorkspaceUpdate={onWorkspaceUpdate}
+      settings={merged}
+      gender={gender}
+      issues={drawerAthleteIssues}
+      scoredResults={scoredResults}
+      allResults={results}
+      editable={editable}
+      onClose={() => {
+        setSelectedAthleteKey(null);
+        onAthleteSelect?.(null);
+      }}
+      autoIsScorer={drawerAutoIsScorer}
+    />
+  );
 
   return (
-    <div
-      className={`grid grid-cols-1 lg:grid-cols-12 gap-4 ${expanded ? 'flex-1 min-h-0' : ''}`}
-    >
-      <div className={`lg:col-span-3 flex flex-col min-h-0 ${expanded ? 'lg:h-full' : ''}`}>
-        <h4 className="text-ui-caption text-theme-muted mb-2 shrink-0">
-          Teams ({teams.length})
-        </h4>
-        <div
-          className={`overflow-y-auto space-y-1.5 pr-1 custom-scrollbar flex-1 min-h-0 ${
-            expanded ? '' : 'max-h-[32rem]'
-          }`}
-        >
-          {!teams.length ? (
-            <p className="text-ui-caption text-theme-muted italic p-3">Upload a PDF to detect teams</p>
-          ) : (
-            teams.map(team => {
-              const projected = projectedByTeam.get(team) ?? 0;
-              const actual = officialLookup.get(team);
-              const isActive = team === selectedTeam;
-              return (
-                <button
-                  key={team}
-                  type="button"
-                  onClick={() => selectTeam(team)}
-                  className={`w-full text-left p-3.5 rounded-lg border transition-all ${
-                    isActive
-                      ? 'border-[var(--text-accent)]/40 bg-[var(--text-accent)]/10'
-                      : 'border-theme-soft surface-overlay theme-hover-row'
-                  }`}
-                >
-                  <div className="text-ui-label font-medium text-[var(--text-primary)] truncate" title={team}>
-                    {team}
-                  </div>
-                  <div className="text-ui-caption text-theme-secondary mt-1">
-                    {memberCounts.get(team) ?? 0} athletes
-                  </div>
-                  <div className="flex gap-2 mt-2 text-ui-micro font-mono">
-                    {actual != null ? (
-                      <span className="text-theme-secondary">
-                        Act {actual.toFixed(0)}
-                      </span>
-                    ) : null}
-                    <span className="text-[var(--text-accent)]">Proj {projected.toFixed(0)}</span>
-                  </div>
-                </button>
-              );
-            })
-          )}
-        </div>
-      </div>
-      <div
-        className={`lg:col-span-9 surface-card rounded-xl p-4 sm:p-5 flex flex-col min-h-0 ${
-          expanded ? 'lg:h-full' : ''
-        }`}
-      >
-        {rosterTable}
-      </div>
-      {drawer}
-    </div>
+    <TeamRosterLayoutShell
+      useSidebar={useSidebar}
+      expanded={expanded}
+      rosterTable={rosterTable}
+      drawer={drawer}
+      teams={teams}
+      memberCounts={memberCounts}
+      projectedByTeam={projectedByTeam}
+      officialLookup={officialLookup}
+      selectedTeam={selectedTeam}
+      onSelectTeam={selectTeam}
+    />
   );
 }

@@ -7,14 +7,7 @@ import React, { useMemo, useState } from 'react';
 import { Gender, RelayLegOverride, SwimmerResult, Workspace } from '@omniswim/core/types';
 import type { ScoringBundle } from '@omniswim/core/lib/useWorkspaceScoring';
 import {
-  displayTimeForRelayLeg,
-  formatLegSplitSummary,
-  formatTeamSplitSummary,
-} from '@omniswim/core/lib/relaySplits';
-import {
   listEligibleRelayLegCandidates,
-  relayLegRequirements,
-  relayMissingStrokeLabel,
   removeRelayLegOverride,
   suggestBestRelayLegFill,
   upsertRelayLegOverride,
@@ -32,8 +25,12 @@ import {
   buildRelaysFromIndividualLineup,
   compareRelayLegSplits,
 } from '@omniswim/core/lib/relayBuilder';
-import { Button, ProvenanceBadges, TeamSelect, useToast } from '@omniswim/ui';
+import { Button, TeamSelect, useToast } from '@omniswim/ui';
 import { buildRelayGroups, type RelayGroup } from './indRelayGroupsView';
+import RelayStatsCards from './RelayStatsCards';
+import RelaySplitInspector from './RelaySplitInspector';
+import RelayGroupCard from './RelayGroupCard';
+import RelayEligibleSwimmersPanel from './RelayEligibleSwimmersPanel';
 
 type Props = {
   workspace: Workspace;
@@ -47,7 +44,7 @@ type Props = {
   hideTeamPicker?: boolean;
 };
 
-type DragPayload = {
+export type DragPayload = {
   name: string;
   recruitId?: string;
   classYear?: string;
@@ -374,23 +371,7 @@ export default function IndRelayManagementView({
             ) : null}
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-5 gap-2 mb-4">
-            {[
-              { label: 'Athletes', value: stats.athletes },
-              { label: 'Individual swims', value: stats.individual },
-              { label: 'Relay leg rows', value: stats.relayLegs },
-              { label: 'Relay events', value: stats.relayEvents },
-              { label: 'Vacant legs', value: stats.vacantLegs },
-            ].map(item => (
-              <div
-                key={item.label}
-                className="surface-overlay border border-theme-soft rounded-lg px-3 py-2"
-              >
-                <p className="text-ui-micro text-theme-secondary uppercase tracking-widest">{item.label}</p>
-                <p className="text-lg font-semibold text-[var(--text-primary)] tabular-nums">{item.value}</p>
-              </div>
-            ))}
-          </div>
+          <RelayStatsCards stats={stats} />
 
           {recruitCount > 0 ? (
             <p className="text-ui-caption text-theme-secondary">
@@ -417,252 +398,41 @@ export default function IndRelayManagementView({
           <h4 className="text-ui-caption font-bold uppercase tracking-widest text-[var(--text-primary)] mb-3">
             Relay split inspector
           </h4>
-          {selectedSplitCompare.length > 0 && selectedGroup ? (
-            <div className="mb-4 border border-theme-soft rounded-lg p-3 surface-muted-bg">
-              <p className="text-ui-micro uppercase tracking-widest text-theme-secondary mb-2">
-                Known (PDF) vs calculated splits · {selectedGroup.event}
-              </p>
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-                {selectedSplitCompare.map(row => (
-                  <div key={row.legIndex} className="text-ui-caption flex justify-between gap-2">
-                    <span className="text-[var(--text-primary)] truncate">
-                      L{row.legIndex + 1} {row.swimmerName}
-                    </span>
-                    <span className="font-mono text-theme-secondary shrink-0">
-                      {row.knownSplit ?? '—'}
-                      {row.calculatedSplit ? (
-                        <span className="text-[var(--text-accent)] ml-1">
-                          / {row.calculatedSplit}
-                          {row.deltaSec != null
-                            ? ` (${row.deltaSec >= 0 ? '+' : ''}${row.deltaSec.toFixed(2)}s)`
-                            : ''}
-                        </span>
-                      ) : null}
-                    </span>
-                  </div>
-                ))}
-              </div>
-            </div>
+          {selectedGroup ? (
+            <RelaySplitInspector rows={selectedSplitCompare} eventLabel={selectedGroup.event} />
           ) : null}
           {relayGroups.length === 0 ? (
             <p className="text-ui-caption text-theme-muted italic">No relay entries for this team.</p>
           ) : (
             <div className="flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-4">
-              {relayGroups.map(group => {
-                const vacantCount = group.legs.filter(l => l.relayLegVacant || l.relayMissingLeg).length;
-                return (
-                  <div
-                    key={group.key}
-                    className={`surface-overlay border rounded-lg p-3 ${
-                      selectedGroup?.key === group.key ? 'border-[var(--text-accent)]/40' : 'border-theme-soft'
-                    }`}
-                    onClick={() => setSelectedRelayKey(group.key)}
-                  >
-                    <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
-                      <div>
-                        <p className="text-ui-label font-medium text-[var(--text-primary)]">{group.event}</p>
-                        <p className="text-ui-micro text-theme-secondary">
-                          {group.roundSwam} · Pl {group.rank > 0 ? group.rank : '—'}
-                          {vacantCount > 0 ? (
-                            <span className="text-amber-400 ml-2">{vacantCount} vacant leg(s)</span>
-                          ) : null}
-                        </p>
-                      </div>
-                      <div className="flex items-center gap-2">
-                        {whatIfMode && vacantCount > 0 ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            className="px-2 py-0.5 text-theme-secondary"
-                            onClick={e => {
-                              e.stopPropagation();
-                              autofillAllVacant(group);
-                            }}
-                          >
-                            Auto-fill all
-                          </Button>
-                        ) : null}
-                        <p className="text-ui-caption font-mono text-[var(--text-accent)] tabular-nums">
-                          Team {group.teamTotal}
-                        </p>
-                      </div>
-                    </div>
-                    {group.teamSplits ? (
-                      <p className="text-ui-micro text-theme-secondary mb-3 font-mono">
-                        {formatTeamSplitSummary(group.teamSplits)}
-                      </p>
-                    ) : null}
-                    <div className="grid sm:grid-cols-2 gap-2">
-                      {group.legs.map(leg => {
-                        const legIndex = leg.relayLegIndex ?? 0;
-                        const req = relayLegRequirements(group.event, legIndex);
-                        const isVacant = Boolean(leg.relayLegVacant || leg.relayMissingLeg);
-                        const legDropKey = `${group.key}|${legIndex}`;
-                        const fieldKey = legDropKey;
-                        return (
-                          <div
-                            key={leg.id}
-                            className={`border rounded-lg px-2 py-1.5 text-ui-caption transition-colors ${
-                              isVacant
-                                ? 'border-amber-500/50 bg-amber-500/5'
-                                : 'border-theme-soft/60'
-                            } ${dragOverLeg === legDropKey ? 'ring-1 ring-[var(--text-accent)]' : ''}`}
-                            onDragOver={e => {
-                              if (!whatIfMode || !isVacant) return;
-                              e.preventDefault();
-                              setDragOverLeg(legDropKey);
-                            }}
-                            onDragLeave={() => setDragOverLeg(null)}
-                            onDrop={e => {
-                              e.preventDefault();
-                              setDragOverLeg(null);
-                              if (!whatIfMode || !isVacant) return;
-                              const raw = e.dataTransfer.getData('application/x-omni-relay-leg');
-                              if (!raw) return;
-                              try {
-                                assignDragPayload(group, legIndex, JSON.parse(raw) as DragPayload);
-                              } catch {
-                                /* ignore */
-                              }
-                            }}
-                          >
-                            <div className="flex justify-between gap-2">
-                              <span className="text-[var(--text-primary)] truncate">
-                                L{legIndex + 1}{' '}
-                                {isVacant && (!leg.name || leg.name === '—') ? (
-                                  <span className="text-amber-400">
-                                    {req.legDistanceYards == null
-                                      ? 'Missing — distance unreadable'
-                                      : `Missing — ${relayMissingStrokeLabel(req.stroke)} ${req.legDistanceYards}`}
-                                  </span>
-                                ) : (
-                                  leg.name
-                                )}
-                              </span>
-                              <span className="font-mono text-[var(--text-accent)] shrink-0 tabular-nums">
-                                {displayTimeForRelayLeg(leg)}
-                              </span>
-                            </div>
-                            {leg.relayLegSplitDetail ? (
-                              <p className="text-ui-micro text-theme-secondary font-mono mt-1 leading-snug">
-                                {formatLegSplitSummary(leg.relayLegSplitDetail)}
-                              </p>
-                            ) : null}
-                            <p className="text-ui-micro text-theme-muted mt-0.5 tabular-nums">
-                              {typeof leg.points === 'number' ? `${leg.points.toFixed(1)} pts` : '—'}
-                            </p>
-                            {whatIfMode && isVacant ? (
-                              <div className="mt-2 space-y-1.5 border-t border-theme-soft/40 pt-2">
-                                <Button
-                                  variant="ghost"
-                                  size="sm"
-                                  className="text-[var(--text-accent)] hover:underline"
-                                  onClick={() => autofillLeg(group, legIndex)}
-                                >
-                                  Auto-fill best
-                                </Button>
-                                {req.legDistanceYards == null ? (
-                                  <p className="text-ui-micro text-theme-muted italic">
-                                    Distance unreadable — fix the relay's event label to enter a leg time.
-                                  </p>
-                                ) : (
-                                  <div className="flex gap-1">
-                                    <input
-                                      type="text"
-                                      placeholder={`Leg time (${req.legDistanceYards}y)`}
-                                      value={manualTimes[fieldKey] ?? ''}
-                                      onChange={e =>
-                                        setManualTimes(prev => ({ ...prev, [fieldKey]: e.target.value }))
-                                      }
-                                      className="flex-1 min-w-0 surface-muted-bg border border-theme-soft rounded-md px-1.5 py-0.5 text-ui-micro font-mono"
-                                    />
-                                    <Button
-                                      variant="outline"
-                                      size="sm"
-                                      className="px-1.5 py-0.5"
-                                      onClick={() => saveManualLeg(group, legIndex)}
-                                    >
-                                      Set
-                                    </Button>
-                                  </div>
-                                )}
-                                {overrides.some(
-                                  o => o.relayEntryKey === group.key && o.legIndex === legIndex
-                                ) ? (
-                                  <Button
-                                    variant="ghost"
-                                    size="sm"
-                                    className="text-theme-muted hover:text-amber-400"
-                                    onClick={() => clearLegOverride(group, legIndex)}
-                                  >
-                                    Clear override
-                                  </Button>
-                                ) : null}
-                              </div>
-                            ) : null}
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                );
-              })}
+              {relayGroups.map(group => (
+                <RelayGroupCard
+                  key={group.key}
+                  group={group}
+                  isSelected={selectedGroup?.key === group.key}
+                  whatIfMode={whatIfMode}
+                  dragOverLeg={dragOverLeg}
+                  manualTimes={manualTimes}
+                  overrides={overrides}
+                  onSelect={() => setSelectedRelayKey(group.key)}
+                  onAutofillAllVacant={() => autofillAllVacant(group)}
+                  onAutofillLeg={legIndex => autofillLeg(group, legIndex)}
+                  onAssignDragPayload={(legIndex, payload) => assignDragPayload(group, legIndex, payload)}
+                  onSetDragOverLeg={setDragOverLeg}
+                  onManualTimeChange={(fieldKey, value) =>
+                    setManualTimes(prev => ({ ...prev, [fieldKey]: value }))
+                  }
+                  onSaveManualLeg={legIndex => saveManualLeg(group, legIndex)}
+                  onClearLegOverride={legIndex => clearLegOverride(group, legIndex)}
+                />
+              ))}
             </div>
           )}
         </div>
       </div>
 
       {whatIfMode && selectedGroup ? (
-        <div className="surface-card rounded-xl p-4 sm:p-5 w-full lg:w-72 shrink-0 flex flex-col min-h-[12rem] max-h-[40vh] lg:max-h-none">
-          <h4 className="text-ui-caption font-bold uppercase tracking-widest text-[var(--text-primary)] mb-1">
-            Eligible swimmers
-          </h4>
-          <p className="text-ui-micro text-theme-secondary mb-3 leading-relaxed">
-            Drag onto a vacant leg for{' '}
-            <span className="text-[var(--text-accent)]">{selectedGroup.event}</span>. Stroke must match
-            the leg distance.
-          </p>
-          {poolCandidates.length === 0 ? (
-            <p className="text-ui-caption text-theme-muted italic">No eligible candidates for vacant legs.</p>
-          ) : (
-            <ul className="flex-1 min-h-0 overflow-y-auto custom-scrollbar space-y-1">
-              {poolCandidates.map(swimmer => (
-                  <li
-                    key={swimmer.id || swimmer.name}
-                    draggable
-                    onDragStart={e => {
-                      e.dataTransfer.setData(
-                        'application/x-omni-relay-leg',
-                        JSON.stringify({
-                          name: swimmer.name,
-                          recruitId: swimmer.isRecruit ? swimmer.id : undefined,
-                          classYear: String(swimmer.classYear),
-                        } satisfies DragPayload)
-                      );
-                      e.dataTransfer.effectAllowed = 'move';
-                    }}
-                    className="border border-theme-soft rounded-lg px-2 py-1.5 cursor-grab active:cursor-grabbing hover:border-[var(--text-accent)]/40 transition-colors"
-                  >
-                    <p className="text-ui-caption text-[var(--text-primary)] truncate">{swimmer.name}</p>
-                    <p className="text-ui-micro text-theme-secondary truncate">
-                      {swimmer.classYear}
-                      {swimmer.isRecruit ? ' · recruit' : ''} · {swimmer.event} {swimmer.time}
-                    </p>
-                    {swimmer.relayLegHistory || swimmer.convertedFrom ? (
-                      <ProvenanceBadges
-                        swim={{
-                          fromHistory: !!swimmer.relayLegHistory,
-                          convertedFrom: swimmer.convertedFrom,
-                        }}
-                        compact
-                        className="mt-1"
-                      />
-                    ) : null}
-                  </li>
-              ))}
-            </ul>
-          )}
-        </div>
+        <RelayEligibleSwimmersPanel eventLabel={selectedGroup.event} poolCandidates={poolCandidates} />
       ) : null}
     </div>
   );
