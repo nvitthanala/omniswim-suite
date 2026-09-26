@@ -2959,6 +2959,22 @@
     const seconds = Math.round(staggerMs / 1e3);
     return `Refreshing: ${alreadyStoredCount} of these swimmers already have a stored personal-bests page, and this run re-fetches ${alreadyStoredCount === 1 ? "it" : "them"} anyway, at one swimmer every ${seconds}s, instead of skipping them as already captured.`;
   }
+  function crawlFinalCompleteness(swimmerTimesCompleteness, eventResultsStopped) {
+    return swimmerTimesCompleteness === "partial" || eventResultsStopped ? "partial" : "every-planned-page-fetched";
+  }
+  function crawlFinalMessage(state) {
+    const { stoppedMessage, completeness, totalDone, totalPlanned } = state;
+    if (stoppedMessage.length > 0) {
+      return {
+        line1: stoppedMessage,
+        line2: `${totalDone} of ${totalPlanned} pages captured before stopping.`
+      };
+    }
+    if (completeness === "partial") {
+      return { line1: `Stopped \u2014 ${totalDone} of ${totalPlanned} pages captured.` };
+    }
+    return { line1: `Done \u2014 ${totalDone} of ${totalPlanned} pages captured.` };
+  }
 
   // extensions/swimcloud-companion/src/crawler-content.ts
   var MIN_DELAY_MS = 3e3;
@@ -3272,21 +3288,20 @@
     completeness: "every-planned-page-fetched",
     stoppedMessage: ""
   };
-  async function runCrawl(meetId, panel, control) {
-    const subject = { kind: "meet", meetId };
-    const retrievedAt = () => (/* @__PURE__ */ new Date()).toISOString();
+  async function prepareCrawlSetup(meetId, panel, control, retrievedAt) {
     renderMessage(panel, "Checking what is already captured\u2026");
+    const subject = { kind: "meet", meetId };
     const resumeDecision = await readAlreadyCaptured(panel, subject);
     const alreadyCaptured = resumeDecision.alreadyCaptured;
     if (await awaitPairingConfirmation(panel, control, resumeDecision) === "cancelled") {
       renderMessage(panel, "Cancelled before fetching started.");
-      return;
+      return void 0;
     }
     renderMessage(panel, "Discovering teams\u2026");
     const discovery = await discoverTeams(meetId, retrievedAt);
     if (discovery.teamIds.length === 0) {
       renderMessage(panel, "Could not discover any teams for this meet. Nothing to crawl.");
-      return;
+      return void 0;
     }
     const confirmation = await confirmTeamList(
       panel,
@@ -3296,7 +3311,7 @@
     );
     if (confirmation === void 0) {
       renderMessage(panel, "Cancelled before fetching started.");
-      return;
+      return void 0;
     }
     const confirmedTeamIds = confirmation.teamIds;
     const scope = confirmation.scope;
@@ -3322,31 +3337,46 @@
         `This meet publishes its own list of ${indexEventRefs.length} events, so the per-team swims pages are not fetched \u2014 the event pages carry the same swims plus the round and the meet score. That is ${indexEventRefs.length} pages instead of ${confirmedTeamIds.length * 2} swims pages and ${indexEventRefs.length} event pages.`
       );
     }
-    const page1Steps = structural.swimsSteps;
-    const rosterSteps = structural.rosterSteps;
-    renderScopeNote(panel, formatCrawlScopeNote(scope));
-    const fetchedUrls = /* @__PURE__ */ new Set();
-    const knownTotalPages = {};
-    const swimsEventRefs = [];
-    const relay = { consecutiveFailures: 0, totalFailures: 0, downloadsFallbackCount: 0 };
-    renderMessage(panel, "Opening the capture record in the Omniswim app\u2026");
-    const opened = await sendToBackground({
+    return {
+      resumeDecision,
+      alreadyCaptured,
+      confirmedTeamIds,
+      scope,
+      refreshPersonalBests,
+      crawlScope,
+      teamDiscovery,
+      structural,
+      // Planned up front, fetched in pass 3. Its size is known now (`teamCount ×
+      // 2`, or zero when the scope declines rosters), which is why the very
+      // first `plannedPageCount` can include it — a capture record whose
+      // planned total climbs as passes are discovered is fine, but one that
+      // ends up below the pages actually filed against it is not.
+      page1Steps: structural.swimsSteps,
+      rosterSteps: structural.rosterSteps,
+      eventListAlreadyKnown,
+      indexEventRefs
+    };
+  }
+  async function openCaptureRecord(panel, subject, plannedPageCount, teamDiscovery, crawlScope, failureContextLabel, failureSuffix) {
+    const result = await sendToBackground({
       type: "omniswim-swimcloud-open-capture",
       subject,
-      plannedPageCount: page1Steps.length + rosterSteps.length,
+      plannedPageCount,
       teamDiscovery,
       crawlScope
     });
-    if (!isRoundTripOk(opened)) {
-      renderWarning(
-        panel,
-        `${roundTripFailureText("Opening the capture record", opened)} Fetched pages will be saved to your downloads folder instead.`
-      );
+    if (!isRoundTripOk(result)) {
+      renderWarning(panel, `${roundTripFailureText(failureContextLabel, result)} ${failureSuffix}`);
     }
+  }
+  async function runPage1SweepPass(page1Steps, confirmedTeamIds, panel, subject, retrievedAt, relay, control) {
+    const fetchedUrls = /* @__PURE__ */ new Set();
+    const knownTotalPages = {};
+    const swimsEventRefs = [];
     for (const step of page1Steps) {
       if (control.cancelled) {
         await finishCrawl(panel, subject, "partial", relay);
-        return;
+        return { kind: "stopped" };
       }
       await waitWhilePaused(control);
       renderPage1Sweep(panel, page1SweepStateFor(step, confirmedTeamIds, fetchedUrls.size, page1Steps.length));
@@ -3356,7 +3386,7 @@
       renderPage1Sweep(panel, page1SweepStateFor(step, confirmedTeamIds, fetchedUrls.size, page1Steps.length));
       const outcomeAction = await handleFetchedPage(panel, subject, url, page, retrievedAt(), relay);
       if (outcomeAction === "stop") {
-        return;
+        return { kind: "stopped" };
       }
       if (page !== void 0 && page.httpStatus < 400 && step.gender !== void 0 && step.teamId !== void 0) {
         const parsed = parseTeamMeetSwimsHtml(page.html, {
@@ -3369,45 +3399,15 @@
         if (parsed.ok) swimsEventRefs.push(eventRefsOf(parsed.data));
       }
     }
-    const fullSteps = planScopedMeetCrawl({
-      eventListAlreadyKnown,
-      meetId,
-      teamIds: confirmedTeamIds,
-      scope,
-      knownTotalPages
-    }).swimsSteps;
-    const pagesTotal = fullSteps.length;
-    if (pagesTotal > 0) renderMessage(panel, formatPassTwoHeadline(fetchedUrls.size, pagesTotal));
-    const corrected = await sendToBackground({
-      type: "omniswim-swimcloud-open-capture",
-      subject,
-      plannedPageCount: pagesTotal + rosterSteps.length,
-      teamDiscovery,
-      crawlScope
-    });
-    if (!isRoundTripOk(corrected)) {
-      renderWarning(
-        panel,
-        `${roundTripFailureText("Correcting the planned page count", corrected)} The crawl continues; the app may show a stale page total.`
-      );
-    }
-    const thisRunRemaining = stepsStillNeeded(fullSteps, fetchedUrls);
-    const resume = partitionResumableSteps(thisRunRemaining, alreadyCaptured);
-    if (pagesTotal > 0) {
-      renderResumeNote(
-        panel,
-        formatResumeSkipLine({
-          skippedPages: resume.alreadyCaptured.length,
-          pagesTotal,
-          storedPageCount: alreadyCaptured.size
-        })
-      );
-    }
-    let pagesDone = fetchedUrls.size + resume.alreadyCaptured.length;
-    for (const step of resume.toFetch) {
+    return { kind: "ok", fetchedUrls, knownTotalPages, swimsEventRefs };
+  }
+  async function runSwimsBulkFetchPass(stepsToFetch, confirmedTeamIds, pagesTotal, knownTotalPages, initialPagesDone, initialSwimsEventRefs, panel, subject, retrievedAt, relay, control) {
+    let pagesDone = initialPagesDone;
+    const swimsEventRefs = [...initialSwimsEventRefs];
+    for (const step of stepsToFetch) {
       if (control.cancelled) {
         await finishCrawl(panel, subject, "partial", relay);
-        return;
+        return { kind: "stopped" };
       }
       await waitWhilePaused(control);
       const { url } = crawlStepToFetchRequest(step);
@@ -3415,7 +3415,7 @@
       renderProgress(panel, progressStateFor(step, confirmedTeamIds, pagesDone, pagesTotal, knownTotalPages));
       const outcomeAction = await handleFetchedPage(panel, subject, url, page, retrievedAt(), relay);
       if (outcomeAction === "stop") {
-        return;
+        return { kind: "stopped" };
       }
       if (page !== void 0 && page.httpStatus < 400) {
         const parsed = parseTeamMeetSwimsHtml(page.html, {
@@ -3428,6 +3428,100 @@
       pagesDone += 1;
       renderProgress(panel, progressStateFor(step, confirmedTeamIds, pagesDone, pagesTotal, knownTotalPages));
     }
+    return { kind: "ok", pagesDone, swimsEventRefs };
+  }
+  async function finalizeCrawl(panel, subject, relay, pagesTotal, rosterStepCount, pagesDone, eventPagesDone, swimmerPagesDone) {
+    const totalPlanned = pagesTotal + rosterStepCount + eventPagesDone.total + swimmerPagesDone.total;
+    const totalDone = pagesDone + rosterStepCount + eventPagesDone.done + swimmerPagesDone.done;
+    const completeness = crawlFinalCompleteness(swimmerPagesDone.completeness, eventPagesDone.stopped);
+    await finishCrawl(panel, subject, completeness, relay);
+    const stoppedMessage = swimmerPagesDone.stoppedMessage.length > 0 ? swimmerPagesDone.stoppedMessage : eventPagesDone.stoppedMessage;
+    const finalMessage = crawlFinalMessage({ stoppedMessage, completeness, totalDone, totalPlanned });
+    renderMessage(panel, finalMessage.line1);
+    if (finalMessage.line2 !== void 0) {
+      panel.line2.textContent = finalMessage.line2;
+    }
+  }
+  async function runCrawl(meetId, panel, control) {
+    const subject = { kind: "meet", meetId };
+    const retrievedAt = () => (/* @__PURE__ */ new Date()).toISOString();
+    const setup = await prepareCrawlSetup(meetId, panel, control, retrievedAt);
+    if (setup === void 0) return;
+    const {
+      resumeDecision,
+      alreadyCaptured,
+      confirmedTeamIds,
+      scope,
+      refreshPersonalBests,
+      crawlScope,
+      teamDiscovery,
+      structural,
+      page1Steps,
+      rosterSteps,
+      eventListAlreadyKnown,
+      indexEventRefs
+    } = setup;
+    renderScopeNote(panel, formatCrawlScopeNote(scope));
+    const relay = { consecutiveFailures: 0, totalFailures: 0, downloadsFallbackCount: 0 };
+    renderMessage(panel, "Opening the capture record in the Omniswim app\u2026");
+    await openCaptureRecord(
+      panel,
+      subject,
+      page1Steps.length + rosterSteps.length,
+      teamDiscovery,
+      crawlScope,
+      "Opening the capture record",
+      "Fetched pages will be saved to your downloads folder instead."
+    );
+    const page1Result = await runPage1SweepPass(page1Steps, confirmedTeamIds, panel, subject, retrievedAt, relay, control);
+    if (page1Result.kind === "stopped") return;
+    const { fetchedUrls, knownTotalPages, swimsEventRefs: page1SwimsEventRefs } = page1Result;
+    const fullSteps = planScopedMeetCrawl({
+      eventListAlreadyKnown,
+      meetId,
+      teamIds: confirmedTeamIds,
+      scope,
+      knownTotalPages
+    }).swimsSteps;
+    const pagesTotal = fullSteps.length;
+    if (pagesTotal > 0) renderMessage(panel, formatPassTwoHeadline(fetchedUrls.size, pagesTotal));
+    await openCaptureRecord(
+      panel,
+      subject,
+      pagesTotal + rosterSteps.length,
+      teamDiscovery,
+      crawlScope,
+      "Correcting the planned page count",
+      "The crawl continues; the app may show a stale page total."
+    );
+    const thisRunRemaining = stepsStillNeeded(fullSteps, fetchedUrls);
+    const resume = partitionResumableSteps(thisRunRemaining, alreadyCaptured);
+    if (pagesTotal > 0) {
+      renderResumeNote(
+        panel,
+        formatResumeSkipLine({
+          skippedPages: resume.alreadyCaptured.length,
+          pagesTotal,
+          storedPageCount: alreadyCaptured.size
+        })
+      );
+    }
+    const initialPagesDone = fetchedUrls.size + resume.alreadyCaptured.length;
+    const bulkResult = await runSwimsBulkFetchPass(
+      resume.toFetch,
+      confirmedTeamIds,
+      pagesTotal,
+      knownTotalPages,
+      initialPagesDone,
+      page1SwimsEventRefs,
+      panel,
+      subject,
+      retrievedAt,
+      relay,
+      control
+    );
+    if (bulkResult.kind === "stopped") return;
+    const { pagesDone, swimsEventRefs } = bulkResult;
     const eventPagesDone = structural.plansEventResults ? await runEventResultsPass({
       meetId,
       // Refs gathered this run, plus the ones the app derived from swims
@@ -3472,19 +3566,7 @@
       relay,
       control
     }) : PASS_NOT_IN_SCOPE_SWIMMER_TIMES;
-    const totalPlanned = pagesTotal + rosterSteps.length + eventPagesDone.total + swimmerPagesDone.total;
-    const totalDone = pagesDone + rosterSteps.length + eventPagesDone.done + swimmerPagesDone.done;
-    const completeness = swimmerPagesDone.completeness === "partial" || eventPagesDone.stopped ? "partial" : "every-planned-page-fetched";
-    await finishCrawl(panel, subject, completeness, relay);
-    const stoppedMessage = swimmerPagesDone.stoppedMessage.length > 0 ? swimmerPagesDone.stoppedMessage : eventPagesDone.stoppedMessage;
-    if (stoppedMessage.length > 0) {
-      renderMessage(panel, stoppedMessage);
-      panel.line2.textContent = `${totalDone} of ${totalPlanned} pages captured before stopping.`;
-    } else if (completeness === "partial") {
-      renderMessage(panel, `Stopped \u2014 ${totalDone} of ${totalPlanned} pages captured.`);
-    } else {
-      renderMessage(panel, `Done \u2014 ${totalDone} of ${totalPlanned} pages captured.`);
-    }
+    await finalizeCrawl(panel, subject, relay, pagesTotal, rosterSteps.length, pagesDone, eventPagesDone, swimmerPagesDone);
   }
   function eventRefsOf(parse) {
     return parse.swims.map((swim) => ({

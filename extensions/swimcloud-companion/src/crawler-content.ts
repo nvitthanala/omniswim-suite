@@ -64,6 +64,7 @@ import {
   type SwimCloudCrawlGender,
   type SwimCloudCrawlScope,
   type SwimCloudCrawlStep,
+  type SwimCloudScopedMeetCrawlPlan,
 } from '@omniswim/swimcloud/crawlPlan';
 import { classifySwimCloudUrl } from '@omniswim/swimcloud/urlClassifier';
 import {
@@ -76,7 +77,12 @@ import {
 import type { SwimCloudTeamMeetSwimsParse } from '@omniswim/swimcloud/parser';
 import type { SwimCloudCaptureSubject, SwimCloudMeetId, SwimCloudTeamId } from '@omniswim/swimcloud/entities';
 import { crawlStepToFetchRequest, stepsStillNeeded, unionTeamIds } from './crawlRequest';
-import { decideResumeFromRoundTrip, partitionResumableSteps, type SwimCloudResumeDecision } from './captureResume';
+import {
+  decideResumeFromRoundTrip,
+  partitionResumableSteps,
+  type SwimCloudResumeDecision,
+  type SwimCloudResumePartition,
+} from './captureResume';
 import { classifyCrawlPageOutcome } from './crawlErrorPolicy';
 import { runBoundedFetchPool } from './boundedFetchPool';
 import {
@@ -116,6 +122,8 @@ import {
   type BackgroundRoundTrip,
 } from './backgroundRoundTrip';
 import {
+  crawlFinalCompleteness,
+  crawlFinalMessage,
   crawlPassLabel,
   formatCrawlScopeNote,
   formatCrawlVolumeFloorLineForScope,
@@ -913,27 +921,59 @@ const PASS_NOT_IN_SCOPE_SWIMMER_TIMES: SwimmerTimesPassResult = {
   stoppedMessage: '',
 };
 
-async function runCrawl(meetId: SwimCloudMeetId, panel: PanelHandles, control: CrawlControl): Promise<void> {
-  const subject: SwimCloudCaptureSubject = { kind: 'meet', meetId };
-  const retrievedAt = () => new Date().toISOString();
+/**
+ * Everything `runCrawl` needs before it can open the capture record: which
+ * teams, which scope, and the up-front plan those two settle. Extracted out
+ * of `runCrawl` (2026-09-25, code-health pass H3) purely to shorten that
+ * function — every side effect, message and early-exit condition below is
+ * copied verbatim, in the same order.
+ */
+interface CrawlSetup {
+  readonly resumeDecision: SwimCloudResumeDecision;
+  readonly alreadyCaptured: ReadonlySet<string>;
+  readonly confirmedTeamIds: readonly SwimCloudTeamId[];
+  readonly scope: SwimCloudCrawlScope;
+  readonly refreshPersonalBests: boolean;
+  readonly crawlScope: SwimCloudCaptureCrawlScope;
+  readonly teamDiscovery: SwimCloudCrawlTeamDiscovery;
+  readonly structural: SwimCloudScopedMeetCrawlPlan;
+  readonly page1Steps: readonly SwimCloudCrawlStep[];
+  readonly rosterSteps: readonly SwimCloudCrawlStep[];
+  readonly eventListAlreadyKnown: boolean;
+  readonly indexEventRefs: readonly string[];
+}
 
+/**
+ * Resume check, pairing gate, team discovery and the team-confirmation
+ * checklist — every step `runCrawl` used to run before it could open the
+ * capture record. Returns `undefined` once this function has already put the
+ * right message on the panel and there is nothing left for `runCrawl` to do
+ * but return.
+ */
+async function prepareCrawlSetup(
+  meetId: SwimCloudMeetId,
+  panel: PanelHandles,
+  control: CrawlControl,
+  retrievedAt: () => string,
+): Promise<CrawlSetup | undefined> {
   // Before anything is fetched: what does the local store already hold? A
   // restarted or retried crawl must not re-request pages SwimCloud has already
   // served once.
   renderMessage(panel, 'Checking what is already captured…');
+  const subject: SwimCloudCaptureSubject = { kind: 'meet', meetId };
   const resumeDecision = await readAlreadyCaptured(panel, subject);
   const alreadyCaptured = resumeDecision.alreadyCaptured;
 
   if ((await awaitPairingConfirmation(panel, control, resumeDecision)) === 'cancelled') {
     renderMessage(panel, 'Cancelled before fetching started.');
-    return;
+    return undefined;
   }
 
   renderMessage(panel, 'Discovering teams…');
   const discovery = await discoverTeams(meetId, retrievedAt);
   if (discovery.teamIds.length === 0) {
     renderMessage(panel, 'Could not discover any teams for this meet. Nothing to crawl.');
-    return;
+    return undefined;
   }
 
   const confirmation = await confirmTeamList(
@@ -944,7 +984,7 @@ async function runCrawl(meetId: SwimCloudMeetId, panel: PanelHandles, control: C
   );
   if (confirmation === undefined) {
     renderMessage(panel, 'Cancelled before fetching started.');
-    return;
+    return undefined;
   }
   const confirmedTeamIds = confirmation.teamIds;
   const scope = confirmation.scope;
@@ -993,57 +1033,100 @@ async function runCrawl(meetId: SwimCloudMeetId, panel: PanelHandles, control: C
       `This meet publishes its own list of ${indexEventRefs.length} events, so the per-team swims pages are not fetched — the event pages carry the same swims plus the round and the meet score. That is ${indexEventRefs.length} pages instead of ${confirmedTeamIds.length * 2} swims pages and ${indexEventRefs.length} event pages.`,
     );
   }
-  const page1Steps = structural.swimsSteps;
-  // Planned up front, fetched in pass 3. Its size is known now (`teamCount × 2`,
-  // or zero when the scope declines rosters), which is why the very first
-  // `plannedPageCount` can include it — a capture record whose planned total
-  // climbs as passes are discovered is fine, but one that ends up below the
-  // pages actually filed against it is not.
-  const rosterSteps = structural.rosterSteps;
-  renderScopeNote(panel, formatCrawlScopeNote(scope));
+
+  return {
+    resumeDecision,
+    alreadyCaptured,
+    confirmedTeamIds,
+    scope,
+    refreshPersonalBests,
+    crawlScope,
+    teamDiscovery,
+    structural,
+    // Planned up front, fetched in pass 3. Its size is known now (`teamCount ×
+    // 2`, or zero when the scope declines rosters), which is why the very
+    // first `plannedPageCount` can include it — a capture record whose
+    // planned total climbs as passes are discovered is fine, but one that
+    // ends up below the pages actually filed against it is not.
+    page1Steps: structural.swimsSteps,
+    rosterSteps: structural.rosterSteps,
+    eventListAlreadyKnown,
+    indexEventRefs,
+  };
+}
+
+/**
+ * Send an `omniswim-swimcloud-open-capture` message and warn on the panel if
+ * it did not land — the two open-capture round trips `runCrawl` makes (the
+ * initial send and the corrected total once page counts are known) differ
+ * only in which label and which consequence they name in that warning.
+ */
+async function openCaptureRecord(
+  panel: PanelHandles,
+  subject: SwimCloudCaptureSubject,
+  plannedPageCount: number,
+  teamDiscovery: SwimCloudCrawlTeamDiscovery,
+  crawlScope: SwimCloudCaptureCrawlScope,
+  failureContextLabel: string,
+  failureSuffix: string,
+): Promise<void> {
+  const result = await sendToBackground({
+    type: 'omniswim-swimcloud-open-capture',
+    subject,
+    plannedPageCount,
+    teamDiscovery,
+    crawlScope,
+  });
+  if (!isRoundTripOk(result)) {
+    // The crawl continues. Pages whose capture record was never opened are
+    // rejected by the app's pages route (404, "open it first") and land in the
+    // chrome.downloads fallback instead, so nothing fetched is lost — but that
+    // is a very different afternoon for the coach, and it must not be silent.
+    renderWarning(panel, `${roundTripFailureText(failureContextLabel, result)} ${failureSuffix}`);
+  }
+}
+
+/** What {@link runPage1SweepPass} learned, or that it stopped and `runCrawl` must return without doing anything else. */
+type Page1SweepResult =
+  | { readonly kind: 'stopped' }
+  | {
+      readonly kind: 'ok';
+      readonly fetchedUrls: Set<string>;
+      readonly knownTotalPages: Record<string, number>;
+      readonly swimsEventRefs: SwimCloudSwimEventRef[][];
+    };
+
+/**
+ * Pass 1: page 1 of every team+gender's swims list, sequential and 3 s apart.
+ *
+ * Fetched even when the store already holds it. Only a fresh page 1 carries
+ * the pagination widget that says how many pages this team+gender has; the
+ * stored page refs give the pages a previous run *got to*, which is a floor
+ * and never the total. Planning against that floor would silently drop every
+ * page past it — the exact class of quiet, plausible wrongness `CLAUDE.md`
+ * forbids. The bulk of the crawl (pages 2..N) is where the resume saving
+ * actually lives, and that runs in {@link runSwimsBulkFetchPass}.
+ */
+async function runPage1SweepPass(
+  page1Steps: readonly SwimCloudCrawlStep[],
+  confirmedTeamIds: readonly SwimCloudTeamId[],
+  panel: PanelHandles,
+  subject: SwimCloudCaptureSubject,
+  retrievedAt: () => string,
+  relay: RelayState,
+  control: CrawlControl,
+): Promise<Page1SweepResult> {
   const fetchedUrls = new Set<string>();
   const knownTotalPages: Record<string, number> = {};
   // Every swims-list page read this run, reduced to just its event references —
   // pass 2b's input. Accumulated as the pages arrive rather than re-read after,
   // because the content script never sees the app's stored bytes.
   const swimsEventRefs: SwimCloudSwimEventRef[][] = [];
-  const relay: RelayState = { consecutiveFailures: 0, totalFailures: 0, downloadsFallbackCount: 0 };
 
-  // This is the first thing that happens after the coach clicks Start crawl, so
-  // it is also the first thing they must see happen. Without this line the
-  // panel kept showing the confirmation prompt while it waited on a round trip
-  // that had no deadline — a stalled worker and a slow one looked identical,
-  // and both looked like the crawl had simply stopped.
-  renderMessage(panel, 'Opening the capture record in the Omniswim app…');
-  const opened = await sendToBackground({
-    type: 'omniswim-swimcloud-open-capture',
-    subject,
-    plannedPageCount: page1Steps.length + rosterSteps.length,
-    teamDiscovery,
-    crawlScope,
-  });
-  if (!isRoundTripOk(opened)) {
-    // The crawl continues. Pages whose capture record was never opened are
-    // rejected by the app's pages route (404, "open it first") and land in the
-    // chrome.downloads fallback instead, so nothing fetched is lost — but that
-    // is a very different afternoon for the coach, and it must not be silent.
-    renderWarning(
-      panel,
-      `${roundTripFailureText('Opening the capture record', opened)} Fetched pages will be saved to your downloads folder instead.`,
-    );
-  }
-
-  // Page 1 is fetched even when the store already holds it. Only a fresh page
-  // 1 carries the pagination widget that says how many pages this team+gender
-  // has; the stored page refs give the pages a previous run *got to*, which is
-  // a floor and never the total. Planning against that floor would silently
-  // drop every page past it — the exact class of quiet, plausible wrongness
-  // `CLAUDE.md` forbids. The bulk of the crawl (pages 2..N) is where the
-  // resume saving actually lives, and that is applied below.
   for (const step of page1Steps) {
     if (control.cancelled) {
       await finishCrawl(panel, subject, 'partial', relay);
-      return;
+      return { kind: 'stopped' };
     }
     await waitWhilePaused(control);
 
@@ -1056,7 +1139,7 @@ async function runCrawl(meetId: SwimCloudMeetId, panel: PanelHandles, control: C
 
     const outcomeAction = await handleFetchedPage(panel, subject, url, page, retrievedAt(), relay);
     if (outcomeAction === 'stop') {
-      return;
+      return { kind: 'stopped' };
     }
     if (page !== undefined && page.httpStatus < 400 && step.gender !== undefined && step.teamId !== undefined) {
       const parsed = parseTeamMeetSwimsHtml(page.html, {
@@ -1069,6 +1152,153 @@ async function runCrawl(meetId: SwimCloudMeetId, panel: PanelHandles, control: C
       if (parsed.ok) swimsEventRefs.push(eventRefsOf(parsed.data));
     }
   }
+
+  return { kind: 'ok', fetchedUrls, knownTotalPages, swimsEventRefs };
+}
+
+/** What {@link runSwimsBulkFetchPass} finished with, or that it stopped and `runCrawl` must return. */
+type SwimsBulkFetchResult =
+  | { readonly kind: 'stopped' }
+  | { readonly kind: 'ok'; readonly pagesDone: number; readonly swimsEventRefs: SwimCloudSwimEventRef[][] };
+
+/**
+ * Pages 2..N of every team+gender's swims list, once pass 1 has established
+ * every page count — same sequential 3 s pacing, resume-skip aware.
+ *
+ * `initialSwimsEventRefs` is pass 1's accumulated refs; this pass keeps
+ * appending to the same list, because pass 2b's input is every swims-list
+ * page read this run, not only the ones this pass fetched.
+ */
+async function runSwimsBulkFetchPass(
+  stepsToFetch: readonly SwimCloudCrawlStep[],
+  confirmedTeamIds: readonly SwimCloudTeamId[],
+  pagesTotal: number,
+  knownTotalPages: Record<string, number>,
+  initialPagesDone: number,
+  initialSwimsEventRefs: readonly SwimCloudSwimEventRef[][],
+  panel: PanelHandles,
+  subject: SwimCloudCaptureSubject,
+  retrievedAt: () => string,
+  relay: RelayState,
+  control: CrawlControl,
+): Promise<SwimsBulkFetchResult> {
+  let pagesDone = initialPagesDone;
+  const swimsEventRefs = [...initialSwimsEventRefs];
+
+  for (const step of stepsToFetch) {
+    if (control.cancelled) {
+      await finishCrawl(panel, subject, 'partial', relay);
+      return { kind: 'stopped' };
+    }
+    await waitWhilePaused(control);
+
+    const { url } = crawlStepToFetchRequest(step);
+    const page = await fetchPageWithDelay(url);
+
+    renderProgress(panel, progressStateFor(step, confirmedTeamIds, pagesDone, pagesTotal, knownTotalPages));
+    const outcomeAction = await handleFetchedPage(panel, subject, url, page, retrievedAt(), relay);
+    if (outcomeAction === 'stop') {
+      return { kind: 'stopped' };
+    }
+    // Parsed for its event references only — pass 2b's input. The page's bytes
+    // are already relayed and are what the app parses for real; this is the
+    // content script learning which event pages exist, which no URL can say.
+    if (page !== undefined && page.httpStatus < 400) {
+      const parsed = parseTeamMeetSwimsHtml(page.html, {
+        sourceUrl: url,
+        retrievedAt: retrievedAt(),
+        track: 'browser-extension',
+      });
+      if (parsed.ok) swimsEventRefs.push(eventRefsOf(parsed.data));
+    }
+    pagesDone += 1;
+    renderProgress(panel, progressStateFor(step, confirmedTeamIds, pagesDone, pagesTotal, knownTotalPages));
+  }
+
+  return { kind: 'ok', pagesDone, swimsEventRefs };
+}
+
+/**
+ * The crawl's last words on the panel and the mark-capture round trip that
+ * always precedes them — pulled out of `runCrawl` so the completeness
+ * decision (now {@link crawlFinalCompleteness}, pure and unit-tested in
+ * `progress.ts`) is not one more branch in an already-long function.
+ */
+async function finalizeCrawl(
+  panel: PanelHandles,
+  subject: SwimCloudCaptureSubject,
+  relay: RelayState,
+  pagesTotal: number,
+  rosterStepCount: number,
+  pagesDone: number,
+  eventPagesDone: EventResultsPassResult,
+  swimmerPagesDone: SwimmerTimesPassResult,
+): Promise<void> {
+  const totalPlanned = pagesTotal + rosterStepCount + eventPagesDone.total + swimmerPagesDone.total;
+  const totalDone = pagesDone + rosterStepCount + eventPagesDone.done + swimmerPagesDone.done;
+  // A pass 2b that ended early makes the whole capture partial, the same way a
+  // short swimmer-times pass does: the pages it did not fetch are pages the
+  // capture was planned to hold.
+  const completeness = crawlFinalCompleteness(swimmerPagesDone.completeness, eventPagesDone.stopped);
+
+  await finishCrawl(panel, subject, completeness, relay);
+  // The count goes on line 2 rather than being folded into line 1, so a pass
+  // that ended early keeps its reason as the headline. A crawl that stopped
+  // must never read as "Done".
+  const stoppedMessage =
+    swimmerPagesDone.stoppedMessage.length > 0
+      ? swimmerPagesDone.stoppedMessage
+      : eventPagesDone.stoppedMessage;
+  const finalMessage = crawlFinalMessage({ stoppedMessage, completeness, totalDone, totalPlanned });
+  renderMessage(panel, finalMessage.line1);
+  if (finalMessage.line2 !== undefined) {
+    panel.line2.textContent = finalMessage.line2;
+  }
+}
+
+async function runCrawl(meetId: SwimCloudMeetId, panel: PanelHandles, control: CrawlControl): Promise<void> {
+  const subject: SwimCloudCaptureSubject = { kind: 'meet', meetId };
+  const retrievedAt = () => new Date().toISOString();
+
+  const setup = await prepareCrawlSetup(meetId, panel, control, retrievedAt);
+  if (setup === undefined) return;
+  const {
+    resumeDecision,
+    alreadyCaptured,
+    confirmedTeamIds,
+    scope,
+    refreshPersonalBests,
+    crawlScope,
+    teamDiscovery,
+    structural,
+    page1Steps,
+    rosterSteps,
+    eventListAlreadyKnown,
+    indexEventRefs,
+  } = setup;
+
+  renderScopeNote(panel, formatCrawlScopeNote(scope));
+  const relay: RelayState = { consecutiveFailures: 0, totalFailures: 0, downloadsFallbackCount: 0 };
+
+  // This is the first thing that happens after the coach clicks Start crawl, so
+  // it is also the first thing they must see happen. Without this line the
+  // panel kept showing the confirmation prompt while it waited on a round trip
+  // that had no deadline — a stalled worker and a slow one looked identical,
+  // and both looked like the crawl had simply stopped.
+  renderMessage(panel, 'Opening the capture record in the Omniswim app…');
+  await openCaptureRecord(
+    panel,
+    subject,
+    page1Steps.length + rosterSteps.length,
+    teamDiscovery,
+    crawlScope,
+    'Opening the capture record',
+    'Fetched pages will be saved to your downloads folder instead.',
+  );
+
+  const page1Result = await runPage1SweepPass(page1Steps, confirmedTeamIds, panel, subject, retrievedAt, relay, control);
+  if (page1Result.kind === 'stopped') return;
+  const { fetchedUrls, knownTotalPages, swimsEventRefs: page1SwimsEventRefs } = page1Result;
 
   // Step 2: the full plan, now that every team+gender's page count is known.
   // Through the same scope gate as step 1, so a scope that declined the swims
@@ -1086,22 +1316,18 @@ async function runCrawl(meetId: SwimCloudMeetId, panel: PanelHandles, control: C
   // the panel's bar and a Matrix picker open in another window both see the
   // real denominator while the crawl is still running.
   if (pagesTotal > 0) renderMessage(panel, formatPassTwoHeadline(fetchedUrls.size, pagesTotal));
-  const corrected = await sendToBackground({
-    type: 'omniswim-swimcloud-open-capture',
+  await openCaptureRecord(
+    panel,
     subject,
-    plannedPageCount: pagesTotal + rosterSteps.length,
+    pagesTotal + rosterSteps.length,
     teamDiscovery,
     crawlScope,
-  });
-  if (!isRoundTripOk(corrected)) {
-    renderWarning(
-      panel,
-      `${roundTripFailureText('Correcting the planned page count', corrected)} The crawl continues; the app may show a stale page total.`,
-    );
-  }
+    'Correcting the planned page count',
+    'The crawl continues; the app may show a stale page total.',
+  );
 
   const thisRunRemaining = stepsStillNeeded(fullSteps, fetchedUrls);
-  const resume = partitionResumableSteps(thisRunRemaining, alreadyCaptured);
+  const resume: SwimCloudResumePartition = partitionResumableSteps(thisRunRemaining, alreadyCaptured);
   if (pagesTotal > 0) {
     renderResumeNote(
       panel,
@@ -1116,37 +1342,23 @@ async function runCrawl(meetId: SwimCloudMeetId, panel: PanelHandles, control: C
   // A skipped page is still a page of this crawl: it counts toward progress
   // and it is named on the panel. A crawl that quietly fetched a handful of
   // pages and reported "done" would be indistinguishable from a broken one.
-  let pagesDone = fetchedUrls.size + resume.alreadyCaptured.length;
+  const initialPagesDone = fetchedUrls.size + resume.alreadyCaptured.length;
 
-  for (const step of resume.toFetch) {
-    if (control.cancelled) {
-      await finishCrawl(panel, subject, 'partial', relay);
-      return;
-    }
-    await waitWhilePaused(control);
-
-    const { url } = crawlStepToFetchRequest(step);
-    const page = await fetchPageWithDelay(url);
-
-    renderProgress(panel, progressStateFor(step, confirmedTeamIds, pagesDone, pagesTotal, knownTotalPages));
-    const outcomeAction = await handleFetchedPage(panel, subject, url, page, retrievedAt(), relay);
-    if (outcomeAction === 'stop') {
-      return;
-    }
-    // Parsed for its event references only — pass 2b's input. The page's bytes
-    // are already relayed and are what the app parses for real; this is the
-    // content script learning which event pages exist, which no URL can say.
-    if (page !== undefined && page.httpStatus < 400) {
-      const parsed = parseTeamMeetSwimsHtml(page.html, {
-        sourceUrl: url,
-        retrievedAt: retrievedAt(),
-        track: 'browser-extension',
-      });
-      if (parsed.ok) swimsEventRefs.push(eventRefsOf(parsed.data));
-    }
-    pagesDone += 1;
-    renderProgress(panel, progressStateFor(step, confirmedTeamIds, pagesDone, pagesTotal, knownTotalPages));
-  }
+  const bulkResult = await runSwimsBulkFetchPass(
+    resume.toFetch,
+    confirmedTeamIds,
+    pagesTotal,
+    knownTotalPages,
+    initialPagesDone,
+    page1SwimsEventRefs,
+    panel,
+    subject,
+    retrievedAt,
+    relay,
+    control,
+  );
+  if (bulkResult.kind === 'stopped') return;
+  const { pagesDone, swimsEventRefs } = bulkResult;
 
   // Pass 2b: per-event results — the round labels and the real meet Score. Runs
   // before the rosters because its input is complete now and what it fetches
@@ -1206,32 +1418,7 @@ async function runCrawl(meetId: SwimCloudMeetId, panel: PanelHandles, control: C
       })
     : PASS_NOT_IN_SCOPE_SWIMMER_TIMES;
 
-  const totalPlanned = pagesTotal + rosterSteps.length + eventPagesDone.total + swimmerPagesDone.total;
-  const totalDone = pagesDone + rosterSteps.length + eventPagesDone.done + swimmerPagesDone.done;
-  // A pass 2b that ended early makes the whole capture partial, the same way a
-  // short swimmer-times pass does: the pages it did not fetch are pages the
-  // capture was planned to hold.
-  const completeness =
-    swimmerPagesDone.completeness === 'partial' || eventPagesDone.stopped
-      ? 'partial'
-      : 'every-planned-page-fetched';
-
-  await finishCrawl(panel, subject, completeness, relay);
-  // The count goes on line 2 rather than being folded into line 1, so a pass
-  // that ended early keeps its reason as the headline. A crawl that stopped
-  // must never read as "Done".
-  const stoppedMessage =
-    swimmerPagesDone.stoppedMessage.length > 0
-      ? swimmerPagesDone.stoppedMessage
-      : eventPagesDone.stoppedMessage;
-  if (stoppedMessage.length > 0) {
-    renderMessage(panel, stoppedMessage);
-    panel.line2.textContent = `${totalDone} of ${totalPlanned} pages captured before stopping.`;
-  } else if (completeness === 'partial') {
-    renderMessage(panel, `Stopped — ${totalDone} of ${totalPlanned} pages captured.`);
-  } else {
-    renderMessage(panel, `Done — ${totalDone} of ${totalPlanned} pages captured.`);
-  }
+  await finalizeCrawl(panel, subject, relay, pagesTotal, rosterSteps.length, pagesDone, eventPagesDone, swimmerPagesDone);
 }
 
 /**

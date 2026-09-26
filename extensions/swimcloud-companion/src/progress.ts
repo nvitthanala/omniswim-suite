@@ -650,3 +650,59 @@ export function formatRefreshPersonalBestsAppliedLine(
     'instead of skipping them as already captured.'
   );
 }
+
+/**
+ * The crawl's final completeness, as `runCrawl` decides it in
+ * `crawler-content.ts`.
+ *
+ * A pass 2b (event results) that stopped early makes the whole capture
+ * partial the same way a short pass 4 (swimmer times) does: pages either one
+ * was planned to fetch are pages the capture does not have. Extracted here,
+ * pure, out of `runCrawl` — see that function's own comment for why the two
+ * inputs are compared this way.
+ */
+export function crawlFinalCompleteness(
+  swimmerTimesCompleteness: 'partial' | 'every-planned-page-fetched',
+  eventResultsStopped: boolean,
+): 'partial' | 'every-planned-page-fetched' {
+  return swimmerTimesCompleteness === 'partial' || eventResultsStopped
+    ? 'partial'
+    : 'every-planned-page-fetched';
+}
+
+/** What {@link crawlFinalCompleteness} and {@link crawlFinalMessage} need to know at the end of a crawl. */
+export interface SwimCloudCrawlFinalState {
+  /** Non-empty when a later pass ended early and named a reason; shown verbatim. */
+  readonly stoppedMessage: string;
+  readonly completeness: 'partial' | 'every-planned-page-fetched';
+  readonly totalDone: number;
+  readonly totalPlanned: number;
+}
+
+/** The panel's two closing lines. `line2` is only ever set when the caller must overwrite what `line1`'s render cleared. */
+export interface SwimCloudCrawlFinalMessage {
+  readonly line1: string;
+  readonly line2?: string;
+}
+
+/**
+ * The crawl's last words on the panel, in the same priority `runCrawl` always
+ * used: a named stop reason first (so a crawl that stopped never reads as
+ * "Done"), then whether it finished the whole plan.
+ *
+ * `line2` goes on a line of its own rather than folded into `line1`, so a
+ * pass that ended early keeps its reason as the headline.
+ */
+export function crawlFinalMessage(state: SwimCloudCrawlFinalState): SwimCloudCrawlFinalMessage {
+  const { stoppedMessage, completeness, totalDone, totalPlanned } = state;
+  if (stoppedMessage.length > 0) {
+    return {
+      line1: stoppedMessage,
+      line2: `${totalDone} of ${totalPlanned} pages captured before stopping.`,
+    };
+  }
+  if (completeness === 'partial') {
+    return { line1: `Stopped — ${totalDone} of ${totalPlanned} pages captured.` };
+  }
+  return { line1: `Done — ${totalDone} of ${totalPlanned} pages captured.` };
+}

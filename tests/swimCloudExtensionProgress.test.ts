@@ -10,6 +10,8 @@
 
 import { describe, expect, it } from 'vitest';
 import {
+  crawlFinalCompleteness,
+  crawlFinalMessage,
   estimateCrawlVolume,
   formatCrawlVolumeFloorLine,
   formatDownloadsFallbackNote,
@@ -377,5 +379,71 @@ describe('formatDownloadsFallbackSummary', () => {
     const summary = formatDownloadsFallbackSummary(12, undefined);
     expect(summary).toContain('combining them into one file failed');
     expect(summary).not.toContain('combined into one file:');
+  });
+});
+
+describe('crawlFinalCompleteness', () => {
+  it('is every-planned-page-fetched when both passes finished', () => {
+    expect(crawlFinalCompleteness('every-planned-page-fetched', false)).toBe('every-planned-page-fetched');
+  });
+
+  it('is partial when the swimmer-times pass was partial, even if event results were not stopped', () => {
+    expect(crawlFinalCompleteness('partial', false)).toBe('partial');
+  });
+
+  it('is partial when the event-results pass stopped, even if swimmer-times finished', () => {
+    expect(crawlFinalCompleteness('every-planned-page-fetched', true)).toBe('partial');
+  });
+
+  it('is partial when both stopped', () => {
+    expect(crawlFinalCompleteness('partial', true)).toBe('partial');
+  });
+});
+
+describe('crawlFinalMessage', () => {
+  it('leads with a named stop reason and puts the tally on line 2, when one pass named a reason', () => {
+    const message = crawlFinalMessage({
+      stoppedMessage: 'Stopped after 403 Forbidden — SwimCloud is blocking this browser.',
+      completeness: 'partial',
+      totalDone: 41,
+      totalPlanned: 66,
+    });
+    expect(message.line1).toBe('Stopped after 403 Forbidden — SwimCloud is blocking this browser.');
+    expect(message.line2).toBe('41 of 66 pages captured before stopping.');
+  });
+
+  it('reports Stopped with the tally on line1 when partial but no pass named a reason', () => {
+    const message = crawlFinalMessage({
+      stoppedMessage: '',
+      completeness: 'partial',
+      totalDone: 41,
+      totalPlanned: 66,
+    });
+    expect(message.line1).toBe('Stopped — 41 of 66 pages captured.');
+    expect(message.line2).toBeUndefined();
+  });
+
+  it('reports Done with the tally when every planned page was fetched', () => {
+    const message = crawlFinalMessage({
+      stoppedMessage: '',
+      completeness: 'every-planned-page-fetched',
+      totalDone: 66,
+      totalPlanned: 66,
+    });
+    expect(message.line1).toBe('Done — 66 of 66 pages captured.');
+    expect(message.line2).toBeUndefined();
+  });
+
+  it('prefers the named stop reason even when completeness happens to read every-planned-page-fetched', () => {
+    // Defensive case: crawlFinalCompleteness never actually produces this
+    // combination, but the priority the panel keeps is the reason first.
+    const message = crawlFinalMessage({
+      stoppedMessage: 'Some pass stopped early.',
+      completeness: 'every-planned-page-fetched',
+      totalDone: 10,
+      totalPlanned: 20,
+    });
+    expect(message.line1).toBe('Some pass stopped early.');
+    expect(message.line2).toBe('10 of 20 pages captured before stopping.');
   });
 });
