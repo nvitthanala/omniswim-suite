@@ -24,6 +24,7 @@ import {
   computeClassTopPerformers,
   relayMissingStrokeLabel,
   sortSwimmersByPoints,
+  type TeamRowCutlineTags,
 } from './teamCardView';
 
 /** Chart tooltip title + points, with the event tooltip's optional over/under badge. */
@@ -108,6 +109,71 @@ interface TooltipSwimmerRowProps {
   psychOuByEntry?: Map<string, PsychOverUnderEntry>;
 }
 
+/** The row's mono time column: relay leg split, or plain finals/time. */
+function SwimmerTimeCell({ s, hasRelaySplit, rowTags }: { s: any; hasRelaySplit: boolean | undefined; rowTags: TeamRowCutlineTags }) {
+  if (!hasRelaySplit) {
+    return (
+      <span className="font-mono text-theme-secondary">
+        {s.finalsTime ? `F:${s.finalsTime}` : s.time}
+        {rowTags.kind === 'relay' ? (
+          <span className="inline-flex items-center gap-1 ml-1 align-middle no-underline">
+            <CutlineVerdict result={rowTags.tags.relay} />
+          </span>
+        ) : null}
+      </span>
+    );
+  }
+  return (
+    <span className="font-mono text-theme-secondary">
+      <span className="text-points-positive">{displayTimeForRelayLeg(s)}</span>
+      {/* The leg's own individual verdict, when this leg is eligible (e.g. a
+          medley relay's backstroke leadoff) — anchored to the split it
+          actually describes. */}
+      {rowTags.kind === 'relay' && rowTags.tags.legQualification ? (
+        <span className="inline-flex items-center gap-1 ml-1 align-middle no-underline">
+          <CutlineVerdict result={rowTags.tags.legQualification} />
+        </span>
+      ) : null}
+      {s.relayLegSplitDetail ? (
+        <span className="block text-ui-micro text-theme-muted font-sans">{formatLegSplitSummary(s.relayLegSplitDetail)}</span>
+      ) : null}
+      <span className="text-theme-muted ml-1">R:{s.relayTeamTime || s.finalsTime || s.time}</span>
+      {/* The relay's own verdict, next to the relay team time — repeats once
+          per leg row on purpose: legs are sorted by points and are not
+          necessarily adjacent, so this is the only placement that is
+          unambiguous on every row. */}
+      {rowTags.kind === 'relay' ? (
+        <span className="inline-flex items-center gap-1 ml-1 align-middle no-underline">
+          <CutlineVerdict result={rowTags.tags.relay} />
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/** The row's trailing Prelims/Psych expected-value + prelims over/under column. */
+function SwimmerExpectedValues({
+  s,
+  showPrelimsPerformance,
+  prelimsOuByEntry,
+  showPsychPerformance,
+  psychOuByEntry,
+}: Pick<TooltipSwimmerRowProps, 's' | 'showPrelimsPerformance' | 'prelimsOuByEntry' | 'showPsychPerformance' | 'psychOuByEntry'>) {
+  return (
+    <div className="flex flex-col items-end gap-0.5">
+      {showPrelimsPerformance && prelimsOuByEntry ? (
+        <PlacementExpectedValue label="Prelims" value={prelimsOuByEntry.get(entryKey(s))?.expected} />
+      ) : null}
+      {showPsychPerformance && psychOuByEntry ? (
+        <PlacementExpectedValue label="Psych" value={psychExpectedForResult(s, psychOuByEntry)} />
+      ) : null}
+      {showPrelimsPerformance && prelimsOuByEntry ? (
+        <PrelimsOuValue value={prelimsOuOverUnderForDisplay(s, prelimsOuByEntry)} compact className="ml-1" />
+      ) : null}
+    </div>
+  );
+}
+
 /** One swimmer row inside the event/class chart tooltip's swimmer list. */
 export function TooltipSwimmerRow({
   s,
@@ -143,62 +209,15 @@ export function TooltipSwimmerRow({
       </div>
       <div className="flex gap-3 text-right">
         <span className="font-mono text-theme-muted">{s.prelimsTime ? `P:${s.prelimsTime}` : ''}</span>
-        <span className="font-mono text-theme-secondary">
-          {hasRelaySplit ? (
-            <>
-              <span className="text-points-positive">{displayTimeForRelayLeg(s)}</span>
-              {/* The leg's own individual verdict, when this leg is
-                  eligible (e.g. a medley relay's backstroke leadoff) —
-                  anchored to the split it actually describes. */}
-              {rowTags.kind === 'relay' && rowTags.tags.legQualification ? (
-                <span className="inline-flex items-center gap-1 ml-1 align-middle no-underline">
-                  <CutlineVerdict result={rowTags.tags.legQualification} />
-                </span>
-              ) : null}
-              {s.relayLegSplitDetail ? (
-                <span className="block text-ui-micro text-theme-muted font-sans">
-                  {formatLegSplitSummary(s.relayLegSplitDetail)}
-                </span>
-              ) : null}
-              <span className="text-theme-muted ml-1">R:{s.relayTeamTime || s.finalsTime || s.time}</span>
-            </>
-          ) : s.finalsTime ? (
-            `F:${s.finalsTime}`
-          ) : (
-            s.time
-          )}
-          {/* The relay's own verdict, next to the relay team time —
-              repeats once per leg row on purpose: legs are sorted by
-              points and are not necessarily adjacent, so this is the
-              only placement that is unambiguous on every row. */}
-          {rowTags.kind === 'relay' ? (
-            <span className="inline-flex items-center gap-1 ml-1 align-middle no-underline">
-              <CutlineVerdict result={rowTags.tags.relay} />
-            </span>
-          ) : null}
-        </span>
+        <SwimmerTimeCell s={s} hasRelaySplit={hasRelaySplit} rowTags={rowTags} />
         <span className="font-mono text-points-positive font-bold">{typeof s.points === 'number' ? s.points.toFixed(1) : s.points}</span>
-        <div className="flex flex-col items-end gap-0.5">
-          {showPrelimsPerformance && prelimsOuByEntry ? (
-            <PlacementExpectedValue
-              label="Prelims"
-              value={prelimsOuByEntry.get(entryKey(s))?.expected}
-            />
-          ) : null}
-          {showPsychPerformance && psychOuByEntry ? (
-            <PlacementExpectedValue
-              label="Psych"
-              value={psychExpectedForResult(s, psychOuByEntry)}
-            />
-          ) : null}
-          {showPrelimsPerformance && prelimsOuByEntry ? (
-            <PrelimsOuValue
-              value={prelimsOuOverUnderForDisplay(s, prelimsOuByEntry)}
-              compact
-              className="ml-1"
-            />
-          ) : null}
-        </div>
+        <SwimmerExpectedValues
+          s={s}
+          showPrelimsPerformance={showPrelimsPerformance}
+          prelimsOuByEntry={prelimsOuByEntry}
+          showPsychPerformance={showPsychPerformance}
+          psychOuByEntry={psychOuByEntry}
+        />
       </div>
     </div>
   );

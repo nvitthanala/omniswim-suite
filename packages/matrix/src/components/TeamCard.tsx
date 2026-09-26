@@ -4,30 +4,19 @@
  */
 
 import React, { useState, useRef, useEffect, useMemo } from 'react';
-import { 
-  ChevronDown, 
-  ChevronUp, 
-  BarChart3,
-  List,
-  Trash2
-} from 'lucide-react';
+import { BarChart3 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, CartesianGrid } from 'recharts';
-import { Button, ChartFrame, ChartShell, SegmentedControl } from '@omniswim/ui';
+import { ChartShell, SegmentedControl } from '@omniswim/ui';
 import { TeamScore, SwimmerResult, Gender } from '@omniswim/core/types';
 import { formatEventChartAxisLabel, colorForChartStroke } from '@omniswim/core/lib/utils';
 import type { PrelimsOverUnderEntry } from '@omniswim/core/lib/prelimsProjection';
-import {
-  buildMomentumSeriesForTeam,
-  sumPrelimsOuForSwimmers,
-} from '@omniswim/core/lib/prelimsProjection';
+import { buildMomentumSeriesForTeam } from '@omniswim/core/lib/prelimsProjection';
 import type { PsychOverUnderEntry } from '@omniswim/core/lib/psychProjection';
 import { useThemeColors } from '@omniswim/core/lib/useThemeColors';
-import { CompactEventLabel, PrelimsOuValue } from './matrixPresentation';
-import ProjectedActualScore from './ProjectedActualScore';
-import MomentumChartCard from './MomentumChartCard';
-import { TeamMatrixSwimmerRow } from './TeamCardMatrixRow';
-import { TeamCardChartTooltip } from './TeamCardTooltips';
+import { TeamMomentumSection } from './TeamMomentumSection';
+import { TeamCardHeader } from './TeamCardHeader';
+import { TeamEventChartPane, TeamClassChartPane } from './TeamCardChartPanes';
+import { TeamCardMatrixControls, TeamCardMatrixList } from './TeamCardMatrixList';
 import { classChartTooltipPosition } from './teamCardView';
 
 const EMPTY_EVENTS_LIST: string[] = [];
@@ -309,48 +298,24 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
 
   return (
     <div className={`neon-card rounded-xl overflow-hidden mb-4`} style={{ borderLeftColor: teamChartColor }}>
-      <button 
-        type="button"
-        aria-label={`${isExpanded ? 'Collapse' : 'Expand'} ${team.teamName} team details`}
-        aria-expanded={isExpanded}
-        onClick={() => {
+      <TeamCardHeader
+        team={team}
+        isExpanded={isExpanded}
+        conference={conference}
+        athleteCount={topSwimmers.length}
+        actualScore={actualScore}
+        baselineScore={baselineScore}
+        prelimsProjectedScore={prelimsProjectedScore}
+        baselineOverUnder={baselineOverUnder}
+        projectedOverUnder={projectedOverUnder}
+        showPrelimsPerformance={showPrelimsPerformance}
+        eventThrough={eventThrough}
+        onToggle={() => {
           const nextExpanded = !isExpanded;
           setIsExpanded(nextExpanded);
           if (!nextExpanded) clearChartTooltips();
         }}
-        className="w-full flex items-center justify-between p-5 theme-hover-row transition-colors"
-      >
-        <div className="flex flex-col items-start gap-1">
-          <h3 className="text-sm font-black uppercase tracking-tighter text-[var(--text-primary)]">{team.teamName}</h3>
-          <div className="flex flex-col gap-1">
-            <span className="text-ui-caption text-theme-secondary uppercase tracking-widest font-medium">
-              {conference ? `${conference} • ` : ''}{topSwimmers.length} Athletes
-            </span>
-            {(actualScore != null || baselineScore != null || showPrelimsPerformance) ? (
-              <ProjectedActualScore
-                actual={actualScore}
-                baseline={baselineScore}
-                projected={team.totalPoints}
-                compact
-                eventThrough={eventThrough}
-                prelimsProjected={prelimsProjectedScore}
-                baselineOverUnder={baselineOverUnder}
-                projectedOverUnder={projectedOverUnder}
-              />
-            ) : null}
-          </div>
-        </div>
-
-        <div className="flex items-center gap-6">
-          <div className="text-right">
-            <span className="block text-2xl font-black text-[var(--text-accent)] font-mono tracking-tighter leading-none">
-              {team.totalPoints.toFixed(1)}
-            </span>
-            <span className="text-ui-micro text-theme-secondary uppercase tracking-widest font-medium font-mono">Projected Points</span>
-          </div>
-          {isExpanded ? <ChevronUp size={16} className="text-theme-secondary" /> : <ChevronDown size={16} className="text-theme-secondary" />}
-        </div>
-      </button>
+      />
 
       <AnimatePresence>
         {isExpanded && (
@@ -392,173 +357,51 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                 <ChartShell size="lg" className="surface-overlay p-2 rounded-lg border border-theme-soft group/chart">
                   {({ width, height }) =>
                     chartView === 'event' ? (
-                  <div ref={eventChartSurfaceRef} className="relative h-full w-full min-h-0 min-w-0">
-                    {!pinnedTooltip && activeTooltip && (
-                      <div 
-                        className="absolute pointer-events-none rounded-lg overflow-hidden"
-                        style={{ 
-                          left: `${Math.min(Math.max(10, activeTooltip.x - 125), activeTooltip.containerWidth - 260)}px`, 
-                          top: `${Math.max(10, activeTooltip.y - 140)}px`,
-                          width: '250px',
-                          zIndex: 999 
-                        }}
-                      >
-                        <TeamCardChartTooltip
-                          data={activeTooltip.payload}
-                          gender={gender}
-                          teamName={team.teamName}
-                          showPrelimsPerformance={showPrelimsPerformance}
-                          prelimsOuByEntry={prelimsOuByEntry}
-                          showPsychPerformance={showPsychPerformance}
-                          psychOuByEntry={psychOuByEntry}
-                          onClose={() => setPinnedTooltip(null)}
-                        />
-                      </div>
-                    )}
-                    
-                    {pinnedTooltip && (
-                      <motion.div 
-                        drag
-                        dragConstraints={{ left: -100, right: 300, top: -50, bottom: 200 }}
-                        className="absolute z-[1000] rounded-lg shadow-2xl overflow-hidden"
-                        style={{ 
-                          left: `${Math.min(Math.max(10, pinnedTooltip.x - 125), pinnedTooltip.containerWidth - 260)}px`, 
-                          top: `${Math.max(10, pinnedTooltip.y - 140)}px`
-                        }}
-                      >
-                        <TeamCardChartTooltip
-                          data={pinnedTooltip.payload}
-                          isPinned
-                          gender={gender}
-                          teamName={team.teamName}
-                          showPrelimsPerformance={showPrelimsPerformance}
-                          prelimsOuByEntry={prelimsOuByEntry}
-                          showPsychPerformance={showPsychPerformance}
-                          psychOuByEntry={psychOuByEntry}
-                          onClose={() => setPinnedTooltip(null)}
-                        />
-                      </motion.div>
-                    )}
-
-                    {eventData.length > 0 ? (
-                      <ChartFrame width={width} height={height}>
-                      <LineChart
-                        key={`event-${team.teamName}-${eventData.length}-${Math.round(chartPanePercent)}-${scoringRefreshKey}`}
-                        width={Math.floor(width)}
-                        height={Math.floor(height)}
-                        responsive={false}
-                        data={eventData}
-                        margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
+                      <TeamEventChartPane
+                        surfaceRef={eventChartSurfaceRef}
+                        activeTooltip={activeTooltip}
+                        pinnedTooltip={pinnedTooltip}
+                        onClosePinned={() => setPinnedTooltip(null)}
+                        eventData={eventData}
+                        teamChartColor={teamChartColor}
+                        chartTheme={chartTheme}
+                        chartPanePercent={chartPanePercent}
+                        scoringRefreshKey={scoringRefreshKey}
+                        teamName={team.teamName}
+                        width={width}
+                        height={height}
                         onMouseMove={handleEventChartMouseMove}
                         onMouseLeave={handleEventChartMouseLeave}
                         onClick={handleEventChartClick}
-                      >
-                        <CartesianGrid strokeDasharray="3 3" stroke={chartTheme.chartGrid} vertical={false} />
-                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: chartTheme.chartTick, fontSize: 8, fontStyle: 'bold', fontFamily: 'JetBrains Mono' }} interval="equidistantPreserveStart" minTickGap={20} tickMargin={8} />
-                        <YAxis axisLine={false} tickLine={false} tick={{ fill: chartTheme.chartTick, fontSize: 8, fontStyle: 'bold', fontFamily: 'JetBrains Mono' }} width={30} />
-                        <Tooltip content={() => null} cursor={{ stroke: chartTheme.chartGrid, strokeWidth: 1 }} />
-                        <Line
-                          type="monotone"
-                          dataKey="points"
-                          stroke={teamChartColor}
-                          strokeWidth={2.5}
-                          dot={false}
-                          isAnimationActive={false}
-                          activeDot={false}
-                        />
-                      </LineChart>
-                      </ChartFrame>
+                        gender={gender}
+                        showPrelimsPerformance={showPrelimsPerformance}
+                        prelimsOuByEntry={prelimsOuByEntry}
+                        showPsychPerformance={showPsychPerformance}
+                        psychOuByEntry={psychOuByEntry}
+                      />
                     ) : (
-                      <div className="flex items-center justify-center text-center text-ui-caption text-theme-muted" style={{ width, height }}>
-                        No scoring events yet.
-                      </div>
-                    )}
-                  </div>
-                  ) : (
-                  <div ref={classChartSurfaceRef} className="relative h-full w-full min-h-0 min-w-0">
-                    {!pinnedClassTooltip && activeClassTooltip && (
-                      <div 
-                        className="absolute pointer-events-none rounded-lg overflow-hidden"
-                        style={{ 
-                          left: `${Math.min(Math.max(10, activeClassTooltip.x - 110), activeClassTooltip.containerWidth - 230)}px`, 
-                          top: `${Math.max(10, activeClassTooltip.y - 120)}px`,
-                          width: '220px',
-                          zIndex: 999 
-                        }}
-                      >
-                        <TeamCardChartTooltip
-                          data={activeClassTooltip.payload}
-                          isClass
-                          gender={gender}
-                          teamName={team.teamName}
-                          showPrelimsPerformance={showPrelimsPerformance}
-                          prelimsOuByEntry={prelimsOuByEntry}
-                          showPsychPerformance={showPsychPerformance}
-                          psychOuByEntry={psychOuByEntry}
-                          onClose={() => setPinnedClassTooltip(null)}
-                        />
-                      </div>
-                    )}
-                    
-                    {pinnedClassTooltip && (
-                      <motion.div 
-                        drag
-                        dragConstraints={{ left: -100, right: 300, top: -100, bottom: 200 }}
-                        className="absolute z-[1000] rounded-lg shadow-2xl overflow-hidden"
-                        style={{ 
-                          left: `${Math.min(Math.max(10, pinnedClassTooltip.x - 110), pinnedClassTooltip.containerWidth - 230)}px`, 
-                          top: `${Math.max(10, pinnedClassTooltip.y - 120)}px`
-                        }}
-                      >
-                        <TeamCardChartTooltip
-                          data={pinnedClassTooltip.payload}
-                          isPinned
-                          isClass
-                          gender={gender}
-                          teamName={team.teamName}
-                          showPrelimsPerformance={showPrelimsPerformance}
-                          prelimsOuByEntry={prelimsOuByEntry}
-                          showPsychPerformance={showPsychPerformance}
-                          psychOuByEntry={psychOuByEntry}
-                          onClose={() => setPinnedClassTooltip(null)}
-                        />
-                      </motion.div>
-                    )}
-
-                    {classData.length > 0 ? (
-                      <ChartFrame width={width} height={height}>
-                      <BarChart
-                        key={`class-${team.teamName}-${classData.reduce((n, d) => n + d.points, 0)}-${Math.round(chartPanePercent)}-${scoringRefreshKey}`}
-                        width={Math.floor(width)}
-                        height={Math.floor(height)}
-                        responsive={false}
-                        data={classData}
-                        margin={{ top: 8, right: 8, left: 0, bottom: 0 }}
-                        onMouseLeave={() => setActiveClassTooltip(null)}
-                      >
-                        <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{ fill: chartTheme.chartTick, fontSize: 10, fontStyle: 'bold', fontFamily: 'JetBrains Mono' }} />
-                        <Tooltip content={<></>} cursor={{ fill: 'rgba(255,255,255,0.03)' }} />
-                        <Bar 
-                          dataKey="points" 
-                          radius={[2, 2, 0, 0]}
-                          onClick={handleClassBarClick}
-                          onMouseEnter={handleClassBarMouseEnter}
-                          onMouseLeave={handleClassBarMouseLeave}
-                          style={{ cursor: 'pointer' }}
-                        >
-                          {classData.map((entry, index) => (
-                            <Cell key={`cell-${index}`} fill={entry.color} opacity={0.8} />
-                          ))}
-                        </Bar>
-                      </BarChart>
-                      </ChartFrame>
-                    ) : (
-                      <div className="flex items-center justify-center text-center text-ui-caption text-theme-muted" style={{ width, height }}>
-                        No class year data yet.
-                      </div>
-                    )}
-                  </div>
-                  )
+                      <TeamClassChartPane
+                        surfaceRef={classChartSurfaceRef}
+                        activeClassTooltip={activeClassTooltip}
+                        pinnedClassTooltip={pinnedClassTooltip}
+                        onClosePinned={() => setPinnedClassTooltip(null)}
+                        classData={classData}
+                        chartTheme={chartTheme}
+                        chartPanePercent={chartPanePercent}
+                        scoringRefreshKey={scoringRefreshKey}
+                        teamName={team.teamName}
+                        width={width}
+                        height={height}
+                        onBarClick={handleClassBarClick}
+                        onBarMouseEnter={handleClassBarMouseEnter}
+                        onBarMouseLeave={handleClassBarMouseLeave}
+                        gender={gender}
+                        showPrelimsPerformance={showPrelimsPerformance}
+                        prelimsOuByEntry={prelimsOuByEntry}
+                        showPsychPerformance={showPsychPerformance}
+                        psychOuByEntry={psychOuByEntry}
+                      />
+                    )
                   }
                 </ChartShell>
 
@@ -580,31 +423,15 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                   </div>
                 </div>
 
-                {(showPrelimsPerformance || showPsychPerformance) ? (
-                  <div className="mt-3">
-                    {showPrelimsPerformance && showPsychPerformance ? (
-                      <div className="mb-2">
-                        <SegmentedControl
-                          layout="inline"
-                          ariaLabel="Team momentum anchor"
-                          value={momentumAnchor}
-                          onChange={setMomentumAnchor}
-                          options={[
-                            { value: 'prelims', label: 'vs Prelims', ariaLabel: 'Show team momentum versus prelims' },
-                            { value: 'psych', label: 'vs Psych', ariaLabel: 'Show team momentum versus psych sheet' },
-                          ]}
-                        />
-                      </div>
-                    ) : null}
-                    <MomentumChartCard
-                      title={momentumAnchor === 'psych' ? 'Momentum vs Psych' : 'Momentum vs Prelims'}
-                      series={momentumSeries}
-                      meetTotalOu={momentumMeetTotal}
-                      size="md"
-                      emptyMessage={teamMomentumEmptyMessage}
-                    />
-                  </div>
-                ) : null}
+                <TeamMomentumSection
+                  showPrelimsPerformance={showPrelimsPerformance}
+                  showPsychPerformance={showPsychPerformance}
+                  momentumAnchor={momentumAnchor}
+                  onMomentumAnchorChange={setMomentumAnchor}
+                  momentumSeries={momentumSeries}
+                  momentumMeetTotal={momentumMeetTotal}
+                  teamMomentumEmptyMessage={teamMomentumEmptyMessage}
+                />
               </div>
 
               <div
@@ -624,107 +451,37 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
               <div className="min-w-0 w-full flex-1">
                 {/* Wraps like the chart header above it: in the split layout this
                     row could not fit the sort select plus both toggles, and the
-                    trailing "By Swimmer" label was clipped at the column edge. */}
-                <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
-                  <div className="flex items-center gap-2 min-w-0">
-                    <List size={14} className="text-[var(--text-accent)] shrink-0" />
-                    <span className="text-ui-micro font-medium uppercase tracking-widest text-theme-secondary truncate">Team Matrix</span>
-                  </div>
-                  {/* Wraps rather than `shrink-0`: at 1024px the select plus both
-                      toggles are wider than the column, and refusing to shrink
-                      pushed them past its right edge instead of onto a new line. */}
-                  <div className="flex flex-wrap items-center justify-end gap-2 min-w-0">
-                    <select
-                      className="glass-input text-ui-micro uppercase tracking-widest text-theme-secondary rounded p-1 outline-none"
-                      value={sortMode}
-                      onChange={(e) => setSortMode(e.target.value as any)}
-                      aria-label="Sort team matrix"
-                    >
-                      {viewMode === 'event' && <option value="chrono">Chronological</option>}
-                      {viewMode === 'event' && <option value="eventDesc">High to Low</option>}
-                      {viewMode === 'event' && <option value="eventAsc">Low to High</option>}
-                      {viewMode === 'swimmer' && <option value="swimmerDesc">High to Low</option>}
-                      {viewMode === 'swimmer' && <option value="swimmerAsc">Low to High</option>}
-                    </select>
+                    trailing "By Swimmer" label was clipped at the column edge.
+                    Wraps rather than `shrink-0`: at 1024px the select plus both
+                    toggles are wider than the column, and refusing to shrink
+                    pushed them past its right edge instead of onto a new line. */}
+                <TeamCardMatrixControls
+                  viewMode={viewMode}
+                  sortMode={sortMode}
+                  onSortModeChange={setSortMode}
+                  onViewModeChange={next => {
+                    setViewMode(next);
+                    setSortMode(next === 'event' ? 'eventDesc' : 'swimmerDesc');
+                  }}
+                />
 
-                    <SegmentedControl
-                      layout="inline"
-                      ariaLabel="Team matrix grouping"
-                      value={viewMode}
-                      onChange={next => {
-                        setViewMode(next);
-                        setSortMode(next === 'event' ? 'eventDesc' : 'swimmerDesc');
-                      }}
-                      options={[
-                        { value: 'event', label: 'By Event', ariaLabel: 'Group team matrix by event' },
-                        { value: 'swimmer', label: 'By Swimmer', ariaLabel: 'Group team matrix by swimmer' },
-                      ]}
-                    />
-                  </div>
-                </div>
-
-                <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-                  {(viewMode === 'swimmer' ? topSwimmers : topEvents).map((group: any) => (
-                    <div key={group.name || group.event} className="p-3 rounded-lg surface-overlay border border-theme-soft group transition-colors hover:border-[var(--border)]">
-                      <div className="flex items-center justify-between mb-2">
-                        <div className="flex items-center gap-3">
-                          <h4 className="text-xs font-medium text-[var(--text-primary)] uppercase group-hover:text-[var(--text-accent)] transition-colors">
-                            {viewMode === 'swimmer' ? group.name : <CompactEventLabel event={group.event} className="font-mono" />}
-                          </h4>
-                          {viewMode === 'swimmer' && (
-                            <span className="px-1.5 py-0.5 rounded surface-overlay border border-theme-soft text-ui-micro font-mono font-medium text-theme-secondary">
-                              {group.classYear}
-                            </span>
-                          )}
-                          {viewMode === 'swimmer' && onRequestDeleteSwimmer && (
-                            <Button
-                              variant="outline"
-                              size="sm"
-                              title="Remove swimmer from workspace"
-                              aria-label={`Remove ${group.name} from workspace`}
-                              className="p-1"
-                              onClick={() => onRequestDeleteSwimmer(group.name)}
-                              leadingIcon={<Trash2 size={12} />}
-                            />
-                          )}
-                        </div>
-                        <div className="text-right flex flex-col items-end gap-0.5">
-                          <span className="font-mono font-black text-[var(--text-primary)] text-xs">{group.points.toFixed(1)} <span className="text-ui-micro text-theme-secondary">PTS</span></span>
-                          {showPrelimsPerformance && prelimsOuByEntry ? (
-                            <PrelimsOuValue
-                              value={sumPrelimsOuForSwimmers(group.swimmers, prelimsOuByEntry, {
-                                includeRelay: viewMode === 'event',
-                              })}
-                              compact
-                            />
-                          ) : null}
-                        </div>
-                      </div>
-
-                      <div className="space-y-1">
-                        {group.swimmers.map((res: SwimmerResult, i: number) => (
-                          <TeamMatrixSwimmerRow
-                            key={i}
-                            res={res}
-                            gender={gender}
-                            teamName={team.teamName}
-                            viewMode={viewMode}
-                            onUpdateTime={onUpdateTime}
-                            editingResultId={editingResultId}
-                            editValue={editValue}
-                            onStartEdit={(id, time) => { setEditingResultId(id); setEditValue(time); }}
-                            onEditValueChange={setEditValue}
-                            onCancelEdit={() => setEditingResultId(null)}
-                            showPrelimsPerformance={showPrelimsPerformance}
-                            prelimsOuByEntry={prelimsOuByEntry}
-                            showPsychPerformance={showPsychPerformance}
-                            psychOuByEntry={psychOuByEntry}
-                          />
-                        ))}
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                <TeamCardMatrixList
+                  groups={viewMode === 'swimmer' ? topSwimmers : topEvents}
+                  viewMode={viewMode}
+                  gender={gender}
+                  teamName={team.teamName}
+                  onUpdateTime={onUpdateTime}
+                  onRequestDeleteSwimmer={onRequestDeleteSwimmer}
+                  editingResultId={editingResultId}
+                  editValue={editValue}
+                  onStartEdit={(id, time) => { setEditingResultId(id); setEditValue(time); }}
+                  onEditValueChange={setEditValue}
+                  onCancelEdit={() => setEditingResultId(null)}
+                  showPrelimsPerformance={showPrelimsPerformance}
+                  prelimsOuByEntry={prelimsOuByEntry}
+                  showPsychPerformance={showPsychPerformance}
+                  psychOuByEntry={psychOuByEntry}
+                />
               </div>
             </div>
           </motion.div>

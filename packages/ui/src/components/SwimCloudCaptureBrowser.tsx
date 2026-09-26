@@ -64,7 +64,7 @@
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { AlertTriangle, ChevronDown, ChevronRight, ClipboardPaste, RefreshCw, Trash2 } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronRight } from 'lucide-react';
 // `@omniswim/swimcloud/captureStore` (and `./cache`, which it re-exports types
 // from) is Node-hosted — `packages/ui/tsconfig.json` sets `"types": []`
 // specifically so this UI package cannot accidentally pull in `node:fs`, and
@@ -97,6 +97,7 @@ import type {
 import { Button } from './Button';
 import { FloatingWindow, type FloatingWindowState } from './FloatingWindow';
 import { useToast } from './Toast';
+import { CaptureListPicker, CaptureStatusPanel, NoCapturesEmptyState, CaptureErrorBanner } from './SwimCloudCaptureBrowserChrome';
 
 const CAPTURES_ENDPOINT = '/api/swimcloud/captures';
 const PAIRING_TOKEN_ENDPOINT = '/api/swimcloud/pairing-token';
@@ -1367,147 +1368,58 @@ export function SwimCloudCaptureBrowser(props: SwimCloudCaptureBrowserProps) {
       <div className="h-full overflow-y-auto custom-scrollbar p-4 space-y-3">
         <p className="text-ui-caption text-theme-muted">{description}</p>
 
-        {tokenError !== null ? (
-          <p className="text-ui-caption badge-warning px-3 py-2 rounded-lg">{tokenError}</p>
-        ) : listError !== null ? (
-          <p className="text-ui-caption badge-warning px-3 py-2 rounded-lg">{listError}</p>
-        ) : null}
+        <CaptureErrorBanner tokenError={tokenError} listError={listError} />
 
         {tokenError === null ? (
-          <div className="flex items-center gap-2">
-            <select
-              ref={pickerRef}
-              aria-label="SwimCloud capture"
-              value={selectedCaptureId ?? ''}
-              disabled={!hasCaptureRows || isParsing}
-              onChange={event => {
-                const captureId = event.target.value;
-                if (captureId === '') {
-                  setSelectedCaptureId(null);
-                  setParseResponse(null);
-                  setSelectedRosterKey(null);
-                  return;
-                }
-                void selectCapture(captureId);
-              }}
-              className="glass-input flex-1 min-w-0 px-3 py-2 rounded-lg text-ui-body appearance-none disabled:opacity-40"
-            >
-              <option value="">
-                {isLoadingList ? 'Loading captures…' : hasCaptureRows ? 'Choose a capture…' : 'No captures'}
-              </option>
-              {captures?.map(capture => {
+          <CaptureListPicker
+            pickerRef={pickerRef}
+            captureOptions={
+              captures?.map(capture => {
                 const label = captureDisplayLabel(capture);
                 const subject = subjectLabel(capture.subject);
-                return (
-                  <option key={capture.captureId} value={capture.captureId}>
-                    {label === subject ? label : `${label} · ${subject}`} · {capturePagesPhrase(capture)}
-                  </option>
-                );
-              })}
-            </select>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => void refresh()}
-              aria-label="Refresh capture list"
-              title="Re-read the local capture store."
-              className="p-2 shrink-0"
-              leadingIcon={<RefreshCw size={16} />}
-            />
-            {selectedCapture !== null ? (
-              confirmingForget ? (
-                <span className="flex items-center gap-1 shrink-0">
-                  <Button
-                    variant="danger"
-                    size="sm"
-                    onClick={() => void forgetSelectedCapture()}
-                    aria-label={`Confirm forgetting capture ${captureDisplayLabel(selectedCapture)}`}
-                    className="px-2 py-1"
-                  >
-                    Confirm
-                  </Button>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setConfirmingForget(false)}
-                    aria-label="Keep this capture"
-                    className="px-2 py-1"
-                  >
-                    Cancel
-                  </Button>
-                </span>
-              ) : (
-                <Button
-                  variant="danger"
-                  size="sm"
-                  onClick={() => setConfirmingForget(true)}
-                  aria-label={`Forget capture ${captureDisplayLabel(selectedCapture)}`}
-                  title="Forget this capture (deletes its stored pages). The only way to make a final page re-fetchable."
-                  className="p-2 border-transparent bg-transparent shrink-0"
-                  leadingIcon={<Trash2 size={16} />}
-                />
-              )
-            ) : null}
-          </div>
+                return {
+                  captureId: capture.captureId,
+                  label: `${label === subject ? label : `${label} · ${subject}`} · ${capturePagesPhrase(capture)}`,
+                };
+              }) ?? null
+            }
+            selectedCaptureId={selectedCaptureId}
+            hasCaptureRows={hasCaptureRows}
+            isLoadingList={isLoadingList}
+            isParsing={isParsing}
+            onSelectChange={captureId => {
+              if (captureId === '') {
+                setSelectedCaptureId(null);
+                setParseResponse(null);
+                setSelectedRosterKey(null);
+                return;
+              }
+              void selectCapture(captureId);
+            }}
+            onRefresh={() => void refresh()}
+            selectedCaptureLabel={selectedCapture !== null ? captureDisplayLabel(selectedCapture) : null}
+            confirmingForget={confirmingForget}
+            onRequestForget={() => setConfirmingForget(true)}
+            onConfirmForget={() => void forgetSelectedCapture()}
+            onCancelForget={() => setConfirmingForget(false)}
+          />
         ) : null}
 
         {selectedCapture !== null ? (
-          <div className="space-y-1" aria-live="polite">
-            <p className="text-ui-caption text-theme-secondary">
-              {isParsing ? 'Parsing…' : describeCompleteness(selectedCapture)}
-            </p>
-            {/* Rendered for every capture, including ones that record no scope.
-                `every-planned-page-fetched` above is a claim about a plan, and
-                the plan can be narrow — this line is the only thing separating
-                a full crawl from a meet-results-only one. */}
-            <p className="text-ui-caption text-theme-muted">{describeCaptureScope(selectedCapture)}</p>
-            {selectedCapture.completeness === 'partial' ? (
-              <span
-                className="inline-flex items-center gap-1 text-ui-micro text-theme-muted border border-theme-soft rounded px-1.5 py-0.5 opacity-70"
-                title="This capture is incomplete. There is no way to resume a crawl from this panel — reopen the meet in the browser extension and let it continue."
-              >
-                <AlertTriangle size={11} /> Resume in the extension
-              </span>
-            ) : null}
-            {selectedCapture.notes.length > 0 ? (
-              <ul className="text-ui-micro text-theme-muted list-disc pl-4">
-                {selectedCapture.notes.map((note, index) => (
-                  <li key={`${index}-${note}`}>{note}</li>
-                ))}
-              </ul>
-            ) : null}
-          </div>
+          <CaptureStatusPanel
+            isParsing={isParsing}
+            completenessText={describeCompleteness(selectedCapture)}
+            scopeText={describeCaptureScope(selectedCapture)}
+            isPartial={selectedCapture.completeness === 'partial'}
+            notes={selectedCapture.notes}
+          />
         ) : null}
 
         {tokenError === null && isLoadingList ? (
           <p className="text-ui-body text-theme-muted">Loading captures…</p>
         ) : null}
 
-        {!isLoadingList && !hasCaptureRows ? (
-          <div className="space-y-2">
-            <p className="text-ui-body text-theme-muted">
-              No captures yet. Use the Omniswim SwimCloud Companion browser extension to crawl a meet or
-              a team, then come back here.
-            </p>
-            {pasteFallback ? (
-              <div className="space-y-1">
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={pasteFallback.onPaste}
-                  aria-label={pasteFallback.label}
-                  className="text-[var(--text-accent)] hover:underline"
-                  leadingIcon={<ClipboardPaste size={13} />}
-                >
-                  {pasteFallback.label}
-                </Button>
-                {pasteFallback.hint !== undefined ? (
-                  <p className="text-ui-micro text-theme-muted">{pasteFallback.hint}</p>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+        {!isLoadingList && !hasCaptureRows ? <NoCapturesEmptyState pasteFallback={pasteFallback} /> : null}
 
         {parseResponse !== null ? (
           <div className="space-y-2 border-t border-theme-soft pt-3">
