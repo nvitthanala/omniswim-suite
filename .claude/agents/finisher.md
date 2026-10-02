@@ -41,6 +41,12 @@ State plainly: what passed, what failed with exact output, what you fixed, and
 what you left for someone else. If the suite is red and you could not fix it
 mechanically, say so — do not report green.
 
+## Stops and report shape
+
+Run every gate before you report. Do not stop to offer to continue. End the
+final report with three headings: **Blocked on me**, **Changed**, **Found**.
+Write "none" under an empty one.
+
 ## Current initiative
 
 This repo is mid-way through a production-readiness push (opened 2026-09-20,

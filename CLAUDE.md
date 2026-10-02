@@ -91,7 +91,8 @@ The model above is now configuration, not just prose. Four agent definitions exi
 | Agent | Model | Effort | Tools | Owns |
 | --- | --- | --- | --- | --- |
 | `orchestrator` | fable | high | read-only + `Agent(executor, worker, finisher)` — **no Edit/Write** | Sequencing, briefing, integration, end-to-end verification |
-| `executor` | opus | xhigh | all | Schema/type design, scoring + lineup correctness, extraction pipelines, algorithms |
+| `executor` | sonnet | high | all | Scoring + lineup correctness, extraction pipelines, algorithms, built to a spec under snapshot and mutation gates |
+| `architect` | opus | xhigh | read-only (no Edit/Write) | Schema/type design with no precedent, specs, review of core diffs, proofs. Opus is the escalation, not the default |
 | `worker` | sonnet | medium | all | Component wiring, restyles, panel layout, docs against an existing API |
 | `finisher` | haiku | low | Read, Grep, Glob, Bash, Edit | Lint/typecheck/tests, mechanical edge cases — **no design decisions** |
 
@@ -107,28 +108,29 @@ API it may rely on, the acceptance test, and the scope boundary. `executor` must
 report its final API surface (exports, types, signatures) because `worker` builds
 against that report without reading the diff.
 
-### Delegation is Claude-only
+### Delegation across Claude, Codex and Cursor (Orca)
 
-Everything this project delegates goes through the four agents above. They
-share this session's context and are the right call for any work that depends
-on the conversation so far.
+Updated 2026-10-02. The user re-enabled Codex and Cursor and asked for work
+to be split, handed off and continued across all three providers. Routing is
+data: `docs/reference/PROVIDER_ROUTING.json`. The how-to is the
+`provider-routing` skill. Claude work goes through the agents above. Codex
+and Cursor work goes through Orca (`orca orchestration worker-start --agent
+codex|cursor`). Smoke-test status for each provider is recorded in the JSON.
 
-**There is no cross-provider layer any more.** An earlier version of this file
-described a "fleet" that routed work to Codex and Cursor alongside Claude,
-driven by a `fleet-routing` skill and a `.fleet.json` in this repo. That
-harness is superseded — it was a self-built precursor to the Orca orchestrator
-— and the user retired it on 2026-09-20. **Disregard `fleet-routing`,
-`.fleet.json`, and any `fleet route` / `fleet_apply_patch` instruction you find
-in this repo or in an older plan document.** Do not route work to another
-provider. If a stale reference to the fleet survives somewhere, treat it as
+**The old fleet stays retired.** An earlier "fleet" harness (a
+`fleet-routing` skill and a `.fleet.json`) was retired on 2026-09-20.
+**Disregard `fleet-routing`, `.fleet.json`, and any `fleet route` /
+`fleet_apply_patch` instruction in this repo or an older plan document.**
+Orca replaces it. If a stale fleet reference survives, treat it as
 documentation debt and say so; do not act on it.
 
-The two rules the fleet used to enforce mechanically still apply, and now
-depend on you keeping them:
+These rules apply to every provider and depend on you keeping them:
 
 - **No git operations by a subagent.** Agents produce diffs. Commits, branches,
   merges and pushes belong to whoever is orchestrating, and only when the user
   has asked for them.
+- **A diff is reviewed by a different provider than the one that wrote it.**
+  The orchestrator reruns the gates before it accepts any worker report.
 - **Briefs stand alone.** A subagent starts cold. Give it file paths, the exact
   API it may rely on, the acceptance test, and the scope boundary. It has none
   of this conversation.
