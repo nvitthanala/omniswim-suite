@@ -7,6 +7,7 @@
  *   - PgRepo:      PostgreSQL via PgWorkspaceService (OMNI_DB=postgres)
  */
 import { promises as fsp } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import type { Workspace } from '../../../packages/core/src/types.ts';
 import { JsonStore } from './jsonStore.ts';
@@ -85,7 +86,13 @@ async function writeJsonBackup(
   await fsp.mkdir(backupDir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const dest = path.join(backupDir, `meets-${label}-${stamp}.json`);
-  await fsp.writeFile(dest, JSON.stringify(workspaces, null, 2), 'utf-8');
+  const temp = path.join(backupDir, `.backup-${randomUUID()}.tmp`);
+  try {
+    await fsp.writeFile(temp, JSON.stringify(workspaces, null, 2), 'utf-8');
+    await fsp.rename(temp, dest);
+  } finally {
+    await fsp.unlink(temp).catch(() => undefined);
+  }
   // After the write, never before: a prune that ran first could take the count
   // to the limit and then add one, leaving `keep + 1` on disk.
   await pruneGeneratedBackups(backupDir, backupKeepCount());

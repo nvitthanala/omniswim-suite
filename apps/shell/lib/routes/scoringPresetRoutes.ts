@@ -116,6 +116,8 @@ const scoringSettingsSchema = z
     maxIndividualEntriesPerSwimmer: z.number().int().nonnegative().optional(),
     maxRelayEntriesPerSwimmer: z.number().int().nonnegative().optional(),
     maxTotalEntriesPerSwimmer: z.number().int().nonnegative().optional(),
+    entryCapCountsTimeTrials: z.boolean().optional(),
+    entryCapCountsExhibition: z.boolean().optional(),
     relayPoints: pointsTableSchema('relayPoints').optional(),
     divingPoints: pointsTableSchema('divingPoints').optional(),
     maxIndividualScorersPerTeamPerEvent: z.number().int().positive().optional(),

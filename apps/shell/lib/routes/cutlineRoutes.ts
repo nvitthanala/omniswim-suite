@@ -54,7 +54,16 @@ export function registerCutlineRoutes(app: Express, deps: CutlineRoutesDeps): vo
     if (fs.existsSync(filePath)) {
       try {
         const data = JSON.parse(fs.readFileSync(filePath, 'utf-8'));
-        return res.json({ version: safe, cutlines: Array.isArray(data) ? data : data.cutlines ?? [] });
+        const cutlines = Array.isArray(data) ? data : data?.cutlines;
+        // A file with no `cutlines` array is a broken table, not an empty one: answering
+        // 200 with [] reads as "no standards published", which is the silent-empty failure.
+        if (!Array.isArray(cutlines)) {
+          return res.status(500).json({
+            error: 'Failed to read cutlines version',
+            details: `${safe}.json has no "cutlines" array`,
+          });
+        }
+        return res.json({ version: safe, cutlines });
       } catch (err) {
         return res.status(500).json({ error: 'Failed to read cutlines version', details: String(err) });
       }

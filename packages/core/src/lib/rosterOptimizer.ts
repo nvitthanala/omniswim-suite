@@ -37,6 +37,7 @@ import {
 import type { ScorerRosterRow } from './scorerRoster';
 import { buildAliasResolver } from './athleteAliases';
 import { mergeScoringSettings } from './scoringDefaults';
+import { canAcceptAnotherEntry, countSwimmerEntries } from './swimmerEntryLimits';
 import {
   buildEventProfileFromCatalog,
   eventBestTimeMarks,
@@ -44,9 +45,10 @@ import {
   meetProgramEvents,
 } from './athleteHistory';
 import { buildWhatIfResults, createPlannedEntry } from './whatIfProjection';
-import { buildCategorizedScoringInputs, calculatePoints } from './utils';
+import { buildScoringBundle, type ScoringBundle } from './scoringEngine';
 import type { CatalogTeamRoster } from './rosterCatalog';
-import { catalogEventOrderByStrength, meetPlaceFieldForWorkspace } from './eventStrength';
+import { meetPlaceFieldForWorkspace } from './eventStrength';
+import { swimEventIdentity } from './bestTimeEligibility';
 
 export type OptimizerStage = 'scorers' | 'events' | 'hypothetical' | 'all';
 
@@ -284,7 +286,47 @@ export function diffOptimizerChanges(
   return { scorerChanges, entryChanges };
 }
 
-/** Score one state once and bucket the points by team — every team's total from a single pass. */
+/**
+ * Score one candidate state through the SAME path the app displays: `buildScoringBundle`.
+ *
+ * The optimizer used to run its own `buildWhatIfResults` + `calculatePoints`
+ * and left out two things the engine does: the meet's `scoredEventNumberMax`
+ * boundary and the alias collapse. It maximized a number nobody was shown.
+ * Routing every objective through the engine means the two cannot drift again.
+ *
+ * `settings` replaces the workspace's stored settings for this call, so a caller
+ * that scores under settings other than the stored ones (as `optimizeScorersForTeam`
+ * does) still gets the engine's own merge on top. The candidate overrides, plans
+ * and active ids ride in on the workspace copy.
+ */
+function scoreStateWithEngine(
+  workspace: Workspace,
+  gender: Gender,
+  removeSeniors: boolean,
+  settings: ScoringSettings,
+  overrides: ScorerRosterOverride[],
+  plans?: PlannedSwimEntry[],
+  activeIds?: string[],
+  rosterCatalog?: CatalogTeamRoster
+): ScoringBundle {
+  const ws: Workspace = {
+    ...workspace,
+    scoringSettings: settings,
+    scorerRosterOverrides: overrides,
+    meetEntryPlans: plans ?? workspace.meetEntryPlans,
+    activeEntryIds: activeIds ?? workspace.activeEntryIds,
+  };
+  return buildScoringBundle({
+    workspace: ws,
+    gender,
+    removeSeniors,
+    applyWhatIf: true,
+    scorerRosterOverrides: overrides,
+    rosterCatalog,
+  });
+}
+
+/** Score one state once and bucket the points by team: every team's total from a single pass. */
 function teamTotalsForState(
   workspace: Workspace,
   gender: Gender,
@@ -295,34 +337,18 @@ function teamTotalsForState(
   activeIds?: string[],
   rosterCatalog?: CatalogTeamRoster
 ): Map<string, number> {
-  const ws: Workspace = {
-    ...workspace,
-    scorerRosterOverrides: overrides,
-    meetEntryPlans: plans ?? workspace.meetEntryPlans,
-    activeEntryIds: activeIds ?? workspace.activeEntryIds,
-  };
-  const base = buildWhatIfResults({ workspace: ws, gender, removeSeniors });
-  const results = rosterCatalog
-    ? buildCategorizedScoringInputs({
-        workspace: { ...ws, menResults: base, womenResults: gender === Gender.WOMEN ? base : [] },
-        gender,
-        rosterCatalog,
-        // Strongest events fill the cap first, judged against the real meet.
-        eventOrder: catalogEventOrderByStrength({ workspace, gender, team: rosterCatalog.team.name }),
-      })
-    : base;
-  const scored = calculatePoints(results, settings, {
-    scorerRosterOverrides: overrides,
-    conferenceForMerge: workspace.conference,
-    resultsForPdfHint: [...(workspace.menResults ?? []), ...(workspace.womenResults ?? [])],
-  });
+  const bundle = scoreStateWithEngine(
+    workspace,
+    gender,
+    removeSeniors,
+    settings,
+    overrides,
+    plans,
+    activeIds,
+    rosterCatalog
+  );
   const totals = new Map<string, number>();
-  for (const r of scored) {
-    if (r.gender != null && r.gender !== gender) continue;
-    const t = String(r.team ?? '').trim();
-    if (!t) continue;
-    totals.set(t, (totals.get(t) ?? 0) + (typeof r.points === 'number' ? r.points : 0));
-  }
+  for (const t of bundle.sortedTeams) totals.set(t.teamName, t.totalPoints);
   return totals;
 }
 
@@ -406,20 +432,21 @@ export function optimizeScorersForTeam(
   rosterCatalog?: CatalogTeamRoster
 ): ScorerOptimizationResult {
   const merged = mergeScoringSettings(settings, { conference: workspace.conference });
-  const base = buildWhatIfResults({ workspace, gender, removeSeniors });
-  const results = rosterCatalog
-    ? buildCategorizedScoringInputs({
-        workspace,
-        gender,
-        rosterCatalog,
-        eventOrder: catalogEventOrderByStrength({ workspace, gender, team: rosterCatalog.team.name }),
-      })
-    : base;
-  const scored = calculatePoints(results, merged, {
-    scorerRosterOverrides: workspace.scorerRosterOverrides ?? [],
-    conferenceForMerge: workspace.conference,
-    resultsForPdfHint: [...(workspace.menResults ?? []), ...(workspace.womenResults ?? [])],
-  });
+  // The same engine pass the displayed total comes from, so the points that
+  // rank athletes here are the points the coach sees. `allResults` is the
+  // scoring pool after the engine's alias collapse.
+  const bundle = scoreStateWithEngine(
+    workspace,
+    gender,
+    removeSeniors,
+    merged,
+    workspace.scorerRosterOverrides ?? [],
+    undefined,
+    undefined,
+    rosterCatalog
+  );
+  const results = bundle.allResults;
+  const scored = bundle.allScored;
   // Built once per call. Two spellings of one athlete are two ranked rows, and
   // `cap` selects the top N of them — so a duplicate both eats a scorer slot and
   // splits that athlete's points across two keys, ranking them lower than they
@@ -433,6 +460,11 @@ export function optimizeScorersForTeam(
     gender,
     resolver
   );
+  // The roster as it stands BEFORE any coach override. This pass drops every
+  // override for the team and rebuilds them, so "does the wanted state differ from
+  // the default" must be asked of a lookup that holds none of the dropped
+  // overrides. `lookup` holds them, and would read a coach's OFF as the default.
+  const baseLookup = buildScorerRosterLookup(results, merged, [], gender, resolver);
   const teamRows = lookup.rows.filter(r => r.team === team);
   const points = aggregateSwimmerMeetPoints(scored, gender, resolver);
 
@@ -451,7 +483,7 @@ export function optimizeScorersForTeam(
 
   for (const row of teamRows) {
     const want = selected.has(row.key);
-    const auto = lookup.isScorer(row.name, row.team, row.gender);
+    const auto = baseLookup.isScorer(row.name, row.team, row.gender);
     if (want !== auto) {
       overrides.push({
         name: row.name,
@@ -470,7 +502,7 @@ export function optimizeScorersForTeam(
     const cur = overrides.find(
       o => scorerRosterKey(o.team, o.gender, o.name) === key
     );
-    const isOn = cur ? cur.isScorer : lookup.isScorer(row.name, row.team, row.gender);
+    const isOn = cur ? cur.isScorer : baseLookup.isScorer(row.name, row.team, row.gender);
     const trial = overrides.filter(o => scorerRosterKey(o.team, o.gender, o.name) !== key);
     trial.push({ name: row.name, team: row.team, gender: row.gender, isScorer: !isOn });
     const t = teamTotalForTeam(workspace, gender, removeSeniors, merged, team, trial, undefined, undefined, rosterCatalog);
@@ -492,7 +524,7 @@ export function optimizeScorersForTeam(
   const finalIsScorer = (row: ScorerRosterRow): boolean => {
     const rowKey = scorerRosterKey(row.team, row.gender, row.name);
     const ov = overrides.find(o => scorerRosterKey(o.team, o.gender, o.name) === rowKey);
-    return ov ? ov.isScorer : lookup.isScorer(row.name, row.team, row.gender);
+    return ov ? ov.isScorer : baseLookup.isScorer(row.name, row.team, row.gender);
   };
   const finalScorerPoints = ranked
     .filter(finalIsScorer)
@@ -521,6 +553,7 @@ export function optimizeEventLineupForTeam(
   rosterCatalog?: CatalogTeamRoster
 ): { plans: PlannedSwimEntry[]; activeEntryIds: string[] } {
   const merged = mergeScoringSettings(settings, { conference: workspace.conference });
+  const aliasResolver = buildAliasResolver(workspace);
   // One resolver for the call. Without it a linked athlete appears twice here and
   // gets TWO sets of planned entries — one human entered in their primary events
   // twice over, straight past the entry cap.
@@ -529,13 +562,17 @@ export function optimizeEventLineupForTeam(
     merged,
     workspace.scorerRosterOverrides ?? [],
     gender,
-    buildAliasResolver(workspace)
+    aliasResolver
   );
   const teamAthletes = lookup.rows.filter(r => r.team === team);
   const existing = [...(workspace.meetEntryPlans ?? [])];
   const rest = existing.filter(p => !(p.team === team && p.gender === gender));
   const plans: PlannedSwimEntry[] = [...rest];
-  const activeEntryIds: string[] = [];
+  const activeEntryIds: string[] = (workspace.activeEntryIds ?? []).length > 0
+    ? [...(workspace.activeEntryIds ?? [])]
+    // An empty list means "every plan is active". Keep that meaning for the other teams
+    // by listing their plans explicitly before this run adds its own ids.
+    : rest.map(plan => plan.id);
 
   // The loaded meet's program bounds what the optimizer may enter anyone in.
   // Read from the frozen source copy so the plans it writes cannot widen it.
@@ -547,6 +584,18 @@ export function optimizeEventLineupForTeam(
   const allowedEvents = program.size > 0 ? program : null;
   // Same frozen copy: events rank by the place they would take in the meet.
   const meetField = meetPlaceFieldForWorkspace(workspace, gender);
+  const rawHeldEventsBySwimmer = new Map<string, Set<string>>();
+  for (const row of sourceResults) {
+    if (row.isTimeTrial || /\bTIME\s+TRIAL\b/i.test(row.event)) continue;
+    if (row.team.trim() !== team || (row.gender && row.gender !== gender)) continue;
+    const key = aliasResolver.resolveAthleteName(row.name, team, gender).trim().toLocaleLowerCase();
+    const held = rawHeldEventsBySwimmer.get(key) ?? new Set<string>();
+    held.add(swimEventIdentity(row.event));
+    rawHeldEventsBySwimmer.set(key, held);
+  }
+  const seededActiveEntryIds = (workspace.activeEntryIds ?? []).length > 0
+    ? [...(workspace.activeEntryIds ?? [])]
+    : (workspace.meetEntryPlans ?? []).map(plan => plan.id);
 
   for (const athlete of teamAthletes) {
     const profile =
@@ -560,22 +609,25 @@ export function optimizeEventLineupForTeam(
         meetField
       ) ?? getAthleteProfile(workspace, team, gender, athlete.name, merged);
     if (!profile) continue;
+    let projectedPool = buildWhatIfResults({
+      workspace: { ...workspace, meetEntryPlans: plans, activeEntryIds: seededActiveEntryIds },
+      gender, removeSeniors: false,
+    });
+    const athleteKey = aliasResolver.resolveAthleteName(athlete.name, team, gender).trim().toLocaleLowerCase();
+    const heldMeetEvents = rawHeldEventsBySwimmer.get(athleteKey) ?? new Set<string>();
     for (const event of profile.primaryEvents) {
+      if (workspace.entryPlanMode !== 'plan_sheet' && heldMeetEvents.has(swimEventIdentity(event))) continue;
+      const counts = countSwimmerEntries(projectedPool, team, gender, athlete.name, aliasResolver, merged);
+      if (!canAcceptAnotherEntry(counts, merged, event)) break;
       const best = profile.bestByEvent[event];
-      const entry = createPlannedEntry({
-        name: athlete.name,
-        team,
-        gender,
-        classYear: athlete.classYear,
-        event,
-        time: best?.time ?? 'NT',
-        source: 'optimizer',
-        active: true,
-        // A converted best stays marked as an estimate on the plan.
-        ...eventBestTimeMarks(best),
-      });
+      const entry = createPlannedEntry({ name: athlete.name, team, gender, classYear: athlete.classYear, event,
+        time: best?.time ?? 'NT', source: 'optimizer', active: true, ...eventBestTimeMarks(best) });
       plans.push(entry);
       activeEntryIds.push(entry.id);
+      projectedPool = buildWhatIfResults({
+        workspace: { ...workspace, meetEntryPlans: plans, activeEntryIds: seededActiveEntryIds.concat(activeEntryIds) },
+        gender, removeSeniors: false,
+      });
     }
   }
 

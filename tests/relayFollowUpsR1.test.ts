@@ -265,10 +265,14 @@ describe("(a) a Mixed-event row counts only for the swimmer's own gender", () =>
 
   it('the swap ranking never offers her either', () => {
     const swaps = swapsWithNonScorer(workspace(), DSU, 'Austin Huffhines');
+    // Alessandro Giustolisi (21.65) is no longer offered. He holds 7 of NSISC's 7 entries
+    // (4 individual + the 4x50 Medley, 4x100 Medley and 4x100 Free relays) and does not swim
+    // this 4x50 Free Relay, so a leg here would be an 8th entry. Sergio Rodriguez Rodriguez
+    // and Kostantin Ilijic are also at 7 of 7, but both already swim Event 31 on another
+    // squad, so the leg adds no entry. See tests/entryCapReviewFixes.test.ts (fix 3).
     expect(swaps).toStrictEqual([
       `${M_200FR} leg3 Sergio Rodriguez Rodriguez 21.22`,
       `${M_200FR} leg3 Kostantin Ilijic 21.45`,
-      `${M_200FR} leg3 Alessandro Giustolisi 21.65`,
     ]);
   });
 

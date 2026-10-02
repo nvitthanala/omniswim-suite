@@ -131,39 +131,42 @@ function plan(id, name, event, time) {
 }
 
 /**
- * THE SHAPE THAT BREAKS A PER-NAME SWEEP. Alpha One is carried as TWO recruit
- * rows for 50 Freestyle at the same time.
+ * THE SHAPE THAT BREAKS A PER-NAME SWEEP. Alpha One is carried as TWO MEET result
+ * rows for 50 Freestyle at the same time and the same published place.
  *
- * Why it lands on ONE placement: `prepareRecruitsForScoring` places recruit rows
- * fastest first and shares a place on an exact time tie, so two rows at 20.10
- * receive the SAME rank. That placement then holds two rows and one distinct
- * name — `calculatePoints` pays both rows, the scorer pool charges one name.
- * (Before 2026-09-02 they collided for a different reason — each row was ranked
- * against the PDF comparators alone, so ANY two recruits sharing an insertion
- * slot tied, whatever their times. Equal times are the only cause now; see
- * scripts/test_recruit_placement_grid.mjs.)
+ * Why it lands on ONE placement: both rows carry rank 1, and with no projected
+ * plan nothing re-ranks a meet row. That placement then holds two rows and one
+ * distinct name: `calculatePoints` pays both rows, the scorer pool charges one
+ * name.
  *
- * (A plain duplicated RESULT row does not reproduce it: projectRanksInField
- * assigns sequential ranks to equal times, splitting the pair across two
- * placements.)
- *
- * WHY TWO RECRUIT ROWS AND NOT recruit+plan. This fixture used to pair a recruit
- * row with an active optimizer plan — "the exact shape the live HSU workspace
- * holds for five men". That shape was the duplication bug itself: the projection
- * composed its three planes without reconciling them, so one athlete held two
- * entries in one event and scored twice. `buildWhatIfProjection` now collapses a
- * cross-plane duplicate down to the most explicit plane, and
- * `buildFastSwapContext` refuses to engage when it does (§4 below). Two rows on
- * ONE plane are deliberately left alone — that is a duplicate import, not a
- * lineup decision — so this fixture still holds more rows than names.
+ * WHY TWO MEET ROWS. This fixture used to hold two RECRUIT rows. The projection
+ * now keeps one row per athlete and event on the recruit and plan planes, so that
+ * shape no longer reaches the scoring pool (and `buildFastSwapContext` correctly
+ * refuses to engage while the projection reports a collapsed row for the team).
+ * The meet plane is never collapsed against itself: a prelims row and a finals row
+ * for one athlete legitimately share a name there. Before that it paired a recruit
+ * row with an active optimizer plan, a cross-plane duplicate that the projection
+ * also reconciles now (see §5 below).
  */
-function duplicateRowWorkspace(extra = {}) {
+function duplicateRowWorkspace(extra = {}, alphaOne = 'dup') {
+  // Alpha One's 50 Freestyle rows, as MEET result rows. 'dup' = two rows holding
+  // one placement; 'single' = one row; 'none' = no row (the caller adds its own).
+  const alphaOneRows = {
+    dup: [
+      result('a1', 'Alpha One', TEAM, '50 Freestyle', '20.10', { rank: 1, roundSwam: 'A Final' }),
+      result('a1b', 'Alpha One', TEAM, '50 Freestyle', '20.10', { rank: 1, roundSwam: 'A Final' }),
+    ],
+    single: [result('a1', 'Alpha One', TEAM, '50 Freestyle', '20.10', { rank: 1, roundSwam: 'A Final' })],
+    none: [],
+  }[alphaOne];
+  const beta1Rank = { dup: 3, single: 2, none: 1 }[alphaOne];
   return baseWorkspace({
     menResults: [
+      ...alphaOneRows,
       result('a2', 'Alpha Two', TEAM, '100 Backstroke', '50.00', { rank: 1, roundSwam: 'A Final' }),
       result('a3', 'Alpha Three', TEAM, '100 Butterfly', '49.50', { rank: 1, roundSwam: 'A Final' }),
       result('a4', 'Alpha Four', TEAM, '200 Freestyle', '1:42.00', { rank: 2, roundSwam: 'A Final' }),
-      result('b1', 'Beta One', 'Beta', '50 Freestyle', '20.50', { rank: 1, roundSwam: 'A Final' }),
+      result('b1', 'Beta One', 'Beta', '50 Freestyle', '20.50', { rank: beta1Rank, roundSwam: 'A Final' }),
       result('b2', 'Beta Two', 'Beta', '100 Backstroke', '51.00', { rank: 2, roundSwam: 'A Final' }),
       result('b3', 'Beta Three', 'Beta', '100 Butterfly', '50.10', { rank: 2, roundSwam: 'A Final' }),
       result('b4', 'Beta Four', 'Beta', '200 Freestyle', '1:41.00', { rank: 1, roundSwam: 'A Final' }),
@@ -171,11 +174,6 @@ function duplicateRowWorkspace(extra = {}) {
       result('b6', 'Beta Six', 'Beta', '50 Freestyle', '20.90', { rank: 2, roundSwam: 'A Final' }),
       // 200 Backstroke sorts last: Alpha Five arrives with the pool already full.
       result('a5', 'Alpha Five', TEAM, '200 Backstroke', '1:49.00', { rank: 1, roundSwam: 'A Final' }),
-    ],
-    // Alpha One twice in 50 Free (two recruit rows, identical time).
-    recruits: [
-      recruit('r1', 'Alpha One', '50 Freestyle', '20.10'),
-      recruit('r1b', 'Alpha One', '50 Freestyle', '20.10'),
     ],
     // Candidate add-events for the swap enumeration.
     athleteHistory: [
@@ -197,9 +195,7 @@ function duplicateRowWorkspace(extra = {}) {
 
 /** Same workspace with the duplicate reduced to a single row. */
 function singleRowWorkspace() {
-  return duplicateRowWorkspace({
-    recruits: [recruit('r1', 'Alpha One', '50 Freestyle', '20.10')],
-  });
+  return duplicateRowWorkspace({}, 'single');
 }
 
 // --- 1. the context ENGAGES on a duplicated-placement workspace -------------
@@ -291,11 +287,14 @@ function singleRowWorkspace() {
 // under-count every drop of a shadowing row. The context must refuse rather
 // than answer, and the full re-score must still work.
 {
-  const ws = duplicateRowWorkspace({
-    recruits: [recruit('r1', 'Alpha One', '50 Freestyle', '20.10')],
-    meetEntryPlans: [plan('p1', 'Alpha One', '50 Freestyle', '20.10')],
-    activeEntryIds: ['p1'],
-  });
+  const ws = duplicateRowWorkspace(
+    {
+      recruits: [recruit('r1', 'Alpha One', '50 Freestyle', '20.10')],
+      meetEntryPlans: [plan('p1', 'Alpha One', '50 Freestyle', '20.10')],
+      activeEntryIds: ['p1'],
+    },
+    'none'
+  );
   const merged = mergeScoringSettings(ws.scoringSettings, { conference: ws.conference });
   const proj = buildWhatIfProjection({ workspace: ws, gender: MEN, removeSeniors: false });
 

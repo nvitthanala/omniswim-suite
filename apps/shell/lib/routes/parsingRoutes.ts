@@ -8,6 +8,7 @@
  * invocation order and fallbacks, and error handling as before.
  */
 import type { Express } from 'express';
+import { randomUUID } from 'node:crypto';
 import fs from 'fs';
 import path from 'path';
 import { Gender, SwimmerResult } from '../../../../packages/core/src/types.ts';
@@ -30,6 +31,10 @@ export interface ParsingRoutesDeps {
   aiEnabled: boolean;
 }
 
+export function createParsingTempFilePath(projectRoot: string, prefix = 'temp'): string {
+  return path.join(projectRoot, `${prefix}_${randomUUID()}.pdf`);
+}
+
 export function registerParsingRoutes(app: Express, deps: ParsingRoutesDeps): void {
   const {
     projectRoot: PROJECT_ROOT,
@@ -43,7 +48,7 @@ export function registerParsingRoutes(app: Express, deps: ParsingRoutesDeps): vo
       return res.status(400).json({ error: 'Invalid PDF payload', details: parsed.error.issues });
     }
     const { base64, format } = parsed.data;
-    const tempFile = path.join(PROJECT_ROOT, `temp_${Date.now()}.pdf`);
+    const tempFile = createParsingTempFilePath(PROJECT_ROOT);
     try {
       fs.writeFileSync(tempFile, Buffer.from(base64, 'base64'));
       const fmt = format || 'auto';
@@ -58,7 +63,7 @@ export function registerParsingRoutes(app: Express, deps: ParsingRoutesDeps): vo
     } catch (error) {
       res.status(500).json({ error: 'Failed to parse PDF', details: String(error) });
     } finally {
-      if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+      try { fs.unlinkSync(tempFile); } catch { /* absent or already removed */ }
     }
   });
 
@@ -71,7 +76,7 @@ export function registerParsingRoutes(app: Express, deps: ParsingRoutesDeps): vo
     if (!base64?.trim()) {
       return res.status(400).json({ error: 'No PDF data in request' });
     }
-    const tempFile = path.join(PROJECT_ROOT, `temp_psych_${Date.now()}.pdf`);
+    const tempFile = createParsingTempFilePath(PROJECT_ROOT, 'temp_psych');
     try {
       fs.writeFileSync(tempFile, Buffer.from(base64, 'base64'));
       const fmt = format || 'auto';
@@ -102,7 +107,7 @@ export function registerParsingRoutes(app: Express, deps: ParsingRoutesDeps): vo
     } catch (error) {
       return res.status(500).json({ error: 'Failed to parse psych PDF', details: String(error) });
     } finally {
-      if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+      try { fs.unlinkSync(tempFile); } catch { /* absent or already removed */ }
     }
   });
 
@@ -115,7 +120,11 @@ export function registerParsingRoutes(app: Express, deps: ParsingRoutesDeps): vo
       const { text, imageBase64, team, gender, swimmerName, division } = validated.data;
       const g = gender === Gender.WOMEN || gender === 'Women' ? Gender.WOMEN : Gender.MEN;
       const teamName = typeof team === 'string' && team.trim() ? team.trim() : 'Unknown';
-      const div = division === 'D2' || division === 'D3' || division === 'NAIA' ? division : 'D1';
+      // A missing or unrecognised division is absent, not D1: passed explicitly it would
+      // stop the parser looking the team up, and an unmapped team would be judged against
+      // the strictest table. Undefined lets the team's own division decide, and an
+      // unmapped team stays unknown.
+      const div = division === 'D1' || division === 'D2' || division === 'D3' || division === 'NAIA' ? division : undefined;
       if (typeof text === 'string' && text.trim()) {
         const result = parseSwimCloudPasteDetailed(text, {
           team: teamName,

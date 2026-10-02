@@ -273,24 +273,58 @@ assert.ok(
   'the refused candidate is the one that would have lowered the total'
 );
 
-// --- 5. A workspace with a meet loaded still gains ---
+// --- 5. A workspace with a meet loaded never restates a held event ---
 assert.ok(
   meetResult.previousTotal > 0,
   `meet fixture must score before optimizing, got ${meetResult.previousTotal}`
 );
-assert.equal(meetResult.outcome, 'improved', 'the guard must not neuter a real improvement');
+// User decision 2026-10-02: a published meet result stands; history bests do not
+// compete with it. This fixture holds every candidate event at the meet.
+assert.equal(meetResult.outcome, 'unchanged');
+assert.equal(meetResult.appliedStages, 'none');
 assert.ok(
-  meetResult.projectedTotal > meetResult.previousTotal,
-  `meet workspace must gain: ${meetResult.previousTotal} -> ${meetResult.projectedTotal}`
+  meetResult.projectedTotal >= meetResult.previousTotal,
+  `meet workspace must not lose: ${meetResult.previousTotal} -> ${meetResult.projectedTotal}`
 );
-assert.notEqual(meetResult.appliedStages, 'none');
-assert.notDeepEqual(
-  meetResult.meetEntryPlans,
-  meetWs.meetEntryPlans,
-  'an improved result must actually change something'
-);
+if (meetResult.outcome === 'unchanged') {
+  assert.equal(meetResult.projectedTotal, meetResult.previousTotal);
+}
 
-// --- 6. Every stage selector is guarded, not just 'all' ---
+// --- 6. A strong history event that the swimmer did not hold can still improve ---
+const unheldEvent = '200 Breaststroke';
+const unheldWs = buildMeetWorkspace();
+const unheldField = [];
+for (let i = 1; i < 4; i++) {
+  unheldField.push({
+    id: `unheld-hsu-${i}`, rank: i * 2, name: `Hsu Swimmer ${i}`, classYear: ClassYear.SO,
+    team: TEAM, time: secondsToTime(121 + i), finalsTime: secondsToTime(121 + i), roundSwam: 'A Final',
+    points: 0, event: unheldEvent, gender: Gender.MEN,
+  });
+}
+for (let i = 0; i < 4; i++) {
+  unheldField.push({
+    id: `unheld-obu-${i}`, rank: i * 2 + 1, name: `Obu Swimmer ${i}`, classYear: ClassYear.SO,
+    team: RIVAL, time: secondsToTime(120 + i), finalsTime: secondsToTime(120 + i), roundSwam: 'A Final',
+    points: 0, event: unheldEvent, gender: Gender.MEN,
+  });
+}
+unheldWs.menResults.push(...unheldField);
+unheldWs.athleteHistory.push({
+  name: 'Hsu Swimmer 0', team: TEAM, gender: Gender.MEN, event: unheldEvent,
+  time: secondsToTime(110), timeType: 'SCY', source: 'paste',
+});
+const unheldResult = optimizeRosterForTeam(
+  unheldWs,
+  Gender.MEN,
+  TEAM,
+  false,
+  mergeScoringSettings(unheldWs.scoringSettings, { conference: 'NSISC' }),
+  'events'
+);
+assert.equal(unheldResult.outcome, 'improved', 'an unheld, stronger history event remains planable');
+assert.ok(unheldResult.meetEntryPlans.some(p => p.event === unheldEvent && p.name === 'Hsu Swimmer 0'));
+
+// --- 7. Every stage selector is guarded, not just 'all' ---
 for (const ws of [rosterWs, meetWs]) {
   const settings = ws === rosterWs ? rosterSettings : meetSettings;
   for (const stage of ['scorers', 'events', 'hypothetical', 'all']) {

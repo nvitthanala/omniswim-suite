@@ -1,9 +1,16 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'fs';
+import { existsSync, readFileSync } from 'fs';
 import { optimizeRosterForTeam, optimizeScorersForTeam } from '../packages/core/src/lib/rosterOptimizer.ts';
 import { mergeScoringSettings } from '../packages/core/src/lib/scoringDefaults.ts';
 import { Gender } from '../packages/core/src/types.ts';
 
+// data/meets.json is the local workspace file. It is gitignored, so a fresh
+// checkout or CI worktree does not have it. Skip with a clear message rather than
+// fail: this script pins numbers from that one local file.
+if (!existsSync('data/meets.json')) {
+  console.log('SKIP roster optimizer test: data/meets.json is absent (gitignored, local only).');
+  process.exit(0);
+}
 const meets = JSON.parse(readFileSync('data/meets.json', 'utf8'));
 const ws = meets[0];
 const settings = mergeScoringSettings(ws.scoringSettings, { conference: 'NSISC' });
@@ -15,7 +22,7 @@ const result = optimizeRosterForTeam(ws, Gender.MEN, team, false, settings, 'sco
 // 'number' — both pass for { overrides: [], projectedTotal: NaN }, since
 // NaN's typeof IS 'number' (docs/reference/TEST_COVERAGE_AUDIT.md,
 // "Pushover"). Hardened 2026-09-14 with real, finite, non-losing, exact-pinned
-// assertions against this real committed workspace.
+// assertions against the local data/meets.json workspace (gitignored).
 assert.ok(Array.isArray(result.overrides), 'overrides array');
 assert.ok(Number.isFinite(result.projectedTotal), 'projected total is a real finite number, not NaN');
 assert.ok(Number.isFinite(result.previousTotal), 'previous total is a real finite number, not NaN');
@@ -24,11 +31,14 @@ assert.ok(
   `the optimizer must never return a total (${result.projectedTotal}) below the one it started from (${result.previousTotal})`
 );
 assert.equal(result.outcome, 'improved', 'this real roster has real headroom for the scorers stage to find');
-// Exact pins against this real, committed workspace — a regression here
-// means a real scoring number moved, not a plausible reshuffling.
-assert.equal(result.previousTotal.toFixed(1), '913.0', 'previous total pinned to the committed NSISC data');
-assert.equal(result.projectedTotal.toFixed(1), '930.0', 'projected total pinned to the committed NSISC data');
-assert.equal(result.overrides.length, 38, 'override count pinned to the committed NSISC data');
+// Re-pinned 2026-10-01 (913/930/38 -> 923/950/39): the alias-split fix stops one
+// linked swimmer scoring twice in a projected event. Not an optimizer change.
+// Exact pins against the local data/meets.json workspace (gitignored, not
+// committed) — a regression here means a real scoring number moved, not a
+// plausible reshuffling.
+assert.equal(result.previousTotal.toFixed(1), '923.0', 'previous total pinned to the local NSISC data');
+assert.equal(result.projectedTotal.toFixed(1), '950.0', 'projected total pinned to the local NSISC data');
+assert.equal(result.overrides.length, 39, 'override count pinned to the local NSISC data');
 console.log(
   'optimizer',
   team,

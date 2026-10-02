@@ -54,11 +54,14 @@ import {
   convertTimeToSeconds,
 } from '../packages/core/src/lib/utils';
 import { buildMeetEventLabelIndex } from '../packages/core/src/lib/eventIdentity';
+import { swimEventIdentity } from '../packages/core/src/lib/bestTimeEligibility';
 import { buildStoredSwim, type CatalogTeamRoster } from '../packages/core/src/lib/rosterCatalog';
 import { buildScoringBundle } from '../packages/core/src/lib/scoringEngine';
 import { importHistoryToRoster } from '../packages/core/src/lib/historyImportRoster';
 import { optimizeEventLineupForTeam } from '../packages/core/src/lib/rosterOptimizer';
 import { NSISC_PRESET_SETTINGS } from '../packages/core/src/lib/scoringDefaults';
+import { countSwimmerEntries } from '../packages/core/src/lib/swimmerEntryLimits';
+import { buildWhatIfResults } from '../packages/core/src/lib/whatIfProjection';
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const HSU = 'Henderson State University';
@@ -586,11 +589,44 @@ describe('buildCategorizedScoringInputs: which catalog events fill the cap', () 
   });
 
   it('the optimizer plans a catalog athlete in their strongest events at the loaded meet', () => {
-    const settings = { ...NSISC_PRESET_SETTINGS, maxIndividualEntriesPerSwimmer: 3, maxTotalEntriesPerSwimmer: undefined };
+    // Entries at the loaded meet count toward the caps, so the individual cap is "what the athlete
+    // already has plus 3". 999 is the explicit "no total cap" sentinel; an undefined total would be
+    // refilled with the NSISC conference value (7).
+    const baseline = workspace({ meet: true, settings: { ...NSISC_PRESET_SETTINGS, maxTotalEntriesPerSwimmer: 999 } });
+    const existing = countSwimmerEntries(
+      buildWhatIfResults({ workspace: baseline, gender: Gender.MEN, removeSeniors: false }),
+      HSU,
+      Gender.MEN,
+      'Avery Henke'
+    ).individual;
+    const settings = { ...NSISC_PRESET_SETTINGS, maxIndividualEntriesPerSwimmer: existing + 3, maxTotalEntriesPerSwimmer: 999 };
     const ws = workspace({ meet: true, settings });
     const { plans } = optimizeEventLineupForTeam(ws, Gender.MEN, HSU, settings, hsuCatalog());
     const avery = plans.filter(p => p.name === 'Avery Henke').map(p => p.event);
-    expect(avery).toStrictEqual(['100 Breaststroke', '200 Breaststroke', '200 Individual Medley']);
+    // Her three meet events stand. The strongest remaining catalog events come first.
+    expect(avery).toStrictEqual(['100 Backstroke', '100 Freestyle', '200 Backstroke']);
+    expect(new Set(avery).size).toBe(avery.length);
+    const held = buildWhatIfResults({ workspace: ws, gender: Gender.MEN, removeSeniors: false })
+      .filter(r => r.name === 'Avery Henke' && r.team === HSU && !r.isTimeTrial)
+      .map(r => swimEventIdentity(r.event));
+    expect(avery.every(event => !held.includes(swimEventIdentity(event)))).toBe(true);
+  });
+
+  it('skips held meet events and adds none when the loaded meet already fills the total cap', () => {
+    const settings = { ...NSISC_PRESET_SETTINGS, maxIndividualEntriesPerSwimmer: 3, maxTotalEntriesPerSwimmer: undefined };
+    const ws = workspace({ meet: true, settings });
+    const currentEntries = countSwimmerEntries(
+      buildWhatIfResults({ workspace: ws, gender: Gender.MEN, removeSeniors: false }),
+      HSU,
+      Gender.MEN,
+      'Avery Henke',
+      undefined,
+      settings
+    );
+    const { plans } = optimizeEventLineupForTeam(ws, Gender.MEN, HSU, settings, hsuCatalog());
+    const avery = plans.filter(p => p.name === 'Avery Henke').map(p => p.event);
+    expect(currentEntries.total).toBe(7);
+    expect(avery).toStrictEqual([]);
   });
 
   it('every production caller passes eventOrder', () => {

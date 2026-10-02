@@ -242,8 +242,8 @@ function goldenMergeResult(
   }
 }
 
-/** Taken from the code before this change (HEAD 3cdaa21f), same pins. */
-const MERGE_GOLDEN_WITH_MEET = '811830d10e4c6be4038d1c18698fc3b9b5fdfdd115d2fca4aef0008eb17485ff';
+/** Hash captured after the loaded-meet result-blocking rule was added. */
+const MERGE_GOLDEN_WITH_MEET = 'b80b37290ef6cd0aa3c37cb9c62482659e2e0471ac24ac330a652909d5e6e321';
 const MERGE_GOLDEN_NO_MEET = '906b4c91855dc79177f4a9137554873b2d7428cac1f84c6051c411321c2699a9';
 
 /** The result with `source` taken off every recruit row: the pre-change shape. */
@@ -258,11 +258,11 @@ function withoutRecruitSource(result: HistoryImportRosterResult): HistoryImportR
 
 const noMeetWorkspace = (): Workspace => ({ ...goldenWorkspace(), menResults: [] });
 
-describe('merge mode is unchanged', () => {
-  it('matches the pre-change output with a loaded meet, apart from Recruit.source', () => {
+describe('merge mode preserves its golden outputs and blocks published meet events', () => {
+  it('matches the repinned loaded-meet output, apart from Recruit.source', () => {
     const result = goldenMergeResult();
     expect(result.summary.newRecruits).toBe(4);
-    expect(result.summary.lineupEntriesAdded).toBe(2);
+    expect(result.summary.lineupEntriesAdded).toBe(1);
     expect(sha256(withoutRecruitSource(result))).toBe(MERGE_GOLDEN_WITH_MEET);
   });
 
@@ -457,7 +457,7 @@ describe('the Capocci case: rows built from a self-reported swim go, manual and 
     const plans = result.patch.meetEntryPlans ?? [];
     expect(plans.filter(isCapocci)).toStrictEqual([CAPOCCI_MANUAL_100_BACK]);
     expect(plans.some(p => p.source === 'optimizer')).toBe(false);
-    expect(result.patch.activeEntryIds).toStrictEqual([]);
+    expect(result.patch.activeEntryIds).toStrictEqual([CAPOCCI_MANUAL_100_BACK.id]);
     expect(result.patch.athleteHistory).toContainEqual(MALONE_PDF_ROW);
     const u = (result.patch.athleteHistory ?? []).filter(h => isCapocci(h) && h.time === '56.98');
     // The U swim is stored again, flagged this time, and written into no row.

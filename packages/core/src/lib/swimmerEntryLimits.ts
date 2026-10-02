@@ -38,7 +38,7 @@
  */
 
 import { Gender, ScoringSettings, SwimmerResult } from '../types';
-import { mergeScoringSettings } from './scoringDefaults';
+import { entryCapPolicy, mergeScoringSettings } from './scoringDefaults';
 import { isRelayResult, normalizeSwimmerName } from './utils';
 import { IDENTITY_ALIAS_RESOLVER, type AthleteAliasResolver } from './athleteAliases';
 
@@ -52,6 +52,13 @@ export type SwimmerEntryCounts = {
   relayEvents: Set<string>;
   relayCount: number;
   total?: number; // individual + relayCount
+  /**
+   * The distinct individual EVENT keys this athlete occupies ({@link entryCapKey}
+   * strings, so raw event labels). Always set by {@link countSwimmerEntries}; optional
+   * only so a hand-built count stays valid. A caller that must know WHICH events
+   * are taken, not just how many, reads it here instead of re-scanning the rows.
+   */
+  individualEvents?: Set<string>;
 };
 
 /**
@@ -117,8 +124,10 @@ export function countSwimmerEntries(
   team: string,
   gender: Gender,
   name: string,
-  resolver: AthleteAliasResolver = IDENTITY_ALIAS_RESOLVER
+  resolver: AthleteAliasResolver = IDENTITY_ALIAS_RESOLVER,
+  settings?: Pick<ScoringSettings, 'entryCapCountsTimeTrials' | 'entryCapCountsExhibition'>
 ): SwimmerEntryCounts {
+  const policy = entryCapPolicy(settings);
   const nameKey = normalizeSwimmerName(resolver.resolveAthleteName(name, team, gender));
   const relayEvents = new Set<string>();
   let individual = 0;
@@ -142,7 +151,13 @@ export function countSwimmerEntries(
     // over it. Oskar Cebula's 100 Breaststroke counted twice because he also
     // swam it as a time trial. The same count gates `canAcceptAnotherEntry`, so
     // those swimmers were also blocked from adding a legitimate entry.
-    if (r.isTimeTrial) continue;
+    //
+    // Whether it does is `entryCapCountsTimeTrials` (default false). Exhibition is
+    // the mirror image: an exhibition swimmer is still ENTERED in the event, so
+    // that swim costs an entry unless `entryCapCountsExhibition` is turned off
+    // (default true; user ruling 2026-10-01, prelims rounds included).
+    if (r.isTimeTrial && !policy.countsTimeTrials) continue;
+    if (r.isExhibition && !policy.countsExhibition) continue;
     if (r.gender != null && r.gender !== gender) continue;
     if (String(r.team ?? '').trim() !== team) continue;
     // Resolve the ROW's name too. Rows reaching here already passed the team and
@@ -162,7 +177,13 @@ export function countSwimmerEntries(
     }
   }
 
-  return { individual, relayEvents, relayCount: relayEvents.size, total: individual + relayEvents.size };
+  return {
+    individual,
+    relayEvents,
+    relayCount: relayEvents.size,
+    total: individual + relayEvents.size,
+    individualEvents: indEvents,
+  };
 }
 
 export function swimmerExceedsEntryLimits(

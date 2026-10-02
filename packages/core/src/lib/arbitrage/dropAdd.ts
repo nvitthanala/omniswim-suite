@@ -21,6 +21,7 @@ import {
   countSwimmerEntries,
   swimmerExceedsEntryLimits,
 } from '../swimmerEntryLimits';
+import { buildAliasResolver, type AthleteAliasResolver } from '../athleteAliases';
 import { createPlannedEntry } from '../whatIfProjection';
 import { convertTimeToSeconds, isRelayResult, normalizeSwimmerName } from '../utils';
 import { buildCrossCourseTable } from './crossCourseTable';
@@ -183,7 +184,8 @@ function computeCapVoids(
   scored: SwimmerResult[],
   team: string,
   gender: Gender,
-  settings: ScoringSettings
+  settings: ScoringSettings,
+  resolver: AthleteAliasResolver
 ): CapVoidSummary {
   const teamRows = scored.filter(
     r => String(r.team ?? '').trim() === team && (r.gender === gender || r.gender == null)
@@ -201,7 +203,7 @@ function computeCapVoids(
   const overCapKeys = new Set<string>();
   let total = 0;
   for (const [key, name] of display) {
-    const counts = countSwimmerEntries(teamRows, team, gender, name);
+    const counts = countSwimmerEntries(teamRows, team, gender, name, resolver, settings);
     const over = swimmerExceedsEntryLimits(counts, settings);
     if (!over.individualOver && !over.relayOver && !over.totalOver) continue;
     overCapKeys.add(key);
@@ -309,7 +311,8 @@ export function rankDropOnly(workspace: Workspace, opts: DropOnlyOptions): DropO
   const scoredBase = scoreWorkspaceRows(workspace, gender, merged);
   const baseTotal = sumTeamPoints(scoredBase, team, gender);
   const baseTotalRounded = Number(baseTotal.toFixed(3));
-  const baseVoids = computeCapVoids(scoredBase, team, gender, merged);
+  const resolver = buildAliasResolver(workspace);
+  const baseVoids = computeCapVoids(scoredBase, team, gender, merged, resolver);
   const baseEffective = baseTotal - baseVoids.total;
 
   // Fast overlay is only void-safe when nobody is over cap at baseline (a
@@ -338,7 +341,7 @@ export function rankDropOnly(workspace: Workspace, opts: DropOnlyOptions): DropO
         };
         const scoredMod = scoreWorkspaceRows(modWs, gender, merged);
         newTotal = sumTeamPoints(scoredMod, team, gender);
-        newEffective = newTotal - computeCapVoids(scoredMod, team, gender, merged).total;
+        newEffective = newTotal - computeCapVoids(scoredMod, team, gender, merged, resolver).total;
       } else {
         // fastCtx only exists when baseVoids.total === 0, and dropping cannot
         // create a new violation — effective total equals the engine total.
@@ -406,7 +409,8 @@ function resolveAddCandidateAthlete(
   teamRows: SwimmerResult[],
   team: string,
   gender: Gender,
-  merged: ScoringSettings
+  merged: ScoringSettings,
+  resolver: AthleteAliasResolver
 ): AddCandidateAthlete | null {
   if (!display) return null;
 
@@ -416,7 +420,7 @@ function resolveAddCandidateAthlete(
 
   // Entry caps over the CURRENT scored what-if rows (plans + results +
   // recruits + relay legs) — an at-cap swimmer gets no add suggestions.
-  const counts = countSwimmerEntries(teamRows, team, gender, display);
+  const counts = countSwimmerEntries(teamRows, team, gender, display, resolver, merged);
   if (!canAcceptAnotherEntry(counts, merged, openEvents[0])) return null;
 
   return { display, openEvents, classYear: classYearFromDroppableEntries(dropInfo) };
@@ -429,7 +433,8 @@ function computeAddEffectiveTotal(
   fastCtx: FastSwapContext | null,
   team: string,
   gender: Gender,
-  merged: ScoringSettings
+  merged: ScoringSettings,
+  resolver: AthleteAliasResolver
 ): { newTotal: number; newEffective: number } {
   const fastTotal = fastCtx ? fastCtx.addOnlyTotalFor(newEntry) : null;
   if (fastTotal != null) {
@@ -440,7 +445,7 @@ function computeAddEffectiveTotal(
   const modWs: Workspace = { ...workspace, ...entryAddPatch(workspace, newEntry).patch };
   const scoredMod = scoreWorkspaceRows(modWs, gender, merged);
   const newTotal = sumTeamPoints(scoredMod, team, gender);
-  const newEffective = newTotal - computeCapVoids(scoredMod, team, gender, merged).total;
+  const newEffective = newTotal - computeCapVoids(scoredMod, team, gender, merged, resolver).total;
   return { newTotal, newEffective };
 }
 
@@ -453,6 +458,7 @@ function buildAddOnlyRowsForAthlete(
   team: string,
   gender: Gender,
   merged: ScoringSettings,
+  resolver: AthleteAliasResolver,
   baseEffective: number,
   baseTotalRounded: number
 ): { rows: AddOnlyRow[]; candidatesEvaluated: number } {
@@ -476,7 +482,7 @@ function buildAddOnlyRowsForAthlete(
       active: true,
     });
 
-    const { newTotal, newEffective } = computeAddEffectiveTotal(workspace, newEntry, fastCtx, team, gender, merged);
+    const { newTotal, newEffective } = computeAddEffectiveTotal(workspace, newEntry, fastCtx, team, gender, merged, resolver);
 
     const deltaPoints = Number((newEffective - baseEffective).toFixed(3));
     if (deltaPoints <= 0) continue;
@@ -531,7 +537,8 @@ export function rankAddOnly(workspace: Workspace, opts: AddOnlyOptions): AddOnly
   const scoredBase = scoreWorkspaceRows(workspace, gender, merged);
   const baseTotal = sumTeamPoints(scoredBase, team, gender);
   const baseTotalRounded = Number(baseTotal.toFixed(3));
-  const baseVoids = computeCapVoids(scoredBase, team, gender, merged);
+  const resolver = buildAliasResolver(workspace);
+  const baseVoids = computeCapVoids(scoredBase, team, gender, merged, resolver);
   const baseEffective = baseTotal - baseVoids.total;
   const teamRows = scoredBase.filter(
     r => String(r.team ?? '').trim() === team && (r.gender === gender || r.gender == null)
@@ -554,7 +561,8 @@ export function rankAddOnly(workspace: Workspace, opts: AddOnlyOptions): AddOnly
       teamRows,
       team,
       gender,
-      merged
+      merged,
+      resolver
     );
     if (!candidate) continue;
 
@@ -566,6 +574,7 @@ export function rankAddOnly(workspace: Workspace, opts: AddOnlyOptions): AddOnly
       team,
       gender,
       merged,
+      resolver,
       baseEffective,
       baseTotalRounded
     );

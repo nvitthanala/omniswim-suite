@@ -206,6 +206,11 @@ def _resolve_scoring_settings(scoring_settings=None):
                 else:
 
                     cfg[k] = v
+        else:
+            print(
+                'WARNING: No scoring config file found; applying the NCAA D2 default scoring table.',
+                file=sys.stderr,
+            )
 
     else:
 
@@ -1564,5 +1569,4 @@ if __name__ == "__main__":
         except Exception as e:
 
             print(json.dumps({"error": str(e)}))
-
 

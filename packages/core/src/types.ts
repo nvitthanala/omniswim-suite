@@ -230,6 +230,20 @@ export interface ScoringSettings {
   maxRelayEntriesPerSwimmer?: number;
   /** Max total events (individual + relay combined) a swimmer may enter. When set, overrides separate limits. */
   maxTotalEntriesPerSwimmer?: number;
+  /**
+   * Whether a time-trial swim spends one of a swimmer's entries against the caps
+   * above. Absent means `false`: a time trial is outside the meet's program, so
+   * it is not an entry (user ruling 2026-09-21, restated 2026-10-01). Read it
+   * through `entryCapPolicy`, never directly.
+   */
+  entryCapCountsTimeTrials?: boolean;
+  /**
+   * Whether an exhibition-tagged swim spends one of a swimmer's entries. Absent
+   * means `true`: an exhibition swimmer is still entered in the event, so the
+   * swim counts toward the cap, prelims or not (user ruling 2026-10-01). Read it
+   * through `entryCapPolicy`, never directly.
+   */
+  entryCapCountsExhibition?: boolean;
 
   /**
    * The relay place-value table, place 1 first — used instead of

@@ -66,6 +66,54 @@ export const DEFAULT_SCORER_AUTO_RULES: ScorerAutoRules = {
 
 export const DEFAULT_SCORING_SETTINGS: ScoringSettings = GENERIC_TOP16_SETTINGS;
 
+/**
+ * Which swims spend one of a swimmer's entries against the per-swimmer caps.
+ * Resolved from {@link ScoringSettings.entryCapCountsTimeTrials} and
+ * {@link ScoringSettings.entryCapCountsExhibition}.
+ */
+export type EntryCapPolicy = {
+  /** A time-trial swim counts as an entry. */
+  countsTimeTrials: boolean;
+  /** An exhibition-tagged swim counts as an entry. */
+  countsExhibition: boolean;
+};
+
+/**
+ * The entry-cap counting rules every division and conference starts from.
+ *
+ * These are the user's rulings (2026-09-21 for time trials, 2026-10-01 for
+ * exhibition), written once. They are NOT keyed to a conference: NSISC gets them
+ * because they are the defaults, and any other division can set either flag on
+ * its own settings. The NSISC conference override in `mergeScoringSettings`
+ * deliberately leaves both flags alone.
+ */
+export const DEFAULT_ENTRY_CAP_POLICY: Readonly<EntryCapPolicy> = {
+  countsTimeTrials: false,
+  countsExhibition: true,
+};
+
+/**
+ * The entry-cap counting rules in force for these settings.
+ *
+ * An absent setting (or absent `settings`) takes {@link DEFAULT_ENTRY_CAP_POLICY}.
+ * Only a literal boolean overrides it, so a stale or malformed saved value falls
+ * back to the default instead of flipping a competition rule.
+ */
+export function entryCapPolicy(
+  settings?: Pick<ScoringSettings, 'entryCapCountsTimeTrials' | 'entryCapCountsExhibition'>
+): EntryCapPolicy {
+  return {
+    countsTimeTrials:
+      typeof settings?.entryCapCountsTimeTrials === 'boolean'
+        ? settings.entryCapCountsTimeTrials
+        : DEFAULT_ENTRY_CAP_POLICY.countsTimeTrials,
+    countsExhibition:
+      typeof settings?.entryCapCountsExhibition === 'boolean'
+        ? settings.entryCapCountsExhibition
+        : DEFAULT_ENTRY_CAP_POLICY.countsExhibition,
+  };
+}
+
 // ---------------------------------------------------------------------------
 // Built-in presets, generated from NCAA_FORMAT_RULESETS
 // ---------------------------------------------------------------------------

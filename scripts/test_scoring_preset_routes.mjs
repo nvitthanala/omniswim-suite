@@ -266,6 +266,13 @@ try {
     });
     assert.equal(badId.status, 400);
 
+    const traversal = await json('POST', '/api/scoring-presets', {
+      id: '../../outside',
+      label: 'Traversal',
+      settings: VALID_SETTINGS,
+    });
+    assert.equal(traversal.status, 400, 'path traversal preset IDs are rejected');
+
     assert.ok(!fs.existsSync(TEST_FILE), 'no file was written by any rejected create');
   }
 

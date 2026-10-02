@@ -240,10 +240,13 @@ function teamFrom(t: string | undefined): string {
 /**
  * The two output accumulators, plus the keying rules that feed them.
  *
- * `pushIssue` keys by the raw normalized name, NOT the resolved identity —
- * callers look an athlete up by whatever spelling they are rendering. Only
- * `pushChecklist` derives a `ScorerRosterRow.key`, so a Jump can match by key
- * rather than by name.
+ * `pushIssue` keys by the normalized name the CALLER passes; it does not resolve
+ * aliases itself. The roster row renders the resolved (canonical) spelling and
+ * looks its issues up by that, so entry-limit, empty-lineup and relay issues are
+ * pushed under the resolved name. The one exception is the duplicate-athlete
+ * scan, which pushes an issue under EACH of the two raw spellings it reports,
+ * because that pair is not yet linked. Only `pushChecklist` derives a
+ * `ScorerRosterRow.key`, so a Jump can match by key rather than by name.
  */
 type LineupAuditCollector = {
   athleteIssues: Map<string, LineupAthleteIssue[]>;
@@ -591,7 +594,7 @@ function auditRosteredAthletes(
       teamResults,
       identityKeyOf
     );
-    const counts = countSwimmerEntries(allResults, team, gender, displayName, resolver);
+    const counts = countSwimmerEntries(allResults, team, gender, displayName, resolver, settings);
     auditEntryLimits(collector, displayName, counts, settings);
     const row = rosterRows.find(r => r.team === team && identityKeyOf(r.name) === nameKey);
     auditEmptyLineup(collector, row, displayName, counts);
@@ -623,6 +626,8 @@ export function buildTeamLineupAudit(input: LineupAuditInput): TeamLineupAudit {
   /** Merged identity key for a raw name, in this team+gender scope. */
   const identityKeyOf = (name: string): string =>
     normalizeSwimmerName(resolver.resolveAthleteName(name, team, gender));
+  /** Canonical display spelling for a raw name, in this team+gender scope. */
+  const resolvedName = (name: string): string => resolver.resolveAthleteName(name, team, gender);
 
   const teamResults = allResults.filter(
     r => (r.gender == null || r.gender === gender) && teamFrom(r.team) === team
@@ -669,7 +674,10 @@ export function buildTeamLineupAudit(input: LineupAuditInput): TeamLineupAudit {
     pdfResults,
     gender,
     merged,
-    workspace.scorerRosterOverrides ?? []
+    workspace.scorerRosterOverrides ?? [],
+    // `pdfResults` are raw rows: a leg printed under an alias spelling is only
+    // recognised as the non-scorer's when the resolver is passed.
+    resolver
   );
 
   const vacantRelayLegCount = auditVacantRelayLegs(collector, {
@@ -677,6 +685,7 @@ export function buildTeamLineupAudit(input: LineupAuditInput): TeamLineupAudit {
     pdfResults,
     vacateNames,
     removeSeniors,
+    resolvedName,
   });
 
   auditUnreadableRelayDistances(collector, { pdfResults, team });
@@ -688,6 +697,8 @@ export function buildTeamLineupAudit(input: LineupAuditInput): TeamLineupAudit {
     rosterRows: lookup.rows,
     pdfResults,
     team,
+    identityKeyOf,
+    resolvedName,
   });
 
   return { athleteIssues, checklistItems, vacantRelayLegCount };
@@ -729,9 +740,11 @@ function auditVacantRelayLegs(
     pdfResults: SwimmerResult[];
     vacateNames: Set<string>;
     removeSeniors: boolean;
+    /** Raw leg spelling -> the roster's canonical spelling. */
+    resolvedName: (name: string) => string;
   }
 ): number {
-  const { teamScored, pdfResults, vacateNames, removeSeniors } = opts;
+  const { teamScored, pdfResults, vacateNames, removeSeniors, resolvedName } = opts;
   const checklistVacantKeys = new Set<string>();
   let vacantRelayLegCount = 0;
 
@@ -757,7 +770,10 @@ function auditVacantRelayLegs(
     const departed = findDepartedNameForVacantLeg(pdfResults, leg);
     if (!departed) continue;
     const removedForScorerRule = vacateNames.has(normalizeSwimmerName(departed));
-    collector.pushIssue(departed, {
+    // Filed under the RESOLVED spelling: the roster row renders the canonical
+    // name and looks its issues up by that, so an issue left under the leg's
+    // alias spelling never reaches the athlete's row.
+    collector.pushIssue(resolvedName(departed), {
       type: removedForScorerRule ? 'relay_scorer_off' : 'relay_leg_vacant',
       message: departedLegMessage(removedForScorerRule, removeSeniors),
       relayEvent: leg.event,
@@ -772,18 +788,24 @@ function auditVacantRelayLegs(
 /**
  * Spelling to render for a vacated name key.
  *
- * Keyed on the RAW normalized name, not the resolved identity: the vacate set is
- * built by `computeVacateRelayLegNames` without a resolver, so its keys are raw.
+ * `nameKey` is the RAW normalized leg spelling: the vacate set keeps the names as
+ * the relay prints them, because the projection matches legs by that spelling.
+ * The roster rows carry the canonical spelling, so the match runs on the
+ * resolved identity and falls back to the resolved spelling of the leg itself.
  */
 function resolveVacatedDisplayName(
   nameKey: string,
   team: string,
   rosterRows: ScorerRosterRow[],
-  pdfResults: SwimmerResult[]
+  pdfResults: SwimmerResult[],
+  identityKeyOf: (name: string) => string,
+  resolvedName: (name: string) => string
 ): string {
+  const identity = identityKeyOf(nameKey);
+  const legSpelling = pdfResults.find(r => normalizeSwimmerName(r.name) === nameKey)?.name;
   return (
-    rosterRows.find(r => r.team === team && normalizeSwimmerName(r.name) === nameKey)?.name ??
-    pdfResults.find(r => normalizeSwimmerName(r.name) === nameKey)?.name ??
+    rosterRows.find(r => r.team === team && identityKeyOf(r.name) === identity)?.name ??
+    (legSpelling !== undefined ? resolvedName(legSpelling) : undefined) ??
     nameKey
   );
 }
@@ -813,13 +835,26 @@ function auditNonScorersOnPdfRelays(
     rosterRows: ScorerRosterRow[];
     pdfResults: SwimmerResult[];
     team: string;
+    identityKeyOf: (name: string) => string;
+    resolvedName: (name: string) => string;
   }
 ): void {
-  const { vacateNames, rosterRows, pdfResults, team } = opts;
+  const { vacateNames, rosterRows, pdfResults, team, identityKeyOf, resolvedName } = opts;
   for (const nameKey of vacateNames) {
-    if (collector.athleteIssues.get(nameKey)?.some(i => i.type === 'relay_scorer_off')) continue;
+    // Issues are filed under the resolved spelling, so the dedup looks there too:
+    // the per-leg sweep may already have flagged this athlete under the canonical
+    // name while the vacate set still holds the leg's alias spelling.
+    const issueKey = identityKeyOf(nameKey);
+    if (collector.athleteIssues.get(issueKey)?.some(i => i.type === 'relay_scorer_off')) continue;
     if (!appearsOnTeamRelayLeg(pdfResults, team, nameKey)) continue;
-    const displayName = resolveVacatedDisplayName(nameKey, team, rosterRows, pdfResults);
+    const displayName = resolveVacatedDisplayName(
+      nameKey,
+      team,
+      rosterRows,
+      pdfResults,
+      identityKeyOf,
+      resolvedName
+    );
     collector.pushIssue(displayName, {
       type: 'relay_scorer_off',
       message: 'Not a scorer — removed from relay projection until leg is filled',

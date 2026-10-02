@@ -26,7 +26,11 @@ import {
 } from '../types';
 import { relayEntryKey } from './relaySplits';
 import { relayTemplateFromLeg } from './relayLegMatching';
-import { buildAliasResolver } from './athleteAliases';
+import {
+  buildAliasResolver,
+  IDENTITY_ALIAS_RESOLVER,
+  type AthleteAliasResolver,
+} from './athleteAliases';
 import { computeVacateRelayLegNames } from './rosterLineupAudit';
 import { relayLegHistoryCandidates } from './relayLegHistoryCandidates';
 import { mergeScoringSettings } from './scoringDefaults';
@@ -123,10 +127,31 @@ const PLANE_MEET = 0;
 const PLANE_RECRUIT = 1;
 const PLANE_PLAN = 2;
 
-function entryIdentityKey(row: SwimmerResult, gender: Gender): string {
+/**
+ * The identity of one entry: team, gender, athlete, event.
+ *
+ * The athlete is the name AFTER the alias resolver, scoped the way the scoring
+ * engine scopes it (`buildScoringBundle` resolves with the bundle's gender and
+ * the row's team). Without that, a recruit row under an alias spelling and a
+ * meet row under the canonical spelling are two entries here, both survive the
+ * collapse, and the engine then renames both to one name and scores the swimmer
+ * twice in one event. See `athleteAliases.ts`: the resolver is opt-in.
+ */
+function entryIdentityKey(
+  row: SwimmerResult,
+  gender: Gender,
+  resolver: AthleteAliasResolver
+): string {
   const team = String(row.team ?? '').trim();
   const g = row.gender ?? gender;
-  return `${team}|${g}|${canonicalSwimmerName(row.name)}|${row.event}`;
+  const athlete = resolver.resolveAthleteName(String(row.name ?? ''), row.team, gender);
+  return `${team}|${g}|${canonicalSwimmerName(athlete)}|${row.event}`;
+}
+
+/** Seconds a row swam; a time that does not parse is the slowest possible. */
+function swimSeconds(row: SwimmerResult): number {
+  const seconds = convertTimeToSeconds(String(row.finalsTime || row.time || ''));
+  return Number.isNaN(seconds) ? Infinity : seconds;
 }
 
 /**
@@ -151,12 +176,23 @@ function entryIdentityKey(row: SwimmerResult, gender: Gender): string {
  * encodes for an edit made through the pencil; extending it to identity means a
  * plan that arrived from an import supersedes the same way an explicit one does.
  *
- * SCOPE: only ACROSS planes. Two rows on one plane are the same kind of
- * statement made twice — a duplicate import, a double-add, or (for meet rows) a
- * second published swim this function has no business discarding. Silently
- * picking one of them would hide a data defect instead of surfacing it; the
- * lineup audit's duplicate-athlete scan is where that belongs. A row is dropped
- * here only when a MORE EXPLICIT statement of the same entry exists.
+ * SAME-PLANE DUPLICATES. Two RECRUIT rows, or two PLAN rows, for one athlete
+ * and event are the same kind of statement made twice — a duplicate import, a
+ * double-add, or one linked athlete entered under both spellings. Both used to
+ * survive and the athlete scored twice (see aliasSplitAthleteScoredOnce.test.ts).
+ * On those two planes the row with the FASTER time stands (the first one on a
+ * tie, or when a time does not parse); the other is reported in `collapsed`.
+ *
+ * PENCIL EDITS. A meet row a `replacesResultId` plan rewrote (`patchedMeetIds`) holds
+ * its entry. A plan-built row for the same athlete and event collapses into it: the
+ * explicit edit stands, and the athlete scores once.
+ *
+ * MEET rows are never collapsed against each other. A prelims row and a finals
+ * row for one athlete and event legitimately share a name there, and a second
+ * published swim is not this function's to discard; the lineup audit's
+ * duplicate-athlete scan is where a meet-plane defect belongs. A meet row a plan
+ * rewrote in place (`patchedMeetIds`) keeps that protection: two pencil edits,
+ * one to the prelims row and one to the finals row, are two swims.
  *
  * Relays are never collapsed: a relay row's identity is the entry, not the one
  * swimmer whose leg it carries.
@@ -171,7 +207,9 @@ function collapseCrossPlaneDuplicates(
   rows: SwimmerResult[],
   gender: Gender,
   recruitIds: ReadonlySet<string>,
-  planIds: ReadonlySet<string>
+  planIds: ReadonlySet<string>,
+  resolver: AthleteAliasResolver = IDENTITY_ALIAS_RESOLVER,
+  patchedMeetIds: ReadonlySet<string> = EMPTY_ID_SET
 ): { rows: SwimmerResult[]; collapsed: SwimmerResult[] } {
   if (recruitIds.size === 0 && planIds.size === 0) return { rows, collapsed: [] };
 
@@ -182,16 +220,43 @@ function collapseCrossPlaneDuplicates(
     if (recruitIds.has(row.id)) return PLANE_RECRUIT;
     return PLANE_MEET;
   };
+  // A row the same-plane pass may drop: a recruit row or a plan-built row, never a
+  // meet row and never a meet row a plan rewrote in place.
+  const sameplaneCollapsible = (row: SwimmerResult): boolean =>
+    !isRelayResult(row) && planeOf(row) !== PLANE_MEET && !patchedMeetIds.has(row.id);
 
-  // Highest plane present per identity. Same-plane rows share the winning plane
-  // and all survive; only a strictly lower plane is displaced.
+  // Highest plane present per identity. Only a strictly lower plane is displaced
+  // by it; rows that share the winning plane are settled by the same-plane pass.
   const topPlane = new Map<string, number>();
   for (const row of rows) {
     if (isRelayResult(row)) continue;
-    const key = entryIdentityKey(row, gender);
+    const key = entryIdentityKey(row, gender, resolver);
     const plane = planeOf(row);
     const held = topPlane.get(key);
     if (held === undefined || plane > held) topPlane.set(key, plane);
+  }
+
+  // The identities a pencil edit holds. A `replacesResultId` plan rewrites a meet
+  // row in place, so that row IS the user's explicit statement of the entry. A
+  // second, plan-built row for the same athlete and event (an import or the
+  // optimizer wrote it without knowing about the edit) is the same entry stated
+  // again, and the faster-time rule below would let it stand BESIDE the edit: the
+  // athlete would score twice. The edit stands and the plan-built row collapses.
+  const pencilEditedKeys = new Set<string>();
+  for (const row of rows) {
+    if (isRelayResult(row) || !patchedMeetIds.has(row.id)) continue;
+    pencilEditedKeys.add(entryIdentityKey(row, gender, resolver));
+  }
+
+  // Same-plane pass, recruit and plan planes only: the fastest row of each
+  // identity at its winning plane is the one that stands.
+  const standing = new Map<string, SwimmerResult>();
+  for (const row of rows) {
+    if (!sameplaneCollapsible(row)) continue;
+    const key = entryIdentityKey(row, gender, resolver);
+    if (planeOf(row) !== topPlane.get(key)) continue;
+    const held = standing.get(key);
+    if (!held || swimSeconds(row) < swimSeconds(held)) standing.set(key, row);
   }
 
   const kept: SwimmerResult[] = [];
@@ -201,8 +266,20 @@ function collapseCrossPlaneDuplicates(
       kept.push(row);
       continue;
     }
-    const top = topPlane.get(entryIdentityKey(row, gender));
-    if (top === undefined || planeOf(row) >= top) kept.push(row);
+    const key = entryIdentityKey(row, gender, resolver);
+    // Every non-relay row has a top plane: the first loop recorded one per identity.
+    if (planeOf(row) < (topPlane.get(key) as number)) {
+      collapsed.push(row);
+      continue;
+    }
+    // At the winning plane. Meet rows, and meet rows a plan rewrote, all stay,
+    // except that a plan-built row yields to the pencil edit that holds its entry.
+    if (sameplaneCollapsible(row) && pencilEditedKeys.has(key)) {
+      collapsed.push(row);
+      continue;
+    }
+    const winner = standing.get(key);
+    if (!sameplaneCollapsible(row) || winner === undefined || winner === row) kept.push(row);
     else collapsed.push(row);
   }
   return { rows: kept, collapsed };
@@ -456,17 +533,27 @@ export function buildWhatIfProjection({
     relayKeysForGender.has(o.relayEntryKey)
   );
 
+  // Built once: the vacate step and the cross-plane collapse both read raw
+  // workspace rows, before the engine collapses alias spellings onto the
+  // canonical name. Without the resolver, a swimmer marked a non-scorer under
+  // their canonical spelling is not recognised on a relay leg printed under an
+  // alias, so the leg is not vacated and this projection keeps a relay a
+  // non-scorer cannot legally swim.
+  const aliasResolver = buildAliasResolver(workspace);
+
   const vacateRelayLegs = computeVacateRelayLegNames(
     currentResults,
     gender,
-    mergeScoringSettings(workspace.scoringSettings),
+    // Merged the way `buildScoringBundle` merges: with the workspace conference
+    // and the PDF hint. A workspace that stores `scoringSettings: {}` and gets
+    // roster mode only from its conference would otherwise vacate nothing here
+    // while the engine scores in roster mode.
+    mergeScoringSettings(workspace.scoringSettings, {
+      conference: workspace.conference,
+      resultsForPdfHint: [...menResults, ...womenResults],
+    }),
     workspace.scorerRosterOverrides ?? [],
-    // These are raw workspace rows: nothing has collapsed alias spellings onto
-    // the canonical name yet. Without the resolver, a swimmer marked a
-    // non-scorer under their canonical spelling is not recognised on a relay
-    // leg printed under an alias, so the leg is not vacated and this projection
-    // keeps a relay a non-scorer cannot legally swim.
-    buildAliasResolver(workspace)
+    aliasResolver
   );
 
   // History swims may fill a leg an override names (R1 e,
@@ -544,7 +631,9 @@ export function buildWhatIfProjection({
     base,
     gender,
     new Set(recruitResults.map(r => r.id)),
-    planIds
+    planIds,
+    aliasResolver,
+    planPatchedIds
   );
   base = reconciled.rows;
 

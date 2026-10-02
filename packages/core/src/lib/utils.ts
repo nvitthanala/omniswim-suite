@@ -3644,6 +3644,9 @@ export function buildCategorizedScoringInputs(
         .filter(t => !t.event.toLowerCase().includes('relay'))
         .filter(t => isRankableSwimCloudStamp(t.swimcloudBadge))
         .filter(t => !eventNotSwumInCourse(t.event, t.timeType))
+        // An unreadable time is stored as 0. Scored, it would be a "0.00" that
+        // ranks first in every event.
+        .filter(t => Number.isFinite(t.timeSecondsScy) && t.timeSecondsScy > 0)
     );
     const strongestFirst = args.eventOrder
       ? args.eventOrder(athlete.fullName, oneTimePerEvent)

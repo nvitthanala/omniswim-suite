@@ -128,6 +128,21 @@ def extract_team_rankings_from_pdf(pdf_path: str, pages_to_scan: int = 8) -> dic
     return extract_team_rankings_from_lines(lines)
 
 
+def has_team_rankings_marker_in_pdf(pdf_path: str, pages_to_scan: int = 8) -> bool:
+    """Check only the scanned final pages for the explicit rankings boundary."""
+    if pdfplumber is None:
+        raise RuntimeError('pdfplumber is required to inspect team rankings marker')
+    path = Path(pdf_path)
+    if not path.is_file():
+        raise FileNotFoundError(pdf_path)
+    with pdfplumber.open(str(path)) as pdf:
+        start = max(0, len(pdf.pages) - pages_to_scan)
+        return any(
+            re.search(r'Team Rankings\s*-\s*Through Event\s+\d+', pdf.pages[i].extract_text() or '', re.I)
+            for i in range(start, len(pdf.pages))
+        )
+
+
 if __name__ == '__main__':
     import json
     import sys

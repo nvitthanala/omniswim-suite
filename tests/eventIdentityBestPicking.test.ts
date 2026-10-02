@@ -235,11 +235,7 @@ describe('a theory event finds a best recorded under a SwimCloud label', () => {
   });
 });
 
-describe('a loaded-meet result still matches by label (unchanged)', () => {
-  // Pinned on purpose. A plan in an event the swimmer swam at the loaded meet
-  // overrides that result in the overlay projection and is the swimmer's only
-  // entry in plan_sheet mode. Whether a HyTek-labelled result should block such
-  // a plan is a lineup decision that the best-time fix does not make.
+describe('a loaded-meet result blocks the same event in overlay mode', () => {
   const history = importFixture('1330318', 'profile_fastest_times-1330318.json', 'Avery Henke');
   const meetRow = {
     id: 'r-back',
@@ -252,6 +248,13 @@ describe('a loaded-meet result still matches by label (unchanged)', () => {
     event: 'Event 24 Men 100 Yard Backstroke',
     gender: Gender.MEN,
   };
+  const freeFieldRow = {
+    ...meetRow,
+    id: 'r-free-field',
+    name: 'Other Swimmer',
+    event: 'Event 8 Men 50 Yard Freestyle',
+    time: '20.00',
+  };
 
   it('does not stop a theory plan', () => {
     const result = applyScoringTheory(
@@ -262,12 +265,43 @@ describe('a loaded-meet result still matches by label (unchanged)', () => {
     expect(result.summary.entriesAdded).toBe(1);
   });
 
-  it('does not stop an import plan', () => {
+  it('blocks the published event without spending the import entry budget', () => {
+    const backAndFree = history.filter(s => ['100 Back SCY', '50 Free SCY'].includes(s.event));
+    const result = importHistoryToRoster(workspaceWith({
+      menResults: [meetRow, freeFieldRow],
+      scoringSettings: { ...NSISC_PRESET_SETTINGS, maxIndividualEntriesPerSwimmer: 2, maxTotalEntriesPerSwimmer: 2 },
+    }), backAndFree, {
+      team: HSU,
+      gender: Gender.MEN,
+    });
+    // User decision (2026-10-02): the published meet result stands in overlay;
+    // history import must not compete with it, and that skipped candidate costs no slot.
+    expect(result.patch.meetEntryPlans?.map(p => [p.event, p.time])).toStrictEqual([['50 Free SCY', '20.99']]);
+    expect(result.summary.lineupEntriesAdded).toBe(1);
+  });
+
+  it('allows history plans for published meet events in plan_sheet mode', () => {
     const back = history.filter(s => s.event === '100 Back SCY');
-    const result = importHistoryToRoster(workspaceWith({ menResults: [meetRow] }), back, {
+    const result = importHistoryToRoster(workspaceWith({ menResults: [meetRow], entryPlanMode: 'plan_sheet' }), back, {
       team: HSU,
       gender: Gender.MEN,
     });
     expect(result.patch.meetEntryPlans?.map(p => [p.event, p.time])).toStrictEqual([['100 Back SCY', '49.58']]);
+  });
+
+  it('keeps active pre-existing plans when seeding an empty active id list', () => {
+    const existing = createPlannedEntry({
+      name: 'Avery Henke', team: HSU, gender: Gender.MEN, classYear: 'SR',
+      event: '200 Freestyle', time: '1:40.00', timeType: 'SCY', source: 'manual', active: true,
+    });
+    const back = history.filter(s => s.event === '100 Back SCY');
+    const anotherEvent = { ...meetRow, event: 'Event 18 Men 200 Yard Butterfly' };
+    const backFieldRow = { ...meetRow, id: 'r-back-field', name: 'Other Swimmer' };
+    const result = importHistoryToRoster(workspaceWith({ menResults: [freeFieldRow, anotherEvent, backFieldRow], meetEntryPlans: [existing] }), back, {
+      team: HSU,
+      gender: Gender.MEN,
+    });
+    expect(result.patch.activeEntryIds).toContain(existing.id);
+    expect(result.patch.activeEntryIds).toHaveLength(2);
   });
 });
