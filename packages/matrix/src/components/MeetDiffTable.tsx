@@ -88,9 +88,9 @@ function DiffTableRow({ row }: { row: DiffRow }) {
   return (
     <tr className="border-b border-theme-soft theme-hover-row transition-colors">
       <td className="p-3"><TeamName name={row.teamName} /></td>
-      <td className="p-3"><PointsValue value={row.baselinePoints} /></td>
-      <td className="p-3"><PointsValue value={row.projectedPoints} className="text-[var(--text-primary)]" /></td>
-      <td className="p-3">
+      <td className="p-3 text-right"><PointsValue value={row.baselinePoints} signed={false} /></td>
+      <td className="p-3 text-right"><PointsValue value={row.projectedPoints} signed={false} className="text-[var(--text-primary)]" /></td>
+      <td className="p-3 text-right">
         <PointsValue value={row.delta} className={deltaClassName(row.delta)} />
       </td>
       <RankCell row={row} />

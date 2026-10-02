@@ -15,6 +15,8 @@ import type { Workspace } from '@omniswim/core/types';
 
 interface MeetOpsLoadStepProps {
   workspace: Workspace;
+  pdfFormat: string;
+  onPdfFormatChange: (format: string) => void;
   workspaceMeetSources: Workspace[];
   onCopyMeetFromWorkspace: (sourceId: string) => void;
   isParsingPdf: boolean;
@@ -29,6 +31,8 @@ interface MeetOpsLoadStepProps {
 
 export function MeetOpsLoadStep({
   workspace,
+  pdfFormat,
+  onPdfFormatChange,
   workspaceMeetSources,
   onCopyMeetFromWorkspace,
   isParsingPdf,
@@ -105,6 +109,12 @@ export function MeetOpsLoadStep({
           )}
         </div>
         <div className="mt-4 grid gap-3 sm:grid-cols-2 text-ui-caption">
+          <label className="flex items-center gap-2 text-theme-secondary">
+            PDF column format
+            <select value={pdfFormat} onChange={event => onPdfFormatChange(event.target.value)} aria-label="PDF column format" className="surface-overlay border border-theme-soft rounded-lg py-1.5 px-2">
+              <option value="auto">Auto Format</option><option value="regular">Regular List</option><option value="divided">Divided (2-Col)</option>
+            </select>
+          </label>
           <div className="rounded-lg border border-theme-soft surface-overlay p-3">
             <span className="text-theme-muted">Meet results</span>
             <p className="mt-1 text-[var(--text-primary)]">{workspace.loadedMeet?.pdfFilename ?? 'No meet PDF loaded'}</p>

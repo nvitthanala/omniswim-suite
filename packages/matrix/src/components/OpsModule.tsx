@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { BarChart3, ClipboardPaste, ExternalLink, Trophy } from 'lucide-react';
 import { Link } from 'react-router-dom';
@@ -205,7 +205,12 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
     presetIdForConference(workspace.conference)
   );
   const [whatIfMode, _setWhatIfMode] = useState(false);
-  const [step, setStep] = useState<MatrixStepId>('load');
+  const [step, setStep] = useState<MatrixStepId>(() => {
+    const saved = sessionStorage.getItem(`matrix-step:${workspace.id}`) as MatrixStepId | null;
+    if (saved && MATRIX_STEPS.some(item => item.id === saved)) return saved;
+    return workspace.loadedMeet ? 'standings' : 'load';
+  });
+  useEffect(() => { sessionStorage.setItem(`matrix-step:${workspace.id}`, step); }, [workspace.id, step]);
   const [scoringRefreshKey, setScoringRefreshKey] = useState(0);
   const parseAbortRef = useRef<AbortController | null>(null);
   const psychParseAbortRef = useRef<AbortController | null>(null);

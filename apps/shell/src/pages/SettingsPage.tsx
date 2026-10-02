@@ -46,7 +46,7 @@ function ToggleRow({
 
 function SettingsPreview() {
   return (
-    <aside className="surface-card rounded-3xl p-5 lg:sticky lg:top-6 h-fit">
+    <aside inert aria-hidden="true" className="surface-card rounded-3xl p-5 lg:sticky lg:top-6 h-fit">
       <div className="flex items-center justify-between border-b border-theme-soft pb-4">
         <div>
           <p className="text-ui-micro uppercase tracking-[0.22em] text-theme-muted font-bold">Live preview</p>

@@ -10,6 +10,7 @@
 import React from 'react';
 import { ScoringPresetMeta, ScoringSettings } from '@omniswim/core/types';
 import { entryCapPolicy } from '@omniswim/core/lib/scoringDefaults';
+import { NumberField } from '@omniswim/ui';
 
 /** One numeric scoring-limit field: label, the settings key it reads/writes,
  * and the display fallback used when the value is unset. */
@@ -23,33 +24,36 @@ type NumericFieldSpec = {
     | 'maxTotalEntriesPerSwimmer'
   >;
   label: string;
+  min?: number;
 };
 
 export const NUMERIC_SETTING_FIELDS: NumericFieldSpec[] = [
   { key: 'maxIndividualScorersPerTeam', label: 'Max scorers / team' },
   { key: 'maxRelaysScoringPerTeam', label: 'Max relays / event' },
-  { key: 'maxIndividualEntriesPerSwimmer', label: 'Max ind entries / swimmer' },
-  { key: 'maxRelayEntriesPerSwimmer', label: 'Max relay entries / swimmer' },
-  { key: 'maxTotalEntriesPerSwimmer', label: 'Max total entries / swimmer' },
+  { key: 'maxIndividualEntriesPerSwimmer', label: 'Max ind entries / swimmer', min: 1 },
+  { key: 'maxRelayEntriesPerSwimmer', label: 'Max relay entries / swimmer', min: 1 },
+  { key: 'maxTotalEntriesPerSwimmer', label: 'Max total entries / swimmer', min: 1 },
 ];
 
 export function NumericSettingField({
   label,
+  min,
   value,
   onChange,
 }: {
   label: string;
+  min?: number;
   value: number | undefined;
   onChange: (next: number) => void;
 }) {
   return (
     <label className="flex flex-col gap-1.5 min-w-0">
       <span className="text-ui-caption text-theme-muted">{label}</span>
-      <input
-        type="number"
+      <NumberField
         className="glass-input rounded-lg px-3 py-2 text-ui-body font-mono"
         value={value ?? 999}
-        onChange={e => onChange(parseInt(e.target.value, 10) || 999)}
+        min={min}
+        onValueChange={onChange}
       />
     </label>
   );

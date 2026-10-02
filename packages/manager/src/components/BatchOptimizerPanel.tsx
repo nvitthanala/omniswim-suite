@@ -24,6 +24,7 @@ type Props = {
   workspace: Workspace;
   gender: Gender;
   scoringSettings: ScoringSettings;
+  removeSeniors?: boolean;
   onApply: (patch: Partial<Workspace>) => void;
   onClose: () => void;
 };
@@ -34,7 +35,7 @@ const STAGES: { value: OptimizerStage; label: string; desc: string }[] = [
   { value: 'all', label: 'Full (Scorers + Events)', desc: 'Both scorer roster and event lineup' },
 ];
 
-export default function BatchOptimizerPanel({ workspace, gender, scoringSettings, onApply, onClose }: Props) {
+export default function BatchOptimizerPanel({ workspace, gender, scoringSettings, removeSeniors = false, onApply, onClose }: Props) {
   const toast = useToast();
   const [stage, setStage] = useState<OptimizerStage>('all');
   const [isRunning, setIsRunning] = useState(false);
@@ -50,7 +51,7 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
     // Use setTimeout to yield to the UI thread for the loading indicator
     setTimeout(() => {
       try {
-        const computed = computeBatchOptimizationResult(workspace, gender, mergedSettings, stage);
+        const computed = computeBatchOptimizationResult(workspace, gender, mergedSettings, stage, removeSeniors);
         setResult(computed);
         toast.push('success', batchOptimizationToastMessage(computed.overrideCount, computed.planCount));
       } catch (err) {
@@ -59,7 +60,7 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
         setIsRunning(false);
       }
     }, 50);
-  }, [workspace, gender, mergedSettings, stage, toast]);
+  }, [workspace, gender, mergedSettings, stage, removeSeniors, toast]);
 
   const handleApply = useCallback(() => {
     if (!result) return;
@@ -111,10 +112,10 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
             <Sparkles size={18} className="text-[var(--text-accent)]" />
             <div>
               <h2 className="text-ui-label font-bold uppercase tracking-widest text-[var(--text-primary)]">
-                Batch Optimizer
+                Batch optimizer
               </h2>
               <p className="text-ui-caption text-theme-secondary mt-0.5">
-                Automatically optimize roster and events for all teams
+                Optimizes all teams using the current What-if and Drop seniors settings.
               </p>
             </div>
           </div>

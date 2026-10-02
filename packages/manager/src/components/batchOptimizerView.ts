@@ -34,9 +34,10 @@ export function computeBatchOptimizationResult(
   workspace: Workspace,
   gender: Gender,
   mergedSettings: ScoringSettings,
-  stage: OptimizerStage
+  stage: OptimizerStage,
+  removeSeniors = false
 ): BatchOptimizationResult {
-  const opt = optimizeRosterAllTeams(workspace, gender, false, mergedSettings, stage);
+  const opt = optimizeRosterAllTeams(workspace, gender, removeSeniors, mergedSettings, stage);
   const overrideCount = (opt.overrides ?? []).length - (workspace.scorerRosterOverrides ?? []).length;
   const planCount = (opt.meetEntryPlans ?? []).length - (workspace.meetEntryPlans ?? []).length;
   const teamDeltas: TeamDelta[] = [

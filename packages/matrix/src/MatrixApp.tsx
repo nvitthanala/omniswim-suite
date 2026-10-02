@@ -22,7 +22,7 @@ export default function MatrixApp() {
   return (
     <AnimatePresence mode="wait">
       <motion.div
-        key={`${activeWorkspace.id}-${activeGender}`}
+        key={activeWorkspace.id}
         initial={{ opacity: 0 }}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}

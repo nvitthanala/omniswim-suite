@@ -269,7 +269,7 @@ function ManagerWorkspaceView({ activeWorkspace }: { activeWorkspace: Workspace 
           >
             Export HyTek
           </Button>
-          <Button variant="outline" onClick={() => setShowBatchOptimizer(true)} title="Run batch optimizer across all teams">
+          <Button variant="outline" onClick={() => setShowBatchOptimizer(true)} disabled={!whatIfMode} title={!whatIfMode ? 'Enable What-if to run the batch optimizer' : 'Run batch optimizer across all teams'}>
             Batch optimizer
           </Button>
           <Button variant="primary" onClick={() => setShowImportWizard(true)}>
@@ -279,7 +279,6 @@ function ManagerWorkspaceView({ activeWorkspace }: { activeWorkspace: Workspace 
       </div>
       <AnimatePresence mode="wait">
         <motion.div
-          key={`roster-${scoringRefreshKey}`}
           initial={{ opacity: 0, y: 6 }}
           animate={{ opacity: 1, y: 0 }}
           exit={{ opacity: 0, y: -6 }}
@@ -328,6 +327,7 @@ function ManagerWorkspaceView({ activeWorkspace }: { activeWorkspace: Workspace 
           workspace={activeWorkspace}
           gender={activeGender}
           scoringSettings={scoringSettings}
+          removeSeniors={removeSeniors}
           onApply={patch => {
             void updateWorkspace(patch);
             toast.push('success', 'Optimizer lineup applied');

@@ -90,6 +90,7 @@ export default function RosterScoringSetup({ workspace, settings, onSave }: Prop
               <NumericSettingField
                 key={field.key}
                 label={field.label}
+                min={field.min}
                 value={local[field.key]}
                 onChange={next => setLocal({ ...local, [field.key]: next })}
               />

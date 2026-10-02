@@ -250,6 +250,8 @@ export default function MeetOperationsView({
         {activeStep === 'load' ? (
           <MeetOpsLoadStep
             workspace={workspace}
+            pdfFormat={pdfFormat}
+            onPdfFormatChange={onPdfFormatChange}
             workspaceMeetSources={workspaceMeetSources}
             onCopyMeetFromWorkspace={onCopyMeetFromWorkspace}
             isParsingPdf={isParsingPdf}
@@ -288,8 +290,6 @@ export default function MeetOperationsView({
           <MeetOpsStandingsStep
             reconciliationSummary={reconciliationSummary}
             scoringSettings={scoringSettings}
-            pdfFormat={pdfFormat}
-            onPdfFormatChange={onPdfFormatChange}
             searchQuery={searchQuery}
             onSearchChange={onSearchChange}
             teamsWithLineStyles={teamsWithLineStyles}

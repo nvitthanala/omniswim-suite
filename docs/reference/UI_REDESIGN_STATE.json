@@ -324,5 +324,30 @@
       "notStartedThisTurn": "auditConversionProvenance (the provenance checklist group) and optimizer-transparency pieces 2-3 remain scoped only, each with the specific remaining design decision named above. Manager's other diagnosis-doc shortlist items (crossCourseArbitrageSections.tsx split, AthleteHistoryImportPanel.tsx split, Matrix's Button convergence) were not raised this turn and remain open backlog, same as t18.",
       "resumeHere": "All 3 plan docs now read as living status documents (shipped/deferred per piece) rather than pure proposals -- read the doc's own top status line before re-scoping any of the three rather than re-deriving what already shipped. The visual/behavioral check the user already owes covers 2 more UI surfaces now: the MeetReconciliationBanner (Matrix Standings step) and the OptimizerChangeSummaryPanel (Manager Optimize step) -- both new, neither has an automated way to verify appearance."
     }
-  ]
+  ],
+  "phase1": {
+    "date": "2026-10-02",
+    "status": "implemented_with_before_screenshot_gap",
+    "summary": "Phase 1 defects fixed; added numeric-field and diff-table render tests and the ui-ia Playwright spec. After screenshots are in docs/reference/ui-phase-1/after/. No before screenshots were captured before implementation.",
+    "files": [
+      "packages/ui/src/components/NumberField.tsx",
+      "packages/matrix/src/components/ScoringCapsFields.tsx",
+      "packages/matrix/src/components/MeetDiffTable.tsx",
+      "packages/matrix/src/MatrixApp.tsx",
+      "packages/matrix/src/components/OpsModule.tsx",
+      "packages/matrix/src/components/MeetOpsLoadStep.tsx",
+      "packages/matrix/src/components/MeetOperationsView.tsx",
+      "packages/matrix/src/components/MeetOpsStandingsStep.tsx",
+      "packages/manager/src/components/RosterScoringSetupParts.tsx",
+      "packages/manager/src/components/RosterScoringSetup.tsx",
+      "packages/manager/src/components/BatchOptimizerPanel.tsx",
+      "packages/manager/src/components/batchOptimizerView.ts",
+      "packages/manager/src/ManagerApp.tsx",
+      "apps/shell/src/components/SuiteHeaderControls.tsx",
+      "apps/shell/src/pages/SettingsPage.tsx",
+      "tests/numberField.test.ts",
+      "tests/meetDiffTable.test.ts",
+      "tests/e2e/ui-ia.spec.ts"
+    ]
+  }
 }

@@ -28,8 +28,6 @@ interface TopContributorRow {
 interface MeetOpsStandingsStepProps {
   reconciliationSummary: MeetReconciliationSummary;
   scoringSettings: ScoringSettings;
-  pdfFormat: string;
-  onPdfFormatChange: (format: string) => void;
   searchQuery: string;
   onSearchChange: (q: string) => void;
   teamsWithLineStyles: TeamScore[];
@@ -54,8 +52,6 @@ interface MeetOpsStandingsStepProps {
 export function MeetOpsStandingsStep({
   reconciliationSummary,
   scoringSettings,
-  pdfFormat,
-  onPdfFormatChange,
   searchQuery,
   onSearchChange,
   teamsWithLineStyles,
@@ -97,16 +93,6 @@ export function MeetOpsStandingsStep({
             </p>
           </div>
           <div className="flex items-center gap-3">
-            <select
-              value={pdfFormat}
-              onChange={e => onPdfFormatChange(e.target.value)}
-              aria-label="PDF column format"
-              className="surface-overlay border border-theme-soft rounded-lg text-[10px] uppercase tracking-widest text-theme-secondary outline-none py-1.5 px-2 cursor-pointer"
-            >
-              <option value="auto">Auto Format</option>
-              <option value="regular">Regular List</option>
-              <option value="divided">Divided (2-Col)</option>
-            </select>
             <div className="flex items-center surface-overlay border border-theme-soft rounded-lg px-3 py-1.5 focus-within:border-[var(--text-accent)]/50 transition-colors">
               <Search size={12} className="text-theme-secondary mr-2" />
               <input

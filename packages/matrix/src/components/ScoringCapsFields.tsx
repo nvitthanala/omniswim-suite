@@ -11,6 +11,7 @@
 
 import type { ScoringSettings } from '@omniswim/core/types';
 import { entryCapPolicy } from '@omniswim/core/lib/scoringDefaults';
+import { NumberField } from '@omniswim/ui';
 
 interface LockState {
   message?: string | null;
@@ -45,64 +46,61 @@ export function ScoringCapsFields({ local, update, lock }: ScoringCapsFieldsProp
       </div>
       <div>
         <label className="block text-[10px] text-theme-secondary uppercase mb-1">Diver scorer weight</label>
-        <input
-          type="number"
+        <NumberField
           aria-label="Diver scorer weight"
-          step="0.01"
-          min="0"
-          max="1"
+          step={0.01}
+          min={0}
+          max={1}
           value={local.diverScorerWeight ?? 1}
-          onChange={e => update({ diverScorerWeight: parseFloat(e.target.value) || 1 })}
+          onValueChange={value => update({ diverScorerWeight: value })}
           {...lockProps('diverScorerWeight')}
         />
       </div>
       <div>
         <label className="block text-[10px] text-theme-secondary uppercase mb-1">Max individual scorers / team</label>
-        <input
-          type="number"
+        <NumberField
           aria-label="Maximum individual scorers per team"
           value={local.maxIndividualScorersPerTeam}
-          onChange={e => update({ maxIndividualScorersPerTeam: parseInt(e.target.value, 10) || 999 })}
+          onValueChange={value => update({ maxIndividualScorersPerTeam: value })}
           {...lockProps('maxIndividualScorersPerTeam')}
         />
       </div>
       <div>
         <label className="block text-[10px] text-theme-secondary uppercase mb-1">Max scoring relays / team / relay event</label>
-        <input
-          type="number"
+        <NumberField
           aria-label="Maximum scoring relays per team per event"
           value={local.maxRelaysScoringPerTeam}
-          onChange={e => update({ maxRelaysScoringPerTeam: parseInt(e.target.value, 10) || 999 })}
+          onValueChange={value => update({ maxRelaysScoringPerTeam: value })}
           {...lockProps('maxRelaysScoringPerTeam')}
         />
       </div>
       <div>
         <label className="block text-[10px] text-theme-secondary uppercase mb-1">Max ind entries / swimmer</label>
-        <input
-          type="number"
+        <NumberField
           aria-label="Maximum individual entries per swimmer"
           value={local.maxIndividualEntriesPerSwimmer ?? 999}
-          onChange={e => update({ maxIndividualEntriesPerSwimmer: parseInt(e.target.value, 10) || 999 })}
+          min={1}
+          onValueChange={value => update({ maxIndividualEntriesPerSwimmer: value })}
           {...lockProps('maxIndividualEntriesPerSwimmer')}
         />
       </div>
       <div>
         <label className="block text-[10px] text-theme-secondary uppercase mb-1">Max relay entries / swimmer</label>
-        <input
-          type="number"
+        <NumberField
           aria-label="Maximum relay entries per swimmer"
           value={local.maxRelayEntriesPerSwimmer ?? 999}
-          onChange={e => update({ maxRelayEntriesPerSwimmer: parseInt(e.target.value, 10) || 999 })}
+          min={1}
+          onValueChange={value => update({ maxRelayEntriesPerSwimmer: value })}
           {...lockProps('maxRelayEntriesPerSwimmer')}
         />
       </div>
       <div>
         <label className="block text-[10px] text-theme-secondary uppercase mb-1">Max total entries / swimmer</label>
-        <input
-          type="number"
+        <NumberField
           aria-label="Maximum total entries per swimmer"
           value={local.maxTotalEntriesPerSwimmer ?? 999}
-          onChange={e => update({ maxTotalEntriesPerSwimmer: parseInt(e.target.value, 10) || 999 })}
+          min={1}
+          onValueChange={value => update({ maxTotalEntriesPerSwimmer: value })}
           {...lockProps('maxTotalEntriesPerSwimmer')}
         />
       </div>
@@ -130,11 +128,12 @@ export function ScoringCapsFields({ local, update, lock }: ScoringCapsFieldsProp
       </div>
       <div>
         <label className="block text-[10px] text-theme-secondary uppercase mb-1">Relay multiplier</label>
-        <input
-          type="number"
+        <NumberField
           aria-label="Relay multiplier"
           value={local.relayMultiplier}
-          onChange={e => update({ relayMultiplier: parseFloat(e.target.value) || 1 })}
+          min={0}
+          step={0.01}
+          onValueChange={value => update({ relayMultiplier: value })}
           {...lockProps('relayMultiplier')}
         />
       </div>

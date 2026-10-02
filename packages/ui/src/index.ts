@@ -24,6 +24,7 @@ export {
   type ProvenanceBadgeSpec,
 } from './components/ProvenanceBadge';
 export { Button } from './components/Button';
+export { NumberField, type NumberFieldProps } from './components/NumberField';
 export { TeamSelect, type TeamSelectProps } from './components/TeamSelect';
 export { EmptyState } from './components/EmptyState';
 export { Modal, type ModalProps } from './components/Modal';
