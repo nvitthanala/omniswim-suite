@@ -228,5 +228,18 @@
     "2026-10-02: published meet result stands vs history bests (optimizer + import); exhibition counts as published, time trial never; DFS/DQ prelims rows stand and DFS counts toward the cap",
     "2026-10-02: OLED theme: pure black (no Orca palette found on disk); coral accent",
     "2026-10-02 (orchestrator, flag for user confirmation): plan_sheet mode is exempt from the published-result-stands rule; scoring theory and the projection are NOT changed by it (what-if tools)"
+  ],
+  "userAnswers_2026_10_02_afternoon": {
+    "commit": "locally, no push (done: 60ce8190, 46637ed8, ee68e6b2)",
+    "uiScope": "ambitious",
+    "uiLanding": "separate branch",
+    "codexBudget": "spend freely, keep 10% reserve (Codex was 53% used)",
+    "away": "user away; act on best judgement"
+  },
+  "plan_afternoon": [
+    "G1 Codex: split optimizeEventLineupForTeam (complexity 31) + fix 2 ineffective import-filter tests + delete trivial test [running]",
+    "UIP architect: UI complexity inventory + phased redesign plan [running]",
+    "then: commit G1; create branch nvitthanala/ui-simplification; Codex builds UI phases with screenshots + tests, verified each; architect reviews the final UI diff",
+    "finally: thorough revision pass + new ideas list; vault + state update"
   ]
 }

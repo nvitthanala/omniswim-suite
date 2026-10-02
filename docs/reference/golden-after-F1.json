@@ -4368,9 +4368,9 @@
       "team": "Henderson State University",
       "gender": "Men",
       "optimizeEventLineupForTeam": {
-        "sha256": "77e4b1b95d0646240ad6b70495345a1daba4505def33b18774011619844d917c",
+        "sha256": "969696b11165707861e1565e81109866bb64775012d91ab2bc401d3058d601c1",
         "output": {
-          "planCount": 93,
+          "planCount": 90,
           "targetPlans": [
             {
               "name": "Aiden Killackey",
@@ -4406,28 +4406,8 @@
               "name": "Alan Gonzalez Mujica",
               "team": "Henderson State University",
               "gender": "Men",
-              "event": "200 Freestyle",
-              "time": "1:40.99",
-              "source": "optimizer",
-              "active": true,
-              "replacesResultId": false
-            },
-            {
-              "name": "Alan Gonzalez Mujica",
-              "team": "Henderson State University",
-              "gender": "Men",
               "event": "400 Individual Medley",
               "time": "4:09.17",
-              "source": "optimizer",
-              "active": true,
-              "replacesResultId": false
-            },
-            {
-              "name": "Alan Gonzalez Mujica",
-              "team": "Henderson State University",
-              "gender": "Men",
-              "event": "500 Freestyle",
-              "time": "4:33.12",
               "source": "optimizer",
               "active": true,
               "replacesResultId": false
@@ -4658,16 +4638,6 @@
               "gender": "Men",
               "event": "200 Butterfly",
               "time": "2:10.73",
-              "source": "optimizer",
-              "active": true,
-              "replacesResultId": false
-            },
-            {
-              "name": "Cam Mask",
-              "team": "Henderson State University",
-              "gender": "Men",
-              "event": "Event 26 Men 100 Yard Breaststroke",
-              "time": "55.52",
               "source": "optimizer",
               "active": true,
               "replacesResultId": false
@@ -5303,17 +5273,17 @@
               "replacesResultId": false
             }
           ],
-          "activeIdCount": 111
+          "activeIdCount": 108
         }
       },
       "optimizeRosterForTeam": {
-        "sha256": "ed8dd31ea2d19cfb816a850be63e90dffae4373dfc175bdd53e6f94c271621a8",
+        "sha256": "39b296ccfbebf6221476447b611a13acac73acf699a62f8966acf05b00746299",
         "output": {
           "outcome": "improved",
           "appliedStages": "events",
           "previousTotal": 1107,
           "projectedTotal": 1274,
-          "allPlanCount": 93,
+          "allPlanCount": 90,
           "targetPlans": [
             {
               "name": "Aiden Killackey",
@@ -5349,28 +5319,8 @@
               "name": "Alan Gonzalez Mujica",
               "team": "Henderson State University",
               "gender": "Men",
-              "event": "200 Freestyle",
-              "time": "1:40.99",
-              "source": "optimizer",
-              "active": true,
-              "replacesResultId": false
-            },
-            {
-              "name": "Alan Gonzalez Mujica",
-              "team": "Henderson State University",
-              "gender": "Men",
               "event": "400 Individual Medley",
               "time": "4:09.17",
-              "source": "optimizer",
-              "active": true,
-              "replacesResultId": false
-            },
-            {
-              "name": "Alan Gonzalez Mujica",
-              "team": "Henderson State University",
-              "gender": "Men",
-              "event": "500 Freestyle",
-              "time": "4:33.12",
               "source": "optimizer",
               "active": true,
               "replacesResultId": false
@@ -5601,16 +5551,6 @@
               "gender": "Men",
               "event": "200 Butterfly",
               "time": "2:10.73",
-              "source": "optimizer",
-              "active": true,
-              "replacesResultId": false
-            },
-            {
-              "name": "Cam Mask",
-              "team": "Henderson State University",
-              "gender": "Men",
-              "event": "Event 26 Men 100 Yard Breaststroke",
-              "time": "55.52",
               "source": "optimizer",
               "active": true,
               "replacesResultId": false
@@ -6246,7 +6186,7 @@
               "replacesResultId": false
             }
           ],
-          "activeIdCount": 111,
+          "activeIdCount": 108,
           "overridesCount": 25
         }
       },

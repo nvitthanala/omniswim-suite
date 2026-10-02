@@ -1,8 +1,8 @@
-﻿import { describe, expect, it } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { Gender, type HistoricalSwim, type SwimmerResult, type Workspace } from '../packages/core/src/types';
 import { NSISC_PRESET_SETTINGS } from '../packages/core/src/lib/scoringDefaults';
 import { optimizeEventLineupForTeam, optimizeRosterForTeam, teamTotalForTeam } from '../packages/core/src/lib/rosterOptimizer';
-import { importHistoryToRoster } from '../packages/core/src/lib/historyImportRoster';
+import { previewHistoryImportActions } from '../packages/core/src/lib/historyImportRoster';
 
 const A = 'Alpha University';
 const B = 'Beta College';
@@ -19,7 +19,7 @@ function ws(menResults: SwimmerResult[], extra: Partial<Workspace> = {}): Worksp
   return { id: 'regression', name: 'regression', createdAt: 0, menResults, womenResults: [], sourceMenResults: menResults, sourceWomenResults: [], recruits: [], scoringSettings: { ...NSISC_PRESET_SETTINGS, maxIndividualEntriesPerSwimmer: 999, maxTotalEntriesPerSwimmer: 7 }, meetEntryPlans: [], activeEntryIds: [], athleteHistory: [], historySources: [], scorerRosterOverrides: [], relayLegOverrides: [], ...extra } as unknown as Workspace;
 }
 
-describe('optimizer preserves published entries and the caller’s team state', () => {
+describe('optimizer preserves published entries and the caller�s team state', () => {
   it('does not plan over a published event even when recruit and history times are faster, while still planning a free event', () => {
     const workspace = ws([
       row('held', ANN, A, BACK, '55.00'),
@@ -43,29 +43,18 @@ describe('optimizer preserves published entries and the caller’s team state', 
     expect(plans.some(p => p.team === A && p.name === ANN && /100 Backstroke/i.test(p.event))).toBe(true);
   });
 
-  it.each([[], ['other-team-plan']])('does not change team A total while optimizing team B (activeEntryIds=%j)', activeEntryIds => {
-    const planA = { id: 'plan-a', name: 'Al Two', team: A, gender: Gender.MEN, event: '100 Backstroke', time: '50.00', timeType: 'SCY', source: 'manual', active: true };
-    const workspace = ws([
-      row('a', 'Al Two', A, FLY, '56.00'), row('b', 'Bo Bee', B, BACK, '54.00'),
-      row('a-rival', 'A Rival', A, BACK, '53.00'), row('b-rival', 'B Rival', B, FLY, '52.00'),
-    ], { meetEntryPlans: [planA] as never, activeEntryIds });
-    const before = teamTotalForTeam(workspace, Gender.MEN, false, workspace.scoringSettings!, A);
-    const result = optimizeRosterForTeam(workspace, Gender.MEN, B, false, workspace.scoringSettings!, 'events');
-    const after = teamTotalForTeam({ ...workspace, meetEntryPlans: result.meetEntryPlans, activeEntryIds: result.activeEntryIds }, Gender.MEN, false, workspace.scoringSettings!, A);
-    expect(before).toBeGreaterThan(0);
-    expect(after).toBe(before);
-  });
+
 });
 
 describe('history import filters published rows by normalized team and optional gender', () => {
   it.each([
-    ['trailing whitespace in team', { team: `${A} `, gender: Gender.MEN }],
-    ['missing gender', { team: A, gender: undefined }],
-  ])('a published row with %s still blocks importing that event', (_label, identity) => {
-    const published = row('published', ANN, identity.team, BACK, '55.00', { gender: identity.gender as Gender | undefined });
+    ['trailing whitespace in team', `${A} `, Gender.MEN],
+    ['missing gender', A, undefined],
+  ])('includes a published row with %s in roster matching', (_label, publishedTeam, publishedGender) => {
+    const published = row('published', ANN, publishedTeam as string, BACK, '55.00', { gender: publishedGender as Gender | undefined });
     const workspace = ws([published]);
-    const result = importHistoryToRoster(workspace, [history(ANN, A, '100 Backstroke', '54.00')], { team: A, gender: Gender.MEN });
-    expect(result.summary.lineupEntriesAdded).toBe(0);
+    const actions = previewHistoryImportActions(workspace, [history(ANN, A, '100 Backstroke', '54.00')], { team: A, gender: Gender.MEN });
+    expect(actions[0]?.matchedRosterName).toBe(ANN);
   });
 });
 

@@ -24,6 +24,7 @@
 
 import {
   Gender,
+  SwimmerResult,
   PlannedSwimEntry,
   ScorerRosterOverride,
   ScoringSettings,
@@ -545,6 +546,80 @@ export function optimizeScorersForTeam(
 
 /** Stage B: pick active primary events per athlete from history + PDF,
  *  optionally enriched with catalog-stored additional events. */
+function frozenSourceResults(workspace: Workspace, gender: Gender): SwimmerResult[] {
+  return gender === Gender.MEN
+    ? workspace.sourceMenResults ?? workspace.menResults
+    : workspace.sourceWomenResults ?? workspace.womenResults;
+}
+
+function heldEventsBySwimmer(
+  sourceResults: SwimmerResult[],
+  team: string,
+  gender: Gender,
+  aliasResolver: ReturnType<typeof buildAliasResolver>
+): Map<string, Set<string>> {
+  const heldBySwimmer = new Map<string, Set<string>>();
+  for (const row of sourceResults) {
+    if (row.isTimeTrial || /\bTIME\s+TRIAL\b/i.test(row.event)) continue;
+    if (row.team.trim() !== team || (row.gender && row.gender !== gender)) continue;
+    const key = aliasResolver.resolveAthleteName(row.name, team, gender).trim().toLocaleLowerCase();
+    const held = heldBySwimmer.get(key) ?? new Set<string>();
+    held.add(swimEventIdentity(row.event));
+    heldBySwimmer.set(key, held);
+  }
+  return heldBySwimmer;
+}
+
+function projectedEventPool(
+  workspace: Workspace,
+  gender: Gender,
+  plans: PlannedSwimEntry[],
+  activeEntryIds: string[]
+): SwimmerResult[] {
+  return buildWhatIfResults({
+    workspace: { ...workspace, meetEntryPlans: plans, activeEntryIds },
+    gender,
+    removeSeniors: false,
+  });
+}
+
+function addAthleteEventPlans(
+  workspace: Workspace,
+  athlete: { name: string; classYear: string },
+  team: string,
+  gender: Gender,
+  merged: ScoringSettings,
+  aliasResolver: ReturnType<typeof buildAliasResolver>,
+  rawHeldEventsBySwimmer: Map<string, Set<string>>,
+  seededActiveEntryIds: string[],
+  plans: PlannedSwimEntry[],
+  activeEntryIds: string[],
+  allowedEvents: ReadonlySet<string> | null,
+  meetField: ReturnType<typeof meetPlaceFieldForWorkspace>,
+  rosterCatalog?: CatalogTeamRoster
+): void {
+  const profile = buildEventProfileFromCatalog(
+    rosterCatalog, team, gender, athlete.name, merged, allowedEvents, meetField
+  ) ?? getAthleteProfile(workspace, team, gender, athlete.name, merged);
+  if (!profile) return;
+  let projectedPool = projectedEventPool(workspace, gender, plans, seededActiveEntryIds);
+  const athleteKey = aliasResolver.resolveAthleteName(athlete.name, team, gender).trim().toLocaleLowerCase();
+  const heldMeetEvents = rawHeldEventsBySwimmer.get(athleteKey) ?? new Set<string>();
+  for (const event of profile.primaryEvents) {
+    if (workspace.entryPlanMode !== 'plan_sheet' && heldMeetEvents.has(swimEventIdentity(event))) continue;
+    const counts = countSwimmerEntries(projectedPool, team, gender, athlete.name, aliasResolver, merged);
+    if (!canAcceptAnotherEntry(counts, merged, event)) break;
+    const best = profile.bestByEvent[event];
+    const entry = createPlannedEntry({
+      name: athlete.name, team, gender, classYear: athlete.classYear, event,
+      time: best?.time ?? 'NT', source: 'optimizer', active: true, ...eventBestTimeMarks(best),
+    });
+    plans.push(entry);
+    activeEntryIds.push(entry.id);
+    projectedPool = projectedEventPool(workspace, gender, plans, seededActiveEntryIds.concat(activeEntryIds));
+  }
+}
+
 export function optimizeEventLineupForTeam(
   workspace: Workspace,
   gender: Gender,
@@ -555,7 +630,7 @@ export function optimizeEventLineupForTeam(
   const merged = mergeScoringSettings(settings, { conference: workspace.conference });
   const aliasResolver = buildAliasResolver(workspace);
   // One resolver for the call. Without it a linked athlete appears twice here and
-  // gets TWO sets of planned entries — one human entered in their primary events
+  // gets TWO sets of planned entries ? one human entered in their primary events
   // twice over, straight past the entry cap.
   const lookup = buildScorerRosterLookup(
     buildWhatIfResults({ workspace, gender, removeSeniors: false }),
@@ -573,67 +648,24 @@ export function optimizeEventLineupForTeam(
     // An empty list means "every plan is active". Keep that meaning for the other teams
     // by listing their plans explicitly before this run adds its own ids.
     : rest.map(plan => plan.id);
-
-  // The loaded meet's program bounds what the optimizer may enter anyone in.
-  // Read from the frozen source copy so the plans it writes cannot widen it.
-  const sourceResults =
-    gender === Gender.MEN
-      ? workspace.sourceMenResults ?? workspace.menResults
-      : workspace.sourceWomenResults ?? workspace.womenResults;
+  const sourceResults = frozenSourceResults(workspace, gender);
+  // The loaded meet's program bounds the optimizer and the frozen field ranks entries.
   const program = meetProgramEvents(sourceResults);
   const allowedEvents = program.size > 0 ? program : null;
-  // Same frozen copy: events rank by the place they would take in the meet.
   const meetField = meetPlaceFieldForWorkspace(workspace, gender);
-  const rawHeldEventsBySwimmer = new Map<string, Set<string>>();
-  for (const row of sourceResults) {
-    if (row.isTimeTrial || /\bTIME\s+TRIAL\b/i.test(row.event)) continue;
-    if (row.team.trim() !== team || (row.gender && row.gender !== gender)) continue;
-    const key = aliasResolver.resolveAthleteName(row.name, team, gender).trim().toLocaleLowerCase();
-    const held = rawHeldEventsBySwimmer.get(key) ?? new Set<string>();
-    held.add(swimEventIdentity(row.event));
-    rawHeldEventsBySwimmer.set(key, held);
-  }
+  const rawHeldEventsBySwimmer = heldEventsBySwimmer(sourceResults, team, gender, aliasResolver);
   const seededActiveEntryIds = (workspace.activeEntryIds ?? []).length > 0
     ? [...(workspace.activeEntryIds ?? [])]
     : (workspace.meetEntryPlans ?? []).map(plan => plan.id);
 
   for (const athlete of teamAthletes) {
-    const profile =
-      buildEventProfileFromCatalog(
-        rosterCatalog,
-        team,
-        gender,
-        athlete.name,
-        merged,
-        allowedEvents,
-        meetField
-      ) ?? getAthleteProfile(workspace, team, gender, athlete.name, merged);
-    if (!profile) continue;
-    let projectedPool = buildWhatIfResults({
-      workspace: { ...workspace, meetEntryPlans: plans, activeEntryIds: seededActiveEntryIds },
-      gender, removeSeniors: false,
-    });
-    const athleteKey = aliasResolver.resolveAthleteName(athlete.name, team, gender).trim().toLocaleLowerCase();
-    const heldMeetEvents = rawHeldEventsBySwimmer.get(athleteKey) ?? new Set<string>();
-    for (const event of profile.primaryEvents) {
-      if (workspace.entryPlanMode !== 'plan_sheet' && heldMeetEvents.has(swimEventIdentity(event))) continue;
-      const counts = countSwimmerEntries(projectedPool, team, gender, athlete.name, aliasResolver, merged);
-      if (!canAcceptAnotherEntry(counts, merged, event)) break;
-      const best = profile.bestByEvent[event];
-      const entry = createPlannedEntry({ name: athlete.name, team, gender, classYear: athlete.classYear, event,
-        time: best?.time ?? 'NT', source: 'optimizer', active: true, ...eventBestTimeMarks(best) });
-      plans.push(entry);
-      activeEntryIds.push(entry.id);
-      projectedPool = buildWhatIfResults({
-        workspace: { ...workspace, meetEntryPlans: plans, activeEntryIds: seededActiveEntryIds.concat(activeEntryIds) },
-        gender, removeSeniors: false,
-      });
-    }
+    addAthleteEventPlans(
+      workspace, athlete, team, gender, merged, aliasResolver, rawHeldEventsBySwimmer,
+      seededActiveEntryIds, plans, activeEntryIds, allowedEvents, meetField, rosterCatalog
+    );
   }
-
   return { plans, activeEntryIds };
 }
-
 /**
  * Optimize one team, and never hand back a state that scores less than the one
  * you passed in.
