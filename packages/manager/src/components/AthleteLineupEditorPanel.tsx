@@ -250,7 +250,7 @@ export default function AthleteLineupEditorPanel({
   };
 
 
-  const counts = countSwimmerEntries(allResults, athlete.team, gender, athlete.name, aliasResolver);
+  const counts = countSwimmerEntries(allResults, athlete.team, gender, athlete.name, aliasResolver, settings);
 
   const relayInvolvement = useMemo((): RelayInvolvement[] => {
     const pdf = gender === Gender.MEN ? workspace.menResults ?? [] : workspace.womenResults ?? [];

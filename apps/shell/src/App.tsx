@@ -1,6 +1,6 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useSearchParams } from 'react-router-dom';
-import { AnimatePresence, motion } from 'motion/react';
+import { AnimatePresence, motion, MotionConfig } from 'motion/react';
 import { AppletSkeleton, useToast } from '@omniswim/ui';
 import { SuitePreferencesProvider, useSuitePreferences } from '@omniswim/core';
 import { SuiteWorkspaceProvider, useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
@@ -273,11 +273,13 @@ export default function App() {
   return (
     <BrowserRouter>
       <SuitePreferencesProvider>
-        <AuthProvider>
-          <SuiteWorkspaceProvider onNotify={toast.push}>
-            <ShellLayout />
-          </SuiteWorkspaceProvider>
-        </AuthProvider>
+        <MotionConfig reducedMotion="user">
+          <AuthProvider>
+            <SuiteWorkspaceProvider onNotify={toast.push}>
+              <ShellLayout />
+            </SuiteWorkspaceProvider>
+          </AuthProvider>
+        </MotionConfig>
       </SuitePreferencesProvider>
     </BrowserRouter>
   );

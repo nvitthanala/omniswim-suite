@@ -1,4 +1,5 @@
 import { Activity, Ruler, Target, User, Waves } from 'lucide-react';
+import { useId } from 'react';
 import { Button } from '@omniswim/ui';
 import type { CycleDefinition, ImProposal, RaceConfig, RaceCourse, Stroke } from '../types';
 import { INPUT_CLASS, SELECT_CLASS, STROKE_LABEL, STROKES } from './raceSetupShared';
@@ -11,12 +12,14 @@ interface SwimmerNameFieldProps {
 
 /** Swimmer name input with a roster-backed datalist for autocomplete. */
 export function SwimmerNameField({ swimmerName, rosterNames, onChange }: SwimmerNameFieldProps) {
+  const id = useId();
   return (
     <div className="space-y-1.5">
-      <label className="label-caps flex items-center gap-1.5">
+      <label htmlFor={id} className="label-caps flex items-center gap-1.5">
         <User className="w-3 h-3" /> Swimmer Name
       </label>
       <input
+        id={id}
         type="text"
         list="metrics-roster-names"
         value={swimmerName}
@@ -51,14 +54,15 @@ export function CourseDistanceFields({
   onCourseChange,
   onDistanceChange,
 }: CourseDistanceFieldsProps) {
+  const idPrefix = useId();
   return (
     <>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
-          <label className="label-caps flex items-center gap-1.5">
+          <label htmlFor={`${idPrefix}-course`} className="label-caps flex items-center gap-1.5">
             <Ruler className="w-3 h-3" /> Course
           </label>
-          <select value={config.course} onChange={(e) => onCourseChange(e.target.value as RaceCourse)} className={SELECT_CLASS}>
+          <select id={`${idPrefix}-course`} value={config.course} onChange={(e) => onCourseChange(e.target.value as RaceCourse)} className={SELECT_CLASS}>
             <option value="LCM">Long Course (50m)</option>
             <option value="SCM">Short Course (25m)</option>
             <option value="SCY">Short Course (25y)</option>
@@ -66,10 +70,10 @@ export function CourseDistanceFields({
         </div>
 
         <div className="space-y-1.5">
-          <label className="label-caps flex items-center gap-1.5">
+          <label htmlFor={`${idPrefix}-distance`} className="label-caps flex items-center gap-1.5">
             <Target className="w-3 h-3" /> Distance
           </label>
-          <select value={config.raceDistance} onChange={(e) => onDistanceChange(Number(e.target.value))} className={SELECT_CLASS}>
+          <select id={`${idPrefix}-distance`} value={config.raceDistance} onChange={(e) => onDistanceChange(Number(e.target.value))} className={SELECT_CLASS}>
             {[50, 100, 200, 400, 800, 1500].map((d) => (
               <option key={d} value={d}>
                 {d}

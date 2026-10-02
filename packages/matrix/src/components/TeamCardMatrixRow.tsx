@@ -97,7 +97,7 @@ export function TeamMatrixTimeCell({
   onEditValueChange,
   onCancelEdit,
 }: TeamMatrixTimeCellProps) {
-  const timeClassName = `font-mono font-medium cursor-pointer hover:underline ${timeColorClass}`;
+  const timeClassName = `font-mono font-medium cursor-pointer hover:underline bg-transparent border-0 p-0 text-right ${timeColorClass}`;
 
   return (
     <div className="flex flex-col items-end gap-0.5 justify-center w-1/3 text-right">
@@ -107,7 +107,7 @@ export function TeamMatrixTimeCell({
         </div>
       )}
       {relaySplitPrimary && (
-        <div className={timeClassName} onClick={onStartEdit}>
+        <button type="button" className={timeClassName} onClick={onStartEdit} aria-label="Edit relay split time">
           <span className="inline-flex items-center gap-1 flex-wrap">
             <span>Split: {displayTimeForRelayLeg(res)}</span>
             {/* The leg's own individual verdict — only present when this leg is eligible. */}
@@ -134,17 +134,17 @@ export function TeamMatrixTimeCell({
               ) : null}
             </span>
           </span>
-        </div>
+        </button>
       )}
       {res.finalsTime && !relaySplitPrimary && (
-        <div className={timeClassName} onClick={onStartEdit}>
+        <button type="button" className={timeClassName} onClick={onStartEdit} aria-label="Edit final time">
           Final: {res.finalsTime}
-        </div>
+        </button>
       )}
       {!res.finalsTime && !res.prelimsTime && !relaySplitPrimary && (
-        <div className={timeClassName} onClick={onStartEdit}>
+        <button type="button" className={timeClassName} onClick={onStartEdit} aria-label="Edit time">
           {res.time}
-        </div>
+        </button>
       )}
       {/* A relay row without a recorded split still needs its team-time
           verdict shown somewhere — the two branches above cover the split

@@ -4,7 +4,7 @@ import { ScoringSettings } from '@omniswim/core/types';
 import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
 import { ScoringSettingsFields } from './ScoringSettingsFields';
 import { ScoringPresetManagerModal } from './ScoringPresetManagerModal';
-import { Button } from '@omniswim/ui';
+import { Button, Modal } from '@omniswim/ui';
 
 interface Props {
   settings: ScoringSettings;
@@ -25,6 +25,9 @@ interface Props {
  * with `ScoringSettingsPanel.tsx` — see `ScoringSettingsFields.tsx`'s own
  * file header. This entry point never receives a `suggestedPresetId` (that's
  * a meet-import-triggered flow, and this dialog isn't one).
+ *
+ * Uses the shared `Modal` for dialog role, aria-modal, Escape, and focus
+ * handling — the previous hand-rolled backdrop had none of those.
  */
 export default function ScoringSettingsModal({ settings, onSave, onClose, scoringView, onScoringViewChange, conference }: Props) {
   const [draft, setDraft] = useState<ScoringSettings>(() => mergeScoringSettings(settings));
@@ -32,8 +35,12 @@ export default function ScoringSettingsModal({ settings, onSave, onClose, scorin
   const [presetListRefreshToken, setPresetListRefreshToken] = useState(0);
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop backdrop-blur-sm">
-      <div className="surface-card rounded-2xl p-6 max-w-2xl w-full mx-4 shadow-2xl max-h-[90vh] flex flex-col">
+    <>
+      <Modal
+        onClose={onClose}
+        ariaLabel="Scoring Matrix Configuration"
+        className="rounded-2xl p-6 max-w-2xl w-full mx-4 shadow-2xl max-h-[90vh] flex flex-col"
+      >
         <div className="flex justify-between items-center mb-6">
           <h2 className="text-lg font-medium text-[var(--text-primary)] uppercase tracking-tight">Scoring Matrix Configuration</h2>
           <Button
@@ -77,7 +84,7 @@ export default function ScoringSettingsModal({ settings, onSave, onClose, scorin
             Update scoring model
           </Button>
         </div>
-      </div>
+      </Modal>
 
       {manageOpen ? (
         <ScoringPresetManagerModal
@@ -85,6 +92,6 @@ export default function ScoringSettingsModal({ settings, onSave, onClose, scorin
           onPresetsChanged={() => setPresetListRefreshToken(v => v + 1)}
         />
       ) : null}
-    </div>
+    </>
   );
 }

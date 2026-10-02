@@ -9,6 +9,7 @@
 
 import React from 'react';
 import { ScoringPresetMeta, ScoringSettings } from '@omniswim/core/types';
+import { entryCapPolicy } from '@omniswim/core/lib/scoringDefaults';
 
 /** One numeric scoring-limit field: label, the settings key it reads/writes,
  * and the display fallback used when the value is unset. */
@@ -51,6 +52,45 @@ export function NumericSettingField({
         onChange={e => onChange(parseInt(e.target.value, 10) || 999)}
       />
     </label>
+  );
+}
+
+/**
+ * Optional entry-cap policy flags. Absent settings resolve through
+ * `entryCapPolicy`, so the checkboxes show the effective default (time trials
+ * off, exhibition on) until the user sets an explicit boolean.
+ */
+export function EntryCapPolicyFields({
+  settings,
+  onChange,
+}: {
+  settings: Pick<ScoringSettings, 'entryCapCountsTimeTrials' | 'entryCapCountsExhibition'>;
+  onChange: (patch: Partial<ScoringSettings>) => void;
+}) {
+  const policy = entryCapPolicy(settings);
+  return (
+    <div className="sm:col-span-2 flex flex-col gap-2">
+      <label className="flex items-center gap-2 text-ui-caption text-theme-muted cursor-pointer">
+        <input
+          type="checkbox"
+          aria-label="Time trials count toward the entry cap"
+          checked={policy.countsTimeTrials}
+          onChange={e => onChange({ entryCapCountsTimeTrials: e.target.checked })}
+          className="accent-[var(--text-accent)]"
+        />
+        Time trials count toward the entry cap
+      </label>
+      <label className="flex items-center gap-2 text-ui-caption text-theme-muted cursor-pointer">
+        <input
+          type="checkbox"
+          aria-label="Exhibition swims count toward the entry cap"
+          checked={policy.countsExhibition}
+          onChange={e => onChange({ entryCapCountsExhibition: e.target.checked })}
+          className="accent-[var(--text-accent)]"
+        />
+        Exhibition swims count toward the entry cap
+      </label>
+    </div>
   );
 }
 

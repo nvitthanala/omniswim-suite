@@ -161,7 +161,8 @@ export default function AthleteEntriesSection({
         athlete.team,
         gender,
         athlete.name,
-        aliasResolver
+        aliasResolver,
+        settings
       );
       if (!canAcceptAnotherEntry(without, settings, target.event)) {
         toast.push('error', 'Entry limit reached — cannot re-enable');

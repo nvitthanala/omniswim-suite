@@ -267,9 +267,14 @@ export function TeamCardChartTooltip({
       }}
     >
       {isPinned && (
-        <div className="absolute top-1 right-1 cursor-pointer text-theme-muted hover:text-[var(--text-primary)]" onClick={onClose}>
+        <button
+          type="button"
+          className="absolute top-1 right-1 cursor-pointer text-theme-muted hover:text-[var(--text-primary)] bg-transparent border-0 p-0"
+          onClick={onClose}
+          aria-label="Close tooltip"
+        >
           ✕
-        </div>
+        </button>
       )}
       <TooltipHeader isClass={isClass} data={data} showPrelimsPerformance={showPrelimsPerformance} />
 

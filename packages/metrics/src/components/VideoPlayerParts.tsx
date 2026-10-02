@@ -141,7 +141,7 @@ export function VideoTransportControls({
         <button
           onClick={() => onStepFrame(-1)}
           disabled={effectiveFps === null}
-          className="hover:text-accent-400 transition-colors focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
+          className="hover:text-accent-400 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-accent)] disabled:opacity-40 disabled:cursor-not-allowed"
           title="Previous Frame"
           aria-label="Previous frame"
         >
@@ -150,14 +150,14 @@ export function VideoTransportControls({
         <button
           onClick={onTogglePlay}
           aria-label={isPlaying ? 'Pause video' : 'Play video'}
-          className="hover:text-accent-400 transition-colors focus:outline-none bg-accent-500/20 p-1.5 rounded-full backdrop-blur-sm border border-accent-500/30 text-accent-100"
+          className="hover:text-accent-400 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-accent)] bg-accent-500/20 p-1.5 rounded-full backdrop-blur-sm border border-accent-500/30 text-accent-100"
         >
           {isPlaying ? <Pause className="w-5 h-5 fill-current" /> : <Play className="w-5 h-5 fill-current ml-0.5" />}
         </button>
         <button
           onClick={() => onStepFrame(1)}
           disabled={effectiveFps === null}
-          className="hover:text-accent-400 transition-colors focus:outline-none disabled:opacity-40 disabled:cursor-not-allowed"
+          className="hover:text-accent-400 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-accent)] disabled:opacity-40 disabled:cursor-not-allowed"
           title="Next Frame"
           aria-label="Next frame"
         >
@@ -181,7 +181,7 @@ export function VideoTransportControls({
             value={fpsOverride ?? ''}
             onChange={(e) => onFpsOverrideChange(e.target.value ? parseFloat(e.target.value) : null)}
             aria-label="Frames per second"
-            className="bg-transparent text-white focus:outline-none cursor-pointer appearance-none pr-3"
+            className="bg-transparent text-white cursor-pointer appearance-none pr-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-accent)]"
           >
             <option value="" className="bg-slate-900 text-white">
               {measuredFps ? `Measured (${measuredFps})` : 'Not measured — select'}
@@ -199,7 +199,7 @@ export function VideoTransportControls({
             value={playbackRate}
             onChange={onPlaybackRateChange}
             aria-label="Playback speed"
-            className="bg-transparent text-white focus:outline-none cursor-pointer appearance-none pr-3"
+            className="bg-transparent text-white cursor-pointer appearance-none pr-3 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-accent)]"
           >
             <option value={0.1} className="bg-slate-900 text-white">
               0.1x
@@ -226,7 +226,7 @@ export function VideoTransportControls({
           <button
             onClick={onToggleMute}
             aria-label={isMuted || volume === 0 ? 'Unmute video' : 'Mute video'}
-            className="hover:text-accent-400 transition-colors focus:outline-none"
+            className="hover:text-accent-400 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-accent)]"
           >
             {isMuted || volume === 0 ? (
               <VolumeX className="w-4 h-4 drop-shadow-md" />
@@ -242,11 +242,11 @@ export function VideoTransportControls({
             value={isMuted ? 0 : volume}
             onChange={onVolumeChange}
             aria-label="Volume"
-            className="w-0 opacity-0 group-hover:w-16 group-hover:opacity-100 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer hover:bg-white/40 transition-all duration-300 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full focus:outline-none"
+            className="w-0 opacity-0 group-hover:w-16 group-hover:opacity-100 group-focus-within:w-16 group-focus-within:opacity-100 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer hover:bg-white/40 transition-all duration-300 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-accent)]"
           />
         </div>
 
-        <button aria-label="Maximize video" className="hover:text-accent-400 transition-colors ml-2 border-l border-white/20 pl-4">
+          <button aria-label="Maximize video" className="hover:text-accent-400 transition-colors ml-2 border-l border-white/20 pl-4 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-accent)]">
           <Maximize className="w-4 h-4 drop-shadow-md" />
         </button>
       </div>

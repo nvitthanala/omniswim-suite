@@ -11,6 +11,7 @@ import { fetchScoringPresetList, fetchScoringPresetSettings } from '@omniswim/co
 import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
 import { usesScorerRoster } from '@omniswim/core/lib/scorerRoster';
 import {
+  EntryCapPolicyFields,
   NUMERIC_SETTING_FIELDS,
   NumericSettingField,
   ScorerModeSelect,
@@ -93,6 +94,10 @@ export default function RosterScoringSetup({ workspace, settings, onSave }: Prop
                 onChange={next => setLocal({ ...local, [field.key]: next })}
               />
             ))}
+            <EntryCapPolicyFields
+              settings={local}
+              onChange={patch => setLocal({ ...local, ...patch })}
+            />
           </div>
           <Button
             variant="outline"

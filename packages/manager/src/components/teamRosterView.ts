@@ -207,7 +207,14 @@ export type RosterRowViewModel = {
  */
 export function buildRosterRowViewModel(row: ScorerRosterRow, ctx: RosterRowContext): RosterRowViewModel {
   const meetPts = ctx.pointTotals.get(row.key) ?? 0;
-  const entryCounts = countSwimmerEntries(ctx.genderResults, row.team, ctx.gender, row.name, ctx.aliasResolver);
+  const entryCounts = countSwimmerEntries(
+    ctx.genderResults,
+    row.team,
+    ctx.gender,
+    row.name,
+    ctx.aliasResolver,
+    ctx.settings
+  );
   const entryOver = swimmerExceedsEntryLimits(entryCounts, ctx.settings);
   const athleteIssues = ctx.lineupAudit?.athleteIssues.get(normalizeSwimmerName(row.name)) ?? [];
   const profile =

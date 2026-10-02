@@ -3,13 +3,14 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * `ScoringSettingsFields`'s scorer-cap grid: scorer cap scope, diver scorer
- * weight, the individual/relay/total entry caps, the relay multiplier,
- * half-rate relay swimmers, and the relay-eligibility checkbox. Pure
- * extraction from `ScoringSettingsFields.tsx` — no behavior change. Lock
- * state and the field updater stay in the parent.
+ * weight, the individual/relay/total entry caps, the entry-cap policy
+ * checkboxes, the relay multiplier, half-rate relay swimmers, and the
+ * relay-eligibility checkbox. Pure extraction from `ScoringSettingsFields.tsx`
+ * — no behavior change. Lock state and the field updater stay in the parent.
  */
 
 import type { ScoringSettings } from '@omniswim/core/types';
+import { entryCapPolicy } from '@omniswim/core/lib/scoringDefaults';
 
 interface LockState {
   message?: string | null;
@@ -25,6 +26,7 @@ interface ScoringCapsFieldsProps {
 
 export function ScoringCapsFields({ local, update, lock }: ScoringCapsFieldsProps) {
   const { isLocked, lockProps } = lock;
+  const policy = entryCapPolicy(local);
   return (
     <div className="grid grid-cols-2 gap-3">
       <div>
@@ -103,6 +105,28 @@ export function ScoringCapsFields({ local, update, lock }: ScoringCapsFieldsProp
           onChange={e => update({ maxTotalEntriesPerSwimmer: parseInt(e.target.value, 10) || 999 })}
           {...lockProps('maxTotalEntriesPerSwimmer')}
         />
+      </div>
+      <div className="col-span-2 flex flex-col gap-2">
+        <label className="flex items-center gap-2 text-[10px] text-theme-secondary cursor-pointer">
+          <input
+            type="checkbox"
+            aria-label="Time trials count toward the entry cap"
+            checked={policy.countsTimeTrials}
+            onChange={e => update({ entryCapCountsTimeTrials: e.target.checked })}
+            className="accent-[var(--text-accent)]"
+          />
+          Time trials count toward the entry cap
+        </label>
+        <label className="flex items-center gap-2 text-[10px] text-theme-secondary cursor-pointer">
+          <input
+            type="checkbox"
+            aria-label="Exhibition swims count toward the entry cap"
+            checked={policy.countsExhibition}
+            onChange={e => update({ entryCapCountsExhibition: e.target.checked })}
+            className="accent-[var(--text-accent)]"
+          />
+          Exhibition swims count toward the entry cap
+        </label>
       </div>
       <div>
         <label className="block text-[10px] text-theme-secondary uppercase mb-1">Relay multiplier</label>

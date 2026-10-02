@@ -191,7 +191,7 @@ export function VideoPlayer({
 
           <VideoTelemetryOverlay liveSpm={liveSpm} measuredFps={measuredFps} />
 
-          <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 via-slate-900/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity z-20">
+          <div className="absolute bottom-0 left-0 right-0 p-4 bg-gradient-to-t from-black/90 via-slate-900/60 to-transparent opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity z-20">
             <div className="flex flex-col gap-2">
               <VideoScrubber
                 progress={progress}
