@@ -402,6 +402,34 @@ export function planTeamSeasonRoster(
   });
 }
 
+/**
+ * The un-seasoned roster page for one team and one gender, with no meet.
+ *
+ * `/team/{id}/roster/?gender={M|F}` carries no `season_id`, so the server serves
+ * its own current season and prints that team's season table in the page's
+ * `<select name="season_id">`. A multi-team crawl fetches this once per team to
+ * read the options from THAT team's own page (`parseTeamSeasonOptions`). It is
+ * the same URL {@link planMeetTeamRosters} builds, from the same private
+ * template, checked here against the classifier. Throws on a bad id.
+ */
+export function planTeamRosterPage(
+  teamId: SwimCloudTeamId,
+  gender: SwimCloudCrawlGender,
+): { readonly canonicalUrl: string; readonly resourceKind: 'teamRoster'; readonly teamId: SwimCloudTeamId; readonly gender: SwimCloudCrawlGender } {
+  const canonicalUrl = teamRosterUrl(teamId, gender);
+  const classified = classifySwimCloudUrl(canonicalUrl);
+  const ok =
+    classified.outcome === 'fetchable' &&
+    classified.resource.kind === 'teamRoster' &&
+    classified.resource.teamId === teamId &&
+    classified.resource.query.seasonId === undefined &&
+    classified.canonicalUrl === canonicalUrl;
+  if (!ok) {
+    throw new Error(`planTeamRosterPage: built URL ${canonicalUrl} is not a fetchable un-seasoned team roster URL.`);
+  }
+  return { canonicalUrl, resourceKind: 'teamRoster' as const, teamId, gender };
+}
+
 export interface SwimCloudMeetSwimmerTimesCrawlInput {
   /** The meet whose crawl this is. Recorded on every step; it is not part of a swimmer-times URL. */
   readonly meetId: SwimCloudMeetId;
@@ -471,6 +499,35 @@ export function planMeetSwimmerTimes(
     });
   }
   return steps;
+}
+
+/**
+ * The one fastest-times request for one swimmer, with no meet.
+ *
+ * A multi-team crawl has no meet, and {@link planMeetSwimmerTimes} needs a
+ * `meetId` that would have to be invented. This builds the same URL from the
+ * same template (one private function, so the two cannot drift) and checks it
+ * classifies as a fetchable `swimmerFastestTimes` resource for this swimmer.
+ * Throws on a bad id or a URL that does not classify. Never returns an empty plan.
+ */
+export function planSwimmerFastestTimes(swimmerId: SwimCloudSwimmerId): {
+  readonly canonicalUrl: string;
+  readonly resourceKind: 'swimmerFastestTimes';
+  readonly swimmerId: SwimCloudSwimmerId;
+} {
+  if (!/^[1-9][0-9]{0,17}$/.test(swimmerId)) {
+    throw new Error(`planSwimmerFastestTimes: swimmer id ${JSON.stringify(swimmerId)} is not a positive integer.`);
+  }
+  const canonicalUrl = swimmerTimesUrl(swimmerId);
+  const classified = classifySwimCloudUrl(canonicalUrl);
+  const ok =
+    classified.outcome === 'fetchable' &&
+    classified.resource.kind === 'swimmerFastestTimes' &&
+    classified.canonicalUrl === canonicalUrl;
+  if (!ok) {
+    throw new Error(`planSwimmerFastestTimes: built URL ${canonicalUrl} is not a fetchable swimmer fastest-times URL.`);
+  }
+  return { canonicalUrl, resourceKind: 'swimmerFastestTimes' as const, swimmerId };
 }
 
 /* -------------------------------------------------------------------------- */

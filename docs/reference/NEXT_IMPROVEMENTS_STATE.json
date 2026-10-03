@@ -101,6 +101,23 @@
     "B1-B5": {
       "status": "not-started",
       "dependsOn": "B0"
+    },
+    "B3": {
+      "item": "Multi-team driver and panel",
+      "status": "in-progress",
+      "owner": "executor acb10892639fc7228",
+      "interruptions": [
+        {
+          "when": "2026-10-03 ~15:30 CT",
+          "what": "Session limit (429) while the agent was still reading; it wrote no files (tree clean at 0c53b125). Resumed with SendMessage after the 20:30Z reset."
+        }
+      ],
+      "progress": [
+        "DONE: src/multiTeamDriver.ts, src/crawlPacing.ts (MIN_DELAY_MS now shared), src/multiTeamPanelModel.ts, src/multiTeamPanel.ts (wired in crawler-content.ts main), content.css rules, README section and live checklist, packages/swimcloud crawlPlan.ts planTeamRosterPage and planSwimmerFastestTimes, four trimmed roster fixtures, four test files (driver 36, denylist wall 3, panel model 10, planners 4), crawler.js rebuilt",
+        "GATES 2026-10-03: lint 0 errors (2 old warnings), lint:extension clean, vitest 163 files 2255 tests green. Mutations M1-M5 and M7 each fail tests; files restored, sha256 verified",
+        "NOT VERIFIED (live only): real fetch carries the session, the panel DOM, 3 s pacing as seen in DevTools, chrome.storage resume, real 403/429 behaviour"
+      ],
+      "resumePoint": "Review by a non-Claude provider; then a live run per the README checklist."
     }
   },
   "gates": {

@@ -85,6 +85,9 @@ import {
 } from './captureResume';
 import { classifyCrawlPageOutcome } from './crawlErrorPolicy';
 import { runBoundedFetchPool } from './boundedFetchPool';
+import { MIN_DELAY_MS } from './crawlPacing';
+import { mountMultiTeamCrawlButton } from './multiTeamPanel';
+import type { MultiTeamRelayOutcome, MultiTeamRelayRequest } from './multiTeamDriver';
 import {
   RATE_LIMITED_STATUS,
   decideRateLimitRetry,
@@ -154,7 +157,6 @@ import {
   type SwimCloudSwimmerTimesProgressState,
 } from './progress';
 
-const MIN_DELAY_MS = 3000;
 const BUTTON_ID = 'omniswim-swimcloud-crawler-button';
 const PANEL_ID = 'omniswim-swimcloud-crawler-panel';
 
@@ -2489,7 +2491,51 @@ function mountTimesEndpointProbe(): void {
   document.body.appendChild(button);
 }
 
+/* -------------------------------------------------------------------------- */
+/* Multi-team crawl: the real I/O handed to `./multiTeamPanel.ts`              */
+/* -------------------------------------------------------------------------- */
+
+/** Consecutive relay failures of the multi-team crawl. One counter for the page's life. */
+let multiTeamRelayFailures = 0;
+
+/**
+ * One same-origin request for the multi-team driver. No pacing and no retry:
+ * the driver owns both (`./multiTeamDriver.ts`). Timeout-bounded by `fetchPage`.
+ * `undefined` is a network error or timeout.
+ */
+async function multiTeamFetchPage(url: string): Promise<FetchedPage | undefined> {
+  try {
+    return await fetchPage(url);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Hand one page to the background worker, with the same streak rule as the meet crawl. */
+async function multiTeamRelay(request: MultiTeamRelayRequest): Promise<MultiTeamRelayOutcome> {
+  const relayed = await sendToBackground<{ relayed?: boolean; via?: 'http' | 'downloads'; error?: string }>(
+    {
+      type: 'omniswim-swimcloud-relay-page',
+      subject: request.subject,
+      sourceUrl: request.sourceUrl,
+      retrievedAt: new Date().toISOString(),
+      httpStatus: request.httpStatus,
+      html: request.html,
+    },
+    RELAY_ROUND_TRIP_TIMEOUT_MS,
+  );
+  if (isRoundTripOk(relayed) && relayed.value?.relayed === true) {
+    multiTeamRelayFailures = 0;
+    return 'landed';
+  }
+  multiTeamRelayFailures += 1;
+  return classifyRelayFailureStreak(multiTeamRelayFailures).action === 'stop' ? 'streak-stop' : 'lost';
+}
+
 function main(): void {
+  // Available on every SwimCloud page: the multi-team crawl needs no meet.
+  mountMultiTeamCrawlButton({ fetchPage: multiTeamFetchPage, relay: multiTeamRelay });
+
   // Runs first, and on a different kind of page: a swimmer profile is not
   // meet-scoped, so the early return below would skip it.
   mountTimesEndpointProbe();

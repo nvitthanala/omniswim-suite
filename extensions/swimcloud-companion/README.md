@@ -65,6 +65,74 @@ recorded in that document.
   the tab or navigating away ends the crawl; everything already relayed is
   already saved.
 
+## Multi-team crawl — what it does
+
+A second button, "Multi-team crawl (Omniswim)", sits on every
+`www.swimcloud.com` page (above the other two). It crawls several teams, each
+for the season you pick, into the Omniswim app. It runs in the content script,
+in your own browser session, because the requests must be same-origin.
+
+How to use it:
+
+1. Click the button. A panel opens.
+2. Paste team links, one per line (or split by spaces or commas). Any
+   `/team/{id}/...` link works. Click **Parse links**. The panel lists the teams
+   it will read and every line it skipped, with the reason.
+3. **Conference links are not supported yet.** The panel says "conference pages
+   are not supported yet (waiting for a captured conference page)" and crawls
+   nothing for them. Paste the teams' own links instead.
+4. Click **Read season lists**. For each team the panel fetches
+   `/team/{id}/roster/?gender=M` (no season) and reads that team's own season
+   menu. Season ids are never shared between teams and never computed.
+5. Pick a season per team (or "Skip this team"). The menu starts on the season
+   the page shows as current. Click **Start crawl**.
+6. Use **Pause** and **Resume** (work in flight finishes first) and **Cancel**.
+   The panel shows one progress line per team, error lines, and a summary at the
+   end: rosters and swimmers done, failed, skipped (already finished), and teams
+   whose season is not offered.
+
+What it requests, in order: each team's season page, then both rosters
+(men, women) of every chosen team, then one
+`/api/swimmers/{id}/profile_fastest_times/` request per distinct swimmer. A
+swimmer on two teams is fetched once. Every page goes to the app under the
+subject `team-{id}-{season}` (season pages under `team-{id}`).
+
+Pacing is the existing pacing, read from the same constants
+(`src/crawlPacing.ts`, `SWIMMER_TIMES_*` in `src/swimmerTimes.ts`): one request
+at a time, at least 3 s apart. A 429 is retried with the existing backoff, which
+only waits longer. The crawl stops by itself on a Cloudflare 403 (never
+retried: refresh your SwimCloud session in the tab, then start again), any 5xx,
+a network error, three rate-limited pages in a row, a swimmer reply that is not
+JSON, or several pages in a row that the app cannot accept. Finished swimmers
+are saved in `chrome.storage.local` and skipped on the next run. Roster pages
+are always fetched again.
+
+What it does not do:
+
+- No conference crawl (no captured conference page exists yet).
+- No relay-leg credits (waiting for a captured swimmer response that has one).
+- The swimmer endpoint returns all-time bests. For a past season they can
+  include later seasons. Do not read them as that season's times.
+- A roster page whose season does not match the chosen one is a failure and is
+  not sent to the app.
+
+Manual live checklist (nobody has run this against the live site):
+
+1. Open any SwimCloud page, click the button, paste two team links, Parse.
+   Expect both ids listed and a conference link refused with the note.
+2. Read season lists. Expect one 3 s-spaced request per team and a dropdown per
+   team that matches that team's own season menu on the site.
+3. Pick a season that is not the current one for one team. Start. Open DevTools
+   Network. Expect roster URLs with `season_id` and `sort=name`, then swimmer
+   URLs. Expect no request faster than 3 s apart and no request in parallel.
+4. Check the roster page the app received is for the chosen season (a wrong
+   season must show as a failed roster, not as data).
+5. Pause for 10 s, Resume. Expect no request while paused.
+6. Cancel mid-run, start again with the same teams. Expect finished swimmers
+   skipped and rosters fetched again.
+7. If SwimCloud answers 403 or 429, expect the crawl to stop with the message
+   and no retry of the 403.
+
 ## What it deliberately does not do
 
 - Neither button ever runs on a schedule, in the background, or without a
@@ -175,6 +243,13 @@ duplicating any of their logic.
   `captureIdForSubject` from `@omniswim/swimcloud/entities` instead of
   carrying a hand-written copy of that rule —
   `tests/swimCloudExtensionCaptureId.test.ts` keeps it that way.
+- `src/multiTeamDriver.ts` — the multi-team crawl loop with every I/O injected
+  (`tests/swimCloudExtensionMultiTeamDriver.test.ts`, run on archived roster
+  pages with a fake clock). `src/multiTeamQueue.ts` is its work queue.
+  `src/multiTeamPanelModel.ts` holds the panel's text and rows
+  (`tests/swimCloudExtensionMultiTeamPanelModel.test.ts`).
+  `src/multiTeamPanel.ts` is the thin DOM half, wired in by `crawler-content.ts`.
+  `src/crawlPacing.ts` holds the shared 3 s floor.
 - `options.html` / `options.js` — the pairing-token field.
 
 `crawler.js` and `background.js` are **build artifacts**. Edit the matching
