@@ -604,7 +604,7 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
       conference: source.conference,
     });
     setScoringRefreshKey(key => key + 1);
-    toast.push('success', `Copied meet results from ${source.name}`);
+    toast.push('success', `Copied meet and psych sheet from ${source.name}`);
   };
 
   const rosterDirty = hasRosterEdits(workspace);

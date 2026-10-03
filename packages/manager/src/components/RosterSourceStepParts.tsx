@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * Section components for RosterSourceStep — the "Add athletes" method picker
- * and the "Meet copy" status header. Split out so the step's top-level
+ * and the "Meet and rules" status header. Split out so the step's top-level
  * return is a short sequence of sections instead of one long conditional
  * tree.
  */
@@ -58,7 +58,6 @@ type AddAthletesSectionProps = {
   gender: Gender;
   teams: string[];
   selectedTeam: string;
-  onSelectTeam: (team: string) => void;
   scoringSettingsWhatIf: boolean;
   recruitPrefill: RecruitAthletePrefill | null;
   onAddRecruit: (recruit: Recruit) => void;
@@ -75,7 +74,6 @@ export function AddAthletesSection({
   gender,
   teams,
   selectedTeam,
-  onSelectTeam,
   scoringSettingsWhatIf,
   recruitPrefill,
   onAddRecruit,
@@ -88,7 +86,7 @@ export function AddAthletesSection({
       <div className="mb-4">
         <h4 className="text-ui-label font-semibold text-[var(--text-primary)]">Add athletes</h4>
         <p className="text-ui-body text-theme-secondary mt-1 leading-relaxed">
-          Choose the way you want to bring swimmers into this roster.
+          Choose how to bring swimmers into this roster.
         </p>
       </div>
 
@@ -128,7 +126,7 @@ export function AddAthletesSection({
             {recruitPrefill ? (
               <p className="text-ui-caption text-theme-secondary mt-3 leading-relaxed">
                 Prefilling <span className="text-[var(--text-accent)]">{recruitPrefill.name}</span> &mdash;
-                choose a new event and time, then inject.
+                choose a new event and time, then add the swim.
               </p>
             ) : null}
           </>
@@ -139,8 +137,6 @@ export function AddAthletesSection({
             workspace={workspace}
             gender={gender}
             team={selectedTeam}
-            teams={teams}
-            onTeamChange={onSelectTeam}
             onUpdate={onUpdate}
             importDisabled={!scoringSettingsWhatIf}
             onClassYearsChange={onClassYearsChange}
@@ -164,14 +160,14 @@ export function AddAthletesSection({
 
 function MeetCopyStatusLine({ hasMeet, hasSource, pdfFilename }: { hasMeet: boolean; hasSource: boolean; pdfFilename?: string }) {
   if (!hasMeet) {
-    return <>Upload a meet PDF in Matrix first &mdash; that becomes the frozen source for this roster.</>;
+    return <>No meet loaded. Upload a meet PDF in Matrix &mdash; it becomes the frozen baseline for this roster.</>;
   }
   return (
     <>
       Using <span className="text-[var(--text-primary)] break-all">{pdfFilename}</span>
       {hasSource
         ? '. Baseline scores stay frozen while you edit the working roster.'
-        : '. Source copy will backfill on the next save.'}
+        : '. The frozen baseline copy fills in on the next save.'}
     </>
   );
 }
@@ -195,7 +191,7 @@ export function MeetCopyHeader({
         {hasMeet ? <FileCheck2 size={18} /> : <FileWarning size={18} />}
       </span>
       <div className="min-w-0">
-        <h4 className="text-ui-label font-semibold text-[var(--text-primary)]">Meet copy</h4>
+        <h4 className="text-ui-label font-semibold text-[var(--text-primary)]">Meet and rules</h4>
         <p className="text-ui-body text-theme-secondary mt-1 leading-relaxed">
           <MeetCopyStatusLine hasMeet={hasMeet} hasSource={hasSource} pdfFilename={pdfFilename} />
         </p>

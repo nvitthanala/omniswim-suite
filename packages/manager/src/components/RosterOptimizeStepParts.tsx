@@ -8,15 +8,13 @@
  */
 
 import React from 'react';
-import { Sparkles, Users } from 'lucide-react';
+import { Sparkles } from 'lucide-react';
 import type { ArbitrageCard, ArbitrageCardsResult, ArbitrageMode } from '@omniswim/core/lib/rosterArbitrage';
-import { Button, TeamSelect } from '@omniswim/ui';
+import { Button } from '@omniswim/ui';
 import { ArbitrageCardList } from './RosterOptimizeStep';
 
 type OptimizerControlsProps = {
   team: string;
-  teams: string[];
-  onSelectTeam: (team: string) => void;
   mode: ArbitrageMode;
   onModeChange: (mode: ArbitrageMode) => void;
   whatIfMode: boolean;
@@ -27,8 +25,6 @@ type OptimizerControlsProps = {
 
 export function OptimizerControls({
   team,
-  teams,
-  onSelectTeam,
   mode,
   onModeChange,
   whatIfMode,
@@ -39,17 +35,6 @@ export function OptimizerControls({
   return (
     <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
       <label className="lg:col-span-4 flex flex-col gap-1.5 min-w-0">
-        <span className="text-ui-caption text-theme-muted flex items-center gap-1.5">
-          <Users size={14} /> Team to optimize
-        </span>
-        <TeamSelect
-          teams={teams}
-          value={team}
-          onChange={e => onSelectTeam(e.target.value)}
-          className="glass-input w-full rounded-lg px-3 py-2.5 text-ui-body"
-        />
-      </label>
-      <label className="lg:col-span-3 flex flex-col gap-1.5 min-w-0">
         <span className="text-ui-caption text-theme-muted">Strategy</span>
         <select
           value={mode}
@@ -61,7 +46,7 @@ export function OptimizerControls({
           <option value="relay_first">Relays first, then individuals</option>
         </select>
       </label>
-      <div className="lg:col-span-5 flex flex-wrap gap-2">
+      <div className="lg:col-span-8 flex flex-wrap gap-2">
         <Button
           disabled={!whatIfMode || !team}
           onClick={onApplyTeam}
@@ -101,7 +86,7 @@ function ScanPrompt({ team, scanning, onScan }: ScanPromptProps) {
       <Button variant="primary" size="md" onClick={onScan} disabled={!team || scanning} className="mt-4">
         {scanning ? 'Scanning…' : 'Find point opportunities'}
       </Button>
-      {!team ? <p className="text-ui-caption text-theme-muted mt-2">Choose a team first.</p> : null}
+      {!team ? <p className="text-ui-caption text-theme-muted mt-2">Choose a team in the team bar above first.</p> : null}
     </div>
   );
 }

@@ -2,15 +2,15 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Per-edit revert panel for the Source step's working copy. Lists recruits
+ * Per-edit revert panel for the Athletes step's working copy. Lists recruits
  * and soft removals individually (the only two categories with an
  * unambiguous revert unit) and shows the rest as counts pointing at their
  * own editors. See `listRevertibleChanges` / `countWorkingCopyChanges` in
- * @omniswim/core for the underlying data.
+ * @omniswim/core for the underlying data. It renders only the body: the
+ * parent's Disclosure supplies the title and the open/closed state.
  */
 
-import React, { useState } from 'react';
-import { Button } from '@omniswim/ui';
+import React from 'react';
 import type { Gender, Workspace } from '@omniswim/core/types';
 import {
   countWorkingCopyChanges,
@@ -27,11 +27,8 @@ type Props = {
 };
 
 export default function WorkingCopyChangesPanel({ workspace, gender, onUpdate, disabled }: Props) {
-  // Collapsed by default. A real workspace can hold dozens of recruits, and one
-  // Revert button each would dominate the step — the Source screen went from 31
-  // to 70 visible controls when this list rendered expanded, which is precisely
-  // the density problem the stepped-wizard work exists to reduce.
-  const [expanded, setExpanded] = useState(false);
+  // The list sits in a collapsed Disclosure. A real workspace can hold dozens of
+  // recruits, and one Revert button each would dominate the step.
   const changes = listRevertibleChanges(workspace, gender);
   const counts = countWorkingCopyChanges(workspace, gender);
 
@@ -41,34 +38,18 @@ export default function WorkingCopyChangesPanel({ workspace, gender, onUpdate, d
     { label: 'planned entries', count: counts.plannedEntries },
   ].filter(c => c.count > 0);
 
-  if (changes.length === 0 && nonRevertible.length === 0) return null;
+  if (changes.length === 0 && nonRevertible.length === 0) {
+    return (
+      <p className="text-ui-caption text-theme-muted">
+        No edits yet. Recruits you add and swimmers you remove appear here, each with a Revert button.
+      </p>
+    );
+  }
 
   return (
-    <section className="surface-card rounded-xl border border-theme-soft p-4 sm:p-5">
-      <div className="flex items-center justify-between gap-3">
-        <h4 className="text-ui-label font-semibold text-[var(--text-primary)]">Working copy edits</h4>
-        {changes.length > 0 ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={() => setExpanded(value => !value)}
-            aria-expanded={expanded}
-            aria-label={
-              expanded
-                ? 'Hide the list of revertible working copy edits'
-                : `Show ${changes.length} revertible working copy ${changes.length === 1 ? 'edit' : 'edits'}`
-            }
-            className="px-2.5 py-1.5 shrink-0"
-          >
-            {expanded
-              ? 'Hide edits'
-              : `Show ${changes.length} ${changes.length === 1 ? 'edit' : 'edits'}`}
-          </Button>
-        ) : null}
-      </div>
-
-      {changes.length > 0 && expanded ? (
-        <ul className="mt-3 flex flex-col gap-2">
+    <div>
+      {changes.length > 0 ? (
+        <ul className="flex flex-col gap-2">
           {changes.map(change => (
             <WorkingCopyChangeRow
               key={changeRowKey(change)}
@@ -86,6 +67,6 @@ export default function WorkingCopyChangesPanel({ workspace, gender, onUpdate, d
           and Lineup steps.
         </p>
       ) : null}
-    </section>
+    </div>
   );
 }

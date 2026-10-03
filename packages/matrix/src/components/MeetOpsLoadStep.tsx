@@ -126,14 +126,17 @@ export function MeetOpsLoadStep({
         </div>
         {workspaceMeetSources.length > 0 ? (
           <div className="mt-4 border-t border-theme-soft pt-4">
-            <label className="block text-ui-caption text-theme-secondary mb-2">Copy a loaded meet from another workspace</label>
+            <label htmlFor="matrix-copy-meet-source" className="block text-ui-caption text-theme-secondary mb-1">Copy meet and psych sheet from another workspace</label>
+            <p className="text-ui-caption text-theme-muted mb-2">
+              Copies the meet results, psych sheet, official team scores, and conference. Replaces the meet loaded here. Does not copy scoring rules or roster plans.
+            </p>
             <select
               defaultValue=""
               onChange={event => {
                 if (event.target.value) onCopyMeetFromWorkspace(event.target.value);
                 event.target.value = '';
               }}
-              aria-label="Copy meet from another workspace"
+              id="matrix-copy-meet-source"
               className="surface-overlay border border-theme-soft rounded-lg px-3 py-2 text-ui-caption text-[var(--text-primary)]"
             >
               <option value="">Choose a workspace…</option>

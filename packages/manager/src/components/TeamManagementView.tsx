@@ -18,6 +18,7 @@ import { Button, useToast } from '@omniswim/ui';
 import type { RecruitAthletePrefill } from './RecruitForm';
 import type { EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
 import RosterWizardShell, { type RosterWizardStepId } from './RosterWizardShell';
+import ManagerTeamBar from './ManagerTeamBar';
 import RosterSourceStep from './RosterSourceStep';
 import RosterLineupStep from './RosterLineupStep';
 import RosterRelayStep from './RosterRelayStep';
@@ -100,7 +101,8 @@ export default function TeamManagementView({
   useEffect(() => {
     // Exactly one scoreable team means there is nothing to choose between, so the
     // Lineup/Relays/Optimize steps used to open on a "Choose a team" empty state
-    // that offered no way to choose one. Select it.
+    // that offered no way to choose one. Select it. With several teams, the
+    // team bar (ManagerTeamBar) is the one place the user picks.
     if (!selectedTeam) {
       if (teams.length === 1) setSelectedTeam(teams[0]);
       return;
@@ -266,14 +268,18 @@ export default function TeamManagementView({
   );
 
   return (
-    <RosterWizardShell step={rosterStep} onStepChange={setRosterStep} toolbar={whatIfControls}>
+    <RosterWizardShell
+      step={rosterStep}
+      onStepChange={setRosterStep}
+      toolbar={whatIfControls}
+      subheader={<ManagerTeamBar teams={teams} selectedTeam={selectedTeam} onSelectTeam={setSelectedTeam} />}
+    >
       {rosterStep === 'source' ? (
         <RosterSourceStep
           workspace={workspace}
           gender={gender}
           teams={teams}
           selectedTeam={selectedTeam}
-          onSelectTeam={setSelectedTeam}
           scoringSettings={scoringSettings}
           whatIfMode={whatIfMode}
           recruitPrefill={recruitPrefill}
@@ -293,8 +299,6 @@ export default function TeamManagementView({
           whatIfMode={whatIfMode}
           removeSeniors={removeSeniors}
           selectedTeam={selectedTeam}
-          teams={teams}
-          onSelectTeam={setSelectedTeam}
           onUpdate={onUpdate}
           onDeleteSwim={whatIfMode ? handleDeleteSwim : undefined}
           onEditSwim={whatIfMode ? handleEditSwim : undefined}
@@ -315,8 +319,6 @@ export default function TeamManagementView({
           whatIfMode={whatIfMode}
           removeSeniors={removeSeniors}
           selectedTeam={selectedTeam}
-          teams={teams}
-          onSelectTeam={setSelectedTeam}
           onUpdate={onUpdate}
         />
       ) : null}
@@ -329,7 +331,6 @@ export default function TeamManagementView({
           removeSeniors={removeSeniors}
           selectedTeam={selectedTeam}
           teams={teams}
-          onSelectTeam={setSelectedTeam}
           onUpdate={onUpdate}
         />
       ) : null}

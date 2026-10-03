@@ -2,13 +2,16 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * "Load this meet here" — copy another workspace's frozen meet results (and
- * scoring config) into this one via copyMeetIntoWorkspace. Only touches the
- * meet-results plane; roster plans/recruits in this workspace are untouched.
+ * "Copy meet and scoring rules" — copy another workspace's frozen meet results,
+ * scoring rules, and official team scores into this one via
+ * copyMeetIntoWorkspace. Only touches the meet-results plane; roster
+ * plans/recruits in this workspace are untouched, and the psych sheet is not
+ * copied (the Matrix "copy meet and psych sheet" path copies that instead).
+ * It renders only the body: the parent's Disclosure supplies the title.
  */
 
 import React, { useMemo, useState } from 'react';
-import { AlertTriangle, ArrowLeftRight, X } from 'lucide-react';
+import { AlertTriangle, X } from 'lucide-react';
 import { Workspace } from '@omniswim/core/types';
 import { copyMeetIntoWorkspace, type CopyMeetResult } from '@omniswim/core/lib/swimEditor';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
@@ -51,16 +54,10 @@ export default function LoadMeetHereCard({ workspace, onUpdate, whatIfMode }: Pr
   };
 
   return (
-    <section className="surface-card rounded-xl p-4 sm:p-5">
-      <div className="flex items-center gap-2 mb-1">
-        <ArrowLeftRight size={16} className="text-[var(--text-accent)] shrink-0" />
-        <h4 className="text-ui-label font-semibold text-[var(--text-primary)]">
-          Load a meet from another workspace
-        </h4>
-      </div>
+    <div>
       <p className="text-ui-body text-theme-secondary mb-3 leading-relaxed">
-        Copy the frozen meet results and scoring config from another workspace into this one.
-        Roster plans and recruits here stay untouched.
+        Copies the meet results, scoring rules, and official team scores from another workspace.
+        Keeps this workspace&apos;s roster plans, recruits, and history. Does not copy a psych sheet.
       </p>
 
       {!whatIfMode ? (
@@ -73,6 +70,7 @@ export default function LoadMeetHereCard({ workspace, onUpdate, whatIfMode }: Pr
       {sourceOptions.length > 0 ? (
         <div className="flex flex-col sm:flex-row gap-2">
           <select
+            aria-label="Workspace to copy the meet and scoring rules from"
             value={sourceId}
             disabled={!whatIfMode}
             onChange={e => setSourceId(e.target.value)}
@@ -93,7 +91,7 @@ export default function LoadMeetHereCard({ workspace, onUpdate, whatIfMode }: Pr
             onClick={requestCopy}
             className="whitespace-nowrap shrink-0"
           >
-            Copy meet results into this workspace
+            Copy meet and scoring rules here
           </Button>
         </div>
       ) : (
@@ -105,7 +103,7 @@ export default function LoadMeetHereCard({ workspace, onUpdate, whatIfMode }: Pr
       {pending ? (
         <Modal
           onClose={() => setPending(null)}
-          ariaLabel="Load this meet here?"
+          ariaLabel="Copy this meet here?"
           className="border border-[var(--text-accent)]/20 rounded-xl max-w-md w-full mx-4 p-6"
           style={{ boxShadow: 'var(--ui-shadow-lg)' }}
         >
@@ -115,7 +113,7 @@ export default function LoadMeetHereCard({ workspace, onUpdate, whatIfMode }: Pr
                   <AlertTriangle size={20} />
                 </div>
                 <div>
-                  <h2 className="text-heading-2">Load this meet here?</h2>
+                  <h2 className="text-heading-2">Copy this meet here?</h2>
                   <p className="text-ui-body text-theme-secondary mt-1 leading-relaxed">
                     {pending.description}
                   </p>
@@ -151,6 +149,6 @@ export default function LoadMeetHereCard({ workspace, onUpdate, whatIfMode }: Pr
             </div>
         </Modal>
       ) : null}
-    </section>
+    </div>
   );
 }

@@ -50,7 +50,7 @@ test('Phase 2 scoring editor, eligibility lock and screenshots', async ({ page, 
       await expect(page.getByRole('button', { name: 'Edit scoring rules' })).toBeVisible();
       await capture(page, `${theme}-${width}-manager-scoring-summary`);
       await page.getByRole('tab', { name: 'Lineup' }).click();
-      await page.getByRole('button', { name: 'Alpha University' }).click();
+      await page.getByRole('combobox', { name: 'Team', exact: true }).selectOption({ label: 'Alpha University' });
       await expect(page.getByRole('button', { name: 'Open scoring rules' })).toBeVisible();
       await capture(page, `${theme}-${width}-manager-lineup-lock`);
       await page.getByRole('button', { name: 'Open scoring rules' }).click();

@@ -37,19 +37,27 @@ export default function AthleteHistoryImportForm({
   return (
     <>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-        {teamOptions.length > 0 ? (
+        {onTeamChange && teamOptions.length > 0 ? (
           <label className="flex flex-col gap-1.5 min-w-0">
             <span className="text-ui-caption text-theme-muted">Team</span>
             <TeamSelect
               teams={teamOptions}
               value={team && teamOptions.includes(team) ? team : ''}
               disabled={busy}
-              onChange={e => onTeamChange?.(e.target.value)}
+              onChange={e => onTeamChange(e.target.value)}
               className="glass-input w-full rounded-lg px-3 py-2.5 text-ui-body appearance-none"
               placeholderDisabled
             />
           </label>
-        ) : null}
+        ) : (
+          // No picker here: the Manager team bar is the one place a team is chosen.
+          <div className="flex flex-col gap-1.5 min-w-0">
+            <span className="text-ui-caption text-theme-muted">Importing for team</span>
+            <p className="rounded-lg border border-theme-soft surface-muted-bg px-3 py-2.5 text-ui-body text-[var(--text-primary)] truncate">
+              {team || 'No team chosen'}
+            </p>
+          </div>
+        )}
         <label className="flex flex-col gap-1.5 min-w-0">
           <span className="text-ui-caption text-theme-muted">Swimmer name (optional)</span>
           <input
@@ -63,9 +71,9 @@ export default function AthleteHistoryImportForm({
         </label>
       </div>
 
-      {!team && teamOptions.length > 0 ? (
+      {!team ? (
         <p className="text-ui-caption text-amber-400/90 mb-3">
-          Choose which team these times belong to before importing.
+          Choose a team in the team bar above before importing.
         </p>
       ) : null}
 

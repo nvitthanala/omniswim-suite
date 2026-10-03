@@ -40,6 +40,7 @@ export { SwimCloudProvider, useSwimCloudWindow } from './components/SwimCloudCon
 export { ScoringRulesOpenerProvider, useOpenScoringRules } from './components/ScoringRulesOpenerContext';
 export { WizardShell, type WizardShellProps, type WizardStep } from './components/WizardShell';
 export { Menu, MenuItem, type MenuAlign } from './components/Menu';
+export { Disclosure, type DisclosureProps } from './components/Disclosure';
 export {
   SwimCloudCaptureBrowser,
   subjectLabel as swimCloudCaptureSubjectLabel,

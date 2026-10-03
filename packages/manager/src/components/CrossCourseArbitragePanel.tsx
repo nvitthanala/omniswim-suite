@@ -258,7 +258,7 @@ export default function CrossCourseArbitragePanel({
           <ArrowLeftRight size={16} className="text-[var(--text-accent)] shrink-0" />
           Cross-course arbitrage
         </div>
-        <p className="text-ui-caption text-theme-secondary mt-2">Select a team…</p>
+        <p className="text-ui-caption text-theme-secondary mt-2">Choose a team in the team bar above.</p>
       </div>
     );
   }

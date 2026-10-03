@@ -11,10 +11,10 @@
     },
     "codex": {
       "dispatch": "orca orchestration worker-start --agent codex",
-      "available": true,
+      "available": false,
       "remainingPct": null,
       "remainingSource": "node ~/.claude/scripts/provider-usage-report.mjs --json -> codex.primary (usedPct of a windowMinutes window; remaining = 100 - usedPct). Reads Codex's own session logs. Never opens auth.json. Shown in the command-center band and pane.",
-      "verified": "2026-10-02: smoke test passed after updating Codex CLI 0.152.1 -> 0.160.0. Launched, ran two read-only commands, sent worker_done succeeded with correct values. The earlier failure was an update prompt (agent-update-prompt) that waits for a keypress; a future CLI update can bring it back."
+      "verified": "2026-10-02: monthly cap at ~87% used after the two UI phases (each ~17 points). User rule: keep a 10% reserve, so Codex is off until the cap resets 2026-11-01 or the user says otherwise. Cost guide: audit ~2.5%, backend fix ~3-6%, core fix ~6-13%, UI phase ~17%."
     },
     "cursor": {
       "dispatch": "orca orchestration worker-start --agent cursor",
@@ -108,8 +108,6 @@
     "quotaBridge": "Before routing, run node ~/.claude/scripts/provider-usage-report.mjs --json. remaining = 100 - codex.primary.usedPct; cursor.remainingPct as entered (ignore if isStale). Do not copy these into this file; read them fresh.",
     "noDirectProviderSpawns": "Never spawn cursor-agent or codex directly from a script or loop. Use Orca worker-start, one worker at a time."
   },
-  "standbyOrder": [
-    "codex"
-  ],
+  "standbyOrder": [],
   "standbyNote": "Order used by limit-handoff.mjs when Claude is out of quota. First provider that is available and below 90% used."
 }

@@ -208,6 +208,11 @@
     {
       "at": "end of 2026-10-02 session",
       "usedPct": 53
+    },
+    {
+      "at": "after UI phases 1-2",
+      "usedPct": 87,
+      "note": "each UI phase cost about 17 points; Codex stopped to keep the 10% reserve"
     }
   ],
   "openDecisions": [
@@ -241,5 +246,14 @@
     "UIP architect: UI complexity inventory + phased redesign plan [running]",
     "then: commit G1; create branch nvitthanala/ui-simplification; Codex builds UI phases with screenshots + tests, verified each; architect reviews the final UI diff",
     "finally: thorough revision pass + new ideas list; vault + state update"
-  ]
+  ],
+  "uiBranch": {
+    "name": "nvitthanala/ui-simplification",
+    "plan": "docs/reference/UI_SIMPLIFICATION_PLAN.md",
+    "committed": [
+      "phase 1 d53b6640",
+      "phase 2 d4b7bf3c"
+    ],
+    "next": "phases 3-6 on Claude workers (Codex and Cursor unavailable)"
+  }
 }

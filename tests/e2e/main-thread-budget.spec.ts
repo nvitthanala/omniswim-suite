@@ -37,7 +37,7 @@ const MAX_SINGLE_TASK_MS = 1000;
 const MAX_TOTAL_BLOCKING_MS = 3200;
 const SETTLE_MS = 2500;
 
-const STEPS = ['Source', 'Lineup', 'Relays', 'Optimize'];
+const STEPS = ['Athletes', 'Lineup', 'Relays', 'Optimize'];
 const TEAM_PICKER_NAME = 'Henderson State University';
 
 test.describe('Manager step main-thread budget', () => {
@@ -67,12 +67,15 @@ test.describe('Manager step main-thread budget', () => {
         const tab = page.getByRole('tab', { name: new RegExp(step) });
         await tab.click({ timeout: 30_000 });
 
-        // Some steps (Optimize, Lineup) show a team picker first on
-        // multi-team workspaces. Pick Henderson State if present, else
-        // proceed — single-team workspaces skip straight past this.
-        const teamButton = page.getByRole('button', { name: TEAM_PICKER_NAME, exact: true });
-        if (await teamButton.count()) {
-          await teamButton.first().click();
+        // Lineup, Relays and Optimize need a team. The shared team bar is the
+        // one control that sets it. Pick Henderson State if the workspace has
+        // it; single-team workspaces already have their team selected.
+        const teamSelect = page.getByRole('combobox', { name: 'Team', exact: true });
+        if (step !== 'Athletes' && (await teamSelect.count())) {
+          const options = await teamSelect.first().locator('option').allTextContents();
+          if (options.includes(TEAM_PICKER_NAME)) {
+            await teamSelect.first().selectOption({ label: TEAM_PICKER_NAME });
+          }
         }
 
         await page.waitForTimeout(SETTLE_MS);

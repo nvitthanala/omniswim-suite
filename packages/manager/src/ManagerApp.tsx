@@ -31,6 +31,7 @@ import SwimmerDeleteConfirmModal from './components/SwimmerDeleteConfirmModal';
 import RosterImportWizard from './components/RosterImportWizard';
 import BatchOptimizerPanel from './components/BatchOptimizerPanel';
 import ExportReviewModal from './components/ExportReviewModal';
+import ExportEntriesMenu from './components/ExportEntriesMenu';
 
 /** Human-readable breakdown for the "Modified copy" badge's title/aria-label, e.g. "2 recruits, 1 removal". */
 function workingCopyChangeSummary(counts: ReturnType<typeof countWorkingCopyChanges>): string {
@@ -218,9 +219,6 @@ function ManagerWorkspaceView({ activeWorkspace }: { activeWorkspace: Workspace 
           <h2 className="text-heading-2">
             Team management
           </h2>
-          <p className="text-ui-caption text-theme-muted mt-0.5">
-            Roster workflow · Source → Lineup → Relays → Optimize
-          </p>
         </div>
         {/* Reserved-width live region: mounts/unmounts only its inner content
             so screen readers announce settle via aria-live, while the fixed
@@ -254,21 +252,9 @@ function ManagerWorkspaceView({ activeWorkspace }: { activeWorkspace: Workspace 
         </span>
         <div className="sm:ml-auto flex flex-wrap items-center gap-2">
           {/* One consistent secondary style (outline) across every peer
-              action in this row — was 3 different treatments (a tab-style
-              pair, a bare-border button, and a smaller uppercase pill) with
-              no visual logic distinguishing them, per
-              plans/2026-09-10/03-MANAGER-DIAGNOSIS.md §4b. Only "Import
-              roster" keeps the primary emphasis it already had. */}
-          <Button variant="outline" onClick={() => handleExport('csv')} title="Export active meet entries as CSV">
-            Export CSV
-          </Button>
-          <Button
-            variant="outline"
-            onClick={() => handleExport('hytek')}
-            title="Export active meet entries as HyTek-style entry list"
-          >
-            Export HyTek
-          </Button>
+              action in this row. Only "Import roster" keeps the primary
+              emphasis it already had. Both exports live in one menu. */}
+          <ExportEntriesMenu onExport={handleExport} />
           <Button variant="outline" onClick={() => setShowBatchOptimizer(true)} disabled={!whatIfMode} title={!whatIfMode ? 'Enable What-if to run the batch optimizer' : 'Run batch optimizer across all teams'}>
             Batch optimizer
           </Button>

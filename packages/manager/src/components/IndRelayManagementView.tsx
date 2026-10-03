@@ -375,8 +375,8 @@ export default function IndRelayManagementView({
 
           {recruitCount > 0 ? (
             <p className="text-ui-caption text-theme-secondary">
-              <span className="text-[var(--text-accent)]">{recruitCount}</span> injected recruit
-              {recruitCount === 1 ? '' : 's'} for this team in the current projection.
+              <span className="text-[var(--text-accent)]">{recruitCount}</span> recruit swim
+              {recruitCount === 1 ? '' : 's'} added for this team in the current projection.
             </p>
           ) : null}
 

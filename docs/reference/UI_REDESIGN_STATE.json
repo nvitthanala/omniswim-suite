@@ -373,5 +373,57 @@
       "playwrightScreenshots": "After captures in all 3 themes at 1440 and 800; exact before captures missing for Lineup and scoring modal.",
       "gates": "npm run lint and vitest passed; run-tests had port 3209 failure and existing main-thread budget timeout, confirmed on rerun."
     }
+  },
+  "phase3": {
+    "date": "2026-10-02",
+    "status": "implemented_gates_green_except_preexisting_port_3209_script",
+    "summary": "Manager step Source renamed Athletes; Athletes step restructured (method picker, Meet and rules card, collapsed More tools holding four Disclosures); Disclosure primitive; one ManagerTeamBar as sole team writer; duplicate intros and subtitle removed; Inject recruit renamed Add swim; one Export entries menu; copy-meet paths relabeled (kept separate). REPORT.md could not be written by the worker (tool refused report files); results are in the worker's final message.",
+    "files": [
+      "packages/ui/src/components/Disclosure.tsx",
+      "packages/ui/src/components/WizardShell.tsx",
+      "packages/ui/src/index.ts",
+      "packages/manager/src/ManagerApp.tsx",
+      "packages/manager/src/components/ManagerTeamBar.tsx",
+      "packages/manager/src/components/ExportEntriesMenu.tsx",
+      "packages/manager/src/components/RosterSourceMoreTools.tsx",
+      "packages/manager/src/components/RosterSourceStep.tsx",
+      "packages/manager/src/components/RosterSourceStepParts.tsx",
+      "packages/manager/src/components/RosterWizardShell.tsx",
+      "packages/manager/src/components/TeamManagementView.tsx",
+      "packages/manager/src/components/TeamPickerEmptyState.tsx",
+      "packages/manager/src/components/RosterLineupStep.tsx",
+      "packages/manager/src/components/RosterRelayStep.tsx",
+      "packages/manager/src/components/RosterOptimizeStep.tsx",
+      "packages/manager/src/components/RosterOptimizeStepParts.tsx",
+      "packages/manager/src/components/TeamRosterPanel.tsx",
+      "packages/manager/src/components/RecruitForm.tsx",
+      "packages/manager/src/components/BaselineDiffPanel.tsx",
+      "packages/manager/src/components/BaselineDiffPanelParts.tsx",
+      "packages/manager/src/components/WorkingCopyChangesPanel.tsx",
+      "packages/manager/src/components/ScoringTheoryPanel.tsx",
+      "packages/manager/src/components/LoadMeetHereCard.tsx",
+      "packages/manager/src/components/AthleteHistoryImportForm.tsx",
+      "packages/manager/src/components/AthleteHistoryImportPanel.tsx",
+      "packages/manager/src/components/AthleteHistoryPreviewSection.tsx",
+      "packages/manager/src/components/CrossCourseArbitragePanel.tsx",
+      "packages/manager/src/components/IndRelayManagementView.tsx",
+      "packages/matrix/src/components/MeetOpsLoadStep.tsx",
+      "packages/matrix/src/components/OpsModule.tsx",
+      "tests/uiDisclosure.test.ts",
+      "tests/managerTeamBar.test.ts",
+      "tests/exportEntriesMenu.test.ts",
+      "tests/managerAthletesCopy.test.ts",
+      "tests/e2e/ui-ia.spec.ts",
+      "tests/e2e/ui-phase-2.spec.ts",
+      "tests/e2e/main-thread-budget.spec.ts"
+    ],
+    "proof": {
+      "regressionTestsFailedBeforeFix": true,
+      "mutationChecks": [
+        "removed hidden from Disclosure panel -> 2 uiDisclosure tests failed",
+        "removed hideTeamSelect on Lineup -> e2e one-team-select check failed (2 received)"
+      ],
+      "gates": "lint and types pass; vitest 138 files / 1862 passed; playwright all 8 passed on fresh data copy; run-tests.mjs 82 passed, 2 failed (test_scoring_preset_routes port 3209, pre-existing; main-thread-budget timeout only on polluted copy)."
+    }
   }
 }

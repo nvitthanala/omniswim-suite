@@ -1,0 +1,1 @@
+The Phase 1 worker did not capture pre-change screenshots before editing began. The pre-change images cannot be recreated faithfully from this worktree, so this folder intentionally contains no screenshots.

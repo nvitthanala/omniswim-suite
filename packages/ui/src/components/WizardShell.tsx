@@ -17,6 +17,8 @@ export type WizardShellProps<T extends string> = {
   step: T;
   onStepChange: (step: T) => void;
   toolbar?: React.ReactNode;
+  /** Content shared by every step, shown between the step tabs and the step panel. */
+  subheader?: React.ReactNode;
   children: React.ReactNode;
 };
 
@@ -28,6 +30,7 @@ export function WizardShell<T extends string>({
   step,
   onStepChange,
   toolbar,
+  subheader,
   children,
 }: WizardShellProps<T>) {
   const reactId = useId().replace(/:/g, '');
@@ -158,6 +161,8 @@ export function WizardShell<T extends string>({
           })}
         </div>
       </div>
+
+      {subheader}
 
       <div
         id={panelId}

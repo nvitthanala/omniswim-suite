@@ -100,7 +100,6 @@ type Props = {
   removeSeniors: boolean;
   selectedTeam: string;
   teams: string[];
-  onSelectTeam: (team: string) => void;
   onUpdate: (patch: Partial<Workspace>) => void;
 };
 
@@ -184,7 +183,6 @@ export default function RosterOptimizeStep({
   removeSeniors,
   selectedTeam,
   teams,
-  onSelectTeam,
   onUpdate,
 }: Props) {
   const toast = useToast();
@@ -358,7 +356,7 @@ export default function RosterOptimizeStep({
         icon={<FileWarning size={28} />}
         eyebrow="Optimize"
         title="Bring in swimmers first"
-        description="Load a meet or import swimmers on the Source step to build this optimization."
+        description="Load a meet or import swimmers on the Athletes step to build this optimization."
       />
     );
   }
@@ -368,9 +366,7 @@ export default function RosterOptimizeStep({
       <TeamPickerEmptyState
         eyebrow="Optimize"
         title="Choose a team to optimize"
-        description="Select a team to review its point opportunities and optimize its entries."
-        teams={teams}
-        onSelectTeam={onSelectTeam}
+        description="Use the team bar above to pick the team whose point opportunities you want to review and optimize."
       />
     );
   }
@@ -379,8 +375,6 @@ export default function RosterOptimizeStep({
     <div className="surface-card rounded-xl p-4 sm:p-5 flex flex-col gap-5">
       <OptimizerControls
         team={team}
-        teams={teams}
-        onSelectTeam={onSelectTeam}
         mode={mode}
         onModeChange={setMode}
         whatIfMode={whatIfMode}

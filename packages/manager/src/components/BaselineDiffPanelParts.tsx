@@ -6,39 +6,11 @@
 
 import React from 'react';
 import { Loader2 } from 'lucide-react';
-import { Button } from '@omniswim/ui';
 import type { ScenarioDiffResult } from '@omniswim/core/lib/scenarioDiffClient';
 import { ScenarioDiffView } from './ScenarioDiffView';
 import type { DiffViewState } from './baselineDiffView';
 
-export function DiffToggleButton({
-  loading,
-  expanded,
-  disabled,
-  onClick,
-}: {
-  loading: boolean;
-  expanded: boolean;
-  disabled: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <Button variant="outline" size="sm" onClick={onClick} disabled={disabled} className="px-2.5 py-1.5">
-      {loading ? (
-        <>
-          <Loader2 size={12} className="animate-spin" />
-          Calculating…
-        </>
-      ) : expanded ? (
-        'Hide changes'
-      ) : (
-        'Show changes from the loaded meet'
-      )}
-    </Button>
-  );
-}
-
-/** The panel body below the toggle button — one of the mutually exclusive
+/** The panel body — one of the mutually exclusive
  * view states resolved by resolveDiffViewState. */
 export function DiffPanelBody({
   state,
@@ -50,7 +22,7 @@ export function DiffPanelBody({
   if (state === 'no-team') {
     return (
       <p className="text-ui-caption text-theme-secondary leading-relaxed mt-2.5">
-        Choose a team above to compare it against the loaded meet.
+        Choose a team in the team bar above to compare it against the loaded meet.
       </p>
     );
   }

@@ -284,7 +284,7 @@ export default function RecruitForm({
             />
           </div>
           <div className="min-w-0 sm:col-span-2">
-            <label htmlFor={ids.team} className={labelClass}>Team</label>
+            <label htmlFor={ids.team} className={labelClass}>Swim&apos;s team</label>
             <TeamSelect
               id={ids.team}
               value={formData.team}
@@ -348,7 +348,7 @@ export default function RecruitForm({
             className="flex-1 btn-recruit"
             leadingIcon={<Play size={12} fill="currentColor" />}
           >
-            Inject recruit
+            Add swim
           </Button>
         </div>
       </form>
@@ -448,7 +448,7 @@ export default function RecruitForm({
         className="w-full mt-2 btn-recruit uppercase tracking-[0.2em]"
         leadingIcon={<Play size={12} fill="currentColor" />}
       >
-        Inject Recruit Into Matrix
+        Add swim
       </Button>
     </form>
   );

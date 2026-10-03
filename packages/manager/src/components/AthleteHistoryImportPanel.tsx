@@ -247,7 +247,7 @@ export default function AthleteHistoryImportPanel({
   const parseLocal = () => {
     setError('');
     if (!team.trim()) {
-      setError('Select a team before parsing.');
+      setError('Choose a team in the team bar before parsing.');
       return;
     }
     const division = divisionForTeamOrNull(team) ?? undefined;

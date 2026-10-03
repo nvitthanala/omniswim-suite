@@ -42,6 +42,11 @@ type Props = {
   showTeamSidebar?: boolean;
   /** When `dropdown`, prefer compact team select over sidebar cards. */
   teamPickerMode?: 'sidebar' | 'dropdown';
+  /**
+   * Omit the in-panel Team select. The parent supplies the team (`selectedTeam`)
+   * and owns the one team control, so a second select here would be a duplicate.
+   */
+  hideTeamSelect?: boolean;
   lineupAudit?: TeamLineupAudit;
   selectedTeam?: string;
   onSelectTeam?: (team: string) => void;
@@ -74,6 +79,7 @@ export default function TeamRosterPanel({
   baselineByTeam,
   showTeamSidebar = true,
   teamPickerMode,
+  hideTeamSelect = false,
   lineupAudit,
   selectedTeam: controlledTeam,
   onSelectTeam,
@@ -409,7 +415,7 @@ export default function TeamRosterPanel({
         selectedBaseline={selectedBaseline}
         selectedProjected={selectedProjected}
         eventThrough={officialTeamScores?.eventThrough}
-        useDropdown={useDropdown}
+        useDropdown={useDropdown && !hideTeamSelect}
         teams={teams}
         controlledTeam={controlledTeam}
         onSelectTeam={selectTeam}

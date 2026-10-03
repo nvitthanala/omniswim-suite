@@ -4,7 +4,6 @@
  */
 
 import React, { useMemo, useState } from 'react';
-import { ListChecks } from 'lucide-react';
 import { ClassYear, Gender, Workspace } from '@omniswim/core/types';
 import {
   applyScoringTheory,
@@ -66,13 +65,7 @@ export default function ScoringTheoryPanel({
   const warnings = [...(parsed?.warnings ?? []), ...(preview?.warnings ?? [])];
 
   return (
-    <div className="surface-card rounded-xl p-4 sm:p-5 shrink-0 min-w-0">
-      <div className="flex items-center gap-2 mb-1">
-        <ListChecks size={16} className="text-[var(--text-accent)] shrink-0" />
-        <h4 className="text-ui-label font-semibold text-[var(--text-primary)]">
-          Scoring theory import
-        </h4>
-      </div>
+    <div className="min-w-0">
       <p className="text-ui-body text-theme-secondary mb-3 leading-relaxed">
         Paste a scoring-team plan (relay squads + per-swimmer event lists, e.g.{' '}
         <span className="font-mono">Bartu Akin (1000, 4IM, 500, 1650)</span>). Names are matched to
@@ -80,7 +73,7 @@ export default function ScoringTheoryPanel({
       </p>
 
       <label className="flex flex-col gap-1.5 mb-3">
-        <span className="text-ui-caption text-theme-muted">Paste theory</span>
+        <span className="text-ui-caption text-theme-muted">Paste scoring plan</span>
         <textarea
           value={text}
           onChange={e => setText(e.target.value)}
@@ -91,13 +84,13 @@ export default function ScoringTheoryPanel({
 
       <div className="flex flex-wrap gap-2 mb-3">
         <Button variant="outline" size="md" disabled={!canParseTheory(text, team)} onClick={parseLocal}>
-          Parse theory
+          Parse plan
         </Button>
       </div>
 
       {shouldShowTeamRequiredWarning(text, team) ? (
         <p className="text-ui-caption text-amber-400/90 mb-3">
-          Select a team above before parsing a theory.
+          Choose a team in the team bar above before parsing a plan.
         </p>
       ) : null}
 

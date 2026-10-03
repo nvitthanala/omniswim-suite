@@ -7,10 +7,7 @@ import React, { useState } from 'react';
 import { ClassYear, Gender, Recruit, ScoringSettings, Workspace } from '@omniswim/core/types';
 import { type RecruitAthletePrefill } from './RecruitForm';
 import RosterScoringSetup from './RosterScoringSetup';
-import ScoringTheoryPanel from './ScoringTheoryPanel';
-import LoadMeetHereCard from './LoadMeetHereCard';
-import BaselineDiffPanel from './BaselineDiffPanel';
-import WorkingCopyChangesPanel from './WorkingCopyChangesPanel';
+import RosterSourceMoreTools from './RosterSourceMoreTools';
 import { AddAthletesSection, MeetCopyHeader, type AddAthletesMethod } from './RosterSourceStepParts';
 
 type Props = {
@@ -18,7 +15,6 @@ type Props = {
   gender: Gender;
   teams: string[];
   selectedTeam: string;
-  onSelectTeam: (team: string) => void;
   scoringSettings: ScoringSettings;
   whatIfMode: boolean;
   recruitPrefill: RecruitAthletePrefill | null;
@@ -27,12 +23,16 @@ type Props = {
   onOpenImportWizard: () => void;
 };
 
+/**
+ * Athletes step. Primary: the add-athletes method picker. Beside it: one
+ * "Meet and rules" card. Below that: four collapsed "More tools". The team
+ * comes from the shared Manager team bar; this step never writes it.
+ */
 export default function RosterSourceStep({
   workspace,
   gender,
   teams,
   selectedTeam,
-  onSelectTeam,
   scoringSettings,
   whatIfMode,
   recruitPrefill,
@@ -58,7 +58,6 @@ export default function RosterSourceStep({
           gender={gender}
           teams={teams}
           selectedTeam={selectedTeam}
-          onSelectTeam={onSelectTeam}
           scoringSettingsWhatIf={whatIfMode}
           recruitPrefill={recruitPrefill}
           onAddRecruit={onAddRecruit}
@@ -81,8 +80,9 @@ export default function RosterSourceStep({
           <RosterScoringSetup workspace={workspace} settings={scoringSettings} onSave={onUpdate} />
 
           <div className="mt-4">
-            <label className="block text-ui-caption text-theme-muted mb-1.5">Entry mode</label>
+            <label htmlFor="athletes-entry-mode" className="block text-ui-caption text-theme-muted mb-1.5">Entry mode</label>
             <select
+              id="athletes-entry-mode"
               value={workspace.entryPlanMode ?? 'overlay'}
               disabled={!whatIfMode}
               onChange={e => onUpdate({ entryPlanMode: e.target.value as 'overlay' | 'plan_sheet' })}
@@ -94,31 +94,15 @@ export default function RosterSourceStep({
           </div>
         </section>
 
-        <LoadMeetHereCard workspace={workspace} onUpdate={onUpdate} whatIfMode={whatIfMode} />
-
-        {hasSource ? (
-          <BaselineDiffPanel
-            workspace={workspace}
-            gender={gender}
-            team={selectedTeam}
-            scoringSettings={scoringSettings}
-          />
-        ) : null}
-
-        <WorkingCopyChangesPanel
+        <RosterSourceMoreTools
           workspace={workspace}
           gender={gender}
-          onUpdate={onUpdate}
-          disabled={!whatIfMode}
-        />
-
-        <ScoringTheoryPanel
-          workspace={workspace}
-          gender={gender}
-          team={selectedTeam}
+          selectedTeam={selectedTeam}
+          scoringSettings={scoringSettings}
+          whatIfMode={whatIfMode}
+          hasSource={hasSource}
           classYearOverrides={Object.keys(classYearOverrides).length > 0 ? classYearOverrides : undefined}
           onUpdate={onUpdate}
-          applyDisabled={!whatIfMode}
         />
       </div>
     </div>
