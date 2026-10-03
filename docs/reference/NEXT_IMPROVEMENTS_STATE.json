@@ -104,8 +104,8 @@
     },
     "B3": {
       "item": "Multi-team driver and panel",
-      "status": "in-progress",
-      "owner": "executor acb10892639fc7228",
+      "status": "review-fixes-done-awaiting-rereview",
+      "owner": "executor acb10892639fc7228 (resumed)",
       "interruptions": [
         {
           "when": "2026-10-03 ~15:30 CT",
@@ -117,7 +117,24 @@
         "GATES 2026-10-03: lint 0 errors (2 old warnings), lint:extension clean, vitest 163 files 2255 tests green. Mutations M1-M5 and M7 each fail tests; files restored, sha256 verified",
         "NOT VERIFIED (live only): real fetch carries the session, the panel DOM, 3 s pacing as seen in DevTools, chrome.storage resume, real 403/429 behaviour"
       ],
-      "resumePoint": "Review by a non-Claude provider; then a live run per the README checklist."
+      "resumePoint": "Architect re-review of the F1-F9 diff; then a live run per the README checklist.",
+      "doNotRunLiveUntil": "F1-F9 fixed and re-reviewed",
+      "committed": "771273ec",
+      "architectReview": "2026-10-03: 9 defects. F1 no capture opened or flushed so no page reaches the app yet panel says Done; F2 pacing clock per run, no lock across crawls/tabs; F3 lost page saved as finished; F4 resume keys global; F5 cancel/pause not checked after waits; F6 200 challenge page not detected; F7 redirects unchecked; F8 empty roster guessed; F9 minor + README.",
+      "reviewFixes": {
+        "when": "2026-10-03",
+        "F1": "FIXED. openCapture before any relay for team-{id} and team-{id}-{season}; stop with a clear message if no captureId; markCapture and flushDownloads on every exit; fallback is not landed (multiTeamApp.ts).",
+        "F2": "FIXED. deps.paceClock shared with the meet crawl lastFetchAtMs; crawlLock.ts (navigator.locks, ifAvailable) held by both crawls for the whole run.",
+        "F3": "FIXED. Only a landed relay marks done and saves; else the item fails.",
+        "F4": "FIXED. One body relayed under every attribution; resume key from sorted (team, season id) pairs; cleared after a clean completed run; Forget saved progress button.",
+        "F5": "FIXED. Cancel and Pause checked after every wait in fetchPaced.",
+        "F6": "FIXED. A 2xx page without a season select, or a Just a moment title, halts and is not relayed; checked before relay on season and roster pages.",
+        "F7": "FIXED. finalUrl returned by the multi-team fetch; a different final URL fails the item, an unfetchable one halts.",
+        "F8": "FIXED. Empty roster only when the parser warns no-roster-posted.",
+        "F9": "FIXED. Relay streak reset per run; halt text says start again; focus return and Escape; button hidden off www.swimcloud.com.",
+        "gates": "lint 0 errors (2 old warnings); lint:extension clean; build:extension and freshness test; vitest 166 files 2321 tests green. Mutations per finding fail tests, files restored, sha256 verified.",
+        "stillLiveOnly": "navigator.locks across real tabs; real worker answers (via http vs downloads) and the app 404 rule; response.url on a real redirect; chrome.storage resume and clear; panel focus and Escape; real 200 challenge body."
+      }
     }
   },
   "gates": {

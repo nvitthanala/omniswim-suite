@@ -2,52 +2,60 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * The multi-team crawl panel: a button and a plain-DOM panel on any
- * www.swimcloud.com page. Impure and thin on purpose. It owns the DOM, the
- * real clock and `chrome.storage.local`; the loop is `./multiTeamDriver.ts`
+ * The multi-team crawl panel: a button and a plain-DOM panel on `www.swimcloud.com`.
+ * Impure and thin on purpose. It owns the DOM, the real clock and
+ * `chrome.storage.local`; the loop is `./multiTeamDriver.ts`, the conversation
+ * with the app is `./multiTeamApp.ts`, the one-crawl lock is `./crawlLock.ts`
  * and every string is `./multiTeamPanelModel.ts`.
  *
  * It runs in the content script because the fetches must be same-origin, in the
- * user's own browser session. `crawler-content.ts` hands it the real
- * `fetchPage` and the relay to the background worker, so this file adds no
- * second copy of either.
+ * user's own browser session. `crawler-content.ts` hands it the real `fetchPage`,
+ * the worker conversation, the shared pacing clock and the lock manager, so this
+ * file adds no second copy of any of them.
  *
  * Styling follows the existing panels (`content.css`, `omniswim-crawler-panel__*`
  * classes). Nothing here is unit-tested; the manual checklist is in the
  * extension README.
  */
 
+import { withCrawlLock, type CrawlLockManager } from './crawlLock';
 import {
+  resumeKeyForChoices,
   runMultiTeamCrawl,
   type MultiTeamControl,
   type MultiTeamDriverState,
   type MultiTeamFetchedPage,
-  type MultiTeamRelayOutcome,
-  type MultiTeamRelayRequest,
+  type MultiTeamPaceClock,
   type TeamSeasonChoice,
   type TeamSeasonOptionsReport,
 } from './multiTeamDriver';
+import type { MultiTeamApp } from './multiTeamApp';
 import {
   defaultSeasonLabel,
   describeTargetInput,
   formatDriverState,
   formatScopeNote,
   formatSummary,
+  multiTeamHostAllowed,
+  readSavedSwimmerKeys,
+  savedProgressStorageKey,
   type PastedTargets,
 } from './multiTeamPanelModel';
 
 const BUTTON_ID = 'omniswim-multiteam-button';
 const PANEL_ID = 'omniswim-multiteam-panel';
-/** `chrome.storage.local` key for the finished swimmer keys. Swimmer keys only. */
-const FINISHED_STORAGE_KEY = 'omniswimMultiTeamFinishedSwimmers';
-const SWIMMER_KEY = /^swimmer\|[1-9][0-9]{0,17}$/;
 const SKIP_VALUE = '';
 
 /** What `crawler-content.ts` supplies. */
 export interface MultiTeamPanelIo {
   /** One same-origin request. `undefined` is a network error or timeout. */
   fetchPage(url: string): Promise<MultiTeamFetchedPage | undefined>;
-  relay(request: MultiTeamRelayRequest): Promise<MultiTeamRelayOutcome>;
+  /** Relay, open, mark and flush through the background worker. */
+  readonly app: MultiTeamApp;
+  /** The last request start time, shared with the meet crawl. */
+  readonly paceClock: MultiTeamPaceClock;
+  /** `navigator.locks`, or undefined when the browser has none. */
+  readonly locks: CrawlLockManager | undefined;
 }
 
 function element<K extends keyof HTMLElementTagNameMap>(tag: K, className?: string, text?: string): HTMLElementTagNameMap[K] {
@@ -67,29 +75,37 @@ function replaceChildrenWithLines(parent: HTMLElement, lines: readonly string[],
   parent.replaceChildren(...lines.map((line) => element('div', className, line)));
 }
 
-async function loadFinished(): Promise<readonly string[]> {
+async function loadFinished(runKey: string): Promise<readonly string[]> {
+  const key = savedProgressStorageKey(runKey);
   try {
-    const stored = await chrome.storage.local.get([FINISHED_STORAGE_KEY]);
-    const value = stored[FINISHED_STORAGE_KEY];
-    // Unreadable storage is "nothing finished": swimmers are fetched again, the safe error.
-    return Array.isArray(value) ? value.filter((k): k is string => typeof k === 'string' && SWIMMER_KEY.test(k)) : [];
+    const stored = await chrome.storage.local.get([key]);
+    return readSavedSwimmerKeys(stored[key]);
   } catch {
     return [];
   }
 }
 
-function saveFinished(keys: readonly string[]): Promise<void> {
+function saveFinished(runKey: string, keys: readonly string[]): Promise<void> {
   return new Promise((resolve) => {
     try {
-      chrome.storage.local.set({ [FINISHED_STORAGE_KEY]: [...keys] }, () => resolve());
+      chrome.storage.local.set({ [savedProgressStorageKey(runKey)]: [...keys] }, () => resolve());
     } catch {
       resolve();
     }
   });
 }
 
-/** Add the entry button. Safe to call once per page load. */
+async function clearFinished(runKey: string): Promise<void> {
+  try {
+    await chrome.storage.local.remove([savedProgressStorageKey(runKey)]);
+  } catch {
+    // Nothing to clear if storage is unreadable.
+  }
+}
+
+/** Add the entry button. Safe to call once per page load. Hides itself on any host but www.swimcloud.com. */
 export function mountMultiTeamCrawlButton(io: MultiTeamPanelIo): void {
+  if (!multiTeamHostAllowed(location.hostname)) return;
   if (document.getElementById(BUTTON_ID) !== null) return;
   const entry = button('Multi-team crawl (Omniswim)');
   entry.id = BUTTON_ID;
@@ -107,6 +123,8 @@ function openPanel(io: MultiTeamPanelIo): void {
   let targets: PastedTargets = { teamIds: [], conferences: [], rejected: [] };
   /** Set while the driver waits for the season choice. */
   let finishChoice: ((choices: readonly TeamSeasonChoice[]) => void) | undefined;
+  /** The selection "Forget saved progress" acts on: the dropdowns while choosing, else the last run's choices. */
+  let currentSelection: () => string = () => '';
 
   const root = element('div');
   root.id = PANEL_ID;
@@ -132,6 +150,8 @@ function openPanel(io: MultiTeamPanelIo): void {
   const choices = element('div', 'omniswim-multiteam__block');
   const startButton = button('Start crawl');
   startButton.hidden = true;
+  const forgetButton = button('Forget saved progress');
+  forgetButton.hidden = true;
 
   const headline = element('div', 'omniswim-crawler-panel__line');
   headline.setAttribute('role', 'status');
@@ -140,6 +160,8 @@ function openPanel(io: MultiTeamPanelIo): void {
   const notice = element('div', 'omniswim-crawler-panel__line omniswim-crawler-panel__warn');
   const errors = element('div', 'omniswim-multiteam__block');
   const summary = element('div', 'omniswim-multiteam__block');
+  const forgetNote = element('div', 'omniswim-crawler-panel__line omniswim-crawler-panel__resume');
+  forgetNote.hidden = true;
 
   const pauseButton = button('Pause');
   pauseButton.hidden = true;
@@ -147,11 +169,21 @@ function openPanel(io: MultiTeamPanelIo): void {
   const buttons = element('div', 'omniswim-crawler-panel__buttons');
   buttons.append(parseButton, readButton);
   const runButtons = element('div', 'omniswim-crawler-panel__buttons');
-  runButtons.append(startButton, pauseButton, cancelButton);
+  runButtons.append(startButton, pauseButton, forgetButton, cancelButton);
 
-  root.append(title, inputLabel, input, scope, buttons, parsed, choices, headline, teamLines, notice, errors, summary, runButtons);
+  root.append(title, inputLabel, input, scope, buttons, parsed, choices, headline, teamLines, notice, errors, summary, forgetNote, runButtons);
   document.body.appendChild(root);
   input.focus();
+
+  const close = (): void => {
+    root.remove();
+    document.getElementById(BUTTON_ID)?.focus();
+  };
+
+  // Escape closes the panel when no crawl is running. While one runs, Cancel is the deliberate way out.
+  root.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape' && !running) close();
+  });
 
   const renderParsed = (): void => {
     const lines: HTMLElement[] = [];
@@ -207,24 +239,53 @@ function openPanel(io: MultiTeamPanelIo): void {
         row.append(label, select);
         rows.push(row);
       }
+      const pick = (): TeamSeasonChoice[] => {
+        const picked: TeamSeasonChoice[] = [];
+        for (const [teamId, select] of selects) {
+          if (select.value !== SKIP_VALUE) picked.push({ teamId, seasonLabel: select.value });
+        }
+        return picked;
+      };
       choices.replaceChildren(...rows);
       startButton.hidden = false;
+      forgetButton.hidden = false;
+      currentSelection = () => resumeKeyForChoices(reports, pick());
       const first = [...selects.values()][0];
       if (first !== undefined) first.focus();
       finishChoice = (picked) => {
         finishChoice = undefined;
         startButton.hidden = true;
         choices.replaceChildren();
+        const key = resumeKeyForChoices(reports, picked);
+        currentSelection = () => key;
         resolve(picked);
       };
-      startButton.onclick = () => {
-        const picked: TeamSeasonChoice[] = [];
-        for (const [teamId, select] of selects) {
-          if (select.value !== SKIP_VALUE) picked.push({ teamId, seasonLabel: select.value });
-        }
-        finishChoice?.(picked);
-      };
+      startButton.onclick = () => finishChoice?.(pick());
     });
+
+  forgetButton.addEventListener('click', () => {
+    const key = currentSelection();
+    forgetNote.hidden = false;
+    if (key === '') {
+      forgetNote.textContent = 'There is no selection to forget saved progress for.';
+      return;
+    }
+    void clearFinished(key).then(() => {
+      forgetNote.textContent = 'Saved progress for this selection was cleared. The next crawl of it fetches every swimmer again.';
+    });
+  });
+
+  const endRun = (): void => {
+    running = false;
+    pauseButton.hidden = true;
+    startButton.hidden = true;
+    forgetButton.hidden = currentSelection() === '';
+    cancelButton.textContent = 'Close';
+    cancelButton.disabled = false;
+    parseButton.disabled = false;
+    input.disabled = false;
+    readButton.disabled = targets.teamIds.length === 0;
+  };
 
   readButton.addEventListener('click', () => {
     if (running || targets.teamIds.length === 0) return;
@@ -237,40 +298,47 @@ function openPanel(io: MultiTeamPanelIo): void {
     parseButton.disabled = true;
     input.disabled = true;
     pauseButton.hidden = false;
+    forgetNote.hidden = true;
     cancelButton.textContent = 'Cancel';
     summary.replaceChildren();
+    io.app.reset();
 
-    void runMultiTeamCrawl(
-      {
-        fetchPage: (url) => io.fetchPage(url),
-        relay: (request) => io.relay(request),
-        sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-        now: () => Date.now(),
-        isoNow: () => new Date().toISOString(),
-        loadFinished,
-        saveFinished,
-        onProgress: render,
-        chooseSeasons: askForSeasons,
-        control,
-      },
-      { teamIds: targets.teamIds },
+    // One crawl at a time, in every tab. The lock is held until the run ends.
+    void withCrawlLock(io.locks, () =>
+      runMultiTeamCrawl(
+        {
+          fetchPage: (url) => io.fetchPage(url),
+          relay: (request) => io.app.relay(request),
+          openCapture: (subject, planned) => io.app.openCapture(subject, planned),
+          markCapture: (subject, completeness) => io.app.markCapture(subject, completeness),
+          flushDownloads: (subjects) => io.app.flushDownloads(subjects),
+          sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+          now: () => Date.now(),
+          isoNow: () => new Date().toISOString(),
+          paceClock: io.paceClock,
+          loadFinished,
+          saveFinished,
+          clearFinished,
+          onProgress: render,
+          chooseSeasons: askForSeasons,
+          control,
+        },
+        { teamIds: targets.teamIds },
+      ),
     )
-      .then((result) => {
-        replaceChildrenWithLines(summary, formatSummary(result), 'omniswim-crawler-panel__line');
+      .then((outcome) => {
+        if (outcome.acquired) replaceChildrenWithLines(summary, formatSummary(outcome.value), 'omniswim-crawler-panel__line');
+        else replaceChildrenWithLines(summary, [outcome.message], 'omniswim-crawler-panel__line omniswim-crawler-panel__warn');
       })
       .catch((error: unknown) => {
         const detail = error instanceof Error ? error.message : String(error);
-        replaceChildrenWithLines(summary, [`The crawl stopped on an unexpected error: ${detail}`, 'Nothing already saved is lost. Finished swimmers are remembered.'], 'omniswim-crawler-panel__line omniswim-crawler-panel__warn');
+        replaceChildrenWithLines(
+          summary,
+          [`The crawl stopped on an unexpected error: ${detail}`, 'Nothing already saved is lost. Finished swimmers are remembered.'],
+          'omniswim-crawler-panel__line omniswim-crawler-panel__warn',
+        );
       })
-      .finally(() => {
-        running = false;
-        pauseButton.hidden = true;
-        cancelButton.textContent = 'Close';
-        cancelButton.disabled = false;
-        parseButton.disabled = false;
-        input.disabled = false;
-        readButton.disabled = targets.teamIds.length === 0;
-      });
+      .finally(endRun);
   });
 
   pauseButton.addEventListener('click', () => {
@@ -280,7 +348,7 @@ function openPanel(io: MultiTeamPanelIo): void {
 
   cancelButton.addEventListener('click', () => {
     if (!running) {
-      root.remove();
+      close();
       return;
     }
     control.cancelled = true;

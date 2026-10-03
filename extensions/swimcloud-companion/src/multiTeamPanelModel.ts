@@ -148,5 +148,41 @@ export function formatSummary(summary: MultiTeamSummary): readonly string[] {
       : summary.outcome === 'cancelled'
         ? 'Cancelled. Finished swimmers are remembered, so the next run skips them.'
         : `Stopped: ${summary.haltMessage ?? 'unknown reason'} Finished swimmers are remembered. Start again to continue.`;
-  return [head, ...summary.teams.map(summaryLine), ...summary.teams.flatMap((t) => t.errors)];
+  const downloads = summary.downloads.map((d) =>
+    d.error !== undefined
+      ? `Pages saved to Downloads for ${d.subject.kind === 'team' ? `team ${d.subject.teamId}` : 'a meet'} could not be combined: ${d.error}`
+      : `${plural(d.pageCount, 'page', 'pages')} for ${d.subject.kind === 'team' ? `team ${d.subject.teamId}${d.subject.season === undefined ? '' : ` ${d.subject.season}`}` : 'a meet'} did not reach the app and were saved to Downloads${d.filename === undefined ? '' : ` (${d.filename})`}. They are not in the app.`,
+  );
+  return [head, ...summary.teams.map(summaryLine), ...summary.teams.flatMap((t) => t.errors), ...downloads];
+}
+
+/* -------------------------------------------------------------------------- */
+/* Host and saved progress                                                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The multi-team crawl runs only on `www.swimcloud.com`. The manifest also
+ * matches bare `swimcloud.com`, but there the `www` URLs the crawl fetches are
+ * cross-origin and would fail or be refused. The entry button hides itself on
+ * any other host.
+ */
+export function multiTeamHostAllowed(hostname: string): boolean {
+  return hostname === 'www.swimcloud.com';
+}
+
+const SAVED_PROGRESS_PREFIX = 'omniswimMultiTeamFinished|';
+const SWIMMER_KEY = /^swimmer\|[1-9][0-9]{0,17}$/;
+
+/** The `chrome.storage.local` key for one selection's finished swimmers. See `resumeKeyForChoices`. */
+export function savedProgressStorageKey(runKey: string): string {
+  return `${SAVED_PROGRESS_PREFIX}${runKey}`;
+}
+
+/**
+ * The swimmer keys read back from storage. Anything that is not a list of
+ * `swimmer|<id>` strings is dropped: unreadable storage means "nothing
+ * finished", so swimmers are fetched again. That is the safe error.
+ */
+export function readSavedSwimmerKeys(value: unknown): readonly string[] {
+  return Array.isArray(value) ? value.filter((k): k is string => typeof k === 'string' && SWIMMER_KEY.test(k)) : [];
 }

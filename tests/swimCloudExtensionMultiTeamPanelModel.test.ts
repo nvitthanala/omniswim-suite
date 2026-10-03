@@ -14,6 +14,9 @@ import {
   formatDriverState,
   formatScopeNote,
   formatSummary,
+  multiTeamHostAllowed,
+  readSavedSwimmerKeys,
+  savedProgressStorageKey,
 } from '../extensions/swimcloud-companion/src/multiTeamPanelModel';
 import type { MultiTeamDriverState, MultiTeamSummary } from '../extensions/swimcloud-companion/src/multiTeamDriver';
 import { addSwimmers, createQueue, markDone, nextWork, queueProgress } from '../extensions/swimcloud-companion/src/multiTeamQueue';
@@ -120,6 +123,7 @@ describe('formatSummary', () => {
     outcome: 'halted',
     haltMessage: 'SwimCloud returned a challenge.',
     requestedUrls: [],
+    downloads: [],
     teams: [
       {
         teamId: '412',
@@ -150,6 +154,47 @@ describe('formatSummary', () => {
   });
 
   it('says Done for a completed run', () => {
-    expect(formatSummary({ outcome: 'completed', teams: [], requestedUrls: [] })[0]).toBe('Done.');
+    expect(formatSummary({ outcome: 'completed', teams: [], requestedUrls: [], downloads: [] })[0]).toBe('Done.');
+  });
+});
+
+describe('formatSummary downloads', () => {
+  it('says which pages did not reach the app', () => {
+    const lines = formatSummary({
+      outcome: 'completed',
+      teams: [],
+      requestedUrls: [],
+      downloads: [
+        { subject: { kind: 'team', teamId: '412', season: '2025-2026' }, pageCount: 3, filename: 'omniswim-swimcloud-captures/team-412-2025-2026/combined-capture.json' },
+        { subject: { kind: 'team', teamId: '58' }, pageCount: 0, error: 'timed out' },
+      ],
+    });
+    expect(lines[1]).toBe(
+      '3 pages for team 412 2025-2026 did not reach the app and were saved to Downloads (omniswim-swimcloud-captures/team-412-2025-2026/combined-capture.json). They are not in the app.',
+    );
+    expect(lines[2]).toBe('Pages saved to Downloads for team 58 could not be combined: timed out');
+  });
+});
+
+describe('multiTeamHostAllowed', () => {
+  it('allows www.swimcloud.com only', () => {
+    expect(multiTeamHostAllowed('www.swimcloud.com')).toBe(true);
+    expect(multiTeamHostAllowed('swimcloud.com')).toBe(false);
+    expect(multiTeamHostAllowed('www.swimcloud.com.evil.example')).toBe(false);
+    expect(multiTeamHostAllowed('WWW.SWIMCLOUD.COM')).toBe(false);
+    expect(multiTeamHostAllowed('')).toBe(false);
+  });
+});
+
+describe('saved progress storage', () => {
+  it('builds one storage key per selection', () => {
+    expect(savedProgressStorageKey('412:29,10002824:29')).toBe('omniswimMultiTeamFinished|412:29,10002824:29');
+    expect(savedProgressStorageKey('412:29')).not.toBe(savedProgressStorageKey('412:28'));
+  });
+
+  it('reads back only well-formed swimmer keys', () => {
+    expect(readSavedSwimmerKeys(['swimmer|1', 'swimmer|2527796', 'roster|412|29|M', 'swimmer|0', 5, 'swimmer|12 '])).toEqual(['swimmer|1', 'swimmer|2527796']);
+    expect(readSavedSwimmerKeys(undefined)).toEqual([]);
+    expect(readSavedSwimmerKeys('swimmer|1')).toEqual([]);
   });
 });

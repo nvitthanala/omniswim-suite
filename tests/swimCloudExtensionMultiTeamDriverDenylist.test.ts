@@ -12,6 +12,8 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
+import { captureIdForSubject } from '../packages/swimcloud/src/entities';
+
 const bad = vi.hoisted(() => ({ roster: undefined as string | undefined, swimmer: undefined as string | undefined }));
 
 vi.mock('../packages/swimcloud/src/crawlPlan', async (importOriginal) => {
@@ -36,23 +38,33 @@ const PAGE = readFileSync(join(here, 'fixtures', 'swimcloud', 'team-10002824-ros
 
 function deps(fetched: string[]): MultiTeamDriverDeps {
   let t = 0;
+  let last: number | undefined;
   return {
     async fetchPage(url) {
       fetched.push(url);
-      return { html: url.includes('/api/') ? '{}' : PAGE, httpStatus: 200 };
+      return { html: url.includes('/api/') ? '{}' : PAGE, httpStatus: 200, finalUrl: url };
     },
     async relay() {
       return 'landed';
+    },
+    async openCapture(subject) {
+      return captureIdForSubject(subject);
+    },
+    async markCapture() {},
+    async flushDownloads() {
+      return [];
     },
     async sleep(ms) {
       t += ms;
     },
     now: () => t,
     isoNow: () => '2026-10-03T00:00:00.000Z',
+    paceClock: { get: () => last, set: (ms) => void (last = ms) },
     async loadFinished() {
       return [];
     },
     async saveFinished() {},
+    async clearFinished() {},
     onProgress() {},
     async chooseSeasons(reports) {
       return reports.flatMap((r) => (r.options === undefined ? [] : [{ teamId: r.teamId, seasonLabel: '2025-2026' }]));

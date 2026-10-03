@@ -87,7 +87,8 @@ import { classifyCrawlPageOutcome } from './crawlErrorPolicy';
 import { runBoundedFetchPool } from './boundedFetchPool';
 import { MIN_DELAY_MS } from './crawlPacing';
 import { mountMultiTeamCrawlButton } from './multiTeamPanel';
-import type { MultiTeamRelayOutcome, MultiTeamRelayRequest } from './multiTeamDriver';
+import { createMultiTeamApp } from './multiTeamApp';
+import { withCrawlLock, type CrawlLockManager } from './crawlLock';
 import {
   RATE_LIMITED_STATUS,
   decideRateLimitRetry,
@@ -322,6 +323,11 @@ interface FetchedPage {
    * could act on it. See `rateLimitBackoff.ts`.
    */
   readonly retryAfter?: string;
+  /**
+   * Where the reply came from after any redirect. The meet crawl ignores it; the
+   * multi-team crawl compares it with the URL it asked for.
+   */
+  readonly finalUrl: string;
 }
 
 class SwimCloudCrawlNetworkError extends Error {}
@@ -346,6 +352,7 @@ async function fetchPage(url: string): Promise<FetchedPage> {
     return {
       html,
       httpStatus: response.status,
+      finalUrl: response.url,
       ...(retryAfter === null ? {} : { retryAfter }),
     };
   } catch (error) {
@@ -2495,8 +2502,8 @@ function mountTimesEndpointProbe(): void {
 /* Multi-team crawl: the real I/O handed to `./multiTeamPanel.ts`              */
 /* -------------------------------------------------------------------------- */
 
-/** Consecutive relay failures of the multi-team crawl. One counter for the page's life. */
-let multiTeamRelayFailures = 0;
+/** The multi-team crawl's conversation with the worker. One object for the page's life. */
+const multiTeamApp = createMultiTeamApp((message, timeoutMs) => sendToBackground(message as unknown as BackgroundMessage, timeoutMs));
 
 /**
  * One same-origin request for the multi-team driver. No pacing and no retry:
@@ -2511,30 +2518,25 @@ async function multiTeamFetchPage(url: string): Promise<FetchedPage | undefined>
   }
 }
 
-/** Hand one page to the background worker, with the same streak rule as the meet crawl. */
-async function multiTeamRelay(request: MultiTeamRelayRequest): Promise<MultiTeamRelayOutcome> {
-  const relayed = await sendToBackground<{ relayed?: boolean; via?: 'http' | 'downloads'; error?: string }>(
-    {
-      type: 'omniswim-swimcloud-relay-page',
-      subject: request.subject,
-      sourceUrl: request.sourceUrl,
-      retrievedAt: new Date().toISOString(),
-      httpStatus: request.httpStatus,
-      html: request.html,
-    },
-    RELAY_ROUND_TRIP_TIMEOUT_MS,
-  );
-  if (isRoundTripOk(relayed) && relayed.value?.relayed === true) {
-    multiTeamRelayFailures = 0;
-    return 'landed';
-  }
-  multiTeamRelayFailures += 1;
-  return classifyRelayFailureStreak(multiTeamRelayFailures).action === 'stop' ? 'streak-stop' : 'lost';
+/** `navigator.locks`, or undefined where the browser has none. Shared by every tab of this origin. */
+function crawlLockManager(): CrawlLockManager | undefined {
+  return (navigator as unknown as { locks?: CrawlLockManager }).locks;
 }
 
 function main(): void {
   // Available on every SwimCloud page: the multi-team crawl needs no meet.
-  mountMultiTeamCrawlButton({ fetchPage: multiTeamFetchPage, relay: multiTeamRelay });
+  mountMultiTeamCrawlButton({
+    fetchPage: multiTeamFetchPage,
+    app: multiTeamApp,
+    // The meet crawl's own last-request clock: the two crawls cannot start closer than the pacing floor.
+    paceClock: {
+      get: () => lastFetchAtMs,
+      set: (ms) => {
+        lastFetchAtMs = ms;
+      },
+    },
+    locks: crawlLockManager(),
+  });
 
   // Runs first, and on a different kind of page: a swimmer profile is not
   // meet-scoped, so the early return below would skip it.
@@ -2576,9 +2578,16 @@ function main(): void {
 }
 
 function startCrawl(meetId: SwimCloudMeetId, panel: PanelHandles, control: CrawlControl): void {
-  runCrawl(meetId, panel, control).catch((error: unknown) => {
-    renderCrawlFailure(panel, error);
-  });
+  // One crawl at a time, in every tab: the meet crawl and the multi-team crawl share one lock.
+  withCrawlLock(crawlLockManager(), () => runCrawl(meetId, panel, control))
+    .then((result) => {
+      if (result.acquired) return;
+      renderMessage(panel, result.message);
+      panel.retryButton.hidden = false;
+    })
+    .catch((error: unknown) => {
+      renderCrawlFailure(panel, error);
+    });
 }
 
 main();

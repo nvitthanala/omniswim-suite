@@ -2638,6 +2638,26 @@
   // extensions/swimcloud-companion/src/crawlPacing.ts
   var MIN_DELAY_MS = 3e3;
 
+  // extensions/swimcloud-companion/src/crawlLock.ts
+  var CRAWL_LOCK_NAME = "omniswim-swimcloud-crawl";
+  var CRAWL_LOCK_HELD_MESSAGE = "Another SwimCloud crawl is running (in this tab or another). Wait for it to finish, or close it, then try again. Two crawls at once would break the pacing.";
+  var CRAWL_LOCK_UNAVAILABLE_MESSAGE = "This browser cannot check whether another crawl is running, so the crawl does not start. Use a current version of Chrome.";
+  async function withCrawlLock(locks, run) {
+    if (locks === void 0) return { acquired: false, message: CRAWL_LOCK_UNAVAILABLE_MESSAGE };
+    return locks.request(CRAWL_LOCK_NAME, { ifAvailable: true }, async (lock) => {
+      if (lock === null || lock === void 0) return { acquired: false, message: CRAWL_LOCK_HELD_MESSAGE };
+      return { acquired: true, value: await run() };
+    });
+  }
+
+  // packages/swimcloud/src/entities.ts
+  function captureIdForSubject(subject) {
+    if (subject.kind === "meet") {
+      return `meet-${subject.meetId}`;
+    }
+    return subject.season === void 0 ? `team-${subject.teamId}` : `team-${subject.teamId}-${subject.season}`;
+  }
+
   // extensions/swimcloud-companion/src/swimmerTimes.ts
   var SWIMMER_TIMES_CONCURRENCY = 1;
   var SWIMMER_TIMES_STAGGER_MS = 3e3;
@@ -3038,6 +3058,10 @@
       this.code = code;
     }
   };
+  function urlIsFetchable(url, expected) {
+    const classified = classifySwimCloudUrl(url);
+    return classified.outcome === "fetchable" && classified.resource.kind === expected;
+  }
   function assertFetchableUrl(url, expected) {
     const classified = classifySwimCloudUrl(url);
     if (classified.outcome !== "fetchable") {
@@ -3050,6 +3074,19 @@
   function teamSubject(teamId, seasonLabel) {
     return seasonLabel === void 0 ? { kind: "team", teamId } : { kind: "team", teamId, season: seasonLabel };
   }
+  function compareTeamIds(a, b) {
+    return a.length !== b.length ? a.length - b.length : a < b ? -1 : a > b ? 1 : 0;
+  }
+  function resumeKeyForChoices(reports, choices) {
+    const pairs = [];
+    for (const choice of choices) {
+      const options = reports.find((r) => r.teamId === choice.teamId)?.options;
+      const season = options === void 0 ? void 0 : resolveSeasonOption(options, choice.seasonLabel);
+      if (season !== void 0) pairs.push({ teamId: choice.teamId, seasonId: season.seasonId });
+    }
+    pairs.sort((a, b) => compareTeamIds(a.teamId, b.teamId) || compareTeamIds(a.seasonId, b.seasonId));
+    return pairs.map((p) => `${p.teamId}:${p.seasonId}`).join(",");
+  }
   function isOkStatus(status) {
     return status >= 200 && status < 300;
   }
@@ -3061,6 +3098,32 @@
       return false;
     }
   }
+  function looksLikeChallengePage(html) {
+    if (/<title>\s*Just a moment/i.test(html)) return true;
+    try {
+      parseTeamSeasonOptions(html);
+      return false;
+    } catch (error) {
+      return error instanceof TeamSeasonParseError && error.code === "season-select-missing";
+    }
+  }
+  function normalizedUrl(url) {
+    try {
+      const parsed = new URL(url);
+      const query = [...parsed.searchParams.entries()].map(([k, v]) => `${k}=${v}`).sort().join("&");
+      return `${parsed.protocol}//${parsed.host}${parsed.pathname.replace(/\/+$/, "").toLowerCase()}?${query}`.toLowerCase();
+    } catch {
+      return void 0;
+    }
+  }
+  var CHALLENGE_TEXT = "SwimCloud returned a challenge. Open the page in a tab, pass the check, then start the crawl again. Finished swimmers are skipped.";
+  function restartText(message) {
+    return message.replace(/Open the page in a tab, pass it, then Resume\./, "Open the page in a tab, pass the check, then start the crawl again. Finished swimmers are skipped.").replace(/Retry once, or Cancel to keep what was already captured\./, "Start the crawl again later. What was already captured is kept.").replace(/Resume when the connection is back\./, "Start the crawl again when the connection is back.").replace(/Wait a while, then Resume\./, "Wait a while, then start the crawl again.");
+  }
+  var OPEN_FAILED_TEXT = "The Omniswim app did not open a capture for this crawl, so its pages would not be saved. Check that the app is running and the pairing token is saved in the extension's options, then start the crawl again.";
+  var NOT_HANDED_TEXT = "not handed to the app, so it is not counted as finished";
+  var RELAY_STREAK_TEXT = "Several pages in a row could not be handed to the Omniswim app. Start the crawl again when it is reachable.";
+  var NOT_JSON_TEXT = "SwimCloud answered the swimmer-times request with a page that is not JSON. Refresh your SwimCloud session in this tab, then start the crawl again.";
   function genderWord(gender) {
     return gender === "M" ? "men's" : "women's";
   }
@@ -3074,6 +3137,9 @@
     const requestedUrls = [];
     const seasonReports = [];
     const teamNotes = /* @__PURE__ */ new Map();
+    const usedSubjects = /* @__PURE__ */ new Map();
+    const optionsLanded = /* @__PURE__ */ new Map();
+    const plannedBySubject = /* @__PURE__ */ new Map();
     const notesFor = (teamId) => {
       let notes = teamNotes.get(teamId);
       if (notes === void 0) {
@@ -3087,9 +3153,10 @@
     let queue;
     let notice;
     let haltMessage;
-    let lastRequestStartMs;
     let recent429 = 0;
     let choiceAsked = false;
+    let plannedCorrected = false;
+    let runKey = "";
     const emit = () => {
       deps.onProgress({
         phase,
@@ -3100,6 +3167,10 @@
         ...haltMessage === void 0 ? {} : { haltMessage }
       });
     };
+    function currentQueue() {
+      if (queue === void 0) throw new MultiTeamDriverError("queue-invariant", "no queue.");
+      return queue;
+    }
     const gate = async () => {
       if (control.paused && !control.cancelled) {
         if (queue !== void 0) {
@@ -3114,23 +3185,30 @@
       }
       return !control.cancelled;
     };
+    const paceWait = async (gapMs) => {
+      if (!await gate()) return false;
+      const last = deps.paceClock.get();
+      if (last === void 0) return true;
+      const elapsed = deps.now() - last;
+      if (elapsed >= gapMs) return true;
+      await deps.sleep(gapMs - elapsed);
+      return gate();
+    };
     const fetchPaced = async (url, expected, gapMs) => {
       assertFetchableUrl(url, expected);
       let attempt = 0;
       for (; ; ) {
         attempt += 1;
-        if (lastRequestStartMs !== void 0) {
-          const elapsed = deps.now() - lastRequestStartMs;
-          if (elapsed < gapMs) await deps.sleep(gapMs - elapsed);
-        }
-        lastRequestStartMs = deps.now();
+        if (!await paceWait(gapMs)) return { page: void 0, aborted: true };
+        deps.paceClock.set(deps.now());
         requestedUrls.push(url);
         const page = await deps.fetchPage(url);
-        if (page === void 0 || page.httpStatus !== RATE_LIMITED_STATUS) return { page };
+        if (page === void 0 || page.httpStatus !== RATE_LIMITED_STATUS) return { page, aborted: false };
         const decision = decideRateLimitRetry(attempt, page.retryAfter, deps.now());
         notice = formatRateLimitWaitLine(url, decision);
         emit();
-        if (decision.action === "give-up" || control.cancelled) return { page };
+        if (decision.action === "give-up") return { page, aborted: false };
+        if (control.cancelled) return { page: void 0, aborted: true };
         await deps.sleep(decision.waitMs);
       }
     };
@@ -3138,47 +3216,105 @@
       const outcome = page === void 0 ? { kind: "network-error" } : { kind: "http-status", httpStatus: page.httpStatus };
       const action = shouldHalt(outcome, recent429);
       recent429 = outcome.kind === "http-status" && outcome.httpStatus === RATE_LIMITED_STATUS ? recent429 + 1 : 0;
-      return action.action === "stop" ? { stop: true, message: action.message } : { stop: false };
+      return action.action === "stop" ? { stop: true, message: restartText(action.message) } : { stop: false };
     };
+    const redirectProblem = (url, expected, page) => {
+      if (normalizedUrl(page.finalUrl) === normalizedUrl(url) && normalizedUrl(url) !== void 0) return void 0;
+      if (!urlIsFetchable(page.finalUrl, expected)) {
+        return { halt: true, message: `SwimCloud redirected ${url} to ${page.finalUrl}, which this crawl does not fetch. Refresh your SwimCloud session in this tab, then start the crawl again.` };
+      }
+      return { halt: false, message: `the page was redirected to ${page.finalUrl}, so it is not the page that was asked for` };
+    };
+    const screenPage = (url, expected, page, contentCheck) => {
+      const stop = haltDecision(page);
+      const redirect = page === void 0 ? void 0 : redirectProblem(url, expected, page);
+      if (stop.stop) return { action: "halt", message: stop.message, relay: page !== void 0 && redirect === void 0 };
+      if (page === void 0) return { action: "fail", message: "no response", relay: false };
+      if (redirect !== void 0) return { action: redirect.halt ? "halt" : "fail", message: redirect.message, relay: false };
+      if (!isOkStatus(page.httpStatus)) {
+        const text = page.httpStatus === RATE_LIMITED_STATUS ? "rate-limited (HTTP 429) after retries" : `HTTP ${page.httpStatus}`;
+        return { action: "fail", message: text, relay: true };
+      }
+      const problem = contentCheck(page.html);
+      if (problem !== void 0) return { action: problem.halt ? "halt" : "fail", message: problem.message, relay: false };
+      return { action: "clean", message: "", relay: true };
+    };
+    const relayTo = async (subjects, sourceUrl, page) => {
+      let result = "landed";
+      for (const subject of subjects) {
+        usedSubjects.set(captureIdForSubject(subject), subject);
+        const outcome = await deps.relay({ subject, sourceUrl, httpStatus: page.httpStatus, html: page.html });
+        if (outcome === "streak-stop") return "streak-stop";
+        if (outcome !== "landed") result = "not-landed";
+      }
+      return result;
+    };
+    const openSubject = async (subject, planned) => {
+      const id = await deps.openCapture(subject, planned);
+      if (id === void 0) return false;
+      usedSubjects.set(captureIdForSubject(subject), subject);
+      plannedBySubject.set(captureIdForSubject(subject), planned);
+      return true;
+    };
+    let endedBy = "halted";
+    let thrown;
     emit();
-    await readSeasonLists();
-    readingTeamId = void 0;
-    const choices = await askForChoices();
-    let endedBy = haltMessage !== void 0 ? "halted" : control.cancelled ? "cancelled" : "completed";
-    if (endedBy === "completed" && choices.length > 0) endedBy = await crawlQueue(choices);
+    try {
+      await readSeasonLists();
+      readingTeamId = void 0;
+      const choices = await askForChoices();
+      endedBy = haltMessage !== void 0 ? "halted" : control.cancelled ? "cancelled" : "completed";
+      if (endedBy === "completed" && choices.length > 0) endedBy = await crawlQueue(choices);
+    } catch (error) {
+      thrown = { error };
+    }
     phase = "finished";
     haltMessage = haltMessage ?? queue?.halt?.message;
     notice = void 0;
+    await markCaptures(thrown === void 0 ? endedBy : "halted");
+    const downloads = await flushAll();
     emit();
-    return buildSummary(endedBy);
+    if (thrown !== void 0) throw thrown.error;
+    return buildSummary(endedBy, downloads);
     async function readSeasonLists() {
       for (const teamId of input.teamIds) {
         if (!await gate()) return;
         readingTeamId = teamId;
         emit();
+        if (!await openSubject(teamSubject(teamId), 1)) {
+          haltMessage = OPEN_FAILED_TEXT;
+          seasonReports.push({ teamId, error: OPEN_FAILED_TEXT });
+          return;
+        }
         const step = planTeamRosterPage(teamId, "M");
-        const { page } = await fetchPaced(step.canonicalUrl, "teamRoster", MIN_DELAY_MS);
+        const { page, aborted } = await fetchPaced(step.canonicalUrl, "teamRoster", MIN_DELAY_MS);
         notice = void 0;
-        if (page !== void 0) {
-          const relayed = await deps.relay({ subject: teamSubject(teamId), sourceUrl: step.canonicalUrl, httpStatus: page.httpStatus, html: page.html });
+        if (aborted) return;
+        const screen = screenPage(step.canonicalUrl, "teamRoster", page, challengeProblem);
+        if (screen.relay && page !== void 0) {
+          const relayed = await relayTo([teamSubject(teamId)], step.canonicalUrl, page);
+          optionsLanded.set(teamId, relayed === "landed" && screen.action === "clean");
           if (relayed === "streak-stop") {
-            haltMessage = "Several pages in a row could not be handed to the Omniswim app. Stopping so nothing more is fetched into the void.";
+            haltMessage = RELAY_STREAK_TEXT;
             seasonReports.push({ teamId, error: haltMessage });
             return;
           }
         }
-        const verdict = haltDecision(page);
-        if (verdict.stop) {
-          haltMessage = verdict.message;
-          seasonReports.push({ teamId, error: verdict.message });
+        if (screen.action === "halt") {
+          haltMessage = screen.message;
+          seasonReports.push({ teamId, error: screen.message });
           return;
         }
-        seasonReports.push(reportSeasons(teamId, page));
+        seasonReports.push(reportSeasons(teamId, screen, page));
       }
     }
-    function reportSeasons(teamId, page) {
-      if (page === void 0 || !isOkStatus(page.httpStatus)) {
-        return { teamId, error: `The season page for team ${teamId} returned HTTP ${page?.httpStatus ?? "no response"}.` };
+    function challengeProblem(html) {
+      return looksLikeChallengePage(html) ? { halt: true, message: CHALLENGE_TEXT } : void 0;
+    }
+    function reportSeasons(teamId, screen, page) {
+      if (screen.action === "fail" || page === void 0) {
+        const why = screen.message.startsWith("HTTP") || screen.message === "no response" ? `returned ${screen.message}` : screen.message;
+        return { teamId, error: `The season page for team ${teamId} ${why}.` };
       }
       try {
         return { teamId, options: parseTeamSeasonOptions(page.html) };
@@ -3203,7 +3339,8 @@
       return picked;
     }
     async function crawlQueue(picked) {
-      const finishedAtStart = await deps.loadFinished();
+      runKey = resumeKeyForChoices(seasonReports, picked);
+      const finishedAtStart = runKey === "" ? [] : await deps.loadFinished(runKey);
       queue = createQueue({
         teams: picked.map((choice) => {
           const options = seasonReports.find((r) => r.teamId === choice.teamId)?.options;
@@ -3214,8 +3351,9 @@
       });
       phase = "crawling";
       emit();
+      if (!await openSeasonCaptures()) return "halted";
       const persistFinished = async () => {
-        await deps.saveFinished([.../* @__PURE__ */ new Set([...finishedAtStart, ...finishedSwimmerKeys(currentQueue())])]);
+        await deps.saveFinished(runKey, [.../* @__PURE__ */ new Set([...finishedAtStart, ...finishedSwimmerKeys(currentQueue())])]);
       };
       for (; ; ) {
         if (!await gate()) {
@@ -3224,10 +3362,15 @@
         }
         const next = nextWork(currentQueue());
         queue = next.queue;
-        if (next.kind === "idle") return idleOutcome(next.reason);
+        if (next.kind === "idle") {
+          const outcome = idleOutcome(next.reason);
+          if (outcome === "completed") await clearIfClean();
+          return outcome;
+        }
         notice = void 0;
         emit();
         const work = next.work;
+        if (work.kind === "swimmer") await correctPlannedCounts();
         const halted = work.kind === "roster" ? await runRosterWork(work) : await runSwimmerWork(work, persistFinished);
         emit();
         if (halted) return "halted";
@@ -3239,43 +3382,90 @@
       if (reason === "cancelled") return "cancelled";
       throw new MultiTeamDriverError("queue-invariant", `the queue is idle (${reason}) with nothing in flight.`);
     }
-    function currentQueue() {
-      if (queue === void 0) throw new MultiTeamDriverError("queue-invariant", "no queue.");
-      return queue;
+    function readyTeams() {
+      return queueProgress(currentQueue()).teams.flatMap(
+        (t) => t.status === "season-unavailable" ? [] : [{ teamId: t.teamId, seasonLabel: t.seasonLabel, swimmerTotal: t.swimmers.total }]
+      );
+    }
+    async function openSeasonCaptures() {
+      for (const team of readyTeams()) {
+        if (!await openSubject(teamSubject(team.teamId, team.seasonLabel), 2)) {
+          haltMessage = OPEN_FAILED_TEXT;
+          return false;
+        }
+      }
+      return true;
+    }
+    async function correctPlannedCounts() {
+      if (plannedCorrected) return;
+      plannedCorrected = true;
+      for (const team of readyTeams()) {
+        const subject = teamSubject(team.teamId, team.seasonLabel);
+        const planned = 2 + team.swimmerTotal;
+        if (plannedBySubject.get(captureIdForSubject(subject)) === planned) continue;
+        if (!await openSubject(subject, planned)) {
+          notice = `The app did not accept the corrected page count for team ${team.teamId}. The crawl goes on.`;
+          emit();
+        }
+      }
+    }
+    async function clearIfClean() {
+      if (runKey === "") return;
+      const failed = queueProgress(currentQueue()).teams.some((t) => t.rosters.failed + t.swimmers.failed > 0);
+      if (!failed) await deps.clearFinished(runKey);
     }
     function halt(key, message) {
       queue = markFailed(currentQueue(), key, message, { haltQueue: true });
       haltMessage = haltMessage ?? message;
       return true;
     }
+    function failItem(key, message) {
+      queue = markFailed(currentQueue(), key, message);
+      return false;
+    }
+    function actOn(key, screen) {
+      return screen.action === "halt" ? halt(key, screen.message) : failItem(key, screen.message);
+    }
+    async function relayItem(key, subjects, url, page) {
+      const relayed = await relayTo(subjects, url, page);
+      if (relayed === "streak-stop") return halt(key, RELAY_STREAK_TEXT);
+      if (relayed === "not-landed") return failItem(key, NOT_HANDED_TEXT);
+      return void 0;
+    }
+    function rosterProblem(work) {
+      return (html) => {
+        if (looksLikeChallengePage(html)) return { halt: true, message: CHALLENGE_TEXT };
+        const check = verifyRosterSeason(html, work);
+        return check.ok ? void 0 : { halt: false, message: check.reason };
+      };
+    }
     async function runRosterWork(work) {
-      const { page } = await fetchPaced(work.canonicalUrl, "teamRoster", MIN_DELAY_MS);
-      const subject = teamSubject(work.teamId, work.seasonLabel);
-      let seasonProblem;
-      if (page !== void 0 && isOkStatus(page.httpStatus)) {
-        const check = verifyRosterSeason(page.html, work);
-        if (!check.ok) seasonProblem = check.reason;
-      }
-      if (page !== void 0 && seasonProblem === void 0) {
-        const relayed = await deps.relay({ subject, sourceUrl: work.canonicalUrl, httpStatus: page.httpStatus, html: page.html });
-        if (relayed === "streak-stop") {
-          return halt(work.key, "Several pages in a row could not be handed to the Omniswim app. Resume when it is reachable.");
+      const { page, aborted } = await fetchPaced(work.canonicalUrl, "teamRoster", MIN_DELAY_MS);
+      if (aborted) return failItem(work.key, "not fetched: the run was cancelled");
+      const screen = screenPage(work.canonicalUrl, "teamRoster", page, rosterProblem(work));
+      if (screen.relay && page !== void 0) {
+        const subject = teamSubject(work.teamId, work.seasonLabel);
+        if (screen.action === "clean") {
+          const stopped = await relayItem(work.key, [subject], work.canonicalUrl, page);
+          if (stopped !== void 0) return stopped;
+        } else if (await relayTo([subject], work.canonicalUrl, page) === "streak-stop") {
+          return halt(work.key, RELAY_STREAK_TEXT);
         }
       }
-      const verdict = haltDecision(page);
-      if (verdict.stop) return halt(work.key, verdict.message);
-      if (page === void 0) return failItem(work.key, "no response");
-      if (!isOkStatus(page.httpStatus)) {
-        return failItem(work.key, page.httpStatus === RATE_LIMITED_STATUS ? "rate-limited (HTTP 429) after retries" : `HTTP ${page.httpStatus}`);
-      }
-      if (seasonProblem !== void 0) return failItem(work.key, seasonProblem);
+      if (screen.action !== "clean" || page === void 0) return actOn(work.key, screen);
+      return finishRoster(work, page.html);
+    }
+    function finishRoster(work, html) {
       const parsed = parseTeamRosterHtml(
-        page.html,
+        html,
         { sourceUrl: work.canonicalUrl, retrievedAt: deps.isoNow(), track: "browser-extension" },
         { gender: work.gender === "M" ? "Men" : "Women", season: work.seasonLabel, teamId: work.teamId }
       );
-      if (!parsed.ok) {
-        return failItem(work.key, `the ${genderWord(work.gender)} roster could not be read: ${parsed.failure.message}`);
+      if (!parsed.ok) return failItem(work.key, `the ${genderWord(work.gender)} roster could not be read: ${parsed.failure.message}`);
+      const says = parsed.warnings.some((w) => w.code === "no-roster-posted");
+      if (parsed.data.athletes.length === 0 && !says) {
+        const codes = parsed.warnings.map((w) => w.code).join(", ") || "no warnings";
+        return failItem(work.key, `the ${genderWord(work.gender)} roster page lists nobody and does not say that no roster is posted (${codes}), so it is not treated as an empty roster`);
       }
       const collected = collectSwimmerIds([parsed.data.athletes]);
       const notes = notesFor(work.teamId);
@@ -3285,39 +3475,46 @@
       queue = markDone(currentQueue(), work.key);
       return false;
     }
+    function swimmerProblem(html) {
+      return looksLikeJson(html) ? void 0 : { halt: true, message: NOT_JSON_TEXT };
+    }
     async function runSwimmerWork(work, persist) {
       const step = planSwimmerFastestTimes(work.swimmerId);
-      const { page } = await fetchPaced(step.canonicalUrl, "swimmerFastestTimes", SWIMMER_TIMES_STAGGER_MS);
-      if (page !== void 0 && isOkStatus(page.httpStatus) && !looksLikeJson(page.html)) {
-        recent429 = 0;
-        return halt(work.key, "SwimCloud answered the swimmer-times request with a page that is not JSON. Refresh your SwimCloud session in this tab, then Resume.");
-      }
-      if (page !== void 0) {
-        const relayed = await deps.relay({
-          subject: teamSubject(work.teamId, work.seasonLabel),
-          sourceUrl: step.canonicalUrl,
-          httpStatus: page.httpStatus,
-          html: page.html
-        });
-        if (relayed === "streak-stop") {
-          return halt(work.key, "Several pages in a row could not be handed to the Omniswim app. Resume when it is reachable.");
+      const { page, aborted } = await fetchPaced(step.canonicalUrl, "swimmerFastestTimes", SWIMMER_TIMES_STAGGER_MS);
+      if (aborted) return failItem(work.key, "not fetched: the run was cancelled");
+      const screen = screenPage(step.canonicalUrl, "swimmerFastestTimes", page, swimmerProblem);
+      const subjects = work.attributions.map((a) => teamSubject(a.teamId, a.seasonLabel));
+      if (screen.relay && page !== void 0) {
+        if (screen.action === "clean") {
+          const stopped = await relayItem(work.key, subjects, step.canonicalUrl, page);
+          if (stopped !== void 0) return stopped;
+        } else if (await relayTo(subjects, step.canonicalUrl, page) === "streak-stop") {
+          return halt(work.key, RELAY_STREAK_TEXT);
         }
       }
-      const verdict = haltDecision(page);
-      if (verdict.stop) return halt(work.key, verdict.message);
-      if (page === void 0) return failItem(work.key, "no response");
-      if (!isOkStatus(page.httpStatus)) {
-        return failItem(work.key, page.httpStatus === RATE_LIMITED_STATUS ? "rate-limited (HTTP 429) after retries" : `HTTP ${page.httpStatus}`);
-      }
+      if (screen.action !== "clean") return actOn(work.key, screen);
       queue = markDone(currentQueue(), work.key);
       await persist();
       return false;
     }
-    function failItem(key, message) {
-      queue = markFailed(currentQueue(), key, message);
-      return false;
+    async function markCaptures(outcome) {
+      const seasonDone = /* @__PURE__ */ new Set();
+      if (queue !== void 0 && outcome === "completed") {
+        for (const t of queueProgress(queue).teams) {
+          if (t.status === "done") seasonDone.add(captureIdForSubject(teamSubject(t.teamId, t.seasonLabel)));
+        }
+      }
+      for (const [id, subject] of usedSubjects) {
+        const complete = subject.kind === "team" && subject.season === void 0 ? optionsLanded.get(subject.teamId) === true : seasonDone.has(id);
+        await deps.markCapture(subject, complete ? "every-planned-page-fetched" : "partial");
+      }
     }
-    function buildSummary(outcome) {
+    async function flushAll() {
+      if (usedSubjects.size === 0) return [];
+      const results = await deps.flushDownloads([...usedSubjects.values()]);
+      return results.filter((r) => r.pageCount > 0 || r.error !== void 0);
+    }
+    function buildSummary(outcome, downloads2) {
       const progress = queue === void 0 ? void 0 : queueProgress(queue);
       const teams = input.teamIds.map((teamId) => {
         const notes = notesFor(teamId);
@@ -3333,10 +3530,9 @@
         };
         const queued = progress?.teams.find((t) => t.teamId === teamId);
         if (queued !== void 0) {
-          const status = queued.status === "season-unavailable" ? "season-unavailable" : queued.status;
           return {
             ...base,
-            status,
+            status: queued.status,
             seasonLabel: queued.seasonLabel,
             ...queued.seasonId === void 0 ? {} : { seasonId: queued.seasonId },
             ...queued.availableLabels === void 0 ? {} : { availableLabels: queued.availableLabels },
@@ -3357,7 +3553,8 @@
         outcome,
         ...haltMessage === void 0 ? {} : { haltMessage },
         teams,
-        requestedUrls
+        requestedUrls,
+        downloads: downloads2
       };
     }
   }
@@ -3514,14 +3711,26 @@
   }
   function formatSummary(summary) {
     const head = summary.outcome === "completed" ? "Done." : summary.outcome === "cancelled" ? "Cancelled. Finished swimmers are remembered, so the next run skips them." : `Stopped: ${summary.haltMessage ?? "unknown reason"} Finished swimmers are remembered. Start again to continue.`;
-    return [head, ...summary.teams.map(summaryLine), ...summary.teams.flatMap((t) => t.errors)];
+    const downloads = summary.downloads.map(
+      (d) => d.error !== void 0 ? `Pages saved to Downloads for ${d.subject.kind === "team" ? `team ${d.subject.teamId}` : "a meet"} could not be combined: ${d.error}` : `${plural(d.pageCount, "page", "pages")} for ${d.subject.kind === "team" ? `team ${d.subject.teamId}${d.subject.season === void 0 ? "" : ` ${d.subject.season}`}` : "a meet"} did not reach the app and were saved to Downloads${d.filename === void 0 ? "" : ` (${d.filename})`}. They are not in the app.`
+    );
+    return [head, ...summary.teams.map(summaryLine), ...summary.teams.flatMap((t) => t.errors), ...downloads];
+  }
+  function multiTeamHostAllowed(hostname) {
+    return hostname === "www.swimcloud.com";
+  }
+  var SAVED_PROGRESS_PREFIX = "omniswimMultiTeamFinished|";
+  var SWIMMER_KEY = /^swimmer\|[1-9][0-9]{0,17}$/;
+  function savedProgressStorageKey(runKey) {
+    return `${SAVED_PROGRESS_PREFIX}${runKey}`;
+  }
+  function readSavedSwimmerKeys(value) {
+    return Array.isArray(value) ? value.filter((k) => typeof k === "string" && SWIMMER_KEY.test(k)) : [];
   }
 
   // extensions/swimcloud-companion/src/multiTeamPanel.ts
   var BUTTON_ID = "omniswim-multiteam-button";
   var PANEL_ID = "omniswim-multiteam-panel";
-  var FINISHED_STORAGE_KEY = "omniswimMultiTeamFinishedSwimmers";
-  var SWIMMER_KEY = /^swimmer\|[1-9][0-9]{0,17}$/;
   var SKIP_VALUE = "";
   function element(tag, className, text) {
     const node = document.createElement(tag);
@@ -3537,25 +3746,32 @@
   function replaceChildrenWithLines(parent, lines, className) {
     parent.replaceChildren(...lines.map((line) => element("div", className, line)));
   }
-  async function loadFinished() {
+  async function loadFinished(runKey) {
+    const key = savedProgressStorageKey(runKey);
     try {
-      const stored = await chrome.storage.local.get([FINISHED_STORAGE_KEY]);
-      const value = stored[FINISHED_STORAGE_KEY];
-      return Array.isArray(value) ? value.filter((k) => typeof k === "string" && SWIMMER_KEY.test(k)) : [];
+      const stored = await chrome.storage.local.get([key]);
+      return readSavedSwimmerKeys(stored[key]);
     } catch {
       return [];
     }
   }
-  function saveFinished(keys) {
+  function saveFinished(runKey, keys) {
     return new Promise((resolve) => {
       try {
-        chrome.storage.local.set({ [FINISHED_STORAGE_KEY]: [...keys] }, () => resolve());
+        chrome.storage.local.set({ [savedProgressStorageKey(runKey)]: [...keys] }, () => resolve());
       } catch {
         resolve();
       }
     });
   }
+  async function clearFinished(runKey) {
+    try {
+      await chrome.storage.local.remove([savedProgressStorageKey(runKey)]);
+    } catch {
+    }
+  }
   function mountMultiTeamCrawlButton(io) {
+    if (!multiTeamHostAllowed(location.hostname)) return;
     if (document.getElementById(BUTTON_ID) !== null) return;
     const entry = button("Multi-team crawl (Omniswim)");
     entry.id = BUTTON_ID;
@@ -3571,6 +3787,7 @@
     let running = false;
     let targets = { teamIds: [], conferences: [], rejected: [] };
     let finishChoice;
+    let currentSelection = () => "";
     const root = element("div");
     root.id = PANEL_ID;
     root.setAttribute("role", "dialog");
@@ -3590,6 +3807,8 @@
     const choices = element("div", "omniswim-multiteam__block");
     const startButton = button("Start crawl");
     startButton.hidden = true;
+    const forgetButton = button("Forget saved progress");
+    forgetButton.hidden = true;
     const headline = element("div", "omniswim-crawler-panel__line");
     headline.setAttribute("role", "status");
     headline.setAttribute("aria-live", "polite");
@@ -3597,16 +3816,25 @@
     const notice = element("div", "omniswim-crawler-panel__line omniswim-crawler-panel__warn");
     const errors = element("div", "omniswim-multiteam__block");
     const summary = element("div", "omniswim-multiteam__block");
+    const forgetNote = element("div", "omniswim-crawler-panel__line omniswim-crawler-panel__resume");
+    forgetNote.hidden = true;
     const pauseButton = button("Pause");
     pauseButton.hidden = true;
     const cancelButton = button("Close");
     const buttons = element("div", "omniswim-crawler-panel__buttons");
     buttons.append(parseButton, readButton);
     const runButtons = element("div", "omniswim-crawler-panel__buttons");
-    runButtons.append(startButton, pauseButton, cancelButton);
-    root.append(title, inputLabel, input, scope, buttons, parsed, choices, headline, teamLines, notice, errors, summary, runButtons);
+    runButtons.append(startButton, pauseButton, forgetButton, cancelButton);
+    root.append(title, inputLabel, input, scope, buttons, parsed, choices, headline, teamLines, notice, errors, summary, forgetNote, runButtons);
     document.body.appendChild(root);
     input.focus();
+    const close = () => {
+      root.remove();
+      document.getElementById(BUTTON_ID)?.focus();
+    };
+    root.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !running) close();
+    });
     const renderParsed = () => {
       const lines = [];
       if (targets.teamIds.length > 0) {
@@ -3657,24 +3885,51 @@
         row.append(label, select);
         rows.push(row);
       }
+      const pick = () => {
+        const picked = [];
+        for (const [teamId, select] of selects) {
+          if (select.value !== SKIP_VALUE) picked.push({ teamId, seasonLabel: select.value });
+        }
+        return picked;
+      };
       choices.replaceChildren(...rows);
       startButton.hidden = false;
+      forgetButton.hidden = false;
+      currentSelection = () => resumeKeyForChoices(reports, pick());
       const first = [...selects.values()][0];
       if (first !== void 0) first.focus();
       finishChoice = (picked) => {
         finishChoice = void 0;
         startButton.hidden = true;
         choices.replaceChildren();
+        const key = resumeKeyForChoices(reports, picked);
+        currentSelection = () => key;
         resolve(picked);
       };
-      startButton.onclick = () => {
-        const picked = [];
-        for (const [teamId, select] of selects) {
-          if (select.value !== SKIP_VALUE) picked.push({ teamId, seasonLabel: select.value });
-        }
-        finishChoice?.(picked);
-      };
+      startButton.onclick = () => finishChoice?.(pick());
     });
+    forgetButton.addEventListener("click", () => {
+      const key = currentSelection();
+      forgetNote.hidden = false;
+      if (key === "") {
+        forgetNote.textContent = "There is no selection to forget saved progress for.";
+        return;
+      }
+      void clearFinished(key).then(() => {
+        forgetNote.textContent = "Saved progress for this selection was cleared. The next crawl of it fetches every swimmer again.";
+      });
+    });
+    const endRun = () => {
+      running = false;
+      pauseButton.hidden = true;
+      startButton.hidden = true;
+      forgetButton.hidden = currentSelection() === "";
+      cancelButton.textContent = "Close";
+      cancelButton.disabled = false;
+      parseButton.disabled = false;
+      input.disabled = false;
+      readButton.disabled = targets.teamIds.length === 0;
+    };
     readButton.addEventListener("click", () => {
       if (running || targets.teamIds.length === 0) return;
       running = true;
@@ -3686,36 +3941,43 @@
       parseButton.disabled = true;
       input.disabled = true;
       pauseButton.hidden = false;
+      forgetNote.hidden = true;
       cancelButton.textContent = "Cancel";
       summary.replaceChildren();
-      void runMultiTeamCrawl(
-        {
-          fetchPage: (url) => io.fetchPage(url),
-          relay: (request) => io.relay(request),
-          sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
-          now: () => Date.now(),
-          isoNow: () => (/* @__PURE__ */ new Date()).toISOString(),
-          loadFinished,
-          saveFinished,
-          onProgress: render,
-          chooseSeasons: askForSeasons,
-          control
-        },
-        { teamIds: targets.teamIds }
-      ).then((result) => {
-        replaceChildrenWithLines(summary, formatSummary(result), "omniswim-crawler-panel__line");
+      io.app.reset();
+      void withCrawlLock(
+        io.locks,
+        () => runMultiTeamCrawl(
+          {
+            fetchPage: (url) => io.fetchPage(url),
+            relay: (request) => io.app.relay(request),
+            openCapture: (subject, planned) => io.app.openCapture(subject, planned),
+            markCapture: (subject, completeness) => io.app.markCapture(subject, completeness),
+            flushDownloads: (subjects) => io.app.flushDownloads(subjects),
+            sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+            now: () => Date.now(),
+            isoNow: () => (/* @__PURE__ */ new Date()).toISOString(),
+            paceClock: io.paceClock,
+            loadFinished,
+            saveFinished,
+            clearFinished,
+            onProgress: render,
+            chooseSeasons: askForSeasons,
+            control
+          },
+          { teamIds: targets.teamIds }
+        )
+      ).then((outcome) => {
+        if (outcome.acquired) replaceChildrenWithLines(summary, formatSummary(outcome.value), "omniswim-crawler-panel__line");
+        else replaceChildrenWithLines(summary, [outcome.message], "omniswim-crawler-panel__line omniswim-crawler-panel__warn");
       }).catch((error) => {
         const detail = error instanceof Error ? error.message : String(error);
-        replaceChildrenWithLines(summary, [`The crawl stopped on an unexpected error: ${detail}`, "Nothing already saved is lost. Finished swimmers are remembered."], "omniswim-crawler-panel__line omniswim-crawler-panel__warn");
-      }).finally(() => {
-        running = false;
-        pauseButton.hidden = true;
-        cancelButton.textContent = "Close";
-        cancelButton.disabled = false;
-        parseButton.disabled = false;
-        input.disabled = false;
-        readButton.disabled = targets.teamIds.length === 0;
-      });
+        replaceChildrenWithLines(
+          summary,
+          [`The crawl stopped on an unexpected error: ${detail}`, "Nothing already saved is lost. Finished swimmers are remembered."],
+          "omniswim-crawler-panel__line omniswim-crawler-panel__warn"
+        );
+      }).finally(endRun);
     });
     pauseButton.addEventListener("click", () => {
       control.paused = !control.paused;
@@ -3723,7 +3985,7 @@
     });
     cancelButton.addEventListener("click", () => {
       if (!running) {
-        root.remove();
+        close();
         return;
       }
       control.cancelled = true;
@@ -3731,6 +3993,151 @@
       cancelButton.disabled = true;
       finishChoice?.([]);
     });
+  }
+
+  // extensions/swimcloud-companion/src/backgroundRoundTrip.ts
+  var BACKGROUND_ROUND_TRIP_TIMEOUT_MS = 1e4;
+  var RELAY_ROUND_TRIP_TIMEOUT_MS = 3e4;
+  var PAGE_FETCH_TIMEOUT_MS = 3e4;
+  var RELAY_FAILURE_STOP_THRESHOLD = 3;
+  var DEFAULT_TIMERS = {
+    setTimeout: (fn, ms) => setTimeout(fn, ms),
+    clearTimeout: (handle) => {
+      if (handle !== void 0) clearTimeout(handle);
+    }
+  };
+  function errorText(error) {
+    if (error instanceof Error && error.message.length > 0) return error.message;
+    if (typeof error === "string" && error.length > 0) return error;
+    try {
+      return String(error);
+    } catch {
+      return "unknown error";
+    }
+  }
+  function sendWithTimeout(send, timeoutMs, timers = DEFAULT_TIMERS) {
+    return new Promise((resolve) => {
+      let settled = false;
+      let handle;
+      const finish = (trip) => {
+        if (settled) return;
+        settled = true;
+        try {
+          timers.clearTimeout(handle);
+        } catch {
+        }
+        resolve(trip);
+      };
+      handle = timers.setTimeout(() => finish({ kind: "timeout", timeoutMs }), timeoutMs);
+      let started;
+      try {
+        started = send();
+      } catch (error) {
+        finish({ kind: "error", message: errorText(error) });
+        return;
+      }
+      void Promise.resolve(started).then(
+        (value) => finish({ kind: "ok", value }),
+        (error) => finish({ kind: "error", message: errorText(error) })
+      );
+    });
+  }
+  function isRoundTripOk(trip) {
+    return trip.kind === "ok";
+  }
+  function roundTripFailureText(label, trip) {
+    if (trip.kind === "ok") return "";
+    if (trip.kind === "timeout") {
+      const seconds = Math.max(1, Math.round(trip.timeoutMs / 1e3));
+      return `${label} timed out after ${seconds}s. Is the Omniswim app running, and is the pairing token saved in the extension's options?`;
+    }
+    return `${label} failed: ${trip.message}`;
+  }
+  function classifyRelayFailureStreak(consecutiveFailures, threshold = RELAY_FAILURE_STOP_THRESHOLD) {
+    if (consecutiveFailures >= threshold) {
+      return {
+        action: "stop",
+        retryable: true,
+        message: `${consecutiveFailures} pages in a row could not be handed to the Omniswim app. Stopping so the rest are not fetched and lost. Check that the app is running and the pairing token is saved, then Retry.`
+      };
+    }
+    return { action: "continue", message: "", retryable: false };
+  }
+  function createFetchDeadline(timeoutMs, timers = DEFAULT_TIMERS) {
+    const controller = new AbortController();
+    let fired = false;
+    const handle = timers.setTimeout(() => {
+      fired = true;
+      controller.abort();
+    }, timeoutMs);
+    return {
+      signal: controller.signal,
+      cancel: () => {
+        try {
+          timers.clearTimeout(handle);
+        } catch {
+        }
+      },
+      expired: () => fired
+    };
+  }
+
+  // extensions/swimcloud-companion/src/multiTeamApp.ts
+  function createMultiTeamApp(send, now = () => (/* @__PURE__ */ new Date()).toISOString()) {
+    let consecutiveFailures = 0;
+    return {
+      reset() {
+        consecutiveFailures = 0;
+      },
+      async relay(request) {
+        const trip = await send(
+          {
+            type: "omniswim-swimcloud-relay-page",
+            subject: request.subject,
+            sourceUrl: request.sourceUrl,
+            retrievedAt: now(),
+            httpStatus: request.httpStatus,
+            html: request.html
+          },
+          RELAY_ROUND_TRIP_TIMEOUT_MS
+        );
+        const reply = isRoundTripOk(trip) ? trip.value : void 0;
+        if (reply?.relayed === true && reply.via === "http") {
+          consecutiveFailures = 0;
+          return "landed";
+        }
+        consecutiveFailures += 1;
+        if (consecutiveFailures >= RELAY_FAILURE_STOP_THRESHOLD) return "streak-stop";
+        return reply?.relayed === true ? "fallback" : "lost";
+      },
+      async openCapture(subject, plannedPageCount) {
+        const trip = await send({ type: "omniswim-swimcloud-open-capture", subject, plannedPageCount });
+        if (!isRoundTripOk(trip)) return void 0;
+        const id = trip.value?.captureId;
+        return typeof id === "string" && id.length > 0 ? id : void 0;
+      },
+      async markCapture(subject, completeness) {
+        await send({ type: "omniswim-swimcloud-mark-capture", subject, completeness });
+      },
+      async flushDownloads(subjects) {
+        const results = [];
+        for (const subject of subjects) {
+          const trip = await send({ type: "omniswim-swimcloud-flush-downloads", subject });
+          if (!isRoundTripOk(trip)) {
+            results.push({ subject, pageCount: 0, error: roundTripFailureText("Flushing the pages saved to Downloads", trip) });
+            continue;
+          }
+          const reply = trip.value ?? {};
+          results.push({
+            subject,
+            pageCount: typeof reply.pageCount === "number" ? reply.pageCount : 0,
+            ...reply.filename === void 0 ? {} : { filename: reply.filename },
+            ...reply.error === void 0 ? {} : { error: reply.error }
+          });
+        }
+        return results;
+      }
+    };
   }
 
   // extensions/swimcloud-companion/src/timesEndpointDiscovery.ts
@@ -3835,93 +4242,6 @@
       };
     }
     return { action: "record-and-continue" };
-  }
-
-  // extensions/swimcloud-companion/src/backgroundRoundTrip.ts
-  var BACKGROUND_ROUND_TRIP_TIMEOUT_MS = 1e4;
-  var RELAY_ROUND_TRIP_TIMEOUT_MS = 3e4;
-  var PAGE_FETCH_TIMEOUT_MS = 3e4;
-  var RELAY_FAILURE_STOP_THRESHOLD = 3;
-  var DEFAULT_TIMERS = {
-    setTimeout: (fn, ms) => setTimeout(fn, ms),
-    clearTimeout: (handle) => {
-      if (handle !== void 0) clearTimeout(handle);
-    }
-  };
-  function errorText(error) {
-    if (error instanceof Error && error.message.length > 0) return error.message;
-    if (typeof error === "string" && error.length > 0) return error;
-    try {
-      return String(error);
-    } catch {
-      return "unknown error";
-    }
-  }
-  function sendWithTimeout(send, timeoutMs, timers = DEFAULT_TIMERS) {
-    return new Promise((resolve) => {
-      let settled = false;
-      let handle;
-      const finish = (trip) => {
-        if (settled) return;
-        settled = true;
-        try {
-          timers.clearTimeout(handle);
-        } catch {
-        }
-        resolve(trip);
-      };
-      handle = timers.setTimeout(() => finish({ kind: "timeout", timeoutMs }), timeoutMs);
-      let started;
-      try {
-        started = send();
-      } catch (error) {
-        finish({ kind: "error", message: errorText(error) });
-        return;
-      }
-      void Promise.resolve(started).then(
-        (value) => finish({ kind: "ok", value }),
-        (error) => finish({ kind: "error", message: errorText(error) })
-      );
-    });
-  }
-  function isRoundTripOk(trip) {
-    return trip.kind === "ok";
-  }
-  function roundTripFailureText(label, trip) {
-    if (trip.kind === "ok") return "";
-    if (trip.kind === "timeout") {
-      const seconds = Math.max(1, Math.round(trip.timeoutMs / 1e3));
-      return `${label} timed out after ${seconds}s. Is the Omniswim app running, and is the pairing token saved in the extension's options?`;
-    }
-    return `${label} failed: ${trip.message}`;
-  }
-  function classifyRelayFailureStreak(consecutiveFailures, threshold = RELAY_FAILURE_STOP_THRESHOLD) {
-    if (consecutiveFailures >= threshold) {
-      return {
-        action: "stop",
-        retryable: true,
-        message: `${consecutiveFailures} pages in a row could not be handed to the Omniswim app. Stopping so the rest are not fetched and lost. Check that the app is running and the pairing token is saved, then Retry.`
-      };
-    }
-    return { action: "continue", message: "", retryable: false };
-  }
-  function createFetchDeadline(timeoutMs, timers = DEFAULT_TIMERS) {
-    const controller = new AbortController();
-    let fired = false;
-    const handle = timers.setTimeout(() => {
-      fired = true;
-      controller.abort();
-    }, timeoutMs);
-    return {
-      signal: controller.signal,
-      cancel: () => {
-        try {
-          timers.clearTimeout(handle);
-        } catch {
-        }
-      },
-      expired: () => fired
-    };
   }
 
   // extensions/swimcloud-companion/src/progress.ts
@@ -4183,6 +4503,7 @@
       return {
         html,
         httpStatus: response.status,
+        finalUrl: response.url,
         ...retryAfter === null ? {} : { retryAfter }
       };
     } catch (error) {
@@ -5281,7 +5602,7 @@
     });
     document.body.appendChild(button2);
   }
-  var multiTeamRelayFailures = 0;
+  var multiTeamApp = createMultiTeamApp((message, timeoutMs) => sendToBackground(message, timeoutMs));
   async function multiTeamFetchPage(url) {
     try {
       return await fetchPage(url);
@@ -5289,27 +5610,22 @@
       return void 0;
     }
   }
-  async function multiTeamRelay(request) {
-    const relayed = await sendToBackground(
-      {
-        type: "omniswim-swimcloud-relay-page",
-        subject: request.subject,
-        sourceUrl: request.sourceUrl,
-        retrievedAt: (/* @__PURE__ */ new Date()).toISOString(),
-        httpStatus: request.httpStatus,
-        html: request.html
-      },
-      RELAY_ROUND_TRIP_TIMEOUT_MS
-    );
-    if (isRoundTripOk(relayed) && relayed.value?.relayed === true) {
-      multiTeamRelayFailures = 0;
-      return "landed";
-    }
-    multiTeamRelayFailures += 1;
-    return classifyRelayFailureStreak(multiTeamRelayFailures).action === "stop" ? "streak-stop" : "lost";
+  function crawlLockManager() {
+    return navigator.locks;
   }
   function main() {
-    mountMultiTeamCrawlButton({ fetchPage: multiTeamFetchPage, relay: multiTeamRelay });
+    mountMultiTeamCrawlButton({
+      fetchPage: multiTeamFetchPage,
+      app: multiTeamApp,
+      // The meet crawl's own last-request clock: the two crawls cannot start closer than the pacing floor.
+      paceClock: {
+        get: () => lastFetchAtMs,
+        set: (ms) => {
+          lastFetchAtMs = ms;
+        }
+      },
+      locks: crawlLockManager()
+    });
     mountTimesEndpointProbe();
     if (document.getElementById(BUTTON_ID2)) return;
     const meetId = meetIdFromCurrentPage();
@@ -5336,7 +5652,11 @@
     });
   }
   function startCrawl(meetId, panel, control) {
-    runCrawl(meetId, panel, control).catch((error) => {
+    withCrawlLock(crawlLockManager(), () => runCrawl(meetId, panel, control)).then((result) => {
+      if (result.acquired) return;
+      renderMessage(panel, result.message);
+      panel.retryButton.hidden = false;
+    }).catch((error) => {
       renderCrawlFailure(panel, error);
     });
   }
@@ -5721,6 +6041,52 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
+ * One crawl at a time, across every tab.
+ *
+ * The meet crawl and the multi-team crawl each pace their own requests, but two
+ * crawls (or the same crawl in two tabs) would add their traffic together and
+ * break the "one request, 3 s apart" rule. Both buttons take this lock for the
+ * whole run. It is the Web Locks API, `navigator.locks`, which is shared by every
+ * tab of the same origin (`www.swimcloud.com`).
+ *
+ * Pure: the lock manager is injected, so a test passes a fake one. A missing lock
+ * manager refuses the run. The check cannot be made, so the crawl does not start.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * SwimCloud source entities.
+ *
+ * Shape adapted from `plans/2026-09-06/02-data-model-and-scoring.md` §2, which in
+ * turn adapts the W3C OpenTrack Community Group's Open Athletics Data Model
+ * (Competition → UnitCompetition → Competitor → Performance → Result).
+ *
+ * Three rules from `CLAUDE.md` § "Data provenance" govern every type in this
+ * file, and they are the reason several fields look more awkward than they
+ * strictly need to:
+ *
+ * 1. **Unknown ≠ a default.** A course we could not determine is `'unknown'`,
+ *    never silently `'SCY'`; a ruleset we could not determine is `'unknown'`,
+ *    never silently `'NCAA'`. This mirrors the existing "unknown division ≠ D1"
+ *    rule in `packages/core/src/data/teamDivisions.ts`.
+ * 2. **Absent ≠ zero.** A competition value we do not hold is an omitted
+ *    optional field, never `0` and never an interpolated estimate.
+ * 3. **Unverified is labelled.** Nothing in this file has been checked against
+ *    real SwimCloud markup — see {@link SwimCloudParseConfidence} in
+ *    `./parser.ts`. Fields whose *existence* on a SwimCloud page is unverified
+ *    carry an explicit "unverified" doc-comment; treat their absence as the
+ *    expected case, not as a parse bug.
+ *
+ * These types describe **what a SwimCloud page says**. They deliberately do not
+ * import from `@omniswim/core`: the domain layer must not learn where an
+ * Entry/Result came from (`plans/2026-09-06/03-architecture.md` §1). Mapping
+ * these into the core roster/scoring model is a separate, later step.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * The swimmer-times leg of a meet crawl, as pure functions.
  *
  * A meet capture answers "who swam what, here". A roster answers "who is on
@@ -5891,52 +6257,74 @@
  * The loop of a multi-team, season-chosen SwimCloud crawl.
  *
  * All I/O is injected through {@link MultiTeamDriverDeps}: the fetch, the relay
- * to the background worker, the clock, the sleep, the saved resume keys, the
- * progress sink and the season chooser. This module has no `chrome.*`, no DOM,
- * no `fetch` and no timers of its own, so the whole flow runs in a test against
- * archived pages with a fake clock. The thin impure half is `multiTeamPanel.ts`.
+ * to the background worker, the capture bookkeeping, the clock, the sleep, the
+ * saved resume keys, the progress sink and the season chooser. This module has
+ * no `chrome.*`, no DOM, no `fetch` and no timers of its own, so the whole flow
+ * runs in a test against archived pages with a fake clock and a fake app. The
+ * thin impure half is `multiTeamPanel.ts`.
  *
  * ## Flow
  *
- * 1. **Seasons.** For each team, fetch `/team/{id}/roster/?gender=M` (no
- *    `season_id`) and read the season select from THAT page with
- *    `parseTeamSeasonOptions`. Options are never shared between teams. The
- *    options go to `deps.chooseSeasons`; the answer is one season label per team.
- * 2. **Queue.** `createQueue` with the choices and the saved finished keys.
- *    A team whose label its own page does not offer is `season-unavailable` and
- *    gets no fetch at all.
+ * 1. **Seasons.** For each team, open the capture `team-{id}`, fetch
+ *    `/team/{id}/roster/?gender=M` (no `season_id`) and read the season select
+ *    from THAT page with `parseTeamSeasonOptions`. Options are never shared
+ *    between teams. The options go to `deps.chooseSeasons`; the answer is one
+ *    season label per team.
+ * 2. **Queue.** `createQueue` with the choices and the progress saved for this
+ *    exact selection. A team whose label its own page does not offer is
+ *    `season-unavailable` and gets no fetch at all. Every other team's capture
+ *    `team-{id}-{season}` is opened before its first page is relayed.
  * 3. **Loop.** `nextWork` hands out one item at a time (concurrency is 1; the
  *    queue refuses more). The returned queue is stored before any `await`
- *    (queue rule 1). A roster page is checked with `verifyRosterSeason` before
- *    it is relayed or parsed (rule 2). A swimmer item fetches
- *    `/api/swimmers/{id}/profile_fastest_times/` once per swimmer id.
+ *    (queue rule 1). A roster page is checked before it is relayed or parsed
+ *    (queue rule 2). A swimmer item fetches
+ *    `/api/swimmers/{id}/profile_fastest_times/` once per swimmer id and files
+ *    the one body under every team that listed the swimmer.
  * 4. **Halt.** Every page outcome goes through `shouldHalt` (rule 3). A halt calls
  *    `markFailed(..., { haltQueue: true })` and the run ends. A 403 is never
- *    retried.
+ *    retried. A halted run has no Resume: the user starts the crawl again and
+ *    finished swimmers are skipped.
+ * 5. **Finish.** On every exit (completed, cancelled, halted, thrown) the driver
+ *    marks each capture, then asks the worker to flush the downloads fallback for
+ *    every subject it used.
+ *
+ * ## Why the captures are opened
+ *
+ * The app's pages route answers 404 for a capture that was never opened. The
+ * worker then saves the page in `chrome.storage.local` and says `relayed: true`.
+ * Without the open call every page of a multi-team crawl sat there, unflushed. A
+ * page counts as landed only when the relay says `landed`, which the glue returns
+ * only for the HTTP path; a `fallback` is not landed.
  *
  * ## Pacing (unchanged, read from the constants)
  *
  * Before every request the driver waits until the request would start at least
  * `MIN_DELAY_MS` (roster and season pages) or `SWIMMER_TIMES_STAGGER_MS`
- * (swimmer fetches) after the previous request started. A 429 is retried with
- * `decideRateLimitRetry`, which only ever waits longer. No concurrency is added.
+ * (swimmer fetches) after the previous request started. The last start time
+ * lives in `deps.paceClock`, which the glue shares with the meet crawl, so two
+ * runs on one page cannot start closer together. A 429 is retried with
+ * `decideRateLimitRetry`, which only ever waits longer. Cancel and Pause are
+ * checked after every wait. No concurrency is added.
  *
  * ## The denylist
  *
  * Every URL is classified by `classifySwimCloudUrl` before it is fetched and
  * must be `fetchable` and of the kind the step expects. Anything else throws
- * {@link MultiTeamDriverError} and nothing is fetched.
+ * {@link MultiTeamDriverError} and nothing is fetched. A reply whose final URL
+ * differs from the requested one is not data: another fetchable page is a
+ * failure of that item, an unfetchable one halts the run.
  *
  * ## Rules the driver bends or adds (stated so a reviewer can check them)
  *
- * - A roster page whose season does not verify is NOT relayed. Relaying it under
- *   the chosen season's capture would file another season's roster there.
- * - A swimmer body that is not JSON halts the run and is not relayed. The
- *   endpoint returns JSON, so another body is a challenge page, not a result.
+ * - A 2xx page that fails a check (challenge, wrong season, redirect, not JSON)
+ *   is NOT relayed. Relaying it would file the wrong data under the chosen capture.
+ * - A 2xx page with no `<select name="season_id">`, or a JSON endpoint answering
+ *   something that is not JSON, is a challenge page: it halts the run.
  * - The swimmer page outcome uses `shouldHalt` (5xx and network errors halt), the
  *   stricter queue rule, not the more forgiving `classifySwimmerTimesOutcome`.
- * - The saved finished keys are the union of the keys loaded and the keys this
- *   run finished, so a swimmer on no chosen roster this run is not forgotten.
+ * - Saved progress is keyed by the sorted (team, season id) pairs of the run. It
+ *   is cleared after a completed run with no failure, and kept otherwise so a
+ *   retry fetches only what failed.
  */
 /**
  * @license
@@ -5973,19 +6361,79 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * The multi-team crawl panel: a button and a plain-DOM panel on any
- * www.swimcloud.com page. Impure and thin on purpose. It owns the DOM, the
- * real clock and `chrome.storage.local`; the loop is `./multiTeamDriver.ts`
+ * The multi-team crawl panel: a button and a plain-DOM panel on `www.swimcloud.com`.
+ * Impure and thin on purpose. It owns the DOM, the real clock and
+ * `chrome.storage.local`; the loop is `./multiTeamDriver.ts`, the conversation
+ * with the app is `./multiTeamApp.ts`, the one-crawl lock is `./crawlLock.ts`
  * and every string is `./multiTeamPanelModel.ts`.
  *
  * It runs in the content script because the fetches must be same-origin, in the
- * user's own browser session. `crawler-content.ts` hands it the real
- * `fetchPage` and the relay to the background worker, so this file adds no
- * second copy of either.
+ * user's own browser session. `crawler-content.ts` hands it the real `fetchPage`,
+ * the worker conversation, the shared pacing clock and the lock manager, so this
+ * file adds no second copy of any of them.
  *
  * Styling follows the existing panels (`content.css`, `omniswim-crawler-panel__*`
  * classes). Nothing here is unit-tested; the manual checklist is in the
  * extension README.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Bounded round trips to the background service worker.
+ *
+ * ## Why this module exists
+ *
+ * `chrome.runtime.sendMessage(message, callback)` has exactly two outcomes the
+ * caller can observe: the callback runs with a response, or the callback runs
+ * with `chrome.runtime.lastError` set. It has **no third outcome for "the
+ * worker never answered"**. If the background listener returns `true` — the
+ * Manifest V3 promise that a response is coming — and then never calls
+ * `sendResponse`, the callback is simply never invoked. A content script that
+ * `await`s that message waits forever: no rejection, no timeout, no console
+ * error. The crawl panel freezes on whatever line it last rendered and a coach
+ * watching it has no way to tell a stalled crawl from a slow one.
+ *
+ * That is not hypothetical. Every handler in `./background.ts` used to be
+ * `handler(message).then(sendResponse)` with no `.catch`, over functions that
+ * did work (`await loadOptions()`, `captureIdForSubject(...)`, `btoa(...)`)
+ * *outside* their own `try` blocks. Any throw on those lines rejected the
+ * promise, skipped the `.then`, and left the message channel open and silent
+ * for the rest of the tab's life.
+ *
+ * So: no `chrome.runtime.sendMessage` on the crawl's critical path is awaited
+ * unbounded. Every one goes through {@link sendWithTimeout}, which always
+ * settles — `ok`, `timeout` or `error` — and the caller decides what a failure
+ * degrades to. A visibly degraded crawl is recoverable. A silent one is not.
+ *
+ * Pure by construction: the timers are injected, `send` is any thunk returning
+ * a promise, and nothing here touches `chrome.*`, the DOM, or the network. That
+ * is what makes "a round trip that never answers becomes a timeout, not a
+ * hang" a unit test (`tests/swimCloudExtensionBackgroundRoundTrip.test.ts`)
+ * rather than something only a live meet can prove.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The multi-team crawl's conversation with the background worker and, through
+ * it, the Omniswim app: relay a page, open a capture, mark it, flush the
+ * downloads fallback.
+ *
+ * Pure: the one impure thing, sending a message to the worker under a deadline,
+ * is injected as `send`. `crawler-content.ts` passes the real `sendToBackground`;
+ * a test passes a fake worker. That makes the rules below a unit test:
+ *
+ * - **A page is `landed` only on the HTTP path.** The worker answers
+ *   `{ relayed: true, via: 'downloads' }` when the app refused the page (a 404
+ *   for a capture that was never opened is the known case) and it saved the page
+ *   in `chrome.storage.local` instead. That page is not in the app. It is a
+ *   `fallback`, counted toward the failure streak, never `landed`.
+ * - **Failures in a row stop the run.** `RELAY_FAILURE_STOP_THRESHOLD` fallbacks
+ *   or losses in a row return `streak-stop`. The counter is per app object, and
+ *   {@link MultiTeamApp.reset} clears it at the start of each run.
+ * - **Opening a capture returns its id or nothing.** No id means the app did not
+ *   answer (not running, not paired). The driver stops before any roster.
  */
 /**
  * @license
@@ -6076,42 +6524,6 @@
  * pages over and over; fetching one per team would be 1,680 requests for 42
  * pages' worth of facts. The dedupe here is not an optimisation, it is the
  * difference between a pass that finishes and one that does not.
- */
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- *
- * Bounded round trips to the background service worker.
- *
- * ## Why this module exists
- *
- * `chrome.runtime.sendMessage(message, callback)` has exactly two outcomes the
- * caller can observe: the callback runs with a response, or the callback runs
- * with `chrome.runtime.lastError` set. It has **no third outcome for "the
- * worker never answered"**. If the background listener returns `true` — the
- * Manifest V3 promise that a response is coming — and then never calls
- * `sendResponse`, the callback is simply never invoked. A content script that
- * `await`s that message waits forever: no rejection, no timeout, no console
- * error. The crawl panel freezes on whatever line it last rendered and a coach
- * watching it has no way to tell a stalled crawl from a slow one.
- *
- * That is not hypothetical. Every handler in `./background.ts` used to be
- * `handler(message).then(sendResponse)` with no `.catch`, over functions that
- * did work (`await loadOptions()`, `captureIdForSubject(...)`, `btoa(...)`)
- * *outside* their own `try` blocks. Any throw on those lines rejected the
- * promise, skipped the `.then`, and left the message channel open and silent
- * for the rest of the tab's life.
- *
- * So: no `chrome.runtime.sendMessage` on the crawl's critical path is awaited
- * unbounded. Every one goes through {@link sendWithTimeout}, which always
- * settles — `ok`, `timeout` or `error` — and the caller decides what a failure
- * degrades to. A visibly degraded crawl is recoverable. A silent one is not.
- *
- * Pure by construction: the timers are injected, `send` is any thunk returning
- * a promise, and nothing here touches `chrome.*`, the DOM, or the network. That
- * is what makes "a round trip that never answers becomes a timeout, not a
- * hang" a unit test (`tests/swimCloudExtensionBackgroundRoundTrip.test.ts`)
- * rather than something only a live meet can prove.
  */
 /**
  * @license

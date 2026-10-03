@@ -5,59 +5,81 @@
  * The loop of a multi-team, season-chosen SwimCloud crawl.
  *
  * All I/O is injected through {@link MultiTeamDriverDeps}: the fetch, the relay
- * to the background worker, the clock, the sleep, the saved resume keys, the
- * progress sink and the season chooser. This module has no `chrome.*`, no DOM,
- * no `fetch` and no timers of its own, so the whole flow runs in a test against
- * archived pages with a fake clock. The thin impure half is `multiTeamPanel.ts`.
+ * to the background worker, the capture bookkeeping, the clock, the sleep, the
+ * saved resume keys, the progress sink and the season chooser. This module has
+ * no `chrome.*`, no DOM, no `fetch` and no timers of its own, so the whole flow
+ * runs in a test against archived pages with a fake clock and a fake app. The
+ * thin impure half is `multiTeamPanel.ts`.
  *
  * ## Flow
  *
- * 1. **Seasons.** For each team, fetch `/team/{id}/roster/?gender=M` (no
- *    `season_id`) and read the season select from THAT page with
- *    `parseTeamSeasonOptions`. Options are never shared between teams. The
- *    options go to `deps.chooseSeasons`; the answer is one season label per team.
- * 2. **Queue.** `createQueue` with the choices and the saved finished keys.
- *    A team whose label its own page does not offer is `season-unavailable` and
- *    gets no fetch at all.
+ * 1. **Seasons.** For each team, open the capture `team-{id}`, fetch
+ *    `/team/{id}/roster/?gender=M` (no `season_id`) and read the season select
+ *    from THAT page with `parseTeamSeasonOptions`. Options are never shared
+ *    between teams. The options go to `deps.chooseSeasons`; the answer is one
+ *    season label per team.
+ * 2. **Queue.** `createQueue` with the choices and the progress saved for this
+ *    exact selection. A team whose label its own page does not offer is
+ *    `season-unavailable` and gets no fetch at all. Every other team's capture
+ *    `team-{id}-{season}` is opened before its first page is relayed.
  * 3. **Loop.** `nextWork` hands out one item at a time (concurrency is 1; the
  *    queue refuses more). The returned queue is stored before any `await`
- *    (queue rule 1). A roster page is checked with `verifyRosterSeason` before
- *    it is relayed or parsed (rule 2). A swimmer item fetches
- *    `/api/swimmers/{id}/profile_fastest_times/` once per swimmer id.
+ *    (queue rule 1). A roster page is checked before it is relayed or parsed
+ *    (queue rule 2). A swimmer item fetches
+ *    `/api/swimmers/{id}/profile_fastest_times/` once per swimmer id and files
+ *    the one body under every team that listed the swimmer.
  * 4. **Halt.** Every page outcome goes through `shouldHalt` (rule 3). A halt calls
  *    `markFailed(..., { haltQueue: true })` and the run ends. A 403 is never
- *    retried.
+ *    retried. A halted run has no Resume: the user starts the crawl again and
+ *    finished swimmers are skipped.
+ * 5. **Finish.** On every exit (completed, cancelled, halted, thrown) the driver
+ *    marks each capture, then asks the worker to flush the downloads fallback for
+ *    every subject it used.
+ *
+ * ## Why the captures are opened
+ *
+ * The app's pages route answers 404 for a capture that was never opened. The
+ * worker then saves the page in `chrome.storage.local` and says `relayed: true`.
+ * Without the open call every page of a multi-team crawl sat there, unflushed. A
+ * page counts as landed only when the relay says `landed`, which the glue returns
+ * only for the HTTP path; a `fallback` is not landed.
  *
  * ## Pacing (unchanged, read from the constants)
  *
  * Before every request the driver waits until the request would start at least
  * `MIN_DELAY_MS` (roster and season pages) or `SWIMMER_TIMES_STAGGER_MS`
- * (swimmer fetches) after the previous request started. A 429 is retried with
- * `decideRateLimitRetry`, which only ever waits longer. No concurrency is added.
+ * (swimmer fetches) after the previous request started. The last start time
+ * lives in `deps.paceClock`, which the glue shares with the meet crawl, so two
+ * runs on one page cannot start closer together. A 429 is retried with
+ * `decideRateLimitRetry`, which only ever waits longer. Cancel and Pause are
+ * checked after every wait. No concurrency is added.
  *
  * ## The denylist
  *
  * Every URL is classified by `classifySwimCloudUrl` before it is fetched and
  * must be `fetchable` and of the kind the step expects. Anything else throws
- * {@link MultiTeamDriverError} and nothing is fetched.
+ * {@link MultiTeamDriverError} and nothing is fetched. A reply whose final URL
+ * differs from the requested one is not data: another fetchable page is a
+ * failure of that item, an unfetchable one halts the run.
  *
  * ## Rules the driver bends or adds (stated so a reviewer can check them)
  *
- * - A roster page whose season does not verify is NOT relayed. Relaying it under
- *   the chosen season's capture would file another season's roster there.
- * - A swimmer body that is not JSON halts the run and is not relayed. The
- *   endpoint returns JSON, so another body is a challenge page, not a result.
+ * - A 2xx page that fails a check (challenge, wrong season, redirect, not JSON)
+ *   is NOT relayed. Relaying it would file the wrong data under the chosen capture.
+ * - A 2xx page with no `<select name="season_id">`, or a JSON endpoint answering
+ *   something that is not JSON, is a challenge page: it halts the run.
  * - The swimmer page outcome uses `shouldHalt` (5xx and network errors halt), the
  *   stricter queue rule, not the more forgiving `classifySwimmerTimesOutcome`.
- * - The saved finished keys are the union of the keys loaded and the keys this
- *   run finished, so a swimmer on no chosen roster this run is not forgotten.
+ * - Saved progress is keyed by the sorted (team, season id) pairs of the run. It
+ *   is cleared after a completed run with no failure, and kept otherwise so a
+ *   retry fetches only what failed.
  */
 
-import type { SwimCloudCaptureSubject, SwimCloudSwimmerId, SwimCloudTeamId } from '@omniswim/swimcloud/entities';
+import { captureIdForSubject, type SwimCloudCaptureSubject, type SwimCloudSwimmerId, type SwimCloudTeamId } from '@omniswim/swimcloud/entities';
 import { planSwimmerFastestTimes, planTeamRosterPage, type SwimCloudCrawlGender } from '@omniswim/swimcloud/crawlPlan';
 import { parseTeamRosterHtml } from '@omniswim/swimcloud/parser';
 import { classifySwimCloudUrl } from '@omniswim/swimcloud/urlClassifier';
-import { parseTeamSeasonOptions, type TeamSeasonOption } from '@omniswim/swimcloud/teamSeasons';
+import { TeamSeasonParseError, parseTeamSeasonOptions, resolveSeasonOption, type TeamSeasonOption } from '@omniswim/swimcloud/teamSeasons';
 import { MIN_DELAY_MS } from './crawlPacing';
 import {
   addSwimmers,
@@ -87,15 +109,25 @@ export const PAUSE_POLL_MS = 250;
 /* Types                                                                       */
 /* -------------------------------------------------------------------------- */
 
-/** What one fetch returned. Same shape as the content script's `FetchedPage`. */
+/** What one fetch returned. */
 export interface MultiTeamFetchedPage {
   readonly html: string;
   readonly httpStatus: number;
   readonly retryAfter?: string;
+  /** The URL the reply came from after any redirect. Compared with the URL asked for. */
+  readonly finalUrl: string;
 }
 
-/** How one relay round trip ended. Same words as the content script's `RelayOutcome`. */
-export type MultiTeamRelayOutcome = 'landed' | 'lost' | 'streak-stop';
+/**
+ * How one relay round trip ended.
+ *
+ * - `landed`: the app took the page (the HTTP path).
+ * - `fallback`: the app did not take it; the worker saved it for the Downloads
+ *   flush. Not landed.
+ * - `lost`: it was saved nowhere.
+ * - `streak-stop`: so many in a row failed that the run must stop.
+ */
+export type MultiTeamRelayOutcome = 'landed' | 'fallback' | 'lost' | 'streak-stop';
 
 export interface MultiTeamRelayRequest {
   readonly subject: SwimCloudCaptureSubject;
@@ -104,10 +136,27 @@ export interface MultiTeamRelayRequest {
   readonly html: string;
 }
 
+/** What flushing one capture's downloads fallback did. */
+export interface MultiTeamFlushResult {
+  readonly subject: SwimCloudCaptureSubject;
+  /** Pages that were in the fallback. Zero means nothing fell back. */
+  readonly pageCount: number;
+  readonly filename?: string;
+  readonly error?: string;
+}
+
+export type MultiTeamCaptureCompleteness = 'partial' | 'every-planned-page-fetched' | 'failed';
+
 /** Flags the panel flips. The driver reads them between items and never writes them. */
 export interface MultiTeamControl {
   cancelled: boolean;
   paused: boolean;
+}
+
+/** The last request start time, shared with every other crawl on the page. */
+export interface MultiTeamPaceClock {
+  get(): number | undefined;
+  set(ms: number): void;
 }
 
 export interface TeamSeasonChoice {
@@ -143,13 +192,25 @@ export interface MultiTeamDriverDeps {
   /** One request, no pacing, no retry. `undefined` is a network error or timeout. */
   fetchPage(url: string): Promise<MultiTeamFetchedPage | undefined>;
   relay(request: MultiTeamRelayRequest): Promise<MultiTeamRelayOutcome>;
+  /**
+   * Open (or update) the capture for a subject. Resolves with its id, or
+   * `undefined` when the app did not answer. Called before any page is relayed
+   * under the subject, and again with a corrected planned page count.
+   */
+  openCapture(subject: SwimCloudCaptureSubject, plannedPageCount: number): Promise<string | undefined>;
+  markCapture(subject: SwimCloudCaptureSubject, completeness: MultiTeamCaptureCompleteness): Promise<void>;
+  /** Combine and download whatever fell back to Downloads, one result per subject. */
+  flushDownloads(subjects: readonly SwimCloudCaptureSubject[]): Promise<readonly MultiTeamFlushResult[]>;
   sleep(ms: number): Promise<void>;
-  /** Milliseconds, monotonic enough for pacing. */
+  /** Milliseconds, the same time base as `paceClock`. */
   now(): number;
   /** ISO-8601 instant for parse provenance. */
   isoNow(): string;
-  loadFinished(): Promise<readonly string[]>;
-  saveFinished(keys: readonly string[]): Promise<void>;
+  readonly paceClock: MultiTeamPaceClock;
+  /** Swimmer keys finished earlier for this exact selection (see {@link resumeKeyForChoices}). */
+  loadFinished(runKey: string): Promise<readonly string[]>;
+  saveFinished(runKey: string, keys: readonly string[]): Promise<void>;
+  clearFinished(runKey: string): Promise<void>;
   onProgress(state: MultiTeamDriverState): void;
   /** Resolve with one choice per team the user wants crawled. Teams left out are not crawled. */
   chooseSeasons(reports: readonly TeamSeasonOptionsReport[]): Promise<readonly TeamSeasonChoice[]>;
@@ -200,6 +261,8 @@ export interface MultiTeamSummary {
   readonly teams: readonly MultiTeamTeamSummary[];
   /** Every request this run issued, in order, retries included. */
   readonly requestedUrls: readonly string[];
+  /** Captures whose downloads fallback held pages, or whose flush failed. Empty when nothing fell back. */
+  readonly downloads: readonly MultiTeamFlushResult[];
 }
 
 export type MultiTeamDriverErrorCode =
@@ -225,6 +288,12 @@ export class MultiTeamDriverError extends Error {
 
 type ExpectedKind = 'teamRoster' | 'swimmerFastestTimes';
 
+/** Whether `url` is fetchable and of the expected kind. */
+function urlIsFetchable(url: string, expected: ExpectedKind): boolean {
+  const classified = classifySwimCloudUrl(url);
+  return classified.outcome === 'fetchable' && classified.resource.kind === expected;
+}
+
 /** Throws unless `url` is fetchable and of the expected kind. The denylist check, run before every fetch. */
 export function assertFetchableUrl(url: string, expected: ExpectedKind): void {
   const classified = classifySwimCloudUrl(url);
@@ -241,6 +310,29 @@ export function teamSubject(teamId: SwimCloudTeamId, seasonLabel?: string): Swim
   return seasonLabel === undefined ? { kind: 'team', teamId } : { kind: 'team', teamId, season: seasonLabel };
 }
 
+/** Compare two team ids as numbers without losing digits: shorter first, then by digits. */
+function compareTeamIds(a: string, b: string): number {
+  return a.length !== b.length ? a.length - b.length : a < b ? -1 : a > b ? 1 : 0;
+}
+
+/**
+ * The key saved progress is stored under: the sorted `teamId:seasonId` pairs of
+ * the choices whose label the team's own page offers, joined by commas. A team
+ * whose label is not offered is not part of the run and is not in the key.
+ * Another team set or another season is another key, so it inherits no skips.
+ * Empty when no choice resolves.
+ */
+export function resumeKeyForChoices(reports: readonly TeamSeasonOptionsReport[], choices: readonly TeamSeasonChoice[]): string {
+  const pairs: { teamId: string; seasonId: string }[] = [];
+  for (const choice of choices) {
+    const options = reports.find((r) => r.teamId === choice.teamId)?.options;
+    const season = options === undefined ? undefined : resolveSeasonOption(options, choice.seasonLabel);
+    if (season !== undefined) pairs.push({ teamId: choice.teamId, seasonId: season.seasonId });
+  }
+  pairs.sort((a, b) => compareTeamIds(a.teamId, b.teamId) || compareTeamIds(a.seasonId, b.seasonId));
+  return pairs.map((p) => `${p.teamId}:${p.seasonId}`).join(',');
+}
+
 function isOkStatus(status: number): boolean {
   return status >= 200 && status < 300;
 }
@@ -254,6 +346,54 @@ function looksLikeJson(body: string): boolean {
   }
 }
 
+/**
+ * Whether a 2xx team page is a challenge page. A real team page always prints a
+ * `<select name="season_id">`, so its absence means the page is something else;
+ * a "Just a moment" title says so directly.
+ */
+function looksLikeChallengePage(html: string): boolean {
+  if (/<title>\s*Just a moment/i.test(html)) return true;
+  try {
+    parseTeamSeasonOptions(html);
+    return false;
+  } catch (error) {
+    return error instanceof TeamSeasonParseError && error.code === 'season-select-missing';
+  }
+}
+
+/** The URL with case, a trailing slash and query order removed, for "is this the page I asked for". */
+function normalizedUrl(url: string): string | undefined {
+  try {
+    const parsed = new URL(url);
+    const query = [...parsed.searchParams.entries()].map(([k, v]) => `${k}=${v}`).sort().join('&');
+    return `${parsed.protocol}//${parsed.host}${parsed.pathname.replace(/\/+$/, '').toLowerCase()}?${query}`.toLowerCase();
+  } catch {
+    return undefined;
+  }
+}
+
+const CHALLENGE_TEXT = 'SwimCloud returned a challenge. Open the page in a tab, pass the check, then start the crawl again. Finished swimmers are skipped.';
+
+/**
+ * Rewrite a halt message for a run that has ended. The shared policy text says
+ * "Resume", which exists only for a paused run. A halted run is started again,
+ * and finished swimmers are skipped.
+ */
+export function restartText(message: string): string {
+  return message
+    .replace(/Open the page in a tab, pass it, then Resume\./, 'Open the page in a tab, pass the check, then start the crawl again. Finished swimmers are skipped.')
+    .replace(/Retry once, or Cancel to keep what was already captured\./, 'Start the crawl again later. What was already captured is kept.')
+    .replace(/Resume when the connection is back\./, 'Start the crawl again when the connection is back.')
+    .replace(/Wait a while, then Resume\./, 'Wait a while, then start the crawl again.');
+}
+
+const OPEN_FAILED_TEXT =
+  "The Omniswim app did not open a capture for this crawl, so its pages would not be saved. Check that the app is running and the pairing token is saved in the extension's options, then start the crawl again.";
+const NOT_HANDED_TEXT = 'not handed to the app, so it is not counted as finished';
+const RELAY_STREAK_TEXT = 'Several pages in a row could not be handed to the Omniswim app. Start the crawl again when it is reachable.';
+const NOT_JSON_TEXT =
+  'SwimCloud answered the swimmer-times request with a page that is not JSON. Refresh your SwimCloud session in this tab, then start the crawl again.';
+
 function genderWord(gender: SwimCloudCrawlGender): string {
   return gender === 'M' ? "men's" : "women's";
 }
@@ -264,6 +404,21 @@ function genderWord(gender: SwimCloudCrawlGender): string {
 
 interface FetchResult {
   readonly page: MultiTeamFetchedPage | undefined;
+  /** Cancel arrived while waiting. Nothing was requested. */
+  readonly aborted: boolean;
+}
+
+/** A reason a 2xx page cannot be used. `halt` stops the run; otherwise it fails the item. */
+interface PageProblem {
+  readonly halt: boolean;
+  readonly message: string;
+}
+
+/** What to do with one fetched page. `relay` says whether the page is recorded with the app. */
+interface Screen {
+  readonly action: 'clean' | 'halt' | 'fail';
+  readonly message: string;
+  readonly relay: boolean;
 }
 
 interface TeamNotes {
@@ -274,7 +429,8 @@ interface TeamNotes {
 /**
  * Run the whole crawl. Resolves with a summary when the run completes, is
  * cancelled, or halts itself. Rejects only for a bug or a denylist hit
- * ({@link MultiTeamDriverError}) and for whatever a dependency throws.
+ * ({@link MultiTeamDriverError}) and for whatever a dependency throws; the
+ * captures are marked and the downloads flushed before it rejects.
  */
 export async function runMultiTeamCrawl(deps: MultiTeamDriverDeps, input: MultiTeamCrawlInput): Promise<MultiTeamSummary> {
   const seenTeams = new Set<string>();
@@ -287,6 +443,10 @@ export async function runMultiTeamCrawl(deps: MultiTeamDriverDeps, input: MultiT
   const requestedUrls: string[] = [];
   const seasonReports: TeamSeasonOptionsReport[] = [];
   const teamNotes = new Map<SwimCloudTeamId, TeamNotes>();
+  /** Every subject opened or relayed under, by capture id. Flushed at the end. */
+  const usedSubjects = new Map<string, SwimCloudCaptureSubject>();
+  const optionsLanded = new Map<SwimCloudTeamId, boolean>();
+  const plannedBySubject = new Map<string, number>();
   const notesFor = (teamId: SwimCloudTeamId): TeamNotes => {
     let notes = teamNotes.get(teamId);
     if (notes === undefined) {
@@ -301,9 +461,10 @@ export async function runMultiTeamCrawl(deps: MultiTeamDriverDeps, input: MultiT
   let queue: MultiTeamQueue | undefined;
   let notice: string | undefined;
   let haltMessage: string | undefined;
-  let lastRequestStartMs: number | undefined;
   let recent429 = 0;
   let choiceAsked = false;
+  let plannedCorrected = false;
+  let runKey = '';
 
   const emit = (): void => {
     deps.onProgress({
@@ -315,6 +476,11 @@ export async function runMultiTeamCrawl(deps: MultiTeamDriverDeps, input: MultiT
       ...(haltMessage === undefined ? {} : { haltMessage }),
     });
   };
+
+  function currentQueue(): MultiTeamQueue {
+    if (queue === undefined) throw new MultiTeamDriverError('queue-invariant', 'no queue.');
+    return queue;
+  }
 
   /** Holds while paused. Returns false when the run was cancelled. */
   const gate = async (): Promise<boolean> => {
@@ -332,25 +498,34 @@ export async function runMultiTeamCrawl(deps: MultiTeamDriverDeps, input: MultiT
     return !control.cancelled;
   };
 
-  /** One paced request: wait for the gap, check the denylist, fetch, retry only on 429. */
+  /** Wait for the pacing gap, honouring Cancel and Pause before and after the wait. False means cancelled. */
+  const paceWait = async (gapMs: number): Promise<boolean> => {
+    if (!(await gate())) return false;
+    const last = deps.paceClock.get();
+    if (last === undefined) return true;
+    const elapsed = deps.now() - last;
+    if (elapsed >= gapMs) return true;
+    await deps.sleep(gapMs - elapsed);
+    return gate();
+  };
+
+  /** One paced request: check the denylist, wait the gap, fetch, retry only on 429. */
   const fetchPaced = async (url: string, expected: ExpectedKind, gapMs: number): Promise<FetchResult> => {
     assertFetchableUrl(url, expected);
     let attempt = 0;
     for (;;) {
       attempt += 1;
-      if (lastRequestStartMs !== undefined) {
-        const elapsed = deps.now() - lastRequestStartMs;
-        if (elapsed < gapMs) await deps.sleep(gapMs - elapsed);
-      }
-      lastRequestStartMs = deps.now();
+      if (!(await paceWait(gapMs))) return { page: undefined, aborted: true };
+      deps.paceClock.set(deps.now());
       requestedUrls.push(url);
       const page = await deps.fetchPage(url);
-      if (page === undefined || page.httpStatus !== RATE_LIMITED_STATUS) return { page };
+      if (page === undefined || page.httpStatus !== RATE_LIMITED_STATUS) return { page, aborted: false };
 
       const decision = decideRateLimitRetry(attempt, page.retryAfter, deps.now());
       notice = formatRateLimitWaitLine(url, decision);
       emit();
-      if (decision.action === 'give-up' || control.cancelled) return { page };
+      if (decision.action === 'give-up') return { page, aborted: false };
+      if (control.cancelled) return { page: undefined, aborted: true };
       await deps.sleep(decision.waitMs);
     }
   };
@@ -360,23 +535,86 @@ export async function runMultiTeamCrawl(deps: MultiTeamDriverDeps, input: MultiT
     const outcome = page === undefined ? ({ kind: 'network-error' } as const) : ({ kind: 'http-status', httpStatus: page.httpStatus } as const);
     const action = shouldHalt(outcome, recent429);
     recent429 = outcome.kind === 'http-status' && outcome.httpStatus === RATE_LIMITED_STATUS ? recent429 + 1 : 0;
-    return action.action === 'stop' ? { stop: true, message: action.message } : { stop: false };
+    return action.action === 'stop' ? { stop: true, message: restartText(action.message) } : { stop: false };
   };
 
-  /* ---- The three steps, in order -------------------------------------- */
+  /** A redirect is a problem; one to an unfetchable URL halts, another fetchable page fails the item. */
+  const redirectProblem = (url: string, expected: ExpectedKind, page: MultiTeamFetchedPage): PageProblem | undefined => {
+    if (normalizedUrl(page.finalUrl) === normalizedUrl(url) && normalizedUrl(url) !== undefined) return undefined;
+    if (!urlIsFetchable(page.finalUrl, expected)) {
+      return { halt: true, message: `SwimCloud redirected ${url} to ${page.finalUrl}, which this crawl does not fetch. Refresh your SwimCloud session in this tab, then start the crawl again.` };
+    }
+    return { halt: false, message: `the page was redirected to ${page.finalUrl}, so it is not the page that was asked for` };
+  };
 
+  /** Decide what one fetched page means. Updates the 429 streak. */
+  const screenPage = (
+    url: string,
+    expected: ExpectedKind,
+    page: MultiTeamFetchedPage | undefined,
+    contentCheck: (html: string) => PageProblem | undefined,
+  ): Screen => {
+    const stop = haltDecision(page);
+    const redirect = page === undefined ? undefined : redirectProblem(url, expected, page);
+    if (stop.stop) return { action: 'halt', message: stop.message, relay: page !== undefined && redirect === undefined };
+    if (page === undefined) return { action: 'fail', message: 'no response', relay: false };
+    if (redirect !== undefined) return { action: redirect.halt ? 'halt' : 'fail', message: redirect.message, relay: false };
+    if (!isOkStatus(page.httpStatus)) {
+      const text = page.httpStatus === RATE_LIMITED_STATUS ? 'rate-limited (HTTP 429) after retries' : `HTTP ${page.httpStatus}`;
+      return { action: 'fail', message: text, relay: true };
+    }
+    const problem = contentCheck(page.html);
+    if (problem !== undefined) return { action: problem.halt ? 'halt' : 'fail', message: problem.message, relay: false };
+    return { action: 'clean', message: '', relay: true };
+  };
+
+  /** Relay one page under each subject. A `fallback` or `lost` is not landed. */
+  const relayTo = async (
+    subjects: readonly SwimCloudCaptureSubject[],
+    sourceUrl: string,
+    page: MultiTeamFetchedPage,
+  ): Promise<'landed' | 'not-landed' | 'streak-stop'> => {
+    let result: 'landed' | 'not-landed' = 'landed';
+    for (const subject of subjects) {
+      usedSubjects.set(captureIdForSubject(subject), subject);
+      const outcome = await deps.relay({ subject, sourceUrl, httpStatus: page.httpStatus, html: page.html });
+      if (outcome === 'streak-stop') return 'streak-stop';
+      if (outcome !== 'landed') result = 'not-landed';
+    }
+    return result;
+  };
+
+  /** Open a capture. False when the app gave no id. */
+  const openSubject = async (subject: SwimCloudCaptureSubject, planned: number): Promise<boolean> => {
+    const id = await deps.openCapture(subject, planned);
+    if (id === undefined) return false;
+    usedSubjects.set(captureIdForSubject(subject), subject);
+    plannedBySubject.set(captureIdForSubject(subject), planned);
+    return true;
+  };
+
+  /* ---- The steps, in order, with the finish on every exit -------------- */
+
+  let endedBy: MultiTeamSummary['outcome'] = 'halted';
+  let thrown: { readonly error: unknown } | undefined;
   emit();
-  await readSeasonLists();
-  readingTeamId = undefined;
-  const choices = await askForChoices();
-
-  let endedBy: MultiTeamSummary['outcome'] = haltMessage !== undefined ? 'halted' : control.cancelled ? 'cancelled' : 'completed';
-  if (endedBy === 'completed' && choices.length > 0) endedBy = await crawlQueue(choices);
+  try {
+    await readSeasonLists();
+    readingTeamId = undefined;
+    const choices = await askForChoices();
+    endedBy = haltMessage !== undefined ? 'halted' : control.cancelled ? 'cancelled' : 'completed';
+    if (endedBy === 'completed' && choices.length > 0) endedBy = await crawlQueue(choices);
+  } catch (error) {
+    thrown = { error };
+  }
   phase = 'finished';
   haltMessage = haltMessage ?? queue?.halt?.message;
   notice = undefined;
+  await markCaptures(thrown === undefined ? endedBy : 'halted');
+  const downloads = await flushAll();
   emit();
-  return buildSummary(endedBy);
+  if (thrown !== undefined) throw thrown.error;
+  return buildSummary(endedBy, downloads);
 
   /* ---- Step 1: each team's own season list ---------------------------- */
 
@@ -385,31 +623,43 @@ export async function runMultiTeamCrawl(deps: MultiTeamDriverDeps, input: MultiT
       if (!(await gate())) return;
       readingTeamId = teamId;
       emit();
+      if (!(await openSubject(teamSubject(teamId), 1))) {
+        haltMessage = OPEN_FAILED_TEXT;
+        seasonReports.push({ teamId, error: OPEN_FAILED_TEXT });
+        return;
+      }
       const step = planTeamRosterPage(teamId, 'M');
-      const { page } = await fetchPaced(step.canonicalUrl, 'teamRoster', MIN_DELAY_MS);
+      const { page, aborted } = await fetchPaced(step.canonicalUrl, 'teamRoster', MIN_DELAY_MS);
       notice = undefined;
+      if (aborted) return;
 
-      if (page !== undefined) {
-        const relayed = await deps.relay({ subject: teamSubject(teamId), sourceUrl: step.canonicalUrl, httpStatus: page.httpStatus, html: page.html });
+      const screen = screenPage(step.canonicalUrl, 'teamRoster', page, challengeProblem);
+      if (screen.relay && page !== undefined) {
+        const relayed = await relayTo([teamSubject(teamId)], step.canonicalUrl, page);
+        optionsLanded.set(teamId, relayed === 'landed' && screen.action === 'clean');
         if (relayed === 'streak-stop') {
-          haltMessage = 'Several pages in a row could not be handed to the Omniswim app. Stopping so nothing more is fetched into the void.';
+          haltMessage = RELAY_STREAK_TEXT;
           seasonReports.push({ teamId, error: haltMessage });
           return;
         }
       }
-      const verdict = haltDecision(page);
-      if (verdict.stop) {
-        haltMessage = verdict.message;
-        seasonReports.push({ teamId, error: verdict.message });
+      if (screen.action === 'halt') {
+        haltMessage = screen.message;
+        seasonReports.push({ teamId, error: screen.message });
         return;
       }
-      seasonReports.push(reportSeasons(teamId, page));
+      seasonReports.push(reportSeasons(teamId, screen, page));
     }
   }
 
-  function reportSeasons(teamId: SwimCloudTeamId, page: MultiTeamFetchedPage | undefined): TeamSeasonOptionsReport {
-    if (page === undefined || !isOkStatus(page.httpStatus)) {
-      return { teamId, error: `The season page for team ${teamId} returned HTTP ${page?.httpStatus ?? 'no response'}.` };
+  function challengeProblem(html: string): PageProblem | undefined {
+    return looksLikeChallengePage(html) ? { halt: true, message: CHALLENGE_TEXT } : undefined;
+  }
+
+  function reportSeasons(teamId: SwimCloudTeamId, screen: Screen, page: MultiTeamFetchedPage | undefined): TeamSeasonOptionsReport {
+    if (screen.action === 'fail' || page === undefined) {
+      const why = screen.message.startsWith('HTTP') || screen.message === 'no response' ? `returned ${screen.message}` : screen.message;
+      return { teamId, error: `The season page for team ${teamId} ${why}.` };
     }
     try {
       return { teamId, options: parseTeamSeasonOptions(page.html) };
@@ -440,7 +690,8 @@ export async function runMultiTeamCrawl(deps: MultiTeamDriverDeps, input: MultiT
   /* ---- Step 3: the queue loop ------------------------------------------ */
 
   async function crawlQueue(picked: readonly TeamSeasonChoice[]): Promise<MultiTeamSummary['outcome']> {
-    const finishedAtStart = await deps.loadFinished();
+    runKey = resumeKeyForChoices(seasonReports, picked);
+    const finishedAtStart = runKey === '' ? [] : await deps.loadFinished(runKey);
     queue = createQueue({
       teams: picked.map((choice) => {
         const options = seasonReports.find((r) => r.teamId === choice.teamId)?.options;
@@ -451,9 +702,10 @@ export async function runMultiTeamCrawl(deps: MultiTeamDriverDeps, input: MultiT
     });
     phase = 'crawling';
     emit();
+    if (!(await openSeasonCaptures())) return 'halted';
 
     const persistFinished = async (): Promise<void> => {
-      await deps.saveFinished([...new Set([...finishedAtStart, ...finishedSwimmerKeys(currentQueue())])]);
+      await deps.saveFinished(runKey, [...new Set([...finishedAtStart, ...finishedSwimmerKeys(currentQueue())])]);
     };
 
     for (;;) {
@@ -463,11 +715,16 @@ export async function runMultiTeamCrawl(deps: MultiTeamDriverDeps, input: MultiT
       }
       const next = nextWork(currentQueue());
       queue = next.queue; // Stored before any await: queue rule 1.
-      if (next.kind === 'idle') return idleOutcome(next.reason);
+      if (next.kind === 'idle') {
+        const outcome = idleOutcome(next.reason);
+        if (outcome === 'completed') await clearIfClean();
+        return outcome;
+      }
       notice = undefined;
       emit();
 
       const work = next.work;
+      if (work.kind === 'swimmer') await correctPlannedCounts();
       const halted = work.kind === 'roster' ? await runRosterWork(work) : await runSwimmerWork(work, persistFinished);
       emit();
       if (halted) return 'halted';
@@ -482,13 +739,47 @@ export async function runMultiTeamCrawl(deps: MultiTeamDriverDeps, input: MultiT
     throw new MultiTeamDriverError('queue-invariant', `the queue is idle (${reason}) with nothing in flight.`);
   }
 
+  /** The teams whose season the queue accepted. Season-unavailable teams get no capture. */
+  function readyTeams(): readonly { teamId: SwimCloudTeamId; seasonLabel: string; swimmerTotal: number }[] {
+    return queueProgress(currentQueue()).teams.flatMap((t) =>
+      t.status === 'season-unavailable' ? [] : [{ teamId: t.teamId, seasonLabel: t.seasonLabel, swimmerTotal: t.swimmers.total }],
+    );
+  }
+
+  /** Open every season capture before its first roster is fetched. False stops the run. */
+  async function openSeasonCaptures(): Promise<boolean> {
+    for (const team of readyTeams()) {
+      if (!(await openSubject(teamSubject(team.teamId, team.seasonLabel), 2))) {
+        haltMessage = OPEN_FAILED_TEXT;
+        return false;
+      }
+    }
+    return true;
+  }
+
+  /** Once the rosters are read, tell the app each capture's real page count: two rosters plus its swimmers. */
+  async function correctPlannedCounts(): Promise<void> {
+    if (plannedCorrected) return;
+    plannedCorrected = true;
+    for (const team of readyTeams()) {
+      const subject = teamSubject(team.teamId, team.seasonLabel);
+      const planned = 2 + team.swimmerTotal;
+      if (plannedBySubject.get(captureIdForSubject(subject)) === planned) continue;
+      if (!(await openSubject(subject, planned))) {
+        notice = `The app did not accept the corrected page count for team ${team.teamId}. The crawl goes on.`;
+        emit();
+      }
+    }
+  }
+
+  /** After a completed run with no failure, forget the saved progress: the next crawl of this selection starts fresh. */
+  async function clearIfClean(): Promise<void> {
+    if (runKey === '') return;
+    const failed = queueProgress(currentQueue()).teams.some((t) => t.rosters.failed + t.swimmers.failed > 0);
+    if (!failed) await deps.clearFinished(runKey);
+  }
 
   /* ---- Work items ------------------------------------------------------ */
-
-  function currentQueue(): MultiTeamQueue {
-    if (queue === undefined) throw new MultiTeamDriverError('queue-invariant', 'no queue.');
-    return queue;
-  }
 
   /** Mark the item failed and halt. Returns true. */
   function halt(key: string, message: string): true {
@@ -497,38 +788,64 @@ export async function runMultiTeamCrawl(deps: MultiTeamDriverDeps, input: MultiT
     return true;
   }
 
-  async function runRosterWork(work: QueueRosterWork): Promise<boolean> {
-    const { page } = await fetchPaced(work.canonicalUrl, 'teamRoster', MIN_DELAY_MS);
-    const subject = teamSubject(work.teamId, work.seasonLabel);
+  /** Mark one item failed without halting. Returns false: the run goes on. */
+  function failItem(key: string, message: string): false {
+    queue = markFailed(currentQueue(), key, message);
+    return false;
+  }
 
-    // A 2xx page for the wrong season is not relayed: it would be filed under the chosen season.
-    let seasonProblem: string | undefined;
-    if (page !== undefined && isOkStatus(page.httpStatus)) {
-      const check = verifyRosterSeason(page.html, work);
-      if (!check.ok) seasonProblem = check.reason;
-    }
-    if (page !== undefined && seasonProblem === undefined) {
-      const relayed = await deps.relay({ subject, sourceUrl: work.canonicalUrl, httpStatus: page.httpStatus, html: page.html });
-      if (relayed === 'streak-stop') {
-        return halt(work.key, 'Several pages in a row could not be handed to the Omniswim app. Resume when it is reachable.');
+  /** Act on a screen that is not clean. Returns whether the run halted. */
+  function actOn(key: string, screen: Screen): boolean {
+    return screen.action === 'halt' ? halt(key, screen.message) : failItem(key, screen.message);
+  }
+
+  /** Relay under the subjects. Returns a halt/fail result, or undefined when the page landed. */
+  async function relayItem(key: string, subjects: readonly SwimCloudCaptureSubject[], url: string, page: MultiTeamFetchedPage): Promise<boolean | undefined> {
+    const relayed = await relayTo(subjects, url, page);
+    if (relayed === 'streak-stop') return halt(key, RELAY_STREAK_TEXT);
+    if (relayed === 'not-landed') return failItem(key, NOT_HANDED_TEXT);
+    return undefined;
+  }
+
+  function rosterProblem(work: QueueRosterWork): (html: string) => PageProblem | undefined {
+    return (html) => {
+      if (looksLikeChallengePage(html)) return { halt: true, message: CHALLENGE_TEXT };
+      const check = verifyRosterSeason(html, work);
+      return check.ok ? undefined : { halt: false, message: check.reason };
+    };
+  }
+
+  async function runRosterWork(work: QueueRosterWork): Promise<boolean> {
+    const { page, aborted } = await fetchPaced(work.canonicalUrl, 'teamRoster', MIN_DELAY_MS);
+    if (aborted) return failItem(work.key, 'not fetched: the run was cancelled');
+    const screen = screenPage(work.canonicalUrl, 'teamRoster', page, rosterProblem(work));
+
+    if (screen.relay && page !== undefined) {
+      const subject = teamSubject(work.teamId, work.seasonLabel);
+      if (screen.action === 'clean') {
+        const stopped = await relayItem(work.key, [subject], work.canonicalUrl, page);
+        if (stopped !== undefined) return stopped;
+      } else if ((await relayTo([subject], work.canonicalUrl, page)) === 'streak-stop') {
+        return halt(work.key, RELAY_STREAK_TEXT);
       }
     }
+    if (screen.action !== 'clean' || page === undefined) return actOn(work.key, screen);
+    return finishRoster(work, page.html);
+  }
 
-    const verdict = haltDecision(page);
-    if (verdict.stop) return halt(work.key, verdict.message);
-    if (page === undefined) return failItem(work.key, 'no response');
-    if (!isOkStatus(page.httpStatus)) {
-      return failItem(work.key, page.httpStatus === RATE_LIMITED_STATUS ? 'rate-limited (HTTP 429) after retries' : `HTTP ${page.httpStatus}`);
-    }
-    if (seasonProblem !== undefined) return failItem(work.key, seasonProblem);
-
+  /** Parse a roster page that passed every check and queue its swimmers. */
+  function finishRoster(work: QueueRosterWork, html: string): boolean {
     const parsed = parseTeamRosterHtml(
-      page.html,
+      html,
       { sourceUrl: work.canonicalUrl, retrievedAt: deps.isoNow(), track: 'browser-extension' },
       { gender: work.gender === 'M' ? 'Men' : 'Women', season: work.seasonLabel, teamId: work.teamId },
     );
-    if (!parsed.ok) {
-      return failItem(work.key, `the ${genderWord(work.gender)} roster could not be read: ${parsed.failure.message}`);
+    if (!parsed.ok) return failItem(work.key, `the ${genderWord(work.gender)} roster could not be read: ${parsed.failure.message}`);
+
+    const says = parsed.warnings.some((w) => w.code === 'no-roster-posted');
+    if (parsed.data.athletes.length === 0 && !says) {
+      const codes = parsed.warnings.map((w) => w.code).join(', ') || 'no warnings';
+      return failItem(work.key, `the ${genderWord(work.gender)} roster page lists nobody and does not say that no roster is posted (${codes}), so it is not treated as an empty roster`);
     }
     const collected = collectSwimmerIds([parsed.data.athletes]);
     const notes = notesFor(work.teamId);
@@ -539,47 +856,60 @@ export async function runMultiTeamCrawl(deps: MultiTeamDriverDeps, input: MultiT
     return false;
   }
 
+  /** The endpoint answers JSON. A 2xx body that is not JSON is a challenge page. */
+  function swimmerProblem(html: string): PageProblem | undefined {
+    return looksLikeJson(html) ? undefined : { halt: true, message: NOT_JSON_TEXT };
+  }
+
   async function runSwimmerWork(work: QueueSwimmerWork, persist: () => Promise<void>): Promise<boolean> {
     const step = planSwimmerFastestTimes(work.swimmerId as SwimCloudSwimmerId);
-    const { page } = await fetchPaced(step.canonicalUrl, 'swimmerFastestTimes', SWIMMER_TIMES_STAGGER_MS);
+    const { page, aborted } = await fetchPaced(step.canonicalUrl, 'swimmerFastestTimes', SWIMMER_TIMES_STAGGER_MS);
+    if (aborted) return failItem(work.key, 'not fetched: the run was cancelled');
+    const screen = screenPage(step.canonicalUrl, 'swimmerFastestTimes', page, swimmerProblem);
 
-    // The endpoint answers JSON. A 2xx body that is not JSON is a challenge page.
-    if (page !== undefined && isOkStatus(page.httpStatus) && !looksLikeJson(page.html)) {
-      recent429 = 0;
-      return halt(work.key, 'SwimCloud answered the swimmer-times request with a page that is not JSON. Refresh your SwimCloud session in this tab, then Resume.');
-    }
-    if (page !== undefined) {
-      const relayed = await deps.relay({
-        subject: teamSubject(work.teamId, work.seasonLabel),
-        sourceUrl: step.canonicalUrl,
-        httpStatus: page.httpStatus,
-        html: page.html,
-      });
-      if (relayed === 'streak-stop') {
-        return halt(work.key, 'Several pages in a row could not be handed to the Omniswim app. Resume when it is reachable.');
+    // The one body goes under every team that listed this swimmer: no extra request.
+    const subjects = work.attributions.map((a) => teamSubject(a.teamId, a.seasonLabel));
+    if (screen.relay && page !== undefined) {
+      if (screen.action === 'clean') {
+        const stopped = await relayItem(work.key, subjects, step.canonicalUrl, page);
+        if (stopped !== undefined) return stopped;
+      } else if ((await relayTo(subjects, step.canonicalUrl, page)) === 'streak-stop') {
+        return halt(work.key, RELAY_STREAK_TEXT);
       }
     }
-
-    const verdict = haltDecision(page);
-    if (verdict.stop) return halt(work.key, verdict.message);
-    if (page === undefined) return failItem(work.key, 'no response');
-    if (!isOkStatus(page.httpStatus)) {
-      return failItem(work.key, page.httpStatus === RATE_LIMITED_STATUS ? 'rate-limited (HTTP 429) after retries' : `HTTP ${page.httpStatus}`);
-    }
+    if (screen.action !== 'clean') return actOn(work.key, screen);
     queue = markDone(currentQueue(), work.key);
     await persist();
     return false;
   }
 
-  /** Mark one item failed without halting. Returns false: the run goes on. */
-  function failItem(key: string, message: string): false {
-    queue = markFailed(currentQueue(), key, message);
-    return false;
+  /* ---- Finish ---------------------------------------------------------- */
+
+  /** Mark each capture. Complete only for a clean run of a team whose pages all landed. */
+  async function markCaptures(outcome: MultiTeamSummary['outcome']): Promise<void> {
+    const seasonDone = new Set<string>();
+    if (queue !== undefined && outcome === 'completed') {
+      for (const t of queueProgress(queue).teams) {
+        if (t.status === 'done') seasonDone.add(captureIdForSubject(teamSubject(t.teamId, t.seasonLabel)));
+      }
+    }
+    for (const [id, subject] of usedSubjects) {
+      const complete =
+        subject.kind === 'team' && subject.season === undefined ? optionsLanded.get(subject.teamId) === true : seasonDone.has(id);
+      await deps.markCapture(subject, complete ? 'every-planned-page-fetched' : 'partial');
+    }
+  }
+
+  /** Flush the downloads fallback for every subject used. Reports only what fell back or failed. */
+  async function flushAll(): Promise<readonly MultiTeamFlushResult[]> {
+    if (usedSubjects.size === 0) return [];
+    const results = await deps.flushDownloads([...usedSubjects.values()]);
+    return results.filter((r) => r.pageCount > 0 || r.error !== undefined);
   }
 
   /* ---- Summary --------------------------------------------------------- */
 
-  function buildSummary(outcome: 'completed' | 'cancelled' | 'halted'): MultiTeamSummary {
+  function buildSummary(outcome: MultiTeamSummary['outcome'], downloads: readonly MultiTeamFlushResult[]): MultiTeamSummary {
     const progress = queue === undefined ? undefined : queueProgress(queue);
     const teams: MultiTeamTeamSummary[] = input.teamIds.map((teamId) => {
       const notes = notesFor(teamId);
@@ -595,10 +925,9 @@ export async function runMultiTeamCrawl(deps: MultiTeamDriverDeps, input: MultiT
       };
       const queued = progress?.teams.find((t) => t.teamId === teamId);
       if (queued !== undefined) {
-        const status: MultiTeamTeamStatus = queued.status === 'season-unavailable' ? 'season-unavailable' : queued.status;
         return {
           ...base,
-          status,
+          status: queued.status,
           seasonLabel: queued.seasonLabel,
           ...(queued.seasonId === undefined ? {} : { seasonId: queued.seasonId }),
           ...(queued.availableLabels === undefined ? {} : { availableLabels: queued.availableLabels }),
@@ -620,6 +949,7 @@ export async function runMultiTeamCrawl(deps: MultiTeamDriverDeps, input: MultiT
       ...(haltMessage === undefined ? {} : { haltMessage }),
       teams,
       requestedUrls,
+      downloads,
     };
   }
 }

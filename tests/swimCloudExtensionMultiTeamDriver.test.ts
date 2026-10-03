@@ -25,179 +25,28 @@
  * 2025-2026 makes a server that ignores `season_id` correct for that choice.
  * The mismatch tests choose another season on purpose.
  */
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 
 import { classifySwimCloudUrl } from '../packages/swimcloud/src/urlClassifier';
-import { parseTeamRosterHtml } from '../packages/swimcloud/src/parser';
-import { SWIMCLOUD_CHALLENGE_MESSAGE } from '../extensions/swimcloud-companion/src/crawlErrorPolicy';
 import { MIN_DELAY_MS } from '../extensions/swimcloud-companion/src/crawlPacing';
 import { BASE_BACKOFF_MS } from '../extensions/swimcloud-companion/src/rateLimitBackoff';
-import { SWIMMER_TIMES_STAGGER_MS, collectSwimmerIds } from '../extensions/swimcloud-companion/src/swimmerTimes';
+import { SWIMMER_TIMES_STAGGER_MS } from '../extensions/swimcloud-companion/src/swimmerTimes';
+import { MultiTeamDriverError, PAUSE_POLL_MS, assertFetchableUrl, type MultiTeamFetchedPage } from '../extensions/swimcloud-companion/src/multiTeamDriver';
 import {
-  MultiTeamDriverError,
-  PAUSE_POLL_MS,
-  assertFetchableUrl,
-  runMultiTeamCrawl,
-  type MultiTeamControl,
-  type MultiTeamDriverDeps,
-  type MultiTeamDriverState,
-  type MultiTeamFetchedPage,
-  type MultiTeamRelayRequest,
-  type MultiTeamSummary,
-  type TeamSeasonChoice,
-} from '../extensions/swimcloud-companion/src/multiTeamDriver';
-
-const here = dirname(fileURLToPath(import.meta.url));
-const fixturesDir = join(here, 'fixtures', 'swimcloud');
-const SWIMMER_BODY = readFileSync(join(here, 'fixtures', 'profile_fastest_times-1330318.json'), 'utf8');
-
-type Gender = 'M' | 'F';
-const rosterPage = (team: string, gender: Gender): string =>
-  readFileSync(join(fixturesDir, `team-${team}-roster-gender-${gender}-page.html`), 'utf8');
-
-const PAGES: Record<string, string> = {};
-for (const team of ['412', '10002824']) for (const g of ['M', 'F'] as const) PAGES[`${team}|${g}`] = rosterPage(team, g);
-
-/** Swimmer ids per roster page, read by the real parser, in page order. */
-function idsOf(team: string, gender: Gender, pages: Record<string, string> = PAGES): string[] {
-  const parsed = parseTeamRosterHtml(pages[`${team}|${gender}`], {
-    sourceUrl: `https://www.swimcloud.com/team/${team}/roster/?gender=${gender}`,
-    retrievedAt: '2026-10-03T00:00:00.000Z',
-    track: 'browser-extension',
-  });
-  if (!parsed.ok) throw new Error('fixture does not parse');
-  return collectSwimmerIds([parsed.data.athletes]).swimmerIds;
-}
-
-const IDS_412M = idsOf('412', 'M');
-const IDS_412F = idsOf('412', 'F');
-const IDS_10002824M = idsOf('10002824', 'M');
-const IDS_10002824F = idsOf('10002824', 'F');
-const ALL_IDS = [...IDS_412M, ...IDS_412F, ...IDS_10002824M, ...IDS_10002824F];
-
-const swimmerUrl = (id: string): string => `https://www.swimcloud.com/api/swimmers/${id}/profile_fastest_times/`;
-const seasonRosterUrl = (team: string, gender: Gender, seasonId: string): string =>
-  `https://www.swimcloud.com/team/${team}/roster/?page=1&gender=${gender}&season_id=${seasonId}&sort=name`;
-const optionsUrl = (team: string): string => `https://www.swimcloud.com/team/${team}/roster/?gender=M`;
-
-const ROSTER_URL = /^https:\/\/www\.swimcloud\.com\/team\/(\d+)\/roster\/\?(?:page=1&)?gender=([MF])(?:&season_id=(\d+)&sort=name)?$/;
-
-/* -------------------------------------------------------------------------- */
-/* The harness                                                                 */
-/* -------------------------------------------------------------------------- */
-
-interface Harness {
-  readonly deps: MultiTeamDriverDeps;
-  readonly control: MultiTeamControl;
-  /** Every request, with the virtual time it started. */
-  readonly fetches: { url: string; at: number }[];
-  readonly relays: MultiTeamRelayRequest[];
-  readonly sleeps: number[];
-  readonly states: MultiTeamDriverState[];
-  readonly saves: (readonly string[])[];
-  readonly chooseCalls: number[];
-}
-
-interface HarnessOptions {
-  /** Override one response. Return `null` for "use the default server". `n` counts requests from 1. */
-  readonly respond?: (url: string, n: number) => MultiTeamFetchedPage | undefined | null;
-  readonly pages?: Record<string, string>;
-  readonly choose?: (teamId: string) => string | undefined;
-  readonly finished?: readonly string[];
-  /** Called after each request is answered, before the driver sees the answer. */
-  readonly afterFetch?: (n: number, h: Harness) => void;
-  /** Called on every sleep. */
-  readonly onSleep?: (ms: number, h: Harness) => void;
-  readonly relayOutcome?: () => 'landed' | 'lost' | 'streak-stop';
-}
-
-function makeHarness(options: HarnessOptions = {}): Harness {
-  let t = 1_000_000;
-  const pages = options.pages ?? PAGES;
-  const control: MultiTeamControl = { cancelled: false, paused: false };
-  const h: Harness = {
-    control,
-    fetches: [],
-    relays: [],
-    sleeps: [],
-    states: [],
-    saves: [],
-    chooseCalls: [],
-    // Filled below; `deps` closes over `h` through the const binding.
-    deps: undefined as unknown as MultiTeamDriverDeps,
-  };
-  const defaultServe = (url: string): MultiTeamFetchedPage => {
-    const roster = ROSTER_URL.exec(url);
-    if (roster !== null) {
-      // A server that ignores `season_id`: it always serves the page it has.
-      const html = pages[`${roster[1]}|${roster[2]}`];
-      if (html === undefined) return { html: 'not found', httpStatus: 404 };
-      return { html, httpStatus: 200 };
-    }
-    if (/\/api\/swimmers\/\d+\/profile_fastest_times\/$/.test(url)) return { html: SWIMMER_BODY, httpStatus: 200 };
-    return { html: 'not found', httpStatus: 404 };
-  };
-  const deps: MultiTeamDriverDeps = {
-    async fetchPage(url) {
-      h.fetches.push({ url, at: t });
-      const n = h.fetches.length;
-      t += 200; // the request takes a little while
-      const override = options.respond === undefined ? null : options.respond(url, n);
-      const answer = override === null ? defaultServe(url) : override; // `undefined` is a network error
-      options.afterFetch?.(n, h);
-      return answer;
-    },
-    async relay(request) {
-      h.relays.push(request);
-      return options.relayOutcome?.() ?? 'landed';
-    },
-    async sleep(ms) {
-      h.sleeps.push(ms);
-      t += ms;
-      options.onSleep?.(ms, h);
-    },
-    now: () => t,
-    isoNow: () => '2026-10-03T12:00:00.000Z',
-    async loadFinished() {
-      return options.finished ?? [];
-    },
-    async saveFinished(keys) {
-      h.saves.push([...keys]);
-    },
-    onProgress(state) {
-      h.states.push(state);
-    },
-    async chooseSeasons(reports) {
-      h.chooseCalls.push(reports.length);
-      const choices: TeamSeasonChoice[] = [];
-      for (const report of reports) {
-        if (report.options === undefined) continue;
-        const label = options.choose === undefined ? '2025-2026' : options.choose(report.teamId);
-        if (label !== undefined) choices.push({ teamId: report.teamId, seasonLabel: label });
-      }
-      return choices;
-    },
-    control,
-  };
-  return Object.assign(h, { deps });
-}
-
-const TEAMS = ['412', '10002824'] as const;
-const run = (h: Harness, teamIds: readonly string[] = TEAMS): Promise<MultiTeamSummary> => runMultiTeamCrawl(h.deps, { teamIds });
-const urls = (h: Harness): string[] => h.fetches.map((f) => f.url);
-
-/** The roster-side URLs of the two-team run, in the order the queue hands them out. */
-const EXPECTED_ROSTER_SIDE = [
-  optionsUrl('412'),
-  optionsUrl('10002824'),
-  seasonRosterUrl('412', 'M', '29'),
-  seasonRosterUrl('412', 'F', '29'),
-  seasonRosterUrl('10002824', 'M', '29'),
-  seasonRosterUrl('10002824', 'F', '29'),
-];
+  PAGES,
+  IDS_412M,
+  IDS_412F,
+  IDS_10002824M,
+  IDS_10002824F,
+  ALL_IDS,
+  swimmerUrl,
+  seasonRosterUrl,
+  optionsUrl,
+  makeHarness,
+  run,
+  urls,
+  EXPECTED_ROSTER_SIDE,
+} from './helpers/multiTeamDriverHarness';
 
 /* -------------------------------------------------------------------------- */
 /* (a) The dry run                                                             */
@@ -295,7 +144,8 @@ describe('multi-team driver: Cloudflare 403', () => {
     expect(urls(h)).toEqual([...EXPECTED_ROSTER_SIDE.slice(0, 4)]);
     expect(urls(h).filter((u) => u === challenge).length).toBe(1);
     expect(summary.outcome).toBe('halted');
-    expect(summary.haltMessage).toBe(SWIMCLOUD_CHALLENGE_MESSAGE);
+    expect(summary.haltMessage).toContain('SwimCloud returned a challenge');
+    expect(summary.haltMessage).not.toMatch(/Resume/);
     expect(summary.teams[0].rostersFailed).toBe(1);
     expect(urls(h).some((u) => u.includes('/api/swimmers/'))).toBe(false);
   });
@@ -443,7 +293,8 @@ describe('multi-team driver: seasons', () => {
   });
 
   it('a season page without a readable season list is reported and the other team goes on', async () => {
-    const pages = { ...PAGES, '412|M': '<html><body>nothing here</body></html>' };
+    // Two season menus: the page is a real team page, but which list is the team's cannot be told.
+    const pages = { ...PAGES, '412|M': PAGES['412|M'] + PAGES['412|M'] };
     const h = makeHarness({ pages });
     const summary = await run(h);
     expect(summary.teams[0].status).toBe('seasons-unreadable');
