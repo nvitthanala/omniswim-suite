@@ -333,14 +333,30 @@ export function resumeKeyForChoices(reports: readonly TeamSeasonOptionsReport[],
   return pairs.map((p) => `${p.teamId}:${p.seasonId}`).join(',');
 }
 
+/**
+ * Whether a season capture may be marked `every-planned-page-fetched`: the team
+ * finished with no failure AND the pages present in the app (landed this run,
+ * plus swimmers a saved run proved filed under this team) reach the planned
+ * count. A capture is never called complete while a planned page is missing.
+ */
+export function capturePagesComplete(input: {
+  readonly planned: number | undefined;
+  readonly landedThisRun: number;
+  readonly resumedProven: number;
+  readonly teamDone: boolean;
+}): boolean {
+  return input.teamDone && input.planned !== undefined && input.landedThisRun + input.resumedProven >= input.planned;
+}
+
 function isOkStatus(status: number): boolean {
   return status >= 200 && status < 300;
 }
 
+/** The swimmer endpoint answers a JSON object or array. A bare string, number or null is not a result. */
 function looksLikeJson(body: string): boolean {
   try {
-    JSON.parse(body);
-    return true;
+    const parsed: unknown = JSON.parse(body);
+    return typeof parsed === 'object' && parsed !== null;
   } catch {
     return false;
   }
@@ -446,6 +462,8 @@ export async function runMultiTeamCrawl(deps: MultiTeamDriverDeps, input: MultiT
   /** Every subject opened or relayed under, by capture id. Flushed at the end. */
   const usedSubjects = new Map<string, SwimCloudCaptureSubject>();
   const optionsLanded = new Map<SwimCloudTeamId, boolean>();
+  /** Source URLs the app really took, per capture id. Completeness is checked against this. */
+  const landedPages = new Map<string, Set<string>>();
   const plannedBySubject = new Map<string, number>();
   const notesFor = (teamId: SwimCloudTeamId): TeamNotes => {
     let notes = teamNotes.get(teamId);
@@ -556,7 +574,9 @@ export async function runMultiTeamCrawl(deps: MultiTeamDriverDeps, input: MultiT
   ): Screen => {
     const stop = haltDecision(page);
     const redirect = page === undefined ? undefined : redirectProblem(url, expected, page);
-    if (stop.stop) return { action: 'halt', message: stop.message, relay: page !== undefined && redirect === undefined };
+    // A halting status (403, 5xx, a 429 give-up) carries no data. It is not relayed: the app keeps the newest
+    // entry for a URL, and a recorded error must never replace a page that was saved.
+    if (stop.stop) return { action: 'halt', message: stop.message, relay: false };
     if (page === undefined) return { action: 'fail', message: 'no response', relay: false };
     if (redirect !== undefined) return { action: redirect.halt ? 'halt' : 'fail', message: redirect.message, relay: false };
     if (!isOkStatus(page.httpStatus)) {
@@ -579,7 +599,12 @@ export async function runMultiTeamCrawl(deps: MultiTeamDriverDeps, input: MultiT
       usedSubjects.set(captureIdForSubject(subject), subject);
       const outcome = await deps.relay({ subject, sourceUrl, httpStatus: page.httpStatus, html: page.html });
       if (outcome === 'streak-stop') return 'streak-stop';
-      if (outcome !== 'landed') result = 'not-landed';
+      if (outcome !== 'landed') {
+        result = 'not-landed';
+        continue;
+      }
+      const id = captureIdForSubject(subject);
+      landedPages.set(id, (landedPages.get(id) ?? new Set<string>()).add(sourceUrl));
     }
     return result;
   };
@@ -717,7 +742,10 @@ export async function runMultiTeamCrawl(deps: MultiTeamDriverDeps, input: MultiT
       queue = next.queue; // Stored before any await: queue rule 1.
       if (next.kind === 'idle') {
         const outcome = idleOutcome(next.reason);
-        if (outcome === 'completed') await clearIfClean();
+        if (outcome === 'completed') {
+          await correctPlannedCounts();
+          await clearIfClean();
+        }
         return outcome;
       }
       notice = undefined;
@@ -744,6 +772,23 @@ export async function runMultiTeamCrawl(deps: MultiTeamDriverDeps, input: MultiT
     return queueProgress(currentQueue()).teams.flatMap((t) =>
       t.status === 'season-unavailable' ? [] : [{ teamId: t.teamId, seasonLabel: t.seasonLabel, swimmerTotal: t.swimmers.total }],
     );
+  }
+
+  /**
+   * Whether every page the capture was told to expect is in the app: the pages
+   * this run landed, plus the swimmers a saved run proved were filed under this
+   * team (`skipped-resumed` needs this team's own key), against the planned count.
+   */
+  function captureHasEveryPlannedPage(teamId: SwimCloudTeamId, seasonLabel: string): boolean {
+    const id = captureIdForSubject(teamSubject(teamId, seasonLabel));
+    const team = queueProgress(currentQueue()).teams.find((t) => t.teamId === teamId);
+    if (team === undefined) return false;
+    return capturePagesComplete({
+      planned: plannedBySubject.get(id),
+      landedThisRun: landedPages.get(id)?.size ?? 0,
+      resumedProven: team.swimmers.skippedResumed,
+      teamDone: team.status === 'done',
+    });
   }
 
   /** Open every season capture before its first roster is fetched. False stops the run. */
@@ -890,7 +935,9 @@ export async function runMultiTeamCrawl(deps: MultiTeamDriverDeps, input: MultiT
     const seasonDone = new Set<string>();
     if (queue !== undefined && outcome === 'completed') {
       for (const t of queueProgress(queue).teams) {
-        if (t.status === 'done') seasonDone.add(captureIdForSubject(teamSubject(t.teamId, t.seasonLabel)));
+        if (captureHasEveryPlannedPage(t.teamId, t.seasonLabel)) {
+          seasonDone.add(captureIdForSubject(teamSubject(t.teamId, t.seasonLabel)));
+        }
       }
     }
     for (const [id, subject] of usedSubjects) {

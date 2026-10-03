@@ -33,6 +33,7 @@ import type { MultiTeamApp } from './multiTeamApp';
 import {
   defaultSeasonLabel,
   describeTargetInput,
+  forgetButtonVisible,
   formatDriverState,
   formatScopeNote,
   formatSummary,
@@ -125,6 +126,7 @@ function openPanel(io: MultiTeamPanelIo): void {
   let finishChoice: ((choices: readonly TeamSeasonChoice[]) => void) | undefined;
   /** The selection "Forget saved progress" acts on: the dropdowns while choosing, else the last run's choices. */
   let currentSelection: () => string = () => '';
+  let choosing = false;
 
   const root = element('div');
   root.id = PANEL_ID;
@@ -174,6 +176,11 @@ function openPanel(io: MultiTeamPanelIo): void {
   root.append(title, inputLabel, input, scope, buttons, parsed, choices, headline, teamLines, notice, errors, summary, forgetNote, runButtons);
   document.body.appendChild(root);
   input.focus();
+
+  /** The button is hidden while a crawl runs past the choice: the driver re-saves its progress as it goes. */
+  const updateForgetButton = (): void => {
+    forgetButton.hidden = !forgetButtonVisible({ running, choosing, selectionKey: currentSelection() });
+  };
 
   const close = (): void => {
     root.remove();
@@ -248,8 +255,9 @@ function openPanel(io: MultiTeamPanelIo): void {
       };
       choices.replaceChildren(...rows);
       startButton.hidden = false;
-      forgetButton.hidden = false;
+      choosing = true;
       currentSelection = () => resumeKeyForChoices(reports, pick());
+      updateForgetButton();
       const first = [...selects.values()][0];
       if (first !== undefined) first.focus();
       finishChoice = (picked) => {
@@ -258,6 +266,8 @@ function openPanel(io: MultiTeamPanelIo): void {
         choices.replaceChildren();
         const key = resumeKeyForChoices(reports, picked);
         currentSelection = () => key;
+        choosing = false;
+        updateForgetButton();
         resolve(picked);
       };
       startButton.onclick = () => finishChoice?.(pick());
@@ -277,9 +287,10 @@ function openPanel(io: MultiTeamPanelIo): void {
 
   const endRun = (): void => {
     running = false;
+    choosing = false;
     pauseButton.hidden = true;
     startButton.hidden = true;
-    forgetButton.hidden = currentSelection() === '';
+    updateForgetButton();
     cancelButton.textContent = 'Close';
     cancelButton.disabled = false;
     parseButton.disabled = false;
@@ -299,6 +310,7 @@ function openPanel(io: MultiTeamPanelIo): void {
     input.disabled = true;
     pauseButton.hidden = false;
     forgetNote.hidden = true;
+    updateForgetButton();
     cancelButton.textContent = 'Cancel';
     summary.replaceChildren();
     io.app.reset();

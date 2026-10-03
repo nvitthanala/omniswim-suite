@@ -2643,9 +2643,9 @@
   var CRAWL_LOCK_HELD_MESSAGE = "Another SwimCloud crawl is running (in this tab or another). Wait for it to finish, or close it, then try again. Two crawls at once would break the pacing.";
   var CRAWL_LOCK_UNAVAILABLE_MESSAGE = "This browser cannot check whether another crawl is running, so the crawl does not start. Use a current version of Chrome.";
   async function withCrawlLock(locks, run) {
-    if (locks === void 0) return { acquired: false, message: CRAWL_LOCK_UNAVAILABLE_MESSAGE };
+    if (locks === void 0) return { acquired: false, reason: "unavailable", message: CRAWL_LOCK_UNAVAILABLE_MESSAGE };
     return locks.request(CRAWL_LOCK_NAME, { ifAvailable: true }, async (lock) => {
-      if (lock === null || lock === void 0) return { acquired: false, message: CRAWL_LOCK_HELD_MESSAGE };
+      if (lock === null || lock === void 0) return { acquired: false, reason: "held", message: CRAWL_LOCK_HELD_MESSAGE };
       return { acquired: true, value: await run() };
     });
   }
@@ -2717,6 +2717,9 @@
   };
   function swimmerWorkKey(swimmerId) {
     return `swimmer|${swimmerId}`;
+  }
+  function swimmerResumeKey(swimmerId, teamId, seasonId) {
+    return `swimmer|${swimmerId}|${teamId}|${seasonId}`;
   }
   function rosterWorkKey(teamId, seasonId, gender) {
     return `roster|${teamId}|${seasonId}|${gender}`;
@@ -2807,10 +2810,11 @@
       }
       const key = swimmerWorkKey(swimmerId);
       const existingIndex = indexByKey.get(key);
+      const pairKey = swimmerResumeKey(swimmerId, teamId, season.seasonId);
       if (existingIndex === void 0) {
         indexByKey.set(key, entries.length);
         entries.push({
-          status: queue.finishedKeys.has(key) ? "skipped-resumed" : "pending",
+          status: queue.finishedKeys.has(pairKey) ? "skipped-resumed" : "pending",
           work: { kind: "swimmer", key, teamId, seasonId: season.seasonId, seasonLabel: season.label, swimmerId, attributions: [pair] }
         });
         continue;
@@ -2819,7 +2823,8 @@
       if (existing.work.kind !== "swimmer") continue;
       const known = existing.work.attributions.some((a) => a.teamId === teamId && a.seasonId === season.seasonId);
       if (known) continue;
-      entries[existingIndex] = { ...existing, work: { ...existing.work, attributions: [...existing.work.attributions, pair] } };
+      const status = existing.status === "skipped-resumed" && !queue.finishedKeys.has(pairKey) ? "pending" : existing.status;
+      entries[existingIndex] = { ...existing, status, work: { ...existing.work, attributions: [...existing.work.attributions, pair] } };
     }
     const listed = team.swimmersListedFor.includes(gender) ? team.swimmersListedFor : [...team.swimmersListedFor, gender];
     return {
@@ -2899,7 +2904,9 @@
     return { ...queue, cancelled: true };
   }
   function finishedSwimmerKeys(queue) {
-    return queue.entries.filter((e) => e.work.kind === "swimmer" && (e.status === "done" || e.status === "skipped-resumed")).map((e) => e.work.key);
+    return queue.entries.flatMap(
+      (e) => e.work.kind === "swimmer" && (e.status === "done" || e.status === "skipped-resumed") ? e.work.attributions.map((a) => swimmerResumeKey(e.work.kind === "swimmer" ? e.work.swimmerId : "", a.teamId, a.seasonId)) : []
+    );
   }
   function counts(entries) {
     const of = (status) => entries.filter((e) => e.status === status).length;
@@ -3087,13 +3094,16 @@
     pairs.sort((a, b) => compareTeamIds(a.teamId, b.teamId) || compareTeamIds(a.seasonId, b.seasonId));
     return pairs.map((p) => `${p.teamId}:${p.seasonId}`).join(",");
   }
+  function capturePagesComplete(input) {
+    return input.teamDone && input.planned !== void 0 && input.landedThisRun + input.resumedProven >= input.planned;
+  }
   function isOkStatus(status) {
     return status >= 200 && status < 300;
   }
   function looksLikeJson(body) {
     try {
-      JSON.parse(body);
-      return true;
+      const parsed = JSON.parse(body);
+      return typeof parsed === "object" && parsed !== null;
     } catch {
       return false;
     }
@@ -3139,6 +3149,7 @@
     const teamNotes = /* @__PURE__ */ new Map();
     const usedSubjects = /* @__PURE__ */ new Map();
     const optionsLanded = /* @__PURE__ */ new Map();
+    const landedPages = /* @__PURE__ */ new Map();
     const plannedBySubject = /* @__PURE__ */ new Map();
     const notesFor = (teamId) => {
       let notes = teamNotes.get(teamId);
@@ -3228,7 +3239,7 @@
     const screenPage = (url, expected, page, contentCheck) => {
       const stop = haltDecision(page);
       const redirect = page === void 0 ? void 0 : redirectProblem(url, expected, page);
-      if (stop.stop) return { action: "halt", message: stop.message, relay: page !== void 0 && redirect === void 0 };
+      if (stop.stop) return { action: "halt", message: stop.message, relay: false };
       if (page === void 0) return { action: "fail", message: "no response", relay: false };
       if (redirect !== void 0) return { action: redirect.halt ? "halt" : "fail", message: redirect.message, relay: false };
       if (!isOkStatus(page.httpStatus)) {
@@ -3245,7 +3256,12 @@
         usedSubjects.set(captureIdForSubject(subject), subject);
         const outcome = await deps.relay({ subject, sourceUrl, httpStatus: page.httpStatus, html: page.html });
         if (outcome === "streak-stop") return "streak-stop";
-        if (outcome !== "landed") result = "not-landed";
+        if (outcome !== "landed") {
+          result = "not-landed";
+          continue;
+        }
+        const id = captureIdForSubject(subject);
+        landedPages.set(id, (landedPages.get(id) ?? /* @__PURE__ */ new Set()).add(sourceUrl));
       }
       return result;
     };
@@ -3364,7 +3380,10 @@
         queue = next.queue;
         if (next.kind === "idle") {
           const outcome = idleOutcome(next.reason);
-          if (outcome === "completed") await clearIfClean();
+          if (outcome === "completed") {
+            await correctPlannedCounts();
+            await clearIfClean();
+          }
           return outcome;
         }
         notice = void 0;
@@ -3386,6 +3405,17 @@
       return queueProgress(currentQueue()).teams.flatMap(
         (t) => t.status === "season-unavailable" ? [] : [{ teamId: t.teamId, seasonLabel: t.seasonLabel, swimmerTotal: t.swimmers.total }]
       );
+    }
+    function captureHasEveryPlannedPage(teamId, seasonLabel) {
+      const id = captureIdForSubject(teamSubject(teamId, seasonLabel));
+      const team = queueProgress(currentQueue()).teams.find((t) => t.teamId === teamId);
+      if (team === void 0) return false;
+      return capturePagesComplete({
+        planned: plannedBySubject.get(id),
+        landedThisRun: landedPages.get(id)?.size ?? 0,
+        resumedProven: team.swimmers.skippedResumed,
+        teamDone: team.status === "done"
+      });
     }
     async function openSeasonCaptures() {
       for (const team of readyTeams()) {
@@ -3501,7 +3531,9 @@
       const seasonDone = /* @__PURE__ */ new Set();
       if (queue !== void 0 && outcome === "completed") {
         for (const t of queueProgress(queue).teams) {
-          if (t.status === "done") seasonDone.add(captureIdForSubject(teamSubject(t.teamId, t.seasonLabel)));
+          if (captureHasEveryPlannedPage(t.teamId, t.seasonLabel)) {
+            seasonDone.add(captureIdForSubject(teamSubject(t.teamId, t.seasonLabel)));
+          }
         }
       }
       for (const [id, subject] of usedSubjects) {
@@ -3719,8 +3751,12 @@
   function multiTeamHostAllowed(hostname) {
     return hostname === "www.swimcloud.com";
   }
+  var crawlHostAllowed = multiTeamHostAllowed;
+  function forgetButtonVisible(state) {
+    return state.selectionKey !== "" && (!state.running || state.choosing);
+  }
   var SAVED_PROGRESS_PREFIX = "omniswimMultiTeamFinished|";
-  var SWIMMER_KEY = /^swimmer\|[1-9][0-9]{0,17}$/;
+  var SWIMMER_KEY = /^swimmer\|[1-9][0-9]{0,17}\|[1-9][0-9]{0,17}\|[0-9]+$/;
   function savedProgressStorageKey(runKey) {
     return `${SAVED_PROGRESS_PREFIX}${runKey}`;
   }
@@ -3788,6 +3824,7 @@
     let targets = { teamIds: [], conferences: [], rejected: [] };
     let finishChoice;
     let currentSelection = () => "";
+    let choosing = false;
     const root = element("div");
     root.id = PANEL_ID;
     root.setAttribute("role", "dialog");
@@ -3828,6 +3865,9 @@
     root.append(title, inputLabel, input, scope, buttons, parsed, choices, headline, teamLines, notice, errors, summary, forgetNote, runButtons);
     document.body.appendChild(root);
     input.focus();
+    const updateForgetButton = () => {
+      forgetButton.hidden = !forgetButtonVisible({ running, choosing, selectionKey: currentSelection() });
+    };
     const close = () => {
       root.remove();
       document.getElementById(BUTTON_ID)?.focus();
@@ -3894,8 +3934,9 @@
       };
       choices.replaceChildren(...rows);
       startButton.hidden = false;
-      forgetButton.hidden = false;
+      choosing = true;
       currentSelection = () => resumeKeyForChoices(reports, pick());
+      updateForgetButton();
       const first = [...selects.values()][0];
       if (first !== void 0) first.focus();
       finishChoice = (picked) => {
@@ -3904,6 +3945,8 @@
         choices.replaceChildren();
         const key = resumeKeyForChoices(reports, picked);
         currentSelection = () => key;
+        choosing = false;
+        updateForgetButton();
         resolve(picked);
       };
       startButton.onclick = () => finishChoice?.(pick());
@@ -3921,9 +3964,10 @@
     });
     const endRun = () => {
       running = false;
+      choosing = false;
       pauseButton.hidden = true;
       startButton.hidden = true;
-      forgetButton.hidden = currentSelection() === "";
+      updateForgetButton();
       cancelButton.textContent = "Close";
       cancelButton.disabled = false;
       parseButton.disabled = false;
@@ -3942,6 +3986,7 @@
       input.disabled = true;
       pauseButton.hidden = false;
       forgetNote.hidden = true;
+      updateForgetButton();
       cancelButton.textContent = "Cancel";
       summary.replaceChildren();
       io.app.reset();
@@ -5628,6 +5673,7 @@
     });
     mountTimesEndpointProbe();
     if (document.getElementById(BUTTON_ID2)) return;
+    if (!crawlHostAllowed(location.hostname)) return;
     const meetId = meetIdFromCurrentPage();
     if (meetId === void 0) return;
     const button2 = createCrawlerButton();
@@ -5655,7 +5701,7 @@
     withCrawlLock(crawlLockManager(), () => runCrawl(meetId, panel, control)).then((result) => {
       if (result.acquired) return;
       renderMessage(panel, result.message);
-      panel.retryButton.hidden = false;
+      panel.retryButton.hidden = result.reason !== "held";
     }).catch((error) => {
       renderCrawlFailure(panel, error);
     });
@@ -6152,9 +6198,21 @@
  * bests. For a past-season roster that includes swims from LATER seasons. Do not
  * read what was fetched for a past-season roster as that season's times.
  *
- * Resume keys changed shape with this rule (they were
- * `swimmer|<team>|<season>|<id>`). An old-shape key in `finishedKeys` matches
- * nothing, so that swimmer is fetched again. That is the safe error.
+ * ## Resume keys are per team and season
+ *
+ * The fetch is one per swimmer, but the filing is per team: the driver files the
+ * one reply under every team that lists the swimmer. So a resume key is
+ * `swimmer|<id>|<teamId>|<seasonId>` ({@link swimmerResumeKey}), one per team
+ * that has the swimmer's reply. {@link addSwimmers} marks a swimmer
+ * `skipped-resumed` only when EVERY team and season listing it has its key. A team
+ * that lists the swimmer only in a later run (its roster failed the first time)
+ * flips the swimmer back to `pending`: the swimmer is fetched once more, and filed
+ * under every team. A skipped swimmer's body was never fetched this run, so it
+ * cannot be filed under the missing team alone.
+ *
+ * Old-shape keys (`swimmer|<id>` alone, or the earlier `swimmer|<team>|<season>|<id>`
+ * order) match nothing in practice, so that swimmer is fetched again. That is the
+ * safe error.
  *
  * ## One shared concurrency limit
  *

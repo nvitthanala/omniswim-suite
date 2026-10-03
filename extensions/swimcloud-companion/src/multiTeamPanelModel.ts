@@ -170,8 +170,25 @@ export function multiTeamHostAllowed(hostname: string): boolean {
   return hostname === 'www.swimcloud.com';
 }
 
+/**
+ * The same rule for the meet crawl: it fetches `www` URLs too, so it is refused
+ * on the bare host for the same reason. One function, so the two cannot differ.
+ */
+export const crawlHostAllowed: (hostname: string) => boolean = multiTeamHostAllowed;
+
+/**
+ * Whether "Forget saved progress" is shown. It is hidden while a crawl runs, once
+ * the choice is made: the driver re-saves what it has finished as it goes, so a
+ * clear during the run would be undone at once and the "cleared" note would lie.
+ * It is shown while the season choice is open (nothing has been saved yet for
+ * this run) and after the run ends, when there is a selection to act on.
+ */
+export function forgetButtonVisible(state: { readonly running: boolean; readonly choosing: boolean; readonly selectionKey: string }): boolean {
+  return state.selectionKey !== '' && (!state.running || state.choosing);
+}
+
 const SAVED_PROGRESS_PREFIX = 'omniswimMultiTeamFinished|';
-const SWIMMER_KEY = /^swimmer\|[1-9][0-9]{0,17}$/;
+const SWIMMER_KEY = /^swimmer\|[1-9][0-9]{0,17}\|[1-9][0-9]{0,17}\|[0-9]+$/;
 
 /** The `chrome.storage.local` key for one selection's finished swimmers. See `resumeKeyForChoices`. */
 export function savedProgressStorageKey(runKey: string): string {
@@ -180,7 +197,7 @@ export function savedProgressStorageKey(runKey: string): string {
 
 /**
  * The swimmer keys read back from storage. Anything that is not a list of
- * `swimmer|<id>` strings is dropped: unreadable storage means "nothing
+ * `swimmer|<id>|<teamId>|<seasonId>` strings is dropped (an older `swimmer|<id>` key too): unreadable storage means "nothing
  * finished", so swimmers are fetched again. That is the safe error.
  */
 export function readSavedSwimmerKeys(value: unknown): readonly string[] {

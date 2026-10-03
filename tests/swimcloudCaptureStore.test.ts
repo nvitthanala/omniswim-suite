@@ -263,3 +263,109 @@ describe('FileSystemSwimCloudCaptureStore', () => {
     expect(index.map((entry) => entry.captureId).sort()).toStrictEqual(['meet-4', 'meet-5']);
   });
 });
+
+describe('FileSystemSwimCloudCaptureStore: a saved page is not erased by a later failure', () => {
+  const swimmerUrl = 'https://www.swimcloud.com/api/swimmers/123/profile_fastest_times/';
+  const ref = (outcome: 'ok' | 'http-error' | 'forbidden', httpStatus?: number): SwimCloudCapturePageRef => ({
+    canonicalUrl: swimmerUrl,
+    resourceKind: 'swimmerFastestTimes',
+    retrievedAt: '2026-10-03T00:00:00.000Z',
+    cacheStatus: 'final',
+    outcome,
+    ...(outcome === 'ok' ? { sha256: 'a'.repeat(64) } : { error: `HTTP ${httpStatus ?? 0}` }),
+    ...(httpStatus === undefined ? {} : { httpStatus }),
+  });
+
+  it('keeps an ok entry when a later non-ok entry arrives for the same URL', async () => {
+    const store = new FileSystemSwimCloudCaptureStore(join(root, 'merge-1'));
+    await store.upsertCapture(blankMeetCapture('meet-m1', 'm1'));
+    await store.putPage(
+      'meet-m1',
+      { canonicalUrl: swimmerUrl, html: '{"x":1}', status: 'final', retrievedAt: '2026-10-03T00:00:00.000Z', track: 'browser-extension' },
+      ref('ok', 200),
+    );
+    await store.putPage('meet-m1', undefined, ref('http-error', 500));
+    await store.putPage('meet-m1', undefined, ref('forbidden', 403));
+    const capture = await store.getCapture('meet-m1');
+    expect(capture?.pages).toHaveLength(1);
+    expect(capture?.pages[0].outcome).toBe('ok');
+    expect(capture?.pages[0].sha256).toBe('a'.repeat(64));
+    expect((await store.readPage(swimmerUrl))?.html).toBe('{"x":1}');
+  });
+
+  it('still records an error status for a URL that was never ok', async () => {
+    const store = new FileSystemSwimCloudCaptureStore(join(root, 'merge-2'));
+    await store.upsertCapture(blankMeetCapture('meet-m2', 'm2'));
+    await store.putPage('meet-m2', undefined, ref('http-error', 404));
+    const capture = await store.getCapture('meet-m2');
+    expect(capture?.pages).toHaveLength(1);
+    expect(capture?.pages[0]).toMatchObject({ outcome: 'http-error', httpStatus: 404 });
+  });
+
+  it('an error entry is replaced by a later ok entry, and a later error replaces an earlier error', async () => {
+    const store = new FileSystemSwimCloudCaptureStore(join(root, 'merge-3'));
+    await store.upsertCapture(blankMeetCapture('meet-m3', 'm3'));
+    await store.putPage('meet-m3', undefined, ref('http-error', 500));
+    await store.putPage('meet-m3', undefined, ref('forbidden', 403));
+    expect((await store.getCapture('meet-m3'))?.pages[0].outcome).toBe('forbidden');
+    await store.putPage('meet-m3', undefined, ref('ok', 200));
+    expect((await store.getCapture('meet-m3'))?.pages[0].outcome).toBe('ok');
+  });
+
+  it('upsertCapture follows the same rule', async () => {
+    const store = new FileSystemSwimCloudCaptureStore(join(root, 'merge-4'));
+    const first = { ...blankMeetCapture('meet-m4', 'm4'), pages: [ref('ok', 200)] };
+    await store.upsertCapture(first);
+    await store.upsertCapture({ ...blankMeetCapture('meet-m4', 'm4'), pages: [ref('http-error', 429)] });
+    expect((await store.getCapture('meet-m4'))?.pages[0].outcome).toBe('ok');
+  });
+});
+
+describe('FileSystemSwimCloudCaptureStore: deleting one capture keeps a page another still lists', () => {
+  const shared = 'https://www.swimcloud.com/api/swimmers/123/profile_fastest_times/';
+  const own = 'https://www.swimcloud.com/team/412/roster/?page=1&gender=M&season_id=29&sort=name';
+  const pageRef = (canonicalUrl: string): SwimCloudCapturePageRef => ({
+    canonicalUrl,
+    resourceKind: canonicalUrl.includes('/api/') ? 'swimmerFastestTimes' : 'teamRoster',
+    retrievedAt: '2026-10-03T00:00:00.000Z',
+    cacheStatus: 'final',
+    outcome: 'ok',
+  });
+  const entry = (canonicalUrl: string, html: string) => ({
+    canonicalUrl,
+    html,
+    status: 'final' as const,
+    retrievedAt: '2026-10-03T00:00:00.000Z',
+    track: 'browser-extension' as const,
+  });
+  const teamCapture = (captureId: string, teamId: string): SwimCloudCaptureRecord => ({
+    ...blankMeetCapture(captureId, '0'),
+    subject: { kind: 'team', teamId, season: '2025-2026' },
+  });
+
+  it('skips the bytes of a page another capture lists, and deletes them with the last reference', async () => {
+    const store = new FileSystemSwimCloudCaptureStore(join(root, 'share-1'));
+    await store.upsertCapture(teamCapture('team-412-2025-2026', '412'));
+    await store.upsertCapture(teamCapture('team-10002824-2025-2026', '10002824'));
+    await store.putPage('team-412-2025-2026', entry(shared, '{"x":1}'), pageRef(shared));
+    await store.putPage('team-10002824-2025-2026', entry(shared, '{"x":1}'), pageRef(shared));
+    await store.putPage('team-412-2025-2026', entry(own, '<html>roster</html>'), pageRef(own));
+
+    await store.deleteCapture('team-412-2025-2026', { withPages: true });
+    // The shared page is still listed by the other capture, so its bytes stay. The roster page was only ours.
+    expect((await store.readPage(shared))?.html).toBe('{"x":1}');
+    expect(await store.readPage(own)).toBeUndefined();
+    expect((await store.getCapture('team-10002824-2025-2026'))?.pages.map((p) => p.canonicalUrl)).toEqual([shared]);
+
+    await store.deleteCapture('team-10002824-2025-2026', { withPages: true });
+    expect(await store.readPage(shared)).toBeUndefined();
+  });
+
+  it('delete without pages leaves every page', async () => {
+    const store = new FileSystemSwimCloudCaptureStore(join(root, 'share-2'));
+    await store.upsertCapture(teamCapture('team-412-2025-2026', '412'));
+    await store.putPage('team-412-2025-2026', entry(own, '<html>roster</html>'), pageRef(own));
+    await store.deleteCapture('team-412-2025-2026', { withPages: false });
+    expect((await store.readPage(own))?.html).toBe('<html>roster</html>');
+  });
+});

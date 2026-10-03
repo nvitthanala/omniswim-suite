@@ -53,7 +53,7 @@ describe('withCrawlLock', () => {
       ran = true;
       return 'second';
     });
-    expect(second).toEqual({ acquired: false, message: CRAWL_LOCK_HELD_MESSAGE });
+    expect(second).toEqual({ acquired: false, reason: 'held', message: CRAWL_LOCK_HELD_MESSAGE });
     expect(ran).toBe(false);
     release();
     expect(await first).toEqual({ acquired: true, value: 'first' });
@@ -72,7 +72,7 @@ describe('withCrawlLock', () => {
     const result = await withCrawlLock(undefined, async () => {
       ran = true;
     });
-    expect(result).toEqual({ acquired: false, message: CRAWL_LOCK_UNAVAILABLE_MESSAGE });
+    expect(result).toEqual({ acquired: false, reason: 'unavailable', message: CRAWL_LOCK_UNAVAILABLE_MESSAGE });
     expect(ran).toBe(false);
   });
 

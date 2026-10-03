@@ -87,6 +87,7 @@ import { classifyCrawlPageOutcome } from './crawlErrorPolicy';
 import { runBoundedFetchPool } from './boundedFetchPool';
 import { MIN_DELAY_MS } from './crawlPacing';
 import { mountMultiTeamCrawlButton } from './multiTeamPanel';
+import { crawlHostAllowed } from './multiTeamPanelModel';
 import { createMultiTeamApp } from './multiTeamApp';
 import { withCrawlLock, type CrawlLockManager } from './crawlLock';
 import {
@@ -2544,6 +2545,10 @@ function main(): void {
 
   if (document.getElementById(BUTTON_ID)) return; // Already injected.
 
+  // The meet crawl fetches www URLs. On the bare host they are cross-origin, so the crawl is refused there
+  // (no button), the same rule the multi-team crawl follows.
+  if (!crawlHostAllowed(location.hostname)) return;
+
   const meetId = meetIdFromCurrentPage();
   if (meetId === undefined) return; // Not a meet-scoped page; nothing to crawl.
 
@@ -2583,7 +2588,8 @@ function startCrawl(meetId: SwimCloudMeetId, panel: PanelHandles, control: Crawl
     .then((result) => {
       if (result.acquired) return;
       renderMessage(panel, result.message);
-      panel.retryButton.hidden = false;
+      // Retry makes sense only when another crawl holds the lock. Without a lock manager it cannot work.
+      panel.retryButton.hidden = result.reason !== 'held';
     })
     .catch((error: unknown) => {
       renderCrawlFailure(panel, error);

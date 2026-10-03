@@ -256,3 +256,9 @@ export const EXPECTED_ROSTER_SIDE = [
   seasonRosterUrl('10002824', 'F', '29'),
 ];
 
+
+/** The saved-progress key of a swimmer in the two-team dry run (season 29): the 412 roster ids belong to 412, the rest to 10002824. */
+export function savedKey(id: string): string {
+  const team = [...IDS_412M, ...IDS_412F].includes(id) ? '412' : '10002824';
+  return `swimmer|${id}|${team}|29`;
+}

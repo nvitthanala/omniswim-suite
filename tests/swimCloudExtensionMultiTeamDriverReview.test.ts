@@ -27,6 +27,7 @@ import {
   IDS_412M,
   PAGES,
   idsOf,
+  savedKey,
   makeHarness,
   optionsUrl,
   run,
@@ -185,7 +186,7 @@ describe('F3: a page the app did not take is not finished', () => {
     expect(summary.teams[0].swimmersFailed).toBe(1);
     expect(summary.teams[0].errors[0]).toContain(`swimmer ${ALL_IDS[5]}`);
     expect(summary.teams[0].errors[0]).toContain('not handed to the app');
-    for (const keys of h.saves) expect(keys).not.toContain(`swimmer|${ALL_IDS[5]}`);
+    for (const keys of h.saves) expect(keys).not.toContain(savedKey(ALL_IDS[5]));
     // Not a clean run, so the saved progress stays for the retry.
     expect(h.clears).toEqual([]);
   });

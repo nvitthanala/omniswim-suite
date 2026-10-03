@@ -14,6 +14,8 @@ import {
   formatDriverState,
   formatScopeNote,
   formatSummary,
+  crawlHostAllowed,
+  forgetButtonVisible,
   multiTeamHostAllowed,
   readSavedSwimmerKeys,
   savedProgressStorageKey,
@@ -193,8 +195,41 @@ describe('saved progress storage', () => {
   });
 
   it('reads back only well-formed swimmer keys', () => {
-    expect(readSavedSwimmerKeys(['swimmer|1', 'swimmer|2527796', 'roster|412|29|M', 'swimmer|0', 5, 'swimmer|12 '])).toEqual(['swimmer|1', 'swimmer|2527796']);
+    expect(
+      readSavedSwimmerKeys(['swimmer|1|412|29', 'swimmer|2527796|10002824|91', 'roster|412|29|M', 'swimmer|0|412|29', 5, 'swimmer|12 ', 'swimmer|12|412|29 ']),
+    ).toEqual(['swimmer|1|412|29', 'swimmer|2527796|10002824|91']);
+  });
+
+  it('drops an old-format key (the swimmer id alone), so that swimmer is fetched again', () => {
+    expect(readSavedSwimmerKeys(['swimmer|1', 'swimmer|2527796'])).toEqual([]);
     expect(readSavedSwimmerKeys(undefined)).toEqual([]);
-    expect(readSavedSwimmerKeys('swimmer|1')).toEqual([]);
+    expect(readSavedSwimmerKeys('swimmer|1|412|29')).toEqual([]);
+  });
+});
+
+describe('crawlHostAllowed (the meet crawl)', () => {
+  it('is the same rule as the multi-team crawl: www only', () => {
+    for (const host of ['www.swimcloud.com', 'swimcloud.com', 'www.swimcloud.com.evil.example', 'WWW.SWIMCLOUD.COM', '']) {
+      expect(crawlHostAllowed(host), host).toBe(multiTeamHostAllowed(host));
+    }
+    expect(crawlHostAllowed('swimcloud.com')).toBe(false);
+    expect(crawlHostAllowed('www.swimcloud.com')).toBe(true);
+  });
+});
+
+describe('forgetButtonVisible', () => {
+  const key = '412:29';
+  it('is shown while the season choice is open, and after a run ends', () => {
+    expect(forgetButtonVisible({ running: true, choosing: true, selectionKey: key })).toBe(true);
+    expect(forgetButtonVisible({ running: false, choosing: false, selectionKey: key })).toBe(true);
+  });
+
+  it('is hidden while a crawl runs past the choice, because the driver re-saves its progress as it goes', () => {
+    expect(forgetButtonVisible({ running: true, choosing: false, selectionKey: key })).toBe(false);
+  });
+
+  it('is hidden when there is no selection to forget', () => {
+    expect(forgetButtonVisible({ running: false, choosing: false, selectionKey: '' })).toBe(false);
+    expect(forgetButtonVisible({ running: true, choosing: true, selectionKey: '' })).toBe(false);
   });
 });

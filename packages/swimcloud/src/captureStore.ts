@@ -368,8 +368,15 @@ export class FileSystemSwimCloudCaptureStore {
       const fs = await import('node:fs/promises');
       const existing = await this.getCapture(captureId);
       if (options.withPages && existing !== undefined) {
+        // The page cache is global and keyed by URL. One page (a swimmer's fastest times, say)
+        // can be listed by several captures. Delete the bytes only when no other capture lists it.
+        const stillListed = new Set<string>();
+        for (const other of await this.listCaptures()) {
+          if (other.captureId === captureId) continue;
+          for (const page of other.pages) stillListed.add(page.canonicalUrl);
+        }
         for (const page of existing.pages) {
-          await this.pageCache.delete(page.canonicalUrl);
+          if (!stillListed.has(page.canonicalUrl)) await this.pageCache.delete(page.canonicalUrl);
         }
       }
       try {
@@ -416,13 +423,25 @@ export class FileSystemSwimCloudCaptureStore {
   }
 }
 
-/** Existing entries keep position; a re-fetched URL replaces its predecessor; new URLs append. */
+/**
+ * Existing entries keep position; a re-fetched URL replaces its predecessor; new URLs append.
+ *
+ * One exception: an `ok` entry is never replaced by a non-`ok` one. A later
+ * failure (a 403 challenge, a 500, a rate limit) is not data and must not erase
+ * a page that was saved. The bytes stay in the page cache either way (a non-`ok`
+ * entry is written without bytes), so keeping the `ok` ref keeps a readable page.
+ * A non-`ok` entry for a URL with no earlier `ok` entry is still recorded.
+ */
 function mergePageRefs(
   existing: readonly SwimCloudCapturePageRef[],
   incoming: readonly SwimCloudCapturePageRef[],
 ): SwimCloudCapturePageRef[] {
   const byUrl = new Map(incoming.map((p) => [p.canonicalUrl, p]));
-  const merged = existing.map((p) => byUrl.get(p.canonicalUrl) ?? p);
+  const merged = existing.map((p) => {
+    const next = byUrl.get(p.canonicalUrl);
+    if (next === undefined) return p;
+    return p.outcome === 'ok' && next.outcome !== 'ok' ? p : next;
+  });
   const seen = new Set(existing.map((p) => p.canonicalUrl));
   for (const p of incoming) {
     if (!seen.has(p.canonicalUrl)) {

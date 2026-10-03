@@ -39,6 +39,7 @@ import {
   retryFailed,
   rosterWorkKey,
   shouldHalt,
+  swimmerResumeKey,
   swimmerWorkKey,
   verifyRosterSeason,
   type MultiTeamQueue,
@@ -375,9 +376,9 @@ describe('ordering', () => {
   });
 });
 
-describe('resume keyed by swimmer id', () => {
+describe('resume keyed by swimmer, team and season', () => {
   it('does not hand out a swimmer whose key an earlier run finished, and counts it as skipped', () => {
-    const finishedKeys = [swimmerWorkKey('7001'), swimmerWorkKey('7002')];
+    const finishedKeys = [swimmerResumeKey('7001', '412', '29'), swimmerResumeKey('7002', '412', '29')];
     const { queue, order } = runAll(createQueue({ teams: [teamA()], finishedKeys }), {
       [rosterWorkKey('412', '29', 'M')]: ['7001', '7002', '7003'],
     });
@@ -390,12 +391,49 @@ describe('resume keyed by swimmer id', () => {
     expect(swimmers).toMatchObject({ total: 3, done: 1, skippedResumed: 2, pending: 0 });
   });
 
-  it('matches on the swimmer id alone: the fetch has no team or season in it', () => {
-    // The same swimmer finished under another team and season is not fetched again.
+  it('does not match a key filed under another team or another season: the reply is not in the capture of this team', () => {
+    const otherSeason = runAll(createQueue({ teams: [teamA()], finishedKeys: [swimmerResumeKey('7001', '412', '28')] }), {
+      [rosterWorkKey('412', '29', 'M')]: ['7001'],
+    });
+    expect(otherSeason.order).toContain(swimmerWorkKey('7001'));
+    const otherTeam = runAll(createQueue({ teams: [teamA()], finishedKeys: [swimmerResumeKey('7001', '58', '91')] }), {
+      [rosterWorkKey('412', '29', 'M')]: ['7001'],
+    });
+    expect(otherTeam.order).toContain(swimmerWorkKey('7001'));
+  });
+
+  it('does not match an old-format key (the swimmer id alone): that swimmer is fetched', () => {
     const { order } = runAll(createQueue({ teams: [teamA()], finishedKeys: [swimmerWorkKey('7001')] }), {
       [rosterWorkKey('412', '29', 'M')]: ['7001'],
     });
-    expect(order).not.toContain(swimmerWorkKey('7001'));
+    expect(order).toContain(swimmerWorkKey('7001'));
+  });
+
+  it('skips a shared swimmer only when every team that lists it has its key', () => {
+    const both = [swimmerResumeKey('7001', '412', '29'), swimmerResumeKey('7001', '58', '91')];
+    const rosters = { [rosterWorkKey('412', '29', 'M')]: ['7001'], [rosterWorkKey('58', '91', 'M')]: ['7001'] };
+    const done = runAll(createQueue({ teams: [teamA(), teamB()], finishedKeys: both }), rosters);
+    expect(done.order.filter((k) => k.startsWith('swimmer|'))).toStrictEqual([]);
+  });
+
+  it('a team that lists the swimmer only now flips a skipped swimmer back to pending, once, under every team', () => {
+    // Run 1 filed the swimmer under 412 only (team 58's roster failed). Run 2 lists it for both.
+    const onlyA = [swimmerResumeKey('7001', '412', '29')];
+    const rosters = { [rosterWorkKey('412', '29', 'M')]: ['7001'], [rosterWorkKey('58', '91', 'M')]: ['7001'] };
+    const flipped = runAll(createQueue({ teams: [teamA(), teamB()], finishedKeys: onlyA }), rosters);
+    expect(flipped.order.filter((k) => k.startsWith('swimmer|'))).toStrictEqual([swimmerWorkKey('7001')]);
+    const swimmer = flipped.queue.entries.find((e) => e.work.kind === 'swimmer');
+    expect(swimmer?.work.kind === 'swimmer' && swimmer.work.attributions.map((a) => a.teamId)).toStrictEqual(['412', '58']);
+    // Listed in the other order: the team without a key arrives first, then the one with it.
+    const onlyB = [swimmerResumeKey('7001', '58', '91')];
+    const reversed = runAll(createQueue({ teams: [teamA(), teamB()], finishedKeys: onlyB }), rosters);
+    expect(reversed.order.filter((k) => k.startsWith('swimmer|'))).toStrictEqual([swimmerWorkKey('7001')]);
+  });
+
+  it('carries one key per team that lists a finished swimmer', () => {
+    const rosters = { [rosterWorkKey('412', '29', 'M')]: ['7001'], [rosterWorkKey('58', '91', 'M')]: ['7001'] };
+    const { queue } = runAll(createQueue({ teams: [teamA(), teamB()] }), rosters);
+    expect(finishedSwimmerKeys(queue)).toStrictEqual([swimmerResumeKey('7001', '412', '29'), swimmerResumeKey('7001', '58', '91')]);
   });
 
   it('does not match a key of the old (teamId, seasonId, swimmerId) shape: that swimmer is fetched', () => {
@@ -420,7 +458,7 @@ describe('resume keyed by swimmer id', () => {
     const s2 = lease(queue);
     queue = markFailed(s2.queue, s2.work.key, 'HTTP 404');
     const carried = finishedSwimmerKeys(queue);
-    expect(carried).toStrictEqual([swimmerWorkKey('8001')]);
+    expect(carried).toStrictEqual([swimmerResumeKey('8001', '412', '29')]);
 
     // Run 2: a restarted crawl.
     const second = runAll(createQueue({ teams: [teamA()], finishedKeys: carried }), rosterSwimmers);
@@ -433,7 +471,7 @@ describe('resume keyed by swimmer id', () => {
   });
 
   it('always fetches rosters again, even when everything under them is finished', () => {
-    const finishedKeys = [swimmerWorkKey('9001')];
+    const finishedKeys = [swimmerResumeKey('9001', '412', '29')];
     const { order } = runAll(createQueue({ teams: [teamA()], finishedKeys }), { [rosterWorkKey('412', '29', 'M')]: ['9001'] });
     expect(order).toStrictEqual([rosterWorkKey('412', '29', 'M'), rosterWorkKey('412', '29', 'F')]);
   });
@@ -663,18 +701,18 @@ describe('a swimmer is fetched once, whatever team and season asked for it', () 
     expect(queueProgress(queue).teams[0].swimmers.total).toBe(1);
   });
 
-  it('a team crawled again for another season does not re-fetch its returning swimmers', () => {
+  it('a team crawled again for another season fetches its returning swimmers again: the reply is filed per season', () => {
     // Run 1: team 412, 2025-2026.
     const first = runAll(createQueue({ teams: [teamA('2025-2026')] }), { [M412]: ['7001', '7002'] });
     const carried = finishedSwimmerKeys(first.queue);
-    expect(carried).toStrictEqual([swimmerWorkKey('7001'), swimmerWorkKey('7002')]);
+    expect(carried).toStrictEqual([swimmerResumeKey('7001', '412', '29'), swimmerResumeKey('7002', '412', '29')]);
     // Run 2: the same team, 2024-2025 (id 28). 7001 returns, 7005 is new.
     const second = runAll(createQueue({ teams: [teamA('2024-2025')], finishedKeys: carried }), {
       [rosterWorkKey('412', '28', 'M')]: ['7001', '7005'],
     });
     const fetched = second.order.filter((k) => k.startsWith('swimmer|'));
-    expect(fetched).toStrictEqual([swimmerWorkKey('7005')]);
-    expect(queueProgress(second.queue).teams[0].swimmers).toMatchObject({ total: 2, done: 1, skippedResumed: 1 });
+    expect(fetched).toStrictEqual([swimmerWorkKey('7001'), swimmerWorkKey('7005')]);
+    expect(queueProgress(second.queue).teams[0].swimmers).toMatchObject({ total: 2, done: 2, skippedResumed: 0 });
   });
 });
 

@@ -37,9 +37,21 @@
  * bests. For a past-season roster that includes swims from LATER seasons. Do not
  * read what was fetched for a past-season roster as that season's times.
  *
- * Resume keys changed shape with this rule (they were
- * `swimmer|<team>|<season>|<id>`). An old-shape key in `finishedKeys` matches
- * nothing, so that swimmer is fetched again. That is the safe error.
+ * ## Resume keys are per team and season
+ *
+ * The fetch is one per swimmer, but the filing is per team: the driver files the
+ * one reply under every team that lists the swimmer. So a resume key is
+ * `swimmer|<id>|<teamId>|<seasonId>` ({@link swimmerResumeKey}), one per team
+ * that has the swimmer's reply. {@link addSwimmers} marks a swimmer
+ * `skipped-resumed` only when EVERY team and season listing it has its key. A team
+ * that lists the swimmer only in a later run (its roster failed the first time)
+ * flips the swimmer back to `pending`: the swimmer is fetched once more, and filed
+ * under every team. A skipped swimmer's body was never fetched this run, so it
+ * cannot be filed under the missing team alone.
+ *
+ * Old-shape keys (`swimmer|<id>` alone, or the earlier `swimmer|<team>|<season>|<id>`
+ * order) match nothing in practice, so that swimmer is fetched again. That is the
+ * safe error.
  *
  * ## One shared concurrency limit
  *
@@ -258,6 +270,23 @@ export function swimmerWorkKey(swimmerId: SwimCloudSwimmerId): string {
   return `swimmer|${swimmerId}`;
 }
 
+/**
+ * The resume key for one swimmer under one team and season: the proof that the
+ * swimmer's fetched reply was filed under THAT team's capture.
+ *
+ * The fetch is one per swimmer, but the filing is per team. A swimmer finished
+ * for team A is not finished for team B, which may list the swimmer only in a
+ * later run (a roster that failed the first time). So a resume key carries the
+ * team and season, and {@link addSwimmers} skips a swimmer only when EVERY team
+ * that lists it has its key. Old-format keys (`swimmer|<id>` alone, or the
+ * earlier `swimmer|<team>|<season>|<id>` order) are never produced by this
+ * function for a real swimmer, so they match nothing and the swimmer is fetched
+ * again: the safe direction.
+ */
+export function swimmerResumeKey(swimmerId: SwimCloudSwimmerId, teamId: SwimCloudTeamId, seasonId: string): string {
+  return `swimmer|${swimmerId}|${teamId}|${seasonId}`;
+}
+
 /** Key for one roster page. */
 export function rosterWorkKey(teamId: SwimCloudTeamId, seasonId: string, gender: SwimCloudCrawlGender): string {
   return `roster|${teamId}|${seasonId}|${gender}`;
@@ -376,10 +405,11 @@ export function addSwimmers(
     }
     const key = swimmerWorkKey(swimmerId);
     const existingIndex = indexByKey.get(key);
+    const pairKey = swimmerResumeKey(swimmerId, teamId, season.seasonId);
     if (existingIndex === undefined) {
       indexByKey.set(key, entries.length);
       entries.push({
-        status: queue.finishedKeys.has(key) ? 'skipped-resumed' : 'pending',
+        status: queue.finishedKeys.has(pairKey) ? 'skipped-resumed' : 'pending',
         work: { kind: 'swimmer', key, teamId, seasonId: season.seasonId, seasonLabel: season.label, swimmerId, attributions: [pair] },
       });
       continue;
@@ -389,7 +419,11 @@ export function addSwimmers(
     if (existing.work.kind !== 'swimmer') continue;
     const known = existing.work.attributions.some((a) => a.teamId === teamId && a.seasonId === season.seasonId);
     if (known) continue;
-    entries[existingIndex] = { ...existing, work: { ...existing.work, attributions: [...existing.work.attributions, pair] } };
+    // A swimmer skipped because every earlier team had its key is NOT finished for this team:
+    // its reply is in no capture of this team. It goes back to pending. The body of a skipped
+    // swimmer was never fetched this run, so the fix is one refetch, filed under every team.
+    const status = existing.status === 'skipped-resumed' && !queue.finishedKeys.has(pairKey) ? 'pending' : existing.status;
+    entries[existingIndex] = { ...existing, status, work: { ...existing.work, attributions: [...existing.work.attributions, pair] } };
   }
   const listed = team.swimmersListedFor.includes(gender) ? team.swimmersListedFor : [...team.swimmersListedFor, gender];
   return {
@@ -523,11 +557,17 @@ export function cancelQueue(queue: MultiTeamQueue): MultiTeamQueue {
   return { ...queue, cancelled: true };
 }
 
-/** Keys of finished swimmer work (`done` or `skipped-resumed`), to carry into the next run's `finishedKeys`. */
+/**
+ * Resume keys of finished swimmer work (`done` or `skipped-resumed`), one per
+ * team and season that lists the swimmer, to carry into the next run's
+ * `finishedKeys`. See {@link swimmerResumeKey}.
+ */
 export function finishedSwimmerKeys(queue: MultiTeamQueue): readonly string[] {
-  return queue.entries
-    .filter((e) => e.work.kind === 'swimmer' && (e.status === 'done' || e.status === 'skipped-resumed'))
-    .map((e) => e.work.key);
+  return queue.entries.flatMap((e) =>
+    e.work.kind === 'swimmer' && (e.status === 'done' || e.status === 'skipped-resumed')
+      ? e.work.attributions.map((a) => swimmerResumeKey(e.work.kind === 'swimmer' ? e.work.swimmerId : '', a.teamId, a.seasonId))
+      : [],
+  );
 }
 
 /* -------------------------------------------------------------------------- */

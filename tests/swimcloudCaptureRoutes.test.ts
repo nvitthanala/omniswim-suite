@@ -1888,3 +1888,52 @@ describe('capture parse route — swimmer times JSON (2026-09-22)', () => {
     }
   });
 });
+
+describe('shared swimmer page across two team captures (2026-10-03 review)', () => {
+  const SW_URL = 'https://www.swimcloud.com/api/swimmers/1330318/profile_fastest_times/';
+  const A = { kind: 'team', teamId: '412', season: '2025-2026' } as const;
+  const B = { kind: 'team', teamId: '10002824', season: '2025-2026' } as const;
+
+  async function openBoth(harness: Harness): Promise<void> {
+    for (const subject of [A, B]) {
+      const res = await call(harness, 'POST', BASE, { body: { subject, plannedPageCount: 1 } });
+      expect(res.status).toBe(201);
+    }
+    for (const [id, subject] of [['team-412-2025-2026', A], ['team-10002824-2025-2026', B]] as const) {
+      const res = await call(harness, 'POST', `${BASE}/${id}/pages`, {
+        body: pagePayload({ subject, sourceUrl: SW_URL, html: fixture('profile_fastest_times-1330318.json') }),
+      });
+      expect(res.status).toBe(200);
+    }
+  }
+
+  it('deleting one capture with its pages leaves the other capture parseable, with no missing-content warning', async () => {
+    const harness = await startHarness();
+    try {
+      await openBoth(harness);
+      expect((await call(harness, 'DELETE', `${BASE}/team-412-2025-2026`)).status).toBe(200);
+      const parsed = await parseCapture(harness, 'team-10002824-2025-2026');
+      expect(parsed.status).toBe(200);
+      expect(parsed.body.warnings.some((w) => w.includes('No stored content'))).toBe(false);
+      expect(parsed.body.swimmerTimes).toHaveLength(1);
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('a later 500 for the shared URL does not replace the saved page', async () => {
+    const harness = await startHarness();
+    try {
+      await openBoth(harness);
+      const res = await call(harness, 'POST', `${BASE}/team-10002824-2025-2026/pages`, {
+        body: pagePayload({ subject: B, sourceUrl: SW_URL, html: 'server error', httpStatus: 500 }),
+      });
+      expect(res.status).toBe(200);
+      const parsed = await parseCapture(harness, 'team-10002824-2025-2026');
+      expect(parsed.body.warnings.some((w) => w.includes('No stored content'))).toBe(false);
+      expect(parsed.body.swimmerTimes).toHaveLength(1);
+    } finally {
+      await harness.close();
+    }
+  });
+});

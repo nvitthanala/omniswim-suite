@@ -24,7 +24,8 @@ export interface CrawlLockManager {
 
 export type CrawlLockResult<T> =
   | { readonly acquired: true; readonly value: T }
-  | { readonly acquired: false; readonly message: string };
+  /** `held`: another crawl runs, so trying again later can work. `unavailable`: this browser has no lock manager, so it cannot. */
+  | { readonly acquired: false; readonly reason: 'held' | 'unavailable'; readonly message: string };
 
 export const CRAWL_LOCK_HELD_MESSAGE =
   'Another SwimCloud crawl is running (in this tab or another). Wait for it to finish, or close it, then try again. Two crawls at once would break the pacing.';
@@ -37,9 +38,9 @@ export const CRAWL_LOCK_UNAVAILABLE_MESSAGE =
  * when another crawl holds it. The lock is released when `run` settles, even if it throws.
  */
 export async function withCrawlLock<T>(locks: CrawlLockManager | undefined, run: () => Promise<T>): Promise<CrawlLockResult<T>> {
-  if (locks === undefined) return { acquired: false, message: CRAWL_LOCK_UNAVAILABLE_MESSAGE };
+  if (locks === undefined) return { acquired: false, reason: 'unavailable', message: CRAWL_LOCK_UNAVAILABLE_MESSAGE };
   return locks.request(CRAWL_LOCK_NAME, { ifAvailable: true }, async (lock) => {
-    if (lock === null || lock === undefined) return { acquired: false as const, message: CRAWL_LOCK_HELD_MESSAGE };
+    if (lock === null || lock === undefined) return { acquired: false as const, reason: 'held' as const, message: CRAWL_LOCK_HELD_MESSAGE };
     return { acquired: true as const, value: await run() };
   });
 }

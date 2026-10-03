@@ -81,8 +81,16 @@ any other host the button does not appear. Open the site through
 multi-team crawl share one lock (`navigator.locks`, name
 `omniswim-swimcloud-crawl`), held for the whole run and shared by every tab. A
 second crawl is refused with a message ("Another SwimCloud crawl is running").
-The two crawls also share one "last request started" clock, so a run that starts
-right after another still waits out the 3 s gap.
+The lock is taken when you press **Read season lists** (or start the meet
+crawl), and held until the run ends, including while the panel waits for your
+season choice.
+
+The two crawls in one tab also share one "last request started" clock, so a run
+that starts right after another still waits out the 3 s gap. That clock lives in
+one tab. It does not cover several tabs: the lock is what does.
+
+The meet crawl button is also hidden on the bare host `swimcloud.com`, for the
+same reason as the multi-team button.
 
 How to use it:
 
@@ -97,8 +105,12 @@ How to use it:
 4. Click **Read season lists**. For each team the panel opens the capture
    `team-{id}` in the app, fetches `/team/{id}/roster/?gender=M` (no season) and
    reads that team's own season menu. Season ids are never shared between teams
-   and never computed. If the app does not answer (not running, no pairing
-   token) the crawl stops before it fetches anything, and says so.
+   and never computed. Before each team's season page, the panel asks the app
+   to open that team's capture. If the app does not answer (not running, no
+   pairing token) for the FIRST team, the crawl stops before it fetches
+   anything. If it fails for a later team, the earlier teams' season pages were
+   already fetched, and the crawl stops there. The same happens before the
+   rosters if a season capture will not open. In every case it says so.
 5. Pick a season per team (or "Skip this team"). The menu starts on the season
    the page shows as current. Click **Start crawl**.
 6. Use **Pause** and **Resume** (work in flight finishes first, and no request
@@ -142,11 +154,45 @@ a failure of that item and is not saved or read.
 Saved progress: finished swimmers are saved in `chrome.storage.local`, under a
 key built from the sorted (team, season id) pairs of the run. A different team
 set or season never inherits another run's skips: crawling team 412 for
-2026-2027 after 2025-2026 fetches every swimmer again. The saved progress is
-deleted when a run completes with no failure; after a cancel, a stop or a run
-with failures it stays, so the next run fetches only what is missing. Roster
-pages are always fetched again. To clear it by hand, press **Forget saved
+2026-2027 after 2025-2026 fetches every swimmer again. Each key names the
+swimmer, the team and the season (`swimmer|<id>|<team>|<season id>`): it proves
+the reply was filed under THAT team's capture. A swimmer is skipped only when
+every team that lists it has its key. A swimmer that a team lists only now (its
+roster failed last time) is fetched again, once, and filed under every team that
+lists it: a skipped swimmer's reply was not kept, so it cannot be filed under the
+missing team alone. Keys from older versions (the swimmer id alone) match
+nothing, so those swimmers are fetched again.
+
+The saved progress is deleted when a run completes with no failure. After a
+cancel, a stop or a run with failures it stays, so the next run skips the
+swimmers that are already filed under every team that lists them and fetches the
+rest. Roster pages are always fetched again.
+
+A capture is marked complete only when its planned pages are all in the app (the
+pages this run landed plus the swimmers a saved run proved were filed under that
+team). Otherwise it is marked partial. To clear it by hand, press **Forget saved
 progress** in the panel (it acts on the current selection, or on the last run's).
+
+Pages that fell back to Downloads, and a tab closed mid-run. When the app refuses a
+page, the extension's service worker keeps it in `chrome.storage.local` under
+`omniswimFallbackIndex:{captureId}` (the list) and
+`omniswimFallbackPage:{captureId}:{n}` (one entry per page). At the end of every
+run (completed, cancelled or stopped) the crawl flushes each capture it used into
+one file, `omniswim-swimcloud-captures/{captureId}/combined-capture.json` in your
+Downloads, and clears those keys. If you close the tab mid-run, nothing flushes:
+the fallback pages stay in extension storage and the captures stay `in-progress`
+(the end-of-run mark never ran). The next run that uses the same capture flushes
+what is left, because it flushes every capture it uses. There is no panel button
+for this yet. To inspect or clear by hand: open `chrome://extensions`, find this
+extension, click "service worker" to open its DevTools, and in the console run
+`chrome.storage.local.get(null)` to list the keys, or
+`chrome.storage.local.remove(['omniswimFallbackIndex:team-412-2025-2026'])` (and
+the matching page keys) to clear one capture's leftovers.
+
+The app keeps a saved page: a later failure for the same URL (403, 500, 429) does
+not replace an `ok` page, and the crawl does not relay halting outcomes at all.
+Deleting one capture with its pages keeps the bytes of any page another capture
+still lists (one swimmer's reply is filed under every team that lists them).
 
 What it does not do:
 
@@ -163,8 +209,10 @@ Manual live checklist (nobody has run this against the live site):
 
 1. Open any `https://www.swimcloud.com/` page, click the button, paste two team
    links, Parse. Expect both ids listed and a conference link refused with the
-   note. Open a second tab and try Start there while the first runs: expect the
-   "Another SwimCloud crawl is running" message.
+   note. In this tab press **Read season lists** and leave the panel at the
+   season choice. In a second tab open the panel, Parse, and press **Read season
+   lists**: expect the "Another SwimCloud crawl is running" message (the lock is
+   taken at Read season lists, not at Start).
 2. Read season lists. Expect one 3 s-spaced request per team and a dropdown per
    team that matches that team's own season menu on the site.
 3. Pick a season that is not the current one for one team. Start. Open DevTools

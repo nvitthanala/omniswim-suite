@@ -39,6 +39,7 @@ import {
   IDS_10002824M,
   IDS_10002824F,
   ALL_IDS,
+  savedKey,
   swimmerUrl,
   seasonRosterUrl,
   optionsUrl,
@@ -110,7 +111,7 @@ describe('multi-team driver: full dry run on archived pages', () => {
     const h = makeHarness();
     const summary = await run(h);
     expect(h.saves.length).toBe(89);
-    expect(h.saves[h.saves.length - 1]).toEqual(ALL_IDS.map((id) => `swimmer|${id}`));
+    expect(h.saves[h.saves.length - 1]).toEqual(ALL_IDS.map(savedKey));
     const [a, b] = summary.teams;
     expect(a).toMatchObject({ teamId: '412', status: 'done', seasonLabel: '2025-2026', seasonId: '29', rostersDone: 2, swimmersDone: 62 });
     expect(b).toMatchObject({ teamId: '10002824', status: 'done', rostersDone: 2, swimmersDone: 27, emptyRosterGenders: ['M'] });
@@ -174,7 +175,7 @@ describe('multi-team driver: Cloudflare 403', () => {
 
 describe('multi-team driver: resume', () => {
   it('skips swimmers a saved run finished and keeps their keys when saving', async () => {
-    const finished = [...ALL_IDS.slice(0, 3).map((id) => `swimmer|${id}`), 'swimmer|999999999'];
+    const finished = [...ALL_IDS.slice(0, 3).map(savedKey), 'swimmer|999999999|412|29'];
     const h = makeHarness({ finished });
     const summary = await run(h);
     const requested = urls(h);
@@ -184,12 +185,12 @@ describe('multi-team driver: resume', () => {
     expect(summary.teams[0].swimmersSkippedResumed).toBe(3);
     // The union is saved: this run's keys plus the one key no chosen roster listed.
     const last = h.saves[h.saves.length - 1];
-    expect(last).toContain('swimmer|999999999');
-    expect(last).toEqual(expect.arrayContaining(ALL_IDS.map((id) => `swimmer|${id}`)));
+    expect(last).toContain('swimmer|999999999|412|29');
+    expect(last).toEqual(expect.arrayContaining(ALL_IDS.map(savedKey)));
   });
 
   it('always fetches roster pages again', async () => {
-    const finished = ALL_IDS.map((id) => `swimmer|${id}`);
+    const finished = ALL_IDS.map(savedKey);
     const h = makeHarness({ finished });
     await run(h);
     expect(urls(h)).toEqual(EXPECTED_ROSTER_SIDE);
@@ -377,7 +378,7 @@ describe('multi-team driver: other outcomes', () => {
     expect(summary.teams[0].swimmersFailed).toBe(1);
     expect(summary.teams[0].errors[0]).toContain(`swimmer ${ALL_IDS[0]}`);
     // A failed swimmer is not remembered as finished.
-    expect(h.saves[h.saves.length - 1]).not.toContain(`swimmer|${ALL_IDS[0]}`);
+    expect(h.saves[h.saves.length - 1]).not.toContain(savedKey(ALL_IDS[0]));
   });
 
   it('a 404 roster page is a failure, not an empty roster', async () => {
