@@ -36,7 +36,7 @@ Save under `data/swimcloud-captures/`; record in the capture state file. The age
 
 ## Phase B3: multi-team orchestration (extension)
 - Options page: textarea of team URLs, per-team season chips from B1, scope, Start. Queue teams; the shared pool runs rosters and swimmer histories across teams.
-- Resume-dedup per `(team, season, swimmer)`; per-team progress and error lines; Cancel and Pause as today. Pure logic in `src/` with unit tests (no chrome mocks); the impure loop stays on the manual checklist.
+- Resume-dedup per swimmer id (the times fetch has no team or season in it; see the 2026-10-03 review update); per-team progress and error lines; Cancel and Pause as today. Pure logic in `src/` with unit tests (no chrome mocks); the impure loop stays on the manual checklist.
 
 ## Phase B4: import and theoretical meet (app)
 - Import the capture set as one workspace roster per team and season, keeping history per swimmer.
@@ -66,3 +66,30 @@ Save under `data/swimcloud-captures/`; record in the capture state file. The age
   (`data/backups/omniswim.db.pre-a6-cleanup.20261003.bak`). 18 duplicate startup backups removed.
   Cause: each server start writes one, and e2e ran on the real data folder. `playwright.config.ts`
   now uses a temp copy.
+
+## Update 2026-10-03 (night): architect review fixes to B1
+
+An architect review of the offline B1 code found seven defects. All are fixed and each has a test
+that failed before the fix and a mutation that makes it fail again.
+
+- **One fetch per swimmer.** The queue key is `swimmer|<id>`, not `(team, season, swimmer)`. The
+  endpoint is `/api/swimmers/{id}/profile_fastest_times/`, so one swimmer on two teams or in two
+  seasons is one request, and a team crawled again for another season does not refetch its
+  returning swimmers. Every (team, season) pair stays on the work item as `attributions`, so
+  progress and error lines are still per team. Old-shape resume keys match nothing and are refetched.
+  **Data caveat:** the endpoint returns all-time bests. For a past-season roster they include swims
+  from later seasons. Downstream code must not read them as that season's times. This also answers
+  open fact 3 for now: nothing here filters by season.
+- **Concurrency.** `createQueue` throws `concurrency-too-high` above `SWIMMER_TIMES_CONCURRENCY`.
+  A roster page runs alone: it never starts while other work is in flight, and nothing starts while
+  a roster is in flight.
+- **Halt and resume.** `resumeQueue` works whether or not the driver called `retryFailed` first.
+  Every halting failure is kept, not only the first, and Resume returns each still-failed one to pending.
+- **Season-form parser.** `value` no longer matches `data-value`; `name` no longer matches
+  `data-name`; HTML comments are ignored.
+- **Targets.** A conference is the lower-cased slug plus the country. `NSISC` and `nsisc` are one
+  target. The same slug in another country is another target. The slug is stored lower-case.
+- **Driver rules, recorded in the `multiTeamQueue.ts` header, with helpers** (the driver is not
+  written): store the queue `nextWork` returns before any `await`; call `verifyRosterSeason(html, work)`
+  before `addSwimmers` and `markFailed` on a mismatch; halt on a 403, any 5xx, a network error and
+  `CONSECUTIVE_429_HALT` (3) consecutive 429 give-ups (`shouldHalt`).

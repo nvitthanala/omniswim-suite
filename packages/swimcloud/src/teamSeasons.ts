@@ -27,7 +27,7 @@
  * Pure: no network, no DOM, no clock.
  */
 
-import { collapseWhitespace, decodeHtmlEntities, stripHtmlTags } from './html';
+import { collapseWhitespace, decodeHtmlEntities, stripHtmlTags, stripNonContent } from './html';
 
 declare const teamSeasonOptionBrand: unique symbol;
 
@@ -83,9 +83,14 @@ export class TeamSeasonParseError extends Error {
   }
 }
 
-const SEASON_SELECT = /<select\b[^>]*\bname\s*=\s*["']season_id["'][^>]*>([\s\S]*?)<\/select>/gi;
+// `\s` before `name`: `data-name="season_id"` must not match. Comments are
+// removed before this runs (see parseTeamSeasonOptions).
+const SEASON_SELECT = /<select\b[^>]*\sname\s*=\s*["']season_id["'][^>]*>([\s\S]*?)<\/select>/gi;
 const OPTION = /<option\b([^>]*)>([\s\S]*?)<\/option>/gi;
-const VALUE_ATTRIBUTE = /\bvalue\s*=\s*(?:"([^"]*)"|'([^']*)')/i;
+// One attribute: its name, and its quoted value when it has one. Walking the
+// attributes in order consumes each quoted value whole, so `value=` written
+// inside another attribute's text (`title=" value='5' "`) is never an attribute.
+const ATTRIBUTE = /(?:^|\s)([^\s=/>"']+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|[^\s"'>]+))?/g;
 const QUOTED_VALUE = /"[^"]*"|'[^']*'/g;
 const SELECTED_ATTRIBUTE =/(?:^|\s)selected(?:\s|=|$)/i;
 const SEASON_LABEL = /^(\d{4})-(\d{4})$/;
@@ -97,15 +102,25 @@ interface RawOption {
   readonly selected: boolean;
 }
 
+/** The quoted `value` attribute, matched by exact name (`data-value` is a different attribute). */
+function readValueAttribute(attributes: string): string | undefined {
+  for (const match of attributes.matchAll(ATTRIBUTE)) {
+    if (match[1].toLowerCase() !== 'value') continue;
+    const quoted = match[2] ?? match[3];
+    if (quoted !== undefined) return quoted;
+  }
+  return undefined;
+}
+
 function readOption(attributes: string, inner: string): RawOption {
-  const valueMatch = VALUE_ATTRIBUTE.exec(attributes);
-  if (valueMatch === null) {
+  const rawValue = readValueAttribute(attributes);
+  if (rawValue === undefined) {
     throw new TeamSeasonParseError(
       'option-value-missing',
       `an <option> has no value attribute: ${JSON.stringify(attributes.trim())}.`,
     );
   }
-  const value = decodeHtmlEntities(valueMatch[1] ?? valueMatch[2] ?? '');
+  const value = decodeHtmlEntities(rawValue);
   const text = collapseWhitespace(decodeHtmlEntities(stripHtmlTags(inner)));
   // Quoted attribute values are blanked first so text inside one
   // (`data-x="a selected b"`) is never read as the boolean attribute.
@@ -147,12 +162,13 @@ function toSeasonOption(raw: RawOption): TeamSeasonOption {
 /**
  * The seasons a team page offers, in the order the page lists them.
  *
- * Reads `<select name="season_id">`. Skips the option whose value is empty
+ * Reads `<select name="season_id">`, ignoring HTML comments and `data-name` look-alikes. Skips the option whose value is empty
  * (`----- All Seasons -----`). Throws {@link TeamSeasonParseError} on anything
  * it cannot read exactly; see that type's codes.
  */
 export function parseTeamSeasonOptions(html: string): readonly TeamSeasonOption[] {
-  const selects = [...html.matchAll(SEASON_SELECT)];
+  // A commented-out <option> or <select> is not on the page.
+  const selects = [...stripNonContent(html).matchAll(SEASON_SELECT)];
   if (selects.length === 0) {
     throw new TeamSeasonParseError('season-select-missing', 'the page has no <select name="season_id">.');
   }

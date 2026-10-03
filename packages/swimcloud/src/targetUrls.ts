@@ -32,7 +32,7 @@ export interface SwimCloudTeamTarget {
 /** A conference whose member teams are to be found. Built from `/country/{country}/college/conference/{slug}/`. */
 export interface SwimCloudConferenceTarget {
   readonly kind: 'conference';
-  /** The slug exactly as the link wrote it, for example `nsisc`. */
+  /** The slug, lower-cased, for example `nsisc` for a link that wrote `NSISC`. */
   readonly slug: SwimCloudConferenceSlug;
   /** The country segment of the link, lowercased, for example `usa`. */
   readonly country: string;
@@ -61,7 +61,7 @@ export interface CrawlTargetRejection {
 }
 
 export interface CrawlTargetParse {
-  /** Teams and conferences in first-seen order, one per team id and one per slug. */
+  /** Teams and conferences in first-seen order, one per team id and one per country and slug. */
   readonly targets: readonly CrawlTarget[];
   readonly rejected: readonly CrawlTargetRejection[];
 }
@@ -100,7 +100,8 @@ function parseConferenceLink(token: string): SingleParse {
   // `/conference/{slug}/` names no country, and a country is part of the identity
   // this target records. It is not defaulted to `usa`.
   if (resource.urlForm !== 'country-scoped' || resource.level !== 'college') return { reason: 'unsupported' };
-  return { target: { kind: 'conference', slug: resource.slug, country: resource.country } };
+  // Case is not identity: `NSISC` and `nsisc` name one conference. The country is.
+  return { target: { kind: 'conference', slug: resource.slug.toLowerCase(), country: resource.country.toLowerCase() } };
 }
 
 function parseOneToken(token: string): SingleParse {
@@ -137,8 +138,8 @@ function parseOneToken(token: string): SingleParse {
  * - `/country/{country}/college/conference/{slug}/` becomes
  *   `{ kind: 'conference', slug, country }`.
  * - Everything else is in `rejected` with a reason. Nothing is guessed.
- * - A team id seen twice, or a conference slug seen twice, is kept once, at its
- *   first position.
+ * - A team id seen twice, or a conference (lower-cased slug plus country) seen
+ *   twice, is kept once, at its first position. The slug is lower-cased in the output.
  */
 export function parseCrawlTargetInput(text: string): CrawlTargetParse {
   const targets: CrawlTarget[] = [];
@@ -155,7 +156,8 @@ export function parseCrawlTargetInput(text: string): CrawlTargetParse {
     }
     const target = parsed.target;
     const seen = target.kind === 'team' ? seenTeams : seenConferences;
-    const key = target.kind === 'team' ? target.teamId : target.slug;
+    // A conference is the lower-cased slug in one country. The same slug in another country is another target.
+    const key = target.kind === 'team' ? target.teamId : `${target.country}/${target.slug}`;
     if (seen.has(key)) continue;
     seen.add(key);
     targets.push(target);

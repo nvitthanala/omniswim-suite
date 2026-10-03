@@ -290,3 +290,51 @@ describe('hasTeamSeasonOptionShape', () => {
     expect(hasTeamSeasonOptionShape({ ...real, label: '2025-2027', endYear: 2027 })).toBe(false);
   });
 });
+
+describe('attribute names are anchored and comments are not content', () => {
+  const FIRST = '<option value="30">2026-2027</option>';
+  const SELECT_OPEN = '<select name="season_id" class=" form-control" id="id_season_id">';
+
+  it('reads `value`, not `data-value`, even when data-value comes first', () => {
+    expect(TEAM_412_F).toContain(FIRST);
+    const tricked = TEAM_412_F.replace(FIRST, '<option data-value="31" value="30">2026-2027</option>');
+    expect(table(parseTeamSeasonOptions(tricked))).toStrictEqual(REAL_TABLE);
+  });
+
+  it('does not read `value` from inside another attribute\'s quoted text', () => {
+    const tricked = TEAM_412_F.replace(FIRST, '<option title=" value=\'31\' " value="30">2026-2027</option>');
+    expect(table(parseTeamSeasonOptions(tricked))).toStrictEqual(REAL_TABLE);
+  });
+
+  it('an option that has only `data-value` has no value attribute', () => {
+    const bad = TEAM_412_F.replace(FIRST, '<option data-value="30">2026-2027</option>');
+    expect(codeOf(() => parseTeamSeasonOptions(bad))).toBe('option-value-missing');
+  });
+
+  it('ignores an <option> inside an HTML comment in the select', () => {
+    expect(TEAM_412_F).toContain(FIRST);
+    const commented = TEAM_412_F.replace(FIRST, `<!-- <option value="31">2027-2028</option> -->\n${FIRST}`);
+    expect(table(parseTeamSeasonOptions(commented))).toStrictEqual(REAL_TABLE);
+  });
+
+  it('ignores a whole commented-out second season select, so the page is not ambiguous', () => {
+    const commented = `<!-- ${SELECT_OPEN}<option value="5">2000-2001</option></select> -->${TEAM_412_F}`;
+    expect(table(parseTeamSeasonOptions(commented))).toStrictEqual(REAL_TABLE);
+  });
+
+  it('a page whose only season select is commented out has no season select', () => {
+    const onlyComment = `<!-- ${TEAM_412_F} -->`;
+    expect(codeOf(() => parseTeamSeasonOptions(onlyComment))).toBe('season-select-missing');
+  });
+
+  it('matches `name`, not `data-name`', () => {
+    const dataOnly = TEAM_412_F.replace(SELECT_OPEN, '<select data-name="season_id" class=" form-control">');
+    expect(dataOnly).not.toBe(TEAM_412_F);
+    expect(codeOf(() => parseTeamSeasonOptions(dataOnly))).toBe('season-select-missing');
+  });
+
+  it('a `data-name="season_id"` select beside the real one does not make the page ambiguous', () => {
+    const extra = '<select data-name="season_id"><option value="5">2000-2001</option></select>';
+    expect(table(parseTeamSeasonOptions(extra + TEAM_412_F))).toStrictEqual(REAL_TABLE);
+  });
+});

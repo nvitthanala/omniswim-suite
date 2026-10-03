@@ -122,12 +122,12 @@ describe('team links', () => {
 });
 
 describe('conference links', () => {
-  it('records the slug exactly as the link wrote it and the country segment', () => {
+  it('records the slug lower-cased and the country segment', () => {
     expect(parseCrawlTargetInput('https://www.swimcloud.com/country/usa/college/conference/nsisc/').targets).toStrictEqual([
       { kind: 'conference', slug: 'nsisc', country: 'usa' },
     ]);
     expect(parseCrawlTargetInput('https://www.swimcloud.com/country/can/college/conference/OUA').targets).toStrictEqual([
-      { kind: 'conference', slug: 'OUA', country: 'can' },
+      { kind: 'conference', slug: 'oua', country: 'can' },
     ]);
     expect(parseCrawlTargetInput('https://www.swimcloud.com/country/usa/college/conference/pac-12/?x=1').targets).toStrictEqual([
       { kind: 'conference', slug: 'pac-12', country: 'usa' },
@@ -210,6 +210,24 @@ describe('dedupe and mixed input', () => {
       ],
       rejected: [],
     });
+  });
+
+  it('dedupes a conference on lower-cased slug plus country, and lower-cases the slug it keeps', () => {
+    const base = 'https://www.swimcloud.com/country';
+    const parsed = parseCrawlTargetInput(
+      [
+        `${base}/usa/college/conference/NSISC/`,
+        `${base}/usa/college/conference/nsisc/`,
+        `${base}/can/college/conference/nsisc/`,
+        `${base}/can/college/conference/NsIsC/`,
+        `${base}/usa/college/conference/Nsisc/`,
+      ].join('\n'),
+    );
+    expect(parsed.rejected).toStrictEqual([]);
+    expect(parsed.targets).toStrictEqual([
+      { kind: 'conference', slug: 'nsisc', country: 'usa' },
+      { kind: 'conference', slug: 'nsisc', country: 'can' },
+    ]);
   });
 
   it('does not treat a team id equal to a conference slug as the same target', () => {

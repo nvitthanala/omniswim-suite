@@ -16,9 +16,30 @@
  *   team whose page does not offer the label is `season-unavailable`: it gets no
  *   work, and its progress names the labels it does offer.
  * - Roster work: men and women, one URL each (`planTeamSeasonRoster`).
- * - Swimmer work, keyed `(teamId, seasonId, swimmerId)`. Swimmer ids are only
- *   known after a roster is parsed, so the driver adds them with
- *   {@link addSwimmers}.
+ * - Swimmer work, keyed by swimmer id alone (`swimmer|<id>`). Swimmer ids are
+ *   only known after a roster is parsed, so the driver adds them with
+ *   {@link addSwimmers}. See "One fetch per swimmer" below.
+ *
+ * ## One fetch per swimmer
+ *
+ * The swimmer fetch is `/api/swimmers/{id}/profile_fastest_times/`. It has no
+ * team and no season in it. One swimmer on two teams, or on one team in two
+ * seasons, is one request. So a swimmer's work key is `swimmer|<id>`, the same
+ * dedupe `collectSwimmerIds` in `./swimmerTimes.ts` does across rosters. A team
+ * crawled again for another season does not fetch its returning swimmers again.
+ *
+ * Every `(teamId, seasonId)` pair that listed the swimmer stays on the work
+ * item as `attributions`, so progress is still per team: each team counts the
+ * shared fetch in its own swimmer totals, and each team gets an error line if it
+ * fails. {@link addSwimmers} meeting an existing key appends the pair.
+ *
+ * **Data caveat for whoever reads the results.** The endpoint returns all-time
+ * bests. For a past-season roster that includes swims from LATER seasons. Do not
+ * read what was fetched for a past-season roster as that season's times.
+ *
+ * Resume keys changed shape with this rule (they were
+ * `swimmer|<team>|<season>|<id>`). An old-shape key in `finishedKeys` matches
+ * nothing, so that swimmer is fetched again. That is the safe error.
  *
  * ## One shared concurrency limit
  *
@@ -26,6 +47,15 @@
  * in-flight work across **all** teams against it. Nothing here multiplies it by
  * the team count, and no team has a limit of its own. Adding teams makes a longer
  * crawl, not a wider one.
+ *
+ * {@link createQueue} refuses a value above `SWIMMER_TIMES_CONCURRENCY`
+ * (`concurrency-too-high`). Roster pages are strictly sequential at 3 s
+ * (`boundedFetchPool.ts` header); only swimmer-times fetches may overlap, and
+ * their limit is that constant. So {@link nextWork} also never hands out a roster
+ * while ANY other work is in flight, and never hands out anything while a roster
+ * is in flight, whatever `concurrency` says. (The second half is stricter than
+ * the written rule, which only forbids overlapping rosters. It costs nothing at
+ * a limit of 1 and keeps a roster page's pacing unshared if the limit is raised.)
  *
  * ## The default is the live pool value, not a literal
  *
@@ -51,13 +81,31 @@
  * - Cancel: terminal. Nothing more is handed out. Work in flight finishes.
  * - A failure that must stop the whole crawl (a 403 challenge, see
  *   `crawlErrorPolicy.ts`) is reported with `markFailed(..., { haltQueue: true })`.
- *   The queue halts. {@link resumeQueue} clears the halt and puts that one item
- *   back to `pending`, because the challenge page was not a real answer for it.
+ *   The queue halts. Every item that halted the queue is remembered.
+ *   {@link resumeQueue} clears the halt and puts each of them back to `pending`
+ *   if it is still `failed`, because the challenge page was not a real answer
+ *   for it. It does not matter whether the driver called {@link retryFailed}
+ *   first.
+ *
+ * ## Rules for the driver (the queue cannot enforce these)
+ *
+ * 1. **Store the queue that {@link nextWork} returns before any `await`.** The
+ *    queue is a value. Calling `nextWork` twice on the same value returns the
+ *    same roster twice, because only the returned queue knows it is in flight.
+ * 2. **Verify the season before {@link addSwimmers}.** The driver must call
+ *    {@link verifyRosterSeason}`(html, work)` on the fetched roster page. If it
+ *    returns `{ ok: false }`, call {@link markFailed} with its reason. A server
+ *    that ignores `season_id` serves the wrong season, and nothing else notices.
+ * 3. **Halt on:** a Cloudflare 403, any 5xx, a network error, and
+ *    {@link CONSECUTIVE_429_HALT} consecutive 429 give-ups. {@link shouldHalt}
+ *    decides this for one page outcome. On `stop`, call
+ *    `markFailed(..., { haltQueue: true })`.
  */
 
 import type { SwimCloudTeamId, SwimCloudSwimmerId } from '@omniswim/swimcloud/entities';
 import { planTeamSeasonRoster, type SwimCloudCrawlGender } from '@omniswim/swimcloud/crawlPlan';
-import { resolveSeasonOption, type TeamSeasonOption } from '@omniswim/swimcloud/teamSeasons';
+import { parseTeamSeasonOptions, resolveSeasonOption, type TeamSeasonOption } from '@omniswim/swimcloud/teamSeasons';
+import { classifyCrawlPageOutcome, type SwimCloudCrawlAction, type SwimCloudCrawlPageOutcome } from './crawlErrorPolicy';
 import { SWIMMER_TIMES_CONCURRENCY } from './swimmerTimes';
 
 /** The default total in-flight limit: the live pool's value. See the module comment. */
@@ -80,7 +128,10 @@ export interface MultiTeamQueueTeamInput {
 
 export interface CreateMultiTeamQueueInput {
   readonly teams: readonly MultiTeamQueueTeamInput[];
-  /** Total in-flight limit across every team. A positive integer. Defaults to {@link MULTI_TEAM_DEFAULT_CONCURRENCY}. */
+  /**
+   * Total in-flight limit across every team. A positive integer, at most
+   * `SWIMMER_TIMES_CONCURRENCY`. Defaults to {@link MULTI_TEAM_DEFAULT_CONCURRENCY}.
+   */
   readonly concurrency?: number;
   /** Keys of work an earlier run finished. See the module comment. */
   readonly finishedKeys?: Iterable<string>;
@@ -97,13 +148,25 @@ export interface QueueRosterWork {
   readonly canonicalUrl: string;
 }
 
-export interface QueueSwimmerWork {
-  readonly kind: 'swimmer';
-  readonly key: string;
+/** One team and season that listed a swimmer. */
+export interface QueueSwimmerAttribution {
   readonly teamId: SwimCloudTeamId;
   readonly seasonId: string;
   readonly seasonLabel: string;
+}
+
+export interface QueueSwimmerWork {
+  readonly kind: 'swimmer';
+  /** `swimmer|<id>`: one fetch per swimmer. See {@link swimmerWorkKey}. */
+  readonly key: string;
+  /** The first team that listed this swimmer. Every team is in {@link attributions}. */
+  readonly teamId: SwimCloudTeamId;
+  /** The season of {@link teamId}. */
+  readonly seasonId: string;
+  readonly seasonLabel: string;
   readonly swimmerId: SwimCloudSwimmerId;
+  /** Every (team, season) that listed this swimmer, in the order they were added. Never empty. */
+  readonly attributions: readonly QueueSwimmerAttribution[];
 }
 
 export type QueueWork = QueueRosterWork | QueueSwimmerWork;
@@ -133,8 +196,11 @@ export interface MultiTeamQueue {
   readonly concurrency: number;
   readonly paused: boolean;
   readonly cancelled: boolean;
-  /** Set by `markFailed(..., { haltQueue: true })`; cleared by {@link resumeQueue}. */
-  readonly halt?: { readonly message: string; readonly key: string };
+  /**
+   * Set by `markFailed(..., { haltQueue: true })`; cleared by {@link resumeQueue}.
+   * `message` is the first halting failure's. `keys` holds every halting item.
+   */
+  readonly halt?: { readonly message: string; readonly keys: readonly string[] };
   readonly teams: readonly QueueTeam[];
   readonly entries: readonly QueueEntry[];
   readonly finishedKeys: ReadonlySet<string>;
@@ -142,6 +208,8 @@ export interface MultiTeamQueue {
 
 export type MultiTeamQueueErrorCode =
   | 'invalid-concurrency'
+  | 'concurrency-too-high'
+  | 'invalid-429-count'
   | 'invalid-team'
   | 'duplicate-team'
   | 'unknown-team'
@@ -167,7 +235,7 @@ export type QueueIdleReason =
   | 'cancelled'
   | 'halted'
   | 'paused'
-  /** Work is pending, but the shared limit is full. */
+  /** Work is pending, but the shared limit is full, or a roster must run alone. */
   | 'at-concurrency-limit'
   /** Nothing is pending, but work in flight may still add more (a roster adds swimmers). */
   | 'waiting-for-in-flight'
@@ -182,9 +250,12 @@ export type NextWork =
 /* Keys                                                                        */
 /* -------------------------------------------------------------------------- */
 
-/** Resume key for one swimmer of one team in one season. Ids are digits, so `|` cannot collide. */
-export function swimmerWorkKey(teamId: SwimCloudTeamId, seasonId: string, swimmerId: SwimCloudSwimmerId): string {
-  return `swimmer|${teamId}|${seasonId}|${swimmerId}`;
+/**
+ * Work key and resume key for one swimmer. The fetch has no team or season in
+ * it, so neither is in the key. Ids are digits, so `|` cannot collide.
+ */
+export function swimmerWorkKey(swimmerId: SwimCloudSwimmerId): string {
+  return `swimmer|${swimmerId}`;
 }
 
 /** Key for one roster page. */
@@ -199,6 +270,12 @@ export function rosterWorkKey(teamId: SwimCloudTeamId, seasonId: string, gender:
 function checkConcurrency(value: number): number {
   if (!Number.isInteger(value) || value < 1) {
     throw new MultiTeamQueueError('invalid-concurrency', `${String(value)} is not a positive integer.`);
+  }
+  if (value > SWIMMER_TIMES_CONCURRENCY) {
+    throw new MultiTeamQueueError(
+      'concurrency-too-high',
+      `${value} is above the swimmer-times limit of ${SWIMMER_TIMES_CONCURRENCY}. Roster pages never overlap, and only swimmer fetches may.`,
+    );
   }
   return value;
 }
@@ -270,9 +347,10 @@ export function createQueue(input: CreateMultiTeamQueueInput): MultiTeamQueue {
  * Add the swimmers one roster page listed. Call once per parsed roster, after
  * that roster's work is done.
  *
- * A swimmer already in the queue for this team and season is kept once. A
- * swimmer whose key is in `finishedKeys` is added as `skipped-resumed` and is
- * never handed out. Throws for an unknown team, for a team whose season is
+ * A swimmer already in the queue, for this team or any other, is kept once: the
+ * pair (team, season) is added to its `attributions` and nothing else changes,
+ * including its status. A swimmer whose key is in `finishedKeys` is added as
+ * `skipped-resumed` and is never handed out. Throws for an unknown team, for a team whose season is
  * unavailable (it gets no work), and for an id that is not a positive integer.
  */
 export function addSwimmers(
@@ -289,25 +367,35 @@ export function addSwimmers(
     throw new MultiTeamQueueError('season-unavailable', `team ${teamId} has no season ${team.seasonLabel}, so it gets no work.`);
   }
   const season = team.state.season;
-  const present = new Set(queue.entries.map((e) => e.work.key));
-  const added: QueueEntry[] = [];
+  const pair: QueueSwimmerAttribution = { teamId, seasonId: season.seasonId, seasonLabel: season.label };
+  const entries = [...queue.entries];
+  const indexByKey = new Map(entries.map((e, i) => [e.work.key, i] as const));
   for (const swimmerId of swimmerIds) {
     if (!NUMERIC_ID.test(swimmerId)) {
       throw new MultiTeamQueueError('invalid-swimmer-id', `swimmer id ${JSON.stringify(swimmerId)} is not a positive integer.`);
     }
-    const key = swimmerWorkKey(teamId, season.seasonId, swimmerId);
-    if (present.has(key)) continue;
-    present.add(key);
-    added.push({
-      status: queue.finishedKeys.has(key) ? 'skipped-resumed' : 'pending',
-      work: { kind: 'swimmer', key, teamId, seasonId: season.seasonId, seasonLabel: season.label, swimmerId },
-    });
+    const key = swimmerWorkKey(swimmerId);
+    const existingIndex = indexByKey.get(key);
+    if (existingIndex === undefined) {
+      indexByKey.set(key, entries.length);
+      entries.push({
+        status: queue.finishedKeys.has(key) ? 'skipped-resumed' : 'pending',
+        work: { kind: 'swimmer', key, teamId, seasonId: season.seasonId, seasonLabel: season.label, swimmerId, attributions: [pair] },
+      });
+      continue;
+    }
+    // Already queued for another team or season (or this one): one fetch, one more pair.
+    const existing = entries[existingIndex];
+    if (existing.work.kind !== 'swimmer') continue;
+    const known = existing.work.attributions.some((a) => a.teamId === teamId && a.seasonId === season.seasonId);
+    if (known) continue;
+    entries[existingIndex] = { ...existing, work: { ...existing.work, attributions: [...existing.work.attributions, pair] } };
   }
   const listed = team.swimmersListedFor.includes(gender) ? team.swimmersListedFor : [...team.swimmersListedFor, gender];
   return {
     ...queue,
     teams: queue.teams.map((t) => (t === team ? { ...t, swimmersListedFor: listed } : t)),
-    entries: [...queue.entries, ...added],
+    entries,
   };
 }
 
@@ -338,8 +426,12 @@ function idle(queue: MultiTeamQueue, reason: QueueIdleReason): NextWork {
  * The next item to fetch, or why there is none.
  *
  * Hands out one item and marks it `in-flight`. Refuses once `concurrency` items
- * are in flight across all teams. Hands out nothing while paused, halted or
- * cancelled. Rosters come before swimmers; within each, queue order.
+ * are in flight across all teams. Never hands out a roster while any other work
+ * is in flight, and nothing while a roster is in flight. Hands out nothing while paused, halted or cancelled. Rosters come
+ * before swimmers; within each, queue order.
+ *
+ * Pure. Store the returned `queue` before any `await`: this function called
+ * again on the queue it was given returns the same item.
  */
 export function nextWork(queue: MultiTeamQueue): NextWork {
   if (queue.cancelled) return idle(queue, 'cancelled');
@@ -352,6 +444,10 @@ export function nextWork(queue: MultiTeamQueue): NextWork {
   if (inFlight >= queue.concurrency) return idle(queue, 'at-concurrency-limit');
 
   const entry = queue.entries[index];
+  // A roster page runs alone: nothing starts beside it, and it starts beside nothing.
+  // Only swimmer fetches may overlap, and only with each other (see the module comment).
+  const rosterInFlight = queue.entries.some((e) => e.status === 'in-flight' && e.work.kind === 'roster');
+  if (rosterInFlight || (entry.work.kind === 'roster' && inFlight > 0)) return idle(queue, 'at-concurrency-limit');
   return { kind: 'work', queue: withStatus(queue, index, { work: entry.work, status: 'in-flight' }), work: entry.work };
 }
 
@@ -384,7 +480,11 @@ export function markFailed(
 ): MultiTeamQueue {
   const index = inFlightIndex(queue, key);
   const next = withStatus(queue, index, { work: queue.entries[index].work, status: 'failed', error: message });
-  return options.haltQueue === true ? { ...next, halt: { message, key } } : next;
+  if (options.haltQueue !== true) return next;
+  // A second halting failure (work finishing while the queue halts) is kept
+  // beside the first. The first message is the one reported.
+  const halt = queue.halt === undefined ? { message, keys: [key] } : { message: queue.halt.message, keys: [...queue.halt.keys, key] };
+  return { ...next, halt };
 }
 
 /** A failed item goes back to `pending`. Throws if it is not `failed`. */
@@ -402,14 +502,20 @@ export function pauseQueue(queue: MultiTeamQueue): MultiTeamQueue {
 }
 
 /**
- * Clear Pause and any halt. The item that caused a halt returns to `pending`.
- * A cancelled queue stays cancelled.
+ * Clear Pause and any halt. Each item that caused a halt returns to `pending`
+ * if it is still `failed`. An item the driver already put back with
+ * {@link retryFailed} is left as it is, so the call order does not matter and
+ * never throws. A cancelled queue stays cancelled.
  */
 export function resumeQueue(queue: MultiTeamQueue): MultiTeamQueue {
   if (queue.cancelled) return queue;
   const { halt, ...rest } = queue;
-  const resumed: MultiTeamQueue = { ...rest, paused: false };
-  return halt === undefined ? resumed : retryFailed(resumed, halt.key);
+  let resumed: MultiTeamQueue = { ...rest, paused: false };
+  for (const key of halt?.keys ?? []) {
+    const entry = resumed.entries.find((e) => e.work.key === key);
+    if (entry?.status === 'failed') resumed = retryFailed(resumed, key);
+  }
+  return resumed;
 }
 
 /** Terminal. Nothing more is handed out. */
@@ -481,6 +587,10 @@ function counts(entries: readonly QueueEntry[]): QueueCounts {
   };
 }
 
+function isForTeam(entry: QueueEntry, teamId: SwimCloudTeamId): boolean {
+  return entry.work.kind === 'swimmer' ? entry.work.attributions.some((a) => a.teamId === teamId) : entry.work.teamId === teamId;
+}
+
 function entryErrorLine(team: QueueTeam, entry: QueueEntry): string {
   const subject = entry.work.kind === 'roster' ? `${entry.work.gender === 'M' ? 'men' : 'women'}'s roster` : `swimmer ${entry.work.swimmerId}`;
   return `Team ${team.teamId} · ${team.seasonLabel} · ${subject}: ${entry.error ?? 'failed'}`;
@@ -507,7 +617,8 @@ function teamProgress(queue: MultiTeamQueue, team: QueueTeam): QueueTeamProgress
       errorLines: [`Team ${team.teamId} · season ${team.seasonLabel} is not offered on this team's page. Available: ${offered}. Nothing is fetched for this team.`],
     };
   }
-  const mine = queue.entries.filter((e) => e.work.teamId === team.teamId);
+  // A shared swimmer fetch counts for every team that listed it.
+  const mine = queue.entries.filter((e) => isForTeam(e, team.teamId));
   const rosterEntries = mine.filter((e) => e.work.kind === 'roster');
   const swimmerEntries = mine.filter((e) => e.work.kind === 'swimmer');
   const rosters = counts(rosterEntries);
@@ -538,4 +649,74 @@ export function queueProgress(queue: MultiTeamQueue): QueueProgress {
     ...(queue.halt === undefined ? {} : { haltMessage: queue.halt.message }),
     teams: queue.teams.map((team) => teamProgress(queue, team)),
   };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Driver helpers                                                              */
+/* -------------------------------------------------------------------------- */
+
+export type RosterSeasonCheck = { readonly ok: true } | { readonly ok: false; readonly reason: string };
+
+/**
+ * Check that a fetched roster page is for the season the work asked for.
+ *
+ * The page prints a `<select name="season_id">` with the season it shows marked
+ * `selected`. That must be `work.seasonId`. Anything else is `{ ok: false }`
+ * with a reason: a different season, no season selected (the page ignored
+ * `season_id` and shows "All Seasons"), two selected, or a page that has no
+ * season select at all (a challenge page). It never throws for a bad page.
+ * Call it before {@link addSwimmers}. On `{ ok: false }`, call {@link markFailed}.
+ */
+export function verifyRosterSeason(html: string, work: Pick<QueueRosterWork, 'seasonId' | 'seasonLabel'>): RosterSeasonCheck {
+  let selected: readonly TeamSeasonOption[];
+  try {
+    selected = parseTeamSeasonOptions(html).filter((option) => option.selected);
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    return { ok: false, reason: `The roster page's season list could not be read, so its season is not verified: ${detail}` };
+  }
+  if (selected.length === 0) {
+    return { ok: false, reason: `The roster page selects no season. It was asked for season ${work.seasonLabel} (id ${work.seasonId}).` };
+  }
+  const shown = selected[0];
+  if (shown.seasonId !== work.seasonId) {
+    return {
+      ok: false,
+      reason: `The roster page shows season ${shown.label} (id ${shown.seasonId}). It was asked for season ${work.seasonLabel} (id ${work.seasonId}).`,
+    };
+  }
+  return { ok: true };
+}
+
+/** Consecutive pages given up on after HTTP 429 that stop the crawl. */
+export const CONSECUTIVE_429_HALT = 3;
+
+/**
+ * Whether one page's outcome stops the whole crawl.
+ *
+ * Reuses `classifyCrawlPageOutcome` (`crawlErrorPolicy.ts`): a 403, any 5xx and
+ * a network error stop. It adds one rule: a page given up on after HTTP 429
+ * (see `rateLimitBackoff.ts`) stops the crawl when it is the
+ * {@link CONSECUTIVE_429_HALT}th in a row.
+ *
+ * `outcome` is the page's final outcome, after any 429 retries.
+ * `recent429Count` is how many pages in a row were given up on after a 429
+ * BEFORE this one. The driver resets it to 0 on any other outcome. A 429
+ * outcome counts itself, so `recent429Count: 2` plus a 429 is the third.
+ * Throws for a count that is not a non-negative integer.
+ */
+export function shouldHalt(outcome: SwimCloudCrawlPageOutcome, recent429Count: number): SwimCloudCrawlAction {
+  if (!Number.isInteger(recent429Count) || recent429Count < 0) {
+    throw new MultiTeamQueueError('invalid-429-count', `${String(recent429Count)} is not a non-negative integer.`);
+  }
+  const policy = classifyCrawlPageOutcome(outcome);
+  if (policy.action === 'stop') return policy;
+  if (outcome.kind === 'http-status' && outcome.httpStatus === 429 && recent429Count + 1 >= CONSECUTIVE_429_HALT) {
+    return {
+      action: 'stop',
+      retryable: true,
+      message: `SwimCloud rate-limited ${CONSECUTIVE_429_HALT} pages in a row. Wait a while, then Resume.`,
+    };
+  }
+  return policy;
 }

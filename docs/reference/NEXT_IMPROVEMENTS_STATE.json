@@ -69,14 +69,28 @@
         "extensions/swimcloud-companion/crawler.js (rebuilt with npm run build:extension; +1.4 KB, background.js unchanged)",
         "tests/fixtures/swimcloud/team-{412,10002824}-roster-gender-{F,M}-season-form.html (byte-exact slices of the real filter form)"
       ],
-      "evidence": "tests/swimcloudTeamSeasons.test.ts (25), swimcloudTeamSeasonRosterPlan.test.ts (10), swimcloudTargetUrls.test.ts (19), swimCloudExtensionMultiTeamQueue.test.ts (28)",
+      "evidence": "tests/swimcloudTeamSeasons.test.ts (33), swimcloudTeamSeasonRosterPlan.test.ts (10), swimcloudTargetUrls.test.ts (20), swimCloudExtensionMultiTeamQueue.test.ts (59). Counts after the 2026-10-03 architect-review fixes (see reviewFixes).",
       "seasonTableTeam412Vs10002824": "Identical on all four captured pages (F and M, both teams): 19 seasons, ids 30..12 for 2026-2027..2008-2009, id 29 (2025-2026) selected. Two teams only. This proves nothing about a third, so the API still resolves per team from that team's own page.",
       "rosterUrlShape": "?page=1&gender={M|F}&season_id={id}&sort=name, the roster filter form's own parameter order, matching real recorded URLs such as tests/rosterQueueImport.test.ts.",
       "decisionsForOrchestrator": [
         "Queue concurrency default is SWIMMER_TIMES_CONCURRENCY (1), not 3. The brief and the crawl plan say 3 lanes and 400 ms; the code was lowered to 1 lane and 3000 ms on 2026-09-22 after HTTP 429 on 111 of 184 requests.",
-        "The swimmer-times endpoint is swimmer-scoped, not season-scoped. The queue key (teamId, seasonId, swimmerId) means one swimmer in two chosen seasons is fetched twice. Open fact 3 (is the endpoint season-filterable) is still unverified.",
+        "SUPERSEDED by reviewFixes: the queue key is now swimmer|<id>, so a swimmer is fetched once across teams and seasons. Data caveat: the endpoint returns all-time bests, so a past-season roster gets later swims too. Open fact 3 (is the endpoint season-filterable) is still unverified.",
         "planTeamSeasonRoster returns SwimCloudTeamSeasonRosterStep, not SwimCloudCrawlStep, because that type requires a meetId and this crawl has none."
       ],
+      "reviewFixes": {
+        "date": "2026-10-03",
+        "source": "architect review; each item reproduced with a probe script, then fixed test-first and mutation-checked",
+        "items": [
+          "Q1 swimmer key is swimmer|<id> with attributions per (team, season); progress stays per team; old-shape resume keys match nothing",
+          "Q2 createQueue throws concurrency-too-high above SWIMMER_TIMES_CONCURRENCY; a roster runs alone (nothing starts beside it, it starts beside nothing)",
+          "Q3 resumeQueue succeeds with or without a prior retryFailed",
+          "Q4 every halting key is kept; Resume returns each still-failed one to pending",
+          "Q5 teamSeasons.ts: value vs data-value, name vs data-name, HTML comments ignored",
+          "Q6 targetUrls.ts: conference dedupe on lower-cased slug plus country; slug stored lower-case",
+          "Q7 driver rules in the multiTeamQueue.ts header; exports verifyRosterSeason, shouldHalt, CONSECUTIVE_429_HALT"
+        ],
+        "followUp": "multiTeamQueue.ts changed after its first review. The Q2 roster-alone rule is stricter than the written rule (it also blocks swimmers beside a roster). Re-review before a driver is built on it."
+      },
       "reviewNeeded": "The queue's concurrency, halt and resume rules gate request volume. A different provider than Claude should review multiTeamQueue.ts.",
       "notDone": [
         "No conference-page parser (no fixture).",
