@@ -34,6 +34,10 @@ export type SwimEditUndoRecord = {
 export const SWIM_EDIT_UNDO_CHANGED_MESSAGE =
   'The lineup changed since this edit. Undo would discard later changes, so it was not applied.';
 
+/** The save of an Undo did not go through, so the edit it undid came back. */
+export const SWIM_EDIT_UNDO_NOT_SAVED_MESSAGE =
+  'The undo was not saved. The edit is back. Press Undo to try again.';
+
 /**
  * The lineup fields the optimizer also writes. They are always part of the fingerprint, even when
  * the inverse does not touch one of them, so an optimizer run after the edit invalidates the Undo
@@ -60,6 +64,26 @@ export function buildSwimEditUndo(args: { afterEdit: Workspace; build: SwimEditB
   };
 }
 
+/** Fingerprint of only the fields `inverse` names, as `source` holds them. Absent and null read the same. */
+function inverseOnlyFingerprint(source: Partial<Workspace>, inverse: Partial<Workspace>): string {
+  const keys = Object.keys(inverse).sort() as Array<keyof Workspace>;
+  return canonical(keys.map(key => [key, source[key] ?? null]));
+}
+
+/** True when `current` already holds every value the inverse writes back (the Undo has taken effect). */
+export function swimEditUndoTargetReached(record: SwimEditUndoRecord, current: Workspace): boolean {
+  return inverseOnlyFingerprint(current, record.inverse) === inverseOnlyFingerprint(record.inverse, record.inverse);
+}
+
+/**
+ * An Undo whose write was issued. The provider's save is debounced and gives no result to await, so
+ * the hook watches the workspace instead (same shape as the optimizer Undo in RosterOptimizeStep).
+ * - pending: nothing is claimed until the workspace reads as the pre-edit values.
+ * - settled: it did, the toast was shown. If the edit's own values come back, the save failed and
+ *   the provider reloaded the server copy.
+ */
+type UndoFlow = { phase: 'pending' | 'settled'; record: SwimEditUndoRecord };
+
 export type SwimEditUndoState = 'clean' | 'other_workspace' | 'changed';
 
 export function swimEditUndoState(record: SwimEditUndoRecord, current: Workspace): SwimEditUndoState {
@@ -82,6 +106,7 @@ export function useSwimEditUndo({
   toast: ToastLike;
 }) {
   const [record, setRecord] = useState<SwimEditUndoRecord | null>(null);
+  const [flow, setFlow] = useState<UndoFlow | null>(null);
 
   const workspaceRef = useRef(workspace);
   useEffect(() => {
@@ -95,8 +120,33 @@ export function useSwimEditUndo({
     if (record && record.workspaceId !== workspace.id) setRecord(null);
   }, [record, workspace.id]);
 
+  // Observe the Undo. See UndoFlow.
+  useEffect(() => {
+    if (!flow) return;
+    if (flow.record.workspaceId !== workspace.id) {
+      setFlow(null);
+      return;
+    }
+    if (flow.phase === 'pending') {
+      if (!swimEditUndoTargetReached(flow.record, workspace)) return;
+      toast.push('success', `Undid: ${flow.record.description}`);
+      setFlow({ ...flow, phase: 'settled' });
+      return;
+    }
+    if (swimEditUndoState(flow.record, workspace) === 'clean') {
+      // The edit's values are back: the Undo's save failed. Put the Undo back within reach.
+      toast.push('error', SWIM_EDIT_UNDO_NOT_SAVED_MESSAGE);
+      setRecord(flow.record);
+      setFlow(null);
+    } else if (!swimEditUndoTargetReached(flow.record, workspace)) {
+      setFlow(null); // something else wrote these fields; there is nothing left to watch
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspace, flow]);
+
   const applySwimPatch = useCallback(
     (build: (ws: Workspace) => SwimEditBuild) => {
+      setFlow(null); // a new edit supersedes any Undo still being watched
       const result = build(workspaceRef.current);
       workspaceRef.current = { ...workspaceRef.current, ...result.patch };
       onUpdate(result.patch);
@@ -118,8 +168,14 @@ export function useSwimEditUndo({
     }
     workspaceRef.current = { ...workspaceRef.current, ...record.inverse };
     onUpdate(record.inverse);
-    toast.push('success', `Undid: ${record.description}`);
     setRecord(null);
+    // Write, then wait to see the fields change before claiming success (see UndoFlow). An edit that
+    // left the fields as they were has nothing to watch for, so it claims at once.
+    if (fingerprintInverseFields(workspaceRef.current, record.inverse) === record.appliedFingerprint) {
+      toast.push('success', `Undid: ${record.description}`);
+      return;
+    }
+    setFlow({ phase: 'pending', record });
   }, [record, onUpdate, toast]);
 
   return { lastSwimEdit, applySwimPatch, undoSwimEdit };

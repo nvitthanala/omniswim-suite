@@ -314,6 +314,10 @@ describe('Optimize step Undo after later edits', () => {
       expect(updates).toHaveLength(1); // nothing written
       expect(alert()?.textContent).toContain(APPLY_NOT_SAVED_MESSAGE);
       expect(alert()?.textContent).not.toContain(UNDO_CHANGED_MESSAGE);
+      // True in both causes (a failed save, or the coach editing the lineup back by hand).
+      expect(APPLY_NOT_SAVED_MESSAGE).toBe(
+        'The lineup is back to how it was before the run. If you did not undo it, the apply was not saved.'
+      );
       // Nothing is left to undo, so there is no "Undo anyway" and no "Keep my edits".
       expect(findButton(/^Undo anyway$/)).toBeUndefined();
       expect(findButton(/^Keep my edits$/)).toBeUndefined();
@@ -405,8 +409,14 @@ describe('Optimize step Undo after later edits', () => {
     });
   });
 
-  describe('gender switch (defect 4)', () => {
-    it('a single-team run summary and its Undo are dropped when the gender changes', async () => {
+  describe('gender switch (defect 4, then the keep-and-hide rule)', () => {
+    const beforeArrays = (ws: Workspace) => ({
+      scorerRosterOverrides: ws.scorerRosterOverrides ?? [],
+      meetEntryPlans: ws.meetEntryPlans ?? [],
+      activeEntryIds: ws.activeEntryIds ?? [],
+    });
+
+    it('a single-team run summary and its Undo are cleared when the gender changes', async () => {
       const { setGender } = await mount(gainWorkspace());
       await click(/Quick optimize \(greedy\)/);
       expect(findButton(/Undo this optimize/)).toBeTruthy();
@@ -414,14 +424,83 @@ describe('Optimize step Undo after later edits', () => {
       await setGender(Gender.WOMEN);
       expect(findButton(/Undo this optimize/)).toBeUndefined();
       expect(findButton(/Dismiss optimizer summary/)).toBeUndefined();
+      // Cleared, not hidden: flipping back does not bring it back.
+      await setGender(Gender.MEN);
+      expect(findButton(/Undo this optimize/)).toBeUndefined();
+      expect(findButton(/Dismiss optimizer summary/)).toBeUndefined();
     });
 
-    it('an All-teams summary describes one gender too, so it is dropped as well', async () => {
-      const { setGender } = await mount(gainWorkspace());
+    it('an All-teams summary is kept but hidden in the other gender, and returns when flipped back', async () => {
+      const { updates, setGender } = await mount(gainWorkspace());
       await applyAllTeams();
       expect(findButton(/Undo this optimize/)).toBeTruthy();
       await setGender(Gender.WOMEN);
       expect(findButton(/Undo this optimize/)).toBeUndefined();
+      expect(findButton(/Dismiss optimizer summary/)).toBeUndefined();
+      await setGender(Gender.MEN);
+      expect(findButton(/Dismiss optimizer summary/)).toBeTruthy();
+      // The kept Undo still works.
+      await click(/Undo this optimize/);
+      expect(updates).toHaveLength(2);
+      expect(toastTexts()).toContain('Undid: All teams optimize');
+    });
+
+    it('an Undo still waiting for its save keeps waiting through a gender switch', async () => {
+      const ws = gainWorkspace();
+      const { state, editOutside, setGender } = await mount(ws);
+      await applyAllTeams();
+      const applied = {
+        scorerRosterOverrides: state.current.scorerRosterOverrides,
+        meetEntryPlans: state.current.meetEntryPlans,
+        activeEntryIds: state.current.activeEntryIds,
+      };
+      state.applyUpdates = false; // the Undo's save has not landed yet
+      await click(/Undo this optimize/);
+      expect(toastTexts().some(t => t.startsWith('Undid:'))).toBe(false);
+
+      await setGender(Gender.WOMEN);
+      expect(toastTexts().some(t => t.startsWith('Undid:'))).toBe(false); // still claims nothing
+
+      await editOutside(beforeArrays(ws)); // the save lands
+      expect(toastTexts()).toContain('Undid: All teams optimize');
+
+      // A later failure still gets its message, although the coach is looking at the other gender.
+      await editOutside(applied);
+      expect(toastTexts()).toContain(UNDO_NOT_SAVED_MESSAGE);
+      expect(findButton(/Undo this optimize/)).toBeUndefined(); // hidden here
+      await setGender(Gender.MEN);
+      expect(findButton(/Undo this optimize/)).toBeTruthy(); // back within reach
+    });
+
+    it('a single-team Undo still waiting for its save also keeps waiting through a gender switch', async () => {
+      const ws = gainWorkspace();
+      const { state, editOutside, setGender } = await mount(ws);
+      await click(/Quick optimize \(greedy\)/);
+      state.applyUpdates = false;
+      await click(/Undo this optimize/);
+      await setGender(Gender.WOMEN);
+      expect(toastTexts().some(t => t.startsWith('Undid:'))).toBe(false);
+      await editOutside(beforeArrays(ws));
+      expect(toastTexts().some(t => t.startsWith('Undid:'))).toBe(true);
+    });
+  });
+
+  describe('Undo watcher is bound to its workspace (P3)', () => {
+    it('after a settled Undo, a workspace whose lineup equals the optimized arrays does not re-arm it', async () => {
+      const { state, editOutside } = await mount(gainWorkspace());
+      await applyAllTeams();
+      const applied = {
+        scorerRosterOverrides: state.current.scorerRosterOverrides,
+        meetEntryPlans: state.current.meetEntryPlans,
+        activeEntryIds: state.current.activeEntryIds,
+      };
+      await click(/Undo this optimize/);
+      expect(toastTexts()).toContain('Undid: All teams optimize');
+      // Another workspace whose lineup happens to equal the optimized arrays.
+      await editOutside({ id: 'another-workspace', ...applied });
+      expect(toastTexts()).not.toContain(UNDO_NOT_SAVED_MESSAGE);
+      expect(findButton(/Undo this optimize/)).toBeUndefined();
+      expect(findButton(/Dismiss optimizer summary/)).toBeUndefined();
     });
   });
 });

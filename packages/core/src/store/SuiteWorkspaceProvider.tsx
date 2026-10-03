@@ -100,6 +100,8 @@ export function SuiteWorkspaceProvider({
   const pendingPatchRef = useRef<Partial<Workspace> | null>(null);
   const pendingPatchTargetRef = useRef<string | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** Latest save number sent per workspace id. See `flushUpdate` and the `onSuccess` below. */
+  const saveSeqRef = useRef(new Map<string, number>());
 
   const error = mutationError ?? (queryError ? 'Failed to load workspaces' : null);
 
@@ -182,10 +184,19 @@ export function SuiteWorkspaceProvider({
   );
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: Partial<Workspace> }) =>
+    mutationFn: ({ id, patch }: { id: string; patch: Partial<Workspace>; seq: number }) =>
       updateWorkspaceApi(id, patch),
-    onSuccess: updated => {
-      setCache(list => list.map(w => (w.id === updated.id ? updated : w)));
+    onSuccess: (updated, { seq }) => {
+      // A response may only replace the cache while it is the freshest word on that workspace.
+      // `updateWorkspace` already wrote every local change into the cache, so a response that has
+      // been overtaken (a newer save was sent, or a newer change still waits in the debounce
+      // queue) would put older arrays back in view. A failed save takes the other path below.
+      const overtaken =
+        saveSeqRef.current.get(updated.id) !== seq ||
+        (pendingPatchRef.current !== null && pendingPatchTargetRef.current === updated.id);
+      if (!overtaken) {
+        setCache(list => list.map(w => (w.id === updated.id ? updated : w)));
+      }
       setMutationError(null);
     },
     onError: (err: unknown) => {
@@ -199,7 +210,10 @@ export function SuiteWorkspaceProvider({
 
   const flushUpdate = useCallback(
     async (id: string, patch: Partial<Workspace>) => {
-      await updateMutation.mutateAsync({ id, patch }).catch(() => undefined);
+      // Number the save per workspace. `onSuccess` compares against the latest number.
+      const seq = (saveSeqRef.current.get(id) ?? 0) + 1;
+      saveSeqRef.current.set(id, seq);
+      await updateMutation.mutateAsync({ id, patch, seq }).catch(() => undefined);
     },
     [updateMutation]
   );

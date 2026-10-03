@@ -83,8 +83,9 @@ type Props = {
   undoBlockedMessage?: string;
   /**
    * Why Undo was refused. 'changed' (default) offers "Keep my edits" and "Undo anyway".
-   * 'apply_not_saved' means the run never reached the server, so nothing is left to undo and the
-   * only choice is "Dismiss".
+   * 'apply_not_saved' means the lineup already reads as it did before the run (the apply was not
+   * saved, or the coach put it back by hand), so nothing is left to undo and the only choice is
+   * "Dismiss".
    */
   undoBlockedKind?: 'changed' | 'apply_not_saved';
   /** Write the pre-run arrays back anyway, discarding the later edits. */

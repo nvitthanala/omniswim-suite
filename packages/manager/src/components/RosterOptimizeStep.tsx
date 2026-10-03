@@ -41,8 +41,11 @@ import {
   type OptimizerUndo,
 } from './optimizerUndo';
 
-/** The summary record the panel shows. The Undo lives inside it. */
-type RunSummaryRecord = OptimizerRunSummary & { undo: OptimizerUndo | null };
+/**
+ * The summary record the panel shows. The Undo lives inside it. `gender` is the view the run was
+ * made in: the panel text describes that view, so the panel hides while the step shows the other.
+ */
+type RunSummaryRecord = OptimizerRunSummary & { undo: OptimizerUndo | null; gender: Gender };
 
 /**
  * An Undo whose write was issued. The provider's save is debounced and gives no result to await
@@ -238,7 +241,9 @@ export default function RosterOptimizeStep({
   // stable, so focus moves there first.
   const rootRef = useRef<HTMLDivElement>(null);
   const summaryRef = useRef<HTMLDivElement>(null);
+  const visibleSummary = lastRunSummary && lastRunSummary.gender === gender ? lastRunSummary : null;
   const lastOptimizeUndo = lastRunSummary?.undo ?? null;
+  const lastRunIsAllTeams = useRef(false);
   const setLastOptimizeUndo = (undo: OptimizerUndo | null) =>
     setLastRunSummary(prev => (prev ? { ...prev, undo } : prev));
   // The "All teams" dialog. It is the one entry point for a whole-field run.
@@ -268,10 +273,15 @@ export default function RosterOptimizeStep({
     dropRun();
   }, [workspace.id]);
 
-  // A summary describes one gender's view. The data stays right after a gender switch, but the
-  // panel text (and its Undo) would describe the other view.
+  // A summary describes one gender's view, so it is only SHOWN in that view (`visibleSummary`).
+  // - A single-team run is about one team's roster in that view: clear it on a gender switch.
+  // - An All-teams run wrote both genders' arrays and its fingerprint guards the Undo, so keep the
+  //   record. The panel hides while the other gender is shown and returns when the coach flips back.
+  // - `undoFlow` is never touched here. An Undo that still waits for its save must keep waiting, or
+  //   a later save failure would get no "not saved" message.
   useEffect(() => {
-    dropRun();
+    if (lastRunIsAllTeams.current) return;
+    setLastRunSummary(null);
   }, [gender]);
 
   /** Move focus off the summary before it unmounts. Primary button when it can take focus, else the step root. */
@@ -286,6 +296,12 @@ export default function RosterOptimizeStep({
   // Observe the Undo. See UndoFlow.
   useEffect(() => {
     if (!undoFlow) return;
+    // The Undo belongs to one workspace. Another workspace's lineup can equal the optimized arrays;
+    // reading that as a failed save would re-arm this Undo's summary in the wrong workspace.
+    if (undoFlow.undo.workspaceId !== workspace.id) {
+      setUndoFlow(null);
+      return;
+    }
     const current = optimizerArraysOf(workspace);
     if (undoFlow.phase === 'pending') {
       if (!optimizerUndoTargetReached(undoFlow.undo, current)) return;
@@ -317,7 +333,6 @@ export default function RosterOptimizeStep({
   // snapshot against the WRONG team's current state would be actively wrong.
   // An All-teams run is not about one team, so its summary and Undo survive a
   // team change (and are shown with or without a team picked).
-  const lastRunIsAllTeams = useRef(false);
   useEffect(() => {
     if (lastRunIsAllTeams.current) return;
     dropRun();
@@ -344,7 +359,7 @@ export default function RosterOptimizeStep({
       overrides: result.overrides,
       plans: result.meetEntryPlans,
     });
-    setLastRunSummary({ label, result, changes, undo: null });
+    setLastRunSummary({ label, result, changes, undo: null, gender });
   };
 
   const handleUndoOptimize = (force = false) => {
@@ -468,10 +483,10 @@ export default function RosterOptimizeStep({
 
   // Shown in both the no-team and the team view, so an All-teams apply always
   // has its Undo in reach.
-  const runSummaryPanel = lastRunSummary ? (
+  const runSummaryPanel = visibleSummary ? (
     <div ref={summaryRef}>
       <OptimizerChangeSummaryPanel
-        summary={lastRunSummary}
+        summary={visibleSummary}
         onDismiss={() => {
           releaseFocusFromSummary();
           dropRun();

@@ -34,11 +34,12 @@ export type OptimizerUndo = {
 export const UNDO_CHANGED_MESSAGE = 'Lineup changed since the run. Undo would discard later edits.';
 
 /**
- * The save of the apply did not go through, so the server copy (reloaded after the failed save)
- * holds the lineup from before the run. There is nothing to undo.
+ * The lineup arrays equal the arrays from before the run. Two things can cause that: the apply's
+ * save failed and the provider reloaded the server copy, or the coach edited the lineup back by
+ * hand. The step cannot tell them apart, so the wording is true in both cases.
  */
 export const APPLY_NOT_SAVED_MESSAGE =
-  'The apply was not saved. The lineup is back to how it was before the run, so there is nothing to undo.';
+  'The lineup is back to how it was before the run. If you did not undo it, the apply was not saved.';
 
 /** The save of an Undo did not go through, so the optimized lineup came back. */
 export const UNDO_NOT_SAVED_MESSAGE =
@@ -107,8 +108,8 @@ export type OptimizerUndoState = 'clean' | 'apply_not_saved' | 'changed';
 /**
  * What the live arrays say about an armed Undo.
  * - clean: still exactly what the run left.
- * - apply_not_saved: exactly the pre-run arrays. The apply's save failed and the provider reloaded
- *   the server copy. There is nothing to undo.
+ * - apply_not_saved: exactly the pre-run arrays. Either the apply's save failed and the provider
+ *   reloaded the server copy, or the coach edited the lineup back by hand. There is nothing to undo.
  * - changed: anything else. The coach edited after the run.
  */
 export function optimizerUndoState(undo: OptimizerUndo, current: OptimizerOwnedArrays): OptimizerUndoState {

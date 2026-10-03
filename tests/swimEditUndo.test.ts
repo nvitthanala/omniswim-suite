@@ -20,6 +20,7 @@ import { Gender, type Workspace } from '@omniswim/core/types';
 import { removePlannedEntry, updatePlannedEntry } from '@omniswim/core/lib/swimEditor';
 import {
   SWIM_EDIT_UNDO_CHANGED_MESSAGE,
+  SWIM_EDIT_UNDO_NOT_SAVED_MESSAGE,
   buildSwimEditUndo,
   fingerprintInverseFields,
   swimEditUndoState,
@@ -94,7 +95,8 @@ describe('useSwimEditUndo', () => {
   async function mount(initial: Workspace) {
     const toasts: Array<[string, string]> = [];
     const writes: Array<Partial<Workspace>> = [];
-    const state = { ws: initial };
+    // `follow: false` models a save that has not landed: the write is made, the workspace does not change.
+    const state = { ws: initial, follow: true };
     /** What every render showed: the workspace it was for and the Undo it offered. */
     const renders: Array<{ wsId: string; undo: string }> = [];
     let api!: ReturnType<typeof useSwimEditUndo>;
@@ -103,6 +105,7 @@ describe('useSwimEditUndo', () => {
         workspace: ws,
         onUpdate: patch => {
           writes.push(patch);
+          if (!state.follow) return;
           state.ws = { ...state.ws, ...patch } as Workspace;
           draw();
         },
@@ -236,6 +239,115 @@ describe('useSwimEditUndo', () => {
     await h.outside({ meetEntryPlans: JSON.parse(JSON.stringify(left)) });
     await h.undo();
     expect(h.state.ws.meetEntryPlans).toEqual(ws.meetEntryPlans);
+  });
+});
+
+describe('useSwimEditUndo waits for the save (P5)', () => {
+  let container: HTMLDivElement;
+  let root: Root;
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  async function mount(initial: Workspace) {
+    const toasts: Array<[string, string]> = [];
+    const writes: Array<Partial<Workspace>> = [];
+    const state = { ws: initial, follow: true };
+    let api!: ReturnType<typeof useSwimEditUndo>;
+    const Probe = ({ ws }: { ws: Workspace }) => {
+      api = useSwimEditUndo({
+        workspace: ws,
+        onUpdate: patch => {
+          writes.push(patch);
+          if (!state.follow) return;
+          state.ws = { ...state.ws, ...patch } as Workspace;
+          draw();
+        },
+        toast: { push: (kind, message) => void toasts.push([kind, message]) },
+      });
+      return createElement('span', { 'data-undo': api.lastSwimEdit?.description ?? '' });
+    };
+    const draw = () => root.render(createElement(Probe, { ws: state.ws }));
+    await act(async () => draw());
+    const outside = (ws: Workspace) =>
+      act(async () => {
+        state.ws = ws;
+        draw();
+      });
+    const edit = (build: Parameters<typeof api.applySwimPatch>[0]) => act(async () => api.applySwimPatch(build));
+    const undo = () => act(async () => api.undoSwimEdit());
+    const visible = () => container.querySelector('span')!.getAttribute('data-undo');
+    const undid = () => toasts.filter(([k, m]) => k === 'success' && m.startsWith('Undid:')).length;
+    return { state, toasts, writes, outside, edit, undo, visible, undid };
+  }
+
+  it('claims nothing while the workspace has not taken the Undo, then claims once it has', async () => {
+    const ws = workspace('A', ['p1', 'p2'], ['p1', 'p2']);
+    const h = await mount(ws);
+    await h.edit(w => removePlannedEntry(w, 'p1'));
+    h.state.follow = false; // the Undo's save has not landed
+    await h.undo();
+    expect(h.writes).toHaveLength(2); // the write was issued
+    expect(h.undid()).toBe(0);
+    expect(h.visible()).toBe(''); // no second press while it waits
+    await h.outside({ ...h.state.ws, ...ws } as Workspace); // the save lands
+    expect(h.undid()).toBe(1);
+  });
+
+  it('a failed Undo save brings the edit back: says so and puts the Undo back within reach', async () => {
+    const ws = workspace('A', ['p1', 'p2'], ['p1', 'p2']);
+    const h = await mount(ws);
+    await h.edit(w => removePlannedEntry(w, 'p1'));
+    const afterEdit = h.state.ws;
+    await h.undo();
+    expect(h.undid()).toBe(1);
+    // The provider reloads the server copy after the failed save: the edit is back.
+    await h.outside(afterEdit);
+    expect(h.toasts).toContainEqual(['error', SWIM_EDIT_UNDO_NOT_SAVED_MESSAGE]);
+    expect(h.visible()).toContain('Remove');
+    expect(h.toasts.some(([, m]) => m === SWIM_EDIT_UNDO_CHANGED_MESSAGE)).toBe(false);
+    // Pressing it again writes again.
+    await h.undo();
+    expect(h.writes).toHaveLength(3);
+    expect(h.state.ws.meetEntryPlans).toEqual(ws.meetEntryPlans);
+  });
+
+  it('after a settled Undo, another workspace holding the edited arrays does not re-arm it', async () => {
+    const ws = workspace('A', ['p1', 'p2'], ['p1', 'p2']);
+    const h = await mount(ws);
+    await h.edit(w => removePlannedEntry(w, 'p1'));
+    const afterEdit = h.state.ws;
+    await h.undo();
+    await h.outside({ ...afterEdit, id: 'B' } as Workspace);
+    expect(h.toasts.some(([, m]) => m === SWIM_EDIT_UNDO_NOT_SAVED_MESSAGE)).toBe(false);
+    expect(h.visible()).toBe('');
+  });
+
+  it('while an Undo waits, another workspace that already holds the pre-edit values does not settle it', async () => {
+    const ws = workspace('A', ['p1', 'p2'], ['p1', 'p2']);
+    const h = await mount(ws);
+    await h.edit(w => removePlannedEntry(w, 'p1'));
+    h.state.follow = false;
+    await h.undo(); // pending
+    await h.outside({ ...ws, id: 'B' } as Workspace); // B reads as the pre-edit lineup
+    expect(h.undid()).toBe(0);
+  });
+
+  it('a later unrelated write ends the watch: the edit coming back afterwards is not read as a failed save', async () => {
+    const ws = workspace('A', ['p1', 'p2'], ['p1', 'p2']);
+    const h = await mount(ws);
+    await h.edit(w => removePlannedEntry(w, 'p1'));
+    const afterEdit = h.state.ws;
+    await h.undo();
+    await h.outside({ ...h.state.ws, meetEntryPlans: [] } as Workspace); // something else wrote
+    await h.outside(afterEdit);
+    expect(h.toasts.some(([, m]) => m === SWIM_EDIT_UNDO_NOT_SAVED_MESSAGE)).toBe(false);
   });
 });
 
