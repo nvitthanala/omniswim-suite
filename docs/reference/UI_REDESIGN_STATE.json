@@ -425,5 +425,46 @@
       ],
       "gates": "lint and types pass; vitest 138 files / 1862 passed; playwright all 8 passed on fresh data copy; run-tests.mjs 82 passed, 2 failed (test_scoring_preset_routes port 3209, pre-existing; main-thread-budget timeout only on polluted copy)."
     }
+  },
+  "phase4": {
+    "date": "2026-10-02",
+    "status": "implemented_gates_green_except_preexisting_port_3209_script",
+    "summary": "Optimize owns all optimizers. Header Batch optimizer removed; Optimize step has 'All teams...' (dialog with preview, Drop seniors shown, unchanged result applies nothing, Undo after apply), 'Optimize team' primary, and 'Quick optimize (greedy)' (ex Classic) under a 'More options' Disclosure. Lineup 'Best roster' and 'All teams' replaced by one 'Optimize this lineup' button that opens the Optimize step. Equivalence gate PASSED: Best roster and Classic give identical overrides, plans, active ids and totals on four fixtures (team and all-teams), so they were merged.",
+    "equivalence": {
+      "verdict": "identical results; merged",
+      "golden": "tests/fixtures/bestRosterGolden.json (output of the removed Lineup buttons at commit fdeaf50a)",
+      "test": "tests/bestRosterEquivalence.test.ts",
+      "wrapperDifferencesOnly": [
+        "Best roster applied an unchanged result (confirm box 'Projected 248.0 pts (was 248.0)'); Quick optimize applies nothing",
+        "Best roster had no Undo; Quick optimize has one",
+        "Best roster used window.confirm; Quick optimize shows the change summary panel"
+      ],
+      "limits": "Men only; four fixtures; NSISC-shaped settings for the run comparison; settings idempotency checked for 26 settings/preset cases under three conference values"
+    },
+    "files": [
+      "packages/manager/src/components/RosterOptimizeStep.tsx",
+      "packages/manager/src/components/RosterOptimizeStepParts.tsx",
+      "packages/manager/src/components/BatchOptimizerPanel.tsx",
+      "packages/manager/src/components/batchOptimizerView.ts",
+      "packages/manager/src/ManagerApp.tsx",
+      "packages/manager/src/components/TeamRosterHeader.tsx",
+      "packages/manager/src/components/TeamRosterPanel.tsx",
+      "packages/manager/src/components/RosterLineupStep.tsx",
+      "packages/manager/src/components/TeamManagementView.tsx",
+      "tests/bestRosterEquivalence.test.ts",
+      "tests/optimizeStepOwnership.test.ts",
+      "tests/optimizerStepFixtures.ts",
+      "tests/optimizerNormalize.ts",
+      "tests/motionStub.ts",
+      "tests/fixtures/bestRosterGolden.json",
+      "tests/e2e/ui-ia.spec.ts"
+    ],
+    "proof": {
+      "regressionTestsFailedBeforeFix": true,
+      "mutationChecks": "9 deliberate breaks (batch unchanged guard, batch removeSeniors, quick optimize removeSeniors, quick optimize stage, step unchanged guard, all-teams Undo, lineup link click, Classic label, dialog Apply enabled when unchanged); each failed 1 to 7 tests and was restored",
+      "gates": "lint 0 errors (2 existing warnings); lint:types exit 0; vitest 140 files / 1916 passed; playwright ui-ia (5), ui-phase-2, matrix-chart, production-server 9 passed on a data copy; main-thread-budget passes only after deleting 18 stale ui-* workspaces from the copy (thin: 1 workspace); run-tests.mjs 83 passed, 1 failed (test_scoring_preset_routes, pre-existing), 1 skipped; data/omniswim.db hashes and data/backups unchanged"
+    },
+    "screenshots": "docs/reference/ui-phase-4/before (12) and after (24): Lineup and Optimize, midnight/deck-light/oled, 1440 and 800",
+    "report": "docs/reference/ui-phase-4/REPORT.md"
   }
 }

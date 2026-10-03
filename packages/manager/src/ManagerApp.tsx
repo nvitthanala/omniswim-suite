@@ -29,7 +29,6 @@ import { withManualSource } from './lib/swimCloudReplaceFlow';
 import TeamManagementView from './components/TeamManagementView';
 import SwimmerDeleteConfirmModal from './components/SwimmerDeleteConfirmModal';
 import RosterImportWizard from './components/RosterImportWizard';
-import BatchOptimizerPanel from './components/BatchOptimizerPanel';
 import ExportReviewModal from './components/ExportReviewModal';
 import ExportEntriesMenu from './components/ExportEntriesMenu';
 
@@ -112,7 +111,6 @@ function ManagerWorkspaceView({ activeWorkspace }: { activeWorkspace: Workspace 
   const [whatIfMode, setWhatIfMode] = useState(true);
   const [scoringRefreshKey, setScoringRefreshKey] = useState(0);
   const [showImportWizard, setShowImportWizard] = useState(false);
-  const [showBatchOptimizer, setShowBatchOptimizer] = useState(false);
   const [pendingExport, setPendingExport] = useState<{
     kind: 'csv' | 'hytek';
     issues: EntryExportIssue[];
@@ -253,11 +251,9 @@ function ManagerWorkspaceView({ activeWorkspace }: { activeWorkspace: Workspace 
         <div className="sm:ml-auto flex flex-wrap items-center gap-2">
           {/* One consistent secondary style (outline) across every peer
               action in this row. Only "Import roster" keeps the primary
-              emphasis it already had. Both exports live in one menu. */}
+              emphasis it already had. Both exports live in one menu. The
+              all-teams optimizer lives on the Optimize step. */}
           <ExportEntriesMenu onExport={handleExport} />
-          <Button variant="outline" onClick={() => setShowBatchOptimizer(true)} disabled={!whatIfMode} title={!whatIfMode ? 'Enable What-if to run the batch optimizer' : 'Run batch optimizer across all teams'}>
-            Batch optimizer
-          </Button>
           <Button variant="primary" onClick={() => setShowImportWizard(true)}>
             Import roster
           </Button>
@@ -306,20 +302,6 @@ function ManagerWorkspaceView({ activeWorkspace }: { activeWorkspace: Workspace 
           gender={activeGender}
           onClose={() => setShowImportWizard(false)}
           onUpdate={updateWorkspace}
-        />
-      )}
-      {showBatchOptimizer && (
-        <BatchOptimizerPanel
-          workspace={activeWorkspace}
-          gender={activeGender}
-          scoringSettings={scoringSettings}
-          removeSeniors={removeSeniors}
-          onApply={patch => {
-            void updateWorkspace(patch);
-            toast.push('success', 'Optimizer lineup applied');
-            setShowBatchOptimizer(false);
-          }}
-          onClose={() => setShowBatchOptimizer(false)}
         />
       )}
       {swimmerDeleteCandidate && (

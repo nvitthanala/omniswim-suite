@@ -305,6 +305,7 @@ export default function TeamManagementView({
           onAthleteSelect={handleAthleteSelect}
           onRequestDeleteSwimmer={onRequestDeleteSwimmer}
           onOpenRelays={() => setRosterStep('relays')}
+          onOpenOptimize={() => setRosterStep('optimize')}
           jumpAthleteName={jumpAthleteName}
           jumpAthleteKey={jumpAthleteKey}
           onJumpAthlete={handleJumpAthlete}

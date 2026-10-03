@@ -43,6 +43,8 @@ type Props = {
   onAthleteSelect?: (athlete: { name: string; team: string; classYear: string } | null) => void;
   onRequestDeleteSwimmer?: (name: string) => void;
   onOpenRelays?: () => void;
+  /** Goes to the Optimize step. The Lineup step has no optimizer of its own. */
+  onOpenOptimize?: () => void;
   jumpAthleteName?: string | null;
   jumpAthleteKey?: string | null;
   /** Jump from checklist/arbitrage: carries the athlete's roster key when known. */
@@ -66,6 +68,7 @@ export default function RosterLineupStep({
   onAthleteSelect,
   onRequestDeleteSwimmer,
   onOpenRelays,
+  onOpenOptimize,
   jumpAthleteName,
   jumpAthleteKey,
   onJumpAthlete,
@@ -192,7 +195,7 @@ export default function RosterLineupStep({
             onAthleteSelect={onAthleteSelect}
             onRequestDeleteSwimmer={onRequestDeleteSwimmer}
             workspace={workspace}
-            removeSeniors={removeSeniors}
+            onOpenOptimize={onOpenOptimize}
             onWorkspaceUpdate={onUpdate}
             jumpAthleteName={jumpAthleteName}
             jumpAthleteKey={jumpAthleteKey}

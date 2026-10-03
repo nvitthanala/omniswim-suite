@@ -63,7 +63,10 @@ test('Phase 1 IA regressions and theme/width screenshots', async ({ page, reques
       await page.getByRole('tab', { name: /Analyze/ }).click();
       await captureScreenshot(page, `${theme}-${width}-matrix-analyze`);
 
-      await page.goto(`/manager?workspace=${createdWorkspace.id}&gender=Men`);
+      // Not `/manager?workspace=<id>`: that cold load sends the shell's workspace/URL sync into a swap
+      // loop (about 30 remounts a second), which detaches the Optimize step's buttons mid-click.
+      await startOnWorkspace(page, createdWorkspace.id);
+      await page.goto('/manager');
       await expect(page.getByRole('tab', { name: /Athletes/ })).toBeVisible();
       await captureScreenshot(page, `${theme}-${width}-manager-athletes`);
       const genderButtons = page.locator('nav[aria-label="Gender"] button[aria-pressed]');
@@ -77,7 +80,9 @@ test('Phase 1 IA regressions and theme/width screenshots', async ({ page, reques
       await page.getByRole('tab', { name: /Optimize/ }).click();
       const whatIf = page.getByLabel('What-if');
       if (await whatIf.isChecked()) await whatIf.uncheck();
-      const batchButton = page.getByRole('button', { name: 'Batch optimizer' });
+      // Phase 4: the all-teams optimizer lives on the Optimize step, not in the header.
+      await expect(page.getByRole('button', { name: 'Batch optimizer' })).toHaveCount(0);
+      const batchButton = page.getByRole('button', { name: 'All teams…' });
       await expect(batchButton).toBeDisabled();
       const recalc = page.getByRole('button', { name: 'Recalc' });
       await recalc.click();
@@ -85,10 +90,14 @@ test('Phase 1 IA regressions and theme/width screenshots', async ({ page, reques
       await genderButtons.nth(1).click();
       await expect(page.getByRole('tab', { name: /Optimize/ })).toHaveAttribute('aria-selected', 'true');
       await captureScreenshot(page, `${theme}-${width}-manager`);
+      // The fixture has no women's results, so Women shows "Bring in swimmers first" with no optimizer
+      // action. Go back to Men, where the roster exists.
+      await genderButtons.first().click();
+      await expect(page.getByRole('tab', { name: /Optimize/ })).toHaveAttribute('aria-selected', 'true');
       if (!(await whatIf.isChecked())) await whatIf.check();
       await expect(batchButton).toBeEnabled();
       await batchButton.click();
-      await expect(page.getByRole('dialog', { name: 'Batch Optimizer' })).toBeVisible();
+      await expect(page.getByRole('dialog', { name: 'Optimize all teams' })).toBeVisible();
       await captureScreenshot(page, `${theme}-${width}-batch-optimizer`);
       await page.keyboard.press('Escape');
 
@@ -112,14 +121,18 @@ test('Phase 1 IA regressions and theme/width screenshots', async ({ page, reques
 type PhasePage = import('@playwright/test').Page;
 type PhaseRequest = import('@playwright/test').APIRequestContext;
 
-async function createPhaseWorkspace(request: PhaseRequest, label: string): Promise<{ id: string; name: string }> {
+async function createPhaseWorkspace(
+  request: PhaseRequest,
+  label: string,
+  phase: 3 | 4 = 3
+): Promise<{ id: string; name: string }> {
   const stamp = Date.now();
-  const id = `ui-p3-${label}-${stamp}`;
+  const id = `ui-p${phase}-${label}-${stamp}`;
   const created = await request.post('/api/workspaces', {
     data: {
       ...fixture,
       id,
-      name: `UI Phase 3 ${label} ${stamp}`,
+      name: `UI Phase ${phase} ${label} ${stamp}`,
       createdAt: stamp,
       menResults: ((fixture.menResults ?? []) as Array<Record<string, unknown>>).map((row, index) => ({ ...row, id: `${id}-m-${index}` })),
       womenResults: ((fixture.womenResults ?? []) as Array<Record<string, unknown>>).map((row, index) => ({ ...row, id: `${id}-w-${index}` })),
@@ -128,7 +141,7 @@ async function createPhaseWorkspace(request: PhaseRequest, label: string): Promi
   });
   const body = await created.text();
   expect(created.ok(), body).toBeTruthy();
-  return { id: (JSON.parse(body) as { id: string }).id, name: `UI Phase 3 ${label} ${stamp}` };
+  return { id: (JSON.parse(body) as { id: string }).id, name: `UI Phase ${phase} ${label} ${stamp}` };
 }
 
 /** Choose a team on whichever UI is present: the Phase 3 team bar, or the pre-Phase-3 per-step pickers. */
@@ -327,6 +340,115 @@ test('Phase 3 Athletes step, shared team bar and Export entries menu', async ({ 
     expect(download.suggestedFilename()).toContain('entries');
     if (suffix) expect(download.suggestedFilename().endsWith(suffix)).toBe(true);
   }
+
+  expect(pageErrors).toEqual([]);
+});
+
+/* ------------------------------------------------------------------------ */
+/* Phase 4: Optimize owns all optimizers                                     */
+/* ------------------------------------------------------------------------ */
+
+const PHASE4_SHOT_DIR = process.env.PHASE4_SHOT_DIR === 'before' ? 'before' : 'after';
+
+test('Phase 4 Optimize and Lineup screenshots', async ({ page, request }) => {
+  test.setTimeout(300_000);
+  const dir = `docs/reference/ui-phase-4/${PHASE4_SHOT_DIR}`;
+  mkdirSync(dir, { recursive: true });
+  const pageErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  const { id, name } = await createPhaseWorkspace(request, 'shots', 4);
+  for (const theme of themes) {
+    await page.addInitScript(value => {
+      localStorage.setItem('omni-preferences', JSON.stringify({
+        themePreset: value, colorMode: value === 'deck-light' ? 'light' : 'dark',
+        textScale: 'default', reducedMotion: false, highContrast: false, focusRingEnhanced: false, sidebarCollapsedDefault: false,
+      }));
+    }, theme);
+    for (const width of widths) {
+      await page.setViewportSize({ width, height: 1000 });
+      await openManagerOn(page, id, name);
+      for (const step of [{ tab: /Lineup/, name: 'lineup' }, { tab: /Optimize/, name: 'optimize' }]) {
+        const tab = page.getByRole('tab', { name: step.tab });
+        await tab.click();
+        await chooseTeam(page, PHASE3_SHOT_TEAM);
+        await expect(tab).toHaveAttribute('aria-selected', 'true');
+        await expect(page.getByRole('heading', { name: 'Team management' })).toBeVisible();
+        await expect(page.locator('header')).toContainText(name.slice(0, 18));
+        await page.waitForTimeout(400);
+        await page.screenshot({ path: `${dir}/${theme}-${width}-${step.name}.png`, fullPage: true });
+        if (step.name === 'optimize' && PHASE4_SHOT_DIR === 'after') {
+          // "More options" open, then the All teams dialog (neither exists before Phase 4).
+          await page.getByRole('button', { name: 'More options' }).click();
+          await page.waitForTimeout(300);
+          await page.screenshot({ path: `${dir}/${theme}-${width}-optimize-more-options.png`, fullPage: true });
+          await page.getByRole('button', { name: 'All teams…' }).click();
+          await expect(page.getByRole('dialog', { name: 'Optimize all teams' })).toBeVisible();
+          await page.waitForTimeout(300);
+          await page.screenshot({ path: `${dir}/${theme}-${width}-optimize-all-teams-dialog.png`, fullPage: true });
+          await page.keyboard.press('Escape');
+        }
+      }
+    }
+  }
+  expect(pageErrors).toEqual([]);
+});
+
+test('Phase 4 Optimize owns the optimizers and Lineup only links to it', async ({ page, request }) => {
+  test.setTimeout(180_000);
+  const pageErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  const { id, name } = await createPhaseWorkspace(request, 'ia', 4);
+  await page.addInitScript(() => {
+    localStorage.setItem('omni-preferences', JSON.stringify({
+      themePreset: 'midnight', colorMode: 'dark', textScale: 'default',
+      reducedMotion: false, highContrast: false, focusRingEnhanced: false, sidebarCollapsedDefault: false,
+    }));
+  });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await openManagerOn(page, id, name);
+
+  // The header no longer carries a Batch optimizer button on any step.
+  for (const step of ['Athletes', 'Lineup', 'Relays', 'Optimize']) {
+    await page.getByRole('tab', { name: new RegExp(step) }).click();
+    await expect(page.getByRole('button', { name: /Batch optimizer/i })).toHaveCount(0);
+  }
+
+  // Lineup: one "Optimize this lineup" link; the old optimizer buttons are gone.
+  await page.getByRole('tab', { name: /Lineup/ }).click();
+  await chooseTeam(page, PHASE3_SHOT_TEAM);
+  const lineupPanel = page.getByRole('tabpanel');
+  await expect(lineupPanel.getByRole('button', { name: 'Optimize this lineup' })).toHaveCount(1);
+  await expect(lineupPanel.getByRole('button', { name: 'Best roster' })).toHaveCount(0);
+  await expect(lineupPanel.getByRole('button', { name: 'All teams', exact: true })).toHaveCount(0);
+  await lineupPanel.getByRole('button', { name: 'Optimize this lineup' }).click();
+  await expect(page.getByRole('tab', { name: /Optimize/ })).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('combobox', { name: 'Team', exact: true })).toHaveValue(PHASE3_SHOT_TEAM);
+
+  // Optimize: This team primary, All teams dialog, Quick optimize under More options.
+  const panel = page.getByRole('tabpanel');
+  await expect(panel.getByRole('button', { name: 'Optimize team' })).toBeVisible();
+  await expect(panel.getByRole('button', { name: 'Classic' })).toHaveCount(0);
+  const more = panel.getByRole('button', { name: 'More options' });
+  await expect(more).toHaveAttribute('aria-expanded', 'false');
+  await expect(panel.getByRole('button', { name: 'Quick optimize (greedy)' })).toBeHidden();
+  await more.click();
+  await expect(more).toHaveAttribute('aria-expanded', 'true');
+  await expect(panel.getByRole('button', { name: 'Quick optimize (greedy)' })).toBeVisible();
+
+  // The All teams dialog opens from here, names Drop seniors, and closes on Escape.
+  await panel.getByRole('button', { name: 'All teams…' }).click();
+  const dialog = page.getByRole('dialog', { name: 'Optimize all teams' });
+  await expect(dialog).toBeVisible();
+  await expect(dialog).toContainText('Drop seniors is off');
+  await expect(dialog.getByRole('button', { name: 'Apply to Workspace' })).toBeDisabled();
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+
+  // Keyboard access: the All teams action takes focus and opens with Enter.
+  await panel.getByRole('button', { name: 'All teams…' }).focus();
+  await page.keyboard.press('Enter');
+  await expect(dialog).toBeVisible();
+  await page.keyboard.press('Escape');
 
   expect(pageErrors).toEqual([]);
 });

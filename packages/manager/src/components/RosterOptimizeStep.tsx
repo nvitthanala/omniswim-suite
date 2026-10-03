@@ -9,7 +9,6 @@ import { Gender, ScoringSettings, Workspace } from '@omniswim/core/types';
 import {
   diffOptimizerChanges,
   optimizeRosterForTeam,
-  optimizeRosterAllTeams,
   type GuardedOptimizerResult,
   type OptimizerChangeSummary,
 } from '@omniswim/core/lib/rosterOptimizer';
@@ -20,10 +19,16 @@ import {
   type ArbitrageCard,
   type ArbitrageMode,
 } from '@omniswim/core/lib/rosterArbitrage';
-import { EmptyState, useToast } from '@omniswim/ui';
+import { Button, EmptyState, useToast } from '@omniswim/ui';
 import TeamPickerEmptyState from './TeamPickerEmptyState';
 import { ArbitragePreviewSection, OptimizerControls } from './RosterOptimizeStepParts';
 import OptimizerChangeSummaryPanel, { type OptimizerRunSummary } from './OptimizerChangeSummaryPanel';
+import BatchOptimizerPanel from './BatchOptimizerPanel';
+import {
+  BATCH_UNCHANGED_MESSAGE,
+  buildBatchApplyPatch,
+  type BatchOptimizationResult,
+} from './batchOptimizerView';
 
 /** Snapshot shape from `captureBeforeState`, shared by `applyOptimizerResult`. */
 type OptimizerBeforeState = {
@@ -36,9 +41,9 @@ type OptimizerBeforeState = {
  * Shared "run guarded optimizer, branch on outcome" logic for the per-team
  * arbitrage (`applyTeam`) and legacy (`applyLegacy`) optimize buttons —
  * jscpd's flagged 24-line clone between them (2026-09-25 code-health pass).
- * `applyAll` below applies to the whole field instead of one team and keeps
- * its own copy: its unguarded-toast wording and label differ enough that
- * sharing would blur both messages.
+ * `applyAllTeamsResult` below applies the "All teams" dialog's result to the
+ * whole field instead of one team and keeps its own copy: its toast wording and
+ * label differ enough that sharing would blur both messages.
  */
 function applyOptimizerResult({
   team,
@@ -205,6 +210,8 @@ export default function RosterOptimizeStep({
   const [preview, setPreview] = useState<ArbitrageCardsResult | null>(null);
   const [scanning, setScanning] = useState(false);
   const [lastRunSummary, setLastRunSummary] = useState<OptimizerRunSummary | null>(null);
+  // The "All teams" dialog. It is the one entry point for a whole-field run.
+  const [showAllTeams, setShowAllTeams] = useState(false);
   // One-shot undo for the single most recent APPLIED optimizer run, following
   // RosterImportWizard.tsx's lastAliasLink/handleUndoAliasLink shape: a
   // component-local snapshot of the pre-run state plus one dedicated Undo
@@ -320,24 +327,24 @@ export default function RosterOptimizeStep({
     });
   };
 
-  const applyAll = () => {
-    if (!whatIfMode) return;
+  /**
+   * Applies what the "All teams" dialog produced. The dialog never offers an
+   * `unchanged` result for applying; this guards again so a result that changed
+   * nothing can never write state or arm an Undo, whichever way it arrives.
+   * Per-team gains can cancel once chained (measured +307 and +18 individually
+   * netting to +16 across the meet), which is why the engine guards on the
+   * aggregate and reports it as `outcome`.
+   */
+  const applyAllTeamsResult = (result: BatchOptimizationResult) => {
     const before = captureBeforeState();
-    const result = optimizeRosterAllTeams(workspace, gender, removeSeniors, scoringSettings);
-    recordRunSummary('All teams', result, before);
-    // Same rule as applyLegacy. The all-teams path guards on the aggregate, because
-    // per-team gains can cancel once chained — measured +307 and +18 individually
-    // netting to +16 across the meet.
-    if (result.outcome === 'unchanged') {
+    recordRunSummary('All teams', result.optimizer, before);
+    const patch = buildBatchApplyPatch(result);
+    if (!patch) {
       setLastOptimizeUndo(null);
-      toast.push('info', 'No lineup change improved the field — nothing was applied.');
+      toast.push('info', BATCH_UNCHANGED_MESSAGE);
       return;
     }
-    onUpdate({
-      scorerRosterOverrides: result.overrides,
-      meetEntryPlans: result.meetEntryPlans,
-      activeEntryIds: result.activeEntryIds,
-    });
+    onUpdate(patch);
     setLastOptimizeUndo({
       label: 'All teams',
       patch: {
@@ -346,9 +353,20 @@ export default function RosterOptimizeStep({
         activeEntryIds: before.activeIds,
       },
     });
-    const gain = result.projectedTotal - result.previousTotal;
+    const gain = result.optimizer.projectedTotal - result.optimizer.previousTotal;
     toast.push('success', `All teams: +${gain.toFixed(1)} pts across the field`);
   };
+
+  const allTeamsDialog = showAllTeams ? (
+    <BatchOptimizerPanel
+      workspace={workspace}
+      gender={gender}
+      scoringSettings={scoringSettings}
+      removeSeniors={removeSeniors}
+      onApply={applyAllTeamsResult}
+      onClose={() => setShowAllTeams(false)}
+    />
+  ) : null;
 
   if (!hasRoster) {
     return (
@@ -363,11 +381,27 @@ export default function RosterOptimizeStep({
 
   if (!selectedTeam) {
     return (
-      <TeamPickerEmptyState
-        eyebrow="Optimize"
-        title="Choose a team to optimize"
-        description="Use the team bar above to pick the team whose point opportunities you want to review and optimize."
-      />
+      <div className="flex flex-col gap-4">
+        <TeamPickerEmptyState
+          eyebrow="Optimize"
+          title="Choose a team to optimize"
+          description="Use the team bar above to pick the team whose point opportunities you want to review and optimize."
+        />
+        <div className="surface-card rounded-xl p-4 sm:p-5 flex flex-wrap items-center gap-3">
+          <p className="text-ui-body text-theme-secondary min-w-0 flex-1">
+            Or optimize every team at once. This does not need a team.
+          </p>
+          <Button
+            variant="outline"
+            disabled={!whatIfMode}
+            onClick={() => setShowAllTeams(true)}
+            title={whatIfMode ? 'Optimize every team in the field' : 'Enable What-if to optimize'}
+          >
+            All teams…
+          </Button>
+        </div>
+        {allTeamsDialog}
+      </div>
     );
   }
 
@@ -380,7 +414,7 @@ export default function RosterOptimizeStep({
         whatIfMode={whatIfMode}
         onApplyTeam={applyTeam}
         onApplyLegacy={applyLegacy}
-        onApplyAll={applyAll}
+        onOpenAllTeams={() => setShowAllTeams(true)}
       />
 
       {!whatIfMode ? (
@@ -396,6 +430,8 @@ export default function RosterOptimizeStep({
           onUndo={lastOptimizeUndo ? handleUndoOptimize : undefined}
         />
       ) : null}
+
+      {allTeamsDialog}
 
       <ArbitragePreviewSection
         team={team}

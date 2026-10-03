@@ -14,7 +14,6 @@ import { buildTeamScoreLookup, officialScoresForGender } from '@omniswim/core/li
 import { buildAliasResolver } from '@omniswim/core/lib/athleteAliases';
 import { type EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
 import { buildHistoryFromWorkspace, mergeHistoryIndex } from '@omniswim/core/lib/athleteHistory';
-import { optimizeRosterAllTeams, optimizeRosterForTeam } from '@omniswim/core/lib/rosterOptimizer';
 import { applyScorerOffRelayPatch, type TeamLineupAudit } from '@omniswim/core/lib/rosterLineupAudit';
 import { Button, useOpenScoringRules, useToast } from '@omniswim/ui';
 import { countTeamMembers, genderLabelFor, resolveTeamPickerMode, rosterColSpan } from './teamRosterView';
@@ -57,7 +56,8 @@ type Props = {
   onAthleteSelect?: (athlete: { name: string; team: string; classYear: string } | null) => void;
   onRequestDeleteSwimmer?: (name: string) => void;
   workspace?: Workspace;
-  removeSeniors?: boolean;
+  /** Opens the Optimize step. The Lineup step has no optimizer of its own. */
+  onOpenOptimize?: () => void;
   onWorkspaceUpdate?: (patch: Partial<Workspace>) => void;
   /** Select this athlete by name when set (checklist Jump). */
   jumpAthleteName?: string | null;
@@ -89,7 +89,7 @@ export default function TeamRosterPanel({
   onAthleteSelect,
   onRequestDeleteSwimmer,
   workspace,
-  removeSeniors = false,
+  onOpenOptimize,
   onWorkspaceUpdate,
   jumpAthleteName,
   jumpAthleteKey,
@@ -360,20 +360,6 @@ export default function TeamRosterPanel({
     onChangeOverrides(rest);
   };
 
-  const runOptimizer = (allTeams: boolean) => {
-    if (!editable || !workspace || !onWorkspaceUpdate) return;
-    const result = allTeams
-      ? optimizeRosterAllTeams(workspace, gender, removeSeniors, merged, 'all')
-      : optimizeRosterForTeam(workspace, gender, selectedTeam, removeSeniors, merged, 'all');
-    const msg = `Projected ${result.projectedTotal.toFixed(1)} pts (was ${result.previousTotal.toFixed(1)}). Apply?`;
-    if (!window.confirm(msg)) return;
-    onWorkspaceUpdate({
-      scorerRosterOverrides: result.overrides,
-      meetEntryPlans: result.meetEntryPlans,
-      activeEntryIds: result.activeEntryIds,
-    });
-  };
-
   const selectedProjected = projectedByTeam.get(selectedTeam) ?? 0;
   const selectedBaseline = baselineByTeam.get(selectedTeam);
   const selectedActual = officialLookup.get(selectedTeam);
@@ -398,17 +384,13 @@ export default function TeamRosterPanel({
   const genderLabel = genderLabelFor(gender);
   const colSpan = rosterColSpan(editable, Boolean(onRequestDeleteSwimmer));
 
-  const canOptimize = Boolean(editable && workspace && onWorkspaceUpdate);
-
   const rosterTable = (
     <div className={expanded ? 'flex flex-col flex-1 min-h-0' : undefined}>
       <TeamRosterHeader
         selectedTeam={selectedTeam}
         genderLabel={genderLabel}
         editable={editable}
-        canOptimize={canOptimize}
-        onOptimizeTeam={() => runOptimizer(false)}
-        onOptimizeAll={() => runOptimizer(true)}
+        onOpenOptimize={onOpenOptimize}
         onResetTeam={resetTeamManual}
         maxIndividualScorersPerTeam={merged.maxIndividualScorersPerTeam}
         selectedActual={selectedActual}

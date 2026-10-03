@@ -10,7 +10,7 @@
 import React from 'react';
 import { Sparkles } from 'lucide-react';
 import type { ArbitrageCard, ArbitrageCardsResult, ArbitrageMode } from '@omniswim/core/lib/rosterArbitrage';
-import { Button } from '@omniswim/ui';
+import { Button, Disclosure } from '@omniswim/ui';
 import { ArbitrageCardList } from './RosterOptimizeStep';
 
 type OptimizerControlsProps = {
@@ -20,7 +20,8 @@ type OptimizerControlsProps = {
   whatIfMode: boolean;
   onApplyTeam: () => void;
   onApplyLegacy: () => void;
-  onApplyAll: () => void;
+  /** Opens the "All teams" dialog. */
+  onOpenAllTeams: () => void;
 };
 
 export function OptimizerControls({
@@ -30,42 +31,61 @@ export function OptimizerControls({
   whatIfMode,
   onApplyTeam,
   onApplyLegacy,
-  onApplyAll,
+  onOpenAllTeams,
 }: OptimizerControlsProps) {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
-      <label className="lg:col-span-4 flex flex-col gap-1.5 min-w-0">
-        <span className="text-ui-caption text-theme-muted">Strategy</span>
-        <select
-          value={mode}
-          disabled={!whatIfMode}
-          onChange={e => onModeChange(e.target.value as ArbitrageMode)}
-          className="glass-input w-full rounded-lg px-3 py-2.5 text-ui-body disabled:opacity-50"
-        >
-          <option value="individual_first">Individuals first, then relays</option>
-          <option value="relay_first">Relays first, then individuals</option>
-        </select>
-      </label>
-      <div className="lg:col-span-8 flex flex-wrap gap-2">
-        <Button
-          disabled={!whatIfMode || !team}
-          onClick={onApplyTeam}
-          leadingIcon={<Sparkles size={14} />}
-        >
-          Optimize team
-        </Button>
-        <Button
-          variant="outline"
-          disabled={!whatIfMode || !team}
-          onClick={onApplyLegacy}
-          title="Classic greedy optimizer"
-        >
-          Classic
-        </Button>
-        <Button variant="outline" disabled={!whatIfMode} onClick={onApplyAll}>
-          All teams
-        </Button>
+    <div className="flex flex-col gap-4">
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
+        <label className="lg:col-span-4 flex flex-col gap-1.5 min-w-0">
+          <span className="text-ui-caption text-theme-muted">Strategy</span>
+          <select
+            value={mode}
+            disabled={!whatIfMode}
+            onChange={e => onModeChange(e.target.value as ArbitrageMode)}
+            className="glass-input w-full rounded-lg px-3 py-2.5 text-ui-body disabled:opacity-50"
+          >
+            <option value="individual_first">Individuals first, then relays</option>
+            <option value="relay_first">Relays first, then individuals</option>
+          </select>
+        </label>
+        <div className="lg:col-span-8 flex flex-wrap gap-2">
+          <Button
+            disabled={!whatIfMode || !team}
+            onClick={onApplyTeam}
+            leadingIcon={<Sparkles size={14} />}
+          >
+            Optimize team
+          </Button>
+          <Button
+            variant="outline"
+            disabled={!whatIfMode}
+            onClick={onOpenAllTeams}
+            title={
+              whatIfMode
+                ? 'Optimize every team in the field, with a preview before it applies'
+                : 'Enable What-if to optimize'
+            }
+          >
+            All teams…
+          </Button>
+        </div>
       </div>
+      <Disclosure title="More options">
+        <div className="flex flex-wrap items-center gap-3">
+          <Button
+            variant="outline"
+            disabled={!whatIfMode || !team}
+            onClick={onApplyLegacy}
+            title="Ranks scorers, then fills events, in one greedy pass"
+          >
+            Quick optimize (greedy)
+          </Button>
+          <p className="text-ui-caption text-theme-secondary min-w-0 flex-1">
+            One greedy pass for this team: ranks scorers, then fills events. It ignores the
+            Strategy setting.
+          </p>
+        </div>
+      </Disclosure>
     </div>
   );
 }

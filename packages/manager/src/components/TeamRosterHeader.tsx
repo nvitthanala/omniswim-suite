@@ -13,9 +13,8 @@ type Props = {
   selectedTeam: string;
   genderLabel: string;
   editable: boolean;
-  canOptimize: boolean;
-  onOptimizeTeam: () => void;
-  onOptimizeAll: () => void;
+  /** Open the Optimize step. Omit to hide the link. */
+  onOpenOptimize?: () => void;
   onResetTeam: () => void;
   maxIndividualScorersPerTeam: number;
   selectedActual: number | undefined;
@@ -32,9 +31,7 @@ export default function TeamRosterHeader({
   selectedTeam,
   genderLabel,
   editable,
-  canOptimize,
-  onOptimizeTeam,
-  onOptimizeAll,
+  onOpenOptimize,
   onResetTeam,
   maxIndividualScorersPerTeam,
   selectedActual,
@@ -57,28 +54,18 @@ export default function TeamRosterHeader({
           <span className="text-theme-muted font-normal shrink-0">{genderLabel}</span>
         </h4>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 shrink-0">
-          {canOptimize ? (
-            <>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onOptimizeTeam}
-                disabled={!selectedTeam}
-                className="text-[var(--text-accent)] hover:underline whitespace-nowrap"
-                title="Optimize scorers and event lineup for selected team"
-                leadingIcon={<Sparkles size={12} />}
-              >
-                Best roster
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onOptimizeAll}
-                className="text-theme-secondary hover:text-[var(--text-accent)] whitespace-nowrap"
-              >
-                All teams
-              </Button>
-            </>
+          {onOpenOptimize ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onOpenOptimize}
+              disabled={!selectedTeam}
+              className="text-[var(--text-accent)] hover:underline whitespace-nowrap"
+              title="Open the Optimize step for this team"
+              leadingIcon={<Sparkles size={12} />}
+            >
+              Optimize this lineup
+            </Button>
           ) : null}
           {editable ? (
             <Button
