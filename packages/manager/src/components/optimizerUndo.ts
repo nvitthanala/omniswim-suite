@@ -33,8 +33,19 @@ export type OptimizerUndo = {
 
 export const UNDO_CHANGED_MESSAGE = 'Lineup changed since the run. Undo would discard later edits.';
 
+/**
+ * The save of the apply did not go through, so the server copy (reloaded after the failed save)
+ * holds the lineup from before the run. There is nothing to undo.
+ */
+export const APPLY_NOT_SAVED_MESSAGE =
+  'The apply was not saved. The lineup is back to how it was before the run, so there is nothing to undo.';
+
+/** The save of an Undo did not go through, so the optimized lineup came back. */
+export const UNDO_NOT_SAVED_MESSAGE =
+  'The undo was not saved. The optimized lineup is back. Press Undo to try again.';
+
 /** JSON with object keys sorted, so equal content gives an equal string whatever the key order. */
-function canonical(value: unknown): string {
+export function canonical(value: unknown): string {
   if (Array.isArray(value)) return `[${value.map(canonical).join(',')}]`;
   if (value !== null && typeof value === 'object') {
     const entries = Object.entries(value as Record<string, unknown>)
@@ -84,4 +95,24 @@ export function buildOptimizerUndo(args: {
 /** True when the live arrays are exactly what the run left, so Undo cannot discard later edits. */
 export function optimizerUndoIsClean(undo: OptimizerUndo, current: OptimizerOwnedArrays): boolean {
   return fingerprintOptimizerArrays(current) === undo.appliedFingerprint;
+}
+
+/** True when the live arrays equal what Undo writes back (the pre-run arrays). */
+export function optimizerUndoTargetReached(undo: OptimizerUndo, current: OptimizerOwnedArrays): boolean {
+  return fingerprintOptimizerArrays(current) === fingerprintOptimizerArrays(optimizerArraysOf(undo.patch));
+}
+
+export type OptimizerUndoState = 'clean' | 'apply_not_saved' | 'changed';
+
+/**
+ * What the live arrays say about an armed Undo.
+ * - clean: still exactly what the run left.
+ * - apply_not_saved: exactly the pre-run arrays. The apply's save failed and the provider reloaded
+ *   the server copy. There is nothing to undo.
+ * - changed: anything else. The coach edited after the run.
+ */
+export function optimizerUndoState(undo: OptimizerUndo, current: OptimizerOwnedArrays): OptimizerUndoState {
+  if (optimizerUndoIsClean(undo, current)) return 'clean';
+  if (optimizerUndoTargetReached(undo, current)) return 'apply_not_saved';
+  return 'changed';
 }

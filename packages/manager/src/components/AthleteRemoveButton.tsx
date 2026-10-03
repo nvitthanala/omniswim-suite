@@ -5,14 +5,16 @@
  * The drawer's "Remove" action. It is a real <button>, so Tab reaches it and
  * Enter and Space activate it through the browser's own key handling. (A
  * second onKeyDown would fire the action twice.) The hint says what Remove
- * does, for the tooltip and for screen readers.
+ * does, for the tooltip and for screen readers. The button opens a confirmation
+ * (SwimmerDeleteConfirmModal: Hide or Remove). It does not remove on its own,
+ * so the hint must not say it does.
  */
 import { useId } from 'react';
 import { Trash2 } from 'lucide-react';
 import { Button } from '@omniswim/ui';
 
 export const ATHLETE_REMOVE_HINT =
-  'Removes this athlete from the roster. Meet results stay on record. Press Enter or Space to remove.';
+  'Opens a confirmation. There you choose to hide this athlete from the What-if projection or to remove them from the roster. Meet results stay on record.';
 
 type Props = {
   athleteName: string;

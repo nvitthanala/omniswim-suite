@@ -47,8 +47,12 @@ describe('AthleteRemoveButton', () => {
   });
 
   it('says what Remove does, in the tooltip and for screen readers', () => {
-    expect(ATHLETE_REMOVE_HINT).toMatch(/roster/);
-    expect(ATHLETE_REMOVE_HINT).toMatch(/Enter or Space/);
+    // The button opens SwimmerDeleteConfirmModal (Hide or Remove). It does not remove by itself,
+    // so the hint must say "confirmation" and must not promise a one-key removal.
+    expect(ATHLETE_REMOVE_HINT).toMatch(/Opens a confirmation/);
+    expect(ATHLETE_REMOVE_HINT).toMatch(/hide/);
+    expect(ATHLETE_REMOVE_HINT).toMatch(/remove/);
+    expect(ATHLETE_REMOVE_HINT).not.toMatch(/Enter or Space/);
     expect(button().title).toBe(ATHLETE_REMOVE_HINT);
     const describedBy = button().getAttribute('aria-describedby');
     expect(describedBy).toBeTruthy();

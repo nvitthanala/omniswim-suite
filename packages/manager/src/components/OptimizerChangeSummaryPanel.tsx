@@ -14,7 +14,7 @@
  * `plans/2026-09-14/03-OPTIMIZER-TRANSPARENCY.md` pieces 1 and 2.
  */
 
-import React from 'react';
+import React, { useRef } from 'react';
 import { X } from 'lucide-react';
 import { Button } from '@omniswim/ui';
 import type {
@@ -81,6 +81,12 @@ type Props = {
   onUndo?: () => void;
   /** Set when Undo was pressed but the lineup changed since the run. Shown with the two choices below. */
   undoBlockedMessage?: string;
+  /**
+   * Why Undo was refused. 'changed' (default) offers "Keep my edits" and "Undo anyway".
+   * 'apply_not_saved' means the run never reached the server, so nothing is left to undo and the
+   * only choice is "Dismiss".
+   */
+  undoBlockedKind?: 'changed' | 'apply_not_saved';
   /** Write the pre-run arrays back anyway, discarding the later edits. */
   onUndoAnyway?: () => void;
   /** Keep the later edits and leave the run as it is. */
@@ -104,10 +110,14 @@ export default function OptimizerChangeSummaryPanel({
   onDismiss,
   onUndo,
   undoBlockedMessage,
+  undoBlockedKind = 'changed',
   onUndoAnyway,
   onKeepEdits,
 }: Props) {
   const { label, result, changes } = summary;
+  // Stable focus target. The "Keep my edits" button unmounts with the message, and a focused element
+  // that unmounts leaves focus on <body>.
+  const headingRef = useRef<HTMLParagraphElement>(null);
   const gain = result.projectedTotal - result.previousTotal;
   const rejected = result.consideredButRejected ?? [];
   const hasDetail = changes.scorerChanges.length > 0 || changes.entryChanges.length > 0 || rejected.length > 0;
@@ -116,7 +126,12 @@ export default function OptimizerChangeSummaryPanel({
     <div className="rounded-xl border border-theme-soft surface-muted-bg p-4 flex flex-col gap-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-ui-label font-semibold text-[var(--text-primary)]">
+          <p
+            ref={headingRef}
+            tabIndex={-1}
+            data-optimizer-summary-heading
+            className="text-ui-label font-semibold text-[var(--text-primary)] outline-none"
+          >
             {label}: {result.outcome === 'improved' ? (
               <span className="text-points-positive">+{gain.toFixed(1)} pts</span>
             ) : (
@@ -154,16 +169,32 @@ export default function OptimizerChangeSummaryPanel({
       {undoBlockedMessage ? (
         <div
           role="alert"
-          className="rounded-lg border border-[var(--toast-border)] bg-[var(--toast-bg)] px-3 py-2 flex flex-wrap items-center gap-3"
+          className="rounded-lg border border-warning-faint bg-warning-faint px-3 py-2 flex flex-wrap items-center gap-3"
         >
-          <p className="text-ui-caption text-[var(--toast-text)] min-w-0 flex-1">{undoBlockedMessage}</p>
+          <p className="text-ui-caption text-warning min-w-0 flex-1">{undoBlockedMessage}</p>
           <div className="shrink-0 flex items-center gap-2">
-            <Button variant="outline" size="sm" onClick={onKeepEdits} className="px-3 py-1.5 whitespace-nowrap">
-              Keep my edits
-            </Button>
-            <Button variant="outline" size="sm" onClick={onUndoAnyway} className="px-3 py-1.5 whitespace-nowrap">
-              Undo anyway
-            </Button>
+            {undoBlockedKind === 'apply_not_saved' ? (
+              <Button variant="outline" size="sm" onClick={onDismiss} className="px-3 py-1.5 whitespace-nowrap">
+                Dismiss
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    onKeepEdits?.();
+                    headingRef.current?.focus();
+                  }}
+                  className="px-3 py-1.5 whitespace-nowrap"
+                >
+                  Keep my edits
+                </Button>
+                <Button variant="outline" size="sm" onClick={onUndoAnyway} className="px-3 py-1.5 whitespace-nowrap">
+                  Undo anyway
+                </Button>
+              </>
+            )}
           </div>
         </div>
       ) : null}

@@ -13,11 +13,14 @@ import { ToastProvider } from '@omniswim/ui';
 import { Gender, type Workspace } from '@omniswim/core/types';
 import RosterOptimizeStep from '../packages/manager/src/components/RosterOptimizeStep';
 import {
+  APPLY_NOT_SAVED_MESSAGE,
   UNDO_CHANGED_MESSAGE,
+  UNDO_NOT_SAVED_MESSAGE,
   buildOptimizerUndo,
   fingerprintOptimizerArrays,
   optimizerArraysOf,
   optimizerUndoIsClean,
+  optimizerUndoState,
 } from '../packages/manager/src/components/optimizerUndo';
 import { HOME_TEAM, buildMeetWorkspace, resolvedScoringSettings } from './optimizerStepFixtures';
 
@@ -89,10 +92,13 @@ describe('Optimize step Undo after later edits', () => {
   const click = async (text: RegExp) => {
     const button = findButton(text);
     expect(button, `button ${text}`).toBeTruthy();
+    // A real press focuses the button first. The focus tests depend on that.
+    button!.focus();
     await act(async () => {
       button!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
   };
+  const toastTexts = () => Array.from(document.querySelectorAll('.toast-message')).map(n => n.textContent ?? '');
   const settle = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 120)); });
 
   const gainWorkspace = () => buildMeetWorkspace({ unheldEvent: true, seniorIndexes: [2, 3] });
@@ -100,14 +106,17 @@ describe('Optimize step Undo after later edits', () => {
   /** The step with a workspace that follows onUpdate, and a way to make an outside edit. */
   async function mount(ws: Workspace, selectedTeam = HOME_TEAM) {
     const updates: Array<Partial<Workspace>> = [];
-    const state = { current: ws, team: selectedTeam };
+    // `applyUpdates: false` models a provider whose save failed and reloaded the server copy:
+    // the write is made but the workspace the step sees does not change.
+    const state = { current: ws, team: selectedTeam, gender: Gender.MEN, applyUpdates: true };
     const draw = () =>
       root.render(createElement(ToastProvider, null,
         createElement(RosterOptimizeStep, {
-          workspace: state.current, gender: Gender.MEN, scoringSettings: resolvedScoringSettings(ws),
+          workspace: state.current, gender: state.gender, scoringSettings: resolvedScoringSettings(ws),
           whatIfMode: true, removeSeniors: false, selectedTeam: state.team, teams: [HOME_TEAM],
           onUpdate: (p: Partial<Workspace>) => {
             updates.push(p);
+            if (!state.applyUpdates) return;
             state.current = { ...state.current, ...p };
             draw();
           },
@@ -118,7 +127,11 @@ describe('Optimize step Undo after later edits', () => {
       state.current = { ...state.current, ...patch };
       draw();
     });
-    return { updates, state, editOutside };
+    const setGender = (gender: Gender) => act(async () => {
+      state.gender = gender;
+      draw();
+    });
+    return { updates, state, editOutside, setGender };
   }
 
   async function applyAllTeams() {
@@ -232,5 +245,183 @@ describe('Optimize step Undo after later edits', () => {
     await editOutside({ id: 'another-workspace' });
     expect(state.current.id).toBe('another-workspace');
     expect(findButton(/Undo this optimize/)).toBeUndefined();
+  });
+
+  describe('Undo waits for the save instead of trusting the write (defect 2)', () => {
+    // The provider's updateWorkspace resolves before the debounced PUT runs, so no save result
+    // can be awaited. The step watches the workspace arrays instead. These tests drive that watch
+    // with a workspace that does or does not follow onUpdate.
+    const beforeArrays = (ws: Workspace) => ({
+      scorerRosterOverrides: ws.scorerRosterOverrides ?? [],
+      meetEntryPlans: ws.meetEntryPlans ?? [],
+      activeEntryIds: ws.activeEntryIds ?? [],
+    });
+
+    it('claims nothing while the workspace has not taken the Undo: no toast, summary and Undo stay', async () => {
+      const ws = gainWorkspace();
+      const { updates, state } = await mount(ws);
+      await applyAllTeams();
+      state.applyUpdates = false; // the save fails and the server copy stays in view
+      await click(/Undo this optimize/);
+      expect(updates).toHaveLength(2); // the write was issued
+      expect(toastTexts().some(t => t.startsWith('Undid:'))).toBe(false);
+      expect(findButton(/Undo this optimize/)).toBeTruthy();
+    });
+
+    it('shows the success toast and drops the summary once the arrays read as the pre-run arrays', async () => {
+      const ws = gainWorkspace();
+      const { state, editOutside } = await mount(ws);
+      await applyAllTeams();
+      state.applyUpdates = false;
+      await click(/Undo this optimize/);
+      expect(toastTexts().some(t => t.startsWith('Undid:'))).toBe(false);
+      // The save lands and the provider now shows the pre-run arrays.
+      await editOutside(beforeArrays(ws));
+      expect(toastTexts()).toContain('Undid: All teams optimize');
+      expect(findButton(/Undo this optimize/)).toBeUndefined();
+    });
+
+    it('a failed Undo save brings the optimized lineup back: says so and puts the Undo back', async () => {
+      const ws = gainWorkspace();
+      const { updates, state, editOutside } = await mount(ws);
+      await applyAllTeams();
+      const applied = {
+        scorerRosterOverrides: state.current.scorerRosterOverrides,
+        meetEntryPlans: state.current.meetEntryPlans,
+        activeEntryIds: state.current.activeEntryIds,
+      };
+      await click(/Undo this optimize/);
+      expect(toastTexts()).toContain('Undid: All teams optimize');
+      expect(findButton(/Undo this optimize/)).toBeUndefined();
+      // The provider reloads the server copy after the failed save: the optimized arrays return.
+      await editOutside(applied);
+      expect(toastTexts()).toContain(UNDO_NOT_SAVED_MESSAGE);
+      expect(findButton(/Undo this optimize/)).toBeTruthy();
+      expect(alert()).toBeNull(); // not the "Lineup changed" refusal
+      // Pressing it again writes again.
+      await click(/Undo this optimize/);
+      expect(updates).toHaveLength(3);
+      expect(findButton(/Undo this optimize/)).toBeUndefined();
+    });
+
+    it('when the APPLY was not saved, Undo says so instead of "Lineup changed"', async () => {
+      const ws = gainWorkspace();
+      const { updates, editOutside } = await mount(ws);
+      await applyAllTeams();
+      // The apply's save failed: the provider reloaded the server copy, which is the pre-run lineup.
+      await editOutside(beforeArrays(ws));
+      await click(/Undo this optimize/);
+      expect(updates).toHaveLength(1); // nothing written
+      expect(alert()?.textContent).toContain(APPLY_NOT_SAVED_MESSAGE);
+      expect(alert()?.textContent).not.toContain(UNDO_CHANGED_MESSAGE);
+      // Nothing is left to undo, so there is no "Undo anyway" and no "Keep my edits".
+      expect(findButton(/^Undo anyway$/)).toBeUndefined();
+      expect(findButton(/^Keep my edits$/)).toBeUndefined();
+      await click(/^Dismiss$/);
+      expect(findButton(/Undo this optimize/)).toBeUndefined();
+    });
+
+    it('a real later edit still says "Lineup changed" (not the apply-not-saved message)', async () => {
+      const { editOutside } = await mount(gainWorkspace());
+      await applyAllTeams();
+      await editOutside({ activeEntryIds: ['later-edit|50 Free'] });
+      await click(/Undo this optimize/);
+      expect(alert()?.textContent).toContain(UNDO_CHANGED_MESSAGE);
+      expect(alert()?.textContent).not.toContain(APPLY_NOT_SAVED_MESSAGE);
+    });
+
+    it('the pure state check tells the three cases apart', () => {
+      const before = { overrides: [], plans: [], activeIds: ['a'] };
+      const applied = { scorerRosterOverrides: [], meetEntryPlans: [], activeEntryIds: ['b'] };
+      const undo = buildOptimizerUndo({ label: 'T', workspaceId: 'w', before, applied });
+      expect(optimizerUndoState(undo, optimizerArraysOf(applied))).toBe('clean');
+      expect(optimizerUndoState(undo, before)).toBe('apply_not_saved');
+      expect(optimizerUndoState(undo, { overrides: [], plans: [], activeIds: ['c'] })).toBe('changed');
+    });
+  });
+
+  describe('focus after the Undo choices (defect 3)', () => {
+    it('"Keep my edits" moves focus to the summary heading, not <body>', async () => {
+      const { editOutside } = await mount(gainWorkspace());
+      await applyAllTeams();
+      await editOutside({ meetEntryPlans: [] });
+      await click(/Undo this optimize/);
+      await click(/^Keep my edits$/);
+      expect(alert()).toBeNull();
+      const active = document.activeElement as HTMLElement | null;
+      expect(active).not.toBe(document.body);
+      expect(active?.hasAttribute('data-optimizer-summary-heading')).toBe(true);
+      expect(active?.textContent).toContain('All teams');
+    });
+
+    it('"Undo anyway" moves focus to the Optimize team button, not <body>', async () => {
+      const { editOutside } = await mount(gainWorkspace());
+      await applyAllTeams();
+      await editOutside({ activeEntryIds: ['later-edit|50 Free'] });
+      await click(/Undo this optimize/);
+      await click(/^Undo anyway$/);
+      expect(findButton(/Undo this optimize/)).toBeUndefined();
+      const active = document.activeElement as HTMLElement | null;
+      expect(active).not.toBe(document.body);
+      expect(active?.textContent).toContain('Optimize team');
+    });
+
+    it('a plain Undo and Dismiss keep focus in the step too', async () => {
+      await mount(gainWorkspace());
+      await applyAllTeams();
+      await click(/Undo this optimize/);
+      expect(document.activeElement).not.toBe(document.body);
+      expect((document.activeElement as HTMLElement).textContent).toContain('Optimize team');
+
+      await applyAllTeams();
+      await click(/Dismiss optimizer summary/);
+      expect(document.activeElement).not.toBe(document.body);
+      expect((document.activeElement as HTMLElement).textContent).toContain('Optimize team');
+    });
+
+    it('does not steal focus the coach put somewhere else', async () => {
+      const { editOutside } = await mount(gainWorkspace());
+      await applyAllTeams();
+      const select = document.querySelector('select') as HTMLSelectElement;
+      await editOutside({ activeEntryIds: ['later-edit|50 Free'] });
+      await click(/Undo this optimize/);
+      select.focus();
+      await act(async () => {
+        findButton(/^Undo anyway$/)!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      });
+      expect(document.activeElement).toBe(select);
+    });
+
+    it('the refusal message uses the warning tokens, not the toast tokens', async () => {
+      const { editOutside } = await mount(gainWorkspace());
+      await applyAllTeams();
+      await editOutside({ meetEntryPlans: [] });
+      await click(/Undo this optimize/);
+      const el = alert()!;
+      expect(el.className).toContain('border-warning-faint');
+      expect(el.className).toContain('bg-warning-faint');
+      expect(el.querySelector('p')?.className).toContain('text-warning');
+      expect(el.outerHTML).not.toContain('--toast-');
+    });
+  });
+
+  describe('gender switch (defect 4)', () => {
+    it('a single-team run summary and its Undo are dropped when the gender changes', async () => {
+      const { setGender } = await mount(gainWorkspace());
+      await click(/Quick optimize \(greedy\)/);
+      expect(findButton(/Undo this optimize/)).toBeTruthy();
+      expect(findButton(/Dismiss optimizer summary/)).toBeTruthy();
+      await setGender(Gender.WOMEN);
+      expect(findButton(/Undo this optimize/)).toBeUndefined();
+      expect(findButton(/Dismiss optimizer summary/)).toBeUndefined();
+    });
+
+    it('an All-teams summary describes one gender too, so it is dropped as well', async () => {
+      const { setGender } = await mount(gainWorkspace());
+      await applyAllTeams();
+      expect(findButton(/Undo this optimize/)).toBeTruthy();
+      await setGender(Gender.WOMEN);
+      expect(findButton(/Undo this optimize/)).toBeUndefined();
+    });
   });
 });

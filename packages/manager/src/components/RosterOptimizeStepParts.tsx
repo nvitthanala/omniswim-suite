@@ -50,6 +50,7 @@ export function OptimizerControls({
         </label>
         <div className="lg:col-span-8 flex flex-wrap gap-2">
           <Button
+            data-optimizer-focus
             disabled={!whatIfMode || !team}
             onClick={onApplyTeam}
             leadingIcon={<Sparkles size={14} />}

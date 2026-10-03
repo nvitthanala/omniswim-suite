@@ -30,12 +30,28 @@ import {
   type BatchOptimizationResult,
 } from './batchOptimizerView';
 import {
+  APPLY_NOT_SAVED_MESSAGE,
   buildOptimizerUndo,
   optimizerArraysOf,
   optimizerUndoIsClean,
+  optimizerUndoState,
+  optimizerUndoTargetReached,
   UNDO_CHANGED_MESSAGE,
+  UNDO_NOT_SAVED_MESSAGE,
   type OptimizerUndo,
 } from './optimizerUndo';
+
+/** The summary record the panel shows. The Undo lives inside it. */
+type RunSummaryRecord = OptimizerRunSummary & { undo: OptimizerUndo | null };
+
+/**
+ * An Undo whose write was issued. The provider's save is debounced and gives no result to await
+ * (`updateWorkspace` resolves before the PUT runs), so the step watches the workspace instead.
+ * - pending: the write was issued. Nothing is claimed until the arrays read as the pre-run arrays.
+ * - settled: they did, the toast was shown and the summary dropped. The step keeps watching: if the
+ *   optimized arrays come back, the save failed and the provider reloaded the server copy.
+ */
+type UndoFlow = { phase: 'pending' | 'settled'; undo: OptimizerUndo; summary: RunSummaryRecord };
 
 /** Snapshot shape from `captureBeforeState`, shared by `applyOptimizerResult`. */
 type OptimizerBeforeState = {
@@ -215,7 +231,13 @@ export default function RosterOptimizeStep({
   // The Undo lives INSIDE the summary record, because the summary panel is the only place its
   // button renders. Dropping the summary (Dismiss, team change, workspace change) therefore drops
   // the Undo with it, and an Undo that is armed but out of reach cannot be represented.
-  const [lastRunSummary, setLastRunSummary] = useState<(OptimizerRunSummary & { undo: OptimizerUndo | null }) | null>(null);
+  const [lastRunSummary, setLastRunSummary] = useState<RunSummaryRecord | null>(null);
+  const [undoFlow, setUndoFlow] = useState<UndoFlow | null>(null);
+  // Focus anchors. The summary (and the Undo button inside it) unmounts when a run is dropped, and a
+  // focused element that unmounts leaves focus on <body>. The step root and its primary button are
+  // stable, so focus moves there first.
+  const rootRef = useRef<HTMLDivElement>(null);
+  const summaryRef = useRef<HTMLDivElement>(null);
   const lastOptimizeUndo = lastRunSummary?.undo ?? null;
   const setLastOptimizeUndo = (undo: OptimizerUndo | null) =>
     setLastRunSummary(prev => (prev ? { ...prev, undo } : prev));
@@ -228,16 +250,61 @@ export default function RosterOptimizeStep({
   // pattern's own today.
   // Set when Undo was pressed but the lineup moved since the run. Undo then waits for an
   // explicit "Undo anyway" instead of discarding the later edits.
-  const [undoBlocked, setUndoBlocked] = useState(false);
+  // 'changed': the coach edited after the run. 'apply_not_saved': the arrays are exactly the pre-run
+  // arrays, so the apply's save failed and the provider reloaded the server copy.
+  const [undoBlocked, setUndoBlocked] = useState<'changed' | 'apply_not_saved' | null>(null);
   useEffect(() => {
-    setUndoBlocked(false);
+    setUndoBlocked(null);
   }, [lastOptimizeUndo]);
+
+  const dropRun = () => {
+    setLastRunSummary(null);
+    setUndoFlow(null);
+  };
 
   // An Undo snapshot belongs to one workspace. Switching workspace drops the summary and the Undo,
   // so a snapshot can never be written onto another workspace.
   useEffect(() => {
-    setLastRunSummary(null);
+    dropRun();
   }, [workspace.id]);
+
+  // A summary describes one gender's view. The data stays right after a gender switch, but the
+  // panel text (and its Undo) would describe the other view.
+  useEffect(() => {
+    dropRun();
+  }, [gender]);
+
+  /** Move focus off the summary before it unmounts. Primary button when it can take focus, else the step root. */
+  const releaseFocusFromSummary = () => {
+    const summary = summaryRef.current;
+    if (!summary || !summary.contains(document.activeElement)) return;
+    const primary = rootRef.current?.querySelector<HTMLElement>('[data-optimizer-focus]');
+    if (primary && !(primary as HTMLButtonElement).disabled) primary.focus();
+    else rootRef.current?.focus();
+  };
+
+  // Observe the Undo. See UndoFlow.
+  useEffect(() => {
+    if (!undoFlow) return;
+    const current = optimizerArraysOf(workspace);
+    if (undoFlow.phase === 'pending') {
+      if (!optimizerUndoTargetReached(undoFlow.undo, current)) return;
+      releaseFocusFromSummary();
+      toast.push('success', `Undid: ${undoFlow.undo.label} optimize`);
+      setLastRunSummary(null);
+      setUndoFlow({ ...undoFlow, phase: 'settled' });
+      return;
+    }
+    if (optimizerUndoIsClean(undoFlow.undo, current)) {
+      // The optimized arrays are back: the Undo's save failed. Put the Undo back within reach.
+      toast.push('error', UNDO_NOT_SAVED_MESSAGE);
+      setLastRunSummary({ ...undoFlow.summary, undo: undoFlow.undo });
+      setUndoFlow({ ...undoFlow, phase: 'pending' });
+    } else if (!optimizerUndoTargetReached(undoFlow.undo, current)) {
+      setUndoFlow(null); // something else wrote the lineup; there is nothing left to watch
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [workspace, undoFlow]);
 
   // A stale scan is worse than none — it would describe a roster that no longer exists.
   useEffect(() => {
@@ -253,7 +320,7 @@ export default function RosterOptimizeStep({
   const lastRunIsAllTeams = useRef(false);
   useEffect(() => {
     if (lastRunIsAllTeams.current) return;
-    setLastRunSummary(null);
+    dropRun();
   }, [team]);
 
   /** The three optimizer-owned fields, as they read right now — the only
@@ -272,6 +339,7 @@ export default function RosterOptimizeStep({
     allTeams = false
   ) => {
     lastRunIsAllTeams.current = allTeams;
+    setUndoFlow(null); // a new run supersedes any Undo still being watched
     const changes: OptimizerChangeSummary = diffOptimizerChanges(before, {
       overrides: result.overrides,
       plans: result.meetEntryPlans,
@@ -282,18 +350,22 @@ export default function RosterOptimizeStep({
   const handleUndoOptimize = (force = false) => {
     if (!lastOptimizeUndo) return;
     if (lastOptimizeUndo.workspaceId !== workspace.id) {
-      setLastRunSummary(null);
+      dropRun();
       return;
     }
-    // The run left the arrays in a known state. If they differ now, the coach edited after the
-    // run, and writing the pre-run arrays back would discard those edits.
-    if (!force && !optimizerUndoIsClean(lastOptimizeUndo, optimizerArraysOf(workspace))) {
-      setUndoBlocked(true);
-      return;
+    // The run left the arrays in a known state. If they differ now, either the coach edited after
+    // the run (writing the pre-run arrays back would discard those edits) or the apply's save
+    // failed and the server copy came back (the arrays are exactly the pre-run arrays).
+    if (!force) {
+      const state = optimizerUndoState(lastOptimizeUndo, optimizerArraysOf(workspace));
+      if (state !== 'clean') {
+        setUndoBlocked(state);
+        return;
+      }
     }
+    // Write, then wait to see the arrays change before claiming success (see UndoFlow).
     onUpdate(lastOptimizeUndo.patch);
-    toast.push('success', `Undid: ${lastOptimizeUndo.label} optimize`);
-    setLastRunSummary(null);
+    if (lastRunSummary) setUndoFlow({ phase: 'pending', undo: lastOptimizeUndo, summary: lastRunSummary });
   };
 
   const runScan = () => {
@@ -397,14 +469,26 @@ export default function RosterOptimizeStep({
   // Shown in both the no-team and the team view, so an All-teams apply always
   // has its Undo in reach.
   const runSummaryPanel = lastRunSummary ? (
-    <OptimizerChangeSummaryPanel
-      summary={lastRunSummary}
-      onDismiss={() => setLastRunSummary(null)}
-      onUndo={lastOptimizeUndo ? () => handleUndoOptimize() : undefined}
-      undoBlockedMessage={lastOptimizeUndo && undoBlocked ? UNDO_CHANGED_MESSAGE : undefined}
-      onUndoAnyway={() => handleUndoOptimize(true)}
-      onKeepEdits={() => setUndoBlocked(false)}
-    />
+    <div ref={summaryRef}>
+      <OptimizerChangeSummaryPanel
+        summary={lastRunSummary}
+        onDismiss={() => {
+          releaseFocusFromSummary();
+          dropRun();
+        }}
+        onUndo={lastOptimizeUndo ? () => handleUndoOptimize() : undefined}
+        undoBlockedKind={lastOptimizeUndo ? undoBlocked ?? undefined : undefined}
+        undoBlockedMessage={
+          lastOptimizeUndo && undoBlocked
+            ? undoBlocked === 'apply_not_saved'
+              ? APPLY_NOT_SAVED_MESSAGE
+              : UNDO_CHANGED_MESSAGE
+            : undefined
+        }
+        onUndoAnyway={() => handleUndoOptimize(true)}
+        onKeepEdits={() => setUndoBlocked(null)}
+      />
+    </div>
   ) : null;
 
   if (!hasRoster) {
@@ -420,7 +504,7 @@ export default function RosterOptimizeStep({
 
   if (!selectedTeam) {
     return (
-      <div className="flex flex-col gap-4">
+      <div ref={rootRef} tabIndex={-1} className="flex flex-col gap-4 outline-none">
         <TeamPickerEmptyState
           eyebrow="Optimize"
           title="Choose a team to optimize"
@@ -432,6 +516,7 @@ export default function RosterOptimizeStep({
           </p>
           <Button
             variant="outline"
+            data-optimizer-focus
             disabled={!whatIfMode}
             onClick={() => setShowAllTeams(true)}
             title={whatIfMode ? 'Optimize every team in the field' : 'Enable What-if to optimize'}
@@ -446,7 +531,7 @@ export default function RosterOptimizeStep({
   }
 
   return (
-    <div className="surface-card rounded-xl p-4 sm:p-5 flex flex-col gap-5">
+    <div ref={rootRef} tabIndex={-1} className="surface-card rounded-xl p-4 sm:p-5 flex flex-col gap-5 outline-none">
       <OptimizerControls
         team={team}
         mode={mode}

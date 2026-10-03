@@ -241,6 +241,21 @@ export default function TeamRosterPanel({
 
   const activeRowId = activeRosterRowId(selectedAthleteKey, rosterWindow.rows);
 
+  // The drawer closes when its athlete leaves the roster (confirmed Remove). The drawer's Remove
+  // button then unmounts, and Modal's focus return had already targeted it, so focus falls to
+  // <body>. Hand it to the roster list, the one stable focus stop. Only act when focus is on
+  // <body>: if the coach has focus somewhere real, leave it there. An athlete who is still listed
+  // (the coach closed the drawer) has no row change here, so this does not fire for that.
+  const hadSelectedAthleteRef = useRef(false);
+  useEffect(() => {
+    const had = hadSelectedAthleteRef.current;
+    hadSelectedAthleteRef.current = selectedAthlete !== null;
+    if (!had || selectedAthlete !== null || selectedAthleteKey === null) return;
+    const active = document.activeElement;
+    if (active && active !== document.body) return;
+    rosterScrollRef.current?.focus();
+  }, [selectedAthlete, selectedAthleteKey]);
+
   useEffect(() => {
     if (!jumpAthleteName && !jumpAthleteKey) return;
     // Prefer the threaded ScorerRosterRow.key (BUG 1 hardening); fall back to
