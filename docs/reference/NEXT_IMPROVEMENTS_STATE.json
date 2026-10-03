@@ -1,0 +1,75 @@
+{
+  "initiative": "next-improvements-2026-10-03",
+  "plan": "docs/reference/NEXT_IMPROVEMENTS_PLAN.md",
+  "crawlPlan": "docs/reference/SWIMCLOUD_MULTI_TEAM_CRAWL_PLAN.md",
+  "branch": "nvitthanala/ui-simplification",
+  "note": "Canonical state for Track A and Track B. Nothing is committed. No agent contacts SwimCloud.",
+  "interruption": {
+    "when": "2026-10-03T15:59Z",
+    "what": "The user denied a tool call while the A1-A3 executor was running its mutation checks. The session continued as 77818e12.",
+    "recovery": "Source files were clean (every mutation had been restored). The e2e spec workspace-route-sync.spec.ts held a duplicated cleanup block and a shadowed variable. Fixed, then all gates re-run."
+  },
+  "tracks": {
+    "A1": {
+      "item": "WorkspaceRouteSync swap loop",
+      "status": "done",
+      "verifiedAt": "2026-10-03",
+      "evidence": "tests/workspaceRouteSync.test.ts (16), tests/e2e/workspace-route-sync.spec.ts (3 pass on a data copy)"
+    },
+    "A2": {
+      "item": "PDF-points lock for diver weight and eligibility",
+      "status": "done",
+      "verifiedAt": "2026-10-03",
+      "evidence": "tests/scoringPdfLockTrackA.test.ts (9)"
+    },
+    "A3": {
+      "item": "Undo refuses after the lineup changed",
+      "status": "done",
+      "verifiedAt": "2026-10-03",
+      "evidence": "tests/optimizerUndoTrackA.test.ts (11), tests/e2e/optimize-undo.spec.ts (1 pass)",
+      "reviewNeeded": "Touches lineup state on apply and Undo. A different provider than Claude should review the diff."
+    },
+    "A4": {
+      "item": "Preset fetch catch, drawer Remove button, amber tokens",
+      "status": "done",
+      "verifiedAt": "2026-10-03",
+      "evidence": "tests/suggestedPresetBannerCatch.test.ts, athleteRemoveButton.test.ts, uiAmberRatchet.test.ts; 25 files migrated (plan said 5); baseline 0"
+    },
+    "A5": {
+      "item": "Per-theme layout test, Lineup and Standings",
+      "status": "done",
+      "verifiedAt": "2026-10-03",
+      "evidence": "tests/e2e/ui-theme-screenshots.spec.ts, 6 pass; custom theme tested on a dark base only"
+    },
+    "A6": {
+      "item": "Stale test workspaces and cold-start backups",
+      "status": "blocked-on-user",
+      "why": "Needs a decision before touching the real database."
+    },
+    "B0": {
+      "item": "Capture three SwimCloud fixtures",
+      "status": "blocked-on-user",
+      "needs": [
+        "team page with season select open",
+        "swimmer times response with a non-leadoff relay leg",
+        "relay event page with Show names expanded"
+      ]
+    },
+    "B1-B5": {
+      "status": "not-started",
+      "dependsOn": "B0"
+    }
+  },
+  "gates": {
+    "lint": "0 errors; 2 existing complexity warnings in swimCloudMeetImportBridge.ts",
+    "knownFailing": "scripts/test_scoring_preset_routes.mjs, failing since UI Phase 1, undiagnosed",
+    "verified": "2026-10-03 orchestrator rerun: lint 0 errors; vitest 152 files, 2038 tests; 10 e2e pass on a data copy; data/omniswim.db unchanged"
+  },
+  "providers": {
+    "fable": "available as claude-fable-5-1; narrow use only, see PROVIDER_ROUTING.json",
+    "cursor": "Free plan, Auto only, allowance spent until 2026-10-19"
+  },
+  "reviewNeeded": [
+    "A3 and A4.2 touch apply/Undo and drawer actions. Review by a non-Claude provider (Codex 89% used; wait or use Cursor Auto)."
+  ]
+}
