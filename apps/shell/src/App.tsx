@@ -1,10 +1,9 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
-import { AppletSkeleton, useToast } from '@omniswim/ui';
+import { AppletSkeleton, ScoringRulesOpenerProvider, useToast } from '@omniswim/ui';
 import { SuitePreferencesProvider, useSuitePreferences } from '@omniswim/core';
 import { SuiteWorkspaceProvider, useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
-import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
 import { Gender } from '@omniswim/core/types';
 import ScoringSettingsModal from '@omniswim/matrix/components/ScoringSettingsModal';
 import SuiteHeader from './components/SuiteHeader';
@@ -19,6 +18,7 @@ import CommandPalette from './components/CommandPalette';
 import { AuthProvider } from './context/AuthContext';
 import { ManagerAppLazy, MatrixAppLazy, MetricsAppLazy, prefetchLastApplet } from './lib/appletPrefetch';
 import { installDataLossWatcher } from './lib/dataLossWatcher';
+import { workspacePdfPlacePointsLocked, workspaceScoringSettings } from './lib/workspaceScoringSettings';
 
 const ManagerApp = ManagerAppLazy;
 const MatrixApp = MatrixAppLazy;
@@ -171,6 +171,7 @@ function ShellLayout() {
   }
 
   return (
+    <ScoringRulesOpenerProvider onOpen={() => setShowScoringModal(true)}>
     <div className={`app-shell flex flex-col h-screen overflow-hidden ${showWorkspaceChrome ? '' : ''}`}>
       <WorkspaceRouteSync />
       <SuiteHeader
@@ -231,13 +232,8 @@ function ShellLayout() {
 
       {showScoringModal && activeWorkspace && (
         <ScoringSettingsModal
-          settings={mergeScoringSettings(activeWorkspace.scoringSettings, {
-            conference: activeWorkspace.conference,
-            resultsForPdfHint: [
-              ...(activeWorkspace.menResults ?? []),
-              ...(activeWorkspace.womenResults ?? []),
-            ],
-          })}
+          settings={workspaceScoringSettings(activeWorkspace)}
+          pdfPlacePointsLocked={workspacePdfPlacePointsLocked(activeWorkspace)}
           scoringView={activeWorkspace.scoringView}
           conference={activeWorkspace.conference}
           onScoringViewChange={view => {
@@ -256,6 +252,7 @@ function ShellLayout() {
 
       <SwimCloudWindow />
     </div>
+    </ScoringRulesOpenerProvider>
   );
 }
 

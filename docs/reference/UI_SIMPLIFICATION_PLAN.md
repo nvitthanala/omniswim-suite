@@ -119,3 +119,7 @@ existing chart hex colors on the chart path; the Metrics flow beyond duplicate C
 ## Phase 1 execution record (2026-10-02)
 
 Implemented the Phase 1 defect fixes and added `tests/e2e/ui-ia.spec.ts` plus render tests for numeric editing and the score-difference table. The Playwright spec verifies Matrix step persistence across gender changes and reloads, Manager step retention after recalculation, responsive gender controls, and the inert Settings preview. It writes screenshots for Matrix Load, Score, Standings and Analyze; Manager Athletes and Optimize; the batch optimizer; and Settings into `docs/reference/ui-phase-1/after/` across midnight, deck-light and oled at 1440px and 800px. See `docs/reference/ui-phase-1/REPORT.md` for check results and the missing before-screenshot evidence.
+
+## Phase 2 execution record (2026-10-02)
+
+Implemented the shared scoring-rules opener, scorer-eligibility field and Manager/Matrix summaries in `docs/reference/ui-phase-2/REPORT.md`. The Phase 2 Playwright spec captures after screenshots for Matrix scoring, Manager scoring, the Lineup lock and both modal entry paths. Exact before screenshots for Lineup and the modal were absent from Phase 1's capture set; the Matrix scoring and Manager source before captures reuse Phase 1 screenshots. The script test gate retains the pre-existing port 3209 startup failure, and the existing Manager main-thread budget spec timed out twice (first during the all-spec run and again on direct rerun).

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Save, Settings2 } from 'lucide-react';
 import { ScoringSettings } from '@omniswim/core/types';
 import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
@@ -18,6 +18,7 @@ interface Props {
    * without it this modal offers edits that `mergeScoringSettings` discards.
    */
   conference?: string;
+  pdfPlacePointsLocked?: boolean;
 }
 
 /**
@@ -29,10 +30,12 @@ interface Props {
  * Uses the shared `Modal` for dialog role, aria-modal, Escape, and focus
  * handling — the previous hand-rolled backdrop had none of those.
  */
-export default function ScoringSettingsModal({ settings, onSave, onClose, scoringView, onScoringViewChange, conference }: Props) {
+export default function ScoringSettingsModal({ settings, onSave, onClose, scoringView, onScoringViewChange, conference, pdfPlacePointsLocked }: Props) {
   const [draft, setDraft] = useState<ScoringSettings>(() => mergeScoringSettings(settings));
   const [manageOpen, setManageOpen] = useState(false);
   const [presetListRefreshToken, setPresetListRefreshToken] = useState(0);
+
+  useEffect(() => setDraft(mergeScoringSettings(settings)), [settings]);
 
   return (
     <>
@@ -58,6 +61,7 @@ export default function ScoringSettingsModal({ settings, onSave, onClose, scorin
             settings={settings}
             onChange={setDraft}
             conference={conference}
+            pdfPlacePointsLocked={pdfPlacePointsLocked}
             scoringView={scoringView}
             onScoringViewChange={onScoringViewChange}
             presetPickerExtra={

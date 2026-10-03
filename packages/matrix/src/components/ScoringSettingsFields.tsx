@@ -78,6 +78,7 @@ export interface ScoringSettingsFieldsProps {
   presetPickerExtra?: ReactNode;
   /** Bump to refetch the preset list — e.g. after `ScoringPresetManagerModal` saves or deletes one. Ignored on initial mount (that fetch always runs). */
   presetListRefreshToken?: number;
+  pdfPlacePointsLocked?: boolean;
 }
 
 export function ScoringSettingsFields({
@@ -91,6 +92,7 @@ export function ScoringSettingsFields({
   hidePresetPicker = false,
   presetPickerExtra,
   presetListRefreshToken,
+  pdfPlacePointsLocked = false,
 }: ScoringSettingsFieldsProps) {
   const [local, setLocal] = useState<ScoringSettings>(() => mergeScoringSettings(settings));
   const [presets, setPresets] = useState<ScoringPresetMeta[]>([]);
@@ -210,6 +212,7 @@ export function ScoringSettingsFields({
   const divingTable = optionalPointsField('divingPoints');
 
   const resolvedScoringView = scoringView ?? 'merged';
+  const pdfPointsLock = pdfPlacePointsLocked || local.usePdfPlacePoints === true;
 
   return (
     <>
@@ -233,6 +236,21 @@ export function ScoringSettingsFields({
       ) : null}
 
       <div className="space-y-4">
+        <div>
+          <label className="block text-[10px] text-theme-secondary uppercase mb-1">Scorer eligibility</label>
+          <select
+            aria-label="Scorer eligibility"
+            className="glass-input w-full text-xs"
+            value={pdfPointsLock ? 'points_pool' : local.scorerEligibilityMode ?? 'points_pool'}
+            disabled={pdfPointsLock}
+            title={pdfPointsLock ? 'PDF place points require Points pool eligibility.' : undefined}
+            onChange={e => update({ scorerEligibilityMode: e.target.value as ScoringSettings['scorerEligibilityMode'] })}
+          >
+            <option value="roster">Team scorer list</option>
+            <option value="points_pool">Points pool</option>
+          </select>
+          {pdfPointsLock ? <p className="mt-1 text-ui-caption text-theme-muted">PDF place points require Points pool eligibility.</p> : null}
+        </div>
         <div>
           <label className="block text-[10px] text-theme-secondary uppercase mb-1">PDF place points</label>
           <select

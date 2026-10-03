@@ -37,6 +37,7 @@ export { SectionHeader } from './components/SectionHeader';
 export { Toolbar, ToolbarSpacer } from './components/Toolbar';
 export { FloatingWindow, type FloatingWindowState } from './components/FloatingWindow';
 export { SwimCloudProvider, useSwimCloudWindow } from './components/SwimCloudContext';
+export { ScoringRulesOpenerProvider, useOpenScoringRules } from './components/ScoringRulesOpenerContext';
 export { WizardShell, type WizardShellProps, type WizardStep } from './components/WizardShell';
 export { Menu, MenuItem, type MenuAlign } from './components/Menu';
 export {

@@ -349,5 +349,29 @@
       "tests/meetDiffTable.test.ts",
       "tests/e2e/ui-ia.spec.ts"
     ]
+  },
+  "phase2": {
+    "date": "2026-10-02",
+    "status": "implemented_with_before_screenshot_gap_and_gate_failures",
+    "summary": "Consolidated scoring controls into the shell scoring modal, added scorer eligibility with a PDF place points lock explanation, and linked Manager and Matrix summaries to the modal. See docs/reference/ui-phase-2/REPORT.md.",
+    "files": [
+      "packages/ui/src/components/ScoringRulesOpenerContext.tsx",
+      "packages/ui/src/index.ts",
+      "packages/matrix/src/components/ScoringSettingsFields.tsx",
+      "packages/matrix/src/components/ScoringSettingsModal.tsx",
+      "packages/matrix/src/components/ScoringSettingsPanel.tsx",
+      "packages/manager/src/components/RosterScoringSetup.tsx",
+      "packages/manager/src/components/TeamRosterPanel.tsx",
+      "apps/shell/src/App.tsx",
+      "apps/shell/src/lib/workspaceScoringSettings.ts",
+      "tests/scoringRulesPhase2.test.ts",
+      "tests/e2e/ui-phase-2.spec.ts"
+    ],
+    "proof": {
+      "regressionTestsFailedBeforeFix": true,
+      "mutationCheckCaughtDisabledRemoval": true,
+      "playwrightScreenshots": "After captures in all 3 themes at 1440 and 800; exact before captures missing for Lineup and scoring modal.",
+      "gates": "npm run lint and vitest passed; run-tests had port 3209 failure and existing main-thread budget timeout, confirmed on rerun."
+    }
   }
 }

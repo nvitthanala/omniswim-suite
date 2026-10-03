@@ -141,7 +141,7 @@ export function ScorerModeSelect({
         value={value}
         onChange={e => onChange(e.target.value as 'points_pool' | 'roster')}
       >
-        <option value="roster">Roster (NSISC)</option>
+        <option value="roster">Team scorer list</option>
         <option value="points_pool">Points pool</option>
       </select>
     </label>

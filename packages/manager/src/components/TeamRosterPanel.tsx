@@ -16,7 +16,7 @@ import { type EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
 import { buildHistoryFromWorkspace, mergeHistoryIndex } from '@omniswim/core/lib/athleteHistory';
 import { optimizeRosterAllTeams, optimizeRosterForTeam } from '@omniswim/core/lib/rosterOptimizer';
 import { applyScorerOffRelayPatch, type TeamLineupAudit } from '@omniswim/core/lib/rosterLineupAudit';
-import { useToast } from '@omniswim/ui';
+import { Button, useOpenScoringRules, useToast } from '@omniswim/ui';
 import { countTeamMembers, genderLabelFor, resolveTeamPickerMode, rosterColSpan } from './teamRosterView';
 import TeamRosterHeader from './TeamRosterHeader';
 import TeamRosterTable from './TeamRosterTable';
@@ -89,6 +89,7 @@ export default function TeamRosterPanel({
   jumpAthleteKey,
   onJumpAthleteHandled,
 }: Props) {
+  const openScoringRules = useOpenScoringRules();
   const toast = useToast();
   // mergeScoringSettings returns a fresh object each call; memoize so the roster-lookup
   // useMemo below (buildScorerRosterLookup ×2 over all genderResults) doesn't rerun on
@@ -379,9 +380,11 @@ export default function TeamRosterPanel({
           Team roster
         </h4>
         <p className="text-ui-body text-theme-secondary leading-relaxed">
-          Roster tools need roster eligibility mode (NSISC preset). Open Source → Scoring setup to
-          switch.
+          {merged.usePdfPlacePoints === true
+            ? 'PDF place points require Points pool eligibility. Turn off PDF place points to use the team scorer list.'
+            : 'Lineup editing requires Team scorer list eligibility. Change the scorer eligibility setting to continue.'}
         </p>
+        <Button className="mt-3" variant="outline" onClick={openScoringRules}>Open scoring rules</Button>
       </div>
     );
   }

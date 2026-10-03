@@ -434,7 +434,7 @@ export function ScoringPresetManagerModal({ onClose, onPresetsChanged }: Scoring
             <input
               type="text"
               aria-label="Conference matches"
-              placeholder="e.g. NSISC, GSC"
+              placeholder="e.g. Conference championship"
               value={editor.conferenceMatches}
               onChange={e => setEditor({ ...editor, conferenceMatches: e.target.value })}
               className="glass-input w-full text-xs"

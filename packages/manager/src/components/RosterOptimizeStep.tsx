@@ -200,7 +200,7 @@ export default function RosterOptimizeStep({
   // Computed on request, never during render.
   //
   // `buildArbitrageCardsResult` re-scores the field once per candidate swap — 849
-  // candidates at ~7 ms each on the NSISC meet. Running that in a `useMemo` froze
+  // candidates at ~7 ms each on the largest measured meet. Running that in a `useMemo` froze
   // the main thread for 8.3 s in a single task (measured), so opening this step
   // locked the UI. Correct numbers are not worth a frozen tab; the button makes
   // the cost explicit and keeps the step instant to open.
