@@ -4,7 +4,7 @@ Goal: paste several SwimCloud team links, pick a season per team, pull each rost
 
 ## Ground rules
 - No agent contacts SwimCloud. Code is built and tested on archived pages in `data/swimcloud-captures/`. The user runs live crawls in their own browser session.
-- The existing denylist (`/api/`, `/jsonapi/`, `/team/*/facilities/`, `/tz_detect/`) stays. The 3-second pacing, Cloudflare stop-on-403 and the bounded pool (3 lanes, 400 ms stagger) stay. Concurrency across teams shares the one pool; it does not add lanes.
+- The existing denylist (`/api/`, `/jsonapi/`, `/team/*/facilities/`, `/tz_detect/`) stays. The pacing, Cloudflare stop-on-403 and the bounded pool stay as coded: `SWIMMER_TIMES_CONCURRENCY` is 1 with a 3000 ms stagger (lowered 2026-09-22 after 111 of 184 requests drew HTTP 429). Never read these numbers from this doc; read the constants. Concurrency across teams shares the one pool; it does not add lanes.
 - Provenance (CLAUDE.md): absent is not zero; no estimate is stored as a real time; a leg is credited only from a page that states it.
 - Nothing is hardcoded to a conference or division.
 

@@ -55,6 +55,35 @@
         "relay event page with Show names expanded"
       ]
     },
+    "B1": {
+      "item": "Offline foundations for a multi-team crawl chosen by season",
+      "status": "done-offline",
+      "verifiedAt": "2026-10-03",
+      "note": "Built on archived pages only. No network. B1-B5 below is the older umbrella entry and is left as written.",
+      "files": [
+        "packages/swimcloud/src/teamSeasons.ts",
+        "packages/swimcloud/src/targetUrls.ts",
+        "packages/swimcloud/src/crawlPlan.ts (added planTeamSeasonRoster; existing planners unchanged)",
+        "packages/swimcloud/src/index.ts and package.json (additive exports)",
+        "extensions/swimcloud-companion/src/multiTeamQueue.ts",
+        "extensions/swimcloud-companion/crawler.js (rebuilt with npm run build:extension; +1.4 KB, background.js unchanged)",
+        "tests/fixtures/swimcloud/team-{412,10002824}-roster-gender-{F,M}-season-form.html (byte-exact slices of the real filter form)"
+      ],
+      "evidence": "tests/swimcloudTeamSeasons.test.ts (25), swimcloudTeamSeasonRosterPlan.test.ts (10), swimcloudTargetUrls.test.ts (19), swimCloudExtensionMultiTeamQueue.test.ts (28)",
+      "seasonTableTeam412Vs10002824": "Identical on all four captured pages (F and M, both teams): 19 seasons, ids 30..12 for 2026-2027..2008-2009, id 29 (2025-2026) selected. Two teams only. This proves nothing about a third, so the API still resolves per team from that team's own page.",
+      "rosterUrlShape": "?page=1&gender={M|F}&season_id={id}&sort=name, the roster filter form's own parameter order, matching real recorded URLs such as tests/rosterQueueImport.test.ts.",
+      "decisionsForOrchestrator": [
+        "Queue concurrency default is SWIMMER_TIMES_CONCURRENCY (1), not 3. The brief and the crawl plan say 3 lanes and 400 ms; the code was lowered to 1 lane and 3000 ms on 2026-09-22 after HTTP 429 on 111 of 184 requests.",
+        "The swimmer-times endpoint is swimmer-scoped, not season-scoped. The queue key (teamId, seasonId, swimmerId) means one swimmer in two chosen seasons is fetched twice. Open fact 3 (is the endpoint season-filterable) is still unverified.",
+        "planTeamSeasonRoster returns SwimCloudTeamSeasonRosterStep, not SwimCloudCrawlStep, because that type requires a meetId and this crawl has none."
+      ],
+      "reviewNeeded": "The queue's concurrency, halt and resume rules gate request volume. A different provider than Claude should review multiTeamQueue.ts.",
+      "notDone": [
+        "No conference-page parser (no fixture).",
+        "No relay-leg parser (no fixture).",
+        "No impure driver that runs the queue through the bounded pool and the 3 s pacing; the queue is not wired into crawler-content.ts or the options page."
+      ]
+    },
     "B1-B5": {
       "status": "not-started",
       "dependsOn": "B0"
