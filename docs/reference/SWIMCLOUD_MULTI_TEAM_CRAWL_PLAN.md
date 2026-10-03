@@ -49,3 +49,20 @@ Save under `data/swimcloud-captures/`; record in the capture state file. The age
 ## Risks
 - Terms of use and access posture are in `plans/2026-09-06/01-legal-and-access-strategy.md`. Multi-team crawling raises request volume; the pool and pacing must not loosen. The user accepts the risk for their own session; I do not add stealth, account switching or paywall bypass.
 - If F-B shows relay credits only for subscribers, B2 is dropped and relays fall back to leadoff plus the labelled estimate.
+
+## Update 2026-10-03 (evening): findings and decisions
+
+- **Live access.** The user supplied teams 58, 412 and 48 and the NSISC conference page, and asked
+  for the example to be run. The embedded Orca browser got the Cloudflare "Just a moment..."
+  page for `/team/58/` and did not clear in 18 seconds. No challenge was solved or worked around.
+  Live pages come from the user's own browser through the extension's copy button (Track A).
+- **F-A already exists.** The archived roster page for team 412 holds the season select with real
+  ids (30 = 2026-2027, 29 = 2025-2026 selected, 28 = 2024-2025 ...). B1 is built on it. Season ids
+  are read from each team's own page and never reused across teams or derived.
+- **Still needed from the user:** F-B (a swimmer's times with a non-leadoff relay leg), F-C (a
+  relay event page with "Show names" expanded) and F-D (the NSISC conference page, for the
+  conference-to-teams list). No parser is written for F-B, F-C or F-D until a real capture exists.
+- **A6 done.** Three stale `ui-*` workspaces removed from the real database after a backup
+  (`data/backups/omniswim.db.pre-a6-cleanup.20261003.bak`). 18 duplicate startup backups removed.
+  Cause: each server start writes one, and e2e ran on the real data folder. `playwright.config.ts`
+  now uses a temp copy.
