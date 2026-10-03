@@ -27,7 +27,7 @@ const SEVERITY_ORDER: readonly ProblemSeverity[] = ['error', 'warning', 'info'];
 const SEVERITY_LABEL: Record<ProblemSeverity, string> = { error: 'Errors', warning: 'Warnings', info: 'Info' };
 const SEVERITY_CLASS: Record<ProblemSeverity, string> = {
   error: 'border-red-500/40 text-red-500 dark:text-red-400',
-  warning: 'border-amber-500/40 text-amber-600 dark:text-amber-400',
+  warning: 'border-warning text-warning',
   info: 'border-theme-soft text-theme-muted',
 };
 

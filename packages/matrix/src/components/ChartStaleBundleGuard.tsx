@@ -54,10 +54,10 @@ export default function ChartStaleBundleGuard() {
 
   return (
     <div
-      className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-4 py-3 text-ui-caption text-[var(--text-primary)]"
+      className="mb-4 rounded-lg border border-warning bg-warning-faint px-4 py-3 text-ui-caption text-[var(--text-primary)]"
       role="status"
     >
-      <p className="font-medium uppercase tracking-wide text-amber-300">
+      <p className="font-medium uppercase tracking-wide text-warning">
         Charts are using a stale cached bundle
       </p>
       <p className="mt-1 text-theme-secondary normal-case tracking-normal">

@@ -108,7 +108,7 @@ export default function LineupComplianceChecklist({
         <span className="flex items-center gap-2 text-ui-label font-semibold text-[var(--text-primary)]">
           <AlertTriangle
             size={16}
-            className={count > 0 ? 'text-amber-400' : 'text-[var(--text-accent)]'}
+            className={count > 0 ? 'text-warning' : 'text-[var(--text-accent)]'}
           />
           Checklist {count > 0 ? `(${count})` : ''}
         </span>
@@ -117,11 +117,11 @@ export default function LineupComplianceChecklist({
       <div className="hidden lg:flex items-center gap-2 px-4 pt-4 mb-3">
         <AlertTriangle
           size={16}
-          className={count > 0 ? 'text-amber-400' : 'text-[var(--text-accent)]'}
+          className={count > 0 ? 'text-warning' : 'text-[var(--text-accent)]'}
         />
         <h4 className="text-ui-label font-semibold text-[var(--text-primary)]">Compliance checklist</h4>
         {count > 0 ? (
-          <span className="ml-auto text-ui-caption font-mono tabular-nums text-amber-400">{count}</span>
+          <span className="ml-auto text-ui-caption font-mono tabular-nums text-warning">{count}</span>
         ) : null}
       </div>
       <div

@@ -78,7 +78,18 @@ export interface ScoringSettingsFieldsProps {
   presetPickerExtra?: ReactNode;
   /** Bump to refetch the preset list — e.g. after `ScoringPresetManagerModal` saves or deletes one. Ignored on initial mount (that fetch always runs). */
   presetListRefreshToken?: number;
+  /**
+   * The SAVED settings already resolve to PDF place points (an explicit On, or Auto with PDF
+   * points in the results). Kept for hosts that cannot say more. When
+   * `resultsCarryPdfPlacePoints` is given it decides the Auto case instead, because this flag
+   * also reads true for a saved explicit On that the draft has since switched to Auto.
+   */
   pdfPlacePointsLocked?: boolean;
+  /**
+   * The results themselves carry HyTek place points, independent of any saved setting. Lets the
+   * dialog resolve a draft Auto the moment it is picked, before anything is saved.
+   */
+  resultsCarryPdfPlacePoints?: boolean;
 }
 
 export function ScoringSettingsFields({
@@ -93,6 +104,7 @@ export function ScoringSettingsFields({
   presetPickerExtra,
   presetListRefreshToken,
   pdfPlacePointsLocked = false,
+  resultsCarryPdfPlacePoints,
 }: ScoringSettingsFieldsProps) {
   const [local, setLocal] = useState<ScoringSettings>(() => mergeScoringSettings(settings));
   const [presets, setPresets] = useState<ScoringPresetMeta[]>([]);
@@ -120,8 +132,21 @@ export function ScoringSettingsFields({
     fetchScoringPresetList().then(setPresets).catch(() => setPresets([]));
   }, [presetListRefreshToken]);
 
-  // Which controls the engine will overwrite regardless of what's edited here.
-  const lock = useMemo(() => scoringSettingsLock(local, { conference }), [local, conference]);
+  // Read the dialog's live choice, not the saved one: an explicit On locks, an
+  // explicit Off unlocks in the same session, and Auto falls back to whether the
+  // results carry PDF place points (the saved lock only when the host cannot say).
+  const autoResolvesToPdf = resultsCarryPdfPlacePoints ?? pdfPlacePointsLocked;
+  const pdfPointsLock =
+    local.usePdfPlacePoints === true ||
+    ((local.usePdfPlacePoints == null || local.usePdfPlacePoints === 'auto') && autoResolvesToPdf);
+
+  // Which controls the engine will overwrite regardless of what's edited here. When the PDF
+  // regime is in force the engine ignores the scorer-pool fields (caps, scope, diver weight,
+  // relay eligibility) even under Auto, so ask the lock for that regime explicitly.
+  const lock = useMemo(
+    () => scoringSettingsLock(pdfPointsLock ? { ...local, usePdfPlacePoints: true } : local, { conference }),
+    [local, conference, pdfPointsLock]
+  );
   const lockedKeys = useMemo(() => new Set<string>(lock.keys as readonly string[]), [lock]);
   const isLocked = (key: keyof ScoringSettings) => lockedKeys.has(key as string);
   const lockProps = (key: keyof ScoringSettings) =>
@@ -217,13 +242,6 @@ export function ScoringSettingsFields({
   const divingTable = optionalPointsField('divingPoints');
 
   const resolvedScoringView = scoringView ?? 'merged';
-  // Read the dialog's live choice, not the saved one: an explicit On locks, an
-  // explicit Off unlocks in the same session, and Auto falls back to what the
-  // saved results imply (`pdfPlacePointsLocked`).
-  const pdfPointsLock =
-    local.usePdfPlacePoints === true ||
-    ((local.usePdfPlacePoints == null || local.usePdfPlacePoints === 'auto') && pdfPlacePointsLocked);
-
   return (
     <>
       {onScoringViewChange ? (
@@ -236,11 +254,17 @@ export function ScoringSettingsFields({
         <SuggestedPresetBanner
           suggestedPresetId={suggestedPresetId}
           onLoadAndSave={() => {
-            void fetchScoringPresetSettings(suggestedPresetId).then(s => {
-              const next = applySettings(s);
-              setSelectedPreset(suggestedPresetId);
-              onApplyAndSaveSuggestedPreset?.(next);
-            });
+            // A rejected fetch must not surface as an unhandled rejection. The banner
+            // stays so the user can try again; nothing is applied or saved.
+            fetchScoringPresetSettings(suggestedPresetId)
+              .then(s => {
+                const next = applySettings(s);
+                setSelectedPreset(suggestedPresetId);
+                onApplyAndSaveSuggestedPreset?.(next);
+              })
+              .catch(err => {
+                console.warn(`Could not load the suggested scoring preset "${suggestedPresetId}".`, err);
+              });
           }}
         />
       ) : null}

@@ -61,6 +61,7 @@ import { addAliasLink, buildAliasResolver, removeAliasLink } from '@omniswim/cor
 import { Button, useToast } from '@omniswim/ui';
 import AthleteCreditedSwimsPanel, { type EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
 import AthleteRoleTag from './AthleteRoleTag';
+import AthleteRemoveButton from './AthleteRemoveButton';
 
 
 type Props = {
@@ -324,17 +325,7 @@ export default function AthleteLineupEditorPanel({
             </div>
             <div className="flex items-center gap-1 shrink-0">
               {onRequestRemove ? (
-                <Button
-                  variant="ghost"
-                  size="sm"
-                  onClick={onRequestRemove}
-                  className="text-theme-muted hover:text-rose-400"
-                  title="Remove from roster (keeps the meet record)"
-                  aria-label={`Remove ${athlete.name} from roster`}
-                  leadingIcon={<Trash2 size={14} />}
-                >
-                  Remove
-                </Button>
+                <AthleteRemoveButton athleteName={athlete.name} onRequestRemove={onRequestRemove} />
               ) : null}
               <Button
                 variant="ghost"
@@ -352,7 +343,7 @@ export default function AthleteLineupEditorPanel({
               {issues.map((issue, i) => (
                 <span
                   key={`${issue.type}-${i}`}
-                  className="text-ui-caption px-1.5 py-0.5 rounded-full border border-amber-400/40 text-amber-400"
+                  className="text-ui-caption px-1.5 py-0.5 rounded-full border border-warning text-warning"
                   title={issue.message}
                 >
                   {issueBadgeLabel(issue)}
@@ -408,7 +399,7 @@ export default function AthleteLineupEditorPanel({
                             variant="ghost"
                             size="sm"
                             onClick={() => handleRemoveAlias(link.id)}
-                            className="p-1 hover:text-amber-400 shrink-0"
+                            className="p-1 hover:text-warning shrink-0"
                             aria-label={`Remove alias ${link.aliasName}`}
                             leadingIcon={<Trash2 size={12} />}
                           />
@@ -497,7 +488,7 @@ export default function AthleteLineupEditorPanel({
                       </span>
                       <span
                         className={`shrink-0 text-ui-caption ${
-                          r.status === 'ok' ? 'text-theme-secondary' : 'text-amber-400'
+                          r.status === 'ok' ? 'text-theme-secondary' : 'text-warning'
                         }`}
                       >
                         {r.statusLabel}

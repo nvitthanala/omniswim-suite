@@ -84,7 +84,7 @@ export default function SwimCloudReplacePreviewPanel({ preview }: Props) {
       </div>
 
       {plansToRemove.length > 0 ? (
-        <p className="text-ui-caption text-amber-400/90 flex items-start gap-1.5">
+        <p className="text-ui-caption text-warning-soft flex items-start gap-1.5">
           <AlertTriangle size={13} className="shrink-0 mt-0.5" />
           Removed lineup entries include scoring-theory (optimizer) plans. Re-run the scoring theory
           after the replace to refill any lineup slots it leaves open.
@@ -104,8 +104,8 @@ export default function SwimCloudReplacePreviewPanel({ preview }: Props) {
       </Collapsible>
 
       {athletesAbsentFromIncoming.length > 0 ? (
-        <div className="border border-amber-400/30 rounded-lg p-2.5 space-y-1">
-          <p className="text-ui-caption font-bold text-amber-400/90 flex items-center gap-1.5">
+        <div className="border border-warning-faint rounded-lg p-2.5 space-y-1">
+          <p className="text-ui-caption font-bold text-warning-soft flex items-center gap-1.5">
             <AlertTriangle size={13} /> These swimmers lose data and are not in this capture
           </p>
           <p className="text-ui-caption text-theme-secondary">
@@ -131,7 +131,7 @@ export default function SwimCloudReplacePreviewPanel({ preview }: Props) {
       ) : null}
 
       {relayOverridesLosingRecruit.length > 0 ? (
-        <p className="text-ui-caption text-amber-400/90">
+        <p className="text-ui-caption text-warning-soft">
           {relayOverridesLosingRecruit.length} relay leg override{relayOverridesLosingRecruit.length === 1 ? '' : 's'} lose their assigned recruit and fall back to the name on the leg.
         </p>
       ) : null}

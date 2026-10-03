@@ -79,6 +79,12 @@ type Props = {
    *  run this session — undone once, or superseded by the next run, and it's
    *  gone. See RosterOptimizeStep.tsx's own doc comment on this pattern. */
   onUndo?: () => void;
+  /** Set when Undo was pressed but the lineup changed since the run. Shown with the two choices below. */
+  undoBlockedMessage?: string;
+  /** Write the pre-run arrays back anyway, discarding the later edits. */
+  onUndoAnyway?: () => void;
+  /** Keep the later edits and leave the run as it is. */
+  onKeepEdits?: () => void;
 };
 
 function RejectedCandidateRow({ candidate }: { candidate: NonNullable<GuardedOptimizerResult['consideredButRejected']>[number] }) {
@@ -93,7 +99,14 @@ function RejectedCandidateRow({ candidate }: { candidate: NonNullable<GuardedOpt
   );
 }
 
-export default function OptimizerChangeSummaryPanel({ summary, onDismiss, onUndo }: Props) {
+export default function OptimizerChangeSummaryPanel({
+  summary,
+  onDismiss,
+  onUndo,
+  undoBlockedMessage,
+  onUndoAnyway,
+  onKeepEdits,
+}: Props) {
   const { label, result, changes } = summary;
   const gain = result.projectedTotal - result.previousTotal;
   const rejected = result.consideredButRejected ?? [];
@@ -137,6 +150,23 @@ export default function OptimizerChangeSummaryPanel({ summary, onDismiss, onUndo
           />
         </div>
       </div>
+
+      {undoBlockedMessage ? (
+        <div
+          role="alert"
+          className="rounded-lg border border-[var(--toast-border)] bg-[var(--toast-bg)] px-3 py-2 flex flex-wrap items-center gap-3"
+        >
+          <p className="text-ui-caption text-[var(--toast-text)] min-w-0 flex-1">{undoBlockedMessage}</p>
+          <div className="shrink-0 flex items-center gap-2">
+            <Button variant="outline" size="sm" onClick={onKeepEdits} className="px-3 py-1.5 whitespace-nowrap">
+              Keep my edits
+            </Button>
+            <Button variant="outline" size="sm" onClick={onUndoAnyway} className="px-3 py-1.5 whitespace-nowrap">
+              Undo anyway
+            </Button>
+          </div>
+        </div>
+      ) : null}
 
       {hasDetail ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-theme-soft">

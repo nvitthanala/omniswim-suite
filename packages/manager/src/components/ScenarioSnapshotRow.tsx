@@ -81,7 +81,7 @@ export default function ScenarioSnapshotRow({
           {diff != null ? (
             <span
               className={`text-ui-caption font-mono tabular-nums ${
-                diff >= 0 ? 'text-points-positive' : 'text-amber-400/80'
+                diff >= 0 ? 'text-points-positive' : 'text-warning-soft'
               }`}
               title="vs current projected total"
             >

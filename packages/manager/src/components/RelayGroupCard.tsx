@@ -64,7 +64,7 @@ export default function RelayGroupCard({
           <p className="text-ui-label font-medium text-[var(--text-primary)]">{group.event}</p>
           <p className="text-ui-micro text-theme-secondary">
             {group.roundSwam} · Pl {group.rank > 0 ? group.rank : '—'}
-            {vacantCount > 0 ? <span className="text-amber-400 ml-2">{vacantCount} vacant leg(s)</span> : null}
+            {vacantCount > 0 ? <span className="text-warning ml-2">{vacantCount} vacant leg(s)</span> : null}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -98,7 +98,7 @@ export default function RelayGroupCard({
             <div
               key={leg.id}
               className={`border rounded-lg px-2 py-1.5 text-ui-caption transition-colors ${
-                isVacant ? 'border-amber-500/50 bg-amber-500/5' : 'border-theme-soft/60'
+                isVacant ? 'border-warning bg-warning-faint' : 'border-theme-soft/60'
               } ${dragOverLeg === legDropKey ? 'ring-1 ring-[var(--text-accent)]' : ''}`}
               onDragOver={e => {
                 if (!whatIfMode || !isVacant) return;
@@ -123,7 +123,7 @@ export default function RelayGroupCard({
                 <span className="text-[var(--text-primary)] truncate">
                   L{legIndex + 1}{' '}
                   {isVacant && (!leg.name || leg.name === '—') ? (
-                    <span className="text-amber-400">
+                    <span className="text-warning">
                       {req.legDistanceYards == null
                         ? 'Missing — distance unreadable'
                         : `Missing — ${relayMissingStrokeLabel(req.stroke)} ${req.legDistanceYards}`}
@@ -181,7 +181,7 @@ export default function RelayGroupCard({
                     <Button
                       variant="ghost"
                       size="sm"
-                      className="text-theme-muted hover:text-amber-400"
+                      className="text-theme-muted hover:text-warning"
                       onClick={() => onClearLegOverride(legIndex)}
                     >
                       Clear override

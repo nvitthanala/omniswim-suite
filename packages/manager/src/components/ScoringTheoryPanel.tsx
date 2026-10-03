@@ -89,7 +89,7 @@ export default function ScoringTheoryPanel({
       </div>
 
       {shouldShowTeamRequiredWarning(text, team) ? (
-        <p className="text-ui-caption text-amber-400/90 mb-3">
+        <p className="text-ui-caption text-warning-soft mb-3">
           Choose a team in the team bar above before parsing a plan.
         </p>
       ) : null}

@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-02",
+  "updated": "2026-10-03",
   "about": "Data, not prose. The orchestrator reads this file to pick a provider for each task. Edit values here to change routing. Nothing in the agent files hardcodes a provider choice.",
   "providers": {
     "claude": {
@@ -7,7 +7,14 @@
       "available": true,
       "remainingPct": null,
       "remainingSource": "command-center band or /budget (live 5h and 7d). Use the lower of the two.",
-      "verified": "2026-10-02: in use all session"
+      "verified": "2026-10-03: 5h window 5% used, 7d 53% used (resets 2026-10-08) per orca account list. The 7d window is the binding one. Fable probe OK: Agent tool model=fable answered claude-fable-5-1.",
+      "models": {
+        "fable": "claude-fable-5-1. Available (probed 2026-10-03). Use ONLY where a wrong call is expensive: cross-cutting design with no precedent, adversarial review of core scoring/lineup diffs, final whole-branch review, resolving a disagreement between providers. Never for UI wiring, mechanical edits or test runs. Dispatch: Agent(model=fable) or the orchestrator agent. Governor downgrades it to Sonnet at conserve+.",
+        "opus": "claude-opus-5-5. architect agent. Design, specs, proofs, review.",
+        "sonnet": "claude-sonnet-5-5. executor/worker default.",
+        "haiku": "claude-haiku-4-5-20251001. finisher."
+      },
+      "fableRule": "Escalate to fable only when: (1) architect and executor disagree, (2) a core scoring/lineup diff needs a second review after architect, (3) a design touches packages/core types used by 3+ packages. Otherwise prefer sonnet or opus."
     },
     "codex": {
       "dispatch": "orca orchestration worker-start --agent codex",
@@ -21,7 +28,7 @@
       "available": false,
       "remainingPct": null,
       "remainingSource": "node ~/.claude/scripts/provider-usage-report.mjs --json -> cursor.usedPct (monthly) and cursor.buckets. Read from Orca's own account data (the Orca bottom-bar figures). No credentials read here.",
-      "verified": "2026-10-02: Cursor Free monthly cap EXHAUSTED (Cursor Models bucket 100%, resets 2026-10-19). Auto uses that bucket. A small task costs ~1.5%; a large multi-file UI task (accessibility, ~10 files) consumed the rest. Treat Cursor as available again only after 2026-10-19 or on a paid plan.",
+      "verified": "2026-10-02: Cursor Free monthly cap EXHAUSTED (re-checked 2026-10-03: Cursor Models bucket 100%, Other Models 0% but named models still need a paid plan; no re-probe, it triggers Avast) (Cursor Models bucket 100%, resets 2026-10-19). Auto uses that bucket. A small task costs ~1.5%; a large multi-file UI task (accessibility, ~10 files) consumed the rest. Treat Cursor as available again only after 2026-10-19 or on a paid plan.",
       "models": "Free plan: only 'Auto' works. Checked 2026-10-02: all 24 named models (Claude, GPT, Gemini, Grok, Kimi, GLM, Composer) were rejected with 'Free plans can only use Auto'; rejected calls spend no tokens. A paid Cursor plan is needed for a model menu. Fable models are marked NO ZDR (no zero data retention): do not send roster data to them.",
       "launch": "ONLY through Orca (orca orchestration worker-start --agent cursor). Do not spawn cursor-agent directly from scripts or loops: repeated direct spawns trigger the user's Avast."
     }

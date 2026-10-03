@@ -49,7 +49,7 @@ export function VideoTelemetryOverlay({
       </div>
       <div className="flex justify-between items-center mt-1.5 pt-1.5 border-t border-white/10">
         <span className="opacity-60">Frame rate</span>
-        <span className={measuredFps ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
+        <span className={measuredFps ? 'text-emerald-400 font-bold' : 'text-warning font-bold'}>
           {measuredFps ? `${measuredFps} measured` : 'not measured'}
         </span>
       </div>

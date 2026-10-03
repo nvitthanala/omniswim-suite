@@ -74,7 +74,7 @@ export function RelaySquadsSection({ relays }: { relays: ParsedScoringTheory['re
 export function TheoryWarningsList({ warnings }: { warnings: string[] }) {
   if (warnings.length === 0) return null;
   return (
-    <ul className="text-ui-caption text-amber-400/90 list-disc list-inside space-y-1">
+    <ul className="text-ui-caption text-warning-soft list-disc list-inside space-y-1">
       {warnings.map((w, i) => (
         <li key={i} className="break-words">
           {w}

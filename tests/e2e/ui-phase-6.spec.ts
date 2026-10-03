@@ -75,7 +75,7 @@ async function setPreferences(page: Page, theme: (typeof themes)[number], extra:
   );
 }
 
-/** Start the shell on this workspace through the key the app reads (not `?workspace=`, which loops). */
+/** Start the shell on this workspace through the key the app reads (the `?workspace=` loop was fixed in A1; storage start is kept for its many callers). */
 async function startOnWorkspace(page: Page, id: string) {
   await page.addInitScript(workspaceId => {
     localStorage.setItem('omni-active-workspace-id', workspaceId);

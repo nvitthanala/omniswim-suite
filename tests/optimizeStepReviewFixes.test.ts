@@ -47,13 +47,25 @@ const click = async (text: RegExp) => {
 const settle = () => act(async () => { await new Promise(resolve => setTimeout(resolve, 120)); });
 
 describe('fix 4: All-teams Undo exists with no team picked and survives picking one', () => {
+  // Like the app, the workspace prop follows every update; Undo checks the lineup is still what
+  // the run left. `live` is the current workspace, and `follow` redraws the step when it changes.
+  let live: Workspace;
+  let liveTeam = '';
   function stepElement(ws: Workspace, selectedTeam: string, onUpdate: (p: Partial<Workspace>) => void) {
+    live = live ?? ws;
+    liveTeam = selectedTeam;
     return createElement(ToastProvider, null,
       createElement(RosterOptimizeStep, {
-        workspace: ws, gender: Gender.MEN, scoringSettings: resolvedScoringSettings(ws),
-        whatIfMode: true, removeSeniors: false, selectedTeam, teams: [HOME_TEAM], onUpdate,
+        workspace: live, gender: Gender.MEN, scoringSettings: resolvedScoringSettings(ws),
+        whatIfMode: true, removeSeniors: false, selectedTeam, teams: [HOME_TEAM],
+        onUpdate: (p: Partial<Workspace>) => {
+          onUpdate(p);
+          live = { ...live, ...p };
+          root.render(stepElement(ws, liveTeam, onUpdate));
+        },
       }));
   }
+  beforeEach(() => { live = undefined as unknown as Workspace; });
 
   it('applies in the no-team state, shows Undo, and Undo restores the pre-run state', async () => {
     const ws = gainWorkspace();

@@ -311,7 +311,7 @@ export default function AthleteHistorySection({ rows, athlete, gender, editable,
                           variant="ghost"
                           size="sm"
                           onClick={() => removeHistoryRow(row)}
-                          className="p-1 hover:text-amber-400 shrink-0"
+                          className="p-1 hover:text-warning shrink-0"
                           aria-label={`Remove history ${row.event}`}
                           leadingIcon={<Trash2 size={12} />}
                         />

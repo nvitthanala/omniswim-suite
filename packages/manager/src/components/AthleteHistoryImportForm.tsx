@@ -72,7 +72,7 @@ export default function AthleteHistoryImportForm({
       </div>
 
       {!team ? (
-        <p className="text-ui-caption text-amber-400/90 mb-3">
+        <p className="text-ui-caption text-warning-soft mb-3">
           Choose a team in the team bar above before importing.
         </p>
       ) : null}

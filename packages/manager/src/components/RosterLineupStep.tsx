@@ -214,7 +214,7 @@ export default function RosterLineupStep({
                   <span className="inline-flex items-center gap-1.5">
                     Checklist
                     {audit.checklistItems.length > 0 ? (
-                      <span className="inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-amber-400/20 text-amber-400 text-ui-micro font-mono normal-case tracking-normal">
+                      <span className="inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-warning-soft text-warning text-ui-micro font-mono normal-case tracking-normal">
                         {audit.checklistItems.length}
                       </span>
                     ) : null}

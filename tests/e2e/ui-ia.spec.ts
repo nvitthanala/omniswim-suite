@@ -65,8 +65,6 @@ test('Phase 1 IA regressions and theme/width screenshots', async ({ page, reques
       await page.getByRole('tab', { name: /Analyze/ }).click();
       await captureScreenshot(page, `${theme}-${width}-matrix-analyze`);
 
-      // Not `/manager?workspace=<id>`: that cold load sends the shell's workspace/URL sync into a swap
-      // loop (about 30 remounts a second), which detaches the Optimize step's buttons mid-click.
       await startOnWorkspace(page, createdWorkspace.id);
       await page.goto('/manager');
       await expect(page.getByRole('tab', { name: /Athletes/ })).toBeVisible();
@@ -164,9 +162,9 @@ async function chooseTeam(page: PhasePage, team: string) {
 
 /**
  * Make `id` the workspace the shell starts on, through the same storage key the
- * app reads. Opening `/manager?workspace=<id>` on a cold load instead sends the
- * dev shell's workspace/URL sync into a swap loop (about 30 navigations a
- * second, seen at HEAD too), which makes screenshots land on another workspace.
+ * app reads. Before A1 (2026-10-03), a cold `/manager?workspace=<id>` load sent the
+ * shell's workspace/URL sync into a swap loop; that is fixed and covered by
+ * `workspace-route-sync.spec.ts`. This helper stays because many callers use it.
  */
 async function startOnWorkspace(page: PhasePage, id: string) {
   await page.addInitScript(workspaceId => {

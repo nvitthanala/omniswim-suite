@@ -247,7 +247,7 @@ export function TeamMatrixSwimmerRow({
   const cutlineTier = primaryTagResult.state === 'tagged' ? primaryTagResult.tag.tier : null;
   const isACut = cutlineTier === 'A' || cutlineTier === 'Standard' || cutlineTier === 'Qualifying';
   const isBCut = cutlineTier === 'B' || cutlineTier === 'Provisional' || cutlineTier === 'Invited';
-  const timeColorClass = isACut ? 'text-[var(--text-accent)]' : isBCut ? 'text-amber-400' : 'text-theme-secondary';
+  const timeColorClass = isACut ? 'text-[var(--text-accent)]' : isBCut ? 'text-warning' : 'text-theme-secondary';
   const relaySplitPrimary = res.isRelay && (res.relayLegSplitDetail || res.relayLegSplit);
   const startEdit = () => {
     if (onUpdateTime && res.id) onStartEdit(res.id, res.time);
@@ -265,7 +265,7 @@ export function TeamMatrixSwimmerRow({
           )}
         </span>
         {res.relayMissingLeg && (
-          <span className="text-ui-micro text-amber-400 shrink-0" title="Missing relay leg">
+          <span className="text-ui-micro text-warning shrink-0" title="Missing relay leg">
             Missing L{(res.relayMissingLeg.legIndex ?? 0) + 1}{' '}
             {relayMissingStrokeLabel(res.relayMissingLeg.stroke)}
           </span>

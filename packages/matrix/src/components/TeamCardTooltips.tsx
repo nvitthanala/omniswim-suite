@@ -199,7 +199,7 @@ export function TooltipSwimmerRow({
           <span className="text-ui-micro text-theme-muted font-mono" title="Relay leg split">Split</span>
         )}
         {s.relayMissingLeg && (
-          <span className="text-ui-micro bg-amber-500/15 text-amber-400 px-1 border border-amber-500/30 rounded-sm ml-1" title="Missing relay leg">
+          <span className="text-ui-micro bg-warning-soft text-warning px-1 border border-warning-faint rounded-sm ml-1" title="Missing relay leg">
             Missing L{(s.relayMissingLeg.legIndex ?? 0) + 1}: {relayMissingStrokeLabel(s.relayMissingLeg.stroke)}
           </span>
         )}

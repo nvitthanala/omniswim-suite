@@ -34,7 +34,7 @@ type Props = {
 function RowWarningChip({ messages, label }: { messages: string[]; label: string }) {
   return (
     <span
-      className="text-ui-caption px-1.5 py-0.5 rounded-full border border-amber-400/40 text-amber-400 shrink-0"
+      className="text-ui-caption px-1.5 py-0.5 rounded-full border border-warning text-warning shrink-0"
       title={messages.join(' · ')}
     >
       {label}

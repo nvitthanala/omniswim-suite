@@ -572,6 +572,34 @@ select {
   color: var(--color-warning);
 }
 
+/*
+ * Warning-tone utilities. They read `--color-warning`, which each theme sets
+ * (amber on Dark, a darker amber on Light), so a caution never needs a fixed
+ * amber hex or `amber-*` class. `@utility` keeps `hover:` and `focus:` variants
+ * working. tests/uiAmberRatchet.test.ts fails if a fixed amber returns.
+ */
+@utility text-warning {
+  color: var(--color-warning);
+}
+@utility text-warning-soft {
+  color: color-mix(in srgb, var(--color-warning) 90%, transparent);
+}
+@utility bg-warning-faint {
+  background-color: color-mix(in srgb, var(--color-warning) 10%, transparent);
+}
+@utility bg-warning-soft {
+  background-color: color-mix(in srgb, var(--color-warning) 20%, transparent);
+}
+@utility border-warning-faint {
+  border-color: color-mix(in srgb, var(--color-warning) 25%, transparent);
+}
+@utility border-warning {
+  border-color: color-mix(in srgb, var(--color-warning) 40%, transparent);
+}
+@utility border-warning-strong {
+  border-color: color-mix(in srgb, var(--color-warning) 70%, transparent);
+}
+
 .badge-info {
   background: color-mix(in srgb, var(--color-info) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-info) 35%, transparent);

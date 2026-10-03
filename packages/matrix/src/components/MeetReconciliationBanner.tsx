@@ -41,7 +41,7 @@ export default function MeetReconciliationBanner({ summary }: Props) {
         {allClear ? (
           <CheckCircle2 size={16} className="shrink-0 text-[var(--text-accent)]" />
         ) : (
-          <AlertTriangle size={16} className="shrink-0 text-amber-400" />
+          <AlertTriangle size={16} className="shrink-0 text-warning" />
         )}
         <h4 className="text-ui-label font-semibold text-[var(--text-primary)]">
           {allClear

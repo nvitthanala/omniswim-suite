@@ -78,23 +78,32 @@ describe('Optimize step owns the all-teams optimizer', () => {
     options: { removeSeniors?: boolean; whatIfMode?: boolean; selectedTeam?: string } = {}
   ) {
     const updates: Array<Partial<Workspace>> = [];
-    await act(async () => {
+    // Like the app, the workspace prop follows every update. Undo checks that the lineup is
+    // still what the run left, so a frozen prop would read as "edited since the run".
+    let current = ws;
+    const draw = () =>
       root.render(
         createElement(
           ToastProvider,
           null,
           createElement(RosterOptimizeStep, {
-            workspace: ws,
+            workspace: current,
             gender: Gender.MEN,
             scoringSettings: resolvedScoringSettings(ws),
             whatIfMode: options.whatIfMode ?? true,
             removeSeniors: options.removeSeniors ?? false,
             selectedTeam: options.selectedTeam ?? HOME_TEAM,
             teams: [HOME_TEAM],
-            onUpdate: (patch: Partial<Workspace>) => updates.push(patch),
+            onUpdate: (patch: Partial<Workspace>) => {
+              updates.push(patch);
+              current = { ...current, ...patch };
+              draw();
+            },
           })
         )
       );
+    await act(async () => {
+      draw();
     });
     return updates;
   }

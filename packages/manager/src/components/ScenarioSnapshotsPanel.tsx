@@ -239,7 +239,7 @@ export default function ScenarioSnapshotsPanel({
       ) : null}
 
       {listError ? (
-        <p className="text-ui-caption text-amber-400/90 leading-relaxed mb-2">{listError}</p>
+        <p className="text-ui-caption text-warning-soft leading-relaxed mb-2">{listError}</p>
       ) : null}
 
       <ScenarioListSection

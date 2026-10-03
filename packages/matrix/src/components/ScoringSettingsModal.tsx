@@ -19,6 +19,8 @@ interface Props {
    */
   conference?: string;
   pdfPlacePointsLocked?: boolean;
+  /** The results carry HyTek place points; lets a draft Auto lock before saving. */
+  resultsCarryPdfPlacePoints?: boolean;
 }
 
 /**
@@ -30,7 +32,7 @@ interface Props {
  * Uses the shared `Modal` for dialog role, aria-modal, Escape, and focus
  * handling — the previous hand-rolled backdrop had none of those.
  */
-export default function ScoringSettingsModal({ settings, onSave, onClose, scoringView, onScoringViewChange, conference, pdfPlacePointsLocked }: Props) {
+export default function ScoringSettingsModal({ settings, onSave, onClose, scoringView, onScoringViewChange, conference, pdfPlacePointsLocked, resultsCarryPdfPlacePoints }: Props) {
   const [draft, setDraft] = useState<ScoringSettings>(() => mergeScoringSettings(settings));
   const [manageOpen, setManageOpen] = useState(false);
   const [presetListRefreshToken, setPresetListRefreshToken] = useState(0);
@@ -69,6 +71,7 @@ export default function ScoringSettingsModal({ settings, onSave, onClose, scorin
             onChange={setDraft}
             conference={conference}
             pdfPlacePointsLocked={pdfPlacePointsLocked}
+            resultsCarryPdfPlacePoints={resultsCarryPdfPlacePoints}
             scoringView={scoringView}
             onScoringViewChange={onScoringViewChange}
             presetPickerExtra={

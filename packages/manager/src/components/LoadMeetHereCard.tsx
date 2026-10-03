@@ -130,7 +130,7 @@ export default function LoadMeetHereCard({ workspace, onUpdate, whatIfMode }: Pr
             </div>
 
             {pending.warnings.length > 0 ? (
-              <ul className="text-ui-caption text-amber-400/90 bg-amber-400/10 border border-amber-400/20 rounded-lg p-3 mb-6 list-disc list-inside space-y-1">
+              <ul className="text-ui-caption text-warning-soft bg-warning-faint border border-warning-faint rounded-lg p-3 mb-6 list-disc list-inside space-y-1">
                 {pending.warnings.map((w, i) => (
                   <li key={i} className="break-words">
                     {w}

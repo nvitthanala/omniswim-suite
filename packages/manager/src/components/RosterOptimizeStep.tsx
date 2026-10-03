@@ -29,6 +29,13 @@ import {
   buildBatchApplyPatch,
   type BatchOptimizationResult,
 } from './batchOptimizerView';
+import {
+  buildOptimizerUndo,
+  optimizerArraysOf,
+  optimizerUndoIsClean,
+  UNDO_CHANGED_MESSAGE,
+  type OptimizerUndo,
+} from './optimizerUndo';
 
 /** Snapshot shape from `captureBeforeState`, shared by `applyOptimizerResult`. */
 type OptimizerBeforeState = {
@@ -47,6 +54,7 @@ type OptimizerBeforeState = {
  */
 function applyOptimizerResult({
   team,
+  workspaceId,
   result,
   before,
   buildSuccessMessage,
@@ -56,12 +64,13 @@ function applyOptimizerResult({
   toast,
 }: {
   team: string;
+  workspaceId: string;
   result: GuardedOptimizerResult;
   before: OptimizerBeforeState;
   buildSuccessMessage: (result: GuardedOptimizerResult, gain: number) => string;
   recordRunSummary: (label: string, result: GuardedOptimizerResult, before: OptimizerBeforeState, allTeams?: boolean) => void;
   onUpdate: (patch: Partial<Workspace>) => void;
-  setLastOptimizeUndo: (value: { label: string; patch: Partial<Workspace> } | null) => void;
+  setLastOptimizeUndo: (value: OptimizerUndo | null) => void;
   toast: ReturnType<typeof useToast>;
 }) {
   recordRunSummary(team, result, before);
@@ -80,19 +89,13 @@ function applyOptimizerResult({
     );
     return;
   }
-  onUpdate({
+  const applied = {
     scorerRosterOverrides: result.overrides,
     meetEntryPlans: result.meetEntryPlans,
     activeEntryIds: result.activeEntryIds,
-  });
-  setLastOptimizeUndo({
-    label: team,
-    patch: {
-      scorerRosterOverrides: before.overrides,
-      meetEntryPlans: before.plans,
-      activeEntryIds: before.activeIds,
-    },
-  });
+  };
+  onUpdate(applied);
+  setLastOptimizeUndo(buildOptimizerUndo({ label: team, workspaceId, before, applied }));
   const gain = result.projectedTotal - result.previousTotal;
   toast.push('success', buildSuccessMessage(result, gain));
 }
@@ -209,7 +212,13 @@ export default function RosterOptimizeStep({
   // the cost explicit and keeps the step instant to open.
   const [preview, setPreview] = useState<ArbitrageCardsResult | null>(null);
   const [scanning, setScanning] = useState(false);
-  const [lastRunSummary, setLastRunSummary] = useState<OptimizerRunSummary | null>(null);
+  // The Undo lives INSIDE the summary record, because the summary panel is the only place its
+  // button renders. Dropping the summary (Dismiss, team change, workspace change) therefore drops
+  // the Undo with it, and an Undo that is armed but out of reach cannot be represented.
+  const [lastRunSummary, setLastRunSummary] = useState<(OptimizerRunSummary & { undo: OptimizerUndo | null }) | null>(null);
+  const lastOptimizeUndo = lastRunSummary?.undo ?? null;
+  const setLastOptimizeUndo = (undo: OptimizerUndo | null) =>
+    setLastRunSummary(prev => (prev ? { ...prev, undo } : prev));
   // The "All teams" dialog. It is the one entry point for a whole-field run.
   const [showAllTeams, setShowAllTeams] = useState(false);
   // One-shot undo for the single most recent APPLIED optimizer run, following
@@ -217,10 +226,18 @@ export default function RosterOptimizeStep({
   // component-local snapshot of the pre-run state plus one dedicated Undo
   // action, not a full history stack. Lost on refresh, same scope as that
   // pattern's own today.
-  const [lastOptimizeUndo, setLastOptimizeUndo] = useState<{
-    label: string;
-    patch: Partial<Workspace>;
-  } | null>(null);
+  // Set when Undo was pressed but the lineup moved since the run. Undo then waits for an
+  // explicit "Undo anyway" instead of discarding the later edits.
+  const [undoBlocked, setUndoBlocked] = useState(false);
+  useEffect(() => {
+    setUndoBlocked(false);
+  }, [lastOptimizeUndo]);
+
+  // An Undo snapshot belongs to one workspace. Switching workspace drops the summary and the Undo,
+  // so a snapshot can never be written onto another workspace.
+  useEffect(() => {
+    setLastRunSummary(null);
+  }, [workspace.id]);
 
   // A stale scan is worse than none — it would describe a roster that no longer exists.
   useEffect(() => {
@@ -237,7 +254,6 @@ export default function RosterOptimizeStep({
   useEffect(() => {
     if (lastRunIsAllTeams.current) return;
     setLastRunSummary(null);
-    setLastOptimizeUndo(null);
   }, [team]);
 
   /** The three optimizer-owned fields, as they read right now — the only
@@ -260,14 +276,23 @@ export default function RosterOptimizeStep({
       overrides: result.overrides,
       plans: result.meetEntryPlans,
     });
-    setLastRunSummary({ label, result, changes });
+    setLastRunSummary({ label, result, changes, undo: null });
   };
 
-  const handleUndoOptimize = () => {
+  const handleUndoOptimize = (force = false) => {
     if (!lastOptimizeUndo) return;
+    if (lastOptimizeUndo.workspaceId !== workspace.id) {
+      setLastRunSummary(null);
+      return;
+    }
+    // The run left the arrays in a known state. If they differ now, the coach edited after the
+    // run, and writing the pre-run arrays back would discard those edits.
+    if (!force && !optimizerUndoIsClean(lastOptimizeUndo, optimizerArraysOf(workspace))) {
+      setUndoBlocked(true);
+      return;
+    }
     onUpdate(lastOptimizeUndo.patch);
     toast.push('success', `Undid: ${lastOptimizeUndo.label} optimize`);
-    setLastOptimizeUndo(null);
     setLastRunSummary(null);
   };
 
@@ -306,6 +331,7 @@ export default function RosterOptimizeStep({
     // toast over an untouched lineup would report a win for a no-op.
     applyOptimizerResult({
       team,
+      workspaceId: workspace.id,
       result,
       before,
       buildSuccessMessage: (_result, gain) => `${team}: +${gain.toFixed(1)} pts (${mode.replace('_', ' ')})`,
@@ -322,6 +348,7 @@ export default function RosterOptimizeStep({
     const result = optimizeRosterForTeam(workspace, gender, team, removeSeniors, scoringSettings);
     applyOptimizerResult({
       team,
+      workspaceId: workspace.id,
       result,
       before,
       buildSuccessMessage: (result, gain) =>
@@ -351,14 +378,7 @@ export default function RosterOptimizeStep({
       return;
     }
     onUpdate(patch);
-    setLastOptimizeUndo({
-      label: 'All teams',
-      patch: {
-        scorerRosterOverrides: before.overrides,
-        meetEntryPlans: before.plans,
-        activeEntryIds: before.activeIds,
-      },
-    });
+    setLastOptimizeUndo(buildOptimizerUndo({ label: 'All teams', workspaceId: workspace.id, before, applied: patch }));
     const gain = result.optimizer.projectedTotal - result.optimizer.previousTotal;
     toast.push('success', `All teams: +${gain.toFixed(1)} pts across the field`);
   };
@@ -380,7 +400,10 @@ export default function RosterOptimizeStep({
     <OptimizerChangeSummaryPanel
       summary={lastRunSummary}
       onDismiss={() => setLastRunSummary(null)}
-      onUndo={lastOptimizeUndo ? handleUndoOptimize : undefined}
+      onUndo={lastOptimizeUndo ? () => handleUndoOptimize() : undefined}
+      undoBlockedMessage={lastOptimizeUndo && undoBlocked ? UNDO_CHANGED_MESSAGE : undefined}
+      onUndoAnyway={() => handleUndoOptimize(true)}
+      onKeepEdits={() => setUndoBlocked(false)}
     />
   ) : null;
 
