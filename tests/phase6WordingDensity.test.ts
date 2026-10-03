@@ -134,7 +134,7 @@ describe('Lineup density and the Swimmer tag', () => {
     const onRequestDeleteSwimmer = vi.fn();
     await renderLineup(largeRosterWorkspace(), { onRequestDeleteSwimmer });
     const list = container.querySelector('[role="listbox"]') as HTMLElement;
-    expect(list.getAttribute('aria-label')).toContain('Delete to remove');
+    expect(list.getAttribute('aria-label')).toContain('Delete or Backspace to remove');
     // No selection yet: Delete does nothing.
     await act(async () => {
       list.dispatchEvent(new KeyboardEvent('keydown', { key: 'Delete', bubbles: true }));
@@ -151,6 +151,51 @@ describe('Lineup density and the Swimmer tag', () => {
     });
     expect(onRequestDeleteSwimmer).toHaveBeenCalledTimes(1);
     expect(onRequestDeleteSwimmer).toHaveBeenCalledWith(selectedName);
+  });
+
+  it('removes the selected athlete with Backspace on the roster list, and only when the list itself has focus', async () => {
+    const onRequestDeleteSwimmer = vi.fn();
+    await renderLineup(largeRosterWorkspace(), { onRequestDeleteSwimmer });
+    const list = container.querySelector('[role="listbox"]') as HTMLElement;
+    await act(async () => {
+      list.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    });
+    // A Backspace that starts inside a child (target is not the list) never removes anyone.
+    const row = container.querySelector('tr[role="option"]') as HTMLElement;
+    await act(async () => {
+      row.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }));
+    });
+    expect(onRequestDeleteSwimmer).not.toHaveBeenCalled();
+    const selectedName = container.querySelector('tr[role="option"][aria-selected="true"] td span')?.textContent;
+    await act(async () => {
+      list.dispatchEvent(new KeyboardEvent('keydown', { key: 'Backspace', bubbles: true }));
+    });
+    expect(onRequestDeleteSwimmer).toHaveBeenCalledTimes(1);
+    expect(onRequestDeleteSwimmer).toHaveBeenCalledWith(selectedName);
+    expect(container.textContent).toMatch(/Delete\s*or\s*Backspace\s*to remove/);
+  });
+
+  it('points aria-activedescendant at the selected row, with a valid id that exists in the list', async () => {
+    await renderLineup(largeRosterWorkspace());
+    const list = container.querySelector('[role="listbox"]') as HTMLElement;
+    expect(list.hasAttribute('aria-activedescendant')).toBe(false);
+    await act(async () => {
+      list.dispatchEvent(new KeyboardEvent('keydown', { key: 'ArrowDown', bubbles: true }));
+    });
+    const activeId = list.getAttribute('aria-activedescendant');
+    expect(activeId).toBeTruthy();
+    expect(activeId).not.toMatch(/\s/);
+    const target = container.querySelector(`[id="${activeId}"]`);
+    expect(target?.getAttribute('role')).toBe('option');
+    expect(target?.getAttribute('aria-selected')).toBe('true');
+    // Row ids are unique.
+    const ids = Array.from(container.querySelectorAll('tr[role="option"]')).map(r => r.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids.every(id => !/\s/.test(id))).toBe(true);
+    await act(async () => {
+      list.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));
+    });
+    expect(list.hasAttribute('aria-activedescendant')).toBe(false);
   });
 
   it('offers Remove from roster in the athlete drawer', async () => {

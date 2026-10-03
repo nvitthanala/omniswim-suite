@@ -18,7 +18,7 @@ import CommandPalette from './components/CommandPalette';
 import { AuthProvider } from './context/AuthContext';
 import { ManagerAppLazy, MatrixAppLazy, MetricsAppLazy, prefetchLastApplet } from './lib/appletPrefetch';
 import { installDataLossWatcher } from './lib/dataLossWatcher';
-import { workspacePdfPlacePointsLocked, workspaceScoringSettings } from './lib/workspaceScoringSettings';
+import { useWorkspaceScoringDialogProps } from './lib/workspaceScoringSettings';
 
 const ManagerApp = ManagerAppLazy;
 const MatrixApp = MatrixAppLazy;
@@ -166,6 +166,8 @@ function ShellLayout() {
     };
   }, []);
 
+  const scoringDialogProps = useWorkspaceScoringDialogProps(activeWorkspace);
+
   if (isLoading) {
     return <AppletSkeleton kind="suite" />;
   }
@@ -230,10 +232,10 @@ function ShellLayout() {
         </span>
       </footer>
 
-      {showScoringModal && activeWorkspace && (
+      {showScoringModal && activeWorkspace && scoringDialogProps && (
         <ScoringSettingsModal
-          settings={workspaceScoringSettings(activeWorkspace)}
-          pdfPlacePointsLocked={workspacePdfPlacePointsLocked(activeWorkspace)}
+          settings={scoringDialogProps.settings}
+          pdfPlacePointsLocked={scoringDialogProps.pdfPlacePointsLocked}
           scoringView={activeWorkspace.scoringView}
           conference={activeWorkspace.conference}
           onScoringViewChange={view => {

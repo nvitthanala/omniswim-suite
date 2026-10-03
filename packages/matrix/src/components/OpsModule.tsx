@@ -41,8 +41,9 @@ import MeetOperationsView from './MeetOperationsView';
 import SwimmerDeleteConfirmModal from './SwimmerDeleteConfirmModal';
 import { SwimCloudImportDiagnosticsPanel } from './SwimCloudImportDiagnosticsPanel';
 import {
-  matrixStepStorageKey,
+  readStoredMatrixStep,
   resolveInitialMatrixStep,
+  writeStoredMatrixStep,
   type MatrixStepId,
 } from './matrixStepState';
 
@@ -210,9 +211,9 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
   // A stored 'load' or 'score' (from before Phase 5) resolves to 'meet'; the
   // effect below then writes the current id back.
   const [step, setStep] = useState<MatrixStepId>(() =>
-    resolveInitialMatrixStep(sessionStorage.getItem(matrixStepStorageKey(workspace.id)), Boolean(workspace.loadedMeet))
+    resolveInitialMatrixStep(readStoredMatrixStep(workspace.id), Boolean(workspace.loadedMeet))
   );
-  useEffect(() => { sessionStorage.setItem(matrixStepStorageKey(workspace.id), step); }, [workspace.id, step]);
+  useEffect(() => { writeStoredMatrixStep(workspace.id, step); }, [workspace.id, step]);
   const [scoringRefreshKey, setScoringRefreshKey] = useState(0);
   const parseAbortRef = useRef<AbortController | null>(null);
   const psychParseAbortRef = useRef<AbortController | null>(null);

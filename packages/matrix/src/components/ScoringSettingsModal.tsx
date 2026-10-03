@@ -35,7 +35,14 @@ export default function ScoringSettingsModal({ settings, onSave, onClose, scorin
   const [manageOpen, setManageOpen] = useState(false);
   const [presetListRefreshToken, setPresetListRefreshToken] = useState(0);
 
-  useEffect(() => setDraft(mergeScoringSettings(settings)), [settings]);
+  // The draft resets when the modal opens (it mounts only while open) or when
+  // the incoming settings change in content. An equal-but-new object from the
+  // parent must not wipe unsaved edits.
+  const settingsKey = JSON.stringify(settings);
+  useEffect(() => {
+    setDraft(mergeScoringSettings(settings));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- settingsKey is the content identity of `settings`
+  }, [settingsKey]);
 
   return (
     <>

@@ -107,9 +107,14 @@ export function ScoringSettingsFields({
     null
   );
 
+  // Reset the edited copy only when the incoming settings change in content.
+  // A parent that rebuilds an equal object each render (a toast, a toggle)
+  // must not wipe unsaved edits, so key on the serialised value, not identity.
+  const settingsKey = JSON.stringify(settings);
   useEffect(() => {
     setLocal(mergeScoringSettings(settings));
-  }, [settings]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- settingsKey is the content identity of `settings`
+  }, [settingsKey]);
 
   useEffect(() => {
     fetchScoringPresetList().then(setPresets).catch(() => setPresets([]));
@@ -212,7 +217,12 @@ export function ScoringSettingsFields({
   const divingTable = optionalPointsField('divingPoints');
 
   const resolvedScoringView = scoringView ?? 'merged';
-  const pdfPointsLock = pdfPlacePointsLocked || local.usePdfPlacePoints === true;
+  // Read the dialog's live choice, not the saved one: an explicit On locks, an
+  // explicit Off unlocks in the same session, and Auto falls back to what the
+  // saved results imply (`pdfPlacePointsLocked`).
+  const pdfPointsLock =
+    local.usePdfPlacePoints === true ||
+    ((local.usePdfPlacePoints == null || local.usePdfPlacePoints === 'auto') && pdfPlacePointsLocked);
 
   return (
     <>

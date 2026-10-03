@@ -6,7 +6,7 @@ import { ScoringSettingsFields } from '../packages/matrix/src/components/Scoring
 import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
 import { Gender, type Workspace } from '@omniswim/core/types';
 import { useWorkspaceScoring } from '@omniswim/core/lib/useWorkspaceScoring';
-import { workspaceScoringSettings } from '../apps/shell/src/lib/workspaceScoringSettings';
+import { workspacePdfPlacePointsLocked, workspaceScoringSettings } from '../apps/shell/src/lib/workspaceScoringSettings';
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
@@ -67,6 +67,32 @@ describe('Phase 2 scoring eligibility', () => {
     }
     await act(async () => root.render(createElement(HookProbe)));
     expect(workspaceScoringSettings(workspace)).toEqual(actual);
+  });
+
+  it('agrees with useWorkspaceScoring when the PDF place-points hint path runs', async () => {
+    // Ten rows carry the HyTek Points column, so Auto resolves to PDF place points.
+    const menResults = Array.from({ length: 10 }, (_, i) => ({
+      id: `m${i}`, rank: i + 1, name: `Swimmer ${i}`, classYear: 'FR', team: 'Alpha', time: '20.00',
+      points: 5, pdfPoints: 5, event: '50 Free', gender: Gender.MEN,
+    }));
+    const workspace = {
+      id: 'settings-proof-pdf', name: 'Settings proof PDF', createdAt: 1,
+      menResults, womenResults: [], recruits: [],
+      // Auto plus a saved roster mode: only the results hint can force the Points pool.
+      scoringSettings: { usePdfPlacePoints: 'auto', scorerEligibilityMode: 'roster' },
+    } as unknown as Workspace;
+    let actual: ReturnType<typeof workspaceScoringSettings> | undefined;
+    function HookProbe() {
+      actual = useWorkspaceScoring({ workspace, gender: Gender.MEN, removeSeniors: false, scoringRefreshKey: 0 }).scoringSettings;
+      return null;
+    }
+    await act(async () => root.render(createElement(HookProbe)));
+
+    const unhinted = mergeScoringSettings(workspace.scoringSettings, { conference: workspace.conference });
+    expect(unhinted.scorerEligibilityMode, 'without the hint the saved roster mode stands').toBe('roster');
+    expect(actual?.scorerEligibilityMode, 'the hint path forced the Points pool').toBe('points_pool');
+    expect(workspaceScoringSettings(workspace)).toEqual(actual);
+    expect(workspacePdfPlacePointsLocked(workspace)).toBe(true);
   });
 
   it('keeps NSISC naming out of Manager and Matrix UI copy', () => {

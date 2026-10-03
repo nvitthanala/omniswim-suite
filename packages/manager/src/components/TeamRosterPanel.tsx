@@ -8,7 +8,7 @@ import {
   usesScorerRoster,
 } from '@omniswim/core/lib/scorerRoster';
 import type { AthleteCreditedSwim, ScorerRosterRow } from '@omniswim/core/lib/scorerRoster';
-import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
+import { effectivePdfPlacePointsMode, mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
 import { canonicalSwimmerName, isRelayResult, normalizeSwimmerName } from '@omniswim/core/lib/utils';
 import { buildTeamScoreLookup, officialScoresForGender } from '@omniswim/core/lib/teamScoreMatching';
 import { buildAliasResolver } from '@omniswim/core/lib/athleteAliases';
@@ -16,7 +16,7 @@ import { type EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
 import { buildHistoryFromWorkspace, mergeHistoryIndex } from '@omniswim/core/lib/athleteHistory';
 import { applyScorerOffRelayPatch, type TeamLineupAudit } from '@omniswim/core/lib/rosterLineupAudit';
 import { Button, useOpenScoringRules, useToast } from '@omniswim/ui';
-import { countTeamMembers, genderLabelFor, resolveTeamPickerMode, rosterColSpan } from './teamRosterView';
+import { countTeamMembers, genderLabelFor, resolveTeamPickerMode, rosterColSpan, activeRosterRowId } from './teamRosterView';
 import TeamRosterHeader from './TeamRosterHeader';
 import TeamRosterTable from './TeamRosterTable';
 import TeamRosterLayoutShell from './TeamRosterLayoutShell';
@@ -102,6 +102,8 @@ export default function TeamRosterPanel({
   // every workspace patch / keystroke that re-renders this panel.
   const merged = useMemo(() => mergeScoringSettings(settings), [settings]);
   const rosterMode = usesScorerRoster(merged);
+  // Explicit On, or Auto with PDF place points in the results: the real blocker when Lineup is locked.
+  const pdfPlacePointsActive = effectivePdfPlacePointsMode(merged, results);
   const { useDropdown, useSidebar } = resolveTeamPickerMode(showTeamSidebar, teamPickerMode);
 
   const genderResults = useMemo(
@@ -237,6 +239,8 @@ export default function TeamRosterPanel({
     [teamRows, selectedAthleteKey]
   );
 
+  const activeRowId = activeRosterRowId(selectedAthleteKey, rosterWindow.rows);
+
   useEffect(() => {
     if (!jumpAthleteName && !jumpAthleteKey) return;
     // Prefer the threaded ScorerRosterRow.key (BUG 1 hardening); fall back to
@@ -317,8 +321,8 @@ export default function TeamRosterPanel({
         e.preventDefault();
         setSelectedAthleteKey(null);
         onAthleteSelect?.(null);
-      } else if (e.key === 'Delete' && currentIndex >= 0 && e.target === e.currentTarget) {
-        // The per-row remove buttons are gone; Delete on the list itself asks to
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && currentIndex >= 0 && e.target === e.currentTarget) {
+        // The per-row remove buttons are gone; Delete or Backspace on the list itself asks to
         // remove the selected athlete. The same confirm dialog opens.
         if (editable && onRequestDeleteSwimmer) {
           e.preventDefault();
@@ -379,8 +383,8 @@ export default function TeamRosterPanel({
           Team roster
         </h4>
         <p className="text-ui-body text-theme-secondary leading-relaxed">
-          {merged.usePdfPlacePoints === true
-            ? 'PDF place points require Points pool eligibility. Turn off PDF place points to use the team scorer list.'
+          {pdfPlacePointsActive
+            ? 'PDF place points require Points pool eligibility. Set PDF place points to Off in the scoring rules to use the team scorer list.'
             : 'Lineup editing requires Team scorer list eligibility. Change the scorer eligibility setting to continue.'}
         </p>
         <Button className="mt-3" variant="outline" onClick={openScoringRules}>Open scoring rules</Button>
@@ -418,7 +422,8 @@ export default function TeamRosterPanel({
         onKeyDown={handleRosterKeyDown}
         tabIndex={teamRows.length ? 0 : -1}
         role="listbox"
-        aria-label={`Team roster — arrow keys to navigate${canRemoveAthlete ? ', Delete to remove' : ''}`}
+        aria-activedescendant={activeRowId}
+        aria-label={`Team roster — arrow keys to navigate${canRemoveAthlete ? ', Delete or Backspace to remove' : ''}`}
         className={`overflow-y-auto pr-1 rounded-xl border border-theme-soft custom-scrollbar outline-none ${
           expanded ? 'flex-1 min-h-[20rem]' : 'max-h-80'
         }`}

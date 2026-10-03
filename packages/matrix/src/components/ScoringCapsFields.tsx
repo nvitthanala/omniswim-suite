@@ -61,6 +61,7 @@ export function ScoringCapsFields({ local, update, lock }: ScoringCapsFieldsProp
         <NumberField
           aria-label="Maximum individual scorers per team"
           value={local.maxIndividualScorersPerTeam}
+          min={0}
           onValueChange={value => update({ maxIndividualScorersPerTeam: value })}
           {...lockProps('maxIndividualScorersPerTeam')}
         />
@@ -70,6 +71,7 @@ export function ScoringCapsFields({ local, update, lock }: ScoringCapsFieldsProp
         <NumberField
           aria-label="Maximum scoring relays per team per event"
           value={local.maxRelaysScoringPerTeam}
+          min={0}
           onValueChange={value => update({ maxRelaysScoringPerTeam: value })}
           {...lockProps('maxRelaysScoringPerTeam')}
         />

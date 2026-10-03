@@ -17,7 +17,7 @@ type Props = {
   /** Open the Optimize step. Omit to hide the link. */
   onOpenOptimize?: () => void;
   onResetTeam: () => void;
-  /** The Delete key removes the selected athlete; mention it in the help text. */
+  /** The Delete or Backspace key removes the selected athlete; mention it in the help text. */
   canRemoveAthlete?: boolean;
   maxIndividualScorersPerTeam: number;
   selectedActual: number | undefined;
@@ -108,6 +108,10 @@ export default function TeamRosterHeader({
             ,{' '}
             <kbd className="px-1 rounded border border-theme-soft bg-[var(--surface-muted)] text-ui-micro font-mono">
               Delete
+            </kbd>{' '}
+            or{' '}
+            <kbd className="px-1 rounded border border-theme-soft bg-[var(--surface-muted)] text-ui-micro font-mono">
+              Backspace
             </kbd>{' '}
             to remove
           </>

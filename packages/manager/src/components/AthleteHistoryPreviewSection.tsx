@@ -131,7 +131,7 @@ export default function AthleteHistoryPreviewSection({
             Enable <strong className="text-[var(--text-primary)]">What-if</strong> to import onto the roster.
           </p>
         ) : !team.trim() ? (
-          <p className="text-ui-caption text-amber-400/90">Choose a team in the team bar above before importing.</p>
+          <p className="text-ui-caption text-[var(--color-warning)]">Choose a team in the team bar above before importing.</p>
         ) : (
           <>
             <div className="border border-theme-soft rounded-lg p-3 space-y-3 mb-3">

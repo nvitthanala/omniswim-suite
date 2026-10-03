@@ -156,6 +156,24 @@ describe('Optimize step owns the all-teams optimizer', () => {
     expect(Object.keys(patch).sort()).toEqual(['activeEntryIds', 'meetEntryPlans', 'scorerRosterOverrides']);
   });
 
+  it('buildBatchApplyPatch writes empty arrays through, so an improving run that empties a field clears it', () => {
+    const gain = gainWorkspace();
+    const improved = computeBatchOptimizationResult(gain, Gender.MEN, resolvedScoringSettings(gain), 'all', false);
+    expect(improved.outcome).toBe('improved');
+    const emptied = { ...improved, overrides: [], meetEntryPlans: [], activeEntryIds: [] };
+    // toStrictEqual: an omitted key or an undefined value would leave the old array in place.
+    expect(buildBatchApplyPatch(emptied)).toStrictEqual({
+      scorerRosterOverrides: [],
+      meetEntryPlans: [],
+      activeEntryIds: [],
+    });
+    // Emptying one field must not disturb the others.
+    const onlyPlansEmptied = buildBatchApplyPatch({ ...improved, meetEntryPlans: [] })!;
+    expect(onlyPlansEmptied.meetEntryPlans).toStrictEqual([]);
+    expect(onlyPlansEmptied.scorerRosterOverrides).toBe(improved.overrides);
+    expect(onlyPlansEmptied.activeEntryIds).toBe(improved.activeEntryIds);
+  });
+
   it('an applied all-teams run shows Undo, and Undo restores the pre-run state', async () => {
     const ws = gainWorkspace();
     const updates = await renderStep(ws);

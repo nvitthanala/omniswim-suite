@@ -14,7 +14,7 @@ import React from 'react';
 import type { ScorerRosterRow } from '@omniswim/core/lib/scorerRoster';
 import type { AthleteEventProfile } from '@omniswim/core/types';
 import AthleteRoleTag from './AthleteRoleTag';
-import { formatEventLabelForDisplay } from './teamRosterView';
+import { formatEventLabelForDisplay, rosterRowDomId } from './teamRosterView';
 
 type Props = {
   row: ScorerRosterRow;
@@ -60,7 +60,7 @@ export default function TeamRosterRow({
 
   return (
     <tr
-      id={`roster-row-${row.key}`}
+      id={rosterRowDomId(row.key)}
       role="option"
       aria-selected={isSelected}
       onClick={onSelect}

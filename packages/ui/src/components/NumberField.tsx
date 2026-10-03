@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { InputHTMLAttributes } from 'react';
 
 export type NumberFieldProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'type' | 'value' | 'onChange' | 'min' | 'max' | 'step'> & {
@@ -14,9 +14,17 @@ export function NumberField({ value, onValueChange, min, max, step = 1, ...props
   const [draft, setDraft] = useState(String(value));
   const [invalid, setInvalid] = useState(false);
 
+  // The last value this field published. The draft text re-syncs from `value`
+  // only when `value` differs from it (an external change). Re-syncing on every
+  // validity flip made "2." -> "2.0" snap back to "2" and turned ".05" into 25.
+  const lastPublished = useRef(value);
+
   useEffect(() => {
-    if (!invalid) setDraft(String(value));
-  }, [value, invalid]);
+    if (value === lastPublished.current) return;
+    lastPublished.current = value;
+    setDraft(String(value));
+    setInvalid(false);
+  }, [value]);
 
   const change = (next: string) => {
     setDraft(next);
@@ -28,6 +36,7 @@ export function NumberField({ value, onValueChange, min, max, step = 1, ...props
       return;
     }
     setInvalid(false);
+    lastPublished.current = parsed;
     onValueChange(parsed);
   };
 

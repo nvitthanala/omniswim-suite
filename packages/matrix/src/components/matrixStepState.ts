@@ -35,3 +35,25 @@ export function resolveInitialMatrixStep(
 ): MatrixStepId {
   return normalizeStoredMatrixStep(saved) ?? (hasLoadedMeet ? 'standings' : 'meet');
 }
+
+/**
+ * Reads the stored step. `sessionStorage` can be missing or throw (private
+ * windows, blocked site data), so this returns null instead of throwing and
+ * the workspace opens on its default step.
+ */
+export function readStoredMatrixStep(workspaceId: string): string | null {
+  try {
+    return sessionStorage.getItem(matrixStepStorageKey(workspaceId));
+  } catch {
+    return null;
+  }
+}
+
+/** Stores the step; silently does nothing when `sessionStorage` is unavailable. */
+export function writeStoredMatrixStep(workspaceId: string, step: MatrixStepId): void {
+  try {
+    sessionStorage.setItem(matrixStepStorageKey(workspaceId), step);
+  } catch {
+    // The step is a convenience, not state: the page works without it.
+  }
+}

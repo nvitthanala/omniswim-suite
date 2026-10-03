@@ -276,3 +276,26 @@ export function resolveTeamPickerMode(
   const useSidebar = showTeamSidebar && !useDropdown;
   return { useDropdown, useSidebar };
 }
+
+/**
+ * A DOM id for a roster row. The row key holds spaces and `|||`, which are not
+ * valid in an id and would break `aria-activedescendant`. Every character
+ * outside `[A-Za-z0-9_-]` becomes `_` plus its hex code, so two keys never
+ * collapse to one id.
+ */
+export function rosterRowDomId(rowKey: string): string {
+  return `roster-row-${rowKey.replace(/[^A-Za-z0-9_-]/g, ch => `_${ch.charCodeAt(0).toString(16)}_`)}`;
+}
+
+/**
+ * The id `aria-activedescendant` should name: the selected row's id, but only
+ * when that row is in the rendered slice. A windowed list renders part of the
+ * roster, and an id that is not in the DOM is invalid.
+ */
+export function activeRosterRowId(
+  selectedKey: string | null,
+  renderedRows: ReadonlyArray<{ key: string }>
+): string | undefined {
+  if (!selectedKey || !renderedRows.some(r => r.key === selectedKey)) return undefined;
+  return rosterRowDomId(selectedKey);
+}

@@ -110,3 +110,43 @@ export function deltaColorClass(delta: number): string {
   if (delta < 0) return 'text-points-negative';
   return 'text-theme-secondary';
 }
+
+/**
+ * What a batch run was computed from. A result is shown and applied only while
+ * the inputs that produced it still hold.
+ */
+export type BatchRunInputs = {
+  workspaceId: string;
+  gender: Gender;
+  settingsKey: string;
+  stage: OptimizerStage;
+  removeSeniors: boolean;
+  /** The three optimizer-owned arrays, by identity: any edit replaces them. */
+  overrides: Workspace['scorerRosterOverrides'];
+  plans: Workspace['meetEntryPlans'];
+  activeEntryIds: Workspace['activeEntryIds'];
+};
+
+/** True while the scoring inputs of a run still match, so its result may be shown. */
+export function batchRunInputsCurrent(ran: BatchRunInputs, now: Pick<BatchRunInputs, 'workspaceId' | 'gender' | 'settingsKey' | 'stage' | 'removeSeniors'>): boolean {
+  return (
+    ran.workspaceId === now.workspaceId &&
+    ran.gender === now.gender &&
+    ran.settingsKey === now.settingsKey &&
+    ran.stage === now.stage &&
+    ran.removeSeniors === now.removeSeniors
+  );
+}
+
+/**
+ * True when the lineup arrays are no longer the objects the run started from.
+ * The result holds the FULL post-run arrays, so applying it then would
+ * overwrite the edits made since.
+ */
+export function batchLineupMoved(ran: BatchRunInputs, workspace: Workspace): boolean {
+  return (
+    ran.overrides !== workspace.scorerRosterOverrides ||
+    ran.plans !== workspace.meetEntryPlans ||
+    ran.activeEntryIds !== workspace.activeEntryIds
+  );
+}

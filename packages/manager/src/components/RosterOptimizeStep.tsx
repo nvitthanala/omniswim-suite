@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { FileWarning } from 'lucide-react';
 import { Gender, ScoringSettings, Workspace } from '@omniswim/core/types';
 import {
@@ -59,7 +59,7 @@ function applyOptimizerResult({
   result: GuardedOptimizerResult;
   before: OptimizerBeforeState;
   buildSuccessMessage: (result: GuardedOptimizerResult, gain: number) => string;
-  recordRunSummary: (label: string, result: GuardedOptimizerResult, before: OptimizerBeforeState) => void;
+  recordRunSummary: (label: string, result: GuardedOptimizerResult, before: OptimizerBeforeState, allTeams?: boolean) => void;
   onUpdate: (patch: Partial<Workspace>) => void;
   setLastOptimizeUndo: (value: { label: string; patch: Partial<Workspace> } | null) => void;
   toast: ReturnType<typeof useToast>;
@@ -231,7 +231,11 @@ export default function RosterOptimizeStep({
   // the old team's controls otherwise — dismissible on its own is not enough
   // once the coach has moved on to a different team, and undoing a stale
   // snapshot against the WRONG team's current state would be actively wrong.
+  // An All-teams run is not about one team, so its summary and Undo survive a
+  // team change (and are shown with or without a team picked).
+  const lastRunIsAllTeams = useRef(false);
   useEffect(() => {
+    if (lastRunIsAllTeams.current) return;
     setLastRunSummary(null);
     setLastOptimizeUndo(null);
   }, [team]);
@@ -248,8 +252,10 @@ export default function RosterOptimizeStep({
   const recordRunSummary = (
     label: string,
     result: GuardedOptimizerResult,
-    before: ReturnType<typeof captureBeforeState>
+    before: ReturnType<typeof captureBeforeState>,
+    allTeams = false
   ) => {
+    lastRunIsAllTeams.current = allTeams;
     const changes: OptimizerChangeSummary = diffOptimizerChanges(before, {
       overrides: result.overrides,
       plans: result.meetEntryPlans,
@@ -337,7 +343,7 @@ export default function RosterOptimizeStep({
    */
   const applyAllTeamsResult = (result: BatchOptimizationResult) => {
     const before = captureBeforeState();
-    recordRunSummary('All teams', result.optimizer, before);
+    recordRunSummary('All teams', result.optimizer, before, true);
     const patch = buildBatchApplyPatch(result);
     if (!patch) {
       setLastOptimizeUndo(null);
@@ -365,6 +371,16 @@ export default function RosterOptimizeStep({
       removeSeniors={removeSeniors}
       onApply={applyAllTeamsResult}
       onClose={() => setShowAllTeams(false)}
+    />
+  ) : null;
+
+  // Shown in both the no-team and the team view, so an All-teams apply always
+  // has its Undo in reach.
+  const runSummaryPanel = lastRunSummary ? (
+    <OptimizerChangeSummaryPanel
+      summary={lastRunSummary}
+      onDismiss={() => setLastRunSummary(null)}
+      onUndo={lastOptimizeUndo ? handleUndoOptimize : undefined}
     />
   ) : null;
 
@@ -400,6 +416,7 @@ export default function RosterOptimizeStep({
             All teams…
           </Button>
         </div>
+        {runSummaryPanel}
         {allTeamsDialog}
       </div>
     );
@@ -423,13 +440,7 @@ export default function RosterOptimizeStep({
         </p>
       ) : null}
 
-      {lastRunSummary ? (
-        <OptimizerChangeSummaryPanel
-          summary={lastRunSummary}
-          onDismiss={() => setLastRunSummary(null)}
-          onUndo={lastOptimizeUndo ? handleUndoOptimize : undefined}
-        />
-      ) : null}
+      {runSummaryPanel}
 
       {allTeamsDialog}
 

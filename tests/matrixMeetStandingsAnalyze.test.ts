@@ -293,6 +293,22 @@ describe('Official team scores', () => {
     expect(container.textContent).toContain('300.0');
   });
 
+  it('keeps a team whose published score is 0 and shows it as 0.0', async () => {
+    const lookup = new Map<string, number | undefined>([['Alpha', 412.5], ['Beta', 0]]);
+    // A score of 0 is a real score; only an absent one is dropped.
+    expect(officialScoreRows(teams, lookup)).toEqual([
+      { teamName: 'Alpha', score: 412.5 },
+      { teamName: 'Beta', score: 0 },
+    ]);
+    await render(lookup);
+    expect(container.textContent).toContain('Official team scores');
+    expect(container.textContent).toContain('412.5');
+    expect(container.textContent).toContain('Beta');
+    expect(container.textContent).toContain('0.0');
+    const values = Array.from(container.querySelectorAll('span.font-mono')).map(el => el.textContent);
+    expect(values).toEqual(['412.5', '0.0']);
+  });
+
   it('hides the card when every team is keyed but none has a score', async () => {
     await render(new Map<string, number | undefined>([['Alpha', undefined], ['Beta', undefined]]));
     expect(container.textContent).not.toContain('Official team scores');
