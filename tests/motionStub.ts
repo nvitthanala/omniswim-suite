@@ -23,4 +23,6 @@ const motion = new Proxy({}, {
 export const motionStub = {
   motion,
   AnimatePresence: ({ children }: { children?: ReactNode }) => createElement(Fragment, null, children),
+  // Reduced motion on, so shared controls that animate an indicator render it statically.
+  useReducedMotion: () => true,
 };

@@ -50,14 +50,15 @@ export function TeamCardMatrixControls({ viewMode, sortMode, onSortModeChange, o
           {viewMode === 'swimmer' && <option value="swimmerAsc">Low to High</option>}
         </select>
 
+        <span className="text-ui-micro text-theme-secondary">List:</span>
         <SegmentedControl
           layout="inline"
           ariaLabel="Team matrix grouping"
           value={viewMode}
           onChange={onViewModeChange}
           options={[
-            { value: 'event', label: 'By Event', ariaLabel: 'Group team matrix by event' },
-            { value: 'swimmer', label: 'By Swimmer', ariaLabel: 'Group team matrix by swimmer' },
+            { value: 'event', label: 'By event', ariaLabel: 'Group team matrix by event' },
+            { value: 'swimmer', label: 'By swimmer', ariaLabel: 'Group team matrix by swimmer' },
           ]}
         />
       </div>

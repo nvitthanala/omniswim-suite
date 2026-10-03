@@ -119,7 +119,7 @@ function CompactScoreSummary({
         </span>
       ) : null}
       {showPrelims && isMeaningfulDelta(baselineOverUnder) ? (
-        <DeltaBadge value={baselineOverUnder} prefix="Base " />
+        <DeltaBadge value={baselineOverUnder} prefix="vs prelims " />
       ) : null}
       {showPrelims && shouldShowProjectedOverUnder(baselineOverUnder, projectedOverUnder) ? (
         <DeltaBadge value={projectedOverUnder} prefix="Proj " />

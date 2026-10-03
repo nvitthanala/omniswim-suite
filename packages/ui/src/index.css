@@ -837,6 +837,13 @@ select {
   }
 }
 
+/* Three steps fill one row instead of leaving an empty fourth column or an orphan on a second row. */
+@container wizard-shell (min-width: 30rem) {
+  .wizard-step-grid[data-step-count="3"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
 .toolbar {
   display: flex;
   flex-wrap: wrap;

@@ -55,11 +55,13 @@ test('Phase 1 IA regressions and theme/width screenshots', async ({ page, reques
       await page.reload();
       await expect(page.getByRole('tab', { name: /Standings/ })).toHaveAttribute('aria-selected', 'true');
       await captureScreenshot(page, `${theme}-${width}-matrix`);
-      await page.getByRole('tab', { name: /Load/ }).click();
+      // Phase 5: scoring lives on the Meet step; there is no Score step.
+      await expect(page.getByRole('tab')).toHaveCount(3);
+      await expect(page.getByRole('tab', { name: /Score/ })).toHaveCount(0);
+      await page.getByRole('tab', { name: /Meet/ }).click();
       await expect(page.getByLabel('PDF column format')).toBeVisible();
-      await captureScreenshot(page, `${theme}-${width}-matrix-load`);
-      await page.getByRole('tab', { name: /Score/ }).click();
-      await captureScreenshot(page, `${theme}-${width}-matrix-scoring`);
+      await expect(page.getByRole('button', { name: 'Edit scoring rules' })).toBeVisible();
+      await captureScreenshot(page, `${theme}-${width}-matrix-meet`);
       await page.getByRole('tab', { name: /Analyze/ }).click();
       await captureScreenshot(page, `${theme}-${width}-matrix-analyze`);
 
@@ -124,7 +126,7 @@ type PhaseRequest = import('@playwright/test').APIRequestContext;
 async function createPhaseWorkspace(
   request: PhaseRequest,
   label: string,
-  phase: 3 | 4 = 3
+  phase: 3 | 4 | 5 = 3
 ): Promise<{ id: string; name: string }> {
   const stamp = Date.now();
   const id = `ui-p${phase}-${label}-${stamp}`;
@@ -449,6 +451,120 @@ test('Phase 4 Optimize owns the optimizers and Lineup only links to it', async (
   await page.keyboard.press('Enter');
   await expect(dialog).toBeVisible();
   await page.keyboard.press('Escape');
+
+  expect(pageErrors).toEqual([]);
+});
+
+/* ------------------------------------------------------------------------ */
+/* Phase 5: Matrix Meet / Standings / Analyze                                */
+/* ------------------------------------------------------------------------ */
+
+const PHASE5_SHOT_DIR = process.env.PHASE5_SHOT_DIR === 'before' ? 'before' : 'after';
+
+test('Phase 5 Matrix screenshots', async ({ page, request }) => {
+  test.setTimeout(300_000);
+  const dir = `docs/reference/ui-phase-5/${PHASE5_SHOT_DIR}`;
+  mkdirSync(dir, { recursive: true });
+  const pageErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  const { id } = await createPhaseWorkspace(request, 'shots', 5);
+  // Before Phase 5 the first step is Load and a Score step sits between it and Standings.
+  const steps = [
+    { tab: /\d\. (Load|Meet)/, name: 'meet', optional: false },
+    { tab: /\d\. Score/, name: 'score', optional: true },
+    { tab: /\d\. Standings/, name: 'standings', optional: false },
+    { tab: /\d\. Analyze/, name: 'analyze', optional: false },
+  ];
+  for (const theme of themes) {
+    await page.addInitScript(value => {
+      localStorage.setItem('omni-preferences', JSON.stringify({
+        themePreset: value, colorMode: value === 'deck-light' ? 'light' : 'dark',
+        textScale: 'default', reducedMotion: false, highContrast: false, focusRingEnhanced: false, sidebarCollapsedDefault: false,
+      }));
+    }, theme);
+    for (const width of widths) {
+      await page.setViewportSize({ width, height: 1000 });
+      await startOnWorkspace(page, id);
+      await page.goto('/matrix');
+      await expect(page.getByRole('tab', { name: /Standings/ })).toBeVisible();
+      for (const step of steps) {
+        const tab = page.getByRole('tab', { name: step.tab });
+        if (step.optional && (await tab.count()) === 0) continue;
+        await tab.click();
+        await expect(tab).toHaveAttribute('aria-selected', 'true');
+        await page.waitForTimeout(500);
+        await page.screenshot({ path: `${dir}/${theme}-${width}-${step.name}.png`, fullPage: true });
+      }
+    }
+  }
+  expect(pageErrors).toEqual([]);
+});
+
+test('Phase 5 Matrix has three steps and scoring lives on Meet', async ({ page, request }) => {
+  test.setTimeout(180_000);
+  const pageErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  const { id } = await createPhaseWorkspace(request, 'ia', 5);
+  await page.addInitScript(() => {
+    localStorage.setItem('omni-preferences', JSON.stringify({
+      themePreset: 'midnight', colorMode: 'dark', textScale: 'default',
+      reducedMotion: false, highContrast: false, focusRingEnhanced: false, sidebarCollapsedDefault: false,
+    }));
+  });
+  await page.setViewportSize({ width: 1440, height: 1000 });
+  await startOnWorkspace(page, id);
+  await page.goto('/matrix');
+
+  // Three tabs, in order; no Score or Load step.
+  const tabs = page.getByRole('tab');
+  await expect(tabs).toHaveCount(3);
+  await expect(tabs.nth(0)).toContainText('Meet');
+  await expect(tabs.nth(1)).toContainText('Standings');
+  await expect(tabs.nth(2)).toContainText('Analyze');
+  await expect(page.getByRole('tab', { name: /\d\. (Score|Load)/ })).toHaveCount(0);
+
+  // A workspace with a meet opens on Standings, with the new wording.
+  await expect(tabs.nth(1)).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('heading', { name: 'Team standings' })).toBeVisible();
+  await expect(page.getByText('Performance Matrix')).toHaveCount(0);
+  const chartGroup = page.getByRole('group', { name: 'Points chart grouping' }).first();
+  await expect(chartGroup.locator('xpath=..')).toContainText('Chart:');
+  await expect(chartGroup.getByRole('button')).toHaveText(['By event', 'By class']);
+  const listGroup = page.getByRole('group', { name: 'Team matrix grouping' }).first();
+  await expect(listGroup.locator('xpath=..')).toContainText('List:');
+  await expect(listGroup.getByRole('button')).toHaveText(['By event', 'By swimmer']);
+  await expect(page.getByText(/\bBase [+-]/)).toHaveCount(0);
+
+  // Meet holds the files, the scoring summary and the full scoring-rules dialog.
+  await tabs.nth(0).click();
+  await expect(tabs.nth(0)).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByLabel('PDF column format')).toBeVisible();
+  await expect(page.getByText('Scoring rules', { exact: true })).toBeVisible();
+  const edit = page.getByRole('button', { name: 'Edit scoring rules' });
+  await edit.focus();
+  await page.keyboard.press('Enter');
+  const dialog = page.getByRole('dialog', { name: 'Scoring Matrix Configuration' });
+  await expect(dialog).toBeVisible();
+  for (const field of ['Scorer eligibility', 'Number of scoring places', 'Scoring view', 'Scorer cap scope', 'Relay multiplier']) {
+    await expect(dialog.getByLabel(field).first()).toBeAttached();
+  }
+  await page.keyboard.press('Escape');
+  await expect(dialog).toHaveCount(0);
+
+  // A stored pre-Phase-5 step lands on Meet, and the current id is written back.
+  await tabs.nth(2).click();
+  await expect(tabs.nth(2)).toHaveAttribute('aria-selected', 'true');
+  await page.evaluate(workspaceId => sessionStorage.setItem(`matrix-step:${workspaceId}`, 'score'), id);
+  await page.reload();
+  await expect(page.getByRole('tab').nth(0)).toHaveAttribute('aria-selected', 'true');
+  expect(await page.evaluate(workspaceId => sessionStorage.getItem(`matrix-step:${workspaceId}`), id)).toBe('meet');
+
+  // The step survives a gender switch and a reload (Phase 1 behaviour, now with three steps).
+  await page.getByRole('tab').nth(1).click();
+  await page.locator('nav[aria-label="Gender"] button[aria-pressed]').nth(1).click();
+  await expect(page.getByRole('tab').nth(1)).toHaveAttribute('aria-selected', 'true');
+  await page.reload();
+  await expect(page.getByRole('tab').nth(1)).toHaveAttribute('aria-selected', 'true');
 
   expect(pageErrors).toEqual([]);
 });

@@ -466,5 +466,40 @@
     },
     "screenshots": "docs/reference/ui-phase-4/before (12) and after (24): Lineup and Optimize, midnight/deck-light/oled, 1440 and 800",
     "report": "docs/reference/ui-phase-4/REPORT.md"
+  },
+  "phase5": {
+    "date": "2026-10-02",
+    "status": "implemented_gates_green_except_preexisting_test_scoring_preset_routes",
+    "summary": "Matrix has three steps: Meet, Standings, Analyze. Load is renamed Meet and absorbs the Score step (suggested-preset banner, scoring summary with 'Edit scoring rules' via useOpenScoringRules(), official team scores). Analyze has its own icon. Standings heading is 'Team standings'; toggles read 'Chart: By event / By class' and 'List: By event / By swimmer'; 'Base' became 'vs prelims'. The no-workspace empty state has a 'New workspace' action. A stored step 'score' or 'load' opens Meet. ScoringSettingsPanel.tsx is kept (still used).",
+    "bugFixed": "The 'Official team scores' card showed for every meet because buildTeamScoreLookup keys every team and leaves undefined values; it now lists only teams with a score and hides when none has one.",
+    "sharedChange": "packages/ui WizardShell sets data-step-count and index.css fills a 3-step strip in one row from 30rem; Metrics (3 steps) changed the same way, Manager (4) did not.",
+    "files": [
+      "packages/matrix/src/components/OpsModule.tsx",
+      "packages/matrix/src/components/MeetOperationsView.tsx",
+      "packages/matrix/src/components/MeetOpsMeetStep.tsx",
+      "packages/matrix/src/components/MeetOpsScoringSection.tsx",
+      "packages/matrix/src/components/MeetOpsLoadStep.tsx",
+      "packages/matrix/src/components/MeetOpsScoreStep.tsx (deleted)",
+      "packages/matrix/src/components/matrixStepState.ts",
+      "packages/matrix/src/components/MeetOpsStandingsStep.tsx",
+      "packages/matrix/src/components/TeamCard.tsx",
+      "packages/matrix/src/components/TeamCardParts.tsx",
+      "packages/matrix/src/components/TeamCardMatrixList.tsx",
+      "packages/matrix/src/components/ProjectedActualScore.tsx",
+      "packages/matrix/src/MatrixApp.tsx",
+      "packages/ui/src/components/WizardShell.tsx",
+      "packages/ui/src/index.css",
+      "tests/matrixMeetStandingsAnalyze.test.ts",
+      "tests/motionStub.ts",
+      "tests/e2e/ui-ia.spec.ts",
+      "tests/e2e/ui-phase-2.spec.ts",
+      "tests/e2e/matrix-chart.spec.ts"
+    ],
+    "proof": {
+      "mutationChecks": "14 deliberate breaks of tests/matrixMeetStandingsAnalyze.test.ts targets; each failed 1 to 3 tests and was restored",
+      "gates": "lint 0 errors (2 existing warnings); lint:types 0 errors; vitest 141 files / 1933 passed; playwright ui-ia (7), ui-phase-2, matrix-chart, production-server 11 passed on a data copy; main-thread-budget passes only after deleting 19 stale ui-* workspaces from the copy (thin: 1 workspace); run-tests.mjs 83 passed, 1 failed (test_scoring_preset_routes, pre-existing), 1 skipped; data/omniswim.db hashes and data/backups unchanged"
+    },
+    "screenshots": "docs/reference/ui-phase-5/before (24) and after (18 + 2 Metrics): Matrix Meet/Standings/Analyze, midnight/deck-light/oled, 1440 and 800",
+    "report": "docs/reference/ui-phase-5/REPORT.md"
   }
 }

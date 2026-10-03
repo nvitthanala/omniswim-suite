@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * `MeetOperationsView`'s "load" step: the empty-state prompt (no meet loaded
+ * The files half of `MeetOperationsView`'s "meet" step: the empty-state prompt (no meet loaded
  * yet), the Meet Files card (load PDF / SwimCloud / link psych sheet), and
  * the cross-workspace meet-copy picker. Pure extraction from
  * `MeetOperationsView.tsx` — no behavior change.
@@ -51,7 +51,7 @@ export function MeetOpsLoadStep({
           icon={<Plus size={24} />}
           eyebrow="Start here"
           title="Load a meet PDF to begin"
-          description="Bring in the meet results first, then set the scoring rules and review team standings."
+          description="Bring in the meet results first, then check the scoring rules and review team standings."
           actionLabel="Load meet PDF"
           onAction={() => meetFileInputRef.current?.click()}
         />

@@ -11,7 +11,7 @@
  * its own. Pure extraction from `TeamCard.tsx` — no behavior change.
  */
 
-import { CutlineTag, CutlineNearMissChip } from '@omniswim/ui';
+import { CutlineTag, CutlineNearMissChip, SegmentedControl } from '@omniswim/ui';
 import type { CutlineTagResult } from '@omniswim/core/lib/cutlineTags';
 
 const PODIUM_MEDALS: Record<string, { emoji: string; className: string; label: string }> = {
@@ -38,5 +38,30 @@ export function CutlineVerdict({ result, className }: { result: CutlineTagResult
       <CutlineTag result={result} compact className={className} />
       <CutlineNearMissChip nextTier={result.nextTier} compact className={className} />
     </>
+  );
+}
+
+/** The "Chart: By event / By class" toggle above a team's points chart. */
+export function TeamCardChartToggle({
+  value,
+  onChange,
+}: {
+  value: 'event' | 'class';
+  onChange: (next: 'event' | 'class') => void;
+}) {
+  return (
+    <div className="flex items-center gap-2">
+      <span className="text-ui-micro text-theme-secondary">Chart:</span>
+      <SegmentedControl
+        layout="inline"
+        ariaLabel="Points chart grouping"
+        value={value}
+        onChange={onChange}
+        options={[
+          { value: 'event', label: 'By event', ariaLabel: 'Show points chart by event' },
+          { value: 'class', label: 'By class', ariaLabel: 'Show points chart by class year' },
+        ]}
+      />
+    </div>
   );
 }

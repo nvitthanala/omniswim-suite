@@ -6,7 +6,7 @@ import OpsModule from './components/OpsModule';
 import ChartStaleBundleGuard from './components/ChartStaleBundleGuard';
 
 export default function MatrixApp() {
-  const { activeWorkspace, activeGender, updateWorkspace } = useSuiteWorkspace();
+  const { activeWorkspace, activeGender, updateWorkspace, createWorkspace } = useSuiteWorkspace();
 
   if (!activeWorkspace) {
     return (
@@ -15,6 +15,9 @@ export default function MatrixApp() {
         eyebrow="Matrix"
         title="Start with a workspace, then load meet results"
         description="Matrix uses a workspace to hold HyTek PDFs, scoring settings, team totals, and what-if roster changes."
+        actionLabel="New workspace"
+        // The provider already shows a toast when creation fails.
+        onAction={() => void createWorkspace().catch(() => undefined)}
       />
     );
   }

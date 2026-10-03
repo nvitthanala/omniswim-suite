@@ -77,6 +77,7 @@ export function WizardShell<T extends string>({
 
         <div
           className="wizard-step-grid mt-5 grid gap-2"
+          data-step-count={steps.length}
           role="tablist"
           aria-label={ariaLabel}
         >

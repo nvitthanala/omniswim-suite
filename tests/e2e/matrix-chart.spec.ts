@@ -67,8 +67,9 @@ test.describe('Matrix timeline chart', () => {
 
     await page.goto(`/matrix?workspace=${created.id}`);
 
-    // Matrix is a stepped wizard (Load → Score → Standings → Analyze); the score
+    // Matrix is a stepped wizard (Meet → Standings → Analyze); the score
     // timeline lives on the Analyze step, so open it before asserting the chart.
+    await expect(page.getByRole('tab')).toHaveCount(3, { timeout: 30_000 });
     await page.getByRole('tab', { name: /Analyze/ }).click({ timeout: 30_000 });
 
     await expect(page.getByText('Chronological Team Score Timeline')).toBeVisible({ timeout: 30_000 });

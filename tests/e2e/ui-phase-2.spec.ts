@@ -37,7 +37,8 @@ test('Phase 2 scoring editor, eligibility lock and screenshots', async ({ page, 
     for (const width of widths) {
       await page.setViewportSize({ width, height: 1000 });
       await page.goto(`/matrix?workspace=${workspace.id}`);
-      await page.getByRole('tab', { name: /Score/ }).click();
+      // Phase 5: the scoring summary and its button are on the Meet step.
+      await page.getByRole('tab', { name: /Meet/ }).click();
       await expect(page.getByRole('button', { name: 'Edit scoring rules' })).toBeVisible();
       await capture(page, `${theme}-${width}-matrix-scoring`);
       await page.getByRole('button', { name: 'Edit scoring rules' }).click();

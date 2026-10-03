@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * `MeetOperationsView`'s "standings" step: the reconciliation banner, the
- * Performance Matrix of `TeamCard`s (filterable by swimmer/team), and the
+ * team standings list of `TeamCard`s (filterable by swimmer/team), and the
  * Top Individual Contributors table. Pure extraction from
  * `MeetOperationsView.tsx` — no behavior change.
  */
@@ -86,7 +86,7 @@ export function MeetOpsStandingsStep({
         <div className="flex justify-between items-end mb-6">
           <div>
             <h3 className="text-lg font-medium text-[var(--text-primary)] uppercase tracking-tight">
-              Performance Matrix: Overall Standing
+              Team standings
             </h3>
             <p className="text-xs text-theme-secondary">
               Projected totals from custom scoring model ({scoringSettings.scoringPoints.slice(0, 3).join('-')}...)
