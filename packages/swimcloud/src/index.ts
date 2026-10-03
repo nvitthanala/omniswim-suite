@@ -220,6 +220,7 @@ export {
   planMeetTeamRosters,
   planMeetTeamSwims,
   planScopedMeetCrawl,
+  planTeamSeasonRoster,
   readSwimCloudCrawlPass,
   readSwimCloudCrawlScopeId,
   swimCloudCrawlScope,
@@ -237,7 +238,27 @@ export type {
   SwimCloudScopedMeetCrawlPlan,
   SwimCloudMeetSwimmerTimesCrawlInput,
   SwimCloudMeetSwimsCrawlInput,
+  SwimCloudTeamSeasonRosterInput,
+  SwimCloudTeamSeasonRosterStep,
 } from './crawlPlan';
+
+export {
+  TeamSeasonParseError,
+  hasTeamSeasonOptionShape,
+  parseTeamSeasonOptions,
+  resolveSeasonOption,
+} from './teamSeasons';
+export type { TeamSeasonOption, TeamSeasonParseErrorCode } from './teamSeasons';
+
+export { parseCrawlTargetInput } from './targetUrls';
+export type {
+  CrawlTarget,
+  CrawlTargetParse,
+  CrawlTargetRejection,
+  CrawlTargetRejectionReason,
+  SwimCloudConferenceTarget,
+  SwimCloudTeamTarget,
+} from './targetUrls';
 
 export {
   collapseWhitespace,

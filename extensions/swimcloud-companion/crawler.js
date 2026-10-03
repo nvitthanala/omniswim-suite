@@ -3,6 +3,188 @@
 
 "use strict";
 (() => {
+  // packages/swimcloud/src/html.ts
+  var NAMED_ENTITIES = {
+    amp: "&",
+    lt: "<",
+    gt: ">",
+    quot: '"',
+    apos: "'",
+    nbsp: "\xA0",
+    ndash: "\u2013",
+    mdash: "\u2014",
+    middot: "\xB7",
+    rsquo: "\u2019",
+    lsquo: "\u2018",
+    ldquo: "\u201C",
+    rdquo: "\u201D",
+    ccedil: "\xE7",
+    eacute: "\xE9",
+    aacute: "\xE1",
+    iacute: "\xED",
+    oacute: "\xF3",
+    uacute: "\xFA",
+    ntilde: "\xF1",
+    uuml: "\xFC",
+    ouml: "\xF6",
+    auml: "\xE4"
+  };
+  var ENTITY = /&(#[Xx][0-9A-Fa-f]+|#[0-9]+|[A-Za-z][A-Za-z0-9]*);/g;
+  function decodeHtmlEntities(text) {
+    return text.replace(ENTITY, (whole, body) => {
+      if (body.charAt(0) === "#") {
+        const isHex = body.charAt(1) === "x" || body.charAt(1) === "X";
+        const digits = isHex ? body.slice(2) : body.slice(1);
+        const code = Number.parseInt(digits, isHex ? 16 : 10);
+        if (!Number.isFinite(code) || code <= 0 || code > 1114111) {
+          return whole;
+        }
+        try {
+          return String.fromCodePoint(code);
+        } catch {
+          return whole;
+        }
+      }
+      const named = NAMED_ENTITIES[body.toLowerCase()];
+      return named === void 0 ? whole : named;
+    });
+  }
+  var COMMENT = /<!--[\s\S]*?-->/g;
+  var SCRIPT_OR_STYLE = /<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi;
+  var ANY_TAG = /<\/?[A-Za-z][^>]*>/g;
+  function stripNonContent(html) {
+    return html.replace(COMMENT, " ").replace(SCRIPT_OR_STYLE, " ");
+  }
+  function stripHtmlTags(html) {
+    return html.replace(ANY_TAG, " ");
+  }
+  function collapseWhitespace(text) {
+    return text.replace(/[\s ]+/g, " ").trim();
+  }
+  function htmlToText(html) {
+    return collapseWhitespace(decodeHtmlEntities(stripHtmlTags(stripNonContent(html))));
+  }
+  function spliceOutSpans(source, spans) {
+    if (spans.length === 0) {
+      return source;
+    }
+    let out = "";
+    let index = 0;
+    let cursor = -1;
+    for (const span of spans) {
+      if (span.start < cursor) {
+        continue;
+      }
+      out += source.slice(index, span.start);
+      out += " ";
+      index = span.end;
+      cursor = span.end;
+    }
+    out += source.slice(index);
+    return out;
+  }
+  function tagPattern(tag) {
+    return new RegExp(`<(/?)${tag}\\b[^>]*>`, "gi");
+  }
+  function findElementSpans(html, tag) {
+    const pattern = tagPattern(tag);
+    const stack = [];
+    const found = [];
+    for (let match = pattern.exec(html); match !== null; match = pattern.exec(html)) {
+      const isClose = match[1] === "/";
+      const start = match.index;
+      const after = start + match[0].length;
+      if (isClose) {
+        const open = stack.pop();
+        if (open !== void 0) {
+          found.push({ start: open.start, contentStart: open.contentStart, contentEnd: start, end: after });
+        }
+        continue;
+      }
+      stack.push({ start, contentStart: after });
+    }
+    found.sort((a, b) => a.start - b.start);
+    return found.map((span) => ({
+      html: html.slice(span.start, span.end),
+      inner: html.slice(span.contentStart, span.contentEnd),
+      start: span.start,
+      end: span.end
+    }));
+  }
+  function findTables(html) {
+    return findElementSpans(stripNonContent(html), "table");
+  }
+  var HEADING = /<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1\s*>/gi;
+  function findHeadings(html) {
+    const cleaned = stripNonContent(html);
+    const headings = [];
+    HEADING.lastIndex = 0;
+    for (let match = HEADING.exec(cleaned); match !== null; match = HEADING.exec(cleaned)) {
+      headings.push({
+        level: Number.parseInt(match[1], 10),
+        text: htmlToText(match[2]),
+        start: match.index
+      });
+    }
+    HEADING.lastIndex = 0;
+    return headings;
+  }
+  function extractTableRows(tableHtml) {
+    const flattened = removeNestedTablesFromTableBody(tableHtml);
+    return splitRepeatedElements(flattened, ["tr"]);
+  }
+  function extractRowCells(rowHtml) {
+    return splitRepeatedElements(rowHtml, ["td", "th"]);
+  }
+  function isHeaderRow(rowHtml) {
+    return /<th\b/i.test(rowHtml);
+  }
+  function removeNestedTablesFromTableBody(tableHtml) {
+    const spans = findElementSpans(tableHtml, "table");
+    const body = spans.length > 0 ? spans[0].inner : tableHtml;
+    return spliceOutSpans(body, findElementSpans(body, "table"));
+  }
+  function splitRepeatedElements(html, tagNames) {
+    const alternation = tagNames.join("|");
+    const opener = new RegExp(`<(${alternation})\\b[^>]*>`, "gi");
+    const starts = [];
+    for (let match = opener.exec(html); match !== null; match = opener.exec(html)) {
+      starts.push({ contentStart: match.index + match[0].length, tag: match[1].toLowerCase() });
+    }
+    if (starts.length === 0) {
+      return [];
+    }
+    const results = [];
+    for (let index = 0; index < starts.length; index += 1) {
+      const current = starts[index];
+      const limit = index + 1 < starts.length ? starts[index + 1].contentStart : html.length;
+      const slice = html.slice(current.contentStart, limit);
+      const closer = new RegExp(`</${current.tag}\\s*>`, "i");
+      const closeAt = closer.exec(slice);
+      results.push(closeAt === null ? trimTrailingOpenTag(slice) : slice.slice(0, closeAt.index));
+    }
+    return results;
+  }
+  function trimTrailingOpenTag(slice) {
+    return slice.replace(/<[A-Za-z][^>]*>\s*$/, "");
+  }
+  var HREF = /<a\b[^>]*\bhref\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'>]+))/gi;
+  function extractHrefs(html) {
+    const hrefs = [];
+    HREF.lastIndex = 0;
+    for (let match = HREF.exec(html); match !== null; match = HREF.exec(html)) {
+      const value = match[2] ?? match[3] ?? match[4];
+      if (value !== void 0 && value.length > 0) {
+        hrefs.push(decodeHtmlEntities(value));
+      }
+    }
+    HREF.lastIndex = 0;
+    return hrefs;
+  }
+  function extractListItems(html) {
+    return findElementSpans(html, "li").map((span) => span.inner);
+  }
+
   // packages/swimcloud/src/urlClassifier.ts
   function exemptSwimmerFastestTimesId(lower) {
     if (lower.length !== 4) return void 0;
@@ -712,188 +894,6 @@
       /** Asked for by the scope but skipped because a fetch cannot satisfy them. */
       declinedNeedingRenderedDom: scopePassesNeedingRenderedDom(input.scope)
     };
-  }
-
-  // packages/swimcloud/src/html.ts
-  var NAMED_ENTITIES = {
-    amp: "&",
-    lt: "<",
-    gt: ">",
-    quot: '"',
-    apos: "'",
-    nbsp: "\xA0",
-    ndash: "\u2013",
-    mdash: "\u2014",
-    middot: "\xB7",
-    rsquo: "\u2019",
-    lsquo: "\u2018",
-    ldquo: "\u201C",
-    rdquo: "\u201D",
-    ccedil: "\xE7",
-    eacute: "\xE9",
-    aacute: "\xE1",
-    iacute: "\xED",
-    oacute: "\xF3",
-    uacute: "\xFA",
-    ntilde: "\xF1",
-    uuml: "\xFC",
-    ouml: "\xF6",
-    auml: "\xE4"
-  };
-  var ENTITY = /&(#[Xx][0-9A-Fa-f]+|#[0-9]+|[A-Za-z][A-Za-z0-9]*);/g;
-  function decodeHtmlEntities(text) {
-    return text.replace(ENTITY, (whole, body) => {
-      if (body.charAt(0) === "#") {
-        const isHex = body.charAt(1) === "x" || body.charAt(1) === "X";
-        const digits = isHex ? body.slice(2) : body.slice(1);
-        const code = Number.parseInt(digits, isHex ? 16 : 10);
-        if (!Number.isFinite(code) || code <= 0 || code > 1114111) {
-          return whole;
-        }
-        try {
-          return String.fromCodePoint(code);
-        } catch {
-          return whole;
-        }
-      }
-      const named = NAMED_ENTITIES[body.toLowerCase()];
-      return named === void 0 ? whole : named;
-    });
-  }
-  var COMMENT = /<!--[\s\S]*?-->/g;
-  var SCRIPT_OR_STYLE = /<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi;
-  var ANY_TAG = /<\/?[A-Za-z][^>]*>/g;
-  function stripNonContent(html) {
-    return html.replace(COMMENT, " ").replace(SCRIPT_OR_STYLE, " ");
-  }
-  function stripHtmlTags(html) {
-    return html.replace(ANY_TAG, " ");
-  }
-  function collapseWhitespace(text) {
-    return text.replace(/[\s ]+/g, " ").trim();
-  }
-  function htmlToText(html) {
-    return collapseWhitespace(decodeHtmlEntities(stripHtmlTags(stripNonContent(html))));
-  }
-  function spliceOutSpans(source, spans) {
-    if (spans.length === 0) {
-      return source;
-    }
-    let out = "";
-    let index = 0;
-    let cursor = -1;
-    for (const span of spans) {
-      if (span.start < cursor) {
-        continue;
-      }
-      out += source.slice(index, span.start);
-      out += " ";
-      index = span.end;
-      cursor = span.end;
-    }
-    out += source.slice(index);
-    return out;
-  }
-  function tagPattern(tag) {
-    return new RegExp(`<(/?)${tag}\\b[^>]*>`, "gi");
-  }
-  function findElementSpans(html, tag) {
-    const pattern = tagPattern(tag);
-    const stack = [];
-    const found = [];
-    for (let match = pattern.exec(html); match !== null; match = pattern.exec(html)) {
-      const isClose = match[1] === "/";
-      const start = match.index;
-      const after = start + match[0].length;
-      if (isClose) {
-        const open = stack.pop();
-        if (open !== void 0) {
-          found.push({ start: open.start, contentStart: open.contentStart, contentEnd: start, end: after });
-        }
-        continue;
-      }
-      stack.push({ start, contentStart: after });
-    }
-    found.sort((a, b) => a.start - b.start);
-    return found.map((span) => ({
-      html: html.slice(span.start, span.end),
-      inner: html.slice(span.contentStart, span.contentEnd),
-      start: span.start,
-      end: span.end
-    }));
-  }
-  function findTables(html) {
-    return findElementSpans(stripNonContent(html), "table");
-  }
-  var HEADING = /<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1\s*>/gi;
-  function findHeadings(html) {
-    const cleaned = stripNonContent(html);
-    const headings = [];
-    HEADING.lastIndex = 0;
-    for (let match = HEADING.exec(cleaned); match !== null; match = HEADING.exec(cleaned)) {
-      headings.push({
-        level: Number.parseInt(match[1], 10),
-        text: htmlToText(match[2]),
-        start: match.index
-      });
-    }
-    HEADING.lastIndex = 0;
-    return headings;
-  }
-  function extractTableRows(tableHtml) {
-    const flattened = removeNestedTablesFromTableBody(tableHtml);
-    return splitRepeatedElements(flattened, ["tr"]);
-  }
-  function extractRowCells(rowHtml) {
-    return splitRepeatedElements(rowHtml, ["td", "th"]);
-  }
-  function isHeaderRow(rowHtml) {
-    return /<th\b/i.test(rowHtml);
-  }
-  function removeNestedTablesFromTableBody(tableHtml) {
-    const spans = findElementSpans(tableHtml, "table");
-    const body = spans.length > 0 ? spans[0].inner : tableHtml;
-    return spliceOutSpans(body, findElementSpans(body, "table"));
-  }
-  function splitRepeatedElements(html, tagNames) {
-    const alternation = tagNames.join("|");
-    const opener = new RegExp(`<(${alternation})\\b[^>]*>`, "gi");
-    const starts = [];
-    for (let match = opener.exec(html); match !== null; match = opener.exec(html)) {
-      starts.push({ contentStart: match.index + match[0].length, tag: match[1].toLowerCase() });
-    }
-    if (starts.length === 0) {
-      return [];
-    }
-    const results = [];
-    for (let index = 0; index < starts.length; index += 1) {
-      const current = starts[index];
-      const limit = index + 1 < starts.length ? starts[index + 1].contentStart : html.length;
-      const slice = html.slice(current.contentStart, limit);
-      const closer = new RegExp(`</${current.tag}\\s*>`, "i");
-      const closeAt = closer.exec(slice);
-      results.push(closeAt === null ? trimTrailingOpenTag(slice) : slice.slice(0, closeAt.index));
-    }
-    return results;
-  }
-  function trimTrailingOpenTag(slice) {
-    return slice.replace(/<[A-Za-z][^>]*>\s*$/, "");
-  }
-  var HREF = /<a\b[^>]*\bhref\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'>]+))/gi;
-  function extractHrefs(html) {
-    const hrefs = [];
-    HREF.lastIndex = 0;
-    for (let match = HREF.exec(html); match !== null; match = HREF.exec(html)) {
-      const value = match[2] ?? match[3] ?? match[4];
-      if (value !== void 0 && value.length > 0) {
-        hrefs.push(decodeHtmlEntities(value));
-      }
-    }
-    HREF.lastIndex = 0;
-    return hrefs;
-  }
-  function extractListItems(html) {
-    return findElementSpans(html, "li").map((span) => span.inner);
   }
 
   // packages/swimcloud/src/parser.ts
@@ -4144,6 +4144,74 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
+ * Minimal HTML text extraction, implemented with string and regular-expression
+ * operations only.
+ *
+ * ## Why there is no HTML parser here
+ *
+ * This package has **zero runtime dependencies** and does not use the DOM. That
+ * is deliberate and it is a scope decision, not an oversight:
+ *
+ * - Choosing an HTML parser (cheerio? jsdom? the extension's own live
+ *   `document`?) is an integration decision that belongs to the phase that
+ *   actually wires in a live source, not to the phase that defines the contract.
+ * - Both access tracks can produce a **string**: Track A's content script has
+ *   `document.documentElement.outerHTML`, Track B's Playwright has
+ *   `page.content()`. A string is the one input shape both can supply without
+ *   either one dictating a parser to the other
+ *   (`plans/2026-09-06/03-architecture.md` §1.3 requires the parser to be
+ *   shared by both tracks and to have no idea which produced its input).
+ *
+ * ## Known limits of regex extraction
+ *
+ * These are stated rather than hidden, because they are the reason the parser
+ * that uses them reports `confidence: 'synthetic-fixture-only'`:
+ *
+ * - Tag matching is textual. A `<` inside an attribute value, or a tag broken
+ *   across a CDATA-ish construct, will confuse it.
+ * - {@link findTables} tracks `<table>` nesting with a stack and so survives
+ *   nested tables, but {@link extractTableRows} **removes nested tables before
+ *   splitting rows**, so content that lives inside a nested table is dropped
+ *   from the outer table's cells.
+ * - Optional end tags (`<tr>` without `</tr>`) are tolerated by ending an
+ *   element at the next sibling's start tag, which is right for `tr`/`td`/`th`
+ *   and would be wrong for a general parser.
+ *
+ * If a real captured page defeats any of this, the fix is to introduce a real
+ * parser at the integration boundary — not to bolt more regexes on here.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Reads the season picker off a SwimCloud team page.
+ *
+ * ## Why this exists
+ *
+ * A team roster page filters by `season_id`, a numeric id. The page prints the
+ * id-to-label table itself, in the `<select name="season_id">` of its filter
+ * form (`30` is `2026-2027`, `29` is `2025-2026`, and so on). Nothing proves
+ * that table is stable over time or shared by every team. So this module never
+ * computes, offsets or reverses an id from a label. It copies the id verbatim
+ * from the option the page printed, and a caller resolves a season **per team,
+ * from that team's own page**.
+ *
+ * ## Fail loudly
+ *
+ * A missing select, an unreadable label or a duplicate throws a
+ * {@link TeamSeasonParseError}. There is no empty-list default: "this page has
+ * no seasons" and "this parser found none" must never look the same, because
+ * the second one silently becomes "no season to crawl".
+ *
+ * The first option, `----- All Seasons -----`, has an empty value and is not a
+ * season. It is skipped by its empty value, not by its label.
+ *
+ * Pure: no network, no DOM, no clock.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * SwimCloud URL classifier — pure, network-free, zero dependencies.
  *
  * ## The URL patterns here are NOT verified fact
@@ -4244,46 +4312,10 @@
  * formula for deriving one exists anywhere in this package. A `season_id`-less
  * roster URL gets the server's own current season — which is what both real
  * captures show, each arriving with the current season pre-`selected`.
- */
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
  *
- * Minimal HTML text extraction, implemented with string and regular-expression
- * operations only.
- *
- * ## Why there is no HTML parser here
- *
- * This package has **zero runtime dependencies** and does not use the DOM. That
- * is deliberate and it is a scope decision, not an oversight:
- *
- * - Choosing an HTML parser (cheerio? jsdom? the extension's own live
- *   `document`?) is an integration decision that belongs to the phase that
- *   actually wires in a live source, not to the phase that defines the contract.
- * - Both access tracks can produce a **string**: Track A's content script has
- *   `document.documentElement.outerHTML`, Track B's Playwright has
- *   `page.content()`. A string is the one input shape both can supply without
- *   either one dictating a parser to the other
- *   (`plans/2026-09-06/03-architecture.md` §1.3 requires the parser to be
- *   shared by both tracks and to have no idea which produced its input).
- *
- * ## Known limits of regex extraction
- *
- * These are stated rather than hidden, because they are the reason the parser
- * that uses them reports `confidence: 'synthetic-fixture-only'`:
- *
- * - Tag matching is textual. A `<` inside an attribute value, or a tag broken
- *   across a CDATA-ish construct, will confuse it.
- * - {@link findTables} tracks `<table>` nesting with a stack and so survives
- *   nested tables, but {@link extractTableRows} **removes nested tables before
- *   splitting rows**, so content that lives inside a nested table is dropped
- *   from the outer table's cells.
- * - Optional end tags (`<tr>` without `</tr>`) are tolerated by ending an
- *   element at the next sibling's start tag, which is right for `tr`/`td`/`th`
- *   and would be wrong for a general parser.
- *
- * If a real captured page defeats any of this, the fix is to introduce a real
- * parser at the integration boundary — not to bolt more regexes on here.
+ * One exception, added 2026-10-03: {@link planTeamSeasonRoster}. It emits a
+ * `season_id` only from a `TeamSeasonOption` that `parseTeamSeasonOptions` read
+ * off that team's own page. Every other planner here still emits none.
  */
 /**
  * @license

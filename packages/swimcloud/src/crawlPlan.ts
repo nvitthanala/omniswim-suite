@@ -32,10 +32,15 @@
  * formula for deriving one exists anywhere in this package. A `season_id`-less
  * roster URL gets the server's own current season — which is what both real
  * captures show, each arriving with the current season pre-`selected`.
+ *
+ * One exception, added 2026-10-03: {@link planTeamSeasonRoster}. It emits a
+ * `season_id` only from a `TeamSeasonOption` that `parseTeamSeasonOptions` read
+ * off that team's own page. Every other planner here still emits none.
  */
 
 import type { SwimCloudMeetId, SwimCloudSwimmerId, SwimCloudTeamId } from './entities';
-import { SWIMCLOUD_CANONICAL_HOST, type SwimCloudResourceKind } from './urlClassifier';
+import { hasTeamSeasonOptionShape, type TeamSeasonOption } from './teamSeasons';
+import { SWIMCLOUD_CANONICAL_HOST, classifySwimCloudUrl, type SwimCloudResourceKind } from './urlClassifier';
 
 export type SwimCloudCrawlGender = 'M' | 'F';
 
@@ -87,6 +92,11 @@ function topTeamsUrl(meetId: SwimCloudMeetId, gender: SwimCloudCrawlGender): str
 
 function teamRosterUrl(teamId: SwimCloudTeamId, gender: SwimCloudCrawlGender): string {
   return `https://${SWIMCLOUD_CANONICAL_HOST}/team/${teamId}/roster/?gender=${gender}`;
+}
+
+/** Parameters in the roster filter form's own order: page, gender, season_id, sort. See {@link planTeamSeasonRoster}. */
+function teamSeasonRosterUrl(teamId: SwimCloudTeamId, gender: SwimCloudCrawlGender, seasonId: string): string {
+  return `https://${SWIMCLOUD_CANONICAL_HOST}/team/${teamId}/roster/?page=1&gender=${gender}&season_id=${seasonId}&sort=name`;
 }
 
 /**
@@ -306,6 +316,90 @@ export function planMeetTeamRosters(
     }
   }
   return steps;
+}
+
+/* -------------------------------------------------------------------------- */
+/* Season-aware team rosters (no meet involved)                                */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * One roster page for one team, one season, one gender.
+ *
+ * Not a {@link SwimCloudCrawlStep}: that type requires a `meetId`, and a
+ * season-roster crawl has no meet. Inventing one would be fabrication. The
+ * fields a caller needs to group, resume and report are all here.
+ */
+export interface SwimCloudTeamSeasonRosterStep {
+  readonly canonicalUrl: string;
+  readonly resourceKind: 'teamRoster';
+  readonly teamId: SwimCloudTeamId;
+  /** The id the team's own page printed for the chosen season. Also part of {@link canonicalUrl}. */
+  readonly seasonId: string;
+  readonly gender: SwimCloudCrawlGender;
+}
+
+export interface SwimCloudTeamSeasonRosterInput {
+  readonly teamId: SwimCloudTeamId;
+  /**
+   * The season, as {@link parseTeamSeasonOptions} returned it **for this team's
+   * page**. A bare string does not type-check. A value that lost its brand in
+   * transit is still re-checked for shape here, and a bad one throws.
+   */
+  readonly season: TeamSeasonOption;
+}
+
+/**
+ * Both genders' roster pages for one team in one chosen season.
+ *
+ * ## The URL, and where each part comes from
+ *
+ * The roster page's filter form (`<form method="GET">` in
+ * `data/swimcloud-captures/pages/...team_2f_412_2f_roster...`) submits, in this
+ * order: a hidden `page` (value `1`), the `gender` radios, the `season_id`
+ * select, and the `sort` select (first option `name`). Real URLs recorded from
+ * a browser submit of that form have exactly this shape, for example
+ * `/team/58/roster/?page=1&gender=M&season_id=29&sort=name`
+ * (`tests/rosterQueueImport.test.ts`). This function builds that same string.
+ * It adds no parameter the form does not have.
+ *
+ * Men then women, matching {@link planMeetTeamRosters}. Unlike that planner,
+ * this one carries `season_id`, because the caller picked the season from the
+ * team's own page and did not derive it. See `./teamSeasons.ts`.
+ *
+ * Throws when the season is malformed or when the URL it builds does not
+ * classify as a fetchable team roster carrying that same season id. A throw
+ * here is a planner bug or a bad input, never a silent empty plan.
+ */
+export function planTeamSeasonRoster(
+  input: SwimCloudTeamSeasonRosterInput,
+): readonly SwimCloudTeamSeasonRosterStep[] {
+  const { teamId, season } = input;
+  if (!hasTeamSeasonOptionShape(season)) {
+    throw new Error(
+      `planTeamSeasonRoster: season is not a TeamSeasonOption from parseTeamSeasonOptions: ${JSON.stringify(season)}.`,
+    );
+  }
+  return GENDERS.map((gender) => {
+    const canonicalUrl = teamSeasonRosterUrl(teamId, gender, season.seasonId);
+    const classified = classifySwimCloudUrl(canonicalUrl);
+    const ok =
+      classified.outcome === 'fetchable' &&
+      classified.resource.kind === 'teamRoster' &&
+      classified.resource.teamId === teamId &&
+      classified.resource.query.seasonId === season.seasonId &&
+      classified.resource.query.gender === gender &&
+      classified.canonicalUrl === canonicalUrl;
+    if (!ok) {
+      throw new Error(`planTeamSeasonRoster: built URL ${canonicalUrl} is not a fetchable team roster URL.`);
+    }
+    return {
+      canonicalUrl,
+      resourceKind: 'teamRoster' as const,
+      teamId,
+      seasonId: season.seasonId,
+      gender,
+    };
+  });
 }
 
 export interface SwimCloudMeetSwimmerTimesCrawlInput {

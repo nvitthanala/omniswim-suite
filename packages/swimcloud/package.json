@@ -14,7 +14,9 @@
     "./playwrightFetcher": "./src/playwrightFetcher.ts",
     "./clipboardPayload": "./src/clipboardPayload.ts",
     "./captureStore": "./src/captureStore.ts",
-    "./crawlPlan": "./src/crawlPlan.ts"
+    "./crawlPlan": "./src/crawlPlan.ts",
+    "./teamSeasons": "./src/teamSeasons.ts",
+    "./targetUrls": "./src/targetUrls.ts"
   },
   "scripts": {
     "lint": "tsc --noEmit -p tsconfig.json"
