@@ -56,47 +56,8 @@
       ]
     },
     "B1": {
-      "item": "Offline foundations for a multi-team crawl chosen by season",
-      "status": "done-offline",
-      "verifiedAt": "2026-10-03",
-      "note": "Built on archived pages only. No network. B1-B5 below is the older umbrella entry and is left as written.",
-      "files": [
-        "packages/swimcloud/src/teamSeasons.ts",
-        "packages/swimcloud/src/targetUrls.ts",
-        "packages/swimcloud/src/crawlPlan.ts (added planTeamSeasonRoster; existing planners unchanged)",
-        "packages/swimcloud/src/index.ts and package.json (additive exports)",
-        "extensions/swimcloud-companion/src/multiTeamQueue.ts",
-        "extensions/swimcloud-companion/crawler.js (rebuilt with npm run build:extension; +1.4 KB, background.js unchanged)",
-        "tests/fixtures/swimcloud/team-{412,10002824}-roster-gender-{F,M}-season-form.html (byte-exact slices of the real filter form)"
-      ],
-      "evidence": "tests/swimcloudTeamSeasons.test.ts (33), swimcloudTeamSeasonRosterPlan.test.ts (10), swimcloudTargetUrls.test.ts (20), swimCloudExtensionMultiTeamQueue.test.ts (59). Counts after the 2026-10-03 architect-review fixes (see reviewFixes).",
-      "seasonTableTeam412Vs10002824": "Identical on all four captured pages (F and M, both teams): 19 seasons, ids 30..12 for 2026-2027..2008-2009, id 29 (2025-2026) selected. Two teams only. This proves nothing about a third, so the API still resolves per team from that team's own page.",
-      "rosterUrlShape": "?page=1&gender={M|F}&season_id={id}&sort=name, the roster filter form's own parameter order, matching real recorded URLs such as tests/rosterQueueImport.test.ts.",
-      "decisionsForOrchestrator": [
-        "Queue concurrency default is SWIMMER_TIMES_CONCURRENCY (1), not 3. The brief and the crawl plan say 3 lanes and 400 ms; the code was lowered to 1 lane and 3000 ms on 2026-09-22 after HTTP 429 on 111 of 184 requests.",
-        "SUPERSEDED by reviewFixes: the queue key is now swimmer|<id>, so a swimmer is fetched once across teams and seasons. Data caveat: the endpoint returns all-time bests, so a past-season roster gets later swims too. Open fact 3 (is the endpoint season-filterable) is still unverified.",
-        "planTeamSeasonRoster returns SwimCloudTeamSeasonRosterStep, not SwimCloudCrawlStep, because that type requires a meetId and this crawl has none."
-      ],
-      "reviewFixes": {
-        "date": "2026-10-03",
-        "source": "architect review; each item reproduced with a probe script, then fixed test-first and mutation-checked",
-        "items": [
-          "Q1 swimmer key is swimmer|<id> with attributions per (team, season); progress stays per team; old-shape resume keys match nothing",
-          "Q2 createQueue throws concurrency-too-high above SWIMMER_TIMES_CONCURRENCY; a roster runs alone (nothing starts beside it, it starts beside nothing)",
-          "Q3 resumeQueue succeeds with or without a prior retryFailed",
-          "Q4 every halting key is kept; Resume returns each still-failed one to pending",
-          "Q5 teamSeasons.ts: value vs data-value, name vs data-name, HTML comments ignored",
-          "Q6 targetUrls.ts: conference dedupe on lower-cased slug plus country; slug stored lower-case",
-          "Q7 driver rules in the multiTeamQueue.ts header; exports verifyRosterSeason, shouldHalt, CONSECUTIVE_429_HALT"
-        ],
-        "followUp": "multiTeamQueue.ts changed after its first review. The Q2 roster-alone rule is stricter than the written rule (it also blocks swimmers beside a roster). Re-review before a driver is built on it."
-      },
-      "reviewNeeded": "The queue's concurrency, halt and resume rules gate request volume. A different provider than Claude should review multiTeamQueue.ts.",
-      "notDone": [
-        "No conference-page parser (no fixture).",
-        "No relay-leg parser (no fixture).",
-        "No impure driver that runs the queue through the bounded pool and the 3 s pacing; the queue is not wired into crawler-content.ts or the options page."
-      ]
+      "status": "done",
+      "note": "seasons, target links, roster planner, queue (771273ec, 0c53b125)"
     },
     "B1-B5": {
       "status": "not-started",
@@ -104,7 +65,7 @@
     },
     "B3": {
       "item": "Multi-team driver and panel",
-      "status": "review-round-2-fixes-done-awaiting-rereview",
+      "status": "built-offline-two-architect-rounds-fixed; live run pending",
       "owner": "executor acb10892639fc7228 (resumed)",
       "interruptions": [
         {
@@ -118,8 +79,7 @@
         "NOT VERIFIED (live only): real fetch carries the session, the panel DOM, 3 s pacing as seen in DevTools, chrome.storage resume, real 403/429 behaviour"
       ],
       "resumePoint": "Architect re-review of the N1-N9 diff; then a live run per the README checklist.",
-      "doNotRunLiveUntil": "F1-F9 fixed and re-reviewed",
-      "committed": "771273ec",
+      "committed": "02fd8fc3",
       "architectReview": "2026-10-03: 9 defects. F1 no capture opened or flushed so no page reaches the app yet panel says Done; F2 pacing clock per run, no lock across crawls/tabs; F3 lost page saved as finished; F4 resume keys global; F5 cancel/pause not checked after waits; F6 200 challenge page not detected; F7 redirects unchecked; F8 empty roster guessed; F9 minor + README.",
       "reviewFixes": {
         "when": "2026-10-03",
@@ -148,7 +108,20 @@
         "N9": "README fixed (lock taken at Read season lists; stop-before-fetch only for the first team; per-tab clock; resume wording; closed tab).",
         "gates": "See the report of this round: lint 0 errors, lint:extension, build and freshness, full vitest green; mutations fail tests, files restored, sha256 verified.",
         "liveOnly": "navigator.locks across tabs; the app route 404 rule and a real downloads fallback flush; response.url on a redirect; chrome.storage resume, clear and Forget; panel focus; real 200 challenge body; the store merge rule against a real second crawl of the same URL."
-      }
+      },
+      "nextStep": "User runs ONE team live with the README checklist, reports what the panel and the app capture show."
+    },
+    "B1b-conference": {
+      "status": "blocked-on-user",
+      "needs": "F-D: capture of https://www.swimcloud.com/country/usa/college/conference/nsisc/"
+    },
+    "B2": {
+      "status": "blocked-on-user",
+      "needs": "F-B swimmer times with a non-leadoff relay leg; F-C relay event page with Show names expanded"
+    },
+    "B4": {
+      "status": "not-started",
+      "scope": "import a multi-team capture set into workspaces per team and season; theoretical-meet projections; labelled relay estimate from flat-start bests (setting, stored apart)"
     }
   },
   "gates": {
