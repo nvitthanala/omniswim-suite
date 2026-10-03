@@ -37,9 +37,7 @@ export function SetupStepPanel({
         icon={<UploadCloud size={28} />}
         eyebrow="Metrics"
         title="Upload a race video to begin"
-        description="Open a local video, configure the race, then tag it frame by frame with the keyboard."
-        actionLabel="Open Video"
-        onAction={() => document.getElementById('metrics-file-input')?.click()}
+        description="Use Open video above or drop a file on the video area. Then set up the race and tag it frame by frame with the keyboard."
       />
     );
   }
@@ -79,7 +77,7 @@ export function TagStepPanel({
     <div className="flex flex-col gap-4">
       <div className="flex items-center justify-between border-b border-theme-soft pb-3">
         <div>
-          <div className="text-ui-micro text-theme-muted uppercase tracking-widest font-bold mb-1">
+          <div className="text-ui-micro text-theme-muted font-bold mb-1">
             {raceConfig.course} {raceConfig.raceDistance}
             {raceConfig.course === 'SCY' ? 'y' : 'm'}
           </div>

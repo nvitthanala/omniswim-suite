@@ -2,7 +2,7 @@ import React from 'react';
 import { FolderOpen, Save, Download, Settings2, UploadCloud } from 'lucide-react';
 
 const HEADER_BUTTON_CLASS =
-  'px-3 py-2 rounded-lg text-ui-micro font-bold uppercase tracking-widest flex items-center gap-2 border border-theme-soft nav-tab-inactive hover:text-[var(--text-primary)] transition-colors';
+  'px-3 py-2 rounded-lg text-ui-micro font-bold flex items-center gap-2 border border-theme-soft nav-tab-inactive hover:text-[var(--text-primary)] transition-colors';
 
 interface MetricsHeaderProps {
   sessionCount: number;
@@ -37,8 +37,8 @@ export function MetricsHeader({
   return (
     <div className="flex items-center justify-between px-4 py-3 border-b border-theme-soft shrink-0">
       <div>
-        <h2 className="text-ui-label font-black uppercase tracking-widest text-[var(--text-primary)]">
-          Swim Metrics
+        <h2 className="text-ui-label font-bold text-[var(--text-primary)]">
+          Swim metrics
         </h2>
         <p className="text-ui-caption text-theme-muted">Frame-accurate race tagging & analysis</p>
       </div>
@@ -81,13 +81,15 @@ export function MetricsHeader({
           </button>
         ) : null}
         <input type="file" accept="video/*" className="hidden" id="metrics-file-input" onChange={onFileChange} />
-        <label
-          htmlFor="metrics-file-input"
-          className="px-3 py-2 btn-primary rounded-lg text-ui-micro font-bold uppercase tracking-widest flex items-center gap-2 cursor-pointer"
+        {/* A real button, not a label: a label for a hidden input is not reachable from the keyboard. */}
+        <button
+          type="button"
+          onClick={() => document.getElementById('metrics-file-input')?.click()}
+          className="px-3 py-2 btn-primary rounded-lg text-ui-micro font-bold flex items-center gap-2 cursor-pointer"
         >
           <UploadCloud size={14} />
-          Open Video
-        </label>
+          Open video
+        </button>
       </div>
     </div>
   );

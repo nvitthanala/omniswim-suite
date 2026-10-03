@@ -5,6 +5,7 @@ import { createSnapshot as createSnapshotApi, listSnapshots as listSnapshotsApi,
 import type { Snapshot } from '@omniswim/core/api/snapshots';
 import { Button, useToast } from '@omniswim/ui';
 import DeleteConfirmationModal from '@omniswim/matrix/components/DeleteConfirmationModal';
+import { useSidebarCollapse } from '../lib/sidebarCollapse';
 import { ExpandedWorkspaceList, CollapsedWorkspaceList } from './workspace-sidebar/WorkspaceListItems';
 import { SnapshotsPanel } from './workspace-sidebar/SnapshotsPanel';
 import { UndoSnackbar } from './workspace-sidebar/UndoSnackbar';
@@ -23,10 +24,9 @@ export default function WorkspaceSidebar() {
 
   const toast = useToast();
   const [isBackingUp, setIsBackingUp] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
-    if (typeof window === 'undefined') return false;
-    return window.localStorage.getItem('omni-sidebar-collapsed') === 'true';
-  });
+  // Collapsed by the saved choice, or automatically below lg. The automatic
+  // collapse is never saved, so the choice returns when the window widens.
+  const { collapsed: sidebarCollapsed, toggle: toggleCollapsed } = useSidebarCollapse();
   const [editingWorkspaceId, setEditingWorkspaceId] = useState<string | null>(null);
   const [editWorkspaceName, setEditWorkspaceName] = useState('');
   const [workspaceToDelete, setWorkspaceToDelete] = useState<string | null>(null);
@@ -107,14 +107,6 @@ export default function WorkspaceSidebar() {
     }
   }, [toast, refreshWorkspaces]);
 
-  const toggleCollapsed = () => {
-    setSidebarCollapsed(prev => {
-      const next = !prev;
-      window.localStorage.setItem('omni-sidebar-collapsed', String(next));
-      return next;
-    });
-  };
-
   const handleCreateWorkspace = async () => {
     const workspace = await createWorkspace();
     toast.push('success', `Workspace "${workspace.name}" ready`);
@@ -193,7 +185,7 @@ export default function WorkspaceSidebar() {
       >
         <div className="flex items-center justify-between border-b border-theme-soft p-2 shrink-0">
           {!sidebarCollapsed ? (
-            <h2 className="text-ui-micro uppercase tracking-widest text-theme-muted font-bold px-2">Workspaces</h2>
+            <h2 className="text-ui-micro text-theme-muted font-bold px-2">Workspaces</h2>
           ) : null}
           <div className={`flex items-center gap-1 ${sidebarCollapsed ? 'w-full justify-center' : 'ml-auto'}`}>
             {!sidebarCollapsed ? (

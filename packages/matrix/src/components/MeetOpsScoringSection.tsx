@@ -65,7 +65,7 @@ export function MeetOpsScoringSection({
       {officialRows.length > 0 ? (
         <div className="surface-card rounded-xl overflow-hidden">
           <div className="p-4 border-b border-theme-soft surface-overlay">
-            <h4 className="text-ui-label font-medium text-theme-secondary uppercase tracking-widest">Official team scores</h4>
+            <h4 className="text-ui-label font-medium text-theme-secondary">Official team scores</h4>
           </div>
           <div className="grid gap-px sm:grid-cols-2 lg:grid-cols-3 surface-overlay">
             {officialRows.map(row => (

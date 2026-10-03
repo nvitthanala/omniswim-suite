@@ -55,7 +55,7 @@ export function VideoStage({
     <div
       className="flex-1 lg:flex-[1.8] relative bg-[var(--surface-muted)] flex flex-col items-center justify-center border-b lg:border-b-0 lg:border-r border-theme-soft overflow-hidden"
       role="region"
-      aria-label="Video drop zone. Drag and drop a video file here, or use the Open Video button."
+      aria-label="Video drop zone. Drag and drop a video file here, or use the Open video button."
       onDragEnter={onDragEnter}
       onDragOver={onDragOver}
       onDragLeave={onDragLeave}
@@ -81,7 +81,7 @@ export function VideoStage({
         <div className="absolute inset-2 z-40 flex items-center justify-center rounded-lg border-2 border-dashed border-[var(--text-accent)] bg-[var(--surface)]/90 pointer-events-none">
           <div className="flex flex-col items-center gap-2 text-center px-4">
             <UploadCloud size={28} className="text-[var(--text-accent)]" />
-            <span className="text-ui-label font-bold uppercase tracking-widest text-[var(--text-primary)]">
+            <span className="text-ui-label font-bold text-[var(--text-primary)]">
               Drop video to open
             </span>
           </div>

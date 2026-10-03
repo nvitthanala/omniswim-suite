@@ -23,6 +23,8 @@ type Props = {
   allResults: SwimmerResult[];
   editable: boolean;
   onClose: () => void;
+  /** Asks to remove this athlete from the roster. Omit to hide the button. */
+  onRequestRemove?: () => void;
   autoIsScorer: boolean;
 };
 
@@ -37,6 +39,7 @@ export default function AthleteLineupDrawer({
   allResults,
   editable,
   onClose,
+  onRequestRemove,
   autoIsScorer,
 }: Props) {
   if (!selectedAthlete || !workspace || !onWorkspaceUpdate) return null;
@@ -53,6 +56,7 @@ export default function AthleteLineupDrawer({
       editable={editable}
       onUpdate={onWorkspaceUpdate}
       onClose={onClose}
+      onRequestRemove={onRequestRemove}
       autoIsScorer={autoIsScorer}
     />
   );

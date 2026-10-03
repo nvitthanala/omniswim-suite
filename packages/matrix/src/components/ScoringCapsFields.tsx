@@ -31,9 +31,9 @@ export function ScoringCapsFields({ local, update, lock }: ScoringCapsFieldsProp
   return (
     <div className="grid grid-cols-2 gap-3">
       <div>
-        <label className="block text-[10px] text-theme-secondary uppercase mb-1">Scorer cap scope</label>
+        <label className="block text-ui-caption text-theme-secondary mb-1">Scorer cap scope</label>
         <select
-          className={`glass-input w-full text-xs uppercase${isLocked('scorerCapScope') ? ' opacity-60 cursor-not-allowed' : ''}`}
+          className={`glass-input w-full text-xs ${isLocked('scorerCapScope') ? ' opacity-60 cursor-not-allowed' : ''}`}
           aria-label="Scorer cap scope"
           disabled={isLocked('scorerCapScope')}
           title={isLocked('scorerCapScope') ? lock.message ?? undefined : undefined}
@@ -45,7 +45,7 @@ export function ScoringCapsFields({ local, update, lock }: ScoringCapsFieldsProp
         </select>
       </div>
       <div>
-        <label className="block text-[10px] text-theme-secondary uppercase mb-1">Diver scorer weight</label>
+        <label className="block text-ui-caption text-theme-secondary mb-1">Diver scorer weight</label>
         <NumberField
           aria-label="Diver scorer weight"
           step={0.01}
@@ -57,7 +57,7 @@ export function ScoringCapsFields({ local, update, lock }: ScoringCapsFieldsProp
         />
       </div>
       <div>
-        <label className="block text-[10px] text-theme-secondary uppercase mb-1">Max individual scorers / team</label>
+        <label className="block text-ui-caption text-theme-secondary mb-1">Max individual scorers / team</label>
         <NumberField
           aria-label="Maximum individual scorers per team"
           value={local.maxIndividualScorersPerTeam}
@@ -66,7 +66,7 @@ export function ScoringCapsFields({ local, update, lock }: ScoringCapsFieldsProp
         />
       </div>
       <div>
-        <label className="block text-[10px] text-theme-secondary uppercase mb-1">Max scoring relays / team / relay event</label>
+        <label className="block text-ui-caption text-theme-secondary mb-1">Max scoring relays / team / relay event</label>
         <NumberField
           aria-label="Maximum scoring relays per team per event"
           value={local.maxRelaysScoringPerTeam}
@@ -75,7 +75,7 @@ export function ScoringCapsFields({ local, update, lock }: ScoringCapsFieldsProp
         />
       </div>
       <div>
-        <label className="block text-[10px] text-theme-secondary uppercase mb-1">Max ind entries / swimmer</label>
+        <label className="block text-ui-caption text-theme-secondary mb-1">Max ind entries / swimmer</label>
         <NumberField
           aria-label="Maximum individual entries per swimmer"
           value={local.maxIndividualEntriesPerSwimmer ?? 999}
@@ -85,7 +85,7 @@ export function ScoringCapsFields({ local, update, lock }: ScoringCapsFieldsProp
         />
       </div>
       <div>
-        <label className="block text-[10px] text-theme-secondary uppercase mb-1">Max relay entries / swimmer</label>
+        <label className="block text-ui-caption text-theme-secondary mb-1">Max relay entries / swimmer</label>
         <NumberField
           aria-label="Maximum relay entries per swimmer"
           value={local.maxRelayEntriesPerSwimmer ?? 999}
@@ -95,7 +95,7 @@ export function ScoringCapsFields({ local, update, lock }: ScoringCapsFieldsProp
         />
       </div>
       <div>
-        <label className="block text-[10px] text-theme-secondary uppercase mb-1">Max total entries / swimmer</label>
+        <label className="block text-ui-caption text-theme-secondary mb-1">Max total entries / swimmer</label>
         <NumberField
           aria-label="Maximum total entries per swimmer"
           value={local.maxTotalEntriesPerSwimmer ?? 999}
@@ -127,7 +127,7 @@ export function ScoringCapsFields({ local, update, lock }: ScoringCapsFieldsProp
         </label>
       </div>
       <div>
-        <label className="block text-[10px] text-theme-secondary uppercase mb-1">Relay multiplier</label>
+        <label className="block text-ui-caption text-theme-secondary mb-1">Relay multiplier</label>
         <NumberField
           aria-label="Relay multiplier"
           value={local.relayMultiplier}

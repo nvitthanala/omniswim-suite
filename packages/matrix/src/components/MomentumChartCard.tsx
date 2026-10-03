@@ -62,7 +62,7 @@ export default function MomentumChartCard(props: Props) {
         .join(' ')}
     >
       <div className="flex items-center justify-between gap-2 mb-3">
-        <h4 className="text-[10px] font-bold uppercase tracking-widest text-theme-secondary">
+        <h4 className="text-ui-caption font-bold text-theme-secondary">
           {props.title}
         </h4>
         {props.mode !== 'multi' && props.meetTotalOu != null && Math.abs(props.meetTotalOu) > 0.05 ? (

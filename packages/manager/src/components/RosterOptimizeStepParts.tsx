@@ -133,7 +133,7 @@ export function ArbitragePreviewSection({
   return (
     <div>
       <h4 className="text-ui-label font-semibold text-[var(--text-primary)] mb-3">
-        Point arbitrage
+        Point opportunities
         {team ? <span className="font-normal text-theme-secondary"> · {team}</span> : null}
       </h4>
       {showScanPrompt ? (

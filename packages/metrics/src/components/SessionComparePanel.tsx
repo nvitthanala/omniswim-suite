@@ -129,7 +129,7 @@ function MetricTable({
 }) {
   return (
     <div className="mb-4 last:mb-0">
-      <h4 className="text-ui-micro font-bold uppercase tracking-widest text-theme-muted mb-2">{title}</h4>
+      <h4 className="text-ui-micro font-bold text-theme-muted mb-2">{title}</h4>
       <div className="overflow-x-auto">
         <table className="w-full text-ui-caption">
           <thead>

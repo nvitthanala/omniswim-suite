@@ -35,12 +35,12 @@ export function ScoringPresetPicker({
   return (
     <div>
       <div className="flex items-center justify-between gap-2 mb-1">
-        <label className="block text-[10px] text-theme-secondary uppercase">Scoring preset</label>
+        <label className="block text-ui-caption text-theme-secondary">Scoring preset</label>
         {presetPickerExtra}
       </div>
       <div className="flex flex-wrap gap-2 items-start">
         <select
-          className="glass-input flex-1 min-w-[10rem] text-xs uppercase"
+          className="glass-input flex-1 min-w-[10rem] text-xs"
           aria-label="Scoring preset"
           value={selectedPreset}
           onChange={e => onSelectPreset(e.target.value)}

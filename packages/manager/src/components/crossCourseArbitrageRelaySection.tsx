@@ -210,7 +210,7 @@ function RelayPromotionList({
   if (relayPromotions.length === 0) return null;
   return (
     <div className={hasRelaySwapsAbove ? 'mt-3' : ''}>
-      <p className="text-ui-micro font-semibold uppercase tracking-wide text-theme-muted mb-1.5">
+      <p className="text-ui-micro font-semibold text-theme-muted mb-1.5">
         Alternate promotions
       </p>
       <ul className="space-y-1.5">

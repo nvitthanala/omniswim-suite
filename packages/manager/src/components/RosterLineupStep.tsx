@@ -221,7 +221,7 @@ export default function RosterLineupStep({
                   </span>
                 ),
               },
-              { value: 'arbitrage', label: 'Arbitrage' },
+              { value: 'arbitrage', label: 'Cross-course' },
               { value: 'scenarios', label: 'Scenarios' },
             ]}
           />

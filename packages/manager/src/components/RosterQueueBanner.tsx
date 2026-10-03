@@ -36,14 +36,14 @@ export default function RosterQueueBanner({
             onClick={onCaptureNext}
             disabled={isImportingFromClipboard || !team.trim()}
             title="Copy a swimmer's Times page from SwimCloud — swimcloud.com/swimmer/{id}/times/, via Copy for Omniswim — then click this to pull it in and check them off."
-            className="px-2.5 py-1 text-ui-micro font-bold uppercase tracking-widest rounded-md nav-tab-inactive hover:text-[var(--text-primary)] transition-colors disabled:opacity-40 flex items-center gap-1"
+            className="px-2.5 py-1 text-ui-micro font-bold rounded-md nav-tab-inactive hover:text-[var(--text-primary)] transition-colors disabled:opacity-40 flex items-center gap-1"
           >
             <Download size={12} /> {isImportingFromClipboard ? 'Reading…' : 'Capture next swimmer'}
           </button>
           <button
             type="button"
             onClick={onClear}
-            className="px-2.5 py-1 text-ui-micro font-bold uppercase tracking-widest rounded-md nav-tab-inactive hover:text-[var(--text-primary)] transition-colors"
+            className="px-2.5 py-1 text-ui-micro font-bold rounded-md nav-tab-inactive hover:text-[var(--text-primary)] transition-colors"
           >
             Clear
           </button>

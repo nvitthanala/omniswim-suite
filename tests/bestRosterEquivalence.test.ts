@@ -130,11 +130,11 @@ describe('Best roster is the Optimize step Quick optimize, on the same fixtures'
     const expected = golden.cases[name].allTeams;
     const patches = await renderStep(ws, removeSeniors);
     await click(buttonByText(/^All teams…$/));
-    await click(buttonByText(/Run Optimizer/));
+    await click(buttonByText(/Run optimizer/));
     await settle();
 
     const { projected, previous } = totalsFromConfirm(expected.confirmMsg);
-    const apply = buttonByText(/Apply to Workspace/);
+    const apply = buttonByText(/Apply to workspace/);
     if (projected > previous) {
       expect(apply.disabled).toBe(false);
       await click(apply);

@@ -629,7 +629,7 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
           {rosterDirty ? (
             <Link
               to="/manager"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-md border border-[var(--text-accent)]/30 text-[var(--text-accent)] hover:bg-[var(--text-accent)]/10 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-ui-micro font-bold rounded-md border border-[var(--text-accent)]/30 text-[var(--text-accent)] hover:bg-[var(--text-accent)]/10 transition-colors"
             >
               Edit roster in Manager
               <ExternalLink size={12} />

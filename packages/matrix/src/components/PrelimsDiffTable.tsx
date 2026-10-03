@@ -60,7 +60,7 @@ export default function PrelimsDiffTable({
     return (
       <div className="p-12 text-center border border-dashed border-theme-soft rounded-xl text-theme-secondary">
         <TrendingUp className="w-12 h-12 mx-auto mb-4 opacity-20" />
-        <p className="text-xs uppercase font-medium tracking-widest">No prelims projection data available</p>
+        <p className="text-xs font-medium">No prelims projection data available</p>
         <p className="text-[10px] text-theme-muted mt-2 normal-case tracking-normal">
           Load a meet PDF with prelims times to see over/underperformance.
         </p>
@@ -70,30 +70,30 @@ export default function PrelimsDiffTable({
 
   return (
     <div className="overflow-x-auto border border-theme-soft rounded-xl">
-      <table className="w-full min-w-[720px] text-left border-collapse">
-        <thead className="surface-overlay text-[10px] uppercase tracking-widest text-theme-secondary font-medium">
+      <table className="w-full min-w-0 text-left border-collapse">
+        <thead className="surface-overlay text-ui-caption text-theme-secondary font-medium">
           <tr>
-            <th className="p-3">Team</th>
-            <th className="p-3 text-right">Prelims Proj</th>
-            <th className="p-3 text-right">Baseline</th>
-            <th className="p-3 text-right">Baseline O/U</th>
-            <th className="p-3 text-right">Projected</th>
-            <th className="p-3 text-right">Projected O/U</th>
+            <th className="px-2 py-3 xl:p-3">Team</th>
+            <th className="px-2 py-3 xl:p-3 text-right">Prelims Proj</th>
+            <th className="px-2 py-3 xl:p-3 text-right">Baseline</th>
+            <th className="px-2 py-3 xl:p-3 text-right">Baseline O/U</th>
+            <th className="px-2 py-3 xl:p-3 text-right">Projected</th>
+            <th className="px-2 py-3 xl:p-3 text-right">Projected O/U</th>
           </tr>
         </thead>
         <tbody className="text-xs font-mono">
           {rows.map(row => (
             <tr key={row.teamName} className="border-b border-theme-soft theme-hover-row transition-colors">
-              <td className="p-3">
+              <td className="px-2 py-3 xl:p-3">
                 <TeamName name={row.teamName} />
               </td>
-              <td className="p-3">
+              <td className="px-2 py-3 xl:p-3">
                 <PointsValue value={row.prelimsPoints} className="text-theme-secondary" />
               </td>
-              <td className="p-3">
+              <td className="px-2 py-3 xl:p-3">
                 <PointsValue value={row.baselinePoints} />
               </td>
-              <td className="p-3">
+              <td className="px-2 py-3 xl:p-3">
                 <PointsValue
                   value={row.baselineOverUnder}
                   className={
@@ -105,10 +105,10 @@ export default function PrelimsDiffTable({
                   }
                 />
               </td>
-              <td className="p-3">
+              <td className="px-2 py-3 xl:p-3">
                 <PointsValue value={row.projectedPoints} className="text-[var(--text-primary)]" />
               </td>
-              <td className="p-3">
+              <td className="px-2 py-3 xl:p-3">
                 <PointsValue
                   value={row.projectedOverUnder}
                   className={

@@ -241,6 +241,22 @@ export function genderLabelFor(gender: Gender): string {
   return gender === GENDER_MEN ? "Men's" : "Women's";
 }
 
+/** True when every roster row would show the default "Swimmer" tag (no recruit,
+ * no diver). One tag repeated on every row says nothing, so the table hides it. */
+export function isUniformSwimmerRoster(
+  rows: ReadonlyArray<Pick<ScorerRosterRow, 'isRecruit' | 'athleteRole'>>
+): boolean {
+  return rows.length > 0 && rows.every(row => !row.isRecruit && row.athleteRole !== 'diver');
+}
+
+/** The sentence that names the scorer cap in the roster help text. 999 is the
+ * "no limit" value the scoring fields store, so it reads "no scorer cap". */
+export function scorerCapPhrase(maxIndividualScorersPerTeam: number): string {
+  return maxIndividualScorersPerTeam >= 999
+    ? 'There is no scorer cap.'
+    : `Toggle scorers for the ${maxIndividualScorersPerTeam}-scorer cap.`;
+}
+
 /** Extra header column count for the roster table: the scorer toggle column
  * (when editable) and the remove column (when a delete handler is wired). */
 export function rosterColSpan(editable: boolean, hasDeleteHandler: boolean): number {

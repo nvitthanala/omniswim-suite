@@ -317,9 +317,16 @@ export default function TeamRosterPanel({
         e.preventDefault();
         setSelectedAthleteKey(null);
         onAthleteSelect?.(null);
+      } else if (e.key === 'Delete' && currentIndex >= 0 && e.target === e.currentTarget) {
+        // The per-row remove buttons are gone; Delete on the list itself asks to
+        // remove the selected athlete. The same confirm dialog opens.
+        if (editable && onRequestDeleteSwimmer) {
+          e.preventDefault();
+          onRequestDeleteSwimmer(teamRows[currentIndex].name);
+        }
       }
     },
-    [teamRows, selectedAthleteKey, selectAthleteByIndex, onAthleteSelect]
+    [teamRows, selectedAthleteKey, selectAthleteByIndex, onAthleteSelect, editable, onRequestDeleteSwimmer]
   );
 
   const setScorer = (row: (typeof rows)[0], isScorer: boolean) => {
@@ -382,7 +389,8 @@ export default function TeamRosterPanel({
   }
 
   const genderLabel = genderLabelFor(gender);
-  const colSpan = rosterColSpan(editable, Boolean(onRequestDeleteSwimmer));
+  const colSpan = rosterColSpan(editable, false);
+  const canRemoveAthlete = Boolean(editable && onRequestDeleteSwimmer);
 
   const rosterTable = (
     <div className={expanded ? 'flex flex-col flex-1 min-h-0' : undefined}>
@@ -392,6 +400,7 @@ export default function TeamRosterPanel({
         editable={editable}
         onOpenOptimize={onOpenOptimize}
         onResetTeam={resetTeamManual}
+        canRemoveAthlete={canRemoveAthlete}
         maxIndividualScorersPerTeam={merged.maxIndividualScorersPerTeam}
         selectedActual={selectedActual}
         selectedBaseline={selectedBaseline}
@@ -409,7 +418,7 @@ export default function TeamRosterPanel({
         onKeyDown={handleRosterKeyDown}
         tabIndex={teamRows.length ? 0 : -1}
         role="listbox"
-        aria-label="Team roster — arrow keys to navigate"
+        aria-label={`Team roster — arrow keys to navigate${canRemoveAthlete ? ', Delete to remove' : ''}`}
         className={`overflow-y-auto pr-1 rounded-xl border border-theme-soft custom-scrollbar outline-none ${
           expanded ? 'flex-1 min-h-[20rem]' : 'max-h-80'
         }`}
@@ -421,7 +430,6 @@ export default function TeamRosterPanel({
           rosterWindow={rosterWindow}
           colSpan={colSpan}
           editable={editable}
-          onRequestDeleteSwimmer={onRequestDeleteSwimmer}
           selectedAthleteKey={selectedAthleteKey}
           pointTotals={pointTotals}
           genderResults={genderResults}
@@ -491,6 +499,11 @@ export default function TeamRosterPanel({
         setSelectedAthleteKey(null);
         onAthleteSelect?.(null);
       }}
+      onRequestRemove={
+        canRemoveAthlete && selectedAthlete && onRequestDeleteSwimmer
+          ? () => onRequestDeleteSwimmer(selectedAthlete.name)
+          : undefined
+      }
       autoIsScorer={drawerAutoIsScorer}
     />
   );

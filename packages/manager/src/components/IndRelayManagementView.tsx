@@ -386,7 +386,6 @@ export default function IndRelayManagementView({
               size="sm"
               disabled={!whatIfMode || !selectedTeam}
               onClick={buildFromLineup}
-              className="uppercase tracking-widest"
               title="Fill vacant relay legs using active meet entry plans, then roster bests"
             >
               Build relays from individual lineup
@@ -395,7 +394,7 @@ export default function IndRelayManagementView({
         </div>
 
         <div className="surface-card rounded-xl p-4 sm:p-5 flex-1 min-h-0 flex flex-col">
-          <h4 className="text-ui-caption font-bold uppercase tracking-widest text-[var(--text-primary)] mb-3">
+          <h4 className="text-ui-caption font-bold text-[var(--text-primary)] mb-3">
             Relay split inspector
           </h4>
           {selectedGroup ? (

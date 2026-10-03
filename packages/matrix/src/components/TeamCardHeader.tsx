@@ -49,9 +49,9 @@ export function TeamCardHeader({
       className="w-full flex items-center justify-between p-5 theme-hover-row transition-colors"
     >
       <div className="flex flex-col items-start gap-1">
-        <h3 className="text-sm font-black uppercase tracking-tighter text-[var(--text-primary)]">{team.teamName}</h3>
+        <h3 className="text-sm font-bold text-[var(--text-primary)]">{team.teamName}</h3>
         <div className="flex flex-col gap-1">
-          <span className="text-ui-caption text-theme-secondary uppercase tracking-widest font-medium">
+          <span className="text-ui-caption text-theme-secondary font-medium">
             {conference ? `${conference} • ` : ''}{athleteCount} Athletes
           </span>
           {(actualScore != null || baselineScore != null || showPrelimsPerformance) ? (
@@ -74,7 +74,7 @@ export function TeamCardHeader({
           <span className="block text-2xl font-black text-[var(--text-accent)] font-mono tracking-tighter leading-none">
             {team.totalPoints.toFixed(1)}
           </span>
-          <span className="text-ui-micro text-theme-secondary uppercase tracking-widest font-medium font-mono">Projected Points</span>
+          <span className="text-ui-micro text-theme-secondary font-medium font-mono">Projected points</span>
         </div>
         {isExpanded ? <ChevronUp size={16} className="text-theme-secondary" /> : <ChevronDown size={16} className="text-theme-secondary" />}
       </div>

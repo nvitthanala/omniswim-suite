@@ -101,7 +101,7 @@ describe('Optimize step owns the all-teams optimizer', () => {
 
   const runAllTeamsDialog = async () => {
     await click(/^All teams…$/);
-    await click(/Run Optimizer/);
+    await click(/Run optimizer/);
     await settle();
   };
 
@@ -135,9 +135,9 @@ describe('Optimize step owns the all-teams optimizer', () => {
     const ws = heldWorkspace();
     const updates = await renderStep(ws);
     await runAllTeamsDialog();
-    const apply = findButton(/Apply to Workspace/) as HTMLButtonElement;
+    const apply = findButton(/Apply to workspace/) as HTMLButtonElement;
     expect(apply.disabled).toBe(true);
-    await click(/Apply to Workspace/);
+    await click(/Apply to workspace/);
     expect(updates).toHaveLength(0);
     expect(container.textContent).toContain('nothing was applied');
     expect(findButton(/Undo this optimize/)).toBeUndefined();
@@ -160,7 +160,7 @@ describe('Optimize step owns the all-teams optimizer', () => {
     const ws = gainWorkspace();
     const updates = await renderStep(ws);
     await runAllTeamsDialog();
-    await click(/Apply to Workspace/);
+    await click(/Apply to workspace/);
     expect(updates).toHaveLength(1);
     expect(updates[0].meetEntryPlans?.length).toBeGreaterThan(0);
 

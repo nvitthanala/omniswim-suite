@@ -74,6 +74,8 @@ type Props = {
   editable: boolean;
   onUpdate: (patch: Partial<Workspace>) => void;
   onClose: () => void;
+  /** Asks to remove this athlete from the roster (the roster rows have no remove button). */
+  onRequestRemove?: () => void;
   autoIsScorer: boolean;
 };
 
@@ -88,6 +90,7 @@ export default function AthleteLineupEditorPanel({
   editable,
   onUpdate,
   onClose,
+  onRequestRemove,
   autoIsScorer,
 }: Props) {
   const toast = useToast();
@@ -319,14 +322,29 @@ export default function AthleteLineupEditorPanel({
                 <AthleteRoleTag role={athlete.athleteRole} isRecruit={athlete.isRecruit} />
               </p>
             </div>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={onClose}
-              className="p-1.5 text-theme-muted hover:text-[var(--text-primary)] shrink-0"
-              aria-label="Close athlete editor"
-              leadingIcon={<X size={18} />}
-            />
+            <div className="flex items-center gap-1 shrink-0">
+              {onRequestRemove ? (
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={onRequestRemove}
+                  className="text-theme-muted hover:text-rose-400"
+                  title="Remove from roster (keeps the meet record)"
+                  aria-label={`Remove ${athlete.name} from roster`}
+                  leadingIcon={<Trash2 size={14} />}
+                >
+                  Remove
+                </Button>
+              ) : null}
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={onClose}
+                className="p-1.5 text-theme-muted hover:text-[var(--text-primary)] shrink-0"
+                aria-label="Close athlete editor"
+                leadingIcon={<X size={18} />}
+              />
+            </div>
           </div>
 
           {issues.length > 0 ? (

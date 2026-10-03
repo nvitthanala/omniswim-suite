@@ -59,7 +59,7 @@ export function MeetOpsLoadStep({
       <div className="surface-card rounded-xl p-5">
         <div className="flex flex-wrap items-end justify-between gap-4">
           <div>
-            <h3 className="text-lg font-medium text-[var(--text-primary)] uppercase tracking-tight">Meet files</h3>
+            <h3 className="text-lg font-medium text-[var(--text-primary)]">Meet files</h3>
             <p className="text-xs text-theme-secondary">Load results and link a psych sheet for this meet.</p>
           </div>
           {isParsingPdf || isParsingPsychPdf ? (
@@ -81,7 +81,7 @@ export function MeetOpsLoadStep({
             <div className="flex flex-wrap items-center gap-2 border border-theme-soft rounded-lg p-1">
               <label
                 aria-label="Load meet results PDF"
-                className="cursor-pointer flex items-center gap-1.5 px-3 py-1 btn-accent-outline rounded-md text-[10px] uppercase font-medium transition-colors"
+                className="cursor-pointer flex items-center gap-1.5 px-3 py-1 btn-accent-outline rounded-md text-ui-caption font-medium transition-colors"
               >
                 <Plus size={12} />
                 <span>Load PDF</span>
@@ -99,10 +99,10 @@ export function MeetOpsLoadStep({
               </Button>
               <label
                 aria-label="Link psych sheet PDF"
-                className="cursor-pointer flex items-center gap-1.5 px-3 py-1 border border-theme-soft rounded-md text-[10px] uppercase font-medium text-theme-secondary hover:text-[var(--text-primary)] transition-colors"
+                className="cursor-pointer flex items-center gap-1.5 px-3 py-1 border border-theme-soft rounded-md text-ui-caption font-medium text-theme-secondary hover:text-[var(--text-primary)] transition-colors"
               >
                 <Plus size={12} />
-                <span>Link Psych</span>
+                <span>Link psych sheet</span>
                 <input aria-label="Psych sheet PDF file" type="file" className="hidden" accept=".pdf" onChange={onPsychFileUpload} />
               </label>
             </div>
@@ -112,7 +112,7 @@ export function MeetOpsLoadStep({
           <label className="flex items-center gap-2 text-theme-secondary">
             PDF column format
             <select value={pdfFormat} onChange={event => onPdfFormatChange(event.target.value)} aria-label="PDF column format" className="surface-overlay border border-theme-soft rounded-lg py-1.5 px-2">
-              <option value="auto">Auto Format</option><option value="regular">Regular List</option><option value="divided">Divided (2-Col)</option>
+              <option value="auto">Auto format</option><option value="regular">Regular list</option><option value="divided">Divided (2-Col)</option>
             </select>
           </label>
           <div className="rounded-lg border border-theme-soft surface-overlay p-3">

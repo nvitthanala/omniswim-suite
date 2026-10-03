@@ -17,7 +17,7 @@ export default function RelaySplitInspector({ rows, eventLabel }: Props) {
 
   return (
     <div className="mb-4 border border-theme-soft rounded-lg p-3 surface-muted-bg">
-      <p className="text-ui-micro uppercase tracking-widest text-theme-secondary mb-2">
+      <p className="text-ui-micro text-theme-secondary mb-2">
         Known (PDF) vs calculated splits · {eventLabel}
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">

@@ -40,7 +40,7 @@ export function SnapshotsPanel({
   return (
     <div className="shrink-0 border-t border-theme-soft">
       <div className="flex items-center justify-between p-2">
-        <h3 className="text-ui-micro uppercase tracking-widest text-theme-muted font-bold px-2 flex items-center gap-1.5">
+        <h3 className="text-ui-micro text-theme-muted font-bold px-2 flex items-center gap-1.5">
           <Database size={10} />
           Snapshots
         </h3>
@@ -113,11 +113,11 @@ function CreateSnapshotForm({
           autoFocus
         />
         <div className="flex gap-1.5">
-          <Button type="button" onClick={onCreate} disabled={isCreatingSnapshot} size="sm" className="uppercase tracking-widest">
+          <Button type="button" onClick={onCreate} disabled={isCreatingSnapshot} size="sm">
             {isCreatingSnapshot ? <Loader2 size={10} className="animate-spin" /> : <Camera size={10} />}
             {isCreatingSnapshot ? 'Saving...' : 'Save'}
           </Button>
-          <Button type="button" onClick={onCancelCreate} variant="outline" size="sm" className="uppercase tracking-widest">
+          <Button type="button" onClick={onCancelCreate} variant="outline" size="sm">
             Cancel
           </Button>
         </div>

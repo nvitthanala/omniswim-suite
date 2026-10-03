@@ -442,7 +442,7 @@ test('Phase 4 Optimize owns the optimizers and Lineup only links to it', async (
   const dialog = page.getByRole('dialog', { name: 'Optimize all teams' });
   await expect(dialog).toBeVisible();
   await expect(dialog).toContainText('Drop seniors is off');
-  await expect(dialog.getByRole('button', { name: 'Apply to Workspace' })).toBeDisabled();
+  await expect(dialog.getByRole('button', { name: 'Apply to workspace' })).toBeDisabled();
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
 
@@ -543,7 +543,7 @@ test('Phase 5 Matrix has three steps and scoring lives on Meet', async ({ page, 
   const edit = page.getByRole('button', { name: 'Edit scoring rules' });
   await edit.focus();
   await page.keyboard.press('Enter');
-  const dialog = page.getByRole('dialog', { name: 'Scoring Matrix Configuration' });
+  const dialog = page.getByRole('dialog', { name: 'Scoring rules' });
   await expect(dialog).toBeVisible();
   for (const field of ['Scorer eligibility', 'Number of scoring places', 'Scoring view', 'Scorer cap scope', 'Relay multiplier']) {
     await expect(dialog.getByLabel(field).first()).toBeAttached();

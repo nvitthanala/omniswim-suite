@@ -2,7 +2,7 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * TeamCard's expanded "Team Matrix" section: the by-event/by-swimmer sort +
+ * TeamCard's expanded "Team matrix" section: the by-event/by-swimmer sort +
  * grouping controls, and the scrollable list of group cards (each holding
  * `TeamMatrixSwimmerRow`s). Pure extraction from `TeamCard.tsx` — no behavior
  * change. Edit state and handlers stay in `TeamCard`; this only renders from
@@ -28,17 +28,17 @@ interface TeamCardMatrixControlsProps {
   onViewModeChange: (mode: ViewMode) => void;
 }
 
-/** The "Team Matrix" heading plus its sort-select and grouping toggle. */
+/** The "Team matrix" heading plus its sort-select and grouping toggle. */
 export function TeamCardMatrixControls({ viewMode, sortMode, onSortModeChange, onViewModeChange }: TeamCardMatrixControlsProps) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
       <div className="flex items-center gap-2 min-w-0">
         <List size={14} className="text-[var(--text-accent)] shrink-0" />
-        <span className="text-ui-micro font-medium uppercase tracking-widest text-theme-secondary truncate">Team Matrix</span>
+        <span className="text-ui-micro font-medium text-theme-secondary truncate">Team matrix</span>
       </div>
       <div className="flex flex-wrap items-center justify-end gap-2 min-w-0">
         <select
-          className="glass-input text-ui-micro uppercase tracking-widest text-theme-secondary rounded p-1 outline-none"
+          className="glass-input text-ui-micro text-theme-secondary rounded p-1 outline-none"
           value={sortMode}
           onChange={(e) => onSortModeChange(e.target.value as SortMode)}
           aria-label="Sort team matrix"
@@ -101,7 +101,7 @@ function TeamCardMatrixGroupHeader({
   return (
     <div className="flex items-center justify-between mb-2">
       <div className="flex items-center gap-3">
-        <h4 className="text-xs font-medium text-[var(--text-primary)] uppercase group-hover:text-[var(--text-accent)] transition-colors">
+        <h4 className="text-xs font-medium text-[var(--text-primary)] group-hover:text-[var(--text-accent)] transition-colors">
           {viewMode === 'swimmer' ? group.name : <CompactEventLabel event={group.event} className="font-mono" />}
         </h4>
         {viewMode === 'swimmer' && (

@@ -8,6 +8,7 @@
 import { Users, RotateCcw, Sparkles } from 'lucide-react';
 import { Button, TeamSelect } from '@omniswim/ui';
 import ProjectedActualScore from './ProjectedActualScore';
+import { scorerCapPhrase } from './teamRosterView';
 
 type Props = {
   selectedTeam: string;
@@ -16,6 +17,8 @@ type Props = {
   /** Open the Optimize step. Omit to hide the link. */
   onOpenOptimize?: () => void;
   onResetTeam: () => void;
+  /** The Delete key removes the selected athlete; mention it in the help text. */
+  canRemoveAthlete?: boolean;
   maxIndividualScorersPerTeam: number;
   selectedActual: number | undefined;
   selectedBaseline: number | undefined;
@@ -33,6 +36,7 @@ export default function TeamRosterHeader({
   editable,
   onOpenOptimize,
   onResetTeam,
+  canRemoveAthlete = false,
   maxIndividualScorersPerTeam,
   selectedActual,
   selectedBaseline,
@@ -93,12 +97,22 @@ export default function TeamRosterHeader({
 
       <p className="text-ui-body text-theme-secondary my-3 leading-relaxed">
         Click an athlete to edit scorers, individual entries, and see relay status.
-        {editable ? ` Toggle scorers for the ${maxIndividualScorersPerTeam}-scorer cap.` : ' Enable What-if to edit scorers.'}
+        {editable ? ` ${scorerCapPhrase(maxIndividualScorersPerTeam)}` : ' Enable What-if to edit scorers.'}
         {' '}
         <kbd className="px-1 rounded border border-theme-soft bg-[var(--surface-muted)] text-ui-micro font-mono">
           ↑↓
         </kbd>{' '}
-        to navigate.
+        to navigate
+        {canRemoveAthlete ? (
+          <>
+            ,{' '}
+            <kbd className="px-1 rounded border border-theme-soft bg-[var(--surface-muted)] text-ui-micro font-mono">
+              Delete
+            </kbd>{' '}
+            to remove
+          </>
+        ) : null}
+        .
       </p>
       {useDropdown ? (
         <label className="block mb-3">

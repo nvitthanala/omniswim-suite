@@ -4,7 +4,7 @@
  *
  * `MeetOperationsView`'s "standings" step: the reconciliation banner, the
  * team standings list of `TeamCard`s (filterable by swimmer/team), and the
- * Top Individual Contributors table. Pure extraction from
+ * Top individual contributors table. Pure extraction from
  * `MeetOperationsView.tsx` — no behavior change.
  */
 
@@ -85,7 +85,7 @@ export function MeetOpsStandingsStep({
       <div className="surface-card rounded-xl p-5">
         <div className="flex justify-between items-end mb-6">
           <div>
-            <h3 className="text-lg font-medium text-[var(--text-primary)] uppercase tracking-tight">
+            <h3 className="text-lg font-medium text-[var(--text-primary)]">
               Team standings
             </h3>
             <p className="text-xs text-theme-secondary">
@@ -100,7 +100,7 @@ export function MeetOpsStandingsStep({
                 onChange={e => onSearchChange(e.target.value)}
                 placeholder="Filter swimmer or team..."
                 aria-label="Filter swimmers or teams"
-                className="bg-transparent border-none outline-none text-[10px] uppercase placeholder:text-theme-secondary text-[var(--text-primary)] w-40"
+                className="bg-transparent border-none outline-none text-ui-caption placeholder:text-theme-secondary text-[var(--text-primary)] w-40"
               />
             </div>
           </div>
@@ -142,7 +142,7 @@ export function MeetOpsStandingsStep({
           ) : (
             <div className="p-12 text-center border border-dashed border-theme-soft rounded-xl text-theme-secondary">
               <Users className="w-12 h-12 mx-auto mb-4 opacity-20" />
-              <p className="text-xs uppercase font-medium tracking-widest">No matrix data persistent</p>
+              <p className="text-xs font-medium">No matrix data persistent</p>
             </div>
           )}
         </div>
@@ -150,10 +150,10 @@ export function MeetOpsStandingsStep({
 
       <div className="surface-card rounded-xl overflow-hidden">
         <div className="p-4 border-b border-theme-soft surface-overlay">
-          <h4 className="text-[10px] font-medium text-theme-secondary uppercase tracking-widest">Top Individual Contributors</h4>
+          <h4 className="text-ui-caption font-medium text-theme-secondary">Top individual contributors</h4>
         </div>
         <table className="w-full text-left border-collapse">
-          <thead className="surface-overlay text-ui-micro uppercase tracking-widest text-theme-secondary font-medium">
+          <thead className="surface-overlay text-ui-micro text-theme-secondary font-medium">
             <tr>
               <th className="p-3">Rank</th>
               <th className="p-3">Athlete Name</th>

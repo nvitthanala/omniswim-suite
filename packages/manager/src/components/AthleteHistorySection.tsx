@@ -277,7 +277,7 @@ export default function AthleteHistorySection({ rows, athlete, gender, editable,
                     <span className="w-20 shrink-0 font-mono tabular-nums text-ui-caption text-theme-secondary">
                       {row.time}
                     </span>
-                    <span className="w-10 shrink-0 text-ui-micro text-theme-muted uppercase">
+                    <span className="w-10 shrink-0 text-ui-micro text-theme-muted">
                       {row.timeType ?? 'SCY'}
                     </span>
                     {row.meetLabel ? (

@@ -705,14 +705,14 @@ export default function RosterImportWizard({ workspace, gender, onClose, onUpdat
       ) : null}
       <Modal
         onClose={onClose}
-        ariaLabel="Import Roster / History"
+        ariaLabel="Import roster / history"
         blur={false}
         className="border border-theme w-full max-w-2xl max-h-[90vh] flex flex-col rounded-xl"
         style={{ boxShadow: 'var(--ui-shadow-lg)' }}
       >
         <div className="flex items-center justify-between px-5 py-4 border-b border-theme-soft">
           <div>
-            <h3 className="text-ui-label font-black uppercase tracking-widest">Import Roster / History</h3>
+            <h3 className="text-ui-label font-bold">Import roster / history</h3>
             <p className="text-ui-caption text-theme-muted mt-1">
               Paste SwimCloud Personal Bests or roster table text
             </p>

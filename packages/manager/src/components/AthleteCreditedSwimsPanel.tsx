@@ -113,7 +113,7 @@ export default function AthleteCreditedSwimsPanel({
         <div className="min-w-0">
           <div className="flex items-center gap-2">
             <Waves size={12} className="text-[var(--text-accent)] shrink-0" />
-            <h5 className="text-ui-caption font-bold uppercase tracking-widest text-[var(--text-primary)] truncate">
+            <h5 className="text-ui-caption font-bold text-[var(--text-primary)] truncate">
               Credited swims — {athleteName}
             </h5>
           </div>
@@ -153,7 +153,7 @@ export default function AthleteCreditedSwimsPanel({
           ) : null}
           <div className="max-h-48 overflow-y-auto custom-scrollbar">
           <table className="w-full">
-            <thead className="sticky top-0 surface-overlay text-ui-micro uppercase text-theme-secondary border-b border-theme-soft">
+            <thead className="sticky top-0 surface-overlay text-ui-micro text-theme-secondary border-b border-theme-soft">
               <tr>
                 <th className="text-left py-1.5 px-2 font-medium">Event</th>
                 <th className="text-left py-1.5 px-2 font-medium">Round</th>
@@ -177,7 +177,7 @@ export default function AthleteCreditedSwimsPanel({
                   <tr>
                     <td
                       colSpan={colCount}
-                      className="py-1.5 px-2 text-ui-micro uppercase tracking-widest text-theme-muted bg-[var(--surface-muted)]/50"
+                      className="py-1.5 px-2 text-ui-micro text-theme-muted bg-[var(--surface-muted)]/50"
                     >
                       Non-scoring swims ({other.length})
                     </td>

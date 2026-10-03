@@ -52,7 +52,7 @@ export default function MeetReconciliationBanner({ summary }: Props) {
 
       {mismatched.length > 0 ? (
         <div className="space-y-1">
-          <p className="text-ui-caption font-semibold text-theme-muted uppercase tracking-widest">
+          <p className="text-ui-caption font-semibold text-theme-muted">
             Score disagrees with official total
           </p>
           <ul className="space-y-1">
@@ -73,7 +73,7 @@ export default function MeetReconciliationBanner({ summary }: Props) {
 
       {officialOnly.length > 0 ? (
         <div className="space-y-1">
-          <p className="text-ui-caption font-semibold text-theme-muted uppercase tracking-widest flex items-center gap-1.5">
+          <p className="text-ui-caption font-semibold text-theme-muted flex items-center gap-1.5">
             <HelpCircle size={12} /> Official total with no matching computed team
           </p>
           <ul className="space-y-1">
@@ -89,7 +89,7 @@ export default function MeetReconciliationBanner({ summary }: Props) {
 
       {computedOnly.length > 0 ? (
         <div className="space-y-1">
-          <p className="text-ui-caption font-semibold text-theme-muted uppercase tracking-widest">
+          <p className="text-ui-caption font-semibold text-theme-muted">
             Computed team with no official total
           </p>
           <ul className="space-y-1">

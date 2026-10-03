@@ -382,7 +382,7 @@ export function ScoringPresetManagerModal({ onClose, onPresetsChanged }: Scoring
         className="rounded-2xl p-6 max-w-2xl w-full mx-4 shadow-2xl max-h-[90vh] flex flex-col"
       >
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-medium text-[var(--text-primary)] uppercase tracking-tight">
+          <h2 className="text-lg font-medium text-[var(--text-primary)]">
             {editor.editingId ? `Edit "${editor.label}"` : 'New scoring rule set'}
           </h2>
         </div>
@@ -390,7 +390,7 @@ export function ScoringPresetManagerModal({ onClose, onPresetsChanged }: Scoring
         <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-4 text-sm">
           <div className="grid grid-cols-2 gap-3">
             <div>
-              <label className="block text-[10px] text-theme-secondary uppercase mb-1">Id</label>
+              <label className="block text-ui-caption text-theme-secondary mb-1">Id</label>
               <input
                 type="text"
                 aria-label="Preset id"
@@ -402,7 +402,7 @@ export function ScoringPresetManagerModal({ onClose, onPresetsChanged }: Scoring
               />
             </div>
             <div>
-              <label className="block text-[10px] text-theme-secondary uppercase mb-1">Label</label>
+              <label className="block text-ui-caption text-theme-secondary mb-1">Label</label>
               <input
                 type="text"
                 aria-label="Preset label"
@@ -419,7 +419,7 @@ export function ScoringPresetManagerModal({ onClose, onPresetsChanged }: Scoring
             </div>
           </div>
           <div>
-            <label className="block text-[10px] text-theme-secondary uppercase mb-1">Description</label>
+            <label className="block text-ui-caption text-theme-secondary mb-1">Description</label>
             <textarea
               aria-label="Preset description"
               value={editor.description}
@@ -428,7 +428,7 @@ export function ScoringPresetManagerModal({ onClose, onPresetsChanged }: Scoring
             />
           </div>
           <div>
-            <label className="block text-[10px] text-theme-secondary uppercase mb-1">
+            <label className="block text-ui-caption text-theme-secondary mb-1">
               Conference matches (comma-separated)
             </label>
             <input
@@ -477,7 +477,7 @@ export function ScoringPresetManagerModal({ onClose, onPresetsChanged }: Scoring
         className="rounded-2xl p-6 max-w-3xl w-full mx-4 shadow-2xl max-h-[90vh] flex flex-col"
       >
         <div className="flex justify-between items-center mb-4">
-          <h2 className="text-lg font-medium text-[var(--text-primary)] uppercase tracking-tight flex items-center gap-2">
+          <h2 className="text-lg font-medium text-[var(--text-primary)] flex items-center gap-2">
             <Settings2 size={18} aria-hidden />
             Scoring rule sets
           </h2>
@@ -504,7 +504,7 @@ export function ScoringPresetManagerModal({ onClose, onPresetsChanged }: Scoring
           ) : (
             grouped.map(([group, items]) => (
               <div key={group}>
-                <h3 className="text-[10px] text-theme-secondary uppercase tracking-widest font-medium mb-2">
+                <h3 className="text-ui-caption text-theme-secondary font-medium mb-2">
                   {group}
                 </h3>
                 <ul className="space-y-2">

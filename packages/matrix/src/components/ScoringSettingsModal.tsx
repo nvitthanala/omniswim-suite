@@ -41,11 +41,11 @@ export default function ScoringSettingsModal({ settings, onSave, onClose, scorin
     <>
       <Modal
         onClose={onClose}
-        ariaLabel="Scoring Matrix Configuration"
+        ariaLabel="Scoring rules"
         className="rounded-2xl p-6 max-w-2xl w-full mx-4 shadow-2xl max-h-[90vh] flex flex-col"
       >
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-lg font-medium text-[var(--text-primary)] uppercase tracking-tight">Scoring Matrix Configuration</h2>
+          <h2 className="text-lg font-medium text-[var(--text-primary)]">Scoring rules</h2>
           <Button
             variant="ghost"
             size="md"
@@ -70,7 +70,7 @@ export default function ScoringSettingsModal({ settings, onSave, onClose, scorin
                 size="sm"
                 onClick={() => setManageOpen(true)}
                 aria-label="Manage scoring rule sets"
-                className="uppercase tracking-widest shrink-0"
+                className="shrink-0"
                 leadingIcon={<Settings2 size={10} aria-hidden />}
               >
                 Manage rule sets

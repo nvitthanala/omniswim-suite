@@ -69,7 +69,7 @@ export function SegmentedControl<TValue extends string>({
               type="button"
               onClick={() => onChange(option.value)}
               className={cn(
-                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-[10px] uppercase font-medium transition-colors',
+                'inline-flex items-center gap-1.5 px-3 py-1.5 rounded text-ui-micro font-medium transition-colors',
                 selected
                   ? 'bg-[var(--text-accent)]/15 text-[var(--text-accent)]'
                   : 'text-theme-secondary hover:text-[var(--text-primary)]'

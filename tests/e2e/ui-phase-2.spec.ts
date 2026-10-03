@@ -42,7 +42,7 @@ test('Phase 2 scoring editor, eligibility lock and screenshots', async ({ page, 
       await expect(page.getByRole('button', { name: 'Edit scoring rules' })).toBeVisible();
       await capture(page, `${theme}-${width}-matrix-scoring`);
       await page.getByRole('button', { name: 'Edit scoring rules' }).click();
-      await expect(page.getByRole('dialog', { name: 'Scoring Matrix Configuration' })).toBeVisible();
+      await expect(page.getByRole('dialog', { name: 'Scoring rules' })).toBeVisible();
       await expect(page.getByLabel('Scorer eligibility')).toBeDisabled();
       await capture(page, `${theme}-${width}-scoring-rules-modal-matrix`);
       await page.keyboard.press('Escape');
@@ -55,7 +55,7 @@ test('Phase 2 scoring editor, eligibility lock and screenshots', async ({ page, 
       await expect(page.getByRole('button', { name: 'Open scoring rules' })).toBeVisible();
       await capture(page, `${theme}-${width}-manager-lineup-lock`);
       await page.getByRole('button', { name: 'Open scoring rules' }).click();
-      await expect(page.getByRole('dialog', { name: 'Scoring Matrix Configuration' })).toBeVisible();
+      await expect(page.getByRole('dialog', { name: 'Scoring rules' })).toBeVisible();
       await capture(page, `${theme}-${width}-scoring-rules-modal-manager`);
     }
   }

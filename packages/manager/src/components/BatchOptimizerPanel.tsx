@@ -98,7 +98,7 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
           <div className="flex items-center gap-3">
             <Sparkles size={18} className="text-[var(--text-accent)]" />
             <div>
-              <h2 className="text-ui-label font-bold uppercase tracking-widest text-[var(--text-primary)]">
+              <h2 className="text-ui-label font-bold text-[var(--text-primary)]">
                 Optimize all teams
               </h2>
               <p className="text-ui-caption text-theme-secondary mt-0.5">
@@ -123,8 +123,8 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
         <div className="p-5 overflow-y-auto flex-1 space-y-5">
           {/* Stage selector */}
           <div>
-            <label className="text-ui-caption uppercase tracking-widest font-bold text-theme-secondary mb-2 block">
-              Optimization Scope
+            <label className="text-ui-caption font-bold text-theme-secondary mb-2 block">
+              Optimization scope
             </label>
             <div className="grid grid-cols-3 gap-2">
               {STAGES.map(s => (
@@ -139,7 +139,7 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
                       : 'border-theme-soft'
                   }`}
                 >
-                  <div className="text-ui-label font-bold uppercase tracking-wider text-[var(--text-primary)]">
+                  <div className="text-ui-label font-bold text-[var(--text-primary)]">
                     {s.label}
                   </div>
                   <div className="text-ui-micro text-theme-secondary mt-1 leading-relaxed">{s.desc}</div>
@@ -154,7 +154,7 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
             size="md"
             onClick={runOptimizer}
             disabled={isRunning}
-            className="w-full uppercase tracking-widest"
+            className="w-full"
           >
             {isRunning ? (
               <>
@@ -166,7 +166,7 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
             ) : (
               <>
                 <TrendingUp size={14} />
-                <span>Run Optimizer</span>
+                <span>Run optimizer</span>
               </>
             )}
           </Button>
@@ -181,16 +181,16 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
               >
                 {/* Summary card */}
                 <div className="surface-overlay rounded-lg border border-theme-soft p-4">
-                  <h4 className="text-ui-caption uppercase tracking-widest font-bold text-theme-secondary mb-3">
-                    Optimization Summary
+                  <h4 className="text-ui-caption font-bold text-theme-secondary mb-3">
+                    Optimization summary
                   </h4>
                   <div className="grid grid-cols-3 gap-4">
                     <div className="text-center p-3 rounded-lg surface-muted-bg border border-theme-soft">
                       <div className="text-2xl font-bold tabular-nums text-points-positive">
                         {result.teamDeltas[0]?.projectedPoints.toFixed(1) ?? '0.0'}
                       </div>
-                      <div className="text-ui-micro uppercase tracking-wider text-theme-secondary mt-1">
-                        Projected Total
+                      <div className="text-ui-micro text-theme-secondary mt-1">
+                        Projected total
                       </div>
                     </div>
                     <div className="text-center p-3 rounded-lg surface-muted-bg border border-theme-soft">
@@ -198,7 +198,7 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
                         {(result.teamDeltas[0]?.delta ?? 0) > 0 ? '+' : ''}
                         {(result.teamDeltas[0]?.delta ?? 0).toFixed(1)}
                       </div>
-                      <div className="text-ui-micro uppercase tracking-wider text-theme-secondary mt-1">
+                      <div className="text-ui-micro text-theme-secondary mt-1">
                         Delta
                       </div>
                     </div>
@@ -206,8 +206,8 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
                       <div className="text-2xl font-bold tabular-nums text-[var(--text-primary)]">
                         {result.teamDeltas[0]?.previousPoints.toFixed(1) ?? '0.0'}
                       </div>
-                      <div className="text-ui-micro uppercase tracking-wider text-theme-secondary mt-1">
-                        Baseline Total
+                      <div className="text-ui-micro text-theme-secondary mt-1">
+                        Baseline total
                       </div>
                     </div>
                   </div>
@@ -215,8 +215,8 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
 
                 {/* Changes detail */}
                 <div className="surface-overlay rounded-lg border border-theme-soft p-4">
-                  <h4 className="text-ui-caption uppercase tracking-widest font-bold text-theme-secondary mb-3">
-                    Changes Proposed
+                  <h4 className="text-ui-caption font-bold text-theme-secondary mb-3">
+                    Changes proposed
                   </h4>
                   {result.outcome === 'unchanged' ? (
                     <p role="status" className="text-ui-body text-theme-secondary mb-3">
@@ -249,7 +249,7 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
             variant="outline"
             size="md"
             onClick={onClose}
-            className="uppercase tracking-widest text-theme-secondary hover:text-[var(--text-primary)]"
+            className="text-theme-secondary hover:text-[var(--text-primary)]"
           >
             Cancel
           </Button>
@@ -258,9 +258,8 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
             size="md"
             onClick={handleApply}
             disabled={!canApply}
-            className="uppercase tracking-widest"
           >
-            Apply to Workspace
+            Apply to workspace
           </Button>
         </div>
     </Modal>

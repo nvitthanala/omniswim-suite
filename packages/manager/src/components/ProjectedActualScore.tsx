@@ -27,7 +27,7 @@ function ScoreRow({
   if (value == null) return null;
   return (
     <div className="flex items-center justify-between gap-4 text-ui-caption font-mono">
-      <span className={`uppercase tracking-widest ${muted ? 'text-theme-muted' : 'text-theme-secondary'}`}>
+      <span className={`${muted ? 'text-theme-muted' : 'text-theme-secondary'}`}>
         {label}
       </span>
       <span
@@ -53,7 +53,7 @@ export default function ProjectedActualScore({
 
   if (compact) {
     return (
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-ui-micro font-mono uppercase tracking-widest">
+      <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-ui-micro font-mono">
         {actual != null ? (
           <span className="text-theme-secondary">
             Actual <span className="text-[var(--text-primary)] font-bold">{actual.toFixed(1)}</span>
@@ -76,11 +76,11 @@ export default function ProjectedActualScore({
   return (
     <div className="surface-overlay border border-theme-soft rounded-lg p-3 space-y-2">
       <div className="flex items-center justify-between gap-2 mb-1">
-        <h5 className="text-ui-micro font-bold uppercase tracking-widest text-theme-secondary">
+        <h5 className="text-ui-micro font-bold text-theme-secondary">
           Team score summary
         </h5>
         {eventThrough != null ? (
-          <span className="text-ui-micro text-theme-muted uppercase">Through event {eventThrough}</span>
+          <span className="text-ui-micro text-theme-muted">Through event {eventThrough}</span>
         ) : null}
       </div>
       <ScoreRow label="Actual" value={actual} />
@@ -93,7 +93,7 @@ export default function ProjectedActualScore({
       ) : null}
       {delta != null && Math.abs(delta) > 0.05 ? (
         <div className="pt-2 border-t border-theme-soft flex justify-between text-ui-caption font-mono">
-          <span className="text-theme-secondary uppercase tracking-widest">
+          <span className="text-theme-secondary">
             Delta vs {actual != null ? 'actual' : 'baseline'}
           </span>
           <span className={`font-bold ${delta > 0 ? 'text-points-positive' : 'text-points-negative'}`}>

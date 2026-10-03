@@ -501,5 +501,34 @@
     },
     "screenshots": "docs/reference/ui-phase-5/before (24) and after (18 + 2 Metrics): Matrix Meet/Standings/Analyze, midnight/deck-light/oled, 1440 and 800",
     "report": "docs/reference/ui-phase-5/REPORT.md"
+  },
+  "phase6": {
+    "date": "2026-10-03",
+    "status": "implemented_gates_green_except_preexisting_test_scoring_preset_routes",
+    "summary": "Wording, case and density sweep. Sentence case on the Phase 1-5 screens (uppercase class 161 -> 14 lines); labels Scoring rules, Cross-course, Point opportunities, Link psych sheet, 'no scorer cap'; 'Proj +x' badge now 'projected vs prelims +x'. Lineup roster mode 94 -> 12 DOM buttons (36-athlete roster): per-row Remove buttons replaced by the Delete key and a drawer Remove button, Swimmer tag hidden when uniform, checklist rows merged per athlete with one Jump and 'Show N more', checklist body rendered once. Sidebar auto-collapses below lg without writing omni-sidebar-collapsed. Metrics has one Open video control (header, now a real button) plus the drop zone. Analyze score-differences table fits at 800px. Hex and uppercase ratchets added.",
+    "baselines": {
+      "hexLiteralsInTsx": 18,
+      "hexLiteralsAfter": 18,
+      "uppercaseLinesStart": 161,
+      "uppercaseLinesAfter": 14,
+      "lineupButtonsDomBefore": 94,
+      "lineupButtonsVisibleBefore": 67,
+      "lineupButtonsDomAfter": 12,
+      "lineupButtonsVisibleAfter": 11,
+      "briefFigureNotReproduced": 78
+    },
+    "newFiles": [
+      "apps/shell/src/lib/sidebarCollapse.ts",
+      "packages/manager/src/components/lineupChecklistView.ts",
+      "tests/phase6WordingDensity.test.ts",
+      "tests/uiCaseAndColorRatchet.test.ts",
+      "tests/e2e/ui-phase-6.spec.ts"
+    ],
+    "proof": {
+      "mutationChecks": "19 deliberate breaks across the new vitest and e2e tests; every one failed at least one test and was restored (git diff hash identical before and after)",
+      "gates": "vitest 143 files / 1962 passed; lint 0 errors (2 existing warnings); lint:types exit 0; playwright 17/17 on a cleaned data copy (3 full runs); run-tests.mjs 83 passed, 1 failed (test_scoring_preset_routes, pre-existing), 1 skipped on the last run, but its playwright part failed on 3 of 4 runs (2 on a polluted copy, 1 unexplained); data/omniswim.db hashes and data/backups unchanged"
+    },
+    "screenshots": "docs/reference/ui-phase-6/before (36) and after (36): Athletes, Lineup, Optimize, Matrix Standings/Analyze, Metrics; midnight/deck-light/oled; 1440 and 800",
+    "report": "docs/reference/ui-phase-6/REPORT.md"
   }
 }

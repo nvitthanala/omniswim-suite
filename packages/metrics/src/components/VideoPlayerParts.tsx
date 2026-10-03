@@ -42,13 +42,13 @@ export function VideoTelemetryOverlay({
   return (
     <div className="absolute top-4 right-4 z-30 bg-black/80 backdrop-blur-md border border-accent-500/50 p-3 rounded-xl shadow-2xl min-w-[180px] text-ui-micro font-mono text-slate-300">
       <div className="flex justify-between items-center">
-        <span className="opacity-60 uppercase tracking-widest">Live tempo</span>
+        <span className="opacity-60">Live tempo</span>
         <span className="text-accent-400 font-bold">
           {liveSpm > 0 ? liveSpm.toFixed(1) : '—'} <span className="text-white/50">cycles/min</span>
         </span>
       </div>
       <div className="flex justify-between items-center mt-1.5 pt-1.5 border-t border-white/10">
-        <span className="opacity-60 uppercase tracking-widest">Frame rate</span>
+        <span className="opacity-60">Frame rate</span>
         <span className={measuredFps ? 'text-emerald-400 font-bold' : 'text-amber-400 font-bold'}>
           {measuredFps ? `${measuredFps} measured` : 'not measured'}
         </span>
@@ -176,7 +176,7 @@ export function VideoTransportControls({
 
       <div className="flex items-center gap-4 text-xs font-mono">
         <div className="bg-black/40 backdrop-blur-sm rounded border border-white/10 px-2 flex items-center h-8">
-          <span className="text-ui-micro text-white/60 mr-2 uppercase">FPS:</span>
+          <span className="text-ui-micro text-white/60 mr-2">FPS:</span>
           <select
             value={fpsOverride ?? ''}
             onChange={(e) => onFpsOverrideChange(e.target.value ? parseFloat(e.target.value) : null)}
@@ -194,7 +194,7 @@ export function VideoTransportControls({
           </select>
         </div>
         <div className="bg-black/40 backdrop-blur-sm rounded border border-white/10 px-2 flex items-center h-8">
-          <span className="text-ui-micro text-white/60 mr-2 uppercase">Speed:</span>
+          <span className="text-ui-micro text-white/60 mr-2">Speed:</span>
           <select
             value={playbackRate}
             onChange={onPlaybackRateChange}

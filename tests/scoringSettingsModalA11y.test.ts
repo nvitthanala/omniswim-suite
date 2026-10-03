@@ -67,7 +67,7 @@ describe('ScoringSettingsModal accessibility', () => {
     const dialog = container.querySelector('[role="dialog"]') as HTMLElement;
     expect(dialog).toBeTruthy();
     expect(dialog.getAttribute('aria-modal')).toBe('true');
-    expect(dialog.getAttribute('aria-label')).toBe('Scoring Matrix Configuration');
+    expect(dialog.getAttribute('aria-label')).toBe('Scoring rules');
 
     await act(async () => {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }));

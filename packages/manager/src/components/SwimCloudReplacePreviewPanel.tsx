@@ -52,7 +52,7 @@ function Collapsible({
       <button
         type="button"
         onClick={() => setOpen(v => !v)}
-        className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-ui-caption font-bold uppercase tracking-widest nav-tab-inactive hover:text-[var(--text-primary)] transition-colors"
+        className="w-full flex items-center gap-1.5 px-2.5 py-1.5 text-ui-caption font-bold nav-tab-inactive hover:text-[var(--text-primary)] transition-colors"
         aria-expanded={open}
       >
         {open ? <ChevronDown size={13} /> : <ChevronRight size={13} />}

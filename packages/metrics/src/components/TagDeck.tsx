@@ -28,7 +28,7 @@ function PreviewChip({ label, preview, gateReason }: { label: string; preview: T
         blocked ? 'border-theme-soft bg-[var(--surface-muted)] opacity-70' : 'border-[var(--text-accent)]/40 bg-[var(--surface)]'
       }`}
     >
-      <span className="text-ui-micro font-bold uppercase tracking-widest text-theme-muted">{label}</span>
+      <span className="text-ui-micro font-bold text-theme-muted">{label}</span>
       {blocked ? (
         <span className="text-ui-caption text-theme-muted">{gateReason ?? preview.reason ?? 'not available'}</span>
       ) : (
@@ -50,7 +50,7 @@ export function TagDeck({ machine, tags, lengthCount, fifteenMetreGateReason }: 
   return (
     <div className="flex flex-col gap-3 rounded-xl border border-theme-soft bg-[var(--surface)]/95 backdrop-blur-sm p-3 shadow-[var(--ui-shadow-lg)]">
       <div className="flex items-center justify-between border-b border-theme-soft pb-2">
-        <span className="text-ui-micro font-bold uppercase tracking-widest text-theme-muted">Length</span>
+        <span className="text-ui-micro font-bold text-theme-muted">Length</span>
         <span className="text-ui-body font-bold text-[var(--text-primary)]">
           {currentLength} / {lengthCount}
         </span>

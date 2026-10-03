@@ -250,7 +250,7 @@ export default function RecruitForm({
   const inputClass = compact ? 'glass-input w-full rounded-lg px-2.5 py-2 text-ui-body' : 'glass-input w-full';
   const labelClass = compact
     ? 'block text-ui-caption text-theme-muted mb-1'
-    : 'block text-ui-caption uppercase tracking-wide text-theme-muted font-bold mb-1.5';
+    : 'block text-ui-caption text-theme-muted font-bold mb-1.5';
   const teamOptions =
     teams.length > 0 ? teams.map(t => ({ value: t, label: t })) : [{ value: 'Unassigned', label: 'Unassigned' }];
 
@@ -445,7 +445,7 @@ export default function RecruitForm({
         variant="primary"
         size="lg"
         disabled={disabled}
-        className="w-full mt-2 btn-recruit uppercase tracking-[0.2em]"
+        className="w-full mt-2 btn-recruit"
         leadingIcon={<Play size={12} fill="currentColor" />}
       >
         Add swim

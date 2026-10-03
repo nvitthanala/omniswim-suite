@@ -237,7 +237,7 @@ export function ScoringSettingsFields({
 
       <div className="space-y-4">
         <div>
-          <label className="block text-[10px] text-theme-secondary uppercase mb-1">Scorer eligibility</label>
+          <label className="block text-ui-caption text-theme-secondary mb-1">Scorer eligibility</label>
           <select
             aria-label="Scorer eligibility"
             className="glass-input w-full text-xs"
@@ -252,9 +252,9 @@ export function ScoringSettingsFields({
           {pdfPointsLock ? <p className="mt-1 text-ui-caption text-theme-muted">PDF place points require Points pool eligibility.</p> : null}
         </div>
         <div>
-          <label className="block text-[10px] text-theme-secondary uppercase mb-1">PDF place points</label>
+          <label className="block text-ui-caption text-theme-secondary mb-1">PDF place points</label>
           <select
-            className="glass-input w-full text-xs uppercase"
+            className="glass-input w-full text-xs"
             aria-label="PDF place points setting"
             value={local.usePdfPlacePoints === true ? 'on' : local.usePdfPlacePoints === false ? 'off' : 'auto'}
             onChange={e => {
@@ -286,7 +286,7 @@ export function ScoringSettingsFields({
 
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <label className="text-[10px] text-theme-secondary uppercase">Scoring places</label>
+            <label className="text-ui-caption text-theme-secondary">Scoring places</label>
             <select
               value={local.scoringPoints.length}
               onChange={e => handlePlacesChange(parseInt(e.target.value, 10))}

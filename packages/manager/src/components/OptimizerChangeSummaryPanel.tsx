@@ -142,7 +142,7 @@ export default function OptimizerChangeSummaryPanel({ summary, onDismiss, onUndo
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-theme-soft">
           {changes.scorerChanges.length > 0 ? (
             <div>
-              <p className="text-ui-caption font-semibold text-theme-muted uppercase tracking-widest mb-1.5">
+              <p className="text-ui-caption font-semibold text-theme-muted mb-1.5">
                 Scorer roster ({changes.scorerChanges.length})
               </p>
               <ul className="space-y-1">
@@ -154,7 +154,7 @@ export default function OptimizerChangeSummaryPanel({ summary, onDismiss, onUndo
           ) : null}
           {changes.entryChanges.length > 0 ? (
             <div>
-              <p className="text-ui-caption font-semibold text-theme-muted uppercase tracking-widest mb-1.5">
+              <p className="text-ui-caption font-semibold text-theme-muted mb-1.5">
                 Entries ({changes.entryChanges.length})
               </p>
               <ul className="space-y-1">
@@ -166,7 +166,7 @@ export default function OptimizerChangeSummaryPanel({ summary, onDismiss, onUndo
           ) : null}
           {rejected.length > 0 ? (
             <div>
-              <p className="text-ui-caption font-semibold text-theme-muted uppercase tracking-widest mb-1.5">
+              <p className="text-ui-caption font-semibold text-theme-muted mb-1.5">
                 Didn't make the scorer cap ({rejected.length})
               </p>
               <ul className="space-y-1">

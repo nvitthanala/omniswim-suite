@@ -49,7 +49,7 @@ export function RelayScoringFields({ relayTable }: RelayScoringFieldsProps) {
   return (
     <div className="p-3 rounded-lg border border-theme-soft surface-overlay">
       <div className="flex items-center justify-between gap-2 mb-1">
-        <label className="text-[10px] text-theme-secondary uppercase font-medium">Relay scoring</label>
+        <label className="text-ui-caption text-theme-secondary font-medium">Relay scoring</label>
         <SegmentedControl
           layout="inline"
           ariaLabel="Relay scoring mode"
@@ -103,7 +103,7 @@ export function DivingPointsFields({ divingTable, divingMaxScorersPerTeamPerEven
   return (
     <div className="p-3 rounded-lg border border-theme-soft surface-overlay">
       <div className="flex items-center justify-between gap-2 mb-1">
-        <label className="text-[10px] text-theme-secondary uppercase font-medium">Diving points table</label>
+        <label className="text-ui-caption text-theme-secondary font-medium">Diving points table</label>
         <SegmentedControl
           layout="inline"
           ariaLabel="Diving points table"
@@ -135,7 +135,7 @@ export function DivingPointsFields({ divingTable, divingMaxScorersPerTeamPerEven
           </div>
           <PlacePointsGrid points={divingTable.points} ariaPrefix="Diving" onSetPoint={divingTable.setPoint} />
           <div className="mt-3">
-            <label className="block text-[10px] text-theme-secondary uppercase mb-1">
+            <label className="block text-ui-caption text-theme-secondary mb-1">
               Max scoring divers / team / event
             </label>
             <input
@@ -173,7 +173,7 @@ export function PerEventCapsFields({
 }: PerEventCapsFieldsProps) {
   return (
     <div className="p-3 rounded-lg border border-theme-soft surface-overlay">
-      <label className="block text-[10px] text-theme-secondary uppercase font-medium mb-2">
+      <label className="block text-ui-caption text-theme-secondary font-medium mb-2">
         Per-team, per-event scoring caps
       </label>
       <p className="text-[9px] text-theme-muted mb-2 normal-case tracking-normal">
@@ -183,7 +183,7 @@ export function PerEventCapsFields({
       </p>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-[10px] text-theme-secondary uppercase mb-1">
+          <label className="block text-ui-caption text-theme-secondary mb-1">
             Max individual scorers / team / event
           </label>
           <input
@@ -199,9 +199,9 @@ export function PerEventCapsFields({
           />
         </div>
         <div>
-          <label className="block text-[10px] text-theme-secondary uppercase mb-1">Over-cap swimmer behavior</label>
+          <label className="block text-ui-caption text-theme-secondary mb-1">Over-cap swimmer behavior</label>
           <select
-            className="glass-input w-full text-xs uppercase"
+            className="glass-input w-full text-xs"
             aria-label="Behavior for a swimmer over the per-team place cap"
             value={overCapPlaceBehavior ?? 'holds-place'}
             onChange={e => onChangeOverCapPlaceBehavior(e.target.value as 'holds-place' | 'removed-from-consideration')}

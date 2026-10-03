@@ -19,7 +19,7 @@ interface ScoringViewBannerProps {
 export function ScoringViewBanner({ scoringView, onScoringViewChange }: ScoringViewBannerProps) {
   return (
     <div className="mb-4 p-3 rounded-lg border border-theme-soft surface-overlay">
-      <label className="block text-[10px] text-theme-secondary uppercase tracking-widest font-medium mb-2">
+      <label className="block text-ui-caption text-theme-secondary font-medium mb-2">
         Scoring view
       </label>
       <SegmentedControl
@@ -75,7 +75,7 @@ interface SuggestedPresetBannerProps {
 export function SuggestedPresetBanner({ suggestedPresetId, onLoadAndSave }: SuggestedPresetBannerProps) {
   return (
     <div className="mb-4 p-3 rounded badge-warning text-[10px]">
-      <span className="uppercase tracking-widest font-medium">Suggested preset: </span>
+      <span className="font-medium">Suggested preset: </span>
       {suggestedPresetId}
       <Button
         variant="ghost"

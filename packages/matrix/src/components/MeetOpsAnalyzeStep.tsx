@@ -50,7 +50,7 @@ function TimelineTooltipContent({
 
   return (
     <div className="theme-popover rounded-lg p-3 max-w-sm">
-      <div className="text-[var(--text-accent)] font-bold mb-2 text-ui-label uppercase tracking-wide border-b border-theme-soft pb-1">
+      <div className="text-[var(--text-accent)] font-bold mb-2 text-ui-label border-b border-theme-soft pb-1">
         {label}
       </div>
       <ul className="space-y-1.5 font-mono text-ui-caption">
@@ -130,7 +130,7 @@ export function MeetOpsAnalyzeStep({
       <div className="surface-card rounded-xl p-5 mb-6">
         <div className="flex items-center gap-2 mb-4">
           <TrendingUp size={16} className="text-[var(--text-accent)]" />
-          <h3 className="text-[12px] font-bold text-[var(--text-primary)] uppercase tracking-tight">
+          <h3 className="text-[12px] font-bold text-[var(--text-primary)]">
             Chronological Team Score Timeline
           </h3>
           {showPrelimsPerformance ? (
@@ -246,7 +246,7 @@ export function MeetOpsAnalyzeStep({
       <div className="surface-card rounded-xl p-5">
         <div className="mb-4 flex flex-wrap items-center justify-between gap-3">
           <div>
-            <h3 className="text-lg font-medium text-[var(--text-primary)] uppercase tracking-tight">Score differences</h3>
+            <h3 className="text-lg font-medium text-[var(--text-primary)]">Score differences</h3>
             <p className="text-xs text-theme-secondary">Compare the projection with the loaded meet and prelims.</p>
           </div>
           <SegmentedControl

@@ -91,45 +91,46 @@ export default function LineupComplianceChecklist({
     </div>
   );
 
+  // One body, rendered once. Below lg the header is a toggle and the body can
+  // collapse; from lg up the header is a plain title and the body is always shown.
+  // (Two copies of the body, one per breakpoint, doubled every button in the DOM.)
   return (
-    <>
-      {/* Mobile summary */}
-      <div className="lg:hidden surface-card rounded-xl border border-theme-soft overflow-hidden">
-        <button
-          type="button"
-          className="w-full flex items-center justify-between gap-2 px-4 py-3 text-left"
-          onClick={() => setMobileOpen(v => !v)}
-        >
-          <span className="flex items-center gap-2 text-ui-label font-semibold text-[var(--text-primary)]">
-            <AlertTriangle
-              size={16}
-              className={count > 0 ? 'text-amber-400' : 'text-[var(--text-accent)]'}
-            />
-            Checklist {count > 0 ? `(${count})` : ''}
-          </span>
-          {mobileOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-        </button>
-        {mobileOpen ? <div className="px-4 pb-4 border-t border-theme-soft pt-3">{body}</div> : null}
+    <aside
+      aria-label="Compliance checklist"
+      className="surface-card rounded-xl border border-theme-soft overflow-hidden lg:sticky lg:top-4 lg:max-h-[calc(100vh-6rem)] lg:overflow-y-auto custom-scrollbar"
+    >
+      <button
+        type="button"
+        className="lg:hidden w-full flex items-center justify-between gap-2 px-4 py-3 text-left"
+        aria-expanded={mobileOpen}
+        onClick={() => setMobileOpen(v => !v)}
+      >
+        <span className="flex items-center gap-2 text-ui-label font-semibold text-[var(--text-primary)]">
+          <AlertTriangle
+            size={16}
+            className={count > 0 ? 'text-amber-400' : 'text-[var(--text-accent)]'}
+          />
+          Checklist {count > 0 ? `(${count})` : ''}
+        </span>
+        {mobileOpen ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+      </button>
+      <div className="hidden lg:flex items-center gap-2 px-4 pt-4 mb-3">
+        <AlertTriangle
+          size={16}
+          className={count > 0 ? 'text-amber-400' : 'text-[var(--text-accent)]'}
+        />
+        <h4 className="text-ui-label font-semibold text-[var(--text-primary)]">Compliance checklist</h4>
+        {count > 0 ? (
+          <span className="ml-auto text-ui-caption font-mono tabular-nums text-amber-400">{count}</span>
+        ) : null}
       </div>
-
-      {/* Desktop sticky */}
-      <aside className="hidden lg:block">
-        <div className="sticky top-4 surface-card rounded-xl border border-theme-soft p-4 max-h-[calc(100vh-6rem)] overflow-y-auto custom-scrollbar">
-          <div className="flex items-center gap-2 mb-3">
-            <AlertTriangle
-              size={16}
-              className={count > 0 ? 'text-amber-400' : 'text-[var(--text-accent)]'}
-            />
-            <h4 className="text-ui-label font-semibold text-[var(--text-primary)]">
-              Compliance checklist
-            </h4>
-            {count > 0 ? (
-              <span className="ml-auto text-ui-caption font-mono tabular-nums text-amber-400">{count}</span>
-            ) : null}
-          </div>
-          {body}
-        </div>
-      </aside>
-    </>
+      <div
+        className={`px-4 pb-4 pt-3 border-t border-theme-soft lg:border-t-0 lg:pt-0 ${
+          mobileOpen ? 'block' : 'hidden lg:block'
+        }`}
+      >
+        {body}
+      </div>
+    </aside>
   );
 }
