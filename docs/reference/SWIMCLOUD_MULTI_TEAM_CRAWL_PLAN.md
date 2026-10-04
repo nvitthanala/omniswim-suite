@@ -93,3 +93,26 @@ that failed before the fix and a mutation that makes it fail again.
   written): store the queue `nextWork` returns before any `await`; call `verifyRosterSeason(html, work)`
   before `addSwimmers` and `markFailed` on a mismatch; halt on a 403, any 5xx, a network error and
   `CONSECUTIVE_429_HALT` (3) consecutive 429 give-ups (`shouldHalt`).
+
+## Phase B4 design (decided 2026-10-04)
+
+User decisions: seed time is the swimmer's **all-time best** per event; entries **follow the scoring
+rules** (the meet's max-events limits).
+
+- **Roster by season, seed by all-time best.** The season picked per team chooses the roster
+  (who is on the team that year). The seed comes from the swimmer's all-time bests, which is what
+  `/api/swimmers/{id}/profile_fastest_times/` returns. This can overstate a swimmer who has since
+  slowed. The UI says so next to the import.
+- **Course is part of the event.** A seed is for one course-qualified event (`100 Y Free`). Only
+  seeds in the meet's course are used. No conversion between courses.
+- **Output is psych-sheet rows.** The workspace already holds `psychMenResults` and
+  `psychWomenResults` (individual entries only, `isPsychSheet: true`). The theoretical meet writes
+  its seeds there, so the existing seed-time projection and scoring run unchanged. Each row keeps
+  its source (SwimCloud swimmer id, capture id, retrieved time).
+- **Absent is not zero.** A swimmer with no seed in an event gets no row for it. A swimmer with no
+  times page captured is listed as "no times captured", not as zero entries.
+- **Entries follow the scoring rules.** Per swimmer, enter the best-scoring events up to the
+  scoring settings' limits (per type and total). Reuse the existing optimizer's selection code. Do
+  not write a second one. Show the chosen events so the user can edit them.
+- **Relays stay out of this phase.** Psych rows hold no relay lineups. Relay projection waits for
+  the relay-leg captures (B2) and the labelled flat-start estimate.
