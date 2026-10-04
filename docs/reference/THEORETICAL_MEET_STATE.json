@@ -101,9 +101,9 @@
     "open": "Cache is still one file per URL; the step-1 season-read URL aliases a meet crawl URL."
   },
   "pausedAt": {
-    "when": "2026-10-04",
-    "why": "7-day Claude window at ~89% (resets 2026-10-08T16:00Z); conserve tier, critical at 92%. No new heavy agents started.",
-    "lastCommit": "be9b12c3"
+    "when": "2026-10-05 (UTC)",
+    "why": "7-day Claude window ~94% (resets 2026-10-08T16:00Z): critical tier. No new agents started. All work committed.",
+    "lastCommit": "8133e7eb"
   },
   "resumeOrder": [
     {
@@ -112,7 +112,7 @@
     },
     {
       "id": "U2-ui",
-      "status": "not-started",
+      "status": "done (8133e7eb); architect review of the create path NOT done",
       "brief": "Worker (sonnet). Dialog Build theoretical meet: list complete team-{id}-{season} captures (GET /api/swimcloud/captures), select teams, pick scoring preset (conference), call theoreticalMeetFromCaptures with fetch-backed deps, buildTheoreticalMeetSeeds, buildTheoreticalMeetWorkspace with newTheoreticalWorkspaceId(), POST /api/workspaces, navigate to the new workspace. Preview: per team athletes with no times, events chosen per swimmer (editable), warnings, caveats (all-time best, relays not included/estimated, event order, diving, exhibition). Entry points: Matrix Meet step and workspace list. A banner via isTheoreticalMeet(workspace). Use emil-design-eng, apple-design, prototype skills; keep Dark/Light/custom tokens; tests/e2e spec on a data copy; never touch core."
     },
     {
@@ -122,7 +122,7 @@
     },
     {
       "id": "exhibition",
-      "status": "decision-pending",
+      "status": "done (e9724524): flag carried, included by default with label, option to exclude",
       "brief": "Needs optional isExhibition on HistoricalSwim (core, about 3 lines) + parser (about 5) + converter (about 2); then exclude exhibition seeds in the builder. User approval for a core edit still open."
     },
     {
@@ -134,5 +134,13 @@
       "id": "B1b-conference-and-B2-relay-legs",
       "status": "blocked-on-user-captures"
     }
+  ],
+  "nextWhenQuotaReturns": [
+    "Architect review of the dialog create path (theoreticalMeetFlow.createMeet, restoreWorkspace) and the banner.",
+    "Relays from individual bests, labelled estimated (design check of the Manager relay builder FIRST).",
+    "Editable chosen events (needs a builder input that excludes one event while keeping caps honest).",
+    "Show school names on the Teams step (capture records carry no name; needs a name from the roster parse or a route).",
+    "Conference page parser and relay-leg parser: blocked on user captures.",
+    "Manager-side banner is mounted in the shell above both routes; verify in a real browser."
   ]
 }
