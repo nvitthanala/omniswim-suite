@@ -26,3 +26,9 @@ See `SWIMCLOUD_MULTI_TEAM_CRAWL_PLAN.md`. Phases B0 to B5. B0 needs the user to 
 
 ## Docs and vault
 Each phase updates `docs/reference/*STATE.json`, the plan record, and a note under the vault's `Sessions/`. Final pass updates `04-Known-Issues-and-Current-State.md`.
+
+## Status (2026-10-04)
+
+- A1 to A6: done and verified. A6 removed three stale `ui-*` workspaces and 18 duplicate startup backups; `playwright.config.ts` and the production-server spec now run on temp copies of the data.
+- Track B: B1 (seeds, links, planner, queue), the multi-team driver and panel, and B4 part 1 (theoretical meet builder, workspace builder) are built and architect-reviewed. The crawl has run live once on teams 412, 58 and 48.
+- Open: the theoretical meet screen (U2), relays from individual bests, the conference page parser (needs a capture), relay-leg credits (need two captures). See `THEORETICAL_MEET_PLAN.md` and `THEORETICAL_MEET_STATE.json`.

@@ -10,7 +10,7 @@ Goal: paste several SwimCloud team links, pick a season per team, pull each rost
 
 ## What already exists
 - Extension `extensions/swimcloud-companion` crawls one meet (Track A') and relays pages to the local app. `swimmerTimes.ts` and `timesEndpointDiscovery.ts` fetch a swimmer's times. `crawlPlan.ts` plans roster and season-best fetches for a scope (`roster-and-season-bests`, `everything`).
-- `crawlPlan.ts` never emits `season_id` today (no derivation formula exists). Captured pages show the current season pre-selected.
+- The meet planners still emit no `season_id` (no derivation formula exists). `planTeamSeasonRoster` (added 2026-10-03) emits one, but only from a `TeamSeasonOption` parsed off that team's own season picker, never derived or reused across teams. Captured pages show the current season pre-selected.
 - `relayLeadoff` is read from `title="Leadoff"` chips. Relay legs on event pages sit in a hidden "Show names" table (parser warns `relay-legs-absent` when missing).
 - A swimmer's `/times/` page is a shell; times load through an endpoint, so relay rows in a history are not in the archived HTML.
 
