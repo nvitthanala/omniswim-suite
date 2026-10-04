@@ -339,19 +339,44 @@ export class FileSystemSwimCloudCaptureStore {
     pageRef: SwimCloudCapturePageRef,
   ): Promise<void> {
     return this.writeLock.runExclusive(captureId, async () => {
-      if (entry !== undefined) {
-        await this.pageCache.set({ ...entry, captureId });
-      }
+      // Refuse to open a missing capture BEFORE touching the page cache, so a refused write
+      // cannot archive or replace anything.
       const existing = await this.getCapture(captureId);
       if (existing === undefined) {
         throw new Error(
           `putPage: no capture ${JSON.stringify(captureId)} exists — call upsertCapture first to open it.`,
         );
       }
+      if (entry !== undefined) {
+        await this.archiveIfSuperseded(entry);
+        await this.pageCache.set({ ...entry, captureId });
+      }
       const pages = mergePageRefs(existing.pages, [pageRef]);
       await this.writeCapture({ ...existing, pages, updatedAt: new Date().toISOString() });
       await this.rebuildIndex();
     });
+  }
+
+  /**
+   * The page cache keeps one file per URL, shared by every capture. A second crawl of the same URL
+   * (a team crawl re-fetches the `/team/{id}/roster/?gender=M` page a meet crawl already stored)
+   * would overwrite the first capture's bytes, and the first capture's record would still carry the
+   * old sha256. Before replacing a page whose bytes differ, keep the old copy under
+   * `pages-superseded/`, named by URL hash and content hash. Idempotent: the same old bytes always
+   * land in the same file. The archive is never read by the app; it exists so nothing is lost.
+   */
+  private async archiveIfSuperseded(next: SwimCloudCacheEntry): Promise<void> {
+    const previous = await this.pageCache.get(next.canonicalUrl);
+    if (previous === undefined || previous.html.length === 0 || previous.html === next.html) {
+      return;
+    }
+    const fs = await import('node:fs/promises');
+    const { createHash } = await import('node:crypto');
+    const hash = (text: string) => createHash('sha256').update(text).digest('hex');
+    const dir = `${this.root}/pages-superseded`;
+    await fs.mkdir(dir, { recursive: true });
+    const name = `${hash(previous.canonicalUrl).slice(0, 16)}-${hash(previous.html).slice(0, 16)}.json`;
+    await fs.writeFile(`${dir}/${name}`, JSON.stringify(previous, null, 2), 'utf8');
   }
 
   async readPage(canonicalUrl: string): Promise<SwimCloudCacheEntry | undefined> {

@@ -122,6 +122,45 @@ describe('FileSystemSwimCloudCaptureStore', () => {
     expect(capture?.pages[0].outcome).toBe('ok');
   });
 
+  it('keeps the old bytes when a second capture overwrites the same URL with different bytes', async () => {
+    const dir = join(root, 'superseded');
+    const store = new FileSystemSwimCloudCaptureStore(dir);
+    await store.upsertCapture(blankMeetCapture('meet-9', '9'));
+    await store.upsertCapture({ ...blankMeetCapture('team-5', '5'), subject: { kind: 'team', teamId: '5' } });
+    const canonicalUrl = 'https://www.swimcloud.com/team/5/roster/?gender=M';
+    const ref = { canonicalUrl, resourceKind: 'teamRoster' as const, retrievedAt: '2026-09-22T00:00:00.000Z', cacheStatus: 'final' as const, outcome: 'ok' as const };
+    const entry = (html: string, retrievedAt: string) => ({ canonicalUrl, html, status: 'final' as const, retrievedAt, track: 'browser-extension' as const });
+    await store.putPage('meet-9', entry('<html>2025-26 roster</html>', '2026-09-22T00:00:00.000Z'), ref);
+    await store.putPage('team-5', entry('<html>2026-27 roster</html>', '2026-10-04T00:00:00.000Z'), ref);
+
+    // The cache holds the newest page (one file per URL, as before)...
+    expect((await store.readPage(canonicalUrl))?.html).toBe('<html>2026-27 roster</html>');
+    // ...and the old bytes survive in the archive.
+    const { readdirSync, readFileSync } = await import('node:fs');
+    const archived = readdirSync(join(dir, 'pages-superseded'));
+    expect(archived).toHaveLength(1);
+    expect(JSON.parse(readFileSync(join(dir, 'pages-superseded', archived[0]), 'utf8')).html).toBe('<html>2025-26 roster</html>');
+
+    // The same bytes again archive nothing new; a repeat of the old overwrite is idempotent.
+    await store.putPage('team-5', entry('<html>2026-27 roster</html>', '2026-10-05T00:00:00.000Z'), ref);
+    expect(readdirSync(join(dir, 'pages-superseded'))).toHaveLength(1);
+  });
+
+  it('archives nothing when the store has no earlier page for the URL, or the capture was never opened', async () => {
+    const dir = join(root, 'superseded-none');
+    const store = new FileSystemSwimCloudCaptureStore(dir);
+    await expect(
+      store.putPage(
+        'meet-404',
+        { canonicalUrl: 'https://www.swimcloud.com/team/6/roster/?gender=M', html: '<html>x</html>', status: 'final', retrievedAt: '2026-10-04T00:00:00.000Z', track: 'browser-extension' },
+        { canonicalUrl: 'https://www.swimcloud.com/team/6/roster/?gender=M', resourceKind: 'teamRoster', retrievedAt: '2026-10-04T00:00:00.000Z', cacheStatus: 'final', outcome: 'ok' },
+      ),
+    ).rejects.toThrow(/no capture/);
+    const { existsSync } = await import('node:fs');
+    expect(existsSync(join(dir, 'pages-superseded'))).toBe(false);
+    expect(existsSync(join(dir, 'pages'))).toBe(false);
+  });
+
   it('re-capturing the same URL replaces the page ref, not appends a second one', async () => {
     const store = new FileSystemSwimCloudCaptureStore(join(root, 'e'));
     await store.upsertCapture(blankMeetCapture('meet-1', '1'));
