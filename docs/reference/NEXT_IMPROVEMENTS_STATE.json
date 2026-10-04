@@ -120,8 +120,21 @@
       "needs": "F-B swimmer times with a non-leadoff relay leg; F-C relay event page with Show names expanded"
     },
     "B4": {
-      "status": "not-started",
-      "scope": "import a multi-team capture set into workspaces per team and season; theoretical-meet projections; labelled relay estimate from flat-start bests (setting, stored apart)"
+      "item": "Theoretical meet from several crawled teams",
+      "status": "in-progress/part1-pure-builder-done",
+      "design": "docs/reference/SWIMCLOUD_MULTI_TEAM_CRAWL_PLAN.md, Phase B4 design (decided 2026-10-04)",
+      "scope": "Part 1 done: pure builder packages/manager/src/lib/theoreticalMeetSeeds.ts. Still to do: write rows to workspace psych arrays, per-team and season workspaces, UI, labelled relay estimate from flat-start bests (setting, stored apart).",
+      "part1": {
+        "when": "2026-10-04",
+        "files": [
+          "packages/manager/src/lib/theoreticalMeetSeeds.ts",
+          "tests/theoreticalMeetSeeds.test.ts"
+        ],
+        "evidence": "46 tests on real roster fixtures, the real swimmer-times response and the real converter. Mutations M1-M8 each fail tests, files restored, sha256 verified. lint 0 errors (2 old warnings); vitest 168 files 2403 tests green.",
+        "reusedSelector": "categorizeBestEvents (event order) and canAcceptAnotherEntry (caps), as rosterOptimizer addAthleteEventPlans does. No second selector.",
+        "reviewNeeded": "Touches entry-limit and lineup selection. Architect review wanted, in particular the LCM/SCM ranking note: the existing selector ranks on a SCY estimate (order only; seeds stay as recorded).",
+        "notDone": "packages/manager/package.json exports not extended (UI inside manager imports by relative path)."
+      }
     }
   },
   "gates": {
