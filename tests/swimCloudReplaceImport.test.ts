@@ -242,9 +242,16 @@ function goldenMergeResult(
   }
 }
 
-/** Hash captured after the loaded-meet result-blocking rule was added. */
-const MERGE_GOLDEN_WITH_MEET = 'b80b37290ef6cd0aa3c37cb9c62482659e2e0471ac24ac330a652909d5e6e321';
-const MERGE_GOLDEN_NO_MEET = '906b4c91855dc79177f4a9137554873b2d7428cac1f84c6051c411321c2699a9';
+/**
+ * Hash captured after the loaded-meet result-blocking rule was added.
+ *
+ * Repinned 2026-10-04 for the additive HistoricalSwim.isExhibition: the real fixture
+ * profile_fastest_times-1330318.json holds one `exhibition: true` row (100 IM SCY 53.27), which now
+ * carries `isExhibition: true`. With that one spread removed from the converter, the previous hashes
+ * (b80b3729..., 906b4c91...) come back byte for byte, so that key is the whole difference.
+ */
+const MERGE_GOLDEN_WITH_MEET = 'f8cda1d4d7683078fb3dd2e011605047ad73ab9de005add61fb6637066bae04e';
+const MERGE_GOLDEN_NO_MEET = '7240416944380c025e63e3e778d3f8ac6dd91d7d04578771e4a330cac71d1848';
 
 /** The result with `source` taken off every recruit row: the pre-change shape. */
 function withoutRecruitSource(result: HistoryImportRosterResult): HistoryImportRosterResult {

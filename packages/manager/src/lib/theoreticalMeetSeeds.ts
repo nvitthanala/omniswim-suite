@@ -36,6 +36,17 @@
  *    two athletes of one name on one team would collapse into one entry. The
  *    builder throws `name-collision-in-team` instead of merging or choosing.
  * 6. **Fail loudly.** Bad input throws {@link TheoreticalMeetError}.
+ * 7. **Exhibition seeds are labelled, and included by default.** A swim the source
+ *    marks exhibition (`HistoricalSwim.isExhibition === true`) was not scored at
+ *    its own meet. It still seeds here, because it is the swimmer's recorded best,
+ *    and the report says so (`exhibitionSeedsUsed`, `isExhibition` on the event
+ *    candidate and on the row's source record, a team caveat and a meet caveat).
+ *    `exhibitionSeeds: 'exclude'` drops those swims before the selector runs.
+ *    The fastest-times endpoint holds ONE row per event, so an excluded
+ *    exhibition best leaves that event with NO seed. No slower time is used in
+ *    its place and none is invented. Absence of the flag means "not known to be
+ *    exhibition", so a swim with no flag is never reported as official. The flag
+ *    is read here only. It does not touch `isRankableSwim` or any other reader.
  *
  * ## Only SCY meets are built (decision D1, 2026-10-04)
  *
@@ -191,8 +202,18 @@ export interface TheoreticalMeetInput {
    * with no meet loaded.
    */
   readonly meetProgram?: ReadonlySet<string> | null;
+  /**
+   * What to do with swims the source marks exhibition (`HistoricalSwim.isExhibition`).
+   * `'include'` (default): they seed like any other swim and are labelled.
+   * `'exclude'`: they are dropped before the selector runs. An event whose only
+   * seed was an exhibition swim then has no seed for that swimmer. Anything else
+   * throws `invalid-input`.
+   */
+  readonly exhibitionSeeds?: ExhibitionSeedMode;
   readonly teams: readonly TheoreticalMeetTeamInput[];
 }
+
+export type ExhibitionSeedMode = 'include' | 'exclude';
 
 /* -------------------------------------------------------------------------- */
 /* Output                                                                      */
@@ -211,6 +232,8 @@ export interface TheoreticalSeedSource {
   readonly swimDate?: string;
   readonly meetLabel?: string;
   readonly seasonId?: string;
+  /** Present (`true`) only when the seed swim is marked exhibition at its source. Absent means not known to be exhibition. */
+  readonly isExhibition?: true;
 }
 
 export type TheoreticalRankBasis = 'meet_place' | 'cut_distance' | 'time';
@@ -228,6 +251,8 @@ export interface TheoreticalEventCandidate {
   readonly notChosenReason?: 'entry_cap';
   /** Present when chosen: the id of the row built for it. */
   readonly rowId?: string;
+  /** Present (`true`) only when the seed swim is marked exhibition at its source. Set on every candidate, chosen or not. */
+  readonly isExhibition?: true;
 }
 
 export interface TheoreticalSwimmerEvents {
@@ -235,6 +260,12 @@ export interface TheoreticalSwimmerEvents {
   readonly swimCloudSwimmerId?: string;
   /** Every offered event, strongest first, with the chosen ones marked. */
   readonly events: readonly TheoreticalEventCandidate[];
+  /**
+   * `exhibitionSeeds: 'exclude'` only. Course-qualified labels of events this
+   * swimmer would have been offered but for an exhibition best, which was
+   * dropped. Each has NO seed for this swimmer. Absent when none.
+   */
+  readonly excludedExhibitionEvents?: readonly string[];
   /** Seeds in the meet course that the selector did not offer (outside the program, extracted splits). Course-qualified labels. */
   readonly unofferedSeeds: readonly string[];
 }
@@ -252,6 +283,14 @@ export interface TheoreticalNoSeedAthlete extends TheoreticalAthleteRef {
    * `no_event_in_program`: swims in the meet course exist, none is an event the selector offers.
    */
   readonly reason: 'no_usable_swim' | 'diving_not_supported' | 'no_swim_in_meet_course' | 'no_event_in_program';
+  /**
+   * `exhibitionSeeds: 'exclude'` only. Events dropped because their best swim is
+   * exhibition (see {@link TheoreticalSwimmerEvents.excludedExhibitionEvents}).
+   * When set, the `reason` describes the swims that remain: this swimmer has
+   * swims in the meet course, but every event that would seed is exhibition.
+   * Absent when none.
+   */
+  readonly excludedExhibitionEvents?: readonly string[];
 }
 
 export interface TheoreticalDuplicateAthlete extends TheoreticalAthleteRef {
@@ -266,6 +305,10 @@ export interface TheoreticalTeamReport {
   readonly gender: Gender;
   readonly rosterStatus: 'parsed' | 'no_rosters_found';
   readonly rowsCreated: number;
+  /** Rows whose seed swim is marked exhibition at its source. Always 0 with `exhibitionSeeds: 'exclude'`. At most `rowsCreated`. */
+  readonly exhibitionSeedsUsed: number;
+  /** `'exclude'` only: events left with no seed because their best swim is exhibition. Always 0 with `'include'`. */
+  readonly exhibitionEventsExcluded: number;
   /** No times page was captured. */
   readonly athletesWithNoTimes: readonly TheoreticalAthleteRef[];
   /** A times page was captured and did not parse. */
@@ -311,6 +354,16 @@ export const TOTAL_CAP_CAVEAT =
   'The meet has a total entry cap. Relay slots are not reserved, so a swimmer\'s individual entries can use the whole cap.';
 export const UNCAPPED_CAVEAT =
   'No entry cap applies to these settings, so every offered event is entered for each swimmer.';
+
+/** Team line and meet line when exhibition seeds are included. `n` of `m` seeds. */
+export function exhibitionIncludedCaveat(n: number, m: number): string {
+  return `${n} of ${m} seeds come from exhibition swims (not scored in their meet). They are included.`;
+}
+
+/** Team line and meet line when exhibition seeds are excluded. `n` events were left with no seed. */
+export function exhibitionExcludedCaveat(n: number): string {
+  return `${n} event(s) were dropped because the swimmer's best swim there is exhibition (not scored in their meet). Exhibition seeds are excluded, so each of those events has NO seed. No slower time was used in its place.`;
+}
 
 /* -------------------------------------------------------------------------- */
 /* Validation                                                                  */
@@ -361,6 +414,12 @@ function resolveSettings(input: TheoreticalMeetInput): { settings: ScoringSettin
   const indCap = requireCap(settings.maxIndividualEntriesPerSwimmer, 'maxIndividualEntriesPerSwimmer', true) as number;
   const totalCap = requireCap(settings.maxTotalEntriesPerSwimmer, 'maxTotalEntriesPerSwimmer', false);
   return { settings, indCap, totalCap };
+}
+
+function resolveExhibitionMode(mode: unknown): ExhibitionSeedMode {
+  if (mode === undefined) return 'include';
+  if (mode === 'include' || mode === 'exclude') return mode;
+  throw new TheoreticalMeetError('invalid-input', `exhibitionSeeds is ${JSON.stringify(mode)}. Use 'include' or 'exclude'.`);
 }
 
 function validateCourse(course: unknown): void {
@@ -457,6 +516,7 @@ type Context = {
   readonly course: 'SCY';
   readonly settings: ScoringSettings;
   readonly meetProgram: ReadonlySet<string> | null;
+  readonly exhibition: ExhibitionSeedMode;
 };
 
 type ChosenSeed = {
@@ -465,8 +525,10 @@ type ChosenSeed = {
 };
 
 type SwimSplit = {
-  /** Non-dive swims recorded in the meet course, stamped with the roster athlete's identity. */
+  /** Non-dive swims recorded in the meet course, stamped with the roster athlete's identity. Exhibition swims are left out when the mode is `'exclude'`. */
   used: HistoricalSwim[];
+  /** `'exclude'` only: the meet-course swims marked exhibition that were left out of `used`, stamped like `used`. */
+  excludedExhibition: HistoricalSwim[];
   /** Non-dive swims with no recorded course. A dive has none and is not counted here. */
   unknownCourse: number;
   /** Whether the athlete has any swim that is not a dive. */
@@ -478,8 +540,14 @@ type SwimSplit = {
  * the swimmer another way (`'Paulk, River J'`) and the caller paired them by id,
  * so each is stamped with the roster athlete's name and team.
  */
-function splitSwims(team: TheoreticalMeetTeamInput, athlete: SwimCloudAthlete, swims: readonly HistoricalSwim[], course: string): SwimSplit {
-  const split: SwimSplit = { used: [], unknownCourse: 0, hasNonDiving: false };
+function splitSwims(
+  team: TheoreticalMeetTeamInput,
+  athlete: SwimCloudAthlete,
+  swims: readonly HistoricalSwim[],
+  course: string,
+  exhibition: ExhibitionSeedMode
+): SwimSplit {
+  const split: SwimSplit = { used: [], excludedExhibition: [], unknownCourse: 0, hasNonDiving: false };
   for (const swim of swims) {
     if (swim.gender !== team.gender) {
       throw new TheoreticalMeetError('swim-gender-mismatch', `A swim of ${athlete.name} (${swim.event}) is ${String(swim.gender)} on a ${team.gender} roster for ${team.teamName}.`);
@@ -490,7 +558,9 @@ function splitSwims(team: TheoreticalMeetTeamInput, athlete: SwimCloudAthlete, s
       split.unknownCourse += 1;
       continue;
     }
-    if (swim.timeType === course) split.used.push({ ...swim, name: athlete.name, team: team.teamName });
+    if (swim.timeType !== course) continue;
+    const stamped = { ...swim, name: athlete.name, team: team.teamName };
+    (exhibition === 'exclude' && swim.isExhibition === true ? split.excludedExhibition : split.used).push(stamped);
   }
   return split;
 }
@@ -512,7 +582,10 @@ function traceSeed(
   if (best.convertedFrom !== undefined) {
     throw new TheoreticalMeetError('seed-provenance-missing', `The selector offered ${selectorEvent} as a converted time. A seed is never converted.`);
   }
-  const swim = swims.find(s => s.event === selectorEvent && s.time === best.time);
+  // Same event and time on an exhibition swim and an official one: the seed is
+  // backed by the official swim, so it is never labelled exhibition.
+  const matches = swims.filter(s => s.event === selectorEvent && s.time === best.time);
+  const swim = matches.find(s => s.isExhibition !== true) ?? matches[0];
   if (swim === undefined) {
     throw new TheoreticalMeetError('seed-provenance-missing', `No captured swim matches ${selectorEvent} ${best.time}.`);
   }
@@ -520,26 +593,16 @@ function traceSeed(
 }
 
 type AthleteOutcome =
-  | { kind: 'no_seed'; reason: TheoreticalNoSeedAthlete['reason']; unknownCourse: number }
-  | { kind: 'seeded'; ranked: ChosenSeed[]; unoffered: string[]; unknownCourse: number };
+  | { kind: 'no_seed'; reason: TheoreticalNoSeedAthlete['reason']; unknownCourse: number; excludedExhibition: string[] }
+  | { kind: 'seeded'; ranked: ChosenSeed[]; unoffered: string[]; unknownCourse: number; excludedExhibition: string[] };
 
-/** Choose one athlete's events: the selector for the order, the optimizer's cap check for the limit. */
-function chooseAthleteEvents(
-  ctx: Context,
-  team: TheoreticalMeetTeamInput,
-  athlete: SwimCloudAthlete,
-  swims: readonly HistoricalSwim[]
-): AthleteOutcome {
-  if (swims.length === 0) return { kind: 'no_seed', reason: 'no_usable_swim', unknownCourse: 0 };
-  const { used, unknownCourse, hasNonDiving } = splitSwims(team, athlete, swims, ctx.course);
-  if (!hasNonDiving) return { kind: 'no_seed', reason: 'diving_not_supported', unknownCourse };
-  if (used.length === 0) return { kind: 'no_seed', reason: 'no_swim_in_meet_course', unknownCourse };
-
+/** The selector's strength order over `used`, each event traced to its recorded swim. The selector gets the whole order (cap 999). */
+function rankSeeds(ctx: Context, team: TheoreticalMeetTeamInput, athlete: SwimCloudAthlete, used: readonly HistoricalSwim[]): ChosenSeed[] {
   // The selector slices its order to the individual cap. Ask for the whole
-  // order (cap 999) and apply the real caps below, so a UI can show the events
+  // order (cap 999) and apply the real caps later, so a UI can show the events
   // the caps left out.
   const profile = categorizeBestEvents(
-    used,
+    [...used],
     team.teamName,
     team.gender,
     athlete.name,
@@ -549,8 +612,7 @@ function chooseAthleteEvents(
     ctx.meetProgram,
     null
   );
-
-  const ranked: ChosenSeed[] = profile.primaryEvents.map(selectorEvent => {
+  return profile.primaryEvents.map(selectorEvent => {
     const seed = traceSeed(selectorEvent, profile.bestByEvent[selectorEvent], used);
     return {
       swim: seed.swim,
@@ -558,14 +620,52 @@ function chooseAthleteEvents(
         event: seed.event,
         time: seed.time,
         rankBasis: rankBasisOf(profile.strengthByEvent as Record<string, { basis: TheoreticalRankBasis }> | undefined, selectorEvent),
+        ...(seed.swim.isExhibition === true ? { isExhibition: true as const } : {}),
       },
     };
   });
-  if (ranked.length === 0) return { kind: 'no_seed', reason: 'no_event_in_program', unknownCourse };
+}
+
+/**
+ * `'exclude'` only: the events the selector would offer with the excluded
+ * exhibition swims back in, that it no longer offers without them. Those events
+ * have no seed. An event an official swim still seeds is not listed.
+ */
+function droppedExhibitionEvents(
+  ctx: Context,
+  team: TheoreticalMeetTeamInput,
+  athlete: SwimCloudAthlete,
+  split: SwimSplit,
+  kept: readonly ChosenSeed[]
+): string[] {
+  if (split.excludedExhibition.length === 0) return [];
+  const keptIdentities = new Set(kept.map(r => swimEventIdentity(r.candidate.event)));
+  const all = rankSeeds(ctx, team, athlete, [...split.used, ...split.excludedExhibition]);
+  return all.map(r => r.candidate.event).filter(event => !keptIdentities.has(swimEventIdentity(event)));
+}
+
+/** Choose one athlete's events: the selector for the order, the optimizer's cap check for the limit. */
+function chooseAthleteEvents(
+  ctx: Context,
+  team: TheoreticalMeetTeamInput,
+  athlete: SwimCloudAthlete,
+  swims: readonly HistoricalSwim[]
+): AthleteOutcome {
+  if (swims.length === 0) return { kind: 'no_seed', reason: 'no_usable_swim', unknownCourse: 0, excludedExhibition: [] };
+  const split = splitSwims(team, athlete, swims, ctx.course, ctx.exhibition);
+  const { used, unknownCourse, hasNonDiving } = split;
+  if (!hasNonDiving) return { kind: 'no_seed', reason: 'diving_not_supported', unknownCourse, excludedExhibition: [] };
+  if (used.length === 0 && split.excludedExhibition.length === 0) {
+    return { kind: 'no_seed', reason: 'no_swim_in_meet_course', unknownCourse, excludedExhibition: [] };
+  }
+
+  const ranked = used.length === 0 ? [] : rankSeeds(ctx, team, athlete, used);
+  const excludedExhibition = droppedExhibitionEvents(ctx, team, athlete, split, ranked);
+  if (ranked.length === 0) return { kind: 'no_seed', reason: 'no_event_in_program', unknownCourse, excludedExhibition };
 
   const offered = new Set(ranked.map(r => swimEventIdentity(r.candidate.event)));
   const unoffered = [...new Set(used.filter(s => !offered.has(swimEventIdentity(s.event))).map(s => s.event))];
-  return { kind: 'seeded', ranked, unoffered, unknownCourse };
+  return { kind: 'seeded', ranked, unoffered, unknownCourse, excludedExhibition };
 }
 
 /** Mark the first events the caps accept, in strength order. Mirrors `addAthleteEventPlans`. */
@@ -607,10 +707,32 @@ type TeamAccumulator = {
   seedSeasonIds: (string | undefined)[];
   unknownCourseSwims: number;
   swimmersRankedOnTime: number;
+  exhibitionSeedsUsed: number;
+  exhibitionEventsExcluded: number;
 };
 
 function newAccumulator(): TeamAccumulator {
-  return { rows: [], noTimes: [], parseFailed: [], noSeed: [], duplicates: [], perSwimmer: [], seedSeasonIds: [], unknownCourseSwims: 0, swimmersRankedOnTime: 0 };
+  return {
+    rows: [],
+    noTimes: [],
+    parseFailed: [],
+    noSeed: [],
+    duplicates: [],
+    perSwimmer: [],
+    seedSeasonIds: [],
+    unknownCourseSwims: 0,
+    swimmersRankedOnTime: 0,
+    exhibitionSeedsUsed: 0,
+    exhibitionEventsExcluded: 0,
+  };
+}
+
+/** The exhibition line for a team or the whole meet. Nothing when there is nothing to say. */
+function exhibitionCaveats(used: number, rows: number, excluded: number): string[] {
+  const lines: string[] = [];
+  if (used > 0) lines.push(exhibitionIncludedCaveat(used, rows));
+  if (excluded > 0) lines.push(exhibitionExcludedCaveat(excluded));
+  return lines;
 }
 
 function freshnessCaveat(team: TheoreticalMeetTeamInput, seedSeasonIds: readonly (string | undefined)[]): string | undefined {
@@ -643,6 +765,7 @@ function teamCaveats(team: TheoreticalMeetTeamInput, acc: TeamAccumulator, caps:
   if (acc.parseFailed.length > 0) {
     caveats.push(`${acc.parseFailed.length} athlete(s) have a times page that did not parse. No rows were made for them.`);
   }
+  caveats.push(...exhibitionCaveats(acc.exhibitionSeedsUsed, acc.rows.length, acc.exhibitionEventsExcluded));
   return caveats;
 }
 
@@ -690,8 +813,10 @@ function processAthlete(
   }
   const outcome = chooseAthleteEvents(ctx, team, athlete, entry.swims);
   acc.unknownCourseSwims += outcome.unknownCourse;
+  acc.exhibitionEventsExcluded += outcome.excludedExhibition.length;
+  const excludedField = outcome.excludedExhibition.length === 0 ? {} : { excludedExhibitionEvents: outcome.excludedExhibition };
   if (outcome.kind === 'no_seed') {
-    acc.noSeed.push({ ...ref, reason: outcome.reason });
+    acc.noSeed.push({ ...ref, reason: outcome.reason, ...excludedField });
     return;
   }
   const accepted = applyEntryCaps(outcome.ranked, ctx.settings);
@@ -714,11 +839,13 @@ function processAthlete(
       ...(seed.swim.date === undefined ? {} : { swimDate: seed.swim.date }),
       ...(seed.swim.meetLabel === undefined ? {} : { meetLabel: seed.swim.meetLabel }),
       ...(seed.swim.seasonId === undefined ? {} : { seasonId: seed.swim.seasonId }),
+      ...(seed.swim.isExhibition === true ? { isExhibition: true as const } : {}),
     });
+    if (seed.swim.isExhibition === true) acc.exhibitionSeedsUsed += 1;
     events.push({ ...seed.candidate, chosen: true, rowId: row.id });
   });
   if (events.some((e, i) => accepted[i] && e.rankBasis === 'time')) acc.swimmersRankedOnTime += 1;
-  acc.perSwimmer.push({ ...ref, events, unofferedSeeds: outcome.unoffered });
+  acc.perSwimmer.push({ ...ref, events, unofferedSeeds: outcome.unoffered, ...excludedField });
 }
 
 const describeAthlete = (a: SwimCloudAthlete): string => `${a.name} (swimmer id ${a.swimCloudSwimmerId ?? 'none'})`;
@@ -760,6 +887,8 @@ function processTeam(
     gender: team.gender,
     rosterStatus: team.rosterStatus,
     rowsCreated: acc.rows.length,
+    exhibitionSeedsUsed: acc.exhibitionSeedsUsed,
+    exhibitionEventsExcluded: acc.exhibitionEventsExcluded,
     athletesWithNoTimes: acc.noTimes,
     athletesWithTimesParseFailed: acc.parseFailed,
     athletesWithNoSeedInMeetCourse: acc.noSeed,
@@ -784,6 +913,7 @@ export function buildTheoreticalMeetSeeds(input: TheoreticalMeetInput): Theoreti
     throw new TheoreticalMeetError('invalid-input', 'The meet id is empty. Row ids are scoped by it.');
   }
   validateCourse(input.course);
+  const exhibition = resolveExhibitionMode(input.exhibitionSeeds);
   const { settings, indCap, totalCap } = resolveSettings(input);
   const seenTeams = new Set<string>();
   for (const team of input.teams) {
@@ -795,7 +925,7 @@ export function buildTheoreticalMeetSeeds(input: TheoreticalMeetInput): Theoreti
     seenTeams.add(key);
   }
 
-  const ctx: Context = { meetId: input.meetId, course: 'SCY', settings, meetProgram: input.meetProgram ?? null };
+  const ctx: Context = { meetId: input.meetId, course: 'SCY', settings, meetProgram: input.meetProgram ?? null, exhibition };
   const claimed = new Map<string, string>();
   const sources = new Map<string, TheoreticalSeedSource>();
   const rows: SwimmerResult[] = [];
@@ -812,7 +942,14 @@ export function buildTheoreticalMeetSeeds(input: TheoreticalMeetInput): Theoreti
     ids.add(row.id);
   }
 
-  const caveats = [...new Set([...teamReports.flatMap(t => t.caveats), RELAYS_EXCLUDED_CAVEAT, DIVING_EXCLUDED_CAVEAT])];
+  // Meet-wide totals across teams. A team line with the same numbers as another
+  // team's collapses in the set, so the totals are stated once here.
+  const meetExhibition = exhibitionCaveats(
+    teamReports.reduce((n, t) => n + t.exhibitionSeedsUsed, 0),
+    rows.length,
+    teamReports.reduce((n, t) => n + t.exhibitionEventsExcluded, 0)
+  ).map(line => `All teams: ${line}`);
+  const caveats = [...new Set([...teamReports.flatMap(t => t.caveats), ...meetExhibition, RELAYS_EXCLUDED_CAVEAT, DIVING_EXCLUDED_CAVEAT])];
   return {
     rows,
     psychMenResults: rows.filter(r => r.gender === Gender.MEN),

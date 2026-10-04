@@ -610,6 +610,9 @@ export function swimCloudSwimmerTimesToHistoricalSwims(
       // A self-reported time. Imported and kept, never a best. See
       // HistoricalSwim.isUserInputted.
       ...(isUserInputted(personalBest) ? { isUserInputted: true as const } : {}),
+      // The source row states `exhibition: true`. Carried only when true; absent
+      // means "not known to be exhibition". See HistoricalSwim.isExhibition.
+      ...(personalBest.isExhibition === true ? { isExhibition: true } : {}),
       ...(personalBest.seasonId === undefined ? {} : { seasonId: personalBest.seasonId }),
       ...(options.retrievedAt === undefined ? {} : { retrievedAt: options.retrievedAt }),
       source: 'swimcloud',

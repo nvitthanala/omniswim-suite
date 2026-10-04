@@ -2470,6 +2470,17 @@ export interface SwimCloudPersonalBestSwim {
    * table lists it among the swimmer's bests.
    */
   readonly relayLeadoff: boolean;
+  /**
+   * `true` only when the fastest-times JSON row states `exhibition: true`
+   * (strict: the JSON boolean `true`, nothing truthy). The swim was swum at a
+   * meet but did not score there.
+   *
+   * **Absent for `exhibition: false` and for a row that omits the field.** The
+   * HTML table has no such column, so an HTML-parsed row never carries it:
+   * absent means "not known to be exhibition", never "known official". Set by
+   * {@link parseSwimmerFastestTimesJson} on non-diving rows only.
+   */
+  readonly isExhibition?: true;
 }
 
 /** Which source answered for a {@link SwimCloudSwimmerTimesParse} field. */
@@ -3460,6 +3471,7 @@ function assembleFastestTimesRegularRow(fields: {
   readonly tags: readonly SwimCloudSwimmerTimesTag[];
   readonly seasonId: string | undefined;
   readonly relayLeadoff: boolean;
+  readonly isExhibition: boolean;
 }): SwimCloudPersonalBestSwim {
   return {
     swimKey: fields.swimKey,
@@ -3478,6 +3490,7 @@ function assembleFastestTimesRegularRow(fields: {
     tags: fields.tags,
     ...(fields.seasonId === undefined ? {} : { seasonId: fields.seasonId }),
     relayLeadoff: fields.relayLeadoff,
+    ...(fields.isExhibition ? { isExhibition: true as const } : {}),
   };
 }
 
@@ -3531,6 +3544,9 @@ function buildFastestTimesRegularRow(
     tags: flags.tags,
     seasonId,
     relayLeadoff: flags.relayLeadoff,
+    // Strict: only the JSON boolean `true`. `false`, a missing field or any
+    // other value leaves it absent (never written false).
+    isExhibition: row['exhibition'] === true,
   });
 }
 

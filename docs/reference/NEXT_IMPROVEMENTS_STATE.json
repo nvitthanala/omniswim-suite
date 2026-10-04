@@ -158,6 +158,23 @@
       "knownIssueExhibition": "Fastest-times parser ignores exhibition:true and HistoricalSwim has no isExhibition (core type), so an exhibition swim can become a seed when its event is in the meet program. Needs an additive core type field + parser + converter carry-through, then exclude in the builder (listed as unofferedSeeds reason exhibition). Not done.",
       "nextUI": "Pick crawled teams, show athletes with no times, import rows into psychMenResults/psychWomenResults, show the all-time-best caveat.",
       "followUp": "In-course ranking by place in the theoretical field (raw times, one event, no conversion) to allow LCM/SCM."
+    },
+    "E-exhibition": {
+      "item": "Exhibition swims: parser flag, additive core field, converter carry, labelled and optional-exclude seeds",
+      "status": "done",
+      "verifiedAt": "2026-10-04",
+      "decisions": "User: additive core field HistoricalSwim.isExhibition approved. Exhibition seeds are INCLUDED by default with a visible label; exhibitionSeeds:\"exclude\" drops them. No change to isRankableSwim, bestTimeEligibility.ts or any other reader of bests.",
+      "measured": "128 of 2,390 SCY best rows (5.4%) across the three teams are exhibition. The endpoint returns ONE row per event, so excluding an exhibition best leaves that event with NO seed. Real fixture tests/fixtures/profile_fastest_times-1330318.json has exactly 1 exhibition row (2025-10-10, 100 IM SCY, 53.27).",
+      "files": {
+        "core": "packages/core/src/types.ts: HistoricalSwim.isExhibition?: boolean (set only when the source says true, never false)",
+        "parser": "packages/swimcloud/src/parser.ts: SwimCloudPersonalBestSwim.isExhibition?: true, read from row.exhibition === true (strict), regular rows only",
+        "converter": "packages/manager/src/lib/swimCloudImportBridge.ts swimCloudSwimmerTimesToHistoricalSwims: carries it when true",
+        "seeds": "packages/manager/src/lib/theoreticalMeetSeeds.ts: exhibitionSeeds option, exhibitionSeedsUsed, exhibitionEventsExcluded, candidate/source isExhibition, team and meet caveats",
+        "tests": "tests/exhibitionSeeds.test.ts (22); tests/swimCloudReplaceImport.test.ts golden hashes repinned (only the new key differs; removing the converter spread restores the old hashes)"
+      },
+      "mergeSurvival": "mergeHistoryIndex keeps the whole object it selects, so the flag survives (tested, incl. both winner directions and a JSON round trip). No other code rebuilds HistoricalSwim field by field for these flags except the converter and the paste stamp (athleteHistory.ts stampFields, which builds a new row from pasted text and is not a source of this flag).",
+      "mutations": "5 mutations each fail tests, files restored, sha256 verified: truthy read of row.exhibition; converter drops the field; builder ignores the option; wrong exhibition count; tie backed by exhibition swim instead of official.",
+      "open": "TheoreticalMeetBanner EXHIBITION_CAVEAT in theoreticalMeetView.ts still says the swim record has no flag and exhibition cannot be left out: now stale (UI agent). NO_SEED_TEXT has no entry for excludedExhibitionEvents wording. Off-program exhibition swims dropped under exclude are not listed (they were never seeds)."
     }
   },
   "gates": {

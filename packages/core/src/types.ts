@@ -594,6 +594,22 @@ export interface HistoricalSwim {
    */
   isUserInputted?: true;
   /**
+   * The source marks this swim **exhibition**: it was swum at a meet but did
+   * not score there.
+   *
+   * Set ONLY when the source says `true` (the swimmer fastest-times JSON row's
+   * `exhibition: true`). It is never written `false`. **Absent means "not known
+   * to be exhibition"**, not "known to be official": a pasted, PDF or CSV row
+   * never states it either way.
+   *
+   * Informational only. It does not change {@link isRankableSwim}, bests, cut
+   * tags or any existing reader; the theoretical meet seed builder
+   * (`theoreticalMeetSeeds.ts`) is the one reader, and it labels these seeds
+   * and can exclude them on request. Use `=== true`, never truthiness of a
+   * missing field as an answer to "official".
+   */
+  isExhibition?: boolean;
+  /**
    * The swim was a time trial at a loaded meet (`SwimmerResult.isTimeTrial`).
    * Set only by `historicalSwimFromResult`.
    *
