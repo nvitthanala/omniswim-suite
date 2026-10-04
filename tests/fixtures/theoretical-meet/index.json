@@ -1,0 +1,38 @@
+[
+  {
+    "captureId": "team-412-2026-2027",
+    "subject": {
+      "kind": "team",
+      "teamId": "412",
+      "season": "2026-2027"
+    },
+    "updatedAt": "2026-10-04T16:51:44.387Z",
+    "completeness": "every-planned-page-fetched",
+    "pageCount": 14,
+    "plannedPageCount": 14
+  },
+  {
+    "captureId": "team-48-2026-2027",
+    "subject": {
+      "kind": "team",
+      "teamId": "48",
+      "season": "2026-2027"
+    },
+    "updatedAt": "2026-10-04T16:51:44.504Z",
+    "completeness": "every-planned-page-fetched",
+    "pageCount": 14,
+    "plannedPageCount": 14
+  },
+  {
+    "captureId": "team-58-2026-2027",
+    "subject": {
+      "kind": "team",
+      "teamId": "58",
+      "season": "2026-2027"
+    },
+    "updatedAt": "2026-10-04T16:51:44.443Z",
+    "completeness": "every-planned-page-fetched",
+    "pageCount": 14,
+    "plannedPageCount": 14
+  }
+]

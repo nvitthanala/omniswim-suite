@@ -1,0 +1,56 @@
+{
+  "initiative": "theoretical-meet-2026-10-04",
+  "plan": "docs/reference/THEORETICAL_MEET_PLAN.md",
+  "design": "docs/reference/SWIMCLOUD_MULTI_TEAM_CRAWL_PLAN.md, Phase B4 design (decided 2026-10-04)",
+  "branch": "nvitthanala/ui-simplification",
+  "note": "Canonical state for the theoretical meet (phases U1 to U3). Nothing is committed. No agent contacts SwimCloud. U1 only is recorded here so far.",
+  "phases": {
+    "U1": {
+      "item": "Data layer: crawled captures to a new workspace payload",
+      "status": "done",
+      "verifiedAt": "2026-10-04",
+      "owner": "executor (Sonnet 5.5)",
+      "files": [
+        "packages/manager/src/lib/theoreticalMeetFromCaptures.ts",
+        "packages/manager/src/lib/theoreticalMeetWorkspace.ts",
+        "tests/theoreticalMeetFromCaptures.test.ts",
+        "tests/theoreticalMeetWorkspace.test.ts",
+        "tests/theoreticalMeetGolden.test.ts",
+        "tests/fixtures/theoretical-meet/ (47 files, 1.29 MB)"
+      ],
+      "evidence": {
+        "tests": "theoreticalMeetFromCaptures 32, theoreticalMeetWorkspace 30, theoreticalMeetGolden 16 (13 on committed fixtures, 3 optional on all real data).",
+        "golden": "Fake deps over a real capture store -> theoreticalMeetFromCaptures -> buildTheoreticalMeetSeeds (SCY, NSISC, preset nsisc) -> buildTheoreticalMeetWorkspace -> buildScoringSnapshot. 50 Free points are hand-computed from the published NCAA table (including the women's tie at 26.51).",
+        "mutations": "M1 drop tie rule (5 tests fail), M2 rank descending (5), M3 keep isPsychSheet (2), M4 ignore conference (1), M5 accept partial capture silently (3), M6 roster page that did not parse passes (1), M7 times page that did not parse reported as no times (1), M8 wrong A bracket (5), M9 empty roster table called an empty roster (1). Each file restored and sha256 verified.",
+        "gates": "lint 0 errors (2 old warnings in swimCloudMeetImportBridge.ts)."
+      },
+      "fixtures": {
+        "source": "data/swimcloud-captures (git-ignored, local only): team-412-2026-2027, team-58-2026-2027, team-48-2026-2027, captured 2026-10-04",
+        "kept": "Both roster pages per team whole (scripts, header, nav and footer removed: they held the account name and a form secret). 12 of each team's real times responses (6 men, 6 women), byte for byte. The rule and the original hashes are in tests/fixtures/theoretical-meet/manifest.json.",
+        "why12": "The full 173 responses are about 5 MB. The brief's cap was 1.5 MB."
+      },
+      "facts": {
+        "engineNeeds": "Baseline reads sourceMenResults/sourceWomenResults (else menResults/womenResults). Individual scoring groups by event, roundSwam and rank; equal rank is one tie. A prelims round scores only distance events and diving. The NSISC scorer roster adds an athlete only from an A Final or B Final row. pdfPoints must be absent so the settings table applies. Result ids are primary keys across workspaces.",
+        "bands": "Places 1 to the A bracket are A Final, the next bracket B Final, the rest Preliminaries. rank is the overall place. Bracket is aFinalBracketSize, else half the table.",
+        "ties": "Standard competition ranking (1, 2, 2, 4), the rule behind prepareRecruitsForScoring. A test pins the two.",
+        "eventOrderMatters": "With no Event N labels the engine scores events in row order. NSISC has an 18-scorer meet-wide pool filled in that order, so event order can change who scores. Rows use the standard program order. No event numbers are invented. A caveat says so.",
+        "provenance": "SwimmerResult has no source field and the workspace table has no column for one. Provenance is returned beside the payload (sources, keyed by result id) and is not persisted.",
+        "loadedMeet": "pdfFilename and meetLabel both carry THEORETICAL_MEET_LABEL. The sidebar, RosterSourceStep and the Matrix meet step read pdfFilename only; swimCloudMeetImportBridge sets it the same way for a meet with no PDF.",
+        "noPageBytesRoute": "No capture route returns page bytes. The roster season id needs the roster page's season table, so theoreticalMeetFromCaptures takes an optional readRosterPageHtml dependency. Without it rosterSeasonId stays undefined and the seed builder's caveat stands."
+      },
+      "reviewNeeded": "Touches meet scoring inputs (ranks, rounds, bands) and the entry data that feeds lineup selection. Route to architect for review. Points to check: the band choice, overall rank in B Final, event order, stored points equal baseline points.",
+      "notDone": [
+        "Relays (U1c).",
+        "UI (U2).",
+        "A server route that returns stored roster page bytes (needed for the roster season id in the real app). Needs a change in apps/shell, out of scope.",
+        "Exhibition swims can still become seeds (known issue, needs a core type field)."
+      ],
+      "nextStep": "Architect review of U1; then U2 UI against the exported API."
+    }
+  },
+  "gates": {
+    "lint": "0 errors; 2 existing complexity warnings in swimCloudMeetImportBridge.ts",
+    "vitest": "2026-10-04: 171 files, 2499 tests: 2496 pass, 3 fail. All 3 failures are in tests/eventFirstImport.test.ts (see knownFailing). U1 added 3 test files, 78 tests, all green.",
+    "knownFailing": "tests/eventFirstImport.test.ts (3 tests) reads every roster page in the git-ignored data/swimcloud-captures/pages and expects the 8 roster pages of meet 356467. The local store now holds 14 (the user's 2026-10-04 crawl of teams 412, 58 and 48 added 6), so its counts moved (for example 216 instead of 184). It depends on local data, not on U1 code. Not changed here."
+  }
+}

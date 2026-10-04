@@ -1,0 +1,164 @@
+{
+  "captureId": "team-58-2026-2027",
+  "subject": {
+    "kind": "team",
+    "teamId": "58",
+    "season": "2026-2027"
+  },
+  "createdAt": "2026-10-04T07:31:17.172Z",
+  "updatedAt": "2026-10-04T16:51:44.443Z",
+  "track": "browser-extension",
+  "completeness": "every-planned-page-fetched",
+  "plannedPageCount": 14,
+  "pages": [
+    {
+      "canonicalUrl": "https://www.swimcloud.com/team/58/roster/?page=1&gender=M&season_id=30&sort=name",
+      "resourceKind": "teamRoster",
+      "teamId": "58",
+      "gender": "M",
+      "page": 1,
+      "retrievedAt": "2026-10-04T16:25:28.798Z",
+      "httpStatus": 200,
+      "sha256": "e2b5d95912098db100a53a04665e95f2f8f3cd9dd506a7b6d3e041d3a93b509b",
+      "bytes": 44927,
+      "cacheStatus": "provisional",
+      "outcome": "ok"
+    },
+    {
+      "canonicalUrl": "https://www.swimcloud.com/team/58/roster/?page=1&gender=F&season_id=30&sort=name",
+      "resourceKind": "teamRoster",
+      "teamId": "58",
+      "gender": "F",
+      "page": 1,
+      "retrievedAt": "2026-10-04T16:25:31.816Z",
+      "httpStatus": 200,
+      "sha256": "d9cb19912309217d83f70e937dae11a1531f5298fe3c4ea6aa86fac1585ed3b0",
+      "bytes": 26737,
+      "cacheStatus": "provisional",
+      "outcome": "ok"
+    },
+    {
+      "canonicalUrl": "https://www.swimcloud.com/api/swimmers/2352628/profile_fastest_times/",
+      "resourceKind": "swimmerFastestTimes",
+      "retrievedAt": "2026-10-04T07:31:35.425Z",
+      "httpStatus": 200,
+      "sha256": "7e7edf0949d735494a9728246d3aa6d67254e214fd84f44f697485e65e2b8f5c",
+      "bytes": 33263,
+      "cacheStatus": "provisional",
+      "outcome": "ok"
+    },
+    {
+      "canonicalUrl": "https://www.swimcloud.com/api/swimmers/1130590/profile_fastest_times/",
+      "resourceKind": "swimmerFastestTimes",
+      "retrievedAt": "2026-10-04T07:31:39.107Z",
+      "httpStatus": 200,
+      "sha256": "7a90b8dbce689499e4b03f0a519a86c4f9431e4740c7487f17eeb42fbf664924",
+      "bytes": 34639,
+      "cacheStatus": "provisional",
+      "outcome": "ok"
+    },
+    {
+      "canonicalUrl": "https://www.swimcloud.com/api/swimmers/1414321/profile_fastest_times/",
+      "resourceKind": "swimmerFastestTimes",
+      "retrievedAt": "2026-10-04T07:31:41.577Z",
+      "httpStatus": 200,
+      "sha256": "724208773dcb8ee0ce5a4c2eb2cba0c7ae9e1de8f98edfcb9f49b86e40551a7d",
+      "bytes": 23536,
+      "cacheStatus": "provisional",
+      "outcome": "ok"
+    },
+    {
+      "canonicalUrl": "https://www.swimcloud.com/api/swimmers/3504614/profile_fastest_times/",
+      "resourceKind": "swimmerFastestTimes",
+      "retrievedAt": "2026-10-04T07:31:44.357Z",
+      "httpStatus": 200,
+      "sha256": "d9079118af32237532fa4731fa62dc494baa65f1fa1807e86caec3678baf8bbc",
+      "bytes": 4971,
+      "cacheStatus": "provisional",
+      "outcome": "ok"
+    },
+    {
+      "canonicalUrl": "https://www.swimcloud.com/api/swimmers/1679982/profile_fastest_times/",
+      "resourceKind": "swimmerFastestTimes",
+      "retrievedAt": "2026-10-04T07:31:48.347Z",
+      "httpStatus": 200,
+      "sha256": "21dd78e19f073b027959ef99dece11518f839735f3c1553550ece37afb203f57",
+      "bytes": 37161,
+      "cacheStatus": "provisional",
+      "outcome": "ok"
+    },
+    {
+      "canonicalUrl": "https://www.swimcloud.com/api/swimmers/2451483/profile_fastest_times/",
+      "resourceKind": "swimmerFastestTimes",
+      "retrievedAt": "2026-10-04T07:31:53.865Z",
+      "httpStatus": 200,
+      "sha256": "5614938dab0392921c80a79b8e5aa6b42fe309ae78c2241ebae262b2def23167",
+      "bytes": 34215,
+      "cacheStatus": "provisional",
+      "outcome": "ok"
+    },
+    {
+      "canonicalUrl": "https://www.swimcloud.com/api/swimmers/2508045/profile_fastest_times/",
+      "resourceKind": "swimmerFastestTimes",
+      "retrievedAt": "2026-10-04T07:33:38.699Z",
+      "httpStatus": 200,
+      "sha256": "258e058a15fbd308ee80e02b8498cd010098b22cfe0fed797abab107b57f13bc",
+      "bytes": 8649,
+      "cacheStatus": "provisional",
+      "outcome": "ok"
+    },
+    {
+      "canonicalUrl": "https://www.swimcloud.com/api/swimmers/2994194/profile_fastest_times/",
+      "resourceKind": "swimmerFastestTimes",
+      "retrievedAt": "2026-10-04T07:33:42.139Z",
+      "httpStatus": 200,
+      "sha256": "bf22a7cb08cce1308bf6a3236ecf03e6154bf616f3502ad1da11769375590e26",
+      "bytes": 24673,
+      "cacheStatus": "provisional",
+      "outcome": "ok"
+    },
+    {
+      "canonicalUrl": "https://www.swimcloud.com/api/swimmers/2340365/profile_fastest_times/",
+      "resourceKind": "swimmerFastestTimes",
+      "retrievedAt": "2026-10-04T07:33:45.249Z",
+      "httpStatus": 200,
+      "sha256": "f11dcd315eb17db91ee90440acbf755cecfbd1081d54b22d1b590b98dd56c861",
+      "bytes": 34118,
+      "cacheStatus": "provisional",
+      "outcome": "ok"
+    },
+    {
+      "canonicalUrl": "https://www.swimcloud.com/api/swimmers/2289226/profile_fastest_times/",
+      "resourceKind": "swimmerFastestTimes",
+      "retrievedAt": "2026-10-04T07:33:48.143Z",
+      "httpStatus": 200,
+      "sha256": "5bfe052225e9dfe4936535872bb46d82205a7bac6b617146e4eace91db26ccfa",
+      "bytes": 38886,
+      "cacheStatus": "provisional",
+      "outcome": "ok"
+    },
+    {
+      "canonicalUrl": "https://www.swimcloud.com/api/swimmers/1828356/profile_fastest_times/",
+      "resourceKind": "swimmerFastestTimes",
+      "retrievedAt": "2026-10-04T07:33:51.173Z",
+      "httpStatus": 200,
+      "sha256": "2abf02d396c44cfef122ef3bf51edc13af196d4cf0466ca3e60e555f4074e476",
+      "bytes": 34931,
+      "cacheStatus": "provisional",
+      "outcome": "ok"
+    },
+    {
+      "canonicalUrl": "https://www.swimcloud.com/api/swimmers/3469022/profile_fastest_times/",
+      "resourceKind": "swimmerFastestTimes",
+      "retrievedAt": "2026-10-04T07:33:53.986Z",
+      "httpStatus": 200,
+      "sha256": "b90ad83bc9c89775c4ee9d1c0ee5db53a00faff0df06a5db6233c87d2e999596",
+      "bytes": 33662,
+      "cacheStatus": "provisional",
+      "outcome": "ok"
+    }
+  ],
+  "notes": [
+    "TRIMMED FIXTURE (2026-10-04): 6 swimmers per gender kept from the real capture; roster pages scrubbed of scripts and the account header. plannedPageCount and pages reflect the trimmed set."
+  ]
+}

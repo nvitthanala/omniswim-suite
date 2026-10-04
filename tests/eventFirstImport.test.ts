@@ -44,10 +44,46 @@ import {
   skipReasonLabel,
 } from '../packages/matrix/src/lib/swimCloudImportDiagnostics';
 
-const PAGES = path.resolve(__dirname, '..', 'data', 'swimcloud-captures', 'pages');
+const CAPTURES = path.resolve(__dirname, '..', 'data', 'swimcloud-captures');
+const PAGES = path.join(CAPTURES, 'pages');
+const MEET_CAPTURE = path.join(CAPTURES, 'captures', 'meet-356467.json');
+
+/**
+ * The page store is one global cache keyed by URL. Other crawls (a team crawl, say) add their own
+ * roster pages to it, so "every roster page in the folder" is not "meet 356467's rosters". Read
+ * only the URLs this meet's own capture record lists.
+ */
+function meetPageUrls(): Set<string> | undefined {
+  if (!fs.existsSync(MEET_CAPTURE)) return undefined;
+  const record = JSON.parse(fs.readFileSync(MEET_CAPTURE, 'utf-8')) as { pages?: { canonicalUrl?: string }[] };
+  return new Set((record.pages ?? []).map((p) => p.canonicalUrl ?? ''));
+}
+
+/**
+ * True when a stored page this meet's capture lists no longer holds the bytes the capture recorded.
+ * Another crawl of the same URL (a team crawl re-fetches `/team/{id}/roster/?gender=M`, the same URL
+ * this meet used) overwrites the one file the page store keeps per URL. The numbers below were
+ * measured on the original bytes. They cannot be reproduced from bytes that changed, so the suite
+ * skips instead of asserting against a different roster.
+ */
+function meetPagesDrifted(): boolean {
+  if (!fs.existsSync(MEET_CAPTURE) || !fs.existsSync(PAGES)) return false;
+  const record = JSON.parse(fs.readFileSync(MEET_CAPTURE, 'utf-8')) as {
+    pages?: { canonicalUrl?: string; sha256?: string; resourceKind?: string }[];
+  };
+  const stored = new Map<string, string | undefined>();
+  for (const name of fs.readdirSync(PAGES)) {
+    const j = JSON.parse(fs.readFileSync(path.join(PAGES, name), 'utf-8')) as { canonicalUrl?: string; sha256?: string };
+    if (j.canonicalUrl) stored.set(j.canonicalUrl, j.sha256);
+  }
+  return (record.pages ?? []).some(
+    (p) => (p.resourceKind === 'teamRoster' || p.resourceKind === 'meetEvent') && stored.get(p.canonicalUrl ?? '') !== p.sha256,
+  );
+}
 
 function storedPages(match: RegExp): { name: string; html: string; url: string }[] {
-  if (!fs.existsSync(PAGES)) return [];
+  const listed = meetPageUrls();
+  if (!listed || !fs.existsSync(PAGES)) return [];
   return fs
     .readdirSync(PAGES)
     .filter((n) => match.test(n))
@@ -59,7 +95,7 @@ function storedPages(match: RegExp): { name: string; html: string; url: string }
       };
       return { name, html: j.html ?? '', url: j.canonicalUrl ?? j.url ?? '' };
     })
-    .filter((p) => p.html.length > 0);
+    .filter((p) => p.html.length > 0 && listed.has(p.url));
 }
 
 const ctx = (url: string) =>
@@ -67,7 +103,7 @@ const ctx = (url: string) =>
 
 const EVENT_PAGES = storedPages(/_2f_event_2f_\d+_2f_/);
 const ROSTER_PAGES = storedPages(/_2f_roster_2f/);
-const HAVE_CAPTURE = EVENT_PAGES.length > 0 && ROSTER_PAGES.length > 0;
+const HAVE_CAPTURE = EVENT_PAGES.length > 0 && ROSTER_PAGES.length > 0 && !meetPagesDrifted();
 
 function parsedRosters(): SwimCloudRosterParse[] {
   const out: SwimCloudRosterParse[] = [];
