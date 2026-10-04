@@ -121,7 +121,7 @@
     },
     "B4": {
       "item": "Theoretical meet from several crawled teams",
-      "status": "in-progress/part1-pure-builder-review-fixes-done",
+      "status": "part1-pure-builder-done-and-reviewed; UI not started",
       "design": "docs/reference/SWIMCLOUD_MULTI_TEAM_CRAWL_PLAN.md, Phase B4 design (decided 2026-10-04)",
       "scope": "Part 1 done: pure builder packages/manager/src/lib/theoreticalMeetSeeds.ts. Still to do: write rows to workspace psych arrays, per-team and season workspaces, UI, labelled relay estimate from flat-start bests (setting, stored apart).",
       "part1": {
@@ -148,7 +148,16 @@
           "X": "BLOCKED, not done. The fastest-times parser ignores exhibition:true and HistoricalSwim (packages/core/src/types.ts) has no field to carry it. Needs a core edit (an optional isExhibition on HistoricalSwim) plus a swimcloud parser field and a converter carry-through. Until then the fixture exhibition 100 IM SCY 53.27 becomes a seed whenever the meet program contains the 100 IM.",
           "evidence": "tests/theoreticalMeetSeeds.test.ts 64 tests; each fix proven by a mutation that fails tests, files restored, sha256 verified."
         }
-      }
+      },
+      "committed": "5bf58a27, f621b978",
+      "decisions": {
+        "seed": "all-time best per event, meet course only, no conversion",
+        "entries": "follow scoring caps via existing selector; conference overrides merged",
+        "courses": "SCY only for now; LCM/SCM refused (architect: ranking on SCY estimate implies an unpublished cut)"
+      },
+      "knownIssueExhibition": "Fastest-times parser ignores exhibition:true and HistoricalSwim has no isExhibition (core type), so an exhibition swim can become a seed when its event is in the meet program. Needs an additive core type field + parser + converter carry-through, then exclude in the builder (listed as unofferedSeeds reason exhibition). Not done.",
+      "nextUI": "Pick crawled teams, show athletes with no times, import rows into psychMenResults/psychWomenResults, show the all-time-best caveat.",
+      "followUp": "In-course ranking by place in the theoretical field (raw times, one event, no conversion) to allow LCM/SCM."
     }
   },
   "gates": {
