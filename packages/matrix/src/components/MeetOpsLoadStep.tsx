@@ -9,8 +9,8 @@
  */
 
 import type { RefObject } from 'react';
-import { Plus, X, Download } from 'lucide-react';
-import { Button, EmptyState } from '@omniswim/ui';
+import { Plus, X, Download, FlaskConical } from 'lucide-react';
+import { Button, EmptyState, useOpenTheoreticalMeet } from '@omniswim/ui';
 import type { Workspace } from '@omniswim/core/types';
 
 interface MeetOpsLoadStepProps {
@@ -44,6 +44,8 @@ export function MeetOpsLoadStep({
   onBrowseSwimCloudCaptures,
   meetFileInputRef,
 }: MeetOpsLoadStepProps) {
+  // Null when the host has no dialog to open: the button is then not drawn.
+  const openTheoreticalMeet = useOpenTheoreticalMeet();
   return (
     <div className="space-y-6">
       {!workspace.loadedMeet ? (
@@ -54,6 +56,13 @@ export function MeetOpsLoadStep({
           description="Bring in the meet results first, then check the scoring rules and review team standings."
           actionLabel="Load meet PDF"
           onAction={() => meetFileInputRef.current?.click()}
+          secondaryAction={
+            openTheoreticalMeet ? (
+              <Button variant="outline" onClick={openTheoreticalMeet} leadingIcon={<FlaskConical size={14} />}>
+                Build theoretical meet
+              </Button>
+            ) : undefined
+          }
         />
       ) : null}
       <div className="surface-card rounded-xl p-5">
@@ -61,6 +70,9 @@ export function MeetOpsLoadStep({
           <div>
             <h3 className="text-lg font-medium text-[var(--text-primary)]">Meet files</h3>
             <p className="text-xs text-theme-secondary">Load results and link a psych sheet for this meet.</p>
+            {openTheoreticalMeet ? (
+              <p className="mt-1 text-ui-caption text-theme-muted">No meet PDF? Build a theoretical meet from teams you crawled. It opens as a new workspace.</p>
+            ) : null}
           </div>
           {isParsingPdf || isParsingPsychPdf ? (
             <div className="flex items-center gap-2">
@@ -97,6 +109,12 @@ export function MeetOpsLoadStep({
               >
                 Add from SwimCloud
               </Button>
+              {/* With no meet loaded, the empty state above already offers this action. */}
+              {openTheoreticalMeet && workspace.loadedMeet ? (
+                <Button variant="outline" size="sm" onClick={openTheoreticalMeet} leadingIcon={<FlaskConical size={12} />}>
+                  Build theoretical meet
+                </Button>
+              ) : null}
               <label
                 aria-label="Link psych sheet PDF"
                 className="cursor-pointer flex items-center gap-1.5 px-3 py-1 border border-theme-soft rounded-md text-ui-caption font-medium text-theme-secondary hover:text-[var(--text-primary)] transition-colors"

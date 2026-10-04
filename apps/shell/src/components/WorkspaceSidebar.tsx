@@ -1,9 +1,9 @@
 import { useState, useRef, useEffect, useCallback } from 'react';
-import { Plus, PanelLeftClose, PanelLeftOpen, DatabaseBackup } from 'lucide-react';
+import { Plus, PanelLeftClose, PanelLeftOpen, DatabaseBackup, FlaskConical } from 'lucide-react';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
 import { createSnapshot as createSnapshotApi, listSnapshots as listSnapshotsApi, restoreSnapshot as restoreSnapshotApi } from '@omniswim/core/api/snapshots';
 import type { Snapshot } from '@omniswim/core/api/snapshots';
-import { Button, useToast } from '@omniswim/ui';
+import { Button, useOpenTheoreticalMeet, useToast } from '@omniswim/ui';
 import DeleteConfirmationModal from '@omniswim/matrix/components/DeleteConfirmationModal';
 import { useSidebarCollapse } from '../lib/sidebarCollapse';
 import { ExpandedWorkspaceList, CollapsedWorkspaceList } from './workspace-sidebar/WorkspaceListItems';
@@ -23,6 +23,7 @@ export default function WorkspaceSidebar() {
   } = useSuiteWorkspace();
 
   const toast = useToast();
+  const openTheoreticalMeet = useOpenTheoreticalMeet();
   const [isBackingUp, setIsBackingUp] = useState(false);
   // Collapsed by the saved choice, or automatically below lg. The automatic
   // collapse is never saved, so the choice returns when the window widens.
@@ -224,6 +225,21 @@ export default function WorkspaceSidebar() {
           </div>
         </div>
 
+        {!sidebarCollapsed && openTheoreticalMeet ? (
+          <div className="border-b border-theme-soft px-2 py-1.5 shrink-0">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={openTheoreticalMeet}
+              className="w-full justify-start gap-2 text-theme-secondary hover:text-[var(--text-primary)]"
+              title="Build a meet from crawled teams, with no meet PDF"
+              leadingIcon={<FlaskConical size={14} />}
+            >
+              New theoretical meet
+            </Button>
+          </div>
+        ) : null}
+
         {!sidebarCollapsed ? (
           <ExpandedWorkspaceList
             workspaces={workspaces}
@@ -245,6 +261,17 @@ export default function WorkspaceSidebar() {
               title="New"
               leadingIcon={<Plus size={16} />}
             />
+            {openTheoreticalMeet ? (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={openTheoreticalMeet}
+                className="p-2"
+                title="New theoretical meet"
+                aria-label="New theoretical meet"
+                leadingIcon={<FlaskConical size={16} />}
+              />
+            ) : null}
             <CollapsedWorkspaceList workspaces={workspaces} activeWorkspaceId={activeWorkspaceId} onSelect={setActiveWorkspaceId} />
           </div>
         )}

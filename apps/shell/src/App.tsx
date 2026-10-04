@@ -1,10 +1,12 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
-import { BrowserRouter, Navigate, Route, Routes, useLocation, useSearchParams } from 'react-router-dom';
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
-import { AppletSkeleton, ScoringRulesOpenerProvider, useToast } from '@omniswim/ui';
+import { AppletSkeleton, ScoringRulesOpenerProvider, TheoreticalMeetOpenerProvider, useToast } from '@omniswim/ui';
 import { SuitePreferencesProvider, useSuitePreferences } from '@omniswim/core';
 import { SuiteWorkspaceProvider, useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
 import ScoringSettingsModal from '@omniswim/matrix/components/ScoringSettingsModal';
+import { writeStoredMatrixStep } from '@omniswim/matrix/components/matrixStepState';
+import type { Workspace } from '@omniswim/core/types';
 import SuiteHeader from './components/SuiteHeader';
 import WorkspaceSidebar from './components/WorkspaceSidebar';
 import SuiteHome from './pages/SuiteHome';
@@ -15,7 +17,14 @@ import AnalyticsPage from './pages/AnalyticsPage';
 import SwimCloudWindow from './components/SwimCloudWindow';
 import CommandPalette from './components/CommandPalette';
 import { AuthProvider } from './context/AuthContext';
-import { ManagerAppLazy, MatrixAppLazy, MetricsAppLazy, prefetchLastApplet } from './lib/appletPrefetch';
+import {
+  ManagerAppLazy,
+  MatrixAppLazy,
+  MetricsAppLazy,
+  TheoreticalMeetBannerLazy,
+  TheoreticalMeetDialogLazy,
+  prefetchLastApplet,
+} from './lib/appletPrefetch';
 import { installDataLossWatcher } from './lib/dataLossWatcher';
 import { useWorkspaceScoringDialogProps } from './lib/workspaceScoringSettings';
 import { planRouteSync, type RouteSyncSnapshot } from './lib/workspaceRouteSync';
@@ -95,6 +104,8 @@ function ShellLayout() {
   const toast = useToast();
   const [showScoringModal, setShowScoringModal] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [showTheoreticalMeet, setShowTheoreticalMeet] = useState(false);
+  const navigate = useNavigate();
   const { isLoading, error, activeWorkspace, updateWorkspace } = useSuiteWorkspace();
 
   // Global Ctrl+K / Cmd+K toggle for the command palette.
@@ -127,12 +138,21 @@ function ShellLayout() {
 
   const scoringDialogProps = useWorkspaceScoringDialogProps(activeWorkspace);
 
+  // The new workspace is already active (the provider selects it). Open it on Matrix Standings.
+  const handleTheoreticalMeetCreated = (workspace: Workspace) => {
+    writeStoredMatrixStep(workspace.id, 'standings');
+    setShowTheoreticalMeet(false);
+    navigate({ pathname: '/matrix', search: `?workspace=${encodeURIComponent(workspace.id)}` });
+    toast.push('success', `Created ${workspace.name}`);
+  };
+
   if (isLoading) {
     return <AppletSkeleton kind="suite" />;
   }
 
   return (
     <ScoringRulesOpenerProvider onOpen={() => setShowScoringModal(true)}>
+    <TheoreticalMeetOpenerProvider onOpen={() => setShowTheoreticalMeet(true)}>
     <div className={`app-shell flex flex-col h-screen overflow-hidden ${showWorkspaceChrome ? '' : ''}`}>
       <WorkspaceRouteSync />
       <SuiteHeader
@@ -162,6 +182,11 @@ function ShellLayout() {
                 transition={{ duration: preferences.reducedMotion ? 0 : 0.15 }}
                 className={showWorkspaceChrome ? 'p-4 lg:p-6' : ''}
               >
+                {showWorkspaceChrome && activeWorkspace?.loadedMeet ? (
+                  <Suspense fallback={null}>
+                    <TheoreticalMeetBannerLazy workspace={activeWorkspace} />
+                  </Suspense>
+                ) : null}
                 <Routes location={location}>
                   <Route path="/" element={<SuiteHome />} />
                   <Route path="/login" element={<LoginPage />} />
@@ -210,10 +235,17 @@ function ShellLayout() {
         />
       )}
 
+      {showTheoreticalMeet ? (
+        <Suspense fallback={null}>
+          <TheoreticalMeetDialogLazy onClose={() => setShowTheoreticalMeet(false)} onCreated={handleTheoreticalMeetCreated} />
+        </Suspense>
+      ) : null}
+
       <CommandPalette open={showCommandPalette} onClose={() => setShowCommandPalette(false)} />
 
       <SwimCloudWindow />
     </div>
+    </TheoreticalMeetOpenerProvider>
     </ScoringRulesOpenerProvider>
   );
 }

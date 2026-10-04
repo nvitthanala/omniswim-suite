@@ -80,6 +80,10 @@ function downloadExport(exp: EntryExport) {
  * one and React throws. Deleting the last workspace does the same in reverse.
  * Found by `react-hooks/rules-of-hooks` the day ESLint was added.
  */
+// The shell lazy-loads these two. They live in the manager package because they build on its data layer.
+export { TheoreticalMeetDialog } from './components/theoreticalMeet/TheoreticalMeetDialog';
+export { TheoreticalMeetBanner } from './components/theoreticalMeet/TheoreticalMeetBanner';
+
 export default function ManagerApp() {
   const { activeWorkspace, createWorkspace } = useSuiteWorkspace();
 
