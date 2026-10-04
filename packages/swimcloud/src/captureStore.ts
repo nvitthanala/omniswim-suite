@@ -194,6 +194,29 @@ class KeyedAsyncMutex {
 }
 
 /**
+ * Django form tokens: `<input type="hidden" name="csrfmiddlewaretoken" value="...">`, either attribute
+ * order, either quote. The value changes on every response.
+ */
+const FORM_TOKEN_NAME_FIRST = /(name\s*=\s*["']csrfmiddlewaretoken["'][^>]*?\svalue\s*=\s*)(["'])[^"']*\2/gi;
+const FORM_TOKEN_VALUE_FIRST = /(value\s*=\s*)(["'])[^"']*\2([^>]*?\sname\s*=\s*["']csrfmiddlewaretoken["'])/gi;
+
+/** The page with every `csrfmiddlewaretoken` value replaced by a fixed word. For comparison only; never stored. */
+function withoutFormTokens(html: string): string {
+  return html
+    .replace(FORM_TOKEN_NAME_FIRST, '$1$2csrf-token-normalised$2')
+    .replace(FORM_TOKEN_VALUE_FIRST, '$1$2csrf-token-normalised$2$3');
+}
+
+/**
+ * True when two copies of one page differ in more than their form tokens. Used to decide whether a
+ * recrawl replaced a page with different content (archive the old copy) or re-fetched the same page
+ * (the token changed, nothing else). Pure; the stored bytes are never altered.
+ */
+export function swimCloudPageBytesDiffer(a: string, b: string): boolean {
+  return a !== b && withoutFormTokens(a) !== withoutFormTokens(b);
+}
+
+/**
  * `FileSystemSwimCloudCache` for page bytes, plus the manifest this module
  * adds. Directory layout, exactly as specified in
  * `plans/2026-09-08/02-capture-store.md`:
@@ -254,6 +277,21 @@ export class FileSystemSwimCloudCaptureStore {
   private readonly indexPath: string;
   /** Keyed by `captureId` — see this class's "Concurrency" note. */
   private readonly writeLock = new KeyedAsyncMutex();
+  /**
+   * Keyed by `canonicalUrl`. The page cache holds one file per URL, shared by every capture, so the
+   * per-capture lock does not serialise two captures that write one URL. See {@link putPage}.
+   */
+  private readonly urlLock = new KeyedAsyncMutex();
+  /**
+   * One lock over every read and write of the `captures/*.json` files. `writeFile` truncates before
+   * it writes, so a reader that lists the folder while ANOTHER capture's record is being rewritten
+   * can read an empty file and fail to parse it (`rebuildIndex` does exactly that after every
+   * write). The per-capture lock cannot help: the writer and the reader belong to different
+   * captures. Held only around the file read or write itself, never across an `await` on another
+   * lock, so it cannot deadlock with `writeLock` or `urlLock`.
+   */
+  private readonly fileLock = new KeyedAsyncMutex();
+  private static readonly CAPTURE_FILES = 'capture-files';
 
   constructor(private readonly root: string) {
     this.pageCache = new FileSystemSwimCloudCache(`${root}/pages`);
@@ -262,19 +300,26 @@ export class FileSystemSwimCloudCaptureStore {
   }
 
   async getCapture(captureId: string): Promise<SwimCloudCaptureRecord | undefined> {
-    const fs = await import('node:fs/promises');
-    try {
-      const raw = await fs.readFile(this.captureFilePath(captureId), 'utf8');
-      return JSON.parse(raw) as SwimCloudCaptureRecord;
-    } catch (error) {
-      if (isEnoent(error)) {
-        return undefined;
+    return this.fileLock.runExclusive(FileSystemSwimCloudCaptureStore.CAPTURE_FILES, async () => {
+      const fs = await import('node:fs/promises');
+      try {
+        const raw = await fs.readFile(this.captureFilePath(captureId), 'utf8');
+        return JSON.parse(raw) as SwimCloudCaptureRecord;
+      } catch (error) {
+        if (isEnoent(error)) {
+          return undefined;
+        }
+        throw error;
       }
-      throw error;
-    }
+    });
   }
 
   async listCaptures(): Promise<readonly SwimCloudCaptureRecord[]> {
+    return this.fileLock.runExclusive(FileSystemSwimCloudCaptureStore.CAPTURE_FILES, () => this.listCapturesUnlocked());
+  }
+
+  /** The body of {@link listCaptures}. Callers must already hold `fileLock`. */
+  private async listCapturesUnlocked(): Promise<readonly SwimCloudCaptureRecord[]> {
     const fs = await import('node:fs/promises');
     let names: string[];
     try {
@@ -348,8 +393,18 @@ export class FileSystemSwimCloudCaptureStore {
         );
       }
       if (entry !== undefined) {
-        await this.archiveIfSuperseded(entry);
-        await this.pageCache.set({ ...entry, captureId });
+        // Lock order is fixed: the captureId lock (held here) first, then the URL lock. Nothing takes
+        // them the other way round, so two writers cannot wait on each other.
+        //
+        // Why a second lock: archive-then-write is read, archive, write. Two captures writing one URL
+        // hold different captureId locks and both read the same earlier page P. Both archive P, then
+        // both write, and the first writer's bytes (NA) are overwritten by NB with no archive copy:
+        // team-a's record points at bytes that exist nowhere. Under the URL lock the second writer
+        // reads NA, archives it, and then writes NB, so every version survives.
+        await this.urlLock.runExclusive(entry.canonicalUrl, async () => {
+          await this.archiveIfSuperseded(entry);
+          await this.pageCache.set({ ...entry, captureId });
+        });
       }
       const pages = mergePageRefs(existing.pages, [pageRef]);
       await this.writeCapture({ ...existing, pages, updatedAt: new Date().toISOString() });
@@ -367,7 +422,10 @@ export class FileSystemSwimCloudCaptureStore {
    */
   private async archiveIfSuperseded(next: SwimCloudCacheEntry): Promise<void> {
     const previous = await this.pageCache.get(next.canonicalUrl);
-    if (previous === undefined || previous.html.length === 0 || previous.html === next.html) {
+    // A recrawl re-fetches the same page, and the page carries a `csrfmiddlewaretoken` that changes on
+    // every response, so the bytes differ every time. That is not a different page. The new bytes are
+    // still written (what is stored does not change); only the archive copy is skipped.
+    if (previous === undefined || previous.html.length === 0 || !swimCloudPageBytesDiffer(previous.html, next.html)) {
       return;
     }
     const fs = await import('node:fs/promises');
@@ -401,16 +459,22 @@ export class FileSystemSwimCloudCaptureStore {
           for (const page of other.pages) stillListed.add(page.canonicalUrl);
         }
         for (const page of existing.pages) {
-          if (!stillListed.has(page.canonicalUrl)) await this.pageCache.delete(page.canonicalUrl);
+          // captureId lock (held) then URL lock: the same order as putPage.
+          if (!stillListed.has(page.canonicalUrl)) {
+            await this.urlLock.runExclusive(page.canonicalUrl, () => this.pageCache.delete(page.canonicalUrl));
+          }
         }
       }
-      try {
-        await fs.unlink(this.captureFilePath(captureId));
-      } catch (error) {
-        if (!isEnoent(error)) {
-          throw error;
+      // Under fileLock: a reader listing the folder must not see the file vanish mid-list.
+      await this.fileLock.runExclusive(FileSystemSwimCloudCaptureStore.CAPTURE_FILES, async () => {
+        try {
+          await fs.unlink(this.captureFilePath(captureId));
+        } catch (error) {
+          if (!isEnoent(error)) {
+            throw error;
+          }
         }
-      }
+      });
       await this.rebuildIndex();
     });
   }
@@ -422,19 +486,21 @@ export class FileSystemSwimCloudCaptureStore {
    * trust either blindly.
    */
   async rebuildIndex(): Promise<void> {
-    const fs = await import('node:fs/promises');
-    const records = await this.listCaptures();
-    const summary = records.map((r) => ({
-      captureId: r.captureId,
-      subject: r.subject,
-      label: r.label,
-      updatedAt: r.updatedAt,
-      completeness: r.completeness,
-      pageCount: r.pages.length,
-      plannedPageCount: r.plannedPageCount,
-    }));
-    await fs.mkdir(this.root, { recursive: true });
-    await fs.writeFile(this.indexPath, JSON.stringify(summary, null, 2), 'utf8');
+    return this.fileLock.runExclusive(FileSystemSwimCloudCaptureStore.CAPTURE_FILES, async () => {
+      const fs = await import('node:fs/promises');
+      const records = await this.listCapturesUnlocked();
+      const summary = records.map((r) => ({
+        captureId: r.captureId,
+        subject: r.subject,
+        label: r.label,
+        updatedAt: r.updatedAt,
+        completeness: r.completeness,
+        pageCount: r.pages.length,
+        plannedPageCount: r.plannedPageCount,
+      }));
+      await fs.mkdir(this.root, { recursive: true });
+      await fs.writeFile(this.indexPath, JSON.stringify(summary, null, 2), 'utf8');
+    });
   }
 
   private captureFilePath(captureId: string): string {
@@ -442,9 +508,11 @@ export class FileSystemSwimCloudCaptureStore {
   }
 
   private async writeCapture(record: SwimCloudCaptureRecord): Promise<void> {
-    const fs = await import('node:fs/promises');
-    await fs.mkdir(this.capturesDir, { recursive: true });
-    await fs.writeFile(this.captureFilePath(record.captureId), JSON.stringify(record, null, 2), 'utf8');
+    return this.fileLock.runExclusive(FileSystemSwimCloudCaptureStore.CAPTURE_FILES, async () => {
+      const fs = await import('node:fs/promises');
+      await fs.mkdir(this.capturesDir, { recursive: true });
+      await fs.writeFile(this.captureFilePath(record.captureId), JSON.stringify(record, null, 2), 'utf8');
+    });
   }
 }
 

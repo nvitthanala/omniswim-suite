@@ -16,6 +16,7 @@ import {
   type SwimCloudCapturePageRef,
   type SwimCloudCaptureRecord,
 } from '@omniswim/swimcloud';
+import { swimCloudPageBytesDiffer } from '@omniswim/swimcloud/captureStore';
 
 const root = mkdtempSync(join(tmpdir(), 'omniswim-capture-store-test-'));
 afterAll(() => {
@@ -407,4 +408,101 @@ describe('FileSystemSwimCloudCaptureStore: deleting one capture keeps a page ano
     await store.deleteCapture('team-412-2025-2026', { withPages: false });
     expect((await store.readPage(own))?.html).toBe('<html>roster</html>');
   });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Concurrent writes to one URL, and form-token noise                          */
+/* -------------------------------------------------------------------------- */
+
+describe('FileSystemSwimCloudCaptureStore: two captures write one URL at once', () => {
+  const url = (n: number) => `https://www.swimcloud.com/team/${n}/roster/?gender=M`;
+  const refFor = (canonicalUrl: string): SwimCloudCapturePageRef => ({ canonicalUrl, resourceKind: 'teamRoster', retrievedAt: '2026-10-04T00:00:00.000Z', cacheStatus: 'final', outcome: 'ok' });
+  const entryFor = (canonicalUrl: string, html: string) => ({ canonicalUrl, html, status: 'final' as const, retrievedAt: '2026-10-04T00:00:00.000Z', track: 'browser-extension' as const });
+
+  it('keeps every version on disk, 50 times over', async () => {
+    const { readdirSync, readFileSync, existsSync } = await import('node:fs');
+    for (let round = 0; round < 50; round += 1) {
+      const dir = join(root, `race-${round}`);
+      const store = new FileSystemSwimCloudCaptureStore(dir);
+      await store.upsertCapture({ ...blankMeetCapture('meet-9', '9'), subject: { kind: 'meet', meetId: '9' } });
+      await store.upsertCapture({ ...blankMeetCapture('team-a', 'a'), subject: { kind: 'team', teamId: 'a' } });
+      await store.upsertCapture({ ...blankMeetCapture('team-b', 'b'), subject: { kind: 'team', teamId: 'b' } });
+      const target = url(round);
+      await store.putPage('meet-9', entryFor(target, '<html>P earlier</html>'), refFor(target));
+      await Promise.all([
+        store.putPage('team-a', entryFor(target, '<html>NA from team a</html>'), refFor(target)),
+        store.putPage('team-b', entryFor(target, '<html>NB from team b</html>'), refFor(target)),
+      ]);
+      const inCache = (await store.readPage(target))?.html as string;
+      const archiveDir = join(dir, 'pages-superseded');
+      const archived = existsSync(archiveDir) ? readdirSync(archiveDir).map(f => (JSON.parse(readFileSync(join(archiveDir, f), 'utf8')) as { html: string }).html) : [];
+      const all = new Set([inCache, ...archived]);
+      expect(all, `round ${round}: cache ${inCache}, archive ${JSON.stringify(archived)}`).toEqual(new Set(['<html>P earlier</html>', '<html>NA from team a</html>', '<html>NB from team b</html>']));
+      expect(['<html>NA from team a</html>', '<html>NB from team b</html>']).toContain(inCache);
+    }
+    // 50 rounds of real disk work: a loaded full run can pass the 30 s default.
+  }, 120_000);
+});
+
+describe('FileSystemSwimCloudCaptureStore: a recrawl that changes only the form token archives nothing', () => {
+  const input = (token: string, extra = ''): string => `<form action="/logout/"><input type="hidden" name="csrfmiddlewaretoken" value="${token}"></form><table>${extra}</table>`;
+  const inputValueFirst = (token: string): string => `<input value='${token}' type="hidden" name='csrfmiddlewaretoken'>`;
+
+  it('swimCloudPageBytesDiffer ignores csrfmiddlewaretoken values and nothing else', () => {
+    expect(swimCloudPageBytesDiffer(input('AAAA'), input('BBBB'))).toBe(false);
+    expect(swimCloudPageBytesDiffer(input('AAAA'), input('AAAA'))).toBe(false);
+    expect(swimCloudPageBytesDiffer(inputValueFirst('AAAA'), inputValueFirst('BBBB'))).toBe(false);
+    expect(swimCloudPageBytesDiffer(input('AAAA', '<tr>1</tr>'), input('BBBB', '<tr>2</tr>'))).toBe(true);
+    // A different value on some other input is content, not a token.
+    expect(swimCloudPageBytesDiffer('<input name="season_id" value="29">', '<input name="season_id" value="30">')).toBe(true);
+    expect(swimCloudPageBytesDiffer('', input('AAAA'))).toBe(true);
+  });
+
+  it('writes the new bytes but keeps no archive copy for a token-only change, and archives a real change', async () => {
+    const { existsSync, readdirSync } = await import('node:fs');
+    const dir = join(root, 'token-noise');
+    const store = new FileSystemSwimCloudCaptureStore(dir);
+    await store.upsertCapture({ ...blankMeetCapture('team-t', 't'), subject: { kind: 'team', teamId: 't' } });
+    const canonicalUrl = 'https://www.swimcloud.com/team/77/roster/?gender=F';
+    const ref: SwimCloudCapturePageRef = { canonicalUrl, resourceKind: 'teamRoster', retrievedAt: '2026-10-04T00:00:00.000Z', cacheStatus: 'final', outcome: 'ok' };
+    const entry = (html: string) => ({ canonicalUrl, html, status: 'final' as const, retrievedAt: '2026-10-04T00:00:00.000Z', track: 'browser-extension' as const });
+    await store.putPage('team-t', entry(input('TOKEN-1', '<tr>same</tr>')), ref);
+    await store.putPage('team-t', entry(input('TOKEN-2', '<tr>same</tr>')), ref);
+    await store.putPage('team-t', entry(input('TOKEN-3', '<tr>same</tr>')), ref);
+    expect(existsSync(join(dir, 'pages-superseded'))).toBe(false);
+    // What is stored is unchanged: the newest bytes, token included.
+    expect((await store.readPage(canonicalUrl))?.html).toBe(input('TOKEN-3', '<tr>same</tr>'));
+    await store.putPage('team-t', entry(input('TOKEN-4', '<tr>different</tr>')), ref);
+    expect(readdirSync(join(dir, 'pages-superseded'))).toHaveLength(1);
+  });
+});
+
+describe('FileSystemSwimCloudCaptureStore: many captures write at once', () => {
+  it('never lets an index rebuild read a half-written capture file', async () => {
+    const { readFileSync } = await import('node:fs');
+    const dir = join(root, 'many-at-once');
+    const store = new FileSystemSwimCloudCaptureStore(dir);
+    const ids = Array.from({ length: 24 }, (_, i) => `team-${i + 100}`);
+    for (const id of ids) {
+      await store.upsertCapture({ ...blankMeetCapture(id, '1'), subject: { kind: 'team', teamId: id.slice(5) } });
+    }
+    // Each putPage rewrites its own capture file and then rebuilds the index, which reads every
+    // capture file. Without one lock over those reads and writes, a reader catches a file that
+    // writeFile has truncated and not yet filled, and JSON.parse throws.
+    for (let round = 0; round < 6; round += 1) {
+      await Promise.all(
+        ids.map((id, i) => {
+          const url = `https://www.swimcloud.com/team/${id.slice(5)}/roster/?gender=M&round=${round}`;
+          return store.putPage(
+            id,
+            { canonicalUrl: url, html: `<html>${id} round ${round} ${'x'.repeat(2000 + i)}</html>`, status: 'final', retrievedAt: '2026-10-04T00:00:00.000Z', track: 'browser-extension' },
+            { canonicalUrl: url, resourceKind: 'teamRoster', retrievedAt: '2026-10-04T00:00:00.000Z', cacheStatus: 'final', outcome: 'ok' },
+          );
+        }),
+      );
+    }
+    const index = JSON.parse(readFileSync(join(dir, 'index.json'), 'utf8')) as { captureId: string; pageCount: number }[];
+    expect(index).toHaveLength(ids.length);
+    for (const row of index) expect(row.pageCount, row.captureId).toBe(6);
+  }, 120_000);
 });
