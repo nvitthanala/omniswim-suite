@@ -52,5 +52,11 @@
     "lint": "0 errors; 2 existing complexity warnings in swimCloudMeetImportBridge.ts",
     "vitest": "2026-10-04: 171 files, 2499 tests: 2496 pass, 3 fail. All 3 failures are in tests/eventFirstImport.test.ts (see knownFailing). U1 added 3 test files, 78 tests, all green.",
     "knownFailing": "tests/eventFirstImport.test.ts (3 tests) reads every roster page in the git-ignored data/swimcloud-captures/pages and expects the 8 roster pages of meet 356467. The local store now holds 14 (the user's 2026-10-04 crawl of teams 412, 58 and 48 added 6), so its counts moved (for example 216 instead of 184). It depends on local data, not on U1 code. Not changed here."
+  },
+  "incident": {
+    "date": "2026-10-04",
+    "what": "Team crawl overwrote 3 roster pages and refreshed 111 swimmer-times pages of meet 356467 (page cache is one file per URL).",
+    "mitigation": "captureStore archives superseded bytes (pages-superseded/); eventFirstImport real-capture tests skip on drift.",
+    "open": "Cache is still one file per URL; the step-1 season-read URL aliases a meet crawl URL."
   }
 }
