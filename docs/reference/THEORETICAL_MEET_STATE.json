@@ -72,5 +72,40 @@
     "what": "Team crawl overwrote 3 roster pages and refreshed 111 swimmer-times pages of meet 356467 (page cache is one file per URL).",
     "mitigation": "captureStore archives superseded bytes (pages-superseded/); eventFirstImport real-capture tests skip on drift.",
     "open": "Cache is still one file per URL; the step-1 season-read URL aliases a meet crawl URL."
-  }
+  },
+  "pausedAt": {
+    "when": "2026-10-04",
+    "why": "7-day Claude window at ~89% (resets 2026-10-08T16:00Z); conserve tier, critical at 92%. No new heavy agents started.",
+    "lastCommit": "be9b12c3"
+  },
+  "resumeOrder": [
+    {
+      "id": "U1-done",
+      "status": "done and reviewed twice (b9658efa, be9b12c3)"
+    },
+    {
+      "id": "U2-ui",
+      "status": "not-started",
+      "brief": "Worker (sonnet). Dialog Build theoretical meet: list complete team-{id}-{season} captures (GET /api/swimcloud/captures), select teams, pick scoring preset (conference), call theoreticalMeetFromCaptures with fetch-backed deps, buildTheoreticalMeetSeeds, buildTheoreticalMeetWorkspace with newTheoreticalWorkspaceId(), POST /api/workspaces, navigate to the new workspace. Preview: per team athletes with no times, events chosen per swimmer (editable), warnings, caveats (all-time best, relays not included/estimated, event order, diving, exhibition). Entry points: Matrix Meet step and workspace list. A banner via isTheoreticalMeet(workspace). Use emil-design-eng, apple-design, prototype skills; keep Dark/Light/custom tokens; tests/e2e spec on a data copy; never touch core."
+    },
+    {
+      "id": "U1c-relays",
+      "status": "not-started",
+      "brief": "Investigate the Manager relay builder (relayLegSplitDetail, relayMissingLeg, relay_leg_overrides, RelayGroupCard); design relay rows from individual bests labelled estimated, never stored as real legs; architect review BEFORE building (user chose: build from individual bests, labelled)."
+    },
+    {
+      "id": "exhibition",
+      "status": "decision-pending",
+      "brief": "Needs optional isExhibition on HistoricalSwim (core, about 3 lines) + parser (about 5) + converter (about 2); then exclude exhibition seeds in the builder. User approval for a core edit still open."
+    },
+    {
+      "id": "LCM-SCM",
+      "status": "deferred",
+      "brief": "In-course ranking by place in the theoretical field, no conversion."
+    },
+    {
+      "id": "B1b-conference-and-B2-relay-legs",
+      "status": "blocked-on-user-captures"
+    }
+  ]
 }
