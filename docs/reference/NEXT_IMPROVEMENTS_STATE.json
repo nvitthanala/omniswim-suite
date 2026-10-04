@@ -121,7 +121,7 @@
     },
     "B4": {
       "item": "Theoretical meet from several crawled teams",
-      "status": "in-progress/part1-pure-builder-done",
+      "status": "in-progress/part1-pure-builder-review-fixes-done",
       "design": "docs/reference/SWIMCLOUD_MULTI_TEAM_CRAWL_PLAN.md, Phase B4 design (decided 2026-10-04)",
       "scope": "Part 1 done: pure builder packages/manager/src/lib/theoreticalMeetSeeds.ts. Still to do: write rows to workspace psych arrays, per-team and season workspaces, UI, labelled relay estimate from flat-start bests (setting, stored apart).",
       "part1": {
@@ -133,7 +133,21 @@
         "evidence": "46 tests on real roster fixtures, the real swimmer-times response and the real converter. Mutations M1-M8 each fail tests, files restored, sha256 verified. lint 0 errors (2 old warnings); vitest 168 files 2403 tests green.",
         "reusedSelector": "categorizeBestEvents (event order) and canAcceptAnotherEntry (caps), as rosterOptimizer addAthleteEventPlans does. No second selector.",
         "reviewNeeded": "Touches entry-limit and lineup selection. Architect review wanted, in particular the LCM/SCM ranking note: the existing selector ranks on a SCY estimate (order only; seeds stay as recorded).",
-        "notDone": "packages/manager/package.json exports not extended (UI inside manager imports by relative path)."
+        "notDone": "packages/manager/package.json exports not extended (UI inside manager imports by relative path). Item X blocked on a core edit.",
+        "reviewFixes": {
+          "when": "2026-10-04",
+          "source": "architect review of 5bf58a27 (probe reproduced D1, D2, D3 and the exhibition item)",
+          "D1": "FIXED. LCM and SCM throw course-not-supported. Follow-up design is in the file header: rank by the place a seed takes in the theoretical field, raw in-course times within one event, no conversion, no cut.",
+          "D2": "FIXED. Same normalized name on one team throws name-collision-in-team naming both athletes.",
+          "D3": "FIXED. A seed is in-season only when its seasonId is string-equal to rosterSeasonId. No ordering.",
+          "D4": "FIXED. conference input; mergeScoringSettings(settings, { conference }) once, used for validation, selector, caps and caveats.",
+          "D5": "FIXED. UNCAPPED_CAVEAT team caveat; no throw.",
+          "D6": "FIXED. DIVING_EXCLUDED_CAVEAT meet-wide; dives not counted as unknown-course; diver reason diving_not_supported.",
+          "D7": "FIXED. no_usable_swim reason for swims []; rosterStatus required (roster-status-required); swimsStatus parse_failed with athletesWithTimesParseFailed.",
+          "D8": "FIXED. nm:{name} id, no counter.",
+          "X": "BLOCKED, not done. The fastest-times parser ignores exhibition:true and HistoricalSwim (packages/core/src/types.ts) has no field to carry it. Needs a core edit (an optional isExhibition on HistoricalSwim) plus a swimcloud parser field and a converter carry-through. Until then the fixture exhibition 100 IM SCY 53.27 becomes a seed whenever the meet program contains the 100 IM.",
+          "evidence": "tests/theoreticalMeetSeeds.test.ts 64 tests; each fix proven by a mutation that fails tests, files restored, sha256 verified."
+        }
       }
     }
   },

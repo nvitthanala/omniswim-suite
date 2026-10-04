@@ -12,8 +12,8 @@
  *   page is the real "No rosters found" page and is used for the empty-roster case.
  * - Times: `tests/fixtures/profile_fastest_times-1330318.json`, the real swimmer-times response the driver
  *   tests also use. The driver harness serves it for every swimmer id, so these tests do the same: every
- *   athlete gets that body, parsed by the real `parseSwimmerFastestTimesJson` under the athlete's own id and
- *   converted by the real `swimCloudSwimmerTimesToHistoricalSwims`. The body's owner is not what is checked.
+ *   athlete gets that body, parsed by the real `parseSwimmerFastestTimesJson` (under its own id, 1330318) and
+ *   converted by the real `swimCloudSwimmerTimesToHistoricalSwims` under the roster athlete's name.
  *   The seeds are checked against values read straight from the file (see GOLDEN_SCY).
  * - Constructed (and said so where used): an athlete moved onto a second roster to make a duplicate id, and
  *   a swimmer's real swims filtered to one course or one event.
@@ -25,10 +25,11 @@ import type { SwimCloudAthlete } from '../packages/swimcloud/src/entities';
 import { swimCloudSwimmerTimesToHistoricalSwims } from '../packages/manager/src/lib/swimCloudImportBridge';
 import {
   ALL_TIME_BEST_CAVEAT,
-  RANKED_ON_ESTIMATE_CAVEAT,
+  DIVING_EXCLUDED_CAVEAT,
   RELAYS_EXCLUDED_CAVEAT,
   THEORETICAL_MEET_COURSES,
   TOTAL_CAP_CAVEAT,
+  UNCAPPED_CAVEAT,
   TheoreticalMeetError,
   buildTheoreticalMeetSeeds,
   theoreticalSeedRowId,
@@ -40,6 +41,9 @@ import { Gender, type HistoricalSwim, type ScoringSettings, type Workspace } fro
 import { GENERIC_TOP16_SETTINGS, NSISC_PRESET_SETTINGS, mergeScoringSettings } from '../packages/core/src/lib/scoringDefaults';
 import { buildPsychExpectedRows, buildPsychProjectedBundle, hasPsychData } from '../packages/core/src/lib/psychProjection';
 import { SWIMMER_BODY, rosterPage } from './helpers/multiTeamDriverHarness';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 /* -------------------------------------------------------------------------- */
 /* Real inputs                                                                 */
@@ -97,8 +101,16 @@ const team = (
   teamName: string,
   gender: Gender,
   athletes: TheoreticalMeetAthleteInput[],
-  rosterSeasonId: string | null = '29'
-): TheoreticalMeetTeamInput => ({ teamName, gender, athletes, ...(rosterSeasonId === null ? {} : { rosterSeasonId }) });
+  rosterSeasonId: string | null = '29',
+  extra: Partial<TheoreticalMeetTeamInput> = {}
+): TheoreticalMeetTeamInput => ({
+  teamName,
+  gender,
+  athletes,
+  rosterStatus: 'parsed',
+  ...(rosterSeasonId === null ? {} : { rosterSeasonId }),
+  ...extra,
+});
 
 /** 412 men (first 8), 412 women (first 6), West Florida women (first 6). All real athletes. */
 function threeTeams(): TheoreticalMeetTeamInput[] {
@@ -150,6 +162,16 @@ const GOLDEN_LCM: Record<string, string> = {
   '200 Fly LCM': '2:28.94',
   '200 IM LCM': '2:14.00',
   '400 IM LCM': '4:52.50',
+};
+
+const codeOf = (fn: () => unknown): string | undefined => {
+  try {
+    fn();
+  } catch (e) {
+    if (e instanceof TheoreticalMeetError) return e.code;
+    throw e;
+  }
+  return undefined;
 };
 
 const rowsOf = (seeds: ReturnType<typeof buildTheoreticalMeetSeeds>, teamName: string, gender: Gender) =>
@@ -280,11 +302,30 @@ describe('no times captured is reported apart from no usable seed', () => {
     expect(report.athletesWithNoSeedInMeetCourse.some(a => a.name === athletes[0].name)).toBe(false);
   });
 
-  it('lists a captured page with nothing in the meet course, and an empty page, as no seed in course', () => {
+  it('lists a captured page with nothing in the meet course apart from a captured page with no usable swim', () => {
     expect(report.athletesWithNoSeedInMeetCourse).toEqual([
       { name: athletes[2].name, swimCloudSwimmerId: athletes[2].swimCloudSwimmerId, reason: 'no_swim_in_meet_course' },
-      { name: athletes[3].name, swimCloudSwimmerId: athletes[3].swimCloudSwimmerId, reason: 'no_swim_in_meet_course' },
+      { name: athletes[3].name, swimCloudSwimmerId: athletes[3].swimCloudSwimmerId, reason: 'no_usable_swim' },
     ]);
+  });
+
+  it('reports a times page that did not parse apart from no page at all', () => {
+    const a = athletes[0];
+    const res = buildTheoreticalMeetSeeds(
+      meet({
+        teams: [
+          team(OBU, Gender.MEN, [
+            { athlete: a, swims: undefined, swimsStatus: 'parse_failed' },
+            { athlete: athletes[1], swims: undefined },
+          ]),
+        ],
+      })
+    );
+    const r = res.report.teams[0];
+    expect(r.athletesWithTimesParseFailed).toEqual([{ name: a.name, swimCloudSwimmerId: a.swimCloudSwimmerId }]);
+    expect(r.athletesWithNoTimes).toEqual([{ name: athletes[1].name, swimCloudSwimmerId: athletes[1].swimCloudSwimmerId }]);
+    expect(r.caveats.join(' ')).toMatch(/did not parse/);
+    expect(res.rows.length).toBe(0);
   });
 
   it('makes rows for the one athlete who has seeds, and none (not a zero row) for the others', () => {
@@ -304,9 +345,28 @@ describe('no times captured is reported apart from no usable seed', () => {
   });
 
   it('says so for an empty roster (the real "No rosters found" page) rather than returning silence', () => {
-    const res = buildTheoreticalMeetSeeds(meet({ teams: [team(UWF, Gender.MEN, [])] }));
+    expect(UWF_M.athletes.length).toBe(0);
+    const res = buildTheoreticalMeetSeeds(meet({ teams: [team(UWF, Gender.MEN, [], '29', { rosterStatus: 'no_rosters_found' })] }));
     expect(res.rows.length).toBe(0);
+    expect(res.report.teams[0].rosterStatus).toBe('no_rosters_found');
     expect(res.report.teams[0].caveats.join(' ')).toMatch(/lists no athletes/);
+  });
+
+  it('refuses an empty roster that is not stated to be "no rosters found"', () => {
+    expect(codeOf(() => buildTheoreticalMeetSeeds(meet({ teams: [team(UWF, Gender.MEN, [])] })))).toBe('roster-status-required');
+    const missing = { ...team(UWF, Gender.MEN, []), rosterStatus: undefined } as unknown as TheoreticalMeetTeamInput;
+    expect(codeOf(() => buildTheoreticalMeetSeeds(meet({ teams: [missing] })))).toBe('roster-status-required');
+  });
+
+  it('refuses "no rosters found" on a roster that lists athletes', () => {
+    const t = team(OBU, Gender.MEN, withTimes(OBU_M.athletes, OBU, Gender.MEN, 1), '29', { rosterStatus: 'no_rosters_found' });
+    expect(codeOf(() => buildTheoreticalMeetSeeds(meet({ teams: [t] })))).toBe('invalid-input');
+  });
+
+  it('refuses a parse_failed athlete that also carries swims', () => {
+    const a = athletes[0];
+    const bad = { athlete: a, swims: swimsFor(a, OBU, Gender.MEN), swimsStatus: 'parse_failed' as const };
+    expect(codeOf(() => buildTheoreticalMeetSeeds(meet({ teams: [team(OBU, Gender.MEN, [bad])] })))).toBe('invalid-input');
   });
 });
 
@@ -363,6 +423,28 @@ describe('entries follow the scoring rules', () => {
     expect(new Set(perSwimmer(b))).toEqual(new Set([2]));
   });
 
+  it('D4: the conference decides the caps, as the optimizer merges them: NSISC caps at 7 total over stale generic settings', () => {
+    const plain = buildTheoreticalMeetSeeds(meet({ scoringSettings: GENERIC_TOP16_SETTINGS }));
+    expect(new Set(perSwimmer(plain))).toEqual(new Set([14]));
+    const nsisc = buildTheoreticalMeetSeeds(meet({ scoringSettings: GENERIC_TOP16_SETTINGS, conference: 'NSISC' }));
+    expect(new Set(perSwimmer(nsisc))).toEqual(new Set([7]));
+    expect(nsisc.report.teams[0].caveats).toContain(TOTAL_CAP_CAVEAT);
+    // Another conference leaves the settings as given.
+    const other = buildTheoreticalMeetSeeds(meet({ scoringSettings: GENERIC_TOP16_SETTINGS, conference: 'SomeOtherConf' }));
+    expect(new Set(perSwimmer(other))).toEqual(new Set([14]));
+  });
+
+  it('D5: uncapped settings enter every offered event and say so, without throwing', () => {
+    const out = buildTheoreticalMeetSeeds(meet({ scoringSettings: GENERIC_TOP16_SETTINGS }));
+    expect(new Set(perSwimmer(out))).toEqual(new Set([14]));
+    for (const t of out.report.teams) expect(t.caveats).toContain(UNCAPPED_CAVEAT);
+    // Any real cap, per type or total, removes the statement.
+    const capped = buildTheoreticalMeetSeeds(meet({ scoringSettings: { ...GENERIC_TOP16_SETTINGS, maxIndividualEntriesPerSwimmer: 3 } }));
+    for (const t of capped.report.teams) expect(t.caveats).not.toContain(UNCAPPED_CAVEAT);
+    const totalOnly = buildTheoreticalMeetSeeds(meet({ scoringSettings: NSISC_PRESET_SETTINGS }));
+    for (const t of totalOnly.report.teams) expect(t.caveats).not.toContain(UNCAPPED_CAVEAT);
+  });
+
   it('a team with no known division is ranked on raw time and says so', () => {
     const swims = (a: SwimCloudAthlete) => swimsFor(a, 'Nowhere University', Gender.MEN);
     const a = OBU_M.athletes[0];
@@ -417,18 +499,18 @@ describe('a swimmer on two rosters enters once, for the first team given', () =>
       return copy;
     };
     const a = noId(OBU_F.athletes[0]);
-    const b = noId(OBU_F.athletes[0]);
     const swims = (name: string, teamName: string) => swimsFor({ ...OBU_F.athletes[0], name }, teamName, Gender.WOMEN);
     const out = buildTheoreticalMeetSeeds(
       meet({
         teams: [
-          team(OBU, Gender.WOMEN, [{ athlete: a, swims: swims(a.name, OBU) }, { athlete: b, swims: swims(b.name, OBU) }]),
+          team(OBU, Gender.WOMEN, [{ athlete: a, swims: swims(a.name, OBU) }]),
           team(UWF, Gender.WOMEN, [{ athlete: a, swims: swims(a.name, UWF) }]),
         ],
       })
     );
     expect(out.report.teams.every(t => t.duplicateAcrossTeams.length === 0)).toBe(true);
-    expect(out.rows.length).toBe(3 * 14);
+    expect(out.rows.length).toBe(2 * 14);
+    expect(new Set(out.rows.map(r => r.team))).toEqual(new Set([OBU, UWF]));
     expect(new Set(out.rows.map(r => r.id)).size).toBe(out.rows.length);
   });
 });
@@ -463,13 +545,74 @@ describe('row ids', () => {
     );
   });
 
-  it('stay unique for two athletes of one name and no id on one roster', () => {
-    const noId = { ...OBU_M.athletes[0] } as { -readonly [K in keyof SwimCloudAthlete]: SwimCloudAthlete[K] };
-    delete noId.swimCloudSwimmerId;
-    const swims = swimsFor(OBU_M.athletes[0], OBU, Gender.MEN);
-    const out = buildTheoreticalMeetSeeds(meet({ teams: [team(OBU, Gender.MEN, [{ athlete: noId, swims }, { athlete: noId, swims }])] }));
-    expect(out.rows.length).toBe(28);
-    expect(new Set(out.rows.map(r => r.id)).size).toBe(28);
+  it('D8: a swimmer with no SwimCloud id gets an id that does not depend on roster order', () => {
+    const noId = (a: SwimCloudAthlete) => {
+      const copy = { ...a } as { -readonly [K in keyof SwimCloudAthlete]: SwimCloudAthlete[K] };
+      delete copy.swimCloudSwimmerId;
+      return copy as SwimCloudAthlete;
+    };
+    const [a, b, c] = OBU_M.athletes.slice(0, 3).map(noId);
+    const entry = (x: SwimCloudAthlete) => ({ athlete: x, swims: swimsFor(OBU_M.athletes[0], OBU, Gender.MEN) });
+    const forward = buildTheoreticalMeetSeeds(meet({ teams: [team(OBU, Gender.MEN, [entry(a), entry(b), entry(c)])] }));
+    const backward = buildTheoreticalMeetSeeds(meet({ teams: [team(OBU, Gender.MEN, [entry(c), entry(b), entry(a)])] }));
+    expect(new Set(forward.rows.map(r => r.id))).toEqual(new Set(backward.rows.map(r => r.id)));
+    expect(forward.rows.every(r => /\|nm:[^|:]+\|/.test(r.id))).toBe(true);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Two swimmers of one name on one team                                        */
+/* -------------------------------------------------------------------------- */
+
+describe('D2: a same-name pair on one team is refused, never merged', () => {
+  // Constructed, real-shaped: two athletes with different SwimCloud ids and one name, both with the real 100 Free SCY.
+  const john = (id: string): SwimCloudAthlete => ({ swimCloudSwimmerId: id, name: 'John Smith', gender: Gender.MEN, classYear: 'FR', season: '2025-2026' });
+  const hundredFree = (name: string, time?: string) =>
+    swimsFor({ ...OBU_M.athletes[0], name }, OBU, Gender.MEN)
+      .filter(s => s.event === '100 Free SCY')
+      .map(s => (time === undefined ? s : { ...s, time }));
+
+  it('throws name-collision-in-team and names both athletes', () => {
+    const run = () =>
+      buildTheoreticalMeetSeeds(
+        meet({ teams: [team(OBU, Gender.MEN, [{ athlete: john('1'), swims: hundredFree('John Smith') }, { athlete: john('2'), swims: hundredFree('John Smith', '44.00') }])] })
+      );
+    expect(codeOf(run)).toBe('name-collision-in-team');
+    expect(() => run()).toThrow(/John Smith.*swimmer id 1.*John Smith.*swimmer id 2/s);
+  });
+
+  it('folds case and spacing like the psych scoring does', () => {
+    const a = { ...john('1'), name: 'John  SMITH' };
+    const run = () => buildTheoreticalMeetSeeds(meet({ teams: [team(OBU, Gender.MEN, [{ athlete: a, swims: hundredFree('x') }, { athlete: john('2'), swims: hundredFree('y') }])] }));
+    expect(codeOf(run)).toBe('name-collision-in-team');
+  });
+
+  it('applies to athletes with no id as well, and to one with an id and one without', () => {
+    const noId = { name: 'John Smith', gender: Gender.MEN } as SwimCloudAthlete;
+    const run = () => buildTheoreticalMeetSeeds(meet({ teams: [team(OBU, Gender.MEN, [{ athlete: noId, swims: hundredFree('a') }, { athlete: john('2'), swims: hundredFree('b') }])] }));
+    expect(codeOf(run)).toBe('name-collision-in-team');
+  });
+
+  it('does not fire for one name on two different teams, or for the same id listed twice', () => {
+    const ok = buildTheoreticalMeetSeeds(
+      meet({
+        teams: [
+          team(OBU, Gender.MEN, [{ athlete: john('1'), swims: hundredFree('John Smith') }]),
+          team(UWF, Gender.MEN, [{ athlete: john('2'), swims: hundredFree('John Smith') }]),
+        ],
+      })
+    );
+    expect(ok.rows.length).toBe(2);
+    const twice = buildTheoreticalMeetSeeds(meet({ teams: [team(OBU, Gender.MEN, [{ athlete: john('1'), swims: hundredFree('a') }, { athlete: john('1'), swims: hundredFree('a') }])] }));
+    expect(twice.rows.length).toBe(1);
+    expect(twice.report.teams[0].duplicateAcrossTeams.length).toBe(1);
+  });
+
+  it('the pipeline keeps two entries when the names differ, which is what the refusal protects', () => {
+    const mk = (name: string, id: string, time: string) => ({ athlete: { ...john(id), name }, swims: hundredFree(name, time) });
+    const out = buildTheoreticalMeetSeeds(meet({ teams: [team(OBU, Gender.MEN, [mk('John Smith', '1', '45.39'), mk('Jon Smith', '2', '44.00')])] }));
+    const psych = buildPsychExpectedRows([...out.psychMenResults], mergeScoringSettings(GENERIC_TOP16_SETTINGS));
+    expect(psych.length).toBe(out.rows.length);
   });
 });
 
@@ -501,16 +644,36 @@ describe('the all-time-best caveat', () => {
     expect(out.report.teams[0].caveats.some(c => c.startsWith(ALL_TIME_BEST_CAVEAT))).toBe(true);
   });
 
-  it('is left out only when every seed is proven to be from the roster season or later', () => {
+  it('D3: is left out only when every seed has a season id equal to the roster season id', () => {
     const athlete = OBU_M.athletes[0];
     const swims = swimsFor(athlete, OBU, Gender.MEN).filter(s => s.seasonId === '29');
     expect(swims.length).toBeGreaterThan(0);
     const out = buildTheoreticalMeetSeeds(meet({ teams: [team(OBU, Gender.MEN, [{ athlete, swims }], '29')] }));
     expect(out.rows.length).toBeGreaterThan(0);
     expect(out.report.teams[0].caveats.some(c => c.startsWith(ALL_TIME_BEST_CAVEAT))).toBe(false);
-    // The same seeds against a later roster season are older again.
-    const later = buildTheoreticalMeetSeeds(meet({ teams: [team(OBU, Gender.MEN, [{ athlete, swims }], '30')] }));
-    expect(later.report.teams[0].caveats.some(c => c.startsWith(ALL_TIME_BEST_CAVEAT))).toBe(true);
+  });
+
+  it('D3: a past roster season keeps the caveat when its seeds are from later seasons, and says how many', () => {
+    const athlete = OBU_M.athletes[0];
+    const swims = swimsFor(athlete, OBU, Gender.MEN).filter(s => s.seasonId === '28' || s.seasonId === '29');
+    expect(new Set(swims.map(s => s.seasonId))).toEqual(new Set(['28', '29']));
+    const out = buildTheoreticalMeetSeeds(meet({ teams: [team(OBU, Gender.MEN, [{ athlete, swims }], '27')] }));
+    const text = out.report.teams[0].caveats.find(c => c.startsWith(ALL_TIME_BEST_CAVEAT));
+    expect(text).toBeDefined();
+    expect(text).toContain(`${out.rows.length} of ${out.rows.length} seeds are from a season other than 27`);
+  });
+
+  it('D3: season ids are compared for equality only, never ordered', () => {
+    const athlete = OBU_M.athletes[0];
+    const swims = swimsFor(athlete, OBU, Gender.MEN).filter(s => s.seasonId === '29');
+    for (const roster of ['28', '30', '290', '029']) {
+      const out = buildTheoreticalMeetSeeds(meet({ teams: [team(OBU, Gender.MEN, [{ athlete, swims }], roster)] }));
+      expect(out.report.teams[0].caveats.some(c => c.startsWith(ALL_TIME_BEST_CAVEAT))).toBe(true);
+    }
+  });
+
+  it('D6: the meet says diving is not included', () => {
+    expect(buildTheoreticalMeetSeeds(meet()).report.caveats).toContain(DIVING_EXCLUDED_CAVEAT);
   });
 });
 
@@ -518,38 +681,28 @@ describe('the all-time-best caveat', () => {
 /* Course                                                                      */
 /* -------------------------------------------------------------------------- */
 
-describe('swapping the meet course changes the rows', () => {
-  const scy = buildTheoreticalMeetSeeds(meet());
-  const lcm = buildTheoreticalMeetSeeds(meet({ course: 'LCM' }));
-
-  it('LCM makes LCM rows with the swim exactly as recorded, never a converted time', () => {
-    expect(lcm.rows.length).toBe(20 * 14);
-    for (const row of lcm.rows) {
-      expect(row.event.endsWith(' LCM')).toBe(true);
-      expect(row.time).toBe(GOLDEN_LCM[row.event]);
-      expect(lcm.sources.get(row.id)?.course).toBe('LCM');
-      expect(lcm.sources.get(row.id)?.sourceEvent).toBe(row.event);
+describe('D1: only SCY meets are built', () => {
+  it('refuses LCM and SCM with course-not-supported, and says why', () => {
+    for (const course of ['LCM', 'SCM'] as const) {
+      let error: unknown;
+      try {
+        buildTheoreticalMeetSeeds(meet({ course }));
+      } catch (e) {
+        error = e;
+      }
+      expect(error).toBeInstanceOf(TheoreticalMeetError);
+      expect((error as TheoreticalMeetError).code).toBe('course-not-supported');
+      expect((error as TheoreticalMeetError).message).toMatch(/no conversion/i);
+      expect((error as TheoreticalMeetError).message).toMatch(/no cut/i);
     }
-    // The 500 Free SCY slot is the 400 Free LCM swim; the SCY time must not appear on an LCM row.
-    expect(lcm.rows.some(r => r.event === '400 Free LCM' && r.time === '4:48.31')).toBe(true);
-    expect(lcm.rows.some(r => r.event.includes('SCY'))).toBe(false);
   });
 
-  it('the two courses share no row id and no event label, and LCM says it ranked on an estimate', () => {
-    const scyIds = new Set(scy.rows.map(r => r.id));
-    expect(lcm.rows.some(r => scyIds.has(r.id))).toBe(false);
-    expect(lcm.report.caveats).toContain(RANKED_ON_ESTIMATE_CAVEAT);
-    expect(scy.report.caveats).not.toContain(RANKED_ON_ESTIMATE_CAVEAT);
+  it('still refuses an unknown course as unknown, not as unsupported', () => {
+    expect(codeOf(() => buildTheoreticalMeetSeeds(meet({ course: 'LCY' as never })))).toBe('unknown-course');
   });
 
-  it('SCM makes no row for a swimmer with no SCM swim, and lists them rather than staying silent', () => {
-    const scm = buildTheoreticalMeetSeeds(meet({ course: 'SCM' }));
-    expect(scm.rows.length).toBe(0);
-    for (const t of scm.report.teams) {
-      expect(t.athletesWithNoTimes.length).toBe(0);
-      expect(t.athletesWithNoSeedInMeetCourse.every(a => a.reason === 'no_swim_in_meet_course')).toBe(true);
-    }
-    expect(scm.report.teams.map(t => t.athletesWithNoSeedInMeetCourse.length)).toEqual([8, 6, 6]);
+  it('refuses before reading any team, so a bad team does not mask it', () => {
+    expect(codeOf(() => buildTheoreticalMeetSeeds(meet({ course: 'LCM', teams: [team('', Gender.MEN, [])] })))).toBe('course-not-supported');
   });
 
   it('knows exactly three courses', () => {
@@ -562,15 +715,7 @@ describe('swapping the meet course changes the rows', () => {
 /* -------------------------------------------------------------------------- */
 
 describe('bad input throws TheoreticalMeetError', () => {
-  const code = (fn: () => unknown): string | undefined => {
-    try {
-      fn();
-    } catch (e) {
-      if (e instanceof TheoreticalMeetError) return e.code;
-      throw e;
-    }
-    return undefined;
-  };
+  const code = codeOf;
   const one = (over: Partial<TheoreticalMeetTeamInput> = {}) => ({ ...team(OBU, Gender.MEN, withTimes(OBU_M.athletes, OBU, Gender.MEN, 1)), ...over });
 
   it('a team gender the meet does not know', () => {
@@ -619,6 +764,56 @@ describe('bad input throws TheoreticalMeetError', () => {
 
   it('does not throw for the same team with the other gender', () => {
     expect(code(() => buildTheoreticalMeetSeeds(meet()))).toBeUndefined();
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Diving                                                                      */
+/* -------------------------------------------------------------------------- */
+
+describe('D6: diving is out, and a diver is told apart from a swimmer with no seed', () => {
+  // Real: tests/fixtures/profile_fastest_times-2508045-diver.json holds five SCY swims and four dives.
+  const DIVER_BODY = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'fixtures', 'profile_fastest_times-2508045-diver.json'), 'utf8');
+  const diverSwims = (athlete: SwimCloudAthlete): HistoricalSwim[] => {
+    const parsed = parseSwimmerFastestTimesJson(DIVER_BODY, {
+      sourceUrl: 'https://www.swimcloud.com/api/swimmers/2508045/profile_fastest_times/',
+      retrievedAt: RETRIEVED,
+      track: 'browser-extension',
+    });
+    if (!parsed.ok) throw new Error(parsed.failure.message);
+    const converted = swimCloudSwimmerTimesToHistoricalSwims({ ...parsed.data, name: athlete.name }, { team: OBU, gender: Gender.MEN, retrievedAt: RETRIEVED });
+    if (!converted.ok) throw new Error(converted.message);
+    return [...converted.swims];
+  };
+  const athlete = OBU_M.athletes[0];
+  const isDive = (s: HistoricalSwim) => /diving/i.test(s.event);
+
+  it('the fixture has dives with no recorded course, which used to be counted as unknown-course swims', () => {
+    const swims = diverSwims(athlete);
+    expect(swims.filter(isDive).length).toBe(4);
+    expect(swims.filter(isDive).every(s => s.timeType === undefined)).toBe(true);
+  });
+
+  it('a diver who also swims gets rows for the swims only, no dive row, and no unknown-course caveat', () => {
+    const out = buildTheoreticalMeetSeeds(meet({ teams: [team(OBU, Gender.MEN, [{ athlete, swims: diverSwims(athlete) }])] }));
+    expect(out.rows.length).toBeGreaterThan(0);
+    expect(out.rows.some(r => /diving/i.test(r.event))).toBe(false);
+    expect(out.report.teams[0].caveats.join(' ')).not.toMatch(/no recorded course/);
+  });
+
+  it('a diver with only dives is reported as diving_not_supported', () => {
+    const out = buildTheoreticalMeetSeeds(meet({ teams: [team(OBU, Gender.MEN, [{ athlete, swims: diverSwims(athlete).filter(isDive) }])] }));
+    expect(out.rows.length).toBe(0);
+    expect(out.report.teams[0].athletesWithNoSeedInMeetCourse).toEqual([
+      { name: athlete.name, swimCloudSwimmerId: athlete.swimCloudSwimmerId, reason: 'diving_not_supported' },
+    ]);
+    expect(out.report.caveats).toContain(DIVING_EXCLUDED_CAVEAT);
+  });
+
+  it('a swim with no recorded course that is not a dive is still counted as unknown-course', () => {
+    const swims = diverSwims(athlete).map(s => (s.event === '50 Free SCY' ? { ...s, timeType: undefined } : s));
+    const out = buildTheoreticalMeetSeeds(meet({ teams: [team(OBU, Gender.MEN, [{ athlete, swims }])] }));
+    expect(out.report.teams[0].caveats.join(' ')).toMatch(/1 captured swim\(s\) have no recorded course/);
   });
 });
 

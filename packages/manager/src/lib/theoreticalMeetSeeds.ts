@@ -16,28 +16,43 @@
  *    course is never used (it is not assumed to be yards). No conversion
  *    between courses is applied to a seed, ever.
  * 2. **Absent is not zero.** An event with no seed gets no row. An athlete with
- *    no captured times page is reported as `athletesWithNoTimes`. An athlete
- *    with a times page but nothing usable is reported with the reason.
+ *    no captured times page is reported as `athletesWithNoTimes`. A times page
+ *    that did not parse is `athletesWithTimesParseFailed`. A captured page with
+ *    nothing usable is reported with its reason. An empty roster must be
+ *    stated as `no_rosters_found`. Nothing is dropped without a trace.
  * 3. **Entries follow the scoring rules.** The events come from the existing
  *    selector, {@link categorizeBestEvents} (strength order: place in a loaded
  *    meet, then distance to the division cut, then raw seconds), and the caps
  *    come from {@link canAcceptAnotherEntry}. That is the same pair the roster
- *    optimizer uses (`addAthleteEventPlans` in `rosterOptimizer.ts`). This file
- *    holds no second selector and no second cap counter.
+ *    optimizer uses (`addAthleteEventPlans` in `rosterOptimizer.ts`), on the
+ *    same merged settings (`mergeScoringSettings` with the conference). This
+ *    file holds no second selector and no second cap counter.
  * 4. **One swimmer, one team.** The same SwimCloud swimmer id on two rosters
  *    enters for the first team given. The other team reports it as
  *    `duplicateAcrossTeams`. Two names that match, with no shared id, are not
- *    merged.
- * 5. **Fail loudly.** Bad input throws {@link TheoreticalMeetError}.
+ *    merged across teams.
+ * 5. **One name, one swimmer, on one team.** Psych scoring keys an entry on
+ *    event, team and normalized name (`entryKey` in `prelimsProjection.ts`), so
+ *    two athletes of one name on one team would collapse into one entry. The
+ *    builder throws `name-collision-in-team` instead of merging or choosing.
+ * 6. **Fail loudly.** Bad input throws {@link TheoreticalMeetError}.
  *
- * ## The one place the existing selector touches another course
+ * ## Only SCY meets are built (decision D1, 2026-10-04)
  *
- * `categorizeBestEvents` ranks events on SCY seconds, and states every metric
- * swim in SCY to do so. For an LCM or SCM meet this builder therefore lets the
- * selector RANK on a SCY estimate. The estimate decides only the order of a
- * swimmer's events. It is never a seed. Each row's event and time come from
- * `convertedFrom.sourceEvent` and `convertedFrom.sourceTime`: the swim exactly
- * as it was recorded. A team caveat says so whenever the course is not SCY.
+ * `categorizeBestEvents` ranks events on SCY seconds against the SCY division
+ * cut tables. A metric swim can only enter that ranking as a conversion
+ * estimate. For an LCM or SCM meet there is no in-course ranking that uses no
+ * conversion and no cut, so the builder refuses those courses
+ * (`course-not-supported`) instead of ranking on an estimate. The course type
+ * and the course list stay, so the follow-up needs no API change.
+ *
+ * ### Follow-up design (not built)
+ *
+ * Rank a swimmer's events by the place the seed takes in the theoretical field
+ * itself: for each event, sort every entrant's seed in that event, and use the
+ * rank (or rank over field size). Compare raw in-course times within ONE event
+ * only. Use no conversion and no cut table, so the ranking needs nothing that is
+ * not in the captured, in-course data.
  *
  * ## Row ids and provenance
  *
@@ -46,28 +61,33 @@
  * ({@link TheoreticalMeetSeeds.sources}). A row id is
  * `tmseed|meet|gender|team|swimmer|event`, every part URI-encoded. The meet id
  * is part of it because psych result ids are primary keys across all
- * workspaces (`psych_results.id TEXT PRIMARY KEY`). The same input always makes
- * the same ids.
+ * workspaces (`psych_results.id TEXT PRIMARY KEY`). The swimmer part is
+ * `sc:{SwimCloud id}`, or `nm:{normalized name}` when the roster gave no id
+ * (a name is unique on a team by rule 5). The same input always makes the same
+ * ids.
  */
 
 import { Gender } from '@omniswim/core/types';
 import type { HistoricalSwim, ScoringSettings, SwimmerResult } from '@omniswim/core/types';
 import { categorizeBestEvents, swimEventIdentity } from '@omniswim/core/lib/athleteHistory';
+import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
 import { canAcceptAnotherEntry, type SwimmerEntryCounts } from '@omniswim/core/lib/swimmerEntryLimits';
-import { normalizeSwimmerName } from '@omniswim/core/lib/utils';
+import { isDivingEvent, normalizeSwimmerName } from '@omniswim/core/lib/utils';
 import type { SwimCloudAthlete } from '@omniswim/swimcloud/entities';
 
 /* -------------------------------------------------------------------------- */
 /* Courses, errors                                                             */
 /* -------------------------------------------------------------------------- */
 
-/** The three courses the codebase names (`HistoricalSwim.timeType`). */
+/** The three courses the codebase names (`HistoricalSwim.timeType`). Only SCY is built; see the file header. */
 export const THEORETICAL_MEET_COURSES = ['SCY', 'LCM', 'SCM'] as const;
 export type TheoreticalMeetCourse = (typeof THEORETICAL_MEET_COURSES)[number];
 
 export type TheoreticalMeetErrorCode =
   /** The meet course is not SCY, LCM or SCM. */
   | 'unknown-course'
+  /** The meet course is LCM or SCM. Not built yet; see the file header. */
+  | 'course-not-supported'
   /** A team's gender is not one the meet knows (`Gender.MEN` or `Gender.WOMEN`). */
   | 'unknown-team-gender'
   /** A roster athlete's own gender contradicts the team's gender. */
@@ -78,7 +98,11 @@ export type TheoreticalMeetErrorCode =
   | 'invalid-scoring-settings'
   /** A roster athlete has no usable name. */
   | 'athlete-without-name'
-  /** The meet id or a team name is empty. */
+  /** Two athletes on one team share a normalized name. Psych scoring would merge them. */
+  | 'name-collision-in-team'
+  /** A team's roster status is missing, or an empty roster is not stated as `no_rosters_found`. */
+  | 'roster-status-required'
+  /** The meet id or a team name is empty, or two fields contradict each other. */
   | 'invalid-input'
   /** The same team and gender were given twice. */
   | 'duplicate-team'
@@ -105,11 +129,17 @@ export interface TheoreticalMeetAthleteInput {
   readonly athlete: SwimCloudAthlete;
   /**
    * The output of `swimCloudSwimmerTimesToHistoricalSwims(...).swims`.
-   * `undefined` means no times page was captured for this athlete. An empty
-   * array means a page was captured and held no usable swim. The two are
-   * reported apart.
+   * `undefined` means no times page was captured for this athlete, or (with
+   * `swimsStatus: 'parse_failed'`) that the page did not parse. An empty array
+   * means a page was captured and held no usable swim. These are reported apart.
    */
   readonly swims: readonly HistoricalSwim[] | undefined;
+  /**
+   * `'parse_failed'`: a times page was captured and the parse failed. Requires
+   * `swims: undefined`. Reported in `athletesWithTimesParseFailed`, not in
+   * `athletesWithNoTimes`. Absent: no claim.
+   */
+  readonly swimsStatus?: 'parse_failed';
   /** The capture the times page came from, when known. Copied into the row's source record. */
   readonly captureId?: string;
   /** When the times page was captured. A swim's own `retrievedAt` wins when it has one. */
@@ -124,9 +154,16 @@ export interface TheoreticalMeetTeamInput {
   readonly teamName: string;
   readonly gender: Gender;
   /**
-   * The SwimCloud season id the roster was read for (`29` for 2025-2026).
-   * Used only to tell whether a seed is older than the roster season. Absent
-   * means the caveat is always included.
+   * What the roster capture said. `parsed`: the page parsed and lists athletes.
+   * `no_rosters_found`: the real "No rosters found" page (the parser warns
+   * `no-roster-posted`); `athletes` must then be empty. An empty list with
+   * `parsed`, or no status, throws `roster-status-required`.
+   */
+  readonly rosterStatus: 'parsed' | 'no_rosters_found';
+  /**
+   * The SwimCloud season id the roster was read for (`29` for 2025-2026). A seed
+   * is in-season only when its own `seasonId` is string-equal to this. Ids are
+   * never ordered. Absent means the all-time-best caveat is always included.
    */
   readonly rosterSeasonId?: string;
   readonly athletes: readonly TheoreticalMeetAthleteInput[];
@@ -135,14 +172,19 @@ export interface TheoreticalMeetTeamInput {
 export interface TheoreticalMeetInput {
   /** Scopes the row ids. Use the id of the workspace the rows will be written to. */
   readonly meetId: string;
+  /** Must be `'SCY'`. LCM and SCM throw `course-not-supported`. */
   readonly course: TheoreticalMeetCourse;
   /**
    * The meet's scoring settings. `maxIndividualEntriesPerSwimmer` is required.
    * `maxTotalEntriesPerSwimmer` is optional: absent means the meet has no total
-   * cap, which is how the non-NSISC presets state it. Each cap that is present
-   * must be a whole number of 1 or more (999 means no cap).
+   * cap, which is how the non-NSISC presets state it. The settings are merged
+   * with `conference` (`mergeScoringSettings`) once, the way the roster
+   * optimizer merges them, and each cap in the merged result must be a whole
+   * number of 1 or more (999 means no cap).
    */
   readonly scoringSettings: ScoringSettings;
+  /** The workspace conference (`workspace.conference`, for example `'NSISC'`). NSISC fixes the entry caps by rule. */
+  readonly conference?: string;
   /**
    * The meet's individual events as canonical labels (`meetProgramEvents`).
    * `null` or absent: the standard championship program, as the selector does
@@ -193,7 +235,7 @@ export interface TheoreticalSwimmerEvents {
   readonly swimCloudSwimmerId?: string;
   /** Every offered event, strongest first, with the chosen ones marked. */
   readonly events: readonly TheoreticalEventCandidate[];
-  /** Seeds in the meet course that the selector did not offer (outside the program, extracted splits, no factor). Course-qualified labels. */
+  /** Seeds in the meet course that the selector did not offer (outside the program, extracted splits). Course-qualified labels. */
   readonly unofferedSeeds: readonly string[];
 }
 
@@ -204,10 +246,12 @@ export interface TheoreticalAthleteRef {
 
 export interface TheoreticalNoSeedAthlete extends TheoreticalAthleteRef {
   /**
-   * `no_swim_in_meet_course`: times were captured, none was recorded in the meet course.
+   * `no_usable_swim`: a times page was captured (`swims: []`) and held no usable swim.
+   * `diving_not_supported`: every captured swim is a dive.
+   * `no_swim_in_meet_course`: swims were captured, none was recorded in the meet course.
    * `no_event_in_program`: swims in the meet course exist, none is an event the selector offers.
    */
-  readonly reason: 'no_swim_in_meet_course' | 'no_event_in_program';
+  readonly reason: 'no_usable_swim' | 'diving_not_supported' | 'no_swim_in_meet_course' | 'no_event_in_program';
 }
 
 export interface TheoreticalDuplicateAthlete extends TheoreticalAthleteRef {
@@ -220,8 +264,12 @@ export interface TheoreticalDuplicateAthlete extends TheoreticalAthleteRef {
 export interface TheoreticalTeamReport {
   readonly teamName: string;
   readonly gender: Gender;
+  readonly rosterStatus: 'parsed' | 'no_rosters_found';
   readonly rowsCreated: number;
+  /** No times page was captured. */
   readonly athletesWithNoTimes: readonly TheoreticalAthleteRef[];
+  /** A times page was captured and did not parse. */
+  readonly athletesWithTimesParseFailed: readonly TheoreticalAthleteRef[];
   readonly athletesWithNoSeedInMeetCourse: readonly TheoreticalNoSeedAthlete[];
   readonly duplicateAcrossTeams: readonly TheoreticalDuplicateAthlete[];
   readonly eventsChosenPerSwimmer: readonly TheoreticalSwimmerEvents[];
@@ -257,10 +305,12 @@ export const ALL_TIME_BEST_CAVEAT =
   'Seeds are all-time bests. An all-time best can overstate a swimmer who has since slowed.';
 export const RELAYS_EXCLUDED_CAVEAT =
   'Relays are not included. These rows are individual entries only.';
-export const RANKED_ON_ESTIMATE_CAVEAT =
-  'This course is not SCY. The existing event selector ranks a swimmer\'s events on a SCY estimate. The estimate only orders the events. Every seed is the swim as recorded, with no conversion.';
+export const DIVING_EXCLUDED_CAVEAT =
+  'Diving is not included. Dives are never made into rows.';
 export const TOTAL_CAP_CAVEAT =
   'The meet has a total entry cap. Relay slots are not reserved, so a swimmer\'s individual entries can use the whole cap.';
+export const UNCAPPED_CAVEAT =
+  'No entry cap applies to these settings, so every offered event is entered for each swimmer.';
 
 /* -------------------------------------------------------------------------- */
 /* Validation                                                                  */
@@ -282,19 +332,66 @@ function requireCap(value: unknown, field: string, required: boolean): number | 
   return value;
 }
 
-function validateSettings(settings: ScoringSettings): { totalCap: number | undefined } {
-  if (settings === undefined || settings === null) {
+/**
+ * The settings the whole build uses: the input settings merged ONCE with the
+ * conference, as `optimizeEventLineupForTeam` merges them. The individual cap
+ * must be present on the input (the merge would otherwise fill in a default).
+ */
+function resolveSettings(input: TheoreticalMeetInput): { settings: ScoringSettings; indCap: number; totalCap: number | undefined } {
+  const raw = input.scoringSettings;
+  if (raw === undefined || raw === null) {
     throw new TheoreticalMeetError('invalid-scoring-settings', 'No scoring settings were given.');
   }
-  requireCap(settings.maxIndividualEntriesPerSwimmer, 'maxIndividualEntriesPerSwimmer', true);
-  return { totalCap: requireCap(settings.maxTotalEntriesPerSwimmer, 'maxTotalEntriesPerSwimmer', false) };
+  requireCap(raw.maxIndividualEntriesPerSwimmer, 'maxIndividualEntriesPerSwimmer', true);
+  const settings = mergeScoringSettings(raw, { conference: input.conference });
+  const indCap = requireCap(settings.maxIndividualEntriesPerSwimmer, 'maxIndividualEntriesPerSwimmer', true) as number;
+  const totalCap = requireCap(settings.maxTotalEntriesPerSwimmer, 'maxTotalEntriesPerSwimmer', false);
+  return { settings, indCap, totalCap };
 }
 
-function validateCourse(course: unknown): TheoreticalMeetCourse {
+function validateCourse(course: unknown): void {
   if (!(THEORETICAL_MEET_COURSES as readonly unknown[]).includes(course)) {
     throw new TheoreticalMeetError('unknown-course', `The meet course ${JSON.stringify(course)} is not one of ${THEORETICAL_MEET_COURSES.join(', ')}.`);
   }
-  return course as TheoreticalMeetCourse;
+  if (course !== 'SCY') {
+    throw new TheoreticalMeetError(
+      'course-not-supported',
+      `A ${String(course)} meet is not supported. The event selector ranks on SCY seconds and SCY cut tables, so a ${String(course)} ranking would need a conversion estimate. ` +
+        'Ranking in the meet course needs a design with no conversion and no cut (rank by the seed\'s place in the theoretical field, one event at a time). That is a follow-up.'
+    );
+  }
+}
+
+function validateAthletes(team: TheoreticalMeetTeamInput): void {
+  for (const entry of team.athletes) {
+    const { athlete } = entry;
+    if (typeof athlete.name !== 'string' || athlete.name.trim().length === 0) {
+      throw new TheoreticalMeetError('athlete-without-name', `Team ${team.teamName} has an athlete with no usable name (swimmer id ${athlete.swimCloudSwimmerId ?? 'none'}).`);
+    }
+    const g = athlete.gender;
+    if (g !== undefined && g !== 'unknown' && (g as string) !== (team.gender as string)) {
+      throw new TheoreticalMeetError('athlete-gender-mismatch', `${athlete.name} is listed as ${g} on a ${team.gender} roster for ${team.teamName}.`);
+    }
+    if (entry.swimsStatus !== undefined && entry.swimsStatus !== 'parse_failed') {
+      throw new TheoreticalMeetError('invalid-input', `${athlete.name} has swimsStatus ${JSON.stringify(entry.swimsStatus)}. Only 'parse_failed' is known.`);
+    }
+    if (entry.swimsStatus === 'parse_failed' && entry.swims !== undefined) {
+      throw new TheoreticalMeetError('invalid-input', `${athlete.name} is marked parse_failed but carries swims.`);
+    }
+  }
+}
+
+function validateRosterStatus(team: TheoreticalMeetTeamInput): void {
+  const status = team.rosterStatus as unknown;
+  if (status !== 'parsed' && status !== 'no_rosters_found') {
+    throw new TheoreticalMeetError('roster-status-required', `Team ${team.teamName} (${team.gender}) has roster status ${JSON.stringify(status)}. State 'parsed' or 'no_rosters_found'.`);
+  }
+  if (status === 'parsed' && team.athletes.length === 0) {
+    throw new TheoreticalMeetError('roster-status-required', `Team ${team.teamName} (${team.gender}) has no athletes but its roster status is 'parsed'. An empty roster must be stated as 'no_rosters_found'.`);
+  }
+  if (status === 'no_rosters_found' && team.athletes.length > 0) {
+    throw new TheoreticalMeetError('invalid-input', `Team ${team.teamName} (${team.gender}) is 'no_rosters_found' but lists ${team.athletes.length} athlete(s).`);
+  }
 }
 
 function validateTeam(team: TheoreticalMeetTeamInput): void {
@@ -304,15 +401,8 @@ function validateTeam(team: TheoreticalMeetTeamInput): void {
   if (team.gender !== Gender.MEN && team.gender !== Gender.WOMEN) {
     throw new TheoreticalMeetError('unknown-team-gender', `Team ${team.teamName} has gender ${JSON.stringify(team.gender)}. The meet knows ${Gender.MEN} and ${Gender.WOMEN}.`);
   }
-  for (const { athlete } of team.athletes) {
-    if (typeof athlete.name !== 'string' || athlete.name.trim().length === 0) {
-      throw new TheoreticalMeetError('athlete-without-name', `Team ${team.teamName} has an athlete with no usable name (swimmer id ${athlete.swimCloudSwimmerId ?? 'none'}).`);
-    }
-    const g = athlete.gender;
-    if (g !== undefined && g !== 'unknown' && (g as string) !== (team.gender as string)) {
-      throw new TheoreticalMeetError('athlete-gender-mismatch', `${athlete.name} is listed as ${g} on a ${team.gender} roster for ${team.teamName}.`);
-    }
-  }
+  validateRosterStatus(team);
+  validateAthletes(team);
 }
 
 /* -------------------------------------------------------------------------- */
@@ -330,55 +420,65 @@ export function theoreticalSeedRowId(args: {
   meetId: string;
   gender: Gender;
   teamName: string;
-  /** `sc:{id}` for an athlete with a SwimCloud id, else `nm:{name}:{n}`; see {@link swimmerKeyFor}. */
+  /** `sc:{id}` for an athlete with a SwimCloud id, else `nm:{normalized name}`; see {@link swimmerKeyFor}. */
   swimmerKey: string;
   event: string;
 }): string {
   return ['tmseed', enc(args.meetId), args.gender, enc(args.teamName), args.swimmerKey, enc(args.event)].join('|');
 }
 
-/** Per-team counter so two same-name athletes with no id still get two ids. */
-function swimmerKeyFor(athlete: SwimCloudAthlete, nameCounts: Map<string, number>): string {
+/** A name is unique on a team (the builder throws otherwise), so the name alone keys an athlete with no id. */
+function swimmerKeyFor(athlete: SwimCloudAthlete): string {
   if (athlete.swimCloudSwimmerId !== undefined) return `sc:${enc(athlete.swimCloudSwimmerId)}`;
-  const name = normalizeSwimmerName(athlete.name);
-  const n = nameCounts.get(name) ?? 0;
-  nameCounts.set(name, n + 1);
-  return `nm:${enc(name)}:${n}`;
+  return `nm:${enc(normalizeSwimmerName(athlete.name))}`;
 }
 
 /* -------------------------------------------------------------------------- */
 /* One athlete                                                                 */
 /* -------------------------------------------------------------------------- */
 
+/** What every athlete is built under. Settings are already merged. */
+type Context = {
+  readonly meetId: string;
+  readonly course: 'SCY';
+  readonly settings: ScoringSettings;
+  readonly meetProgram: ReadonlySet<string> | null;
+};
+
 type ChosenSeed = {
   readonly swim: HistoricalSwim;
   readonly candidate: Omit<TheoreticalEventCandidate, 'chosen' | 'rowId' | 'notChosenReason'>;
 };
 
+type SwimSplit = {
+  /** Non-dive swims recorded in the meet course, stamped with the roster athlete's identity. */
+  used: HistoricalSwim[];
+  /** Non-dive swims with no recorded course. A dive has none and is not counted here. */
+  unknownCourse: number;
+  /** Whether the athlete has any swim that is not a dive. */
+  hasNonDiving: boolean;
+};
+
 /**
- * The swims the meet can seed from: recorded in the meet course, stamped with
- * the roster athlete's identity (the swims came from a times page that names the
- * swimmer another way, `'Paulk, River J'`, and the caller paired them by id).
+ * The swims the meet can seed from. The swims came from a times page that names
+ * the swimmer another way (`'Paulk, River J'`) and the caller paired them by id,
+ * so each is stamped with the roster athlete's name and team.
  */
-function inCourseSwims(
-  team: TheoreticalMeetTeamInput,
-  athlete: SwimCloudAthlete,
-  swims: readonly HistoricalSwim[],
-  course: TheoreticalMeetCourse
-): { used: HistoricalSwim[]; unknownCourse: number } {
-  const used: HistoricalSwim[] = [];
-  let unknownCourse = 0;
+function splitSwims(team: TheoreticalMeetTeamInput, athlete: SwimCloudAthlete, swims: readonly HistoricalSwim[], course: string): SwimSplit {
+  const split: SwimSplit = { used: [], unknownCourse: 0, hasNonDiving: false };
   for (const swim of swims) {
     if (swim.gender !== team.gender) {
       throw new TheoreticalMeetError('swim-gender-mismatch', `A swim of ${athlete.name} (${swim.event}) is ${String(swim.gender)} on a ${team.gender} roster for ${team.teamName}.`);
     }
+    if (isDivingEvent(swim.event)) continue;
+    split.hasNonDiving = true;
     if (swim.timeType === undefined) {
-      unknownCourse += 1;
+      split.unknownCourse += 1;
       continue;
     }
-    if (swim.timeType === course) used.push({ ...swim, name: athlete.name, team: team.teamName });
+    if (swim.timeType === course) split.used.push({ ...swim, name: athlete.name, team: team.teamName });
   }
-  return { used, unknownCourse };
+  return split;
 }
 
 function rankBasisOf(strength: Record<string, { basis: TheoreticalRankBasis }> | undefined, event: string): TheoreticalRankBasis {
@@ -389,28 +489,20 @@ function rankBasisOf(strength: Record<string, { basis: TheoreticalRankBasis }> |
   return basis;
 }
 
-/** The recorded swim behind one selector best: event, time and the swim row itself. */
+/** The recorded swim behind one selector best. In SCY the selector's event and time are the recorded ones. */
 function traceSeed(
   selectorEvent: string,
-  best: { time: string; convertedFrom?: { sourceCourse: string; sourceEvent: string; sourceTime: string } },
-  course: TheoreticalMeetCourse,
+  best: { time: string; convertedFrom?: unknown },
   swims: readonly HistoricalSwim[]
 ): { event: string; time: string; swim: HistoricalSwim } {
-  let event = selectorEvent;
-  let time = best.time;
-  if (course !== 'SCY') {
-    const from = best.convertedFrom;
-    if (from === undefined || from.sourceCourse !== course) {
-      throw new TheoreticalMeetError('seed-provenance-missing', `The selector offered ${selectorEvent} without the ${course} swim it came from.`);
-    }
-    event = from.sourceEvent;
-    time = from.sourceTime;
+  if (best.convertedFrom !== undefined) {
+    throw new TheoreticalMeetError('seed-provenance-missing', `The selector offered ${selectorEvent} as a converted time. A seed is never converted.`);
   }
-  const swim = swims.find(s => s.event === event && s.time === time);
+  const swim = swims.find(s => s.event === selectorEvent && s.time === best.time);
   if (swim === undefined) {
-    throw new TheoreticalMeetError('seed-provenance-missing', `No captured swim matches ${event} ${time}.`);
+    throw new TheoreticalMeetError('seed-provenance-missing', `No captured swim matches ${selectorEvent} ${best.time}.`);
   }
-  return { event, time, swim };
+  return { event: selectorEvent, time: best.time, swim };
 }
 
 type AthleteOutcome =
@@ -419,12 +511,14 @@ type AthleteOutcome =
 
 /** Choose one athlete's events: the selector for the order, the optimizer's cap check for the limit. */
 function chooseAthleteEvents(
-  input: TheoreticalMeetInput,
+  ctx: Context,
   team: TheoreticalMeetTeamInput,
   athlete: SwimCloudAthlete,
   swims: readonly HistoricalSwim[]
 ): AthleteOutcome {
-  const { used, unknownCourse } = inCourseSwims(team, athlete, swims, input.course);
+  if (swims.length === 0) return { kind: 'no_seed', reason: 'no_usable_swim', unknownCourse: 0 };
+  const { used, unknownCourse, hasNonDiving } = splitSwims(team, athlete, swims, ctx.course);
+  if (!hasNonDiving) return { kind: 'no_seed', reason: 'diving_not_supported', unknownCourse };
   if (used.length === 0) return { kind: 'no_seed', reason: 'no_swim_in_meet_course', unknownCourse };
 
   // The selector slices its order to the individual cap. Ask for the whole
@@ -435,16 +529,15 @@ function chooseAthleteEvents(
     team.teamName,
     team.gender,
     athlete.name,
-    { ...input.scoringSettings, maxIndividualEntriesPerSwimmer: UNCAPPED },
+    { ...ctx.settings, maxIndividualEntriesPerSwimmer: UNCAPPED },
     [],
     undefined,
-    input.meetProgram ?? null,
+    ctx.meetProgram,
     null
   );
 
   const ranked: ChosenSeed[] = profile.primaryEvents.map(selectorEvent => {
-    const best = profile.bestByEvent[selectorEvent];
-    const seed = traceSeed(selectorEvent, best, input.course, used);
+    const seed = traceSeed(selectorEvent, profile.bestByEvent[selectorEvent], used);
     return {
       swim: seed.swim,
       candidate: {
@@ -477,15 +570,13 @@ function applyEntryCaps(ranked: readonly ChosenSeed[], settings: ScoringSettings
 /* -------------------------------------------------------------------------- */
 
 /**
- * Whether a seed is provably not older than the roster season. SwimCloud
- * numbers seasons in time order (checked on the real swimmer 1330318 response:
- * season 21 holds 2018, season 29 holds 2025-2026). Anything that cannot be
- * compared counts as "not proven", which keeps the caveat.
+ * A seed is in-season only when its season id is string-equal to the roster's.
+ * Season ids are never ordered or compared as numbers: a later season is as
+ * much "not the roster season" as an earlier one, and a missing id proves
+ * nothing.
  */
-function seedProvenNotOlder(seedSeasonId: string | undefined, rosterSeasonId: string | undefined): boolean {
-  if (seedSeasonId === undefined || rosterSeasonId === undefined) return false;
-  if (!/^\d+$/.test(seedSeasonId) || !/^\d+$/.test(rosterSeasonId)) return false;
-  return Number(seedSeasonId) >= Number(rosterSeasonId);
+function seedInRosterSeason(seedSeasonId: string | undefined, rosterSeasonId: string | undefined): boolean {
+  return seedSeasonId !== undefined && rosterSeasonId !== undefined && seedSeasonId === rosterSeasonId;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -495,6 +586,7 @@ function seedProvenNotOlder(seedSeasonId: string | undefined, rosterSeasonId: st
 type TeamAccumulator = {
   rows: SwimmerResult[];
   noTimes: TheoreticalAthleteRef[];
+  parseFailed: TheoreticalAthleteRef[];
   noSeed: TheoreticalNoSeedAthlete[];
   duplicates: TheoreticalDuplicateAthlete[];
   perSwimmer: TheoreticalSwimmerEvents[];
@@ -504,24 +596,28 @@ type TeamAccumulator = {
 };
 
 function newAccumulator(): TeamAccumulator {
-  return { rows: [], noTimes: [], noSeed: [], duplicates: [], perSwimmer: [], seedSeasonIds: [], unknownCourseSwims: 0, swimmersRankedOnTime: 0 };
+  return { rows: [], noTimes: [], parseFailed: [], noSeed: [], duplicates: [], perSwimmer: [], seedSeasonIds: [], unknownCourseSwims: 0, swimmersRankedOnTime: 0 };
 }
 
-function teamCaveats(input: TheoreticalMeetInput, team: TheoreticalMeetTeamInput, acc: TeamAccumulator, totalCap: number | undefined): string[] {
+function freshnessCaveat(team: TheoreticalMeetTeamInput, seedSeasonIds: readonly (string | undefined)[]): string | undefined {
+  if (seedSeasonIds.every(id => seedInRosterSeason(id, team.rosterSeasonId))) return undefined;
+  if (team.rosterSeasonId === undefined) {
+    return `${ALL_TIME_BEST_CAVEAT} The roster season is not known, so the season of each seed is not checked.`;
+  }
+  const other = seedSeasonIds.filter(id => !seedInRosterSeason(id, team.rosterSeasonId)).length;
+  return `${ALL_TIME_BEST_CAVEAT} ${other} of ${seedSeasonIds.length} seeds are from a season other than ${team.rosterSeasonId} (a seed with no season id counts as other).`;
+}
+
+function teamCaveats(team: TheoreticalMeetTeamInput, acc: TeamAccumulator, caps: { indCap: number; totalCap: number | undefined }): string[] {
   const caveats: string[] = [];
-  const notProven = acc.seedSeasonIds.some(id => !seedProvenNotOlder(id, team.rosterSeasonId));
-  if (notProven) {
-    const olderKnown = acc.seedSeasonIds.filter(id => id !== undefined && team.rosterSeasonId !== undefined && /^\d+$/.test(id) && /^\d+$/.test(team.rosterSeasonId) && Number(id) < Number(team.rosterSeasonId)).length;
-    const detail = team.rosterSeasonId === undefined
-      ? ' The roster season is not known, so the age of each seed is not checked.'
-      : ` ${olderKnown} of ${acc.seedSeasonIds.length} seeds are older than roster season ${team.rosterSeasonId}.`;
-    caveats.push(`${ALL_TIME_BEST_CAVEAT}${detail}`);
+  const fresh = freshnessCaveat(team, acc.seedSeasonIds);
+  if (fresh !== undefined) caveats.push(fresh);
+  if (team.rosterStatus === 'no_rosters_found') {
+    caveats.push(`The roster for ${team.teamName} (${team.gender}) lists no athletes (SwimCloud: no rosters found). No rows were made.`);
   }
-  if (team.athletes.length === 0) {
-    caveats.push(`The roster for ${team.teamName} (${team.gender}) lists no athletes. No rows were made.`);
-  }
-  if (input.course !== 'SCY') caveats.push(RANKED_ON_ESTIMATE_CAVEAT);
-  if (totalCap !== undefined && totalCap < UNCAPPED) caveats.push(TOTAL_CAP_CAVEAT);
+  const totalCapped = caps.totalCap !== undefined && caps.totalCap < UNCAPPED;
+  if (totalCapped) caveats.push(TOTAL_CAP_CAVEAT);
+  if (!totalCapped && caps.indCap >= UNCAPPED) caveats.push(UNCAPPED_CAVEAT);
   if (acc.swimmersRankedOnTime > 0) {
     caveats.push(
       `${acc.swimmersRankedOnTime} swimmer(s) have events ranked by raw time, not by distance to a published cut. This team's division is unknown or no standard covers the event, so short events can win a capped lineup.`
@@ -529,6 +625,9 @@ function teamCaveats(input: TheoreticalMeetInput, team: TheoreticalMeetTeamInput
   }
   if (acc.unknownCourseSwims > 0) {
     caveats.push(`${acc.unknownCourseSwims} captured swim(s) have no recorded course. They were not used.`);
+  }
+  if (acc.parseFailed.length > 0) {
+    caveats.push(`${acc.parseFailed.length} athlete(s) have a times page that did not parse. No rows were made for them.`);
   }
   return caveats;
 }
@@ -559,36 +658,36 @@ function buildRow(args: {
 }
 
 function processAthlete(
-  input: TheoreticalMeetInput,
+  ctx: Context,
   team: TheoreticalMeetTeamInput,
   entry: TheoreticalMeetAthleteInput,
-  swimmerKey: string,
   acc: TeamAccumulator,
   sources: Map<string, TheoreticalSeedSource>
 ): void {
   const { athlete } = entry;
+  const swimmerKey = swimmerKeyFor(athlete);
   const ref: TheoreticalAthleteRef = {
     name: athlete.name,
     ...(athlete.swimCloudSwimmerId === undefined ? {} : { swimCloudSwimmerId: athlete.swimCloudSwimmerId }),
   };
   if (entry.swims === undefined) {
-    acc.noTimes.push(ref);
+    (entry.swimsStatus === 'parse_failed' ? acc.parseFailed : acc.noTimes).push(ref);
     return;
   }
-  const outcome = chooseAthleteEvents(input, team, athlete, entry.swims);
+  const outcome = chooseAthleteEvents(ctx, team, athlete, entry.swims);
   acc.unknownCourseSwims += outcome.unknownCourse;
   if (outcome.kind === 'no_seed') {
     acc.noSeed.push({ ...ref, reason: outcome.reason });
     return;
   }
-  const accepted = applyEntryCaps(outcome.ranked, input.scoringSettings);
+  const accepted = applyEntryCaps(outcome.ranked, ctx.settings);
   const events: TheoreticalEventCandidate[] = [];
   outcome.ranked.forEach((seed, index) => {
     if (!accepted[index]) {
       events.push({ ...seed.candidate, chosen: false, notChosenReason: 'entry_cap' });
       return;
     }
-    const row = buildRow({ meetId: input.meetId, team, athlete, swimmerKey, seed });
+    const row = buildRow({ meetId: ctx.meetId, team, athlete, swimmerKey, seed });
     acc.rows.push(row);
     acc.seedSeasonIds.push(seed.swim.seasonId);
     const retrievedAt = seed.swim.retrievedAt ?? entry.retrievedAt;
@@ -596,7 +695,7 @@ function processAthlete(
       ...(athlete.swimCloudSwimmerId === undefined ? {} : { swimCloudSwimmerId: athlete.swimCloudSwimmerId }),
       ...(entry.captureId === undefined ? {} : { captureId: entry.captureId }),
       ...(retrievedAt === undefined ? {} : { retrievedAt }),
-      course: input.course,
+      course: ctx.course,
       sourceEvent: seed.candidate.event,
       ...(seed.swim.date === undefined ? {} : { swimDate: seed.swim.date }),
       ...(seed.swim.meetLabel === undefined ? {} : { meetLabel: seed.swim.meetLabel }),
@@ -608,15 +707,17 @@ function processAthlete(
   acc.perSwimmer.push({ ...ref, events, unofferedSeeds: outcome.unoffered });
 }
 
+const describeAthlete = (a: SwimCloudAthlete): string => `${a.name} (swimmer id ${a.swimCloudSwimmerId ?? 'none'})`;
+
 function processTeam(
-  input: TheoreticalMeetInput,
+  ctx: Context,
   team: TheoreticalMeetTeamInput,
   claimed: Map<string, string>,
   sources: Map<string, TheoreticalSeedSource>,
-  totalCap: number | undefined
-): { acc: TeamAccumulator; report: TheoreticalTeamReport } {
+  caps: { indCap: number; totalCap: number | undefined }
+): TheoreticalTeamReport & { rows: SwimmerResult[] } {
   const acc = newAccumulator();
-  const nameCounts = new Map<string, number>();
+  const seenNames = new Map<string, SwimCloudAthlete>();
   for (const entry of team.athletes) {
     const id = entry.athlete.swimCloudSwimmerId;
     if (id !== undefined) {
@@ -627,35 +728,49 @@ function processTeam(
       }
       claimed.set(id, team.teamName);
     }
-    processAthlete(input, team, entry, swimmerKeyFor(entry.athlete, nameCounts), acc, sources);
+    const nameKey = normalizeSwimmerName(entry.athlete.name);
+    const prior = seenNames.get(nameKey);
+    if (prior !== undefined) {
+      throw new TheoreticalMeetError(
+        'name-collision-in-team',
+        `Team ${team.teamName} (${team.gender}) has two athletes with the name ${entry.athlete.name}: ${describeAthlete(prior)} and ${describeAthlete(entry.athlete)}. ` +
+          'Psych scoring keys an entry on event, team and name, so it would merge them. Neither is picked. Resolve the names first.'
+      );
+    }
+    seenNames.set(nameKey, entry.athlete);
+    processAthlete(ctx, team, entry, acc, sources);
   }
-  const report: TheoreticalTeamReport = {
+  return {
+    rows: acc.rows,
     teamName: team.teamName,
     gender: team.gender,
+    rosterStatus: team.rosterStatus,
     rowsCreated: acc.rows.length,
     athletesWithNoTimes: acc.noTimes,
+    athletesWithTimesParseFailed: acc.parseFailed,
     athletesWithNoSeedInMeetCourse: acc.noSeed,
     duplicateAcrossTeams: acc.duplicates,
     eventsChosenPerSwimmer: acc.perSwimmer,
-    caveats: teamCaveats(input, team, acc, totalCap),
+    caveats: teamCaveats(team, acc, caps),
   };
-  return { acc, report };
 }
 
 /**
  * Build psych-sheet rows for a theoretical meet from several crawled teams.
  *
- * Throws {@link TheoreticalMeetError} on a bad course, an unknown team gender,
- * settings with no individual cap or a cap that is not a whole number of 1 or
- * more, an athlete with no name, a repeated team, or a seed the builder cannot
- * trace to a captured swim.
+ * Throws {@link TheoreticalMeetError} on an unknown course, an LCM or SCM
+ * course (`course-not-supported`), an unknown team gender, settings with no
+ * individual cap or a cap that is not a whole number of 1 or more, an athlete
+ * with no name, two athletes of one name on one team, a roster status that is
+ * missing or contradicts the athlete list, a repeated team, or a seed the
+ * builder cannot trace to a captured swim.
  */
 export function buildTheoreticalMeetSeeds(input: TheoreticalMeetInput): TheoreticalMeetSeeds {
   if (typeof input.meetId !== 'string' || input.meetId.trim().length === 0) {
     throw new TheoreticalMeetError('invalid-input', 'The meet id is empty. Row ids are scoped by it.');
   }
   validateCourse(input.course);
-  const { totalCap } = validateSettings(input.scoringSettings);
+  const { settings, indCap, totalCap } = resolveSettings(input);
   const seenTeams = new Set<string>();
   for (const team of input.teams) {
     validateTeam(team);
@@ -666,13 +781,14 @@ export function buildTheoreticalMeetSeeds(input: TheoreticalMeetInput): Theoreti
     seenTeams.add(key);
   }
 
+  const ctx: Context = { meetId: input.meetId, course: 'SCY', settings, meetProgram: input.meetProgram ?? null };
   const claimed = new Map<string, string>();
   const sources = new Map<string, TheoreticalSeedSource>();
   const rows: SwimmerResult[] = [];
   const teamReports: TheoreticalTeamReport[] = [];
   for (const team of input.teams) {
-    const { acc, report } = processTeam(input, team, claimed, sources, totalCap);
-    rows.push(...acc.rows);
+    const { rows: teamRows, ...report } = processTeam(ctx, team, claimed, sources, { indCap, totalCap });
+    rows.push(...teamRows);
     teamReports.push(report);
   }
 
@@ -682,7 +798,7 @@ export function buildTheoreticalMeetSeeds(input: TheoreticalMeetInput): Theoreti
     ids.add(row.id);
   }
 
-  const caveats = [...new Set([...teamReports.flatMap(t => t.caveats), RELAYS_EXCLUDED_CAVEAT])];
+  const caveats = [...new Set([...teamReports.flatMap(t => t.caveats), RELAYS_EXCLUDED_CAVEAT, DIVING_EXCLUDED_CAVEAT])];
   return {
     rows,
     psychMenResults: rows.filter(r => r.gender === Gender.MEN),
