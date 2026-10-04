@@ -35,6 +35,7 @@ import {
   type TheoreticalCapturePageRef,
   type TheoreticalCaptureParse,
   type TheoreticalCaptureRecord,
+  type TheoreticalStoredPageStamp,
 } from '../packages/manager/src/lib/theoreticalMeetFromCaptures';
 import { buildTheoreticalMeetSeeds } from '../packages/manager/src/lib/theoreticalMeetSeeds';
 import { SWIMMER_BODY, rosterPage } from './helpers/multiTeamDriverHarness';
@@ -79,8 +80,16 @@ const timesFor = (swimmerId: string): SwimCloudSwimmerTimesParse => ({ ...timesP
 /* Constructed capture records                                                 */
 /* -------------------------------------------------------------------------- */
 
+/** A stand-in page hash: 64 hex characters that depend on the URL. The records and the stored stamps agree on it unless a test says otherwise. */
+const shaOf = (text: string): string => {
+  let h = 0;
+  for (let i = 0; i < text.length; i += 1) h = (Math.imul(31, h) + text.charCodeAt(i)) | 0;
+  return (h >>> 0).toString(16).padStart(8, '0').repeat(8);
+};
+
 const rosterRef = (teamId: string, gender: 'M' | 'F', over: Partial<TheoreticalCapturePageRef> = {}): TheoreticalCapturePageRef => ({
   canonicalUrl: `https://www.swimcloud.com/team/${teamId}/roster/?gender=${gender}&page=1&season_id=29&sort=name`,
+  sha256: shaOf(`https://www.swimcloud.com/team/${teamId}/roster/?gender=${gender}&page=1&season_id=29&sort=name`),
   resourceKind: 'teamRoster',
   gender,
   teamId,
@@ -91,6 +100,7 @@ const rosterRef = (teamId: string, gender: 'M' | 'F', over: Partial<TheoreticalC
 
 const timesRef = (swimmerId: string, over: Partial<TheoreticalCapturePageRef> = {}): TheoreticalCapturePageRef => ({
   canonicalUrl: `https://www.swimcloud.com/api/swimmers/${swimmerId}/profile_fastest_times/`,
+  sha256: shaOf(`https://www.swimcloud.com/api/swimmers/${swimmerId}/profile_fastest_times/`),
   resourceKind: 'swimmerFastestTimes',
   retrievedAt: '2026-10-04T12:05:00.000Z',
   outcome: 'ok',
@@ -116,6 +126,12 @@ type Fixture = {
   withHtmlDep?: boolean;
 };
 
+function stampsOf(record: TheoreticalCaptureRecord | undefined): TheoreticalStoredPageStamp[] {
+  return (record?.pages ?? [])
+    .filter(p => p.outcome === 'ok' && p.sha256 !== undefined)
+    .map(p => ({ canonicalUrl: p.canonicalUrl, resourceKind: p.resourceKind, entryRetrievedAt: p.retrievedAt, contentSha256: p.sha256 as string }));
+}
+
 function deps(f: Fixture = {}): TheoreticalCaptureDeps {
   const records = f.records ?? [record()];
   return {
@@ -124,6 +140,8 @@ function deps(f: Fixture = {}): TheoreticalCaptureDeps {
       captureId,
       rosters: [OBU_M, OBU_F],
       swimmerTimes: [],
+      // What the real route answers: the stored bytes' hash and write time, here equal to the record's.
+      storedPages: stampsOf(records.find(r => r.captureId === captureId)),
       ...f.parse,
     }),
     ...(f.withHtmlDep === false ? {} : { readRosterPageHtml: async () => ('html' in f ? f.html : SEASON_FORM) }),
@@ -445,5 +463,132 @@ describe('theoreticalMeetFromCaptures: bad input', () => {
     });
     expect(result.teams.map(t => t.captureId)).toEqual(['team-10002824-2025-2026', 'team-412-2025-2026', 'team-412-2025-2026']);
     expect(result.captures.map(c => c.captureId)).toEqual(['team-10002824-2025-2026', 'team-412-2025-2026']);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* T4: changed page bytes                                                      */
+/* -------------------------------------------------------------------------- */
+
+describe('theoreticalMeetFromCaptures: page bytes that changed since the fetch', () => {
+  const first = OBU_M.athletes[0].swimCloudSwimmerId as string;
+  const STORED_AT = '2026-10-06T09:00:00.000Z';
+  const pagesWithTimes = () => [rosterRef('412', 'M'), rosterRef('412', 'F'), timesRef(first)];
+  const driftOf = (url: string): TheoreticalStoredPageStamp => ({ canonicalUrl: url, resourceKind: 'x', entryRetrievedAt: STORED_AT, contentSha256: 'ab'.repeat(32) });
+
+  it('a clean capture reports nothing and keeps the record fetch times', async () => {
+    const result = await run({ records: [record({ pages: pagesWithTimes() })], parse: { swimmerTimes: [timesFor(first)] } });
+    expect(result.warnings).toEqual([]);
+    expect(result.captures[0].driftedPages).toEqual([]);
+    expect(result.captures[0].unverifiedPages).toBe(0);
+    expect(result.teams[0].retrievedAt).toBe(RETRIEVED);
+  });
+
+  it('a roster page whose stored bytes differ gets a page-bytes-drifted warning and the stored write time as its time', async () => {
+    const pages = pagesWithTimes();
+    const result = await run({ records: [record({ pages })], parse: { storedPages: [driftOf(pages[0].canonicalUrl), ...stampsOf(record({ pages })).slice(1)] } });
+    expect(result.captures[0].driftedPages).toEqual([pages[0].canonicalUrl]);
+    expect(result.warnings.join('\n')).toMatch(/page-bytes-drifted/);
+    expect(result.warnings.join('\n')).toContain(pages[0].canonicalUrl);
+    for (const team of result.teams) expect(team.warnings.join('\n')).toMatch(/page-bytes-drifted/);
+    // The drifted men's roster page no longer keeps the old fetch time as its provenance.
+    expect(result.teams[0].retrievedAt).toBe(STORED_AT);
+    expect(result.teams[1].retrievedAt).toBe(RETRIEVED);
+  });
+
+  it('a times page whose stored bytes differ stamps its athlete, its swims and the seed source with the stored write time', async () => {
+    const pages = pagesWithTimes();
+    const result = await run({
+      records: [record({ pages })],
+      parse: { swimmerTimes: [timesFor(first)], storedPages: [...stampsOf(record({ pages })).slice(0, 2), driftOf(pages[2].canonicalUrl)] },
+    });
+    const athlete = result.teams[0].athletes[0];
+    expect(athlete.retrievedAt).toBe(STORED_AT);
+    expect(athlete.swims?.every(s => s.retrievedAt === STORED_AT)).toBe(true);
+    expect(result.captures[0].driftedPages).toEqual([pages[2].canonicalUrl]);
+    const seeds = buildTheoreticalMeetSeeds({ meetId: 'ws-1', course: 'SCY', scoringSettings: GENERIC_TOP16_SETTINGS, teams: result.teams });
+    expect(seeds.sources.get(seeds.rows[0].id)?.retrievedAt).toBe(STORED_AT);
+  });
+
+  it('a parse that returns no stamps cannot verify anything, and says so once', async () => {
+    const result = await run({ parse: { storedPages: undefined } });
+    expect(result.captures[0].unverifiedPages).toBe(2);
+    expect(result.warnings.join('\n')).toMatch(/2 page\(s\) could not be checked against the fetched bytes/);
+  });
+
+  it('a page with no recorded hash, or no stored stamp, is unverified, not drifted', async () => {
+    const pages = [rosterRef('412', 'M', { sha256: undefined }), rosterRef('412', 'F')];
+    const result = await run({ records: [record({ pages })], parse: { storedPages: [] } });
+    expect(result.captures[0].driftedPages).toEqual([]);
+    expect(result.captures[0].unverifiedPages).toBe(2);
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* T5: parse warnings                                                          */
+/* -------------------------------------------------------------------------- */
+
+describe('theoreticalMeetFromCaptures: parse warnings reach the report', () => {
+  const url = 'https://www.swimcloud.com/team/412/roster/?gender=M&page=1&season_id=29&sort=name';
+  const warnings = [
+    url + ' (row 4): unparsed-row — Roster row has an empty name cell and was skipped.',
+    url + ' (row 9): unparsed-row — Roster row has an empty name cell and was skipped.',
+    url + ' (row 2): missing-athlete-link — Roster row for A B carries no /swimmer/{id}/ link.',
+    'Could not parse https://www.swimcloud.com/api/swimmers/1/profile_fastest_times/: not json',
+    'No stored content for https://www.swimcloud.com/api/swimmers/2/profile_fastest_times/ (outcome: http-error)',
+  ];
+
+  it('counts them by code in the capture summary and on every team', async () => {
+    const result = await run({ parse: { warnings } });
+    expect(result.captures[0].parseWarnings).toEqual({
+      total: 5,
+      byCode: { 'unparsed-row': 2, 'missing-athlete-link': 1, 'page-not-parsed': 1, 'no-stored-content': 1 },
+      lines: warnings,
+    });
+    for (const team of result.teams) {
+      expect(team.warnings.join('\n')).toMatch(/The capture parse reported 5 warning\(s\): unparsed-row x2, missing-athlete-link x1, page-not-parsed x1, no-stored-content x1\./);
+    }
+    expect(result.warnings.join('\n')).toMatch(/unparsed-row x2/);
+  });
+
+  it('a clean parse adds nothing', async () => {
+    const result = await run({ parse: { warnings: [] } });
+    expect(result.captures[0].parseWarnings.total).toBe(0);
+    expect(result.warnings).toEqual([]);
+  });
+
+  it('a warning in a shape this file does not know is counted as other, never dropped', async () => {
+    const result = await run({ parse: { warnings: ['something new happened'] } });
+    expect(result.captures[0].parseWarnings.byCode).toEqual({ other: 1 });
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* T8: the season id needs proof                                               */
+/* -------------------------------------------------------------------------- */
+
+describe('theoreticalMeetFromCaptures: no season id without proof', () => {
+  const NO_ID_URL = 'https://www.swimcloud.com/team/412/roster/?gender=M';
+  const noProofPages = [rosterRef('412', 'M', { canonicalUrl: NO_ID_URL, sha256: shaOf(NO_ID_URL) }), rosterRef('412', 'F')];
+  const unprinted = [{ ...OBU_M, season: undefined }, OBU_F];
+
+  it('leaves the id undefined when the URL has no season_id and the page prints no season, even if the table lists the label', async () => {
+    const noneSelected = SEASON_FORM.replace('value="29" selected', 'value="29"');
+    const result = await run({ records: [record({ pages: noProofPages })], parse: { rosters: unprinted }, html: noneSelected });
+    expect(result.teams[0].rosterSeasonId).toBeUndefined();
+    expect(result.teams[0].warnings.join(' ')).toMatch(/nothing proves which season/);
+    // The women's page prints its season, so it is proof.
+    expect(result.teams[1].rosterSeasonId).toBe('29');
+  });
+
+  it('uses the selected option only when it is the subject label', async () => {
+    // The real season form marks 2025-2026 (29) selected, and the subject label is 2025-2026.
+    const result = await run({ records: [record({ pages: noProofPages })], parse: { rosters: unprinted } });
+    expect(result.teams[0].rosterSeasonId).toBe('29');
+    // A different selected option is not proof for this label.
+    const other = SEASON_FORM.replace('value="29" selected', 'value="29"').replace('value="30"', 'value="30" selected');
+    const mismatch = await run({ records: [record({ pages: noProofPages })], parse: { rosters: unprinted }, html: other });
+    expect(mismatch.teams[0].rosterSeasonId).toBeUndefined();
+    expect(mismatch.teams[0].warnings.join(' ')).toMatch(/marks 2026-2027 selected, not 2025-2026/);
   });
 });

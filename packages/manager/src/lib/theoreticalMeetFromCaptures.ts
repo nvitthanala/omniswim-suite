@@ -50,6 +50,20 @@
  *    in-progress, partial, or short of its planned pages is accepted, and every
  *    one of its teams carries a warning with the counts. A `failed` capture
  *    throws `capture-failed`.
+ * 7. **The bytes parsed are the bytes fetched, or the report says they are not.**
+ *    The parse route reads whatever bytes the URL holds now, and one URL has one
+ *    stored file shared by every capture, so a later crawl can replace what a
+ *    capture record was written for. The route returns a hash of each stored page
+ *    (`storedPages`). A used page whose hash differs from the record's gets a
+ *    `page-bytes-drifted` warning, and its fetch time is replaced by the write
+ *    time of the stored bytes (so a seed never keeps the old time as provenance).
+ *    A page that cannot be checked is counted in `unverifiedPages`, never assumed
+ *    clean.
+ * 8. **Parse warnings are not dropped.** The parse's warning lines are counted by
+ *    code (`parseWarnings`) in the capture summary and on every team of the capture.
+ * 9. **A season id needs proof.** The URL names it (`season_id`), or the page prints
+ *    the season. With neither, the table's selected option counts only when it is the
+ *    subject's label. Otherwise `rosterSeasonId` stays undefined.
  *
  * ## Where the page bytes come from
  *
@@ -128,6 +142,8 @@ export interface TheoreticalCapturePageRef {
   /** ISO-8601. */
   readonly retrievedAt: string;
   readonly outcome: string;
+  /** SHA-256 of the bytes at fetch time, as the crawl recorded them. Absent on a record with no hash. */
+  readonly sha256?: string;
 }
 
 /** The fields of a stored capture record this file reads. `GET /api/swimcloud/captures` returns full records. */
@@ -139,11 +155,29 @@ export interface TheoreticalCaptureRecord {
   readonly pages: readonly TheoreticalCapturePageRef[];
 }
 
+/**
+ * What the parse route read for one stored page: the hash of the bytes it parsed, and the write time of
+ * those bytes. The parse reads whatever bytes the URL holds now, which can differ from the bytes the
+ * capture record was written for (a later crawl of the same URL overwrites them).
+ */
+export interface TheoreticalStoredPageStamp {
+  readonly canonicalUrl: string;
+  readonly resourceKind: string;
+  /** The stored entry's own `retrievedAt`: when these bytes were last written. */
+  readonly entryRetrievedAt: string;
+  /** SHA-256 of the stored bytes, computed when they were read for the parse. */
+  readonly contentSha256: string;
+}
+
 /** The fields of `POST /api/swimcloud/captures/:id/parse` this file reads. */
 export interface TheoreticalCaptureParse {
   readonly captureId: string;
   readonly rosters: readonly SwimCloudRosterParse[];
   readonly swimmerTimes: readonly SwimCloudSwimmerTimesParse[];
+  /** The parse's own warning lines (`warnings` in the route response). Absent: none were returned. */
+  readonly warnings?: readonly string[];
+  /** One stamp per stored page the parse read (`storedPages` in the route response). Absent on a server that does not return it. */
+  readonly storedPages?: readonly TheoreticalStoredPageStamp[];
 }
 
 export interface TheoreticalCaptureDeps {
@@ -190,6 +224,20 @@ export interface TheoreticalCaptureSummary {
   readonly pagesPlanned: number;
   /** Warnings that belong to the capture, not to one team. */
   readonly warnings: readonly string[];
+  /** Canonical URLs of used pages whose stored bytes no longer hash to what the crawl recorded. */
+  readonly driftedPages: readonly string[];
+  /** How many used pages could not be checked (no recorded hash, no stored stamp, or no stamps at all). */
+  readonly unverifiedPages: number;
+  /** The parse's warning lines, counted by code. Nothing is dropped: an unknown shape counts as `other`. */
+  readonly parseWarnings: TheoreticalParseWarningSummary;
+}
+
+export interface TheoreticalParseWarningSummary {
+  readonly total: number;
+  /** In order of first appearance. */
+  readonly byCode: Readonly<Record<string, number>>;
+  /** Every line, as the route returned it. */
+  readonly lines: readonly string[];
 }
 
 export interface TheoreticalMeetFromCapturesResult {
@@ -439,7 +487,19 @@ async function resolveRosterSeasonId(
     );
     return undefined;
   }
-  return match.seasonId;
+  // Proof the page is for this season: the URL asked for it (checked above), or the page prints it.
+  // The season table lists every season the team has, so listing the label proves nothing by itself.
+  if (inUrl !== undefined || page.parse.season === label) return match.seasonId;
+  // No URL id and no printed season. The table's selected option is the server's current season; it
+  // proves the page's season only when it is the label the capture was made for.
+  const selected = options.find(option => option.selected);
+  if (selected !== undefined && selected.label === label) return match.seasonId;
+  warnings.push(
+    selected === undefined
+      ? `The roster page URL names no season_id, the page prints no season and its season table marks none selected, so nothing proves which season the page is for. The roster season id is not known.`
+      : `The roster page URL names no season_id and the page prints no season, and its season table marks ${selected.label} selected, not ${label}, so nothing proves which season the page is for. The roster season id is not known.`
+  );
+  return undefined;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -512,6 +572,82 @@ function buildAthletes(
 }
 
 /* -------------------------------------------------------------------------- */
+/* Page bytes and parse warnings                                               */
+/* -------------------------------------------------------------------------- */
+
+const USED_PAGE_KINDS = ['teamRoster', 'swimmerFastestTimes', 'swimmerTimes'];
+
+const shortSha = (sha: string): string => `${sha.slice(0, 12)}...`;
+
+type Verification = {
+  /** Used pages whose stored bytes hash to something other than what the crawl recorded. */
+  drifted: Map<string, TheoreticalStoredPageStamp>;
+  unverified: number;
+  warnings: string[];
+};
+
+/**
+ * Compare the hash the crawl recorded for each used page with the hash of the bytes the parse read.
+ * The parse reads whatever the URL holds now. A later crawl of the same URL overwrites the bytes, so
+ * a capture record can describe a page whose bytes are no longer there. A page that cannot be
+ * checked is counted, never assumed clean.
+ */
+function verifyStoredPages(record: TheoreticalCaptureRecord, parse: TheoreticalCaptureParse): Verification {
+  const used = record.pages.filter(p => p.outcome === 'ok' && USED_PAGE_KINDS.includes(p.resourceKind));
+  const stamps = new Map((parse.storedPages ?? []).map(stamp => [stamp.canonicalUrl, stamp] as const));
+  const result: Verification = { drifted: new Map(), unverified: 0, warnings: [] };
+  for (const ref of used) {
+    const stamp = stamps.get(ref.canonicalUrl);
+    if (ref.sha256 === undefined || stamp === undefined) {
+      result.unverified += 1;
+      continue;
+    }
+    if (stamp.contentSha256 === ref.sha256) continue;
+    result.drifted.set(ref.canonicalUrl, stamp);
+    result.warnings.push(
+      `page-bytes-drifted: ${ref.canonicalUrl} was fetched as sha256 ${shortSha(ref.sha256)}, but the stored bytes hash to ${shortSha(stamp.contentSha256)}. ` +
+        `The stored bytes were parsed. The page's fetch time is replaced by the time the stored bytes were written (${stamp.entryRetrievedAt}).`
+    );
+  }
+  if (result.unverified > 0) {
+    result.warnings.push(
+      parse.storedPages === undefined
+        ? `${result.unverified} page(s) could not be checked against the fetched bytes: the capture parse returned no page hashes.`
+        : `${result.unverified} page(s) could not be checked against the fetched bytes: no recorded hash, or no stored bytes.`
+    );
+  }
+  return result;
+}
+
+/** The page ref with its time replaced by the stored bytes' own write time, when the bytes drifted. */
+function withStoredTime(ref: TheoreticalCapturePageRef, drifted: ReadonlyMap<string, TheoreticalStoredPageStamp>): TheoreticalCapturePageRef {
+  const stamp = drifted.get(ref.canonicalUrl);
+  return stamp === undefined ? ref : { ...ref, retrievedAt: stamp.entryRetrievedAt };
+}
+
+/**
+ * The code of one parse warning line. The route writes four shapes:
+ * `{url} (row N): {code} — {message}`, `{url}: {code} — {message}`, `Could not parse {url}: ...`
+ * and `No stored content for {url} (...)`. Anything else is `other`.
+ */
+function parseWarningCode(line: string): string {
+  if (line.startsWith('Could not parse ')) return 'page-not-parsed';
+  if (line.startsWith('No stored content for ')) return 'no-stored-content';
+  const match = /: ([a-z][a-z0-9-]*) — /.exec(line);
+  return match === null ? 'other' : match[1];
+}
+
+/** Count the parse's warning lines by code. Exported for the report UI and the tests. */
+export function summarizeParseWarnings(lines: readonly string[]): TheoreticalParseWarningSummary {
+  const byCode: Record<string, number> = {};
+  for (const line of lines) {
+    const code = parseWarningCode(line);
+    byCode[code] = (byCode[code] ?? 0) + 1;
+  }
+  return { total: lines.length, byCode, lines: [...lines] };
+}
+
+/* -------------------------------------------------------------------------- */
 /* One capture                                                                 */
 /* -------------------------------------------------------------------------- */
 
@@ -530,7 +666,15 @@ async function teamsOfCapture(
   const completeness = completenessWarning(record, pagesPresent);
   if (completeness !== undefined) captureWarnings.push(completeness);
 
-  const pages = pairRosterPages(record, parse);
+  const verification = verifyStoredPages(record, parse);
+  captureWarnings.push(...verification.warnings);
+  const parseWarnings = summarizeParseWarnings(parse.warnings ?? []);
+  if (parseWarnings.total > 0) {
+    const counts = Object.entries(parseWarnings.byCode).map(([code, n]) => `${code} x${n}`).join(', ');
+    captureWarnings.push(`The capture parse reported ${parseWarnings.total} warning(s): ${counts}.`);
+  }
+
+  const pages = pairRosterPages(record, parse).map(page => ({ ...page, ref: withStoredTime(page.ref, verification.drifted) }));
   for (const page of pages) {
     const id = page.parse.swimCloudTeamId;
     if (id !== undefined && id !== subject.teamId) {
@@ -546,7 +690,8 @@ async function teamsOfCapture(
     captureWarnings.push(`The roster page ${page.canonicalUrl} was recorded with outcome ${page.outcome}. No team was made from it.`);
   }
 
-  const { ok: timesRefs, notOk } = timesPageRefs(record);
+  const { ok: rawTimesRefs, notOk } = timesPageRefs(record);
+  const timesRefs = new Map([...rawTimesRefs].map(([id, ref]) => [id, withStoredTime(ref, verification.drifted)] as const));
   if (notOk > 0) {
     captureWarnings.push(`${notOk} swimmer times page(s) were recorded with a non-ok outcome. Those swimmers count as having no times captured.`);
   }
@@ -608,6 +753,9 @@ async function teamsOfCapture(
       pagesPresent,
       pagesPlanned: record.plannedPageCount,
       warnings: captureWarnings,
+      driftedPages: [...verification.drifted.keys()],
+      unverifiedPages: verification.unverified,
+      parseWarnings,
     },
   };
 }

@@ -316,6 +316,17 @@ export const UNCAPPED_CAVEAT =
 /* Validation                                                                  */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Settings saved from a PDF or SwimCloud meet carry `usePdfPlacePoints: true`
+ * (`buildScoringPatchForParsedPdf`). Under that flag the engine scores from the
+ * HyTek Points column and skips the conference override, so with theoretical rows
+ * (which carry no PDF points) every team would score 0 and the entry caps would
+ * not be the conference's. The caller must pass the preset's own settings.
+ */
+export const PDF_POINTS_SETTINGS_MESSAGE =
+  'The scoring settings carry usePdfPlacePoints: true. Theoretical rows carry no PDF points, so every team would score 0 and the conference entry caps would not apply. ' +
+  'Pass preset settings instead: settingsForBuiltInScoringPreset(presetIdForConference(conference)) from @omniswim/core/lib/scoringDefaults, or the generic preset when the conference has none.';
+
 /** The selector reads no cap above this as a limit. Used to ask it for the whole ranking. */
 const UNCAPPED = 999;
 
@@ -341,6 +352,9 @@ function resolveSettings(input: TheoreticalMeetInput): { settings: ScoringSettin
   const raw = input.scoringSettings;
   if (raw === undefined || raw === null) {
     throw new TheoreticalMeetError('invalid-scoring-settings', 'No scoring settings were given.');
+  }
+  if (raw.usePdfPlacePoints === true) {
+    throw new TheoreticalMeetError('invalid-scoring-settings', PDF_POINTS_SETTINGS_MESSAGE);
   }
   requireCap(raw.maxIndividualEntriesPerSwimmer, 'maxIndividualEntriesPerSwimmer', true);
   const settings = mergeScoringSettings(raw, { conference: input.conference });

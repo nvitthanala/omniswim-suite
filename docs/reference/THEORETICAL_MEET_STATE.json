@@ -38,20 +38,34 @@
         "loadedMeet": "pdfFilename and meetLabel both carry THEORETICAL_MEET_LABEL. The sidebar, RosterSourceStep and the Matrix meet step read pdfFilename only; swimCloudMeetImportBridge sets it the same way for a meet with no PDF.",
         "noPageBytesRoute": "No capture route returns page bytes. The roster season id needs the roster page's season table, so theoreticalMeetFromCaptures takes an optional readRosterPageHtml dependency. Without it rosterSeasonId stays undefined and the seed builder's caveat stands."
       },
-      "reviewNeeded": "Touches meet scoring inputs (ranks, rounds, bands) and the entry data that feeds lineup selection. Route to architect for review. Points to check: the band choice, overall rank in B Final, event order, stored points equal baseline points.",
+      "reviewNeeded": "Re-review of the T1 to T8 fixes. T6 touches the capture store write path.",
       "notDone": [
         "Relays (U1c).",
         "UI (U2).",
         "A server route that returns stored roster page bytes (needed for the roster season id in the real app). Needs a change in apps/shell, out of scope.",
         "Exhibition swims can still become seeds (known issue, needs a core type field)."
       ],
-      "nextStep": "Architect review of U1; then U2 UI against the exported API."
+      "nextStep": "Architect review of U1; then U2 UI against the exported API.",
+      "reviewFixes": {
+        "when": "2026-10-05",
+        "source": "architect review of b9658efa (scratch probes reproduced T1, T2, T6)",
+        "T1": "FIXED. Places past twice the A bracket are C Final, not Preliminaries. A prelims row made hasPrelimsData true and the prelims-vs-finals view showed every team at 0 with an over/under equal to its whole total (472 of 696 men rows on the real data). Tests: hasPrelimsData false and prelims projection empty on constructed rows, on the fixtures and on the real captures; totals unchanged (real: Henderson men 931).",
+        "T2": "FIXED in both builders. usePdfPlacePoints === true throws invalid-scoring-settings, naming settingsForBuiltInScoringPreset(presetIdForConference(conference)). Tested with the exact shape buildScoringPatchForParsedPdf saves. auto and false stay allowed.",
+        "T3": "FIXED. eventOrder?: readonly string[] on buildTheoreticalMeetWorkspace, theoreticalEventOrderFromMeetResults(rows) reads a real meet order from its Event N labels, eventOrderSource and warnings on the result, caveat states the size (several percent, measured up to 7%). Applied to row order, which is the engine mechanism for rows with no Event N label; no event number is written. Real data, Henderson men: program order 931, real 2026 NSISC order 997 (+66), reversed program order 897 (-34), as the architect measured. The 12-swimmer fixtures do not fill the pool, so no fixture total moves; hand-derived pool tests (202 vs 250) prove the direction.",
+        "T4": "FIXED. The parse route returns storedPages (canonicalUrl, resourceKind, entryRetrievedAt, contentSha256) additively. theoreticalMeetFromCaptures compares with the record sha256: page-bytes-drifted warning per page, driftedPages and unverifiedPages in the capture summary, and a drifted page takes the stored bytes write time as its retrievedAt (team, athlete, swims, seed source). A parse with no stamps counts every used page as unverified. Fixture records already matched the trimmed bytes (the generator rewrote them); a test now asserts it for every page.",
+        "T5": "FIXED. Parse warnings are counted by code (summarizeParseWarnings) into the capture summary (parseWarnings) and a line on every team. Real data: only diving-score-not-a-time (28, 7, 21 on the full captures; 6, 4, 12 on the fixtures).",
+        "T6": "FIXED. captureStore has a second KeyedAsyncMutex keyed by canonicalUrl around archive-and-write and around the page delete. Order is captureId lock then URL lock, always. Test: two captures write one URL with Promise.all, 50 rounds, all three versions survive (cache plus pages-superseded). The race reproduced on round 0 before the fix.",
+        "T7": "FIXED. swimCloudPageBytesDiffer ignores csrfmiddlewaretoken values (either attribute order); a token-only change archives nothing. The new bytes are still written.",
+        "T8": "FIXED (season) and ANSWERED (exhibition). rosterSeasonId needs proof: URL season_id, or a printed season; with neither the table selected option counts only when it equals the subject label, else a warning. Exhibition and eventgender: see report; no core edit.",
+        "newWorkspaceGap": "POST /api/workspaces with an existing id overwrites that workspace and deletes its rows (WorkspaceService.create). Server not changed. buildTheoreticalMeetWorkspace documents that workspaceId must be fresh, and newTheoreticalWorkspaceId() (crypto.randomUUID) is exported and tested.",
+        "mutations": "T1, T2a, T2b, T3a, T3b, T3c, T4a, T4b, T4c (route), T5, T6, T7, T8: each fails tests (1 to 9 tests); files restored, sha256 verified identical.",
+        "gates": "lint 0 errors (2 old warnings); vitest 171 files, 2518 tests pass, 14 skipped by design (eventFirstImport)."
+      }
     }
   },
   "gates": {
     "lint": "0 errors; 2 existing complexity warnings in swimCloudMeetImportBridge.ts",
-    "vitest": "2026-10-04: 171 files, 2499 tests: 2496 pass, 3 fail. All 3 failures are in tests/eventFirstImport.test.ts (see knownFailing). U1 added 3 test files, 78 tests, all green.",
-    "knownFailing": "tests/eventFirstImport.test.ts (3 tests) reads every roster page in the git-ignored data/swimcloud-captures/pages and expects the 8 roster pages of meet 356467. The local store now holds 14 (the user's 2026-10-04 crawl of teams 412, 58 and 48 added 6), so its counts moved (for example 216 instead of 184). It depends on local data, not on U1 code. Not changed here."
+    "vitest": "2026-10-05: 171 files, 2518 tests pass, 14 skipped by design (tests/eventFirstImport.test.ts)."
   },
   "incident": {
     "date": "2026-10-04",

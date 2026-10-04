@@ -15,26 +15,34 @@
  * 14, 13, 12, 11, 9, 7, 6, 5, 4, 3, 2, 1), not read back from the engine.
  */
 import { describe, expect, it } from 'vitest';
+import { readFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 import { Gender } from '../packages/core/src/types';
 import type { HistoricalSwim, ScoringSettings, SwimmerResult, Workspace } from '../packages/core/src/types';
-import { GENERIC_TOP16_SETTINGS, mergeScoringSettings, resultsHavePdfPlacePoints } from '../packages/core/src/lib/scoringDefaults';
+import { GENERIC_TOP16_SETTINGS, buildScoringPatchForParsedPdf, mergeScoringSettings, resultsHavePdfPlacePoints } from '../packages/core/src/lib/scoringDefaults';
 import { buildScoringSnapshot } from '../packages/core/src/lib/scoringEngine';
 import { prepareRecruitsForScoring } from '../packages/core/src/lib/utils';
+import { buildPrelimsProjectedBundle, hasPrelimsData } from '../packages/core/src/lib/prelimsProjection';
 import type { SwimCloudAthlete } from '../packages/swimcloud/src/entities';
 import {
+  TheoreticalMeetError,
   buildTheoreticalMeetSeeds,
   type TheoreticalMeetSeeds,
   type TheoreticalMeetTeamInput,
 } from '../packages/manager/src/lib/theoreticalMeetSeeds';
 import {
   EVENT_ORDER_CAVEAT,
+  EVENT_ORDER_SUPPLIED_CAVEAT,
   THEORETICAL_MEET_LABEL,
   THEORETICAL_PLACES_CAVEAT,
   TheoreticalWorkspaceError,
   buildTheoreticalMeetWorkspace,
   defaultTheoreticalMeetName,
   isTheoreticalMeet,
+  newTheoreticalWorkspaceId,
+  theoreticalEventOrderFromMeetResults,
   sanitizeWorkspaceName,
   theoreticalResultRowId,
   type TheoreticalMeetWorkspaceInput,
@@ -80,7 +88,7 @@ function seedsFor(teams: TheoreticalMeetTeamInput[], settings: ScoringSettings =
   return buildTheoreticalMeetSeeds({ meetId, course: 'SCY', scoringSettings: settings, ...(conference === undefined ? {} : { conference }), teams });
 }
 
-type BuildOptions = { settings?: ScoringSettings; conference?: string; name?: string; seeds?: TheoreticalMeetSeeds };
+type BuildOptions = { settings?: ScoringSettings; conference?: string; name?: string; seeds?: TheoreticalMeetSeeds; eventOrder?: readonly string[] };
 
 function build(teams: TheoreticalMeetTeamInput[], over: BuildOptions = {}): Build {
   const settings = over.settings ?? GENERIC_TOP16_SETTINGS;
@@ -92,6 +100,7 @@ function build(teams: TheoreticalMeetTeamInput[], over: BuildOptions = {}): Buil
     scoringSettings: settings,
     ...(over.conference === undefined ? {} : { conference: over.conference }),
     ...(over.name === undefined ? {} : { name: over.name }),
+    ...(over.eventOrder === undefined ? {} : { eventOrder: over.eventOrder }),
   });
 }
 
@@ -171,13 +180,29 @@ describe('buildTheoreticalMeetWorkspace: places', () => {
     expect(b.payload.womenResults.map(r => [r.event, r.rank])).toEqual([['50 Free SCY', 1]]);
   });
 
-  it('bands the rows the way the what-if projection does: A bracket, B bracket, then Preliminaries that score nothing', () => {
+  it('bands the rows the way the what-if projection does: A bracket, B bracket, then C Final rows that score nothing', () => {
     const b = build([teamOf('Alpha U', Gender.MEN, menField(18))]);
     expect(b.aFinalBracketSize).toBe(8);
     const rows = b.payload.menResults;
     expect(rows.map(r => r.rank)).toEqual(Array.from({ length: 18 }, (_, i) => i + 1));
-    expect(rows.map(r => r.roundSwam)).toEqual([...Array(8).fill('A Final'), ...Array(8).fill('B Final'), 'Preliminaries', 'Preliminaries']);
+    expect(rows.map(r => r.roundSwam)).toEqual([...Array(8).fill('A Final'), ...Array(8).fill('B Final'), 'C Final', 'C Final']);
     expect(rows.map(r => r.points)).toEqual([...NCAA_TABLE, 0, 0]);
+  });
+
+  it('no row reads as a prelims swim, so the prelims-vs-finals view stays empty', () => {
+    // 30 men: places 17 to 30 are past both brackets. A prelims label there made hasPrelimsData true
+    // and the prelims projection scored every team as 0 (over/under equal to its whole total).
+    const b = build([teamOf('Alpha U', Gender.MEN, menField(30))]);
+    const rows = b.payload.menResults;
+    expect(rows.filter(r => r.roundSwam === 'C Final')).toHaveLength(14);
+    expect(rows.some(r => /prelim/i.test(String(r.roundSwam)))).toBe(false);
+    expect(hasPrelimsData(rows)).toBe(false);
+    expect(buildPrelimsProjectedBundle({ workspace: b.payload as unknown as Workspace, gender: Gender.MEN }).sortedTeams).toEqual([]);
+    const snap = snapshot(b, Gender.MEN);
+    expect(snap.prelimsProjected.sortedTeams).toEqual([]);
+    // C Final rows score nothing and the totals are the A and B places only.
+    expect(snap.baseline.sortedTeams[0].totalPoints).toBe(NCAA_TABLE.reduce((a, c) => a + c, 0));
+    expect(snap.projected.sortedTeams[0].totalPoints).toBe(NCAA_TABLE.reduce((a, c) => a + c, 0));
   });
 
   it('a tie that crosses no band edge stays in one band; a tie at place 8 stays in the A bracket', () => {
@@ -451,5 +476,185 @@ describe('buildTheoreticalMeetWorkspace: fails loudly', () => {
   it('a repeated row id is refused', () => {
     const dup = withRows(rows => [...rows, rows[0]]);
     expect(codeOf(() => buildTheoreticalMeetWorkspace(base({ seeds: dup })))).toBe('row-id-collision');
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Settings saved from a PDF or SwimCloud meet                                 */
+/* -------------------------------------------------------------------------- */
+
+describe('both builders refuse scoring settings that carry usePdfPlacePoints: true', () => {
+  // The exact shape a PDF or SwimCloud meet saves into a workspace (buildScoringPatchForParsedPdf with a
+  // HyTek Points column on the parsed rows). The PDF lock then skips the NSISC override, so every team
+  // would score 0 and entries would stop at 3 per swimmer.
+  const withPdfPoints: SwimmerResult[] = Array.from({ length: 10 }, (_, i) => ({
+    id: `pdf-${i}`,
+    rank: i + 1,
+    name: `Pdf Swimmer ${i}`,
+    classYear: 'FR',
+    team: 'Alpha U',
+    time: `2${i}.00`,
+    points: 0,
+    pdfPoints: 20 - i,
+    event: 'Event 1 Men 50 Yard Freestyle',
+    gender: Gender.MEN,
+    roundSwam: 'A Final',
+  }));
+  const saved = buildScoringPatchForParsedPdf(GENERIC_TOP16_SETTINGS, 'NSISC', 'nsisc', withPdfPoints) as ScoringSettings;
+
+  it('the saved shape really is the locked one', () => {
+    expect(saved.usePdfPlacePoints).toBe(true);
+    expect(saved.scorerEligibilityMode).toBe('points_pool');
+    // The lock wins over the conference: NSISC's roster mode and 18-scorer pool are replaced by the neutral points pool.
+    const merged = mergeScoringSettings(saved, { conference: 'NSISC' });
+    expect(merged.scorerEligibilityMode).toBe('points_pool');
+    expect(merged.maxIndividualScorersPerTeam).toBe(999);
+  });
+
+  it('the seed builder throws invalid-scoring-settings and names the settings to use', () => {
+    let error: unknown;
+    try {
+      seedsFor([teamOf('Alpha U', Gender.MEN, menField(3))], saved, 'NSISC');
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(TheoreticalMeetError);
+    expect((error as TheoreticalMeetError).code).toBe('invalid-scoring-settings');
+    expect((error as Error).message).toMatch(/carry no PDF points/);
+    expect((error as Error).message).toMatch(/settingsForBuiltInScoringPreset.presetIdForConference/);
+  });
+
+  it('the workspace builder throws the same code, even for seeds built under good settings', () => {
+    const seeds = seedsFor([teamOf('Alpha U', Gender.MEN, menField(3))], GENERIC_TOP16_SETTINGS, 'NSISC');
+    let error: unknown;
+    try {
+      buildTheoreticalMeetWorkspace({ workspaceId: WS, createdAt: CREATED, seeds, scoringSettings: saved, conference: 'NSISC' });
+    } catch (e) {
+      error = e;
+    }
+    expect(error).toBeInstanceOf(TheoreticalWorkspaceError);
+    expect((error as TheoreticalWorkspaceError).code).toBe('invalid-scoring-settings');
+    expect((error as Error).message).toMatch(/settingsForBuiltInScoringPreset.presetIdForConference/);
+  });
+
+  it("'auto' and false are allowed: theoretical rows carry no PDF points, so neither locks", () => {
+    for (const flag of ['auto', false] as const) {
+      const b = build([teamOf('Alpha U', Gender.MEN, menField(3))], { settings: { ...GENERIC_TOP16_SETTINGS, usePdfPlacePoints: flag } });
+      expect(b.payload.menResults).toHaveLength(3);
+    }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Event order                                                                 */
+/* -------------------------------------------------------------------------- */
+
+describe('buildTheoreticalMeetWorkspace: event order', () => {
+  const here = dirname(fileURLToPath(import.meta.url));
+  // The real 2026 NSISC championship results (Event N labels), rows copied verbatim.
+  const real = JSON.parse(readFileSync(join(here, 'fixtures', 'nsisc-2026-relay-leg-event-matching.json'), 'utf8')) as { menResults: SwimmerResult[]; womenResults: SwimmerResult[] };
+  const REAL_ORDER = [
+    '1000 Freestyle', '200 Individual Medley', '50 Freestyle', '100 Butterfly', '400 Individual Medley', '200 Freestyle', '500 Freestyle',
+    '100 Backstroke', '100 Breaststroke', '200 Butterfly', '1650 Freestyle', '100 Freestyle', '200 Backstroke', '200 Breaststroke',
+  ];
+
+  it('reads the order of a loaded meet from its Event N labels (individual events only)', () => {
+    expect(theoreticalEventOrderFromMeetResults(real.menResults)).toEqual(REAL_ORDER);
+    expect(theoreticalEventOrderFromMeetResults(real.womenResults)).toEqual(REAL_ORDER);
+    expect(theoreticalEventOrderFromMeetResults([])).toEqual([]);
+  });
+
+  // One team under NSISC (18 scorer units meet-wide, filled in event order).
+  // 50 Free: S1 to S16, places 1 to 16.
+  // 100 Free: N1 to N12 (faster, places 1 to 12) and S1 to S4 (places 13 to 16). S1 to S4 swim both events.
+  const field = (): TheoreticalMeetTeamInput[] => {
+    const athletes = [
+      ...Array.from({ length: 16 }, (_, i) => ({
+        id: `s${i + 1}`,
+        name: `Alpha S${i + 1}`,
+        swims: [
+          { event: '50 Free SCY', time: (20 + (i + 1) * 0.1).toFixed(2) },
+          ...(i < 4 ? [{ event: '100 Free SCY', time: (55 + (i + 1) * 0.1).toFixed(2) }] : []),
+        ],
+      })),
+      ...Array.from({ length: 12 }, (_, i) => ({ id: `n${i + 1}`, name: `Alpha N${i + 1}`, swims: [{ event: '100 Free SCY', time: (45 + (i + 1) * 0.1).toFixed(2) }] })),
+    ];
+    return [
+      {
+        teamName: 'Alpha U',
+        gender: Gender.MEN,
+        rosterStatus: 'parsed',
+        rosterSeasonId: '30',
+        athletes: athletes.map(a => ({
+          athlete: { swimCloudSwimmerId: a.id, name: a.name },
+          swims: a.swims.map(sw => ({ name: a.name, team: 'Alpha U', gender: Gender.MEN, event: sw.event, time: sw.time, timeType: 'SCY' as const, source: 'swimcloud' as const, seasonId: '30' })),
+          captureId: 'capture-Alpha',
+          retrievedAt: '2026-10-04T12:00:00.000Z',
+        })),
+      },
+    ];
+  };
+  const total = (b: Build) => snapshot(b, Gender.MEN).baseline.sortedTeams[0].totalPoints;
+  const full = NCAA_TABLE.reduce((a, b) => a + b, 0);
+
+  it('defaults to the program order and says so', () => {
+    const b = build(field(), { conference: 'NSISC' });
+    expect(b.eventOrderSource).toBe('program-default');
+    expect(b.payload.menResults.map(r => r.event).filter((e, i, all) => all.indexOf(e) === i)).toEqual(['50 Free SCY', '100 Free SCY']);
+    // Hand-derived. 50 Free first: S1 to S16 enter the pool (16) and score the full table, 155.
+    // 100 Free next: N1 and N2 take the last two slots (20 + 17), N3 to N12 find the pool full and score 0,
+    // and S1 to S4 are already in the pool and score places 13 to 16 (4 + 3 + 2 + 1). 155 + 37 + 10 = 202.
+    expect(total(b)).toBe(full + 20 + 17 + 4 + 3 + 2 + 1);
+    expect(b.warnings).toEqual([]);
+    expect(b.caveats).toContain(EVENT_ORDER_CAVEAT);
+  });
+
+  it('a supplied order is applied to the rows and moves the NSISC total the way the pool rule says', () => {
+    const b = build(field(), { conference: 'NSISC', eventOrder: ['100 Freestyle', '50 Freestyle'] });
+    expect(b.eventOrderSource).toBe('supplied');
+    expect(b.payload.menResults.map(r => r.event).filter((e, i, all) => all.indexOf(e) === i)).toEqual(['100 Free SCY', '50 Free SCY']);
+    // Hand-derived. 100 Free first: N1 to N12 and S1 to S4 (16 swimmers) enter the pool and score places 1 to 16, 155.
+    // 50 Free next: S1 to S4 are in the pool, S5 and S6 take the last two slots, S7 to S16 score 0.
+    // S1 to S6 hold places 1 to 6: 20 + 17 + 16 + 15 + 14 + 13 = 95. 155 + 95 = 250.
+    expect(total(b)).toBe(full + 20 + 17 + 16 + 15 + 14 + 13);
+    expect(b.caveats).toContain(EVENT_ORDER_SUPPLIED_CAVEAT);
+    expect(b.caveats).not.toContain(EVENT_ORDER_CAVEAT);
+    // The source rows copy follows the same order, and the stored points are the engine's for that order.
+    expect(b.payload.sourceMenResults.map(r => r.id)).toEqual(b.payload.menResults.map(r => r.id));
+    const scored = new Map(snapshot(b, Gender.MEN).baseline.allScored.map(r => [r.id, r.points]));
+    for (const row of b.payload.menResults) expect(row.points, row.id).toBe(scored.get(row.id));
+  });
+
+  it('events missing from the supplied order follow in program order, and a warning names them', () => {
+    const b = build(field(), { conference: 'NSISC', eventOrder: ['100 Freestyle'] });
+    expect(b.payload.menResults.map(r => r.event).filter((e, i, all) => all.indexOf(e) === i)).toEqual(['100 Free SCY', '50 Free SCY']);
+    expect(b.warnings).toHaveLength(1);
+    expect(b.warnings[0]).toMatch(/50 Free SCY/);
+    // An order entry the meet has no row for is not an error.
+    const extra = build(field(), { eventOrder: ['1650 Freestyle', '50 Freestyle', '100 Freestyle'] });
+    expect(extra.warnings).toEqual([]);
+  });
+
+  it('accepts HyTek and course-qualified labels, skips relays and diving, and refuses what it cannot read', () => {
+    const b = build(field(), { eventOrder: ['Event 35 Men 100 Yard Freestyle', 'Event 20 Men 4x100 Yard Medley Relay', '1 mtr Diving', '50 Free SCY'] });
+    expect(b.payload.menResults[0].event).toBe('100 Free SCY');
+    expect(codeOf(() => build(field(), { eventOrder: ['Underwater Hockey'] }))).toBe('invalid-event-order');
+    expect(codeOf(() => build(field(), { eventOrder: ['50 Freestyle', '50 Free SCY'] }))).toBe('invalid-event-order');
+  });
+
+  it('the caveats state the size of the effect', () => {
+    const sentence = 'NSISC totals can move by several percent with event order (measured up to 7% on real data).';
+    expect(EVENT_ORDER_CAVEAT).toContain(sentence);
+    expect(EVENT_ORDER_SUPPLIED_CAVEAT).toContain(sentence);
+    expect(EVENT_ORDER_SUPPLIED_CAVEAT).toMatch(/several percent/);
+  });
+});
+
+describe('newTheoreticalWorkspaceId', () => {
+  it('is a fresh UUID each call, so a new meet never reuses an id (POST /api/workspaces overwrites an existing id)', () => {
+    const a = newTheoreticalWorkspaceId();
+    const b = newTheoreticalWorkspaceId();
+    expect(a).toMatch(/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/);
+    expect(a).not.toBe(b);
   });
 });

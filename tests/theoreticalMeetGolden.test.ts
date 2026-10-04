@@ -37,7 +37,9 @@
  * git-ignored captures are not on this machine.
  */
 import { describe, expect, it } from 'vitest';
-import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs';
+import { cpSync, existsSync, mkdtempSync, readFileSync, readdirSync, rmSync, statSync } from 'node:fs';
+import { createHash } from 'node:crypto';
+import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -49,10 +51,11 @@ import { Gender } from '../packages/core/src/types';
 import type { SwimmerResult, Workspace } from '../packages/core/src/types';
 import { presetIdForConference, settingsForBuiltInScoringPreset } from '../packages/core/src/lib/scoringDefaults';
 import { buildScoringSnapshot } from '../packages/core/src/lib/scoringEngine';
+import { hasPrelimsData } from '../packages/core/src/lib/prelimsProjection';
 import { convertTimeToSeconds } from '../packages/core/src/lib/utils';
 import { theoreticalMeetFromCaptures, type TheoreticalCaptureDeps, type TheoreticalMeetFromCapturesResult } from '../packages/manager/src/lib/theoreticalMeetFromCaptures';
 import { buildTheoreticalMeetSeeds, type TheoreticalMeetSeeds } from '../packages/manager/src/lib/theoreticalMeetSeeds';
-import { buildTheoreticalMeetWorkspace, isTheoreticalMeet, type TheoreticalMeetWorkspaceBuild } from '../packages/manager/src/lib/theoreticalMeetWorkspace';
+import { buildTheoreticalMeetWorkspace, isTheoreticalMeet, theoreticalEventOrderFromMeetResults, type TheoreticalMeetWorkspaceBuild } from '../packages/manager/src/lib/theoreticalMeetWorkspace';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const FIXTURE_ROOT = join(here, 'fixtures', 'theoretical-meet');
@@ -137,8 +140,15 @@ describe('theoretical meet from three real captures (committed, trimmed fixtures
       [TEAMS[2], Gender.MEN, 'parsed', '30'],
       [TEAMS[2], Gender.WOMEN, 'parsed', '30'],
     ]);
-    // The fixture captures are complete for their trimmed plan, so nothing is reported.
-    expect(captures.warnings).toEqual([]);
+    // The fixture captures are complete for their trimmed plan and every stored page hashes to its record.
+    expect(captures.captures.map(c => [c.driftedPages, c.unverifiedPages])).toEqual([[[], 0], [[], 0], [[], 0]]);
+    // The only thing the parse says is that dives are kept as judged scores (6, 4 and 12 dive rows).
+    expect(captures.captures.map(c => c.parseWarnings.byCode)).toEqual([{ 'diving-score-not-a-time': 6 }, { 'diving-score-not-a-time': 4 }, { 'diving-score-not-a-time': 12 }]);
+    expect(captures.warnings).toEqual([
+      'team-412-2026-2027: The capture parse reported 6 warning(s): diving-score-not-a-time x6.',
+      'team-58-2026-2027: The capture parse reported 4 warning(s): diving-score-not-a-time x4.',
+      'team-48-2026-2027: The capture parse reported 12 warning(s): diving-score-not-a-time x12.',
+    ]);
     expect(captures.teams.every(t => t.pagesPresent === t.pagesPlanned && t.pagesPlanned === 14)).toBe(true);
   });
 
@@ -196,11 +206,20 @@ describe('theoretical meet from three real captures (committed, trimmed fixtures
     expect(resultsOf(built, Gender.WOMEN).filter(r => r.event === '50 Free SCY').map(r => r.points)).toEqual([20, 17, 16, 15, 14, 13, 12, 11, 9, 6.5, 6.5, 5, 4, 3, 2]);
   });
 
+  it('no row reads as a prelims swim: the prelims-vs-finals view is empty and every total is the finals total', () => {
+    for (const gender of [Gender.MEN, Gender.WOMEN]) {
+      expect(hasPrelimsData(resultsOf(built, gender)), gender).toBe(false);
+      const snap = buildScoringSnapshot(asWorkspace(built), gender, false);
+      expect(snap.prelimsProjected.sortedTeams, gender).toEqual([]);
+      expect(snap.projected.sortedTeams.map(t => t.totalPoints)).toEqual(snap.baseline.sortedTeams.map(t => t.totalPoints));
+    }
+  });
+
   it('rows carry the meet shape: ranked, banded, not psych, no pdfPoints', () => {
     for (const row of [...built.payload.menResults, ...built.payload.womenResults]) {
       expect(row.isPsychSheet).toBeUndefined();
       expect(row.pdfPoints).toBeUndefined();
-      expect(row.roundSwam).toMatch(/^(A Final|B Final|Preliminaries)$/);
+      expect(row.roundSwam).toMatch(/^(A Final|B Final|C Final)$/);
       expect(row.rank).toBeGreaterThan(0);
       expect(row.id.startsWith(`tmres|${WORKSPACE_ID}|`)).toBe(true);
     }
@@ -282,6 +301,76 @@ describe('theoretical meet from three real captures (committed, trimmed fixtures
 });
 
 /* -------------------------------------------------------------------------- */
+/* Page bytes, the route's stamps, and an overwritten page                     */
+/* -------------------------------------------------------------------------- */
+
+describe('the parse route stamps each stored page with the hash of the bytes it read', () => {
+  it('every page of a committed fixture capture hashes to its record, and the stamp carries the entry write time', async () => {
+    const store = new FileSystemSwimCloudCaptureStore(FIXTURE_ROOT);
+    for (const captureId of CAPTURE_IDS) {
+      const record = (await store.getCapture(captureId))!;
+      const response = await parseSwimCloudCapture(store, record);
+      expect(response.storedPages).toHaveLength(14);
+      for (const stamp of response.storedPages) {
+        const ref = record.pages.find(page => page.canonicalUrl === stamp.canonicalUrl)!;
+        const html = (await store.readPage(stamp.canonicalUrl))!.html;
+        expect(stamp.contentSha256).toBe(createHash('sha256').update(html, 'utf8').digest('hex'));
+        expect(stamp.contentSha256, stamp.canonicalUrl).toBe(ref.sha256);
+        expect(stamp.entryRetrievedAt).toBe(ref.retrievedAt);
+      }
+    }
+  });
+
+  it('a page overwritten by another capture is reported as drifted, with the new write time, end to end', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'omniswim-theoretical-drift-'));
+    try {
+      cpSync(FIXTURE_ROOT, dir, { recursive: true });
+      const store = new FileSystemSwimCloudCaptureStore(dir);
+      const record = (await store.getCapture('team-58-2026-2027'))!;
+      const mensRoster = record.pages.find(p => p.resourceKind === 'teamRoster' && p.gender === 'M')!;
+      const original = (await store.readPage(mensRoster.canonicalUrl))!;
+      // A later crawl of the same URL (another capture) writes the same page with other bytes.
+      await store.upsertCapture({ ...record, captureId: 'team-58-other', subject: { kind: 'team', teamId: '58' }, pages: [], notes: [] });
+      const later = '2026-10-09T08:00:00.000Z';
+      await store.putPage('team-58-other', { ...original, html: original.html + '<!-- a later edit -->', retrievedAt: later }, { ...mensRoster, retrievedAt: later });
+      const result = await theoreticalMeetFromCaptures(CAPTURE_IDS, depsOver(dir));
+      const hsu = result.captures.find(c => c.captureId === 'team-58-2026-2027')!;
+      expect(hsu.driftedPages).toEqual([mensRoster.canonicalUrl]);
+      expect(result.captures.filter(c => c.captureId !== 'team-58-2026-2027').every(c => c.driftedPages.length === 0)).toBe(true);
+      expect(result.warnings.join('\n')).toMatch(/team-58-2026-2027: page-bytes-drifted: /);
+      const men = result.teams.find(t => t.captureId === 'team-58-2026-2027' && t.gender === Gender.MEN)!;
+      expect(men.retrievedAt).toBe(later);
+      expect(men.warnings.join('\n')).toMatch(/page-bytes-drifted/);
+      // The overwrite kept the old bytes in the archive.
+      expect(readdirSync(join(dir, 'pages-superseded'))).toHaveLength(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+});
+
+describe('a supplied event order, from the real 2026 NSISC results, on the fixtures', () => {
+  const real = JSON.parse(readFileSync(join(here, 'fixtures', 'nsisc-2026-relay-leg-event-matching.json'), 'utf8')) as { menResults: SwimmerResult[] };
+
+  it('is applied to the rows and flagged, and the small fixture field does not fill the 18-scorer pool, so no total moves', async () => {
+    const presetId = presetIdForConference('NSISC') as string;
+    const scoringSettings = settingsForBuiltInScoringPreset(presetId);
+    const captures = await theoreticalMeetFromCaptures(CAPTURE_IDS, depsOver(FIXTURE_ROOT));
+    const seeds = buildTheoreticalMeetSeeds({ meetId: WORKSPACE_ID, course: 'SCY', scoringSettings, conference: 'NSISC', teams: captures.teams });
+    const eventOrder = theoreticalEventOrderFromMeetResults(real.menResults);
+    expect(eventOrder[0]).toBe('1000 Freestyle');
+    const supplied = buildTheoreticalMeetWorkspace({ workspaceId: WORKSPACE_ID, createdAt: CREATED_AT, seeds, scoringSettings, conference: 'NSISC', eventOrder });
+    expect(supplied.eventOrderSource).toBe('supplied');
+    expect(supplied.payload.menResults[0].event).toBe('1000 Free SCY');
+    expect(supplied.warnings).toEqual([]);
+    // 12 swimmers per team never fill the pool, so the totals match the default order exactly.
+    expect(baselineOf(supplied, Gender.MEN).sortedTeams.map(t => [t.teamName, t.totalPoints])).toEqual(
+      baselineOf(buildTheoreticalMeetWorkspace({ workspaceId: WORKSPACE_ID, createdAt: CREATED_AT, seeds, scoringSettings, conference: 'NSISC' }), Gender.MEN).sortedTeams.map(t => [t.teamName, t.totalPoints])
+    );
+  });
+});
+
+/* -------------------------------------------------------------------------- */
 /* The committed fixtures hold no account data                                 */
 /* -------------------------------------------------------------------------- */
 
@@ -343,6 +432,35 @@ describe.skipIf(!realPresent)('theoretical meet from ALL the real captures (loca
         report.duplicateAcrossTeams.length;
       expect(accounted, `${team.teamName} ${team.gender}`).toBe(team.athletes.length);
     }
+  });
+
+  it('event order moves the Henderson men total the way the 2026 NSISC measurement says', () => {
+    const presetId = presetIdForConference('NSISC') as string;
+    const scoringSettings = settingsForBuiltInScoringPreset(presetId);
+    const real = JSON.parse(readFileSync(join(here, 'fixtures', 'nsisc-2026-relay-leg-event-matching.json'), 'utf8')) as { menResults: SwimmerResult[] };
+    const realOrder = theoreticalEventOrderFromMeetResults(real.menResults);
+    const program = ['50 Freestyle', '100 Freestyle', '200 Freestyle', '500 Freestyle', '1000 Freestyle', '1650 Freestyle', '100 Backstroke', '200 Backstroke', '100 Breaststroke', '200 Breaststroke', '100 Butterfly', '200 Butterfly', '200 Individual Medley', '400 Individual Medley'];
+    const hsu = (eventOrder?: readonly string[]): number => {
+      const b = buildTheoreticalMeetWorkspace({ workspaceId: WORKSPACE_ID, createdAt: CREATED_AT, seeds, scoringSettings, conference: 'NSISC', ...(eventOrder === undefined ? {} : { eventOrder }) });
+      return baselineOf(b, Gender.MEN).sortedTeams.find(t => t.teamName === TEAMS[1])!.totalPoints;
+    };
+    // The architect measured 931 (program order), 997 (real 2026 order, +66) and 897 (program order reversed, -34).
+    expect(hsu()).toBe(931);
+    expect(hsu(realOrder)).toBe(997);
+    expect(hsu([...program].reverse())).toBe(897);
+  });
+
+  it('no row reads as a prelims swim, and the totals are the finals totals (472 rows of the men are past the B bracket)', () => {
+    for (const gender of [Gender.MEN, Gender.WOMEN]) {
+      expect(hasPrelimsData(resultsOf(built, gender)), gender).toBe(false);
+      const snap = buildScoringSnapshot(asWorkspace(built), gender, false);
+      expect(snap.prelimsProjected.sortedTeams).toEqual([]);
+      expect(snap.baseline.sortedTeams.map(t => [t.teamName, t.totalPoints])).toEqual(snap.projected.sortedTeams.map(t => [t.teamName, t.totalPoints]));
+    }
+    const cFinal = built.payload.menResults.filter(r => r.roundSwam === 'C Final');
+    expect(cFinal.length).toBeGreaterThan(400);
+    expect(baselineOf(built, Gender.MEN).sortedTeams.map(t => [t.teamName, t.totalPoints])).toEqual([[TEAMS[1], 931], [TEAMS[0], 566.5], [TEAMS[2], 507.5]]);
+    expect(baselineOf(built, Gender.WOMEN).sortedTeams.map(t => [t.teamName, t.totalPoints])).toEqual([[TEAMS[0], 786], [TEAMS[1], 661.5], [TEAMS[2], 645.5]]);
   });
 
   it('every row id is unique, every row has provenance, and totals match the rows', () => {

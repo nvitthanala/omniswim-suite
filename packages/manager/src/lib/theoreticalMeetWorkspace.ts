@@ -27,12 +27,17 @@
  *   bracket. A prelims round scores only distance events and diving. A
  *   non-championship round (`Time Trial`, `C Final`) scores nothing. The NSISC
  *   scorer roster adds an athlete automatically only from an `A Final` or `B
- *   Final` row. So the rows use the same bands the what-if projection uses
+ *   Final` row. So the rows use bands like the what-if projection's
  *   (`projectRanksInField`, `roundAndRankForPrelimsSeed`): places 1 to the A
  *   bracket are `A Final`, the next bracket is `B Final`, the rest are
- *   `Preliminaries`. The bracket is the merged settings' `aFinalBracketSize`
- *   (the engine's own `aFinalBracket` rule: half the table when absent). `rank`
- *   is the overall place for every band.
+ *   `C Final`. The what-if projection labels the rest `Preliminaries`. This file
+ *   must not: a prelims row with a time makes `hasPrelimsData` true, and the
+ *   prelims-vs-finals view then shows every team's prelims projection as 0 and an
+ *   over/under equal to its whole total. `C Final` is scored as 0 and never
+ *   reads as prelims (the real 2026 NSISC results ran A, B and C finals with C
+ *   unscored: `tests/fixtures/nsisc-2026-relay-followups-r1.json`). The bracket is
+ *   the merged settings' `aFinalBracketSize` (the engine's own `aFinalBracket`
+ *   rule: half the table when absent). `rank` is the overall place for every band.
  * - **Points.** `calculatePoints` overwrites `points`. It uses a row's
  *   `pdfPoints` only when enough rows carry one (`resultsHavePdfPlacePoints`:
  *   at least 8 rows and 1 percent). These rows carry no `pdfPoints`, so the
@@ -53,12 +58,21 @@
  *
  * ## Event order is a modelling choice, and it can move a total
  *
- * Rows are ordered by the standard SCY program order (50, 100, 200, 500, 1000,
- * 1650 free; back; breast; fly; IM), the same list the cross-course table uses.
- * The engine processes events in row order when no row carries an `Event N`
- * label. NSISC scores 18 scorer units per team meet-wide, filled as events are
- * processed, so for NSISC the order can change which swimmers score. This file
- * invents no event numbers and says so in `caveats`.
+ * By default rows are ordered by the standard SCY program order (50, 100, 200,
+ * 500, 1000, 1650 free; back; breast; fly; IM), the same list the cross-course
+ * table uses. The engine processes events in row order when no row carries an
+ * `Event N` label (it sorts by that number when there is one). NSISC scores 18
+ * scorer units per team meet-wide, filled as events are processed, so for NSISC
+ * the order can change which swimmers score. Measured on the three real teams
+ * (Henderson State men): 931 in program order, 997 in the real 2026 NSISC order,
+ * 897 in the reversed program order, a spread of 7 percent. This file invents no
+ * event numbers.
+ *
+ * `eventOrder` replaces the default with the order of a real loaded meet
+ * ({@link theoreticalEventOrderFromMeetResults}). It is applied to the row order,
+ * which is the engine's own mechanism for rows with no `Event N` label.
+ * `eventOrderSource` says which order ran, and the caveat says how far a total can
+ * move with it.
  *
  * ## Provenance
  *
@@ -77,12 +91,11 @@
 
 import { Gender } from '@omniswim/core/types';
 import type { LoadedMeetMeta, ScoringSettings, SwimmerResult } from '@omniswim/core/types';
-import { swimEventIdentity } from '@omniswim/core/lib/athleteHistory';
-import { canonicalProgramEvent } from '@omniswim/core/lib/eventIdentity';
+import { canonicalMeetEventLabel, swimEventIdentity } from '@omniswim/core/lib/athleteHistory';
 import { meetCopyFromParsed } from '@omniswim/core/lib/meetSource';
 import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
-import { calculatePoints, convertTimeToSeconds } from '@omniswim/core/lib/utils';
-import type { TheoreticalMeetSeeds, TheoreticalSeedSource } from './theoreticalMeetSeeds';
+import { calculatePoints, convertTimeToSeconds, isDivingEvent, isRelayResult, parseEventNumber } from '@omniswim/core/lib/utils';
+import { PDF_POINTS_SETTINGS_MESSAGE, type TheoreticalMeetSeeds, type TheoreticalSeedSource } from './theoreticalMeetSeeds';
 
 /* -------------------------------------------------------------------------- */
 /* Label and detection                                                         */
@@ -97,9 +110,11 @@ export function isTheoreticalMeet(workspace: { readonly loadedMeet?: Pick<Loaded
 }
 
 export const EVENT_ORDER_CAVEAT =
-  'Events run in the standard program order, not a published meet order. Under a meet-wide scorer cap (NSISC: 18 scorers per team) the order can change which swimmers score.';
+  'Events run in the standard program order, not a published meet order. Under a meet-wide scorer cap (NSISC: 18 scorers per team) the order decides which swimmers fill the cap. NSISC totals can move by several percent with event order (measured up to 7% on real data).';
+export const EVENT_ORDER_SUPPLIED_CAVEAT =
+  'Events run in the order supplied from a loaded meet. Under a meet-wide scorer cap (NSISC: 18 scorers per team) the order decides which swimmers fill the cap, so these totals hold for that order only. NSISC totals can move by several percent with event order (measured up to 7% on real data).';
 export const THEORETICAL_PLACES_CAVEAT =
-  'Nobody swam this meet. Places are the order of the seed times, within each event and gender. Rows ranked below the scoring bracket are marked Preliminaries and score nothing.';
+  'Nobody swam this meet. Places are the order of the seed times, within each event and gender. Rows ranked past the A and B brackets are marked C Final, which the engine scores as 0.';
 
 /* -------------------------------------------------------------------------- */
 /* Errors                                                                      */
@@ -108,6 +123,10 @@ export const THEORETICAL_PLACES_CAVEAT =
 export type TheoreticalWorkspaceErrorCode =
   /** The workspace id is empty, or `createdAt` is not a finite number. */
   | 'invalid-input'
+  /** The scoring settings carry `usePdfPlacePoints: true`. Pass preset settings. */
+  | 'invalid-scoring-settings'
+  /** `eventOrder` holds a label that is not an event, or one event twice. */
+  | 'invalid-event-order'
   /** A seed row was not built for this workspace id. */
   | 'meet-id-mismatch'
   /** The seeds hold no row. An empty meet is not a meet. */
@@ -137,8 +156,12 @@ export class TheoreticalWorkspaceError extends Error {
 export interface TheoreticalMeetWorkspaceInput {
   /**
    * The id of the workspace to create. Must be the `meetId` the seeds were built
-   * with, because every row id contains it. The caller makes it (for example a
-   * UUID); this file has no source of randomness.
+   * with, because every row id contains it.
+   *
+   * **It must be a fresh UUID: use {@link newTheoreticalWorkspaceId}.** `POST /api/workspaces`
+   * with an id that already exists overwrites that workspace and deletes its rows
+   * (`packages/db/src/WorkspaceService.ts`, `create`). This builder cannot see the
+   * server, so it cannot check; a reused id would destroy a real workspace.
    */
   readonly workspaceId: string;
   /** Epoch milliseconds. Used for `createdAt` and `loadedMeet.uploadedAt`. */
@@ -151,6 +174,20 @@ export interface TheoreticalMeetWorkspaceInput {
   readonly conference?: string;
   /** Workspace name. Default {@link defaultTheoreticalMeetName}. Sanitized either way. */
   readonly name?: string;
+  /**
+   * Individual-event labels in the order the meet runs them, for example from
+   * {@link theoreticalEventOrderFromMeetResults} over a real loaded meet. HyTek labels
+   * (`Event 35 Men 100 Yard Freestyle`), canonical labels (`100 Freestyle`) and the
+   * course-qualified labels of the rows (`100 Free SCY`) all read. Relays and diving
+   * are skipped. A label that is not an event, or one event twice, throws
+   * `invalid-event-order`. Absent: the standard program order.
+   *
+   * The engine orders events by an `Event N` number in the label and, when no label
+   * has one (these rows have none), by row order. So the order is applied to the row
+   * order. No event number is written. Events the order does not name follow it in
+   * program order, and `warnings` lists them.
+   */
+  readonly eventOrder?: readonly string[];
 }
 
 /** The body for `createWorkspace(name, body)` / `POST /api/workspaces`. Every field is a field of `Workspace`. */
@@ -181,6 +218,10 @@ export interface TheoreticalMeetWorkspaceBuild {
   readonly caveats: readonly string[];
   /** The A bracket size the rows were banded with. */
   readonly aFinalBracketSize: number;
+  /** `supplied`: the rows follow `eventOrder`. `program-default`: the standard program order. */
+  readonly eventOrderSource: 'program-default' | 'supplied';
+  /** Things the caller should show: events the supplied order did not name. Empty when there is nothing to say. */
+  readonly warnings: readonly string[];
 }
 
 /* -------------------------------------------------------------------------- */
@@ -250,9 +291,64 @@ const PROGRAM_ORDER: readonly string[] = [
 
 /** Index in the program order. An event the list does not hold sorts after it. */
 function programIndex(event: string): number {
-  const canonical = canonicalProgramEvent(event);
+  const canonical = canonicalMeetEventLabel(event);
   const index = canonical === null ? -1 : PROGRAM_ORDER.indexOf(canonical);
   return index < 0 ? PROGRAM_ORDER.length : index;
+}
+
+/** A canonical individual-event label starts with a distance. Anything else is not an event. */
+const LOOKS_LIKE_EVENT = /^\d{2,4}\s+\S/;
+
+/** Canonical label to its place in the supplied order. Throws on a label that is not an event or a repeated event. */
+function parseEventOrder(order: readonly string[]): Map<string, number> {
+  const index = new Map<string, number>();
+  for (const raw of order) {
+    if (typeof raw !== 'string') {
+      throw new TheoreticalWorkspaceError('invalid-event-order', `eventOrder holds ${JSON.stringify(raw)}, which is not a label.`);
+    }
+    // Relays and diving have no individual canonical label. They are not rows here, so they are skipped.
+    if (/\brelay\b/i.test(raw) || isDivingEvent(raw)) continue;
+    const canonical = canonicalMeetEventLabel(raw);
+    if (canonical === null || !LOOKS_LIKE_EVENT.test(canonical)) {
+      throw new TheoreticalWorkspaceError('invalid-event-order', `eventOrder holds ${JSON.stringify(raw)}, which does not read as an individual event.`);
+    }
+    if (index.has(canonical)) {
+      throw new TheoreticalWorkspaceError('invalid-event-order', `eventOrder names ${canonical} twice.`);
+    }
+    index.set(canonical, index.size);
+  }
+  return index;
+}
+
+/**
+ * The order a loaded meet runs its individual events in, as canonical labels, from the `Event N` numbers
+ * in its result rows (the engine's own ordering key, `parseEventNumber`). Relays and time trials are left
+ * out. Rows with no `Event N` label contribute nothing. Pass the result as `eventOrder`.
+ */
+export function theoreticalEventOrderFromMeetResults(results: readonly SwimmerResult[]): string[] {
+  const first = new Map<string, number>();
+  for (const row of results) {
+    if (isRelayResult(row) || row.isTimeTrial === true) continue;
+    const number = parseEventNumber(row.event);
+    const canonical = canonicalMeetEventLabel(row.event);
+    if (number === null || canonical === null || !LOOKS_LIKE_EVENT.test(canonical)) continue;
+    const seen = first.get(canonical);
+    if (seen === undefined || number < seen) first.set(canonical, number);
+  }
+  return [...first.entries()].sort((a, b) => a[1] - b[1]).map(([label]) => label);
+}
+
+/**
+ * A fresh workspace id. `POST /api/workspaces` with an id that already exists overwrites that workspace
+ * and deletes its rows (`WorkspaceService.create`), so a new meet must never reuse an id. Use this for
+ * `workspaceId`; the seed builder's `meetId` is the same value.
+ */
+export function newTheoreticalWorkspaceId(): string {
+  const webCrypto = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  if (webCrypto?.randomUUID === undefined) {
+    throw new TheoreticalWorkspaceError('invalid-input', 'No crypto.randomUUID is available, so no fresh workspace id can be made.');
+  }
+  return webCrypto.randomUUID();
 }
 
 /* -------------------------------------------------------------------------- */
@@ -278,7 +374,7 @@ function placesFastestFirst(field: readonly Seeded[]): Map<SwimmerResult, number
 function roundForPlace(place: number, bracket: number): string {
   if (place <= bracket) return 'A Final';
   if (place <= bracket * 2) return 'B Final';
-  return 'Preliminaries';
+  return 'C Final';
 }
 
 /** The engine's own A bracket rule (`aFinalBracket` in `utils.ts`): the setting, else half the table. */
@@ -299,7 +395,13 @@ function requirePlainSeed(row: SwimmerResult, workspaceIdPart: string): void {
 }
 
 /** One gender's meet rows: placed, banded, ordered. Points are filled in by the caller. */
-function rankGender(seedRows: readonly SwimmerResult[], bracket: number, workspaceIdPart: string): SwimmerResult[] {
+function rankGender(
+  seedRows: readonly SwimmerResult[],
+  bracket: number,
+  workspaceIdPart: string,
+  order: ReadonlyMap<string, number> | undefined,
+  notNamed: Set<string>
+): SwimmerResult[] {
   const fields = new Map<string, Seeded[]>();
   const labelOf = new Map<string, string>();
   for (const row of seedRows) {
@@ -320,11 +422,19 @@ function rankGender(seedRows: readonly SwimmerResult[], bracket: number, workspa
   }
 
   const ranked: Array<{ row: SwimmerResult; seconds: number; order: number }> = [];
+  // A supplied order comes first; events it does not name follow in program order.
+  const AFTER_SUPPLIED = 1_000;
+  const rankOf = (identity: string): number => {
+    const label = labelOf.get(identity) as string;
+    const supplied = order === undefined ? undefined : order.get(canonicalMeetEventLabel(label) ?? '');
+    if (order !== undefined && supplied === undefined) notNamed.add(label);
+    return supplied ?? AFTER_SUPPLIED + programIndex(label);
+  };
   const identities = [...fields.keys()].sort((a, b) => {
-    const byProgram = programIndex(labelOf.get(a) as string) - programIndex(labelOf.get(b) as string);
-    return byProgram !== 0 ? byProgram : a.localeCompare(b);
+    const byOrder = rankOf(a) - rankOf(b);
+    return byOrder !== 0 ? byOrder : a.localeCompare(b);
   });
-  identities.forEach((identity, order) => {
+  identities.forEach((identity, eventIndex) => {
     const field = fields.get(identity) as Seeded[];
     const places = placesFastestFirst(field);
     for (const { row, seconds } of field) {
@@ -332,7 +442,7 @@ function rankGender(seedRows: readonly SwimmerResult[], bracket: number, workspa
       const { isPsychSheet: _psych, ...rest } = row;
       void _psych;
       ranked.push({
-        order,
+        order: eventIndex,
         seconds,
         row: { ...rest, id: theoreticalResultRowId(row.id), rank: place, points: 0, roundSwam: roundForPlace(place, bracket) },
       });
@@ -370,12 +480,17 @@ export function buildTheoreticalMeetWorkspace(input: TheoreticalMeetWorkspaceInp
     throw new TheoreticalWorkspaceError('no-seed-rows', 'The seeds hold no row, so there is no meet to build. See the report for why each athlete made none.');
   }
 
+  if (input.scoringSettings?.usePdfPlacePoints === true) {
+    throw new TheoreticalWorkspaceError('invalid-scoring-settings', PDF_POINTS_SETTINGS_MESSAGE);
+  }
   const settings = mergeScoringSettings(input.scoringSettings, { conference: input.conference });
   const bracket = aFinalBracketOf(settings);
   const idPart = encodeIdPart(input.workspaceId);
 
-  const men = rankGender(seeds.rows.filter(r => r.gender === Gender.MEN), bracket, idPart);
-  const women = rankGender(seeds.rows.filter(r => r.gender === Gender.WOMEN), bracket, idPart);
+  const order = input.eventOrder === undefined ? undefined : parseEventOrder(input.eventOrder);
+  const notNamed = new Set<string>();
+  const men = rankGender(seeds.rows.filter(r => r.gender === Gender.MEN), bracket, idPart, order, notNamed);
+  const women = rankGender(seeds.rows.filter(r => r.gender === Gender.WOMEN), bracket, idPart, order, notNamed);
   if (men.length + women.length !== seeds.rows.length) {
     throw new TheoreticalWorkspaceError('unexpected-seed-row', 'A seed row has a gender other than Men or Women.');
   }
@@ -435,7 +550,12 @@ export function buildTheoreticalMeetWorkspace(input: TheoreticalMeetWorkspaceInp
     sources,
     resultIdBySeedId,
     report: seeds.report,
-    caveats: [...new Set([...seeds.report.caveats, THEORETICAL_PLACES_CAVEAT, EVENT_ORDER_CAVEAT])],
+    caveats: [...new Set([...seeds.report.caveats, THEORETICAL_PLACES_CAVEAT, order === undefined ? EVENT_ORDER_CAVEAT : EVENT_ORDER_SUPPLIED_CAVEAT])],
     aFinalBracketSize: bracket,
+    eventOrderSource: order === undefined ? 'program-default' : 'supplied',
+    warnings:
+      notNamed.size === 0
+        ? []
+        : [`${notNamed.size} event(s) are not in the supplied event order and run after it in program order: ${[...notNamed].sort().join(', ')}.`],
   };
 }
