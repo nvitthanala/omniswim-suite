@@ -10,23 +10,13 @@
     {
       "id": "C1",
       "branch": "cloud/c1-team-names-harness",
-      "baseCommit": "e331b8d7",
-      "commits": [
-        "30cd61f0 Send the school name when a crawl marks a team",
-        "057982ef Show school names and divisions on Teams step",
-        "2cabaeea Pass the school name through the crawl panel",
-        "harness, README and report: the last commit on the branch"
-      ],
-      "pricedCostUsd": 4.65,
-      "pricedBy": "node scripts/claude-cost-report.mjs --since 2026-10-05T14:18:45Z (Sonnet 5.5 only, this session's transcripts)",
-      "verified": [
-        "vitest: tests/theoreticalMeetTeamNames.test.ts (14 tests) and the MultiTeamApp label test pass; 3 mutations killed and restored by sha256",
-        "playwright tests/e2e/theoretical-meet.spec.ts 6 of 6",
-        "npm run test:harness 7 passed, 1 fixme (redirect)",
-        "lint 0 errors; lint:extension clean",
-        "2 vitest files fail only because the ignored data/swimcloud-captures/pages folder is absent"
-      ],
-      "note": "spentUsd and remainingUsd are left to the orchestrator."
+      "merged": "8f068944 (fast-forward into nvitthanala/ui-simplification)",
+      "ranIn": "LOCAL worktree on the user machine, NOT in the cloud",
+      "why": "The Agent tool isolation:\"remote\" is gated for this session and silently fell back to a local worktree. The cost report read this machine's transcripts.",
+      "cloudCreditsSpentUsd": 0,
+      "localListPriceUsd": 5.48,
+      "localUsageNote": "Counted against the Claude subscription window, not the credits. 7-day window was 94% before and 98% after.",
+      "verified": "orchestrator rerun: lint 0 errors, 2604 unit tests, 33 e2e, harness 7 passed 1 skipped (redirect, unit-covered)"
     }
   ],
   "spentUsd": 0,
@@ -34,5 +24,6 @@
   "notes": [
     "Local usage on this machine is a Claude subscription window, not these credits. Do not count it here.",
     "Costs are list-price estimates from transcripts, not an invoice. Check the console for the real balance."
-  ]
+  ],
+  "howToRunInCloud": "Start a Claude Code web session at claude.ai/code on github.com/nvitthanala/omniswim-suite (branch nvitthanala/ui-simplification) and paste docs/reference/cloud-handoff/C2_BRIEF.md. After each phase run: node scripts/claude-cost-report.mjs --since <start> and add the output here."
 }
