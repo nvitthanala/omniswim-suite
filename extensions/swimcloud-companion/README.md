@@ -377,3 +377,50 @@ live browser and a live SwimCloud page: DOM injection timing, whether
 the design doc reasons it does, and how SwimCloud's own markup and
 anti-automation behavior actually respond to a paced burst of same-origin
 fetches.
+
+## Harness
+
+`npm run test:harness` loads this extension's real build into real Chromium. It runs the
+extension against a fake SwimCloud. The real Omniswim app (the dev server, on a temp copy of
+`data/`) is the backend. The harness is not part of `npm test` or `vitest run`.
+
+Run it:
+
+1. `npm ci`
+2. `npx playwright install chromium`
+3. `npm run build:extension`
+4. `npm run test:harness`
+
+The script skips with a message, and exits 0, when Chromium or the extension build is missing.
+A full run takes about 2.5 minutes. The extension has no clock override, and its 3 second
+pacing is not lowered, so the harness waits in real time. The fixtures are small to keep that
+short: each roster page keeps its first two swimmer rows.
+
+How it works (`tests/harness/`):
+
+- `fakeSwimCloud.ts` answers `https://www.swimcloud.com/**` from committed fixtures only:
+  the roster pages of teams 412 and 10002824, one swimmer-times body, and a stub team page for
+  the content script to mount on. It logs every request it answers.
+- `extensionHarness.ts` starts Chromium with `--load-extension`, pairs the extension with the app
+  by writing the pairing token to `chrome.storage.local` through the service worker, and drives
+  the Multi-team crawl panel.
+- Network isolation: the route handler aborts every request that is not the fake origin or the
+  local app and records it. Each test fails if anything was aborted. The browser also maps every
+  host except `127.0.0.1` to "not found", so a request Playwright cannot see (the service
+  worker's) cannot leave the machine either.
+
+Scenarios: the happy path (two teams, pinned request order, gaps of 3 s or more, the capture
+store in the app, the school-name label, then Build theoretical meet in the app UI), a 403 on a
+swimmer, a 429 once then OK, a "Just a moment..." challenge on a team page and on a swimmer
+request, the crawl lock across two tabs, and cancel mid-run. The redirect scenario is
+`test.fixme`: Playwright's `route.fulfill` with a 302 does not make Chromium follow the
+redirect for the extension's fetch, so the scenario cannot be driven. The unit tests cover that
+rule.
+
+What it proves: the built bundles run in Chromium, the panel drives the real driver, the
+background worker relays pages and labels to the real capture routes, the pacing and halt rules
+hold on the wire, and the data the app stores builds a theoretical meet.
+
+What it does not prove: Cloudflare behaviour, real cookies or sessions, real SwimCloud markup
+beyond the fixtures, and real timing against the live site. A pass here says nothing about
+whether SwimCloud will accept the crawl.

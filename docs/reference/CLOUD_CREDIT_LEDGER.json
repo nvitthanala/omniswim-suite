@@ -6,7 +6,29 @@
   "capUsd": 75,
   "stopRule": "Do not start a phase whose estimate exceeds (cap - spent). Stop and report at 90% of the cap.",
   "rates": "USD per million tokens, see RATES in scripts/claude-cost-report.mjs (Fable 5.1 10/50, Opus 5.5 4/20, Sonnet 5.5 2/10, Haiku 4.5 1/5; cache read 0.25/0.20/0.20/0.10; cache write 1.25x input for 5-minute TTL, 2x for 1-hour)",
-  "phases": [],
+  "phases": [
+    {
+      "id": "C1",
+      "branch": "cloud/c1-team-names-harness",
+      "baseCommit": "e331b8d7",
+      "commits": [
+        "30cd61f0 Send the school name when a crawl marks a team",
+        "057982ef Show school names and divisions on Teams step",
+        "2cabaeea Pass the school name through the crawl panel",
+        "harness, README and report: the last commit on the branch"
+      ],
+      "pricedCostUsd": 4.65,
+      "pricedBy": "node scripts/claude-cost-report.mjs --since 2026-10-05T14:18:45Z (Sonnet 5.5 only, this session's transcripts)",
+      "verified": [
+        "vitest: tests/theoreticalMeetTeamNames.test.ts (14 tests) and the MultiTeamApp label test pass; 3 mutations killed and restored by sha256",
+        "playwright tests/e2e/theoretical-meet.spec.ts 6 of 6",
+        "npm run test:harness 7 passed, 1 fixme (redirect)",
+        "lint 0 errors; lint:extension clean",
+        "2 vitest files fail only because the ignored data/swimcloud-captures/pages folder is absent"
+      ],
+      "note": "spentUsd and remainingUsd are left to the orchestrator."
+    }
+  ],
   "spentUsd": 0,
   "remainingUsd": 75,
   "notes": [
