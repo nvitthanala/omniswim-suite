@@ -1,0 +1,16 @@
+{
+  "purpose": "Tracks cloud-credit spend for cloud sessions started from this repo. The user set a cap; every cloud run is priced per model from its own transcripts with scripts/claude-cost-report.mjs.",
+  "setBy": "user, 2026-10-05",
+  "balanceUsd": 100,
+  "capPercent": 75,
+  "capUsd": 75,
+  "stopRule": "Do not start a phase whose estimate exceeds (cap - spent). Stop and report at 90% of the cap.",
+  "rates": "USD per million tokens, see RATES in scripts/claude-cost-report.mjs (Fable 5.1 10/50, Opus 5.5 4/20, Sonnet 5.5 2/10, Haiku 4.5 1/5; cache read 0.25/0.20/0.20/0.10; cache write 1.25x input for 5-minute TTL, 2x for 1-hour)",
+  "phases": [],
+  "spentUsd": 0,
+  "remainingUsd": 75,
+  "notes": [
+    "Local usage on this machine is a Claude subscription window, not these credits. Do not count it here.",
+    "Costs are list-price estimates from transcripts, not an invoice. Check the console for the real balance."
+  ]
+}
