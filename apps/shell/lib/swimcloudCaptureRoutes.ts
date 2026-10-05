@@ -88,6 +88,7 @@ import {
   type SwimCloudResourceKind,
 } from '../../../packages/swimcloud/src/urlClassifier.ts';
 import { isLoopbackHost } from './loopbackHost.ts';
+import { withTeamName } from './swimcloudCaptureTeamName.ts';
 
 /* -------------------------------------------------------------------------- */
 /* Constants                                                                   */
@@ -1199,7 +1200,7 @@ export function createSwimCloudCaptureRouter(options: SwimCloudCaptureRouterOpti
         if (a.updatedAt !== b.updatedAt) return a.updatedAt < b.updatedAt ? 1 : -1;
         return a.captureId < b.captureId ? -1 : 1;
       });
-      return res.json(captures);
+      return res.json(await Promise.all(captures.map(c => withTeamName(store, c))));
     } catch (err) {
       return res.status(500).json({ error: 'Failed to list captures', details: String(err) });
     }

@@ -17,7 +17,8 @@
  */
 
 import { Gender } from '@omniswim/core/types';
-import type { ScoringSettings, SwimmerResult, Workspace } from '@omniswim/core/types';
+import { resolveTeamDivision } from '@omniswim/core/data/teamDivisions';
+import type { NcaaDivision, ScoringSettings, SwimmerResult, Workspace } from '@omniswim/core/types';
 import {
   BUILT_IN_SCORING_PRESETS,
   presetIdForConference,
@@ -61,6 +62,10 @@ export interface CaptureListRecord extends TheoreticalCaptureRecord {
   readonly createdAt?: string;
   readonly updatedAt?: string;
   readonly label?: string;
+  /** The school name the server read from the stored roster pages. Absent when none was readable. */
+  readonly teamName?: string;
+  /** Set when the roster pages of the capture print different names. Then no name is shown. */
+  readonly teamNameWarning?: string;
 }
 
 export interface CaptureRow {
@@ -89,6 +94,12 @@ export interface CaptureRow {
 export interface CaptureTeamGroup {
   readonly teamId: string;
   readonly title: string;
+  /** True when `title` is a school name. False means the title is the numeric team id. */
+  readonly named: boolean;
+  /** Division tag for the school name. `unknown division` when unnamed or not in the division table. */
+  readonly divisionTag: DivisionTag;
+  /** Why the school name is not shown, when two sources disagree. */
+  readonly nameWarning: string | null;
   readonly rows: readonly CaptureRow[];
 }
 
@@ -186,27 +197,69 @@ function captureRow(record: CaptureListRecord, now: number): CaptureRow {
  * newest season comes first; ready captures come before blocked ones inside a season.
  */
 export function groupCaptures(records: readonly CaptureListRecord[], now: number): CaptureTeamGroup[] {
-  const groups = new Map<string, { title: string; rows: CaptureRow[] }>();
+  const groups = new Map<string, { names: Set<string>; warnings: Set<string>; rows: CaptureRow[] }>();
   for (const record of records) {
     if (record.subject.kind !== 'team') continue;
     const row = captureRow(record, now);
-    const existing = groups.get(row.teamId);
-    const label = record.label !== undefined && record.label.trim().length > 0 ? record.label.trim() : null;
-    if (existing === undefined) groups.set(row.teamId, { title: label ?? `Team ${row.teamId}`, rows: [row] });
-    else {
-      existing.rows.push(row);
-      if (label !== null && existing.title === `Team ${row.teamId}`) existing.title = label;
-    }
+    const group = groups.get(row.teamId) ?? { names: new Set<string>(), warnings: new Set<string>(), rows: [] };
+    groups.set(row.teamId, group);
+    group.rows.push(row);
+    const name = (record.teamName ?? record.label ?? '').trim();
+    if (name.length > 0) group.names.add(name);
+    if (record.teamNameWarning !== undefined) group.warnings.add(record.teamNameWarning);
   }
   return [...groups.entries()]
-    .map(([teamId, group]) => ({
-      teamId,
-      title: group.title,
-      rows: [...group.rows].sort(
-        (a, b) => (b.season ?? '').localeCompare(a.season ?? '') || Number(a.status === 'blocked') - Number(b.status === 'blocked')
-      ),
-    }))
+    .map(([teamId, group]) => {
+      const disagree = group.names.size > 1;
+      const named = group.names.size === 1 && group.warnings.size === 0;
+      const name = named ? [...group.names][0] : null;
+      const nameWarning = disagree
+        ? `The captures of team ${teamId} carry different school names (${[...group.names].join(' / ')}), so no school name is shown.`
+        : group.warnings.size > 0
+          ? [...group.warnings][0]
+          : null;
+      return {
+        teamId,
+        title: name ?? `Team ${teamId}`,
+        named,
+        divisionTag: teamDivisionTag(name),
+        nameWarning,
+        rows: [...group.rows].sort(
+          (a, b) => (b.season ?? '').localeCompare(a.season ?? '') || Number(a.status === 'blocked') - Number(b.status === 'blocked')
+        ),
+      };
+    })
     .sort((a, b) => a.teamId.localeCompare(b.teamId, undefined, { numeric: true }));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Division tag                                                                */
+/* -------------------------------------------------------------------------- */
+
+export interface DivisionTag {
+  /** `NCAA D2`, `NAIA`, or `unknown division`. */
+  readonly text: string;
+  /** The division, or null when the app's division table does not give one. Null is never D1. */
+  readonly division: NcaaDivision | null;
+  /** The canonical school name the table matched, or null. */
+  readonly canonicalTeam: string | null;
+}
+
+/**
+ * Whether the app's division table knows this school name. Reads the same strict lookup the seed
+ * builder uses (`divisionForTeamOrNull`, which is `resolveTeamDivision(name).division`). No name, no
+ * match, or a discontinued program: `unknown division`. It never falls back to D1.
+ */
+export function teamDivisionTag(schoolName: string | null): DivisionTag {
+  const unknown: DivisionTag = { text: 'unknown division', division: null, canonicalTeam: null };
+  if (schoolName === null || schoolName.trim().length === 0) return unknown;
+  const resolution = resolveTeamDivision(schoolName);
+  if (resolution.division === null) return { ...unknown, canonicalTeam: resolution.canonicalTeam };
+  return {
+    text: resolution.division === 'NAIA' ? 'NAIA' : `NCAA ${resolution.division}`,
+    division: resolution.division,
+    canonicalTeam: resolution.canonicalTeam,
+  };
 }
 
 /** Every capture id in the groups that can be picked. */

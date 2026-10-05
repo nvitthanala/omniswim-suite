@@ -32,7 +32,7 @@ const THEMES = [
 ] as const;
 type Theme = (typeof THEMES)[number];
 
-type Mocks = { list: Array<Record<string, unknown>>; parses: Record<string, unknown> };
+type Mocks = { list: Array<Record<string, unknown>>; parses: Record<string, unknown>; names: Record<string, string> };
 let mocks: Mocks;
 
 test.beforeAll(() => {
@@ -48,8 +48,10 @@ test.beforeAll(() => {
 
 /** The list the capture route returns: the fixture captures plus one crawl that is still running. */
 function captureList() {
-  const running = { ...mocks.list[0], captureId: 'team-99-2026-2027', subject: { kind: 'team', teamId: '99', season: '2026-2027' }, completeness: 'in-progress' };
-  return [...mocks.list, running];
+  const running = { ...mocks.list[0], captureId: 'team-99-2026-2027', subject: { kind: 'team', teamId: '99', season: '2026-2027' }, completeness: 'in-progress', label: undefined, teamName: undefined };
+  // A capture whose roster pages print no name: no label, no teamName. It must show as Team 77.
+  const unnamed = { ...mocks.list[0], captureId: 'team-77-2026-2027', subject: { kind: 'team', teamId: '77', season: '2026-2027' }, label: undefined };
+  return [...mocks.list, running, unnamed];
 }
 
 async function mockCaptureApi(page: Page) {
@@ -162,8 +164,8 @@ for (const theme of THEMES) {
       await expect(page.locator('html')).toHaveAttribute('data-theme', theme.mode);
 
       const dialog = await openDialog(page);
-      // Teams: three ready crawls and one still running (disabled, with its reason).
-      await expect(dialog.getByRole('checkbox')).toHaveCount(4);
+      // Teams: four ready crawls (one has no school name, so it shows Team 77) and one still running (disabled, with its reason).
+      await expect(dialog.getByRole('checkbox')).toHaveCount(5);
       const running = dialog.locator('input[id="tmeet-capture-team-99-2026-2027"]');
       await expect(running).toBeDisabled();
       await expect(dialog.getByText('The crawl is still running. Wait for it to finish.')).toBeVisible();
@@ -206,9 +208,15 @@ test('builds a theoretical meet from three crawled teams and opens it on Standin
   await page.goto('/matrix');
 
   const dialog = await openDialog(page);
-  await expect(dialog.getByRole('heading', { name: 'Team 412' })).toBeVisible();
-  for (const name of ['412', '48', '58']) {
-    await dialog.getByRole('heading', { name: `Team ${name}` }).locator('xpath=following-sibling::ul[1]').getByRole('checkbox').check();
+  // School names: team 412 carries a label (new crawl). Teams 48 and 58 carry only a server-read teamName
+  // (old captures). Team 77 has no name anywhere, so it shows its number and an unknown division.
+  for (const id of ['412', '48', '58']) {
+    await expect(dialog.getByRole('heading', { name: new RegExp(`^${mocks.names[id]} NCAA D[123]$`) })).toBeVisible();
+  }
+  await expect(dialog.getByRole('heading', { name: 'Team 77 unknown division' })).toBeVisible();
+  await expect(dialog.getByRole('heading', { name: /^Team (412|48|58)/ })).toHaveCount(0);
+  for (const id of ['412', '48', '58']) {
+    await dialog.getByRole('heading', { name: new RegExp(`^${mocks.names[id]} `) }).locator('xpath=following-sibling::ul[1]').getByRole('checkbox').check();
   }
   await expect(dialog.getByText('3 teams picked.')).toBeVisible();
   await dialog.getByRole('button', { name: 'Next' }).click();

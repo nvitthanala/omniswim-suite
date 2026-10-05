@@ -105,8 +105,12 @@ export function TeamsStep({ flow }: { flow: TheoreticalMeetFlow }) {
         ? groups.map(group => (
             <section key={group.teamId} aria-labelledby={`tmeet-group-${group.teamId}`}>
               <h3 id={`tmeet-group-${group.teamId}`} className="mb-2 text-ui-label font-semibold text-[var(--text-primary)]">
-                {group.title}
+                <span data-testid="tmeet-group-title">{group.title}</span>
+                <Badge tone={group.divisionTag.division === null ? 'warning' : 'neutral'} className="ml-2 align-middle">
+                  {group.divisionTag.text}
+                </Badge>
               </h3>
+              {group.nameWarning !== null ? <p className="mb-2 text-ui-caption text-warning">{group.nameWarning}</p> : null}
               <ul className="space-y-2">
                 {group.rows.map(row => (
                   <CaptureOption key={row.captureId} row={row} checked={selected.includes(row.captureId)} onToggle={() => toggleCapture(row.captureId)} />
