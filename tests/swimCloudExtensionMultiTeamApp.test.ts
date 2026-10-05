@@ -103,6 +103,15 @@ describe('markCapture and flushDownloads', () => {
     expect(w.sent[0]).toEqual({ type: 'omniswim-swimcloud-mark-capture', subject: SUBJECT, completeness: 'partial' });
   });
 
+  it('sends the school name as the label, and only when there is one', async () => {
+    const w = worker(() => ok({ captureId: 'x' }));
+    const app = createMultiTeamApp(w.send);
+    await app.markCapture(SUBJECT, 'every-planned-page-fetched', 'Henderson State University');
+    await app.markCapture(SUBJECT, 'partial');
+    expect(w.sent[0]).toEqual({ type: 'omniswim-swimcloud-mark-capture', subject: SUBJECT, completeness: 'every-planned-page-fetched', label: 'Henderson State University' });
+    expect('label' in w.sent[1]).toBe(false);
+  });
+
   it('flushes each subject and reports counts, filenames and failures', async () => {
     const other = { kind: 'team', teamId: '58' } as const;
     const w = worker((m) =>

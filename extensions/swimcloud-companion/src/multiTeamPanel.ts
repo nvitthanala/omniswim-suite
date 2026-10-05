@@ -322,7 +322,7 @@ function openPanel(io: MultiTeamPanelIo): void {
           fetchPage: (url) => io.fetchPage(url),
           relay: (request) => io.app.relay(request),
           openCapture: (subject, planned) => io.app.openCapture(subject, planned),
-          markCapture: (subject, completeness) => io.app.markCapture(subject, completeness),
+          markCapture: (subject, completeness, label) => io.app.markCapture(subject, completeness, label),
           flushDownloads: (subjects) => io.app.flushDownloads(subjects),
           sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
           now: () => Date.now(),
