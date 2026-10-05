@@ -198,7 +198,11 @@ export interface MultiTeamDriverDeps {
    * under the subject, and again with a corrected planned page count.
    */
   openCapture(subject: SwimCloudCaptureSubject, plannedPageCount: number): Promise<string | undefined>;
-  markCapture(subject: SwimCloudCaptureSubject, completeness: MultiTeamCaptureCompleteness): Promise<void>;
+  /**
+   * `label` is the school name the team's roster pages print, passed only when
+   * every roster page read for that team printed the same one. Never a guess.
+   */
+  markCapture(subject: SwimCloudCaptureSubject, completeness: MultiTeamCaptureCompleteness, label?: string): Promise<void>;
   /** Combine and download whatever fell back to Downloads, one result per subject. */
   flushDownloads(subjects: readonly SwimCloudCaptureSubject[]): Promise<readonly MultiTeamFlushResult[]>;
   sleep(ms: number): Promise<void>;
@@ -462,6 +466,8 @@ export async function runMultiTeamCrawl(deps: MultiTeamDriverDeps, input: MultiT
   /** Every subject opened or relayed under, by capture id. Flushed at the end. */
   const usedSubjects = new Map<string, SwimCloudCaptureSubject>();
   const optionsLanded = new Map<SwimCloudTeamId, boolean>();
+  /** School names the roster pages printed, by team. More than one name means no label. */
+  const rosterNames = new Map<SwimCloudTeamId, Set<string>>();
   /** Source URLs the app really took, per capture id. Completeness is checked against this. */
   const landedPages = new Map<string, Set<string>>();
   const plannedBySubject = new Map<string, number>();
@@ -887,6 +893,11 @@ export async function runMultiTeamCrawl(deps: MultiTeamDriverDeps, input: MultiT
     );
     if (!parsed.ok) return failItem(work.key, `the ${genderWord(work.gender)} roster could not be read: ${parsed.failure.message}`);
 
+    const printed = parsed.data.teamName?.trim();
+    if (printed !== undefined && printed.length > 0) {
+      rosterNames.set(work.teamId, (rosterNames.get(work.teamId) ?? new Set<string>()).add(printed));
+    }
+
     const says = parsed.warnings.some((w) => w.code === 'no-roster-posted');
     if (parsed.data.athletes.length === 0 && !says) {
       const codes = parsed.warnings.map((w) => w.code).join(', ') || 'no warnings';
@@ -943,7 +954,9 @@ export async function runMultiTeamCrawl(deps: MultiTeamDriverDeps, input: MultiT
     for (const [id, subject] of usedSubjects) {
       const complete =
         subject.kind === 'team' && subject.season === undefined ? optionsLanded.get(subject.teamId) === true : seasonDone.has(id);
-      await deps.markCapture(subject, complete ? 'every-planned-page-fetched' : 'partial');
+      const names = subject.kind === 'team' ? rosterNames.get(subject.teamId) : undefined;
+      const label = names?.size === 1 ? [...names][0] : undefined;
+      await deps.markCapture(subject, complete ? 'every-planned-page-fetched' : 'partial', label);
     }
   }
 

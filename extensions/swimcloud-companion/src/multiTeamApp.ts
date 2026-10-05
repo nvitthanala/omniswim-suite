@@ -59,7 +59,7 @@ interface FlushReply {
 export interface MultiTeamApp {
   relay(request: MultiTeamRelayRequest): Promise<MultiTeamRelayOutcome>;
   openCapture(subject: SwimCloudCaptureSubject, plannedPageCount: number): Promise<string | undefined>;
-  markCapture(subject: SwimCloudCaptureSubject, completeness: MultiTeamCaptureCompleteness): Promise<void>;
+  markCapture(subject: SwimCloudCaptureSubject, completeness: MultiTeamCaptureCompleteness, label?: string): Promise<void>;
   flushDownloads(subjects: readonly SwimCloudCaptureSubject[]): Promise<readonly MultiTeamFlushResult[]>;
   /** Clear the failure streak. Call at the start of every run. */
   reset(): void;
@@ -102,9 +102,14 @@ export function createMultiTeamApp(send: SendToWorker, now: () => string = () =>
       return typeof id === 'string' && id.length > 0 ? id : undefined;
     },
 
-    async markCapture(subject, completeness) {
+    async markCapture(subject, completeness, label) {
       // Bookkeeping. A failure here must not hide that the pages are saved, so it is not an error.
-      await send({ type: 'omniswim-swimcloud-mark-capture', subject, completeness });
+      await send({
+        type: 'omniswim-swimcloud-mark-capture',
+        subject,
+        completeness,
+        ...(label === undefined ? {} : { label }),
+      });
     },
 
     async flushDownloads(subjects) {

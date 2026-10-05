@@ -3149,6 +3149,7 @@
     const teamNotes = /* @__PURE__ */ new Map();
     const usedSubjects = /* @__PURE__ */ new Map();
     const optionsLanded = /* @__PURE__ */ new Map();
+    const rosterNames = /* @__PURE__ */ new Map();
     const landedPages = /* @__PURE__ */ new Map();
     const plannedBySubject = /* @__PURE__ */ new Map();
     const notesFor = (teamId) => {
@@ -3492,6 +3493,10 @@
         { gender: work.gender === "M" ? "Men" : "Women", season: work.seasonLabel, teamId: work.teamId }
       );
       if (!parsed.ok) return failItem(work.key, `the ${genderWord(work.gender)} roster could not be read: ${parsed.failure.message}`);
+      const printed = parsed.data.teamName?.trim();
+      if (printed !== void 0 && printed.length > 0) {
+        rosterNames.set(work.teamId, (rosterNames.get(work.teamId) ?? /* @__PURE__ */ new Set()).add(printed));
+      }
       const says = parsed.warnings.some((w) => w.code === "no-roster-posted");
       if (parsed.data.athletes.length === 0 && !says) {
         const codes = parsed.warnings.map((w) => w.code).join(", ") || "no warnings";
@@ -3538,7 +3543,9 @@
       }
       for (const [id, subject] of usedSubjects) {
         const complete = subject.kind === "team" && subject.season === void 0 ? optionsLanded.get(subject.teamId) === true : seasonDone.has(id);
-        await deps.markCapture(subject, complete ? "every-planned-page-fetched" : "partial");
+        const names = subject.kind === "team" ? rosterNames.get(subject.teamId) : void 0;
+        const label = names?.size === 1 ? [...names][0] : void 0;
+        await deps.markCapture(subject, complete ? "every-planned-page-fetched" : "partial", label);
       }
     }
     async function flushAll() {
@@ -4161,8 +4168,13 @@
         const id = trip.value?.captureId;
         return typeof id === "string" && id.length > 0 ? id : void 0;
       },
-      async markCapture(subject, completeness) {
-        await send({ type: "omniswim-swimcloud-mark-capture", subject, completeness });
+      async markCapture(subject, completeness, label) {
+        await send({
+          type: "omniswim-swimcloud-mark-capture",
+          subject,
+          completeness,
+          ...label === void 0 ? {} : { label }
+        });
       },
       async flushDownloads(subjects) {
         const results = [];

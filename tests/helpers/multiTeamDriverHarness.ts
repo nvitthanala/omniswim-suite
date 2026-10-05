@@ -84,7 +84,7 @@ export interface Harness {
   /** Capture ids the app has been told to open, with the last planned page count. */
   readonly opened: Map<string, number>;
   readonly openCalls: { subject: SwimCloudCaptureSubject; planned: number }[];
-  readonly marks: { subject: SwimCloudCaptureSubject; completeness: string }[];
+  readonly marks: { subject: SwimCloudCaptureSubject; completeness: string; label?: string }[];
   readonly flushes: (readonly SwimCloudCaptureSubject[])[];
   /** Source URLs that really reached the app, per capture id. */
   readonly appPages: Map<string, string[]>;
@@ -191,8 +191,8 @@ export function makeHarness(options: HarnessOptions = {}): Harness {
       h.opened.set(id, planned);
       return id;
     },
-    async markCapture(subject, completeness) {
-      h.marks.push({ subject, completeness });
+    async markCapture(subject, completeness, label) {
+      h.marks.push({ subject, completeness, ...(label === undefined ? {} : { label }) });
     },
     async flushDownloads(subjects) {
       h.flushes.push([...subjects]);

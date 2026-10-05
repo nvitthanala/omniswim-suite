@@ -93,6 +93,8 @@ interface MarkCaptureMessage {
   readonly type: 'omniswim-swimcloud-mark-capture';
   readonly subject: SwimCloudCaptureSubject;
   readonly completeness: 'partial' | 'every-planned-page-fetched' | 'failed';
+  /** The school name the team's roster pages print. Absent when it could not be read. */
+  readonly label?: string;
 }
 
 interface ReadCaptureMessage {
@@ -222,6 +224,7 @@ interface CaptureUpdate {
   readonly plannedPageCount?: number;
   readonly track?: string;
   readonly teamDiscovery?: SwimCloudCrawlTeamDiscovery;
+  readonly label?: string;
 }
 
 /**
@@ -479,7 +482,11 @@ const HANDLERS: Readonly<Record<string, (message: unknown) => Promise<unknown>>>
   },
   'omniswim-swimcloud-mark-capture': async (message) => {
     const mark = message as MarkCaptureMessage;
-    return { captureId: await registerOrUpdateCapture(mark.subject, { completeness: mark.completeness }) };
+    return { captureId: await registerOrUpdateCapture(mark.subject, {
+        completeness: mark.completeness,
+        ...(typeof mark.label === 'string' && mark.label.length > 0 ? { label: mark.label } : {}),
+      }),
+    };
   },
   'omniswim-swimcloud-read-capture': async (message) =>
     readCapture((message as ReadCaptureMessage).subject),
