@@ -20,6 +20,8 @@ import {
 import { buildMeetReportHtml } from '../../../../packages/core/src/lib/reportBuilder.ts';
 import type { WorkspaceRepo } from '../workspaceRepo.ts';
 import { applyWorkspaceUpdateWithGuard } from '../dataLossGuard.ts';
+import { SaveSequencer, parseSaveToken } from '../saveSequencer.ts';
+import { SAVE_UNCHECKED_HEADER, STALE_SAVE_CODE } from '../../../../packages/core/src/api/saveSequence.ts';
 import type { AuthedRequest } from '../authMiddleware.ts';
 import type { AuthService, ShareLinkService } from '../../../../packages/db/src/AuthService.ts';
 
@@ -31,6 +33,8 @@ export interface WorkspaceRoutesDeps {
   requireAuth: RequestHandler;
   optionalAuth: RequestHandler;
   defaultScoringSettings: ScoringSettings;
+  /** Optional: tests inject one to inspect it. Production gets a private instance. */
+  saveSequencer?: SaveSequencer;
 }
 
 /**
@@ -68,6 +72,10 @@ function registerWorkspaceCrudRoutes(
   normalizeWorkspaceResults: (ws: Workspace) => Workspace
 ): void {
   const { repo, AUTH_REQUIRED, requireAuth, optionalAuth, defaultScoringSettings } = deps;
+  const sequencer = deps.saveSequencer ?? new SaveSequencer();
+  /** Per user and workspace: two tenants never share a recorded sequence. */
+  const sequenceKey = (req: AuthedRequest) => `${req.user?.id ?? ''}|${req.params.id}`;
+  const uncheckedWarned = new Set<string>();
 
   app.get('/api/workspaces', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     try {
@@ -112,31 +120,68 @@ function registerWorkspaceCrudRoutes(
     }
     const expectedVersion =
       typeof req.body?.version === 'number' ? (req.body.version as number) : undefined;
+    // Out-of-order save protection. A malformed sequence is a client bug and is
+    // refused loudly; an absent one is an old client or a script and still saves.
+    const sequence = parseSaveToken(req.headers);
+    if (sequence.kind === 'invalid') {
+      return res
+        .status(400)
+        .json({ error: 'Invalid save sequence headers', code: 'BAD_SAVE_SEQUENCE', details: sequence.reason });
+    }
     try {
-      applyRepoScope(req);
       const patch = parsed.data as Partial<Workspace>;
 
-      // Data-loss guard (2026-09-22 incident): a save that sharply shrinks
-      // menResults/womenResults/athleteHistory gets a `pre-shrink` backup
-      // BEFORE the write, and the response says so. This never blocks the
-      // save — a coach's deliberate trim must still go through — it only
-      // makes sure a silent wipe is never silent again. See
-      // `apps/shell/lib/dataLossGuard.ts` for the detection rule and the
-      // best-effort backup handling.
-      const { updated, dataLossWarning } = await applyWorkspaceUpdateWithGuard(
-        repo,
-        req.params.id,
-        patch,
-        expectedVersion
+      // Runs under a per-workspace lock, in arrival order. The scope is applied
+      // INSIDE the lock: this request may have waited behind another user's
+      // save, and `repo.setScope` is shared state on the repo.
+      const outcome = await sequencer.run(
+        sequenceKey(req),
+        sequence.kind === 'ok' ? sequence.token : undefined,
+        async () => {
+          applyRepoScope(req);
+          // Data-loss guard (2026-09-22 incident): a save that sharply shrinks
+          // menResults/womenResults/athleteHistory gets a `pre-shrink` backup
+          // BEFORE the write, and the response says so. This never blocks the
+          // save — a coach's deliberate trim must still go through — it only
+          // makes sure a silent wipe is never silent again. See
+          // `apps/shell/lib/dataLossGuard.ts` for the detection rule and the
+          // best-effort backup handling. A stale save is refused before it gets
+          // here, so it can never cost a backup slot.
+          return applyWorkspaceUpdateWithGuard(repo, req.params.id, patch, expectedVersion);
+        },
+        result => result.updated !== undefined
       );
+
+      if (outcome.status === 'stale') {
+        console.warn(
+          `Refused a stale save for workspace ${req.params.id}: sequence ${outcome.receivedSeq} <= applied ${outcome.lastAppliedSeq}`
+        );
+        return res.status(409).json({
+          error: 'This save was superseded by a newer one and was not applied.',
+          code: STALE_SAVE_CODE,
+          lastAppliedSeq: outcome.lastAppliedSeq,
+          receivedSeq: outcome.receivedSeq,
+        });
+      }
+      const { updated, dataLossWarning } = outcome.value;
       if (dataLossWarning?.backupError) {
         console.warn('Pre-shrink backup failed; saving anyway:', dataLossWarning.backupError);
       }
       if (!updated) return res.status(404).json({ error: 'Workspace not found' });
+      if (outcome.unchecked) {
+        // Flag it, once per workspace, so a client that forgot the headers shows up in the log.
+        res.setHeader(SAVE_UNCHECKED_HEADER, 'no-sequence');
+        if (!uncheckedWarned.has(req.params.id)) {
+          uncheckedWarned.add(req.params.id);
+          console.warn(
+            `PUT /api/workspaces/${req.params.id} had no save sequence; out-of-order arrival cannot be detected for it.`
+          );
+        }
+      }
       res.json(dataLossWarning ? { ...updated, dataLossWarning } : updated);
     } catch (err) {
       if (err instanceof Error && (err as Error & { code?: string }).code === 'VERSION_CONFLICT') {
-        return res.status(409).json({ error: 'Version conflict — refresh and retry' });
+        return res.status(409).json({ error: 'Version conflict — refresh and retry', code: 'VERSION_CONFLICT' });
       }
       res.status(500).json({ error: 'Failed to update workspace', details: String(err) });
     }
@@ -155,6 +200,7 @@ function registerWorkspaceCrudRoutes(
         console.warn('Pre-delete backup failed; deleting anyway:', backupErr);
       }
       await repo.remove(req.params.id);
+      sequencer.forget(sequenceKey(req));
       res.json({ success: true });
     } catch (err) {
       res.status(500).json({ error: 'Failed to delete workspace', details: String(err) });

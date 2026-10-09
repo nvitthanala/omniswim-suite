@@ -14,8 +14,17 @@ import {
   createWorkspace,
   deleteWorkspaceApi,
   fetchWorkspaces,
+  StaleSaveError,
   updateWorkspaceApi,
 } from '../api/workspaces';
+
+/** One random id per page load. The server compares save numbers only within one id. */
+function newSaveClientId(): string {
+  const c = (globalThis as { crypto?: { randomUUID?: () => string } }).crypto;
+  if (typeof c?.randomUUID === 'function') return c.randomUUID();
+  // Non-secure contexts (plain http on a LAN address) have no randomUUID.
+  return `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
+}
 
 export type AppletId = 'home' | 'manager' | 'matrix' | 'metrics';
 
@@ -102,6 +111,9 @@ export function SuiteWorkspaceProvider({
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** Latest save number sent per workspace id. See `flushUpdate` and the `onSuccess` below. */
   const saveSeqRef = useRef(new Map<string, number>());
+  /** Names this page load to the server, which orders saves per client id. */
+  const saveClientIdRef = useRef<string | null>(null);
+  if (saveClientIdRef.current === null) saveClientIdRef.current = newSaveClientId();
 
   const error = mutationError ?? (queryError ? 'Failed to load workspaces' : null);
 
@@ -184,8 +196,10 @@ export function SuiteWorkspaceProvider({
   );
 
   const updateMutation = useMutation({
-    mutationFn: ({ id, patch }: { id: string; patch: Partial<Workspace>; seq: number }) =>
-      updateWorkspaceApi(id, patch),
+    mutationFn: ({ id, patch, seq }: { id: string; patch: Partial<Workspace>; seq: number }) =>
+      // `seq` is the same per-workspace number `onSuccess` uses. The server keeps the highest
+      // one it applied, so a save that arrives after a newer one is refused (409), not applied.
+      updateWorkspaceApi(id, patch, { clientId: saveClientIdRef.current!, seq }),
     onSuccess: (updated, { seq }) => {
       // A response may only replace the cache while it is the freshest word on that workspace.
       // `updateWorkspace` already wrote every local change into the cache, so a response that has
@@ -200,6 +214,14 @@ export function SuiteWorkspaceProvider({
       setMutationError(null);
     },
     onError: (err: unknown) => {
+      if (err instanceof StaleSaveError) {
+        // The server already holds a newer save from this page, so the stored data is right and the
+        // cache already shows it. Do not roll back or refetch: a refetch could drop a change that is
+        // still waiting in the debounce queue. Tell the user, so the refusal is never silent.
+        console.warn('Stale workspace save refused by the server:', err.message);
+        notify('info', 'An older save arrived after a newer one and was ignored. Your latest changes are saved.');
+        return;
+      }
       const message = err instanceof Error ? err.message : 'Save failed';
       setMutationError(message);
       notify('error', message);
@@ -344,6 +366,11 @@ export function SuiteWorkspaceProvider({
   return (
     <SuiteWorkspaceContext.Provider value={value}>{children}</SuiteWorkspaceContext.Provider>
   );
+}
+
+/** The workspace context, or `null` outside a provider. For leaf views that only read the active workspace. */
+export function useSuiteWorkspaceOptional(): SuiteWorkspaceContextValue | null {
+  return useContext(SuiteWorkspaceContext);
 }
 
 export function useSuiteWorkspace(): SuiteWorkspaceContextValue {
