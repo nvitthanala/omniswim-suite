@@ -236,7 +236,9 @@ describe('TheoreticalMeetDialogContent', () => {
     expect(api.parseCalls).toEqual([A, B]);
     expect(api.listCalls).toBe(1);
     expect(document.body.textContent).toContain('This is not a real meet');
-    expect(document.body.textContent).toContain('Relays are not included');
+    // Relays are on by default (NSISC has a relay program), so the caveat says they are estimates.
+    expect(document.body.textContent).toContain('Relays are estimates');
+    expect(document.body.textContent).not.toContain('Relays are not included');
     expect(document.body.textContent).toContain('all-time bests');
     expect(restore).not.toHaveBeenCalled();
 

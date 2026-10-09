@@ -20,6 +20,8 @@ import type { DragPayload } from './IndRelayManagementView';
 type Props = {
   group: RelayGroup;
   isSelected: boolean;
+  /** A relay of a theoretical meet: built from individual bests, never swum. Shows an estimated tag. */
+  estimated?: boolean;
   whatIfMode: boolean;
   dragOverLeg: string | null;
   manualTimes: Record<string, string>;
@@ -37,6 +39,7 @@ type Props = {
 export default function RelayGroupCard({
   group,
   isSelected,
+  estimated = false,
   whatIfMode,
   dragOverLeg,
   manualTimes,
@@ -61,7 +64,10 @@ export default function RelayGroupCard({
     >
       <div className="flex flex-wrap items-start justify-between gap-2 mb-2">
         <div>
-          <p className="text-ui-label font-medium text-[var(--text-primary)]">{group.event}</p>
+          <p className="text-ui-label font-medium text-[var(--text-primary)]">
+            {group.event}
+            {estimated ? <span className="ml-2 rounded border border-warning-faint px-1 text-ui-micro font-normal text-warning">estimated</span> : null}
+          </p>
           <p className="text-ui-micro text-theme-secondary">
             {group.roundSwam} · Pl {group.rank > 0 ? group.rank : '—'}
             {vacantCount > 0 ? <span className="text-warning ml-2">{vacantCount} vacant leg(s)</span> : null}

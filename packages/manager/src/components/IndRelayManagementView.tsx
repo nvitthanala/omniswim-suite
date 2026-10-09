@@ -21,6 +21,7 @@ import {
   swimEventNotSwumInCourse,
 } from '@omniswim/core/lib/utils';
 import { passesRosterGates } from '@omniswim/core/lib/whatIfProjection';
+import { isTheoreticalMeet } from '@omniswim/core/lib/theoreticalMeetLabel';
 import {
   buildRelaysFromIndividualLineup,
   compareRelayLegSplits,
@@ -398,7 +399,7 @@ export default function IndRelayManagementView({
             Relay split inspector
           </h4>
           {selectedGroup ? (
-            <RelaySplitInspector rows={selectedSplitCompare} eventLabel={selectedGroup.event} />
+            <RelaySplitInspector rows={selectedSplitCompare} eventLabel={selectedGroup.event} estimated={isTheoreticalMeet(workspace)} />
           ) : null}
           {relayGroups.length === 0 ? (
             <p className="text-ui-caption text-theme-muted italic">No relay entries for this team.</p>
@@ -409,6 +410,7 @@ export default function IndRelayManagementView({
                   key={group.key}
                   group={group}
                   isSelected={selectedGroup?.key === group.key}
+                  estimated={isTheoreticalMeet(workspace)}
                   whatIfMode={whatIfMode}
                   dragOverLeg={dragOverLeg}
                   manualTimes={manualTimes}

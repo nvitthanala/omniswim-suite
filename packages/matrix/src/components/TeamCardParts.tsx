@@ -13,6 +13,10 @@
 
 import { CutlineTag, CutlineNearMissChip, SegmentedControl } from '@omniswim/ui';
 import type { CutlineTagResult } from '@omniswim/core/lib/cutlineTags';
+import type { SwimmerResult } from '@omniswim/core/types';
+import { isEstimatedRelayRow } from '@omniswim/core/lib/theoreticalMeetLabel';
+import { useSuiteWorkspaceOptional } from '@omniswim/core/store/SuiteWorkspaceProvider';
+import { RELAY_ESTIMATE_NOT_JUDGED_LABEL, RELAY_ESTIMATE_NOT_JUDGED_TITLE, type TeamRowCutlineTags } from './teamCardView';
 
 const PODIUM_MEDALS: Record<string, { emoji: string; className: string; label: string }> = {
   gold: { emoji: '🥇', className: 'text-yellow-400', label: 'Gold' },
@@ -39,6 +43,34 @@ export function CutlineVerdict({ result, className }: { result: CutlineTagResult
       <CutlineNearMissChip nextTier={result.nextTier} compact className={className} />
     </>
   );
+}
+
+/**
+ * Whether this row is an estimated relay of the active workspace (`isEstimatedRelayRow`). False outside a
+ * provider, and for every row of a real meet.
+ */
+export function useIsEstimatedRelayRow(res: Pick<SwimmerResult, 'isRelay' | 'event'>): boolean {
+  const ctx = useSuiteWorkspaceOptional();
+  return isEstimatedRelayRow(ctx?.activeWorkspace, res);
+}
+
+/**
+ * The relay team's own verdict slot. An estimated relay shows "Estimate, not judged" here: no cut tag and no
+ * miss. Any other relay row shows its cutline verdict as before.
+ */
+export function RelayVerdict({ tags }: { tags: Extract<TeamRowCutlineTags, { kind: 'relay' }> }) {
+  if (tags.tags.relay === null) {
+    return (
+      <span
+        className="inline-flex items-center rounded border border-theme-soft px-1 text-ui-micro text-theme-muted font-sans"
+        title={RELAY_ESTIMATE_NOT_JUDGED_TITLE}
+        data-relay-estimate-not-judged
+      >
+        {RELAY_ESTIMATE_NOT_JUDGED_LABEL}
+      </span>
+    );
+  }
+  return <CutlineVerdict result={tags.tags.relay} />;
 }
 
 /** The "Chart: By event / By class" toggle above a team's points chart. */

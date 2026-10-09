@@ -230,9 +230,17 @@ test('builds a theoretical meet from three crawled teams and opens it on Standin
 
   const create = dialog.getByRole('button', { name: 'Create theoretical meet' });
   await expect(create).toBeEnabled({ timeout: 60_000 });
-  await expect(dialog.getByText('Relays are not included. These rows are individual entries only.')).toBeVisible();
-  await expect(dialog.getByText(/Seeds are all-time bests/)).toBeVisible();
+  // Relays are on by default (NSISC has a relay program): the caveat says they are estimates.
+  await expect(dialog.getByText(/^Relays are estimates\. Each relay time is the sum of four swimmers/)).toBeVisible();
+  await expect(dialog.getByText(/Relays are not included/)).toHaveCount(0);
+  await expect(dialog.getByText(/Seeds are all-time bests/).first()).toBeVisible();
   for (const team of TEAMS) await expect(dialog.getByRole('button', { name: new RegExp(`^${team}, Men`) })).toBeVisible();
+  // Each relay is listed with four swimmers and the estimated tag.
+  await dialog.getByRole('button', { name: new RegExp(`^${TEAMS[1]}, Men`) }).click();
+  const relayCard = dialog.locator('[data-tmeet-relay]:visible').first();
+  await expect(relayCard).toBeVisible();
+  await expect(relayCard).toContainText('estimated');
+  await expect(relayCard.locator('ol > li')).toHaveCount(4);
 
   const posted = page.waitForResponse(r => new URL(r.url()).pathname === '/api/workspaces' && r.request().method() === 'POST');
   await create.click();
@@ -252,7 +260,8 @@ test('builds a theoretical meet from three crawled teams and opens it on Standin
   const banner = page.getByRole('region', { name: 'Theoretical meet notice' });
   await expect(banner).toBeVisible();
   await expect(banner).toContainText('Theoretical meet: seeded from crawled teams.');
-  await expect(banner).toContainText('Relays are not included');
+  await expect(banner).toContainText('Relays are estimates.');
+  await expect(banner).not.toContainText('Relays are not included');
   // The caveats are collapsed behind a disclosure.
   const toggle = banner.getByRole('button', { name: /What this means/ });
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
@@ -301,4 +310,68 @@ test('a real meet has no banner, and the sidebar offers a new theoretical meet',
   await expect(page.getByRole('dialog', { name: 'Build theoretical meet' })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(page.getByRole('button', { name: 'New theoretical meet' })).toBeFocused();
+});
+
+test('removes and restores a chosen event in the preview, by keyboard too, and saves the meet without it', async ({ page, request }, testInfo) => {
+  test.setTimeout(180_000);
+  const pageErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  const blankId = await createBlankWorkspace(request);
+  await mockCaptureApi(page);
+  await applyTheme(page, blankId, THEMES[0]);
+  await page.setViewportSize({ width: 768, height: 900 });
+  await page.goto('/matrix');
+
+  const dialog = await openDialog(page);
+  await dialog.getByRole('heading', { name: new RegExp(`^${mocks.names['412']} `) }).locator('xpath=following-sibling::ul[1]').getByRole('checkbox').check();
+  await dialog.getByRole('button', { name: 'Next' }).click();
+  await dialog.getByLabel('Scoring preset').selectOption('nsisc');
+  await dialog.getByRole('button', { name: 'Next' }).click();
+  await expect(dialog.getByRole('button', { name: 'Create theoretical meet' })).toBeEnabled({ timeout: 60_000 });
+  await dialog.getByRole('button', { name: /Men/ }).first().click();
+
+  // No sentence says the events cannot be edited.
+  await expect(dialog.getByText(/read-only/)).toHaveCount(0);
+  const removeButtons = dialog.getByRole('button', { name: /^Remove .+ for .+/ });
+  await expect(removeButtons.first()).toBeVisible();
+  const label = (await removeButtons.first().getAttribute('aria-label'))!;
+  const [, event, swimmer] = /^Remove (.+) for (.+)$/.exec(label)!;
+  const restoreName = `Restore ${event} for ${swimmer}`;
+  const before = await removeButtons.count();
+
+  // Remove it with the keyboard: the button is a real button in the tab order.
+  await removeButtons.first().focus();
+  await page.keyboard.press('Enter');
+  const restore = dialog.getByRole('button', { name: restoreName });
+  await expect(restore).toBeVisible();
+  await expect(restore).toBeFocused();
+  await expect(dialog.getByText('removed by you').first()).toBeVisible();
+  await expect(dialog.getByText('You removed 1 event.')).toBeVisible();
+  // The slot is refilled when the swimmer has another event, so the count of Remove buttons holds, and the
+  // refill is tagged. A swimmer with no further event shows the empty-slot note instead.
+  const refilled = await dialog.getByText('in place of a removed event').count();
+  if (refilled > 0) await expect(removeButtons).toHaveCount(before);
+  else await expect(dialog.getByText(/freed slot stays empty/).first()).toBeVisible();
+  await expectNoOverflow(page, 'Preview with a removal, 768px');
+  await shot(page, testInfo, 'preview-removed-dark-768');
+
+  // Restore it with the keyboard.
+  await page.keyboard.press('Space');
+  await expect(dialog.getByRole('button', { name: `Remove ${event} for ${swimmer}` })).toBeFocused();
+  await expect(dialog.getByText('removed by you')).toHaveCount(0);
+  await expect(removeButtons).toHaveCount(before);
+
+  // Remove again, create, and check the saved meet has no row for that swimmer and event.
+  await dialog.getByRole('button', { name: `Remove ${event} for ${swimmer}` }).click();
+  await expect(dialog.getByRole('button', { name: restoreName })).toBeVisible();
+  const posted = page.waitForResponse(r => new URL(r.url()).pathname === '/api/workspaces' && r.request().method() === 'POST');
+  await dialog.getByRole('button', { name: 'Create theoretical meet' }).click();
+  const response = await posted;
+  expect(response.ok(), await response.text()).toBeTruthy();
+  const saved = (await response.json()) as { id: string; menResults?: Array<{ name: string; event: string }>; womenResults?: Array<{ name: string; event: string }> };
+  createdIds.push(saved.id);
+  const rows = [...(saved.menResults ?? []), ...(saved.womenResults ?? [])].filter(r => r.name === swimmer);
+  expect(rows.length).toBeGreaterThan(0);
+  expect(rows.some(r => r.event === event)).toBe(false);
+  expect(pageErrors).toEqual([]);
 });

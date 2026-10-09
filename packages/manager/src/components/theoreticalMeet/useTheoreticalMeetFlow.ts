@@ -12,16 +12,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { Workspace } from '@omniswim/core/types';
 import type { TheoreticalMeetFromCapturesResult } from '../../lib/theoreticalMeetFromCaptures';
+import type { RelayFlyingStartAdjustment, RelayLegDistance, TheoreticalEventExclusion } from '../../lib/theoreticalMeetSeeds';
 import { newTheoreticalWorkspaceId } from '../../lib/theoreticalMeetWorkspace';
 import type { CaptureApi } from './captureApi';
 import { buildMeet, createMeet, readTeamCapture, type BuildMeetArgs, type BuiltMeet } from './theoreticalMeetFlow';
 import {
   buildScoringChoices,
   describeTheoreticalError,
+  dropRemovalsForTeams,
   eventOrderChoices,
   eventOrderOf,
   groupCaptures,
+  parseFlyingStartText,
+  parseMaxRelaysText,
   pruneSelection,
+  toggleRemoval,
   type CaptureListRecord,
   type CaptureTeamGroup,
   type TheoreticalProblem,
@@ -67,9 +72,18 @@ export function useTheoreticalMeetFlow(options: FlowOptions) {
   const [listVersion, setListVersion] = useState(0);
   const [selected, setSelected] = useState<readonly string[]>([]);
   const [step, setStep] = useState<FlowStep>('teams');
-  const [scoringChoiceId, setScoringChoiceId] = useState<string | null>(null);
+  const [scoringChoiceId, setScoringChoiceIdState] = useState<string | null>(null);
   const [eventOrderWorkspaceId, setEventOrderWorkspaceId] = useState<string | null>(null);
-  const [includeExhibition, setIncludeExhibition] = useState(true);
+  const [includeExhibition, setIncludeExhibitionState] = useState(true);
+  // Relays (estimates) are on by default. The flying-start adjustment is OFF by default and has no default value:
+  // the user types seconds per leg distance, and an empty box means no adjustment for that distance.
+  const [includeRelays, setIncludeRelaysState] = useState(true);
+  const [flyingStartOn, setFlyingStartOn] = useState(false);
+  const [flyingStartText, setFlyingStartText] = useState<Readonly<Record<RelayLegDistance, string>>>({ 50: '', 100: '', 200: '' });
+  // "Relays per swimmer: at most N". Empty (the default) means no limit beyond the entry caps.
+  const [maxRelaysText, setMaxRelaysText] = useState('');
+  // Events the user removed in the preview, keyed by team, gender, swimmer and event (no meet id).
+  const [removals, setRemovals] = useState<Readonly<Record<string, TheoreticalEventExclusion>>>({});
   const [name, setName] = useState('');
   const [teamLoads, setTeamLoads] = useState<Readonly<Record<string, TeamLoadState>>>({});
   const [creating, setCreating] = useState(false);
@@ -111,18 +125,61 @@ export function useTheoreticalMeetFlow(options: FlowOptions) {
     [list]
   );
 
-  // A reload can remove or block a capture the user already picked.
+  // The team names each capture gave when it was read. Kept across reloads, so the removals of a capture that a
+  // reload drops can still be tied to its teams.
+  const teamNamesByCaptureRef = useRef(new Map<string, readonly string[]>());
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
+
+  // A reload can remove or block a capture the user already picked. The removals of a team that left with it go too.
   useEffect(() => {
     if (list.status !== 'ready') return;
-    setSelected(current => {
-      const next = pruneSelection(current, groups);
-      return next.length === current.length ? current : next;
-    });
+    const current = selectedRef.current;
+    const next = pruneSelection(current, groups);
+    if (next.length === current.length) return;
+    const kept = new Set(next);
+    const namesOf = (ids: readonly string[]) => ids.flatMap(id => teamNamesByCaptureRef.current.get(id) ?? []);
+    const droppedNames = namesOf(current.filter(id => !kept.has(id)));
+    const keptNames = namesOf(next);
+    setSelected(next);
+    if (droppedNames.length > 0) setRemovals(removals => dropRemovalsForTeams(removals, droppedNames, keptNames));
   }, [list, groups]);
 
-  const toggleCapture = useCallback((captureId: string) => {
-    setSelected(current => (current.includes(captureId) ? current.filter(id => id !== captureId) : [...current, captureId]));
-  }, []);
+  // A removal belongs to the field it was made in. A new team, scoring rule or exhibition switch makes a new
+  // field, so earlier removals are dropped rather than carried into it unseen.
+  const clearRemovals = useCallback(() => setRemovals(current => (Object.keys(current).length === 0 ? current : {})), []);
+  const toggleEventRemoval = useCallback((removal: TheoreticalEventExclusion) => setRemovals(current => toggleRemoval(current, removal)), []);
+
+  const toggleCapture = useCallback(
+    (captureId: string) => {
+      setSelected(current => (current.includes(captureId) ? current.filter(id => id !== captureId) : [...current, captureId]));
+      clearRemovals();
+    },
+    [clearRemovals]
+  );
+  const setScoringChoiceId = useCallback(
+    (id: string | null) => {
+      setScoringChoiceIdState(id);
+      clearRemovals();
+    },
+    [clearRemovals]
+  );
+  const setIncludeExhibition = useCallback(
+    (include: boolean) => {
+      setIncludeExhibitionState(include);
+      clearRemovals();
+    },
+    [clearRemovals]
+  );
+
+  const setIncludeRelays = useCallback(
+    (include: boolean) => {
+      setIncludeRelaysState(include);
+      clearRemovals();
+    },
+    [clearRemovals]
+  );
+  const setFlyingStartSeconds = useCallback((distance: RelayLegDistance, text: string) => setFlyingStartText(current => ({ ...current, [distance]: text })), []);
 
   /* ---- per-team read, run when the preview step is open ---- */
 
@@ -136,6 +193,7 @@ export function useTheoreticalMeetFlow(options: FlowOptions) {
       readTeamCapture(api, captureId, records).then(
         result => {
           loadingRef.current.delete(captureId);
+          teamNamesByCaptureRef.current.set(captureId, result.teams.map(t => t.teamName));
           if (mountedRef.current) setTeamLoads(current => ({ ...current, [captureId]: { status: 'done', result } }));
         },
         err => {
@@ -177,6 +235,13 @@ export function useTheoreticalMeetFlow(options: FlowOptions) {
   // One id per dialog session. The preview and the created workspace use it unless it is taken.
   const previewIdRef = useRef<string | null>(null);
 
+  const adjustment: RelayFlyingStartAdjustment | undefined = useMemo(
+    () => (flyingStartOn ? parseFlyingStartText(flyingStartText) : undefined),
+    [flyingStartOn, flyingStartText]
+  );
+
+  const maxRelaysPerSwimmer: number | undefined = useMemo(() => parseMaxRelaysText(maxRelaysText), [maxRelaysText]);
+
   const buildArgs: BuildMeetArgs | null = useMemo(() => {
     if (scoringChoiceId === null || selected.length === 0) return null;
     const results: Record<string, TheoreticalMeetFromCapturesResult | undefined> = {};
@@ -185,14 +250,23 @@ export function useTheoreticalMeetFlow(options: FlowOptions) {
       results[id] = load?.status === 'done' ? load.result : undefined;
     }
     const order = eventOrderWorkspaceId === null ? undefined : eventOrderOf(workspaces.find(w => w.id === eventOrderWorkspaceId));
+    const excludedEvents = Object.values(removals);
     return {
       captureIds: selected,
       resultsByCaptureId: results,
       scoringChoiceId,
       includeExhibition,
       ...(order === undefined ? {} : { eventOrder: order }),
+      ...(excludedEvents.length === 0 ? {} : { excludedEvents }),
+      ...(includeRelays
+        ? {
+            includeRelays: true,
+            ...(adjustment === undefined ? {} : { relayFlyingStartAdjustmentSec: adjustment }),
+            ...(maxRelaysPerSwimmer === undefined ? {} : { maxRelaysPerSwimmer }),
+          }
+        : {}),
     };
-  }, [selected, teamLoads, scoringChoiceId, includeExhibition, eventOrderWorkspaceId, workspaces]);
+  }, [selected, teamLoads, scoringChoiceId, includeExhibition, eventOrderWorkspaceId, workspaces, removals, includeRelays, adjustment, maxRelaysPerSwimmer]);
 
   const allRead = selected.length > 0 && selected.every(id => teamLoads[id]?.status === 'done');
   const anyFailed = selected.some(id => teamLoads[id]?.status === 'failed');
@@ -209,8 +283,11 @@ export function useTheoreticalMeetFlow(options: FlowOptions) {
 
   /* ---- create ---- */
 
+  // A ref, not the `creating` state: two clicks in one tick both see the same stale state value.
+  const creatingRef = useRef(false);
   const create = useCallback(async () => {
-    if (preview.status !== 'ready' || buildArgs === null || creating) return;
+    if (preview.status !== 'ready' || buildArgs === null || creatingRef.current) return;
+    creatingRef.current = true;
     setCreating(true);
     setCreateProblem(null);
     try {
@@ -229,9 +306,10 @@ export function useTheoreticalMeetFlow(options: FlowOptions) {
     } catch (err) {
       if (mountedRef.current) setCreateProblem(describeTheoreticalError(err));
     } finally {
+      creatingRef.current = false;
       if (mountedRef.current) setCreating(false);
     }
-  }, [preview, buildArgs, creating, restoreWorkspace, name, onCreated]);
+  }, [preview, buildArgs, restoreWorkspace, name, onCreated]);
 
   return {
     list,
@@ -249,6 +327,17 @@ export function useTheoreticalMeetFlow(options: FlowOptions) {
     setEventOrderWorkspaceId,
     includeExhibition,
     setIncludeExhibition,
+    includeRelays,
+    setIncludeRelays,
+    flyingStartOn,
+    setFlyingStartOn,
+    flyingStartText,
+    setFlyingStartSeconds,
+    maxRelaysText,
+    setMaxRelaysText,
+    removals,
+    toggleEventRemoval,
+    clearRemovals,
     name,
     setName,
     teamLoads,

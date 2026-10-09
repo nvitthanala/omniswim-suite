@@ -273,8 +273,32 @@ describe("seed builder: exhibitionSeeds 'exclude'", () => {
     const excl = buildTheoreticalMeetSeeds(meet({ teams: [menTeam(1, only)], exhibitionSeeds: 'exclude' }));
     expect(excl.rows).toHaveLength(0);
     expect(excl.report.teams[0].athletesWithNoSeedInMeetCourse).toEqual([
-      expect.objectContaining({ name: obuMen[0].name, reason: 'no_event_in_program', excludedExhibitionEvents: ['100 IM SCY'] }),
+      expect.objectContaining({ name: obuMen[0].name, reason: 'all_seeds_exhibition_excluded', excludedExhibitionEvents: ['100 IM SCY'] }),
     ]);
+  });
+
+  it('constructed: exhibition swims only in an event outside the meet program give no_event_in_program, not all_seeds_exhibition_excluded', () => {
+    // The reason is keyed on the exhibition-seeded events the program would have offered. A swimmer whose only
+    // swims are exhibition swims in an event the meet does not hold would get no seed with the swims back in
+    // either, so the exhibition rule is not the cause.
+    const exhibitionSwim: HistoricalSwim = {
+      name: 'x',
+      team: OBU,
+      gender: Gender.MEN,
+      event: '1000 Free SCY',
+      time: '9:50.00',
+      timeType: 'SCY',
+      source: 'swimcloud',
+      isExhibition: true,
+    };
+    const program = new Set([...PROGRAM].filter(e => e !== canonicalMeetEventLabel('1000 Free SCY')));
+    expect(program.size).toBe(PROGRAM.size - 1);
+    const out = buildTheoreticalMeetSeeds(meet({ teams: [menTeam(1, () => [exhibitionSwim])], meetProgram: program, exhibitionSeeds: 'exclude' }));
+    expect(out.rows).toHaveLength(0);
+    const [noSeed] = out.report.teams[0].athletesWithNoSeedInMeetCourse;
+    expect(noSeed).toMatchObject({ name: obuMen[0].name, reason: 'no_event_in_program' });
+    expect(noSeed).not.toHaveProperty('excludedExhibitionEvents');
+    expect(out.report.teams[0].exhibitionEventsExcluded).toBe(0);
   });
 
   it('rejects an unknown mode loudly', () => {

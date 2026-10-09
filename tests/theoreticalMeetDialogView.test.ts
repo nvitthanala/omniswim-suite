@@ -264,7 +264,7 @@ describe('preview model over the committed fixtures', async () => {
     const swimmer = first.swimmers[0];
     expect(swimmer.chosen.length).toBeGreaterThan(0);
     const source = seeds.report.teams.flatMap(t => t.eventsChosenPerSwimmer).find(s => s.name === swimmer.name)!;
-    expect(swimmer.chosen).toEqual(source.events.filter(e => e.chosen).map(e => ({ event: e.event, time: e.time, isExhibition: e.isExhibition === true })));
+    expect(swimmer.chosen).toEqual(source.events.filter(e => e.chosen).map(e => ({ event: e.event, time: e.time, isExhibition: e.isExhibition === true, fillsRemovedSlot: false })));
     expect(new Set(swimmer.chosen.map(c => c.event)).size).toBe(swimmer.chosen.length);
   });
 

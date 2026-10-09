@@ -53,7 +53,7 @@ function EmptyCaptures({ onReload }: { onReload: () => void }) {
   );
 }
 
-function CaptureOption({ row, checked, onToggle }: { row: CaptureRow; checked: boolean; onToggle: () => void }) {
+function CaptureOption({ row, checked, onToggle, showDivision }: { row: CaptureRow; checked: boolean; onToggle: () => void; showDivision: boolean }) {
   const blocked = row.status === 'blocked';
   const id = `tmeet-capture-${row.captureId}`;
   const noteId = `${id}-note`;
@@ -76,6 +76,7 @@ function CaptureOption({ row, checked, onToggle }: { row: CaptureRow; checked: b
           <span className="flex flex-wrap items-center gap-2">
             <span className="text-ui-label font-medium text-[var(--text-primary)]">{row.season ?? 'Season not recorded'}</span>
             {blocked ? <Badge tone="warning">Not ready</Badge> : <Badge tone="success">Ready</Badge>}
+            {showDivision ? <Badge tone={row.divisionTag.division === null ? 'warning' : 'neutral'}>{row.divisionTag.text}</Badge> : null}
           </span>
           <span id={noteId} className="mt-1 block space-y-0.5 text-ui-caption">
             <span className="block text-theme-secondary">{row.coverageText}</span>
@@ -113,7 +114,13 @@ export function TeamsStep({ flow }: { flow: TheoreticalMeetFlow }) {
               {group.nameWarning !== null ? <p className="mb-2 text-ui-caption text-warning">{group.nameWarning}</p> : null}
               <ul className="space-y-2">
                 {group.rows.map(row => (
-                  <CaptureOption key={row.captureId} row={row} checked={selected.includes(row.captureId)} onToggle={() => toggleCapture(row.captureId)} />
+                  <CaptureOption
+                    key={row.captureId}
+                    row={row}
+                    checked={selected.includes(row.captureId)}
+                    onToggle={() => toggleCapture(row.captureId)}
+                    showDivision={group.divisionVaries}
+                  />
                 ))}
               </ul>
             </section>

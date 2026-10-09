@@ -20,12 +20,22 @@ import {
   buildRelaySwimTagsForTeam,
   convertedSwimOfRecord,
   type CutlineTagResult,
-  type RelaySwimTagResults,
 } from '@omniswim/core/lib/cutlineTags';
 
+/**
+ * A relay row's two verdicts. `relay` is `null` for an estimated relay (a theoretical meet's relay, whose
+ * team time is a sum of individual bests): it is not judged against a relay standard. That is a state of its
+ * own, shown as "Estimate, not judged". It is not absent and it is not `no_cut`.
+ */
+export type RelayRowTags = { relay: CutlineTagResult | null; legQualification: CutlineTagResult | null };
+
 export type TeamRowCutlineTags =
-  | { kind: 'relay'; tags: RelaySwimTagResults }
+  | { kind: 'relay'; tags: RelayRowTags; relayEstimate: boolean }
   | { kind: 'single'; result: CutlineTagResult };
+
+export const RELAY_ESTIMATE_NOT_JUDGED_LABEL = 'Estimate, not judged';
+export const RELAY_ESTIMATE_NOT_JUDGED_TITLE =
+  "This relay time is the sum of four swimmers' individual best times. Nobody swam it, so it is not judged against a relay cut.";
 
 /**
  * One cutline verdict per row, except a relay leg carries TWO independent
@@ -39,28 +49,36 @@ export type TeamRowCutlineTags =
  * each call site keeps its own pre-existing time fallback for a *non-relay*
  * row (they differ today; this only unifies the relay side, per the actual
  * bug report).
+ *
+ * `estimatedRelay` (from `isEstimatedRelayRow(workspace, res)`): the relay's team time is an estimate. The
+ * relay verdict is then withheld (`tags.relay` is `null`, `relayEstimate` is `true`). Leg 1's own verdict may
+ * stay, because leg 1 is a recorded flat-start individual best. Legs 2 to 4 keep no verdict.
  */
 export function buildTeamRowCutlineTags(
   res: SwimmerResult,
   gender: Gender | string,
   teamName: string,
-  individualTime: string
+  individualTime: string,
+  estimatedRelay = false
 ): TeamRowCutlineTags {
   // normalizeEventForCutline strips course words, the HyTek "Event N <Gender>"
   // prefix and Time Trial suffixes itself.
   const cleanEventBase = res.event.replace(' (Avg Split)', '').trim();
 
   if (res.isRelay) {
+    const tags = buildRelaySwimTagsForTeam({
+      gender,
+      team: teamName,
+      relayEvent: cleanEventBase,
+      relayTeamTime: res.relayTeamTime || res.finalsTime || res.time,
+      legQualificationEvent: relaySplitQualificationCutEvent(res),
+      legSplit: res.relayLegSplit,
+    });
+    if (!estimatedRelay) return { kind: 'relay', tags, relayEstimate: false };
     return {
       kind: 'relay',
-      tags: buildRelaySwimTagsForTeam({
-        gender,
-        team: teamName,
-        relayEvent: cleanEventBase,
-        relayTeamTime: res.relayTeamTime || res.finalsTime || res.time,
-        legQualificationEvent: relaySplitQualificationCutEvent(res),
-        legSplit: res.relayLegSplit,
-      }),
+      tags: { relay: null, legQualification: res.relayLegIndex === 0 ? tags.legQualification : null },
+      relayEstimate: true,
     };
   }
 

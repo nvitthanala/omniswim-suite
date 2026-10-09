@@ -20,7 +20,12 @@
 
 import type { Workspace } from '@omniswim/core/types';
 import { theoreticalMeetFromCaptures, type TheoreticalMeetFromCapturesResult } from '../../lib/theoreticalMeetFromCaptures';
-import { buildTheoreticalMeetSeeds, type TheoreticalMeetSeeds } from '../../lib/theoreticalMeetSeeds';
+import {
+  buildTheoreticalMeetSeeds,
+  type RelayFlyingStartAdjustment,
+  type TheoreticalEventExclusion,
+  type TheoreticalMeetSeeds,
+} from '../../lib/theoreticalMeetSeeds';
 import {
   TheoreticalWorkspaceError,
   buildTheoreticalMeetWorkspace,
@@ -59,6 +64,26 @@ export interface BuildMeetArgs {
   readonly includeExhibition?: boolean;
   /** Event labels in meet order, or undefined for the standard program order. */
   readonly eventOrder?: readonly string[];
+  /**
+   * (swimmer, event) pairs the user removed in the preview. They carry no meet id, so a rebuild under a
+   * fresh workspace id (see `createMeet`) keeps them. Absent or empty: the strength-first selection.
+   */
+  readonly excludedEvents?: readonly TheoreticalEventExclusion[];
+  /**
+   * Also build relays from individual bests (estimates). Absent or false: no relay, as before. The dialog
+   * passes `true` by default. A scoring preset with no relay program on record builds none and says so.
+   */
+  readonly includeRelays?: boolean;
+  /**
+   * Flying-start seconds per leg distance, as the user typed them. Used only with `includeRelays`. A distance
+   * with no value gets no adjustment. There is no default.
+   */
+  readonly relayFlyingStartAdjustmentSec?: RelayFlyingStartAdjustment;
+  /**
+   * "Relays per swimmer: at most N". Used only with `includeRelays`. Absent: no limit beyond the entry caps.
+   * A value that is not a whole number of 1 or more is rejected by the seed builder, never replaced.
+   */
+  readonly maxRelaysPerSwimmer?: number;
 }
 
 export interface BuiltMeet {
@@ -82,6 +107,14 @@ export function buildMeet(args: BuildMeetArgs, workspaceId: string, createdAt: n
     scoringSettings: settings,
     ...(conference === undefined ? {} : { conference }),
     exhibitionSeeds: args.includeExhibition === false ? 'exclude' : 'include',
+    ...(args.excludedEvents === undefined || args.excludedEvents.length === 0 ? {} : { excludedEvents: args.excludedEvents }),
+    ...(args.includeRelays === true
+      ? {
+          includeRelays: true,
+          ...(args.relayFlyingStartAdjustmentSec === undefined ? {} : { relayFlyingStartAdjustmentSec: args.relayFlyingStartAdjustmentSec }),
+          ...(args.maxRelaysPerSwimmer === undefined ? {} : { maxRelaysPerSwimmer: args.maxRelaysPerSwimmer }),
+        }
+      : {}),
     teams: captures.teams,
   });
   const build = buildTheoreticalMeetWorkspace({

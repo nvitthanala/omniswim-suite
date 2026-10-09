@@ -50,6 +50,18 @@
  * - **Not set:** `isPsychSheet`, `isRecruit`, `isExhibition`, `isTimeTrial`,
  *   `pdfPoints`, `relay*`. A row with none of these is a plain scored swim.
  *
+ * ## Relay rows (estimates)
+ *
+ * `seeds.relayEntries` (empty unless relays were requested) become four rows each, one per leg, the way a
+ * HyTek relay is stored: the legs of one relay share `event`, `team`, `roundSwam`, `rank` and the team time
+ * (`time`, `finalsTime`, `relayTeamTime`), and each leg row carries its swimmer, `relayLegIndex`,
+ * `relayLegStroke` and `relayLegSplit` (the leg time). The engine groups legs by that shared key
+ * (`relayEntryGroupKey`) and pays `scoringPoints[place] x relayMultiplier` (or `relayPoints`) once per
+ * relay, split over the legs (`halfRateRelaySwimmer`). Teams are ranked by estimated team time within an
+ * event and gender, ties 1, 2, 2, 4, and banded like the individual rows. No `relayLegSplitDetail` is
+ * written: a segment breakdown would be a second invented number. Every relay row of a theoretical meet is
+ * an estimate by construction ({@link isEstimatedRelayRow}); the workspace has no field for it.
+ *
  * ## Ties
  *
  * Standard competition ranking on an exact time tie (1, 2, 2, 4), the rule the
@@ -94,20 +106,23 @@ import type { LoadedMeetMeta, ScoringSettings, SwimmerResult } from '@omniswim/c
 import { canonicalMeetEventLabel, swimEventIdentity } from '@omniswim/core/lib/athleteHistory';
 import { meetCopyFromParsed } from '@omniswim/core/lib/meetSource';
 import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
+import { THEORETICAL_MEET_LABEL, isEstimatedRelayRow, isTheoreticalMeet } from '@omniswim/core/lib/theoreticalMeetLabel';
 import { calculatePoints, convertTimeToSeconds, isDivingEvent, isRelayResult, parseEventNumber } from '@omniswim/core/lib/utils';
-import { PDF_POINTS_SETTINGS_MESSAGE, type TheoreticalMeetSeeds, type TheoreticalSeedSource } from './theoreticalMeetSeeds';
+import {
+  PDF_POINTS_SETTINGS_MESSAGE,
+  theoreticalRelayProgramIndex,
+  type TheoreticalMeetSeeds,
+  type TheoreticalProjectedRelay,
+  type TheoreticalSeedSource,
+} from './theoreticalMeetSeeds';
 
 /* -------------------------------------------------------------------------- */
 /* Label and detection                                                         */
 /* -------------------------------------------------------------------------- */
 
-/** The text that marks a workspace as a theoretical meet. */
-export const THEORETICAL_MEET_LABEL = 'Theoretical meet (seeded from crawled teams)';
-
-/** True when the workspace's loaded meet is a theoretical meet. Reads `loadedMeet.meetLabel` only. */
-export function isTheoreticalMeet(workspace: { readonly loadedMeet?: Pick<LoadedMeetMeta, 'meetLabel'> | null } | null | undefined): boolean {
-  return workspace?.loadedMeet?.meetLabel === THEORETICAL_MEET_LABEL;
-}
+// Defined in core (no heavy imports) so the shell and Metrics can read the label without loading the
+// manager bundle. Re-exported here so every existing import keeps working.
+export { THEORETICAL_MEET_LABEL, isEstimatedRelayRow, isTheoreticalMeet };
 
 export const EVENT_ORDER_CAVEAT =
   'Events run in the standard program order, not a published meet order. Under a meet-wide scorer cap (NSISC: 18 scorers per team) the order decides which swimmers fill the cap. NSISC totals can move by several percent with event order (measured up to 7% on real data).';
@@ -212,6 +227,10 @@ export interface TheoreticalMeetWorkspaceBuild {
   readonly sources: ReadonlyMap<string, TheoreticalSeedSource>;
   /** Seed row id to result row id. */
   readonly resultIdBySeedId: ReadonlyMap<string, string>;
+  /** Relay entry id (`TheoreticalProjectedRelay.id`) to its four leg row ids, in leg order. Empty without relays. */
+  readonly relayResultIdsByEntryId: ReadonlyMap<string, readonly string[]>;
+  /** The relay entries the leg rows were made from (estimates). */
+  readonly relayEntries: readonly TheoreticalProjectedRelay[];
   /** The seed report, unchanged, so a UI shows one report. */
   readonly report: TheoreticalMeetSeeds['report'];
   /** The seed caveats, then this file's. */
@@ -223,6 +242,19 @@ export interface TheoreticalMeetWorkspaceBuild {
   /** Things the caller should show: events the supplied order did not name. Empty when there is nothing to say. */
   readonly warnings: readonly string[];
 }
+
+/**
+ * Names each group of tied estimated relays. Core relay scoring (`scoreRelaysInEvent`) gives every tied relay
+ * the full points of the shared place; it does not split them the way individual ties are split. This app
+ * does not change that, so the meet says it.
+ */
+export function relayTieCaveat(event: string, tied: readonly Pick<TheoreticalProjectedRelay, 'team' | 'gender' | 'totalTime'>[], place: number): string {
+  const teams = tied.map(r => r.team).join(', ');
+  return `Tied estimated relays: ${event}, ${String(tied[0].gender)}, place ${place}, ${tied[0].totalTime}: ${teams}. In this app today each tied relay receives the full place points. The points are not split.`;
+}
+
+export const RELAY_PLACES_CAVEAT =
+  'Relay places are the order of the estimated relay times within each event and gender. A relay that was not built has no place.';
 
 /* -------------------------------------------------------------------------- */
 /* Names                                                                       */
@@ -453,6 +485,107 @@ function rankGender(
 }
 
 /* -------------------------------------------------------------------------- */
+/* Relays                                                                      */
+/* -------------------------------------------------------------------------- */
+
+const RELAY_ENTRY_PREFIX = 'tmrelay|';
+const RELAY_RESULT_PREFIX = 'tmresrelay|';
+
+/** The leg row id for a relay entry id and a leg position. */
+export function theoreticalRelayLegRowId(relayEntryId: string, position: number): string {
+  if (!relayEntryId.startsWith(RELAY_ENTRY_PREFIX)) {
+    throw new TheoreticalWorkspaceError('unexpected-seed-row', `The relay id ${relayEntryId} is not a theoretical relay id.`);
+  }
+  return `${RELAY_RESULT_PREFIX}${relayEntryId.slice(RELAY_ENTRY_PREFIX.length)}|leg${position}`;
+}
+
+const round2 = (n: number): number => Math.round(n * 100) / 100;
+
+function requireRelayShape(relay: TheoreticalProjectedRelay, workspaceIdPart: string): void {
+  const bad = (what: string): never => {
+    throw new TheoreticalWorkspaceError('unexpected-seed-row', `The relay ${relay.id} ${what}.`);
+  };
+  if (!relay.id.startsWith(`${RELAY_ENTRY_PREFIX}${workspaceIdPart}|`)) {
+    throw new TheoreticalWorkspaceError('meet-id-mismatch', `The relay ${relay.id} was not built for workspace ${workspaceIdPart}.`);
+  }
+  if (relay.gender !== Gender.MEN && relay.gender !== Gender.WOMEN) bad(`has gender ${JSON.stringify(relay.gender)}`);
+  if (theoreticalRelayProgramIndex(relay.event) < 0) bad(`names ${JSON.stringify(relay.event)}, which is not in the relay program`);
+  if (relay.anyEstimated !== true) bad('is not marked estimated');
+  if (relay.legs.length !== 4 || relay.legs.some((leg, index) => leg.position !== index + 1)) bad('does not have exactly four legs in positions 1 to 4');
+  if (relay.legs.some(leg => leg.team !== relay.team)) bad('has a leg from another team');
+  const names = new Set(relay.legs.map(leg => leg.name.trim().toLowerCase().replace(/\s+/g, ' ')));
+  if (names.size !== 4) bad('has a swimmer on two legs');
+  if (relay.legs.some(leg => !Number.isFinite(leg.timeSec) || leg.timeSec <= 0)) bad('has a leg time that is not a positive number');
+  if (!Number.isFinite(relay.totalSec) || relay.totalSec !== round2(relay.legs.reduce((sum, leg) => sum + leg.timeSec, 0))) {
+    bad('has a team time that is not the sum of its four leg times');
+  }
+}
+
+/** One gender's relay rows: teams ranked per event by estimated time, banded, four leg rows each. Points are filled in by the caller. */
+function rankRelays(
+  relays: readonly TheoreticalProjectedRelay[],
+  bracket: number,
+  workspaceIdPart: string,
+  resultIds: Map<string, string[]>,
+  tieNotes: string[]
+): SwimmerResult[] {
+  const byEvent = new Map<string, Array<{ relay: TheoreticalProjectedRelay; key: SwimmerResult }>>();
+  const legRows = new Map<string, SwimmerResult[]>();
+  for (const relay of relays) {
+    requireRelayShape(relay, workspaceIdPart);
+    if (resultIds.has(relay.id)) throw new TheoreticalWorkspaceError('row-id-collision', `Two relays share the id ${relay.id}.`);
+    const rows: SwimmerResult[] = relay.legs.map(leg => ({
+      id: theoreticalRelayLegRowId(relay.id, leg.position),
+      rank: 0,
+      name: leg.name,
+      classYear: leg.classYear,
+      team: relay.team,
+      time: relay.totalTime,
+      finalsTime: relay.totalTime,
+      relayTeamTime: relay.totalTime,
+      points: 0,
+      event: relay.event,
+      gender: relay.gender,
+      isRelay: true,
+      roundSwam: 'C Final',
+      relayNames: relay.legs.map(l => ({ name: l.name, year: l.classYear })),
+      relayLegIndex: leg.position - 1,
+      relayLegStroke: leg.stroke,
+      relayLegSplit: leg.time,
+    }));
+    legRows.set(relay.id, rows);
+    resultIds.set(relay.id, rows.map(r => r.id));
+    const list = byEvent.get(relay.event) ?? [];
+    list.push({ relay, key: rows[0] });
+    byEvent.set(relay.event, list);
+  }
+  const out: SwimmerResult[] = [];
+  const events = [...byEvent.keys()].sort((a, b) => theoreticalRelayProgramIndex(a) - theoreticalRelayProgramIndex(b));
+  for (const event of events) {
+    const field = byEvent.get(event) as Array<{ relay: TheoreticalProjectedRelay; key: SwimmerResult }>;
+    const places = placesFastestFirst(field.map(f => ({ row: f.key, seconds: f.relay.totalSec })));
+    const byPlace = new Map<number, TheoreticalProjectedRelay[]>();
+    for (const f of field) {
+      const place = places.get(f.key) as number;
+      byPlace.set(place, [...(byPlace.get(place) ?? []), f.relay]);
+    }
+    for (const [place, tied] of [...byPlace.entries()].sort((a, b) => a[0] - b[0])) {
+      if (tied.length > 1) tieNotes.push(relayTieCaveat(event, tied, place));
+    }
+    const ordered = [...field].sort(
+      (a, b) => (places.get(a.key) as number) - (places.get(b.key) as number) || a.relay.totalSec - b.relay.totalSec || a.relay.team.localeCompare(b.relay.team)
+    );
+    for (const { relay, key } of ordered) {
+      const place = places.get(key) as number;
+      for (const row of legRows.get(relay.id) as SwimmerResult[]) {
+        out.push({ ...row, rank: place, roundSwam: roundForPlace(place, bracket) });
+      }
+    }
+  }
+  return out;
+}
+
+/* -------------------------------------------------------------------------- */
 /* The builder                                                                 */
 /* -------------------------------------------------------------------------- */
 
@@ -489,11 +622,22 @@ export function buildTheoreticalMeetWorkspace(input: TheoreticalMeetWorkspaceInp
 
   const order = input.eventOrder === undefined ? undefined : parseEventOrder(input.eventOrder);
   const notNamed = new Set<string>();
-  const men = rankGender(seeds.rows.filter(r => r.gender === Gender.MEN), bracket, idPart, order, notNamed);
-  const women = rankGender(seeds.rows.filter(r => r.gender === Gender.WOMEN), bracket, idPart, order, notNamed);
-  if (men.length + women.length !== seeds.rows.length) {
+  const menIndividual = rankGender(seeds.rows.filter(r => r.gender === Gender.MEN), bracket, idPart, order, notNamed);
+  const womenIndividual = rankGender(seeds.rows.filter(r => r.gender === Gender.WOMEN), bracket, idPart, order, notNamed);
+  if (menIndividual.length + womenIndividual.length !== seeds.rows.length) {
     throw new TheoreticalWorkspaceError('unexpected-seed-row', 'A seed row has a gender other than Men or Women.');
   }
+  // Relay rows follow the individual events in row order (the engine's order for rows with no Event N label).
+  const relayEntries = seeds.relayEntries ?? [];
+  const relayResultIdsByEntryId = new Map<string, string[]>();
+  const relayTieNotes: string[] = [];
+  const menRelays = rankRelays(relayEntries.filter(r => r.gender === Gender.MEN), bracket, idPart, relayResultIdsByEntryId, relayTieNotes);
+  const womenRelays = rankRelays(relayEntries.filter(r => r.gender === Gender.WOMEN), bracket, idPart, relayResultIdsByEntryId, relayTieNotes);
+  if (menRelays.length + womenRelays.length !== relayEntries.length * 4) {
+    throw new TheoreticalWorkspaceError('unexpected-seed-row', 'A relay entry has a gender other than Men or Women.');
+  }
+  const men = [...menIndividual, ...menRelays];
+  const women = [...womenIndividual, ...womenRelays];
 
   // The engine's own baseline points, so a raw reader sees what Standings shows.
   // Same arguments as `buildScoringBundle`: both genders' rows are the PDF hint.
@@ -549,8 +693,18 @@ export function buildTheoreticalMeetWorkspace(input: TheoreticalMeetWorkspaceInp
     payload,
     sources,
     resultIdBySeedId,
+    relayResultIdsByEntryId,
+    relayEntries,
     report: seeds.report,
-    caveats: [...new Set([...seeds.report.caveats, THEORETICAL_PLACES_CAVEAT, order === undefined ? EVENT_ORDER_CAVEAT : EVENT_ORDER_SUPPLIED_CAVEAT])],
+    caveats: [
+      ...new Set([
+        ...seeds.report.caveats,
+        THEORETICAL_PLACES_CAVEAT,
+        ...(relayEntries.length > 0 ? [RELAY_PLACES_CAVEAT] : []),
+        ...relayTieNotes,
+        order === undefined ? EVENT_ORDER_CAVEAT : EVENT_ORDER_SUPPLIED_CAVEAT,
+      ]),
+    ],
     aFinalBracketSize: bracket,
     eventOrderSource: order === undefined ? 'program-default' : 'supplied',
     warnings:

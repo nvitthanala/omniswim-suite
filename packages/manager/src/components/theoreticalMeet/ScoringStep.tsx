@@ -9,11 +9,29 @@
  */
 
 import { Badge } from '@omniswim/ui';
+import { RELAY_LEG_DISTANCES } from '../../lib/theoreticalMeetSeeds';
 import { EVENT_ORDER_CAVEAT } from '../../lib/theoreticalMeetWorkspace';
 import type { TheoreticalMeetFlow } from './useTheoreticalMeetFlow';
 
 export function ScoringStep({ flow }: { flow: TheoreticalMeetFlow }) {
-  const { scoringChoices, scoringChoiceId, setScoringChoiceId, eventOrders, eventOrderWorkspaceId, setEventOrderWorkspaceId, includeExhibition, setIncludeExhibition } = flow;
+  const {
+    scoringChoices,
+    scoringChoiceId,
+    setScoringChoiceId,
+    eventOrders,
+    eventOrderWorkspaceId,
+    setEventOrderWorkspaceId,
+    includeExhibition,
+    setIncludeExhibition,
+    includeRelays,
+    setIncludeRelays,
+    flyingStartOn,
+    setFlyingStartOn,
+    flyingStartText,
+    setFlyingStartSeconds,
+    maxRelaysText,
+    setMaxRelaysText,
+  } = flow;
   const chosen = scoringChoices.find(choice => choice.id === scoringChoiceId) ?? null;
   const groups = [...new Set(scoringChoices.map(choice => choice.group))];
   const useLoadedOrder = eventOrderWorkspaceId !== null;
@@ -89,6 +107,84 @@ export function ScoringStep({ flow }: { flow: TheoreticalMeetFlow }) {
         <p id="tmeet-exhibition-help" className="text-ui-caption text-theme-muted">
           Exhibition swims did not score at their meet. Turning this off drops those events entirely: the crawl returns only each swimmer&apos;s best time per event, so there is no slower official time to fall back to.
         </p>
+      </section>
+
+      <section aria-labelledby="tmeet-relays-heading" className="space-y-2">
+        <h3 id="tmeet-relays-heading" className="text-ui-label font-semibold text-[var(--text-primary)]">
+          Relays
+        </h3>
+        <label htmlFor="tmeet-relays" className="flex items-center gap-2 text-ui-caption text-[var(--text-primary)]">
+          <input
+            id="tmeet-relays"
+            type="checkbox"
+            role="switch"
+            className="h-4 w-4 accent-[var(--text-accent)]"
+            checked={includeRelays}
+            aria-describedby="tmeet-relays-help"
+            onChange={event => setIncludeRelays(event.target.checked)}
+          />
+          Include relays (estimated)
+        </label>
+        <p id="tmeet-relays-help" className="text-ui-caption text-theme-muted">
+          Relay times are built from each swimmer&apos;s individual best times, so they are estimates and not times any team swam.
+        </p>
+        {includeRelays ? (
+          <div className="space-y-2 pl-6">
+            <label htmlFor="tmeet-flying-start" className="flex items-center gap-2 text-ui-caption text-[var(--text-primary)]">
+              <input
+                id="tmeet-flying-start"
+                type="checkbox"
+                role="switch"
+                className="h-4 w-4 accent-[var(--text-accent)]"
+                checked={flyingStartOn}
+                aria-describedby="tmeet-flying-start-help"
+                onChange={event => setFlyingStartOn(event.target.checked)}
+              />
+              Take a flying-start gain off legs 2 to 4
+            </label>
+            <p id="tmeet-flying-start-help" className="text-ui-caption text-theme-muted">
+              Off: legs 2 to 4 use the flat-start best, unchanged. On: enter the seconds to subtract per leg distance. The app has no published figure, so there is no default. A box left empty means no adjustment for that distance. Leg 1 is never adjusted.
+            </p>
+            {flyingStartOn ? (
+              <div className="flex flex-wrap gap-3">
+                {RELAY_LEG_DISTANCES.map(distance => (
+                  <label key={distance} htmlFor={`tmeet-flying-start-${distance}`} className="text-ui-caption text-theme-secondary">
+                    {`${distance}-yard legs (seconds)`}
+                    <input
+                      id={`tmeet-flying-start-${distance}`}
+                      type="number"
+                      inputMode="decimal"
+                      min={0}
+                      step={0.01}
+                      className="glass-input mt-1 block w-32 text-ui-caption"
+                      value={flyingStartText[distance]}
+                      placeholder="none"
+                      onChange={event => setFlyingStartSeconds(distance, event.target.value)}
+                    />
+                  </label>
+                ))}
+              </div>
+            ) : null}
+            <label htmlFor="tmeet-max-relays" className="block text-ui-caption text-theme-secondary">
+              Relays per swimmer: at most
+              <input
+                id="tmeet-max-relays"
+                type="number"
+                inputMode="numeric"
+                min={1}
+                step={1}
+                className="glass-input mt-1 block w-32 text-ui-caption"
+                value={maxRelaysText}
+                placeholder="no limit"
+                aria-describedby="tmeet-max-relays-help"
+                onChange={event => setMaxRelaysText(event.target.value)}
+              />
+            </label>
+            <p id="tmeet-max-relays-help" className="text-ui-caption text-theme-muted">
+              Empty: no limit beyond the entry cap. A number: a swimmer already on that many relays is not offered another leg, so more of the entry cap stays for individual events. The cap itself stays total-only.
+            </p>
+          </div>
+        ) : null}
       </section>
 
       <fieldset className="space-y-2">

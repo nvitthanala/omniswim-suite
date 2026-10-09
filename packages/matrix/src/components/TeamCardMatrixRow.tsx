@@ -17,7 +17,7 @@ import type { PsychOverUnderEntry } from '@omniswim/core/lib/psychProjection';
 import { psychExpectedForResult } from '@omniswim/core/lib/psychProjection';
 import { displayTimeForRelayLeg, formatLegSplitSummary } from '@omniswim/core/lib/relaySplits';
 import { AthleteName, CompactEventLabel, PlacementExpectedValue, PointsValue, PrelimsOuValue } from './matrixPresentation';
-import { CutlineVerdict } from './TeamCardParts';
+import { CutlineVerdict, RelayVerdict, useIsEstimatedRelayRow } from './TeamCardParts';
 import { buildTeamRowCutlineTags, relayMissingStrokeLabel, type TeamRowCutlineTags } from './teamCardView';
 
 interface TeamMatrixSwimmerRowProps {
@@ -129,7 +129,7 @@ export function TeamMatrixTimeCell({
                   actually describes, not the swimmer's split above. */}
               {rowTags.kind === 'relay' ? (
                 <span className="inline-flex items-center gap-1 no-underline">
-                  <CutlineVerdict result={rowTags.tags.relay} />
+                  <RelayVerdict tags={rowTags} />
                 </span>
               ) : null}
             </span>
@@ -151,7 +151,7 @@ export function TeamMatrixTimeCell({
           case inline, this covers the finalsTime/plain-time fallbacks. */}
       {!relaySplitPrimary && rowTags.kind === 'relay' ? (
         <div className="flex items-center justify-end gap-1 flex-wrap">
-          <CutlineVerdict result={rowTags.tags.relay} />
+          <RelayVerdict tags={rowTags} />
         </div>
       ) : null}
       {editingResultId === res.id && (
@@ -237,14 +237,15 @@ export function TeamMatrixSwimmerRow({
   showPsychPerformance,
   psychOuByEntry,
 }: TeamMatrixSwimmerRowProps) {
-  const rowTags = buildTeamRowCutlineTags(res, gender, teamName, res.time);
+  const estimatedRelay = useIsEstimatedRelayRow(res);
+  const rowTags = buildTeamRowCutlineTags(res, gender, teamName, res.time, estimatedRelay);
   // Coloring keys off each row's own verdict: the relay's
   // for a relay leg (never the leg's, which was the bug —
   // a leadoff's individual split used to silently stand
   // in for the relay's own result), the single verdict
   // otherwise.
   const primaryTagResult = rowTags.kind === 'relay' ? rowTags.tags.relay : rowTags.result;
-  const cutlineTier = primaryTagResult.state === 'tagged' ? primaryTagResult.tag.tier : null;
+  const cutlineTier = primaryTagResult?.state === 'tagged' ? primaryTagResult.tag.tier : null;
   const isACut = cutlineTier === 'A' || cutlineTier === 'Standard' || cutlineTier === 'Qualifying';
   const isBCut = cutlineTier === 'B' || cutlineTier === 'Provisional' || cutlineTier === 'Invited';
   const timeColorClass = isACut ? 'text-[var(--text-accent)]' : isBCut ? 'text-warning' : 'text-theme-secondary';

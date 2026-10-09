@@ -18,7 +18,7 @@ import type { PsychOverUnderEntry } from '@omniswim/core/lib/psychProjection';
 import { psychExpectedForResult } from '@omniswim/core/lib/psychProjection';
 import { displayTimeForRelayLeg, formatLegSplitSummary } from '@omniswim/core/lib/relaySplits';
 import { CompactEventLabel, PlacementExpectedValue, PrelimsOuValue } from './matrixPresentation';
-import { CutlineVerdict, PodiumMedal } from './TeamCardParts';
+import { CutlineVerdict, PodiumMedal, RelayVerdict, useIsEstimatedRelayRow } from './TeamCardParts';
 import {
   buildTeamRowCutlineTags,
   computeClassTopPerformers,
@@ -117,7 +117,7 @@ function SwimmerTimeCell({ s, hasRelaySplit, rowTags }: { s: any; hasRelaySplit:
         {s.finalsTime ? `F:${s.finalsTime}` : s.time}
         {rowTags.kind === 'relay' ? (
           <span className="inline-flex items-center gap-1 ml-1 align-middle no-underline">
-            <CutlineVerdict result={rowTags.tags.relay} />
+            <RelayVerdict tags={rowTags} />
           </span>
         ) : null}
       </span>
@@ -144,7 +144,7 @@ function SwimmerTimeCell({ s, hasRelaySplit, rowTags }: { s: any; hasRelaySplit:
           unambiguous on every row. */}
       {rowTags.kind === 'relay' ? (
         <span className="inline-flex items-center gap-1 ml-1 align-middle no-underline">
-          <CutlineVerdict result={rowTags.tags.relay} />
+          <RelayVerdict tags={rowTags} />
         </span>
       ) : null}
     </span>
@@ -184,7 +184,8 @@ export function TooltipSwimmerRow({
   showPsychPerformance,
   psychOuByEntry,
 }: TooltipSwimmerRowProps) {
-  const rowTags = buildTeamRowCutlineTags(s, gender, teamName, s.finalsTime || s.time);
+  const estimatedRelay = useIsEstimatedRelayRow(s);
+  const rowTags = buildTeamRowCutlineTags(s, gender, teamName, s.finalsTime || s.time, estimatedRelay);
   const hasRelaySplit = s.isRelay && (s.relayLegSplitDetail || s.relayLegSplit);
 
   return (

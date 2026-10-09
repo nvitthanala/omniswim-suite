@@ -47,6 +47,30 @@
  *    its place and none is invented. Absence of the flag means "not known to be
  *    exhibition", so a swim with no flag is never reported as official. The flag
  *    is read here only. It does not touch `isRankableSwim` or any other reader.
+ * 8. **Removed events (`excludedEvents`).** A user may take one chosen event out
+ *    of a swimmer's lineup. The event stays in the offered order, marked
+ *    `notChosenReason: 'removed_by_user'`, and the entry caps are applied to the
+ *    order WITHOUT it, by the same {@link canAcceptAnotherEntry} walk. The freed
+ *    slot therefore goes to the next-best offered event the caps had left out
+ *    (`fillsRemovedSlot: true`), and to nothing else: no event is added that the
+ *    selector did not offer, and no time is invented. A removal names a swimmer
+ *    by team, gender, {@link theoreticalSwimmerKey} and course-qualified event, so
+ *    it does not depend on the meet id and survives a rebuild under a new id. A
+ *    removal that matches no offered event is ignored for the rows and listed in
+ *    `report.unmatchedExclusions`. A removal of an event the caps would have left
+ *    out anyway changes no row; the event is still marked `removed_by_user`.
+ * 9. **Relays are optional estimates, built first.** With `includeRelays: true` the builder also
+ *    makes relay entries from the swimmers' flat-start individual bests (design:
+ *    `docs/reference/THEORETICAL_MEET_PLAN.md`, "Relays from individual bests"). The relay program is the
+ *    NSISC championship's five relays; no other conference has one on record, so no relay is built for
+ *    it and the report says so. Legs are chosen by the Manager's own selector
+ *    ({@link suggestBestRelayLegFill}); the caps are checked by {@link canAcceptAnotherEntry}. Relays are
+ *    chosen BEFORE the individual events, and the individual cap walk then starts from each swimmer's relay
+ *    count, so the entry caps hold in either order. The reason for the order is the cap, not the points:
+ *    a relay leg pays half an individual swim at the same place, but individual-first would fill the
+ *    total cap and leave no relay. The user may set `maxRelaysPerSwimmer` (unset by default) so the fill
+ *    skips a swimmer already on N relays. A relay is an estimate by construction: it is a
+ *    composite that no team swam. Without `includeRelays` nothing changes, byte for byte.
  *
  * ## Only SCY meets are built (decision D1, 2026-10-04)
  *
@@ -79,11 +103,19 @@
  */
 
 import { Gender } from '@omniswim/core/types';
-import type { HistoricalSwim, ScoringSettings, SwimmerResult } from '@omniswim/core/types';
+import type { HistoricalSwim, RelayLegStroke, ScoringSettings, SwimmerResult } from '@omniswim/core/types';
 import { categorizeBestEvents, swimEventIdentity } from '@omniswim/core/lib/athleteHistory';
-import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
+import { isRankableSwim } from '@omniswim/core/lib/bestTimeEligibility';
+import {
+  individualEventDistanceStroke,
+  listEligibleRelayLegCandidates,
+  relayLegEventName,
+  relayLegRequirements,
+  suggestBestRelayLegFill,
+} from '@omniswim/core/lib/relayLegMatching';
+import { mergeScoringSettings, presetIdForConference } from '@omniswim/core/lib/scoringDefaults';
 import { canAcceptAnotherEntry, type SwimmerEntryCounts } from '@omniswim/core/lib/swimmerEntryLimits';
-import { isDivingEvent, normalizeSwimmerName } from '@omniswim/core/lib/utils';
+import { convertTimeToSeconds, formatSecondsToTime, isDivingEvent, normalizeSwimmerName } from '@omniswim/core/lib/utils';
 import type { SwimCloudAthlete } from '@omniswim/swimcloud/entities';
 
 /* -------------------------------------------------------------------------- */
@@ -120,7 +152,9 @@ export type TheoreticalMeetErrorCode =
   /** The selector returned a best the builder cannot trace to a captured swim. */
   | 'seed-provenance-missing'
   /** Two rows got one id. */
-  | 'row-id-collision';
+  | 'row-id-collision'
+  /** The relay options are not usable: an adjustment without `includeRelays`, a value that is not a number of 0 or more, a distance other than 50, 100 or 200, or an adjustment that would take a leg to zero. */
+  | 'invalid-relay-settings';
 
 export class TheoreticalMeetError extends Error {
   readonly code: TheoreticalMeetErrorCode;
@@ -210,7 +244,49 @@ export interface TheoreticalMeetInput {
    * throws `invalid-input`.
    */
   readonly exhibitionSeeds?: ExhibitionSeedMode;
+  /**
+   * (swimmer, event) pairs the user took out of the lineup (rule 8). Absent or
+   * empty: the strength-first selection with the entry caps, as before. Repeats
+   * are the same removal. A pair that names no offered event is ignored and
+   * reported in `report.unmatchedExclusions`. A malformed pair throws `invalid-input`.
+   */
+  readonly excludedEvents?: readonly TheoreticalEventExclusion[];
+  /**
+   * `true`: also build relay entries from individual bests (rule 9). They are estimates. Absent or
+   * `false`: no relay, and the output is identical to a build that never knew about relays.
+   */
+  readonly includeRelays?: boolean;
+  /**
+   * The flying-start adjustment, in seconds per leg distance, entered by the user. Taken off legs 2 to 4
+   * of every relay, never leg 1 (a flat start). The app holds no published figure, so there is NO
+   * default: absent, or a distance with no value, means no adjustment for that distance. Requires
+   * `includeRelays: true`. Each value must be a finite number of 0 or more.
+   */
+  readonly relayFlyingStartAdjustmentSec?: RelayFlyingStartAdjustment;
+  /**
+   * "Relays per swimmer: at most N". A user setting, unset by default: absent means the relay fill is bound
+   * only by the entry caps, as before. When set, a swimmer already on N relays is not offered another leg.
+   * The meet cap stays total-only: this is not a second cap, it only keeps the fill from spending one
+   * swimmer's entries on relays. Requires `includeRelays: true`. A whole number of 1 or more.
+   */
+  readonly maxRelaysPerSwimmer?: number;
   readonly teams: readonly TheoreticalMeetTeamInput[];
+}
+
+/** Leg distances a theoretical relay can have (4x50, 4x100, 4x200). */
+export type RelayLegDistance = 50 | 100 | 200;
+export const RELAY_LEG_DISTANCES: readonly RelayLegDistance[] = [50, 100, 200];
+export type RelayFlyingStartAdjustment = Partial<Record<RelayLegDistance, number>>;
+
+/** One (swimmer, event) pair the user removed. Built from a report: `teamName`, `gender`, `TheoreticalSwimmerEvents.swimmerKey`, `TheoreticalEventCandidate.event`. */
+export interface TheoreticalEventExclusion {
+  /** The team name as given in {@link TheoreticalMeetTeamInput.teamName}. */
+  readonly teamName: string;
+  readonly gender: Gender;
+  /** `TheoreticalSwimmerEvents.swimmerKey` (`sc:{id}` or `nm:{name}`). */
+  readonly swimmerKey: string;
+  /** Course-qualified label exactly as the candidate carries it (`'100 Free SCY'`). */
+  readonly event: string;
 }
 
 export type ExhibitionSeedMode = 'include' | 'exclude';
@@ -236,6 +312,102 @@ export interface TheoreticalSeedSource {
   readonly isExhibition?: true;
 }
 
+/* -------------------------------------------------------------------------- */
+/* Relay output (shapes follow RELAY_LEG_CREDITS_SPEC.md, "Theoretical meet relays")  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Where a leg time came from. This builder makes only two: `flat-start-best` (leg 1, a real flat-start swim)
+ * and `estimated-from-flat-start` (legs 2 to 4: the flat-start best, less the user's adjustment when one is
+ * set for that distance). The other two are for real relay-leg credits and are never produced here.
+ */
+export type RelayLegBasis = 'flat-start-best' | 'real-leadoff-credit' | 'real-takeover-credit' | 'estimated-from-flat-start';
+
+export interface TheoreticalProjectedRelayLeg {
+  readonly position: 1 | 2 | 3 | 4;
+  readonly name: string;
+  readonly team: string;
+  readonly classYear: string;
+  readonly swimCloudSwimmerId?: string;
+  /** The individual event this leg swims, as recorded (`'50 Free SCY'`). */
+  readonly legEvent: string;
+  readonly stroke: RelayLegStroke;
+  readonly legDistanceYards: RelayLegDistance;
+  /** The leg time as shown. Leg 1, and any leg with no adjustment, shows the recorded flat-start time verbatim. */
+  readonly time: string;
+  readonly timeSec: number;
+  readonly basis: RelayLegBasis;
+  /** `true` on legs 2 to 4. Leg 1 is a real flat-start swim and is not an estimate by itself. */
+  readonly estimated?: true;
+  /** The recorded flat-start best the leg is built from. */
+  readonly flatStartTime: string;
+  /** Present only when the user's adjustment was subtracted from this leg. */
+  readonly startAdjustmentSec?: number;
+  /** Present (`true`) only when the flat-start best is an exhibition swim at its source. */
+  readonly isExhibition?: true;
+}
+
+export interface TheoreticalProjectedRelay {
+  /** Stable id. See {@link theoreticalRelayEntryId}. */
+  readonly id: string;
+  /** Course-qualified relay label (`'200 Free Relay SCY'`). */
+  readonly event: string;
+  readonly team: string;
+  readonly gender: Gender;
+  /** Always four legs, positions 1 to 4. */
+  readonly legs: readonly TheoreticalProjectedRelayLeg[];
+  /** The sum of the four leg times, rounded to hundredths, as shown. */
+  readonly totalTime: string;
+  readonly totalSec: number;
+  /** Always `true`: no team swam this relay. */
+  readonly anyEstimated: true;
+  /** `true` when the user's flying-start adjustment changed at least one leg. */
+  readonly adjustmentApplied: boolean;
+}
+
+/** Why one leg of an absent relay could not be filled. */
+export interface TheoreticalRelayMissingLeg {
+  readonly position: 1 | 2 | 3 | 4;
+  /** The individual event the leg swims (`'50 Breaststroke'`). */
+  readonly legEvent: string;
+  /** Swimmers on the team with a flat-start best (in the meet course) at that event. 0 means nobody. */
+  readonly swimmersWithBest: number;
+  /** Of those, how many were already on this relay. */
+  readonly alreadyOnRelay: number;
+  /** Of those, how many are at an entry cap. */
+  readonly atEntryCap: number;
+  /** Of those, how many are already on the most relays the user allowed (`maxRelaysPerSwimmer`). 0 when no limit is set. */
+  readonly atRelayLimit: number;
+}
+
+/** A relay the team did not get, and why. Never a zero time. */
+export interface TheoreticalRelayAbsent {
+  readonly event: string;
+  readonly team: string;
+  readonly gender: Gender;
+  readonly missingLegs: readonly TheoreticalRelayMissingLeg[];
+}
+
+/** What the relay build did for one team. Present only when relays were requested. */
+export interface TheoreticalTeamRelayReport {
+  readonly relays: readonly TheoreticalProjectedRelay[];
+  readonly absent: readonly TheoreticalRelayAbsent[];
+}
+
+/** What the relay build did overall. Present only when relays were requested. */
+export interface TheoreticalMeetRelayReport {
+  /** `true`: the conference has a relay program on record (NSISC). `false`: none, so no relay was built. */
+  readonly programKnown: boolean;
+  /** The relay events built for, in order. Empty when the program is unknown. */
+  readonly program: readonly string[];
+  readonly relaysBuilt: number;
+  readonly relaysAbsent: number;
+  /** The adjustment the user entered, per distance. Empty when none was set. */
+  readonly flyingStartAdjustmentSec: RelayFlyingStartAdjustment;
+  /** The "at most N relays per swimmer" limit the user set, or `null` when none was set. */
+  readonly maxRelaysPerSwimmer: number | null;
+}
+
 export type TheoreticalRankBasis = 'meet_place' | 'cut_distance' | 'time';
 
 /** One event the selector offered for a swimmer, in strength order. */
@@ -247,17 +419,33 @@ export interface TheoreticalEventCandidate {
   /** Which rule of `rankEventsByStrength` placed this event. `time` is the weakest. */
   readonly rankBasis: TheoreticalRankBasis;
   readonly chosen: boolean;
-  /** Present when not chosen: the entry caps stopped it. */
-  readonly notChosenReason?: 'entry_cap';
+  /**
+   * Present when not chosen. `entry_cap`: the entry caps stopped it.
+   * `removed_by_user`: the user removed it (`excludedEvents`); it is out of the cap walk.
+   */
+  readonly notChosenReason?: 'entry_cap' | 'removed_by_user';
   /** Present when chosen: the id of the row built for it. */
   readonly rowId?: string;
   /** Present (`true`) only when the seed swim is marked exhibition at its source. Set on every candidate, chosen or not. */
   readonly isExhibition?: true;
+  /**
+   * Present (`true`) only on a chosen event the entry caps would have left out
+   * had nothing been removed: it took a slot a removal freed.
+   */
+  readonly fillsRemovedSlot?: true;
+  /**
+   * Present (`true`) only on a `removed_by_user` event the entry caps would have chosen
+   * had nothing been removed: its removal freed a slot. Absent on a removed event the
+   * caps would have left out anyway (its removal changed no row).
+   */
+  readonly chosenWithoutRemovals?: true;
 }
 
 export interface TheoreticalSwimmerEvents {
   readonly name: string;
   readonly swimCloudSwimmerId?: string;
+  /** The key a {@link TheoreticalEventExclusion} names this swimmer by. See {@link theoreticalSwimmerKey}. */
+  readonly swimmerKey: string;
   /** Every offered event, strongest first, with the chosen ones marked. */
   readonly events: readonly TheoreticalEventCandidate[];
   /**
@@ -281,14 +469,21 @@ export interface TheoreticalNoSeedAthlete extends TheoreticalAthleteRef {
    * `diving_not_supported`: every captured swim is a dive.
    * `no_swim_in_meet_course`: swims were captured, none was recorded in the meet course.
    * `no_event_in_program`: swims in the meet course exist, none is an event the selector offers.
+   * `all_seeds_exhibition_excluded`: `exhibitionSeeds: 'exclude'` only. Every event that would seed is an
+   * exhibition best, which was dropped; with those swims back in, the swimmer would have a seed. The dropped
+   * events are in `excludedExhibitionEvents`. (Before this reason existed such a swimmer got `no_event_in_program`.)
    */
-  readonly reason: 'no_usable_swim' | 'diving_not_supported' | 'no_swim_in_meet_course' | 'no_event_in_program';
+  readonly reason:
+    | 'no_usable_swim'
+    | 'diving_not_supported'
+    | 'no_swim_in_meet_course'
+    | 'no_event_in_program'
+    | 'all_seeds_exhibition_excluded';
   /**
    * `exhibitionSeeds: 'exclude'` only. Events dropped because their best swim is
    * exhibition (see {@link TheoreticalSwimmerEvents.excludedExhibitionEvents}).
-   * When set, the `reason` describes the swims that remain: this swimmer has
-   * swims in the meet course, but every event that would seed is exhibition.
-   * Absent when none.
+   * Set with reason `all_seeds_exhibition_excluded` when they are the only cause of
+   * no seed; with another reason it lists the dropped events beside it. Absent when none.
    */
   readonly excludedExhibitionEvents?: readonly string[];
 }
@@ -309,6 +504,8 @@ export interface TheoreticalTeamReport {
   readonly exhibitionSeedsUsed: number;
   /** `'exclude'` only: events left with no seed because their best swim is exhibition. Always 0 with `'include'`. */
   readonly exhibitionEventsExcluded: number;
+  /** Candidates marked `removed_by_user` for this team. Always 0 with no `excludedEvents`. */
+  readonly eventsRemovedByUser: number;
   /** No times page was captured. */
   readonly athletesWithNoTimes: readonly TheoreticalAthleteRef[];
   /** A times page was captured and did not parse. */
@@ -316,6 +513,8 @@ export interface TheoreticalTeamReport {
   readonly athletesWithNoSeedInMeetCourse: readonly TheoreticalNoSeedAthlete[];
   readonly duplicateAcrossTeams: readonly TheoreticalDuplicateAthlete[];
   readonly eventsChosenPerSwimmer: readonly TheoreticalSwimmerEvents[];
+  /** Present only when `includeRelays` was set. */
+  readonly relayReport?: TheoreticalTeamRelayReport;
   readonly caveats: readonly string[];
 }
 
@@ -326,6 +525,10 @@ export interface TheoreticalMeetReport {
   readonly teams: readonly TheoreticalTeamReport[];
   /** Every team caveat once, plus the meet-wide ones. */
   readonly caveats: readonly string[];
+  /** `excludedEvents` pairs (repeats removed) that matched no offered event. They changed nothing. Empty when all matched. */
+  readonly unmatchedExclusions: readonly TheoreticalEventExclusion[];
+  /** Present only when `includeRelays` was set. */
+  readonly relays?: TheoreticalMeetRelayReport;
 }
 
 export interface TheoreticalMeetSeeds {
@@ -337,6 +540,11 @@ export interface TheoreticalMeetSeeds {
   readonly psychWomenResults: readonly SwimmerResult[];
   /** Provenance per row id. Holds exactly one entry for each row. */
   readonly sources: ReadonlyMap<string, TheoreticalSeedSource>;
+  /**
+   * The relay entries (estimates), in team order then program order. Empty without `includeRelays`. They are
+   * not rows: the workspace builder turns each into four scored leg rows.
+   */
+  readonly relayEntries: readonly TheoreticalProjectedRelay[];
   readonly report: TheoreticalMeetReport;
 }
 
@@ -355,6 +563,34 @@ export const TOTAL_CAP_CAVEAT =
 export const UNCAPPED_CAVEAT =
   'No entry cap applies to these settings, so every offered event is entered for each swimmer.';
 
+export const RELAYS_ESTIMATED_CAVEAT =
+  "Relays are estimates. Each relay time is the sum of four swimmers' individual best times (flat start), not a time any team swam. Every relay is tagged estimated.";
+export const RELAYS_NO_PROGRAM_CAVEAT =
+  'Relays were requested, but no relay program is on record in the app for this scoring preset (only NSISC has one), so no relay was built. The app does not guess a relay program.';
+export const RELAY_FILL_CAVEAT =
+  "Each team has one relay per event. Its legs are filled one leg at a time with the fastest eligible swimmer (the Manager's autofill rule), so it is not a guaranteed fastest relay. A second (B) relay is not built.";
+export const RELAY_CAP_CAVEAT =
+  "Relay legs are chosen first and count toward each swimmer's entry caps. The reason is the cap: with individual events first, the total cap would be used up and no relay could be built. A relay leg pays half what an individual swim at the same place pays (the relay's points are split over four swimmers), so a swimmer on many relays can give up individual events that are worth more. \"Relays per swimmer\" limits that.";
+export function relayLimitCaveat(max: number): string {
+  return `Relays per swimmer: at most ${max}. A swimmer already on ${max} ${max === 1 ? 'relay' : 'relays'} is not offered another leg. The entry cap itself stays total-only.`;
+}
+export const RELAYS_NOT_ADJUSTED_CAVEAT =
+  'Flying starts are not adjusted. Legs 2 to 4 use flat-start bests, so a relay time runs slower than a real relay with flying starts.';
+
+/** Meet line when the user entered a flying-start adjustment. Distances with no value are named. */
+export function relayAdjustmentCaveat(adjustment: RelayFlyingStartAdjustment): string {
+  const set = RELAY_LEG_DISTANCES.filter(d => adjustment[d] !== undefined);
+  const unset = RELAY_LEG_DISTANCES.filter(d => adjustment[d] === undefined);
+  const given = set.map(d => `${d} yd: ${adjustment[d]} s`).join(', ');
+  const none = unset.length === 0 ? '' : ` No adjustment for ${unset.map(d => `${d} yd`).join(', ')} legs.`;
+  return `Legs 2 to 4 are reduced by the flying-start adjustment you entered (${given}). Leg 1 is never adjusted. The app holds no published figure.${none}`;
+}
+
+/** Meet line when some relays could not be built. */
+export function relaysAbsentCaveat(n: number): string {
+  return `${n} relay(s) could not be built because a team did not have four eligible swimmers. Those teams have no entry in that relay, so their totals run low.`;
+}
+
 /** Team line and meet line when exhibition seeds are included. `n` of `m` seeds. */
 export function exhibitionIncludedCaveat(n: number, m: number): string {
   return `${n} of ${m} seeds come from exhibition swims (not scored in their meet). They are included.`;
@@ -363,6 +599,11 @@ export function exhibitionIncludedCaveat(n: number, m: number): string {
 /** Team line and meet line when exhibition seeds are excluded. `n` events were left with no seed. */
 export function exhibitionExcludedCaveat(n: number): string {
   return `${n} event(s) were dropped because the swimmer's best swim there is exhibition (not scored in their meet). Exhibition seeds are excluded, so each of those events has NO seed. No slower time was used in its place.`;
+}
+
+/** Team line and meet line when the user removed events. `n` events were removed. */
+export function removedEventsCaveat(n: number): string {
+  return `${n} event(s) were removed by you. The freed slot goes to the swimmer's next-best offered event under the same entry caps, so a swimmer can enter an event the strength order alone would have left out.`;
 }
 
 /* -------------------------------------------------------------------------- */
@@ -478,6 +719,29 @@ function validateTeam(team: TheoreticalMeetTeamInput): void {
   validateAthletes(team);
 }
 
+function validateExclusions(list: unknown): TheoreticalEventExclusion[] {
+  if (list === undefined) return [];
+  if (!Array.isArray(list)) throw new TheoreticalMeetError('invalid-input', 'excludedEvents must be a list.');
+  return list.map((raw: unknown, index) => {
+    const e = raw as Partial<TheoreticalEventExclusion> | null;
+    const ok =
+      e !== null &&
+      typeof e === 'object' &&
+      typeof e.teamName === 'string' &&
+      e.teamName.trim().length > 0 &&
+      (e.gender === Gender.MEN || e.gender === Gender.WOMEN) &&
+      typeof e.swimmerKey === 'string' &&
+      e.swimmerKey.length > 0 &&
+      typeof e.event === 'string' &&
+      e.event.length > 0;
+    if (!ok) {
+      throw new TheoreticalMeetError('invalid-input', `excludedEvents[${index}] needs a team name, a team gender, a swimmer key and an event. Got ${JSON.stringify(raw)}.`);
+    }
+    // Copy the four fields. The caller's object may carry more, and `report.unmatchedExclusions` hands these back.
+    return { teamName: e.teamName as string, gender: e.gender as Gender, swimmerKey: e.swimmerKey as string, event: e.event as string };
+  });
+}
+
 /* -------------------------------------------------------------------------- */
 /* Row ids                                                                     */
 /* -------------------------------------------------------------------------- */
@@ -506,6 +770,19 @@ function swimmerKeyFor(athlete: SwimCloudAthlete): string {
   return `nm:${enc(normalizeSwimmerName(athlete.name))}`;
 }
 
+/** The key a swimmer carries in a row id and in {@link TheoreticalSwimmerEvents.swimmerKey}. Exported so a caller can predict it. */
+export const theoreticalSwimmerKey = swimmerKeyFor;
+
+/**
+ * One string per (team, gender, swimmer, event), for sets and maps on the caller's side. The team name is
+ * normalized the way the builder compares teams. Two exclusions with one key are the same removal.
+ * The team name and the event are encoded like the parts of {@link theoreticalSeedRowId}, so a `|` inside either
+ * cannot make two different removals share a key.
+ */
+export function theoreticalEventExclusionKey(e: TheoreticalEventExclusion): string {
+  return [e.gender, enc(normalizeSwimmerName(e.teamName)), e.swimmerKey, enc(e.event)].join('|');
+}
+
 /* -------------------------------------------------------------------------- */
 /* One athlete                                                                 */
 /* -------------------------------------------------------------------------- */
@@ -517,6 +794,12 @@ type Context = {
   readonly settings: ScoringSettings;
   readonly meetProgram: ReadonlySet<string> | null;
   readonly exhibition: ExhibitionSeedMode;
+  /** Keys of the user's removals ({@link theoreticalEventExclusionKey}). */
+  readonly exclusions: ReadonlySet<string>;
+  /** Filled while building: the removal keys that matched an offered event. */
+  readonly matchedExclusions: Set<string>;
+  /** `null`: relays were not requested. */
+  readonly relays: RelayPlan | null;
 };
 
 type ChosenSeed = {
@@ -593,8 +876,8 @@ function traceSeed(
 }
 
 type AthleteOutcome =
-  | { kind: 'no_seed'; reason: TheoreticalNoSeedAthlete['reason']; unknownCourse: number; excludedExhibition: string[] }
-  | { kind: 'seeded'; ranked: ChosenSeed[]; unoffered: string[]; unknownCourse: number; excludedExhibition: string[] };
+  | { kind: 'no_seed'; reason: TheoreticalNoSeedAthlete['reason']; unknownCourse: number; excludedExhibition: string[]; used: HistoricalSwim[] }
+  | { kind: 'seeded'; ranked: ChosenSeed[]; unoffered: string[]; unknownCourse: number; excludedExhibition: string[]; used: HistoricalSwim[] };
 
 /** The selector's strength order over `used`, each event traced to its recorded swim. The selector gets the whole order (cap 999). */
 function rankSeeds(ctx: Context, team: TheoreticalMeetTeamInput, athlete: SwimCloudAthlete, used: readonly HistoricalSwim[]): ChosenSeed[] {
@@ -651,32 +934,327 @@ function chooseAthleteEvents(
   athlete: SwimCloudAthlete,
   swims: readonly HistoricalSwim[]
 ): AthleteOutcome {
-  if (swims.length === 0) return { kind: 'no_seed', reason: 'no_usable_swim', unknownCourse: 0, excludedExhibition: [] };
+  if (swims.length === 0) return { kind: 'no_seed', reason: 'no_usable_swim', unknownCourse: 0, excludedExhibition: [], used: [] };
   const split = splitSwims(team, athlete, swims, ctx.course, ctx.exhibition);
   const { used, unknownCourse, hasNonDiving } = split;
-  if (!hasNonDiving) return { kind: 'no_seed', reason: 'diving_not_supported', unknownCourse, excludedExhibition: [] };
+  if (!hasNonDiving) return { kind: 'no_seed', reason: 'diving_not_supported', unknownCourse, excludedExhibition: [], used: [] };
   if (used.length === 0 && split.excludedExhibition.length === 0) {
-    return { kind: 'no_seed', reason: 'no_swim_in_meet_course', unknownCourse, excludedExhibition: [] };
+    return { kind: 'no_seed', reason: 'no_swim_in_meet_course', unknownCourse, excludedExhibition: [], used: [] };
   }
 
   const ranked = used.length === 0 ? [] : rankSeeds(ctx, team, athlete, used);
   const excludedExhibition = droppedExhibitionEvents(ctx, team, athlete, split, ranked);
-  if (ranked.length === 0) return { kind: 'no_seed', reason: 'no_event_in_program', unknownCourse, excludedExhibition };
+  if (ranked.length === 0) {
+    // Dropped exhibition events mean the swimmer would have a seed with those swims back in.
+    const reason = excludedExhibition.length > 0 ? 'all_seeds_exhibition_excluded' : 'no_event_in_program';
+    return { kind: 'no_seed', reason, unknownCourse, excludedExhibition, used };
+  }
 
   const offered = new Set(ranked.map(r => swimEventIdentity(r.candidate.event)));
   const unoffered = [...new Set(used.filter(s => !offered.has(swimEventIdentity(s.event))).map(s => s.event))];
-  return { kind: 'seeded', ranked, unoffered, unknownCourse, excludedExhibition };
+  return { kind: 'seeded', ranked, unoffered, unknownCourse, excludedExhibition, used };
 }
 
-/** Mark the first events the caps accept, in strength order. Mirrors `addAthleteEventPlans`. */
-function applyEntryCaps(ranked: readonly ChosenSeed[], settings: ScoringSettings): boolean[] {
-  const counts: SwimmerEntryCounts = { individual: 0, relayEvents: new Set<string>(), relayCount: 0, total: 0 };
-  return ranked.map(r => {
+/**
+ * Mark the first events the caps accept, in strength order. Mirrors `addAthleteEventPlans`.
+ * A removed event is skipped: it is not accepted and it uses no slot, so the next event meets the same cap check.
+ */
+function applyEntryCaps(
+  ranked: readonly ChosenSeed[],
+  settings: ScoringSettings,
+  removed: readonly boolean[] = [],
+  /** The swimmer's relay entries, chosen before the individual events. Absent: no relay (the count starts at zero). */
+  relayCounts?: SwimmerEntryCounts
+): boolean[] {
+  const counts: SwimmerEntryCounts =
+    relayCounts === undefined
+      ? { individual: 0, relayEvents: new Set<string>(), relayCount: 0, total: 0 }
+      : { individual: 0, relayEvents: new Set(relayCounts.relayEvents), relayCount: relayCounts.relayCount, total: relayCounts.total ?? relayCounts.relayCount };
+  return ranked.map((r, index) => {
+    if (removed[index] === true) return false;
     if (!canAcceptAnotherEntry(counts, settings, r.candidate.event)) return false;
     counts.individual += 1;
     counts.total = (counts.total ?? 0) + 1;
     return true;
   });
+}
+
+/* -------------------------------------------------------------------------- */
+/* Relays (estimates), chosen before the individual events                     */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * The NSISC championship relay program, in the order the meet runs it. Read from the real 2026 NSISC
+ * results: `tests/fixtures/nsisc-2026-relay-followups-r1.json` (men: Events 2, 11, 20, 31, 42) and the
+ * women's rows of `data/meets.json` (Events 1, 10, 19, 30, 41). The same five events in both genders:
+ * 4x200 free, 4x50 medley, 4x100 medley, 4x50 free, 4x100 free. Labels follow the individual rows.
+ */
+export const NSISC_RELAY_PROGRAM: readonly string[] = [
+  '800 Free Relay SCY',
+  '200 Medley Relay SCY',
+  '400 Medley Relay SCY',
+  '200 Free Relay SCY',
+  '400 Free Relay SCY',
+];
+
+/**
+ * The relay events a conference scores, or `null` when the app has none on record. Only NSISC has one.
+ * `null` is not an empty program: it says the build did not know, and no relay is guessed.
+ */
+export function theoreticalRelayProgram(conference: string | undefined): readonly string[] | null {
+  return presetIdForConference(conference) === 'nsisc' ? NSISC_RELAY_PROGRAM : null;
+}
+
+/** Position of a relay label in the NSISC program, or -1. Used to order relay rows. */
+export function theoreticalRelayProgramIndex(event: string): number {
+  return NSISC_RELAY_PROGRAM.indexOf(event);
+}
+
+/** Id of one relay entry. Every part is URI-encoded, the meet id is part of it, so it is unique per workspace. */
+export function theoreticalRelayEntryId(args: { meetId: string; gender: Gender; teamName: string; event: string }): string {
+  return ['tmrelay', enc(args.meetId), args.gender, enc(args.teamName), enc(args.event)].join('|');
+}
+
+type RelayPlan = {
+  /** `null`: no relay program on record for the conference. Nothing is built. */
+  readonly program: readonly string[] | null;
+  readonly adjustment: RelayFlyingStartAdjustment;
+  /** The user's "at most N relays per swimmer", or `undefined` when unset. */
+  readonly maxPerSwimmer: number | undefined;
+};
+
+function resolveRelayPlan(input: TheoreticalMeetInput): RelayPlan | null {
+  const include = input.includeRelays as unknown;
+  const adjustment = input.relayFlyingStartAdjustmentSec as unknown;
+  const maxRelays = input.maxRelaysPerSwimmer as unknown;
+  if (include !== undefined && include !== true && include !== false) {
+    throw new TheoreticalMeetError('invalid-relay-settings', `includeRelays is ${JSON.stringify(include)}. Use true or false.`);
+  }
+  const given: RelayFlyingStartAdjustment = {};
+  if (adjustment !== undefined) {
+    if (adjustment === null || typeof adjustment !== 'object' || Array.isArray(adjustment)) {
+      throw new TheoreticalMeetError('invalid-relay-settings', 'relayFlyingStartAdjustmentSec must be an object keyed by leg distance (50, 100, 200).');
+    }
+    for (const [key, value] of Object.entries(adjustment as Record<string, unknown>)) {
+      if (!(RELAY_LEG_DISTANCES as readonly number[]).includes(Number(key)) || String(Number(key)) !== key) {
+        throw new TheoreticalMeetError('invalid-relay-settings', `A flying-start adjustment for a ${key}-yard leg is not usable. The legs are 50, 100 or 200 yards.`);
+      }
+      if (value === undefined) continue;
+      if (typeof value !== 'number' || !Number.isFinite(value) || value < 0) {
+        throw new TheoreticalMeetError('invalid-relay-settings', `The flying-start adjustment for ${key}-yard legs is ${JSON.stringify(value)}. It must be a number of seconds, 0 or more.`);
+      }
+      given[Number(key) as RelayLegDistance] = value;
+    }
+  }
+  if (maxRelays !== undefined && (typeof maxRelays !== 'number' || !Number.isInteger(maxRelays) || maxRelays < 1)) {
+    throw new TheoreticalMeetError('invalid-relay-settings', `Relays per swimmer is ${JSON.stringify(maxRelays)}. It must be a whole number of 1 or more, or left unset.`);
+  }
+  if (include !== true) {
+    if (Object.keys(given).length > 0) {
+      throw new TheoreticalMeetError('invalid-relay-settings', 'A flying-start adjustment was given, but includeRelays is not true. It would have no effect.');
+    }
+    if (maxRelays !== undefined) {
+      throw new TheoreticalMeetError('invalid-relay-settings', 'Relays per swimmer was given, but includeRelays is not true. It would have no effect.');
+    }
+    return null;
+  }
+  return { program: theoreticalRelayProgram(input.conference), adjustment: given, maxPerSwimmer: maxRelays as number | undefined };
+}
+
+/** The best flat-start time of one swimmer at one relay-leg event. */
+type LegBest = { readonly swim: HistoricalSwim; readonly distance: RelayLegDistance; readonly stroke: RelayLegStroke; readonly seconds: number };
+
+const round2 = (n: number): number => Math.round(n * 100) / 100;
+
+/**
+ * A swimmer's flat-start bests at the events relay legs swim (single-stroke 50, 100 and 200), from the
+ * swims already limited to the meet course and the exhibition mode. Only a result counts (`isRankableSwim`:
+ * no extracted split, no self-reported time). One best per event, the fastest; on an exact tie an official
+ * swim wins over an exhibition one. An unreadable time on such a swim throws: it is never skipped.
+ */
+function legBestsOf(used: readonly HistoricalSwim[], athleteName: string): LegBest[] {
+  const best = new Map<string, LegBest>();
+  for (const swim of used) {
+    if (!isRankableSwim(swim)) continue;
+    const ds = individualEventDistanceStroke(swim.event);
+    if (ds === null || !(RELAY_LEG_DISTANCES as readonly number[]).includes(ds.distance)) continue;
+    const seconds = convertTimeToSeconds(swim.time);
+    if (!Number.isFinite(seconds) || seconds <= 0) {
+      throw new TheoreticalMeetError('invalid-input', `${athleteName} has a ${swim.event} time of ${JSON.stringify(swim.time)}, which is not a time. A relay leg is never built from it.`);
+    }
+    const key = `${ds.distance}|${ds.stroke}`;
+    const known = best.get(key);
+    const better = known === undefined || seconds < known.seconds || (seconds === known.seconds && known.swim.isExhibition === true && swim.isExhibition !== true);
+    if (better) best.set(key, { swim, distance: ds.distance as RelayLegDistance, stroke: ds.stroke, seconds });
+  }
+  return [...best.values()];
+}
+
+type RelayCandidate = {
+  readonly athlete: SwimCloudAthlete;
+  readonly swimmerKey: string;
+  readonly legBests: readonly LegBest[];
+};
+
+type TeamRelayOutcome = {
+  readonly relays: TheoreticalProjectedRelay[];
+  readonly absent: TheoreticalRelayAbsent[];
+  /** Each swimmer's entries after the relays, keyed by swimmer key. */
+  readonly counts: ReadonlyMap<string, SwimmerEntryCounts>;
+};
+
+function makeLeg(
+  team: TheoreticalMeetTeamInput,
+  candidate: RelayCandidate,
+  best: LegBest,
+  position: 1 | 2 | 3 | 4,
+  adjustment: RelayFlyingStartAdjustment
+): TheoreticalProjectedRelayLeg {
+  const { athlete } = candidate;
+  const adj = position === 1 ? undefined : adjustment[best.distance];
+  const base = {
+    position,
+    name: athlete.name,
+    team: team.teamName,
+    classYear: athlete.classYear !== undefined && athlete.classYear !== 'unknown' ? athlete.classYear : 'UNKNOWN',
+    ...(athlete.swimCloudSwimmerId === undefined ? {} : { swimCloudSwimmerId: athlete.swimCloudSwimmerId }),
+    legEvent: best.swim.event,
+    stroke: best.stroke,
+    legDistanceYards: best.distance,
+    flatStartTime: best.swim.time,
+    ...(best.swim.isExhibition === true ? { isExhibition: true as const } : {}),
+  };
+  if (position === 1) {
+    return { ...base, time: best.swim.time, timeSec: round2(best.seconds), basis: 'flat-start-best' };
+  }
+  if (adj === undefined) {
+    return { ...base, time: best.swim.time, timeSec: round2(best.seconds), basis: 'estimated-from-flat-start', estimated: true };
+  }
+  const adjusted = round2(best.seconds - adj);
+  if (!(adjusted > 0)) {
+    throw new TheoreticalMeetError(
+      'invalid-relay-settings',
+      `The flying-start adjustment of ${adj} s takes ${athlete.name}'s ${best.swim.event} (${best.swim.time}) to ${adjusted} s. A leg time must stay above zero.`
+    );
+  }
+  return { ...base, time: formatSecondsToTime(adjusted), timeSec: adjusted, basis: 'estimated-from-flat-start', estimated: true, startAdjustmentSec: adj };
+}
+
+/**
+ * Build one team's relays, one per program event, before the individual events.
+ *
+ * The legs come from the Manager's selector, not a new one: {@link suggestBestRelayLegFill} (the function
+ * `buildRelaysFromIndividualLineup` calls) takes the fastest eligible swimmer for each leg in turn, never a
+ * swimmer already on this relay, never one of the wrong gender. The caps come from
+ * {@link canAcceptAnotherEntry} on the swimmer's running counts: a swimmer at a cap is passed to the
+ * selector as excluded. A relay with a missing leg charges nobody; its counts are committed only when all
+ * four legs are filled.
+ */
+function buildTeamRelays(
+  ctx: Context,
+  plan: RelayPlan & { program: readonly string[] },
+  team: TheoreticalMeetTeamInput,
+  candidates: readonly RelayCandidate[]
+): TeamRelayOutcome {
+  const counts = new Map<string, SwimmerEntryCounts>();
+  const pool: SwimmerResult[] = [];
+  const bestById = new Map<string, { candidate: RelayCandidate; best: LegBest }>();
+  for (const candidate of candidates) {
+    counts.set(candidate.swimmerKey, { individual: 0, relayEvents: new Set<string>(), relayCount: 0, total: 0 });
+    for (const best of candidate.legBests) {
+      const id = `${candidate.swimmerKey}|${best.distance}|${best.stroke}`;
+      bestById.set(id, { candidate, best });
+      pool.push({
+        id,
+        rank: 0,
+        name: candidate.athlete.name,
+        classYear: 'UNKNOWN',
+        team: team.teamName,
+        time: best.swim.time,
+        points: 0,
+        event: best.swim.event,
+        gender: team.gender,
+      });
+    }
+  }
+
+  const relays: TheoreticalProjectedRelay[] = [];
+  const absent: TheoreticalRelayAbsent[] = [];
+  for (const event of plan.program) {
+    const template: SwimmerResult = {
+      id: 'tmrelay-template',
+      rank: 0,
+      name: team.teamName,
+      classYear: 'UNKNOWN',
+      team: team.teamName,
+      time: '',
+      points: 0,
+      event,
+      gender: team.gender,
+      isRelay: true,
+    };
+    const atCap = new Set<string>();
+    const atRelayLimit = new Set<string>();
+    for (const candidate of candidates) {
+      const swimmerCounts = counts.get(candidate.swimmerKey) as SwimmerEntryCounts;
+      if (!canAcceptAnotherEntry(swimmerCounts, ctx.settings, event)) {
+        atCap.add(normalizeSwimmerName(candidate.athlete.name));
+      }
+      // The user's relay limit: the swimmer is passed to the selector as excluded, like a swimmer at a cap.
+      if (plan.maxPerSwimmer !== undefined && swimmerCounts.relayCount >= plan.maxPerSwimmer) {
+        atCap.add(normalizeSwimmerName(candidate.athlete.name));
+        atRelayLimit.add(normalizeSwimmerName(candidate.athlete.name));
+      }
+    }
+    const assigned = new Set<string>();
+    const legs: TheoreticalProjectedRelayLeg[] = [];
+    const missing: TheoreticalRelayMissingLeg[] = [];
+    const chosen: RelayCandidate[] = [];
+    for (let legIndex = 0; legIndex < 4; legIndex += 1) {
+      const position = (legIndex + 1) as 1 | 2 | 3 | 4;
+      const suggestion = suggestBestRelayLegFill(pool, template, legIndex, assigned, atCap);
+      if (suggestion === null) {
+        const everyone = listEligibleRelayLegCandidates(pool, event, legIndex, new Set<string>(), team.teamName, team.gender);
+        const req = relayLegRequirements(event, legIndex);
+        missing.push({
+          position,
+          legEvent: relayLegEventName(req.legDistanceYards as number, req.stroke),
+          swimmersWithBest: everyone.length,
+          alreadyOnRelay: everyone.filter(s => assigned.has(normalizeSwimmerName(s.name))).length,
+          atEntryCap: everyone.filter(s => atCap.has(normalizeSwimmerName(s.name)) && !atRelayLimit.has(normalizeSwimmerName(s.name))).length,
+          atRelayLimit: everyone.filter(s => atRelayLimit.has(normalizeSwimmerName(s.name))).length,
+        });
+        continue;
+      }
+      const hit = bestById.get(suggestion.swimmer.id) as { candidate: RelayCandidate; best: LegBest };
+      assigned.add(normalizeSwimmerName(hit.candidate.athlete.name));
+      chosen.push(hit.candidate);
+      legs.push(makeLeg(team, hit.candidate, hit.best, position, plan.adjustment));
+    }
+    if (missing.length > 0) {
+      absent.push({ event, team: team.teamName, gender: team.gender, missingLegs: missing });
+      continue;
+    }
+    for (const candidate of chosen) {
+      const c = counts.get(candidate.swimmerKey) as SwimmerEntryCounts;
+      c.relayEvents.add(event);
+      c.relayCount += 1;
+      c.total = (c.total ?? 0) + 1;
+    }
+    const totalSec = round2(legs.reduce((sum, leg) => sum + leg.timeSec, 0));
+    relays.push({
+      id: theoreticalRelayEntryId({ meetId: ctx.meetId, gender: team.gender, teamName: team.teamName, event }),
+      event,
+      team: team.teamName,
+      gender: team.gender,
+      legs,
+      totalTime: formatSecondsToTime(totalSec),
+      totalSec,
+      anyEstimated: true,
+      adjustmentApplied: legs.some(leg => leg.startAdjustmentSec !== undefined),
+    });
+  }
+  return { relays, absent, counts };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -709,6 +1287,10 @@ type TeamAccumulator = {
   swimmersRankedOnTime: number;
   exhibitionSeedsUsed: number;
   exhibitionEventsExcluded: number;
+  eventsRemovedByUser: number;
+  /** Relay entries and absences, when relays were requested. */
+  relays: TheoreticalProjectedRelay[];
+  relaysAbsent: TheoreticalRelayAbsent[];
 };
 
 function newAccumulator(): TeamAccumulator {
@@ -724,6 +1306,9 @@ function newAccumulator(): TeamAccumulator {
     swimmersRankedOnTime: 0,
     exhibitionSeedsUsed: 0,
     exhibitionEventsExcluded: 0,
+    eventsRemovedByUser: 0,
+    relays: [],
+    relaysAbsent: [],
   };
 }
 
@@ -744,7 +1329,12 @@ function freshnessCaveat(team: TheoreticalMeetTeamInput, seedSeasonIds: readonly
   return `${ALL_TIME_BEST_CAVEAT} ${other} of ${seedSeasonIds.length} seeds are from a season other than ${team.rosterSeasonId} (a seed with no season id counts as other).`;
 }
 
-function teamCaveats(team: TheoreticalMeetTeamInput, acc: TeamAccumulator, caps: { indCap: number; totalCap: number | undefined }): string[] {
+function teamCaveats(
+  team: TheoreticalMeetTeamInput,
+  acc: TeamAccumulator,
+  caps: { indCap: number; totalCap: number | undefined },
+  relaysAccounted: boolean
+): string[] {
   const caveats: string[] = [];
   const fresh = freshnessCaveat(team, acc.seedSeasonIds);
   if (fresh !== undefined) caveats.push(fresh);
@@ -752,7 +1342,8 @@ function teamCaveats(team: TheoreticalMeetTeamInput, acc: TeamAccumulator, caps:
     caveats.push(`The roster for ${team.teamName} (${team.gender}) lists no athletes (SwimCloud: no rosters found). No rows were made.`);
   }
   const totalCapped = caps.totalCap !== undefined && caps.totalCap < UNCAPPED;
-  if (totalCapped) caveats.push(TOTAL_CAP_CAVEAT);
+  // With relays built the slots ARE accounted for (relays are chosen first), so the "not reserved" line would be false.
+  if (totalCapped && !relaysAccounted) caveats.push(TOTAL_CAP_CAVEAT);
   if (!totalCapped && caps.indCap >= UNCAPPED) caveats.push(UNCAPPED_CAVEAT);
   if (acc.swimmersRankedOnTime > 0) {
     caveats.push(
@@ -766,6 +1357,7 @@ function teamCaveats(team: TheoreticalMeetTeamInput, acc: TeamAccumulator, caps:
     caveats.push(`${acc.parseFailed.length} athlete(s) have a times page that did not parse. No rows were made for them.`);
   }
   caveats.push(...exhibitionCaveats(acc.exhibitionSeedsUsed, acc.rows.length, acc.exhibitionEventsExcluded));
+  if (acc.eventsRemovedByUser > 0) caveats.push(removedEventsCaveat(acc.eventsRemovedByUser));
   return caveats;
 }
 
@@ -794,13 +1386,18 @@ function buildRow(args: {
   };
 }
 
-function processAthlete(
-  ctx: Context,
-  team: TheoreticalMeetTeamInput,
-  entry: TheoreticalMeetAthleteInput,
-  acc: TeamAccumulator,
-  sources: Map<string, TheoreticalSeedSource>
-): void {
+/** One roster athlete after the first pass: who they are and what the selector offered. */
+type PreparedAthlete = {
+  readonly entry: TheoreticalMeetAthleteInput;
+  readonly swimmerKey: string;
+  readonly ref: TheoreticalAthleteRef;
+  readonly excludedField: { excludedExhibitionEvents?: string[] };
+  /** `undefined`: no times page, or it did not parse (already reported). */
+  readonly outcome: AthleteOutcome | undefined;
+};
+
+/** First pass: report the athlete's data status and run the selector. Makes no row. */
+function prepareAthlete(ctx: Context, team: TheoreticalMeetTeamInput, entry: TheoreticalMeetAthleteInput, acc: TeamAccumulator): PreparedAthlete {
   const { athlete } = entry;
   const swimmerKey = swimmerKeyFor(athlete);
   const ref: TheoreticalAthleteRef = {
@@ -809,19 +1406,50 @@ function processAthlete(
   };
   if (entry.swims === undefined) {
     (entry.swimsStatus === 'parse_failed' ? acc.parseFailed : acc.noTimes).push(ref);
-    return;
+    return { entry, swimmerKey, ref, excludedField: {}, outcome: undefined };
   }
   const outcome = chooseAthleteEvents(ctx, team, athlete, entry.swims);
   acc.unknownCourseSwims += outcome.unknownCourse;
   acc.exhibitionEventsExcluded += outcome.excludedExhibition.length;
   const excludedField = outcome.excludedExhibition.length === 0 ? {} : { excludedExhibitionEvents: outcome.excludedExhibition };
+  return { entry, swimmerKey, ref, excludedField, outcome };
+}
+
+/**
+ * Second pass: apply the removals and the entry caps and make the rows. `relayCounts` is what the swimmer's
+ * relays already use (chosen first); absent means no relay, and the walk is the one it always was.
+ */
+function finishAthlete(
+  ctx: Context,
+  team: TheoreticalMeetTeamInput,
+  prepared: PreparedAthlete,
+  acc: TeamAccumulator,
+  sources: Map<string, TheoreticalSeedSource>,
+  relayCounts: SwimmerEntryCounts | undefined
+): void {
+  const { entry, swimmerKey, ref, excludedField, outcome } = prepared;
+  const { athlete } = entry;
+  if (outcome === undefined) return;
   if (outcome.kind === 'no_seed') {
     acc.noSeed.push({ ...ref, reason: outcome.reason, ...excludedField });
     return;
   }
-  const accepted = applyEntryCaps(outcome.ranked, ctx.settings);
+  const removed = outcome.ranked.map(seed => {
+    const key = theoreticalEventExclusionKey({ teamName: team.teamName, gender: team.gender, swimmerKey, event: seed.candidate.event });
+    if (!ctx.exclusions.has(key)) return false;
+    ctx.matchedExclusions.add(key);
+    return true;
+  });
+  const accepted = applyEntryCaps(outcome.ranked, ctx.settings, removed, relayCounts);
+  // The same walk with nothing removed: an event chosen now and not then took a freed slot.
+  const baseline = removed.some(Boolean) ? applyEntryCaps(outcome.ranked, ctx.settings, [], relayCounts) : accepted;
+  acc.eventsRemovedByUser += removed.filter(Boolean).length;
   const events: TheoreticalEventCandidate[] = [];
   outcome.ranked.forEach((seed, index) => {
+    if (removed[index]) {
+      events.push({ ...seed.candidate, chosen: false, notChosenReason: 'removed_by_user', ...(baseline[index] ? { chosenWithoutRemovals: true as const } : {}) });
+      return;
+    }
     if (!accepted[index]) {
       events.push({ ...seed.candidate, chosen: false, notChosenReason: 'entry_cap' });
       return;
@@ -842,10 +1470,10 @@ function processAthlete(
       ...(seed.swim.isExhibition === true ? { isExhibition: true as const } : {}),
     });
     if (seed.swim.isExhibition === true) acc.exhibitionSeedsUsed += 1;
-    events.push({ ...seed.candidate, chosen: true, rowId: row.id });
+    events.push({ ...seed.candidate, chosen: true, rowId: row.id, ...(baseline[index] ? {} : { fillsRemovedSlot: true as const }) });
   });
   if (events.some((e, i) => accepted[i] && e.rankBasis === 'time')) acc.swimmersRankedOnTime += 1;
-  acc.perSwimmer.push({ ...ref, events, unofferedSeeds: outcome.unoffered, ...excludedField });
+  acc.perSwimmer.push({ ...ref, swimmerKey, events, unofferedSeeds: outcome.unoffered, ...excludedField });
 }
 
 const describeAthlete = (a: SwimCloudAthlete): string => `${a.name} (swimmer id ${a.swimCloudSwimmerId ?? 'none'})`;
@@ -858,6 +1486,7 @@ function processTeam(
   caps: { indCap: number; totalCap: number | undefined }
 ): TheoreticalTeamReport & { rows: SwimmerResult[] } {
   const acc = newAccumulator();
+  const prepared: PreparedAthlete[] = [];
   const seenNames = new Map<string, SwimCloudAthlete>();
   for (const entry of team.athletes) {
     const id = entry.athlete.swimCloudSwimmerId;
@@ -879,8 +1508,15 @@ function processTeam(
       );
     }
     seenNames.set(nameKey, entry.athlete);
-    processAthlete(ctx, team, entry, acc, sources);
+    prepared.push(prepareAthlete(ctx, team, entry, acc));
   }
+  // Relays first (rule 9). Their entries are charged against the same caps the individual walk reads.
+  const relayOutcome = buildRelaysForTeam(ctx, team, prepared);
+  if (relayOutcome !== undefined) {
+    acc.relays.push(...relayOutcome.relays);
+    acc.relaysAbsent.push(...relayOutcome.absent);
+  }
+  for (const p of prepared) finishAthlete(ctx, team, p, acc, sources, relayOutcome?.counts.get(p.swimmerKey));
   return {
     rows: acc.rows,
     teamName: team.teamName,
@@ -889,13 +1525,45 @@ function processTeam(
     rowsCreated: acc.rows.length,
     exhibitionSeedsUsed: acc.exhibitionSeedsUsed,
     exhibitionEventsExcluded: acc.exhibitionEventsExcluded,
+    eventsRemovedByUser: acc.eventsRemovedByUser,
     athletesWithNoTimes: acc.noTimes,
     athletesWithTimesParseFailed: acc.parseFailed,
     athletesWithNoSeedInMeetCourse: acc.noSeed,
     duplicateAcrossTeams: acc.duplicates,
     eventsChosenPerSwimmer: acc.perSwimmer,
-    caveats: teamCaveats(team, acc, caps),
+    ...(ctx.relays === null ? {} : { relayReport: { relays: acc.relays, absent: acc.relaysAbsent } }),
+    // Slots are accounted for only when relays are really built. Relays asked for under a conference with no
+    // relay program build none, so the total cap is still unreserved and its line must stay.
+    caveats: teamCaveats(team, acc, caps, ctx.relays?.program != null),
   };
+}
+
+/** The team's relays, or `undefined` when relays were not requested or the conference has no relay program. */
+function buildRelaysForTeam(ctx: Context, team: TheoreticalMeetTeamInput, prepared: readonly PreparedAthlete[]): TeamRelayOutcome | undefined {
+  const plan = ctx.relays;
+  if (plan === null || plan.program === null) return undefined;
+  const candidates: RelayCandidate[] = [];
+  for (const p of prepared) {
+    if (p.outcome === undefined) continue;
+    const legBests = legBestsOf(p.outcome.used, p.entry.athlete.name);
+    if (legBests.length > 0) candidates.push({ athlete: p.entry.athlete, swimmerKey: p.swimmerKey, legBests });
+  }
+  return buildTeamRelays(ctx, { ...plan, program: plan.program }, team, candidates);
+}
+
+/** The meet-wide relay lines. Without relays the one old line, so a build that never asked is unchanged. */
+function relayCaveats(plan: RelayPlan | null, report: TheoreticalMeetRelayReport | undefined): string[] {
+  if (plan === null || report === undefined) return [RELAYS_EXCLUDED_CAVEAT];
+  if (!report.programKnown) return [RELAYS_NO_PROGRAM_CAVEAT, RELAYS_EXCLUDED_CAVEAT];
+  const lines: string[] = [];
+  if (report.relaysBuilt === 0) lines.push(RELAYS_EXCLUDED_CAVEAT);
+  else lines.push(RELAYS_ESTIMATED_CAVEAT, RELAY_FILL_CAVEAT, RELAY_CAP_CAVEAT);
+  if (report.relaysBuilt > 0) {
+    lines.push(Object.keys(plan.adjustment).length === 0 ? RELAYS_NOT_ADJUSTED_CAVEAT : relayAdjustmentCaveat(plan.adjustment));
+  }
+  if (report.relaysBuilt > 0 && plan.maxPerSwimmer !== undefined) lines.push(relayLimitCaveat(plan.maxPerSwimmer));
+  if (report.relaysAbsent > 0) lines.push(relaysAbsentCaveat(report.relaysAbsent));
+  return lines;
 }
 
 /**
@@ -914,7 +1582,9 @@ export function buildTheoreticalMeetSeeds(input: TheoreticalMeetInput): Theoreti
   }
   validateCourse(input.course);
   const exhibition = resolveExhibitionMode(input.exhibitionSeeds);
+  const exclusions = validateExclusions(input.excludedEvents);
   const { settings, indCap, totalCap } = resolveSettings(input);
+  const relayPlan = resolveRelayPlan(input);
   const seenTeams = new Set<string>();
   for (const team of input.teams) {
     validateTeam(team);
@@ -925,7 +1595,16 @@ export function buildTheoreticalMeetSeeds(input: TheoreticalMeetInput): Theoreti
     seenTeams.add(key);
   }
 
-  const ctx: Context = { meetId: input.meetId, course: 'SCY', settings, meetProgram: input.meetProgram ?? null, exhibition };
+  const ctx: Context = {
+    meetId: input.meetId,
+    course: 'SCY',
+    settings,
+    meetProgram: input.meetProgram ?? null,
+    exhibition,
+    exclusions: new Set(exclusions.map(theoreticalEventExclusionKey)),
+    matchedExclusions: new Set<string>(),
+    relays: relayPlan,
+  };
   const claimed = new Map<string, string>();
   const sources = new Map<string, TheoreticalSeedSource>();
   const rows: SwimmerResult[] = [];
@@ -949,12 +1628,44 @@ export function buildTheoreticalMeetSeeds(input: TheoreticalMeetInput): Theoreti
     rows.length,
     teamReports.reduce((n, t) => n + t.exhibitionEventsExcluded, 0)
   ).map(line => `All teams: ${line}`);
-  const caveats = [...new Set([...teamReports.flatMap(t => t.caveats), ...meetExhibition, RELAYS_EXCLUDED_CAVEAT, DIVING_EXCLUDED_CAVEAT])];
+  const removedTotal = teamReports.reduce((n, t) => n + t.eventsRemovedByUser, 0);
+  const meetRemoved = removedTotal > 0 ? [`All teams: ${removedEventsCaveat(removedTotal)}`] : [];
+  const relayEntries = teamReports.flatMap(t => t.relayReport?.relays ?? []);
+  const relaysAbsent = teamReports.reduce((n, t) => n + (t.relayReport?.absent.length ?? 0), 0);
+  const relayReport: TheoreticalMeetRelayReport | undefined =
+    relayPlan === null
+      ? undefined
+      : {
+          programKnown: relayPlan.program !== null,
+          program: relayPlan.program ?? [],
+          relaysBuilt: relayEntries.length,
+          relaysAbsent,
+          flyingStartAdjustmentSec: relayPlan.adjustment,
+          maxRelaysPerSwimmer: relayPlan.maxPerSwimmer ?? null,
+        };
+  const caveats = [
+    ...new Set([...teamReports.flatMap(t => t.caveats), ...meetExhibition, ...meetRemoved, ...relayCaveats(relayPlan, relayReport), DIVING_EXCLUDED_CAVEAT]),
+  ];
+  const seenUnmatched = new Set<string>();
+  const unmatchedExclusions = exclusions.filter(e => {
+    const key = theoreticalEventExclusionKey(e);
+    if (ctx.matchedExclusions.has(key) || seenUnmatched.has(key)) return false;
+    seenUnmatched.add(key);
+    return true;
+  });
   return {
     rows,
     psychMenResults: rows.filter(r => r.gender === Gender.MEN),
     psychWomenResults: rows.filter(r => r.gender === Gender.WOMEN),
     sources,
-    report: { course: input.course, totalRows: rows.length, teams: teamReports, caveats },
+    relayEntries,
+    report: {
+      course: input.course,
+      totalRows: rows.length,
+      teams: teamReports,
+      caveats,
+      unmatchedExclusions,
+      ...(relayReport === undefined ? {} : { relays: relayReport }),
+    },
   };
 }
