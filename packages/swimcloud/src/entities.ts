@@ -726,6 +726,17 @@ export interface SwimCloudRelayLeg {
    * subtracting cumulative times, which would be fabrication.
    */
   readonly splitTime?: SwimCloudTimeString;
+  /**
+   * SwimCloud's id for this leg's own swim: the `/times/{id}/` link on the
+   * leg's split. Added 2026-10-09 from the real capture of
+   * `/results/401354/event/22/`, where every leg split links its own
+   * `/times/{id}/` (distinct from the relay's own total-time id).
+   *
+   * It is the join key to a swimmer's own relay credit
+   * (`SwimCloudRelayLegCredit.swimCloudSwimId`). Absent when the leg's row
+   * carried no such link. Never joined on name plus time.
+   */
+  readonly swimCloudSwimId?: string;
 }
 
 /**

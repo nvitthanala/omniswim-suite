@@ -8,6 +8,7 @@
     "./entities": "./src/entities.ts",
     "./urlClassifier": "./src/urlClassifier.ts",
     "./parser": "./src/parser.ts",
+    "./relayLegCredits": "./src/relayLegCredits.ts",
     "./html": "./src/html.ts",
     "./cache": "./src/cache.ts",
     "./fetcher": "./src/fetcher.ts",
