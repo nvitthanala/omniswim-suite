@@ -42,7 +42,7 @@ import {
 import { ScoringViewBanner, ScoringLockBanner, SuggestedPresetBanner } from './ScoringSettingsBanners';
 import { ScoringPresetPicker } from './ScoringPresetPicker';
 import { ScoringCapsFields } from './ScoringCapsFields';
-import { RelayScoringFields, DivingPointsFields, PerEventCapsFields } from './ScoringOptionalTablesFields';
+import { RelayScoringFields, DivingPointsFields, PerEventCapsFields, PlacePointInput } from './ScoringOptionalTablesFields';
 
 const PLACE_COUNT_OPTIONS = [8, 12, 16, 20, 24];
 const TOP_24_POINTS = [32, 28, 27, 26, 25, 24, 23, 22, 20, 17, 16, 15, 14, 13, 12, 11, 9, 7, 6, 5, 4, 3, 2, 1];
@@ -338,12 +338,10 @@ export function ScoringSettingsFields({
             {local.scoringPoints.map((pt, i) => (
               <div key={i} className="flex flex-col gap-1">
                 <span className="text-[9px] text-theme-secondary font-mono">Place {i + 1}</span>
-                <input
-                  type="number"
-                  aria-label={`Points for place ${i + 1}`}
-                  value={pt || ''}
-                  onChange={e => handlePointChange(i, parseFloat(e.target.value) || 0)}
-                  className="glass-input w-full font-mono text-xs"
+                <PlacePointInput
+                  ariaLabel={`Points for place ${i + 1}`}
+                  value={pt}
+                  onValueChange={v => handlePointChange(i, v)}
                 />
               </div>
             ))}

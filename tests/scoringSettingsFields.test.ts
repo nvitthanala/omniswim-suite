@@ -84,9 +84,7 @@ describe('ScoringSettingsFields', () => {
 
   it('renders one number input per scoring place, matching the initial settings', () => {
     return render().then(() => {
-      const placeInputs = [...container.querySelectorAll('input[type="number"]')].filter(el =>
-        (el as HTMLInputElement).getAttribute('aria-label')?.startsWith('Points for place')
-      );
+      const placeInputs = [...container.querySelectorAll('input[aria-label^="Points for place"]')];
       expect(placeInputs).toHaveLength(8);
       expect((placeInputs[0] as HTMLInputElement).value).toBe('20');
       expect((placeInputs[7] as HTMLInputElement).value).toBe('11');
@@ -95,11 +93,44 @@ describe('ScoringSettingsFields', () => {
 
   it('editing one place calls onChange with only that place updated', async () => {
     await render();
-    const secondPlace = [...container.querySelectorAll('input[type="number"]')].find(
-      el => el.getAttribute('aria-label') === 'Points for place 2'
-    ) as HTMLInputElement;
+    const secondPlace = container.querySelector<HTMLInputElement>('input[aria-label="Points for place 2"]')!;
     await act(async () => setNativeValue(secondPlace, '18'));
     expect(latest?.scoringPoints).toStrictEqual([20, 18, 16, 15, 14, 13, 12, 11]);
+  });
+
+  describe('a blank or malformed place value is rejected, never read as 0 points', () => {
+    const placeInput = (label: string) =>
+      container.querySelector<HTMLInputElement>(`input[aria-label="${label}"]`)!;
+
+    it('clearing a scoring place does not publish a 0 for that place', async () => {
+      await render();
+      latest = undefined;
+      await act(async () => setNativeValue(placeInput('Points for place 8'), ''));
+      expect(latest).toBeUndefined();
+    });
+
+    it('a non-numeric scoring place value is not published', async () => {
+      await render();
+      latest = undefined;
+      await act(async () => setNativeValue(placeInput('Points for place 8'), 'abc'));
+      expect(latest).toBeUndefined();
+    });
+
+    it('a real 0 point value still displays as 0 and can be entered on purpose', async () => {
+      await render({ settings: mergeScoringSettings({ scoringPoints: [5, 3, 0] }) });
+      expect(placeInput('Points for place 3').value).toBe('0');
+      await act(async () => setNativeValue(placeInput('Points for place 2'), '0'));
+      expect(latest?.scoringPoints).toStrictEqual([5, 0, 0]);
+    });
+
+    it('clearing a relay-table or diving-table place does not publish a 0', async () => {
+      await render({ settings: mergeScoringSettings({ scoringPoints: [9, 4], relayPoints: [11, 4], divingPoints: [9, 4] }) });
+      latest = undefined;
+      await act(async () => setNativeValue(placeInput('Relay points for place 2'), ''));
+      expect(latest).toBeUndefined();
+      await act(async () => setNativeValue(placeInput('Diving points for place 2'), ''));
+      expect(latest).toBeUndefined();
+    });
   });
 
   it('changing the places count resizes the points array AND recomputes aFinalBracketSize', async () => {

@@ -9,7 +9,7 @@
  * parent's `optionalPointsField` and passed through unchanged.
  */
 
-import { SegmentedControl } from '@omniswim/ui';
+import { NumberField, SegmentedControl } from '@omniswim/ui';
 import type { ScoringSettings } from '@omniswim/core/types';
 
 export interface OptionalPointsField {
@@ -21,6 +21,28 @@ export interface OptionalPointsField {
   setPoint: (index: number, value: number) => void;
 }
 
+/**
+ * One "Place N" points input.
+ *
+ * `NumberField` publishes only a complete, finite, non-negative value, and
+ * reverts a blank or malformed draft on blur. The inputs used to read
+ * `parseFloat(text) || 0`, so a cleared cell silently saved as 0 points and a
+ * real 0 rendered as an empty box. A place value is a published competition
+ * number: a blank is "not yet entered", never "worth nothing".
+ */
+export function PlacePointInput({ value, ariaLabel, onValueChange }: { value: number; ariaLabel: string; onValueChange: (v: number) => void }) {
+  return (
+    <NumberField
+      aria-label={ariaLabel}
+      min={0}
+      step={0.01}
+      value={value}
+      onValueChange={onValueChange}
+      className="glass-input w-full font-mono text-xs"
+    />
+  );
+}
+
 /** One "Place N" points input grid, shared by the relay and diving tables. */
 function PlacePointsGrid({ points, ariaPrefix, onSetPoint }: { points: number[]; ariaPrefix: string; onSetPoint: (i: number, v: number) => void }) {
   return (
@@ -28,13 +50,7 @@ function PlacePointsGrid({ points, ariaPrefix, onSetPoint }: { points: number[];
       {points.map((pt, i) => (
         <div key={i} className="flex flex-col gap-1">
           <span className="text-[9px] text-theme-secondary font-mono">Place {i + 1}</span>
-          <input
-            type="number"
-            aria-label={`${ariaPrefix} points for place ${i + 1}`}
-            value={pt || ''}
-            onChange={e => onSetPoint(i, parseFloat(e.target.value) || 0)}
-            className="glass-input w-full font-mono text-xs"
-          />
+          <PlacePointInput value={pt} ariaLabel={`${ariaPrefix} points for place ${i + 1}`} onValueChange={v => onSetPoint(i, v)} />
         </div>
       ))}
     </div>
