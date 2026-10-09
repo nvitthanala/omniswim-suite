@@ -8,7 +8,7 @@
  * field into columns.
  */
 
-export const SCHEMA_VERSION = 7;
+export const SCHEMA_VERSION = 8;
 
 export const CREATE_TABLES_SQL = `
 PRAGMA journal_mode = WAL;
@@ -124,6 +124,13 @@ CREATE TABLE IF NOT EXISTS athlete_aliases (
   data         TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_athlete_aliases_ws ON athlete_aliases(workspace_id);
+
+CREATE TABLE IF NOT EXISTS relay_leg_credits (
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  position     INTEGER NOT NULL DEFAULT 0,
+  data         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_relay_leg_credits_ws ON relay_leg_credits(workspace_id);
 
 CREATE TABLE IF NOT EXISTS workspace_snapshots (
   id           TEXT PRIMARY KEY,
@@ -261,4 +268,14 @@ export const SQLITE_MIGRATIONS_V7 = [
   data         TEXT NOT NULL
 )`,
   'CREATE INDEX IF NOT EXISTS idx_race_analyses_ws ON race_analyses(workspace_id)',
+];
+
+/** SQLite v7 → v8 relay-leg credits (one JSON row per credit). */
+export const SQLITE_MIGRATIONS_V8 = [
+  `CREATE TABLE IF NOT EXISTS relay_leg_credits (
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  position     INTEGER NOT NULL DEFAULT 0,
+  data         TEXT NOT NULL
+)`,
+  'CREATE INDEX IF NOT EXISTS idx_relay_leg_credits_ws ON relay_leg_credits(workspace_id)',
 ];

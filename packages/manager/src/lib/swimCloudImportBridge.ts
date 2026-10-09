@@ -31,7 +31,8 @@
  */
 
 import { Gender } from '@omniswim/core/types';
-import type { HistoricalSwim } from '@omniswim/core/types';
+import type { HistoricalSwim, RelayLegCredit } from '@omniswim/core/types';
+import { isRelayShapedEventLabel } from '@omniswim/core/lib/bestTimeEligibility';
 // Imported from the ./parser subpath, not the @omniswim/swimcloud package
 // root, on purpose: the root re-exports cache.ts/fetcher.ts/playwrightFetcher.ts,
 // which pull in node:fs/promises and playwright-core — fine in the desktop
@@ -48,6 +49,12 @@ import type {
   SwimCloudSwimmerTimesParse,
   SwimCloudTeamMeetSwimsParse,
 } from '@omniswim/swimcloud/parser';
+import type {
+  SwimCloudMeetSwimmerCredits,
+  SwimCloudRelayCreditConflictReason,
+  SwimCloudRelayCreditJoin,
+  SwimCloudRelayLegCredit,
+} from '@omniswim/swimcloud/relayLegCredits';
 
 export interface SwimCloudPersonalBestsToHistoricalSwimsOptions {
   readonly team: string;
@@ -461,7 +468,18 @@ export type SwimCloudSwimmerTimesSkipReason =
    * {@link swimCloudPersonalBestsToHistoricalSwims} had to do against a table
    * shape that does not exist.
    */
-  | 'relay-leadoff';
+  | 'relay-leadoff'
+  /**
+   * The row's event label is relay-shaped ("200 MED-R (Anchor)", "400 Medley
+   * Relay"). A relay leg is not a swim from the blocks, so it is not a
+   * personal best. It belongs in `Workspace.relayLegCredits` (see
+   * {@link swimCloudRelayCreditsToRelayLegCredits}), never in history.
+   *
+   * Not the same as `'relay-leadoff'`: that row carries an individual-event
+   * label (`50 Back SCY`) and the page's `R` chip, and is kept as an
+   * individual swim by the 2026-09-22 ruling.
+   */
+  | 'relay-leg-credit';
 
 export interface SwimCloudSwimmerTimesSkippedRow {
   readonly personalBest: SwimCloudPersonalBestSwim;
@@ -546,6 +564,13 @@ export function swimCloudSwimmerTimesToHistoricalSwims(
   const skipped: SwimCloudSwimmerTimesSkippedRow[] = [];
 
   for (const personalBest of parse.personalBests) {
+    // A relay-shaped label is a relay leg (or a relay), never a best. Skipped
+    // and reported, not dropped: see `SwimCloudSwimmerTimesSkipReason`.
+    if (isRelayShapedEventLabel(personalBest.eventLabel)) {
+      skipped.push({ personalBest, reason: 'relay-leg-credit' });
+      continue;
+    }
+
     // A relay leadoff is imported as a real individual swim. **Changed
     // 2026-09-22 on the user's ruling**, and the reasoning is the rules: a
     // leadoff starts from the blocks, not a flying takeover, and finishes to
@@ -620,4 +645,154 @@ export function swimCloudSwimmerTimesToHistoricalSwims(
   }
 
   return { ok: true, swims, skipped };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Relay-leg credits — a swimmer's page inside one meet                        */
+/* -------------------------------------------------------------------------- */
+
+export interface SwimCloudRelayCreditsToRelayLegCreditsOptions {
+  /** The workspace team these credits are stored under. Never read from the page. */
+  readonly team: string;
+  /** The workspace gender. Never inferred: the swimmer page prints no gender code. */
+  readonly gender: Gender;
+  /** The URL the capture came from (the parse's `provenance.sourceUrl`). Stamped on every credit. */
+  readonly sourceUrl: string;
+  /** When the capture was taken (the parse's `provenance.retrievedAt`). */
+  readonly retrievedAt?: string;
+  /** The meet's name, when the caller has it. The swimmer-in-meet page does not print it. */
+  readonly meetLabel?: string;
+  /** Verbatim date, when the caller has it. Never derived. */
+  readonly date?: string;
+  /**
+   * The course the meet was swum in, when the caller knows it. This is the only
+   * source of `timeType`: the swimmer-in-meet page prints no course, so without
+   * this option every credit leaves `timeType` absent.
+   */
+  readonly meetCourse?: 'SCY' | 'LCM' | 'SCM';
+  /**
+   * The result of `joinRelayCreditsToEventEntries(parse.relayLegs, eventPage)`.
+   * A `matched` credit gets `legPosition` from the event page's leg order
+   * (`legPositionSource: 'event-page-join'`) when its leg word gave none, and
+   * `relayLetter` from the matched relay entry.
+   */
+  readonly eventPageJoin?: SwimCloudRelayCreditJoin;
+}
+
+/**
+ * A credit whose leg word and the event page disagree. The credit is kept, with
+ * `legPosition` left absent, because neither source is more trustworthy than the
+ * other and the position is not guessed.
+ */
+export interface SwimCloudRelayCreditPositionConflict {
+  readonly swimCloudSwimId: string;
+  readonly reason: SwimCloudRelayCreditConflictReason;
+}
+
+export type SwimCloudRelayCreditsConversionResult =
+  | {
+      readonly ok: true;
+      readonly credits: readonly RelayLegCredit[];
+      /** Credits whose `eventPageJoin` entry was a conflict. Their `legPosition` is absent. */
+      readonly joinConflicts: readonly SwimCloudRelayCreditPositionConflict[];
+    }
+  | {
+      readonly ok: false;
+      readonly reason: 'missing-swimmer-name';
+      readonly message: string;
+    };
+
+const LEG_POSITIONS = [1, 2, 3, 4] as const;
+
+function legPositionOf(order: number): 1 | 2 | 3 | 4 | undefined {
+  return LEG_POSITIONS.find((p) => p === order);
+}
+
+/**
+ * Converts the relay legs of one `/results/{meetId}/swimmer/{id}/` capture
+ * (`parseMeetSwimmerCreditsHtml`) into {@link RelayLegCredit}s.
+ *
+ * ## What this never does
+ *
+ * - **Never writes history.** The result is `RelayLegCredit[]`: no `event`, no
+ *   `time`. The page's individual swims and extracted splits are not touched
+ *   here; the times converter owns them. The leadoff ruling of 2026-09-22 (a
+ *   leadoff is also an individual swim) is that converter's business, not this one.
+ * - **Never guesses a position.** `legPosition` is 1 for the leg word
+ *   `Leadoff` and 4 for `Anchor` (`legPositionSource: 'leg-word'`), or the
+ *   event page's leg order for a `matched` join result
+ *   (`'event-page-join'`). Any other credit has none.
+ * - **Never defaults a course.** `timeType` comes from `options.meetCourse`
+ *   or stays absent.
+ * - **Never expands `MED-R`.** `relayEvent` is as printed. `relayEventTitle` is
+ *   the meet's own menu title, when the parser found one.
+ *
+ * `gender` and `team` come from the caller, as in the other converters. The
+ * swimmer's name is the page heading's, verbatim.
+ */
+export function swimCloudRelayCreditsToRelayLegCredits(
+  parse: SwimCloudMeetSwimmerCredits,
+  options: SwimCloudRelayCreditsToRelayLegCreditsOptions,
+): SwimCloudRelayCreditsConversionResult {
+  const name = parse.swimmerName?.trim() ?? '';
+  if (name.length === 0) {
+    return {
+      ok: false,
+      reason: 'missing-swimmer-name',
+      message:
+        'The captured SwimCloud swimmer page has no swimmer name (no heading link was found). Refusing to store relay-leg credits under a placeholder name.',
+    };
+  }
+
+  const matchedBySwimId = new Map(
+    (options.eventPageJoin?.matched ?? []).map((match) => [match.credit.swimCloudSwimId, match] as const),
+  );
+  const conflictBySwimId = new Map(
+    (options.eventPageJoin?.conflicts ?? []).map((conflict) => [conflict.credit.swimCloudSwimId, conflict.reason] as const),
+  );
+
+  const credits: RelayLegCredit[] = [];
+  const joinConflicts: SwimCloudRelayCreditPositionConflict[] = [];
+  for (const leg of parse.relayLegs) {
+    const conflictReason = conflictBySwimId.get(leg.swimCloudSwimId);
+    if (conflictReason !== undefined) joinConflicts.push({ swimCloudSwimId: leg.swimCloudSwimId, reason: conflictReason });
+    const match = matchedBySwimId.get(leg.swimCloudSwimId);
+    const fromWord = conflictReason === undefined ? leg.legIndex : undefined;
+    const fromJoin = conflictReason === undefined && match !== undefined ? legPositionOf(match.leg.order) : undefined;
+    const legPosition = fromWord ?? fromJoin;
+    credits.push(relayCreditOf(leg, name, legPosition, fromWord !== undefined ? 'leg-word' : 'event-page-join', match?.entry.relayLetter, options));
+  }
+  return { ok: true, credits, joinConflicts };
+}
+
+function relayCreditOf(
+  leg: SwimCloudRelayLegCredit,
+  name: string,
+  legPosition: 1 | 2 | 3 | 4 | undefined,
+  legPositionSource: 'leg-word' | 'event-page-join',
+  relayLetter: string | undefined,
+  options: SwimCloudRelayCreditsToRelayLegCreditsOptions,
+): RelayLegCredit {
+  return {
+    swimCloudSwimId: leg.swimCloudSwimId,
+    swimCloudSwimmerId: leg.swimmerId,
+    meetId: leg.meetId,
+    eventRef: leg.eventRef,
+    name,
+    team: options.team,
+    gender: options.gender,
+    relayEvent: leg.relayEvent,
+    ...(leg.relayEventTitle === undefined ? {} : { relayEventTitle: leg.relayEventTitle }),
+    ...(leg.legLabel === undefined ? {} : { legLabel: leg.legLabel }),
+    ...(legPosition === undefined ? {} : { legPosition, legPositionSource }),
+    isLeadoff: leg.isLeadoff,
+    split: leg.time,
+    ...(options.meetCourse === undefined ? {} : { timeType: options.meetCourse }),
+    ...(leg.place === undefined ? {} : { relayPlace: leg.place }),
+    ...(relayLetter === undefined ? {} : { relayLetter }),
+    ...(options.meetLabel === undefined ? {} : { meetLabel: options.meetLabel }),
+    ...(options.date === undefined ? {} : { date: options.date }),
+    sourceUrl: options.sourceUrl,
+    ...(options.retrievedAt === undefined ? {} : { retrievedAt: options.retrievedAt }),
+  };
 }

@@ -17,6 +17,7 @@ export const CHILD_TABLES = [
   'athlete_history',
   'race_analyses',
   'athlete_aliases',
+  'relay_leg_credits',
 ] as const;
 
 export type ChildTable = (typeof CHILD_TABLES)[number];
@@ -63,6 +64,7 @@ export function assembleWorkspace(
     athleteHistory: childData('athlete_history') as Workspace['athleteHistory'],
     raceAnalyses: childData('race_analyses') as Workspace['raceAnalyses'],
     athleteAliases: childData('athlete_aliases') as Workspace['athleteAliases'],
+    relayLegCredits: childData('relay_leg_credits') as Workspace['relayLegCredits'],
     conference: row.conference != null ? String(row.conference) : undefined,
     entryPlanMode: (row.entry_plan_mode as Workspace['entryPlanMode']) ?? undefined,
     scoringView: (row.scoring_view as Workspace['scoringView']) ?? undefined,
