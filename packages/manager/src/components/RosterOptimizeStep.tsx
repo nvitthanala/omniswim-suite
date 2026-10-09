@@ -61,6 +61,8 @@ type OptimizerBeforeState = {
   overrides: NonNullable<Workspace['scorerRosterOverrides']>;
   plans: NonNullable<Workspace['meetEntryPlans']>;
   activeIds: NonNullable<Workspace['activeEntryIds']>;
+  /** Read for the Undo fingerprint only. A run does not write it. */
+  relayOverrides?: NonNullable<Workspace['relayLegOverrides']>;
 };
 
 /**
@@ -345,6 +347,7 @@ export default function RosterOptimizeStep({
     overrides: workspace.scorerRosterOverrides ?? [],
     plans: workspace.meetEntryPlans ?? [],
     activeIds: workspace.activeEntryIds ?? [],
+    relayOverrides: workspace.relayLegOverrides ?? [],
   });
 
   const recordRunSummary = (

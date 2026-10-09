@@ -204,6 +204,28 @@ describe('Optimize step Undo after later edits', () => {
     expect(updates[1].meetEntryPlans).toEqual(ws.meetEntryPlans ?? []);
   });
 
+  const relayFill = (assigneeName: string) =>
+    ({ relayEntryKey: 'k', legIndex: 3, assigneeName, source: 'manual' }) as never;
+
+  it('a relay leg filled after the run makes Undo refuse, and the fill stays', async () => {
+    const { updates, state, editOutside } = await mount(gainWorkspace());
+    await applyAllTeams();
+    await editOutside({ relayLegOverrides: [relayFill('Late Fill')] });
+    await click(/Undo this optimize/);
+    expect(updates).toHaveLength(1); // nothing written
+    expect(alert()?.textContent).toContain(UNDO_CHANGED_MESSAGE);
+    expect(state.current.relayLegOverrides).toEqual([relayFill('Late Fill')]);
+  });
+
+  it('relay legs filled before the run do not stop a plain Undo', async () => {
+    const ws = { ...gainWorkspace(), relayLegOverrides: [relayFill('Early Fill')] };
+    const { updates } = await mount(ws);
+    await applyAllTeams();
+    await click(/Undo this optimize/);
+    expect(updates).toHaveLength(2);
+    expect(alert()).toBeNull();
+  });
+
   it('a per-team Quick optimize is guarded the same way', async () => {
     const { updates, editOutside } = await mount(gainWorkspace());
     await click(/Quick optimize \(greedy\)/);
