@@ -1,5 +1,15 @@
 # Current state — one page
 
+**Updated 2026-10-09.** Active branch `nvitthanala/ui-simplification`.
+Progress log for the 2026-10-09 sweep: `docs/reference/SESSION_2026-10-09_STATE.json`
+(read it before resuming; its `userReview` list holds open decisions).
+Backlog: `docs/reference/IMPROVEMENTS_BACKLOG_2026-10-09.md`. New this round:
+save-order sequencing (409 `STALE_SAVE`), SwimCloud relay-leg credit and
+conference parsers, `relayLegCredits` storage (schema v8, spec
+`docs/reference/RELAY_LEG_CREDITS_SPEC.md`), editable events and estimated
+relays in theoretical meets. The section below is the 2026-09-25 state.
+
+## Earlier state (2026-09-25)
 **Updated 2026-09-25.** Active work is the production-readiness push on
 branch `nvitthanala/production-readiness`, plan
 [`plans/2026-09-24/01-NEXT-ROUND-PLAN.md`](2026-09-24/01-NEXT-ROUND-PLAN.md),

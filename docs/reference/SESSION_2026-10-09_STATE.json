@@ -1,0 +1,268 @@
+{
+  "initiative": "2026-10-09 open-items sweep: user said 'do all the work you listed', then stepped away. Orchestrator (Opus 5.5 main session) decides as best fit and records every judgment call in userReview.",
+  "branch": "nvitthanala/ui-simplification",
+  "baseCommit": "9c70341b",
+  "startedAt": "2026-10-09T15:40Z",
+  "gatesAtStart": "lint 0 errors (2 known complexity warnings); vitest 176 files, 2604 pass, 14 skipped; scripts/test_scoring_preset_routes.mjs passes",
+  "inputs": {
+    "fixtures": {
+      "F-D conference home": "tests/fixtures/swimcloud-real-conference-nsisc.html (home page, NOT the /teams/ tab: team list incomplete)",
+      "F-B swimmer-in-meet with relay leg": "tests/fixtures/swimcloud-real-meet-swimmer-399227-1355764-relay-anchor.html (200 MED-R (Anchor) 21.83)",
+      "F-C relay event with names": "tests/fixtures/swimcloud-real-meet-event-401354-event22-relay-names.html",
+      "redaction": "auth-info, auth-groups, gtag user ids, CSRF token, Sentry user scope, CF params, logged-in Profiles nav and account menu removed. Captured 2026-10-09 by the user."
+    }
+  },
+  "tracks": {
+    "T1-parsers": {
+      "owner": "executor",
+      "scope": "packages/swimcloud/src (new files preferred), tests/swimCloudRelayLegs*.test.ts, tests/swimCloudConference*.test.ts",
+      "status": "done",
+      "result": "New relayLegCredits.ts (parseMeetSwimmerCreditsHtml, parseRelayEventEntriesHtml, joinRelayCreditsToEventEntries) and conferencePage.ts (parseConferenceHomeHtml, complete:false). parser.ts readRelayLegsFromHiddenTable pairs legs row by row (fixes positional mispairing). Tests 38+12; mutations 6/6; golden byte-identical over 59 pages.",
+      "open": [
+        "join assumption (swimmer-page /times/ id == leg id) unverified live",
+        "core HistoricalSwim relayLeg field: architect spec dispatched",
+        "old RELAY_DESIGNATOR never matches real pages; relay row with no legs gives no warning"
+      ]
+    },
+    "T2-theoretical-events": {
+      "owner": "executor",
+      "scope": "packages/manager/src/lib/theoreticalMeetSeeds.ts, packages/manager/src/components/theoreticalMeet/*, tests/theoreticalMeet*.test.ts",
+      "status": "done; architect review found no wrong-lineup defect; fixes dispatched (T2-fix)",
+      "then": "T2b relays from individual bests (C2 scope) after T2 lands",
+      "result": "Editable chosen events: excludedEvents input (teamName,gender,swimmerKey,event); removed events skipped in the existing applyEntryCaps walk; refill flagged fillsRemovedSlot; unmatchedExclusions reported; Remove/Restore UI with focus + live status; removals cleared on team/preset/exhibition change. EXHIBITION_CAVEAT and read-only text removed; banner caveat added. New no-seed reason all_seeds_exhibition_excluded (behaviour change). Tests 28+15+1 e2e; mutations 4/4. vitest 2745 pass.",
+      "leftover": [
+        "teamDivisionTag ignores capture season (T4a nit)",
+        "useTheoreticalMeetFlow.ts:213 stale-closure guard (T4a nit)"
+      ]
+    },
+    "T3-save-order": {
+      "owner": "executor",
+      "scope": "apps/shell/server.ts, apps/shell/lib/workspaceRepo.ts, apps/shell/lib/routes/*, packages/core/src/store/SuiteWorkspaceProvider.tsx save path only, new tests",
+      "status": "done, pending orchestrator gate rerun",
+      "result": "Per-client save sequence headers (X-Omni-Client-Id, X-Omni-Save-Seq); server SaveSequencer (per-workspace lock, stale check before data-loss guard) returns 409 STALE_SAVE; no headers = accepted + X-Omni-Save-Unchecked. Client shows info notice on stale. Files: apps/shell/lib/saveSequencer.ts (new), packages/core/src/api/saveSequence.ts (new), apps/shell/lib/routes/workspaceRoutes.ts, packages/core/src/api/workspaces.ts, packages/core/src/store/SuiteWorkspaceProvider.tsx. Tests: saveSequencer (15), workspaceSaveSequenceRoute (22, JSON+SQLite), workspaceSaveStaleClient (7). Mutations 4/4 killed. vitest 2745 pass. Postgres not exercised.",
+      "risks": [
+        "sequence numbers in memory: restart forgets them; multi-process not covered",
+        "Pg updateWorkspace read-then-write left alone (packages/db)",
+        "restoreBackup/restoreSnapshot/replaceAll reset db version to 1",
+        "apps/shell/dist/server.js not rebuilt"
+      ]
+    },
+    "T4-review": {
+      "owner": "architect (theoretical create path + banner) and fable (A3/A4.2 apply/Undo, drawer)",
+      "scope": "read-only",
+      "status": "T4a done (fix running); T4b done",
+      "note": "Codex unavailable, Cursor ruled out by user: second review is a different model, not a different provider.",
+      "t4aFindings": {
+        "defect": "apps/shell/lib/swimcloudCaptureTeamName.ts:75-76 withTeamName upserts a stale capture copy during GET /api/swimcloud/captures; can roll back an in-progress re-crawl (completeness, planned count, page hash/retrievedAt). Promise.all makes one failed label write a 500. Fix: label-only store write that re-reads under lock and skips in-progress/labelled; best-effort.",
+        "nits": [
+          "failed create leaves provider mutationError banner up after cancel (App.tsx:166)",
+          "/metrics has no theoretical banner; computeComparisonTime can use a theoretical best (MetricsApp.tsx:164)",
+          "banner gated on loadedMeet not label: loads manager bundle on /matrix",
+          "teamDivisionTag ignores capture season; use divisionForTeamInSeason",
+          "ManagerApp.tsx:84-85 exports split a comment from its hook",
+          "useTheoreticalMeetFlow.ts:213 stale-closure creating guard; add ref"
+        ],
+        "optional": "server create-only flag returning 409 when id exists",
+        "queued": "T4a-fix executor after T1 (captureStore) and T2 (theoreticalMeet) finish"
+      },
+      "t4bFindings": {
+        "verifiedFalse": [
+          "Swim-edit Undo shows success before save lands: already fixed (SWIM_EDIT_UNDO_NOT_SAVED_MESSAGE, fe278764)",
+          "BatchOptimizerPanel handleApply lacks workspaceId check: not a defect; result is null unless batchRunInputsCurrent matches workspaceId, and handleApply returns on !result (BatchOptimizerPanel.tsx:143,177)"
+        ],
+        "plausible": "useSwimEditUndo.ts:46 LINEUP_FIELDS omits relayLegOverrides. If an inverse does not name relayLegOverrides, a relay-leg edit after the swim edit does not expire the Undo; the Undo can then restore lineup arrays under a newer override. Unproven; needs a failing reproduction (bug-hunter) before any fix.",
+        "note": "Fable review quality was low (2 of 3 defects false on check). Orchestrator verified each claim against the code."
+      }
+    },
+    "T5-flagged-0902": {
+      "owner": "executor",
+      "scope": "packages/core/src/data/teamAbbreviations.json (report only), malformed ScoringSettings numbers, scripts/test_relay_swaps.mjs, GLVC format",
+      "status": "done",
+      "result": [
+        "ROCK/INDY/LU: already fixed in 07fb5ae5; audit doc stale.",
+        "GLVC format_type: report only; no archived PDF, no config.",
+        "Place-point editors read a cleared cell as 0: fixed via NumberField/PlacePointInput (ScoringSettingsFields.tsx, ScoringOptionalTablesFields.tsx); 4 tests, mutation caught.",
+        "test_relay_swaps.mjs real-data block ran 0 candidates yet printed ok: fixed (137 candidates, 26 swaps brute-forced; SKIP if meets.json absent); 3 mutations caught.",
+        "ACC/SEC PDF detection uses word boundaries: ok."
+      ],
+      "found": "presetIdForConference (scoringDefaults.ts:508-518) bare includes: 'Sectional Championships' -> generic-top16 via SEC. Scoring-adjacent; needs a design call (userReview)."
+    },
+    "T6-housekeeping": {
+      "owner": "orchestrator",
+      "items": [
+        "leftover worktree branch worktree-agent-a99097b7c8da45307",
+        "local main clone 61 behind origin/main",
+        "A6 stale test workspaces (backup first)"
+      ],
+      "status": "done",
+      "result": [
+        "Worktree .claude/worktrees/agent-a99097b7c8da45307 (clean, branch cloud/c1-team-names-harness already merged here) removed; leftover node_modules folder deleted; its two .txt files were byte-identical to the main clone copies.",
+        "Local branch worktree-agent-a99097b7c8da45307 (eec50526, already on origin/main) deleted. Remote cloud/c1-team-names-harness kept.",
+        "Main clone main fast-forwarded 02f22903 -> eec50526 (origin/main).",
+        "A6: no ui-* workspaces exist in oyster data/omniswim.db (only Blank Workspace 1, which has settings and a loaded meet) or the main clone data/omniswim.db (HSU 2026-27 Roster Plan, OBU 2026-27 Roster, Blank Workspace 4). Nothing deleted."
+      ]
+    },
+    "T7-ship": {
+      "owner": "orchestrator",
+      "items": [
+        "gates",
+        "commits",
+        "vault",
+        "PR for the branch"
+      ],
+      "status": "pending"
+    },
+    "T1b-relay-leg-credits": {
+      "owner": "architect spec done; executor pending",
+      "status": "done incl. review fixes D1-D3 (regex course letter/prefix/4x, flag-only leadoff join conflict, merge fill+conflict rules); full gates pending T2b",
+      "spec": "docs/reference/RELAY_LEG_CREDITS_SPEC.md",
+      "decision": "Do NOT add relayLeg to HistoricalSwim. New Workspace.relayLegCredits collection (RelayLegCredit type with split not time, no event field), relay_leg_credits child table, mergeRelayLegCredits keyed on swimCloudSwimId, isRankableSwim refuses relay labels (/\brelay\b/i, /^d+s+[A-Z]+-R\b/i), times converter skips relay-shaped labels (reason relay-leg-credit), parser adds relayEventTitle from the event menu.",
+      "reproduced": [
+        "flagged leg on HistoricalSwim becomes the 50 Free best",
+        "mergeHistoryIndex drops the real swim for a leg",
+        "isRankableSwim(\"200 MED-R\") is true today",
+        "relayStrokeForIndex reads 200 MED-R as four free legs"
+      ],
+      "open": [
+        "merge rule: incoming copy with newly known legPosition is dropped; proposal fill absent optional fields, conflict on differing present legPosition/relayEventTitle",
+        "join conflict leaves legPosition absent (accept?)",
+        "Pg DDL never run (no server)",
+        "e2e main-thread-budget times out over 27 local workspaces (env)",
+        "SCHEMA_VERSION/PG_SCHEMA_VERSION now 8"
+      ],
+      "reviewFindingsOpen": [
+        "over-broad /-R\b/ regex not caught by tests (no -R individual label exists)",
+        "restoring a pre-v8 snapshot empties credits without a warning (same as race_analyses)"
+      ]
+    },
+    "T4a-fix": {
+      "owner": "executor",
+      "status": "done",
+      "result": "captureStore.setCaptureLabel (label-only write under lock, skips labelled/in-progress); withTeamName best-effort. Nits: dialogScopedError.ts hides the shell error while/after the theoretical dialog; metrics comparisonTime.ts skips theoretical meets; core theoreticalMeetLabel.ts gates the banner; ManagerApp exports moved to file end. Tests 6+8; mutations caught. vitest 2759 pass, lint 0 errors.",
+      "leftover": [
+        "teamDivisionTag ignores capture season",
+        "useTheoreticalMeetFlow.ts:213 stale-closure guard",
+        "no theoretical banner on /metrics (lookup is skipped instead)",
+        "withTeamName may cache a name parsed from a pre-race copy (narrow)"
+      ]
+    },
+    "T2-fix": {
+      "owner": "executor",
+      "status": "done",
+      "items": [
+        "negative test for all_seeds_exhibition_excluded",
+        "show unmatched removals; prune removals on pruneSelection",
+        "enc() in theoreticalEventExclusionKey",
+        "validateExclusions returns only the 4 fields",
+        "teamDivisionTag uses divisionForTeamInSeason",
+        "ref guard against double create"
+      ],
+      "result": "All 6 fixed; new tests/theoreticalMeetReviewFixes.test.ts; teamDivisionTag(schoolName, season) with divisionVaries badge (Lindenwood D2 2021-22 / D1 2022-23 / unknown 2024-25); captures with no recorded season keep old behaviour. Mutations 8/8. vitest 2776 pass, lint 0 errors."
+    },
+    "T2b-relays": {
+      "owner": "executor",
+      "status": "done incl. review fixes; maxRelaysPerSwimmer setting added",
+      "result": "Estimated relays in theoretical meets. NSISC-only program (800FR,200MR,400MR,200FR,400FR from 2026 results); legs via suggestBestRelayLegFill (greedy), flat-start SCY bests only; flying-start adjustment off by default, legs 2-4; relays chosen before individual events, cap walk starts from relay counts; absent relays carry reasons; four leg rows scored by the existing engine. Golden byte-identical with relays off. vitest 2908 pass/15 skip; lint 0 errors; theoretical e2e 7 pass. Mutations 6 killed; M1 (cap in relay phase) survives: dead under NSISC.",
+      "open": [
+        "relayLegSplit on saved rows holds estimated times (tag derived from meet label)",
+        "no B relays; greedy fill not guaranteed minimum",
+        "non-NSISC presets build no relays until a sourced program exists"
+      ],
+      "review": {
+        "defects": [
+          "core scoreRelaysInEvent (utils.ts:2298-2337) gives tied relays full points each; individual ties split. Affects real meets. NOT changed: needs user approval (core scoring).",
+          "estimated relay earns real D2 cut tag in Matrix (teamCardView.ts:53-63)",
+          "RelaySplitInspector labels estimates Known (PDF)",
+          "TOTAL_CAP_CAVEAT dropped when relays on but no program (seeds.ts:1501)",
+          "seasonAnalytics sums theoretical points"
+        ],
+        "ordering": "relays-first ok as default but stated reason wrong; add relays-per-swimmer setting"
+      }
+    },
+    "T8-db-growth": {
+      "owner": "orchestrator",
+      "status": "cause found and guarded",
+      "cause": "A node dist/server.js started 2026-10-04 02:29 is bound to port 3000 against the oyster data/. playwright.config.ts reused any server on PORT outside CI, so e2e runs this session wrote 39 \"UI …\" workspaces into the real data/omniswim.db (40 total incl. Blank Workspace 1) and asserted against an old dist bundle.",
+      "fix": "playwright.config.ts: reuseExistingServer only when PLAYWRIGHT_REUSE_SERVER=1. docs/INVARIANTS.md §4 and TEST_COVERAGE_AUDIT.md corrected.",
+      "notDone": "39 test workspaces not deleted; old server not stopped (user process)."
+    },
+    "T9-improvements-brainstorm": {
+      "status": "done",
+      "doc": "docs/reference/IMPROVEMENTS_BACKLOG_2026-10-09.md"
+    },
+    "T10-improvements-build": {
+      "status": "in progress",
+      "batches": [
+        {
+          "items": "A1 parsing zeros, A2 Python D2 fallback + parse parity, A3 preset id path validator",
+          "owner": "executor",
+          "status": "built; architect review: no defect in diff; legacy-fallback path fix dispatched",
+          "result": "parsingPipeline ParsedRowError (422 with rows); pdf_points parsed the same in TS and Python; Python DEFAULT_NCAA_D2_SCORING removed, ScoringSettingsMissing; bounded meets layer the cutoff over the settings file; userPresetFilePathIn guard. NSISC 930 rows byte-identical (executor claim; reviewer could not rerun: no results PDF in checkout)."
+        },
+        {
+          "items": "D1 plans/STATE.md refresh, D2 audit 09-02 status note",
+          "owner": "orchestrator",
+          "status": "done"
+        }
+      ],
+      "next": [
+        "B8 seed/migrate scripts honour OMNI_DATA_DIR",
+        "B2 skip-count guard",
+        "B1 CI e2e/harness check",
+        "A9 relay row with no legs warns",
+        "A4 bug-hunter repro for relayLegOverrides Undo"
+      ]
+    }
+  },
+  "resumeOrder": [
+    "T2b-review-fixes",
+    "T7-ship",
+    "T9-improvements-brainstorm",
+    "T10-improvements-build",
+    "vault"
+  ],
+  "standbyScope": [],
+  "standbyLog": [],
+  "usage": [
+    {
+      "at": "2026-10-09T15:38Z",
+      "source": "claude-usage-report.mjs (local proxy)",
+      "5h": "haiku 131 req / opus 105 req",
+      "7d": "sonnet 3901 req, opus 901 req, haiku 131 req",
+      "budgetTier": "full, 5h 0%, 7d 0% at session start"
+    },
+    {
+      "at": "2026-10-09T15:54Z",
+      "source": "claude-usage-report.mjs (local proxy)",
+      "5h": "942 req: sonnet 392, opus 305, haiku-5-5 131, haiku-4-5 114",
+      "7d": "5644 req: sonnet 4293, opus 1101, haiku 245",
+      "budgetTier": "5h 58% used, pace 237% at reset (4h); 7d 8%"
+    }
+  ],
+  "userReview": [
+    "DECISION NEEDED: core scoring gives each tied relay the full place points (utils.ts scoreRelaysInEvent ~2298-2337), while tied individual swims split points. Probe: two relays tied for 1st get 40+40 instead of 37+37. This affects real meets. Not changed without your OK; theoretical meets show a caveat for now.",
+    "Fixtures were scrubbed of account data before saving; the user's own name stays only in the public relay result of F-B.",
+    "Conference capture is the home page; a /country/usa/college/conference/nsisc/teams/ capture is still needed for a complete team list.",
+    "A3/A4.2 second review uses Fable (different model, same provider) because Codex and Cursor are unavailable.",
+    "presetIdForConference matches conference names by substring: a workspace named 'Sectional Championships' picks the generic-top16 preset via 'SEC'. Not changed; decide whether to match whole words or an explicit map.",
+    "Place-point tables: enabling a relay/diving table seeds [0] and growing the place count pads with 0. Left as is.",
+    "A6 closed with no deletion: no ui-* test workspaces exist. Oyster worktree DB holds only Blank Workspace 1; your HSU/OBU rosters are in the main clone DB (last updated 2026-09-07). Delete Blank Workspace 1 yourself if unwanted.",
+    "Theoretical meet: a swimmer whose only seeds were excluded exhibition swims now reports all_seeds_exhibition_excluded instead of no_event_in_program.",
+    "Theoretical meet: the built workspace does not record which events were removed in the preview; the banner says events may have been removed.",
+    "Theoretical meet Teams step: a team whose captures span seasons in different divisions shows \"division differs by season\"; captures with no recorded season are still tagged by the current division.",
+    "Estimated relays: user rule from 2026-10-04 (adjustment default off, flat-start sum labelled estimated) chosen over the architect spec, which left relays absent without an adjustment setting.",
+    "The real oyster data/omniswim.db now holds 39 \"UI …\" test workspaces written by e2e runs that reused your port-3000 server (node dist/server.js, running since 2026-10-04). Playwright no longer reuses a server unless PLAYWRIGHT_REUSE_SERVER=1. I did not delete the workspaces or stop the server: say if you want both done (backup first).",
+    "Estimated relays: only NSISC has a relay program; other presets build none until a sourced program is added. Relays are picked before individual events so the 7-event cap counts them first. Want a sourced program for other conferences, or the order as a visible choice?",
+    "Scoring change: meets with a \"Through Event N\" rankings page and no printed Points column used to score with a hidden D2 table; they now use data/scoring_settings.json, which is NSISC-shaped (18 scorers, divers 1/3, 2 relays). Non-NSISC meets of that kind get NSISC caps, as unbounded meets already did."
+  ],
+  "interruption": {
+    "at": "2026-10-09T16:30Z",
+    "reason": "usage limit reached",
+    "resumePoint": "1) git status/diff, lint, vitest to see what the stopped T2b executor left; 2) rerun architect review of relay-leg credits diff; 3) redispatch T2b with the same decisions; 4) T7 ship (gates, advisor diff audit, commits, push, PR); 5) vault update.",
+    "resumedAt": "2026-10-09T19:42Z",
+    "reconcile": "Stopped T2b left no edits (plan doc and seeds unchanged). Gates rerun: lint 0 errors/2 warnings, vitest 188 files 2832 pass 15 skip. Both stopped agents resumed via SendMessage."
+  },
+  "userInstructions": [
+    "2026-10-09T~20:30Z: user stepping away for an extended period; full right to continue until the rate limit. After T2b review + gates: brainstorm improvements (write to docs), update docs, continue as best fit. Covers commits, push and PR on this branch."
+  ]
+}
