@@ -14,7 +14,10 @@ Usage:
 Emits a single JSON object on stdout:
     { "athletes": [...], "conference": str | None, "officialTeamScores": {...} | None }
 
-On failure emits: { "error": "<message>" }
+On failure emits: { "error": "<message>", "code": "<tag>" | null, "trace": "..." }
+Known codes: "rankings_extraction_failed", "scoring_settings_missing". The Node
+route treats both as final: it does not retry the legacy pipeline, which would
+score without the meet's event cutoff.
 """
 import json
 import sys
@@ -57,7 +60,17 @@ def _score_athletes(raw_athletes, scored_event_number_max=None):
     if scored_event_number_max is None:
         return fn(raw_athletes)
     # The meet's own boundary keeps post-meet extra sessions out of the totals.
-    return fn(raw_athletes, {'scoredEventNumberMax': scored_event_number_max})
+    return fn(raw_athletes, overrides={'scoredEventNumberMax': scored_event_number_max})
+
+
+class RankingsExtractionError(RuntimeError):
+    """A Team Rankings page was found but its team-score block could not be read.
+
+    Scoring then has no "Through Event N" cutoff. Carrying on would count the
+    meet's post-program events, so this stops the parse.
+    """
+
+    code = 'rankings_extraction_failed'
 
 
 def _team_rankings(pdf_path):
@@ -70,15 +83,15 @@ def _team_rankings(pdf_path):
         result = fn(pdf_path)
     except Exception as exc:
         if team_rankings_parser.has_team_rankings_marker_in_pdf(pdf_path):
-            raise RuntimeError(f'Team Rankings page was detected but extraction failed: {exc}') from exc
+            raise RankingsExtractionError(f'Team Rankings page was detected but extraction failed: {exc}') from exc
         return None
     if not isinstance(result, dict) or result.get('error'):
         if team_rankings_parser.has_team_rankings_marker_in_pdf(pdf_path):
-            raise RuntimeError('Team Rankings page was detected but extraction returned an error')
+            raise RankingsExtractionError('Team Rankings page was detected but extraction returned an error')
         return None
     if not result.get('men') and not result.get('women'):
         if result.get('eventThrough') is not None or team_rankings_parser.has_team_rankings_marker_in_pdf(pdf_path):
-            raise RuntimeError('Team Rankings page was detected but no usable team score block was found')
+            raise RankingsExtractionError('Team Rankings page was detected but no usable team score block was found')
         return None
     return {
         'eventThrough': result.get('eventThrough'),
@@ -121,7 +134,11 @@ def main():
             'officialTeamScores': official,
         }))
     except Exception as exc:  # noqa: BLE001 - surface any failure as JSON
-        print(json.dumps({'error': str(exc), 'trace': traceback.format_exc()}))
+        print(json.dumps({
+            'error': str(exc),
+            'code': getattr(exc, 'code', None),
+            'trace': traceback.format_exc(),
+        }))
         sys.exit(1)
 
 

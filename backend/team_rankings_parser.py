@@ -150,9 +150,18 @@ if __name__ == '__main__':
     if len(sys.argv) < 2:
         print(json.dumps({'error': 'Usage: team_rankings_parser.py <pdf_path>'}))
         sys.exit(1)
+    # markerFound is True/False, or None when the PDF could not be inspected. The
+    # legacy pipeline refuses to continue unless it is exactly False: a rankings
+    # page that was found but not read must never fall back to "no cutoff".
+    try:
+        marker_found = has_team_rankings_marker_in_pdf(sys.argv[1])
+    except Exception:
+        marker_found = None
     try:
         result = extract_team_rankings_from_pdf(sys.argv[1])
+        if isinstance(result, dict):
+            result['markerFound'] = marker_found
         print(json.dumps(result))
     except Exception as exc:
-        print(json.dumps({'error': str(exc)}))
+        print(json.dumps({'error': str(exc), 'markerFound': marker_found}))
         sys.exit(1)

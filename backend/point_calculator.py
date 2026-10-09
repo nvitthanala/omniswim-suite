@@ -10,7 +10,38 @@ from collections import defaultdict
 
 
 
-DEFAULT_NCAA_D2_SCORING = [20, 17, 16, 15, 14, 13, 12, 11, 9, 7, 6, 5, 4, 3, 2, 1]
+class ScoringSettingsMissing(ValueError):
+    """No scoring configuration was supplied or found.
+
+    There is deliberately no default scoring table. Place points differ by
+    division and by conference, so a built-in table would be a guess that
+    produces plausible, wrong totals for any meet outside the guessed division.
+
+    `code` is the machine-readable tag the CLIs put in their error JSON, so the
+    Node routes can tell this failure apart from a generic one.
+    """
+
+    code = 'scoring_settings_missing'
+
+
+def parse_pdf_points(value):
+    """Read one printed PDF points value, or None when the PDF printed none.
+
+    The single accepted shape is a finite, non-negative JSON number. `None` and
+    an empty string mean "no points column value" and return None. Everything
+    else raises ValueError, including booleans, non-numeric strings, and
+    numeric strings (whitespace-wrapped or not). The TypeScript twin is
+    `parsePdfPointsValue` in `apps/shell/lib/routes/parsingPipeline.ts`; both
+    must accept and reject the same inputs.
+    """
+    if value is None or (isinstance(value, str) and value == ''):
+        return None
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        raise ValueError(f'malformed pdf_points value: {value!r}')
+    val = float(value)
+    if not math.isfinite(val) or val < 0:
+        raise ValueError(f'malformed pdf_points value: {value!r}')
+    return val
 
 
 def _is_nsisc_shaped_settings(cfg):
@@ -47,14 +78,7 @@ def _results_have_pdf_place_points(athletes):
         return False
 
     def _has_pdf(a):
-        pp = a.get('pdf_points')
-        if pp is None or pp == '':
-            return False
-        try:
-            val = float(pp)
-        except (TypeError, ValueError):
-            return False
-        return math.isfinite(val)
+        return parse_pdf_points(a.get('pdf_points')) is not None
 
     with_pdf = sum(1 for a in non_recruit if _has_pdf(a))
     threshold = max(8, math.ceil(len(non_recruit) * 0.01))
@@ -118,16 +142,8 @@ def _pdf_place_points_for_row(a, cfg=None):
         return 0.0
     if a.get('is_time_trial') and not is_championship_gender_event(ev_nm):
         return 0.0
-    pp = a.get('pdf_points')
-    if pp is None or pp == '':
-        return 0.0
-    try:
-        val = float(pp)
-    except (TypeError, ValueError):
-        return 0.0
-    if not math.isfinite(val) or val < 0:
-        return 0.0
-    return val
+    val = parse_pdf_points(a.get('pdf_points'))
+    return 0.0 if val is None else val
 
 
 def _relay_team_clock(a):
@@ -147,7 +163,15 @@ def _relay_entry_group_key(a):
     ])
 
 
-def _resolve_scoring_settings(scoring_settings=None):
+def _resolve_scoring_settings(scoring_settings=None, overrides=None):
+    """Return the complete scoring configuration, or raise.
+
+    `scoring_settings` is a complete configuration supplied by the caller. When
+    it is empty the settings file is loaded instead; a missing file raises
+    `ScoringSettingsMissing`. `overrides` are applied on top of whichever base
+    was used (the parse pipeline passes the meet's own `scoredEventNumberMax`
+    this way so that a meet boundary never replaces the settings).
+    """
 
     import os
 
@@ -207,20 +231,28 @@ def _resolve_scoring_settings(scoring_settings=None):
 
                     cfg[k] = v
         else:
-            print(
-                'WARNING: No scoring config file found; applying the NCAA D2 default scoring table.',
-                file=sys.stderr,
+            raise ScoringSettingsMissing(
+                'No scoring settings file found (looked in OMNI_DATA_DIR, data/ and the working '
+                'directory). Refusing to score without settings; there is no default scoring table.'
             )
 
     else:
 
         cfg = dict(scoring_settings)
 
+    if overrides:
+        cfg.update(overrides)
 
-
-    cfg.setdefault('scoringPoints', DEFAULT_NCAA_D2_SCORING)
-
-    cfg.setdefault('relayMultiplier', 2)
+    sp = cfg.get('scoringPoints')
+    if not isinstance(sp, list) or not sp:
+        raise ScoringSettingsMissing(
+            "Scoring settings have no 'scoringPoints' table; refusing to substitute a default."
+        )
+    rm = cfg.get('relayMultiplier')
+    if isinstance(rm, bool) or not isinstance(rm, (int, float)):
+        raise ScoringSettingsMissing(
+            "Scoring settings have no numeric 'relayMultiplier'; refusing to substitute a default."
+        )
 
     cfg.setdefault('halfRateRelaySwimmer', True)
 
@@ -1046,9 +1078,9 @@ def _seed_ab_relay_legs_into_pool(relay_athletes, cfg, meet_states, gender):
 
 
 
-def calculate_points(athletes, scoring_settings=None):
+def calculate_points(athletes, scoring_settings=None, overrides=None):
 
-    cfg = _resolve_scoring_settings(scoring_settings)
+    cfg = _resolve_scoring_settings(scoring_settings, overrides)
 
     for ath in athletes:
 
@@ -1540,14 +1572,8 @@ def calculate_points(athletes, scoring_settings=None):
 def _apply_pdf_points_overrides(athletes):
     """When HyTek PDF includes a Points column, use those values instead of calculated."""
     for a in athletes:
-        pp = a.get('pdf_points')
-        if pp is None or pp == '':
-            continue
-        try:
-            val = float(pp)
-        except (TypeError, ValueError):
-            continue
-        if val < 0:
+        val = parse_pdf_points(a.get('pdf_points'))
+        if val is None:
             continue
         a['calculated_points'] = val
 
@@ -1562,11 +1588,17 @@ if __name__ == "__main__":
 
             athletes = json.loads(input_data)
 
-            scored = calculate_points(athletes)
+            # Optional argv[1]: the meet's last scored event number, read from
+            # "Team Rankings - Through Event N". Without it every event scores.
+            cutoff_overrides = None
+            if len(sys.argv) > 1:
+                cutoff_overrides = {'scoredEventNumberMax': int(sys.argv[1])}
+
+            scored = calculate_points(athletes, overrides=cutoff_overrides)
 
             print(json.dumps(scored))
 
         except Exception as e:
 
-            print(json.dumps({"error": str(e)}))
+            print(json.dumps({"error": str(e), "code": getattr(e, 'code', None)}))
 
