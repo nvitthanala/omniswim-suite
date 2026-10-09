@@ -365,6 +365,31 @@ export class FileSystemSwimCloudCaptureStore {
   }
 
   /**
+   * Set ONLY the `label` of a stored capture. Unlike {@link upsertCapture} it never takes a field
+   * from the caller's copy of the record: it re-reads the record under the capture lock, so a
+   * re-crawl that landed after the caller read its copy is never rolled back.
+   *
+   * Returns the record as stored afterwards:
+   * - `undefined` when no such capture exists (nothing is created);
+   * - the record UNCHANGED (no write, `updatedAt` kept) when it already has a non-blank label or its
+   *   crawl is still `in-progress` (the crawl owns the record until it finishes);
+   * - otherwise the record with only `label` set. `pages`, `completeness`, `plannedPageCount` and
+   *   `updatedAt` are not touched, because a label is a display cache, not new capture data.
+   */
+  async setCaptureLabel(captureId: string, label: string): Promise<SwimCloudCaptureRecord | undefined> {
+    return this.writeLock.runExclusive(captureId, async () => {
+      const existing = await this.getCapture(captureId);
+      if (existing === undefined) return undefined;
+      if (existing.completeness === 'in-progress') return existing;
+      if (existing.label !== undefined && existing.label.trim().length > 0) return existing;
+      const next: SwimCloudCaptureRecord = { ...existing, label };
+      await this.writeCapture(next);
+      await this.rebuildIndex();
+      return next;
+    });
+  }
+
+  /**
    * Write one fetched page: the bytes go through the unchanged
    * `FileSystemSwimCloudCache`, and the capture's own page-ref list is
    * patched (merge-by-`canonicalUrl`, same rule as {@link upsertCapture}).
