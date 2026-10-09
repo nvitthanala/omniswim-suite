@@ -3,6 +3,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
 import { buildSeasonTrends } from '../packages/core/src/lib/seasonAnalytics';
+import { THEORETICAL_MEET_LABEL } from '../packages/core/src/lib/theoreticalMeetLabel';
 import { parseSwimCloudPasteDetailed } from '../packages/core/src/lib/athleteHistory';
 import { Gender, type HistoricalSwim, type Workspace } from '../packages/core/src/types';
 
@@ -43,6 +44,24 @@ function workspace(id: string, name: string, menResults: unknown[]): Workspace {
 }
 
 describe('seasonAnalytics', () => {
+  it('skips a theoretical meet: no team total and no progression point', () => {
+    const real = workspace('w1', 'Real Meet', [swim('r1', 'Alice Swimmer', '100 Free', '52.10', 20)]);
+    const theoretical = {
+      ...workspace('w2', 'Theoretical meet', [swim('t1', 'Alice Swimmer', '100 Free', '51.00', 20)]),
+      loadedMeet: { pdfFilename: THEORETICAL_MEET_LABEL, uploadedAt: 1, meetLabel: THEORETICAL_MEET_LABEL },
+    } as unknown as Workspace;
+
+    const trends = buildSeasonTrends([real, theoretical]);
+
+    expect(trends.teamScoreTrends.map(t => t.meetLabel)).toEqual(['Real Meet']);
+    expect(trends.teamScoreTrends[0].menTotal).toBe(20);
+    expect(trends.swimmerTrends).toHaveLength(1);
+    expect(trends.swimmerTrends[0].bestTime).toBe('52.10');
+    expect(trends.swimmerTrends[0].progression).toEqual([{ label: 'Real Meet', time: '52.10' }]);
+    // Only the theoretical meet: nothing at all.
+    expect(buildSeasonTrends([theoretical])).toEqual({ swimmerTrends: [], teamScoreTrends: [] });
+  });
+
   it('keeps the fastest of two swims in one workspace', () => {
     const ws = workspace('w1', 'Test Meet', [
       swim('r1', 'Alice Swimmer', '100 Free', '52.10'),

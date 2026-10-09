@@ -7,6 +7,7 @@ import { SuiteWorkspaceProvider, useSuiteWorkspace } from '@omniswim/core/store/
 import ScoringSettingsModal from '@omniswim/matrix/components/ScoringSettingsModal';
 import { writeStoredMatrixStep } from '@omniswim/matrix/components/matrixStepState';
 import type { Workspace } from '@omniswim/core/types';
+import { isTheoreticalMeet } from '@omniswim/core/lib/theoreticalMeetLabel';
 import SuiteHeader from './components/SuiteHeader';
 import WorkspaceSidebar from './components/WorkspaceSidebar';
 import SuiteHome from './pages/SuiteHome';
@@ -28,6 +29,7 @@ import {
 import { installDataLossWatcher } from './lib/dataLossWatcher';
 import { useWorkspaceScoringDialogProps } from './lib/workspaceScoringSettings';
 import { planRouteSync, type RouteSyncSnapshot } from './lib/workspaceRouteSync';
+import { useDialogScopedError } from './lib/dialogScopedError';
 
 const ManagerApp = ManagerAppLazy;
 const MatrixApp = MatrixAppLazy;
@@ -137,6 +139,8 @@ function ShellLayout() {
   }, []);
 
   const scoringDialogProps = useWorkspaceScoringDialogProps(activeWorkspace);
+  // A failed theoretical-meet create is reported in its dialog. The banner must not repeat it after cancel.
+  const bannerError = useDialogScopedError(error, showTheoreticalMeet);
 
   // The new workspace is already active (the provider selects it). Open it on Matrix Standings.
   const handleTheoreticalMeetCreated = (workspace: Workspace) => {
@@ -163,9 +167,9 @@ function ShellLayout() {
         onOpenCommandPalette={() => setShowCommandPalette(true)}
       />
 
-      {error ? (
+      {bannerError ? (
         <div className="px-6 py-2 bg-[var(--toast-bg)] border-b border-[var(--toast-border)] text-[var(--toast-text)] text-ui-caption">
-          {error}
+          {bannerError}
         </div>
       ) : null}
 
@@ -182,7 +186,7 @@ function ShellLayout() {
                 transition={{ duration: preferences.reducedMotion ? 0 : 0.15 }}
                 className={showWorkspaceChrome ? 'p-4 lg:p-6' : ''}
               >
-                {showWorkspaceChrome && activeWorkspace?.loadedMeet ? (
+                {showWorkspaceChrome && activeWorkspace && isTheoreticalMeet(activeWorkspace) ? (
                   <Suspense fallback={null}>
                     <TheoreticalMeetBannerLazy workspace={activeWorkspace} />
                   </Suspense>
