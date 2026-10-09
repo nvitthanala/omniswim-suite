@@ -86,15 +86,27 @@ and [cbea.ms, "How to Write a Git Commit Message"](https://cbea.ms/git-commit/).
 
 ### Delegation contract (enforced via `.claude/agents/`)
 
-The model above is now configuration, not just prose. Four agent definitions exist:
+The model above is now configuration, not just prose. Six agent definitions exist:
 
 | Agent | Model | Effort | Tools | Owns |
 | --- | --- | --- | --- | --- |
-| `orchestrator` | fable | high | read-only + `Agent(executor, worker, finisher)` — **no Edit/Write** | Sequencing, briefing, integration, end-to-end verification |
+| `orchestrator` | fable | high | read-only + `Agent(executor, architect, worker, finisher, bug-hunter)` — **no Edit/Write** | Sequencing, briefing, integration, end-to-end verification |
 | `executor` | sonnet | high | all | Scoring + lineup correctness, extraction pipelines, algorithms, built to a spec under snapshot and mutation gates |
-| `architect` | opus | xhigh | read-only (no Edit/Write) | Schema/type design with no precedent, specs, review of core diffs, proofs. Opus is the escalation, not the default |
-| `worker` | sonnet | medium | all | Component wiring, restyles, panel layout, docs against an existing API |
+| `architect` | opus | high | read-only (no Edit/Write) | Schema/type design with no precedent, specs, review of core diffs, proofs. Opus is the escalation, not the default |
+| `worker` | sonnet | high | all | Component wiring, restyles, panel layout, docs against an existing API |
 | `finisher` | haiku | low | Read, Grep, Glob, Bash, Edit | Lint/typecheck/tests, mechanical edge cases — **no design decisions** |
+| `bug-hunter` | opus | high | all | Adversarial defect hunting with a failing reproduction for each bug |
+
+Two global read-only Haiku agents also apply here: `scout` (discovery and
+symbol summaries) and `transcript-miner` (open items from transcripts and
+plans). They live in `~/.claude/agents/`.
+
+**Advisor bridge (added 2026-10-09).** The global advisor checkpoints in
+`~/.claude/CLAUDE.md` apply in this repo: plan review, repeat failure, and
+the diff contract audit before done or commit. The default lead is now
+Sonnet, so the Opus advisor tool is usually on. When it is off, or when the
+lead is Opus or Fable, `architect` is the advisor. This table still decides
+which agent builds what.
 
 Invoke with the `Agent` tool, e.g. `subagent_type: "executor"`. Route by stakes:
 schema design goes to `executor` even when it looks small; a class rename goes to
