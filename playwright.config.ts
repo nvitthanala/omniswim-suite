@@ -44,7 +44,10 @@ export default defineConfig({
   webServer: {
     command: 'npm run dev',
     url: baseURL,
-    reuseExistingServer: !process.env.CI,
+    // A server already on PORT serves whatever data folder it was started with, usually the real
+    // `data/`, and the temp copy above is then ignored (39 `UI …` workspaces landed in the real DB
+    // on 2026-10-09 this way). Reuse only on request; otherwise a busy port fails the run loudly.
+    reuseExistingServer: !process.env.CI && process.env.PLAYWRIGHT_REUSE_SERVER === '1',
     timeout: 120_000,
     env: {
       ...process.env,

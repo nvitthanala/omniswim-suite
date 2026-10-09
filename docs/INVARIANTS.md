@@ -59,13 +59,13 @@ these rather than string-comparing `event` fields directly.
 
 ## 4. Playwright can assert against a stale bundle, not the code you just changed
 
-`npm test` (`scripts/run-tests.mjs`) runs Playwright, whose `webServer` config
-(`playwright.config.ts`) is `npm run dev` with `reuseExistingServer: true`
-outside CI. If a production server built from an old `dist/` is already bound
-to port 3000 when you run `npm test`, Playwright attaches to that stale process
-instead of starting a fresh dev server — so e2e can pass (or fail) against code
-that predates your change, with no indication that happened. Kill anything on
-port 3000, or run `npm run build` first, before trusting a green `npm test`.
+`npm test` (`scripts/run-tests.mjs`) runs Playwright. Its `webServer`
+(`playwright.config.ts`) starts `npm run dev` on a temp copy of `data/`.
+Until 2026-10-09 it reused any server already bound to `PORT` outside CI.
+That server ran an old `dist/` against the real `data/`, so e2e asserted
+against stale code and wrote 39 `UI …` test workspaces into the real
+`data/omniswim.db`. Reuse now needs `PLAYWRIGHT_REUSE_SERVER=1`; otherwise
+a busy port fails the run. Stop the old server or set a free `PORT`.
 
 ## 5. `calculatePoints` lives in `utils.ts`, not `scoringEngine.ts`
 
