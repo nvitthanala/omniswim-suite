@@ -8,6 +8,61 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Added (PR #6, 2026-10-02 to 2026-10-10)
+
+- **The Manager is a set of steps.** An Athletes step and one shared team bar
+  sit before Lineup. All optimizers live in one Optimize step. One editor
+  holds the scoring rules. Matrix has three steps: Meet, Standings and
+  Analyze.
+- **An OLED (true black) theme.** Accessibility fixes ship with it. Dialogs
+  trap focus and return it on close. Form fields have labels. Reduced-motion
+  settings stop looping animation.
+- **Theoretical meets.** Build a meet from teams you crawled on SwimCloud.
+  Each swimmer is seeded with their all-time best, SCY only. Exhibition
+  swims never become seeds. You can remove events before you build. Relays
+  are built from flat-start bests, are always labelled "Estimate, not
+  judged", and never earn a real cut tag. A "relays per swimmer, at most N"
+  setting limits relay load. Only NSISC has a relay program today.
+- **Multi-team SwimCloud crawl.** The extension crawls a list of teams one
+  page at a time, at least 3 seconds apart, and resumes after a stop. The
+  Teams step shows each school's name and division.
+- **Relay leg credits.** SwimCloud relay legs are stored apart from
+  individual swims (schema v8). A relay leg can never become a swimmer's
+  best time.
+- **Out-of-order saves are rejected.** A slow, older save that reaches the
+  server after a newer one gets `409 STALE_SAVE` and cannot overwrite it.
+
+### Changed (PR #6)
+
+- Labels and headings use sentence case. Lineup rows drop their Remove
+  buttons: use the Delete key or the drawer. The sidebar collapses below
+  1024px.
+- Undo expires when its workspace, its lineup or a relay leg fill changed
+  after the action it would undo.
+- A relay leg filled with a named swimmer who no longer matches anyone now
+  reads as vacant (+3 s, flagged). Before, it kept its held time silently.
+  A time typed with no swimmer named still holds the clock.
+- The "relay leg needs filling" warning names the round and place, so the A
+  and B relays no longer give the same message.
+- Meets with a "Through Event N" rankings page and no printed Points column
+  score with `data/scoring_settings.json`. Before, a hidden Division II
+  table scored them.
+
+### Fixed (PR #6)
+
+- An unreadable rank or points value in a PDF row is rejected (HTTP 422).
+  Before, it scored as 0.
+- The Python scorer stops with an error when scoring settings are missing.
+  Before, it fell back to Division II points.
+- Blank place-point cells no longer save as 0.
+- Preset IDs and backup names are checked before they become file paths.
+- Removing a swimmer's last swim clears their relay leg fills.
+- A recrawl keeps the old page bytes when it overwrites a URL. Capture file
+  reads and writes run one at a time.
+- Theoretical points stay out of season analytics and real comparisons.
+- End-to-end tests no longer write into a server you already have running.
+  Seed scripts refuse to write while a server holds the data.
+
 ### Added
 
 - **A swimmer's personal bests can now come straight from SwimCloud's own
