@@ -63,8 +63,14 @@ function backupKeepCount(): number {
  * prefix, would eventually delete a human's deliberate safety copy to make room
  * for an automatic one. Retention may only ever remove files this function
  * itself wrote.
+ *
+ * The label admits only letters, digits, `_` and `-` (every caller passes a
+ * fixed word such as `manual` or `pre-restore`), and the stamp is exactly what
+ * `toISOString()` yields after `:` and `.` become `-`. No separator of any
+ * platform can match, so a backslash is refused on Linux as well as Windows,
+ * where `path.basename` alone only treats it as a separator on Windows.
  */
-const GENERATED_BACKUP_PATTERN = /^meets-.+-\d{4}-\d{2}-\d{2}T[\dZ-]+\.json$/;
+const GENERATED_BACKUP_PATTERN = /^meets-[A-Za-z0-9][A-Za-z0-9_-]*-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.json$/;
 
 /** Delete the oldest generated backups beyond `keep`. Never throws. */
 async function pruneGeneratedBackups(backupDir: string, keep: number): Promise<void> {

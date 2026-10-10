@@ -64,11 +64,14 @@ describe('resolveBackupPath — the traversal boundary', () => {
   });
 
   it('refuses a traversal that is disguised INSIDE a well-formed backup name', async () => {
-    // Found by mutation testing: removing the path.basename check left all the
-    // other cases green. The filename pattern is `meets-<label>-<stamp>.json`
-    // and `.+` matches a slash, so a label can smuggle a path through it. This
-    // is the case that proves the basename layer earns its place rather than
-    // being belt-and-braces over the pattern.
+    // Found by mutation testing: with a loose `.+` label, removing the
+    // path.basename check left every other case green, because the pattern let
+    // a slash through. The pattern is now strict (label is letters, digits, `_`
+    // and `-`), so it alone refuses all four shapes below on every platform.
+    // The backslash case matters most: `path.basename` treats `\` as a
+    // separator only on Windows, so on Linux the pattern is the only gate that
+    // refuses it (CI caught this on 2026-10-10). The basename check stays as a
+    // second gate.
     const dir = await tempDir();
     for (const smuggled of [
       'meets-../../../etc/passwd-2026-09-20T12-00-00-000Z.json',
