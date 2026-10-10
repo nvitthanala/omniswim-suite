@@ -1,5 +1,5 @@
-﻿/**
- * AthleteRosterRow ΓÇö Renders one catalog athlete and every stored event row
+/**
+ * AthleteRosterRow — Renders one catalog athlete and every stored event row
  * with an "eligibility" toggle. Eligibility is what feeds the scoring pool;
  * ineligible rows are kept for reference but excluded from auto scoring.
  */
@@ -60,7 +60,7 @@ export default function AthleteRosterRow({ athlete, onToggleEligibility, onDelet
           ) : null}
           <span className="text-ui-caption text-theme-muted">
             {eligibleCount}/{sortedTimes.length} events eligible
-            {relayCount > 0 ? ` ┬╖ ${relayCount} relays` : ''}
+            {relayCount > 0 ? ` · ${relayCount} relays` : ''}
           </span>
         </div>
         {expanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}

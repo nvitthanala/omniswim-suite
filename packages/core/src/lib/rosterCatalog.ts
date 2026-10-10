@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -85,7 +85,7 @@ export interface CatalogRosterExport {
 
 // -------------------- Helpers --------------------
 
-/** Strip a course suffix ("50 Free SCY") ΓåÆ "50 Free". */
+/** Strip a course suffix ("50 Free SCY") → "50 Free". */
 export function stripCourseSuffix(event: string): string {
   return event.replace(/\b(SCY|LCM|SCM)\b/gi, '').replace(/\s+/g, ' ').trim();
 }
@@ -291,7 +291,7 @@ export function sortedTimesByScy(times: CatalogEventTime[]): CatalogEventTime[] 
   });
 }
 
-/** Filter times within a specific declared course ΓÇö handy for badges/tooltips. */
+/** Filter times within a specific declared course — handy for badges/tooltips. */
 export function timesOfCourse(
   times: CatalogEventTime[],
   course: CatalogTimeType
