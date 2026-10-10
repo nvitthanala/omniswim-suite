@@ -200,7 +200,12 @@
     },
     "omniswim-swimcloud-mark-capture": async (message) => {
       const mark = message;
-      return { captureId: await registerOrUpdateCapture(mark.subject, { completeness: mark.completeness }) };
+      return {
+        captureId: await registerOrUpdateCapture(mark.subject, {
+          completeness: mark.completeness,
+          ...typeof mark.label === "string" && mark.label.length > 0 ? { label: mark.label } : {}
+        })
+      };
     },
     "omniswim-swimcloud-read-capture": async (message) => readCapture(message.subject),
     "omniswim-swimcloud-relay-page": async (message) => relayPage(message),

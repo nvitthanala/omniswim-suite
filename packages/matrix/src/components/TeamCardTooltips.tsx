@@ -18,7 +18,7 @@ import type { PsychOverUnderEntry } from '@omniswim/core/lib/psychProjection';
 import { psychExpectedForResult } from '@omniswim/core/lib/psychProjection';
 import { displayTimeForRelayLeg, formatLegSplitSummary } from '@omniswim/core/lib/relaySplits';
 import { CompactEventLabel, PlacementExpectedValue, PrelimsOuValue } from './matrixPresentation';
-import { CutlineVerdict, PodiumMedal } from './TeamCardParts';
+import { CutlineVerdict, PodiumMedal, RelayVerdict, useIsEstimatedRelayRow } from './TeamCardParts';
 import {
   buildTeamRowCutlineTags,
   computeClassTopPerformers,
@@ -117,7 +117,7 @@ function SwimmerTimeCell({ s, hasRelaySplit, rowTags }: { s: any; hasRelaySplit:
         {s.finalsTime ? `F:${s.finalsTime}` : s.time}
         {rowTags.kind === 'relay' ? (
           <span className="inline-flex items-center gap-1 ml-1 align-middle no-underline">
-            <CutlineVerdict result={rowTags.tags.relay} />
+            <RelayVerdict tags={rowTags} />
           </span>
         ) : null}
       </span>
@@ -144,7 +144,7 @@ function SwimmerTimeCell({ s, hasRelaySplit, rowTags }: { s: any; hasRelaySplit:
           unambiguous on every row. */}
       {rowTags.kind === 'relay' ? (
         <span className="inline-flex items-center gap-1 ml-1 align-middle no-underline">
-          <CutlineVerdict result={rowTags.tags.relay} />
+          <RelayVerdict tags={rowTags} />
         </span>
       ) : null}
     </span>
@@ -184,7 +184,8 @@ export function TooltipSwimmerRow({
   showPsychPerformance,
   psychOuByEntry,
 }: TooltipSwimmerRowProps) {
-  const rowTags = buildTeamRowCutlineTags(s, gender, teamName, s.finalsTime || s.time);
+  const estimatedRelay = useIsEstimatedRelayRow(s);
+  const rowTags = buildTeamRowCutlineTags(s, gender, teamName, s.finalsTime || s.time, estimatedRelay);
   const hasRelaySplit = s.isRelay && (s.relayLegSplitDetail || s.relayLegSplit);
 
   return (
@@ -199,7 +200,7 @@ export function TooltipSwimmerRow({
           <span className="text-ui-micro text-theme-muted font-mono" title="Relay leg split">Split</span>
         )}
         {s.relayMissingLeg && (
-          <span className="text-ui-micro bg-amber-500/15 text-amber-400 px-1 border border-amber-500/30 rounded-sm ml-1" title="Missing relay leg">
+          <span className="text-ui-micro bg-warning-soft text-warning px-1 border border-warning-faint rounded-sm ml-1" title="Missing relay leg">
             Missing L{(s.relayMissingLeg.legIndex ?? 0) + 1}: {relayMissingStrokeLabel(s.relayMissingLeg.stroke)}
           </span>
         )}
@@ -267,9 +268,14 @@ export function TeamCardChartTooltip({
       }}
     >
       {isPinned && (
-        <div className="absolute top-1 right-1 cursor-pointer text-theme-muted hover:text-[var(--text-primary)]" onClick={onClose}>
+        <button
+          type="button"
+          className="absolute top-1 right-1 cursor-pointer text-theme-muted hover:text-[var(--text-primary)] bg-transparent border-0 p-0"
+          onClick={onClose}
+          aria-label="Close tooltip"
+        >
           ✕
-        </div>
+        </button>
       )}
       <TooltipHeader isClass={isClass} data={data} showPrelimsPerformance={showPrelimsPerformance} />
 

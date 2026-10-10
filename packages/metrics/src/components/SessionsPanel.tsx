@@ -11,7 +11,7 @@ interface SessionsPanelProps {
 }
 
 /**
- * The collapsible "Saved Sessions" list shown under the header when the
+ * The collapsible "Saved sessions" list shown under the header when the
  * Sessions button is toggled on. Empty-state and populated-list are two
  * distinct branches; kept as one small component so MetricsApp's render
  * doesn't carry this branching itself.
@@ -20,7 +20,7 @@ export function SessionsPanel({ sessions, onClose, onLoad, onDelete }: SessionsP
   return (
     <div className="mx-4 mt-4 border border-theme-soft rounded-lg overflow-hidden shrink-0">
       <div className="flex items-center justify-between px-3 py-2 bg-[var(--surface-strong)]">
-        <span className="text-ui-micro font-bold uppercase tracking-widest text-theme-muted">Saved Sessions</span>
+        <span className="text-ui-micro font-bold text-theme-muted">Saved sessions</span>
         <Button variant="ghost" size="sm" onClick={onClose} className="p-1" aria-label="Close" leadingIcon={<X size={14} />} />
       </div>
       {sessions.length === 0 ? (

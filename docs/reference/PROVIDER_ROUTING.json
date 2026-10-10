@@ -1,0 +1,120 @@
+{
+  "updated": "2026-10-03",
+  "about": "Data, not prose. The orchestrator reads this file to pick a provider for each task. Edit values here to change routing. Nothing in the agent files hardcodes a provider choice.",
+  "providers": {
+    "claude": {
+      "dispatch": "Agent tool with subagent_type (architect, executor, worker, finisher, bug-hunter). Continue with SendMessage.",
+      "available": true,
+      "remainingPct": null,
+      "remainingSource": "command-center band or /budget (live 5h and 7d). Use the lower of the two.",
+      "verified": "2026-10-03: 5h window 5% used, 7d 53% used (resets 2026-10-08) per orca account list. The 7d window is the binding one. Fable probe OK: Agent tool model=fable answered claude-fable-5-1.",
+      "models": {
+        "fable": "claude-fable-5-1. Available (probed 2026-10-03). Use ONLY where a wrong call is expensive: cross-cutting design with no precedent, adversarial review of core scoring/lineup diffs, final whole-branch review, resolving a disagreement between providers. Never for UI wiring, mechanical edits or test runs. Dispatch: Agent(model=fable) or the orchestrator agent. Governor downgrades it to Sonnet at conserve+.",
+        "opus": "claude-opus-5-5. architect agent. Design, specs, proofs, review.",
+        "sonnet": "claude-sonnet-5-5. executor/worker default.",
+        "haiku": "claude-haiku-4-5-20251001. finisher."
+      },
+      "fableRule": "Escalate to fable only when: (1) architect and executor disagree, (2) a core scoring/lineup diff needs a second review after architect, (3) a design touches packages/core types used by 3+ packages. Otherwise prefer sonnet or opus."
+    },
+    "codex": {
+      "dispatch": "orca orchestration worker-start --agent codex",
+      "available": false,
+      "remainingPct": null,
+      "remainingSource": "node ~/.claude/scripts/provider-usage-report.mjs --json -> codex.primary (usedPct of a windowMinutes window; remaining = 100 - usedPct). Reads Codex's own session logs. Never opens auth.json. Shown in the command-center band and pane.",
+      "verified": "2026-10-02: monthly cap at ~87% used after the two UI phases (each ~17 points). User rule: keep a 10% reserve, so Codex is off until the cap resets 2026-11-01 or the user says otherwise. Cost guide: audit ~2.5%, backend fix ~3-6%, core fix ~6-13%, UI phase ~17%."
+    },
+    "cursor": {
+      "dispatch": "orca orchestration worker-start --agent cursor",
+      "available": false,
+      "remainingPct": null,
+      "remainingSource": "node ~/.claude/scripts/provider-usage-report.mjs --json -> cursor.usedPct (monthly) and cursor.buckets. Read from Orca's own account data (the Orca bottom-bar figures). No credentials read here.",
+      "verified": "2026-10-02: Cursor Free monthly cap EXHAUSTED (re-checked 2026-10-03: Cursor Models bucket 100%, Other Models 0% but named models still need a paid plan; no re-probe, it triggers Avast) (Cursor Models bucket 100%, resets 2026-10-19). Auto uses that bucket. A small task costs ~1.5%; a large multi-file UI task (accessibility, ~10 files) consumed the rest. Treat Cursor as available again only after 2026-10-19 or on a paid plan.",
+      "models": "Free plan: only 'Auto' works. Checked 2026-10-02: all 24 named models (Claude, GPT, Gemini, Grok, Kimi, GLM, Composer) were rejected with 'Free plans can only use Auto'; rejected calls spend no tokens. A paid Cursor plan is needed for a model menu. Fable models are marked NO ZDR (no zero data retention): do not send roster data to them.",
+      "launch": "ONLY through Orca (orca orchestration worker-start --agent cursor). Do not spawn cursor-agent directly from scripts or loops: repeated direct spawns trigger the user's Avast."
+    }
+  },
+  "riskClasses": {
+    "design": {
+      "meaning": "Schema, algorithm or rule with no precedent. Specs. Proofs.",
+      "build": [
+        "claude:architect"
+      ],
+      "review": [
+        "claude:architect"
+      ],
+      "editsFiles": false
+    },
+    "core": {
+      "meaning": "Scoring, lineup, entry-limit, cut-standard and provenance logic. A wrong value fails silently.",
+      "build": [
+        "claude:executor",
+        "codex"
+      ],
+      "review": "different-provider-than-builder",
+      "reviewOrder": [
+        "claude:architect",
+        "codex",
+        "cursor"
+      ],
+      "gates": [
+        "golden-snapshot",
+        "mutation-check",
+        "vitest",
+        "lint:types",
+        "scripts/run-tests.mjs"
+      ],
+      "editsFiles": true
+    },
+    "ui": {
+      "meaning": "Component wiring, restyles, accessibility, docs against an existing API.",
+      "build": [
+        "cursor",
+        "codex",
+        "claude:worker"
+      ],
+      "review": "different-provider-than-builder",
+      "reviewOrder": [
+        "claude:finisher",
+        "codex",
+        "cursor"
+      ],
+      "editsFiles": true
+    },
+    "mechanical": {
+      "meaning": "Lint, typecheck, test runs, narrow edge-case fixes. No design.",
+      "build": [
+        "cursor",
+        "codex",
+        "claude:finisher"
+      ],
+      "review": "orchestrator-reruns-gates",
+      "editsFiles": true
+    },
+    "adversarial": {
+      "meaning": "Find real defects in code that already passes its tests.",
+      "build": [
+        "claude:bug-hunter",
+        "codex"
+      ],
+      "review": "orchestrator-reruns-repro",
+      "editsFiles": true,
+      "scope": "new test files only"
+    }
+  },
+  "rules": {
+    "skipProviderWhen": [
+      "available is false",
+      "remainingPct is a number below 10"
+    ],
+    "unknownBudgetMeans": "treat as usable, but say so in the report",
+    "parallelEditors": "Workers that edit files must have disjoint file scopes, or each gets its own worktree (--worktree new-child). Read-only work may share the current worktree.",
+    "coreIsSerial": "One editor at a time in packages/core, whatever the provider.",
+    "noGitByWorkers": "Workers do not commit, branch, merge or push. The orchestrator does, only when the user asks.",
+    "reviewerIsNeverBuilder": "A diff is reviewed by a different provider than the one that wrote it. If only one provider is available, use a different model tier and say so.",
+    "acceptOnlyAfterVerification": "The orchestrator reruns the gates and reads the diff before it accepts any worker_done.",
+    "quotaBridge": "Before routing, run node ~/.claude/scripts/provider-usage-report.mjs --json. remaining = 100 - codex.primary.usedPct; cursor.remainingPct as entered (ignore if isStale). Do not copy these into this file; read them fresh.",
+    "noDirectProviderSpawns": "Never spawn cursor-agent or codex directly from a script or loop. Use Orca worker-start, one worker at a time."
+  },
+  "standbyOrder": [],
+  "standbyNote": "Order used by limit-handoff.mjs when Claude is out of quota. First provider that is available and below 90% used."
+}

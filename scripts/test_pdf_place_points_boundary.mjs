@@ -116,7 +116,8 @@ const RESULTS = [
   row(PAST_PROGRAM_BOYS, 9, { gender: 'Men' }),
 ];
 
-const BASE = { scoringPoints: [20, 17, 16, 15, 14, 13, 12, 11, 9, 7, 6, 5, 4, 3, 2, 1] };
+// relayMultiplier is stated, not left to a default: the scorer refuses settings without one.
+const BASE = { scoringPoints: [20, 17, 16, 15, 14, 13, 12, 11, 9, 7, 6, 5, 4, 3, 2, 1], relayMultiplier: 2 };
 
 const SCENARIOS = {
   // Explicitly flagged, no boundary published: the defect.

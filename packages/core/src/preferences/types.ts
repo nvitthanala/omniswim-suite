@@ -6,6 +6,7 @@ export type ThemePreset =
   | 'championship'
   | 'deep-ocean'
   | 'slate-pro'
+  | 'oled'
   | 'custom';
 
 export type TextScale = 'compact' | 'default' | 'comfortable' | 'large';
@@ -77,6 +78,13 @@ export const THEME_PRESETS: ThemePresetMeta[] = [
     name: 'Slate Pro',
     description: 'Neutral contrast for long roster reviews.',
     accentColor: '#94a3b8',
+    mode: 'dark',
+  },
+  {
+    id: 'oled',
+    name: 'OLED black',
+    description: 'Pure black backgrounds with crisp, high-contrast text.',
+    accentColor: '#f87171',
     mode: 'dark',
   },
   {

@@ -34,9 +34,12 @@ import {
   type RelayCandidateGenderIndex,
 } from '../relayLegMatching';
 import { relayLegHistoryCandidates } from '../relayLegHistoryCandidates';
-import { countSwimmerEntries } from '../swimmerEntryLimits';
+import { canAcceptAnotherEntry, countSwimmerEntries, entryCapKey } from '../swimmerEntryLimits';
+import { buildAliasResolver, type AthleteAliasResolver } from '../athleteAliases';
 import { computeVacateRelayLegNames } from '../rosterLineupAudit';
+import { buildWhatIfResults } from '../whatIfProjection';
 import {
+  canonicalSwimmerName,
   convertTimeToSeconds,
   findDepartedLegSwim,
   isRelayResult,
@@ -368,6 +371,13 @@ type LegSwapContext = {
   workspace: Workspace;
   /** Gender-specific result rows (the same array the ranking was keyed from). */
   results: SwimmerResult[];
+  /**
+   * The projected pool the entry caps are counted over (`buildWhatIfResults`): meet
+   * rows, recruit rows, ACTIVE plans and relay-leg overrides, the pool the lineup audit
+   * and the scoring theory count. Built once per ranking. `results` stays the raw meet
+   * rows because the clock-hold lookup and the scorer roster read them as loaded.
+   */
+  entryPool: SwimmerResult[];
   team: string;
   gender: Gender;
   settings: ScoringSettings;
@@ -377,6 +387,12 @@ type LegSwapContext = {
   legTimeIndex: Map<string, Map<string, RelayLegTimeRef>>;
   rosterLookup: ScorerRosterLookup | null;
   relayCap: number;
+  /** Total-entry cap (individual and relay together); 999 when the settings set none. */
+  totalCap: number;
+  /** Merges two linked spellings of one swimmer into one count (INVARIANTS item 6). */
+  resolver: AthleteAliasResolver;
+  /** Canonical deleted names, matching `buildWhatIfResults`' projection gate. */
+  deletedSwimmerKeys: ReadonlySet<string>;
   baseOverrides: RelayLegOverride[];
   baseTotal: number;
   baseTotalRounded: number;
@@ -502,15 +518,27 @@ function buildLegTarget(
 }
 
 /**
- * True when the candidate already holds the per-swimmer relay-entry cap.
- * The `>= 999` early exit preserves the original short-circuit: an effectively
- * unlimited cap skips the entry count entirely rather than paying for it per
- * candidate.
+ * True when the candidate cannot take another entry on `relay`'s event: either the
+ * per-swimmer relay cap or the TOTAL cap (individual and relay together) is full.
+ *
+ * A candidate who already swims this relay EVENT on another squad (A and B of one
+ * event are one entry, `entryCapKey`) is never at the cap for it: moving between
+ * squads adds no entry.
+ *
+ * The short-circuit skips the entry count only when BOTH caps are effectively
+ * unlimited. It used to test the relay cap alone, so a conference that caps the
+ * total and leaves the relay cap open (`maxRelayEntriesPerSwimmer: 999`) never
+ * had a candidate refused. `canAcceptAnotherEntry` is the one place the cap
+ * precedence is written, so it decides here as it does for drop/add.
+ *
+ * The count goes through the workspace's alias resolver: a swimmer entered under
+ * two linked spellings is one swimmer against one cap.
  */
-function isAtRelayEntryCap(cand: SwimmerResult, ctx: LegSwapContext): boolean {
-  if (ctx.relayCap >= 999) return false;
-  const counts = countSwimmerEntries(ctx.results, ctx.team, ctx.gender, cand.name);
-  return counts.relayCount >= ctx.relayCap;
+function isAtRelayEntryCap(cand: SwimmerResult, relay: SwimmerResult, ctx: LegSwapContext): boolean {
+  if (ctx.relayCap >= 999 && ctx.totalCap >= 999) return false;
+  const counts = countSwimmerEntries(ctx.entryPool, ctx.team, ctx.gender, cand.name, ctx.resolver, ctx.settings);
+  if (counts.relayEvents.has(entryCapKey(relay))) return false;
+  return !canAcceptAnotherEntry(counts, ctx.settings, relay.event);
 }
 
 /**
@@ -526,11 +554,12 @@ function isEligibleLegCandidate(
   ctx: LegSwapContext
 ): boolean {
   if (candKey === target.outKey) return false;
+  if (ctx.deletedSwimmerKeys.has(canonicalSwimmerName(cand.name))) return false;
   if (target.onRelay.has(candKey)) return false;
   if (!swimmerMatchesRelayLeg(cand, target.entry.template.event, target.legIndex)) return false;
   if (!isRelayCandidateOfGender(cand, ctx.gender, ctx.poolGenders)) return false;
   if (ctx.rosterLookup && !ctx.rosterLookup.isScorer(cand.name, ctx.team, ctx.gender)) return false;
-  return !isAtRelayEntryCap(cand, ctx);
+  return !isAtRelayEntryCap(cand, target.entry.template, ctx);
 }
 
 /** Full re-score of the workspace with this substitution applied. */
@@ -654,9 +683,16 @@ function buildLegSwapContext(
 ): LegSwapContext {
   const baseTotal = teamTotal(workspace, gender, team, merged);
   const pool = resolvableLegPool(workspace, team, gender);
+  const resolver = buildAliasResolver(workspace);
+  const deletedSwimmerKeys = new Set(
+    (workspace.deletedSwimmers ?? [])
+      .filter(d => d.gender === gender)
+    .map(d => canonicalSwimmerName(d.name))
+  );
   return {
     workspace,
     results,
+    entryPool: buildWhatIfResults({ workspace, gender, removeSeniors: false }),
     team,
     gender,
     settings: merged,
@@ -671,6 +707,9 @@ function buildLegSwapContext(
       ? buildScorerRosterLookup(results, merged, workspace.scorerRosterOverrides ?? [], gender)
       : null,
     relayCap: merged.maxRelayEntriesPerSwimmer ?? 999,
+    totalCap: merged.maxTotalEntriesPerSwimmer ?? 999,
+    resolver,
+    deletedSwimmerKeys,
     baseOverrides: workspace.relayLegOverrides ?? [],
     baseTotal,
     baseTotalRounded: Number(baseTotal.toFixed(3)),

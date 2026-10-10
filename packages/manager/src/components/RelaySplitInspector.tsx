@@ -10,15 +10,23 @@ import type { RelaySplitComparison } from '@omniswim/core/lib/relayBuilder';
 type Props = {
   rows: RelaySplitComparison[];
   eventLabel: string;
+  /**
+   * A relay of a theoretical meet: the "known" splits are flat-start individual bests, summed into an
+   * estimate, not splits from a PDF. The label says so. The comparison itself is unchanged.
+   */
+  estimated?: boolean;
 };
 
-export default function RelaySplitInspector({ rows, eventLabel }: Props) {
+export const RELAY_SPLIT_KNOWN_LABEL = 'Known (PDF)';
+export const RELAY_SPLIT_ESTIMATED_LABEL = 'Estimated (flat-start best)';
+
+export default function RelaySplitInspector({ rows, eventLabel, estimated = false }: Props) {
   if (rows.length === 0) return null;
 
   return (
     <div className="mb-4 border border-theme-soft rounded-lg p-3 surface-muted-bg">
-      <p className="text-ui-micro uppercase tracking-widest text-theme-secondary mb-2">
-        Known (PDF) vs calculated splits · {eventLabel}
+      <p className="text-ui-micro text-theme-secondary mb-2" data-relay-split-label={estimated ? 'estimated' : 'known'}>
+        {estimated ? RELAY_SPLIT_ESTIMATED_LABEL : RELAY_SPLIT_KNOWN_LABEL} vs calculated splits · {eventLabel}
       </p>
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
         {rows.map(row => (

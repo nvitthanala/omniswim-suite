@@ -277,7 +277,7 @@ export default function AthleteHistorySection({ rows, athlete, gender, editable,
                     <span className="w-20 shrink-0 font-mono tabular-nums text-ui-caption text-theme-secondary">
                       {row.time}
                     </span>
-                    <span className="w-10 shrink-0 text-ui-micro text-theme-muted uppercase">
+                    <span className="w-10 shrink-0 text-ui-micro text-theme-muted">
                       {row.timeType ?? 'SCY'}
                     </span>
                     {row.meetLabel ? (
@@ -311,7 +311,7 @@ export default function AthleteHistorySection({ rows, athlete, gender, editable,
                           variant="ghost"
                           size="sm"
                           onClick={() => removeHistoryRow(row)}
-                          className="p-1 hover:text-amber-400 shrink-0"
+                          className="p-1 hover:text-warning shrink-0"
                           aria-label={`Remove history ${row.event}`}
                           leadingIcon={<Trash2 size={12} />}
                         />

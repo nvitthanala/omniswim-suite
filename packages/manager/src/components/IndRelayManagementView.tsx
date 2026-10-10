@@ -21,6 +21,7 @@ import {
   swimEventNotSwumInCourse,
 } from '@omniswim/core/lib/utils';
 import { passesRosterGates } from '@omniswim/core/lib/whatIfProjection';
+import { isTheoreticalMeet } from '@omniswim/core/lib/theoreticalMeetLabel';
 import {
   buildRelaysFromIndividualLineup,
   compareRelayLegSplits,
@@ -375,8 +376,8 @@ export default function IndRelayManagementView({
 
           {recruitCount > 0 ? (
             <p className="text-ui-caption text-theme-secondary">
-              <span className="text-[var(--text-accent)]">{recruitCount}</span> injected recruit
-              {recruitCount === 1 ? '' : 's'} for this team in the current projection.
+              <span className="text-[var(--text-accent)]">{recruitCount}</span> recruit swim
+              {recruitCount === 1 ? '' : 's'} added for this team in the current projection.
             </p>
           ) : null}
 
@@ -386,7 +387,6 @@ export default function IndRelayManagementView({
               size="sm"
               disabled={!whatIfMode || !selectedTeam}
               onClick={buildFromLineup}
-              className="uppercase tracking-widest"
               title="Fill vacant relay legs using active meet entry plans, then roster bests"
             >
               Build relays from individual lineup
@@ -395,11 +395,11 @@ export default function IndRelayManagementView({
         </div>
 
         <div className="surface-card rounded-xl p-4 sm:p-5 flex-1 min-h-0 flex flex-col">
-          <h4 className="text-ui-caption font-bold uppercase tracking-widest text-[var(--text-primary)] mb-3">
+          <h4 className="text-ui-caption font-bold text-[var(--text-primary)] mb-3">
             Relay split inspector
           </h4>
           {selectedGroup ? (
-            <RelaySplitInspector rows={selectedSplitCompare} eventLabel={selectedGroup.event} />
+            <RelaySplitInspector rows={selectedSplitCompare} eventLabel={selectedGroup.event} estimated={isTheoreticalMeet(workspace)} />
           ) : null}
           {relayGroups.length === 0 ? (
             <p className="text-ui-caption text-theme-muted italic">No relay entries for this team.</p>
@@ -410,6 +410,7 @@ export default function IndRelayManagementView({
                   key={group.key}
                   group={group}
                   isSelected={selectedGroup?.key === group.key}
+                  estimated={isTheoreticalMeet(workspace)}
                   whatIfMode={whatIfMode}
                   dragOverLeg={dragOverLeg}
                   manualTimes={manualTimes}

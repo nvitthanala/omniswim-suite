@@ -17,7 +17,8 @@ import {
   type PlannedSwimEntry,
 } from '../types';
 import { divisionForTeamOrNull } from '../data/teamDivisions';
-import { computedCutInOwnCourse, cutlineTableCourseForSwim } from './cutlineUtils';
+import { cutlineTableCourseForSwim } from './cutlineUtils';
+import { computedCutForTeamSwim } from './cutlineTags';
 import { mergeScoringSettings } from './scoringDefaults';
 import {
   convertSwimToSCYDetailed,
@@ -745,6 +746,11 @@ export function detectSwimCloudPasteFormat(text: string): SwimCloudPasteFormat {
  * re-check `divisionForTeamOrNull(team)` (or the lookup status) first rather
  * than reading a null here as a miss.
  *
+ * A badge is also withheld when the cut tag would refuse the swim for its
+ * program: a school that does not sponsor the swim's gender (UWF has no men's
+ * team) or that dropped the sport. `computedCutForTeamSwim` makes that call, so
+ * a stored badge never sits beside a tag that says `gender_not_sponsored`.
+ *
  * A metric swim is judged in its own course when its division publishes a
  * table there: an NAIA team's SCM swim is judged against the NAIA SCM column
  * (`computedCutInOwnCourse`). Before 2026-09-25 every metric swim was skipped
@@ -769,7 +775,10 @@ function enrichWithComputedCut(
     if (!div || (course !== 'SCY' && cutlineTableCourseForSwim(s.gender, s.event, div, course) !== course)) {
       return { ...s, computedCut: s.computedCut ?? null };
     }
-    const achieved = computedCutInOwnCourse({
+    // Gated by the cut tag, so a program the school does not field for this
+    // gender (UWF men) or has dropped carries no badge, as its tag says.
+    const achieved = computedCutForTeamSwim({
+      team,
       seconds: convertTimeToSeconds(s.time),
       gender: s.gender,
       event: s.event,

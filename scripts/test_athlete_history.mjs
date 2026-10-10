@@ -14,10 +14,9 @@ import { divisionForTeam } from '../packages/core/src/data/teamDivisions.ts';
 import { mergeScoringSettings } from '../packages/core/src/lib/scoringDefaults.ts';
 import { convertTimeToSeconds, convertToSCY } from '../packages/core/src/lib/utils.ts';
 import { Gender } from '../packages/core/src/types.ts';
+import { loadLocalMeets, noteLocalOnlySkipped } from './lib/localMeets.mjs';
 
-const meets = JSON.parse(readFileSync('data/meets.json', 'utf8'));
-const ws = meets[0];
-const settings = mergeScoringSettings(ws.scoringSettings, { conference: ws.conference });
+const meets = loadLocalMeets();
 
 // Was: `history.length > 0` / `rosterPaste.length >= 1` /
 // `merged.length >= history.slice(0, 100).length` / a positional, arbitrary
@@ -29,9 +28,7 @@ const settings = mergeScoringSettings(ws.scoringSettings, { conference: ws.confe
 // a real, specific, known athlete (Landon Dehn, a real Ouachita Baptist
 // swimmer used elsewhere in this repo's tests) instead of an arbitrary
 // positional pick.
-const history = buildHistoryFromWorkspace(ws);
-assert.equal(history.length, 646, 'history row count pinned to the committed NSISC data');
-
+// Check (b): the paste parser needs nothing local, so it runs everywhere.
 const rosterPaste = parseSwimCloudPaste(
   'Landon Dehn\t200 Freestyle\t1:56.47\nJane Doe\t100 Breaststroke\t1:05.00',
   'Ouachita Baptist University',
@@ -39,31 +36,42 @@ const rosterPaste = parseSwimCloudPaste(
 );
 assert.equal(rosterPaste.length, 2, 'roster paste parses exactly the 2 pasted rows');
 
-const historySlice = history.slice(0, 100);
-const merged = mergeHistoryIndex(historySlice, rosterPaste);
-assert.equal(merged.length, historySlice.length + rosterPaste.length, 'merge adds exactly the 2 new pasted rows, no silent drop or duplication');
+// Checks (a): these read the real NSISC workspace in data/meets.json, which is
+// untracked. Without it they are skipped out loud, not dropped.
+if (meets === null) {
+  noteLocalOnlySkipped('test_athlete_history.mjs', 'history row count, merge and Landon Dehn profile');
+} else {
+  const ws = meets[0];
+  const settings = mergeScoringSettings(ws.scoringSettings, { conference: ws.conference });
+  const history = buildHistoryFromWorkspace(ws);
+  assert.equal(history.length, 646, 'history row count pinned to the committed NSISC data');
 
-// Landon Dehn's pasted 200 Freestyle is guaranteed present in `merged`
-// regardless of how the 100-row history slice above happened to land, so
-// this profile check can assert a real, non-empty, exact result rather than
-// an upper bound alone.
-//
-// His NSISC 50 Free (`Event 8 Men 50 Yard Freestyle`, 21.58) also sits in the
-// 100-row slice. Until 2026-09-24 a HyTek label never reached a profile
-// (plans/2026-09-22/01 P14 item a), so this check read only the pasted swim.
-// The meet swim now ranks beside it, under the label it was recorded with.
-const landonProfile = categorizeBestEvents(merged, 'Ouachita Baptist University', Gender.MEN, 'Landon Dehn', settings);
-assert.deepEqual(
-  [...landonProfile.primaryEvents].sort(),
-  ['200 Freestyle', 'Event 8 Men 50 Yard Freestyle'],
-  'Landon Dehn\'s primary events are the pasted 200 Free and his NSISC 50 Free'
-);
-assert.equal(landonProfile.bestByEvent['200 Freestyle']?.time, '1:56.47', 'best time for the primary event matches the pasted swim exactly');
-assert.equal(
-  landonProfile.bestByEvent['Event 8 Men 50 Yard Freestyle']?.time,
-  '21.58',
-  'the loaded-meet 50 Free ranks under its HyTek label'
-);
+  const historySlice = history.slice(0, 100);
+  const merged = mergeHistoryIndex(historySlice, rosterPaste);
+  assert.equal(merged.length, historySlice.length + rosterPaste.length, 'merge adds exactly the 2 new pasted rows, no silent drop or duplication');
+
+  // Landon Dehn's pasted 200 Freestyle is guaranteed present in `merged`
+  // regardless of how the 100-row history slice above happened to land, so
+  // this profile check can assert a real, non-empty, exact result rather than
+  // an upper bound alone.
+  //
+  // His NSISC 50 Free (`Event 8 Men 50 Yard Freestyle`, 21.58) also sits in the
+  // 100-row slice. Until 2026-09-24 a HyTek label never reached a profile
+  // (plans/2026-09-22/01 P14 item a), so this check read only the pasted swim.
+  // The meet swim now ranks beside it, under the label it was recorded with.
+  const landonProfile = categorizeBestEvents(merged, 'Ouachita Baptist University', Gender.MEN, 'Landon Dehn', settings);
+  assert.deepEqual(
+    [...landonProfile.primaryEvents].sort(),
+    ['200 Freestyle', 'Event 8 Men 50 Yard Freestyle'],
+    'Landon Dehn\'s primary events are the pasted 200 Free and his NSISC 50 Free'
+  );
+  assert.equal(landonProfile.bestByEvent['200 Freestyle']?.time, '1:56.47', 'best time for the primary event matches the pasted swim exactly');
+  assert.equal(
+    landonProfile.bestByEvent['Event 8 Men 50 Yard Freestyle']?.time,
+    '21.58',
+    'the loaded-meet 50 Free ranks under its HyTek label'
+  );
+}
 
 const blaiseFixture = readFileSync(
   'tests/fixtures/swimcloud/blaise_vera_personal_bests.txt',

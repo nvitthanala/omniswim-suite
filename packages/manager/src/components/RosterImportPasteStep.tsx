@@ -52,21 +52,21 @@ export default function RosterImportPasteStep({
         <button
           type="button"
           onClick={() => onSetMode('paste')}
-          className={`px-3 py-2 text-ui-micro font-bold uppercase tracking-widest flex items-center gap-1.5 border-b-2 -mb-px transition-colors ${mode === 'paste' ? 'border-[var(--text-accent)] text-[var(--text-primary)]' : 'border-transparent nav-tab-inactive'}`}
+          className={`px-3 py-2 text-ui-micro font-bold flex items-center gap-1.5 border-b-2 -mb-px transition-colors ${mode === 'paste' ? 'border-[var(--text-accent)] text-[var(--text-primary)]' : 'border-transparent nav-tab-inactive'}`}
         >
           <ClipboardPaste size={13} /> Paste
         </button>
         <button
           type="button"
           onClick={() => onSetMode('csv')}
-          className={`px-3 py-2 text-ui-micro font-bold uppercase tracking-widest flex items-center gap-1.5 border-b-2 -mb-px transition-colors ${mode === 'csv' ? 'border-[var(--text-accent)] text-[var(--text-primary)]' : 'border-transparent nav-tab-inactive'}`}
+          className={`px-3 py-2 text-ui-micro font-bold flex items-center gap-1.5 border-b-2 -mb-px transition-colors ${mode === 'csv' ? 'border-[var(--text-accent)] text-[var(--text-primary)]' : 'border-transparent nav-tab-inactive'}`}
         >
           <FileSpreadsheet size={13} /> CSV
         </button>
         <button
           type="button"
           onClick={onToggleReference}
-          className={`ml-auto px-3 py-2 text-ui-micro font-bold uppercase tracking-widest flex items-center gap-1.5 transition-colors ${showReference ? 'text-[var(--text-primary)]' : 'nav-tab-inactive'}`}
+          className={`ml-auto px-3 py-2 text-ui-micro font-bold flex items-center gap-1.5 transition-colors ${showReference ? 'text-[var(--text-primary)]' : 'nav-tab-inactive'}`}
         >
           <Globe size={13} /> SwimCloud
         </button>
@@ -78,7 +78,7 @@ export default function RosterImportPasteStep({
           onClick={onShowCaptureRosterPanel}
           disabled={!team.trim()}
           title="Import a whole roster's times from a capture the Omniswim SwimCloud Companion extension has already fetched — every swimmer it captured, in one action. Pasting a single page from the clipboard is still offered there when no capture exists yet."
-          className="px-3 py-2 text-ui-micro font-bold uppercase tracking-widest flex items-center gap-1.5 nav-tab-inactive hover:text-[var(--text-primary)] transition-colors disabled:opacity-40"
+          className="px-3 py-2 text-ui-micro font-bold flex items-center gap-1.5 nav-tab-inactive hover:text-[var(--text-primary)] transition-colors disabled:opacity-40"
         >
           <Boxes size={13} /> Add from SwimCloud
         </button>

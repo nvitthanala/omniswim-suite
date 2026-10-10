@@ -1,4 +1,10 @@
 import type { Workspace } from '../types';
+import {
+  SAVE_CLIENT_HEADER,
+  SAVE_SEQ_HEADER,
+  STALE_SAVE_CODE,
+  type SaveToken,
+} from './saveSequence';
 
 const API_BASE = '';
 
@@ -49,14 +55,52 @@ export async function createWorkspace(name: string, body?: Partial<Workspace>): 
   return asWorkspace(await res.json(), 'Failed to create workspace');
 }
 
-export async function updateWorkspaceApi(id: string, patch: Partial<Workspace>): Promise<Workspace> {
+/**
+ * The server refused a save because a newer save from this client was already
+ * applied. The stored data is the newer one, so nothing is lost; the caller
+ * must still tell the user rather than drop the refusal.
+ */
+export class StaleSaveError extends Error {
+  readonly code = STALE_SAVE_CODE;
+  constructor(
+    message: string,
+    readonly lastAppliedSeq?: number,
+    readonly receivedSeq?: number
+  ) {
+    super(message);
+    this.name = 'StaleSaveError';
+  }
+}
+
+/**
+ * Save a workspace patch. Pass `token` to let the server detect a save that
+ * arrives after a newer one; without it the save still works but cannot be
+ * checked (the server flags it).
+ */
+export async function updateWorkspaceApi(
+  id: string,
+  patch: Partial<Workspace>,
+  token?: SaveToken
+): Promise<Workspace> {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (token) {
+    headers[SAVE_CLIENT_HEADER] = token.clientId;
+    headers[SAVE_SEQ_HEADER] = String(token.seq);
+  }
   const res = await fetch(`${API_BASE}/api/workspaces/${id}`, {
     method: 'PUT',
-    headers: { 'Content-Type': 'application/json' },
+    headers,
     body: JSON.stringify(patch),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
+    if (res.status === 409 && err.code === STALE_SAVE_CODE) {
+      throw new StaleSaveError(
+        err.error || 'A newer save was already applied.',
+        typeof err.lastAppliedSeq === 'number' ? err.lastAppliedSeq : undefined,
+        typeof err.receivedSeq === 'number' ? err.receivedSeq : undefined
+      );
+    }
     throw new Error(err.error || `Failed to update workspace (${res.status})`);
   }
   return res.json();

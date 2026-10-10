@@ -17,7 +17,7 @@ import type { PsychOverUnderEntry } from '@omniswim/core/lib/psychProjection';
 import { psychExpectedForResult } from '@omniswim/core/lib/psychProjection';
 import { displayTimeForRelayLeg, formatLegSplitSummary } from '@omniswim/core/lib/relaySplits';
 import { AthleteName, CompactEventLabel, PlacementExpectedValue, PointsValue, PrelimsOuValue } from './matrixPresentation';
-import { CutlineVerdict } from './TeamCardParts';
+import { CutlineVerdict, RelayVerdict, useIsEstimatedRelayRow } from './TeamCardParts';
 import { buildTeamRowCutlineTags, relayMissingStrokeLabel, type TeamRowCutlineTags } from './teamCardView';
 
 interface TeamMatrixSwimmerRowProps {
@@ -97,7 +97,7 @@ export function TeamMatrixTimeCell({
   onEditValueChange,
   onCancelEdit,
 }: TeamMatrixTimeCellProps) {
-  const timeClassName = `font-mono font-medium cursor-pointer hover:underline ${timeColorClass}`;
+  const timeClassName = `font-mono font-medium cursor-pointer hover:underline bg-transparent border-0 p-0 text-right ${timeColorClass}`;
 
   return (
     <div className="flex flex-col items-end gap-0.5 justify-center w-1/3 text-right">
@@ -107,7 +107,7 @@ export function TeamMatrixTimeCell({
         </div>
       )}
       {relaySplitPrimary && (
-        <div className={timeClassName} onClick={onStartEdit}>
+        <button type="button" className={timeClassName} onClick={onStartEdit} aria-label="Edit relay split time">
           <span className="inline-flex items-center gap-1 flex-wrap">
             <span>Split: {displayTimeForRelayLeg(res)}</span>
             {/* The leg's own individual verdict — only present when this leg is eligible. */}
@@ -129,29 +129,29 @@ export function TeamMatrixTimeCell({
                   actually describes, not the swimmer's split above. */}
               {rowTags.kind === 'relay' ? (
                 <span className="inline-flex items-center gap-1 no-underline">
-                  <CutlineVerdict result={rowTags.tags.relay} />
+                  <RelayVerdict tags={rowTags} />
                 </span>
               ) : null}
             </span>
           </span>
-        </div>
+        </button>
       )}
       {res.finalsTime && !relaySplitPrimary && (
-        <div className={timeClassName} onClick={onStartEdit}>
+        <button type="button" className={timeClassName} onClick={onStartEdit} aria-label="Edit final time">
           Final: {res.finalsTime}
-        </div>
+        </button>
       )}
       {!res.finalsTime && !res.prelimsTime && !relaySplitPrimary && (
-        <div className={timeClassName} onClick={onStartEdit}>
+        <button type="button" className={timeClassName} onClick={onStartEdit} aria-label="Edit time">
           {res.time}
-        </div>
+        </button>
       )}
       {/* A relay row without a recorded split still needs its team-time
           verdict shown somewhere — the two branches above cover the split
           case inline, this covers the finalsTime/plain-time fallbacks. */}
       {!relaySplitPrimary && rowTags.kind === 'relay' ? (
         <div className="flex items-center justify-end gap-1 flex-wrap">
-          <CutlineVerdict result={rowTags.tags.relay} />
+          <RelayVerdict tags={rowTags} />
         </div>
       ) : null}
       {editingResultId === res.id && (
@@ -237,17 +237,18 @@ export function TeamMatrixSwimmerRow({
   showPsychPerformance,
   psychOuByEntry,
 }: TeamMatrixSwimmerRowProps) {
-  const rowTags = buildTeamRowCutlineTags(res, gender, teamName, res.time);
+  const estimatedRelay = useIsEstimatedRelayRow(res);
+  const rowTags = buildTeamRowCutlineTags(res, gender, teamName, res.time, estimatedRelay);
   // Coloring keys off each row's own verdict: the relay's
   // for a relay leg (never the leg's, which was the bug —
   // a leadoff's individual split used to silently stand
   // in for the relay's own result), the single verdict
   // otherwise.
   const primaryTagResult = rowTags.kind === 'relay' ? rowTags.tags.relay : rowTags.result;
-  const cutlineTier = primaryTagResult.state === 'tagged' ? primaryTagResult.tag.tier : null;
+  const cutlineTier = primaryTagResult?.state === 'tagged' ? primaryTagResult.tag.tier : null;
   const isACut = cutlineTier === 'A' || cutlineTier === 'Standard' || cutlineTier === 'Qualifying';
   const isBCut = cutlineTier === 'B' || cutlineTier === 'Provisional' || cutlineTier === 'Invited';
-  const timeColorClass = isACut ? 'text-[var(--text-accent)]' : isBCut ? 'text-amber-400' : 'text-theme-secondary';
+  const timeColorClass = isACut ? 'text-[var(--text-accent)]' : isBCut ? 'text-warning' : 'text-theme-secondary';
   const relaySplitPrimary = res.isRelay && (res.relayLegSplitDetail || res.relayLegSplit);
   const startEdit = () => {
     if (onUpdateTime && res.id) onStartEdit(res.id, res.time);
@@ -265,7 +266,7 @@ export function TeamMatrixSwimmerRow({
           )}
         </span>
         {res.relayMissingLeg && (
-          <span className="text-ui-micro text-amber-400 shrink-0" title="Missing relay leg">
+          <span className="text-ui-micro text-warning shrink-0" title="Missing relay leg">
             Missing L{(res.relayMissingLeg.legIndex ?? 0) + 1}{' '}
             {relayMissingStrokeLabel(res.relayMissingLeg.stroke)}
           </span>

@@ -109,11 +109,37 @@ export function bestTimeLane(swim: BestTimeProvenance): BestTimeLane {
  * (`EventNotSwumInCourseError`), so a direct caller cannot convert one either.
  *
  * A caller that passes no `event` gets the flag-only answer, as before.
+ *
+ * Also false for a relay-shaped label (`200 MED-R`, `400 Medley Relay`); see
+ * {@link isRelayShapedEventLabel}.
  */
 export function isRankableSwim(swim: BestTimeProvenance): boolean {
   if (bestTimeLane(swim) !== 'result') return false;
   if (swim.event === undefined) return true;
+  if (isRelayShapedEventLabel(swim.event)) return false;
   return swimEventNotSwumInCourse({ event: swim.event, timeType: swim.timeType }) === null;
+}
+
+/** `200 MED-R`, `200 Y MED-R`, `Men 400 FR-R`, `4x50 FR-R`: a distance, an optional course letter, a `...-R` token. */
+const RELAY_ABBREVIATION = /(?:^|\s|\dx)\d+\s+(?:[YLS]\s+)?[A-Z]+-R\b/i;
+
+/**
+ * The label names a relay, in either spelling this app receives.
+ *
+ * - A word: `400 Medley Relay`, `Event 31 Men 4x50 Yard Freestyle Relay`.
+ * - SwimCloud's abbreviation: `200 MED-R`, `200 MED-R SCY`, `200 Y MED-R`,
+ *   `Men 400 FR-R`, `4x50 FR-R`. It contains no "relay", so a word test alone
+ *   reads it as an individual event; the abbreviation is a distance, an
+ *   optional course letter, then a token ending in `-R` (`FR-R`, `MED-R`).
+ *   The distance may open the label, follow a space, or follow `4x`. The label
+ *   is not anchored, so a gender word or entry number may come first.
+ *
+ * A relay time is a team result, or one leg of it. It is never a swimmer's
+ * best (see {@link RelayLegCredit}, which holds legs apart from history).
+ */
+export function isRelayShapedEventLabel(event: string): boolean {
+  const label = String(event ?? '');
+  return /\brelay\b/i.test(label) || RELAY_ABBREVIATION.test(label);
 }
 
 /* -------------------------------------------------------------------------- */

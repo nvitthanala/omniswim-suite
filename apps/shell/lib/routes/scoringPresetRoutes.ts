@@ -34,6 +34,27 @@ const PRESET_META_KEYS = new Set<string>(SCORING_PRESET_META_KEYS);
 /** A saved preset id: lowercase, so two files cannot collide on a case-insensitive filesystem. */
 const USER_PRESET_ID_RE = /^[a-z0-9][a-z0-9_-]{0,79}$/;
 
+/** Thrown when an id that is not a valid saved-preset id reaches a file-path join. */
+export class InvalidPresetIdError extends Error {
+  constructor(presetId: string) {
+    super(`${JSON.stringify(presetId)} is not a valid scoring preset id.`);
+    this.name = 'InvalidPresetIdError';
+  }
+}
+
+/**
+ * The one place a preset id becomes a file path. The id is checked against
+ * `USER_PRESET_ID_RE` here, not only in the request schema, so no caller can
+ * join a raw id (`../x`, an absolute path, an empty string) into the presets
+ * directory.
+ */
+export function userPresetFilePathIn(dir: string, presetId: string): string {
+  if (typeof presetId !== 'string' || !USER_PRESET_ID_RE.test(presetId)) {
+    throw new InvalidPresetIdError(String(presetId));
+  }
+  return path.resolve(dir, `${presetId}.json`);
+}
+
 function stripPresetMeta(raw: Record<string, unknown>) {
   const settings: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(raw)) {
@@ -116,6 +137,8 @@ const scoringSettingsSchema = z
     maxIndividualEntriesPerSwimmer: z.number().int().nonnegative().optional(),
     maxRelayEntriesPerSwimmer: z.number().int().nonnegative().optional(),
     maxTotalEntriesPerSwimmer: z.number().int().nonnegative().optional(),
+    entryCapCountsTimeTrials: z.boolean().optional(),
+    entryCapCountsExhibition: z.boolean().optional(),
     relayPoints: pointsTableSchema('relayPoints').optional(),
     divingPoints: pointsTableSchema('divingPoints').optional(),
     maxIndividualScorersPerTeamPerEvent: z.number().int().positive().optional(),
@@ -175,7 +198,7 @@ export function registerScoringPresetRoutes(app: Express, deps: ScoringPresetRou
   const SCORING_PRESETS_DIR = deps.scoringPresetsDir;
 
   function userPresetFilePath(presetId: string): string {
-    return path.join(SCORING_PRESETS_DIR, `${presetId}.json`);
+    return userPresetFilePathIn(SCORING_PRESETS_DIR, presetId);
   }
 
   function loadScoringPresetFile(presetId: string): Record<string, unknown> | null {

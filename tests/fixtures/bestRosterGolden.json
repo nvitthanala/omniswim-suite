@@ -1,0 +1,161 @@
+{
+ "_note": "Output of the Lineup step Best roster and All teams buttons (TeamRosterPanel.runOptimizer) at commit fdeaf50a, before Phase 4 removed them. Plan ids are normalised to plan#N. Fixtures: tests/optimizerStepFixtures.ts.",
+ "cases": {
+  "meet-held": {
+   "team": {
+    "confirmMsg": "Projected 248.0 pts (was 248.0). Apply?",
+    "applied": {
+     "overrides": [],
+     "plans": [],
+     "activeEntryIds": []
+    }
+   },
+   "allTeams": {
+    "confirmMsg": "Projected 472.0 pts (was 472.0). Apply?",
+    "applied": {
+     "overrides": [],
+     "plans": [],
+     "activeEntryIds": []
+    }
+   }
+  },
+  "meet-gain": {
+   "team": {
+    "confirmMsg": "Projected 307.0 pts (was 293.0). Apply?",
+    "applied": {
+     "overrides": [],
+     "plans": [
+      {
+       "id": "plan#0",
+       "name": "Hsu Swimmer 0",
+       "team": "Henderson State University",
+       "gender": "Men",
+       "classYear": "SO",
+       "event": "200 Breaststroke",
+       "time": "1:50.00",
+       "source": "optimizer",
+       "active": true
+      }
+     ],
+     "activeEntryIds": [
+      "plan#0"
+     ]
+    }
+   },
+   "allTeams": {
+    "confirmMsg": "Projected 590.0 pts (was 579.0). Apply?",
+    "applied": {
+     "overrides": [],
+     "plans": [
+      {
+       "id": "plan#0",
+       "name": "Hsu Swimmer 0",
+       "team": "Henderson State University",
+       "gender": "Men",
+       "classYear": "SO",
+       "event": "200 Breaststroke",
+       "time": "1:50.00",
+       "source": "optimizer",
+       "active": true
+      }
+     ],
+     "activeEntryIds": [
+      "plan#0"
+     ]
+    }
+   }
+  },
+  "meet-gain-drop-seniors": {
+   "team": {
+    "confirmMsg": "Projected 179.0 pts (was 161.0). Apply?",
+    "applied": {
+     "overrides": [],
+     "plans": [
+      {
+       "id": "plan#0",
+       "name": "Hsu Swimmer 0",
+       "team": "Henderson State University",
+       "gender": "Men",
+       "classYear": "SO",
+       "event": "200 Breaststroke",
+       "time": "1:50.00",
+       "source": "optimizer",
+       "active": true
+      }
+     ],
+     "activeEntryIds": [
+      "plan#0"
+     ]
+    }
+   },
+   "allTeams": {
+    "confirmMsg": "Projected 475.0 pts (was 447.0). Apply?",
+    "applied": {
+     "overrides": [],
+     "plans": [
+      {
+       "id": "plan#0",
+       "name": "Hsu Swimmer 0",
+       "team": "Henderson State University",
+       "gender": "Men",
+       "classYear": "SO",
+       "event": "200 Breaststroke",
+       "time": "1:50.00",
+       "source": "optimizer",
+       "active": true
+      }
+     ],
+     "activeEntryIds": [
+      "plan#0"
+     ]
+    }
+   }
+  },
+  "roster-only": {
+   "team": {
+    "confirmMsg": "Projected 485.0 pts (was 485.0). Apply?",
+    "applied": {
+     "overrides": [],
+     "plans": [
+      {
+       "id": "plan#0",
+       "name": "Athlete 00",
+       "team": "Henderson State University",
+       "gender": "Men",
+       "classYear": "FR",
+       "event": "200 Freestyle",
+       "time": "1:42.00",
+       "source": "manual",
+       "active": true
+      }
+     ],
+     "activeEntryIds": [
+      "plan#0"
+     ]
+    }
+   },
+   "allTeams": {
+    "confirmMsg": "Projected 485.0 pts (was 485.0). Apply?",
+    "applied": {
+     "overrides": [],
+     "plans": [
+      {
+       "id": "plan#0",
+       "name": "Athlete 00",
+       "team": "Henderson State University",
+       "gender": "Men",
+       "classYear": "FR",
+       "event": "200 Freestyle",
+       "time": "1:42.00",
+       "source": "manual",
+       "active": true
+      }
+     ],
+     "activeEntryIds": [
+      "plan#0"
+     ]
+    }
+   }
+  }
+ }
+}

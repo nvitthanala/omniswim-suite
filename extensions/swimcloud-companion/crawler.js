@@ -3,6 +3,308 @@
 
 "use strict";
 (() => {
+  // packages/swimcloud/src/html.ts
+  var NAMED_ENTITIES = {
+    amp: "&",
+    lt: "<",
+    gt: ">",
+    quot: '"',
+    apos: "'",
+    nbsp: "\xA0",
+    ndash: "\u2013",
+    mdash: "\u2014",
+    middot: "\xB7",
+    rsquo: "\u2019",
+    lsquo: "\u2018",
+    ldquo: "\u201C",
+    rdquo: "\u201D",
+    ccedil: "\xE7",
+    eacute: "\xE9",
+    aacute: "\xE1",
+    iacute: "\xED",
+    oacute: "\xF3",
+    uacute: "\xFA",
+    ntilde: "\xF1",
+    uuml: "\xFC",
+    ouml: "\xF6",
+    auml: "\xE4"
+  };
+  var ENTITY = /&(#[Xx][0-9A-Fa-f]+|#[0-9]+|[A-Za-z][A-Za-z0-9]*);/g;
+  function decodeHtmlEntities(text) {
+    return text.replace(ENTITY, (whole, body) => {
+      if (body.charAt(0) === "#") {
+        const isHex = body.charAt(1) === "x" || body.charAt(1) === "X";
+        const digits = isHex ? body.slice(2) : body.slice(1);
+        const code = Number.parseInt(digits, isHex ? 16 : 10);
+        if (!Number.isFinite(code) || code <= 0 || code > 1114111) {
+          return whole;
+        }
+        try {
+          return String.fromCodePoint(code);
+        } catch {
+          return whole;
+        }
+      }
+      const named = NAMED_ENTITIES[body.toLowerCase()];
+      return named === void 0 ? whole : named;
+    });
+  }
+  var COMMENT = /<!--[\s\S]*?-->/g;
+  var SCRIPT_OR_STYLE = /<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi;
+  var ANY_TAG = /<\/?[A-Za-z][^>]*>/g;
+  function stripNonContent(html) {
+    return html.replace(COMMENT, " ").replace(SCRIPT_OR_STYLE, " ");
+  }
+  function stripHtmlTags(html) {
+    return html.replace(ANY_TAG, " ");
+  }
+  function collapseWhitespace(text) {
+    return text.replace(/[\s ]+/g, " ").trim();
+  }
+  function htmlToText(html) {
+    return collapseWhitespace(decodeHtmlEntities(stripHtmlTags(stripNonContent(html))));
+  }
+  function spliceOutSpans(source, spans) {
+    if (spans.length === 0) {
+      return source;
+    }
+    let out = "";
+    let index = 0;
+    let cursor = -1;
+    for (const span of spans) {
+      if (span.start < cursor) {
+        continue;
+      }
+      out += source.slice(index, span.start);
+      out += " ";
+      index = span.end;
+      cursor = span.end;
+    }
+    out += source.slice(index);
+    return out;
+  }
+  function tagPattern(tag) {
+    return new RegExp(`<(/?)${tag}\\b[^>]*>`, "gi");
+  }
+  function findElementSpans(html, tag) {
+    const pattern = tagPattern(tag);
+    const stack = [];
+    const found = [];
+    for (let match = pattern.exec(html); match !== null; match = pattern.exec(html)) {
+      const isClose = match[1] === "/";
+      const start = match.index;
+      const after = start + match[0].length;
+      if (isClose) {
+        const open = stack.pop();
+        if (open !== void 0) {
+          found.push({ start: open.start, contentStart: open.contentStart, contentEnd: start, end: after });
+        }
+        continue;
+      }
+      stack.push({ start, contentStart: after });
+    }
+    found.sort((a, b) => a.start - b.start);
+    return found.map((span) => ({
+      html: html.slice(span.start, span.end),
+      inner: html.slice(span.contentStart, span.contentEnd),
+      start: span.start,
+      end: span.end
+    }));
+  }
+  function findTables(html) {
+    return findElementSpans(stripNonContent(html), "table");
+  }
+  var HEADING = /<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1\s*>/gi;
+  function findHeadings(html) {
+    const cleaned = stripNonContent(html);
+    const headings = [];
+    HEADING.lastIndex = 0;
+    for (let match = HEADING.exec(cleaned); match !== null; match = HEADING.exec(cleaned)) {
+      headings.push({
+        level: Number.parseInt(match[1], 10),
+        text: htmlToText(match[2]),
+        start: match.index
+      });
+    }
+    HEADING.lastIndex = 0;
+    return headings;
+  }
+  function extractTableRows(tableHtml) {
+    const flattened = removeNestedTablesFromTableBody(tableHtml);
+    return splitRepeatedElements(flattened, ["tr"]);
+  }
+  function extractRowCells(rowHtml) {
+    return splitRepeatedElements(rowHtml, ["td", "th"]);
+  }
+  function isHeaderRow(rowHtml) {
+    return /<th\b/i.test(rowHtml);
+  }
+  function removeNestedTablesFromTableBody(tableHtml) {
+    const spans = findElementSpans(tableHtml, "table");
+    const body = spans.length > 0 ? spans[0].inner : tableHtml;
+    return spliceOutSpans(body, findElementSpans(body, "table"));
+  }
+  function splitRepeatedElements(html, tagNames) {
+    const alternation = tagNames.join("|");
+    const opener = new RegExp(`<(${alternation})\\b[^>]*>`, "gi");
+    const starts = [];
+    for (let match = opener.exec(html); match !== null; match = opener.exec(html)) {
+      starts.push({ contentStart: match.index + match[0].length, tag: match[1].toLowerCase() });
+    }
+    if (starts.length === 0) {
+      return [];
+    }
+    const results = [];
+    for (let index = 0; index < starts.length; index += 1) {
+      const current = starts[index];
+      const limit = index + 1 < starts.length ? starts[index + 1].contentStart : html.length;
+      const slice = html.slice(current.contentStart, limit);
+      const closer = new RegExp(`</${current.tag}\\s*>`, "i");
+      const closeAt = closer.exec(slice);
+      results.push(closeAt === null ? trimTrailingOpenTag(slice) : slice.slice(0, closeAt.index));
+    }
+    return results;
+  }
+  function trimTrailingOpenTag(slice) {
+    return slice.replace(/<[A-Za-z][^>]*>\s*$/, "");
+  }
+  var HREF = /<a\b[^>]*\bhref\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'>]+))/gi;
+  function extractHrefs(html) {
+    const hrefs = [];
+    HREF.lastIndex = 0;
+    for (let match = HREF.exec(html); match !== null; match = HREF.exec(html)) {
+      const value = match[2] ?? match[3] ?? match[4];
+      if (value !== void 0 && value.length > 0) {
+        hrefs.push(decodeHtmlEntities(value));
+      }
+    }
+    HREF.lastIndex = 0;
+    return hrefs;
+  }
+  function extractListItems(html) {
+    return findElementSpans(html, "li").map((span) => span.inner);
+  }
+
+  // packages/swimcloud/src/teamSeasons.ts
+  var TeamSeasonParseError = class extends Error {
+    code;
+    constructor(code, detail) {
+      super(`parseTeamSeasonOptions: ${code}: ${detail}`);
+      this.name = "TeamSeasonParseError";
+      this.code = code;
+    }
+  };
+  var SEASON_SELECT = /<select\b[^>]*\sname\s*=\s*["']season_id["'][^>]*>([\s\S]*?)<\/select>/gi;
+  var OPTION = /<option\b([^>]*)>([\s\S]*?)<\/option>/gi;
+  var ATTRIBUTE = /(?:^|\s)([^\s=/>"']+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|[^\s"'>]+))?/g;
+  var QUOTED_VALUE = /"[^"]*"|'[^']*'/g;
+  var SELECTED_ATTRIBUTE = /(?:^|\s)selected(?:\s|=|$)/i;
+  var SEASON_LABEL = /^(\d{4})-(\d{4})$/;
+  var SEASON_ID = /^[0-9]+$/;
+  function readValueAttribute(attributes) {
+    for (const match of attributes.matchAll(ATTRIBUTE)) {
+      if (match[1].toLowerCase() !== "value") continue;
+      const quoted = match[2] ?? match[3];
+      if (quoted !== void 0) return quoted;
+    }
+    return void 0;
+  }
+  function readOption(attributes, inner) {
+    const rawValue = readValueAttribute(attributes);
+    if (rawValue === void 0) {
+      throw new TeamSeasonParseError(
+        "option-value-missing",
+        `an <option> has no value attribute: ${JSON.stringify(attributes.trim())}.`
+      );
+    }
+    const value = decodeHtmlEntities(rawValue);
+    const text = collapseWhitespace(decodeHtmlEntities(stripHtmlTags(inner)));
+    const selected = SELECTED_ATTRIBUTE.test(attributes.replace(QUOTED_VALUE, '""'));
+    return { value, text, selected };
+  }
+  function toSeasonOption(raw) {
+    if (!SEASON_ID.test(raw.value)) {
+      throw new TeamSeasonParseError(
+        "season-id-invalid",
+        `option value ${JSON.stringify(raw.value)} (label ${JSON.stringify(raw.text)}) is not a string of digits.`
+      );
+    }
+    const label = SEASON_LABEL.exec(raw.text);
+    if (label === null) {
+      throw new TeamSeasonParseError(
+        "season-label-invalid",
+        `option label ${JSON.stringify(raw.text)} (value ${JSON.stringify(raw.value)}) is not YYYY-YYYY.`
+      );
+    }
+    const startYear = Number(label[1]);
+    const endYear = Number(label[2]);
+    if (endYear !== startYear + 1) {
+      throw new TeamSeasonParseError(
+        "season-label-invalid",
+        `option label ${JSON.stringify(raw.text)} does not span consecutive years.`
+      );
+    }
+    return {
+      seasonId: raw.value,
+      label: raw.text,
+      startYear,
+      endYear,
+      selected: raw.selected
+    };
+  }
+  function parseTeamSeasonOptions(html) {
+    const selects = [...stripNonContent(html).matchAll(SEASON_SELECT)];
+    if (selects.length === 0) {
+      throw new TeamSeasonParseError("season-select-missing", 'the page has no <select name="season_id">.');
+    }
+    if (selects.length > 1) {
+      throw new TeamSeasonParseError(
+        "season-select-ambiguous",
+        `the page has ${selects.length} <select name="season_id"> elements.`
+      );
+    }
+    const options = [];
+    for (const match of selects[0][1].matchAll(OPTION)) {
+      const raw = readOption(match[1], match[2]);
+      if (raw.value === "") continue;
+      options.push(toSeasonOption(raw));
+    }
+    if (options.length === 0) {
+      throw new TeamSeasonParseError(
+        "no-season-options",
+        'the season select holds no option except the empty "All Seasons" one.'
+      );
+    }
+    const ids = /* @__PURE__ */ new Set();
+    const labels = /* @__PURE__ */ new Set();
+    for (const option of options) {
+      if (ids.has(option.seasonId) || labels.has(option.label)) {
+        throw new TeamSeasonParseError(
+          "season-duplicate",
+          `season id ${option.seasonId} or label ${option.label} appears more than once.`
+        );
+      }
+      ids.add(option.seasonId);
+      labels.add(option.label);
+    }
+    if (options.filter((option) => option.selected).length > 1) {
+      throw new TeamSeasonParseError("season-selected-ambiguous", "more than one season option is selected.");
+    }
+    return options;
+  }
+  function resolveSeasonOption(options, label) {
+    return options.find((option) => option.label === label);
+  }
+  function hasTeamSeasonOptionShape(value) {
+    if (typeof value !== "object" || value === null) return false;
+    const v = value;
+    if (typeof v.seasonId !== "string" || !SEASON_ID.test(v.seasonId)) return false;
+    if (typeof v.label !== "string" || typeof v.selected !== "boolean") return false;
+    if (typeof v.startYear !== "number" || typeof v.endYear !== "number") return false;
+    const label = SEASON_LABEL.exec(v.label);
+    return label !== null && Number(label[1]) === v.startYear && Number(label[2]) === v.endYear && v.endYear === v.startYear + 1;
+  }
+
   // packages/swimcloud/src/urlClassifier.ts
   function exemptSwimmerFastestTimesId(lower) {
     if (lower.length !== 4) return void 0;
@@ -502,6 +804,9 @@
   function teamRosterUrl(teamId, gender) {
     return `https://${SWIMCLOUD_CANONICAL_HOST}/team/${teamId}/roster/?gender=${gender}`;
   }
+  function teamSeasonRosterUrl(teamId, gender, seasonId) {
+    return `https://${SWIMCLOUD_CANONICAL_HOST}/team/${teamId}/roster/?page=1&gender=${gender}&season_id=${seasonId}&sort=name`;
+  }
   function swimmerTimesUrl(swimmerId) {
     return `https://${SWIMCLOUD_CANONICAL_HOST}/api/swimmers/${swimmerId}/profile_fastest_times/`;
   }
@@ -579,6 +884,38 @@
     }
     return steps;
   }
+  function planTeamSeasonRoster(input) {
+    const { teamId, season } = input;
+    if (!hasTeamSeasonOptionShape(season)) {
+      throw new Error(
+        `planTeamSeasonRoster: season is not a TeamSeasonOption from parseTeamSeasonOptions: ${JSON.stringify(season)}.`
+      );
+    }
+    return GENDERS.map((gender) => {
+      const canonicalUrl = teamSeasonRosterUrl(teamId, gender, season.seasonId);
+      const classified = classifySwimCloudUrl(canonicalUrl);
+      const ok = classified.outcome === "fetchable" && classified.resource.kind === "teamRoster" && classified.resource.teamId === teamId && classified.resource.query.seasonId === season.seasonId && classified.resource.query.gender === gender && classified.canonicalUrl === canonicalUrl;
+      if (!ok) {
+        throw new Error(`planTeamSeasonRoster: built URL ${canonicalUrl} is not a fetchable team roster URL.`);
+      }
+      return {
+        canonicalUrl,
+        resourceKind: "teamRoster",
+        teamId,
+        seasonId: season.seasonId,
+        gender
+      };
+    });
+  }
+  function planTeamRosterPage(teamId, gender) {
+    const canonicalUrl = teamRosterUrl(teamId, gender);
+    const classified = classifySwimCloudUrl(canonicalUrl);
+    const ok = classified.outcome === "fetchable" && classified.resource.kind === "teamRoster" && classified.resource.teamId === teamId && classified.resource.query.seasonId === void 0 && classified.canonicalUrl === canonicalUrl;
+    if (!ok) {
+      throw new Error(`planTeamRosterPage: built URL ${canonicalUrl} is not a fetchable un-seasoned team roster URL.`);
+    }
+    return { canonicalUrl, resourceKind: "teamRoster", teamId, gender };
+  }
   function planMeetSwimmerTimes(input) {
     const steps = [];
     const seen = /* @__PURE__ */ new Set();
@@ -595,6 +932,18 @@
       });
     }
     return steps;
+  }
+  function planSwimmerFastestTimes(swimmerId) {
+    if (!/^[1-9][0-9]{0,17}$/.test(swimmerId)) {
+      throw new Error(`planSwimmerFastestTimes: swimmer id ${JSON.stringify(swimmerId)} is not a positive integer.`);
+    }
+    const canonicalUrl = swimmerTimesUrl(swimmerId);
+    const classified = classifySwimCloudUrl(canonicalUrl);
+    const ok = classified.outcome === "fetchable" && classified.resource.kind === "swimmerFastestTimes" && classified.canonicalUrl === canonicalUrl;
+    if (!ok) {
+      throw new Error(`planSwimmerFastestTimes: built URL ${canonicalUrl} is not a fetchable swimmer fastest-times URL.`);
+    }
+    return { canonicalUrl, resourceKind: "swimmerFastestTimes", swimmerId };
   }
   var SWIMCLOUD_CRAWL_PASSES = [
     "meetTeamSwims",
@@ -712,188 +1061,6 @@
       /** Asked for by the scope but skipped because a fetch cannot satisfy them. */
       declinedNeedingRenderedDom: scopePassesNeedingRenderedDom(input.scope)
     };
-  }
-
-  // packages/swimcloud/src/html.ts
-  var NAMED_ENTITIES = {
-    amp: "&",
-    lt: "<",
-    gt: ">",
-    quot: '"',
-    apos: "'",
-    nbsp: "\xA0",
-    ndash: "\u2013",
-    mdash: "\u2014",
-    middot: "\xB7",
-    rsquo: "\u2019",
-    lsquo: "\u2018",
-    ldquo: "\u201C",
-    rdquo: "\u201D",
-    ccedil: "\xE7",
-    eacute: "\xE9",
-    aacute: "\xE1",
-    iacute: "\xED",
-    oacute: "\xF3",
-    uacute: "\xFA",
-    ntilde: "\xF1",
-    uuml: "\xFC",
-    ouml: "\xF6",
-    auml: "\xE4"
-  };
-  var ENTITY = /&(#[Xx][0-9A-Fa-f]+|#[0-9]+|[A-Za-z][A-Za-z0-9]*);/g;
-  function decodeHtmlEntities(text) {
-    return text.replace(ENTITY, (whole, body) => {
-      if (body.charAt(0) === "#") {
-        const isHex = body.charAt(1) === "x" || body.charAt(1) === "X";
-        const digits = isHex ? body.slice(2) : body.slice(1);
-        const code = Number.parseInt(digits, isHex ? 16 : 10);
-        if (!Number.isFinite(code) || code <= 0 || code > 1114111) {
-          return whole;
-        }
-        try {
-          return String.fromCodePoint(code);
-        } catch {
-          return whole;
-        }
-      }
-      const named = NAMED_ENTITIES[body.toLowerCase()];
-      return named === void 0 ? whole : named;
-    });
-  }
-  var COMMENT = /<!--[\s\S]*?-->/g;
-  var SCRIPT_OR_STYLE = /<(script|style)\b[^>]*>[\s\S]*?<\/\1\s*>/gi;
-  var ANY_TAG = /<\/?[A-Za-z][^>]*>/g;
-  function stripNonContent(html) {
-    return html.replace(COMMENT, " ").replace(SCRIPT_OR_STYLE, " ");
-  }
-  function stripHtmlTags(html) {
-    return html.replace(ANY_TAG, " ");
-  }
-  function collapseWhitespace(text) {
-    return text.replace(/[\s ]+/g, " ").trim();
-  }
-  function htmlToText(html) {
-    return collapseWhitespace(decodeHtmlEntities(stripHtmlTags(stripNonContent(html))));
-  }
-  function spliceOutSpans(source, spans) {
-    if (spans.length === 0) {
-      return source;
-    }
-    let out = "";
-    let index = 0;
-    let cursor = -1;
-    for (const span of spans) {
-      if (span.start < cursor) {
-        continue;
-      }
-      out += source.slice(index, span.start);
-      out += " ";
-      index = span.end;
-      cursor = span.end;
-    }
-    out += source.slice(index);
-    return out;
-  }
-  function tagPattern(tag) {
-    return new RegExp(`<(/?)${tag}\\b[^>]*>`, "gi");
-  }
-  function findElementSpans(html, tag) {
-    const pattern = tagPattern(tag);
-    const stack = [];
-    const found = [];
-    for (let match = pattern.exec(html); match !== null; match = pattern.exec(html)) {
-      const isClose = match[1] === "/";
-      const start = match.index;
-      const after = start + match[0].length;
-      if (isClose) {
-        const open = stack.pop();
-        if (open !== void 0) {
-          found.push({ start: open.start, contentStart: open.contentStart, contentEnd: start, end: after });
-        }
-        continue;
-      }
-      stack.push({ start, contentStart: after });
-    }
-    found.sort((a, b) => a.start - b.start);
-    return found.map((span) => ({
-      html: html.slice(span.start, span.end),
-      inner: html.slice(span.contentStart, span.contentEnd),
-      start: span.start,
-      end: span.end
-    }));
-  }
-  function findTables(html) {
-    return findElementSpans(stripNonContent(html), "table");
-  }
-  var HEADING = /<h([1-6])\b[^>]*>([\s\S]*?)<\/h\1\s*>/gi;
-  function findHeadings(html) {
-    const cleaned = stripNonContent(html);
-    const headings = [];
-    HEADING.lastIndex = 0;
-    for (let match = HEADING.exec(cleaned); match !== null; match = HEADING.exec(cleaned)) {
-      headings.push({
-        level: Number.parseInt(match[1], 10),
-        text: htmlToText(match[2]),
-        start: match.index
-      });
-    }
-    HEADING.lastIndex = 0;
-    return headings;
-  }
-  function extractTableRows(tableHtml) {
-    const flattened = removeNestedTablesFromTableBody(tableHtml);
-    return splitRepeatedElements(flattened, ["tr"]);
-  }
-  function extractRowCells(rowHtml) {
-    return splitRepeatedElements(rowHtml, ["td", "th"]);
-  }
-  function isHeaderRow(rowHtml) {
-    return /<th\b/i.test(rowHtml);
-  }
-  function removeNestedTablesFromTableBody(tableHtml) {
-    const spans = findElementSpans(tableHtml, "table");
-    const body = spans.length > 0 ? spans[0].inner : tableHtml;
-    return spliceOutSpans(body, findElementSpans(body, "table"));
-  }
-  function splitRepeatedElements(html, tagNames) {
-    const alternation = tagNames.join("|");
-    const opener = new RegExp(`<(${alternation})\\b[^>]*>`, "gi");
-    const starts = [];
-    for (let match = opener.exec(html); match !== null; match = opener.exec(html)) {
-      starts.push({ contentStart: match.index + match[0].length, tag: match[1].toLowerCase() });
-    }
-    if (starts.length === 0) {
-      return [];
-    }
-    const results = [];
-    for (let index = 0; index < starts.length; index += 1) {
-      const current = starts[index];
-      const limit = index + 1 < starts.length ? starts[index + 1].contentStart : html.length;
-      const slice = html.slice(current.contentStart, limit);
-      const closer = new RegExp(`</${current.tag}\\s*>`, "i");
-      const closeAt = closer.exec(slice);
-      results.push(closeAt === null ? trimTrailingOpenTag(slice) : slice.slice(0, closeAt.index));
-    }
-    return results;
-  }
-  function trimTrailingOpenTag(slice) {
-    return slice.replace(/<[A-Za-z][^>]*>\s*$/, "");
-  }
-  var HREF = /<a\b[^>]*\bhref\s*=\s*("([^"]*)"|'([^']*)'|([^\s"'>]+))/gi;
-  function extractHrefs(html) {
-    const hrefs = [];
-    HREF.lastIndex = 0;
-    for (let match = HREF.exec(html); match !== null; match = HREF.exec(html)) {
-      const value = match[2] ?? match[3] ?? match[4];
-      if (value !== void 0 && value.length > 0) {
-        hrefs.push(decodeHtmlEntities(value));
-      }
-    }
-    HREF.lastIndex = 0;
-    return hrefs;
-  }
-  function extractListItems(html) {
-    return findElementSpans(html, "li").map((span) => span.inner);
   }
 
   // packages/swimcloud/src/parser.ts
@@ -1123,7 +1290,7 @@
     return null;
   }
   var ROSTER_SEASON_HEADING = /^season\b\s*(.*)$/i;
-  var SEASON_LABEL = /^\d{4}-\d{4}$/;
+  var SEASON_LABEL2 = /^\d{4}-\d{4}$/;
   function findSeasonCardHeading(cleaned) {
     return findElementSpans(cleaned, "h2").find(
       (h) => classTokens(startTagOf(h.html)).includes("c-title") && ROSTER_SEASON_HEADING.test(htmlToText(h.inner).trim())
@@ -1162,7 +1329,7 @@
     if (rest.length === 0) {
       return gender === void 0 ? {} : { gender };
     }
-    if (!SEASON_LABEL.test(rest)) {
+    if (!SEASON_LABEL2.test(rest)) {
       warnings.push({
         code: "unrecognized-season-label",
         message: `Roster heading season label ${JSON.stringify(rest)} is not the YYYY-YYYY shape; no season recorded.`,
@@ -2468,101 +2635,27 @@
     return { started, notStarted: items.length - started, peakInFlight };
   }
 
-  // extensions/swimcloud-companion/src/rateLimitBackoff.ts
-  var RATE_LIMITED_STATUS = 429;
-  var MAX_RATE_LIMIT_RETRIES = 3;
-  var BASE_BACKOFF_MS = 3e3;
-  var MAX_BACKOFF_MS = 6e4;
-  function parseRetryAfterMs(header, nowMs) {
-    if (header === null || header === void 0) return void 0;
-    const trimmed = header.trim();
-    if (trimmed.length === 0) return void 0;
-    if (/^\d+$/.test(trimmed)) {
-      return Number(trimmed) * 1e3;
-    }
-    if (!/[a-z]/i.test(trimmed)) return void 0;
-    const at = Date.parse(trimmed);
-    if (Number.isNaN(at)) return void 0;
-    return Math.max(0, at - nowMs);
-  }
-  function decideRateLimitRetry(attempt, retryAfterHeader, nowMs) {
-    if (attempt >= MAX_RATE_LIMIT_RETRIES + 1) {
-      return {
-        action: "give-up",
-        reason: `SwimCloud rate-limited this page ${attempt} times. It is recorded as not served rather than retried further.`
-      };
-    }
-    const fromHeader = parseRetryAfterMs(retryAfterHeader, nowMs);
-    if (fromHeader !== void 0) {
-      if (fromHeader > MAX_BACKOFF_MS) {
-        return {
-          action: "give-up",
-          reason: `SwimCloud asked for a ${Math.round(fromHeader / 1e3)}s wait, which is longer than this crawl will hold for one page. It is recorded as not served.`
-        };
-      }
-      return { action: "retry", waitMs: Math.max(BASE_BACKOFF_MS, fromHeader), fromRetryAfter: true };
-    }
-    const backoff = BASE_BACKOFF_MS * 2 ** (attempt - 1);
-    return { action: "retry", waitMs: Math.min(MAX_BACKOFF_MS, backoff), fromRetryAfter: false };
-  }
-  function formatRateLimitWaitLine(url, decision) {
-    if (decision.action === "give-up") return decision.reason;
-    const seconds = Math.round(decision.waitMs / 1e3);
-    const source = decision.fromRetryAfter ? "SwimCloud asked for" : "backing off";
-    return `Rate-limited on ${url} \u2014 ${source} ${seconds}s, then retrying. The crawl has not stalled.`;
+  // extensions/swimcloud-companion/src/crawlPacing.ts
+  var MIN_DELAY_MS = 3e3;
+
+  // extensions/swimcloud-companion/src/crawlLock.ts
+  var CRAWL_LOCK_NAME = "omniswim-swimcloud-crawl";
+  var CRAWL_LOCK_HELD_MESSAGE = "Another SwimCloud crawl is running (in this tab or another). Wait for it to finish, or close it, then try again. Two crawls at once would break the pacing.";
+  var CRAWL_LOCK_UNAVAILABLE_MESSAGE = "This browser cannot check whether another crawl is running, so the crawl does not start. Use a current version of Chrome.";
+  async function withCrawlLock(locks, run) {
+    if (locks === void 0) return { acquired: false, reason: "unavailable", message: CRAWL_LOCK_UNAVAILABLE_MESSAGE };
+    return locks.request(CRAWL_LOCK_NAME, { ifAvailable: true }, async (lock) => {
+      if (lock === null || lock === void 0) return { acquired: false, reason: "held", message: CRAWL_LOCK_HELD_MESSAGE };
+      return { acquired: true, value: await run() };
+    });
   }
 
-  // extensions/swimcloud-companion/src/timesEndpointDiscovery.ts
-  var SWIMMER_ID_PLACEHOLDER = "{swimmerId}";
-  var SWIMCLOUD_HOSTS = /* @__PURE__ */ new Set(["www.swimcloud.com", "swimcloud.com"]);
-  var DATA_INITIATORS = /* @__PURE__ */ new Set(["fetch", "xmlhttprequest"]);
-  var ASSET_SUFFIX = /\.(?:js|mjs|css|png|jpe?g|gif|svg|webp|woff2?|ttf|eot|ico|map)$/i;
-  function discoverSwimmerTimesEndpoints(entries, swimmerId) {
-    if (swimmerId.length === 0) return [];
-    const out = [];
-    const seen = /* @__PURE__ */ new Set();
-    for (const entry of entries) {
-      if (!DATA_INITIATORS.has(entry.initiatorType)) continue;
-      let parsed;
-      try {
-        parsed = new URL(entry.name);
-      } catch {
-        continue;
-      }
-      if (!SWIMCLOUD_HOSTS.has(parsed.host)) continue;
-      if (ASSET_SUFFIX.test(parsed.pathname)) continue;
-      if (!entry.name.includes(swimmerId)) continue;
-      if (seen.has(entry.name)) continue;
-      seen.add(entry.name);
-      out.push({
-        url: entry.name,
-        template: entry.name.split(swimmerId).join(SWIMMER_ID_PLACEHOLDER),
-        initiatorType: entry.initiatorType
-      });
+  // packages/swimcloud/src/entities.ts
+  function captureIdForSubject(subject) {
+    if (subject.kind === "meet") {
+      return `meet-${subject.meetId}`;
     }
-    return out;
-  }
-  function swimmerTimesEndpointReport(observation) {
-    const lines = [
-      "SwimCloud swimmer-times endpoint observation",
-      `page:        ${observation.pageUrl}`,
-      `swimmer id:  ${observation.swimmerId}`,
-      ...observation.seasonIds === void 0 ? [] : [`season ids:  ${observation.seasonIds}`],
-      `requests seen: ${observation.entriesSeen}`,
-      ""
-    ];
-    if (observation.candidates.length === 0) {
-      lines.push(
-        observation.entriesSeen === 0 ? "No resource timing entries were recorded. The page may have loaded before the extension, or the buffer was cleared \u2014 reload the page with the extension already installed." : "No request to SwimCloud carried this swimmer's id. The page may pass the id in a POST body, which resource timing cannot show. Read the Network tab directly and send the request URL plus its payload."
-      );
-      return lines.join("\n");
-    }
-    lines.push(`${observation.candidates.length} candidate request(s):`);
-    for (const candidate of observation.candidates) {
-      lines.push(`  [${candidate.initiatorType}] ${candidate.url}`);
-      lines.push(`      template: ${candidate.template}`);
-    }
-    return lines.join("\n");
+    return subject.season === void 0 ? `team-${subject.teamId}` : `team-${subject.teamId}-${subject.season}`;
   }
 
   // extensions/swimcloud-companion/src/swimmerTimes.ts
@@ -2611,55 +2704,1347 @@
     return { action: "record-and-continue" };
   }
 
-  // extensions/swimcloud-companion/src/eventResults.ts
-  var EVENT_RESULTS_CONCURRENCY = 1;
-  var EVENT_RESULTS_STAGGER_MS = 3e3;
-  function planEventResultsSteps(meetId, swimsPages, indexEventRefs = []) {
-    const collected = collectEventRefs(swimsPages);
-    const deduplicatedIndexRefs = [...new Set(indexEventRefs)];
-    return {
-      steps: planMeetEventResults({
-        meetId,
-        eventRefs: [...deduplicatedIndexRefs, ...collected.eventRefs]
-      }),
-      swimsSeen: collected.swimsSeen,
-      withoutEventRef: collected.withoutEventRef,
-      duplicates: collected.duplicates,
-      fromEventIndex: deduplicatedIndexRefs.length
-    };
-  }
-  function collectEventRefs(swimsPages) {
-    const seen = /* @__PURE__ */ new Set();
-    const eventRefs = [];
-    let swimsSeen = 0;
-    let withoutEventRef = 0;
-    let duplicates = 0;
-    for (const page of swimsPages) {
-      for (const swim of page) {
-        swimsSeen += 1;
-        const eventRef = swim.event.eventRef;
-        if (eventRef === void 0 || eventRef.length === 0) {
-          withoutEventRef += 1;
-          continue;
-        }
-        if (seen.has(eventRef)) {
-          duplicates += 1;
-          continue;
-        }
-        seen.add(eventRef);
-        eventRefs.push(eventRef);
-      }
+  // extensions/swimcloud-companion/src/multiTeamQueue.ts
+  var MULTI_TEAM_DEFAULT_CONCURRENCY = SWIMMER_TIMES_CONCURRENCY;
+  var NUMERIC_ID2 = /^[1-9][0-9]{0,17}$/;
+  var MultiTeamQueueError = class extends Error {
+    code;
+    constructor(code, detail) {
+      super(`multiTeamQueue: ${code}: ${detail}`);
+      this.name = "MultiTeamQueueError";
+      this.code = code;
     }
-    return { eventRefs, swimsSeen, withoutEventRef, duplicates };
+  };
+  function swimmerWorkKey(swimmerId) {
+    return `swimmer|${swimmerId}`;
   }
-  function classifyEventResultsOutcome(outcome) {
-    if (outcome.kind === "http-status" && outcome.httpStatus === 403) {
+  function swimmerResumeKey(swimmerId, teamId, seasonId) {
+    return `swimmer|${swimmerId}|${teamId}|${seasonId}`;
+  }
+  function rosterWorkKey(teamId, seasonId, gender) {
+    return `roster|${teamId}|${seasonId}|${gender}`;
+  }
+  function checkConcurrency(value) {
+    if (!Number.isInteger(value) || value < 1) {
+      throw new MultiTeamQueueError("invalid-concurrency", `${String(value)} is not a positive integer.`);
+    }
+    if (value > SWIMMER_TIMES_CONCURRENCY) {
+      throw new MultiTeamQueueError(
+        "concurrency-too-high",
+        `${value} is above the swimmer-times limit of ${SWIMMER_TIMES_CONCURRENCY}. Roster pages never overlap, and only swimmer fetches may.`
+      );
+    }
+    return value;
+  }
+  function buildTeam2(input) {
+    if (!NUMERIC_ID2.test(input.teamId)) {
+      throw new MultiTeamQueueError("invalid-team", `team id ${JSON.stringify(input.teamId)} is not a positive integer.`);
+    }
+    const season = resolveSeasonOption(input.seasonOptions, input.seasonLabel);
+    if (season === void 0) {
       return {
-        action: "record-and-stop-phase",
-        message: "SwimCloud returned a challenge on an event results page. Stopping the event-results pass; the meet results already captured are unaffected, but prelims and finals cannot be told apart for the events not yet fetched. Open the page in a tab, pass the challenge, then Retry."
+        team: {
+          teamId: input.teamId,
+          seasonLabel: input.seasonLabel,
+          state: { kind: "season-unavailable", availableLabels: input.seasonOptions.map((o) => o.label) },
+          swimmersListedFor: []
+        },
+        rosters: []
       };
     }
-    return { action: "record-and-continue" };
+    const rosters = planTeamSeasonRoster({ teamId: input.teamId, season }).map((step) => ({
+      status: "pending",
+      work: {
+        kind: "roster",
+        key: rosterWorkKey(step.teamId, step.seasonId, step.gender),
+        teamId: step.teamId,
+        seasonId: step.seasonId,
+        seasonLabel: season.label,
+        gender: step.gender,
+        canonicalUrl: step.canonicalUrl
+      }
+    }));
+    return {
+      team: { teamId: input.teamId, seasonLabel: input.seasonLabel, state: { kind: "ready", season }, swimmersListedFor: [] },
+      rosters
+    };
+  }
+  function createQueue(input) {
+    const concurrency = checkConcurrency(input.concurrency ?? MULTI_TEAM_DEFAULT_CONCURRENCY);
+    const seen = /* @__PURE__ */ new Set();
+    const teams = [];
+    const entries = [];
+    for (const teamInput of input.teams) {
+      if (seen.has(teamInput.teamId)) {
+        throw new MultiTeamQueueError("duplicate-team", `team ${teamInput.teamId} is listed more than once.`);
+      }
+      seen.add(teamInput.teamId);
+      const built = buildTeam2(teamInput);
+      teams.push(built.team);
+      entries.push(...built.rosters);
+    }
+    return {
+      concurrency,
+      paused: false,
+      cancelled: false,
+      teams,
+      entries,
+      finishedKeys: new Set(input.finishedKeys ?? [])
+    };
+  }
+  function addSwimmers(queue, teamId, gender, swimmerIds) {
+    const team = queue.teams.find((t) => t.teamId === teamId);
+    if (team === void 0) {
+      throw new MultiTeamQueueError("unknown-team", `team ${teamId} is not in this queue.`);
+    }
+    if (team.state.kind !== "ready") {
+      throw new MultiTeamQueueError("season-unavailable", `team ${teamId} has no season ${team.seasonLabel}, so it gets no work.`);
+    }
+    const season = team.state.season;
+    const pair = { teamId, seasonId: season.seasonId, seasonLabel: season.label };
+    const entries = [...queue.entries];
+    const indexByKey = new Map(entries.map((e, i) => [e.work.key, i]));
+    for (const swimmerId of swimmerIds) {
+      if (!NUMERIC_ID2.test(swimmerId)) {
+        throw new MultiTeamQueueError("invalid-swimmer-id", `swimmer id ${JSON.stringify(swimmerId)} is not a positive integer.`);
+      }
+      const key = swimmerWorkKey(swimmerId);
+      const existingIndex = indexByKey.get(key);
+      const pairKey = swimmerResumeKey(swimmerId, teamId, season.seasonId);
+      if (existingIndex === void 0) {
+        indexByKey.set(key, entries.length);
+        entries.push({
+          status: queue.finishedKeys.has(pairKey) ? "skipped-resumed" : "pending",
+          work: { kind: "swimmer", key, teamId, seasonId: season.seasonId, seasonLabel: season.label, swimmerId, attributions: [pair] }
+        });
+        continue;
+      }
+      const existing = entries[existingIndex];
+      if (existing.work.kind !== "swimmer") continue;
+      const known = existing.work.attributions.some((a) => a.teamId === teamId && a.seasonId === season.seasonId);
+      if (known) continue;
+      const status = existing.status === "skipped-resumed" && !queue.finishedKeys.has(pairKey) ? "pending" : existing.status;
+      entries[existingIndex] = { ...existing, status, work: { ...existing.work, attributions: [...existing.work.attributions, pair] } };
+    }
+    const listed = team.swimmersListedFor.includes(gender) ? team.swimmersListedFor : [...team.swimmersListedFor, gender];
+    return {
+      ...queue,
+      teams: queue.teams.map((t) => t === team ? { ...t, swimmersListedFor: listed } : t),
+      entries
+    };
+  }
+  function countStatus(queue, status) {
+    return queue.entries.filter((e) => e.status === status).length;
+  }
+  function withStatus(queue, index, entry) {
+    return { ...queue, entries: queue.entries.map((e, i) => i === index ? entry : e) };
+  }
+  function firstPendingIndex(queue) {
+    const roster = queue.entries.findIndex((e) => e.status === "pending" && e.work.kind === "roster");
+    if (roster !== -1) return roster;
+    return queue.entries.findIndex((e) => e.status === "pending");
+  }
+  function idle(queue, reason) {
+    return { kind: "idle", queue, reason };
+  }
+  function nextWork(queue) {
+    if (queue.cancelled) return idle(queue, "cancelled");
+    if (queue.halt !== void 0) return idle(queue, "halted");
+    if (queue.paused) return idle(queue, "paused");
+    const inFlight = countStatus(queue, "in-flight");
+    const index = firstPendingIndex(queue);
+    if (index === -1) return idle(queue, inFlight > 0 ? "waiting-for-in-flight" : "drained");
+    if (inFlight >= queue.concurrency) return idle(queue, "at-concurrency-limit");
+    const entry = queue.entries[index];
+    const rosterInFlight = queue.entries.some((e) => e.status === "in-flight" && e.work.kind === "roster");
+    if (rosterInFlight || entry.work.kind === "roster" && inFlight > 0) return idle(queue, "at-concurrency-limit");
+    return { kind: "work", queue: withStatus(queue, index, { work: entry.work, status: "in-flight" }), work: entry.work };
+  }
+  function inFlightIndex(queue, key) {
+    const index = queue.entries.findIndex((e) => e.work.key === key);
+    if (index === -1) throw new MultiTeamQueueError("unknown-key", `no work has key ${key}.`);
+    if (queue.entries[index].status !== "in-flight") {
+      throw new MultiTeamQueueError("not-in-flight", `work ${key} is ${queue.entries[index].status}, not in-flight.`);
+    }
+    return index;
+  }
+  function markDone(queue, key) {
+    const index = inFlightIndex(queue, key);
+    return withStatus(queue, index, { work: queue.entries[index].work, status: "done" });
+  }
+  function markFailed(queue, key, message, options = {}) {
+    const index = inFlightIndex(queue, key);
+    const next = withStatus(queue, index, { work: queue.entries[index].work, status: "failed", error: message });
+    if (options.haltQueue !== true) return next;
+    const halt = queue.halt === void 0 ? { message, keys: [key] } : { message: queue.halt.message, keys: [...queue.halt.keys, key] };
+    return { ...next, halt };
+  }
+  function retryFailed(queue, key) {
+    const index = queue.entries.findIndex((e) => e.work.key === key);
+    if (index === -1) throw new MultiTeamQueueError("unknown-key", `no work has key ${key}.`);
+    if (queue.entries[index].status !== "failed") {
+      throw new MultiTeamQueueError("not-failed", `work ${key} is ${queue.entries[index].status}, not failed.`);
+    }
+    return withStatus(queue, index, { work: queue.entries[index].work, status: "pending" });
+  }
+  function pauseQueue(queue) {
+    return queue.cancelled ? queue : { ...queue, paused: true };
+  }
+  function resumeQueue(queue) {
+    if (queue.cancelled) return queue;
+    const { halt, ...rest } = queue;
+    let resumed = { ...rest, paused: false };
+    for (const key of halt?.keys ?? []) {
+      const entry = resumed.entries.find((e) => e.work.key === key);
+      if (entry?.status === "failed") resumed = retryFailed(resumed, key);
+    }
+    return resumed;
+  }
+  function cancelQueue(queue) {
+    return { ...queue, cancelled: true };
+  }
+  function finishedSwimmerKeys(queue) {
+    return queue.entries.flatMap(
+      (e) => e.work.kind === "swimmer" && (e.status === "done" || e.status === "skipped-resumed") ? e.work.attributions.map((a) => swimmerResumeKey(e.work.kind === "swimmer" ? e.work.swimmerId : "", a.teamId, a.seasonId)) : []
+    );
+  }
+  function counts(entries) {
+    const of = (status) => entries.filter((e) => e.status === status).length;
+    return {
+      total: entries.length,
+      pending: of("pending"),
+      inFlight: of("in-flight"),
+      done: of("done"),
+      failed: of("failed"),
+      skippedResumed: of("skipped-resumed")
+    };
+  }
+  function isForTeam(entry, teamId) {
+    return entry.work.kind === "swimmer" ? entry.work.attributions.some((a) => a.teamId === teamId) : entry.work.teamId === teamId;
+  }
+  function entryErrorLine(team, entry) {
+    const subject = entry.work.kind === "roster" ? `${entry.work.gender === "M" ? "men" : "women"}'s roster` : `swimmer ${entry.work.swimmerId}`;
+    return `Team ${team.teamId} \xB7 ${team.seasonLabel} \xB7 ${subject}: ${entry.error ?? "failed"}`;
+  }
+  function teamStatus(rosters, swimmers, awaitingSwimmerList) {
+    const started = rosters.inFlight + rosters.done + rosters.failed + swimmers.inFlight + swimmers.done + swimmers.failed > 0;
+    const open = rosters.pending + rosters.inFlight + swimmers.pending + swimmers.inFlight > 0 || awaitingSwimmerList;
+    if (open) return started ? "running" : "queued";
+    return rosters.failed + swimmers.failed > 0 ? "done-with-errors" : "done";
+  }
+  function teamProgress(queue, team) {
+    if (team.state.kind === "season-unavailable") {
+      const labels = team.state.availableLabels;
+      const offered = labels.length === 0 ? "none read from this team's page" : labels.join(", ");
+      return {
+        teamId: team.teamId,
+        seasonLabel: team.seasonLabel,
+        status: "season-unavailable",
+        availableLabels: labels,
+        rosters: counts([]),
+        swimmers: counts([]),
+        errorLines: [`Team ${team.teamId} \xB7 season ${team.seasonLabel} is not offered on this team's page. Available: ${offered}. Nothing is fetched for this team.`]
+      };
+    }
+    const mine = queue.entries.filter((e) => isForTeam(e, team.teamId));
+    const rosterEntries = mine.filter((e) => e.work.kind === "roster");
+    const swimmerEntries = mine.filter((e) => e.work.kind === "swimmer");
+    const rosters = counts(rosterEntries);
+    const swimmers = counts(swimmerEntries);
+    const awaitingSwimmerList = rosterEntries.some(
+      (e) => e.status === "done" && e.work.kind === "roster" && !team.swimmersListedFor.includes(e.work.gender)
+    );
+    return {
+      teamId: team.teamId,
+      seasonLabel: team.seasonLabel,
+      seasonId: team.state.season.seasonId,
+      status: teamStatus(rosters, swimmers, awaitingSwimmerList),
+      rosters,
+      swimmers,
+      errorLines: mine.filter((e) => e.status === "failed").map((e) => entryErrorLine(team, e))
+    };
+  }
+  function queueProgress(queue) {
+    return {
+      concurrency: queue.concurrency,
+      inFlight: countStatus(queue, "in-flight"),
+      paused: queue.paused,
+      cancelled: queue.cancelled,
+      ...queue.halt === void 0 ? {} : { haltMessage: queue.halt.message },
+      teams: queue.teams.map((team) => teamProgress(queue, team))
+    };
+  }
+  function verifyRosterSeason(html, work) {
+    let selected;
+    try {
+      selected = parseTeamSeasonOptions(html).filter((option) => option.selected);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      return { ok: false, reason: `The roster page's season list could not be read, so its season is not verified: ${detail}` };
+    }
+    if (selected.length === 0) {
+      return { ok: false, reason: `The roster page selects no season. It was asked for season ${work.seasonLabel} (id ${work.seasonId}).` };
+    }
+    const shown = selected[0];
+    if (shown.seasonId !== work.seasonId) {
+      return {
+        ok: false,
+        reason: `The roster page shows season ${shown.label} (id ${shown.seasonId}). It was asked for season ${work.seasonLabel} (id ${work.seasonId}).`
+      };
+    }
+    return { ok: true };
+  }
+  var CONSECUTIVE_429_HALT = 3;
+  function shouldHalt(outcome, recent429Count) {
+    if (!Number.isInteger(recent429Count) || recent429Count < 0) {
+      throw new MultiTeamQueueError("invalid-429-count", `${String(recent429Count)} is not a non-negative integer.`);
+    }
+    const policy = classifyCrawlPageOutcome(outcome);
+    if (policy.action === "stop") return policy;
+    if (outcome.kind === "http-status" && outcome.httpStatus === 429 && recent429Count + 1 >= CONSECUTIVE_429_HALT) {
+      return {
+        action: "stop",
+        retryable: true,
+        message: `SwimCloud rate-limited ${CONSECUTIVE_429_HALT} pages in a row. Wait a while, then Resume.`
+      };
+    }
+    return policy;
+  }
+
+  // extensions/swimcloud-companion/src/rateLimitBackoff.ts
+  var RATE_LIMITED_STATUS = 429;
+  var MAX_RATE_LIMIT_RETRIES = 3;
+  var BASE_BACKOFF_MS = 3e3;
+  var MAX_BACKOFF_MS = 6e4;
+  function parseRetryAfterMs(header, nowMs) {
+    if (header === null || header === void 0) return void 0;
+    const trimmed = header.trim();
+    if (trimmed.length === 0) return void 0;
+    if (/^\d+$/.test(trimmed)) {
+      return Number(trimmed) * 1e3;
+    }
+    if (!/[a-z]/i.test(trimmed)) return void 0;
+    const at = Date.parse(trimmed);
+    if (Number.isNaN(at)) return void 0;
+    return Math.max(0, at - nowMs);
+  }
+  function decideRateLimitRetry(attempt, retryAfterHeader, nowMs) {
+    if (attempt >= MAX_RATE_LIMIT_RETRIES + 1) {
+      return {
+        action: "give-up",
+        reason: `SwimCloud rate-limited this page ${attempt} times. It is recorded as not served rather than retried further.`
+      };
+    }
+    const fromHeader = parseRetryAfterMs(retryAfterHeader, nowMs);
+    if (fromHeader !== void 0) {
+      if (fromHeader > MAX_BACKOFF_MS) {
+        return {
+          action: "give-up",
+          reason: `SwimCloud asked for a ${Math.round(fromHeader / 1e3)}s wait, which is longer than this crawl will hold for one page. It is recorded as not served.`
+        };
+      }
+      return { action: "retry", waitMs: Math.max(BASE_BACKOFF_MS, fromHeader), fromRetryAfter: true };
+    }
+    const backoff = BASE_BACKOFF_MS * 2 ** (attempt - 1);
+    return { action: "retry", waitMs: Math.min(MAX_BACKOFF_MS, backoff), fromRetryAfter: false };
+  }
+  function formatRateLimitWaitLine(url, decision) {
+    if (decision.action === "give-up") return decision.reason;
+    const seconds = Math.round(decision.waitMs / 1e3);
+    const source = decision.fromRetryAfter ? "SwimCloud asked for" : "backing off";
+    return `Rate-limited on ${url} \u2014 ${source} ${seconds}s, then retrying. The crawl has not stalled.`;
+  }
+
+  // extensions/swimcloud-companion/src/multiTeamDriver.ts
+  var PAUSE_POLL_MS = 250;
+  var MultiTeamDriverError = class extends Error {
+    code;
+    constructor(code, detail) {
+      super(`multiTeamDriver: ${code}: ${detail}`);
+      this.name = "MultiTeamDriverError";
+      this.code = code;
+    }
+  };
+  function urlIsFetchable(url, expected) {
+    const classified = classifySwimCloudUrl(url);
+    return classified.outcome === "fetchable" && classified.resource.kind === expected;
+  }
+  function assertFetchableUrl(url, expected) {
+    const classified = classifySwimCloudUrl(url);
+    if (classified.outcome !== "fetchable") {
+      throw new MultiTeamDriverError("denylisted-url", `${url} classifies as ${classified.outcome}; it is not fetched.`);
+    }
+    if (classified.resource.kind !== expected) {
+      throw new MultiTeamDriverError("denylisted-url", `${url} is a ${classified.resource.kind} URL, not a ${expected} URL; it is not fetched.`);
+    }
+  }
+  function teamSubject(teamId, seasonLabel) {
+    return seasonLabel === void 0 ? { kind: "team", teamId } : { kind: "team", teamId, season: seasonLabel };
+  }
+  function compareTeamIds(a, b) {
+    return a.length !== b.length ? a.length - b.length : a < b ? -1 : a > b ? 1 : 0;
+  }
+  function resumeKeyForChoices(reports, choices) {
+    const pairs = [];
+    for (const choice of choices) {
+      const options = reports.find((r) => r.teamId === choice.teamId)?.options;
+      const season = options === void 0 ? void 0 : resolveSeasonOption(options, choice.seasonLabel);
+      if (season !== void 0) pairs.push({ teamId: choice.teamId, seasonId: season.seasonId });
+    }
+    pairs.sort((a, b) => compareTeamIds(a.teamId, b.teamId) || compareTeamIds(a.seasonId, b.seasonId));
+    return pairs.map((p) => `${p.teamId}:${p.seasonId}`).join(",");
+  }
+  function capturePagesComplete(input) {
+    return input.teamDone && input.planned !== void 0 && input.landedThisRun + input.resumedProven >= input.planned;
+  }
+  function isOkStatus(status) {
+    return status >= 200 && status < 300;
+  }
+  function looksLikeJson(body) {
+    try {
+      const parsed = JSON.parse(body);
+      return typeof parsed === "object" && parsed !== null;
+    } catch {
+      return false;
+    }
+  }
+  function looksLikeChallengePage(html) {
+    if (/<title>\s*Just a moment/i.test(html)) return true;
+    try {
+      parseTeamSeasonOptions(html);
+      return false;
+    } catch (error) {
+      return error instanceof TeamSeasonParseError && error.code === "season-select-missing";
+    }
+  }
+  function normalizedUrl(url) {
+    try {
+      const parsed = new URL(url);
+      const query = [...parsed.searchParams.entries()].map(([k, v]) => `${k}=${v}`).sort().join("&");
+      return `${parsed.protocol}//${parsed.host}${parsed.pathname.replace(/\/+$/, "").toLowerCase()}?${query}`.toLowerCase();
+    } catch {
+      return void 0;
+    }
+  }
+  var CHALLENGE_TEXT = "SwimCloud returned a challenge. Open the page in a tab, pass the check, then start the crawl again. Finished swimmers are skipped.";
+  function restartText(message) {
+    return message.replace(/Open the page in a tab, pass it, then Resume\./, "Open the page in a tab, pass the check, then start the crawl again. Finished swimmers are skipped.").replace(/Retry once, or Cancel to keep what was already captured\./, "Start the crawl again later. What was already captured is kept.").replace(/Resume when the connection is back\./, "Start the crawl again when the connection is back.").replace(/Wait a while, then Resume\./, "Wait a while, then start the crawl again.");
+  }
+  var OPEN_FAILED_TEXT = "The Omniswim app did not open a capture for this crawl, so its pages would not be saved. Check that the app is running and the pairing token is saved in the extension's options, then start the crawl again.";
+  var NOT_HANDED_TEXT = "not handed to the app, so it is not counted as finished";
+  var RELAY_STREAK_TEXT = "Several pages in a row could not be handed to the Omniswim app. Start the crawl again when it is reachable.";
+  var NOT_JSON_TEXT = "SwimCloud answered the swimmer-times request with a page that is not JSON. Refresh your SwimCloud session in this tab, then start the crawl again.";
+  function genderWord(gender) {
+    return gender === "M" ? "men's" : "women's";
+  }
+  async function runMultiTeamCrawl(deps, input) {
+    const seenTeams = /* @__PURE__ */ new Set();
+    for (const teamId of input.teamIds) {
+      if (seenTeams.has(teamId)) throw new MultiTeamDriverError("duplicate-team", `team ${teamId} is listed more than once.`);
+      seenTeams.add(teamId);
+    }
+    const { control } = deps;
+    const requestedUrls = [];
+    const seasonReports = [];
+    const teamNotes = /* @__PURE__ */ new Map();
+    const usedSubjects = /* @__PURE__ */ new Map();
+    const optionsLanded = /* @__PURE__ */ new Map();
+    const rosterNames = /* @__PURE__ */ new Map();
+    const landedPages = /* @__PURE__ */ new Map();
+    const plannedBySubject = /* @__PURE__ */ new Map();
+    const notesFor = (teamId) => {
+      let notes = teamNotes.get(teamId);
+      if (notes === void 0) {
+        notes = { rosterRowsWithoutSwimmerId: 0, emptyRosterGenders: [] };
+        teamNotes.set(teamId, notes);
+      }
+      return notes;
+    };
+    let phase = "reading-seasons";
+    let readingTeamId;
+    let queue;
+    let notice;
+    let haltMessage;
+    let recent429 = 0;
+    let choiceAsked = false;
+    let plannedCorrected = false;
+    let runKey = "";
+    const emit = () => {
+      deps.onProgress({
+        phase,
+        ...readingTeamId === void 0 ? {} : { readingTeamId },
+        seasonReports: [...seasonReports],
+        ...queue === void 0 ? {} : { queue: queueProgress(queue) },
+        ...notice === void 0 ? {} : { notice },
+        ...haltMessage === void 0 ? {} : { haltMessage }
+      });
+    };
+    function currentQueue() {
+      if (queue === void 0) throw new MultiTeamDriverError("queue-invariant", "no queue.");
+      return queue;
+    }
+    const gate = async () => {
+      if (control.paused && !control.cancelled) {
+        if (queue !== void 0) {
+          queue = pauseQueue(queue);
+          emit();
+        }
+        while (control.paused && !control.cancelled) await deps.sleep(PAUSE_POLL_MS);
+        if (queue !== void 0 && !control.cancelled) {
+          queue = resumeQueue(queue);
+          emit();
+        }
+      }
+      return !control.cancelled;
+    };
+    const paceWait = async (gapMs) => {
+      if (!await gate()) return false;
+      const last = deps.paceClock.get();
+      if (last === void 0) return true;
+      const elapsed = deps.now() - last;
+      if (elapsed >= gapMs) return true;
+      await deps.sleep(gapMs - elapsed);
+      return gate();
+    };
+    const fetchPaced = async (url, expected, gapMs) => {
+      assertFetchableUrl(url, expected);
+      let attempt = 0;
+      for (; ; ) {
+        attempt += 1;
+        if (!await paceWait(gapMs)) return { page: void 0, aborted: true };
+        deps.paceClock.set(deps.now());
+        requestedUrls.push(url);
+        const page = await deps.fetchPage(url);
+        if (page === void 0 || page.httpStatus !== RATE_LIMITED_STATUS) return { page, aborted: false };
+        const decision = decideRateLimitRetry(attempt, page.retryAfter, deps.now());
+        notice = formatRateLimitWaitLine(url, decision);
+        emit();
+        if (decision.action === "give-up") return { page, aborted: false };
+        if (control.cancelled) return { page: void 0, aborted: true };
+        await deps.sleep(decision.waitMs);
+      }
+    };
+    const haltDecision = (page) => {
+      const outcome = page === void 0 ? { kind: "network-error" } : { kind: "http-status", httpStatus: page.httpStatus };
+      const action = shouldHalt(outcome, recent429);
+      recent429 = outcome.kind === "http-status" && outcome.httpStatus === RATE_LIMITED_STATUS ? recent429 + 1 : 0;
+      return action.action === "stop" ? { stop: true, message: restartText(action.message) } : { stop: false };
+    };
+    const redirectProblem = (url, expected, page) => {
+      if (normalizedUrl(page.finalUrl) === normalizedUrl(url) && normalizedUrl(url) !== void 0) return void 0;
+      if (!urlIsFetchable(page.finalUrl, expected)) {
+        return { halt: true, message: `SwimCloud redirected ${url} to ${page.finalUrl}, which this crawl does not fetch. Refresh your SwimCloud session in this tab, then start the crawl again.` };
+      }
+      return { halt: false, message: `the page was redirected to ${page.finalUrl}, so it is not the page that was asked for` };
+    };
+    const screenPage = (url, expected, page, contentCheck) => {
+      const stop = haltDecision(page);
+      const redirect = page === void 0 ? void 0 : redirectProblem(url, expected, page);
+      if (stop.stop) return { action: "halt", message: stop.message, relay: false };
+      if (page === void 0) return { action: "fail", message: "no response", relay: false };
+      if (redirect !== void 0) return { action: redirect.halt ? "halt" : "fail", message: redirect.message, relay: false };
+      if (!isOkStatus(page.httpStatus)) {
+        const text = page.httpStatus === RATE_LIMITED_STATUS ? "rate-limited (HTTP 429) after retries" : `HTTP ${page.httpStatus}`;
+        return { action: "fail", message: text, relay: true };
+      }
+      const problem = contentCheck(page.html);
+      if (problem !== void 0) return { action: problem.halt ? "halt" : "fail", message: problem.message, relay: false };
+      return { action: "clean", message: "", relay: true };
+    };
+    const relayTo = async (subjects, sourceUrl, page) => {
+      let result = "landed";
+      for (const subject of subjects) {
+        usedSubjects.set(captureIdForSubject(subject), subject);
+        const outcome = await deps.relay({ subject, sourceUrl, httpStatus: page.httpStatus, html: page.html });
+        if (outcome === "streak-stop") return "streak-stop";
+        if (outcome !== "landed") {
+          result = "not-landed";
+          continue;
+        }
+        const id = captureIdForSubject(subject);
+        landedPages.set(id, (landedPages.get(id) ?? /* @__PURE__ */ new Set()).add(sourceUrl));
+      }
+      return result;
+    };
+    const openSubject = async (subject, planned) => {
+      const id = await deps.openCapture(subject, planned);
+      if (id === void 0) return false;
+      usedSubjects.set(captureIdForSubject(subject), subject);
+      plannedBySubject.set(captureIdForSubject(subject), planned);
+      return true;
+    };
+    let endedBy = "halted";
+    let thrown;
+    emit();
+    try {
+      await readSeasonLists();
+      readingTeamId = void 0;
+      const choices = await askForChoices();
+      endedBy = haltMessage !== void 0 ? "halted" : control.cancelled ? "cancelled" : "completed";
+      if (endedBy === "completed" && choices.length > 0) endedBy = await crawlQueue(choices);
+    } catch (error) {
+      thrown = { error };
+    }
+    phase = "finished";
+    haltMessage = haltMessage ?? queue?.halt?.message;
+    notice = void 0;
+    await markCaptures(thrown === void 0 ? endedBy : "halted");
+    const downloads = await flushAll();
+    emit();
+    if (thrown !== void 0) throw thrown.error;
+    return buildSummary(endedBy, downloads);
+    async function readSeasonLists() {
+      for (const teamId of input.teamIds) {
+        if (!await gate()) return;
+        readingTeamId = teamId;
+        emit();
+        if (!await openSubject(teamSubject(teamId), 1)) {
+          haltMessage = OPEN_FAILED_TEXT;
+          seasonReports.push({ teamId, error: OPEN_FAILED_TEXT });
+          return;
+        }
+        const step = planTeamRosterPage(teamId, "M");
+        const { page, aborted } = await fetchPaced(step.canonicalUrl, "teamRoster", MIN_DELAY_MS);
+        notice = void 0;
+        if (aborted) return;
+        const screen = screenPage(step.canonicalUrl, "teamRoster", page, challengeProblem);
+        if (screen.relay && page !== void 0) {
+          const relayed = await relayTo([teamSubject(teamId)], step.canonicalUrl, page);
+          optionsLanded.set(teamId, relayed === "landed" && screen.action === "clean");
+          if (relayed === "streak-stop") {
+            haltMessage = RELAY_STREAK_TEXT;
+            seasonReports.push({ teamId, error: haltMessage });
+            return;
+          }
+        }
+        if (screen.action === "halt") {
+          haltMessage = screen.message;
+          seasonReports.push({ teamId, error: screen.message });
+          return;
+        }
+        seasonReports.push(reportSeasons(teamId, screen, page));
+      }
+    }
+    function challengeProblem(html) {
+      return looksLikeChallengePage(html) ? { halt: true, message: CHALLENGE_TEXT } : void 0;
+    }
+    function reportSeasons(teamId, screen, page) {
+      if (screen.action === "fail" || page === void 0) {
+        const why = screen.message.startsWith("HTTP") || screen.message === "no response" ? `returned ${screen.message}` : screen.message;
+        return { teamId, error: `The season page for team ${teamId} ${why}.` };
+      }
+      try {
+        return { teamId, options: parseTeamSeasonOptions(page.html) };
+      } catch (error) {
+        const detail = error instanceof Error ? error.message : String(error);
+        return { teamId, error: `The season list on team ${teamId}'s page could not be read: ${detail}` };
+      }
+    }
+    async function askForChoices() {
+      if (haltMessage !== void 0 || control.cancelled) return [];
+      phase = "choosing-seasons";
+      emit();
+      const withOptions = seasonReports.filter((r) => r.options !== void 0);
+      choiceAsked = withOptions.length > 0;
+      if (!choiceAsked) return [];
+      const picked = await deps.chooseSeasons(seasonReports);
+      for (const choice of picked) {
+        if (!withOptions.some((r) => r.teamId === choice.teamId)) {
+          throw new MultiTeamDriverError("unknown-choice", `a season was chosen for team ${choice.teamId}, which has no season list.`);
+        }
+      }
+      return picked;
+    }
+    async function crawlQueue(picked) {
+      runKey = resumeKeyForChoices(seasonReports, picked);
+      const finishedAtStart = runKey === "" ? [] : await deps.loadFinished(runKey);
+      queue = createQueue({
+        teams: picked.map((choice) => {
+          const options = seasonReports.find((r) => r.teamId === choice.teamId)?.options;
+          if (options === void 0) throw new MultiTeamDriverError("unknown-choice", `team ${choice.teamId} has no season list.`);
+          return { teamId: choice.teamId, seasonLabel: choice.seasonLabel, seasonOptions: options };
+        }),
+        finishedKeys: finishedAtStart
+      });
+      phase = "crawling";
+      emit();
+      if (!await openSeasonCaptures()) return "halted";
+      const persistFinished = async () => {
+        await deps.saveFinished(runKey, [.../* @__PURE__ */ new Set([...finishedAtStart, ...finishedSwimmerKeys(currentQueue())])]);
+      };
+      for (; ; ) {
+        if (!await gate()) {
+          queue = cancelQueue(currentQueue());
+          return "cancelled";
+        }
+        const next = nextWork(currentQueue());
+        queue = next.queue;
+        if (next.kind === "idle") {
+          const outcome = idleOutcome(next.reason);
+          if (outcome === "completed") {
+            await correctPlannedCounts();
+            await clearIfClean();
+          }
+          return outcome;
+        }
+        notice = void 0;
+        emit();
+        const work = next.work;
+        if (work.kind === "swimmer") await correctPlannedCounts();
+        const halted = work.kind === "roster" ? await runRosterWork(work) : await runSwimmerWork(work, persistFinished);
+        emit();
+        if (halted) return "halted";
+      }
+    }
+    function idleOutcome(reason) {
+      if (reason === "drained") return "completed";
+      if (reason === "halted") return "halted";
+      if (reason === "cancelled") return "cancelled";
+      throw new MultiTeamDriverError("queue-invariant", `the queue is idle (${reason}) with nothing in flight.`);
+    }
+    function readyTeams() {
+      return queueProgress(currentQueue()).teams.flatMap(
+        (t) => t.status === "season-unavailable" ? [] : [{ teamId: t.teamId, seasonLabel: t.seasonLabel, swimmerTotal: t.swimmers.total }]
+      );
+    }
+    function captureHasEveryPlannedPage(teamId, seasonLabel) {
+      const id = captureIdForSubject(teamSubject(teamId, seasonLabel));
+      const team = queueProgress(currentQueue()).teams.find((t) => t.teamId === teamId);
+      if (team === void 0) return false;
+      return capturePagesComplete({
+        planned: plannedBySubject.get(id),
+        landedThisRun: landedPages.get(id)?.size ?? 0,
+        resumedProven: team.swimmers.skippedResumed,
+        teamDone: team.status === "done"
+      });
+    }
+    async function openSeasonCaptures() {
+      for (const team of readyTeams()) {
+        if (!await openSubject(teamSubject(team.teamId, team.seasonLabel), 2)) {
+          haltMessage = OPEN_FAILED_TEXT;
+          return false;
+        }
+      }
+      return true;
+    }
+    async function correctPlannedCounts() {
+      if (plannedCorrected) return;
+      plannedCorrected = true;
+      for (const team of readyTeams()) {
+        const subject = teamSubject(team.teamId, team.seasonLabel);
+        const planned = 2 + team.swimmerTotal;
+        if (plannedBySubject.get(captureIdForSubject(subject)) === planned) continue;
+        if (!await openSubject(subject, planned)) {
+          notice = `The app did not accept the corrected page count for team ${team.teamId}. The crawl goes on.`;
+          emit();
+        }
+      }
+    }
+    async function clearIfClean() {
+      if (runKey === "") return;
+      const failed = queueProgress(currentQueue()).teams.some((t) => t.rosters.failed + t.swimmers.failed > 0);
+      if (!failed) await deps.clearFinished(runKey);
+    }
+    function halt(key, message) {
+      queue = markFailed(currentQueue(), key, message, { haltQueue: true });
+      haltMessage = haltMessage ?? message;
+      return true;
+    }
+    function failItem(key, message) {
+      queue = markFailed(currentQueue(), key, message);
+      return false;
+    }
+    function actOn(key, screen) {
+      return screen.action === "halt" ? halt(key, screen.message) : failItem(key, screen.message);
+    }
+    async function relayItem(key, subjects, url, page) {
+      const relayed = await relayTo(subjects, url, page);
+      if (relayed === "streak-stop") return halt(key, RELAY_STREAK_TEXT);
+      if (relayed === "not-landed") return failItem(key, NOT_HANDED_TEXT);
+      return void 0;
+    }
+    function rosterProblem(work) {
+      return (html) => {
+        if (looksLikeChallengePage(html)) return { halt: true, message: CHALLENGE_TEXT };
+        const check = verifyRosterSeason(html, work);
+        return check.ok ? void 0 : { halt: false, message: check.reason };
+      };
+    }
+    async function runRosterWork(work) {
+      const { page, aborted } = await fetchPaced(work.canonicalUrl, "teamRoster", MIN_DELAY_MS);
+      if (aborted) return failItem(work.key, "not fetched: the run was cancelled");
+      const screen = screenPage(work.canonicalUrl, "teamRoster", page, rosterProblem(work));
+      if (screen.relay && page !== void 0) {
+        const subject = teamSubject(work.teamId, work.seasonLabel);
+        if (screen.action === "clean") {
+          const stopped = await relayItem(work.key, [subject], work.canonicalUrl, page);
+          if (stopped !== void 0) return stopped;
+        } else if (await relayTo([subject], work.canonicalUrl, page) === "streak-stop") {
+          return halt(work.key, RELAY_STREAK_TEXT);
+        }
+      }
+      if (screen.action !== "clean" || page === void 0) return actOn(work.key, screen);
+      return finishRoster(work, page.html);
+    }
+    function finishRoster(work, html) {
+      const parsed = parseTeamRosterHtml(
+        html,
+        { sourceUrl: work.canonicalUrl, retrievedAt: deps.isoNow(), track: "browser-extension" },
+        { gender: work.gender === "M" ? "Men" : "Women", season: work.seasonLabel, teamId: work.teamId }
+      );
+      if (!parsed.ok) return failItem(work.key, `the ${genderWord(work.gender)} roster could not be read: ${parsed.failure.message}`);
+      const printed = parsed.data.teamName?.trim();
+      if (printed !== void 0 && printed.length > 0) {
+        rosterNames.set(work.teamId, (rosterNames.get(work.teamId) ?? /* @__PURE__ */ new Set()).add(printed));
+      }
+      const says = parsed.warnings.some((w) => w.code === "no-roster-posted");
+      if (parsed.data.athletes.length === 0 && !says) {
+        const codes = parsed.warnings.map((w) => w.code).join(", ") || "no warnings";
+        return failItem(work.key, `the ${genderWord(work.gender)} roster page lists nobody and does not say that no roster is posted (${codes}), so it is not treated as an empty roster`);
+      }
+      const collected = collectSwimmerIds([parsed.data.athletes]);
+      const notes = notesFor(work.teamId);
+      notes.rosterRowsWithoutSwimmerId += collected.withoutSwimmerId;
+      if (parsed.data.athletes.length === 0) notes.emptyRosterGenders.push(work.gender);
+      queue = addSwimmers(currentQueue(), work.teamId, work.gender, collected.swimmerIds);
+      queue = markDone(currentQueue(), work.key);
+      return false;
+    }
+    function swimmerProblem(html) {
+      return looksLikeJson(html) ? void 0 : { halt: true, message: NOT_JSON_TEXT };
+    }
+    async function runSwimmerWork(work, persist) {
+      const step = planSwimmerFastestTimes(work.swimmerId);
+      const { page, aborted } = await fetchPaced(step.canonicalUrl, "swimmerFastestTimes", SWIMMER_TIMES_STAGGER_MS);
+      if (aborted) return failItem(work.key, "not fetched: the run was cancelled");
+      const screen = screenPage(step.canonicalUrl, "swimmerFastestTimes", page, swimmerProblem);
+      const subjects = work.attributions.map((a) => teamSubject(a.teamId, a.seasonLabel));
+      if (screen.relay && page !== void 0) {
+        if (screen.action === "clean") {
+          const stopped = await relayItem(work.key, subjects, step.canonicalUrl, page);
+          if (stopped !== void 0) return stopped;
+        } else if (await relayTo(subjects, step.canonicalUrl, page) === "streak-stop") {
+          return halt(work.key, RELAY_STREAK_TEXT);
+        }
+      }
+      if (screen.action !== "clean") return actOn(work.key, screen);
+      queue = markDone(currentQueue(), work.key);
+      await persist();
+      return false;
+    }
+    async function markCaptures(outcome) {
+      const seasonDone = /* @__PURE__ */ new Set();
+      if (queue !== void 0 && outcome === "completed") {
+        for (const t of queueProgress(queue).teams) {
+          if (captureHasEveryPlannedPage(t.teamId, t.seasonLabel)) {
+            seasonDone.add(captureIdForSubject(teamSubject(t.teamId, t.seasonLabel)));
+          }
+        }
+      }
+      for (const [id, subject] of usedSubjects) {
+        const complete = subject.kind === "team" && subject.season === void 0 ? optionsLanded.get(subject.teamId) === true : seasonDone.has(id);
+        const names = subject.kind === "team" ? rosterNames.get(subject.teamId) : void 0;
+        const label = names?.size === 1 ? [...names][0] : void 0;
+        await deps.markCapture(subject, complete ? "every-planned-page-fetched" : "partial", label);
+      }
+    }
+    async function flushAll() {
+      if (usedSubjects.size === 0) return [];
+      const results = await deps.flushDownloads([...usedSubjects.values()]);
+      return results.filter((r) => r.pageCount > 0 || r.error !== void 0);
+    }
+    function buildSummary(outcome, downloads2) {
+      const progress = queue === void 0 ? void 0 : queueProgress(queue);
+      const teams = input.teamIds.map((teamId) => {
+        const notes = notesFor(teamId);
+        const base = {
+          teamId,
+          rostersDone: 0,
+          rostersFailed: 0,
+          swimmersDone: 0,
+          swimmersFailed: 0,
+          swimmersSkippedResumed: 0,
+          rosterRowsWithoutSwimmerId: notes.rosterRowsWithoutSwimmerId,
+          emptyRosterGenders: notes.emptyRosterGenders
+        };
+        const queued = progress?.teams.find((t) => t.teamId === teamId);
+        if (queued !== void 0) {
+          return {
+            ...base,
+            status: queued.status,
+            seasonLabel: queued.seasonLabel,
+            ...queued.seasonId === void 0 ? {} : { seasonId: queued.seasonId },
+            ...queued.availableLabels === void 0 ? {} : { availableLabels: queued.availableLabels },
+            rostersDone: queued.rosters.done,
+            rostersFailed: queued.rosters.failed,
+            swimmersDone: queued.swimmers.done,
+            swimmersFailed: queued.swimmers.failed,
+            swimmersSkippedResumed: queued.swimmers.skippedResumed,
+            errors: queued.errorLines
+          };
+        }
+        const report = seasonReports.find((r) => r.teamId === teamId);
+        if (report === void 0) return { ...base, status: "not-reached", errors: [] };
+        if (report.error !== void 0) return { ...base, status: "seasons-unreadable", errors: [report.error] };
+        return { ...base, status: choiceAsked ? "not-chosen" : "not-reached", errors: [] };
+      });
+      return {
+        outcome,
+        ...haltMessage === void 0 ? {} : { haltMessage },
+        teams,
+        requestedUrls,
+        downloads: downloads2
+      };
+    }
+  }
+
+  // packages/swimcloud/src/targetUrls.ts
+  var TOKEN_SEPARATOR = /[\s,]+/;
+  var HTTP_URL = /^https?:\/\//i;
+  var TEAM_ID = /^[1-9][0-9]{0,17}$/;
+  function hostIsSwimCloud(url) {
+    const host = url.hostname.toLowerCase();
+    const exactHost = host === SWIMCLOUD_CANONICAL_HOST || host === SWIMCLOUD_APEX_HOST;
+    return exactHost && url.port === "" && url.username === "" && url.password === "";
+  }
+  function parseTeamPath(segments) {
+    const teamId = segments[1];
+    if (teamId === void 0 || !TEAM_ID.test(teamId)) return { reason: "invalid-team-id" };
+    return { target: { kind: "team", teamId } };
+  }
+  function parseConferenceLink(token) {
+    const classified = classifySwimCloudUrl(token);
+    if (classified.outcome === "malformed" && classified.kind === "conference") {
+      return { reason: classified.reason === "invalid-slug" ? "invalid-conference-slug" : "unsupported" };
+    }
+    if (classified.outcome !== "fetchable" || classified.resource.kind !== "conference") {
+      return { reason: "unsupported" };
+    }
+    const resource = classified.resource;
+    if (resource.urlForm !== "country-scoped" || resource.level !== "college") return { reason: "unsupported" };
+    return { target: { kind: "conference", slug: resource.slug.toLowerCase(), country: resource.country.toLowerCase() } };
+  }
+  function parseOneToken(token) {
+    if (!HTTP_URL.test(token)) return { reason: "not-a-url" };
+    let url;
+    try {
+      url = new URL(token);
+    } catch {
+      return { reason: "not-a-url" };
+    }
+    if (!hostIsSwimCloud(url)) return { reason: "wrong-host" };
+    const classified = classifySwimCloudUrl(token);
+    if (classified.outcome === "forbidden") return { reason: "denylisted" };
+    if (classified.outcome === "fetchable" && classified.resource.kind === "swimmerFastestTimes") {
+      return { reason: "denylisted" };
+    }
+    const segments = url.pathname.split("/").filter((segment) => segment.length > 0);
+    const first = segments[0]?.toLowerCase();
+    if (first === "team") return parseTeamPath(segments);
+    if (first === "country") return parseConferenceLink(token);
+    return { reason: "unsupported" };
+  }
+  function parseCrawlTargetInput(text) {
+    const targets = [];
+    const rejected = [];
+    const seenTeams = /* @__PURE__ */ new Set();
+    const seenConferences = /* @__PURE__ */ new Set();
+    for (const token of text.split(TOKEN_SEPARATOR)) {
+      if (token.length === 0) continue;
+      const parsed = parseOneToken(token);
+      if ("reason" in parsed) {
+        rejected.push({ text: token, reason: parsed.reason });
+        continue;
+      }
+      const target = parsed.target;
+      const seen = target.kind === "team" ? seenTeams : seenConferences;
+      const key = target.kind === "team" ? target.teamId : `${target.country}/${target.slug}`;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      targets.push(target);
+    }
+    return { targets, rejected };
+  }
+
+  // extensions/swimcloud-companion/src/multiTeamPanelModel.ts
+  var CONFERENCE_NOT_SUPPORTED_NOTE = "conference pages are not supported yet (waiting for a captured conference page)";
+  var REJECTION_TEXT = {
+    "not-a-url": "not a link (it must start with https://)",
+    "wrong-host": "not a www.swimcloud.com link",
+    denylisted: "a path SwimCloud's robots.txt does not allow",
+    "invalid-team-id": "the team id is missing or is not a positive whole number",
+    "invalid-conference-slug": "the conference name in the link is not readable",
+    unsupported: "a kind of SwimCloud page this tool does not read"
+  };
+  function describeTargetInput(text) {
+    const parsed = parseCrawlTargetInput(text);
+    const teamIds = [];
+    const conferences = [];
+    for (const target of parsed.targets) {
+      if (target.kind === "team") teamIds.push(target.teamId);
+      else conferences.push({ text: `${target.country}/${target.slug}`, message: CONFERENCE_NOT_SUPPORTED_NOTE });
+    }
+    return {
+      teamIds,
+      conferences,
+      rejected: parsed.rejected.map((r) => ({ text: r.text, message: REJECTION_TEXT[r.reason] }))
+    };
+  }
+  function defaultSeasonLabel(options) {
+    return (options.find((o) => o.selected) ?? options[0]).label;
+  }
+  function formatScopeNote() {
+    const seconds = Math.round(MIN_DELAY_MS / 1e3);
+    const swimmerSeconds = Math.round(SWIMMER_TIMES_STAGGER_MS / 1e3);
+    return `Scope: both rosters (men and women) of each team for the season you pick, then one fastest-times request per swimmer. One request at a time, at least ${seconds} s apart (${swimmerSeconds} s for swimmer requests, ${SWIMMER_TIMES_CONCURRENCY} at once). Swimmer times are all-time bests, so for a past season they can include later seasons. A swimmer on two teams is fetched once.`;
+  }
+  function plural(n, one, many) {
+    return `${n} ${n === 1 ? one : many}`;
+  }
+  function teamLine(team) {
+    if (team.status === "season-unavailable") return `Team ${team.teamId} \xB7 ${team.seasonLabel} \xB7 season not offered, nothing fetched`;
+    const rosters = `rosters ${team.rosters.done + team.rosters.failed}/${team.rosters.total}`;
+    const swimmersDone = team.swimmers.done + team.swimmers.skippedResumed + team.swimmers.failed;
+    const swimmers = team.swimmers.total === 0 ? "swimmers not listed yet" : `swimmers ${swimmersDone}/${team.swimmers.total}`;
+    const skipped = team.swimmers.skippedResumed > 0 ? ` (${team.swimmers.skippedResumed} already finished earlier)` : "";
+    const failed = team.swimmers.failed + team.rosters.failed > 0 ? ` \xB7 ${team.swimmers.failed + team.rosters.failed} failed` : "";
+    return `Team ${team.teamId} \xB7 ${team.seasonLabel} \xB7 ${rosters} \xB7 ${swimmers}${skipped}${failed} \xB7 ${team.status}`;
+  }
+  function formatDriverState(state) {
+    const queue = state.queue;
+    let headline;
+    if (state.haltMessage !== void 0) headline = `Stopped: ${state.haltMessage}`;
+    else if (state.phase === "reading-seasons") {
+      headline = state.readingTeamId === void 0 ? "Reading season lists." : `Reading the season list of team ${state.readingTeamId}.`;
+    } else if (state.phase === "choosing-seasons") headline = "Pick a season for each team, then press Start crawl.";
+    else if (queue?.cancelled === true) headline = "Cancelled.";
+    else if (queue?.paused === true) headline = "Paused. Work in flight finishes first.";
+    else if (state.phase === "finished") headline = "Finished.";
+    else headline = "Crawling.";
+    return {
+      headline,
+      teams: queue === void 0 ? [] : queue.teams.map(teamLine),
+      errors: [
+        ...state.seasonReports.flatMap((r) => r.error === void 0 ? [] : [r.error]),
+        ...queue?.teams.flatMap((t) => t.errorLines) ?? []
+      ],
+      notice: state.notice ?? ""
+    };
+  }
+  function summaryLine(team) {
+    switch (team.status) {
+      case "season-unavailable":
+        return `Team ${team.teamId}: season ${team.seasonLabel ?? "?"} is not offered on its page. Nothing fetched. Available: ${(team.availableLabels ?? []).join(", ") || "none read"}.`;
+      case "seasons-unreadable":
+        return `Team ${team.teamId}: its season list could not be read. Nothing fetched.`;
+      case "not-chosen":
+        return `Team ${team.teamId}: no season chosen. Nothing fetched.`;
+      case "not-reached":
+        return `Team ${team.teamId}: the run ended before this team was reached.`;
+      default: {
+        const empty = team.emptyRosterGenders.length === 0 ? "" : ` Empty roster: ${team.emptyRosterGenders.map((g) => g === "M" ? "men" : "women").join(", ")}.`;
+        const noLink = team.rosterRowsWithoutSwimmerId === 0 ? "" : ` ${plural(team.rosterRowsWithoutSwimmerId, "roster row has", "roster rows have")} no profile link.`;
+        return `Team ${team.teamId} \xB7 ${team.seasonLabel ?? "?"}: ${plural(team.rostersDone, "roster", "rosters")} done, ${team.rostersFailed} failed; ${plural(team.swimmersDone, "swimmer", "swimmers")} done, ${team.swimmersSkippedResumed} skipped (already finished), ${team.swimmersFailed} failed.${empty}${noLink}`;
+      }
+    }
+  }
+  function formatSummary(summary) {
+    const head = summary.outcome === "completed" ? "Done." : summary.outcome === "cancelled" ? "Cancelled. Finished swimmers are remembered, so the next run skips them." : `Stopped: ${summary.haltMessage ?? "unknown reason"} Finished swimmers are remembered. Start again to continue.`;
+    const downloads = summary.downloads.map(
+      (d) => d.error !== void 0 ? `Pages saved to Downloads for ${d.subject.kind === "team" ? `team ${d.subject.teamId}` : "a meet"} could not be combined: ${d.error}` : `${plural(d.pageCount, "page", "pages")} for ${d.subject.kind === "team" ? `team ${d.subject.teamId}${d.subject.season === void 0 ? "" : ` ${d.subject.season}`}` : "a meet"} did not reach the app and were saved to Downloads${d.filename === void 0 ? "" : ` (${d.filename})`}. They are not in the app.`
+    );
+    return [head, ...summary.teams.map(summaryLine), ...summary.teams.flatMap((t) => t.errors), ...downloads];
+  }
+  function multiTeamHostAllowed(hostname) {
+    return hostname === "www.swimcloud.com";
+  }
+  var crawlHostAllowed = multiTeamHostAllowed;
+  function forgetButtonVisible(state) {
+    return state.selectionKey !== "" && (!state.running || state.choosing);
+  }
+  var SAVED_PROGRESS_PREFIX = "omniswimMultiTeamFinished|";
+  var SWIMMER_KEY = /^swimmer\|[1-9][0-9]{0,17}\|[1-9][0-9]{0,17}\|[0-9]+$/;
+  function savedProgressStorageKey(runKey) {
+    return `${SAVED_PROGRESS_PREFIX}${runKey}`;
+  }
+  function readSavedSwimmerKeys(value) {
+    return Array.isArray(value) ? value.filter((k) => typeof k === "string" && SWIMMER_KEY.test(k)) : [];
+  }
+
+  // extensions/swimcloud-companion/src/multiTeamPanel.ts
+  var BUTTON_ID = "omniswim-multiteam-button";
+  var PANEL_ID = "omniswim-multiteam-panel";
+  var SKIP_VALUE = "";
+  function element(tag, className, text) {
+    const node = document.createElement(tag);
+    if (className !== void 0) node.className = className;
+    if (text !== void 0) node.textContent = text;
+    return node;
+  }
+  function button(label) {
+    const b = element("button", void 0, label);
+    b.type = "button";
+    return b;
+  }
+  function replaceChildrenWithLines(parent, lines, className) {
+    parent.replaceChildren(...lines.map((line) => element("div", className, line)));
+  }
+  async function loadFinished(runKey) {
+    const key = savedProgressStorageKey(runKey);
+    try {
+      const stored = await chrome.storage.local.get([key]);
+      return readSavedSwimmerKeys(stored[key]);
+    } catch {
+      return [];
+    }
+  }
+  function saveFinished(runKey, keys) {
+    return new Promise((resolve) => {
+      try {
+        chrome.storage.local.set({ [savedProgressStorageKey(runKey)]: [...keys] }, () => resolve());
+      } catch {
+        resolve();
+      }
+    });
+  }
+  async function clearFinished(runKey) {
+    try {
+      await chrome.storage.local.remove([savedProgressStorageKey(runKey)]);
+    } catch {
+    }
+  }
+  function mountMultiTeamCrawlButton(io) {
+    if (!multiTeamHostAllowed(location.hostname)) return;
+    if (document.getElementById(BUTTON_ID) !== null) return;
+    const entry = button("Multi-team crawl (Omniswim)");
+    entry.id = BUTTON_ID;
+    entry.setAttribute("aria-label", "Crawl several teams and seasons into Omniswim Suite. Opens a panel. Several minutes, many requests.");
+    entry.addEventListener("click", () => {
+      if (document.getElementById(PANEL_ID) !== null) return;
+      openPanel(io);
+    });
+    document.body.appendChild(entry);
+  }
+  function openPanel(io) {
+    const control = { cancelled: false, paused: false };
+    let running = false;
+    let targets = { teamIds: [], conferences: [], rejected: [] };
+    let finishChoice;
+    let currentSelection = () => "";
+    let choosing = false;
+    const root = element("div");
+    root.id = PANEL_ID;
+    root.setAttribute("role", "dialog");
+    root.setAttribute("aria-label", "Multi-team crawl");
+    const title = element("div", "omniswim-crawler-panel__title", "Multi-team crawl");
+    const inputLabel = element("label", "omniswim-crawler-panel__line", "Team links, one per line (or separated by spaces or commas)");
+    const input = element("textarea", "omniswim-multiteam__input");
+    input.id = `${PANEL_ID}-input`;
+    input.rows = 4;
+    input.placeholder = "https://www.swimcloud.com/team/412/";
+    inputLabel.htmlFor = input.id;
+    const scope = element("div", "omniswim-crawler-panel__line omniswim-crawler-panel__resume", formatScopeNote());
+    const parseButton = button("Parse links");
+    const readButton = button("Read season lists");
+    readButton.disabled = true;
+    const parsed = element("div", "omniswim-multiteam__block");
+    const choices = element("div", "omniswim-multiteam__block");
+    const startButton = button("Start crawl");
+    startButton.hidden = true;
+    const forgetButton = button("Forget saved progress");
+    forgetButton.hidden = true;
+    const headline = element("div", "omniswim-crawler-panel__line");
+    headline.setAttribute("role", "status");
+    headline.setAttribute("aria-live", "polite");
+    const teamLines = element("div", "omniswim-multiteam__block");
+    const notice = element("div", "omniswim-crawler-panel__line omniswim-crawler-panel__warn");
+    const errors = element("div", "omniswim-multiteam__block");
+    const summary = element("div", "omniswim-multiteam__block");
+    const forgetNote = element("div", "omniswim-crawler-panel__line omniswim-crawler-panel__resume");
+    forgetNote.hidden = true;
+    const pauseButton = button("Pause");
+    pauseButton.hidden = true;
+    const cancelButton = button("Close");
+    const buttons = element("div", "omniswim-crawler-panel__buttons");
+    buttons.append(parseButton, readButton);
+    const runButtons = element("div", "omniswim-crawler-panel__buttons");
+    runButtons.append(startButton, pauseButton, forgetButton, cancelButton);
+    root.append(title, inputLabel, input, scope, buttons, parsed, choices, headline, teamLines, notice, errors, summary, forgetNote, runButtons);
+    document.body.appendChild(root);
+    input.focus();
+    const updateForgetButton = () => {
+      forgetButton.hidden = !forgetButtonVisible({ running, choosing, selectionKey: currentSelection() });
+    };
+    const close = () => {
+      root.remove();
+      document.getElementById(BUTTON_ID)?.focus();
+    };
+    root.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !running) close();
+    });
+    const renderParsed = () => {
+      const lines = [];
+      if (targets.teamIds.length > 0) {
+        lines.push(element("div", "omniswim-crawler-panel__line", `Teams to read: ${targets.teamIds.join(", ")}`));
+      }
+      for (const c of targets.conferences) {
+        lines.push(element("div", "omniswim-crawler-panel__line omniswim-crawler-panel__warn", `Conference ${c.text}: ${c.message}. Nothing is crawled for it.`));
+      }
+      for (const r of targets.rejected) {
+        lines.push(element("div", "omniswim-crawler-panel__line omniswim-crawler-panel__warn", `Skipped "${r.text}": ${r.message}.`));
+      }
+      if (lines.length === 0) lines.push(element("div", "omniswim-crawler-panel__line", "No links found."));
+      parsed.replaceChildren(...lines);
+      readButton.disabled = running || targets.teamIds.length === 0;
+    };
+    parseButton.addEventListener("click", () => {
+      targets = describeTargetInput(input.value);
+      renderParsed();
+    });
+    const render = (state) => {
+      const lines = formatDriverState(state);
+      headline.textContent = lines.headline;
+      replaceChildrenWithLines(teamLines, lines.teams, "omniswim-crawler-panel__line");
+      notice.textContent = lines.notice;
+      notice.hidden = lines.notice.length === 0;
+      replaceChildrenWithLines(errors, lines.errors, "omniswim-crawler-panel__line omniswim-crawler-panel__warn");
+    };
+    const askForSeasons = (reports) => new Promise((resolve) => {
+      const selects = /* @__PURE__ */ new Map();
+      const rows = [];
+      for (const report of reports) {
+        if (report.options === void 0) continue;
+        const row = element("div", "omniswim-crawler-panel__line");
+        const label = element("label", void 0, `Team ${report.teamId} season `);
+        const select = element("select");
+        select.id = `${PANEL_ID}-season-${report.teamId}`;
+        label.htmlFor = select.id;
+        const skip = element("option", void 0, "Skip this team");
+        skip.value = SKIP_VALUE;
+        select.appendChild(skip);
+        for (const option of report.options) {
+          const o = element("option", void 0, option.selected ? `${option.label} (page's current season)` : option.label);
+          o.value = option.label;
+          select.appendChild(o);
+        }
+        select.value = defaultSeasonLabel(report.options);
+        selects.set(report.teamId, select);
+        row.append(label, select);
+        rows.push(row);
+      }
+      const pick = () => {
+        const picked = [];
+        for (const [teamId, select] of selects) {
+          if (select.value !== SKIP_VALUE) picked.push({ teamId, seasonLabel: select.value });
+        }
+        return picked;
+      };
+      choices.replaceChildren(...rows);
+      startButton.hidden = false;
+      choosing = true;
+      currentSelection = () => resumeKeyForChoices(reports, pick());
+      updateForgetButton();
+      const first = [...selects.values()][0];
+      if (first !== void 0) first.focus();
+      finishChoice = (picked) => {
+        finishChoice = void 0;
+        startButton.hidden = true;
+        choices.replaceChildren();
+        const key = resumeKeyForChoices(reports, picked);
+        currentSelection = () => key;
+        choosing = false;
+        updateForgetButton();
+        resolve(picked);
+      };
+      startButton.onclick = () => finishChoice?.(pick());
+    });
+    forgetButton.addEventListener("click", () => {
+      const key = currentSelection();
+      forgetNote.hidden = false;
+      if (key === "") {
+        forgetNote.textContent = "There is no selection to forget saved progress for.";
+        return;
+      }
+      void clearFinished(key).then(() => {
+        forgetNote.textContent = "Saved progress for this selection was cleared. The next crawl of it fetches every swimmer again.";
+      });
+    });
+    const endRun = () => {
+      running = false;
+      choosing = false;
+      pauseButton.hidden = true;
+      startButton.hidden = true;
+      updateForgetButton();
+      cancelButton.textContent = "Close";
+      cancelButton.disabled = false;
+      parseButton.disabled = false;
+      input.disabled = false;
+      readButton.disabled = targets.teamIds.length === 0;
+    };
+    readButton.addEventListener("click", () => {
+      if (running || targets.teamIds.length === 0) return;
+      running = true;
+      control.cancelled = false;
+      control.paused = false;
+      pauseButton.textContent = "Pause";
+      cancelButton.disabled = false;
+      readButton.disabled = true;
+      parseButton.disabled = true;
+      input.disabled = true;
+      pauseButton.hidden = false;
+      forgetNote.hidden = true;
+      updateForgetButton();
+      cancelButton.textContent = "Cancel";
+      summary.replaceChildren();
+      io.app.reset();
+      void withCrawlLock(
+        io.locks,
+        () => runMultiTeamCrawl(
+          {
+            fetchPage: (url) => io.fetchPage(url),
+            relay: (request) => io.app.relay(request),
+            openCapture: (subject, planned) => io.app.openCapture(subject, planned),
+            markCapture: (subject, completeness, label) => io.app.markCapture(subject, completeness, label),
+            flushDownloads: (subjects) => io.app.flushDownloads(subjects),
+            sleep: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),
+            now: () => Date.now(),
+            isoNow: () => (/* @__PURE__ */ new Date()).toISOString(),
+            paceClock: io.paceClock,
+            loadFinished,
+            saveFinished,
+            clearFinished,
+            onProgress: render,
+            chooseSeasons: askForSeasons,
+            control
+          },
+          { teamIds: targets.teamIds }
+        )
+      ).then((outcome) => {
+        if (outcome.acquired) replaceChildrenWithLines(summary, formatSummary(outcome.value), "omniswim-crawler-panel__line");
+        else replaceChildrenWithLines(summary, [outcome.message], "omniswim-crawler-panel__line omniswim-crawler-panel__warn");
+      }).catch((error) => {
+        const detail = error instanceof Error ? error.message : String(error);
+        replaceChildrenWithLines(
+          summary,
+          [`The crawl stopped on an unexpected error: ${detail}`, "Nothing already saved is lost. Finished swimmers are remembered."],
+          "omniswim-crawler-panel__line omniswim-crawler-panel__warn"
+        );
+      }).finally(endRun);
+    });
+    pauseButton.addEventListener("click", () => {
+      control.paused = !control.paused;
+      pauseButton.textContent = control.paused ? "Resume" : "Pause";
+    });
+    cancelButton.addEventListener("click", () => {
+      if (!running) {
+        close();
+        return;
+      }
+      control.cancelled = true;
+      control.paused = false;
+      cancelButton.disabled = true;
+      finishChoice?.([]);
+    });
   }
 
   // extensions/swimcloud-companion/src/backgroundRoundTrip.ts
@@ -2747,6 +4132,173 @@
       },
       expired: () => fired
     };
+  }
+
+  // extensions/swimcloud-companion/src/multiTeamApp.ts
+  function createMultiTeamApp(send, now = () => (/* @__PURE__ */ new Date()).toISOString()) {
+    let consecutiveFailures = 0;
+    return {
+      reset() {
+        consecutiveFailures = 0;
+      },
+      async relay(request) {
+        const trip = await send(
+          {
+            type: "omniswim-swimcloud-relay-page",
+            subject: request.subject,
+            sourceUrl: request.sourceUrl,
+            retrievedAt: now(),
+            httpStatus: request.httpStatus,
+            html: request.html
+          },
+          RELAY_ROUND_TRIP_TIMEOUT_MS
+        );
+        const reply = isRoundTripOk(trip) ? trip.value : void 0;
+        if (reply?.relayed === true && reply.via === "http") {
+          consecutiveFailures = 0;
+          return "landed";
+        }
+        consecutiveFailures += 1;
+        if (consecutiveFailures >= RELAY_FAILURE_STOP_THRESHOLD) return "streak-stop";
+        return reply?.relayed === true ? "fallback" : "lost";
+      },
+      async openCapture(subject, plannedPageCount) {
+        const trip = await send({ type: "omniswim-swimcloud-open-capture", subject, plannedPageCount });
+        if (!isRoundTripOk(trip)) return void 0;
+        const id = trip.value?.captureId;
+        return typeof id === "string" && id.length > 0 ? id : void 0;
+      },
+      async markCapture(subject, completeness, label) {
+        await send({
+          type: "omniswim-swimcloud-mark-capture",
+          subject,
+          completeness,
+          ...label === void 0 ? {} : { label }
+        });
+      },
+      async flushDownloads(subjects) {
+        const results = [];
+        for (const subject of subjects) {
+          const trip = await send({ type: "omniswim-swimcloud-flush-downloads", subject });
+          if (!isRoundTripOk(trip)) {
+            results.push({ subject, pageCount: 0, error: roundTripFailureText("Flushing the pages saved to Downloads", trip) });
+            continue;
+          }
+          const reply = trip.value ?? {};
+          results.push({
+            subject,
+            pageCount: typeof reply.pageCount === "number" ? reply.pageCount : 0,
+            ...reply.filename === void 0 ? {} : { filename: reply.filename },
+            ...reply.error === void 0 ? {} : { error: reply.error }
+          });
+        }
+        return results;
+      }
+    };
+  }
+
+  // extensions/swimcloud-companion/src/timesEndpointDiscovery.ts
+  var SWIMMER_ID_PLACEHOLDER = "{swimmerId}";
+  var SWIMCLOUD_HOSTS = /* @__PURE__ */ new Set(["www.swimcloud.com", "swimcloud.com"]);
+  var DATA_INITIATORS = /* @__PURE__ */ new Set(["fetch", "xmlhttprequest"]);
+  var ASSET_SUFFIX = /\.(?:js|mjs|css|png|jpe?g|gif|svg|webp|woff2?|ttf|eot|ico|map)$/i;
+  function discoverSwimmerTimesEndpoints(entries, swimmerId) {
+    if (swimmerId.length === 0) return [];
+    const out = [];
+    const seen = /* @__PURE__ */ new Set();
+    for (const entry of entries) {
+      if (!DATA_INITIATORS.has(entry.initiatorType)) continue;
+      let parsed;
+      try {
+        parsed = new URL(entry.name);
+      } catch {
+        continue;
+      }
+      if (!SWIMCLOUD_HOSTS.has(parsed.host)) continue;
+      if (ASSET_SUFFIX.test(parsed.pathname)) continue;
+      if (!entry.name.includes(swimmerId)) continue;
+      if (seen.has(entry.name)) continue;
+      seen.add(entry.name);
+      out.push({
+        url: entry.name,
+        template: entry.name.split(swimmerId).join(SWIMMER_ID_PLACEHOLDER),
+        initiatorType: entry.initiatorType
+      });
+    }
+    return out;
+  }
+  function swimmerTimesEndpointReport(observation) {
+    const lines = [
+      "SwimCloud swimmer-times endpoint observation",
+      `page:        ${observation.pageUrl}`,
+      `swimmer id:  ${observation.swimmerId}`,
+      ...observation.seasonIds === void 0 ? [] : [`season ids:  ${observation.seasonIds}`],
+      `requests seen: ${observation.entriesSeen}`,
+      ""
+    ];
+    if (observation.candidates.length === 0) {
+      lines.push(
+        observation.entriesSeen === 0 ? "No resource timing entries were recorded. The page may have loaded before the extension, or the buffer was cleared \u2014 reload the page with the extension already installed." : "No request to SwimCloud carried this swimmer's id. The page may pass the id in a POST body, which resource timing cannot show. Read the Network tab directly and send the request URL plus its payload."
+      );
+      return lines.join("\n");
+    }
+    lines.push(`${observation.candidates.length} candidate request(s):`);
+    for (const candidate of observation.candidates) {
+      lines.push(`  [${candidate.initiatorType}] ${candidate.url}`);
+      lines.push(`      template: ${candidate.template}`);
+    }
+    return lines.join("\n");
+  }
+
+  // extensions/swimcloud-companion/src/eventResults.ts
+  var EVENT_RESULTS_CONCURRENCY = 1;
+  var EVENT_RESULTS_STAGGER_MS = 3e3;
+  function planEventResultsSteps(meetId, swimsPages, indexEventRefs = []) {
+    const collected = collectEventRefs(swimsPages);
+    const deduplicatedIndexRefs = [...new Set(indexEventRefs)];
+    return {
+      steps: planMeetEventResults({
+        meetId,
+        eventRefs: [...deduplicatedIndexRefs, ...collected.eventRefs]
+      }),
+      swimsSeen: collected.swimsSeen,
+      withoutEventRef: collected.withoutEventRef,
+      duplicates: collected.duplicates,
+      fromEventIndex: deduplicatedIndexRefs.length
+    };
+  }
+  function collectEventRefs(swimsPages) {
+    const seen = /* @__PURE__ */ new Set();
+    const eventRefs = [];
+    let swimsSeen = 0;
+    let withoutEventRef = 0;
+    let duplicates = 0;
+    for (const page of swimsPages) {
+      for (const swim of page) {
+        swimsSeen += 1;
+        const eventRef = swim.event.eventRef;
+        if (eventRef === void 0 || eventRef.length === 0) {
+          withoutEventRef += 1;
+          continue;
+        }
+        if (seen.has(eventRef)) {
+          duplicates += 1;
+          continue;
+        }
+        seen.add(eventRef);
+        eventRefs.push(eventRef);
+      }
+    }
+    return { eventRefs, swimsSeen, withoutEventRef, duplicates };
+  }
+  function classifyEventResultsOutcome(outcome) {
+    if (outcome.kind === "http-status" && outcome.httpStatus === 403) {
+      return {
+        action: "record-and-stop-phase",
+        message: "SwimCloud returned a challenge on an event results page. Stopping the event-results pass; the meet results already captured are unaffected, but prelims and finals cannot be told apart for the events not yet fetched. Open the page in a tab, pass the challenge, then Retry."
+      };
+    }
+    return { action: "record-and-continue" };
   }
 
   // extensions/swimcloud-companion/src/progress.ts
@@ -2977,9 +4529,8 @@
   }
 
   // extensions/swimcloud-companion/src/crawler-content.ts
-  var MIN_DELAY_MS = 3e3;
-  var BUTTON_ID = "omniswim-swimcloud-crawler-button";
-  var PANEL_ID = "omniswim-swimcloud-crawler-panel";
+  var BUTTON_ID2 = "omniswim-swimcloud-crawler-button";
+  var PANEL_ID2 = "omniswim-swimcloud-crawler-panel";
   function sendMessageRaw(message) {
     return new Promise((resolve, reject) => {
       chrome.runtime.sendMessage(message, (response) => {
@@ -3009,6 +4560,7 @@
       return {
         html,
         httpStatus: response.status,
+        finalUrl: response.url,
         ...retryAfter === null ? {} : { retryAfter }
       };
     } catch (error) {
@@ -3023,10 +4575,10 @@
     }
   }
   function createPanel(subjectTitle) {
-    const existing = document.getElementById(PANEL_ID);
+    const existing = document.getElementById(PANEL_ID2);
     if (existing) existing.remove();
     const root = document.createElement("div");
-    root.id = PANEL_ID;
+    root.id = PANEL_ID2;
     const title = document.createElement("div");
     title.className = "omniswim-crawler-panel__title";
     title.textContent = subjectTitle;
@@ -4063,15 +5615,15 @@
     return void 0;
   }
   function createCrawlerButton() {
-    const button = document.createElement("button");
-    button.id = BUTTON_ID;
-    button.type = "button";
-    button.textContent = "Auto-fetch full meet (Omniswim)";
-    button.setAttribute(
+    const button2 = document.createElement("button");
+    button2.id = BUTTON_ID2;
+    button2.type = "button";
+    button2.textContent = "Auto-fetch full meet (Omniswim)";
+    button2.setAttribute(
       "aria-label",
       "Fetch every team\u2019s results for this meet into Omniswim Suite, several minutes, several requests"
     );
-    return button;
+    return button2;
   }
   var TIMES_ENDPOINT_BUTTON_ID = "omniswim-times-endpoint-button";
   function mountTimesEndpointProbe() {
@@ -4080,12 +5632,12 @@
     if (mount === null) return;
     const swimmerId = mount.getAttribute("data-swimmer-id") ?? "";
     if (!/^\d+$/.test(swimmerId)) return;
-    const button = document.createElement("button");
-    button.id = TIMES_ENDPOINT_BUTTON_ID;
-    button.type = "button";
-    button.textContent = "Copy times endpoint for Omniswim";
-    button.style.cssText = "position:fixed;right:16px;bottom:64px;z-index:2147483646;padding:8px 12px;font:600 13px system-ui,sans-serif;color:#fff;background:#1f6feb;border:0;border-radius:6px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3)";
-    button.addEventListener("click", () => {
+    const button2 = document.createElement("button");
+    button2.id = TIMES_ENDPOINT_BUTTON_ID;
+    button2.type = "button";
+    button2.textContent = "Copy times endpoint for Omniswim";
+    button2.style.cssText = "position:fixed;right:16px;bottom:64px;z-index:2147483646;padding:8px 12px;font:600 13px system-ui,sans-serif;color:#fff;background:#1f6feb;border:0;border-radius:6px;cursor:pointer;box-shadow:0 2px 8px rgba(0,0,0,.3)";
+    button2.addEventListener("click", () => {
       const entries = performance.getEntriesByType("resource").map((entry) => ({
         name: entry.name,
         initiatorType: entry.initiatorType
@@ -4099,23 +5651,47 @@
         entriesSeen: entries.length
       });
       void navigator.clipboard.writeText(report).then(() => {
-        button.textContent = "Copied \u2014 paste it into Omniswim";
+        button2.textContent = "Copied \u2014 paste it into Omniswim";
       }).catch(() => {
-        button.textContent = "Clipboard refused \u2014 see the console";
+        button2.textContent = "Clipboard refused \u2014 see the console";
         console.info(report);
       });
     });
-    document.body.appendChild(button);
+    document.body.appendChild(button2);
+  }
+  var multiTeamApp = createMultiTeamApp((message, timeoutMs) => sendToBackground(message, timeoutMs));
+  async function multiTeamFetchPage(url) {
+    try {
+      return await fetchPage(url);
+    } catch {
+      return void 0;
+    }
+  }
+  function crawlLockManager() {
+    return navigator.locks;
   }
   function main() {
+    mountMultiTeamCrawlButton({
+      fetchPage: multiTeamFetchPage,
+      app: multiTeamApp,
+      // The meet crawl's own last-request clock: the two crawls cannot start closer than the pacing floor.
+      paceClock: {
+        get: () => lastFetchAtMs,
+        set: (ms) => {
+          lastFetchAtMs = ms;
+        }
+      },
+      locks: crawlLockManager()
+    });
     mountTimesEndpointProbe();
-    if (document.getElementById(BUTTON_ID)) return;
+    if (document.getElementById(BUTTON_ID2)) return;
+    if (!crawlHostAllowed(location.hostname)) return;
     const meetId = meetIdFromCurrentPage();
     if (meetId === void 0) return;
-    const button = createCrawlerButton();
-    document.body.appendChild(button);
-    button.addEventListener("click", () => {
-      button.remove();
+    const button2 = createCrawlerButton();
+    document.body.appendChild(button2);
+    button2.addEventListener("click", () => {
+      button2.remove();
       const panel = createPanel(`Meet ${meetId} \u2014 full-field crawl`);
       const control = { cancelled: false, paused: false };
       panel.cancelButton.addEventListener("click", () => {
@@ -4134,12 +5710,84 @@
     });
   }
   function startCrawl(meetId, panel, control) {
-    runCrawl(meetId, panel, control).catch((error) => {
+    withCrawlLock(crawlLockManager(), () => runCrawl(meetId, panel, control)).then((result) => {
+      if (result.acquired) return;
+      renderMessage(panel, result.message);
+      panel.retryButton.hidden = result.reason !== "held";
+    }).catch((error) => {
       renderCrawlFailure(panel, error);
     });
   }
   main();
 })();
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Minimal HTML text extraction, implemented with string and regular-expression
+ * operations only.
+ *
+ * ## Why there is no HTML parser here
+ *
+ * This package has **zero runtime dependencies** and does not use the DOM. That
+ * is deliberate and it is a scope decision, not an oversight:
+ *
+ * - Choosing an HTML parser (cheerio? jsdom? the extension's own live
+ *   `document`?) is an integration decision that belongs to the phase that
+ *   actually wires in a live source, not to the phase that defines the contract.
+ * - Both access tracks can produce a **string**: Track A's content script has
+ *   `document.documentElement.outerHTML`, Track B's Playwright has
+ *   `page.content()`. A string is the one input shape both can supply without
+ *   either one dictating a parser to the other
+ *   (`plans/2026-09-06/03-architecture.md` §1.3 requires the parser to be
+ *   shared by both tracks and to have no idea which produced its input).
+ *
+ * ## Known limits of regex extraction
+ *
+ * These are stated rather than hidden, because they are the reason the parser
+ * that uses them reports `confidence: 'synthetic-fixture-only'`:
+ *
+ * - Tag matching is textual. A `<` inside an attribute value, or a tag broken
+ *   across a CDATA-ish construct, will confuse it.
+ * - {@link findTables} tracks `<table>` nesting with a stack and so survives
+ *   nested tables, but {@link extractTableRows} **removes nested tables before
+ *   splitting rows**, so content that lives inside a nested table is dropped
+ *   from the outer table's cells.
+ * - Optional end tags (`<tr>` without `</tr>`) are tolerated by ending an
+ *   element at the next sibling's start tag, which is right for `tr`/`td`/`th`
+ *   and would be wrong for a general parser.
+ *
+ * If a real captured page defeats any of this, the fix is to introduce a real
+ * parser at the integration boundary — not to bolt more regexes on here.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Reads the season picker off a SwimCloud team page.
+ *
+ * ## Why this exists
+ *
+ * A team roster page filters by `season_id`, a numeric id. The page prints the
+ * id-to-label table itself, in the `<select name="season_id">` of its filter
+ * form (`30` is `2026-2027`, `29` is `2025-2026`, and so on). Nothing proves
+ * that table is stable over time or shared by every team. So this module never
+ * computes, offsets or reverses an id from a label. It copies the id verbatim
+ * from the option the page printed, and a caller resolves a season **per team,
+ * from that team's own page**.
+ *
+ * ## Fail loudly
+ *
+ * A missing select, an unreadable label or a duplicate throws a
+ * {@link TeamSeasonParseError}. There is no empty-list default: "this page has
+ * no seasons" and "this parser found none" must never look the same, because
+ * the second one silently becomes "no season to crawl".
+ *
+ * The first option, `----- All Seasons -----`, has an empty value and is not a
+ * season. It is skipped by its empty value, not by its label.
+ *
+ * Pure: no network, no DOM, no clock.
+ */
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0
@@ -4244,46 +5892,10 @@
  * formula for deriving one exists anywhere in this package. A `season_id`-less
  * roster URL gets the server's own current season — which is what both real
  * captures show, each arriving with the current season pre-`selected`.
- */
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
  *
- * Minimal HTML text extraction, implemented with string and regular-expression
- * operations only.
- *
- * ## Why there is no HTML parser here
- *
- * This package has **zero runtime dependencies** and does not use the DOM. That
- * is deliberate and it is a scope decision, not an oversight:
- *
- * - Choosing an HTML parser (cheerio? jsdom? the extension's own live
- *   `document`?) is an integration decision that belongs to the phase that
- *   actually wires in a live source, not to the phase that defines the contract.
- * - Both access tracks can produce a **string**: Track A's content script has
- *   `document.documentElement.outerHTML`, Track B's Playwright has
- *   `page.content()`. A string is the one input shape both can supply without
- *   either one dictating a parser to the other
- *   (`plans/2026-09-06/03-architecture.md` §1.3 requires the parser to be
- *   shared by both tracks and to have no idea which produced its input).
- *
- * ## Known limits of regex extraction
- *
- * These are stated rather than hidden, because they are the reason the parser
- * that uses them reports `confidence: 'synthetic-fixture-only'`:
- *
- * - Tag matching is textual. A `<` inside an attribute value, or a tag broken
- *   across a CDATA-ish construct, will confuse it.
- * - {@link findTables} tracks `<table>` nesting with a stack and so survives
- *   nested tables, but {@link extractTableRows} **removes nested tables before
- *   splitting rows**, so content that lives inside a nested table is dropped
- *   from the outer table's cells.
- * - Optional end tags (`<tr>` without `</tr>`) are tolerated by ending an
- *   element at the next sibling's start tag, which is right for `tr`/`td`/`th`
- *   and would be wrong for a general parser.
- *
- * If a real captured page defeats any of this, the fix is to introduce a real
- * parser at the integration boundary — not to bolt more regexes on here.
+ * One exception, added 2026-10-03: {@link planTeamSeasonRoster}. It emits a
+ * `season_id` only from a `TeamSeasonOption` that `parseTeamSeasonOptions` read
+ * off that team's own page. Every other planner here still emits none.
  */
 /**
  * @license
@@ -4474,6 +6086,210 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
+ * The sequential pacing floor, in one place.
+ *
+ * Every page this crawl fetches one at a time (team pages, roster pages) starts
+ * at least this many milliseconds after the previous request started, per
+ * `plans/2026-09-08/03-extension-crawler.md` "Pacing and politeness": do not
+ * lower it for the extension. `crawler-content.ts` and `multiTeamDriver.ts` both
+ * read this constant, so the single-meet crawl and the multi-team crawl cannot
+ * drift apart. `rateLimitBackoff.ts` `BASE_BACKOFF_MS` is deliberately equal to it.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * One crawl at a time, across every tab.
+ *
+ * The meet crawl and the multi-team crawl each pace their own requests, but two
+ * crawls (or the same crawl in two tabs) would add their traffic together and
+ * break the "one request, 3 s apart" rule. Both buttons take this lock for the
+ * whole run. It is the Web Locks API, `navigator.locks`, which is shared by every
+ * tab of the same origin (`www.swimcloud.com`).
+ *
+ * Pure: the lock manager is injected, so a test passes a fake one. A missing lock
+ * manager refuses the run. The check cannot be made, so the crawl does not start.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * SwimCloud source entities.
+ *
+ * Shape adapted from `plans/2026-09-06/02-data-model-and-scoring.md` §2, which in
+ * turn adapts the W3C OpenTrack Community Group's Open Athletics Data Model
+ * (Competition → UnitCompetition → Competitor → Performance → Result).
+ *
+ * Three rules from `CLAUDE.md` § "Data provenance" govern every type in this
+ * file, and they are the reason several fields look more awkward than they
+ * strictly need to:
+ *
+ * 1. **Unknown ≠ a default.** A course we could not determine is `'unknown'`,
+ *    never silently `'SCY'`; a ruleset we could not determine is `'unknown'`,
+ *    never silently `'NCAA'`. This mirrors the existing "unknown division ≠ D1"
+ *    rule in `packages/core/src/data/teamDivisions.ts`.
+ * 2. **Absent ≠ zero.** A competition value we do not hold is an omitted
+ *    optional field, never `0` and never an interpolated estimate.
+ * 3. **Unverified is labelled.** Nothing in this file has been checked against
+ *    real SwimCloud markup — see {@link SwimCloudParseConfidence} in
+ *    `./parser.ts`. Fields whose *existence* on a SwimCloud page is unverified
+ *    carry an explicit "unverified" doc-comment; treat their absence as the
+ *    expected case, not as a parse bug.
+ *
+ * These types describe **what a SwimCloud page says**. They deliberately do not
+ * import from `@omniswim/core`: the domain layer must not learn where an
+ * Entry/Result came from (`plans/2026-09-06/03-architecture.md` §1). Mapping
+ * these into the core roster/scoring model is a separate, later step.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The swimmer-times leg of a meet crawl, as pure functions.
+ *
+ * A meet capture answers "who swam what, here". A roster answers "who is on
+ * this program". Neither answers "what has this swimmer done this season",
+ * which is what a coach comparing entries actually needs — that lives on
+ * `/swimmer/{id}/times/`, one small static page per swimmer. This module turns
+ * a set of parsed rosters into the exact list of those pages to fetch, and
+ * carries the two constants that govern how fast the fetch pool is allowed to
+ * go.
+ *
+ * ## What is here and what is not
+ *
+ * The URL is **not** built here. `planMeetSwimmerTimes` in
+ * `packages/swimcloud/src/crawlPlan.ts` owns the `/swimmer/{id}/times/`
+ * template, the "no gender, no season_id, no page" rules behind it, and the
+ * dedupe by swimmer id, all pinned against the real capture archived as
+ * `tests/fixtures/swimcloud-real-swimmer-times-1472365.html`. This module calls
+ * it. A second copy of that template living in the extension is exactly the
+ * mistake `./background.ts`'s header documents about the old hand-copied
+ * capture-id rule: two implementations that agree only by construction, until
+ * one changes.
+ *
+ * What this module adds is the part the planner does not have and should not:
+ * the reduction from *roster rows* to *swimmer ids*, and the arithmetic that
+ * makes the resulting count explainable on the panel.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The work queue for a multi-team, season-chosen SwimCloud crawl.
+ *
+ * Pure state machine: no `chrome.*`, no DOM, no `fetch`, no clock. Every
+ * function takes a queue and returns a new queue. The impure loop that does the
+ * fetching (not written yet) asks {@link nextWork} for an item, runs it, then
+ * calls {@link markDone} or {@link markFailed}.
+ *
+ * ## What the queue holds
+ *
+ * - A team with a season the user chose by label. The label must be one of the
+ *   options parsed from **that team's own page** (`parseTeamSeasonOptions`). A
+ *   team whose page does not offer the label is `season-unavailable`: it gets no
+ *   work, and its progress names the labels it does offer.
+ * - Roster work: men and women, one URL each (`planTeamSeasonRoster`).
+ * - Swimmer work, keyed by swimmer id alone (`swimmer|<id>`). Swimmer ids are
+ *   only known after a roster is parsed, so the driver adds them with
+ *   {@link addSwimmers}. See "One fetch per swimmer" below.
+ *
+ * ## One fetch per swimmer
+ *
+ * The swimmer fetch is `/api/swimmers/{id}/profile_fastest_times/`. It has no
+ * team and no season in it. One swimmer on two teams, or on one team in two
+ * seasons, is one request. So a swimmer's work key is `swimmer|<id>`, the same
+ * dedupe `collectSwimmerIds` in `./swimmerTimes.ts` does across rosters. A team
+ * crawled again for another season does not fetch its returning swimmers again.
+ *
+ * Every `(teamId, seasonId)` pair that listed the swimmer stays on the work
+ * item as `attributions`, so progress is still per team: each team counts the
+ * shared fetch in its own swimmer totals, and each team gets an error line if it
+ * fails. {@link addSwimmers} meeting an existing key appends the pair.
+ *
+ * **Data caveat for whoever reads the results.** The endpoint returns all-time
+ * bests. For a past-season roster that includes swims from LATER seasons. Do not
+ * read what was fetched for a past-season roster as that season's times.
+ *
+ * ## Resume keys are per team and season
+ *
+ * The fetch is one per swimmer, but the filing is per team: the driver files the
+ * one reply under every team that lists the swimmer. So a resume key is
+ * `swimmer|<id>|<teamId>|<seasonId>` ({@link swimmerResumeKey}), one per team
+ * that has the swimmer's reply. {@link addSwimmers} marks a swimmer
+ * `skipped-resumed` only when EVERY team and season listing it has its key. A team
+ * that lists the swimmer only in a later run (its roster failed the first time)
+ * flips the swimmer back to `pending`: the swimmer is fetched once more, and filed
+ * under every team. A skipped swimmer's body was never fetched this run, so it
+ * cannot be filed under the missing team alone.
+ *
+ * Old-shape keys (`swimmer|<id>` alone, or the earlier `swimmer|<team>|<season>|<id>`
+ * order) match nothing in practice, so that swimmer is fetched again. That is the
+ * safe error.
+ *
+ * ## One shared concurrency limit
+ *
+ * `concurrency` is one number for the whole queue. {@link nextWork} counts
+ * in-flight work across **all** teams against it. Nothing here multiplies it by
+ * the team count, and no team has a limit of its own. Adding teams makes a longer
+ * crawl, not a wider one.
+ *
+ * {@link createQueue} refuses a value above `SWIMMER_TIMES_CONCURRENCY`
+ * (`concurrency-too-high`). Roster pages are strictly sequential at 3 s
+ * (`boundedFetchPool.ts` header); only swimmer-times fetches may overlap, and
+ * their limit is that constant. So {@link nextWork} also never hands out a roster
+ * while ANY other work is in flight, and never hands out anything while a roster
+ * is in flight, whatever `concurrency` says. (The second half is stricter than
+ * the written rule, which only forbids overlapping rosters. It costs nothing at
+ * a limit of 1 and keeps a roster page's pacing unshared if the limit is raised.)
+ *
+ * ## The default is the live pool value, not a literal
+ *
+ * The default is `SWIMMER_TIMES_CONCURRENCY` from `./swimmerTimes.ts`, the number
+ * the real crawl runs at. That is 1: it was lowered from 3 on 2026-09-22 after a
+ * 3-lane crawl drew HTTP 429 on 111 of 184 requests. A literal 3 here would loosen
+ * pacing. Pacing between starts (`SWIMMER_TIMES_STAGGER_MS`) stays the driver's
+ * job through `runBoundedFetchPool`-style gating; this module only decides how
+ * many items may be in flight at once.
+ *
+ * ## Resume
+ *
+ * `finishedKeys` (keys of work an earlier run finished) makes
+ * {@link addSwimmers} mark a matching swimmer `skipped-resumed`, so a restarted
+ * crawl does not fetch it again. Roster work is always fetched again, because a
+ * fresh roster is the only thing that says who is on the team now; this is the
+ * same rule the single-meet crawl follows. Only `done` swimmers are finished:
+ * `failed` work is retried on the next run.
+ *
+ * ## Stop, pause, cancel
+ *
+ * - Pause: {@link nextWork} hands out nothing. Work in flight finishes.
+ * - Cancel: terminal. Nothing more is handed out. Work in flight finishes.
+ * - A failure that must stop the whole crawl (a 403 challenge, see
+ *   `crawlErrorPolicy.ts`) is reported with `markFailed(..., { haltQueue: true })`.
+ *   The queue halts. Every item that halted the queue is remembered.
+ *   {@link resumeQueue} clears the halt and puts each of them back to `pending`
+ *   if it is still `failed`, because the challenge page was not a real answer
+ *   for it. It does not matter whether the driver called {@link retryFailed}
+ *   first.
+ *
+ * ## Rules for the driver (the queue cannot enforce these)
+ *
+ * 1. **Store the queue that {@link nextWork} returns before any `await`.** The
+ *    queue is a value. Calling `nextWork` twice on the same value returns the
+ *    same roster twice, because only the returned queue knows it is in flight.
+ * 2. **Verify the season before {@link addSwimmers}.** The driver must call
+ *    {@link verifyRosterSeason}`(html, work)` on the fetched roster page. If it
+ *    returns `{ ok: false }`, call {@link markFailed} with its reason. A server
+ *    that ignores `season_id` serves the wrong season, and nothing else notices.
+ * 3. **Halt on:** a Cloudflare 403, any 5xx, a network error, and
+ *    {@link CONSECUTIVE_429_HALT} consecutive 429 give-ups. {@link shouldHalt}
+ *    decides this for one page outcome. On `stop`, call
+ *    `markFailed(..., { haltQueue: true })`.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * What to do when SwimCloud answers HTTP 429.
  *
  * ## Why this exists
@@ -4503,6 +6319,191 @@
  * {@link MAX_BACKOFF_MS} this stops retrying and reports the page as not
  * served, which is the same honest outcome as before — but now with the reason
  * named, rather than a bare `http-error`.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The loop of a multi-team, season-chosen SwimCloud crawl.
+ *
+ * All I/O is injected through {@link MultiTeamDriverDeps}: the fetch, the relay
+ * to the background worker, the capture bookkeeping, the clock, the sleep, the
+ * saved resume keys, the progress sink and the season chooser. This module has
+ * no `chrome.*`, no DOM, no `fetch` and no timers of its own, so the whole flow
+ * runs in a test against archived pages with a fake clock and a fake app. The
+ * thin impure half is `multiTeamPanel.ts`.
+ *
+ * ## Flow
+ *
+ * 1. **Seasons.** For each team, open the capture `team-{id}`, fetch
+ *    `/team/{id}/roster/?gender=M` (no `season_id`) and read the season select
+ *    from THAT page with `parseTeamSeasonOptions`. Options are never shared
+ *    between teams. The options go to `deps.chooseSeasons`; the answer is one
+ *    season label per team.
+ * 2. **Queue.** `createQueue` with the choices and the progress saved for this
+ *    exact selection. A team whose label its own page does not offer is
+ *    `season-unavailable` and gets no fetch at all. Every other team's capture
+ *    `team-{id}-{season}` is opened before its first page is relayed.
+ * 3. **Loop.** `nextWork` hands out one item at a time (concurrency is 1; the
+ *    queue refuses more). The returned queue is stored before any `await`
+ *    (queue rule 1). A roster page is checked before it is relayed or parsed
+ *    (queue rule 2). A swimmer item fetches
+ *    `/api/swimmers/{id}/profile_fastest_times/` once per swimmer id and files
+ *    the one body under every team that listed the swimmer.
+ * 4. **Halt.** Every page outcome goes through `shouldHalt` (rule 3). A halt calls
+ *    `markFailed(..., { haltQueue: true })` and the run ends. A 403 is never
+ *    retried. A halted run has no Resume: the user starts the crawl again and
+ *    finished swimmers are skipped.
+ * 5. **Finish.** On every exit (completed, cancelled, halted, thrown) the driver
+ *    marks each capture, then asks the worker to flush the downloads fallback for
+ *    every subject it used.
+ *
+ * ## Why the captures are opened
+ *
+ * The app's pages route answers 404 for a capture that was never opened. The
+ * worker then saves the page in `chrome.storage.local` and says `relayed: true`.
+ * Without the open call every page of a multi-team crawl sat there, unflushed. A
+ * page counts as landed only when the relay says `landed`, which the glue returns
+ * only for the HTTP path; a `fallback` is not landed.
+ *
+ * ## Pacing (unchanged, read from the constants)
+ *
+ * Before every request the driver waits until the request would start at least
+ * `MIN_DELAY_MS` (roster and season pages) or `SWIMMER_TIMES_STAGGER_MS`
+ * (swimmer fetches) after the previous request started. The last start time
+ * lives in `deps.paceClock`, which the glue shares with the meet crawl, so two
+ * runs on one page cannot start closer together. A 429 is retried with
+ * `decideRateLimitRetry`, which only ever waits longer. Cancel and Pause are
+ * checked after every wait. No concurrency is added.
+ *
+ * ## The denylist
+ *
+ * Every URL is classified by `classifySwimCloudUrl` before it is fetched and
+ * must be `fetchable` and of the kind the step expects. Anything else throws
+ * {@link MultiTeamDriverError} and nothing is fetched. A reply whose final URL
+ * differs from the requested one is not data: another fetchable page is a
+ * failure of that item, an unfetchable one halts the run.
+ *
+ * ## Rules the driver bends or adds (stated so a reviewer can check them)
+ *
+ * - A 2xx page that fails a check (challenge, wrong season, redirect, not JSON)
+ *   is NOT relayed. Relaying it would file the wrong data under the chosen capture.
+ * - A 2xx page with no `<select name="season_id">`, or a JSON endpoint answering
+ *   something that is not JSON, is a challenge page: it halts the run.
+ * - The swimmer page outcome uses `shouldHalt` (5xx and network errors halt), the
+ *   stricter queue rule, not the more forgiving `classifySwimmerTimesOutcome`.
+ * - Saved progress is keyed by the sorted (team, season id) pairs of the run. It
+ *   is cleared after a completed run with no failure, and kept otherwise so a
+ *   retry fetches only what failed.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Turns pasted text into crawl targets: SwimCloud teams and conferences.
+ *
+ * The user pastes one or many links. Links may be split by newlines, spaces or
+ * commas. Each link becomes a target or a named rejection. Nothing is dropped
+ * without a line saying why, except a repeat of a target already in the list.
+ *
+ * ## The denylist is not duplicated here
+ *
+ * `classifySwimCloudUrl` in `./urlClassifier.ts` already enforces the robots.txt
+ * list (`/api/`, `/jsonapi/`, `/team/{@literal *}/facilities/`, `/tz_detect/`)
+ * and answers `forbidden` before any pattern match. This module asks it first.
+ * The one `/api/` path the app fetches by the user's decision
+ * (`/api/swimmers/{id}/profile_fastest_times/`) classifies as fetchable there.
+ * It is still under `/api/`, so a pasted target link to it is `denylisted` here.
+ *
+ * Pure: no network, no DOM, no clock.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The words and rows of the multi-team panel, as pure functions.
+ *
+ * `multiTeamPanel.ts` (impure, DOM) calls these and writes the strings into
+ * elements. Nothing here touches the DOM, the network or a clock, so the text a
+ * coach reads is a unit test, not something only a live run shows.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The multi-team crawl panel: a button and a plain-DOM panel on `www.swimcloud.com`.
+ * Impure and thin on purpose. It owns the DOM, the real clock and
+ * `chrome.storage.local`; the loop is `./multiTeamDriver.ts`, the conversation
+ * with the app is `./multiTeamApp.ts`, the one-crawl lock is `./crawlLock.ts`
+ * and every string is `./multiTeamPanelModel.ts`.
+ *
+ * It runs in the content script because the fetches must be same-origin, in the
+ * user's own browser session. `crawler-content.ts` hands it the real `fetchPage`,
+ * the worker conversation, the shared pacing clock and the lock manager, so this
+ * file adds no second copy of any of them.
+ *
+ * Styling follows the existing panels (`content.css`, `omniswim-crawler-panel__*`
+ * classes). Nothing here is unit-tested; the manual checklist is in the
+ * extension README.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Bounded round trips to the background service worker.
+ *
+ * ## Why this module exists
+ *
+ * `chrome.runtime.sendMessage(message, callback)` has exactly two outcomes the
+ * caller can observe: the callback runs with a response, or the callback runs
+ * with `chrome.runtime.lastError` set. It has **no third outcome for "the
+ * worker never answered"**. If the background listener returns `true` — the
+ * Manifest V3 promise that a response is coming — and then never calls
+ * `sendResponse`, the callback is simply never invoked. A content script that
+ * `await`s that message waits forever: no rejection, no timeout, no console
+ * error. The crawl panel freezes on whatever line it last rendered and a coach
+ * watching it has no way to tell a stalled crawl from a slow one.
+ *
+ * That is not hypothetical. Every handler in `./background.ts` used to be
+ * `handler(message).then(sendResponse)` with no `.catch`, over functions that
+ * did work (`await loadOptions()`, `captureIdForSubject(...)`, `btoa(...)`)
+ * *outside* their own `try` blocks. Any throw on those lines rejected the
+ * promise, skipped the `.then`, and left the message channel open and silent
+ * for the rest of the tab's life.
+ *
+ * So: no `chrome.runtime.sendMessage` on the crawl's critical path is awaited
+ * unbounded. Every one goes through {@link sendWithTimeout}, which always
+ * settles — `ok`, `timeout` or `error` — and the caller decides what a failure
+ * degrades to. A visibly degraded crawl is recoverable. A silent one is not.
+ *
+ * Pure by construction: the timers are injected, `send` is any thunk returning
+ * a promise, and nothing here touches `chrome.*`, the DOM, or the network. That
+ * is what makes "a round trip that never answers becomes a timeout, not a
+ * hang" a unit test (`tests/swimCloudExtensionBackgroundRoundTrip.test.ts`)
+ * rather than something only a live meet can prove.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * The multi-team crawl's conversation with the background worker and, through
+ * it, the Omniswim app: relay a page, open a capture, mark it, flush the
+ * downloads fallback.
+ *
+ * Pure: the one impure thing, sending a message to the worker under a deadline,
+ * is injected as `send`. `crawler-content.ts` passes the real `sendToBackground`;
+ * a test passes a fake worker. That makes the rules below a unit test:
+ *
+ * - **A page is `landed` only on the HTTP path.** The worker answers
+ *   `{ relayed: true, via: 'downloads' }` when the app refused the page (a 404
+ *   for a capture that was never opened is the known case) and it saved the page
+ *   in `chrome.storage.local` instead. That page is not in the app. It is a
+ *   `fallback`, counted toward the failure streak, never `landed`.
+ * - **Failures in a row stop the run.** `RELAY_FAILURE_STOP_THRESHOLD` fallbacks
+ *   or losses in a row return `streak-stop`. The counter is per app object, and
+ *   {@link MultiTeamApp.reset} clears it at the start of each run.
+ * - **Opening a capture returns its id or nothing.** No id means the app did not
+ *   answer (not running, not paired). The driver stops before any roster.
  */
 /**
  * @license
@@ -4561,36 +6562,6 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * The swimmer-times leg of a meet crawl, as pure functions.
- *
- * A meet capture answers "who swam what, here". A roster answers "who is on
- * this program". Neither answers "what has this swimmer done this season",
- * which is what a coach comparing entries actually needs — that lives on
- * `/swimmer/{id}/times/`, one small static page per swimmer. This module turns
- * a set of parsed rosters into the exact list of those pages to fetch, and
- * carries the two constants that govern how fast the fetch pool is allowed to
- * go.
- *
- * ## What is here and what is not
- *
- * The URL is **not** built here. `planMeetSwimmerTimes` in
- * `packages/swimcloud/src/crawlPlan.ts` owns the `/swimmer/{id}/times/`
- * template, the "no gender, no season_id, no page" rules behind it, and the
- * dedupe by swimmer id, all pinned against the real capture archived as
- * `tests/fixtures/swimcloud-real-swimmer-times-1472365.html`. This module calls
- * it. A second copy of that template living in the extension is exactly the
- * mistake `./background.ts`'s header documents about the old hand-copied
- * capture-id rule: two implementations that agree only by construction, until
- * one changes.
- *
- * What this module adds is the part the planner does not have and should not:
- * the reduction from *roster rows* to *swimmer ids*, and the arithmetic that
- * makes the resulting count explainable on the panel.
- */
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- *
  * The per-event-results leg of a meet crawl, as pure functions.
  *
  * A team's swims list answers "who swam what, here". It does **not** answer
@@ -4623,42 +6594,6 @@
  * pages over and over; fetching one per team would be 1,680 requests for 42
  * pages' worth of facts. The dedupe here is not an optimisation, it is the
  * difference between a pass that finishes and one that does not.
- */
-/**
- * @license
- * SPDX-License-Identifier: Apache-2.0
- *
- * Bounded round trips to the background service worker.
- *
- * ## Why this module exists
- *
- * `chrome.runtime.sendMessage(message, callback)` has exactly two outcomes the
- * caller can observe: the callback runs with a response, or the callback runs
- * with `chrome.runtime.lastError` set. It has **no third outcome for "the
- * worker never answered"**. If the background listener returns `true` — the
- * Manifest V3 promise that a response is coming — and then never calls
- * `sendResponse`, the callback is simply never invoked. A content script that
- * `await`s that message waits forever: no rejection, no timeout, no console
- * error. The crawl panel freezes on whatever line it last rendered and a coach
- * watching it has no way to tell a stalled crawl from a slow one.
- *
- * That is not hypothetical. Every handler in `./background.ts` used to be
- * `handler(message).then(sendResponse)` with no `.catch`, over functions that
- * did work (`await loadOptions()`, `captureIdForSubject(...)`, `btoa(...)`)
- * *outside* their own `try` blocks. Any throw on those lines rejected the
- * promise, skipped the `.then`, and left the message channel open and silent
- * for the rest of the tab's life.
- *
- * So: no `chrome.runtime.sendMessage` on the crawl's critical path is awaited
- * unbounded. Every one goes through {@link sendWithTimeout}, which always
- * settles — `ok`, `timeout` or `error` — and the caller decides what a failure
- * degrades to. A visibly degraded crawl is recoverable. A silent one is not.
- *
- * Pure by construction: the timers are injected, `send` is any thunk returning
- * a promise, and nothing here touches `chrome.*`, the DOM, or the network. That
- * is what makes "a round trip that never answers becomes a timeout, not a
- * hang" a unit test (`tests/swimCloudExtensionBackgroundRoundTrip.test.ts`)
- * rather than something only a live meet can prove.
  */
 /**
  * @license

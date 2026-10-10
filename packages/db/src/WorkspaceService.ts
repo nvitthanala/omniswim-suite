@@ -5,7 +5,7 @@ import { DatabaseSync } from 'node:sqlite';
 import fs from 'node:fs';
 import path from 'node:path';
 import type { Workspace, SwimmerResult } from '@omniswim/core/types';
-import { SCHEMA_VERSION, CREATE_TABLES_SQL, SQLITE_MIGRATIONS_V2, SQLITE_MIGRATIONS_V3, SQLITE_MIGRATIONS_V4, SQLITE_MIGRATIONS_V5, SQLITE_MIGRATIONS_V6, SQLITE_MIGRATIONS_V7 } from './schema';
+import { SCHEMA_VERSION, CREATE_TABLES_SQL, SQLITE_MIGRATIONS_V2, SQLITE_MIGRATIONS_V3, SQLITE_MIGRATIONS_V4, SQLITE_MIGRATIONS_V5, SQLITE_MIGRATIONS_V6, SQLITE_MIGRATIONS_V7, SQLITE_MIGRATIONS_V8 } from './schema';
 import {
   assembleWorkspace,
   insertPositionalRows,
@@ -59,6 +59,13 @@ export class WorkspaceService {
       }
     }
     for (const sql of SQLITE_MIGRATIONS_V7) {
+      try {
+        this.db.exec(sql);
+      } catch {
+        /* table already exists */
+      }
+    }
+    for (const sql of SQLITE_MIGRATIONS_V8) {
       try {
         this.db.exec(sql);
       } catch {
@@ -348,6 +355,7 @@ export class WorkspaceService {
       'athlete_history',
       'race_analyses',
       'athlete_aliases',
+      'relay_leg_credits',
     ]) {
       this.db.prepare(`DELETE FROM ${table} WHERE workspace_id = ?`).run(workspaceId);
     }
@@ -422,6 +430,9 @@ export class WorkspaceService {
     }
     for (const row of insertPositionalRows(ws.id, ws.raceAnalyses ?? [])) {
       insertPos('race_analyses').run(row.workspace_id, row.position, row.data);
+    }
+    for (const row of insertPositionalRows(ws.id, ws.relayLegCredits ?? [])) {
+      insertPos('relay_leg_credits').run(row.workspace_id, row.position, row.data);
     }
   }
 }

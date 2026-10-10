@@ -1,10 +1,10 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { X, Save, Settings2 } from 'lucide-react';
 import { ScoringSettings } from '@omniswim/core/types';
 import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
 import { ScoringSettingsFields } from './ScoringSettingsFields';
 import { ScoringPresetManagerModal } from './ScoringPresetManagerModal';
-import { Button } from '@omniswim/ui';
+import { Button, Modal } from '@omniswim/ui';
 
 interface Props {
   settings: ScoringSettings;
@@ -18,6 +18,9 @@ interface Props {
    * without it this modal offers edits that `mergeScoringSettings` discards.
    */
   conference?: string;
+  pdfPlacePointsLocked?: boolean;
+  /** The results carry HyTek place points; lets a draft Auto lock before saving. */
+  resultsCarryPdfPlacePoints?: boolean;
 }
 
 /**
@@ -25,17 +28,33 @@ interface Props {
  * with `ScoringSettingsPanel.tsx` — see `ScoringSettingsFields.tsx`'s own
  * file header. This entry point never receives a `suggestedPresetId` (that's
  * a meet-import-triggered flow, and this dialog isn't one).
+ *
+ * Uses the shared `Modal` for dialog role, aria-modal, Escape, and focus
+ * handling — the previous hand-rolled backdrop had none of those.
  */
-export default function ScoringSettingsModal({ settings, onSave, onClose, scoringView, onScoringViewChange, conference }: Props) {
+export default function ScoringSettingsModal({ settings, onSave, onClose, scoringView, onScoringViewChange, conference, pdfPlacePointsLocked, resultsCarryPdfPlacePoints }: Props) {
   const [draft, setDraft] = useState<ScoringSettings>(() => mergeScoringSettings(settings));
   const [manageOpen, setManageOpen] = useState(false);
   const [presetListRefreshToken, setPresetListRefreshToken] = useState(0);
 
+  // The draft resets when the modal opens (it mounts only while open) or when
+  // the incoming settings change in content. An equal-but-new object from the
+  // parent must not wipe unsaved edits.
+  const settingsKey = JSON.stringify(settings);
+  useEffect(() => {
+    setDraft(mergeScoringSettings(settings));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- settingsKey is the content identity of `settings`
+  }, [settingsKey]);
+
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center modal-backdrop backdrop-blur-sm">
-      <div className="surface-card rounded-2xl p-6 max-w-2xl w-full mx-4 shadow-2xl max-h-[90vh] flex flex-col">
+    <>
+      <Modal
+        onClose={onClose}
+        ariaLabel="Scoring rules"
+        className="rounded-2xl p-6 max-w-2xl w-full mx-4 shadow-2xl max-h-[90vh] flex flex-col"
+      >
         <div className="flex justify-between items-center mb-6">
-          <h2 className="text-lg font-medium text-[var(--text-primary)] uppercase tracking-tight">Scoring Matrix Configuration</h2>
+          <h2 className="text-lg font-medium text-[var(--text-primary)]">Scoring rules</h2>
           <Button
             variant="ghost"
             size="md"
@@ -51,6 +70,8 @@ export default function ScoringSettingsModal({ settings, onSave, onClose, scorin
             settings={settings}
             onChange={setDraft}
             conference={conference}
+            pdfPlacePointsLocked={pdfPlacePointsLocked}
+            resultsCarryPdfPlacePoints={resultsCarryPdfPlacePoints}
             scoringView={scoringView}
             onScoringViewChange={onScoringViewChange}
             presetPickerExtra={
@@ -59,7 +80,7 @@ export default function ScoringSettingsModal({ settings, onSave, onClose, scorin
                 size="sm"
                 onClick={() => setManageOpen(true)}
                 aria-label="Manage scoring rule sets"
-                className="uppercase tracking-widest shrink-0"
+                className="shrink-0"
                 leadingIcon={<Settings2 size={10} aria-hidden />}
               >
                 Manage rule sets
@@ -77,7 +98,7 @@ export default function ScoringSettingsModal({ settings, onSave, onClose, scorin
             Update scoring model
           </Button>
         </div>
-      </div>
+      </Modal>
 
       {manageOpen ? (
         <ScoringPresetManagerModal
@@ -85,6 +106,6 @@ export default function ScoringSettingsModal({ settings, onSave, onClose, scorin
           onPresetsChanged={() => setPresetListRefreshToken(v => v + 1)}
         />
       ) : null}
-    </div>
+    </>
   );
 }

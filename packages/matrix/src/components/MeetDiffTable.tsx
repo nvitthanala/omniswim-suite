@@ -64,7 +64,7 @@ function DiffTableEmptyState() {
   return (
     <div className="p-12 text-center border border-dashed border-theme-soft rounded-xl text-theme-secondary">
       <GitCompareArrows className="w-12 h-12 mx-auto mb-4 opacity-20" />
-      <p className="text-xs uppercase font-medium tracking-widest">No team diff data available</p>
+      <p className="text-xs font-medium">No team diff data available</p>
     </div>
   );
 }
@@ -72,7 +72,7 @@ function DiffTableEmptyState() {
 function RankCell({ row }: { row: DiffRow }) {
   const rankDelta = rankDeltaFor(row);
   return (
-    <td className="p-3 text-right text-theme-secondary tabular-nums">
+    <td className="px-2 py-3 xl:p-3 text-right text-theme-secondary tabular-nums">
       {row.projectedRank != null ? `#${row.projectedRank}` : '-'}
       {rankDelta ? (
         <span className={rankDelta > 0 ? 'text-points-positive ml-2' : 'text-points-negative ml-2'}>
@@ -87,10 +87,10 @@ function RankCell({ row }: { row: DiffRow }) {
 function DiffTableRow({ row }: { row: DiffRow }) {
   return (
     <tr className="border-b border-theme-soft theme-hover-row transition-colors">
-      <td className="p-3"><TeamName name={row.teamName} /></td>
-      <td className="p-3"><PointsValue value={row.baselinePoints} /></td>
-      <td className="p-3"><PointsValue value={row.projectedPoints} className="text-[var(--text-primary)]" /></td>
-      <td className="p-3">
+      <td className="px-2 py-3 xl:p-3"><TeamName name={row.teamName} /></td>
+      <td className="px-2 py-3 xl:p-3 text-right"><PointsValue value={row.baselinePoints} signed={false} /></td>
+      <td className="px-2 py-3 xl:p-3 text-right"><PointsValue value={row.projectedPoints} signed={false} className="text-[var(--text-primary)]" /></td>
+      <td className="px-2 py-3 xl:p-3 text-right">
         <PointsValue value={row.delta} className={deltaClassName(row.delta)} />
       </td>
       <RankCell row={row} />
@@ -107,14 +107,14 @@ export default function MeetDiffTable({ projectedTeams, baselineTeams, searchQue
 
   return (
     <div className="overflow-x-auto border border-theme-soft rounded-xl">
-      <table className="w-full min-w-[620px] text-left border-collapse">
-        <thead className="surface-overlay text-[10px] uppercase tracking-widest text-theme-secondary font-medium">
+      <table className="w-full min-w-0 text-left border-collapse">
+        <thead className="surface-overlay text-ui-caption text-theme-secondary font-medium">
           <tr>
-            <th className="p-3">Team</th>
-            <th className="p-3 text-right">Baseline</th>
-            <th className="p-3 text-right">Projected</th>
-            <th className="p-3 text-right">Delta</th>
-            <th className="p-3 text-right">Rank</th>
+            <th className="px-2 py-3 xl:p-3">Team</th>
+            <th className="px-2 py-3 xl:p-3 text-right">Baseline</th>
+            <th className="px-2 py-3 xl:p-3 text-right">Projected</th>
+            <th className="px-2 py-3 xl:p-3 text-right">Delta</th>
+            <th className="px-2 py-3 xl:p-3 text-right">Rank</th>
           </tr>
         </thead>
         <tbody className="text-xs font-mono">

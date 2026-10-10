@@ -14,7 +14,7 @@
  * `plans/2026-09-14/03-OPTIMIZER-TRANSPARENCY.md` pieces 1 and 2.
  */
 
-import React from 'react';
+import React, { useRef } from 'react';
 import { X } from 'lucide-react';
 import { Button } from '@omniswim/ui';
 import type {
@@ -79,6 +79,19 @@ type Props = {
    *  run this session — undone once, or superseded by the next run, and it's
    *  gone. See RosterOptimizeStep.tsx's own doc comment on this pattern. */
   onUndo?: () => void;
+  /** Set when Undo was pressed but the lineup changed since the run. Shown with the two choices below. */
+  undoBlockedMessage?: string;
+  /**
+   * Why Undo was refused. 'changed' (default) offers "Keep my edits" and "Undo anyway".
+   * 'apply_not_saved' means the lineup already reads as it did before the run (the apply was not
+   * saved, or the coach put it back by hand), so nothing is left to undo and the only choice is
+   * "Dismiss".
+   */
+  undoBlockedKind?: 'changed' | 'apply_not_saved';
+  /** Write the pre-run arrays back anyway, discarding the later edits. */
+  onUndoAnyway?: () => void;
+  /** Keep the later edits and leave the run as it is. */
+  onKeepEdits?: () => void;
 };
 
 function RejectedCandidateRow({ candidate }: { candidate: NonNullable<GuardedOptimizerResult['consideredButRejected']>[number] }) {
@@ -93,8 +106,19 @@ function RejectedCandidateRow({ candidate }: { candidate: NonNullable<GuardedOpt
   );
 }
 
-export default function OptimizerChangeSummaryPanel({ summary, onDismiss, onUndo }: Props) {
+export default function OptimizerChangeSummaryPanel({
+  summary,
+  onDismiss,
+  onUndo,
+  undoBlockedMessage,
+  undoBlockedKind = 'changed',
+  onUndoAnyway,
+  onKeepEdits,
+}: Props) {
   const { label, result, changes } = summary;
+  // Stable focus target. The "Keep my edits" button unmounts with the message, and a focused element
+  // that unmounts leaves focus on <body>.
+  const headingRef = useRef<HTMLParagraphElement>(null);
   const gain = result.projectedTotal - result.previousTotal;
   const rejected = result.consideredButRejected ?? [];
   const hasDetail = changes.scorerChanges.length > 0 || changes.entryChanges.length > 0 || rejected.length > 0;
@@ -103,7 +127,12 @@ export default function OptimizerChangeSummaryPanel({ summary, onDismiss, onUndo
     <div className="rounded-xl border border-theme-soft surface-muted-bg p-4 flex flex-col gap-3">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <p className="text-ui-label font-semibold text-[var(--text-primary)]">
+          <p
+            ref={headingRef}
+            tabIndex={-1}
+            data-optimizer-summary-heading
+            className="text-ui-label font-semibold text-[var(--text-primary)] outline-none"
+          >
             {label}: {result.outcome === 'improved' ? (
               <span className="text-points-positive">+{gain.toFixed(1)} pts</span>
             ) : (
@@ -138,11 +167,44 @@ export default function OptimizerChangeSummaryPanel({ summary, onDismiss, onUndo
         </div>
       </div>
 
+      {undoBlockedMessage ? (
+        <div
+          role="alert"
+          className="rounded-lg border border-warning-faint bg-warning-faint px-3 py-2 flex flex-wrap items-center gap-3"
+        >
+          <p className="text-ui-caption text-warning min-w-0 flex-1">{undoBlockedMessage}</p>
+          <div className="shrink-0 flex items-center gap-2">
+            {undoBlockedKind === 'apply_not_saved' ? (
+              <Button variant="outline" size="sm" onClick={onDismiss} className="px-3 py-1.5 whitespace-nowrap">
+                Dismiss
+              </Button>
+            ) : (
+              <>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => {
+                    onKeepEdits?.();
+                    headingRef.current?.focus();
+                  }}
+                  className="px-3 py-1.5 whitespace-nowrap"
+                >
+                  Keep my edits
+                </Button>
+                <Button variant="outline" size="sm" onClick={onUndoAnyway} className="px-3 py-1.5 whitespace-nowrap">
+                  Undo anyway
+                </Button>
+              </>
+            )}
+          </div>
+        </div>
+      ) : null}
+
       {hasDetail ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2 border-t border-theme-soft">
           {changes.scorerChanges.length > 0 ? (
             <div>
-              <p className="text-ui-caption font-semibold text-theme-muted uppercase tracking-widest mb-1.5">
+              <p className="text-ui-caption font-semibold text-theme-muted mb-1.5">
                 Scorer roster ({changes.scorerChanges.length})
               </p>
               <ul className="space-y-1">
@@ -154,7 +216,7 @@ export default function OptimizerChangeSummaryPanel({ summary, onDismiss, onUndo
           ) : null}
           {changes.entryChanges.length > 0 ? (
             <div>
-              <p className="text-ui-caption font-semibold text-theme-muted uppercase tracking-widest mb-1.5">
+              <p className="text-ui-caption font-semibold text-theme-muted mb-1.5">
                 Entries ({changes.entryChanges.length})
               </p>
               <ul className="space-y-1">
@@ -166,7 +228,7 @@ export default function OptimizerChangeSummaryPanel({ summary, onDismiss, onUndo
           ) : null}
           {rejected.length > 0 ? (
             <div>
-              <p className="text-ui-caption font-semibold text-theme-muted uppercase tracking-widest mb-1.5">
+              <p className="text-ui-caption font-semibold text-theme-muted mb-1.5">
                 Didn't make the scorer cap ({rejected.length})
               </p>
               <ul className="space-y-1">

@@ -1,0 +1,259 @@
+{
+  "stoppedAt": "2026-10-01, usage limit reached",
+  "branch": "nvitthanala/production-readiness",
+  "committed": false,
+  "doneAndVerified": [
+    "entry-cap policy flags entryCapCountsTimeTrials/entryCapCountsExhibition + unified counter (reviewed by architect: ship)",
+    "bug-hunter findings 1,3,4,5,6,2 fixed (alias double-score, theory cap, history import budget, vacate rule, audit badge, optimizer objective)",
+    "residual entry-cap fixes, same-plane alias collapse, optimizer scorer-override fix, provenance fixes (UWF men badge, D1 default, D3 Invited order, NT stored as 0): all gates green, architect-reviewed (run A fixed in the latest run: projected-pool counting in import and relay swaps)",
+    "provider routing scaffold, command-center plugin 0.4.2, usage bridge via Orca, limit-handoff script",
+    "UI entry-cap toggles (Cursor, verified) + backend temp-name/atomic-backup fixes (Codex; risky strict changes reverted)"
+  ],
+  "resumeOrder": [
+    "architect/other-provider review of the latest executor run (projected-pool import/swap counting, pencil+plan collapse)",
+    "bug-hunter survivors M9-M15 and relay dead heat (finding 7)",
+    "update Obsidian vault: Sessions note + 02/04 notes (entry-count rule: count over projected pool, charge only what the run writes, block from raw rows)"
+  ],
+  "openQuestions": [
+    "Pal rank-0 rows: parser gap? check source PDF",
+    "Gotaas DFS row counted as an entry: confirm NSISC treatment",
+    "delete deprecated D1-fallback exports divisionForTeam/registerTeamsFromList?",
+    "Cursor named models need a paid plan; Free = Auto only"
+  ],
+  "note": "Resume stopped agents with SendMessage; one agent at a time.",
+  "updated": "2026-10-02 (night)",
+  "standbyScope": [
+    "apps/shell/src/**",
+    "packages/ui/src/**",
+    "packages/manager/src/**",
+    "packages/matrix/src/**",
+    "packages/metrics/src/**",
+    "tests/**",
+    "docs/**"
+  ],
+  "standbyNote": "Standby (Codex/Cursor) may edit only standbyScope. packages/core is excluded on purpose: core work waits for Claude or a Claude-reviewed run.",
+  "standbyLog": [],
+  "userAway": "User asleep from ~23:00 local 2026-10-01; handle with best judgement; report in the morning.",
+  "nightPlan": {
+    "rules": [
+      "Claude spend minimal: coordinate and verify only. Claude 5h window resets 2026-10-02T07:00Z (02:00 local).",
+      "One editor at a time in the repo (child worktrees are not usable: uncommitted work would be missing).",
+      "Read-only workers may run in parallel with one editor.",
+      "Codex has a 30-day cap: measure usage before/after each Codex task, log it here.",
+      "Cursor Free = Auto only; always pass --model auto; ~1.5% of monthly cap per small task.",
+      "Never spawn cursor-agent/codex directly; Orca only.",
+      "Every diff is verified by the orchestrator (gates) and, for core, flagged for a Claude architect review after reset."
+    ],
+    "tasks": [
+      {
+        "id": "V1",
+        "what": "Cursor vault-access check",
+        "provider": "cursor",
+        "dispatch": "ctx_eae5f54e061e",
+        "status": "done: codex and cursor both quoted the vault notes exactly"
+      },
+      {
+        "id": "A1",
+        "what": "Codex backend logic audit (read-only; writes docs/reference/AUDIT_BACKEND_2026-10-02.md)",
+        "provider": "codex",
+        "dispatch": "ctx_045a9cf25365",
+        "status": "done",
+        "result": "docs/reference/AUDIT_BACKEND_2026-10-02.md (7 findings, inferred)"
+      },
+      {
+        "id": "U1",
+        "what": "Entry-cap toggles + pass settings into UI counters (resumeOrder 1)",
+        "provider": "cursor",
+        "status": "done, verified by orchestrator (diff read, targeted test + eslint pass); full gates pending after B1",
+        "dispatch": "ctx_a5340bfba074"
+      },
+      {
+        "id": "U2",
+        "what": "Accessibility fixes (resumeOrder 2)",
+        "provider": "codex (continue)",
+        "status": "done via U2b"
+      },
+      {
+        "id": "U3",
+        "what": "Web page visual cleanup with Playwright before/after screenshots, no behavior change",
+        "provider": "codex or cursor",
+        "status": "done, verified: 1826 tests, types ok, 84 scripts; report docs/reference/ui-cleanup-2026-10-02/REPORT.md"
+      },
+      {
+        "id": "C1",
+        "what": "Core: optimizer total cap; import-skip-existing-event (user approved); seed activeEntryIds; deleted swimmers relay guard",
+        "provider": "codex",
+        "status": "C1a + C1b done and verified by orchestrator (1826 tests, types ok, 84 scripts). Awaiting independent review after Claude reset.",
+        "note": "needs golden + mutation gates; flag for Claude architect review after reset"
+      },
+      {
+        "id": "B1",
+        "what": "Codex backend fixes from the audit (reproduce first)",
+        "provider": "codex",
+        "dispatch": "ctx_3b08f32b668b",
+        "status": "done with reverts",
+        "kept": [
+          "collision-proof temp PDF names (parsingRoutes.ts)",
+          "atomic backup writes (workspaceRepo.ts)",
+          "preset id traversal test (already safe: schema rejects)"
+        ],
+        "reverted": [
+          "parsingPipeline.ts strict rank/points/gender: rank 0 is the documented unplaced value (utils.ts:2407) and psych rows have no rank; throwing would break imports",
+          "parse_meet.py raising when no team-rankings page: many PDFs have none",
+          "point_calculator.py raising when scoringPoints missing: parse script gets only pdf path; a fresh checkout would crash"
+        ]
+      },
+      {
+        "id": "U2b",
+        "what": "Codex finishes accessibility after Cursor cap",
+        "provider": "codex",
+        "dispatch": "ctx_c5ec51dbeb41",
+        "status": "done, verified by orchestrator: 1820 tests, types clean, 84 scripts"
+      },
+      {
+        "id": "U3",
+        "what": "Web page visual cleanup (see resumeOrder[0])",
+        "provider": "codex (standby or after C1)",
+        "status": "queued"
+      },
+      {
+        "id": "R1",
+        "what": "Claude architect review of Codex core diffs",
+        "provider": "claude:architect",
+        "status": "done: fix-first on optimizer, relay guard, import; tests weakened in places; see needsFix"
+      },
+      {
+        "id": "I1",
+        "what": "Codex read-only backend investigation (3 reverted findings, Pal rank-0, Gotaas DFS)",
+        "provider": "codex",
+        "dispatch": "ctx_bb7bc7a36b47",
+        "status": "done: docs/reference/BACKEND_INVESTIGATION_2026-10-02.md"
+      },
+      {
+        "id": "T1",
+        "what": "OLED theme preset (matches Orca terminal palette if found)",
+        "provider": "codex",
+        "status": "done; orchestrator changed accent to coral for button contrast; 1827 tests ok"
+      },
+      {
+        "id": "F1",
+        "what": "Codex fixes the architect review findings (D1,D3,D4-6,F5, tests, CRLF)",
+        "provider": "codex",
+        "status": "done, verified by orchestrator: 1834 tests, types ok, 84 scripts, rosterOptimizer.ts CRLF + 2 NUL. No pre-fix baseline; independent architect re-review running"
+      },
+      {
+        "id": "F2",
+        "what": "Backend: marker-gated rankings failure; strict gender for meet rows; stderr warning for D2 default; SwimCloud import loses isExhibition (Pal Event 8)",
+        "provider": "codex",
+        "status": "done, verified: 1838 tests, types ok, 84 scripts; fixture still 428 rows. Exhibition flag: current parser already sets isExhibition for all 26 exhibition rows on event 8; the stored Pal row is stale until a re-crawl"
+      },
+      {
+        "id": "R2",
+        "what": "Claude architect re-review of F1",
+        "provider": "claude:architect",
+        "status": "done: D3 and overlay import ship; D1 (recruit replaces meet row), F5 (empty active list), import filter strictness, dead code, perf, loose test pins need fixing"
+      },
+      {
+        "id": "F3",
+        "what": "Codex fixes re-review findings",
+        "provider": "codex",
+        "status": "done and verified: 1845 tests, types ok, eslint 0 errors, 84 scripts. Orchestrator completed F5 (returned active list now keeps other teams plans) and proved it by mutation; M1 held-event skip also mutation-proven"
+      },
+      {
+        "id": "F4",
+        "what": "Orchestrator-run mutation checks on Codex tests",
+        "status": "done",
+        "note": "Held-event skip and F5 caught. NOT caught: import team-trim filter and missing-gender filter (helper at historyImportRoster.ts ~256 is not decisive in the test scenario); the older it.each team-A-total test passes trivially. Gaps to close."
+      }
+    ],
+    "cursorUsageLog": [
+      {
+        "after": "vault check x2",
+        "usedPct": 5
+      },
+      {
+        "after": "U1 toggles",
+        "usedPct": 5,
+        "note": "U1 cost <1%"
+      }
+    ],
+    "finished": "2026-10-02T05:50Z",
+    "finished2": "2026-10-02 afternoon: R1,R2,F1-F4,I1,T1 complete"
+  },
+  "codexUsageLog": [
+    {
+      "at": "2026-10-02T04:05Z",
+      "usedPctBefore": 0,
+      "note": "start of night; 4 tiny smoke/vault tasks so far read 0%"
+    },
+    {
+      "at": "after A1",
+      "usedPct": 0,
+      "note": "backend audit read ~40 files; still 0%"
+    },
+    {
+      "at": "after A1 audit + B1 backend fixes",
+      "usedPct": 5,
+      "note": "about 2.5% per moderate task => roughly 40 moderate tasks per 30-day window"
+    },
+    {
+      "at": "after C1a",
+      "usedPct": 18,
+      "note": "C1a (core optimizer + guard) cost ~13%. Keep reserve."
+    },
+    {
+      "at": "after C1b",
+      "note": "read next"
+    },
+    {
+      "at": "end of 2026-10-02 session",
+      "usedPct": 53
+    },
+    {
+      "at": "after UI phases 1-2",
+      "usedPct": 87,
+      "note": "each UI phase cost about 17 points; Codex stopped to keep the 10% reserve"
+    }
+  ],
+  "openDecisions": [
+    "AUDIT finding 1 (parse_meet.py): a team-rankings parse that throws AFTER a rankings page was found should fail loudly, but a PDF with no rankings page must still parse. Needs a narrower design: distinguish absent page vs crashed parser.",
+    "AUDIT finding 2 (parsingPipeline.ts): missing rank/points/gender map to 0/0/Men. Rank 0 is legitimate (unplaced). A safe fix is gender only (reject unknown gender) after checking what the Python parser emits; needs a real PDF corpus to prove.",
+    "AUDIT finding 5 (point_calculator.py): silent D2 default when no scoring config. Decide: fail loudly (breaks a fresh checkout without data/scoring_settings.json) or keep D2 and log a warning.",
+    "Import block filter tests (trailing-space team, missing gender) do not fail when the fix is removed: write a scenario where historyImportRoster.ts ~256 is the deciding path",
+    "optimizeEventLineupForTeam complexity is 31 (warn threshold 25): split into named steps",
+    "Re-crawl SwimCloud meet 356467 so stored rows pick up isExhibition (Pal Event 8 is stale)",
+    "Cursor named models need a paid plan; Free = Auto and the monthly cap is spent until 2026-10-19"
+  ],
+  "needsReviewByOtherProvider": [
+    "Codex core diffs (optimizer total cap, relay guard, import changes) have gates + golden diffs but NO independent review yet; Cursor is out of quota. Run a Claude architect review after the Claude window resets."
+  ],
+  "vaultNote": "Sessions/oyster-2026-10-02-multi-provider-night.md written; 04 callout added",
+  "morningUpdate": "2026-10-02 ~14:15Z: user approved all; Claude window reset; running R1, I1, T1.",
+  "userDecisions": [
+    "2026-10-02: published meet result stands vs history bests (optimizer + import); exhibition counts as published, time trial never; DFS/DQ prelims rows stand and DFS counts toward the cap",
+    "2026-10-02: OLED theme: pure black (no Orca palette found on disk); coral accent",
+    "2026-10-02 (orchestrator, flag for user confirmation): plan_sheet mode is exempt from the published-result-stands rule; scoring theory and the projection are NOT changed by it (what-if tools)"
+  ],
+  "userAnswers_2026_10_02_afternoon": {
+    "commit": "locally, no push (done: 60ce8190, 46637ed8, ee68e6b2)",
+    "uiScope": "ambitious",
+    "uiLanding": "separate branch",
+    "codexBudget": "spend freely, keep 10% reserve (Codex was 53% used)",
+    "away": "user away; act on best judgement"
+  },
+  "plan_afternoon": [
+    "G1 Codex: split optimizeEventLineupForTeam (complexity 31) + fix 2 ineffective import-filter tests + delete trivial test [running]",
+    "UIP architect: UI complexity inventory + phased redesign plan [running]",
+    "then: commit G1; create branch nvitthanala/ui-simplification; Codex builds UI phases with screenshots + tests, verified each; architect reviews the final UI diff",
+    "finally: thorough revision pass + new ideas list; vault + state update"
+  ],
+  "uiBranch": {
+    "name": "nvitthanala/ui-simplification",
+    "plan": "docs/reference/UI_SIMPLIFICATION_PLAN.md",
+    "committed": [
+      "phase 1 d53b6640",
+      "phase 2 d4b7bf3c"
+    ],
+    "next": "phases 3-6 on Claude workers (Codex and Cursor unavailable)"
+  }
+}

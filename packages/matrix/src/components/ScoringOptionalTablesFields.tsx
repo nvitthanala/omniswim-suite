@@ -9,7 +9,7 @@
  * parent's `optionalPointsField` and passed through unchanged.
  */
 
-import { SegmentedControl } from '@omniswim/ui';
+import { NumberField, SegmentedControl } from '@omniswim/ui';
 import type { ScoringSettings } from '@omniswim/core/types';
 
 export interface OptionalPointsField {
@@ -21,6 +21,28 @@ export interface OptionalPointsField {
   setPoint: (index: number, value: number) => void;
 }
 
+/**
+ * One "Place N" points input.
+ *
+ * `NumberField` publishes only a complete, finite, non-negative value, and
+ * reverts a blank or malformed draft on blur. The inputs used to read
+ * `parseFloat(text) || 0`, so a cleared cell silently saved as 0 points and a
+ * real 0 rendered as an empty box. A place value is a published competition
+ * number: a blank is "not yet entered", never "worth nothing".
+ */
+export function PlacePointInput({ value, ariaLabel, onValueChange }: { value: number; ariaLabel: string; onValueChange: (v: number) => void }) {
+  return (
+    <NumberField
+      aria-label={ariaLabel}
+      min={0}
+      step={0.01}
+      value={value}
+      onValueChange={onValueChange}
+      className="glass-input w-full font-mono text-xs"
+    />
+  );
+}
+
 /** One "Place N" points input grid, shared by the relay and diving tables. */
 function PlacePointsGrid({ points, ariaPrefix, onSetPoint }: { points: number[]; ariaPrefix: string; onSetPoint: (i: number, v: number) => void }) {
   return (
@@ -28,13 +50,7 @@ function PlacePointsGrid({ points, ariaPrefix, onSetPoint }: { points: number[];
       {points.map((pt, i) => (
         <div key={i} className="flex flex-col gap-1">
           <span className="text-[9px] text-theme-secondary font-mono">Place {i + 1}</span>
-          <input
-            type="number"
-            aria-label={`${ariaPrefix} points for place ${i + 1}`}
-            value={pt || ''}
-            onChange={e => onSetPoint(i, parseFloat(e.target.value) || 0)}
-            className="glass-input w-full font-mono text-xs"
-          />
+          <PlacePointInput value={pt} ariaLabel={`${ariaPrefix} points for place ${i + 1}`} onValueChange={v => onSetPoint(i, v)} />
         </div>
       ))}
     </div>
@@ -49,7 +65,7 @@ export function RelayScoringFields({ relayTable }: RelayScoringFieldsProps) {
   return (
     <div className="p-3 rounded-lg border border-theme-soft surface-overlay">
       <div className="flex items-center justify-between gap-2 mb-1">
-        <label className="text-[10px] text-theme-secondary uppercase font-medium">Relay scoring</label>
+        <label className="text-ui-caption text-theme-secondary font-medium">Relay scoring</label>
         <SegmentedControl
           layout="inline"
           ariaLabel="Relay scoring mode"
@@ -103,7 +119,7 @@ export function DivingPointsFields({ divingTable, divingMaxScorersPerTeamPerEven
   return (
     <div className="p-3 rounded-lg border border-theme-soft surface-overlay">
       <div className="flex items-center justify-between gap-2 mb-1">
-        <label className="text-[10px] text-theme-secondary uppercase font-medium">Diving points table</label>
+        <label className="text-ui-caption text-theme-secondary font-medium">Diving points table</label>
         <SegmentedControl
           layout="inline"
           ariaLabel="Diving points table"
@@ -135,7 +151,7 @@ export function DivingPointsFields({ divingTable, divingMaxScorersPerTeamPerEven
           </div>
           <PlacePointsGrid points={divingTable.points} ariaPrefix="Diving" onSetPoint={divingTable.setPoint} />
           <div className="mt-3">
-            <label className="block text-[10px] text-theme-secondary uppercase mb-1">
+            <label className="block text-ui-caption text-theme-secondary mb-1">
               Max scoring divers / team / event
             </label>
             <input
@@ -173,7 +189,7 @@ export function PerEventCapsFields({
 }: PerEventCapsFieldsProps) {
   return (
     <div className="p-3 rounded-lg border border-theme-soft surface-overlay">
-      <label className="block text-[10px] text-theme-secondary uppercase font-medium mb-2">
+      <label className="block text-ui-caption text-theme-secondary font-medium mb-2">
         Per-team, per-event scoring caps
       </label>
       <p className="text-[9px] text-theme-muted mb-2 normal-case tracking-normal">
@@ -183,7 +199,7 @@ export function PerEventCapsFields({
       </p>
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className="block text-[10px] text-theme-secondary uppercase mb-1">
+          <label className="block text-ui-caption text-theme-secondary mb-1">
             Max individual scorers / team / event
           </label>
           <input
@@ -199,9 +215,9 @@ export function PerEventCapsFields({
           />
         </div>
         <div>
-          <label className="block text-[10px] text-theme-secondary uppercase mb-1">Over-cap swimmer behavior</label>
+          <label className="block text-ui-caption text-theme-secondary mb-1">Over-cap swimmer behavior</label>
           <select
-            className="glass-input w-full text-xs uppercase"
+            className="glass-input w-full text-xs"
             aria-label="Behavior for a swimmer over the per-team place cap"
             value={overCapPlaceBehavior ?? 'holds-place'}
             onChange={e => onChangeOverCapPlaceBehavior(e.target.value as 'holds-place' | 'removed-from-consideration')}

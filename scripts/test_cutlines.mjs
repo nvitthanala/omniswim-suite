@@ -41,6 +41,7 @@ import {
 } from '../packages/core/src/lib/cutlineUtils.ts';
 import { divisionForTeam } from '../packages/core/src/data/teamDivisions.ts';
 import { relaySplitQualificationCutEvent } from '../packages/core/src/lib/utils.ts';
+import { loadLocalMeets, noteLocalOnlySkipped } from './lib/localMeets.mjs';
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 let failures = 0;
@@ -316,17 +317,48 @@ for (const s of manifest.sources) {
   }
 }
 
-// Tier ordering: every published tier list must be strictest-first.
+// Tier ordering. The printed order of a record's tiers (`A, Invited, B` for D3)
+// is NOT a speed order, and no code may read it as one: the archived D3 PDF
+// prints Invited slower than B in exactly the events pinned below. This block
+// checks the rule the code relies on instead:
+//   1. every tier is a well-formed published time;
+//   2. the strict slot (A / Standard / Qualifying) is strictly faster than every
+//      other tier of its record, so "met the strict slot" never needs an order;
+//   3. any other pair whose printed order is not non-decreasing in time is one
+//      of the pinned inversions. A new inversion in a re-extracted table fails
+//      here until a person has read it, instead of drifting into a label.
+const toSec = t => t.split(':').reduce((acc, part) => acc * 60 + Number(part), 0);
+const PINNED_INVERSIONS = new Set([
+  'D3 2026-2027 Women 100 Butterfly SCY: Invited 55.83 printed before B 55.79',
+  'D3 2026-2027 Women 400 Individual Medley SCY: Invited 4:28.76 printed before B 4:28.70',
+]);
+const seenInversions = new Set();
 for (const e of entries) {
   if (e.kind === 'diving') continue;
   const tiers = cutlineTierTimes(e);
+  const where = `${e.division} ${e.season} ${e.gender} ${e.event} ${e.course}`;
   if (tiers.length === 0) fail(`${e.division} ${e.gender} ${e.event} publishes no tier at all`);
   for (const t of tiers) {
     if (!/^(?:\d{1,3}:)?\d{1,2}\.\d{2}$/.test(t.time)) {
       fail(`${e.division} ${e.gender} ${e.event} ${t.tier} is not a published time: ${t.time}`);
     }
   }
+  const strict = tiers.find(t => t.tier === 'A' || t.tier === 'Standard' || t.tier === 'Qualifying');
+  if (strict) {
+    for (const t of tiers) {
+      if (t !== strict && !(toSec(strict.time) < toSec(t.time))) {
+        fail(`${where}: strict tier ${strict.tier} ${strict.time} is not faster than ${t.tier} ${t.time}`);
+      }
+    }
+  }
+  for (let i = 1; i < tiers.length; i++) {
+    if (toSec(tiers[i].time) < toSec(tiers[i - 1].time)) {
+      seenInversions.add(`${where}: ${tiers[i - 1].tier} ${tiers[i - 1].time} printed before ${tiers[i].tier} ${tiers[i].time}`);
+    }
+  }
 }
+for (const inv of seenInversions) if (!PINNED_INVERSIONS.has(inv)) fail(`unreviewed tier-order inversion: ${inv}`);
+for (const inv of PINNED_INVERSIONS) if (!seenInversions.has(inv)) fail(`pinned tier-order inversion no longer in the data: ${inv}`);
 
 /* ------------------------------------------------------------------ */
 /* 3. The live bug: D2 lookups used to return nothing                  */
@@ -369,11 +401,19 @@ eq(d1.tiers.map(t => t.tier).join(','), 'Standard', 'D1 individual tier labels')
 eq(compareTimeToCutline(19.4, 'Men', '50 Freestyle', 'D1').tier, 'Standard', 'D1 honest tier label');
 
 const d3 = getCutlinesForSwim('Men', '50 Free', 'D3');
-eq(d3.tiers.map(t => t.tier).join(','), 'A,Invited,B', 'D3 tier order is strictest first');
+eq(d3.tiers.map(t => t.tier).join(','), 'A,Invited,B', 'D3 tiers are listed in printed order (not a speed order)');
 eq(d3.invitedCutSec, 20.05, 'D3 Invited seconds');
 eq(compareTimeToCutline(20.02, 'Men', '50 Free', 'D3').tier, 'Invited', 'D3 20.02 makes the Invited cut');
 eq(compareTimeToCutline(20.02, 'Men', '50 Free', 'D3').achieved, 'B', 'D3 Invited maps to legacy B slot');
 eq(compareTimeToCutline(20.2, 'Men', '50 Free', 'D3').tier, 'B', 'D3 20.20 only makes the B cut');
+// Where the archived sheet prints Invited SLOWER than B, meeting Invited is not meeting B.
+const flyInvitedOnly = compareTimeToCutline(55.8, 'Women', '100 Butterfly', 'D3');
+eq(flyInvitedOnly.achieved, null, 'D3 women 100 Fly 55.80 beats Invited 55.83 but not B 55.79: no legacy cut');
+eq(flyInvitedOnly.tier, 'Invited', 'D3 women 100 Fly 55.80 still names the Invited tier it cleared');
+const imInvitedOnly = compareTimeToCutline(4 * 60 + 28.73, 'Women', '400 Individual Medley', 'D3');
+eq(imInvitedOnly.achieved, null, 'D3 women 400 IM 4:28.73 beats Invited 4:28.76 but not B 4:28.70: no legacy cut');
+eq(imInvitedOnly.tier, 'Invited', 'D3 women 400 IM 4:28.73 still names the Invited tier it cleared');
+eq(compareTimeToCutline(55.79, 'Women', '100 Butterfly', 'D3').achieved, 'B', 'D3 women 100 Fly 55.79 is a B cut');
 
 const naiaMetric = getCutlinesForSwim('Men', '50 Freestyle', 'NAIA', undefined, 'SCM');
 eq(naiaMetric.aCutSec, 22.27, 'NAIA SCM lookup uses the metric column');
@@ -493,42 +533,48 @@ const D2_EVENTS_WITHOUT_A_PUBLISHED_STANDARD = new Set([
 ]);
 
 {
-  const meets = JSON.parse(fs.readFileSync(path.join(repoRoot, 'data/meets.json'), 'utf-8'));
-  const rawEvents = new Set();
-  const collect = node => {
-    if (Array.isArray(node)) return node.forEach(collect);
-    if (!node || typeof node !== 'object') return;
-    for (const [key, value] of Object.entries(node)) {
-      if (key === 'event' && typeof value === 'string') rawEvents.add(value);
-      else collect(value);
+  // Local-only: needs the real event labels in data/meets.json, which is untracked.
+  // Every other section of this script reads only the committed cutline tables.
+  const meets = loadLocalMeets();
+  if (meets === null) {
+    noteLocalOnlySkipped('test_cutlines.mjs', 'section 5c, every event label in the local workspaces');
+  } else {
+    const rawEvents = new Set();
+    const collect = node => {
+      if (Array.isArray(node)) return node.forEach(collect);
+      if (!node || typeof node !== 'object') return;
+      for (const [key, value] of Object.entries(node)) {
+        if (key === 'event' && typeof value === 'string') rawEvents.add(value);
+        else collect(value);
+      }
+    };
+    collect(meets);
+
+    if (rawEvents.size < 60) {
+      fail(`expected data/meets.json to carry 60+ distinct event labels, got ${rawEvents.size}`);
     }
-  };
-  collect(meets);
 
-  if (rawEvents.size < 60) {
-    fail(`expected data/meets.json to carry 60+ distinct event labels, got ${rawEvents.size}`);
+    const tally = { ok: 0, not_a_timed_event: 0, expected_no_standard: 0 };
+    const unaccounted = [];
+    for (const raw of [...rawEvents].sort()) {
+      const clean = normalizeEventForCutline(raw);
+      const status = getCutlinesForSwim('Men', clean, 'D2').status;
+      if (status === 'ok') tally.ok += 1;
+      else if (status === 'not_a_timed_event') tally.not_a_timed_event += 1;
+      else if (D2_EVENTS_WITHOUT_A_PUBLISHED_STANDARD.has(clean)) tally.expected_no_standard += 1;
+      else unaccounted.push(`${raw} -> ${clean} (${status})`);
+    }
+    for (const miss of unaccounted) {
+      fail(`meets.json event resolves to no D2 row and is not on the expected-absent list: ${miss}`);
+    }
+    // The parser must not quietly regress: 'ok' is the count the HyTek fix bought.
+    if (tally.ok < 67) fail(`expected 67+ meets.json labels to resolve to a D2 row, got ${tally.ok}`);
+    eq(tally.not_a_timed_event, 4, 'meets.json diving labels (1M/3M, both genders)');
+    console.log(
+      `cutlines: meets.json labels ${rawEvents.size} = ${tally.ok} published, ` +
+        `${tally.expected_no_standard} no published standard, ${tally.not_a_timed_event} diving`
+    );
   }
-
-  const tally = { ok: 0, not_a_timed_event: 0, expected_no_standard: 0 };
-  const unaccounted = [];
-  for (const raw of [...rawEvents].sort()) {
-    const clean = normalizeEventForCutline(raw);
-    const status = getCutlinesForSwim('Men', clean, 'D2').status;
-    if (status === 'ok') tally.ok += 1;
-    else if (status === 'not_a_timed_event') tally.not_a_timed_event += 1;
-    else if (D2_EVENTS_WITHOUT_A_PUBLISHED_STANDARD.has(clean)) tally.expected_no_standard += 1;
-    else unaccounted.push(`${raw} -> ${clean} (${status})`);
-  }
-  for (const miss of unaccounted) {
-    fail(`meets.json event resolves to no D2 row and is not on the expected-absent list: ${miss}`);
-  }
-  // The parser must not quietly regress: 'ok' is the count the HyTek fix bought.
-  if (tally.ok < 67) fail(`expected 67+ meets.json labels to resolve to a D2 row, got ${tally.ok}`);
-  eq(tally.not_a_timed_event, 4, 'meets.json diving labels (1M/3M, both genders)');
-  console.log(
-    `cutlines: meets.json labels ${rawEvents.size} = ${tally.ok} published, ` +
-      `${tally.expected_no_standard} no published standard, ${tally.not_a_timed_event} diving`
-  );
 }
 
 /* ------------------------------------------------------------------ */

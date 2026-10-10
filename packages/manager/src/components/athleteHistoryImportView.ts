@@ -169,7 +169,7 @@ export function buildSwimRowTagSpecs(
     {
       key: 'b-cut',
       show: stamp === 'B CUT' || showComputedB,
-      className: 'text-ui-micro bg-amber-400/10 text-amber-400 px-1.5 border border-amber-400/30 rounded-full',
+      className: 'text-ui-micro bg-warning-faint text-warning px-1.5 border border-warning-faint rounded-full',
       title: cutTooltip,
       label: 'B CUT',
     },

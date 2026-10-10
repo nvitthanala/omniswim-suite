@@ -101,6 +101,7 @@ export class PgWorkspaceService {
       'athlete_history',
       'race_analyses',
       'athlete_aliases',
+      'relay_leg_credits',
     ] as const;
     const dataMap: Record<string, unknown[]> = {};
     for (const t of tables) dataMap[t] = await childData(t);
@@ -357,6 +358,7 @@ export class PgWorkspaceService {
       'athlete_history',
       'race_analyses',
       'athlete_aliases',
+      'relay_leg_credits',
     ]) {
       await client.query(`DELETE FROM ${table} WHERE workspace_id = $1`, [workspaceId]);
     }
@@ -458,6 +460,12 @@ export class PgWorkspaceService {
     for (const row of insertPositionalRows(ws.id, ws.raceAnalyses ?? [])) {
       await client.query(
         'INSERT INTO race_analyses(workspace_id, position, data) VALUES($1,$2,$3)',
+        [row.workspace_id, row.position, row.data]
+      );
+    }
+    for (const row of insertPositionalRows(ws.id, ws.relayLegCredits ?? [])) {
+      await client.query(
+        'INSERT INTO relay_leg_credits(workspace_id, position, data) VALUES($1,$2,$3)',
         [row.workspace_id, row.position, row.data]
       );
     }

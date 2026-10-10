@@ -207,7 +207,14 @@ export type RosterRowViewModel = {
  */
 export function buildRosterRowViewModel(row: ScorerRosterRow, ctx: RosterRowContext): RosterRowViewModel {
   const meetPts = ctx.pointTotals.get(row.key) ?? 0;
-  const entryCounts = countSwimmerEntries(ctx.genderResults, row.team, ctx.gender, row.name, ctx.aliasResolver);
+  const entryCounts = countSwimmerEntries(
+    ctx.genderResults,
+    row.team,
+    ctx.gender,
+    row.name,
+    ctx.aliasResolver,
+    ctx.settings
+  );
   const entryOver = swimmerExceedsEntryLimits(entryCounts, ctx.settings);
   const athleteIssues = ctx.lineupAudit?.athleteIssues.get(normalizeSwimmerName(row.name)) ?? [];
   const profile =
@@ -234,6 +241,22 @@ export function genderLabelFor(gender: Gender): string {
   return gender === GENDER_MEN ? "Men's" : "Women's";
 }
 
+/** True when every roster row would show the default "Swimmer" tag (no recruit,
+ * no diver). One tag repeated on every row says nothing, so the table hides it. */
+export function isUniformSwimmerRoster(
+  rows: ReadonlyArray<Pick<ScorerRosterRow, 'isRecruit' | 'athleteRole'>>
+): boolean {
+  return rows.length > 0 && rows.every(row => !row.isRecruit && row.athleteRole !== 'diver');
+}
+
+/** The sentence that names the scorer cap in the roster help text. 999 is the
+ * "no limit" value the scoring fields store, so it reads "no scorer cap". */
+export function scorerCapPhrase(maxIndividualScorersPerTeam: number): string {
+  return maxIndividualScorersPerTeam >= 999
+    ? 'There is no scorer cap.'
+    : `Toggle scorers for the ${maxIndividualScorersPerTeam}-scorer cap.`;
+}
+
 /** Extra header column count for the roster table: the scorer toggle column
  * (when editable) and the remove column (when a delete handler is wired). */
 export function rosterColSpan(editable: boolean, hasDeleteHandler: boolean): number {
@@ -252,4 +275,27 @@ export function resolveTeamPickerMode(
   const useDropdown = teamPickerMode === 'dropdown' || (!showTeamSidebar && teamPickerMode !== 'sidebar');
   const useSidebar = showTeamSidebar && !useDropdown;
   return { useDropdown, useSidebar };
+}
+
+/**
+ * A DOM id for a roster row. The row key holds spaces and `|||`, which are not
+ * valid in an id and would break `aria-activedescendant`. Every character
+ * outside `[A-Za-z0-9_-]` becomes `_` plus its hex code, so two keys never
+ * collapse to one id.
+ */
+export function rosterRowDomId(rowKey: string): string {
+  return `roster-row-${rowKey.replace(/[^A-Za-z0-9_-]/g, ch => `_${ch.charCodeAt(0).toString(16)}_`)}`;
+}
+
+/**
+ * The id `aria-activedescendant` should name: the selected row's id, but only
+ * when that row is in the rendered slice. A windowed list renders part of the
+ * roster, and an id that is not in the DOM is invalid.
+ */
+export function activeRosterRowId(
+  selectedKey: string | null,
+  renderedRows: ReadonlyArray<{ key: string }>
+): string | undefined {
+  if (!selectedKey || !renderedRows.some(r => r.key === selectedKey)) return undefined;
+  return rosterRowDomId(selectedKey);
 }

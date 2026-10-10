@@ -1,0 +1,344 @@
+{
+  "generatedFrom": "data/swimcloud-captures (git-ignored, local only)",
+  "generatedOn": "2026-10-04",
+  "perGenderPerTeam": 6,
+  "teams": [
+    {
+      "captureId": "team-412-2026-2027",
+      "realPlannedPageCount": 79,
+      "realPageCount": 79,
+      "keptPageCount": 14,
+      "chosen": {
+        "Men": [
+          "1200541:Carson Powers",
+          "3210255:Caston Feazel",
+          "2446001:AJ Alfeo",
+          "2527796:Ansh Anand",
+          "2268094:Tyler Bell",
+          "2691134:Gavin Bolton"
+        ],
+        "Women": [
+          "1248797:Torey Duran",
+          "2234855:Lexa Jackson",
+          "1825215:Britta Andruss",
+          "2537259:Alyson Beason",
+          "2885259:Callie Bishop",
+          "2580321:Eva Canalito"
+        ]
+      },
+      "pages": [
+        {
+          "canonicalUrl": "https://www.swimcloud.com/team/412/roster/?page=1&gender=M&season_id=30&sort=name",
+          "originalSha256": "b274b1f741b5f895cc20390bfd5418e1c44be2872c93fce70498f14f8533e7d9",
+          "originalBytes": 75424,
+          "trimmedSha256": "deb82ffafca4976127216f870e2ed00509a2558253d3ddce7d5309bff64866b2",
+          "trimmedBytes": 50978
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/team/412/roster/?page=1&gender=F&season_id=30&sort=name",
+          "originalSha256": "8affa78d0e90878c0c32009aa07b9a4a86547668950ef5a17a9686e647cb5461",
+          "originalBytes": 58830,
+          "trimmedSha256": "9466e375e8ae15e74e3120ed2938e20f837c8c3eb4d3164223a311575286dac0",
+          "trimmedBytes": 34384
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/2446001/profile_fastest_times/",
+          "swimmerId": "2446001",
+          "sha256": "ebc5aab549d1e74ae0d2c243af2f230ab2a1cba6d403d7dc36cd934952cb8bfb",
+          "bytes": 34555
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/2527796/profile_fastest_times/",
+          "swimmerId": "2527796",
+          "sha256": "79d3779df583d395228c3fec5f594df23d1bea9de3ed36f48eb0335939952690",
+          "bytes": 45855
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/2268094/profile_fastest_times/",
+          "swimmerId": "2268094",
+          "sha256": "76935d46af6eff20bd7de444db5447ba7ff53e56d1dc442a2d5f448223b2dd1b",
+          "bytes": 41211
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/2691134/profile_fastest_times/",
+          "swimmerId": "2691134",
+          "sha256": "1fe8cb9a25a1ad032b56f1c227b573acdf942be98f6abffddb865f10971b8238",
+          "bytes": 19764
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/3210255/profile_fastest_times/",
+          "swimmerId": "3210255",
+          "sha256": "1dd532a019f936202587022381e3e61b1b42edd9deabe5b875703c0a8aa3a5af",
+          "bytes": 33154
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/1200541/profile_fastest_times/",
+          "swimmerId": "1200541",
+          "sha256": "9f4676be373b8e5b36daad1e988d0b8aa70481c1faa9228ce718b945b7434bd7",
+          "bytes": 4653
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/1825215/profile_fastest_times/",
+          "swimmerId": "1825215",
+          "sha256": "220777604a943f69ad2fc08a17ca96f7c05065de46314b61f2d7da540eeda4b2",
+          "bytes": 25739
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/2537259/profile_fastest_times/",
+          "swimmerId": "2537259",
+          "sha256": "edee9e8ab484c3a7ee1b0167361c24e5d488c205b9dca8275153a69935622a23",
+          "bytes": 10796
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/2885259/profile_fastest_times/",
+          "swimmerId": "2885259",
+          "sha256": "ab1b01bdc90c72b8842e8b993b0454a18c321b88921a403452e12bee0dedd1d1",
+          "bytes": 9887
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/2580321/profile_fastest_times/",
+          "swimmerId": "2580321",
+          "sha256": "d60eaf62455abcf691a01bf49f835035f86511d8b71b27a5537a5b87e368226b",
+          "bytes": 21277
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/1248797/profile_fastest_times/",
+          "swimmerId": "1248797",
+          "sha256": "a8a240c26a03e5591d52184b26b298af421942f149ae0bc7876f7dfa83c57e73",
+          "bytes": 32634
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/2234855/profile_fastest_times/",
+          "swimmerId": "2234855",
+          "sha256": "f26398046bba7412095d11c66625fe6a44018fea576a7c16fe6d1eec32bb5c5e",
+          "bytes": 14773
+        }
+      ]
+    },
+    {
+      "captureId": "team-58-2026-2027",
+      "realPlannedPageCount": 62,
+      "realPageCount": 62,
+      "keptPageCount": 14,
+      "chosen": {
+        "Men": [
+          "1130590:Steven Balistreri",
+          "2451483:Afonso Campanico",
+          "2352628:Bartu Akin",
+          "1414321:Cody Bauer",
+          "3504614:Bona Benedek",
+          "1679982:Colton Bennett"
+        ],
+        "Women": [
+          "1828356:Emma Crowe",
+          "2508045:Katie Batts",
+          "2994194:Ava Caroielli",
+          "2340365:Audrey Cash",
+          "2289226:Monroe Chittum",
+          "3469022:Tayden Drake"
+        ]
+      },
+      "pages": [
+        {
+          "canonicalUrl": "https://www.swimcloud.com/team/58/roster/?page=1&gender=M&season_id=30&sort=name",
+          "originalSha256": "8ad600b0043496c5eadaee787cb3a74a404d53e1ffeb46b17a6079de2fbb613f",
+          "originalBytes": 69370,
+          "trimmedSha256": "e2b5d95912098db100a53a04665e95f2f8f3cd9dd506a7b6d3e041d3a93b509b",
+          "trimmedBytes": 44927
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/team/58/roster/?page=1&gender=F&season_id=30&sort=name",
+          "originalSha256": "4e3d4c394593ca8afe3e318f3e4fac057701efaea02c8b579ddea50b1679c14f",
+          "originalBytes": 51180,
+          "trimmedSha256": "d9cb19912309217d83f70e937dae11a1531f5298fe3c4ea6aa86fac1585ed3b0",
+          "trimmedBytes": 26737
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/2352628/profile_fastest_times/",
+          "swimmerId": "2352628",
+          "sha256": "7e7edf0949d735494a9728246d3aa6d67254e214fd84f44f697485e65e2b8f5c",
+          "bytes": 33263
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/1130590/profile_fastest_times/",
+          "swimmerId": "1130590",
+          "sha256": "7a90b8dbce689499e4b03f0a519a86c4f9431e4740c7487f17eeb42fbf664924",
+          "bytes": 34639
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/1414321/profile_fastest_times/",
+          "swimmerId": "1414321",
+          "sha256": "724208773dcb8ee0ce5a4c2eb2cba0c7ae9e1de8f98edfcb9f49b86e40551a7d",
+          "bytes": 23536
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/3504614/profile_fastest_times/",
+          "swimmerId": "3504614",
+          "sha256": "d9079118af32237532fa4731fa62dc494baa65f1fa1807e86caec3678baf8bbc",
+          "bytes": 4971
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/1679982/profile_fastest_times/",
+          "swimmerId": "1679982",
+          "sha256": "21dd78e19f073b027959ef99dece11518f839735f3c1553550ece37afb203f57",
+          "bytes": 37161
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/2451483/profile_fastest_times/",
+          "swimmerId": "2451483",
+          "sha256": "5614938dab0392921c80a79b8e5aa6b42fe309ae78c2241ebae262b2def23167",
+          "bytes": 34215
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/2508045/profile_fastest_times/",
+          "swimmerId": "2508045",
+          "sha256": "258e058a15fbd308ee80e02b8498cd010098b22cfe0fed797abab107b57f13bc",
+          "bytes": 8649
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/2994194/profile_fastest_times/",
+          "swimmerId": "2994194",
+          "sha256": "bf22a7cb08cce1308bf6a3236ecf03e6154bf616f3502ad1da11769375590e26",
+          "bytes": 24673
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/2340365/profile_fastest_times/",
+          "swimmerId": "2340365",
+          "sha256": "f11dcd315eb17db91ee90440acbf755cecfbd1081d54b22d1b590b98dd56c861",
+          "bytes": 34118
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/2289226/profile_fastest_times/",
+          "swimmerId": "2289226",
+          "sha256": "5bfe052225e9dfe4936535872bb46d82205a7bac6b617146e4eace91db26ccfa",
+          "bytes": 38886
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/1828356/profile_fastest_times/",
+          "swimmerId": "1828356",
+          "sha256": "2abf02d396c44cfef122ef3bf51edc13af196d4cf0466ca3e60e555f4074e476",
+          "bytes": 34931
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/3469022/profile_fastest_times/",
+          "swimmerId": "3469022",
+          "sha256": "b90ad83bc9c89775c4ee9d1c0ee5db53a00faff0df06a5db6233c87d2e999596",
+          "bytes": 33662
+        }
+      ]
+    },
+    {
+      "captureId": "team-48-2026-2027",
+      "realPlannedPageCount": 38,
+      "realPageCount": 38,
+      "keptPageCount": 14,
+      "chosen": {
+        "Men": [
+          "1427842:Jake Bigler",
+          "2250518:Gabriel Ledon",
+          "2213193:Reece Achord",
+          "3556137:Timeo Bordier",
+          "2998657:Sandijs Cecins",
+          "3072578:Mateus Cruz"
+        ],
+        "Women": [
+          "3099066:Penelope Autry",
+          "2451946:Ella Berg",
+          "1480226:Kennedy Cleasant",
+          "988145:Mazie Finch",
+          "2392192:Rhianna Foster",
+          "2407887:Audrey Lemoine"
+        ]
+      },
+      "pages": [
+        {
+          "canonicalUrl": "https://www.swimcloud.com/team/48/roster/?page=1&gender=M&season_id=30&sort=name",
+          "originalSha256": "67ede2f922f4b1a9c2bc40a4979afef9f7f546f3c7710e05fd6e04aaf7b0e915",
+          "originalBytes": 55453,
+          "trimmedSha256": "48d524396b5f19f541480a9cb971094b72b609cb0a098f3cf9a7bdd0d280be78",
+          "trimmedBytes": 31018
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/team/48/roster/?page=1&gender=F&season_id=30&sort=name",
+          "originalSha256": "45e18b22c77309862f84150aeb6ab79ff946434444442fc72f492b8963a13101",
+          "originalBytes": 45714,
+          "trimmedSha256": "f2f8adf0078b6612fe513476c65a39ec306f3a8d0fd46957a07714401060a168",
+          "trimmedBytes": 21279
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/2213193/profile_fastest_times/",
+          "swimmerId": "2213193",
+          "sha256": "88bc938e07f4ac3a3e5dee1d5acc15b6b4475ffbf218862a24571f014d5c197a",
+          "bytes": 25865
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/1427842/profile_fastest_times/",
+          "swimmerId": "1427842",
+          "sha256": "5031df58330c01f605040147d8f59b1e78ec8af6dcc8d095410b01cf9ea3cbde",
+          "bytes": 5579
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/3556137/profile_fastest_times/",
+          "swimmerId": "3556137",
+          "sha256": "f56daabc781c32074d8b2629065b5de4a6d5cf826f1ea056a75654f17acc7a2b",
+          "bytes": 12617
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/2998657/profile_fastest_times/",
+          "swimmerId": "2998657",
+          "sha256": "246fb1e2c248038312886d0704424e9ad0fcb7b84fde664ce225b62dde18839b",
+          "bytes": 30063
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/3072578/profile_fastest_times/",
+          "swimmerId": "3072578",
+          "sha256": "e93b2b295becdb008fab52d0d7b1cee458035053c65f408b2d63715255cba0ab",
+          "bytes": 23516
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/2250518/profile_fastest_times/",
+          "swimmerId": "2250518",
+          "sha256": "cd04d0c8738292b277ae9b3b27091873eb569b5bd8b4208fce7559c346804cfd",
+          "bytes": 4627
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/3099066/profile_fastest_times/",
+          "swimmerId": "3099066",
+          "sha256": "86e910a25b5699617deb4a0ec374a3f14036d2569ab1ac490a103032835be2d3",
+          "bytes": 26618
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/2451946/profile_fastest_times/",
+          "swimmerId": "2451946",
+          "sha256": "51eaa5f8a9386c73832726362df3b624b090e6ba663f391bb81b060d6f6fc134",
+          "bytes": 28486
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/1480226/profile_fastest_times/",
+          "swimmerId": "1480226",
+          "sha256": "1b33b2c74cd1ad2872c59ca913e4380f65fef53ad26d0030839e5b26768bdc53",
+          "bytes": 37181
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/988145/profile_fastest_times/",
+          "swimmerId": "988145",
+          "sha256": "7ac259a1893fb635261631c13adb488ee0c7eabef2839218b614361d87bcada5",
+          "bytes": 14665
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/2392192/profile_fastest_times/",
+          "swimmerId": "2392192",
+          "sha256": "fb4d320638ca545ce1ea2275e36a84a3b981a8cb6de0f94bbe124097897e4055",
+          "bytes": 8148
+        },
+        {
+          "canonicalUrl": "https://www.swimcloud.com/api/swimmers/2407887/profile_fastest_times/",
+          "swimmerId": "2407887",
+          "sha256": "f5702979885cd6dac33efd5b8e8a38578fc7cea7cb3ac472011bcbd55ae8cf3e",
+          "bytes": 33223
+        }
+      ]
+    }
+  ],
+  "totalBytesOfKeptPages": 1096913
+}

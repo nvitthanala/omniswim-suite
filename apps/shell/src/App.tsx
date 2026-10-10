@@ -1,12 +1,13 @@
 import { Suspense, useEffect, useRef, useState } from 'react';
-import { BrowserRouter, Navigate, Route, Routes, useLocation, useSearchParams } from 'react-router-dom';
-import { AnimatePresence, motion } from 'motion/react';
-import { AppletSkeleton, useToast } from '@omniswim/ui';
+import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
+import { AnimatePresence, motion, MotionConfig } from 'motion/react';
+import { AppletSkeleton, ScoringRulesOpenerProvider, TheoreticalMeetOpenerProvider, useToast } from '@omniswim/ui';
 import { SuitePreferencesProvider, useSuitePreferences } from '@omniswim/core';
 import { SuiteWorkspaceProvider, useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
-import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
-import { Gender } from '@omniswim/core/types';
 import ScoringSettingsModal from '@omniswim/matrix/components/ScoringSettingsModal';
+import { writeStoredMatrixStep } from '@omniswim/matrix/components/matrixStepState';
+import type { Workspace } from '@omniswim/core/types';
+import { isTheoreticalMeet } from '@omniswim/core/lib/theoreticalMeetLabel';
 import SuiteHeader from './components/SuiteHeader';
 import WorkspaceSidebar from './components/WorkspaceSidebar';
 import SuiteHome from './pages/SuiteHome';
@@ -17,8 +18,18 @@ import AnalyticsPage from './pages/AnalyticsPage';
 import SwimCloudWindow from './components/SwimCloudWindow';
 import CommandPalette from './components/CommandPalette';
 import { AuthProvider } from './context/AuthContext';
-import { ManagerAppLazy, MatrixAppLazy, MetricsAppLazy, prefetchLastApplet } from './lib/appletPrefetch';
+import {
+  ManagerAppLazy,
+  MatrixAppLazy,
+  MetricsAppLazy,
+  TheoreticalMeetBannerLazy,
+  TheoreticalMeetDialogLazy,
+  prefetchLastApplet,
+} from './lib/appletPrefetch';
 import { installDataLossWatcher } from './lib/dataLossWatcher';
+import { useWorkspaceScoringDialogProps } from './lib/workspaceScoringSettings';
+import { planRouteSync, type RouteSyncSnapshot } from './lib/workspaceRouteSync';
+import { useDialogScopedError } from './lib/dialogScopedError';
 
 const ManagerApp = ManagerAppLazy;
 const MatrixApp = MatrixAppLazy;
@@ -38,94 +49,53 @@ function WorkspaceRouteSync() {
   const workspaceParam = searchParams.get('workspace');
   const genderParam = searchParams.get('gender');
 
-  // The URL→state effects below read the current selection through refs rather than
-  // through their dependency arrays. Otherwise they re-fire whenever the selection changes
-  // (e.g. clicking a sidebar row) and, on the transient render where state leads the URL,
-  // revert the selection back to the still-stale URL param — fighting the state→URL effect
-  // that is simultaneously pushing the new selection into the URL. The two writers then swap
-  // the two values every render, causing a continuous selection/URL oscillation (and a
-  // snapshot-fetch storm). Keyed only on the params, these effects fire solely on genuine
-  // URL changes (shared links, back/forward), leaving the state→URL effect as the single
-  // authoritative URL writer.
-  const activeWorkspaceIdRef = useRef(activeWorkspaceId);
-  activeWorkspaceIdRef.current = activeWorkspaceId;
-  const setActiveWorkspaceIdRef = useRef(setActiveWorkspaceId);
-  setActiveWorkspaceIdRef.current = setActiveWorkspaceId;
-  const activeGenderRef = useRef(activeGender);
-  activeGenderRef.current = activeGender;
-  const setActiveGenderRef = useRef(setActiveGender);
-  setActiveGenderRef.current = setActiveGender;
-  // The state→URL effect below reads the current search params through a ref
-  // too, for the same reason the URL→state effects above read selection
-  // through refs (see the comment there): `setSearchParams` hands back a new
-  // `searchParams` on every call, and depending on it directly re-armed this
-  // effect on its own write, which raced the URL→state effect for who got
-  // the last word — the two writers then swapped the workspace id every
-  // render, forever. Keying this effect only on the state it publishes
-  // (`activeWorkspaceId`, `activeGender`) makes it fire once per real
-  // selection change and never in response to its own output.
+  // One effect, one decision. `planRouteSync` (lib/workspaceRouteSync.ts) works out which
+  // side moved since the last run and who leads; this effect only carries the plan out.
+  // The previous two-effect version compared URL and state against each other and swapped
+  // the workspace id about 30 times a second on a cold `?workspace=<id>` load. The handlers
+  // and search params are read through refs so a re-render cannot re-arm the effect.
+  const prevRef = useRef<RouteSyncSnapshot | null>(null);
   const searchParamsRef = useRef(searchParams);
   searchParamsRef.current = searchParams;
-  // Guards the state→URL effect's mount-time deferral below — set once the
-  // effect has run past that first check, so every later mismatch (e.g. a
-  // sidebar/palette workspace switch, where state legitimately leads the
-  // URL) writes through normally instead of deferring forever.
-  const initialSyncDoneRef = useRef(false);
+  const setSearchParamsRef = useRef(setSearchParams);
+  setSearchParamsRef.current = setSearchParams;
+  const setActiveWorkspaceIdRef = useRef(setActiveWorkspaceId);
+  setActiveWorkspaceIdRef.current = setActiveWorkspaceId;
+  const setActiveGenderRef = useRef(setActiveGender);
+  setActiveGenderRef.current = setActiveGender;
 
   useEffect(() => {
-    if (
-      workspaceParam &&
-      workspaces.some(w => w.id === workspaceParam) &&
-      workspaceParam !== activeWorkspaceIdRef.current
-    ) {
-      setActiveWorkspaceIdRef.current(workspaceParam);
+    const cur: RouteSyncSnapshot = {
+      urlWorkspace: workspaceParam,
+      urlGender: genderParam,
+      activeWorkspaceId,
+      activeGender,
+    };
+    const plan = planRouteSync(
+      prevRef.current,
+      cur,
+      workspaces.map(w => w.id)
+    );
+    prevRef.current = cur;
+    if (plan.setActiveWorkspaceId) {
+      // Deferred past this commit's effect flush on purpose. `SuiteWorkspaceProvider` has a
+      // parent effect that mirrors its derived selection back into its stored intent with a
+      // functional update. This child effect runs first, so a synchronous set here is queued
+      // before that mirror update and then overwritten by it (the mirror writes the stale
+      // derived id back). The selection would never leave the stored workspace and the URL
+      // would never win. A microtask lands after the whole flush. Not cancelled on cleanup:
+      // StrictMode's second mount run is a no-op by design, so cancelling would lose the set.
+      const id = plan.setActiveWorkspaceId;
+      queueMicrotask(() => setActiveWorkspaceIdRef.current(id));
     }
-  }, [workspaceParam, workspaces]);
-
-  useEffect(() => {
-    if (genderParam === Gender.MEN || genderParam === Gender.WOMEN) {
-      if (genderParam !== activeGenderRef.current) setActiveGenderRef.current(genderParam);
+    if (plan.setActiveGender) setActiveGenderRef.current(plan.setActiveGender);
+    if (plan.writeUrl) {
+      const next = new URLSearchParams(searchParamsRef.current);
+      if (plan.writeUrl.workspace) next.set('workspace', plan.writeUrl.workspace);
+      if (plan.writeUrl.gender) next.set('gender', plan.writeUrl.gender);
+      setSearchParamsRef.current(next, { replace: true });
     }
-  }, [genderParam]);
-
-  useEffect(() => {
-    if (!activeWorkspaceId) return;
-    const current = searchParamsRef.current;
-    if (!initialSyncDoneRef.current) {
-      initialSyncDoneRef.current = true;
-      const urlWorkspaceParam = current.get('workspace');
-      // Mount-time only: the URL already names a *different*, valid
-      // workspace, so the URL→state effect above is about to reconcile
-      // `activeWorkspaceId` to match it (it fires in this same commit).
-      // Writing this render's — about to be superseded — `activeWorkspaceId`
-      // into the URL right now would win that race instead of losing it
-      // gracefully, handing the URL→state effect a freshly-wrong param to
-      // correct, which corrects back to a param this effect then "corrects"
-      // again: the two writers swap the id forever. Deferring this one write
-      // lets the URL→state effect land first. Every write after this first
-      // one reflects a real, settled selection change (a sidebar/palette
-      // switch, say) and must go through normally, or the URL would stop
-      // tracking the selection after the first render.
-      if (
-        urlWorkspaceParam &&
-        urlWorkspaceParam !== activeWorkspaceId &&
-        workspaces.some(w => w.id === urlWorkspaceParam)
-      ) {
-        return;
-      }
-    }
-    const next = new URLSearchParams(current);
-    let changed = false;
-    if (next.get('workspace') !== activeWorkspaceId) {
-      next.set('workspace', activeWorkspaceId);
-      changed = true;
-    }
-    if (next.get('gender') !== activeGender) {
-      next.set('gender', activeGender);
-      changed = true;
-    }
-    if (changed) setSearchParams(next, { replace: true });
-  }, [activeWorkspaceId, activeGender, setSearchParams, workspaces]);
+  }, [workspaceParam, genderParam, activeWorkspaceId, activeGender, workspaces]);
 
   return null;
 }
@@ -136,6 +106,8 @@ function ShellLayout() {
   const toast = useToast();
   const [showScoringModal, setShowScoringModal] = useState(false);
   const [showCommandPalette, setShowCommandPalette] = useState(false);
+  const [showTheoreticalMeet, setShowTheoreticalMeet] = useState(false);
+  const navigate = useNavigate();
   const { isLoading, error, activeWorkspace, updateWorkspace } = useSuiteWorkspace();
 
   // Global Ctrl+K / Cmd+K toggle for the command palette.
@@ -166,11 +138,25 @@ function ShellLayout() {
     };
   }, []);
 
+  const scoringDialogProps = useWorkspaceScoringDialogProps(activeWorkspace);
+  // A failed theoretical-meet create is reported in its dialog. The banner must not repeat it after cancel.
+  const bannerError = useDialogScopedError(error, showTheoreticalMeet);
+
+  // The new workspace is already active (the provider selects it). Open it on Matrix Standings.
+  const handleTheoreticalMeetCreated = (workspace: Workspace) => {
+    writeStoredMatrixStep(workspace.id, 'standings');
+    setShowTheoreticalMeet(false);
+    navigate({ pathname: '/matrix', search: `?workspace=${encodeURIComponent(workspace.id)}` });
+    toast.push('success', `Created ${workspace.name}`);
+  };
+
   if (isLoading) {
     return <AppletSkeleton kind="suite" />;
   }
 
   return (
+    <ScoringRulesOpenerProvider onOpen={() => setShowScoringModal(true)}>
+    <TheoreticalMeetOpenerProvider onOpen={() => setShowTheoreticalMeet(true)}>
     <div className={`app-shell flex flex-col h-screen overflow-hidden ${showWorkspaceChrome ? '' : ''}`}>
       <WorkspaceRouteSync />
       <SuiteHeader
@@ -181,9 +167,9 @@ function ShellLayout() {
         onOpenCommandPalette={() => setShowCommandPalette(true)}
       />
 
-      {error ? (
+      {bannerError ? (
         <div className="px-6 py-2 bg-[var(--toast-bg)] border-b border-[var(--toast-border)] text-[var(--toast-text)] text-ui-caption">
-          {error}
+          {bannerError}
         </div>
       ) : null}
 
@@ -200,6 +186,11 @@ function ShellLayout() {
                 transition={{ duration: preferences.reducedMotion ? 0 : 0.15 }}
                 className={showWorkspaceChrome ? 'p-4 lg:p-6' : ''}
               >
+                {showWorkspaceChrome && activeWorkspace && isTheoreticalMeet(activeWorkspace) ? (
+                  <Suspense fallback={null}>
+                    <TheoreticalMeetBannerLazy workspace={activeWorkspace} />
+                  </Suspense>
+                ) : null}
                 <Routes location={location}>
                   <Route path="/" element={<SuiteHome />} />
                   <Route path="/login" element={<LoginPage />} />
@@ -229,15 +220,11 @@ function ShellLayout() {
         </span>
       </footer>
 
-      {showScoringModal && activeWorkspace && (
+      {showScoringModal && activeWorkspace && scoringDialogProps && (
         <ScoringSettingsModal
-          settings={mergeScoringSettings(activeWorkspace.scoringSettings, {
-            conference: activeWorkspace.conference,
-            resultsForPdfHint: [
-              ...(activeWorkspace.menResults ?? []),
-              ...(activeWorkspace.womenResults ?? []),
-            ],
-          })}
+          settings={scoringDialogProps.settings}
+          pdfPlacePointsLocked={scoringDialogProps.pdfPlacePointsLocked}
+          resultsCarryPdfPlacePoints={scoringDialogProps.resultsCarryPdfPlacePoints}
           scoringView={activeWorkspace.scoringView}
           conference={activeWorkspace.conference}
           onScoringViewChange={view => {
@@ -252,10 +239,18 @@ function ShellLayout() {
         />
       )}
 
+      {showTheoreticalMeet ? (
+        <Suspense fallback={null}>
+          <TheoreticalMeetDialogLazy onClose={() => setShowTheoreticalMeet(false)} onCreated={handleTheoreticalMeetCreated} />
+        </Suspense>
+      ) : null}
+
       <CommandPalette open={showCommandPalette} onClose={() => setShowCommandPalette(false)} />
 
       <SwimCloudWindow />
     </div>
+    </TheoreticalMeetOpenerProvider>
+    </ScoringRulesOpenerProvider>
   );
 }
 
@@ -273,11 +268,13 @@ export default function App() {
   return (
     <BrowserRouter>
       <SuitePreferencesProvider>
-        <AuthProvider>
-          <SuiteWorkspaceProvider onNotify={toast.push}>
-            <ShellLayout />
-          </SuiteWorkspaceProvider>
-        </AuthProvider>
+        <MotionConfig reducedMotion="user">
+          <AuthProvider>
+            <SuiteWorkspaceProvider onNotify={toast.push}>
+              <ShellLayout />
+            </SuiteWorkspaceProvider>
+          </AuthProvider>
+        </MotionConfig>
       </SuitePreferencesProvider>
     </BrowserRouter>
   );

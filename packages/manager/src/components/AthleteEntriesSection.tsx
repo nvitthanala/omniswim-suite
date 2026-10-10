@@ -161,7 +161,8 @@ export default function AthleteEntriesSection({
         athlete.team,
         gender,
         athlete.name,
-        aliasResolver
+        aliasResolver,
+        settings
       );
       if (!canAcceptAnotherEntry(without, settings, target.event)) {
         toast.push('error', 'Entry limit reached — cannot re-enable');
@@ -230,7 +231,7 @@ export default function AthleteEntriesSection({
       <p className="text-ui-caption text-theme-secondary mb-2">
         {formatEntryLimitLabel(counts, settings)}
         {over.individualOver || over.relayOver || over.totalOver ? (
-          <span className="text-amber-400 ml-2">Over limit</span>
+          <span className="text-warning ml-2">Over limit</span>
         ) : null}
       </p>
       {athletePlans.length > 0 ? (
@@ -318,7 +319,7 @@ export default function AthleteEntriesSection({
                   variant="ghost"
                   size="sm"
                   onClick={() => removeEntry(p.id)}
-                  className="p-1 hover:text-amber-400"
+                  className="p-1 hover:text-warning"
                   aria-label={`Remove ${p.event}`}
                   leadingIcon={<Trash2 size={14} />}
                 />

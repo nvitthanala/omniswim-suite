@@ -85,6 +85,11 @@ import {
 } from './captureResume';
 import { classifyCrawlPageOutcome } from './crawlErrorPolicy';
 import { runBoundedFetchPool } from './boundedFetchPool';
+import { MIN_DELAY_MS } from './crawlPacing';
+import { mountMultiTeamCrawlButton } from './multiTeamPanel';
+import { crawlHostAllowed } from './multiTeamPanelModel';
+import { createMultiTeamApp } from './multiTeamApp';
+import { withCrawlLock, type CrawlLockManager } from './crawlLock';
 import {
   RATE_LIMITED_STATUS,
   decideRateLimitRetry,
@@ -154,7 +159,6 @@ import {
   type SwimCloudSwimmerTimesProgressState,
 } from './progress';
 
-const MIN_DELAY_MS = 3000;
 const BUTTON_ID = 'omniswim-swimcloud-crawler-button';
 const PANEL_ID = 'omniswim-swimcloud-crawler-panel';
 
@@ -320,6 +324,11 @@ interface FetchedPage {
    * could act on it. See `rateLimitBackoff.ts`.
    */
   readonly retryAfter?: string;
+  /**
+   * Where the reply came from after any redirect. The meet crawl ignores it; the
+   * multi-team crawl compares it with the URL it asked for.
+   */
+  readonly finalUrl: string;
 }
 
 class SwimCloudCrawlNetworkError extends Error {}
@@ -344,6 +353,7 @@ async function fetchPage(url: string): Promise<FetchedPage> {
     return {
       html,
       httpStatus: response.status,
+      finalUrl: response.url,
       ...(retryAfter === null ? {} : { retryAfter }),
     };
   } catch (error) {
@@ -2489,12 +2499,55 @@ function mountTimesEndpointProbe(): void {
   document.body.appendChild(button);
 }
 
+/* -------------------------------------------------------------------------- */
+/* Multi-team crawl: the real I/O handed to `./multiTeamPanel.ts`              */
+/* -------------------------------------------------------------------------- */
+
+/** The multi-team crawl's conversation with the worker. One object for the page's life. */
+const multiTeamApp = createMultiTeamApp((message, timeoutMs) => sendToBackground(message as unknown as BackgroundMessage, timeoutMs));
+
+/**
+ * One same-origin request for the multi-team driver. No pacing and no retry:
+ * the driver owns both (`./multiTeamDriver.ts`). Timeout-bounded by `fetchPage`.
+ * `undefined` is a network error or timeout.
+ */
+async function multiTeamFetchPage(url: string): Promise<FetchedPage | undefined> {
+  try {
+    return await fetchPage(url);
+  } catch {
+    return undefined;
+  }
+}
+
+/** `navigator.locks`, or undefined where the browser has none. Shared by every tab of this origin. */
+function crawlLockManager(): CrawlLockManager | undefined {
+  return (navigator as unknown as { locks?: CrawlLockManager }).locks;
+}
+
 function main(): void {
+  // Available on every SwimCloud page: the multi-team crawl needs no meet.
+  mountMultiTeamCrawlButton({
+    fetchPage: multiTeamFetchPage,
+    app: multiTeamApp,
+    // The meet crawl's own last-request clock: the two crawls cannot start closer than the pacing floor.
+    paceClock: {
+      get: () => lastFetchAtMs,
+      set: (ms) => {
+        lastFetchAtMs = ms;
+      },
+    },
+    locks: crawlLockManager(),
+  });
+
   // Runs first, and on a different kind of page: a swimmer profile is not
   // meet-scoped, so the early return below would skip it.
   mountTimesEndpointProbe();
 
   if (document.getElementById(BUTTON_ID)) return; // Already injected.
+
+  // The meet crawl fetches www URLs. On the bare host they are cross-origin, so the crawl is refused there
+  // (no button), the same rule the multi-team crawl follows.
+  if (!crawlHostAllowed(location.hostname)) return;
 
   const meetId = meetIdFromCurrentPage();
   if (meetId === undefined) return; // Not a meet-scoped page; nothing to crawl.
@@ -2530,9 +2583,17 @@ function main(): void {
 }
 
 function startCrawl(meetId: SwimCloudMeetId, panel: PanelHandles, control: CrawlControl): void {
-  runCrawl(meetId, panel, control).catch((error: unknown) => {
-    renderCrawlFailure(panel, error);
-  });
+  // One crawl at a time, in every tab: the meet crawl and the multi-team crawl share one lock.
+  withCrawlLock(crawlLockManager(), () => runCrawl(meetId, panel, control))
+    .then((result) => {
+      if (result.acquired) return;
+      renderMessage(panel, result.message);
+      // Retry makes sense only when another crawl holds the lock. Without a lock manager it cannot work.
+      panel.retryButton.hidden = result.reason !== 'held';
+    })
+    .catch((error: unknown) => {
+      renderCrawlFailure(panel, error);
+    });
 }
 
 main();

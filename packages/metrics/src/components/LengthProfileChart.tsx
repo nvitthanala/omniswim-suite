@@ -50,7 +50,7 @@ export function LengthProfileChart<TPoint>({
   return (
     <div>
       <div className="flex items-center justify-between mb-2">
-        <h4 className="text-ui-micro font-bold text-theme-muted uppercase tracking-[0.2em]">{title}</h4>
+        <h4 className="text-ui-micro font-bold text-theme-muted">{title}</h4>
         <span className="text-ui-micro text-theme-muted font-mono">{unit}</span>
       </div>
       <ChartShell size="fluid" className="surface-card rounded-xl p-5 overflow-hidden transition-colors">

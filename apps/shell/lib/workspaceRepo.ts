@@ -7,6 +7,7 @@
  *   - PgRepo:      PostgreSQL via PgWorkspaceService (OMNI_DB=postgres)
  */
 import { promises as fsp } from 'node:fs';
+import { randomUUID } from 'node:crypto';
 import path from 'node:path';
 import type { Workspace } from '../../../packages/core/src/types.ts';
 import { JsonStore } from './jsonStore.ts';
@@ -62,8 +63,14 @@ function backupKeepCount(): number {
  * prefix, would eventually delete a human's deliberate safety copy to make room
  * for an automatic one. Retention may only ever remove files this function
  * itself wrote.
+ *
+ * The label admits only letters, digits, `_` and `-` (every caller passes a
+ * fixed word such as `manual` or `pre-restore`), and the stamp is exactly what
+ * `toISOString()` yields after `:` and `.` become `-`. No separator of any
+ * platform can match, so a backslash is refused on Linux as well as Windows,
+ * where `path.basename` alone only treats it as a separator on Windows.
  */
-const GENERATED_BACKUP_PATTERN = /^meets-.+-\d{4}-\d{2}-\d{2}T[\dZ-]+\.json$/;
+const GENERATED_BACKUP_PATTERN = /^meets-[A-Za-z0-9][A-Za-z0-9_-]*-\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z\.json$/;
 
 /** Delete the oldest generated backups beyond `keep`. Never throws. */
 async function pruneGeneratedBackups(backupDir: string, keep: number): Promise<void> {
@@ -85,7 +92,13 @@ async function writeJsonBackup(
   await fsp.mkdir(backupDir, { recursive: true });
   const stamp = new Date().toISOString().replace(/[:.]/g, '-');
   const dest = path.join(backupDir, `meets-${label}-${stamp}.json`);
-  await fsp.writeFile(dest, JSON.stringify(workspaces, null, 2), 'utf-8');
+  const temp = path.join(backupDir, `.backup-${randomUUID()}.tmp`);
+  try {
+    await fsp.writeFile(temp, JSON.stringify(workspaces, null, 2), 'utf-8');
+    await fsp.rename(temp, dest);
+  } finally {
+    await fsp.unlink(temp).catch(() => undefined);
+  }
   // After the write, never before: a prune that ran first could take the count
   // to the limit and then add one, leaving `keep + 1` on disk.
   await pruneGeneratedBackups(backupDir, backupKeepCount());

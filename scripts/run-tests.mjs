@@ -9,6 +9,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -23,9 +24,19 @@ const E2E_TIMEOUT_MS = Number(process.env.OMNI_E2E_TIMEOUT_MS ?? 900_000);
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(scriptsDir, '..');
 
-// Each entry: [file, requiredFixture?]. If the fixture is listed and missing,
-// the test is skipped rather than failed. A test may also skip itself by exiting
-// 0 with a leading `SKIP` line (used for checks needing a live database).
+// Each entry: [file, ...requiredFixtures]. If any listed fixture is missing,
+// the test is skipped rather than failed. `data/meets.json` is the local working
+// store and holds real roster data, so it is untracked (f9d63c4b) and absent on CI.
+//
+// List `data/meets.json` here ONLY for a script whose every check needs it
+// (today: `test_relay_overrides.mjs`). A script that has checks needing nothing
+// local does not list it. It reads the store through `scripts/lib/localMeets.mjs`,
+// runs the local-free checks everywhere, and prints a `LOCAL-ONLY SKIPPED` line for
+// each part that needs the file. This runner counts those lines and prints them
+// beside the PASS and in the summary, so a skipped part cannot hide in a green run.
+//
+// A test may also skip itself by exiting 0 with a leading `SKIP` line (used for
+// checks needing a live database).
 //
 // A test may also report a KNOWN FAILURE by printing a line beginning `XFAIL`
 // and exiting 0. That is for a check whose subject is correct but whose input is
@@ -41,6 +52,7 @@ const TESTS = [
   ['test_pg_roundtrip.mjs'],
   ['test_persistence_parity.mjs'],
   ['test_workspace_scope.mjs'],
+  ['test_data_dir_guard.mjs'],
   ['test_chart_data.mjs'],
   ['test_chart_shell.mjs'],
   ['test_chart_render.mjs'],
@@ -96,7 +108,7 @@ const TESTS = [
   ['test_lineup_audit.mjs'],
   ['test_vacate_relay_alias.mjs'],
   ['test_relay_splits.mjs'],
-  ['test_relay_overrides.mjs'],
+  ['test_relay_overrides.mjs', 'data/meets.json'],
   ['test_dq_scoring.mjs'],
   ['test_prelims_projection.mjs'],
   ['test_momentum_series.mjs'],
@@ -128,15 +140,18 @@ let failed = 0;
 let skipped = 0;
 const failures = [];
 const knownFailures = [];
+/** `LOCAL-ONLY SKIPPED` lines from passing scripts: parts that need the untracked data/meets.json. */
+const localOnlySkips = [];
 
-for (const [file, fixture] of TESTS) {
+for (const [file, ...fixtures] of TESTS) {
   const path = join(scriptsDir, file);
   if (!existsSync(path)) {
     console.log(`SKIP  ${file} (missing)`);
     skipped += 1;
     continue;
   }
-  if (fixture && !existsSync(join(repoRoot, fixture))) {
+  const fixture = fixtures.find(f => !existsSync(join(repoRoot, f)));
+  if (fixture) {
     console.log(`SKIP  ${file} (needs ${fixture})`);
     skipped += 1;
     continue;
@@ -178,12 +193,13 @@ for (const [file, fixture] of TESTS) {
       skipped += 1;
     } else {
       const xfails = stdout.split('\n').filter(l => l.trimStart().startsWith('XFAIL'));
-      if (xfails.length) {
-        console.log(`PASS  ${file} (${xfails.length} known failure${xfails.length > 1 ? 's' : ''})`);
-        for (const line of xfails) knownFailures.push(`${file}: ${line.trim()}`);
-      } else {
-        console.log(`PASS  ${file}`);
-      }
+      const localSkips = stdout.split('\n').filter(l => l.startsWith('LOCAL-ONLY SKIPPED'));
+      for (const line of localSkips) localOnlySkips.push(line.replace('LOCAL-ONLY SKIPPED', '').trim());
+      const notes = [];
+      if (xfails.length) notes.push(`${xfails.length} known failure${xfails.length > 1 ? 's' : ''}`);
+      if (localSkips.length) notes.push(`${localSkips.length} local-only part${localSkips.length > 1 ? 's' : ''} skipped`);
+      console.log(`PASS  ${file}${notes.length ? ` (${notes.join(', ')})` : ''}`);
+      for (const line of xfails) knownFailures.push(`${file}: ${line.trim()}`);
       passed += 1;
     }
   } else {
@@ -211,26 +227,76 @@ for (const [file, fixture] of TESTS) {
   }
 }
 
+/** Ask the OS for a free TCP port. Playwright's dev server must not land on a port a user server holds. */
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address();
+      server.close(() => resolve(port));
+    });
+  });
+}
+
+/**
+ * Reduce Playwright output to what explains a failure. The dev server echoes the same
+ * `[WebServer] ...` line (for example the `[scoring-presets] ignoring ...` notice) on every
+ * request, and a tail of the raw output was nothing but those. Keep the first copy of each
+ * WebServer line, say how many repeats were dropped, then start at the failure summary.
+ */
+function condensePlaywrightOutput(raw, maxLines = 60) {
+  const seen = new Map();
+  const kept = [];
+  for (const line of raw.split(/\r?\n/)) {
+    if (!/^\[WebServer\]/.test(line)) {
+      kept.push(line);
+      continue;
+    }
+    const count = seen.get(line) ?? 0;
+    seen.set(line, count + 1);
+    if (count === 0) kept.push(line);
+  }
+  const repeats = [...seen.values()].reduce((sum, n) => sum + (n - 1), 0);
+  // The list reporter prints a numbered failure block ("  1) [chromium] > spec") after the run.
+  const firstFailure = kept.findIndex(l => /^\s+1\) /.test(l));
+  const body = firstFailure >= 0 ? kept.slice(firstFailure) : kept;
+  const lines = body.join('\n').trim().split('\n');
+  const shown = firstFailure >= 0 ? lines.slice(0, maxLines) : lines.slice(-maxLines);
+  const note = repeats > 0 ? `(${repeats} repeated [WebServer] lines omitted)\n` : '';
+  return note + shown.join('\n');
+}
+
 const playwrightBin = join(repoRoot, 'node_modules', '@playwright', 'test', 'cli.js');
 if (existsSync(playwrightBin)) {
-  const e2e = spawnSync(process.execPath, [playwrightBin, 'test'], {
+  // A free port, unless the caller chose one. playwright.config.ts and the dev server both read PORT.
+  // `npm run dev` runs `predev`, which kills whatever listens on that port, so a fixed 3000 could
+  // stop a user's own server on a developer machine.
+  const e2ePort = process.env.PORT ?? String(await freePort());
+  const e2e = spawnSync(process.execPath, [playwrightBin, 'test', `--reporter=${process.env.CI ? 'list,github' : 'list'}`], {
     cwd: repoRoot,
     stdio: 'pipe',
-    env: { ...process.env, NODE_OPTIONS: process.env.NODE_OPTIONS ?? '--use-system-ca' },
+    env: { ...process.env, PORT: e2ePort, NODE_OPTIONS: process.env.NODE_OPTIONS ?? '--use-system-ca' },
     // Same ceiling, same reason as the per-script timeout above. Playwright's
     // own webServer will wait indefinitely for a port that never opens.
     timeout: E2E_TIMEOUT_MS,
     killSignal: 'SIGKILL',
+    maxBuffer: 256 * 1024 * 1024,
   });
   if (e2e.status === 0) {
     console.log('PASS  playwright e2e (all specs)');
     passed += 1;
   } else {
     console.log('FAIL  playwright e2e (all specs)');
-    const out = (e2e.stdout?.toString() || '') + (e2e.stderr?.toString() || '');
-    failures.push(`--- playwright e2e ---\n${out.trim().split('\n').slice(-40).join('\n')}`);
+    const out = (e2e.stdout?.toString() || '') + '\n' + (e2e.stderr?.toString() || '');
+    failures.push(`--- playwright e2e (PORT ${e2ePort}) ---\n${condensePlaywrightOutput(out)}`);
     failed += 1;
   }
+} else if (process.env.CI) {
+  // On CI a missing Playwright means the e2e specs would never run and the job would still pass.
+  console.log('FAIL  playwright e2e (@playwright/test not installed, and CI=true forbids skipping it)');
+  failures.push('--- playwright e2e ---\n@playwright/test is not in node_modules. Run `npm ci` before `npm test`, and `npx playwright install --with-deps chromium` for the browser.');
+  failed += 1;
 } else {
   console.log('SKIP  playwright e2e (@playwright/test not installed)');
   skipped += 1;
@@ -238,6 +304,11 @@ if (existsSync(playwrightBin)) {
 
 const knownSuffix = knownFailures.length ? `, ${knownFailures.length} known failure${knownFailures.length > 1 ? 's' : ''}` : '';
 console.log(`\n${passed} passed, ${failed} failed, ${skipped} skipped${knownSuffix}`);
+if (localOnlySkips.length) {
+  // A passing script can still have skipped the part that reads data/meets.json.
+  console.log(`\nLOCAL-ONLY PARTS SKIPPED (${localOnlySkips.length}, need the untracked data/meets.json):`);
+  for (const k of localOnlySkips) console.log(`  ${k}`);
+}
 if (knownFailures.length) {
   // Printed every run so a documented gap cannot fade into a green suite.
   console.log('\nKNOWN FAILURES (expected, documented in the test file):');

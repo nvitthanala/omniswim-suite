@@ -124,6 +124,7 @@ npm run test:roundtrip
 | `OMNI_HOST` | `127.0.0.1` | Bind address. Loopback by default — the suite ships with authentication off, so exposing it to the network is opt-in. Set `0.0.0.0` to serve other devices; startup then prints a warning |
 | `OMNI_AI_ENABLED` | `false` | Keeps optional AI/OCR paths disabled unless explicitly enabled |
 | `OMNI_PORT` / `PORT` | `3000` | HTTP port for `npm run dev` and `npm start` |
+| `OMNI_DATA_DIR` | `<repo>/data` | Where workspaces, backups and presets live. The seed, migrate and re-extract scripts honour it, print the path before writing, and refuse to write while a server answers on the port (`--force` overrides). Point it at a copy when testing those scripts |
 
 `npm test` runs the self-contained checks in [scripts](scripts) via the runner [scripts/run-tests.mjs](scripts/run-tests.mjs). Tests that depend on local-only fixtures are skipped automatically on a clean checkout. CI (GitHub Actions) installs Python `pdfplumber` and Playwright Chromium before running the same suite.
 

@@ -29,6 +29,7 @@ import {
 import { isRankableSwim, isSameSwimEvent, swimEventIdentity } from './bestTimeEligibility';
 import { findSwimsNotSwumInCourse, type CourseWithSourcedEvents } from './courseEvents';
 import { mergeScoringSettings } from './scoringDefaults';
+import { countSwimmerEntries } from './swimmerEntryLimits';
 import { usesScorerRoster, scorerRosterKey } from './scorerRoster';
 import {
   convertTimeToSeconds,
@@ -38,7 +39,7 @@ import {
   normalizeSwimmerName,
   scyConversionProvenance,
 } from './utils';
-import { createPlannedEntry } from './whatIfProjection';
+import { buildWhatIfResults, createPlannedEntry } from './whatIfProjection';
 import { meetPlaceFieldForWorkspace, type MeetPlaceField } from './eventStrength';
 import {
   aliasNameKey,
@@ -445,7 +446,7 @@ function existingPlanEvents(
 
 /**
  * Entries already charged against a swimmer's caps, and the events they occupy.
- * Read the occupancy through {@link occupiesEvent}.
+ * Read the charge through {@link occupiesEvent} and the block through {@link blocksCandidate}.
  */
 type EntryCounts = {
   individual: number;
@@ -457,49 +458,104 @@ type EntryCounts = {
    */
   events: Set<string>;
   /**
-   * Raw labels of the swimmer's loaded-meet results, matched by label exactly as
-   * before. Deliberately not folded: a plan in an event the swimmer swam at the
-   * loaded meet collapses onto that result in the overlay projection, and in
-   * `plan_sheet` mode it is the only way the swimmer keeps the event. Whether a
-   * HyTek-labelled result should block such a plan is a lineup question, not a
-   * best-time one, and folding it here would change it silently.
+   * Event identities (see `swimEventIdentity`) of the swimmer's loaded-meet
+   * results, individual and relay. Folded like `events`, because the lineup
+   * projection folds them: it remaps a plan or recruit row onto the meet's own
+   * label and collapses the pair into one entry (`collapseCrossPlaneDuplicates`).
+   * Matching a HyTek label ("Event 4 Men 50 Yard Freestyle") against a plan label
+   * ("50 Freestyle") by raw text charged the swimmer for one event twice.
    */
   resultEvents: Set<string>;
 };
 
-/** The swimmer already holds an entry in `event`. */
+/** The swimmer already holds an entry in `event`, under any label of it: it is charged once. */
 function occupiesEvent(counts: EntryCounts, event: string): boolean {
-  return counts.resultEvents.has(event) || counts.events.has(swimEventIdentity(event));
+  const identity = swimEventIdentity(event);
+  return counts.events.has(identity);
 }
 
 /**
- * Roster-plane rows (planned entries and recruit rows) share one exact team/gender/name
- * filter. Result rows do not — they carry an optional gender and an untrimmed team.
+ * The import writes no plan for this candidate.
+ *
+ * A plan or recruit row in the event blocks it (by identity). In overlay mode, a
+ * loaded-meet result also blocks the same event by identity: the published result
+ * stands, and importing a history best must not replace it. Plan-sheet mode allows
+ * the sheet to define entries independently of meet rows.
+ */
+function blocksCandidate(counts: EntryCounts, event: string, blockResultIdentity: boolean): boolean {
+  return counts.events.has(swimEventIdentity(event)) ||
+    (blockResultIdentity && counts.resultEvents.has(swimEventIdentity(event)));
+}
+
+/**
+ * Roster-plane rows (planned entries and recruit rows) share one exact team/gender
+ * filter and a name filter that goes through the alias resolver. Result rows do
+ * not — they carry an optional gender and an untrimmed team — and are filtered
+ * inside `countSwimmerEntries`.
+ *
+ * `nameKey` is already resolved. The row's name is resolved the same way here, so
+ * a recruit stored under one spelling of a linked athlete is charged to that athlete.
  */
 function rosterRowMatchesSwimmer(
   row: { name: string; team: string; gender: Gender },
   nameKey: string,
   team: string,
-  gender: Gender
+  gender: Gender,
+  resolver: AthleteAliasResolver
 ): boolean {
   if (row.gender !== gender || row.team !== team) return false;
-  return normalizeSwimmerName(row.name) === nameKey;
+  return normalizeSwimmerName(resolver.resolveAthleteName(row.name, team, gender)) === nameKey;
 }
 
+/**
+ * Entries a swimmer already holds, for the import's entry budget.
+ *
+ * WHAT IS CHARGED comes from `pool`, the PROJECTED pool (`buildWhatIfResults`: meet
+ * rows, recruit rows, ACTIVE plans, relay-leg overrides), counted by
+ * `countSwimmerEntries`, the one entry counter. A time trial, an exhibition swim, a
+ * prelims/finals pair, a linked alias spelling, a relay leg held only through an
+ * override, and a plan that is switched off are therefore judged exactly as the
+ * lineup audit and the scoring theory judge them.
+ *
+ * The pool was built from the workspace as it stood BEFORE this run, so the rows
+ * this run writes are not in it. Those, and only those (`writtenIds`), are charged
+ * on top, keyed by event identity and matched through the same resolver. A row the
+ * workspace already held is never charged by the loop below: the pool already
+ * counted it, or the projection left it out on purpose (an inactive plan).
+ *
+ * WHAT IS BLOCKED is unchanged and still read from the RAW meet rows (`results`)
+ * and from every plan and recruit row, active or not: the writers decline an event
+ * that holds a row whatever its state, and a candidate in an event the swimmer swam
+ * at the meet is a lineup decision that this function does not make.
+ *
+ * Before 2026-10-01 this counted the raw meet rows and charged every plan and
+ * recruit row it was handed. A relay leg held through an override was invisible, an
+ * inactive plan cost an entry, and the import wrote entries the audit then flagged.
+ */
 function countExistingEntries(
   plans: PlannedSwimEntry[],
   recruits: Recruit[],
-  results: { name: string; team: string; gender?: Gender; event: string; isRelay?: boolean }[],
+  results: SwimmerResult[],
+  pool: SwimmerResult[],
+  writtenIds: ReadonlySet<string>,
   name: string,
   team: string,
-  gender: Gender
+  gender: Gender,
+  resolver: AthleteAliasResolver,
+  settings: ScoringSettings
 ): EntryCounts {
-  const nameKey = normalizeSwimmerName(name);
+  const nameKey = normalizeSwimmerName(resolver.resolveAthleteName(name, team, gender));
+  const fromPool = countSwimmerEntries(pool, team, gender, name, resolver, settings);
+  const publishedMeetEvents = results
+    .filter(row => !row.isTimeTrial && !/\bTIME\s+TRIAL\b/i.test(row.event))
+    .filter(row => row.team.trim() === team && (!row.gender || row.gender === gender))
+    .filter(row => normalizeSwimmerName(resolver.resolveAthleteName(row.name, team, gender)) === nameKey)
+    .map(row => row.event);
   const counts: EntryCounts = {
-    individual: 0,
-    relay: 0,
+    individual: fromPool.individual,
+    relay: fromPool.relayCount,
     events: new Set<string>(),
-    resultEvents: new Set<string>(),
+    resultEvents: new Set<string>(publishedMeetEvents.map(swimEventIdentity)),
   };
 
   const charge = (isRelay: boolean) => {
@@ -507,23 +563,14 @@ function countExistingEntries(
     else counts.individual += 1;
   };
 
-  for (const r of results) {
-    if (!resultMatchesTeamAndGender(r, team, gender)) continue;
-    if (normalizeSwimmerName(r.name) !== nameKey) continue;
-    const relayish = Boolean(r.isRelay) || isRelayEventName(r.event);
-    // A relay aggregate row standing in for the squad is not this swimmer's entry.
-    if (relayish && r.name === team) continue;
-    if (counts.resultEvents.has(r.event)) continue;
-    counts.resultEvents.add(r.event);
-    charge(relayish);
-  }
   // Plans first, then recruits — the original visit order. Deduped by event, so the
   // attribution is the same either way.
   for (const row of [...plans, ...recruits]) {
-    if (!rosterRowMatchesSwimmer(row, nameKey, team, gender)) continue;
+    if (!rosterRowMatchesSwimmer(row, nameKey, team, gender, resolver)) continue;
     if (occupiesEvent(counts, row.event)) continue;
     counts.events.add(swimEventIdentity(row.event));
-    charge(isRelayEventName(row.event));
+    // Held before this run: the pool counted it, or left it out on purpose.
+    if (writtenIds.has(row.id)) charge(isRelayEventName(row.event));
   }
 
   return counts;
@@ -819,6 +866,8 @@ type ImportAccumulator = {
   activeEntryIds: string[];
   overrides: ScorerRosterOverride[];
   existingRecruitEventKeys: Set<string>;
+  /** Ids of the plan and recruit rows THIS run wrote. The projected pool cannot hold them. */
+  writtenIds: Set<string>;
   newRecruits: number;
   lineupEntriesAdded: number;
 };
@@ -887,6 +936,7 @@ function appendLineupEntry(
     ...candidateTimeMarks(swim),
   });
   acc.meetEntryPlans.push(entry);
+  acc.writtenIds.add(entry.id);
   acc.activeEntryIds.push(entry.id);
   acc.lineupEntriesAdded += 1;
   return true;
@@ -919,6 +969,7 @@ function appendRecruitRow(
     ...(swim.source ? { source: swim.source } : {}),
   };
   acc.recruits.push(recruit);
+  acc.writtenIds.add(recruit.id);
   acc.existingRecruitEventKeys.add(key);
   acc.newRecruits += 1;
   if (markAsScorer) acc.overrides = upsertScorerOverride(acc.overrides, recruit);
@@ -933,10 +984,19 @@ type ImportContext = {
   settings: ScoringSettings;
   resolver: AthleteAliasResolver;
   rosterNames: string[];
+  /** The gender's raw meet rows. They decide which events a candidate is blocked from. */
   results: SwimmerResult[];
+  /**
+   * The projected pool the entry budget is CHARGED over — the same pool the lineup
+   * audit counts (`buildWhatIfResults`), built once from the workspace before this
+   * run writes anything.
+   */
+  entryPool: SwimmerResult[];
   programEvents: Set<string> | null;
   /** The loaded meet's scored fields, so events rank by place there. Null: no meet. */
   meetField: MeetPlaceField | null;
+  /** A published result wins over an imported plan only in the overlay projection. */
+  blockResultIdentity: boolean;
   classYearOverrides: Map<string, ClassYear>;
   markNewRecruitsAsScorers: boolean;
 };
@@ -980,9 +1040,13 @@ function importSwimmerGroup(
     acc.meetEntryPlans,
     acc.recruits,
     ctx.results,
+    ctx.entryPool,
+    acc.writtenIds,
     displayName,
     ctx.team,
-    ctx.gender
+    ctx.gender,
+    ctx.resolver,
+    ctx.settings
   );
 
   const budget = openEntryBudget(counts, ctx.caps);
@@ -997,7 +1061,7 @@ function importSwimmerGroup(
 
   for (const swim of orderCandidateSwims(ranked, profile)) {
     const relayish = isRelayEventName(swim.event);
-    if (occupiesEvent(counts, swim.event)) continue;
+    if (blocksCandidate(counts, swim.event, ctx.blockResultIdentity)) continue;
     if (!budgetHasRoom(budget, relayish)) continue;
 
     // A swimmer already known to the team joins the lineup; a new one becomes a
@@ -1022,13 +1086,17 @@ function openImportAccumulator(
   return {
     recruits,
     meetEntryPlans: [...(workspace.meetEntryPlans ?? [])],
-    activeEntryIds: [...(workspace.activeEntryIds ?? [])],
+    activeEntryIds:
+      (workspace.activeEntryIds ?? []).length > 0
+        ? [...(workspace.activeEntryIds ?? [])]
+        : (workspace.meetEntryPlans ?? []).map(plan => plan.id),
     overrides: [...(workspace.scorerRosterOverrides ?? [])],
     existingRecruitEventKeys: new Set(
       recruits
         .filter(r => r.gender === gender && r.team === team)
         .map(r => recruitEventKey(r.name, r.team, r.gender, r.event))
     ),
+    writtenIds: new Set<string>(),
     newRecruits: 0,
     lineupEntriesAdded: 0,
   };
@@ -1214,8 +1282,10 @@ export function importHistoryToRoster(
     resolver,
     rosterNames: rosterNamesForTeam(workspace, team, gender),
     results: resultsForGender(workspace, gender),
+    entryPool: buildWhatIfResults({ workspace, gender, removeSeniors: false }),
     programEvents: workspaceProgramEvents(workspace, gender),
     meetField: meetPlaceFieldForWorkspace(workspace, gender),
+    blockResultIdentity: workspace.entryPlanMode !== 'plan_sheet',
     classYearOverrides: buildClassYearOverrideLookup(opts.classYearOverrides),
     markNewRecruitsAsScorers: usesScorerRoster(settings),
   };

@@ -478,7 +478,10 @@ export function getDivingCutlines(
 export type CutlineTierTime = { tier: CutlineTier; time: string };
 
 /**
- * The tiers a swim record publishes, strictest (fastest) first.
+ * The tiers a swim record publishes, in the order the source prints them
+ * (`A`, `Invited`, `B` for D3). That is NOT a guarantee of speed order: the
+ * archived D3 PDF prints Invited slower than B in two events. Compare the
+ * times (`strictestTierMet`); never read position as strictness.
  * A tier a division does not publish simply does not appear.
  */
 export function cutlineTierTimes(entry: SwimCutline): CutlineTierTime[] {
@@ -547,6 +550,27 @@ export type CutlineRecord = {
   source: CutlineSourceRef;
 };
 
+/**
+ * The legacy two-slot cut (`A` / `B`) a tier stands in, or `null` for a tier
+ * with no slot. `Standard` and `Qualifying` occupy the strict slot; `B` and
+ * `Provisional` the permissive one. `Invited` has none: it is a selection line,
+ * not a standard a swim "achieves" in the legacy sense, and the archived D3
+ * sheet prints it slower than B in two events, so it cannot be read as a B.
+ */
+export function legacySlotForTier(tier: CutlineTier): 'A' | 'B' | null {
+  switch (tier) {
+    case 'Standard':
+    case 'Qualifying':
+    case 'A':
+      return 'A';
+    case 'B':
+    case 'Provisional':
+      return 'B';
+    case 'Invited':
+      return null;
+  }
+}
+
 function legacyRows(entry: SwimCutline): CutlineRecord[] {
   const base = {
     division: entry.division,
@@ -556,22 +580,9 @@ function legacyRows(entry: SwimCutline): CutlineRecord[] {
     course: entry.course,
     source: entry.source,
   };
-  // The legacy shape has exactly two slots. `Standard` and `Qualifying` occupy
-  // the strict slot; `B`, `Provisional` the permissive one. `Invited` has no
-  // legacy slot and is reachable only through the typed API.
-  const slotFor = (tier: CutlineTier): 'A' | 'B' | null => {
-    switch (tier) {
-      case 'Standard':
-      case 'Qualifying':
-      case 'A':
-        return 'A';
-      case 'B':
-      case 'Provisional':
-        return 'B';
-      case 'Invited':
-        return null;
-    }
-  };
+  // The legacy shape has exactly two slots; see `legacySlotForTier`. `Invited`
+  // has no legacy slot and is reachable only through the typed API.
+  const slotFor = legacySlotForTier;
   const rows: CutlineRecord[] = [];
   for (const { tier, time } of cutlineTierTimes(entry)) {
     const slot = slotFor(tier);

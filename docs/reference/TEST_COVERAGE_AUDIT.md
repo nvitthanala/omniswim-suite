@@ -137,6 +137,13 @@ write to `os.tmpdir()`. `test_roster_catalog.mjs` and `test_eligibility_toggle.m
 use `fs.mkdtemp`. The suite is idempotent and does not contaminate the seeded
 HSU and OBU roster workspaces.
 
+**Correction (2026-10-09):** this held for the script suite only. Playwright
+used to reuse a server already on `PORT`, which wrote e2e workspaces into the
+real `data/omniswim.db` (see `docs/INVARIANTS.md` §4, now guarded).
+`scripts/test_scoring_preset_routes.mjs` starts the server without
+`OMNI_DATA_DIR`, so it writes scoring presets and a startup backup into the
+real `data/`.
+
 ### Coupling to live user data
 
 Fourteen files read `data/meets.json` as a fixture. That file is user-editable, so

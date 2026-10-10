@@ -319,7 +319,17 @@ function baseWorkspace(overrides = {}) {
 }
 
 // ============================================================================
-// realistic merged NSISC workspace (skipped when data/meets.json lacks it) + timing.
+// realistic merged NSISC workspace + timing.
+//
+// data/meets.json is gitignored (local-only), so a checkout without it prints an
+// explicit SKIP and counts no group. A file that IS present but lacks the two
+// workspaces this block needs, or a run that evaluates zero candidates or finds
+// zero swaps, throws: this block used to log "ok ... exact vs brute force" over
+// 0 candidates and 0 swaps, a check that could not fail. Under the NSISC default
+// (includeRelayLegsInFinals true) every real relay leg is healthy, so nothing is
+// replaceable. The exercised scenario therefore vacates real relay legs through
+// scorerRosterOverrides (what-if overrides on real rows, no invented data) under
+// includeRelayLegsInFinals:false, the same regime the synthetic fixtures use.
 // ============================================================================
 {
   let raw = null;
@@ -328,16 +338,14 @@ function baseWorkspace(overrides = {}) {
   } catch {
     raw = null;
   }
-  const plan = Array.isArray(raw)
-    ? raw.find(w => (w.meetEntryPlans ?? []).length > 0 && (w.athleteHistory ?? []).length > 0)
-    : null;
-  const res = Array.isArray(raw)
-    ? raw.find(w => w.loadedMeet?.pdfFilename === '2026_NSISC_Championships_Final_Results.pdf')
-    : null;
-
-  if (!plan || !res) {
-    console.log('  skip - realistic merged workspace (data/meets.json lacks roster-plan + NSISC-results workspaces)');
+  if (raw === null) {
+    console.log('  SKIP - realistic merged workspace (data/meets.json absent or unreadable; local-only data)');
   } else {
+    assert.ok(Array.isArray(raw), 'data/meets.json must be an array of workspaces');
+    const plan = raw.find(w => (w.meetEntryPlans ?? []).length > 0 && (w.athleteHistory ?? []).length > 0);
+    const res = raw.find(w => w.loadedMeet?.pdfFilename === '2026_NSISC_Championships_Final_Results.pdf');
+    assert.ok(plan, 'data/meets.json has no workspace with meetEntryPlans + athleteHistory');
+    assert.ok(res, 'data/meets.json has no workspace loaded from 2026_NSISC_Championships_Final_Results.pdf');
     const ws = {
       ...plan,
       menResults: res.menResults,
@@ -348,24 +356,49 @@ function baseWorkspace(overrides = {}) {
       officialTeamScores: res.officialTeamScores,
     };
     const team = 'Henderson State University';
+    const relayRows = ws.menResults.filter(r => r.isRelay && String(r.team ?? '').trim() === team);
+    assert.ok(relayRows.length > 0, 'no HSU men relay rows in the NSISC results: the team lookup matched nothing');
+    const legNames = [...new Set(relayRows.map(r => r.name))].slice(0, 4);
+    assert.ok(legNames.length > 0, 'HSU relay rows carry no leg names');
+
+    const vacatedWs = {
+      ...ws,
+      scorerRosterOverrides: [
+        ...(ws.scorerRosterOverrides ?? []),
+        ...legNames.map(name => ({ name, team, gender: MEN, isScorer: false })),
+      ],
+    };
+    const vacatedSettings = {
+      ...ws.scoringSettings,
+      scorerAutoRules: {
+        abFinalTiers: ['A', 'B'],
+        distanceFinalRequired: true,
+        distanceEventPattern: ['1000', '1650', '1500'],
+        ...(ws.scoringSettings?.scorerAutoRules ?? {}),
+        includeRelayLegsInFinals: false,
+      },
+    };
     const t0 = performance.now();
-    const ranking = rankRelayLegSwaps(ws, { team, gender: MEN });
+    const ranking = rankRelayLegSwaps(vacatedWs, { team, gender: MEN, settings: vacatedSettings });
     const t1 = performance.now();
+    assert.ok(ranking.candidatesEvaluated > 0, 'real-data scenario evaluated no candidates: the block is vacuous');
+    assert.ok(ranking.swaps.length > 0, 'real-data scenario produced no swaps: the brute-force loop would not run');
 
     // Every surfaced swap must match an independent brute-force re-score.
+    let bruteChecked = 0;
     for (const s of ranking.swaps) {
-      const { patch } = applyRelayLegSwap(ws, s, { team, gender: MEN });
-      const brute = teamTotalOf({ ...ws, ...patch }, team, MEN);
+      const { patch } = applyRelayLegSwap(vacatedWs, s, { team, gender: MEN });
+      const brute = teamTotalOf({ ...vacatedWs, ...patch }, team, MEN, vacatedSettings);
       assert.ok(Math.abs(brute - s.newTotal) < 1e-6, `realistic brute-force matches (${s.inAthlete} L${s.legIndex + 1})`);
+      bruteChecked += 1;
     }
+    assert.equal(bruteChecked, ranking.swaps.length);
     console.log(
       `  (timing) MEN relay-leg swaps: ${(t1 - t0).toFixed(0)}ms over ${ranking.candidatesEvaluated} candidates -> ${ranking.swaps.length} beneficial`
     );
-    if (ranking.swaps[0]) {
-      const s = ranking.swaps[0];
-      console.log(`  (top) ${s.relayEvent} leg ${s.legIndex + 1} ${s.stroke}: +${s.inAthlete} for ${s.outAthlete} = +${s.deltaPoints}`);
-    }
-    ok(`realistic NSISC workspace: ${ranking.swaps.length} beneficial relay-leg swaps, exact vs brute force`);
+    const top = ranking.swaps[0];
+    console.log(`  (top) ${top.relayEvent} leg ${top.legIndex + 1} ${top.stroke}: +${top.inAthlete} for ${top.outAthlete} = +${top.deltaPoints}`);
+    ok(`realistic NSISC workspace: ${bruteChecked} beneficial relay-leg swaps re-scored by brute force, all exact`);
   }
 }
 

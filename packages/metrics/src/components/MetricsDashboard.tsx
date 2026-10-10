@@ -47,7 +47,7 @@ function MeasuredValue({ measured }: { measured: Measured<number> }) {
 function StatCard({ label, measured, note }: { label: string; measured: Measured<number>; note?: string }) {
   return (
     <div className="surface-card p-4 rounded-xl transition-colors">
-      <div className="text-ui-micro text-theme-muted mb-1 uppercase tracking-wider font-bold">{label}</div>
+      <div className="text-ui-micro text-theme-muted mb-1 font-bold">{label}</div>
       <div className="text-2xl">
         <MeasuredValue measured={measured} />
       </div>
@@ -83,7 +83,7 @@ function Section({
 }) {
   return (
     <section>
-      <h3 className="text-ui-micro font-bold text-theme-muted uppercase tracking-[0.2em] mb-3">{title}</h3>
+      <h3 className="text-ui-micro font-bold text-theme-muted mb-3">{title}</h3>
       {children}
       {bandKey ? <BandNote bandKey={bandKey} /> : null}
     </section>
@@ -198,14 +198,14 @@ function ProblemsPanel({ problems }: { problems: readonly Problem[] }) {
       }
     >
       {hasError ? (
-        <div className="text-ui-caption font-bold text-red-500 dark:text-red-400 mb-3 uppercase tracking-wide">
+        <div className="text-ui-caption font-bold text-red-500 dark:text-red-400 mb-3">
           {'Analysis incomplete — resolve the error below'}
         </div>
       ) : null}
       <div className="space-y-3">
         {severityKeys.map((severity) => (
           <div key={severity}>
-            <div className="text-ui-micro font-bold uppercase tracking-widest text-theme-muted mb-1">{severity}</div>
+            <div className="text-ui-micro font-bold text-theme-muted mb-1">{severity}</div>
             <ul className="space-y-1">
               {grouped[severity].map((problem, index) => (
                 <li

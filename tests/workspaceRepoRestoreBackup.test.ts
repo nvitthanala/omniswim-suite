@@ -49,11 +49,15 @@ async function makeRepo(seedWorkspace: Workspace) {
 describe('SqliteRepo.restoreBackup', () => {
   it('replaces every workspace, takes a pre-restore backup, and returns the restored count', async () => {
     const seed = baseWorkspace({ name: 'Before restore' });
-    const { repo } = await makeRepo(seed);
+    const { repo, backupDir } = await makeRepo(seed);
 
     // Snapshot the seeded state, then mutate it so restoring is observable.
     const manualBackupPath = await repo.backup('manual');
     const manualBackupFile = path.basename(manualBackupPath);
+    const backupContents = JSON.parse(await fsp.readFile(manualBackupPath, 'utf-8')) as Workspace[];
+    expect(backupContents).toHaveLength(1);
+    expect(backupContents[0]?.name).toBe(seed.name);
+    expect((await fsp.readdir(backupDir)).some(file => file.endsWith('.tmp'))).toBe(false);
 
     await repo.update(seed.id, { name: 'Mutated after backup' });
     expect((await repo.list()).find(w => w.id === seed.id)?.name).toBe('Mutated after backup');

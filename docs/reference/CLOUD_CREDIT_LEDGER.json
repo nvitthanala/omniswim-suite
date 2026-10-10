@@ -1,0 +1,29 @@
+{
+  "purpose": "Tracks cloud-credit spend for cloud sessions started from this repo. The user set a cap; every cloud run is priced per model from its own transcripts with scripts/claude-cost-report.mjs.",
+  "setBy": "user, 2026-10-05",
+  "balanceUsd": 100,
+  "capPercent": 75,
+  "capUsd": 75,
+  "stopRule": "Do not start a phase whose estimate exceeds (cap - spent). Stop and report at 90% of the cap.",
+  "rates": "USD per million tokens, see RATES in scripts/claude-cost-report.mjs (Fable 5.1 10/50, Opus 5.5 4/20, Sonnet 5.5 2/10, Haiku 4.5 1/5; cache read 0.25/0.20/0.20/0.10; cache write 1.25x input for 5-minute TTL, 2x for 1-hour)",
+  "phases": [
+    {
+      "id": "C1",
+      "branch": "cloud/c1-team-names-harness",
+      "merged": "8f068944 (fast-forward into nvitthanala/ui-simplification)",
+      "ranIn": "LOCAL worktree on the user machine, NOT in the cloud",
+      "why": "The Agent tool isolation:\"remote\" is gated for this session and silently fell back to a local worktree. The cost report read this machine's transcripts.",
+      "cloudCreditsSpentUsd": 0,
+      "localListPriceUsd": 5.48,
+      "localUsageNote": "Counted against the Claude subscription window, not the credits. 7-day window was 94% before and 98% after.",
+      "verified": "orchestrator rerun: lint 0 errors, 2604 unit tests, 33 e2e, harness 7 passed 1 skipped (redirect, unit-covered)"
+    }
+  ],
+  "spentUsd": 0,
+  "remainingUsd": 75,
+  "notes": [
+    "Local usage on this machine is a Claude subscription window, not these credits. Do not count it here.",
+    "Costs are list-price estimates from transcripts, not an invoice. Check the console for the real balance."
+  ],
+  "howToRunInCloud": "Start a Claude Code web session at claude.ai/code on github.com/nvitthanala/omniswim-suite (branch nvitthanala/ui-simplification) and paste docs/reference/cloud-handoff/C2_BRIEF.md. After each phase run: node scripts/claude-cost-report.mjs --since <start> and add the output here."
+}

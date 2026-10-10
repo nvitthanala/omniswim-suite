@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
@@ -12,6 +12,7 @@
  */
 import { Gender, NcaaDivision } from '../types';
 import { convertTimeToSeconds, convertToSCY, normalizeSwimmerName } from './utils';
+import { computedCutForTeamSwim } from './cutlineTags';
 import { computedCutInOwnCourse } from './cutlineUtils';
 import {
   bestTimeLaneOfStamp,
@@ -84,7 +85,7 @@ export interface CatalogRosterExport {
 
 // -------------------- Helpers --------------------
 
-/** Strip a course suffix ("50 Free SCY") ΓåÆ "50 Free". */
+/** Strip a course suffix ("50 Free SCY") → "50 Free". */
 export function stripCourseSuffix(event: string): string {
   return event.replace(/\b(SCY|LCM|SCM)\b/gi, '').replace(/\s+/g, ' ').trim();
 }
@@ -107,6 +108,12 @@ export function buildStoredSwim(args: {
   source: CatalogSource;
   gender: Gender | CatalogGender;
   division?: NcaaDivision;
+  /**
+   * The school the swimmer swims for. When given, the stored `computedCut` is
+   * withheld for a gender the school does not sponsor or a program it dropped
+   * (see `computedCutForTeamSwim`). Absent, only `division` decides, as before.
+   */
+  team?: string;
   swimcloudBadge?: string | null;
   meetLabel?: string | null;
   swimDate?: string | null;
@@ -145,13 +152,22 @@ export function buildStoredSwim(args: {
     isRankableSwimCloudStamp(args.swimcloudBadge) &&
     Number.isFinite(sec) &&
     sec > 0
-      ? computedCutInOwnCourse({
-          seconds: sec,
-          gender: args.gender,
-          event,
-          division: args.division,
-          swimCourse: args.timeType,
-        })
+      ? args.team !== undefined
+        ? computedCutForTeamSwim({
+            team: args.team,
+            seconds: sec,
+            gender: args.gender,
+            event,
+            division: args.division,
+            swimCourse: args.timeType,
+          })
+        : computedCutInOwnCourse({
+            seconds: sec,
+            gender: args.gender,
+            event,
+            division: args.division,
+            swimCourse: args.timeType,
+          })
       : null;
 
   return {
@@ -190,14 +206,32 @@ export function catalogTimeLane(time: Pick<CatalogEventTime, 'swimcloudBadge'>):
 }
 
 /**
- * A catalog time may be a best: its stamp says it is a result, and its event
- * exists in its course. A 1000 Free recorded SCM is neither ranked nor listed
- * in any lane (see `courseEvents.ts`).
+ * A catalog time may be a best: its stamp says it is a result, its event
+ * exists in its course, and it holds a real time. A 1000 Free recorded SCM is
+ * neither ranked nor listed in any lane (see `courseEvents.ts`).
+ *
+ * `timeSecondsScy` is stored as `0` when a time cannot be read (an `NT` row)
+ * or an event has no SCY equivalent: the column is `NOT NULL`, so `0` is the
+ * stored form of "absent". It is never a time. A `0` that ranked would beat
+ * every real swim and read as a world record.
  */
 export function isRankableCatalogTime(
-  time: Pick<CatalogEventTime, 'swimcloudBadge' | 'event' | 'timeType'>
+  time: Pick<CatalogEventTime, 'swimcloudBadge' | 'event' | 'timeType' | 'timeSecondsScy'>
 ): boolean {
-  return catalogTimeLane(time) === 'result' && !eventNotSwumInCourse(time.event, time.timeType);
+  return (
+    hasCatalogTime(time) &&
+    catalogTimeLane(time) === 'result' &&
+    !eventNotSwumInCourse(time.event, time.timeType)
+  );
+}
+
+/**
+ * True when the stored SCY time is a real, positive, finite time. `0` is the
+ * stored form of an unreadable time or an event with no SCY equivalent; see
+ * {@link isRankableCatalogTime}.
+ */
+export function hasCatalogTime(time: Pick<CatalogEventTime, 'timeSecondsScy'>): boolean {
+  return Number.isFinite(time.timeSecondsScy) && time.timeSecondsScy > 0;
 }
 
 /**
@@ -218,6 +252,8 @@ export function bestTimesByEventInLane(
   for (const t of times) {
     if (catalogTimeLane(t) !== lane) continue;
     if (eventNotSwumInCourse(t.event, t.timeType)) continue;
+    // An unreadable time (stored 0) is in no lane: it would beat every real one.
+    if (!hasCatalogTime(t)) continue;
     const identity = swimEventIdentity(t.event);
     const heldLabel = labelByIdentity.get(identity);
     const held = heldLabel === undefined ? undefined : map.get(heldLabel);
@@ -244,12 +280,18 @@ export function eventCountForAthlete(times: CatalogEventTime[]): number {
   return new Set(times.map(t => t.event)).size;
 }
 
-/** Events sorted by SCY ascending (best first). */
+/** Events sorted by SCY ascending (best first). Times with no real SCY value come last. */
 export function sortedTimesByScy(times: CatalogEventTime[]): CatalogEventTime[] {
-  return [...times].sort((a, b) => a.timeSecondsScy - b.timeSecondsScy);
+  // A time with no real SCY value (stored 0) sorts last, never first.
+  const key = (t: CatalogEventTime) => (hasCatalogTime(t) ? t.timeSecondsScy : Number.POSITIVE_INFINITY);
+  return [...times].sort((a, b) => {
+    const ka = key(a);
+    const kb = key(b);
+    return ka === kb ? 0 : ka < kb ? -1 : 1;
+  });
 }
 
-/** Filter times within a specific declared course ΓÇö handy for badges/tooltips. */
+/** Filter times within a specific declared course — handy for badges/tooltips. */
 export function timesOfCourse(
   times: CatalogEventTime[],
   course: CatalogTimeType

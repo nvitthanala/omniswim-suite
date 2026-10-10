@@ -21,9 +21,12 @@ const SIZE_OVERRIDE = 'shrink-0 px-1.5 py-0.5 text-ui-caption font-medium normal
 export default function AthleteRoleTag({
   role,
   isRecruit,
+  hideSwimmer = false,
 }: {
   role: ScorerRosterAthleteRole;
   isRecruit?: boolean;
+  /** Skip the default "Swimmer" tag, for a list where every row would carry it. */
+  hideSwimmer?: boolean;
 }) {
   if (isRecruit) {
     // The accent tone's own `bg-[var(--text-accent)]/10` fill is dropped here --
@@ -35,6 +38,7 @@ export default function AthleteRoleTag({
     );
   }
   const isDiver = role === 'diver';
+  if (!isDiver && hideSwimmer) return null;
   return (
     <Badge tone={isDiver ? 'warning' : 'info'} className={SIZE_OVERRIDE}>
       {isDiver ? 'Diver' : 'Swimmer'}

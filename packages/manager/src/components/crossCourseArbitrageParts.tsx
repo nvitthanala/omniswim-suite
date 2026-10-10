@@ -53,7 +53,7 @@ export function UndoLastSwapButton({
 export function StalePill() {
   return (
     <span
-      className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full border border-theme-soft text-theme-muted text-ui-micro font-semibold uppercase tracking-wide leading-none"
+      className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full border border-theme-soft text-theme-muted text-ui-micro font-semibold leading-none"
       title="Best time is older than the recency window — verify before relying on it"
     >
       stale
@@ -65,7 +65,7 @@ export function StalePill() {
 export function VerifyPill() {
   return (
     <span
-      className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full border border-amber-400/40 text-amber-400/90 text-ui-micro font-semibold uppercase tracking-wide leading-none"
+      className="shrink-0 inline-flex items-center px-1.5 py-0.5 rounded-full border border-warning text-warning-soft text-ui-micro font-semibold leading-none"
       title="Winning margin is within ~1% of a converted (LCM/SCM→SCY) time — verify in practice before relying on this projection"
     >
       verify in practice
@@ -165,7 +165,7 @@ export function UpdatingBadge({ show }: { show: boolean }) {
 export function ArbitrageErrorNotice({ error }: { error: string | null }) {
   if (!error) return null;
   return (
-    <p className="text-ui-caption text-amber-400/90 leading-relaxed mb-3">
+    <p className="text-ui-caption text-warning-soft leading-relaxed mb-3">
       Couldn&apos;t compute cross-course data — {error}
     </p>
   );

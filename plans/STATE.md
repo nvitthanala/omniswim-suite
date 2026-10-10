@@ -1,5 +1,21 @@
 # Current state — one page
 
+**Updated 2026-10-10.** Start with the improvement plan
+`docs/reference/IMPROVEMENT_PLAN_2026-10-10.md` and its state file
+`docs/reference/IMPROVEMENT_PLAN_2026-10-10_STATE.json`. The plan carries
+every open item forward, with a priority order and user decisions U1 to U12.
+The 2026-10-09 notes below are kept for history.
+
+**Updated 2026-10-09.** Active branch `nvitthanala/ui-simplification`.
+Progress log for the 2026-10-09 sweep: `docs/reference/SESSION_2026-10-09_STATE.json`
+(read it before resuming; its `userReview` list holds open decisions).
+Backlog: `docs/reference/IMPROVEMENTS_BACKLOG_2026-10-09.md`. New this round:
+save-order sequencing (409 `STALE_SAVE`), SwimCloud relay-leg credit and
+conference parsers, `relayLegCredits` storage (schema v8, spec
+`docs/reference/RELAY_LEG_CREDITS_SPEC.md`), editable events and estimated
+relays in theoretical meets. The section below is the 2026-09-25 state.
+
+## Earlier state (2026-09-25)
 **Updated 2026-09-25.** Active work is the production-readiness push on
 branch `nvitthanala/production-readiness`, plan
 [`plans/2026-09-24/01-NEXT-ROUND-PLAN.md`](2026-09-24/01-NEXT-ROUND-PLAN.md),
@@ -225,8 +241,8 @@ each~~ **fixed 2026-09-13, see [13](2026-08-14/13-official-score-mismatch.md)'s
 resolution note** (closed at the scoring-boundary layer, `isTimeTrial`
 itself may still be wrong on these rows but no longer matters) · a duplicated row in Event 39 ·
 the `Boys`/`Girls` carve-out in `utils.ts` makes HyTek gender-token events score,
-unadjudicable without the PDF · dead `npById` per fast-swap context ·
-`CapVoidSummary.byAthlete` dead · `individualStrokeDistance` lacks label hygiene
+unadjudicable without the PDF · dead `npById` per fast-swap context (gone; confirmed 2026-10-09) ·
+`CapVoidSummary.byAthlete` dead (removed 2026-10-09) · `individualStrokeDistance` lacks label hygiene
 (latent, 0 live rows) · two competing alias mechanisms, neither canonical ·
 points awarded per row not per distinct name.
 

@@ -4,7 +4,7 @@
  *
  * Tests for `packages/matrix/src/lib/swimCloudMeetImportBridge.ts`.
  */
-import { readFileSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -16,6 +16,7 @@ import {
   mergeSwimCloudResults,
   swimCloudMeetResultsToSwimmerResults,
   swimCloudTeamMeetSwimsToSwimmerResults,
+  swimCloudEventResultsToSwimmerResults,
 } from '@omniswim/matrix/lib/swimCloudMeetImportBridge';
 import { parseMeetEventResultsHtml, parseTeamMeetSwimsHtml } from '@omniswim/swimcloud/parser';
 import type {
@@ -785,6 +786,41 @@ const eventTwentySix = () => {
   if (!result.ok) throw new Error(`fixture failed to parse: ${result.failure.code}`);
   return result.data;
 };
+
+const eventEightFromStoredCapture = () => {
+  const pagesDir = join(fixturesDir, '..', '..', 'data', 'swimcloud-captures', 'pages');
+  const name = readdirSync(pagesDir).find(file => /356467.*_2f_event_2f_8_2f_/.test(file));
+  if (!name) throw new Error('stored SwimCloud event 8 capture is missing');
+  const capture = JSON.parse(readFileSync(join(pagesDir, name), 'utf8')) as { html: string };
+  const result = parseMeetEventResultsHtml(capture.html, {
+    sourceUrl: 'https://www.swimcloud.com/results/356467/event/8/',
+    retrievedAt: '2026-09-22T00:28:23Z',
+    track: 'browser-extension',
+  });
+  if (!result.ok) throw new Error(`event 8 capture failed to parse: ${result.failure.code}`);
+  return result.data;
+};
+
+// data/swimcloud-captures is gitignored (local-only by design), so a clean checkout, CI included,
+// has no stored event 8 page. Skip then, counted in tests/skip-budget.json, instead of failing.
+const HAVE_EVENT_EIGHT_CAPTURE = (() => {
+  const pagesDir = join(fixturesDir, '..', '..', 'data', 'swimcloud-captures', 'pages');
+  return existsSync(pagesDir) && readdirSync(pagesDir).some(file => /356467.*_2f_event_2f_8_2f_/.test(file));
+})();
+
+describe.skipIf(!HAVE_EVENT_EIGHT_CAPTURE)('event 8 exhibition flags from the stored SwimCloud capture', () => {
+  it('preserves the C Final exhibition marker in converted SwimmerResult rows', () => {
+    const parsed = eventEightFromStoredCapture();
+    const converted = swimCloudEventResultsToSwimmerResults(parsed);
+    const exhibitionNames = parsed.rounds.flatMap(round => round.swims
+      .filter(swim => swim.exhibition)
+      .map(swim => swim.entry.athleteName));
+    expect(exhibitionNames).toContain('Vince Pal');
+    const convertedExhibitions = [...converted.men, ...converted.women].filter(row => row.isExhibition);
+    expect(convertedExhibitions.map(row => row.name).sort()).toStrictEqual([...exhibitionNames].sort());
+    expect(converted.men.find(row => row.name === 'Vince Pal')).toMatchObject({ isExhibition: true, rank: 9999 });
+  });
+});
 
 describe('buildSwimCloudEventRoundIndex', () => {
   it('keys every swim by the same swimKey the swims list builds', () => {

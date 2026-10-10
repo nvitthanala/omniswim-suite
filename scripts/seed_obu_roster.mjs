@@ -21,11 +21,19 @@
  *
  * Idempotent: re-running replaces the previously seeded workspace by name.
  *
- * Usage: npx tsx scripts/seed_obu_roster.mjs [--dry-run]
+ * Data dir: the repo's `data/` folder unless `OMNI_DATA_DIR` is set (same
+ * resolution as apps/shell/server.ts). The resolved paths print before the
+ * script writes. It refuses to write while a server answers on
+ * http://127.0.0.1:<PORT||OMNI_PORT||3000> (see scripts/lib/dataDir.mjs)
+ * unless you pass `--force`. `--dry-run` writes nothing and skips the check.
+ * To test, point OMNI_DATA_DIR at a copy. Never run it against live data.
+ *
+ * Usage: npx tsx scripts/seed_obu_roster.mjs [--dry-run] [--force]
  */
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { resolveDataDir, assertNoServerHoldsStore } from './lib/dataDir.mjs';
 import { randomUUID } from 'node:crypto';
 import { Gender } from '../packages/core/src/types.ts';
 import { parseSwimCloudMultiProfile } from '../packages/core/src/lib/swimCloudMultiProfile.ts';
@@ -35,19 +43,21 @@ import { WorkspaceService } from '../packages/db/src/WorkspaceService.ts';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.join(__dirname, '..');
 const ROSTER_FILE = path.join(ROOT, 'oburoster202627.txt');
-const MEETS_FILE = path.join(ROOT, 'data', 'meets.json');
-const DB_FILE = path.join(ROOT, 'data', 'omniswim.db');
+const DATA_DIR = resolveDataDir();
+const MEETS_FILE = path.join(DATA_DIR, 'meets.json');
+const DB_FILE = path.join(DATA_DIR, 'omniswim.db');
 
 const TEAM = 'Ouachita Baptist University';
 const WS_NAME = 'OBU 2026-27 Roster';
 const DRY_RUN = process.argv.includes('--dry-run');
+const FORCE = process.argv.includes('--force');
 
 function fail(msg) {
   console.error(`ERROR: ${msg}`);
   process.exit(1);
 }
 
-function main() {
+async function main() {
   if (!fs.existsSync(ROSTER_FILE)) fail(`Missing ${ROSTER_FILE}`);
 
   // 1. Parse the multi-athlete roster paste.
@@ -97,7 +107,11 @@ function main() {
     return;
   }
 
-  // 4. Upsert into data/meets.json (by workspace name).
+  // Guard: print where we are about to write, and refuse if a server holds it.
+  console.log(`\nTarget data dir: ${DATA_DIR}\n  meets.json: ${MEETS_FILE}\n  sqlite:     ${DB_FILE}`);
+  await assertNoServerHoldsStore({ force: FORCE, what: DATA_DIR, fail });
+
+  // 4. Upsert into meets.json (by workspace name).
   const meets = fs.existsSync(MEETS_FILE)
     ? JSON.parse(fs.readFileSync(MEETS_FILE, 'utf-8'))
     : [];
@@ -109,7 +123,7 @@ function main() {
     meets.push(workspace);
   }
   fs.writeFileSync(MEETS_FILE, JSON.stringify(meets, null, 2));
-  console.log(`\nWrote workspace "${WS_NAME}" to data/meets.json (${meets.length} total).`);
+  console.log(`\nWrote workspace "${WS_NAME}" to ${MEETS_FILE} (${meets.length} total).`);
 
   // 5. Upsert into SQLite.
   const service = new WorkspaceService(DB_FILE);
@@ -117,14 +131,14 @@ function main() {
     const existing = service.listWorkspaces().find(w => w.name === WS_NAME);
     if (existing) {
       service.updateWorkspace(existing.id, { ...workspace, id: existing.id });
-      console.log(`Updated workspace "${WS_NAME}" in data/omniswim.db.`);
+      console.log(`Updated workspace "${WS_NAME}" in ${DB_FILE}.`);
     } else {
       service.createWorkspace(workspace);
-      console.log(`Created workspace "${WS_NAME}" in data/omniswim.db.`);
+      console.log(`Created workspace "${WS_NAME}" in ${DB_FILE}.`);
     }
   } finally {
     service.close();
   }
 }
 
-main();
+await main();

@@ -57,7 +57,7 @@ function ScoreRow({
         : 'text-[var(--text-primary)]';
   return (
     <div className="flex items-center justify-between gap-4 text-[10px] font-mono">
-      <span className={`uppercase tracking-widest ${muted ? 'text-theme-muted' : 'text-theme-secondary'}`}>
+      <span className={`${muted ? 'text-theme-muted' : 'text-theme-secondary'}`}>
         {label}
       </span>
       <span className={`font-bold tabular-nums ${deltaClass}`}>
@@ -101,7 +101,7 @@ function CompactScoreSummary({
   showPrelims,
 }: CompactScoreSummaryProps) {
   return (
-    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[9px] font-mono uppercase tracking-widest">
+    <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-ui-micro font-mono">
       {actual != null ? (
         <span className="text-theme-secondary">
           Actual <span className="text-[var(--text-primary)] font-bold">{actual.toFixed(1)}</span>
@@ -119,10 +119,10 @@ function CompactScoreSummary({
         </span>
       ) : null}
       {showPrelims && isMeaningfulDelta(baselineOverUnder) ? (
-        <DeltaBadge value={baselineOverUnder} prefix="Base " />
+        <DeltaBadge value={baselineOverUnder} prefix="vs prelims " />
       ) : null}
       {showPrelims && shouldShowProjectedOverUnder(baselineOverUnder, projectedOverUnder) ? (
-        <DeltaBadge value={projectedOverUnder} prefix="Proj " />
+        <DeltaBadge value={projectedOverUnder} prefix="projected vs prelims " />
       ) : null}
     </div>
   );
@@ -155,11 +155,11 @@ function FullScoreSummary({
   return (
     <div className="surface-overlay border border-theme-soft rounded-lg p-3 space-y-2">
       <div className="flex items-center justify-between gap-2 mb-1">
-        <h5 className="text-[9px] font-bold uppercase tracking-widest text-theme-secondary">
+        <h5 className="text-ui-micro font-bold text-theme-secondary">
           Team score summary
         </h5>
         {eventThrough != null ? (
-          <span className="text-[8px] text-theme-muted uppercase">Through event {eventThrough}</span>
+          <span className="text-ui-micro text-theme-muted">Through event {eventThrough}</span>
         ) : null}
       </div>
       <ScoreRow label="Actual" value={actual} />
@@ -179,7 +179,7 @@ function FullScoreSummary({
       ) : null}
       {isMeaningfulDelta(delta) ? (
         <div className="pt-2 border-t border-theme-soft flex justify-between text-[10px] font-mono">
-          <span className="text-theme-secondary uppercase tracking-widest">
+          <span className="text-theme-secondary">
             Delta vs {actual != null ? 'actual' : 'baseline'}
           </span>
           <DeltaBadge value={delta} className="font-bold" />

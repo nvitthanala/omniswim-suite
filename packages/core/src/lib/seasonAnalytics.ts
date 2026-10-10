@@ -5,6 +5,7 @@ import {
   isDivingEvent,
   type CourseOfRecordFromLabel,
 } from './cutlineEventNames';
+import { isTheoreticalMeet } from './theoreticalMeetLabel';
 
 export type SwimmerTrend = {
   name: string;
@@ -78,7 +79,13 @@ function trendKey(name: string, event: string, course: CourseOfRecordFromLabel):
   return `${name.toLowerCase()}::${swimEventIdentity(event)}::${course}`;
 }
 
-export function buildSeasonTrends(workspaces: Workspace[]): SeasonTrends {
+/**
+ * A theoretical meet is skipped. Nobody swam it: its rows are all-time bests laid out as a meet, and its points
+ * and estimated relays are projections. Counting them would put a meet that never happened on the cross-meet
+ * chart and add best times to a swimmer's progression a second time.
+ */
+export function buildSeasonTrends(allWorkspaces: Workspace[]): SeasonTrends {
+  const workspaces = allWorkspaces.filter(ws => !isTheoreticalMeet(ws));
   const swimmerMap = new Map<string, SwimmerTrend>();
 
   const record = (

@@ -372,6 +372,48 @@ html {
   transition-duration: 0.01ms !important;
 }
 
+[data-reduced-motion='true'] .animate-spin,
+[data-reduced-motion='true'] .suite-pool-shimmer {
+  animation: none !important;
+}
+
+/* OS-level reduced motion (no Suite preference attribute required). */
+@media (prefers-reduced-motion: reduce) {
+  html {
+    scroll-behavior: auto;
+  }
+
+  .animate-spin,
+  .suite-pool-shimmer {
+    animation: none !important;
+  }
+}
+
+:root:not([data-theme='light'])[data-theme-preset='oled'] {
+  --bg: #000000;
+  --surface: #08090b;
+  --surface-strong: #0f1114;
+  --surface-muted: #030405;
+  --surface-rgb: 8, 9, 11;
+  --surface-strong-rgb: 15, 17, 20;
+  --surface-muted-rgb: 3, 4, 5;
+  --text-primary: #ffffff;
+  --text-secondary: #d1d5db;
+  --text-muted: #a1a1aa;
+  --preset-accent: #f87171;
+  --accent: #d1d5db;
+  --accent-soft: #6b7280;
+  --border: #1c2026;
+  --border-soft: #292e36;
+  --chart-grid: #292e36;
+  --chart-tick: #d1d5db;
+  --popover-bg: #08090b;
+  --popover-border: #292e36;
+  --nav-active-bg: #0f1114;
+  --scrollbar-thumb: #4b5563;
+  --scrollbar-thumb-hover: #6b7280;
+}
+
 body {
   margin: 0;
   min-height: 100vh;
@@ -528,6 +570,34 @@ select {
   background: color-mix(in srgb, var(--color-warning) 12%, transparent);
   border: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent);
   color: var(--color-warning);
+}
+
+/*
+ * Warning-tone utilities. They read `--color-warning`, which each theme sets
+ * (amber on Dark, a darker amber on Light), so a caution never needs a fixed
+ * amber hex or `amber-*` class. `@utility` keeps `hover:` and `focus:` variants
+ * working. tests/uiAmberRatchet.test.ts fails if a fixed amber returns.
+ */
+@utility text-warning {
+  color: var(--color-warning);
+}
+@utility text-warning-soft {
+  color: color-mix(in srgb, var(--color-warning) 90%, transparent);
+}
+@utility bg-warning-faint {
+  background-color: color-mix(in srgb, var(--color-warning) 10%, transparent);
+}
+@utility bg-warning-soft {
+  background-color: color-mix(in srgb, var(--color-warning) 20%, transparent);
+}
+@utility border-warning-faint {
+  border-color: color-mix(in srgb, var(--color-warning) 25%, transparent);
+}
+@utility border-warning {
+  border-color: color-mix(in srgb, var(--color-warning) 40%, transparent);
+}
+@utility border-warning-strong {
+  border-color: color-mix(in srgb, var(--color-warning) 70%, transparent);
 }
 
 .badge-info {
@@ -773,6 +843,33 @@ select {
   font-size: var(--text-ui-caption);
   color: var(--text-muted);
   margin-top: 0.15rem;
+}
+
+.wizard-shell-container {
+  container: wizard-shell / inline-size;
+}
+
+.wizard-step-grid {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+@container wizard-shell (min-width: 22rem) {
+  .wizard-step-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+@container wizard-shell (min-width: 56rem) {
+  .wizard-step-grid {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+/* Three steps fill one row instead of leaving an empty fourth column or an orphan on a second row. */
+@container wizard-shell (min-width: 30rem) {
+  .wizard-step-grid[data-step-count="3"] {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
 }
 
 .toolbar {

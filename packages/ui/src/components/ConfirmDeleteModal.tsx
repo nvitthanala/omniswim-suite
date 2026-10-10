@@ -54,7 +54,7 @@ export function ConfirmDeleteModal({
               <AlertTriangle size={20} />
             </div>
             <div>
-              <h2 className="text-lg font-medium text-[var(--text-primary)] uppercase tracking-tight">
+              <h2 className="text-lg font-medium text-[var(--text-primary)]">
                 {title}
               </h2>
               <p className="text-sm text-theme-secondary mt-1">{description}</p>

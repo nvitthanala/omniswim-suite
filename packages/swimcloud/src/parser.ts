@@ -210,6 +210,15 @@ export type SwimCloudParseWarningCode =
   | 'missing-athlete-link'
   /** A relay row listed no legs. SwimCloud does publish them — a per-event page serves them in a table behind its own "Show names" toggle — so this is a genuine gap, not the expected state. */
   | 'relay-legs-absent'
+  /**
+   * A relay row on a per-event results page (`parseMeetEventResultsHtml`) read no
+   * legs: the page had no hidden "Show names" list for it, or the list was
+   * unreadable. The row is kept without legs, so its swimmers cannot be
+   * credited. Raised by the parser itself. `readRelayEventEntries` still adds its
+   * own `relay-legs-absent` for the same row, so a caller reading both sees the
+   * row twice under two codes.
+   */
+  | 'relay-row-without-legs'
   /** A per-event page carried no `js-event-item` event index, so it cannot enumerate the rest of the meet. Never read as "the meet has no events". */
   | 'event-index-absent'
   /** A row's event label said "Yard" but an explicit course column disagreed. The label wins; the disagreement is surfaced rather than silently resolved either way. */
@@ -274,7 +283,26 @@ export type SwimCloudParseWarningCode =
    * option. **The page's heading wins**, and the disagreement is surfaced
    * rather than silently resolved. `raw` carries both values.
    */
-  | 'contradicted-page-declaration';
+  | 'contradicted-page-declaration'
+  /**
+   * A relay event page lists a relay whose leg count is not four. Every relay
+   * SwimCloud models here has four legs, so a different count means the hidden
+   * "Show names" list was cut short or the markup changed. The legs that were
+   * read are kept; none is invented to make four.
+   */
+  | 'relay-leg-count-unexpected'
+  /**
+   * A conference home page names teams only incidentally (latest results, top
+   * swims, commitments, top swimmers). It is never the member list. Emitted on
+   * every successful parse so no caller can read the result as complete.
+   */
+  | 'conference-teams-list-incomplete'
+  /** The conference home page carried no readable `<title>` display name. `displayName` stays absent. */
+  | 'conference-name-absent'
+  /** The conference home page carried no link to its own Teams tab. `teamsTabUrl` stays absent; the URL is not rebuilt from the slug. */
+  | 'conference-teams-tab-absent'
+  /** The conference home page linked no team at all. Absent evidence, not proof the conference has no teams. */
+  | 'conference-no-team-mentions';
 
 /** One non-fatal observation, with enough context to find the row it came from. */
 export interface SwimCloudParseWarning {
@@ -303,7 +331,11 @@ export type SwimCloudParseFailureCode =
   /** Data rows existed and every one of them failed to parse. */
   | 'no-rows-parsed'
   /** Event headings existed and not one of their tables could be read. */
-  | 'no-events-parsed';
+  | 'no-events-parsed'
+  /** The page lacks the structure of the page type the parser was asked for (for example no section headings and no nav links on a conference home). */
+  | 'expected-structure-missing'
+  /** An event page parsed fine but is not a relay event, so it has no relay entries to read. */
+  | 'not-a-relay-event';
 
 export interface SwimCloudParseFailure {
   readonly code: SwimCloudParseFailureCode;
@@ -358,7 +390,8 @@ function provenanceOf(context: SwimCloudParseContext): SwimCloudProvenance {
   };
 }
 
-function fail(
+/** Shared with the sibling page parsers in this package (`relayLegCredits.ts`, `conferencePage.ts`). Not part of the public barrel. */
+export function fail(
   context: SwimCloudParseContext,
   code: SwimCloudParseFailureCode,
   message: string,
@@ -374,7 +407,8 @@ function fail(
   };
 }
 
-function succeed<T>(
+/** See {@link fail}. */
+export function succeed<T>(
   context: SwimCloudParseContext,
   data: T,
   warnings: readonly SwimCloudParseWarning[],
@@ -1838,9 +1872,24 @@ function readTime(
   return { rawTimeToken: token };
 }
 
-const RELAY_DESIGNATOR = /^(.*?)\s*['‘’"“”]\s*([A-Za-z])\s*['‘’"“”]?\s*$/;
+/**
+ * A relay entry's printed designator, after the team name.
+ *
+ * **Two shapes.** The real pages print the letter in parentheses:
+ * `Henderson State (A)`, from the `<span>` inside the team link on
+ * `tests/fixtures/swimcloud-real-meet-event-401354-event22-relay-names.html`.
+ * This reader used to accept only a quoted letter (`'A'`), a shape invented
+ * alongside `swimcloud-synthetic-meet-results.html` before any real relay page
+ * was captured, so it matched nothing a real page prints. The parenthesised form
+ * is now read. The quoted form stays because that synthetic fixture and its test
+ * still use it.
+ *
+ * Single letter only: a longer parenthetical is part of the team's name, not a
+ * designator, and stays in it.
+ */
+const RELAY_DESIGNATOR = /^(.*?)\s*(?:['‘’"“”]\s*([A-Za-z])\s*['‘’"“”]?|\(\s*([A-Za-z])\s*\))\s*$/;
 
-function readRelayDesignator(text: string): { teamName: string; designator: string } | undefined {
+export function readRelayDesignator(text: string): { teamName: string; designator: string } | undefined {
   const match = RELAY_DESIGNATOR.exec(text);
   if (match === null) {
     return undefined;
@@ -1849,7 +1898,7 @@ function readRelayDesignator(text: string): { teamName: string; designator: stri
   if (teamName.length === 0) {
     return undefined;
   }
-  return { teamName, designator: match[2].toUpperCase() };
+  return { teamName, designator: (match[2] ?? match[3]).toUpperCase() };
 }
 
 /**
@@ -1918,30 +1967,58 @@ function readRelayLegsFromHiddenTable(rowHtml: string): SwimCloudRelayLeg[] {
   // change a helper every parser in this file leans on, for one caller.
   const listStart = rowHtml.indexOf('js-hidden-list');
   if (listStart < 0) return [];
-  const region = rowHtml.slice(listStart);
+  let region = rowHtml.slice(listStart);
 
-  // Legs are a swimmer link followed by that leg's split link, repeating in leg
-  // order. Paired positionally within the region rather than by table shape,
-  // because the shape is what the cell splitter cannot be trusted to preserve.
-  const swimmers = [...region.matchAll(/href="[^"]*\/swimmer\/(\d+)\/?"[^>]*>([^<]*)</g)];
-  const splits = [...region.matchAll(/href="\/times\/(\d+)\/?"[^>]*>([^<]*)</g)];
+  // A leg is one `<tr>`: its swimmer link and its own split link. Pairing by
+  // row (not by position across the whole region) means a leg whose row lacks
+  // a split link gets no split, instead of borrowing the next leg's time. The
+  // region stops at the leg table's own `</table>` so the relay's total-time
+  // link in the outer row is never read as a leg split.
+  const tableEnd = region.indexOf('</table>');
+  if (tableEnd >= 0) region = region.slice(0, tableEnd);
+  const rows = region.split(/<tr(?=[\s>])/i).slice(1);
+  if (rows.length === 0) return readRelayLegsPositionally(region);
 
   const legs: SwimCloudRelayLeg[] = [];
+  for (const row of rows) {
+    const swimmer = /href="[^"]*\/swimmer\/(\d+)\/?"[^>]*>([^<]*)</.exec(row);
+    if (swimmer === null) continue;
+    const split = /href="\/times\/(\d+)\/?"[^>]*>([^<]*)</.exec(row);
+    legs.push(legFromLinks(legs.length + 1, swimmer, split));
+  }
+  return legs;
+}
+
+function legFromLinks(
+  order: number,
+  swimmer: RegExpExecArray,
+  split: RegExpExecArray | null,
+): SwimCloudRelayLeg {
+  const athleteName = collapseWhitespace(decodeHtmlEntities(swimmer[2] ?? ''));
+  const splitText = split === null ? '' : collapseWhitespace(decodeHtmlEntities(split[2] ?? ''));
+  // Only a well-formed time counts as a split. Never reconstructed by
+  // subtracting cumulative times: that would manufacture a competition value
+  // the page never printed.
+  const splitTime = TRAILING_TIME.test(splitText) ? splitText : undefined;
+  return {
+    order,
+    ...(swimmer[1] === undefined ? {} : { swimCloudSwimmerId: swimmer[1] }),
+    ...(athleteName.length === 0 ? {} : { athleteName }),
+    ...(splitTime === undefined ? {} : { splitTime }),
+    ...(split === null || split[1] === undefined ? {} : { swimCloudSwimId: split[1] }),
+  };
+}
+
+/** Legacy shape: a region with no `<tr>` at all. Pairs swimmer and split links by position. */
+function readRelayLegsPositionally(region: string): SwimCloudRelayLeg[] {
+  const swimmers = [...region.matchAll(/href="[^"]*\/swimmer\/(\d+)\/?"[^>]*>([^<]*)</g)];
+  const splits = [...region.matchAll(/href="\/times\/(\d+)\/?"[^>]*>([^<]*)</g)];
+  const legs: SwimCloudRelayLeg[] = [];
   swimmers.forEach((swimmer, index) => {
-    const athleteName = collapseWhitespace(decodeHtmlEntities(swimmer[2] ?? ''));
-    const split = splits[index];
-    const splitText = split === undefined ? '' : collapseWhitespace(decodeHtmlEntities(split[2] ?? ''));
-    // Only a well-formed time counts as a split. Never reconstructed by
-    // subtracting cumulative times: that would manufacture a competition value
-    // the page never printed.
-    const splitTime = TRAILING_TIME.test(splitText) ? splitText : undefined;
-    if (athleteName.length === 0 && swimmer[1] === undefined) return;
-    legs.push({
-      order: index + 1,
-      ...(swimmer[1] === undefined ? {} : { swimCloudSwimmerId: swimmer[1] }),
-      ...(athleteName.length === 0 ? {} : { athleteName }),
-      ...(splitTime === undefined ? {} : { splitTime }),
-    });
+    const split = splits[index] ?? null;
+    const leg = legFromLinks(index + 1, swimmer, split);
+    if (leg.athleteName === undefined && swimmer[1] === undefined) return;
+    legs.push(leg);
   });
   return legs;
 }
@@ -2470,6 +2547,17 @@ export interface SwimCloudPersonalBestSwim {
    * table lists it among the swimmer's bests.
    */
   readonly relayLeadoff: boolean;
+  /**
+   * `true` only when the fastest-times JSON row states `exhibition: true`
+   * (strict: the JSON boolean `true`, nothing truthy). The swim was swum at a
+   * meet but did not score there.
+   *
+   * **Absent for `exhibition: false` and for a row that omits the field.** The
+   * HTML table has no such column, so an HTML-parsed row never carries it:
+   * absent means "not known to be exhibition", never "known official". Set by
+   * {@link parseSwimmerFastestTimesJson} on non-diving rows only.
+   */
+  readonly isExhibition?: true;
 }
 
 /** Which source answered for a {@link SwimCloudSwimmerTimesParse} field. */
@@ -3460,6 +3548,7 @@ function assembleFastestTimesRegularRow(fields: {
   readonly tags: readonly SwimCloudSwimmerTimesTag[];
   readonly seasonId: string | undefined;
   readonly relayLeadoff: boolean;
+  readonly isExhibition: boolean;
 }): SwimCloudPersonalBestSwim {
   return {
     swimKey: fields.swimKey,
@@ -3478,6 +3567,7 @@ function assembleFastestTimesRegularRow(fields: {
     tags: fields.tags,
     ...(fields.seasonId === undefined ? {} : { seasonId: fields.seasonId }),
     relayLeadoff: fields.relayLeadoff,
+    ...(fields.isExhibition ? { isExhibition: true as const } : {}),
   };
 }
 
@@ -3531,6 +3621,9 @@ function buildFastestTimesRegularRow(
     tags: flags.tags,
     seasonId,
     relayLeadoff: flags.relayLeadoff,
+    // Strict: only the JSON boolean `true`. `false`, a missing field or any
+    // other value leaves it absent (never written false).
+    isExhibition: row['exhibition'] === true,
   });
 }
 
@@ -5442,6 +5535,32 @@ function assembleEventRoundSwim(fields: {
   };
 }
 
+/**
+ * Say so when a relay row on a per-event page read no legs. Silence here looked
+ * like "this relay has no swimmers", which is never true: the legs sit in a
+ * hidden table, so no legs means that table was missing from the capture or
+ * unreadable. A non-relay event never warns.
+ */
+function warnRelayRowWithoutLegs(
+  event: SwimCloudEvent,
+  athlete: EventRoundAthlete,
+  athleteName: string,
+  eventId: string,
+  rowIndex: number,
+  warnings: SwimCloudParseWarning[],
+): void {
+  if (event.kind !== 'relay' || athlete.relayLegs.length > 0) {
+    return;
+  }
+  warnings.push({
+    code: 'relay-row-without-legs',
+    message: `Relay row ${JSON.stringify(athleteName)} read no legs. SwimCloud serves them in a hidden "Show names" table on this page, so the capture lacks that table or it could not be read. The row is kept without legs; its swimmers cannot be credited.`,
+    eventId,
+    rowIndex,
+    raw: athleteName,
+  });
+}
+
 function readEventRound(
   table: LocatedEventRoundTable,
   ctx: EventRoundContext,
@@ -5529,6 +5648,8 @@ function readEventRound(
       eventId,
       ctx.warnings,
     );
+
+    warnRelayRowWithoutLegs(event, athlete, athleteName, eventId, rowIndex, ctx.warnings);
 
     swims.push(
       assembleEventRoundSwim({

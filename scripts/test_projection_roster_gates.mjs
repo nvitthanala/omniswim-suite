@@ -360,18 +360,22 @@ const apply = (ws, result) => ({ ...ws, ...result.patch });
   assert.equal(rival.rank, 2, `a phantom second entry must not push the rival to ${rival.rank}`);
   ok('the collapse runs before rank projection, so a duplicate cannot displace a rival');
 
-  // (e) SCOPE. Two rows on ONE plane are a duplicate import, not a lineup
-  //     decision — the projection leaves them alone and the duplicate-athlete
-  //     audit is what surfaces them. Guarding this keeps the collapse from
-  //     quietly widening into "drop any row that looks like another one".
+  // (e) SCOPE. Two rows on the RECRUIT plane (or the plan plane) for one athlete
+  //     and event are one entry stated twice: the faster row stands. Changed
+  //     2026-10-01 — they used to both survive and the athlete scored twice.
+  //     The MEET plane is never collapsed against itself (a prelims row and a
+  //     finals row legitimately share a name), and an athlete in a different
+  //     event or a different athlete is untouched.
   const samePlane = workspace({
     recruits: [
       recruitRow('r1', 'Alan Gonzalez', '50 Freestyle', '21.00'),
-      recruitRow('r2', 'Alan Gonzalez', '50 Freestyle', '21.00'),
+      recruitRow('r2', 'Alan Gonzalez', '50 Freestyle', '20.80'),
     ],
   });
-  assert.equal(project(samePlane).length, 2, 'two recruit rows are left for the audit to report');
-  ok('same-plane duplicates are left intact — only a more explicit plane displaces a row');
+  const samePlaneRows = project(samePlane);
+  assert.equal(samePlaneRows.length, 1, 'two recruit rows for one athlete and event hold one entry');
+  assert.equal(samePlaneRows[0].time, '20.80', 'the faster recruit row stands');
+  ok('same-plane recruit duplicates collapse to the faster row; meet rows are never collapsed');
 
   // (f) Different athletes and different events never collide.
   const distinct = workspace({
@@ -466,10 +470,11 @@ const apply = (ws, result) => ({ ...ws, ...result.patch });
   );
   ok('the edited row is still deletable by the id the pool shows');
 
-  // Two plan-plane statements for one athlete in one event are two lineup
-  // decisions in conflict, and the projection has no basis to prefer either.
-  // Same-plane rows both survive — the rule case (e) states, applied to a row
-  // whose content came from a plan. The collapse never picks a winner.
+  // A pencil edit and a standalone plan for one athlete in one event are one entry
+  // stated twice. Before 2026-10-01 both survived ("the collapse never picks a
+  // winner") and the athlete scored twice. The architect review ruled that the
+  // explicit user edit stands: the plan-built row collapses into the edited meet
+  // row, however fast its time, and is reported in `collapsed`.
   const conflicting = {
     ...edited,
     meetEntryPlans: [
@@ -478,13 +483,19 @@ const apply = (ws, result) => ({ ...ws, ...result.patch });
     ],
   };
   const conflictRows = project(conflicting);
-  assert.equal(conflictRows.length, 2, 'two plan-plane statements both survive');
+  assert.equal(conflictRows.length, 1, 'a pencil edit and a plan for its event are one entry');
   assert.deepEqual(
-    conflictRows.map(r => r.time).sort(),
-    ['48.00', '49.00'],
-    'neither plan silently wins — the recruit row is all that collapses'
+    conflictRows.map(r => [r.id, r.time]),
+    [['m1', '49.00']],
+    'the pencil edit stands, even against a faster plan'
   );
-  ok('two conflicting plan-plane entries are both kept rather than one picked');
+  assert.ok(
+    buildWhatIfProjection({ workspace: conflicting, gender: MEN, removeSeniors: false }).collapsed.some(
+      r => r.id === 'p2'
+    ),
+    'the plan-built row is reported as collapsed'
+  );
+  ok('a plan-built row collapses into the pencil edit for its event');
 }
 
 // ===========================================================================

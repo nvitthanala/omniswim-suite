@@ -22,7 +22,7 @@ type Props = {
 function UnrestorableWarning({ change }: { change: RevertibleChange }) {
   if (change.kind !== 'removal' || change.fullyRestorable) return null;
   return (
-    <p className="text-ui-caption text-amber-500 mt-0.5">
+    <p className="text-ui-caption text-warning mt-0.5">
       Original rows are no longer recoverable — reverting will only clear the removal marker, not
       bring back this athlete&apos;s swims.
     </p>

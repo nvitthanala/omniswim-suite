@@ -18,10 +18,12 @@ import { Button, useToast } from '@omniswim/ui';
 import type { RecruitAthletePrefill } from './RecruitForm';
 import type { EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
 import RosterWizardShell, { type RosterWizardStepId } from './RosterWizardShell';
+import ManagerTeamBar from './ManagerTeamBar';
 import RosterSourceStep from './RosterSourceStep';
 import RosterLineupStep from './RosterLineupStep';
 import RosterRelayStep from './RosterRelayStep';
 import RosterOptimizeStep from './RosterOptimizeStep';
+import { useSwimEditUndo } from './useSwimEditUndo';
 
 type Props = {
   workspace: Workspace;
@@ -57,18 +59,10 @@ export default function TeamManagementView({
   onRequestDeleteSwimmer,
 }: Props) {
   const toast = useToast();
-  const [lastSwimEdit, setLastSwimEdit] = useState<{
-    inverse: Partial<Workspace>;
-    description: string;
-  } | null>(null);
-
-  // Compose-ref (BUG 3.2): build each credited-swim patch against the freshest
-  // workspace (prop composed forward with applied patches) so rapid successive
-  // deletes/edits don't clobber one another via a stale full-array replacement.
-  const workspaceRef = useRef(workspace);
-  useEffect(() => {
-    workspaceRef.current = workspace;
-  }, [workspace]);
+  // The compose-ref and the one-shot Undo for the last swim edit. The Undo is bound to the
+  // workspace it was made in and refuses once the lineup fields it would overwrite have changed
+  // (an optimizer run, a second edit, an import). See useSwimEditUndo.ts.
+  const { lastSwimEdit, applySwimPatch, undoSwimEdit } = useSwimEditUndo({ workspace, onUpdate, toast });
 
   const projectedByTeam = useMemo(() => {
     const map = new Map<string, number>();
@@ -100,7 +94,8 @@ export default function TeamManagementView({
   useEffect(() => {
     // Exactly one scoreable team means there is nothing to choose between, so the
     // Lineup/Relays/Optimize steps used to open on a "Choose a team" empty state
-    // that offered no way to choose one. Select it.
+    // that offered no way to choose one. Select it. With several teams, the
+    // team bar (ManagerTeamBar) is the one place the user picks.
     if (!selectedTeam) {
       if (teams.length === 1) setSelectedTeam(teams[0]);
       return;
@@ -171,16 +166,6 @@ export default function TeamManagementView({
     setJumpAthleteKey(null);
   }, [jumpSignalTick, teams, gender]);
 
-  const applySwimPatch = (
-    build: (ws: Workspace) => { patch: Partial<Workspace>; inverse: Partial<Workspace>; description: string }
-  ) => {
-    const result = build(workspaceRef.current);
-    workspaceRef.current = { ...workspaceRef.current, ...result.patch };
-    onUpdate(result.patch);
-    setLastSwimEdit({ inverse: result.inverse, description: result.description });
-    toast.push('success', result.description);
-  };
-
   // `isRecruit` is true for a planned entry as well as a recruit row, so it
   // cannot pick the plane to delete from. removeProjectedSwim dispatches on
   // where the id actually lives — the old branch filtered `recruits` by a plan
@@ -202,14 +187,6 @@ export default function TeamManagementView({
 
   const handleEditSwim = (swim: AthleteCreditedSwim, changes: EditCreditedSwimValues) => {
     applySwimPatch(ws => editCreditedSwim(ws, gender, swim.id, changes));
-  };
-
-  const handleUndoSwimEdit = () => {
-    if (!lastSwimEdit) return;
-    workspaceRef.current = { ...workspaceRef.current, ...lastSwimEdit.inverse };
-    onUpdate(lastSwimEdit.inverse);
-    toast.push('success', `Undid: ${lastSwimEdit.description}`);
-    setLastSwimEdit(null);
   };
 
   const whatIfControls = (
@@ -254,7 +231,7 @@ export default function TeamManagementView({
         <Button
           variant="outline"
           size="md"
-          onClick={handleUndoSwimEdit}
+          onClick={undoSwimEdit}
           title={lastSwimEdit.description}
           className="text-theme-secondary hover:text-[var(--text-primary)] whitespace-nowrap max-w-[16rem] truncate"
           leadingIcon={<Undo2 size={14} className="shrink-0" />}
@@ -266,14 +243,18 @@ export default function TeamManagementView({
   );
 
   return (
-    <RosterWizardShell step={rosterStep} onStepChange={setRosterStep} toolbar={whatIfControls}>
+    <RosterWizardShell
+      step={rosterStep}
+      onStepChange={setRosterStep}
+      toolbar={whatIfControls}
+      subheader={<ManagerTeamBar teams={teams} selectedTeam={selectedTeam} onSelectTeam={setSelectedTeam} />}
+    >
       {rosterStep === 'source' ? (
         <RosterSourceStep
           workspace={workspace}
           gender={gender}
           teams={teams}
           selectedTeam={selectedTeam}
-          onSelectTeam={setSelectedTeam}
           scoringSettings={scoringSettings}
           whatIfMode={whatIfMode}
           recruitPrefill={recruitPrefill}
@@ -293,14 +274,13 @@ export default function TeamManagementView({
           whatIfMode={whatIfMode}
           removeSeniors={removeSeniors}
           selectedTeam={selectedTeam}
-          teams={teams}
-          onSelectTeam={setSelectedTeam}
           onUpdate={onUpdate}
           onDeleteSwim={whatIfMode ? handleDeleteSwim : undefined}
           onEditSwim={whatIfMode ? handleEditSwim : undefined}
           onAthleteSelect={handleAthleteSelect}
           onRequestDeleteSwimmer={onRequestDeleteSwimmer}
           onOpenRelays={() => setRosterStep('relays')}
+          onOpenOptimize={() => setRosterStep('optimize')}
           jumpAthleteName={jumpAthleteName}
           jumpAthleteKey={jumpAthleteKey}
           onJumpAthlete={handleJumpAthlete}
@@ -315,8 +295,6 @@ export default function TeamManagementView({
           whatIfMode={whatIfMode}
           removeSeniors={removeSeniors}
           selectedTeam={selectedTeam}
-          teams={teams}
-          onSelectTeam={setSelectedTeam}
           onUpdate={onUpdate}
         />
       ) : null}
@@ -329,7 +307,6 @@ export default function TeamManagementView({
           removeSeniors={removeSeniors}
           selectedTeam={selectedTeam}
           teams={teams}
-          onSelectTeam={setSelectedTeam}
           onUpdate={onUpdate}
         />
       ) : null}

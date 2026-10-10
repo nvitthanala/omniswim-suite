@@ -1,4 +1,5 @@
 import { Activity, Ruler, Target, User, Waves } from 'lucide-react';
+import { useId } from 'react';
 import { Button } from '@omniswim/ui';
 import type { CycleDefinition, ImProposal, RaceConfig, RaceCourse, Stroke } from '../types';
 import { INPUT_CLASS, SELECT_CLASS, STROKE_LABEL, STROKES } from './raceSetupShared';
@@ -11,12 +12,14 @@ interface SwimmerNameFieldProps {
 
 /** Swimmer name input with a roster-backed datalist for autocomplete. */
 export function SwimmerNameField({ swimmerName, rosterNames, onChange }: SwimmerNameFieldProps) {
+  const id = useId();
   return (
     <div className="space-y-1.5">
-      <label className="label-caps flex items-center gap-1.5">
+      <label htmlFor={id} className="label-caps flex items-center gap-1.5">
         <User className="w-3 h-3" /> Swimmer Name
       </label>
       <input
+        id={id}
         type="text"
         list="metrics-roster-names"
         value={swimmerName}
@@ -51,14 +54,15 @@ export function CourseDistanceFields({
   onCourseChange,
   onDistanceChange,
 }: CourseDistanceFieldsProps) {
+  const idPrefix = useId();
   return (
     <>
       <div className="grid grid-cols-2 gap-4">
         <div className="space-y-1.5">
-          <label className="label-caps flex items-center gap-1.5">
+          <label htmlFor={`${idPrefix}-course`} className="label-caps flex items-center gap-1.5">
             <Ruler className="w-3 h-3" /> Course
           </label>
-          <select value={config.course} onChange={(e) => onCourseChange(e.target.value as RaceCourse)} className={SELECT_CLASS}>
+          <select id={`${idPrefix}-course`} value={config.course} onChange={(e) => onCourseChange(e.target.value as RaceCourse)} className={SELECT_CLASS}>
             <option value="LCM">Long Course (50m)</option>
             <option value="SCM">Short Course (25m)</option>
             <option value="SCY">Short Course (25y)</option>
@@ -66,10 +70,10 @@ export function CourseDistanceFields({
         </div>
 
         <div className="space-y-1.5">
-          <label className="label-caps flex items-center gap-1.5">
+          <label htmlFor={`${idPrefix}-distance`} className="label-caps flex items-center gap-1.5">
             <Target className="w-3 h-3" /> Distance
           </label>
-          <select value={config.raceDistance} onChange={(e) => onDistanceChange(Number(e.target.value))} className={SELECT_CLASS}>
+          <select id={`${idPrefix}-distance`} value={config.raceDistance} onChange={(e) => onDistanceChange(Number(e.target.value))} className={SELECT_CLASS}>
             {[50, 100, 200, 400, 800, 1500].map((d) => (
               <option key={d} value={d}>
                 {d}
@@ -120,15 +124,15 @@ export function EventTypeSection({
             variant={eventType === 'single' ? 'outline' : 'ghost'}
             size="sm"
             onClick={() => onEventTypeChange('single')}
-            className="w-full uppercase tracking-wide"
+            className="w-full"
           >
-            Single Stroke
+            Single stroke
           </Button>
           <Button
             variant={eventType === 'im' ? 'outline' : 'ghost'}
             size="sm"
             onClick={() => onEventTypeChange('im')}
-            className="w-full uppercase tracking-wide"
+            className="w-full"
           >
             IM
           </Button>
@@ -178,7 +182,7 @@ function ImOrderPanel({
   const hasProposal = imProposal !== null && imProposal.strokePerLength.length > 0;
   return (
     <div className="border border-theme-soft rounded-lg p-3 space-y-2">
-      <h3 className="text-ui-caption font-bold uppercase tracking-widest text-theme-muted">Standard IM Order (proposed)</h3>
+      <h3 className="text-ui-caption font-bold text-theme-muted">Standard IM order (proposed)</h3>
       {hasProposal && imProposal ? (
         <>
           <div className="flex flex-wrap gap-1.5">
@@ -193,7 +197,6 @@ function ImOrderPanel({
             size="sm"
             onClick={onConfirmImProposal}
             disabled={imConfirmedForLengthCount === lengthCountForRows}
-            className="uppercase tracking-wide"
           >
             {imConfirmedForLengthCount === lengthCountForRows ? 'Confirmed' : 'Confirm IM Order'}
           </Button>
@@ -266,7 +269,7 @@ interface BreakoutDistanceSectionProps {
 export function BreakoutDistanceSection({ strokePerLength, breakoutRecord, onChange }: BreakoutDistanceSectionProps) {
   return (
     <div className="border border-theme-soft rounded-lg p-3 space-y-2">
-      <h3 className="text-ui-caption font-bold uppercase tracking-widest text-theme-muted">Breakout Distance per Length (optional)</h3>
+      <h3 className="text-ui-caption font-bold text-theme-muted">Breakout distance per length (optional)</h3>
       <div className="grid grid-cols-2 gap-2">
         {strokePerLength.map((_, i) => (
           <div key={i} className="flex items-center gap-2 text-ui-caption">
@@ -302,7 +305,7 @@ export function FlagDistanceSection({
 }: FlagDistanceSectionProps) {
   return (
     <div className="border border-theme-soft rounded-lg p-3 space-y-2">
-      <h3 className="text-ui-caption font-bold uppercase tracking-widest text-theme-muted">Flag Distance</h3>
+      <h3 className="text-ui-caption font-bold text-theme-muted">Flag Distance</h3>
       <label className="flex items-center gap-2 text-ui-caption text-theme-secondary">
         <input type="checkbox" checked={flagDistanceConfirmed} onChange={(e) => onConfirmedChange(e.target.checked)} />
         I have measured the flag distance for the final length
@@ -360,7 +363,7 @@ interface ConfirmFooterProps {
   onConfirm: () => void;
 }
 
-/** The "Start Tagging" confirm button and its blocking-reason hint. */
+/** The "Start tagging" confirm button and its blocking-reason hint. */
 export function ConfirmFooter({ canConfirm, lengthCountValid, onConfirm }: ConfirmFooterProps) {
   return (
     <div className="mt-auto pt-6 border-t border-theme-soft shrink-0">
@@ -369,9 +372,9 @@ export function ConfirmFooter({ canConfirm, lengthCountValid, onConfirm }: Confi
         size="lg"
         onClick={onConfirm}
         disabled={!canConfirm}
-        className="w-full uppercase tracking-wider shadow-sm"
+        className="w-full shadow-sm"
       >
-        Start Tagging
+        Start tagging
       </Button>
       {!canConfirm ? (
         <p className="text-ui-micro text-center text-theme-muted mt-2">

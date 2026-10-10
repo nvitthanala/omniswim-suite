@@ -20,7 +20,7 @@ import path from 'node:path';
 import type { Workspace } from '../../../packages/core/src/types.ts';
 
 /** Collections this guard watches. Add here, not ad hoc, if another one needs it. */
-export const DATA_LOSS_COLLECTIONS = ['menResults', 'womenResults', 'athleteHistory'] as const;
+export const DATA_LOSS_COLLECTIONS = ['menResults', 'womenResults', 'athleteHistory', 'relayLegCredits'] as const;
 
 export type DataLossCollection = (typeof DATA_LOSS_COLLECTIONS)[number];
 

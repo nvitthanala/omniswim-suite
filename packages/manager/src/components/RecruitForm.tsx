@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useId } from 'react';
 import { Play } from 'lucide-react';
 import { Button } from '@omniswim/ui';
 import { Gender, ClassYear, Recruit } from '@omniswim/core/types';
@@ -80,14 +80,18 @@ function TeamSelect({
   onChange,
   options,
   className,
+  id,
+  ariaLabel,
 }: {
   value: string;
   onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
   options: SelectOption[];
   className: string;
+  id?: string;
+  ariaLabel?: string;
 }) {
   return (
-    <select value={value} onChange={onChange} className={className}>
+    <select id={id} aria-label={ariaLabel} value={value} onChange={onChange} className={className}>
       {options.map(o => (
         <option key={o.value} value={o.value}>
           {o.label}
@@ -102,13 +106,17 @@ function EventSelect({
   value,
   onChange,
   className,
+  id,
+  ariaLabel,
 }: {
   value: string;
   onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
   className: string;
+  id?: string;
+  ariaLabel?: string;
 }) {
   return (
-    <select value={value} onChange={onChange} className={className}>
+    <select id={id} aria-label={ariaLabel} value={value} onChange={onChange} className={className}>
       {EVENTS.map(ev => (
         <option key={ev} value={ev}>
           {ev}
@@ -145,14 +153,18 @@ function ClassYearSelect({
   onChange,
   className,
   labels,
+  id,
+  ariaLabel,
 }: {
   value: ClassYear;
   onChange: (e: React.ChangeEvent<HTMLSelectElement>) => void;
   className: string;
   labels: ClassYearLabels;
+  id?: string;
+  ariaLabel?: string;
 }) {
   return (
-    <select value={value} onChange={onChange} className={className}>
+    <select id={id} aria-label={ariaLabel} value={value} onChange={onChange} className={className}>
       <option value={ClassYear.FR}>{labels[ClassYear.FR]}</option>
       <option value={ClassYear.SO}>{labels[ClassYear.SO]}</option>
       <option value={ClassYear.JR}>{labels[ClassYear.JR]}</option>
@@ -171,6 +183,16 @@ export default function RecruitForm({
   defaultTeam,
   athletePrefill,
 }: Props) {
+  const idPrefix = useId();
+  const ids = {
+    firstName: `${idPrefix}-first-name`,
+    lastName: `${idPrefix}-last-name`,
+    team: `${idPrefix}-team`,
+    event: `${idPrefix}-event`,
+    course: `${idPrefix}-course`,
+    year: `${idPrefix}-year`,
+    time: `${idPrefix}-time`,
+  };
   const [formData, setFormData] = useState({
     firstName: '',
     lastName: '',
@@ -228,7 +250,7 @@ export default function RecruitForm({
   const inputClass = compact ? 'glass-input w-full rounded-lg px-2.5 py-2 text-ui-body' : 'glass-input w-full';
   const labelClass = compact
     ? 'block text-ui-caption text-theme-muted mb-1'
-    : 'block text-ui-caption uppercase tracking-wide text-theme-muted font-bold mb-1.5';
+    : 'block text-ui-caption text-theme-muted font-bold mb-1.5';
   const teamOptions =
     teams.length > 0 ? teams.map(t => ({ value: t, label: t })) : [{ value: 'Unassigned', label: 'Unassigned' }];
 
@@ -240,8 +262,9 @@ export default function RecruitForm({
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div className="min-w-0">
-            <label className={labelClass}>First name</label>
+            <label htmlFor={ids.firstName} className={labelClass}>First name</label>
             <input
+              id={ids.firstName}
               type="text"
               value={formData.firstName}
               onChange={e => setFormData({ ...formData, firstName: e.target.value })}
@@ -250,8 +273,9 @@ export default function RecruitForm({
             />
           </div>
           <div className="min-w-0">
-            <label className={labelClass}>Last name</label>
+            <label htmlFor={ids.lastName} className={labelClass}>Last name</label>
             <input
+              id={ids.lastName}
               type="text"
               value={formData.lastName}
               onChange={e => setFormData({ ...formData, lastName: e.target.value })}
@@ -260,8 +284,9 @@ export default function RecruitForm({
             />
           </div>
           <div className="min-w-0 sm:col-span-2">
-            <label className={labelClass}>Team</label>
+            <label htmlFor={ids.team} className={labelClass}>Swim&apos;s team</label>
             <TeamSelect
+              id={ids.team}
               value={formData.team}
               onChange={e => setFormData({ ...formData, team: e.target.value })}
               options={teamOptions}
@@ -269,8 +294,9 @@ export default function RecruitForm({
             />
           </div>
           <div className="min-w-0">
-            <label className={labelClass}>Event</label>
+            <label htmlFor={ids.event} className={labelClass}>Event</label>
             <EventSelect
+              id={ids.event}
               value={formData.event}
               onChange={e => setFormData({ ...formData, event: e.target.value })}
               className={`${inputClass} appearance-none`}
@@ -278,8 +304,9 @@ export default function RecruitForm({
           </div>
           <div className="grid grid-cols-2 gap-3 min-w-0">
             <div>
-              <label className={labelClass}>Course</label>
+              <label htmlFor={ids.course} className={labelClass}>Course</label>
               <select
+                id={ids.course}
                 value={formData.timeType}
                 onChange={e => setFormData({ ...formData, timeType: e.target.value as 'SCY' | 'LCM' | 'SCM' })}
                 className={`${inputClass} appearance-none`}
@@ -290,8 +317,9 @@ export default function RecruitForm({
               </select>
             </div>
             <div>
-              <label className={labelClass}>Year</label>
+              <label htmlFor={ids.year} className={labelClass}>Year</label>
               <ClassYearSelect
+                id={ids.year}
                 value={formData.classYear}
                 onChange={e => setFormData({ ...formData, classYear: e.target.value as ClassYear })}
                 className={`${inputClass} appearance-none`}
@@ -302,8 +330,9 @@ export default function RecruitForm({
         </div>
         <div className="flex flex-col sm:flex-row gap-3 sm:items-end">
           <div className="sm:w-36">
-            <label className={labelClass}>Time</label>
+            <label htmlFor={ids.time} className={labelClass}>Time</label>
             <input
+              id={ids.time}
               type="text"
               value={formData.time}
               onChange={e => setFormData({ ...formData, time: e.target.value })}
@@ -319,7 +348,7 @@ export default function RecruitForm({
             className="flex-1 btn-recruit"
             leadingIcon={<Play size={12} fill="currentColor" />}
           >
-            Inject recruit
+            Add swim
           </Button>
         </div>
       </form>
@@ -329,9 +358,11 @@ export default function RecruitForm({
   return (
     <form onSubmit={handleSubmit} className={`space-y-4 ${disabled ? 'opacity-60 pointer-events-none' : ''}`}>
       <div>
-        <label className={labelClass}>Athlete Name</label>
+        <span className={labelClass}>Athlete Name</span>
         <div className="grid grid-cols-2 gap-2">
           <input
+            id={ids.firstName}
+            aria-label="First name"
             type="text"
             value={formData.firstName}
             onChange={e => setFormData({ ...formData, firstName: e.target.value })}
@@ -339,6 +370,8 @@ export default function RecruitForm({
             placeholder="First"
           />
           <input
+            id={ids.lastName}
+            aria-label="Last name"
             type="text"
             value={formData.lastName}
             onChange={e => setFormData({ ...formData, lastName: e.target.value })}
@@ -350,8 +383,9 @@ export default function RecruitForm({
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label className={labelClass}>Committed Team</label>
+          <label htmlFor={ids.team} className={labelClass}>Committed Team</label>
           <TeamSelect
+            id={ids.team}
             value={formData.team}
             onChange={e => setFormData({ ...formData, team: e.target.value })}
             options={teamOptions}
@@ -359,8 +393,9 @@ export default function RecruitForm({
           />
         </div>
         <div>
-          <label className={labelClass}>Course</label>
+          <label htmlFor={ids.course} className={labelClass}>Course</label>
           <select
+            id={ids.course}
             value={formData.timeType}
             onChange={e => setFormData({ ...formData, timeType: e.target.value as 'SCY' | 'LCM' | 'SCM' })}
             className={`${inputClass} appearance-none`}
@@ -373,14 +408,18 @@ export default function RecruitForm({
       </div>
 
       <div>
-        <label className={labelClass}>Event Selection</label>
+        <span className={labelClass}>Event Selection</span>
         <div className="grid grid-cols-2 gap-3">
           <EventSelect
+            id={ids.event}
+            ariaLabel="Event selection"
             value={formData.event}
             onChange={e => setFormData({ ...formData, event: e.target.value })}
             className={`${inputClass} appearance-none`}
           />
           <ClassYearSelect
+            id={ids.year}
+            ariaLabel="Class year"
             value={formData.classYear}
             onChange={e => setFormData({ ...formData, classYear: e.target.value as ClassYear })}
             className={`${inputClass} appearance-none`}
@@ -390,8 +429,9 @@ export default function RecruitForm({
       </div>
 
       <div>
-        <label className={labelClass}>Time Entry (Auto-Convert Enabled)</label>
+        <label htmlFor={ids.time} className={labelClass}>Time Entry (Auto-Convert Enabled)</label>
         <input
+          id={ids.time}
           type="text"
           value={formData.time}
           onChange={e => setFormData({ ...formData, time: e.target.value })}
@@ -405,10 +445,10 @@ export default function RecruitForm({
         variant="primary"
         size="lg"
         disabled={disabled}
-        className="w-full mt-2 btn-recruit uppercase tracking-[0.2em]"
+        className="w-full mt-2 btn-recruit"
         leadingIcon={<Play size={12} fill="currentColor" />}
       >
-        Inject Recruit Into Matrix
+        Add swim
       </Button>
     </form>
   );

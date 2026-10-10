@@ -3,9 +3,9 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useRef, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
-import { BarChart3, ClipboardPaste, ExternalLink, Trophy } from 'lucide-react';
+import { Activity, ClipboardPaste, ExternalLink, Trophy } from 'lucide-react';
 import { Link } from 'react-router-dom';
 import { Gender, OfficialTeamScores, SwimmerResult, ScoringSettings, Workspace } from '@omniswim/core/types';
 import {
@@ -40,6 +40,12 @@ import {
 import MeetOperationsView from './MeetOperationsView';
 import SwimmerDeleteConfirmModal from './SwimmerDeleteConfirmModal';
 import { SwimCloudImportDiagnosticsPanel } from './SwimCloudImportDiagnosticsPanel';
+import {
+  readStoredMatrixStep,
+  resolveInitialMatrixStep,
+  writeStoredMatrixStep,
+  type MatrixStepId,
+} from './matrixStepState';
 
 interface Props {
   workspace: Workspace;
@@ -47,13 +53,10 @@ interface Props {
   onUpdate: (updated: Partial<Workspace>) => void | Promise<void>;
 }
 
-type MatrixStepId = 'load' | 'score' | 'standings' | 'analyze';
-
 const MATRIX_STEPS: WizardStep<MatrixStepId>[] = [
-  { id: 'load', label: 'Load', title: 'Bring in the meet', hint: 'Load results and link a psych sheet before reviewing projections.', icon: <ClipboardPaste size={16} /> },
-  { id: 'score', label: 'Score', title: 'Set the scoring rules', hint: 'Choose the scoring model, presets, and official-score comparison.', icon: <BarChart3 size={16} /> },
+  { id: 'meet', label: 'Meet', title: 'Bring in the meet', hint: 'Load results, link a psych sheet and check the scoring rules.', icon: <ClipboardPaste size={16} /> },
   { id: 'standings', label: 'Standings', title: 'See where teams land', hint: 'Review the projected team order and the swims behind each total.', icon: <Trophy size={16} /> },
-  { id: 'analyze', label: 'Analyze', title: 'Explain the result', hint: 'Trace score changes, momentum, and differences from prelims.', icon: <BarChart3 size={16} /> },
+  { id: 'analyze', label: 'Analyze', title: 'Explain the result', hint: 'Trace score changes, momentum, and differences from prelims.', icon: <Activity size={16} /> },
 ];
 
 /** True when a list prop that may be missing has at least one entry. */
@@ -205,7 +208,12 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
     presetIdForConference(workspace.conference)
   );
   const [whatIfMode, _setWhatIfMode] = useState(false);
-  const [step, setStep] = useState<MatrixStepId>('load');
+  // A stored 'load' or 'score' (from before Phase 5) resolves to 'meet'; the
+  // effect below then writes the current id back.
+  const [step, setStep] = useState<MatrixStepId>(() =>
+    resolveInitialMatrixStep(readStoredMatrixStep(workspace.id), Boolean(workspace.loadedMeet))
+  );
+  useEffect(() => { writeStoredMatrixStep(workspace.id, step); }, [workspace.id, step]);
   const [scoringRefreshKey, setScoringRefreshKey] = useState(0);
   const parseAbortRef = useRef<AbortController | null>(null);
   const psychParseAbortRef = useRef<AbortController | null>(null);
@@ -558,10 +566,6 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
     psychParseAbortRef.current?.abort();
   };
 
-  const handleScoringViewChange = (view: 'merged' | 'pdf_only') => {
-    void onUpdate({ scoringView: view });
-  };
-
   const copyMeetFromWorkspace = (sourceId: string) => {
     const source = workspaces.find(candidate => candidate.id === sourceId);
     if (!source) return;
@@ -599,7 +603,7 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
       conference: source.conference,
     });
     setScoringRefreshKey(key => key + 1);
-    toast.push('success', `Copied meet results from ${source.name}`);
+    toast.push('success', `Copied meet and psych sheet from ${source.name}`);
   };
 
   const rosterDirty = hasRosterEdits(workspace);
@@ -626,7 +630,7 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
           {rosterDirty ? (
             <Link
               to="/manager"
-              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-md border border-[var(--text-accent)]/30 text-[var(--text-accent)] hover:bg-[var(--text-accent)]/10 transition-colors"
+              className="inline-flex items-center gap-1.5 px-3 py-1.5 text-ui-micro font-bold rounded-md border border-[var(--text-accent)]/30 text-[var(--text-accent)] hover:bg-[var(--text-accent)]/10 transition-colors"
             >
               Edit roster in Manager
               <ExternalLink size={12} />
@@ -680,7 +684,6 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
               whatIfMode ? name => setSwimmerDeleteCandidate({ name }) : undefined
             }
             onSaveScoringSettings={sets => void onUpdate({ scoringSettings: sets })}
-            onScoringViewChange={handleScoringViewChange}
             onClearSuggestedPreset={() => setSuggestedPresetId(null)}
             scoringRefreshKey={scoringRefreshKey}
           />

@@ -19,6 +19,7 @@ import {
   hasCutlineTable,
   isSwimCutline,
   latestSeasonForDivision,
+  legacySlotForTier,
   type CutlineCourse,
   type CutlineRecord,
   type CutlineSeason,
@@ -103,7 +104,11 @@ export type CutlineLookup = {
   eventCategory: CutlineEventCategory;
   /** The published record, when one was found. */
   entry?: SwimCutline;
-  /** Every published tier, strictest (fastest) first. Empty unless `status === 'ok'`. */
+  /**
+   * Every published tier, in the source's printed order. Not guaranteed to be
+   * speed order (D3 Invited is slower than B in two events); use
+   * {@link strictestTierMet}. Empty unless `status === 'ok'`.
+   */
   tiers: CutlineTierValue[];
   /** @deprecated legacy flat row for the strict tier. Use `tiers` / `entry`. */
   aCut?: CutlineRecord;
@@ -162,11 +167,12 @@ export type ScyEquivalentSwim = {
 /**
  * The `CONVERSION_FACTORS` key for a canonical cutline event, or `null`.
  *
- * `null` is load-bearing. `convertToSCY` falls back to the **50 Freestyle**
- * factor for any event it does not recognise, which on e.g. a 400 Medley Relay
- * would silently manufacture a 30-second "conversion". Callers must refuse
- * instead, so this function only answers for events the factor table actually
- * publishes.
+ * `null` is load-bearing. `convertToSCY` used to fall back to the **50
+ * Freestyle** factor for any event it did not recognise, which on e.g. a 400
+ * Medley Relay silently manufactured a 30-second "conversion". It now throws
+ * when no factor is published (`convertTimeWithBasis` in `utils.ts`). This
+ * function is the check made before that call: it only answers for events the
+ * factor table actually publishes, so a caller can refuse instead of catching.
  *
  * Two spelling gaps are bridged, both verified against `constants.ts`:
  * - the factor table uses the meet-sheet short form `200 IM` / `400 IM`, the
@@ -263,12 +269,11 @@ function toSeconds(time: string): number {
  * The strictest published tier the swim did **not** clear — i.e. the next one up
  * from whatever it did clear, and on a total miss the easiest tier published.
  *
- * `tiers` arrives strictest-first, so the answer is the *slowest* standard the
- * swim still failed to reach; that is simultaneously "the tier immediately above
- * the one achieved" (every stricter tier is further away) and "the tier it came
- * closest to earning" when nothing was achieved. Selecting on seconds rather
- * than on list position keeps it correct if a division ever publishes its tiers
- * in another order.
+ * The answer is the *slowest* standard the swim still failed to reach; that is
+ * simultaneously "the tier immediately above the one achieved" (every stricter
+ * tier is further away) and "the tier it came closest to earning" when nothing
+ * was achieved. It selects on seconds, never on list position, because D3 does
+ * publish a tier out of speed order.
  *
  * `null` — never a zero-second gap — when every published tier was cleared, when
  * the list is empty, or when the time is unusable. A caller that needs "how far
@@ -464,7 +469,12 @@ export function computedCutInOwnCourse(args: {
 export type CutlineComparison = {
   /** Legacy two-tier verdict. `A` = met the strict tier, `B` = met the permissive one. */
   achieved: 'A' | 'B' | null;
-  /** The honest label of the strictest tier met, e.g. `Standard`, `Invited`, `Provisional`. */
+  /**
+   * The honest label of the fastest published tier met, chosen by comparing
+   * times ({@link strictestTierMet}), e.g. `Standard`, `Invited`, `Provisional`.
+   * It can be set while `achieved` is `null`: a D3 swim that clears Invited but
+   * not the faster B standard in the events where Invited is printed slower.
+   */
   tier: CutlineTier | null;
   status: CutlineLookupStatus;
   /** `diving` always comes back `achieved: null` with `status: 'not_a_timed_event'`. */
@@ -506,12 +516,60 @@ export function compareTimeToCutline(
   if (!timeSec || timeSec <= 0 || !Number.isFinite(timeSec) || lookup.status !== 'ok') {
     return { ...base, achieved: null, tier: null };
   }
-  // `tiers` is ordered strictest first, so the first tier met is the best one.
-  const met = lookup.tiers.find(t => t.seconds > 0 && timeSec <= t.seconds);
-  if (!met) return { ...base, achieved: null, tier: null };
-  const achieved: 'A' | 'B' =
-    met.tier === 'A' || met.tier === 'Standard' || met.tier === 'Qualifying' ? 'A' : 'B';
-  return { ...base, achieved, tier: met.tier };
+  // The label is the fastest published standard the swim cleared, chosen by
+  // comparing times. List position says nothing: the archived D3 sheet prints
+  // Invited slower than B in two events (see `strictestTierMet`).
+  const met = strictestTierMet(lookup.tiers, timeSec);
+  // The legacy two-slot verdict is a direct comparison against the slot's own
+  // time, never inferred from which tier happened to match. Meeting `Invited`
+  // says nothing about `B`: a swim between the two in those events cleared
+  // Invited and not B, so it earns the label and no legacy cut.
+  const achieved = legacyCutAchieved(lookup.tiers, timeSec);
+  return { ...base, achieved, tier: met ? met.tier : null };
+}
+
+/**
+ * The fastest published tier a time cleared, or `null` when it cleared none.
+ *
+ * Chosen by comparing seconds, not by position in `tiers`: a division is not
+ * guaranteed to publish its tiers in speed order. D3 lists `A, Invited, B`, and
+ * its Women's 100 Butterfly (B 55.79, Invited 55.83) and 400 IM (B 4:28.70,
+ * Invited 4:28.76) put Invited slower than B. Reading the list as strictest
+ * first called a 55.80 "B" that is slower than the 55.79 B standard.
+ *
+ * A tier whose time is absent (`seconds <= 0`) never matches. A tie keeps the
+ * published order, so a label does not flip between two equal standards. The
+ * time must be finite and positive, or the answer is `null`, never a tier.
+ */
+export function strictestTierMet(
+  tiers: readonly CutlineTierValue[],
+  seconds: number
+): CutlineTierValue | null {
+  if (!Number.isFinite(seconds) || seconds <= 0) return null;
+  let best: CutlineTierValue | null = null;
+  for (const tier of tiers) {
+    if (!(tier.seconds > 0) || seconds > tier.seconds) continue;
+    if (!best || tier.seconds < best.seconds) best = tier;
+  }
+  return best;
+}
+
+/**
+ * The legacy two-slot cut for a time: `A` when it clears the strict slot's own
+ * time, else `B` when it clears the permissive slot's own time, else `null`.
+ * Each slot is read through {@link legacySlotForTier}; a tier with no slot
+ * (`Invited`) never contributes. The slots are compared separately, so no
+ * order between tiers is assumed.
+ */
+function legacyCutAchieved(
+  tiers: readonly CutlineTierValue[],
+  seconds: number
+): 'A' | 'B' | null {
+  const clears = (slot: 'A' | 'B') =>
+    tiers.some(t => legacySlotForTier(t.tier) === slot && t.seconds > 0 && seconds <= t.seconds);
+  if (clears('A')) return 'A';
+  if (clears('B')) return 'B';
+  return null;
 }
 
 /**

@@ -71,7 +71,7 @@ export function ArbitrageResultBody({
   if (viewModel.showingInitialLoad) {
     return (
       <div className="min-h-[140px]">
-        <LoadingSpinner label="Computing arbitrage…" />
+        <LoadingSpinner label="Checking cross-course options…" />
       </div>
     );
   }

@@ -1,0 +1,146 @@
+{
+  "initiative": "theoretical-meet-2026-10-04",
+  "plan": "docs/reference/THEORETICAL_MEET_PLAN.md",
+  "design": "docs/reference/SWIMCLOUD_MULTI_TEAM_CRAWL_PLAN.md, Phase B4 design (decided 2026-10-04)",
+  "branch": "nvitthanala/ui-simplification",
+  "note": "Canonical state for the theoretical meet (phases U1 to U3). Nothing is committed. No agent contacts SwimCloud. U1 only is recorded here so far.",
+  "phases": {
+    "U1": {
+      "item": "Data layer: crawled captures to a new workspace payload",
+      "status": "done",
+      "verifiedAt": "2026-10-04",
+      "owner": "executor (Sonnet 5.5)",
+      "files": [
+        "packages/manager/src/lib/theoreticalMeetFromCaptures.ts",
+        "packages/manager/src/lib/theoreticalMeetWorkspace.ts",
+        "tests/theoreticalMeetFromCaptures.test.ts",
+        "tests/theoreticalMeetWorkspace.test.ts",
+        "tests/theoreticalMeetGolden.test.ts",
+        "tests/fixtures/theoretical-meet/ (47 files, 1.29 MB)"
+      ],
+      "evidence": {
+        "tests": "theoreticalMeetFromCaptures 32, theoreticalMeetWorkspace 30, theoreticalMeetGolden 16 (13 on committed fixtures, 3 optional on all real data).",
+        "golden": "Fake deps over a real capture store -> theoreticalMeetFromCaptures -> buildTheoreticalMeetSeeds (SCY, NSISC, preset nsisc) -> buildTheoreticalMeetWorkspace -> buildScoringSnapshot. 50 Free points are hand-computed from the published NCAA table (including the women's tie at 26.51).",
+        "mutations": "M1 drop tie rule (5 tests fail), M2 rank descending (5), M3 keep isPsychSheet (2), M4 ignore conference (1), M5 accept partial capture silently (3), M6 roster page that did not parse passes (1), M7 times page that did not parse reported as no times (1), M8 wrong A bracket (5), M9 empty roster table called an empty roster (1). Each file restored and sha256 verified.",
+        "gates": "lint 0 errors (2 old warnings in swimCloudMeetImportBridge.ts)."
+      },
+      "fixtures": {
+        "source": "data/swimcloud-captures (git-ignored, local only): team-412-2026-2027, team-58-2026-2027, team-48-2026-2027, captured 2026-10-04",
+        "kept": "Both roster pages per team whole (scripts, header, nav and footer removed: they held the account name and a form secret). 12 of each team's real times responses (6 men, 6 women), byte for byte. The rule and the original hashes are in tests/fixtures/theoretical-meet/manifest.json.",
+        "why12": "The full 173 responses are about 5 MB. The brief's cap was 1.5 MB."
+      },
+      "facts": {
+        "engineNeeds": "Baseline reads sourceMenResults/sourceWomenResults (else menResults/womenResults). Individual scoring groups by event, roundSwam and rank; equal rank is one tie. A prelims round scores only distance events and diving. The NSISC scorer roster adds an athlete only from an A Final or B Final row. pdfPoints must be absent so the settings table applies. Result ids are primary keys across workspaces.",
+        "bands": "Places 1 to the A bracket are A Final, the next bracket B Final, the rest Preliminaries. rank is the overall place. Bracket is aFinalBracketSize, else half the table.",
+        "ties": "Standard competition ranking (1, 2, 2, 4), the rule behind prepareRecruitsForScoring. A test pins the two.",
+        "eventOrderMatters": "With no Event N labels the engine scores events in row order. NSISC has an 18-scorer meet-wide pool filled in that order, so event order can change who scores. Rows use the standard program order. No event numbers are invented. A caveat says so.",
+        "provenance": "SwimmerResult has no source field and the workspace table has no column for one. Provenance is returned beside the payload (sources, keyed by result id) and is not persisted.",
+        "loadedMeet": "pdfFilename and meetLabel both carry THEORETICAL_MEET_LABEL. The sidebar, RosterSourceStep and the Matrix meet step read pdfFilename only; swimCloudMeetImportBridge sets it the same way for a meet with no PDF.",
+        "noPageBytesRoute": "No capture route returns page bytes. The roster season id needs the roster page's season table, so theoreticalMeetFromCaptures takes an optional readRosterPageHtml dependency. Without it rosterSeasonId stays undefined and the seed builder's caveat stands."
+      },
+      "reviewNeeded": "Re-review of the T1 to T8 fixes. T6 touches the capture store write path.",
+      "notDone": [
+        "Relays (U1c).",
+        "UI (U2).",
+        "A server route that returns stored roster page bytes (needed for the roster season id in the real app). Needs a change in apps/shell, out of scope.",
+        "Exhibition swims can still become seeds (known issue, needs a core type field)."
+      ],
+      "nextStep": "Architect review of U1; then U2 UI against the exported API.",
+      "reviewFixes": {
+        "when": "2026-10-05",
+        "source": "architect review of b9658efa (scratch probes reproduced T1, T2, T6)",
+        "T1": "FIXED. Places past twice the A bracket are C Final, not Preliminaries. A prelims row made hasPrelimsData true and the prelims-vs-finals view showed every team at 0 with an over/under equal to its whole total (472 of 696 men rows on the real data). Tests: hasPrelimsData false and prelims projection empty on constructed rows, on the fixtures and on the real captures; totals unchanged (real: Henderson men 931).",
+        "T2": "FIXED in both builders. usePdfPlacePoints === true throws invalid-scoring-settings, naming settingsForBuiltInScoringPreset(presetIdForConference(conference)). Tested with the exact shape buildScoringPatchForParsedPdf saves. auto and false stay allowed.",
+        "T3": "FIXED. eventOrder?: readonly string[] on buildTheoreticalMeetWorkspace, theoreticalEventOrderFromMeetResults(rows) reads a real meet order from its Event N labels, eventOrderSource and warnings on the result, caveat states the size (several percent, measured up to 7%). Applied to row order, which is the engine mechanism for rows with no Event N label; no event number is written. Real data, Henderson men: program order 931, real 2026 NSISC order 997 (+66), reversed program order 897 (-34), as the architect measured. The 12-swimmer fixtures do not fill the pool, so no fixture total moves; hand-derived pool tests (202 vs 250) prove the direction.",
+        "T4": "FIXED. The parse route returns storedPages (canonicalUrl, resourceKind, entryRetrievedAt, contentSha256) additively. theoreticalMeetFromCaptures compares with the record sha256: page-bytes-drifted warning per page, driftedPages and unverifiedPages in the capture summary, and a drifted page takes the stored bytes write time as its retrievedAt (team, athlete, swims, seed source). A parse with no stamps counts every used page as unverified. Fixture records already matched the trimmed bytes (the generator rewrote them); a test now asserts it for every page.",
+        "T5": "FIXED. Parse warnings are counted by code (summarizeParseWarnings) into the capture summary (parseWarnings) and a line on every team. Real data: only diving-score-not-a-time (28, 7, 21 on the full captures; 6, 4, 12 on the fixtures).",
+        "T6": "FIXED. captureStore has a second KeyedAsyncMutex keyed by canonicalUrl around archive-and-write and around the page delete. Order is captureId lock then URL lock, always. Test: two captures write one URL with Promise.all, 50 rounds, all three versions survive (cache plus pages-superseded). The race reproduced on round 0 before the fix.",
+        "T7": "FIXED. swimCloudPageBytesDiffer ignores csrfmiddlewaretoken values (either attribute order); a token-only change archives nothing. The new bytes are still written.",
+        "T8": "FIXED (season) and ANSWERED (exhibition). rosterSeasonId needs proof: URL season_id, or a printed season; with neither the table selected option counts only when it equals the subject label, else a warning. Exhibition and eventgender: see report; no core edit.",
+        "newWorkspaceGap": "POST /api/workspaces with an existing id overwrites that workspace and deletes its rows (WorkspaceService.create). Server not changed. buildTheoreticalMeetWorkspace documents that workspaceId must be fresh, and newTheoreticalWorkspaceId() (crypto.randomUUID) is exported and tested.",
+        "mutations": "T1, T2a, T2b, T3a, T3b, T3c, T4a, T4b, T4c (route), T5, T6, T7, T8: each fails tests (1 to 9 tests); files restored, sha256 verified identical.",
+        "gates": "lint 0 errors (2 old warnings); vitest 171 files, 2518 tests pass, 14 skipped by design (eventFirstImport)."
+      }
+    },
+    "U2": {
+      "item": "UI: Build theoretical meet dialog, entry points, banner",
+      "status": "done",
+      "verifiedAt": "2026-10-04",
+      "owner": "worker (Sonnet 5.5)",
+      "files": [
+        "packages/manager/src/components/theoreticalMeet/ (Dialog, TeamsStep, ScoringStep, PreviewStep, Banner, flow, hook, view, captureApi)",
+        "packages/ui/src/components/TheoreticalMeetOpenerContext.tsx",
+        "apps/shell/src/App.tsx, apps/shell/src/components/WorkspaceSidebar.tsx, apps/shell/src/lib/appletPrefetch.ts",
+        "packages/matrix/src/components/MeetOpsLoadStep.tsx, packages/manager/src/ManagerApp.tsx (re-exports)",
+        "tests/theoreticalMeetDialogView.test.ts, tests/theoreticalMeetDialog.test.ts, tests/theoreticalMeetBanner.test.ts, tests/theoreticalMeetUiFixtures.ts",
+        "tests/e2e/theoretical-meet.spec.ts, tests/e2e/theoreticalMeetCaptureMocks.ts"
+      ],
+      "evidence": {
+        "tests": "View model 32, dialog and createMeet 13, banner 3. Full run: 175 files, 2589 tests pass, 14 skipped by design.",
+        "e2e": "6 tests green on the data copy (PORT=3493). Capture routes mocked from the committed fixtures; /api/workspaces real; workspaces deleted in afterEach. data/omniswim.db and -wal mtimes unchanged.",
+        "mutations": "M1 partial capture treated as ready (1 test fails), M2 taken-id check removed (2 fail), M3 exhibition switch ignored (1 fails). Files restored, sha256 verified.",
+        "gates": "lint 0 errors (2 old warnings)."
+      },
+      "v1ReadOnly": "Chosen events are chips, not editable: the seed builder has no input that leaves one event out, so a removable chip could not keep the entry caps honest without a data-layer change.",
+      "notDone": [
+        "Per-swimmer event editing (needs a seed-builder input).",
+        "Roster season id in the real app (no route returns roster page bytes), so the all-time-best caveat always shows.",
+        "The workspace keeps no build report, so the banner shows the always-true caveats only.",
+        "Relays (U1c)."
+      ]
+    }
+  },
+  "gates": {
+    "lint": "0 errors; 2 existing complexity warnings in swimCloudMeetImportBridge.ts",
+    "vitest": "2026-10-05: 171 files, 2518 tests pass, 14 skipped by design (tests/eventFirstImport.test.ts)."
+  },
+  "incident": {
+    "date": "2026-10-04",
+    "what": "Team crawl overwrote 3 roster pages and refreshed 111 swimmer-times pages of meet 356467 (page cache is one file per URL).",
+    "mitigation": "captureStore archives superseded bytes (pages-superseded/); eventFirstImport real-capture tests skip on drift.",
+    "open": "Cache is still one file per URL; the step-1 season-read URL aliases a meet crawl URL."
+  },
+  "pausedAt": {
+    "when": "2026-10-05 (UTC)",
+    "why": "7-day Claude window ~94% (resets 2026-10-08T16:00Z): critical tier. No new agents started. All work committed.",
+    "lastCommit": "8133e7eb"
+  },
+  "resumeOrder": [
+    {
+      "id": "U1-done",
+      "status": "done and reviewed twice (b9658efa, be9b12c3)"
+    },
+    {
+      "id": "U2-ui",
+      "status": "done (8133e7eb); architect review of the create path NOT done",
+      "brief": "Worker (sonnet). Dialog Build theoretical meet: list complete team-{id}-{season} captures (GET /api/swimcloud/captures), select teams, pick scoring preset (conference), call theoreticalMeetFromCaptures with fetch-backed deps, buildTheoreticalMeetSeeds, buildTheoreticalMeetWorkspace with newTheoreticalWorkspaceId(), POST /api/workspaces, navigate to the new workspace. Preview: per team athletes with no times, events chosen per swimmer (editable), warnings, caveats (all-time best, relays not included/estimated, event order, diving, exhibition). Entry points: Matrix Meet step and workspace list. A banner via isTheoreticalMeet(workspace). Use emil-design-eng, apple-design, prototype skills; keep Dark/Light/custom tokens; tests/e2e spec on a data copy; never touch core."
+    },
+    {
+      "id": "U1c-relays",
+      "status": "not-started",
+      "brief": "Investigate the Manager relay builder (relayLegSplitDetail, relayMissingLeg, relay_leg_overrides, RelayGroupCard); design relay rows from individual bests labelled estimated, never stored as real legs; architect review BEFORE building (user chose: build from individual bests, labelled)."
+    },
+    {
+      "id": "exhibition",
+      "status": "done (e9724524): flag carried, included by default with label, option to exclude",
+      "brief": "Needs optional isExhibition on HistoricalSwim (core, about 3 lines) + parser (about 5) + converter (about 2); then exclude exhibition seeds in the builder. User approval for a core edit still open."
+    },
+    {
+      "id": "LCM-SCM",
+      "status": "deferred",
+      "brief": "In-course ranking by place in the theoretical field, no conversion."
+    },
+    {
+      "id": "B1b-conference-and-B2-relay-legs",
+      "status": "blocked-on-user-captures"
+    }
+  ],
+  "nextWhenQuotaReturns": [
+    "Architect review of the dialog create path (theoreticalMeetFlow.createMeet, restoreWorkspace) and the banner.",
+    "Relays from individual bests, labelled estimated (design check of the Manager relay builder FIRST).",
+    "Editable chosen events (needs a builder input that excludes one event while keeping caps honest).",
+    "Show school names on the Teams step (capture records carry no name; needs a name from the roster parse or a route).",
+    "Conference page parser and relay-leg parser: blocked on user captures.",
+    "Manager-side banner is mounted in the shell above both routes; verify in a real browser."
+  ]
+}

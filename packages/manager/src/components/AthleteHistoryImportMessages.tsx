@@ -30,7 +30,7 @@ export default function AthleteHistoryImportMessages({
       ) : null}
 
       {otherWarnings.length > 0 ? (
-        <ul className="text-ui-caption text-amber-400/90 mb-2 list-disc list-inside space-y-1">
+        <ul className="text-ui-caption text-warning-soft mb-2 list-disc list-inside space-y-1">
           {otherWarnings.map((w, i) => (
             <li key={i} className="break-words">
               {w}
@@ -43,7 +43,7 @@ export default function AthleteHistoryImportMessages({
         <p className="text-ui-caption text-theme-secondary mb-2 break-words">{unreadStampSummary}</p>
       ) : null}
 
-      {error ? <p className="text-ui-caption text-amber-400 mb-2 break-words">{error}</p> : null}
+      {error ? <p className="text-ui-caption text-warning mb-2 break-words">{error}</p> : null}
     </>
   );
 }

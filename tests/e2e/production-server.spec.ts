@@ -1,6 +1,8 @@
 import { test, expect } from '@playwright/test';
 import { spawn, spawnSync, type ChildProcess } from 'node:child_process';
+import { cpSync, existsSync, mkdtempSync, rmSync } from 'node:fs';
 import http from 'node:http';
+import { tmpdir } from 'node:os';
 import path from 'node:path';
 
 /**
@@ -30,6 +32,15 @@ const PROD_PORT = 3201;
 const BASE = `http://127.0.0.1:${PROD_PORT}`;
 
 let serverProcess: ChildProcess | undefined;
+/**
+ * The production server runs on its own throwaway data folder holding only the committed demo seed.
+ * It used to run on the real `data/` folder (playwright.config.ts's data copy only reaches the dev
+ * server), which wrote startup backups and database state into the user's real data, and made the
+ * "finds the seed" check pass or fail on whatever the real database happened to hold. With only
+ * `demo-seed.json` present the server seeds a fresh database from it, which is the path this spec
+ * guards.
+ */
+let prodDataDir: string | undefined;
 
 function waitForPort(url: string, timeoutMs: number): Promise<void> {
   const deadline = Date.now() + timeoutMs;
@@ -66,12 +77,18 @@ test.describe('production server (dist/server.js)', () => {
       throw new Error('npm run build failed — cannot verify the production server without a build');
     }
 
+    prodDataDir = mkdtempSync(path.join(tmpdir(), 'omniswim-prod-spec-'));
+    const demoSeed = path.join(REPO_ROOT, 'data', 'demo-seed.json');
+    if (!existsSync(demoSeed)) throw new Error('data/demo-seed.json is missing: nothing to seed the production server from');
+    cpSync(demoSeed, path.join(prodDataDir, 'demo-seed.json'));
+
     serverProcess = spawn('node', ['dist/server.js'], {
       cwd: SHELL_DIR,
       env: {
         ...process.env,
         NODE_ENV: 'production',
         PORT: String(PROD_PORT),
+        OMNI_DATA_DIR: prodDataDir,
         OMNI_DB: 'sqlite',
       },
       stdio: 'inherit',
@@ -88,6 +105,14 @@ test.describe('production server (dist/server.js)', () => {
   });
 
   test.afterAll(async () => {
+    try {
+      await stopServerThenCleanup();
+    } finally {
+      if (prodDataDir) rmSync(prodDataDir, { recursive: true, force: true });
+    }
+  });
+
+  async function stopServerThenCleanup(): Promise<void> {
     if (serverProcess && !serverProcess.killed) {
       serverProcess.kill();
       // Give it a moment to release the port; force-kill if it doesn't.
@@ -102,7 +127,7 @@ test.describe('production server (dist/server.js)', () => {
         });
       });
     }
-  });
+  }
 
   test('GET / serves the real app shell, not a 404 from a missing dist dir', async ({ request }) => {
     const res = await request.get(`${BASE}/`);

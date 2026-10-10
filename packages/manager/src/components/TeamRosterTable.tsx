@@ -13,7 +13,7 @@ import type { TeamLineupAudit } from '@omniswim/core/lib/rosterLineupAudit';
 import type { buildAliasResolver } from '@omniswim/core/lib/athleteAliases';
 import type { HistoricalSwim } from '@omniswim/core/types';
 import TeamRosterRow from './TeamRosterRow';
-import { buildRosterRowViewModel, describeStrongestEvents } from './teamRosterView';
+import { buildRosterRowViewModel, describeStrongestEvents, isUniformSwimmerRoster } from './teamRosterView';
 
 type RosterWindow = {
   rows: ScorerRosterRow[];
@@ -29,7 +29,6 @@ type Props = {
   rosterWindow: RosterWindow;
   colSpan: number;
   editable: boolean;
-  onRequestDeleteSwimmer?: (name: string) => void;
   selectedAthleteKey: string | null;
   pointTotals: Map<string, number>;
   genderResults: SwimmerResult[];
@@ -50,7 +49,6 @@ export default function TeamRosterTable({
   rosterWindow,
   colSpan,
   editable,
-  onRequestDeleteSwimmer,
   selectedAthleteKey,
   pointTotals,
   genderResults,
@@ -63,6 +61,8 @@ export default function TeamRosterTable({
   onSelectRow,
   onSetScorer,
 }: Props) {
+  // Judged over the whole team, not the visible window, so scrolling cannot flip it.
+  const hideSwimmerTag = isUniformSwimmerRoster(teamRows);
   return (
     <table className="w-full">
       <thead className="sticky top-0 surface-muted-bg z-[1]">
@@ -72,11 +72,6 @@ export default function TeamRosterTable({
           <th className="text-right py-2.5 px-3 font-medium w-24">Meet pts</th>
           {editable ? (
             <th className="text-center py-2.5 px-3 font-medium w-20">Scorer</th>
-          ) : null}
-          {editable && onRequestDeleteSwimmer ? (
-            <th className="text-center py-2.5 px-2 font-medium w-12">
-              <span className="sr-only">Remove</span>
-            </th>
           ) : null}
         </tr>
       </thead>
@@ -118,7 +113,7 @@ export default function TeamRosterTable({
                   warningMessages={viewModel.warningMessages}
                   warningLabel={viewModel.warningLabel}
                   editable={editable}
-                  onRequestDeleteSwimmer={onRequestDeleteSwimmer}
+                  hideSwimmerTag={hideSwimmerTag}
                   onSelect={() => onSelectRow(row)}
                   onSetScorer={isScorer => onSetScorer(row, isScorer)}
                 />

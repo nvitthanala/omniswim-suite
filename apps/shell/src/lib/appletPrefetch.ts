@@ -29,3 +29,7 @@ export function prefetchLastApplet() {
 export const ManagerAppLazy = lazy(() => import('@omniswim/manager'));
 export const MatrixAppLazy = lazy(() => import('@omniswim/matrix'));
 export const MetricsAppLazy = lazy(() => import('@omniswim/metrics'));
+
+/** The "Build theoretical meet" dialog and the notice shown on a theoretical meet. Both come from the manager package. */
+export const TheoreticalMeetDialogLazy = lazy(() => import('@omniswim/manager').then(m => ({ default: m.TheoreticalMeetDialog })));
+export const TheoreticalMeetBannerLazy = lazy(() => import('@omniswim/manager').then(m => ({ default: m.TheoreticalMeetBanner })));

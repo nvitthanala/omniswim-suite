@@ -47,6 +47,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { ClassYear, Gender, HistoricalSwim, PlannedSwimEntry, Workspace } from '../types';
 import { normalizeEventLabel } from './athleteHistory';
 import { cloneMeetResults, getSourceResults } from './meetSource';
+import { pruneRelayOverridesForSwimmer } from './rosterLineupAudit';
 import { normalizeSwimmerName } from './utils';
 import { createPlannedEntry } from './whatIfProjection';
 
@@ -399,6 +400,44 @@ export function removeCreditedSwim(
 }
 
 /**
+ * Drop the relay leg fills that name `removed`'s swimmer once `edit` leaves that
+ * swimmer with no meet row and no recruit row — the same prune a scorer toggle
+ * makes (`applyScorerOffRelayPatch`).
+ *
+ * A fill resolves only onto those two planes (plus history swims of a swimmer
+ * still in them; planned entries never fill a leg). A fill whose name no longer
+ * resolves reads vacant and flagged on its own (`resolveRelayLegs`). Pruning it
+ * as well keeps the stored fills honest.
+ * The inverse restores the fills, so Undo brings them back with the swim.
+ */
+function pruneUnresolvableRelayFills(
+  workspace: Workspace,
+  gender: Gender,
+  removed: { name: string; team?: string },
+  edit: WorkspaceEditorPatch
+): WorkspaceEditorPatch {
+  const after = { ...workspace, ...edit.patch };
+  const nameKey = normalizeSwimmerName(removed.name);
+  const team = String(removed.team ?? '').trim();
+  const isSwimmer = (r: { name: string; team?: string }) =>
+    normalizeSwimmerName(r.name) === nameKey && String(r.team ?? '').trim() === team;
+  const stillFillsLegs =
+    (after[genderResultsField(gender)] ?? []).some(r => !r.isRelay && isSwimmer(r)) ||
+    (after.recruits ?? []).some(r => r.gender === gender && isSwimmer(r));
+  if (stillFillsLegs) return edit;
+
+  const fills = workspace.relayLegOverrides ?? [];
+  const kept = pruneRelayOverridesForSwimmer(fills, removed.name);
+  if (kept.length === fills.length) return edit;
+  const cleared = fills.length - kept.length;
+  return {
+    patch: { ...edit.patch, relayLegOverrides: kept },
+    inverse: { ...edit.inverse, relayLegOverrides: fills },
+    description: `${edit.description}; cleared ${cleared} relay leg fill${cleared === 1 ? '' : 's'}`,
+  };
+}
+
+/**
  * Remove ONE projected swim by the row id the scored pool shows, whichever plane
  * that row actually came from.
  *
@@ -416,6 +455,10 @@ export function removeCreditedSwim(
  *   recruits       → filter the recruit out
  *   men/womenResults → removeCreditedSwim (frozen source copy untouched)
  *
+ * A recruit or credited removal that leaves the swimmer no row a relay leg fill
+ * can resolve onto also clears that swimmer's fills
+ * (`pruneUnresolvableRelayFills`).
+ *
  * Raises when the id belongs to none of them rather than returning an empty
  * patch: a delete that quietly removes nothing is the failure this function
  * exists to end.
@@ -431,16 +474,22 @@ export function removeProjectedSwim(
   const recruits = workspace.recruits ?? [];
   const recruit = recruits.find(r => r.id === rowId);
   if (recruit) {
-    return {
+    return pruneUnresolvableRelayFills(workspace, gender, recruit, {
       patch: { recruits: recruits.filter(r => r.id !== rowId) },
       inverse: { recruits },
       description: `Remove recruit entry (${recruit.name}: ${recruit.event})`,
-    };
+    });
   }
 
   const field = genderResultsField(gender);
-  if ((workspace[field] ?? []).some(r => r.id === rowId)) {
-    return removeCreditedSwim(workspace, gender, rowId);
+  const credited = (workspace[field] ?? []).find(r => r.id === rowId);
+  if (credited) {
+    return pruneUnresolvableRelayFills(
+      workspace,
+      gender,
+      credited,
+      removeCreditedSwim(workspace, gender, rowId)
+    );
   }
 
   throw new Error(

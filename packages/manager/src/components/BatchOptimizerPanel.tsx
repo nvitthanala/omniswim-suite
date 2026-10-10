@@ -2,8 +2,10 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Batch Optimizer Panel — runs rosterOptimizer across all teams in a workspace
- * and lets the user review/applies changes.
+ * "All teams" optimizer dialog — runs rosterOptimizer across all teams in a
+ * workspace and lets the user review the result before applying it. It is
+ * opened from the Optimize step, which also records the applied run and its
+ * Undo (see RosterOptimizeStep.tsx).
  */
 
 import React, { useMemo, useState, useCallback } from 'react';
@@ -14,8 +16,13 @@ import type { OptimizerStage } from '@omniswim/core/lib/rosterOptimizer';
 import { mergeScoringSettings } from '@omniswim/core/lib/utils';
 import { Button, Modal, useToast } from '@omniswim/ui';
 import {
+  BATCH_UNCHANGED_MESSAGE,
   batchOptimizationToastMessage,
+  batchLineupMoved,
+  batchRunInputsCurrent,
+  buildBatchApplyPatch,
   computeBatchOptimizationResult,
+  type BatchRunInputs,
   deltaColorClass,
   type BatchOptimizationResult,
 } from './batchOptimizerView';
@@ -24,7 +31,13 @@ type Props = {
   workspace: Workspace;
   gender: Gender;
   scoringSettings: ScoringSettings;
-  onApply: (patch: Partial<Workspace>) => void;
+  /** Mirrors the Manager's "Drop seniors" switch; the run honours it. */
+  removeSeniors?: boolean;
+  /**
+   * Called with a result that has something to apply. It is never called for an
+   * `unchanged` result. The caller owns the toast and the Undo.
+   */
+  onApply: (result: BatchOptimizationResult) => void;
   onClose: () => void;
 };
 
@@ -34,73 +47,151 @@ const STAGES: { value: OptimizerStage; label: string; desc: string }[] = [
   { value: 'all', label: 'Full (Scorers + Events)', desc: 'Both scorer roster and event lineup' },
 ];
 
-export default function BatchOptimizerPanel({ workspace, gender, scoringSettings, onApply, onClose }: Props) {
+/** The review card for one run: totals, delta and how many scorer and event changes it proposes. */
+function BatchResultView({ result }: { result: BatchOptimizationResult }) {
+  const scorerChangeCount = result.changes.scorerChanges.length;
+  const entryChangeCount = result.changes.entryChanges.length;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="space-y-4"
+    >
+      {/* Summary card */}
+      <div className="surface-overlay rounded-lg border border-theme-soft p-4">
+        <h4 className="text-ui-caption font-bold text-theme-secondary mb-3">
+          Optimization summary
+        </h4>
+        <div className="grid grid-cols-3 gap-4">
+          <div className="text-center p-3 rounded-lg surface-muted-bg border border-theme-soft">
+            <div className="text-2xl font-bold tabular-nums text-points-positive">
+              {result.teamDeltas[0]?.projectedPoints.toFixed(1) ?? '0.0'}
+            </div>
+            <div className="text-ui-micro text-theme-secondary mt-1">
+              Projected total
+            </div>
+          </div>
+          <div className="text-center p-3 rounded-lg surface-muted-bg border border-theme-soft">
+            <div className={`text-2xl font-bold tabular-nums ${deltaColorClass(result.teamDeltas[0]?.delta ?? 0)}`}>
+              {(result.teamDeltas[0]?.delta ?? 0) > 0 ? '+' : ''}
+              {(result.teamDeltas[0]?.delta ?? 0).toFixed(1)}
+            </div>
+            <div className="text-ui-micro text-theme-secondary mt-1">
+              Delta
+            </div>
+          </div>
+          <div className="text-center p-3 rounded-lg surface-muted-bg border border-theme-soft">
+            <div className="text-2xl font-bold tabular-nums text-[var(--text-primary)]">
+              {result.teamDeltas[0]?.previousPoints.toFixed(1) ?? '0.0'}
+            </div>
+            <div className="text-ui-micro text-theme-secondary mt-1">
+              Baseline total
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Changes detail */}
+      <div className="surface-overlay rounded-lg border border-theme-soft p-4">
+        <h4 className="text-ui-caption font-bold text-theme-secondary mb-3">
+          Changes proposed
+        </h4>
+        {result.outcome === 'unchanged' ? (
+          <p role="status" className="text-ui-body text-theme-secondary mb-3">
+            {BATCH_UNCHANGED_MESSAGE}
+          </p>
+        ) : null}
+        <div className="flex gap-4">
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-theme-soft">
+            <CheckCircle size={14} className="text-points-positive" />
+            <span className="text-ui-label font-medium text-[var(--text-primary)]">
+              {scorerChangeCount} scorer change{scorerChangeCount !== 1 ? 's' : ''}
+            </span>
+          </div>
+          <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-theme-soft">
+            <CheckCircle size={14} className="text-points-positive" />
+            <span className="text-ui-label font-medium text-[var(--text-primary)]">
+              {entryChangeCount} event change{entryChangeCount !== 1 ? 's' : ''}
+            </span>
+          </div>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+type RanResult = { result: BatchOptimizationResult; inputs: BatchRunInputs };
+
+const LINEUP_CHANGED_MESSAGE = 'Lineup changed, run again.';
+
+export default function BatchOptimizerPanel({ workspace, gender, scoringSettings, removeSeniors = false, onApply, onClose }: Props) {
   const toast = useToast();
   const [stage, setStage] = useState<OptimizerStage>('all');
   const [isRunning, setIsRunning] = useState(false);
-  const [result, setResult] = useState<BatchOptimizationResult | null>(null);
+  const [ran, setRan] = useState<RanResult | null>(null);
+  const [lineupChanged, setLineupChanged] = useState(false);
 
   const mergedSettings = useMemo(
     () => mergeScoringSettings(scoringSettings, { conference: workspace.conference }),
     [scoringSettings, workspace.conference]
   );
+  // Content key, so an equal settings object rebuilt by a parent does not count as a change.
+  const settingsKey = JSON.stringify(mergedSettings);
+
+  // The result is dropped (not just disabled) the moment its inputs change.
+  const current = { workspaceId: workspace.id, gender, settingsKey, stage, removeSeniors };
+  const result = ran && batchRunInputsCurrent(ran.inputs, current) ? ran.result : null;
 
   const runOptimizer = useCallback(() => {
     setIsRunning(true);
+    setLineupChanged(false);
+    const inputs: BatchRunInputs = {
+      workspaceId: workspace.id,
+      gender,
+      settingsKey,
+      stage,
+      removeSeniors,
+      overrides: workspace.scorerRosterOverrides,
+      plans: workspace.meetEntryPlans,
+      activeEntryIds: workspace.activeEntryIds,
+    };
     // Use setTimeout to yield to the UI thread for the loading indicator
     setTimeout(() => {
       try {
-        const computed = computeBatchOptimizationResult(workspace, gender, mergedSettings, stage);
-        setResult(computed);
-        toast.push('success', batchOptimizationToastMessage(computed.overrideCount, computed.planCount));
+        const computed = computeBatchOptimizationResult(workspace, gender, mergedSettings, stage, removeSeniors);
+        setRan({ result: computed, inputs });
+        if (computed.outcome === 'unchanged') {
+          toast.push('info', BATCH_UNCHANGED_MESSAGE);
+        } else {
+          toast.push('success', batchOptimizationToastMessage(computed.overrideCount, computed.planCount));
+        }
       } catch (err) {
         toast.push('error', `Optimization failed: ${err instanceof Error ? err.message : String(err)}`);
       } finally {
         setIsRunning(false);
       }
     }, 50);
-  }, [workspace, gender, mergedSettings, stage, toast]);
+  }, [workspace, gender, mergedSettings, settingsKey, stage, removeSeniors, toast]);
 
   const handleApply = useCallback(() => {
-    if (!result) return;
-    const patch: Partial<Workspace> = {};
-    if (result.overrides.length > 0) {
-      patch.scorerRosterOverrides = result.overrides;
+    if (!ran || !result || !buildBatchApplyPatch(result)) return;
+    // The result holds the FULL post-run arrays. If the lineup moved since the
+    // run, applying would silently overwrite those edits.
+    if (batchLineupMoved(ran.inputs, workspace)) {
+      setRan(null);
+      setLineupChanged(true);
+      return;
     }
-    if (result.meetEntryPlans.length > 0) {
-      patch.meetEntryPlans = result.meetEntryPlans;
-    }
-    if (result.activeEntryIds.length > 0) {
-      patch.activeEntryIds = result.activeEntryIds;
-    }
-    onApply(patch);
-    toast.push('success', 'Optimization applied to workspace');
+    onApply(result);
     onClose();
-  }, [result, onApply, onClose, toast]);
+  }, [ran, result, workspace, onApply, onClose]);
 
-  const overrideChanges = useMemo(() => {
-    if (!result) return 0;
-    const before = new Set(
-      (workspace.scorerRosterOverrides ?? []).map(o => `${o.team}:${o.gender}:${o.name}:${o.isScorer}`)
-    );
-    const after = new Set(result.overrides.map(o => `${o.team}:${o.gender}:${o.name}:${o.isScorer}`));
-    // Count added/changed
-    let changes = 0;
-    for (const a of after) {
-      if (!before.has(a)) changes++;
-    }
-    return changes;
-  }, [result, workspace.scorerRosterOverrides]);
-
-  const planChanges = useMemo(() => {
-    if (!result) return 0;
-    return result.meetEntryPlans.length - (workspace.meetEntryPlans ?? []).length;
-  }, [result, workspace.meetEntryPlans]);
+  const canApply = Boolean(result && buildBatchApplyPatch(result));
 
   return (
     <Modal
       onClose={onClose}
-      ariaLabel="Batch Optimizer"
+      ariaLabel="Optimize all teams"
       closeOnBackdropClick
       className="rounded-xl border border-theme-soft w-full max-w-2xl max-h-[80vh] flex flex-col"
       style={{ boxShadow: 'var(--ui-shadow-lg)' }}
@@ -110,11 +201,14 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
           <div className="flex items-center gap-3">
             <Sparkles size={18} className="text-[var(--text-accent)]" />
             <div>
-              <h2 className="text-ui-label font-bold uppercase tracking-widest text-[var(--text-primary)]">
-                Batch Optimizer
+              <h2 className="text-ui-label font-bold text-[var(--text-primary)]">
+                Optimize all teams
               </h2>
               <p className="text-ui-caption text-theme-secondary mt-0.5">
-                Automatically optimize roster and events for all teams
+                Optimizes every team using the current What-if setting.{' '}
+                {removeSeniors
+                  ? 'Drop seniors is on: graduating seniors are left out.'
+                  : 'Drop seniors is off: every athlete stays in.'}
               </p>
             </div>
           </div>
@@ -122,6 +216,7 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
             variant="ghost"
             size="sm"
             onClick={onClose}
+            aria-label="Close"
             className="p-2 text-theme-secondary hover:text-[var(--text-primary)]"
             leadingIcon={<X size={16} />}
           />
@@ -131,8 +226,8 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
         <div className="p-5 overflow-y-auto flex-1 space-y-5">
           {/* Stage selector */}
           <div>
-            <label className="text-ui-caption uppercase tracking-widest font-bold text-theme-secondary mb-2 block">
-              Optimization Scope
+            <label className="text-ui-caption font-bold text-theme-secondary mb-2 block">
+              Optimization scope
             </label>
             <div className="grid grid-cols-3 gap-2">
               {STAGES.map(s => (
@@ -147,7 +242,7 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
                       : 'border-theme-soft'
                   }`}
                 >
-                  <div className="text-ui-label font-bold uppercase tracking-wider text-[var(--text-primary)]">
+                  <div className="text-ui-label font-bold text-[var(--text-primary)]">
                     {s.label}
                   </div>
                   <div className="text-ui-micro text-theme-secondary mt-1 leading-relaxed">{s.desc}</div>
@@ -162,7 +257,7 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
             size="md"
             onClick={runOptimizer}
             disabled={isRunning}
-            className="w-full uppercase tracking-widest"
+            className="w-full"
           >
             {isRunning ? (
               <>
@@ -174,74 +269,21 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
             ) : (
               <>
                 <TrendingUp size={14} />
-                <span>Run Optimizer</span>
+                <span>Run optimizer</span>
               </>
             )}
           </Button>
 
+          {lineupChanged ? (
+            <p role="alert" className="text-ui-body text-theme-secondary">
+              {LINEUP_CHANGED_MESSAGE}
+            </p>
+          ) : null}
+
           {/* Results */}
           <AnimatePresence>
             {result && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                className="space-y-4"
-              >
-                {/* Summary card */}
-                <div className="surface-overlay rounded-lg border border-theme-soft p-4">
-                  <h4 className="text-ui-caption uppercase tracking-widest font-bold text-theme-secondary mb-3">
-                    Optimization Summary
-                  </h4>
-                  <div className="grid grid-cols-3 gap-4">
-                    <div className="text-center p-3 rounded-lg surface-muted-bg border border-theme-soft">
-                      <div className="text-2xl font-bold tabular-nums text-points-positive">
-                        {result.teamDeltas[0]?.projectedPoints.toFixed(1) ?? '0.0'}
-                      </div>
-                      <div className="text-ui-micro uppercase tracking-wider text-theme-secondary mt-1">
-                        Projected Total
-                      </div>
-                    </div>
-                    <div className="text-center p-3 rounded-lg surface-muted-bg border border-theme-soft">
-                      <div className={`text-2xl font-bold tabular-nums ${deltaColorClass(result.teamDeltas[0]?.delta ?? 0)}`}>
-                        {(result.teamDeltas[0]?.delta ?? 0) > 0 ? '+' : ''}
-                        {(result.teamDeltas[0]?.delta ?? 0).toFixed(1)}
-                      </div>
-                      <div className="text-ui-micro uppercase tracking-wider text-theme-secondary mt-1">
-                        Delta
-                      </div>
-                    </div>
-                    <div className="text-center p-3 rounded-lg surface-muted-bg border border-theme-soft">
-                      <div className="text-2xl font-bold tabular-nums text-[var(--text-primary)]">
-                        {result.teamDeltas[0]?.previousPoints.toFixed(1) ?? '0.0'}
-                      </div>
-                      <div className="text-ui-micro uppercase tracking-wider text-theme-secondary mt-1">
-                        Baseline Total
-                      </div>
-                    </div>
-                  </div>
-                </div>
-
-                {/* Changes detail */}
-                <div className="surface-overlay rounded-lg border border-theme-soft p-4">
-                  <h4 className="text-ui-caption uppercase tracking-widest font-bold text-theme-secondary mb-3">
-                    Changes Proposed
-                  </h4>
-                  <div className="flex gap-4">
-                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-theme-soft">
-                      <CheckCircle size={14} className="text-points-positive" />
-                      <span className="text-ui-label font-medium text-[var(--text-primary)]">
-                        {overrideChanges} scorer override{overrideChanges !== 1 ? 's' : ''}
-                      </span>
-                    </div>
-                    <div className="flex items-center gap-2 px-3 py-2 rounded-lg border border-theme-soft">
-                      <CheckCircle size={14} className="text-points-positive" />
-                      <span className="text-ui-label font-medium text-[var(--text-primary)]">
-                        {planChanges === 0 ? 'No new' : `+${planChanges}`} event plan{planChanges !== 1 ? 's' : ''}
-                      </span>
-                    </div>
-                  </div>
-                </div>
-              </motion.div>
+              <BatchResultView result={result} />
             )}
           </AnimatePresence>
         </div>
@@ -252,7 +294,7 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
             variant="outline"
             size="md"
             onClick={onClose}
-            className="uppercase tracking-widest text-theme-secondary hover:text-[var(--text-primary)]"
+            className="text-theme-secondary hover:text-[var(--text-primary)]"
           >
             Cancel
           </Button>
@@ -260,10 +302,9 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
             variant="primary"
             size="md"
             onClick={handleApply}
-            disabled={!result}
-            className="uppercase tracking-widest"
+            disabled={!canApply}
           >
-            Apply to Workspace
+            Apply to workspace
           </Button>
         </div>
     </Modal>

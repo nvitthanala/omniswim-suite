@@ -88,6 +88,7 @@ import {
   type SwimCloudResourceKind,
 } from '../../../packages/swimcloud/src/urlClassifier.ts';
 import { isLoopbackHost } from './loopbackHost.ts';
+import { withTeamName } from './swimcloudCaptureTeamName.ts';
 
 /* -------------------------------------------------------------------------- */
 /* Constants                                                                   */
@@ -558,6 +559,23 @@ function isParseableResourceKind(kind: SwimCloudResourceKind): kind is Parseable
   return (PARSEABLE_RESOURCE_KINDS as readonly SwimCloudResourceKind[]).includes(kind);
 }
 
+/**
+ * What the parse read for one stored page. Additive field of the parse response (2026-10-05).
+ *
+ * The parse reads whatever bytes the page cache holds for the URL NOW. The cache keeps one file per
+ * URL, shared by every capture, so a later crawl of the same URL replaces the bytes a capture record
+ * was written for. The record's own `sha256` is the hash at fetch time; `contentSha256` is the hash of
+ * the bytes this parse actually read. A consumer compares the two to see a page that drifted.
+ */
+export interface SwimCloudParsedPageStamp {
+  readonly canonicalUrl: string;
+  readonly resourceKind: SwimCloudResourceKind;
+  /** The stored entry's own `retrievedAt`: when the bytes now in the cache were written. */
+  readonly entryRetrievedAt: string;
+  /** SHA-256 (hex) of the stored bytes (UTF-8 of the HTML), computed when they were read for this parse. */
+  readonly contentSha256: string;
+}
+
 /** What `POST /api/swimcloud/captures/:id/parse` answers with. */
 export interface SwimCloudCaptureParseResponse {
   readonly captureId: string;
@@ -607,6 +625,12 @@ export interface SwimCloudCaptureParseResponse {
    * because it genuinely holds no such page.
    */
   readonly warnings: readonly string[];
+  /**
+   * One stamp per parseable page whose stored bytes were read, in stored page order, whether or not the
+   * parse of it succeeded. Additive: a client written before this field ignores it. A page with no
+   * stored bytes has no stamp (its absence is also in `warnings`).
+   */
+  readonly storedPages: readonly SwimCloudParsedPageStamp[];
 }
 
 /** One parser warning as a line a coach can read, with the page it came from. */
@@ -719,6 +743,7 @@ export async function parseSwimCloudCapture(
   const swimmerTimes: SwimCloudSwimmerTimesParse[] = [];
   const eventResults: SwimCloudMeetEventResultsParse[] = [];
   const warnings: string[] = [];
+  const storedPages: SwimCloudParsedPageStamp[] = [];
 
   for (const page of capture.pages) {
     if (!isParseableResourceKind(page.resourceKind)) continue;
@@ -734,6 +759,13 @@ export async function parseSwimCloudCapture(
       warnings.push(`No stored content for ${page.canonicalUrl} (outcome: ${page.outcome})`);
       continue;
     }
+
+    storedPages.push({
+      canonicalUrl: page.canonicalUrl,
+      resourceKind: page.resourceKind,
+      entryRetrievedAt: entry.retrievedAt,
+      contentSha256: crypto.createHash('sha256').update(entry.html, 'utf8').digest('hex'),
+    });
 
     // The canonical URL is what each parser reads its ids off, and it is the
     // classifier's own output rather than anything a caller typed. No override
@@ -788,6 +820,7 @@ export async function parseSwimCloudCapture(
     swimmerTimes,
     eventResults,
     warnings,
+    storedPages,
   };
 }
 
@@ -1167,7 +1200,7 @@ export function createSwimCloudCaptureRouter(options: SwimCloudCaptureRouterOpti
         if (a.updatedAt !== b.updatedAt) return a.updatedAt < b.updatedAt ? 1 : -1;
         return a.captureId < b.captureId ? -1 : 1;
       });
-      return res.json(captures);
+      return res.json(await Promise.all(captures.map(c => withTeamName(store, c))));
     } catch (err) {
       return res.status(500).json({ error: 'Failed to list captures', details: String(err) });
     }

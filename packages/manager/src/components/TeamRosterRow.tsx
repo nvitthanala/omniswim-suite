@@ -3,18 +3,18 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * One row of TeamRosterPanel's roster table. Split out so the per-row JSX
- * (warning chip, profile tooltip, scorer checkbox, remove button) lives in
+ * (warning chip, profile tooltip, scorer checkbox) lives in
  * its own small component instead of one long closure inside the panel's
- * `.map()`.
+ * `.map()`. The row has no button of its own: removing an athlete is done from
+ * the athlete drawer or with the Delete key on the roster list, so a 38-row
+ * roster does not carry 38 identical remove buttons.
  */
 
 import React from 'react';
-import { Trash2 } from 'lucide-react';
-import { Button } from '@omniswim/ui';
 import type { ScorerRosterRow } from '@omniswim/core/lib/scorerRoster';
 import type { AthleteEventProfile } from '@omniswim/core/types';
 import AthleteRoleTag from './AthleteRoleTag';
-import { formatEventLabelForDisplay } from './teamRosterView';
+import { formatEventLabelForDisplay, rosterRowDomId } from './teamRosterView';
 
 type Props = {
   row: ScorerRosterRow;
@@ -25,7 +25,8 @@ type Props = {
   warningMessages: string[];
   warningLabel: string | null;
   editable: boolean;
-  onRequestDeleteSwimmer?: (name: string) => void;
+  /** Skip the "Swimmer" tag because every row in the table would show it. */
+  hideSwimmerTag?: boolean;
   onSelect: () => void;
   onSetScorer: (isScorer: boolean) => void;
 };
@@ -33,7 +34,7 @@ type Props = {
 function RowWarningChip({ messages, label }: { messages: string[]; label: string }) {
   return (
     <span
-      className="text-ui-caption px-1.5 py-0.5 rounded-full border border-amber-400/40 text-amber-400 shrink-0"
+      className="text-ui-caption px-1.5 py-0.5 rounded-full border border-warning text-warning shrink-0"
       title={messages.join(' · ')}
     >
       {label}
@@ -51,7 +52,7 @@ export default function TeamRosterRow({
   warningMessages,
   warningLabel,
   editable,
-  onRequestDeleteSwimmer,
+  hideSwimmerTag = false,
   onSelect,
   onSetScorer,
 }: Props) {
@@ -59,7 +60,7 @@ export default function TeamRosterRow({
 
   return (
     <tr
-      id={`roster-row-${row.key}`}
+      id={rosterRowDomId(row.key)}
       role="option"
       aria-selected={isSelected}
       onClick={onSelect}
@@ -72,7 +73,7 @@ export default function TeamRosterRow({
           <span className={`truncate min-w-0 ${isSelected ? 'text-[var(--text-accent)] font-medium' : ''}`}>
             {row.name}
           </span>
-          <AthleteRoleTag role={row.athleteRole} isRecruit={row.isRecruit} />
+          <AthleteRoleTag role={row.athleteRole} isRecruit={row.isRecruit} hideSwimmer={hideSwimmerTag} />
           {warningLabel ? <RowWarningChip messages={warningMessages} label={warningLabel} /> : null}
         </div>
         {showProfileHint && profile ? (
@@ -100,19 +101,6 @@ export default function TeamRosterRow({
             onChange={e => onSetScorer(e.target.checked)}
             className="accent-[var(--text-accent)]"
             aria-label={`${row.name} scorer`}
-          />
-        </td>
-      ) : null}
-      {editable && onRequestDeleteSwimmer ? (
-        <td className="py-2.5 px-2 text-center" onClick={e => e.stopPropagation()}>
-          <Button
-            variant="danger"
-            size="sm"
-            className="p-1.5 border-transparent bg-transparent text-theme-muted hover:text-rose-400 hover:bg-rose-400/10"
-            title={`Remove ${row.name} from roster (keeps meet record)`}
-            aria-label={`Remove ${row.name}`}
-            onClick={() => onRequestDeleteSwimmer(row.name)}
-            leadingIcon={<Trash2 size={14} />}
           />
         </td>
       ) : null}

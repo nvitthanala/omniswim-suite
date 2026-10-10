@@ -12,24 +12,26 @@ interface GenderToggleNavProps {
 /** The Men/Women segmented toggle shown when workspace controls are on. */
 export function GenderToggleNav({ activeGender, onChange }: GenderToggleNavProps) {
   return (
-    <nav className="hidden md:flex gap-1 bg-[var(--surface)] p-1 rounded-lg border border-[var(--border)] ml-2">
+    <nav aria-label="Gender" className="flex gap-1 bg-[var(--surface)] p-1 rounded-lg border border-[var(--border)] ml-2">
       <button
         type="button"
+        aria-pressed={activeGender === Gender.MEN}
         onClick={() => onChange(Gender.MEN)}
-        className={`px-3 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-md transition-colors ${
+        className={`px-2 md:px-3 py-1 text-ui-micro font-bold uppercase tracking-widest rounded-md transition-colors ${
           activeGender === Gender.MEN ? 'nav-tab-active' : 'nav-tab-inactive'
         }`}
       >
-        Men
+        <span className="md:hidden">M</span><span className="hidden md:inline">Men</span>
       </button>
       <button
         type="button"
+        aria-pressed={activeGender === Gender.WOMEN}
         onClick={() => onChange(Gender.WOMEN)}
-        className={`px-3 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-md transition-colors ${
+        className={`px-2 md:px-3 py-1 text-ui-micro font-bold uppercase tracking-widest rounded-md transition-colors ${
           activeGender === Gender.WOMEN ? 'nav-tab-active' : 'nav-tab-inactive'
         }`}
       >
-        Women
+        <span className="md:hidden">W</span><span className="hidden md:inline">Women</span>
       </button>
     </nav>
   );

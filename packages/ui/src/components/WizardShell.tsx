@@ -17,6 +17,8 @@ export type WizardShellProps<T extends string> = {
   step: T;
   onStepChange: (step: T) => void;
   toolbar?: React.ReactNode;
+  /** Content shared by every step, shown between the step tabs and the step panel. */
+  subheader?: React.ReactNode;
   children: React.ReactNode;
 };
 
@@ -28,6 +30,7 @@ export function WizardShell<T extends string>({
   step,
   onStepChange,
   toolbar,
+  subheader,
   children,
 }: WizardShellProps<T>) {
   const reactId = useId().replace(/:/g, '');
@@ -61,7 +64,7 @@ export function WizardShell<T extends string>({
   };
 
   return (
-    <div className="flex flex-col gap-5 flex-1 min-h-0">
+    <div className="wizard-shell-container flex flex-col gap-5 flex-1 min-h-0">
       <div className="surface-card rounded-xl p-4 sm:p-5">
         <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div className="min-w-0 flex-1">
@@ -73,7 +76,8 @@ export function WizardShell<T extends string>({
         </div>
 
         <div
-          className="mt-5 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2"
+          className="wizard-step-grid mt-5 grid gap-2"
+          data-step-count={steps.length}
           role="tablist"
           aria-label={ariaLabel}
         >
@@ -158,6 +162,8 @@ export function WizardShell<T extends string>({
           })}
         </div>
       </div>
+
+      {subheader}
 
       <div
         id={panelId}

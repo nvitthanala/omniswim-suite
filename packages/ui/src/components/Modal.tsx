@@ -20,9 +20,33 @@
  * `role="dialog"`/`aria-modal="true"` and Escape-to-close are new here —
  * none of the 6 hand-rolled versions had either. A real, positive behavior
  * change, not a silent one: recorded here rather than left implicit.
+ *
+ * Focus: on open, move focus to the first focusable descendant (or the
+ * dialog itself); trap Tab/Shift+Tab inside; on close restore focus to the
+ * element that had focus when the modal opened.
  */
-import { useEffect, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, type CSSProperties, type ReactNode } from 'react';
 import { cn } from '../lib/cn';
+
+const FOCUSABLE_SELECTOR = [
+  'a[href]',
+  'button:not([disabled])',
+  'input:not([disabled])',
+  'select:not([disabled])',
+  'textarea:not([disabled])',
+  '[tabindex]:not([tabindex="-1"])',
+].join(',');
+const modalStack: HTMLElement[] = [];
+
+function listFocusable(root: HTMLElement): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
+    el =>
+      !el.matches(':disabled') &&
+      !el.closest('[hidden]') &&
+      !el.closest('[aria-hidden="true"]') &&
+      el.getAttribute('tabindex') !== '-1'
+  );
+}
 
 export interface ModalProps {
   onClose: () => void;
@@ -54,13 +78,75 @@ export function Modal({
   closeOnBackdropClick = false,
   blur = true,
 }: ModalProps) {
+  const dialogRef = useRef<HTMLDivElement>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const onCloseRef = useRef(onClose);
+  onCloseRef.current = onClose;
+
   useEffect(() => {
+    const dialog = dialogRef.current;
+    previouslyFocusedRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+
+    if (dialog) {
+      modalStack.push(dialog);
+      modalStack.sort((a, b) =>
+        a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING ? -1 : 1
+      );
+      const focusables = listFocusable(dialog);
+      const target = focusables[0] ?? dialog;
+      target.focus();
+    }
+
     const onKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      const activeDialog = dialogRef.current;
+      if (!activeDialog || modalStack[modalStack.length - 1] !== activeDialog) return;
+
+      if (event.key === 'Escape') {
+        onCloseRef.current();
+        return;
+      }
+      if (event.key !== 'Tab') return;
+
+      const focusables = listFocusable(activeDialog);
+      if (focusables.length === 0) {
+        event.preventDefault();
+        activeDialog.focus();
+        return;
+      }
+
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      const active = document.activeElement;
+
+      if (!activeDialog.contains(active)) {
+        event.preventDefault();
+        (event.shiftKey ? last : first).focus();
+        return;
+      }
+
+      if (event.shiftKey) {
+        if (active === first || active === activeDialog) {
+          event.preventDefault();
+          last.focus();
+        }
+      } else if (active === last) {
+        event.preventDefault();
+        first.focus();
+      }
     };
+
     document.addEventListener('keydown', onKeyDown);
-    return () => document.removeEventListener('keydown', onKeyDown);
-  }, [onClose]);
+    return () => {
+      document.removeEventListener('keydown', onKeyDown);
+      const index = dialog ? modalStack.lastIndexOf(dialog) : -1;
+      if (index !== -1) modalStack.splice(index, 1);
+      const previous = previouslyFocusedRef.current;
+      if (previous && previous.isConnected) {
+        previous.focus();
+      }
+    };
+  }, []);
 
   return (
     <div
@@ -68,9 +154,11 @@ export function Modal({
       onClick={closeOnBackdropClick ? onClose : undefined}
     >
       <div
+        ref={dialogRef}
         role="dialog"
         aria-modal="true"
         aria-label={ariaLabel}
+        tabIndex={-1}
         className={cn('surface-card', className)}
         style={style}
         onClick={closeOnBackdropClick ? event => event.stopPropagation() : undefined}

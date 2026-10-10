@@ -23,7 +23,9 @@ jobs:
     # the account's quota and stopped jobs starting at all. The suite finishes in
     # well under ten minutes; twenty-five is generous and bounds the damage.
     # scripts/run-tests.mjs now also caps each script individually.
-    timeout-minutes: 25
+    # Raised from 25 when the vitest suite and the extension harness joined the job
+    # (the harness alone takes a few minutes: it uses real 3 s pacing).
+    timeout-minutes: 40
 
     # Throwaway database so the Postgres round-trip test runs for real instead of
     # skipping. Without it, PgWorkspaceService is only ever checked structurally.
@@ -61,16 +63,44 @@ jobs:
       - name: Install Python PDF deps
         run: python -m pip install pdfplumber
 
+      # pdftotext, for the tests that re-read the archived qualifying-standard PDFs.
+      # ubuntu ships poppler, which lacks the xpdf-only `-table` flag, so the two
+      # altitudeAdjustment PDF tests still skip here; tests/skip-budget.json counts them.
+      - name: Install pdftotext
+        run: sudo apt-get update && sudo apt-get install -y poppler-utils
+
+      # The e2e specs in `npm test` and the extension harness both need this browser.
+      # scripts/run-tests.mjs and scripts/run-harness.mjs fail, not skip, when CI is set
+      # and Playwright or Chromium is missing.
       - name: Install Playwright browsers
         run: npx playwright install --with-deps chromium
 
       - name: Lint
         run: npm run lint
 
+      # Runs the script suite and the Playwright e2e specs. run-tests.mjs picks a free
+      # PORT for the e2e dev server itself; do not set PORT here, because
+      # test_scoring_preset_routes.mjs starts a server with OMNI_PORT and the server
+      # prefers PORT over OMNI_PORT.
       - name: Test
         run: npm test
         env:
           PG_TEST_URL: postgres://postgres:postgres@localhost:5432/omni_test
+
+      # `vitest run` (the ~3000 unit tests) was not in CI before this step. The script runs
+      # vitest, then fails if more tests skipped than tests/skip-budget.json allows, so a
+      # missing fixture or tool cannot quietly shrink the suite.
+      - name: Unit tests and skip budget
+        run: node scripts/check_skip_budget.mjs
+        env:
+          PG_TEST_URL: postgres://postgres:postgres@localhost:5432/omni_test
+
+      # Real built extension in real Chromium against a fake SwimCloud made of committed
+      # fixtures. It never contacts swimcloud.com, so it needs no network beyond `npm ci`.
+      # It picks its own free port.
+      - name: Extension harness
+        run: npm run test:harness
+        timeout-minutes: 15
 
       - name: Build
         run: npm run build

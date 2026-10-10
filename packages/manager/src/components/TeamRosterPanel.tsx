@@ -8,16 +8,15 @@ import {
   usesScorerRoster,
 } from '@omniswim/core/lib/scorerRoster';
 import type { AthleteCreditedSwim, ScorerRosterRow } from '@omniswim/core/lib/scorerRoster';
-import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
+import { effectivePdfPlacePointsMode, mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
 import { canonicalSwimmerName, isRelayResult, normalizeSwimmerName } from '@omniswim/core/lib/utils';
 import { buildTeamScoreLookup, officialScoresForGender } from '@omniswim/core/lib/teamScoreMatching';
 import { buildAliasResolver } from '@omniswim/core/lib/athleteAliases';
 import { type EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
 import { buildHistoryFromWorkspace, mergeHistoryIndex } from '@omniswim/core/lib/athleteHistory';
-import { optimizeRosterAllTeams, optimizeRosterForTeam } from '@omniswim/core/lib/rosterOptimizer';
 import { applyScorerOffRelayPatch, type TeamLineupAudit } from '@omniswim/core/lib/rosterLineupAudit';
-import { useToast } from '@omniswim/ui';
-import { countTeamMembers, genderLabelFor, resolveTeamPickerMode, rosterColSpan } from './teamRosterView';
+import { Button, useOpenScoringRules, useToast } from '@omniswim/ui';
+import { countTeamMembers, genderLabelFor, resolveTeamPickerMode, rosterColSpan, activeRosterRowId } from './teamRosterView';
 import TeamRosterHeader from './TeamRosterHeader';
 import TeamRosterTable from './TeamRosterTable';
 import TeamRosterLayoutShell from './TeamRosterLayoutShell';
@@ -42,6 +41,11 @@ type Props = {
   showTeamSidebar?: boolean;
   /** When `dropdown`, prefer compact team select over sidebar cards. */
   teamPickerMode?: 'sidebar' | 'dropdown';
+  /**
+   * Omit the in-panel Team select. The parent supplies the team (`selectedTeam`)
+   * and owns the one team control, so a second select here would be a duplicate.
+   */
+  hideTeamSelect?: boolean;
   lineupAudit?: TeamLineupAudit;
   selectedTeam?: string;
   onSelectTeam?: (team: string) => void;
@@ -52,7 +56,8 @@ type Props = {
   onAthleteSelect?: (athlete: { name: string; team: string; classYear: string } | null) => void;
   onRequestDeleteSwimmer?: (name: string) => void;
   workspace?: Workspace;
-  removeSeniors?: boolean;
+  /** Opens the Optimize step. The Lineup step has no optimizer of its own. */
+  onOpenOptimize?: () => void;
   onWorkspaceUpdate?: (patch: Partial<Workspace>) => void;
   /** Select this athlete by name when set (checklist Jump). */
   jumpAthleteName?: string | null;
@@ -74,6 +79,7 @@ export default function TeamRosterPanel({
   baselineByTeam,
   showTeamSidebar = true,
   teamPickerMode,
+  hideTeamSelect = false,
   lineupAudit,
   selectedTeam: controlledTeam,
   onSelectTeam,
@@ -83,18 +89,21 @@ export default function TeamRosterPanel({
   onAthleteSelect,
   onRequestDeleteSwimmer,
   workspace,
-  removeSeniors = false,
+  onOpenOptimize,
   onWorkspaceUpdate,
   jumpAthleteName,
   jumpAthleteKey,
   onJumpAthleteHandled,
 }: Props) {
+  const openScoringRules = useOpenScoringRules();
   const toast = useToast();
   // mergeScoringSettings returns a fresh object each call; memoize so the roster-lookup
   // useMemo below (buildScorerRosterLookup ×2 over all genderResults) doesn't rerun on
   // every workspace patch / keystroke that re-renders this panel.
   const merged = useMemo(() => mergeScoringSettings(settings), [settings]);
   const rosterMode = usesScorerRoster(merged);
+  // Explicit On, or Auto with PDF place points in the results: the real blocker when Lineup is locked.
+  const pdfPlacePointsActive = effectivePdfPlacePointsMode(merged, results);
   const { useDropdown, useSidebar } = resolveTeamPickerMode(showTeamSidebar, teamPickerMode);
 
   const genderResults = useMemo(
@@ -230,6 +239,23 @@ export default function TeamRosterPanel({
     [teamRows, selectedAthleteKey]
   );
 
+  const activeRowId = activeRosterRowId(selectedAthleteKey, rosterWindow.rows);
+
+  // The drawer closes when its athlete leaves the roster (confirmed Remove). The drawer's Remove
+  // button then unmounts, and Modal's focus return had already targeted it, so focus falls to
+  // <body>. Hand it to the roster list, the one stable focus stop. Only act when focus is on
+  // <body>: if the coach has focus somewhere real, leave it there. An athlete who is still listed
+  // (the coach closed the drawer) has no row change here, so this does not fire for that.
+  const hadSelectedAthleteRef = useRef(false);
+  useEffect(() => {
+    const had = hadSelectedAthleteRef.current;
+    hadSelectedAthleteRef.current = selectedAthlete !== null;
+    if (!had || selectedAthlete !== null || selectedAthleteKey === null) return;
+    const active = document.activeElement;
+    if (active && active !== document.body) return;
+    rosterScrollRef.current?.focus();
+  }, [selectedAthlete, selectedAthleteKey]);
+
   useEffect(() => {
     if (!jumpAthleteName && !jumpAthleteKey) return;
     // Prefer the threaded ScorerRosterRow.key (BUG 1 hardening); fall back to
@@ -310,9 +336,16 @@ export default function TeamRosterPanel({
         e.preventDefault();
         setSelectedAthleteKey(null);
         onAthleteSelect?.(null);
+      } else if ((e.key === 'Delete' || e.key === 'Backspace') && currentIndex >= 0 && e.target === e.currentTarget) {
+        // The per-row remove buttons are gone; Delete or Backspace on the list itself asks to
+        // remove the selected athlete. The same confirm dialog opens.
+        if (editable && onRequestDeleteSwimmer) {
+          e.preventDefault();
+          onRequestDeleteSwimmer(teamRows[currentIndex].name);
+        }
       }
     },
-    [teamRows, selectedAthleteKey, selectAthleteByIndex, onAthleteSelect]
+    [teamRows, selectedAthleteKey, selectAthleteByIndex, onAthleteSelect, editable, onRequestDeleteSwimmer]
   );
 
   const setScorer = (row: (typeof rows)[0], isScorer: boolean) => {
@@ -353,20 +386,6 @@ export default function TeamRosterPanel({
     onChangeOverrides(rest);
   };
 
-  const runOptimizer = (allTeams: boolean) => {
-    if (!editable || !workspace || !onWorkspaceUpdate) return;
-    const result = allTeams
-      ? optimizeRosterAllTeams(workspace, gender, removeSeniors, merged, 'all')
-      : optimizeRosterForTeam(workspace, gender, selectedTeam, removeSeniors, merged, 'all');
-    const msg = `Projected ${result.projectedTotal.toFixed(1)} pts (was ${result.previousTotal.toFixed(1)}). Apply?`;
-    if (!window.confirm(msg)) return;
-    onWorkspaceUpdate({
-      scorerRosterOverrides: result.overrides,
-      meetEntryPlans: result.meetEntryPlans,
-      activeEntryIds: result.activeEntryIds,
-    });
-  };
-
   const selectedProjected = projectedByTeam.get(selectedTeam) ?? 0;
   const selectedBaseline = baselineByTeam.get(selectedTeam);
   const selectedActual = officialLookup.get(selectedTeam);
@@ -379,17 +398,18 @@ export default function TeamRosterPanel({
           Team roster
         </h4>
         <p className="text-ui-body text-theme-secondary leading-relaxed">
-          Roster tools need roster eligibility mode (NSISC preset). Open Source → Scoring setup to
-          switch.
+          {pdfPlacePointsActive
+            ? 'PDF place points require Points pool eligibility. Set PDF place points to Off in the scoring rules to use the team scorer list.'
+            : 'Lineup editing requires Team scorer list eligibility. Change the scorer eligibility setting to continue.'}
         </p>
+        <Button className="mt-3" variant="outline" onClick={openScoringRules}>Open scoring rules</Button>
       </div>
     );
   }
 
   const genderLabel = genderLabelFor(gender);
-  const colSpan = rosterColSpan(editable, Boolean(onRequestDeleteSwimmer));
-
-  const canOptimize = Boolean(editable && workspace && onWorkspaceUpdate);
+  const colSpan = rosterColSpan(editable, false);
+  const canRemoveAthlete = Boolean(editable && onRequestDeleteSwimmer);
 
   const rosterTable = (
     <div className={expanded ? 'flex flex-col flex-1 min-h-0' : undefined}>
@@ -397,16 +417,15 @@ export default function TeamRosterPanel({
         selectedTeam={selectedTeam}
         genderLabel={genderLabel}
         editable={editable}
-        canOptimize={canOptimize}
-        onOptimizeTeam={() => runOptimizer(false)}
-        onOptimizeAll={() => runOptimizer(true)}
+        onOpenOptimize={onOpenOptimize}
         onResetTeam={resetTeamManual}
+        canRemoveAthlete={canRemoveAthlete}
         maxIndividualScorersPerTeam={merged.maxIndividualScorersPerTeam}
         selectedActual={selectedActual}
         selectedBaseline={selectedBaseline}
         selectedProjected={selectedProjected}
         eventThrough={officialTeamScores?.eventThrough}
-        useDropdown={useDropdown}
+        useDropdown={useDropdown && !hideTeamSelect}
         teams={teams}
         controlledTeam={controlledTeam}
         onSelectTeam={selectTeam}
@@ -418,7 +437,8 @@ export default function TeamRosterPanel({
         onKeyDown={handleRosterKeyDown}
         tabIndex={teamRows.length ? 0 : -1}
         role="listbox"
-        aria-label="Team roster — arrow keys to navigate"
+        aria-activedescendant={activeRowId}
+        aria-label={`Team roster — arrow keys to navigate${canRemoveAthlete ? ', Delete or Backspace to remove' : ''}`}
         className={`overflow-y-auto pr-1 rounded-xl border border-theme-soft custom-scrollbar outline-none ${
           expanded ? 'flex-1 min-h-[20rem]' : 'max-h-80'
         }`}
@@ -430,7 +450,6 @@ export default function TeamRosterPanel({
           rosterWindow={rosterWindow}
           colSpan={colSpan}
           editable={editable}
-          onRequestDeleteSwimmer={onRequestDeleteSwimmer}
           selectedAthleteKey={selectedAthleteKey}
           pointTotals={pointTotals}
           genderResults={genderResults}
@@ -500,6 +519,11 @@ export default function TeamRosterPanel({
         setSelectedAthleteKey(null);
         onAthleteSelect?.(null);
       }}
+      onRequestRemove={
+        canRemoveAthlete && selectedAthlete && onRequestDeleteSwimmer
+          ? () => onRequestDeleteSwimmer(selectedAthlete.name)
+          : undefined
+      }
       autoIsScorer={drawerAutoIsScorer}
     />
   );

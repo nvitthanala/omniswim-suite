@@ -324,5 +324,211 @@
       "notStartedThisTurn": "auditConversionProvenance (the provenance checklist group) and optimizer-transparency pieces 2-3 remain scoped only, each with the specific remaining design decision named above. Manager's other diagnosis-doc shortlist items (crossCourseArbitrageSections.tsx split, AthleteHistoryImportPanel.tsx split, Matrix's Button convergence) were not raised this turn and remain open backlog, same as t18.",
       "resumeHere": "All 3 plan docs now read as living status documents (shipped/deferred per piece) rather than pure proposals -- read the doc's own top status line before re-scoping any of the three rather than re-deriving what already shipped. The visual/behavioral check the user already owes covers 2 more UI surfaces now: the MeetReconciliationBanner (Matrix Standings step) and the OptimizerChangeSummaryPanel (Manager Optimize step) -- both new, neither has an automated way to verify appearance."
     }
-  ]
+  ],
+  "phase1": {
+    "date": "2026-10-02",
+    "status": "implemented_with_before_screenshot_gap",
+    "summary": "Phase 1 defects fixed; added numeric-field and diff-table render tests and the ui-ia Playwright spec. After screenshots are in docs/reference/ui-phase-1/after/. No before screenshots were captured before implementation.",
+    "files": [
+      "packages/ui/src/components/NumberField.tsx",
+      "packages/matrix/src/components/ScoringCapsFields.tsx",
+      "packages/matrix/src/components/MeetDiffTable.tsx",
+      "packages/matrix/src/MatrixApp.tsx",
+      "packages/matrix/src/components/OpsModule.tsx",
+      "packages/matrix/src/components/MeetOpsLoadStep.tsx",
+      "packages/matrix/src/components/MeetOperationsView.tsx",
+      "packages/matrix/src/components/MeetOpsStandingsStep.tsx",
+      "packages/manager/src/components/RosterScoringSetupParts.tsx",
+      "packages/manager/src/components/RosterScoringSetup.tsx",
+      "packages/manager/src/components/BatchOptimizerPanel.tsx",
+      "packages/manager/src/components/batchOptimizerView.ts",
+      "packages/manager/src/ManagerApp.tsx",
+      "apps/shell/src/components/SuiteHeaderControls.tsx",
+      "apps/shell/src/pages/SettingsPage.tsx",
+      "tests/numberField.test.ts",
+      "tests/meetDiffTable.test.ts",
+      "tests/e2e/ui-ia.spec.ts"
+    ]
+  },
+  "phase2": {
+    "date": "2026-10-02",
+    "status": "implemented_with_before_screenshot_gap_and_gate_failures",
+    "summary": "Consolidated scoring controls into the shell scoring modal, added scorer eligibility with a PDF place points lock explanation, and linked Manager and Matrix summaries to the modal. See docs/reference/ui-phase-2/REPORT.md.",
+    "files": [
+      "packages/ui/src/components/ScoringRulesOpenerContext.tsx",
+      "packages/ui/src/index.ts",
+      "packages/matrix/src/components/ScoringSettingsFields.tsx",
+      "packages/matrix/src/components/ScoringSettingsModal.tsx",
+      "packages/matrix/src/components/ScoringSettingsPanel.tsx",
+      "packages/manager/src/components/RosterScoringSetup.tsx",
+      "packages/manager/src/components/TeamRosterPanel.tsx",
+      "apps/shell/src/App.tsx",
+      "apps/shell/src/lib/workspaceScoringSettings.ts",
+      "tests/scoringRulesPhase2.test.ts",
+      "tests/e2e/ui-phase-2.spec.ts"
+    ],
+    "proof": {
+      "regressionTestsFailedBeforeFix": true,
+      "mutationCheckCaughtDisabledRemoval": true,
+      "playwrightScreenshots": "After captures in all 3 themes at 1440 and 800; exact before captures missing for Lineup and scoring modal.",
+      "gates": "npm run lint and vitest passed; run-tests had port 3209 failure and existing main-thread budget timeout, confirmed on rerun."
+    }
+  },
+  "phase3": {
+    "date": "2026-10-02",
+    "status": "implemented_gates_green_except_preexisting_port_3209_script",
+    "summary": "Manager step Source renamed Athletes; Athletes step restructured (method picker, Meet and rules card, collapsed More tools holding four Disclosures); Disclosure primitive; one ManagerTeamBar as sole team writer; duplicate intros and subtitle removed; Inject recruit renamed Add swim; one Export entries menu; copy-meet paths relabeled (kept separate). REPORT.md could not be written by the worker (tool refused report files); results are in the worker's final message.",
+    "files": [
+      "packages/ui/src/components/Disclosure.tsx",
+      "packages/ui/src/components/WizardShell.tsx",
+      "packages/ui/src/index.ts",
+      "packages/manager/src/ManagerApp.tsx",
+      "packages/manager/src/components/ManagerTeamBar.tsx",
+      "packages/manager/src/components/ExportEntriesMenu.tsx",
+      "packages/manager/src/components/RosterSourceMoreTools.tsx",
+      "packages/manager/src/components/RosterSourceStep.tsx",
+      "packages/manager/src/components/RosterSourceStepParts.tsx",
+      "packages/manager/src/components/RosterWizardShell.tsx",
+      "packages/manager/src/components/TeamManagementView.tsx",
+      "packages/manager/src/components/TeamPickerEmptyState.tsx",
+      "packages/manager/src/components/RosterLineupStep.tsx",
+      "packages/manager/src/components/RosterRelayStep.tsx",
+      "packages/manager/src/components/RosterOptimizeStep.tsx",
+      "packages/manager/src/components/RosterOptimizeStepParts.tsx",
+      "packages/manager/src/components/TeamRosterPanel.tsx",
+      "packages/manager/src/components/RecruitForm.tsx",
+      "packages/manager/src/components/BaselineDiffPanel.tsx",
+      "packages/manager/src/components/BaselineDiffPanelParts.tsx",
+      "packages/manager/src/components/WorkingCopyChangesPanel.tsx",
+      "packages/manager/src/components/ScoringTheoryPanel.tsx",
+      "packages/manager/src/components/LoadMeetHereCard.tsx",
+      "packages/manager/src/components/AthleteHistoryImportForm.tsx",
+      "packages/manager/src/components/AthleteHistoryImportPanel.tsx",
+      "packages/manager/src/components/AthleteHistoryPreviewSection.tsx",
+      "packages/manager/src/components/CrossCourseArbitragePanel.tsx",
+      "packages/manager/src/components/IndRelayManagementView.tsx",
+      "packages/matrix/src/components/MeetOpsLoadStep.tsx",
+      "packages/matrix/src/components/OpsModule.tsx",
+      "tests/uiDisclosure.test.ts",
+      "tests/managerTeamBar.test.ts",
+      "tests/exportEntriesMenu.test.ts",
+      "tests/managerAthletesCopy.test.ts",
+      "tests/e2e/ui-ia.spec.ts",
+      "tests/e2e/ui-phase-2.spec.ts",
+      "tests/e2e/main-thread-budget.spec.ts"
+    ],
+    "proof": {
+      "regressionTestsFailedBeforeFix": true,
+      "mutationChecks": [
+        "removed hidden from Disclosure panel -> 2 uiDisclosure tests failed",
+        "removed hideTeamSelect on Lineup -> e2e one-team-select check failed (2 received)"
+      ],
+      "gates": "lint and types pass; vitest 138 files / 1862 passed; playwright all 8 passed on fresh data copy; run-tests.mjs 82 passed, 2 failed (test_scoring_preset_routes port 3209, pre-existing; main-thread-budget timeout only on polluted copy)."
+    }
+  },
+  "phase4": {
+    "date": "2026-10-02",
+    "status": "implemented_gates_green_except_preexisting_port_3209_script",
+    "summary": "Optimize owns all optimizers. Header Batch optimizer removed; Optimize step has 'All teams...' (dialog with preview, Drop seniors shown, unchanged result applies nothing, Undo after apply), 'Optimize team' primary, and 'Quick optimize (greedy)' (ex Classic) under a 'More options' Disclosure. Lineup 'Best roster' and 'All teams' replaced by one 'Optimize this lineup' button that opens the Optimize step. Equivalence gate PASSED: Best roster and Classic give identical overrides, plans, active ids and totals on four fixtures (team and all-teams), so they were merged.",
+    "equivalence": {
+      "verdict": "identical results; merged",
+      "golden": "tests/fixtures/bestRosterGolden.json (output of the removed Lineup buttons at commit fdeaf50a)",
+      "test": "tests/bestRosterEquivalence.test.ts",
+      "wrapperDifferencesOnly": [
+        "Best roster applied an unchanged result (confirm box 'Projected 248.0 pts (was 248.0)'); Quick optimize applies nothing",
+        "Best roster had no Undo; Quick optimize has one",
+        "Best roster used window.confirm; Quick optimize shows the change summary panel"
+      ],
+      "limits": "Men only; four fixtures; NSISC-shaped settings for the run comparison; settings idempotency checked for 26 settings/preset cases under three conference values"
+    },
+    "files": [
+      "packages/manager/src/components/RosterOptimizeStep.tsx",
+      "packages/manager/src/components/RosterOptimizeStepParts.tsx",
+      "packages/manager/src/components/BatchOptimizerPanel.tsx",
+      "packages/manager/src/components/batchOptimizerView.ts",
+      "packages/manager/src/ManagerApp.tsx",
+      "packages/manager/src/components/TeamRosterHeader.tsx",
+      "packages/manager/src/components/TeamRosterPanel.tsx",
+      "packages/manager/src/components/RosterLineupStep.tsx",
+      "packages/manager/src/components/TeamManagementView.tsx",
+      "tests/bestRosterEquivalence.test.ts",
+      "tests/optimizeStepOwnership.test.ts",
+      "tests/optimizerStepFixtures.ts",
+      "tests/optimizerNormalize.ts",
+      "tests/motionStub.ts",
+      "tests/fixtures/bestRosterGolden.json",
+      "tests/e2e/ui-ia.spec.ts"
+    ],
+    "proof": {
+      "regressionTestsFailedBeforeFix": true,
+      "mutationChecks": "9 deliberate breaks (batch unchanged guard, batch removeSeniors, quick optimize removeSeniors, quick optimize stage, step unchanged guard, all-teams Undo, lineup link click, Classic label, dialog Apply enabled when unchanged); each failed 1 to 7 tests and was restored",
+      "gates": "lint 0 errors (2 existing warnings); lint:types exit 0; vitest 140 files / 1916 passed; playwright ui-ia (5), ui-phase-2, matrix-chart, production-server 9 passed on a data copy; main-thread-budget passes only after deleting 18 stale ui-* workspaces from the copy (thin: 1 workspace); run-tests.mjs 83 passed, 1 failed (test_scoring_preset_routes, pre-existing), 1 skipped; data/omniswim.db hashes and data/backups unchanged"
+    },
+    "screenshots": "docs/reference/ui-phase-4/before (12) and after (24): Lineup and Optimize, midnight/deck-light/oled, 1440 and 800",
+    "report": "docs/reference/ui-phase-4/REPORT.md"
+  },
+  "phase5": {
+    "date": "2026-10-02",
+    "status": "implemented_gates_green_except_preexisting_test_scoring_preset_routes",
+    "summary": "Matrix has three steps: Meet, Standings, Analyze. Load is renamed Meet and absorbs the Score step (suggested-preset banner, scoring summary with 'Edit scoring rules' via useOpenScoringRules(), official team scores). Analyze has its own icon. Standings heading is 'Team standings'; toggles read 'Chart: By event / By class' and 'List: By event / By swimmer'; 'Base' became 'vs prelims'. The no-workspace empty state has a 'New workspace' action. A stored step 'score' or 'load' opens Meet. ScoringSettingsPanel.tsx is kept (still used).",
+    "bugFixed": "The 'Official team scores' card showed for every meet because buildTeamScoreLookup keys every team and leaves undefined values; it now lists only teams with a score and hides when none has one.",
+    "sharedChange": "packages/ui WizardShell sets data-step-count and index.css fills a 3-step strip in one row from 30rem; Metrics (3 steps) changed the same way, Manager (4) did not.",
+    "files": [
+      "packages/matrix/src/components/OpsModule.tsx",
+      "packages/matrix/src/components/MeetOperationsView.tsx",
+      "packages/matrix/src/components/MeetOpsMeetStep.tsx",
+      "packages/matrix/src/components/MeetOpsScoringSection.tsx",
+      "packages/matrix/src/components/MeetOpsLoadStep.tsx",
+      "packages/matrix/src/components/MeetOpsScoreStep.tsx (deleted)",
+      "packages/matrix/src/components/matrixStepState.ts",
+      "packages/matrix/src/components/MeetOpsStandingsStep.tsx",
+      "packages/matrix/src/components/TeamCard.tsx",
+      "packages/matrix/src/components/TeamCardParts.tsx",
+      "packages/matrix/src/components/TeamCardMatrixList.tsx",
+      "packages/matrix/src/components/ProjectedActualScore.tsx",
+      "packages/matrix/src/MatrixApp.tsx",
+      "packages/ui/src/components/WizardShell.tsx",
+      "packages/ui/src/index.css",
+      "tests/matrixMeetStandingsAnalyze.test.ts",
+      "tests/motionStub.ts",
+      "tests/e2e/ui-ia.spec.ts",
+      "tests/e2e/ui-phase-2.spec.ts",
+      "tests/e2e/matrix-chart.spec.ts"
+    ],
+    "proof": {
+      "mutationChecks": "14 deliberate breaks of tests/matrixMeetStandingsAnalyze.test.ts targets; each failed 1 to 3 tests and was restored",
+      "gates": "lint 0 errors (2 existing warnings); lint:types 0 errors; vitest 141 files / 1933 passed; playwright ui-ia (7), ui-phase-2, matrix-chart, production-server 11 passed on a data copy; main-thread-budget passes only after deleting 19 stale ui-* workspaces from the copy (thin: 1 workspace); run-tests.mjs 83 passed, 1 failed (test_scoring_preset_routes, pre-existing), 1 skipped; data/omniswim.db hashes and data/backups unchanged"
+    },
+    "screenshots": "docs/reference/ui-phase-5/before (24) and after (18 + 2 Metrics): Matrix Meet/Standings/Analyze, midnight/deck-light/oled, 1440 and 800",
+    "report": "docs/reference/ui-phase-5/REPORT.md"
+  },
+  "phase6": {
+    "date": "2026-10-03",
+    "status": "implemented_gates_green_except_preexisting_test_scoring_preset_routes",
+    "summary": "Wording, case and density sweep. Sentence case on the Phase 1-5 screens (uppercase class 161 -> 14 lines); labels Scoring rules, Cross-course, Point opportunities, Link psych sheet, 'no scorer cap'; 'Proj +x' badge now 'projected vs prelims +x'. Lineup roster mode 94 -> 12 DOM buttons (36-athlete roster): per-row Remove buttons replaced by the Delete key and a drawer Remove button, Swimmer tag hidden when uniform, checklist rows merged per athlete with one Jump and 'Show N more', checklist body rendered once. Sidebar auto-collapses below lg without writing omni-sidebar-collapsed. Metrics has one Open video control (header, now a real button) plus the drop zone. Analyze score-differences table fits at 800px. Hex and uppercase ratchets added.",
+    "baselines": {
+      "hexLiteralsInTsx": 18,
+      "hexLiteralsAfter": 18,
+      "uppercaseLinesStart": 161,
+      "uppercaseLinesAfter": 14,
+      "lineupButtonsDomBefore": 94,
+      "lineupButtonsVisibleBefore": 67,
+      "lineupButtonsDomAfter": 12,
+      "lineupButtonsVisibleAfter": 11,
+      "briefFigureNotReproduced": 78
+    },
+    "newFiles": [
+      "apps/shell/src/lib/sidebarCollapse.ts",
+      "packages/manager/src/components/lineupChecklistView.ts",
+      "tests/phase6WordingDensity.test.ts",
+      "tests/uiCaseAndColorRatchet.test.ts",
+      "tests/e2e/ui-phase-6.spec.ts"
+    ],
+    "proof": {
+      "mutationChecks": "19 deliberate breaks across the new vitest and e2e tests; every one failed at least one test and was restored (git diff hash identical before and after)",
+      "gates": "vitest 143 files / 1962 passed; lint 0 errors (2 existing warnings); lint:types exit 0; playwright 17/17 on a cleaned data copy (3 full runs); run-tests.mjs 83 passed, 1 failed (test_scoring_preset_routes, pre-existing), 1 skipped on the last run, but its playwright part failed on 3 of 4 runs (2 on a polluted copy, 1 unexplained); data/omniswim.db hashes and data/backups unchanged"
+    },
+    "screenshots": "docs/reference/ui-phase-6/before (36) and after (36): Athletes, Lineup, Optimize, Matrix Standings/Analyze, Metrics; midnight/deck-light/oled; 1440 and 800",
+    "report": "docs/reference/ui-phase-6/REPORT.md"
+  }
 }

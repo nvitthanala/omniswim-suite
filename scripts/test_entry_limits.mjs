@@ -1,5 +1,4 @@
 import assert from 'node:assert/strict';
-import { readFileSync } from 'fs';
 import { mergeScoringSettings, NSISC_PRESET_SETTINGS } from '../packages/core/src/lib/scoringDefaults.ts';
 import {
   canAcceptAnotherEntry,
@@ -8,11 +7,8 @@ import {
   swimmerExceedsEntryLimits,
 } from '../packages/core/src/lib/swimmerEntryLimits.ts';
 import { Gender } from '../packages/core/src/types.ts';
+import { loadLocalMeets, noteLocalOnlySkipped } from './lib/localMeets.mjs';
 
-const meets = JSON.parse(readFileSync('data/meets.json', 'utf8'));
-const ws = meets[0];
-const men = ws.menResults ?? [];
-const settings = mergeScoringSettings(ws.scoringSettings, { conference: ws.conference });
 
 assert.equal(
   NSISC_PRESET_SETTINGS.maxIndividualEntriesPerSwimmer,
@@ -25,12 +21,22 @@ assert.equal(
   'NSISC has no per-type relay cap (total-only)'
 );
 
-const sample = men.find(r => !r.isRelay);
-if (sample) {
-  const counts = countSwimmerEntries(men, sample.team, Gender.MEN, sample.name);
-  const label = formatEntryLimitLabel(counts, settings);
-  const over = swimmerExceedsEntryLimits(counts, settings);
-  console.log('sample athlete', sample.name, label, over);
+// Local-only: log one real athlete's entry label from the local working store.
+// It asserts nothing, so without meets.json there is nothing to lose but the log line.
+const meets = loadLocalMeets();
+if (meets === null) {
+  noteLocalOnlySkipped('test_entry_limits.mjs', 'the sample-athlete entry label log');
+} else {
+  const ws = meets[0];
+  const men = ws.menResults ?? [];
+  const settings = mergeScoringSettings(ws.scoringSettings, { conference: ws.conference });
+  const sample = men.find(r => !r.isRelay);
+  if (sample) {
+    const counts = countSwimmerEntries(men, sample.team, Gender.MEN, sample.name);
+    const label = formatEntryLimitLabel(counts, settings);
+    const over = swimmerExceedsEntryLimits(counts, settings);
+    console.log('sample athlete', sample.name, label, over);
+  }
 }
 
 // --- NSISC total cap (7 combined) --------------------------------------------

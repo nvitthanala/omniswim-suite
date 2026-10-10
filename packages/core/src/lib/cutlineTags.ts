@@ -83,8 +83,10 @@ import {
 import {
   courseOfRecordFromEventLabel,
   cutlineEventCategory,
+  computedCutInOwnCourse,
   cutlineTableCourseForSwim,
   DEFAULT_CUTLINE_COURSE,
+  strictestTierMet,
   getCutlinesForSwim,
   normalizeEventForCutline,
   nextStrictestTierNotAchieved,
@@ -1087,8 +1089,9 @@ function buildCutlineVerdict(
   division: NcaaDivision,
   tableCourse: CutlineCourse
 ): CutlineTagResult {
-  // `tiers` is ordered strictest first, so the first cleared tier is the best.
-  const met = lookup.tiers.find(t => t.seconds > 0 && judgedSeconds <= t.seconds);
+  // The best cleared tier is the fastest standard cleared, by comparing times.
+  // List position is not speed order: D3 prints Invited slower than B in two events.
+  const met = strictestTierMet(lookup.tiers, judgedSeconds);
   const season = lookup.season;
   if (!met || !lookup.entry || !season) {
     // A metric swim that misses even on its converted time is a genuine miss —
@@ -1277,6 +1280,40 @@ export function buildCutlineTagForTeam(input: CutlineTagForTeamInput): CutlineTa
     division: division ?? resolved.division,
     program: resolved.program,
   });
+}
+
+/**
+ * The legacy `computedCut` badge (`A` / `B`) for a swim by a named team, or
+ * `null`.
+ *
+ * Gated by {@link buildCutlineTagForTeam}: the badge exists only when that
+ * builder says `state: 'tagged'`. So a program that no longer exists, or one
+ * that does not sponsor the swim's gender (UWF has no men's team), gets no
+ * badge — the same refusal the cut tag makes, never a "B" beside a tag that
+ * says `gender_not_sponsored`. An explicit `division` says which table applies,
+ * not that the school fields a team, so it does not bypass the gate. A team the
+ * registry does not know has no program record to refuse on, so the caller's
+ * `division` decides, as it does in `buildCutlineTagForTeam`.
+ *
+ * `null` is under-determined by design, as `computedCut: null` always was: it
+ * covers a refused program, a miss, and "no table in this course". A caller
+ * that must tell them apart reads {@link buildCutlineTagForTeam}.
+ *
+ * `seconds` is the swim as recorded, never a converted time.
+ */
+export function computedCutForTeamSwim(args: {
+  team: string;
+  teamOptions?: TeamDivisionOptions;
+  gender: Gender | string;
+  event: string;
+  seconds: number;
+  division: NcaaDivision;
+  swimCourse: SwimCourseOfRecord;
+}): 'A' | 'B' | null {
+  const { team, teamOptions, gender, event, seconds, division, swimCourse } = args;
+  const tag = buildCutlineTagForTeam({ team, teamOptions, gender, event, timeSec: seconds, division, swimCourse });
+  if (tag.state !== 'tagged') return null;
+  return computedCutInOwnCourse({ seconds, gender, event, division, swimCourse });
 }
 
 /* -------------------------------------------------------------------------- */

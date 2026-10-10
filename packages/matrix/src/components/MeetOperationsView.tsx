@@ -14,13 +14,13 @@ import { buildMeetMomentumChartDataFromLookup, buildPrelimsOverUnderByEntryKey }
 import type { PsychOverUnderEntry } from '@omniswim/core/lib/psychProjection';
 import type { ScoringBundle } from '@omniswim/core/lib/useWorkspaceScoring';
 import { useThemeColors } from '@omniswim/core/lib/useThemeColors';
-import { MeetOpsLoadStep } from './MeetOpsLoadStep';
-import { MeetOpsScoreStep } from './MeetOpsScoreStep';
+import { MeetOpsMeetStep } from './MeetOpsMeetStep';
+import type { MatrixStepId } from './matrixStepState';
 import { MeetOpsAnalyzeStep } from './MeetOpsAnalyzeStep';
 import { MeetOpsStandingsStep } from './MeetOpsStandingsStep';
 
 type Props = {
-  activeStep: 'load' | 'score' | 'standings' | 'analyze';
+  activeStep: MatrixStepId;
   workspace: Workspace;
   workspaceMeetSources: Workspace[];
   onCopyMeetFromWorkspace: (sourceId: string) => void;
@@ -62,7 +62,6 @@ type Props = {
   onUpdate: (patch: Partial<Workspace>) => void;
   onRequestDeleteSwimmer?: (name: string) => void;
   onSaveScoringSettings: (sets: ScoringSettings) => void;
-  onScoringViewChange: (view: 'merged' | 'pdf_only') => void;
   onClearSuggestedPreset: () => void;
   scoringRefreshKey: number;
 };
@@ -103,7 +102,6 @@ export default function MeetOperationsView({
   onUpdate,
   onRequestDeleteSwimmer,
   onSaveScoringSettings,
-  onScoringViewChange,
   onClearSuggestedPreset,
   scoringRefreshKey,
 }: Props) {
@@ -232,24 +230,12 @@ export default function MeetOperationsView({
 
   return (
     <div className="flex flex-col gap-6">
-      {activeStep === 'score' ? (
-        <MeetOpsScoreStep
-          scoringSettings={scoringSettings}
-          suggestedPresetId={suggestedPresetId}
-          onSaveScoringSettings={onSaveScoringSettings}
-          onClearSuggestedPreset={onClearSuggestedPreset}
-          scoringView={workspace.scoringView}
-          onScoringViewChange={onScoringViewChange}
-          conference={workspace.conference}
-          officialLookup={officialLookup}
-          teamsWithLineStyles={teamsWithLineStyles}
-        />
-      ) : null}
-
       <div className="space-y-6 min-w-0">
-        {activeStep === 'load' ? (
-          <MeetOpsLoadStep
+        {activeStep === 'meet' ? (
+          <MeetOpsMeetStep
             workspace={workspace}
+            pdfFormat={pdfFormat}
+            onPdfFormatChange={onPdfFormatChange}
             workspaceMeetSources={workspaceMeetSources}
             onCopyMeetFromWorkspace={onCopyMeetFromWorkspace}
             isParsingPdf={isParsingPdf}
@@ -260,6 +246,12 @@ export default function MeetOperationsView({
             onCancelPsychPdfParse={onCancelPsychPdfParse}
             onBrowseSwimCloudCaptures={onBrowseSwimCloudCaptures}
             meetFileInputRef={meetFileInputRef}
+            scoringSettings={scoringSettings}
+            suggestedPresetId={suggestedPresetId}
+            onSaveScoringSettings={onSaveScoringSettings}
+            onClearSuggestedPreset={onClearSuggestedPreset}
+            officialLookup={officialLookup}
+            teamsWithLineStyles={teamsWithLineStyles}
           />
         ) : null}
 
@@ -288,8 +280,6 @@ export default function MeetOperationsView({
           <MeetOpsStandingsStep
             reconciliationSummary={reconciliationSummary}
             scoringSettings={scoringSettings}
-            pdfFormat={pdfFormat}
-            onPdfFormatChange={onPdfFormatChange}
             searchQuery={searchQuery}
             onSearchChange={onSearchChange}
             teamsWithLineStyles={teamsWithLineStyles}

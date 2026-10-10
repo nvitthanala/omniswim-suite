@@ -142,7 +142,7 @@ export default function RosterImportPreviewStep({
       <div className="border border-theme-soft rounded-lg max-h-64 overflow-y-auto custom-scrollbar">
         <table className="w-full text-ui-caption">
           <thead className="sticky top-0 bg-[var(--surface-strong)]">
-            <tr className="text-left text-theme-muted uppercase tracking-wider">
+            <tr className="text-left text-theme-muted">
               <th className="p-2">Name</th>
               <th className="p-2">Event</th>
               <th className="p-2">Time</th>

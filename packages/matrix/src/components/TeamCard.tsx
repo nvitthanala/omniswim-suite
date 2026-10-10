@@ -6,7 +6,8 @@
 import React, { useState, useRef, useEffect, useMemo } from 'react';
 import { BarChart3 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChartShell, SegmentedControl } from '@omniswim/ui';
+import { ChartShell } from '@omniswim/ui';
+import { TeamCardChartToggle } from './TeamCardParts';
 import { TeamScore, SwimmerResult, Gender } from '@omniswim/core/types';
 import { formatEventChartAxisLabel, colorForChartStroke } from '@omniswim/core/lib/utils';
 import type { PrelimsOverUnderEntry } from '@omniswim/core/lib/prelimsProjection';
@@ -338,19 +339,13 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                 <div className="flex items-center justify-between gap-2 flex-wrap">
                   <div className="flex items-center gap-2">
                     <BarChart3 size={14} className="text-[var(--text-accent)]" />
-                    <span className="text-ui-micro font-medium uppercase tracking-widest text-theme-secondary">
-                      {chartView === 'event' ? 'Points by Event' : 'Points by Class'}
+                    <span className="text-ui-micro font-medium text-theme-secondary">
+                      {chartView === 'event' ? 'Points by event' : 'Points by Class'}
                     </span>
                   </div>
-                  <SegmentedControl
-                    layout="inline"
-                    ariaLabel="Points chart grouping"
+                  <TeamCardChartToggle
                     value={chartView}
                     onChange={next => { setChartView(next); clearChartTooltips(); }}
-                    options={[
-                      { value: 'event', label: 'By Event', ariaLabel: 'Show points chart by event' },
-                      { value: 'class', label: 'By Class', ariaLabel: 'Show points chart by class year' },
-                    ]}
                   />
                 </div>
                 
@@ -405,7 +400,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                   }
                 </ChartShell>
 
-                <div className="flex flex-wrap justify-between items-center gap-2 mt-2 px-2 text-ui-micro text-theme-secondary font-mono border-t border-theme-soft pt-2 italic uppercase">
+                <div className="flex flex-wrap justify-between items-center gap-2 mt-2 px-2 text-ui-micro text-theme-secondary font-mono border-t border-theme-soft pt-2 italic">
                   <span>
                     {chartView === 'event'
                       ? 'Chronological Event Scoring Timeline'

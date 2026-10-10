@@ -24,6 +24,7 @@ export {
   type ProvenanceBadgeSpec,
 } from './components/ProvenanceBadge';
 export { Button } from './components/Button';
+export { NumberField, type NumberFieldProps } from './components/NumberField';
 export { TeamSelect, type TeamSelectProps } from './components/TeamSelect';
 export { EmptyState } from './components/EmptyState';
 export { Modal, type ModalProps } from './components/Modal';
@@ -36,8 +37,11 @@ export { SectionHeader } from './components/SectionHeader';
 export { Toolbar, ToolbarSpacer } from './components/Toolbar';
 export { FloatingWindow, type FloatingWindowState } from './components/FloatingWindow';
 export { SwimCloudProvider, useSwimCloudWindow } from './components/SwimCloudContext';
+export { ScoringRulesOpenerProvider, useOpenScoringRules } from './components/ScoringRulesOpenerContext';
+export { TheoreticalMeetOpenerProvider, useOpenTheoreticalMeet } from './components/TheoreticalMeetOpenerContext';
 export { WizardShell, type WizardShellProps, type WizardStep } from './components/WizardShell';
 export { Menu, MenuItem, type MenuAlign } from './components/Menu';
+export { Disclosure, type DisclosureProps } from './components/Disclosure';
 export {
   SwimCloudCaptureBrowser,
   subjectLabel as swimCloudCaptureSubjectLabel,

@@ -1,0 +1,55 @@
+{
+  "$comment": "Skip budget for `vitest run`, enforced by scripts/check_skip_budget.mjs. Each entry names a test file and how many of its tests may skip in each environment: `local` (a developer machine that holds the gitignored capture data and an xpdf pdftotext) and `ci` (a clean checkout on ubuntu-latest with Postgres, Chromium and poppler-utils). A skipped test in a file not listed here, or above its count, fails the check. Lower a number when a skip is fixed. Raise one only with a reason written here.",
+  "files": {
+    "tests/eventFirstImport.test.ts": {
+      "local": 14,
+      "ci": 14,
+      "reason": "describe.skipIf(!HAVE_CAPTURE). Needs data/swimcloud-captures (gitignored) AND every stored page of meet 356467 to still match the sha256 its capture recorded. Absent in CI. Locally the pages have drifted, because a later team crawl overwrote the one file the page store keeps per URL."
+    },
+    "tests/relayLegCreditsPersistence.test.ts": {
+      "local": 1,
+      "ci": 0,
+      "reason": "describe.skipIf(!pgUrl). The PostgreSQL round trip needs PG_TEST_URL or DATABASE_URL. CI sets PG_TEST_URL on the Test step and the postgres:16 service; a developer machine usually has no database."
+    },
+    "tests/divingEventImport.test.ts": {
+      "local": 0,
+      "ci": 9,
+      "reason": "describe.skipIf(no stored diving pages). Reads data/swimcloud-captures/pages, which is gitignored (local-only by design, plans/2026-09-06/01-legal-and-access-strategy.md section 4)."
+    },
+    "tests/meetEventIndex.test.ts": {
+      "local": 0,
+      "ci": 8,
+      "reason": "describe.skipIf(no stored event pages). Reads data/swimcloud-captures/pages (gitignored)."
+    },
+    "tests/relayLegsHiddenList.test.ts": {
+      "local": 0,
+      "ci": 5,
+      "reason": "describe.skipIf(no stored relay page). Reads data/swimcloud-captures/pages (gitignored)."
+    },
+    "tests/swimCloudMeetImportBridge.test.ts": {
+      "local": 0,
+      "ci": 1,
+      "reason": "describe.skipIf(no stored event 8 page), the 'event 8 exhibition flags' block. Reads data/swimcloud-captures/pages (gitignored). The other 50 tests in the file use committed fixtures and still run."
+    },
+    "tests/theoreticalMeetGolden.test.ts": {
+      "local": 0,
+      "ci": 5,
+      "reason": "describe.skipIf(!realPresent), the 'ALL the real captures' block. Reads data/swimcloud-captures/captures (gitignored)."
+    },
+    "tests/rosterEmptyState.test.ts": {
+      "local": 0,
+      "ci": 1,
+      "reason": "it.skipIf(UWF_MEN === undefined). Reads one stored UWF men's roster page from data/swimcloud-captures/pages (gitignored). The synthetic-page tests in the same file still run."
+    },
+    "tests/optimizerActivePlansAcrossTeams.test.ts": {
+      "local": 0,
+      "ci": 1,
+      "reason": "it.skipIf(!hasLocalMeets). Reads data/meets.json, which is gitignored."
+    },
+    "tests/altitudeAdjustment.test.ts": {
+      "local": 0,
+      "ci": 2,
+      "reason": "it.skipIf(!hasPdftotextTable). `pdftotext -table` is an xpdf option; poppler (what ubuntu ships) lacks it. The developer machine has xpdf 4.00. These two tests re-read the archived NCAA PDFs and never run in CI."
+    }
+  }
+}

@@ -29,7 +29,7 @@ export default function ExportReviewModal({ issues, onExportAnyway, onCancel }: 
     >
       <div className="flex justify-between items-start mb-4">
         <div className="flex gap-4">
-          <div className="w-10 h-10 rounded-full bg-amber-400/15 text-amber-400 flex items-center justify-center shrink-0 border border-amber-400/20">
+          <div className="w-10 h-10 rounded-full bg-warning-soft text-warning flex items-center justify-center shrink-0 border border-warning-faint">
             <AlertTriangle size={20} />
           </div>
           <div>
@@ -69,7 +69,7 @@ export default function ExportReviewModal({ issues, onExportAnyway, onCancel }: 
           variant="outline"
           size="md"
           onClick={onExportAnyway}
-          className="border-amber-400/40 hover:border-amber-400/70 hover:bg-amber-400/10 text-amber-400"
+          className="border-warning hover:border-warning-strong hover:bg-warning-faint text-warning"
         >
           Export anyway
         </Button>

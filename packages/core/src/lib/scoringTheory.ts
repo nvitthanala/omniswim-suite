@@ -12,6 +12,7 @@ import {
   HistoricalSwim,
   PlannedSwimEntry,
   RelayLegOverride,
+  ScoringSettings,
   ScorerRosterOverride,
   SwimmerResult,
   Workspace,
@@ -22,8 +23,13 @@ import { mergeScoringSettings } from './scoringDefaults';
 import { scorerRosterKey, usesScorerRoster } from './scorerRoster';
 import { relayEntryKey, parseRelayDistanceYardsOrNull } from './relaySplits';
 import { relayTemplateFromLeg, upsertRelayLegOverride } from './relayLegMatching';
-import { countSwimmerEntries, swimmerExceedsEntryLimits } from './swimmerEntryLimits';
-import { buildAliasResolver } from './athleteAliases';
+import {
+  canAcceptAnotherEntry,
+  countSwimmerEntries,
+  swimmerExceedsEntryLimits,
+  type SwimmerEntryCounts,
+} from './swimmerEntryLimits';
+import { buildAliasResolver, type AthleteAliasResolver } from './athleteAliases';
 import { buildWhatIfResults } from './whatIfProjection';
 import {
   convertSwimToSCYDetailed,
@@ -545,77 +551,111 @@ function lookupClassYear(map: Map<string, ClassYear>, name: string): ClassYear |
   return map.get(norm) ?? map.get(foldDiacritics(norm));
 }
 
-/** An individual (non-relay) meet result swum by this athlete for this team's squad. */
-function isIndividualResultFor(
-  r: SwimmerResult,
-  team: string,
-  gender: Gender,
-  nameKey: string
-): boolean {
-  if (!resultRowIsForTeam(r, team, gender)) return false;
-  if (normalizeSwimmerName(r.name) !== nameKey) return false;
-  return !isRelayResult(r);
-}
-
-/** An individual (non-relay) planned entry held by this athlete for this team's squad. */
-function isIndividualPlanFor(
+/** A planned entry held by this athlete for this team's squad, under any spelling the resolver links. */
+function isPlanFor(
   p: PlannedSwimEntry,
   team: string,
   gender: Gender,
-  nameKey: string
+  nameKey: string,
+  resolver: AthleteAliasResolver
 ): boolean {
   if (p.team !== team || p.gender !== gender) return false;
-  if (normalizeSwimmerName(p.name) !== nameKey) return false;
-  return !/\brelay\b/i.test(p.event);
+  return normalizeSwimmerName(resolver.resolveAthleteName(p.name, team, gender)) === nameKey;
 }
 
 /**
- * Individual events this athlete already holds — from meet results and from planned
- * entries. Read at the point of use, so entries added earlier in the same apply count
- * against the cap for a later theory line naming the same athlete.
+ * What one athlete holds, by event identity (see `swimEventIdentity`), and where it came
+ * from. Identities, never raw labels: the meet prints "Event 4 Men 50 Yard Freestyle" and a
+ * plan or theory says "50 Freestyle", and the lineup projection treats those as one entry
+ * (it remaps a plan onto the meet's label and collapses the pair).
+ *
+ * - `individual` / `relay` — the entries the LINEUP AUDIT counts, so the caps are measured
+ *   the way the audit measures them. Seeded from `countSwimmerEntries` over the projected
+ *   pool, then grown by every entry this apply adds.
+ * - `planned` — identities of every planned individual entry, active or not. An inactive
+ *   plan is not in the projection, so it spends no entry; it still stops the theory from
+ *   writing a second plan for the same event.
  */
-function existingIndividualEvents(
-  results: SwimmerResult[],
+type HeldEvents = {
+  individual: Set<string>;
+  relay: Set<string>;
+  planned: Set<string>;
+};
+
+/**
+ * Entries this athlete already holds.
+ *
+ * The count is `countSwimmerEntries` over `pool`, the projected pool
+ * (`buildWhatIfResults`: meet results, recruits, ACTIVE plans, relay-leg overrides, the
+ * cross-plane collapse). That is the pool the audit and `buildAvailabilityCheck` count, so
+ * a time trial, an exhibition swim, a prelims/finals pair, a relay leg filled by an
+ * override and a linked alias spelling are judged here exactly as the audit judges them.
+ * Counting raw meet rows missed every relay-leg override and every inactive plan.
+ */
+function existingEntries(
+  pool: SwimmerResult[],
   plans: PlannedSwimEntry[],
   team: string,
   gender: Gender,
-  name: string
+  name: string,
+  resolver: AthleteAliasResolver,
+  settings: ScoringSettings
 ): HeldEvents {
-  const nameKey = normalizeSwimmerName(name);
-  const held: HeldEvents = { resultEvents: new Set<string>(), planEvents: new Set<string>() };
-  for (const r of results) {
-    if (isIndividualResultFor(r, team, gender, nameKey) && r.event) held.resultEvents.add(r.event);
-  }
+  const nameKey = normalizeSwimmerName(resolver.resolveAthleteName(name, team, gender));
+  const counted = countSwimmerEntries(pool, team, gender, name, resolver, settings);
+  const held: HeldEvents = {
+    individual: new Set<string>([...(counted.individualEvents ?? [])].map(swimEventIdentity)),
+    relay: new Set<string>([...counted.relayEvents].map(swimEventIdentity)),
+    planned: new Set<string>(),
+  };
   for (const p of plans) {
-    if (isIndividualPlanFor(p, team, gender, nameKey)) holdEvent(held, p.event);
+    if (!isPlanFor(p, team, gender, nameKey, resolver)) continue;
+    held.planned.add(swimEventIdentity(p.event));
   }
   return held;
 }
 
+/** The athlete already has a PLAN in this event, under any label of it. */
+function hasPlanFor(held: HeldEvents, event: string): boolean {
+  return held.planned.has(swimEventIdentity(event));
+}
+
 /**
- * The individual events an athlete holds, split by where each came from.
- *
- * - `planEvents` — event identities (see `swimEventIdentity`) of planned entries,
- *   so a plan recorded as '100 Back SCY' occupies the theory's '100 Backstroke'.
- * - `resultEvents` — raw labels of loaded-meet results, matched by label exactly as
- *   before. Not folded on purpose: a plan in an event the athlete swam at the
- *   loaded meet overrides that result in the projection (and is the athlete's only
- *   entry in `plan_sheet` mode), so whether a HyTek-labelled result should block a
- *   theory plan is a lineup question this change does not answer.
+ * The athlete's entry in this event is already counted, on whatever plane: a meet result,
+ * a recruit row or an active plan. A new plan in it adds no entry. The projection puts the
+ * plan on a higher plane than a result or recruit row and collapses the pair into one
+ * (`collapseCrossPlaneDuplicates`), so the plan replaces that row.
  */
-type HeldEvents = { resultEvents: Set<string>; planEvents: Set<string> };
-
-function holdsEvent(held: HeldEvents, event: string): boolean {
-  return held.resultEvents.has(event) || held.planEvents.has(swimEventIdentity(event));
+function holdsEntryIn(held: HeldEvents, event: string): boolean {
+  return held.individual.has(swimEventIdentity(event));
 }
 
-/** Record a planned event. An event already held is not counted twice. */
+/** Record a planned individual entry this apply adds. It spends one entry. */
 function holdEvent(held: HeldEvents, event: string): void {
-  if (!holdsEvent(held, event)) held.planEvents.add(swimEventIdentity(event));
+  const id = swimEventIdentity(event);
+  held.individual.add(id);
+  held.planned.add(id);
 }
 
+/** Individual entries held. */
 function heldEventCount(held: HeldEvents): number {
-  return held.resultEvents.size + held.planEvents.size;
+  return held.individual.size;
+}
+
+/** Individual and relay entries held: what the total cap is measured against. */
+function heldTotalCount(held: HeldEvents): number {
+  return held.individual.size + held.relay.size;
+}
+
+/** The held entries as the counts shape `canAcceptAnotherEntry` reads. */
+function heldAsCounts(held: HeldEvents): SwimmerEntryCounts {
+  return {
+    individual: held.individual.size,
+    relayEvents: held.relay,
+    relayCount: held.relay.size,
+    total: heldTotalCount(held),
+    individualEvents: held.individual,
+  };
 }
 
 /**
@@ -706,11 +746,23 @@ function recruitClassYearFor(
 type TheoryApplyContext = {
   team: string;
   gender: Gender;
-  /** Individual-entry cap: the tighter of the individual cap and the total cap. */
+  /** Individual-entry cap. */
   indCap: number;
+  /** Total-entry cap (individual and relay together); 999 when the conference sets none. */
+  totalCap: number;
+  /** Which swims spend an entry, and the alias links that merge two spellings of one swimmer. */
+  settings: ScoringSettings;
+  resolver: AthleteAliasResolver;
   /** Roster-mode scoring — a theory swimmer gets an explicit scorer flag. */
   rosterMode: boolean;
   results: SwimmerResult[];
+  /**
+   * The projected pool the entry caps are counted over (`buildWhatIfResults`), built on
+   * first use and then reused: it is the expensive part of an apply, and an apply with no
+   * swimmer and no relay never needs it. It reflects the workspace as it was BEFORE this
+   * apply; the entries the apply adds are tracked on {@link TheoryApplyDraft.held}.
+   */
+  pool: () => SwimmerResult[];
   rosterNames: string[];
   historyBest: Map<string, HistoryBestTime>;
   /** Class year for a planned entry: caller override first, then the recruit row. */
@@ -731,6 +783,12 @@ type TheoryApplyDraft = {
   relayOverrides: RelayLegOverride[];
   summary: ScoringTheoryApplyResult['summary'];
   warnings: string[];
+  /**
+   * Entries each swimmer holds, keyed by the resolved name. Filled on a swimmer's first use
+   * and kept for the rest of the apply, so an entry added for one theory line counts against
+   * the cap for the next line (or the relay step) that names the same athlete.
+   */
+  held: Map<string, HeldEvents>;
 };
 
 function buildTheoryApplyContext(
@@ -743,15 +801,20 @@ function buildTheoryApplyContext(
     conference: workspace.conference,
   });
   const classYearMap = buildClassYearLookup(opts.classYearOverrides);
+  let pool: SwimmerResult[] | null = null;
   return {
     team,
     gender,
-    indCap: Math.min(
-      settings.maxIndividualEntriesPerSwimmer ?? 3,
-      settings.maxTotalEntriesPerSwimmer ?? 999
-    ),
+    indCap: settings.maxIndividualEntriesPerSwimmer ?? 3,
+    totalCap: settings.maxTotalEntriesPerSwimmer ?? 999,
+    settings,
+    resolver: buildAliasResolver(workspace),
     rosterMode: usesScorerRoster(settings),
     results: resultsForGender(workspace, gender),
+    pool: () => {
+      if (pool === null) pool = buildWhatIfResults({ workspace, gender, removeSeniors: false });
+      return pool;
+    },
     rosterNames: rosterNamesForTeam(workspace, team, gender),
     historyBest: buildHistoryBestTimes(workspace, team, gender),
     classYearForEntry: name =>
@@ -772,17 +835,22 @@ function theoryEntryBlocker(
   displayName: string,
   event: string,
   already: HeldEvents,
-  indCap: number,
+  caps: { individual: number; total: number },
   time: string | undefined
 ): string | null {
   if (!isChampionshipProgramEvent(event)) {
     return `Skipped non-program event "${event}" for ${displayName}`;
   }
-  if (holdsEvent(already, event)) {
+  if (hasPlanFor(already, event)) {
     return `${displayName} already has a plan for ${event} — skipped`;
   }
-  if (heldEventCount(already) >= indCap) {
-    return `${displayName} at individual entry cap (${indCap}) — skipped ${event}`;
+  // An event held on a lower plane is replaced by the plan, not added to: no cap applies.
+  const replacesHeldEntry = holdsEntryIn(already, event);
+  if (!replacesHeldEntry && heldEventCount(already) >= caps.individual) {
+    return `${displayName} at individual entry cap (${caps.individual}) — skipped ${event}`;
+  }
+  if (!replacesHeldEntry && heldTotalCount(already) >= caps.total) {
+    return `${displayName} at total entry cap (${caps.total}) — skipped ${event}`;
   }
   if (!time) {
     return `No history time for ${displayName} in ${event} — skipped`;
@@ -804,6 +872,24 @@ function withScorerMarked(
   ];
 }
 
+/** The entries this swimmer holds, read from the projected pool the first time and kept after. */
+function heldFor(ctx: TheoryApplyContext, draft: TheoryApplyDraft, name: string): HeldEvents {
+  const key = normalizeSwimmerName(ctx.resolver.resolveAthleteName(name, ctx.team, ctx.gender));
+  const known = draft.held.get(key);
+  if (known) return known;
+  const held = existingEntries(
+    ctx.pool(),
+    draft.meetEntryPlans,
+    ctx.team,
+    ctx.gender,
+    name,
+    ctx.resolver,
+    ctx.settings
+  );
+  draft.held.set(key, held);
+  return held;
+}
+
 /**
  * Add the planned entries one theory swimmer's event list earns, under the entry cap.
  * Times come from history — an event with no history time is warned, never invented.
@@ -815,17 +901,12 @@ function addTheoryEntries(
   events: string[]
 ): void {
   const classYear = ctx.classYearForEntry(displayName);
-  const already = existingIndividualEvents(
-    ctx.results,
-    draft.meetEntryPlans,
-    ctx.team,
-    ctx.gender,
-    displayName
-  );
+  const already = heldFor(ctx, draft, displayName);
+  const caps = { individual: ctx.indCap, total: ctx.totalCap };
   for (const event of events) {
     const best = ctx.historyBest.get(historyBestKey(displayName, event));
     const time = best?.time;
-    const blocked = theoryEntryBlocker(displayName, event, already, ctx.indCap, time);
+    const blocked = theoryEntryBlocker(displayName, event, already, caps, time);
     if (blocked) {
       draft.warnings.push(blocked);
       continue;
@@ -926,6 +1007,31 @@ function resolveLegAlternates(alternates: string[], rosterNames: string[]): stri
 }
 
 /**
+ * Why this swimmer cannot take a leg of `relayEvent`, as the warning to report, or null
+ * when they can.
+ *
+ * A swimmer who already holds the relay (any squad of it) takes no new entry, so a second
+ * leg on it, or a re-assignment of the same leg, is never refused. Otherwise the leg is a
+ * new entry and `canAcceptAnotherEntry` decides, so the total cap and the relay cap are
+ * read where drop/add read them. The message names the cap that is full.
+ */
+function relayLegCapBlocker(
+  ctx: TheoryApplyContext,
+  held: HeldEvents,
+  displayName: string,
+  relayEvent: string,
+  relay: TheoryRelay
+): string | null {
+  if (held.relay.has(swimEventIdentity(relayEvent))) return null;
+  if (canAcceptAnotherEntry(heldAsCounts(held), ctx.settings, relayEvent)) return null;
+  const label = `${relay.event} ${relay.squad}`;
+  if (heldTotalCount(held) >= ctx.totalCap) {
+    return `${displayName} at total entry cap (${ctx.totalCap}) — skipped relay leg on ${label}`;
+  }
+  return `${displayName} at relay entry cap — skipped relay leg on ${label}`;
+}
+
+/**
  * Assign one theory relay leg onto an existing relay entry.
  *
  * Alternates are persisted on the override (additive) so suggestRelayAlternatePromotions
@@ -936,6 +1042,7 @@ function assignRelayLeg(
   draft: TheoryApplyDraft,
   relay: TheoryRelay,
   entryKey: string,
+  relayEvent: string,
   leg: TheoryRelayLeg,
   legIndex: number
 ): void {
@@ -944,6 +1051,13 @@ function assignRelayLeg(
     draft.warnings.push(
       `Could not resolve relay leg "${leg.name}" (${relay.event} ${relay.squad})`
     );
+    return;
+  }
+
+  const held = heldFor(ctx, draft, resolved.match);
+  const capBlock = relayLegCapBlocker(ctx, held, resolved.match, relayEvent, relay);
+  if (capBlock) {
+    draft.warnings.push(capBlock);
     return;
   }
 
@@ -956,6 +1070,7 @@ function assignRelayLeg(
     source: 'manual',
     ...(resolvedAlternates.length > 0 ? { alternates: resolvedAlternates } : {}),
   });
+  held.relay.add(swimEventIdentity(relayEvent));
   draft.summary.relayLegsAssigned += 1;
 
   if (leg.alternates.length > 0) {
@@ -993,7 +1108,7 @@ function applyTheoryRelay(
   }
   const entryKey = relayEntryKey(template);
   relay.legs.forEach((leg, legIndex) =>
-    assignRelayLeg(ctx, draft, relay, entryKey, leg, legIndex)
+    assignRelayLeg(ctx, draft, relay, entryKey, template.event, leg, legIndex)
   );
 }
 
@@ -1030,6 +1145,7 @@ export function applyScoringTheory(
     relayOverrides: [...(workspace.relayLegOverrides ?? [])],
     summary,
     warnings: [],
+    held: new Map<string, HeldEvents>(),
   };
 
   // Swimmers first: their new plans count against the entry cap the relay step reads.
@@ -1119,7 +1235,7 @@ function buildAvailabilityCheck(
   const resolver = buildAliasResolver(workspace);
 
   const isOverCap = (name: string): boolean => {
-    const counts = countSwimmerEntries(pool, team, gender, name, resolver);
+    const counts = countSwimmerEntries(pool, team, gender, name, resolver, settings);
     const over = swimmerExceedsEntryLimits(counts, settings);
     return over.individualOver || over.totalOver;
   };

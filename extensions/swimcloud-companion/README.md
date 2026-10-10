@@ -65,6 +65,173 @@ recorded in that document.
   the tab or navigating away ends the crawl; everything already relayed is
   already saved.
 
+## Multi-team crawl — what it does
+
+A second button, "Multi-team crawl (Omniswim)", sits on `www.swimcloud.com`
+pages (above the other two). It crawls several teams, each for the season you
+pick, into the Omniswim app. It runs in the content script, in your own browser
+session, because the requests must be same-origin.
+
+**Host: `www.swimcloud.com` only.** The manifest also matches bare
+`swimcloud.com`, but there the `www` URLs the crawl fetches are cross-origin. On
+any other host the button does not appear. Open the site through
+`https://www.swimcloud.com/`.
+
+**Never run two crawls, and never run it in two tabs.** The meet crawl and the
+multi-team crawl share one lock (`navigator.locks`, name
+`omniswim-swimcloud-crawl`), held for the whole run and shared by every tab. A
+second crawl is refused with a message ("Another SwimCloud crawl is running").
+The lock is taken when you press **Read season lists** (or start the meet
+crawl), and held until the run ends, including while the panel waits for your
+season choice.
+
+The two crawls in one tab also share one "last request started" clock, so a run
+that starts right after another still waits out the 3 s gap. That clock lives in
+one tab. It does not cover several tabs: the lock is what does.
+
+The meet crawl button is also hidden on the bare host `swimcloud.com`, for the
+same reason as the multi-team button.
+
+How to use it:
+
+1. Click the button. A panel opens. Press Escape or Close to leave it (Escape
+   works only while no crawl runs; during a run use Cancel).
+2. Paste team links, one per line (or split by spaces or commas). Any
+   `/team/{id}/...` link works. Click **Parse links**. The panel lists the teams
+   it will read and every line it skipped, with the reason.
+3. **Conference links are not supported yet.** The panel says "conference pages
+   are not supported yet (waiting for a captured conference page)" and crawls
+   nothing for them. Paste the teams' own links instead.
+4. Click **Read season lists**. For each team the panel opens the capture
+   `team-{id}` in the app, fetches `/team/{id}/roster/?gender=M` (no season) and
+   reads that team's own season menu. Season ids are never shared between teams
+   and never computed. Before each team's season page, the panel asks the app
+   to open that team's capture. If the app does not answer (not running, no
+   pairing token) for the FIRST team, the crawl stops before it fetches
+   anything. If it fails for a later team, the earlier teams' season pages were
+   already fetched, and the crawl stops there. The same happens before the
+   rosters if a season capture will not open. In every case it says so.
+5. Pick a season per team (or "Skip this team"). The menu starts on the season
+   the page shows as current. Click **Start crawl**.
+6. Use **Pause** and **Resume** (work in flight finishes first, and no request
+   starts while paused, including a request waiting out the 3 s gap or a 429
+   wait) and **Cancel** (no request starts after it, including a retry waiting
+   on a 429). The panel shows one progress line per team, error lines, and a
+   summary at the end: rosters and swimmers done, failed, skipped (already
+   finished), teams whose season is not offered, and any pages that fell back
+   to Downloads.
+
+What it requests, in order: each team's season page, then both rosters
+(men, women) of every chosen team, then one
+`/api/swimmers/{id}/profile_fastest_times/` request per distinct swimmer. A
+swimmer on two teams is fetched once, and that one reply is filed under every
+team that listed the swimmer. Every page goes to the app under the capture
+`team-{id}-{season}` (season pages under `team-{id}`). The captures are opened
+first; the app refuses pages for a capture that was never opened. A page counts
+as saved only when the app took it. A page the app refused is saved to
+Downloads instead, and the run flushes those to one file per capture at the end
+(also on cancel and on a stop). Those pages are not in the app.
+
+Pacing is the existing pacing, read from the same constants
+(`src/crawlPacing.ts`, `SWIMMER_TIMES_*` in `src/swimmerTimes.ts`): one request
+at a time, at least 3 s apart. A 429 is retried with the existing backoff, which
+only waits longer, and the crawl stops after three rate-limited pages in a row.
+**A stopped run has no Resume.** Start the crawl again; finished swimmers are
+skipped. The crawl stops by itself on:
+
+- a Cloudflare 403 (never retried: refresh your SwimCloud session in the tab,
+  then start the crawl again);
+- a page that answers 200 but is a challenge page (no season menu on a team
+  page, or a non-JSON reply from the swimmer endpoint). It is not saved;
+- any 5xx, a network error, three rate-limited pages in a row;
+- a reply redirected to a page the crawl does not fetch;
+- several pages in a row that the app cannot accept, or a capture the app will
+  not open.
+
+A reply redirected to another fetchable page (for example a merged team id) is
+a failure of that item and is not saved or read.
+
+Saved progress: finished swimmers are saved in `chrome.storage.local`, under a
+key built from the sorted (team, season id) pairs of the run. A different team
+set or season never inherits another run's skips: crawling team 412 for
+2026-2027 after 2025-2026 fetches every swimmer again. Each key names the
+swimmer, the team and the season (`swimmer|<id>|<team>|<season id>`): it proves
+the reply was filed under THAT team's capture. A swimmer is skipped only when
+every team that lists it has its key. A swimmer that a team lists only now (its
+roster failed last time) is fetched again, once, and filed under every team that
+lists it: a skipped swimmer's reply was not kept, so it cannot be filed under the
+missing team alone. Keys from older versions (the swimmer id alone) match
+nothing, so those swimmers are fetched again.
+
+The saved progress is deleted when a run completes with no failure. After a
+cancel, a stop or a run with failures it stays, so the next run skips the
+swimmers that are already filed under every team that lists them and fetches the
+rest. Roster pages are always fetched again.
+
+A capture is marked complete only when its planned pages are all in the app (the
+pages this run landed plus the swimmers a saved run proved were filed under that
+team). Otherwise it is marked partial. To clear it by hand, press **Forget saved
+progress** in the panel (it acts on the current selection, or on the last run's).
+
+Pages that fell back to Downloads, and a tab closed mid-run. When the app refuses a
+page, the extension's service worker keeps it in `chrome.storage.local` under
+`omniswimFallbackIndex:{captureId}` (the list) and
+`omniswimFallbackPage:{captureId}:{n}` (one entry per page). At the end of every
+run (completed, cancelled or stopped) the crawl flushes each capture it used into
+one file, `omniswim-swimcloud-captures/{captureId}/combined-capture.json` in your
+Downloads, and clears those keys. If you close the tab mid-run, nothing flushes:
+the fallback pages stay in extension storage and the captures stay `in-progress`
+(the end-of-run mark never ran). The next run that uses the same capture flushes
+what is left, because it flushes every capture it uses. There is no panel button
+for this yet. To inspect or clear by hand: open `chrome://extensions`, find this
+extension, click "service worker" to open its DevTools, and in the console run
+`chrome.storage.local.get(null)` to list the keys, or
+`chrome.storage.local.remove(['omniswimFallbackIndex:team-412-2025-2026'])` (and
+the matching page keys) to clear one capture's leftovers.
+
+The app keeps a saved page: a later failure for the same URL (403, 500, 429) does
+not replace an `ok` page, and the crawl does not relay halting outcomes at all.
+Deleting one capture with its pages keeps the bytes of any page another capture
+still lists (one swimmer's reply is filed under every team that lists them).
+
+What it does not do:
+
+- No conference crawl (no captured conference page exists yet).
+- No relay-leg credits (waiting for a captured swimmer response that has one).
+- The swimmer endpoint returns all-time bests. For a past season they can
+  include later seasons. Do not read them as that season's times.
+- A roster page whose season does not match the chosen one is a failure and is
+  not sent to the app.
+- A roster page with no rows is a failure unless the page itself says no roster
+  is posted ("No rosters found").
+
+Manual live checklist (nobody has run this against the live site):
+
+1. Open any `https://www.swimcloud.com/` page, click the button, paste two team
+   links, Parse. Expect both ids listed and a conference link refused with the
+   note. In this tab press **Read season lists** and leave the panel at the
+   season choice. In a second tab open the panel, Parse, and press **Read season
+   lists**: expect the "Another SwimCloud crawl is running" message (the lock is
+   taken at Read season lists, not at Start).
+2. Read season lists. Expect one 3 s-spaced request per team and a dropdown per
+   team that matches that team's own season menu on the site.
+3. Pick a season that is not the current one for one team. Start. Open DevTools
+   Network. Expect roster URLs with `season_id` and `sort=name`, then swimmer
+   URLs. Expect no request faster than 3 s apart and no request in parallel.
+4. Open the app's capture `team-{id}-{season}` for each team and confirm the two
+   roster pages and the swimmer pages are listed (and `team-{id}` lists the
+   season page). If the summary says pages were saved to Downloads, they are not
+   in the app: fix the pairing and run again.
+5. Check the roster page the app received is for the chosen season (a wrong
+   season must show as a failed roster, not as data).
+6. Pause for 10 s, Resume. Expect no request while paused.
+7. Cancel mid-run, start again with the same teams. Expect finished swimmers
+   skipped and rosters fetched again. Press **Forget saved progress** and start
+   again: expect every swimmer fetched.
+8. If SwimCloud answers 403, expect the crawl to stop with the message, no retry
+   of the 403, and no Resume (start again). A 429 is retried with a growing
+   wait; only three rate-limited pages in a row stop the crawl.
+
 ## What it deliberately does not do
 
 - Neither button ever runs on a schedule, in the background, or without a
@@ -175,6 +342,16 @@ duplicating any of their logic.
   `captureIdForSubject` from `@omniswim/swimcloud/entities` instead of
   carrying a hand-written copy of that rule —
   `tests/swimCloudExtensionCaptureId.test.ts` keeps it that way.
+- `src/multiTeamDriver.ts` — the multi-team crawl loop with every I/O injected
+  (`tests/swimCloudExtensionMultiTeamDriver.test.ts`, run on archived roster
+  pages with a fake clock). `src/multiTeamQueue.ts` is its work queue.
+  `src/multiTeamPanelModel.ts` holds the panel's text and rows
+  (`tests/swimCloudExtensionMultiTeamPanelModel.test.ts`).
+  `src/multiTeamPanel.ts` is the thin DOM half, wired in by `crawler-content.ts`.
+  `src/crawlPacing.ts` holds the shared 3 s floor. `src/multiTeamApp.ts` is its
+  conversation with the worker and the app (relay, open, mark, flush), and
+  `src/crawlLock.ts` is the one-crawl lock both crawls take
+  (`tests/swimCloudExtensionMultiTeamApp.test.ts`, `...CrawlLock.test.ts`).
 - `options.html` / `options.js` — the pairing-token field.
 
 `crawler.js` and `background.js` are **build artifacts**. Edit the matching
@@ -200,3 +377,50 @@ live browser and a live SwimCloud page: DOM injection timing, whether
 the design doc reasons it does, and how SwimCloud's own markup and
 anti-automation behavior actually respond to a paced burst of same-origin
 fetches.
+
+## Harness
+
+`npm run test:harness` loads this extension's real build into real Chromium. It runs the
+extension against a fake SwimCloud. The real Omniswim app (the dev server, on a temp copy of
+`data/`) is the backend. The harness is not part of `npm test` or `vitest run`.
+
+Run it:
+
+1. `npm ci`
+2. `npx playwright install chromium`
+3. `npm run build:extension`
+4. `npm run test:harness`
+
+The script skips with a message, and exits 0, when Chromium or the extension build is missing.
+A full run takes about 2.5 minutes. The extension has no clock override, and its 3 second
+pacing is not lowered, so the harness waits in real time. The fixtures are small to keep that
+short: each roster page keeps its first two swimmer rows.
+
+How it works (`tests/harness/`):
+
+- `fakeSwimCloud.ts` answers `https://www.swimcloud.com/**` from committed fixtures only:
+  the roster pages of teams 412 and 10002824, one swimmer-times body, and a stub team page for
+  the content script to mount on. It logs every request it answers.
+- `extensionHarness.ts` starts Chromium with `--load-extension`, pairs the extension with the app
+  by writing the pairing token to `chrome.storage.local` through the service worker, and drives
+  the Multi-team crawl panel.
+- Network isolation: the route handler aborts every request that is not the fake origin or the
+  local app and records it. Each test fails if anything was aborted. The browser also maps every
+  host except `127.0.0.1` to "not found", so a request Playwright cannot see (the service
+  worker's) cannot leave the machine either.
+
+Scenarios: the happy path (two teams, pinned request order, gaps of 3 s or more, the capture
+store in the app, the school-name label, then Build theoretical meet in the app UI), a 403 on a
+swimmer, a 429 once then OK, a "Just a moment..." challenge on a team page and on a swimmer
+request, the crawl lock across two tabs, and cancel mid-run. The redirect scenario is
+`test.fixme`: Playwright's `route.fulfill` with a 302 does not make Chromium follow the
+redirect for the extension's fetch, so the scenario cannot be driven. The unit tests cover that
+rule.
+
+What it proves: the built bundles run in Chromium, the panel drives the real driver, the
+background worker relays pages and labels to the real capture routes, the pacing and halt rules
+hold on the wire, and the data the app stores builds a theoretical meet.
+
+What it does not prove: Cloudflare behaviour, real cookies or sessions, real SwimCloud markup
+beyond the fixtures, and real timing against the live site. A pass here says nothing about
+whether SwimCloud will accept the crawl.

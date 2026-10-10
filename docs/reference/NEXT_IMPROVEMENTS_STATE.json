@@ -1,0 +1,192 @@
+{
+  "initiative": "next-improvements-2026-10-03",
+  "plan": "docs/reference/NEXT_IMPROVEMENTS_PLAN.md",
+  "crawlPlan": "docs/reference/SWIMCLOUD_MULTI_TEAM_CRAWL_PLAN.md",
+  "branch": "nvitthanala/ui-simplification",
+  "note": "Canonical state for Track A and Track B. Nothing is committed. No agent contacts SwimCloud.",
+  "interruption": {
+    "when": "2026-10-03T15:59Z",
+    "what": "The user denied a tool call while the A1-A3 executor was running its mutation checks. The session continued as 77818e12.",
+    "recovery": "Source files were clean (every mutation had been restored). The e2e spec workspace-route-sync.spec.ts held a duplicated cleanup block and a shadowed variable. Fixed, then all gates re-run."
+  },
+  "tracks": {
+    "A1": {
+      "item": "WorkspaceRouteSync swap loop",
+      "status": "done",
+      "verifiedAt": "2026-10-03",
+      "evidence": "tests/workspaceRouteSync.test.ts (16), tests/e2e/workspace-route-sync.spec.ts (3 pass on a data copy)"
+    },
+    "A2": {
+      "item": "PDF-points lock for diver weight and eligibility",
+      "status": "done",
+      "verifiedAt": "2026-10-03",
+      "evidence": "tests/scoringPdfLockTrackA.test.ts (9)"
+    },
+    "A3": {
+      "item": "Undo refuses after the lineup changed",
+      "status": "done",
+      "verifiedAt": "2026-10-03",
+      "evidence": "tests/optimizerUndoTrackA.test.ts (11), tests/e2e/optimize-undo.spec.ts (1 pass)",
+      "reviewNeeded": "Touches lineup state on apply and Undo. A different provider than Claude should review the diff."
+    },
+    "A4": {
+      "item": "Preset fetch catch, drawer Remove button, amber tokens",
+      "status": "done",
+      "verifiedAt": "2026-10-03",
+      "evidence": "tests/suggestedPresetBannerCatch.test.ts, athleteRemoveButton.test.ts, uiAmberRatchet.test.ts; 25 files migrated (plan said 5); baseline 0"
+    },
+    "A5": {
+      "item": "Per-theme layout test, Lineup and Standings",
+      "status": "done",
+      "verifiedAt": "2026-10-03",
+      "evidence": "tests/e2e/ui-theme-screenshots.spec.ts, 6 pass; custom theme tested on a dark base only"
+    },
+    "A6": {
+      "item": "Stale test workspaces and cold-start backups",
+      "status": "blocked-on-user",
+      "why": "Needs a decision before touching the real database."
+    },
+    "B0": {
+      "item": "Capture three SwimCloud fixtures",
+      "status": "blocked-on-user",
+      "needs": [
+        "team page with season select open",
+        "swimmer times response with a non-leadoff relay leg",
+        "relay event page with Show names expanded"
+      ]
+    },
+    "B1": {
+      "status": "done",
+      "note": "seasons, target links, roster planner, queue (771273ec, 0c53b125)"
+    },
+    "B1-B5": {
+      "status": "not-started",
+      "dependsOn": "B0"
+    },
+    "B3": {
+      "item": "Multi-team driver and panel",
+      "status": "built-offline-two-architect-rounds-fixed; live run pending",
+      "owner": "executor acb10892639fc7228 (resumed)",
+      "interruptions": [
+        {
+          "when": "2026-10-03 ~15:30 CT",
+          "what": "Session limit (429) while the agent was still reading; it wrote no files (tree clean at 0c53b125). Resumed with SendMessage after the 20:30Z reset."
+        }
+      ],
+      "progress": [
+        "DONE: src/multiTeamDriver.ts, src/crawlPacing.ts (MIN_DELAY_MS now shared), src/multiTeamPanelModel.ts, src/multiTeamPanel.ts (wired in crawler-content.ts main), content.css rules, README section and live checklist, packages/swimcloud crawlPlan.ts planTeamRosterPage and planSwimmerFastestTimes, four trimmed roster fixtures, four test files (driver 36, denylist wall 3, panel model 10, planners 4), crawler.js rebuilt",
+        "GATES 2026-10-03: lint 0 errors (2 old warnings), lint:extension clean, vitest 163 files 2255 tests green. Mutations M1-M5 and M7 each fail tests; files restored, sha256 verified",
+        "NOT VERIFIED (live only): real fetch carries the session, the panel DOM, 3 s pacing as seen in DevTools, chrome.storage resume, real 403/429 behaviour"
+      ],
+      "resumePoint": "Architect re-review of the N1-N9 diff; then a live run per the README checklist.",
+      "committed": "02fd8fc3",
+      "architectReview": "2026-10-03: 9 defects. F1 no capture opened or flushed so no page reaches the app yet panel says Done; F2 pacing clock per run, no lock across crawls/tabs; F3 lost page saved as finished; F4 resume keys global; F5 cancel/pause not checked after waits; F6 200 challenge page not detected; F7 redirects unchecked; F8 empty roster guessed; F9 minor + README.",
+      "reviewFixes": {
+        "when": "2026-10-03",
+        "F1": "FIXED. openCapture before any relay for team-{id} and team-{id}-{season}; stop with a clear message if no captureId; markCapture and flushDownloads on every exit; fallback is not landed (multiTeamApp.ts).",
+        "F2": "FIXED. deps.paceClock shared with the meet crawl lastFetchAtMs; crawlLock.ts (navigator.locks, ifAvailable) held by both crawls for the whole run.",
+        "F3": "FIXED. Only a landed relay marks done and saves; else the item fails.",
+        "F4": "FIXED. One body relayed under every attribution; resume key from sorted (team, season id) pairs; cleared after a clean completed run; Forget saved progress button.",
+        "F5": "FIXED. Cancel and Pause checked after every wait in fetchPaced.",
+        "F6": "FIXED. A 2xx page without a season select, or a Just a moment title, halts and is not relayed; checked before relay on season and roster pages.",
+        "F7": "FIXED. finalUrl returned by the multi-team fetch; a different final URL fails the item, an unfetchable one halts.",
+        "F8": "FIXED. Empty roster only when the parser warns no-roster-posted.",
+        "F9": "FIXED. Relay streak reset per run; halt text says start again; focus return and Escape; button hidden off www.swimcloud.com.",
+        "gates": "lint 0 errors (2 old warnings); lint:extension clean; build:extension and freshness test; vitest 166 files 2321 tests green. Mutations per finding fail tests, files restored, sha256 verified.",
+        "stillLiveOnly": "navigator.locks across real tabs; real worker answers (via http vs downloads) and the app 404 rule; response.url on a real redirect; chrome.storage resume and clear; panel focus and Escape; real 200 challenge body."
+      },
+      "reviewFixesRound2": {
+        "when": "2026-10-03",
+        "N1": "FIXED. Saved keys per team and season (swimmer|id|team|season). Skip only when every listing team has its key; a late team flips the swimmer to pending (one refetch, filed under every team). Completeness also checked against pages landed plus proven (capturePagesComplete). Old keys match nothing.",
+        "N2": "FIXED. Driver relays no halting outcome. captureStore mergePageRefs never replaces an ok entry with a non-ok one.",
+        "N3": "FIXED. deleteCapture withPages keeps a URL another capture still lists. Residual: not atomic against a concurrent write to another capture.",
+        "N4": "FIXED. forgetButtonVisible: hidden while a run is past the choice.",
+        "N5": "README only: leftover Downloads pages, storage key names, how to inspect and clear.",
+        "N6": "FIXED. Meet crawl button hidden on the bare host (crawlHostAllowed). Shared clock is per tab; the lock covers tabs (README).",
+        "N7": "FIXED. Swimmer reply must be a JSON object or array.",
+        "N8": "FIXED. Lock refusal carries reason held or unavailable; Retry only for held.",
+        "N9": "README fixed (lock taken at Read season lists; stop-before-fetch only for the first team; per-tab clock; resume wording; closed tab).",
+        "gates": "See the report of this round: lint 0 errors, lint:extension, build and freshness, full vitest green; mutations fail tests, files restored, sha256 verified.",
+        "liveOnly": "navigator.locks across tabs; the app route 404 rule and a real downloads fallback flush; response.url on a redirect; chrome.storage resume, clear and Forget; panel focus; real 200 challenge body; the store merge rule against a real second crawl of the same URL."
+      },
+      "nextStep": "User runs ONE team live with the README checklist, reports what the panel and the app capture show."
+    },
+    "B1b-conference": {
+      "status": "blocked-on-user",
+      "needs": "F-D: capture of https://www.swimcloud.com/country/usa/college/conference/nsisc/"
+    },
+    "B2": {
+      "status": "blocked-on-user",
+      "needs": "F-B swimmer times with a non-leadoff relay leg; F-C relay event page with Show names expanded"
+    },
+    "B4": {
+      "item": "Theoretical meet from several crawled teams",
+      "status": "part1-pure-builder-done-and-reviewed; UI not started",
+      "design": "docs/reference/SWIMCLOUD_MULTI_TEAM_CRAWL_PLAN.md, Phase B4 design (decided 2026-10-04)",
+      "scope": "Part 1 done: pure builder packages/manager/src/lib/theoreticalMeetSeeds.ts. Still to do: write rows to workspace psych arrays, per-team and season workspaces, UI, labelled relay estimate from flat-start bests (setting, stored apart).",
+      "part1": {
+        "when": "2026-10-04",
+        "files": [
+          "packages/manager/src/lib/theoreticalMeetSeeds.ts",
+          "tests/theoreticalMeetSeeds.test.ts"
+        ],
+        "evidence": "46 tests on real roster fixtures, the real swimmer-times response and the real converter. Mutations M1-M8 each fail tests, files restored, sha256 verified. lint 0 errors (2 old warnings); vitest 168 files 2403 tests green.",
+        "reusedSelector": "categorizeBestEvents (event order) and canAcceptAnotherEntry (caps), as rosterOptimizer addAthleteEventPlans does. No second selector.",
+        "reviewNeeded": "Touches entry-limit and lineup selection. Architect review wanted, in particular the LCM/SCM ranking note: the existing selector ranks on a SCY estimate (order only; seeds stay as recorded).",
+        "notDone": "packages/manager/package.json exports not extended (UI inside manager imports by relative path). Item X blocked on a core edit.",
+        "reviewFixes": {
+          "when": "2026-10-04",
+          "source": "architect review of 5bf58a27 (probe reproduced D1, D2, D3 and the exhibition item)",
+          "D1": "FIXED. LCM and SCM throw course-not-supported. Follow-up design is in the file header: rank by the place a seed takes in the theoretical field, raw in-course times within one event, no conversion, no cut.",
+          "D2": "FIXED. Same normalized name on one team throws name-collision-in-team naming both athletes.",
+          "D3": "FIXED. A seed is in-season only when its seasonId is string-equal to rosterSeasonId. No ordering.",
+          "D4": "FIXED. conference input; mergeScoringSettings(settings, { conference }) once, used for validation, selector, caps and caveats.",
+          "D5": "FIXED. UNCAPPED_CAVEAT team caveat; no throw.",
+          "D6": "FIXED. DIVING_EXCLUDED_CAVEAT meet-wide; dives not counted as unknown-course; diver reason diving_not_supported.",
+          "D7": "FIXED. no_usable_swim reason for swims []; rosterStatus required (roster-status-required); swimsStatus parse_failed with athletesWithTimesParseFailed.",
+          "D8": "FIXED. nm:{name} id, no counter.",
+          "X": "BLOCKED, not done. The fastest-times parser ignores exhibition:true and HistoricalSwim (packages/core/src/types.ts) has no field to carry it. Needs a core edit (an optional isExhibition on HistoricalSwim) plus a swimcloud parser field and a converter carry-through. Until then the fixture exhibition 100 IM SCY 53.27 becomes a seed whenever the meet program contains the 100 IM.",
+          "evidence": "tests/theoreticalMeetSeeds.test.ts 64 tests; each fix proven by a mutation that fails tests, files restored, sha256 verified."
+        }
+      },
+      "committed": "5bf58a27, f621b978",
+      "decisions": {
+        "seed": "all-time best per event, meet course only, no conversion",
+        "entries": "follow scoring caps via existing selector; conference overrides merged",
+        "courses": "SCY only for now; LCM/SCM refused (architect: ranking on SCY estimate implies an unpublished cut)"
+      },
+      "knownIssueExhibition": "Fastest-times parser ignores exhibition:true and HistoricalSwim has no isExhibition (core type), so an exhibition swim can become a seed when its event is in the meet program. Needs an additive core type field + parser + converter carry-through, then exclude in the builder (listed as unofferedSeeds reason exhibition). Not done.",
+      "nextUI": "Pick crawled teams, show athletes with no times, import rows into psychMenResults/psychWomenResults, show the all-time-best caveat.",
+      "followUp": "In-course ranking by place in the theoretical field (raw times, one event, no conversion) to allow LCM/SCM."
+    },
+    "E-exhibition": {
+      "item": "Exhibition swims: parser flag, additive core field, converter carry, labelled and optional-exclude seeds",
+      "status": "done",
+      "verifiedAt": "2026-10-04",
+      "decisions": "User: additive core field HistoricalSwim.isExhibition approved. Exhibition seeds are INCLUDED by default with a visible label; exhibitionSeeds:\"exclude\" drops them. No change to isRankableSwim, bestTimeEligibility.ts or any other reader of bests.",
+      "measured": "128 of 2,390 SCY best rows (5.4%) across the three teams are exhibition. The endpoint returns ONE row per event, so excluding an exhibition best leaves that event with NO seed. Real fixture tests/fixtures/profile_fastest_times-1330318.json has exactly 1 exhibition row (2025-10-10, 100 IM SCY, 53.27).",
+      "files": {
+        "core": "packages/core/src/types.ts: HistoricalSwim.isExhibition?: boolean (set only when the source says true, never false)",
+        "parser": "packages/swimcloud/src/parser.ts: SwimCloudPersonalBestSwim.isExhibition?: true, read from row.exhibition === true (strict), regular rows only",
+        "converter": "packages/manager/src/lib/swimCloudImportBridge.ts swimCloudSwimmerTimesToHistoricalSwims: carries it when true",
+        "seeds": "packages/manager/src/lib/theoreticalMeetSeeds.ts: exhibitionSeeds option, exhibitionSeedsUsed, exhibitionEventsExcluded, candidate/source isExhibition, team and meet caveats",
+        "tests": "tests/exhibitionSeeds.test.ts (22); tests/swimCloudReplaceImport.test.ts golden hashes repinned (only the new key differs; removing the converter spread restores the old hashes)"
+      },
+      "mergeSurvival": "mergeHistoryIndex keeps the whole object it selects, so the flag survives (tested, incl. both winner directions and a JSON round trip). No other code rebuilds HistoricalSwim field by field for these flags except the converter and the paste stamp (athleteHistory.ts stampFields, which builds a new row from pasted text and is not a source of this flag).",
+      "mutations": "5 mutations each fail tests, files restored, sha256 verified: truthy read of row.exhibition; converter drops the field; builder ignores the option; wrong exhibition count; tie backed by exhibition swim instead of official.",
+      "open": "TheoreticalMeetBanner EXHIBITION_CAVEAT in theoreticalMeetView.ts still says the swim record has no flag and exhibition cannot be left out: now stale (UI agent). NO_SEED_TEXT has no entry for excludedExhibitionEvents wording. Off-program exhibition swims dropped under exclude are not listed (they were never seeds)."
+    }
+  },
+  "gates": {
+    "lint": "0 errors; 2 existing complexity warnings in swimCloudMeetImportBridge.ts",
+    "knownFailing": "scripts/test_scoring_preset_routes.mjs, failing since UI Phase 1, undiagnosed",
+    "verified": "2026-10-03 orchestrator rerun: lint 0 errors; vitest 152 files, 2038 tests; 10 e2e pass on a data copy; data/omniswim.db unchanged"
+  },
+  "providers": {
+    "fable": "available as claude-fable-5-1; narrow use only, see PROVIDER_ROUTING.json",
+    "cursor": "Free plan, Auto only, allowance spent until 2026-10-19"
+  },
+  "reviewNeeded": [
+    "A3 and A4.2 touch apply/Undo and drawer actions. Review by a non-Claude provider (Codex 89% used; wait or use Cursor Auto)."
+  ]
+}

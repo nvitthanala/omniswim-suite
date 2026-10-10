@@ -46,6 +46,7 @@ import {
   isCutlineTagConclusive,
 } from '../packages/core/src/lib/cutlineTags.ts';
 import { relaySplitQualificationCutEvent } from '../packages/core/src/lib/utils.ts';
+import { loadLocalMeets, noteLocalOnlySkipped } from './lib/localMeets.mjs';
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 let failures = 0;
@@ -91,25 +92,31 @@ eq(divisionForTeamOrNull('Henderson State University'), 'D2', 'HSU resolves to D
 eq(divisionForTeamOrNull('HSU'), 'D2', 'HSU abbreviation resolves to D2');
 
 // Every team in data/meets.json must be mapped — an unmapped one is a silent bug.
-const meets = JSON.parse(fs.readFileSync(path.join(repoRoot, 'data/meets.json'), 'utf-8'));
-const meetTeams = new Set();
-(function walk(node) {
-  if (Array.isArray(node)) {
-    node.forEach(walk);
-    return;
-  }
-  if (!node || typeof node !== 'object') return;
-  for (const [k, v] of Object.entries(node)) {
-    if (k === 'team' && typeof v === 'string') meetTeams.add(v);
-    if (k === 'teams' && Array.isArray(v)) v.forEach(t => typeof t === 'string' && meetTeams.add(t));
-    walk(v);
-  }
-})(meets);
-for (const t of meetTeams) {
-  if (divisionForTeamOrNull(t) === null) fail(`team in data/meets.json is unmapped: ${t}`);
-  const status = resolveTeamDivision(t).status;
-  if (status !== 'active') {
-    fail(`team in data/meets.json no longer has an active program (${status}): ${t}`);
+// Local-only: data/meets.json is untracked. MEET_TEAMS above is the committed list
+// of the four meet teams, and the checks below that use it always run.
+const meets = loadLocalMeets();
+if (meets === null) {
+  noteLocalOnlySkipped('test_cutline_tags.mjs', 'section 1, every team in the local workspaces is mapped and active');
+} else {
+  const meetTeams = new Set();
+  (function walk(node) {
+    if (Array.isArray(node)) {
+      node.forEach(walk);
+      return;
+    }
+    if (!node || typeof node !== 'object') return;
+    for (const [k, v] of Object.entries(node)) {
+      if (k === 'team' && typeof v === 'string') meetTeams.add(v);
+      if (k === 'teams' && Array.isArray(v)) v.forEach(t => typeof t === 'string' && meetTeams.add(t));
+      walk(v);
+    }
+  })(meets);
+  for (const t of meetTeams) {
+    if (divisionForTeamOrNull(t) === null) fail(`team in data/meets.json is unmapped: ${t}`);
+    const status = resolveTeamDivision(t).status;
+    if (status !== 'active') {
+      fail(`team in data/meets.json no longer has an active program (${status}): ${t}`);
+    }
   }
 }
 

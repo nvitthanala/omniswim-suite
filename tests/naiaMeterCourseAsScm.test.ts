@@ -145,8 +145,19 @@ describe('the evidence behind the SCM reading', () => {
     expect(text).toMatch(/Qualifying Standards\s+\S+\s+2020-2021/);
     expect(text).toMatch(/EVENTS\s+Men\s+Women/);
     // One Yards and one SCM heading per gender, and no other course named.
-    expect(text).toMatch(/50 FREESTYLE\s+SCM/);
-    expect(text).toMatch(/100 FREESTYLE\s+Yards\s+Yards\s+SCM/);
+    //
+    // The headings sit in the table's header block: everything before the first
+    // time value. Do not pin them to a row ("50 FREESTYLE ... SCM"). Where they
+    // land relative to the first event rows depends on the pdftotext
+    // implementation: xpdf 4.00 (the developer machine) folds the "Yards" and
+    // "SCM" headings into the first event rows, and poppler (ubuntu CI) prints
+    // them on their own line above "50 FREESTYLE". The sheet is the same.
+    const firstTime = text.search(/\b\d{1,2}(?::\d{2})?\.\d{2}\b/);
+    expect(firstTime, 'the sheet prints at least one time').toBeGreaterThan(0);
+    const headerBlock = text.slice(0, firstTime);
+    expect(count(headerBlock, /\bSCM\b/g), 'SCM headings above the first time').toBe(2);
+    expect(count(headerBlock, /\bYards\b/g), 'Yards headings above the first time').toBe(2);
+    expect(headerBlock).toMatch(/50 FREESTYLE/);
     expect(count(text, /\bSCM\b/g)).toBe(2);
     expect(count(text, /\bYards\b/g)).toBe(2);
     expect(text).not.toMatch(/\bLCM\b|\bMETERS\b|long[\s-]?course/i);

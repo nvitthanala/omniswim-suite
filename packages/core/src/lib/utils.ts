@@ -3025,6 +3025,20 @@ export function findDepartedLegSwim(
   );
 }
 
+/**
+ * The time an override holds for a leg when it names no swimmer, or undefined.
+ *
+ * A clock hold is a time typed with NO swimmer named. An override that names
+ * one (`assigneeName` or `recruitId`) is a fill, and a fill whose swimmer
+ * stopped resolving is vacant, not held: a relay swap stores the swimmer's name
+ * AND a clock-hold time, so reading that time for an unresolved name showed a
+ * filled `—` leg that no audit flagged.
+ */
+function clockHoldTime(override: RelayLegOverride): string | undefined {
+  if (override.assigneeName?.trim() || override.recruitId) return undefined;
+  return override.manualLegTime?.trim() || undefined;
+}
+
 /** One relay leg's canonical name/class-year, as `relayNames` (or a fallback
  *  built from the ordered rows) records it. */
 type RelayLegCanonical = { name: string; year: string };
@@ -3041,8 +3055,10 @@ type ResolvedRelayLegs = {
 /**
  * Resolve every leg of one relay group: a leg whose holder stays untouched
  * keeps their spot; a leg whose holder departs (dropped, excluded, or a
- * non-scorer vacate) is filled by its override's assignee or manual time, or
- * left vacant with a 3-second penalty and a reason the lineup audit can name.
+ * non-scorer vacate) is filled by its override's assignee, or by its manual time
+ * when the override names no swimmer (a clock hold), or left vacant with a
+ * 3-second penalty and a reason the lineup audit can name. An override that
+ * names a swimmer who no longer resolves is vacant, never a clock hold.
  *
  * `legPool` is the swims an override may resolve onto — `simulateRoster`'s
  * caller mixes in the history leg-only pool there. `findDepartedLegSwim`'s
@@ -3184,9 +3200,10 @@ function resolveRelayLegs(
       continue;
     }
 
-    if (manualTime) {
+    const holdTime = clockHoldTime(override);
+    if (holdTime) {
       modified = true;
-      const legTimeSec = convertTimeToSeconds(manualTime);
+      const legTimeSec = convertTimeToSeconds(holdTime);
       applyLegTimeDelta(index, legTimeSec, oldSplitSec, departedIndiv);
       outLegs[index] = { name: '—', year: '' };
       legReplacements.set(index, {
@@ -3194,7 +3211,7 @@ function resolveRelayLegs(
         id: `manual-${index}`,
         name: '—',
         classYear: '',
-        time: manualTime,
+        time: holdTime,
         isRelay: false,
       });
       continue;
@@ -3644,6 +3661,9 @@ export function buildCategorizedScoringInputs(
         .filter(t => !t.event.toLowerCase().includes('relay'))
         .filter(t => isRankableSwimCloudStamp(t.swimcloudBadge))
         .filter(t => !eventNotSwumInCourse(t.event, t.timeType))
+        // An unreadable time is stored as 0. Scored, it would be a "0.00" that
+        // ranks first in every event.
+        .filter(t => Number.isFinite(t.timeSecondsScy) && t.timeSecondsScy > 0)
     );
     const strongestFirst = args.eventOrder
       ? args.eventOrder(athlete.fullName, oneTimePerEvent)

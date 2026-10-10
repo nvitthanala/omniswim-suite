@@ -27,7 +27,7 @@ const SEVERITY_ORDER: readonly ProblemSeverity[] = ['error', 'warning', 'info'];
 const SEVERITY_LABEL: Record<ProblemSeverity, string> = { error: 'Errors', warning: 'Warnings', info: 'Info' };
 const SEVERITY_CLASS: Record<ProblemSeverity, string> = {
   error: 'border-red-500/40 text-red-500 dark:text-red-400',
-  warning: 'border-amber-500/40 text-amber-600 dark:text-amber-400',
+  warning: 'border-warning text-warning',
   info: 'border-theme-soft text-theme-muted',
 };
 
@@ -72,7 +72,7 @@ export function TagTable({ config, tags, frameSeconds, onChange }: TagTableProps
   return (
     <div className="flex flex-col gap-3">
       <div className="rounded-xl border border-theme-soft overflow-hidden">
-        <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 px-3 py-2 bg-[var(--surface-muted)] text-ui-micro font-bold uppercase tracking-widest text-theme-muted">
+        <div className="grid grid-cols-[1fr_auto_auto_auto] gap-2 px-3 py-2 bg-[var(--surface-muted)] text-ui-micro font-bold text-theme-muted">
           <span>Tag</span>
           <span>Length</span>
           <span>Time</span>
@@ -136,7 +136,7 @@ export function TagTable({ config, tags, frameSeconds, onChange }: TagTableProps
         <div className="flex flex-col gap-2">
           {SEVERITY_ORDER.filter((severity) => problemsBySeverity[severity].length > 0).map((severity) => (
             <div key={severity} className={`rounded-lg border px-3 py-2 space-y-1 ${SEVERITY_CLASS[severity]}`}>
-              <div className="text-ui-micro font-bold uppercase tracking-widest">{SEVERITY_LABEL[severity]}</div>
+              <div className="text-ui-micro font-bold">{SEVERITY_LABEL[severity]}</div>
               {problemsBySeverity[severity].map((problem, i) => (
                 <div key={`${problem.code}-${i}`} className="text-ui-caption">
                   {problem.message}

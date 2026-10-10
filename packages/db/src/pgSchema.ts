@@ -4,7 +4,8 @@
 // 7 = union of the video-analysis branch (6: source_meet_results, race_analyses,
 // athlete_aliases, scoring_view) and main's psych-sheet schema (3: psych_results,
 // loaded_psych). The merged schema is a superset of both, so it gets its own version.
-export const PG_SCHEMA_VERSION = 7;
+// 8 = adds relay_leg_credits (Workspace.relayLegCredits).
+export const PG_SCHEMA_VERSION = 8;
 
 export const CREATE_PG_TABLES_SQL = `
 CREATE TABLE IF NOT EXISTS meta (
@@ -151,6 +152,13 @@ CREATE TABLE IF NOT EXISTS athlete_aliases (
   data         TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_athlete_aliases_ws ON athlete_aliases(workspace_id);
+
+CREATE TABLE IF NOT EXISTS relay_leg_credits (
+  workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
+  position     INTEGER NOT NULL DEFAULT 0,
+  data         TEXT NOT NULL
+);
+CREATE INDEX IF NOT EXISTS idx_relay_leg_credits_ws ON relay_leg_credits(workspace_id);
 
 CREATE TABLE IF NOT EXISTS workspace_snapshots (
   id           TEXT PRIMARY KEY,

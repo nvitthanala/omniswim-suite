@@ -35,16 +35,16 @@ type Props = {
   projectedByTeam: Map<string, number>;
   whatIfMode: boolean;
   removeSeniors: boolean;
+  /** The team chosen in the Manager team bar. This step never writes it. */
   selectedTeam: string;
-  /** Scoreable teams, so the "choose a team" state can offer them. */
-  teams: string[];
-  onSelectTeam: (team: string) => void;
   onUpdate: (patch: Partial<Workspace>) => void;
   onDeleteSwim?: (swim: AthleteCreditedSwim) => void;
   onEditSwim?: (swim: AthleteCreditedSwim, changes: EditCreditedSwimValues) => void;
   onAthleteSelect?: (athlete: { name: string; team: string; classYear: string } | null) => void;
   onRequestDeleteSwimmer?: (name: string) => void;
   onOpenRelays?: () => void;
+  /** Goes to the Optimize step. The Lineup step has no optimizer of its own. */
+  onOpenOptimize?: () => void;
   jumpAthleteName?: string | null;
   jumpAthleteKey?: string | null;
   /** Jump from checklist/arbitrage: carries the athlete's roster key when known. */
@@ -62,14 +62,13 @@ export default function RosterLineupStep({
   whatIfMode,
   removeSeniors,
   selectedTeam,
-  teams,
-  onSelectTeam,
   onUpdate,
   onDeleteSwim,
   onEditSwim,
   onAthleteSelect,
   onRequestDeleteSwimmer,
   onOpenRelays,
+  onOpenOptimize,
   jumpAthleteName,
   jumpAthleteKey,
   onJumpAthlete,
@@ -142,7 +141,7 @@ export default function RosterLineupStep({
         icon={<FileWarning size={28} />}
         eyebrow="Lineup"
         title="Bring in swimmers first"
-        description="Load a meet or import swimmers on the Source step to build this lineup."
+        description="Load a meet or import swimmers on the Athletes step to build this lineup."
       />
     );
   }
@@ -152,9 +151,7 @@ export default function RosterLineupStep({
       <TeamPickerEmptyState
         eyebrow="Lineup"
         title="Choose a team to build its lineup"
-        description="Select a team to edit its roster and entries."
-        teams={teams}
-        onSelectTeam={onSelectTeam}
+        description="Use the team bar above to pick the team whose roster and entries you want to edit."
       />
     );
   }
@@ -165,13 +162,7 @@ export default function RosterLineupStep({
         <p className="text-ui-caption rounded-xl border border-theme-soft surface-muted-bg px-4 py-2.5 text-theme-secondary shrink-0">
           Observe only — enable What-if to toggle scorers, edit entries, or remove athletes.
         </p>
-      ) : (
-        <p className="text-ui-body text-theme-secondary shrink-0 leading-relaxed">
-          Select a team and athlete. Edit scorers and individual entries together. Non-scorers are
-          removed from relay legs automatically — fill gaps on Relays. Watch the checklist for
-          over-limit, empty lineup, and vacant relay warnings.
-        </p>
-      )}
+      ) : null}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-4 flex-1 min-h-0 items-start">
         <div className="lg:col-span-9 flex flex-col min-h-0 min-w-0 order-2 lg:order-1">
@@ -195,16 +186,16 @@ export default function RosterLineupStep({
             baselineByTeam={baselineByTeam}
             showTeamSidebar={false}
             teamPickerMode="dropdown"
+            hideTeamSelect
             lineupAudit={audit}
             expanded
             selectedTeam={selectedTeam || undefined}
-            onSelectTeam={onSelectTeam}
             onDeleteSwim={onDeleteSwim}
             onEditSwim={onEditSwim}
             onAthleteSelect={onAthleteSelect}
             onRequestDeleteSwimmer={onRequestDeleteSwimmer}
             workspace={workspace}
-            removeSeniors={removeSeniors}
+            onOpenOptimize={onOpenOptimize}
             onWorkspaceUpdate={onUpdate}
             jumpAthleteName={jumpAthleteName}
             jumpAthleteKey={jumpAthleteKey}
@@ -223,14 +214,14 @@ export default function RosterLineupStep({
                   <span className="inline-flex items-center gap-1.5">
                     Checklist
                     {audit.checklistItems.length > 0 ? (
-                      <span className="inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-amber-400/20 text-amber-400 text-ui-micro font-mono normal-case tracking-normal">
+                      <span className="inline-flex items-center justify-center min-w-[1.1rem] h-[1.1rem] px-1 rounded-full bg-warning-soft text-warning text-ui-micro font-mono normal-case tracking-normal">
                         {audit.checklistItems.length}
                       </span>
                     ) : null}
                   </span>
                 ),
               },
-              { value: 'arbitrage', label: 'Arbitrage' },
+              { value: 'arbitrage', label: 'Cross-course' },
               { value: 'scenarios', label: 'Scenarios' },
             ]}
           />

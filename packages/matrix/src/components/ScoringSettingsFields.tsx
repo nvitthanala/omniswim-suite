@@ -42,7 +42,7 @@ import {
 import { ScoringViewBanner, ScoringLockBanner, SuggestedPresetBanner } from './ScoringSettingsBanners';
 import { ScoringPresetPicker } from './ScoringPresetPicker';
 import { ScoringCapsFields } from './ScoringCapsFields';
-import { RelayScoringFields, DivingPointsFields, PerEventCapsFields } from './ScoringOptionalTablesFields';
+import { RelayScoringFields, DivingPointsFields, PerEventCapsFields, PlacePointInput } from './ScoringOptionalTablesFields';
 
 const PLACE_COUNT_OPTIONS = [8, 12, 16, 20, 24];
 const TOP_24_POINTS = [32, 28, 27, 26, 25, 24, 23, 22, 20, 17, 16, 15, 14, 13, 12, 11, 9, 7, 6, 5, 4, 3, 2, 1];
@@ -78,6 +78,18 @@ export interface ScoringSettingsFieldsProps {
   presetPickerExtra?: ReactNode;
   /** Bump to refetch the preset list — e.g. after `ScoringPresetManagerModal` saves or deletes one. Ignored on initial mount (that fetch always runs). */
   presetListRefreshToken?: number;
+  /**
+   * The SAVED settings already resolve to PDF place points (an explicit On, or Auto with PDF
+   * points in the results). Kept for hosts that cannot say more. When
+   * `resultsCarryPdfPlacePoints` is given it decides the Auto case instead, because this flag
+   * also reads true for a saved explicit On that the draft has since switched to Auto.
+   */
+  pdfPlacePointsLocked?: boolean;
+  /**
+   * The results themselves carry HyTek place points, independent of any saved setting. Lets the
+   * dialog resolve a draft Auto the moment it is picked, before anything is saved.
+   */
+  resultsCarryPdfPlacePoints?: boolean;
 }
 
 export function ScoringSettingsFields({
@@ -91,6 +103,8 @@ export function ScoringSettingsFields({
   hidePresetPicker = false,
   presetPickerExtra,
   presetListRefreshToken,
+  pdfPlacePointsLocked = false,
+  resultsCarryPdfPlacePoints,
 }: ScoringSettingsFieldsProps) {
   const [local, setLocal] = useState<ScoringSettings>(() => mergeScoringSettings(settings));
   const [presets, setPresets] = useState<ScoringPresetMeta[]>([]);
@@ -105,16 +119,34 @@ export function ScoringSettingsFields({
     null
   );
 
+  // Reset the edited copy only when the incoming settings change in content.
+  // A parent that rebuilds an equal object each render (a toast, a toggle)
+  // must not wipe unsaved edits, so key on the serialised value, not identity.
+  const settingsKey = JSON.stringify(settings);
   useEffect(() => {
     setLocal(mergeScoringSettings(settings));
-  }, [settings]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- settingsKey is the content identity of `settings`
+  }, [settingsKey]);
 
   useEffect(() => {
     fetchScoringPresetList().then(setPresets).catch(() => setPresets([]));
   }, [presetListRefreshToken]);
 
-  // Which controls the engine will overwrite regardless of what's edited here.
-  const lock = useMemo(() => scoringSettingsLock(local, { conference }), [local, conference]);
+  // Read the dialog's live choice, not the saved one: an explicit On locks, an
+  // explicit Off unlocks in the same session, and Auto falls back to whether the
+  // results carry PDF place points (the saved lock only when the host cannot say).
+  const autoResolvesToPdf = resultsCarryPdfPlacePoints ?? pdfPlacePointsLocked;
+  const pdfPointsLock =
+    local.usePdfPlacePoints === true ||
+    ((local.usePdfPlacePoints == null || local.usePdfPlacePoints === 'auto') && autoResolvesToPdf);
+
+  // Which controls the engine will overwrite regardless of what's edited here. When the PDF
+  // regime is in force the engine ignores the scorer-pool fields (caps, scope, diver weight,
+  // relay eligibility) even under Auto, so ask the lock for that regime explicitly.
+  const lock = useMemo(
+    () => scoringSettingsLock(pdfPointsLock ? { ...local, usePdfPlacePoints: true } : local, { conference }),
+    [local, conference, pdfPointsLock]
+  );
   const lockedKeys = useMemo(() => new Set<string>(lock.keys as readonly string[]), [lock]);
   const isLocked = (key: keyof ScoringSettings) => lockedKeys.has(key as string);
   const lockProps = (key: keyof ScoringSettings) =>
@@ -210,7 +242,6 @@ export function ScoringSettingsFields({
   const divingTable = optionalPointsField('divingPoints');
 
   const resolvedScoringView = scoringView ?? 'merged';
-
   return (
     <>
       {onScoringViewChange ? (
@@ -223,20 +254,41 @@ export function ScoringSettingsFields({
         <SuggestedPresetBanner
           suggestedPresetId={suggestedPresetId}
           onLoadAndSave={() => {
-            void fetchScoringPresetSettings(suggestedPresetId).then(s => {
-              const next = applySettings(s);
-              setSelectedPreset(suggestedPresetId);
-              onApplyAndSaveSuggestedPreset?.(next);
-            });
+            // A rejected fetch must not surface as an unhandled rejection. The banner
+            // stays so the user can try again; nothing is applied or saved.
+            fetchScoringPresetSettings(suggestedPresetId)
+              .then(s => {
+                const next = applySettings(s);
+                setSelectedPreset(suggestedPresetId);
+                onApplyAndSaveSuggestedPreset?.(next);
+              })
+              .catch(err => {
+                console.warn(`Could not load the suggested scoring preset "${suggestedPresetId}".`, err);
+              });
           }}
         />
       ) : null}
 
       <div className="space-y-4">
         <div>
-          <label className="block text-[10px] text-theme-secondary uppercase mb-1">PDF place points</label>
+          <label className="block text-ui-caption text-theme-secondary mb-1">Scorer eligibility</label>
           <select
-            className="glass-input w-full text-xs uppercase"
+            aria-label="Scorer eligibility"
+            className="glass-input w-full text-xs"
+            value={pdfPointsLock ? 'points_pool' : local.scorerEligibilityMode ?? 'points_pool'}
+            disabled={pdfPointsLock}
+            title={pdfPointsLock ? 'PDF place points require Points pool eligibility.' : undefined}
+            onChange={e => update({ scorerEligibilityMode: e.target.value as ScoringSettings['scorerEligibilityMode'] })}
+          >
+            <option value="roster">Team scorer list</option>
+            <option value="points_pool">Points pool</option>
+          </select>
+          {pdfPointsLock ? <p className="mt-1 text-ui-caption text-theme-muted">PDF place points require Points pool eligibility.</p> : null}
+        </div>
+        <div>
+          <label className="block text-ui-caption text-theme-secondary mb-1">PDF place points</label>
+          <select
+            className="glass-input w-full text-xs"
             aria-label="PDF place points setting"
             value={local.usePdfPlacePoints === true ? 'on' : local.usePdfPlacePoints === false ? 'off' : 'auto'}
             onChange={e => {
@@ -268,7 +320,7 @@ export function ScoringSettingsFields({
 
         <div>
           <div className="flex items-center gap-3 mb-1">
-            <label className="text-[10px] text-theme-secondary uppercase">Scoring places</label>
+            <label className="text-ui-caption text-theme-secondary">Scoring places</label>
             <select
               value={local.scoringPoints.length}
               onChange={e => handlePlacesChange(parseInt(e.target.value, 10))}
@@ -286,12 +338,10 @@ export function ScoringSettingsFields({
             {local.scoringPoints.map((pt, i) => (
               <div key={i} className="flex flex-col gap-1">
                 <span className="text-[9px] text-theme-secondary font-mono">Place {i + 1}</span>
-                <input
-                  type="number"
-                  aria-label={`Points for place ${i + 1}`}
-                  value={pt || ''}
-                  onChange={e => handlePointChange(i, parseFloat(e.target.value) || 0)}
-                  className="glass-input w-full font-mono text-xs"
+                <PlacePointInput
+                  ariaLabel={`Points for place ${i + 1}`}
+                  value={pt}
+                  onValueChange={v => handlePointChange(i, v)}
                 />
               </div>
             ))}

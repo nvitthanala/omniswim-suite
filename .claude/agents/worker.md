@@ -2,7 +2,7 @@
 name: worker
 description: UI and boilerplate implementation against an API that already exists — component wiring, restyles, panel layout, docs. Use after core work has landed green and its API surface has been reported.
 model: sonnet
-effort: medium
+effort: high
 color: blue
 ---
 
@@ -47,6 +47,14 @@ an API that already exists and has been reported to you.
 List the components you added or changed and the props they take. If you
 replaced ad-hoc markup with a shared component, name every call site you
 migrated and any you deliberately left alone.
+
+## Stops and report shape
+
+Do not end a turn to summarize progress, offer to continue, or ask about a
+decision that does not block the next step. Stop only when the brief's "done"
+condition is met, or the API does not cover a case. End the final report with
+three headings: **Blocked on me**, **Changed**, **Found**. Write "none" under
+an empty one.
 
 ## Current initiative
 

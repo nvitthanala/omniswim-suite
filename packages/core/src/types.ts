@@ -230,6 +230,20 @@ export interface ScoringSettings {
   maxRelayEntriesPerSwimmer?: number;
   /** Max total events (individual + relay combined) a swimmer may enter. When set, overrides separate limits. */
   maxTotalEntriesPerSwimmer?: number;
+  /**
+   * Whether a time-trial swim spends one of a swimmer's entries against the caps
+   * above. Absent means `false`: a time trial is outside the meet's program, so
+   * it is not an entry (user ruling 2026-09-21, restated 2026-10-01). Read it
+   * through `entryCapPolicy`, never directly.
+   */
+  entryCapCountsTimeTrials?: boolean;
+  /**
+   * Whether an exhibition-tagged swim spends one of a swimmer's entries. Absent
+   * means `true`: an exhibition swimmer is still entered in the event, so the
+   * swim counts toward the cap, prelims or not (user ruling 2026-10-01). Read it
+   * through `entryCapPolicy`, never directly.
+   */
+  entryCapCountsExhibition?: boolean;
 
   /**
    * The relay place-value table, place 1 first — used instead of
@@ -491,6 +505,55 @@ export type NcaaDivision = 'D1' | 'D2' | 'D3' | 'NAIA';
  */
 export type HistoricalSwimSource = 'pdf' | 'paste' | 'ocr' | 'csv' | 'manual' | 'swimcloud';
 
+/**
+ * One relay leg a swimmer swam, as SwimCloud credits it on that swimmer's page
+ * for one meet. Spec: `docs/reference/RELAY_LEG_CREDITS_SPEC.md`.
+ *
+ * **Deliberately not a {@link HistoricalSwim}.** A relay leg (any leg after the
+ * first) starts with a flying takeover, so it is not a race from the blocks and
+ * must never compete for an individual best. The type has no `event` and no
+ * `time` field, so no best-time reader can pick one up: the leg's own split is
+ * `split`, and the relay it belongs to is `relayEvent` (as printed, `'200 MED-R'`).
+ * A credit is never written into `athleteHistory`, `athlete_event_times`, psych
+ * rows or a `SwimmerResult`. It lives in {@link Workspace.relayLegCredits}.
+ *
+ * Absent stays absent: `legPosition`, `timeType`, `relayEventTitle` and the
+ * rest are set only when a page printed them (or a caller stated them). A
+ * credit with no `legPosition` is stored and never used.
+ */
+export interface RelayLegCredit {
+  /** SwimCloud's id for this leg's swim (`/times/{id}/`). Primary key. */
+  swimCloudSwimId: string;
+  swimCloudSwimmerId: string;
+  meetId: string;
+  /** `n` of the `/results/{meetId}/event/{n}/` link. */
+  eventRef: string;
+  name: string;
+  team: string;
+  gender: Gender;
+  /** The relay label as printed, leg word removed: `'200 MED-R'`. Never expanded in code. */
+  relayEvent: string;
+  /** The meet's own event-menu title for this event: `'200 Medley Relay Men'`. Absent when the capture's menu had no entry. */
+  relayEventTitle?: string;
+  /** The word SwimCloud printed in parentheses (`'Anchor'`, `'Leadoff'`), verbatim. */
+  legLabel?: string;
+  /** 1-4. Only from the leg word (Leadoff = 1, Anchor = 4) or a matched event-page join. */
+  legPosition?: 1 | 2 | 3 | 4;
+  legPositionSource?: 'leg-word' | 'event-page-join';
+  /** True only when the page said leadoff. False means "not stated", not "stated to be a later leg". */
+  isLeadoff: boolean;
+  /** The leg's split as printed. Never named `time`: see the type comment. */
+  split: string;
+  /** Only from a printed course or the caller's stated meet course. Never defaulted. */
+  timeType?: 'SCY' | 'LCM' | 'SCM';
+  relayPlace?: number;
+  relayLetter?: string;
+  meetLabel?: string;
+  date?: string;
+  sourceUrl: string;
+  retrievedAt?: string;
+}
+
 export interface HistoricalSwim {
   /**
    * Stable id. Optional and additive: rows imported before this field existed
@@ -579,6 +642,22 @@ export interface HistoricalSwim {
    * before 2026-09-24 carries only `swimcloudBadge: 'user_input'`.
    */
   isUserInputted?: true;
+  /**
+   * The source marks this swim **exhibition**: it was swum at a meet but did
+   * not score there.
+   *
+   * Set ONLY when the source says `true` (the swimmer fastest-times JSON row's
+   * `exhibition: true`). It is never written `false`. **Absent means "not known
+   * to be exhibition"**, not "known to be official": a pasted, PDF or CSV row
+   * never states it either way.
+   *
+   * Informational only. It does not change {@link isRankableSwim}, bests, cut
+   * tags or any existing reader; the theoretical meet seed builder
+   * (`theoreticalMeetSeeds.ts`) is the one reader, and it labels these seeds
+   * and can exclude them on request. Use `=== true`, never truthiness of a
+   * missing field as an answer to "official".
+   */
+  isExhibition?: boolean;
   /**
    * The swim was a time trial at a loaded meet (`SwimmerResult.isTimeTrial`).
    * Set only by `historicalSwimFromResult`.
@@ -774,6 +853,11 @@ export interface Workspace {
   athleteHistory?: HistoricalSwim[];
   raceAnalyses?: Array<{ id: string; swimmerName: string; video: { fileName: string; duration: number; width: number; height: number; fps?: number }; config: RaceConfig; tags: RaceTag[]; createdAt: number; updatedAt: number }>;
   historySources?: { type: string; label: string; importedAt: number }[];
+  /**
+   * Relay legs SwimCloud credits to swimmers (see {@link RelayLegCredit}). Kept apart
+   * from `athleteHistory` on purpose: a leg is not a swim from the blocks.
+   */
+  relayLegCredits?: RelayLegCredit[];
   /**
    * Confirmed athlete name-identity links: each row declares that `aliasName`
    * and `canonicalName` are the same human (e.g. "Stevie Balistreri" ==

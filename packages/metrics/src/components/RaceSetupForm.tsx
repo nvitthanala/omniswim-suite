@@ -154,7 +154,7 @@ export function RaceSetupForm({ config, swimmerName, rosterNames = [], onSwimmer
   return (
     <div className="flex flex-col h-full space-y-6">
       <div>
-        <h2 className="text-ui-label font-bold uppercase tracking-widest text-theme-muted mb-4 flex items-center gap-2">
+        <h2 className="text-ui-label font-bold text-theme-muted mb-4 flex items-center gap-2">
           <Settings2 className="w-4 h-4" /> Race Setup
         </h2>
         <p className="text-ui-body text-theme-secondary">

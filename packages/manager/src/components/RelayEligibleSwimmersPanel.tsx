@@ -17,7 +17,7 @@ type Props = {
 export default function RelayEligibleSwimmersPanel({ eventLabel, poolCandidates }: Props) {
   return (
     <div className="surface-card rounded-xl p-4 sm:p-5 w-full lg:w-72 shrink-0 flex flex-col min-h-[12rem] max-h-[40vh] lg:max-h-none">
-      <h4 className="text-ui-caption font-bold uppercase tracking-widest text-[var(--text-primary)] mb-1">
+      <h4 className="text-ui-caption font-bold text-[var(--text-primary)] mb-1">
         Eligible swimmers
       </h4>
       <p className="text-ui-micro text-theme-secondary mb-3 leading-relaxed">

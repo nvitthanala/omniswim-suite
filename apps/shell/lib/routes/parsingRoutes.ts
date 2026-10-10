@@ -8,6 +8,7 @@
  * invocation order and fallbacks, and error handling as before.
  */
 import type { Express } from 'express';
+import { randomUUID } from 'node:crypto';
 import fs from 'fs';
 import path from 'path';
 import { Gender, SwimmerResult } from '../../../../packages/core/src/types.ts';
@@ -17,7 +18,15 @@ import {
   parsePsychPdfSchema,
   parseAthleteHistorySchema,
 } from '../../../../packages/core/src/schemas/workspace.ts';
-import { runPythonScript, mapPsychRows, parsePsychPdfFile, parseMeetUnified, parseMeetLegacy } from './parsingPipeline.ts';
+import {
+  runPythonScript,
+  mapPsychRows,
+  parsePsychPdfFile,
+  parseMeetUnified,
+  parseMeetLegacy,
+  ParsedRowError,
+  MeetPipelineError,
+} from './parsingPipeline.ts';
 
 export interface ParsingRoutesDeps {
   projectRoot: string;
@@ -28,6 +37,10 @@ export interface ParsingRoutesDeps {
   pointCalculatorScript: string;
   teamRankingsScript: string;
   aiEnabled: boolean;
+}
+
+export function createParsingTempFilePath(projectRoot: string, prefix = 'temp'): string {
+  return path.join(projectRoot, `${prefix}_${randomUUID()}.pdf`);
 }
 
 export function registerParsingRoutes(app: Express, deps: ParsingRoutesDeps): void {
@@ -43,7 +56,7 @@ export function registerParsingRoutes(app: Express, deps: ParsingRoutesDeps): vo
       return res.status(400).json({ error: 'Invalid PDF payload', details: parsed.error.issues });
     }
     const { base64, format } = parsed.data;
-    const tempFile = path.join(PROJECT_ROOT, `temp_${Date.now()}.pdf`);
+    const tempFile = createParsingTempFilePath(PROJECT_ROOT);
     try {
       fs.writeFileSync(tempFile, Buffer.from(base64, 'base64'));
       const fmt = format || 'auto';
@@ -51,14 +64,34 @@ export function registerParsingRoutes(app: Express, deps: ParsingRoutesDeps): vo
       try {
         payload = await parseMeetUnified(deps, tempFile, fmt);
       } catch (unifiedErr) {
+        // Final failures: retrying the legacy pipeline cannot help and could hurt.
+        // Unusable rows would be mapped the same way. An unread Team Rankings page
+        // or missing settings would let legacy score without the event cutoff or
+        // settings. Only untagged failures fall back.
+        if (unifiedErr instanceof ParsedRowError || unifiedErr instanceof MeetPipelineError) throw unifiedErr;
         console.warn('Unified parse_meet failed, falling back to legacy pipeline:', unifiedErr);
         payload = await parseMeetLegacy(deps, tempFile, fmt);
       }
       res.json(payload);
     } catch (error) {
+      if (error instanceof ParsedRowError) {
+        return res.status(422).json({
+          error: 'PDF rows could not be read without guessing',
+          details: error.message,
+          rows: error.problems,
+        });
+      }
+      if (error instanceof MeetPipelineError) {
+        const rankings = error.code === 'rankings_extraction_failed';
+        return res.status(rankings ? 422 : 500).json({
+          error: rankings ? 'Team Rankings could not be read' : 'Scoring settings are missing',
+          code: error.code,
+          details: error.message,
+        });
+      }
       res.status(500).json({ error: 'Failed to parse PDF', details: String(error) });
     } finally {
-      if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+      try { fs.unlinkSync(tempFile); } catch { /* absent or already removed */ }
     }
   });
 
@@ -71,7 +104,7 @@ export function registerParsingRoutes(app: Express, deps: ParsingRoutesDeps): vo
     if (!base64?.trim()) {
       return res.status(400).json({ error: 'No PDF data in request' });
     }
-    const tempFile = path.join(PROJECT_ROOT, `temp_psych_${Date.now()}.pdf`);
+    const tempFile = createParsingTempFilePath(PROJECT_ROOT, 'temp_psych');
     try {
       fs.writeFileSync(tempFile, Buffer.from(base64, 'base64'));
       const fmt = format || 'auto';
@@ -79,6 +112,8 @@ export function registerParsingRoutes(app: Express, deps: ParsingRoutesDeps): vo
       try {
         results = await parsePsychPdfFile(deps, tempFile, fmt);
       } catch (primaryErr) {
+        // Unusable rows are a data defect: psych_parser.py would hand back the same rows.
+        if (primaryErr instanceof ParsedRowError) throw primaryErr;
         console.warn('Psych parse via pdf_parser failed, trying psych_parser.py:', primaryErr);
         const output = await runPythonScript(deps, PARSE_PSYCH_SCRIPT, [tempFile, fmt]);
         const trimmed = output.trim();
@@ -100,9 +135,16 @@ export function registerParsingRoutes(app: Express, deps: ParsingRoutesDeps): vo
       }
       return res.json({ results });
     } catch (error) {
+      if (error instanceof ParsedRowError) {
+        return res.status(422).json({
+          error: 'Psych sheet rows could not be read without guessing',
+          details: error.message,
+          rows: error.problems,
+        });
+      }
       return res.status(500).json({ error: 'Failed to parse psych PDF', details: String(error) });
     } finally {
-      if (fs.existsSync(tempFile)) fs.unlinkSync(tempFile);
+      try { fs.unlinkSync(tempFile); } catch { /* absent or already removed */ }
     }
   });
 
@@ -115,7 +157,11 @@ export function registerParsingRoutes(app: Express, deps: ParsingRoutesDeps): vo
       const { text, imageBase64, team, gender, swimmerName, division } = validated.data;
       const g = gender === Gender.WOMEN || gender === 'Women' ? Gender.WOMEN : Gender.MEN;
       const teamName = typeof team === 'string' && team.trim() ? team.trim() : 'Unknown';
-      const div = division === 'D2' || division === 'D3' || division === 'NAIA' ? division : 'D1';
+      // A missing or unrecognised division is absent, not D1: passed explicitly it would
+      // stop the parser looking the team up, and an unmapped team would be judged against
+      // the strictest table. Undefined lets the team's own division decide, and an
+      // unmapped team stays unknown.
+      const div = division === 'D1' || division === 'D2' || division === 'D3' || division === 'NAIA' ? division : undefined;
       if (typeof text === 'string' && text.trim()) {
         const result = parseSwimCloudPasteDetailed(text, {
           team: teamName,

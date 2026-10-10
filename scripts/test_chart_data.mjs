@@ -7,12 +7,15 @@
  * per-team event series). Catches regressions in the scoring engine that
  * would render empty/blank graphs even when the UI itself is fine.
  */
-import { readFileSync } from 'fs';
 import { buildScoringSnapshot } from '../packages/core/src/lib/scoringEngine.ts';
 import { Gender } from '../packages/core/src/types.ts';
+import { loadDemoSeed, loadLocalMeets, noteLocalOnlySkipped } from './lib/localMeets.mjs';
 
-const meets = JSON.parse(readFileSync('data/meets.json', 'utf8'));
-if (!Array.isArray(meets) || meets.length === 0) {
+// Two sources, one set of checks. The committed demo seed (invented data) always
+// runs, so CI exercises the chart pipeline. The local working store runs as well
+// when this machine has it, and is skipped out loud when it does not.
+const meets = loadLocalMeets();
+if (meets !== null && (!Array.isArray(meets) || meets.length === 0)) {
   throw new Error('no workspaces in data/meets.json to verify');
 }
 
@@ -32,13 +35,17 @@ const assert = (cond, msg) => {
 // non-zero after the loop.
 let checkedCount = 0;
 
-for (const ws of meets) {
+/** Run the chart-data checks over one source's workspaces. Returns how many workspace/gender pairs had results. */
+function checkWorkspaces(workspaces) {
+  let checkedHere = 0;
+  for (const ws of workspaces) {
   for (const gender of [Gender.MEN, Gender.WOMEN]) {
     const { projected, baseline } = buildScoringSnapshot(ws, gender, false);
     const results = gender === Gender.MEN ? ws.menResults : ws.womenResults;
     const hasData = Array.isArray(results) && results.length > 0;
     if (!hasData) continue;
     checkedCount += 1;
+    checkedHere += 1;
 
     console.log(`\n[${ws.name} / ${gender}] results=${results.length}`);
 
@@ -68,9 +75,21 @@ for (const ws of meets) {
         `baselineTeams=${baseline.sortedTeams.length}`
     );
   }
+  }
+  return checkedHere;
 }
 
-assert(checkedCount > 0, 'at least one workspace/gender combination had real results to check — a workspace losing its results must fail loudly, not pass vacuously');
+// The local store first, so its output is unchanged from before this split.
+if (meets !== null) {
+  const checkedLocal = checkWorkspaces(meets);
+  assert(checkedLocal > 0, 'data/meets.json: at least one workspace/gender combination had real results to check — a workspace losing its results must fail loudly, not pass vacuously');
+} else {
+  noteLocalOnlySkipped('test_chart_data.mjs', 'chart data over the local workspaces');
+}
+
+console.log('\n[committed demo seed]');
+const checkedDemo = checkWorkspaces(loadDemoSeed());
+assert(checkedDemo > 0, 'data/demo-seed.json: at least one workspace/gender combination had real results to check — the committed seed losing its results must fail loudly, not pass vacuously');
 
 if (failures > 0) {
   console.error(`\nchart data test FAILED (${failures} assertion failures)`);

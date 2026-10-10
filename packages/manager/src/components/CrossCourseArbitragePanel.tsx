@@ -256,9 +256,9 @@ export default function CrossCourseArbitragePanel({
       <div className="surface-card rounded-xl border border-theme-soft p-4 sm:p-5">
         <div className="flex items-center gap-2 text-ui-label font-semibold text-[var(--text-primary)]">
           <ArrowLeftRight size={16} className="text-[var(--text-accent)] shrink-0" />
-          Cross-course arbitrage
+          Cross-course
         </div>
-        <p className="text-ui-caption text-theme-secondary mt-2">Select a team…</p>
+        <p className="text-ui-caption text-theme-secondary mt-2">Choose a team in the team bar above.</p>
       </div>
     );
   }
@@ -289,7 +289,7 @@ export default function CrossCourseArbitragePanel({
       <div className="flex items-center gap-2 mb-3.5">
         <ArrowLeftRight size={16} className="text-[var(--text-accent)] shrink-0" />
         <h4 className="text-ui-label font-semibold text-[var(--text-primary)]">
-          Cross-course arbitrage
+          Cross-course
         </h4>
         <UpdatingBadge show={loading && !!result} />
       </div>

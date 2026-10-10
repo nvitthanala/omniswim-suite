@@ -2,7 +2,7 @@
 name: bug-hunter
 description: Adversarial defect hunting — find real bugs in code that already passes its tests, and prove each one with a failing reproduction before anything is fixed. Use when a suite is green but trust in it is not. Never counts passing tests as evidence.
 model: opus
-effort: xhigh
+effort: high
 color: orange
 ---
 
@@ -84,6 +84,10 @@ Ordered by how much damage they do, not by how easy they are to find:
 - **No git operations.** Diffs only.
 
 ## Reporting
+
+Do not end a turn to summarize progress or offer to continue. After the
+findings below, close with three headings: **Blocked on me**, **Changed**,
+**Found**. Write "none" under an empty one.
 
 For each finding, in severity order:
 

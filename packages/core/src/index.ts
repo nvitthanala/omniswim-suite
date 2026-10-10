@@ -155,6 +155,7 @@ export * from './lib/swimEditor';
 export * from './lib/athleteAliases';
 export { buildMeetEventLabelIndex, computeVisibleEvents } from './lib/eventIdentity';
 export * from './lib/raceAnalysis';
+export * from './lib/relayLegCredits';
 
 /* --- Cross-workspace team roster catalog. --- */
 export * from './lib/rosterCatalog';

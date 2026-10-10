@@ -8,15 +8,17 @@
 import { Users, RotateCcw, Sparkles } from 'lucide-react';
 import { Button, TeamSelect } from '@omniswim/ui';
 import ProjectedActualScore from './ProjectedActualScore';
+import { scorerCapPhrase } from './teamRosterView';
 
 type Props = {
   selectedTeam: string;
   genderLabel: string;
   editable: boolean;
-  canOptimize: boolean;
-  onOptimizeTeam: () => void;
-  onOptimizeAll: () => void;
+  /** Open the Optimize step. Omit to hide the link. */
+  onOpenOptimize?: () => void;
   onResetTeam: () => void;
+  /** The Delete or Backspace key removes the selected athlete; mention it in the help text. */
+  canRemoveAthlete?: boolean;
   maxIndividualScorersPerTeam: number;
   selectedActual: number | undefined;
   selectedBaseline: number | undefined;
@@ -32,10 +34,9 @@ export default function TeamRosterHeader({
   selectedTeam,
   genderLabel,
   editable,
-  canOptimize,
-  onOptimizeTeam,
-  onOptimizeAll,
+  onOpenOptimize,
   onResetTeam,
+  canRemoveAthlete = false,
   maxIndividualScorersPerTeam,
   selectedActual,
   selectedBaseline,
@@ -57,28 +58,18 @@ export default function TeamRosterHeader({
           <span className="text-theme-muted font-normal shrink-0">{genderLabel}</span>
         </h4>
         <div className="flex flex-wrap items-center gap-x-3 gap-y-1 shrink-0">
-          {canOptimize ? (
-            <>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onOptimizeTeam}
-                disabled={!selectedTeam}
-                className="text-[var(--text-accent)] hover:underline whitespace-nowrap"
-                title="Optimize scorers and event lineup for selected team"
-                leadingIcon={<Sparkles size={12} />}
-              >
-                Best roster
-              </Button>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onOptimizeAll}
-                className="text-theme-secondary hover:text-[var(--text-accent)] whitespace-nowrap"
-              >
-                All teams
-              </Button>
-            </>
+          {onOpenOptimize ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onOpenOptimize}
+              disabled={!selectedTeam}
+              className="text-[var(--text-accent)] hover:underline whitespace-nowrap"
+              title="Open the Optimize step for this team"
+              leadingIcon={<Sparkles size={12} />}
+            >
+              Optimize this lineup
+            </Button>
           ) : null}
           {editable ? (
             <Button
@@ -106,12 +97,26 @@ export default function TeamRosterHeader({
 
       <p className="text-ui-body text-theme-secondary my-3 leading-relaxed">
         Click an athlete to edit scorers, individual entries, and see relay status.
-        {editable ? ` Toggle scorers for the ${maxIndividualScorersPerTeam}-scorer cap.` : ' Enable What-if to edit scorers.'}
+        {editable ? ` ${scorerCapPhrase(maxIndividualScorersPerTeam)}` : ' Enable What-if to edit scorers.'}
         {' '}
         <kbd className="px-1 rounded border border-theme-soft bg-[var(--surface-muted)] text-ui-micro font-mono">
           ↑↓
         </kbd>{' '}
-        to navigate.
+        to navigate
+        {canRemoveAthlete ? (
+          <>
+            ,{' '}
+            <kbd className="px-1 rounded border border-theme-soft bg-[var(--surface-muted)] text-ui-micro font-mono">
+              Delete
+            </kbd>{' '}
+            or{' '}
+            <kbd className="px-1 rounded border border-theme-soft bg-[var(--surface-muted)] text-ui-micro font-mono">
+              Backspace
+            </kbd>{' '}
+            to remove
+          </>
+        ) : null}
+        .
       </p>
       {useDropdown ? (
         <label className="block mb-3">
