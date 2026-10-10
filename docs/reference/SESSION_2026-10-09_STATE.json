@@ -223,6 +223,10 @@
           "items": "B1 CI e2e + harness, readable run-tests failures; B2 skip budget guard",
           "owner": "worker",
           "status": "dispatched"
+        },
+        {
+          "items": "B4 harness redirect",
+          "status": "stays fixme; reason documented (Chromium does not route followed hops)"
         }
       ],
       "next": [
@@ -272,6 +276,7 @@
     }
   ],
   "userReview": [
+    "RULE BREACH, reported: while debugging the harness redirect test (2026-10-10 ~01:45Z), a worker ran a throwaway script with the host-resolver block removed. One redirect hop reached www.swimcloud.com and Cloudflare returned a challenge. Nothing was kept. The committed harness keeps the block. Its afterEach check cannot see redirect hops, so the host-resolver rule is the only guard.",
     "DECISION NEEDED: core scoring gives each tied relay the full place points (utils.ts scoreRelaysInEvent ~2298-2337), while tied individual swims split points. Probe: two relays tied for 1st get 40+40 instead of 37+37. This affects real meets. Not changed without your OK; theoretical meets show a caveat for now.",
     "Fixtures were scrubbed of account data before saving; the user's own name stays only in the public relay result of F-B.",
     "Conference capture is the home page; a /country/usa/college/conference/nsisc/teams/ capture is still needed for a complete team list.",
