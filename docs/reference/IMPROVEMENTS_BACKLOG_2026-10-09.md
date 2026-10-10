@@ -26,12 +26,12 @@ the user must make.
 
 | # | Item | Evidence | User | Status |
 |---|---|---|---|---|
-| B1 | Check that the e2e step really runs in CI. Add `npm run test:harness` | `.github/workflows/ci.yml:60-90` | N | open |
-| B2 | Tests skip silently when local fixtures or `pdftotext` are absent. Report the skip count and fail when it grows | `tests/eventFirstImport.test.ts:126` | N | open |
+| B1 | Check that the e2e step really runs in CI. Add `npm run test:harness` | `.github/workflows/ci.yml:60-90` | N | done: e2e, unit suite, skip budget and harness all run in CI (green run 38013108804) |
+| B2 | Tests skip silently when local fixtures or `pdftotext` are absent. Report the skip count and fail when it grows | `tests/eventFirstImport.test.ts:126` | N | done: `scripts/check_skip_budget.mjs`, `tests/skip-budget.json` |
 | B3 | The meet 356467 regression guard depends on crawl state. Commit minimal redacted fixtures | vault 04, 2026-10-04 | Y | open |
 | B4 | The harness redirect scenario is `test.fixme` | `tests/harness/extension.harness.spec.ts:229` | N | open |
 | B5 | `main-thread-budget` e2e times out over many local workspaces | S10-09 | N | fixed: measures a seeded workspace plus named real ones; budget unchanged |
-| B6 | The Postgres v8 DDL has never run | `relayLegCreditsPersistence.test.ts` | N | needs a Postgres server |
+| B6 | The Postgres v8 DDL has never run | `relayLegCreditsPersistence.test.ts` | N | done: ran green in CI run 38013108804 (Postgres 16) |
 | B7 | `apps/shell/dist/server.js` goes stale | S10-09 T3, T8 | N | rebuilt by `run-tests.mjs` |
 | B8 | Seed and migrate scripts write to the real `data/` with no guard | `seed_hsu_roster.mjs:29-30`, `seed_obu_roster.mjs:38-39`, `migrate-json-to-sqlite.mjs:18` | N | fixed: `scripts/lib/dataDir.mjs` (OMNI_DATA_DIR + running-server guard), `scripts/test_data_dir_guard.mjs` |
 | B9 | The real DB holds 39 test workspaces, and an old server runs on port 3000 | S10-09 T8 | Y | waiting on user |

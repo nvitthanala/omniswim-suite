@@ -110,7 +110,7 @@
         "vault",
         "PR for the branch"
       ],
-      "status": "18 commits pushed (through 94f4437b); PR #6 open",
+      "status": "pushed through 5a56bfe2; PR #6 open, CI green",
       "gates": "lint 0 errors/2 warnings; vitest 193 files 2988 pass 15 skip; run-tests 82 pass 2 fail (preset routes server-start timeout under load, passes alone; e2e ui-theme 768px flaky under load, passes alone; main-thread-budget timeout env) 1 skip (Pg)"
     },
     "T1b-relay-leg-credits": {
@@ -233,6 +233,16 @@
         "D5 dead code",
         "removeProjectedSwim relay override pruning (verify)",
         "useSwimEditUndo LINEUP_FIELDS hardening"
+      ]
+    },
+    "T11-ci": {
+      "status": "green",
+      "run": "38013108804",
+      "result": "First green CI since 2026-09-26: lint, 72 scripts (14 skipped, 13 need untracked data/meets.json), vitest + skip budget 46/46, extension harness 7 passed, build, Postgres round-trips incl. relayLegCredits v8 (9 tests).",
+      "fixes": [
+        "be982fe1 meets.json scripts skip visibly",
+        "d6a96c81 backup name exact pattern (backslash accepted on Linux)",
+        "5a56bfe2 poppler layout, capture-dependent skips, measured budget"
       ]
     }
   },
