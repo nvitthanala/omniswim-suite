@@ -221,11 +221,18 @@ test('a 200 "Just a moment..." challenge where swimmer JSON belongs halts and is
   expect(filed).toContain(swimmerUrls[0]);
 });
 
-// FIXME (observed, not guessed): Playwright's route.fulfill with a 302 and a Location header does not
-// make Chromium follow the redirect for the extension's fetch. The fake logs the 302, the Location
-// target is never requested, and the extension reports "A network error stopped the crawl". The
-// extension's redirect rule (finalUrl differs from the asked URL) is covered by the driver unit tests.
-// Driving it end to end needs a real HTTPS origin for www.swimcloud.com, which this harness does not run.
+// FIXME (re-checked 2026-10-09 with Playwright 1.61.1, Chromium 1228; observed, not guessed):
+// route.fulfill can send a 302 with a Location header, and the extension's fetch sees it. But the
+// hop Chromium then follows is NOT passed to context.route. Pointed at www.swimcloud.com, the hop
+// bypasses the fake and goes to the real network; behind this harness's host-resolver rule it fails
+// instead, and the extension reports "A network error stopped the crawl". The fake never logs the
+// target. A plain Playwright page with no extension behaves the same. A loopback target (a local
+// http server with CORS headers) was also tried: the extension still got a network error and the
+// server saw no request. The extension's redirect rule (finalUrl differs from the asked URL) is
+// covered by the driver unit tests (F7).
+// To drive it end to end the harness would need a real local HTTPS origin for www.swimcloud.com
+// (host-resolver MAP to 127.0.0.1, a test certificate Chromium trusts, a server that answers the
+// fixtures and sends the 302 itself) in place of route.fulfill. That replaces the fake's transport.
 test.fixme('a redirect to another team: that roster fails and is not filed', async ({ request }) => {
   h.fake.addRule(url =>
     url.pathname === '/team/412/roster/' && url.searchParams.get('gender') === 'M' && url.searchParams.get('season_id') === '29'
