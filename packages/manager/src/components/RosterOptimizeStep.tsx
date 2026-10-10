@@ -343,7 +343,7 @@ export default function RosterOptimizeStep({
   /** The three optimizer-owned fields, as they read right now — the only
    *  state `diffOptimizerChanges` can honestly compare against, and exactly
    *  what one-shot undo needs to snapshot before an apply call overwrites it. */
-  const captureBeforeState = () => ({
+  const captureBeforeState = (): OptimizerBeforeState => ({
     overrides: workspace.scorerRosterOverrides ?? [],
     plans: workspace.meetEntryPlans ?? [],
     activeIds: workspace.activeEntryIds ?? [],
@@ -353,7 +353,7 @@ export default function RosterOptimizeStep({
   const recordRunSummary = (
     label: string,
     result: GuardedOptimizerResult,
-    before: ReturnType<typeof captureBeforeState>,
+    before: OptimizerBeforeState,
     allTeams = false
   ) => {
     lastRunIsAllTeams.current = allTeams;
