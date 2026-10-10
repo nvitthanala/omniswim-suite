@@ -174,8 +174,6 @@ export type AddOnlyOptions = {
 type CapVoidSummary = {
   /** Total voided individual points across all violating team athletes. */
   total: number;
-  /** Voided individual points per violating athlete (normalized-name key). */
-  byAthlete: Map<string, number>;
   /** Every team athlete currently violating an entry cap (even at 0 points). */
   overCapKeys: Set<string>;
 };
@@ -199,7 +197,6 @@ function computeCapVoids(
     if (!display.has(k)) display.set(k, r.name);
   }
 
-  const byAthlete = new Map<string, number>();
   const overCapKeys = new Set<string>();
   let total = 0;
   for (const [key, name] of display) {
@@ -213,12 +210,9 @@ function computeCapVoids(
       if (normalizeSwimmerName(r.name) !== key) continue;
       pts += typeof r.points === 'number' ? r.points : 0;
     }
-    if (pts > 0) {
-      byAthlete.set(key, pts);
-      total += pts;
-    }
+    if (pts > 0) total += pts;
   }
-  return { total: Number(total.toFixed(3)), byAthlete, overCapKeys };
+  return { total: Number(total.toFixed(3)), overCapKeys };
 }
 
 /**

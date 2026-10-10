@@ -563,6 +563,8 @@ Engine in `core`, presentation in `metrics`. The engine must be unit-testable wi
 
 ## 9. Agent DAG
 
+> **Retired harness (2026-09-20):** this section was written for the retired `fleet` harness (`.fleet.json`, `fleet_route_preview`, `fleet_apply_patch`). Do not use it. Route work through Orca; see `docs/reference/PROVIDER_ROUTING.json` and the `provider-routing` skill.
+
 `.fleet.json`: `isolateByDefault: true`, `maxConcurrent: 3`, `fallbackDepth: 4`,
 fairness `spread` @ 0.35.
 

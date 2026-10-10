@@ -235,8 +235,8 @@ each~~ **fixed 2026-09-13, see [13](2026-08-14/13-official-score-mismatch.md)'s
 resolution note** (closed at the scoring-boundary layer, `isTimeTrial`
 itself may still be wrong on these rows but no longer matters) · a duplicated row in Event 39 ·
 the `Boys`/`Girls` carve-out in `utils.ts` makes HyTek gender-token events score,
-unadjudicable without the PDF · dead `npById` per fast-swap context ·
-`CapVoidSummary.byAthlete` dead · `individualStrokeDistance` lacks label hygiene
+unadjudicable without the PDF · dead `npById` per fast-swap context (gone; confirmed 2026-10-09) ·
+`CapVoidSummary.byAthlete` dead (removed 2026-10-09) · `individualStrokeDistance` lacks label hygiene
 (latent, 0 live rows) · two competing alias mechanisms, neither canonical ·
 points awarded per row not per distinct name.
 

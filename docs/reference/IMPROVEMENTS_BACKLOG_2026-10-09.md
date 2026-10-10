@@ -62,6 +62,6 @@ skip, `teamDivisionTag` by season, and the double-create guard.
 | D1 | `plans/STATE.md` is stale (body from 2026-08-16) | open |
 | D2 | `AUDIT_2026-09-02.md` still lists ROCK/INDY/LU as open (fixed in `07fb5ae5`) | open |
 | D3 | Vault `04-Known-Issues` is a layered history | vault pass |
-| D4 | Dead references to the retired fleet harness | open |
-| D5 | Dead code: `npById`, `CapVoidSummary.byAthlete` | open |
+| D4 | Dead references to the retired fleet harness | done: one live instruction marked retired (`docs/video/VIDEO_ANALYSIS_MASTERPLAN.md`) |
+| D5 | Dead code: `npById`, `CapVoidSummary.byAthlete` | done: `npById` already gone; `byAthlete` removed |
 | D6 | Remote branch `cloud/c1-team-names-harness` | user |
