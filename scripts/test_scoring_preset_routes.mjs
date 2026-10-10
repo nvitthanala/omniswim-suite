@@ -94,7 +94,7 @@ if (fs.existsSync(TEST_FILE)) fs.rmSync(TEST_FILE);
  */
 const server = spawn(process.execPath, ['--import', 'tsx', path.join('apps', 'shell', 'server.ts')], {
   cwd: REPO_ROOT,
-  env: { ...process.env, OMNI_PORT: String(PORT), OMNI_HOST: '127.0.0.1' },
+  env: { ...process.env, PORT: String(PORT), OMNI_PORT: String(PORT), OMNI_HOST: '127.0.0.1' },
   stdio: ['ignore', 'pipe', 'pipe'],
   detached: process.platform !== 'win32',
 });
