@@ -55,7 +55,13 @@ const CONTEXT = {
 } as const;
 
 describe.skipIf(RELAY_PAGE === undefined)('relay legs from a real per-event page', () => {
-  const parsed = parseMeetEventResultsHtml(RELAY_PAGE as string, CONTEXT as never, {} as never);
+  // Vitest runs a skipped describe's body while it collects tests, so the page
+  // must not be parsed when it is absent (CI has no gitignored captures). The
+  // fallback is never read: every test below is skipped with the block.
+  const parsed =
+    RELAY_PAGE === undefined
+      ? ({ ok: false } as unknown as ReturnType<typeof parseMeetEventResultsHtml>)
+      : parseMeetEventResultsHtml(RELAY_PAGE, CONTEXT as never, {} as never);
   const swims = parsed.ok
     ? (parsed.data.rounds ?? []).flatMap((round: { swims?: unknown[] }) => round.swims ?? [])
     : [];

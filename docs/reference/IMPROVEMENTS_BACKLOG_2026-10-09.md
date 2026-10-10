@@ -35,8 +35,9 @@ the user must make.
 | B7 | `apps/shell/dist/server.js` goes stale | S10-09 T3, T8 | N | rebuilt by `run-tests.mjs` |
 | B8 | Seed and migrate scripts write to the real `data/` with no guard | `seed_hsu_roster.mjs:29-30`, `seed_obu_roster.mjs:38-39`, `migrate-json-to-sqlite.mjs:18` | N | fixed: `scripts/lib/dataDir.mjs` (OMNI_DATA_DIR + running-server guard), `scripts/test_data_dir_guard.mjs` |
 | B9 | The real DB holds 39 test workspaces, and an old server runs on port 3000 | S10-09 T8 | Y | waiting on user |
-| B10 | Confirm the `optimizeWithArbitrage` never-loses test exists | `TEST_COVERAGE_AUDIT.md:37` | N | open |
+| B10 | Confirm the `optimizeWithArbitrage` never-loses test exists | `scripts/test_arbitrage_never_loses.mjs` | N | done: exists and runs in `run-tests.mjs` |
 | B11 | Two lint complexity warnings remain | `swimCloudMeetImportBridge.ts` | N | open |
+| B12 | 13 scripts need the untracked `data/meets.json`, so CI skips them whole. Split out checks that need no local data (for example the static cut labels in `test_cutlines.mjs`) so CI runs them | `scripts/run-tests.mjs` (`be982fe1`) | N | open |
 
 Done this session: Playwright no longer reuses a server on the port unless
 `PLAYWRIGHT_REUSE_SERVER=1` is set (`docs/INVARIANTS.md` §4).

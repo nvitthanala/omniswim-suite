@@ -4,7 +4,7 @@
  *
  * Tests for `packages/matrix/src/lib/swimCloudMeetImportBridge.ts`.
  */
-import { readFileSync, readdirSync } from 'node:fs';
+import { existsSync, readFileSync, readdirSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -801,7 +801,14 @@ const eventEightFromStoredCapture = () => {
   return result.data;
 };
 
-describe('event 8 exhibition flags from the stored SwimCloud capture', () => {
+// data/swimcloud-captures is gitignored (local-only by design), so a clean checkout, CI included,
+// has no stored event 8 page. Skip then, counted in tests/skip-budget.json, instead of failing.
+const HAVE_EVENT_EIGHT_CAPTURE = (() => {
+  const pagesDir = join(fixturesDir, '..', '..', 'data', 'swimcloud-captures', 'pages');
+  return existsSync(pagesDir) && readdirSync(pagesDir).some(file => /356467.*_2f_event_2f_8_2f_/.test(file));
+})();
+
+describe.skipIf(!HAVE_EVENT_EIGHT_CAPTURE)('event 8 exhibition flags from the stored SwimCloud capture', () => {
   it('preserves the C Final exhibition marker in converted SwimmerResult rows', () => {
     const parsed = eventEightFromStoredCapture();
     const converted = swimCloudEventResultsToSwimmerResults(parsed);

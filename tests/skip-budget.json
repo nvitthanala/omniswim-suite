@@ -26,6 +26,11 @@
       "ci": 5,
       "reason": "describe.skipIf(no stored relay page). Reads data/swimcloud-captures/pages (gitignored)."
     },
+    "tests/swimCloudMeetImportBridge.test.ts": {
+      "local": 0,
+      "ci": 1,
+      "reason": "describe.skipIf(no stored event 8 page), the 'event 8 exhibition flags' block. Reads data/swimcloud-captures/pages (gitignored). The other 50 tests in the file use committed fixtures and still run."
+    },
     "tests/theoreticalMeetGolden.test.ts": {
       "local": 0,
       "ci": 5,
