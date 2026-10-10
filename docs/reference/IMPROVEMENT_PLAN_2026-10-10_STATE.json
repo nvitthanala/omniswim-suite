@@ -14,7 +14,7 @@
     "ci": "green on 84fa6323 (run 38018611118)"
   },
   "resumeOrder": [
-    "M1 merge PR #6 if still open; pull main in the main clone",
+    "M2 and M3: ask the user (branch deletion, untracked omniswim-suite/data in the main clone)",
     "U1-U12 ask the user in one batch; record answers in userDecisions",
     "S1 Host and Origin checks",
     "S2 pin Python dependencies",
@@ -26,7 +26,7 @@
     "remaining items in plan order"
   ],
   "items": {
-    "M1": "pending",
+    "M1": "done: PR #6 merged as 1583d897 on 2026-10-10 after CI run 38032181996 passed; main clone fast-forwarded",
     "M2": "user",
     "M3": "user"
   },
@@ -47,5 +47,6 @@
   "notes": [
     "Two read-only Sonnet scans (code health and tests; product, UX, pipeline, security) fed the plan. Their top claims were checked against the code before inclusion: test_post/test_acc_post unlisted, src-tauri frontendDist ../../dist, runtime pip install, updateWorkspaceSchema passthrough, client sends no version, backups route unscoped, seasonAnalytics sums all teams, 9999.99 sentinel, mojibake, flattened files.",
     "Scan claims not yet re-verified by hand are marked by file:line in the plan; read the cited line before acting."
-  ]
+  ],
+  "branchAfterMerge": "main (start new work on a fresh branch from main)"
 }
