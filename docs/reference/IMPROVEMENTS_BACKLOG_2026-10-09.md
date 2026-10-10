@@ -12,7 +12,7 @@ the user must make.
 | A1 | Parsing turns a missing or unparseable rank and calculated points into `0`, and a missing gender into a default | `parsingPipeline.ts:99-115,133-147` (audit 10-02, finding 2) | N | dispatched |
 | A2 | The Python scorer falls back to D2 when settings are absent. Python and TypeScript disagree on malformed point strings | `backend/point_calculator.py:9,124-129,213-224` (findings 5, 6) | N | dispatched |
 | A3 | Preset IDs are joined into file paths without the ID validator on create and update | `scoringPresetRoutes.ts:179-180,325-333` (finding 3) | N | dispatched |
-| A4 | Undo fingerprint omits `relayLegOverrides`. Unproven: needs a failing test first | `useSwimEditUndo.ts:46` | N | open |
+| A4 | Undo fingerprint omits `relayLegOverrides`. Unproven: needs a failing test first | `useSwimEditUndo.ts:46` | N | done: optimizer Undo fixed (`e0be7d0c`); swim-edit Undo not reproducible; `removeProjectedSwim` now prunes unresolvable fills |
 | A5 | An estimated relay earns a real cut tag. The split inspector shows estimates as "Known (PDF)" | `teamCardView.ts:53-63`, `RelaySplitInspector.tsx:21` | N | fixing (T2b) |
 | A6 | Season analytics sums theoretical points. The cap caveat is dropped when no relay program exists | `seasonAnalytics.ts:128-149`, `theoreticalMeetSeeds.ts:1501` | N | fixing (T2b) |
 | A7 | Saved theoretical relay rows hold estimated times in `relayLegSplit` | S10-09 T2b | N | open (architect) |
@@ -21,6 +21,8 @@ the user must make.
 | A10 | Tied relays each get full place points. Tied individual swims split them | `utils.ts` `scoreRelaysInEvent` | **Y** | waiting on user |
 | A11 | `presetIdForConference` matches by substring ("Sectional" picks a preset via "SEC") | `scoringDefaults.ts:508-518` | Y | waiting on user |
 | A12 | The `/times/` id join is not verified on a live capture | S10-09 T1 | Y | needs a live capture |
+| A13 | A relay fill naming a swimmer who still has other rows but no row the fill resolves to shows `—` at the held clock, unflagged, not vacant (cause: `resolveRelayLegs` falls back to the held leg time, `utils.ts` ~3187) | bug-hunter probe 2026-10-10 | N | open |
+| A14 | The A and B relay `relay_needs_fill` messages are identical, so a coach cannot tell which entry needs a leg | lineup audit | N | open |
 
 ## Tier B: test and infra gaps
 
