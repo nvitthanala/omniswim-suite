@@ -110,7 +110,7 @@
         "vault",
         "PR for the branch"
       ],
-      "status": "pushed through 5a56bfe2; PR #6 open, CI green",
+      "status": "pushed through 87c3ceac; PR #6 open",
       "gates": "lint 0 errors/2 warnings; vitest 193 files 2988 pass 15 skip; run-tests 82 pass 2 fail (preset routes server-start timeout under load, passes alone; e2e ui-theme 768px flaky under load, passes alone; main-thread-budget timeout env) 1 skip (Pg)"
     },
     "T1b-relay-leg-credits": {
@@ -227,6 +227,22 @@
         {
           "items": "B4 harness redirect",
           "status": "stays fixme; reason documented (Chromium does not route followed hops)"
+        },
+        {
+          "items": "B12 CI-safe checks out of meets.json scripts",
+          "status": "done 3430f117 (CI scripts 72 -> 84 pass)"
+        },
+        {
+          "items": "preset test PORT clash",
+          "status": "done c8e30b33"
+        },
+        {
+          "items": "removeProjectedSwim relay fill pruning",
+          "status": "done 2145c4a7 (reproduced: leg showed held time, unflagged, 0 under strict scoring)"
+        },
+        {
+          "items": "A13 unresolved named fill reads vacant; A14 needs-fill message names entry",
+          "status": "done b83a7361, 87c3ceac"
         }
       ],
       "next": [
@@ -251,11 +267,8 @@
     }
   },
   "resumeOrder": [
-    "T2b-review-fixes",
-    "T7-ship",
-    "T9-improvements-brainstorm",
-    "T10-improvements-build",
-    "vault"
+    "user decisions in userReview",
+    "backlog items marked open in docs/reference/IMPROVEMENTS_BACKLOG_2026-10-09.md"
   ],
   "standbyScope": [],
   "standbyLog": [],
@@ -310,5 +323,6 @@
       "resumedAt": "2026-10-10T00:45Z",
       "reconcile": "vitest 3019 pass; lint found a shell typecheck error from e0be7d0c (inferred vs declared before-state type), fixed in ec766f06; both agents resumed via SendMessage"
     }
-  ]
+  ],
+  "finishedAt": "2026-10-10T~03:00Z"
 }
