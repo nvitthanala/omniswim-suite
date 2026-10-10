@@ -231,7 +231,7 @@ export type OptimizerChangeSummary = {
 };
 
 function overrideKey(o: ScorerRosterOverride): string {
-  return `${o.team} ${o.gender} ${o.name}`;
+  return `${o.team}\u0000${o.gender}\u0000${o.name}`;
 }
 
 /**
