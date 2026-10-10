@@ -24,8 +24,10 @@ const E2E_TIMEOUT_MS = Number(process.env.OMNI_E2E_TIMEOUT_MS ?? 900_000);
 const scriptsDir = dirname(fileURLToPath(import.meta.url));
 const repoRoot = join(scriptsDir, '..');
 
-// Each entry: [file, requiredFixture?]. If the fixture is listed and missing,
-// the test is skipped rather than failed. A test may also skip itself by exiting
+// Each entry: [file, ...requiredFixtures]. If any listed fixture is missing,
+// the test is skipped rather than failed. `data/meets.json` is the local working
+// store and holds real roster data, so it is untracked (f9d63c4b) and CI skips
+// every test that reads it. A test may also skip itself by exiting
 // 0 with a leading `SKIP` line (used for checks needing a live database).
 //
 // A test may also report a KNOWN FAILURE by printing a line beginning `XFAIL`
@@ -43,7 +45,7 @@ const TESTS = [
   ['test_persistence_parity.mjs'],
   ['test_workspace_scope.mjs'],
   ['test_data_dir_guard.mjs'],
-  ['test_chart_data.mjs'],
+  ['test_chart_data.mjs', 'data/meets.json'],
   ['test_chart_shell.mjs'],
   ['test_chart_render.mjs'],
   ['test_theme_css.mjs'],
@@ -52,12 +54,12 @@ const TESTS = [
   ['test_optimizer_never_loses.mjs'],
   ['test_arbitrage_never_loses.mjs'],
   ['test_tie_group_scoring.mjs'],
-  ['test_recruit_placement_grid.mjs'],
+  ['test_recruit_placement_grid.mjs', 'data/meets.json'],
   ['test_scorer_pool_cap.mjs'],
   ['test_fast_swap_context.mjs'],
-  ['test_entry_limits.mjs'],
-  ['test_entry_limits_time_trials.mjs'],
-  ['test_athlete_history.mjs'],
+  ['test_entry_limits.mjs', 'data/meets.json'],
+  ['test_entry_limits_time_trials.mjs', 'data/meets.json'],
+  ['test_athlete_history.mjs', 'data/meets.json'],
   ['test_course_conversion.mjs'],
   ['test_conversion_keys.mjs'],
   ['test_meet_program_events.mjs'],
@@ -93,13 +95,13 @@ const TESTS = [
   ['test_entry_limits_prelims_finals.mjs'],
   ['test_parse_plausibility.mjs'],
   ['test_athlete_autolink.mjs'],
-  ['test_roster_identity_match.mjs'],
+  ['test_roster_identity_match.mjs', 'data/meets.json'],
   ['test_event_identity_scoring.mjs'],
   ['test_lineup_audit.mjs'],
   ['test_vacate_relay_alias.mjs'],
-  ['test_relay_splits.mjs'],
-  ['test_relay_overrides.mjs'],
-  ['test_dq_scoring.mjs'],
+  ['test_relay_splits.mjs', 'data/meets.json'],
+  ['test_relay_overrides.mjs', 'data/meets.json'],
+  ['test_dq_scoring.mjs', 'data/meets.json'],
   ['test_prelims_projection.mjs'],
   ['test_momentum_series.mjs'],
   ['test_psych_projection.mjs'],
@@ -109,20 +111,20 @@ const TESTS = [
   ['test_pdf_abbreviation_table_required.mjs'],
   ['test_scoring_settings_required.mjs'],
   ['test_season_analytics_official_zero.mjs'],
-  ['test_cutlines.mjs'],
-  ['test_cutline_tags.mjs'],
+  ['test_cutlines.mjs', 'data/meets.json'],
+  ['test_cutline_tags.mjs', 'data/meets.json'],
   ['test_team_rankings_parser.mjs'],
   ['test_yearless_result_row.mjs'],
   ['test_yearless_relay_row.mjs'],
   ['test_abbreviated_school_column.mjs'],
   ['test_scored_event_boundary.mjs'],
   ['test_pdf_place_points_boundary.mjs'],
-  ['test_nsisc_team_totals.mjs'],
+  ['test_nsisc_team_totals.mjs', 'data/meets.json'],
   ['test_nsisc_psych.mjs', 'tests/fixtures/nsisc_psych_sheet.pdf'],
   ['test_compact_event_label.mjs'],
   ['test_team_colors.mjs'],
   ['test_individual_scoring.mjs', 'tests/test_nsisc_output.json'],
-  ['test_relay_scoring.mjs', 'tests/test_nsisc_output.json'],
+  ['test_relay_scoring.mjs', 'tests/test_nsisc_output.json', 'data/meets.json'],
 ];
 
 let passed = 0;
@@ -131,14 +133,15 @@ let skipped = 0;
 const failures = [];
 const knownFailures = [];
 
-for (const [file, fixture] of TESTS) {
+for (const [file, ...fixtures] of TESTS) {
   const path = join(scriptsDir, file);
   if (!existsSync(path)) {
     console.log(`SKIP  ${file} (missing)`);
     skipped += 1;
     continue;
   }
-  if (fixture && !existsSync(join(repoRoot, fixture))) {
+  const fixture = fixtures.find(f => !existsSync(join(repoRoot, f)));
+  if (fixture) {
     console.log(`SKIP  ${file} (needs ${fixture})`);
     skipped += 1;
     continue;
