@@ -405,10 +405,9 @@ export function removeCreditedSwim(
  * makes (`applyScorerOffRelayPatch`).
  *
  * A fill resolves only onto those two planes (plus history swims of a swimmer
- * still in them; planned entries never fill a leg). Left in place, a fill whose
- * name no longer resolves falls through to its clock-hold `manualLegTime`: the
- * leg shows `—`, scores as filled, and is not flagged vacant, so the lineup
- * audit never says it needs filling. Pruned, the leg reads vacant and flagged.
+ * still in them; planned entries never fill a leg). A fill whose name no longer
+ * resolves reads vacant and flagged on its own (`resolveRelayLegs`). Pruning it
+ * as well keeps the stored fills honest.
  * The inverse restores the fills, so Undo brings them back with the swim.
  */
 function pruneUnresolvableRelayFills(
