@@ -710,12 +710,26 @@ function isVacantRelayLeg(leg: SwimmerResult): boolean {
   return Boolean(leg.relayLegVacant || leg.relayMissingLeg);
 }
 
-/** Checklist wording for one vacant leg — stroke named when the source records it. */
+/**
+ * Which entry of the event a vacant leg belongs to: the round it swam ("A Final")
+ * and its place. Without it the A and B relays of one event word the same
+ * checklist item, and a coach cannot tell which one needs a leg. Empty when the
+ * source records neither.
+ */
+function relayEntryLabel(leg: SwimmerResult): string {
+  const round = (leg.roundSwam ?? '').trim();
+  const place = typeof leg.rank === 'number' && leg.rank > 0 ? `place ${leg.rank}` : '';
+  return [round, place].filter(Boolean).join(', ');
+}
+
+/** Checklist wording for one vacant leg — entry and stroke named when the source records them. */
 function vacantLegFillMessage(leg: SwimmerResult, legIndex: number): string {
   const strokeLabel = relayMissingStrokeLabel(leg.relayMissingLeg?.stroke);
+  const entryLabel = relayEntryLabel(leg);
+  const event = entryLabel ? `${leg.event} (${entryLabel})` : leg.event;
   return strokeLabel
-    ? `Relay ${leg.event}: leg ${legIndex + 1} (${strokeLabel}) needs filling`
-    : `Relay ${leg.event}: leg ${legIndex + 1} needs filling`;
+    ? `Relay ${event}: leg ${legIndex + 1} (${strokeLabel}) needs filling`
+    : `Relay ${event}: leg ${legIndex + 1} needs filling`;
 }
 
 /** Why the leg is empty, in the words the coach reads. */

@@ -21,8 +21,8 @@ the user must make.
 | A10 | Tied relays each get full place points. Tied individual swims split them | `utils.ts` `scoreRelaysInEvent` | **Y** | waiting on user |
 | A11 | `presetIdForConference` matches by substring ("Sectional" picks a preset via "SEC") | `scoringDefaults.ts:508-518` | Y | waiting on user |
 | A12 | The `/times/` id join is not verified on a live capture | S10-09 T1 | Y | needs a live capture |
-| A13 | A relay fill naming a swimmer who still has other rows but no row the fill resolves to shows `—` at the held clock, unflagged, not vacant (cause: `resolveRelayLegs` falls back to the held leg time, `utils.ts` ~3187) | bug-hunter probe 2026-10-10 | N | open |
-| A14 | The A and B relay `relay_needs_fill` messages are identical, so a coach cannot tell which entry needs a leg | lineup audit | N | open |
+| A13 | A relay fill naming a swimmer who still has other rows but no row the fill resolves to shows `—` at the held clock, unflagged, not vacant (cause: `resolveRelayLegs` falls back to the held leg time, `utils.ts` ~3187) | bug-hunter probe 2026-10-10 | N | done: named fill that stops resolving reads vacant; time-only clock hold kept |
+| A14 | The A and B relay `relay_needs_fill` messages are identical, so a coach cannot tell which entry needs a leg | lineup audit | N | done: message names round and place |
 
 ## Tier B: test and infra gaps
 

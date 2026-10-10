@@ -159,7 +159,7 @@ describe('removeProjectedSwim and relay leg overrides', () => {
       'Oliver Pozvai 1:23.21 vacant=false missing=-',
     ]);
     expect(relayFillWarnings(removed)).toStrictEqual([
-      'Relay Event 31 Men 4x50 Yard Freestyle Relay: leg 1 (Free) needs filling',
+      'Relay Event 31 Men 4x50 Yard Freestyle Relay (A Final, place 1): leg 1 (Free) needs filling',
     ]);
 
     // Same relay state as toggling Jordan off as a scorer.
@@ -204,7 +204,7 @@ describe('removeProjectedSwim and relay leg overrides', () => {
     expect(ws.relayLegOverrides).toStrictEqual([]);
     expect(legView(ws)[0]).toBe('— 1:23.21 vacant=true missing=vacant');
     expect(relayFillWarnings(ws)).toStrictEqual([
-      'Relay Event 31 Men 4x50 Yard Freestyle Relay: leg 1 (Free) needs filling',
+      'Relay Event 31 Men 4x50 Yard Freestyle Relay (A Final, place 1): leg 1 (Free) needs filling',
     ]);
   });
 
