@@ -36,6 +36,13 @@ any name or team in it also appears in the live store.
 `DATA_DIR` is overridable with `OMNI_DATA_DIR`, which is how the fresh-install
 path is exercised without moving real data aside.
 
+The scripts that write workspaces (`seed_hsu_roster.mjs`, `seed_obu_roster.mjs`,
+`migrate-json-to-sqlite.mjs`, `reextract_meet_workspace.mjs`) honour the same
+`OMNI_DATA_DIR`, print the resolved path before they write, and refuse to write
+while a server answers on `PORT`/`OMNI_PORT`/3000 (`--force` overrides). The
+shared helper is `scripts/lib/dataDir.mjs`; `scripts/test_data_dir_guard.mjs`
+is the test. Test these scripts only against a copy.
+
 ## 2. Dev and prod resolve the project root from different depths
 
 The dev entry point is `apps/shell/server.ts`; the production bundle is

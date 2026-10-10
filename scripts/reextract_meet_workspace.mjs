@@ -34,10 +34,21 @@
  * genuinely new rows get a new uuid. The script refuses to run if the workspace
  * holds an id reference it would break.
  *
- * The SQLite store (`data/omniswim.db`, gitignored) is not touched.
+ * The SQLite store (`omniswim.db`, gitignored) is not touched.
+ *
+ * ## Which file it writes
+ *
+ * `<data dir>/meets.json`. The data dir is the repo's `data/` folder unless
+ * `OMNI_DATA_DIR` is set (same resolution as apps/shell/server.ts). The resolved
+ * path is printed first, so the real store is never targeted silently. This
+ * script does not start a server; the only subprocess is `backend/parse_meet.py`.
+ * Before it writes it refuses if a server answers on
+ * http://127.0.0.1:<PORT||OMNI_PORT||3000> (see scripts/lib/dataDir.mjs), because
+ * a running server holds its own copy and would overwrite this write.
+ * `--force` skips that check. `--dry-run` writes nothing and skips it too.
  *
  * Usage:
- *   npx tsx scripts/reextract_meet_workspace.mjs --pdf <path> [--workspace <id>] [--dry-run] [--emit <json>]
+ *   npx tsx scripts/reextract_meet_workspace.mjs --pdf <path> [--workspace <id>] [--dry-run] [--emit <json>] [--force]
  *
  * The source PDF is local-only, so this is not part of `npm test`.
  */
@@ -46,10 +57,12 @@ import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { Gender } from '../packages/core/src/types.ts';
+import { resolveDataDir, assertNoServerHoldsStore } from './lib/dataDir.mjs';
 import { mapAthleteRows } from '../apps/shell/lib/routes/parsingPipeline.ts';
 
 const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
-const MEETS_FILE = join(repoRoot, 'data', 'meets.json');
+const DATA_DIR = resolveDataDir();
+const MEETS_FILE = join(DATA_DIR, 'meets.json');
 const PARSE_MEET = join(repoRoot, 'backend', 'parse_meet.py');
 
 function arg(name) {
@@ -57,6 +70,7 @@ function arg(name) {
   return i >= 0 ? process.argv[i + 1] : undefined;
 }
 const DRY_RUN = process.argv.includes('--dry-run');
+const FORCE = process.argv.includes('--force');
 const pdfPath = arg('--pdf');
 const workspaceId = arg('--workspace');
 
@@ -68,6 +82,8 @@ if (!existsSync(pdfPath)) {
   console.error(`PDF not found: ${pdfPath}`);
   process.exit(1);
 }
+
+console.log(`meets.json: ${MEETS_FILE}${process.env.OMNI_DATA_DIR ? ' (OMNI_DATA_DIR)' : ' (default repo data/ -- the real store)'}`);
 
 // --- 1. locate the workspace --------------------------------------------------
 const workspaces = JSON.parse(readFileSync(MEETS_FILE, 'utf8'));
@@ -190,9 +206,18 @@ if (emitPath) {
 }
 
 if (DRY_RUN) {
-  console.log('dry run — data/meets.json not written');
+  console.log(`dry run — ${MEETS_FILE} not written`);
   process.exit(0);
 }
+
+await assertNoServerHoldsStore({
+  force: FORCE,
+  what: DATA_DIR,
+  fail: msg => {
+    console.error(`ERROR: ${msg}`);
+    process.exit(1);
+  },
+});
 
 // --- 7. write the five fields, and prove nothing else moved -------------------
 const before = JSON.parse(readFileSync(MEETS_FILE, 'utf8'));
@@ -222,4 +247,4 @@ if (changedElsewhere.length > 0) {
 }
 
 writeFileSync(MEETS_FILE, JSON.stringify(workspaces, null, 2), 'utf8');
-console.log('data/meets.json updated');
+console.log(`${MEETS_FILE} updated`);
