@@ -26,9 +26,17 @@ const repoRoot = join(scriptsDir, '..');
 
 // Each entry: [file, ...requiredFixtures]. If any listed fixture is missing,
 // the test is skipped rather than failed. `data/meets.json` is the local working
-// store and holds real roster data, so it is untracked (f9d63c4b) and CI skips
-// every test that reads it. A test may also skip itself by exiting
-// 0 with a leading `SKIP` line (used for checks needing a live database).
+// store and holds real roster data, so it is untracked (f9d63c4b) and absent on CI.
+//
+// List `data/meets.json` here ONLY for a script whose every check needs it
+// (today: `test_relay_overrides.mjs`). A script that has checks needing nothing
+// local does not list it. It reads the store through `scripts/lib/localMeets.mjs`,
+// runs the local-free checks everywhere, and prints a `LOCAL-ONLY SKIPPED` line for
+// each part that needs the file. This runner counts those lines and prints them
+// beside the PASS and in the summary, so a skipped part cannot hide in a green run.
+//
+// A test may also skip itself by exiting 0 with a leading `SKIP` line (used for
+// checks needing a live database).
 //
 // A test may also report a KNOWN FAILURE by printing a line beginning `XFAIL`
 // and exiting 0. That is for a check whose subject is correct but whose input is
@@ -45,7 +53,7 @@ const TESTS = [
   ['test_persistence_parity.mjs'],
   ['test_workspace_scope.mjs'],
   ['test_data_dir_guard.mjs'],
-  ['test_chart_data.mjs', 'data/meets.json'],
+  ['test_chart_data.mjs'],
   ['test_chart_shell.mjs'],
   ['test_chart_render.mjs'],
   ['test_theme_css.mjs'],
@@ -54,12 +62,12 @@ const TESTS = [
   ['test_optimizer_never_loses.mjs'],
   ['test_arbitrage_never_loses.mjs'],
   ['test_tie_group_scoring.mjs'],
-  ['test_recruit_placement_grid.mjs', 'data/meets.json'],
+  ['test_recruit_placement_grid.mjs'],
   ['test_scorer_pool_cap.mjs'],
   ['test_fast_swap_context.mjs'],
-  ['test_entry_limits.mjs', 'data/meets.json'],
-  ['test_entry_limits_time_trials.mjs', 'data/meets.json'],
-  ['test_athlete_history.mjs', 'data/meets.json'],
+  ['test_entry_limits.mjs'],
+  ['test_entry_limits_time_trials.mjs'],
+  ['test_athlete_history.mjs'],
   ['test_course_conversion.mjs'],
   ['test_conversion_keys.mjs'],
   ['test_meet_program_events.mjs'],
@@ -95,13 +103,13 @@ const TESTS = [
   ['test_entry_limits_prelims_finals.mjs'],
   ['test_parse_plausibility.mjs'],
   ['test_athlete_autolink.mjs'],
-  ['test_roster_identity_match.mjs', 'data/meets.json'],
+  ['test_roster_identity_match.mjs'],
   ['test_event_identity_scoring.mjs'],
   ['test_lineup_audit.mjs'],
   ['test_vacate_relay_alias.mjs'],
-  ['test_relay_splits.mjs', 'data/meets.json'],
+  ['test_relay_splits.mjs'],
   ['test_relay_overrides.mjs', 'data/meets.json'],
-  ['test_dq_scoring.mjs', 'data/meets.json'],
+  ['test_dq_scoring.mjs'],
   ['test_prelims_projection.mjs'],
   ['test_momentum_series.mjs'],
   ['test_psych_projection.mjs'],
@@ -111,20 +119,20 @@ const TESTS = [
   ['test_pdf_abbreviation_table_required.mjs'],
   ['test_scoring_settings_required.mjs'],
   ['test_season_analytics_official_zero.mjs'],
-  ['test_cutlines.mjs', 'data/meets.json'],
-  ['test_cutline_tags.mjs', 'data/meets.json'],
+  ['test_cutlines.mjs'],
+  ['test_cutline_tags.mjs'],
   ['test_team_rankings_parser.mjs'],
   ['test_yearless_result_row.mjs'],
   ['test_yearless_relay_row.mjs'],
   ['test_abbreviated_school_column.mjs'],
   ['test_scored_event_boundary.mjs'],
   ['test_pdf_place_points_boundary.mjs'],
-  ['test_nsisc_team_totals.mjs', 'data/meets.json'],
+  ['test_nsisc_team_totals.mjs'],
   ['test_nsisc_psych.mjs', 'tests/fixtures/nsisc_psych_sheet.pdf'],
   ['test_compact_event_label.mjs'],
   ['test_team_colors.mjs'],
   ['test_individual_scoring.mjs', 'tests/test_nsisc_output.json'],
-  ['test_relay_scoring.mjs', 'tests/test_nsisc_output.json', 'data/meets.json'],
+  ['test_relay_scoring.mjs', 'tests/test_nsisc_output.json'],
 ];
 
 let passed = 0;
@@ -132,6 +140,8 @@ let failed = 0;
 let skipped = 0;
 const failures = [];
 const knownFailures = [];
+/** `LOCAL-ONLY SKIPPED` lines from passing scripts: parts that need the untracked data/meets.json. */
+const localOnlySkips = [];
 
 for (const [file, ...fixtures] of TESTS) {
   const path = join(scriptsDir, file);
@@ -183,12 +193,13 @@ for (const [file, ...fixtures] of TESTS) {
       skipped += 1;
     } else {
       const xfails = stdout.split('\n').filter(l => l.trimStart().startsWith('XFAIL'));
-      if (xfails.length) {
-        console.log(`PASS  ${file} (${xfails.length} known failure${xfails.length > 1 ? 's' : ''})`);
-        for (const line of xfails) knownFailures.push(`${file}: ${line.trim()}`);
-      } else {
-        console.log(`PASS  ${file}`);
-      }
+      const localSkips = stdout.split('\n').filter(l => l.startsWith('LOCAL-ONLY SKIPPED'));
+      for (const line of localSkips) localOnlySkips.push(line.replace('LOCAL-ONLY SKIPPED', '').trim());
+      const notes = [];
+      if (xfails.length) notes.push(`${xfails.length} known failure${xfails.length > 1 ? 's' : ''}`);
+      if (localSkips.length) notes.push(`${localSkips.length} local-only part${localSkips.length > 1 ? 's' : ''} skipped`);
+      console.log(`PASS  ${file}${notes.length ? ` (${notes.join(', ')})` : ''}`);
+      for (const line of xfails) knownFailures.push(`${file}: ${line.trim()}`);
       passed += 1;
     }
   } else {
@@ -293,6 +304,11 @@ if (existsSync(playwrightBin)) {
 
 const knownSuffix = knownFailures.length ? `, ${knownFailures.length} known failure${knownFailures.length > 1 ? 's' : ''}` : '';
 console.log(`\n${passed} passed, ${failed} failed, ${skipped} skipped${knownSuffix}`);
+if (localOnlySkips.length) {
+  // A passing script can still have skipped the part that reads data/meets.json.
+  console.log(`\nLOCAL-ONLY PARTS SKIPPED (${localOnlySkips.length}, need the untracked data/meets.json):`);
+  for (const k of localOnlySkips) console.log(`  ${k}`);
+}
 if (knownFailures.length) {
   // Printed every run so a documented gap cannot fade into a green suite.
   console.log('\nKNOWN FAILURES (expected, documented in the test file):');

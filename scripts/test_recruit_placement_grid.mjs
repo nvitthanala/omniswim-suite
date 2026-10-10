@@ -32,10 +32,13 @@
  * times were 4:05.95, 4:07.75 and 4:09.18.
  *
  * WHAT IS ASSERTED. Sections 1-4 are hermetic and pin the placement rules
- * directly. Sections 5-6 read data/meets.json and assert PROPERTIES, not
+ * directly. Sections 5-6 score whole workspaces and assert PROPERTIES, not
  * snapshots, so editing a lineup cannot fail them: no scored tie group may hold
  * two different times, and every team total and every arbitrage delta must be a
  * multiple of 0.5 (place points are integers; only a real dead heat halves one).
+ * They run over the committed demo seed (data/demo-seed.json) always, and over
+ * the local data/meets.json as well when this machine has it. Without meets.json
+ * the script prints a LOCAL-ONLY SKIPPED line and runs everything else.
  *
  * NOT COVERED. Sections 5-6 score each workspace AS SAVED. One regime is still
  * broken and is deliberately out of this test's reach: delete every planned
@@ -47,7 +50,6 @@
  * Test: npx tsx scripts/test_recruit_placement_grid.mjs
  */
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
 import {
   calculatePoints,
   convertTimeToSeconds,
@@ -63,6 +65,7 @@ import {
   rankExactSwaps,
 } from '../packages/core/src/lib/crossCourseArbitrage.ts';
 import { Gender } from '../packages/core/src/types.ts';
+import { loadDemoSeed, loadLocalMeets, noteLocalOnlySkipped } from './lib/localMeets.mjs';
 
 const MEN = Gender.MEN;
 const TEAM = 'Henderson State University';
@@ -201,9 +204,16 @@ const recruitRow = (name, time, extra = {}) => row(name, TEAM, time, { isRecruit
 // --- 5. no scored tie group holds two different times (live workspaces) -----
 // The invariant the bug violated, asserted as a property so a lineup edit
 // cannot fail it. A genuine dead heat (equal times) is allowed and expected.
-const meets = JSON.parse(readFileSync('data/meets.json', 'utf8'));
-const workspaces = Object.values(meets);
-assert.ok(workspaces.length > 0, 'data/meets.json must hold at least one workspace');
+const meets = loadLocalMeets();
+const localWorkspaces = meets === null ? [] : Object.values(meets);
+if (meets === null) {
+  noteLocalOnlySkipped('test_recruit_placement_grid.mjs', 'sections 5-6 over the local workspaces (the demo seed has no arbitrage candidates, so section 6 checks nothing without meets.json)');
+} else {
+  assert.ok(localWorkspaces.length > 0, 'data/meets.json must hold at least one workspace');
+}
+// The committed demo seed always runs, so CI checks these properties too.
+// Local workspaces come first so their output order is unchanged.
+const workspaces = [...localWorkspaces, ...loadDemoSeed()];
 
 /** The exact key scoreIndividualsInEvent groups a tie on. */
 const tieKey = r => {

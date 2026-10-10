@@ -41,6 +41,7 @@ import {
 } from '../packages/core/src/lib/cutlineUtils.ts';
 import { divisionForTeam } from '../packages/core/src/data/teamDivisions.ts';
 import { relaySplitQualificationCutEvent } from '../packages/core/src/lib/utils.ts';
+import { loadLocalMeets, noteLocalOnlySkipped } from './lib/localMeets.mjs';
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 let failures = 0;
@@ -532,42 +533,48 @@ const D2_EVENTS_WITHOUT_A_PUBLISHED_STANDARD = new Set([
 ]);
 
 {
-  const meets = JSON.parse(fs.readFileSync(path.join(repoRoot, 'data/meets.json'), 'utf-8'));
-  const rawEvents = new Set();
-  const collect = node => {
-    if (Array.isArray(node)) return node.forEach(collect);
-    if (!node || typeof node !== 'object') return;
-    for (const [key, value] of Object.entries(node)) {
-      if (key === 'event' && typeof value === 'string') rawEvents.add(value);
-      else collect(value);
+  // Local-only: needs the real event labels in data/meets.json, which is untracked.
+  // Every other section of this script reads only the committed cutline tables.
+  const meets = loadLocalMeets();
+  if (meets === null) {
+    noteLocalOnlySkipped('test_cutlines.mjs', 'section 5c, every event label in the local workspaces');
+  } else {
+    const rawEvents = new Set();
+    const collect = node => {
+      if (Array.isArray(node)) return node.forEach(collect);
+      if (!node || typeof node !== 'object') return;
+      for (const [key, value] of Object.entries(node)) {
+        if (key === 'event' && typeof value === 'string') rawEvents.add(value);
+        else collect(value);
+      }
+    };
+    collect(meets);
+
+    if (rawEvents.size < 60) {
+      fail(`expected data/meets.json to carry 60+ distinct event labels, got ${rawEvents.size}`);
     }
-  };
-  collect(meets);
 
-  if (rawEvents.size < 60) {
-    fail(`expected data/meets.json to carry 60+ distinct event labels, got ${rawEvents.size}`);
+    const tally = { ok: 0, not_a_timed_event: 0, expected_no_standard: 0 };
+    const unaccounted = [];
+    for (const raw of [...rawEvents].sort()) {
+      const clean = normalizeEventForCutline(raw);
+      const status = getCutlinesForSwim('Men', clean, 'D2').status;
+      if (status === 'ok') tally.ok += 1;
+      else if (status === 'not_a_timed_event') tally.not_a_timed_event += 1;
+      else if (D2_EVENTS_WITHOUT_A_PUBLISHED_STANDARD.has(clean)) tally.expected_no_standard += 1;
+      else unaccounted.push(`${raw} -> ${clean} (${status})`);
+    }
+    for (const miss of unaccounted) {
+      fail(`meets.json event resolves to no D2 row and is not on the expected-absent list: ${miss}`);
+    }
+    // The parser must not quietly regress: 'ok' is the count the HyTek fix bought.
+    if (tally.ok < 67) fail(`expected 67+ meets.json labels to resolve to a D2 row, got ${tally.ok}`);
+    eq(tally.not_a_timed_event, 4, 'meets.json diving labels (1M/3M, both genders)');
+    console.log(
+      `cutlines: meets.json labels ${rawEvents.size} = ${tally.ok} published, ` +
+        `${tally.expected_no_standard} no published standard, ${tally.not_a_timed_event} diving`
+    );
   }
-
-  const tally = { ok: 0, not_a_timed_event: 0, expected_no_standard: 0 };
-  const unaccounted = [];
-  for (const raw of [...rawEvents].sort()) {
-    const clean = normalizeEventForCutline(raw);
-    const status = getCutlinesForSwim('Men', clean, 'D2').status;
-    if (status === 'ok') tally.ok += 1;
-    else if (status === 'not_a_timed_event') tally.not_a_timed_event += 1;
-    else if (D2_EVENTS_WITHOUT_A_PUBLISHED_STANDARD.has(clean)) tally.expected_no_standard += 1;
-    else unaccounted.push(`${raw} -> ${clean} (${status})`);
-  }
-  for (const miss of unaccounted) {
-    fail(`meets.json event resolves to no D2 row and is not on the expected-absent list: ${miss}`);
-  }
-  // The parser must not quietly regress: 'ok' is the count the HyTek fix bought.
-  if (tally.ok < 67) fail(`expected 67+ meets.json labels to resolve to a D2 row, got ${tally.ok}`);
-  eq(tally.not_a_timed_event, 4, 'meets.json diving labels (1M/3M, both genders)');
-  console.log(
-    `cutlines: meets.json labels ${rawEvents.size} = ${tally.ok} published, ` +
-      `${tally.expected_no_standard} no published standard, ${tally.not_a_timed_event} diving`
-  );
 }
 
 /* ------------------------------------------------------------------ */

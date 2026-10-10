@@ -36,6 +36,7 @@
  */
 import assert from 'node:assert/strict';
 import { countSwimmerEntries } from '../packages/core/src/lib/swimmerEntryLimits.ts';
+import { loadLocalMeets, noteLocalOnlySkipped } from './lib/localMeets.mjs';
 
 const TEAM = 'Test University';
 const MEN = 'Men';
@@ -128,8 +129,12 @@ const count = rows => countSwimmerEntries(rows, TEAM, MEN, 'Test Swimmer');
 /* 6. The real meet, end to end                                               */
 /* -------------------------------------------------------------------------- */
 {
-  const { readFileSync } = await import('node:fs');
-  const ws = JSON.parse(readFileSync('data/meets.json', 'utf-8')).find(w => w.name === 'Blank Workspace 1');
+  // Local-only: needs the real meet in data/meets.json, which is untracked.
+  const meets = loadLocalMeets();
+  if (meets === null) {
+    noteLocalOnlySkipped('test_entry_limits_time_trials.mjs', 'section 6, the real meet end to end');
+  }
+  const ws = meets === null ? undefined : meets.find(w => w.name === 'Blank Workspace 1');
   if (ws) {
     const c = countSwimmerEntries(ws.menResults, 'Henderson State University', MEN, 'Oskar Cebula');
     // 8/7 before the fix: his 100 Breaststroke was charged twice.

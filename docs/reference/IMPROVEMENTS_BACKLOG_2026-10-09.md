@@ -37,7 +37,7 @@ the user must make.
 | B9 | The real DB holds 39 test workspaces, and an old server runs on port 3000 | S10-09 T8 | Y | waiting on user |
 | B10 | Confirm the `optimizeWithArbitrage` never-loses test exists | `scripts/test_arbitrage_never_loses.mjs` | N | done: exists and runs in `run-tests.mjs` |
 | B11 | Two lint complexity warnings remain | `swimCloudMeetImportBridge.ts` | N | open |
-| B12 | 13 scripts need the untracked `data/meets.json`, so CI skips them whole. Split out checks that need no local data (for example the static cut labels in `test_cutlines.mjs`) so CI runs them | `scripts/run-tests.mjs` (`be982fe1`) | N | open |
+| B12 | 13 scripts need the untracked `data/meets.json`, so CI skips them whole. Split out checks that need no local data (for example the static cut labels in `test_cutlines.mjs`) so CI runs them | `scripts/run-tests.mjs` (`be982fe1`) | N | done: 12 of 13 scripts now run their local-free checks in CI through `scripts/lib/localMeets.mjs`. Each skipped part prints `LOCAL-ONLY SKIPPED`, and the runner lists them. `test_relay_overrides.mjs` stays local-only (every check reads the real relay data). Still local-only: `test_roster_optimizer.mjs` self-skips on the same file (not in the 13) |
 
 Done this session: Playwright no longer reuses a server on the port unless
 `PLAYWRIGHT_REUSE_SERVER=1` is set (`docs/INVARIANTS.md` §4).

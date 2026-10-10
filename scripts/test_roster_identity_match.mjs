@@ -26,9 +26,6 @@
  * Test: npx tsx scripts/test_roster_identity_match.mjs
  */
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import {
   importHistoryToRoster,
   previewHistoryImportActions,
@@ -39,8 +36,8 @@ import {
 import { matchAthleteToRoster } from '../packages/core/src/lib/athleteHistory.ts';
 import { ClassYear, Gender } from '../packages/core/src/types.ts';
 import { NSISC_PRESET_SETTINGS } from '../packages/core/src/lib/scoringDefaults.ts';
+import { loadLocalMeets, noteLocalOnlySkipped } from './lib/localMeets.mjs';
 
-const repoRoot = join(dirname(fileURLToPath(import.meta.url)), '..');
 const TEAM = 'Henderson State University';
 let n = 0;
 const ok = msg => {
@@ -226,11 +223,15 @@ const previewOne = (ws, name) =>
 }
 
 // --- 9. the real workspaces: every variant spelling stays recoverable ---------
-{
+// Local-only: needs the real HSU roster in data/meets.json, which is untracked.
+// Sections 1-8 above use only literals and always run.
+const meets = loadLocalMeets();
+if (meets === null) {
+  noteLocalOnlySkipped('test_roster_identity_match.mjs', 'section 9, the real HSU roster');
+} else {
   // Snapshotted against the committed workspaces so upstream data drift breaks CI
   // rather than drifting silently. These four athletes are the live cases: two
   // accented Hungarian names and two Hispanic double surnames.
-  const meets = JSON.parse(readFileSync(join(repoRoot, 'data/meets.json'), 'utf8'));
   const hsu = meets.find(w => w.name === 'HSU 2026-27 Roster Plan');
   assert.ok(hsu, 'the HSU 2026-27 roster workspace is present in data/meets.json');
   const rosterNames = rosterNamesForTeam(hsu, TEAM, Gender.MEN);
