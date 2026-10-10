@@ -64,8 +64,9 @@ const REAL_CAPTURE = 'real-capture-verified' as const;
 const TIME_TOKEN = /^(?:\d{1,2}:){0,2}\d{1,2}\.\d{2}$/;
 /**
  * The real relay team cell prints the letter in parentheses: `Henderson State (A)`.
- * (The quote-delimited reader in `parser.ts` was written before any real relay
- * page was captured and does not match this shape.)
+ * (`readRelayDesignator` in `parser.ts` reads this shape too since 2026-10-09; it
+ * first accepted only a quoted letter, written before any real relay page was
+ * captured.)
  */
 const RELAY_LETTER = /^(.*?)\s*\(([A-Za-z])\)\s*$/;
 const ORDINAL = /^(\d+)\s*(?:st|nd|rd|th)$/i;

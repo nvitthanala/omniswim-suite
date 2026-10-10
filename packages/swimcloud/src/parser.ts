@@ -210,6 +210,15 @@ export type SwimCloudParseWarningCode =
   | 'missing-athlete-link'
   /** A relay row listed no legs. SwimCloud does publish them — a per-event page serves them in a table behind its own "Show names" toggle — so this is a genuine gap, not the expected state. */
   | 'relay-legs-absent'
+  /**
+   * A relay row on a per-event results page (`parseMeetEventResultsHtml`) read no
+   * legs: the page had no hidden "Show names" list for it, or the list was
+   * unreadable. The row is kept without legs, so its swimmers cannot be
+   * credited. Raised by the parser itself. `readRelayEventEntries` still adds its
+   * own `relay-legs-absent` for the same row, so a caller reading both sees the
+   * row twice under two codes.
+   */
+  | 'relay-row-without-legs'
   /** A per-event page carried no `js-event-item` event index, so it cannot enumerate the rest of the meet. Never read as "the meet has no events". */
   | 'event-index-absent'
   /** A row's event label said "Yard" but an explicit course column disagreed. The label wins; the disagreement is surfaced rather than silently resolved either way. */
@@ -1863,9 +1872,24 @@ function readTime(
   return { rawTimeToken: token };
 }
 
-const RELAY_DESIGNATOR = /^(.*?)\s*['‘’"“”]\s*([A-Za-z])\s*['‘’"“”]?\s*$/;
+/**
+ * A relay entry's printed designator, after the team name.
+ *
+ * **Two shapes.** The real pages print the letter in parentheses:
+ * `Henderson State (A)`, from the `<span>` inside the team link on
+ * `tests/fixtures/swimcloud-real-meet-event-401354-event22-relay-names.html`.
+ * This reader used to accept only a quoted letter (`'A'`), a shape invented
+ * alongside `swimcloud-synthetic-meet-results.html` before any real relay page
+ * was captured, so it matched nothing a real page prints. The parenthesised form
+ * is now read. The quoted form stays because that synthetic fixture and its test
+ * still use it.
+ *
+ * Single letter only: a longer parenthetical is part of the team's name, not a
+ * designator, and stays in it.
+ */
+const RELAY_DESIGNATOR = /^(.*?)\s*(?:['‘’"“”]\s*([A-Za-z])\s*['‘’"“”]?|\(\s*([A-Za-z])\s*\))\s*$/;
 
-function readRelayDesignator(text: string): { teamName: string; designator: string } | undefined {
+export function readRelayDesignator(text: string): { teamName: string; designator: string } | undefined {
   const match = RELAY_DESIGNATOR.exec(text);
   if (match === null) {
     return undefined;
@@ -1874,7 +1898,7 @@ function readRelayDesignator(text: string): { teamName: string; designator: stri
   if (teamName.length === 0) {
     return undefined;
   }
-  return { teamName, designator: match[2].toUpperCase() };
+  return { teamName, designator: (match[2] ?? match[3]).toUpperCase() };
 }
 
 /**
@@ -5511,6 +5535,32 @@ function assembleEventRoundSwim(fields: {
   };
 }
 
+/**
+ * Say so when a relay row on a per-event page read no legs. Silence here looked
+ * like "this relay has no swimmers", which is never true: the legs sit in a
+ * hidden table, so no legs means that table was missing from the capture or
+ * unreadable. A non-relay event never warns.
+ */
+function warnRelayRowWithoutLegs(
+  event: SwimCloudEvent,
+  athlete: EventRoundAthlete,
+  athleteName: string,
+  eventId: string,
+  rowIndex: number,
+  warnings: SwimCloudParseWarning[],
+): void {
+  if (event.kind !== 'relay' || athlete.relayLegs.length > 0) {
+    return;
+  }
+  warnings.push({
+    code: 'relay-row-without-legs',
+    message: `Relay row ${JSON.stringify(athleteName)} read no legs. SwimCloud serves them in a hidden "Show names" table on this page, so the capture lacks that table or it could not be read. The row is kept without legs; its swimmers cannot be credited.`,
+    eventId,
+    rowIndex,
+    raw: athleteName,
+  });
+}
+
 function readEventRound(
   table: LocatedEventRoundTable,
   ctx: EventRoundContext,
@@ -5598,6 +5648,8 @@ function readEventRound(
       eventId,
       ctx.warnings,
     );
+
+    warnRelayRowWithoutLegs(event, athlete, athleteName, eventId, rowIndex, ctx.warnings);
 
     swims.push(
       assembleEventRoundSwim({
