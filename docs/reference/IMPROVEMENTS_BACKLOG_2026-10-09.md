@@ -17,7 +17,7 @@ the user must make.
 | A6 | Season analytics sums theoretical points. The cap caveat is dropped when no relay program exists | `seasonAnalytics.ts:128-149`, `theoreticalMeetSeeds.ts:1501` | N | fixing (T2b) |
 | A7 | Saved theoretical relay rows hold estimated times in `relayLegSplit` | S10-09 T2b | N | open (architect) |
 | A8 | Save-sequence numbers live in memory. The Postgres update is read-then-write. Restore resets the version | S10-09 T3 risks | Y | open |
-| A9 | The old `RELAY_DESIGNATOR` never matches real pages. A relay row with no legs gives no warning | S10-09 T1 | N | open |
+| A9 | The old `RELAY_DESIGNATOR` never matches real pages. A relay row with no legs gives no warning | S10-09 T1 | N | fixed: parenthesised designator read, `relay-row-without-legs` warning; `tests/relayRowWithoutLegs.test.ts` |
 | A10 | Tied relays each get full place points. Tied individual swims split them | `utils.ts` `scoreRelaysInEvent` | **Y** | waiting on user |
 | A11 | `presetIdForConference` matches by substring ("Sectional" picks a preset via "SEC") | `scoringDefaults.ts:508-518` | Y | waiting on user |
 | A12 | The `/times/` id join is not verified on a live capture | S10-09 T1 | Y | needs a live capture |
@@ -30,10 +30,10 @@ the user must make.
 | B2 | Tests skip silently when local fixtures or `pdftotext` are absent. Report the skip count and fail when it grows | `tests/eventFirstImport.test.ts:126` | N | open |
 | B3 | The meet 356467 regression guard depends on crawl state. Commit minimal redacted fixtures | vault 04, 2026-10-04 | Y | open |
 | B4 | The harness redirect scenario is `test.fixme` | `tests/harness/extension.harness.spec.ts:229` | N | open |
-| B5 | `main-thread-budget` e2e times out over many local workspaces | S10-09 | N | open |
+| B5 | `main-thread-budget` e2e times out over many local workspaces | S10-09 | N | fixed: measures a seeded workspace plus named real ones; budget unchanged |
 | B6 | The Postgres v8 DDL has never run | `relayLegCreditsPersistence.test.ts` | N | needs a Postgres server |
 | B7 | `apps/shell/dist/server.js` goes stale | S10-09 T3, T8 | N | rebuilt by `run-tests.mjs` |
-| B8 | Seed and migrate scripts write to the real `data/` with no guard | `seed_hsu_roster.mjs:29-30`, `seed_obu_roster.mjs:38-39`, `migrate-json-to-sqlite.mjs:18` | N | open |
+| B8 | Seed and migrate scripts write to the real `data/` with no guard | `seed_hsu_roster.mjs:29-30`, `seed_obu_roster.mjs:38-39`, `migrate-json-to-sqlite.mjs:18` | N | fixed: `scripts/lib/dataDir.mjs` (OMNI_DATA_DIR + running-server guard), `scripts/test_data_dir_guard.mjs` |
 | B9 | The real DB holds 39 test workspaces, and an old server runs on port 3000 | S10-09 T8 | Y | waiting on user |
 | B10 | Confirm the `optimizeWithArbitrage` never-loses test exists | `TEST_COVERAGE_AUDIT.md:37` | N | open |
 | B11 | Two lint complexity warnings remain | `swimCloudMeetImportBridge.ts` | N | open |

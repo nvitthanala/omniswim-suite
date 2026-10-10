@@ -110,7 +110,8 @@
         "vault",
         "PR for the branch"
       ],
-      "status": "pending"
+      "status": "18 commits pushed (through 94f4437b); PR #6 open",
+      "gates": "lint 0 errors/2 warnings; vitest 193 files 2988 pass 15 skip; run-tests 82 pass 2 fail (preset routes server-start timeout under load, passes alone; e2e ui-theme 768px flaky under load, passes alone; main-thread-budget timeout env) 1 skip (Pg)"
     },
     "T1b-relay-leg-credits": {
       "owner": "architect spec done; executor pending",
@@ -196,21 +197,42 @@
         {
           "items": "A1 parsing zeros, A2 Python D2 fallback + parse parity, A3 preset id path validator",
           "owner": "executor",
-          "status": "built; architect review: no defect in diff; legacy-fallback path fix dispatched",
+          "status": "done; committed 8b294c0b, ee466bf6, c8e39242",
           "result": "parsingPipeline ParsedRowError (422 with rows); pdf_points parsed the same in TS and Python; Python DEFAULT_NCAA_D2_SCORING removed, ScoringSettingsMissing; bounded meets layer the cutoff over the settings file; userPresetFilePathIn guard. NSISC 930 rows byte-identical (executor claim; reviewer could not rerun: no results PDF in checkout)."
         },
         {
           "items": "D1 plans/STATE.md refresh, D2 audit 09-02 status note",
           "owner": "orchestrator",
-          "status": "done"
+          "status": "done: 551c6db9, 77a5d32b, 09ba1061"
+        },
+        {
+          "items": "B8 seed/migrate scripts honour OMNI_DATA_DIR; B5 main-thread-budget isolation; A9 relay row with no legs warns",
+          "owner": "executor",
+          "status": "done: optimizer Undo reproduced and fixed (e0be7d0c); swim-edit Undo not reproducible (overrides re-checked on read)",
+          "leftover": [
+            "useSwimEditUndo LINEUP_FIELDS still omits relayLegOverrides (latent hardening)",
+            "removeProjectedSwim may not prune relay overrides when it removes a swimmer last scoring entry (unverified)"
+          ]
+        },
+        {
+          "items": "A4 relayLegOverrides Undo repro",
+          "owner": "bug-hunter",
+          "status": "done: 94f4437b (CI unrun; CI skip budget 45 reasoned, verify on first run)"
+        },
+        {
+          "items": "B1 CI e2e + harness, readable run-tests failures; B2 skip budget guard",
+          "owner": "worker",
+          "status": "dispatched"
         }
       ],
       "next": [
-        "B8 seed/migrate scripts honour OMNI_DATA_DIR",
-        "B2 skip-count guard",
-        "B1 CI e2e/harness check",
-        "A9 relay row with no legs warns",
-        "A4 bug-hunter repro for relayLegOverrides Undo"
+        "check CI run on PR #6",
+        "B4 harness redirect fixme",
+        "B10 arbitrage never-loses test",
+        "D4 retired fleet references",
+        "D5 dead code",
+        "removeProjectedSwim relay override pruning (verify)",
+        "useSwimEditUndo LINEUP_FIELDS hardening"
       ]
     }
   },
@@ -253,7 +275,8 @@
     "Estimated relays: user rule from 2026-10-04 (adjustment default off, flat-start sum labelled estimated) chosen over the architect spec, which left relays absent without an adjustment setting.",
     "The real oyster data/omniswim.db now holds 39 \"UI …\" test workspaces written by e2e runs that reused your port-3000 server (node dist/server.js, running since 2026-10-04). Playwright no longer reuses a server unless PLAYWRIGHT_REUSE_SERVER=1. I did not delete the workspaces or stop the server: say if you want both done (backup first).",
     "Estimated relays: only NSISC has a relay program; other presets build none until a sourced program is added. Relays are picked before individual events so the 7-event cap counts them first. Want a sourced program for other conferences, or the order as a visible choice?",
-    "Scoring change: meets with a \"Through Event N\" rankings page and no printed Points column used to score with a hidden D2 table; they now use data/scoring_settings.json, which is NSISC-shaped (18 scorers, divers 1/3, 2 relays). Non-NSISC meets of that kind get NSISC caps, as unbounded meets already did."
+    "Scoring change: meets with a \"Through Event N\" rankings page and no printed Points column used to score with a hidden D2 table; they now use data/scoring_settings.json, which is NSISC-shaped (18 scorers, divers 1/3, 2 relays). Non-NSISC meets of that kind get NSISC caps, as unbounded meets already did.",
+    "Lesson: an agent reported lint:types clean but the shell app typecheck failed after its change. Always run the root npm run lint before committing agent work."
   ],
   "interruption": {
     "at": "2026-10-09T16:30Z",
@@ -264,5 +287,13 @@
   },
   "userInstructions": [
     "2026-10-09T~20:30Z: user stepping away for an extended period; full right to continue until the rate limit. After T2b review + gates: brainstorm improvements (write to docs), update docs, continue as best fit. Covers commits, push and PR on this branch."
+  ],
+  "interruptions": [
+    {
+      "at": "2026-10-09T~22:00Z",
+      "reason": "usage limit (429) stopped B8/B5/A9 executor and B1/B2 worker mid-work",
+      "resumedAt": "2026-10-10T00:45Z",
+      "reconcile": "vitest 3019 pass; lint found a shell typecheck error from e0be7d0c (inferred vs declared before-state type), fixed in ec766f06; both agents resumed via SendMessage"
+    }
   ]
 }
