@@ -1,0 +1,51 @@
+{
+  "initiative": "Improvement plan 2026-10-10",
+  "plan": "docs/reference/IMPROVEMENT_PLAN_2026-10-10.md",
+  "previous": {
+    "state": "docs/reference/SESSION_2026-10-09_STATE.json",
+    "backlog": "docs/reference/IMPROVEMENTS_BACKLOG_2026-10-09.md"
+  },
+  "createdAt": "2026-10-10",
+  "branchAtCreation": "nvitthanala/ui-simplification",
+  "gatesAtCreation": {
+    "lint": "0 errors, 2 complexity warnings (swimCloudMeetImportBridge.ts:207,1010)",
+    "vitest": "199 files, 3030 passed, 15 skipped",
+    "scripts": "85 passed, 0 failed, 1 skipped (PostgreSQL round trip without PG_TEST_URL)",
+    "ci": "green on 84fa6323 (run 38018611118)"
+  },
+  "resumeOrder": [
+    "M1 merge PR #6 if still open; pull main in the main clone",
+    "U1-U12 ask the user in one batch; record answers in userDecisions",
+    "S1 Host and Origin checks",
+    "S2 pin Python dependencies",
+    "S3 scope every workspace route",
+    "C3 season team score (after U7), C4 Python bad-time sentinel, C5 silent parse fallbacks, C7 projections, C8 unnamed meet",
+    "P1 validate workspace writes, P2 duplicate id, P7 newer-schema refusal, P4 save failures, P5 error shape",
+    "T3 unlisted scripts, T12 lint ratchets, T1 type-check tests, T7 PDF tests in CI, T8 demo-seed tests",
+    "X1 error boundary, X3 alert roles, X4 NumberField, X2 FloatingWindow keyboard",
+    "remaining items in plan order"
+  ],
+  "items": {
+    "M1": "pending",
+    "M2": "user",
+    "M3": "user"
+  },
+  "userDecisions": {},
+  "standbyScope": [
+    "docs/**",
+    "README.md"
+  ],
+  "standbyLog": [],
+  "doneThisSession": [
+    "Escaped raw NUL bytes in athleteAliases.ts and rosterOptimizer.ts (runtime value unchanged; files now stored as LF)",
+    "Reformatted 8 flattened source files with Prettier 3.3.3 (token-identical apart from explicit JSX spaces)",
+    "Removed user-visible mojibake (AthleteRosterRow relay count, report title, share and login pages)",
+    "CHANGELOG entries for PR #6",
+    "Corrected 2026-10-09 backlog statuses",
+    "Wrote this plan"
+  ],
+  "notes": [
+    "Two read-only Sonnet scans (code health and tests; product, UX, pipeline, security) fed the plan. Their top claims were checked against the code before inclusion: test_post/test_acc_post unlisted, src-tauri frontendDist ../../dist, runtime pip install, updateWorkspaceSchema passthrough, client sends no version, backups route unscoped, seasonAnalytics sums all teams, 9999.99 sentinel, mojibake, flattened files.",
+    "Scan claims not yet re-verified by hand are marked by file:line in the plan; read the cited line before acting."
+  ]
+}

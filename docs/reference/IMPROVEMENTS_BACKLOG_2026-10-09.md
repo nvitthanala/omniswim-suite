@@ -9,12 +9,12 @@ the user must make.
 
 | # | Item | Evidence | User | Status |
 |---|---|---|---|---|
-| A1 | Parsing turns a missing or unparseable rank and calculated points into `0`, and a missing gender into a default | `parsingPipeline.ts:99-115,133-147` (audit 10-02, finding 2) | N | dispatched |
-| A2 | The Python scorer falls back to D2 when settings are absent. Python and TypeScript disagree on malformed point strings | `backend/point_calculator.py:9,124-129,213-224` (findings 5, 6) | N | dispatched |
-| A3 | Preset IDs are joined into file paths without the ID validator on create and update | `scoringPresetRoutes.ts:179-180,325-333` (finding 3) | N | dispatched |
+| A1 | Parsing turns a missing or unparseable rank and calculated points into `0`, and a missing gender into a default | `parsingPipeline.ts:99-115,133-147` (audit 10-02, finding 2) | N | done: `8b294c0b` (ParsedRowError, 422) |
+| A2 | The Python scorer falls back to D2 when settings are absent. Python and TypeScript disagree on malformed point strings | `backend/point_calculator.py:9,124-129,213-224` (findings 5, 6) | N | done: `ee466bf6` (ScoringSettingsMissing, D2 fallback removed) |
+| A3 | Preset IDs are joined into file paths without the ID validator on create and update | `scoringPresetRoutes.ts:179-180,325-333` (finding 3) | N | done: `c8e39242` (userPresetFilePathIn, InvalidPresetIdError) |
 | A4 | Undo fingerprint omits `relayLegOverrides`. Unproven: needs a failing test first | `useSwimEditUndo.ts:46` | N | done: optimizer Undo fixed (`e0be7d0c`); swim-edit Undo not reproducible; `removeProjectedSwim` now prunes unresolvable fills |
-| A5 | An estimated relay earns a real cut tag. The split inspector shows estimates as "Known (PDF)" | `teamCardView.ts:53-63`, `RelaySplitInspector.tsx:21` | N | fixing (T2b) |
-| A6 | Season analytics sums theoretical points. The cap caveat is dropped when no relay program exists | `seasonAnalytics.ts:128-149`, `theoreticalMeetSeeds.ts:1501` | N | fixing (T2b) |
+| A5 | An estimated relay earns a real cut tag. The split inspector shows estimates as "Known (PDF)" | `teamCardView.ts:53-63`, `RelaySplitInspector.tsx:21` | N | done: `010c3022`, `c215b244` |
+| A6 | Season analytics sums theoretical points. The cap caveat is dropped when no relay program exists | `seasonAnalytics.ts:128-149`, `theoreticalMeetSeeds.ts:1501` | N | done: `c215b244`, `010c3022` |
 | A7 | Saved theoretical relay rows hold estimated times in `relayLegSplit` | S10-09 T2b | N | open (architect) |
 | A8 | Save-sequence numbers live in memory. The Postgres update is read-then-write. Restore resets the version | S10-09 T3 risks | Y | open |
 | A9 | The old `RELAY_DESIGNATOR` never matches real pages. A relay row with no legs gives no warning | S10-09 T1 | N | fixed: parenthesised designator read, `relay-row-without-legs` warning; `tests/relayRowWithoutLegs.test.ts` |
@@ -31,7 +31,7 @@ the user must make.
 | B1 | Check that the e2e step really runs in CI. Add `npm run test:harness` | `.github/workflows/ci.yml:60-90` | N | done: e2e, unit suite, skip budget and harness all run in CI (green run 38013108804) |
 | B2 | Tests skip silently when local fixtures or `pdftotext` are absent. Report the skip count and fail when it grows | `tests/eventFirstImport.test.ts:126` | N | done: `scripts/check_skip_budget.mjs`, `tests/skip-budget.json` |
 | B3 | The meet 356467 regression guard depends on crawl state. Commit minimal redacted fixtures | vault 04, 2026-10-04 | Y | open |
-| B4 | The harness redirect scenario is `test.fixme` | `tests/harness/extension.harness.spec.ts:229` | N | open |
+| B4 | The harness redirect scenario is `test.fixme` | `tests/harness/extension.harness.spec.ts:229` | N | kept as fixme with the reason documented (`569a40c8`); unit-covered |
 | B5 | `main-thread-budget` e2e times out over many local workspaces | S10-09 | N | fixed: measures a seeded workspace plus named real ones; budget unchanged |
 | B6 | The Postgres v8 DDL has never run | `relayLegCreditsPersistence.test.ts` | N | done: ran green in CI run 38013108804 (Postgres 16) |
 | B7 | `apps/shell/dist/server.js` goes stale | S10-09 T3, T8 | N | rebuilt by `run-tests.mjs` |
@@ -48,12 +48,12 @@ Done this session: Playwright no longer reuses a server on the port unless
 
 | # | Item | User | Status |
 |---|---|---|---|
-| C1 | Open a PR for the branch | N (authorised) | this session |
+| C1 | Open a PR for the branch | N (authorised) | done: PR #6 |
 | C2 | Capture the NSISC `/teams/` page. Run one live multi-team crawl | Y | waiting on user |
 | C3 | Record which events were removed in a theoretical meet. Add sourced relay programs beyond NSISC | Y | open |
 | C5 | One-click "All teams" apply. Lineup Remove behaviour | Y | waiting on user |
 | C6 | Place-point tables seed `[0]` and pad with 0 when they grow | Y | waiting on user |
-| C7 | A "relays per swimmer, at most N" setting | N | fixing (T2b) |
+| C7 | A "relays per swimmer, at most N" setting | N | done: `010c3022` |
 
 Done this session: the theoretical banner gate, the `/metrics` comparison
 skip, `teamDivisionTag` by season, and the double-create guard.
@@ -62,9 +62,11 @@ skip, `teamDivisionTag` by season, and the double-create guard.
 
 | # | Item | Status |
 |---|---|---|
-| D1 | `plans/STATE.md` is stale (body from 2026-08-16) | open |
-| D2 | `AUDIT_2026-09-02.md` still lists ROCK/INDY/LU as open (fixed in `07fb5ae5`) | open |
+| D1 | `plans/STATE.md` is stale (body from 2026-08-16) | partly: current header added (`d190c306`); the body is still layered history (plan item H1) |
+| D2 | `AUDIT_2026-09-02.md` still lists ROCK/INDY/LU as open (fixed in `07fb5ae5`) | done: `d190c306` |
 | D3 | Vault `04-Known-Issues` is a layered history | vault pass |
 | D4 | Dead references to the retired fleet harness | done: one live instruction marked retired (`docs/video/VIDEO_ANALYSIS_MASTERPLAN.md`) |
 | D5 | Dead code: `npById`, `CapVoidSummary.byAthlete` | done: `npById` already gone; `byAthlete` removed |
 | D6 | Remote branch `cloud/c1-team-names-harness` | user |
+
+The next plan is `docs/reference/IMPROVEMENT_PLAN_2026-10-10.md`. It carries every open item above forward.

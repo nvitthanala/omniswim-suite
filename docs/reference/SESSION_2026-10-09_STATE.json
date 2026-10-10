@@ -267,8 +267,7 @@
     }
   },
   "resumeOrder": [
-    "user decisions in userReview",
-    "backlog items marked open in docs/reference/IMPROVEMENTS_BACKLOG_2026-10-09.md"
+    "superseded: follow docs/reference/IMPROVEMENT_PLAN_2026-10-10_STATE.json"
   ],
   "standbyScope": [],
   "standbyLog": [],

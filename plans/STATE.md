@@ -1,5 +1,11 @@
 # Current state — one page
 
+**Updated 2026-10-10.** Start with the improvement plan
+`docs/reference/IMPROVEMENT_PLAN_2026-10-10.md` and its state file
+`docs/reference/IMPROVEMENT_PLAN_2026-10-10_STATE.json`. The plan carries
+every open item forward, with a priority order and user decisions U1 to U12.
+The 2026-10-09 notes below are kept for history.
+
 **Updated 2026-10-09.** Active branch `nvitthanala/ui-simplification`.
 Progress log for the 2026-10-09 sweep: `docs/reference/SESSION_2026-10-09_STATE.json`
 (read it before resuming; its `userReview` list holds open decisions).
