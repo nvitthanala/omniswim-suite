@@ -9,6 +9,7 @@
  */
 import { spawnSync } from 'node:child_process';
 import { existsSync } from 'node:fs';
+import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 
@@ -41,6 +42,7 @@ const TESTS = [
   ['test_pg_roundtrip.mjs'],
   ['test_persistence_parity.mjs'],
   ['test_workspace_scope.mjs'],
+  ['test_data_dir_guard.mjs'],
   ['test_chart_data.mjs'],
   ['test_chart_shell.mjs'],
   ['test_chart_render.mjs'],
@@ -211,26 +213,76 @@ for (const [file, fixture] of TESTS) {
   }
 }
 
+/** Ask the OS for a free TCP port. Playwright's dev server must not land on a port a user server holds. */
+function freePort() {
+  return new Promise((resolve, reject) => {
+    const server = createServer();
+    server.once('error', reject);
+    server.listen(0, '127.0.0.1', () => {
+      const { port } = server.address();
+      server.close(() => resolve(port));
+    });
+  });
+}
+
+/**
+ * Reduce Playwright output to what explains a failure. The dev server echoes the same
+ * `[WebServer] ...` line (for example the `[scoring-presets] ignoring ...` notice) on every
+ * request, and a tail of the raw output was nothing but those. Keep the first copy of each
+ * WebServer line, say how many repeats were dropped, then start at the failure summary.
+ */
+function condensePlaywrightOutput(raw, maxLines = 60) {
+  const seen = new Map();
+  const kept = [];
+  for (const line of raw.split(/\r?\n/)) {
+    if (!/^\[WebServer\]/.test(line)) {
+      kept.push(line);
+      continue;
+    }
+    const count = seen.get(line) ?? 0;
+    seen.set(line, count + 1);
+    if (count === 0) kept.push(line);
+  }
+  const repeats = [...seen.values()].reduce((sum, n) => sum + (n - 1), 0);
+  // The list reporter prints a numbered failure block ("  1) [chromium] > spec") after the run.
+  const firstFailure = kept.findIndex(l => /^\s+1\) /.test(l));
+  const body = firstFailure >= 0 ? kept.slice(firstFailure) : kept;
+  const lines = body.join('\n').trim().split('\n');
+  const shown = firstFailure >= 0 ? lines.slice(0, maxLines) : lines.slice(-maxLines);
+  const note = repeats > 0 ? `(${repeats} repeated [WebServer] lines omitted)\n` : '';
+  return note + shown.join('\n');
+}
+
 const playwrightBin = join(repoRoot, 'node_modules', '@playwright', 'test', 'cli.js');
 if (existsSync(playwrightBin)) {
-  const e2e = spawnSync(process.execPath, [playwrightBin, 'test'], {
+  // A free port, unless the caller chose one. playwright.config.ts and the dev server both read PORT.
+  // `npm run dev` runs `predev`, which kills whatever listens on that port, so a fixed 3000 could
+  // stop a user's own server on a developer machine.
+  const e2ePort = process.env.PORT ?? String(await freePort());
+  const e2e = spawnSync(process.execPath, [playwrightBin, 'test', `--reporter=${process.env.CI ? 'list,github' : 'list'}`], {
     cwd: repoRoot,
     stdio: 'pipe',
-    env: { ...process.env, NODE_OPTIONS: process.env.NODE_OPTIONS ?? '--use-system-ca' },
+    env: { ...process.env, PORT: e2ePort, NODE_OPTIONS: process.env.NODE_OPTIONS ?? '--use-system-ca' },
     // Same ceiling, same reason as the per-script timeout above. Playwright's
     // own webServer will wait indefinitely for a port that never opens.
     timeout: E2E_TIMEOUT_MS,
     killSignal: 'SIGKILL',
+    maxBuffer: 256 * 1024 * 1024,
   });
   if (e2e.status === 0) {
     console.log('PASS  playwright e2e (all specs)');
     passed += 1;
   } else {
     console.log('FAIL  playwright e2e (all specs)');
-    const out = (e2e.stdout?.toString() || '') + (e2e.stderr?.toString() || '');
-    failures.push(`--- playwright e2e ---\n${out.trim().split('\n').slice(-40).join('\n')}`);
+    const out = (e2e.stdout?.toString() || '') + '\n' + (e2e.stderr?.toString() || '');
+    failures.push(`--- playwright e2e (PORT ${e2ePort}) ---\n${condensePlaywrightOutput(out)}`);
     failed += 1;
   }
+} else if (process.env.CI) {
+  // On CI a missing Playwright means the e2e specs would never run and the job would still pass.
+  console.log('FAIL  playwright e2e (@playwright/test not installed, and CI=true forbids skipping it)');
+  failures.push('--- playwright e2e ---\n@playwright/test is not in node_modules. Run `npm ci` before `npm test`, and `npx playwright install --with-deps chromium` for the browser.');
+  failed += 1;
 } else {
   console.log('SKIP  playwright e2e (@playwright/test not installed)');
   skipped += 1;
