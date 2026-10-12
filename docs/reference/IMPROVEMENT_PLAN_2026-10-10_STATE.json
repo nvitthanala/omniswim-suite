@@ -262,5 +262,12 @@
     "e2e ui-ia.spec.ts failed once in the scoring agent run (step differed between runs); not attributed, rerun with all agents idle",
     "stale docs: docs/reference/THEORETICAL_MEET_PLAN.md:95 and backlog item A10 (relay tie text)",
     "Postgres tests ran on PGlite only; CI real-Postgres P7 CREATE DATABASE test and the 8-way race test unverified locally"
+  ],
+  "limitEvents": [
+    {
+      "at": "2026-10-12 (before 15:20 CT reset)",
+      "what": "Session limit 429 stopped the server/auth executor (a4a12ccfffa3d7bce; it was on its final script-suite rerun, 7 targeted tests passing) and the architect review (af176a27510a0f9d6; it had reached the scoring diff). Limit then reset.",
+      "resumePlan": "low-priority pace: one agent at a time. 1) SendMessage a4a12ccfffa3d7bce for its final report. 2) SendMessage af176a27510a0f9d6 to finish Parts A-D. 3) full gates with all idle, then path-scoped commits."
+    }
   ]
 }
