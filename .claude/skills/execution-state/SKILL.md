@@ -95,6 +95,33 @@ Rules for using it:
    what's done — read the state file's current entries and continue from
    `nextTarget`.
 
+## What must survive a compaction
+
+A compaction replaces the conversation with a summary. The summary is
+lossy. The state file is the record. Keep these seven facts in it, under
+whatever field names the task already uses:
+
+| Fact | Usual field |
+| --- | --- |
+| Goal | `initiative`, `sweep` or `plan` |
+| Files touched | each target's `file`, or `doneThisSession` |
+| Done | `items` with a done status, `verifiedBy` |
+| Pending | `resumeOrder` |
+| Errors and their fixes | `notes`, or a target's `note` |
+| Current state | `gatesAtCreation`, branch, each target's `status` |
+| Next step | `nextTarget`, or the first item in `resumeOrder` |
+
+Patch the file when a step is verified, not when the context is nearly
+full. After a compaction, the global `compact-resume` hook names the newest
+`*STATE*.json` under `docs/reference`. Read your target's entry and run
+`git status` before you continue.
+
+Do not keep raw tool output as a record. "An Empirical Study of Harness
+Design for Coding Agents" (arXiv:2609.20804) measured a store of
+recoverable raw output: agents rarely used it and accuracy did not improve.
+Rerun the command when you need the output again. Rule 4 above already
+says to discard scratch artifacts; this is the evidence for it.
+
 ## When to skip this
 
 Small, one-shot tasks that finish inside a single turn don't need it — the

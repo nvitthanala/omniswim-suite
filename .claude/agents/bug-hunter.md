@@ -105,9 +105,7 @@ coverage hole" is a success, not a thin result.
 
 ## Current initiative
 
-This repo is mid-way through a production-readiness push (opened 2026-09-20,
-deadline 2026-09-26). **Live status is `docs/reference/PRODUCTION_READINESS_STATE.json`;
-the reasoning behind it is `plans/2026-09-20/README.md`.** If your brief names
-a phase (P0-P6), read that phase's entry in the state file before starting —
-it records what is already done, what was measured rather than assumed, and
-which decisions the user has already made. Do not re-derive the baseline.
+Your brief names the state file for the work. If it does not, use the newest
+`docs/reference/*_STATE.json`. Read the entry for your target before you
+start. It records what is done, what was measured, and what the user has
+decided. Do not re-derive the baseline.

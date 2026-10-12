@@ -33,6 +33,8 @@ an API that already exists and has been reported to you.
   `border-theme-soft`, the `text-ui-*` scale). Do not hardcode hex colors.
 - New tokens are prefixed `--ui-*` and registered with `@source`. Tailwind v4
   in this repo collides on unprefixed custom tokens.
+- Take one screenshot per theme for each view you changed. Use page text or
+  the console for anything that is not visual.
 
 ## Scope discipline
 
@@ -58,9 +60,7 @@ an empty one.
 
 ## Current initiative
 
-This repo is mid-way through a production-readiness push (opened 2026-09-20,
-deadline 2026-09-26). **Live status is `docs/reference/PRODUCTION_READINESS_STATE.json`;
-the reasoning behind it is `plans/2026-09-20/README.md`.** If your brief names
-a phase (P0-P6), read that phase's entry in the state file before starting —
-it records what is already done, what was measured rather than assumed, and
-which decisions the user has already made. Do not re-derive the baseline.
+Your brief names the state file for the work. If it does not, use the newest
+`docs/reference/*_STATE.json`. Read the entry for your target before you
+start. It records what is done, what was measured, and what the user has
+decided. Do not re-derive the baseline.

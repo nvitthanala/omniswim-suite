@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-03",
+  "updated": "2026-10-11",
   "about": "Data, not prose. The orchestrator reads this file to pick a provider for each task. Edit values here to change routing. Nothing in the agent files hardcodes a provider choice.",
   "providers": {
     "claude": {
@@ -12,7 +12,7 @@
         "fable": "claude-fable-5-1. Available (probed 2026-10-03). Use ONLY where a wrong call is expensive: cross-cutting design with no precedent, adversarial review of core scoring/lineup diffs, final whole-branch review, resolving a disagreement between providers. Never for UI wiring, mechanical edits or test runs. Dispatch: Agent(model=fable) or the orchestrator agent. Governor downgrades it to Sonnet at conserve+.",
         "opus": "claude-opus-5-5. architect agent. Design, specs, proofs, review.",
         "sonnet": "claude-sonnet-5-5. executor/worker default.",
-        "haiku": "claude-haiku-4-5-20251001. finisher."
+        "haiku": "claude-haiku-5-5 (the `haiku` alias; the agent file pins no dated id). finisher."
       },
       "fableRule": "Escalate to fable only when: (1) architect and executor disagree, (2) a core scoring/lineup diff needs a second review after architect, (3) a design touches packages/core types used by 3+ packages. Otherwise prefer sonnet or opus."
     },
@@ -100,6 +100,42 @@
       "editsFiles": true,
       "scope": "new test files only"
     }
+  },
+  "briefTiers": {
+    "about": "How to shape a brief for a target. Source: arXiv:2609.20804 (its weakest model failed most often at finding the file; its stronger models at the patch). The paper tested a plan the model kept itself; orchestrator-written steps for the guided tier are this repo's extension. Templates: the global tiered-brief skill. Checked by the brief-lint hook.",
+    "guided": {
+      "targets": [
+        "claude:finisher",
+        "cursor"
+      ],
+      "briefMustHave": [
+        "exact path:start-end locations, read by the orchestrator first",
+        "numbered steps",
+        "a rule to stop and report when the code is not at the stated lines",
+        "one item per brief"
+      ],
+      "tools": "structured tools (Read, Grep, Glob, Edit)"
+    },
+    "autonomous": {
+      "targets": [
+        "claude:executor",
+        "claude:worker",
+        "claude:architect",
+        "claude:bug-hunter",
+        "codex"
+      ],
+      "briefMustHave": [
+        "the acceptance command",
+        "the scope boundary",
+        "the API it may rely on"
+      ],
+      "briefMustNotHave": [
+        "a scripted implementation (required procedures such as the golden snapshot and the mutation check stay in the acceptance part)"
+      ],
+      "tools": "a short tools list in the agent file; every tool definition is resent on each request"
+    },
+    "everyBrief": "Run targeted tests while iterating. Run the full gates once at the end. The orchestrator still reruns the full gates before it accepts the report.",
+    "unknownModelMeans": "guided"
   },
   "rules": {
     "skipProviderWhen": [

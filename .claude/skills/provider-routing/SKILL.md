@@ -48,6 +48,16 @@ A worker starts cold. Every brief, to any provider, has these five parts:
 5. **Observable acceptance:** the exact commands that must pass, such as
    `npx vitest run`, `npm run lint:types`, `node scripts/run-tests.mjs`.
 
+Shape the brief for the target's tier. `briefTiers` in the JSON lists the
+guided and the autonomous targets. A guided target (the `finisher` agent,
+Cursor `Auto`) gets exact `path:start-end` locations and numbered steps. An
+autonomous target (the other Claude agents, Codex) gets the acceptance test
+and the scope. Do not script its implementation. Required procedures, such
+as the golden snapshot and the mutation check, stay in the acceptance part.
+The global `tiered-brief` skill has a template for each. Every brief says:
+run targeted tests while iterating, and the full gates once at the end.
+Step 5 does not change: you rerun the full gates yourself.
+
 Add the handoff fields from the orchestrator agent: inputs already available,
 what done means, prior confidence, what was tried and failed, and the owner
 if the chain stops. End the brief with the report shape: **Blocked on me**,

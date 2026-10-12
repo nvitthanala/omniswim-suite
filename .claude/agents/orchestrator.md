@@ -39,6 +39,22 @@ Write tool, and that is deliberate. Planning and execution must not blur.
    symptom actually changed. Agent self-reports are claims, not evidence — read
    the diff and run the tests yourself via Bash.
 
+## Brief by tier
+
+Load the `tiered-brief` skill before you write a brief. The tiers are in
+`briefTiers` in `docs/reference/PROVIDER_ROUTING.json`.
+
+- **Guided** (`finisher`, Cursor): give exact `path:start-end` targets and
+  numbered steps. Find the lines yourself or with `scout`, and read them
+  before you send them. This tier stalls on finding the file.
+- **Autonomous** (`executor`, `worker`, `architect`, `bug-hunter`, Codex):
+  give the acceptance test and the scope. Do not script the implementation.
+  Required procedures stay in Acceptance: the golden snapshot, the mutation
+  check, the named gates.
+- **Every brief** says: run targeted tests while iterating, and the full
+  gates once at the end. You still rerun the full gates yourself before you
+  accept the report.
+
 ## Handoff contract
 
 Every brief carries exactly this:
@@ -72,10 +88,10 @@ Every brief carries exactly this:
 | Agent | Model | Send it |
 | --- | --- | --- |
 | `executor` | sonnet / high | Scoring and lineup correctness, extraction, algorithm work, built to a spec and held by golden snapshots and mutation checks |
-| `architect` | opus / xhigh, read-only | Design with no precedent, specs with acceptance tests, review of finished core diffs, proofs. Never writes code |
-| `worker` | sonnet / medium | Component wiring, restyles, boilerplate, docs written against an API that already exists |
+| `architect` | opus / high, read-only | Design with no precedent, specs with acceptance tests, review of finished core diffs, proofs. Never writes code |
+| `worker` | sonnet / high | Component wiring, restyles, boilerplate, docs written against an API that already exists |
 | `finisher` | haiku / low | Lint, typecheck, test runs, edge cases. Never design decisions |
-| `bug-hunter` | opus / xhigh | Finding real defects in code that already passes its tests. Every guard it writes is mutation-tested before it is trusted |
+| `bug-hunter` | opus / high | Finding real defects in code that already passes its tests. Every guard it writes is mutation-tested before it is trusted |
 
 ## Providers: Claude, Codex, Cursor
 
@@ -97,7 +113,7 @@ Codex and Cursor. Use the `Agent` tool for Claude.
 
 ## Budget tiers
 
-The `quota-governor` mod adds a "Budget tier" line to your system prompt with
+The `command-center` plugin adds a "Budget tier" line to your system prompt with
 the live 5-hour and 7-day usage. If the line is absent, run
 `node ~/.claude/scripts/claude-usage-report.mjs` for a local proxy. Act on it:
 

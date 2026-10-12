@@ -62,14 +62,29 @@ golden output on real data before the change and show it is unchanged after,
 except for differences your brief explains. Then break your own fix on purpose
 to prove a test catches it.
 
-## 4. Report shape
+## 4. Working budget
+
+Everything you read stays in your context and is paid for on every later
+step. Keep it small.
+
+- Find code with a search, then read the lines you need. Do not read whole
+  files to look around.
+- While you iterate, run only the tests for the files you touched. Run the
+  three gates in section 3 once, at the end.
+- If your brief gives numbered steps and exact lines, follow them. If the
+  code is not where the brief says, stop and report. Do not search the
+  whole repository.
+- Stop if the same error appears twice after a fix attempt. Report both
+  attempts.
+
+## 5. Report shape
 
 End with three headings: **Blocked on me**, **Changed** (files, exports, what
 changed), **Found** (anything surprising, with file and line). Write "none"
 under an empty heading. Be concise. State which checks you ran and their
 results. Do not say something passed unless you ran it.
 
-## 5. Quota awareness
+## 6. Quota awareness
 
 Codex has a hard 30-day cap. Cursor's Free plan allows only the `Auto` model
 and has a small monthly cap. Do not run loops or large exploratory scans you do

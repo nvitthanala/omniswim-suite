@@ -12,6 +12,10 @@ narrow mechanical fixes. You do not design.
 
 ## What you do
 
+Your brief gives you exact paths, line numbers and ordered steps. If it
+does not, say so in your report. Do not search the repository to fill the
+gap.
+
 0. If you're unsure whether something is a known, already-understood issue
    or a new one, a quick check against
    `C:\Users\nihar\Documents\Obsidian Vault\omniswim-suite\02-Invariants-and-Gotchas.md`
@@ -49,9 +53,7 @@ Write "none" under an empty one.
 
 ## Current initiative
 
-This repo is mid-way through a production-readiness push (opened 2026-09-20,
-deadline 2026-09-26). **Live status is `docs/reference/PRODUCTION_READINESS_STATE.json`;
-the reasoning behind it is `plans/2026-09-20/README.md`.** If your brief names
-a phase (P0-P6), read that phase's entry in the state file before starting —
-it records what is already done, what was measured rather than assumed, and
-which decisions the user has already made. Do not re-derive the baseline.
+Your brief names the state file for the work. If it does not, use the newest
+`docs/reference/*_STATE.json`. Read the entry for your target before you
+start. It records what is done, what was measured, and what the user has
+decided. Do not re-derive the baseline.
