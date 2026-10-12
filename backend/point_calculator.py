@@ -24,6 +24,32 @@ class ScoringSettingsMissing(ValueError):
     code = 'scoring_settings_missing'
 
 
+class PointsOnStatusClock(ValueError):
+    """A row prints place points beside a clock that says the swim did not count.
+
+    A swimmer who is NT, DQ, NS, SCR or DNF has no place, so a printed points
+    value on the same row means the columns drifted: the points belong to a
+    neighbouring row. Trusting them would put another swimmer's points on this
+    team. Scoring stops instead, because there is no safe row to drop.
+
+    `code` is the machine-readable tag the CLIs put in their error JSON.
+    `rows` lists each offending row as a short description.
+    """
+
+    code = 'points_on_status_clock'
+
+    def __init__(self, rows, total=None):
+        self.rows = list(rows)
+        self.total = total if total is not None else len(self.rows)
+        shown = '; '.join(self.rows)
+        more = f' (+{self.total - len(self.rows)} more)' if self.total > len(self.rows) else ''
+        super().__init__(
+            f'{self.total} row(s) print place points beside a clock that reads as '
+            f'NT, DQ, NS, SCR or DNF, which means the PDF columns drifted. Nothing '
+            f'was scored: {shown}{more}'
+        )
+
+
 def parse_pdf_points(value):
     """Read one printed PDF points value, or None when the PDF printed none.
 
@@ -807,6 +833,32 @@ def _unreadable_time_warning(a, points_kept=False):
     }
 
 
+_STATUS_CLOCK_RE = re.compile(r'^(?:NT|DQ|NS|SCR|DNF)\b', re.IGNORECASE)
+
+
+def _check_points_beside_status_clocks(athletes, max_listed=10):
+    """Raise PointsOnStatusClock when a row has pdf_points > 0 and a status clock.
+
+    Only the explicit status words count. An empty or garbled clock is a missing
+    time, not a contradiction, and keeps the points the PDF printed.
+    """
+    offenders = []
+    for i, a in enumerate(athletes):
+        pts = parse_pdf_points(a.get('pdf_points'))
+        if pts is None or pts <= 0:
+            continue
+        clock = str(
+            a.get('finals_time') or a.get('prelims_time') or a.get('relay_team_time') or ''
+        ).strip()
+        if _STATUS_CLOCK_RE.match(clock):
+            offenders.append(
+                f"row {i} ({a.get('name') or '?'}, {a.get('event') or '?'}): "
+                f"clock {clock!r} with {pts:g} printed points"
+            )
+    if offenders:
+        raise PointsOnStatusClock(offenders[:max_listed], total=len(offenders))
+
+
 def _add_row_warning(a, warning):
     """Append a warning to the row's `parse_warnings`, once per code."""
     existing = a.get('parse_warnings')
@@ -1167,6 +1219,7 @@ def calculate_points(athletes, scoring_settings=None, overrides=None):
             ath['is_time_trial'] = True
 
     if _effective_pdf_place_points_mode(cfg, athletes):
+        _check_points_beside_status_clocks(athletes)
         _apply_pdf_place_scoring_lock(cfg)
         for ath in athletes:
             ath['calculated_points'] = _pdf_place_points_for_row(ath, cfg)
@@ -1662,5 +1715,9 @@ if __name__ == "__main__":
 
         except Exception as e:
 
-            print(json.dumps({"error": str(e), "code": getattr(e, 'code', None)}))
+            print(json.dumps({
+                "error": str(e),
+                "code": getattr(e, 'code', None),
+                "rows": getattr(e, 'rows', None),
+            }))
 

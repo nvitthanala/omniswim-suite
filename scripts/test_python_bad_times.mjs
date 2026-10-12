@@ -134,4 +134,50 @@ const mapped = mapAthleteRows(scored);
 assert.equal(mapped.length, 5);
 assert.equal(mapped.find(r => r.name === 'Dana Synthetic').points, 0);
 
+// --- PDF place-points mode ----------------------------------------------------
+// The printed points are trusted, so a garbled clock keeps them (and warns). An
+// explicit status clock beside printed points is a column drift and stops the
+// import with a tagged error. The CLI prints it on stdout as JSON.
+function runCalculator(rows, settings) {
+  const dir = mkdtempSync(join(tmpdir(), 'omni-bad-times-'));
+  try {
+    writeFileSync(join(dir, 'scoring_settings.json'), JSON.stringify(settings));
+    const run = python([CALCULATOR], {
+      input: JSON.stringify(rows),
+      env: { ...process.env, OMNI_DATA_DIR: dir },
+    });
+    assert.ok(run && run.status === 0, `calculator failed: ${run?.stderr ?? ''}`);
+    return JSON.parse(run.stdout.trim());
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+const PDF_MODE = { ...SETTINGS, usePdfPlacePoints: true };
+
+const kept = runCalculator(
+  [
+    row('Alice Synthetic', 1, '50.00', { pdf_points: 20 }),
+    row('Bob Synthetic', 2, 'abc', { pdf_points: 17, team: 'Synthetic Team B' }),
+  ],
+  PDF_MODE
+);
+assert.ok(Array.isArray(kept));
+const keptBob = kept.find(r => r.name === 'Bob Synthetic');
+assert.equal(keptBob.calculated_points, 17, 'printed points are kept for a garbled clock');
+assert.equal(keptBob.parse_warnings[0].code, 'unreadable_time');
+assert.equal(mapAthleteRows(kept).length, 2);
+
+const refused = runCalculator(
+  [
+    row('Alice Synthetic', 1, '50.00', { pdf_points: 20 }),
+    row('Bob Synthetic', 2, 'DQ', { pdf_points: 17, team: 'Synthetic Team B' }),
+  ],
+  PDF_MODE
+);
+assert.ok(!Array.isArray(refused), 'a status clock with printed points must not score');
+assert.equal(refused.code, 'points_on_status_clock');
+assert.equal(refused.rows.length, 1);
+assert.match(refused.rows[0], /Bob Synthetic/);
+assert.match(refused.error, /columns drifted/);
+
 console.log('OK  test_python_bad_times: unreadable and NT clocks earn no place, no points, and a warning');

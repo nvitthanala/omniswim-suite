@@ -5,6 +5,7 @@ the place came from the printed rank and nothing looked at the clock.
 """
 import copy
 
+import pytest
 from conftest import make_row
 
 import point_calculator as pc
@@ -153,3 +154,58 @@ def test_pdf_place_points_mode_keeps_printed_points_but_still_warns(cfg):
     assert scored['Bob Synthetic']['calculated_points'] == 17
     assert _warning_codes(scored['Bob Synthetic']) == ['unreadable_time']
     assert 'kept' in scored['Bob Synthetic']['parse_warnings'][0]['message']
+
+
+def test_garbled_clock_keeps_printed_points_and_the_team_total_matches(cfg):
+    # Architect ruling: the PDF's printed points are trusted in this mode, so the
+    # team total must equal the meet's printed team ranking even when one clock
+    # is garbled. The unreadable time is recorded, never scored from.
+    cfg = {**cfg, 'usePdfPlacePoints': True}
+    rows = [
+        make_row('Alice Synthetic', 1, '50.00', pdf_points=20, team='Test Team A'),
+        make_row('Bob Synthetic', 2, 'abc', pdf_points=17, team='Test Team A'),
+        make_row('Cara Synthetic', 3, '52.00', pdf_points=16, team='Test Team B'),
+    ]
+    printed_team_totals = {'Test Team A': 37, 'Test Team B': 16}  # synthetic ranking
+    scored = pc.calculate_points(rows, cfg)
+    totals = {}
+    for r in scored:
+        totals[r['team']] = totals.get(r['team'], 0) + r['calculated_points']
+    assert totals == printed_team_totals
+    assert _by_name(scored)['Bob Synthetic']['calculated_points'] == 17
+    assert pc.time_to_sec(_by_name(scored)['Bob Synthetic']['finals_time']) is None
+
+
+@pytest.mark.parametrize('clock', ['DQ', 'NT', 'NS', 'SCR', 'DNF', 'dq'])
+def test_status_clock_with_printed_points_raises(cfg, clock):
+    cfg = {**cfg, 'usePdfPlacePoints': True}
+    rows = [
+        make_row('Alice Synthetic', 1, '50.00', pdf_points=20),
+        make_row('Bob Synthetic', 2, clock, pdf_points=17, team='Test Team B'),
+    ]
+    with pytest.raises(pc.PointsOnStatusClock) as exc:
+        pc.calculate_points(rows, cfg)
+    assert exc.value.code == 'points_on_status_clock'
+    assert exc.value.total == 1
+    assert 'Bob Synthetic' in str(exc.value)
+    assert 'row 1' in exc.value.rows[0]
+
+
+def test_status_clock_with_zero_or_no_points_does_not_raise(cfg):
+    cfg = {**cfg, 'usePdfPlacePoints': True}
+    rows = [
+        make_row('Alice Synthetic', 1, '50.00', pdf_points=20),
+        make_row('Bob Synthetic', 2, 'DQ', pdf_points=0, team='Test Team B'),
+        make_row('Cara Synthetic', 3, 'NT', pdf_points=None, team='Test Team C'),
+    ]
+    scored = _by_name(pc.calculate_points(rows, cfg))
+    assert scored['Bob Synthetic']['calculated_points'] == 0.0
+    assert scored['Cara Synthetic']['calculated_points'] == 0.0
+
+
+def test_status_clock_check_applies_only_in_pdf_points_mode(cfg):
+    # Calculated mode ignores pdf_points, so the printed value cannot be trusted
+    # and is not checked: the row simply earns nothing for its status clock.
+    cfg = {**cfg, 'usePdfPlacePoints': False}
+    rows = [make_row('Bob Synthetic', 1, 'DQ', pdf_points=17)]
+    assert pc.calculate_points(rows, cfg)[0]['calculated_points'] == 0.0

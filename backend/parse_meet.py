@@ -21,10 +21,14 @@ its own entries; a row with none has no `parse_warnings` key. Relay rows also
 carry `relay_split_source`: "structured", "legacy", or null when the PDF printed
 no split lines for that entry.
 
-On failure emits: { "error": "<message>", "code": "<tag>" | null, "trace": "..." }
-Known codes: "rankings_extraction_failed", "scoring_settings_missing". The Node
-route treats both as final: it does not retry the legacy pipeline, which would
-score without the meet's event cutoff.
+On failure emits:
+    { "error": "<message>", "code": "<tag>" | null, "rows": [str, ...] | null, "trace": "..." }
+`rows` is set only by "points_on_status_clock" (one description per offending row).
+Known codes: "rankings_extraction_failed", "scoring_settings_missing",
+"points_on_status_clock". The Node
+route treats the first two as final: it does not retry the legacy pipeline, which
+would score without the meet's event cutoff. The third must be final too: the
+legacy pipeline raises the same error.
 """
 import json
 import sys
@@ -161,6 +165,7 @@ def main():
         print(json.dumps({
             'error': str(exc),
             'code': getattr(exc, 'code', None),
+            'rows': getattr(exc, 'rows', None),
             'trace': traceback.format_exc(),
         }))
         sys.exit(1)
