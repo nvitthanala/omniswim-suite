@@ -43,8 +43,8 @@
     "C1": "pending",
     "C2": "pending",
     "C3": "pending",
-    "C4": "pending",
-    "C5": "pending",
+    "C4": "built, awaiting orchestrator gate rerun + architect review + commit (python agent a70e2fae465e980e9 reported 86 passed/0 failed/1 skipped, pytest 37, ruff clean)",
+    "C5": "python half built (relay_split_source + parse_warnings on each relay leg row; top-level warnings roll-up in parse_meet.py); TypeScript half (parsingRoutes.ts pipeline:legacy flag, import-UI warning) pending until the server agent is done",
     "C6": "pending",
     "C7": "pending",
     "C8": "pending",
@@ -58,7 +58,7 @@
     "P6": "pending",
     "P7": "pending",
     "T1": "pending",
-    "T2": "pending",
+    "T2": "built, awaiting commit (backend/pyproject.toml, requirements-dev.txt, CI step)",
     "T3": "pending",
     "T4": "pending",
     "T5": "pending",
@@ -244,5 +244,14 @@
     "Overlap to watch: backend/requirements.txt and ci.yml were touched by both the server and python agents (server owns requirements.txt; python owns only its own CI step).",
     "With every agent idle: npm run lint, npx vitest run, node scripts/run-tests.mjs, npm run test:harness. Then architect review of the C1/C6/C2 diff, then path-scoped commits per item.",
     "Then wave 2 as in resumeOrder."
+  ],
+  "openForArchitect": [
+    "C4: in PDF-place-points mode (usePdfPlacePoints, or >=8 rows with pdf_points) printed points are still trusted when the clock is unreadable; the agent added a warning only. Decide: keep (team totals match the meet rankings) or override."
+  ],
+  "foundNotFixed": [
+    "backend: timed-but-ineligible rows in a mixed group are emitted twice (extend(ineligible) then extend(group))",
+    "backend/pdf_parser.py: broad except Exception near the relay payload build (now flagged by relay_split_source legacy)",
+    "backend: clock like 1:02:03.00 now reads None (used to read 62.0)",
+    "Toast.tsx timer fires after teardown (flaky unhandled error in the skip-budget gate) - folded into X3"
   ]
 }
