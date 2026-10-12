@@ -27,6 +27,7 @@ import {
   settingsForBuiltInScoringPreset,
 } from '../../../../packages/core/src/lib/scoringDefaults.ts';
 import { NCAA_MEET_FORMATS, type NcaaMeetFormat } from '../../../../packages/core/src/lib/ncaaScoringRules.ts';
+import { pointsTableSchema } from '../../../../packages/core/src/lib/scoringPlaceTables.ts';
 
 /** Keys a stored preset carries about itself rather than about scoring. Defined once, in core. */
 const PRESET_META_KEYS = new Set<string>(SCORING_PRESET_META_KEYS);
@@ -67,40 +68,8 @@ function stripPresetMeta(raw: Record<string, unknown>) {
 // Scoring-preset validation
 // ---------------------------------------------------------------------------
 
-/**
- * A place-value table.
- *
- * Rejects an empty table, a non-finite or negative value, and a table that goes
- * *up* as places get worse. None of those is a competition rule; accepting one
- * produces a plausible team total nobody can trace to a published table.
- */
-function pointsTableSchema(field: string) {
-  return z
-    .array(z.number().finite(`${field}: every place value must be a finite number.`))
-    .min(1, `${field} must list at least one place value.`)
-    .superRefine((places, ctx) => {
-      places.forEach((value, i) => {
-        if (value < 0) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: [i],
-            message: `${field}: place ${i + 1} is ${value}; place values cannot be negative.`,
-          });
-        }
-      });
-      for (let i = 1; i < places.length; i += 1) {
-        if (places[i] > places[i - 1]) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: [i],
-            message:
-              `${field}: place ${i + 1} is worth ${places[i]} but place ${i} is worth ` +
-              `${places[i - 1]}. A place table must not increase as places get worse.`,
-          });
-        }
-      }
-    });
-}
+// `pointsTableSchema` (finite, not negative, not increasing, at least one entry)
+// lives in core so the shell and the workspace save share one definition.
 
 const scorerAutoRulesSchema = z
   .object({

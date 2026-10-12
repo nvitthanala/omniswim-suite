@@ -8,6 +8,7 @@
  */
 import { z } from 'zod';
 import type { Workspace } from '../types';
+import { storedPlaceTableSchema } from '../lib/scoringPlaceTables';
 
 export const genderSchema = z.enum(['Men', 'Women']);
 
@@ -79,6 +80,22 @@ const rowsSchema = z.array(rowSchema);
 const recordSchema = z.object({}).passthrough();
 
 /**
+ * A workspace's scoring settings: a record, plus a light check on its three place
+ * tables (finite, not negative, not null, at least one entry each). A `null` cell
+ * is how a UI draft spells "blank"; it must never reach a stored table, where it
+ * would read as a place worth nothing. The non-increasing rule a preset obeys is
+ * deliberately NOT applied: a legacy table must always save. Nothing else is
+ * checked here, so every other settings key passes through untouched.
+ */
+const scoringSettingsSchema = z
+  .object({
+    scoringPoints: storedPlaceTableSchema('scoringSettings.scoringPoints').optional(),
+    relayPoints: storedPlaceTableSchema('scoringSettings.relayPoints').optional(),
+    divingPoints: storedPlaceTableSchema('scoringSettings.divingPoints').optional(),
+  })
+  .passthrough();
+
+/**
  * Fields of a workspace a PUT may set: an ALLOWLIST. `id`, `createdAt` and
  * `version` are not in it, so they are stripped, and so is anything else the
  * client invents. The server owns identity, creation time and the revision counter.
@@ -97,7 +114,7 @@ export const workspacePatchShape = {
   sourceMenResults: rowsSchema,
   sourceWomenResults: rowsSchema,
   recruits: rowsSchema,
-  scoringSettings: recordSchema,
+  scoringSettings: scoringSettingsSchema,
   conference: z.string(),
   deletedSwimmers: rowsSchema,
   scorerRosterOverrides: rowsSchema,

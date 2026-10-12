@@ -183,3 +183,15 @@ export {
   type MeetPlaceField,
   type CatalogEventOrder,
 } from './lib/eventStrength';
+
+/* --- Place-point table drafts: a blank cell exists only in a UI draft; stored tables are number[]. --- */
+export {
+  finalizeScoringDraft,
+  pointsTableSchema,
+  storedPlaceTableSchema,
+  type PlaceDraft,
+  type PlaceTableName,
+  type BlankPlace,
+  type ScoringSettingsDraft,
+  type FinalizeScoringDraftResult,
+} from './lib/scoringPlaceTables';
