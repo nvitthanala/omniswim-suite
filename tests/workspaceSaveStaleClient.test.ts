@@ -5,6 +5,9 @@
  *
  * Client half of out-of-order save protection.
  *
+ * 0. One save is in flight per workspace at a time. Edits made meanwhile are
+ *    merged into one pending patch and sent when the PUT finishes, carrying the
+ *    version from that PUT's response (P3, architect decision).
  * 1. Every PUT carries the page's client id and a per-workspace save number that
  *    only goes up.
  * 2. When the server answers 409 STALE_SAVE the user is told (a notice, not a
@@ -25,9 +28,11 @@ import {
 } from '@omniswim/core/store/SuiteWorkspaceProvider';
 import { updateWorkspaceApi, StaleSaveError } from '@omniswim/core/api/workspaces';
 import {
+  EXPECTED_VERSION_HEADER,
   SAVE_CLIENT_HEADER,
   SAVE_SEQ_HEADER,
   STALE_SAVE_CODE,
+  VERSION_CONFLICT_CODE,
 } from '@omniswim/core/api/saveSequence';
 import type { Workspace } from '@omniswim/core/types';
 
@@ -45,6 +50,7 @@ function makeWorkspace(id: string, activeEntryIds: string[]): Workspace {
     deletedSwimmers: [],
     createdAt: 1,
     activeEntryIds,
+    version: 1,
   } as unknown as Workspace;
 }
 
@@ -83,8 +89,17 @@ function installFetch() {
           id,
           patch,
           headers: { ...(init?.headers as Record<string, string>) },
+          // The server answers like the real one: a header version that is not the stored one
+          // is refused (409 VERSION_CONFLICT) and nothing is written; otherwise the patch is
+          // applied and the version moves up by one.
           succeed: () => {
-            serverCopies[id] = { ...serverCopies[id], ...patch } as Workspace;
+            const stored = (serverCopies[id] as unknown as { version: number }).version;
+            const sent = (init?.headers as Record<string, string>)[EXPECTED_VERSION_HEADER];
+            if (sent !== undefined && Number(sent) !== stored) {
+              resolve(jsonResponse(409, { error: 'Version conflict', code: VERSION_CONFLICT_CODE }));
+              return;
+            }
+            serverCopies[id] = { ...serverCopies[id], ...patch, version: stored + 1 } as unknown as Workspace;
             resolve(jsonResponse(200, serverCopies[id]));
           },
           stale: () =>
@@ -145,7 +160,10 @@ async function mount() {
       )
     );
   });
-  await tick();
+  // Wait for the list to land and a workspace to be selected. A fixed two ticks was enough on an
+  // idle machine and dropped the first edit (no active workspace yet) when the machine was busy.
+  for (let i = 0; i < 200 && !ctx?.activeWorkspace; i += 1) await tick(10);
+  expect(ctx?.activeWorkspace, 'the workspace list loaded').toBeTruthy();
   await tick();
 }
 
@@ -187,12 +205,23 @@ describe('save numbering', () => {
     serverCopies = { a: makeWorkspace('a', ['pre']), b: makeWorkspace('b', ['b-pre']) };
     await mount();
     await edit(['a1']);
+    await act(async () => {
+      puts[0].succeed();
+    });
+    await tick();
     await edit(['a2']);
+    await act(async () => {
+      puts[1].succeed();
+    });
+    await tick();
     await act(async () => {
       ctx!.setActiveWorkspaceId('b');
     });
     await edit(['b1']);
     expect(puts).toHaveLength(3);
+    // The version each save asked about: a's first is the fetched 1, its second is the response (2),
+    // and b has its own.
+    expect(puts.map(p => p.headers[EXPECTED_VERSION_HEADER])).toEqual(['1', '2', '1']);
 
     const seqs = puts.map(p => Number(p.headers[SAVE_SEQ_HEADER]));
     expect(seqs).toEqual([1, 2, 1]); // a:1, a:2, b:1 — numbered per workspace
@@ -219,28 +248,79 @@ describe('save numbering', () => {
   });
 });
 
-describe('a refused stale save is visible, not silent', () => {
-  it('409 STALE_SAVE: notice shown, cache keeps the newer data, no banner, no refetch', async () => {
+describe('one save in flight per workspace', () => {
+  it('an edit made while a save is in flight waits, then goes out with the version from the first response', async () => {
     await mount();
-    await edit(['A']); // seq 1, held
-    await edit(['B']); // seq 2, held
-    expect(puts).toHaveLength(2);
-    const readsBefore = getCount;
+    await edit(['A']); // PUT 1 sent, held
+    await edit(['B']); // waits: PUT 1 has not answered
+    await edit(['C']); // merges into the same pending patch
+    expect(puts).toHaveLength(1);
+    expect(puts[0].headers[EXPECTED_VERSION_HEADER]).toBe('1');
 
-    // B lands first, then A is refused as stale.
+    await act(async () => {
+      puts[0].succeed();
+    });
+    await tick();
+    await tick();
+    expect(puts).toHaveLength(2);
+    expect(puts[1].patch.activeEntryIds).toEqual(['C']);
+    // The first response moved the server to version 2; the second save must ask about that.
+    expect(puts[1].headers[EXPECTED_VERSION_HEADER]).toBe('2');
+    // Still the same page, so the number only goes up.
+    expect(Number(puts[1].headers[SAVE_SEQ_HEADER])).toBe(Number(puts[0].headers[SAVE_SEQ_HEADER]) + 1);
+
     await act(async () => {
       puts[1].succeed();
     });
     await tick();
+    expect(ids()).toEqual(['C']);
+    expect(serverCopies.a.activeEntryIds).toEqual(['C']);
+    expect(ctx!.versionConflictIds).toEqual([]);
+    expect(ctx!.error).toBeNull();
+  });
+
+  it('three quick edits in one tab never conflict with themselves', async () => {
+    await mount();
+    for (const next of [['q1'], ['q2'], ['q3']]) {
+      await act(async () => {
+        await ctx!.updateWorkspace({ activeEntryIds: next });
+      });
+      await tick(320); // longer than the debounce: each edit would have been its own PUT
+    }
+    // Answer whatever is in flight until the queue drains.
+    for (let guard = 0; guard < 6; guard++) {
+      const open = puts.filter(p => !(p as unknown as { answered?: boolean }).answered);
+      const next = open[0];
+      if (!next) break;
+      (next as unknown as { answered?: boolean }).answered = true;
+      await act(async () => {
+        next.succeed();
+      });
+      await tick(20);
+    }
+    expect(ctx!.versionConflictIds).toEqual([]);
+    expect(ctx!.error).toBeNull();
+    expect(serverCopies.a.activeEntryIds).toEqual(['q3']);
+    expect(ids()).toEqual(['q3']);
+  });
+});
+
+describe('a refused stale save is visible, not silent', () => {
+  it('409 STALE_SAVE: notice shown, cache keeps the local data, no banner, no refetch', async () => {
+    await mount();
+    await edit(['A']); // the one PUT in flight
+    expect(puts).toHaveLength(1);
+    const readsBefore = getCount;
+
     await act(async () => {
       puts[0].stale();
     });
     await tick();
     await tick();
 
-    expect(ids()).toEqual(['B']);
-    expect(serverCopies.a.activeEntryIds).toEqual(['B']);
+    expect(ids()).toEqual(['A']);
     expect(ctx!.error).toBeNull();
+    expect(ctx!.versionConflictIds).toEqual([]);
     expect(getCount).toBe(readsBefore);
     const info = notices.filter(n => n.kind === 'info');
     expect(info).toHaveLength(1);
@@ -248,14 +328,10 @@ describe('a refused stale save is visible, not silent', () => {
     expect(notices.filter(n => n.kind === 'error')).toHaveLength(0);
   });
 
-  it('a stale refusal does not eat a change still waiting in the debounce queue', async () => {
+  it('a stale refusal does not eat a change still waiting to be sent', async () => {
     await mount();
-    await edit(['A']);
-    await edit(['B']);
-    await act(async () => {
-      puts[1].succeed();
-    });
-    // C is queued but not yet sent when A's refusal arrives.
+    await edit(['A']); // in flight
+    // C is queued behind A's PUT when A's refusal arrives.
     await act(async () => {
       await ctx!.updateWorkspace({ activeEntryIds: ['C'] });
     });
@@ -265,8 +341,9 @@ describe('a refused stale save is visible, not silent', () => {
     await tick();
     expect(ids()).toEqual(['C']);
     await waitForDebounce();
-    expect(puts).toHaveLength(3);
-    expect(puts[2].patch.activeEntryIds).toEqual(['C']);
+    await tick();
+    expect(puts).toHaveLength(2);
+    expect(puts[1].patch.activeEntryIds).toEqual(['C']);
   });
 
   it('any other failure keeps the old path: error notice, banner, refetch', async () => {
@@ -281,6 +358,159 @@ describe('a refused stale save is visible, not silent', () => {
     expect(ctx!.error).toBe('boom');
     expect(getCount).toBeGreaterThan(readsBefore);
     expect(notices.some(n => n.kind === 'error' && n.message === 'boom')).toBe(true);
+  });
+});
+
+describe('a version conflict pauses the workspace and keeps the edits until Reload', () => {
+  it('a save refused after a restore: banner state, edits kept, autosave paused, no refetch, Reload discards', async () => {
+    await mount();
+    expect(puts).toHaveLength(0);
+    // A restore from backup (or another tab's save) moved the server on while this tab sat open.
+    serverCopies.a = { ...makeWorkspace('a', ['restored']), version: 5 } as unknown as Workspace;
+    const readsBefore = getCount;
+
+    await edit(['mine']);
+    expect(puts).toHaveLength(1);
+    expect(puts[0].headers[EXPECTED_VERSION_HEADER]).toBe('1');
+    await act(async () => {
+      puts[0].succeed(); // the mock server compares 1 with 5 and answers 409 VERSION_CONFLICT
+    });
+    await tick();
+    await tick();
+
+    expect(ctx!.versionConflictIds).toEqual(['a']);
+    expect(ids()).toEqual(['mine']); // the user's edit is still on screen
+    expect(serverCopies.a.activeEntryIds).toEqual(['restored']); // nothing was written
+    expect(getCount).toBe(readsBefore); // no refetch, so the edit was not replaced
+    expect(ctx!.error).toBeNull();
+
+    // Autosave stays paused: more typing is kept but never sent.
+    await edit(['mine-2']);
+    await waitForDebounce();
+    expect(puts).toHaveLength(1);
+    expect(ids()).toEqual(['mine-2']);
+
+    // Reload is the only way out, and it discards the unsaved edits.
+    await act(async () => {
+      await ctx!.reloadWorkspace('a');
+    });
+    await tick();
+    expect(getCount).toBe(readsBefore + 1);
+    expect(ctx!.versionConflictIds).toEqual([]);
+    expect(ids()).toEqual(['restored']);
+
+    // Saving works again, against the version Reload fetched.
+    await edit(['after-reload']);
+    expect(puts).toHaveLength(2);
+    expect(puts[1].headers[EXPECTED_VERSION_HEADER]).toBe('5');
+  });
+
+  it('a list refetch never advances the version under an unsent edit', async () => {
+    await mount();
+    // The edit is typed but the debounce has not fired yet.
+    await act(async () => {
+      await ctx!.updateWorkspace({ activeEntryIds: ['mine'] });
+    });
+    // Meanwhile another tab saved (server is at 7) and this tab's list is re-read.
+    serverCopies.a = { ...makeWorkspace('a', ['theirs']), version: 7 } as unknown as Workspace;
+    await act(async () => {
+      await ctx!.refreshWorkspaces();
+    });
+    await tick(); // react-query notifies observers on a timer; let that render land
+    expect(ids()).toEqual(['mine']); // the unsent edit is still what is shown, not the server copy
+    await waitForDebounce();
+    expect(puts).toHaveLength(1);
+    // It must still ask about the version this tab's edit was made against, so the server can refuse it.
+    expect(puts[0].headers[EXPECTED_VERSION_HEADER]).toBe('1');
+    await act(async () => {
+      puts[0].succeed();
+    });
+    await tick();
+    expect(ctx!.versionConflictIds).toEqual(['a']);
+    expect(serverCopies.a.activeEntryIds).toEqual(['theirs']);
+  });
+
+  it('a list refetch under the banner keeps the edits on screen and the conflict up', async () => {
+    await mount();
+    serverCopies.a = { ...makeWorkspace('a', ['theirs']), version: 6 } as unknown as Workspace;
+    await edit(['mine']);
+    await act(async () => {
+      puts[0].succeed();
+    });
+    await tick();
+    expect(ctx!.versionConflictIds).toEqual(['a']);
+    await edit(['mine-2']); // typed after the refusal, never sent
+
+    // A snapshot restore elsewhere in the UI, or a failed save of another workspace, re-reads the list.
+    await act(async () => {
+      await ctx!.refreshWorkspaces();
+    });
+    await tick();
+    expect(ids()).toEqual(['mine-2']);
+    expect(ctx!.versionConflictIds).toEqual(['a']);
+    expect(puts).toHaveLength(1);
+    expect(serverCopies.a.activeEntryIds).toEqual(['theirs']);
+
+    // Only Reload swaps in the server copy.
+    await act(async () => {
+      await ctx!.reloadWorkspace('a');
+    });
+    await tick();
+    expect(ids()).toEqual(['theirs']);
+    expect(ctx!.versionConflictIds).toEqual([]);
+  });
+
+  it('Reload takes the version the server now has, even when it is lower than the one this tab held', async () => {
+    // The data directory was swapped for an older copy: the server's version went DOWN.
+    serverCopies.a = { ...makeWorkspace('a', ['pre']), version: 9 } as unknown as Workspace;
+    await mount();
+    serverCopies.a = { ...makeWorkspace('a', ['older-copy']), version: 4 } as unknown as Workspace;
+    await edit(['mine']);
+    expect(puts[0].headers[EXPECTED_VERSION_HEADER]).toBe('9');
+    await act(async () => {
+      puts[0].succeed();
+    });
+    await tick();
+    expect(ctx!.versionConflictIds).toEqual(['a']);
+
+    await act(async () => {
+      await ctx!.reloadWorkspace('a');
+    });
+    await tick();
+    expect(ctx!.versionConflictIds).toEqual([]);
+    expect(ids()).toEqual(['older-copy']);
+
+    // A "raise only" rule would keep asking for 9 and be refused forever.
+    await edit(['after-reload']);
+    expect(puts).toHaveLength(2);
+    expect(puts[1].headers[EXPECTED_VERSION_HEADER]).toBe('4');
+    await act(async () => {
+      puts[1].succeed();
+    });
+    await tick();
+    expect(ctx!.versionConflictIds).toEqual([]);
+    expect(serverCopies.a.activeEntryIds).toEqual(['after-reload']);
+  });
+
+  it('a failed Reload keeps the conflict and the edits', async () => {
+    await mount();
+    serverCopies.a = { ...makeWorkspace('a', ['restored']), version: 3 } as unknown as Workspace;
+    await edit(['mine']);
+    await act(async () => {
+      puts[0].succeed();
+    });
+    await tick();
+    expect(ctx!.versionConflictIds).toEqual(['a']);
+
+    const realFetch = globalThis.fetch;
+    globalThis.fetch = (async () => jsonResponse(500, { error: 'down' })) as typeof fetch;
+    await act(async () => {
+      await ctx!.reloadWorkspace('a');
+    });
+    await tick();
+    globalThis.fetch = realFetch;
+    expect(ctx!.versionConflictIds).toEqual(['a']);
+    expect(ids()).toEqual(['mine']);
   });
 });
 

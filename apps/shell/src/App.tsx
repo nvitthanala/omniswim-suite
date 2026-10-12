@@ -10,6 +10,7 @@ import type { Workspace } from '@omniswim/core/types';
 import { isTheoreticalMeet } from '@omniswim/core/lib/theoreticalMeetLabel';
 import SuiteHeader from './components/SuiteHeader';
 import WorkspaceSidebar from './components/WorkspaceSidebar';
+import WorkspaceConflictBanner from './components/WorkspaceConflictBanner';
 import SuiteHome from './pages/SuiteHome';
 import SettingsPage from './pages/SettingsPage';
 import LoginPage from './pages/LoginPage';
@@ -172,6 +173,8 @@ function ShellLayout() {
           {bannerError}
         </div>
       ) : null}
+
+      <WorkspaceConflictBanner />
 
       <div className="flex-1 flex overflow-hidden min-w-0">
         {showWorkspaceChrome ? <WorkspaceSidebar /> : null}

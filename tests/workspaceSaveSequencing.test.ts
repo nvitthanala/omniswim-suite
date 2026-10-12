@@ -125,7 +125,9 @@ async function mount() {
       )
     );
   });
-  await tick();
+  // Wait for the list to land and a workspace to be selected; two bare ticks drop the first edit on a busy machine.
+  for (let i = 0; i < 200 && !ctx?.activeWorkspace; i += 1) await tick(10);
+  expect(ctx?.activeWorkspace, 'the workspace list loaded').toBeTruthy();
   await tick();
 }
 
@@ -194,7 +196,7 @@ describe('a late save response never overwrites a newer local change', () => {
     expect(serverCopies.a.activeEntryIds).toEqual(['pre']);
   });
 
-  it('out of order: the older response arrives after the newer save was sent', async () => {
+  it('the first response lands while a newer edit waits: the cache keeps the newer edit, and it is sent next', async () => {
     await mount();
     await act(async () => {
       await ctx!.updateWorkspace({ activeEntryIds: ['optimized'] });
@@ -203,15 +205,18 @@ describe('a late save response never overwrites a newer local change', () => {
     await act(async () => {
       await ctx!.updateWorkspace({ activeEntryIds: ['pre'] });
     });
-    await waitForDebounce(); // PUT B sent, queue is empty now
-    expect(puts).toHaveLength(2);
+    await waitForDebounce();
+    // One save per workspace at a time: B waits behind A instead of overlapping it.
+    expect(puts).toHaveLength(1);
 
-    // Only the debounce queue is empty here, so the sequence check alone must hold the line.
     await act(async () => {
       puts[0].succeed();
     });
     await tick();
-    expect(ids()).toEqual(['pre']);
+    await tick();
+    expect(ids()).toEqual(['pre']); // A's response did not put 'optimized' back in view
+    expect(puts).toHaveLength(2);
+    expect(puts[1].patch.activeEntryIds).toEqual(['pre']);
 
     await act(async () => {
       puts[1].succeed();
