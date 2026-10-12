@@ -36,29 +36,29 @@
     "U10": "answered",
     "U11": "answered",
     "U12": "answered; Claude in Chrome tools are not available in this session, so D2/D3/T4/A12/F9 wait for the end batch",
-    "S1": "built, awaiting gate rerun + commit (agent a4a12ccfffa3d7bce; 5 mutants caught; env OMNI_ALLOWED_HOSTS)",
-    "S2": "built, awaiting commit (pdfplumber==0.11.10; OMNI_NO_AUTO_INSTALL=1)",
-    "S3": "built, awaiting commit (agent a825b3847674e68bd)",
-    "S4": "built, awaiting commit (admin = email in OMNI_ADMIN_EMAILS; OMNI_INVITE_CODES 12+ chars; registration closed when both empty; limiter; Secure cookie off loopback)",
-    "C1": "built, awaiting gate rerun + architect review + commit (agent aca3beddb23680687: 10 mutations killed; real totals unchanged; synthetic tied relays 40->37 and 34->33)",
+    "S1": "committed 3105ba98 (gates green on combined tree 2026-10-12)",
+    "S2": "committed 3105ba98 (gates green on combined tree 2026-10-12)",
+    "S3": "committed 09c5882e",
+    "S4": "committed 3105ba98 (gates green on combined tree 2026-10-12)",
+    "C1": "in flight: architect found gender-in-relayTieKey defect and relayEntryGroupKey A/B merge defect; agent aca3beddb23680687 fixing; then commit",
     "C2": "built, awaiting commit",
     "C3": "pending",
-    "C4": "built, awaiting orchestrator gate rerun + architect review + commit (python agent a70e2fae465e980e9 reported 86 passed/0 failed/1 skipped, pytest 37, ruff clean)",
-    "C5": "python half built (relay_split_source + parse_warnings on each relay leg row; top-level warnings roll-up in parse_meet.py); TypeScript half (parsingRoutes.ts pipeline:legacy flag, import-UI warning) pending until the server agent is done",
-    "C6": "core contract built (null past table end); settings UI blank-cell save block pending architect design (af176a27510a0f9d6)",
+    "C4": "committed 9c87d57c; architect decision pending implementation: explicit NT/DQ/NS/SCR/DNF clock with pdf_points>0 must fail loudly as a top-level import error (keep printed points otherwise)",
+    "C5": "python half committed 9c87d57c; TypeScript half (parsingRoutes.ts pipeline:legacy flag, import-UI warning) pending",
+    "C6": "in flight: core scoringPlaceTables.ts + light server check (agent aca3beddb23680687); UI blank-cell save block is a worker task after that",
     "C7": "pending",
     "C8": "pending",
     "A7": "pending",
     "A12": "pending",
-    "P1": "built (PUT only; createWorkspaceSchema still passthrough), awaiting commit",
-    "P2": "built, awaiting commit",
-    "P3": "server half built; client half + two-page e2e blocked on architect design (overlapping own saves; adopt-new-version policy)",
+    "P1": "committed 09c5882e",
+    "P2": "committed 09c5882e",
+    "P3": "server half committed 09c5882e; client half + e2e in flight (agent a825b3847674e68bd) per architect spec: one PUT at a time, knownVersionRef, conflict banner with Reload, never adopt silently",
     "P4": "pending",
     "P5": "pending",
     "P6": "pending",
-    "P7": "built, awaiting commit; note server.ts falls back from SQLite to JSON on any error, which would hide the P7 refusal",
+    "P7": "committed 09c5882e (refusal); server.ts SQLite->JSON fallback fix in flight (agent a825b3847674e68bd)",
     "T1": "pending",
-    "T2": "built, awaiting commit (backend/pyproject.toml, requirements-dev.txt, CI step)",
+    "T2": "committed 0af4ac9b",
     "T3": "pending",
     "T4": "pending",
     "T5": "pending",
@@ -67,7 +67,7 @@
     "T8": "pending",
     "T9": "pending",
     "T10": "pending",
-    "T11": "built as part of the server agent (npm audit --omit=dev report-only step in ci.yml), awaiting commit",
+    "T11": "committed 0af4ac9b (report-only npm audit step in ci.yml)",
     "T12": "pending",
     "X1": "pending",
     "X2": "pending",
@@ -124,7 +124,7 @@
     "H9": "pending",
     "H10": "done by the 2026-10-11 harness commit 74fe0748 (round-3 bug block moved to docs/archive/2026-08/ROUND3_KNOWN_BUGS.md)",
     "H11": "pending",
-    "parse-pdf-limit": "built, awaiting commit (OMNI_PARSE_PDF_MAX_MB default 25; 413/400)"
+    "parse-pdf-limit": "committed 3105ba98 (gates green on combined tree 2026-10-12)"
   },
   "userDecisions": {
     "workflow": {
@@ -275,5 +275,16 @@
       "what": "Session limit 429 stopped the server/auth executor (a4a12ccfffa3d7bce; it was on its final script-suite rerun, 7 targeted tests passing) and the architect review (af176a27510a0f9d6; it had reached the scoring diff). Limit then reset.",
       "resumePlan": "low-priority pace: one agent at a time. 1) SendMessage a4a12ccfffa3d7bce for its final report. 2) SendMessage af176a27510a0f9d6 to finish Parts A-D. 3) full gates with all idle, then path-scoped commits."
     }
+  ],
+  "gatesAfterWave1": {
+    "lint": "0 errors, 2 baseline warnings",
+    "vitest": "208 files, 3171 passed, 23 skipped",
+    "skipBudget": "23 = budget 23 (raised from 15 by the PG tests that skip without PG_TEST_URL)",
+    "scripts": "86 passed, 0 failed, 1 skipped",
+    "harness": "7 passed, 1 skipped (pre-existing fixme)"
+  },
+  "userQuestionsAtEnd": [
+    "Individual A/B-final tie that includes an exhibition swimmer zeroes the scoring swimmer (utils.ts ~2152-2158: {A:0, X:0}); relay and timed-final paths exclude only the exhibition entry. The code comment calls it deliberate. Keep or change? (architect says needs a golden run)",
+    "No admin concept exists in the database; admin is an email in OMNI_ADMIN_EMAILS (server agent). Backup list/restore under AUTH_REQUIRED are 403 until isAdmin is wired to that. Wire it?"
   ]
 }
