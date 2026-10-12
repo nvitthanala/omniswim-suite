@@ -181,6 +181,32 @@ describe.each(['json', 'sqlite'] as const)('workspace write policy on the %s sto
     ).toBe(400);
     expect((await http(`${h.url}/api/workspaces`, 'GET')).json[0].name).toBe('HSU');
   });
+
+  it('P3: a restore from backup moves the version on, so a tab holding an older one gets 409', async () => {
+    const h = await boot(kind);
+    await http(`${h.url}/api/workspaces`, 'POST', base('p3r'));
+    await http(`${h.url}/api/workspaces/p3r`, 'PUT', { name: 'A' }, { [EXPECTED_VERSION_HEADER]: '1' }); // v2
+    const file = path.basename(await h.repo.backup('manual'));
+    const afterB = await http(`${h.url}/api/workspaces/p3r`, 'PUT', { name: 'B' }, { [EXPECTED_VERSION_HEADER]: '2' });
+    expect(afterB.json.version).toBe(3); // a second tab is open holding v3
+
+    const restored = await http(`${h.url}/api/workspaces/restore`, 'POST', { file });
+    expect(restored.status).toBe(200);
+    const now = (await http(`${h.url}/api/workspaces`, 'GET')).json[0];
+    expect(now.name).toBe('A');
+    expect(now.version).toBeGreaterThan(3); // not the backup's own 2, and not back to 3
+
+    // Every version a tab could be holding from before the restore is refused, nothing is written.
+    for (const held of ['2', '3']) {
+      const r = await http(`${h.url}/api/workspaces/p3r`, 'PUT', { name: 'stale' }, { [EXPECTED_VERSION_HEADER]: held });
+      expect(r.status, `held v${held}`).toBe(409);
+      expect(r.json.code).toBe('VERSION_CONFLICT');
+    }
+    expect((await http(`${h.url}/api/workspaces`, 'GET')).json[0].name).toBe('A');
+    // A tab that reloaded holds the new version and saves normally.
+    const ok = await http(`${h.url}/api/workspaces/p3r`, 'PUT', { name: 'C' }, { [EXPECTED_VERSION_HEADER]: String(now.version) });
+    expect(ok.status).toBe(200);
+  });
 });
 
 describe('P1 allowlist covers what the app saves', () => {
