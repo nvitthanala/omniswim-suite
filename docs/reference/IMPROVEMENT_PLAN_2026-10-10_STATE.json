@@ -43,8 +43,8 @@
     "C1": "committed a74420af (also fixed architect findings: gender out of relayTieKey; A/B relay merge in relayEntryGroupKey). e2e rerun on a quiet tree still owed (ui-ia.spec.ts:353 timed out while another agent edited apps/shell; goldens byte-identical)",
     "C2": "committed 7d361aab",
     "C3": "pending",
-    "C4": "committed 9c87d57c; architect decision pending implementation: explicit NT/DQ/NS/SCR/DNF clock with pdf_points>0 must fail loudly as a top-level import error (keep printed points otherwise)",
-    "C5": "python half committed 9c87d57c; TypeScript half (parsingRoutes.ts pipeline:legacy flag, import-UI warning) pending",
+    "C4": "committed 9c87d57c + follow-up (points_on_status_clock raises; garbled clock keeps printed points). TS side must add the code to MEET_PIPELINE_ERROR_CODES in parsingPipeline.ts as final -> 422 with rows (part of C5 TS half)",
+    "C5": "python half committed; TS half pending: pipeline:legacy flag on legacy fallback, relay_split_source/parse_warnings read in mapAthleteRows, points_on_status_clock as a final 422, import-UI warning",
     "C6": "core committed e1c87ec0; UI half + X4 in flight (worker a467cc44fdcdec299)",
     "C7": "pending",
     "C8": "pending",
@@ -269,7 +269,8 @@
     "global pdfplumber 0.11.9 vs venv/pin 0.11.10",
     "production static serving has no host check (Vite allowedHosts covers dev only)",
     "relayGroupKey (utils.ts:351, roster-simulation key) has the same A/B relay merge flaw relayEntryGroupKey had (scoring agent did not change it); fix in the core pass 2 with C7",
-    "THEORETICAL_MEET_PLAN.md:95 and backlog item A10 relay tie text are stale (H-group docs pass)"
+    "THEORETICAL_MEET_PLAN.md:95 and backlog item A10 relay tie text are stale (H-group docs pass)",
+    "e2e tests/e2e/ui-ia.spec.ts failed (Athletes tab not visible at line 14; Phase 4 at 353) in three agent runs while apps/shell/src/App.tsx was being edited by the persistence agent; rerun on a quiet tree before wave 2 starts"
   ],
   "limitEvents": [
     {
