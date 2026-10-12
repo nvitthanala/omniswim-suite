@@ -9,6 +9,7 @@
  * parent's `optionalPointsField` and passed through unchanged.
  */
 
+import { useEffect, useState } from 'react';
 import { NumberField, SegmentedControl } from '@omniswim/ui';
 import type { ScoringSettings } from '@omniswim/core/types';
 import type { PlaceDraft } from '@omniswim/core/lib/scoringPlaceTables';
@@ -42,6 +43,38 @@ export function PlacePointInput({ value, ariaLabel, onValueChange }: { value: nu
       value={value}
       onValueChange={onValueChange}
       className="glass-input w-full font-mono text-xs"
+    />
+  );
+}
+
+/**
+ * The "number of places" box of a relay or diving table. It commits on blur or Enter, not on
+ * each keystroke: typing "12" over "8" would otherwise publish 1 first, cut the table to one
+ * place, and bring places 2-8 back blank. Text that is not a whole number from 1 to 24 changes
+ * nothing and reverts to the table's real length.
+ */
+function PlaceCountField({ value, ariaLabel, onCommit }: { value: number; ariaLabel: string; onCommit: (count: number) => void }) {
+  const [text, setText] = useState(String(value));
+  // An outside change (a preset applied) replaces the text.
+  useEffect(() => setText(String(value)), [value]);
+  const commit = () => {
+    const n = /^\d+$/.test(text.trim()) ? Number(text) : Number.NaN;
+    if (Number.isInteger(n) && n >= 1 && n <= 24 && n !== value) onCommit(n);
+    else setText(String(value));
+  };
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      aria-label={ariaLabel}
+      value={text}
+      aria-invalid={text.trim() !== String(value) && !/^\d+$/.test(text.trim()) ? true : undefined}
+      onChange={e => setText(e.currentTarget.value)}
+      onBlur={commit}
+      onKeyDown={e => {
+        if (e.key === 'Enter') commit();
+      }}
+      className="glass-input w-20 font-mono text-xs"
     />
   );
 }
@@ -98,14 +131,10 @@ export function RelayScoringFields({ relayTable }: RelayScoringFieldsProps) {
           </p>
           <div className="flex items-center gap-3 mb-2">
             <span className="text-[9px] text-theme-secondary font-mono">Relay places</span>
-            <NumberField
-              min={1}
-              max={24}
-              step={1}
-              aria-label="Number of relay scoring places"
+            <PlaceCountField
+              ariaLabel="Number of relay scoring places"
               value={relayTable.points.length}
-              onValueChange={relayTable.setCount}
-              className="glass-input w-20 font-mono text-xs"
+              onCommit={relayTable.setCount}
             />
           </div>
           <PlacePointsGrid points={relayTable.points} ariaPrefix="Relay" onSetPoint={relayTable.setPoint} />
@@ -157,14 +186,10 @@ export function DivingPointsFields({ divingTable, divingMaxScorersPerTeamPerEven
           </p>
           <div className="flex items-center gap-3 mb-2">
             <span className="text-[9px] text-theme-secondary font-mono">Diving places</span>
-            <NumberField
-              min={1}
-              max={24}
-              step={1}
-              aria-label="Number of diving scoring places"
+            <PlaceCountField
+              ariaLabel="Number of diving scoring places"
               value={divingTable.points.length}
-              onValueChange={divingTable.setCount}
-              className="glass-input w-20 font-mono text-xs"
+              onCommit={divingTable.setCount}
             />
           </div>
           <PlacePointsGrid points={divingTable.points} ariaPrefix="Diving" onSetPoint={divingTable.setPoint} />

@@ -143,10 +143,51 @@ describe('place-table drafts on the scoring settings screens (U5)', () => {
       });
     });
 
+    const blur = (el: HTMLElement) => act(async () => void el.dispatchEvent(new FocusEvent('focusout', { bubbles: true })));
+
     it('growing a relay table pads with blank cells, not 0', async () => {
       await renderFields({ scoringPoints: [9, 7], relayPoints: [11, 4] });
-      await act(async () => setNativeValue(input('Number of relay scoring places')!, '4'));
+      const count = input('Number of relay scoring places')!;
+      await act(async () => setNativeValue(count, '4'));
+      await blur(count);
       expect(lastDraft().draft.relayPoints).toStrictEqual([11, 4, null, null]);
+    });
+
+    it('typing "12" over "8" keeps places 1-8 and adds blank 9-12; nothing is cut at the "1"', async () => {
+      const eight = [11, 9, 8, 7, 6, 5, 4, 3];
+      await renderFields({ scoringPoints: [9, 7], relayPoints: eight });
+      const count = input('Number of relay scoring places')!;
+      // Keystrokes: "8" is selected, "1" replaces it, "2" follows. Nothing commits yet.
+      await act(async () => setNativeValue(count, '1'));
+      expect(drafts).toHaveLength(0);
+      expect(input('Relay points for place 8')!.value).toBe('3');
+      await act(async () => setNativeValue(count, '12'));
+      expect(drafts).toHaveLength(0);
+      await blur(count);
+      expect(lastDraft().draft.relayPoints).toStrictEqual([...eight, null, null, null, null]);
+      expect(count.value).toBe('12');
+      expect(input('Relay points for place 12')!.value).toBe('');
+      expect(input('Relay points for place 8')!.value).toBe('3');
+    });
+
+    it('Enter commits the count, and diving counts behave the same way', async () => {
+      await renderFields({ scoringPoints: [9, 7], divingPoints: [7, 3, 1] });
+      const count = input('Number of diving scoring places')!;
+      await act(async () => setNativeValue(count, '5'));
+      expect(drafts).toHaveLength(0);
+      await act(async () => void count.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
+      expect(lastDraft().draft.divingPoints).toStrictEqual([7, 3, 1, null, null]);
+    });
+
+    it('a count that is not a whole number from 1 to 24 changes nothing and reverts', async () => {
+      await renderFields({ scoringPoints: [9, 7], relayPoints: [11, 4, 2] });
+      const count = input('Number of relay scoring places')!;
+      for (const bad of ['0', '25', 'abc', '2.5', '']) {
+        await act(async () => setNativeValue(count, bad));
+        await blur(count);
+        expect(count.value, bad).toBe('3');
+      }
+      expect(drafts).toHaveLength(0);
     });
 
     it('a legacy table with 0 places loads unchanged and the unedited form reports no edit', async () => {
@@ -369,6 +410,39 @@ describe('place-table drafts on the scoring settings screens (U5)', () => {
       expect(table).toHaveLength(20);
       expect(table.every(v => typeof v === 'number')).toBe(true);
       expect(table.slice(16)).toStrictEqual([1, 1, 1, 1]);
+    });
+
+    it('"Duplicate to edit" on a host-published preset shows 0 places that the select can name', async () => {
+      await act(async () => {
+        root.render(createElement(ScoringPresetManagerModal, { onClose: () => {} }));
+      });
+      await flush();
+      const row = [...document.querySelectorAll('li')].find(li => li.textContent?.includes('Host publishes this table'));
+      expect(row, 'a host-published preset is listed').toBeTruthy();
+      const duplicate = [...row!.querySelectorAll('button')].find(b => b.textContent?.includes('Duplicate to edit'))!;
+      await click(duplicate);
+      await flush();
+
+      const places = select('Number of scoring places')!;
+      // Nothing is invented: the table has no places, and the select says so instead of showing 8.
+      expect(document.querySelectorAll('input[aria-label^="Points for place"]')).toHaveLength(0);
+      expect(places.selectedOptions[0]?.value).toBe('0');
+      expect(places.selectedOptions[0]?.textContent).toBe('None yet');
+    });
+
+    it('a stored table length that is not a standard count is shown as itself, not as 8', async () => {
+      await act(async () => {
+        root.render(
+          createElement(ScoringSettingsFields, {
+            settings: mergeScoringSettings({ scoringPoints: [9, 7, 6, 5, 4, 3, 2, 1, 1, 1] }),
+            onChange: () => {},
+          })
+        );
+      });
+      await flush();
+      const places = select('Number of scoring places')!;
+      expect(places.selectedOptions[0]?.value).toBe('10');
+      expect([...places.options].map(o => o.value)).toStrictEqual(['8', '10', '12', '16', '20', '24']);
     });
 
     it('an unedited editor saves the loaded table as it was', async () => {

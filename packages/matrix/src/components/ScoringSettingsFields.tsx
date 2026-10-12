@@ -52,6 +52,14 @@ import { RelayScoringFields, DivingPointsFields, PerEventCapsFields } from './Sc
 import { NullablePlacePointInput } from './NullablePlacePointInput';
 
 const PLACE_COUNT_OPTIONS = [8, 12, 16, 20, 24];
+/**
+ * The offered place counts, plus the table's real length when it is not one of them (0 for a
+ * table the host publishes, 10 or 3 for a stored legacy table). A select whose value is not an
+ * option shows its first option, which would misreport the table as 8 places.
+ */
+function placeCountOptions(length: number): number[] {
+  return PLACE_COUNT_OPTIONS.includes(length) ? PLACE_COUNT_OPTIONS : [length, ...PLACE_COUNT_OPTIONS].sort((a, b) => a - b);
+}
 const TOP_24_POINTS = [32, 28, 27, 26, 25, 24, 23, 22, 20, 17, 16, 15, 14, 13, 12, 11, 9, 7, 6, 5, 4, 3, 2, 1];
 
 /**
@@ -373,9 +381,9 @@ export function ScoringSettingsFields({
               className="glass-input font-mono text-xs"
               aria-label="Number of scoring places"
             >
-              {PLACE_COUNT_OPTIONS.map(n => (
+              {placeCountOptions(local.scoringPoints.length).map(n => (
                 <option key={n} value={n}>
-                  {n}
+                  {n === 0 ? 'None yet' : n}
                 </option>
               ))}
             </select>
