@@ -1272,17 +1272,96 @@ function scoringRowIndex(
   return placeRowIndex(roundSwam, rank, event, settings, individualPlaceTable(event, settings));
 }
 
-/** Single-place team points for a round + rank (no tie splits or scorer caps). */
+/**
+ * The value a place-point table holds at a 0-based place index, or `null` when it
+ * holds none — the index is past the table's end, or the cell is blank.
+ *
+ * `null` is "the table says nothing", which is not the same fact as a table that
+ * says 0. A caller decides what absent means for its own total; this function
+ * never decides for it. See CLAUDE.md § Data provenance, rule 4.
+ */
+export function placePointAt(
+  table: readonly (number | null | undefined)[],
+  idx: number
+): number | null {
+  const value = table[idx];
+  return typeof value === 'number' && Number.isFinite(value) ? value : null;
+}
+
+/**
+ * Points each of `tiedCount` tied entries takes when they share a place.
+ *
+ * The points of every place the tie spans are added and divided by the number of
+ * tied entries — NCAA Rule 7-8, and the user's rule for this app (decision U1,
+ * 2026-10-12): 1st and 2nd tied under the NSISC table score (20 + 17) / 2 each.
+ *
+ * A spanned place the table does not reach adds nothing, and the divisor stays
+ * `tiedCount`: two entries tied for 8th in an 8-place table score (pts8 + 0) / 2
+ * each, never pts8 each. A missing place never turns the total into null or NaN.
+ *
+ * Returns `null` only when the table holds no value at ANY spanned place, so a
+ * tie wholly past the end reads as "no table row" and not as a computed 0.
+ *
+ * This is the single tie rule. Individual swims (both scorers) and relay entries
+ * all divide through here; do not write a second one.
+ *
+ * @param table      the place-value table, place 1 first
+ * @param startIdx   0-based index of the first place the tie spans
+ * @param tiedCount  how many entries share those places (at least 1)
+ */
+export function tiedPlaceShare(
+  table: readonly (number | null | undefined)[],
+  startIdx: number,
+  tiedCount: number
+): number | null {
+  if (!Number.isInteger(tiedCount) || tiedCount < 1) return null;
+  let sum = 0;
+  let spanned = 0;
+  for (let idx = startIdx; idx < startIdx + tiedCount; idx += 1) {
+    const value = placePointAt(table, idx);
+    if (value == null) continue;
+    sum += value;
+    spanned += 1;
+  }
+  return spanned === 0 ? null : sum / tiedCount;
+}
+
+/**
+ * Single-place team points for a round + rank (no tie splits or scorer caps), or
+ * `null` when the swim is eligible and holds a place but the individual table has
+ * no row for it — a place past the table's end.
+ *
+ * `0` is kept for the cases where the RULES give the swim nothing: a round that
+ * does not score, or no place at all. Only `null` means "the table is silent".
+ */
+export function pointsForPlacementOrNull(
+  roundSwam: string | undefined,
+  rank: number,
+  event: string | undefined,
+  settings: ScoringSettings
+): number | null {
+  if (!canScoreAthlete(roundSwam, event, settings)) return 0;
+  if (!rank || rank < 1) return 0;
+  const table = individualPlaceTable(event, settings);
+  const idx = placeRowIndex(roundSwam, rank, event, settings, table);
+  if (idx == null) return null;
+  return placePointAt(table, idx);
+}
+
+/**
+ * Single-place team points for a round + rank (no tie splits or scorer caps).
+ *
+ * Reads a place past the end of the table as 0 — the pre-2026-10-12 behaviour,
+ * kept so existing callers do not change. A caller that must tell "no points"
+ * from "table has no row" calls {@link pointsForPlacementOrNull}.
+ */
 export function pointsForPlacement(
   roundSwam: string | undefined,
   rank: number,
   event: string | undefined,
   settings: ScoringSettings
 ): number {
-  const table = individualPlaceTable(event, settings);
-  const idx = placeRowIndex(roundSwam, rank, event, settings, table);
-  if (idx == null) return 0;
-  return table[idx] ?? 0;
+  return pointsForPlacementOrNull(roundSwam, rank, event, settings) ?? 0;
 }
 
 function scoringRowIndexForRelay(
@@ -1297,16 +1376,29 @@ function scoringRowIndexForRelay(
 }
 
 /**
- * Team points a relay entry earns for the place at `idx`.
+ * The team points a relay earns at each place, place 1 first.
  *
  * `relayPoints` wins when present; otherwise the historical
- * `scoringPoints[idx] * relayMultiplier`, which is exact for every championship
- * field size and wrong for every other format.
+ * `scoringPoints[place] * relayMultiplier`, which is exact for every championship
+ * field size and wrong for every other format. A blank place stays blank.
  */
-function relayTeamPointsForIndex(settings: ScoringSettings, idx: number): number {
+function relayPlaceValues(settings: ScoringSettings): readonly (number | null | undefined)[] {
   const explicit = relayPlaceTable(settings);
-  if (explicit) return explicit[idx] ?? 0;
-  return (settings.scoringPoints[idx] ?? 0) * settings.relayMultiplier;
+  if (explicit) return explicit;
+  const multiplier = settings.relayMultiplier;
+  return settings.scoringPoints.map(p => (typeof p === 'number' ? p * multiplier : null));
+}
+
+/**
+ * Team points a relay entry earns for the place at `idx`, or `null` when the
+ * relay table (or the individual table x `relayMultiplier`) has no row there.
+ *
+ * `null` is not 0. The relay scorer reads it as "this entry takes no points",
+ * which is right for a place past the end of 11-4-2-0; it is returned as `null`
+ * so that decision is made by the caller and not hidden in the lookup.
+ */
+export function relayTeamPointsForIndex(settings: ScoringSettings, idx: number): number | null {
+  return placePointAt(relayPlaceValues(settings), idx);
 }
 
 function roundTierSort(roundSwam: string | undefined): number {
@@ -1681,12 +1773,12 @@ function awardTimedFinalPointEligibleGroup(
 ): number {
   const avail = pts.length - scoringPlace;
   const take = Math.min(pointEligible.length, avail);
-  const slice = pts.slice(scoringPlace, scoringPlace + take);
-  if (!slice.length) {
+  // The one tie rule: places the group spans, added, over the group's size.
+  const each = tiedPlaceShare(pts, scoringPlace, pointEligible.length);
+  if (each == null) {
     pointEligible.forEach(r => indivOut.push({ ...r, points: 0 }));
     return 0;
   }
-  const each = slice.reduce((s, p) => s + p, 0) / pointEligible.length;
 
   const byTeam = new Map<string, SwimmerResult[]>();
   for (const r of pointEligible) {
@@ -2088,16 +2180,12 @@ function resolveIndividualGroupLadderShare(
     return null;
   }
 
-  const pts = individualPlaceTable(sample.event, merged);
-  const gLen = eligible.length;
-  const avail = pts.length - baseIdx;
-  const take = Math.min(gLen, avail);
-  const slice = pts.slice(baseIdx, baseIdx + take);
-  if (!slice.length) {
+  // The one tie rule, shared with the timed-final scorer and with relays.
+  const each = tiedPlaceShare(individualPlaceTable(sample.event, merged), baseIdx, eligible.length);
+  if (each == null) {
     eligible.forEach(r => indivOut.push({ ...r, points: 0 }));
     return null;
   }
-  const each = slice.reduce((s, p) => s + p, 0) / gLen;
   return { each, isPrelimDiving };
 }
 
@@ -2236,8 +2324,31 @@ export function relayTeamClock(r: SwimmerResult): string {
 }
 
 /**
+ * The swimmers a relay entry names, sorted, or `''` when the row records none.
+ *
+ * A team's A and B relays carry the same team name (a relay letter is stored
+ * nowhere on a row) and, on a dead heat, the same event, round, place and clock.
+ * The four swimmers are what tells the two entries apart. Every leg row of one
+ * entry lists the same four names, so the signature is the same on all of them.
+ */
+function relayEntryLegSignature(r: SwimmerResult): string {
+  const named = r.relayNames ?? [];
+  if (named.length === 0) return '';
+  return named
+    .map(n => normalizeSwimmerName(String(n.name ?? '')))
+    .sort()
+    .join(';');
+}
+
+/**
  * One key per team relay entry (all legs share this). Used for scoring caps and grouping.
- * Event + team + round + place + team time — not per-leg split times.
+ * Event + team + round + place + team time + the named swimmers — not per-leg
+ * split times.
+ *
+ * The swimmers are in the key so one team's A and B relays on a dead heat stay two
+ * entries: without them they merged into one eight-leg group, which paid the
+ * pair's points to eight legs and counted one entry against the per-team relay
+ * cap instead of two. A row that names no swimmers keeps the previous key.
  */
 export function relayEntryGroupKey(r: SwimmerResult): string {
   const team = String(r.team ?? '').trim();
@@ -2245,12 +2356,70 @@ export function relayEntryGroupKey(r: SwimmerResult): string {
   const round = String(r.roundSwam ?? '').trim();
   const rk = parseRankInt(r.rank) ?? '';
   const clock = relayTeamClock(r);
-  return `${event}|${team}|${round}|${rk}|${clock}`;
+  const legs = relayEntryLegSignature(r);
+  const base = `${event}|${team}|${round}|${rk}|${clock}`;
+  return legs ? `${base}|${legs}` : base;
 }
 
 /** @deprecated Use relayEntryGroupKey */
 function relayScoringGroupKey(r: SwimmerResult): string {
   return relayEntryGroupKey(r);
+}
+
+/**
+ * The 0-based place-table row one relay entry (all its legs) scores from, or
+ * `null` when the entry takes no place: an exhibition or time-trial entry, a
+ * round or event that does not score, a non-finish result, no rank, or a rank
+ * the table has no row for.
+ *
+ * One gate, read by both the tie count and the scoring loop, so the two cannot
+ * disagree about which entries hold a place.
+ */
+function relayEntryPlaceIndex(group: SwimmerResult[], merged: ScoringSettings): number | null {
+  const sample = group[0];
+  const ex = group.some(r => r.isExhibition);
+  const tt = group.some(r => r.isTimeTrial);
+  if (ex || tt || !canScoreAthlete(sample.roundSwam, sample.event, merged) || !isScoringSwimResult(sample)) {
+    return null;
+  }
+  const rk = parseRankInt(sample.rank);
+  return rk != null ? scoringRowIndexForRelay(sample.roundSwam, rk, sample.event, merged) : null;
+}
+
+/**
+ * Entries that tie share one event, round and finish rank — the key the
+ * individual scorer uses (`buildIndividualEventGroups`). Not the team and not
+ * the clock: two teams tied for 1st are two entries on one tie key.
+ *
+ * Gender is NOT in the key, deliberately. `SwimmerResult.gender` is optional, so
+ * a key that read it would un-split a tie between a relay that names its gender
+ * and one that does not. Every caller of `calculatePoints` passes the rows of ONE
+ * gender, so one event label never holds two genders here.
+ */
+function relayTieKey(sample: SwimmerResult): string {
+  const rk = parseRankInt(sample.rank) ?? 0;
+  return `${String(sample.event ?? '').trim()}|${(sample.roundSwam || '').trim()}|${rk}`;
+}
+
+/**
+ * How many relay entries hold each tied place.
+ *
+ * Counted BEFORE the per-team relay cap and the roster / scorer-pool gates, so
+ * an entry those gates zero still holds its place and still sits in the divisor:
+ * it forfeits its share and a rival's points never move. This is the rule the
+ * individual scorer follows (see `admitTieGroupToMeetPool`).
+ */
+function countTiedRelayEntries(
+  entries: SwimmerResult[][],
+  merged: ScoringSettings
+): Map<string, number> {
+  const counts = new Map<string, number>();
+  for (const group of entries) {
+    if (relayEntryPlaceIndex(group, merged) == null) continue;
+    const key = relayTieKey(group[0]);
+    counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  return counts;
 }
 
 function scoreRelaysInEvent(
@@ -2280,23 +2449,20 @@ function scoreRelaysInEvent(
   /** Relay cap is per team per relay event (e.g. max 2 scoring entries in 200 Free Relay). */
   const teamRelayCountsByEvent = new Map<string, number>();
   const relayOut: SwimmerResult[] = [];
+  const placeValues = relayPlaceValues(merged);
+  const tiedEntryCounts = countTiedRelayEntries(
+    relayKeys.map(k => relayMap.get(k)!),
+    merged
+  );
 
   for (const key of relayKeys) {
     const group = relayMap.get(key)!;
     const sample = group[0];
-    const ex = group.some(r => r.isExhibition);
-    const tt = group.some(r => r.isTimeTrial);
     const team = String(sample.team ?? 'Unknown').trim() || 'Unknown';
     const eventName = String(sample.event ?? '').trim();
     const meetState = getOrCreateMeetState(meetStates, team, sample.gender);
 
-    if (ex || tt || !canScoreAthlete(sample.roundSwam, sample.event, merged) || !isScoringSwimResult(sample)) {
-      group.forEach(r => relayOut.push({ ...r, points: 0 }));
-      continue;
-    }
-
-    const rk = parseRankInt(sample.rank);
-    const idx = rk != null ? scoringRowIndexForRelay(sample.roundSwam, rk, sample.event, merged) : null;
+    const idx = relayEntryPlaceIndex(group, merged);
     if (idx == null) {
       group.forEach(r => relayOut.push({ ...r, points: 0 }));
       continue;
@@ -2323,7 +2489,12 @@ function scoreRelaysInEvent(
       }
     }
 
-    const teamPts = relayTeamPointsForIndex(merged, idx);
+    // Tied entries split the points of every place the tie spans (decision U1),
+    // through the same helper the individual scorers use. `null` means the table
+    // holds no row at any spanned place: the entry takes no points, a decision
+    // made here and not inside the lookup.
+    const tiedEntries = tiedEntryCounts.get(relayTieKey(sample)) ?? 1;
+    const teamPts = tiedPlaceShare(placeValues, idx, tiedEntries) ?? 0;
     const n = group.length;
     // halfRateRelaySwimmer: each leg earns 1/n of team relay points (typically n=4 → 1/4 share).
     let swimmerPts = teamPts / (n > 0 ? n : 1);

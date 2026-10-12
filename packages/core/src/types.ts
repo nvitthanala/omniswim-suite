@@ -263,6 +263,13 @@ export interface ScoringSettings {
    * `scoringPoints` — a relay placing past its end scores 0, which is how
    * 11-4-2-0 stops a fourth-place relay from scoring in a six-lane dual.
    *
+   * Tied relays split the points of every place the tie spans, the same as
+   * tied individual swims (`tiedPlaceShare` in `utils.ts`). The table lookup
+   * itself returns `null`, not 0, for a place it has no row for
+   * (`relayTeamPointsForIndex`); the relay scorer reads that as "takes no
+   * points" and the straddle of a tie across the table's end counts the
+   * missing place as 0.
+   *
    * Source: NCAA Rule 7, archived at `data/scoring_rules/sources/ncaascoring.pdf`.
    * Never hand-type one of these; generate it from `NCAA_FORMAT_RULESETS`.
    */
@@ -404,9 +411,12 @@ export interface ScoringPresetMeta {
   /** Heading a picker can group by, e.g. `'NCAA dual meets'`. Presentation only. */
   group?: string;
   /**
-   * Uppercased substrings that select this preset from a workspace's conference
-   * name. Replaces the conference names that used to be hardcoded inside
-   * `presetIdForConference`. See `conferencePresetBindings` in `scoringDefaults.ts`.
+   * Names that select this preset from a workspace's conference name, matched as
+   * WHOLE WORDS (case and punctuation ignored) — never as substrings, so
+   * "Sectional Championships" does not select an "SEC" preset. A multi-word
+   * entry ("Big 12") must appear as that word sequence. Replaces the conference
+   * names that used to be hardcoded inside `presetIdForConference`. See
+   * `conferencePresetBindings` in `scoringDefaults.ts`.
    */
   conferenceMatches?: string[];
 }

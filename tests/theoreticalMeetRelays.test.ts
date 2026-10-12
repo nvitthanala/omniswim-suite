@@ -351,7 +351,7 @@ describe('team totals through the existing scoring path', () => {
     expect(built.relayResultIdsByEntryId.size).toBe(3);
   });
 
-  it('ranks teams by estimated time with a shared place on an exact tie (1, 1, 3), pays each tied relay the full place points, and names the tie', () => {
+  it('ranks teams by estimated time with a shared place on an exact tie (1, 1, 3), splits the tied places between the tied relays, and names the tie', () => {
     const tie = build([
       team('Alpha University', { A1: [['50 Free SCY', '20.00']], A2: [['50 Free SCY', '20.50']], A3: [['50 Free SCY', '21.00']], A4: [['50 Free SCY', '21.50']] }),
       team('Beta University', { B1: [['50 Free SCY', '20.00']], B2: [['50 Free SCY', '20.50']], B3: [['50 Free SCY', '21.00']], B4: [['50 Free SCY', '21.50']] }),
@@ -360,19 +360,21 @@ describe('team totals through the existing scoring path', () => {
     const b = buildTheoreticalMeetWorkspace({ workspaceId: 'ws-relay', createdAt: 1, seeds: tie, scoringSettings: NSISC_PRESET_SETTINGS, conference: 'NSISC' });
     const places = new Map(b.payload.menResults.filter(r => r.isRelay === true && r.relayLegIndex === 0).map(r => [r.team, r.rank]));
     expect([places.get('Alpha University'), places.get('Beta University'), places.get('Gamma University')]).toEqual([1, 1, 3]);
-    // Pinned current behaviour: core relay scoring does not split tied points. Each tied relay gets the full
-    // place-1 points (2 x 20 = 40, a quarter per leg = 10). Place 3 follows with 2 x 16 = 32 (8 per leg).
+    // Decision U1 (2026-10-12): tied relays split the points of every place the tie spans, as tied
+    // individual swims do. 1st and 2nd tied under the NSISC relay values (2 x 20, 2 x 17): (40 + 34) / 2 = 37
+    // per relay, a quarter per leg = 9.25. Place 3 follows with 2 x 16 = 32 (8 per leg).
     const scored = buildScoringSnapshot(b.payload as unknown as Workspace, Gender.MEN, false).baseline.allScored.filter(r => r.isRelay === true);
     const legPoints = (t: string): number[] => scored.filter(r => r.team === t).map(r => r.points as number);
-    expect(legPoints('Alpha University')).toEqual([10, 10, 10, 10]);
-    expect(legPoints('Beta University')).toEqual([10, 10, 10, 10]);
+    expect(legPoints('Alpha University')).toEqual([9.25, 9.25, 9.25, 9.25]);
+    expect(legPoints('Beta University')).toEqual([9.25, 9.25, 9.25, 9.25]);
     expect(legPoints('Gamma University')).toEqual([8, 8, 8, 8]);
-    // The meet names each tied relay and says it is not split.
+    // The meet names each tied relay and says the tied places are shared.
     const note = b.caveats.find(c => c.startsWith('Tied estimated relays:')) as string;
     expect(note).toContain('200 Free Relay SCY');
     expect(note).toContain('Alpha University, Beta University');
     expect(note).toContain('place 1');
-    expect(note).toContain('each tied relay receives the full place points');
+    expect(note).toContain('share the points of the places the tie spans');
+    expect(note).not.toContain('full place points');
     expect(b.caveats.filter(c => c.startsWith('Tied estimated relays:'))).toHaveLength(1);
   });
 

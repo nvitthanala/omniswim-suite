@@ -244,13 +244,13 @@ export interface TheoreticalMeetWorkspaceBuild {
 }
 
 /**
- * Names each group of tied estimated relays. Core relay scoring (`scoreRelaysInEvent`) gives every tied relay
- * the full points of the shared place; it does not split them the way individual ties are split. This app
- * does not change that, so the meet says it.
+ * Names each group of tied estimated relays. Core relay scoring (`scoreRelaysInEvent`) splits the points of
+ * every place the tie spans between the tied relays, as it does for individual ties. The meet names the tie
+ * so a reader knows why those relays score alike.
  */
 export function relayTieCaveat(event: string, tied: readonly Pick<TheoreticalProjectedRelay, 'team' | 'gender' | 'totalTime'>[], place: number): string {
   const teams = tied.map(r => r.team).join(', ');
-  return `Tied estimated relays: ${event}, ${String(tied[0].gender)}, place ${place}, ${tied[0].totalTime}: ${teams}. In this app today each tied relay receives the full place points. The points are not split.`;
+  return `Tied estimated relays: ${event}, ${String(tied[0].gender)}, place ${place}, ${tied[0].totalTime}: ${teams}. The tied relays share the points of the places the tie spans, as tied individual swims do.`;
 }
 
 export const RELAY_PLACES_CAVEAT =
