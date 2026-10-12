@@ -127,6 +127,7 @@ const TESTS = [
   ['test_abbreviated_school_column.mjs'],
   ['test_scored_event_boundary.mjs'],
   ['test_pdf_place_points_boundary.mjs'],
+  ['test_python_bad_times.mjs'],
   ['test_nsisc_team_totals.mjs'],
   ['test_nsisc_psych.mjs', 'tests/fixtures/nsisc_psych_sheet.pdf'],
   ['test_compact_event_label.mjs'],

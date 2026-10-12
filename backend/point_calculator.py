@@ -737,69 +737,123 @@ def round_tier_sort_order(round_swam):
 
 
 def time_to_sec(t):
+    """Seconds for a printed clock, or None when there is no readable time.
 
-    if not t or t == 'NT':
+    None means absent. It is never a number: an empty, NT, DQ or unparseable
+    clock has no seconds value, so nothing here may stand in for one. Callers
+    must handle None (see `_unreadable_time_warning`).
 
-        return 9999.99
-
+    Trailing qualifier letters ("1:02.63R") are still stripped and read.
+    """
+    if not t:
+        return None
     val = re.sub(r'[^\d\.:]', '', str(t)).rstrip('.')
-
     if not val:
-
-        return 9999.99
-
+        return None
     if ':' in val:
-
         parts = val.split(':')
-
+        if len(parts) > 2:
+            return None
         try:
-
-            minutes = float(parts[0])
-
-            seconds = float(parts[1]) if len(parts) > 1 else 0.0
-
-            return minutes * 60 + seconds
-
+            return float(parts[0]) * 60 + float(parts[1])
         except ValueError:
-
-            return 9999.99
-
+            return None
     try:
-
         return float(val)
-
     except ValueError:
-
-        return 9999.99
-
+        return None
 
 
+def _row_time_seconds(a):
+    """Seconds of the swim a row reports, or None when it has no readable time.
+
+    The finals clock wins over the prelims clock, matching `get_ev_sort_key`.
+    """
+    clock = a.get('finals_time') or a.get('prelims_time') or a.get('relay_team_time')
+    return time_to_sec(clock) if clock else None
+
+
+def _unreadable_time_warning(a, points_kept=False):
+    """None when the row has a readable time, else a warning dict for it.
+
+    `points_kept` is True in PDF-place-points mode, where the points printed in
+    the PDF are trusted and the clock is never consulted: the warning then says
+    the row still carries them, because "earns no points" would be false.
+    """
+    if _row_time_seconds(a) is not None:
+        return None
+    clock = str(
+        a.get('finals_time') or a.get('prelims_time') or a.get('relay_team_time') or ''
+    ).strip()
+    if not clock:
+        reason = 'empty'
+    elif _NON_SCORING_TIME_RE.match(clock):
+        reason = 'status_code'
+    else:
+        reason = 'unparseable'
+    who = str(a.get('name') or '?')
+    event = str(a.get('event') or '?')
+    shown = repr(clock) if clock else 'no time printed'
+    outcome = (
+        "the points printed in the PDF were kept."
+        if points_kept
+        else 'the row earns no place and no points.'
+    )
+    return {
+        'code': 'unreadable_time',
+        'reason': reason,
+        'value': clock or None,
+        'message': f'{who}, {event}: no readable swim time ({shown}); {outcome}',
+    }
+
+
+def _add_row_warning(a, warning):
+    """Append a warning to the row's `parse_warnings`, once per code."""
+    existing = a.get('parse_warnings')
+    if not isinstance(existing, list):
+        existing = []
+        a['parse_warnings'] = existing
+    if not any(isinstance(w, dict) and w.get('code') == warning['code'] for w in existing):
+        existing.append(warning)
+
+
+def _set_aside_untimed_rows(ev_athletes, scored_out):
+    """Return the rows with a readable time; zero and record the rest.
+
+    A row with no readable time earns no place and no points, and it must not
+    take a scoring slot or dilute a tie. So it never reaches the place ladder.
+    It stays in the output with `calculated_points` 0.0 (the value every other
+    non-scoring row carries) and a warning, appended to `scored_out` once.
+    """
+    timed = []
+    for a in ev_athletes:
+        warning = _unreadable_time_warning(a)
+        if warning is None:
+            timed.append(a)
+            continue
+        a['podium'] = None
+        a['cutline_achieved'] = a.get('is_cutline', False)
+        a['calculated_points'] = 0.0
+        _add_row_warning(a, warning)
+        scored_out.append(a)
+    return timed
 
 
 def get_ev_sort_key(a):
-
-    t_final = a.get('finals_time') or a.get('prelims_time')
-
-    t = time_to_sec(t_final) if t_final else 9999.99
+    """Sort key (tier, rank, time-missing, seconds). A missing time sorts last."""
+    t = _row_time_seconds(a)
+    missing = t is None
+    seconds = 0.0 if missing else t
 
     is_exh = a.get('is_exhibition', False)
-
     is_tt = a.get('is_time_trial', False)
-
     if is_exh or is_tt:
-
-        return (99999, 99999, t)
+        return (99999, 99999, missing, seconds)
 
     rnum = parse_rank_int(a)
-
     if rnum is None:
-
         rnum = 9999
-
-    return (round_tier_sort_order(a.get('round_swam')), rnum, t)
-
-
-
+    return (round_tier_sort_order(a.get('round_swam')), rnum, missing, seconds)
 
 
 def event_meet_sort_key(event_name):
@@ -1116,6 +1170,10 @@ def calculate_points(athletes, scoring_settings=None, overrides=None):
         _apply_pdf_place_scoring_lock(cfg)
         for ath in athletes:
             ath['calculated_points'] = _pdf_place_points_for_row(ath, cfg)
+            # Points stay as the PDF printed them; an unreadable clock is only recorded.
+            warning = _unreadable_time_warning(ath, points_kept=True)
+            if warning is not None:
+                _add_row_warning(ath, warning)
         return athletes
 
     SCORING = cfg['scoringPoints']
@@ -1162,6 +1220,10 @@ def calculate_points(athletes, scoring_settings=None, overrides=None):
     event_list = [(k, events[k]) for k in sorted_event_keys]
 
     def _process_scoring_event(ev_athletes, gender):
+
+        ev_athletes = _set_aside_untimed_rows(ev_athletes, scored_athletes)
+        if not ev_athletes:
+            return
 
         is_relay = any(a.get('is_relay') for a in ev_athletes)
 

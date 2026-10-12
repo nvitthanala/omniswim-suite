@@ -359,7 +359,6 @@ def parse_meet_data(lines, conference="NSISC"):
         
         has_rank = re.match(r'^(\d+|\*?\d+)\s+', before_yr)
         has_comma_before = ',' in before_yr
-        has_comma_after = ',' in after_yr
         
         # If before_yr has a comma, it must contain "Last, First", meaning format is "Rank Name YR School"
         # If it doesn't have a comma, we fall back to rank detection or timed final logic
@@ -666,7 +665,6 @@ def _build_4x100_split_payload(event_name, relay_names, split_lines, team_time):
     Line 1 = legs 1–2 (two cells per leg); line 2 = legs 3–4.
     Within each leg pair, order by team cumulative and diff swimmer cumulatives.
     """
-    n_legs = len(relay_names) or 4
     leg_dist = 100
     rows = [_parse_relay_split_line_cells(ln) for ln in split_lines[:2]]
     leg_pairs = [(0, 0), (0, 2), (1, 0), (1, 2)]
@@ -693,7 +691,8 @@ def _build_4x100_split_payload(event_name, relay_names, split_lines, team_time):
         last_row = rows[-1]
         for cell in reversed(last_row):
             outer = cell.get('outer')
-            if outer and (_relay_time_to_seconds(outer) or 0) >= 120:
+            outer_sec = _relay_time_to_seconds(outer) if outer else None
+            if outer_sec is not None and outer_sec >= 120:
                 team_total = outer
                 break
 
@@ -882,18 +881,29 @@ def _build_distance_relay_split_payload(event_name, relay_names, split_lines, te
 
 
 def _build_relay_split_payload(event_name, relay_names, split_lines, team_time):
+    """Relay split payload for one entry, or None when no split lines were printed.
+
+    The payload carries `split_source`: 'structured' when a builder read the
+    split lines, 'legacy' when the builder failed and only the parenthesised
+    leg times were pulled from the first split line. A legacy payload has no
+    `leg_details`, and its leg times can be short or misaligned, so a caller
+    must surface the source instead of treating the two alike.
+    """
     if not split_lines:
         return None
     relay_dist = _parse_relay_distance_yards(event_name)
     leg_dist = relay_dist // 4
     try:
         if leg_dist == 100 and len(split_lines) == 2:
-            return _build_4x100_split_payload(event_name, relay_names, split_lines, team_time)
-        if len(split_lines) >= 2 and relay_dist >= 400:
-            return _build_distance_relay_split_payload(event_name, relay_names, split_lines, team_time)
-        if len(split_lines) >= 4:
-            return _build_distance_relay_split_payload(event_name, relay_names, split_lines, team_time)
-        return _build_short_relay_split_payload(event_name, relay_names, split_lines[0], team_time)
+            payload = _build_4x100_split_payload(event_name, relay_names, split_lines, team_time)
+        elif len(split_lines) >= 2 and relay_dist >= 400:
+            payload = _build_distance_relay_split_payload(event_name, relay_names, split_lines, team_time)
+        elif len(split_lines) >= 4:
+            payload = _build_distance_relay_split_payload(event_name, relay_names, split_lines, team_time)
+        else:
+            payload = _build_short_relay_split_payload(event_name, relay_names, split_lines[0], team_time)
+        payload['split_source'] = 'structured'
+        return payload
     except (IndexError, ValueError, TypeError):
         legacy = _extract_relay_leg_splits_from_line(split_lines[0])
         return {
@@ -903,6 +913,7 @@ def _build_relay_split_payload(event_name, relay_names, split_lines, team_time):
                 'team_total': team_time,
             },
             'legacy_leg_splits': legacy,
+            'split_source': 'legacy',
         }
 
 
@@ -1090,6 +1101,8 @@ def _parse_nsisc_relay(
     relay_names = []
     relay_leg_splits = []
     relay_split_payload = None
+    # 'structured' | 'legacy' | None (the PDF printed no split lines for this entry).
+    relay_split_source = None
     j = line_idx + 1
     end_scan = min(len(lines), line_idx + 12)
     split_lines = []
@@ -1116,9 +1129,12 @@ def _parse_nsisc_relay(
             relay_split_payload = _build_relay_split_payload(
                 current_event, relay_names, split_lines, finals_time
             )
+            if relay_split_payload:
+                relay_split_source = relay_split_payload.get('split_source')
         except Exception:
             relay_split_payload = None
             relay_leg_splits = _extract_relay_leg_splits_from_line(split_lines[0])
+            relay_split_source = 'legacy'
         if relay_split_payload:
             relay_leg_splits = relay_split_payload.get('legacy_leg_splits') or []
 
@@ -1138,6 +1154,7 @@ def _parse_nsisc_relay(
                 "relay_names": relay_names,
                 "relay_leg_splits": relay_leg_splits,
                 "relay_split_payload": relay_split_payload,
+                "relay_split_source": relay_split_source,
                 "conference": conference,
                 "pdf_team_points": pdf_team_points,
                 "pdf_points": leg_pdf_pts,
@@ -1444,7 +1461,8 @@ def _build_team_cache(lines):
         return re.sub(r'[^a-z0-9]', '', s.lower())
     
     for t in team_candidates:
-        if not t: continue
+        if not t:
+            continue
         nk = norm_key(t)
         if nk not in canon_map or len(t) > len(canon_map[nk]):
             canon_map[nk] = t
@@ -1549,7 +1567,6 @@ def parse_pdf(file_path, format_type='auto'):
     elif 'BIG 12' in full_text.upper() or 'BIG12' in full_text.upper():
         conference = 'Big 12'
     
-    meet_type = detect_meet_type(full_text)
     
     # Parse based on format
     athletes = parse_meet_data(lines, conference=conference or "NSISC")
@@ -1564,6 +1581,17 @@ def parse_pdf(file_path, format_type='auto'):
             payload = data.get("relay_split_payload") or {}
             leg_details = payload.get("leg_details") or []
             team_splits = payload.get("team_splits")
+            split_source = data.get("relay_split_source")
+            leg_warnings = []
+            if split_source == 'legacy':
+                leg_warnings.append({
+                    'code': 'relay_split_legacy_fallback',
+                    'message': (
+                        f'{data["team"]}, {data["event"]}: structured relay split '
+                        'parsing failed; leg splits came from the legacy fallback '
+                        'and may be missing or misaligned.'
+                    ),
+                })
             for idx, r in enumerate(relay_names):
                 detail = leg_details[idx] if idx < len(leg_details) else None
                 leg_split = None
@@ -1587,8 +1615,11 @@ def parse_pdf(file_path, format_type='auto'):
                     "relay_leg_split_detail": detail,
                     "relay_team_splits": team_splits,
                     "relay_team_time": team_time,
+                    "relay_split_source": split_source,
                     "pdf_points": leg_pts,
                 })
+                if leg_warnings:
+                    results[-1]["parse_warnings"] = [dict(w) for w in leg_warnings]
         else:
             results.append({
                 "name": data["name"], "event": data["event"], "gender": data["gender"],
