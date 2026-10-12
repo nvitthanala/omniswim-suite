@@ -52,11 +52,11 @@
     "A12": "pending",
     "P1": "committed 09c5882e",
     "P2": "committed 09c5882e",
-    "P3": "server half committed 09c5882e; client half + e2e in flight (agent a825b3847674e68bd) per architect spec: one PUT at a time, knownVersionRef, conflict banner with Reload, never adopt silently",
+    "P3": "committed 171ddc31 (client), 1464ea7b (restore test), earlier 09c5882e (server). U10 satisfied: version checks, no persisted sequence.",
     "P4": "pending",
     "P5": "pending",
     "P6": "pending",
-    "P7": "committed 09c5882e (refusal); server.ts SQLite->JSON fallback fix in flight (agent a825b3847674e68bd)",
+    "P7": "committed 09c5882e + a9dccc27 (server exits non-zero on a newer or unreadable schema or any SQLite error; JSON fallback only on native-module load failure, logged as error)",
     "T1": "pending",
     "T2": "committed 0af4ac9b",
     "T3": "pending",
@@ -270,7 +270,8 @@
     "production static serving has no host check (Vite allowedHosts covers dev only)",
     "relayGroupKey (utils.ts:351, roster-simulation key) has the same A/B relay merge flaw relayEntryGroupKey had (scoring agent did not change it); fix in the core pass 2 with C7",
     "THEORETICAL_MEET_PLAN.md:95 and backlog item A10 relay tie text are stale (H-group docs pass)",
-    "e2e tests/e2e/ui-ia.spec.ts failed (Athletes tab not visible at line 14; Phase 4 at 353) in three agent runs while apps/shell/src/App.tsx was being edited by the persistence agent; rerun on a quiet tree before wave 2 starts"
+    "e2e tests/e2e/ui-ia.spec.ts failed (Athletes tab not visible at line 14; Phase 4 at 353) in three agent runs while apps/shell/src/App.tsx was being edited by the persistence agent; rerun on a quiet tree before wave 2 starts",
+    "WorkspaceSidebar rename UI is unreachable: setEditingWorkspaceId is never set to a non-null value (X-group)"
   ],
   "limitEvents": [
     {
@@ -288,6 +289,10 @@
   },
   "userQuestionsAtEnd": [
     "Individual A/B-final tie that includes an exhibition swimmer zeroes the scoring swimmer (utils.ts ~2152-2158: {A:0, X:0}); relay and timed-final paths exclude only the exhibition entry. The code comment calls it deliberate. Keep or change? (architect says needs a golden run)",
-    "No admin concept exists in the database; admin is an email in OMNI_ADMIN_EMAILS (server agent). Backup list/restore under AUTH_REQUIRED are 403 until isAdmin is wired to that. Wire it?"
+    "No admin concept exists in the database; admin is an email in OMNI_ADMIN_EMAILS (server agent). Backup list/restore under AUTH_REQUIRED are 403 until isAdmin is wired to that. Wire it?",
+    "P7: a corrupt or locked SQLite database now stops the server (exit 1) instead of falling back to meets.json. Confirm that is wanted."
+  ],
+  "pendingArchitectReview": [
+    "P3 client/conflict diff (171ddc31) + persistence layer (09c5882e): bundle with wave 2 core diffs"
   ]
 }
