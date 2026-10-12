@@ -12,6 +12,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { execSync } from 'child_process';
 import { Workspace, ScoringSettings } from '../../packages/core/src/types.ts';
 import { JsonRepo, SqliteRepo, PgRepo, type WorkspaceRepo } from './lib/workspaceRepo.ts';
+import { decideSqliteStartupFailure } from './lib/sqliteStartup.ts';
 import { staleCutTableLines } from './lib/cutTableFreshness.ts';
 import { isLoopbackHost } from './lib/loopbackHost.ts';
 import { FileSystemSwimCloudCaptureStore } from '../../packages/swimcloud/src/captureStore.ts';
@@ -379,7 +380,11 @@ async function startServer() {
       await repo.init();
       console.log('Storage backend: SQLite (data/omniswim.db)');
     } catch (err) {
-      console.warn('SQLite backend failed to initialize, falling back to JSON:', err);
+      // A newer schema or an unreadable file must stop the server; only a SQLite that cannot
+      // load may fall back to JSON, and that is logged as an error (see sqliteStartup.ts).
+      const decision = decideSqliteStartupFailure(err);
+      console.error(decision.message);
+      if (decision.action === 'exit') process.exit(1);
       repo = new JsonRepo(MEETS_FILE, BACKUP_DIR, seedWorkspaces);
       await repo.init();
     }
