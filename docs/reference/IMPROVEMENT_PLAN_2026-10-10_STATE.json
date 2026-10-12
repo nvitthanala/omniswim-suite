@@ -45,7 +45,7 @@
     "C3": "pending",
     "C4": "committed 9c87d57c + follow-up (points_on_status_clock raises; garbled clock keeps printed points). TS side must add the code to MEET_PIPELINE_ERROR_CODES in parsingPipeline.ts as final -> 422 with rows (part of C5 TS half)",
     "C5": "python half committed; TS half pending: pipeline:legacy flag on legacy fallback, relay_split_source/parse_warnings read in mapAthleteRows, points_on_status_clock as a final 422, import-UI warning",
-    "C6": "core committed e1c87ec0; UI half + X4 in flight (worker a467cc44fdcdec299)",
+    "C6": "committed e1c87ec0 (core) + 4057721d (UI); worker a467cc44fdcdec299 fixing two follow-ups (count-field truncation on keystroke; empty seed on Duplicate to edit)",
     "C7": "pending",
     "C8": "pending",
     "A7": "pending",
@@ -72,7 +72,7 @@
     "X1": "pending",
     "X2": "pending",
     "X3": "pending; also fix Toast.tsx timer cleanup (flaky unhandled error in the skip-budget gate)",
-    "X4": "in flight with C6 UI (worker a467cc44fdcdec299)",
+    "X4": "committed 4057721d with C6 UI",
     "X5": "pending",
     "X6": "pending",
     "X7": "pending",
@@ -236,6 +236,51 @@
         "aca3beddb23680687": "updating a test, the caveat text and the dead-heat test for the tie split",
         "a70e2fae465e980e9": "registering scripts/test_python_bad_times.mjs in run-tests.mjs and running it"
       }
+    },
+    {
+      "id": "wave-2",
+      "status": "dispatched 2026-10-12",
+      "agents": [
+        {
+          "scope": "core projections + swimcloud parser",
+          "items": [
+            "C3",
+            "C7",
+            "relayGroupKey",
+            "C8"
+          ],
+          "agent": "executor aca3beddb23680687"
+        },
+        {
+          "scope": "parse pipeline TS",
+          "items": [
+            "C5 TS half",
+            "C4 error code"
+          ],
+          "agent": "executor a4a12ccfffa3d7bce"
+        },
+        {
+          "scope": "persistence + metrics",
+          "items": [
+            "P4",
+            "P6"
+          ],
+          "agent": "executor a825b3847674e68bd"
+        },
+        {
+          "scope": "matrix scoring settings follow-up",
+          "items": [
+            "C6 UI follow-ups"
+          ],
+          "agent": "worker a467cc44fdcdec299"
+        }
+      ],
+      "laterOnQuietTree": [
+        "P5 apiError helper across routes",
+        "U3 delete 39 UI test workspaces after P6 and a consistent db copy",
+        "import-UI warning display (worker)",
+        "C3 team picker + C7 no-actual marker UI (worker)"
+      ]
     }
   ],
   "onResume": [
