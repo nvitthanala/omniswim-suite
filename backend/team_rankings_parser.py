@@ -73,14 +73,14 @@ def extract_team_rankings_from_lines(lines: list[str]) -> dict[str, Any]:
     women: dict[str, float] = {}
     men: dict[str, float] = {}
 
-    upper_lines = [l.strip() for l in lines if l.strip()]
+    upper_lines = [ln.strip() for ln in lines if ln.strip()]
 
     w_idx = next(
-        (i for i, l in enumerate(upper_lines) if re.match(r'^Women\s*-\s*Team Scores', l, re.I)),
+        (i for i, ln in enumerate(upper_lines) if re.match(r'^Women\s*-\s*Team Scores', ln, re.I)),
         None,
     )
     m_idx = next(
-        (i for i, l in enumerate(upper_lines) if re.match(r'^Men\s*-\s*Team Scores', l, re.I)),
+        (i for i, ln in enumerate(upper_lines) if re.match(r'^Men\s*-\s*Team Scores', ln, re.I)),
         None,
     )
 

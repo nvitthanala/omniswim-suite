@@ -60,8 +60,16 @@ jobs:
       - name: Install
         run: npm ci
 
+      # Report only: it lists known advisories in production dependencies but does
+      # not fail the build. Read the log; fix by upgrading, not by silencing it.
+      - name: Audit production dependencies (report only)
+        run: npm audit --omit=dev
+        continue-on-error: true
+
+      # Exact versions live in backend/requirements.txt (pdfplumber is pinned), so a
+      # new upstream release cannot change parser output between two CI runs.
       - name: Install Python PDF deps
-        run: python -m pip install pdfplumber
+        run: python -m pip install -r backend/requirements.txt
 
       # pdftotext, for the tests that re-read the archived qualifying-standard PDFs.
       # ubuntu ships poppler, which lacks the xpdf-only `-table` flag, so the two
@@ -77,6 +85,16 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      # The Python parsers feed every PDF meet score. Lint tools install in their
+      # own step so they never reach the runtime requirements (requirements.txt is
+      # installed above). Config lives in backend/pyproject.toml.
+      - name: Python backend lint and tests
+        working-directory: backend
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m ruff check .
+          python -m pytest
 
       # Runs the script suite and the Playwright e2e specs. run-tests.mjs picks a free
       # PORT for the e2e dev server itself; do not set PORT here, because
