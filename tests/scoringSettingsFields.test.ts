@@ -18,6 +18,7 @@ import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
 import type { ScoringSettings } from '@omniswim/core/types';
+import type { ScoringSettingsDraft } from '@omniswim/core/lib/scoringPlaceTables';
 import { ScoringSettingsFields } from '@omniswim/matrix/components/ScoringSettingsFields';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -43,12 +44,15 @@ describe('ScoringSettingsFields', () => {
   let root: Root;
   let onChange: (next: ScoringSettings) => void;
   let latest: ScoringSettings | undefined;
+  /** The live draft (U5: may hold `null` cells). `onChange` does not fire while a cell is blank. */
+  let latestDraft: ScoringSettingsDraft | undefined;
 
   beforeEach(() => {
     container = document.createElement('div');
     document.body.appendChild(container);
     root = createRoot(container);
     latest = undefined;
+    latestDraft = undefined;
     onChange = next => {
       latest = next;
     };
@@ -77,7 +81,16 @@ describe('ScoringSettingsFields', () => {
 
   async function render(props: Partial<Parameters<typeof ScoringSettingsFields>[0]> = {}) {
     await act(async () => {
-      root.render(createElement(ScoringSettingsFields, { settings: BASE, onChange, ...props }));
+      root.render(
+        createElement(ScoringSettingsFields, {
+          settings: BASE,
+          onChange,
+          onDraftChange: draft => {
+            latestDraft = draft;
+          },
+          ...props,
+        })
+      );
     });
     await flush();
   }
@@ -138,14 +151,17 @@ describe('ScoringSettingsFields', () => {
     const placesSelect = container.querySelector<HTMLSelectElement>('select[aria-label="Number of scoring places"]');
     expect(placesSelect).toBeTruthy();
     await act(async () => setNativeValue(placesSelect!, '12'));
-    expect(latest?.scoringPoints).toHaveLength(12);
-    // The 8 original values are preserved; the 4 new places pad with 0.
-    expect(latest?.scoringPoints.slice(0, 8)).toStrictEqual([20, 17, 16, 15, 14, 13, 12, 11]);
-    expect(latest?.scoringPoints.slice(8)).toStrictEqual([0, 0, 0, 0]);
+    // U5: the 4 new places are BLANK, not 0, so the draft is not a ScoringSettings yet and
+    // `onChange` stays silent. The draft carries the length and the recomputed bracket size.
+    expect(latest).toBeUndefined();
+    expect(latestDraft?.scoringPoints).toHaveLength(12);
+    // The 8 original values are preserved; the 4 new places are null.
+    expect(latestDraft?.scoringPoints.slice(0, 8)).toStrictEqual([20, 17, 16, 15, 14, 13, 12, 11]);
+    expect(latestDraft?.scoringPoints.slice(8)).toStrictEqual([null, null, null, null]);
     // This is the bug this merge fixed: the old Modal only recomputed
     // aFinalBracketSize at save time; a places change here must recompute it
     // immediately, in the same update, not leave it stale from the prior count.
-    expect(latest?.aFinalBracketSize).toBe(6);
+    expect(latestDraft?.aFinalBracketSize).toBe(6);
   });
 
   it('"Top 24 points only" sets 24 places, the real point values, relayMultiplier 2, half-rate on, and the matching aFinalBracketSize', async () => {
@@ -257,7 +273,9 @@ describe('ScoringSettingsFields', () => {
       );
       expect(tableButton).toBeTruthy();
       await act(async () => tableButton!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-      expect(latest?.relayPoints).toStrictEqual([0]);
+      // U5: the seed is one BLANK cell, not [0]. A blank is not a ScoringSettings, so onChange is silent.
+      expect(latest).toBeUndefined();
+      expect(latestDraft?.relayPoints).toStrictEqual([null]);
       const placeInput = container.querySelector<HTMLInputElement>('input[aria-label="Relay points for place 1"]');
       expect(placeInput).toBeTruthy();
       await act(async () => setNativeValue(placeInput!, '11'));
@@ -274,13 +292,14 @@ describe('ScoringSettingsFields', () => {
       );
       expect(tableButton).toBeTruthy();
       await act(async () => tableButton!.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-      expect(latest?.divingPoints).toStrictEqual([0]);
+      expect(latestDraft?.divingPoints).toStrictEqual([null]);
       const capInput = container.querySelector<HTMLInputElement>(
         'input[aria-label="Maximum scoring divers per team per diving event"]'
       );
       expect(capInput).toBeTruthy();
       await act(async () => setNativeValue(capInput!, '2'));
-      expect(latest?.divingMaxScorersPerTeamPerEvent).toBe(2);
+      // Place 1 is still blank, so the cap shows up on the draft, not on onChange.
+      expect(latestDraft?.divingMaxScorersPerTeamPerEvent).toBe(2);
     });
   });
 

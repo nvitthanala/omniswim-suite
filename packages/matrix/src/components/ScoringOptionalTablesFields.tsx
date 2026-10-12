@@ -11,14 +11,17 @@
 
 import { NumberField, SegmentedControl } from '@omniswim/ui';
 import type { ScoringSettings } from '@omniswim/core/types';
+import type { PlaceDraft } from '@omniswim/core/lib/scoringPlaceTables';
+import { NullableNumberField, NullablePlacePointInput } from './NullablePlacePointInput';
 
 export interface OptionalPointsField {
-  points: number[];
+  /** The table as a draft: `null` is a cell the coach has not filled in yet. */
+  points: PlaceDraft;
   enabled: boolean;
   enable: () => void;
   disable: () => void;
   setCount: (count: number) => void;
-  setPoint: (index: number, value: number) => void;
+  setPoint: (index: number, value: number | null) => void;
 }
 
 /**
@@ -43,14 +46,14 @@ export function PlacePointInput({ value, ariaLabel, onValueChange }: { value: nu
   );
 }
 
-/** One "Place N" points input grid, shared by the relay and diving tables. */
-function PlacePointsGrid({ points, ariaPrefix, onSetPoint }: { points: number[]; ariaPrefix: string; onSetPoint: (i: number, v: number) => void }) {
+/** One "Place N" points input grid, shared by the relay and diving tables. A blank cell is `null`. */
+function PlacePointsGrid({ points, ariaPrefix, onSetPoint }: { points: PlaceDraft; ariaPrefix: string; onSetPoint: (i: number, v: number | null) => void }) {
   return (
     <div className="grid grid-cols-4 md:grid-cols-6 gap-3">
       {points.map((pt, i) => (
         <div key={i} className="flex flex-col gap-1">
           <span className="text-[9px] text-theme-secondary font-mono">Place {i + 1}</span>
-          <PlacePointInput value={pt} ariaLabel={`${ariaPrefix} points for place ${i + 1}`} onValueChange={v => onSetPoint(i, v)} />
+          <NullablePlacePointInput value={pt} ariaLabel={`${ariaPrefix} points for place ${i + 1}`} onValueChange={v => onSetPoint(i, v)} />
         </div>
       ))}
     </div>
@@ -59,6 +62,15 @@ function PlacePointsGrid({ points, ariaPrefix, onSetPoint }: { points: number[];
 
 interface RelayScoringFieldsProps {
   relayTable: OptionalPointsField;
+}
+
+/**
+ * A saved `relayPoints: [0]` overrides the relay multiplier, so every relay
+ * scores 0. Older workspaces seeded exactly that. It is a legal stored table, so
+ * it loads as stored and never blocks save; the coach is told what it does.
+ */
+function isSingleZeroRelayTable(table: OptionalPointsField): boolean {
+  return table.enabled && table.points.length === 1 && table.points[0] === 0;
 }
 
 export function RelayScoringFields({ relayTable }: RelayScoringFieldsProps) {
@@ -86,17 +98,23 @@ export function RelayScoringFields({ relayTable }: RelayScoringFieldsProps) {
           </p>
           <div className="flex items-center gap-3 mb-2">
             <span className="text-[9px] text-theme-secondary font-mono">Relay places</span>
-            <input
-              type="number"
+            <NumberField
               min={1}
               max={24}
+              step={1}
               aria-label="Number of relay scoring places"
               value={relayTable.points.length}
-              onChange={e => relayTable.setCount(parseInt(e.target.value, 10) || 1)}
+              onValueChange={relayTable.setCount}
               className="glass-input w-20 font-mono text-xs"
             />
           </div>
           <PlacePointsGrid points={relayTable.points} ariaPrefix="Relay" onSetPoint={relayTable.setPoint} />
+          {isSingleZeroRelayTable(relayTable) ? (
+            <p role="status" className="mt-2 p-2 rounded-lg badge-warning text-ui-caption normal-case tracking-normal">
+              Relay table: one place, worth 0. Every relay scores 0 points, and the relay multiplier is ignored. Add
+              the relay places, or switch to Multiplier.
+            </p>
+          ) : null}
         </>
       ) : (
         <p className="text-[9px] text-theme-muted normal-case tracking-normal">
@@ -139,13 +157,13 @@ export function DivingPointsFields({ divingTable, divingMaxScorersPerTeamPerEven
           </p>
           <div className="flex items-center gap-3 mb-2">
             <span className="text-[9px] text-theme-secondary font-mono">Diving places</span>
-            <input
-              type="number"
+            <NumberField
               min={1}
               max={24}
+              step={1}
               aria-label="Number of diving scoring places"
               value={divingTable.points.length}
-              onChange={e => divingTable.setCount(parseInt(e.target.value, 10) || 1)}
+              onValueChange={divingTable.setCount}
               className="glass-input w-20 font-mono text-xs"
             />
           </div>
@@ -154,15 +172,13 @@ export function DivingPointsFields({ divingTable, divingMaxScorersPerTeamPerEven
             <label className="block text-ui-caption text-theme-secondary mb-1">
               Max scoring divers / team / event
             </label>
-            <input
-              type="number"
+            <NullableNumberField
               aria-label="Maximum scoring divers per team per diving event"
-              value={divingMaxScorersPerTeamPerEvent ?? ''}
+              min={1}
+              step={1}
+              value={divingMaxScorersPerTeamPerEvent ?? null}
               placeholder="No separate cap"
-              onChange={e => {
-                const raw = e.target.value;
-                onChangeMaxScorers(raw === '' ? undefined : parseInt(raw, 10) || undefined);
-              }}
+              onValueChange={v => onChangeMaxScorers(v ?? undefined)}
               className="glass-input w-full font-mono text-xs"
             />
           </div>
@@ -202,15 +218,13 @@ export function PerEventCapsFields({
           <label className="block text-ui-caption text-theme-secondary mb-1">
             Max individual scorers / team / event
           </label>
-          <input
-            type="number"
+          <NullableNumberField
             aria-label="Maximum individual scorers per team per event"
-            value={maxIndividualScorersPerTeamPerEvent ?? ''}
+            min={1}
+            step={1}
+            value={maxIndividualScorersPerTeamPerEvent ?? null}
             placeholder="No per-event cap"
-            onChange={e => {
-              const raw = e.target.value;
-              onChangeMaxIndividualScorersPerTeamPerEvent(raw === '' ? undefined : parseInt(raw, 10) || undefined);
-            }}
+            onValueChange={v => onChangeMaxIndividualScorersPerTeamPerEvent(v ?? undefined)}
             className="glass-input w-full font-mono text-xs"
           />
         </div>

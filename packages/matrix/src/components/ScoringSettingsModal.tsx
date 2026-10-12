@@ -2,9 +2,14 @@ import React, { useEffect, useState } from 'react';
 import { X, Save, Settings2 } from 'lucide-react';
 import { ScoringSettings } from '@omniswim/core/types';
 import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
+import type { FinalizeScoringDraftResult } from '@omniswim/core/lib/scoringPlaceTables';
 import { ScoringSettingsFields } from './ScoringSettingsFields';
+import { BlankPlacesNotice } from './NullablePlacePointInput';
 import { ScoringPresetManagerModal } from './ScoringPresetManagerModal';
 import { Button, Modal } from '@omniswim/ui';
+
+const BLANK_NOTICE_ID = 'scoring-settings-blank-places';
+const noop = () => undefined;
 
 interface Props {
   settings: ScoringSettings;
@@ -33,7 +38,12 @@ interface Props {
  * handling — the previous hand-rolled backdrop had none of those.
  */
 export default function ScoringSettingsModal({ settings, onSave, onClose, scoringView, onScoringViewChange, conference, pdfPlacePointsLocked, resultsCarryPdfPlacePoints }: Props) {
-  const [draft, setDraft] = useState<ScoringSettings>(() => mergeScoringSettings(settings));
+  // The latest finalized draft. Starts as the merged stored settings, untouched: an unedited form
+  // saves exactly what it loaded, and a blank place cell turns this into `{ ok: false }`.
+  const [result, setResult] = useState<FinalizeScoringDraftResult>(() => ({
+    ok: true,
+    settings: mergeScoringSettings(settings),
+  }));
   const [manageOpen, setManageOpen] = useState(false);
   const [presetListRefreshToken, setPresetListRefreshToken] = useState(0);
 
@@ -42,7 +52,7 @@ export default function ScoringSettingsModal({ settings, onSave, onClose, scorin
   // parent must not wipe unsaved edits.
   const settingsKey = JSON.stringify(settings);
   useEffect(() => {
-    setDraft(mergeScoringSettings(settings));
+    setResult({ ok: true, settings: mergeScoringSettings(settings) });
     // eslint-disable-next-line react-hooks/exhaustive-deps -- settingsKey is the content identity of `settings`
   }, [settingsKey]);
 
@@ -68,7 +78,8 @@ export default function ScoringSettingsModal({ settings, onSave, onClose, scorin
         <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-6 text-sm">
           <ScoringSettingsFields
             settings={settings}
-            onChange={setDraft}
+            onChange={noop}
+            onDraftChange={(_draft, next) => setResult(next)}
             conference={conference}
             pdfPlacePointsLocked={pdfPlacePointsLocked}
             resultsCarryPdfPlacePoints={resultsCarryPdfPlacePoints}
@@ -90,11 +101,21 @@ export default function ScoringSettingsModal({ settings, onSave, onClose, scorin
           />
         </div>
 
-        <div className="pt-6 mt-2 border-t border-theme-soft flex justify-end gap-3">
-          <Button variant="ghost" onClick={onClose}>
+        <div className="pt-6 mt-2 border-t border-theme-soft flex items-center justify-end gap-3">
+          {result.ok ? null : <BlankPlacesNotice blanks={result.blanks} id={BLANK_NOTICE_ID} />}
+          <Button variant="ghost" onClick={onClose} className="shrink-0">
             Cancel
           </Button>
-          <Button variant="primary" onClick={() => onSave(draft)} leadingIcon={<Save size={16} />}>
+          <Button
+            variant="primary"
+            className="shrink-0"
+            disabled={!result.ok}
+            aria-describedby={result.ok ? undefined : BLANK_NOTICE_ID}
+            onClick={() => {
+              if (result.ok) onSave(result.settings);
+            }}
+            leadingIcon={<Save size={16} />}
+          >
             Update scoring model
           </Button>
         </div>
