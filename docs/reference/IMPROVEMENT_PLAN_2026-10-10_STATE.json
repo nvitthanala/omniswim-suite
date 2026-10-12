@@ -36,10 +36,10 @@
     "U10": "answered",
     "U11": "answered",
     "U12": "answered; Claude in Chrome tools are not available in this session, so D2/D3/T4/A12/F9 wait for the end batch",
-    "S1": "pending",
-    "S2": "pending",
+    "S1": "built, awaiting gate rerun + commit (agent a4a12ccfffa3d7bce; 5 mutants caught; env OMNI_ALLOWED_HOSTS)",
+    "S2": "built, awaiting commit (pdfplumber==0.11.10; OMNI_NO_AUTO_INSTALL=1)",
     "S3": "built, awaiting commit (agent a825b3847674e68bd)",
-    "S4": "pending",
+    "S4": "built, awaiting commit (admin = email in OMNI_ADMIN_EMAILS; OMNI_INVITE_CODES 12+ chars; registration closed when both empty; limiter; Secure cookie off loopback)",
     "C1": "built, awaiting gate rerun + architect review + commit (agent aca3beddb23680687: 10 mutations killed; real totals unchanged; synthetic tied relays 40->37 and 34->33)",
     "C2": "built, awaiting commit",
     "C3": "pending",
@@ -67,7 +67,7 @@
     "T8": "pending",
     "T9": "pending",
     "T10": "pending",
-    "T11": "pending",
+    "T11": "built as part of the server agent (npm audit --omit=dev report-only step in ci.yml), awaiting commit",
     "T12": "pending",
     "X1": "pending",
     "X2": "pending",
@@ -123,7 +123,8 @@
     "H8": "pending",
     "H9": "pending",
     "H10": "done by the 2026-10-11 harness commit 74fe0748 (round-3 bug block moved to docs/archive/2026-08/ROUND3_KNOWN_BUGS.md)",
-    "H11": "pending"
+    "H11": "pending",
+    "parse-pdf-limit": "built, awaiting commit (OMNI_PARSE_PDF_MAX_MB default 25; 413/400)"
   },
   "userDecisions": {
     "workflow": {
@@ -261,7 +262,12 @@
     "prelimsProjection.ts:107 still reads past-the-end table as 0 via pointsForPlacement (C7 owns it)",
     "e2e ui-ia.spec.ts failed once in the scoring agent run (step differed between runs); not attributed, rerun with all agents idle",
     "stale docs: docs/reference/THEORETICAL_MEET_PLAN.md:95 and backlog item A10 (relay tie text)",
-    "Postgres tests ran on PGlite only; CI real-Postgres P7 CREATE DATABASE test and the 8-way race test unverified locally"
+    "Postgres tests ran on PGlite only; CI real-Postgres P7 CREATE DATABASE test and the 8-way race test unverified locally",
+    "/api/parse-psych-pdf has the same 50 MB body exposure as parse-pdf had",
+    "README and environment docs need OMNI_ALLOWED_HOSTS, OMNI_INVITE_CODES, OMNI_ADMIN_EMAILS, OMNI_NO_AUTO_INSTALL, OMNI_PARSE_PDF_MAX_MB (H3)",
+    "A Secure cookie off loopback over plain HTTP is dropped by browsers (document in README)",
+    "global pdfplumber 0.11.9 vs venv/pin 0.11.10",
+    "production static serving has no host check (Vite allowedHosts covers dev only)"
   ],
   "limitEvents": [
     {
