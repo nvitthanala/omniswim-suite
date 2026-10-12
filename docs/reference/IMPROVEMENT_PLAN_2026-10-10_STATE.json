@@ -38,25 +38,25 @@
     "U12": "answered; Claude in Chrome tools are not available in this session, so D2/D3/T4/A12/F9 wait for the end batch",
     "S1": "pending",
     "S2": "pending",
-    "S3": "pending",
+    "S3": "built, awaiting commit (agent a825b3847674e68bd)",
     "S4": "pending",
-    "C1": "pending",
-    "C2": "pending",
+    "C1": "built, awaiting gate rerun + architect review + commit (agent aca3beddb23680687: 10 mutations killed; real totals unchanged; synthetic tied relays 40->37 and 34->33)",
+    "C2": "built, awaiting commit",
     "C3": "pending",
     "C4": "built, awaiting orchestrator gate rerun + architect review + commit (python agent a70e2fae465e980e9 reported 86 passed/0 failed/1 skipped, pytest 37, ruff clean)",
     "C5": "python half built (relay_split_source + parse_warnings on each relay leg row; top-level warnings roll-up in parse_meet.py); TypeScript half (parsingRoutes.ts pipeline:legacy flag, import-UI warning) pending until the server agent is done",
-    "C6": "pending",
+    "C6": "core contract built (null past table end); settings UI blank-cell save block pending architect design (af176a27510a0f9d6)",
     "C7": "pending",
     "C8": "pending",
     "A7": "pending",
     "A12": "pending",
-    "P1": "pending",
-    "P2": "pending",
-    "P3": "pending",
+    "P1": "built (PUT only; createWorkspaceSchema still passthrough), awaiting commit",
+    "P2": "built, awaiting commit",
+    "P3": "server half built; client half + two-page e2e blocked on architect design (overlapping own saves; adopt-new-version policy)",
     "P4": "pending",
     "P5": "pending",
     "P6": "pending",
-    "P7": "pending",
+    "P7": "built, awaiting commit; note server.ts falls back from SQLite to JSON on any error, which would hide the P7 refusal",
     "T1": "pending",
     "T2": "built, awaiting commit (backend/pyproject.toml, requirements-dev.txt, CI step)",
     "T3": "pending",
@@ -246,12 +246,21 @@
     "Then wave 2 as in resumeOrder."
   ],
   "openForArchitect": [
-    "C4: in PDF-place-points mode (usePdfPlacePoints, or >=8 rows with pdf_points) printed points are still trusted when the clock is unreadable; the agent added a warning only. Decide: keep (team totals match the meet rankings) or override."
+    "C4: in PDF-place-points mode (usePdfPlacePoints, or >=8 rows with pdf_points) printed points are still trusted when the clock is unreadable; the agent added a warning only. Decide: keep (team totals match the meet rankings) or override.",
+    "C6 blank-cell representation; P3 client overlap/adopt policy; individual tie key gender; scoring diff review (dispatched as af176a27510a0f9d6)"
   ],
   "foundNotFixed": [
     "backend: timed-but-ineligible rows in a mixed group are emitted twice (extend(ineligible) then extend(group))",
     "backend/pdf_parser.py: broad except Exception near the relay payload build (now flagged by relay_split_source legacy)",
     "backend: clock like 1:02:03.00 now reads None (used to read 62.0)",
-    "Toast.tsx timer fires after teardown (flaky unhandled error in the skip-budget gate) - folded into X3"
+    "Toast.tsx timer fires after teardown (flaky unhandled error in the skip-budget gate) - folded into X3",
+    "server.ts falls back SQLite->JSON on any error: a P7 SCHEMA_TOO_NEW refusal becomes a silent switch to meets.json (server cluster file; decide in wave 2)",
+    "isAdmin is not wired: backup list/restore return 403 under AUTH_REQUIRED; the app has no admin concept (S4 invite-only needs the same notion)",
+    "createWorkspaceSchema is still passthrough (P1 covered PUT only)",
+    "individual tie key (buildIndividualEventGroups) has no gender; architect checking whether event names carry it",
+    "prelimsProjection.ts:107 still reads past-the-end table as 0 via pointsForPlacement (C7 owns it)",
+    "e2e ui-ia.spec.ts failed once in the scoring agent run (step differed between runs); not attributed, rerun with all agents idle",
+    "stale docs: docs/reference/THEORETICAL_MEET_PLAN.md:95 and backlog item A10 (relay tie text)",
+    "Postgres tests ran on PGlite only; CI real-Postgres P7 CREATE DATABASE test and the 8-way race test unverified locally"
   ]
 }
