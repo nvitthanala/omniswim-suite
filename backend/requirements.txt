@@ -1,0 +1,13 @@
+# Python dependencies for the PDF parsers in this folder.
+#
+# pdfplumber is pinned to an exact version on purpose. An unpinned install takes
+# whatever is newest the day the server first starts, and a parser upgrade can
+# change extracted text without any change in this repository. pdfplumber itself
+# pins pdfminer.six exactly (the text extractor), so this one line fixes both.
+# Pillow and pypdfium2 are lower bounds in pdfplumber's own metadata; they do not
+# affect text extraction.
+#
+# To upgrade: change the version here, rerun the parser tests against the real
+# PDFs, and commit both together. Installed by apps/shell/lib/pythonEnv.ts on
+# server start and by .github/workflows/ci.yml.
+pdfplumber==0.11.10
