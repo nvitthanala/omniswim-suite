@@ -180,7 +180,7 @@
   "waves": [
     {
       "id": "wave-1",
-      "status": "dispatched 2026-10-12",
+      "status": "in flight 2026-10-12; 4 background executors editing the shared tree; nothing integrated or committed yet",
       "agents": [
         {
           "scope": "server/auth cluster",
@@ -213,8 +213,25 @@
           ],
           "agent": "executor",
           "review": "architect after"
+        },
+        {
+          "scope": "python backend",
+          "items": [
+            "C4",
+            "C5 (python half)",
+            "T2"
+          ],
+          "agent": "executor",
+          "note": "C5 TypeScript half (parsingRoutes.ts pipeline:legacy flag and import-UI warning) is held until the server cluster agent is done"
         }
       ]
     }
+  ],
+  "pausedAt": "2026-10-12: user asked to pause for a connection gap. No new dispatches. No agent report has been reviewed, no gate rerun, no commit made for wave 1.",
+  "onResume": [
+    "git status in oyster; agents may have left partial diffs. Do not re-spawn before checking.",
+    "Wait for or read the 4 executor completion notices (server/auth, workspace persistence, core scoring C1+C6+C2, python backend). Resume a stopped one with SendMessage, not a fresh brief.",
+    "With every agent idle: npm run lint, npx vitest run, node scripts/run-tests.mjs, npm run test:harness. Then architect review of the C1/C6/C2 diff, then path-scoped commits per item.",
+    "Then wave 2 (C3,C7,C8 | C5 TS half | P4,P5,P6 then U3 delete) as in resumeOrder."
   ]
 }
