@@ -13,28 +13,62 @@ import type { Workspace } from '../../../packages/core/src/types.ts';
 import { JsonStore } from './jsonStore.ts';
 import { WorkspaceService } from '../../../packages/db/src/WorkspaceService.ts';
 import { PgWorkspaceService } from '../../../packages/db/src/PgWorkspaceService.ts';
-import type { WorkspaceScope } from '../../../packages/db/src/workspacePersistence.ts';
+import {
+  duplicateWorkspaceError,
+  stripProtectedPatchFields,
+  versionConflictError,
+  workspaceVersionOf,
+  type WorkspaceScope,
+} from '../../../packages/db/src/workspacePersistence.ts';
 
 export type SnapshotMeta = { id: string; createdAt: number; label: string };
 
 export type RepoKind = 'json' | 'sqlite' | 'postgres';
 
+/**
+ * Every method that reads or writes tenant data takes the caller's `scope` as its
+ * LAST argument. Pass it on every call. Leaving it off falls back to whatever
+ * `setScope` last stored on the repo, which is shared by every in-flight request;
+ * that fallback exists only for scripts and older tests.
+ *
+ * JsonRepo has one tenant and ignores `scope`.
+ */
 export interface WorkspaceRepo {
   readonly kind: RepoKind;
   init(): Promise<void>;
-  list(): Promise<Workspace[]>;
-  create(ws: Workspace): Promise<Workspace>;
-  update(id: string, patch: Partial<Workspace>, expectedVersion?: number): Promise<Workspace | undefined>;
-  remove(id: string): Promise<void>;
-  backup(label?: string): Promise<string>;
+  list(scope?: WorkspaceScope): Promise<Workspace[]>;
+  /**
+   * Rejects with `code: 'DUPLICATE_WORKSPACE_ID'` when the id is already taken, by any
+   * tenant. The stored copy always starts at version 1.
+   */
+  create(ws: Workspace, scope?: WorkspaceScope): Promise<Workspace>;
+  /**
+   * `id`, `version` and `createdAt` in `patch` are ignored. When `expectedVersion` is
+   * given and is not the stored version, rejects with `code: 'VERSION_CONFLICT'` and
+   * writes nothing. Resolves undefined when the id is not in `scope`.
+   */
+  update(
+    id: string,
+    patch: Partial<Workspace>,
+    expectedVersion?: number,
+    scope?: WorkspaceScope
+  ): Promise<Workspace | undefined>;
+  remove(id: string, scope?: WorkspaceScope): Promise<void>;
+  /** Writes the workspaces visible to `scope` (everything when it is empty). */
+  backup(label?: string, scope?: WorkspaceScope): Promise<string>;
   listBackups(): Promise<BackupFileMeta[]>;
-  /** Replace every workspace with the contents of a generated backup. Returns how many were restored. */
+  /**
+   * Replace EVERY workspace, for every tenant, with the contents of a generated
+   * backup. Returns how many were restored. There is no scoped form: callers must
+   * decide who may do this (the route requires an admin under AUTH_REQUIRED).
+   */
   restoreBackup(file: string): Promise<number>;
-  snapshot(id: string, label: string): Promise<SnapshotMeta | undefined>;
-  listSnapshots(id: string): Promise<SnapshotMeta[]>;
-  /** Read-only snapshot content (no restore). Undefined on JSON backend / unknown id. */
-  getSnapshotContent(snapshotId: string): Promise<Workspace | undefined>;
-  restoreSnapshot(snapshotId: string): Promise<Workspace | undefined>;
+  snapshot(id: string, label: string, scope?: WorkspaceScope): Promise<SnapshotMeta | undefined>;
+  listSnapshots(id: string, scope?: WorkspaceScope): Promise<SnapshotMeta[]>;
+  /** Read-only snapshot content (no restore). Undefined on JSON backend, unknown id, or out of scope. */
+  getSnapshotContent(snapshotId: string, scope?: WorkspaceScope): Promise<Workspace | undefined>;
+  restoreSnapshot(snapshotId: string, scope?: WorkspaceScope): Promise<Workspace | undefined>;
+  /** Default scope for calls that pass none. The server does not use it. */
   setScope?(scope: WorkspaceScope): void;
 }
 
@@ -239,19 +273,29 @@ export class JsonRepo implements WorkspaceRepo {
   init() {
     return this.store.init();
   }
-  list() {
-    return this.store.read();
+  /** A document with no `version` is revision 1; the file is not rewritten to say so. */
+  async list() {
+    return (await this.store.read()).map(w => ({ ...w, version: workspaceVersionOf(w) }) as Workspace);
   }
   async create(ws: Workspace) {
-    await this.store.mutate(list => [...list, ws]);
-    return ws;
+    const stored = { ...ws, version: 1 } as Workspace;
+    // The existence check and the append share one write-lock turn, so two creates of
+    // one id cannot both pass it.
+    await this.store.mutate(list => {
+      if (list.some(w => w.id === ws.id)) throw duplicateWorkspaceError(ws.id);
+      return [...list, stored];
+    });
+    return stored;
   }
-  async update(id: string, patch: Partial<Workspace>) {
+  async update(id: string, patch: Partial<Workspace>, expectedVersion?: number) {
     let updated: Workspace | undefined;
+    const fields = stripProtectedPatchFields(patch);
     await this.store.mutate(list =>
       list.map(w => {
         if (w.id !== id) return w;
-        updated = { ...w, ...patch };
+        const current = workspaceVersionOf(w);
+        if (expectedVersion != null && current !== expectedVersion) throw versionConflictError();
+        updated = { ...w, ...fields, version: current + 1 } as Workspace;
         return updated;
       })
     );
@@ -282,7 +326,20 @@ export class JsonRepo implements WorkspaceRepo {
     if (full === null) throw new Error(`Not a backup this app wrote: ${file}`);
     const workspaces = await readBackupWorkspaces(full);
     await this.backup('pre-restore');
-    await this.store.mutate(() => workspaces);
+    // A restore is a change to every workspace it touches: an id that exists moves
+    // forward, so a tab holding the old revision is refused instead of overwriting
+    // what was just restored.
+    await this.store.mutate(current => {
+      const before = new Map(current.map(w => [w.id, workspaceVersionOf(w)]));
+      return workspaces.map(w => {
+        const prev = before.get(w.id);
+        const restored = workspaceVersionOf(w);
+        return {
+          ...w,
+          version: prev === undefined ? restored : Math.max(prev, restored) + 1,
+        } as Workspace;
+      });
+    });
     return workspaces.length;
   }
   async snapshot() {
@@ -339,20 +396,20 @@ export class SqliteRepo implements WorkspaceRepo {
       for (const ws of this.seed()) this.service.createWorkspace(ws);
     }
   }
-  async list() {
-    return this.service.listWorkspaces();
+  async list(scope?: WorkspaceScope) {
+    return this.service.listWorkspaces(scope);
   }
-  async create(ws: Workspace) {
-    return this.service.createWorkspace(ws);
+  async create(ws: Workspace, scope?: WorkspaceScope) {
+    return this.service.createWorkspace(ws, undefined, scope);
   }
-  async update(id: string, patch: Partial<Workspace>, expectedVersion?: number) {
-    return this.service.updateWorkspace(id, patch, expectedVersion);
+  async update(id: string, patch: Partial<Workspace>, expectedVersion?: number, scope?: WorkspaceScope) {
+    return this.service.updateWorkspace(id, patch, expectedVersion, scope);
   }
-  async remove(id: string) {
-    this.service.deleteWorkspace(id);
+  async remove(id: string, scope?: WorkspaceScope) {
+    this.service.deleteWorkspace(id, scope);
   }
-  async backup(label = 'manual') {
-    return writeJsonBackup(this.backupDir, this.service.exportAll(), label);
+  async backup(label = 'manual', scope?: WorkspaceScope) {
+    return writeJsonBackup(this.backupDir, this.service.exportAll(scope), label);
   }
 
   async listBackups() {
@@ -372,23 +429,24 @@ export class SqliteRepo implements WorkspaceRepo {
     return restoreBackupIntoService(
       this.backupDir,
       file,
-      () => this.backup('pre-restore'),
+      // The restore replaces every tenant, so the safety copy must hold every tenant.
+      () => this.backup('pre-restore', {}),
       workspaces => this.service.replaceAll(workspaces)
     );
   }
-  async snapshot(id: string, label: string) {
-    const res = this.service.createSnapshot(id, label);
+  async snapshot(id: string, label: string, scope?: WorkspaceScope) {
+    const res = this.service.createSnapshot(id, label, scope);
     if (!res) return undefined;
     return { id: res.id, createdAt: Date.now(), label };
   }
-  async listSnapshots(id: string) {
-    return this.service.listSnapshots(id);
+  async listSnapshots(id: string, scope?: WorkspaceScope) {
+    return this.service.listSnapshots(id, scope);
   }
-  async getSnapshotContent(snapshotId: string) {
-    return this.service.getSnapshotContent(snapshotId);
+  async getSnapshotContent(snapshotId: string, scope?: WorkspaceScope) {
+    return this.service.getSnapshotContent(snapshotId, scope);
   }
-  async restoreSnapshot(snapshotId: string) {
-    return this.service.restoreSnapshot(snapshotId);
+  async restoreSnapshot(snapshotId: string, scope?: WorkspaceScope) {
+    return this.service.restoreSnapshot(snapshotId, scope);
   }
 }
 
@@ -409,20 +467,20 @@ export class PgRepo implements WorkspaceRepo {
   async init() {
     await this.service.init();
   }
-  async list() {
-    return this.service.listWorkspaces();
+  async list(scope?: WorkspaceScope) {
+    return this.service.listWorkspaces(scope);
   }
-  async create(ws: Workspace) {
-    return this.service.createWorkspace(ws);
+  async create(ws: Workspace, scope?: WorkspaceScope) {
+    return this.service.createWorkspace(ws, undefined, scope);
   }
-  async update(id: string, patch: Partial<Workspace>, expectedVersion?: number) {
-    return this.service.updateWorkspace(id, patch, expectedVersion);
+  async update(id: string, patch: Partial<Workspace>, expectedVersion?: number, scope?: WorkspaceScope) {
+    return this.service.updateWorkspace(id, patch, expectedVersion, scope);
   }
-  async remove(id: string) {
-    await this.service.deleteWorkspace(id);
+  async remove(id: string, scope?: WorkspaceScope) {
+    await this.service.deleteWorkspace(id, scope);
   }
-  async backup(label = 'manual') {
-    return writeJsonBackup(this.backupDir, await this.service.exportAll(), label);
+  async backup(label = 'manual', scope?: WorkspaceScope) {
+    return writeJsonBackup(this.backupDir, await this.service.exportAll(scope), label);
   }
 
   async listBackups() {
@@ -442,22 +500,23 @@ export class PgRepo implements WorkspaceRepo {
     return restoreBackupIntoService(
       this.backupDir,
       file,
-      () => this.backup('pre-restore'),
+      // The restore replaces every tenant, so the safety copy must hold every tenant.
+      () => this.backup('pre-restore', {}),
       workspaces => this.service.replaceAll(workspaces)
     );
   }
-  async snapshot(id: string, label: string) {
-    const res = await this.service.createSnapshot(id, label);
+  async snapshot(id: string, label: string, scope?: WorkspaceScope) {
+    const res = await this.service.createSnapshot(id, label, scope);
     if (!res) return undefined;
     return { id: res.id, createdAt: Date.now(), label };
   }
-  async listSnapshots(id: string) {
-    return this.service.listSnapshots(id);
+  async listSnapshots(id: string, scope?: WorkspaceScope) {
+    return this.service.listSnapshots(id, scope);
   }
-  async getSnapshotContent(snapshotId: string) {
-    return this.service.getSnapshotContent(snapshotId);
+  async getSnapshotContent(snapshotId: string, scope?: WorkspaceScope) {
+    return this.service.getSnapshotContent(snapshotId, scope);
   }
-  async restoreSnapshot(snapshotId: string) {
-    return this.service.restoreSnapshot(snapshotId);
+  async restoreSnapshot(snapshotId: string, scope?: WorkspaceScope) {
+    return this.service.restoreSnapshot(snapshotId, scope);
   }
 }

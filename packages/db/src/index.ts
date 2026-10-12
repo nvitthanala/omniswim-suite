@@ -14,3 +14,19 @@ export {
 } from './schema';
 export { PG_SCHEMA_VERSION, CREATE_PG_TABLES_SQL } from './pgSchema';
 export type { WorkspaceScope } from './workspacePersistence';
+export {
+  VERSION_CONFLICT_CODE,
+  DUPLICATE_WORKSPACE_ID_CODE,
+  PROTECTED_PATCH_FIELDS,
+  duplicateWorkspaceError,
+  versionConflictError,
+  stripProtectedPatchFields,
+  workspaceVersionOf,
+  type CodedError,
+} from './workspacePersistence';
+export {
+  SCHEMA_TOO_NEW_CODE,
+  SCHEMA_UNREADABLE_CODE,
+  SchemaVersionError,
+  assertSchemaNotNewer,
+} from './schemaGuard';

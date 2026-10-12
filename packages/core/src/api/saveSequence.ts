@@ -33,3 +33,23 @@ export interface SaveToken {
 
 export const CLIENT_ID_PATTERN = /^[A-Za-z0-9_-]{8,64}$/;
 export const SEQ_PATTERN = /^[1-9]\d{0,14}$/;
+
+/**
+ * Optimistic concurrency, which is a different question from save order above.
+ *
+ * Order asks "did these two saves from one page arrive the wrong way round?".
+ * Version asks "did somebody ELSE change this workspace since I loaded it?" — a
+ * second tab, a second user on a shared team, or a script. Every workspace the
+ * server returns carries a `version`; a client that echoes the one it last saw in
+ * this header gets a 409 `VERSION_CONFLICT` instead of silently overwriting the
+ * newer copy.
+ *
+ * A header, for the same reason as the sequence headers: the body stays a pure
+ * workspace patch. (A `version` field in the body is still honoured as the
+ * expected version, for older callers; it is never written into the workspace.)
+ */
+export const EXPECTED_VERSION_HEADER = 'X-Omni-Expected-Version';
+/** `code` in the 409 body of a save refused because the stored version moved on. */
+export const VERSION_CONFLICT_CODE = 'VERSION_CONFLICT';
+/** `code` in the 409 body of a create refused because the id already exists. */
+export const DUPLICATE_WORKSPACE_ID_CODE = 'DUPLICATE_WORKSPACE_ID';

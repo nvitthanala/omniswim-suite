@@ -7,6 +7,7 @@
  * server-side request validation.
  */
 import { z } from 'zod';
+import type { Workspace } from '../types';
 
 export const genderSchema = z.enum(['Men', 'Women']);
 
@@ -67,8 +68,73 @@ export const createWorkspaceSchema = z
   })
   .passthrough();
 
-/** Body accepted by PUT /api/workspaces/:id (partial patch). */
-export const updateWorkspaceSchema = z.object({}).passthrough();
+/**
+ * One element of a workspace collection: an object, nothing more. Deliberately NOT
+ * `swimmerResultSchema` and friends — those require fields (`rank`, `classYear`,
+ * `points`) that real saved rows lack, and a stricter element schema would turn a
+ * valid save into a 400. The element's own fields pass through untouched.
+ */
+const rowSchema = z.object({}).passthrough();
+const rowsSchema = z.array(rowSchema);
+const recordSchema = z.object({}).passthrough();
+
+/**
+ * Fields of a workspace a PUT may set: an ALLOWLIST. `id`, `createdAt` and
+ * `version` are not in it, so they are stripped, and so is anything else the
+ * client invents. The server owns identity, creation time and the revision counter.
+ *
+ * Why each is the shape it is:
+ * - Collections are arrays of objects, so `"menResults": {}` or `[1, 2]` is a 400
+ *   instead of a document the next read cannot map over.
+ * - `activeEntryIds` is the one collection of strings, not objects.
+ * - Keys left out of a patch stay out: nothing here has a default, because a default
+ *   would write `[]` over a collection the patch never mentioned.
+ */
+export const workspacePatchShape = {
+  name: z.string(),
+  menResults: rowsSchema,
+  womenResults: rowsSchema,
+  sourceMenResults: rowsSchema,
+  sourceWomenResults: rowsSchema,
+  recruits: rowsSchema,
+  scoringSettings: recordSchema,
+  conference: z.string(),
+  deletedSwimmers: rowsSchema,
+  scorerRosterOverrides: rowsSchema,
+  officialTeamScores: recordSchema,
+  relayLegOverrides: rowsSchema,
+  loadedMeet: recordSchema,
+  psychMenResults: rowsSchema,
+  psychWomenResults: rowsSchema,
+  loadedPsych: recordSchema,
+  meetEntryPlans: rowsSchema,
+  entryPlanMode: z.enum(['overlay', 'plan_sheet']),
+  scoringView: z.enum(['merged', 'pdf_only']),
+  activeEntryIds: z.array(z.string()),
+  athleteHistory: rowsSchema,
+  raceAnalyses: rowsSchema,
+  historySources: rowsSchema,
+  relayLegCredits: rowsSchema,
+  athleteAliases: rowsSchema,
+} as const;
+
+/** Body accepted by PUT /api/workspaces/:id (partial patch). Unknown and protected keys are dropped. */
+export const updateWorkspaceSchema = z.object(workspacePatchShape).partial().strip();
+
+/**
+ * Compile-time guard: every `Workspace` field except `id` and `createdAt` is in the
+ * allowlist, and nothing else is. Add a field to `Workspace` without adding it to
+ * `workspacePatchShape` and `tsc` fails here, instead of the field silently never
+ * saving. (e2e alone would not catch a field the UI sends rarely.)
+ */
+type PatchKeys = keyof typeof workspacePatchShape;
+type WorkspacePatchableKeys = Exclude<keyof Workspace, 'id' | 'createdAt'>;
+export type WorkspacePatchCoversWorkspace = [WorkspacePatchableKeys] extends [PatchKeys]
+  ? [PatchKeys] extends [WorkspacePatchableKeys]
+    ? true
+    : { error: 'workspacePatchShape has a key Workspace does not'; extra: Exclude<PatchKeys, WorkspacePatchableKeys> }
+  : { error: 'Workspace has a field workspacePatchShape does not'; missing: Exclude<WorkspacePatchableKeys, PatchKeys> };
+export const workspacePatchCoversWorkspace: WorkspacePatchCoversWorkspace = true;
 
 /** Body accepted by POST /api/parse-pdf. */
 export const parsePdfSchema = z.object({

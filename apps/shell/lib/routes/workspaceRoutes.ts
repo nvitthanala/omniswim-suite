@@ -8,7 +8,7 @@
  * before. Registration order relative to the other route modules is
  * unchanged in `server.ts`.
  */
-import type { Express, RequestHandler } from 'express';
+import type { Express, RequestHandler, Response } from 'express';
 import path from 'path';
 import { v4 as uuidv4 } from 'uuid';
 import { Workspace, ScoringSettings } from '../../../../packages/core/src/types.ts';
@@ -19,11 +19,18 @@ import {
 } from '../../../../packages/core/src/schemas/workspace.ts';
 import { buildMeetReportHtml } from '../../../../packages/core/src/lib/reportBuilder.ts';
 import type { WorkspaceRepo } from '../workspaceRepo.ts';
-import { applyWorkspaceUpdateWithGuard } from '../dataLossGuard.ts';
+import { applyWorkspaceUpdateWithGuard, type WorkspaceUpdateRepo } from '../dataLossGuard.ts';
 import { SaveSequencer, parseSaveToken } from '../saveSequencer.ts';
-import { SAVE_UNCHECKED_HEADER, STALE_SAVE_CODE } from '../../../../packages/core/src/api/saveSequence.ts';
+import {
+  DUPLICATE_WORKSPACE_ID_CODE,
+  EXPECTED_VERSION_HEADER,
+  SAVE_UNCHECKED_HEADER,
+  STALE_SAVE_CODE,
+  VERSION_CONFLICT_CODE,
+} from '../../../../packages/core/src/api/saveSequence.ts';
 import type { AuthedRequest } from '../authMiddleware.ts';
 import type { AuthService, ShareLinkService } from '../../../../packages/db/src/AuthService.ts';
+import type { WorkspaceScope } from '../../../../packages/db/src/workspacePersistence.ts';
 
 export interface WorkspaceRoutesDeps {
   repo: WorkspaceRepo;
@@ -35,23 +42,72 @@ export interface WorkspaceRoutesDeps {
   defaultScoringSettings: ScoringSettings;
   /** Optional: tests inject one to inspect it. Production gets a private instance. */
   saveSequencer?: SaveSequencer;
+  /**
+   * Who may list backups and restore one, when `AUTH_REQUIRED`. Defaults to nobody.
+   *
+   * A restore replaces EVERY workspace of EVERY user, and a backup file is not tagged
+   * with the tenant that wrote it, so neither is a per-user operation. The app has no
+   * administrator concept yet (`AuthUser` has no role, and every account owns its own
+   * team), so until the server wires one in, these two routes answer 403 under
+   * `AUTH_REQUIRED`. Without `AUTH_REQUIRED` the instance is single-tenant and they
+   * behave as they always did.
+   */
+  isAdmin?: (req: AuthedRequest) => boolean;
+}
+
+/** The tenant a request acts as. Empty (everything) only when there is no signed-in user. */
+export function workspaceScopeOf(req: AuthedRequest): WorkspaceScope {
+  return req.user ? { ownerId: req.user.id, teamId: req.user.teamId } : {};
+}
+
+/**
+ * The slice of the repo the data-loss guard calls, bound to one request's scope.
+ * The guard predates per-call scope and takes `list()`/`backup()`/`update()` bare, so
+ * it gets this adapter rather than the shared repo.
+ */
+function scopedUpdateRepo(repo: WorkspaceRepo, scope: WorkspaceScope): WorkspaceUpdateRepo {
+  return {
+    list: () => repo.list(scope),
+    backup: label => repo.backup(label, scope),
+    update: (id, patch, expectedVersion) => repo.update(id, patch, expectedVersion, scope),
+  };
+}
+
+const EXPECTED_VERSION_PATTERN = /^[1-9]\d{0,14}$/;
+
+type ExpectedVersion = { kind: 'none' } | { kind: 'ok'; version: number } | { kind: 'invalid'; reason: string };
+
+/**
+ * The version the caller says it last saw. The header is the contract; a numeric
+ * `version` in the body is the older spelling and still counts. A malformed header
+ * is refused rather than ignored: ignoring it would turn a checked save into an
+ * unchecked one without anyone knowing.
+ */
+function readExpectedVersion(req: AuthedRequest): ExpectedVersion {
+  const raw = req.headers[EXPECTED_VERSION_HEADER.toLowerCase()];
+  if (raw !== undefined) {
+    const value = Array.isArray(raw) ? raw.join(',') : raw;
+    if (!EXPECTED_VERSION_PATTERN.test(value)) {
+      return { kind: 'invalid', reason: `${EXPECTED_VERSION_HEADER} must be a positive integer` };
+    }
+    return { kind: 'ok', version: Number(value) };
+  }
+  const body = req.body?.version;
+  if (typeof body === 'number' && Number.isInteger(body) && body >= 1) return { kind: 'ok', version: body };
+  return { kind: 'none' };
+}
+
+function errorCode(err: unknown): string | undefined {
+  return err instanceof Error ? (err as Error & { code?: string }).code : undefined;
 }
 
 /**
  * Registers every workspace-data route in three cohesive groups (CRUD, backups
  * and snapshots, share links and the printable report). Split only to keep
  * each function under the repo's line-count ceiling — registration order is
- * unchanged, and every group shares `applyRepoScope`/`normalizeWorkspaceResults`.
+ * unchanged, and every group scopes each call with `workspaceScopeOf(req)`.
  */
 export function registerWorkspaceRoutes(app: Express, deps: WorkspaceRoutesDeps): void {
-  const { repo } = deps;
-
-  function applyRepoScope(req: AuthedRequest): void {
-    if (req.user && repo.setScope) {
-      repo.setScope({ ownerId: req.user.id, teamId: req.user.teamId });
-    }
-  }
-
   function normalizeWorkspaceResults(ws: Workspace): Workspace {
     return {
       ...ws,
@@ -60,15 +116,14 @@ export function registerWorkspaceRoutes(app: Express, deps: WorkspaceRoutesDeps)
     };
   }
 
-  registerWorkspaceCrudRoutes(app, deps, applyRepoScope, normalizeWorkspaceResults);
-  registerWorkspaceBackupAndSnapshotRoutes(app, deps, applyRepoScope);
-  registerWorkspaceShareAndReportRoutes(app, deps, applyRepoScope, normalizeWorkspaceResults);
+  registerWorkspaceCrudRoutes(app, deps, normalizeWorkspaceResults);
+  registerWorkspaceBackupAndSnapshotRoutes(app, deps);
+  registerWorkspaceShareAndReportRoutes(app, deps, normalizeWorkspaceResults);
 }
 
 function registerWorkspaceCrudRoutes(
   app: Express,
   deps: WorkspaceRoutesDeps,
-  applyRepoScope: (req: AuthedRequest) => void,
   normalizeWorkspaceResults: (ws: Workspace) => Workspace
 ): void {
   const { repo, AUTH_REQUIRED, requireAuth, optionalAuth, defaultScoringSettings } = deps;
@@ -76,11 +131,11 @@ function registerWorkspaceCrudRoutes(
   /** Per user and workspace: two tenants never share a recorded sequence. */
   const sequenceKey = (req: AuthedRequest) => `${req.user?.id ?? ''}|${req.params.id}`;
   const uncheckedWarned = new Set<string>();
+  const droppedKeysWarned = new Set<string>();
 
   app.get('/api/workspaces', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     try {
-      applyRepoScope(req);
-      const data = await repo.list();
+      const data = await repo.list(workspaceScopeOf(req));
       res.json(data.map(normalizeWorkspaceResults));
     } catch (err) {
       res.status(500).json({ error: 'Failed to read workspaces', details: String(err) });
@@ -92,7 +147,9 @@ function registerWorkspaceCrudRoutes(
     if (!parsed.success) {
       return res.status(400).json({ error: 'Invalid workspace payload', details: parsed.error.issues });
     }
-    const body = parsed.data as Record<string, unknown> & Partial<Workspace>;
+    // `version` is the store's, not the client's: a restored workspace arrives carrying
+    // the revision it had, which must not become the new document's revision.
+    const { version: _clientVersion, ...body } = parsed.data as Record<string, unknown> & Partial<Workspace>;
     const newWorkspace: Workspace = {
       id: typeof body.id === 'string' ? body.id : uuidv4(),
       name: body.name || 'New Workspace',
@@ -105,10 +162,15 @@ function registerWorkspaceCrudRoutes(
       ...body,
     };
     try {
-      applyRepoScope(req);
-      const created = await repo.create(newWorkspace);
+      const created = await repo.create(newWorkspace, workspaceScopeOf(req));
       res.json(created);
     } catch (err) {
+      if (errorCode(err) === DUPLICATE_WORKSPACE_ID_CODE) {
+        return res.status(409).json({
+          error: 'A workspace with this id already exists.',
+          code: DUPLICATE_WORKSPACE_ID_CODE,
+        });
+      }
       res.status(500).json({ error: 'Failed to create workspace', details: String(err) });
     }
   });
@@ -118,8 +180,13 @@ function registerWorkspaceCrudRoutes(
     if (!parsed.success) {
       return res.status(400).json({ error: 'Invalid workspace patch', details: parsed.error.issues });
     }
-    const expectedVersion =
-      typeof req.body?.version === 'number' ? (req.body.version as number) : undefined;
+    const expected = readExpectedVersion(req);
+    if (expected.kind === 'invalid') {
+      return res
+        .status(400)
+        .json({ error: 'Invalid expected version', code: 'BAD_EXPECTED_VERSION', details: expected.reason });
+    }
+    const expectedVersion = expected.kind === 'ok' ? expected.version : undefined;
     // Out-of-order save protection. A malformed sequence is a client bug and is
     // refused loudly; an absent one is an old client or a script and still saves.
     const sequence = parseSaveToken(req.headers);
@@ -130,15 +197,23 @@ function registerWorkspaceCrudRoutes(
     }
     try {
       const patch = parsed.data as Partial<Workspace>;
+      // The allowlist drops what it does not know. Say so, once per key, so a field
+      // the schema missed shows up in the log instead of vanishing.
+      for (const key of Object.keys(req.body ?? {})) {
+        if (!(key in patch) && !['id', 'version', 'createdAt'].includes(key) && !droppedKeysWarned.has(key)) {
+          droppedKeysWarned.add(key);
+          console.warn(`PUT /api/workspaces/:id ignored unknown field "${key}".`);
+        }
+      }
+      // Scope per call, never through shared repo state: this request may wait behind
+      // another user's save on the same workspace, and must still act as ITS user.
+      const scope = workspaceScopeOf(req);
 
-      // Runs under a per-workspace lock, in arrival order. The scope is applied
-      // INSIDE the lock: this request may have waited behind another user's
-      // save, and `repo.setScope` is shared state on the repo.
+      // Runs under a per-workspace lock, in arrival order.
       const outcome = await sequencer.run(
         sequenceKey(req),
         sequence.kind === 'ok' ? sequence.token : undefined,
         async () => {
-          applyRepoScope(req);
           // Data-loss guard (2026-09-22 incident): a save that sharply shrinks
           // menResults/womenResults/athleteHistory gets a `pre-shrink` backup
           // BEFORE the write, and the response says so. This never blocks the
@@ -147,7 +222,12 @@ function registerWorkspaceCrudRoutes(
           // `apps/shell/lib/dataLossGuard.ts` for the detection rule and the
           // best-effort backup handling. A stale save is refused before it gets
           // here, so it can never cost a backup slot.
-          return applyWorkspaceUpdateWithGuard(repo, req.params.id, patch, expectedVersion);
+          return applyWorkspaceUpdateWithGuard(
+            scopedUpdateRepo(repo, scope),
+            req.params.id,
+            patch,
+            expectedVersion
+          );
         },
         result => result.updated !== undefined
       );
@@ -180,8 +260,10 @@ function registerWorkspaceCrudRoutes(
       }
       res.json(dataLossWarning ? { ...updated, dataLossWarning } : updated);
     } catch (err) {
-      if (err instanceof Error && (err as Error & { code?: string }).code === 'VERSION_CONFLICT') {
-        return res.status(409).json({ error: 'Version conflict — refresh and retry', code: 'VERSION_CONFLICT' });
+      if (errorCode(err) === VERSION_CONFLICT_CODE) {
+        return res
+          .status(409)
+          .json({ error: 'Version conflict — refresh and retry', code: VERSION_CONFLICT_CODE });
       }
       res.status(500).json({ error: 'Failed to update workspace', details: String(err) });
     }
@@ -189,17 +271,17 @@ function registerWorkspaceCrudRoutes(
 
   app.delete('/api/workspaces/:id', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     try {
-      applyRepoScope(req);
+      const scope = workspaceScopeOf(req);
       // Back up before the only irreversible workspace operation there is.
       // Deliberately best-effort: a backup that cannot be written must not
       // block a delete the user asked for, but it must say so loudly rather
       // than failing silently.
       try {
-        await repo.backup('pre-delete');
+        await repo.backup('pre-delete', scope);
       } catch (backupErr) {
         console.warn('Pre-delete backup failed; deleting anyway:', backupErr);
       }
-      await repo.remove(req.params.id);
+      await repo.remove(req.params.id, scope);
       sequencer.forget(sequenceKey(req));
       res.json({ success: true });
     } catch (err) {
@@ -208,14 +290,19 @@ function registerWorkspaceCrudRoutes(
   });
 }
 
-function registerWorkspaceBackupAndSnapshotRoutes(
-  app: Express,
-  deps: WorkspaceRoutesDeps,
-  applyRepoScope: (req: AuthedRequest) => void
-): void {
+function registerWorkspaceBackupAndSnapshotRoutes(app: Express, deps: WorkspaceRoutesDeps): void {
   const { repo, AUTH_REQUIRED, requireAuth, optionalAuth } = deps;
+  const isAdmin = deps.isAdmin ?? (() => false);
+  /** Under AUTH_REQUIRED the backup directory is shared by every tenant: administrators only. */
+  const mayUseSharedBackups = (req: AuthedRequest) => !AUTH_REQUIRED || isAdmin(req);
+  const refuseSharedBackups = (res: Response) =>
+    res.status(403).json({
+      error: 'Backups hold every user data and are limited to administrators.',
+      code: 'ADMIN_REQUIRED',
+    });
 
-  app.get('/api/workspaces/backups', AUTH_REQUIRED ? requireAuth : optionalAuth, async (_req: AuthedRequest, res) => {
+  app.get('/api/workspaces/backups', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
+    if (!mayUseSharedBackups(req)) return refuseSharedBackups(res);
     try {
       res.json(await repo.listBackups());
     } catch (err) {
@@ -233,12 +320,13 @@ function registerWorkspaceBackupAndSnapshotRoutes(
    * A refusal is a 400 naming the file, never a 500 with a stack.
    */
   app.post('/api/workspaces/restore', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
+    // Checked first: a refusal must not depend on what the body says.
+    if (!mayUseSharedBackups(req)) return refuseSharedBackups(res);
     const file = (req.body ?? {}).file;
     if (typeof file !== 'string' || file.length === 0) {
       return res.status(400).json({ error: 'A backup file name is required.' });
     }
     try {
-      applyRepoScope(req);
       const restored = await repo.restoreBackup(file);
       res.json({ success: true, file, workspaces: restored });
     } catch (err) {
@@ -252,8 +340,7 @@ function registerWorkspaceBackupAndSnapshotRoutes(
 
   app.post('/api/workspaces/backup', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     try {
-      applyRepoScope(req);
-      const file = await repo.backup('manual');
+      const file = await repo.backup('manual', workspaceScopeOf(req));
       res.json({ success: true, file: path.basename(file) });
     } catch (err) {
       res.status(500).json({ error: 'Backup failed', details: String(err) });
@@ -263,9 +350,8 @@ function registerWorkspaceBackupAndSnapshotRoutes(
   // Workspace snapshots (SQLite backend only; JSON backend returns empty/no-op).
   app.post('/api/workspaces/:id/snapshots', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     try {
-      applyRepoScope(req);
       const label = typeof req.body?.label === 'string' ? req.body.label : 'snapshot';
-      const snap = await repo.snapshot(req.params.id, label);
+      const snap = await repo.snapshot(req.params.id, label, workspaceScopeOf(req));
       if (!snap) return res.status(400).json({ error: 'Snapshots require SQLite or PostgreSQL backend' });
       res.json(snap);
     } catch (err) {
@@ -275,8 +361,7 @@ function registerWorkspaceBackupAndSnapshotRoutes(
 
   app.get('/api/workspaces/:id/snapshots', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     try {
-      applyRepoScope(req);
-      res.json(await repo.listSnapshots(req.params.id));
+      res.json(await repo.listSnapshots(req.params.id, workspaceScopeOf(req)));
     } catch (err) {
       res.status(500).json({ error: 'Failed to list snapshots', details: String(err) });
     }
@@ -285,11 +370,10 @@ function registerWorkspaceBackupAndSnapshotRoutes(
   // Read-only snapshot content (diff drill-down) — never restores.
   app.get('/api/snapshots/:snapshotId', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     try {
-      applyRepoScope(req);
       if (repo.kind === 'json') {
         return res.status(400).json({ error: 'Snapshots require SQLite or PostgreSQL backend' });
       }
-      const content = await repo.getSnapshotContent(req.params.snapshotId);
+      const content = await repo.getSnapshotContent(req.params.snapshotId, workspaceScopeOf(req));
       if (!content) return res.status(404).json({ error: 'Snapshot not found' });
       res.json(content);
     } catch (err) {
@@ -299,8 +383,7 @@ function registerWorkspaceBackupAndSnapshotRoutes(
 
   app.post('/api/snapshots/:snapshotId/restore', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     try {
-      applyRepoScope(req);
-      const restored = await repo.restoreSnapshot(req.params.snapshotId);
+      const restored = await repo.restoreSnapshot(req.params.snapshotId, workspaceScopeOf(req));
       if (!restored) return res.status(404).json({ error: 'Snapshot not found' });
       res.json(restored);
     } catch (err) {
@@ -312,7 +395,6 @@ function registerWorkspaceBackupAndSnapshotRoutes(
 function registerWorkspaceShareAndReportRoutes(
   app: Express,
   deps: WorkspaceRoutesDeps,
-  applyRepoScope: (req: AuthedRequest) => void,
   normalizeWorkspaceResults: (ws: Workspace) => Workspace
 ): void {
   const { repo, shareLinks, AUTH_REQUIRED, requireAuth, optionalAuth } = deps;
@@ -323,8 +405,7 @@ function registerWorkspaceShareAndReportRoutes(
       return res.status(503).json({ error: 'Share links require PostgreSQL auth backend' });
     }
     try {
-      applyRepoScope(req);
-      const ws = (await repo.list()).find(w => w.id === req.params.id);
+      const ws = (await repo.list(workspaceScopeOf(req))).find(w => w.id === req.params.id);
       if (!ws) return res.status(404).json({ error: 'Workspace not found' });
       const link = await shareLinks.createLink(
         req.params.id,
@@ -343,7 +424,19 @@ function registerWorkspaceShareAndReportRoutes(
     try {
       const resolved = await shareLinks.resolveToken(req.params.token);
       if (!resolved) return res.status(404).json({ error: 'Link not found or expired' });
-      const all = await repo.list();
+      // The link's own tenant, not "whatever the repo was last set to": a token is
+      // anonymous, so nothing in the request says whose workspace it should reach.
+      // A link with no recorded tenant (older rows) cannot be scoped; refuse it
+      // rather than search every tenant's data for the id.
+      const shareScope: WorkspaceScope | null = resolved.teamId
+        ? { teamId: resolved.teamId }
+        : resolved.createdBy
+          ? { ownerId: resolved.createdBy }
+          : null;
+      if (!shareScope) {
+        return res.status(404).json({ error: 'Workspace not found' });
+      }
+      const all = await repo.list(shareScope);
       const ws = all.find(w => w.id === resolved.workspaceId);
       if (!ws) return res.status(404).json({ error: 'Workspace not found' });
       res.json({ label: resolved.label, workspace: normalizeWorkspaceResults(ws) });
@@ -354,8 +447,7 @@ function registerWorkspaceShareAndReportRoutes(
 
   app.get('/api/workspaces/:id/report', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     try {
-      applyRepoScope(req);
-      const ws = (await repo.list()).find(w => w.id === req.params.id);
+      const ws = (await repo.list(workspaceScopeOf(req))).find(w => w.id === req.params.id);
       if (!ws) return res.status(404).json({ error: 'Workspace not found' });
       const html = buildMeetReportHtml(ws);
       res.setHeader('Content-Type', 'text/html; charset=utf-8');

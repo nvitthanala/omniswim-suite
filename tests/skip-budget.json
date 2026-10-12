@@ -50,6 +50,11 @@
       "local": 0,
       "ci": 2,
       "reason": "it.skipIf(!hasPdftotextTable). `pdftotext -table` is an xpdf option; poppler (what ubuntu ships) lacks it. The developer machine has xpdf 4.00. These two tests re-read the archived NCAA PDFs and never run in CI."
+    },
+    "tests/workspaceScopePg.test.ts": {
+      "local": 8,
+      "ci": 0,
+      "reason": "describe.skipIf(!pgUrl). Cross-tenant scope, duplicate id, version conflict, global-replace ownership and the newer-schema refusal need a real PostgreSQL server (PG_TEST_URL or DATABASE_URL). CI sets PG_TEST_URL on the postgres:16 service; a developer machine usually has no database."
     }
   }
 }
