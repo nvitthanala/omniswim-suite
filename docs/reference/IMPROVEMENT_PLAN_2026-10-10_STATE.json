@@ -180,7 +180,7 @@
   "waves": [
     {
       "id": "wave-1",
-      "status": "STOPPED by the user request (connection gap). All four executors killed mid-work; their partial edits remain uncommitted in the working tree. Nothing reviewed, no gate rerun, no commit of wave-1 code.",
+      "status": "RESUMED 2026-10-12 after the connection gap: all four executors continued with SendMessage (same agent IDs). Still nothing reviewed or committed.",
       "agents": [
         {
           "scope": "server/auth cluster",
@@ -237,7 +237,6 @@
       }
     }
   ],
-  "pausedAt": "2026-10-12: user paused work and asked for the agents to be halted. Agents stopped; partial wave-1 diff is uncommitted in the tree.",
   "onResume": [
     "git status and git diff --stat in oyster first. The partial edits are the tree truth; do not re-spawn fresh agents on top of them.",
     "Resume each stopped executor with SendMessage to its agentId (names keep working after a stop): tell it to run git status for its own files, finish its brief, and report. Keep the four scopes disjoint as before.",
