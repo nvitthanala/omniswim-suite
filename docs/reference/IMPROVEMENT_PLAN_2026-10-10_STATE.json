@@ -14,20 +14,15 @@
     "ci": "green on 84fa6323 (run 38018611118)"
   },
   "resumeOrder": [
-    "M2 and M3: ask the user (branch deletion, untracked omniswim-suite/data in the main clone)",
-    "U1-U12 ask the user in one batch; record answers in userDecisions",
-    "S1 Host and Origin checks",
-    "S2 pin Python dependencies",
-    "S3 scope every workspace route",
-    "C3 season team score (after U7), C4 Python bad-time sentinel, C5 silent parse fallbacks, C7 projections, C8 unnamed meet",
-    "P1 validate workspace writes, P2 duplicate id, P7 newer-schema refusal, P4 save failures, P5 error shape",
-    "T3 unlisted scripts, T12 lint ratchets, T1 type-check tests, T7 PDF tests in CI, T8 demo-seed tests",
-    "X1 error boundary, X3 alert roles, X4 NumberField, X2 FloatingWindow keyboard",
-    "remaining items in plan order"
+    "wave-1 review and commit (S1,S2,S4 | S3,P1,P2,P3,P7 | C1+C6,C2); run full gates with every agent idle",
+    "wave-2: C3,C7,C8 (core) | C4,C5,T2 (backend python + parsingRoutes) | P4,P5,P6 then U3 delete of 39 test workspaces",
+    "wave-3: T-group (T3,T12,T1,T7,T8,T9,T5,T11,T10) then X-group then F-group",
+    "wave-4: R-group (R9 last, one droppable commit each), D-group, H-group (H6 renormalize alone, H2 archive after others)",
+    "final: vault update, then ask the user the open items (M3, H4, source-gated D1/D6/D7/F6, live captures)"
   ],
   "items": {
     "M1": "done (PR #6 merged 1583d897)",
-    "M2": "approved",
+    "M2": "done (6 remote branches deleted 2026-10-12; backup/pre-cleanup-2026-06-19 kept)",
     "M3": "pending",
     "U1": "answered",
     "U2": "answered",
@@ -40,7 +35,7 @@
     "U9": "answered",
     "U10": "answered",
     "U11": "answered",
-    "U12": "answered",
+    "U12": "answered; Claude in Chrome tools are not available in this session, so D2/D3/T4/A12/F9 wait for the end batch",
     "S1": "pending",
     "S2": "pending",
     "S3": "pending",
@@ -76,7 +71,7 @@
     "T12": "pending",
     "X1": "pending",
     "X2": "pending",
-    "X3": "pending",
+    "X3": "pending; also fix Toast.tsx timer cleanup (flaky unhandled error in the skip-budget gate)",
     "X4": "pending",
     "X5": "pending",
     "X6": "pending",
@@ -127,7 +122,7 @@
     "H7": "pending",
     "H8": "pending",
     "H9": "pending",
-    "H10": "pending",
+    "H10": "done by the 2026-10-11 harness commit 74fe0748 (round-3 bug block moved to docs/archive/2026-08/ROUND3_KNOWN_BUGS.md)",
     "H11": "pending"
   },
   "userDecisions": {
@@ -174,5 +169,52 @@
   "branchAfterMerge": "main (start new work on a fresh branch from main)",
   "branch": "nvitthanala/improvement-plan-2026-10-10",
   "branchBase": "main@74fe0748 (origin/main e204752a + harness tiering commit)",
-  "sessionStartedAt": "2026-10-12"
+  "sessionStartedAt": "2026-10-12",
+  "baseline20261012": {
+    "lint": "0 errors, 2 complexity warnings",
+    "vitest": "199 files, 3030 passed, 15 skipped",
+    "scripts": "85 passed, 0 failed, 1 skipped (incl. playwright e2e)",
+    "skipBudget": "15 skipped = budget 15; the gate exited 1 once because of a flaky unhandled Toast.tsx timer error after test teardown (tests/optimizerUndoTrackA.test.ts); a plain vitest run was clean",
+    "harness": "not yet run"
+  },
+  "waves": [
+    {
+      "id": "wave-1",
+      "status": "dispatched 2026-10-12",
+      "agents": [
+        {
+          "scope": "server/auth cluster",
+          "items": [
+            "S1",
+            "S2",
+            "S4",
+            "parse-pdf limit",
+            "npm audit step"
+          ],
+          "agent": "executor"
+        },
+        {
+          "scope": "workspace persistence",
+          "items": [
+            "S3",
+            "P1",
+            "P2",
+            "P3",
+            "P7"
+          ],
+          "agent": "executor"
+        },
+        {
+          "scope": "core scoring",
+          "items": [
+            "C1",
+            "C6",
+            "C2"
+          ],
+          "agent": "executor",
+          "review": "architect after"
+        }
+      ]
+    }
+  ]
 }
