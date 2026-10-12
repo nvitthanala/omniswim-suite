@@ -40,12 +40,12 @@
     "S2": "committed 3105ba98 (gates green on combined tree 2026-10-12)",
     "S3": "committed 09c5882e",
     "S4": "committed 3105ba98 (gates green on combined tree 2026-10-12)",
-    "C1": "in flight: architect found gender-in-relayTieKey defect and relayEntryGroupKey A/B merge defect; agent aca3beddb23680687 fixing; then commit",
-    "C2": "built, awaiting commit",
+    "C1": "committed a74420af (also fixed architect findings: gender out of relayTieKey; A/B relay merge in relayEntryGroupKey). e2e rerun on a quiet tree still owed (ui-ia.spec.ts:353 timed out while another agent edited apps/shell; goldens byte-identical)",
+    "C2": "committed 7d361aab",
     "C3": "pending",
     "C4": "committed 9c87d57c; architect decision pending implementation: explicit NT/DQ/NS/SCR/DNF clock with pdf_points>0 must fail loudly as a top-level import error (keep printed points otherwise)",
     "C5": "python half committed 9c87d57c; TypeScript half (parsingRoutes.ts pipeline:legacy flag, import-UI warning) pending",
-    "C6": "in flight: core scoringPlaceTables.ts + light server check (agent aca3beddb23680687); UI blank-cell save block is a worker task after that",
+    "C6": "core committed e1c87ec0; UI half + X4 in flight (worker a467cc44fdcdec299)",
     "C7": "pending",
     "C8": "pending",
     "A7": "pending",
@@ -72,7 +72,7 @@
     "X1": "pending",
     "X2": "pending",
     "X3": "pending; also fix Toast.tsx timer cleanup (flaky unhandled error in the skip-budget gate)",
-    "X4": "pending",
+    "X4": "in flight with C6 UI (worker a467cc44fdcdec299)",
     "X5": "pending",
     "X6": "pending",
     "X7": "pending",
@@ -267,7 +267,9 @@
     "README and environment docs need OMNI_ALLOWED_HOSTS, OMNI_INVITE_CODES, OMNI_ADMIN_EMAILS, OMNI_NO_AUTO_INSTALL, OMNI_PARSE_PDF_MAX_MB (H3)",
     "A Secure cookie off loopback over plain HTTP is dropped by browsers (document in README)",
     "global pdfplumber 0.11.9 vs venv/pin 0.11.10",
-    "production static serving has no host check (Vite allowedHosts covers dev only)"
+    "production static serving has no host check (Vite allowedHosts covers dev only)",
+    "relayGroupKey (utils.ts:351, roster-simulation key) has the same A/B relay merge flaw relayEntryGroupKey had (scoring agent did not change it); fix in the core pass 2 with C7",
+    "THEORETICAL_MEET_PLAN.md:95 and backlog item A10 relay tie text are stale (H-group docs pass)"
   ],
   "limitEvents": [
     {
