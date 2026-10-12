@@ -454,11 +454,58 @@ export const SCORING_PRESET_BY_ID: Record<string, ScoringSettings> = Object.from
 
 /** One "this conference scores by that preset" rule. */
 export interface ConferencePresetBinding {
-  /** Matched case-insensitively as a substring of the workspace's conference name. */
+  /**
+   * Matched case-insensitively as WHOLE WORDS in the workspace's conference name,
+   * with punctuation read as a word break: "SEC" matches "SEC Championships" and
+   * "Gulf South / SEC", and does not match "Sectional Championships". A multi-word
+   * match ("BIG 12") must appear as that exact word sequence.
+   */
   readonly match: string;
   readonly presetId: string;
   readonly builtIn: boolean;
 }
+
+/**
+ * A conference name as an array of upper-case words: letters and digits kept,
+ * every other character a word break. `"Gulf South / NSISC Championships"` and
+ * `"gulf south - nsisc  championships"` read the same.
+ */
+function conferenceWords(name: string): string[] {
+  return name
+    .toUpperCase()
+    .split(/[^\p{L}\p{N}]+/u)
+    .filter(word => word.length > 0);
+}
+
+/** True when `needle` appears in `haystack` as a run of whole, adjacent words. */
+function containsWholeWords(haystack: readonly string[], needle: readonly string[]): boolean {
+  if (needle.length === 0 || needle.length > haystack.length) return false;
+  for (let start = 0; start + needle.length <= haystack.length; start += 1) {
+    if (needle.every((word, offset) => haystack[start + offset] === word)) return true;
+  }
+  return false;
+}
+
+/**
+ * Whole conference names a workspace's `conference` field may carry, each mapped
+ * to the preset that scores it. This is the explicit half of the lookup: a name
+ * here is matched exactly (words, case and punctuation ignored), so it needs no
+ * abbreviation to appear in the text.
+ *
+ * Only a name that is a plain restatement of an abbreviation a built-in preset
+ * already binds belongs here. A new conference is a new preset with
+ * `conferenceMatches`, not an entry in this table. "SEC" and "ACC" bind to
+ * `generic-top16` (see {@link LEGACY_BUILT_IN_PRESETS}); their spelled-out names
+ * are the same conferences, which an abbreviation test cannot see.
+ */
+const CONFERENCE_NAME_PRESETS: Readonly<Record<string, string>> = {
+  'SOUTHEASTERN CONFERENCE': 'generic-top16',
+  'ATLANTIC COAST CONFERENCE': 'generic-top16',
+};
+
+const EXPLICIT_CONFERENCE_NAME_WORDS: ReadonlyArray<{ words: string[]; presetId: string }> = Object.entries(
+  CONFERENCE_NAME_PRESETS
+).map(([name, presetId]) => ({ words: conferenceWords(name), presetId }));
 
 function bindingsFrom(presets: readonly ScoringPresetMeta[], builtIn: boolean): ConferencePresetBinding[] {
   const out: ConferencePresetBinding[] = [];
@@ -503,15 +550,33 @@ export function conferencePresetBindings(): readonly ConferencePresetBinding[] {
  * the hardcoding this round exists to remove. They are now declared as
  * `conferenceMatches` on the presets themselves, so adding a conference means
  * adding a preset, not editing an engine.
+ *
+ * Two steps, never a substring test (decision U2, 2026-10-12 — "Sectional
+ * Championships" once selected the SEC preset because it contains "SEC"):
+ *
+ *  1. The conference name equals a whole name in the explicit map
+ *     ("Southeastern Conference" selects the same preset as "SEC").
+ *  2. A binding's `match` appears in the name as whole, adjacent words. Longer
+ *     matches go first, and a user binding is consulted only after every
+ *     built-in one.
+ *
+ * A name no step claims returns `null` — unknown, not a default preset.
  */
 export function presetIdForConference(
   conference?: string,
   bindings: readonly ConferencePresetBinding[] = conferencePresetBindings()
 ): string | null {
   if (!conference) return null;
-  const u = conference.toUpperCase();
+  const words = conferenceWords(conference);
+  if (words.length === 0) return null;
+
+  for (const entry of EXPLICIT_CONFERENCE_NAME_WORDS) {
+    if (entry.words.length === words.length && containsWholeWords(words, entry.words)) {
+      return entry.presetId;
+    }
+  }
   for (const binding of bindings) {
-    if (u.includes(binding.match)) return binding.presetId;
+    if (containsWholeWords(words, conferenceWords(binding.match))) return binding.presetId;
   }
   return null;
 }

@@ -191,6 +191,49 @@ describe('conference bindings are declared, not hardcoded', () => {
     expect(presetIdForConference(undefined)).toBeNull();
   });
 
+  describe('whole names and whole words, never substrings (decision U2)', () => {
+    it('"Sectional Championships" does NOT select the SEC preset', () => {
+      expect(presetIdForConference('Sectional Championships')).toBeNull();
+    });
+
+    it('"SEC Championships" selects the SEC preset', () => {
+      expect(presetIdForConference('SEC Championships')).toBe('generic-top16');
+    });
+
+    it('"Southeastern Conference" selects the SEC preset, by the explicit name map', () => {
+      expect(presetIdForConference('Southeastern Conference')).toBe('generic-top16');
+      expect(presetIdForConference('southeastern   conference')).toBe('generic-top16');
+    });
+
+    it('"Atlantic Coast Conference" selects the ACC preset', () => {
+      expect(presetIdForConference('Atlantic Coast Conference')).toBe('generic-top16');
+    });
+
+    it('an explicit name is matched whole: a longer name containing it is not claimed', () => {
+      expect(presetIdForConference('Mid-Southeastern Conference')).toBeNull();
+    });
+
+    it('a word that merely contains an abbreviation is not that abbreviation', () => {
+      expect(presetIdForConference('Accelerated Swim League')).toBeNull();
+      expect(presetIdForConference('Secondary School Meet')).toBeNull();
+      expect(presetIdForConference('NSISCX Invitational')).toBeNull();
+      expect(presetIdForConference('Big 120 Series')).toBeNull();
+    });
+
+    it('punctuation is a word break, so a slashed or hyphenated name still matches', () => {
+      expect(presetIdForConference('Gulf South/NSISC-Championships')).toBe('nsisc');
+      expect(presetIdForConference('(SEC)')).toBe('generic-top16');
+    });
+
+    it('a saved preset binding is whole-word too, and still ranks after the built-ins', () => {
+      setUserConferencePresetBindings([
+        { id: 'gac-house', label: 'GAC house rules', conferenceMatches: ['GAC'] },
+      ]);
+      expect(presetIdForConference('Great American Conference (GAC)')).toBe('gac-house');
+      expect(presetIdForConference('GACHA Cup')).toBeNull();
+    });
+  });
+
   it('lets a saved preset claim a conference the app does not', () => {
     setUserConferencePresetBindings([
       { id: 'gac-house', label: 'GAC house rules', conferenceMatches: ['GAC'] },
