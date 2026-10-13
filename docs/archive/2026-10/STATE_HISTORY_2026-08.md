@@ -1,0 +1,289 @@
+# STATE history, 2026-08 to 2026-10-09
+
+This file holds the body of `plans/STATE.md` as it stood on 2026-10-10. It is history, kept for the record. The current one-page state is [plans/STATE.md](../../../plans/STATE.md).
+
+The text below is unchanged except for the relative links to `plans/2026-*` folders. They now start with `../../../plans/` so they resolve from this folder. Paths written in backticks keep their original form and are relative to the repository root.
+
+---
+
+**Updated 2026-10-09.** Active branch `nvitthanala/ui-simplification`.
+Progress log for the 2026-10-09 sweep: `docs/reference/SESSION_2026-10-09_STATE.json`
+(read it before resuming; its `userReview` list holds open decisions).
+Backlog: `docs/reference/IMPROVEMENTS_BACKLOG_2026-10-09.md`. New this round:
+save-order sequencing (409 `STALE_SAVE`), SwimCloud relay-leg credit and
+conference parsers, `relayLegCredits` storage (schema v8, spec
+`docs/reference/RELAY_LEG_CREDITS_SPEC.md`), editable events and estimated
+relays in theoretical meets. The section below is the 2026-09-25 state.
+
+## Earlier state (2026-09-25)
+**Updated 2026-09-25.** Active work is the production-readiness push on
+branch `nvitthanala/production-readiness`, plan
+[`plans/2026-09-24/01-NEXT-ROUND-PLAN.md`](../../../plans/2026-09-24/01-NEXT-ROUND-PLAN.md),
+progress log `docs/reference/NEXT_ROUND_2026-09-24_STATE.json` — read the log
+before resuming. It follows
+[`plans/2026-09-22/01-CONVERSION-AND-IMPROVEMENTS-PLAN.md`](../../../plans/2026-09-22/01-CONVERSION-AND-IMPROVEMENTS-PLAN.md)
+(progress log `docs/reference/IMPROVEMENTS_2026-09-22_STATE.json`), which
+landed course-conversion provenance, altitude handling, the bests-correctness
+sweep, and NAIA SCM verdicts. `CHANGELOG.md`'s `[Unreleased]` section has the
+user-visible summary of both rounds.
+
+Everything below this point predates both rounds and describes the
+`nvitthanala/swimcloud-data-ingest` branch's history; it has not been
+refreshed for the current push. Treat the section above as current, and the
+rest as historical background until a later pass folds it in.
+
+---
+
+Last updated 2026-08-16. **Start here.** 132 KB across 19 files sits behind this
+page; everything below links into it.
+
+**New initiative, Phases 1–3 done.** SwimCloud ingestion (paste a
+meet/team/athlete/conference link, get structured data instead of retyping
+it) — plan in [`plans/2026-09-06/`](../../../plans/2026-09-06/README.md), full status/
+history across three worklogs in that folder (`WORKLOG-01` through
+`WORKLOG-03`; **read the most recent one first if resuming this work**).
+Landed on branch `nvitthanala/swimcloud-data-ingest` (18 commits, not yet
+merged to `main`): an NCAA Rule 7 scoring engine (`packages/core`);
+`packages/swimcloud` — entities, URL classifier, three HTML parsers (team
+roster, meet results, swimmer personal-bests — all against synthetic
+fixtures only), a status-keyed cache, and a Track B politeness wrapper in
+front of a Playwright-backed fetcher; a browser extension
+(`extensions/swimcloud-companion/`, Track A) that copies a captured page to
+the clipboard; and a working "From clipboard" import path wired into
+`RosterImportWizard` for the swimmer-profile case specifically (team-roster
+and meet-results captures are parsed but have no UI path — see
+`WORKLOG-03`'s "what Phase 3 does not cover"). Also: a `/code-review medium`
+pass found and fixed 3 real correctness bugs (with regression tests proven
+against the pre-fix code — see `WORKLOG-03`'s review section), and a local
+Chromium smoke test proved `PlaywrightSwimCloudFetcher`'s actual mechanism
+(launch, navigate, `storageState` session reuse) works against a throwaway
+local server. 219 tests, lint clean 8/8 workspaces, and a real
+`npm run build` of the shell app succeeds.
+
+**One thing still genuinely unverified, requiring a human, not more code:**
+whether the Playwright fetcher (Track B) can pass SwimCloud's actual
+Cloudflare challenge — its mechanism is now proven locally (a real Chromium
+launch/navigate/session-reuse cycle against a throwaway local server), but
+touching the *live* site is, per the plan's own posture, a deliberate
+human-present action, never an automated one, including for testing (Phase
+2 worklog). Everything else has now been seen working, not just inferred:
+the "From clipboard" path — swimmer profile, team roster, and (per user
+feedback) meet results too — was click-tested against the real running app
+with a simulated extension capture, not just unit tests (Phase 3 worklog,
+`verification-screenshots/`; this is also what caught a real duplicate-
+React-key bug the unit suite never exercised). Team-roster captures stay
+informational (no times on that page type, and this app's data model has no
+"bare athlete" concept to import one into) while meet-results captures do
+full bulk import — see the Phase 3 worklog's "team-roster and meet-results
+captures now work too" section. Key finding worth knowing
+before touching any of this: SwimCloud's Terms of Use flatly prohibit
+automated access; the plan records an explicit, informed user decision to
+build one compliant track (the browser extension) and one accepted-risk
+track (Playwright fetch-on-paste) side by side — see
+[`01-legal-and-access-strategy.md`](../../../plans/2026-09-06/01-legal-and-access-strategy.md).
+
+Baseline: lint clean (7 packages), `npm test` **61 passed / 0 failed / 3 skipped**,
+`npm run build` exit 0.
+
+**2026-09-08 — full-capture round planned, not yet built.** The single-page
+clipboard import doesn't scale (a full meet is dozens of manual captures),
+and the one path that routed a meet capture through a single paste
+(`parseMeetResultsHtml`, in Manager's roster wizard) targets a page shape
+proven not to exist on SwimCloud. Plan at
+[`plans/2026-09-08/`](../../../plans/2026-09-08/README.md): the extension auto-fetches a
+whole meet or team after one click (amends Track A to "Track A′" — see
+`2026-09-06/01-legal-and-access-strategy.md` §4), captures land in a new
+machine-global local store (amends the open transport question in
+`2026-09-06/03-architecture.md` §5, clipboard → localhost route), and
+Matrix gets a picker reading that store.
+
+**Update 2026-09-08, same day:** OQ-1 and its follow-up OQ-1b are both
+resolved (real captures of a 13-team meet proved the meet-root Teams card
+truncates, and that its "More" link's target, `topteams`, lists every team
+including zero-scoring ones). **Phase 1 is done** — `packages/swimcloud`'s
+capture store, crawl planner, and the two new meet-team parsers are built,
+verified (lint clean across all 8 workspaces, 363/363 tests, production
+build succeeds), and reported in
+`plans/2026-09-08/WORKLOG-01-phase1-capture-store-and-parsers.md`. Built
+directly (no subagent) against a 26%-of-5-hour quota budget, deliberately
+scoped to one package so a forced stop would never leave it half-broken.
+Uncommitted — diffs only, per the standing no-git-ops rule. Phase 2
+(`apps/shell/server.ts` capture routes) is next and unblocked. State
+tracked at `docs/reference/SWIMCLOUD_CAPTURE_STATE.json`.
+
+**Update 2026-09-09/10 — the whole pipeline built, then real-world tested,
+then a UI plan.** Phases 2 through 4c all landed: capture routes, the
+Manifest V3 auto-fetch crawler (roster + swimmer-times passes, bounded
+concurrency for the swimmer-times leaf pages specifically), a server-side
+`/parse` extension surfacing rosters and swimmer times alongside meet
+results, and a genuine new capability in Manager — importing a whole
+roster's event history from one completed capture in one action instead of
+one clipboard paste per swimmer. An adversarial review along the way found
+and fixed a real Manifest V3 message-hang bug and a capture-store race.
+Then the user hand-tested a real 234-page crawl and hit a real friction bug
+— every page silently falling back to 234 separate `chrome.downloads`
+calls with zero warning — root-caused and fixed (batched into one file,
+plus a pre-flight pairing check) in
+[`plans/2026-09-09/WORKLOG-13-friction-fix-download-batching.md`](../../../plans/2026-09-09/WORKLOG-13-friction-fix-download-batching.md).
+The user then asked for a full UI-redesign plan given "the ui looks very
+complex/cluttered" — not yet built, plan only, at
+[`plans/2026-09-09/01-UI-REDESIGN-PLAN.md`](../../../plans/2026-09-09/01-UI-REDESIGN-PLAN.md).
+Full phase history in `docs/reference/SWIMCLOUD_CAPTURE_STATE.json`; also
+mirrored in the Obsidian vault
+(`Documents/Obsidian Vault/omniswim-suite/Sessions/oyster-2026-09-09-74cdc90a.md`).
+
+**Update 2026-09-13/14 — the 60+ uncommitted files above are now committed
+and pushed, and this same session built substantially more on top.** The
+UI-redesign plan turned into 17 tracked implementation turns (SwimCloud
+capture browser unified, Badge/toggle convergence, a real scoring bug and a
+real team-matching bug fixed along the way — `docs/reference/UI_REDESIGN_STATE.json`
+turns `t1`–`t17`), then a whole-app improvement sweep on explicit request
+(happy-dom RCE fix, the two `ScoringSettings` editors merged into one,
+a `Modal` primitive converging 6 of Manager's overlay dialogs, three
+feature-scoping docs — turn `t18`), then a triaged partial build of those
+three scoped features under a stated quota constraint: a whole-meet
+official-score reconciliation banner (shipped), an optimizer-change
+breakdown panel (shipped, piece 1 of 3), and a program-provenance checklist
+group (shipped, sibling conversion-provenance group stays scoped — turn
+`t19`). `nvitthanala/swimcloud-data-ingest` is now 102 commits ahead of
+`main`, still no PR. Full detail: `docs/reference/UI_REDESIGN_STATE.json`,
+`docs/reference/IMPROVEMENT_BRAINSTORM_2026-09-02.md`,
+`plans/2026-09-14/*.md`. Obsidian vault refreshed the same day — see that
+session note's own "Update — 2026-09-13/14" section, plus
+`05-GitHub-Commit-Timeline.md` Era 10 and `08-Open-Decisions-For-You.md`.
+
+---
+
+## Do this next
+
+**Update 2026-09-13: items 1–3 below are resolved.** #1's underlying defect
+closed without the PDF ever landing (see [13](../../../plans/2026-08-14/13-official-score-mismatch.md)'s
+resolution note — `test_nsisc_team_totals.mjs` now passes byte-exact,
+registered and green). #2 closed the same way, at the scoring-boundary
+layer rather than the parser layer. #3 closed via `prepareRecruitsForScoring`
+ranking a recruit against every other unplaced recruit, not PDF rows alone
+(commit `d24fd3e5`, merged in today from a sibling branch). The PDF itself
+is still not in the repo — worth getting for its own sake (two remaining
+judgment calls in 13 need it) but no longer blocking. Remaining open:
+
+| # | Item | Why now |
+| - | ---- | ------- |
+| 4 | Branded `CanonicalEvent` — [04 §3](../../../plans/2026-08-14/04-architecture-complexity.md) | The structural bet. Four defects were the same bug: a value keyed on one identity, looked up by another. |
+| 5 | Conversion-factor provenance — [02 §1](../../../plans/2026-08-14/02-data-quality-aliasing.md) | **Blocked on an open question**: does any governing body publish these factors? If not, the whole table is indicative, not official. |
+
+**Done since this page was written:** the optimiser guard (1277 → 0 became
+1277 → 1395), the NSISC settings lock, the fast path (**5.7×**, cause was a
+per-row/per-name counting bug that silently disabled it), the **`every()`
+tie-group gate** (roster workspace best result 1395 → **1407.27**, and the
+`scorers` stage alone 213 → **1270**), and the Delta State diagnosis below.
+
+### The Delta State mismatch is diagnosed — and the engine is exonerated
+
+`calculatePoints` reproduces `backend/point_calculator.py`'s stored points
+**exactly**, row by row, every event, both genders. Two independent
+implementations agree with each other and disagree with the meet, so the defect
+is upstream of both, in extraction. Three extraction defects found:
+
+- **Women +20 is fully explained.** One untagged time-trial row (`Event 938`,
+  `prelimsTime: "NT"`, last row of the array) wins a phantom one-swimmer event.
+  936 − 20 = **916 = official, exactly**.
+- **Men −1 is a net.** The mirror row (`Event 939 Boys …`) adds 20; a genuinely
+  dropped row in Event 13 (B-final winner, rank 9) removes 9; the residual −21
+  is not closed. Two seductive candidates were **eliminated** — Event 39 rank 8
+  is a DQ-vacated place, Event 22 ranks 11–16 are a sparse B final. Recorded so
+  nobody re-spends that hour.
+- **`officialTeamScores` was destroyed for every half-point total** — ✅ fixed.
+  pdfplumber splits `1,029.50` into `1,029. 50`, and the lazy regex took the
+  school name to be `… 1,029.` scoring `50`. It corrupted exactly the two teams
+  whose scores end in .50, and stored the wreckage under a *different key* than
+  the clean rows, so nothing could tell corrupt from missing.
+
+---
+
+## Shipped
+
+| Commit | What |
+| ------ | ---- |
+| `fae4da46` | Round 3 docs |
+| `f7054e00` | Resolver reaches the UI; inert cap diagnosed; destructive optimiser found |
+| `ef98abe0` | Alias-aware rosters + entry limits; parse plausibility; arbitrage split |
+| `07703e20` | Docs reorganised; `INVARIANTS.md`; `CHANGELOG.md`; two questions closed |
+| `2559e429` | Network exposure; unmapped-division cuts; tests that could not fail |
+| `15a0d293` | Arbitrage scan moved off the render path (8.3 s freeze) |
+| `f3355927` | Arbitrage cards state real points, or state nothing |
+| `350a42a7` | Events ranked by quality, not by raw elapsed time |
+| `ea8ad61e` | The loaded meet decides which events an athlete can enter |
+| `7af56513` | Production launcher served 404 and seeded an empty DB |
+| `ad616e69` | IM conversion factor; Manager dead-ends; layout clipping |
+
+## Open findings, by severity
+
+**P0** — none open. [12](../../../plans/2026-08-14/12-optimizer-destroys-score.md) is closed:
+guarded last round, root cause fixed this round (**213 → 1270**, and the stage
+that produced the 0.00 wipeout is now the best answer at **1407.27**).
+
+**P1** — [02 §2b](../../../plans/2026-08-14/02-data-quality-aliasing.md) seven settings controls
+editable but ignored · [02 §1](../../../plans/2026-08-14/02-data-quality-aliasing.md) conversion
+table has no provenance · [09 §1](../../../plans/2026-08-14/09-performance.md) fast path no
+faster than a full re-score · [09 §2](../../../plans/2026-08-14/09-performance.md) Lineup step
+blocks ~700 ms · [04 §3](../../../plans/2026-08-14/04-architecture-complexity.md) event identity
+is stringly-typed · [06 §1](../../../plans/2026-08-14/06-testing-verification.md) two scoring
+tests permanently skipped · [03 §1](../../../plans/2026-08-14/03-scoring-model-depth.md) relays
+ranked by nothing.
+
+**P2** — [05](../../../plans/2026-08-14/05-ux-workflow.md) explain the ranking, tap targets ·
+[07](../../../plans/2026-08-14/07-packaging-offline-ops.md) pip-installs at first boot, no
+version stamp, unattended backups · [04 §2](../../../plans/2026-08-14/04-architecture-complexity.md)
+`utils.ts` junk drawer.
+
+**Reported, not fixed** — ~~two untagged time-trial rows score 20 points
+each~~ **fixed 2026-09-13, see [13](../../../plans/2026-08-14/13-official-score-mismatch.md)'s
+resolution note** (closed at the scoring-boundary layer, `isTimeTrial`
+itself may still be wrong on these rows but no longer matters) · a duplicated row in Event 39 ·
+the `Boys`/`Girls` carve-out in `utils.ts` makes HyTek gender-token events score,
+unadjudicable without the PDF · dead `npById` per fast-swap context (gone; confirmed 2026-10-09) ·
+`CapVoidSummary.byAthlete` dead (removed 2026-10-09) · `individualStrokeDistance` lacks label hygiene
+(latent, 0 live rows) · two competing alias mechanisms, neither canonical ·
+points awarded per row not per distinct name.
+
+---
+
+## Open questions only you can answer
+
+1. **Does any governing body publish course-conversion factors?** Blocks item 5.
+   If not, the honest label for the whole table is "indicative".
+2. **Who is the second user?** Governs how much the UI must explain.
+3. **`Afonso` or `Alfonso` Campanico?** One source is misspelled.
+4. **Is the desktop-copy launcher flow still real?** Mentioned only in a `.bat` echo.
+5. **Should `data/meets.json` be a curated demo set** rather than a snapshot of live
+   working state? They are the same file today.
+6. **Is anything backing up `data/omniswim.db`?**
+
+Answered from data, no longer open: HSU fields **zero** divers (rivals field 13,
+worth 360 points); time trials **already** earn cut tags correctly (4 of 18).
+
+---
+
+## How this work runs
+
+1. **Disjoint scopes.** No two agents edit the same file. The integrator owns
+   `scripts/run-tests.mjs` and all cross-scope wiring.
+2. **Evidence over assertion.** Anything that moves a number carries a before/after
+   from the live workspaces.
+3. **A guard is not trusted until it has been seen to fail.** Every new test gets a
+   deliberate mutation, then the mutation is reverted.
+4. **Report, don't fix, outside scope.** Latent bugs become findings, not diffs.
+5. **Corrections are recorded in place.** Six review claims have been wrong so far;
+   each is struck through with the measurement that disproved it, because the
+   correction is usually more informative than the original.
+6. **Assess partial work, never trust it.** Three agents died mid-edit on 2026-08-16;
+   one left the tree uncompilable. Only compiling them told the good from the bad.
+
+## Layout
+
+- `plans/2026-08-14/` — the **review**: what is wrong and why. `00` is the summary,
+  `11` is the ordering.
+- `plans/2026-08-16/` — the **execution**: what was done, including where the review
+  turned out to be wrong.
+- `docs/INVARIANTS.md` — things true of this codebase that are written nowhere else.
+- `CHANGELOG.md` — user-visible behaviour changes.
