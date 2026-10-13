@@ -18,7 +18,7 @@ export default function WorkspaceSidebar() {
     createWorkspace,
     deleteWorkspace,
     restoreWorkspace,
-    updateWorkspace,
+    saveWorkspace,
     refreshWorkspaces,
   } = useSuiteWorkspace();
 
@@ -120,8 +120,10 @@ export default function WorkspaceSidebar() {
     }
     const nextName = editWorkspaceName.trim();
     if (id === activeWorkspaceId) {
-      await updateWorkspace({ name: nextName });
-      toast.push('success', `Workspace renamed to "${nextName}"`);
+      // Say "renamed" only once the server has the name. A failed save already raised its own notice
+      // or banner, so a success toast here would contradict it.
+      const saved = await saveWorkspace({ name: nextName });
+      if (saved.ok) toast.push('success', `Workspace renamed to "${nextName}"`);
     }
     setEditingWorkspaceId(null);
   };

@@ -22,6 +22,11 @@ import {
 import { buildRaceReport } from './lib/reportExport';
 import { computeComparisonTime } from './lib/comparisonTime';
 
+/** The text of a caught value, for a toast. */
+function failureReason(err: unknown): string {
+  return err instanceof Error ? err.message : String(err);
+}
+
 function downloadText(filename: string, mimeType: string, content: string) {
   const blob = new Blob([content], { type: mimeType });
   const url = URL.createObjectURL(blob);
@@ -129,9 +134,19 @@ export default function MetricsApp() {
     null
   );
 
+  // `toast` changes identity whenever a toast is added, so the callbacks below read `push` through a
+  // ref. Depending on `toast` here would re-run the mount effect for every toast it raises.
+  const pushToastRef = useRef(toast.push);
+  pushToastRef.current = toast.push;
+
   const refreshSessions = useCallback(() => {
     if (!isIndexedDbAvailable()) return;
-    listSessions().then(setSessions).catch(() => undefined);
+    listSessions()
+      .then(setSessions)
+      .catch((err: unknown) => {
+        // An empty list and an unreadable store look the same on screen. Say which one it is.
+        pushToastRef.current('error', `Could not read saved sessions: ${failureReason(err)}`);
+      });
   }, []);
 
   useEffect(() => {
@@ -191,7 +206,14 @@ export default function MetricsApp() {
       setSessionCreatedAt(null);
       extractVideoMeta(url)
         .then(setVideoMeta)
-        .catch(() => undefined);
+        .catch((err: unknown) => {
+          // Without metadata there is no frame rate, so frame timing and saving stay unavailable.
+          // The video itself still plays, so the user needs the reason, not a silent gap.
+          toast.push(
+            'error',
+            `Could not read the frame rate and size of "${file.name}": ${failureReason(err)}`,
+          );
+        });
       toast.push('success', `Video "${file.name}" opened`);
     },
     [videoUrl, toast],
@@ -292,7 +314,13 @@ export default function MetricsApp() {
 
   const handleLoadSession = useCallback(
     async (id: string) => {
-      const loaded = await loadSession(id);
+      let loaded: Awaited<ReturnType<typeof loadSession>>;
+      try {
+        loaded = await loadSession(id);
+      } catch (err) {
+        toast.push('error', `Could not open the saved session: ${failureReason(err)}`);
+        return;
+      }
       if (!loaded) return;
       if (loaded.legacy) {
         toast.push('info', `"${loaded.label}" ${loaded.reason}`);
@@ -319,7 +347,13 @@ export default function MetricsApp() {
 
   const handleDeleteSession = useCallback(
     async (id: string) => {
-      await deleteSession(id);
+      try {
+        await deleteSession(id);
+      } catch (err) {
+        // Nothing was deleted, so leave the list and the open session alone.
+        toast.push('error', `Could not delete the saved session: ${failureReason(err)}`);
+        return;
+      }
       if (sessionId === id) {
         setSessionId(null);
         setSessionCreatedAt(null);

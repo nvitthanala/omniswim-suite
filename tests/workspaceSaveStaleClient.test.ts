@@ -35,6 +35,7 @@ import {
   VERSION_CONFLICT_CODE,
 } from '@omniswim/core/api/saveSequence';
 import type { Workspace } from '@omniswim/core/types';
+import type { WorkspaceSaveResult } from '@omniswim/core/store/SuiteWorkspaceProvider';
 
 type Ctx = ReturnType<typeof useSuiteWorkspace>;
 
@@ -511,6 +512,157 @@ describe('a version conflict pauses the workspace and keeps the edits until Relo
     globalThis.fetch = realFetch;
     expect(ctx!.versionConflictIds).toEqual(['a']);
     expect(ids()).toEqual(['mine']);
+  });
+});
+
+describe('saveWorkspace: the caller sees what became of its edit (P4)', () => {
+  /** Queue an edit through `saveWorkspace` without awaiting it; the result is read later. */
+  async function save(entryIds: string[]): Promise<{ result: () => Promise<WorkspaceSaveResult>; settled: () => boolean }> {
+    let value: WorkspaceSaveResult | null = null;
+    let promise!: Promise<WorkspaceSaveResult>;
+    await act(async () => {
+      promise = ctx!.saveWorkspace({ activeEntryIds: entryIds });
+      void promise.then(v => {
+        value = v;
+      });
+    });
+    return { result: () => promise, settled: () => value !== null };
+  }
+
+  it('resolves ok with the stored copy once the PUT succeeds, and not before', async () => {
+    await mount();
+    const s = await save(['mine']);
+    await waitForDebounce();
+    expect(puts).toHaveLength(1);
+    expect(s.settled()).toBe(false); // the PUT has not answered yet
+    await act(async () => {
+      puts[0].succeed();
+    });
+    const result = await s.result();
+    expect(result.ok).toBe(true);
+    if (result.ok) {
+      expect(result.workspace.activeEntryIds).toEqual(['mine']);
+      expect((result.workspace as unknown as { version: number }).version).toBe(2);
+    }
+  });
+
+  it('a failed save resolves { ok: false, reason: "error" } with the reason, and still notifies', async () => {
+    await mount();
+    const s = await save(['mine']);
+    await waitForDebounce();
+    await act(async () => {
+      puts[0].fail();
+    });
+    const result = await s.result();
+    expect(result).toEqual({ ok: false, reason: 'error', message: 'boom' });
+    expect(notices.some(n => n.kind === 'error' && n.message === 'boom')).toBe(true);
+  });
+
+  it('a version conflict resolves "conflict", is not a generic error, and does not raise the error banner', async () => {
+    await mount();
+    serverCopies.a = { ...makeWorkspace('a', ['theirs']), version: 4 } as unknown as Workspace;
+    const s = await save(['mine']);
+    await waitForDebounce();
+    await act(async () => {
+      puts[0].succeed(); // the mock server answers 409 VERSION_CONFLICT
+    });
+    const result = await s.result();
+    expect(result).toMatchObject({ ok: false, reason: 'conflict' });
+    expect(ctx!.versionConflictIds).toEqual(['a']);
+    expect(ctx!.error).toBeNull();
+    expect(notices.filter(n => n.kind === 'error')).toEqual([]);
+  });
+
+  it('an edit made while the workspace is paused on a conflict resolves "conflict" at once and sends nothing', async () => {
+    await mount();
+    serverCopies.a = { ...makeWorkspace('a', ['theirs']), version: 4 } as unknown as Workspace;
+    const first = await save(['mine']);
+    await waitForDebounce();
+    await act(async () => {
+      puts[0].succeed();
+    });
+    await first.result();
+
+    const second = await save(['mine-2']);
+    expect(second.settled()).toBe(true);
+    expect(await second.result()).toMatchObject({ ok: false, reason: 'conflict' });
+    await waitForDebounce();
+    expect(puts).toHaveLength(1);
+    expect(ids()).toEqual(['mine-2']); // still on screen
+  });
+
+  it('an edit queued behind a refused one resolves "conflict" too, instead of waiting for a Reload', async () => {
+    await mount();
+    serverCopies.a = { ...makeWorkspace('a', ['theirs']), version: 4 } as unknown as Workspace;
+    const first = await save(['one']);
+    await waitForDebounce();
+    expect(puts).toHaveLength(1);
+    const behind = await save(['two']); // queued while the first PUT is in flight
+    await act(async () => {
+      puts[0].succeed(); // 409 VERSION_CONFLICT
+    });
+    expect(await first.result()).toMatchObject({ ok: false, reason: 'conflict' });
+    expect(await behind.result()).toMatchObject({ ok: false, reason: 'conflict' });
+    await waitForDebounce();
+    expect(puts).toHaveLength(1);
+    expect(ids()).toEqual(['two']);
+  });
+
+  it('edits merged into one request all resolve with that request', async () => {
+    await mount();
+    const a = await save(['one']);
+    const b = await save(['two']);
+    await waitForDebounce();
+    expect(puts).toHaveLength(1);
+    await act(async () => {
+      puts[0].succeed();
+    });
+    const [ra, rb] = await Promise.all([a.result(), b.result()]);
+    expect(ra.ok).toBe(true);
+    expect(rb.ok).toBe(true);
+    expect(serverCopies.a.activeEntryIds).toEqual(['two']);
+  });
+
+  it('an edit behind one in flight resolves with its own request, not the first', async () => {
+    await mount();
+    const first = await save(['one']);
+    await waitForDebounce();
+    expect(puts).toHaveLength(1);
+    const second = await save(['two']);
+    await act(async () => {
+      puts[0].succeed();
+    });
+    expect((await first.result()).ok).toBe(true);
+    expect(second.settled()).toBe(false); // waits for its own PUT
+    await waitForDebounce();
+    expect(puts).toHaveLength(2);
+    await act(async () => {
+      puts[1].fail();
+    });
+    expect(await second.result()).toMatchObject({ ok: false, reason: 'error' });
+  });
+
+  it('Reload resolves a queued edit as "discarded" instead of leaving the caller waiting', async () => {
+    await mount();
+    const s = await save(['mine']); // debounce has not fired
+    await act(async () => {
+      await ctx!.reloadWorkspace('a');
+    });
+    expect(await s.result()).toMatchObject({ ok: false, reason: 'discarded' });
+    await waitForDebounce();
+    expect(puts).toHaveLength(0);
+  });
+
+  it('updateWorkspace still resolves before the PUT runs', async () => {
+    await mount();
+    let done = false;
+    await act(async () => {
+      await ctx!.updateWorkspace({ activeEntryIds: ['mine'] }).then(() => {
+        done = true;
+      });
+    });
+    expect(done).toBe(true);
+    expect(puts).toHaveLength(0);
   });
 });
 

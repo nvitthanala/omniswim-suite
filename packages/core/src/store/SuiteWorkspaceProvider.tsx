@@ -28,6 +28,38 @@ function newSaveClientId(): string {
   return `c${Date.now().toString(36)}${Math.random().toString(36).slice(2, 12)}`;
 }
 
+/**
+ * What became of one edit queued with `saveWorkspace`.
+ *
+ * - `ok`: the server stored it; `workspace` is the stored copy.
+ * - `conflict`: the workspace changed elsewhere. The edit is on screen, unsaved, and autosave is
+ *   paused until `reloadWorkspace`. This is not a generic failure: the banner owns it.
+ * - `stale`: the server already holds a newer save from this page and ignored this one.
+ * - `error`: the request failed (network, 4xx/5xx). `message` is the reason; the user was notified.
+ * - `discarded`: the edit was dropped before it was sent (Reload, delete, or the provider unmounted).
+ * - `no-workspace`: no workspace was open, so nothing was queued.
+ */
+export type WorkspaceSaveResult =
+  | { ok: true; workspace: Workspace }
+  | {
+      ok: false;
+      reason: 'conflict' | 'stale' | 'error' | 'discarded' | 'no-workspace';
+      message: string;
+    };
+
+type SaveWaiter = (result: WorkspaceSaveResult) => void;
+
+const CONFLICT_RESULT: WorkspaceSaveResult = {
+  ok: false,
+  reason: 'conflict',
+  message: 'This workspace changed in another tab. Reload to see the latest version.',
+};
+const DISCARDED_RESULT: WorkspaceSaveResult = {
+  ok: false,
+  reason: 'discarded',
+  message: 'The change was dropped before it was saved.',
+};
+
 export type AppletId = 'home' | 'manager' | 'matrix' | 'metrics';
 
 export type NotifyKind = 'error' | 'success' | 'info';
@@ -42,7 +74,18 @@ type SuiteWorkspaceContextValue = {
   setActiveWorkspaceId: (id: string | null) => void;
   setActiveGender: (gender: Gender) => void;
   createWorkspace: (name?: string) => Promise<Workspace>;
+  /**
+   * Queue an edit. Resolves as soon as the edit is on screen and queued, NOT when it is saved, so
+   * existing callers do not wait on the network. A failed save is shown to the user (notice, error
+   * banner or conflict banner) but not reported here. Use `saveWorkspace` when the caller must
+   * know whether the edit was stored.
+   */
   updateWorkspace: (patch: Partial<Workspace>) => Promise<void>;
+  /**
+   * Same queueing as `updateWorkspace`, but resolves with the outcome once the save carrying this
+   * edit settles. Never rejects. Edits merged into one request all resolve with that request's result.
+   */
+  saveWorkspace: (patch: Partial<Workspace>) => Promise<WorkspaceSaveResult>;
   deleteWorkspace: (id: string) => Promise<void>;
   restoreWorkspace: (workspace: Workspace) => Promise<Workspace>;
   refreshWorkspaces: () => Promise<void>;
@@ -108,6 +151,8 @@ export function SuiteWorkspaceProvider({
    */
   const knownVersionRef = useRef(new Map<string, number>());
   const conflictRef = useRef(new Set<string>());
+  /** Callers of `saveWorkspace` waiting on the queued (not yet sent) patch, per workspace. */
+  const waitersRef = useRef(new Map<string, SaveWaiter[]>());
   const [versionConflictIds, setVersionConflictIds] = useState<string[]>([]);
 
   const loadWorkspaces = useCallback(async () => {
@@ -212,9 +257,12 @@ export function SuiteWorkspaceProvider({
   // A queued autosave must not outlive the provider.
   useEffect(() => {
     const timers = timersRef.current;
+    const waiters = waitersRef.current;
     return () => {
       for (const t of timers.values()) clearTimeout(t);
       timers.clear();
+      for (const list of waiters.values()) for (const w of list) w(DISCARDED_RESULT);
+      waiters.clear();
     };
   }, []);
 
@@ -258,9 +306,15 @@ export function SuiteWorkspaceProvider({
     if (t) clearTimeout(t);
     timersRef.current.delete(id);
     pendingRef.current.delete(id);
+    // Whoever waited on the dropped edit must hear that it is gone, not wait forever.
+    const dropped = waitersRef.current.get(id);
+    waitersRef.current.delete(id);
+    if (dropped) for (const w of dropped) w(DISCARDED_RESULT);
   }, []);
 
-  const sendSaveRef = useRef<(id: string, patch: Partial<Workspace>) => Promise<void>>(async () => undefined);
+  const sendSaveRef = useRef<(id: string, patch: Partial<Workspace>, waiters: SaveWaiter[]) => Promise<void>>(
+    async () => undefined
+  );
 
   /** Send the pending patch for `id` unless a save is in flight or the workspace is in conflict. */
   const trySave = useCallback(
@@ -270,14 +324,18 @@ export function SuiteWorkspaceProvider({
       const patch = pendingRef.current.get(id);
       if (!patch) return;
       pendingRef.current.delete(id);
-      void sendSaveRef.current(id, patch);
+      // The callers waiting on this patch travel with it; later edits get their own request.
+      const waiters = waitersRef.current.get(id) ?? [];
+      waitersRef.current.delete(id);
+      void sendSaveRef.current(id, patch, waiters);
     },
     []
   );
 
   const sendSave = useCallback(
-    async (id: string, patch: Partial<Workspace>): Promise<void> => {
+    async (id: string, patch: Partial<Workspace>, waiters: SaveWaiter[]): Promise<void> => {
       inFlightRef.current.add(id);
+      let outcome: WorkspaceSaveResult = DISCARDED_RESULT;
       // Number the save per workspace. The cache write below compares against the latest number.
       const seq = (saveSeqRef.current.get(id) ?? 0) + 1;
       saveSeqRef.current.set(id, seq);
@@ -302,6 +360,7 @@ export function SuiteWorkspaceProvider({
           setCache(list => list.map(w => (w.id === updated.id ? updated : w)));
         }
         setMutationError(null);
+        outcome = { ok: true, workspace: updated };
       } catch (err: unknown) {
         if (err instanceof VersionConflictError) {
           // Someone else changed this workspace first. Nothing was written. Do NOT refetch and do
@@ -314,20 +373,29 @@ export function SuiteWorkspaceProvider({
           timersRef.current.delete(id);
           setConflict(id, true);
           setMutationError(null);
+          outcome = CONFLICT_RESULT;
+          // Edits queued behind this one are held too and will not be sent. Say so now: their
+          // callers would otherwise wait for a Reload that may never come.
+          const held = waitersRef.current.get(id);
+          waitersRef.current.delete(id);
+          if (held) for (const w of held) w(CONFLICT_RESULT);
         } else if (err instanceof StaleSaveError) {
           // The server already holds a newer save from this page, so the stored data is right and the
           // cache already shows it. Do not roll back or refetch: a refetch could drop a change that is
           // still waiting to be sent. Tell the user, so the refusal is never silent.
           console.warn('Stale workspace save refused by the server:', err.message);
           notify('info', 'An older save arrived after a newer one and was ignored. Your latest changes are saved.');
+          outcome = { ok: false, reason: 'stale', message: err.message };
         } else {
           const message = err instanceof Error ? err.message : 'Save failed';
           setMutationError(message);
           notify('error', message);
+          outcome = { ok: false, reason: 'error', message };
           // Re-sync from server to roll back the optimistic edit.
           void queryClient.invalidateQueries({ queryKey: WORKSPACES_KEY });
         }
       } finally {
+        for (const w of waiters) w(outcome);
         inFlightRef.current.delete(id);
         // Edits made while this PUT was in flight go out now, unless the user is still typing
         // (the debounce timer will send them) or the workspace is paused on a conflict.
@@ -346,22 +414,39 @@ export function SuiteWorkspaceProvider({
   // `trySave` is created before `sendSave` and must call the live one.
   sendSaveRef.current = sendSave;
 
-  const updateWorkspace = useCallback(
-    async (patch: Partial<Workspace>) => {
-      if (!activeWorkspaceId) return;
+  const saveWorkspace = useCallback(
+    (patch: Partial<Workspace>): Promise<WorkspaceSaveResult> => {
+      if (!activeWorkspaceId) {
+        return Promise.resolve({ ok: false, reason: 'no-workspace', message: 'No workspace is open.' });
+      }
       const id = activeWorkspaceId;
       setCache(list => list.map(w => (w.id === id ? { ...w, ...patch } : w)));
       pendingRef.current.set(id, { ...pendingRef.current.get(id), ...patch });
       // A workspace paused on a conflict keeps the edit on screen and in memory, and sends nothing.
-      if (conflictRef.current.has(id)) return;
+      if (conflictRef.current.has(id)) return Promise.resolve(CONFLICT_RESULT);
+      const outcome = new Promise<WorkspaceSaveResult>(resolve => {
+        const list = waitersRef.current.get(id) ?? [];
+        list.push(resolve);
+        waitersRef.current.set(id, list);
+      });
       const existing = timersRef.current.get(id);
       if (existing) clearTimeout(existing);
       timersRef.current.set(
         id,
         setTimeout(() => trySave(id), 300)
       );
+      return outcome;
     },
     [activeWorkspaceId, setCache, trySave]
+  );
+
+  const updateWorkspace = useCallback(
+    async (patch: Partial<Workspace>) => {
+      // Fire and forget by contract: resolve now, and let the save report through the notice,
+      // the error banner or the conflict banner.
+      void saveWorkspace(patch);
+    },
+    [saveWorkspace]
   );
 
   const reloadWorkspace = useCallback(
@@ -464,6 +549,7 @@ export function SuiteWorkspaceProvider({
       setActiveGender,
       createWorkspace: handleCreateWorkspace,
       updateWorkspace,
+      saveWorkspace,
       deleteWorkspace,
       restoreWorkspace,
       refreshWorkspaces,
@@ -482,6 +568,7 @@ export function SuiteWorkspaceProvider({
       setActiveGender,
       handleCreateWorkspace,
       updateWorkspace,
+      saveWorkspace,
       deleteWorkspace,
       restoreWorkspace,
       refreshWorkspaces,
