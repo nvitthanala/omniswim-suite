@@ -8,6 +8,7 @@ in the repository root. Everything else lives here.
 | Doc | Covers |
 | --- | --- |
 | [USER_GUIDE.md](USER_GUIDE.md) | **How to use the app.** Written for a coach: workspaces, choosing a scoring rule set, getting swimmers in, lineups, relays, optimising, scoring a meet, reconciling against official results, and backups. |
+| [ONBOARDING.md](ONBOARDING.md) | **First-day setup for a developer.** Tools, Python environment, Playwright browsers, `pdftotext`, which tests need local data, the gates and their baseline numbers, the port-3000 rule. |
 
 ## Reference — current
 
