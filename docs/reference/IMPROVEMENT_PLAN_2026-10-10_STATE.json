@@ -50,11 +50,11 @@
     "C8": "committed bdca188c (meet-name-missing at 3 sites; crawler.js bundle rebuilt)",
     "A7": "pending",
     "A12": "pending",
-    "P1": "committed 09c5882e",
+    "P1": "committed 09c5882e (PUT) + 6008967c (create allowlist)",
     "P2": "committed 09c5882e",
     "P3": "committed 171ddc31 (client), 1464ea7b (restore test), earlier 09c5882e (server). U10 satisfied: version checks, no persisted sequence.",
     "P4": "committed (saveWorkspace returns WorkspaceSaveResult; metrics toasts)",
-    "P5": "pending",
+    "P5": "committed ea5a09c7 (apiError helper + handler; swimcloudCaptureRoutes.ts and authMiddleware codes in follow-up, agent a797f55e1440838e9)",
     "P6": "committed (OMNI_BACKUP_KEEP_MANUAL=20, OMNI_BACKUP_KEEP_PRE_RESTORE=10, other kinds shared 20; OMNI_BACKUP_DIR mirror; VACUUM INTO). README text for restore: doc comment above DEFAULT_BACKUP_KEEP in workspaceRepo.ts (H3).",
     "P7": "committed 09c5882e + a9dccc27 (server exits non-zero on a newer or unreadable schema or any SQLite error; JSON fallback only on native-module load failure, logged as error)",
     "T1": "pending",
@@ -125,7 +125,8 @@
     "H10": "done by the 2026-10-11 harness commit 74fe0748 (round-3 bug block moved to docs/archive/2026-08/ROUND3_KNOWN_BUGS.md)",
     "H11": "pending",
     "parse-pdf-limit": "committed 3105ba98 (gates green on combined tree 2026-10-12)",
-    "relayGroupKey": "committed 6cede0ae"
+    "relayGroupKey": "committed 6cede0ae",
+    "parse-psych-pdf-guard": "committed ea5a09c7"
   },
   "userDecisions": {
     "workflow": {
@@ -359,7 +360,9 @@
     "officialTeamScores keys are doubled team names (parser artifact); matchOfficialTeamKey works around it",
     "buildPrelimsDeltaTimeline has the same ?? 0 shape; unchanged",
     "defaultSeasonTeam: data model has no own-team field; confirm the default with the user",
-    "extensions/swimcloud-companion/background.js shows modified for line endings only after build:extension; left uncommitted"
+    "extensions/swimcloud-companion/background.js shows modified for line endings only after build:extension; left uncommitted",
+    "SQLite meet_results.id is unique store-wide: a create reusing row ids while the original exists returns 500 (predates P5; restore works only after delete)",
+    "In production the preset modal loses field-level validation text and OpsModule loses the size hint, because details is dropped; client should read a separate field"
   ],
   "limitEvents": [
     {
