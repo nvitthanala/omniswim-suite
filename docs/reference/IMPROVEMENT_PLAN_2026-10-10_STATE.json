@@ -286,7 +286,7 @@
     },
     {
       "id": "wave-3",
-      "status": "P5 + create allowlist + psych guard committed; T-group worker (a4ce0992b13a275c5) still running; UX batch X1,X2,X5,X10 dispatched (worker abeae90519ea56dca)",
+      "status": "STOPPED by the third session limit; resuming serially",
       "agents": [
         {
           "scope": "API error helper + schema + parse-psych-pdf guard",
@@ -384,6 +384,11 @@
       "at": "2026-10-12 (reset 20:20 CT)",
       "what": "Second session limit (429) stopped all three wave-2 executors mid-work: a4a12ccfffa3d7bce (C5 TS; 13 mutants caught, on final gates), a825b3847674e68bd (P4/P6; adding load and delete failure tests), aca3beddb23680687 (C3/C7/C8/relayGroupKey; running touched scripts). Cause: three or four parallel Sonnet executors in one window.",
       "resumePlan": "ONE agent at a time, in this order: a4a12 (nearly done), a825, aca3. Commit each as it finishes. Then quiet-tree gates. No parallel executors until the next window reset unless usage looks low."
+    },
+    {
+      "at": "2026-10-13 (reset 01:20 CT)",
+      "what": "Third session limit (429) stopped both wave-3 workers: a4ce0992b13a275c5 (test tooling T3/T5/T7/T8/T9/T10; was on the T5 CI step) and abeae90519ea56dca (UX batch X1/X2/X5/X10; had only read the plan). Two parallel Sonnet agents were still too many for the window.",
+      "resumePlan": "ONE agent at a time, strictly. Resume a4ce0992b13a275c5 first (nearly done), commit, then abeae90519ea56dca. Between agents, run the usage report and stay below 80% of the 5h figure before dispatching the next."
     }
   ],
   "gatesAfterWave1": {
