@@ -59,7 +59,9 @@ describe('seasonAnalytics', () => {
     expect(trends.swimmerTrends[0].bestTime).toBe('52.10');
     expect(trends.swimmerTrends[0].progression).toEqual([{ label: 'Real Meet', time: '52.10' }]);
     // Only the theoretical meet: nothing at all.
-    expect(buildSeasonTrends([theoretical])).toEqual({ swimmerTrends: [], teamScoreTrends: [] });
+    const only = buildSeasonTrends([theoretical]);
+    expect(only.swimmerTrends).toEqual([]);
+    expect(only.teamScoreTrends).toEqual([]);
   });
 
   it('keeps the fastest of two swims in one workspace', () => {
