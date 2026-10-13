@@ -69,16 +69,16 @@
     "T10": "committed 42d8e61f; found header overflow at 390px (scrollWidth 566), marked test.fail until X9 fixes it",
     "T11": "committed 0af4ac9b (report-only npm audit step in ci.yml)",
     "T12": "pending",
-    "X1": "in flight (worker a51999eedd910e7ae, with X2)",
-    "X2": "in flight (worker a51999eedd910e7ae)",
+    "X1": "committed ae20801e",
+    "X2": "committed c0e7be08 (known gap: SwimCloud window focus return, opener is a menu item that unmounts; fix needs Menu change)",
     "X3": "committed bb662f8d (also fixes Toast timer flake)",
     "X4": "committed 4057721d with C6 UI",
-    "X5": "pending",
+    "X5": "in flight (worker abb19d7362275bf21, with X10)",
     "X6": "pending",
     "X7": "committed 54c62dd3",
     "X8": "committed 54c62dd3",
     "X9": "pending: fix app-header overflow at 390px (header.app-header scrollWidth 566; right icon buttons end at x=566)",
-    "X10": "pending",
+    "X10": "in flight (worker abb19d7362275bf21)",
     "X11": "pending",
     "X12": "pending",
     "F1": "pending",
@@ -374,7 +374,8 @@
     "SQLite meet_results.id is unique store-wide: a create reusing row ids while the original exists returns 500 (predates P5; restore works only after delete)",
     "In production the preset modal loses field-level validation text and OpsModule loses the size hint, because details is dropped; client should read a separate field",
     "docs still cite the old probe paths (scripts/test_post.mjs etc.; H-group)",
-    "package-lock.json gained a deprecated glob@10.5.0 transitive dependency (from the coverage dev dependency)"
+    "package-lock.json gained a deprecated glob@10.5.0 transitive dependency (from the coverage dev dependency)",
+    "Focus does not return to the opener for the SwimCloud window (menu item unmounts); fixing needs a change to Menu used by every menu"
   ],
   "limitEvents": [
     {
