@@ -33,19 +33,15 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { parseTeamRosterHtml } from '../packages/swimcloud/src/parser';
 
-const PAGES = path.resolve(__dirname, '..', 'data', 'swimcloud-captures', 'pages');
-
-/** The real stored body for one captured URL, or undefined on a clean checkout. */
-function storedPage(match: (name: string) => boolean): string | undefined {
-  if (!fs.existsSync(PAGES)) return undefined;
-  const file = fs.readdirSync(PAGES).find(match);
-  if (!file) return undefined;
-  const entry = JSON.parse(fs.readFileSync(path.join(PAGES, file), 'utf-8')) as { html?: string };
-  return entry.html;
-}
-
-const UWF_MEN = storedPage(
-  n => n.includes('10002824') && n.includes('roster') && n.includes('gender_3d_M'),
+/**
+ * The real University of West Florida men's roster page, committed under
+ * `tests/fixtures/swimcloud/`. It used to be read from the gitignored
+ * `data/swimcloud-captures/pages`, so the test skipped on a clean checkout and in CI.
+ * A missing file here is a broken checkout, not a reason to skip.
+ */
+const UWF_MEN = fs.readFileSync(
+  path.resolve(__dirname, 'fixtures', 'swimcloud', 'team-10002824-roster-gender-M-page.html'),
+  'utf-8',
 );
 
 /** Minimal page carrying the empty state, for the clean-checkout path. */
@@ -83,7 +79,7 @@ describe('a roster page with no table', () => {
   it.skipIf(UWF_MEN === undefined)(
     'reads the real University of West Florida men\'s page as no-roster-posted',
     () => {
-      const result = parseTeamRosterHtml(UWF_MEN as string, CONTEXT as never, {} as never);
+      const result = parseTeamRosterHtml(UWF_MEN, CONTEXT as never, {} as never);
       expect(result.ok, 'UWF fields no men\'s programme; that is an answer').toBe(true);
       if (!result.ok) return;
       expect(result.data.athletes).toStrictEqual([]);
