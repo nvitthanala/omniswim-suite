@@ -68,7 +68,7 @@
     "T9": "committed 3a97d52a (pool of 4; ~157 s serial vs ~60 s scripts-only)",
     "T10": "committed 42d8e61f; found header overflow at 390px (scrollWidth 566), marked test.fail until X9 fixes it",
     "T11": "committed 0af4ac9b (report-only npm audit step in ci.yml)",
-    "T12": "in flight (af5921472cb93f101)",
+    "T12": "committed (max-warnings 66 = no-explicit-any in matrix 55 + metrics 11; reasons on every disable; no-floating-promises 0 violations)",
     "X1": "committed ae20801e",
     "X2": "committed c0e7be08 (known gap: SwimCloud window focus return, opener is a menu item that unmounts; fix needs Menu change)",
     "X3": "committed bb662f8d (also fixes Toast timer flake)",
@@ -95,14 +95,14 @@
     "R2": "pending",
     "R3": "pending",
     "R4": "pending",
-    "R5": "pending",
-    "R6": "in flight (executor af5921472cb93f101)",
+    "R5": "pending: 66 any warnings are the target (matrix 55, metrics 11), mostly recharts payloads in TeamCard*.tsx",
+    "R6": "committed (complexity 29->7 and 31->11; golden over 83 calls identical; baseline now 0 complexity warnings)",
     "R7": "pending",
-    "R8": "in flight (af5921472cb93f101)",
+    "R8": "committed",
     "R9": "pending",
     "R10": "committed d19aa4df (folder) + 7c71285a (scripts, dependency, eslint ignore)",
-    "R11": "in flight (af5921472cb93f101)",
-    "R12": "in flight (af5921472cb93f101)",
+    "R11": "partial: noFallthroughCasesInSwitch on (0 cases); noUncheckedIndexedAccess NOT applied: swimcloud 75 errors (parser.ts 43, urlClassifier.ts 21, html.ts 7, teamSeasons.ts 4); db pulls core via paths, ~201 of 203 errors in core (utils.ts 103, athleteAliases 22, athleteHistory 18, relayLegMatching 16); needs an architect order decision",
+    "R12": "committed",
     "D1": "pending",
     "D2": "pending",
     "D3": "pending",
@@ -377,7 +377,9 @@
     "package-lock.json gained a deprecated glob@10.5.0 transitive dependency (from the coverage dev dependency)",
     "Focus does not return to the opener for the SwimCloud window (menu item unmounts); fixing needs a change to Menu used by every menu",
     "docs/README.md links a missing reference/ROSTER_CATALOG_NOTES.md",
-    "ONBOARDING.md baseline numbers come from the state file and trail the current vitest count"
+    "ONBOARDING.md baseline numbers come from the state file and trail the current vitest count",
+    "core formatSecondsToTime does not carry a rounded-up second: 59.996 renders 60.00 and 119.996 renders 1:60.00 (used in altitude, cutlineTags, cutlineUtils, relaySplits, swimCloudReplace); fix in core with a test (batch D)",
+    "T12: 22 eslint suppressions total: 19 exhaustive-deps plus 3 others (plan said 22 exhaustive-deps)"
   ],
   "limitEvents": [
     {
@@ -414,7 +416,8 @@
   "pendingArchitectReview": [
     "P3 client/conflict diff (171ddc31) + persistence layer (09c5882e): bundle with wave 2 core diffs",
     "P4/P6 persistence diffs",
-    "C3, C7, relayGroupKey diffs (051a2bc9, 6368b19d, 6cede0ae)"
+    "C3, C7, relayGroupKey diffs (051a2bc9, 6368b19d, 6cede0ae)",
+    "R6 converter split (pdfPoints, isTimeTrial, roundSwam)"
   ],
   "u3Prereq": "U3 delete of 39 UI test workspaces: take a MANUAL backup first (a bulk delete writes 39 pre-delete backups and would evict the 20 startup backups of this worktree data/backups); a manual backup survives and restores all 39.",
   "gatesAfterWave2": {
