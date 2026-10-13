@@ -200,6 +200,13 @@ export type SwimCloudParseWarningCode =
   | 'ambiguous-metric-course'
   /** The event label carried no course unit at all and no meet-level course was supplied. */
   | 'missing-course-declaration'
+  /**
+   * The page printed no meet name: no `meet-name` element and no level-1 heading.
+   * `meet.name` is then `''`, as `format`, `ruleset` and `course` read
+   * `'unknown'` when unstated. An empty name means "not stated", never a meet
+   * called nothing. `meetName` stays absent on the payload.
+   */
+  | 'meet-name-missing'
   /** A class-year cell held a value outside the known vocabulary. Recorded as `'unknown'`. */
   | 'unmapped-class-year'
   /** An event's gender word is outside `Men`/`Women` (e.g. `Mixed`). Recorded as `'unknown'`. */
@@ -1109,6 +1116,15 @@ function rosterTeamName(cleaned: string): string | undefined {
   return firstHeadingText(cleaned);
 }
 
+/** The warning every parse raises when the page prints no meet name. See `meet-name-missing`. */
+function missingMeetNameWarning(): SwimCloudParseWarning {
+  return {
+    code: 'meet-name-missing',
+    message:
+      'The page prints no meet name (no meet-name element and no level-1 heading). meet.name is the empty string, which means "not stated".',
+  };
+}
+
 function firstHeadingText(html: string): string | undefined {
   const headings = findHeadings(html);
   for (const heading of headings) {
@@ -1373,6 +1389,7 @@ export function parseMeetResultsHtml(
   }
 
   const meetName = firstHeadingText(html);
+  if (meetName === undefined) warnings.push(missingMeetNameWarning());
   const meet: SwimCloudMeet = {
     swimCloudMeetId: meetId,
     name: meetName ?? '',
@@ -4099,6 +4116,7 @@ export function parseTeamMeetSwimsHtml(
     }
   }
 
+  if (meetName === undefined) warnings.push(missingMeetNameWarning());
   const meet: SwimCloudMeet = {
     swimCloudMeetId: meetId,
     name: meetName ?? '',
@@ -4898,6 +4916,7 @@ export function parseMeetEventResultsHtml(
     rowCount += round.rowCount;
   }
 
+  if (meetName === undefined) warnings.push(missingMeetNameWarning());
   const meet: SwimCloudMeet = {
     swimCloudMeetId: meetId,
     name: meetName ?? '',

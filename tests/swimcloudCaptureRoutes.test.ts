@@ -1206,10 +1206,14 @@ describe('capture parse route', () => {
       expect(body.parses[0].swims[0].result.finalTime).toBeUndefined();
       expect(body.parses[0].swims[0].result.rawTimeToken).toBe('banana');
       // Each warning names the page it came from, the row, and the parser's own
-      // code. This is the string shape the picker renders.
+      // code. This is the string shape the picker renders. The seeded page is a
+      // bare table with no meet-name element and no level-1 heading, so the
+      // parser also says so with a page-level warning (no row): the meet name is
+      // "not stated", not a name that happens to be empty (C8).
       expect(body.warnings.map(line => line.split(' — ')[0])).toStrictEqual([
         `${warnUrl} (row 0): missing-swim-link`,
         `${warnUrl} (row 0): unrecognized-time-token`,
+        `${warnUrl}: meet-name-missing`,
       ]);
       expect(body.warnings[1]).toContain('"banana"');
     } finally {

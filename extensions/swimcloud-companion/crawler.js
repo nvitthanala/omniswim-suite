@@ -1457,6 +1457,12 @@
     }
     return firstHeadingText(cleaned);
   }
+  function missingMeetNameWarning() {
+    return {
+      code: "meet-name-missing",
+      message: 'The page prints no meet name (no meet-name element and no level-1 heading). meet.name is the empty string, which means "not stated".'
+    };
+  }
   function firstHeadingText(html) {
     const headings = findHeadings(html);
     for (const heading of headings) {
@@ -1694,6 +1700,7 @@
         events.push(swim.event);
       }
     }
+    if (meetName === void 0) warnings.push(missingMeetNameWarning());
     const meet = {
       swimCloudMeetId: meetId,
       name: meetName ?? "",

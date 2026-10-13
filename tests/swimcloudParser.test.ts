@@ -1103,3 +1103,76 @@ describe('parseMeetEventResultsHtml — real capture, per-event results (F9)', (
     }
   });
 });
+
+/**
+ * C8 (2026-10-12). A page with no meet name used to build `meet.name = ''` while
+ * `format`, `ruleset` and `course` read 'unknown', and raised nothing: an empty
+ * name looked like a meet called nothing. Each of the three parsers that build a
+ * `SwimCloudMeet` now says so with a `meet-name-missing` warning.
+ *
+ * The fixtures are the committed pages with their meet-name element removed, so
+ * the only thing that changed is the name. No request to swimcloud.com is made.
+ */
+describe('meet-name-missing: a page that prints no meet name says so', () => {
+  const stripMeetName = (html: string): string => {
+    const stripped = html
+      .replace(/<h1\b[^>]*>[\s\S]*?<\/h1>/gi, '')
+      .replace(/<[a-z0-9]+\b[^>]*\bid="meet-name"[^>]*>[\s\S]*?<\/[a-z0-9]+>/gi, '');
+    expect(stripped).not.toMatch(/<h1\b/i);
+    expect(stripped).not.toContain('id="meet-name"');
+    return stripped;
+  };
+  const realCtx = (url: string): SwimCloudParseContext => ({
+    sourceUrl: url,
+    retrievedAt: '2026-09-08T00:00:00Z',
+    track: 'browser-extension',
+  });
+
+  it('parseMeetResultsHtml: empty name, warning raised, meetName absent', () => {
+    const html = stripMeetName(fixture('swimcloud-synthetic-meet-results.html'));
+    const result = parseMeetResultsHtml(html, contextFor('https://www.swimcloud.com/results/193735/'));
+    if (!result.ok) throw new Error(`expected success, got ${result.failure.code}`);
+    expect(result.data.meet.name).toBe('');
+    expect(result.data.meet.format).toBe('unknown');
+    expect(result.data.meetName).toBeUndefined();
+    expect(warningCodes(result.warnings)).toContain('meet-name-missing');
+  });
+
+  it('parseTeamMeetSwimsHtml: empty name, warning raised, meetName absent', () => {
+    const html = stripMeetName(fixture('swimcloud-real-meet-team-swims-356467-team58-page1.html'));
+    const result = parseTeamMeetSwimsHtml(html, realCtx('https://www.swimcloud.com/results/356467/team/58/swims/'));
+    if (!result.ok) throw new Error(`expected success, got ${result.failure.code}`);
+    expect(result.data.meet.name).toBe('');
+    expect(result.data.meetName).toBeUndefined();
+    expect(warningCodes(result.warnings)).toContain('meet-name-missing');
+  });
+
+  it('parseMeetEventResultsHtml: empty name, warning raised, meetName absent', () => {
+    const html = stripMeetName(fixture('swimcloud-real-meet-event-356467-event26.html'));
+    const result = parseMeetEventResultsHtml(html, realCtx('https://www.swimcloud.com/results/356467/event/26/'));
+    if (!result.ok) throw new Error(`expected success, got ${result.failure.code}`);
+    expect(result.data.meet.name).toBe('');
+    expect(result.data.meetName).toBeUndefined();
+    expect(warningCodes(result.warnings)).toContain('meet-name-missing');
+  });
+
+  it('a page that does print its name raises no such warning, at any of the three sites', () => {
+    const synthetic = parseMeetResultsHtml(
+      fixture('swimcloud-synthetic-meet-results.html'),
+      contextFor('https://www.swimcloud.com/results/193735/'),
+    );
+    const teamSwims = parseTeamMeetSwimsHtml(
+      fixture('swimcloud-real-meet-team-swims-356467-team58-page1.html'),
+      realCtx('https://www.swimcloud.com/results/356467/team/58/swims/'),
+    );
+    const event = parseMeetEventResultsHtml(
+      fixture('swimcloud-real-meet-event-356467-event26.html'),
+      realCtx('https://www.swimcloud.com/results/356467/event/26/'),
+    );
+    for (const result of [synthetic, teamSwims, event]) {
+      if (!result.ok) throw new Error(`expected success, got ${result.failure.code}`);
+      expect(result.data.meet.name.length).toBeGreaterThan(0);
+      expect(warningCodes(result.warnings)).not.toContain('meet-name-missing');
+    }
+  });
+});
