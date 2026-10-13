@@ -166,7 +166,8 @@ export function VideoTransportControls({
 
         <div className="text-xs font-mono font-medium tracking-wide opacity-90 drop-shadow-md ml-2 border-l border-white/20 pl-4 py-0.5 flex items-center gap-4">
           <span>
-            {formatTime(currentTime)} / {formatTime(duration)}
+            {/* `duration` is 0 until metadata loads and NaN for a stream with none: not a real length. */}
+            {formatTime(currentTime)} / {formatTime(duration > 0 ? duration : null)}
           </span>
           <span className="text-accent-300">
             FR: {effectiveFps !== null ? Math.floor(currentTime * effectiveFps) : '—'}
