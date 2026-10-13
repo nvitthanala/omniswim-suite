@@ -44,7 +44,7 @@
     "C2": "committed 7d361aab",
     "C3": "pending",
     "C4": "committed 9c87d57c + follow-up (points_on_status_clock raises; garbled clock keeps printed points). TS side must add the code to MEET_PIPELINE_ERROR_CODES in parsingPipeline.ts as final -> 422 with rows (part of C5 TS half)",
-    "C5": "python half committed; TS half pending: pipeline:legacy flag on legacy fallback, relay_split_source/parse_warnings read in mapAthleteRows, points_on_status_clock as a final 422, import-UI warning",
+    "C5": "python half 9c87d57c; TypeScript half committed e461c859 (pipeline flag, warnings, parsingRoutes). Import-UI warning display still pending (worker).",
     "C6": "committed e1c87ec0 (core) + 4057721d (UI); worker a467cc44fdcdec299 fixing two follow-ups (count-field truncation on keystroke; empty seed on Duplicate to edit)",
     "C7": "pending",
     "C8": "pending",
@@ -53,9 +53,9 @@
     "P1": "committed 09c5882e",
     "P2": "committed 09c5882e",
     "P3": "committed 171ddc31 (client), 1464ea7b (restore test), earlier 09c5882e (server). U10 satisfied: version checks, no persisted sequence.",
-    "P4": "pending",
+    "P4": "committed (saveWorkspace returns WorkspaceSaveResult; metrics toasts)",
     "P5": "pending",
-    "P6": "pending",
+    "P6": "committed (OMNI_BACKUP_KEEP_MANUAL=20, OMNI_BACKUP_KEEP_PRE_RESTORE=10, other kinds shared 20; OMNI_BACKUP_DIR mirror; VACUUM INTO). README text for restore: doc comment above DEFAULT_BACKUP_KEEP in workspaceRepo.ts (H3).",
     "P7": "committed 09c5882e + a9dccc27 (server exits non-zero on a newer or unreadable schema or any SQLite error; JSON fallback only on native-module load failure, logged as error)",
     "T1": "pending",
     "T2": "committed 0af4ac9b",
@@ -343,6 +343,8 @@
     "P7: a corrupt or locked SQLite database now stops the server (exit 1) instead of falling back to meets.json. Confirm that is wanted."
   ],
   "pendingArchitectReview": [
-    "P3 client/conflict diff (171ddc31) + persistence layer (09c5882e): bundle with wave 2 core diffs"
-  ]
+    "P3 client/conflict diff (171ddc31) + persistence layer (09c5882e): bundle with wave 2 core diffs",
+    "P4/P6 persistence diffs"
+  ],
+  "u3Prereq": "U3 delete of 39 UI test workspaces: take a MANUAL backup first (a bulk delete writes 39 pre-delete backups and would evict the 20 startup backups of this worktree data/backups); a manual backup survives and restores all 39."
 }
