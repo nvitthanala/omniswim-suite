@@ -10,7 +10,11 @@ import { aggregateSwimmerMeetPoints, scorerRosterKey } from '@omniswim/core/lib/
 import { buildTeamScoreLookup, officialScoresForGender } from '@omniswim/core/lib/teamScoreMatching';
 import { buildMeetReconciliationSummary } from '@omniswim/core/lib/meetReconciliation';
 import type { PrelimsDeltaTimelinePoint, PrelimsOverUnderEntry } from '@omniswim/core/lib/prelimsProjection';
-import { buildMeetMomentumChartDataFromLookup, buildPrelimsOverUnderByEntryKey } from '@omniswim/core/lib/prelimsProjection';
+import {
+  buildMeetMomentumChartDataFromLookup,
+  buildPrelimsOverUnderByEntryKey,
+  countPrelimsEntriesWithoutActual,
+} from '@omniswim/core/lib/prelimsProjection';
 import type { PsychOverUnderEntry } from '@omniswim/core/lib/psychProjection';
 import type { ScoringBundle } from '@omniswim/core/lib/useWorkspaceScoring';
 import { useThemeColors } from '@omniswim/core/lib/useThemeColors';
@@ -221,6 +225,14 @@ export default function MeetOperationsView({
     visibleEvents,
   ]);
 
+  // Entries the momentum chart leaves out because they have no result yet.
+  const momentumNoActualCount =
+    meetMomentumAnchor === 'psych' && showPsychPerformance
+      ? countPrelimsEntriesWithoutActual(resolvedPsychOuByEntry)
+      : showPrelimsPerformance
+        ? countPrelimsEntriesWithoutActual(resolvedPrelimsOuByEntry)
+        : 0;
+
   const momentumEmptyMessage =
     meetMomentumAnchor === 'psych' && showPsychPerformance && !psychMomentumHasData
       ? 'No psych momentum for this gender — team names on the psych sheet may not match meet results yet.'
@@ -268,6 +280,7 @@ export default function MeetOperationsView({
             onMeetMomentumAnchorChange={setMeetMomentumAnchor}
             meetMomentumData={meetMomentumData}
             momentumEmptyMessage={momentumEmptyMessage}
+            momentumNoActualCount={momentumNoActualCount}
             analysisView={analysisView}
             onAnalysisViewChange={setAnalysisView}
             baselineBundle={baselineBundle}

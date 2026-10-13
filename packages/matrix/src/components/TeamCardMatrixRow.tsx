@@ -16,6 +16,7 @@ import { entryKey, prelimsOuOverUnderForDisplay } from '@omniswim/core/lib/preli
 import type { PsychOverUnderEntry } from '@omniswim/core/lib/psychProjection';
 import { psychExpectedForResult } from '@omniswim/core/lib/psychProjection';
 import { displayTimeForRelayLeg, formatLegSplitSummary } from '@omniswim/core/lib/relaySplits';
+import { rowHasNoActual } from '../lib/noActual';
 import { AthleteName, CompactEventLabel, PlacementExpectedValue, PointsValue, PrelimsOuValue } from './matrixPresentation';
 import { CutlineVerdict, RelayVerdict, useIsEstimatedRelayRow } from './TeamCardParts';
 import { buildTeamRowCutlineTags, relayMissingStrokeLabel, type TeamRowCutlineTags } from './teamCardView';
@@ -212,6 +213,7 @@ export function TeamMatrixPointsCell({
         {showPrelimsPerformance && prelimsOuByEntry ? (
           <PrelimsOuValue
             value={prelimsOuOverUnderForDisplay(res, prelimsOuByEntry)}
+            noActual={rowHasNoActual(res, prelimsOuByEntry)}
             compact
           />
         ) : null}

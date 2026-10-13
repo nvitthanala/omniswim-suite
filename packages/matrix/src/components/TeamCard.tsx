@@ -11,9 +11,10 @@ import { TeamCardChartToggle } from './TeamCardParts';
 import { TeamScore, SwimmerResult, Gender } from '@omniswim/core/types';
 import { formatEventChartAxisLabel, colorForChartStroke } from '@omniswim/core/lib/utils';
 import type { PrelimsOverUnderEntry } from '@omniswim/core/lib/prelimsProjection';
-import { buildMomentumSeriesForTeam } from '@omniswim/core/lib/prelimsProjection';
+import { buildMomentumSeriesForTeam, countPrelimsEntriesWithoutActual } from '@omniswim/core/lib/prelimsProjection';
 import type { PsychOverUnderEntry } from '@omniswim/core/lib/psychProjection';
 import { useThemeColors } from '@omniswim/core/lib/useThemeColors';
+import { eventsWithoutActual } from '../lib/noActual';
 import { TeamMomentumSection } from './TeamMomentumSection';
 import { TeamCardHeader } from './TeamCardHeader';
 import { TeamEventChartPane, TeamClassChartPane } from './TeamCardChartPanes';
@@ -113,27 +114,46 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
   const psychMomentumHasData = (psychOuByEntry?.size ?? 0) > 0;
   const prelimsMomentumHasData = (prelimsOuByEntry?.size ?? 0) > 0;
 
-  const momentumSeries = useMemo(
-    () => {
-      const lookup =
-        momentumAnchor === 'psych' && showPsychPerformance && psychOuByEntry && psychMomentumHasData
-          ? psychOuByEntry
-          : momentumAnchor !== 'psych' && showPrelimsPerformance && prelimsOuByEntry && prelimsMomentumHasData
-            ? prelimsOuByEntry
-            : undefined;
-      return lookup ? buildMomentumSeriesForTeam(team.teamName, lookup, eventsList) : [];
-    },
+  const momentumLookup = useMemo(
+    () =>
+      momentumAnchor === 'psych' && showPsychPerformance && psychOuByEntry && psychMomentumHasData
+        ? psychOuByEntry
+        : momentumAnchor !== 'psych' && showPrelimsPerformance && prelimsOuByEntry && prelimsMomentumHasData
+          ? prelimsOuByEntry
+          : undefined,
     [
-      team.teamName,
       showPrelimsPerformance,
       showPsychPerformance,
       prelimsOuByEntry,
       psychOuByEntry,
       psychMomentumHasData,
       prelimsMomentumHasData,
-      eventsList,
       momentumAnchor,
     ]
+  );
+
+  const momentumSeries = useMemo(
+    () => (momentumLookup ? buildMomentumSeriesForTeam(team.teamName, momentumLookup, eventsList) : []),
+    [team.teamName, momentumLookup, eventsList]
+  );
+
+  // Entries with an expected value and no actual yet. The series above leaves them out
+  // (C7: no actual is not 0), so the card says how many it left out.
+  const noActualEvents = useMemo(
+    () => eventsWithoutActual(momentumLookup, team.teamName),
+    [momentumLookup, team.teamName]
+  );
+  const momentumNoActualCount = useMemo(
+    () => (momentumLookup ? countPrelimsEntriesWithoutActual(momentumLookup, team.teamName) : 0),
+    [momentumLookup, team.teamName]
+  );
+  // The header's "vs prelims" is baseline minus prelims, which counts these entries as 0 points.
+  const prelimsNoActualCount = useMemo(
+    () =>
+      showPrelimsPerformance && prelimsOuByEntry
+        ? countPrelimsEntriesWithoutActual(prelimsOuByEntry, team.teamName)
+        : 0,
+    [showPrelimsPerformance, prelimsOuByEntry, team.teamName]
   );
 
   const teamMomentumEmptyMessage =
@@ -195,8 +215,10 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
         name: formatEventChartAxisLabel(name, { maxLength: 20 }),
         rawEvent: name,
         points,
-        overUnder: ou?.delta ?? 0,
-        cumulativeOu: ou?.cumulative ?? 0,
+        // No momentum entry for the event is "no value", not 0: a 0 would read as "exactly on expectation".
+        overUnder: ou ? ou.delta : null,
+        cumulativeOu: ou ? ou.cumulative : null,
+        noActual: noActualEvents.has(name),
         swimmers: eventSwimmersMap.get(name) ?? [],
       };
     });
@@ -207,10 +229,10 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
       eventData.sort((a, b) => b.points - a.points);
     }
 
-    let cumulativeOu = 0;
+    let cumulativeOu: number | null = null;
     for (const row of eventData) {
-      cumulativeOu += row.overUnder;
-      row.cumulativeOu = row.cumulativeOu || cumulativeOu;
+      if (row.overUnder !== null) cumulativeOu = (cumulativeOu ?? 0) + row.overUnder;
+      row.cumulativeOu = row.cumulativeOu ?? cumulativeOu;
     }
 
     return {
@@ -219,7 +241,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
       topSwimmersBase: Object.values(swimmerGroups).sort((a: any, b: any) => b.points - a.points),
       topEventsBase: Object.values(eventGroups).sort((a: any, b: any) => b.points - a.points),
     };
-  }, [filteredSwimmers, eventsList, momentumSeries]);
+  }, [filteredSwimmers, eventsList, momentumSeries, noActualEvents]);
 
   const normalizedSearchQuery = searchQuery?.trim().toLowerCase() ?? '';
   const topSwimmers = useMemo(() => {
@@ -311,6 +333,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
         projectedOverUnder={projectedOverUnder}
         showPrelimsPerformance={showPrelimsPerformance}
         eventThrough={eventThrough}
+        noActualCount={prelimsNoActualCount}
         onToggle={() => {
           const nextExpanded = !isExpanded;
           setIsExpanded(nextExpanded);
@@ -426,6 +449,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                   momentumSeries={momentumSeries}
                   momentumMeetTotal={momentumMeetTotal}
                   teamMomentumEmptyMessage={teamMomentumEmptyMessage}
+                  noActualCount={momentumNoActualCount}
                 />
               </div>
 

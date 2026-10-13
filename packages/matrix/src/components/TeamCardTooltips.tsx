@@ -17,7 +17,8 @@ import { entryKey, prelimsOuOverUnderForDisplay } from '@omniswim/core/lib/preli
 import type { PsychOverUnderEntry } from '@omniswim/core/lib/psychProjection';
 import { psychExpectedForResult } from '@omniswim/core/lib/psychProjection';
 import { displayTimeForRelayLeg, formatLegSplitSummary } from '@omniswim/core/lib/relaySplits';
-import { CompactEventLabel, PlacementExpectedValue, PrelimsOuValue } from './matrixPresentation';
+import { rowHasNoActual } from '../lib/noActual';
+import { CompactEventLabel, NoActualMarker, PlacementExpectedValue, PrelimsOuValue } from './matrixPresentation';
 import { CutlineVerdict, PodiumMedal, RelayVerdict, useIsEstimatedRelayRow } from './TeamCardParts';
 import {
   buildTeamRowCutlineTags,
@@ -30,6 +31,8 @@ import {
 /** Chart tooltip title + points, with the event tooltip's optional over/under badge. */
 export function TooltipHeader({ isClass, data, showPrelimsPerformance }: { isClass: boolean; data: any; showPrelimsPerformance?: boolean }) {
   const showOverUnder = !isClass && showPrelimsPerformance && data.overUnder != null && Math.abs(data.overUnder) > 0.05;
+  // The event has an entry with no result yet and nothing else to show: say so rather than show nothing.
+  const showNoActual = !isClass && showPrelimsPerformance && data.overUnder == null && data.noActual === true;
   return (
     <div className="flex justify-between items-center mb-2 pb-2 border-b border-theme-soft shrink-0">
       <h4 className="font-bold text-[var(--text-accent)] uppercase tracking-widest" style={{ fontSize: 'clamp(8px, 5cqi, 12px)' }}>
@@ -38,6 +41,7 @@ export function TooltipHeader({ isClass, data, showPrelimsPerformance }: { isCla
       <div className="flex flex-col items-end gap-0.5">
         <span className="font-mono font-black" style={{ fontSize: 'clamp(9px, 6cqi, 14px)' }}>{data.points.toFixed(1)} PTS</span>
         {showOverUnder ? <PrelimsOuValue value={data.overUnder} compact /> : null}
+        {showNoActual ? <NoActualMarker /> : null}
       </div>
     </div>
   );
@@ -168,7 +172,12 @@ function SwimmerExpectedValues({
         <PlacementExpectedValue label="Psych" value={psychExpectedForResult(s, psychOuByEntry)} />
       ) : null}
       {showPrelimsPerformance && prelimsOuByEntry ? (
-        <PrelimsOuValue value={prelimsOuOverUnderForDisplay(s, prelimsOuByEntry)} compact className="ml-1" />
+        <PrelimsOuValue
+          value={prelimsOuOverUnderForDisplay(s, prelimsOuByEntry)}
+          noActual={rowHasNoActual(s, prelimsOuByEntry)}
+          compact
+          className="ml-1"
+        />
       ) : null}
     </div>
   );

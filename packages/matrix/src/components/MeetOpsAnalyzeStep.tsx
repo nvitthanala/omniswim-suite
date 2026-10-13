@@ -40,7 +40,8 @@ function TimelineTooltipContent({
   const rows = [...payload]
     .map(p => ({
       name: String(p.name ?? p.dataKey ?? ''),
-      value: typeof p.value === 'number' ? p.value : Number(p.value),
+      // Number(null) is 0: a missing value must drop out of the list, not read as 0.0.
+      value: typeof p.value === 'number' ? p.value : p.value == null ? Number.NaN : Number(p.value),
       color: String(p.color ?? ''),
       strokeDasharray: dashByTeam[String(p.name ?? p.dataKey ?? '')] as string | undefined,
       prelimsDelta: prelimsDeltaByTeam?.[String(p.name ?? p.dataKey ?? '')],
@@ -100,6 +101,8 @@ interface MeetOpsAnalyzeStepProps {
   onMeetMomentumAnchorChange: (anchor: 'prelims' | 'psych') => void;
   meetMomentumData: Record<string, unknown>[];
   momentumEmptyMessage?: string;
+  /** Entries the meet momentum chart leaves out because they have no result yet. */
+  momentumNoActualCount?: number;
   analysisView: 'diff' | 'prelims';
   onAnalysisViewChange: (view: 'diff' | 'prelims') => void;
   baselineBundle: ScoringBundle;
@@ -119,6 +122,7 @@ export function MeetOpsAnalyzeStep({
   onMeetMomentumAnchorChange,
   meetMomentumData,
   momentumEmptyMessage,
+  momentumNoActualCount,
   analysisView,
   onAnalysisViewChange,
   baselineBundle,
@@ -240,6 +244,7 @@ export function MeetOpsAnalyzeStep({
             teams={teamsWithLineStyles}
             size="md"
             emptyMessage={momentumEmptyMessage}
+            noActualCount={momentumNoActualCount}
           />
         </div>
       ) : null}

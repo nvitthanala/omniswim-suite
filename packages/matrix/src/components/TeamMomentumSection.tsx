@@ -18,6 +18,8 @@ interface TeamMomentumSectionProps {
   momentumSeries: any[];
   momentumMeetTotal?: number;
   teamMomentumEmptyMessage?: string;
+  /** Entries left out of the momentum line because they have no result yet. */
+  noActualCount?: number;
 }
 
 export function TeamMomentumSection({
@@ -28,6 +30,7 @@ export function TeamMomentumSection({
   momentumSeries,
   momentumMeetTotal,
   teamMomentumEmptyMessage,
+  noActualCount,
 }: TeamMomentumSectionProps) {
   if (!showPrelimsPerformance && !showPsychPerformance) return null;
   return (
@@ -52,6 +55,7 @@ export function TeamMomentumSection({
         meetTotalOu={momentumMeetTotal}
         size="md"
         emptyMessage={teamMomentumEmptyMessage}
+        noActualCount={noActualCount}
       />
     </div>
   );

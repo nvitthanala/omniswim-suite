@@ -23,6 +23,8 @@ interface TeamCardHeaderProps {
   projectedOverUnder?: number;
   showPrelimsPerformance?: boolean;
   eventThrough?: number;
+  /** Entries with no result yet that the "vs prelims" difference counts as 0 points. */
+  noActualCount?: number;
   onToggle: () => void;
 }
 
@@ -38,6 +40,7 @@ export function TeamCardHeader({
   projectedOverUnder,
   showPrelimsPerformance,
   eventThrough,
+  noActualCount,
   onToggle,
 }: TeamCardHeaderProps) {
   return (
@@ -64,6 +67,7 @@ export function TeamCardHeader({
               prelimsProjected={prelimsProjectedScore}
               baselineOverUnder={baselineOverUnder}
               projectedOverUnder={projectedOverUnder}
+              noActualCount={noActualCount}
             />
           ) : null}
         </div>

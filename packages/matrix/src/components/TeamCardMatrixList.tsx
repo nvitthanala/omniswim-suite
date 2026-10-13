@@ -15,7 +15,8 @@ import type { Gender, SwimmerResult } from '@omniswim/core/types';
 import type { PrelimsOverUnderEntry } from '@omniswim/core/lib/prelimsProjection';
 import { sumPrelimsOuForSwimmers } from '@omniswim/core/lib/prelimsProjection';
 import type { PsychOverUnderEntry } from '@omniswim/core/lib/psychProjection';
-import { CompactEventLabel, PrelimsOuValue } from './matrixPresentation';
+import { countGroupEntriesWithoutActual, NO_ACTUAL_LABEL } from '../lib/noActual';
+import { CompactEventLabel, NoActualMarker, PrelimsOuValue } from './matrixPresentation';
 import { TeamMatrixSwimmerRow } from './TeamCardMatrixRow';
 
 type SortMode = 'chrono' | 'eventDesc' | 'eventAsc' | 'swimmerDesc' | 'swimmerAsc';
@@ -150,8 +151,31 @@ function PrelimsOuValueOrPoints({
           compact
         />
       ) : null}
+      {showPrelimsPerformance && prelimsOuByEntry
+        ? <GroupNoActualMarker group={group} viewMode={viewMode} prelimsOuByEntry={prelimsOuByEntry} />
+        : null}
     </div>
   );
+}
+
+/**
+ * The over/under sum skips an entry with no actual, so it is a lower or higher
+ * number than the whole group would give. This says how many entries it skipped.
+ */
+function GroupNoActualMarker({
+  group,
+  viewMode,
+  prelimsOuByEntry,
+}: {
+  group: any;
+  viewMode: ViewMode;
+  prelimsOuByEntry: Map<string, PrelimsOverUnderEntry>;
+}) {
+  const missing = countGroupEntriesWithoutActual(group.swimmers, prelimsOuByEntry, {
+    includeRelay: viewMode === 'event',
+  });
+  if (missing === 0) return null;
+  return <NoActualMarker label={`${NO_ACTUAL_LABEL}: ${missing} ${missing === 1 ? 'entry is' : 'entries are'} left out of this over/under`} />;
 }
 
 /** The scrollable list of group cards (by-event or by-swimmer) with their swimmer rows. */

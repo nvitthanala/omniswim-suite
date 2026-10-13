@@ -89,16 +89,47 @@ export function PointsValue({
   );
 }
 
+/**
+ * The mark for a value that has no actual result yet. A dash on screen and
+ * "No result yet" for a screen reader. It is never 0: 0 means a real result
+ * that scored nothing.
+ */
+export function NoActualMarker({
+  label = 'No result yet',
+  className,
+}: {
+  /** Replaces the default words for the screen reader and the hover title. */
+  label?: string;
+  className?: string;
+}) {
+  return (
+    <span
+      className={['font-mono tabular-nums text-ui-micro text-theme-muted whitespace-nowrap', className]
+        .filter(Boolean)
+        .join(' ')}
+      title={label}
+      data-no-actual
+    >
+      <span aria-hidden="true">{'—'}</span>
+      <span className="sr-only">{label}</span>
+    </span>
+  );
+}
+
 /** Compact prelims over/under badge (+5.0 vs prelims). */
 export function PrelimsOuValue({
   value,
   compact = false,
   className,
+  noActual = false,
 }: {
-  value: number | undefined;
+  value: number | undefined | null;
   compact?: boolean;
   className?: string;
+  /** The entry has no actual yet: with no value to show, draw the "No result yet" mark instead of nothing. */
+  noActual?: boolean;
 }) {
+  if (value == null && noActual) return <NoActualMarker className={className} />;
   if (value == null || Math.abs(value) <= 0.05) return null;
   const positive = value > 0;
   const label = compact
