@@ -914,6 +914,11 @@ select {
   cursor: grabbing;
 }
 
+/* The window clips its overflow, so draw the focus ring inside the title bar. */
+.floating-window-header:focus-visible {
+  outline-offset: -2px;
+}
+
 .floating-window-title {
   flex: 1;
   font-size: var(--text-ui-caption);

@@ -38,7 +38,8 @@ const FOCUSABLE_SELECTOR = [
 ].join(',');
 const modalStack: HTMLElement[] = [];
 
-function listFocusable(root: HTMLElement): HTMLElement[] {
+/** Tabbable, visible descendants of `root` in DOM order. Shared with `FloatingWindow`. */
+export function listFocusable(root: HTMLElement): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
     el =>
       !el.matches(':disabled') &&
