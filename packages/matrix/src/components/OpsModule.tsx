@@ -40,6 +40,8 @@ import {
 import MeetOperationsView from './MeetOperationsView';
 import SwimmerDeleteConfirmModal from './SwimmerDeleteConfirmModal';
 import { SwimCloudImportDiagnosticsPanel } from './SwimCloudImportDiagnosticsPanel';
+import { PdfImportNoticePanel } from './PdfImportNoticePanel';
+import { noticeForParsedMeet, noticeForRefusedMeet, type PdfImportNotice } from '../lib/pdfImportNotice';
 import {
   readStoredMatrixStep,
   resolveInitialMatrixStep,
@@ -202,6 +204,8 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
     warnings?: readonly SwimCloudParseWarning[];
     rawWarnings?: readonly string[];
   } | null>(null);
+  // How the last meet PDF was read: a legacy read, parser warnings, or the rows that blocked it.
+  const [pdfImportNotice, setPdfImportNotice] = useState<PdfImportNotice | null>(null);
   const [pdfFormat, setPdfFormat] = useState('auto');
   const [swimmerDeleteCandidate, setSwimmerDeleteCandidate] = useState<{ name: string } | null>(null);
   const [suggestedPresetId, setSuggestedPresetId] = useState<string | null>(() =>
@@ -260,6 +264,7 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
       const abortController = new AbortController();
       parseAbortRef.current = abortController;
       setIsParsingPdf(true);
+      setPdfImportNotice(null);
       try {
         const base64 = (event.target?.result as string).split(',')[1];
         const res = await fetch('/api/parse-pdf', {
@@ -271,7 +276,10 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
         const data = await res.json();
 
         if (!res.ok || data.error) {
-          toast.push('error', `${data.error || 'PDF parsing failed'}${data.details ? ` — ${data.details}` : ''}`);
+          // A refusal that names rows is shown as a panel that stays; any other failure is a toast.
+          const refused = noticeForRefusedMeet(data);
+          if (refused) setPdfImportNotice(refused);
+          else toast.push('error', `${data.error || 'PDF parsing failed'}${data.details ? ` — ${data.details}` : ''}`);
           return;
         }
 
@@ -311,6 +319,7 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
           toast.push('info', `Workspace renamed to "${autoName}"`);
         }
         setScoringRefreshKey(k => k + 1);
+        setPdfImportNotice(noticeForParsedMeet(data));
       } catch (err) {
         if (err instanceof DOMException && err.name === 'AbortError') {
           toast.push('info', 'PDF parsing canceled');
@@ -610,6 +619,11 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
 
   return (
     <>
+      {pdfImportNotice ? (
+        <div className="mb-3">
+          <PdfImportNoticePanel notice={pdfImportNotice} onDismiss={() => setPdfImportNotice(null)} />
+        </div>
+      ) : null}
       {importDiagnostics ? (
         <div className="mb-3">
           <SwimCloudImportDiagnosticsPanel
