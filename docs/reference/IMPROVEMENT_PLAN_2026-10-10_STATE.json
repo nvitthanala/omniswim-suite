@@ -42,11 +42,11 @@
     "S4": "committed 3105ba98 (gates green on combined tree 2026-10-12)",
     "C1": "committed a74420af (also fixed architect findings: gender out of relayTieKey; A/B relay merge in relayEntryGroupKey). e2e rerun on a quiet tree still owed (ui-ia.spec.ts:353 timed out while another agent edited apps/shell; goldens byte-identical)",
     "C2": "committed 7d361aab",
-    "C3": "core committed 051a2bc9; UI picker in flight (worker af97b60e5a3e9ad0f). Until it lands AnalyticsPage shows a blank team chart for multi-team sets.",
+    "C3": "committed 051a2bc9 (core) + 54c62dd3 (UI picker); default team open question",
     "C4": "committed 9c87d57c + follow-up (points_on_status_clock raises; garbled clock keeps printed points). TS side must add the code to MEET_PIPELINE_ERROR_CODES in parsingPipeline.ts as final -> 422 with rows (part of C5 TS half)",
-    "C5": "python 9c87d57c, TS e461c859; import-UI warning display in flight (worker af97b60e5a3e9ad0f)",
+    "C5": "committed 9c87d57c + e461c859 + 871c0712",
     "C6": "committed e1c87ec0 (core) + 4057721d (UI); worker a467cc44fdcdec299 fixing two follow-ups (count-field truncation on keystroke; empty seed on Duplicate to edit)",
-    "C7": "core committed 6368b19d; no-actual marker UI in flight (worker af97b60e5a3e9ad0f)",
+    "C7": "committed 6368b19d (core) + caca5b72 (UI marker); matrix header \"vs prelims\" still counts no actual as 0 (open question)",
     "C8": "committed bdca188c (meet-name-missing at 3 sites; crawler.js bundle rebuilt)",
     "A7": "pending",
     "A12": "pending",
@@ -71,12 +71,12 @@
     "T12": "pending",
     "X1": "pending",
     "X2": "pending",
-    "X3": "in flight (worker af97b60e5a3e9ad0f): role=alert + Toast timer cleanup (fixes the flaky vitest exit 1)",
+    "X3": "committed bb662f8d (also fixes Toast timer flake)",
     "X4": "committed 4057721d with C6 UI",
     "X5": "pending",
     "X6": "pending",
-    "X7": "in flight (worker af97b60e5a3e9ad0f)",
-    "X8": "in flight (worker af97b60e5a3e9ad0f)",
+    "X7": "committed 54c62dd3",
+    "X8": "committed 54c62dd3",
     "X9": "pending",
     "X10": "pending",
     "X11": "pending",
@@ -282,6 +282,43 @@
         "import-UI warning display (worker)",
         "C3 team picker + C7 no-actual marker UI (worker)"
       ]
+    },
+    {
+      "id": "wave-3",
+      "status": "dispatched 2026-10-12",
+      "agents": [
+        {
+          "scope": "API error helper + schema + parse-psych-pdf guard",
+          "items": [
+            "P5",
+            "createWorkspaceSchema allowlist",
+            "parse-psych-pdf size and magic check"
+          ],
+          "agent": "executor (fresh)"
+        },
+        {
+          "scope": "test and CI tooling",
+          "items": [
+            "T3",
+            "T5",
+            "T7",
+            "T8",
+            "T9",
+            "T10"
+          ],
+          "agent": "worker (fresh)"
+        }
+      ],
+      "later": [
+        "T12 lint ratchets after P5",
+        "T1 type-check tests",
+        "T4/T6",
+        "X-group rest (X1,X2,X5,X6,X9,X10,X11,X12)",
+        "F-group",
+        "R-group (R9 last)",
+        "D-group",
+        "H-group (H6 alone; H2 last)"
+      ]
     }
   ],
   "onResume": [
@@ -354,5 +391,13 @@
     "P4/P6 persistence diffs",
     "C3, C7, relayGroupKey diffs (051a2bc9, 6368b19d, 6cede0ae)"
   ],
-  "u3Prereq": "U3 delete of 39 UI test workspaces: take a MANUAL backup first (a bulk delete writes 39 pre-delete backups and would evict the 20 startup backups of this worktree data/backups); a manual backup survives and restores all 39."
+  "u3Prereq": "U3 delete of 39 UI test workspaces: take a MANUAL backup first (a bulk delete writes 39 pre-delete backups and would evict the 20 startup backups of this worktree data/backups); a manual backup survives and restores all 39.",
+  "gatesAfterWave2": {
+    "at": "bb662f8d... 871c0712, quiet tree",
+    "lint": "0 errors, 2 baseline warnings",
+    "vitest": "220 files passed, 3362 passed, 23 skipped, exit 0",
+    "skipBudget": "23 = budget 23, exit 0 (Toast timer flake fixed)",
+    "scripts": "86 passed, 0 failed, 1 skipped (incl. e2e ui-ia.spec.ts; earlier failures were concurrent edits)",
+    "harness": "7 passed, 1 skipped (pre-existing fixme)"
+  }
 }
