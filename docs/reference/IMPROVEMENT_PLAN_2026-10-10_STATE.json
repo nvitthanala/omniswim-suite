@@ -101,7 +101,7 @@
     "R8": "committed",
     "R9": "pending",
     "R10": "committed d19aa4df (folder) + 7c71285a (scripts, dependency, eslint ignore)",
-    "R11": "partial: noFallthroughCasesInSwitch on (0 cases); noUncheckedIndexedAccess NOT applied: swimcloud 75 errors (parser.ts 43, urlClassifier.ts 21, html.ts 7, teamSeasons.ts 4); db pulls core via paths, ~201 of 203 errors in core (utils.ts 103, athleteAliases 22, athleteHistory 18, relayLegMatching 16); needs an architect order decision | Architect order decided 2026-10-13, see architectReview20261013.decisions.R11.",
+    "R11": "steps 1-2 committed 129404d2 (ratchet; baseline 343 errors in 65 files: core 263, manager 38, apps/shell 21, ui 12, metrics 6, db 2, matrix 1, swimcloud 0) + aa1677da (swimcloud flag on, helpers regexGroup/itemAt). Remaining: step 3 core files <=6 errors; step 4 relaySplits, historyImportRoster, relayLegMatching, scoringTheory, athleteHistory, athleteAliases one commit each; step 5 utils.ts 3-4 commits; step 6 tsconfig.base.json then db, manager, matrix, metrics, shell. Latent bug seen, not fixed: PATH_CLASSIFIERS[segment] in urlClassifier.ts is a plain object lookup (/constructor/ may resolve to an inherited member).",
     "R12": "committed",
     "D1": "pending",
     "D2": "pending",
@@ -527,10 +527,26 @@
     "worker: wire RelayGroupCard.tsx:186 to hasRelayLegOverride(overrides, group.key, legIndex) from @omniswim/core/lib/relayLegMatching",
     "DQ-with-legal-prelimsTime rows (Rhodes 56.76) are excluded as leg candidates; no prelimsTime fallback (architect asked to rule)",
     "a name override onto a DQ-only swimmer reads 'vacant' (no new reason code)",
-    "vault gotcha: the Edit tool rewrote an LF file as CRLF once; normalize before commit"
+    "vault gotcha: the Edit tool rewrote an LF file as CRLF once; normalize before commit",
+    "urlClassifier.ts PATH_CLASSIFIERS plain-object lookup: use Object.hasOwn / Map (small executor fix, swimcloud)"
   ],
   "inFlight20261013": {
-    "abcb8fdcf557dfc92": "stopped by 429, resume first",
-    "a388b4128dda85e7f": "stopped by 429, resume second"
+    "ac5a7c109269754bc": "executor: architect re-review findings 1-5 (core relay keys, history boundary, RelayGroupCard indicator)"
+  },
+  "architectReReview20261013": {
+    "reviewed": "ddb838fb, e54adab4, d5dc09ff",
+    "findings": [
+      "1 HIGH reproduced: projected tied B relay gets A's key (narrowToTiedEntry returns whole group when overlap ties/0; first row wins) -> override for B lands on A. Fix in flight: executor ac5a7c109269754bc (ambiguous result, migrate legacy plain keys at load).",
+      "2 MED: clearing A's override drops the legacy plain key, B goes vacant +3.0s silently -> removed by migration in finding 1 fix.",
+      "3 MED: RelayGroupCard.tsx:186 indicator misses legacy keys; hasRelayLegOverride has no caller -> in flight.",
+      "4 LOW: theoreticalMeetSeeds.ts:1233 suggestBestRelayLegFill without relayPool writes a plain key -> in flight.",
+      "5 LOW: history swims from other meets judged against the loaded meet's scoredEventNumberMax (relayLegHistoryCandidates.ts:305/316, theoreticalMeetSeeds.ts:1094/1143) -> in flight.",
+      "6 LOW: seed past place-point table drops the team from sortedTeams with no marker; ProjectedActualScore.tsx:130/188/231 hides the line, MeetOpsAnalyzeStep.tsx:292 drops the team; partial sums show no marker -> NOT started."
+    ],
+    "recommendations": {
+      "nullSeeds": "keep the team with an explicit absent marker; bundle carries withoutExpectation (entry keys) and a per-team count; consumers: scoringEngine.ts:167-168, worker payload useWorkspaceScoring.ts:119-126, useWorkspaceScoring.ts:255-279, MeetOpsStandingsStep.tsx:122/135, TeamCard/TeamCardHeader, ProjectedActualScore.tsx, MeetOpsAnalyzeStep.tsx:292; render '— (N seeds past table)', never 0.",
+      "hasRelayLegTime": "correct for every row shape; excluding Rhodes (DQ with legal prelimsTime) is right; follow-up: show a reason in place of the silent drop. History change: an override naming a swimmer whose row at the leg event has no time now resolves onto a history swim (relay gets a time instead of NT), same with the setting on or off.",
+      "boundaryPrecedence": "eventThrough first, then scoredEventNumberMax; matches the engine; no caller left on the old signature."
+    }
   }
 }
