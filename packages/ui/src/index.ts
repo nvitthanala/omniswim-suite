@@ -28,6 +28,12 @@ export { NumberField, type NumberFieldProps } from './components/NumberField';
 export { TeamSelect, type TeamSelectProps } from './components/TeamSelect';
 export { EmptyState } from './components/EmptyState';
 export { Modal, type ModalProps } from './components/Modal';
+export {
+  ErrorBoundary,
+  type ErrorBoundaryProps,
+  type BackupChoice,
+  type BackupRestoreActions,
+} from './components/ErrorBoundary';
 export { ConfirmDeleteModal, type ConfirmDeleteModalProps } from './components/ConfirmDeleteModal';
 export { ChartShell, getChartContentBoxSize, getChartViewportSize, isChartMeasurementReady, resolveChartMeasurement, type ChartShellRenderState, type ChartShellSize } from './components/ChartShell';
 export { ChartFrame } from './components/ChartFrame';

@@ -18,6 +18,7 @@ import SharePage from './pages/SharePage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import SwimCloudWindow from './components/SwimCloudWindow';
 import CommandPalette from './components/CommandPalette';
+import AppErrorBoundary from './components/AppErrorBoundary';
 import { AuthProvider } from './context/AuthContext';
 import {
   ManagerAppLazy,
@@ -195,14 +196,14 @@ function ShellLayout() {
                   </Suspense>
                 ) : null}
                 <Routes location={location}>
-                  <Route path="/" element={<SuiteHome />} />
-                  <Route path="/login" element={<LoginPage />} />
-                  <Route path="/share/:token" element={<SharePage />} />
-                  <Route path="/analytics" element={<AnalyticsPage />} />
-                  <Route path="/manager" element={<ManagerApp />} />
-                  <Route path="/matrix" element={<MatrixApp />} />
-                  <Route path="/metrics" element={<MetricsApp />} />
-                  <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="/" element={<AppErrorBoundary area="Home"><SuiteHome /></AppErrorBoundary>} />
+                  <Route path="/login" element={<AppErrorBoundary area="Sign in"><LoginPage /></AppErrorBoundary>} />
+                  <Route path="/share/:token" element={<AppErrorBoundary area="Shared view"><SharePage /></AppErrorBoundary>} />
+                  <Route path="/analytics" element={<AppErrorBoundary area="Analytics"><AnalyticsPage /></AppErrorBoundary>} />
+                  <Route path="/manager" element={<AppErrorBoundary area="Manager"><ManagerApp /></AppErrorBoundary>} />
+                  <Route path="/matrix" element={<AppErrorBoundary area="Matrix"><MatrixApp /></AppErrorBoundary>} />
+                  <Route path="/metrics" element={<AppErrorBoundary area="Metrics"><MetricsApp /></AppErrorBoundary>} />
+                  <Route path="/settings" element={<AppErrorBoundary area="Settings"><SettingsPage /></AppErrorBoundary>} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </motion.div>
@@ -274,7 +275,9 @@ export default function App() {
         <MotionConfig reducedMotion="user">
           <AuthProvider>
             <SuiteWorkspaceProvider onNotify={toast.push}>
-              <ShellLayout />
+              <AppErrorBoundary>
+                <ShellLayout />
+              </AppErrorBoundary>
             </SuiteWorkspaceProvider>
           </AuthProvider>
         </MotionConfig>
