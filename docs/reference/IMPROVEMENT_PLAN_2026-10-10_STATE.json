@@ -54,7 +54,7 @@
     "P2": "committed 09c5882e",
     "P3": "committed 171ddc31 (client), 1464ea7b (restore test), earlier 09c5882e (server). U10 satisfied: version checks, no persisted sequence.",
     "P4": "committed (saveWorkspace returns WorkspaceSaveResult; metrics toasts)",
-    "P5": "committed ea5a09c7 (apiError helper + handler; swimcloudCaptureRoutes.ts and authMiddleware codes in follow-up, agent a797f55e1440838e9)",
+    "P5": "committed ea5a09c7 + 7a4876c6 (capture routes and authMiddleware)",
     "P6": "committed (OMNI_BACKUP_KEEP_MANUAL=20, OMNI_BACKUP_KEEP_PRE_RESTORE=10, other kinds shared 20; OMNI_BACKUP_DIR mirror; VACUUM INTO). README text for restore: doc comment above DEFAULT_BACKUP_KEEP in workspaceRepo.ts (H3).",
     "P7": "committed 09c5882e + a9dccc27 (server exits non-zero on a newer or unreadable schema or any SQLite error; JSON fallback only on native-module load failure, logged as error)",
     "T1": "pending",
@@ -286,7 +286,7 @@
     },
     {
       "id": "wave-3",
-      "status": "dispatched 2026-10-12",
+      "status": "P5 + create allowlist + psych guard committed; T-group worker (a4ce0992b13a275c5) still running; UX batch X1,X2,X5,X10 dispatched (worker abeae90519ea56dca)",
       "agents": [
         {
           "scope": "API error helper + schema + parse-psych-pdf guard",
@@ -308,6 +308,16 @@
             "T10"
           ],
           "agent": "worker (fresh)"
+        },
+        {
+          "scope": "UX batch",
+          "items": [
+            "X1",
+            "X2",
+            "X5",
+            "X10"
+          ],
+          "agent": "worker abeae90519ea56dca"
         }
       ],
       "later": [
