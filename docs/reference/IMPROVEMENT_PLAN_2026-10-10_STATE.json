@@ -46,7 +46,7 @@
     "C4": "committed 9c87d57c + follow-up (points_on_status_clock raises; garbled clock keeps printed points). TS side must add the code to MEET_PIPELINE_ERROR_CODES in parsingPipeline.ts as final -> 422 with rows (part of C5 TS half)",
     "C5": "committed 9c87d57c + e461c859 + 871c0712",
     "C6": "committed e1c87ec0 (core) + 4057721d (UI); worker a467cc44fdcdec299 fixing two follow-ups (count-field truncation on keystroke; empty seed on Duplicate to edit)",
-    "C7": "committed 6368b19d (core) + caca5b72 (UI marker); matrix header \"vs prelims\" still counts no actual as 0 (open question)",
+    "C7": "committed 6368b19d (core) + caca5b72 (UI marker); matrix header \"vs prelims\" still counts no actual as 0 (open question) | projection null-not-0 completed e54adab4 (prelims and psych).",
     "C8": "committed bdca188c (meet-name-missing at 3 sites; crawler.js bundle rebuilt)",
     "A7": "decided 2026-10-13: estimate goes in a labelled new field; relayLegSplit stays absent on theoretical rows (implementation pending)",
     "A12": "pending",
@@ -111,7 +111,7 @@
     "D6": "pending",
     "D7": "pending",
     "D8": "done (23b5e8d9): rank-collapse guard test only; fix was already in place. Reverting placement fix or per-athlete scorer gate fails it.",
-    "D9": "done: core 67105555, UI label+banner 91606bec, toggle on preset+workspace 4233b1f2. Architect fixes (scoredEventNumberMax, C7 null, A/B override tie, time_trial_only) in progress, uncommitted.",
+    "D9": "done: core 67105555; UI label+banner 91606bec; toggle 4233b1f2; scored-program boundary + tie keys + time_trial_only in ddb838fb. Open question to user: Event 938/939 counted as time trial (code already acts on yes).",
     "D10": "pending",
     "H1": "committed",
     "H2": "partial cfdfb92b: 11 closed state files/plans moved to docs/archive/2026-09 and 2026-10 with path rewrites; files cited from code or active state stay in docs/reference",
@@ -128,7 +128,8 @@
     "relayGroupKey": "committed 6cede0ae",
     "parse-psych-pdf-guard": "committed ea5a09c7",
     "time-format-carry": "in flight (a3003cfad2024423c)",
-    "formatSecondsToTime": "done (686a4292): 59.996 -> 1:00.00, 119.996 -> 2:00.00; NaN/null/undefined -> NT; 4M-value sweep differs only where old output ended 60.00"
+    "formatSecondsToTime": "done (686a4292): 59.996 -> 1:00.00, 119.996 -> 2:00.00; NaN/null/undefined -> NT; 4M-value sweep differs only where old output ended 60.00",
+    "architectFixes20261013": "committed e54adab4 (item 2) and ddb838fb (items 1,3,4 combined: interleaved hunks). Golden on real data: 26 relay-candidate rows changed (Hamblen E939, Cloete E938 leave default lists), 0 totals. Gates before commit: lint 0/66, lint:types, vitest 243 files 3687 passed 23 skipped (tree held X11/X12 worker's unverified UI edits), scripts 86/0/1 (executor-run)."
   },
   "userDecisions": {
     "workflow": {
@@ -442,7 +443,7 @@
     "D9 scope: a post-meet swim numbered past scoredEventNumberMax (NSISC Event 938/939) now counts as a time trial for relay legs, matching how the SwimCloud bridge flags it. Confirm."
   ],
   "pendingArchitectReview": [
-    "(2026-10-13 reviewed: see architectReview20261013) re-review the executor a64b8f0d8878aed81 diff (items 1,3,4,5) before commit"
+    "Narrow re-review of ddb838fb/e54adab4, two design questions the architect has not seen: (a) item 3 adds leg names to an override key only on a tie; legacy plain key still applies to both tied relays; upsertRelayLegOverride/removeRelayLegOverride still compare exact keys so 'clear leg' leaves the plain key active on a tied relay, and RelayGroupCard.tsx:186 indicator misses it; (b) item 2: a team whose every seed is past the table leaves prelimsProjected.sortedTeams instead of showing 0, and no UI calls list*WithoutExpectation, so absent != empty is not surfaced."
   ],
   "u3Prereq": "U3 delete of 39 UI test workspaces: take a MANUAL backup first (a bulk delete writes 39 pre-delete backups and would evict the 20 startup backups of this worktree data/backups); a manual backup survives and restores all 39.",
   "gatesAfterWave2": {
@@ -510,5 +511,14 @@
       "A7": "leave relayLegSplit absent on theoretical relay rows; put the estimate in a new labelled field (relayLegEstimate {time, basis, startAdjustmentSec?}); simulation may fall back to it only where it reads oldSplitSec. Readers of relayLegSplit with no workspace: cutlineTags leadoff legSplit, pickPlausibleLegTime, swap clockLegTime, oldSplitSec."
     },
     "staleStateEntries": "createWorkspaceSchema is now .strip() not passthrough on create"
-  }
+  },
+  "followUpsFromAdvisor20261013": [
+    "legacy key cleanup: upsert/removeRelayLegOverride must also drop the legacy plain key on a tied relay (executor, core)",
+    "surface listPrelimsEntriesWithoutExpectation/listPsychEntriesWithoutExpectation in prelims and psych UI (worker)",
+    "wording for RelayMissingLeg.reason 'time_trial_only': grep where reason is rendered, add a case (worker)",
+    "legRowsForTemplate signature filter (relayLegSwaps.ts) survived its mutation: add a test",
+    "DQ swim offered as relay-leg candidate (Chloe Skelt, women's medley breast): provenance bug, executor fix, queue next",
+    "recruit-id override path returns that id's own row even when the swimmer has a program swim at the event (name path would fill the leg)",
+    "quiet-tree full vitest + lint + scripts after the X11/X12 commit"
+  ]
 }
