@@ -1,10 +1,12 @@
 /**
  * Zod schemas for runtime validation at the API boundary.
  *
- * These intentionally stay permissive (`.passthrough()` / optional) so they
- * validate shape without rejecting forward-compatible fields. They mirror the
- * TypeScript interfaces in `../types` but are the source of truth for
- * server-side request validation.
+ * Most of these stay permissive (`.passthrough()` / optional) so they validate
+ * shape without rejecting forward-compatible fields. The two workspace write
+ * bodies are the exception: `createWorkspaceSchema` and `updateWorkspaceSchema`
+ * are allowlists that strip what they do not name. They mirror the TypeScript
+ * interfaces in `../types` but are the source of truth for server-side request
+ * validation.
  */
 import { z } from 'zod';
 import type { Workspace } from '../types';
@@ -58,14 +60,6 @@ export const workspaceSchema = z
     womenResults: z.array(swimmerResultSchema).default([]),
     recruits: z.array(recruitSchema).default([]),
     createdAt: z.number(),
-  })
-  .passthrough();
-
-/** Body accepted by POST /api/workspaces (server fills defaults). */
-export const createWorkspaceSchema = z
-  .object({
-    id: z.string().optional(),
-    name: z.string().optional(),
   })
   .passthrough();
 
@@ -137,6 +131,29 @@ export const workspacePatchShape = {
 
 /** Body accepted by PUT /api/workspaces/:id (partial patch). Unknown and protected keys are dropped. */
 export const updateWorkspaceSchema = z.object(workspacePatchShape).partial().strip();
+
+/**
+ * Body accepted by POST /api/workspaces (the server fills defaults for what is absent).
+ *
+ * The same ALLOWLIST and the same collection checks as a patch, plus the three keys
+ * a create may name: `id` (a restore keeps its id), `name` and `createdAt`. It was
+ * `.passthrough()`, which stored whatever the client sent: a `menResults` that was
+ * not an array, or a key no code reads. Now a malformed value is a 400, and an
+ * unknown key is dropped, the same as on PUT.
+ *
+ * `version` is not in the allowlist: the store owns it. A restored workspace arrives
+ * carrying the revision it had, and it is stripped here, never trusted.
+ * `workspacePatchCoversWorkspace` below makes `tsc` fail if `Workspace` gains a field
+ * this does not accept, so a field cannot be silently dropped on create either.
+ */
+export const createWorkspaceSchema = z
+  .object({
+    id: z.string(),
+    createdAt: z.number(),
+    ...workspacePatchShape, // includes `name`
+  })
+  .partial()
+  .strip();
 
 /**
  * Compile-time guard: every `Workspace` field except `id` and `createdAt` is in the
