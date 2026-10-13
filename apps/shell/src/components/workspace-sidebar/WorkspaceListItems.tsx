@@ -136,6 +136,7 @@ export function CollapsedWorkspaceList({ workspaces, activeWorkspaceId, onSelect
               : 'border-theme-soft'
           }`}
           title={w.name}
+          aria-label={w.name}
           leadingIcon={<FileText size={14} />}
         />
       ))}

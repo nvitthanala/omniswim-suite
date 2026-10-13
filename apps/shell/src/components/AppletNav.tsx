@@ -21,19 +21,22 @@ export default function AppletNav() {
           onMouseEnter={() => prefetchApplet(applet.id)}
           onFocus={() => prefetchApplet(applet.id)}
           className={({ isActive }) =>
-            `applet-nav-item px-4 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-md transition-colors ${
+            `applet-nav-item px-2 sm:px-4 py-1.5 text-ui-micro font-bold uppercase tracking-widest rounded-md transition-colors ${
               isActive ? 'nav-tab-active' : 'nav-tab-inactive'
             }`
           }
         >
           {applet.label}
           {applet.experimental ? (
-            <Badge
-              tone="warning"
-              className="ml-1.5 px-1.5 py-0.5 text-ui-micro normal-case tracking-normal align-middle"
-            >
-              Experimental
-            </Badge>
+            // Under 640px the badge text stays for screen readers and drops off the bar.
+            <span className="max-sm:sr-only">
+              <Badge
+                tone="warning"
+                className="ml-1.5 px-1.5 py-0.5 text-ui-micro normal-case tracking-normal align-middle"
+              >
+                Experimental
+              </Badge>
+            </span>
           ) : null}
         </NavLink>
       ))}

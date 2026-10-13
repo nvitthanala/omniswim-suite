@@ -260,7 +260,8 @@ export default function WorkspaceSidebar() {
               size="sm"
               onClick={() => void handleCreateWorkspace()}
               className="p-2"
-              title="New"
+              title="New workspace"
+              aria-label="New workspace"
               leadingIcon={<Plus size={16} />}
             />
             {openTheoreticalMeet ? (

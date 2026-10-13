@@ -726,18 +726,14 @@ test(`Manager Lineup and Relays at ${NARROW_WIDTH}px: the step fits and its prim
 });
 
 /**
- * KNOWN BUG, reported not fixed. At 390px the app header is 566px of content in a 390px bar
- * (measured 2026-10-12, every theme, every Manager step): `header.app-header` has
- * scrollWidth 566. The nav group `header.app-header > div.flex.items-center.gap-2`
- * ("Manager Matrix Metrics Experiment") is 455px wide, and the right-hand icon buttons
- * (`header.app-header div.relative > button.btn-ghost`) end at x=566, so they sit off screen.
- * `div#root > div.app-shell` reports the same 566px as its scrollWidth.
- *
- * `test.fail` keeps the run green while the bug stands and turns red the day the header is
- * fixed, which is the cue to delete the `test.fail` line.
+ * The app header once ran to 566px of content in a 390px bar (measured 2026-10-12): the applet
+ * nav was 455px wide and the right-hand icon buttons ended at x=566, off screen. Under 640px the
+ * header now drops the brand name and the Experimental badge text from the bar, and moves
+ * "Configure Scoring Model" and the colour-mode switch into the More menu. This test holds that:
+ * no header or shell ancestor may be wider than the viewport, and no element outside the step
+ * panel may sit past it.
  */
 test(`Manager header at ${NARROW_WIDTH}px stays inside the viewport`, async ({ page, request }) => {
-  test.fail(true, 'App header overflows at 390px: header.app-header scrollWidth 566, icon buttons end at x=566. Fix the header, then remove this line.');
   test.setTimeout(120_000);
   const { id, name } = await createPhaseWorkspace(request, 'narrow-header');
   for (const step of NARROW_STEPS) {
