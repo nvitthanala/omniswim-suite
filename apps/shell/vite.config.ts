@@ -3,6 +3,7 @@ import { fileURLToPath } from 'url';
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import tailwindcss from '@tailwindcss/vite';
+import { tsconfigPathAliases } from '../../scripts/lib/tsconfigAliases';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const monorepoRoot = path.resolve(__dirname, '../..');
@@ -13,16 +14,15 @@ export default defineConfig({
   plugins: [react(), tailwindcss()],
   resolve: {
     dedupe: ['react', 'react-dom', 'recharts'],
-    alias: {
-      recharts: path.join(monorepoRoot, 'node_modules/recharts'),
-      // Specific entries must precede the package-root aliases so they win.
-      '@omniswim/ui/styles.css': path.join(monorepoRoot, 'packages/ui/src/index.css'),
-      '@omniswim/core': path.join(monorepoRoot, 'packages/core/src'),
-      '@omniswim/ui': path.join(monorepoRoot, 'packages/ui/src'),
-      '@omniswim/manager': path.join(monorepoRoot, 'packages/manager/src/ManagerApp.tsx'),
-      '@omniswim/matrix': path.join(monorepoRoot, 'packages/matrix/src'),
-      '@omniswim/metrics': path.join(monorepoRoot, 'packages/metrics/src/MetricsApp.tsx'),
-    },
+    alias: [
+      { find: 'recharts', replacement: path.join(monorepoRoot, 'node_modules/recharts') },
+      // Not a tsconfig path: `@omniswim/ui/*` maps to src/*, which has no styles.css.
+      // It must precede the derived entries so it wins.
+      { find: '@omniswim/ui/styles.css', replacement: path.join(monorepoRoot, 'packages/ui/src/index.css') },
+      // Every `@omniswim/*` source alias comes from tsconfig.base.json `paths`, so the
+      // bundler and the type checker cannot disagree. See scripts/lib/tsconfigAliases.ts.
+      ...tsconfigPathAliases(path.join(monorepoRoot, 'tsconfig.base.json')),
+    ],
   },
   optimizeDeps: {
     include: ['recharts', 'react', 'react-dom'],

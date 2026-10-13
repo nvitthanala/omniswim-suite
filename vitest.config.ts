@@ -1,6 +1,7 @@
 import { defineConfig } from 'vitest/config';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { tsconfigPathAliases } from './scripts/lib/tsconfigAliases';
 
 const root = path.dirname(fileURLToPath(import.meta.url));
 
@@ -24,8 +25,7 @@ export default defineConfig({
     },
   },
   resolve: {
-    alias: {
-      '@omniswim/core': path.join(root, 'packages/core/src'),
-    },
+    // One list: tsconfig.base.json `paths`. See scripts/lib/tsconfigAliases.ts.
+    alias: tsconfigPathAliases(path.join(root, 'tsconfig.base.json')),
   },
 });
