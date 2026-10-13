@@ -3,10 +3,35 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ClassYear, Gender, RelayLegOverride, RelayLegStroke, SwimmerResult } from '../types';
+import {
+  ClassYear,
+  Gender,
+  RelayLegOverride,
+  RelayLegStroke,
+  ScoringSettings,
+  SwimmerResult,
+} from '../types';
 import { normalizeEventForCutline } from './cutlineEventNames';
+import { relayLegsAllowTimeTrials } from './scoringDefaults';
 import { relayEntryKey, relayLegDistanceYardsOfEvent } from './relaySplits';
-import { canonicalSwimmerName } from './utils';
+import { canonicalSwimmerName, isTimeTrialSwim } from './utils';
+
+/**
+ * The one setting the relay-leg matchers read: whether a time-trial swim may
+ * fill a leg (`ScoringSettings.relayLegsAllowTimeTrials`). Every matcher takes
+ * it as an optional trailing argument. Omitted, or without the field, a time
+ * trial fills no leg.
+ */
+export type RelayLegMatchSettings = Pick<ScoringSettings, 'relayLegsAllowTimeTrials'>;
+
+/**
+ * The row as a leg may take it: unchanged unless it is a time trial and the
+ * setting lets it fill a leg, in which case it carries `relayLegTimeTrial`.
+ */
+function labelTimeTrialLeg(row: SwimmerResult, settings?: RelayLegMatchSettings): SwimmerResult {
+  if (!relayLegsAllowTimeTrials(settings) || !isTimeTrialSwim(row)) return row;
+  return row.relayLegTimeTrial === true ? row : { ...row, relayLegTimeTrial: true };
+}
 
 function normalizeName(name: string): string {
   return name.trim().toLowerCase().replace(/\s+/g, ' ');
@@ -343,8 +368,27 @@ function keepRelayGender(
   return rows.filter(r => isRelayCandidateOfGender(r, relayGender, index));
 }
 
-export function swimmerMatchesRelayLeg(swimmer: SwimmerResult, event: string, legIndex: number): boolean {
+/**
+ * True when `swimmer` is a swim of the individual event leg `legIndex` of
+ * `event` swims (`isRelayLegEvent`).
+ *
+ * A time-trial swim matches only when `settings.relayLegsAllowTimeTrials` is
+ * `true` (user decision D9). `isRelayLegEvent` itself still reads a time trial
+ * of the leg event as the leg event; this function is where the setting applies.
+ */
+export function swimmerMatchesRelayLeg(
+  swimmer: SwimmerResult,
+  event: string,
+  legIndex: number,
+  settings?: RelayLegMatchSettings
+): boolean {
   if (swimmer.isRelay) return false;
+  if (
+    (isTimeTrialSwim(swimmer) || swimmer.relayLegTimeTrial === true) &&
+    !relayLegsAllowTimeTrials(settings)
+  ) {
+    return false;
+  }
   const { legDistanceYards, stroke } = relayLegRequirements(event, legIndex);
   return isRelayLegEvent(swimmer.event, legDistanceYards, stroke);
 }
@@ -357,6 +401,10 @@ export function swimmerMatchesRelayLeg(swimmer: SwimmerResult, event: string, le
  *
  * `relayGender` defaults to the gender word of `relayEvent`. Pass it when the
  * label has none (a SwimCloud `200 Free Relay`).
+ *
+ * A time-trial swim is left out unless `settings.relayLegsAllowTimeTrials` is
+ * `true`. When it is, the returned row for a time trial carries
+ * `relayLegTimeTrial: true` (a copy; the input row is not changed).
  */
 export function listEligibleRelayLegCandidates(
   activeSwimmers: SwimmerResult[],
@@ -364,19 +412,20 @@ export function listEligibleRelayLegCandidates(
   legIndex: number,
   assignedInEvent: Set<string>,
   team: string,
-  relayGender?: Gender
+  relayGender?: Gender,
+  settings?: RelayLegMatchSettings
 ): SwimmerResult[] {
   const legSwims = activeSwimmers.filter(
     s =>
       !s.isRelay &&
       s.team === team &&
       !assignedInEvent.has(normalizeName(s.name)) &&
-      swimmerMatchesRelayLeg(s, relayEvent, legIndex)
+      swimmerMatchesRelayLeg(s, relayEvent, legIndex, settings)
   );
   const gender = relayGender ?? relayEntryGender({ event: relayEvent });
-  return keepRelayGender(legSwims, gender, activeSwimmers).sort(
-    (a, b) => timeToSec(a.time) - timeToSec(b.time)
-  );
+  return keepRelayGender(legSwims, gender, activeSwimmers)
+    .map(s => labelTimeTrialLeg(s, settings))
+    .sort((a, b) => timeToSec(a.time) - timeToSec(b.time));
 }
 
 export function relayTemplateFromLeg(results: SwimmerResult[], leg: SwimmerResult): SwimmerResult {
@@ -414,6 +463,11 @@ export function findRelayLegOverride(
  * naming a woman whose only swim at the leg event is a Mixed time trial filed
  * in the men's results leaves a men's leg unresolved. `relayGender` defaults
  * to the gender word of `relayEvent`; pass it when the label has none.
+ *
+ * A name resolves onto a time-trial swim only when
+ * `settings.relayLegsAllowTimeTrials` is `true`, and the swim then carries
+ * `relayLegTimeTrial: true`. Otherwise the leg resolves onto the swimmer's
+ * other swim at the leg event, or onto nothing.
  */
 export function resolveOverrideAssignee(
   override: RelayLegOverride,
@@ -421,13 +475,14 @@ export function resolveOverrideAssignee(
   team: string,
   relayEvent?: string,
   legIndex?: number,
-  relayGender?: Gender
+  relayGender?: Gender,
+  settings?: RelayLegMatchSettings
 ): SwimmerResult | null {
   const gender = relayGender ?? (relayEvent != null ? relayEntryGender({ event: relayEvent }) : undefined);
   if (override.recruitId) {
     const hit = activeSwimmers.find(s => !s.isRelay && s.id === override.recruitId);
     if (hit && hit.team === team && keepRelayGender([hit], gender, activeSwimmers).length > 0) {
-      return hit;
+      return labelTimeTrialLeg(hit, settings);
     }
   }
   if (override.assigneeName) {
@@ -438,10 +493,12 @@ export function resolveOverrideAssignee(
     const matches = keepRelayGender(named, gender, named);
     if (matches.length === 0) return null;
     if (relayEvent != null && legIndex != null) {
-      const strokeMatches = matches.filter(m => swimmerMatchesRelayLeg(m, relayEvent, legIndex));
+      const strokeMatches = matches.filter(m =>
+        swimmerMatchesRelayLeg(m, relayEvent, legIndex, settings)
+      );
       if (strokeMatches.length === 0) return null;
       strokeMatches.sort((a, b) => timeToSec(a.time) - timeToSec(b.time));
-      return strokeMatches[0];
+      return labelTimeTrialLeg(strokeMatches[0], settings);
     }
     return matches[0];
   }
@@ -458,12 +515,19 @@ export function relayLegNameKeys(template: SwimmerResult): Set<string> {
   return keys;
 }
 
+/**
+ * The fastest eligible swim for a leg, as an autofill override and the swim
+ * behind it. A time trial is a candidate only when
+ * `settings.relayLegsAllowTimeTrials` is `true`; `swimmer` then carries
+ * `relayLegTimeTrial: true`.
+ */
 export function suggestBestRelayLegFill(
   activeSwimmers: SwimmerResult[],
   template: SwimmerResult,
   legIndex: number,
   assignedInEvent: Set<string>,
-  excludeNormalizedNames: Set<string>
+  excludeNormalizedNames: Set<string>,
+  settings?: RelayLegMatchSettings
 ): { override: RelayLegOverride; swimmer: SwimmerResult } | null {
   const blocked = new Set(assignedInEvent);
   relayLegNameKeys(template).forEach(n => blocked.add(n));
@@ -474,7 +538,8 @@ export function suggestBestRelayLegFill(
     legIndex,
     blocked,
     template.team,
-    relayEntryGender(template)
+    relayEntryGender(template),
+    settings
   );
   if (candidates.length === 0) return null;
   const swimmer = candidates[0];

@@ -985,7 +985,8 @@ export function suggestQuickFillForVacantLeg(
     template,
     legIndex,
     individualEntrantNames(activeSwimmers, team),
-    new Set()
+    new Set(),
+    workspace.scoringSettings
   );
   if (!hit) return null;
 

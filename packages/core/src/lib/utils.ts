@@ -58,6 +58,7 @@ import {
   relayStrokeForIndex,
   resolveOverrideAssignee,
   swimmerMatchesRelayLeg,
+  type RelayLegMatchSettings,
 } from './relayLegMatching';
 
 export { DEFAULT_SCORING_SETTINGS, mergeScoringSettings } from './scoringDefaults';
@@ -283,7 +284,6 @@ export function convertTimeToSeconds(timeStr: string): number {
   return value;
 }
 
-export function formatSecondsToTime(seconds: number): string {
 /**
  * A time in seconds as `s.ss` or `m:ss.ss`, rounded to the hundredth with
  * `toFixed(2)`.
@@ -296,6 +296,7 @@ export function formatSecondsToTime(seconds: number): string {
  *   59.996 reads `1:00.00` (not `60.00`) and 119.996 reads `2:00.00` (not
  *   `1:60.00`).
  */
+export function formatSecondsToTime(seconds: number): string {
   if (typeof seconds !== 'number' || !Number.isFinite(seconds)) return 'NT';
   if (seconds < 60) {
     const rounded = seconds.toFixed(2);
@@ -1047,6 +1048,22 @@ export function classifyRoundTier(
   // HyTek distance timed-finals label (not A/B bracket heats)
   if (/^FINALS?$/.test(r.trim()) || (/\bFINALS?\b/.test(r) && !/[ABCD]\s*FINAL/.test(r))) return 'FIN';
   return 'UNK';
+}
+
+/**
+ * True when a swim is a time trial: the row's `isTimeTrial` flag or a "Time
+ * Trial" label, except in a Boys/Girls championship event, which scores like a
+ * final (`isChampionshipGenderEvent`). The scoring engine reads a time trial the
+ * same way (`takesAScoringPlace`, `isUnscoredRoundOrEvent`).
+ *
+ * The relay-leg code reads it to keep a time trial off a leg unless
+ * `ScoringSettings.relayLegsAllowTimeTrials` is on. It accepts a
+ * `HistoricalSwim` as well as a `SwimmerResult`.
+ */
+export function isTimeTrialSwim(row: { event?: string; isTimeTrial?: boolean }): boolean {
+  const event = String(row.event ?? '');
+  const flagged = row.isTimeTrial === true || /\bTIME\s+TRIALS?\b/i.test(event);
+  return flagged && !isChampionshipGenderEvent(event);
 }
 
 function isDistanceEvent(event: string | undefined): boolean {
@@ -3251,6 +3268,8 @@ type ResolvedRelayLegs = {
   legReplacements: Map<number, SwimmerResult>;
   legMissingByIndex: Map<number, RelayMissingLeg>;
   legVacantByIndex: Map<number, boolean>;
+  /** Legs filled from a time-trial swim (only possible when the setting allows it). */
+  legTimeTrialByIndex: Set<number>;
 };
 
 /**
@@ -3277,9 +3296,11 @@ function resolveRelayLegs(
   overrideList: RelayLegOverride[],
   removeSeniors: boolean,
   excluded: Set<string>,
-  vacateLegs: Set<string>
+  vacateLegs: Set<string>,
+  relayLegSettings?: RelayLegMatchSettings
 ): ResolvedRelayLegs {
   const outLegs = legsCanonical.map(l => ({ ...l }));
+  const legTimeTrialByIndex = new Set<number>();
   let newTimeSecs = convertTimeToSeconds(template.time);
   let modified = false;
   const legReplacements = new Map<number, SwimmerResult>();
@@ -3370,7 +3391,8 @@ function resolveRelayLegs(
       template.team,
       template.event,
       index,
-      relayGender
+      relayGender,
+      relayLegSettings
     );
     const manualTime = override.manualLegTime?.trim();
 
@@ -3379,7 +3401,7 @@ function resolveRelayLegs(
         markVacant('vacant');
         continue;
       }
-      if (!swimmerMatchesRelayLeg(assignee, template.event, index)) {
+      if (!swimmerMatchesRelayLeg(assignee, template.event, index, relayLegSettings)) {
         markVacant('stroke_mismatch');
         continue;
       }
@@ -3391,6 +3413,7 @@ function resolveRelayLegs(
 
       modified = true;
       legReplacements.set(index, assignee);
+      if (assignee.relayLegTimeTrial === true) legTimeTrialByIndex.add(index);
       assignedInRelay.add(assigneeKey);
       const legTimeSec = convertTimeToSeconds(manualTime || assignee.time);
       applyLegTimeDelta(index, legTimeSec, oldSplitSec, departedIndiv);
@@ -3421,7 +3444,15 @@ function resolveRelayLegs(
     markVacant('vacant');
   }
 
-  return { outLegs, newTimeSecs, modified, legReplacements, legMissingByIndex, legVacantByIndex };
+  return {
+    outLegs,
+    newTimeSecs,
+    modified,
+    legReplacements,
+    legMissingByIndex,
+    legVacantByIndex,
+    legTimeTrialByIndex,
+  };
 }
 
 type RelayLegSplitDetails = {
@@ -3496,7 +3527,7 @@ function emitRelayGroupRows(
   undetailedLegTimes: Map<number, string>,
   finalResults: SwimmerResult[]
 ): void {
-  const { outLegs, modified, legMissingByIndex, legVacantByIndex } = resolved;
+  const { outLegs, modified, legMissingByIndex, legVacantByIndex, legTimeTrialByIndex } = resolved;
   const newTeamStr = formatSecondsToTime(resolved.newTimeSecs);
 
   const teamSplits =
@@ -3529,6 +3560,8 @@ function emitRelayGroupRows(
       relayTeamSplits: teamSplits,
       relayMissingLeg: legMissingByIndex.get(idx),
       relayLegVacant: legVacantByIndex.get(idx) ?? false,
+      // The leg was filled from a time-trial swim (opt-in): label it.
+      ...(legTimeTrialByIndex.has(idx) ? { relayLegTimeTrial: true as const } : {}),
     });
   });
 }
@@ -3549,7 +3582,8 @@ function processRelayGroupForRosterSim(
   removeSeniors: boolean,
   excluded: Set<string>,
   vacateLegs: Set<string>,
-  finalResults: SwimmerResult[]
+  finalResults: SwimmerResult[],
+  relayLegSettings?: RelayLegMatchSettings
 ): void {
   const group = results.filter(x => x.isRelay && relayGroupKey(x) === key);
   if (group.length === 0) return;
@@ -3578,7 +3612,8 @@ function processRelayGroupForRosterSim(
     overrideList,
     removeSeniors,
     excluded,
-    vacateLegs
+    vacateLegs,
+    relayLegSettings
   );
 
   // Null when the relay's label names no distance. No swim then matches a
@@ -3628,6 +3663,11 @@ function reAddUnprocessedRelayGroups(
  * `relayLegHistoryCandidates` builds (R1, plans/2026-09-24). They are searched
  * with the results and recruits when an override is resolved, and never
  * emitted.
+ *
+ * `relayLegSettings` carries `relayLegsAllowTimeTrials` (pass the workspace's
+ * `scoringSettings`). Omitted, or without the field, no time-trial swim fills
+ * a leg (user decision D9). When it is on, a leg filled from a time trial is
+ * emitted with `relayLegTimeTrial: true` on that leg's relay row.
  */
 export function simulateRoster(
   results: SwimmerResult[],
@@ -3636,7 +3676,8 @@ export function simulateRoster(
   excludedSwimmerNames?: Set<string>,
   relayLegOverrides: RelayLegOverride[] = [],
   vacateRelayLegNames: Set<string> = new Set(),
-  relayLegOnlyPool: SwimmerResult[] = []
+  relayLegOnlyPool: SwimmerResult[] = [],
+  relayLegSettings?: RelayLegMatchSettings
 ): SwimmerResult[] {
   const excluded = excludedSwimmerNames ?? new Set<string>();
   const overrideList = relayLegOverrides ?? [];
@@ -3681,7 +3722,8 @@ export function simulateRoster(
       removeSeniors,
       excluded,
       vacateLegs,
-      finalResults
+      finalResults,
+      relayLegSettings
     );
   }
 

@@ -235,10 +235,14 @@ describe("(a) a Mixed-event row counts only for the swimmer's own gender", () =>
   });
 
   it("a man's Mixed swim still counts for the men (Landon Dehn)", () => {
-    const rows = listEligibleRelayLegCandidates(menIndividuals, M_200FR, 0, new Set(), OBU).map(
-      r => `${r.name} ${r.time} ${r.event}`
-    );
-    expect(rows).toStrictEqual([
+    // The Mixed swim is a time trial, so it fills a leg only when the coach opts in (D9). The gender rule
+    // under test is the same either way: it is read as the man's swim.
+    const rows = (settings?: { relayLegsAllowTimeTrials: boolean }) =>
+      listEligibleRelayLegCandidates(menIndividuals, M_200FR, 0, new Set(), OBU, undefined, settings).map(
+        r => `${r.name} ${r.time} ${r.event}`
+      );
+    expect(rows()).toStrictEqual(['Landon Dehn 21.58 Event 8 Men 50 Yard Freestyle']);
+    expect(rows({ relayLegsAllowTimeTrials: true })).toStrictEqual([
       'Landon Dehn 21.58 Event 8 Men 50 Yard Freestyle',
       'Landon Dehn 28.98 Event 403 Mixed 50 Yard Freestyle Time Trial',
     ]);

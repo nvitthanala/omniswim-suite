@@ -195,7 +195,14 @@ export function buildRelaysFromIndividualLineup(
     for (let legIndex = 0; legIndex < 4; legIndex++) {
       const leg = legs.find(l => (l.relayLegIndex ?? -1) === legIndex) ?? legs[legIndex];
       if (leg && !leg.relayLegVacant) continue;
-      const suggestion = suggestBestRelayLegFill(pool, template, legIndex, assigned, exclude);
+      const suggestion = suggestBestRelayLegFill(
+        pool,
+        template,
+        legIndex,
+        assigned,
+        exclude,
+        workspace.scoringSettings
+      );
       if (!suggestion) continue;
       assigned.add(normalizeSwimmerName(suggestion.swimmer.name));
       overrides = upsertRelayLegOverride(overrides, suggestion.override);

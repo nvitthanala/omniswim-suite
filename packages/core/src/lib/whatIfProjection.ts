@@ -581,7 +581,8 @@ export function buildWhatIfProjection({
     excluded,
     relayOverrides,
     vacateRelayLegs,
-    relayLegOnlyPool
+    relayLegOnlyPool,
+    workspace.scoringSettings
   );
 
   // pdf_only: exclude meet entry plans + recruits from scoring entirely. The

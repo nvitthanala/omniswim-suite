@@ -113,9 +113,9 @@ import {
   relayLegRequirements,
   suggestBestRelayLegFill,
 } from '@omniswim/core/lib/relayLegMatching';
-import { mergeScoringSettings, presetIdForConference } from '@omniswim/core/lib/scoringDefaults';
+import { mergeScoringSettings, presetIdForConference, relayLegsAllowTimeTrials } from '@omniswim/core/lib/scoringDefaults';
 import { canAcceptAnotherEntry, type SwimmerEntryCounts } from '@omniswim/core/lib/swimmerEntryLimits';
-import { convertTimeToSeconds, formatSecondsToTime, isDivingEvent, normalizeSwimmerName } from '@omniswim/core/lib/utils';
+import { convertTimeToSeconds, formatSecondsToTime, isDivingEvent, isTimeTrialSwim, normalizeSwimmerName } from '@omniswim/core/lib/utils';
 import type { SwimCloudAthlete } from '@omniswim/swimcloud/entities';
 
 /* -------------------------------------------------------------------------- */
@@ -345,6 +345,12 @@ export interface TheoreticalProjectedRelayLeg {
   readonly startAdjustmentSec?: number;
   /** Present (`true`) only when the flat-start best is an exhibition swim at its source. */
   readonly isExhibition?: true;
+  /**
+   * Present (`true`) only when the flat-start best is a time trial. A time trial fills a leg only when the
+   * build's scoring settings carry `relayLegsAllowTimeTrials: true` (user decision D9); a leg that rests on one
+   * says so here. Absent on every leg of a default build.
+   */
+  readonly isTimeTrial?: true;
 }
 
 export interface TheoreticalProjectedRelay {
@@ -1071,11 +1077,16 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
  * swims already limited to the meet course and the exhibition mode. Only a result counts (`isRankableSwim`:
  * no extracted split, no self-reported time). One best per event, the fastest; on an exact tie an official
  * swim wins over an exhibition one. An unreadable time on such a swim throws: it is never skipped.
+ *
+ * A time-trial swim (`isTimeTrialSwim`) is not a leg best unless `allowTimeTrials` is true (user decision D9,
+ * `relayLegsAllowTimeTrials`). It is left out before the comparison, so the swimmer's best official swim at the
+ * event stands in its place, and a swimmer whose only swim there is a time trial has no best at that event.
  */
-function legBestsOf(used: readonly HistoricalSwim[], athleteName: string): LegBest[] {
+function legBestsOf(used: readonly HistoricalSwim[], athleteName: string, allowTimeTrials: boolean): LegBest[] {
   const best = new Map<string, LegBest>();
   for (const swim of used) {
     if (!isRankableSwim(swim)) continue;
+    if (!allowTimeTrials && isTimeTrialSwim(swim)) continue;
     const ds = individualEventDistanceStroke(swim.event);
     if (ds === null || !(RELAY_LEG_DISTANCES as readonly number[]).includes(ds.distance)) continue;
     const seconds = convertTimeToSeconds(swim.time);
@@ -1123,6 +1134,7 @@ function makeLeg(
     legDistanceYards: best.distance,
     flatStartTime: best.swim.time,
     ...(best.swim.isExhibition === true ? { isExhibition: true as const } : {}),
+    ...(isTimeTrialSwim(best.swim) ? { isTimeTrial: true as const } : {}),
   };
   if (position === 1) {
     return { ...base, time: best.swim.time, timeSec: round2(best.seconds), basis: 'flat-start-best' };
@@ -1212,9 +1224,9 @@ function buildTeamRelays(
     const chosen: RelayCandidate[] = [];
     for (let legIndex = 0; legIndex < 4; legIndex += 1) {
       const position = (legIndex + 1) as 1 | 2 | 3 | 4;
-      const suggestion = suggestBestRelayLegFill(pool, template, legIndex, assigned, atCap);
+      const suggestion = suggestBestRelayLegFill(pool, template, legIndex, assigned, atCap, ctx.settings);
       if (suggestion === null) {
-        const everyone = listEligibleRelayLegCandidates(pool, event, legIndex, new Set<string>(), team.teamName, team.gender);
+        const everyone = listEligibleRelayLegCandidates(pool, event, legIndex, new Set<string>(), team.teamName, team.gender, ctx.settings);
         const req = relayLegRequirements(event, legIndex);
         missing.push({
           position,
@@ -1543,9 +1555,10 @@ function buildRelaysForTeam(ctx: Context, team: TheoreticalMeetTeamInput, prepar
   const plan = ctx.relays;
   if (plan === null || plan.program === null) return undefined;
   const candidates: RelayCandidate[] = [];
+  const allowTimeTrials = relayLegsAllowTimeTrials(ctx.settings);
   for (const p of prepared) {
     if (p.outcome === undefined) continue;
-    const legBests = legBestsOf(p.outcome.used, p.entry.athlete.name);
+    const legBests = legBestsOf(p.outcome.used, p.entry.athlete.name, allowTimeTrials);
     if (legBests.length > 0) candidates.push({ athlete: p.entry.athlete, swimmerKey: p.swimmerKey, legBests });
   }
   return buildTeamRelays(ctx, { ...plan, program: plan.program }, team, candidates);

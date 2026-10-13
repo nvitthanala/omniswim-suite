@@ -114,6 +114,21 @@ export function entryCapPolicy(
   };
 }
 
+/**
+ * Whether a time-trial swim may fill a relay leg under these settings.
+ *
+ * Absent setting (or absent `settings`) is `false`: a time trial is outside the
+ * meet's program, and by user decision (D9) it does not fill a leg unless the
+ * coach opts in. Only a literal `true` turns it on, so a stale or malformed saved
+ * value falls back to off instead of flipping a competition rule. A workspace
+ * saved before the field existed reads as off.
+ */
+export function relayLegsAllowTimeTrials(
+  settings?: Pick<ScoringSettings, 'relayLegsAllowTimeTrials'> | null
+): boolean {
+  return settings?.relayLegsAllowTimeTrials === true;
+}
+
 // ---------------------------------------------------------------------------
 // Built-in presets, generated from NCAA_FORMAT_RULESETS
 // ---------------------------------------------------------------------------

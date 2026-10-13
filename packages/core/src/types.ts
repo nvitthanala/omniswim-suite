@@ -102,6 +102,16 @@ export interface SwimmerResult {
    * swim stated in SCY; this record is the swim as recorded.
    */
   relayLegHistory?: RelayLegHistoryOrigin;
+  /**
+   * Set only when this swim is a time trial that fills a relay leg because
+   * `ScoringSettings.relayLegsAllowTimeTrials` is on. It labels the leg as
+   * filled from a time trial. It appears on a relay-leg candidate row
+   * (`listEligibleRelayLegCandidates`, `suggestBestRelayLegFill`,
+   * `relayLegHistoryCandidates`) and on the emitted relay row of the leg it
+   * fills (`simulateRoster`, `buildWhatIfProjection`). It is never set while
+   * the setting is off, because no time trial fills a leg then.
+   */
+  relayLegTimeTrial?: true;
 }
 
 /**
@@ -244,6 +254,15 @@ export interface ScoringSettings {
    * through `entryCapPolicy`, never directly.
    */
   entryCapCountsExhibition?: boolean;
+  /**
+   * Whether a time-trial swim may fill a relay leg. Absent means `false`: a
+   * time trial is outside the meet's program, so by default it does not fill a
+   * leg (user decision D9). When `true`, a leg filled from one is labelled
+   * (`SwimmerResult.relayLegTimeTrial`). Read it through
+   * `relayLegsAllowTimeTrials`, never directly. A saved workspace without the
+   * field behaves as `false`.
+   */
+  relayLegsAllowTimeTrials?: boolean;
 
   /**
    * The relay place-value table, place 1 first — used instead of

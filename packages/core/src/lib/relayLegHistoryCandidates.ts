@@ -39,9 +39,12 @@
  * rows as `relayLegOnlyPool`: an override may resolve onto one, and no row is
  * ever emitted.
  *
- * Time trials: a history swim flagged as one still qualifies, exactly as a
- * meet time-trial row does today. Whether a time trial may fill a relay leg
- * is an open user question (R1 g); change both together or neither.
+ * Time trials: a history swim that is a time trial (`isTimeTrialSwim`) fills no
+ * leg, the same rule a meet time-trial row follows. User decision D9: a time
+ * trial fills a leg only when `ScoringSettings.relayLegsAllowTimeTrials` is
+ * on. A candidate built from one then carries `relayLegTimeTrial: true`. With
+ * the setting off, a meet time-trial row also does not count as the swimmer's
+ * swim at the leg event (rule 3), so their history swim is still offered.
  */
 
 import {
@@ -62,9 +65,11 @@ import {
   relayStrokeForIndex,
 } from './relayLegMatching';
 import { relayLegDistanceYardsOfEvent } from './relaySplits';
+import { relayLegsAllowTimeTrials } from './scoringDefaults';
 import {
   convertTimeToSeconds,
   isRelayResult,
+  isTimeTrialSwim,
   scyConversionOutcome,
   scyConversionProvenance,
 } from './utils';
@@ -196,7 +201,8 @@ function historyCandidateRow(
   member: RosterSwimmer,
   legSwim: HistoryLegSwim,
   gender: Gender,
-  key: string
+  key: string,
+  timeTrial: boolean
 ): SwimmerResult {
   const { swim } = legSwim;
   return {
@@ -210,6 +216,7 @@ function historyCandidateRow(
     event: legSwim.legEvent,
     gender,
     ...(legSwim.convertedFrom ? { convertedFrom: legSwim.convertedFrom } : {}),
+    ...(timeTrial ? { relayLegTimeTrial: true as const } : {}),
     relayLegHistory: {
       event: swim.event,
       time: swim.time,
@@ -244,6 +251,9 @@ export function relayLegHistoryCandidates(
   const legEvents = relayLegEventsOf(results);
   if (legEvents.size === 0) return [];
 
+  // Read after the history cache, never inside it: the cache is keyed on the
+  // history array, so toggling the setting must not return stale rows.
+  const allowTimeTrials = relayLegsAllowTimeTrials(workspace.scoringSettings);
   const resolver = buildAliasResolver(workspace);
   const keys = new Map<string, string>();
   const keyOf = (name: string, team: string): string => {
@@ -268,7 +278,9 @@ export function relayLegHistoryCandidates(
     const key = keyOf(row.name, row.team);
     const member = roster.get(key) ?? { row, legEventsSwum: new Set<string>() };
     const legEvent = legEventByKey.get(memoLegEventKey(row.event));
-    if (legEvent) member.legEventsSwum.add(legEvent);
+    // A time-trial row cannot fill the leg while the setting is off, so it
+    // must not hide the swimmer's history swim at that event (rule 3).
+    if (legEvent && (allowTimeTrials || !isTimeTrialSwim(row))) member.legEventsSwum.add(legEvent);
     roster.set(key, member);
   }
   if (roster.size === 0) return [];
@@ -276,6 +288,7 @@ export function relayLegHistoryCandidates(
   const fastest = new Map<string, { legSwim: HistoryLegSwim; key: string; member: RosterSwimmer }>();
   for (const legSwim of historyLegSwims(history, gender)) {
     if (!legEvents.has(legSwim.legEvent)) continue;
+    if (!allowTimeTrials && isTimeTrialSwim(legSwim.swim)) continue;
     const key = keyOf(legSwim.swim.name, legSwim.swim.team);
     const member = roster.get(key);
     if (!member || member.legEventsSwum.has(legSwim.legEvent)) continue;
@@ -286,7 +299,7 @@ export function relayLegHistoryCandidates(
   }
 
   return [...fastest.values()].map(({ legSwim, key, member }) =>
-    historyCandidateRow(member, legSwim, gender, key)
+    historyCandidateRow(member, legSwim, gender, key, isTimeTrialSwim(legSwim.swim))
   );
 }
 

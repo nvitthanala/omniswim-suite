@@ -43,6 +43,7 @@ import {
   convertTimeToSeconds,
   findDepartedLegSwim,
   isRelayResult,
+  isTimeTrialSwim,
   normalizeSwimmerName,
 } from '../utils';
 import { isExtractedSplitSwim } from '../bestTimeEligibility';
@@ -131,6 +132,12 @@ export type RelayLegSwap = {
    * history swim is (`relayLegHistoryCandidates`, R1 e).
    */
   inFromHistory?: true;
+  /**
+   * True when the incoming swim is a time trial. It can be a candidate only
+   * when `ScoringSettings.relayLegsAllowTimeTrials` is on (user decision D9);
+   * this label tells the coach the leg rests on one.
+   */
+  inFromTimeTrial?: true;
   /**
    * manualLegTime the override carries so the relay team clock is held constant
    * (the departed leg's split). Points are placement-based; holding the clock
@@ -556,7 +563,18 @@ function isEligibleLegCandidate(
   if (candKey === target.outKey) return false;
   if (ctx.deletedSwimmerKeys.has(canonicalSwimmerName(cand.name))) return false;
   if (target.onRelay.has(candKey)) return false;
-  if (!swimmerMatchesRelayLeg(cand, target.entry.template.event, target.legIndex)) return false;
+  // The same setting `buildWhatIfResults` reads when it re-scores the swap, so a
+  // candidate offered here is a candidate that resolves there.
+  if (
+    !swimmerMatchesRelayLeg(
+      cand,
+      target.entry.template.event,
+      target.legIndex,
+      ctx.workspace.scoringSettings
+    )
+  ) {
+    return false;
+  }
   if (!isRelayCandidateOfGender(cand, ctx.gender, ctx.poolGenders)) return false;
   if (ctx.rosterLookup && !ctx.rosterLookup.isScorer(cand.name, ctx.team, ctx.gender)) return false;
   return !isAtRelayEntryCap(cand, target.entry.template, ctx);
@@ -609,6 +627,9 @@ function buildRelayLegSwap(
     inTimeStale: bestRef?.stale ? true : undefined,
     inTimeExtractedSplit: bestRef?.extractedSplit ? true : undefined,
     ...(cand.relayLegHistory ? { inFromHistory: true as const } : {}),
+    ...(isTimeTrialSwim(cand) || cand.relayLegTimeTrial === true
+      ? { inFromTimeTrial: true as const }
+      : {}),
     clockLegTime: target.clockLegTime,
     deltaPoints,
     newTotal: Number(newTotal.toFixed(3)),
