@@ -69,7 +69,7 @@ function ScoreRow({
         ? 'text-[var(--text-accent)]'
         : 'text-[var(--text-primary)]';
   return (
-    <div className="flex items-center justify-between gap-4 text-[10px] font-mono">
+    <div className="flex items-center justify-between gap-4 text-ui-micro font-mono">
       <span className={`${muted ? 'text-theme-muted' : 'text-theme-secondary'}`}>
         {label}
       </span>
@@ -188,7 +188,7 @@ function FullScoreSummary({
           <ScoreRow label="Prelims Proj" value={prelimsProjected} muted />
           <ScoreRow label="Baseline vs Prelims" value={baselineOverUnder} delta />
           {noActualCount > 0 ? (
-            <p className="flex items-center gap-1 text-[10px] font-mono text-theme-muted">
+            <p className="flex items-center gap-1 text-ui-micro font-mono text-theme-muted">
               <NoActualMarker label={noActualBaselineLabel(noActualCount)} />
               <span>{noActualCountSentence(noActualCount)}</span>
             </p>
@@ -197,12 +197,12 @@ function FullScoreSummary({
         </div>
       ) : null}
       {actual == null && baseline == null ? (
-        <p className="text-[9px] text-theme-muted italic leading-relaxed">
+        <p className="text-ui-micro text-theme-muted italic leading-relaxed">
           No official PDF totals — showing computed scores only.
         </p>
       ) : null}
       {isMeaningfulDelta(delta) ? (
-        <div className="pt-2 border-t border-theme-soft flex justify-between text-[10px] font-mono">
+        <div className="pt-2 border-t border-theme-soft flex justify-between text-ui-micro font-mono">
           <span className="text-theme-secondary">
             Delta vs {actual != null ? 'actual' : 'baseline'}
           </span>

@@ -61,7 +61,7 @@ export default function PrelimsDiffTable({
       <div className="p-12 text-center border border-dashed border-theme-soft rounded-xl text-theme-secondary">
         <TrendingUp className="w-12 h-12 mx-auto mb-4 opacity-20" />
         <p className="text-xs font-medium">No prelims projection data available</p>
-        <p className="text-[10px] text-theme-muted mt-2 normal-case tracking-normal">
+        <p className="text-ui-micro text-theme-muted mt-2 normal-case tracking-normal">
           Load a meet PDF with prelims times to see over/underperformance.
         </p>
       </div>

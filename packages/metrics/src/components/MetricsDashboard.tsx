@@ -144,7 +144,7 @@ function LengthMetricsTable({
             <div className="text-theme-muted">
               {`L${length.lengthIndex}`}
               {length.lengthIndex === 1 ? (
-                <span className="block text-[10px] normal-case opacity-70">{'dive start'}</span>
+                <span className="block text-ui-micro normal-case opacity-70">{'dive start'}</span>
               ) : null}
             </div>
             {columns.map((column) => (

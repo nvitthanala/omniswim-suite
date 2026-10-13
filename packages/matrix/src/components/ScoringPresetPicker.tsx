@@ -67,9 +67,9 @@ export function ScoringPresetPicker({
             {selected.citation ? <Badge tone="info">{selected.citation}</Badge> : null}
             {selected.requiresHostPublishedTable ? <Badge tone="warning">Host publishes this table</Badge> : null}
           </div>
-          {selected.description ? <p className="text-[9px] text-theme-secondary italic">{selected.description}</p> : null}
+          {selected.description ? <p className="text-ui-micro text-theme-secondary italic">{selected.description}</p> : null}
           {hostTableRequired ? (
-            <div className="p-2 rounded-lg badge-warning text-[10px] normal-case tracking-normal leading-relaxed">
+            <div className="p-2 rounded-lg badge-warning text-ui-micro normal-case tracking-normal leading-relaxed">
               <span className="font-medium">No points table applied.</span> {hostTableRequired.citation} leaves this
               format&apos;s scoring to the host institution — the NCAA publishes no table for it. Enter the
               host&apos;s published points below; nothing here is a guess.

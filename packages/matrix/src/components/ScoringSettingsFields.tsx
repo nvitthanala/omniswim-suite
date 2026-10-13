@@ -391,7 +391,7 @@ export function ScoringSettingsFields({
           <div className="grid grid-cols-4 md:grid-cols-6 gap-3 pt-1">
             {local.scoringPoints.map((pt, i) => (
               <div key={i} className="flex flex-col gap-1">
-                <span className="text-[9px] text-theme-secondary font-mono">Place {i + 1}</span>
+                <span className="text-ui-micro text-theme-secondary font-mono">Place {i + 1}</span>
                 <NullablePlacePointInput
                   ariaLabel={`Points for place ${i + 1}`}
                   value={pt}

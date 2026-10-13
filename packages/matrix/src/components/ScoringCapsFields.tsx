@@ -107,7 +107,7 @@ export function ScoringCapsFields({ local, update, lock }: ScoringCapsFieldsProp
         />
       </div>
       <div className="col-span-2 flex flex-col gap-2">
-        <label className="flex items-center gap-2 text-[10px] text-theme-secondary cursor-pointer">
+        <label className="flex items-center gap-2 text-ui-micro text-theme-secondary cursor-pointer">
           <input
             type="checkbox"
             aria-label="Time trials count toward the entry cap"
@@ -117,7 +117,7 @@ export function ScoringCapsFields({ local, update, lock }: ScoringCapsFieldsProp
           />
           Time trials count toward the entry cap
         </label>
-        <label className="flex items-center gap-2 text-[10px] text-theme-secondary cursor-pointer">
+        <label className="flex items-center gap-2 text-ui-micro text-theme-secondary cursor-pointer">
           <input
             type="checkbox"
             aria-label="Exhibition swims count toward the entry cap"
@@ -140,7 +140,7 @@ export function ScoringCapsFields({ local, update, lock }: ScoringCapsFieldsProp
         />
       </div>
       <div className="flex items-end">
-        <label className="flex items-center gap-2 text-[10px] text-theme-secondary cursor-pointer">
+        <label className="flex items-center gap-2 text-ui-micro text-theme-secondary cursor-pointer">
           <input
             type="checkbox"
             aria-label="Half-rate relay swimmers"
@@ -153,7 +153,7 @@ export function ScoringCapsFields({ local, update, lock }: ScoringCapsFieldsProp
       </div>
       <div className="col-span-2">
         <label
-          className={`flex items-center gap-2 text-[10px] text-theme-secondary ${
+          className={`flex items-center gap-2 text-ui-micro text-theme-secondary ${
             isLocked('relayEligibleFromScorerPool') ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
           }`}
           title={isLocked('relayEligibleFromScorerPool') ? lock.message ?? undefined : undefined}

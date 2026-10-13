@@ -219,7 +219,7 @@ export default function MomentumChartCard(props: Props) {
           )
         }
       </ChartShell>
-      <p className="text-[9px] text-theme-muted mt-2 normal-case tracking-normal">
+      <p className="text-ui-micro text-theme-muted mt-2 normal-case tracking-normal">
         Cumulative over/under vs prelims placement expected points. Timed-finals events contribute 0.
       </p>
       {props.noActualCount != null && props.noActualCount > 0 ? (

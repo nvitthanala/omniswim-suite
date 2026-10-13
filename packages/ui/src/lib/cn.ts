@@ -1,5 +1,19 @@
 import { type ClassValue, clsx } from 'clsx';
-import { twMerge } from 'tailwind-merge';
+import { extendTailwindMerge } from 'tailwind-merge';
+
+/**
+ * `text-ui-*` are plain CSS classes in `index.css`, not Tailwind theme keys.
+ * Stock tailwind-merge reads an unknown `text-<name>` as a text colour, so
+ * `cn('text-ui-micro', 'text-theme-secondary')` would drop one of the two.
+ * Registering the four sizes as font sizes keeps both.
+ */
+const twMerge = extendTailwindMerge({
+  extend: {
+    classGroups: {
+      'font-size': [{ text: ['ui-micro', 'ui-caption', 'ui-label', 'ui-body'] }],
+    },
+  },
+});
 
 /**
  * Same convention `packages/metrics/src/lib/utils.ts` already uses. Plain

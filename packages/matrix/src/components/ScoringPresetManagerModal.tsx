@@ -470,7 +470,7 @@ export function ScoringPresetManagerModal({ onClose, onPresetsChanged }: Scoring
           </div>
 
           {saveError ? (
-            <div className="p-2 rounded-lg badge-warning text-[10px] flex items-start gap-2">
+            <div className="p-2 rounded-lg badge-warning text-ui-micro flex items-start gap-2">
               <AlertTriangle size={12} className="mt-0.5 shrink-0" aria-hidden />
               <span>{saveError}</span>
             </div>
@@ -523,13 +523,13 @@ export function ScoringPresetManagerModal({ onClose, onPresetsChanged }: Scoring
         </div>
 
         {importError ? (
-          <div className="mb-3 p-2 rounded-lg badge-warning text-[10px]">{importError}</div>
+          <div className="mb-3 p-2 rounded-lg badge-warning text-ui-micro">{importError}</div>
         ) : null}
-        {listError ? <div className="mb-3 p-2 rounded-lg badge-warning text-[10px]">{listError}</div> : null}
+        {listError ? <div className="mb-3 p-2 rounded-lg badge-warning text-ui-micro">{listError}</div> : null}
 
         <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-5 text-sm">
           {loading ? (
-            <p className="text-[10px] text-theme-muted">Loading…</p>
+            <p className="text-ui-micro text-theme-muted">Loading…</p>
           ) : (
             grouped.map(([group, items]) => (
               <div key={group}>
@@ -552,7 +552,7 @@ export function ScoringPresetManagerModal({ onClose, onPresetsChanged }: Scoring
                           ) : null}
                         </div>
                         {preset.description ? (
-                          <p className="text-[9px] text-theme-secondary">{preset.description}</p>
+                          <p className="text-ui-micro text-theme-secondary">{preset.description}</p>
                         ) : null}
                       </div>
                       <div className="flex items-center gap-2 shrink-0">

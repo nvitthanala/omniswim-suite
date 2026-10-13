@@ -30,7 +30,7 @@ export default function AppletNav() {
           {applet.experimental ? (
             <Badge
               tone="warning"
-              className="ml-1.5 px-1.5 py-0.5 text-[9px] normal-case tracking-normal align-middle"
+              className="ml-1.5 px-1.5 py-0.5 text-ui-micro normal-case tracking-normal align-middle"
             >
               Experimental
             </Badge>
