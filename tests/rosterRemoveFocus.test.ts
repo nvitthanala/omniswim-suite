@@ -51,8 +51,11 @@ describe('focus after the drawer closes because its athlete was removed', () => 
           }))));
   }
 
+  // The drawer's Remove only. Each roster row also has an icon-only Remove (decision U6).
   const removeButton = () =>
-    Array.from(document.querySelectorAll('button')).find(b => /^Remove .* from roster$/.test(b.getAttribute('aria-label') ?? ''));
+    Array.from(document.querySelectorAll('#athlete-lineup-editor button')).find(b =>
+      /^Remove .* from roster$/.test(b.getAttribute('aria-label') ?? '')
+    );
 
   async function openDrawer() {
     await render(bundle.allResults, bundle.allScored);

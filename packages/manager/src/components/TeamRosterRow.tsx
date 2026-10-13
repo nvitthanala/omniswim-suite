@@ -3,16 +3,17 @@
  * SPDX-License-Identifier: Apache-2.0
  *
  * One row of TeamRosterPanel's roster table. Split out so the per-row JSX
- * (warning chip, profile tooltip, scorer checkbox) lives in
+ * (warning chip, profile tooltip, scorer checkbox, remove button) lives in
  * its own small component instead of one long closure inside the panel's
- * `.map()`. The row has no button of its own: removing an athlete is done from
- * the athlete drawer or with the Delete key on the roster list, so a 38-row
- * roster does not carry 38 identical remove buttons.
+ * `.map()`. Removing an athlete: this row's icon-only Remove button (decision
+ * U6), the drawer's Remove, or the Delete key on the roster list. All three
+ * open the same Hide or Remove confirmation.
  */
 
 import React from 'react';
 import type { ScorerRosterRow } from '@omniswim/core/lib/scorerRoster';
 import type { AthleteEventProfile } from '@omniswim/core/types';
+import AthleteRemoveButton from './AthleteRemoveButton';
 import AthleteRoleTag from './AthleteRoleTag';
 import { formatEventLabelForDisplay, rosterRowDomId } from './teamRosterView';
 
@@ -27,6 +28,10 @@ type Props = {
   editable: boolean;
   /** Skip the "Swimmer" tag because every row in the table would show it. */
   hideSwimmerTag?: boolean;
+  /** Reserve the trailing Remove cell. True for every row once the table has a Remove column. */
+  showRemoveColumn?: boolean;
+  /** Asks to remove this athlete. It opens the Hide or Remove confirmation; it never removes by itself. */
+  onRequestRemove?: () => void;
   onSelect: () => void;
   onSetScorer: (isScorer: boolean) => void;
 };
@@ -53,6 +58,8 @@ export default function TeamRosterRow({
   warningLabel,
   editable,
   hideSwimmerTag = false,
+  showRemoveColumn = false,
+  onRequestRemove,
   onSelect,
   onSetScorer,
 }: Props) {
@@ -102,6 +109,15 @@ export default function TeamRosterRow({
             className="accent-[var(--text-accent)]"
             aria-label={`${row.name} scorer`}
           />
+        </td>
+      ) : null}
+      {showRemoveColumn ? (
+        // Its own cell, set apart from the scorer box by a rule, so it is not hit by a miss-click on
+        // the scorer box. The click must not toggle the row's selection.
+        <td className="py-2.5 px-2 text-center border-l border-theme-soft/50" onClick={e => e.stopPropagation()}>
+          {onRequestRemove ? (
+            <AthleteRemoveButton athleteName={row.name} onRequestRemove={onRequestRemove} iconOnly />
+          ) : null}
         </td>
       ) : null}
     </tr>

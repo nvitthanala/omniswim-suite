@@ -168,8 +168,8 @@ test('Phase 6 Lineup stays at 45 buttons or fewer and keeps every action reachab
   console.log('LINEUP_BUTTONS', JSON.stringify(counts));
   expect(counts.dom).toBeLessThanOrEqual(45);
   expect(counts.visible).toBeLessThanOrEqual(45);
-  // No per-row Remove button remains.
-  await expect(page.getByRole('button', { name: /^Remove .+$/ })).toHaveCount(0);
+  // One icon-only Remove button per row (decision U6). The drawer is closed here.
+  await expect(page.getByRole('button', { name: /^Remove .+ from roster$/ })).toHaveCount(counts.rows);
 
   // Keyboard: arrow to the first athlete, Delete asks to remove, the confirm dialog opens, Escape closes it.
   await roster.focus();
@@ -177,7 +177,7 @@ test('Phase 6 Lineup stays at 45 buttons or fewer and keeps every action reachab
   const drawer = page.getByRole('dialog', { name: /^Edit / });
   await expect(drawer).toBeVisible();
   // The drawer carries a Remove button for the selected athlete.
-  await expect(page.getByRole('button', { name: /^Remove .+ from roster$/ })).toHaveCount(1);
+  await expect(drawer.getByRole('button', { name: /^Remove .+ from roster$/ })).toHaveCount(1);
   await roster.focus();
   await page.keyboard.press('Delete');
   await expect(page.getByRole('dialog').filter({ hasText: /remove/i }).last()).toBeVisible();

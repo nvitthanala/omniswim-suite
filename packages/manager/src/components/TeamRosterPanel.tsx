@@ -22,6 +22,7 @@ import TeamRosterTable from './TeamRosterTable';
 import TeamRosterLayoutShell from './TeamRosterLayoutShell';
 import RemovedSwimmersSection from './RemovedSwimmersSection';
 import AthleteLineupDrawer from './AthleteLineupDrawer';
+import { useAllTeamsApply } from './useAllTeamsApply';
 
 const ROSTER_WINDOW_THRESHOLD = 80;
 const ROSTER_ROW_ESTIMATE_PX = 44;
@@ -58,6 +59,8 @@ type Props = {
   workspace?: Workspace;
   /** Opens the Optimize step. The Lineup step has no optimizer of its own. */
   onOpenOptimize?: () => void;
+  /** Drop seniors setting for the one-click all-teams run. Matches the Optimize step. */
+  removeSeniors?: boolean;
   onWorkspaceUpdate?: (patch: Partial<Workspace>) => void;
   /** Select this athlete by name when set (checklist Jump). */
   jumpAthleteName?: string | null;
@@ -90,6 +93,7 @@ export default function TeamRosterPanel({
   onRequestDeleteSwimmer,
   workspace,
   onOpenOptimize,
+  removeSeniors,
   onWorkspaceUpdate,
   jumpAthleteName,
   jumpAthleteKey,
@@ -101,6 +105,15 @@ export default function TeamRosterPanel({
   // useMemo below (buildScorerRosterLookup ×2 over all genderResults) doesn't rerun on
   // every workspace patch / keystroke that re-renders this panel.
   const merged = useMemo(() => mergeScoringSettings(settings), [settings]);
+  // One-click "Optimize all teams". Same engine as the Optimize step's dialog; Undo comes on the toast.
+  const allTeams = useAllTeamsApply({
+    workspace,
+    gender,
+    settings,
+    removeSeniors,
+    editable,
+    onWorkspaceUpdate,
+  });
   const rosterMode = usesScorerRoster(merged);
   // Explicit On, or Auto with PDF place points in the results: the real blocker when Lineup is locked.
   const pdfPlacePointsActive = effectivePdfPlacePointsMode(merged, results);
@@ -408,8 +421,8 @@ export default function TeamRosterPanel({
   }
 
   const genderLabel = genderLabelFor(gender);
-  const colSpan = rosterColSpan(editable, false);
   const canRemoveAthlete = Boolean(editable && onRequestDeleteSwimmer);
+  const colSpan = rosterColSpan(editable, canRemoveAthlete);
 
   const rosterTable = (
     <div className={expanded ? 'flex flex-col flex-1 min-h-0' : undefined}>
@@ -418,6 +431,8 @@ export default function TeamRosterPanel({
         genderLabel={genderLabel}
         editable={editable}
         onOpenOptimize={onOpenOptimize}
+        onOptimizeAllTeams={allTeams.run}
+        allTeamsBusy={allTeams.busy}
         onResetTeam={resetTeamManual}
         canRemoveAthlete={canRemoveAthlete}
         maxIndividualScorersPerTeam={merged.maxIndividualScorersPerTeam}
@@ -450,6 +465,7 @@ export default function TeamRosterPanel({
           rosterWindow={rosterWindow}
           colSpan={colSpan}
           editable={editable}
+          onRequestRemove={onRequestDeleteSwimmer}
           selectedAthleteKey={selectedAthleteKey}
           pointTotals={pointTotals}
           genderResults={genderResults}

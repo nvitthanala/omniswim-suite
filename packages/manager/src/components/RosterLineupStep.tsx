@@ -196,6 +196,7 @@ export default function RosterLineupStep({
             onRequestDeleteSwimmer={onRequestDeleteSwimmer}
             workspace={workspace}
             onOpenOptimize={onOpenOptimize}
+            removeSeniors={removeSeniors}
             onWorkspaceUpdate={onUpdate}
             jumpAthleteName={jumpAthleteName}
             jumpAthleteKey={jumpAthleteKey}

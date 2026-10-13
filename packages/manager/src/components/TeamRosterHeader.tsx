@@ -16,6 +16,10 @@ type Props = {
   editable: boolean;
   /** Open the Optimize step. Omit to hide the link. */
   onOpenOptimize?: () => void;
+  /** One click: optimize every team and apply it, with an Undo. Omit to hide the button. */
+  onOptimizeAllTeams?: () => void;
+  /** True while the all-teams run is working. */
+  allTeamsBusy?: boolean;
   onResetTeam: () => void;
   /** The Delete or Backspace key removes the selected athlete; mention it in the help text. */
   canRemoveAthlete?: boolean;
@@ -35,6 +39,8 @@ export default function TeamRosterHeader({
   genderLabel,
   editable,
   onOpenOptimize,
+  onOptimizeAllTeams,
+  allTeamsBusy = false,
   onResetTeam,
   canRemoveAthlete = false,
   maxIndividualScorersPerTeam,
@@ -69,6 +75,18 @@ export default function TeamRosterHeader({
               leadingIcon={<Sparkles size={12} />}
             >
               Optimize this lineup
+            </Button>
+          ) : null}
+          {onOptimizeAllTeams ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onOptimizeAllTeams}
+              disabled={allTeamsBusy}
+              className="text-theme-secondary hover:text-[var(--text-accent)] whitespace-nowrap"
+              title="Optimize every team and apply it now. You can undo it from the message that follows."
+            >
+              {allTeamsBusy ? 'Optimizing…' : 'Optimize all teams'}
             </Button>
           ) : null}
           {editable ? (
