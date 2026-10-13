@@ -16,6 +16,7 @@ import { relayLegsAllowTimeTrials } from './scoringDefaults';
 import { relayEntryKey, relayLegDistanceYardsOfEvent } from './relaySplits';
 import {
   canonicalSwimmerName,
+  convertTimeToSeconds,
   isTimeTrialSwim,
   normalizeSwimmerName,
   relayEntryLegSignature,
@@ -416,8 +417,28 @@ function keepRelayGender(
 }
 
 /**
+ * True when `swimmer`'s `time` is a time a relay leg may carry: a finished swim
+ * with a readable, positive clock.
+ *
+ * A disqualified swim (`DQ`), a no-show (`DFS`, `NS`, `SCR`), a no-time entry
+ * (`NT`, empty) and any other code that is not a time (`DNF`, `DSQ`) have none:
+ * `convertTimeToSeconds` reads none of them as a finite number. That covers
+ * every code `isScoringSwimTime` lists, and the ones it does not (`DNF`). A leg
+ * is ranked and filled from the row's own `time`, so the prelims or finals
+ * clock is never read in its place: a row with `time: 'DQ'` and a legal
+ * `prelimsTime` is a disqualified swim here.
+ */
+export function hasRelayLegTime(swimmer: Pick<SwimmerResult, 'time'>): boolean {
+  const seconds = convertTimeToSeconds(String(swimmer.time ?? '').trim());
+  return Number.isFinite(seconds) && seconds > 0;
+}
+
+/**
  * True when `swimmer` is a swim of the individual event leg `legIndex` of
  * `event` swims (`isRelayLegEvent`).
+ *
+ * A swim with no time (`hasRelayLegTime`: a DQ, a no-show, an NT) matches no
+ * leg, whatever the setting.
  *
  * A time-trial swim matches only when `settings.relayLegsAllowTimeTrials` is
  * `true` (user decision D9). `isRelayLegEvent` itself still reads a time trial
@@ -430,6 +451,7 @@ export function swimmerMatchesRelayLeg(
   settings?: RelayLegMatchSettings
 ): boolean {
   if (swimmer.isRelay) return false;
+  if (!hasRelayLegTime(swimmer)) return false;
   if (
     (isTimeTrialSwim(swimmer, settings?.scoredEventNumberMax) || swimmer.relayLegTimeTrial === true) &&
     !relayLegsAllowTimeTrials(settings)
@@ -641,6 +663,15 @@ export function relayEntryOverrideKeys(
  * `settings.relayLegsAllowTimeTrials` is `true`, and the swim then carries
  * `relayLegTimeTrial: true`. Otherwise the leg resolves onto the swimmer's
  * other swim at the leg event, or onto nothing.
+ *
+ * With a leg named, a swim with no time (`hasRelayLegTime`) never resolves, on
+ * either path.
+ *
+ * The recruit id and the name choose the same swim. With a leg named, the id
+ * stands for its row's swimmer: the fastest swim of theirs that may fill the leg
+ * wins, the id's own row or a program swim at the event. Only when none may
+ * does the id's own row come back (so the leg check can name the reason).
+ * Without a leg, the id's own row.
  */
 export function resolveOverrideAssignee(
   override: RelayLegOverride,
@@ -652,30 +683,49 @@ export function resolveOverrideAssignee(
   settings?: RelayLegMatchSettings
 ): SwimmerResult | null {
   const gender = relayGender ?? (relayEvent != null ? relayEntryGender({ event: relayEvent }) : undefined);
+  const hasLegContext = relayEvent != null && legIndex != null;
+
+  // The swim the recruit id points at. A swim with no time never stands in.
+  let hit: SwimmerResult | undefined;
   if (override.recruitId) {
-    const hit = activeSwimmers.find(s => !s.isRelay && s.id === override.recruitId);
-    if (hit && hit.team === team && keepRelayGender([hit], gender, activeSwimmers).length > 0) {
-      return labelTimeTrialLeg(hit, settings);
+    const found = activeSwimmers.find(s => !s.isRelay && s.id === override.recruitId);
+    if (
+      found &&
+      found.team === team &&
+      hasRelayLegTime(found) &&
+      keepRelayGender([found], gender, activeSwimmers).length > 0
+    ) {
+      hit = found;
     }
   }
-  if (override.assigneeName) {
-    const key = normalizeName(override.assigneeName);
-    const named = activeSwimmers.filter(
-      s => !s.isRelay && s.team === team && normalizeName(s.name) === key
+  // With no leg named there is no swim to choose between: the id's own row.
+  if (hit && !hasLegContext) return labelTimeTrialLeg(hit, settings);
+
+  // Both paths choose among the swimmer's swims the same way: the id names the
+  // swimmer (its row's name, with the stored name), and the fastest of their
+  // swims that may fill the leg wins. A recruit row at another event, or a time
+  // trial, no longer shadows the swimmer's program swim at the leg event.
+  const keys = new Set<string>();
+  if (override.assigneeName) keys.add(normalizeName(override.assigneeName));
+  if (hit) keys.add(normalizeName(hit.name));
+  if (keys.size === 0) return null;
+  const named = activeSwimmers.filter(
+    s => !s.isRelay && s.team === team && keys.has(normalizeName(s.name))
+  );
+  const matches = keepRelayGender(named, gender, named);
+  if (relayEvent != null && legIndex != null) {
+    const strokeMatches = matches.filter(m =>
+      swimmerMatchesRelayLeg(m, relayEvent, legIndex, settings)
     );
-    const matches = keepRelayGender(named, gender, named);
-    if (matches.length === 0) return null;
-    if (relayEvent != null && legIndex != null) {
-      const strokeMatches = matches.filter(m =>
-        swimmerMatchesRelayLeg(m, relayEvent, legIndex, settings)
-      );
-      if (strokeMatches.length === 0) return null;
+    if (strokeMatches.length > 0) {
       strokeMatches.sort((a, b) => timeToSec(a.time) - timeToSec(b.time));
       return labelTimeTrialLeg(strokeMatches[0], settings);
     }
-    return matches[0];
+    // Nothing of the swimmer's fills the leg. The id's own row is still the
+    // answer, so the leg check can say why (wrong event, or a time trial).
+    return hit ? labelTimeTrialLeg(hit, settings) : null;
   }
-  return null;
+  return matches.length === 0 ? null : matches[0];
 }
 
 /**
@@ -784,22 +834,79 @@ export function suggestBestRelayLegFill(
   return { override, swimmer };
 }
 
+/**
+ * True when an override stored under `storedKey` is one `entryKey`'s relay
+ * entry reads: the same key, or the plain `relayEntryKey` a tied relay's key is
+ * built on (`relayEntryKeyIn` appends `|<swimmers>` to it, and nothing else
+ * does).
+ *
+ * That plain key is the only key a tied A or B relay had before the two were
+ * told apart, and `findRelayLegOverride` still reads it for both. Everything
+ * that edits or reports an override must see it the same way. A plain key is a
+ * pipe-prefix of exactly its own relay's tied keys, never of another relay's.
+ */
+function overrideKeyAppliesToEntry(storedKey: string, entryKey: string): boolean {
+  return storedKey === entryKey || entryKey.startsWith(`${storedKey}|`);
+}
+
+/**
+ * The overrides with `next` in place of the one it replaces.
+ *
+ * It replaces the override of the same relay entry and leg: stored under the
+ * same key, or under the plain key a tied entry's key is built on (a key saved
+ * before A and B were told apart). Without that, the legacy override stayed
+ * beside `next`, and clearing the leg later let it show through again. The
+ * legacy key also applied to the tied sibling: that sibling reads no override
+ * for this leg once the key is replaced.
+ */
 export function upsertRelayLegOverride(
   overrides: RelayLegOverride[],
   next: RelayLegOverride
 ): RelayLegOverride[] {
   return [
-    ...overrides.filter(o => !(o.relayEntryKey === next.relayEntryKey && o.legIndex === next.legIndex)),
+    ...overrides.filter(
+      o =>
+        !(o.legIndex === next.legIndex && overrideKeyAppliesToEntry(o.relayEntryKey, next.relayEntryKey))
+    ),
     next,
   ];
 }
 
+/**
+ * The overrides without the one of `entryKey`'s relay entry at `legIndex`: the
+ * one stored under `entryKey`, and the one stored under the plain key of a tied
+ * entry (`overrideKeyAppliesToEntry`). `entryKey` is the key
+ * `stableRelayEntryKey` gives (a RelayGroup's `key`). A leg's override of a
+ * tied relay could be either, and the one left behind would read as an override
+ * the coach had just cleared.
+ */
 export function removeRelayLegOverride(
   overrides: RelayLegOverride[],
   entryKey: string,
   legIndex: number
 ): RelayLegOverride[] {
-  return overrides.filter(o => !(o.relayEntryKey === entryKey && o.legIndex === legIndex));
+  return overrides.filter(
+    o => !(o.legIndex === legIndex && overrideKeyAppliesToEntry(o.relayEntryKey, entryKey))
+  );
+}
+
+/**
+ * True when the leg has an override a relay reads: stored under `entryKey`, or
+ * under the plain key of a tied entry. The same test `removeRelayLegOverride`
+ * clears, and the same answer `findRelayLegOverride` gives (non-`undefined`)
+ * for the relay `entryKey` was made from.
+ *
+ * Use it for "is there an override to clear" on a relay group, passing the
+ * group's `key`.
+ */
+export function hasRelayLegOverride(
+  overrides: readonly RelayLegOverride[],
+  entryKey: string,
+  legIndex: number
+): boolean {
+  return overrides.some(
+    o => o.legIndex === legIndex && overrideKeyAppliesToEntry(o.relayEntryKey, entryKey)
+  );
 }
 
 export function relayMissingStrokeLabel(stroke: RelayLegStroke | undefined): string {

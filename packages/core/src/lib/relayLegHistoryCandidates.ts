@@ -23,7 +23,9 @@
  * 3. **Never over a meet or recruit swim.** A swimmer who already has a row at
  *    the leg's event in the pool gets no history candidate for it, even a
  *    faster one. Gavin Kock's history 20.46 50 Free does not displace his
- *    20.47 at the meet.
+ *    20.47 at the meet. A pool row with no time (a DQ, a no-show:
+ *    `hasRelayLegTime`) is not a swim here: it fills no leg, so it hides no
+ *    history swim.
  * 4. **Only a swimmer already on the roster.** History is read only for a
  *    swimmer the pool already holds (same team, same name after the alias
  *    links), so the roster gates the pool passed ("drop seniors", removed
@@ -59,6 +61,7 @@ import { aliasNameKey, buildAliasResolver } from './athleteAliases';
 import { isRankableSwim } from './bestTimeEligibility';
 import { recordedCourseOfSwim } from './courseEvents';
 import {
+  hasRelayLegTime,
   individualEventDistanceStroke,
   relayLegEventKey,
   relayLegMatchSettings,
@@ -283,7 +286,15 @@ export function relayLegHistoryCandidates(
     const legEvent = legEventByKey.get(memoLegEventKey(row.event));
     // A time-trial row cannot fill the leg while the setting is off, so it
     // must not hide the swimmer's history swim at that event (rule 3).
-    if (legEvent && (allowTimeTrials || !isTimeTrialSwim(row, scoredMax))) member.legEventsSwum.add(legEvent);
+    // A row with no time (a DQ, a no-show) cannot fill the leg either, so it
+    // must not hide the swimmer's history swim: nothing else would be offered.
+    if (
+      legEvent &&
+      hasRelayLegTime(row) &&
+      (allowTimeTrials || !isTimeTrialSwim(row, scoredMax))
+    ) {
+      member.legEventsSwum.add(legEvent);
+    }
     roster.set(key, member);
   }
   if (roster.size === 0) return [];

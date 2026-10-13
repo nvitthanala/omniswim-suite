@@ -409,7 +409,8 @@ describe('event labels', () => {
   });
 
   it('medley legs match by stroke in leg order', () => {
-    const row = (event: string) => ({ event, isRelay: false }) as SwimmerResult;
+    // A leg takes only a swim that has a time; the label is what this test varies.
+    const row = (event: string) => ({ event, isRelay: false, time: '1:00.00' }) as SwimmerResult;
     const MR = 'Event 20 Men 4x100 Yard Medley Relay';
     expect(swimmerMatchesRelayLeg(row('Event 24 Men 100 Yard Backstroke'), MR, 0)).toBe(true);
     expect(swimmerMatchesRelayLeg(row('100 Breaststroke'), MR, 1)).toBe(true);
@@ -421,7 +422,11 @@ describe('event labels', () => {
   });
 
   it('a relay row never fills a leg, whatever its label says', () => {
-    const splitRow = { event: '100 Freestyle (relay split)', isRelay: true } as SwimmerResult;
+    const splitRow = {
+      event: '100 Freestyle (relay split)',
+      isRelay: true,
+      time: '1:00.00',
+    } as SwimmerResult;
     expect(swimmerMatchesRelayLeg(splitRow, M_400FR, 0)).toBe(false);
     expect(swimmerMatchesRelayLeg({ ...splitRow, isRelay: false }, M_400FR, 0)).toBe(true);
   });

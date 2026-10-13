@@ -1,0 +1,1332 @@
+{
+  "_provenance": {
+    "source": "data/meets.json, workspace \"Blank Workspace 1\" (id 8fc8e12e-7fea-4dfc-923f-394361232f94), loadedMeet.pdfFilename 2026_NSISC_Championships_Final_Results.pdf",
+    "extractedAt": "2026-10-13",
+    "selection": "womenResults rows copied verbatim and in their original array order. Delta State University: every row of Event 19 Women 4x100 Yard Medley Relay (A and B Final) and every individual 100 Yard Breaststroke row (Event 25, Event 400 time trial, Event 938). Henderson State University: every row of Event 41 Women 4x100 Yard Freestyle Relay and every individual row of Allie Grace Rhodes and Emily Hand.",
+    "why": "A swim with no time is not a relay-leg candidate. Chloe Skelt (DSU) is DQ in the Event 25 100 Breast prelims, swam a 1:02.63R time trial (Event 400) and has no other 100 Breast; leg 1 of the 4x100 medley relay is the 100 Breast. Kiera Cloete also has an Event 938 swim, past the scored program (a time trial). Allie Grace Rhodes (HSU) is DQ in the Event 34 100 Free B Final: time DQ, prelimsTime 56.76. Emily Hand (HSU) is DFS in the same event."
+  },
+  "womenResults": [
+    {
+      "id": "e94d5a10-2a68-4431-b3b3-2b0136aaec74",
+      "rank": 14,
+      "name": "Emily Hand",
+      "classYear": "SO",
+      "team": "Henderson State University",
+      "time": "24.66",
+      "prelimsTime": "24.73",
+      "finalsTime": "24.66",
+      "roundSwam": "B Final",
+      "points": 3,
+      "event": "Event 7 Women 50 Yard Freestyle",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "853fe47a-83d5-4cfb-b14a-84743279316a",
+      "rank": 23,
+      "name": "Allie Grace Rhodes",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "25.99",
+      "prelimsTime": "25.99",
+      "finalsTime": null,
+      "roundSwam": "Preliminaries",
+      "points": 0,
+      "event": "Event 7 Women 50 Yard Freestyle",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "cc9d98bb-1eda-4f31-bfa3-283738dbe7dc",
+      "rank": 12,
+      "name": "Emily Hand",
+      "classYear": "SO",
+      "team": "Henderson State University",
+      "time": "1:01.75",
+      "prelimsTime": "1:02.47",
+      "finalsTime": "1:01.75",
+      "roundSwam": "B Final",
+      "points": 5,
+      "event": "Event 12 Women 100 Yard Butterfly",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "b7993633-0174-46dd-9b26-dc07e3ce87ae",
+      "rank": 13,
+      "name": "Allie Grace Rhodes",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "1:02.13",
+      "prelimsTime": "1:01.71",
+      "finalsTime": "1:02.13",
+      "roundSwam": "B Final",
+      "points": 4,
+      "event": "Event 12 Women 100 Yard Butterfly",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "f3b560eb-9c0a-4c9a-87d8-40dd47addd57",
+      "rank": 2,
+      "name": "Kaley Davis",
+      "classYear": "SR",
+      "team": "Delta State University",
+      "time": "3:41.69",
+      "prelimsTime": null,
+      "finalsTime": "3:41.69",
+      "roundSwam": "A Final",
+      "points": 8.5,
+      "event": "Event 19 Women 4x100 Yard Medley Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Kaley Davis",
+          "year": "SR"
+        },
+        {
+          "name": "Pia Delkeskamp",
+          "year": "SR"
+        },
+        {
+          "name": "Zinna Nimander",
+          "year": "SO"
+        },
+        {
+          "name": "Olivia Murphy",
+          "year": "SO"
+        }
+      ],
+      "relayLegIndex": 0,
+      "relayLegStroke": "back",
+      "relayLegSplit": "55.13",
+      "relayLegSplitDetail": {
+        "legIndex": 0,
+        "stroke": "back",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "26.52",
+            "cumulativeLeg": "26.52"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "28.61",
+            "cumulativeLeg": "55.13"
+          }
+        ],
+        "legTotal": "55.13"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "55.13",
+          "1:03.23",
+          "54.26",
+          "49.07"
+        ],
+        "firstHalf": "1:58.36",
+        "secondHalf": "1:43.33",
+        "teamTotal": "3:41.69"
+      },
+      "relayTeamTime": "3:41.69"
+    },
+    {
+      "id": "c98d2a9a-0410-463b-a248-6e7099804e69",
+      "rank": 2,
+      "name": "Pia Delkeskamp",
+      "classYear": "SR",
+      "team": "Delta State University",
+      "time": "3:41.69",
+      "prelimsTime": null,
+      "finalsTime": "3:41.69",
+      "roundSwam": "A Final",
+      "points": 8.5,
+      "event": "Event 19 Women 4x100 Yard Medley Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Kaley Davis",
+          "year": "SR"
+        },
+        {
+          "name": "Pia Delkeskamp",
+          "year": "SR"
+        },
+        {
+          "name": "Zinna Nimander",
+          "year": "SO"
+        },
+        {
+          "name": "Olivia Murphy",
+          "year": "SO"
+        }
+      ],
+      "relayLegIndex": 1,
+      "relayLegStroke": "breast",
+      "relayLegSplit": "1:03.23",
+      "relayLegSplitDetail": {
+        "legIndex": 1,
+        "stroke": "breast",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "29.07",
+            "cumulativeLeg": "1:24.20"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "34.16",
+            "cumulativeLeg": "1:58.36"
+          }
+        ],
+        "legTotal": "1:03.23"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "55.13",
+          "1:03.23",
+          "54.26",
+          "49.07"
+        ],
+        "firstHalf": "1:58.36",
+        "secondHalf": "1:43.33",
+        "teamTotal": "3:41.69"
+      },
+      "relayTeamTime": "3:41.69"
+    },
+    {
+      "id": "40398274-ec19-4a97-9dad-3816837af524",
+      "rank": 2,
+      "name": "Zinna Nimander",
+      "classYear": "SO",
+      "team": "Delta State University",
+      "time": "3:41.69",
+      "prelimsTime": null,
+      "finalsTime": "3:41.69",
+      "roundSwam": "A Final",
+      "points": 8.5,
+      "event": "Event 19 Women 4x100 Yard Medley Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Kaley Davis",
+          "year": "SR"
+        },
+        {
+          "name": "Pia Delkeskamp",
+          "year": "SR"
+        },
+        {
+          "name": "Zinna Nimander",
+          "year": "SO"
+        },
+        {
+          "name": "Olivia Murphy",
+          "year": "SO"
+        }
+      ],
+      "relayLegIndex": 2,
+      "relayLegStroke": "fly",
+      "relayLegSplit": "54.26",
+      "relayLegSplitDetail": {
+        "legIndex": 2,
+        "stroke": "fly",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "25.05",
+            "cumulativeLeg": "2:23.41"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "29.21",
+            "cumulativeLeg": "2:52.62"
+          }
+        ],
+        "legTotal": "54.26"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "55.13",
+          "1:03.23",
+          "54.26",
+          "49.07"
+        ],
+        "firstHalf": "1:58.36",
+        "secondHalf": "1:43.33",
+        "teamTotal": "3:41.69"
+      },
+      "relayTeamTime": "3:41.69"
+    },
+    {
+      "id": "49ced365-2b08-4df0-aed3-0ca813d1ed3e",
+      "rank": 2,
+      "name": "Olivia Murphy",
+      "classYear": "SO",
+      "team": "Delta State University",
+      "time": "3:41.69",
+      "prelimsTime": null,
+      "finalsTime": "3:41.69",
+      "roundSwam": "A Final",
+      "points": 8.5,
+      "event": "Event 19 Women 4x100 Yard Medley Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Kaley Davis",
+          "year": "SR"
+        },
+        {
+          "name": "Pia Delkeskamp",
+          "year": "SR"
+        },
+        {
+          "name": "Zinna Nimander",
+          "year": "SO"
+        },
+        {
+          "name": "Olivia Murphy",
+          "year": "SO"
+        }
+      ],
+      "relayLegIndex": 3,
+      "relayLegStroke": "free",
+      "relayLegSplit": "49.07",
+      "relayLegSplitDetail": {
+        "legIndex": 3,
+        "stroke": "free",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "23.34",
+            "cumulativeLeg": "3:15.96"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "25.73",
+            "cumulativeLeg": "3:41.69"
+          }
+        ],
+        "legTotal": "49.07"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "55.13",
+          "1:03.23",
+          "54.26",
+          "49.07"
+        ],
+        "firstHalf": "1:58.36",
+        "secondHalf": "1:43.33",
+        "teamTotal": "3:41.69"
+      },
+      "relayTeamTime": "3:41.69"
+    },
+    {
+      "id": "d7bfadfd-85aa-41f8-b4f1-b19ac73471c1",
+      "rank": 10,
+      "name": "Jordon Kloth",
+      "classYear": "SR",
+      "team": "Delta State University",
+      "time": "3:50.87",
+      "prelimsTime": null,
+      "finalsTime": "3:50.87",
+      "roundSwam": "B Final",
+      "points": 3.5,
+      "event": "Event 19 Women 4x100 Yard Medley Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Jordon Kloth",
+          "year": "SR"
+        },
+        {
+          "name": "Kiera Cloete",
+          "year": "FR"
+        },
+        {
+          "name": "Janne Bodemer",
+          "year": "SR"
+        },
+        {
+          "name": "Rhianna Foster",
+          "year": "FR"
+        }
+      ],
+      "relayLegIndex": 0,
+      "relayLegStroke": "back",
+      "relayLegSplit": "58.80",
+      "relayLegSplitDetail": {
+        "legIndex": 0,
+        "stroke": "back",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "28.24",
+            "cumulativeLeg": "28.24"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "30.56",
+            "cumulativeLeg": "58.80"
+          }
+        ],
+        "legTotal": "58.80"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "58.80",
+          "1:04.03",
+          "54.73",
+          "53.31"
+        ],
+        "firstHalf": "2:02.83",
+        "secondHalf": "1:48.04",
+        "teamTotal": "3:50.87"
+      },
+      "relayTeamTime": "3:50.87"
+    },
+    {
+      "id": "d1f50c1d-1bad-467d-996a-4bc2354a566a",
+      "rank": 10,
+      "name": "Kiera Cloete",
+      "classYear": "FR",
+      "team": "Delta State University",
+      "time": "3:50.87",
+      "prelimsTime": null,
+      "finalsTime": "3:50.87",
+      "roundSwam": "B Final",
+      "points": 3.5,
+      "event": "Event 19 Women 4x100 Yard Medley Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Jordon Kloth",
+          "year": "SR"
+        },
+        {
+          "name": "Kiera Cloete",
+          "year": "FR"
+        },
+        {
+          "name": "Janne Bodemer",
+          "year": "SR"
+        },
+        {
+          "name": "Rhianna Foster",
+          "year": "FR"
+        }
+      ],
+      "relayLegIndex": 1,
+      "relayLegStroke": "breast",
+      "relayLegSplit": "1:04.03",
+      "relayLegSplitDetail": {
+        "legIndex": 1,
+        "stroke": "breast",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "28.77",
+            "cumulativeLeg": "1:27.57"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "35.26",
+            "cumulativeLeg": "2:02.83"
+          }
+        ],
+        "legTotal": "1:04.03"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "58.80",
+          "1:04.03",
+          "54.73",
+          "53.31"
+        ],
+        "firstHalf": "2:02.83",
+        "secondHalf": "1:48.04",
+        "teamTotal": "3:50.87"
+      },
+      "relayTeamTime": "3:50.87"
+    },
+    {
+      "id": "c072ee14-d61a-437d-b4ae-040cfaa1ee1f",
+      "rank": 10,
+      "name": "Janne Bodemer",
+      "classYear": "SR",
+      "team": "Delta State University",
+      "time": "3:50.87",
+      "prelimsTime": null,
+      "finalsTime": "3:50.87",
+      "roundSwam": "B Final",
+      "points": 3.5,
+      "event": "Event 19 Women 4x100 Yard Medley Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Jordon Kloth",
+          "year": "SR"
+        },
+        {
+          "name": "Kiera Cloete",
+          "year": "FR"
+        },
+        {
+          "name": "Janne Bodemer",
+          "year": "SR"
+        },
+        {
+          "name": "Rhianna Foster",
+          "year": "FR"
+        }
+      ],
+      "relayLegIndex": 2,
+      "relayLegStroke": "fly",
+      "relayLegSplit": "54.73",
+      "relayLegSplitDetail": {
+        "legIndex": 2,
+        "stroke": "fly",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "26.18",
+            "cumulativeLeg": "2:29.01"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "28.55",
+            "cumulativeLeg": "2:57.56"
+          }
+        ],
+        "legTotal": "54.73"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "58.80",
+          "1:04.03",
+          "54.73",
+          "53.31"
+        ],
+        "firstHalf": "2:02.83",
+        "secondHalf": "1:48.04",
+        "teamTotal": "3:50.87"
+      },
+      "relayTeamTime": "3:50.87"
+    },
+    {
+      "id": "4d0296a5-8db5-4ac4-a018-2adcb36cd207",
+      "rank": 10,
+      "name": "Rhianna Foster",
+      "classYear": "FR",
+      "team": "Delta State University",
+      "time": "3:50.87",
+      "prelimsTime": null,
+      "finalsTime": "3:50.87",
+      "roundSwam": "B Final",
+      "points": 3.5,
+      "event": "Event 19 Women 4x100 Yard Medley Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Jordon Kloth",
+          "year": "SR"
+        },
+        {
+          "name": "Kiera Cloete",
+          "year": "FR"
+        },
+        {
+          "name": "Janne Bodemer",
+          "year": "SR"
+        },
+        {
+          "name": "Rhianna Foster",
+          "year": "FR"
+        }
+      ],
+      "relayLegIndex": 3,
+      "relayLegStroke": "free",
+      "relayLegSplit": "53.31",
+      "relayLegSplitDetail": {
+        "legIndex": 3,
+        "stroke": "free",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "25.60",
+            "cumulativeLeg": "3:23.16"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "27.71",
+            "cumulativeLeg": "3:50.87"
+          }
+        ],
+        "legTotal": "53.31"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "58.80",
+          "1:04.03",
+          "54.73",
+          "53.31"
+        ],
+        "firstHalf": "2:02.83",
+        "secondHalf": "1:48.04",
+        "teamTotal": "3:50.87"
+      },
+      "relayTeamTime": "3:50.87"
+    },
+    {
+      "id": "0efdb8b1-b4ee-4c91-86f6-e90029108b59",
+      "rank": 22,
+      "name": "Allie Grace Rhodes",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "1:04.01",
+      "prelimsTime": "1:04.30",
+      "finalsTime": "1:04.01",
+      "roundSwam": "C Final",
+      "points": 0,
+      "event": "Event 23 Women 100 Yard Backstroke",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "8c02121d-3585-4665-ac11-9c7152f752d1",
+      "rank": 2,
+      "name": "Kiera Cloete",
+      "classYear": "FR",
+      "team": "Delta State University",
+      "time": "1:03.53",
+      "prelimsTime": "1:03.39",
+      "finalsTime": "1:03.53",
+      "roundSwam": "A Final",
+      "points": 17,
+      "event": "Event 25 Women 100 Yard Breaststroke",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "e83dcf44-0810-45fa-b2da-6027cc8a1d41",
+      "rank": 4,
+      "name": "Pia Delkeskamp",
+      "classYear": "SR",
+      "team": "Delta State University",
+      "time": "1:04.72",
+      "prelimsTime": "1:05.42",
+      "finalsTime": "1:04.72",
+      "roundSwam": "A Final",
+      "points": 15,
+      "event": "Event 25 Women 100 Yard Breaststroke",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "2292a297-454f-4c18-8266-11c4dc7b4555",
+      "rank": 5,
+      "name": "Hannah Jones",
+      "classYear": "JR",
+      "team": "Delta State University",
+      "time": "1:05.46",
+      "prelimsTime": "1:05.65",
+      "finalsTime": "1:05.46",
+      "roundSwam": "A Final",
+      "points": 14,
+      "event": "Event 25 Women 100 Yard Breaststroke",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "7230f064-c65c-48b3-88cc-8739c363eb4a",
+      "rank": 0,
+      "name": "Chloe Skelt",
+      "classYear": "JR",
+      "team": "Delta State University",
+      "time": "DQ",
+      "prelimsTime": "DQ",
+      "finalsTime": null,
+      "roundSwam": "Preliminaries",
+      "points": 0,
+      "event": "Event 25 Women 100 Yard Breaststroke",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "e1d65cf1-c646-4ede-9c12-a896eedc9611",
+      "rank": 16,
+      "name": "Allie Grace Rhodes",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "DQ",
+      "prelimsTime": "56.76",
+      "finalsTime": "DQ",
+      "roundSwam": "B Final",
+      "points": 0,
+      "event": "Event 34 Women 100 Yard Freestyle",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "cac30095-1366-41c6-aeef-f9d87586074d",
+      "rank": 0,
+      "name": "Emily Hand",
+      "classYear": "SO",
+      "team": "Henderson State University",
+      "time": "DFS",
+      "prelimsTime": "DFS",
+      "finalsTime": null,
+      "roundSwam": "Preliminaries",
+      "points": 0,
+      "event": "Event 34 Women 100 Yard Freestyle",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "e2876a54-9a88-431f-91f5-8b3b21b5ad7d",
+      "rank": 3,
+      "name": "Emma Crowe",
+      "classYear": "SO",
+      "team": "Henderson State University",
+      "time": "3:32.12",
+      "prelimsTime": null,
+      "finalsTime": "3:32.12",
+      "roundSwam": "A Final",
+      "points": 8,
+      "event": "Event 41 Women 4x100 Yard Freestyle Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Emma Crowe",
+          "year": "SO"
+        },
+        {
+          "name": "Iris McNamara",
+          "year": "FR"
+        },
+        {
+          "name": "Raven Roberts",
+          "year": "SR"
+        },
+        {
+          "name": "Shelby Travis",
+          "year": "SO"
+        }
+      ],
+      "relayLegIndex": 0,
+      "relayLegStroke": "free",
+      "relayLegSplit": "52.73",
+      "relayLegSplitDetail": {
+        "legIndex": 0,
+        "stroke": "free",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "25.15",
+            "cumulativeLeg": "25.15"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "27.58",
+            "cumulativeLeg": "52.73"
+          }
+        ],
+        "legTotal": "52.73"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "52.73",
+          "53.46",
+          "52.88",
+          "53.05"
+        ],
+        "firstHalf": "1:46.19",
+        "secondHalf": "1:45.93",
+        "teamTotal": "3:32.12"
+      },
+      "relayTeamTime": "3:32.12"
+    },
+    {
+      "id": "7e506969-836d-40ba-8add-1db82decdc99",
+      "rank": 3,
+      "name": "Iris McNamara",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "3:32.12",
+      "prelimsTime": null,
+      "finalsTime": "3:32.12",
+      "roundSwam": "A Final",
+      "points": 8,
+      "event": "Event 41 Women 4x100 Yard Freestyle Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Emma Crowe",
+          "year": "SO"
+        },
+        {
+          "name": "Iris McNamara",
+          "year": "FR"
+        },
+        {
+          "name": "Raven Roberts",
+          "year": "SR"
+        },
+        {
+          "name": "Shelby Travis",
+          "year": "SO"
+        }
+      ],
+      "relayLegIndex": 1,
+      "relayLegStroke": "free",
+      "relayLegSplit": "53.46",
+      "relayLegSplitDetail": {
+        "legIndex": 1,
+        "stroke": "free",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "25.43",
+            "cumulativeLeg": "1:18.16"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "28.03",
+            "cumulativeLeg": "1:46.19"
+          }
+        ],
+        "legTotal": "53.46"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "52.73",
+          "53.46",
+          "52.88",
+          "53.05"
+        ],
+        "firstHalf": "1:46.19",
+        "secondHalf": "1:45.93",
+        "teamTotal": "3:32.12"
+      },
+      "relayTeamTime": "3:32.12"
+    },
+    {
+      "id": "7e21327b-6137-44a1-9bb5-f6ac77706b7b",
+      "rank": 3,
+      "name": "Raven Roberts",
+      "classYear": "SR",
+      "team": "Henderson State University",
+      "time": "3:32.12",
+      "prelimsTime": null,
+      "finalsTime": "3:32.12",
+      "roundSwam": "A Final",
+      "points": 8,
+      "event": "Event 41 Women 4x100 Yard Freestyle Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Emma Crowe",
+          "year": "SO"
+        },
+        {
+          "name": "Iris McNamara",
+          "year": "FR"
+        },
+        {
+          "name": "Raven Roberts",
+          "year": "SR"
+        },
+        {
+          "name": "Shelby Travis",
+          "year": "SO"
+        }
+      ],
+      "relayLegIndex": 2,
+      "relayLegStroke": "free",
+      "relayLegSplit": "52.88",
+      "relayLegSplitDetail": {
+        "legIndex": 2,
+        "stroke": "free",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "25.04",
+            "cumulativeLeg": "2:11.23"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "27.84",
+            "cumulativeLeg": "2:39.07"
+          }
+        ],
+        "legTotal": "52.88"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "52.73",
+          "53.46",
+          "52.88",
+          "53.05"
+        ],
+        "firstHalf": "1:46.19",
+        "secondHalf": "1:45.93",
+        "teamTotal": "3:32.12"
+      },
+      "relayTeamTime": "3:32.12"
+    },
+    {
+      "id": "65324c37-4cf7-48d5-9f89-34ee2cbac3a6",
+      "rank": 3,
+      "name": "Shelby Travis",
+      "classYear": "SO",
+      "team": "Henderson State University",
+      "time": "3:32.12",
+      "prelimsTime": null,
+      "finalsTime": "3:32.12",
+      "roundSwam": "A Final",
+      "points": 8,
+      "event": "Event 41 Women 4x100 Yard Freestyle Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Emma Crowe",
+          "year": "SO"
+        },
+        {
+          "name": "Iris McNamara",
+          "year": "FR"
+        },
+        {
+          "name": "Raven Roberts",
+          "year": "SR"
+        },
+        {
+          "name": "Shelby Travis",
+          "year": "SO"
+        }
+      ],
+      "relayLegIndex": 3,
+      "relayLegStroke": "free",
+      "relayLegSplit": "53.05",
+      "relayLegSplitDetail": {
+        "legIndex": 3,
+        "stroke": "free",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "25.06",
+            "cumulativeLeg": "3:04.13"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "27.99",
+            "cumulativeLeg": "3:32.12"
+          }
+        ],
+        "legTotal": "53.05"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "52.73",
+          "53.46",
+          "52.88",
+          "53.05"
+        ],
+        "firstHalf": "1:46.19",
+        "secondHalf": "1:45.93",
+        "teamTotal": "3:32.12"
+      },
+      "relayTeamTime": "3:32.12"
+    },
+    {
+      "id": "060724c7-1652-4e50-bc80-4acb2ca18033",
+      "rank": 11,
+      "name": "Ryann Grasser",
+      "classYear": "SR",
+      "team": "Henderson State University",
+      "time": "3:38.29",
+      "prelimsTime": null,
+      "finalsTime": "3:38.29",
+      "roundSwam": "B Final",
+      "points": 3,
+      "event": "Event 41 Women 4x100 Yard Freestyle Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Ryann Grasser",
+          "year": "SR"
+        },
+        {
+          "name": "Tayden Drake",
+          "year": "JR"
+        },
+        {
+          "name": "Jennifer Montier",
+          "year": "FR"
+        },
+        {
+          "name": "Ryleigh Wells",
+          "year": "FR"
+        }
+      ],
+      "relayLegIndex": 0,
+      "relayLegStroke": "free",
+      "relayLegSplit": "53.53",
+      "relayLegSplitDetail": {
+        "legIndex": 0,
+        "stroke": "free",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "25.67",
+            "cumulativeLeg": "25.67"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "27.86",
+            "cumulativeLeg": "53.53"
+          }
+        ],
+        "legTotal": "53.53"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "53.53",
+          "53.10",
+          "56.74",
+          "54.92"
+        ],
+        "firstHalf": "1:46.63",
+        "secondHalf": "1:51.66",
+        "teamTotal": "3:38.29"
+      },
+      "relayTeamTime": "3:38.29"
+    },
+    {
+      "id": "81d6b9b3-27fa-4f8d-94a6-5a376d44f92d",
+      "rank": 11,
+      "name": "Tayden Drake",
+      "classYear": "JR",
+      "team": "Henderson State University",
+      "time": "3:38.29",
+      "prelimsTime": null,
+      "finalsTime": "3:38.29",
+      "roundSwam": "B Final",
+      "points": 3,
+      "event": "Event 41 Women 4x100 Yard Freestyle Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Ryann Grasser",
+          "year": "SR"
+        },
+        {
+          "name": "Tayden Drake",
+          "year": "JR"
+        },
+        {
+          "name": "Jennifer Montier",
+          "year": "FR"
+        },
+        {
+          "name": "Ryleigh Wells",
+          "year": "FR"
+        }
+      ],
+      "relayLegIndex": 1,
+      "relayLegStroke": "free",
+      "relayLegSplit": "53.10",
+      "relayLegSplitDetail": {
+        "legIndex": 1,
+        "stroke": "free",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "25.28",
+            "cumulativeLeg": "1:18.81"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "27.82",
+            "cumulativeLeg": "1:46.63"
+          }
+        ],
+        "legTotal": "53.10"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "53.53",
+          "53.10",
+          "56.74",
+          "54.92"
+        ],
+        "firstHalf": "1:46.63",
+        "secondHalf": "1:51.66",
+        "teamTotal": "3:38.29"
+      },
+      "relayTeamTime": "3:38.29"
+    },
+    {
+      "id": "6a22d6a9-d2a3-430e-89ac-d65b88b715d0",
+      "rank": 11,
+      "name": "Jennifer Montier",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "3:38.29",
+      "prelimsTime": null,
+      "finalsTime": "3:38.29",
+      "roundSwam": "B Final",
+      "points": 3,
+      "event": "Event 41 Women 4x100 Yard Freestyle Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Ryann Grasser",
+          "year": "SR"
+        },
+        {
+          "name": "Tayden Drake",
+          "year": "JR"
+        },
+        {
+          "name": "Jennifer Montier",
+          "year": "FR"
+        },
+        {
+          "name": "Ryleigh Wells",
+          "year": "FR"
+        }
+      ],
+      "relayLegIndex": 2,
+      "relayLegStroke": "free",
+      "relayLegSplit": "56.74",
+      "relayLegSplitDetail": {
+        "legIndex": 2,
+        "stroke": "free",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "26.73",
+            "cumulativeLeg": "2:13.36"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "30.01",
+            "cumulativeLeg": "2:43.37"
+          }
+        ],
+        "legTotal": "56.74"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "53.53",
+          "53.10",
+          "56.74",
+          "54.92"
+        ],
+        "firstHalf": "1:46.63",
+        "secondHalf": "1:51.66",
+        "teamTotal": "3:38.29"
+      },
+      "relayTeamTime": "3:38.29"
+    },
+    {
+      "id": "97981ebd-1621-4cee-a474-46e28f3f80a6",
+      "rank": 11,
+      "name": "Ryleigh Wells",
+      "classYear": "FR",
+      "team": "Henderson State University",
+      "time": "3:38.29",
+      "prelimsTime": null,
+      "finalsTime": "3:38.29",
+      "roundSwam": "B Final",
+      "points": 3,
+      "event": "Event 41 Women 4x100 Yard Freestyle Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Ryann Grasser",
+          "year": "SR"
+        },
+        {
+          "name": "Tayden Drake",
+          "year": "JR"
+        },
+        {
+          "name": "Jennifer Montier",
+          "year": "FR"
+        },
+        {
+          "name": "Ryleigh Wells",
+          "year": "FR"
+        }
+      ],
+      "relayLegIndex": 3,
+      "relayLegStroke": "free",
+      "relayLegSplit": "54.92",
+      "relayLegSplitDetail": {
+        "legIndex": 3,
+        "stroke": "free",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "25.68",
+            "cumulativeLeg": "3:09.05"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "29.24",
+            "cumulativeLeg": "3:38.29"
+          }
+        ],
+        "legTotal": "54.92"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "53.53",
+          "53.10",
+          "56.74",
+          "54.92"
+        ],
+        "firstHalf": "1:46.63",
+        "secondHalf": "1:51.66",
+        "teamTotal": "3:38.29"
+      },
+      "relayTeamTime": "3:38.29"
+    },
+    {
+      "id": "813d3b85-22a3-4b43-a953-6b44e2bd4331",
+      "rank": 1,
+      "name": "Chloe Skelt",
+      "classYear": "JR",
+      "team": "Delta State University",
+      "time": "1:02.63R",
+      "prelimsTime": "NT",
+      "finalsTime": "1:02.63R",
+      "roundSwam": "A Final",
+      "points": 0,
+      "event": "Event 400 Women 100 Yard Breaststroke Time Trial",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": true,
+      "relayNames": []
+    },
+    {
+      "id": "09460d6d-e285-4631-9ae1-f32bcd5f5dd2",
+      "rank": 1,
+      "name": "Kiera Cloete",
+      "classYear": "FR",
+      "team": "Delta State University",
+      "time": "1:05.16",
+      "prelimsTime": "NT",
+      "finalsTime": "1:05.16",
+      "roundSwam": "A Final",
+      "points": 0,
+      "event": "Event 938 Women 100 Yard Breaststroke",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    }
+  ]
+}
