@@ -87,7 +87,7 @@
     "F4": "pending",
     "F5": "pending",
     "F6": "pending",
-    "F7": "pending",
+    "F7": "in flight (a3003cfad2024423c)",
     "F8": "pending",
     "F9": "pending",
     "F10": "pending",
@@ -110,8 +110,8 @@
     "D5": "pending",
     "D6": "pending",
     "D7": "pending",
-    "D8": "pending",
-    "D9": "pending",
+    "D8": "in flight (a3003cfad2024423c)",
+    "D9": "in flight (executor a3003cfad2024423c; stops on a schema gap)",
     "D10": "pending",
     "H1": "committed",
     "H2": "pending",
@@ -126,7 +126,8 @@
     "H11": "pending",
     "parse-pdf-limit": "committed 3105ba98 (gates green on combined tree 2026-10-12)",
     "relayGroupKey": "committed 6cede0ae",
-    "parse-psych-pdf-guard": "committed ea5a09c7"
+    "parse-psych-pdf-guard": "committed ea5a09c7",
+    "time-format-carry": "in flight (a3003cfad2024423c)"
   },
   "userDecisions": {
     "workflow": {
@@ -429,9 +430,7 @@
     "harness": "7 passed, 1 skipped (pre-existing fixme)"
   },
   "nextBatches": [
-    "B: T12 ratchets, R6 complexity warnings, R8 time formatter, R12 alias config, R11 strictness (executor)",
     "C: X6 icon names, X9 header overflow at 390px, X11 motion audit, X12 copy pass (worker)",
-    "D: F7 removed events, D9 time-trial opt-in, D8 rank collapse verification (executor)",
     "E: F1 print cards, F2 deck view, F3 compare snapshots, F5 progression, F8 static report",
     "F: R1,R2,R3,R4,R5,R7 splits (one agent each)",
     "G: D4/D5/D10/F6/D1 research",
