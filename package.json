@@ -15,7 +15,7 @@
     "lint": "npm run lint:types && npm run lint:extension && npm run lint:eslint",
     "lint:types": "npm run lint --workspaces --if-present",
     "lint:extension": "tsc --noEmit -p extensions/swimcloud-companion/tsconfig.json",
-    "lint:eslint": "eslint .",
+    "lint:eslint": "eslint . --max-warnings 66",
     "test": "node scripts/run-tests.mjs",
     "test:e2e": "playwright test",
     "test:harness": "node scripts/run-harness.mjs",

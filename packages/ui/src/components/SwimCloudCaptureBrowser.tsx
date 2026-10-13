@@ -838,7 +838,7 @@ export function SwimCloudCaptureBrowser(props: SwimCloudCaptureBrowserProps) {
 
   useEffect(() => {
     void refresh();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: the first listing runs once, and `refresh` changes identity whenever the pairing token does
   }, []);
 
   useEffect(() => {
@@ -873,7 +873,7 @@ export function SwimCloudCaptureBrowser(props: SwimCloudCaptureBrowserProps) {
       genderMismatch: roster.gender !== undefined && (roster.gender as string) !== genderLabel,
     }));
     // `props` is narrowed above; the mode-specific fields are the real deps.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `props` is narrowed by mode; the mode-specific fields are the real deps
   }, [parseResponse, props.mode, props.mode === 'roster-history' ? props.rosterCoverage : null, props.mode === 'roster-history' ? props.genderLabel : null]);
 
   const selectedRoster = rosterOptions.find(option => option.key === selectedRosterKey) ?? null;

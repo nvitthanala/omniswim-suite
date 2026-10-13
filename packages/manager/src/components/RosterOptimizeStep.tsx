@@ -321,7 +321,7 @@ export default function RosterOptimizeStep({
     } else if (!optimizerUndoTargetReached(undoFlow.undo, current)) {
       setUndoFlow(null); // something else wrote the lineup; there is nothing left to watch
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `toast` changes identity each time one is pushed and `releaseFocusFromSummary` is a per-render closure; listing them would re-run this observer on its own announcements
   }, [workspace, undoFlow]);
 
   // A stale scan is worse than none — it would describe a roster that no longer exists.

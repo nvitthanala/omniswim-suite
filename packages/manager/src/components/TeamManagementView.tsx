@@ -74,7 +74,7 @@ export default function TeamManagementView({
   // per team (see prelimsProjection.ts), so it changes whenever anything read
   // here changes. sortedTeams is a fresh array on every worker response, so
   // depending on it would rebuild this for identical data every recompute.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on teamStyleSignature, which changes with any team's name, points or color; sortedTeams is a new array on every response
   }, [scoringBundle.teamStyleSignature]);
 
   const teams = useMemo(() => {
@@ -83,7 +83,7 @@ export default function TeamManagementView({
   // per team (see prelimsProjection.ts), so it changes whenever anything read
   // here changes. sortedTeams is a fresh array on every worker response, so
   // depending on it would rebuild this for identical data every recompute.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on teamStyleSignature, which changes with any team's name, points or color; sortedTeams is a new array on every response
   }, [scoringBundle.teamStyleSignature]);
   const [selectedTeam, setSelectedTeam] = useState<string>('');
   const [recruitPrefill, setRecruitPrefill] = useState<RecruitAthletePrefill | null>(null);

@@ -127,7 +127,7 @@ export default function MeetOperationsView({
     // per team (see prelimsProjection.ts), so it changes whenever anything read
     // here changes. sortedTeams is a fresh array on every worker response, so
     // depending on it would rebuild this for identical data every recompute.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on teamStyleSignature, which changes with any team's name, points or color; sortedTeams is a new array on every response
     [scoringBundle.teamStyleSignature, chartTheme.isDark]
   );
 
@@ -171,7 +171,7 @@ export default function MeetOperationsView({
       .slice(0, 10);
   // Deliberate: scoringRefreshKey is a cache-buster. It is not read in the
   // body; bumping it is how a caller forces a recompute.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- scoringRefreshKey is a cache-buster that is not read in the body; bumping it forces a recompute
   }, [scoringBundle.allScored, gender, searchQuery, scoringRefreshKey]);
 
   const prelimsOuByEntryLocal = useMemo(

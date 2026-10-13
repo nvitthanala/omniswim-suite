@@ -188,7 +188,7 @@ export default function MetricsApp() {
     // for this production-readiness round and marked Experimental in the UI.
     // If computeComparisonTime ever reads another raceConfig field, this goes
     // stale -- recorded as a finding rather than fixed blind.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the two raceConfig fields computeComparisonTime reads, not the whole object
     [activeWorkspace, swimmerName, raceConfig.raceDistance, raceConfig.strokePerLength],
   );
 

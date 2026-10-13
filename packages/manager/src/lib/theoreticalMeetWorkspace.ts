@@ -264,7 +264,7 @@ const NAME_MAX = 120;
 
 /** Collapse whitespace, drop control characters and angle brackets, cap the length. Empty stays empty. */
 export function sanitizeWorkspaceName(raw: string): string {
-  // eslint-disable-next-line no-control-regex
+  // eslint-disable-next-line no-control-regex -- the class strips C0 control characters on purpose
   const cleaned = raw.replace(/[\u0000-\u001f\u007f<>]/g, ' ').replace(/\s+/g, ' ').trim();
   return cleaned.length > NAME_MAX ? `${cleaned.slice(0, NAME_MAX - 3).trimEnd()}...` : cleaned;
 }

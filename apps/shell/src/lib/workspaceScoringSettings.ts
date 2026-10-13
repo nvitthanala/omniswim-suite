@@ -56,6 +56,6 @@ export function useWorkspaceScoringDialogProps(workspace: Workspace | null | und
       resultsCarryPdfPlacePoints: workspaceResultsCarryPdfPlacePoints(workspace),
     };
     // The helpers read exactly these fields; `workspace` identity itself changes on unrelated edits.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- the helpers read exactly these workspace fields; `workspace` identity changes on unrelated edits
   }, [scoringSettings, conference, menResults, womenResults, psychMenResults, psychWomenResults]);
 }

@@ -131,7 +131,7 @@ export function collapseWhitespace(text: string): string {
   // it in JavaScript, so it is redundant -- but it is deliberate and documented
   // above, and this parser's whole job is HTML whitespace. Kept rather than
   // silently narrowed to satisfy a linter.
-  // eslint-disable-next-line no-irregular-whitespace
+  // eslint-disable-next-line no-irregular-whitespace -- the literal U+00A0 in the class is deliberate (see above)
   return text.replace(/[\s ]+/g, ' ').trim();
 }
 

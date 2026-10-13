@@ -50,6 +50,12 @@ export default tseslint.config(
     ],
   },
 
+  // A suppression that no longer suppresses anything reads like a live decision.
+  // Make it an error so it is deleted with the code it excused. A reason is
+  // required on every suppression by tests/eslintDisableReasons.test.ts (the
+  // eslint-comments plugin is not installed).
+  { linterOptions: { reportUnusedDisableDirectives: 'error' } },
+
   js.configs.recommended,
   ...tseslint.configs.recommended,
 
@@ -125,6 +131,27 @@ export default tseslint.config(
       'prefer-const': ['error', { destructuring: 'all' }],
       'no-empty': ['error', { allowEmptyCatch: true }],
     },
+  },
+
+  // A promise that is dropped loses its rejection: the request handler or save
+  // path carries on as though the write worked. Type-aware, so it is scoped to
+  // the shell's server-side code, which is where a lost write does damage.
+  // `void promise` is the explicit way to say "fire and forget".
+  {
+    files: ['apps/shell/lib/**/*.ts'],
+    languageOptions: {
+      parserOptions: { projectService: true, tsconfigRootDir: import.meta.dirname },
+    },
+    rules: { '@typescript-eslint/no-floating-promises': 'error' },
+  },
+
+  // `any` is allowed in the parser and HTTP boundary packages (see the rule
+  // above). The chart packages have no such boundary: most of their `any` is
+  // a recharts payload that can be typed (docs/reference/IMPROVEMENT_PLAN_2026-10-10.md R5). A warning
+  // keeps new ones visible; the count is ratcheted by `--max-warnings`.
+  {
+    files: ['packages/matrix/**/*.{ts,tsx}', 'packages/metrics/**/*.{ts,tsx}'],
+    rules: { '@typescript-eslint/no-explicit-any': 'warn' },
   },
 
   // The extension runs as a Manifest V3 content script / service worker, so
