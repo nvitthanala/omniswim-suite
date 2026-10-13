@@ -48,7 +48,7 @@
     "C6": "committed e1c87ec0 (core) + 4057721d (UI); worker a467cc44fdcdec299 fixing two follow-ups (count-field truncation on keystroke; empty seed on Duplicate to edit)",
     "C7": "committed 6368b19d (core) + caca5b72 (UI marker); matrix header \"vs prelims\" still counts no actual as 0 (open question)",
     "C8": "committed bdca188c (meet-name-missing at 3 sites; crawler.js bundle rebuilt)",
-    "A7": "pending",
+    "A7": "decided 2026-10-13: estimate goes in a labelled new field; relayLegSplit stays absent on theoretical rows (implementation pending)",
     "A12": "pending",
     "P1": "committed 09c5882e (PUT) + 6008967c (create allowlist)",
     "P2": "committed 09c5882e",
@@ -87,7 +87,7 @@
     "F4": "pending",
     "F5": "pending",
     "F6": "pending",
-    "F7": "done in core+manager (cef6ec4c): loadedMeet.theoreticalRemovedEvents, reader theoreticalRemovedEvents(workspace). Banner UI NOT done.",
+    "F7": "done (cef6ec4c core+manager, 91606bec banner UI)",
     "F8": "pending",
     "F9": "pending",
     "F10": "pending",
@@ -101,7 +101,7 @@
     "R8": "committed",
     "R9": "pending",
     "R10": "committed d19aa4df (folder) + 7c71285a (scripts, dependency, eslint ignore)",
-    "R11": "partial: noFallthroughCasesInSwitch on (0 cases); noUncheckedIndexedAccess NOT applied: swimcloud 75 errors (parser.ts 43, urlClassifier.ts 21, html.ts 7, teamSeasons.ts 4); db pulls core via paths, ~201 of 203 errors in core (utils.ts 103, athleteAliases 22, athleteHistory 18, relayLegMatching 16); needs an architect order decision",
+    "R11": "partial: noFallthroughCasesInSwitch on (0 cases); noUncheckedIndexedAccess NOT applied: swimcloud 75 errors (parser.ts 43, urlClassifier.ts 21, html.ts 7, teamSeasons.ts 4); db pulls core via paths, ~201 of 203 errors in core (utils.ts 103, athleteAliases 22, athleteHistory 18, relayLegMatching 16); needs an architect order decision | Architect order decided 2026-10-13, see architectReview20261013.decisions.R11.",
     "R12": "committed",
     "D1": "pending",
     "D2": "pending",
@@ -111,10 +111,10 @@
     "D6": "pending",
     "D7": "pending",
     "D8": "done (23b5e8d9): rank-collapse guard test only; fix was already in place. Reverting placement fix or per-athlete scorer gate fails it.",
-    "D9": "done in core (67105555): ScoringSettings.relayLegsAllowTimeTrials (default off), isTimeTrialSwim, label relayLegTimeTrial. UI toggle NOT done (preset route schema strict). Awaiting architect review.",
+    "D9": "done in core (67105555): ScoringSettings.relayLegsAllowTimeTrials (default off), isTimeTrialSwim, label relayLegTimeTrial. UI toggle NOT done (preset route schema strict). Awaiting architect review. UI label/banner done 91606bec; toggle pending architect decision D9-home (both).",
     "D10": "pending",
     "H1": "committed",
-    "H2": "pending",
+    "H2": "partial cfdfb92b: 11 closed state files/plans moved to docs/archive/2026-09 and 2026-10 with path rewrites; files cited from code or active state stay in docs/reference",
     "H3": "committed",
     "H4": "pending",
     "H5": "BLOCKED on user: untracking the three roster .txt files breaks 11 vitest files and scripts/seed_hsu_roster.mjs and seed_obu_roster.mjs that read them from the repo root. Options: move to a local-only path and repoint tests (CI loses them), or untrack and let those tests skip when absent (CI skip budget grows). Files left tracked meanwhile.",
@@ -421,14 +421,11 @@
     "P7: a corrupt or locked SQLite database now stops the server (exit 1) instead of falling back to meets.json. Confirm that is wanted.",
     "Which team should the season trend default to? The data model has no own-team field; defaultSeasonTeam picks one.",
     "X10: the all-teams apply is labelled \"Optimize all teams\" (an e2e asserts no button named exactly \"All teams\"); remove button is on every row, not only the selected row. Keep?",
-    "H5 (U8): untracking the roster .txt files breaks 11 test files and two seed scripts. Move them to a local-only path and repoint the tests, or untrack and let the tests skip when the files are absent? History keeps the files either way."
+    "H5 (U8): untracking the roster .txt files breaks 11 test files and two seed scripts. Move them to a local-only path and repoint the tests, or untrack and let the tests skip when the files are absent? History keeps the files either way.",
+    "D9 scope: a post-meet swim numbered past scoredEventNumberMax (NSISC Event 938/939) now counts as a time trial for relay legs, matching how the SwimCloud bridge flags it. Confirm."
   ],
   "pendingArchitectReview": [
-    "P3 client/conflict diff (171ddc31) + persistence layer (09c5882e): bundle with wave 2 core diffs",
-    "P4/P6 persistence diffs",
-    "C3, C7, relayGroupKey diffs (051a2bc9, 6368b19d, 6cede0ae)",
-    "R6 converter split (pdfPoints, isTimeTrial, roundSwam)",
-    "D9 time trials off relay legs by default (67105555): relay lineup logic; also workspace-vs-preset home for relayLegsAllowTimeTrials and F7 placement under loadedMeet (cef6ec4c). Real-data golden 68 cases: setting off changes only 25 time-trial candidate rows in 4 lists, no totals; setting on byte-identical."
+    "(2026-10-13 reviewed: see architectReview20261013) re-review the executor a64b8f0d8878aed81 diff (items 1,3,4,5) before commit"
   ],
   "u3Prereq": "U3 delete of 39 UI test workspaces: take a MANUAL backup first (a bulk delete writes 39 pre-delete backups and would evict the 20 startup backups of this worktree data/backups); a manual backup survives and restores all 39.",
   "gatesAfterWave2": {
@@ -459,5 +456,42 @@
     "lint:types": "pass",
     "vitest": "235 files passed, 3586 passed, 23 skipped",
     "scriptsAndHarness": "agent-reported pass (86 passed/1 skipped; harness pass), not rerun by lead"
+  },
+  "architectReview20261013": {
+    "agent": "a1d6130cfad0314a1 (opus, read-only)",
+    "reviewed": [
+      "D9 67105555",
+      "F7 cef6ec4c",
+      "P3",
+      "P4",
+      "P6",
+      "C3",
+      "C7",
+      "relayGroupKey",
+      "R6"
+    ],
+    "noDefectFound": [
+      "R6 pdfPoints/isTimeTrial/roundSwam",
+      "relayGroupKey",
+      "C3 theoretical filter",
+      "F7 counts",
+      "P3 client conflict/reload"
+    ],
+    "findings": [
+      "1 HIGH isTimeTrialSwim (utils.ts:1063) ignores scoredEventNumberMax: Event 938 unflagged fills a leg; flagged Event 939 Boys returns via championship exception -> executor a64b8f0d8878aed81",
+      "2 MED IndRelayManagementView old signatures -> fixed in 91606bec",
+      "3 MED C7 incomplete: prelimsProjection.ts:211, psychProjection.ts:120 use pointsForPrelimsSeedRank (?? 0) -> executor a64b8f0d8878aed81",
+      "4 MED relayEntryKey has no leg names; findRelayLegOverride matches A and B tie -> executor a64b8f0d8878aed81",
+      "5 LOW recruit-id override path gives stroke_mismatch where name path gives vacant; add time_trial_only reason -> executor a64b8f0d8878aed81",
+      "6 LOW PgWorkspaceService.ts:186 reads merge base outside the row lock; saves without expectedVersion can lose fields (not fixed)",
+      "7 LOW P4 stale save returns ok:false reason stale although data is saved (not fixed)",
+      "8 LOW P6 lastBackupMirror module-global; concurrent backups can report each other's status (not fixed)"
+    ],
+    "decisions": {
+      "D9-home": "both workspace and preset like entryCapCountsTimeTrials: add relayLegsAllowTimeTrials z.boolean().optional() to apps/shell/lib/routes/scoringPresetRoutes.ts near line 110; toggles in packages/manager/src/components/RosterScoringSetupParts.tsx and packages/matrix/src/components/ScoringCapsFields.tsx; theoretical flow needs no change",
+      "R11": "1 scripts/index-access-ratchet.mjs (per-package tsc --noUncheckedIndexedAccess, per-file baseline, fail on rise). 2 fix swimcloud then turn flag on in its tsconfig. 3 core files with <=6 errors in one batch. 4 relaySplits, historyImportRoster, relayLegMatching, scoringTheory, athleteHistory, athleteAliases one commit each. 5 utils.ts in 3-4 commits by section. 6 flag in tsconfig.base.json; db, manager, matrix, metrics, shell one package at a time. Gates per commit: full vitest, theoreticalMeetGolden unchanged, coreReviewGoldenHarness unchanged (local only), ratchet not up. Banned: ?? 0 / ?? '' / || 0 on time, point, place; ! unless a bound proves the index. Core alone has 261 errors (not ~201).",
+      "A7": "leave relayLegSplit absent on theoretical relay rows; put the estimate in a new labelled field (relayLegEstimate {time, basis, startAdjustmentSec?}); simulation may fall back to it only where it reads oldSplitSec. Readers of relayLegSplit with no workspace: cutlineTags leadoff legSplit, pickPlausibleLegTime, swap clockLegTime, oldSplitSec."
+    },
+    "staleStateEntries": "createWorkspaceSchema is now .strip() not passthrough on create"
   }
 }
