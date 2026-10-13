@@ -47,6 +47,11 @@
  * on. A candidate built from one then carries `relayLegTimeTrial: true`. With
  * the setting off, a meet time-trial row also does not count as the swimmer's
  * swim at the leg event (rule 3), so their history swim is still offered.
+ *
+ * The loaded meet's scored-event boundary (`officialTeamScores.eventThrough`)
+ * makes a swim of a later event a time trial. It judges the meet's own result
+ * rows, and the history swims copied from them (`historySwimBoundary`). A
+ * history swim of another meet is judged by its flag and label alone.
  */
 
 import {
@@ -258,8 +263,12 @@ export function relayLegHistoryCandidates(
   // Read after the history cache, never inside it: the cache is keyed on the
   // history array, so toggling the setting must not return stale rows.
   const allowTimeTrials = relayLegsAllowTimeTrials(workspace.scoringSettings);
-  // The meet's scored-event boundary: a swim of a later event is a time trial here too.
-  const scoredMax = relayLegMatchSettings(workspace).scoredEventNumberMax;
+  // The loaded meet's scored-event boundary. It judges only the swims that
+  // meet's own results gave (`historySwimBoundary`), never another meet's.
+  const meetBoundary = relayLegMatchSettings(workspace).scoredEventNumberMax;
+  const meetLabel = loadedMeetHistoryLabel(workspace);
+  const boundaryOf = (swim: HistoricalSwim): number | undefined =>
+    historySwimBoundary(swim, meetLabel, meetBoundary);
   const resolver = buildAliasResolver(workspace);
   const keys = new Map<string, string>();
   const keyOf = (name: string, team: string): string => {
@@ -291,7 +300,7 @@ export function relayLegHistoryCandidates(
     if (
       legEvent &&
       hasRelayLegTime(row) &&
-      (allowTimeTrials || !isTimeTrialSwim(row, scoredMax))
+      (allowTimeTrials || !isTimeTrialSwim(row, meetBoundary))
     ) {
       member.legEventsSwum.add(legEvent);
     }
@@ -302,7 +311,7 @@ export function relayLegHistoryCandidates(
   const fastest = new Map<string, { legSwim: HistoryLegSwim; key: string; member: RosterSwimmer }>();
   for (const legSwim of historyLegSwims(history, gender)) {
     if (!legEvents.has(legSwim.legEvent)) continue;
-    if (!allowTimeTrials && isTimeTrialSwim(legSwim.swim, scoredMax)) continue;
+    if (!allowTimeTrials && isTimeTrialSwim(legSwim.swim, boundaryOf(legSwim.swim))) continue;
     const key = keyOf(legSwim.swim.name, legSwim.swim.team);
     const member = roster.get(key);
     if (!member || member.legEventsSwum.has(legSwim.legEvent)) continue;
@@ -313,8 +322,46 @@ export function relayLegHistoryCandidates(
   }
 
   return [...fastest.values()].map(({ legSwim, key, member }) =>
-    historyCandidateRow(member, legSwim, gender, key, isTimeTrialSwim(legSwim.swim, scoredMax))
+    historyCandidateRow(
+      member,
+      legSwim,
+      gender,
+      key,
+      isTimeTrialSwim(legSwim.swim, boundaryOf(legSwim.swim))
+    )
   );
+}
+
+/**
+ * The `meetLabel` `buildHistoryFromWorkspace` gives the history swims it copies
+ * from the loaded meet's own results: the PDF file name, else the workspace
+ * name. A history swim carrying it came from the loaded meet.
+ */
+export function loadedMeetHistoryLabel(
+  workspace: Pick<Workspace, 'loadedMeet' | 'name'>
+): string {
+  return workspace.loadedMeet?.pdfFilename ?? workspace.name;
+}
+
+/**
+ * The scored-event boundary that judges one history swim.
+ *
+ * A history swim records no boundary of its own meet: `HistoricalSwim` has the
+ * meet's label, not the meet's program. The loaded meet's boundary
+ * (`meetBoundary`) is that meet's, so it applies only to a swim that meet's own
+ * results gave (its `meetLabel` is the loaded meet's, `loadedMeetHistoryLabel`).
+ * A swim of another meet, or one with no label, is a time trial only by its
+ * `isTimeTrial` flag or a "Time Trial" in its label: its event number is a
+ * number of some other meet's program (`Event 45` at a meet that scored through
+ * 60 is no time trial), so no boundary is applied.
+ */
+export function historySwimBoundary(
+  swim: Pick<HistoricalSwim, 'meetLabel'>,
+  loadedMeetLabel: string,
+  meetBoundary: number | undefined
+): number | undefined {
+  if (meetBoundary === undefined) return undefined;
+  return swim.meetLabel !== undefined && swim.meetLabel === loadedMeetLabel ? meetBoundary : undefined;
 }
 
 /** True for a row {@link relayLegHistoryCandidates} built. */

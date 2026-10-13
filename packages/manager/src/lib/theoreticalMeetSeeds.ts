@@ -112,6 +112,7 @@ import {
   relayLegEventName,
   relayLegRequirements,
   suggestBestRelayLegFill,
+  type RelayLegMatchSettings,
 } from '@omniswim/core/lib/relayLegMatching';
 import { mergeScoringSettings, presetIdForConference, relayLegsAllowTimeTrials } from '@omniswim/core/lib/scoringDefaults';
 import { canAcceptAnotherEntry, type SwimmerEntryCounts } from '@omniswim/core/lib/swimmerEntryLimits';
@@ -1081,17 +1082,20 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
  * A time-trial swim (`isTimeTrialSwim`) is not a leg best unless `allowTimeTrials` is true (user decision D9,
  * `relayLegsAllowTimeTrials`). It is left out before the comparison, so the swimmer's best official swim at the
  * event stands in its place, and a swimmer whose only swim there is a time trial has no best at that event.
+ *
+ * The swim is judged by its own `isTimeTrial` flag and label only. A history swim records no boundary of the meet it
+ * came from, and the build's `scoredEventNumberMax` belongs to another meet: `Event 45` at a meet that scored through
+ * 60 is no time trial because this build's settings say 42.
  */
 function legBestsOf(
   used: readonly HistoricalSwim[],
   athleteName: string,
-  allowTimeTrials: boolean,
-  scoredEventNumberMax?: number
+  allowTimeTrials: boolean
 ): LegBest[] {
   const best = new Map<string, LegBest>();
   for (const swim of used) {
     if (!isRankableSwim(swim)) continue;
-    if (!allowTimeTrials && isTimeTrialSwim(swim, scoredEventNumberMax)) continue;
+    if (!allowTimeTrials && isTimeTrialSwim(swim)) continue;
     const ds = individualEventDistanceStroke(swim.event);
     if (ds === null || !(RELAY_LEG_DISTANCES as readonly number[]).includes(ds.distance)) continue;
     const seconds = convertTimeToSeconds(swim.time);
@@ -1124,8 +1128,7 @@ function makeLeg(
   candidate: RelayCandidate,
   best: LegBest,
   position: 1 | 2 | 3 | 4,
-  adjustment: RelayFlyingStartAdjustment,
-  scoredEventNumberMax?: number
+  adjustment: RelayFlyingStartAdjustment
 ): TheoreticalProjectedRelayLeg {
   const { athlete } = candidate;
   const adj = position === 1 ? undefined : adjustment[best.distance];
@@ -1140,7 +1143,7 @@ function makeLeg(
     legDistanceYards: best.distance,
     flatStartTime: best.swim.time,
     ...(best.swim.isExhibition === true ? { isExhibition: true as const } : {}),
-    ...(isTimeTrialSwim(best.swim, scoredEventNumberMax) ? { isTimeTrial: true as const } : {}),
+    ...(isTimeTrialSwim(best.swim) ? { isTimeTrial: true as const } : {}),
   };
   if (position === 1) {
     return { ...base, time: best.swim.time, timeSec: round2(best.seconds), basis: 'flat-start-best' };
@@ -1196,6 +1199,14 @@ function buildTeamRelays(
     }
   }
 
+  // The leg matchers read `scoredEventNumberMax` too. The pool rows here are history swims of other meets
+  // (`Event 45 Men 100 Yard Breaststroke` from a meet that scored through 60), so the build's boundary
+  // is left out: only the `relayLegsAllowTimeTrials` setting goes in, and `legBestsOf` has already judged each
+  // swim by its own flag and label.
+  const legSettings: RelayLegMatchSettings =
+    ctx.settings.relayLegsAllowTimeTrials === undefined
+      ? {}
+      : { relayLegsAllowTimeTrials: ctx.settings.relayLegsAllowTimeTrials };
   const relays: TheoreticalProjectedRelay[] = [];
   const absent: TheoreticalRelayAbsent[] = [];
   for (const event of plan.program) {
@@ -1230,9 +1241,9 @@ function buildTeamRelays(
     const chosen: RelayCandidate[] = [];
     for (let legIndex = 0; legIndex < 4; legIndex += 1) {
       const position = (legIndex + 1) as 1 | 2 | 3 | 4;
-      const suggestion = suggestBestRelayLegFill(pool, template, legIndex, assigned, atCap, ctx.settings);
+      const suggestion = suggestBestRelayLegFill(pool, template, legIndex, assigned, atCap, legSettings);
       if (suggestion === null) {
-        const everyone = listEligibleRelayLegCandidates(pool, event, legIndex, new Set<string>(), team.teamName, team.gender, ctx.settings);
+        const everyone = listEligibleRelayLegCandidates(pool, event, legIndex, new Set<string>(), team.teamName, team.gender, legSettings);
         const req = relayLegRequirements(event, legIndex);
         missing.push({
           position,
@@ -1247,7 +1258,7 @@ function buildTeamRelays(
       const hit = bestById.get(suggestion.swimmer.id) as { candidate: RelayCandidate; best: LegBest };
       assigned.add(normalizeSwimmerName(hit.candidate.athlete.name));
       chosen.push(hit.candidate);
-      legs.push(makeLeg(team, hit.candidate, hit.best, position, plan.adjustment, ctx.settings.scoredEventNumberMax));
+      legs.push(makeLeg(team, hit.candidate, hit.best, position, plan.adjustment));
     }
     if (missing.length > 0) {
       absent.push({ event, team: team.teamName, gender: team.gender, missingLegs: missing });
@@ -1564,7 +1575,7 @@ function buildRelaysForTeam(ctx: Context, team: TheoreticalMeetTeamInput, prepar
   const allowTimeTrials = relayLegsAllowTimeTrials(ctx.settings);
   for (const p of prepared) {
     if (p.outcome === undefined) continue;
-    const legBests = legBestsOf(p.outcome.used, p.entry.athlete.name, allowTimeTrials, ctx.settings.scoredEventNumberMax);
+    const legBests = legBestsOf(p.outcome.used, p.entry.athlete.name, allowTimeTrials);
     if (legBests.length > 0) candidates.push({ athlete: p.entry.athlete, swimmerKey: p.swimmerKey, legBests });
   }
   return buildTeamRelays(ctx, { ...plan, program: plan.program }, team, candidates);

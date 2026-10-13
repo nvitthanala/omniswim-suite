@@ -39,12 +39,15 @@ import {
   relayLegMatchSettings,
   swimmerMatchesRelayLeg,
 } from '../packages/core/src/lib/relayLegMatching';
-import { relayLegHistoryCandidates } from '../packages/core/src/lib/relayLegHistoryCandidates';
+import {
+  loadedMeetHistoryLabel,
+  relayLegHistoryCandidates,
+} from '../packages/core/src/lib/relayLegHistoryCandidates';
 import { buildRelaysFromIndividualLineup } from '../packages/core/src/lib/relayBuilder';
 import { rankRelayLegSwaps } from '../packages/core/src/lib/arbitrage/relayLegSwaps';
 import { buildWhatIfProjection } from '../packages/core/src/lib/whatIfProjection';
 import { isTimeTrialSwim } from '../packages/core/src/lib/utils';
-import { historicalSwimFromResult } from '../packages/core/src/lib/athleteHistory';
+import { buildHistoryFromWorkspace, historicalSwimFromResult } from '../packages/core/src/lib/athleteHistory';
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const fixture = JSON.parse(
@@ -214,9 +217,13 @@ describe('the projected relay (the resolve side)', () => {
 describe('history candidates', () => {
   it('a history swim of an event past the boundary fills no leg unless allowed', () => {
     const hamblen939 = menResults.find(r => r.name === HAMBLEN && r.event === EVENT_939) as SwimmerResult;
-    const history = historicalSwimFromResult(hamblen939, 'NSISC 2026') as NonNullable<
-      ReturnType<typeof historicalSwimFromResult>
-    >;
+    // The copy of the loaded meet's own result that `buildHistoryFromWorkspace` makes: it carries the loaded
+    // meet's label, so the loaded meet's boundary judges it (a history swim of another meet is not judged
+    // by this boundary: tests/relayTiedAmbiguityMigration.test.ts).
+    const history = buildHistoryFromWorkspace(workspace()).find(
+      h => h.name === HAMBLEN && h.event === hamblen939.event
+    ) as NonNullable<ReturnType<typeof historicalSwimFromResult>>;
+    expect(history.meetLabel).toBe(loadedMeetHistoryLabel(workspace()));
     const pool = menResults.filter(r => !r.isRelay && r.team === DSU && r.name === HAMBLEN && r !== hamblen939);
     const run = (ws: Workspace) =>
       relayLegHistoryCandidates({ ...ws, athleteHistory: [history] }, pool, Gender.MEN).filter(
