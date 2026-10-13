@@ -102,11 +102,16 @@
  */
 
 import { Gender } from '@omniswim/core/types';
-import type { LoadedMeetMeta, ScoringSettings, SwimmerResult } from '@omniswim/core/types';
+import type { LoadedMeetMeta, ScoringSettings, SwimmerResult, TheoreticalRemovedEvent } from '@omniswim/core/types';
 import { canonicalMeetEventLabel, swimEventIdentity } from '@omniswim/core/lib/athleteHistory';
 import { meetCopyFromParsed } from '@omniswim/core/lib/meetSource';
 import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
-import { THEORETICAL_MEET_LABEL, isEstimatedRelayRow, isTheoreticalMeet } from '@omniswim/core/lib/theoreticalMeetLabel';
+import {
+  THEORETICAL_MEET_LABEL,
+  isEstimatedRelayRow,
+  isTheoreticalMeet,
+  theoreticalRemovedEvents,
+} from '@omniswim/core/lib/theoreticalMeetLabel';
 import { calculatePoints, convertTimeToSeconds, isDivingEvent, isRelayResult, parseEventNumber } from '@omniswim/core/lib/utils';
 import {
   PDF_POINTS_SETTINGS_MESSAGE,
@@ -122,7 +127,7 @@ import {
 
 // Defined in core (no heavy imports) so the shell and Metrics can read the label without loading the
 // manager bundle. Re-exported here so every existing import keeps working.
-export { THEORETICAL_MEET_LABEL, isEstimatedRelayRow, isTheoreticalMeet };
+export { THEORETICAL_MEET_LABEL, isEstimatedRelayRow, isTheoreticalMeet, theoreticalRemovedEvents };
 
 export const EVENT_ORDER_CAVEAT =
   'Events run in the standard program order, not a published meet order. Under a meet-wide scorer cap (NSISC: 18 scorers per team) the order decides which swimmers fill the cap. NSISC totals can move by several percent with event order (measured up to 7% on real data).';
@@ -601,6 +606,40 @@ const encodeIdPart = (part: string): string => encodeURIComponent(part.trim());
  * for one event (`event-label-conflict`), a time that is not a number
  * (`unrankable-time`), two rows with one id (`row-id-collision`).
  */
+/**
+ * The (swimmer, event) pairs the build preview removed, from the seed report.
+ *
+ * A candidate is removed when its `notChosenReason` is `removed_by_user`. The count must equal each team's
+ * `eventsRemovedByUser`: a report that disagrees with itself throws instead of storing a list that
+ * under- or over-states what was removed.
+ */
+export function removedEventsOfReport(report: TheoreticalMeetSeeds['report']): TheoreticalRemovedEvent[] {
+  const removed: TheoreticalRemovedEvent[] = [];
+  for (const team of report.teams) {
+    let teamCount = 0;
+    for (const swimmer of team.eventsChosenPerSwimmer) {
+      for (const candidate of swimmer.events) {
+        if (candidate.notChosenReason !== 'removed_by_user') continue;
+        teamCount += 1;
+        removed.push({
+          teamName: team.teamName,
+          gender: team.gender,
+          swimmerName: swimmer.name,
+          event: candidate.event,
+          time: candidate.time,
+        });
+      }
+    }
+    if (teamCount !== team.eventsRemovedByUser) {
+      throw new TheoreticalWorkspaceError(
+        'unexpected-seed-row',
+        `The report for ${team.teamName} (${String(team.gender)}) counts ${team.eventsRemovedByUser} removed events but lists ${teamCount}.`
+      );
+    }
+  }
+  return removed;
+}
+
 export function buildTheoreticalMeetWorkspace(input: TheoreticalMeetWorkspaceInput): TheoreticalMeetWorkspaceBuild {
   if (typeof input.workspaceId !== 'string' || input.workspaceId.trim().length === 0) {
     throw new TheoreticalWorkspaceError('invalid-input', 'The workspace id is empty. Row ids are scoped by it.');
@@ -687,6 +726,8 @@ export function buildTheoreticalMeetWorkspace(input: TheoreticalMeetWorkspaceInp
       uploadedAt: input.createdAt,
       meetLabel: THEORETICAL_MEET_LABEL,
       ...(input.conference === undefined ? {} : { conference: input.conference }),
+      // Always written, empty when nothing was removed: a missing list means "built before F7, unknown".
+      theoreticalRemovedEvents: removedEventsOfReport(seeds.report),
     },
   };
   return {

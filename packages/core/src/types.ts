@@ -454,6 +454,29 @@ export interface LoadedMeetMeta {
   meetLabel?: string;
   /** Optional tie to linked psych sheet upload timestamp. */
   linkedPsychUploadedAt?: number;
+  /**
+   * Theoretical meets only. The (swimmer, event) pairs the user removed from a
+   * lineup in the build preview, in report order. An empty array means the build
+   * recorded no removal. Absent means the workspace was built before the list was
+   * kept, so nothing is known: read it through `theoreticalRemovedEvents`, never
+   * as "none removed". Written once by `buildTheoreticalMeetWorkspace`.
+   */
+  theoreticalRemovedEvents?: TheoreticalRemovedEvent[];
+}
+
+/**
+ * One event the user removed from a swimmer's lineup in a theoretical-meet
+ * preview. See {@link LoadedMeetMeta.theoreticalRemovedEvents}.
+ */
+export interface TheoreticalRemovedEvent {
+  /** The team name as the meet holds it. */
+  teamName: string;
+  gender: Gender;
+  swimmerName: string;
+  /** Course-qualified label as the seed carried it (`'100 Free SCY'`). */
+  event: string;
+  /** The seed time that was removed, as recorded. */
+  time: string;
 }
 
 export interface LoadedPsychMeta {

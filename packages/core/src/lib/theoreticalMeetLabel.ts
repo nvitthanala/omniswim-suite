@@ -9,7 +9,7 @@
  * `theoreticalMeetWorkspace.ts` re-exports these names, so existing imports keep working.
  */
 
-import type { LoadedMeetMeta, SwimmerResult } from '../types';
+import type { LoadedMeetMeta, SwimmerResult, TheoreticalRemovedEvent } from '../types';
 
 /** The text that marks a workspace as a theoretical meet. */
 export const THEORETICAL_MEET_LABEL = 'Theoretical meet (seeded from crawled teams)';
@@ -17,6 +17,25 @@ export const THEORETICAL_MEET_LABEL = 'Theoretical meet (seeded from crawled tea
 /** True when the workspace's loaded meet is a theoretical meet. Reads `loadedMeet.meetLabel` only. */
 export function isTheoreticalMeet(workspace: { readonly loadedMeet?: Pick<LoadedMeetMeta, 'meetLabel'> | null } | null | undefined): boolean {
   return workspace?.loadedMeet?.meetLabel === THEORETICAL_MEET_LABEL;
+}
+
+/**
+ * The events the user removed from lineups when the meet was built.
+ *
+ * - `undefined`: not a theoretical meet, or one built before the list was kept.
+ *   Nothing is known, and a reader must not say "none were removed".
+ * - `[]`: the build recorded no removal.
+ * - Otherwise: each removed (swimmer, event), in the order the build report held them.
+ */
+export function theoreticalRemovedEvents(
+  workspace:
+    | { readonly loadedMeet?: Pick<LoadedMeetMeta, 'meetLabel' | 'theoreticalRemovedEvents'> | null }
+    | null
+    | undefined
+): readonly TheoreticalRemovedEvent[] | undefined {
+  if (!isTheoreticalMeet(workspace)) return undefined;
+  const list = workspace?.loadedMeet?.theoreticalRemovedEvents;
+  return Array.isArray(list) ? list : undefined;
 }
 
 /**

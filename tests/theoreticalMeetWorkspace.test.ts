@@ -346,7 +346,8 @@ describe('buildTheoreticalMeetWorkspace: the theoretical label, the name, the co
 
   it('marks the meet as theoretical, and isTheoreticalMeet reads it back', () => {
     const b = build(teams());
-    expect(b.payload.loadedMeet).toEqual({ pdfFilename: THEORETICAL_MEET_LABEL, uploadedAt: CREATED, meetLabel: THEORETICAL_MEET_LABEL });
+    // `theoreticalRemovedEvents` is always written (F7), empty when the build removed nothing.
+    expect(b.payload.loadedMeet).toEqual({ pdfFilename: THEORETICAL_MEET_LABEL, uploadedAt: CREATED, meetLabel: THEORETICAL_MEET_LABEL, theoreticalRemovedEvents: [] });
     expect(isTheoreticalMeet(b.payload)).toBe(true);
     expect(isTheoreticalMeet({ loadedMeet: { meetLabel: 'NSISC Championships 2026' } })).toBe(false);
     expect(isTheoreticalMeet({ loadedMeet: { meetLabel: `${THEORETICAL_MEET_LABEL} (copy)` } })).toBe(false);
