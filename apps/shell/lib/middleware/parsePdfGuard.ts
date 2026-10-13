@@ -2,8 +2,11 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Size and format guard for `POST /api/parse-pdf` (improvement plan, section 4
- * note "limit /api/parse-pdf size and check the %PDF- magic").
+ * Size and format guard for the PDF upload routes, `POST /api/parse-pdf` and
+ * `POST /api/parse-psych-pdf` (improvement plan, section 4 note "limit
+ * /api/parse-pdf size and check the %PDF- magic"). Both take the same body,
+ * `{ base64, format }`, and both write it to a temp file for a Python subprocess,
+ * so both go through {@link mountPdfUploadGuards}.
  *
  * The app-wide `express.json` limit is 50 MB, which the server then writes to a
  * temp file and hands to a Python subprocess. This guard puts a tighter, route-
@@ -26,7 +29,8 @@
  *   route's own schema check keeps producing its existing 400.
  */
 import express from 'express';
-import type { ErrorRequestHandler, RequestHandler } from 'express';
+import type { Express, ErrorRequestHandler, RequestHandler } from 'express';
+import { apiError } from './apiError.ts';
 
 /** Largest decoded PDF accepted. Real meet-results PDFs are well under 5 MB; this is generous. */
 export const DEFAULT_PARSE_PDF_MAX_BYTES = 25 * 1024 * 1024;
@@ -73,10 +77,13 @@ export function createParsePdfGuards(
   const bodyLimit = parsePdfBodyLimitBytes(maxPdfBytes);
 
   const tooLarge = (res: Parameters<RequestHandler>[1]): void => {
-    res.status(413).json({
-      error: 'PDF too large',
-      details: `The PDF upload is limited to ${megabytes(maxPdfBytes)}. Split the file or remove pages and try again.`,
-    });
+    apiError(
+      res,
+      413,
+      'PDF_TOO_LARGE',
+      'PDF too large',
+      `The PDF upload is limited to ${megabytes(maxPdfBytes)}. Split the file or remove pages and try again.`
+    );
   };
 
   const declaredLength: RequestHandler = (req, res, next) => {
@@ -113,14 +120,35 @@ export function createParsePdfGuards(
     // Decode only the head: the magic is in the first bytes and the route decodes the rest.
     const head = Buffer.from(base64.slice(0, 256).replace(/\s+/g, '').slice(0, 16), 'base64');
     if (head.subarray(0, PDF_MAGIC.length).toString('latin1') !== PDF_MAGIC) {
-      res.status(400).json({
-        error: 'Not a PDF',
-        details: `The upload does not start with ${PDF_MAGIC}. Send the raw PDF file as base64, without a data: URL prefix.`,
-      });
+      apiError(
+        res,
+        400,
+        'NOT_A_PDF',
+        'Not a PDF',
+        `The upload does not start with ${PDF_MAGIC}. Send the raw PDF file as base64, without a data: URL prefix.`
+      );
       return;
     }
     next();
   };
 
   return [declaredLength, express.json({ limit: bodyLimit }), parseErrors, checkPayload];
+}
+
+/**
+ * Every route that takes a base64 PDF in its JSON body. A route that reads
+ * `parsePdfSchema` or `parsePsychPdfSchema` must be listed, or it keeps the
+ * app-wide 50 MB parser. `tests/parsePdfGuard.test.ts` enumerates the routes in
+ * `parsingRoutes.ts` and fails on one that is missing.
+ */
+export const PDF_UPLOAD_ROUTES = ['/api/parse-pdf', '/api/parse-psych-pdf'] as const;
+
+/**
+ * Mount the guards on every {@link PDF_UPLOAD_ROUTES} entry. Call it BEFORE the
+ * app-wide `express.json` (see "Mount order is load-bearing" above).
+ */
+export function mountPdfUploadGuards(app: Express, options: ParsePdfGuardOptions = {}): void {
+  for (const route of PDF_UPLOAD_ROUTES) {
+    app.post(route, ...createParsePdfGuards(options));
+  }
 }

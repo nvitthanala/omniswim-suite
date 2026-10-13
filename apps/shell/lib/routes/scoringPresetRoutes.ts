@@ -18,6 +18,7 @@ import type { Express } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { z } from 'zod';
+import { apiError } from '../middleware/apiError.ts';
 import {
   SCORING_PRESET_META_KEYS,
   HostPublishedTableRequiredError,
@@ -242,7 +243,7 @@ export function registerScoringPresetRoutes(app: Express, deps: ScoringPresetRou
         ...onDisk.filter(e => !isBuiltInScoringPresetId(e.id)).map(userPresetMeta),
       ]);
     } catch (err) {
-      res.status(500).json({ error: 'Failed to list scoring presets', details: String(err) });
+      apiError(res, 500, 'PRESET_LIST_FAILED', 'Failed to list scoring presets', String(err));
     }
   });
 
@@ -255,17 +256,17 @@ export function registerScoringPresetRoutes(app: Express, deps: ScoringPresetRou
         if (err instanceof HostPublishedTableRequiredError) {
           // Absent, not empty. Rule 7-4 leaves the table to the host, so there is
           // nothing to return and nothing may be invented in its place.
-          return res.status(409).json({
-            error: err.message,
+          // err.message is the preset's own description, written for display (see apiError).
+          return apiError(res, 409, 'HOST_PUBLISHED_TABLE_REQUIRED', err.message, undefined, {
             citation: err.citation,
             requiresHostPublishedTable: true,
           });
         }
-        return res.status(500).json({ error: 'Failed to read preset', details: String(err) });
+        return apiError(res, 500, 'PRESET_READ_FAILED', 'Failed to read preset', String(err));
       }
     }
     const raw = loadScoringPresetFile(id);
-    if (!raw) return res.status(404).json({ error: 'Preset not found' });
+    if (!raw) return apiError(res, 404, 'PRESET_NOT_FOUND', 'Preset not found');
     res.json(stripPresetMeta(raw));
   });
 
@@ -284,26 +285,29 @@ export function registerScoringPresetRoutes(app: Express, deps: ScoringPresetRou
     const body = { ...(req.body ?? {}) } as Record<string, unknown>;
     if (urlId != null) {
       if (body.id != null && body.id !== urlId) {
-        res.status(400).json({
-          error: `Body id "${String(body.id)}" does not match the URL id "${urlId}".`,
-        });
+        apiError(
+          res,
+          400,
+          'PRESET_ID_MISMATCH',
+          `Body id "${String(body.id)}" does not match the URL id "${urlId}".`
+        );
         return null;
       }
       body.id = urlId;
     }
     const parsed = scoringPresetWriteSchema.safeParse(body);
     if (!parsed.success) {
-      res
-        .status(400)
-        .json({ error: 'Invalid scoring preset', details: zodDetails(parsed.error) });
+      apiError(res, 400, 'INVALID_PRESET', 'Invalid scoring preset', zodDetails(parsed.error));
       return null;
     }
     if (isBuiltInScoringPresetId(parsed.data.id)) {
-      res.status(409).json({
-        error:
-          `"${parsed.data.id}" is a built-in rule set. Built-ins are generated from the ` +
-          `published rulebook and are immutable; save this under a different id.`,
-      });
+      apiError(
+        res,
+        409,
+        'PRESET_BUILT_IN',
+        `"${parsed.data.id}" is a built-in rule set. Built-ins are generated from the ` +
+          `published rulebook and are immutable; save this under a different id.`
+      );
       return null;
     }
     return parsed.data;
@@ -314,9 +318,7 @@ export function registerScoringPresetRoutes(app: Express, deps: ScoringPresetRou
     if (!body) return;
     const filePath = userPresetFilePath(body.id);
     if (fs.existsSync(filePath)) {
-      return res
-        .status(409)
-        .json({ error: `A scoring preset with id "${body.id}" already exists.` });
+      return apiError(res, 409, 'PRESET_EXISTS', `A scoring preset with id "${body.id}" already exists.`);
     }
     try {
       fs.mkdirSync(SCORING_PRESETS_DIR, { recursive: true });
@@ -331,7 +333,7 @@ export function registerScoringPresetRoutes(app: Express, deps: ScoringPresetRou
         conferenceMatches: body.conferenceMatches,
       });
     } catch (err) {
-      res.status(500).json({ error: 'Failed to save the scoring preset', details: String(err) });
+      apiError(res, 500, 'PRESET_SAVE_FAILED', 'Failed to save the scoring preset', String(err));
     }
   });
 
@@ -340,7 +342,7 @@ export function registerScoringPresetRoutes(app: Express, deps: ScoringPresetRou
     if (!body) return;
     const filePath = userPresetFilePath(body.id);
     if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: `No scoring preset with id "${body.id}".` });
+      return apiError(res, 404, 'PRESET_NOT_FOUND', `No scoring preset with id "${body.id}".`);
     }
     try {
       fs.writeFileSync(filePath, `${JSON.stringify(presetFileContents(body), null, 2)}\n`, 'utf-8');
@@ -354,30 +356,28 @@ export function registerScoringPresetRoutes(app: Express, deps: ScoringPresetRou
         conferenceMatches: body.conferenceMatches,
       });
     } catch (err) {
-      res.status(500).json({ error: 'Failed to save the scoring preset', details: String(err) });
+      apiError(res, 500, 'PRESET_SAVE_FAILED', 'Failed to save the scoring preset', String(err));
     }
   });
 
   app.delete('/api/scoring-presets/:id', (req, res) => {
     const id = req.params.id;
     if (isBuiltInScoringPresetId(id)) {
-      return res.status(409).json({
-        error: `"${id}" is a built-in rule set and cannot be deleted.`,
-      });
+      return apiError(res, 409, 'PRESET_BUILT_IN', `"${id}" is a built-in rule set and cannot be deleted.`);
     }
     if (!USER_PRESET_ID_RE.test(id)) {
-      return res.status(400).json({ error: `"${id}" is not a valid preset id.` });
+      return apiError(res, 400, 'INVALID_PRESET_ID', `"${id}" is not a valid preset id.`);
     }
     const filePath = userPresetFilePath(id);
     if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: `No scoring preset with id "${id}".` });
+      return apiError(res, 404, 'PRESET_NOT_FOUND', `No scoring preset with id "${id}".`);
     }
     try {
       fs.unlinkSync(filePath);
       refreshUserConferenceBindings();
       res.json({ success: true });
     } catch (err) {
-      res.status(500).json({ error: 'Failed to delete the scoring preset', details: String(err) });
+      apiError(res, 500, 'PRESET_DELETE_FAILED', 'Failed to delete the scoring preset', String(err));
     }
   });
 }

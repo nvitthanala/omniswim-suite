@@ -24,7 +24,9 @@ import {
   timingSafeTokenEquals,
 } from './lib/swimcloudCaptureRoutes.ts';
 import { installApiHostOriginGuard } from './lib/middleware/hostOriginGuard.ts';
-import { createParsePdfGuards, parsePdfMaxBytesFromEnv } from './lib/middleware/parsePdfGuard.ts';
+import { apiError } from './lib/middleware/apiError.ts';
+import { apiErrorHandler } from './lib/middleware/apiErrorHandler.ts';
+import { mountPdfUploadGuards, parsePdfMaxBytesFromEnv } from './lib/middleware/parsePdfGuard.ts';
 import { ensurePythonEnv, PythonDepsError } from './lib/pythonEnv.ts';
 import { createAuthMiddleware } from './lib/authMiddleware.ts';
 import { AuthService, ShareLinkService } from '../../packages/db/src/AuthService.ts';
@@ -317,10 +319,10 @@ async function startServer() {
   });
   swimCloudCaptureBanner = swimCloudCaptureBannerLines(swimCloudCaptureRegistration, swimCloudPairing);
 
-  // POST /api/parse-pdf gets its own, tighter size cap and a %PDF- check. It must
-  // be mounted BEFORE the app-wide parser below: body-parser is a no-op once
-  // req.body is set, so after it this cap would protect nothing.
-  app.post('/api/parse-pdf', ...createParsePdfGuards({ maxPdfBytes: parsePdfMaxBytes }));
+  // POST /api/parse-pdf and /api/parse-psych-pdf get their own, tighter size cap and a
+  // %PDF- check. They must be mounted BEFORE the app-wide parser below: body-parser is a
+  // no-op once req.body is set, so after it this cap would protect nothing.
+  mountPdfUploadGuards(app, { maxPdfBytes: parsePdfMaxBytes });
 
   app.use(express.json({ limit: '50mb' }));
 
@@ -505,6 +507,11 @@ async function startServer() {
     aiEnabled: AI_ENABLED,
   });
 
+  // After every route and the app-wide body parser, so a malformed body or a throw
+  // outside a route's own try/catch is one JSON error and not an HTML page with a
+  // stack trace. A request outside /api passes through it untouched.
+  app.use(apiErrorHandler);
+
   if (process.env.NODE_ENV !== 'production') {
     const httpServer = http.createServer(app);
     const vite = await createViteServer({
@@ -533,7 +540,7 @@ async function startServer() {
   } else {
     app.use(express.static(path.join(PROJECT_ROOT, 'dist')));
     app.use('/api', (_req, res) => {
-      res.status(404).json({ error: 'API route not found — restart the server after updating' });
+      apiError(res, 404, 'API_ROUTE_NOT_FOUND', 'API route not found — restart the server after updating');
     });
     app.get('*', (_req, res) => {
       res.sendFile(path.join(PROJECT_ROOT, 'dist', 'index.html'));

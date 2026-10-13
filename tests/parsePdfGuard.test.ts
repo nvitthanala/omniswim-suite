@@ -17,8 +17,10 @@ import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   createParsePdfGuards,
   DEFAULT_PARSE_PDF_MAX_BYTES,
+  mountPdfUploadGuards,
   parsePdfBodyLimitBytes,
   parsePdfMaxBytesFromEnv,
+  PDF_UPLOAD_ROUTES,
 } from '../apps/shell/lib/middleware/parsePdfGuard';
 import { startTestServer, type TestServer } from './helpers/rawHttp';
 
@@ -164,13 +166,16 @@ describe('parse-pdf %PDF- magic check', () => {
     expect(bytes.subarray(0, 5).toString('latin1')).toBe('%PDF-');
     const big = await startTestServer(() => {
       const app = express();
-      app.post('/api/parse-pdf', ...createParsePdfGuards());
-      app.post('/api/parse-pdf', (_req, res) => res.json({ reached: true }));
+      mountPdfUploadGuards(app);
+      for (const route of PDF_UPLOAD_ROUTES) app.post(route, (_req, res) => res.json({ reached: true }));
       return app;
     });
     try {
-      const res = await big.request({ method: 'POST', path: '/api/parse-pdf', body: { base64: bytes.toString('base64') } });
-      expect(res.status).toBe(200);
+      // The psych route takes the same file: this fixture is a psych sheet.
+      for (const route of PDF_UPLOAD_ROUTES) {
+        const res = await big.request({ method: 'POST', path: route, body: { base64: bytes.toString('base64') } });
+        expect(res.status, route).toBe(200);
+      }
     } finally {
       await big.close();
     }
@@ -200,14 +205,82 @@ describe('parse-pdf limit configuration', () => {
   });
 });
 
+describe.each([...PDF_UPLOAD_ROUTES])('PDF upload guard on %s, mounted as server.ts mounts it', route => {
+  // One shared mount helper, in front of a 50 MB app-wide parser, then a handler
+  // that records whether it was reached. The same shape server.ts builds.
+  let upload: TestServer;
+  let reached = 0;
+  beforeAll(async () => {
+    upload = await startTestServer(() => {
+      const app = express();
+      mountPdfUploadGuards(app, { maxPdfBytes: LIMIT });
+      app.use(express.json({ limit: '50mb' }));
+      for (const r of PDF_UPLOAD_ROUTES) {
+        app.post(r, (_req, res) => {
+          reached += 1;
+          res.json({ reached: true });
+        });
+      }
+      return app;
+    });
+  });
+  afterAll(() => upload.close());
+
+  const send = (body: unknown, opts: { chunked?: boolean } = {}) =>
+    upload.request({ method: 'POST', path: route, body, ...opts });
+
+  it('lets a small PDF through', async () => {
+    const before = reached;
+    expect((await send({ base64: pdfBase64(500), format: 'auto' })).status).toBe(200);
+    expect(reached).toBe(before + 1);
+  });
+
+  it('answers 413 over the limit and never reaches the route', async () => {
+    const before = reached;
+    const res = await send({ base64: pdfBase64(LIMIT + 200) });
+    expect(res.status).toBe(413);
+    expect(res.json.code).toBe('PDF_TOO_LARGE');
+    expect(reached).toBe(before);
+  });
+
+  it('answers 413 for a chunked body far over the limit, which declares no Content-Length', async () => {
+    const before = reached;
+    const res = await send({ base64: pdfBase64(parsePdfBodyLimitBytes(LIMIT) * 3) }, { chunked: true });
+    expect(res.status).toBe(413);
+    expect(reached).toBe(before);
+  });
+
+  it('answers 400 for a body that is not a PDF', async () => {
+    const before = reached;
+    const res = await send({ base64: Buffer.from('<html>not a pdf</html>').toString('base64') });
+    expect(res.status).toBe(400);
+    expect(res.json.code).toBe('NOT_A_PDF');
+    expect(reached).toBe(before);
+  });
+});
+
 describe('parse-pdf guard mount in server.ts', () => {
+  const read = (...parts: string[]) => fs.readFileSync(path.join(import.meta.dirname, '..', ...parts), 'utf8');
+
   it('is mounted before the app-wide JSON parser', () => {
-    const source = fs.readFileSync(path.join(import.meta.dirname, '..', 'apps', 'shell', 'server.ts'), 'utf8');
-    const guard = source.indexOf("app.post('/api/parse-pdf', ...createParsePdfGuards(");
+    const source = read('apps', 'shell', 'server.ts');
+    const guard = source.indexOf('mountPdfUploadGuards(app,');
     const wide = source.indexOf("app.use(express.json({ limit: '50mb' }))");
     const routes = source.indexOf('registerParsingRoutes(app');
     expect(guard).toBeGreaterThan(-1);
     expect(guard).toBeLessThan(wide);
     expect(wide).toBeLessThan(routes);
+  });
+
+  it('guards every route in parsingRoutes.ts that reads a base64 PDF schema', () => {
+    const source = read('apps', 'shell', 'lib', 'routes', 'parsingRoutes.ts');
+    const uploadRoutes: string[] = [];
+    for (const chunk of source.split("app.post('").slice(1)) {
+      const route = chunk.slice(0, chunk.indexOf("'"));
+      if (/(parsePdfSchema|parsePsychPdfSchema).safeParse/.test(chunk.slice(0, 600))) uploadRoutes.push(route);
+    }
+    // A wrong path or a renamed schema would leave this empty and pass vacuously.
+    expect(uploadRoutes.length).toBeGreaterThanOrEqual(2);
+    for (const route of uploadRoutes) expect(PDF_UPLOAD_ROUTES as readonly string[]).toContain(route);
   });
 });

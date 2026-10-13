@@ -35,6 +35,7 @@ import crypto from 'node:crypto';
 import type { Express, Request, RequestHandler, Response } from 'express';
 import { clearSessionCookie, setSessionCookie, type AuthedRequest } from '../authMiddleware.ts';
 import type { AuthService } from '../../../../packages/db/src/AuthService.ts';
+import { apiError } from '../middleware/apiError.ts';
 import { createAttemptLimiter } from '../middleware/attemptLimiter.ts';
 import { isLoopbackRequest, setSessionCookieForRequest } from '../middleware/sessionCookie.ts';
 
@@ -141,7 +142,7 @@ export function registerAuthRoutes(app: Express, deps: AuthRoutesDeps): void {
     const blocked = checks.find(check => !check.allowed);
     if (blocked === undefined || blocked.allowed) return false;
     res.setHeader('Retry-After', String(blocked.retryAfterSeconds));
-    res.status(429).json({ error: 'Too many attempts. Try again later.' });
+    apiError(res, 429, 'RATE_LIMITED', 'Too many attempts. Try again later.');
     return true;
   };
 
@@ -149,18 +150,22 @@ export function registerAuthRoutes(app: Express, deps: AuthRoutesDeps): void {
 
   /** Auth off: the original behavior, unchanged. */
   const openRegister = async (req: Request, res: Response) => {
-    if (!auth) return res.status(503).json({ error: 'Auth requires PostgreSQL backend' });
+    if (!auth) return apiError(res, 503, 'AUTH_UNAVAILABLE', 'Auth requires PostgreSQL backend');
     try {
       const { email, password, displayName } = req.body ?? {};
       if (typeof email !== 'string' || typeof password !== 'string' || password.length < OPEN_MIN_PASSWORD_LENGTH) {
-        return res.status(400).json({ error: 'Valid email and password (6+ chars) required' });
+        return apiError(res, 400, 'INVALID_REGISTRATION', 'Valid email and password (6+ chars) required');
       }
       const session = await auth.register(email, password, displayName);
       setSessionCookie(res, session.token, session.expiresAt);
       res.json({ user: session.user });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      res.status(msg === 'EMAIL_EXISTS' ? 409 : 500).json({ error: msg });
+      // `EMAIL_EXISTS` is a sentinel the service throws and clients match. It is
+      // not free text. Any other message can hold database detail: keep it off the wire.
+      if (msg === 'EMAIL_EXISTS') return apiError(res, 409, 'EMAIL_EXISTS', 'EMAIL_EXISTS');
+      console.error('Registration failed:', msg);
+      apiError(res, 500, 'REGISTRATION_FAILED', 'Registration failed', msg);
     }
   };
 
@@ -177,14 +182,14 @@ export function registerAuthRoutes(app: Express, deps: AuthRoutesDeps): void {
 
   /** Auth required: invite-only, 12-character minimum, one generic failure. */
   const hardenedRegister = async (req: AuthedRequest, res: Response) => {
-    if (!auth) return res.status(503).json({ error: 'Auth requires PostgreSQL backend' });
+    if (!auth) return apiError(res, 503, 'AUTH_UNAVAILABLE', 'Auth requires PostgreSQL backend');
     const address = addressOf(req);
     if (rateLimited(res, [addressLimiter.check(address)])) return undefined;
 
     const route = registrationRoute(req);
     if (route === undefined) {
       addressLimiter.fail(address);
-      return res.status(403).json({ error: 'Registration is by invitation only.' });
+      return apiError(res, 403, 'INVITE_REQUIRED', 'Registration is by invitation only.');
     }
 
     const { email, password, displayName } = (req.body ?? {}) as Record<string, unknown>;
@@ -194,9 +199,12 @@ export function registerAuthRoutes(app: Express, deps: AuthRoutesDeps): void {
       typeof password !== 'string' ||
       password.length < MIN_PASSWORD_LENGTH_AUTH_REQUIRED
     ) {
-      return res.status(400).json({
-        error: `A valid email and a password of at least ${MIN_PASSWORD_LENGTH_AUTH_REQUIRED} characters are required.`,
-      });
+      return apiError(
+        res,
+        400,
+        'INVALID_REGISTRATION',
+        `A valid email and a password of at least ${MIN_PASSWORD_LENGTH_AUTH_REQUIRED} characters are required.`
+      );
     }
 
     try {
@@ -213,7 +221,7 @@ export function registerAuthRoutes(app: Express, deps: AuthRoutesDeps): void {
     } catch (err) {
       // The cause (duplicate email, database error) goes to the log only.
       console.error('Registration failed:', err instanceof Error ? err.message : String(err));
-      return res.status(400).json({ error: GENERIC_REGISTER_FAILURE });
+      return apiError(res, 400, 'REGISTRATION_FAILED', GENERIC_REGISTER_FAILURE);
     }
   };
 
@@ -230,20 +238,20 @@ export function registerAuthRoutes(app: Express, deps: AuthRoutesDeps): void {
 
   /** Auth off: the original behavior, unchanged. */
   const openLogin = async (req: Request, res: Response) => {
-    if (!auth) return res.status(503).json({ error: 'Auth requires PostgreSQL backend' });
+    if (!auth) return apiError(res, 503, 'AUTH_UNAVAILABLE', 'Auth requires PostgreSQL backend');
     try {
       const { email, password } = req.body ?? {};
       const session = await auth.login(String(email ?? ''), String(password ?? ''));
       setSessionCookie(res, session.token, session.expiresAt);
       res.json({ user: session.user });
     } catch (_err) {
-      res.status(401).json({ error: 'Invalid credentials' });
+      apiError(res, 401, 'INVALID_CREDENTIALS', 'Invalid credentials');
     }
   };
 
   /** Auth required: rate limited, and the cookie is `Secure` off loopback. */
   const hardenedLogin = async (req: Request, res: Response) => {
-    if (!auth) return res.status(503).json({ error: 'Auth requires PostgreSQL backend' });
+    if (!auth) return apiError(res, 503, 'AUTH_UNAVAILABLE', 'Auth requires PostgreSQL backend');
     const address = addressOf(req);
     const email = String(req.body?.email ?? '').trim().toLowerCase().slice(0, 254);
     const accountKey = `${address}|${email}`;
@@ -260,7 +268,7 @@ export function registerAuthRoutes(app: Express, deps: AuthRoutesDeps): void {
         accountLimiter.fail(accountKey);
         addressLimiter.fail(address);
       }
-      return res.status(401).json({ error: 'Invalid credentials' });
+      return apiError(res, 401, 'INVALID_CREDENTIALS', 'Invalid credentials');
     }
   };
 
@@ -282,13 +290,17 @@ export function registerAuthRoutes(app: Express, deps: AuthRoutesDeps): void {
   });
 
   app.post('/api/auth/invite', requireAuth, async (req: AuthedRequest, res) => {
-    if (!auth || !req.user?.teamId) return res.status(503).json({ error: 'Invite unavailable' });
+    if (!auth || !req.user?.teamId) return apiError(res, 503, 'INVITE_UNAVAILABLE', 'Invite unavailable');
     try {
       await auth.inviteToTeam(req.user.teamId, req.user.id, String(req.body?.email ?? ''));
       res.json({ success: true });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      res.status(400).json({ error: msg });
+      // `FORBIDDEN` and `USER_NOT_FOUND` are the service's sentinels. Anything else
+      // is unexpected and its text stays off the wire.
+      if (msg === 'FORBIDDEN' || msg === 'USER_NOT_FOUND') return apiError(res, 400, msg, msg);
+      console.error('Invite failed:', msg);
+      apiError(res, 400, 'INVITE_FAILED', 'Could not send the invite.', msg);
     }
   });
 }

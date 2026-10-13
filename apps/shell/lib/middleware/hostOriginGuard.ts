@@ -44,6 +44,7 @@
  */
 import type { Express, Request, RequestHandler, Response } from 'express';
 import { isLoopbackHost } from '../loopbackHost.ts';
+import { apiError } from './apiError.ts';
 
 const SAFE_METHODS = new Set(['GET', 'HEAD']);
 const LOOPBACK_NAMES = new Set(['localhost', '127.0.0.1', '[::1]']);
@@ -141,8 +142,8 @@ function parseOrigin(raw: string): OriginParts | undefined {
   return { hostname: url.hostname, port: url.port || (url.protocol === 'https:' ? '443' : '80') };
 }
 
-function sendDenied(res: Response, status: 403 | 421, error: string, details: string): void {
-  res.status(status).json({ error, details });
+function sendDenied(res: Response, status: 403 | 421, code: string, error: string, details: string): void {
+  apiError(res, status, code, error, details);
 }
 
 export function createHostOriginGuard(options: HostOriginGuardOptions): RequestHandler {
@@ -180,6 +181,7 @@ export function createHostOriginGuard(options: HostOriginGuardOptions): RequestH
       sendDenied(
         res,
         421,
+        'HOST_NOT_ALLOWED',
         'Host not allowed',
         `This server answers /api requests addressed to localhost, 127.0.0.1 or [::1] on port ${options.port}. ` +
           `To allow ${JSON.stringify(shown)}, add it to OMNI_ALLOWED_HOSTS and restart.`
@@ -201,6 +203,7 @@ export function createHostOriginGuard(options: HostOriginGuardOptions): RequestH
       sendDenied(
         res,
         403,
+        'ORIGIN_NOT_ALLOWED',
         'Origin not allowed',
         `Requests that change data must come from this app. Origin ${JSON.stringify(origin.slice(0, 80))} is not an allowed origin.`
       );
@@ -215,6 +218,7 @@ export function createHostOriginGuard(options: HostOriginGuardOptions): RequestH
     sendDenied(
       res,
       403,
+      'CROSS_SITE_REFUSED',
       'Cross-site request refused',
       `Requests that change data must come from this app. Sec-Fetch-Site was ${JSON.stringify(String(fetchSite).slice(0, 40))}.`
     );

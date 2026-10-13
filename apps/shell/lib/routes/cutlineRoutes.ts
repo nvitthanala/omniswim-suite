@@ -9,6 +9,7 @@
 import type { Express } from 'express';
 import fs from 'fs';
 import path from 'path';
+import { apiError } from '../middleware/apiError.ts';
 
 export interface CutlineRoutesDeps {
   cutlinesDir: string;
@@ -58,14 +59,17 @@ export function registerCutlineRoutes(app: Express, deps: CutlineRoutesDeps): vo
         // A file with no `cutlines` array is a broken table, not an empty one: answering
         // 200 with [] reads as "no standards published", which is the silent-empty failure.
         if (!Array.isArray(cutlines)) {
-          return res.status(500).json({
-            error: 'Failed to read cutlines version',
-            details: `${safe}.json has no "cutlines" array`,
-          });
+          return apiError(
+            res,
+            500,
+            'CUTLINES_MALFORMED',
+            'Failed to read cutlines version',
+            `${safe}.json has no "cutlines" array`
+          );
         }
         return res.json({ version: safe, cutlines });
       } catch (err) {
-        return res.status(500).json({ error: 'Failed to read cutlines version', details: String(err) });
+        return apiError(res, 500, 'CUTLINES_READ_FAILED', 'Failed to read cutlines version', String(err));
       }
     }
     // Last resort: serve the compiled-in table. Core now loads from these same
@@ -73,6 +77,6 @@ export function registerCutlineRoutes(app: Express, deps: CutlineRoutesDeps): vo
     if (safe === defaultCutlineVersion()) {
       return res.json({ version: safe, cutlines: builtinCutlines });
     }
-    return res.status(404).json({ error: `Cutline version not found: ${safe}` });
+    return apiError(res, 404, 'CUTLINE_VERSION_NOT_FOUND', `Cutline version not found: ${safe}`);
   });
 }

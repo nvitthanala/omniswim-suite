@@ -8,6 +8,7 @@
  * invocation order and fallbacks, and error handling as before.
  */
 import type { Express } from 'express';
+import { apiError } from '../middleware/apiError.ts';
 import { randomUUID } from 'node:crypto';
 import fs from 'fs';
 import path from 'path';
@@ -76,7 +77,7 @@ export function registerParsingRoutes(app: Express, deps: ParsingRoutesDeps): vo
   app.post('/api/parse-pdf', async (req, res) => {
     const parsed = parsePdfSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Invalid PDF payload', details: parsed.error.issues });
+      return apiError(res, 400, 'INVALID_PDF_PAYLOAD', 'Invalid PDF payload', parsed.error.issues);
     }
     const { base64, format } = parsed.data;
     const tempFile = createParsingTempFilePath(PROJECT_ROOT);
@@ -106,22 +107,27 @@ export function registerParsingRoutes(app: Express, deps: ParsingRoutesDeps): vo
       res.json(payload);
     } catch (error) {
       if (error instanceof ParsedRowError) {
-        return res.status(422).json({
-          error: 'PDF rows could not be read without guessing',
-          details: error.message,
-          rows: error.problems,
-        });
+        return apiError(
+          res,
+          422,
+          'PDF_ROWS_UNREADABLE',
+          'PDF rows could not be read without guessing',
+          error.message,
+          { rows: error.problems }
+        );
       }
       if (error instanceof MeetPipelineError) {
         const final = MEET_PIPELINE_RESPONSES[error.code];
-        return res.status(final.status).json({
-          error: final.error,
-          code: error.code,
-          details: error.message,
-          ...(error.code === 'points_on_status_clock' ? { rows: error.rows } : {}),
-        });
+        return apiError(
+          res,
+          final.status,
+          error.code,
+          final.error,
+          error.message,
+          error.code === 'points_on_status_clock' ? { rows: error.rows } : undefined
+        );
       }
-      res.status(500).json({ error: 'Failed to parse PDF', details: String(error) });
+      apiError(res, 500, 'PDF_PARSE_FAILED', 'Failed to parse PDF', String(error));
     } finally {
       try { fs.unlinkSync(tempFile); } catch { /* absent or already removed */ }
     }
@@ -130,11 +136,11 @@ export function registerParsingRoutes(app: Express, deps: ParsingRoutesDeps): vo
   app.post('/api/parse-psych-pdf', async (req, res) => {
     const parsed = parsePsychPdfSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Invalid psych PDF payload', details: parsed.error.issues });
+      return apiError(res, 400, 'INVALID_PSYCH_PAYLOAD', 'Invalid psych PDF payload', parsed.error.issues);
     }
     const { base64, format } = parsed.data;
     if (!base64?.trim()) {
-      return res.status(400).json({ error: 'No PDF data in request' });
+      return apiError(res, 400, 'NO_PDF_DATA', 'No PDF data in request');
     }
     const tempFile = createParsingTempFilePath(PROJECT_ROOT, 'temp_psych');
     try {
@@ -154,27 +160,34 @@ export function registerParsingRoutes(app: Express, deps: ParsingRoutesDeps): vo
         }
         const parsedJson = JSON.parse(trimmed) as { error?: string; results?: Record<string, unknown>[] };
         if (parsedJson.error) {
-          return res.status(500).json({ error: parsedJson.error });
+          // The script's own error text is not for the caller in production.
+          return apiError(res, 500, 'PSYCH_PARSE_FAILED', 'Failed to parse psych PDF', parsedJson.error);
         }
         const rawRows = Array.isArray(parsedJson.results) ? parsedJson.results : [];
         results = mapPsychRows(rawRows);
       }
       if (results.length === 0) {
-        return res.status(422).json({
-          error: 'No individual psych entries found',
-          details: 'Try Regular List or Divided (2-Col) format from the dropdown.',
-        });
+        return apiError(
+          res,
+          422,
+          'PSYCH_NO_ENTRIES',
+          'No individual psych entries found',
+          'Try Regular List or Divided (2-Col) format from the dropdown.'
+        );
       }
       return res.json({ results });
     } catch (error) {
       if (error instanceof ParsedRowError) {
-        return res.status(422).json({
-          error: 'Psych sheet rows could not be read without guessing',
-          details: error.message,
-          rows: error.problems,
-        });
+        return apiError(
+          res,
+          422,
+          'PSYCH_ROWS_UNREADABLE',
+          'Psych sheet rows could not be read without guessing',
+          error.message,
+          { rows: error.problems }
+        );
       }
-      return res.status(500).json({ error: 'Failed to parse psych PDF', details: String(error) });
+      return apiError(res, 500, 'PSYCH_PARSE_FAILED', 'Failed to parse psych PDF', String(error));
     } finally {
       try { fs.unlinkSync(tempFile); } catch { /* absent or already removed */ }
     }
@@ -183,7 +196,7 @@ export function registerParsingRoutes(app: Express, deps: ParsingRoutesDeps): vo
   app.post('/api/parse-athlete-history', async (req, res) => {
     const validated = parseAthleteHistorySchema.safeParse(req.body ?? {});
     if (!validated.success) {
-      return res.status(400).json({ error: 'Invalid request', details: validated.error.issues });
+      return apiError(res, 400, 'INVALID_HISTORY_PAYLOAD', 'Invalid request', validated.error.issues);
     }
     try {
       const { text, imageBase64, team, gender, swimmerName, division } = validated.data;
@@ -210,7 +223,7 @@ export function registerParsingRoutes(app: Express, deps: ParsingRoutesDeps): vo
           // @ts-expect-error — @google/genai is an optional runtime dep; omitted from package.json intentionally
           ({ GoogleGenAI } = await import('@google/genai'));
         } catch {
-          return res.status(501).json({ error: 'AI image parsing is not installed in this build' });
+          return apiError(res, 501, 'AI_NOT_INSTALLED', 'AI image parsing is not installed in this build');
         }
         const ai = new GoogleGenAI({ apiKey: process.env.GEMINI_API_KEY });
         const response = await ai.models.generateContent({
@@ -238,13 +251,16 @@ export function registerParsingRoutes(app: Express, deps: ParsingRoutesDeps): vo
         }));
         return res.json({ swims: swims.filter((s: { name: string; event: string }) => s.name && s.event) });
       }
-      return res.status(400).json({
-        error: AI_ENABLED
+      return apiError(
+        res,
+        400,
+        'NO_HISTORY_INPUT',
+        AI_ENABLED
           ? 'Provide pasted text, or imageBase64 with GEMINI_API_KEY'
-          : 'Image parsing is disabled. Provide pasted text or set OMNI_AI_ENABLED=true with GEMINI_API_KEY.',
-      });
+          : 'Image parsing is disabled. Provide pasted text or set OMNI_AI_ENABLED=true with GEMINI_API_KEY.'
+      );
     } catch (err) {
-      return res.status(500).json({ error: 'Parse failed', details: String(err) });
+      return apiError(res, 500, 'HISTORY_PARSE_FAILED', 'Parse failed', String(err));
     }
   });
 
@@ -253,8 +269,11 @@ export function registerParsingRoutes(app: Express, deps: ParsingRoutesDeps): vo
   // it accepted an unauthenticated write from anyone who could reach the port.
   // Re-enable via createVideoUpload() when the feature is actually implemented.
   app.post('/api/analyze-video', async (_req, res) => {
-    res.status(501).json({
-      error: 'Gemini video analysis reserved for a future release. Use local metrics in the Metrics applet.',
-    });
+    apiError(
+      res,
+      501,
+      'VIDEO_ANALYSIS_UNAVAILABLE',
+      'Gemini video analysis reserved for a future release. Use local metrics in the Metrics applet.'
+    );
   });
 }

@@ -29,6 +29,7 @@ import {
   VERSION_CONFLICT_CODE,
 } from '../../../../packages/core/src/api/saveSequence.ts';
 import type { AuthedRequest } from '../authMiddleware.ts';
+import { apiError } from '../middleware/apiError.ts';
 import type { AuthService, ShareLinkService } from '../../../../packages/db/src/AuthService.ts';
 import type { WorkspaceScope } from '../../../../packages/db/src/workspacePersistence.ts';
 
@@ -138,14 +139,21 @@ function registerWorkspaceCrudRoutes(
       const data = await repo.list(workspaceScopeOf(req));
       res.json(data.map(normalizeWorkspaceResults));
     } catch (err) {
-      res.status(500).json({ error: 'Failed to read workspaces', details: String(err) });
+      apiError(res, 500, 'WORKSPACE_LIST_FAILED', 'Failed to read workspaces', String(err));
     }
   });
 
   app.post('/api/workspaces', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     const parsed = createWorkspaceSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Invalid workspace payload', details: parsed.error.issues });
+      return apiError(res, 400, 'INVALID_WORKSPACE_PAYLOAD', 'Invalid workspace payload', parsed.error.issues);
+    }
+    // The allowlist drops what it does not know. Say so, once per key, as PUT does.
+    for (const key of Object.keys(req.body ?? {})) {
+      if (!(key in parsed.data) && key !== 'version' && !droppedKeysWarned.has(`create:${key}`)) {
+        droppedKeysWarned.add(`create:${key}`);
+        console.warn(`POST /api/workspaces ignored unknown field "${key}".`);
+      }
     }
     // `version` is the store's, not the client's: a restored workspace arrives carrying
     // the revision it had, which must not become the new document's revision.
@@ -166,34 +174,32 @@ function registerWorkspaceCrudRoutes(
       res.json(created);
     } catch (err) {
       if (errorCode(err) === DUPLICATE_WORKSPACE_ID_CODE) {
-        return res.status(409).json({
-          error: 'A workspace with this id already exists.',
-          code: DUPLICATE_WORKSPACE_ID_CODE,
-        });
+        return apiError(
+          res,
+          409,
+          DUPLICATE_WORKSPACE_ID_CODE,
+          'A workspace with this id already exists.'
+        );
       }
-      res.status(500).json({ error: 'Failed to create workspace', details: String(err) });
+      apiError(res, 500, 'WORKSPACE_CREATE_FAILED', 'Failed to create workspace', String(err));
     }
   });
 
   app.put('/api/workspaces/:id', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     const parsed = updateWorkspaceSchema.safeParse(req.body ?? {});
     if (!parsed.success) {
-      return res.status(400).json({ error: 'Invalid workspace patch', details: parsed.error.issues });
+      return apiError(res, 400, 'INVALID_WORKSPACE_PATCH', 'Invalid workspace patch', parsed.error.issues);
     }
     const expected = readExpectedVersion(req);
     if (expected.kind === 'invalid') {
-      return res
-        .status(400)
-        .json({ error: 'Invalid expected version', code: 'BAD_EXPECTED_VERSION', details: expected.reason });
+      return apiError(res, 400, 'BAD_EXPECTED_VERSION', 'Invalid expected version', expected.reason);
     }
     const expectedVersion = expected.kind === 'ok' ? expected.version : undefined;
     // Out-of-order save protection. A malformed sequence is a client bug and is
     // refused loudly; an absent one is an old client or a script and still saves.
     const sequence = parseSaveToken(req.headers);
     if (sequence.kind === 'invalid') {
-      return res
-        .status(400)
-        .json({ error: 'Invalid save sequence headers', code: 'BAD_SAVE_SEQUENCE', details: sequence.reason });
+      return apiError(res, 400, 'BAD_SAVE_SEQUENCE', 'Invalid save sequence headers', sequence.reason);
     }
     try {
       const patch = parsed.data as Partial<Workspace>;
@@ -236,18 +242,20 @@ function registerWorkspaceCrudRoutes(
         console.warn(
           `Refused a stale save for workspace ${req.params.id}: sequence ${outcome.receivedSeq} <= applied ${outcome.lastAppliedSeq}`
         );
-        return res.status(409).json({
-          error: 'This save was superseded by a newer one and was not applied.',
-          code: STALE_SAVE_CODE,
-          lastAppliedSeq: outcome.lastAppliedSeq,
-          receivedSeq: outcome.receivedSeq,
-        });
+        return apiError(
+          res,
+          409,
+          STALE_SAVE_CODE,
+          'This save was superseded by a newer one and was not applied.',
+          undefined,
+          { lastAppliedSeq: outcome.lastAppliedSeq, receivedSeq: outcome.receivedSeq }
+        );
       }
       const { updated, dataLossWarning } = outcome.value;
       if (dataLossWarning?.backupError) {
         console.warn('Pre-shrink backup failed; saving anyway:', dataLossWarning.backupError);
       }
-      if (!updated) return res.status(404).json({ error: 'Workspace not found' });
+      if (!updated) return apiError(res, 404, 'WORKSPACE_NOT_FOUND', 'Workspace not found');
       if (outcome.unchecked) {
         // Flag it, once per workspace, so a client that forgot the headers shows up in the log.
         res.setHeader(SAVE_UNCHECKED_HEADER, 'no-sequence');
@@ -261,11 +269,9 @@ function registerWorkspaceCrudRoutes(
       res.json(dataLossWarning ? { ...updated, dataLossWarning } : updated);
     } catch (err) {
       if (errorCode(err) === VERSION_CONFLICT_CODE) {
-        return res
-          .status(409)
-          .json({ error: 'Version conflict — refresh and retry', code: VERSION_CONFLICT_CODE });
+        return apiError(res, 409, VERSION_CONFLICT_CODE, 'Version conflict — refresh and retry');
       }
-      res.status(500).json({ error: 'Failed to update workspace', details: String(err) });
+      apiError(res, 500, 'WORKSPACE_UPDATE_FAILED', 'Failed to update workspace', String(err));
     }
   });
 
@@ -285,7 +291,7 @@ function registerWorkspaceCrudRoutes(
       sequencer.forget(sequenceKey(req));
       res.json({ success: true });
     } catch (err) {
-      res.status(500).json({ error: 'Failed to delete workspace', details: String(err) });
+      apiError(res, 500, 'WORKSPACE_DELETE_FAILED', 'Failed to delete workspace', String(err));
     }
   });
 }
@@ -296,17 +302,14 @@ function registerWorkspaceBackupAndSnapshotRoutes(app: Express, deps: WorkspaceR
   /** Under AUTH_REQUIRED the backup directory is shared by every tenant: administrators only. */
   const mayUseSharedBackups = (req: AuthedRequest) => !AUTH_REQUIRED || isAdmin(req);
   const refuseSharedBackups = (res: Response) =>
-    res.status(403).json({
-      error: 'Backups hold every user data and are limited to administrators.',
-      code: 'ADMIN_REQUIRED',
-    });
+    apiError(res, 403, 'ADMIN_REQUIRED', 'Backups hold every user data and are limited to administrators.');
 
   app.get('/api/workspaces/backups', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     if (!mayUseSharedBackups(req)) return refuseSharedBackups(res);
     try {
       res.json(await repo.listBackups());
     } catch (err) {
-      res.status(500).json({ error: 'Could not list backups', details: String(err) });
+      apiError(res, 500, 'BACKUP_LIST_FAILED', 'Could not list backups', String(err));
     }
   });
 
@@ -324,7 +327,7 @@ function registerWorkspaceBackupAndSnapshotRoutes(app: Express, deps: WorkspaceR
     if (!mayUseSharedBackups(req)) return refuseSharedBackups(res);
     const file = (req.body ?? {}).file;
     if (typeof file !== 'string' || file.length === 0) {
-      return res.status(400).json({ error: 'A backup file name is required.' });
+      return apiError(res, 400, 'BACKUP_FILE_REQUIRED', 'A backup file name is required.');
     }
     try {
       const restored = await repo.restoreBackup(file);
@@ -334,7 +337,13 @@ function registerWorkspaceBackupAndSnapshotRoutes(app: Express, deps: WorkspaceR
       // A rejected name and a corrupt file are both the caller's problem, not a
       // server fault; anything else is ours.
       const isCallerError = /Not a backup this app wrote|Backup file/.test(message);
-      res.status(isCallerError ? 400 : 500).json({ error: 'Restore failed', details: message });
+      apiError(
+        res,
+        isCallerError ? 400 : 500,
+        isCallerError ? 'RESTORE_REJECTED' : 'RESTORE_FAILED',
+        'Restore failed',
+        message
+      );
     }
   });
 
@@ -351,7 +360,7 @@ function registerWorkspaceBackupAndSnapshotRoutes(app: Express, deps: WorkspaceR
         ...(mirror ? { mirror: { ok: mirror.ok, dir: mirror.dir, files: mirror.files, error: mirror.error } } : {}),
       });
     } catch (err) {
-      res.status(500).json({ error: 'Backup failed', details: String(err) });
+      apiError(res, 500, 'BACKUP_FAILED', 'Backup failed', String(err));
     }
   });
 
@@ -360,10 +369,12 @@ function registerWorkspaceBackupAndSnapshotRoutes(app: Express, deps: WorkspaceR
     try {
       const label = typeof req.body?.label === 'string' ? req.body.label : 'snapshot';
       const snap = await repo.snapshot(req.params.id, label, workspaceScopeOf(req));
-      if (!snap) return res.status(400).json({ error: 'Snapshots require SQLite or PostgreSQL backend' });
+      if (!snap) {
+        return apiError(res, 400, 'SNAPSHOT_BACKEND_REQUIRED', 'Snapshots require SQLite or PostgreSQL backend');
+      }
       res.json(snap);
     } catch (err) {
-      res.status(500).json({ error: 'Snapshot failed', details: String(err) });
+      apiError(res, 500, 'SNAPSHOT_FAILED', 'Snapshot failed', String(err));
     }
   });
 
@@ -371,7 +382,7 @@ function registerWorkspaceBackupAndSnapshotRoutes(app: Express, deps: WorkspaceR
     try {
       res.json(await repo.listSnapshots(req.params.id, workspaceScopeOf(req)));
     } catch (err) {
-      res.status(500).json({ error: 'Failed to list snapshots', details: String(err) });
+      apiError(res, 500, 'SNAPSHOT_LIST_FAILED', 'Failed to list snapshots', String(err));
     }
   });
 
@@ -379,23 +390,23 @@ function registerWorkspaceBackupAndSnapshotRoutes(app: Express, deps: WorkspaceR
   app.get('/api/snapshots/:snapshotId', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     try {
       if (repo.kind === 'json') {
-        return res.status(400).json({ error: 'Snapshots require SQLite or PostgreSQL backend' });
+        return apiError(res, 400, 'SNAPSHOT_BACKEND_REQUIRED', 'Snapshots require SQLite or PostgreSQL backend');
       }
       const content = await repo.getSnapshotContent(req.params.snapshotId, workspaceScopeOf(req));
-      if (!content) return res.status(404).json({ error: 'Snapshot not found' });
+      if (!content) return apiError(res, 404, 'SNAPSHOT_NOT_FOUND', 'Snapshot not found');
       res.json(content);
     } catch (err) {
-      res.status(500).json({ error: 'Failed to read snapshot', details: String(err) });
+      apiError(res, 500, 'SNAPSHOT_READ_FAILED', 'Failed to read snapshot', String(err));
     }
   });
 
   app.post('/api/snapshots/:snapshotId/restore', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     try {
       const restored = await repo.restoreSnapshot(req.params.snapshotId, workspaceScopeOf(req));
-      if (!restored) return res.status(404).json({ error: 'Snapshot not found' });
+      if (!restored) return apiError(res, 404, 'SNAPSHOT_NOT_FOUND', 'Snapshot not found');
       res.json(restored);
     } catch (err) {
-      res.status(500).json({ error: 'Restore failed', details: String(err) });
+      apiError(res, 500, 'SNAPSHOT_RESTORE_FAILED', 'Restore failed', String(err));
     }
   });
 }
@@ -410,11 +421,11 @@ function registerWorkspaceShareAndReportRoutes(
   // Shareable read-only links + printable reports
   app.post('/api/workspaces/:id/share', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     if (!shareLinks || !req.user) {
-      return res.status(503).json({ error: 'Share links require PostgreSQL auth backend' });
+      return apiError(res, 503, 'SHARE_UNAVAILABLE', 'Share links require PostgreSQL auth backend');
     }
     try {
       const ws = (await repo.list(workspaceScopeOf(req))).find(w => w.id === req.params.id);
-      if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+      if (!ws) return apiError(res, 404, 'WORKSPACE_NOT_FOUND', 'Workspace not found');
       const link = await shareLinks.createLink(
         req.params.id,
         req.user.id,
@@ -423,15 +434,15 @@ function registerWorkspaceShareAndReportRoutes(
       );
       res.json(link);
     } catch (err) {
-      res.status(500).json({ error: 'Failed to create share link', details: String(err) });
+      apiError(res, 500, 'SHARE_CREATE_FAILED', 'Failed to create share link', String(err));
     }
   });
 
   app.get('/api/share/:token', async (req, res) => {
-    if (!shareLinks) return res.status(503).json({ error: 'Share links unavailable' });
+    if (!shareLinks) return apiError(res, 503, 'SHARE_UNAVAILABLE', 'Share links unavailable');
     try {
       const resolved = await shareLinks.resolveToken(req.params.token);
-      if (!resolved) return res.status(404).json({ error: 'Link not found or expired' });
+      if (!resolved) return apiError(res, 404, 'SHARE_NOT_FOUND', 'Link not found or expired');
       // The link's own tenant, not "whatever the repo was last set to": a token is
       // anonymous, so nothing in the request says whose workspace it should reach.
       // A link with no recorded tenant (older rows) cannot be scoped; refuse it
@@ -442,27 +453,27 @@ function registerWorkspaceShareAndReportRoutes(
           ? { ownerId: resolved.createdBy }
           : null;
       if (!shareScope) {
-        return res.status(404).json({ error: 'Workspace not found' });
+        return apiError(res, 404, 'WORKSPACE_NOT_FOUND', 'Workspace not found');
       }
       const all = await repo.list(shareScope);
       const ws = all.find(w => w.id === resolved.workspaceId);
-      if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+      if (!ws) return apiError(res, 404, 'WORKSPACE_NOT_FOUND', 'Workspace not found');
       res.json({ label: resolved.label, workspace: normalizeWorkspaceResults(ws) });
     } catch (err) {
-      res.status(500).json({ error: 'Failed to load share', details: String(err) });
+      apiError(res, 500, 'SHARE_LOAD_FAILED', 'Failed to load share', String(err));
     }
   });
 
   app.get('/api/workspaces/:id/report', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     try {
       const ws = (await repo.list(workspaceScopeOf(req))).find(w => w.id === req.params.id);
-      if (!ws) return res.status(404).json({ error: 'Workspace not found' });
+      if (!ws) return apiError(res, 404, 'WORKSPACE_NOT_FOUND', 'Workspace not found');
       const html = buildMeetReportHtml(ws);
       res.setHeader('Content-Type', 'text/html; charset=utf-8');
       res.setHeader('Content-Disposition', `inline; filename="${ws.name.replace(/[^a-z0-9]/gi, '_')}-report.html"`);
       res.send(html);
     } catch (err) {
-      res.status(500).json({ error: 'Report failed', details: String(err) });
+      apiError(res, 500, 'REPORT_FAILED', 'Report failed', String(err));
     }
   });
 }
