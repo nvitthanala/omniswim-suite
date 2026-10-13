@@ -1,6 +1,6 @@
 {
   "purpose": "Running log for the overnight 2026-09-21/22 session. The user is asleep and asked that work continue, that progress be logged so a rate limit loses nothing, and that the whole thing be finished inside the remaining 7-day quota. An hourly cron job (created in-session) re-enters this file and takes the next item.",
-  "readThisFirstOnResume": "This file, then docs/reference/CRAWL_INVESTIGATION_STATE.json. Do not re-derive anything either one already records. Take the top unfinished item from `nextUp`, finish it completely, append to `timeline`, and update this file before moving on.",
+  "readThisFirstOnResume": "This file, then docs/archive/2026-09/CRAWL_INVESTIGATION_STATE.json. Do not re-derive anything either one already records. Take the top unfinished item from `nextUp`, finish it completely, append to `timeline`, and update this file before moving on.",
   "hardRules": [
     "NEVER fetch swimcloud.com. Everything comes from the stored capture in data/swimcloud-captures/, the code, or committed fixtures. Touching the live site is a deliberate human-present action.",
     "Never fabricate competition data. Absent is not empty. Parsers fail loudly.",
@@ -147,7 +147,7 @@
   "notesForTheUser": [
     "divisionForTeam and registerTeamsFromList are exported, deprecated, and answer D1 for an unknown team. Nothing in the repo calls them, but scripts/test_cutline_tags.mjs deliberately pins the legacy behaviour, so they were left alone. Deleting exported API is your call -- say the word and they go.",
     "Readiness finding f8 is still open and is a real limit on \"usable for all formats\": INDIVIDUAL_EVENTS does not list 400 Freestyle, though the conversion table already knows it. A coach planning a long-course meet cannot pick an event the program actually contests.",
-    "The UI redesign initiative (docs/reference/UI_REDESIGN_STATE.json, 19 turns) has three items the 2026-09-14 session DEFERRED on purpose rather than rushed: optimizer rejected-candidate surfacing (a real rosterOptimizer candidate-selection change, executor-tier), optimizer undo, and the converted-time cutline half of the pre-submit checklist. I did not start any of them overnight -- each is a design decision, not a fix, and starting one on limited quota while you were asleep was the wrong call. They are yours to sequence."
+    "The UI redesign initiative (docs/archive/2026-09/UI_REDESIGN_STATE.json, 19 turns) has three items the 2026-09-14 session DEFERRED on purpose rather than rushed: optimizer rejected-candidate surfacing (a real rosterOptimizer candidate-selection change, executor-tier), optimizer undo, and the converted-time cutline half of the pre-submit checklist. I did not start any of them overnight -- each is a design decision, not a fix, and starting one on limited quota while you were asleep was the wrong call. They are yours to sequence."
   ],
   "queueState": "EMPTY as of 2026-09-22T08:15Z, but the n7-style hunt keeps paying: it found the isTimeTrial gap after the queue was already clear. If resuming with quota to spare, keep reading a path at a time rather than inventing queue items -- the pattern that works is looking for a default standing in for a missing fact, two tables that must agree with nothing asserting it, and an absent value treated as zero."
 }

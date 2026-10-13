@@ -119,7 +119,7 @@ Two visual variants of the same idea, none using `@omniswim/ui`'s `SegmentedCont
 
 ## 5. Prioritized shortlist
 
-1. **✅ DONE 2026-09-14 (see `docs/reference/UI_REDESIGN_STATE.json`).**
+1. **✅ DONE 2026-09-14 (see `docs/archive/2026-09/UI_REDESIGN_STATE.json`).**
    Converge the two live `ScoringSettings` editors (§4a). New
    `ScoringSettingsFields.tsx` owns every field; both hosts are thin chrome
    around it now. Confirmed the risk was real, not hypothetical, while
@@ -131,7 +131,7 @@ Two visual variants of the same idea, none using `@omniswim/ui`'s `SegmentedCont
    (`aFinalBracketSize` not recomputing after the "Top 24 points only"
    quick button, which a naive port would have reproduced). 9 new DOM-render
    tests.
-2. **✅ DONE 2026-09-10 (see `docs/reference/UI_REDESIGN_STATE.json` turns
+2. **✅ DONE 2026-09-10 (see `docs/archive/2026-09/UI_REDESIGN_STATE.json` turns
    t14–t15).** Split `TeamCard.tsx` (§3). Was 1,351 lines, the single largest
    file in the entire suite, already informally decomposed into 16 private
    functions plus 1 inline closure — the boundaries already existed (row/cell
@@ -144,7 +144,7 @@ Two visual variants of the same idea, none using `@omniswim/ui`'s `SegmentedCont
    recovered by reading the four sibling files' real exports and
    reconciling `TeamCard.tsx` against them. `npx tsc --noEmit -p
    packages/matrix/tsconfig.json` clean; full suite green (748/748).
-3. **✅ DONE 2026-09-13 (see `docs/reference/UI_REDESIGN_STATE.json` turns
+3. **✅ DONE 2026-09-13 (see `docs/archive/2026-09/UI_REDESIGN_STATE.json` turns
    t16–t17).** `SegmentedControl` convergence (§4b). Investigated first,
    not assumed mechanical: the flagged sites turned out to be **two**
    visually distinct, internally-consistent variants (Variant A —
@@ -171,12 +171,12 @@ Two visual variants of the same idea, none using `@omniswim/ui`'s `SegmentedCont
    tint the other 5 sites already used, and the 2 "freestanding" sites gain
    a subtle bordered container they previously lacked, for one consistent
    look instead of three.
-4. **✅ DONE 2026-09-10 (see `docs/reference/UI_REDESIGN_STATE.json` turn
+4. **✅ DONE 2026-09-10 (see `docs/archive/2026-09/UI_REDESIGN_STATE.json` turn
    t13).** Delete `WorkspaceTabs.tsx` (§1). 41 lines, zero import sites
    anywhere in the repo — the cheapest possible cleanup, worth doing
    alongside #2/#3 so a redesign pass doesn't waste time reasoning about a
    component nothing renders.
-5. **✅ DONE 2026-09-13 (see `docs/reference/UI_REDESIGN_STATE.json` turn
+5. **✅ DONE 2026-09-13 (see `docs/archive/2026-09/UI_REDESIGN_STATE.json` turn
    t16).** Confirm-delete modal convergence (§4d). New `ConfirmDeleteModal`
    in `@omniswim/ui`, reproducing the shared markup (icon circle,
    header/close row, warning paragraph, Cancel/Confirm footer) byte-for-byte

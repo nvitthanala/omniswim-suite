@@ -1,6 +1,6 @@
 # Backend investigation — 2026-10-02
 
-Scope: read-only investigation of the five questions in the dispatch. Sources read: `AGENTS.md`, `docs/reference/AUDIT_BACKEND_2026-10-02.md`, `docs/reference/SESSION_2026-10-01_STATE.json` (`openDecisions`, `openQuestions`), and vault notes `00-INDEX.md`, `02-Invariants-and-Gotchas.md`, `06-Data-Provenance-Rules.md`. No files besides this report were changed.
+Scope: read-only investigation of the five questions in the dispatch. Sources read: `AGENTS.md`, `docs/archive/2026-10/AUDIT_BACKEND_2026-10-02.md`, `docs/archive/2026-10/SESSION_2026-10-01_STATE.json` (`openDecisions`, `openQuestions`), and vault notes `00-INDEX.md`, `02-Invariants-and-Gotchas.md`, `06-Data-Provenance-Rules.md`. No files besides this report were changed.
 
 ## Q1 — Team rankings: absent page vs parse failure
 
@@ -49,7 +49,7 @@ None. The original NSISC results PDF and a rankings-page parse-failure fixture w
 
 ## Changed
 
-`docs/reference/BACKEND_INVESTIGATION_2026-10-02.md` — created this evidence-based investigation report. No exports or application code changed. No tests or lint checks were run; this task was read-only investigation, and the only write was the requested report.
+`docs/archive/2026-10/BACKEND_INVESTIGATION_2026-10-02.md` — created this evidence-based investigation report. No exports or application code changed. No tests or lint checks were run; this task was read-only investigation, and the only write was the requested report.
 
 ## Found
 

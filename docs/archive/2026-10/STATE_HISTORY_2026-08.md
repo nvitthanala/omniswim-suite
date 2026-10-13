@@ -19,10 +19,10 @@ relays in theoretical meets. The section below is the 2026-09-25 state.
 **Updated 2026-09-25.** Active work is the production-readiness push on
 branch `nvitthanala/production-readiness`, plan
 [`plans/2026-09-24/01-NEXT-ROUND-PLAN.md`](../../../plans/2026-09-24/01-NEXT-ROUND-PLAN.md),
-progress log `docs/reference/NEXT_ROUND_2026-09-24_STATE.json` — read the log
+progress log `docs/archive/2026-09/NEXT_ROUND_2026-09-24_STATE.json` — read the log
 before resuming. It follows
 [`plans/2026-09-22/01-CONVERSION-AND-IMPROVEMENTS-PLAN.md`](../../../plans/2026-09-22/01-CONVERSION-AND-IMPROVEMENTS-PLAN.md)
-(progress log `docs/reference/IMPROVEMENTS_2026-09-22_STATE.json`), which
+(progress log `docs/archive/2026-09/IMPROVEMENTS_2026-09-22_STATE.json`), which
 landed course-conversion provenance, altitude handling, the bests-correctness
 sweep, and NAIA SCM verdicts. `CHANGELOG.md`'s `[Unreleased]` section has the
 user-visible summary of both rounds.
@@ -136,7 +136,7 @@ mirrored in the Obsidian vault
 and pushed, and this same session built substantially more on top.** The
 UI-redesign plan turned into 17 tracked implementation turns (SwimCloud
 capture browser unified, Badge/toggle convergence, a real scoring bug and a
-real team-matching bug fixed along the way — `docs/reference/UI_REDESIGN_STATE.json`
+real team-matching bug fixed along the way — `docs/archive/2026-09/UI_REDESIGN_STATE.json`
 turns `t1`–`t17`), then a whole-app improvement sweep on explicit request
 (happy-dom RCE fix, the two `ScoringSettings` editors merged into one,
 a `Modal` primitive converging 6 of Manager's overlay dialogs, three
@@ -146,7 +146,7 @@ official-score reconciliation banner (shipped), an optimizer-change
 breakdown panel (shipped, piece 1 of 3), and a program-provenance checklist
 group (shipped, sibling conversion-provenance group stays scoped — turn
 `t19`). `nvitthanala/swimcloud-data-ingest` is now 102 commits ahead of
-`main`, still no PR. Full detail: `docs/reference/UI_REDESIGN_STATE.json`,
+`main`, still no PR. Full detail: `docs/archive/2026-09/UI_REDESIGN_STATE.json`,
 `docs/reference/IMPROVEMENT_BRAINSTORM_2026-09-02.md`,
 `plans/2026-09-14/*.md`. Obsidian vault refreshed the same day — see that
 session note's own "Update — 2026-09-13/14" section, plus

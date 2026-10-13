@@ -2,7 +2,7 @@
 
 Date: 2026-09-24. Branch: `nvitthanala/production-readiness`.
 Follows `plans/2026-09-22/01-CONVERSION-AND-IMPROVEMENTS-PLAN.md`.
-Progress log (canonical): `docs/reference/NEXT_ROUND_2026-09-24_STATE.json`.
+Progress log (canonical): `docs/archive/2026-09/NEXT_ROUND_2026-09-24_STATE.json`.
 Read the log before resuming. On any usage limit, follow its `limitProtocol`.
 
 Every anchor below (file, function, field) was checked against the code on
@@ -255,7 +255,7 @@ preview and replace reimport, following `production-server.spec.ts`.
 | `docs/INVARIANTS.md` | Any new rule the code must keep | One rule, why, where it is enforced, which test guards it |
 | `docs/reference/CUTLINE_TAGS_PLAN.md` | Cut-tag states, table-course rules, conversion and altitude sources | Cite the archived PDF and manifest id |
 | `plans/STATE.md` | Repo-level status the next session reads first | Short; points at the progress log |
-| `docs/reference/NEXT_ROUND_2026-09-24_STATE.json` | Item status, commit, results, blockers | After every commit |
+| `docs/archive/2026-09/NEXT_ROUND_2026-09-24_STATE.json` | Item status, commit, results, blockers | After every commit |
 | Vault `Sessions/` note | What changed and why, per commit | One note per session; cite commits |
 | Vault `02-Invariants-and-Gotchas.md` | New gotchas (hazards list in section 1, new invariants) | Mirror, do not fork, `docs/INVARIANTS.md` |
 | Vault `04-Known-Issues-and-Current-State.md` | Open issues, held items, branch/push state | Update the dated banner |

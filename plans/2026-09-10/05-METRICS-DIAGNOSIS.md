@@ -315,7 +315,7 @@ undifferentiated peers competing for a coach's attention.
 
 ## 5. Prioritized shortlist
 
-1. **✅ DONE 2026-09-13 (see `docs/reference/UI_REDESIGN_STATE.json` turn
+1. **✅ DONE 2026-09-13 (see `docs/archive/2026-09/UI_REDESIGN_STATE.json` turn
    t16).** `VideoPlayer.tsx` (317 lines, §3). Pure JSX extraction, no
    behavior or visual change: 4 named presentational pieces —
    `VideoPlayerEmptyState`, `VideoTelemetryOverlay`, `VideoScrubber`,
@@ -332,7 +332,7 @@ undifferentiated peers competing for a coach's attention.
    direct line-by-line comparison against the original JSX, the same
    standard already applied to `TeamCard.tsx`'s split.
 2. **⚠️ INVESTIGATED, NOT CONVERTED 2026-09-13 (see
-   `docs/reference/UI_REDESIGN_STATE.json` turn t16).** `SegmentedControl`
+   `docs/archive/2026-09/UI_REDESIGN_STATE.json` turn t16).** `SegmentedControl`
    convergence, 1 site (§4a). `RaceSetupFormFields.tsx`'s `EventTypeSection`
    turns out to be a third distinct visual pattern, not a size-only variant
    of `SegmentedControl`: two **separately bordered boxes** in a
@@ -343,7 +343,7 @@ undifferentiated peers competing for a coach's attention.
    a real layout redesign, not a mechanical swap. Same conclusion, and same
    reasoning, as Matrix's own 6 sites (`04-MATRIX-DIAGNOSIS.md` §5 item 3):
    left as hand-rolled, blocked on a design decision.
-3. **✅ DONE 2026-09-13 (see `docs/reference/UI_REDESIGN_STATE.json` turn
+3. **✅ DONE 2026-09-13 (see `docs/archive/2026-09/UI_REDESIGN_STATE.json` turn
    t16).** `SessionsPanel.tsx`'s "Legacy" pill → `Badge` (§4b). Converted
    with an explicit `className` override (`rounded border-0 px-1.5 py-0.5
    font-normal text-theme-muted`) reproducing the original's smaller,

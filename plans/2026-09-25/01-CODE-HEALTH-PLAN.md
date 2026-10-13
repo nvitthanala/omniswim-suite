@@ -1,7 +1,7 @@
 # Code health: complexity, duplication, efficiency
 
 Date: 2026-09-25. Branch: `nvitthanala/production-readiness`.
-Progress log: `docs/reference/CODE_HEALTH_2026-09-25_STATE.json`.
+Progress log: `docs/archive/2026-09/CODE_HEALTH_2026-09-25_STATE.json`.
 Executor model: **Sonnet (worker)** for every item, per the user, to save
 usage. One agent at a time. The orchestrator verifies and commits.
 
@@ -88,7 +88,7 @@ steps in order and reports each one.
 
 ## 4. Docs and vault
 
-- Each item: a line in `docs/reference/CODE_HEALTH_2026-09-25_STATE.json`
+- Each item: a line in `docs/archive/2026-09/CODE_HEALTH_2026-09-25_STATE.json`
   with before/after complexity for every function touched.
 - No CHANGELOG entries (no user-visible change) unless an item finds and
   fixes a real bug, which gets its own commit and a CHANGELOG `Fixed` line.

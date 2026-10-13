@@ -54,11 +54,11 @@
       },
       {
         "id": "A1",
-        "what": "Codex backend logic audit (read-only; writes docs/reference/AUDIT_BACKEND_2026-10-02.md)",
+        "what": "Codex backend logic audit (read-only; writes docs/archive/2026-10/AUDIT_BACKEND_2026-10-02.md)",
         "provider": "codex",
         "dispatch": "ctx_045a9cf25365",
         "status": "done",
-        "result": "docs/reference/AUDIT_BACKEND_2026-10-02.md (7 findings, inferred)"
+        "result": "docs/archive/2026-10/AUDIT_BACKEND_2026-10-02.md (7 findings, inferred)"
       },
       {
         "id": "U1",
@@ -127,7 +127,7 @@
         "what": "Codex read-only backend investigation (3 reverted findings, Pal rank-0, Gotaas DFS)",
         "provider": "codex",
         "dispatch": "ctx_bb7bc7a36b47",
-        "status": "done: docs/reference/BACKEND_INVESTIGATION_2026-10-02.md"
+        "status": "done: docs/archive/2026-10/BACKEND_INVESTIGATION_2026-10-02.md"
       },
       {
         "id": "T1",
@@ -249,7 +249,7 @@
   ],
   "uiBranch": {
     "name": "nvitthanala/ui-simplification",
-    "plan": "docs/reference/UI_SIMPLIFICATION_PLAN.md",
+    "plan": "docs/archive/2026-10/UI_SIMPLIFICATION_PLAN.md",
     "committed": [
       "phase 1 d53b6640",
       "phase 2 d4b7bf3c"

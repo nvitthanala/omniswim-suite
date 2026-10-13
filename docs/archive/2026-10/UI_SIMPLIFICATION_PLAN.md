@@ -58,7 +58,7 @@ against a COPY of the data: `OMNI_DATA_DIR=<copy> PORT=<free> npx playwright tes
 `pageerror`; screenshots to `test-results/ui-ia/<phase>/`); later phases extend it. Gates: `npm run
 lint`, `npx vitest run`, `node scripts/run-tests.mjs`. Specs that depend on labels:
 `tests/e2e/main-thread-budget.spec.ts:40`, `tests/e2e/matrix-chart.spec.ts`. Log each phase in
-`docs/reference/UI_REDESIGN_STATE.json`. Never put the step in the URL (it races WorkspaceRouteSync);
+`docs/archive/2026-09/UI_REDESIGN_STATE.json`. Never put the step in the URL (it races WorkspaceRouteSync);
 use `sessionStorage`. Keep Dark, Light, custom and OLED working; no hex colors; no new dependencies;
 keep modal focus, labels and keyboard access; nothing hardcoded to a conference or division; do not
 touch `packages/core` scoring logic.
