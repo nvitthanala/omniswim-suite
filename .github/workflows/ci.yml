@@ -72,8 +72,9 @@ jobs:
         run: python -m pip install -r backend/requirements.txt
 
       # pdftotext, for the tests that re-read the archived qualifying-standard PDFs.
-      # ubuntu ships poppler, which lacks the xpdf-only `-table` flag, so the two
-      # altitudeAdjustment PDF tests still skip here; tests/skip-budget.json counts them.
+      # ubuntu ships poppler, which lacks the xpdf-only `-table` flag. The altitude tests
+      # that need `-table` read the text archived next to each PDF instead (hashes in
+      # data/cutlines/sources/manifest.json; scripts/extract-cutline-text.mjs writes it).
       - name: Install pdftotext
         run: sudo apt-get update && sudo apt-get install -y poppler-utils
 
@@ -110,6 +111,15 @@ jobs:
       # missing fixture or tool cannot quietly shrink the suite.
       - name: Unit tests and skip budget
         run: node scripts/check_skip_budget.mjs
+        env:
+          PG_TEST_URL: postgres://postgres:postgres@localhost:5432/omni_test
+
+      # Line and branch coverage of packages/*/src, from the same vitest suite. Report only:
+      # there is no threshold, and continue-on-error means a coverage failure cannot fail
+      # the build. The text summary prints in this log; the HTML report is not uploaded.
+      - name: Coverage summary (report only)
+        run: npm run test:coverage
+        continue-on-error: true
         env:
           PG_TEST_URL: postgres://postgres:postgres@localhost:5432/omni_test
 
