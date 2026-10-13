@@ -282,7 +282,13 @@ export default function TeamRosterPanel({
       onAthleteSelect?.({ name: row.name, team: row.team, classYear: row.classYear });
       requestAnimationFrame(() => {
         document.getElementById('athlete-lineup-editor')?.scrollIntoView({
-          behavior: 'smooth',
+          // Script scrolling ignores the CSS `scroll-behavior` guard, so check
+          // both the OS setting and the app's own Reduced motion setting here.
+          behavior:
+            window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ||
+            document.documentElement.dataset.reducedMotion === 'true'
+              ? 'auto'
+              : 'smooth',
           block: 'nearest',
         });
       });

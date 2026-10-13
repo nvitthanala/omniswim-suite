@@ -72,7 +72,7 @@ function ExpandedWorkspaceRow({
       <button
         type="button"
         onClick={() => onSelect(w.id)}
-        className={`flex flex-col p-3 rounded-r-md border-l-4 transition-all w-full text-left ${
+        className={`flex flex-col p-3 rounded-r-md border-l-4 transition-colors w-full text-left ${
           isActive ? 'surface-card border-[var(--text-accent)]' : 'surface-soft border-theme-soft theme-hover-row'
         }`}
       >

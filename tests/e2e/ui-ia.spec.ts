@@ -729,7 +729,7 @@ test(`Manager Lineup and Relays at ${NARROW_WIDTH}px: the step fits and its prim
  * The app header once ran to 566px of content in a 390px bar (measured 2026-10-12): the applet
  * nav was 455px wide and the right-hand icon buttons ended at x=566, off screen. Under 640px the
  * header now drops the brand name and the Experimental badge text from the bar, and moves
- * "Configure Scoring Model" and the colour-mode switch into the More menu. This test holds that:
+ * "Configure scoring model" and the colour-mode switch into the More menu. This test holds that:
  * no header or shell ancestor may be wider than the viewport, and no element outside the step
  * panel may sit past it.
  */

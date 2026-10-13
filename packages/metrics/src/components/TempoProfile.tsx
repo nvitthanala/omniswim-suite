@@ -76,7 +76,7 @@ function TempoProfileComponent({
 
   return (
     <LengthProfileChart
-      title="Tempo Profile"
+      title="Tempo profile"
       unit={unit}
       emptyMessage="No stroke-tempo data measured yet."
       lengths={lengths}

@@ -387,6 +387,18 @@ html {
   .suite-pool-shimmer {
     animation: none !important;
   }
+
+  /* Hover lifts and the sidebar width change are movement: drop them, keep
+     the colour and shadow feedback. */
+  .surface-interactive:hover,
+  .neon-card:hover,
+  .suite-home-card:hover {
+    transform: none;
+  }
+
+  .workspace-sidebar {
+    transition: none;
+  }
 }
 
 :root:not([data-theme='light'])[data-theme-preset='oled'] {
@@ -498,7 +510,7 @@ select {
 .theme-toggle-button {
   background: var(--hover-overlay);
   border: 1px solid var(--border);
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
 .theme-toggle-button:hover {

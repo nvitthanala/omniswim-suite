@@ -46,19 +46,19 @@ function formatDelta(d: DeltaCell): string {
 
 function raceLevelRows(left: RaceAnalysisResult, right: RaceAnalysisResult): MetricRow[] {
   return [
-    { label: 'Reaction Time', left: left.reactionTime, right: right.reactionTime },
-    { label: 'Flight Time', left: left.flightTime, right: right.flightTime },
-    { label: 'Race Time', left: left.raceTime, right: right.raceTime },
-    { label: 'Race Mean Velocity', left: left.raceMeanVelocity, right: right.raceMeanVelocity },
-    { label: 'Finish Segment Time', left: left.finishSegmentTime, right: right.finishSegmentTime },
-    { label: 'Finish Segment Velocity', left: left.finishSegmentVelocity, right: right.finishSegmentVelocity },
+    { label: 'Reaction time', left: left.reactionTime, right: right.reactionTime },
+    { label: 'Flight time', left: left.flightTime, right: right.flightTime },
+    { label: 'Race time', left: left.raceTime, right: right.raceTime },
+    { label: 'Race mean velocity', left: left.raceMeanVelocity, right: right.raceMeanVelocity },
+    { label: 'Finish segment time', left: left.finishSegmentTime, right: right.finishSegmentTime },
+    { label: 'Finish segment velocity', left: left.finishSegmentVelocity, right: right.finishSegmentVelocity },
     {
-      label: 'First-to-Last Stroke Rate Delta',
+      label: 'First-to-last stroke rate delta',
       left: left.firstToLastStrokeRateDelta,
       right: right.firstToLastStrokeRateDelta,
     },
     {
-      label: 'First-to-Last Length Mean Velocity Delta',
+      label: 'First-to-last length mean velocity delta',
       left: left.firstToLastLengthMeanVelocityDelta,
       right: right.firstToLastLengthMeanVelocityDelta,
     },
@@ -79,17 +79,17 @@ type LengthMeasuredKey =
   | 'meanVelocity';
 
 const LENGTH_METRIC_KEYS: ReadonlyArray<readonly [LengthMeasuredKey, string]> = [
-  ['breakoutTime', 'Breakout Time'],
-  ['underwaterVelocity', 'Underwater Velocity'],
-  ['kickCount', 'Kick Count'],
-  ['kickTempo', 'Kick Tempo'],
-  ['fifteenMetreTime', '15 m Time'],
-  ['zeroToFifteenMetreVelocity', '0-15 m Velocity'],
-  ['cycleCount', 'Cycle Count'],
-  ['strokeRate', 'Stroke Rate'],
-  ['distancePerCycle', 'Distance per Cycle'],
+  ['breakoutTime', 'Breakout time'],
+  ['underwaterVelocity', 'Underwater velocity'],
+  ['kickCount', 'Kick count'],
+  ['kickTempo', 'Kick tempo'],
+  ['fifteenMetreTime', '15 m time'],
+  ['zeroToFifteenMetreVelocity', '0-15 m velocity'],
+  ['cycleCount', 'Cycle count'],
+  ['strokeRate', 'Stroke rate'],
+  ['distancePerCycle', 'Distance per cycle'],
   ['split', 'Split'],
-  ['meanVelocity', 'Mean Velocity'],
+  ['meanVelocity', 'Mean velocity'],
 ];
 
 function lengthRowGroups(
@@ -170,7 +170,7 @@ export function SessionComparePanel({ left, right }: Props) {
 
   return (
     <section className="panel p-4 border border-theme-soft rounded-xl">
-      <h3 className="text-ui-label font-bold text-[var(--text-primary)] mb-1">Compare Sessions</h3>
+      <h3 className="text-ui-label font-bold text-[var(--text-primary)] mb-1">Compare sessions</h3>
       <div className="text-ui-caption text-theme-muted mb-3">
         <span className="font-bold text-[var(--text-primary)]">{left.label}</span> vs{' '}
         <span className="font-bold text-[var(--text-primary)]">{right.label}</span>

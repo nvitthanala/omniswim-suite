@@ -35,7 +35,7 @@ export default function SuiteHeader({
             className="w-10 h-10 shrink-0 flex items-center justify-center bg-[var(--surface-muted)] rounded-lg border border-[var(--border)] overflow-hidden"
             style={{ boxShadow: 'var(--ui-shadow-sm)' }}
           >
-            <img src="/OMNISWIMLOGO.png" alt="Omni Swim Logo" className="w-full h-full object-contain p-1" />
+            <img src="/OMNISWIMLOGO.png" alt="Omni Swim logo" className="w-full h-full object-contain p-1" />
           </div>
           {/* Under 640px the logo stands alone; the name stays in the accessible name. */}
           <h1 className="max-sm:sr-only text-xl font-black tracking-tighter text-[var(--text-primary)] group-hover:text-[var(--text-accent)] transition-colors">
@@ -57,8 +57,8 @@ export default function SuiteHeader({
               size="sm"
               onClick={onOpenScoringSettings}
               className="p-1.5"
-              title="Configure Scoring Model"
-              aria-label="Configure Scoring Model"
+              title="Configure scoring model"
+              aria-label="Configure scoring model"
               leadingIcon={<Settings size={14} />}
             />
           </span>
@@ -78,7 +78,7 @@ export default function SuiteHeader({
         <Menu label="More" icon={<MoreHorizontal size={14} />} triggerClassName="btn-ghost p-1.5 rounded-lg">
           {showWorkspaceControls && activeWorkspace && onOpenScoringSettings ? (
             <MenuItem icon={<Settings size={14} />} onSelect={onOpenScoringSettings} className="sm:hidden">
-              Configure Scoring Model
+              Configure scoring model
             </MenuItem>
           ) : null}
 

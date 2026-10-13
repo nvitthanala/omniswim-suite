@@ -50,7 +50,7 @@ function SettingsPreview() {
       <div className="flex items-center justify-between border-b border-theme-soft pb-4">
         <div>
           <p className="text-ui-micro text-theme-muted font-bold">Live preview</p>
-          <h2 className="text-heading-2 mt-1">Meet Deck</h2>
+          <h2 className="text-heading-2 mt-1">Meet deck</h2>
         </div>
         <div className="h-8 w-8 rounded-full bg-[var(--text-accent)] shadow-[0_0_24px_color-mix(in_srgb,var(--text-accent)_42%,transparent)]" />
       </div>
@@ -59,7 +59,7 @@ function SettingsPreview() {
         <div className="surface-muted-bg rounded-2xl p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-ui-caption font-bold text-[var(--text-primary)]">Championship Session</p>
+              <p className="text-ui-caption font-bold text-[var(--text-primary)]">Championship session</p>
               <p className="text-ui-caption text-theme-secondary">Projected score updates instantly.</p>
             </div>
             <Badge tone="accent">Ready</Badge>

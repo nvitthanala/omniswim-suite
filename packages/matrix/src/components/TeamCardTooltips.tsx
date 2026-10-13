@@ -291,7 +291,7 @@ export function TeamCardChartTooltip({
       <div className="space-y-1 mt-2 flex-1 overflow-y-auto custom-scrollbar">
         {isClass ? (
           <>
-            <div className="text-theme-muted font-bold uppercase mb-1" style={{ fontSize: 'clamp(7px, 4cqi, 10px)' }}>Top Performers</div>
+            <div className="text-theme-muted font-bold uppercase mb-1" style={{ fontSize: 'clamp(7px, 4cqi, 10px)' }}>Top performers</div>
             <ClassTopPerformersList topPerformers={topPerformers} />
           </>
         ) : (

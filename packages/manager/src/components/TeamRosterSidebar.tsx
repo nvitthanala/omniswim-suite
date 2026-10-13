@@ -43,7 +43,7 @@ export default function TeamRosterSidebar({
                 key={team}
                 type="button"
                 onClick={() => onSelectTeam(team)}
-                className={`w-full text-left p-3.5 rounded-lg border transition-all ${
+                className={`w-full text-left p-3.5 rounded-lg border transition-colors ${
                   isActive
                     ? 'border-[var(--text-accent)]/40 bg-[var(--text-accent)]/10'
                     : 'border-theme-soft surface-overlay theme-hover-row'

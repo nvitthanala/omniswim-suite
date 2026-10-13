@@ -39,7 +39,7 @@ function VelocityProfileComponent({
 
   return (
     <LengthProfileChart
-      title="Velocity Profile"
+      title="Velocity profile"
       unit={unit}
       emptyMessage="No velocity data measured yet."
       lengths={lengths}

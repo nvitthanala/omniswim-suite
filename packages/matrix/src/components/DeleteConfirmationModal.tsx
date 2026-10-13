@@ -12,15 +12,15 @@ interface Props {
 export default function DeleteConfirmationModal({ workspaceName, onConfirm, onCancel, busy = false }: Props) {
   return (
     <ConfirmDeleteModal
-      title="Delete Workspace"
+      title="Delete workspace"
       description={
         <>
           Are you sure you want to delete{' '}
           <span className="text-[var(--text-primary)] font-mono">{workspaceName}</span>?
         </>
       }
-      warning="This operation will obliterate all swimmer results, recruit injections, and active scoring configurations within this workspace. You will have a brief window to undo this action."
-      confirmLabel={busy ? 'Deleting...' : 'Obliterate Workspace'}
+      warning="This removes all swimmer results, recruits and scoring settings in this workspace. You can undo it for a short time."
+      confirmLabel={busy ? 'Deleting...' : 'Delete workspace'}
       onConfirm={onConfirm}
       onCancel={onCancel}
       busy={busy}

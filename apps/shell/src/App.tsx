@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
 import { AppletSkeleton, ScoringRulesOpenerProvider, TheoreticalMeetOpenerProvider, useToast } from '@omniswim/ui';
@@ -258,6 +258,12 @@ function ShellLayout() {
   );
 }
 
+/** Motion follows the OS setting, and the app's own Reduced motion setting forces it on. */
+function PreferenceMotionConfig({ children }: { children: ReactNode }) {
+  const { preferences } = useSuitePreferences();
+  return <MotionConfig reducedMotion={preferences.reducedMotion ? 'always' : 'user'}>{children}</MotionConfig>;
+}
+
 export default function App() {
   const toast = useToast();
 
@@ -272,7 +278,7 @@ export default function App() {
   return (
     <BrowserRouter>
       <SuitePreferencesProvider>
-        <MotionConfig reducedMotion="user">
+        <PreferenceMotionConfig>
           <AuthProvider>
             <SuiteWorkspaceProvider onNotify={toast.push}>
               <AppErrorBoundary>
@@ -280,7 +286,7 @@ export default function App() {
               </AppErrorBoundary>
             </SuiteWorkspaceProvider>
           </AuthProvider>
-        </MotionConfig>
+        </PreferenceMotionConfig>
       </SuitePreferencesProvider>
     </BrowserRouter>
   );

@@ -63,9 +63,9 @@ export function CourseDistanceFields({
             <Ruler className="w-3 h-3" /> Course
           </label>
           <select id={`${idPrefix}-course`} value={config.course} onChange={(e) => onCourseChange(e.target.value as RaceCourse)} className={SELECT_CLASS}>
-            <option value="LCM">Long Course (50m)</option>
-            <option value="SCM">Short Course (25m)</option>
-            <option value="SCY">Short Course (25y)</option>
+            <option value="LCM">Long course (50m)</option>
+            <option value="SCM">Short course (25m)</option>
+            <option value="SCY">Short course (25y)</option>
           </select>
         </div>
 
@@ -198,7 +198,7 @@ function ImOrderPanel({
             onClick={onConfirmImProposal}
             disabled={imConfirmedForLengthCount === lengthCountForRows}
           >
-            {imConfirmedForLengthCount === lengthCountForRows ? 'Confirmed' : 'Confirm IM Order'}
+            {imConfirmedForLengthCount === lengthCountForRows ? 'Confirmed' : 'Confirm IM order'}
           </Button>
         </>
       ) : (
@@ -305,7 +305,7 @@ export function FlagDistanceSection({
 }: FlagDistanceSectionProps) {
   return (
     <div className="border border-theme-soft rounded-lg p-3 space-y-2">
-      <h3 className="text-ui-caption font-bold text-theme-muted">Flag Distance</h3>
+      <h3 className="text-ui-caption font-bold text-theme-muted">Flag distance</h3>
       <label className="flex items-center gap-2 text-ui-caption text-theme-secondary">
         <input type="checkbox" checked={flagDistanceConfirmed} onChange={(e) => onConfirmedChange(e.target.checked)} />
         I have measured the flag distance for the final length

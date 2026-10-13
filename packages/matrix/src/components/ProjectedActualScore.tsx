@@ -185,7 +185,7 @@ function FullScoreSummary({
       <ScoreRow label="Projected" value={projected} highlight />
       {showPrelims ? (
         <div className="pt-2 border-t border-theme-soft space-y-2">
-          <ScoreRow label="Prelims Proj" value={prelimsProjected} muted />
+          <ScoreRow label="Prelims proj" value={prelimsProjected} muted />
           <ScoreRow label="Baseline vs Prelims" value={baselineOverUnder} delta />
           {noActualCount > 0 ? (
             <p className="flex items-center gap-1 text-ui-micro font-mono text-theme-muted">

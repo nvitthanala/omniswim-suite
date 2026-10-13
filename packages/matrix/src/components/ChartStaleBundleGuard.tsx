@@ -22,7 +22,7 @@ export default function ChartStaleBundleGuard() {
   useEffect(() => {
     const timer = window.setTimeout(() => {
       const hasTimeline = Boolean(
-        document.body.textContent?.includes('Chronological Team Score Timeline')
+        document.body.textContent?.includes('Team score timeline')
       );
       if (!hasTimeline) return;
 

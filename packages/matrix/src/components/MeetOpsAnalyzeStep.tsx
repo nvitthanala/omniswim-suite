@@ -135,7 +135,7 @@ export function MeetOpsAnalyzeStep({
         <div className="flex items-center gap-2 mb-4">
           <TrendingUp size={16} className="text-[var(--text-accent)]" />
           <h3 className="text-ui-caption font-bold text-[var(--text-primary)]">
-            Chronological Team Score Timeline
+            Team score timeline
           </h3>
           {showPrelimsPerformance ? (
             <p className="text-ui-micro text-theme-muted mt-1 normal-case tracking-normal">

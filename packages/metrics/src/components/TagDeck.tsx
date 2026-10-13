@@ -4,7 +4,7 @@ import { ALL_TAG_KINDS, TAG_KIND_COLOR, TAG_KIND_LABEL } from './TagTimeline';
 
 const LEGEND: ReadonlyArray<{ key: string; description: string; addition?: boolean }> = [
   { key: 'S', description: 'Start → Entry → Breakout → Stroke (repeats within a length)' },
-  { key: 'D', description: 'Turn Start → Turn End (Finish on the final length)' },
+  { key: 'D', description: 'Turn start → Turn end (Finish on the final length)' },
   { key: 'A', description: '15 m mark' },
   { key: 'R', description: 'Starting signal (horn / strobe)', addition: true },
   { key: 'G', description: 'Flags crossing on the final length', addition: true },
@@ -83,7 +83,7 @@ export function TagDeck({ machine, tags, lengthCount, fifteenMetreGateReason }: 
             <span className="text-theme-muted text-right">
               {row.description}
               {row.addition ? (
-                <span className="block text-[var(--text-accent)] font-bold">OmniSwim addition — not a Swimcloud key</span>
+                <span className="block text-[var(--text-accent)] font-bold">OmniSwim addition — not a SwimCloud key</span>
               ) : null}
             </span>
           </div>

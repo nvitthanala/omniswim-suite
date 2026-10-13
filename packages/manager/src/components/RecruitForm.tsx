@@ -143,7 +143,7 @@ const LONG_CLASS_YEAR_LABELS: ClassYearLabels = {
   [ClassYear.SO]: 'Sophomore (SO)',
   [ClassYear.JR]: 'Junior (JR)',
   [ClassYear.SR]: 'Senior (SR)',
-  [ClassYear.HS]: 'High School (HS)',
+  [ClassYear.HS]: 'High school (HS)',
 };
 
 /** Shared `<select>` shape behind both "Year"/class-year fields; option text
@@ -358,7 +358,7 @@ export default function RecruitForm({
   return (
     <form onSubmit={handleSubmit} className={`space-y-4 ${disabled ? 'opacity-60 pointer-events-none' : ''}`}>
       <div>
-        <span className={labelClass}>Athlete Name</span>
+        <span className={labelClass}>Athlete name</span>
         <div className="grid grid-cols-2 gap-2">
           <input
             id={ids.firstName}
@@ -383,7 +383,7 @@ export default function RecruitForm({
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label htmlFor={ids.team} className={labelClass}>Committed Team</label>
+          <label htmlFor={ids.team} className={labelClass}>Committed team</label>
           <TeamSelect
             id={ids.team}
             value={formData.team}
@@ -408,7 +408,7 @@ export default function RecruitForm({
       </div>
 
       <div>
-        <span className={labelClass}>Event Selection</span>
+        <span className={labelClass}>Event selection</span>
         <div className="grid grid-cols-2 gap-3">
           <EventSelect
             id={ids.event}
@@ -429,7 +429,7 @@ export default function RecruitForm({
       </div>
 
       <div>
-        <label htmlFor={ids.time} className={labelClass}>Time Entry (Auto-Convert Enabled)</label>
+        <label htmlFor={ids.time} className={labelClass}>Time entry (auto-convert on)</label>
         <input
           id={ids.time}
           type="text"

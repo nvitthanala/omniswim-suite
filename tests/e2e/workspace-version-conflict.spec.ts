@@ -48,7 +48,7 @@ async function fromServer(request: APIRequestContext, id: string): Promise<Saved
 }
 
 async function openScoringDialog(page: Page) {
-  await page.getByRole('button', { name: 'Configure Scoring Model' }).click();
+  await page.getByRole('button', { name: 'Configure scoring model' }).click();
   const dialog = page.getByRole('dialog', { name: 'Scoring rules' });
   await expect(dialog).toBeVisible();
   return dialog;
@@ -67,8 +67,8 @@ test('a stale tab gets a banner, the server keeps the other tab\'s save, and the
     // Both tabs load the workspace at version 1. B then sits idle.
     await pageA.goto(url);
     await pageB.goto(url);
-    await expect(pageA.getByRole('button', { name: 'Configure Scoring Model' })).toBeVisible();
-    await expect(pageB.getByRole('button', { name: 'Configure Scoring Model' })).toBeVisible();
+    await expect(pageA.getByRole('button', { name: 'Configure scoring model' })).toBeVisible();
+    await expect(pageB.getByRole('button', { name: 'Configure scoring model' })).toBeVisible();
     expect((await fromServer(request, id)).version).toBe(1);
 
     // Tab A changes the scoring view. The control saves on its own after the autosave debounce.

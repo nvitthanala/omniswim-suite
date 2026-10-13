@@ -134,12 +134,12 @@ describe('fix 5: the All-teams dialog result cannot outlive its inputs', () => {
     act(async () => root.render(panel(ws, o)));
   const runIt = async () => { await click(/Run optimizer/); await settle(); };
 
-  it('Run Full, switch to Scorers Only, then Apply has nothing to apply', async () => {
+  it('Run Full, switch to Scorers only, then Apply has nothing to apply', async () => {
     const onApply = vi.fn();
     await renderPanel(gainWorkspace(), { onApply });
     await runIt();
     expect((findButton(/Apply to workspace/) as HTMLButtonElement).disabled).toBe(false);
-    await click(/Scorers Only/);
+    await click(/Scorers only/);
     expect((findButton(/Apply to workspace/) as HTMLButtonElement).disabled).toBe(true);
     await click(/Apply to workspace/);
     expect(onApply).not.toHaveBeenCalled();

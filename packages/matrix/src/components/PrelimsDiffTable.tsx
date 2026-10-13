@@ -74,7 +74,7 @@ export default function PrelimsDiffTable({
         <thead className="surface-overlay text-ui-caption text-theme-secondary font-medium">
           <tr>
             <th className="px-2 py-3 xl:p-3">Team</th>
-            <th className="px-2 py-3 xl:p-3 text-right">Prelims Proj</th>
+            <th className="px-2 py-3 xl:p-3 text-right">Prelims proj</th>
             <th className="px-2 py-3 xl:p-3 text-right">Baseline</th>
             <th className="px-2 py-3 xl:p-3 text-right">Baseline O/U</th>
             <th className="px-2 py-3 xl:p-3 text-right">Projected</th>

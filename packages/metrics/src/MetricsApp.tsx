@@ -305,7 +305,7 @@ export default function MetricsApp() {
       await saveSession(record);
       setSessionId(record.id);
       setSessionCreatedAt(record.createdAt);
-      toast.push('success', `Saved session for ${swimmerName || 'Unknown Swimmer'}.`);
+      toast.push('success', `Saved session for ${swimmerName || 'Unknown swimmer'}.`);
       refreshSessions();
     } catch (err) {
       toast.push('error', `Save failed: ${err instanceof Error ? err.message : String(err)}`);
@@ -379,7 +379,7 @@ export default function MetricsApp() {
         .then((loaded) => {
           if (!loaded) return;
           if (loaded.legacy) {
-            toast.push('info', 'That session used an earlier schema and cannot be compared.');
+            toast.push('info', 'That session was saved in an older format and cannot be compared.');
             setCompareData(null);
             return;
           }

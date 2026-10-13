@@ -42,9 +42,9 @@ type Props = {
 };
 
 const STAGES: { value: OptimizerStage; label: string; desc: string }[] = [
-  { value: 'scorers', label: 'Scorers Only', desc: 'Optimize which athletes score per team' },
-  { value: 'events', label: 'Events Only', desc: 'Optimize event lineup per athlete' },
-  { value: 'all', label: 'Full (Scorers + Events)', desc: 'Both scorer roster and event lineup' },
+  { value: 'scorers', label: 'Scorers only', desc: 'Optimize which athletes score per team' },
+  { value: 'events', label: 'Events only', desc: 'Optimize event lineup per athlete' },
+  { value: 'all', label: 'Full (scorers + events)', desc: 'Both scorer roster and event lineup' },
 ];
 
 /** The review card for one run: totals, delta and how many scorer and event changes it proposes. */
@@ -261,9 +261,7 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
           >
             {isRunning ? (
               <>
-                <motion.div animate={{ rotate: 360 }} transition={{ repeat: Infinity, duration: 1, ease: 'linear' }}>
-                  <RefreshCw size={14} />
-                </motion.div>
+                <RefreshCw size={14} className="animate-spin" aria-hidden="true" />
                 <span>Optimizing...</span>
               </>
             ) : (

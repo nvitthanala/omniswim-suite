@@ -156,7 +156,7 @@ export function MeetOpsStandingsStep({
           <thead className="surface-overlay text-ui-micro text-theme-secondary font-medium">
             <tr>
               <th className="p-3">Rank</th>
-              <th className="p-3">Athlete Name</th>
+              <th className="p-3">Swimmer name</th>
               <th className="p-3">Team</th>
               <th className="p-3">Class</th>
               <th className="p-3 text-right">Meet pts</th>

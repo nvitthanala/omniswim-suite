@@ -45,10 +45,10 @@ export function TeamCardMatrixControls({ viewMode, sortMode, onSortModeChange, o
           aria-label="Sort team matrix"
         >
           {viewMode === 'event' && <option value="chrono">Chronological</option>}
-          {viewMode === 'event' && <option value="eventDesc">High to Low</option>}
-          {viewMode === 'event' && <option value="eventAsc">Low to High</option>}
-          {viewMode === 'swimmer' && <option value="swimmerDesc">High to Low</option>}
-          {viewMode === 'swimmer' && <option value="swimmerAsc">Low to High</option>}
+          {viewMode === 'event' && <option value="eventDesc">High to low</option>}
+          {viewMode === 'event' && <option value="eventAsc">Low to high</option>}
+          {viewMode === 'swimmer' && <option value="swimmerDesc">High to low</option>}
+          {viewMode === 'swimmer' && <option value="swimmerAsc">Low to high</option>}
         </select>
 
         <span className="text-ui-micro text-theme-secondary">List:</span>
