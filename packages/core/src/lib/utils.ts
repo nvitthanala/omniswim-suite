@@ -348,12 +348,22 @@ export function isGraduatingClassYear(year: string | undefined | null): boolean 
   return GRADUATING_CLASS_YEARS.has(y);
 }
 
+/**
+ * One key per team relay entry for the roster simulation. The named swimmers are
+ * in the key for the reason they are in {@link relayEntryGroupKey}: one team's A
+ * and B relays on a dead heat share team, event, round, place and clock, and
+ * without the swimmers they merge into one eight-leg group, whose legs the
+ * simulation then writes back over four. A row that names no swimmers keeps the
+ * previous key.
+ */
 function relayGroupKey(r: SwimmerResult): string {
   const clock = relayTeamClock(r) || r.time;
   const t = convertTimeToSeconds(clock);
   const rk = parseRankInt(r.rank) ?? '';
   const rs = (r.roundSwam || '').trim();
-  return `${(r.team || '').trim()}|${r.event}|${rs}|${rk}|${t}`;
+  const base = `${(r.team || '').trim()}|${r.event}|${rs}|${rk}|${t}`;
+  const legs = relayEntryLegSignature(r);
+  return legs ? `${base}|${legs}` : base;
 }
 
 export function calculateProjectedTime(timeSec: number, classYear: string, overallDropPercent = -1.0): number {

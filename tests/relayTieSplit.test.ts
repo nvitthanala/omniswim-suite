@@ -26,6 +26,7 @@ import {
   pointsForPlacement,
   pointsForPlacementOrNull,
   relayTeamPointsForIndex,
+  simulateRoster,
   tiedPlaceShare,
 } from '../packages/core/src/lib/utils';
 import {
@@ -376,5 +377,51 @@ describe("one team's A and B relays on a dead heat stay two entries", () => {
   it('a row that names no swimmers keeps the previous key', () => {
     const row = { ...entryWith('Home', A, 2, '1:21.00')[0], relayNames: undefined };
     expect(relayEntryGroupKey(row)).toBe(`${RELAY_EVENT}|Home|A Final|2|1:21.00`);
+  });
+});
+
+describe("one team's A and B relays on a dead heat stay two entries in the roster simulation", () => {
+  // `simulateRoster` groups relay legs by `relayGroupKey`. Without the named swimmers in the key the
+  // two entries became one eight-leg group: the senior's removal vacated a leg of the merged group
+  // and the B relay's legs were written back over the A relay's four.
+  const legs = (swimmers: string[], years: string[], clock: string): SwimmerResult[] =>
+    swimmers.map((name, i) => ({
+      id: `${swimmers[0]}-${i}`,
+      rank: 2,
+      name,
+      classYear: years[i],
+      team: 'Home',
+      time: clock,
+      finalsTime: clock,
+      relayTeamTime: clock,
+      roundSwam: 'A Final',
+      points: 0,
+      event: RELAY_EVENT,
+      gender: Gender.MEN,
+      isRelay: true,
+      relayLegIndex: i,
+      relayLegSplit: '20.00',
+      relayNames: swimmers.map((n, j) => ({ name: n, year: years[j] })),
+    })) as SwimmerResult[];
+
+  it('removing the A relay senior vacates that leg only; the B relay is returned untouched', () => {
+    const a = legs(['A1', 'A2', 'A3', 'A4'], ['SR', 'FR', 'FR', 'FR'], '1:21.00');
+    const b = legs(['B1', 'B2', 'B3', 'B4'], ['FR', 'FR', 'FR', 'FR'], '1:21.00');
+    const out = simulateRoster([...a, ...b], [], true);
+    expect(out).toHaveLength(8);
+    const bOut = out.filter(r => r.name.startsWith('B'));
+    expect(bOut.map(r => r.name)).toEqual(['B1', 'B2', 'B3', 'B4']);
+    expect(bOut.every(r => r.time === '1:21.00' && !r.relayLegVacant)).toBe(true);
+    // The A relay lost its senior: one vacant leg, and the clock moved off the B relay's.
+    const aOut = out.filter(r => !r.name.startsWith('B'));
+    expect(aOut).toHaveLength(4);
+    expect(aOut.filter(r => r.relayLegVacant)).toHaveLength(1);
+    expect(aOut.every(r => r.time !== '1:21.00')).toBe(true);
+  });
+
+  it('with nobody removed the simulation does not run and both entries pass through', () => {
+    const a = legs(['A1', 'A2', 'A3', 'A4'], ['FR', 'FR', 'FR', 'FR'], '1:21.00');
+    const b = legs(['B1', 'B2', 'B3', 'B4'], ['FR', 'FR', 'FR', 'FR'], '1:21.00');
+    expect(simulateRoster([...a, ...b], [], false)).toHaveLength(8);
   });
 });
