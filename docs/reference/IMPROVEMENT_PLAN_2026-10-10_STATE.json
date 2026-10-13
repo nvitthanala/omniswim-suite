@@ -87,7 +87,7 @@
     "F4": "pending",
     "F5": "pending",
     "F6": "pending",
-    "F7": "in flight (a3003cfad2024423c)",
+    "F7": "done in core+manager (cef6ec4c): loadedMeet.theoreticalRemovedEvents, reader theoreticalRemovedEvents(workspace). Banner UI NOT done.",
     "F8": "pending",
     "F9": "pending",
     "F10": "pending",
@@ -110,8 +110,8 @@
     "D5": "pending",
     "D6": "pending",
     "D7": "pending",
-    "D8": "in flight (a3003cfad2024423c)",
-    "D9": "in flight (executor a3003cfad2024423c; stops on a schema gap)",
+    "D8": "done (23b5e8d9): rank-collapse guard test only; fix was already in place. Reverting placement fix or per-athlete scorer gate fails it.",
+    "D9": "done in core (67105555): ScoringSettings.relayLegsAllowTimeTrials (default off), isTimeTrialSwim, label relayLegTimeTrial. UI toggle NOT done (preset route schema strict). Awaiting architect review.",
     "D10": "pending",
     "H1": "committed",
     "H2": "pending",
@@ -127,7 +127,8 @@
     "parse-pdf-limit": "committed 3105ba98 (gates green on combined tree 2026-10-12)",
     "relayGroupKey": "committed 6cede0ae",
     "parse-psych-pdf-guard": "committed ea5a09c7",
-    "time-format-carry": "in flight (a3003cfad2024423c)"
+    "time-format-carry": "in flight (a3003cfad2024423c)",
+    "formatSecondsToTime": "done (686a4292): 59.996 -> 1:00.00, 119.996 -> 2:00.00; NaN/null/undefined -> NT; 4M-value sweep differs only where old output ended 60.00"
   },
   "userDecisions": {
     "workflow": {
@@ -380,7 +381,10 @@
     "docs/README.md links a missing reference/ROSTER_CATALOG_NOTES.md",
     "ONBOARDING.md baseline numbers come from the state file and trail the current vitest count",
     "core formatSecondsToTime does not carry a rounded-up second: 59.996 renders 60.00 and 119.996 renders 1:60.00 (used in altitude, cutlineTags, cutlineUtils, relaySplits, swimCloudReplace); fix in core with a test (batch D)",
-    "T12: 22 eslint suppressions total: 19 exhaustive-deps plus 3 others (plan said 22 exhaustive-deps)"
+    "T12: 22 eslint suppressions total: 19 exhaustive-deps plus 3 others (plan said 22 exhaustive-deps)",
+    "findDepartedLegSwim still uses a time trial as a departed leg's baseline (not a fill)",
+    "theoretical-meet individual seeds still use time-trial swims",
+    "metrics/utils.ts:19 stale NaN:NaN comment"
   ],
   "limitEvents": [
     {
@@ -397,6 +401,11 @@
       "at": "2026-10-13 (reset 01:20 CT)",
       "what": "Third session limit (429) stopped both wave-3 workers: a4ce0992b13a275c5 (test tooling T3/T5/T7/T8/T9/T10; was on the T5 CI step) and abeae90519ea56dca (UX batch X1/X2/X5/X10; had only read the plan). Two parallel Sonnet agents were still too many for the window.",
       "resumePlan": "ONE agent at a time, strictly. Resume a4ce0992b13a275c5 first (nearly done), commit, then abeae90519ea56dca. Between agents, run the usage report and stay below 80% of the 5h figure before dispatching the next."
+    },
+    {
+      "at": "2026-10-13 ~03:50 CT",
+      "what": "Budget tier critical (5h 83%, 7d 99%). No new agents started. Core-correctness batch (a3003cfad2024423c) finished and was committed by the lead. Lead-only verification and commits since.",
+      "resumePlan": "After the 7d window resets (about 2 days), dispatch ONE agent at a time. First: worker for workerTodoAfterD9, then architect bundle review (pendingArchitectReview), then nextBatches C. Hold R9 last."
     }
   ],
   "gatesAfterWave1": {
@@ -418,7 +427,8 @@
     "P3 client/conflict diff (171ddc31) + persistence layer (09c5882e): bundle with wave 2 core diffs",
     "P4/P6 persistence diffs",
     "C3, C7, relayGroupKey diffs (051a2bc9, 6368b19d, 6cede0ae)",
-    "R6 converter split (pdfPoints, isTimeTrial, roundSwam)"
+    "R6 converter split (pdfPoints, isTimeTrial, roundSwam)",
+    "D9 time trials off relay legs by default (67105555): relay lineup logic; also workspace-vs-preset home for relayLegsAllowTimeTrials and F7 placement under loadedMeet (cef6ec4c). Real-data golden 68 cases: setting off changes only 25 time-trial candidate rows in 4 lists, no totals; setting on byte-identical."
   ],
   "u3Prereq": "U3 delete of 39 UI test workspaces: take a MANUAL backup first (a bulk delete writes 39 pre-delete backups and would evict the 20 startup backups of this worktree data/backups); a manual backup survives and restores all 39.",
   "gatesAfterWave2": {
@@ -430,10 +440,24 @@
     "harness": "7 passed, 1 skipped (pre-existing fixme)"
   },
   "nextBatches": [
+    "B2: worker for workerTodoAfterD9, then architect review of pendingArchitectReview bundle",
     "C: X6 icon names, X9 header overflow at 390px, X11 motion audit, X12 copy pass (worker)",
     "E: F1 print cards, F2 deck view, F3 compare snapshots, F5 progression, F8 static report",
     "F: R1,R2,R3,R4,R5,R7 splits (one agent each)",
     "G: D4/D5/D10/F6/D1 research",
     "H: H2 archive, H6 renormalize alone, H7 one skills dir, H11 JSX spaces, then R9 upgrades last"
-  ]
+  ],
+  "workerTodoAfterD9": [
+    "IndRelayManagementView.tsx:220,269,295 pass workspace.scoringSettings to candidate listing (else panel hides candidates scoring accepts when opt-in is on)",
+    "RelayEligibleSwimmersPanel render the relayLegTimeTrial label",
+    "theoretical meet banner read theoreticalRemovedEvents",
+    "settings toggle for relayLegsAllowTimeTrials (needs scoringPresetRoutes.ts strict schema key + workspace-vs-preset decision)"
+  ],
+  "gatesAfterCoreCorrectness": {
+    "at": "67105555, quiet tree",
+    "lint": "0 errors, 66 warnings (budget 66)",
+    "lint:types": "pass",
+    "vitest": "235 files passed, 3586 passed, 23 skipped",
+    "scriptsAndHarness": "agent-reported pass (86 passed/1 skipped; harness pass), not rerun by lead"
+  }
 }
