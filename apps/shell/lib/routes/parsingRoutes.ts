@@ -26,6 +26,8 @@ import {
   parseMeetLegacy,
   ParsedRowError,
   MeetPipelineError,
+  type MeetPipelineErrorCode,
+  type MeetWarningRollup,
 } from './parsingPipeline.ts';
 
 export interface ParsingRoutesDeps {
@@ -37,6 +39,27 @@ export interface ParsingRoutesDeps {
   pointCalculatorScript: string;
   teamRankingsScript: string;
   aiEnabled: boolean;
+}
+
+/** Status and headline for each tagged failure the Python meet pipeline can end on. */
+const MEET_PIPELINE_RESPONSES: Record<MeetPipelineErrorCode, { status: number; error: string }> = {
+  rankings_extraction_failed: { status: 422, error: 'Team Rankings could not be read' },
+  scoring_settings_missing: { status: 500, error: 'Scoring settings are missing' },
+  points_on_status_clock: { status: 422, error: 'Place points sit beside an NT, DQ, NS, SCR or DNF time' },
+};
+
+/** The roll-up entry added when the legacy pipeline produced the rows. `rows` is every row in the response. */
+export const LEGACY_FALLBACK_WARNING_CODE = 'unified_pipeline_failed_legacy_used';
+
+function legacyFallbackWarning(unifiedErr: unknown, rowCount: number): MeetWarningRollup {
+  const reason = (unifiedErr instanceof Error ? unifiedErr.message : String(unifiedErr)).slice(0, 300);
+  return {
+    code: LEGACY_FALLBACK_WARNING_CODE,
+    rows: rowCount,
+    examples: [
+      `The main PDF parser failed, so the older fallback parser read this file. Relay splits and some warnings may differ. Reason: ${reason}`,
+    ],
+  };
 }
 
 export function createParsingTempFilePath(projectRoot: string, prefix = 'temp'): string {
@@ -62,15 +85,23 @@ export function registerParsingRoutes(app: Express, deps: ParsingRoutesDeps): vo
       const fmt = format || 'auto';
       let payload;
       try {
-        payload = await parseMeetUnified(deps, tempFile, fmt);
+        payload = { ...(await parseMeetUnified(deps, tempFile, fmt)), pipeline: 'unified' as const };
       } catch (unifiedErr) {
         // Final failures: retrying the legacy pipeline cannot help and could hurt.
-        // Unusable rows would be mapped the same way. An unread Team Rankings page
-        // or missing settings would let legacy score without the event cutoff or
-        // settings. Only untagged failures fall back.
+        // Unusable rows would be mapped the same way. An unread Team Rankings page,
+        // missing settings or a status-clock contradiction would let legacy score
+        // without the event cutoff or settings, or from the same drifted columns.
+        // Only untagged failures fall back.
         if (unifiedErr instanceof ParsedRowError || unifiedErr instanceof MeetPipelineError) throw unifiedErr;
         console.warn('Unified parse_meet failed, falling back to legacy pipeline:', unifiedErr);
-        payload = await parseMeetLegacy(deps, tempFile, fmt);
+        const legacy = await parseMeetLegacy(deps, tempFile, fmt);
+        // The fallback is visible: the response says which pipeline produced the rows,
+        // and the roll-up leads with a warning that names why the unified one failed.
+        payload = {
+          ...legacy,
+          pipeline: 'legacy' as const,
+          warnings: [legacyFallbackWarning(unifiedErr, legacy.results.length), ...legacy.warnings],
+        };
       }
       res.json(payload);
     } catch (error) {
@@ -82,11 +113,12 @@ export function registerParsingRoutes(app: Express, deps: ParsingRoutesDeps): vo
         });
       }
       if (error instanceof MeetPipelineError) {
-        const rankings = error.code === 'rankings_extraction_failed';
-        return res.status(rankings ? 422 : 500).json({
-          error: rankings ? 'Team Rankings could not be read' : 'Scoring settings are missing',
+        const final = MEET_PIPELINE_RESPONSES[error.code];
+        return res.status(final.status).json({
+          error: final.error,
           code: error.code,
           details: error.message,
+          ...(error.code === 'points_on_status_clock' ? { rows: error.rows } : {}),
         });
       }
       res.status(500).json({ error: 'Failed to parse PDF', details: String(error) });

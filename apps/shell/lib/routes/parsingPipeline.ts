@@ -99,23 +99,38 @@ export async function runPythonScript(
   });
 }
 
-/** Failures the Python pipeline tags with a `code`. Both are final: the route must not retry the legacy pipeline. */
-export type MeetPipelineErrorCode = 'rankings_extraction_failed' | 'scoring_settings_missing';
+/**
+ * Failures the Python pipeline tags with a `code`. All are final: the route must not retry the legacy pipeline.
+ * `points_on_status_clock` is final because the legacy pipeline raises the same error from the same rows.
+ */
+export type MeetPipelineErrorCode =
+  | 'rankings_extraction_failed'
+  | 'scoring_settings_missing'
+  | 'points_on_status_clock';
 
-const MEET_PIPELINE_ERROR_CODES: readonly string[] = ['rankings_extraction_failed', 'scoring_settings_missing'];
+const MEET_PIPELINE_ERROR_CODES: readonly string[] = [
+  'rankings_extraction_failed',
+  'scoring_settings_missing',
+  'points_on_status_clock',
+];
 
 /**
  * A Python-side failure that retrying cannot fix and that must reach the user
  * with its own text. `rankings_extraction_failed`: the meet's Team Rankings page
  * was found but not read, so there is no event cutoff. `scoring_settings_missing`:
  * no scoring settings exist, and there is no default table.
+ * `points_on_status_clock`: a row prints place points beside an NT/DQ/NS/SCR/DNF
+ * clock, so the PDF columns drifted and no row is safe to drop. `rows` then lists
+ * each offending row; it is empty for the other codes.
  */
 export class MeetPipelineError extends Error {
   readonly code: MeetPipelineErrorCode;
-  constructor(code: MeetPipelineErrorCode, message: string) {
+  readonly rows: readonly string[];
+  constructor(code: MeetPipelineErrorCode, message: string, rows: readonly string[] = []) {
     super(message);
     this.name = 'MeetPipelineError';
     this.code = code;
+    this.rows = rows;
   }
 }
 
@@ -136,9 +151,14 @@ export function structuredPipelineError(source: unknown): MeetPipelineError | nu
     }
   }
   if (!payload || typeof payload !== 'object') return null;
-  const { code, error } = payload as { code?: unknown; error?: unknown };
+  const { code, error, rows } = payload as { code?: unknown; error?: unknown; rows?: unknown };
   if (typeof code !== 'string' || !MEET_PIPELINE_ERROR_CODES.includes(code)) return null;
-  return new MeetPipelineError(code as MeetPipelineErrorCode, typeof error === 'string' && error ? error : code);
+  const rowLines = Array.isArray(rows) ? rows.filter((r): r is string => typeof r === 'string') : [];
+  return new MeetPipelineError(
+    code as MeetPipelineErrorCode,
+    typeof error === 'string' && error ? error : code,
+    rowLines
+  );
 }
 
 /**
@@ -211,7 +231,108 @@ function parseGender(raw: unknown): Gender | null {
   return null;
 }
 
-export function mapAthleteRows(athletes: Record<string, unknown>[]): SwimmerResult[] {
+/** How a relay leg's split was read. `null`: the PDF printed no split lines for that entry. */
+export type RelaySplitSource = 'structured' | 'legacy' | null;
+
+/** One note the Python parser attached to a row, for example `unreadable_time`. */
+export interface ParseWarning {
+  readonly code: string;
+  readonly message: string;
+}
+
+/** One entry of the meet-level warning roll-up: a code, how many rows carry it, and sample messages. */
+export interface MeetWarningRollup {
+  readonly code: string;
+  readonly rows: number;
+  readonly examples: readonly string[];
+}
+
+/**
+ * A mapped result row plus what the parser said about how it was read. Both
+ * fields are present only when the Python row carried them, so a row with
+ * nothing to report is exactly the `SwimmerResult` it always was.
+ */
+export type ParsedMeetRow = SwimmerResult & {
+  relaySplitSource?: RelaySplitSource;
+  parseWarnings?: ParseWarning[];
+};
+
+/**
+ * Read `relay_split_source` and `parse_warnings` off one Python row. An absent
+ * key stays absent. A present key with an unknown shape is a parse defect and is
+ * reported through `bad`, like every other unreadable field.
+ */
+function readRowNotes(
+  a: Record<string, unknown>,
+  bad: (reason: string) => void
+): { relaySplitSource?: RelaySplitSource; parseWarnings?: ParseWarning[] } {
+  const notes: { relaySplitSource?: RelaySplitSource; parseWarnings?: ParseWarning[] } = {};
+  const src = a.relay_split_source;
+  if (src === 'structured' || src === 'legacy' || src === null) notes.relaySplitSource = src;
+  else if (src !== undefined) bad(`relay_split_source ${JSON.stringify(src)} is not "structured", "legacy" or null`);
+
+  const warnings = a.parse_warnings;
+  if (warnings === undefined || warnings === null) return notes;
+  const valid =
+    Array.isArray(warnings) &&
+    warnings.every(
+      w =>
+        w != null &&
+        typeof w === 'object' &&
+        typeof (w as ParseWarning).code === 'string' &&
+        typeof (w as ParseWarning).message === 'string'
+    );
+  if (!valid) {
+    bad('parse_warnings is not a list of {code, message}');
+    return notes;
+  }
+  if ((warnings as ParseWarning[]).length > 0) {
+    notes.parseWarnings = (warnings as ParseWarning[]).map(w => ({ code: w.code, message: w.message }));
+  }
+  return notes;
+}
+
+/** One entry per warning code across `rows`, in first-seen order, with up to five sample messages. */
+export function rollUpParseWarnings(rows: readonly { parseWarnings?: readonly ParseWarning[] }[]): MeetWarningRollup[] {
+  const byCode = new Map<string, { code: string; rows: number; examples: string[] }>();
+  for (const row of rows) {
+    for (const w of row.parseWarnings ?? []) {
+      const entry = byCode.get(w.code) ?? { code: w.code, rows: 0, examples: [] };
+      byCode.set(w.code, entry);
+      entry.rows += 1;
+      if (w.message && !entry.examples.includes(w.message) && entry.examples.length < 5) entry.examples.push(w.message);
+    }
+  }
+  return [...byCode.values()];
+}
+
+/**
+ * The top-level `warnings` the unified parser printed, when it is a well-formed
+ * list. Anything else falls back to rolling up the rows' own `parse_warnings`,
+ * which is the data the parser's roll-up is built from.
+ */
+function readWarningRollup(raw: unknown, rows: readonly ParsedMeetRow[]): MeetWarningRollup[] {
+  if (Array.isArray(raw)) {
+    const ok = raw.every(
+      w =>
+        w != null &&
+        typeof w === 'object' &&
+        typeof (w as MeetWarningRollup).code === 'string' &&
+        typeof (w as MeetWarningRollup).rows === 'number' &&
+        Array.isArray((w as MeetWarningRollup).examples)
+    );
+    if (ok) {
+      return (raw as MeetWarningRollup[]).map(w => ({
+        code: w.code,
+        rows: w.rows,
+        examples: w.examples.filter((e): e is string => typeof e === 'string'),
+      }));
+    }
+  }
+  return rollUpParseWarnings(rows);
+}
+
+export function mapAthleteRows(athletes: Record<string, unknown>[]): ParsedMeetRow[] {
   const problems: string[] = [];
   const mapped = athletes.map((a: Record<string, unknown>, index: number) => {
     const bad = (reason: string) => problems.push(`${rowLabel(index, a)}: ${reason}`);
@@ -235,7 +356,8 @@ export function mapAthleteRows(athletes: Record<string, unknown>[]): SwimmerResu
 
     const teamClock = (a.relay_team_time || a.finals_time || a.prelims_time) as string;
     const isRelay = Boolean(a.is_relay) || /\brelay\b/i.test(String(a.event || ''));
-    return normalizeSwimmerResultRelayFields({
+    const notes = readRowNotes(a, bad);
+    const row = normalizeSwimmerResultRelayFields({
       id: uuidv4(),
       rank: rank.ok ? rank.rank : 0,
       name: name ?? '',
@@ -260,6 +382,7 @@ export function mapAthleteRows(athletes: Record<string, unknown>[]): SwimmerResu
       relayTeamTime: isRelay ? teamClock : (a.relay_team_time as string),
       pdfPoints: pdfPoints.ok ? pdfPoints.value : undefined,
     });
+    return Object.keys(notes).length === 0 ? row : { ...row, ...notes };
   });
   if (problems.length > 0) throw new ParsedRowError('meet', problems);
   return mapped;
@@ -381,10 +504,12 @@ export async function parseMeetUnified(deps: ParsingPipelineDeps, tempFile: stri
   const parsed = JSON.parse(output.trim());
   if (parsed.error) throw structuredPipelineError(parsed) ?? new Error(parsed.error);
   const athletes = Array.isArray(parsed.athletes) ? parsed.athletes : [];
+  const results = mapAthleteRows(athletes);
   return {
-    results: mapAthleteRows(athletes),
+    results,
     conference: typeof parsed.conference === 'string' ? parsed.conference : undefined,
     officialTeamScores: parsed.officialTeamScores ?? undefined,
+    warnings: readWarningRollup(parsed.warnings, results),
   };
 }
 
@@ -448,7 +573,13 @@ export async function parseMeetLegacy(deps: ParsingPipelineDeps, tempFile: strin
   // page that cannot be read must stop the parse (see legacyTeamRankings).
   const rankings = await legacyTeamRankings(deps, tempFile);
   const calcArgs = rankings?.eventThrough != null ? [String(rankings.eventThrough)] : [];
-  const calcOutput = await runPythonScript(deps, deps.pointCalculatorScript, calcArgs, parserOutput);
+  let calcOutput: string;
+  try {
+    calcOutput = await runPythonScript(deps, deps.pointCalculatorScript, calcArgs, parserOutput);
+  } catch (err) {
+    // The calculator prints its tagged error JSON (for example points_on_status_clock) on stdout.
+    throw structuredPipelineError(err) ?? err;
+  }
   const athletes = JSON.parse(calcOutput);
   if (!Array.isArray(athletes)) {
     const failure = athletes as { error?: unknown } | null;
@@ -464,5 +595,6 @@ export async function parseMeetLegacy(deps: ParsingPipelineDeps, tempFile: strin
   const officialTeamScores = rankings
     ? { eventThrough: rankings.eventThrough ?? undefined, men: rankings.men, women: rankings.women }
     : undefined;
-  return { results: mapAthleteRows(athletes), conference, officialTeamScores };
+  const results = mapAthleteRows(athletes);
+  return { results, conference, officialTeamScores, warnings: rollUpParseWarnings(results) };
 }
