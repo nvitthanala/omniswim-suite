@@ -5,7 +5,11 @@
     // (playwrightFetcher.ts), both Node-hosted. entities.ts/urlClassifier.ts/
     // html.ts/parser.ts/fetcher.ts remain pure — this only widens what's
     // *available* to import, not what those files use.
-    "types": ["node"]
+    "types": ["node"],
+    // On for this package only. Every indexed read here is narrowed or goes through
+    // ./indexed. The rest of the repo is on scripts/index-access-ratchet.mjs until
+    // tsconfig.base.json can carry the flag.
+    "noUncheckedIndexedAccess": true
   },
   "include": ["src/**/*"]
 }

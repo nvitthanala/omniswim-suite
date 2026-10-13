@@ -3,6 +3,26 @@
 
 "use strict";
 (() => {
+  // packages/swimcloud/src/indexed.ts
+  function regexGroup(match, index) {
+    const value = match[index];
+    if (value === void 0) {
+      throw new Error(
+        `SwimCloud parser invariant broken: capture group ${index} did not take part in the match of ${JSON.stringify(match[0])}.`
+      );
+    }
+    return value;
+  }
+  function itemAt(items, index) {
+    const value = items[index];
+    if (value === void 0) {
+      throw new Error(
+        `SwimCloud parser invariant broken: index ${index} is outside an array of length ${items.length}.`
+      );
+    }
+    return value;
+  }
+
   // packages/swimcloud/src/html.ts
   var NAMED_ENTITIES = {
     amp: "&",
@@ -121,8 +141,8 @@
     HEADING.lastIndex = 0;
     for (let match = HEADING.exec(cleaned); match !== null; match = HEADING.exec(cleaned)) {
       headings.push({
-        level: Number.parseInt(match[1], 10),
-        text: htmlToText(match[2]),
+        level: Number.parseInt(regexGroup(match, 1), 10),
+        text: htmlToText(regexGroup(match, 2)),
         start: match.index
       });
     }
@@ -141,7 +161,8 @@
   }
   function removeNestedTablesFromTableBody(tableHtml) {
     const spans = findElementSpans(tableHtml, "table");
-    const body = spans.length > 0 ? spans[0].inner : tableHtml;
+    const firstTable = spans[0];
+    const body = firstTable === void 0 ? tableHtml : firstTable.inner;
     return spliceOutSpans(body, findElementSpans(body, "table"));
   }
   function splitRepeatedElements(html, tagNames) {
@@ -149,15 +170,15 @@
     const opener = new RegExp(`<(${alternation})\\b[^>]*>`, "gi");
     const starts = [];
     for (let match = opener.exec(html); match !== null; match = opener.exec(html)) {
-      starts.push({ contentStart: match.index + match[0].length, tag: match[1].toLowerCase() });
+      starts.push({ contentStart: match.index + match[0].length, tag: regexGroup(match, 1).toLowerCase() });
     }
     if (starts.length === 0) {
       return [];
     }
     const results = [];
-    for (let index = 0; index < starts.length; index += 1) {
-      const current = starts[index];
-      const limit = index + 1 < starts.length ? starts[index + 1].contentStart : html.length;
+    for (const [index, current] of starts.entries()) {
+      const next = starts[index + 1];
+      const limit = next === void 0 ? html.length : next.contentStart;
       const slice = html.slice(current.contentStart, limit);
       const closer = new RegExp(`</${current.tag}\\s*>`, "i");
       const closeAt = closer.exec(slice);
@@ -203,7 +224,7 @@
   var SEASON_ID = /^[0-9]+$/;
   function readValueAttribute(attributes) {
     for (const match of attributes.matchAll(ATTRIBUTE)) {
-      if (match[1].toLowerCase() !== "value") continue;
+      if (regexGroup(match, 1).toLowerCase() !== "value") continue;
       const quoted = match[2] ?? match[3];
       if (quoted !== void 0) return quoted;
     }
@@ -264,8 +285,8 @@
       );
     }
     const options = [];
-    for (const match of selects[0][1].matchAll(OPTION)) {
-      const raw = readOption(match[1], match[2]);
+    for (const match of regexGroup(itemAt(selects, 0), 1).matchAll(OPTION)) {
+      const raw = readOption(regexGroup(match, 1), regexGroup(match, 2));
       if (raw.value === "") continue;
       options.push(toSeasonOption(raw));
     }
@@ -309,7 +330,8 @@
   function exemptSwimmerFastestTimesId(lower) {
     if (lower.length !== 4) return void 0;
     if (lower[0] !== "api" || lower[1] !== "swimmers" || lower[3] !== "profile_fastest_times") return void 0;
-    return NUMERIC_ID.test(lower[2]) ? lower[2] : void 0;
+    const swimmerId = lower[2];
+    return swimmerId !== void 0 && NUMERIC_ID.test(swimmerId) ? swimmerId : void 0;
   }
   var SWIMCLOUD_CANONICAL_HOST = "www.swimcloud.com";
   var SWIMCLOUD_APEX_HOST = "swimcloud.com";
@@ -427,7 +449,7 @@
     if (segments.length === 1) {
       return malformed(input, canonicalPath, "team", "missing-id", "Team URL carries no team id.");
     }
-    const teamId = segments[1];
+    const teamId = itemAt(segments, 1);
     if (!NUMERIC_ID.test(teamId)) {
       return malformed(
         input,
@@ -482,7 +504,7 @@
     if (segments.length === 1) {
       return malformed(input, canonicalPath, "swimmer", "missing-id", "Swimmer URL carries no swimmer id.");
     }
-    const swimmerId = segments[1];
+    const swimmerId = itemAt(segments, 1);
     if (!NUMERIC_ID.test(swimmerId)) {
       return malformed(
         input,
@@ -516,7 +538,7 @@
         "Meet event URL carries no event reference."
       );
     }
-    const eventRef = segments[3];
+    const eventRef = itemAt(segments, 3);
     if (!NUMERIC_ID.test(eventRef)) {
       return malformed(
         input,
@@ -556,7 +578,7 @@
     if (segments.length === 3) {
       return malformed(input, canonicalPath, "meetTeam", "missing-id", "Meet team URL carries no team id.");
     }
-    const teamId = segments[3];
+    const teamId = itemAt(segments, 3);
     if (!NUMERIC_ID.test(teamId)) {
       return malformed(
         input,
@@ -597,7 +619,7 @@
         "Meet swimmer URL carries no swimmer id."
       );
     }
-    const swimmerId = segments[3];
+    const swimmerId = itemAt(segments, 3);
     if (!NUMERIC_ID.test(swimmerId)) {
       return malformed(
         input,
@@ -617,7 +639,7 @@
     if (segments.length === 1) {
       return malformed(input, canonicalPath, "meet", "missing-id", "Meet URL carries no meet id.");
     }
-    const meetId = segments[1];
+    const meetId = itemAt(segments, 1);
     if (!NUMERIC_ID.test(meetId)) {
       return malformed(
         input,
@@ -663,7 +685,7 @@
           "Conference URL carries no conference slug."
         );
       }
-      const slug = segments[4];
+      const slug = itemAt(segments, 4);
       if (!CONFERENCE_SLUG.test(slug)) {
         return malformed(
           input,
@@ -678,8 +700,8 @@
           kind: "conference",
           urlForm: "country-scoped",
           slug,
-          country: lower[1],
-          level: lower[2]
+          country: itemAt(lower, 1),
+          level: itemAt(lower, 2)
         });
       }
     }
@@ -701,7 +723,7 @@
         "Conference URL carries no conference slug."
       );
     }
-    const slug = segments[1];
+    const slug = itemAt(segments, 1);
     if (!CONFERENCE_SLUG.test(slug)) {
       return malformed(
         input,
@@ -781,7 +803,7 @@
     if (exemptSwimmerId !== void 0) {
       return fetchable({ kind: "swimmerFastestTimes", swimmerId: exemptSwimmerId });
     }
-    const classifyPath = PATH_CLASSIFIERS[lower[0]];
+    const classifyPath = PATH_CLASSIFIERS[itemAt(lower, 0)];
     if (classifyPath === void 0) {
       return unrecognized(
         input,
@@ -1096,8 +1118,8 @@
     return collapseWhitespace(label.toLowerCase().replace(/[^a-z0-9]+/g, " "));
   }
   function findColumn(headers, synonyms) {
-    for (let index = 0; index < headers.length; index += 1) {
-      if (synonyms.includes(headers[index])) {
+    for (const [index, header] of headers.entries()) {
+      if (synonyms.includes(header)) {
         return index;
       }
     }
@@ -1111,7 +1133,7 @@
     if (index < 0 || index >= cells.length) {
       return "";
     }
-    return cells[index];
+    return itemAt(cells, index);
   }
   function textAt(cells, index) {
     return htmlToText(cellAt(cells, index));
@@ -1274,7 +1296,7 @@
       if (headerIndex < 0) {
         continue;
       }
-      const headerCells = extractRowCells(rows[headerIndex]).map(
+      const headerCells = extractRowCells(itemAt(rows, headerIndex)).map(
         (cell) => normalizeHeader(htmlToText(cell))
       );
       const nameColumn = findColumn(headerCells, NAME_HEADERS);
@@ -1316,7 +1338,7 @@
     if (match === null) {
       return {};
     }
-    let rest = match[1].trim();
+    let rest = regexGroup(match, 1).trim();
     let gender;
     const trailing = /\s*(men|women|mens|womens|mixed|boys|girls)$/i.exec(rest);
     if (trailing !== null) {
@@ -1450,7 +1472,7 @@
     if (title !== void 0) {
       const text = htmlToText(title.inner);
       const match = ROSTER_TITLE.exec(text);
-      const name = (match === null ? text : match[1]).trim();
+      const name = (match === null ? text : regexGroup(match, 1)).trim();
       if (name.length > 0) {
         return name;
       }
@@ -1909,7 +1931,7 @@
     if (match === null) {
       return void 0;
     }
-    const tag = match[1].toLowerCase();
+    const tag = regexGroup(match, 1).toLowerCase();
     const startEnd = html.indexOf(">", match.index);
     if (startEnd < 0) {
       return void 0;
@@ -2021,18 +2043,18 @@
     }
     const cross = DATE_CROSS_MONTH.exec(text);
     if (cross !== null) {
-      const year = Number.parseInt(cross[5], 10);
-      const startDate = isoDate(year, cross[1], Number.parseInt(cross[2], 10));
-      const endDate = isoDate(year, cross[3], Number.parseInt(cross[4], 10));
+      const year = Number.parseInt(regexGroup(cross, 5), 10);
+      const startDate = isoDate(year, regexGroup(cross, 1), Number.parseInt(regexGroup(cross, 2), 10));
+      const endDate = isoDate(year, regexGroup(cross, 3), Number.parseInt(regexGroup(cross, 4), 10));
       if (startDate !== void 0 && endDate !== void 0) {
         return { startDate, endDate };
       }
     }
     const same = DATE_SAME_MONTH.exec(text);
     if (same !== null) {
-      const year = Number.parseInt(same[4], 10);
-      const startDate = isoDate(year, same[1], Number.parseInt(same[2], 10));
-      const endDate = isoDate(year, same[1], Number.parseInt(same[3], 10));
+      const year = Number.parseInt(regexGroup(same, 4), 10);
+      const startDate = isoDate(year, regexGroup(same, 1), Number.parseInt(regexGroup(same, 2), 10));
+      const endDate = isoDate(year, regexGroup(same, 1), Number.parseInt(regexGroup(same, 3), 10));
       if (startDate !== void 0 && endDate !== void 0) {
         return { startDate, endDate };
       }
@@ -2040,9 +2062,9 @@
     const single = DATE_SINGLE.exec(text);
     if (single !== null) {
       const startDate = isoDate(
-        Number.parseInt(single[3], 10),
-        single[1],
-        Number.parseInt(single[2], 10)
+        Number.parseInt(regexGroup(single, 3), 10),
+        regexGroup(single, 1),
+        Number.parseInt(regexGroup(single, 2), 10)
       );
       if (startDate !== void 0) {
         return { startDate };
@@ -2176,7 +2198,7 @@
       if (headerIndex < 0) {
         continue;
       }
-      const columns = readHeaderColumns(rows[headerIndex]);
+      const columns = readHeaderColumns(itemAt(rows, headerIndex));
       const name = columnFor(columns, NAME_HEADERS);
       const event = columnFor(columns, SWIMS_EVENT_HEADERS);
       const time = columnFor(columns, SWIMS_TIME_HEADERS);
@@ -2205,7 +2227,8 @@
   function subjectCellIndex(cells, column) {
     const end = Math.min(column.start + column.span, cells.length);
     for (let index = column.start; index < end; index += 1) {
-      if (swimmerIdFromCell(cells[index]) !== void 0) {
+      const cell = cells[index];
+      if (cell !== void 0 && swimmerIdFromCell(cell) !== void 0) {
         return index;
       }
     }
@@ -2224,17 +2247,17 @@
     if (match === null) {
       const loose = /\b(\d{1,4})\b/.exec(label);
       return {
-        ...loose === null ? {} : { distance: Number.parseInt(loose[1], 10) },
+        ...loose === null ? {} : { distance: Number.parseInt(regexGroup(loose, 1), 10) },
         course: "unknown",
         stroke: mapStroke(lower, isRelay),
         isRelay,
         matchedShape: false
       };
     }
-    const courseLetter = match[2];
+    const courseLetter = regexGroup(match, 2);
     const course = COURSE_LETTERS[courseLetter.toLowerCase()] ?? "unknown";
     return {
-      distance: Number.parseInt(match[1], 10),
+      distance: Number.parseInt(regexGroup(match, 1), 10),
       course,
       stroke: mapStroke(lower, isRelay),
       isRelay,
@@ -5727,6 +5750,22 @@
   }
   main();
 })();
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
+ * Two checked reads for places where a parser already knows an index exists.
+ *
+ * `noUncheckedIndexedAccess` types `match[1]` and `cells[i]` as `T | undefined`.
+ * Most reads in this package are provably in range: a capture group that is not
+ * optional, or an index that came from `findIndex`. Writing `?? ''` there would
+ * hide a broken invariant behind an empty string. These helpers raise instead,
+ * so a pattern edit or a bad index fails loudly at the read, not as a blank
+ * field further downstream.
+ *
+ * Do not use them for an optional group (`(…)?`) or for an index that may be out
+ * of range. Test `=== undefined` there and decide what absent means.
+ */
 /**
  * @license
  * SPDX-License-Identifier: Apache-2.0

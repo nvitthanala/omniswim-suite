@@ -104,6 +104,7 @@ import {
   stripElements,
   stripNonContent,
 } from './html';
+import { itemAt, regexGroup } from './indexed';
 import type { HtmlElementSpan } from './html';
 import type {
   SwimCloudAthlete,
@@ -448,8 +449,8 @@ function normalizeHeader(label: string): string {
 }
 
 function findColumn(headers: readonly string[], synonyms: readonly string[]): number {
-  for (let index = 0; index < headers.length; index += 1) {
-    if (synonyms.includes(headers[index])) {
+  for (const [index, header] of headers.entries()) {
+    if (synonyms.includes(header)) {
       return index;
     }
   }
@@ -468,7 +469,7 @@ function cellAt(cells: readonly string[], index: number): string {
   if (index < 0 || index >= cells.length) {
     return '';
   }
-  return cells[index];
+  return itemAt(cells, index);
 }
 
 function textAt(cells: readonly string[], index: number): string {
@@ -831,7 +832,7 @@ function locateRosterTable(
     if (headerIndex < 0) {
       continue;
     }
-    const headerCells = extractRowCells(rows[headerIndex]).map((cell) =>
+    const headerCells = extractRowCells(itemAt(rows, headerIndex)).map((cell) =>
       normalizeHeader(htmlToText(cell)),
     );
     const nameColumn = findColumn(headerCells, NAME_HEADERS);
@@ -899,7 +900,7 @@ function readRosterCardHeading(
     return {};
   }
 
-  let rest = match[1].trim();
+  let rest = regexGroup(match, 1).trim();
   let gender: SwimCloudGender | undefined;
   const trailing = /\s*(men|women|mens|womens|mixed|boys|girls)$/i.exec(rest);
   if (trailing !== null) {
@@ -1108,7 +1109,7 @@ function rosterTeamName(cleaned: string): string | undefined {
   if (title !== undefined) {
     const text = htmlToText(title.inner);
     const match = ROSTER_TITLE.exec(text);
-    const name = (match === null ? text : match[1]).trim();
+    const name = (match === null ? text : regexGroup(match, 1)).trim();
     if (name.length > 0) {
       return name;
     }
@@ -1453,8 +1454,8 @@ function parseEventHeading(text: string): ParsedEventHeading | null {
   if (match === null) {
     return null;
   }
-  const eventRef = match[1];
-  const rest = match[2];
+  const eventRef = regexGroup(match, 1);
+  const rest = regexGroup(match, 2);
   const lower = rest.toLowerCase();
 
   const genderMatch = /^(men|women|mixed|boys|girls|mens|womens)\b/i.exec(rest);
@@ -1462,7 +1463,8 @@ function parseEventHeading(text: string): ParsedEventHeading | null {
   const gender = mapGender(genderWord);
 
   const distanceMatch = /\b(\d{1,4})\b/.exec(rest);
-  const distance = distanceMatch === null ? undefined : Number.parseInt(distanceMatch[1], 10);
+  const distance =
+    distanceMatch === null ? undefined : Number.parseInt(regexGroup(distanceMatch, 1), 10);
 
   const unit: ParsedEventHeading['unit'] = /\byards?\b/.test(lower)
     ? 'yard'
@@ -1613,7 +1615,7 @@ function parseEventTable(
   if (headerIndex < 0) {
     return null;
   }
-  const headers = extractRowCells(rows[headerIndex]).map((cell) => normalizeHeader(htmlToText(cell)));
+  const headers = extractRowCells(itemAt(rows, headerIndex)).map((cell) => normalizeHeader(htmlToText(cell)));
 
   const placeColumn = findColumn(headers, PLACE_HEADERS);
   const nameColumn = findColumn(headers, NAME_HEADERS);
@@ -1911,11 +1913,19 @@ export function readRelayDesignator(text: string): { teamName: string; designato
   if (match === null) {
     return undefined;
   }
-  const teamName = match[1].trim();
+  const teamName = regexGroup(match, 1).trim();
   if (teamName.length === 0) {
     return undefined;
   }
-  return { teamName, designator: (match[2] ?? match[3]).toUpperCase() };
+  // The pattern's two arms each capture the letter in their own group, so one of
+  // them always took part.
+  const letter = match[2] ?? match[3];
+  if (letter === undefined) {
+    throw new Error(
+      `SwimCloud parser invariant broken: relay designator pattern matched ${JSON.stringify(match[0])} without a letter.`,
+    );
+  }
+  return { teamName, designator: letter.toUpperCase() };
 }
 
 /**
@@ -2163,7 +2173,8 @@ function parsePersonalBestEventLabel(label: string): {
 } {
   const lower = label.toLowerCase();
   const distanceMatch = /\b(\d{1,4})\b/.exec(label);
-  const distance = distanceMatch === null ? undefined : Number.parseInt(distanceMatch[1], 10);
+  const distance =
+    distanceMatch === null ? undefined : Number.parseInt(regexGroup(distanceMatch, 1), 10);
   const unit: 'yard' | 'metric' | 'none' = /\byards?\b/.test(lower)
     ? 'yard'
     : /\bmet(?:er|re)s?\b|\bmtr\b/.test(lower)
@@ -2255,7 +2266,7 @@ export function parseSwimmerProfileHtml(
     if (headerIndex < 0) {
       continue;
     }
-    const headers = extractRowCells(rows[headerIndex]).map((cell) => normalizeHeader(htmlToText(cell)));
+    const headers = extractRowCells(itemAt(rows, headerIndex)).map((cell) => normalizeHeader(htmlToText(cell)));
     const candidateEvent = findColumn(headers, EVENT_LABEL_HEADERS);
     const candidateTime = findColumn(headers, TIME_HEADERS);
     if (candidateEvent < 0 || candidateTime < 0) {
@@ -2973,7 +2984,7 @@ function locateSwimmerTimesTable(
     if (headerIndex < 0) {
       continue;
     }
-    const headers = extractRowCells(rows[headerIndex]).map((cell) => normalizeHeader(htmlToText(cell)));
+    const headers = extractRowCells(itemAt(rows, headerIndex)).map((cell) => normalizeHeader(htmlToText(cell)));
     const event = findColumn(headers, EVENT_LABEL_HEADERS);
     const time = findColumn(headers, TIME_HEADERS);
     const meet = findColumn(headers, MEET_HEADERS);
@@ -3058,7 +3069,7 @@ function readSwimmerTimesEventLabel(label: string): ParsedSwimmerTimesEventLabel
     // that the shape was not the expected one.
     const loose = /\b(\d{1,4})\b/.exec(trimmed);
     return {
-      ...(loose === null ? {} : { distance: Number.parseInt(loose[1], 10) }),
+      ...(loose === null ? {} : { distance: Number.parseInt(regexGroup(loose, 1), 10) }),
       course: 'unknown',
       stroke: mapStroke(lower, isRelay),
       isRelay,
@@ -3066,13 +3077,13 @@ function readSwimmerTimesEventLabel(label: string): ParsedSwimmerTimesEventLabel
     };
   }
 
-  const courseToken = match[3];
+  const courseToken = regexGroup(match, 3);
   return {
-    distance: Number.parseInt(match[1], 10),
+    distance: Number.parseInt(regexGroup(match, 1), 10),
     course: SWIMMER_TIMES_COURSE_TOKENS[courseToken.toLowerCase()] ?? 'unknown',
     // Only the stroke portion, so a course token can never be mistaken for a
     // stroke word by a future addition to `mapStroke`'s vocabulary.
-    stroke: mapStroke(match[2].toLowerCase(), isRelay),
+    stroke: mapStroke(regexGroup(match, 2).toLowerCase(), isRelay),
     isRelay,
     courseToken,
     matchedShape: true,
@@ -3411,8 +3422,8 @@ const FASTEST_TIMES_DIVING_STROKE = 'H';
 function fastestTimesSecondsToTime(raw: string): SwimCloudTimeString | undefined {
   const match = FASTEST_TIMES_SECONDS.exec(raw);
   if (match === null) return undefined;
-  const whole = Number.parseInt(match[1], 10);
-  const hundredths = match[2];
+  const whole = Number.parseInt(regexGroup(match, 1), 10);
+  const hundredths = regexGroup(match, 2);
   const hours = Math.floor(whole / 3600);
   const minutes = Math.floor((whole % 3600) / 60);
   const seconds = whole % 60;
@@ -5022,7 +5033,7 @@ function locateEventRoundTables(tables: readonly HtmlElementSpan[]): LocatedEven
     if (headerIndex < 0) {
       continue;
     }
-    const columns = readHeaderColumns(rows[headerIndex]);
+    const columns = readHeaderColumns(itemAt(rows, headerIndex));
     const name = columnFor(columns, NAME_HEADERS);
     const time = columnFor(columns, SWIMS_TIME_HEADERS);
     const team = columnFor(columns, TEAM_HEADERS);
@@ -5092,11 +5103,11 @@ function locateEventRoundTables(tables: readonly HtmlElementSpan[]): LocatedEven
  * part of what it says.
  */
 function readTableCaption(tableHtml: string): string | undefined {
-  const captions = findElementSpans(tableHtml, 'caption');
-  if (captions.length === 0) {
+  const caption = findElementSpans(tableHtml, 'caption')[0];
+  if (caption === undefined) {
     return undefined;
   }
-  const text = htmlToText(stripElements(captions[0].inner, ['button']));
+  const text = htmlToText(stripElements(caption.inner, ['button']));
   return text.length === 0 ? undefined : text;
 }
 
@@ -5220,7 +5231,7 @@ function readEventPageEventLabel(label: string): ParsedEventPageLabel {
     return { stroke: mapStroke(lower, isRelay), isRelay, matchedShape: false };
   }
   return {
-    distance: Number.parseInt(match[1], 10),
+    distance: Number.parseInt(regexGroup(match, 1), 10),
     stroke: mapStroke(lower, isRelay),
     isRelay,
     matchedShape: true,
@@ -5760,7 +5771,7 @@ function elementTextById(html: string, id: string): string | undefined {
   if (match === null) {
     return undefined;
   }
-  const tag = match[1].toLowerCase();
+  const tag = regexGroup(match, 1).toLowerCase();
   const startEnd = html.indexOf('>', match.index);
   if (startEnd < 0) {
     return undefined;
@@ -5905,9 +5916,9 @@ function readMeetDateRange(
 
   const cross = DATE_CROSS_MONTH.exec(text);
   if (cross !== null) {
-    const year = Number.parseInt(cross[5], 10);
-    const startDate = isoDate(year, cross[1], Number.parseInt(cross[2], 10));
-    const endDate = isoDate(year, cross[3], Number.parseInt(cross[4], 10));
+    const year = Number.parseInt(regexGroup(cross, 5), 10);
+    const startDate = isoDate(year, regexGroup(cross, 1), Number.parseInt(regexGroup(cross, 2), 10));
+    const endDate = isoDate(year, regexGroup(cross, 3), Number.parseInt(regexGroup(cross, 4), 10));
     if (startDate !== undefined && endDate !== undefined) {
       return { startDate, endDate };
     }
@@ -5915,9 +5926,9 @@ function readMeetDateRange(
 
   const same = DATE_SAME_MONTH.exec(text);
   if (same !== null) {
-    const year = Number.parseInt(same[4], 10);
-    const startDate = isoDate(year, same[1], Number.parseInt(same[2], 10));
-    const endDate = isoDate(year, same[1], Number.parseInt(same[3], 10));
+    const year = Number.parseInt(regexGroup(same, 4), 10);
+    const startDate = isoDate(year, regexGroup(same, 1), Number.parseInt(regexGroup(same, 2), 10));
+    const endDate = isoDate(year, regexGroup(same, 1), Number.parseInt(regexGroup(same, 3), 10));
     if (startDate !== undefined && endDate !== undefined) {
       return { startDate, endDate };
     }
@@ -5926,9 +5937,9 @@ function readMeetDateRange(
   const single = DATE_SINGLE.exec(text);
   if (single !== null) {
     const startDate = isoDate(
-      Number.parseInt(single[3], 10),
-      single[1],
-      Number.parseInt(single[2], 10),
+      Number.parseInt(regexGroup(single, 3), 10),
+      regexGroup(single, 1),
+      Number.parseInt(regexGroup(single, 2), 10),
     );
     if (startDate !== undefined) {
       return { startDate };
@@ -6179,7 +6190,7 @@ function locateSwimsTable(tables: readonly HtmlElementSpan[]): LocatedSwimsTable
     if (headerIndex < 0) {
       continue;
     }
-    const columns = readHeaderColumns(rows[headerIndex]);
+    const columns = readHeaderColumns(itemAt(rows, headerIndex));
     const name = columnFor(columns, NAME_HEADERS);
     const event = columnFor(columns, SWIMS_EVENT_HEADERS);
     const time = columnFor(columns, SWIMS_TIME_HEADERS);
@@ -6220,7 +6231,8 @@ function locateSwimsTable(tables: readonly HtmlElementSpan[]): LocatedSwimsTable
 function subjectCellIndex(cells: readonly string[], column: SwimsHeaderColumn): number {
   const end = Math.min(column.start + column.span, cells.length);
   for (let index = column.start; index < end; index += 1) {
-    if (swimmerIdFromCell(cells[index]) !== undefined) {
+    const cell = cells[index];
+    if (cell !== undefined && swimmerIdFromCell(cell) !== undefined) {
       return index;
     }
   }
@@ -6285,7 +6297,7 @@ function readSwimsEventLabel(label: string): ParsedSwimsEventLabel {
     // that the shape was not the expected one.
     const loose = /\b(\d{1,4})\b/.exec(label);
     return {
-      ...(loose === null ? {} : { distance: Number.parseInt(loose[1], 10) }),
+      ...(loose === null ? {} : { distance: Number.parseInt(regexGroup(loose, 1), 10) }),
       course: 'unknown',
       stroke: mapStroke(lower, isRelay),
       isRelay,
@@ -6293,10 +6305,10 @@ function readSwimsEventLabel(label: string): ParsedSwimsEventLabel {
     };
   }
 
-  const courseLetter = match[2];
+  const courseLetter = regexGroup(match, 2);
   const course = COURSE_LETTERS[courseLetter.toLowerCase()] ?? 'unknown';
   return {
-    distance: Number.parseInt(match[1], 10),
+    distance: Number.parseInt(regexGroup(match, 1), 10),
     course,
     stroke: mapStroke(lower, isRelay),
     isRelay,
