@@ -79,8 +79,8 @@
     "X8": "committed 54c62dd3",
     "X9": "committed cb2fdf03 (header fits 390px; More menu holds Configure Scoring Model and theme; Menu arrow keys skip hidden items; T10 spec is a normal test)",
     "X10": "committed ea39c3e0 (button labelled \"Optimize all teams\"; remove button on every row; user may prefer selected-row-only or a different label)",
-    "X11": "in-progress (worker a9bf3e5c013f56fc2 stopped mid-edit, uncommitted)",
-    "X12": "in-progress (worker a9bf3e5c013f56fc2 stopped mid-edit, uncommitted)",
+    "X11": "committed f0fb4e03: transition-all replaced; reduced-motion for hover lifts, sidebar width, wizard press scale; app Reduced motion reaches Motion. UNCHECKED visually: video progress fill now scaleX and lost rounded-full. Not fixed: index.css:262,671,1063 hover lifts not gated by (hover:hover); index.css:467, VideoPlayerParts.tsx:246 animate width; index.css:643 shimmer animates background-position; Motion y shorthands ManagerApp.tsx:264, OpsModule.tsx:658, SuiteHome.tsx:61,101, BatchOptimizerPanel.tsx:56; metrics/index.css:54 300ms body colour transition; useReducedMotion() in SegmentedControl, LoadingSpinner, TheoreticalMeetDialog reads OS setting only.",
+    "X12": "committed f0fb4e03: ~15 screens sentence case; 'Configure Scoring Model' -> 'Configure scoring model'; 'Chronological Team Score Timeline' -> 'Team score timeline' (2 components, e2e, scripts/chart_browser_diagnostic.mjs). Left: ~49 'athlete' strings in 24 files (Manager step 'Athletes' locked by tests/managerAthletesCopy.test.ts), reportExport.ts CSV labels, external SwimCloud names, 'Omni Swim Suite' brand, '...' vs '…'.",
     "F1": "pending",
     "F2": "pending",
     "F3": "pending",
@@ -129,7 +129,8 @@
     "parse-psych-pdf-guard": "committed ea5a09c7",
     "time-format-carry": "in flight (a3003cfad2024423c)",
     "formatSecondsToTime": "done (686a4292): 59.996 -> 1:00.00, 119.996 -> 2:00.00; NaN/null/undefined -> NT; 4M-value sweep differs only where old output ended 60.00",
-    "architectFixes20261013": "committed e54adab4 (item 2) and ddb838fb (items 1,3,4 combined: interleaved hunks). Golden on real data: 26 relay-candidate rows changed (Hamblen E939, Cloete E938 leave default lists), 0 totals. Gates before commit: lint 0/66, lint:types, vitest 243 files 3687 passed 23 skipped (tree held X11/X12 worker's unverified UI edits), scripts 86/0/1 (executor-run)."
+    "architectFixes20261013": "committed e54adab4 (item 2) and ddb838fb (items 1,3,4 combined: interleaved hunks). Golden on real data: 26 relay-candidate rows changed (Hamblen E939, Cloete E938 leave default lists), 0 totals. Gates before commit: lint 0/66, lint:types, vitest 243 files 3687 passed 23 skipped (tree held X11/X12 worker's unverified UI edits), scripts 86/0/1 (executor-run).",
+    "relayNoTimeAndOverrideFixes": "committed d5dc09ff + 56be97af: no-time swims (DQ/DFS/DNF/DNS) never fill relay legs; id and name overrides pick the same swim; clearing/replacing an override drops the legacy plain key; hasRelayLegOverride(overrides, entryKey, legIndex) for RelayGroupCard.tsx:186 (UI wiring NOT done). Golden: 44 candidate rows removed across 10 swimmers (7 DFS, 3 DQ incl. Chloe Skelt), 0 totals. Quiet-tree gates at d5dc09ff~: lint 0/66, lint:types, vitest 247 files 3733 passed 23 skipped."
   },
   "userDecisions": {
     "workflow": {
@@ -440,10 +441,12 @@
     "Which team should the season trend default to? The data model has no own-team field; defaultSeasonTeam picks one.",
     "X10: the all-teams apply is labelled \"Optimize all teams\" (an e2e asserts no button named exactly \"All teams\"); remove button is on every row, not only the selected row. Keep?",
     "H5 (U8): untracking the roster .txt files breaks 11 test files and two seed scripts. Move them to a local-only path and repoint the tests, or untrack and let the tests skip when the files are absent? History keeps the files either way.",
-    "D9 scope: a post-meet swim numbered past scoredEventNumberMax (NSISC Event 938/939) now counts as a time trial for relay legs, matching how the SwimCloud bridge flags it. Confirm."
+    "D9 scope: a post-meet swim numbered past scoredEventNumberMax (NSISC Event 938/939) now counts as a time trial for relay legs, matching how the SwimCloud bridge flags it. Confirm.",
+    "Fixture tests/fixtures/nsisc-2026-dq-relay-leg.json (33 KB) holds verbatim rows from the private data/meets.json (published NSISC 2026 championship results for Delta State and Henderson State). Decision U-meets said tests use data/demo-seed.json. Keep the fixture, or replace it with synthetic rows?",
+    "Copy: rename the ~49 user-visible 'athlete' strings (24 files) to 'swimmer'? The Manager step 'Athletes' is locked by tests/managerAthletesCopy.test.ts."
   ],
   "pendingArchitectReview": [
-    "Narrow re-review of ddb838fb/e54adab4, two design questions the architect has not seen: (a) item 3 adds leg names to an override key only on a tie; legacy plain key still applies to both tied relays; upsertRelayLegOverride/removeRelayLegOverride still compare exact keys so 'clear leg' leaves the plain key active on a tied relay, and RelayGroupCard.tsx:186 indicator misses it; (b) item 2: a team whose every seed is past the table leaves prelimsProjected.sortedTeams instead of showing 0, and no UI calls list*WithoutExpectation, so absent != empty is not surfaced."
+    "IN FLIGHT 2026-10-13: architect a388b4128dda85e7f re-reviewing ddb838fb, e54adab4, d5dc09ff (tie key design, null seeds dropping a team, hasRelayLegTime, boundary precedence)."
   ],
   "u3Prereq": "U3 delete of 39 UI test workspaces: take a MANUAL backup first (a bulk delete writes 39 pre-delete backups and would evict the 20 startup backups of this worktree data/backups); a manual backup survives and restores all 39.",
   "gatesAfterWave2": {
@@ -513,12 +516,15 @@
     "staleStateEntries": "createWorkspaceSchema is now .strip() not passthrough on create"
   },
   "followUpsFromAdvisor20261013": [
-    "legacy key cleanup: upsert/removeRelayLegOverride must also drop the legacy plain key on a tied relay (executor, core)",
     "surface listPrelimsEntriesWithoutExpectation/listPsychEntriesWithoutExpectation in prelims and psych UI (worker)",
     "wording for RelayMissingLeg.reason 'time_trial_only': grep where reason is rendered, add a case (worker)",
-    "legRowsForTemplate signature filter (relayLegSwaps.ts) survived its mutation: add a test",
-    "DQ swim offered as relay-leg candidate (Chloe Skelt, women's medley breast): provenance bug, executor fix, queue next",
-    "recruit-id override path returns that id's own row even when the swimmer has a program swim at the event (name path would fill the leg)",
-    "quiet-tree full vitest + lint + scripts after the X11/X12 commit"
-  ]
+    "worker: wire RelayGroupCard.tsx:186 to hasRelayLegOverride(overrides, group.key, legIndex) from @omniswim/core/lib/relayLegMatching",
+    "DQ-with-legal-prelimsTime rows (Rhodes 56.76) are excluded as leg candidates; no prelimsTime fallback (architect asked to rule)",
+    "a name override onto a DQ-only swimmer reads 'vacant' (no new reason code)",
+    "vault gotcha: the Edit tool rewrote an LF file as CRLF once; normalize before commit"
+  ],
+  "inFlight20261013": {
+    "a388b4128dda85e7f": "architect re-review (read-only)",
+    "abcb8fdcf557dfc92": "executor R11 steps 1-2: scripts/index-access-ratchet.mjs + swimcloud noUncheckedIndexedAccess. Dirty files expected: scripts/, package.json, ci.yml, packages/swimcloud, tests/ swimcloud only."
+  }
 }
