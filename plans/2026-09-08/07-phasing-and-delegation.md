@@ -1,5 +1,7 @@
 # Phasing and delegation
 
+> **Historical.** The fleet harness (`fleet-routing`, `.fleet.json`) was retired on 2026-09-20. Orca replaces it. Disregard any `fleet` routing instruction below. See `CLAUDE.md` "Delegation across Claude, Codex and Cursor (Orca)".
+
 Uses the repo's actual contract: `.claude/agents/{orchestrator,executor,worker,finisher}.md`,
 and `CLAUDE.md`'s "land core green before UI, briefed against a reported
 API."

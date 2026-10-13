@@ -1,5 +1,7 @@
 # Decisions on record
 
+> **Historical.** The fleet harness (`fleet-routing`, `.fleet.json`) was retired on 2026-09-20. Orca replaces it. Disregard any `fleet` routing instruction below. See `CLAUDE.md` "Delegation across Claude, Codex and Cursor (Orca)".
+
 Format follows [`plans/2026-09-06/01-legal-and-access-strategy.md`](../2026-09-06/01-legal-and-access-strategy.md)
 §4: what was decided, when, by whom, what was shown before deciding, and
 what was explicitly accepted.
@@ -74,7 +76,7 @@ depends on.
 reasons, in order of weight:
 
 1. `PlaywrightSwimCloudFetcher` has never fetched a real page from anywhere.
-   Its own header says so, and `plans/STATE.md` names it as "one thing
+   Its own header says so, and `docs/archive/2026-10/STATE_HISTORY_2026-08.md` names it as "one thing
    still genuinely unverified." Making a 300-page crawl its first live run
    is the worst possible first run.
 2. It has to pass Cloudflare's Managed Challenge cold, then keep a

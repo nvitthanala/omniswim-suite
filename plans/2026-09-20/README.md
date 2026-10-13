@@ -1,5 +1,7 @@
 # Production readiness — the suite minus Metrics
 
+> **Historical.** The fleet harness (`fleet-routing`, `.fleet.json`) was retired on 2026-09-20. Orca replaces it. Disregard any `fleet` routing instruction below. See `CLAUDE.md` "Delegation across Claude, Codex and Cursor (Orca)".
+
 **Opened:** 2026-09-20 · **Deadline:** Saturday 2026-09-26 (a self-imposed
 timeline marker, not a specific meet — confirmed with the user 2026-09-20)
 
