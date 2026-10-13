@@ -74,13 +74,13 @@
     "X3": "committed bb662f8d (also fixes Toast timer flake)",
     "X4": "committed 4057721d with C6 UI",
     "X5": "committed d06ee85c (41 classes in 16 files; text-ui-micro/caption; ratchet test)",
-    "X6": "pending",
+    "X6": "committed cb2fdf03 (Button derives aria-label from title when icon-only; 4 labels; iconButtonAccessibleName.test.ts). 150-odd title= on spans/divs left alone.",
     "X7": "committed 54c62dd3",
     "X8": "committed 54c62dd3",
-    "X9": "pending: fix app-header overflow at 390px (header.app-header scrollWidth 566; right icon buttons end at x=566)",
+    "X9": "committed cb2fdf03 (header fits 390px; More menu holds Configure Scoring Model and theme; Menu arrow keys skip hidden items; T10 spec is a normal test)",
     "X10": "committed ea39c3e0 (button labelled \"Optimize all teams\"; remove button on every row; user may prefer selected-row-only or a different label)",
-    "X11": "pending",
-    "X12": "pending",
+    "X11": "in-progress (worker a9bf3e5c013f56fc2 stopped mid-edit, uncommitted)",
+    "X12": "in-progress (worker a9bf3e5c013f56fc2 stopped mid-edit, uncommitted)",
     "F1": "pending",
     "F2": "pending",
     "F3": "pending",
@@ -111,7 +111,7 @@
     "D6": "pending",
     "D7": "pending",
     "D8": "done (23b5e8d9): rank-collapse guard test only; fix was already in place. Reverting placement fix or per-athlete scorer gate fails it.",
-    "D9": "done in core (67105555): ScoringSettings.relayLegsAllowTimeTrials (default off), isTimeTrialSwim, label relayLegTimeTrial. UI toggle NOT done (preset route schema strict). Awaiting architect review. UI label/banner done 91606bec; toggle pending architect decision D9-home (both).",
+    "D9": "done: core 67105555, UI label+banner 91606bec, toggle on preset+workspace 4233b1f2. Architect fixes (scoredEventNumberMax, C7 null, A/B override tie, time_trial_only) in progress, uncommitted.",
     "D10": "pending",
     "H1": "committed",
     "H2": "partial cfdfb92b: 11 closed state files/plans moved to docs/archive/2026-09 and 2026-10 with path rewrites; files cited from code or active state stay in docs/reference",
@@ -406,6 +406,23 @@
       "at": "2026-10-13 ~03:50 CT",
       "what": "Budget tier critical (5h 83%, 7d 99%). No new agents started. Core-correctness batch (a3003cfad2024423c) finished and was committed by the lead. Lead-only verification and commits since.",
       "resumePlan": "After the 7d window resets (about 2 days), dispatch ONE agent at a time. First: worker for workerTodoAfterD9, then architect bundle review (pendingArchitectReview), then nextBatches C. Hold R9 last."
+    },
+    {
+      "at": "2026-10-13 ~11:00 CT (user connection pause; quota reset by user, full 5h/7d, real reset Thursday 11:00)",
+      "what": "User asked to pause. Both running agents were stopped with TaskStop mid-edit. Nothing from them is committed; the working tree is dirty and UNVERIFIED.",
+      "stoppedAgents": {
+        "a64b8f0d8878aed81": "executor: four core fixes from the architect review (items 1 scoredEventNumberMax in isTimeTrialSwim; 2 C7 prelims/psych projection null not 0; 3 relayEntryKey override A/B tie; 4 time_trial_only reason). Dirty: packages/core/src/lib/{arbitrage/relayLegSwaps,prelimsProjection,psychProjection,relayBuilder,relayLegHistoryCandidates,relayLegMatching,rosterLineupAudit,scoringTheory,utils,whatIfProjection,workingCopyChanges}.ts, packages/core/src/types.ts, packages/manager/src/components/IndRelayManagementView.tsx, packages/manager/src/lib/theoreticalMeetSeeds.ts. New untracked tests: tests/projectionNoExpectation.test.ts, relayLegScoredProgramBoundary.test.ts, relayLegTimeTrialOnlyReason.test.ts, relayOverrideTieKey.test.ts. Was writing the item-1 test file when stopped. Not yet done: mutation checks, golden diff, full gates, report.",
+        "a9bf3e5c013f56fc2": "worker: X11 motion audit + X12 copy pass. Dirty (UI only): apps/shell/src/components/workspace-sidebar/WorkspaceListItems.tsx, apps/shell/src/pages/SettingsPage.tsx, packages/manager/src/components/{BatchOptimizerPanel,RecruitForm,TeamRosterPanel,TeamRosterSidebar}.tsx, packages/matrix/src/components/{ChartStaleBundleGuard,DeleteConfirmationModal,MeetOpsAnalyzeStep,MeetOpsStandingsStep}.tsx, packages/metrics/src/MetricsApp.tsx, packages/metrics/src/components/{MetricsStepPanels,RaceSetupFormFields,SessionComparePanel,TagDeck,TagTimeline,TempoProfile,VelocityProfile,VideoPlayerParts}.tsx, packages/ui/src/components/WizardShell.tsx, packages/ui/src/index.css, tests/e2e/matrix-chart.spec.ts, tests/optimizeStepReviewFixes.test.ts. Not verified; no report."
+      },
+      "alsoDirtyNotMine": "extensions/swimcloud-companion/background.js (line-ending artifact, never commit)",
+      "resumePlan": [
+        "1 git status; do not commit anything yet.",
+        "2 SendMessage a64b8f0d8878aed81 (executor) to finish: write remaining tests, mutation-check each fix, golden diff on real data, run full gates, send the report. Keep the brief pointer: state file architectReview20261013.findings 1,3,4,5.",
+        "3 Review its diff, commit one commit per item (path-scoped; core files overlap, use git apply --cached with a context patch, never --unidiff-zero), then update items.",
+        "4 Only then SendMessage a9bf3e5c013f56fc2 (worker) to finish X11/X12 (UI files do not overlap core). Review diff, run vitest + lint + e2e subset, commit.",
+        "5 Next batches: R11 steps 1-6 (architectReview20261013.decisions.R11), A7 estimate field, then nextBatches E (F1,F2,F3,F5,F8), F (R1-R5,R7), G research, H (H6 alone, H7, H11, R9 last).",
+        "6 One or two agents at a time. Run node ~/.claude/scripts/claude-usage-report.mjs between agents."
+      ]
     }
   ],
   "gatesAfterWave1": {
@@ -437,7 +454,7 @@
     "harness": "7 passed, 1 skipped (pre-existing fixme)"
   },
   "nextBatches": [
-    "B2: worker for workerTodoAfterD9, then architect review of pendingArchitectReview bundle",
+    "RESUME FIRST: see limitEvents last entry resumePlan",
     "C: X6 icon names, X9 header overflow at 390px, X11 motion audit, X12 copy pass (worker)",
     "E: F1 print cards, F2 deck view, F3 compare snapshots, F5 progression, F8 static report",
     "F: R1,R2,R3,R4,R5,R7 splits (one agent each)",
