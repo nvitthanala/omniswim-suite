@@ -73,12 +73,12 @@
     "X2": "committed c0e7be08 (known gap: SwimCloud window focus return, opener is a menu item that unmounts; fix needs Menu change)",
     "X3": "committed bb662f8d (also fixes Toast timer flake)",
     "X4": "committed 4057721d with C6 UI",
-    "X5": "in flight (worker abb19d7362275bf21, with X10)",
+    "X5": "committed d06ee85c (41 classes in 16 files; text-ui-micro/caption; ratchet test)",
     "X6": "pending",
     "X7": "committed 54c62dd3",
     "X8": "committed 54c62dd3",
     "X9": "pending: fix app-header overflow at 390px (header.app-header scrollWidth 566; right icon buttons end at x=566)",
-    "X10": "in flight (worker abb19d7362275bf21)",
+    "X10": "committed ea39c3e0 (button labelled \"Optimize all teams\"; remove button on every row; user may prefer selected-row-only or a different label)",
     "X11": "pending",
     "X12": "pending",
     "F1": "pending",
@@ -100,7 +100,7 @@
     "R7": "pending",
     "R8": "pending",
     "R9": "pending",
-    "R10": "pending",
+    "R10": "in flight (worker a82c7ecf00b92c3e5, hygiene batch)",
     "R11": "pending",
     "R12": "pending",
     "D1": "pending",
@@ -113,15 +113,15 @@
     "D8": "pending",
     "D9": "pending",
     "D10": "pending",
-    "H1": "pending",
+    "H1": "in flight (a82c7ecf00b92c3e5)",
     "H2": "pending",
-    "H3": "pending",
+    "H3": "in flight (a82c7ecf00b92c3e5)",
     "H4": "pending",
-    "H5": "pending",
+    "H5": "in flight (a82c7ecf00b92c3e5)",
     "H6": "pending",
     "H7": "pending",
-    "H8": "pending",
-    "H9": "pending",
+    "H8": "in flight (a82c7ecf00b92c3e5)",
+    "H9": "in flight (a82c7ecf00b92c3e5)",
     "H10": "done by the 2026-10-11 harness commit 74fe0748 (round-3 bug block moved to docs/archive/2026-08/ROUND3_KNOWN_BUGS.md)",
     "H11": "pending",
     "parse-pdf-limit": "committed 3105ba98 (gates green on combined tree 2026-10-12)",
@@ -405,7 +405,8 @@
     "Individual A/B-final tie that includes an exhibition swimmer zeroes the scoring swimmer (utils.ts ~2152-2158: {A:0, X:0}); relay and timed-final paths exclude only the exhibition entry. The code comment calls it deliberate. Keep or change? (architect says needs a golden run)",
     "No admin concept exists in the database; admin is an email in OMNI_ADMIN_EMAILS (server agent). Backup list/restore under AUTH_REQUIRED are 403 until isAdmin is wired to that. Wire it?",
     "P7: a corrupt or locked SQLite database now stops the server (exit 1) instead of falling back to meets.json. Confirm that is wanted.",
-    "Which team should the season trend default to? The data model has no own-team field; defaultSeasonTeam picks one."
+    "Which team should the season trend default to? The data model has no own-team field; defaultSeasonTeam picks one.",
+    "X10: the all-teams apply is labelled \"Optimize all teams\" (an e2e asserts no button named exactly \"All teams\"); remove button is on every row, not only the selected row. Keep?"
   ],
   "pendingArchitectReview": [
     "P3 client/conflict diff (171ddc31) + persistence layer (09c5882e): bundle with wave 2 core diffs",
@@ -420,5 +421,14 @@
     "skipBudget": "23 = budget 23, exit 0 (Toast timer flake fixed)",
     "scripts": "86 passed, 0 failed, 1 skipped (incl. e2e ui-ia.spec.ts; earlier failures were concurrent edits)",
     "harness": "7 passed, 1 skipped (pre-existing fixme)"
-  }
+  },
+  "nextBatches": [
+    "B: T12 ratchets, R6 complexity warnings, R8 time formatter, R12 alias config, R11 strictness (executor)",
+    "C: X6 icon names, X9 header overflow at 390px, X11 motion audit, X12 copy pass (worker)",
+    "D: F7 removed events, D9 time-trial opt-in, D8 rank collapse verification (executor)",
+    "E: F1 print cards, F2 deck view, F3 compare snapshots, F5 progression, F8 static report",
+    "F: R1,R2,R3,R4,R5,R7 splits (one agent each)",
+    "G: D4/D5/D10/F6/D1 research",
+    "H: H2 archive, H6 renormalize alone, H7 one skills dir, H11 JSX spaces, then R9 upgrades last"
+  ]
 }
