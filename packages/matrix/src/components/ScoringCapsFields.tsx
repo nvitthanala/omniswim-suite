@@ -9,8 +9,9 @@
  * — no behavior change. Lock state and the field updater stay in the parent.
  */
 
+import { useId } from 'react';
 import type { ScoringSettings } from '@omniswim/core/types';
-import { entryCapPolicy } from '@omniswim/core/lib/scoringDefaults';
+import { entryCapPolicy, relayLegsAllowTimeTrials } from '@omniswim/core/lib/scoringDefaults';
 import { NumberField } from '@omniswim/ui';
 
 interface LockState {
@@ -28,6 +29,7 @@ interface ScoringCapsFieldsProps {
 export function ScoringCapsFields({ local, update, lock }: ScoringCapsFieldsProps) {
   const { isLocked, lockProps } = lock;
   const policy = entryCapPolicy(local);
+  const relayTimeTrialHelperId = useId();
   return (
     <div className="grid grid-cols-2 gap-3">
       <div>
@@ -127,6 +129,21 @@ export function ScoringCapsFields({ local, update, lock }: ScoringCapsFieldsProp
           />
           Exhibition swims count toward the entry cap
         </label>
+        <div className="flex flex-col gap-0.5">
+          <label className="flex items-center gap-2 text-ui-micro text-theme-secondary cursor-pointer">
+            <input
+              type="checkbox"
+              aria-describedby={relayTimeTrialHelperId}
+              checked={relayLegsAllowTimeTrials(local)}
+              onChange={e => update({ relayLegsAllowTimeTrials: e.target.checked })}
+              className="accent-[var(--text-accent)]"
+            />
+            Let time trials fill relay legs
+          </label>
+          <p id={relayTimeTrialHelperId} className="pl-6 text-ui-micro text-theme-muted">
+            Off by default. A time trial is outside the meet&apos;s program. A leg filled from one is marked Time trial.
+          </p>
+        </div>
       </div>
       <div>
         <label className="block text-ui-caption text-theme-secondary mb-1">Relay multiplier</label>
