@@ -284,10 +284,30 @@ export function convertTimeToSeconds(timeStr: string): number {
 }
 
 export function formatSecondsToTime(seconds: number): string {
-  if (seconds === Infinity) return 'NT';
-  if (seconds < 60) return seconds.toFixed(2);
-  const mins = Math.floor(seconds / 60);
-  const secs = (seconds % 60).toFixed(2);
+/**
+ * A time in seconds as `s.ss` or `m:ss.ss`, rounded to the hundredth with
+ * `toFixed(2)`.
+ *
+ * - A time with no value (`Infinity`, `NaN`, `null`, `undefined`) renders as
+ *   `NT`, the same sentinel `convertTimeToSeconds` maps back to `Infinity`.
+ *   It never renders as `0.00`: a real zero-second time is a different thing
+ *   from a missing one.
+ * - A time that rounds up to a whole minute carries into the minutes column:
+ *   59.996 reads `1:00.00` (not `60.00`) and 119.996 reads `2:00.00` (not
+ *   `1:60.00`).
+ */
+  if (typeof seconds !== 'number' || !Number.isFinite(seconds)) return 'NT';
+  if (seconds < 60) {
+    const rounded = seconds.toFixed(2);
+    // 59.996 rounds up to 60.00: carry one minute.
+    return rounded === '60.00' ? '1:00.00' : rounded;
+  }
+  let mins = Math.floor(seconds / 60);
+  let secs = (seconds % 60).toFixed(2);
+  if (secs === '60.00') {
+    mins += 1;
+    secs = '0.00';
+  }
   return `${mins}:${secs.padStart(5, '0')}`;
 }
 
