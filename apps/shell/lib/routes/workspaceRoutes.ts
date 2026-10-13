@@ -18,7 +18,7 @@ import {
   updateWorkspaceSchema,
 } from '../../../../packages/core/src/schemas/workspace.ts';
 import { buildMeetReportHtml } from '../../../../packages/core/src/lib/reportBuilder.ts';
-import type { WorkspaceRepo } from '../workspaceRepo.ts';
+import { getBackupMirrorStatus, type WorkspaceRepo } from '../workspaceRepo.ts';
 import { applyWorkspaceUpdateWithGuard, type WorkspaceUpdateRepo } from '../dataLossGuard.ts';
 import { SaveSequencer, parseSaveToken } from '../saveSequencer.ts';
 import {
@@ -341,7 +341,15 @@ function registerWorkspaceBackupAndSnapshotRoutes(app: Express, deps: WorkspaceR
   app.post('/api/workspaces/backup', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     try {
       const file = await repo.backup('manual', workspaceScopeOf(req));
-      res.json({ success: true, file: path.basename(file) });
+      // `mirror` is present only when OMNI_BACKUP_DIR is set. `ok: false` means the local backup is
+      // written but the off-machine copy was not, so a caller can tell the user instead of
+      // reporting a clean success.
+      const mirror = getBackupMirrorStatus();
+      res.json({
+        success: true,
+        file: path.basename(file),
+        ...(mirror ? { mirror: { ok: mirror.ok, dir: mirror.dir, files: mirror.files, error: mirror.error } } : {}),
+      });
     } catch (err) {
       res.status(500).json({ error: 'Backup failed', details: String(err) });
     }

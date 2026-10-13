@@ -258,6 +258,28 @@ export class WorkspaceService {
     return this.listWorkspaces(scope);
   }
 
+  /**
+   * Write a consistent, standalone copy of the live database to `destPath`.
+   *
+   * Copying `omniswim.db` with a file copy while the server runs can capture the main file
+   * without the `-wal` pages that hold the newest commits, or a torn page mid-checkpoint. The
+   * copy then opens, but not at any state the database was ever in. `VACUUM INTO` reads one
+   * snapshot through SQLite itself and writes a single file with no `-wal` or `-shm` beside it,
+   * so the result opens on its own.
+   *
+   * The copy holds EVERY tenant's rows (it is the whole database), not the current scope.
+   * `destPath` must not exist: SQLite refuses to overwrite, and this refuses first with a clear
+   * message. The caller writes to a temporary name and renames, so a half-written file never
+   * carries a final name.
+   */
+  copyDatabaseTo(destPath: string): void {
+    if (fs.existsSync(destPath)) {
+      throw new Error(`Refusing to overwrite an existing file with a database copy: ${destPath}`);
+    }
+    fs.mkdirSync(path.dirname(destPath), { recursive: true });
+    this.db.prepare('VACUUM INTO ?').run(destPath);
+  }
+
   createSnapshot(
     workspaceId: string,
     label: string,
