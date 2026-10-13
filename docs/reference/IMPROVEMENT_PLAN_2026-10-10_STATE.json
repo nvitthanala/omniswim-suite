@@ -100,7 +100,7 @@
     "R7": "pending",
     "R8": "pending",
     "R9": "pending",
-    "R10": "in flight (worker a82c7ecf00b92c3e5, hygiene batch)",
+    "R10": "committed (src-tauri deleted, scripts, dependency, eslint ignore)",
     "R11": "pending",
     "R12": "pending",
     "D1": "pending",
@@ -113,15 +113,15 @@
     "D8": "pending",
     "D9": "pending",
     "D10": "pending",
-    "H1": "in flight (a82c7ecf00b92c3e5)",
+    "H1": "committed",
     "H2": "pending",
-    "H3": "in flight (a82c7ecf00b92c3e5)",
+    "H3": "committed",
     "H4": "pending",
-    "H5": "in flight (a82c7ecf00b92c3e5)",
+    "H5": "BLOCKED on user: untracking the three roster .txt files breaks 11 vitest files and scripts/seed_hsu_roster.mjs and seed_obu_roster.mjs that read them from the repo root. Options: move to a local-only path and repoint tests (CI loses them), or untrack and let those tests skip when absent (CI skip budget grows). Files left tracked meanwhile.",
     "H6": "pending",
     "H7": "pending",
-    "H8": "in flight (a82c7ecf00b92c3e5)",
-    "H9": "in flight (a82c7ecf00b92c3e5)",
+    "H8": "committed",
+    "H9": "committed",
     "H10": "done by the 2026-10-11 harness commit 74fe0748 (round-3 bug block moved to docs/archive/2026-08/ROUND3_KNOWN_BUGS.md)",
     "H11": "pending",
     "parse-pdf-limit": "committed 3105ba98 (gates green on combined tree 2026-10-12)",
@@ -375,7 +375,9 @@
     "In production the preset modal loses field-level validation text and OpsModule loses the size hint, because details is dropped; client should read a separate field",
     "docs still cite the old probe paths (scripts/test_post.mjs etc.; H-group)",
     "package-lock.json gained a deprecated glob@10.5.0 transitive dependency (from the coverage dev dependency)",
-    "Focus does not return to the opener for the SwimCloud window (menu item unmounts); fixing needs a change to Menu used by every menu"
+    "Focus does not return to the opener for the SwimCloud window (menu item unmounts); fixing needs a change to Menu used by every menu",
+    "docs/README.md links a missing reference/ROSTER_CATALOG_NOTES.md",
+    "ONBOARDING.md baseline numbers come from the state file and trail the current vitest count"
   ],
   "limitEvents": [
     {
@@ -406,7 +408,8 @@
     "No admin concept exists in the database; admin is an email in OMNI_ADMIN_EMAILS (server agent). Backup list/restore under AUTH_REQUIRED are 403 until isAdmin is wired to that. Wire it?",
     "P7: a corrupt or locked SQLite database now stops the server (exit 1) instead of falling back to meets.json. Confirm that is wanted.",
     "Which team should the season trend default to? The data model has no own-team field; defaultSeasonTeam picks one.",
-    "X10: the all-teams apply is labelled \"Optimize all teams\" (an e2e asserts no button named exactly \"All teams\"); remove button is on every row, not only the selected row. Keep?"
+    "X10: the all-teams apply is labelled \"Optimize all teams\" (an e2e asserts no button named exactly \"All teams\"); remove button is on every row, not only the selected row. Keep?",
+    "H5 (U8): untracking the roster .txt files breaks 11 test files and two seed scripts. Move them to a local-only path and repoint the tests, or untrack and let the tests skip when the files are absent? History keeps the files either way."
   ],
   "pendingArchitectReview": [
     "P3 client/conflict diff (171ddc31) + persistence layer (09c5882e): bundle with wave 2 core diffs",
