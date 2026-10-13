@@ -116,7 +116,11 @@ export function pointsForPrelimsSeedRankOrNull(
 
 /**
  * {@link pointsForPrelimsSeedRankOrNull} read as a number: a place the table has
- * no row for expects 0 points. Kept for callers that only need a number.
+ * no row for expects 0 points.
+ *
+ * @deprecated Reads "the table is silent" as 0 points, which is not what the
+ * table says. Use {@link pointsForPrelimsSeedRankOrNull} and keep `null` apart
+ * from 0. The projection builders no longer call this.
  */
 export function pointsForPrelimsSeedRank(
   prelimsRank: number,
@@ -184,11 +188,17 @@ function pickRepresentativeRow(rows: SwimmerResult[]): SwimmerResult {
   return prelims ?? rows[0];
 }
 
-/** Build synthetic scored rows: one per entry with points = prelims-placement expected. */
-export function buildPrelimsExpectedRows(
+/** The expected rows of a prelims projection, and the entries the table has no row for. */
+type PrelimsExpectation = {
+  rows: SwimmerResult[];
+  /** Entry keys whose seed is past the end of the place-point table: no expectation. */
+  withoutExpectation: string[];
+};
+
+function collectPrelimsExpectation(
   results: SwimmerResult[],
   settings: ScoringSettings
-): SwimmerResult[] {
+): PrelimsExpectation {
   const byEvent = new Map<string, SwimmerResult[]>();
   for (const r of results) {
     const ev = String(r.event ?? '').trim();
@@ -197,6 +207,7 @@ export function buildPrelimsExpectedRows(
   }
 
   const out: SwimmerResult[] = [];
+  const withoutExpectation: string[] = [];
 
   for (const [event, eventRows] of byEvent) {
     if (!isPrelimsOuEligibleEvent(event, eventRows)) continue;
@@ -208,8 +219,14 @@ export function buildPrelimsExpectedRows(
       const prelimsRank = prelimsRanks.get(key);
       if (prelimsRank == null || prelimsRank < 1) continue;
 
-      const expected = pointsForPrelimsSeedRank(prelimsRank, event, settings);
+      const expected = pointsForPrelimsSeedRankOrNull(prelimsRank, event, settings);
       const rep = pickRepresentativeRow(rows);
+      // The table is silent for this seed: there is no expectation. It is not 0
+      // points, so no row is built (a 0 row would read as "expected nothing").
+      if (expected === null) {
+        withoutExpectation.push(entryKey(rep));
+        continue;
+      }
       const bracket = settings.aFinalBracketSize ?? Math.floor(settings.scoringPoints.length / 2);
       const seedRound = roundAndRankForPrelimsSeed(prelimsRank, bracket);
 
@@ -224,7 +241,34 @@ export function buildPrelimsExpectedRows(
     }
   }
 
-  return out;
+  return { rows: out, withoutExpectation };
+}
+
+/**
+ * Build synthetic scored rows: one per entry with points = prelims-placement
+ * expected.
+ *
+ * An entry whose seed is past the end of the place-point table has no
+ * expectation, and no row. A seed the table scores 0 keeps its row with 0 points.
+ * {@link listPrelimsEntriesWithoutExpectation} names the entries left out.
+ */
+export function buildPrelimsExpectedRows(
+  results: SwimmerResult[],
+  settings: ScoringSettings
+): SwimmerResult[] {
+  return collectPrelimsExpectation(results, settings).rows;
+}
+
+/**
+ * Entry keys (`entryKey`) that {@link buildPrelimsExpectedRows} leaves out
+ * because the place-point table has no row for the seed. Distinct from an entry
+ * that expects 0 points, which has a row.
+ */
+export function listPrelimsEntriesWithoutExpectation(
+  results: SwimmerResult[],
+  settings: ScoringSettings
+): string[] {
+  return collectPrelimsExpectation(results, settings).withoutExpectation;
 }
 
 export type PrelimsOverUnderEntry = {

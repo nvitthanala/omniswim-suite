@@ -11,7 +11,7 @@ import type { ScoringBundle } from './scoringEngine';
 import { buildProjectedScoringBundle, gatherBaselineScoredByEntry } from './scoringBundleAggregation';
 import {
   entryKey,
-  pointsForPrelimsSeedRank,
+  pointsForPrelimsSeedRankOrNull,
   type PrelimsOverUnderEntry,
   type PrelimsDeltaTimelinePoint,
   buildPrelimsDeltaTimeline,
@@ -93,11 +93,16 @@ export function resolvePsychRanksForEvent(eventRows: SwimmerResult[]): Map<strin
   return ranks;
 }
 
-/** Build synthetic scored rows: one per psych entry with psych-placement expected points. */
-export function buildPsychExpectedRows(
+type PsychExpectation = {
+  rows: SwimmerResult[];
+  /** Entry keys with no rank, or a seed past the end of the place-point table: no expectation. */
+  withoutExpectation: string[];
+};
+
+function collectPsychExpectation(
   psychResults: SwimmerResult[],
   settings: ScoringSettings
-): SwimmerResult[] {
+): PsychExpectation {
   const byEvent = new Map<string, SwimmerResult[]>();
   for (const r of psychResults) {
     if (isRelayResult(r)) continue;
@@ -108,6 +113,7 @@ export function buildPsychExpectedRows(
   }
 
   const out: SwimmerResult[] = [];
+  const withoutExpectation: string[] = [];
   for (const [event, eventRows] of byEvent) {
     if (/\bTIME TRIAL\b/i.test(event) || eventRows.some(r => r.isTimeTrial)) continue;
     const ranks = resolvePsychRanksForEvent(eventRows);
@@ -116,8 +122,17 @@ export function buildPsychExpectedRows(
       if (seen.has(key)) continue;
       seen.add(key);
       const rep = rows[0];
-      const rank = ranks.get(key) ?? 0;
-      const pts = rank > 0 ? pointsForPrelimsSeedRank(rank, event, settings) : 0;
+      const rank = ranks.get(key);
+      // No rank, or a seed the table has no row for: no expectation. That is not
+      // 0 points, so no row is built.
+      const pts =
+        rank !== undefined && rank > 0
+          ? pointsForPrelimsSeedRankOrNull(rank, event, settings)
+          : null;
+      if (rank === undefined || pts === null) {
+        withoutExpectation.push(key);
+        continue;
+      }
       out.push({
         ...rep,
         id: `psych-${key}`,
@@ -128,7 +143,29 @@ export function buildPsychExpectedRows(
       });
     }
   }
-  return out;
+  return { rows: out, withoutExpectation };
+}
+
+/**
+ * Build synthetic scored rows: one per psych entry with psych-placement expected
+ * points. An entry with no rank, or a seed past the end of the place-point
+ * table, has no expectation and no row (a seed the table scores 0 keeps its row
+ * with 0 points). {@link listPsychEntriesWithoutExpectation} names the entries
+ * left out.
+ */
+export function buildPsychExpectedRows(
+  psychResults: SwimmerResult[],
+  settings: ScoringSettings
+): SwimmerResult[] {
+  return collectPsychExpectation(psychResults, settings).rows;
+}
+
+/** Entry keys {@link buildPsychExpectedRows} leaves out for want of an expectation. */
+export function listPsychEntriesWithoutExpectation(
+  psychResults: SwimmerResult[],
+  settings: ScoringSettings
+): string[] {
+  return collectPsychExpectation(psychResults, settings).withoutExpectation;
 }
 
 function baselineActualPointsForEntry(rows: SwimmerResult[], key: string): number {
