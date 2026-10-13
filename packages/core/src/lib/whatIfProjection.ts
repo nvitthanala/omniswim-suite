@@ -24,8 +24,11 @@ import {
   Workspace,
   type ScyConversionProvenance,
 } from '../types';
-import { relayEntryKey } from './relaySplits';
-import { relayTemplateFromLeg } from './relayLegMatching';
+import {
+  relayEntryOverrideKeys,
+  relayLegMatchSettings,
+  relayTemplateFromLeg,
+} from './relayLegMatching';
 import {
   buildAliasResolver,
   IDENTITY_ALIAS_RESOLVER,
@@ -527,7 +530,11 @@ export function buildWhatIfProjection({
 
   const relayKeysForGender = new Set<string>();
   for (const row of currentResults.filter(x => x.isRelay)) {
-    relayKeysForGender.add(relayEntryKey(relayTemplateFromLeg(currentResults, row)));
+    // Both keys an override of this entry may be stored under: its own and the
+    // plain key a tied relay's override had before the two were told apart.
+    for (const key of relayEntryOverrideKeys(currentResults, relayTemplateFromLeg(currentResults, row))) {
+      relayKeysForGender.add(key);
+    }
   }
   const relayOverrides: RelayLegOverride[] = (workspace.relayLegOverrides ?? []).filter(o =>
     relayKeysForGender.has(o.relayEntryKey)
@@ -582,7 +589,7 @@ export function buildWhatIfProjection({
     relayOverrides,
     vacateRelayLegs,
     relayLegOnlyPool,
-    workspace.scoringSettings
+    relayLegMatchSettings(workspace)
   );
 
   // pdf_only: exclude meet entry plans + recruits from scoring entirely. The

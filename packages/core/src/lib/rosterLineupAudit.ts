@@ -21,13 +21,15 @@ import {
 import type { SwimmerEntryCounts } from './swimmerEntryLimits';
 import { mergeScoringSettings } from './scoringDefaults';
 import {
+  relayEntryKeyIn,
+  relayLegMatchSettings,
   relayMissingStrokeLabel,
   relayTemplateFromLeg,
   stableRelayEntryKey,
   suggestBestRelayLegFill,
   upsertRelayLegOverride,
 } from './relayLegMatching';
-import { parseRelayDistanceYardsOrNull, relayEntryKey } from './relaySplits';
+import { parseRelayDistanceYardsOrNull } from './relaySplits';
 import { relayLegHistoryCandidates } from './relayLegHistoryCandidates';
 import { buildAliasResolver, detectDuplicateAthletes } from './athleteAliases';
 import { IDENTITY_ALIAS_RESOLVER } from './athleteAliases';
@@ -144,7 +146,7 @@ function relayTemplatesByEntry(genderResults: SwimmerResult[]): Map<string, Swim
   for (const r of genderResults) {
     if (!isRelayResult(r) || r.name === r.team) continue;
     const template = relayTemplateFromLeg(genderResults, r);
-    const key = relayEntryKey(template);
+    const key = relayEntryKeyIn(genderResults, template);
     if (!templates.has(key)) templates.set(key, template);
   }
   return templates;
@@ -948,7 +950,7 @@ function findTeamRelayTemplateByEntryKey(
     if (!isRelayResult(r)) continue;
     if (teamFrom(r.team) !== team) continue;
     const template = relayTemplateFromLeg(results, r);
-    if (relayEntryKey(template) !== entryKey) continue;
+    if (relayEntryKeyIn(results, template) !== entryKey) continue;
     return template;
   }
   return null;
@@ -986,7 +988,8 @@ export function suggestQuickFillForVacantLeg(
     legIndex,
     individualEntrantNames(activeSwimmers, team),
     new Set(),
-    workspace.scoringSettings
+    relayLegMatchSettings(workspace),
+    results
   );
   if (!hit) return null;
 

@@ -10,6 +10,7 @@ import { swimEventIdentity } from './bestTimeEligibility';
 import { mergeScoringSettings } from './scoringDefaults';
 import {
   relayLegRequirements,
+  relayLegMatchSettings,
   suggestBestRelayLegFill,
   upsertRelayLegOverride,
   stableRelayEntryKey,
@@ -201,7 +202,8 @@ export function buildRelaysFromIndividualLineup(
         legIndex,
         assigned,
         exclude,
-        workspace.scoringSettings
+        relayLegMatchSettings(workspace),
+        teamRelayLegs
       );
       if (!suggestion) continue;
       assigned.add(normalizeSwimmerName(suggestion.swimmer.name));

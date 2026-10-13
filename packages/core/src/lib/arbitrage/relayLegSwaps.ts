@@ -18,15 +18,13 @@ import {
 } from '../../types';
 import { mergeScoringSettings } from '../scoringDefaults';
 import { buildScorerRosterLookup, usesScorerRoster, type ScorerRosterLookup } from '../scorerRoster';
-import {
-  displayTimeForRelayLeg,
-  relayEntryKey,
-  relayLegDistanceYardsOfEvent,
-} from '../relaySplits';
+import { displayTimeForRelayLeg, relayLegDistanceYardsOfEvent } from '../relaySplits';
 import {
   buildRelayCandidateGenderIndex,
   individualEventDistanceStroke,
   isRelayCandidateOfGender,
+  relayEntryKeyIn,
+  relayLegMatchSettings,
   relayStrokeForIndex,
   relayTemplateFromLeg,
   swimmerMatchesRelayLeg,
@@ -45,6 +43,7 @@ import {
   isRelayResult,
   isTimeTrialSwim,
   normalizeSwimmerName,
+  relayEntryLegSignature,
 } from '../utils';
 import { isExtractedSplitSwim } from '../bestTimeEligibility';
 import {
@@ -285,6 +284,7 @@ function legRowsForTemplate(
   team: string
 ): SwimmerResult[] {
   const round = (template.roundSwam || '').trim();
+  const signature = relayEntryLegSignature(template);
   return results
     .filter(
       x =>
@@ -292,7 +292,10 @@ function legRowsForTemplate(
         String(x.team ?? '').trim() === team &&
         x.event === template.event &&
         x.rank === template.rank &&
-        (x.roundSwam || '').trim() === round
+        (x.roundSwam || '').trim() === round &&
+        // One team's tied A and B relays share the label, round and place: the
+        // named swimmers say which entry a row is a leg of.
+        (!signature || relayEntryLegSignature(x) === '' || relayEntryLegSignature(x) === signature)
     )
     .sort((a, b) => (a.relayLegIndex ?? 0) - (b.relayLegIndex ?? 0));
 }
@@ -316,7 +319,7 @@ function collectTeamRelayEntries(
   for (const r of results) {
     if (!isTeamRelayRow(r, team, gender)) continue;
     const template = relayTemplateFromLeg(results, r);
-    const entryKey = relayEntryKey(template);
+    const entryKey = relayEntryKeyIn(results, template);
     if (seen.has(entryKey)) continue;
     seen.add(entryKey);
     const legRows = legRowsForTemplate(results, template, team);
@@ -570,7 +573,7 @@ function isEligibleLegCandidate(
       cand,
       target.entry.template.event,
       target.legIndex,
-      ctx.workspace.scoringSettings
+      relayLegMatchSettings(ctx.workspace)
     )
   ) {
     return false;
@@ -611,6 +614,9 @@ function buildRelayLegSwap(
   newTotal: number,
   deltaPoints: number
 ): RelayLegSwap {
+  const fromTimeTrial =
+    isTimeTrialSwim(cand, relayLegMatchSettings(ctx.workspace).scoredEventNumberMax) ||
+    cand.relayLegTimeTrial === true;
   return {
     relayEntryKey: target.entry.entryKey,
     relayEvent: target.entry.template.event,
@@ -627,9 +633,7 @@ function buildRelayLegSwap(
     inTimeStale: bestRef?.stale ? true : undefined,
     inTimeExtractedSplit: bestRef?.extractedSplit ? true : undefined,
     ...(cand.relayLegHistory ? { inFromHistory: true as const } : {}),
-    ...(isTimeTrialSwim(cand) || cand.relayLegTimeTrial === true
-      ? { inFromTimeTrial: true as const }
-      : {}),
+    ...(fromTimeTrial ? { inFromTimeTrial: true as const } : {}),
     clockLegTime: target.clockLegTime,
     deltaPoints,
     newTotal: Number(newTotal.toFixed(3)),

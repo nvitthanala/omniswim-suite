@@ -61,6 +61,7 @@ import { recordedCourseOfSwim } from './courseEvents';
 import {
   individualEventDistanceStroke,
   relayLegEventKey,
+  relayLegMatchSettings,
   relayLegEventName,
   relayStrokeForIndex,
 } from './relayLegMatching';
@@ -254,6 +255,8 @@ export function relayLegHistoryCandidates(
   // Read after the history cache, never inside it: the cache is keyed on the
   // history array, so toggling the setting must not return stale rows.
   const allowTimeTrials = relayLegsAllowTimeTrials(workspace.scoringSettings);
+  // The meet's scored-event boundary: a swim of a later event is a time trial here too.
+  const scoredMax = relayLegMatchSettings(workspace).scoredEventNumberMax;
   const resolver = buildAliasResolver(workspace);
   const keys = new Map<string, string>();
   const keyOf = (name: string, team: string): string => {
@@ -280,7 +283,7 @@ export function relayLegHistoryCandidates(
     const legEvent = legEventByKey.get(memoLegEventKey(row.event));
     // A time-trial row cannot fill the leg while the setting is off, so it
     // must not hide the swimmer's history swim at that event (rule 3).
-    if (legEvent && (allowTimeTrials || !isTimeTrialSwim(row))) member.legEventsSwum.add(legEvent);
+    if (legEvent && (allowTimeTrials || !isTimeTrialSwim(row, scoredMax))) member.legEventsSwum.add(legEvent);
     roster.set(key, member);
   }
   if (roster.size === 0) return [];
@@ -288,7 +291,7 @@ export function relayLegHistoryCandidates(
   const fastest = new Map<string, { legSwim: HistoryLegSwim; key: string; member: RosterSwimmer }>();
   for (const legSwim of historyLegSwims(history, gender)) {
     if (!legEvents.has(legSwim.legEvent)) continue;
-    if (!allowTimeTrials && isTimeTrialSwim(legSwim.swim)) continue;
+    if (!allowTimeTrials && isTimeTrialSwim(legSwim.swim, scoredMax)) continue;
     const key = keyOf(legSwim.swim.name, legSwim.swim.team);
     const member = roster.get(key);
     if (!member || member.legEventsSwum.has(legSwim.legEvent)) continue;
@@ -299,7 +302,7 @@ export function relayLegHistoryCandidates(
   }
 
   return [...fastest.values()].map(({ legSwim, key, member }) =>
-    historyCandidateRow(member, legSwim, gender, key, isTimeTrialSwim(legSwim.swim))
+    historyCandidateRow(member, legSwim, gender, key, isTimeTrialSwim(legSwim.swim, scoredMax))
   );
 }
 

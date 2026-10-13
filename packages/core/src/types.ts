@@ -26,7 +26,16 @@ export type RelayLegStroke = 'back' | 'breast' | 'fly' | 'free';
 export interface RelayMissingLeg {
   stroke: RelayLegStroke;
   legIndex: number;
-  reason: 'vacant' | 'no_replacement' | 'stroke_mismatch';
+  /**
+   * Why the leg has no swimmer.
+   *
+   * - `vacant`: nobody is named, or the name resolves onto nothing.
+   * - `no_replacement`: the departed swimmer was a non-scorer and nobody replaces them.
+   * - `stroke_mismatch`: the named swim is not the leg's event, or the swimmer is already on the relay.
+   * - `time_trial_only`: the named swimmer's only swim at the leg's event is a time trial, and
+   *   `ScoringSettings.relayLegsAllowTimeTrials` is off. The leg takes the same +3.0 s penalty as a vacant leg.
+   */
+  reason: 'vacant' | 'no_replacement' | 'stroke_mismatch' | 'time_trial_only';
 }
 
 export type RelaySplitSegment = {

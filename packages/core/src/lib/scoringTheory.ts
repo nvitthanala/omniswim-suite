@@ -21,8 +21,8 @@ import { isChampionshipProgramEvent, normalizeEventLabel } from './athleteHistor
 import { isRankableSwim, swimEventIdentity } from './bestTimeEligibility';
 import { mergeScoringSettings } from './scoringDefaults';
 import { scorerRosterKey, usesScorerRoster } from './scorerRoster';
-import { relayEntryKey, parseRelayDistanceYardsOrNull } from './relaySplits';
-import { relayTemplateFromLeg, upsertRelayLegOverride } from './relayLegMatching';
+import { parseRelayDistanceYardsOrNull } from './relaySplits';
+import { relayEntryKeyIn, relayTemplateFromLeg, upsertRelayLegOverride } from './relayLegMatching';
 import {
   canAcceptAnotherEntry,
   countSwimmerEntries,
@@ -977,7 +977,7 @@ function indexRelayTemplatesBySignature(
     if (!isRelayResult(r)) continue;
     if (!resultRowIsForTeam(r, team, gender)) continue;
     const template = relayTemplateFromLeg(results, r);
-    const key = relayEntryKey(template);
+    const key = relayEntryKeyIn(results, template);
     if (seenKeys.has(key)) continue;
     seenKeys.add(key);
     const sig = relaySignature(template.event);
@@ -1106,7 +1106,7 @@ function applyTheoryRelay(
     );
     return;
   }
-  const entryKey = relayEntryKey(template);
+  const entryKey = relayEntryKeyIn(ctx.results, template);
   relay.legs.forEach((leg, legIndex) =>
     assignRelayLeg(ctx, draft, relay, entryKey, template.event, leg, legIndex)
   );

@@ -11,6 +11,7 @@
 
 import { Gender, Workspace } from '../types';
 import { relayEntryKey } from './relaySplits';
+import { relayEntryKeyIn } from './relayLegMatching';
 import { canonicalSwimmerName, isRelayResult } from './utils';
 import { getSourceResults } from './meetSource';
 
@@ -63,7 +64,12 @@ export function countWorkingCopyChanges(workspace: Workspace, gender: Gender): W
   // looking at the men's roster — a plausible, wrong number.
   const keysFor = (rows: Workspace['menResults']) => {
     const keys = new Set<string>();
-    for (const r of rows ?? []) keys.add(relayEntryKey(r));
+    const list = rows ?? [];
+    for (const r of list) {
+      keys.add(relayEntryKey(r));
+      // A tied relay's override may carry the named swimmers after the clock.
+      if (r.isRelay) keys.add(relayEntryKeyIn(list, r));
+    }
     return keys;
   };
   const thisGenderKeys = keysFor(gender === Gender.MEN ? workspace.menResults : workspace.womenResults);

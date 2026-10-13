@@ -8,6 +8,7 @@ import { Gender, RelayLegOverride, SwimmerResult, Workspace } from '@omniswim/co
 import type { ScoringBundle } from '@omniswim/core/lib/useWorkspaceScoring';
 import {
   listEligibleRelayLegCandidates,
+  relayLegMatchSettings,
   removeRelayLegOverride,
   suggestBestRelayLegFill,
   upsertRelayLegOverride,
@@ -224,7 +225,7 @@ export default function IndRelayManagementView({
         assignedInSelectedRelay,
         selectedTeam,
         gender,
-        workspace.scoringSettings
+        relayLegMatchSettings(workspace)
       )) {
         const k = normalizeSwimmerName(swimmer.name);
         if (seen.has(k)) continue;
@@ -233,7 +234,7 @@ export default function IndRelayManagementView({
       }
     }
     return out.sort((a, b) => a.name.localeCompare(b.name));
-  }, [relayLegCandidatePool, assignedInSelectedRelay, selectedGroup, selectedTeam, gender, workspace.scoringSettings]);
+  }, [relayLegCandidatePool, assignedInSelectedRelay, selectedGroup, selectedTeam, gender, workspace]);
 
   const patchOverrides = (next: RelayLegOverride[]) => {
     onUpdate({ relayLegOverrides: next });
@@ -273,7 +274,8 @@ export default function IndRelayManagementView({
       legIndex,
       assignedInSelectedRelay,
       exclude,
-      workspace.scoringSettings
+      relayLegMatchSettings(workspace),
+      originalResults
     );
     if (!fill) return;
     patchOverrides(upsertRelayLegOverride(overrides, fill.override));
@@ -300,7 +302,8 @@ export default function IndRelayManagementView({
         legIndex,
         assigned,
         exclude,
-        workspace.scoringSettings
+        relayLegMatchSettings(workspace),
+        originalResults
       );
       if (!fill) continue;
       next = upsertRelayLegOverride(next, fill.override);

@@ -53,6 +53,8 @@ import {
 import {
   findRelayLegOverride,
   isRelayLegEvent,
+  isTimeTrialOnlyForRelayLeg,
+  overrideNamesTimeTrialOnlySwimmer,
   relayEntryGender,
   relayLegRequirements,
   relayStrokeForIndex,
@@ -1059,9 +1061,21 @@ export function classifyRoundTier(
  * The relay-leg code reads it to keep a time trial off a leg unless
  * `ScoringSettings.relayLegsAllowTimeTrials` is on. It accepts a
  * `HistoricalSwim` as well as a `SwimmerResult`.
+ *
+ * `scoredEventNumberMax` is the meet's last scored event number. A swim whose
+ * label names a later event (`Event 938 Women 100 Yard Breaststroke`) is outside
+ * the scored program and is a time trial here, with or without the flag and
+ * with or without a Boys/Girls word: the championship-event exception does not
+ * rescue it. It is the same boundary the scoring engine reads
+ * (`isOutsideScoredProgram`). Omitted, only the flag and the label decide, as
+ * before.
  */
-export function isTimeTrialSwim(row: { event?: string; isTimeTrial?: boolean }): boolean {
+export function isTimeTrialSwim(
+  row: { event?: string; isTimeTrial?: boolean },
+  scoredEventNumberMax?: number
+): boolean {
   const event = String(row.event ?? '');
+  if (isOutsideScoredProgram(event, scoredEventNumberMax)) return true;
   const flagged = row.isTimeTrial === true || /\bTIME\s+TRIALS?\b/i.test(event);
   return flagged && !isChampionshipGenderEvent(event);
 }
@@ -2378,7 +2392,7 @@ export function relayTeamClock(r: SwimmerResult): string {
  * The four swimmers are what tells the two entries apart. Every leg row of one
  * entry lists the same four names, so the signature is the same on all of them.
  */
-function relayEntryLegSignature(r: SwimmerResult): string {
+export function relayEntryLegSignature(r: SwimmerResult): string {
   const named = r.relayNames ?? [];
   if (named.length === 0) return '';
   return named
@@ -3273,6 +3287,48 @@ type ResolvedRelayLegs = {
 };
 
 /**
+ * Why a leg is vacant when its named swim is not the leg's event. A swim that is
+ * the leg's event but a time trial (setting off) is not a wrong stroke: say so,
+ * so the coach can opt in rather than hunt for a mismatch.
+ */
+function failedLegCheckReason(
+  assignee: SwimmerResult,
+  event: string,
+  legIndex: number,
+  settings?: RelayLegMatchSettings
+): RelayMissingLeg['reason'] {
+  return isTimeTrialOnlyForRelayLeg(assignee, event, legIndex, settings)
+    ? 'time_trial_only'
+    : 'stroke_mismatch';
+}
+
+/**
+ * Why a leg is vacant when its override resolves onto no swim. The named
+ * swimmer's only swim at the leg event may be a time trial (setting off): the
+ * same reason the recruit-id path reports ({@link failedLegCheckReason}).
+ */
+function unresolvedOverrideReason(
+  override: RelayLegOverride,
+  legPool: SwimmerResult[],
+  template: SwimmerResult,
+  legIndex: number,
+  relayGender: Gender | undefined,
+  settings?: RelayLegMatchSettings
+): RelayMissingLeg['reason'] {
+  return overrideNamesTimeTrialOnlySwimmer(
+    override,
+    legPool,
+    template.team,
+    template.event,
+    legIndex,
+    relayGender,
+    settings
+  )
+    ? 'time_trial_only'
+    : 'vacant';
+}
+
+/**
  * Resolve every leg of one relay group: a leg whose holder stays untouched
  * keeps their spot; a leg whose holder departs (dropped, excluded, or a
  * non-scorer vacate) is filled by its override's assignee, or by its manual time
@@ -3361,7 +3417,7 @@ function resolveRelayLegs(
     );
 
     const stroke = relayStrokeForIndex(evLower, index);
-    const override = findRelayLegOverride(overrideList, template, index);
+    const override = findRelayLegOverride(overrideList, template, index, results);
     const departedNameKey = normalizeSwimmerName(leg.name);
 
     const markVacant = (reason: RelayMissingLeg['reason']) => {
@@ -3402,7 +3458,7 @@ function resolveRelayLegs(
         continue;
       }
       if (!swimmerMatchesRelayLeg(assignee, template.event, index, relayLegSettings)) {
-        markVacant('stroke_mismatch');
+        markVacant(failedLegCheckReason(assignee, template.event, index, relayLegSettings));
         continue;
       }
       const assigneeKey = normalizeSwimmerName(assignee.name);
@@ -3441,7 +3497,9 @@ function resolveRelayLegs(
       continue;
     }
 
-    markVacant('vacant');
+    markVacant(
+      unresolvedOverrideReason(override, legPool, template, index, relayGender, relayLegSettings)
+    );
   }
 
   return {
