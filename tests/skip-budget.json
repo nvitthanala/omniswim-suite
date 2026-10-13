@@ -36,21 +36,6 @@
       "ci": 5,
       "reason": "describe.skipIf(!realPresent), the 'ALL the real captures' block. Reads data/swimcloud-captures/captures (gitignored)."
     },
-    "tests/rosterEmptyState.test.ts": {
-      "local": 0,
-      "ci": 1,
-      "reason": "it.skipIf(UWF_MEN === undefined). Reads one stored UWF men's roster page from data/swimcloud-captures/pages (gitignored). The synthetic-page tests in the same file still run."
-    },
-    "tests/optimizerActivePlansAcrossTeams.test.ts": {
-      "local": 0,
-      "ci": 1,
-      "reason": "it.skipIf(!hasLocalMeets). Reads data/meets.json, which is gitignored."
-    },
-    "tests/altitudeAdjustment.test.ts": {
-      "local": 0,
-      "ci": 2,
-      "reason": "it.skipIf(!hasPdftotextTable). `pdftotext -table` is an xpdf option; poppler (what ubuntu ships) lacks it. The developer machine has xpdf 4.00. These two tests re-read the archived NCAA PDFs and never run in CI."
-    },
     "tests/workspaceScopePg.test.ts": {
       "local": 8,
       "ci": 0,

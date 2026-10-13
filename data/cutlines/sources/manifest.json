@@ -12,7 +12,17 @@
       "sha256": "acd6624227405e92e466b6078d7621e0048e18334d0026d2c51d4c5f5b22d1d3",
       "bytes": 200094,
       "pageCount": 4,
-      "retrievedAt": "2026-07-26T05:30:05Z"
+      "retrievedAt": "2026-07-26T05:30:05Z",
+      "extractedText": {
+        "filename": "2025-26D1XSW_QUALSTANDARDS.table.txt",
+        "sha256": "94c09f28ba0a89de390ba41af83d3cc9342e3f1a2357dbcfae799ef31e84aece",
+        "bytes": 7745,
+        "pdfSha256": "acd6624227405e92e466b6078d7621e0048e18334d0026d2c51d4c5f5b22d1d3",
+        "tool": "xpdf pdftotext",
+        "toolVersion": "4.00",
+        "command": "pdftotext -eol unix -table 2025-26D1XSW_QUALSTANDARDS.pdf -",
+        "pageSeparator": "form feed (U+000C) after each page"
+      }
     },
     {
       "id": "ncaa-d2-men-2026-27",
@@ -24,7 +34,17 @@
       "sha256": "5864b9e84fdd2eed08d2e0283e2bc1424e7293a5be87636a08b295549d844852",
       "bytes": 156359,
       "pageCount": 2,
-      "retrievedAt": "2026-07-26T05:30:05Z"
+      "retrievedAt": "2026-07-26T05:30:05Z",
+      "extractedText": {
+        "filename": "2026-27D2MSW_QualStandards.table.txt",
+        "sha256": "84aced7ef6469e8b208008f59b137450af11e9e8204b0334bd006af1b5c5938b",
+        "bytes": 4865,
+        "pdfSha256": "5864b9e84fdd2eed08d2e0283e2bc1424e7293a5be87636a08b295549d844852",
+        "tool": "xpdf pdftotext",
+        "toolVersion": "4.00",
+        "command": "pdftotext -eol unix -table 2026-27D2MSW_QualStandards.pdf -",
+        "pageSeparator": "form feed (U+000C) after each page"
+      }
     },
     {
       "id": "ncaa-d2-women-2026-27",
@@ -36,7 +56,17 @@
       "sha256": "cda92c2c63346a49ada7ec941f6ed3fe1f18b37f459e0462193babd032bfc8a7",
       "bytes": 152729,
       "pageCount": 2,
-      "retrievedAt": "2026-07-26T05:30:06Z"
+      "retrievedAt": "2026-07-26T05:30:06Z",
+      "extractedText": {
+        "filename": "2026-27D2WSW_QualStandards.table.txt",
+        "sha256": "0b54c352f41f6d9651232e88f9c6e6d40cffc1a71b0ccf3ce2ce3b036bb06310",
+        "bytes": 4795,
+        "pdfSha256": "cda92c2c63346a49ada7ec941f6ed3fe1f18b37f459e0462193babd032bfc8a7",
+        "tool": "xpdf pdftotext",
+        "toolVersion": "4.00",
+        "command": "pdftotext -eol unix -table 2026-27D2WSW_QualStandards.pdf -",
+        "pageSeparator": "form feed (U+000C) after each page"
+      }
     },
     {
       "id": "ncaa-d3-2026-27",
@@ -48,7 +78,17 @@
       "sha256": "3668b73e3eb9b71686a29636f06349437053b35f1bc1df792dad9c118a7d188d",
       "bytes": 162052,
       "pageCount": 1,
-      "retrievedAt": "2026-07-26T05:30:06Z"
+      "retrievedAt": "2026-07-26T05:30:06Z",
+      "extractedText": {
+        "filename": "2026-27D3XSW_QualifyingStandards.table.txt",
+        "sha256": "3891e3b5f8718f093dd86d5234ec929a6053a14b538b8d191d0bd62d2e11a940",
+        "bytes": 2750,
+        "pdfSha256": "3668b73e3eb9b71686a29636f06349437053b35f1bc1df792dad9c118a7d188d",
+        "tool": "xpdf pdftotext",
+        "toolVersion": "4.00",
+        "command": "pdftotext -eol unix -table 2026-27D3XSW_QualifyingStandards.pdf -",
+        "pageSeparator": "form feed (U+000C) after each page"
+      }
     },
     {
       "id": "naia-2026-27",
@@ -60,7 +100,17 @@
       "sha256": "395be842a2fde60a25348ed9d534cbdf65024fb831626ccfa908ca00c130c166",
       "bytes": 169011,
       "pageCount": 1,
-      "retrievedAt": "2026-07-26T05:30:06Z"
+      "retrievedAt": "2026-07-26T05:30:06Z",
+      "extractedText": {
+        "filename": "2026-27-SD-Qualifying-Standards-wo-Relays.table.txt",
+        "sha256": "349c09c5c0585599083acf80b46183f0e063dbef76456cb730b701a63d68ec74",
+        "bytes": 4640,
+        "pdfSha256": "395be842a2fde60a25348ed9d534cbdf65024fb831626ccfa908ca00c130c166",
+        "tool": "xpdf pdftotext",
+        "toolVersion": "4.00",
+        "command": "pdftotext -eol unix -table 2026-27-SD-Qualifying-Standards-wo-Relays.pdf -",
+        "pageSeparator": "form feed (U+000C) after each page"
+      }
     },
     {
       "id": "naia-2020-21-course-evidence",
@@ -74,7 +124,17 @@
       "pageCount": 1,
       "retrievedAt": "2026-09-25T02:01:53Z",
       "purpose": "Course evidence only, no values used. The official NAIA 2020-21 sheet heads its metric column \"SCM\". The 2026-27 sheet heads it \"METERS\" with no course. User decision 2026-09-24: read NAIA METERS as SCM on this evidence. Hosted by a club (gomotionapp), not naia.org; the naia.org coaches manual URL returned 404 on 2026-09-24.",
-      "evidenceOnly": true
+      "evidenceOnly": true,
+      "extractedText": {
+        "filename": "2020-21-NAIA-SD-Qualifying-Standards.table.txt",
+        "sha256": "67e0a9a94d1dcfa2448140a4ac38230be85ab5d331374572d2a48f099fbdca96",
+        "bytes": 5852,
+        "pdfSha256": "c672d8bcbbdcf2b69b94dc6fbfe701cf6a724fb738cdd14de0fda4a18022b132",
+        "tool": "xpdf pdftotext",
+        "toolVersion": "4.00",
+        "command": "pdftotext -eol unix -table 2020-21-NAIA-SD-Qualifying-Standards.pdf -",
+        "pageSeparator": "form feed (U+000C) after each page"
+      }
     }
   ]
 }

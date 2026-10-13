@@ -1,0 +1,133 @@
+2026-27 Division II Men's Swimming and Diving Qualifying Standards
+
+       MEN'S SWIMMING STANDARDS
+
+                         25-Yard Course
+
+EVENT                    A                        B
+
+                         Standard                 Standard
+
+       50 Freestyle                      19.39                      20.36
+
+       100 Freestyle                     42.87                      45.01
+
+       200 Freestyle                     1:34.19       1:38.90
+
+       500 Freestyle                     4:19.37       4:32.34
+
+     1000 Freestyle                      8:57.17       9:24.03
+
+     1650 Freestyle           15:08.94                 15:54.38
+
+     100 Backstroke                      46.29                      48.60
+
+     200 Backstroke                      1:42.18       1:47.29
+
+     100 Breaststroke                    52.46                      55.08
+
+     200 Breaststroke                    1:54.78       2:00.52
+
+       100 Butterfly                     46.17                      48.48
+
+       200 Butterfly                     1:44.50       1:49.72
+
+200  Individual Medley                   1:44.31       1:49.53
+
+400  Individual Medley                   3:46.91       3:58.26
+
+                         MEN'S RELAY STANDARDS
+
+                         25-Yard Course
+
+EVENT                    QUALIFYING               PROVISIONAL
+
+200 Freestyle Relay                      N/A           1:19.88
+
+400 Freestyle Relay                      N/A           2:56.13
+
+800 Freestyle Relay                      N/A           6:32.68
+
+     200 Medley Relay                    N/A           1:27.34
+
+     400 Medley Relay                    N/A           3:12.45
+
+                         MEN'S DIVING STANDARDS
+
+* A minimum degree of difficulty on the 1-Meter six optional dives shall be a 14.0
+
+# A minimum degree of difficulty on the 3-Meter six optional dives shall be a 15.0
+
+EVENT                    Dual-6 Optionals         Championship-11 Dives
+
+1-Meter Diving Points *  285                      440
+
+3-Meter Diving Points #  295                      460
+Conversions
+
+To convert a metric time achieved in a 25-meter racing course to an equivalent time for a 25-yard racing course:
+
+(a) transform the achieved metric time into seconds; (b) carrying the calculation out to five decimal places,
+
+multiply the transformed time in seconds by the appropriate following conversion factor; (c) drop, without
+
+rounding, all units smaller than a hundredth of a second; and (d) finally, transform the resultant value in seconds
+
+back into minutes and seconds to obtain the converted time.
+
+                          Short-Course Conversion Factors (Men and Women)
+
+                          Event                                                   Factor
+
+                          400 meters to 500 yards                                 1.143
+
+                          800 meters to 1000 yards                                1.143
+
+                          1500 meters to 1650 yards                               1.003
+
+                          All other events                                        0.896
+
+Please note that the conversion table above reflects what is included in the 2026-27 NCAA Swimming and
+
+Diving Rules Book, Appendix A-2. This document reflects what will be used for selection to and seeding at the
+
+2027 Division II Swimming and Diving Championships.
+
+All time standards, consideration standards and optional-entry standards may be achieved only in 25-yard or 25-
+
+meter racing courses. No times achieved in 50-meter courses will be eligible for selection.
+
+Altitude
+
+Times achieved at an altitude of 3,000 feet or higher may be adjusted according to the following chart:
+
+                                 I                           II                                          III
+
+          Event                  3,000-4,250 Ft.             4,251-6,500 Ft.                 Above 6,500 Ft.
+
+                                 Elevation                   Elevation                       Elevation
+
+100 Yards/Meters                 .0                          .10                                         .15
+
+(Individual Events)
+
+200 Yards/Meters                 .5                          1.2                                         1.6
+
+(Individual Events)
+
+500 Yards/400 Meters             2.5                         5.0                                         7.0
+
+(Individual Events)
+
+1,000 Yards/800 Meters           6.3                         11.4                            18.5
+
+(Individual Events)
+
+1,650 Yards/1,500 Meters         11.0                        20.0                            32.5
+
+(Individual Events)
+
+Subtract the time above from the actual time achieved. A relay team may use a conversion that is four times the
+
+appropriate figures listed above. This is the time to be used on the entry form.
+

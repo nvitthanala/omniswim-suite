@@ -9,8 +9,10 @@
  * 1. **The NCAA altitude chart** is printed in the archived D2 2026-27 sheets
  *    (page 2) and the D1 2025-26 sheet (page 3), with identical figures.
  *    `NCAA_ALTITUDE_ADJUSTMENT_TABLE` holds it; this file snapshots every value
- *    and, where `pdftotext -table` is available, re-reads the PDFs. (`-layout`
- *    misaligns the rows of this chart.)
+ *    and checks the figures against the PDFs' `pdftotext -table` text. Where xpdf's
+ *    `pdftotext` is installed it re-reads the PDFs live; elsewhere (CI has poppler,
+ *    which lacks `-table`) it reads the archived output, whose hashes are in the
+ *    manifest. (`-layout` misaligns the rows of this chart.)
  * 2. **SwimCloud publishes the adjusted time, not the swum one.** Swimmer
  *    1401610's `400 Free LCM` reads `247.11` (4:07.11) with chip `A` /
  *    "Altitude Adjusted"; the meet results page shows the swim as 4:12.11. The
@@ -51,21 +53,50 @@ const NAME = 'Fixture Swimmer';
 /* The chart, against its archived sources                                     */
 /* -------------------------------------------------------------------------- */
 
-type ManifestEntry = { id: string; filename: string; sha256: string };
+type ManifestEntry = {
+  id: string;
+  filename: string;
+  sha256: string;
+  /** The tool's own `-table` output for this PDF, archived by scripts/extract-cutline-text.mjs. */
+  extractedText?: { filename: string; sha256: string; pdfSha256: string; tool: string; toolVersion: string };
+};
 const manifest = JSON.parse(readFileSync(join(sourcesDir, 'manifest.json'), 'utf8')) as {
   sources: ManifestEntry[];
 };
+
+const lf = (text: string) => text.replace(/\r\n/g, '\n');
 
 function pdfTableText(filename: string, page?: number) {
   const args = page ? ['-f', String(page), '-l', String(page)] : [];
   return spawnSync('pdftotext', [...args, '-table', join(sourcesDir, filename), '-'], { encoding: 'utf8' });
 }
 
-/** `-table` is an xpdf option; poppler's pdftotext lacks it. Skip rather than misread. */
+/**
+ * `-table` is an xpdf option; poppler's pdftotext (what ubuntu ships) lacks it. Where it is
+ * missing the tests read the text archived next to each PDF instead, so they still run.
+ */
 const hasPdftotextTable = (() => {
   const probe = pdfTableText('2026-27D2MSW_QualStandards.pdf', 2);
   return !probe.error && probe.status === 0 && /Altitude/.test(probe.stdout);
 })();
+
+/** The archived `-table` text of a whole PDF, line endings as LF. Pages end with a form feed. */
+function archivedTableText(pdfFilename: string): string {
+  const entry = manifest.sources.find((s) => s.filename === pdfFilename);
+  expect(entry?.extractedText, `${pdfFilename} has no extractedText in the manifest`).toBeDefined();
+  return lf(readFileSync(join(sourcesDir, entry!.extractedText!.filename), 'utf8'));
+}
+
+/** `-table` text of one page (1-based) or of the whole PDF: live from xpdf, else the archived copy. */
+function tableText(filename: string, page?: number): string {
+  if (hasPdftotextTable) {
+    const run = pdfTableText(filename, page);
+    expect(run.status, filename).toBe(0);
+    return lf(run.stdout);
+  }
+  const whole = archivedTableText(filename);
+  return page === undefined ? whole : whole.split('\f')[page - 1];
+}
 
 /** Row label as each sheet prints it. The D1 sheet writes `500 Yards-400 Meters`. */
 const ROW_PATTERNS: Record<NcaaAltitudeRow, RegExp> = {
@@ -104,11 +135,25 @@ describe('the NCAA altitude chart matches its archived sources', () => {
     }
   });
 
-  it.skipIf(!hasPdftotextTable)('reads every figure and the instruction off each cited page', () => {
+  it('archives the -table text with the hashes the manifest records', () => {
+    for (const entry of manifest.sources) {
+      const archived = entry.extractedText;
+      expect(archived, `${entry.filename} has no extractedText`).toBeDefined();
+      expect(archived!.pdfSha256, entry.filename).toBe(entry.sha256);
+      // Hashed as LF, so a Windows checkout that converted line endings still matches.
+      const text = archivedTableText(entry.filename);
+      expect(createHash('sha256').update(text).digest('hex'), archived!.filename).toBe(archived!.sha256);
+      // Where xpdf is installed, the archive must still be what the tool prints for the PDF.
+      if (hasPdftotextTable) {
+        const live = lf(pdfTableText(entry.filename).stdout);
+        expect(live, `${archived!.filename} is stale; run node scripts/extract-cutline-text.mjs`).toBe(text);
+      }
+    }
+  });
+
+  it('reads every figure and the instruction off each cited page', () => {
     for (const doc of NCAA_ALTITUDE_ADJUSTMENT_TABLE.source.documents) {
-      const run = pdfTableText(doc.filename, doc.page);
-      expect(run.status, doc.filename).toBe(0);
-      const text = run.stdout;
+      const text = tableText(doc.filename, doc.page);
       const flat = text.replace(/\s+/g, ' ');
       expect(flat, doc.filename).toContain('Times achieved at an altitude of 3,000 feet or higher may be adjusted');
       for (const cls of Object.values(NCAA_ALTITUDE_ADJUSTMENT_TABLE.elevationClasses)) {
@@ -128,11 +173,9 @@ describe('the NCAA altitude chart matches its archived sources', () => {
     }
   });
 
-  it.skipIf(!hasPdftotextTable)('finds no altitude chart in the D3 or NAIA sheet', () => {
+  it('finds no altitude chart in the D3 or NAIA sheet', () => {
     for (const filename of ['2026-27D3XSW_QualifyingStandards.pdf', '2026-27-SD-Qualifying-Standards-wo-Relays.pdf']) {
-      const run = pdfTableText(filename);
-      expect(run.status, filename).toBe(0);
-      expect(run.stdout, filename).not.toMatch(/altitude/i);
+      expect(tableText(filename), filename).not.toMatch(/altitude/i);
     }
   });
 });
