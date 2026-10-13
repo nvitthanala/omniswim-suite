@@ -223,7 +223,8 @@ export default function IndRelayManagementView({
         idx,
         assignedInSelectedRelay,
         selectedTeam,
-        gender
+        gender,
+        workspace.scoringSettings
       )) {
         const k = normalizeSwimmerName(swimmer.name);
         if (seen.has(k)) continue;
@@ -232,7 +233,7 @@ export default function IndRelayManagementView({
       }
     }
     return out.sort((a, b) => a.name.localeCompare(b.name));
-  }, [relayLegCandidatePool, assignedInSelectedRelay, selectedGroup, selectedTeam, gender]);
+  }, [relayLegCandidatePool, assignedInSelectedRelay, selectedGroup, selectedTeam, gender, workspace.scoringSettings]);
 
   const patchOverrides = (next: RelayLegOverride[]) => {
     onUpdate({ relayLegOverrides: next });
@@ -271,7 +272,8 @@ export default function IndRelayManagementView({
       group.template,
       legIndex,
       assignedInSelectedRelay,
-      exclude
+      exclude,
+      workspace.scoringSettings
     );
     if (!fill) return;
     patchOverrides(upsertRelayLegOverride(overrides, fill.override));
@@ -297,7 +299,8 @@ export default function IndRelayManagementView({
         group.template,
         legIndex,
         assigned,
-        exclude
+        exclude,
+        workspace.scoringSettings
       );
       if (!fill) continue;
       next = upsertRelayLegOverride(next, fill.override);
