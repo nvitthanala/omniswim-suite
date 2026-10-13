@@ -7,8 +7,8 @@
  * require local-only fixtures (not committed to the repo) are skipped when the
  * fixture is absent so `npm test` stays green on a clean checkout.
  */
-import { spawnSync } from 'node:child_process';
-import { existsSync } from 'node:fs';
+import { spawn, spawnSync } from 'node:child_process';
+import { existsSync, readdirSync } from 'node:fs';
 import { createServer } from 'node:net';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
@@ -136,6 +136,46 @@ const TESTS = [
   ['test_relay_scoring.mjs', 'tests/test_nsisc_output.json'],
 ];
 
+/**
+ * Scripts named `test_*.mjs` that deliberately do not run in this suite, each with
+ * the reason it cannot. A script that is in neither TESTS nor here fails the run
+ * (the check below), so a new test cannot sit unregistered and read as coverage.
+ *
+ * Manual probes live in `scripts/probes/` instead and need no entry.
+ */
+const EXCLUDED = {
+  // 'test_<name>.mjs': 'why it cannot run unattended',
+};
+
+{
+  const onDisk = readdirSync(scriptsDir).filter(f => /^test_.+\.mjs$/.test(f));
+  const listed = new Set(TESTS.map(([file]) => file));
+  const unaccounted = onDisk.filter(f => !listed.has(f) && !(f in EXCLUDED));
+  const bothWays = Object.keys(EXCLUDED).filter(f => listed.has(f));
+  const stale = Object.keys(EXCLUDED).filter(f => !onDisk.includes(f));
+  if (unaccounted.length || bothWays.length || stale.length) {
+    console.log('FAIL  scripts/test_*.mjs registration');
+    for (const f of unaccounted) console.log(`  ${f} is in neither TESTS nor EXCLUDED. List it in TESTS, give it a reason in EXCLUDED, or move it to scripts/probes/.`);
+    for (const f of bothWays) console.log(`  ${f} is in both TESTS and EXCLUDED. Remove one.`);
+    for (const f of stale) console.log(`  ${f} is in EXCLUDED but is not on disk. Remove the entry.`);
+    process.exit(1);
+  }
+}
+
+/**
+ * Scripts that must not overlap with any other script. Each one touches state that
+ * the pool would share: a fixed port, the real `data/` folder, or the one database.
+ * They run one at a time, after the pool has drained.
+ */
+const EXCLUSIVE = {
+  'test_scoring_preset_routes.mjs': 'starts the real server on fixed port 3209 and writes data/scoring_presets/',
+  'test_pg_roundtrip.mjs': 'writes to the one shared PostgreSQL database (PG_TEST_URL)',
+  'test_data_dir_guard.mjs': 'starts real server processes and probes ports',
+};
+
+/** How many scripts run at once. OMNI_TEST_JOBS=1 restores the old one-at-a-time run. */
+const JOBS = Math.max(1, Math.floor(Number(process.env.OMNI_TEST_JOBS ?? 4)) || 4);
+
 let passed = 0;
 let failed = 0;
 let skipped = 0;
@@ -144,87 +184,161 @@ const knownFailures = [];
 /** `LOCAL-ONLY SKIPPED` lines from passing scripts: parts that need the untracked data/meets.json. */
 const localOnlySkips = [];
 
-for (const [file, ...fixtures] of TESTS) {
-  const path = join(scriptsDir, file);
-  if (!existsSync(path)) {
-    console.log(`SKIP  ${file} (missing)`);
-    skipped += 1;
-    continue;
-  }
-  const fixture = fixtures.find(f => !existsSync(join(repoRoot, f)));
-  if (fixture) {
-    console.log(`SKIP  ${file} (needs ${fixture})`);
-    skipped += 1;
-    continue;
-  }
-  // spawnSync rather than execFileSync so BOTH streams are captured even on a
-  // zero exit. That matters for the `console.assert` guard below: Node's
-  // console.assert writes "Assertion failed" to stderr and then keeps going,
-  // leaving the exit code at 0. Three test files used it, so they reported PASS
-  // no matter what they found. Exit status alone is not enough evidence.
-  const startedAt = Date.now();
-  const run = spawnSync(process.execPath, ['--import', 'tsx', path], {
-    cwd: repoRoot,
-    stdio: 'pipe',
-    // No script may hang the suite. Without this, one that never exits stalls
-    // `npm test` until the CI job's own ceiling kills it -- which on GitHub
-    // Actions is SIX HOURS, per run, billed. test_scoring_preset_routes.mjs did
-    // exactly that in September 2026: it starts a server through `npx tsx`, and
-    // killing `npx` left the real server running as a grandchild holding the
-    // stdio pipes open, so the script's event loop never drained. Fifteen runs
-    // burned six hours each before anyone looked.
-    //
-    // A timeout here turns that into one loud failure instead of a silent,
-    // expensive stall. It is deliberately generous: the slowest legitimate
-    // script in this suite finishes well inside a minute.
-    timeout: SCRIPT_TIMEOUT_MS,
-    killSignal: 'SIGKILL',
+/**
+ * Run one script and collect BOTH streams, even on a zero exit. That matters for the
+ * `console.assert` guard in `classify`: Node's console.assert writes "Assertion failed"
+ * to stderr and then keeps going, leaving the exit code at 0. Three test files used it,
+ * so they reported PASS no matter what they found. Exit status alone is not enough
+ * evidence.
+ *
+ * No script may hang the suite. Without a ceiling, one that never exits stalls
+ * `npm test` until the CI job's own ceiling kills it -- which on GitHub Actions is
+ * SIX HOURS, per run, billed. test_scoring_preset_routes.mjs did exactly that in
+ * September 2026: it starts a server through `npx tsx`, and killing `npx` left the
+ * real server running as a grandchild holding the stdio pipes open, so the script's
+ * event loop never drained. Fifteen runs burned six hours each before anyone looked.
+ *
+ * The timer lives here, not in spawn options, because the runner is async now. After
+ * the kill it also stops waiting for the pipes: a grandchild that holds them open
+ * would otherwise keep `close` from ever firing, and the runner would stall the same
+ * way. The ceiling is deliberately generous: the slowest legitimate script in this
+ * suite finishes well inside a minute.
+ */
+function runScript(path) {
+  return new Promise(resolve => {
+    const startedAt = Date.now();
+    const out = [];
+    const err = [];
+    let timedOut = false;
+    let settled = false;
+    const child = spawn(process.execPath, ['--import', 'tsx', path], {
+      cwd: repoRoot,
+      stdio: 'pipe',
+      windowsHide: true,
+    });
+    const finish = status => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve({
+        status,
+        timedOut,
+        elapsedMs: Date.now() - startedAt,
+        stdout: Buffer.concat(out).toString(),
+        stderr: Buffer.concat(err).toString(),
+      });
+    };
+    const timer = setTimeout(() => {
+      timedOut = true;
+      child.kill('SIGKILL');
+      setTimeout(() => {
+        child.stdout.destroy();
+        child.stderr.destroy();
+        finish(null);
+      }, 2000).unref();
+    }, SCRIPT_TIMEOUT_MS);
+    child.stdout.on('data', c => out.push(c));
+    child.stderr.on('data', c => err.push(c));
+    child.on('error', e => {
+      err.push(Buffer.from(String(e)));
+      finish(null);
+    });
+    child.on('close', code => finish(code));
+    child.stdin.on('error', () => {});
+    child.stdin.end();
   });
-  const elapsedMs = Date.now() - startedAt;
-  const stdout = run.stdout?.toString() ?? '';
-  const stderr = run.stderr?.toString() ?? '';
-  const combined = stdout + stderr;
+}
+
+/** Turn one finished script into its printed line and its contribution to the summary. */
+function classify(file, run) {
+  const combined = run.stdout + run.stderr;
   // A test that cannot fail is not a test. If a file ever reintroduces
   // console.assert, treat a tripped assertion as a failure regardless of status.
   const silentAssertion = /^Assertion failed/m.test(combined);
 
-  if (run.status === 0 && !silentAssertion) {
-    if (stdout.trimStart().startsWith('SKIP')) {
-      console.log(stdout.trim().split('\n')[0]);
-      skipped += 1;
-    } else {
-      const xfails = stdout.split('\n').filter(l => l.trimStart().startsWith('XFAIL'));
-      const localSkips = stdout.split('\n').filter(l => l.startsWith('LOCAL-ONLY SKIPPED'));
-      for (const line of localSkips) localOnlySkips.push(line.replace('LOCAL-ONLY SKIPPED', '').trim());
-      const notes = [];
-      if (xfails.length) notes.push(`${xfails.length} known failure${xfails.length > 1 ? 's' : ''}`);
-      if (localSkips.length) notes.push(`${localSkips.length} local-only part${localSkips.length > 1 ? 's' : ''} skipped`);
-      console.log(`PASS  ${file}${notes.length ? ` (${notes.join(', ')})` : ''}`);
-      for (const line of xfails) knownFailures.push(`${file}: ${line.trim()}`);
-      passed += 1;
+  if (run.status === 0 && !run.timedOut && !silentAssertion) {
+    if (run.stdout.trimStart().startsWith('SKIP')) {
+      return { kind: 'skip', line: run.stdout.trim().split('\n')[0] };
     }
+    const lines = run.stdout.split('\n');
+    const xfails = lines.filter(l => l.trimStart().startsWith('XFAIL'));
+    const localSkips = lines.filter(l => l.startsWith('LOCAL-ONLY SKIPPED'));
+    const notes = [];
+    if (xfails.length) notes.push(`${xfails.length} known failure${xfails.length > 1 ? 's' : ''}`);
+    if (localSkips.length) notes.push(`${localSkips.length} local-only part${localSkips.length > 1 ? 's' : ''} skipped`);
+    return {
+      kind: 'pass',
+      line: `PASS  ${file}${notes.length ? ` (${notes.join(', ')})` : ''}`,
+      knownFailures: xfails.map(l => `${file}: ${l.trim()}`),
+      localOnlySkips: localSkips.map(l => l.replace('LOCAL-ONLY SKIPPED', '').trim()),
+    };
+  }
+  // Saying "timed out" matters because a bare "FAIL" over the tail of a stalled
+  // script reads like an assertion failure and sends the next person hunting in the
+  // wrong place.
+  const why = run.timedOut
+    ? `Timed out after ${SCRIPT_TIMEOUT_MS} ms and was killed. The script did not exit on its own.\n` +
+      'A common cause here is spawning a server through `npx`: killing npx leaves the real\n' +
+      'server running as a grandchild, holding the stdio pipes open so the event loop never drains.\n'
+    : silentAssertion && run.status === 0
+      ? 'console.assert tripped but exited 0 — use node:assert/strict so the failure is real\n'
+      : '';
+  return {
+    kind: 'fail',
+    line: `FAIL  ${file}${run.timedOut ? ` (timed out after ${SCRIPT_TIMEOUT_MS} ms)` : ''}`,
+    failure: `--- ${file} ---\n${why}${combined.trim().split('\n').slice(-8).join('\n')}`,
+  };
+}
+
+// Decide each script's lane. A missing script or fixture is a skip, resolved here and
+// printed first so the order of the first lines does not depend on the pool.
+const outcomes = new Array(TESTS.length);
+const poolQueue = [];
+const exclusiveQueue = [];
+TESTS.forEach(([file, ...fixtures], index) => {
+  if (!existsSync(join(scriptsDir, file))) {
+    outcomes[index] = { kind: 'skip', line: `SKIP  ${file} (missing)` };
   } else {
-    // Detected by elapsed time, not by the exit shape. How a timed-out
-    // spawnSync reports itself is platform-dependent and not worth trusting:
-    // POSIX gives status null with signal SIGKILL, while Windows was observed
-    // giving status 13, no signal and no error at all. Wall time is the same
-    // everywhere. Saying "timed out" matters because a bare "FAIL" over the
-    // tail of a stalled script reads like an assertion failure and sends the
-    // next person hunting in the wrong place.
-    // The small tolerance absorbs timer granularity: the kill lands a few
-    // milliseconds either side of the ceiling, and at a short ceiling that was
-    // enough to leave a genuinely-stalled script labelled as a plain failure.
-    const timedOut = run.error?.code === 'ETIMEDOUT' || elapsedMs >= SCRIPT_TIMEOUT_MS - 250;
-    console.log(`FAIL  ${file}${timedOut ? ` (timed out after ${SCRIPT_TIMEOUT_MS} ms)` : ''}`);
-    const why = timedOut
-      ? `Timed out after ${SCRIPT_TIMEOUT_MS} ms and was killed. The script did not exit on its own.\n` +
-        'A common cause here is spawning a server through `npx`: killing npx leaves the real\n' +
-        'server running as a grandchild, holding the stdio pipes open so the event loop never drains.\n'
-      : silentAssertion && run.status === 0
-        ? 'console.assert tripped but exited 0 — use node:assert/strict so the failure is real\n'
-        : '';
-    failures.push(`--- ${file} ---\n${why}${combined.trim().split('\n').slice(-8).join('\n')}`);
+    const fixture = fixtures.find(f => !existsSync(join(repoRoot, f)));
+    if (fixture) outcomes[index] = { kind: 'skip', line: `SKIP  ${file} (needs ${fixture})` };
+    else (file in EXCLUSIVE ? exclusiveQueue : poolQueue).push(index);
+  }
+  if (outcomes[index]) console.log(outcomes[index].line);
+});
+
+/** Take scripts off a queue until it is empty. Each worker prints a script's line the moment it finishes. */
+async function drain(queue) {
+  while (queue.length > 0) {
+    const index = queue.shift();
+    const file = TESTS[index][0];
+    const run = await runScript(join(scriptsDir, file));
+    outcomes[index] = { ...classify(file, run), file, elapsedMs: run.elapsedMs };
+    console.log(outcomes[index].line);
+  }
+}
+
+const scriptsStartedAt = Date.now();
+await Promise.all(Array.from({ length: Math.min(JOBS, poolQueue.length) }, () => drain(poolQueue)));
+for (const index of exclusiveQueue) await drain([index]);
+const scriptsMs = Date.now() - scriptsStartedAt;
+const slowest = outcomes
+  .filter(o => o.elapsedMs !== undefined)
+  .sort((a, b) => b.elapsedMs - a.elapsedMs)
+  .slice(0, 3);
+console.log(`\nscripts: ${TESTS.length} listed, run in ${(scriptsMs / 1000).toFixed(1)} s (${JOBS} at a time, ${exclusiveQueue.length} exclusive)`);
+console.log(`slowest: ${slowest.map(o => `${o.file} ${(o.elapsedMs / 1000).toFixed(1)} s`).join(', ')}\n`);
+
+// Fold the outcomes into the summary in TESTS order, so two runs list failures the same way.
+for (const outcome of outcomes) {
+  if (outcome.kind === 'skip') {
+    skipped += 1;
+  } else if (outcome.kind === 'pass') {
+    passed += 1;
+    knownFailures.push(...outcome.knownFailures);
+    localOnlySkips.push(...outcome.localOnlySkips);
+  } else {
     failed += 1;
+    failures.push(outcome.failure);
   }
 }
 

@@ -1,6 +1,7 @@
+// MANUAL PROBE, not a suite test. Needs four conference result PDFs in the repo root that are not in the repo, plus the Python backend; without them it only prints SKIP. scripts/run-tests.mjs does not run it.
 /**
  * Parse ACC, Big 12, SEC (and NSISC) sample PDFs via Python parser + point calculator.
- * Usage: node scripts/test_conference_pdfs.mjs
+ * Usage: node scripts/probes/test_conference_pdfs.mjs
  */
 import { execFileSync } from 'child_process';
 import fs from 'fs';
@@ -8,7 +9,7 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const root = path.join(__dirname, '..');
+const root = path.join(__dirname, '..', '..');
 
 function resolvePython() {
   const win = process.platform === 'win32';

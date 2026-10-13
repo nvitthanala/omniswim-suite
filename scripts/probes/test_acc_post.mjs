@@ -1,7 +1,8 @@
+// MANUAL PROBE, not a suite test. Needs 2026_acc_championship_full_meet_results_1col.pdf in the cwd (not in the repo) and a server on port 3000. scripts/run-tests.mjs does not run it.
 import fs from 'fs';
 
 async function test() {
-  const file1 = fs.readFileSync('2026_NSISC_Championships_Final_Results.pdf').toString('base64');
+  const file1 = fs.readFileSync('2026_acc_championship_full_meet_results_1col.pdf').toString('base64');
   
   try {
     const res = await fetch('http://127.0.0.1:3000/api/parse-pdf', {
@@ -13,8 +14,8 @@ async function test() {
     if (data.error) throw new Error(data.error + " - " + data.details);
 
     const teams = new Set(data.results.map(r => r.team));
-    console.log(`NSISC length: ${data.results.length}`);
-    console.log('NSISC Teams:', Array.from(teams));
+    console.log(`ACC length: ${data.results.length}`);
+    console.log('ACC Teams:', Array.from(teams));
     
   } catch (e) {
     console.error('Er:', e);
