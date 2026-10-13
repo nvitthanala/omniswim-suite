@@ -51,9 +51,26 @@ const KIND_ICON: Record<ToastKind, typeof Info> = {
 export function ToastProvider({ children }: { children: ReactNode }) {
   const [toasts, setToasts] = useState<Toast[]>([]);
   const counter = useRef(0);
+  // One auto-dismiss timer per toast, by id. A timer that outlives the provider
+  // calls setState on an unmounted tree; after a test environment is torn down
+  // that throws "window is not defined" from inside React and fails the run.
+  const dismissTimers = useRef(new Map<string, number>());
 
   const dismiss = useCallback((id: string) => {
+    const timer = dismissTimers.current.get(id);
+    if (timer !== undefined) {
+      window.clearTimeout(timer);
+      dismissTimers.current.delete(id);
+    }
     setToasts(list => list.filter(t => t.id !== id));
+  }, []);
+
+  useEffect(() => {
+    const timers = dismissTimers.current;
+    return () => {
+      timers.forEach(timer => window.clearTimeout(timer));
+      timers.clear();
+    };
   }, []);
 
   const push = useCallback(
@@ -62,7 +79,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       setToasts(list => [...list, { id, kind, message, action: options?.action }]);
       if (!options?.persistent) {
         const ttl = kind === 'error' ? 7000 : 4000;
-        window.setTimeout(() => dismiss(id), ttl);
+        dismissTimers.current.set(id, window.setTimeout(() => dismiss(id), ttl));
       }
       return id;
     },
@@ -153,7 +170,13 @@ function ToastItem({
   const state = exiting ? 'exiting' : entered ? 'entered' : 'entering';
 
   return (
-    <div className={`toast-item toast-${toast.kind}`} data-state={state} role="status">
+    <div
+      className={`toast-item toast-${toast.kind}`}
+      data-state={state}
+      // An error interrupts a screen reader so a failed save is not missed.
+      // Success and info wait their turn (role "status" is a polite live region).
+      role={toast.kind === 'error' ? 'alert' : 'status'}
+    >
       <Icon size={16} className="toast-icon" />
       <span className="toast-message">{toast.message}</span>
       {toast.action && (

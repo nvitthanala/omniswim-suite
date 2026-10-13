@@ -141,7 +141,8 @@ describe('Optimize step Undo after later edits', () => {
     await click(/Apply to workspace/);
   }
 
-  const alert = () => document.querySelector('[role="alert"]');
+  // The in-panel refusal, not a toast: an error toast now has role="alert" too (X3).
+  const alert = () => document.querySelector('[role="alert"]:not(.toast-item)');
 
   it('an All-teams run, then a lineup edit, then Undo: refuses with a message and writes nothing', async () => {
     const ws = gainWorkspace();

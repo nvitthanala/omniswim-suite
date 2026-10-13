@@ -20,7 +20,11 @@ export default function SharePage() {
       .catch((err) => setError(err instanceof Error ? err.message : 'Failed to load'));
   }, [token]);
   if (error) {
-    return <div className="max-w-lg mx-auto py-20 px-4 text-center text-theme-muted">{error}</div>;
+    return (
+      <div role="alert" className="max-w-lg mx-auto py-20 px-4 text-center text-theme-muted">
+        {error}
+      </div>
+    );
   }
   if (!workspace) {
     return (
