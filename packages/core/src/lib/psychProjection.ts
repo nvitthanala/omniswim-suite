@@ -213,11 +213,17 @@ export function buildPsychOverUnderByEntryKey(
   const out = new Map<string, PsychOverUnderEntry>();
   for (const [key, expected] of expectedByKey) {
     if (expected <= 0) continue;
-    let actual = actualByKey.get(key) ?? 0;
-    if (actual === 0) {
-      actual = actualByEventName.get(entryKeyEventName(key)) ?? 0;
+    // No baseline row is "no actual", not 0 (see PrelimsOverUnderEntry).
+    let actual: number | null = actualByKey.get(key) ?? null;
+    if (actual === null || actual === 0) {
+      actual = actualByEventName.get(entryKeyEventName(key)) ?? actual;
     }
-    out.set(key, { expected, actual, overUnder: actual - expected });
+    out.set(key, {
+      expected,
+      actual,
+      overUnder: actual === null ? null : actual - expected,
+      hasActual: actual !== null,
+    });
   }
   return out;
 }

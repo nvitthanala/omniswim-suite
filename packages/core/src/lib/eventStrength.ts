@@ -125,8 +125,12 @@ export function rankEventsByQuality(
 ): EventQualityRanking {
   const events = Object.keys(bestByEvent);
   const byTimeThenName = (list: string[]) =>
+    // An event with no usable time sorts LAST. It used to read as 0 seconds, the
+    // fastest possible, and led the list.
     [...list].sort(
-      (a, b) => (bestByEvent[a]?.timeSec ?? 0) - (bestByEvent[b]?.timeSec ?? 0) || a.localeCompare(b)
+      (a, b) =>
+        compareNumbers(usableSeconds(bestByEvent[a]?.timeSec), usableSeconds(bestByEvent[b]?.timeSec)) ||
+        a.localeCompare(b)
     );
 
   const division = divisionOverride !== undefined ? divisionOverride : divisionForTeamOrNull(team);
@@ -202,8 +206,9 @@ function compareOptional(a: number | undefined, b: number | undefined): number {
   return 0;
 }
 
-function usableSeconds(sec: number): number {
-  return Number.isFinite(sec) && sec > 0 ? sec : Number.POSITIVE_INFINITY;
+/** A time a ranking may use: finite and above 0. Anything else is "no time" and sorts last. */
+function usableSeconds(sec: number | undefined): number {
+  return typeof sec === 'number' && Number.isFinite(sec) && sec > 0 ? sec : Number.POSITIVE_INFINITY;
 }
 
 /**

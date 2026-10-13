@@ -21,7 +21,7 @@ import {
   looksLikeInstitutionTeamName,
   normalizeSwimmerName,
   parseRankInt,
-  pointsForPlacement,
+  pointsForPlacementOrNull,
   sortEventsByMeetOrder,
   stripEventGenderMarker,
 } from './utils';
@@ -96,15 +96,34 @@ export function roundAndRankForPrelimsSeed(
   return { roundSwam: 'Preliminaries', rank: prelimsRank };
 }
 
-/** Points a swimmer would earn if their prelims placement were their finals result. */
+/**
+ * Points a swimmer would earn if their prelims placement were their finals
+ * result, or `null` when the place-point table has no row for that place (a
+ * place past the end of the table).
+ *
+ * `null` is the table being silent; 0 is the table saying "no points". A
+ * caller that needs a number says what silent means for it.
+ */
+export function pointsForPrelimsSeedRankOrNull(
+  prelimsRank: number,
+  event: string,
+  settings: ScoringSettings
+): number | null {
+  const bracket = settings.aFinalBracketSize ?? Math.floor(settings.scoringPoints.length / 2);
+  const { roundSwam, rank } = roundAndRankForPrelimsSeed(prelimsRank, bracket);
+  return pointsForPlacementOrNull(roundSwam, rank, event, settings);
+}
+
+/**
+ * {@link pointsForPrelimsSeedRankOrNull} read as a number: a place the table has
+ * no row for expects 0 points. Kept for callers that only need a number.
+ */
 export function pointsForPrelimsSeedRank(
   prelimsRank: number,
   event: string,
   settings: ScoringSettings
 ): number {
-  const bracket = settings.aFinalBracketSize ?? Math.floor(settings.scoringPoints.length / 2);
-  const { roundSwam, rank } = roundAndRankForPrelimsSeed(prelimsRank, bracket);
-  return pointsForPlacement(roundSwam, rank, event, settings);
+  return pointsForPrelimsSeedRankOrNull(prelimsRank, event, settings) ?? 0;
 }
 
 type EntryRows = { key: string; rows: SwimmerResult[] };
@@ -210,8 +229,16 @@ export function buildPrelimsExpectedRows(
 
 export type PrelimsOverUnderEntry = {
   expected: number;
-  actual: number;
-  overUnder: number;
+  /**
+   * The points the entry actually earned in the baseline, or `null` when the
+   * baseline holds no row for it: the swim has not been scored yet, or the
+   * entrant never swam it. `null` is "no actual", which is not 0 points.
+   */
+  actual: number | null;
+  /** `actual - expected`, or `null` exactly when `actual` is. A sum skips it. */
+  overUnder: number | null;
+  /** `false` exactly when `actual` is `null`. The field a screen reads to draw a "no actual" marker. */
+  hasActual: boolean;
 };
 
 function isRelayAggregateRow(r: SwimmerResult): boolean {
@@ -260,8 +287,15 @@ export function buildPrelimsOverUnderByEntryKey(
   // Only entries with a prelims-placement anchor — skip timed-finals (actual but no expected).
   for (const [key, expected] of expectedByKey) {
     if (expected <= 0) continue;
-    const actual = actualByKey.get(key) ?? 0;
-    out.set(key, { expected, actual, overUnder: actual - expected });
+    // No baseline row is "no actual", not 0: an entry whose swim is not scored
+    // yet must not read as a swimmer who earned nothing.
+    const actual = actualByKey.get(key) ?? null;
+    out.set(key, {
+      expected,
+      actual,
+      overUnder: actual === null ? null : actual - expected,
+      hasActual: actual !== null,
+    });
   }
   return out;
 }
@@ -289,7 +323,8 @@ export function prelimsOuOverUnderForDisplay(
   if (!entry) return undefined;
   const credited = typeof r.points === 'number' ? r.points : 0;
   if (credited > 0) return credited - entry.expected;
-  return entry.overUnder;
+  // No actual: nothing to show, rather than -expected.
+  return entry.overUnder ?? undefined;
 }
 
 /** Sum O/U for a list of rows — one entry key counted once (prelims+finals rows deduped). */
@@ -310,7 +345,9 @@ export function sumPrelimsOuForSwimmers(
     if (seen.has(key)) continue;
     seen.add(key);
     const entry = lookup.get(key);
-    if (entry) total += entry.overUnder;
+    // An entry with no actual adds nothing; it is counted by
+    // {@link countPrelimsEntriesWithoutActual}, not as an under.
+    if (entry && entry.overUnder !== null) total += entry.overUnder;
   }
   return total;
 }
@@ -324,9 +361,28 @@ export function sumPrelimsOuForTeam(
   let total = 0;
   for (const [key, entry] of lookup) {
     const parts = key.split('|');
-    if ((parts[1] ?? '').trim() === teamNorm) total += entry.overUnder;
+    if ((parts[1] ?? '').trim() === teamNorm && entry.overUnder !== null) total += entry.overUnder;
   }
   return total;
+}
+
+/**
+ * How many entries have an expected value and no actual yet. Pair it with
+ * {@link sumPrelimsOuForTeam}: that sum covers only the entries that have one.
+ * Pass `teamName` for one team; omit it for the whole lookup.
+ */
+export function countPrelimsEntriesWithoutActual(
+  lookup: Map<string, PrelimsOverUnderEntry>,
+  teamName?: string
+): number {
+  const teamNorm = teamName?.trim();
+  let n = 0;
+  for (const [key, entry] of lookup) {
+    if (entry.actual !== null) continue;
+    if (teamNorm !== undefined && (key.split('|')[1] ?? '').trim() !== teamNorm) continue;
+    n += 1;
+  }
+  return n;
 }
 
 export type MomentumSeriesPoint = {
@@ -350,6 +406,7 @@ export function buildMomentumSeriesForTeam(
     if ((parts[1] ?? '').trim() !== teamNorm) continue;
     const ev = parts[0] ?? '';
     if (!ev) continue;
+    if (entry.overUnder === null) continue; // no actual: no delta for this event from it
     eventDelta.set(ev, (eventDelta.get(ev) ?? 0) + entry.overUnder);
   }
 
@@ -387,6 +444,9 @@ export function buildMeetMomentumChartDataFromLookup(
     teamNames.map(team => [team, buildMomentumSeriesForTeam(team, lookup, eventsList)])
   );
   const carryForward: Record<string, number> = Object.fromEntries(teamNames.map(t => [t, 0]));
+  // A team with no entry that has an actual has no momentum at all. Its line is
+  // absent (null), not a flat 0 that reads as "exactly on expectation".
+  const hasMomentum = new Set(teamNames.filter(t => (seriesByTeam.get(t) ?? []).length > 0));
 
   const orderedEvents = eventsList.filter(ev => !/\bTIME TRIAL\b/i.test(ev));
   return orderedEvents.map(rawEvent => {
@@ -396,7 +456,11 @@ export function buildMeetMomentumChartDataFromLookup(
     };
     for (const team of teamNames) {
       const pt = (seriesByTeam.get(team) ?? []).find(p => p.rawEvent === rawEvent);
-      const cumulative = pt?.cumulative ?? carryForward[team] ?? 0;
+      if (!hasMomentum.has(team)) {
+        row[team] = null;
+        continue;
+      }
+      const cumulative = pt?.cumulative ?? carryForward[team];
       carryForward[team] = cumulative;
       row[team] = cumulative;
     }
@@ -415,7 +479,8 @@ export function buildMeetMomentumChartData(
       fullEvent: pt.fullEvent,
     };
     for (const team of teamNames) {
-      row[team] = pt.baselineDelta[team] ?? 0;
+      // A team the timeline point does not name has no value there: absent, not 0.
+      row[team] = pt.baselineDelta[team] ?? null;
     }
     return row;
   });
