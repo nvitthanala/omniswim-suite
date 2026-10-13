@@ -425,6 +425,12 @@
         "5 Next batches: R11 steps 1-6 (architectReview20261013.decisions.R11), A7 estimate field, then nextBatches E (F1,F2,F3,F5,F8), F (R1-R5,R7), G research, H (H6 alone, H7, H11, R9 last).",
         "6 One or two agents at a time. Run node ~/.claude/scripts/claude-usage-report.mjs between agents."
       ]
+    },
+    {
+      "at": "2026-10-13 ~14:30 CT",
+      "what": "Session limit 429 (resets 2:40pm CT) stopped the architect re-review a388b4128dda85e7f (read-only, no output) and the R11 executor abcb8fdcf557dfc92 (was renaming a script to .mts). Two agents in parallel again hit the 5h window.",
+      "dirty": "package.json, scripts/index-access-ratchet.mjs, scripts/index-access-baseline.json, packages/swimcloud/src/indexed.ts (R11 executor, unverified)",
+      "resumePlan": "ONE agent at a time. 1 SendMessage abcb8fdcf557dfc92 (R11 steps 1-2) and finish; commit. 2 SendMessage a388b4128dda85e7f (architect re-review of ddb838fb, e54adab4, d5dc09ff). 3 then R11 core steps one at a time. Check usage report between agents."
     }
   ],
   "gatesAfterWave1": {
@@ -524,7 +530,7 @@
     "vault gotcha: the Edit tool rewrote an LF file as CRLF once; normalize before commit"
   ],
   "inFlight20261013": {
-    "a388b4128dda85e7f": "architect re-review (read-only)",
-    "abcb8fdcf557dfc92": "executor R11 steps 1-2: scripts/index-access-ratchet.mjs + swimcloud noUncheckedIndexedAccess. Dirty files expected: scripts/, package.json, ci.yml, packages/swimcloud, tests/ swimcloud only."
+    "abcb8fdcf557dfc92": "stopped by 429, resume first",
+    "a388b4128dda85e7f": "stopped by 429, resume second"
   }
 }
