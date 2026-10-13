@@ -239,7 +239,7 @@
     },
     {
       "id": "wave-2",
-      "status": "dispatched 2026-10-12",
+      "status": "STOPPED by session limit; partial diffs uncommitted in tree; resuming serially",
       "agents": [
         {
           "scope": "core projections + swimcloud parser",
@@ -323,6 +323,11 @@
       "at": "2026-10-12 (before 15:20 CT reset)",
       "what": "Session limit 429 stopped the server/auth executor (a4a12ccfffa3d7bce; it was on its final script-suite rerun, 7 targeted tests passing) and the architect review (af176a27510a0f9d6; it had reached the scoring diff). Limit then reset.",
       "resumePlan": "low-priority pace: one agent at a time. 1) SendMessage a4a12ccfffa3d7bce for its final report. 2) SendMessage af176a27510a0f9d6 to finish Parts A-D. 3) full gates with all idle, then path-scoped commits."
+    },
+    {
+      "at": "2026-10-12 (reset 20:20 CT)",
+      "what": "Second session limit (429) stopped all three wave-2 executors mid-work: a4a12ccfffa3d7bce (C5 TS; 13 mutants caught, on final gates), a825b3847674e68bd (P4/P6; adding load and delete failure tests), aca3beddb23680687 (C3/C7/C8/relayGroupKey; running touched scripts). Cause: three or four parallel Sonnet executors in one window.",
+      "resumePlan": "ONE agent at a time, in this order: a4a12 (nearly done), a825, aca3. Commit each as it finishes. Then quiet-tree gates. No parallel executors until the next window reset unless usage looks low."
     }
   ],
   "gatesAfterWave1": {
