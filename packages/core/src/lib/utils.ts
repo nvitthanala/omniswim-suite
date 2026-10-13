@@ -54,6 +54,7 @@ import {
   findRelayLegOverride,
   isRelayLegEvent,
   isTimeTrialOnlyForRelayLeg,
+  migrateTiedRelayOverrides,
   overrideNamesTimeTrialOnlySwimmer,
   relayEntryGender,
   relayLegRequirements,
@@ -3738,7 +3739,9 @@ export function simulateRoster(
   relayLegSettings?: RelayLegMatchSettings
 ): SwimmerResult[] {
   const excluded = excludedSwimmerNames ?? new Set<string>();
-  const overrideList = relayLegOverrides ?? [];
+  // A key saved for a tied pair of relays (before the two were told apart) is
+  // split into one override per relay; every reader below reads the split list.
+  const overrideList = migrateTiedRelayOverrides(relayLegOverrides ?? [], results);
   const vacateLegs = vacateRelayLegNames ?? new Set<string>();
   const runRosterSim =
     removeSeniors || excluded.size > 0 || overrideList.length > 0 || vacateLegs.size > 0;

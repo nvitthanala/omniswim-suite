@@ -2,20 +2,24 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Editing and reporting an override of a tied relay sees the key saved before
- * A and B were told apart (improvement plan 2026-10-10, advisor follow-up of
- * 2026-10-13).
+ * Editing and reporting an override of a tied relay, with the key saved before
+ * A and B were told apart (improvement plan 2026-10-10; architect re-review of
+ * 2026-10-13, finding 1b).
  *
  * ## Why this test exists
  *
- * A team's tied A and B relays share event, round, place and clock. Since
- * ddb838fb an override of a tied relay is stored under a key that also names
- * the relay's swimmers, and `findRelayLegOverride` still reads the plain key
- * saved before that, for both relays. `removeRelayLegOverride` and
- * `upsertRelayLegOverride` compared exact keys, so "clear leg" on a tied relay
- * left the plain key in place and the leg stayed overridden. The "Clear
- * override" button in the relay card looked for the exact key too and did not
- * show for a leg that only had the plain key.
+ * A team's tied A and B relays share event, round, place and clock. An
+ * override of a tied relay is stored under a key that also names the relay's
+ * swimmers. A key saved before that (the plain key) named both relays.
+ *
+ * The first fix let `findRelayLegOverride` read the plain key for both relays
+ * and let `removeRelayLegOverride` and `upsertRelayLegOverride` match it by
+ * prefix. Then "clear leg" on A removed the plain key and B lost its fill too,
+ * and a save for A replaced the key B read.
+ *
+ * Now the plain key of a tied pair is rewritten into one override per relay
+ * (`migrateTiedRelayOverrides`) before it is read, and the readers and the
+ * editors match one exact key. Clearing A cannot change what B reads.
  *
  * Real data holds no tied relay of one team, so the relays are synthetic, in
  * the shape `relayOverrideTieKey.test.ts` builds.
@@ -26,6 +30,7 @@ import { simulateRoster } from '../packages/core/src/lib/utils';
 import {
   findRelayLegOverride,
   hasRelayLegOverride,
+  migrateTiedRelayOverrides,
   relayTemplateFromLeg,
   removeRelayLegOverride,
   stableRelayEntryKey,
@@ -116,13 +121,13 @@ describe('upsertRelayLegOverride', () => {
   const cOwn = at(cKey, LEG, 'Y1');
   const next = at(aKey, LEG, 'Y1');
 
-  it("replaces the plain key's override of the leg instead of leaving both", () => {
-    expect(upsertRelayLegOverride([legacy], next)).toStrictEqual([next]);
+  it("leaves the plain key's override in place: it is B's too until it is migrated", () => {
+    expect(upsertRelayLegOverride([legacy], next)).toStrictEqual([legacy, next]);
   });
 
   it("keeps the sibling's own override, the other leg's override and another relay's override", () => {
     const out = upsertRelayLegOverride([legacy, legacyOtherLeg, bOwn, cOwn], next);
-    expect(out).toStrictEqual([legacyOtherLeg, bOwn, cOwn, next]);
+    expect(out).toStrictEqual([legacy, legacyOtherLeg, bOwn, cOwn, next]);
   });
 
   it('still replaces an override under the exact same key', () => {
@@ -135,10 +140,20 @@ describe('upsertRelayLegOverride', () => {
     expect(upsertRelayLegOverride([cOwn, legacy], cNext)).toStrictEqual([legacy, cNext]);
   });
 
-  it('the cleared leg does not come back from the plain key afterwards', () => {
-    const wrote = upsertRelayLegOverride([legacy], next);
-    const cleared = removeRelayLegOverride(wrote, aKey, LEG);
+  it('a save for A leaves what B reads: the migrated plain key still fills B', () => {
+    const wrote = migrateTiedRelayOverrides(upsertRelayLegOverride([legacy], next), results);
+    const bTemplate = relayTemplateFromLeg(tied, bLeg);
+    const aTemplate = relayTemplateFromLeg(tied, aLeg);
+    expect(findRelayLegOverride(wrote, aTemplate, LEG, tied)?.assigneeName).toBe('Y1');
+    expect(findRelayLegOverride(wrote, bTemplate, LEG, tied)?.assigneeName).toBe('X1');
+  });
+
+  it('the cleared leg of A does not come back from the plain key afterwards', () => {
+    const migrated = migrateTiedRelayOverrides(upsertRelayLegOverride([legacy], next), results);
+    const cleared = removeRelayLegOverride(migrated, aKey, LEG);
     expect(findRelayLegOverride(cleared, relayTemplateFromLeg(tied, aLeg), LEG, tied)).toBeUndefined();
+    // Migrating the cleared list again changes nothing: the plain key is gone.
+    expect(migrateTiedRelayOverrides(cleared, results)).toBe(cleared);
   });
 });
 
@@ -149,17 +164,17 @@ describe('removeRelayLegOverride', () => {
   const bOwn = at(bKey, LEG, 'Y1');
   const cOwn = at(cKey, LEG, 'Y1');
 
-  it("drops the plain key's override of a tied relay's leg", () => {
-    expect(removeRelayLegOverride([legacy], aKey, LEG)).toStrictEqual([]);
+  it("does not drop the plain key's override: that is the sibling's too", () => {
+    expect(removeRelayLegOverride([legacy], aKey, LEG)).toStrictEqual([legacy]);
   });
 
-  it('drops both the plain and the own key of that leg', () => {
-    expect(removeRelayLegOverride([legacy, aOwn], aKey, LEG)).toStrictEqual([]);
+  it('drops the own key of that leg only', () => {
+    expect(removeRelayLegOverride([legacy, aOwn], aKey, LEG)).toStrictEqual([legacy]);
   });
 
   it("keeps the sibling's own override, the other legs and another relay's override", () => {
     const out = removeRelayLegOverride([legacy, legacyOtherLeg, aOwn, bOwn, cOwn], aKey, LEG);
-    expect(out).toStrictEqual([legacyOtherLeg, bOwn, cOwn]);
+    expect(out).toStrictEqual([legacy, legacyOtherLeg, bOwn, cOwn]);
   });
 
   it('an untied relay key removes only its own key and leg, as before', () => {
@@ -181,14 +196,18 @@ describe('removeRelayLegOverride', () => {
     expect(removeRelayLegOverride([legacy, aOwn, bOwn], plainKey, LEG)).toStrictEqual([aOwn, bOwn]);
   });
 
-  it('end to end: after "clear leg" the leg of the tied relay is vacant, not X1', () => {
-    const left = new Set(['a2']);
+  it('end to end: after "clear leg" on A, A is vacant and B keeps the fill', () => {
+    const left = new Set(['a2', 'b2']);
     const before = simulateRoster(results, [], false, left, [legacy]);
-    expect(before.some(r => r.isRelay && r.name === 'X1' && r.relayLegIndex === LEG)).toBe(true);
-    const cleared = removeRelayLegOverride([legacy], aKey, LEG);
+    expect(before.filter(r => r.isRelay && r.name === 'X1' && r.relayLegIndex === LEG)).toHaveLength(2);
+    // The relays screen clears from the migrated list.
+    const cleared = removeRelayLegOverride(migrateTiedRelayOverrides([legacy], results), aKey, LEG);
     const after = simulateRoster(results, [], false, left, cleared);
-    expect(after.some(r => r.isRelay && r.name === 'X1')).toBe(false);
-    expect(after.filter(r => r.isRelay && r.relayLegIndex === LEG && r.relayLegVacant === true)).toHaveLength(1);
+    const legOf = (first: string) =>
+      after.find(r => r.isRelay && r.relayLegIndex === LEG && r.relayNames?.some(n => n.name === first));
+    expect(legOf('A1')?.relayLegVacant).toBe(true);
+    expect(legOf('A1')?.name).toBe('—');
+    expect(legOf('B1')?.name).toBe('X1');
   });
 });
 
@@ -206,7 +225,8 @@ describe('hasRelayLegOverride', () => {
   ];
 
   it('answers what findRelayLegOverride finds, for the key of A and of B', () => {
-    for (const [label, overrides] of states) {
+    for (const [label, raw] of states) {
+      const overrides = migrateTiedRelayOverrides(raw, results);
       for (const [leg, key] of [
         [aLeg, aKey],
         [bLeg, bKey],
@@ -218,19 +238,24 @@ describe('hasRelayLegOverride', () => {
     }
   });
 
-  it('is true for the plain key on a tied relay (the indicator the card read missed it)', () => {
-    expect(hasRelayLegOverride([legacy], aKey, LEG)).toBe(true);
-    expect(hasRelayLegOverride([legacy], bKey, LEG)).toBe(true);
+  it('is true for the plain key on a tied relay once migrated (the indicator the card reads)', () => {
+    const migrated = migrateTiedRelayOverrides([legacy], results);
+    expect(hasRelayLegOverride(migrated, aKey, LEG)).toBe(true);
+    expect(hasRelayLegOverride(migrated, bKey, LEG)).toBe(true);
+    // The unmigrated plain key is not a key of A or B.
+    expect(hasRelayLegOverride([legacy], aKey, LEG)).toBe(false);
   });
 
   it('is false for another leg, another relay and an own key of the sibling', () => {
-    expect(hasRelayLegOverride([legacy], aKey, OTHER_LEG)).toBe(false);
-    expect(hasRelayLegOverride([legacy], cKey, LEG)).toBe(false);
+    const migrated = migrateTiedRelayOverrides([legacy], results);
+    expect(hasRelayLegOverride(migrated, aKey, OTHER_LEG)).toBe(false);
+    expect(hasRelayLegOverride(migrated, cKey, LEG)).toBe(false);
     expect(hasRelayLegOverride([bOwn], aKey, LEG)).toBe(false);
   });
 
   it('agrees with removeRelayLegOverride: an override it reports is one clearing removes', () => {
-    for (const [, overrides] of states) {
+    for (const [, raw] of states) {
+      const overrides = migrateTiedRelayOverrides(raw, results);
       const has = hasRelayLegOverride(overrides, aKey, LEG);
       const cleared = removeRelayLegOverride(overrides, aKey, LEG);
       expect(cleared.length < overrides.length).toBe(has);

@@ -25,6 +25,7 @@ import {
   type ScyConversionProvenance,
 } from '../types';
 import {
+  migrateTiedRelayOverrides,
   relayEntryOverrideKeys,
   relayLegMatchSettings,
   relayTemplateFromLeg,
@@ -530,15 +531,16 @@ export function buildWhatIfProjection({
 
   const relayKeysForGender = new Set<string>();
   for (const row of currentResults.filter(x => x.isRelay)) {
-    // Both keys an override of this entry may be stored under: its own and the
-    // plain key a tied relay's override had before the two were told apart.
     for (const key of relayEntryOverrideKeys(currentResults, relayTemplateFromLeg(currentResults, row))) {
       relayKeysForGender.add(key);
     }
   }
-  const relayOverrides: RelayLegOverride[] = (workspace.relayLegOverrides ?? []).filter(o =>
-    relayKeysForGender.has(o.relayEntryKey)
-  );
+  // A key a tied pair of relays had before the two were told apart is split into
+  // one override per relay first, or the filter below would drop it.
+  const relayOverrides: RelayLegOverride[] = migrateTiedRelayOverrides(
+    workspace.relayLegOverrides ?? [],
+    currentResults
+  ).filter(o => relayKeysForGender.has(o.relayEntryKey));
 
   // Built once: the vacate step and the cross-plane collapse both read raw
   // workspace rows, before the engine collapses alias spellings onto the

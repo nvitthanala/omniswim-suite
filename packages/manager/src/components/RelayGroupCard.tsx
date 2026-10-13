@@ -11,7 +11,11 @@ import {
   formatLegSplitSummary,
   formatTeamSplitSummary,
 } from '@omniswim/core/lib/relaySplits';
-import { relayLegRequirements, relayMissingStrokeLabel } from '@omniswim/core/lib/relayLegMatching';
+import {
+  hasRelayLegOverride,
+  relayLegRequirements,
+  relayMissingStrokeLabel,
+} from '@omniswim/core/lib/relayLegMatching';
 import type { RelayLegOverride } from '@omniswim/core/types';
 import { Button } from '@omniswim/ui';
 import type { RelayGroup } from './indRelayGroupsView';
@@ -183,7 +187,7 @@ export default function RelayGroupCard({
                       </Button>
                     </div>
                   )}
-                  {overrides.some(o => o.relayEntryKey === group.key && o.legIndex === legIndex) ? (
+                  {hasRelayLegOverride(overrides, group.key, legIndex) ? (
                     <Button
                       variant="ghost"
                       size="sm"

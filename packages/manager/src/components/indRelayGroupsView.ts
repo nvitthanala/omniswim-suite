@@ -6,7 +6,12 @@
  */
 
 import type { Gender, SwimmerResult } from '@omniswim/core/types';
-import { relayTemplateFromLeg, stableRelayEntryKey } from '@omniswim/core/lib/relayLegMatching';
+import {
+  relayOverrideRefusal,
+  resolveRelayEntryForLeg,
+  type RelayEntryResolution,
+  type RelayOverrideRefusal,
+} from '@omniswim/core/lib/relayLegMatching';
 import { isRelayResult } from '@omniswim/core/lib/utils';
 
 export type RelayGroup = {
@@ -18,7 +23,23 @@ export type RelayGroup = {
   teamTotal: string;
   legs: SwimmerResult[];
   teamSplits?: SwimmerResult['relayTeamSplits'];
+  /**
+   * Set when the relay of these legs cannot be told from its tied sibling (one
+   * team's two relays with the same place and time, and no swimmer left that
+   * names one). `key` then names no stored override, and every write for the
+   * group is refused (`relayGroupWriteRefusal`). Absent on an ordinary relay.
+   */
+  refusal?: RelayOverrideRefusal;
 };
+
+/**
+ * `null` when overrides may be written for `group`, else the reason they may
+ * not. The screen's writers (drag, autofill, manual time, clear) ask this first
+ * and write nothing when it is not `null`.
+ */
+export function relayGroupWriteRefusal(group: Pick<RelayGroup, 'refusal'>): RelayOverrideRefusal | null {
+  return group.refusal ?? null;
+}
 
 function belongsToTeamAndGender(r: SwimmerResult, gender: Gender, team: string): boolean {
   return r.gender === gender && String(r.team ?? '').trim() === team;
@@ -28,11 +49,13 @@ function isRelayLegRow(r: SwimmerResult): boolean {
   return isRelayResult(r) && r.name !== r.team;
 }
 
-function seedRelayGroup(key: string, r: SwimmerResult, originalResults: SwimmerResult[]): RelayGroup {
-  const template = relayTemplateFromLeg(originalResults, r);
+function seedRelayGroup(key: string, r: SwimmerResult, resolution: RelayEntryResolution): RelayGroup {
+  const refusal = relayOverrideRefusal(resolution);
   return {
     key,
-    template,
+    // An unresolved leg is its own template: no original row is this relay's.
+    template: resolution.status === 'resolved' ? resolution.template : r,
+    ...(refusal === null ? {} : { refusal }),
     event: r.event,
     roundSwam: r.roundSwam?.trim() || '—',
     rank: r.rank,
@@ -45,11 +68,14 @@ function seedRelayGroup(key: string, r: SwimmerResult, originalResults: SwimmerR
 function groupRelayLegRows(rows: SwimmerResult[], originalResults: SwimmerResult[]): Map<string, RelayGroup> {
   const map = new Map<string, RelayGroup>();
   for (const r of rows) {
-    const key = stableRelayEntryKey(originalResults, r);
-    if (!map.has(key)) {
-      map.set(key, seedRelayGroup(key, r, originalResults));
+    const resolution = resolveRelayEntryForLeg(originalResults, r);
+    const key = resolution.status === 'resolved' ? resolution.entryKey : resolution.groupKey;
+    let group = map.get(key);
+    if (!group) {
+      group = seedRelayGroup(key, r, resolution);
+      map.set(key, group);
     }
-    map.get(key)!.legs.push(r);
+    group.legs.push(r);
   }
   return map;
 }

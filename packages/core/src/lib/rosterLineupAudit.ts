@@ -25,7 +25,7 @@ import {
   relayLegMatchSettings,
   relayMissingStrokeLabel,
   relayTemplateFromLeg,
-  stableRelayEntryKey,
+  resolveRelayEntryForLeg,
   suggestBestRelayLegFill,
   upsertRelayLegOverride,
 } from './relayLegMatching';
@@ -768,9 +768,14 @@ function auditVacantRelayLegs(
     if (!isVacantRelayLeg(leg)) continue;
     vacantRelayLegCount += 1;
 
-    const entryKey = stableRelayEntryKey(pdfResults, leg);
+    // A vacated leg of one of two tied relays may not say which. It is still a
+    // vacant leg to report, but with no entry key: no quick fill can be offered
+    // (it would write an override for one relay by luck), and the checklist row
+    // opens the relays screen instead.
+    const resolution = resolveRelayEntryForLeg(pdfResults, leg);
+    const entryKey = resolution.status === 'resolved' ? resolution.entryKey : undefined;
     const legIdx = leg.relayLegIndex ?? leg.relayMissingLeg?.legIndex ?? 0;
-    const vacantKey = `${entryKey}|${legIdx}`;
+    const vacantKey = `${resolution.status === 'resolved' ? resolution.entryKey : resolution.groupKey}|${legIdx}`;
     if (!checklistVacantKeys.has(vacantKey)) {
       checklistVacantKeys.add(vacantKey);
       collector.pushChecklist({
@@ -779,11 +784,12 @@ function auditVacantRelayLegs(
         message: vacantLegFillMessage(leg, legIdx),
         relayEvent: leg.event,
         legIndex: legIdx,
-        relayEntryKey: entryKey,
+        ...(entryKey === undefined ? {} : { relayEntryKey: entryKey }),
       });
     }
 
-    const departed = findDepartedNameForVacantLeg(pdfResults, leg);
+    const departed =
+      resolution.status === 'resolved' ? findDepartedNameForVacantLeg(pdfResults, leg) : null;
     if (!departed) continue;
     const removedForScorerRule = vacateNames.has(normalizeSwimmerName(departed));
     // Filed under the RESOLVED spelling: the roster row renders the canonical
@@ -794,7 +800,7 @@ function auditVacantRelayLegs(
       message: departedLegMessage(removedForScorerRule, removeSeniors),
       relayEvent: leg.event,
       legIndex: legIdx,
-      relayEntryKey: entryKey,
+      ...(entryKey === undefined ? {} : { relayEntryKey: entryKey }),
     });
   }
 
@@ -949,9 +955,9 @@ function findTeamRelayTemplateByEntryKey(
   for (const r of results) {
     if (!isRelayResult(r)) continue;
     if (teamFrom(r.team) !== team) continue;
-    const template = relayTemplateFromLeg(results, r);
-    if (relayEntryKeyIn(results, template) !== entryKey) continue;
-    return template;
+    const resolution = resolveRelayEntryForLeg(results, r);
+    if (resolution.status !== 'resolved' || resolution.entryKey !== entryKey) continue;
+    return resolution.template;
   }
   return null;
 }

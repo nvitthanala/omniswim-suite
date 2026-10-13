@@ -8,6 +8,7 @@ import { Gender, RelayLegOverride, SwimmerResult, Workspace } from '@omniswim/co
 import type { ScoringBundle } from '@omniswim/core/lib/useWorkspaceScoring';
 import {
   listEligibleRelayLegCandidates,
+  migrateTiedRelayOverrides,
   relayLegMatchSettings,
   removeRelayLegOverride,
   suggestBestRelayLegFill,
@@ -28,7 +29,7 @@ import {
   compareRelayLegSplits,
 } from '@omniswim/core/lib/relayBuilder';
 import { Button, TeamSelect, useToast } from '@omniswim/ui';
-import { buildRelayGroups, type RelayGroup } from './indRelayGroupsView';
+import { buildRelayGroups, relayGroupWriteRefusal, type RelayGroup } from './indRelayGroupsView';
 import RelayStatsCards from './RelayStatsCards';
 import RelaySplitInspector from './RelaySplitInspector';
 import RelayGroupCard from './RelayGroupCard';
@@ -93,7 +94,13 @@ export default function IndRelayManagementView({
     () => (gender === Gender.MEN ? workspace.menResults ?? [] : workspace.womenResults ?? []),
     [gender, workspace.menResults, workspace.womenResults]
   );
-  const overrides = workspace.relayLegOverrides ?? [];
+  // A key saved for one team's tied A and B relays before the two were told
+  // apart names both. It is split into one override per relay here, so clearing
+  // a leg of A leaves B's fill, and every save below writes the split list.
+  const overrides = useMemo(
+    () => migrateTiedRelayOverrides(workspace.relayLegOverrides ?? [], originalResults),
+    [workspace.relayLegOverrides, originalResults]
+  );
 
   const activeSwimmers = useMemo(() => {
     // Same identity key and the same shared senior test the scoring
@@ -240,8 +247,20 @@ export default function IndRelayManagementView({
     onUpdate({ relayLegOverrides: next });
   };
 
+  /**
+   * True (after telling the coach why) when `group` may not be edited: its legs
+   * cannot be told from its tied sibling's, so an override would land on one of
+   * the two relays by luck. Nothing is written.
+   */
+  const refuseWrite = (group: RelayGroup): boolean => {
+    const refusal = relayGroupWriteRefusal(group);
+    if (refusal === null) return false;
+    toast.push('info', refusal.message);
+    return true;
+  };
+
   const assignDragPayload = (group: RelayGroup, legIndex: number, payload: DragPayload) => {
-    if (!whatIfMode) return;
+    if (!whatIfMode || refuseWrite(group)) return;
     patchOverrides(
       upsertRelayLegOverride(overrides, {
         relayEntryKey: group.key,
@@ -255,7 +274,7 @@ export default function IndRelayManagementView({
   };
 
   const autofillLeg = (group: RelayGroup, legIndex: number) => {
-    if (!whatIfMode) return;
+    if (!whatIfMode || refuseWrite(group)) return;
     const exclude = new Set<string>();
     const origNames = group.template.relayNames ?? group.legs.map(l => ({ name: l.name, year: '' }));
     origNames.forEach((ln, _i) => {
@@ -282,7 +301,7 @@ export default function IndRelayManagementView({
   };
 
   const autofillAllVacant = (group: RelayGroup) => {
-    if (!whatIfMode) return;
+    if (!whatIfMode || refuseWrite(group)) return;
     let next = [...overrides];
     const assigned = new Set(assignedInSelectedRelay);
     for (const leg of group.legs) {
@@ -313,7 +332,7 @@ export default function IndRelayManagementView({
   };
 
   const saveManualLeg = (group: RelayGroup, legIndex: number) => {
-    if (!whatIfMode) return;
+    if (!whatIfMode || refuseWrite(group)) return;
     const fieldKey = `${group.key}|${legIndex}`;
     const manualLegTime = manualTimes[fieldKey]?.trim();
     if (!manualLegTime) return;
@@ -328,7 +347,7 @@ export default function IndRelayManagementView({
   };
 
   const clearLegOverride = (group: RelayGroup, legIndex: number) => {
-    if (!whatIfMode) return;
+    if (!whatIfMode || refuseWrite(group)) return;
     patchOverrides(removeRelayLegOverride(overrides, group.key, legIndex));
   };
 

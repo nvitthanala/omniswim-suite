@@ -507,6 +507,14 @@ function relayEntryNameSet(r: SwimmerResult): Set<string> {
   return names;
 }
 
+/** What `narrowToTiedEntry` found: the rows of one entry, or the whole group when it could not tell. */
+type TiedNarrowing = {
+  /** The leg's own entry's rows (plus unnamed rows), or the whole group when `ambiguous`. */
+  rows: SwimmerResult[];
+  /** True when the group holds more than one entry and nothing says which one `leg` belongs to. */
+  ambiguous: boolean;
+};
+
 /**
  * The rows of one relay entry among rows that share its event, round, place and
  * team, when those rows hold more than one entry (a dead heat).
@@ -515,28 +523,37 @@ function relayEntryNameSet(r: SwimmerResult): Set<string> {
  * wins. A leg of a projected relay has had a swimmer replaced, so no entry names
  * exactly its four: the entry that shares the most named swimmers wins, and
  * only when one entry leads. Rows that name no swimmers stay with every entry.
- * When nothing tells the entries apart the whole group is returned, as before.
+ *
+ * When the group holds more than one entry and nothing tells them apart (the
+ * leg names no swimmer, shares none, or shares as many with two entries) the
+ * result is `ambiguous`, with the whole group in `rows`. The caller must not
+ * read an entry, a key or an override from an ambiguous leg: any answer would
+ * be one entry's, given to a leg that may belong to the other.
  */
-function narrowToTiedEntry(group: SwimmerResult[], leg: SwimmerResult): SwimmerResult[] {
+function narrowToTiedEntry(group: SwimmerResult[], leg: SwimmerResult): TiedNarrowing {
   const signatures = new Set<string>();
   for (const r of group) {
     const signature = relayEntryLegSignature(r);
     if (signature) signatures.add(signature);
   }
-  if (signatures.size < 2) return group;
+  if (signatures.size < 2) return { rows: group, ambiguous: false };
 
   const legSignature = relayEntryLegSignature(leg);
   const unnamed = group.filter(r => relayEntryLegSignature(r) === '');
   if (legSignature && signatures.has(legSignature)) {
-    return [...group.filter(r => relayEntryLegSignature(r) === legSignature), ...unnamed];
+    return {
+      rows: [...group.filter(r => relayEntryLegSignature(r) === legSignature), ...unnamed],
+      ambiguous: false,
+    };
   }
 
   const legNames = relayEntryNameSet(leg);
-  if (legNames.size === 0) return group;
+  if (legNames.size === 0) return { rows: group, ambiguous: true };
   let best: { signature: string; overlap: number } | null = null;
   let leader = true;
   for (const signature of signatures) {
-    const row = group.find(r => relayEntryLegSignature(r) === signature) as SwimmerResult;
+    const row = group.find(r => relayEntryLegSignature(r) === signature);
+    if (!row) continue;
     let overlap = 0;
     for (const name of relayEntryNameSet(row)) if (legNames.has(name)) overlap += 1;
     if (best === null || overlap > best.overlap) {
@@ -546,9 +563,34 @@ function narrowToTiedEntry(group: SwimmerResult[], leg: SwimmerResult): SwimmerR
       leader = false;
     }
   }
-  if (best === null || best.overlap === 0 || !leader) return group;
+  if (best === null || best.overlap === 0 || !leader) return { rows: group, ambiguous: true };
   const chosen = best.signature;
-  return [...group.filter(r => relayEntryLegSignature(r) === chosen), ...unnamed];
+  return {
+    rows: [...group.filter(r => relayEntryLegSignature(r) === chosen), ...unnamed],
+    ambiguous: false,
+  };
+}
+
+/** The row with the lowest leg index (the first of equals), or `undefined` for no rows. */
+function firstLegRow(rows: readonly SwimmerResult[]): SwimmerResult | undefined {
+  let first: SwimmerResult | undefined;
+  for (const r of rows) {
+    if (first === undefined || (r.relayLegIndex ?? 0) < (first.relayLegIndex ?? 0)) first = r;
+  }
+  return first;
+}
+
+/** The relay rows that share `leg`'s team, event, place and round: one entry, or a dead heat of several. */
+function relayRowsSharingPlace(results: readonly SwimmerResult[], leg: SwimmerResult): SwimmerResult[] {
+  const rs = (leg.roundSwam || '').trim();
+  return results.filter(
+    r =>
+      r.isRelay &&
+      r.team === leg.team &&
+      r.event === leg.event &&
+      r.rank === leg.rank &&
+      (r.roundSwam || '').trim() === rs
+  );
 }
 
 /**
@@ -559,20 +601,103 @@ function narrowToTiedEntry(group: SwimmerResult[], leg: SwimmerResult): SwimmerR
  * (`relayNames`), and the template of a B leg must be a B row, not the A
  * relay's leadoff (`narrowToTiedEntry`). With no tie the template is the first
  * row of the group, as it always was.
+ *
+ * A leg that belongs to no entry the rows can name (an ambiguous leg of a
+ * projected tied relay) still gets the first row of the whole group here, as
+ * before. A caller that holds projected rows must use
+ * {@link resolveRelayEntryForLeg}, which says so.
  */
 export function relayTemplateFromLeg(results: SwimmerResult[], leg: SwimmerResult): SwimmerResult {
-  const rs = (leg.roundSwam || '').trim();
-  const group = results.filter(
-    r =>
-      r.isRelay &&
-      r.team === leg.team &&
-      r.event === leg.event &&
-      r.rank === leg.rank &&
-      (r.roundSwam || '').trim() === rs
-  );
+  const group = relayRowsSharingPlace(results, leg);
   if (group.length === 0) return leg;
-  const entry = narrowToTiedEntry(group, leg);
-  return [...entry].sort((a, b) => (a.relayLegIndex ?? 0) - (b.relayLegIndex ?? 0))[0];
+  const { rows } = narrowToTiedEntry(group, leg);
+  return firstLegRow(rows) ?? leg;
+}
+
+/**
+ * The relay entry of a leg row, or the fact that the rows cannot say.
+ *
+ * - `resolved`: `template` is a row of the entry, and `entryKey` is the key an
+ *   override of it is stored under (`relayEntryKeyIn`).
+ * - `ambiguous`: one team's relays share event, round, place and clock, and
+ *   nothing in the leg tells them apart (a projected leg whose swimmers all
+ *   left, or two of each relay's). It belongs to one of `candidates` (each
+ *   the first leg row of one tied entry). `groupKey` names the unresolved
+ *   leg's relay for grouping and de-duplication only. It starts with
+ *   `ambiguous-tied-relay|`, which no stored override key does, and must never
+ *   be written as an override key.
+ *
+ * An ambiguous leg gets no override read, no autofill and no edit
+ * ({@link relayOverrideRefusal}).
+ */
+export type RelayEntryResolution =
+  | { status: 'resolved'; template: SwimmerResult; entryKey: string }
+  | { status: 'ambiguous'; candidates: SwimmerResult[]; groupKey: string };
+
+const AMBIGUOUS_TIED_RELAY_PREFIX = 'ambiguous-tied-relay|';
+
+/**
+ * Resolve the relay entry `leg` belongs to among `results` (the original rows).
+ * See {@link RelayEntryResolution}. A leg whose place holds no relay row is its
+ * own template.
+ */
+export function resolveRelayEntryForLeg(
+  results: SwimmerResult[],
+  leg: SwimmerResult
+): RelayEntryResolution {
+  const group = relayRowsSharingPlace(results, leg);
+  if (group.length === 0) {
+    return { status: 'resolved', template: leg, entryKey: relayEntryKeyIn(results, leg) };
+  }
+  const narrowed = narrowToTiedEntry(group, leg);
+  if (!narrowed.ambiguous) {
+    const template = firstLegRow(narrowed.rows) ?? leg;
+    return { status: 'resolved', template, entryKey: relayEntryKeyIn(results, template) };
+  }
+  const bySignature = new Map<string, SwimmerResult[]>();
+  for (const r of group) {
+    const signature = relayEntryLegSignature(r);
+    if (!signature) continue;
+    const rows = bySignature.get(signature) ?? [];
+    rows.push(r);
+    bySignature.set(signature, rows);
+  }
+  const candidates: SwimmerResult[] = [];
+  for (const rows of bySignature.values()) {
+    const first = firstLegRow(rows);
+    if (first) candidates.push(first);
+  }
+  const placeKey = relayEntryKey(firstLegRow(group) ?? leg);
+  return {
+    status: 'ambiguous',
+    candidates,
+    groupKey: `${AMBIGUOUS_TIED_RELAY_PREFIX}${placeKey}|${relayEntryLegSignature(leg)}`,
+  };
+}
+
+/** The reason an override write is refused: its relay is one of a tied pair and the leg cannot say which. */
+export const TIED_RELAY_AMBIGUOUS = 'tied_relay_ambiguous' as const;
+
+export type RelayOverrideRefusal = {
+  reason: typeof TIED_RELAY_AMBIGUOUS;
+  /** Plain words for the coach. */
+  message: string;
+};
+
+/**
+ * `null` when an override may be written for the resolved relay entry, else why
+ * not. A writer that holds a leg row (the relays screen, the autofill, the
+ * quick fill) asks this first and writes nothing when it is not `null`: an
+ * override for an ambiguous leg would land on one of two tied relays by luck.
+ */
+export function relayOverrideRefusal(resolution: RelayEntryResolution): RelayOverrideRefusal | null {
+  if (resolution.status === 'resolved') return null;
+  return {
+    reason: TIED_RELAY_AMBIGUOUS,
+    message:
+      'This team has two relays with the same place and time, and this leg could belong to either. ' +
+      'Nothing was changed.',
+  };
 }
 
 /**
@@ -608,7 +733,14 @@ export function relayEntryKeyIn(
   return tied ? `${key}|${signature}` : key;
 }
 
-/** The key a stored override for `leg`'s relay entry carries (`relayEntryKeyIn` over the template). */
+/**
+ * The key a stored override for `leg`'s relay entry carries (`relayEntryKeyIn`
+ * over the template).
+ *
+ * Only for a leg of the original rows. A leg of a projected relay may be
+ * ambiguous between two tied relays, and then this returns the key of the
+ * group's first entry: use {@link resolveRelayEntryForLeg} for such a leg.
+ */
 export function stableRelayEntryKey(originalResults: SwimmerResult[], leg: SwimmerResult): string {
   return relayEntryKeyIn(originalResults, relayTemplateFromLeg(originalResults, leg));
 }
@@ -617,11 +749,11 @@ export function stableRelayEntryKey(originalResults: SwimmerResult[], leg: Swimm
  * The override for leg `legIndex` of `template`'s relay entry.
  *
  * Pass `pool` (the results the template came from) so one team's tied A and B
- * relays are told apart (`relayEntryKeyIn`). The override stored under the
- * entry's own key wins. Failing that, an override stored under the plain
- * `relayEntryKey` still applies: that is the only key a tied relay had before
- * the two were told apart, and it named both relays, so it keeps applying to
- * both. Without `pool` only the plain key is read, as before.
+ * relays are told apart (`relayEntryKeyIn`). Only the override stored under the
+ * entry's own key is read. A key saved before the two relays were told apart
+ * (the plain `relayEntryKey` of a tied pair) names neither: run the list
+ * through {@link migrateTiedRelayOverrides} first, which rewrites it into one
+ * override per relay. Without `pool` only the plain key is read, as before.
  */
 export function findRelayLegOverride(
   overrides: RelayLegOverride[],
@@ -629,25 +761,80 @@ export function findRelayLegOverride(
   legIndex: number,
   pool?: readonly SwimmerResult[]
 ): RelayLegOverride | undefined {
-  const plainKey = relayEntryKey(template);
   const key = relayEntryKeyIn(pool, template);
-  const own = overrides.find(o => o.relayEntryKey === key && o.legIndex === legIndex);
-  if (own || key === plainKey) return own;
-  return overrides.find(o => o.relayEntryKey === plainKey && o.legIndex === legIndex);
+  return overrides.find(o => o.relayEntryKey === key && o.legIndex === legIndex);
 }
 
 /**
- * Both keys an override of `template`'s relay entry may be stored under: the
- * entry's own key and the plain `relayEntryKey` (the same string unless the
- * entry is tied). Use it to ask "is this override one of this relay's".
+ * The keys an override of `template`'s relay entry may be stored under: the
+ * entry's own key (`relayEntryKeyIn`). One key, in a list for the callers that
+ * took two before a tied relay's plain key was migrated away.
  */
 export function relayEntryOverrideKeys(
   pool: readonly SwimmerResult[] | undefined,
   template: SwimmerResult
 ): string[] {
-  const plain = relayEntryKey(template);
-  const own = relayEntryKeyIn(pool, template);
-  return own === plain ? [plain] : [own, plain];
+  return [relayEntryKeyIn(pool, template)];
+}
+
+/**
+ * The overrides with every override stored under the plain key of a tied relay
+ * pair rewritten into one override per relay.
+ *
+ * Before one team's A and B relays on a dead heat were told apart, an override
+ * of a tied relay was stored under `relayEntryKey` (`team|event|round|place|
+ * clock`) and applied to both. A reader no longer reads that key for a tied
+ * relay, so this puts a copy under each relay's own key
+ * (`relayEntryKeyIn`: the plain key, `|`, the named swimmers). A copy keeps
+ * every field of the override, and the override list keeps its order.
+ *
+ * A relay's own override of the same leg wins: no copy is made over it. A
+ * second legacy override of one leg is dropped, as `findRelayLegOverride` read
+ * only the first. A relay that is not tied keeps every key it had.
+ *
+ * `results` is the original rows of the relays (`menResults`, `womenResults`).
+ * Pure and idempotent. The same array comes back when nothing is rewritten.
+ */
+export function migrateTiedRelayOverrides(
+  overrides: RelayLegOverride[],
+  results: readonly SwimmerResult[]
+): RelayLegOverride[] {
+  if (overrides.length === 0) return overrides;
+  const signaturesByKey = new Map<string, Set<string>>();
+  for (const r of results) {
+    if (!r.isRelay) continue;
+    const signature = relayEntryLegSignature(r);
+    if (!signature) continue;
+    const key = relayEntryKey(r);
+    const signatures = signaturesByKey.get(key) ?? new Set<string>();
+    signatures.add(signature);
+    signaturesByKey.set(key, signatures);
+  }
+  const tiedKeys = new Map<string, string[]>();
+  for (const [key, signatures] of signaturesByKey) {
+    if (signatures.size >= 2) tiedKeys.set(key, [...signatures].sort());
+  }
+  if (tiedKeys.size === 0) return overrides;
+
+  const slot = (key: string, legIndex: number): string => `${key}\u0000${legIndex}`;
+  const taken = new Set<string>(overrides.map(o => slot(o.relayEntryKey, o.legIndex)));
+  const out: RelayLegOverride[] = [];
+  let rewritten = false;
+  for (const o of overrides) {
+    const signatures = tiedKeys.get(o.relayEntryKey);
+    if (!signatures) {
+      out.push(o);
+      continue;
+    }
+    rewritten = true;
+    for (const signature of signatures) {
+      const key = `${o.relayEntryKey}|${signature}`;
+      if (taken.has(slot(key, o.legIndex))) continue;
+      taken.add(slot(key, o.legIndex));
+      out.push({ ...o, relayEntryKey: key });
+    }
+  }
+  return rewritten ? out : overrides;
 }
 
 /**
@@ -835,29 +1022,14 @@ export function suggestBestRelayLegFill(
 }
 
 /**
- * True when an override stored under `storedKey` is one `entryKey`'s relay
- * entry reads: the same key, or the plain `relayEntryKey` a tied relay's key is
- * built on (`relayEntryKeyIn` appends `|<swimmers>` to it, and nothing else
- * does).
+ * The overrides with `next` in place of the one it replaces: the override of the
+ * same relay entry key and leg.
  *
- * That plain key is the only key a tied A or B relay had before the two were
- * told apart, and `findRelayLegOverride` still reads it for both. Everything
- * that edits or reports an override must see it the same way. A plain key is a
- * pipe-prefix of exactly its own relay's tied keys, never of another relay's.
- */
-function overrideKeyAppliesToEntry(storedKey: string, entryKey: string): boolean {
-  return storedKey === entryKey || entryKey.startsWith(`${storedKey}|`);
-}
-
-/**
- * The overrides with `next` in place of the one it replaces.
- *
- * It replaces the override of the same relay entry and leg: stored under the
- * same key, or under the plain key a tied entry's key is built on (a key saved
- * before A and B were told apart). Without that, the legacy override stayed
- * beside `next`, and clearing the leg later let it show through again. The
- * legacy key also applied to the tied sibling: that sibling reads no override
- * for this leg once the key is replaced.
+ * Only the same key counts. An override stored under the plain key of a tied
+ * pair is another relay's, or both relays' until `migrateTiedRelayOverrides`
+ * splits it: replacing it here would drop the other relay's fill. Readers
+ * migrate first, so a plain key left in the list still reaches the tied relay
+ * `next` is not for.
  */
 export function upsertRelayLegOverride(
   overrides: RelayLegOverride[],
@@ -865,48 +1037,42 @@ export function upsertRelayLegOverride(
 ): RelayLegOverride[] {
   return [
     ...overrides.filter(
-      o =>
-        !(o.legIndex === next.legIndex && overrideKeyAppliesToEntry(o.relayEntryKey, next.relayEntryKey))
+      o => !(o.legIndex === next.legIndex && o.relayEntryKey === next.relayEntryKey)
     ),
     next,
   ];
 }
 
 /**
- * The overrides without the one of `entryKey`'s relay entry at `legIndex`: the
- * one stored under `entryKey`, and the one stored under the plain key of a tied
- * entry (`overrideKeyAppliesToEntry`). `entryKey` is the key
- * `stableRelayEntryKey` gives (a RelayGroup's `key`). A leg's override of a
- * tied relay could be either, and the one left behind would read as an override
- * the coach had just cleared.
+ * The overrides without the one stored under `entryKey` at `legIndex`.
+ * `entryKey` is the key `stableRelayEntryKey` gives (a RelayGroup's `key`).
+ *
+ * A key saved before A and B were told apart is not `entryKey`. Pass a list
+ * that went through `migrateTiedRelayOverrides`, or the legacy key stays and
+ * the tied relays read it again after the next migration.
  */
 export function removeRelayLegOverride(
   overrides: RelayLegOverride[],
   entryKey: string,
   legIndex: number
 ): RelayLegOverride[] {
-  return overrides.filter(
-    o => !(o.legIndex === legIndex && overrideKeyAppliesToEntry(o.relayEntryKey, entryKey))
-  );
+  return overrides.filter(o => !(o.legIndex === legIndex && o.relayEntryKey === entryKey));
 }
 
 /**
- * True when the leg has an override a relay reads: stored under `entryKey`, or
- * under the plain key of a tied entry. The same test `removeRelayLegOverride`
- * clears, and the same answer `findRelayLegOverride` gives (non-`undefined`)
- * for the relay `entryKey` was made from.
+ * True when the leg has an override stored under `entryKey`: the test
+ * `removeRelayLegOverride` clears, and the answer `findRelayLegOverride` gives
+ * (non-`undefined`) for the relay `entryKey` was made from.
  *
  * Use it for "is there an override to clear" on a relay group, passing the
- * group's `key`.
+ * group's `key` and a migrated list (`migrateTiedRelayOverrides`).
  */
 export function hasRelayLegOverride(
   overrides: readonly RelayLegOverride[],
   entryKey: string,
   legIndex: number
 ): boolean {
-  return overrides.some(
-    o => o.legIndex === legIndex && overrideKeyAppliesToEntry(o.relayEntryKey, entryKey)
-  );
+  return overrides.some(o => o.legIndex === legIndex && o.relayEntryKey === entryKey);
 }
 
 export function relayMissingStrokeLabel(stroke: RelayLegStroke | undefined): string {

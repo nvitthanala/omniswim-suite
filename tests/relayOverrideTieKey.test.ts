@@ -195,6 +195,14 @@ describe('an override of one tied relay', () => {
   });
 });
 
+/**
+ * Architect re-review 2026-10-13, finding 1b: a key saved before the two relays
+ * were told apart is not read for a tied relay any more. It is rewritten into
+ * one override per relay (`migrateTiedRelayOverrides`), which the readers
+ * (`simulateRoster`, the what-if projection) and the relays screen do first.
+ * The fallback this block used to pin let a clear on A change B's fill.
+ * `tests/relayTiedAmbiguityMigration.test.ts` holds the new-contract cases.
+ */
 describe('a key saved before the two relays were told apart', () => {
   const plainKey = `${TEAM}|${EVENT}|A Final|2|${CLOCK}`;
   const legacy: RelayLegOverride = { relayEntryKey: plainKey, legIndex: LEG, assigneeName: 'X1', source: 'manual' };
@@ -205,17 +213,23 @@ describe('a key saved before the two relays were told apart', () => {
     expect(out.find(r => r.isRelay && r.relayLegIndex === LEG)?.name).toBe('X1');
   });
 
-  it('still applies to a tied relay, as it did before (it named both)', () => {
-    expect(findRelayLegOverride([legacy], aTemplate, LEG, tied)).toBe(legacy);
-    expect(findRelayLegOverride([legacy], bTemplate, LEG, tied)).toBe(legacy);
+  it('is not read as the own key of a tied relay', () => {
+    expect(findRelayLegOverride([legacy], aTemplate, LEG, tied)).toBeUndefined();
+    expect(findRelayLegOverride([legacy], bTemplate, LEG, tied)).toBeUndefined();
+  });
+
+  it('applies to both tied relays once migrated, as it did before (it named both)', () => {
     const out = simulateRoster(results, [], false, BOTH_LEFT, [legacy]);
     expect(out.filter(r => r.isRelay && r.relayLegIndex === LEG).map(r => r.name)).toStrictEqual(['X1', 'X1']);
   });
 
   it("an override saved under the relay's own key wins over the plain one", () => {
     const own: RelayLegOverride = { ...autofillFor(bTemplate), assigneeName: 'Y1' };
-    expect(findRelayLegOverride([legacy, own], bTemplate, LEG, tied)).toBe(own);
-    expect(findRelayLegOverride([legacy, own], aTemplate, LEG, tied)).toBe(legacy);
+    const out = simulateRoster(results, [], false, BOTH_LEFT, [legacy, own]);
+    const nameOf = (first: string) =>
+      out.find(r => r.isRelay && r.relayLegIndex === LEG && r.relayNames?.some(n => n.name === first))?.name;
+    expect(nameOf('B1')).toBe('Y1');
+    expect(nameOf('A1')).toBe('X1');
   });
 
   it('is read as plain when no pool is given', () => {
