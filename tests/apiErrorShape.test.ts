@@ -27,6 +27,13 @@ import { registerCutlineRoutes } from '../apps/shell/lib/routes/cutlineRoutes';
 import { registerParsingRoutes } from '../apps/shell/lib/routes/parsingRoutes';
 import { registerScoringPresetRoutes } from '../apps/shell/lib/routes/scoringPresetRoutes';
 import { registerWorkspaceRoutes } from '../apps/shell/lib/routes/workspaceRoutes';
+import { createAuthMiddleware } from '../apps/shell/lib/authMiddleware';
+import {
+  createSwimCloudCaptureRouter,
+  SWIMCLOUD_CAPTURE_ROUTE_BASE,
+  SWIMCLOUD_CAPTURE_TOKEN_HEADER,
+} from '../apps/shell/lib/swimcloudCaptureRoutes';
+import { FileSystemSwimCloudCaptureStore } from '../packages/swimcloud/src/captureStore';
 import { EXPECTED_VERSION_HEADER } from '../packages/core/src/api/saveSequence';
 import type { AuthService, ShareLinkService } from '../packages/db/src/AuthService';
 import type { ScoringSettings } from '../packages/core/src/types';
@@ -114,15 +121,21 @@ describe('apiError', () => {
 /* -------------------------------------------------------------------------- */
 
 describe('every file that answers /api requests uses apiError', () => {
-  const routesDir = path.join(ROOT, 'apps', 'shell', 'lib', 'routes');
-  const middlewareDir = path.join(ROOT, 'apps', 'shell', 'lib', 'middleware');
+  const libDir = path.join(ROOT, 'apps', 'shell', 'lib');
+  const routesDir = path.join(libDir, 'routes');
+  const middlewareDir = path.join(libDir, 'middleware');
   const ts = (dir: string) => fs.readdirSync(dir).filter(f => f.endsWith('.ts')).map(f => path.join(dir, f));
 
   /** The helper itself is the one place `.status().json()` is allowed. */
   const exempt = (file: string) => path.basename(file) === 'apiError.ts';
-  const files = [...ts(routesDir), ...ts(middlewareDir), path.join(ROOT, 'apps', 'shell', 'server.ts')].filter(
-    f => !exempt(f)
-  );
+  // `apps/shell/lib/*.ts` as well as routes/ and middleware/: the capture router and the
+  // auth middleware answer `/api` requests from outside `routes/`.
+  const files = [
+    ...ts(libDir),
+    ...ts(routesDir),
+    ...ts(middlewareDir),
+    path.join(ROOT, 'apps', 'shell', 'server.ts'),
+  ].filter(f => !exempt(f));
 
   /** `.status(<anything but 2xx>)` then `.json(` across whitespace and newlines. */
   const RAW_ERROR_STATUS = /\.status\(\s*(?!2\d\d\b)[^)]*\)\s*\.json\(/;
@@ -140,6 +153,8 @@ describe('every file that answers /api requests uses apiError', () => {
       'workspaceRoutes.ts',
       'hostOriginGuard.ts',
       'parsePdfGuard.ts',
+      'swimcloudCaptureRoutes.ts',
+      'authMiddleware.ts',
       'apiErrorHandler.ts',
       'server.ts',
     ]) {
@@ -176,6 +191,11 @@ describe('every file that answers /api requests uses apiError', () => {
     ]) {
       const source = fs.readFileSync(path.join(routesDir, name), 'utf8');
       expect(source, name).toMatch(/import \{ apiError \} from '\.\.\/middleware\/apiError\.ts'/);
+      expect(source, name).toMatch(/apiError\(/);
+    }
+    for (const name of ['swimcloudCaptureRoutes.ts', 'authMiddleware.ts']) {
+      const source = fs.readFileSync(path.join(libDir, name), 'utf8');
+      expect(source, name).toMatch(/import \{ apiError \} from '\.\/middleware\/apiError\.ts'/);
       expect(source, name).toMatch(/apiError\(/);
     }
   });
@@ -646,5 +666,122 @@ describe('parse failures that carry rows keep them in production', () => {
     expect(res.json.code).toBe('scoring_settings_missing');
     expect(res.json).not.toHaveProperty('details');
     expect(res.json).not.toHaveProperty('rows');
+  });
+});
+
+describe('SwimCloud capture routes and the auth middleware', () => {
+  const TOKEN = 'a'.repeat(48);
+  const BASE = SWIMCLOUD_CAPTURE_ROUTE_BASE;
+  let sandbox: string;
+  let server: TestServer;
+  let authServer: TestServer;
+  const auth = (headers: Record<string, string> = {}) => ({ [SWIMCLOUD_CAPTURE_TOKEN_HEADER]: TOKEN, ...headers });
+
+  beforeAll(async () => {
+    sandbox = fs.mkdtempSync(path.join(os.tmpdir(), 'omni-api-error-capture-'));
+    const captureRoot = path.join(sandbox, 'store');
+    const store = new FileSystemSwimCloudCaptureStore(captureRoot);
+    // A store whose reads fail, as a corrupt capture file would.
+    const failing = Object.assign(store, {
+      getCapture: async () => {
+        throw new Error(SECRET);
+      },
+      listCaptures: async () => {
+        throw new Error(SECRET);
+      },
+    });
+    server = await startTestServer(() => {
+      const app = express();
+      app.use(
+        BASE,
+        createSwimCloudCaptureRouter({ store: failing, captureRoot, pairingToken: TOKEN, bodyLimitBytes: 4096 })
+      );
+      return app;
+    });
+    authServer = await startTestServer(() => {
+      const app = express();
+      app.get('/needs-auth', createAuthMiddleware(null, true), (_q, res) => res.json({ ok: true }));
+      app.get('/needs-session', createAuthMiddleware({ validateSession: async () => null } as never, true), (_q, res) =>
+        res.json({ ok: true })
+      );
+      return app;
+    });
+  });
+  afterAll(async () => {
+    await server.close();
+    await authServer.close();
+    fs.rmSync(sandbox, { recursive: true, force: true });
+  });
+
+  /** The shape the extension and the app read: status, `error`, `code`. */
+  const CASES: ReadonlyArray<
+    readonly [string, string, string, Record<string, string> | undefined, unknown, number, string, string]
+  > = [
+    ['missing token', 'GET', BASE, {}, undefined, 401, 'CAPTURE_TOKEN_MISSING', `Missing ${SWIMCLOUD_CAPTURE_TOKEN_HEADER} header`],
+    ['wrong token', 'GET', BASE, { [SWIMCLOUD_CAPTURE_TOKEN_HEADER]: 'b'.repeat(48) }, undefined, 403, 'CAPTURE_TOKEN_INVALID', 'Invalid SwimCloud capture pairing token'],
+    ['bad capture id', 'GET', `${BASE}/not%20valid`, undefined, undefined, 400, 'INVALID_CAPTURE_ID', 'Invalid capture id'],
+    ['bad subject', 'POST', BASE, undefined, { subject: { kind: 'nope' } }, 400, 'INVALID_CAPTURE_SUBJECT', 'Invalid capture subject'],
+    ['body not an object', 'POST', BASE, auth({ 'Content-Type': 'application/json' }), '[1]', 400, 'INVALID_CAPTURE_BODY', 'Capture body must be a JSON object'],
+    ['over the body limit', 'POST', BASE, undefined, { subject: { kind: 'meet', meetId: '1' }, notes: ['x'.repeat(6000)] }, 413, 'CAPTURE_PAYLOAD_TOO_LARGE', 'SwimCloud capture payload too large'],
+    ['store read fails', 'GET', `${BASE}/meet-1`, undefined, undefined, 500, 'CAPTURE_READ_FAILED', 'Failed to read capture'],
+    ['store list fails', 'GET', BASE, undefined, undefined, 500, 'CAPTURE_LIST_FAILED', 'Failed to list captures'],
+    ['page payload unreadable', 'POST', `${BASE}/meet-1/pages`, undefined, { not: 'a capture' }, 400, 'INVALID_CAPTURE_PAGE', 'Invalid capture page payload'],
+  ];
+
+  const send = (method: string, route: string, headers: Record<string, string> | undefined, body: unknown) =>
+    server.request({
+      method,
+      path: route,
+      headers: headers ?? auth(),
+      ...(body === undefined ? {} : { body }),
+    });
+
+  it.each(CASES)('production: %s keeps status, error and code and drops details', async (_n, m, r, h, b, status, code, error) => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const res = await send(m, r, h, b);
+    expect(res.status, res.text).toBe(status);
+    expect(res.json.code).toBe(code);
+    expect(res.json.error).toBe(error);
+    expectNoLeak(res, _n);
+  });
+
+  // The one capture refusal that never had details (a body that is not an object) is left out.
+  it.each(CASES.filter(c => c[0] !== 'body not an object'))('outside production: %s carries details', async (_n, m, r, h, b, status, code) => {
+    vi.stubEnv('NODE_ENV', 'test');
+    const res = await send(m, r, h, b);
+    expect(res.status).toBe(status);
+    expect(res.json.code).toBe(code);
+    expect(typeof res.json.details, _n).toBe('string');
+  });
+
+  it('a store failure never puts the exception text on the wire in production', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const res = await send('GET', `${BASE}/meet-1`, undefined, undefined);
+    expect(res.status).toBe(500);
+    expect(res.text).not.toContain('SECRET_LEAK');
+  });
+
+  it('keeps the top-level fields a client reads: reason on a refused page, in production too', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const res = await send('POST', `${BASE}/meet-1/pages`, undefined, { not: 'a capture' });
+    expect(res.status).toBe(400);
+    expect(typeof res.json.reason).toBe('string');
+    expect(res.json).not.toHaveProperty('details');
+  });
+
+  it('the auth middleware answers a code on each refusal', async () => {
+    vi.stubEnv('NODE_ENV', 'test');
+    const noAuth = await authServer.request({ path: '/needs-auth' });
+    expect(noAuth.status).toBe(503);
+    expect(noAuth.json).toEqual({
+      error: 'Auth not configured (requires OMNI_DB=postgres + DATABASE_URL)',
+      code: 'AUTH_UNAVAILABLE',
+    });
+    const noToken = await authServer.request({ path: '/needs-session' });
+    expect(noToken.status).toBe(401);
+    expect(noToken.json).toEqual({ error: 'Authentication required', code: 'AUTHENTICATION_REQUIRED' });
+    const badToken = await authServer.request({ path: '/needs-session', headers: { Authorization: 'Bearer nope' } });
+    expect(badToken.status).toBe(401);
+    expect(badToken.json).toEqual({ error: 'Invalid or expired session', code: 'SESSION_INVALID' });
   });
 });

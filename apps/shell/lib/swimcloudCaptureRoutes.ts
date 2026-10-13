@@ -47,6 +47,8 @@ import path from 'node:path';
 import express from 'express';
 import type { ErrorRequestHandler, Express, RequestHandler, Response, Router } from 'express';
 
+import { apiError } from './middleware/apiError.ts';
+
 import {
   captureIdForSubject,
   FileSystemSwimCloudCaptureStore,
@@ -832,19 +834,23 @@ function requireCaptureToken(expected: string): RequestHandler {
   return (req, res, next) => {
     const received = req.get(SWIMCLOUD_CAPTURE_TOKEN_HEADER);
     if (typeof received !== 'string' || received.length === 0) {
-      res.status(401).json({
-        error: `Missing ${SWIMCLOUD_CAPTURE_TOKEN_HEADER} header`,
-        details:
-          'The SwimCloud capture routes require the pairing token printed in this server\'s startup banner. Paste it into the extension\'s options page.',
-      });
+      apiError(
+        res,
+        401,
+        'CAPTURE_TOKEN_MISSING',
+        `Missing ${SWIMCLOUD_CAPTURE_TOKEN_HEADER} header`,
+        'The SwimCloud capture routes require the pairing token printed in this server\'s startup banner. Paste it into the extension\'s options page.'
+      );
       return;
     }
     if (!timingSafeTokenEquals(expected, received)) {
-      res.status(403).json({
-        error: 'Invalid SwimCloud capture pairing token',
-        details:
-          'The token does not match this server\'s. Re-copy it from the startup banner, or delete data/swimcloud-pairing-token.json to mint a new one.',
-      });
+      apiError(
+        res,
+        403,
+        'CAPTURE_TOKEN_INVALID',
+        'Invalid SwimCloud capture pairing token',
+        'The token does not match this server\'s. Re-copy it from the startup banner, or delete data/swimcloud-pairing-token.json to mint a new one.'
+      );
       return;
     }
     next();
@@ -870,10 +876,13 @@ function enforceCaptureBodyLimit(limitBytes: number): RequestHandler {
     if (declared !== undefined) {
       const length = Number(declared);
       if (Number.isFinite(length) && length > limitBytes) {
-        res.status(413).json({
-          error: 'SwimCloud capture payload too large',
-          details: `This route accepts at most ${limitBytes} bytes; the request declared ${declared}.`,
-        });
+        apiError(
+          res,
+          413,
+          'CAPTURE_PAYLOAD_TOO_LARGE',
+          'SwimCloud capture payload too large',
+          `This route accepts at most ${limitBytes} bytes; the request declared ${declared}.`
+        );
         return;
       }
     }
@@ -925,25 +934,31 @@ function narrowCors(origin: string): RequestHandler {
   };
 }
 
-/** Turns body-parser's own failures into this file's `{ error, details }` shape. */
+/** Turns body-parser's own failures into the shared `apiError` shape. */
 const captureErrorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
   const type = (err as { type?: unknown } | null)?.type;
   const status = (err as { status?: unknown } | null)?.status;
   if (type === 'entity.too.large') {
-    res.status(413).json({
-      error: 'SwimCloud capture payload too large',
-      details: `This route accepts at most ${SWIMCLOUD_CAPTURE_BODY_LIMIT_BYTES} bytes.`,
-    });
+    apiError(
+      res,
+      413,
+      'CAPTURE_PAYLOAD_TOO_LARGE',
+      'SwimCloud capture payload too large',
+      `This route accepts at most ${SWIMCLOUD_CAPTURE_BODY_LIMIT_BYTES} bytes.`
+    );
     return;
   }
   if (typeof status === 'number' && status >= 400 && status < 500) {
-    res.status(status).json({
-      error: 'Invalid SwimCloud capture request',
-      details: err instanceof Error ? err.message : String(err),
-    });
+    apiError(
+      res,
+      status,
+      'CAPTURE_REQUEST_INVALID',
+      'Invalid SwimCloud capture request',
+      err instanceof Error ? err.message : String(err)
+    );
     return;
   }
-  res.status(500).json({ error: 'SwimCloud capture route failed', details: String(err) });
+  apiError(res, 500, 'CAPTURE_ROUTE_FAILED', 'SwimCloud capture route failed', String(err));
 };
 
 /* -------------------------------------------------------------------------- */
@@ -1008,7 +1023,7 @@ function validateCaptureOpenBody(
 ): CaptureOpenFields | undefined {
   const subject = readCaptureSubject(body.subject);
   if (!subject.ok) {
-    res.status(400).json({ error: 'Invalid capture subject', details: subject.message });
+    apiError(res, 400, 'INVALID_CAPTURE_SUBJECT', 'Invalid capture subject', subject.message);
     return undefined;
   }
 
@@ -1024,52 +1039,55 @@ function validateCaptureOpenBody(
   if (captureId === undefined) return undefined;
 
   if (Array.isArray(body.pages) && body.pages.length > 0) {
-    res.status(400).json({
-      error: 'Capture pages are not accepted here',
-      details: `Post each fetched page to ${SWIMCLOUD_CAPTURE_ROUTE_BASE}/${captureId}/pages. This route owns the record, not its pages.`,
-    });
+    apiError(
+      res,
+      400,
+      'CAPTURE_PAGES_NOT_ACCEPTED',
+      'Capture pages are not accepted here',
+      `Post each fetched page to ${SWIMCLOUD_CAPTURE_ROUTE_BASE}/${captureId}/pages. This route owns the record, not its pages.`
+    );
     return undefined;
   }
 
   const track = readOptionalEnum(body.track, CAPTURE_TRACKS, 'track');
   if (!track.ok) {
-    res.status(400).json({ error: 'Invalid capture track', details: track.message });
+    apiError(res, 400, 'INVALID_CAPTURE_TRACK', 'Invalid capture track', track.message);
     return undefined;
   }
 
   const completeness = readOptionalEnum(body.completeness, CAPTURE_COMPLETENESS, 'completeness');
   if (!completeness.ok) {
-    res.status(400).json({ error: 'Invalid capture completeness', details: completeness.message });
+    apiError(res, 400, 'INVALID_CAPTURE_COMPLETENESS', 'Invalid capture completeness', completeness.message);
     return undefined;
   }
 
   const plannedPageCount = readOptionalCount(body.plannedPageCount, 'plannedPageCount');
   if (!plannedPageCount.ok) {
-    res.status(400).json({ error: 'Invalid plannedPageCount', details: plannedPageCount.message });
+    apiError(res, 400, 'INVALID_PLANNED_PAGE_COUNT', 'Invalid plannedPageCount', plannedPageCount.message);
     return undefined;
   }
 
   const notes = readOptionalStringArray(body.notes, 'notes');
   if (!notes.ok) {
-    res.status(400).json({ error: 'Invalid notes', details: notes.message });
+    apiError(res, 400, 'INVALID_CAPTURE_NOTES', 'Invalid notes', notes.message);
     return undefined;
   }
 
   const label = readOptionalLabel(body.label);
   if (!label.ok) {
-    res.status(400).json({ error: 'Invalid label', details: label.message });
+    apiError(res, 400, 'INVALID_CAPTURE_LABEL', 'Invalid label', label.message);
     return undefined;
   }
 
   const teamDiscovery = readOptionalTeamDiscovery(body.teamDiscovery);
   if (!teamDiscovery.ok) {
-    res.status(400).json({ error: 'Invalid teamDiscovery', details: teamDiscovery.message });
+    apiError(res, 400, 'INVALID_TEAM_DISCOVERY', 'Invalid teamDiscovery', teamDiscovery.message);
     return undefined;
   }
 
   const crawlScope = readOptionalCrawlScope(body.crawlScope);
   if (!crawlScope.ok) {
-    res.status(400).json({ error: 'Invalid crawlScope', details: crawlScope.message });
+    apiError(res, 400, 'INVALID_CRAWL_SCOPE', 'Invalid crawlScope', crawlScope.message);
     return undefined;
   }
 
@@ -1155,17 +1173,23 @@ export function createSwimCloudCaptureRouter(options: SwimCloudCaptureRouterOpti
    */
   function guardCaptureId(candidate: unknown, res: Response): string | undefined {
     if (!isValidSwimCloudCaptureId(candidate)) {
-      res.status(400).json({
-        error: 'Invalid capture id',
-        details: `A capture id must match ${SWIMCLOUD_CAPTURE_ID_PATTERN.source} — got ${JSON.stringify(candidate)}.`,
-      });
+      apiError(
+        res,
+        400,
+        'INVALID_CAPTURE_ID',
+        'Invalid capture id',
+        `A capture id must match ${SWIMCLOUD_CAPTURE_ID_PATTERN.source} — got ${JSON.stringify(candidate)}.`
+      );
       return undefined;
     }
     if (resolveCaptureFilePathWithinRoot(captureRoot, candidate) === undefined) {
-      res.status(400).json({
-        error: 'Invalid capture id',
-        details: 'That capture id does not resolve to a file inside the capture store.',
-      });
+      apiError(
+        res,
+        400,
+        'INVALID_CAPTURE_ID',
+        'Invalid capture id',
+        'That capture id does not resolve to a file inside the capture store.'
+      );
       return undefined;
     }
     return candidate;
@@ -1176,7 +1200,7 @@ export function createSwimCloudCaptureRouter(options: SwimCloudCaptureRouterOpti
     try {
       const body: unknown = req.body;
       if (!isPlainObject(body)) {
-        return res.status(400).json({ error: 'Capture body must be a JSON object' });
+        return apiError(res, 400, 'INVALID_CAPTURE_BODY', 'Capture body must be a JSON object');
       }
 
       const fields = validateCaptureOpenBody(body, res, guardCaptureId);
@@ -1187,9 +1211,10 @@ export function createSwimCloudCaptureRouter(options: SwimCloudCaptureRouterOpti
       const record = buildMergedCaptureRecord(fields, existing, now);
 
       const saved = await store.upsertCapture(record);
-      return res.status(existing === undefined ? 201 : 200).json(saved);
+      if (existing === undefined) return res.status(201).json(saved);
+      return res.json(saved);
     } catch (err) {
-      return res.status(500).json({ error: 'Failed to open capture', details: String(err) });
+      return apiError(res, 500, 'CAPTURE_OPEN_FAILED', 'Failed to open capture', String(err));
     }
   });
 
@@ -1202,7 +1227,7 @@ export function createSwimCloudCaptureRouter(options: SwimCloudCaptureRouterOpti
       });
       return res.json(await Promise.all(captures.map(c => withTeamName(store, c))));
     } catch (err) {
-      return res.status(500).json({ error: 'Failed to list captures', details: String(err) });
+      return apiError(res, 500, 'CAPTURE_LIST_FAILED', 'Failed to list captures', String(err));
     }
   });
 
@@ -1297,7 +1322,7 @@ export function createSwimCloudCaptureRouter(options: SwimCloudCaptureRouterOpti
     try {
       const record = await store.getCapture(captureId);
       if (record === undefined) {
-        return res.status(404).json({ error: `Capture not found: ${captureId}` });
+        return apiError(res, 404, 'CAPTURE_NOT_FOUND', `Capture not found: ${captureId}`);
       }
       // Opt-in, because deriving them parses every stored swims page and the
       // ordinary read of a capture record must stay cheap. The crawler asks for
@@ -1307,7 +1332,7 @@ export function createSwimCloudCaptureRouter(options: SwimCloudCaptureRouterOpti
       }
       return res.json(record);
     } catch (err) {
-      return res.status(500).json({ error: 'Failed to read capture', details: String(err) });
+      return apiError(res, 500, 'CAPTURE_READ_FAILED', 'Failed to read capture', String(err));
     }
   });
 
@@ -1325,22 +1350,22 @@ export function createSwimCloudCaptureRouter(options: SwimCloudCaptureRouterOpti
     try {
       serialized = JSON.stringify(req.body ?? null);
     } catch (err) {
-      return res.status(400).json({ error: 'Unreadable capture page body', details: String(err) });
+      return apiError(res, 400, 'UNREADABLE_CAPTURE_PAGE', 'Unreadable capture page body', String(err));
     }
     const read = readSwimCloudClipboardPayload(serialized ?? '');
     if (!read.ok) {
-      return res.status(400).json({
-        error: 'Invalid capture page payload',
-        details: read.message,
+      return apiError(res, 400, 'INVALID_CAPTURE_PAGE', 'Invalid capture page payload', read.message, {
         reason: read.reason,
       });
     }
     if (read.payload.omniswimSwimCloudCapture !== 2) {
-      return res.status(400).json({
-        error: 'This route needs a version 2 capture payload',
-        details:
-          'A version 1 payload is the single-page clipboard shape and carries no subject. Post `omniswimSwimCloudCapture: 2` with a subject, or use the clipboard import.',
-      });
+      return apiError(
+        res,
+        400,
+        'CAPTURE_PAYLOAD_VERSION',
+        'This route needs a version 2 capture payload',
+        'A version 1 payload is the single-page clipboard shape and carries no subject. Post `omniswimSwimCloudCapture: 2` with a subject, or use the clipboard import.'
+      );
     }
     const payload = read.payload;
 
@@ -1351,20 +1376,26 @@ export function createSwimCloudCaptureRouter(options: SwimCloudCaptureRouterOpti
     // repo does not model.
     const classification = classifySwimCloudUrl(payload.sourceUrl);
     if (classification.outcome !== 'fetchable') {
-      return res.status(400).json({
-        error: 'Capture page sourceUrl is not a fetchable SwimCloud resource',
-        details: classification.detail,
-        outcome: classification.outcome,
-      });
+      return apiError(
+        res,
+        400,
+        'CAPTURE_PAGE_URL_REFUSED',
+        'Capture page sourceUrl is not a fetchable SwimCloud resource',
+        classification.detail,
+        { outcome: classification.outcome }
+      );
     }
 
     try {
       const capture = await store.getCapture(captureId);
       if (capture === undefined) {
-        return res.status(404).json({
-          error: `Capture not found: ${captureId}`,
-          details: `Open it with POST ${SWIMCLOUD_CAPTURE_ROUTE_BASE} before posting pages to it.`,
-        });
+        return apiError(
+          res,
+          404,
+          'CAPTURE_NOT_FOUND',
+          `Capture not found: ${captureId}`,
+          `Open it with POST ${SWIMCLOUD_CAPTURE_ROUTE_BASE} before posting pages to it.`
+        );
       }
 
       // A page whose subject disagrees with the capture it is being filed under
@@ -1372,10 +1403,13 @@ export function createSwimCloudCaptureRouter(options: SwimCloudCaptureRouterOpti
       // compared: a per-page payload may legitimately omit it while the record
       // carries one, and the team id is what identifies the crawl target.
       if (!subjectsAgree(capture.subject, payload.subject)) {
-        return res.status(409).json({
-          error: 'Capture page subject does not match the capture',
-          details: `Capture ${captureId} is ${JSON.stringify(capture.subject)}; the page claims ${JSON.stringify(payload.subject)}.`,
-        });
+        return apiError(
+          res,
+          409,
+          'CAPTURE_SUBJECT_MISMATCH',
+          'Capture page subject does not match the capture',
+          `Capture ${captureId} is ${JSON.stringify(capture.subject)}; the page claims ${JSON.stringify(payload.subject)}.`
+        );
       }
 
       const canonicalUrl = classification.canonicalUrl;
@@ -1426,7 +1460,7 @@ export function createSwimCloudCaptureRouter(options: SwimCloudCaptureRouterOpti
       const updated = await store.getCapture(captureId);
       return res.json({ captureId, page: pageRef, capture: updated });
     } catch (err) {
-      return res.status(500).json({ error: 'Failed to store capture page', details: String(err) });
+      return apiError(res, 500, 'CAPTURE_PAGE_STORE_FAILED', 'Failed to store capture page', String(err));
     }
   });
 
@@ -1444,11 +1478,11 @@ export function createSwimCloudCaptureRouter(options: SwimCloudCaptureRouterOpti
     try {
       const capture = await store.getCapture(captureId);
       if (capture === undefined) {
-        return res.status(404).json({ error: `Capture not found: ${captureId}` });
+        return apiError(res, 404, 'CAPTURE_NOT_FOUND', `Capture not found: ${captureId}`);
       }
       return res.json(await parseSwimCloudCapture(store, capture));
     } catch (err) {
-      return res.status(500).json({ error: 'Failed to parse capture', details: String(err) });
+      return apiError(res, 500, 'CAPTURE_PARSE_FAILED', 'Failed to parse capture', String(err));
     }
   });
 
@@ -1459,12 +1493,12 @@ export function createSwimCloudCaptureRouter(options: SwimCloudCaptureRouterOpti
     try {
       const existing = await store.getCapture(captureId);
       if (existing === undefined) {
-        return res.status(404).json({ error: `Capture not found: ${captureId}` });
+        return apiError(res, 404, 'CAPTURE_NOT_FOUND', `Capture not found: ${captureId}`);
       }
       await store.deleteCapture(captureId, { withPages: true });
       return res.json({ success: true, captureId, pagesDeleted: existing.pages.length });
     } catch (err) {
-      return res.status(500).json({ error: 'Failed to delete capture', details: String(err) });
+      return apiError(res, 500, 'CAPTURE_DELETE_FAILED', 'Failed to delete capture', String(err));
     }
   });
 

@@ -1,5 +1,6 @@
 import type { Request, Response, NextFunction } from 'express';
 import type { AuthService, AuthUser } from '../../../packages/db/src/AuthService.ts';
+import { apiError } from './middleware/apiError.ts';
 
 export type AuthedRequest = Request & { user?: AuthUser; sessionToken?: string };
 
@@ -30,18 +31,23 @@ export function createAuthMiddleware(auth: AuthService | null, requireAuth: bool
   return async (req: AuthedRequest, res: Response, next: NextFunction) => {
     if (!auth) {
       if (requireAuth) {
-        return res.status(503).json({ error: 'Auth not configured (requires OMNI_DB=postgres + DATABASE_URL)' });
+        return apiError(
+          res,
+          503,
+          'AUTH_UNAVAILABLE',
+          'Auth not configured (requires OMNI_DB=postgres + DATABASE_URL)'
+        );
       }
       return next();
     }
     const token = getSessionToken(req);
     if (!token) {
-      if (requireAuth) return res.status(401).json({ error: 'Authentication required' });
+      if (requireAuth) return apiError(res, 401, 'AUTHENTICATION_REQUIRED', 'Authentication required');
       return next();
     }
     const user = await auth.validateSession(token);
     if (!user) {
-      if (requireAuth) return res.status(401).json({ error: 'Invalid or expired session' });
+      if (requireAuth) return apiError(res, 401, 'SESSION_INVALID', 'Invalid or expired session');
       return next();
     }
     req.user = user;
