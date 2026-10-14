@@ -460,7 +460,8 @@
     "UWF: it moves to NCAA D1 in 2026-27 (ASUN; postseason 2029). divisionHistory records it but tag paths read the season-agnostic `division` (D2). Route tag paths through divisionForTeamInSeason so a 2026-27 swim is judged against D1, or keep D2 until a season-aware pass?",
     "relayLegMatching.ts relayStrokeForIndex: what should a negative or invalid leg index mean? (today undefined; caller passes position-1 from stored data)",
     "PodiumMedal reads s.podium which nothing sets, so the medal never renders: remove it or wire it from place?",
-    "Python pdf_parser._load_abbrev_teams keeps five setdefault fallbacks (UMSL, HSU, DSU, OUAC, UWF) that contradict its fail-loud comment: remove them?"
+    "Python pdf_parser._load_abbrev_teams keeps five setdefault fallbacks (UMSL, HSU, DSU, OUAC, UWF) that contradict its fail-loud comment: remove them?",
+    "utils.ts ~3481 `(oldSplitSec ?? 30) + 3`: a vacated relay leg with no known split is priced at 33.0 s. That is an invented number on the scoring path. Keep (flagged as a vacancy penalty) or refuse to price the leg?"
   ],
   "pendingArchitectReview": [
     "Review e6b35d54 (type break: projected bundle lacks totalPoints in its type) and a23a20b3/15b216e1 (migration at read time, not load time)"
@@ -637,6 +638,10 @@
       "extensionLeftover": "extensions/swimcloud-companion/tsconfig.json keeps noUncheckedIndexedAccess false: 21 errors in src/multiTeamQueue.ts, multiTeamPanelModel.ts, boundedFetchPool.ts; fixing changes background.js, guarded by swimCloudExtensionBuildFreshness.test.ts. Nothing stops them growing: known issue",
       "behaviourChanges": "relayLegSlotOf position below 1 or fraction on a medley returns null (above 4 reads as free leg); prefetchApplet unknown id is a no-op (was throw); cross-course relay row no longer prints (undefined)",
       "gates": "lint 0/0, vitest 266 files 3967 passed 23 skipped, scripts 86/0/1"
+    },
+    "A7": {
+      "commits": "14a0c08f core+writer, b6e9509a labelled views, 6bb0d048 GET normalises source results and snapshots",
+      "architect": "a71f55ae806e6b795: scoring and swaps identical; fixed team split summary (omitted on theoretical relay), normaliser no longer writes relayLegSplit back, source results normalised, swap-clock test added. Open: relayLegSwaps.ts manualLegTime from an applied swap persists an estimate in relayLegOverrides unlabelled (same value as before); backups not rewritten (read path normalises); legacy startAdjustmentSec unrecoverable; utils.ts ~3481 (oldSplitSec ?? 30) + 3 is an invented fallback leg time (pre-existing, scoring path, not changed)"
     }
   },
   "commitsAfterAuditNote": "R11 steps 3-6 done (flag on). Next: A7 relayLegEstimate, R2 split utils.ts, R3 identity module, R4 optimizers to worker, R1 split parser.ts, R7, T1, T6, F4, F6, R9 last"
