@@ -450,7 +450,11 @@
     "D9 scope: a post-meet swim numbered past scoredEventNumberMax (NSISC Event 938/939) now counts as a time trial for relay legs, matching how the SwimCloud bridge flags it. Confirm.",
     "Fixture tests/fixtures/nsisc-2026-dq-relay-leg.json (33 KB) holds verbatim rows from the private data/meets.json (published NSISC 2026 championship results for Delta State and Henderson State). Decision U-meets said tests use data/demo-seed.json. Keep the fixture, or replace it with synthetic rows?",
     "Copy: rename the ~49 user-visible 'athlete' strings (24 files) to 'swimmer'? The Manager step 'Athletes' is locked by tests/managerAthletesCopy.test.ts.",
-    "Tied relay with a legacy plain override key: migrateTiedRelayOverrides copies it to BOTH relays (tests/relayTiedAmbiguityMigration.test.ts:314 pins ['X1','X1']), putting one swimmer on the same leg of both relays in one event. The scoring engine does not block it and no audit rule flags it. Recommendation (architect and lead): surface the key as ambiguous and refuse to apply it, so nothing is guessed. Real data has 0 tied relays. Change it?"
+    "Tied relay with a legacy plain override key: migrateTiedRelayOverrides copies it to BOTH relays (tests/relayTiedAmbiguityMigration.test.ts:314 pins ['X1','X1']), putting one swimmer on the same leg of both relays in one event. The scoring engine does not block it and no audit rule flags it. Recommendation (architect and lead): surface the key as ambiguous and refuse to apply it, so nothing is guessed. Real data has 0 tied relays. Change it?",
+    "UWF: it moves to NCAA D1 in 2026-27 (ASUN; postseason 2029). divisionHistory records it but tag paths read the season-agnostic `division` (D2). Route tag paths through divisionForTeamInSeason so a 2026-27 swim is judged against D1, or keep D2 until a season-aware pass?",
+    "relayLegMatching.ts relayStrokeForIndex: what should a negative or invalid leg index mean? (today undefined; caller passes position-1 from stored data)",
+    "PodiumMedal reads s.podium which nothing sets, so the medal never renders: remove it or wire it from place?",
+    "Python pdf_parser._load_abbrev_teams keeps five setdefault fallbacks (UMSL, HSU, DSU, OUAC, UWF) that contradict its fail-loud comment: remove them?"
   ],
   "pendingArchitectReview": [
     "Review e6b35d54 (type break: projected bundle lacks totalPoints in its type) and a23a20b3/15b216e1 (migration at read time, not load time)"
@@ -532,8 +536,7 @@
     "urlClassifier.ts PATH_CLASSIFIERS plain-object lookup: use Object.hasOwn / Map (small executor fix, swimcloud)"
   ],
   "inFlight20261013": {
-    "acee6d4b4f0e8162c": "D1 check NCAA D1 2026-27 PDF + D10 factor recheck",
-    "af5d43ac0c8b3fbf0": "D4 team divisions 2026-27"
+    "a5a9325bf0e25dbcf": "executor: R11 step 5 utils.ts index reads"
   },
   "architectReReview20261013": {
     "reviewed": "ddb838fb, e54adab4, d5dc09ff",
@@ -613,10 +616,12 @@
     "F5": "2f89f23f Add the swimmer progress chart (meet order = workspace list order, no meet date exists; R flag accepted)",
     "D5": "b6de276c TEAM_ABBREVIATIONS imports teamAbbreviations.json (pdf_parser.py already loaded it; plan wording was off). pdf_parser._load_abbrev_teams still has five setdefault fallbacks (UMSL, HSU, DSU, OUAC, UWF) that contradict its fail-loud comment; parity test catches drift",
     "R5": "c63960df all 66 no-explicit-any removed; eslint --max-warnings now 0. Found: PodiumMedal reads s.podium which nothing sets (medal never renders)",
-    "gates": "after R5: lint 0 errors 0 warnings, vitest 264 files 3943 passed 23 skipped",
+    "gates": "after D1: lint 0/0, vitest 264 files 3944 passed 23 skipped, scripts 86 passed 0 failed 1 skipped",
     "inFlight": {
-      "acee6d4b4f0e8162c": "D1 check NCAA D1 2026-27 PDF + D10 factor recheck",
-      "af5d43ac0c8b3fbf0": "D4 team divisions 2026-27"
-    }
+      "a5a9325bf0e25dbcf": "executor: R11 step 5 utils.ts index reads"
+    },
+    "D1": "544bca88 Archive the NCAA D1 2026-27 standards (id ncaa-d1-2026-27, sha256 259c76ba..., 44 records; D1 resolves to 2026-27 by default; PDF re-uploaded after its 6/15/2026 stamp, re-run fetch-cutlines.py --check before a release; SwimSwam shows 400 IM women 4:13.22, PDF prints 4:13.32, PDF used)",
+    "D10": "91ca9ac7 factors match D1 and D2 2026-27 sheets; D3/NAIA publish none (Rules Book table); LCM stays 'indicative'. NCAA_ALTITUDE_ADJUSTMENT_TABLE still cites D1 2025-26 only (2026-27 identical)",
+    "D4": "b4493d24 UWF divisionHistory gets D1 from 2026-27 (3 sources, uwf.edu page checked by lead). Top-level division stays D2: tag paths (cutlineTags, athleteHistory, eventStrength, utils, rosterLineupAudit) read the season-agnostic field. Unverified: Ouachita Baptist, McKendree, Henderson State, Delta State, Pitt, Louisville, Florida State (no 2026-27 primary source found)"
   }
 }
