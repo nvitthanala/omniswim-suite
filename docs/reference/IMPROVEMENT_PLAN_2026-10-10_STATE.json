@@ -541,9 +541,7 @@
     "vault gotcha: the Edit tool rewrote an LF file as CRLF once; normalize before commit",
     "urlClassifier.ts PATH_CLASSIFIERS plain-object lookup: use Object.hasOwn / Map (small executor fix, swimcloud)"
   ],
-  "inFlight20261013": {
-    "a5a9325bf0e25dbcf": "executor: R11 step 5 utils.ts index reads"
-  },
+  "inFlight20261013": {},
   "architectReReview20261013": {
     "reviewed": "ddb838fb, e54adab4, d5dc09ff",
     "findings": [
@@ -623,11 +621,15 @@
     "D5": "b6de276c TEAM_ABBREVIATIONS imports teamAbbreviations.json (pdf_parser.py already loaded it; plan wording was off). pdf_parser._load_abbrev_teams still has five setdefault fallbacks (UMSL, HSU, DSU, OUAC, UWF) that contradict its fail-loud comment; parity test catches drift",
     "R5": "c63960df all 66 no-explicit-any removed; eslint --max-warnings now 0. Found: PodiumMedal reads s.podium which nothing sets (medal never renders)",
     "gates": "after D1: lint 0/0, vitest 264 files 3944 passed 23 skipped, scripts 86 passed 0 failed 1 skipped",
-    "inFlight": {
-      "a5a9325bf0e25dbcf": "executor: R11 step 5 utils.ts index reads"
-    },
+    "inFlight": {},
     "D1": "544bca88 Archive the NCAA D1 2026-27 standards (id ncaa-d1-2026-27, sha256 259c76ba..., 44 records; D1 resolves to 2026-27 by default; PDF re-uploaded after its 6/15/2026 stamp, re-run fetch-cutlines.py --check before a release; SwimSwam shows 400 IM women 4:13.22, PDF prints 4:13.32, PDF used)",
     "D10": "91ca9ac7 factors match D1 and D2 2026-27 sheets; D3/NAIA publish none (Rules Book table); LCM stays 'indicative'. NCAA_ALTITUDE_ADJUSTMENT_TABLE still cites D1 2025-26 only (2026-27 identical)",
-    "D4": "b4493d24 UWF divisionHistory gets D1 from 2026-27 (3 sources, uwf.edu page checked by lead). Top-level division stays D2: tag paths (cutlineTags, athleteHistory, eventStrength, utils, rosterLineupAudit) read the season-agnostic field. Unverified: Ouachita Baptist, McKendree, Henderson State, Delta State, Pitt, Louisville, Florida State (no 2026-27 primary source found)"
+    "D4": "b4493d24 UWF divisionHistory gets D1 from 2026-27 (3 sources, uwf.edu page checked by lead). Top-level division stays D2: tag paths (cutlineTags, athleteHistory, eventStrength, utils, rosterLineupAudit) read the season-agnostic field. Unverified: Ouachita Baptist, McKendree, Henderson State, Delta State, Pitt, Louisville, Florida State (no 2026-27 primary source found)",
+    "r11Step5": {
+      "commits": "15a0ea97 colors/time/regex, edf3c99e place groups, 09d4f013 relay scoring + PDF merge, 6a85fa80 line styles + relay sim, 0ad9dad4 baseline 184->81 (core 104->1; only relayLegMatching.ts:261 left)",
+      "architect": "a5e116f818f77a482 review a5e116f..: no defect. Six sites rely on caller promise (utils.ts ~2245, 2287, 2455, 2495, 3643, 2381); old code already threw TypeError there. New tests pin output but do not fail if a guard is reverted (out-of-range unreachable via public API)",
+      "gates": "lint 0/0, vitest 265 files 3955 passed 23 skipped, ratchet 81",
+      "note": "history rewritten for these 5 commits only (local, unpushed) to fix subject length; tree identical"
+    }
   }
 }
