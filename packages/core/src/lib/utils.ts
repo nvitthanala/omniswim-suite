@@ -1778,12 +1778,13 @@ function buildTimedFinalRankGroups(
   }
 
   const sortedKeys = Array.from(byRank.keys()).sort((a, b) => {
-    const ra = parseRankInt(byRank.get(a)![0].rank) ?? 9999;
-    const rb = parseRankInt(byRank.get(b)![0].rank) ?? 9999;
+    // Each key was created with a row pushed straight after, so a group is never empty.
+    const first = itemAt(byRank.get(a)!, 0);
+    const second = itemAt(byRank.get(b)!, 0);
+    const ra = parseRankInt(first.rank) ?? 9999;
+    const rb = parseRankInt(second.rank) ?? 9999;
     if (ra !== rb) return ra - rb;
-    return (
-      convertTimeToSeconds(byRank.get(a)![0].time) - convertTimeToSeconds(byRank.get(b)![0].time)
-    );
+    return convertTimeToSeconds(first.time) - convertTimeToSeconds(second.time);
   });
 
   return { byRank, sortedKeys };
@@ -1857,7 +1858,8 @@ function awardTimedFinalPointEligibleGroup(
 
   let anyAwarded = false;
   for (const [team, members] of byTeam) {
-    const meetState = getOrCreateMeetState(meetStates, team, members[0].gender);
+    // `members` was created with a row pushed straight after, so it is never empty.
+    const meetState = getOrCreateMeetState(meetStates, team, itemAt(members, 0).gender);
 
     // Cap admission is per athlete and accumulates — see admitTieGroupToMeetPool.
     if (useMeetWidePool) {
@@ -1924,7 +1926,8 @@ function scoreTimedFinalIndividualsInEvent(
     // row did before this split.
     scoringPlace += awardTimedFinalPointEligibleGroup(
       pointEligible,
-      pointEligible[0].event,
+      // `pointEligible.length === 0` continued above, so index 0 exists.
+      itemAt(pointEligible, 0).event,
       pts,
       scoringPlace,
       cap,
@@ -2180,8 +2183,9 @@ function buildIndividualEventGroups(
   }
 
   const indivSortedKeys = Array.from(indivGroups.keys()).sort((a, b) => {
-    const ga = indivGroups.get(a)![0];
-    const gb = indivGroups.get(b)![0];
+    // Each key was created with a row pushed straight after, so a group is never empty.
+    const ga = itemAt(indivGroups.get(a)!, 0);
+    const gb = itemAt(indivGroups.get(b)!, 0);
     const tw = roundTierSort(ga.roundSwam) - roundTierSort(gb.roundSwam);
     if (tw !== 0) return tw;
     const ra = parseRankInt(ga.rank) ?? 9999;
@@ -2216,7 +2220,7 @@ function eligibleIndividualGroupOrNull(
   ineligible.forEach(r => indivOut.push({ ...r, points: 0 }));
   if (eligible.length === 0) return null;
 
-  const sample = eligible[0];
+  const sample = itemAt(eligible, 0);
   const ex = eligible.some(r => r.isExhibition);
   const tt = eligible.some(r => r.isTimeTrial) && !isChampionshipGenderEvent(sample.event);
 
@@ -2238,7 +2242,8 @@ function resolveIndividualGroupLadderShare(
   merged: ScoringSettings,
   indivOut: SwimmerResult[]
 ): { each: number; isPrelimDiving: boolean } | null {
-  const sample = eligible[0];
+  // The only caller passes the non-empty result of `eligibleIndividualGroupOrNull`.
+  const sample = itemAt(eligible, 0);
   const rk = parseRankInt(sample.rank);
   const isPrelimDiving =
     classifyRoundTier(sample.roundSwam) === 'PRE' && isDivingForSettings(sample.event, merged);
@@ -2278,8 +2283,10 @@ function awardIndividualEventTeamGroup(
   rosterLookup: ScorerRosterLookup | undefined,
   indivOut: SwimmerResult[]
 ): void {
-  const meetState = getOrCreateMeetState(meetStates, team, allMembers[0].gender);
-  const gender = allMembers[0].gender;
+  // `allMembers` is a `byTeam` bucket: created with a row pushed straight after.
+  const firstMember = itemAt(allMembers, 0);
+  const meetState = getOrCreateMeetState(meetStates, team, firstMember.gender);
+  const gender = firstMember.gender;
 
   // Roster eligibility is a per-ATHLETE decision, so it is applied per
   // athlete. It used to be `uniqueNames.every(...)`, which zeroed the whole
@@ -2371,7 +2378,8 @@ function scoreIndividualsInEvent(
         share.each,
         share.isPrelimDiving,
         individuals,
-        eligible[0].event,
+        // `eligible` is non-empty: `eligibleIndividualGroupOrNull` returned it.
+        itemAt(eligible, 0).event,
         cap,
         useMeetWidePool,
         teamIndivScorers,
