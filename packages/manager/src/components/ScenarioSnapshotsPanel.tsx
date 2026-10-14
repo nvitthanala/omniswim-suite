@@ -28,6 +28,8 @@ import {
 import { useScoringSettled } from '@omniswim/core/lib/useWorkspaceScoring';
 import { useToast } from '@omniswim/ui';
 import { SaveScenarioForm, ScenarioListSection } from './ScenarioSnapshotsPanelParts';
+import ScenarioCompare from './ScenarioCompare';
+import { compareSnapshots } from './scenarioCompareView';
 
 type Props = {
   workspace: Workspace;
@@ -261,6 +263,16 @@ export default function ScenarioSnapshotsPanel({
         diffResult={diffResult}
         onDiffClick={snap => void handleDiffClick(snap)}
         onRestoreClick={snapshotId => handleRestoreClick(snapshotId)}
+      />
+
+      {/* Keyed so a new workspace, team or gender starts with empty pickers. */}
+      <ScenarioCompare
+        key={`${workspaceId}|${team}|${gender}`}
+        snapshots={sorted}
+        enabled={diffSupported}
+        loadDiff={(aId, bId) =>
+          compareSnapshots(aId, bId, { team, gender, settings: scoringSettings, removeSeniors })
+        }
       />
     </div>
   );
