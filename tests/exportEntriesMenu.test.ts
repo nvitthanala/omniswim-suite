@@ -55,4 +55,20 @@ describe('ExportEntriesMenu', () => {
     await click(container.querySelectorAll('[role="menuitem"]')[1]);
     expect(onExport).toHaveBeenLastCalledWith('hytek');
   });
+
+  it('adds "Export report (HTML)" only when a report handler is passed', async () => {
+    const onExportReport = vi.fn();
+    await act(async () => {
+      root.render(createElement(ExportEntriesMenu, { onExport: vi.fn(), onExportReport }));
+    });
+    await click(container.querySelector('button')!);
+    const items = Array.from(container.querySelectorAll('[role="menuitem"]'));
+    expect(items.map(i => i.textContent)).toEqual([
+      'CSV (spreadsheet)',
+      'HyTek entry list',
+      'Export report (HTML)',
+    ]);
+    await click(items[2]);
+    expect(onExportReport).toHaveBeenCalledTimes(1);
+  });
 });

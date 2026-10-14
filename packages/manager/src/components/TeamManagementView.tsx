@@ -42,6 +42,8 @@ type Props = {
   onUpdate: (patch: Partial<Workspace>) => void;
   onOpenImportWizard: () => void;
   onRequestDeleteSwimmer?: (name: string) => void;
+  /** Called with the team chosen in the team bar (`''` when none), so the header can export a report for it. */
+  onSelectedTeamChange?: (team: string) => void;
 };
 
 export default function TeamManagementView({
@@ -59,6 +61,7 @@ export default function TeamManagementView({
   onUpdate,
   onOpenImportWizard,
   onRequestDeleteSwimmer,
+  onSelectedTeamChange,
 }: Props) {
   const toast = useToast();
   // The compose-ref and the one-shot Undo for the last swim edit. The Undo is bound to the
@@ -88,6 +91,9 @@ export default function TeamManagementView({
   // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on teamStyleSignature, which changes with any team's name, points or color; sortedTeams is a new array on every response
   }, [scoringBundle.teamStyleSignature]);
   const [selectedTeam, setSelectedTeam] = useState<string>('');
+  useEffect(() => {
+    onSelectedTeamChange?.(selectedTeam);
+  }, [selectedTeam, onSelectedTeamChange]);
   const [recruitPrefill, setRecruitPrefill] = useState<RecruitAthletePrefill | null>(null);
   const [rosterStep, setRosterStep] = useState<RosterWizardStepId>('source');
   const [jumpAthleteName, setJumpAthleteName] = useState<string | null>(null);

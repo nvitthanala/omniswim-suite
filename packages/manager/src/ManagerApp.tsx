@@ -26,6 +26,7 @@ import {
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
 import { Button, EmptyState, useToast } from '@omniswim/ui';
 import { withManualSource } from './lib/swimCloudReplaceFlow';
+import { buildStaticReportHtml } from './lib/staticReportHtml';
 import TeamManagementView from './components/TeamManagementView';
 import SwimmerDeleteConfirmModal from './components/SwimmerDeleteConfirmModal';
 import RosterImportWizard from './components/RosterImportWizard';
@@ -116,6 +117,8 @@ function ManagerWorkspaceView({ activeWorkspace }: { activeWorkspace: Workspace 
     issues: EntryExportIssue[];
   } | null>(null);
   const [swimmerDeleteCandidate, setSwimmerDeleteCandidate] = useState<{ name: string } | null>(null);
+  // The team chosen in the team bar, reported up so the HTML report can list its lineup.
+  const [reportTeam, setReportTeam] = useState('');
 
   // Working-copy change count for the persistent "Modified copy" badge — a pure
   // tally of the edits (recruits, removals, overrides, plans) that make the
@@ -188,6 +191,30 @@ function ManagerWorkspaceView({ activeWorkspace }: { activeWorkspace: Workspace 
     runExport(kind);
   };
 
+  // The HTML report is built in the browser from the data on screen. It needs no server, so it
+  // works when share links are unavailable (no Postgres auth) and when they are available.
+  const handleExportReport = () => {
+    const report = buildStaticReportHtml({
+      workspace: activeWorkspace,
+      scoringBundle: projected,
+      gender: activeGender,
+      team: reportTeam,
+      generatedAt: new Date(),
+    });
+    downloadExport({
+      filename: report.filename,
+      mimeType: report.mimeType,
+      content: report.content,
+      count: report.cardCount,
+    });
+    toast.push(
+      'success',
+      reportTeam === ''
+        ? `Report saved → ${report.filename}. No team was picked, so it lists scores only. Pick a team in the team bar to add its lineup.`
+        : `Report saved → ${report.filename}`
+    );
+  };
+
   const hideSwimmer = () => {
     if (!swimmerDeleteCandidate) return;
     const patch = softRemoveSwimmerFromWorkspace(activeWorkspace, {
@@ -253,7 +280,7 @@ function ManagerWorkspaceView({ activeWorkspace }: { activeWorkspace: Workspace 
               action in this row. Only "Import roster" keeps the primary
               emphasis it already had. Both exports live in one menu. The
               all-teams optimizer lives on the Optimize step. */}
-          <ExportEntriesMenu onExport={handleExport} />
+          <ExportEntriesMenu onExport={handleExport} onExportReport={handleExportReport} />
           <Button variant="primary" onClick={() => setShowImportWizard(true)}>
             Import roster
           </Button>
@@ -283,6 +310,7 @@ function ManagerWorkspaceView({ activeWorkspace }: { activeWorkspace: Workspace 
             onRequestDeleteSwimmer={
               whatIfMode ? name => setSwimmerDeleteCandidate({ name }) : undefined
             }
+            onSelectedTeamChange={setReportTeam}
           />
         </motion.div>
       </AnimatePresence>
