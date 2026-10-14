@@ -543,7 +543,7 @@
     "urlClassifier.ts PATH_CLASSIFIERS plain-object lookup: use Object.hasOwn / Map (small executor fix, swimcloud)"
   ],
   "inFlight20261013": {
-    "a022f6bb773508915": "executor: R2 split core utils.ts into modules (barrel re-exports)"
+    "a4ac5b8e47d1979d1": "executor: R4 optimizers to the scoring worker"
   },
   "architectReReview20261013": {
     "reviewed": "ddb838fb, e54adab4, d5dc09ff",
@@ -625,7 +625,7 @@
     "R5": "c63960df all 66 no-explicit-any removed; eslint --max-warnings now 0. Found: PodiumMedal reads s.podium which nothing sets (medal never renders)",
     "gates": "after D1: lint 0/0, vitest 264 files 3944 passed 23 skipped, scripts 86 passed 0 failed 1 skipped",
     "inFlight": {
-      "a022f6bb773508915": "executor: R2 split core utils.ts into modules (barrel re-exports)"
+      "a4ac5b8e47d1979d1": "executor: R4 optimizers to the scoring worker"
     },
     "D1": "544bca88 Archive the NCAA D1 2026-27 standards (id ncaa-d1-2026-27, sha256 259c76ba..., 44 records; D1 resolves to 2026-27 by default; PDF re-uploaded after its 6/15/2026 stamp, re-run fetch-cutlines.py --check before a release; SwimSwam shows 400 IM women 4:13.22, PDF prints 4:13.32, PDF used)",
     "D10": "91ca9ac7 factors match D1 and D2 2026-27 sheets; D3/NAIA publish none (Rules Book table); LCM stays 'indicative'. NCAA_ALTITUDE_ADJUSTMENT_TABLE still cites D1 2025-26 only (2026-27 identical)",
@@ -654,7 +654,12 @@
       "notAudited": "scripts/*.mjs checkJs error count not measured; 'eslint --fix' slip reverted by the worker, assertions spot-checked by lead (only whitespace/cast/bang diffs plus 2 equivalent rewrites)",
       "gates": "lint 0/0, vitest 269 files 3997 passed 23 skipped, scripts 86/0/1"
     },
-    "extensionReads": "done: 12 sites (21 tsc errors) in boundedFetchPool, multiTeamPanelModel, multiTeamQueue; flag on in extension tsconfig; 10 test excludes removed; bundle is crawler.js (not background.js: correct earlier note); harness 7 passed 1 skipped"
+    "extensionReads": "done: 12 sites (21 tsc errors) in boundedFetchPool, multiTeamPanelModel, multiTeamQueue; flag on in extension tsconfig; 10 test excludes removed; bundle is crawler.js (not background.js: correct earlier note); harness 7 passed 1 skipped",
+    "R2": {
+      "commit": "9aa08734 Split utils.ts into twelve modules (barrel 148 lines, 99 exported names identical; 16 private helpers gained export for sibling use, not re-exported)",
+      "pinTest": "tests/relayScoringPerSwimmerPoints.test.ts (7 tests) added because teamPts / n -> teamPts passed the whole suite before",
+      "open": "pre-existing runtime import cycle (athleteAliases, relayLegMatching, relaySplits, scorerRoster, utils) now also includes meetPool, individualScoring, relayScoring, calculatePoints, relaySimulation; fix by pointing scorerRoster/relayLegMatching importers at the new modules; every built-in preset sets halfRateRelaySwimmer true, which overwrites teamPts / n"
+    }
   },
   "commitsAfterAuditNote": "R11 steps 3-6 done (flag on). Next: A7 relayLegEstimate, R2 split utils.ts, R3 identity module, R4 optimizers to worker, R1 split parser.ts, R7, T1, T6, F4, F6, R9 last"
 }
