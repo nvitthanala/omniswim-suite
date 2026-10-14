@@ -7,6 +7,7 @@
  */
 import { Gender, ScoringSettings, SwimmerResult, Workspace } from '../types';
 import { mergeScoringSettings } from './scoringDefaults';
+import { itemAt } from './indexedAccess';
 import type { ProjectionBundle } from './scoringEngine';
 import {
   buildProjectionBundle,
@@ -84,8 +85,8 @@ export function resolvePsychRanksForEvent(eventRows: SwimmerResult[]): Map<strin
   }
 
   const timeSorted = [...entries].sort((a, b) => {
-    const clockA = psychClock(a.rows[0]);
-    const clockB = psychClock(b.rows[0]);
+    const clockA = psychClock(itemAt(a.rows, 0));
+    const clockB = psychClock(itemAt(b.rows, 0));
     return convertTimeToSeconds(clockA) - convertTimeToSeconds(clockB);
   });
 
