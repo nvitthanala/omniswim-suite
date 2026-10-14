@@ -54,6 +54,8 @@ interface MeetOpsStandingsStepProps {
   prelimsBaselineLeftOutByTeam?: Map<string, number>;
   /** The same for the projected total (`team.totalPoints`). */
   prelimsProjectedLeftOutByTeam?: Map<string, number>;
+  /** The same for the psych projection: baseline points of its left-out entries, per team. */
+  psychBaselineLeftOutByTeam?: Map<string, number>;
   showPrelimsPerformance: boolean;
   prelimsOuByEntry: Map<string, PrelimsOverUnderEntry>;
   showPsychPerformance: boolean;
@@ -82,6 +84,7 @@ export function MeetOpsStandingsStep({
   psychWithoutExpectationByTeam,
   prelimsBaselineLeftOutByTeam,
   prelimsProjectedLeftOutByTeam,
+  psychBaselineLeftOutByTeam,
   showPrelimsPerformance,
   prelimsOuByEntry,
   showPsychPerformance,
@@ -161,6 +164,7 @@ export function MeetOpsStandingsStep({
                 psychProjectedScore={psychByTeam.get(team.teamName)}
                 prelimsWithoutExpectationCount={prelimsWithoutExpectationByTeam?.get(team.teamName)}
                 psychWithoutExpectationCount={psychWithoutExpectationByTeam?.get(team.teamName)}
+                psychBaselineLeftOut={psychBaselineLeftOutByTeam?.get(team.teamName)}
                 eventThrough={eventThrough}
                 onRequestDeleteSwimmer={onRequestDeleteSwimmer}
                 scoringRefreshKey={scoringRefreshKey}

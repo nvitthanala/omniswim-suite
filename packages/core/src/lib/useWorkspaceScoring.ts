@@ -4,7 +4,12 @@
  */
 import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { Gender, Workspace } from '../types';
-import { buildPrelimsDeltaTimeline, buildPrelimsOverUnderByEntryKey, hasPrelimsData } from './prelimsProjection';
+import {
+  buildPrelimsDeltaTimeline,
+  buildPrelimsOverUnderByEntryKey,
+  hasPrelimsData,
+  prelimsDeltaTimelineOptions,
+} from './prelimsProjection';
 import { buildPsychDeltaTimeline, buildPsychOverUnderByEntryKey, hasPsychData, psychResultsForGender } from './psychProjection';
 import { mergeScoringSettings } from './scoringDefaults';
 import { buildScoringSnapshot, type ProjectionBundle, type ScoringBundle } from './scoringEngine';
@@ -274,17 +279,27 @@ export function useWorkspaceScoring({
   const prelimsWithoutExpectationByTeam = prelimsExpectations.withoutExpectationByTeam;
   const psychWithoutExpectationByTeam = psychExpectations.withoutExpectationByTeam;
 
+  // A team with no expectation gets no delta, and a team with seeds past the
+  // table is compared on the entries that have an expectation. The options are
+  // undefined when the bundle has neither, so the plain timeline is unchanged.
   const prelimsDeltaTimeline = useMemo(
     () =>
       buildPrelimsDeltaTimeline(
         snapshot.baseline.timelineData,
         snapshot.projected.timelineData,
-        snapshot.prelimsProjected.timelineData
+        snapshot.prelimsProjected.timelineData,
+        prelimsDeltaTimelineOptions(
+          snapshot.prelimsProjected,
+          snapshot.baseline.allScored,
+          snapshot.projected.allScored
+        )
       ),
     [
       snapshot.baseline.timelineData,
       snapshot.projected.timelineData,
-      snapshot.prelimsProjected.timelineData,
+      snapshot.prelimsProjected,
+      snapshot.baseline.allScored,
+      snapshot.projected.allScored,
     ]
   );
 
@@ -293,12 +308,19 @@ export function useWorkspaceScoring({
       buildPsychDeltaTimeline(
         snapshot.baseline.timelineData,
         snapshot.projected.timelineData,
-        snapshot.psychProjected.timelineData
+        snapshot.psychProjected.timelineData,
+        prelimsDeltaTimelineOptions(
+          snapshot.psychProjected,
+          snapshot.baseline.allScored,
+          snapshot.projected.allScored
+        )
       ),
     [
       snapshot.baseline.timelineData,
       snapshot.projected.timelineData,
-      snapshot.psychProjected.timelineData,
+      snapshot.psychProjected,
+      snapshot.baseline.allScored,
+      snapshot.projected.allScored,
     ]
   );
 

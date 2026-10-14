@@ -86,7 +86,7 @@ export default function MeetOperationsView({
   scoringBundle,
   baselineBundle,
   prelimsProjectedBundle,
-  psychProjectedBundle: _psychProjectedBundle,
+  psychProjectedBundle,
   baselineByTeam,
   prelimsByTeam,
   psychByTeam,
@@ -238,6 +238,12 @@ export default function MeetOperationsView({
     () => sumProjectionLeftOutPoints(scoringBundle.allScored, prelimsProjectedBundle.sortedTeams).byTeam,
     [scoringBundle.allScored, prelimsProjectedBundle.sortedTeams]
   );
+  // The same for the psych projection: its "vs baseline" total leaves out the
+  // baseline points of the entries the psych sheet has no expectation for.
+  const psychBaselineLeftOutByTeam = useMemo(
+    () => sumProjectionLeftOutPoints(baselineBundle.allScored, psychProjectedBundle.sortedTeams).byTeam,
+    [baselineBundle.allScored, psychProjectedBundle.sortedTeams]
+  );
 
   const psychMomentumHasData = resolvedPsychOuByEntry.size > 0;
   const prelimsMomentumHasData = resolvedPrelimsOuByEntry.size > 0;
@@ -347,6 +353,7 @@ export default function MeetOperationsView({
             psychWithoutExpectationByTeam={psychWithoutExpectationByTeam}
             prelimsBaselineLeftOutByTeam={prelimsBaselineLeftOutByTeam}
             prelimsProjectedLeftOutByTeam={prelimsProjectedLeftOutByTeam}
+            psychBaselineLeftOutByTeam={psychBaselineLeftOutByTeam}
             showPrelimsPerformance={showPrelimsPerformance}
             prelimsOuByEntry={resolvedPrelimsOuByEntry}
             showPsychPerformance={showPsychPerformance}

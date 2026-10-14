@@ -348,6 +348,43 @@ describe('the team card', () => {
     expect(note()!.textContent).toContain('4 seeds past table');
   });
 
+  it('the psych momentum total leaves the baseline points of left-out entries out', () => {
+    // Baseline 10 holds 2 points from an entry with no psych expectation. Psych expects 7.
+    renderCard({
+      showPsychPerformance: true,
+      psychOuByEntry: new Map(),
+      psychProjectedScore: 7,
+      psychBaselineLeftOut: 2,
+      psychWithoutExpectationCount: 1,
+    });
+    const psychButton = [...document.body.querySelectorAll('button')].find(
+      b => b.getAttribute('aria-label') === 'Show team momentum versus psych sheet'
+    )!;
+    act(() => {
+      psychButton.click();
+    });
+    const heading = [...document.body.querySelectorAll('h4')].find(h => h.textContent === 'Momentum vs Psych')!;
+    const total = heading.parentElement!.textContent ?? '';
+    expect(total).toContain('+1.0');
+    expect(total).not.toContain('+3.0');
+  });
+
+  it('the psych momentum total is baseline minus psych when nothing is left out', () => {
+    renderCard({
+      showPsychPerformance: true,
+      psychOuByEntry: new Map(),
+      psychProjectedScore: 7,
+    });
+    const psychButton = [...document.body.querySelectorAll('button')].find(
+      b => b.getAttribute('aria-label') === 'Show team momentum versus psych sheet'
+    )!;
+    act(() => {
+      psychButton.click();
+    });
+    const heading = [...document.body.querySelectorAll('h4')].find(h => h.textContent === 'Momentum vs Psych')!;
+    expect(heading.parentElement!.textContent).toContain('+3.0');
+  });
+
   it('shows no momentum note for a team with no seed past the table', () => {
     renderCard({ prelimsProjectedScore: 13, baselineOverUnder: -3, prelimsWithoutExpectationCount: 0 });
     expect(document.body.querySelector('[data-testid="momentum-no-expectation-note"]')).toBeNull();

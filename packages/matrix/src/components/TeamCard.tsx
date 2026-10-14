@@ -45,6 +45,13 @@ interface Props {
   prelimsWithoutExpectationCount?: number;
   /** Seeds past the end of the place-point table (no expected points), psych projection. */
   psychWithoutExpectationCount?: number;
+  /**
+   * Points the baseline earned in the entries counted in
+   * `psychWithoutExpectationCount`. The psych "vs baseline" total subtracts
+   * them, so it compares the entries that have an expectation. Absent: nothing
+   * is subtracted.
+   */
+  psychBaselineLeftOut?: number;
   eventThrough?: number;
   scoringRefreshKey?: number;
   onUpdateTime?: (id: string, newTime: string) => void;
@@ -52,7 +59,7 @@ interface Props {
   onRequestDeleteSwimmer?: (name: string) => void;
 }
 
-function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, conference, searchQuery, actualScore, baselineScore, prelimsProjectedScore, baselineOverUnder, projectedOverUnder, showPrelimsPerformance, prelimsOuByEntry, showPsychPerformance, psychOuByEntry, psychProjectedScore, prelimsWithoutExpectationCount, psychWithoutExpectationCount, eventThrough, scoringRefreshKey = 0, onUpdateTime, onRequestDeleteSwimmer }: Props) {
+function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, conference, searchQuery, actualScore, baselineScore, prelimsProjectedScore, baselineOverUnder, projectedOverUnder, showPrelimsPerformance, prelimsOuByEntry, showPsychPerformance, psychOuByEntry, psychProjectedScore, prelimsWithoutExpectationCount, psychWithoutExpectationCount, psychBaselineLeftOut, eventThrough, scoringRefreshKey = 0, onUpdateTime, onRequestDeleteSwimmer }: Props) {
   const chartTheme = useThemeColors();
   const [momentumAnchor, setMomentumAnchor] = useState<'prelims' | 'psych'>('prelims');
   const teamChartColor = useMemo(
@@ -169,10 +176,14 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
 
   const momentumMeetTotal = useMemo(() => {
     if (momentumAnchor === 'psych' && showPsychPerformance && psychProjectedScore != null && baselineScore != null) {
-      return baselineScore - psychProjectedScore;
+      // Baseline points of the entries the psych projection has no expectation
+      // for sit in baselineScore and not in psychProjectedScore. Leave them out.
+      return psychBaselineLeftOut === undefined
+        ? baselineScore - psychProjectedScore
+        : baselineScore - psychBaselineLeftOut - psychProjectedScore;
     }
     return baselineOverUnder;
-  }, [momentumAnchor, showPsychPerformance, psychProjectedScore, baselineScore, baselineOverUnder]);
+  }, [momentumAnchor, showPsychPerformance, psychProjectedScore, psychBaselineLeftOut, baselineScore, baselineOverUnder]);
 
   const { eventData, classData, topSwimmersBase, topEventsBase } = useMemo(() => {
     const eventPointsMap: Record<string, number> = {};

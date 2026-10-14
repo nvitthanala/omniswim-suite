@@ -61,6 +61,7 @@ import {
 } from '../packages/core/src/lib/prelimsProjection';
 import { buildPsychDeltaTimeline, buildPsychProjectedBundle } from '../packages/core/src/lib/psychProjection';
 import { buildScoringSnapshot } from '../packages/core/src/lib/scoringEngine';
+import { useWorkspaceScoring } from '../packages/core/src/lib/useWorkspaceScoring';
 import { settingsForBuiltInScoringPreset } from '../packages/core/src/lib/scoringDefaults';
 
 const EVENT = 'Event 5 Men 100 Yard Backstroke';
@@ -427,5 +428,65 @@ describe('finding 2 on screen', () => {
     const header = document.body.querySelector('button[aria-expanded]')!.textContent ?? '';
     expect(header).toContain('vs prelims +2.0');
     expect(header).not.toContain('+5.0');
+  });
+});
+
+describe('the store hook hands the like-for-like options to both delta timelines', () => {
+  let root: Root | null = null;
+  let container: HTMLDivElement | null = null;
+
+  afterEach(() => {
+    if (root) act(() => root!.unmount());
+    root = null;
+    container?.remove();
+    container = null;
+  });
+
+  function mountHook(workspace: Workspace) {
+    let seen: ReturnType<typeof useWorkspaceScoring> | null = null;
+    function Probe() {
+      seen = useWorkspaceScoring({ workspace, gender: Gender.MEN, removeSeniors: false, scoringRefreshKey: 0 });
+      return null;
+    }
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+    act(() => {
+      root!.render(React.createElement(Probe));
+    });
+    return seen!;
+  }
+
+  it('prelims: Beta has no delta key and Gamma is compared without its seed past the table', () => {
+    const hook = mountHook(workspaceOf());
+    const point = hook.prelimsDeltaTimeline[0]!;
+    expect('Beta U' in point.baselineDelta).toBe(false);
+    expect('Beta U' in point.projectedDelta).toBe(false);
+    expect(point.baselineDelta['Gamma U']).toBe(0);
+    // Same numbers the pure builder gives with the options.
+    const snapshot = buildScoringSnapshot(workspaceOf(), Gender.MEN, false);
+    expect(hook.prelimsDeltaTimeline).toEqual(deltaFor(snapshot).timeline);
+  });
+
+  it('psych: Beta has no delta key and Gamma is compared without its seed past the table', () => {
+    const psych = (team: string, name: string, seed: number) =>
+      row(team, name, 'Psych Sheet', seed, clock(seed), { isPsychSheet: true });
+    const workspace = workspaceOf({
+      psychMenResults: [
+        psych('Alpha U', 'A1', 1),
+        psych('Alpha U', 'A2', 2),
+        psych('Gamma U', 'G1', 3),
+        psych('Filler U', 'F1', 4),
+        psych('Filler U', 'F2', 5),
+        psych('Filler U', 'F3', 6),
+        psych('Beta U', 'B1', 7),
+        psych('Beta U', 'B2', 8),
+        psych('Gamma U', 'G2', 9),
+      ],
+    });
+    const hook = mountHook(workspace);
+    const point = hook.psychDeltaTimeline[0]!;
+    expect('Beta U' in point.baselineDelta).toBe(false);
+    expect(point.baselineDelta['Gamma U']).toBe(0);
   });
 });
