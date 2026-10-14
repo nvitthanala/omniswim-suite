@@ -532,9 +532,8 @@
     "urlClassifier.ts PATH_CLASSIFIERS plain-object lookup: use Object.hasOwn / Map (small executor fix, swimcloud)"
   ],
   "inFlight20261013": {
-    "ae5563cbe88eb62bf": "executor: architect 20261014 findings 1-3 (prelims/psych deltas, partial-team baseline, totalPoints shape)",
-    "a96109dd12070025d": "executor: R11 step 3 small core files",
-    "a62502e54081f35c6": "worker: F1 printable lineup and relay cards in packages/manager"
+    "a93ed69da712e081a": "architect: review b89198d1 and fb3dcd68",
+    "a6ed0d28cbba89299": "executor: delta options wiring, tied-relay save count, ScenarioDiffView absent side"
   },
   "architectReReview20261013": {
     "reviewed": "ddb838fb, e54adab4, d5dc09ff",
@@ -576,5 +575,15 @@
       "PrelimsDiffTable ?? 0 for a team the bundle does not list",
       "every scoring read of relayLegOverrides goes through simulateRoster/whatIfProjection which migrate; no writer creates a plain key on a tied relay"
     ]
+  },
+  "commits20261014b": {
+    "decision": "user chose one combined commit for R11 step 3 plus the like-for-like fix (shared file scoringBundleAggregation.ts); scenario diff kept separate",
+    "b89198d1": "Guard indexed reads and compare like entries (R11 step 3, baseline core 262->205, total 285; null-expectation like-for-like)",
+    "fb3dcd68": "Flag absent sides in the scenario compare (inThen/inNow, compare view dash, Added/Removed)",
+    "gates": "npm run lint 0 errors/66 warnings; vitest 258 files passed, 3876 tests passed, 23 skipped (quiet tree, before commit)",
+    "followUpsLaunched": {
+      "a93ed69da712e081a": "architect review of b89198d1 scoring files + fb3dcd68",
+      "a6ed0d28cbba89299": "executor: wire prelimsDeltaTimelineOptions in useWorkspaceScoring + TeamCard, tied-relay save count (workingCopyChanges), ScenarioDiffView absent side"
+    }
   }
 }
