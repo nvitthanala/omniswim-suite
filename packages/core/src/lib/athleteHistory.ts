@@ -19,6 +19,7 @@ import {
 import { divisionForTeamOrNull } from '../data/teamDivisions';
 import { cutlineTableCourseForSwim } from './cutlineUtils';
 import { computedCutForTeamSwim } from './cutlineTags';
+import { itemAt, regexGroup } from './indexedAccess';
 import { mergeScoringSettings } from './scoringDefaults';
 import {
   convertSwimToSCYDetailed,
@@ -578,7 +579,7 @@ function looksLikePersonName(line: string): boolean {
   if (ORG_LINE_RE.test(t)) return false;
   if (SOCIAL_HANDLE_RE.test(t)) return false;
   const parts = t.split(/\s+/);
-  return parts.length >= 2 && parts.length <= 5 && /^[A-Za-z]/.test(parts[0]);
+  return parts.length >= 2 && parts.length <= 5 && /^[A-Za-z]/.test(itemAt(parts, 0));
 }
 
 export function extractSwimmerNameFromPaste(text: string): string | undefined {
@@ -611,7 +612,7 @@ export function isProfileNameLine(line: string): boolean {
 /** A row shaped like a personal-bests entry: event label in column 0, time in column 1. */
 function isSwimDataRow(trimmedLine: string): boolean {
   const cols = splitRow(trimmedLine);
-  return cols.length >= 2 && isEventToken(cols[0]) && isTimeToken(cols[1]);
+  return cols.length >= 2 && isEventToken(itemAt(cols, 0)) && isTimeToken(itemAt(cols, 1));
 }
 
 /** One athlete's slice of a multi-profile paste. */
@@ -714,8 +715,8 @@ export function detectSwimCloudPasteFormat(text: string): SwimCloudPasteFormat {
     if (!t || isHeaderOrJunkLine(t)) continue;
     const cols = splitRow(t);
     if (cols.length < 2) continue;
-    if (isEventToken(cols[0]) && isTimeToken(cols[1])) return 'personal_bests';
-    if (looksLikePersonName(cols[0])) return 'roster';
+    if (isEventToken(itemAt(cols, 0)) && isTimeToken(itemAt(cols, 1))) return 'personal_bests';
+    if (looksLikePersonName(itemAt(cols, 0))) return 'roster';
     break;
   }
   return 'unknown';
@@ -819,7 +820,7 @@ const SANCTIONED_SWIM_DISTANCE_SET: ReadonlySet<number> = new Set(SANCTIONED_SWI
 export function swimEventDistance(event: string): number | null {
   const m = /^\s*(\d+)(?!\d)/.exec(event ?? '');
   if (!m) return null;
-  const n = Number.parseInt(m[1], 10);
+  const n = Number.parseInt(regexGroup(m, 1), 10);
   return Number.isFinite(n) ? n : null;
 }
 
@@ -950,7 +951,10 @@ type PastedRowColumns = { stamp: string; meet: string; date: string };
  */
 function pastedRowColumns(line: string, cols: string[]): PastedRowColumns | null {
   if (!line.includes('\t') || cols.length < 5) return null;
-  const [, , stamp, meet, date] = cols;
+  // `cols.length >= 5` above bounds all three reads.
+  const stamp = itemAt(cols, 2);
+  const meet = itemAt(cols, 3);
+  const date = itemAt(cols, 4);
   if (date !== '' && !DATE_RE.test(date)) return null;
   if (DATE_RE.test(stamp) || DATE_RE.test(meet)) return null;
   return { stamp, meet, date };
@@ -1024,9 +1028,10 @@ export function parseSwimCloudPersonalBestsDetailed(
     if (!t || isHeaderOrJunkLine(t)) continue;
     const cols = splitRow(t);
     if (cols.length < 2) continue;
-    if (!isEventToken(cols[0]) || !isTimeToken(cols[1])) continue;
+    const rawEvent = itemAt(cols, 0);
+    const time = itemAt(cols, 1);
+    if (!isEventToken(rawEvent) || !isTimeToken(time)) continue;
 
-    const rawEvent = cols[0];
     const event = normalizeEventLabel(rawEvent);
     // Gate here, at the one point where a row's event string becomes a stored
     // swim: the raw line is still in hand, so the warning can name exactly what
@@ -1035,7 +1040,6 @@ export function parseSwimCloudPersonalBestsDetailed(
       rejected.push({ raw: t, event, distance: swimEventDistance(event) });
       continue;
     }
-    const time = cols[1];
     const timeType = parseCourseFromEvent(rawEvent) ?? 'SCY';
 
     let fields: ReturnType<typeof stampFields>;
