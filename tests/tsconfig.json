@@ -7,24 +7,5 @@
   "compilerOptions": {
     "types": ["node", "vitest/globals"]
   },
-  "include": ["./**/*.ts"],
-  "exclude": [
-    // T1: fix then remove.
-    // These tests reach extensions/swimcloud-companion/src/multiTeamQueue.ts,
-    // boundedFetchPool.ts or multiTeamPanelModel.ts, directly or through multiTeamDriver.ts.
-    // The extension's own tsconfig turns noUncheckedIndexedAccess off, so those three files
-    // carry 21 unchecked reads that fail here. Fix the extension source (it has a build drift
-    // guard) before removing these. exclude cannot hide an imported file, so every importer
-    // is listed.
-    "./helpers/multiTeamDriverHarness.ts",
-    "./theoreticalMeetTeamNames.test.ts",
-    "./swimCloudExtensionBoundedFetchPool.test.ts",
-    "./swimCloudExtensionMultiTeamApp.test.ts",
-    "./swimCloudExtensionMultiTeamDriver.test.ts",
-    "./swimCloudExtensionMultiTeamDriverDenylist.test.ts",
-    "./swimCloudExtensionMultiTeamDriverReview.test.ts",
-    "./swimCloudExtensionMultiTeamDriverReview2.test.ts",
-    "./swimCloudExtensionMultiTeamPanelModel.test.ts",
-    "./swimCloudExtensionMultiTeamQueue.test.ts"
-  ]
+  "include": ["./**/*.ts"]
 }

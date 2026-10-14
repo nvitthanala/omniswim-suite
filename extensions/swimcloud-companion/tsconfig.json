@@ -1,11 +1,7 @@
 {
   "extends": "../../tsconfig.base.json",
   "compilerOptions": {
-    "types": [],
-    // Off here only. The base turns the flag on (R11 step 6). src/multiTeamQueue.ts,
-    // multiTeamPanelModel.ts and boundedFetchPool.ts still have 21 unchecked reads, and
-    // fixing them changes the bundled background.js, which has a drift guard.
-    "noUncheckedIndexedAccess": false
+    "types": []
   },
   "include": ["src/**/*"]
 }

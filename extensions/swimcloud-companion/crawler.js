@@ -2649,12 +2649,13 @@
         if (input.beforeStart !== void 0) await input.beforeStart();
         if (stopped() || cursor >= items.length) return;
         const index = cursor;
+        const item = items[index];
         cursor += 1;
         started += 1;
         inFlight += 1;
         if (inFlight > peakInFlight) peakInFlight = inFlight;
         try {
-          await run(items[index], index);
+          await run(item, index);
         } catch {
         } finally {
           inFlight -= 1;
@@ -2850,6 +2851,9 @@
         continue;
       }
       const existing = entries[existingIndex];
+      if (existing === void 0) {
+        throw new MultiTeamQueueError("unknown-key", `swimmer key ${key} is indexed but has no queue entry.`);
+      }
       if (existing.work.kind !== "swimmer") continue;
       const known = existing.work.attributions.some((a) => a.teamId === teamId && a.seasonId === season.seasonId);
       if (known) continue;
@@ -2886,36 +2890,39 @@
     if (index === -1) return idle(queue, inFlight > 0 ? "waiting-for-in-flight" : "drained");
     if (inFlight >= queue.concurrency) return idle(queue, "at-concurrency-limit");
     const entry = queue.entries[index];
+    if (entry === void 0) throw new MultiTeamQueueError("unknown-key", `pending index ${index} has no queue entry.`);
     const rosterInFlight = queue.entries.some((e) => e.status === "in-flight" && e.work.kind === "roster");
     if (rosterInFlight || entry.work.kind === "roster" && inFlight > 0) return idle(queue, "at-concurrency-limit");
     return { kind: "work", queue: withStatus(queue, index, { work: entry.work, status: "in-flight" }), work: entry.work };
   }
-  function inFlightIndex(queue, key) {
+  function inFlightEntry(queue, key) {
     const index = queue.entries.findIndex((e) => e.work.key === key);
-    if (index === -1) throw new MultiTeamQueueError("unknown-key", `no work has key ${key}.`);
-    if (queue.entries[index].status !== "in-flight") {
-      throw new MultiTeamQueueError("not-in-flight", `work ${key} is ${queue.entries[index].status}, not in-flight.`);
+    const entry = queue.entries[index];
+    if (index === -1 || entry === void 0) throw new MultiTeamQueueError("unknown-key", `no work has key ${key}.`);
+    if (entry.status !== "in-flight") {
+      throw new MultiTeamQueueError("not-in-flight", `work ${key} is ${entry.status}, not in-flight.`);
     }
-    return index;
+    return { index, entry };
   }
   function markDone(queue, key) {
-    const index = inFlightIndex(queue, key);
-    return withStatus(queue, index, { work: queue.entries[index].work, status: "done" });
+    const { index, entry } = inFlightEntry(queue, key);
+    return withStatus(queue, index, { work: entry.work, status: "done" });
   }
   function markFailed(queue, key, message, options = {}) {
-    const index = inFlightIndex(queue, key);
-    const next = withStatus(queue, index, { work: queue.entries[index].work, status: "failed", error: message });
+    const { index, entry } = inFlightEntry(queue, key);
+    const next = withStatus(queue, index, { work: entry.work, status: "failed", error: message });
     if (options.haltQueue !== true) return next;
     const halt = queue.halt === void 0 ? { message, keys: [key] } : { message: queue.halt.message, keys: [...queue.halt.keys, key] };
     return { ...next, halt };
   }
   function retryFailed(queue, key) {
     const index = queue.entries.findIndex((e) => e.work.key === key);
-    if (index === -1) throw new MultiTeamQueueError("unknown-key", `no work has key ${key}.`);
-    if (queue.entries[index].status !== "failed") {
-      throw new MultiTeamQueueError("not-failed", `work ${key} is ${queue.entries[index].status}, not failed.`);
+    const entry = queue.entries[index];
+    if (index === -1 || entry === void 0) throw new MultiTeamQueueError("unknown-key", `no work has key ${key}.`);
+    if (entry.status !== "failed") {
+      throw new MultiTeamQueueError("not-failed", `work ${key} is ${entry.status}, not failed.`);
     }
-    return withStatus(queue, index, { work: queue.entries[index].work, status: "pending" });
+    return withStatus(queue, index, { work: entry.work, status: "pending" });
   }
   function pauseQueue(queue) {
     return queue.cancelled ? queue : { ...queue, paused: true };
@@ -3012,10 +3019,10 @@
       const detail = error instanceof Error ? error.message : String(error);
       return { ok: false, reason: `The roster page's season list could not be read, so its season is not verified: ${detail}` };
     }
-    if (selected.length === 0) {
+    const shown = selected[0];
+    if (shown === void 0) {
       return { ok: false, reason: `The roster page selects no season. It was asked for season ${work.seasonLabel} (id ${work.seasonId}).` };
     }
-    const shown = selected[0];
     if (shown.seasonId !== work.seasonId) {
       return {
         ok: false,
@@ -3721,7 +3728,9 @@
     };
   }
   function defaultSeasonLabel(options) {
-    return (options.find((o) => o.selected) ?? options[0]).label;
+    const season = options.find((o) => o.selected) ?? options[0];
+    if (season === void 0) throw new Error("defaultSeasonLabel: the season list is empty, so there is no default.");
+    return season.label;
   }
   function formatScopeNote() {
     const seconds = Math.round(MIN_DELAY_MS / 1e3);

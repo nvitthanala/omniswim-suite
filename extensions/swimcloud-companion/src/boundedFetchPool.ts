@@ -146,12 +146,15 @@ export async function runBoundedFetchPool<T>(input: BoundedFetchPoolInput<T>): P
       if (stopped() || cursor >= items.length) return;
 
       const index = cursor;
+      // `index < items.length` was just checked, so this read is in range. Not an
+      // `undefined` test: `T` may itself include `undefined`, and that is a real item.
+      const item = items[index] as T;
       cursor += 1;
       started += 1;
       inFlight += 1;
       if (inFlight > peakInFlight) peakInFlight = inFlight;
       try {
-        await run(items[index], index);
+        await run(item, index);
       } catch {
         // Deliberately swallowed. See BoundedFetchPoolInput.run: a pool whose
         // lane dies on one bad item is a pool that silently fetches fewer pages

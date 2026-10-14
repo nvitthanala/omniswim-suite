@@ -59,7 +59,10 @@ export function describeTargetInput(text: string): PastedTargets {
 
 /** The season the page marks as current, else the first listed. A default for the dropdown, never a decision. */
 export function defaultSeasonLabel(options: readonly TeamSeasonOption[]): string {
-  return (options.find((o) => o.selected) ?? options[0]).label;
+  const season = options.find((o) => o.selected) ?? options[0];
+  // An empty list has no season to default to. Fail loudly, as reading `.label` of nothing did.
+  if (season === undefined) throw new Error('defaultSeasonLabel: the season list is empty, so there is no default.');
+  return season.label;
 }
 
 /** What the crawl will and will not do. Shown before Start. */

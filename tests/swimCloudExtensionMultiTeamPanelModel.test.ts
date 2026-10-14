@@ -69,6 +69,15 @@ describe('defaultSeasonLabel', () => {
   it('uses the season the page marks as current', () => {
     expect(defaultSeasonLabel(OPTIONS)).toBe('2025-2026');
   });
+
+  it('falls back to the first listed season when none is marked current', () => {
+    const none = OPTIONS.map((o) => ({ ...o, selected: false }));
+    expect(defaultSeasonLabel(none)).toBe(none[0]!.label);
+  });
+
+  it('throws on an empty list rather than inventing a default', () => {
+    expect(() => defaultSeasonLabel([])).toThrow(/season list is empty/);
+  });
 });
 
 describe('formatScopeNote', () => {
