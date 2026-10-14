@@ -74,7 +74,8 @@ interface TeamMatrixTimeCellProps {
   res: SwimmerResult;
   rowTags: TeamRowCutlineTags;
   timeColorClass: string;
-  relaySplitPrimary: any;
+  /** True when the row is a relay leg with a parsed split to show as its primary time. */
+  relaySplitPrimary: boolean;
   onStartEdit: () => void;
   editingResultId: string | null;
   editValue: string;
@@ -251,7 +252,7 @@ export function TeamMatrixSwimmerRow({
   const isACut = cutlineTier === 'A' || cutlineTier === 'Standard' || cutlineTier === 'Qualifying';
   const isBCut = cutlineTier === 'B' || cutlineTier === 'Provisional' || cutlineTier === 'Invited';
   const timeColorClass = isACut ? 'text-[var(--text-accent)]' : isBCut ? 'text-warning' : 'text-theme-secondary';
-  const relaySplitPrimary = res.isRelay && (res.relayLegSplitDetail || res.relayLegSplit);
+  const relaySplitPrimary = Boolean(res.isRelay && (res.relayLegSplitDetail || res.relayLegSplit));
   const startEdit = () => {
     if (onUpdateTime && res.id) onStartEdit(res.id, res.time);
   };

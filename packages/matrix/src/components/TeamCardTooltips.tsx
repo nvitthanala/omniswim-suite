@@ -23,24 +23,29 @@ import { CutlineVerdict, PodiumMedal, RelayVerdict, useIsEstimatedRelayRow } fro
 import {
   buildTeamRowCutlineTags,
   computeClassTopPerformers,
+  isTeamCardEventDatum,
   relayMissingStrokeLabel,
   sortSwimmersByPoints,
+  type TeamCardTooltipDatum,
   type TeamRowCutlineTags,
 } from './teamCardView';
 
 /** Chart tooltip title + points, with the event tooltip's optional over/under badge. */
-export function TooltipHeader({ isClass, data, showPrelimsPerformance }: { isClass: boolean; data: any; showPrelimsPerformance?: boolean }) {
-  const showOverUnder = !isClass && showPrelimsPerformance && data.overUnder != null && Math.abs(data.overUnder) > 0.05;
+export function TooltipHeader({ isClass, data, showPrelimsPerformance }: { isClass: boolean; data: TeamCardTooltipDatum; showPrelimsPerformance?: boolean }) {
+  // Only an event datum carries over/under; a class datum has none.
+  const eventDatum = !isClass && isTeamCardEventDatum(data) ? data : null;
+  const overUnder = eventDatum?.overUnder ?? null;
+  const showOverUnder = eventDatum !== null && showPrelimsPerformance && overUnder !== null && Math.abs(overUnder) > 0.05;
   // The event has an entry with no result yet and nothing else to show: say so rather than show nothing.
-  const showNoActual = !isClass && showPrelimsPerformance && data.overUnder == null && data.noActual === true;
+  const showNoActual = eventDatum !== null && showPrelimsPerformance && overUnder === null && eventDatum.noActual === true;
   return (
     <div className="flex justify-between items-center mb-2 pb-2 border-b border-theme-soft shrink-0">
       <h4 className="font-bold text-[var(--text-accent)] uppercase tracking-widest" style={{ fontSize: 'clamp(8px, 5cqi, 12px)' }}>
-        {isClass ? `Class of ${data.name}` : <CompactEventLabel event={data.rawEvent} />}
+        {eventDatum ? <CompactEventLabel event={eventDatum.rawEvent} /> : `Class of ${data.name}`}
       </h4>
       <div className="flex flex-col items-end gap-0.5">
         <span className="font-mono font-black" style={{ fontSize: 'clamp(9px, 6cqi, 14px)' }}>{data.points.toFixed(1)} PTS</span>
-        {showOverUnder ? <PrelimsOuValue value={data.overUnder} compact /> : null}
+        {showOverUnder ? <PrelimsOuValue value={overUnder} compact /> : null}
         {showNoActual ? <NoActualMarker /> : null}
       </div>
     </div>
@@ -87,7 +92,7 @@ export function TooltipSwimmerList({
   }
   return (
     <>
-      {swimmers.map((s: any, idx: number) => (
+      {swimmers.map((s, idx) => (
         <TooltipSwimmerRow
           key={idx}
           s={s}
@@ -103,8 +108,14 @@ export function TooltipSwimmerList({
   );
 }
 
+/**
+ * A swimmer row as the tooltip reads it. `podium` is not a `SwimmerResult` field
+ * (nothing in core sets it); the medal reads it when a row carries one.
+ */
+type TooltipSwimmer = SwimmerResult & { podium?: string };
+
 interface TooltipSwimmerRowProps {
-  s: any;
+  s: TooltipSwimmer;
   gender: Gender | string;
   teamName: string;
   showPrelimsPerformance?: boolean;
@@ -114,7 +125,7 @@ interface TooltipSwimmerRowProps {
 }
 
 /** The row's mono time column: relay leg split, or plain finals/time. */
-function SwimmerTimeCell({ s, hasRelaySplit, rowTags }: { s: any; hasRelaySplit: boolean | undefined; rowTags: TeamRowCutlineTags }) {
+function SwimmerTimeCell({ s, hasRelaySplit, rowTags }: { s: TooltipSwimmer; hasRelaySplit: boolean; rowTags: TeamRowCutlineTags }) {
   if (!hasRelaySplit) {
     return (
       <span className="font-mono text-theme-secondary">
@@ -195,7 +206,7 @@ export function TooltipSwimmerRow({
 }: TooltipSwimmerRowProps) {
   const estimatedRelay = useIsEstimatedRelayRow(s);
   const rowTags = buildTeamRowCutlineTags(s, gender, teamName, s.finalsTime || s.time, estimatedRelay);
-  const hasRelaySplit = s.isRelay && (s.relayLegSplitDetail || s.relayLegSplit);
+  const hasRelaySplit = Boolean(s.isRelay && (s.relayLegSplitDetail || s.relayLegSplit));
 
   return (
     <div className="flex items-center justify-between py-1 border-b border-theme-soft/50 last:border-0 swimmer-row text-ui-caption">
@@ -234,7 +245,7 @@ export function TooltipSwimmerRow({
 }
 
 interface TeamCardChartTooltipProps {
-  data: any;
+  data: TeamCardTooltipDatum;
   /** A pinned tooltip is resizable and carries a close affordance. */
   isPinned?: boolean;
   /** The class chart's tooltip lists per-class top performers; the event chart's lists swimmers. */

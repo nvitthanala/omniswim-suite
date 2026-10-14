@@ -16,7 +16,7 @@
     "lint:index-access": "node scripts/index-access-ratchet.mjs",
     "lint:types": "npm run lint --workspaces --if-present",
     "lint:extension": "tsc --noEmit -p extensions/swimcloud-companion/tsconfig.json",
-    "lint:eslint": "eslint . --max-warnings 66",
+    "lint:eslint": "eslint . --max-warnings 0",
     "test": "node scripts/run-tests.mjs",
     "test:e2e": "playwright test",
     "test:harness": "node scripts/run-harness.mjs",

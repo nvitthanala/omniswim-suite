@@ -82,8 +82,8 @@ function TempoProfileComponent({
       lengths={lengths}
       data={meanPoints}
       chartKey={`tempo-${cyclePoints.length}-${meanPoints.length}`}
-      tooltipFormatter={(_value: any, _name: any, item: any) => {
-        const point = item?.payload as TooltipPoint | undefined;
+      tooltipFormatter={(_value, _name, item) => {
+        const point: TooltipPoint | undefined = item?.payload;
         if (!point) return ['not measured', ''];
         if (typeof point.cycleIndex === 'number') {
           const rate = point.rate ?? 0;

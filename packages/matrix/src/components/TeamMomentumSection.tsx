@@ -8,6 +8,7 @@
  */
 
 import { SegmentedControl } from '@omniswim/ui';
+import type { MomentumSeriesPoint } from '@omniswim/core/lib/prelimsProjection';
 import MomentumChartCard from './MomentumChartCard';
 import { SeedsPastTableNote } from './matrixPresentation';
 
@@ -16,7 +17,7 @@ interface TeamMomentumSectionProps {
   showPsychPerformance?: boolean;
   momentumAnchor: 'prelims' | 'psych';
   onMomentumAnchorChange: (anchor: 'prelims' | 'psych') => void;
-  momentumSeries: any[];
+  momentumSeries: MomentumSeriesPoint[];
   momentumMeetTotal?: number;
   teamMomentumEmptyMessage?: string;
   /** Entries left out of the momentum line because they have no result yet. */

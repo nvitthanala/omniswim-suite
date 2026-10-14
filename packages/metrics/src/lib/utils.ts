@@ -30,12 +30,14 @@ export function formatTime(seconds: number | null | undefined): string {
   return formatSecondsToTime(Number(seconds.toFixed(2)));
 }
 
-export function exportToCSV(data: any, filename: string) {
-  const replacer = (key: string, value: any) => value === null ? '' : value; 
-  const header = Object.keys(data[0]);
+export function exportToCSV(data: readonly Record<string, unknown>[], filename: string) {
+  const replacer = (_key: string, value: unknown) => value === null ? '' : value; 
+  const first = data[0];
+  if (first === undefined) throw new Error('exportToCSV needs at least one row to read the column names from');
+  const header = Object.keys(first);
   const csv = [
     header.join(','),
-    ...data.map((row: any) => header.map(fieldName => JSON.stringify(row[fieldName], replacer)).join(','))
+    ...data.map((row) => header.map(fieldName => JSON.stringify(row[fieldName], replacer)).join(','))
   ].join('\r\n');
 
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });

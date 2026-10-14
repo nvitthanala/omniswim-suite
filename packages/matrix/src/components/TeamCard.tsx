@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useRef, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useEffect, useMemo, type MouseEvent as ReactMouseEvent } from 'react';
 import { BarChart3 } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChartShell } from '@omniswim/ui';
@@ -19,7 +19,15 @@ import { TeamMomentumSection } from './TeamMomentumSection';
 import { TeamCardHeader } from './TeamCardHeader';
 import { TeamEventChartPane, TeamClassChartPane } from './TeamCardChartPanes';
 import { TeamCardMatrixControls, TeamCardMatrixList } from './TeamCardMatrixList';
-import { classChartTooltipPosition } from './teamCardView';
+import type { BarRectangleItem, MouseHandlerDataParam } from 'recharts';
+import {
+  classChartTooltipPosition,
+  type TeamCardClassDatum,
+  type TeamCardEventDatum,
+  type TeamCardEventGroup,
+  type TeamCardSwimmerGroup,
+  type TeamCardTooltipAnchor,
+} from './teamCardView';
 
 const EMPTY_EVENTS_LIST: string[] = [];
 
@@ -74,10 +82,10 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
   const [sortMode, setSortMode] = useState<'chrono'|'eventDesc'|'eventAsc'|'swimmerDesc'|'swimmerAsc'>('eventDesc');
   
   // Custom Tooltip State
-  const [activeTooltip, setActiveTooltip] = useState<any>(null);
-  const [pinnedTooltip, setPinnedTooltip] = useState<any>(null);
-  const [activeClassTooltip, setActiveClassTooltip] = useState<any>(null);
-  const [pinnedClassTooltip, setPinnedClassTooltip] = useState<any>(null);
+  const [activeTooltip, setActiveTooltip] = useState<TeamCardTooltipAnchor<TeamCardEventDatum> | null>(null);
+  const [pinnedTooltip, setPinnedTooltip] = useState<TeamCardTooltipAnchor<TeamCardEventDatum> | null>(null);
+  const [activeClassTooltip, setActiveClassTooltip] = useState<TeamCardTooltipAnchor<TeamCardClassDatum> | null>(null);
+  const [pinnedClassTooltip, setPinnedClassTooltip] = useState<TeamCardTooltipAnchor<TeamCardClassDatum> | null>(null);
   const [chartPanePercent, setChartPanePercent] = useState(67);
   const [isDraggingSplit, setIsDraggingSplit] = useState(false);
   const chartSplitRowRef = useRef<HTMLDivElement>(null);
@@ -189,15 +197,15 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
     const eventPointsMap: Record<string, number> = {};
     const eventSwimmersMap = new Map<string, SwimmerResult[]>();
     const ouByEvent = new Map(momentumSeries.map(m => [m.rawEvent, m]));
-    const classData = [
+    const classData: TeamCardClassDatum[] = [
       { name: 'FR', points: 0, color: '#39FF14', swimmers: [] as SwimmerResult[] },
       { name: 'SO', points: 0, color: '#00F5FF', swimmers: [] as SwimmerResult[] },
       { name: 'JR', points: 0, color: '#FF00FF', swimmers: [] as SwimmerResult[] },
       { name: 'SR', points: 0, color: '#FFD700', swimmers: [] as SwimmerResult[] },
     ];
 
-    const swimmerGroups: Record<string, any> = {};
-    const eventGroups: Record<string, any> = {};
+    const swimmerGroups: Record<string, TeamCardSwimmerGroup> = {};
+    const eventGroups: Record<string, TeamCardEventGroup> = {};
 
     filteredSwimmers.forEach(s => {
       const points = typeof s.points === 'number' ? s.points : 0;
@@ -211,20 +219,24 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
         classEntry.swimmers.push(s);
       }
 
-      if (!swimmerGroups[s.name]) {
-        swimmerGroups[s.name] = { name: s.name, points: 0, swimmers: [], classYear: s.classYear };
+      let swimmerGroup = swimmerGroups[s.name];
+      if (!swimmerGroup) {
+        swimmerGroup = { name: s.name, points: 0, swimmers: [], classYear: s.classYear };
+        swimmerGroups[s.name] = swimmerGroup;
       }
-      swimmerGroups[s.name].points += points;
-      swimmerGroups[s.name].swimmers.push(s);
+      swimmerGroup.points += points;
+      swimmerGroup.swimmers.push(s);
 
-      if (!eventGroups[s.event]) {
-        eventGroups[s.event] = { event: s.event, points: 0, swimmers: [] };
+      let eventGroup = eventGroups[s.event];
+      if (!eventGroup) {
+        eventGroup = { event: s.event, points: 0, swimmers: [] };
+        eventGroups[s.event] = eventGroup;
       }
-      eventGroups[s.event].points += points;
-      eventGroups[s.event].swimmers.push(s);
+      eventGroup.points += points;
+      eventGroup.swimmers.push(s);
     });
 
-    const eventData = Object.entries(eventPointsMap).map(([name, points]) => {
+    const eventData = Object.entries(eventPointsMap).map(([name, points]): TeamCardEventDatum => {
       const ou = ouByEvent.get(name);
       return {
         name: formatEventChartAxisLabel(name, { maxLength: 20 }),
@@ -253,41 +265,41 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
     return {
       eventData,
       classData,
-      topSwimmersBase: Object.values(swimmerGroups).sort((a: any, b: any) => b.points - a.points),
-      topEventsBase: Object.values(eventGroups).sort((a: any, b: any) => b.points - a.points),
+      topSwimmersBase: Object.values(swimmerGroups).sort((a, b) => b.points - a.points),
+      topEventsBase: Object.values(eventGroups).sort((a, b) => b.points - a.points),
     };
   }, [filteredSwimmers, eventsList, momentumSeries, noActualEvents]);
 
   const normalizedSearchQuery = searchQuery?.trim().toLowerCase() ?? '';
   const topSwimmers = useMemo(() => {
     const list = normalizedSearchQuery
-      ? topSwimmersBase.filter((s: any) => s.name.toLowerCase().includes(normalizedSearchQuery))
+      ? topSwimmersBase.filter((s) => s.name.toLowerCase().includes(normalizedSearchQuery))
       : [...topSwimmersBase];
     if (viewMode === 'swimmer') {
-      list.sort((a: any, b: any) => sortMode === 'swimmerAsc' ? a.points - b.points : b.points - a.points);
+      list.sort((a, b) => sortMode === 'swimmerAsc' ? a.points - b.points : b.points - a.points);
     }
     return list;
   }, [normalizedSearchQuery, sortMode, topSwimmersBase, viewMode]);
 
   const topEvents = useMemo(() => {
     const list = normalizedSearchQuery
-      ? topEventsBase.filter((e: any) => e.event.toLowerCase().includes(normalizedSearchQuery))
+      ? topEventsBase.filter((e) => e.event.toLowerCase().includes(normalizedSearchQuery))
       : [...topEventsBase];
     if (viewMode !== 'event') return list;
     if (sortMode === 'chrono' && eventsList.length > 0) {
-      list.sort((a: any, b: any) => eventsList.indexOf(a.event) - eventsList.indexOf(b.event));
+      list.sort((a, b) => eventsList.indexOf(a.event) - eventsList.indexOf(b.event));
     } else if (sortMode === 'eventAsc') {
-      list.sort((a: any, b: any) => a.points - b.points);
+      list.sort((a, b) => a.points - b.points);
     } else {
-      list.sort((a: any, b: any) => b.points - a.points);
+      list.sort((a, b) => b.points - a.points);
     }
     return list;
   }, [eventsList, normalizedSearchQuery, sortMode, topEventsBase, viewMode]);
 
-  const handleEventChartMouseMove = (state: any) => {
+  const handleEventChartMouseMove = (state: MouseHandlerDataParam) => {
     if (isDraggingSplitRef.current) return;
     const idx = state?.activeTooltipIndex;
-    if (idx == null || idx < 0 || !eventData[idx]) {
+    if (typeof idx !== 'number' || idx < 0 || !eventData[idx]) {
       if (lastTooltipIndexRef.current !== null) {
         lastTooltipIndexRef.current = null;
         setActiveTooltip(null);
@@ -310,12 +322,13 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
     }
   };
 
-  const handleEventChartClick = (state: any) => {
+  const handleEventChartClick = (state: MouseHandlerDataParam) => {
     if (isDraggingSplitRef.current) return;
-    if (!state || state.activeTooltipIndex == null || state.activeTooltipIndex < 0 || !eventData[state.activeTooltipIndex]) {
+    const idx = state?.activeTooltipIndex;
+    if (typeof idx !== 'number' || idx < 0 || !eventData[idx]) {
       return;
     }
-    const payload = eventData[state.activeTooltipIndex];
+    const payload = eventData[idx];
     const x = state.activeCoordinate?.x ?? 0;
     const y = state.activeCoordinate?.y ?? 0;
     const w = eventChartSurfaceRef.current?.clientWidth ?? 500;
@@ -323,13 +336,16 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
     setActiveTooltip(null);
   };
 
-  const handleClassBarClick = (data: any, _index: number, e: any) => {
-    setPinnedClassTooltip({ ...classChartTooltipPosition(e), payload: data });
+  // recharts types a bar's `payload` as `any`; it is the `classData` row the bar was drawn from.
+  const handleClassBarClick = (data: BarRectangleItem, _index: number, e: ReactMouseEvent<SVGPathElement>) => {
+    const payload: TeamCardClassDatum = data.payload;
+    setPinnedClassTooltip({ ...classChartTooltipPosition(e), payload });
     setActiveClassTooltip(null);
   };
 
-  const handleClassBarMouseEnter = (data: any, _index: number, e: any) => {
-    setActiveClassTooltip({ ...classChartTooltipPosition(e), payload: data });
+  const handleClassBarMouseEnter = (data: BarRectangleItem, _index: number, e: ReactMouseEvent<SVGPathElement>) => {
+    const payload: TeamCardClassDatum = data.payload;
+    setActiveClassTooltip({ ...classChartTooltipPosition(e), payload });
   };
 
   const handleClassBarMouseLeave = () => setActiveClassTooltip(null);
