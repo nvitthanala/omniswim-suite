@@ -58,7 +58,7 @@ async function mockCaptureApi(page: Page) {
   await page.route(/\/api\/swimcloud\/pairing-token$/, route => route.fulfill({ json: { token: 'e2e-token' } }));
   await page.route(/\/api\/swimcloud\/captures$/, route => route.fulfill({ json: captureList() }));
   await page.route(/\/api\/swimcloud\/captures\/([^/]+)\/parse$/, async route => {
-    const id = decodeURIComponent(new URL(route.request().url()).pathname.split('/').slice(-2)[0]);
+    const id = decodeURIComponent(new URL(route.request().url()).pathname.split('/').slice(-2)[0]!);
     await route.fulfill({ json: mocks.parses[id] });
   });
 }

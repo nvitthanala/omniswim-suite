@@ -5,6 +5,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
+import { elementWithChildren } from './helpers/elementWithChildren';
 import { createRoot, type Root } from 'react-dom/client';
 import RosterWizardShell from '../packages/manager/src/components/RosterWizardShell';
 import RecruitForm from '../packages/manager/src/components/RecruitForm';
@@ -29,7 +30,7 @@ describe('Manager Athletes step wording', () => {
 
   it('names the first step Athletes, not Source', async () => {
     await act(async () => {
-      root.render(createElement(RosterWizardShell, { step: 'source', onStepChange: vi.fn() }, 'body'));
+      root.render(elementWithChildren(RosterWizardShell, { step: 'source', onStepChange: vi.fn() }, 'body'));
     });
     const labels = Array.from(container.querySelectorAll('[role="tab"]')).map(t => t.textContent ?? '');
     expect(labels[0]).toContain('Athletes');

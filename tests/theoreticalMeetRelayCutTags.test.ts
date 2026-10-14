@@ -57,7 +57,7 @@ describe('estimated relay and its cut tag', () => {
   });
 
   it('a real relay row at the same time still gets the real D2 PROVISIONAL tag (the control)', () => {
-    const view = buildTeamRowCutlineTags(legs[0], Gender.MEN, HSU, legs[0].time);
+    const view = buildTeamRowCutlineTags(legs[0]!, Gender.MEN, HSU, legs[0]!.time);
     if (view.kind !== 'relay') throw new Error('expected a relay view');
     expect(view.relayEstimate).toBe(false);
     expect(view.tags.relay?.state).toBe('tagged');
@@ -74,8 +74,8 @@ describe('estimated relay and its cut tag', () => {
   });
 
   it('keeps leg 1 own verdict slot and gives legs 2 to 4 none', () => {
-    const leg1 = buildTeamRowCutlineTags(legs[0], Gender.MEN, HSU, legs[0].time, true);
-    const real = buildTeamRowCutlineTags(legs[0], Gender.MEN, HSU, legs[0].time, false);
+    const leg1 = buildTeamRowCutlineTags(legs[0]!, Gender.MEN, HSU, legs[0]!.time, true);
+    const real = buildTeamRowCutlineTags(legs[0]!, Gender.MEN, HSU, legs[0]!.time, false);
     if (leg1.kind !== 'relay' || real.kind !== 'relay') throw new Error('expected relay views');
     expect(leg1.tags.legQualification).toEqual(real.tags.legQualification);
     for (const row of legs.slice(1)) {
@@ -92,7 +92,7 @@ describe('estimated relay and its cut tag', () => {
   });
 
   it('renders "Estimate, not judged" for the withheld verdict, and no cut tag', () => {
-    const view = buildTeamRowCutlineTags(legs[1], Gender.MEN, HSU, legs[1].time, true);
+    const view = buildTeamRowCutlineTags(legs[1]!, Gender.MEN, HSU, legs[1]!.time, true);
     if (view.kind !== 'relay') throw new Error('expected a relay view');
     const container = document.createElement('div');
     document.body.appendChild(container);

@@ -93,10 +93,10 @@ describe('groupSkipsByReason', () => {
     // Both review-severity groups precede the one structural group.
     expect(groups.map(g => g.severity)).toStrictEqual(['review', 'review', 'structural']);
     const byReason = Object.fromEntries(groups.map(g => [g.reason, g]));
-    expect(byReason['relay-leadoff'].count).toBe(2);
-    expect(byReason['ambiguous-round-duplicate'].count).toBe(1);
-    expect(byReason['ambiguous-round-duplicate'].items[0].subject).toBe('Avery Henke');
-    expect(byReason['unknown-gender'].count).toBe(1);
+    expect(byReason['relay-leadoff']!.count).toBe(2);
+    expect(byReason['ambiguous-round-duplicate']!.count).toBe(1);
+    expect(byReason['ambiguous-round-duplicate']!.items[0]!.subject).toBe('Avery Henke');
+    expect(byReason['unknown-gender']!.count).toBe(1);
   });
 
   it('returns no groups for an empty skip list', () => {
@@ -117,17 +117,17 @@ describe('groupWarningsByCode', () => {
     // code stopped being classified as an expected structural absence.
     expect(groups.map(g => g.severity)).toStrictEqual(['review', 'review']);
     const byCode = Object.fromEntries(groups.map(g => [g.code, g]));
-    expect(byCode['relay-legs-absent'].count).toBe(3); // count is every row, not de-duplicated
-    expect(byCode['relay-legs-absent'].examples).toStrictEqual(['event A', 'event B']); // examples ARE de-duplicated
-    expect(byCode['missing-round-caption'].count).toBe(1);
+    expect(byCode['relay-legs-absent']!.count).toBe(3); // count is every row, not de-duplicated
+    expect(byCode['relay-legs-absent']!.examples).toStrictEqual(['event A', 'event B']); // examples ARE de-duplicated
+    expect(byCode['missing-round-caption']!.count).toBe(1);
   });
 
   it('caps examples at 3 even with many distinct messages', () => {
     const groups = groupWarningsByCode(
       Array.from({ length: 5 }, (_, i) => warning({ message: `event ${i}` }))
     );
-    expect(groups[0].count).toBe(5);
-    expect(groups[0].examples).toHaveLength(3);
+    expect(groups[0]!.count).toBe(5);
+    expect(groups[0]!.examples).toHaveLength(3);
   });
 });
 

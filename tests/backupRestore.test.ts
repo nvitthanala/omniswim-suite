@@ -121,9 +121,9 @@ describe('listGeneratedBackups', () => {
       'meets-startup-2026-09-19T12-00-00-000Z.json',
       'meets-pre-delete-2026-09-18T12-00-00-000Z.json',
     ]);
-    expect(listed[0].label).toBe('manual');
-    expect(listed[0].writtenAt).toBe('2026-09-20T12:00:00.000Z');
-    expect(listed[2].label).toBe('pre-delete');
+    expect(listed[0]!.label).toBe('manual');
+    expect(listed[0]!.writtenAt).toBe('2026-09-20T12:00:00.000Z');
+    expect(listed[2]!.label).toBe('pre-delete');
   });
 
   it('returns nothing rather than throwing when the directory does not exist', async () => {
@@ -136,7 +136,7 @@ describe('readBackupWorkspaces — validate before replacing', () => {
     const dir = await tempDir({ [VALID]: JSON.stringify([{ id: 'a', name: 'A' }]) });
     const ws = await readBackupWorkspaces(path.join(dir, VALID));
     expect(ws).toHaveLength(1);
-    expect(ws[0].id).toBe('a');
+    expect(ws[0]!.id).toBe('a');
   });
 
   it('refuses a file that is valid JSON but not a workspace array', async () => {

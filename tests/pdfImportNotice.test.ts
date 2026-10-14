@@ -22,13 +22,14 @@ import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '@omniswim/ui';
-import { Gender, type Workspace } from '@omniswim/core/types';
+import { Gender } from '@omniswim/core/types';
 import OpsModule from '../packages/matrix/src/components/OpsModule';
 import {
   LEGACY_FALLBACK_WARNING_CODE,
   noticeForParsedMeet,
   noticeForRefusedMeet,
 } from '../packages/matrix/src/lib/pdfImportNotice';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 vi.mock('motion/react', async () => (await import('./motionStub')).motionStub);
 
@@ -113,14 +114,14 @@ describe('the meet import screen', () => {
   let container: HTMLDivElement;
   let root: Root;
 
-  const workspace = {
+  const workspace = workspaceFixture({
     id: 'ws-import',
     name: 'Import test',
     createdAt: 1,
     menResults: [],
     womenResults: [],
     recruits: [],
-  } as unknown as Workspace;
+  });
 
   beforeEach(() => {
     container = document.createElement('div');

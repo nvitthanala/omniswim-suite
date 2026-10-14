@@ -54,7 +54,8 @@ const timeOf = (eventIndex: number, slot: number): string => {
 };
 
 /** CONSTRUCTED roster-only men's workspace: 214 recruit rows, 67 planned entries, no meet rows. */
-function constructedWorkspace(): { workspace: Workspace; rows: number } {
+/** `recruitRows` is the same array as `workspace.recruits`, typed as the scored rows the engine reads. */
+function constructedWorkspace(): { workspace: Workspace; rows: number; recruitRows: SwimmerResult[] } {
   const recruits: SwimmerResult[] = [];
   const plans: PlannedSwimEntry[] = [];
   let slotsLeftForRecruits = RECRUIT_ROWS;
@@ -113,7 +114,7 @@ function constructedWorkspace(): { workspace: Workspace; rows: number } {
     deletedSwimmers: [],
     scoringSettings: { ...GENERIC_TOP16_SETTINGS, maxIndividualScorersPerTeam: 999, maxIndividualEntriesPerSwimmer: 99 },
   } as unknown as Workspace;
-  return { workspace, rows: RECRUIT_ROWS + PLAN_ROWS };
+  return { workspace, rows: RECRUIT_ROWS + PLAN_ROWS, recruitRows: recruits };
 }
 
 /** Rows grouped by the key the scoring engine ties on: event, round, rank. */
@@ -166,7 +167,7 @@ describe('D8 a real dead heat that straddles the scoring roster', () => {
     });
     const points = (name: string) => Number(scored.find(r => r.name === name)?.points);
     // A and B tie for 1st and 2nd: the shared place table, halved. B is off the roster, so B's half is forfeited.
-    expect(points('Heat A')).toBe((SCORING_POINTS[0] + SCORING_POINTS[1]) / 2);
+    expect(points('Heat A')).toBe((SCORING_POINTS[0]! + SCORING_POINTS[1]!) / 2);
     expect(points('Heat B')).toBe(0);
     expect(points('Heat C')).toBe(SCORING_POINTS[2]);
   });
@@ -174,9 +175,9 @@ describe('D8 a real dead heat that straddles the scoring roster', () => {
 
 describe('D8 roster-only rank collapse', () => {
   it('places 281 unranked rows event by event, never as one tie', () => {
-    const { workspace, rows } = constructedWorkspace();
+    const { workspace, rows, recruitRows } = constructedWorkspace();
     const unplaced = [
-      ...(workspace.recruits as SwimmerResult[]),
+      ...recruitRows,
       ...(workspace.meetEntryPlans ?? []).map(
         p =>
           ({
@@ -217,8 +218,7 @@ describe('D8 roster-only rank collapse', () => {
     // `calculatePoints` places an unranked recruit itself. The what-if
     // projection re-places every row before it, so only this path would still
     // show the collapse if `prepareRecruitsForScoring` regressed.
-    const { workspace } = constructedWorkspace();
-    const recruits = workspace.recruits as SwimmerResult[];
+    const { workspace, recruitRows: recruits } = constructedWorkspace();
     const scored = calculatePoints(recruits, workspace.scoringSettings);
     const total = scored.reduce((sum, r) => sum + Number(r.points || 0), 0);
     // Each event pays the place table down to its last row, to 16 places at most.

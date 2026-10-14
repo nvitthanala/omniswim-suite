@@ -5,6 +5,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
+import { elementWithChildren } from './helpers/elementWithChildren';
 import { createRoot, type Root } from 'react-dom/client';
 import { Disclosure } from '../packages/ui/src/components/Disclosure';
 
@@ -27,7 +28,7 @@ describe('Disclosure', () => {
 
   const render = async (props: Record<string, unknown> = {}) => {
     await act(async () => {
-      root.render(createElement(Disclosure, { title: 'Copy meet', ...props }, createElement('p', null, 'Hidden body')));
+      root.render(elementWithChildren(Disclosure, { title: 'Copy meet', ...props }, createElement('p', null, 'Hidden body')));
     });
     return container.querySelector('button')!;
   };

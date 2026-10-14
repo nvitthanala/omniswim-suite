@@ -9,6 +9,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement, useState } from 'react';
+import { elementWithChildren } from './helpers/elementWithChildren';
 import { createRoot, type Root } from 'react-dom/client';
 import { FloatingWindow, type FloatingWindowState } from '../packages/ui/src/components/FloatingWindow';
 import { Modal } from '../packages/ui/src/components/Modal';
@@ -45,7 +46,7 @@ describe('FloatingWindow keyboard support', () => {
   /** Holds `state` so a key press re-renders with the window's new geometry. */
   function Harness({ open, children }: { open: boolean; children?: unknown }) {
     const [state, setState] = useState(START);
-    return createElement(
+    return elementWithChildren(
       FloatingWindow,
       {
         title: 'SwimCloud',
@@ -109,7 +110,7 @@ describe('FloatingWindow keyboard support', () => {
         createElement(
           'div',
           null,
-          createElement(Modal, { onClose: onModalClose, ariaLabel: 'Settings' }, createElement('p', null, 'Body')),
+          elementWithChildren(Modal, { onClose: onModalClose, ariaLabel: 'Settings' }, createElement('p', null, 'Body')),
           createElement(Harness, { open: true })
         )
       );

@@ -21,6 +21,7 @@ import type { SwimmerResult, Workspace } from '../packages/core/src/types';
 import { NSISC_PRESET_SETTINGS } from '../packages/core/src/lib/scoringDefaults';
 import { applyRelayLegSwap, rankRelayLegSwaps } from '../packages/core/src/lib/arbitrage/relayLegSwaps';
 import { convertTimeToSeconds, normalizeSwimmerName, simulateRoster } from '../packages/core/src/lib/utils';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 const HSU = 'Henderson State University';
 const EVENT = 'Event 42 Men 4x100 Yard Freestyle Relay';
@@ -53,7 +54,7 @@ function variant(kind: 'split' | 'legacy' | 'estimate'): Row[] {
 }
 
 function workspaceOf(kind: 'split' | 'legacy' | 'estimate'): Workspace {
-  return {
+  return workspaceFixture({
     id: 'w',
     name: 'w',
     createdAt: 0,
@@ -68,7 +69,7 @@ function workspaceOf(kind: 'split' | 'legacy' | 'estimate'): Workspace {
     conference: 'NSISC',
     scoringSettings: STRICT,
     scorerRosterOverrides: [{ name: OUT, team: HSU, gender: Gender.MEN, isScorer: false }],
-  } as unknown as Workspace;
+  });
 }
 
 function swapsOf(kind: 'split' | 'legacy' | 'estimate') {

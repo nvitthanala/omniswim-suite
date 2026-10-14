@@ -196,10 +196,10 @@ describe('anchorFixture_neverReachesBests', () => {
 
   it('a credit carries no event and no time, so it cannot be mistaken for a swim', () => {
     const [leg] = convert();
-    expect('event' in leg).toBe(false);
-    expect('time' in leg).toBe(false);
-    expect(leg.split).toBe('21.83');
-    expect(leg.relayEvent).toBe('200 MED-R');
+    expect('event' in leg!).toBe(false);
+    expect('time' in leg!).toBe(false);
+    expect(leg!.split).toBe('21.83');
+    expect(leg!.relayEvent).toBe('200 MED-R');
   });
 
   it('fixture credit: ids, position, title, place, provenance', () => {
@@ -336,7 +336,7 @@ describe('mergeRelayLegCredits_keysOnSwimId', () => {
     const incoming = credit({ split: '20.00' });
     const { credits, conflicts } = mergeRelayLegCredits([existing], [incoming]);
     expect(credits).toStrictEqual([existing]);
-    expect(credits[0].split).toBe('21.83');
+    expect(credits[0]!.split).toBe('21.83');
     expect(conflicts).toStrictEqual([{ existing, incoming, fields: ['split'] }]);
   });
 
@@ -363,20 +363,20 @@ describe('mergeRelayLegCredits_keysOnSwimId', () => {
       const incoming = credit({ legPosition: 4, legPositionSource: 'event-page-join' });
       const { credits, conflicts } = mergeRelayLegCredits([existing], [incoming]);
       expect(conflicts).toStrictEqual([]);
-      expect([credits[0].legPosition, credits[0].legPositionSource]).toStrictEqual([4, 'event-page-join']);
+      expect([credits[0]!.legPosition, credits[0]!.legPositionSource]).toStrictEqual([4, 'event-page-join']);
       expect(existing.legPosition).toBeUndefined();
     });
 
     it('never fills a position without its source (a pair, never one alone)', () => {
       const { credits } = mergeRelayLegCredits([credit()], [credit({ legPosition: 4 })]);
-      expect('legPosition' in credits[0]).toBe(false);
-      expect('legPositionSource' in credits[0]).toBe(false);
+      expect('legPosition' in credits[0]!).toBe(false);
+      expect('legPositionSource' in credits[0]!).toBe(false);
     });
 
     it('never fills a source without its position either', () => {
       const { credits } = mergeRelayLegCredits([credit()], [credit({ legPositionSource: 'leg-word' })]);
-      expect('legPosition' in credits[0]).toBe(false);
-      expect('legPositionSource' in credits[0]).toBe(false);
+      expect('legPosition' in credits[0]!).toBe(false);
+      expect('legPositionSource' in credits[0]!).toBe(false);
     });
 
     it('fills each fillable optional field the existing credit lacks', () => {
@@ -399,13 +399,13 @@ describe('mergeRelayLegCredits_keysOnSwimId', () => {
       const incoming = credit({ legLabel: 'Leadoff', relayPlace: 1, relayLetter: 'B' });
       const { credits, conflicts } = mergeRelayLegCredits([existing], [incoming]);
       expect(conflicts).toStrictEqual([]);
-      expect([credits[0].legLabel, credits[0].relayPlace, credits[0].relayLetter]).toStrictEqual(['Anchor', 6, 'B']);
+      expect([credits[0]!.legLabel, credits[0]!.relayPlace, credits[0]!.relayLetter]).toStrictEqual(['Anchor', 6, 'B']);
     });
 
     it('does not fill isLeadoff, name or sourceUrl', () => {
       const existing = credit({ isLeadoff: false, name: 'A' });
       const { credits } = mergeRelayLegCredits([existing], [credit({ isLeadoff: true, name: 'B', legLabel: 'Leadoff' })]);
-      expect([credits[0].isLeadoff, credits[0].name, credits[0].legLabel]).toStrictEqual([false, 'A', 'Leadoff']);
+      expect([credits[0]!.isLeadoff, credits[0]!.name, credits[0]!.legLabel]).toStrictEqual([false, 'A', 'Leadoff']);
     });
 
     it('returns the very same object when the incoming copy adds nothing', () => {
@@ -417,7 +417,7 @@ describe('mergeRelayLegCredits_keysOnSwimId', () => {
       const { credits, conflicts } = mergeRelayLegCredits([], [credit(), credit({ timeType: 'SCY' })]);
       expect(conflicts).toStrictEqual([]);
       expect(credits).toHaveLength(1);
-      expect(credits[0].timeType).toBe('SCY');
+      expect(credits[0]!.timeType).toBe('SCY');
     });
   });
 
@@ -436,7 +436,7 @@ describe('mergeRelayLegCredits_keysOnSwimId', () => {
       const incoming = credit({ timeType: 'LCM', relayLetter: 'A' });
       const { credits, conflicts } = mergeRelayLegCredits([existing], [incoming]);
       expect(credits).toStrictEqual([existing]);
-      expect('relayLetter' in credits[0]).toBe(false);
+      expect('relayLetter' in credits[0]!).toBe(false);
       expect(conflicts.map((c) => c.fields)).toStrictEqual([['timeType']]);
     });
 
@@ -486,26 +486,26 @@ describe('mergeRelayLegCredits_keysOnSwimId', () => {
 describe('relayEventTitle_fromFixtureNav', () => {
   it('reads "200 Medley Relay Men" from the event menu, and does not expand MED-R', () => {
     const leg = swimmerPage().relayLegs[0];
-    expect(leg.relayEvent).toBe('200 MED-R');
-    expect(leg.relayEventTitle).toBe('200 Medley Relay Men');
-    expect(leg.eventRef).toBe('2');
+    expect(leg!.relayEvent).toBe('200 MED-R');
+    expect(leg!.relayEventTitle).toBe('200 Medley Relay Men');
+    expect(leg!.eventRef).toBe('2');
   });
 
   it('reads the menu title verbatim even when it is worded unlike any expansion of the printed label', () => {
     const html = SWIMMER_HTML.replace(/title="200 Medley Relay Men"/g, 'title="Men\'s 200 Medley Relay (Finals)"');
     expect(html).not.toBe(SWIMMER_HTML);
-    expect(swimmerPage(html).relayLegs[0].relayEventTitle).toBe("Men's 200 Medley Relay (Finals)");
+    expect(swimmerPage(html).relayLegs[0]!.relayEventTitle).toBe("Men's 200 Medley Relay (Finals)");
   });
 
   it('reads the title of the credit\'s own event, not a neighbouring entry (event 1 is the women\'s relay)', () => {
-    expect(swimmerPage().relayLegs[0].relayEventTitle).not.toBe('200 Medley Relay Women');
+    expect(swimmerPage().relayLegs[0]!.relayEventTitle).not.toBe('200 Medley Relay Women');
   });
 
   it('leaves the title absent when the menu has no entry for the event', () => {
     const html = SWIMMER_HTML.replace('href="/results/399227/event/2/" class="c-events__link', 'href="/results/399227/event/99/" class="c-events__link');
     const leg = swimmerPage(html).relayLegs[0];
-    expect('relayEventTitle' in leg).toBe(false);
-    expect(leg.relayEvent).toBe('200 MED-R');
+    expect('relayEventTitle' in leg!).toBe(false);
+    expect(leg!.relayEvent).toBe('200 MED-R');
   });
 
   it('leaves the title absent when two menu entries for one event disagree', () => {
@@ -514,12 +514,12 @@ describe('relayEventTitle_fromFixtureNav', () => {
       `<ul><li><a href="/results/399227/event/2/" class="c-events__link"><div class="c-events__link-body" title="Something Else"></div></a></li></ul><ul id="meet-events-portal-list"`,
     );
     expect(html).not.toBe(SWIMMER_HTML);
-    expect('relayEventTitle' in swimmerPage(html).relayLegs[0]).toBe(false);
+    expect('relayEventTitle' in swimmerPage(html).relayLegs[0]!).toBe(false);
   });
 
   it('ignores a menu entry that belongs to another meet', () => {
     const html = SWIMMER_HTML.replace(/\/results\/399227\/event\/2\/" class="c-events__link/, '/results/111/event/2/" class="c-events__link');
-    expect('relayEventTitle' in swimmerPage(html).relayLegs[0]).toBe(false);
+    expect('relayEventTitle' in swimmerPage(html).relayLegs[0]!).toBe(false);
   });
 });
 
@@ -528,7 +528,7 @@ describe('relayEventTitle_fromFixtureNav', () => {
 /* -------------------------------------------------------------------------- */
 
 describe('relayLegSlot_absentWithoutPositionOrTitle', () => {
-  const anchor = (): RelayLegCredit => convert()[0];
+  const anchor = (): RelayLegCredit => convert()[0]!;
 
   it('gives the medley anchor a 50 free takeover slot', () => {
     expect(relayLegSlotOf(anchor())).toStrictEqual({ distance: 50, stroke: 'free', position: 4, start: 'takeover' });
@@ -588,17 +588,17 @@ describe('swimCloudRelayCreditsToRelayLegCredits', () => {
   it('Leadoff gives position 1 from the leg word', () => {
     const html = SWIMMER_HTML.replace('200 MED-R\n                      (Anchor)', '200 MED-R\n                      (Leadoff)');
     const [leg] = convert(html);
-    expect([leg.legPosition, leg.legPositionSource, leg.isLeadoff]).toStrictEqual([1, 'leg-word', true]);
-    expect(relayLegSlotOf(leg)).toStrictEqual({ distance: 50, stroke: 'back', position: 1, start: 'flat' });
+    expect([leg!.legPosition, leg!.legPositionSource, leg!.isLeadoff]).toStrictEqual([1, 'leg-word', true]);
+    expect(relayLegSlotOf(leg!)).toStrictEqual({ distance: 50, stroke: 'back', position: 1, start: 'flat' });
   });
 
   it('an unmapped leg word or no word gives no position', () => {
     for (const word of ['2nd Leg', null]) {
       const html = SWIMMER_HTML.replace('200 MED-R\n                      (Anchor)', word === null ? '200 MED-R' : `200 MED-R\n                      (${word})`);
       const [leg] = convert(html);
-      expect('legPosition' in leg).toBe(false);
-      expect('legPositionSource' in leg).toBe(false);
-      expect(relayLegSlotOf(leg)).toBeNull();
+      expect('legPosition' in leg!).toBe(false);
+      expect('legPositionSource' in leg!).toBe(false);
+      expect(relayLegSlotOf(leg!)).toBeNull();
     }
   });
 
@@ -624,13 +624,13 @@ describe('swimCloudRelayCreditsToRelayLegCredits', () => {
       const result = swimCloudRelayCreditsToRelayLegCredits(parse(leg), { ...OPTIONS, eventPageJoin: join });
       if (!result.ok) throw new Error(result.reason);
       const [out] = result.credits;
-      expect([out.legPosition, out.legPositionSource, out.relayLetter]).toStrictEqual([4, 'event-page-join', 'A']);
+      expect([out!.legPosition, out!.legPositionSource, out!.relayLetter]).toStrictEqual([4, 'event-page-join', 'A']);
     });
 
     it('without the join the same credit has no position', () => {
       const result = swimCloudRelayCreditsToRelayLegCredits(parse(bare()), OPTIONS);
       if (!result.ok) throw new Error(result.reason);
-      expect('legPosition' in result.credits[0]).toBe(false);
+      expect('legPosition' in result.credits[0]!).toBe(false);
     });
 
     it('a join conflict leaves the position absent and is reported', () => {
@@ -639,21 +639,21 @@ describe('swimCloudRelayCreditsToRelayLegCredits', () => {
       expect(join.conflicts.map((c) => c.reason)).toStrictEqual(['leg-position-differs']);
       const result = swimCloudRelayCreditsToRelayLegCredits(parse(leg), { ...OPTIONS, eventPageJoin: join });
       if (!result.ok) throw new Error(result.reason);
-      expect('legPosition' in result.credits[0]).toBe(false);
+      expect('legPosition' in result.credits[0]!).toBe(false);
       expect(result.joinConflicts).toStrictEqual([{ swimCloudSwimId: '188544376', reason: 'leg-position-differs' }]);
     });
   });
 
   it('timeType comes only from the caller\'s meetCourse, never a default', () => {
-    expect('timeType' in convert()[0]).toBe(false);
-    expect(convert(SWIMMER_HTML, { meetCourse: 'SCY' })[0].timeType).toBe('SCY');
+    expect('timeType' in convert()[0]!).toBe(false);
+    expect(convert(SWIMMER_HTML, { meetCourse: 'SCY' })[0]!.timeType).toBe('SCY');
   });
 
   it('optional context is stamped only when given', () => {
     const [leg] = convert(SWIMMER_HTML, { meetLabel: 'NSISC Champs', date: 'Feb 11, 2026' });
-    expect([leg.meetLabel, leg.date]).toStrictEqual(['NSISC Champs', 'Feb 11, 2026']);
+    expect([leg!.meetLabel, leg!.date]).toStrictEqual(['NSISC Champs', 'Feb 11, 2026']);
     const [bare] = convert();
-    expect('meetLabel' in bare || 'date' in bare).toBe(false);
+    expect('meetLabel' in bare! || 'date' in bare!).toBe(false);
   });
 
   it('refuses a page with no swimmer name rather than store credits under a placeholder', () => {

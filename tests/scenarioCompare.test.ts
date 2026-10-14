@@ -10,7 +10,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { Gender, type Workspace } from '@omniswim/core/types';
+import { Gender, type ScoringSettings, type Workspace } from '@omniswim/core/types';
 import type { Snapshot } from '@omniswim/core/api/snapshots';
 import type { ScenarioDiffResult } from '@omniswim/core/lib/scenarioDiffClient';
 import { computeScenarioDiff } from '@omniswim/core/lib/scenarioDiff';
@@ -51,7 +51,7 @@ import {
 
 const MEN = Gender.MEN;
 const A_FINAL = 'A Final';
-const SETTINGS = {
+const SETTINGS: ScoringSettings = {
   scoringPoints: [5, 3, 1],
   relayMultiplier: 2,
   halfRateRelaySwimmer: true,
@@ -178,8 +178,8 @@ describe('ScenarioCompare (F3)', () => {
     const optionsA = [...a.options].map(o => o.textContent);
     expect(optionsA).toEqual([
       'Choose a snapshot',
-      snapshotOptionLabel(SNAPSHOTS[0]),
-      snapshotOptionLabel(SNAPSHOTS[1]),
+      snapshotOptionLabel(SNAPSHOTS[0]!),
+      snapshotOptionLabel(SNAPSHOTS[1]!),
     ]);
     expect(optionsA[1]).toContain('Depth plan');
     expect(optionsA[1]).toContain('15.0 pts');
@@ -194,7 +194,7 @@ describe('ScenarioCompare (F3)', () => {
 
     const tables = container.querySelectorAll('table');
     expect(tables.length).toBe(3);
-    const totals = [...tables[0].querySelectorAll('tbody td')].map(td => td.textContent);
+    const totals = [...tables[0]!.querySelectorAll('tbody td')].map(td => td.textContent);
     expect(totals).toEqual(['10.0', '15.0', '+5.0']);
 
     const text = container.textContent ?? '';
@@ -204,7 +204,7 @@ describe('ScenarioCompare (F3)', () => {
     expect(text).toContain('100 Free: 50.00 to 49.50');
     expect(text).not.toContain('No differences');
 
-    const bobRow = [...tables[1].querySelectorAll('tbody tr')].find(tr =>
+    const bobRow = [...tables[1]!.querySelectorAll('tbody tr')].find(tr =>
       (tr.textContent ?? '').includes('Bob Brown')
     )!;
     // Before, after, change. Bob is absent from B, so the after cell is a dash, not 0.0.
@@ -213,7 +213,7 @@ describe('ScenarioCompare (F3)', () => {
     expect(bobRow.querySelector('th')!.textContent).toContain('Bob Brown');
     expect(bobRow.querySelector('th')!.textContent).toContain('(Removed)');
 
-    const carlRow = [...tables[1].querySelectorAll('tbody tr')].find(tr =>
+    const carlRow = [...tables[1]!.querySelectorAll('tbody tr')].find(tr =>
       (tr.textContent ?? '').includes('Carl Cole')
     )!;
     const carlCells = [...carlRow.querySelectorAll('td')].map(td => td.textContent);
@@ -221,7 +221,7 @@ describe('ScenarioCompare (F3)', () => {
     expect(carlRow.querySelector('th')!.textContent).toContain('(Added)');
 
     // Alice swam in both snapshots: numbers on both sides and no status word.
-    const aliceRow = [...tables[1].querySelectorAll('tbody tr')].find(tr =>
+    const aliceRow = [...tables[1]!.querySelectorAll('tbody tr')].find(tr =>
       (tr.textContent ?? '').includes('Alice Adams')
     );
     expect(aliceRow).toBeDefined();
@@ -237,7 +237,7 @@ describe('ScenarioCompare (F3)', () => {
     await choose(select('Snapshot A'), 'snap-empty');
     await choose(select('Snapshot B'), 'snap-b');
     const tables = container.querySelectorAll('table');
-    const totals = [...tables[0].querySelectorAll('tbody td')].map(td => td.textContent);
+    const totals = [...tables[0]!.querySelectorAll('tbody td')].map(td => td.textContent);
     expect(totals).toEqual([ABSENT_LABEL, '15.0', '+15.0']);
   });
 
@@ -258,7 +258,7 @@ describe('ScenarioCompare (F3)', () => {
     await mount();
     await choose(select('Snapshot A'), 'snap-b');
     await choose(select('Snapshot B'), 'snap-a');
-    const totals = [...container.querySelectorAll('table')[0].querySelectorAll('tbody td')].map(
+    const totals = [...container.querySelectorAll('table')[0]!.querySelectorAll('tbody td')].map(
       td => td.textContent
     );
     expect(totals).toEqual(['15.0', '10.0', '-5.0']);
@@ -302,8 +302,8 @@ describe('ScenarioCompare (F3)', () => {
     const stale = computeScenarioDiff(WS_B, WS_A, CONTEXT);
     const fresh = computeScenarioDiff(WS_A, WS_A, CONTEXT);
     await act(async () => {
-      pending[1](fresh);
-      pending[0](stale);
+      pending[1]!(fresh);
+      pending[0]!(stale);
     });
     expect(container.textContent).toContain('No differences');
   });
@@ -440,7 +440,7 @@ describe('absent is not zero in the compare tables', () => {
     await act(async () => {
       root.render(createElement(ScenarioCompareResult, { result, labelA: 'A', labelB: 'B' }));
     });
-    const rows = [...container.querySelectorAll('table')[1].querySelectorAll('tbody tr')];
+    const rows = [...container.querySelectorAll('table')[1]!.querySelectorAll('tbody tr')];
     const cellsOf = (name: string) => {
       const row = rows.find(tr => (tr.textContent ?? '').includes(name))!;
       return {
@@ -455,7 +455,7 @@ describe('absent is not zero in the compare tables', () => {
     expect(cellsOf('New Nat').cells).toEqual([ABSENT_LABEL, '0.0', '0.0']);
     expect(cellsOf('New Nat').head).toContain('(Added)');
 
-    const eventRow = container.querySelectorAll('table')[2].querySelector('tbody tr')!;
+    const eventRow = container.querySelectorAll('table')[2]!.querySelector('tbody tr')!;
     expect([...eventRow.querySelectorAll('td')].map(td => td.textContent).slice(0, 3)).toEqual([
       '0.0',
       ABSENT_LABEL,

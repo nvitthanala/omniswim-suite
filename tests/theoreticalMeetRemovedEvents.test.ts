@@ -102,11 +102,17 @@ function seedsWith(excludedEvents?: readonly TheoreticalEventExclusion[]): Theor
 }
 
 const buildWorkspace = (seeds: TheoreticalMeetSeeds) =>
-  buildTheoreticalMeetWorkspace({ seeds, workspaceId: 'ws-removed', createdAt: 1, conference: 'NSISC' });
+  buildTheoreticalMeetWorkspace({
+    seeds,
+    workspaceId: 'ws-removed',
+    createdAt: 1,
+    conference: 'NSISC',
+    scoringSettings: NSISC_PRESET_SETTINGS,
+  });
 
 describe('F7 removed events on the built workspace', () => {
   const plain = seedsWith();
-  const swimmers = plain.report.teams[0].eventsChosenPerSwimmer;
+  const swimmers = plain.report.teams[0]!.eventsChosenPerSwimmer;
   const ann = swimmers.find(s => s.name === 'Ann')!;
   const bob = swimmers.find(s => s.name === 'Bob')!;
   const annChosen = ann.events.filter(e => e.chosen);
@@ -120,15 +126,15 @@ describe('F7 removed events on the built workspace', () => {
 
   it('stores exactly the events the builder removed', () => {
     const removals: TheoreticalEventExclusion[] = [
-      { teamName: TEAM, gender: Gender.MEN, swimmerKey: ann.swimmerKey, event: annChosen[0].event },
-      { teamName: TEAM, gender: Gender.MEN, swimmerKey: bob.swimmerKey, event: bobChosen[0].event },
+      { teamName: TEAM, gender: Gender.MEN, swimmerKey: ann.swimmerKey, event: annChosen[0]!.event },
+      { teamName: TEAM, gender: Gender.MEN, swimmerKey: bob.swimmerKey, event: bobChosen[0]!.event },
     ];
     const seeds = seedsWith(removals);
     const build = buildWorkspace(seeds);
     const stored = build.payload.loadedMeet.theoreticalRemovedEvents;
     expect(stored).toStrictEqual([
-      { teamName: TEAM, gender: Gender.MEN, swimmerName: 'Ann', event: annChosen[0].event, time: annChosen[0].time },
-      { teamName: TEAM, gender: Gender.MEN, swimmerName: 'Bob', event: bobChosen[0].event, time: bobChosen[0].time },
+      { teamName: TEAM, gender: Gender.MEN, swimmerName: 'Ann', event: annChosen[0]!.event, time: annChosen[0]!.time },
+      { teamName: TEAM, gender: Gender.MEN, swimmerName: 'Bob', event: bobChosen[0]!.event, time: bobChosen[0]!.time },
     ]);
     // The same pairs the report counts.
     expect(stored).toHaveLength(seeds.report.teams.reduce((n, t) => n + t.eventsRemovedByUser, 0));
@@ -165,13 +171,13 @@ describe('F7 removed events on the built workspace', () => {
   });
 
   it('survives the JSON column the workspace is saved in', () => {
-    const removals = [{ teamName: TEAM, gender: Gender.MEN, swimmerKey: ann.swimmerKey, event: annChosen[0].event }];
+    const removals = [{ teamName: TEAM, gender: Gender.MEN, swimmerKey: ann.swimmerKey, event: annChosen[0]!.event }];
     const loaded = JSON.parse(JSON.stringify(buildWorkspace(seedsWith(removals)).payload.loadedMeet));
     expect(theoreticalRemovedEvents({ loadedMeet: loaded })).toHaveLength(1);
   });
 
   it('passes the create and update schemas and the saved loaded_meet column', () => {
-    const removals = [{ teamName: TEAM, gender: Gender.MEN, swimmerKey: ann.swimmerKey, event: annChosen[0].event }];
+    const removals = [{ teamName: TEAM, gender: Gender.MEN, swimmerKey: ann.swimmerKey, event: annChosen[0]!.event }];
     const { payload } = buildWorkspace(seedsWith(removals));
     const stored = payload.loadedMeet.theoreticalRemovedEvents;
     expect(stored).toHaveLength(1);
@@ -185,7 +191,7 @@ describe('F7 removed events on the built workspace', () => {
   });
 
   it('refuses a report that counts one number and lists another', () => {
-    const seeds = seedsWith([{ teamName: TEAM, gender: Gender.MEN, swimmerKey: ann.swimmerKey, event: annChosen[0].event }]);
+    const seeds = seedsWith([{ teamName: TEAM, gender: Gender.MEN, swimmerKey: ann.swimmerKey, event: annChosen[0]!.event }]);
     const lying = {
       ...seeds.report,
       teams: seeds.report.teams.map(t => ({ ...t, eventsRemovedByUser: t.eventsRemovedByUser + 1 })),

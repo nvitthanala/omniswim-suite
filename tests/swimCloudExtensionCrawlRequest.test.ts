@@ -20,9 +20,9 @@ import {
 describe('crawlStepToFetchRequest', () => {
   it('carries the step canonical URL and resource kind straight through', () => {
     const [step] = planMeetTeamSwims({ meetId: '356467', teamIds: ['58'] });
-    expect(crawlStepToFetchRequest(step)).toEqual({
-      url: step.canonicalUrl,
-      resourceKind: step.resourceKind,
+    expect(crawlStepToFetchRequest(step!)).toEqual({
+      url: step!.canonicalUrl,
+      resourceKind: step!.resourceKind,
     });
   });
 });
@@ -34,10 +34,10 @@ describe('stepsStillNeeded', () => {
       teamIds: ['58', '59'],
       knownTotalPages: { '58:M': 2, '58:F': 1, '59:M': 1, '59:F': 1 },
     });
-    const fetched = new Set([steps[0].canonicalUrl]);
+    const fetched = new Set([steps[0]!.canonicalUrl]);
     const remaining = stepsStillNeeded(steps, fetched);
     expect(remaining.length).toBe(steps.length - 1);
-    expect(remaining.map((s) => s.canonicalUrl)).not.toContain(steps[0].canonicalUrl);
+    expect(remaining.map((s) => s.canonicalUrl)).not.toContain(steps[0]!.canonicalUrl);
     // Order preserved for the rest.
     expect(remaining.map((s) => s.canonicalUrl)).toEqual(
       steps.slice(1).map((s) => s.canonicalUrl),

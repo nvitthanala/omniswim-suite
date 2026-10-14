@@ -35,6 +35,7 @@ import { importHistoryToRoster } from '../packages/core/src/lib/historyImportRos
 import { countSwimmerEntries } from '../packages/core/src/lib/swimmerEntryLimits';
 import { buildScoringBundle } from '../packages/core/src/lib/scoringEngine';
 import { buildAliasResolver } from '../packages/core/src/lib/athleteAliases';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 const TEAM = 'Alpha University';
 const MATES = ['Bo Bee', 'Cy Cee', 'Di Dee'];
@@ -93,7 +94,7 @@ function sixEntries(name: string): SwimmerResult[] {
 const BACKSTROKE_FIELD = individual('field-1', 'Bo Bee', 'Event 30 Men 200 Yard Backstroke', '1:52.00');
 
 function workspace(menResults: SwimmerResult[], extra: Partial<Workspace> = {}): Workspace {
-  return {
+  return workspaceFixture({
     id: 'ws-import-budget',
     name: 'import budget probe',
     createdAt: 0,
@@ -111,7 +112,7 @@ function workspace(menResults: SwimmerResult[], extra: Partial<Workspace> = {}):
     relayLegOverrides: [],
     athleteHistory: [],
     ...extra,
-  } as unknown as Workspace;
+  });
 }
 
 function swim(name: string, event: string, time: string): HistoricalSwim {

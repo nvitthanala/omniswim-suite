@@ -17,6 +17,7 @@
  * 3. Any other failure keeps its old path: error notice, banner, refetch.
  */
 import React, { useEffect } from 'react';
+import { elementWithChildren } from './helpers/elementWithChildren';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -83,7 +84,7 @@ function installFetch() {
     }
     const put = /\/api\/workspaces\/([^/]+)$/.exec(url);
     if (put && method === 'PUT') {
-      const id = put[1];
+      const id = put[1]!;
       const patch = JSON.parse(String(init?.body ?? '{}')) as Partial<Workspace>;
       return new Promise<Response>(resolve => {
         puts.push({
@@ -153,7 +154,7 @@ async function mount() {
       React.createElement(
         QueryClientProvider,
         { client: queryClient },
-        React.createElement(
+        elementWithChildren(
           SuiteWorkspaceProvider,
           { onNotify: (kind: NotifyKind, message: string) => notices.push({ kind, message }) },
           React.createElement(Probe)
@@ -207,12 +208,12 @@ describe('save numbering', () => {
     await mount();
     await edit(['a1']);
     await act(async () => {
-      puts[0].succeed();
+      puts[0]!.succeed();
     });
     await tick();
     await edit(['a2']);
     await act(async () => {
-      puts[1].succeed();
+      puts[1]!.succeed();
     });
     await tick();
     await act(async () => {
@@ -236,7 +237,7 @@ describe('save numbering', () => {
   it('two page loads use two client ids', async () => {
     await mount();
     await edit(['x']);
-    const first = puts[0].headers[SAVE_CLIENT_HEADER];
+    const first = puts[0]!.headers[SAVE_CLIENT_HEADER];
     await act(async () => {
       root!.unmount();
     });
@@ -245,7 +246,7 @@ describe('save numbering', () => {
     puts = [];
     await mount();
     await edit(['y']);
-    expect(puts[0].headers[SAVE_CLIENT_HEADER]).not.toBe(first);
+    expect(puts[0]!.headers[SAVE_CLIENT_HEADER]).not.toBe(first);
   });
 });
 
@@ -256,26 +257,26 @@ describe('one save in flight per workspace', () => {
     await edit(['B']); // waits: PUT 1 has not answered
     await edit(['C']); // merges into the same pending patch
     expect(puts).toHaveLength(1);
-    expect(puts[0].headers[EXPECTED_VERSION_HEADER]).toBe('1');
+    expect(puts[0]!.headers[EXPECTED_VERSION_HEADER]).toBe('1');
 
     await act(async () => {
-      puts[0].succeed();
+      puts[0]!.succeed();
     });
     await tick();
     await tick();
     expect(puts).toHaveLength(2);
-    expect(puts[1].patch.activeEntryIds).toEqual(['C']);
+    expect(puts[1]!.patch.activeEntryIds).toEqual(['C']);
     // The first response moved the server to version 2; the second save must ask about that.
-    expect(puts[1].headers[EXPECTED_VERSION_HEADER]).toBe('2');
+    expect(puts[1]!.headers[EXPECTED_VERSION_HEADER]).toBe('2');
     // Still the same page, so the number only goes up.
-    expect(Number(puts[1].headers[SAVE_SEQ_HEADER])).toBe(Number(puts[0].headers[SAVE_SEQ_HEADER]) + 1);
+    expect(Number(puts[1]!.headers[SAVE_SEQ_HEADER])).toBe(Number(puts[0]!.headers[SAVE_SEQ_HEADER]) + 1);
 
     await act(async () => {
-      puts[1].succeed();
+      puts[1]!.succeed();
     });
     await tick();
     expect(ids()).toEqual(['C']);
-    expect(serverCopies.a.activeEntryIds).toEqual(['C']);
+    expect(serverCopies.a!.activeEntryIds).toEqual(['C']);
     expect(ctx!.versionConflictIds).toEqual([]);
     expect(ctx!.error).toBeNull();
   });
@@ -301,7 +302,7 @@ describe('one save in flight per workspace', () => {
     }
     expect(ctx!.versionConflictIds).toEqual([]);
     expect(ctx!.error).toBeNull();
-    expect(serverCopies.a.activeEntryIds).toEqual(['q3']);
+    expect(serverCopies.a!.activeEntryIds).toEqual(['q3']);
     expect(ids()).toEqual(['q3']);
   });
 });
@@ -314,7 +315,7 @@ describe('a refused stale save is visible, not silent', () => {
     const readsBefore = getCount;
 
     await act(async () => {
-      puts[0].stale();
+      puts[0]!.stale();
     });
     await tick();
     await tick();
@@ -325,7 +326,7 @@ describe('a refused stale save is visible, not silent', () => {
     expect(getCount).toBe(readsBefore);
     const info = notices.filter(n => n.kind === 'info');
     expect(info).toHaveLength(1);
-    expect(info[0].message).toMatch(/older save/i);
+    expect(info[0]!.message).toMatch(/older save/i);
     expect(notices.filter(n => n.kind === 'error')).toHaveLength(0);
   });
 
@@ -337,14 +338,14 @@ describe('a refused stale save is visible, not silent', () => {
       await ctx!.updateWorkspace({ activeEntryIds: ['C'] });
     });
     await act(async () => {
-      puts[0].stale();
+      puts[0]!.stale();
     });
     await tick();
     expect(ids()).toEqual(['C']);
     await waitForDebounce();
     await tick();
     expect(puts).toHaveLength(2);
-    expect(puts[1].patch.activeEntryIds).toEqual(['C']);
+    expect(puts[1]!.patch.activeEntryIds).toEqual(['C']);
   });
 
   it('any other failure keeps the old path: error notice, banner, refetch', async () => {
@@ -352,7 +353,7 @@ describe('a refused stale save is visible, not silent', () => {
     const readsBefore = getCount;
     await edit(['A']);
     await act(async () => {
-      puts[0].fail();
+      puts[0]!.fail();
     });
     await tick();
     await tick();
@@ -372,9 +373,9 @@ describe('a version conflict pauses the workspace and keeps the edits until Relo
 
     await edit(['mine']);
     expect(puts).toHaveLength(1);
-    expect(puts[0].headers[EXPECTED_VERSION_HEADER]).toBe('1');
+    expect(puts[0]!.headers[EXPECTED_VERSION_HEADER]).toBe('1');
     await act(async () => {
-      puts[0].succeed(); // the mock server compares 1 with 5 and answers 409 VERSION_CONFLICT
+      puts[0]!.succeed(); // the mock server compares 1 with 5 and answers 409 VERSION_CONFLICT
     });
     await tick();
     await tick();
@@ -403,7 +404,7 @@ describe('a version conflict pauses the workspace and keeps the edits until Relo
     // Saving works again, against the version Reload fetched.
     await edit(['after-reload']);
     expect(puts).toHaveLength(2);
-    expect(puts[1].headers[EXPECTED_VERSION_HEADER]).toBe('5');
+    expect(puts[1]!.headers[EXPECTED_VERSION_HEADER]).toBe('5');
   });
 
   it('a list refetch never advances the version under an unsent edit', async () => {
@@ -422,9 +423,9 @@ describe('a version conflict pauses the workspace and keeps the edits until Relo
     await waitForDebounce();
     expect(puts).toHaveLength(1);
     // It must still ask about the version this tab's edit was made against, so the server can refuse it.
-    expect(puts[0].headers[EXPECTED_VERSION_HEADER]).toBe('1');
+    expect(puts[0]!.headers[EXPECTED_VERSION_HEADER]).toBe('1');
     await act(async () => {
-      puts[0].succeed();
+      puts[0]!.succeed();
     });
     await tick();
     expect(ctx!.versionConflictIds).toEqual(['a']);
@@ -436,7 +437,7 @@ describe('a version conflict pauses the workspace and keeps the edits until Relo
     serverCopies.a = { ...makeWorkspace('a', ['theirs']), version: 6 } as unknown as Workspace;
     await edit(['mine']);
     await act(async () => {
-      puts[0].succeed();
+      puts[0]!.succeed();
     });
     await tick();
     expect(ctx!.versionConflictIds).toEqual(['a']);
@@ -467,9 +468,9 @@ describe('a version conflict pauses the workspace and keeps the edits until Relo
     await mount();
     serverCopies.a = { ...makeWorkspace('a', ['older-copy']), version: 4 } as unknown as Workspace;
     await edit(['mine']);
-    expect(puts[0].headers[EXPECTED_VERSION_HEADER]).toBe('9');
+    expect(puts[0]!.headers[EXPECTED_VERSION_HEADER]).toBe('9');
     await act(async () => {
-      puts[0].succeed();
+      puts[0]!.succeed();
     });
     await tick();
     expect(ctx!.versionConflictIds).toEqual(['a']);
@@ -484,9 +485,9 @@ describe('a version conflict pauses the workspace and keeps the edits until Relo
     // A "raise only" rule would keep asking for 9 and be refused forever.
     await edit(['after-reload']);
     expect(puts).toHaveLength(2);
-    expect(puts[1].headers[EXPECTED_VERSION_HEADER]).toBe('4');
+    expect(puts[1]!.headers[EXPECTED_VERSION_HEADER]).toBe('4');
     await act(async () => {
-      puts[1].succeed();
+      puts[1]!.succeed();
     });
     await tick();
     expect(ctx!.versionConflictIds).toEqual([]);
@@ -498,7 +499,7 @@ describe('a version conflict pauses the workspace and keeps the edits until Relo
     serverCopies.a = { ...makeWorkspace('a', ['restored']), version: 3 } as unknown as Workspace;
     await edit(['mine']);
     await act(async () => {
-      puts[0].succeed();
+      puts[0]!.succeed();
     });
     await tick();
     expect(ctx!.versionConflictIds).toEqual(['a']);
@@ -536,7 +537,7 @@ describe('saveWorkspace: the caller sees what became of its edit (P4)', () => {
     expect(puts).toHaveLength(1);
     expect(s.settled()).toBe(false); // the PUT has not answered yet
     await act(async () => {
-      puts[0].succeed();
+      puts[0]!.succeed();
     });
     const result = await s.result();
     expect(result.ok).toBe(true);
@@ -551,7 +552,7 @@ describe('saveWorkspace: the caller sees what became of its edit (P4)', () => {
     const s = await save(['mine']);
     await waitForDebounce();
     await act(async () => {
-      puts[0].fail();
+      puts[0]!.fail();
     });
     const result = await s.result();
     expect(result).toEqual({ ok: false, reason: 'error', message: 'boom' });
@@ -564,7 +565,7 @@ describe('saveWorkspace: the caller sees what became of its edit (P4)', () => {
     const s = await save(['mine']);
     await waitForDebounce();
     await act(async () => {
-      puts[0].succeed(); // the mock server answers 409 VERSION_CONFLICT
+      puts[0]!.succeed(); // the mock server answers 409 VERSION_CONFLICT
     });
     const result = await s.result();
     expect(result).toMatchObject({ ok: false, reason: 'conflict' });
@@ -579,7 +580,7 @@ describe('saveWorkspace: the caller sees what became of its edit (P4)', () => {
     const first = await save(['mine']);
     await waitForDebounce();
     await act(async () => {
-      puts[0].succeed();
+      puts[0]!.succeed();
     });
     await first.result();
 
@@ -599,7 +600,7 @@ describe('saveWorkspace: the caller sees what became of its edit (P4)', () => {
     expect(puts).toHaveLength(1);
     const behind = await save(['two']); // queued while the first PUT is in flight
     await act(async () => {
-      puts[0].succeed(); // 409 VERSION_CONFLICT
+      puts[0]!.succeed(); // 409 VERSION_CONFLICT
     });
     expect(await first.result()).toMatchObject({ ok: false, reason: 'conflict' });
     expect(await behind.result()).toMatchObject({ ok: false, reason: 'conflict' });
@@ -615,12 +616,12 @@ describe('saveWorkspace: the caller sees what became of its edit (P4)', () => {
     await waitForDebounce();
     expect(puts).toHaveLength(1);
     await act(async () => {
-      puts[0].succeed();
+      puts[0]!.succeed();
     });
     const [ra, rb] = await Promise.all([a.result(), b.result()]);
     expect(ra.ok).toBe(true);
     expect(rb.ok).toBe(true);
-    expect(serverCopies.a.activeEntryIds).toEqual(['two']);
+    expect(serverCopies.a!.activeEntryIds).toEqual(['two']);
   });
 
   it('an edit behind one in flight resolves with its own request, not the first', async () => {
@@ -630,14 +631,14 @@ describe('saveWorkspace: the caller sees what became of its edit (P4)', () => {
     expect(puts).toHaveLength(1);
     const second = await save(['two']);
     await act(async () => {
-      puts[0].succeed();
+      puts[0]!.succeed();
     });
     expect((await first.result()).ok).toBe(true);
     expect(second.settled()).toBe(false); // waits for its own PUT
     await waitForDebounce();
     expect(puts).toHaveLength(2);
     await act(async () => {
-      puts[1].fail();
+      puts[1]!.fail();
     });
     expect(await second.result()).toMatchObject({ ok: false, reason: 'error' });
   });

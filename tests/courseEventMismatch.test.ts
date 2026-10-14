@@ -507,7 +507,7 @@ describe('a mislabelled paste row (Bartu Akin, HSU)', () => {
 
   it('flags the yards side too: a 400 Freestyle recorded SCY', () => {
     const parsed = parseAkin([AKIN_400_SCY_MISLABEL]);
-    const [row] = parsed.swims;
+    const row = parsed.swims[0]!;
     expect(row).toMatchObject({ event: '400 Freestyle', timeType: 'SCY', computedCut: null });
     expect(isRankableSwim(row)).toBe(false);
     expect(parsed.warnings.some(w => w.startsWith('Kept, never ranked — Bartu Akin: 400 Freestyle SCY'))).toBe(true);
@@ -627,7 +627,7 @@ describe('a stored recruit row entered as 1000 Freestyle SCM', () => {
     const items = audit.checklistItems.filter(i => i.type === 'event_not_swum_in_course');
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ group: 'provenance', athleteName: 'Akin, Bartu' });
-    expect(items[0].message).toBe(
+    expect(items[0]!.message).toBe(
       'Akin, Bartu: the recruit row 1000 Freestyle SCM is not scored. There is no 1000 Freestyle in SCM; ' +
         'that course swims the 800 Freestyle. Check the event and course.'
     );
@@ -719,8 +719,8 @@ describe('the real roster exports', () => {
     readFileSync(join(repoRoot, file), 'utf8')
       .split(/\r?\n/)
       .map(line => line.split('\t').map(c => c.trim()))
-      .filter(cols => cols.length >= 2 && TIME.test(cols[1]) && COURSE.test(cols[0]))
-      .map(cols => ({ event: cols[0], time: cols[1] }))
+      .filter(cols => cols.length >= 2 && TIME.test(cols[1]!) && COURSE.test(cols[0]!))
+      .map(cols => ({ event: cols[0]!, time: cols[1]! }))
   );
 
   it('flag nothing', () => {

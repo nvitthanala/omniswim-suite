@@ -31,7 +31,7 @@ const CAPTURE_A = 'team-412-2025-2026';
 const SHARED = IDS_412M[0];
 const PAGES_SHARED = {
   ...PAGES,
-  '10002824|F': PAGES['10002824|F'].replace(new RegExp(`/swimmer/${IDS_10002824F[0]}(?=[/"'?#])`, 'g'), `/swimmer/${SHARED}`),
+  '10002824|F': PAGES['10002824|F']!.replace(new RegExp(`/swimmer/${IDS_10002824F[0]}(?=[/"'?#])`, 'g'), `/swimmer/${SHARED}`),
 };
 const IDS_B_SHARED = idsOf('10002824', 'F', PAGES_SHARED);
 
@@ -58,8 +58,8 @@ describe('N1: saved progress is per team, so a late team still gets the swimmer'
   it('run 1 filed the shared swimmer under 412 only and saved a key for 412 only', async () => {
     const { first, firstSummary, savedAfterFirst, clearsAfterFirst } = await runOneThenTwo();
     expect(firstSummary.outcome).toBe('completed');
-    expect(first.appPages.get(CAPTURE_A)).toContain(swimmerUrl(SHARED));
-    expect(first.appPages.get(CAPTURE_B) ?? []).not.toContain(swimmerUrl(SHARED));
+    expect(first.appPages.get(CAPTURE_A)).toContain(swimmerUrl(SHARED!));
+    expect(first.appPages.get(CAPTURE_B) ?? []).not.toContain(swimmerUrl(SHARED!));
     const saved = savedAfterFirst;
     expect(saved).toContain(`swimmer|${SHARED}|412|29`);
     expect(saved).not.toContain(`swimmer|${SHARED}|10002824|29`);
@@ -69,10 +69,10 @@ describe('N1: saved progress is per team, so a late team still gets the swimmer'
 
   it('run 2 fetches the shared swimmer again, once, and files it under both teams', async () => {
     const { second } = await runOneThenTwo();
-    expect(urls(second).filter((u) => u === swimmerUrl(SHARED))).toHaveLength(1);
-    const under = second.relays.filter((r) => r.sourceUrl === swimmerUrl(SHARED)).map((r) => captureIdForSubject(r.subject)).sort();
+    expect(urls(second).filter((u) => u === swimmerUrl(SHARED!))).toHaveLength(1);
+    const under = second.relays.filter((r) => r.sourceUrl === swimmerUrl(SHARED!)).map((r) => captureIdForSubject(r.subject)).sort();
     expect(under).toEqual([CAPTURE_B, CAPTURE_A]);
-    expect(second.appPages.get(CAPTURE_B)).toContain(swimmerUrl(SHARED));
+    expect(second.appPages.get(CAPTURE_B)).toContain(swimmerUrl(SHARED!));
   });
 
   it('run 2 skips the swimmers that are finished for every team that lists them', async () => {
@@ -146,10 +146,10 @@ describe('N2: pages from halting outcomes are not relayed', () => {
   });
 
   it('a 500 on a swimmer shared by two teams is not relayed under either team', async () => {
-    const h = makeHarness({ pages: PAGES_SHARED, respond: (u) => (u === swimmerUrl(SHARED) ? { html: 'err', httpStatus: 500 } : null) });
+    const h = makeHarness({ pages: PAGES_SHARED, respond: (u) => (u === swimmerUrl(SHARED!) ? { html: 'err', httpStatus: 500 } : null) });
     const summary = await run(h);
     expect(summary.outcome).toBe('halted');
-    expect(h.relays.filter((r) => r.sourceUrl === swimmerUrl(SHARED))).toEqual([]);
+    expect(h.relays.filter((r) => r.sourceUrl === swimmerUrl(SHARED!))).toEqual([]);
   });
 
   it('the third rate-limited page is not relayed', async () => {
@@ -162,7 +162,7 @@ describe('N2: pages from halting outcomes are not relayed', () => {
   });
 
   it('a 404 swimmer is still recorded with the app (a real answer, protected by the store merge rule)', async () => {
-    const target = swimmerUrl(ALL_IDS[0]);
+    const target = swimmerUrl(ALL_IDS[0]!);
     const h = makeHarness({ respond: (u) => (u === target ? { html: 'gone', httpStatus: 404 } : null) });
     await run(h);
     expect(h.relays.filter((r) => r.sourceUrl === target).map((r) => r.httpStatus)).toEqual([404]);
@@ -175,7 +175,7 @@ describe('N2: pages from halting outcomes are not relayed', () => {
 
 describe('N7: a swimmer reply that is JSON but not an object or array halts', () => {
   it.each(['"blocked"', '123', 'null', 'true'])('halts on the body %s and does not relay it', async (body) => {
-    const target = swimmerUrl(ALL_IDS[2]);
+    const target = swimmerUrl(ALL_IDS[2]!);
     const h = makeHarness({ respond: (u) => (u === target ? { html: body, httpStatus: 200 } : null) });
     const summary = await run(h);
     expect(summary.outcome).toBe('halted');
@@ -185,7 +185,7 @@ describe('N7: a swimmer reply that is JSON but not an object or array halts', ()
   });
 
   it.each(['{}', '[]', '{"personal_bests":[]}'])('accepts the body %s', async (body) => {
-    const target = swimmerUrl(ALL_IDS[2]);
+    const target = swimmerUrl(ALL_IDS[2]!);
     const h = makeHarness({ respond: (u) => (u === target ? { html: body, httpStatus: 200 } : null) });
     const summary = await run(h);
     expect(summary.outcome).toBe('completed');

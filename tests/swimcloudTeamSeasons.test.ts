@@ -93,7 +93,7 @@ describe('parseTeamSeasonOptions on the real team 412 roster form', () => {
 
   it('marks only the option the page marked selected (2025-2026, not the newest)', () => {
     expect(options.filter((o) => o.selected).map((o) => o.seasonId)).toStrictEqual(['29']);
-    expect(options[0].selected).toBe(false);
+    expect(options[0]!.selected).toBe(false);
   });
 
   it('reads start and end years from the label, with end = start + 1', () => {

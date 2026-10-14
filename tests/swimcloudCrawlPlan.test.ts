@@ -137,7 +137,7 @@ describe('planMeetTeamRosters', () => {
 
   it('emits the real /team/{id}/roster/ URL shape', () => {
     const [first] = planMeetTeamRosters({ meetId: '356467', teamIds: ['58'] });
-    expect(first.canonicalUrl).toBe('https://www.swimcloud.com/team/58/roster/?gender=M');
+    expect(first!.canonicalUrl).toBe('https://www.swimcloud.com/team/58/roster/?gender=M');
   });
 
   it('every emitted URL round-trips through classifySwimCloudUrl as teamRoster', () => {
@@ -190,7 +190,7 @@ describe('planMeetSwimmerTimes', () => {
 
   it('emits the profile_fastest_times JSON URL the times page renders from', () => {
     const [first] = planMeetSwimmerTimes({ meetId: '356467', swimmerIds: ['1472365'] });
-    expect(first.canonicalUrl).toBe('https://www.swimcloud.com/api/swimmers/1472365/profile_fastest_times/');
+    expect(first!.canonicalUrl).toBe('https://www.swimcloud.com/api/swimmers/1472365/profile_fastest_times/');
   });
 
   it('every emitted URL round-trips through classifySwimCloudUrl as swimmerFastestTimes', () => {
@@ -262,7 +262,7 @@ describe('planMeetEventResults', () => {
 
   it('emits the real /results/{meetId}/event/{n}/ URL shape', () => {
     const [first] = planMeetEventResults({ meetId: '356467', eventRefs: ['26'] });
-    expect(first.canonicalUrl).toBe('https://www.swimcloud.com/results/356467/event/26/');
+    expect(first!.canonicalUrl).toBe('https://www.swimcloud.com/results/356467/event/26/');
   });
 
   it('every emitted URL round-trips through classifySwimCloudUrl as meetEvent', () => {

@@ -11,12 +11,12 @@
  * forced to `true` fails a case.
  */
 import { describe, expect, it } from 'vitest';
-import { Gender, type Workspace } from '@omniswim/core/types';
+import { Gender, type ScoringSettings, type Workspace } from '@omniswim/core/types';
 import { computeScenarioDiff } from '@omniswim/core/lib/scenarioDiff';
 
 const MEN = Gender.MEN;
 const A_FINAL = 'A Final';
-const SETTINGS = {
+const SETTINGS: ScoringSettings = {
   scoringPoints: [5, 3, 1],
   relayMultiplier: 2,
   halfRateRelaySwimmer: true,

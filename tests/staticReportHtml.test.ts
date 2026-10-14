@@ -25,6 +25,7 @@ import {
   escapeHtml,
   reportDate,
 } from '../packages/manager/src/lib/staticReportHtml';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const HSU = 'Henderson State University';
@@ -54,7 +55,7 @@ function entry(over: Partial<PlannedSwimEntry>): PlannedSwimEntry {
 }
 
 function workspaceWith(entries: PlannedSwimEntry[], over: Partial<Workspace> = {}): Workspace {
-  return {
+  return workspaceFixture({
     id: 'ws-private-id-123',
     name: 'HSU 2026-27',
     createdAt: 0,
@@ -69,7 +70,7 @@ function workspaceWith(entries: PlannedSwimEntry[], over: Partial<Workspace> = {
     scorerRosterOverrides: [],
     officialTeamScores: { men: { [HSU]: 400 }, women: {} },
     ...over,
-  } as unknown as Workspace;
+  });
 }
 
 function bundle(timeTrialLeg?: number): ScoringBundle {

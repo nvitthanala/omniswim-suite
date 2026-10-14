@@ -22,6 +22,7 @@ import {
 } from '../packages/core/src/lib/seasonAnalytics';
 import { THEORETICAL_MEET_LABEL } from '../packages/core/src/lib/theoreticalMeetLabel';
 import type { Workspace } from '../packages/core/src/types';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 const row = (id: string, team: string, points: number | string, name = `${team} Swimmer ${id}`) => ({
   id,
@@ -71,8 +72,8 @@ describe('the chosen team, not every team', () => {
   });
 
   it('the other two teams each get their own figure from the same meet', () => {
-    expect(buildSeasonTrends([THREE_TEAM_MEET], { team: 'Alpha U' }).teamScoreTrends[0].menTotal).toBe(37);
-    expect(buildSeasonTrends([THREE_TEAM_MEET], { team: 'Gamma U' }).teamScoreTrends[0].menTotal).toBe(14);
+    expect(buildSeasonTrends([THREE_TEAM_MEET], { team: 'Alpha U' }).teamScoreTrends[0]!.menTotal).toBe(37);
+    expect(buildSeasonTrends([THREE_TEAM_MEET], { team: 'Gamma U' }).teamScoreTrends[0]!.menTotal).toBe(14);
   });
 
   it('published team scores: the chosen team official total, not the sum of all of them', () => {
@@ -110,7 +111,7 @@ describe('the chosen team, not every team', () => {
     const zero = meet('Zero Meet', [row('a', 'Alpha U', 99)], [], {
       officialTeamScores: { men: { 'Alpha U': 0 }, women: {} },
     });
-    expect(buildSeasonTrends([zero], { team: 'Alpha U' }).teamScoreTrends[0].menTotal).toBe(0);
+    expect(buildSeasonTrends([zero], { team: 'Alpha U' }).teamScoreTrends[0]!.menTotal).toBe(0);
   });
 });
 
@@ -132,12 +133,12 @@ describe('absent is not 0', () => {
   it('a gender the team did not enter is null, a gender it entered and scored nothing in is 0', () => {
     const ws = meet('Mixed', [row('a1', 'Alpha U', 12)], [{ ...row('a2', 'Alpha U', 0), gender: 'Women' }, row('b1', 'Beta U', 9)]);
     const alpha = buildSeasonTrends([ws], { team: 'Alpha U' }).teamScoreTrends[0];
-    expect(alpha.menTotal).toBe(12);
-    expect(alpha.womenTotal).toBe(0);
+    expect(alpha!.menTotal).toBe(12);
+    expect(alpha!.womenTotal).toBe(0);
     const beta = buildSeasonTrends([ws], { team: 'Beta U' }).teamScoreTrends[0];
-    expect(beta.menTotal).toBeNull();
-    expect(beta.menSource).toBeNull();
-    expect(beta.womenTotal).toBe(9);
+    expect(beta!.menTotal).toBeNull();
+    expect(beta!.menSource).toBeNull();
+    expect(beta!.womenTotal).toBe(9);
   });
 
   it('a team nobody names: no point, and the selection says why', () => {
@@ -152,8 +153,8 @@ describe('unreadable points are skipped and counted', () => {
   it('a row whose points are not a number is not added as 0, and is counted', () => {
     const ws = meet('Messy', [row('a1', 'Alpha U', 20), row('a2', 'Alpha U', 'n/a'), row('a3', 'Alpha U', ''), row('a4', 'Alpha U', '7')]);
     const t = buildSeasonTrends([ws], { team: 'Alpha U' });
-    expect(t.teamScoreTrends[0].menTotal).toBe(27); // 20 + 7; "n/a" and "" are skipped
-    expect(t.teamScoreTrends[0].unreadablePointRows).toBe(2);
+    expect(t.teamScoreTrends[0]!.menTotal).toBe(27); // 20 + 7; "n/a" and "" are skipped
+    expect(t.teamScoreTrends[0]!.unreadablePointRows).toBe(2);
     expect(t.unreadablePointRows).toBe(2);
   });
 
@@ -175,7 +176,7 @@ describe('which team is plotted', () => {
     const solo = meet('Solo', [row('a1', 'Alpha U', 20)]);
     const t = buildSeasonTrends([solo]);
     expect(t.team).toBe('Alpha U');
-    expect(t.teamScoreTrends[0].menTotal).toBe(20);
+    expect(t.teamScoreTrends[0]!.menTotal).toBe(20);
   });
 
   it('matches the team on trimmed, case-folded name', () => {
@@ -183,10 +184,10 @@ describe('which team is plotted', () => {
   });
 
   it('a theoretical meet names no team and scores nothing', () => {
-    const theoretical = {
+    const theoretical = workspaceFixture({
       ...meet('Theoretical', [row('t1', 'Phantom U', 20)]),
       loadedMeet: { pdfFilename: THEORETICAL_MEET_LABEL, uploadedAt: 1, meetLabel: THEORETICAL_MEET_LABEL },
-    } as unknown as Workspace;
+    });
     expect(seasonTeams([THREE_TEAM_MEET, theoretical])).toEqual(['Alpha U', 'Beta U', 'Gamma U']);
   });
 });

@@ -20,6 +20,7 @@
  * selection is visible in the log rather than hidden by the final value.
  */
 import React, { useEffect } from 'react';
+import { elementWithChildren } from './helpers/elementWithChildren';
 import { act } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -34,13 +35,14 @@ import {
   fetchWorkspaces,
 } from '@omniswim/core/api/workspaces';
 import type { Workspace } from '@omniswim/core/types';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 type Ctx = ReturnType<typeof useSuiteWorkspace>;
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 function makeWorkspace(id: string, name: string): Workspace {
-  return {
+  return workspaceFixture({
     id,
     name,
     menResults: [],
@@ -48,7 +50,7 @@ function makeWorkspace(id: string, name: string): Workspace {
     recruits: [],
     deletedSwimmers: [],
     createdAt: 1,
-  } as unknown as Workspace;
+  });
 }
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -97,9 +99,9 @@ function installFetch() {
     const del = /\/api\/workspaces\/([^/]+)$/.exec(url);
     if (del && method === 'DELETE') {
       const id = del[1];
-      server.deleteCalls.push(id);
+      server.deleteCalls.push(id!);
       const run = () => {
-        if (server.failDeletes.has(id)) {
+        if (server.failDeletes.has(id!)) {
           return jsonResponse(500, { error: 'Failed to delete workspace' });
         }
         server.workspaces = server.workspaces.filter(w => w.id !== id);
@@ -155,7 +157,7 @@ async function mount() {
       React.createElement(
         QueryClientProvider,
         { client: queryClient },
-        React.createElement(
+        elementWithChildren(
           SuiteWorkspaceProvider,
           { onNotify: (kind: string, message: string) => notices.push([kind, message]) },
           React.createElement(Probe)

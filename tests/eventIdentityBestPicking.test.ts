@@ -124,7 +124,7 @@ describe('one swimmer, two sources, one best per event (Bartu Akin)', () => {
     expect(new Set(identities).size).toBe(keys.length);
     const fifties = keys.filter(k => isSameSwimEvent(k, '50 Freestyle'));
     expect(fifties).toHaveLength(1);
-    expect(profile.bestByEvent[fifties[0]].time).toBe('22.65');
+    expect(profile.bestByEvent[fifties[0]!]!.time).toBe('22.65');
     // The primary events are distinct events, not two labels of one.
     const primary = profile.primaryEvents.map(swimEventIdentity);
     expect(new Set(primary).size).toBe(primary.length);
@@ -141,7 +141,7 @@ describe('one swimmer, two sources, one best per event (Bartu Akin)', () => {
     expect(fifties.map(s => s.event).sort()).toStrictEqual(['50 Free SCY', '50 Freestyle']);
     const result = importHistoryToRoster(workspaceWith(), fifties, { team: HSU, gender: Gender.MEN });
     expect(result.patch.recruits?.map(r => [r.event, r.time])).toHaveLength(1);
-    expect(result.patch.recruits?.[0].time).toBe('22.65');
+    expect(result.patch.recruits?.[0]!.time).toBe('22.65');
   });
 
   it('writes no second plan for an event the swimmer already has under another label', () => {

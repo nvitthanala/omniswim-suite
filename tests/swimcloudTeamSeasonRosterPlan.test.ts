@@ -37,7 +37,7 @@ function season(label: string, html = FORM_412_F): TeamSeasonOption {
 function realFormParameterOrder(): string[] {
   const names: string[] = [];
   for (const match of FORM_412_F.matchAll(/<(?:input|select)\b[^>]*\bname="([^"]+)"/g)) {
-    if (!names.includes(match[1])) names.push(match[1]);
+    if (!names.includes(match[1]!)) names.push(match[1]!);
   }
   return names;
 }
@@ -72,8 +72,8 @@ describe('planTeamSeasonRoster', () => {
   it('matches a real browser-recorded roster URL for team 58 character for character', () => {
     // From `tests/rosterQueueImport.test.ts`, a sourceUrl the extension recorded.
     const [men, women] = planTeamSeasonRoster({ teamId: '58', season: season('2025-2026') });
-    expect(men.canonicalUrl).toBe('https://www.swimcloud.com/team/58/roster/?page=1&gender=M&season_id=29&sort=name');
-    expect(women.canonicalUrl).toBe('https://www.swimcloud.com/team/58/roster/?page=1&gender=F&season_id=29&sort=name');
+    expect(men!.canonicalUrl).toBe('https://www.swimcloud.com/team/58/roster/?page=1&gender=M&season_id=29&sort=name');
+    expect(women!.canonicalUrl).toBe('https://www.swimcloud.com/team/58/roster/?page=1&gender=F&season_id=29&sort=name');
   });
 
   it('every URL classifies as a fetchable team roster that carries the season id, and round-trips unchanged', () => {

@@ -76,7 +76,7 @@ describe('FileSystemSwimCloudCaptureStore', () => {
 
     const listed = await store.listCaptures();
     expect(listed).toHaveLength(1);
-    expect(listed[0].captureId).toBe('meet-356467');
+    expect(listed[0]!.captureId).toBe('meet-356467');
   });
 
   it('putPage refuses to write into a capture that was never opened', async () => {
@@ -120,7 +120,7 @@ describe('FileSystemSwimCloudCaptureStore', () => {
 
     const capture = await store.getCapture('meet-356467');
     expect(capture?.pages).toHaveLength(1);
-    expect(capture?.pages[0].outcome).toBe('ok');
+    expect(capture?.pages[0]!.outcome).toBe('ok');
   });
 
   it('keeps the old bytes when a second capture overwrites the same URL with different bytes', async () => {
@@ -140,7 +140,7 @@ describe('FileSystemSwimCloudCaptureStore', () => {
     const { readdirSync, readFileSync } = await import('node:fs');
     const archived = readdirSync(join(dir, 'pages-superseded'));
     expect(archived).toHaveLength(1);
-    expect(JSON.parse(readFileSync(join(dir, 'pages-superseded', archived[0]), 'utf8')).html).toBe('<html>2025-26 roster</html>');
+    expect(JSON.parse(readFileSync(join(dir, 'pages-superseded', archived[0]!), 'utf8')).html).toBe('<html>2025-26 roster</html>');
 
     // The same bytes again archive nothing new; a repeat of the old overwrite is idempotent.
     await store.putPage('team-5', entry('<html>2026-27 roster</html>', '2026-10-05T00:00:00.000Z'), ref);
@@ -177,7 +177,7 @@ describe('FileSystemSwimCloudCaptureStore', () => {
     await store.putPage('meet-1', undefined, pageRef('ok'));
     const capture = await store.getCapture('meet-1');
     expect(capture?.pages).toHaveLength(1);
-    expect(capture?.pages[0].outcome).toBe('ok');
+    expect(capture?.pages[0]!.outcome).toBe('ok');
   });
 
   it('upsertCapture preserves createdAt across a re-capture and moves updatedAt', async () => {
@@ -328,8 +328,8 @@ describe('FileSystemSwimCloudCaptureStore: a saved page is not erased by a later
     await store.putPage('meet-m1', undefined, ref('forbidden', 403));
     const capture = await store.getCapture('meet-m1');
     expect(capture?.pages).toHaveLength(1);
-    expect(capture?.pages[0].outcome).toBe('ok');
-    expect(capture?.pages[0].sha256).toBe('a'.repeat(64));
+    expect(capture?.pages[0]!.outcome).toBe('ok');
+    expect(capture?.pages[0]!.sha256).toBe('a'.repeat(64));
     expect((await store.readPage(swimmerUrl))?.html).toBe('{"x":1}');
   });
 
@@ -347,9 +347,9 @@ describe('FileSystemSwimCloudCaptureStore: a saved page is not erased by a later
     await store.upsertCapture(blankMeetCapture('meet-m3', 'm3'));
     await store.putPage('meet-m3', undefined, ref('http-error', 500));
     await store.putPage('meet-m3', undefined, ref('forbidden', 403));
-    expect((await store.getCapture('meet-m3'))?.pages[0].outcome).toBe('forbidden');
+    expect((await store.getCapture('meet-m3'))?.pages[0]!.outcome).toBe('forbidden');
     await store.putPage('meet-m3', undefined, ref('ok', 200));
-    expect((await store.getCapture('meet-m3'))?.pages[0].outcome).toBe('ok');
+    expect((await store.getCapture('meet-m3'))?.pages[0]!.outcome).toBe('ok');
   });
 
   it('upsertCapture follows the same rule', async () => {
@@ -357,7 +357,7 @@ describe('FileSystemSwimCloudCaptureStore: a saved page is not erased by a later
     const first = { ...blankMeetCapture('meet-m4', 'm4'), pages: [ref('ok', 200)] };
     await store.upsertCapture(first);
     await store.upsertCapture({ ...blankMeetCapture('meet-m4', 'm4'), pages: [ref('http-error', 429)] });
-    expect((await store.getCapture('meet-m4'))?.pages[0].outcome).toBe('ok');
+    expect((await store.getCapture('meet-m4'))?.pages[0]!.outcome).toBe('ok');
   });
 });
 

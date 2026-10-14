@@ -37,7 +37,7 @@ import {
 } from '../packages/manager/src/lib/theoreticalMeetSeeds';
 import { Gender, type HistoricalSwim, type ScoringSettings } from '../packages/core/src/types';
 import { GENERIC_TOP16_SETTINGS, NSISC_PRESET_SETTINGS } from '../packages/core/src/lib/scoringDefaults';
-import { SWIMMER_BODY, rosterPage } from './helpers/multiTeamDriverHarness';
+import { SWIMMER_BODY, rosterPage } from './helpers/multiTeamFixtures';
 
 const RETRIEVED = '2026-10-03T12:00:00.000Z';
 const OBU = 'Ouachita Baptist University';
@@ -84,7 +84,7 @@ const meet = (over: Partial<TheoreticalMeetInput> = {}): TheoreticalMeetInput =>
 });
 
 const swimmerOf = (out: TheoreticalMeetSeeds, gender: Gender, index = 0): TheoreticalSwimmerEvents =>
-  out.report.teams.find(t => t.gender === gender)!.eventsChosenPerSwimmer[index];
+  out.report.teams.find(t => t.gender === gender)!.eventsChosenPerSwimmer[index]!;
 const chosenEvents = (s: TheoreticalSwimmerEvents) => s.events.filter(e => e.chosen).map(e => e.event);
 const removal = (s: TheoreticalSwimmerEvents, event: string, gender = Gender.MEN): TheoreticalEventExclusion => ({
   teamName: OBU,
@@ -111,7 +111,7 @@ describe('the baseline the removals are measured against', () => {
   it('has 14 offered events and the strongest 7 chosen, and every swimmer carries a key', () => {
     expect(ORDER.length).toBe(14);
     expect(chosenEvents(baseMan)).toEqual(ORDER.slice(0, 7));
-    expect(baseMan.swimmerKey).toBe(theoreticalSwimmerKey(MEN[0]));
+    expect(baseMan.swimmerKey).toBe(theoreticalSwimmerKey(MEN[0]!));
     expect(baseMan.swimmerKey).toMatch(/^(sc|nm):/);
     expect(base.report.unmatchedExclusions).toEqual([]);
     expect(base.report.teams.every(t => t.eventsRemovedByUser === 0)).toBe(true);
@@ -126,7 +126,7 @@ describe('the baseline the removals are measured against', () => {
 });
 
 describe('removing a chosen event refills the slot under the same cap', () => {
-  const victim = ORDER[2];
+  const victim = ORDER[2]!;
   const out = buildTheoreticalMeetSeeds(meet({ excludedEvents: [removal(baseMan, victim)] }));
   const man = swimmerOf(out, Gender.MEN);
 
@@ -137,7 +137,7 @@ describe('removing a chosen event refills the slot under the same cap', () => {
     expect(gone.notChosenReason).toBe('removed_by_user');
     expect(gone.rowId).toBeUndefined();
     expect(gone.chosenWithoutRemovals).toBe(true);
-    expect(rowsOfSwimmer(out, MEN[0].name, Gender.MEN).some(r => r.event === victim)).toBe(false);
+    expect(rowsOfSwimmer(out, MEN[0]!.name, Gender.MEN).some(r => r.event === victim)).toBe(false);
   });
 
   it('fills the freed slot with the strongest event the cap had left out, and says so', () => {
@@ -150,7 +150,7 @@ describe('removing a chosen event refills the slot under the same cap', () => {
   });
 
   it('still enters exactly 7 events under the 7-total cap, with a source for each row and none for the removed one', () => {
-    expect(rowsOfSwimmer(out, MEN[0].name, Gender.MEN).length).toBe(7);
+    expect(rowsOfSwimmer(out, MEN[0]!.name, Gender.MEN).length).toBe(7);
     expect(out.rows.length).toBe(base.rows.length);
     expect(out.sources.size).toBe(out.rows.length);
     const removedId = baseMan.events.find(e => e.event === victim)!.rowId!;
@@ -162,8 +162,8 @@ describe('removing a chosen event refills the slot under the same cap', () => {
     for (let i = 1; i < 3; i += 1) expect(swimmerOf(out, Gender.MEN, i)).toEqual(swimmerOf(base, Gender.MEN, i));
     expect(swimmerOf(out, Gender.WOMEN, 0)).toEqual(swimmerOf(base, Gender.WOMEN, 0));
     expect(out.psychWomenResults).toEqual(base.psychWomenResults);
-    const keep = (rows: readonly { id: string }[]) => rows.filter(r => !r.id.includes(encodeURIComponent(victim)) && !r.id.includes(encodeURIComponent(ORDER[7])));
-    const sameSwimmer = (r: { name: string }) => r.name === MEN[0].name;
+    const keep = (rows: readonly { id: string }[]) => rows.filter(r => !r.id.includes(encodeURIComponent(victim)) && !r.id.includes(encodeURIComponent(ORDER[7]!)));
+    const sameSwimmer = (r: { name: string }) => r.name === MEN[0]!.name;
     expect(keep(out.rows.filter(sameSwimmer))).toEqual(keep(base.rows.filter(sameSwimmer)));
     expect(out.rows.filter(r => !sameSwimmer(r))).toEqual(base.rows.filter(r => !sameSwimmer(r)));
   });
@@ -180,18 +180,18 @@ describe('removing a chosen event refills the slot under the same cap', () => {
 
 describe('the cap is never exceeded', () => {
   it('removing three chosen events still gives exactly 7 under NSISC (7 total)', () => {
-    const out = buildTheoreticalMeetSeeds(meet({ excludedEvents: [0, 1, 2].map(i => removal(baseMan, ORDER[i])) }));
+    const out = buildTheoreticalMeetSeeds(meet({ excludedEvents: [0, 1, 2].map(i => removal(baseMan, ORDER[i]!)) }));
     const man = swimmerOf(out, Gender.MEN);
     expect(chosenEvents(man)).toEqual(ORDER.slice(3, 10));
     expect(man.events.filter(e => e.fillsRemovedSlot === true).map(e => e.event)).toEqual(ORDER.slice(7, 10));
-    expect(rowsOfSwimmer(out, MEN[0].name, Gender.MEN).length).toBe(7);
+    expect(rowsOfSwimmer(out, MEN[0]!.name, Gender.MEN).length).toBe(7);
   });
 
   it('removing 8 of 14 leaves exactly the 6 remaining events, never more than the cap, and says the slot stays empty', () => {
     const out = buildTheoreticalMeetSeeds(meet({ excludedEvents: ORDER.slice(0, 8).map(e => removal(baseMan, e)) }));
     const man = swimmerOf(out, Gender.MEN);
     expect(chosenEvents(man)).toEqual(ORDER.slice(8));
-    expect(rowsOfSwimmer(out, MEN[0].name, Gender.MEN).length).toBe(6);
+    expect(rowsOfSwimmer(out, MEN[0]!.name, Gender.MEN).length).toBe(6);
     // 7 events were chosen before, 6 are now: one freed slot has no event to fill it.
     expect(man.events.filter(e => e.chosenWithoutRemovals === true).length).toBe(7);
     expect(man.events.filter(e => e.fillsRemovedSlot === true).length).toBe(6);
@@ -201,7 +201,7 @@ describe('the cap is never exceeded', () => {
     const out = buildTheoreticalMeetSeeds(meet({ excludedEvents: ORDER.map(e => removal(baseMan, e)) }));
     const man = swimmerOf(out, Gender.MEN);
     expect(man.events.every(e => e.notChosenReason === 'removed_by_user')).toBe(true);
-    expect(rowsOfSwimmer(out, MEN[0].name, Gender.MEN)).toEqual([]);
+    expect(rowsOfSwimmer(out, MEN[0]!.name, Gender.MEN)).toEqual([]);
     expect(out.report.teams.find(t => t.gender === Gender.MEN)!.eventsRemovedByUser).toBe(14);
   });
 
@@ -209,8 +209,8 @@ describe('the cap is never exceeded', () => {
     const settings: ScoringSettings = { ...GENERIC_TOP16_SETTINGS, maxIndividualEntriesPerSwimmer: 3 };
     const plain = buildTheoreticalMeetSeeds(meet({ scoringSettings: settings }));
     const first = chosenEvents(swimmerOf(plain, Gender.MEN))[0];
-    const out = buildTheoreticalMeetSeeds(meet({ scoringSettings: settings, excludedEvents: [removal(swimmerOf(plain, Gender.MEN), first)] }));
-    expect(rowsOfSwimmer(out, MEN[0].name, Gender.MEN).length).toBe(3);
+    const out = buildTheoreticalMeetSeeds(meet({ scoringSettings: settings, excludedEvents: [removal(swimmerOf(plain, Gender.MEN), first!)] }));
+    expect(rowsOfSwimmer(out, MEN[0]!.name, Gender.MEN).length).toBe(3);
     expect(chosenEvents(swimmerOf(out, Gender.MEN))).not.toContain(first);
   });
 
@@ -218,23 +218,23 @@ describe('the cap is never exceeded', () => {
     const plain = buildTheoreticalMeetSeeds(meet({ scoringSettings: GENERIC_TOP16_SETTINGS }));
     const man = swimmerOf(plain, Gender.MEN);
     expect(chosenEvents(man).length).toBe(14);
-    const out = buildTheoreticalMeetSeeds(meet({ scoringSettings: GENERIC_TOP16_SETTINGS, excludedEvents: [removal(man, ORDER[0])] }));
-    expect(rowsOfSwimmer(out, MEN[0].name, Gender.MEN).length).toBe(13);
+    const out = buildTheoreticalMeetSeeds(meet({ scoringSettings: GENERIC_TOP16_SETTINGS, excludedEvents: [removal(man, ORDER[0]!)] }));
+    expect(rowsOfSwimmer(out, MEN[0]!.name, Gender.MEN).length).toBe(13);
     expect(swimmerOf(out, Gender.MEN).events.some(e => e.fillsRemovedSlot === true)).toBe(false);
   });
 
   it('the conference cap still applies: NSISC over stale generic settings stays at 7', () => {
     const out = buildTheoreticalMeetSeeds(
-      meet({ scoringSettings: GENERIC_TOP16_SETTINGS, conference: 'NSISC', excludedEvents: [removal(baseMan, ORDER[0])] })
+      meet({ scoringSettings: GENERIC_TOP16_SETTINGS, conference: 'NSISC', excludedEvents: [removal(baseMan, ORDER[0]!)] })
     );
-    expect(rowsOfSwimmer(out, MEN[0].name, Gender.MEN).length).toBe(7);
+    expect(rowsOfSwimmer(out, MEN[0]!.name, Gender.MEN).length).toBe(7);
   });
 });
 
 describe('a removal of an event that was not chosen', () => {
   it('changes no row: the event is marked removed, nothing is refilled, no slot is reported freed', () => {
     const notChosen = ORDER[10];
-    const out = buildTheoreticalMeetSeeds(meet({ excludedEvents: [removal(baseMan, notChosen)] }));
+    const out = buildTheoreticalMeetSeeds(meet({ excludedEvents: [removal(baseMan, notChosen!)] }));
     expect(out.rows).toEqual(base.rows);
     const man = swimmerOf(out, Gender.MEN);
     expect(chosenEvents(man)).toEqual(chosenEvents(baseMan));
@@ -250,10 +250,10 @@ describe('a removal that names nothing offered is ignored and reported', () => {
   it('lists an unknown event, an unknown swimmer, another team and the other gender, each once, and changes no row', () => {
     const list: TheoreticalEventExclusion[] = [
       removal(baseMan, '999 Free SCY'),
-      { ...removal(baseMan, ORDER[0]), swimmerKey: 'sc:no-such-swimmer' },
-      { ...removal(baseMan, ORDER[0]), teamName: 'Another University' },
+      { ...removal(baseMan, ORDER[0]!), swimmerKey: 'sc:no-such-swimmer' },
+      { ...removal(baseMan, ORDER[0]!), teamName: 'Another University' },
       // The women's team has the same name; a men's key with the women's gender names no one.
-      { ...removal(baseMan, ORDER[0]), gender: Gender.WOMEN },
+      { ...removal(baseMan, ORDER[0]!), gender: Gender.WOMEN },
       removal(baseMan, '999 Free SCY'),
     ];
     const out = buildTheoreticalMeetSeeds(meet({ excludedEvents: list }));
@@ -264,7 +264,7 @@ describe('a removal that names nothing offered is ignored and reported', () => {
   });
 
   it('matches on the meet course label only: the same event in another course names nothing', () => {
-    const out = buildTheoreticalMeetSeeds(meet({ excludedEvents: [removal(baseMan, ORDER[0].replace('SCY', 'LCM'))] }));
+    const out = buildTheoreticalMeetSeeds(meet({ excludedEvents: [removal(baseMan, ORDER[0]!.replace('SCY', 'LCM'))] }));
     expect(out.rows).toEqual(base.rows);
     expect(out.report.unmatchedExclusions.length).toBe(1);
   });
@@ -272,7 +272,7 @@ describe('a removal that names nothing offered is ignored and reported', () => {
 
 describe('the removal does not depend on the meet id or on list order', () => {
   it('survives a rebuild under a new meet id', () => {
-    const list = [removal(baseMan, ORDER[0]), removal(baseMan, ORDER[1])];
+    const list = [removal(baseMan, ORDER[0]!), removal(baseMan, ORDER[1]!)];
     const a = buildTheoreticalMeetSeeds(meet({ excludedEvents: list }));
     const b = buildTheoreticalMeetSeeds(meet({ meetId: 'a-fresh-workspace-id', excludedEvents: [...list].reverse() }));
     expect(chosenEvents(swimmerOf(b, Gender.MEN))).toEqual(chosenEvents(swimmerOf(a, Gender.MEN)));
@@ -281,17 +281,17 @@ describe('the removal does not depend on the meet id or on list order', () => {
   });
 
   it('treats repeated pairs as one removal', () => {
-    const one = buildTheoreticalMeetSeeds(meet({ excludedEvents: [removal(baseMan, ORDER[0])] }));
-    const twice = buildTheoreticalMeetSeeds(meet({ excludedEvents: [removal(baseMan, ORDER[0]), removal(baseMan, ORDER[0])] }));
+    const one = buildTheoreticalMeetSeeds(meet({ excludedEvents: [removal(baseMan, ORDER[0]!)] }));
+    const twice = buildTheoreticalMeetSeeds(meet({ excludedEvents: [removal(baseMan, ORDER[0]!), removal(baseMan, ORDER[0]!)] }));
     expect(twice.rows).toEqual(one.rows);
-    expect(twice.report.teams[0].eventsRemovedByUser).toBe(1);
+    expect(twice.report.teams[0]!.eventsRemovedByUser).toBe(1);
   });
 
   it('keys a removal by team (normalized), gender, swimmer and event', () => {
-    const a = removal(baseMan, ORDER[0]);
+    const a = removal(baseMan, ORDER[0]!);
     expect(theoreticalEventExclusionKey({ ...a, teamName: `  ${OBU.toUpperCase()} ` })).toBe(theoreticalEventExclusionKey(a));
     expect(theoreticalEventExclusionKey({ ...a, gender: Gender.WOMEN })).not.toBe(theoreticalEventExclusionKey(a));
-    expect(theoreticalEventExclusionKey({ ...a, event: ORDER[1] })).not.toBe(theoreticalEventExclusionKey(a));
+    expect(theoreticalEventExclusionKey({ ...a, event: ORDER[1]! })).not.toBe(theoreticalEventExclusionKey(a));
     expect(theoreticalEventExclusionKey({ ...a, swimmerKey: 'sc:other' })).not.toBe(theoreticalEventExclusionKey(a));
   });
 });
@@ -311,13 +311,13 @@ describe('removal keys and the unmatched report', () => {
     const extra = { ...removal(baseMan, '999 Free SCY'), note: 'ui state', nested: { a: 1 } } as TheoreticalEventExclusion;
     const out = buildTheoreticalMeetSeeds(meet({ excludedEvents: [extra] }));
     expect(out.report.unmatchedExclusions).toEqual([removal(baseMan, '999 Free SCY')]);
-    expect(Object.keys(out.report.unmatchedExclusions[0]).sort()).toEqual(['event', 'gender', 'swimmerKey', 'teamName']);
+    expect(Object.keys(out.report.unmatchedExclusions[0]!).sort()).toEqual(['event', 'gender', 'swimmerKey', 'teamName']);
     expect(out.report.unmatchedExclusions[0]).not.toBe(extra);
   });
 });
 
 describe('bad removals throw invalid-input', () => {
-  const good = removal(baseMan, ORDER[0]);
+  const good = removal(baseMan, ORDER[0]!);
   it.each([
     ['a missing event', { ...good, event: '' }],
     ['a missing swimmer key', { ...good, swimmerKey: '' }],
@@ -339,21 +339,21 @@ describe('a swimmer whose only seeds are excluded exhibition swims', () => {
       .filter(s => s.event === '100 Free SCY')
       .map(s => ({ ...s, isExhibition: true as const }));
   const input = (mode: 'include' | 'exclude') =>
-    meet({ exhibitionSeeds: mode, teams: [{ teamName: OBU, gender: Gender.MEN, rosterStatus: 'parsed', athletes: [{ athlete: MEN[0], swims: only(MEN[0]) }] }] });
+    meet({ exhibitionSeeds: mode, teams: [{ teamName: OBU, gender: Gender.MEN, rosterStatus: 'parsed', athletes: [{ athlete: MEN[0]!, swims: only(MEN[0]!) }] }] });
 
   it('gets its own reason, naming the dropped event, and is not told "no event in program"', () => {
-    expect(only(MEN[0]).length).toBe(1);
+    expect(only(MEN[0]!).length).toBe(1);
     const out = buildTheoreticalMeetSeeds(input('exclude'));
     expect(out.rows).toEqual([]);
-    expect(out.report.teams[0].athletesWithNoSeedInMeetCourse).toEqual([
-      expect.objectContaining({ name: MEN[0].name, reason: 'all_seeds_exhibition_excluded', excludedExhibitionEvents: ['100 Free SCY'] }),
+    expect(out.report.teams[0]!.athletesWithNoSeedInMeetCourse).toEqual([
+      expect.objectContaining({ name: MEN[0]!.name, reason: 'all_seeds_exhibition_excluded', excludedExhibitionEvents: ['100 Free SCY'] }),
     ]);
   });
 
   it('is seeded, and tagged exhibition, when exhibition swims are included', () => {
     const out = buildTheoreticalMeetSeeds(input('include'));
     expect(out.rows.map(r => r.event)).toEqual(['100 Free SCY']);
-    expect(out.report.teams[0].athletesWithNoSeedInMeetCourse).toEqual([]);
+    expect(out.report.teams[0]!.athletesWithNoSeedInMeetCourse).toEqual([]);
   });
 });
 
@@ -362,7 +362,7 @@ describe('the base build still answers a removal made on top of exhibition mode'
     const plain = buildTheoreticalMeetSeeds(meet({ exhibitionSeeds: 'exclude' }));
     const man = swimmerOf(plain, Gender.MEN);
     const first = chosenEvents(man)[0];
-    const out = buildTheoreticalMeetSeeds(meet({ exhibitionSeeds: 'exclude', excludedEvents: [removal(man, first)] }));
+    const out = buildTheoreticalMeetSeeds(meet({ exhibitionSeeds: 'exclude', excludedEvents: [removal(man, first!)] }));
     expect(chosenEvents(swimmerOf(out, Gender.MEN))).not.toContain(first);
     expect(swimmerOf(out, Gender.MEN).excludedExhibitionEvents).toEqual(man.excludedExhibitionEvents);
   });

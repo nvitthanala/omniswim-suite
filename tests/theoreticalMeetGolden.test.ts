@@ -108,16 +108,16 @@ const baselineOf = (b: TheoreticalMeetWorkspaceBuild, gender: Gender) => buildSc
 /** Places and points of one event, from the seed times alone and the published table. Ties share the mean. */
 function handPoints(times: readonly string[]): number[] {
   const seconds = times.map(convertTimeToSeconds);
-  const order = seconds.map((_, i) => i).sort((a, b) => seconds[a] - seconds[b]);
+  const order = seconds.map((_, i) => i).sort((a, b) => seconds[a]! - seconds[b]!);
   const out: number[] = new Array(times.length).fill(0);
   let start = 0;
   while (start < order.length) {
     let end = start;
-    while (end + 1 < order.length && seconds[order[end + 1]] === seconds[order[start]]) end += 1;
+    while (end + 1 < order.length && seconds[order[end + 1]!] === seconds[order[start]!]) end += 1;
     const size = end - start + 1;
     let sum = 0;
     for (let place = start; place <= end; place += 1) sum += NCAA_TABLE[place] ?? 0;
-    for (let k = start; k <= end; k += 1) out[order[k]] = sum / size;
+    for (let k = start; k <= end; k += 1) out[order[k]!] = sum / size;
     start = end + 1;
   }
   return out;
@@ -361,7 +361,7 @@ describe('a supplied event order, from the real 2026 NSISC results, on the fixtu
     expect(eventOrder[0]).toBe('1000 Freestyle');
     const supplied = buildTheoreticalMeetWorkspace({ workspaceId: WORKSPACE_ID, createdAt: CREATED_AT, seeds, scoringSettings, conference: 'NSISC', eventOrder });
     expect(supplied.eventOrderSource).toBe('supplied');
-    expect(supplied.payload.menResults[0].event).toBe('1000 Free SCY');
+    expect(supplied.payload.menResults[0]!.event).toBe('1000 Free SCY');
     expect(supplied.warnings).toEqual([]);
     // 12 swimmers per team never fill the pool, so the totals match the default order exactly.
     expect(baselineOf(supplied, Gender.MEN).sortedTeams.map(t => [t.teamName, t.totalPoints])).toEqual(

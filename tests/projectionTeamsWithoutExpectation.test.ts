@@ -43,6 +43,7 @@ import {
 } from '../packages/core/src/lib/scoringBundleAggregation';
 import { buildScoringSnapshot } from '../packages/core/src/lib/scoringEngine';
 import { settingsForBuiltInScoringPreset } from '../packages/core/src/lib/scoringDefaults';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 const EVENT = 'Event 5 Men 100 Yard Backstroke';
 const dual = settingsForBuiltInScoringPreset('ncaa-dual-six-lanes-or-more') as ScoringSettings;
@@ -84,18 +85,18 @@ function field(psych: boolean): SwimmerResult[] {
 }
 
 function prelimsWorkspace(rows = field(false)): Workspace {
-  return {
+  return workspaceFixture({
     id: 'ws',
     name: 'ws',
     createdAt: 0,
     menResults: rows,
     womenResults: [],
     scoringSettings: dual,
-  } as unknown as Workspace;
+  });
 }
 
 function psychWorkspace(rows = field(true)): Workspace {
-  return {
+  return workspaceFixture({
     id: 'ws',
     name: 'ws',
     createdAt: 0,
@@ -104,7 +105,7 @@ function psychWorkspace(rows = field(true)): Workspace {
     psychMenResults: rows,
     psychWomenResults: [],
     scoringSettings: dual,
-  } as unknown as Workspace;
+  });
 }
 
 const byName = <T extends { teamName: string }>(teams: T[], name: string): T => {

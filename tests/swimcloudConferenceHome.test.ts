@@ -42,8 +42,8 @@ describe('conference home page (real capture)', () => {
     expect(data.complete).toBe(false);
     const w = warnings.filter((x) => x.code === 'conference-teams-list-incomplete');
     expect(w).toHaveLength(1);
-    expect(w[0].message).toContain('not the Teams tab');
-    expect(w[0].message).toContain('conference/nsisc/teams/');
+    expect(w[0]!.message).toContain('not the Teams tab');
+    expect(w[0]!.message).toContain('conference/nsisc/teams/');
   });
 
   it('lists exactly the three teams the page links, each with names and where it was seen', () => {

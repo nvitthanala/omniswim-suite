@@ -65,7 +65,7 @@ function realRows(): RealRow[] {
     const lines = readFileSync(join(repoRoot, file), 'utf8').split(/\r?\n/);
     lines.forEach((text, i) => {
       const cols = text.split('\t').map(c => c.trim());
-      if (cols.length >= 5 && TIME.test(cols[1]) && DATE.test(cols[4])) {
+      if (cols.length >= 5 && TIME.test(cols[1]!) && DATE.test(cols[4]!)) {
         rows.push({ file, line: i + 1, text, cols, team });
       }
     });
@@ -115,8 +115,8 @@ describe('every real row keeps its meet name and date', () => {
       if (swims.length !== 1) continue; // a row the plausibility gate refuses is not this test's subject
       const [swim] = swims;
       const meet = row.cols[3] || undefined;
-      if (swim.meetLabel !== meet || swim.date !== row.cols[4]) {
-        wrong.push(`${row.file}:${row.line} [${row.cols[2]}] meet=${swim.meetLabel} date=${swim.date}`);
+      if (swim!.meetLabel !== meet || swim!.date !== row.cols[4]) {
+        wrong.push(`${row.file}:${row.line} [${row.cols[2]}] meet=${swim!.meetLabel} date=${swim!.date}`);
       }
     }
     expect(wrong).toStrictEqual([]);
@@ -127,8 +127,8 @@ describe('every real row keeps its meet name and date', () => {
     for (const row of rows) {
       const { swims } = parseSwimCloudPersonalBestsDetailed(row.text, 'Real Swimmer', row.team, Gender.MEN);
       if (swims.length !== 1) continue;
-      const want = EXPECTED[row.cols[2]];
-      const got = { x: swims[0].isExtractedSplit === true, u: swims[0].isUserInputted === true };
+      const want = EXPECTED[row.cols[2]!]!;
+      const got = { x: swims[0]!.isExtractedSplit === true, u: swims[0]!.isUserInputted === true };
       if (got.x !== want.x || got.u !== want.u) {
         wrong.push(`${row.file}:${row.line} [${row.cols[2]}] got x=${got.x} u=${got.u}`);
       }
@@ -147,11 +147,11 @@ describe('the rows this defect was found on', () => {
   });
 
   it('NCAA B and WIN JRS (lines 830, 6)', () => {
-    expect(one('100 Free SCY\t42.99\tNCAA B\tJames E Martin Invitational\tFeb 28, 2025\t').meetLabel).toBe(
+    expect(one('100 Free SCY\t42.99\tNCAA B\tJames E Martin Invitational\tFeb 28, 2025\t')!.meetLabel).toBe(
       'James E Martin Invitational'
     );
     expect(
-      one('200 IM SCY\t1:49.77\tWIN JRS\t2023 Louisiana Senior SC State Championships\tFeb 12, 2023\t').meetLabel
+      one('200 IM SCY\t1:49.77\tWIN JRS\t2023 Louisiana Senior SC State Championships\tFeb 12, 2023\t')!.meetLabel
     ).toBe('2023 Louisiana Senior SC State Championships');
   });
 
@@ -164,15 +164,15 @@ describe('the rows this defect was found on', () => {
       meetLabel: 'Louisiana Senior Short Course State Championships',
       computedCut: null,
     });
-    const profile = categorizeBestEvents([swim], HSU, Gender.MEN, 'Real Swimmer', NSISC_PRESET_SETTINGS);
+    const profile = categorizeBestEvents([swim!], HSU, Gender.MEN, 'Real Swimmer', NSISC_PRESET_SETTINGS);
     expect(profile.bestByEvent).toStrictEqual({});
   });
 
   it('D2 BR (line 45) is the D2 B cut on a relay leadoff, and still a result', () => {
     const swim = one('100 Free SCY\t44.32\tD2 BR\tNew South Championships\tFeb 21, 2026\t');
     expect(swim).toMatchObject({ swimcloudBadge: 'other', meetLabel: 'New South Championships' });
-    expect(swim.isExtractedSplit).toBeUndefined();
-    expect(swim.isUserInputted).toBeUndefined();
+    expect(swim!.isExtractedSplit).toBeUndefined();
+    expect(swim!.isUserInputted).toBeUndefined();
   });
 
   it('FTR-18U and FTR-18UR (oburoster202627.txt lines 213, 386) are not self-reported', () => {
@@ -181,8 +181,8 @@ describe('the rows this defect was found on', () => {
       '100 Free LCM\t53.28\tFTR-18UR\tUSA Swimming Futures Championship - Justin\tJul 25, 2025\t',
     ]) {
       const swim = one(row, OBU);
-      expect(swim.isUserInputted, row).toBeUndefined();
-      expect(swim.swimcloudBadge, row).toBe('other');
+      expect(swim!.isUserInputted, row).toBeUndefined();
+      expect(swim!.swimcloudBadge, row).toBe('other');
     }
   });
 

@@ -201,7 +201,7 @@ describe('OMNI_BACKUP_DIR', () => {
       expect((copy.prepare('PRAGMA integrity_check').get() as { integrity_check: string }).integrity_check).toBe('ok');
       const rows = copy.prepare('SELECT id, name FROM workspaces ORDER BY id').all() as Array<{ id: string; name: string }>;
       expect(rows.map(r => r.id)).toEqual(['w1', 'w2']);
-      expect(rows[0].name).toBe('Henderson State');
+      expect(rows[0]!.name).toBe('Henderson State');
       const stamp = copy.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as { value: string };
       expect(Number(stamp.value)).toBeGreaterThanOrEqual(8);
     } finally {
@@ -321,8 +321,8 @@ describe('OMNI_BACKUP_DIR', () => {
     expect(status?.ok).toBe(false);
     expect(status?.error).toMatch(/cannot create/);
     expect(errors).toHaveBeenCalledTimes(1);
-    expect(String(errors.mock.calls[0][0])).toMatch(/OMNI_BACKUP_DIR copy FAILED/);
-    expect(String(errors.mock.calls[0][0])).toContain(path.basename(local));
+    expect(String(errors.mock.calls[0]![0])).toMatch(/OMNI_BACKUP_DIR copy FAILED/);
+    expect(String(errors.mock.calls[0]![0])).toContain(path.basename(local));
   });
 
   it('is off when unset: nothing is written outside data/backups and the status is null', async () => {

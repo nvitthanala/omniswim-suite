@@ -16,10 +16,11 @@ import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '@omniswim/ui';
 import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
-import { Gender, type ScoringSettings, type Workspace } from '@omniswim/core/types';
+import { Gender, type ScoringSettings } from '@omniswim/core/types';
 import OpsModule from '../packages/matrix/src/components/OpsModule';
 import ScoringSettingsPanel from '../packages/matrix/src/components/ScoringSettingsPanel';
 import { ScoringSettingsFields } from '../packages/matrix/src/components/ScoringSettingsFields';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 vi.mock('motion/react', async () => (await import('./motionStub')).motionStub);
 vi.mock('@omniswim/core/store/SuiteWorkspaceProvider', () => ({
@@ -67,10 +68,10 @@ describe('UI review smaller fixes', () => {
   it('OpsModule renders and opens on its default step when sessionStorage throws', async () => {
     vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('storage blocked'); });
     vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => { throw new Error('storage blocked'); });
-    const ws = {
+    const ws = workspaceFixture({
       id: 'blocked-storage', name: 'W', createdAt: 1, menResults: [], womenResults: [], recruits: [],
       loadedMeet: { pdfFilename: 'meet.pdf', uploadedAt: 1 },
-    } as unknown as Workspace;
+    });
     await act(async () => {
       root.render(createElement(MemoryRouter, null, createElement(ToastProvider, null,
         createElement(OpsModule, { workspace: ws, gender: Gender.MEN, onUpdate: vi.fn() }))));

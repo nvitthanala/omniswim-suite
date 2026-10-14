@@ -76,7 +76,7 @@ describe('fix 4: All-teams Undo exists with no team picked and survives picking 
     await settle();
     await click(/Apply to workspace/);
     expect(updates).toHaveLength(1);
-    expect(updates[0].meetEntryPlans?.length).toBeGreaterThan(0);
+    expect(updates[0]!.meetEntryPlans?.length).toBeGreaterThan(0);
 
     expect(findButton(/Undo this optimize/), 'Undo in the no-team state').toBeTruthy();
     await click(/Undo this optimize/);

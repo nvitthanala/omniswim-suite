@@ -19,7 +19,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { Gender, type RelayLegOverride, type SwimmerResult, type Workspace } from '../packages/core/src/types';
+import { Gender, type RelayLegOverride, type SwimmerResult } from '../packages/core/src/types';
 import { simulateRoster } from '../packages/core/src/lib/utils';
 import { buildScorerRosterLookup, relayEntryRosterEligible } from '../packages/core/src/lib/scorerRoster';
 import { mergeScoringSettings, NSISC_PRESET_SETTINGS } from '../packages/core/src/lib/scoringDefaults';
@@ -30,6 +30,7 @@ import {
   optimizerUndoState,
   optimizerUndoTargetReached,
 } from '../packages/manager/src/components/optimizerUndo';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const HSU = 'Henderson State University';
@@ -106,10 +107,10 @@ describe('optimizer Undo and relay leg fills', () => {
       before: { ...optimizerArraysOf({ ...before, ...existing }) },
       applied,
     });
-    const live = { ...applied, ...existing } as unknown as Workspace;
+    const live = workspaceFixture({ ...applied, ...existing });
     expect(optimizerUndoState(armed, optimizerArraysOf(live))).toBe('clean');
     // After Undo writes the pre-run arrays, the unchanged relay overrides must read as "target reached".
-    const undone = { ...armed.patch, ...existing } as unknown as Workspace;
+    const undone = workspaceFixture({ ...armed.patch, ...existing });
     expect(optimizerUndoTargetReached(armed, optimizerArraysOf(undone))).toBe(true);
     expect(optimizerUndoState(armed, optimizerArraysOf(undone))).toBe('apply_not_saved');
   });

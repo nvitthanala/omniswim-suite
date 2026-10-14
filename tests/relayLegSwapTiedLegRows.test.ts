@@ -33,11 +33,11 @@ import {
   Gender,
   type ScoringSettings,
   type SwimmerResult,
-  type Workspace,
 } from '../packages/core/src/types';
 import { NSISC_PRESET_SETTINGS } from '../packages/core/src/lib/scoringDefaults';
 import { rankRelayLegSwaps } from '../packages/core/src/lib/arbitrage/relayLegSwaps';
 import { relayEntryLegSignature } from '../packages/core/src/lib/utils';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const fixture = JSON.parse(
@@ -60,14 +60,14 @@ const SIBLING_NAMES = ['Sib One', 'Sib Two', 'Sib Three', 'Sib Four'];
 const sibling: SwimmerResult[] = realLegs.map((r, i) => ({
   ...r,
   id: `derived-sibling-${i}`,
-  name: SIBLING_NAMES[i],
+  name: SIBLING_NAMES[i]!,
   relayLegSplit: i === LEG ? '42.00' : r.relayLegSplit,
   relayLegSplitDetail: undefined,
   relayNames: SIBLING_NAMES.map(name => ({ name, year: 'FR' })),
 }));
 
 function rank(menResults: SwimmerResult[]) {
-  const ws = {
+  const ws = workspaceFixture({
     id: 'ws-tied-leg-rows',
     name: 'tied leg rows',
     createdAt: 0,
@@ -82,17 +82,17 @@ function rank(menResults: SwimmerResult[]) {
     conference: 'NSISC',
     scoringSettings: STRICT,
     scorerRosterOverrides: [{ name: 'Scott Doll', team: HSU, gender: Gender.MEN, isScorer: false }],
-  } as unknown as Workspace;
+  });
   return rankRelayLegSwaps(ws, { team: HSU, gender: Gender.MEN, settings: STRICT });
 }
 
-const firstReal = fixture.menResults.indexOf(realLegs[0]);
+const firstReal = fixture.menResults.indexOf(realLegs[0]!);
 const siblingFirst = [
   ...fixture.menResults.slice(0, firstReal),
   ...sibling,
   ...fixture.menResults.slice(firstReal),
 ];
-const realSignature = relayEntryLegSignature(realLegs[0]);
+const realSignature = relayEntryLegSignature(realLegs[0]!);
 
 describe('the tied relay used by this test', () => {
   it('shares event, round, place and clock with the real relay, and names other swimmers', () => {
@@ -102,9 +102,9 @@ describe('the tied relay used by this test', () => {
       ['Scott Doll', 2, '49.05'],
       ['Oliver Pozvai', 3, '44.35'],
     ]);
-    expect(realLegs[0].relayTeamTime).toBe('3:02.81');
-    expect(relayEntryLegSignature(sibling[0])).not.toBe(realSignature);
-    expect(sibling[0].relayTeamTime).toBe(realLegs[0].relayTeamTime);
+    expect(realLegs[0]!.relayTeamTime).toBe('3:02.81');
+    expect(relayEntryLegSignature(sibling[0]!)).not.toBe(realSignature);
+    expect(sibling[0]!.relayTeamTime).toBe(realLegs[0]!.relayTeamTime);
   });
 });
 

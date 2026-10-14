@@ -136,9 +136,9 @@ describe('the template of a tied relay', () => {
 describe('the key an override is stored under', () => {
   it('a relay that is not tied keeps the plain key it always had', () => {
     const onlyA = relayLegs(A);
-    const key = stableRelayEntryKey(onlyA, onlyA[1]);
+    const key = stableRelayEntryKey(onlyA, onlyA[1]!);
     expect(key).toBe(`${TEAM}|${EVENT}|A Final|2|${CLOCK}`);
-    expect(key).toBe(relayEntryKey(onlyA[1]));
+    expect(key).toBe(relayEntryKey(onlyA[1]!));
   });
 
   it('a tied relay carries its named swimmers, and the two relays get two keys', () => {
@@ -152,7 +152,7 @@ describe('the key an override is stored under', () => {
 
   it('a relay that ties a different clock is not tied', () => {
     const other = relayLegs(B, '1:22.00');
-    expect(stableRelayEntryKey([...relayLegs(A), ...other], relayLegs(A)[0])).toBe(`${TEAM}|${EVENT}|A Final|2|${CLOCK}`);
+    expect(stableRelayEntryKey([...relayLegs(A), ...other], relayLegs(A)[0]!)).toBe(`${TEAM}|${EVENT}|A Final|2|${CLOCK}`);
   });
 
   it('the writer keys the override to the relay it fills', () => {

@@ -10,6 +10,7 @@
  * - The no-workspace empty state offers "New workspace".
  */
 import { act, createElement, useState, type ReactElement } from 'react';
+import { elementWithChildren } from './helpers/elementWithChildren';
 import { createRoot, type Root } from 'react-dom/client';
 import { MemoryRouter } from 'react-router-dom';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -33,6 +34,7 @@ import {
   normalizeStoredMatrixStep,
   resolveInitialMatrixStep,
 } from '../packages/matrix/src/components/matrixStepState';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 vi.mock('motion/react', async () => (await import('./motionStub')).motionStub);
 
@@ -54,7 +56,7 @@ vi.mock('@omniswim/core/store/SuiteWorkspaceProvider', () => ({
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 function workspace(id: string, withMeet: boolean): Workspace {
-  return {
+  return workspaceFixture({
     id,
     name: `Workspace ${id}`,
     createdAt: 1,
@@ -62,7 +64,7 @@ function workspace(id: string, withMeet: boolean): Workspace {
     womenResults: [],
     recruits: [],
     ...(withMeet ? { loadedMeet: { pdfFilename: 'meet.pdf', uploadedAt: 1 } } : {}),
-  } as unknown as Workspace;
+  });
 }
 
 async function settle() {
@@ -187,7 +189,7 @@ describe('Matrix steps', () => {
     sessionStorage.setItem(matrixStepStorageKey(ws.id), 'meet');
     function Shell({ children }: { children: ReactElement }) {
       const [open, setOpen] = useState(false);
-      return createElement(
+      return elementWithChildren(
         ScoringRulesOpenerProvider,
         { onOpen: () => setOpen(true) },
         children,

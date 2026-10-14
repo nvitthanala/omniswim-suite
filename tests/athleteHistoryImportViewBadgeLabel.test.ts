@@ -40,7 +40,7 @@ describe('buildSwimRowTagSpecs', () => {
   it('shows the "Extracted" tag with a not-a-result tooltip for an extracted stamp', () => {
     const specs = buildSwimRowTagSpecs('Extracted', swim, undefined).filter((s) => s.show);
     expect(specs.map((s) => s.label)).toStrictEqual(['Extracted']);
-    expect(specs[0].title).toMatch(/not a standalone race result/i);
+    expect(specs[0]!.title).toMatch(/not a standalone race result/i);
     // No spec anywhere claims the row is official.
     expect(specs.every((s) => s.label !== 'Official')).toBe(true);
   });

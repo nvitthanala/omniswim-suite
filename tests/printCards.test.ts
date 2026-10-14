@@ -148,7 +148,7 @@ describe('printable cards', () => {
       expect.stringContaining('Zero Time'),
     ]);
     // A swimmer with a time sorts ahead of the two with none.
-    expect(rows[0].textContent).toContain('Has Time');
+    expect(rows[0]!.textContent).toContain('Has Time');
   });
 
   it('prints team, event, round and the projected points on every card', () => {
@@ -174,7 +174,7 @@ describe('printable cards', () => {
     expect(legs.map(r => r.querySelector('td')?.textContent)).toEqual(['1', '2', '3', '4']);
     const badged = legs.filter(r => r.textContent?.includes(RELAY_LEG_TIME_TRIAL_LABEL));
     expect(badged).toHaveLength(1);
-    expect(badged[0].querySelector('td')?.textContent).toBe('2');
+    expect(badged[0]!.querySelector('td')?.textContent).toBe('2');
     expect(RELAY_LEG_TIME_TRIAL_LABEL).toBe('Time trial');
     const vacant = legs.filter(r => r.textContent?.includes('Vacant'));
     expect(vacant.length).toBeGreaterThan(0);

@@ -112,11 +112,11 @@ describe('place-table drafts on the scoring settings screens (U5)', () => {
 
       const cells = [...document.querySelectorAll<HTMLInputElement>('input[aria-label^="Relay points for place"]')];
       expect(cells).toHaveLength(1);
-      expect(cells[0].value).toBe('');
-      expect(cells[0].getAttribute('aria-invalid')).toBe('true');
+      expect(cells[0]!.value).toBe('');
+      expect(cells[0]!.getAttribute('aria-invalid')).toBe('true');
 
-      expect(lastDraft().draft.relayPoints).toStrictEqual([null]);
-      expect(lastDraft().result).toStrictEqual({ ok: false, blanks: [{ table: 'relayPoints', place: 1 }] });
+      expect(lastDraft()!.draft.relayPoints).toStrictEqual([null]);
+      expect(lastDraft()!.result).toStrictEqual({ ok: false, blanks: [{ table: 'relayPoints', place: 1 }] });
       // A blank is not a ScoringSettings: nothing is published through onChange.
       expect(changes).toHaveLength(0);
     });
@@ -125,7 +125,7 @@ describe('place-table drafts on the scoring settings screens (U5)', () => {
       await renderFields({ scoringPoints: [9, 7, 6, 5] });
       await click(buttonByLabel('Score diving from its own place table'));
       expect(input('Diving points for place 1')!.value).toBe('');
-      expect(lastDraft().draft.divingPoints).toStrictEqual([null]);
+      expect(lastDraft()!.draft.divingPoints).toStrictEqual([null]);
     });
 
     it('growing the scoring table from 8 to 12 adds 4 blank cells and keeps the 8 values', async () => {
@@ -136,8 +136,8 @@ describe('place-table drafts on the scoring settings screens (U5)', () => {
       expect(cells.map(c => c.value)).toStrictEqual(
         ['20', '17', '16', '15', '14', '13', '12', '11', '', '', '', '']
       );
-      expect(lastDraft().draft.scoringPoints).toStrictEqual([20, 17, 16, 15, 14, 13, 12, 11, null, null, null, null]);
-      expect(lastDraft().result).toStrictEqual({
+      expect(lastDraft()!.draft.scoringPoints).toStrictEqual([20, 17, 16, 15, 14, 13, 12, 11, null, null, null, null]);
+      expect(lastDraft()!.result).toStrictEqual({
         ok: false,
         blanks: [9, 10, 11, 12].map(place => ({ table: 'scoringPoints', place })),
       });
@@ -150,7 +150,7 @@ describe('place-table drafts on the scoring settings screens (U5)', () => {
       const count = input('Number of relay scoring places')!;
       await act(async () => setNativeValue(count, '4'));
       await blur(count);
-      expect(lastDraft().draft.relayPoints).toStrictEqual([11, 4, null, null]);
+      expect(lastDraft()!.draft.relayPoints).toStrictEqual([11, 4, null, null]);
     });
 
     it('typing "12" over "8" keeps places 1-8 and adds blank 9-12; nothing is cut at the "1"', async () => {
@@ -164,7 +164,7 @@ describe('place-table drafts on the scoring settings screens (U5)', () => {
       await act(async () => setNativeValue(count, '12'));
       expect(drafts).toHaveLength(0);
       await blur(count);
-      expect(lastDraft().draft.relayPoints).toStrictEqual([...eight, null, null, null, null]);
+      expect(lastDraft()!.draft.relayPoints).toStrictEqual([...eight, null, null, null, null]);
       expect(count.value).toBe('12');
       expect(input('Relay points for place 12')!.value).toBe('');
       expect(input('Relay points for place 8')!.value).toBe('3');
@@ -176,7 +176,7 @@ describe('place-table drafts on the scoring settings screens (U5)', () => {
       await act(async () => setNativeValue(count, '5'));
       expect(drafts).toHaveLength(0);
       await act(async () => void count.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true })));
-      expect(lastDraft().draft.divingPoints).toStrictEqual([7, 3, 1, null, null]);
+      expect(lastDraft()!.draft.divingPoints).toStrictEqual([7, 3, 1, null, null]);
     });
 
     it('a count that is not a whole number from 1 to 24 changes nothing and reverts', async () => {
@@ -217,12 +217,12 @@ describe('place-table drafts on the scoring settings screens (U5)', () => {
     it('an emptied place cell becomes a blank draft cell, never 0', async () => {
       await renderFields({ scoringPoints: [9, 7, 6] });
       await act(async () => setNativeValue(input('Points for place 2')!, ''));
-      expect(lastDraft().draft.scoringPoints).toStrictEqual([9, null, 6]);
-      expect(lastDraft().result.ok).toBe(false);
+      expect(lastDraft()!.draft.scoringPoints).toStrictEqual([9, null, 6]);
+      expect(lastDraft()!.result.ok).toBe(false);
       // Typing a value back clears the blank.
       await act(async () => setNativeValue(input('Points for place 2')!, '0'));
-      expect(lastDraft().draft.scoringPoints).toStrictEqual([9, 0, 6]);
-      expect(lastDraft().result.ok).toBe(true);
+      expect(lastDraft()!.draft.scoringPoints).toStrictEqual([9, 0, 6]);
+      expect(lastDraft()!.result.ok).toBe(true);
     });
 
     // ---- X4 ---------------------------------------------------------------
@@ -255,12 +255,12 @@ describe('place-table drafts on the scoring settings screens (U5)', () => {
         await renderFields({ scoringPoints: [9, 7, 6] });
         const cap = input('Maximum individual scorers per team per event')!;
         await act(async () => setNativeValue(cap, '3'));
-        expect(changes[changes.length - 1].maxIndividualScorersPerTeamPerEvent).toBe(3);
+        expect(changes[changes.length - 1]!.maxIndividualScorersPerTeamPerEvent).toBe(3);
         const before = drafts.length;
         await act(async () => setNativeValue(cap, '0'));
         await act(async () => setNativeValue(cap, '2.5'));
         expect(drafts).toHaveLength(before);
-        expect(lastDraft().draft.maxIndividualScorersPerTeamPerEvent).toBe(3);
+        expect(lastDraft()!.draft.maxIndividualScorersPerTeamPerEvent).toBe(3);
       });
 
       it('clearing the per-event cap and the diving cap reports undefined, a real "no cap"', async () => {
@@ -268,12 +268,12 @@ describe('place-table drafts on the scoring settings screens (U5)', () => {
         const cap = input('Maximum individual scorers per team per event')!;
         await act(async () => setNativeValue(cap, '3'));
         await act(async () => setNativeValue(cap, ''));
-        expect(lastDraft().draft.maxIndividualScorersPerTeamPerEvent).toBeUndefined();
+        expect(lastDraft()!.draft.maxIndividualScorersPerTeamPerEvent).toBeUndefined();
         const diving = input('Maximum scoring divers per team per diving event')!;
         await act(async () => setNativeValue(diving, '2'));
-        expect(lastDraft().draft.divingMaxScorersPerTeamPerEvent).toBe(2);
+        expect(lastDraft()!.draft.divingMaxScorersPerTeamPerEvent).toBe(2);
         await act(async () => setNativeValue(diving, ''));
-        expect(lastDraft().draft.divingMaxScorersPerTeamPerEvent).toBeUndefined();
+        expect(lastDraft()!.draft.divingMaxScorersPerTeamPerEvent).toBeUndefined();
       });
     });
   });
@@ -302,7 +302,7 @@ describe('place-table drafts on the scoring settings screens (U5)', () => {
       expect(saveButton().disabled).toBe(false);
       expect(document.body.textContent).not.toContain('is blank');
       await click(saveButton());
-      const saved = onSave.mock.calls[0][0] as ScoringSettings;
+      const saved = onSave.mock.calls[0]![0] as ScoringSettings;
       expect(saved.scoringPoints).toStrictEqual(LEGACY_SCORING);
       expect(saved.relayPoints).toStrictEqual([0]);
     });
@@ -346,7 +346,7 @@ describe('place-table drafts on the scoring settings screens (U5)', () => {
 
       await click(saveButton());
       expect(onSave).toHaveBeenCalledTimes(1);
-      const saved = onSave.mock.calls[0][0] as ScoringSettings;
+      const saved = onSave.mock.calls[0]![0] as ScoringSettings;
       expect(saved.relayPoints).toStrictEqual([11]);
       expect(saved.divingPoints).toStrictEqual([7]);
       for (const table of [saved.scoringPoints, saved.relayPoints, saved.divingPoints]) {
@@ -406,7 +406,7 @@ describe('place-table drafts on the scoring settings screens (U5)', () => {
       await flush();
 
       expect(posts).toHaveLength(1);
-      const table = posts[0].settings.scoringPoints;
+      const table = posts[0]!.settings.scoringPoints;
       expect(table).toHaveLength(20);
       expect(table.every(v => typeof v === 'number')).toBe(true);
       expect(table.slice(16)).toStrictEqual([1, 1, 1, 1]);
@@ -466,7 +466,7 @@ describe('place-table drafts on the scoring settings screens (U5)', () => {
       await click(buttonByText('Save rule set')!);
       await flush();
       expect(posts).toHaveLength(1);
-      expect(posts[0].settings.scoringPoints).toStrictEqual(mergeScoringSettings({}).scoringPoints);
+      expect(posts[0]!.settings.scoringPoints).toStrictEqual(mergeScoringSettings({}).scoringPoints);
     });
   });
 

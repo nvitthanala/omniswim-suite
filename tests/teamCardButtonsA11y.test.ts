@@ -9,7 +9,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import type { SwimmerResult } from '@omniswim/core/types';
+import { noCutTagResult, swimmerResult } from './helpers/typedFixtures';
 import { TeamMatrixTimeCell } from '../packages/matrix/src/components/TeamCardMatrixRow';
 import { TeamCardChartTooltip } from '../packages/matrix/src/components/TeamCardTooltips';
 import type { TeamRowCutlineTags } from '../packages/matrix/src/components/teamCardView';
@@ -18,8 +18,8 @@ import type { TeamRowCutlineTags } from '../packages/matrix/src/components/teamC
 
 const ROW_TAGS: TeamRowCutlineTags = {
   kind: 'single',
-  result: { status: 'no_cut' },
-} as TeamRowCutlineTags;
+  result: noCutTagResult(),
+};
 
 describe('TeamCard clickable controls are buttons', () => {
   let container: HTMLDivElement;
@@ -39,13 +39,7 @@ describe('TeamCard clickable controls are buttons', () => {
   });
 
   it('renders the plain time as a button with an aria-label', async () => {
-    const res = {
-      id: 'r1',
-      name: 'Alex',
-      time: '48.12',
-      event: '100 Free',
-      gender: 'M',
-    } as SwimmerResult;
+    const res = swimmerResult({ id: 'r1', name: 'Alex', time: '48.12', event: '100 Free' });
     const onStartEdit = vi.fn();
 
     await act(async () => {
@@ -54,7 +48,7 @@ describe('TeamCard clickable controls are buttons', () => {
           res,
           rowTags: ROW_TAGS,
           timeColorClass: 'text-[var(--text-primary)]',
-          relaySplitPrimary: null,
+          relaySplitPrimary: false,
           onStartEdit,
           editingResultId: null,
           editValue: '',
@@ -76,14 +70,7 @@ describe('TeamCard clickable controls are buttons', () => {
   });
 
   it('renders the finals time as a button with an aria-label', async () => {
-    const res = {
-      id: 'r2',
-      name: 'Alex',
-      time: '48.12',
-      finalsTime: '47.90',
-      event: '100 Free',
-      gender: 'M',
-    } as SwimmerResult;
+    const res = swimmerResult({ id: 'r2', name: 'Alex', time: '48.12', finalsTime: '47.90', event: '100 Free' });
 
     await act(async () => {
       root.render(
@@ -91,7 +78,7 @@ describe('TeamCard clickable controls are buttons', () => {
           res,
           rowTags: ROW_TAGS,
           timeColorClass: 'text-[var(--text-primary)]',
-          relaySplitPrimary: null,
+          relaySplitPrimary: false,
           onStartEdit: vi.fn(),
           editingResultId: null,
           editValue: '',
@@ -113,7 +100,7 @@ describe('TeamCard clickable controls are buttons', () => {
     await act(async () => {
       root.render(
         createElement(TeamCardChartTooltip, {
-          data: { name: 'Freshman', points: 12, swimmers: [] },
+          data: { name: 'Freshman', points: 12, color: 'var(--text-accent)', swimmers: [] },
           isPinned: true,
           isClass: true,
           gender: 'M',

@@ -105,7 +105,7 @@ describe('runBoundedFetchPool', () => {
     expect(started).toEqual([0, 1, 2]);
 
     // Releasing one lane admits exactly one more item, not a burst.
-    gates[1].resolve();
+    gates[1]!.resolve();
     await flush();
     expect(started).toEqual([0, 1, 2, 3]);
 

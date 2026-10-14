@@ -190,6 +190,6 @@ describe('existingSwimCloudHistoryFor', () => {
     ];
     const found = existingSwimCloudHistoryFor(history, 'River Paulk', 'Henderson State', Gender.MEN);
     expect(found).toHaveLength(1);
-    expect(found[0].time).toBe('20.99');
+    expect(found[0]!.time).toBe('20.99');
   });
 });

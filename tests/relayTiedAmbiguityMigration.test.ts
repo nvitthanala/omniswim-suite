@@ -61,6 +61,7 @@ import {
   buildRelayGroups,
   relayGroupWriteRefusal,
 } from '../packages/manager/src/components/indRelayGroupsView';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 const TEAM = 'Home';
 const EVENT = 'Event 31 Men 4x50 Yard Freestyle Relay';
@@ -214,7 +215,7 @@ describe('the relays screen groups a projected tied relay by its own key', () =>
 });
 
 describe('the lineup audit offers no quick fill for an ambiguous vacated leg', () => {
-  const ws = {
+  const ws = workspaceFixture({
     id: 'ws',
     name: 'tied',
     createdAt: 0,
@@ -227,7 +228,7 @@ describe('the lineup audit offers no quick fill for an ambiguous vacated leg', (
     relayLegOverrides: [],
     conference: 'NSISC',
     scoringSettings: { ...NSISC_PRESET_SETTINGS },
-  } as unknown as Workspace;
+  });
   const auditOf = (leftNames: string[]) => {
     const projected = simulateRoster(results, [], false, new Set(leftNames.map(n => n.toLowerCase())), []);
     return buildTeamLineupAudit({
@@ -291,7 +292,7 @@ describe('a key saved before the two relays were told apart', () => {
   });
 
   it('the legacy key on a projected tied relay reaches both through the what-if projection', () => {
-    const ws = {
+    const ws = workspaceFixture({
       id: 'ws',
       name: 'tied',
       createdAt: 0,
@@ -308,7 +309,7 @@ describe('a key saved before the two relays were told apart', () => {
       ],
       conference: 'NSISC',
       scoringSettings: { ...NSISC_PRESET_SETTINGS },
-    } as unknown as Workspace;
+    });
     const rows = buildWhatIfProjection({ workspace: ws, gender: Gender.MEN, removeSeniors: false }).rows;
     const legs = rows.filter(r => r.isRelay === true && r.relayLegIndex === LEG);
     expect(legs.map(r => r.name)).toStrictEqual(['X1', 'X1']);
@@ -392,7 +393,7 @@ describe('a history swim of another meet is not judged by the loaded meet bounda
     ...over,
   });
   const workspace = (history: HistoricalSwim[], settings = {}): Workspace =>
-    ({
+    workspaceFixture({
       id: 'ws',
       name: 'Loaded Meet',
       createdAt: 0,
@@ -407,7 +408,7 @@ describe('a history swim of another meet is not judged by the loaded meet bounda
       // The loaded meet scored through event 42, on officialTeamScores as a loaded meet keeps it.
       officialTeamScores: { eventThrough: 42, men: {}, women: {} },
       scoringSettings: { ...NSISC_PRESET_SETTINGS, ...settings },
-    }) as unknown as Workspace;
+    });
   const breast = (ws: Workspace) =>
     relayLegHistoryCandidates(ws, [zedSwim], Gender.MEN).filter(r => r.event === '100 Breaststroke');
 

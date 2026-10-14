@@ -48,12 +48,12 @@ describe('parseMeetTeamsHtml — swimcloud-real-meet-landing-356467.html (4-team
     expect(result.data.teams).toHaveLength(4);
     const [hsu, obu, dsu, uwf] = result.data.teams;
     expect(hsu).toMatchObject({ swimCloudTeamId: '58', teamName: 'Henderson State', rank: 1, score: 1056 });
-    expect(obu.teamName).toBe('Ouachita Baptist');
-    expect(dsu.teamName).toBe('Delta State');
+    expect(obu!.teamName).toBe('Ouachita Baptist');
+    expect(dsu!.teamName).toBe('Delta State');
     // West Florida: em-dash rank and score — a real zero-scoring team, not a parse gap.
     expect(uwf).toMatchObject({ swimCloudTeamId: '10002824', teamName: 'West Florida' });
-    expect(uwf.rank).toBeUndefined();
-    expect(uwf.score).toBeUndefined();
+    expect(uwf!.rank).toBeUndefined();
+    expect(uwf!.score).toBeUndefined();
   });
 
   it('resolves the meet id from the source URL', () => {

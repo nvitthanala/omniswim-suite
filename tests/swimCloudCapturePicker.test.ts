@@ -39,9 +39,9 @@ import type {
   SwimCloudTeamMeetSwim,
   SwimCloudRosterParse,
   SwimCloudSwimmerTimesParse,
-  SwimCloudAthlete,
   SwimCloudPersonalBestSwim,
 } from '@omniswim/swimcloud/parser';
+import type { SwimCloudAthlete } from '@omniswim/swimcloud/entities';
 import {
   SwimCloudCaptureBrowser,
   describeSwimCloudCaptureCompleteness,
@@ -152,12 +152,13 @@ function fakeParse(opts: { teamName: string; gender: 'Men' | 'Women'; swims: Swi
   };
 }
 
-function fakeAthlete(opts: { name: string; hometown?: string; classYear?: SwimCloudAthlete['classYear']; swimCloudSwimmerId?: string }): SwimCloudAthlete {
+function fakeAthlete(opts: { name: string; hometown?: string; classYear?: string; swimCloudSwimmerId?: string }): SwimCloudAthlete {
   return {
     swimCloudSwimmerId: opts.swimCloudSwimmerId,
     name: opts.name,
     hometown: opts.hometown,
-    classYear: opts.classYear,
+    // A string on purpose: one test passes a class year the SwimCloud union does not list.
+    classYear: opts.classYear as SwimCloudAthlete['classYear'],
   };
 }
 
@@ -177,6 +178,8 @@ function fakePersonalBest(opts: { eventLabel: string; time?: string; meetName?: 
     swimKey: `pb:${opts.eventLabel}`,
     eventId: `evt:${opts.eventLabel}`,
     eventLabel: opts.eventLabel,
+    course: 'unknown',
+    stroke: 'unknown',
     time: opts.time,
     meetName: opts.meetName,
     date: opts.date,
@@ -354,7 +357,7 @@ describe('SwimCloudCaptureBrowser (mode="meet-results")', () => {
     await flush();
 
     expect(onImportMeetResults).toHaveBeenCalledTimes(1);
-    const selection = onImportMeetResults.mock.calls[0][0] as SwimCloudCaptureMeetResultsSelection;
+    const selection = onImportMeetResults.mock.calls[0]![0] as SwimCloudCaptureMeetResultsSelection;
     expect(selection.parses).toStrictEqual([teamAMen]);
     expect(selection.pageCount).toBe(1);
     expect(selection.groups.map(g => g.label)).toStrictEqual(['Team A · Men']);

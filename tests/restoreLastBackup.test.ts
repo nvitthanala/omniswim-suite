@@ -49,7 +49,7 @@ describe('restoreLastBackup', () => {
     vi.stubGlobal('fetch', fetchMock);
     const err = await restoreBackupFile('meets-manual-a.json').catch(e => e);
     expect(err).toMatchObject({ status: 403, code: 'ADMIN_REQUIRED' });
-    const [url, init] = fetchMock.mock.calls[0];
+    const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe('/api/workspaces/restore');
     expect(JSON.parse(init.body)).toEqual({ file: 'meets-manual-a.json' });
   });

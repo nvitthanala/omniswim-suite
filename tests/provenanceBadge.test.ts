@@ -41,8 +41,8 @@ const SCM_CONVERSION: ScyConversionProvenance = {
     row: 'allOtherEvents',
     tableId: 'ncaa-rules-book-a2-2026-27',
     division: 'D2',
-    reason: 'division_publishes_table',
-  } as ScyConversionProvenance['basis'],
+    reason: 'division_table',
+  },
 };
 
 describe('buildProvenanceBadges', () => {
@@ -73,16 +73,16 @@ describe('buildProvenanceBadges', () => {
 
   it('labels an LCM-converted estimate "Est. from LCM" with a full tooltip', () => {
     const [badge] = buildProvenanceBadges({ convertedFrom: LCM_CONVERSION });
-    expect(badge.key).toBe('converted_lcm');
-    expect(badge.label).toBe('Est. from LCM');
-    expect(badge.tooltip).toBe('LCM 56.28 → SCY 47.56, Colorado Time Systems factor (estimate)');
+    expect(badge!.key).toBe('converted_lcm');
+    expect(badge!.label).toBe('Est. from LCM');
+    expect(badge!.tooltip).toBe('LCM 56.28 → SCY 47.56, Colorado Time Systems factor (estimate)');
   });
 
   it('labels an SCM-converted estimate "Est. from SCM" with the NCAA table and division', () => {
     const [badge] = buildProvenanceBadges({ convertedFrom: SCM_CONVERSION });
-    expect(badge.key).toBe('converted_scm');
-    expect(badge.label).toBe('Est. from SCM');
-    expect(badge.tooltip).toBe('SCM 54.49 → 48.82, NCAA Rules Book A-2 (2026-27) (D2)');
+    expect(badge!.key).toBe('converted_scm');
+    expect(badge!.label).toBe('Est. from SCM');
+    expect(badge!.tooltip).toBe('SCM 54.49 → 48.82, NCAA Rules Book A-2 (2026-27) (D2)');
   });
 
   it('stacks every applicable badge on one swim, extracted/self-reported first', () => {

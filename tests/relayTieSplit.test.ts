@@ -190,7 +190,7 @@ describe('a place past the end of a table is null at the lookup', () => {
     ];
     const scored = calculatePoints(rows, dual);
     for (const r of scored) expect(Number.isFinite(r.points)).toBe(true);
-    const teamTotal = (team: string) => scored.filter(r => r.team === team).reduce((s, r) => s + r.points, 0);
+    const teamTotal = (team: string) => scored.filter(r => r.team === team).reduce((s, r) => s + (r.points as number), 0);
     expect(teamTotal('TeamA')).toBe(11);
     expect(teamTotal('TeamB')).toBe(0);
     expect(teamTotal('TeamC')).toBe(0);
@@ -213,7 +213,7 @@ describe('tied relays split the places the tie spans', () => {
     expect(points.TeamC).toBeCloseTo(each, 10);
     expect(points.TeamD).toBe(30); // fourth place, 2 x 15
     // The event pays out exactly what its table holds for those four places.
-    const paid = points.TeamA + points.TeamB + points.TeamC + points.TeamD;
+    const paid = points.TeamA! + points.TeamB! + points.TeamC! + points.TeamD!;
     expect(paid).toBeCloseTo(40 + 34 + 32 + 30, 10);
   });
 
@@ -286,7 +286,7 @@ describe('relays and individuals tie through one helper', () => {
     const rel = relayTeamPoints(f, NSISC_PRESET_SETTINGS);
     const ind = individualPoints(f, NSISC_PRESET_SETTINGS);
     expect(Object.keys(rel).sort()).toEqual(Object.keys(ind).sort());
-    for (const team of Object.keys(ind)) expect(rel[team]).toBeCloseTo(ind[team] * mult, 10);
+    for (const team of Object.keys(ind)) expect(rel[team]).toBeCloseTo(ind[team]! * mult, 10);
   });
 
   it('pins the user-named example once: 1st and 2nd tied is (20 + 17) / 2 = 18.5 each for individuals, (40 + 34) / 2 = 37 each for relays', () => {
@@ -305,7 +305,7 @@ describe('a tie does not depend on whether a relay names its gender', () => {
   it('two tied relays, one with no gender: both score (40 + 34) / 2 = 37', () => {
     const rows = [...relayEntry('TeamA', 1, '1:20.00'), ...withoutGender(relayEntry('TeamB', 1, '1:20.00'))];
     const scored = calculatePoints(rows, NSISC_PRESET_SETTINGS);
-    const total = (team: string) => scored.filter(r => r.team === team).reduce((sum, r) => sum + r.points, 0);
+    const total = (team: string) => scored.filter(r => r.team === team).reduce((sum, r) => sum + (r.points as number), 0);
     expect(total('TeamA')).toBe(37);
     expect(total('TeamB')).toBe(37);
   });
@@ -336,7 +336,7 @@ describe("one team's A and B relays on a dead heat stay two entries", () => {
   const A = ['A1', 'A2', 'A3', 'A4'];
   const B = ['B1', 'B2', 'B3', 'B4'];
   const total = (rows: SwimmerResult[], team: string) =>
-    rows.filter(r => r.team === team).reduce((sum, r) => sum + r.points, 0);
+    rows.filter(r => r.team === team).reduce((sum, r) => sum + (r.points as number), 0);
 
   it('A and B tied for 2nd behind Z: each takes (34 + 32) / 2 = 33, the team 66, not 68', () => {
     const rows = [
@@ -358,7 +358,7 @@ describe("one team's A and B relays on a dead heat stay two entries", () => {
     const scored = calculatePoints(rows, capped);
     // One entry scores its share of 1st and 2nd (37); the other is over the cap and scores 0.
     expect(total(scored, 'Home')).toBe(37);
-    expect(scored.filter(r => r.points > 0)).toHaveLength(4);
+    expect(scored.filter(r => (r.points as number) > 0)).toHaveLength(4);
   });
 
   it('two A/B relays of one team that did not tie are unchanged', () => {
@@ -371,11 +371,11 @@ describe("one team's A and B relays on a dead heat stay two entries", () => {
     const b = entryWith('Home', B, 2, '1:21.00');
     expect(new Set(a.map(relayEntryGroupKey)).size).toBe(1);
     expect(new Set(b.map(relayEntryGroupKey)).size).toBe(1);
-    expect(relayEntryGroupKey(a[0])).not.toBe(relayEntryGroupKey(b[0]));
+    expect(relayEntryGroupKey(a[0]!)).not.toBe(relayEntryGroupKey(b[0]!));
   });
 
   it('a row that names no swimmers keeps the previous key', () => {
-    const row = { ...entryWith('Home', A, 2, '1:21.00')[0], relayNames: undefined };
+    const row = { ...entryWith('Home', A, 2, '1:21.00')[0]!, relayNames: undefined };
     expect(relayEntryGroupKey(row)).toBe(`${RELAY_EVENT}|Home|A Final|2|1:21.00`);
   });
 });

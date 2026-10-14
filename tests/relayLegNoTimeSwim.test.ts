@@ -27,7 +27,6 @@ import {
   Gender,
   type RelayLegOverride,
   type SwimmerResult,
-  type Workspace,
 } from '../packages/core/src/types';
 import { simulateRoster } from '../packages/core/src/lib/utils';
 import { relayEntryKey } from '../packages/core/src/lib/relaySplits';
@@ -39,6 +38,7 @@ import {
 } from '../packages/core/src/lib/relayLegMatching';
 import { relayLegHistoryCandidates } from '../packages/core/src/lib/relayLegHistoryCandidates';
 import { historicalSwimFromResult } from '../packages/core/src/lib/athleteHistory';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const fixture = JSON.parse(
@@ -124,7 +124,7 @@ describe('a swim with no time matches no leg', () => {
       'Kiera Cloete 1:05.16',
       'Hannah Jones 1:05.46',
     ]);
-    expect(list[0].relayLegTimeTrial).toBe(true);
+    expect(list[0]!.relayLegTimeTrial).toBe(true);
     expect(list.some(s => s.time === 'DQ')).toBe(false);
   });
 
@@ -226,7 +226,7 @@ describe('a row with no time hides no history swim (history rule 3)', () => {
     { ...rhodesDq, time: rhodesDq.prelimsTime as string },
     'NSISC 2026 prelims'
   )!;
-  const workspace = { womenResults, athleteHistory: [prelim] } as unknown as Workspace;
+  const workspace = workspaceFixture({ womenResults, athleteHistory: [prelim] });
   const hsuPool = individuals.filter(r => r.team === HSU);
 
   it('the DQ row at the 100 Free does not count as her swim there', () => {
@@ -239,7 +239,7 @@ describe('a row with no time hides no history swim (history rule 3)', () => {
     const fly = row('Allie Grace Rhodes', 'Event 12 Women 100 Yard Butterfly');
     expect([fly.time, fly.prelimsTime]).toStrictEqual(['1:02.13', '1:01.71']);
     const prelimFly = historicalSwimFromResult({ ...fly, time: fly.prelimsTime as string }, 'NSISC 2026 prelims')!;
-    const ws = { womenResults, athleteHistory: [prelimFly] } as unknown as Workspace;
+    const ws = workspaceFixture({ womenResults, athleteHistory: [prelimFly] });
     const out = relayLegHistoryCandidates(ws, hsuPool, Gender.WOMEN);
     expect(out.filter(r => r.name === 'Allie Grace Rhodes')).toStrictEqual([]);
   });

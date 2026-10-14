@@ -200,7 +200,7 @@ describe('ScoringSettingsFields', () => {
     await flush();
     expect(saved).toHaveLength(1);
     // The NSISC preset caps individual scorers at 18 — a real, distinguishing field.
-    expect(saved[0].maxIndividualScorersPerTeam).toBe(18);
+    expect(saved[0]!.maxIndividualScorersPerTeam).toBe(18);
   });
 
   it('omits the suggested-preset banner and the scoring-view toggle when their props are not supplied — the Modal entry point never passes either', async () => {

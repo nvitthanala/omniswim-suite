@@ -29,7 +29,7 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import express from 'express';
 import { afterAll, describe, expect, it } from 'vitest';
-import { Gender, type Workspace } from '../packages/core/src/types';
+import { Gender } from '../packages/core/src/types';
 import { parseSwimCloudPasteDetailed } from '../packages/core/src/lib/athleteHistory';
 import {
   bestTimesByEvent,
@@ -50,6 +50,7 @@ import { NSISC_PRESET_SETTINGS } from '../packages/core/src/lib/scoringDefaults'
 import { findCutlines } from '../packages/core/src/cutlines';
 import { registerParsingRoutes } from '../apps/shell/lib/routes/parsingRoutes';
 import { registerCutlineRoutes } from '../apps/shell/lib/routes/cutlineRoutes';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 const UWF = 'University of West Florida';
 const HSU = 'Henderson State University';
@@ -69,7 +70,7 @@ describe('computedCut honours gender sponsorship (rule 7)', () => {
       division,
     });
     expect(r.swims).toHaveLength(1);
-    return r.swims[0].computedCut ?? null;
+    return r.swims[0]!.computedCut ?? null;
   };
 
   it('UWF men have no program: no badge, matching the cut tag', () => {
@@ -147,26 +148,26 @@ describe('POST /api/parse-athlete-history (rule 5)', () => {
 
   it('resolves Henderson State to D2 when no division is sent', async () => {
     const out = await post({ text, team: HSU, gender: 'Men' });
-    expect(out.swims[0].computedCut).toBe('B'); // D2 B is 45.01; D1 is 42.55 and gave null
+    expect(out.swims[0]!.computedCut).toBe('B'); // D2 B is 45.01; D1 is 42.55 and gave null
   });
 
   it('keeps an unmapped team unknown instead of scoring it against D1', async () => {
     const out = await post({ text, team: 'Example College', gender: 'Men' });
-    expect(out.swims[0].computedCut).toBeNull();
+    expect(out.swims[0]!.computedCut).toBeNull();
     const noTeam = await post({ text, gender: 'Men' });
-    expect(noTeam.swims[0].computedCut).toBeNull();
+    expect(noTeam.swims[0]!.computedCut).toBeNull();
   });
 
   it('honours an explicit division, including D1', async () => {
     const d1 = await post({ text, team: 'Example College', gender: 'Men', division: 'D1' });
-    expect(d1.swims[0].computedCut).toBeNull(); // 44.00 misses the D1 42.55 standard
+    expect(d1.swims[0]!.computedCut).toBeNull(); // 44.00 misses the D1 42.55 standard
     const d2 = await post({ text, team: 'Example College', gender: 'Men', division: 'D2' });
-    expect(d2.swims[0].computedCut).toBe('B');
+    expect(d2.swims[0]!.computedCut).toBe('B');
   });
 
   it('treats a nonsense division as absent, not as D1', async () => {
     const out = await post({ text, team: HSU, gender: 'Men', division: 'D9' });
-    expect(out.swims[0].computedCut).toBe('B');
+    expect(out.swims[0]!.computedCut).toBe('B');
   });
 });
 
@@ -310,14 +311,14 @@ describe('an NT catalog time (rule 3)', () => {
         },
       ],
     };
-    const workspace = {
+    const workspace = workspaceFixture({
       id: 'ws',
       name: 'catalog',
       createdAt: 0,
       menResults: [],
       womenResults: [],
       scoringSettings: { ...NSISC_PRESET_SETTINGS },
-    } as unknown as Workspace;
+    });
     expect(buildCategorizedScoringInputs({ workspace, gender: Gender.MEN, rosterCatalog: roster })).toStrictEqual([]);
   });
 });

@@ -32,22 +32,22 @@ function goodRow(over: Record<string, unknown> = {}): Record<string, unknown> {
 describe('mapAthleteRows: no plausible zero, no default gender', () => {
   it('maps a clean row unchanged', () => {
     const [r] = mapAthleteRows([goodRow()]);
-    expect(r.rank).toBe(3);
-    expect(r.points).toBe(16);
-    expect(r.gender).toBe(Gender.MEN);
-    expect(r.pdfPoints).toBeUndefined();
+    expect(r!.rank).toBe(3);
+    expect(r!.points).toBe(16);
+    expect(r!.gender).toBe(Gender.MEN);
+    expect(r!.pdfPoints).toBeUndefined();
   });
 
   it('keeps Women as Women and "N/A" points as "N/A"', () => {
     const [r] = mapAthleteRows([goodRow({ gender: 'Women', calculated_points: 'N/A' })]);
-    expect(r.gender).toBe(Gender.WOMEN);
-    expect(r.points).toBe('N/A');
+    expect(r!.gender).toBe(Gender.WOMEN);
+    expect(r!.points).toBe('N/A');
   });
 
   it('treats an absent rank as the unplaced sentinel 0 (real: exhibition and timed finals)', () => {
     for (const rank of [null, undefined, '']) {
       const [r] = mapAthleteRows([goodRow({ rank })]);
-      expect(r.rank).toBe(0);
+      expect(r!.rank).toBe(0);
     }
   });
 
@@ -102,8 +102,8 @@ describe('mapAthleteRows: no plausible zero, no default gender', () => {
 describe('mapPsychRows', () => {
   it('maps a clean psych row and expands nothing it cannot', () => {
     const [r] = mapPsychRows([{ ...goodRow(), time: '1:40.12' }]);
-    expect(r.gender).toBe(Gender.MEN);
-    expect(r.isPsychSheet).toBe(true);
+    expect(r!.gender).toBe(Gender.MEN);
+    expect(r!.isPsychSheet).toBe(true);
   });
 
   it('throws on a missing gender instead of defaulting to Men', () => {

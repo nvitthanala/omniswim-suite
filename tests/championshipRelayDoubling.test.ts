@@ -39,9 +39,9 @@ import {
 } from '../packages/core/src/lib/ncaaScoringRules';
 import type { NcaaPointTable, NcaaTableSlot } from '../packages/core/src/lib/ncaaScoringRules';
 
-/** A slot's places, or `undefined` when the host publishes the table instead. */
-function placesOf(slot: NcaaTableSlot | undefined): readonly number[] | undefined {
-  if (slot === undefined || isNcaaHostPublishedTable(slot)) return undefined;
+/** A slot's places, or `undefined` when the host publishes the table or the slot is absent (`null`). */
+function placesOf(slot: NcaaTableSlot | null | undefined): readonly number[] | undefined {
+  if (slot === undefined || slot === null || isNcaaHostPublishedTable(slot)) return undefined;
   return (slot as NcaaPointTable).places;
 }
 

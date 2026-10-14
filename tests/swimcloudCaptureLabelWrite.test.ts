@@ -104,7 +104,7 @@ describe('withTeamName against a concurrent re-crawl', () => {
     expect(stored.completeness).toBe('partial');
     expect(stored.plannedPageCount).toBe(stale.plannedPageCount + 7);
     expect(stored.pages).toEqual(newerPages(stale));
-    expect(stored.pages[0].sha256).toBe('f'.repeat(64));
+    expect(stored.pages[0]!.sha256).toBe('f'.repeat(64));
     // The answer handed back is the newer record too, not the stale copy.
     expect(listed.plannedPageCount).toBe(stale.plannedPageCount + 7);
     expect(listed.pages).toEqual(newerPages(stale));

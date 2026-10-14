@@ -31,8 +31,8 @@ describe('ManagerTeamBar', () => {
     const selects = container.querySelectorAll('select');
     expect(selects).toHaveLength(1);
     expect(container.querySelector('label')?.textContent).toMatch(/Team/);
-    expect(selects[0].value).toBe('Beta');
-    expect(Array.from(selects[0].options).map(o => o.value)).toEqual(['', 'Alpha', 'Beta']);
+    expect(selects[0]!.value).toBe('Beta');
+    expect(Array.from(selects[0]!.options).map(o => o.value)).toEqual(['', 'Alpha', 'Beta']);
   });
 
   it('reports the chosen team through onSelectTeam', async () => {
@@ -54,7 +54,7 @@ describe('ManagerTeamBar', () => {
     });
     const selects = container.querySelectorAll('select');
     expect(selects).toHaveLength(1);
-    expect(selects[0].disabled).toBe(true);
-    expect(selects[0].options[0].textContent).toBe('No teams yet');
+    expect(selects[0]!.disabled).toBe(true);
+    expect(selects[0]!.options[0]!.textContent).toBe('No teams yet');
   });
 });

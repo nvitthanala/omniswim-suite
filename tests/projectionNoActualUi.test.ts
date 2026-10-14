@@ -144,9 +144,9 @@ describe('the marker', () => {
   it('draws a dash and the words "No result yet" for a screen reader', () => {
     render(React.createElement(NoActualMarker));
     const marker = markers()[0];
-    expect(marker.querySelector('[aria-hidden="true"]')!.textContent).toBe('—');
-    expect(marker.querySelector('.sr-only')!.textContent).toBe('No result yet');
-    expect(marker.getAttribute('title')).toBe('No result yet');
+    expect(marker!.querySelector('[aria-hidden="true"]')!.textContent).toBe('—');
+    expect(marker!.querySelector('.sr-only')!.textContent).toBe('No result yet');
+    expect(marker!.getAttribute('title')).toBe('No result yet');
   });
 
   it('PrelimsOuValue draws it for a null value only when asked, and never draws 0', () => {
@@ -213,7 +213,7 @@ describe('team card swimmer rows and groups', () => {
     const cards = [...container!.querySelectorAll('.group')];
     expect(cards).toHaveLength(2);
     // Ann: -8.0, no marker. Bea: marker, and no "0.0" over/under.
-    expect(cards[0].textContent).toContain('-8.0');
+    expect(cards[0]!.textContent).toContain('-8.0');
     expect(markers(cards[0])).toHaveLength(0);
     // The swimmer row's own marker says exactly "No result yet" (the group marker's words are longer).
     const rowMarkers = markers(cards[1]).filter(el => el.querySelector('.sr-only')!.textContent === 'No result yet');
@@ -266,7 +266,7 @@ describe('the event tooltip', () => {
       React.createElement(TooltipHeader, {
         isClass: false,
         showPrelimsPerformance: true,
-        data: { rawEvent: EVENT_B, points: 0, overUnder: null, noActual: true },
+        data: { name: EVENT_B, rawEvent: EVENT_B, points: 0, overUnder: null, cumulativeOu: null, noActual: true, swimmers: [] },
       })
     );
     expect(markers()).toHaveLength(1);
@@ -277,7 +277,7 @@ describe('the event tooltip', () => {
       React.createElement(TooltipHeader, {
         isClass: false,
         showPrelimsPerformance: true,
-        data: { rawEvent: EVENT_A, points: 4, overUnder: null, noActual: false },
+        data: { name: EVENT_A, rawEvent: EVENT_A, points: 4, overUnder: null, cumulativeOu: null, noActual: false, swimmers: [] },
       })
     );
     expect(markers()).toHaveLength(0);
@@ -405,7 +405,7 @@ describe('the team card', () => {
     expect(header.textContent).toContain('vs prelims');
     const marker = markers(header)[0];
     expect(marker, 'header marker').toBeDefined();
-    const words = marker.querySelector('.sr-only')!.textContent!;
+    const words = marker!.querySelector('.sr-only')!.textContent!;
     expect(words).toContain('1 entry has no result yet');
     expect(words).toContain('counts it as 0 points');
   });

@@ -109,9 +109,9 @@ describe('concatenated chips (real roster exports)', () => {
     const paste = ['Colin Candebat', HDR, '50 Free SCY\t21.17\tXR\tNew South Championships\tFeb 21, 2026\t'].join('\n');
     const [row] = parseSwimCloudPasteDetailed(paste, { team: HSU, gender: Gender.MEN }).swims;
     expect(row).toMatchObject({ event: '50 Freestyle', time: '21.17', swimcloudBadge: 'extracted', isExtractedSplit: true });
-    expect(row.isUserInputted).toBeUndefined();
-    expect(row.computedCut).toBeNull();
-    const profile = categorizeBestEvents([row], HSU, Gender.MEN, 'Colin Candebat', NSISC_PRESET_SETTINGS);
+    expect(row!.isUserInputted).toBeUndefined();
+    expect(row!.computedCut).toBeNull();
+    const profile = categorizeBestEvents([row!], HSU, Gender.MEN, 'Colin Candebat', NSISC_PRESET_SETTINGS);
     expect(profile.bestByEvent).toStrictEqual({});
     expect(profile.extractedByEvent['50 Freestyle']?.time).toBe('21.17');
   });
@@ -122,7 +122,7 @@ describe('concatenated chips (real roster exports)', () => {
       HDR,
       '100 Free SCM\t51.26\tUR\tI. Korosztályos Országos Rövidpályás Bajnokság\tDec 7, 2022\t',
     ].join('\n');
-    const [row] = parseSwimCloudPasteDetailed(paste, { team: OBU, gender: Gender.MEN }).swims;
+    const row = parseSwimCloudPasteDetailed(paste, { team: OBU, gender: Gender.MEN }).swims[0]!;
     expect(row).toMatchObject({ event: '100 Freestyle', timeType: 'SCM', swimcloudBadge: 'user_input', isUserInputted: true });
     expect(isUserInputtedSwim(row)).toBe(true);
     expect(isExtractedSplitSwim(row)).toBe(false);
@@ -188,7 +188,7 @@ describe('a bare A is not a cut', () => {
       HDR,
       '100 Free SCY\t46.09\tA\tRocky Mountain Athletic Conference Championships\tFeb 11, 2023\t',
     ].join('\n');
-    const [row] = parseSwimCloudPasteDetailed(paste, { team: HSU, gender: Gender.MEN }).swims;
+    const row = parseSwimCloudPasteDetailed(paste, { team: HSU, gender: Gender.MEN }).swims[0]!;
     expect(row.swimcloudBadge).toBe('other');
     expect(row.meetLabel).toBe('Rocky Mountain Athletic Conference Championships');
     // Unknown meaning: not claimed as an altitude-adjusted time either.

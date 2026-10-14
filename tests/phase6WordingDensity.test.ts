@@ -360,7 +360,7 @@ describe('Lineup checklist rows', () => {
       );
     });
     await act(async () => {
-      jumps()[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      jumps()[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(onJump).toHaveBeenCalledWith('Ann', 'k-ann');
   });
@@ -495,7 +495,7 @@ describe('Metrics has one Open video call to action', () => {
     const input = container.querySelector('input#metrics-file-input') as HTMLInputElement;
     const click = vi.spyOn(input, 'click').mockImplementation(() => undefined);
     await act(async () => {
-      controls[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      controls[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(click).toHaveBeenCalledTimes(1);
   });

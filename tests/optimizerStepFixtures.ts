@@ -4,9 +4,10 @@
  * optimizer really gains, the roster-only workspace is the recruit-driven shape.
  * Not a test file (no .test suffix), so vitest does not collect it.
  */
-import { Gender, ClassYear, type SwimmerResult, type Workspace } from '../packages/core/src/types';
+import { Gender, ClassYear, type Recruit, type SwimmerResult, type Workspace } from '../packages/core/src/types';
 import { NSISC_PRESET_SETTINGS, mergeScoringSettings } from '../packages/core/src/lib/scoringDefaults';
 import { buildScoringBundle, type ScoringBundle } from '../packages/core/src/lib/scoringEngine';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 export const HOME_TEAM = 'Henderson State University';
 export const RIVAL_TEAM = 'Ouachita Baptist University';
@@ -116,7 +117,7 @@ export function buildMeetWorkspace(
 
 /** Recruit-only workspace with no meet: the shape where nothing beats the current lineup. */
 export function buildRosterOnlyWorkspace(): Workspace {
-  const recruits = [];
+  const recruits: Recruit[] = [];
   for (let i = 0; i < 22; i++) {
     ['50 Freestyle', '100 Freestyle', '100 Backstroke'].forEach((event, e) => {
       recruits.push({
@@ -131,7 +132,7 @@ export function buildRosterOnlyWorkspace(): Workspace {
       });
     });
   }
-  return {
+  return workspaceFixture({
     id: 'ws-roster-only',
     name: 'Roster Plan (no meet)',
     createdAt: 1,
@@ -156,7 +157,7 @@ export function buildRosterOnlyWorkspace(): Workspace {
       },
     ],
     activeEntryIds: ['plan-keep-1'],
-  } as unknown as Workspace;
+  });
 }
 
 /** The scoring settings the Manager hands every step: `useWorkspaceScoring`'s own merge. */

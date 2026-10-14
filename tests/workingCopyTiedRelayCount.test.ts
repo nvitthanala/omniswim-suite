@@ -23,6 +23,7 @@ import {
   upsertRelayLegOverride,
 } from '../packages/core/src/lib/relayLegMatching';
 import { countWorkingCopyChanges } from '../packages/core/src/lib/workingCopyChanges';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 const TEAM = 'Home';
 const EVENT = 'Event 31 Men 4x50 Yard Freestyle Relay';
@@ -71,14 +72,14 @@ const at = (key: string, legIndex: number, assigneeName: string): RelayLegOverri
 });
 
 function workspaceOf(relayLegOverrides: RelayLegOverride[]): Workspace {
-  return {
+  return workspaceFixture({
     id: 'ws',
     name: 'ws',
     createdAt: 0,
     menResults: results,
     womenResults: [],
     relayLegOverrides,
-  } as unknown as Workspace;
+  });
 }
 
 const count = (overrides: RelayLegOverride[]) =>

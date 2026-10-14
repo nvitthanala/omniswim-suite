@@ -63,7 +63,7 @@ describe.skipIf(RELAY_PAGE === undefined)('relay legs from a real per-event page
       ? ({ ok: false } as unknown as ReturnType<typeof parseMeetEventResultsHtml>)
       : parseMeetEventResultsHtml(RELAY_PAGE, CONTEXT as never, {} as never);
   const swims = parsed.ok
-    ? (parsed.data.rounds ?? []).flatMap((round: { swims?: unknown[] }) => round.swims ?? [])
+    ? (parsed.data.rounds ?? []).flatMap((round: { swims?: readonly unknown[] }) => round.swims ?? [])
     : [];
 
   it('parses the page at all', () => {

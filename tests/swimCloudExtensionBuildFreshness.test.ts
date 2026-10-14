@@ -72,7 +72,7 @@ describe('extension bundles are in sync with their source', () => {
       });
 
       expect(result.outputFiles).toHaveLength(1);
-      const rebuilt = result.outputFiles![0].text;
+      const rebuilt = result.outputFiles![0]!.text;
       const committed = await readFile(entry.out, 'utf-8');
 
       // Normalise only line endings. This repo runs on Windows with

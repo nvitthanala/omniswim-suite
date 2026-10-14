@@ -256,11 +256,11 @@ describe("(a) a Mixed-event row counts only for the swimmer's own gender", () =>
       '1:21.60',
     ]);
     const out = simulateRoster(menResults, [], false, new Set(['austin huffhines']), [
-      fillOverride(legs[0], 3, 'Ave Owens'),
+      fillOverride(legs[0]!, 3, 'Ave Owens'),
     ]);
     const relay = relayLegRows(out, DSU, M_200FR, 2);
     // Before R1: 'Ave Owens' at 1:21.60 - 19.65 + 23.19 = 1:25.14.
-    expect([relay[3].name, relay[3].relayLegVacant, relay[3].relayTeamTime]).toStrictEqual([
+    expect([relay[3]!.name, relay[3]!.relayLegVacant, relay[3]!.relayTeamTime]).toStrictEqual([
       '—',
       true,
       '1:24.60',
@@ -311,10 +311,10 @@ describe("(a) a Mixed-event row counts only for the swimmer's own gender", () =>
     const legs = relayLegRows(menResults, DSU, M_200FR, 2);
     const woman = { ...womenResults.find(r => r.name === 'Ave Owens' && /50 Yard Free/.test(r.event))!, team: DSU };
     expect(
-      resolveOverrideAssignee(fillOverride(legs[0], 3, 'Ave Owens'), [woman], DSU, M_200FR, 3)
+      resolveOverrideAssignee(fillOverride(legs[0]!, 3, 'Ave Owens'), [woman], DSU, M_200FR, 3)
     ).toBeNull();
     expect(
-      resolveOverrideAssignee(fillOverride(legs[0], 3, 'Ave Owens'), [woman], DSU, 'Event 30 Women 4x50 Yard Freestyle Relay', 3)
+      resolveOverrideAssignee(fillOverride(legs[0]!, 3, 'Ave Owens'), [woman], DSU, 'Event 30 Women 4x50 Yard Freestyle Relay', 3)
     ).toBe(woman);
   });
 });
@@ -376,12 +376,12 @@ describe("(b) a relay's distance comes from its own distance token", () => {
     expect(menIndividuals.some(r => swimmerMatchesRelayLeg(r, UNREADABLE, 0))).toBe(false);
     // Reid Remmert (50 Free 21.00) fills the readable relay; the unreadable one stays vacant.
     const readable = simulateRoster(menResults, [], true, new Set(), [
-      fillOverride(relayLegRows(menResults, HSU, M_200FR, 9)[0], 0, 'Reid Remmert'),
+      fillOverride(relayLegRows(menResults, HSU, M_200FR, 9)[0]!, 0, 'Reid Remmert'),
     ]);
-    expect(relayLegRows(readable, HSU, M_200FR, 9)[0].name).toBe('Reid Remmert');
-    const out = simulateRoster(relabelled, [], true, new Set(), [fillOverride(legs[0], 0, 'Reid Remmert')]);
+    expect(relayLegRows(readable, HSU, M_200FR, 9)[0]!.name).toBe('Reid Remmert');
+    const out = simulateRoster(relabelled, [], true, new Set(), [fillOverride(legs[0]!, 0, 'Reid Remmert')]);
     const relay = relayLegRows(out, HSU, UNREADABLE, 9);
-    expect([relay[0].name, relay[0].relayLegVacant, relay[0].relayMissingLeg?.reason]).toStrictEqual([
+    expect([relay[0]!.name, relay[0]!.relayLegVacant, relay[0]!.relayMissingLeg?.reason]).toStrictEqual([
       '—',
       true,
       'vacant',
@@ -426,7 +426,7 @@ describe("(c) an individual event's distance is its own token", () => {
         continue;
       }
       singleStroke += 1;
-      const stroke = { Freestyle: 'free', Backstroke: 'back', Breaststroke: 'breast', Butterfly: 'fly' }[own[2]];
+      const stroke = { Freestyle: 'free', Backstroke: 'back', Breaststroke: 'breast', Butterfly: 'fly' }[own[2]!];
       expect(individualEventDistanceStroke(label), label).toStrictEqual({ distance: Number(own[1]), stroke });
     }
     expect(singleStroke).toBeGreaterThan(20);
@@ -477,7 +477,7 @@ describe('(d) a graduate student (GS) graduates', () => {
     const out = simulateRoster(menResults, [], true);
     const relay = relayLegRows(out, HSU, M_400MR, 10);
     // Before R1 his breaststroke leg stayed: 'Mark Eberhard'.
-    expect([relay[1].name, relay[1].relayLegVacant]).toStrictEqual(['—', true]);
+    expect([relay[1]!.name, relay[1]!.relayLegVacant]).toStrictEqual(['—', true]);
     const projected = buildWhatIfResults({ workspace: workspace(), gender: Gender.MEN, removeSeniors: true });
     expect(projected.filter(r => r.name === 'Mark Eberhard')).toStrictEqual([]);
   });
@@ -541,14 +541,14 @@ describe('(e) a history swim fills a relay leg the meet holds no swim for', () =
       ['Stevie Balistreri', 'JR', '20.69'],
       ['Avery Henke', 'JR', '20.20'],
     ]);
-    const w = { ...ws, relayLegOverrides: [fillOverride(legs[0], 0, 'Colton Bennett')] } as Workspace;
+    const w = { ...ws, relayLegOverrides: [fillOverride(legs[0]!, 0, 'Colton Bennett')] } as Workspace;
     const relay = relayLegRows(buildWhatIfResults({ workspace: w, gender: Gender.MEN, removeSeniors: true }), HSU, M_200FR, 9);
     // Doll's own 50 Free (20.90) leaves, Bennett's 22.93 arrives; Cebula's
     // leg has no fill (+3.00): 1:23.30 + 2.03 + 3.00 = 1:28.33. Before R1 the
     // override resolved to nothing and both legs sat vacant: 1:29.30.
     expect(relay.map(r => r.name)).toStrictEqual(['Colton Bennett', '—', 'Stevie Balistreri', 'Avery Henke']);
-    expect(relay[0].relayTeamTime).toBe('1:28.33');
-    expect(relay[0].relayLegSplit).toBe('22.93');
+    expect(relay[0]!.relayTeamTime).toBe('1:28.33');
+    expect(relay[0]!.relayLegSplit).toBe('22.93');
     // A leg-only row never becomes an individual entry.
     const projected = buildWhatIfResults({ workspace: w, gender: Gender.MEN, removeSeniors: true });
     expect(projected.some(r => !r.isRelay && r.relayLegHistory)).toBe(false);
@@ -581,9 +581,9 @@ describe("(f) the departed leg holder's swim is the relay team's own", () => {
     // arrives, 3:00.20 + 0.88 = 3:01.08. Before R1 the namesake's 48.04 left.
     const legs = relayLegRows(menResults, DSU, M_400FR, 0);
     const out = simulateRoster(withNamesake, [], false, new Set(['austin huffhines']), [
-      fillOverride(legs[0], 3, 'Sergio Rodriguez Rodriguez'),
+      fillOverride(legs[0]!, 3, 'Sergio Rodriguez Rodriguez'),
     ]);
-    expect(relayLegRows(out, DSU, M_400FR, 0)[3].relayTeamTime).toBe('3:01.08');
+    expect(relayLegRows(out, DSU, M_400FR, 0)[3]!.relayTeamTime).toBe('3:01.08');
   });
 });
 
@@ -597,13 +597,13 @@ describe('a swimmer never swims two legs of one relay (found by the R1 scenario 
       ['Oliver Pozvai', '19.49'],
     ]);
     const out = simulateRoster(menResults, [], false, new Set(['gavin kock']), [
-      fillOverride(legs[0], 0, 'Oliver Pozvai'),
+      fillOverride(legs[0]!, 0, 'Oliver Pozvai'),
     ]);
     const relay = relayLegRows(out, HSU, M_200FR, 1);
     // Before: Oliver Pozvai on legs 1 and 4 at 1:20.02. The anchor was added
     // to the relay's swimmers only when the walk reached leg 4.
     expect(relay.map(r => r.name)).toStrictEqual(['—', 'Tristen Fergunson', 'Vitor Sa', 'Oliver Pozvai']);
-    expect([relay[0].relayMissingLeg?.reason, relay[0].relayTeamTime]).toStrictEqual([
+    expect([relay[0]!.relayMissingLeg?.reason, relay[0]!.relayTeamTime]).toStrictEqual([
       'stroke_mismatch',
       '1:23.21',
     ]);

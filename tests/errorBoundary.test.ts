@@ -11,6 +11,7 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement, type ReactNode } from 'react';
+import { elementWithChildren } from './helpers/elementWithChildren';
 import { createRoot, type Root } from 'react-dom/client';
 import { ErrorBoundary, type BackupRestoreActions } from '../packages/ui/src/components/ErrorBoundary';
 
@@ -48,7 +49,7 @@ describe('ErrorBoundary', () => {
   async function show(backup?: BackupRestoreActions, area = 'Matrix') {
     await act(async () => {
       root.render(
-        createElement(ErrorBoundary, { area, backup, onPageReload }, createElement(Thrower))
+        elementWithChildren(ErrorBoundary, { area, backup, onPageReload }, createElement(Thrower))
       );
     });
   }
@@ -146,7 +147,7 @@ describe('ErrorBoundary', () => {
     await show({ findLast, restore });
     await click('Restore last backup');
     expect(confirm).toHaveBeenCalledTimes(1);
-    expect(String(confirm.mock.calls[0][0])).toContain('meets-manual-20261012T150000Z.json');
+    expect(String(confirm.mock.calls[0]![0])).toContain('meets-manual-20261012T150000Z.json');
     expect(restore).toHaveBeenCalledWith('meets-manual-20261012T150000Z.json');
     expect(onPageReload).toHaveBeenCalledTimes(1);
   });

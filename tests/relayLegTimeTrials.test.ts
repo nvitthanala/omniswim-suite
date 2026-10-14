@@ -204,7 +204,7 @@ describe('the projected relay', () => {
     expect(leg.relayLegVacant).toBe(true);
     expect(leg.name).toBe('—');
     expect(legs.some(r => r.relayLegTimeTrial === true)).toBe(false);
-    expect(legs[0].relayNames?.map(n => n.name)).not.toContain(KILLACKEY);
+    expect(legs[0]!.relayNames?.map(n => n.name)).not.toContain(KILLACKEY);
   });
 
   it('fills and labels the leg when the setting is on', () => {
@@ -215,7 +215,7 @@ describe('the projected relay', () => {
     expect(leg.relayLegTimeTrial).toBe(true);
     // The label is on the filled leg only.
     expect(legs.filter(r => r.relayLegTimeTrial === true).map(r => r.relayLegIndex)).toStrictEqual([2]);
-    expect(legs[0].relayNames?.map(n => n.name)).toContain(KILLACKEY);
+    expect(legs[0]!.relayNames?.map(n => n.name)).toContain(KILLACKEY);
   });
 
   it('the label reaches the scored rows the screens read', () => {

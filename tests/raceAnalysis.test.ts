@@ -64,7 +64,7 @@ function fixtureA(): { config: RaceConfig; tags: RaceTag[] } {
       { kind: 'Kick', time: 13.6, lengthIndex: 1 },
       { kind: 'Kick', time: 14.0, lengthIndex: 1 },
       { kind: 'Breakout', time: 15.4, lengthIndex: 1 },
-      l1Strokes[0],
+      l1Strokes[0]!,
       { kind: 'FifteenMetre', time: 16.5, lengthIndex: 1 },
       ...l1Strokes.slice(1),
       { kind: 'TurnStart', time: 35.4, lengthIndex: 1 },
@@ -143,53 +143,53 @@ describe('raceAnalysis', () => {
     expect(result.problems).toHaveLength(0);
     expect(valueOf(result.reactionTime, 's')).toBeCloseTo(0.68, 6);
     expect(valueOf(result.flightTime, 's')).toBeCloseTo(0.72, 6);
-    expect(valueOf(result.lengths[0].breakoutTime, 's')).toBeCloseTo(4.72, 6);
-    expect(valueOf(result.lengths[1].breakoutTime, 's')).toBeCloseTo(3.5, 6);
-    expect(valueOf(result.lengths[0].underwaterVelocity, 'm/s')).toBeCloseTo(2.375, 6);
-    expect(valueOf(result.lengths[1].underwaterVelocity, 'm/s')).toBeCloseTo(2.285714285714286, 6);
-    expect(valueOf(result.lengths[0].kickCount, 'count')).toBe(6);
-    expect(valueOf(result.lengths[0].kickTempo, 'kicks/min')).toBeCloseTo(150.0, 6);
-    expect(valueOf(result.lengths[0].fifteenMetreTime, 's')).toBeCloseTo(5.82, 6);
-    expect(valueOf(result.lengths[0].zeroToFifteenMetreVelocity, 'm/s')).toBeCloseTo(2.577319587628866, 6);
-    expect(valueOf(result.lengths[0].cycleCount, 'count')).toBe(16);
-    expect(valueOf(result.lengths[1].cycleCount, 'count')).toBe(18);
-    expect(valueOf(result.lengths[0].strokeRate, 'cycles/min')).toBeCloseTo(50.0, 6);
-    expect(valueOf(result.lengths[1].strokeRate, 'cycles/min')).toBeCloseTo(48.0, 6);
-    expect(valueOf(result.lengths[0].distancePerCycle, 'm')).toBeCloseTo(2.53125, 6);
-    expect(valueOf(result.lengths[1].distancePerCycle, 'm')).toBeCloseTo(2.055555555555556, 6);
-    expect(valueOf(result.turns[0].turnTime, 's')).toBeCloseTo(1.1, 6);
-    expect(valueOf(result.lengths[0].split, 's')).toBeCloseTo(24.72, 6);
-    expect(valueOf(result.lengths[1].split, 's')).toBeCloseTo(30.0, 6);
-    expect(valueOf(result.lengths[0].meanVelocity, 'm/s')).toBeCloseTo(2.022653721682848, 6);
-    expect(valueOf(result.lengths[1].meanVelocity, 'm/s')).toBeCloseTo(1.666666666666667, 6);
+    expect(valueOf(result.lengths[0]!.breakoutTime, 's')).toBeCloseTo(4.72, 6);
+    expect(valueOf(result.lengths[1]!.breakoutTime, 's')).toBeCloseTo(3.5, 6);
+    expect(valueOf(result.lengths[0]!.underwaterVelocity, 'm/s')).toBeCloseTo(2.375, 6);
+    expect(valueOf(result.lengths[1]!.underwaterVelocity, 'm/s')).toBeCloseTo(2.285714285714286, 6);
+    expect(valueOf(result.lengths[0]!.kickCount, 'count')).toBe(6);
+    expect(valueOf(result.lengths[0]!.kickTempo, 'kicks/min')).toBeCloseTo(150.0, 6);
+    expect(valueOf(result.lengths[0]!.fifteenMetreTime, 's')).toBeCloseTo(5.82, 6);
+    expect(valueOf(result.lengths[0]!.zeroToFifteenMetreVelocity, 'm/s')).toBeCloseTo(2.577319587628866, 6);
+    expect(valueOf(result.lengths[0]!.cycleCount, 'count')).toBe(16);
+    expect(valueOf(result.lengths[1]!.cycleCount, 'count')).toBe(18);
+    expect(valueOf(result.lengths[0]!.strokeRate, 'cycles/min')).toBeCloseTo(50.0, 6);
+    expect(valueOf(result.lengths[1]!.strokeRate, 'cycles/min')).toBeCloseTo(48.0, 6);
+    expect(valueOf(result.lengths[0]!.distancePerCycle, 'm')).toBeCloseTo(2.53125, 6);
+    expect(valueOf(result.lengths[1]!.distancePerCycle, 'm')).toBeCloseTo(2.055555555555556, 6);
+    expect(valueOf(result.turns[0]!.turnTime, 's')).toBeCloseTo(1.1, 6);
+    expect(valueOf(result.lengths[0]!.split, 's')).toBeCloseTo(24.72, 6);
+    expect(valueOf(result.lengths[1]!.split, 's')).toBeCloseTo(30.0, 6);
+    expect(valueOf(result.lengths[0]!.meanVelocity, 'm/s')).toBeCloseTo(2.022653721682848, 6);
+    expect(valueOf(result.lengths[1]!.meanVelocity, 'm/s')).toBeCloseTo(1.666666666666667, 6);
     expect(valueOf(result.raceTime, 's')).toBeCloseTo(54.72, 6);
     expect(valueOf(result.raceMeanVelocity, 'm/s')).toBeCloseTo(1.827485380116959, 6);
     expect(valueOf(result.finishSegmentTime, 's')).toBeCloseTo(2.4, 6);
     expect(valueOf(result.finishSegmentVelocity, 'm/s')).toBeCloseTo(2.083333333333333, 6);
 
-    expect(valueOf(result.lengths[0].underwaterTime, 's')).toBeCloseTo(4.0, 6);
-    expect(valueOf(result.lengths[1].underwaterTime, 's')).toBeCloseTo(3.5, 6);
-    expect(result.lengths[0].underwaterVelocity.status === 'value' && result.lengths[0].underwaterVelocity.approximate).toBe(true);
-    expect(result.lengths[1].underwaterVelocity.status === 'value' && result.lengths[1].underwaterVelocity.approximate).toBe(true);
-    expect(result.lengths[0].distancePerCycle.status === 'value' && result.lengths[0].distancePerCycle.approximate).toBe(true);
-    expect(result.lengths[0].fifteenMetreTime.status === 'value' && result.lengths[0].fifteenMetreTime.approximate).toBe(false);
-    expect(valueOf(result.lengths[1].fifteenMetreTime, 's')).toBeCloseTo(8.5, 6);
-    expect(result.lengths[1].fifteenMetreTime.status === 'value' && result.lengths[1].fifteenMetreTime.approximate).toBe(true);
-    expect(result.lengths[0].zeroToFifteenMetreVelocity.status === 'value' && result.lengths[0].zeroToFifteenMetreVelocity.approximate).toBe(false);
-    expect(result.lengths[1].zeroToFifteenMetreVelocity.status === 'value' && result.lengths[1].zeroToFifteenMetreVelocity.approximate).toBe(true);
+    expect(valueOf(result.lengths[0]!.underwaterTime, 's')).toBeCloseTo(4.0, 6);
+    expect(valueOf(result.lengths[1]!.underwaterTime, 's')).toBeCloseTo(3.5, 6);
+    expect(result.lengths[0]!.underwaterVelocity.status === 'value' && result.lengths[0]!.underwaterVelocity.approximate).toBe(true);
+    expect(result.lengths[1]!.underwaterVelocity.status === 'value' && result.lengths[1]!.underwaterVelocity.approximate).toBe(true);
+    expect(result.lengths[0]!.distancePerCycle.status === 'value' && result.lengths[0]!.distancePerCycle.approximate).toBe(true);
+    expect(result.lengths[0]!.fifteenMetreTime.status === 'value' && result.lengths[0]!.fifteenMetreTime.approximate).toBe(false);
+    expect(valueOf(result.lengths[1]!.fifteenMetreTime, 's')).toBeCloseTo(8.5, 6);
+    expect(result.lengths[1]!.fifteenMetreTime.status === 'value' && result.lengths[1]!.fifteenMetreTime.approximate).toBe(true);
+    expect(result.lengths[0]!.zeroToFifteenMetreVelocity.status === 'value' && result.lengths[0]!.zeroToFifteenMetreVelocity.approximate).toBe(false);
+    expect(result.lengths[1]!.zeroToFifteenMetreVelocity.status === 'value' && result.lengths[1]!.zeroToFifteenMetreVelocity.approximate).toBe(true);
     expect(result.reactionTime.status === 'value' && result.reactionTime.provenance).toBe('derived');
-    expect(result.lengths[0].split.status === 'value' && result.lengths[0].split.provenance).toBe('derived');
+    expect(result.lengths[0]!.split.status === 'value' && result.lengths[0]!.split.provenance).toBe('derived');
     const subtractionMetrics = [
       result.reactionTime,
       result.flightTime,
       result.raceTime,
-      result.lengths[0].breakoutTime,
-      result.lengths[0].underwaterTime,
-      result.lengths[0].fifteenMetreTime,
-      result.lengths[0].split,
-      result.turns[0].turnTime,
+      result.lengths[0]!.breakoutTime,
+      result.lengths[0]!.underwaterTime,
+      result.lengths[0]!.fifteenMetreTime,
+      result.lengths[0]!.split,
+      result.turns[0]!.turnTime,
       result.finishSegmentTime,
-      result.lengths[0].strokeCycles[0].cycleTime,
+      result.lengths[0]!.strokeCycles[0]!.cycleTime,
     ];
     for (const metric of subtractionMetrics) {
       expect(metric.status).toBe('value');
@@ -198,7 +198,7 @@ describe('raceAnalysis', () => {
       }
     }
 
-    const splitSum = valueOf(result.lengths[0].split) + valueOf(result.lengths[1].split);
+    const splitSum = valueOf(result.lengths[0]!.split) + valueOf(result.lengths[1]!.split);
     expect(splitSum).toBeCloseTo(valueOf(result.raceTime), 6);
     expect(valueOf(result.reactionTime)).toBeCloseTo(0.68, 6);
     expect(raceAnalysisReferenceBands.find((band) => band.key === 'start')?.quote).toBe('.75 to 1.00 avg.');
@@ -223,7 +223,7 @@ describe('raceAnalysis', () => {
       expect(valueOf(length.strokeRate, 'cycles/min')).toBeCloseTo(60.0, 6);
     }
 
-    expect(valueOf(result.lengths[0].breakoutTime, 's')).toBeCloseTo(3.0, 6);
+    expect(valueOf(result.lengths[0]!.breakoutTime, 's')).toBeCloseTo(3.0, 6);
     for (const length of result.lengths.slice(1)) {
       expect(valueOf(length.breakoutTime, 's')).toBeCloseTo(2.5, 6);
     }
@@ -233,19 +233,19 @@ describe('raceAnalysis', () => {
       expect(valueOf(turn.turnTime, 's')).toBeCloseTo(1.0, 6);
     }
 
-    expect(valueOf(result.lengths[0].split, 's')).toBeCloseTo(15.0, 6);
+    expect(valueOf(result.lengths[0]!.split, 's')).toBeCloseTo(15.0, 6);
     for (const length of result.lengths.slice(1, 7)) {
       expect(valueOf(length.split, 's')).toBeCloseTo(20.0, 6);
     }
-    expect(valueOf(result.lengths[7].split, 's')).toBeCloseTo(20.5, 6);
+    expect(valueOf(result.lengths[7]!.split, 's')).toBeCloseTo(20.5, 6);
 
     const splitSum = result.lengths.reduce((total, length) => total + valueOf(length.split), 0);
     expect(splitSum).toBeCloseTo(155.5, 6);
-    expect(valueOf(result.lengths[0].meanVelocity, 'yd/s')).toBeCloseTo(1.666666666666667, 6);
+    expect(valueOf(result.lengths[0]!.meanVelocity, 'yd/s')).toBeCloseTo(1.666666666666667, 6);
     for (const length of result.lengths.slice(1, 7)) {
       expect(valueOf(length.meanVelocity, 'yd/s')).toBeCloseTo(1.25, 6);
     }
-    expect(valueOf(result.lengths[7].meanVelocity, 'yd/s')).toBeCloseTo(1.219512195121951, 6);
+    expect(valueOf(result.lengths[7]!.meanVelocity, 'yd/s')).toBeCloseTo(1.219512195121951, 6);
     expect(valueOf(result.raceTime, 's')).toBeCloseTo(155.5, 6);
     expect(valueOf(result.raceMeanVelocity, 'yd/s')).toBeCloseTo(1.286173633440514, 6);
     expectAbsent(result.finishSegmentTime);
@@ -268,13 +268,13 @@ describe('raceAnalysis', () => {
 
     const unpairedTurns = result.problems.filter((problem) => problem.code === 'UNPAIRED_TURN');
     expect(unpairedTurns).toHaveLength(1);
-    expect(unpairedTurns[0].severity).toBe('warning');
-    expectAbsent(result.turns[0].turnTime);
-    expectAbsent(result.lengths[1].breakoutTime);
-    expectAbsent(result.lengths[1].underwaterVelocity);
-    expect(valueOf(result.lengths[0].split, 's')).toBeCloseTo(24.72, 6);
-    expect(valueOf(result.lengths[1].split, 's')).toBeCloseTo(30.0, 6);
-    expect(valueOf(result.lengths[1].strokeRate, 'cycles/min')).toBeCloseTo(48.0, 6);
+    expect(unpairedTurns[0]!.severity).toBe('warning');
+    expectAbsent(result.turns[0]!.turnTime);
+    expectAbsent(result.lengths[1]!.breakoutTime);
+    expectAbsent(result.lengths[1]!.underwaterVelocity);
+    expect(valueOf(result.lengths[0]!.split, 's')).toBeCloseTo(24.72, 6);
+    expect(valueOf(result.lengths[1]!.split, 's')).toBeCloseTo(30.0, 6);
+    expect(valueOf(result.lengths[1]!.strokeRate, 'cycles/min')).toBeCloseTo(48.0, 6);
     expect(valueOf(result.raceTime, 's')).toBeCloseTo(54.72, 6);
   });
 
@@ -283,20 +283,20 @@ describe('raceAnalysis', () => {
     const result = analyzeRace(config, tags.map(({ lengthIndex: _lengthIndex, ...tag }) => tag));
 
     expect(result.problems.map((problem) => problem.code)).not.toContain('LENGTHS_UNRESOLVED');
-    expect(valueOf(result.lengths[0].split, 's')).toBeCloseTo(24.72, 6);
-    expect(valueOf(result.lengths[1].split, 's')).toBeCloseTo(30.0, 6);
-    expect(valueOf(result.lengths[0].cycleCount, 'count')).toBe(16);
-    expect(valueOf(result.lengths[1].strokeRate, 'cycles/min')).toBeCloseTo(48.0, 6);
+    expect(valueOf(result.lengths[0]!.split, 's')).toBeCloseTo(24.72, 6);
+    expect(valueOf(result.lengths[1]!.split, 's')).toBeCloseTo(30.0, 6);
+    expect(valueOf(result.lengths[0]!.cycleCount, 'count')).toBe(16);
+    expect(valueOf(result.lengths[1]!.strokeRate, 'cycles/min')).toBeCloseTo(48.0, 6);
   });
 
   it('reports unresolved lengths and emits no plausible metrics when missing indexes are non-monotonic', () => {
     const { config, tags } = fixtureA();
     const indexFreeTags = tags.map(({ lengthIndex: _lengthIndex, ...tag }) => tag);
-    const result = analyzeRace(config, [indexFreeTags[1], indexFreeTags[0], ...indexFreeTags.slice(2)]);
+    const result = analyzeRace(config, [indexFreeTags[1]!, indexFreeTags[0]!, ...indexFreeTags.slice(2)]);
 
     expect(result.problems.find((problem) => problem.code === 'LENGTHS_UNRESOLVED')?.severity).toBe('error');
     expectAbsent(result.raceTime, 'length indexes could not be resolved');
-    expectAbsent(result.lengths[0].split, 'length indexes could not be resolved');
+    expectAbsent(result.lengths[0]!.split, 'length indexes could not be resolved');
   });
 
   it('returns absent for an identical-timestamp rate denominator and single-length deltas', () => {
@@ -317,8 +317,8 @@ describe('raceAnalysis', () => {
       { kind: 'Finish', time: 30, lengthIndex: 1 },
     ]);
 
-    expectAbsent(result.lengths[0].strokeRate, 'tag interval for rate must be finite and greater than zero');
-    expectAbsent(result.lengths[0].strokeCycles[0].instantaneousStrokeRate, 'cycle time must be finite and greater than zero');
+    expectAbsent(result.lengths[0]!.strokeRate, 'tag interval for rate must be finite and greater than zero');
+    expectAbsent(result.lengths[0]!.strokeCycles[0]!.instantaneousStrokeRate, 'cycle time must be finite and greater than zero');
     expectAbsent(result.firstToLastStrokeRateDelta, 'a single-length race has no first-to-last comparison');
     expectAbsent(result.firstToLastLengthMeanVelocityDelta, 'a single-length race has no first-to-last comparison');
 
@@ -331,7 +331,7 @@ describe('raceAnalysis', () => {
         { kind: 'Finish', time: 30, lengthIndex: 1 },
       ],
     );
-    expectAbsent(noStrokeResult.lengths[0].cycleCount, 'stroke tags were not tagged for this length');
+    expectAbsent(noStrokeResult.lengths[0]!.cycleCount, 'stroke tags were not tagged for this length');
   });
 
   it('invalidates finish metrics for misplaced flags and excludes out-of-window kicks', () => {
@@ -359,7 +359,7 @@ describe('raceAnalysis', () => {
     expect(result.problems.map((problem) => problem.code)).toContain('KICK_OUTSIDE_UNDERWATER');
     expectAbsent(result.finishSegmentTime, 'flags tag is invalid for finish segment metrics');
     expectAbsent(result.finishSegmentVelocity, 'flags tag is invalid for finish segment metrics');
-    expectAbsent(result.lengths[0].kickCount, 'no valid kick tags were tagged for this length');
+    expectAbsent(result.lengths[0]!.kickCount, 'no valid kick tags were tagged for this length');
   });
 
   it('supports legal and illegal tag presses, including undo', () => {
@@ -388,7 +388,7 @@ describe('raceAnalysis', () => {
 
     const invalid = proposeStandardImStrokeOrder(6);
     expect(invalid.strokePerLength).toStrictEqual([]);
-    expect(invalid.problems[0].code).toBe('IM_LENGTHS_NOT_DIVISIBLE');
+    expect(invalid.problems[0]!.code).toBe('IM_LENGTHS_NOT_DIVISIBLE');
   });
 });
 

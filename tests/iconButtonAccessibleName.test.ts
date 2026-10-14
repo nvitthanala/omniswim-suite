@@ -25,6 +25,7 @@
 import { readdirSync, readFileSync, statSync } from 'node:fs';
 import { join, relative } from 'node:path';
 import { createElement } from 'react';
+import { elementWithChildren } from './helpers/elementWithChildren';
 import { renderToStaticMarkup } from 'react-dom/server';
 import ts from 'typescript';
 import { describe, expect, it } from 'vitest';
@@ -225,7 +226,7 @@ describe('the Button primitive names an icon-only button', () => {
     const toggle = renderToStaticMarkup(createElement(ThemeToggle, { theme: 'dark', onToggle: () => undefined }));
     expect(toggle).toContain('aria-label="Toggle color mode"');
     const menu = renderToStaticMarkup(
-      createElement(Menu, { label: 'More', icon }, createElement(MenuItem, null, 'Item'))
+      elementWithChildren(Menu, { label: 'More', icon }, createElement(MenuItem, null, 'Item'))
     );
     expect(menu).toContain('aria-label="More"');
   });

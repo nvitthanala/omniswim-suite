@@ -162,15 +162,15 @@ describe('meet-day deck', () => {
     expect(list.length).toBeGreaterThanOrEqual(3);
     expect(container.querySelectorAll('[data-deck-card]')).toHaveLength(1);
     expect(position()).toBe(`1 of ${list.length}`);
-    expect(currentCard().getAttribute('aria-label')).toContain(list[0].event);
+    expect(currentCard().getAttribute('aria-label')).toContain(list[0]!.event);
 
     pressKey('ArrowRight');
     expect(position()).toBe(`2 of ${list.length}`);
-    expect(currentCard().getAttribute('aria-label')).toContain(list[1].event);
+    expect(currentCard().getAttribute('aria-label')).toContain(list[1]!.event);
 
     pressKey('ArrowLeft');
     expect(position()).toBe(`1 of ${list.length}`);
-    expect(currentCard().getAttribute('aria-label')).toContain(list[0].event);
+    expect(currentCard().getAttribute('aria-label')).toContain(list[0]!.event);
 
     // Stops at the first card.
     pressKey('ArrowLeft');
@@ -222,7 +222,7 @@ describe('meet-day deck', () => {
     const badged = legs.filter(r => r.textContent?.includes(RELAY_LEG_TIME_TRIAL_LABEL));
     expect(RELAY_LEG_TIME_TRIAL_LABEL).toBe('Time trial');
     expect(badged).toHaveLength(1);
-    expect(badged[0].textContent).toMatch(/^2/);
+    expect(badged[0]!.textContent).toMatch(/^2/);
     // A leg with no swimmer shows NT, not a time.
     const vacant = legs.filter(r => r.textContent?.includes('Vacant'));
     expect(vacant.length).toBeGreaterThan(0);

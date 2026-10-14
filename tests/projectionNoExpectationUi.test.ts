@@ -32,7 +32,6 @@ import {
   type ScoringSettings,
   type SwimmerResult,
   type TeamScore,
-  type Workspace,
 } from '../packages/core/src/types';
 
 vi.mock('motion/react', async () => (await import('./motionStub')).motionStub);
@@ -65,6 +64,7 @@ import { MeetOpsAnalyzeStep } from '../packages/matrix/src/components/MeetOpsAna
 import { noExpectationText, seedsPastTableLabel } from '../packages/matrix/src/lib/noExpectation';
 import { useWorkspaceScoring } from '../packages/core/src/lib/useWorkspaceScoring';
 import { settingsForBuiltInScoringPreset } from '../packages/core/src/lib/scoringDefaults';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 const EVENT = 'Event 5 Men 100 Yard Backstroke';
 
@@ -518,7 +518,7 @@ describe('the scoring hook', () => {
     }) as SwimmerResult;
 
   it('puts a team with no expectation in the count map and not in the numeric map', () => {
-    const workspace = {
+    const workspace = workspaceFixture({
       id: 'ws',
       name: 'ws',
       createdAt: 0,
@@ -531,7 +531,7 @@ describe('the scoring hook', () => {
       ],
       womenResults: [],
       scoringSettings: dual,
-    } as unknown as Workspace;
+    });
 
     let seen: ReturnType<typeof useWorkspaceScoring> | null = null;
     function Probe() {

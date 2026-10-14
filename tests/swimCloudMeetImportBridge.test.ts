@@ -19,17 +19,16 @@ import {
   swimCloudEventResultsToSwimmerResults,
 } from '@omniswim/matrix/lib/swimCloudMeetImportBridge';
 import { parseMeetEventResultsHtml, parseTeamMeetSwimsHtml } from '@omniswim/swimcloud/parser';
+import type { SwimCloudEntry, SwimCloudEvent, SwimCloudRelay, SwimCloudResult } from '@omniswim/swimcloud/entities';
 import type {
-  SwimCloudEntry,
-  SwimCloudEvent,
   SwimCloudMeetEventResultsParse,
   SwimCloudMeetResultsParse,
   SwimCloudParseContext,
   SwimCloudParsedEvent,
-  SwimCloudRelay,
-  SwimCloudResult,
+  SwimCloudTeamMeetSwim,
   SwimCloudTeamMeetSwimsParse,
 } from '@omniswim/swimcloud/parser';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 let nextId = 0;
 function resetIds() {
@@ -268,7 +267,7 @@ describe('swimCloudMeetResultsToSwimmerResults — relay events', () => {
         }),
       ]),
     );
-    expect(result.women[0].relayNames).toEqual([
+    expect(result.women[0]!.relayNames).toEqual([
       { name: 'Landon Dehn', year: '' },
       { name: 'Sam Reyes', year: '' },
     ]);
@@ -413,8 +412,8 @@ describe('swimCloudTeamMeetSwimsToSwimmerResults — real capture', () => {
     const result = swimCloudTeamMeetSwimsToSwimmerResults(landing);
     expect(result.men).toHaveLength(1);
     // 20 meet points, not the 846 in the same row's Pts column.
-    expect(result.men[0].points).toBe(20);
-    expect(result.men[0].pdfPoints).toBe(20);
+    expect(result.men[0]!.points).toBe(20);
+    expect(result.men[0]!.pdfPoints).toBe(20);
   });
 
   it('carries place through as rank for a row with no duplicate', () => {
@@ -438,7 +437,7 @@ describe('swimCloudTeamMeetSwimsToSwimmerResults — real capture', () => {
   it('ids every row by its SwimCloud swim id so repeat captures can merge', () => {
     const result = swimCloudTeamMeetSwimsToSwimmerResults(swimsPageOne());
     expect(new Set(result.men.map(row => row.id)).size).toBe(14);
-    expect(result.men[0].id).toBe('356467:swim:171560650');
+    expect(result.men[0]!.id).toBe('356467:swim:171560650');
     expect(result.men.every(row => row.id.startsWith('356467:swim:'))).toBe(true);
   });
 });
@@ -501,8 +500,8 @@ describe('swimCloudTeamMeetSwimsToSwimmerResults — ambiguous-round-duplicate',
       swimCloudSwimId: '171560737',
     });
     const result = swimCloudTeamMeetSwimsToSwimmerResults(teamMeetSwimsParse([dup1, dup2]));
-    expect(result.skipped[0].detail).toBe('54.09 (place 1, swim 171560736)');
-    expect(result.skipped[1].detail).toBe('54.27 (place 1, swim 171560737)');
+    expect(result.skipped[0]!.detail).toBe('54.09 (place 1, swim 171560736)');
+    expect(result.skipped[1]!.detail).toBe('54.27 (place 1, swim 171560737)');
   });
 
   it('a relay leadoff is never counted toward the duplicate group', () => {
@@ -537,7 +536,7 @@ describe('mergeSwimCloudResults', () => {
   it('replaces a row rather than duplicating it when the same swim is recaptured', () => {
     const merged = mergeSwimCloudResults([row('a', { time: '55.00' })], [row('a', { time: '54.09' })]);
     expect(merged).toHaveLength(1);
-    expect(merged[0].time).toBe('54.09');
+    expect(merged[0]!.time).toBe('54.09');
   });
 
   it('leaves rows from other sources untouched', () => {
@@ -610,21 +609,21 @@ describe('applySwimCloudRows', () => {
 
     expect(calls).toHaveLength(1);
     const patch = calls[0];
-    expect(patch.menResults).toHaveLength(14);
-    expect(patch.womenResults).toEqual([]);
+    expect(patch!.menResults).toHaveLength(14);
+    expect(patch!.womenResults).toEqual([]);
     // meetCopyFromParsed clones into both the working and source copies.
-    expect(patch.sourceMenResults).toEqual(patch.menResults);
-    expect(patch.sourceWomenResults).toEqual(patch.womenResults);
+    expect(patch!.sourceMenResults).toEqual(patch!.menResults);
+    expect(patch!.sourceWomenResults).toEqual(patch!.womenResults);
     // A fresh meet (not the same as anything loaded) resets the workspace's own edits.
-    expect(patch.deletedSwimmers).toEqual([]);
-    expect(patch.scorerRosterOverrides).toEqual([]);
-    expect(patch.relayLegOverrides).toEqual([]);
-    expect(patch.recruits).toEqual([]);
-    expect(patch.loadedMeet).toMatchObject({
+    expect(patch!.deletedSwimmers).toEqual([]);
+    expect(patch!.scorerRosterOverrides).toEqual([]);
+    expect(patch!.relayLegOverrides).toEqual([]);
+    expect(patch!.recruits).toEqual([]);
+    expect(patch!.loadedMeet).toMatchObject({
       pdfFilename: `${parsed.meetName} (via SwimCloud)`,
       meetLabel: parsed.meetName,
     });
-    expect(typeof patch.loadedMeet?.uploadedAt).toBe('number');
+    expect(typeof patch!.loadedMeet?.uploadedAt).toBe('number');
     // No conference on this workspace, and this fixture has no Score column
     // (see the "does not put SwimCloud power points into a meet-score field"
     // test above), so neither key is ever set on the patch — never a guessed
@@ -656,7 +655,7 @@ describe('applySwimCloudRows', () => {
     // The landing page's one Henke row (1) plus the full list's 14 surviving
     // rows, which no longer include a duplicate of that same swim (see
     // `mergeSwimCloudResults`'s "without doubling a swim" test above) = 15.
-    expect(calls[0].menResults).toHaveLength(15);
+    expect(calls[0]!.menResults).toHaveLength(15);
     expect(result.appliedRowCount).toBe(15);
     expect(result.totalRowCount).toBe(15);
     expect(result.skipped).toHaveLength(landingSkipCount + fullSkipCount);
@@ -693,7 +692,7 @@ describe('applySwimCloudRows', () => {
     expect(patch).not.toHaveProperty('relayLegOverrides');
     expect(patch).not.toHaveProperty('recruits');
     // The pre-existing row plus the 14 newly converted rows.
-    expect(patch.menResults).toHaveLength(15);
+    expect(patch!.menResults).toHaveLength(15);
     expect(result.totalRowCount).toBe(15);
     expect(result.appliedRowCount).toBe(converted.men.length + converted.women.length);
   });
@@ -713,7 +712,7 @@ describe('applySwimCloudRows', () => {
     });
 
     expect(askedWith).toBe(existingRecruits);
-    expect(calls[0].recruits).toEqual([]);
+    expect(calls[0]!.recruits).toEqual([]);
   });
 
   it('the default resolveKeepRecruits never touches window.confirm when there are no recruits to lose', async () => {
@@ -726,7 +725,7 @@ describe('applySwimCloudRows', () => {
     const { onUpdate, calls } = capturingOnUpdate();
 
     await expect(applySwimCloudRows([parsed], workspace, onUpdate)).resolves.toBeDefined();
-    expect(calls[0].recruits).toEqual([]);
+    expect(calls[0]!.recruits).toEqual([]);
   });
 
   it('an all-skipped capture calls onUpdate zero times and reports zero applied rows', async () => {
@@ -926,7 +925,7 @@ describe('swimCloudTeamMeetSwimsToSwimmerResults — round resolution against F9
       s => s.reason === 'ambiguous-round-duplicate' && s.subject === 'Oskar Cebula',
     );
     expect(stillSkipped).toHaveLength(1);
-    expect(stillSkipped[0].detail).toContain('54.86');
+    expect(stillSkipped[0]!.detail).toContain('54.86');
   });
 
   it('marks Camden Mask exhibition, which the swims list could not say at all', () => {
@@ -1014,7 +1013,7 @@ describe('swimCloudTeamMeetSwimsToSwimmerResults — round resolution against F9
 
   it('threads eventResults through applySwimCloudRows to the workspace', async () => {
     const patches: Partial<Workspace>[] = [];
-    const workspace = { id: 'w1', name: 'HSU' } as unknown as Workspace;
+    const workspace = workspaceFixture({ id: 'w1', name: 'HSU' });
     const result = await applySwimCloudRows(
       [swimsPageOne()],
       workspace,
@@ -1034,7 +1033,7 @@ describe('swimCloudTeamMeetSwimsToSwimmerResults — round resolution against F9
     // the whole reason event-first is cheaper AND more complete — and a meet
     // score cannot be computed from one team's swims anyway.
     expect(result.appliedRowCount).toBe(52);
-    const men = patches[0].menResults ?? [];
+    const men = patches[0]!.menResults ?? [];
     const henkeA = men.find(row => row.name === 'Avery Henke' && row.roundSwam === 'A Final');
     expect(henkeA).toMatchObject({ pdfPoints: 20, time: '54.27' });
   });

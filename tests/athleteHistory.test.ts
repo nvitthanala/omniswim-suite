@@ -78,8 +78,8 @@ describe('multi-profile block splitting', () => {
     const res = parseSwimCloudMultiProfile(paste, { team: TEAM, gender: Gender.MEN });
 
     expect(res.athletes).toHaveLength(1);
-    expect(res.athletes[0].name).toBe('Mikhail Lymar');
-    expect(res.athletes[0].swims).toHaveLength(3);
+    expect(res.athletes[0]!.name).toBe('Mikhail Lymar');
+    expect(res.athletes[0]!.swims).toHaveLength(3);
     // No phantom zero-swim athlete, and therefore no "No swims parsed" warning.
     expect(res.warnings.filter(w => /No swims parsed/.test(w))).toEqual([]);
     // The swims belong to the swimmer, not to the club.
@@ -102,8 +102,8 @@ describe('multi-profile block splitting', () => {
     const res = parseSwimCloudMultiProfile(paste, { team: TEAM, gender: Gender.MEN });
 
     expect(res.athletes).toHaveLength(1);
-    expect(res.athletes[0].name).toBe('Owen Green');
-    expect(res.athletes[0].swims).toHaveLength(2);
+    expect(res.athletes[0]!.name).toBe('Owen Green');
+    expect(res.athletes[0]!.swims).toHaveLength(2);
     expect(res.warnings.filter(w => /No swims parsed/.test(w))).toEqual([]);
   });
 
@@ -144,8 +144,8 @@ describe('multi-profile block splitting', () => {
     expect(res.athletes.map(a => a.swims.length)).toEqual([2, 1, 2]);
     expect(res.warnings.filter(w => /No swims parsed/.test(w))).toEqual([]);
     // Each swim is under its own swimmer.
-    expect(res.athletes[0].swims.every(s => s.name === 'AJ Alfeo')).toBe(true);
-    expect(res.athletes[2].swims.map(s => s.event).sort()).toEqual([
+    expect(res.athletes[0]!.swims.every(s => s.name === 'AJ Alfeo')).toBe(true);
+    expect(res.athletes[2]!.swims.map(s => s.event).sort()).toEqual([
       '200 Individual Medley',
       '400 Individual Medley',
     ]);
@@ -170,12 +170,12 @@ describe('multi-profile block splitting', () => {
     const { blocks, orphanLines } = splitMultiProfileBlocks(paste);
     expect(blocks).toHaveLength(1);
     expect(orphanLines).toEqual([]);
-    expect(blocks[0].name).toBe('Carston Silva');
-    expect(blocks[0].absorbed).toEqual(['Arkansas Dolphins']);
-    expect(blocks[0].hasDataRow).toBe(true);
+    expect(blocks[0]!.name).toBe('Carston Silva');
+    expect(blocks[0]!.absorbed).toEqual(['Arkansas Dolphins']);
+    expect(blocks[0]!.hasDataRow).toBe(true);
     // Nothing vanishes: every folded line is still in the block's raw lines.
-    expect(blocks[0].lines).toContain('Mansfield Aquatic Club');
-    expect(blocks[0].lines).toContain('Arkansas Dolphins');
+    expect(blocks[0]!.lines).toContain('Mansfield Aquatic Club');
+    expect(blocks[0]!.lines).toContain('Arkansas Dolphins');
   });
 
   it('does not read a club or hometown line as the swimmer name', () => {
@@ -199,7 +199,7 @@ describe('multi-profile block splitting', () => {
       const paste = [name, HDR, '50 Free SCY\t21.00\t\tMeet\tFeb 1, 2026\t'].join('\n');
       const res = parseSwimCloudMultiProfile(paste, { team: TEAM, gender: Gender.MEN });
       expect(res.athletes.map(a => a.name)).toEqual([name]);
-      expect(res.athletes[0].swims).toHaveLength(1);
+      expect(res.athletes[0]!.swims).toHaveLength(1);
     }
   });
 

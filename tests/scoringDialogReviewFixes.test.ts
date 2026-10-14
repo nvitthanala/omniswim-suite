@@ -70,7 +70,7 @@ describe('scoring dialog review fixes', () => {
       expect(relay().value).toBe('3');
       const save = Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('Update scoring model'))!;
       await act(async () => save.dispatchEvent(new MouseEvent('click', { bubbles: true })));
-      expect((onSave.mock.calls[0][0] as ScoringSettings).relayMultiplier).toBe(3);
+      expect((onSave.mock.calls[0]![0] as ScoringSettings).relayMultiplier).toBe(3);
     });
 
     it('modal still resets when the incoming settings change in content', async () => {
@@ -106,7 +106,7 @@ describe('scoring dialog review fixes', () => {
       await act(async () => root.render(createElement(Probe, { ws: { ...ws, name: 'B' } })));
       expect(seen).toHaveLength(2);
       expect(seen[1]!.settings).toBe(seen[0]!.settings);
-      await act(async () => root.render(createElement(Probe, { ws: { ...ws, scoringSettings: { ...BASE, relayMultiplier: 4 } } })));
+      await act(async () => root.render(createElement(Probe, { ws: { ...ws, scoringSettings: { ...BASE, relayMultiplier: 4 } as ScoringSettings } })));
       expect(seen[2]!.settings).not.toBe(seen[0]!.settings);
       expect(seen[2]!.settings.relayMultiplier).toBe(4);
     });

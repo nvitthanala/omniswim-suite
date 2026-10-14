@@ -441,15 +441,15 @@ describe('end to end: metric SwimCloud swims reach the projection', () => {
   it('yields the brief’s swim: 50 Free LCM 24.20 -> 21.05 in the 50 Free SCY slot', () => {
     const out = [...convertedHistorySwims([swim({})])];
     expect(out).toHaveLength(1);
-    expect(out[0].timeType).toBe('LCM');
-    expect(out[0].converted).toMatchObject({ event: '50 Free SCY', time: '21.05', sourceCourse: 'LCM' });
-    expect(out[0].converted.basis).toMatchObject({ method: 'lcm_factor_table', factorEvent: '50 Freestyle' });
+    expect(out[0]!.timeType).toBe('LCM');
+    expect(out[0]!.converted).toMatchObject({ event: '50 Free SCY', time: '21.05', sourceCourse: 'LCM' });
+    expect(out[0]!.converted.basis).toMatchObject({ method: 'lcm_factor_table', factorEvent: '50 Freestyle' });
   });
 
   it('converts an HSU SCM swim with the D2 table', () => {
     const [row] = [...convertedHistorySwims([swim({ event: '100 Free SCM', time: '54.49', timeType: 'SCM' })])];
-    expect(row.converted.time).toBe('48.82');
-    expect(row.converted.basis).toMatchObject({ tableId: RULES_BOOK, division: 'D2', reason: 'division_table' });
+    expect(row!.converted.time).toBe('48.82');
+    expect(row!.converted.basis).toMatchObject({ tableId: RULES_BOOK, division: 'D2', reason: 'division_table' });
   });
 
   it('projects all 17 LCM swims of the real HSU fixture swimmer (0 before the fix)', () => {

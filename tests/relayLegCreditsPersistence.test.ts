@@ -101,7 +101,7 @@ describe('relayLegCredits_roundTripSqliteAndPg', () => {
       const got = reopened.getWorkspace('ws-1');
       reopened.close();
       expect(got?.relayLegCredits).toStrictEqual([FULL, BARE]);
-      const bare = got?.relayLegCredits?.[1] as Record<string, unknown>;
+      const bare: object = got!.relayLegCredits![1]!;
       for (const optional of ['relayEventTitle', 'legLabel', 'legPosition', 'legPositionSource', 'timeType', 'relayPlace', 'relayLetter', 'meetLabel', 'date', 'retrievedAt']) {
         expect(optional in bare).toBe(false);
       }

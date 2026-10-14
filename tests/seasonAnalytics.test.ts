@@ -6,6 +6,7 @@ import { buildSeasonTrends } from '../packages/core/src/lib/seasonAnalytics';
 import { THEORETICAL_MEET_LABEL } from '../packages/core/src/lib/theoreticalMeetLabel';
 import { parseSwimCloudPasteDetailed } from '../packages/core/src/lib/athleteHistory';
 import { Gender, type HistoricalSwim, type Workspace } from '../packages/core/src/types';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 /**
  * The original single case was named "aggregates swimmer bests across workspaces"
@@ -46,18 +47,18 @@ function workspace(id: string, name: string, menResults: unknown[]): Workspace {
 describe('seasonAnalytics', () => {
   it('skips a theoretical meet: no team total and no progression point', () => {
     const real = workspace('w1', 'Real Meet', [swim('r1', 'Alice Swimmer', '100 Free', '52.10', 20)]);
-    const theoretical = {
+    const theoretical = workspaceFixture({
       ...workspace('w2', 'Theoretical meet', [swim('t1', 'Alice Swimmer', '100 Free', '51.00', 20)]),
       loadedMeet: { pdfFilename: THEORETICAL_MEET_LABEL, uploadedAt: 1, meetLabel: THEORETICAL_MEET_LABEL },
-    } as unknown as Workspace;
+    });
 
     const trends = buildSeasonTrends([real, theoretical]);
 
     expect(trends.teamScoreTrends.map(t => t.meetLabel)).toEqual(['Real Meet']);
-    expect(trends.teamScoreTrends[0].menTotal).toBe(20);
+    expect(trends.teamScoreTrends[0]!.menTotal).toBe(20);
     expect(trends.swimmerTrends).toHaveLength(1);
-    expect(trends.swimmerTrends[0].bestTime).toBe('52.10');
-    expect(trends.swimmerTrends[0].progression).toEqual([{ label: 'Real Meet', time: '52.10' }]);
+    expect(trends.swimmerTrends[0]!.bestTime).toBe('52.10');
+    expect(trends.swimmerTrends[0]!.progression).toEqual([{ label: 'Real Meet', time: '52.10' }]);
     // Only the theoretical meet: nothing at all.
     const only = buildSeasonTrends([theoretical]);
     expect(only.swimmerTrends).toEqual([]);
@@ -73,8 +74,8 @@ describe('seasonAnalytics', () => {
     const trends = buildSeasonTrends([ws]);
 
     expect(trends.swimmerTrends).toHaveLength(1);
-    expect(trends.swimmerTrends[0].bestTime).toBe('51.50');
-    expect(trends.swimmerTrends[0].meetCount).toBe(2);
+    expect(trends.swimmerTrends[0]!.bestTime).toBe('51.50');
+    expect(trends.swimmerTrends[0]!.meetCount).toBe(2);
   });
 
   it('merges one swimmer across two workspaces and keeps the progression in order', () => {
@@ -85,10 +86,10 @@ describe('seasonAnalytics', () => {
 
     expect(trends.swimmerTrends).toHaveLength(1);
     const alice = trends.swimmerTrends[0];
-    expect(alice.bestTime).toBe('51.50');
-    expect(alice.meetCount).toBe(2);
+    expect(alice!.bestTime).toBe('51.50');
+    expect(alice!.meetCount).toBe(2);
     // The progression must name the workspace each swim came from, in order.
-    expect(alice.progression).toEqual([
+    expect(alice!.progression).toEqual([
       { label: 'Meet One', time: '52.10' },
       { label: 'Meet Two', time: '51.50' },
     ]);
@@ -125,7 +126,7 @@ describe('seasonAnalytics', () => {
       ]),
     ]);
 
-    expect(trends.swimmerTrends[0].bestTime).toBe('59.90');
+    expect(trends.swimmerTrends[0]!.bestTime).toBe('59.90');
   });
 
   it('excludes relay rows from swimmer trends', () => {
@@ -234,6 +235,6 @@ describe('seasonAnalytics keys trends by event identity and course', () => {
       workspace('w2', 'Meet Two', [dive('d2', '503.95')]),
     ]).swimmerTrends;
     expect(trends).toHaveLength(1);
-    expect(trends[0].bestTime).toBe('503.95');
+    expect(trends[0]!.bestTime).toBe('503.95');
   });
 });

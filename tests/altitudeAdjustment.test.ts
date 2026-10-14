@@ -95,7 +95,7 @@ function tableText(filename: string, page?: number): string {
     return lf(run.stdout);
   }
   const whole = archivedTableText(filename);
-  return page === undefined ? whole : whole.split('\f')[page - 1];
+  return page === undefined ? whole : whole.split('\f')[page - 1]!;
 }
 
 /** Row label as each sheet prints it. The D1 sheet writes `500 Yards-400 Meters`. */
@@ -423,17 +423,17 @@ describe('an A-tagged SwimCloud swim is flagged, kept as published, and still a 
       if (!result.ok) throw new Error('refused');
       return result.swims[0];
     };
-    expect(importOnce([{ code: 'A', title: 'Altitude Adjusted' }]).isAltitudeAdjusted).toBe(true);
+    expect(importOnce([{ code: 'A', title: 'Altitude Adjusted' }])!.isAltitudeAdjusted).toBe(true);
     // "A" is also SwimCloud's letter for a D1 A-cut chip.
-    expect(importOnce([{ code: 'A', title: 'NCAA Division I A Cut' }]).isAltitudeAdjusted).toBeUndefined();
-    expect(importOnce([]).isAltitudeAdjusted).toBeUndefined();
+    expect(importOnce([{ code: 'A', title: 'NCAA Division I A Cut' }])!.isAltitudeAdjusted).toBeUndefined();
+    expect(importOnce([])!.isAltitudeAdjusted).toBeUndefined();
   });
 
   it('refuses to adjust an already-adjusted swim a second time', () => {
-    expect(() => adjustSwimForAltitude(adjusted[0], { elevationClass: 'II' })).toThrow(/already altitude-adjusted/);
+    expect(() => adjustSwimForAltitude(adjusted[0]!, { elevationClass: 'II' })).toThrow(/already altitude-adjusted/);
     // The same swim without the flag would be adjusted to 4:02.11 — the double
     // subtraction the guard exists to stop.
-    const { isAltitudeAdjusted: _flag, ...unflagged } = adjusted[0];
+    const { isAltitudeAdjusted: _flag, ...unflagged } = adjusted[0]!;
     expect(adjustSwimForAltitude(unflagged, { elevationClass: 'II' })).toMatchObject({ adjustedTime: '4:02.11' });
   });
 
@@ -483,8 +483,8 @@ describe('an A-tagged SwimCloud swim is flagged, kept as published, and still a 
     const tag = buildCutlineTagForTeam({
       team: HSU,
       gender: Gender.MEN,
-      event: adjusted[0].event,
-      time: adjusted[0].time,
+      event: adjusted[0]!.event,
+      time: adjusted[0]!.time,
       swimCourse: 'LCM',
     });
     expect(tag.state).toBe('no_cut');

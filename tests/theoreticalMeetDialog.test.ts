@@ -17,6 +17,7 @@ import { isTheoreticalMeet, THEORETICAL_MEET_LABEL } from '../packages/manager/s
 import { TheoreticalMeetDialogContent } from '../packages/manager/src/components/theoreticalMeet/TheoreticalMeetDialog';
 import { buildMeet, createMeet, readTeamCapture } from '../packages/manager/src/components/theoreticalMeet/theoreticalMeetFlow';
 import { fakeCaptureApi, fixtureParse, fixtureRecords, CAPTURE_IDS } from './theoreticalMeetUiFixtures';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 vi.mock('motion/react', async () => (await import('./motionStub')).motionStub);
 
@@ -58,9 +59,9 @@ describe('createMeet', async () => {
     expect(workspace.id).toBe('fresh-1');
     // Every row id carries the workspace id it was built for.
     const row = workspace.menResults[0];
-    expect(row.id).toContain('fresh-1');
-    expect(row.id).not.toContain('preview-id');
-    expect(restore.mock.calls[0][0].id).toBe('fresh-1');
+    expect(row!.id).toContain('fresh-1');
+    expect(row!.id).not.toContain('preview-id');
+    expect(restore.mock.calls[0]![0].id).toBe('fresh-1');
   });
 
   it('gives up after five taken ids and posts nothing', async () => {
@@ -145,7 +146,7 @@ describe('TheoreticalMeetDialogContent', () => {
     const restore = vi.fn(options.restore ?? (async (w: Workspace) => w));
     const onCreated = vi.fn(options.onCreated);
     const onClose = vi.fn(options.onClose);
-    const existing = (options.existing ?? ['existing-workspace']).map(id => ({ id, name: id, menResults: [], womenResults: [] }) as unknown as Workspace);
+    const existing = (options.existing ?? ['existing-workspace']).map(id => workspaceFixture({ id, name: id, menResults: [], womenResults: [] }));
     act(() => {
       root.render(
         createElement(TheoreticalMeetDialogContent, {
@@ -189,7 +190,7 @@ describe('TheoreticalMeetDialogContent', () => {
 
   it('shows an unfinished capture disabled, with the reason, and a stale one with its age', async () => {
     const records = await fixtureRecords();
-    const busy = { ...records[0], captureId: 'team-99-2026-2027', subject: { kind: 'team' as const, teamId: '99', season: '2026-2027' }, completeness: 'in-progress' as const };
+    const busy = { ...records[0]!, captureId: 'team-99-2026-2027', subject: { kind: 'team' as const, teamId: '99', season: '2026-2027' }, completeness: 'in-progress' as const };
     const oldRecords = records.map(r => ({ ...r, pages: r.pages.map(p => ({ ...p, retrievedAt: '2026-08-01T00:00:00.000Z' })) }));
     mount({ api: fakeCaptureApi({ records: [...oldRecords, busy] }) });
     await waitFor(() => captureBox('team-99-2026-2027'));
@@ -245,14 +246,14 @@ describe('TheoreticalMeetDialogContent', () => {
     await click(create);
     await waitFor(() => onCreated.mock.calls.length > 0);
     expect(restore).toHaveBeenCalledTimes(1);
-    const payload = restore.mock.calls[0][0];
+    const payload = restore.mock.calls[0]![0];
     expect(['existing-workspace', 'another']).not.toContain(payload.id);
     expect(payload.id).toMatch(/^[0-9a-f-]{36}$/);
     expect(isTheoreticalMeet(payload)).toBe(true);
     expect(payload.menResults.length).toBeGreaterThan(0);
     expect(payload.menResults.every(row => row.id.includes(payload.id))).toBe(true);
     expect(payload.conference).toBe('NSISC');
-    expect(onCreated.mock.calls[0][0].id).toBe(payload.id);
+    expect(onCreated.mock.calls[0]![0].id).toBe(payload.id);
   });
 
   it('keeps Create off while a team is unread, and offers Retry for a team that failed', async () => {
@@ -319,7 +320,7 @@ describe('TheoreticalMeetDialogContent', () => {
     });
     expect(onClose).not.toHaveBeenCalled();
     await act(async () => {
-      release({ id: 'saved', name: 'saved' } as unknown as Workspace);
+      release(workspaceFixture({ id: 'saved', name: 'saved' }));
     });
     await waitFor(() => onCreated.mock.calls.length > 0);
   });

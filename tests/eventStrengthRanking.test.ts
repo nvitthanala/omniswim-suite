@@ -62,6 +62,7 @@ import { optimizeEventLineupForTeam } from '../packages/core/src/lib/rosterOptim
 import { NSISC_PRESET_SETTINGS } from '../packages/core/src/lib/scoringDefaults';
 import { countSwimmerEntries } from '../packages/core/src/lib/swimmerEntryLimits';
 import { buildWhatIfResults } from '../packages/core/src/lib/whatIfProjection';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const HSU = 'Henderson State University';
@@ -124,7 +125,7 @@ function workspace(opts: {
   conference?: string;
 }): Workspace {
   const men = opts.meet ? menResults : [];
-  return {
+  return workspaceFixture({
     id: 'ws-b3',
     name: 'B3',
     createdAt: 0,
@@ -138,7 +139,7 @@ function workspace(opts: {
     scoringSettings: opts.settings ?? { ...NSISC_PRESET_SETTINGS },
     conference: opts.conference,
     athleteHistory: opts.history ?? [],
-  } as unknown as Workspace;
+  });
 }
 
 const withMeet = (history: HistoricalSwim[] = []) =>
@@ -357,8 +358,8 @@ describe('rankEventsByStrength', () => {
     const s = p.strengthByEvent ?? {};
     const five = p.primaryEvents.find(e => /500/.test(e)) as string;
     const mile = p.primaryEvents.find(e => /1650/.test(e)) as string;
-    expect([s[five].meetPlace, s[mile].meetPlace]).toStrictEqual([4, 4]);
-    expect(s[five].cutRatio as number).toBeLessThan(s[mile].cutRatio as number);
+    expect([s[five]!.meetPlace, s[mile]!.meetPlace]).toStrictEqual([4, 4]);
+    expect(s[five]!.cutRatio as number).toBeLessThan(s[mile]!.cutRatio as number);
     expect(p.primaryEvents.indexOf(five)).toBeLessThan(p.primaryEvents.indexOf(mile));
     expect(p.primaryEvents.slice(0, 3)).toStrictEqual([
       '1000 Freestyle',
@@ -373,7 +374,7 @@ describe('rankEventsByStrength', () => {
     expect(p.rankingDivision).toBe('D2');
     expect(p.primaryEvents.slice(0, 3)).toStrictEqual(['1000 Freestyle', '500 Freestyle', '1650 Freestyle']);
     const s = p.strengthByEvent ?? {};
-    expect(p.primaryEvents.every(e => s[e].basis === 'cut_distance' && s[e].meetPlace === undefined)).toBe(true);
+    expect(p.primaryEvents.every(e => s[e]!.basis === 'cut_distance' && s[e]!.meetPlace === undefined)).toBe(true);
     // The order is the cut ratio's, unchanged from before B3 for a no-meet workspace.
     const cut = rankEventsByQuality(p.bestByEvent, Gender.MEN, HSU);
     expect(p.primaryEvents).toStrictEqual([...cut.ranked, ...cut.unranked]);
@@ -382,8 +383,8 @@ describe('rankEventsByStrength', () => {
   it('a converted metric time ranks on its SCY equivalent and stays an estimate', () => {
     const p = profile(noMeet(), HSU, 'Colton Bennett');
     const im = p.strengthByEvent?.['400 Individual Medley'];
-    expect(p.bestByEvent['400 Individual Medley'].time).toBe('4:03.33');
-    expect(p.bestByEvent['400 Individual Medley'].convertedFrom).toMatchObject({
+    expect(p.bestByEvent['400 Individual Medley']!.time).toBe('4:03.33');
+    expect(p.bestByEvent['400 Individual Medley']!.convertedFrom).toMatchObject({
       sourceCourse: 'LCM',
       sourceTime: '4:38.09',
     });
@@ -404,7 +405,7 @@ describe('rankEventsByStrength', () => {
     );
     expect(r.order).toStrictEqual(['100 Freestyle', '400 IM', '50 Backstroke']);
     // Faster than Mark Eberhard's 4:53.08 only: 15th of the 15-row field.
-    expect(r.strengthByEvent['400 IM'].meetPlace).toBe(15);
+    expect(r.strengthByEvent['400 IM']!.meetPlace).toBe(15);
     expect(r.strengthByEvent['50 Backstroke']).toStrictEqual({
       event: '50 Backstroke',
       timeSec: 22.0,
@@ -422,9 +423,9 @@ describe('rankEventsByStrength', () => {
     expect(r.rankedAgainstMeet).toBe(false);
     expect(r.order).toStrictEqual(['50 Freestyle', '1650 Freestyle']);
     for (const e of r.order) {
-      expect(r.strengthByEvent[e].basis).toBe('time');
-      expect(r.strengthByEvent[e].cutRatio).toBeUndefined();
-      expect(r.strengthByEvent[e].meetPlace).toBeUndefined();
+      expect(r.strengthByEvent[e]!.basis).toBe('time');
+      expect(r.strengthByEvent[e]!.cutRatio).toBeUndefined();
+      expect(r.strengthByEvent[e]!.meetPlace).toBeUndefined();
     }
   });
 
@@ -518,7 +519,7 @@ describe('every profile builder uses the shared ranking', () => {
   it('categorizeBestEvents takes the meet field (the import path passes it)', () => {
     const swims = hsuFixture.athleteHistory.filter(h => h.name === 'Avery Henke');
     const field = meetPlaceFieldForWorkspace(withMeet(), Gender.MEN);
-    const args = [swims, HSU, Gender.MEN, 'Avery Henke', NSISC_PRESET_SETTINGS, [], undefined, null] as const;
+    const args = [swims, HSU, Gender.MEN, 'Avery Henke', NSISC_PRESET_SETTINGS, [] as string[], undefined, null] as const;
     expect(categorizeBestEvents(...args, field).primaryEvents.slice(0, 3)).toStrictEqual([
       '100 Breaststroke',
       '200 Breaststroke',

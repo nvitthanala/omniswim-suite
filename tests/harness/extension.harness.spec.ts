@@ -51,7 +51,7 @@ test.afterEach(async ({ request }) => {
 
 function gaps(harness: Harness): number[] {
   const at = harness.fake.dataLog.map(r => r.at);
-  return at.slice(1).map((t, i) => t - at[i]);
+  return at.slice(1).map((t, i) => t - at[i]!);
 }
 
 function expectPaced(harness: Harness): void {

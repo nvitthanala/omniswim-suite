@@ -94,7 +94,7 @@ describe('a 50 Free swim flagged isTimeTrial', () => {
   it('with no fifth swimmer the relay is absent, not built on the time trial', () => {
     const seeds = build(alpha(flag, false));
     expect(relay(seeds)).toBeUndefined();
-    const absent = seeds.report.teams[0].relayReport?.absent.find(a => a.event === RELAY);
+    const absent = seeds.report.teams[0]!.relayReport?.absent.find(a => a.event === RELAY);
     expect(absent).toBeDefined();
     expect(absent?.missingLegs.length).toBeGreaterThan(0);
   });

@@ -97,7 +97,7 @@ describe('prelims over/under: an entry with no actual is null, not 0', () => {
   it('the momentum series gets no delta from an entry with no actual', () => {
     const series = buildMomentumSeriesForTeam('Alpha U', lookup, [EVENT]);
     expect(series).toHaveLength(1);
-    expect(series[0].delta).toBe(-8);
+    expect(series[0]!.delta).toBe(-8);
   });
 });
 
@@ -109,13 +109,13 @@ describe('momentum chart rows: a team with no actual has no line', () => {
   it('Alpha has a cumulative; Beta is null, not a flat 0 that reads as "on expectation"', () => {
     const rows = buildMeetMomentumChartDataFromLookup(['Alpha U', 'Beta U'], lookup, [EVENT]);
     expect(rows).toHaveLength(1);
-    expect(rows[0]['Alpha U']).toBe(-8);
-    expect(rows[0]['Beta U']).toBeNull();
+    expect(rows[0]!['Alpha U']).toBe(-8);
+    expect(rows[0]!['Beta U']).toBeNull();
   });
 
   it('a team with a real 0 cumulative keeps 0', () => {
     const exact = buildPrelimsOverUnderByEntryKey([row('Ann', 'Alpha U', 17)], [row('Ann', 'Alpha U', 17)]);
-    expect(buildMeetMomentumChartDataFromLookup(['Alpha U'], exact, [EVENT])[0]['Alpha U']).toBe(0);
+    expect(buildMeetMomentumChartDataFromLookup(['Alpha U'], exact, [EVENT])[0]!['Alpha U']).toBe(0);
   });
 
   it('the deprecated timeline builder reads a team a point does not name as null', () => {
@@ -123,8 +123,8 @@ describe('momentum chart rows: a team with no actual has no line', () => {
       [{ name: 'E5', fullEvent: EVENT, baselineDelta: { 'Alpha U': 3 }, projectedDelta: {} } as never],
       ['Alpha U', 'Beta U']
     );
-    expect(rows[0]['Alpha U']).toBe(3);
-    expect(rows[0]['Beta U']).toBeNull();
+    expect(rows[0]!['Alpha U']).toBe(3);
+    expect(rows[0]!['Beta U']).toBeNull();
   });
 });
 

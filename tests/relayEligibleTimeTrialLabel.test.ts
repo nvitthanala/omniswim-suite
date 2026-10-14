@@ -18,7 +18,7 @@ import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { Gender, type ScoringSettings, type SwimmerResult, type TeamScore, type Workspace } from '@omniswim/core/types';
+import { Gender, type RelayLegHistoryOrigin, type ScoringSettings, type SwimmerResult, type TeamScore, type Workspace } from '@omniswim/core/types';
 import type { ScoringBundle } from '@omniswim/core/lib/useWorkspaceScoring';
 import { canonicalSwimmerName, simulateRoster } from '@omniswim/core/lib/utils';
 import IndRelayManagementView from '../packages/manager/src/components/IndRelayManagementView';
@@ -42,6 +42,9 @@ const M_400FR = 'Event 42 Men 4x100 Yard Freestyle Relay';
  * the panel's selected relay is the one a 100 Free time trial can fill.
  */
 const menResults = fixture.menResults.filter(r => !r.isRelay || r.event === M_400FR);
+
+/** A history-sourced leg candidate carries the swim as recorded. The panel only reads that it is present. */
+const HISTORY_ORIGIN: RelayLegHistoryOrigin = { event: '100 Freestyle', time: '50.82', timeType: 'SCY', source: 'swimcloud' };
 
 function row(over: Partial<SwimmerResult>): SwimmerResult {
   return {
@@ -82,11 +85,11 @@ describe('RelayEligibleSwimmersPanel time-trial label', () => {
     const items = Array.from(container.querySelectorAll('li'));
     expect(items).toHaveLength(2);
     expect(RELAY_LEG_TIME_TRIAL_LABEL).toBe('Time trial');
-    expect(items[0].textContent).not.toContain('Time trial');
-    expect(items[1].textContent).toContain('Trial Swimmer');
-    expect(items[1].textContent).toContain('Time trial');
+    expect(items[0]!.textContent).not.toContain('Time trial');
+    expect(items[1]!.textContent).toContain('Trial Swimmer');
+    expect(items[1]!.textContent).toContain('Time trial');
     // The label is a text node inside a badge, not a colour on the row.
-    const badge = Array.from(items[1].querySelectorAll('span')).find(
+    const badge = Array.from(items[1]!.querySelectorAll('span')).find(
       s => s.textContent === 'Time trial' && s.children.length === 0
     );
     expect(badge).toBeTruthy();
@@ -95,16 +98,16 @@ describe('RelayEligibleSwimmersPanel time-trial label', () => {
 
   it('shows the label beside the history badge, and no label without the flag', () => {
     const candidates = [
-      row({ id: 'h', name: 'History Trial', relayLegHistory: true, relayLegTimeTrial: true }),
-      row({ id: 'g', name: 'History Only', relayLegHistory: true }),
+      row({ id: 'h', name: 'History Trial', relayLegHistory: HISTORY_ORIGIN, relayLegTimeTrial: true }),
+      row({ id: 'g', name: 'History Only', relayLegHistory: HISTORY_ORIGIN }),
     ];
     act(() => root.render(createElement(RelayEligibleSwimmersPanel, { eventLabel: '4x100 Free', poolCandidates: candidates })));
 
     const [both, historyOnly] = Array.from(container.querySelectorAll('li'));
-    expect(both.textContent).toContain('From history');
-    expect(both.textContent).toContain('Time trial');
-    expect(historyOnly.textContent).toContain('From history');
-    expect(historyOnly.textContent).not.toContain('Time trial');
+    expect(both!.textContent).toContain('From history');
+    expect(both!.textContent).toContain('Time trial');
+    expect(historyOnly!.textContent).toContain('From history');
+    expect(historyOnly!.textContent).not.toContain('Time trial');
   });
 });
 

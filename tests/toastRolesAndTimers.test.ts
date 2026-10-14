@@ -87,7 +87,7 @@ describe('toast auto-dismiss timer', () => {
     });
     const index = setSpy.mock.calls.findIndex(call => call[1] === delay);
     expect(index, `a ${delay} ms timer was set`).toBeGreaterThanOrEqual(0);
-    return setSpy.mock.results[index].value as number;
+    return setSpy.mock.results[index]!.value as number;
   }
 
   it('is cleared when the provider unmounts', () => {

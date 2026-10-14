@@ -481,7 +481,7 @@ describe('the Capocci case: rows built from a self-reported swim go, manual and 
     const scm = convertSwimToSCYDetailed('100 Backstroke', '54.44', MEN, 'SCM', { team: HSU });
     expect(scm.time).not.toBe('48.15');
     expect(back.map(r => [r.time, r.source])).toStrictEqual([[scm.time, 'paste']]);
-    expect(back[0].convertedFrom).toMatchObject({ sourceCourse: 'SCM', sourceEvent: '100 Backstroke', sourceTime: '54.44' });
+    expect(back[0]!.convertedFrom).toMatchObject({ sourceCourse: 'SCM', sourceEvent: '100 Backstroke', sourceTime: '54.44' });
   });
 
   it('a merge reimport leaves the 48.15 rows in place, which is why replace exists', () => {

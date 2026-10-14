@@ -16,7 +16,7 @@
  * 6 is a scored 0 and seed 7 (first of the B final) is past the table.
  */
 import { describe, expect, it } from 'vitest';
-import { Gender, type ScoringSettings, type SwimmerResult, type Workspace } from '../packages/core/src/types';
+import { Gender, type ScoringSettings, type SwimmerResult } from '../packages/core/src/types';
 import {
   buildPrelimsExpectedRows,
   buildPrelimsProjectedBundle,
@@ -30,6 +30,7 @@ import {
   listPsychEntriesWithoutExpectation,
 } from '../packages/core/src/lib/psychProjection';
 import { settingsForBuiltInScoringPreset } from '../packages/core/src/lib/scoringDefaults';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 const EVENT = 'Event 5 Men 100 Yard Backstroke';
 const dual = settingsForBuiltInScoringPreset('ncaa-dual-six-lanes-or-more') as ScoringSettings;
@@ -89,14 +90,14 @@ describe('prelims expected rows', () => {
   });
 
   it('the projected bundle carries the seed the table scores and not the seed it is silent on', () => {
-    const workspace = {
+    const workspace = workspaceFixture({
       id: 'ws',
       name: 'ws',
       createdAt: 0,
       menResults: prelims,
       womenResults: [],
       scoringSettings: dual,
-    } as unknown as Workspace;
+    });
     const bundle = buildPrelimsProjectedBundle({ workspace, gender: Gender.MEN });
     const names = bundle.allResults.map(r => r.name);
     expect(names).toContain('Swimmer 6');

@@ -28,6 +28,7 @@ import {
 import { importHistoryToRoster } from '../packages/core/src/lib/historyImportRoster';
 import { applyScoringTheory, parseScoringTheory } from '../packages/core/src/lib/scoringTheory';
 import { countSwimmerEntries, swimmerExceedsEntryLimits } from '../packages/core/src/lib/swimmerEntryLimits';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 const TEAM = 'Alpha University';
 const NAME = 'Ann Able';
@@ -213,7 +214,7 @@ describe('every counter reads the same policy', () => {
   const NSISC = { ...NSISC_PRESET_SETTINGS };
 
   function workspace(menResults: SwimmerResult[], scoringSettings = NSISC): Workspace {
-    return {
+    return workspaceFixture({
       id: 'ws-policy',
       name: 'policy probe',
       createdAt: 0,
@@ -230,7 +231,7 @@ describe('every counter reads the same policy', () => {
       scorerRosterOverrides: [],
       relayLegOverrides: [],
       athleteHistory: [],
-    } as unknown as Workspace;
+    });
   }
 
   /** Four individual events and two relays: 6 of 7, plus a time trial. */

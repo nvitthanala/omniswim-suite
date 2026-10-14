@@ -202,7 +202,7 @@ describe('Optimize step Undo after later edits', () => {
     await click(/Undo this optimize/);
     expect(updates).toHaveLength(2);
     expect(alert()).toBeNull();
-    expect(updates[1].meetEntryPlans).toEqual(ws.meetEntryPlans ?? []);
+    expect(updates[1]!.meetEntryPlans).toEqual(ws.meetEntryPlans ?? []);
   });
 
   const relayFill = (assigneeName: string) =>

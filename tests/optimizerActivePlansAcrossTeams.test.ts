@@ -16,7 +16,7 @@ const SECOND_TEAM = 'Riverside College';
 
 describe('the optimizer event stage preserves other teams’ active plans', () => {
   it('keeps the first team’s plans active when optimizing the second team', () => {
-    const [seed] = JSON.parse(readFileSync(SEED_PATH, 'utf8')) as Workspace[];
+    const seed = (JSON.parse(readFileSync(SEED_PATH, 'utf8')) as Workspace[])[0]!;
     const settings = NSISC_PRESET_SETTINGS;
     // Plan-sheet mode plans an athlete's events even when the loaded meet already holds a swim
     // in them, which is what lets the demo seed (every swimmer already in every event) produce plans.

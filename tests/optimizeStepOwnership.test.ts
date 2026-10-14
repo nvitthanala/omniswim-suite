@@ -119,14 +119,14 @@ describe('Optimize step owns the all-teams optimizer', () => {
     await runAllTeamsDialog();
     expect(allTeamsSpy).toHaveBeenCalledTimes(1);
     // (workspace, gender, removeSeniors, settings, stage)
-    expect(allTeamsSpy.mock.calls[0][2]).toBe(true);
+    expect(allTeamsSpy.mock.calls[0]![2]).toBe(true);
     expect(container.textContent).toContain('Drop seniors is on');
   });
 
   it('passes Drop seniors off when it is off', async () => {
     await renderStep(gainWorkspace(), { removeSeniors: false });
     await runAllTeamsDialog();
-    expect(allTeamsSpy.mock.calls[0][2]).toBe(false);
+    expect(allTeamsSpy.mock.calls[0]![2]).toBe(false);
     expect(container.textContent).toContain('Drop seniors is off');
   });
 
@@ -189,7 +189,7 @@ describe('Optimize step owns the all-teams optimizer', () => {
     await runAllTeamsDialog();
     await click(/Apply to workspace/);
     expect(updates).toHaveLength(1);
-    expect(updates[0].meetEntryPlans?.length).toBeGreaterThan(0);
+    expect(updates[0]!.meetEntryPlans?.length).toBeGreaterThan(0);
 
     expect(findButton(/Undo this optimize/)).toBeTruthy();
     await click(/Undo this optimize/);
@@ -239,7 +239,7 @@ describe('Optimize step owns the all-teams optimizer', () => {
       expect(updates).toHaveLength(1);
       await click(/Undo this optimize/);
       expect(updates).toHaveLength(2);
-      expect(updates[1].meetEntryPlans).toEqual(ws.meetEntryPlans ?? []);
+      expect(updates[1]!.meetEntryPlans).toEqual(ws.meetEntryPlans ?? []);
     });
 
     it('applies nothing and offers no Undo when nothing beats the lineup', async () => {

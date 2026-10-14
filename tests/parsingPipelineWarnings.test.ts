@@ -377,9 +377,9 @@ describe('helpers', () => {
     }));
     rows.push({ parseWarnings: [{ code: 'unreadable_time', message: 'row 0' }] });
     const [entry] = rollUpParseWarnings(rows);
-    expect(entry.code).toBe('unreadable_time');
-    expect(entry.rows).toBe(9);
-    expect(entry.examples).toHaveLength(5);
+    expect(entry!.code).toBe('unreadable_time');
+    expect(entry!.rows).toBe(9);
+    expect(entry!.examples).toHaveLength(5);
     expect(rollUpParseWarnings([{}, { parseWarnings: [] }])).toEqual([]);
   });
 });
