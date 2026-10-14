@@ -48,6 +48,7 @@ import {
   IDENTITY_ALIAS_RESOLVER,
   type AthleteAliasResolver,
 } from './athleteAliases';
+import { itemAt } from './indexedAccess';
 import {
   applySwimCloudReplacePlan,
   planSwimCloudReplace,
@@ -692,7 +693,7 @@ export function previewHistoryImportActions(
   const out: ImportSwimmerPreview[] = [];
 
   for (const [, swims] of groupPreviewBySwimmer(preview, resolver)) {
-    const sample = swims[0];
+    const sample = itemAt(swims, 0);
     if (sample.team !== team || sample.gender !== gender) continue;
     const resolvedName = resolver.resolveAthleteName(sample.name, team, gender);
     const match = matchAthleteToRoster(resolvedName, rosterNames);
@@ -1011,7 +1012,7 @@ function importSwimmerGroup(
   ctx: ImportContext,
   swims: HistoricalSwim[]
 ): void {
-  const sample = swims[0];
+  const sample = itemAt(swims, 0);
   if (sample.team !== ctx.team || sample.gender !== ctx.gender) return;
 
   const { displayName, isOnRoster, isExistingRecruit } = resolveImportIdentity(
