@@ -230,13 +230,41 @@ const TEAM_DIVISION_ENTRIES: readonly TeamDivisionEntry[] = [
     provenance: 'meet',
     status: 'active',
     sponsoredGenders: ['Women'],
-    verifiedOn: AUDIT_DATE,
+    divisionHistory: [
+      {
+        division: 'D2',
+        through: '2025-2026',
+        note: 'Gulf South Conference.',
+      },
+      {
+        division: 'D1',
+        from: '2026-2027',
+        note:
+          'Joined the Atlantic Sun Conference in fall 2026 and began a ' +
+          'three-year NCAA reclassification. Teams are not eligible for NCAA ' +
+          'postseason championships until the transition ends in 2029.',
+      },
+    ],
+    verifiedOn: '2026-10-14',
     sources: [
       'https://goargos.com/sports/womens-swimming-and-diving/roster',
       'https://goargos.com/staff-directory',
+      'https://uwf.edu/go/division-i/',
+      'https://asunsports.org/news/2026/4/1/general-university-of-west-florida-to-join-the-atlantic-sun-conference-united-athletic-conference.aspx',
+      'https://goargos.com/news/2026/8/25/womens-swimming-and-diving-uwf-womens-swim-dive-releases-2026-27-schedule.aspx',
     ],
     note:
-      'NCAA D2, Gulf South Conference. Added 2026-07-26: it was absent from the ' +
+      'Division move effective 2026-2027 (recorded 2026-10-14): UWF left NCAA ' +
+      'D2 for NCAA D1 and the Atlantic Sun Conference; see `divisionHistory`. ' +
+      '`division` stays `D2` on purpose. The tag paths (`cutlineTags`, ' +
+      '`athleteHistory`, `eventStrength`, `utils`, `rosterLineupAudit`) read ' +
+      'this season-agnostic field, so `D1` here would judge every 2025-2026 ' +
+      'swim against the D1 table. Use `divisionForTeamInSeason` for a ' +
+      'season-aware answer. The sources dated 2026-10-14 are the three after ' +
+      'the staff directory; the roster and staff directory were last read on ' +
+      '2026-07-26, and sponsorship (women only) was not re-audited for men. ' +
+      'The 2026-27 schedule release lists the women’s team only. ' +
+      'NCAA D2, Gulf South Conference through 2025-2026. Added 2026-07-26: it was absent from the ' +
       'map and the old D1 fallback silently scored it against the D1 table. ' +
       'UWF sponsors women’s swimming & diving only. Both sources agree: the ' +
       'sports navigation lists "Swimming & Diving" under women’s sports and ' +
