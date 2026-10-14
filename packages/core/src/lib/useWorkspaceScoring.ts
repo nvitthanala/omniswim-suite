@@ -7,14 +7,15 @@ import { Gender, Workspace } from '../types';
 import { buildPrelimsDeltaTimeline, buildPrelimsOverUnderByEntryKey, hasPrelimsData } from './prelimsProjection';
 import { buildPsychDeltaTimeline, buildPsychOverUnderByEntryKey, hasPsychData, psychResultsForGender } from './psychProjection';
 import { mergeScoringSettings } from './scoringDefaults';
-import { buildScoringSnapshot, type ScoringBundle } from './scoringEngine';
+import { buildScoringSnapshot, type ProjectionBundle, type ScoringBundle } from './scoringEngine';
+import { projectionTeamExpectations } from './scoringBundleAggregation';
 import type { CatalogTeamRoster } from './rosterCatalog';
 
 type Snapshot = {
   projected: ScoringBundle;
   baseline: ScoringBundle;
-  prelimsProjected: ScoringBundle;
-  psychProjected: ScoringBundle;
+  prelimsProjected: ProjectionBundle;
+  psychProjected: ProjectionBundle;
 };
 
 type WorkerResponse = {
@@ -22,8 +23,8 @@ type WorkerResponse = {
   ok: boolean;
   projected?: ScoringBundle;
   baseline?: ScoringBundle;
-  prelimsProjected?: ScoringBundle;
-  psychProjected?: ScoringBundle;
+  prelimsProjected?: ProjectionBundle;
+  psychProjected?: ProjectionBundle;
   error?: string;
 };
 
@@ -252,31 +253,26 @@ export function useWorkspaceScoring({
   // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on teamStyleSignature, which changes with any team's name, points or color; sortedTeams is a new array on every response
   }, [snapshot.baseline.teamStyleSignature]);
 
-  const prelimsByTeam = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const t of snapshot.prelimsProjected.sortedTeams) {
-      map.set(t.teamName, t.totalPoints);
-    }
-    return map;
-  // Deliberate: depends on teamStyleSignature, which is `name:points:color`
-  // per team (see prelimsProjection.ts), so it changes whenever anything read
-  // here changes. sortedTeams is a fresh array on every worker response, so
-  // depending on it would rebuild this for identical data every recompute.
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on teamStyleSignature, which changes with any team's name, points or color; sortedTeams is a new array on every response
-  }, [snapshot.prelimsProjected.teamStyleSignature]);
-
-  const psychByTeam = useMemo(() => {
-    const map = new Map<string, number>();
-    for (const t of snapshot.psychProjected.sortedTeams) {
-      map.set(t.teamName, t.totalPoints);
-    }
-    return map;
-  // Deliberate: depends on teamStyleSignature, which is `name:points:color`
-  // per team (see prelimsProjection.ts), so it changes whenever anything read
-  // here changes. sortedTeams is a fresh array on every worker response, so
-  // depending on it would rebuild this for identical data every recompute.
-  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on teamStyleSignature, which changes with any team's name, points or color; sortedTeams is a new array on every response
-  }, [snapshot.psychProjected.teamStyleSignature]);
+  // Numeric expected points only. A team with no expectation (every seed past the
+  // place-point table) is absent here, so its over/under is skipped, not 0. The
+  // count of seeds left out is in prelimsWithoutExpectationByTeam.
+  const prelimsExpectations = useMemo(
+    () => projectionTeamExpectations(snapshot.prelimsProjected.sortedTeams),
+    // Deliberate: keyed on teamStyleSignature, which carries every team's name,
+    // expected points, color and seeds-past-table count. sortedTeams is a new
+    // array on every worker response.
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on teamStyleSignature; sortedTeams is a new array on every response
+    [snapshot.prelimsProjected.teamStyleSignature]
+  );
+  const psychExpectations = useMemo(
+    () => projectionTeamExpectations(snapshot.psychProjected.sortedTeams),
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on teamStyleSignature; sortedTeams is a new array on every response
+    [snapshot.psychProjected.teamStyleSignature]
+  );
+  const prelimsByTeam = prelimsExpectations.expectedByTeam;
+  const psychByTeam = psychExpectations.expectedByTeam;
+  const prelimsWithoutExpectationByTeam = prelimsExpectations.withoutExpectationByTeam;
+  const psychWithoutExpectationByTeam = psychExpectations.withoutExpectationByTeam;
 
   const prelimsDeltaTimeline = useMemo(
     () =>
@@ -346,8 +342,12 @@ export function useWorkspaceScoring({
     psychProjected: snapshot.psychProjected,
     scoringSettings,
     baselineByTeam,
+    /** Expected points per team; a team with no expectation is absent (not 0). */
     prelimsByTeam,
     psychByTeam,
+    /** Seeds past the end of the place-point table per team; only teams with at least one. */
+    prelimsWithoutExpectationByTeam,
+    psychWithoutExpectationByTeam,
     prelimsDeltaTimeline,
     psychDeltaTimeline,
     showPrelimsPerformance,
@@ -357,4 +357,4 @@ export function useWorkspaceScoring({
   };
 }
 
-export type { ScoringBundle } from './scoringEngine';
+export type { ProjectionBundle, ScoringBundle } from './scoringEngine';

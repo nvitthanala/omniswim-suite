@@ -38,6 +38,13 @@ interface MeetOpsStandingsStepProps {
   baselineByTeam: Map<string, number>;
   prelimsByTeam: Map<string, number>;
   psychByTeam: Map<string, number>;
+  /**
+   * Seeds past the end of the place-point table per team (teams with at least
+   * one). These have no expected points. A team with every seed past the table
+   * is absent from `prelimsByTeam` and present here.
+   */
+  prelimsWithoutExpectationByTeam?: Map<string, number>;
+  psychWithoutExpectationByTeam?: Map<string, number>;
   showPrelimsPerformance: boolean;
   prelimsOuByEntry: Map<string, PrelimsOverUnderEntry>;
   showPsychPerformance: boolean;
@@ -62,6 +69,8 @@ export function MeetOpsStandingsStep({
   baselineByTeam,
   prelimsByTeam,
   psychByTeam,
+  prelimsWithoutExpectationByTeam,
+  psychWithoutExpectationByTeam,
   showPrelimsPerformance,
   prelimsOuByEntry,
   showPsychPerformance,
@@ -133,6 +142,8 @@ export function MeetOpsStandingsStep({
                 showPsychPerformance={showPsychPerformance}
                 psychOuByEntry={psychOuByEntry}
                 psychProjectedScore={psychByTeam.get(team.teamName)}
+                prelimsWithoutExpectationCount={prelimsWithoutExpectationByTeam?.get(team.teamName)}
+                psychWithoutExpectationCount={psychWithoutExpectationByTeam?.get(team.teamName)}
                 eventThrough={eventThrough}
                 onRequestDeleteSwimmer={onRequestDeleteSwimmer}
                 scoringRefreshKey={scoringRefreshKey}

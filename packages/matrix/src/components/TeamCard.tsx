@@ -41,6 +41,10 @@ interface Props {
   showPsychPerformance?: boolean;
   psychOuByEntry?: Map<string, PsychOverUnderEntry>;
   psychProjectedScore?: number;
+  /** Seeds past the end of the place-point table (no expected points), prelims projection. */
+  prelimsWithoutExpectationCount?: number;
+  /** Seeds past the end of the place-point table (no expected points), psych projection. */
+  psychWithoutExpectationCount?: number;
   eventThrough?: number;
   scoringRefreshKey?: number;
   onUpdateTime?: (id: string, newTime: string) => void;
@@ -48,7 +52,7 @@ interface Props {
   onRequestDeleteSwimmer?: (name: string) => void;
 }
 
-function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, conference, searchQuery, actualScore, baselineScore, prelimsProjectedScore, baselineOverUnder, projectedOverUnder, showPrelimsPerformance, prelimsOuByEntry, showPsychPerformance, psychOuByEntry, psychProjectedScore, eventThrough, scoringRefreshKey = 0, onUpdateTime, onRequestDeleteSwimmer }: Props) {
+function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, conference, searchQuery, actualScore, baselineScore, prelimsProjectedScore, baselineOverUnder, projectedOverUnder, showPrelimsPerformance, prelimsOuByEntry, showPsychPerformance, psychOuByEntry, psychProjectedScore, prelimsWithoutExpectationCount, psychWithoutExpectationCount, eventThrough, scoringRefreshKey = 0, onUpdateTime, onRequestDeleteSwimmer }: Props) {
   const chartTheme = useThemeColors();
   const [momentumAnchor, setMomentumAnchor] = useState<'prelims' | 'psych'>('prelims');
   const teamChartColor = useMemo(
@@ -334,6 +338,7 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
         showPrelimsPerformance={showPrelimsPerformance}
         eventThrough={eventThrough}
         noActualCount={prelimsNoActualCount}
+        prelimsWithoutExpectationCount={prelimsWithoutExpectationCount}
         onToggle={() => {
           const nextExpanded = !isExpanded;
           setIsExpanded(nextExpanded);
@@ -450,6 +455,9 @@ function TeamCard({ team, index, gender, eventsList = EMPTY_EVENTS_LIST, confere
                   momentumMeetTotal={momentumMeetTotal}
                   teamMomentumEmptyMessage={teamMomentumEmptyMessage}
                   noActualCount={momentumNoActualCount}
+                  withoutExpectationCount={
+                    momentumAnchor === 'psych' ? psychWithoutExpectationCount : prelimsWithoutExpectationCount
+                  }
                 />
               </div>
 

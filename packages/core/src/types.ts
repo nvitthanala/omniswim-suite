@@ -195,6 +195,25 @@ export interface TeamScore {
   strokeDasharray?: string;
 }
 
+/**
+ * A team in a placement-projection bundle (prelims seed or psych seed).
+ *
+ * `expected` is the sum of expected points over the seeds the place-point table
+ * covers. It is `null` when no seed of the team has an expectation: that is
+ * "no expectation", not 0 points. There is no `totalPoints` field on purpose,
+ * so a caller cannot read the absent figure as a number. A team whose seeds are
+ * partly past the table keeps its sum in `expected` and names the rest in
+ * `withoutExpectation`.
+ */
+export interface ProjectedTeamScore extends Omit<TeamScore, 'totalPoints'> {
+  /** Sum of expected points, or `null` when every seed of the team lacks one. */
+  expected: number | null;
+  /** Entry keys (`event|team|swimmer`) whose seed is past the end of the place-point table. */
+  withoutExpectation: string[];
+  /** `withoutExpectation.length`. */
+  withoutExpectationCount: number;
+}
+
 export interface ScoringSettings {
   scoringPoints: number[];
   relayMultiplier: number;

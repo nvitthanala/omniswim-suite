@@ -16,7 +16,7 @@ import {
   countPrelimsEntriesWithoutActual,
 } from '@omniswim/core/lib/prelimsProjection';
 import type { PsychOverUnderEntry } from '@omniswim/core/lib/psychProjection';
-import type { ScoringBundle } from '@omniswim/core/lib/useWorkspaceScoring';
+import type { ProjectionBundle, ScoringBundle } from '@omniswim/core/lib/useWorkspaceScoring';
 import { useThemeColors } from '@omniswim/core/lib/useThemeColors';
 import { MeetOpsMeetStep } from './MeetOpsMeetStep';
 import type { MatrixStepId } from './matrixStepState';
@@ -31,11 +31,15 @@ type Props = {
   gender: Gender;
   scoringBundle: ScoringBundle;
   baselineBundle: ScoringBundle;
-  prelimsProjectedBundle: ScoringBundle;
-  psychProjectedBundle: ScoringBundle;
+  prelimsProjectedBundle: ProjectionBundle;
+  psychProjectedBundle: ProjectionBundle;
   baselineByTeam: Map<string, number>;
+  /** Expected points per team. A team with no expectation (every seed past the place-point table) is absent. */
   prelimsByTeam: Map<string, number>;
   psychByTeam: Map<string, number>;
+  /** Seeds past the place-point table per team (teams with at least one): no expected points. */
+  prelimsWithoutExpectationByTeam?: Map<string, number>;
+  psychWithoutExpectationByTeam?: Map<string, number>;
   prelimsDeltaTimeline: PrelimsDeltaTimelinePoint[];
   psychDeltaTimeline: PrelimsDeltaTimelinePoint[];
   showPrelimsPerformance: boolean;
@@ -83,6 +87,8 @@ export default function MeetOperationsView({
   baselineByTeam,
   prelimsByTeam,
   psychByTeam,
+  prelimsWithoutExpectationByTeam,
+  psychWithoutExpectationByTeam,
   prelimsDeltaTimeline,
   psychDeltaTimeline: _psychDeltaTimeline,
   showPrelimsPerformance,
@@ -303,6 +309,8 @@ export default function MeetOperationsView({
             baselineByTeam={baselineByTeam}
             prelimsByTeam={prelimsByTeam}
             psychByTeam={psychByTeam}
+            prelimsWithoutExpectationByTeam={prelimsWithoutExpectationByTeam}
+            psychWithoutExpectationByTeam={psychWithoutExpectationByTeam}
             showPrelimsPerformance={showPrelimsPerformance}
             prelimsOuByEntry={resolvedPrelimsOuByEntry}
             showPsychPerformance={showPsychPerformance}

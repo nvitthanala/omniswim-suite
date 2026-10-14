@@ -10,6 +10,7 @@ import {
   compactEventTitleAttr,
   formatCompactEventLabel,
 } from '@omniswim/core/lib/utils';
+import { noExpectationText, seedsPastTableLabel } from '../lib/noExpectation';
 
 export function AthleteName({ name, className }: { name: string; className?: string }) {
   return (
@@ -112,6 +113,70 @@ export function NoActualMarker({
     >
       <span aria-hidden="true">{'—'}</span>
       <span className="sr-only">{label}</span>
+    </span>
+  );
+}
+
+/**
+ * Shown where a team's expected figure would be, when no seed of the team has an
+ * expectation because every seed is past the end of the place-point table:
+ * "— (N seeds past table)". Real text, not colour or an icon alone. It is never 0:
+ * 0 would read as "expected nothing". `count` is a positive whole number.
+ */
+export function NoExpectationText({ count, className }: { count: number; className?: string }) {
+  return (
+    <span
+      className={['font-mono tabular-nums text-ui-micro text-theme-muted whitespace-nowrap', className]
+        .filter(Boolean)
+        .join(' ')}
+      title="Seeds past the end of the place-point table have no expected points"
+      data-no-expectation
+    >
+      {noExpectationText(count)}
+    </span>
+  );
+}
+
+/**
+ * A dash for a figure that cannot be worked out because the team has no expected
+ * points (an over/under against nothing). The screen reader hears the reason.
+ * Never 0.
+ */
+export function NoExpectationMarker({
+  label = 'No expected points, so no over/under',
+  className,
+}: {
+  label?: string;
+  className?: string;
+}) {
+  return (
+    <span
+      className={['font-mono tabular-nums text-ui-micro text-theme-muted whitespace-nowrap', className]
+        .filter(Boolean)
+        .join(' ')}
+      title={label}
+      data-no-expectation-dash
+    >
+      <span aria-hidden="true">{'—'}</span>
+      <span className="sr-only">{label}</span>
+    </span>
+  );
+}
+
+/**
+ * The note beside a team's expected sum when some of its seeds are past the end
+ * of the place-point table: "N seeds past table". The sum covers the other seeds.
+ */
+export function SeedsPastTableNote({ count, className }: { count: number; className?: string }) {
+  return (
+    <span
+      className={['font-mono text-ui-micro text-theme-muted whitespace-nowrap', className]
+        .filter(Boolean)
+        .join(' ')}
+      title="The sum leaves these seeds out: the place-point table has no row for them"
+      data-seeds-past-table
+    >
+      {seedsPastTableLabel(count)}
     </span>
   );
 }

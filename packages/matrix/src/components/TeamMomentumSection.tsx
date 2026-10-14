@@ -9,6 +9,7 @@
 
 import { SegmentedControl } from '@omniswim/ui';
 import MomentumChartCard from './MomentumChartCard';
+import { SeedsPastTableNote } from './matrixPresentation';
 
 interface TeamMomentumSectionProps {
   showPrelimsPerformance?: boolean;
@@ -20,6 +21,11 @@ interface TeamMomentumSectionProps {
   teamMomentumEmptyMessage?: string;
   /** Entries left out of the momentum line because they have no result yet. */
   noActualCount?: number;
+  /**
+   * Seeds of this team past the end of the place-point table, for the active
+   * anchor. They have no expected points, so the line leaves them out.
+   */
+  withoutExpectationCount?: number;
 }
 
 export function TeamMomentumSection({
@@ -31,6 +37,7 @@ export function TeamMomentumSection({
   momentumMeetTotal,
   teamMomentumEmptyMessage,
   noActualCount,
+  withoutExpectationCount,
 }: TeamMomentumSectionProps) {
   if (!showPrelimsPerformance && !showPsychPerformance) return null;
   return (
@@ -57,6 +64,15 @@ export function TeamMomentumSection({
         emptyMessage={teamMomentumEmptyMessage}
         noActualCount={noActualCount}
       />
+      {withoutExpectationCount != null && withoutExpectationCount > 0 ? (
+        <p
+          className="text-ui-micro text-theme-muted mt-1 normal-case tracking-normal"
+          data-testid="momentum-no-expectation-note"
+        >
+          <SeedsPastTableNote count={withoutExpectationCount} />. {withoutExpectationCount === 1 ? 'It has' : 'They have'} no
+          expected points and {withoutExpectationCount === 1 ? 'is' : 'are'} left out of this chart, not counted as 0.
+        </p>
+      ) : null}
     </div>
   );
 }

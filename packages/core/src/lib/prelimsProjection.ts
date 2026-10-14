@@ -7,8 +7,12 @@
  */
 import { Gender, ScoringSettings, SwimmerResult, Workspace } from '../types';
 import { mergeScoringSettings } from './scoringDefaults';
-import type { ScoringBundle } from './scoringEngine';
-import { buildProjectedScoringBundle, gatherBaselineScoredByEntry } from './scoringBundleAggregation';
+import type { ProjectionBundle } from './scoringEngine';
+import {
+  buildProjectionBundle,
+  gatherBaselineScoredByEntry,
+  type ExpectationGap,
+} from './scoringBundleAggregation';
 import {
   classifyRoundTier,
   convertTimeToSeconds,
@@ -191,8 +195,8 @@ function pickRepresentativeRow(rows: SwimmerResult[]): SwimmerResult {
 /** The expected rows of a prelims projection, and the entries the table has no row for. */
 type PrelimsExpectation = {
   rows: SwimmerResult[];
-  /** Entry keys whose seed is past the end of the place-point table: no expectation. */
-  withoutExpectation: string[];
+  /** Entries whose seed is past the end of the place-point table: no expectation. */
+  gaps: ExpectationGap[];
 };
 
 function collectPrelimsExpectation(
@@ -207,7 +211,7 @@ function collectPrelimsExpectation(
   }
 
   const out: SwimmerResult[] = [];
-  const withoutExpectation: string[] = [];
+  const gaps: ExpectationGap[] = [];
 
   for (const [event, eventRows] of byEvent) {
     if (!isPrelimsOuEligibleEvent(event, eventRows)) continue;
@@ -224,7 +228,7 @@ function collectPrelimsExpectation(
       // The table is silent for this seed: there is no expectation. It is not 0
       // points, so no row is built (a 0 row would read as "expected nothing").
       if (expected === null) {
-        withoutExpectation.push(entryKey(rep));
+        gaps.push({ key: entryKey(rep), row: rep });
         continue;
       }
       const bracket = settings.aFinalBracketSize ?? Math.floor(settings.scoringPoints.length / 2);
@@ -241,7 +245,7 @@ function collectPrelimsExpectation(
     }
   }
 
-  return { rows: out, withoutExpectation };
+  return { rows: out, gaps };
 }
 
 /**
@@ -268,7 +272,7 @@ export function listPrelimsEntriesWithoutExpectation(
   results: SwimmerResult[],
   settings: ScoringSettings
 ): string[] {
-  return collectPrelimsExpectation(results, settings).withoutExpectation;
+  return collectPrelimsExpectation(results, settings).gaps.map(g => g.key);
 }
 
 export type PrelimsOverUnderEntry = {
@@ -536,11 +540,18 @@ export type PrelimsProjectedOptions = {
   gender: Gender;
 };
 
-/** Build prelims-placement expected scoring bundle from raw loaded meet data. */
+/**
+ * Build prelims-placement expected scoring bundle from raw loaded meet data.
+ *
+ * A team with a seed past the end of the place-point table stays in
+ * `sortedTeams`: with its sum and the count of seeds left out, or with
+ * `expected: null` when every seed is past the table (see
+ * {@link ProjectedTeamScore}).
+ */
 export function buildPrelimsProjectedBundle({
   workspace,
   gender,
-}: PrelimsProjectedOptions): ScoringBundle {
+}: PrelimsProjectedOptions): ProjectionBundle {
   const menResults = workspace.menResults ?? [];
   const womenResults = workspace.womenResults ?? [];
   const currentResults = gender === Gender.MEN ? menResults : womenResults;
@@ -563,8 +574,8 @@ export function buildPrelimsProjectedBundle({
     };
   }
 
-  const expectedRows = buildPrelimsExpectedRows(currentResults, scoringSettings);
-  return buildProjectedScoringBundle(expectedRows, expectedRows);
+  const { rows, gaps } = collectPrelimsExpectation(currentResults, scoringSettings);
+  return buildProjectionBundle(rows, rows, gaps);
 }
 
 export type PrelimsDeltaTimelinePoint = {

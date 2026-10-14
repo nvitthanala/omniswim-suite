@@ -25,6 +25,8 @@ interface TeamCardHeaderProps {
   eventThrough?: number;
   /** Entries with no result yet that the "vs prelims" difference counts as 0 points. */
   noActualCount?: number;
+  /** Seeds past the end of the place-point table: they have no expected points. */
+  prelimsWithoutExpectationCount?: number;
   onToggle: () => void;
 }
 
@@ -41,6 +43,7 @@ export function TeamCardHeader({
   showPrelimsPerformance,
   eventThrough,
   noActualCount,
+  prelimsWithoutExpectationCount,
   onToggle,
 }: TeamCardHeaderProps) {
   return (
@@ -68,6 +71,7 @@ export function TeamCardHeader({
               baselineOverUnder={baselineOverUnder}
               projectedOverUnder={projectedOverUnder}
               noActualCount={noActualCount}
+              prelimsWithoutExpectationCount={prelimsWithoutExpectationCount}
             />
           ) : null}
         </div>

@@ -231,6 +231,8 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
     baselineByTeam,
     prelimsByTeam,
     psychByTeam,
+    prelimsWithoutExpectationByTeam,
+    psychWithoutExpectationByTeam,
     prelimsDeltaTimeline,
     psychDeltaTimeline,
     showPrelimsPerformance,
@@ -673,6 +675,8 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
             baselineByTeam={baselineByTeam}
             prelimsByTeam={prelimsByTeam}
             psychByTeam={psychByTeam}
+            prelimsWithoutExpectationByTeam={prelimsWithoutExpectationByTeam}
+            psychWithoutExpectationByTeam={psychWithoutExpectationByTeam}
             prelimsDeltaTimeline={prelimsDeltaTimeline}
             psychDeltaTimeline={psychDeltaTimeline}
             showPrelimsPerformance={showPrelimsPerformance}

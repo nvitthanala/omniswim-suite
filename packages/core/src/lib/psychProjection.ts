@@ -7,8 +7,12 @@
  */
 import { Gender, ScoringSettings, SwimmerResult, Workspace } from '../types';
 import { mergeScoringSettings } from './scoringDefaults';
-import type { ScoringBundle } from './scoringEngine';
-import { buildProjectedScoringBundle, gatherBaselineScoredByEntry } from './scoringBundleAggregation';
+import type { ProjectionBundle } from './scoringEngine';
+import {
+  buildProjectionBundle,
+  gatherBaselineScoredByEntry,
+  type ExpectationGap,
+} from './scoringBundleAggregation';
 import {
   entryKey,
   pointsForPrelimsSeedRankOrNull,
@@ -95,8 +99,8 @@ export function resolvePsychRanksForEvent(eventRows: SwimmerResult[]): Map<strin
 
 type PsychExpectation = {
   rows: SwimmerResult[];
-  /** Entry keys with no rank, or a seed past the end of the place-point table: no expectation. */
-  withoutExpectation: string[];
+  /** Entries with no rank, or a seed past the end of the place-point table: no expectation. */
+  gaps: ExpectationGap[];
 };
 
 function collectPsychExpectation(
@@ -113,7 +117,7 @@ function collectPsychExpectation(
   }
 
   const out: SwimmerResult[] = [];
-  const withoutExpectation: string[] = [];
+  const gaps: ExpectationGap[] = [];
   for (const [event, eventRows] of byEvent) {
     if (/\bTIME TRIAL\b/i.test(event) || eventRows.some(r => r.isTimeTrial)) continue;
     const ranks = resolvePsychRanksForEvent(eventRows);
@@ -122,6 +126,8 @@ function collectPsychExpectation(
       if (seen.has(key)) continue;
       seen.add(key);
       const rep = rows[0];
+      // gatherPsychEntries builds an entry from at least one row.
+      if (rep === undefined) throw new Error(`psych entry ${key} has no rows`);
       const rank = ranks.get(key);
       // No rank, or a seed the table has no row for: no expectation. That is not
       // 0 points, so no row is built.
@@ -130,7 +136,7 @@ function collectPsychExpectation(
           ? pointsForPrelimsSeedRankOrNull(rank, event, settings)
           : null;
       if (rank === undefined || pts === null) {
-        withoutExpectation.push(key);
+        gaps.push({ key, row: rep });
         continue;
       }
       out.push({
@@ -143,7 +149,7 @@ function collectPsychExpectation(
       });
     }
   }
-  return { rows: out, withoutExpectation };
+  return { rows: out, gaps };
 }
 
 /**
@@ -165,7 +171,7 @@ export function listPsychEntriesWithoutExpectation(
   psychResults: SwimmerResult[],
   settings: ScoringSettings
 ): string[] {
-  return collectPsychExpectation(psychResults, settings).withoutExpectation;
+  return collectPsychExpectation(psychResults, settings).gaps.map(g => g.key);
 }
 
 function baselineActualPointsForEntry(rows: SwimmerResult[], key: string): number {
@@ -279,11 +285,18 @@ export type PsychProjectedOptions = {
   gender: Gender;
 };
 
-/** Build psych-placement expected scoring bundle from psych sheet data. */
+/**
+ * Build psych-placement expected scoring bundle from psych sheet data.
+ *
+ * A team with a seed past the end of the place-point table stays in
+ * `sortedTeams`: with its sum and the count of seeds left out, or with
+ * `expected: null` when every seed is past the table (see
+ * {@link ProjectedTeamScore}).
+ */
 export function buildPsychProjectedBundle({
   workspace,
   gender,
-}: PsychProjectedOptions): ScoringBundle {
+}: PsychProjectedOptions): ProjectionBundle {
   const currentResults = psychResultsForGender(workspace, gender);
   const pdfHint = [
     ...(workspace.menResults ?? []),
@@ -311,8 +324,8 @@ export function buildPsychProjectedBundle({
 
   const meetRows = [...(workspace.menResults ?? []), ...(workspace.womenResults ?? [])];
   const alignedPsych = alignPsychResultsToMeetTeams(currentResults, meetRows);
-  const expectedRows = buildPsychExpectedRows(alignedPsych, scoringSettings);
-  return buildProjectedScoringBundle(expectedRows, expectedRows);
+  const { rows, gaps } = collectPsychExpectation(alignedPsych, scoringSettings);
+  return buildProjectionBundle(rows, rows, gaps);
 }
 
 export type PsychDeltaTimelinePoint = PrelimsDeltaTimelinePoint;

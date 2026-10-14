@@ -13,7 +13,7 @@ import { TrendingUp, GitCompareArrows } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { ChartFrame, ChartShell, SegmentedControl } from '@omniswim/ui';
 import type { TeamScore } from '@omniswim/core/types';
-import type { ScoringBundle } from '@omniswim/core/lib/scoringEngine';
+import type { ProjectionBundle, ScoringBundle } from '@omniswim/core/lib/scoringEngine';
 import type { ThemeColors } from '@omniswim/core/lib/useThemeColors';
 import MeetDiffTable from './MeetDiffTable';
 import PrelimsDiffTable from './PrelimsDiffTable';
@@ -106,7 +106,7 @@ interface MeetOpsAnalyzeStepProps {
   analysisView: 'diff' | 'prelims';
   onAnalysisViewChange: (view: 'diff' | 'prelims') => void;
   baselineBundle: ScoringBundle;
-  prelimsProjectedBundle: ScoringBundle;
+  prelimsProjectedBundle: ProjectionBundle;
   searchQuery: string;
 }
 
