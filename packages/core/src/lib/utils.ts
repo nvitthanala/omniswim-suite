@@ -2452,7 +2452,8 @@ function relayScoringGroupKey(r: SwimmerResult): string {
  * disagree about which entries hold a place.
  */
 function relayEntryPlaceIndex(group: SwimmerResult[], merged: ScoringSettings): number | null {
-  const sample = group[0];
+  // Both callers pass a `relayMap` bucket: created with a row pushed straight after.
+  const sample = itemAt(group, 0);
   const ex = group.some(r => r.isExhibition);
   const tt = group.some(r => r.isTimeTrial);
   if (ex || tt || !canScoreAthlete(sample.roundSwam, sample.event, merged) || !isScoringSwimResult(sample)) {
@@ -2492,7 +2493,7 @@ function countTiedRelayEntries(
   const counts = new Map<string, number>();
   for (const group of entries) {
     if (relayEntryPlaceIndex(group, merged) == null) continue;
-    const key = relayTieKey(group[0]);
+    const key = relayTieKey(itemAt(group, 0));
     counts.set(key, (counts.get(key) ?? 0) + 1);
   }
   return counts;
@@ -2512,8 +2513,9 @@ function scoreRelaysInEvent(
     relayMap.get(k)!.push(r);
   }
   const relayKeys = Array.from(relayMap.keys()).sort((a, b) => {
-    const ra = relayMap.get(a)![0];
-    const rb = relayMap.get(b)![0];
+    // Each key was created with a row pushed straight after, so a group is never empty.
+    const ra = itemAt(relayMap.get(a)!, 0);
+    const rb = itemAt(relayMap.get(b)!, 0);
     const tw = roundTierSort(ra.roundSwam) - roundTierSort(rb.roundSwam);
     if (tw !== 0) return tw;
     const rna = parseRankInt(ra.rank) ?? 9999;
@@ -2533,7 +2535,7 @@ function scoreRelaysInEvent(
 
   for (const key of relayKeys) {
     const group = relayMap.get(key)!;
-    const sample = group[0];
+    const sample = itemAt(group, 0);
     const team = String(sample.team ?? 'Unknown').trim() || 'Unknown';
     const eventName = String(sample.event ?? '').trim();
     const meetState = getOrCreateMeetState(meetStates, team, sample.gender);
@@ -2699,7 +2701,8 @@ export function prepareRecruitsForScoring(
 
   const placeByRow = new Map<SwimmerResult, number>();
   for (const group of fields.values()) {
-    const sample = group[0];
+    // Each field was created with `[r]`, so a field is never empty.
+    const sample = itemAt(group, 0);
     const field = [...recruitComparators(pdfResults, sample.event, sample.gender), ...group];
     for (const [row, place] of placeFieldByTime(field)) {
       if (!placeByRow.has(row)) placeByRow.set(row, place);
@@ -2913,15 +2916,16 @@ function scoreWithPdfPlacePoints(
   recruitResults.sort((a, b) => convertTimeToSeconds(a.time) - convertTimeToSeconds(b.time));
   for (const recruit of recruitResults) {
     const recTime = convertTimeToSeconds(recruit.time);
-    while (pdfIdx < sortedPdf.length && convertTimeToSeconds(sortedPdf[pdfIdx].time) <= recTime) {
-      const p = sortedPdf[pdfIdx];
+    // `pdfIdx < sortedPdf.length` is tested first, so the read is in range.
+    while (pdfIdx < sortedPdf.length && convertTimeToSeconds(itemAt(sortedPdf, pdfIdx).time) <= recTime) {
+      const p = itemAt(sortedPdf, pdfIdx);
       sorted.push(scoredById.get(p.id) ?? { ...p, points: 0 });
       pdfIdx++;
     }
     sorted.push({ ...recruit, rank: 0, points: 0 });
   }
   while (pdfIdx < sortedPdf.length) {
-    const p = sortedPdf[pdfIdx];
+    const p = itemAt(sortedPdf, pdfIdx);
     sorted.push(scoredById.get(p.id) ?? { ...p, points: 0 });
     pdfIdx++;
   }
@@ -3065,15 +3069,16 @@ function interleaveRecruitsWithScoredResults(
   recruitResults.sort((a, b) => convertTimeToSeconds(a.time) - convertTimeToSeconds(b.time));
   for (const recruit of recruitResults) {
     const recTime = convertTimeToSeconds(recruit.time);
-    while (pdfIdx < sortedPdf.length && convertTimeToSeconds(sortedPdf[pdfIdx].time) <= recTime) {
-      const p = sortedPdf[pdfIdx];
+    // `pdfIdx < sortedPdf.length` is tested first, so the read is in range.
+    while (pdfIdx < sortedPdf.length && convertTimeToSeconds(itemAt(sortedPdf, pdfIdx).time) <= recTime) {
+      const p = itemAt(sortedPdf, pdfIdx);
       sorted.push(scoredById.get(p.id) ?? { ...p, points: 0 });
       pdfIdx++;
     }
     sorted.push(scoredById.get(recruit.id) ?? { ...recruit, rank: 0, points: 0 });
   }
   while (pdfIdx < sortedPdf.length) {
-    const p = sortedPdf[pdfIdx];
+    const p = itemAt(sortedPdf, pdfIdx);
     sorted.push(scoredById.get(p.id) ?? { ...p, points: 0 });
     pdfIdx++;
   }
