@@ -41,12 +41,13 @@ function matchesLegDirect(r: SwimmerResult, ctx: RelayLegContext): boolean {
 /** `r` is the relay row whose `relayNames` roster names this athlete on this leg. */
 function matchesLegByRelayName(r: SwimmerResult, ctx: RelayLegContext): boolean {
   const { leg, team, legIdx, nameKey } = ctx;
+  const named = r.relayNames?.[legIdx];
   return (
     isRelayResult(r) &&
     r.team === team &&
     r.event === leg.event &&
-    Boolean(r.relayNames?.[legIdx]) &&
-    normalizeSwimmerName(r.relayNames![legIdx].name) === nameKey
+    named != null &&
+    normalizeSwimmerName(named.name) === nameKey
   );
 }
 

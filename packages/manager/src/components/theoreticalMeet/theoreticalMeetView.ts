@@ -229,11 +229,12 @@ export function groupCaptures(records: readonly CaptureListRecord[], now: number
     .map(([teamId, group]) => {
       const disagree = group.names.size > 1;
       const named = group.names.size === 1 && group.warnings.size === 0;
-      const name = named ? [...group.names][0] : null;
+      // `named` means exactly one name, so the first read is that name.
+      const name = named ? ([...group.names][0] ?? null) : null;
       const nameWarning = disagree
         ? `The captures of team ${teamId} carry different school names (${[...group.names].join(' / ')}), so no school name is shown.`
         : group.warnings.size > 0
-          ? [...group.warnings][0]
+          ? ([...group.warnings][0] ?? null)
           : null;
       const rows: CaptureRow[] = [...group.rows]
         .sort((a, b) => (b.season ?? '').localeCompare(a.season ?? '') || Number(a.status === 'blocked') - Number(b.status === 'blocked'))

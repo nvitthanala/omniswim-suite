@@ -182,7 +182,8 @@ export default function TeamRosterPanel({
     if (controlledTeam === '' && useDropdown) return '';
     if (!teams.length) return '';
     if (pickedTeam && teams.includes(pickedTeam)) return pickedTeam;
-    return useDropdown ? '' : teams[0];
+    // `teams` is not empty here; the fallback only satisfies the type.
+    return useDropdown ? '' : (teams[0] ?? '');
   }, [teams, pickedTeam, controlledTeam, useDropdown]);
 
   useEffect(() => {
@@ -323,6 +324,7 @@ export default function TeamRosterPanel({
       if (!teamRows.length) return;
       const clamped = Math.max(0, Math.min(teamRows.length - 1, index));
       const row = teamRows[clamped];
+      if (row === undefined) return;
       setSelectedAthleteKey(row.key);
       onAthleteSelect?.({ name: row.name, team: row.team, classYear: row.classYear });
       const el = rosterScrollRef.current;
@@ -358,9 +360,10 @@ export default function TeamRosterPanel({
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && currentIndex >= 0 && e.target === e.currentTarget) {
         // The per-row remove buttons are gone; Delete or Backspace on the list itself asks to
         // remove the selected athlete. The same confirm dialog opens.
-        if (editable && onRequestDeleteSwimmer) {
+        const current = teamRows[currentIndex];
+        if (editable && onRequestDeleteSwimmer && current !== undefined) {
           e.preventDefault();
-          onRequestDeleteSwimmer(teamRows[currentIndex].name);
+          onRequestDeleteSwimmer(current.name);
         }
       }
     },

@@ -146,12 +146,13 @@ export function ChecklistItemRow({
   row: ChecklistRow;
   handlers: ChecklistItemHandlers;
 }) {
-  const [first] = row.items;
+  // Only a one-item row shows the item inline; any other row lists its items.
+  const single = row.items.length === 1 ? row.items[0] : undefined;
   return (
     <li className="rounded-lg border border-theme-soft surface-muted-bg px-3 py-2.5 transition-colors hover:border-theme">
-      {row.items.length === 1 ? (
+      {single !== undefined ? (
         <p className="text-ui-caption text-[var(--text-primary)] leading-relaxed break-words">
-          {first.message}
+          {single.message}
         </p>
       ) : (
         <ul className="list-disc pl-4 space-y-1 text-ui-caption text-[var(--text-primary)] leading-relaxed break-words">
@@ -160,7 +161,7 @@ export function ChecklistItemRow({
           ))}
         </ul>
       )}
-      {row.items.length === 1 ? <ChecklistDuplicateNote item={first} /> : null}
+      {single !== undefined ? <ChecklistDuplicateNote item={single} /> : null}
       <ChecklistItemActions items={row.items} handlers={handlers} />
     </li>
   );

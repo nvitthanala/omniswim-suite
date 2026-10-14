@@ -332,7 +332,18 @@ function pairRosterPages(record: TheoreticalCaptureRecord, parse: TheoreticalCap
       record.captureId
     );
   }
-  return refs.map((ref, i) => ({ ref, parse: parse.rosters[i] }));
+  return refs.map((ref, i) => {
+    const rosterParse = parse.rosters[i];
+    // The length check above puts `i` in range.
+    if (rosterParse === undefined) {
+      throw new TheoreticalCaptureError(
+        'roster-page-unparsed',
+        `Capture ${record.captureId} has no parsed roster for page ${i + 1}. A roster that did not parse is not an empty roster.`,
+        record.captureId
+      );
+    }
+    return { ref, parse: rosterParse };
+  });
 }
 
 /** Gender of a roster page, with how it was learned. */
@@ -420,6 +431,14 @@ function teamNameFor(
     );
   }
   const name = [...siblings][0];
+  // `siblings` holds exactly one name here: zero and more than one both threw above.
+  if (name === undefined) {
+    throw new TheoreticalCaptureError(
+      'team-name-missing',
+      `The roster page ${page.ref.canonicalUrl} is SwimCloud's "No rosters found" page, which prints no team name, and no other roster page of capture ${captureId} states one.`,
+      captureId
+    );
+  }
   warnings.push(`The team name "${name}" comes from this capture's other roster page. This page is SwimCloud's "No rosters found" page and prints no name.`);
   return name;
 }
@@ -543,7 +562,12 @@ function buildAthletes(
   }));
   const pairings = pairRosterWithSwimmerTimes(entries, parse.swimmerTimes);
   return roster.athletes.map((athlete: SwimCloudAthlete, index): TheoreticalMeetAthleteInput => {
-    const { entry, parse: timesParse } = pairings[index];
+    const pairing = pairings[index];
+    // `pairRosterWithSwimmerTimes` returns one pairing per roster entry, in order.
+    if (pairing === undefined) {
+      throw new Error(`Indexed-read invariant broken: no pairing for roster athlete ${index}.`);
+    }
+    const { entry, parse: timesParse } = pairing;
     const ref = athlete.swimCloudSwimmerId === undefined ? undefined : timesRefs.get(athlete.swimCloudSwimmerId);
     const provenance = {
       captureId: record.captureId,
@@ -634,7 +658,8 @@ function parseWarningCode(line: string): string {
   if (line.startsWith('Could not parse ')) return 'page-not-parsed';
   if (line.startsWith('No stored content for ')) return 'no-stored-content';
   const match = /: ([a-z][a-z0-9-]*) — /.exec(line);
-  return match === null ? 'other' : match[1];
+  // Group 1 is mandatory in the pattern, so a match always has a code.
+  return match?.[1] ?? 'other';
 }
 
 /** Count the parse's warning lines by code. Exported for the report UI and the tests. */
@@ -710,7 +735,12 @@ async function teamsOfCapture(
   const teams: CapturedTheoreticalTeam[] = [];
   for (const [index, page] of pages.entries()) {
     const teamWarnings: string[] = [];
-    const { gender, fromFilterLetter } = genders[index];
+    const resolvedGender = genders[index];
+    // `genders` is `pages.map(...)`, so it has one entry per page.
+    if (resolvedGender === undefined) {
+      throw new Error(`Indexed-read invariant broken: no gender for roster page ${index}.`);
+    }
+    const { gender, fromFilterLetter } = resolvedGender;
     if (fromFilterLetter && !letterCorroborated) {
       teamWarnings.push(`The gender of this "No rosters found" page comes from its URL filter (gender=${String(page.ref.gender)}), and no parsed roster page of this capture confirms that reading.`);
     }

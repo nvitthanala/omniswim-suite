@@ -33,11 +33,12 @@ function parseAthleteName(name: string): { firstName: string; lastName: string }
   if (!trimmed) return { firstName: '', lastName: '' };
   if (trimmed.includes(',')) {
     const [last, ...rest] = trimmed.split(',');
-    return { firstName: rest.join(',').trim(), lastName: last.trim() };
+    // `split` always returns at least one element.
+    return { firstName: rest.join(',').trim(), lastName: (last ?? '').trim() };
   }
   const parts = trimmed.split(/\s+/);
   if (parts.length >= 2) {
-    return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
+    return { firstName: parts[0] ?? '', lastName: parts.slice(1).join(' ') };
   }
   return { firstName: trimmed, lastName: '' };
 }
@@ -61,7 +62,8 @@ function parseClassYear(raw: string | undefined): ClassYear {
   return CLASS_YEAR_ALIASES[u] ?? ClassYear.FR;
 }
 
-const EVENTS = [
+// A non-empty tuple, so `EVENTS[0]` is a string under `noUncheckedIndexedAccess`.
+const EVENTS: readonly [string, ...string[]] = [
   '50 Freestyle', '100 Freestyle', '200 Freestyle', '500 Freestyle', '1000 Freestyle', '1650 Freestyle',
   '100 Backstroke', '200 Backstroke', '100 Breaststroke', '200 Breaststroke',
   '100 Butterfly', '200 Butterfly', '200 IM', '400 IM',

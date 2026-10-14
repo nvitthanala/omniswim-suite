@@ -127,7 +127,8 @@ function RelayPromotionRow({
       className="flex items-center justify-between gap-2 rounded-lg border border-theme-soft surface-muted-bg px-3 py-2"
     >
       <span className="text-ui-caption text-theme-secondary truncate" title={promotion.description}>
-        Leg {promotion.legIndex + 1} ({stroke}): promote{' '}
+        Leg {promotion.legIndex + 1}
+        {stroke !== undefined ? ` (${stroke})` : ''}: promote{' '}
         <span className="text-[var(--text-primary)] font-semibold">{promotion.alternate}</span> for{' '}
         {promotion.primary} — {RELAY_ALTERNATE_REASON_LABEL[promotion.reason]}
       </span>

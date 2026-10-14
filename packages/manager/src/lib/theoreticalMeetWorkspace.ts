@@ -254,8 +254,13 @@ export interface TheoreticalMeetWorkspaceBuild {
  * so a reader knows why those relays score alike.
  */
 export function relayTieCaveat(event: string, tied: readonly Pick<TheoreticalProjectedRelay, 'team' | 'gender' | 'totalTime'>[], place: number): string {
+  const first = tied[0];
+  // The caller passes a group of two or more tied relays.
+  if (first === undefined) {
+    throw new Error(`Indexed-read invariant broken: a tie caveat for ${event} place ${place} needs at least one relay.`);
+  }
   const teams = tied.map(r => r.team).join(', ');
-  return `Tied estimated relays: ${event}, ${String(tied[0].gender)}, place ${place}, ${tied[0].totalTime}: ${teams}. The tied relays share the points of the places the tie spans, as tied individual swims do.`;
+  return `Tied estimated relays: ${event}, ${String(first.gender)}, place ${place}, ${first.totalTime}: ${teams}. The tied relays share the points of the places the tie spans, as tied individual swims do.`;
 }
 
 export const RELAY_PLACES_CAVEAT =
@@ -561,7 +566,12 @@ function rankRelays(
     legRows.set(relay.id, rows);
     resultIds.set(relay.id, rows.map(r => r.id));
     const list = byEvent.get(relay.event) ?? [];
-    list.push({ relay, key: rows[0] });
+    const key = rows[0];
+    // `requireRelayShape` proved exactly four legs, so there are four rows.
+    if (key === undefined) {
+      throw new TheoreticalWorkspaceError('unexpected-seed-row', `The relay ${relay.id} has no leg rows.`);
+    }
+    list.push({ relay, key });
     byEvent.set(relay.event, list);
   }
   const out: SwimmerResult[] = [];

@@ -175,8 +175,10 @@ export function relayMissingStrokeLabel(stroke: RelayLegStroke | undefined): str
 export function computeClassTopPerformers(swimmers: SwimmerResult[]): [string, number][] {
   const swimmerPts: Record<string, number> = {};
   swimmers.forEach((s) => {
-    if (!swimmerPts[s.name]) swimmerPts[s.name] = 0;
-    swimmerPts[s.name] += typeof s.points === 'number' ? s.points : 0;
+    // A missing, zero or NaN running total restarts at 0, as before.
+    const prior = swimmerPts[s.name];
+    const running = prior ? prior : 0;
+    swimmerPts[s.name] = running + (typeof s.points === 'number' ? s.points : 0);
   });
   return Object.entries(swimmerPts)
     .sort((a, b) => b[1] - a[1])

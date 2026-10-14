@@ -105,11 +105,12 @@ export default function TeamManagementView({
     // that offered no way to choose one. Select it. With several teams, the
     // team bar (ManagerTeamBar) is the one place the user picks.
     if (!selectedTeam) {
-      if (teams.length === 1) setSelectedTeam(teams[0]);
+      const onlyTeam = teams.length === 1 ? teams[0] : undefined;
+      if (onlyTeam !== undefined) setSelectedTeam(onlyTeam);
       return;
     }
     if (teams.includes(selectedTeam)) return;
-    setSelectedTeam(teams.length === 1 ? teams[0] : '');
+    setSelectedTeam(teams.length === 1 ? (teams[0] ?? '') : '');
   }, [teams, selectedTeam, gender]);
 
   const handleAthleteSelect = useCallback((athlete: RecruitAthletePrefill | null) => {

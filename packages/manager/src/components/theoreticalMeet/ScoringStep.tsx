@@ -35,6 +35,7 @@ export function ScoringStep({ flow }: { flow: TheoreticalMeetFlow }) {
   const chosen = scoringChoices.find(choice => choice.id === scoringChoiceId) ?? null;
   const groups = [...new Set(scoringChoices.map(choice => choice.group))];
   const useLoadedOrder = eventOrderWorkspaceId !== null;
+  const firstEventOrder = eventOrders[0];
 
   return (
     <div className="space-y-6">
@@ -202,7 +203,7 @@ export function ScoringStep({ flow }: { flow: TheoreticalMeetFlow }) {
             <span className="block text-theme-muted">The standard championship order. No event numbers are invented.</span>
           </span>
         </label>
-        {eventOrders.length > 0 ? (
+        {firstEventOrder !== undefined ? (
           <div>
             <label className="flex items-start gap-2 text-ui-caption text-[var(--text-primary)]">
               <input
@@ -210,7 +211,7 @@ export function ScoringStep({ flow }: { flow: TheoreticalMeetFlow }) {
                 name="tmeet-event-order"
                 className="mt-0.5 accent-[var(--text-accent)]"
                 checked={useLoadedOrder}
-                onChange={() => setEventOrderWorkspaceId(eventOrders[0].workspaceId)}
+                onChange={() => setEventOrderWorkspaceId(firstEventOrder.workspaceId)}
               />
               <span>
                 Copy from a loaded meet
@@ -224,7 +225,7 @@ export function ScoringStep({ flow }: { flow: TheoreticalMeetFlow }) {
               id="tmeet-event-order-source"
               className="glass-input ml-6 w-[calc(100%-1.5rem)] text-ui-caption"
               disabled={!useLoadedOrder}
-              value={eventOrderWorkspaceId ?? eventOrders[0].workspaceId}
+              value={eventOrderWorkspaceId ?? firstEventOrder.workspaceId}
               onChange={event => setEventOrderWorkspaceId(event.target.value)}
             >
               {eventOrders.map(choice => (

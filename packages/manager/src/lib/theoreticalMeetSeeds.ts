@@ -903,7 +903,11 @@ function rankSeeds(ctx: Context, team: TheoreticalMeetTeamInput, athlete: SwimCl
     null
   );
   return profile.primaryEvents.map(selectorEvent => {
-    const seed = traceSeed(selectorEvent, profile.bestByEvent[selectorEvent], used);
+    const best = profile.bestByEvent[selectorEvent];
+    if (best === undefined) {
+      throw new TheoreticalMeetError('seed-provenance-missing', `The selector offered ${selectorEvent} with no best time.`);
+    }
+    const seed = traceSeed(selectorEvent, best, used);
     return {
       swim: seed.swim,
       candidate: {
@@ -1245,9 +1249,14 @@ function buildTeamRelays(
       if (suggestion === null) {
         const everyone = listEligibleRelayLegCandidates(pool, event, legIndex, new Set<string>(), team.teamName, team.gender, legSettings);
         const req = relayLegRequirements(event, legIndex);
+        // `legIndex` is the loop counter (0 to 3), so it always has a stroke.
+        const legStroke = req.stroke;
+        if (legStroke === undefined) {
+          throw new Error(`Indexed-read invariant broken: relay leg index ${legIndex} has no stroke.`);
+        }
         missing.push({
           position,
-          legEvent: relayLegEventName(req.legDistanceYards as number, req.stroke),
+          legEvent: relayLegEventName(req.legDistanceYards as number, legStroke),
           swimmersWithBest: everyone.length,
           alreadyOnRelay: everyone.filter(s => assigned.has(normalizeSwimmerName(s.name))).length,
           atEntryCap: everyone.filter(s => atCap.has(normalizeSwimmerName(s.name)) && !atRelayLimit.has(normalizeSwimmerName(s.name))).length,
