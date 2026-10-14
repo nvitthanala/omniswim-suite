@@ -1,0 +1,249 @@
+             UPDATED 6/15/2026
+
+2027  Division I Men's Swimming and Diving Qualifying Standards
+
+      MEN'S SWIMMING STANDARDS
+
+                             25-Yard Course
+
+      EVENT                  STANDARD
+
+      50 Freestyle                             19.22
+
+      100 Freestyle                            42.33
+
+      200 Freestyle                          1:33.29
+
+      500 Freestyle                          4:16.64
+
+      1,650 Freestyle        15:03.96
+
+      100 Butterfly                            45.59
+
+      200 Butterfly                          1:43.10
+
+      100 Backstroke                           45.84
+
+      200 Backstroke                         1:41.11
+
+      100 Breaststroke                         52.18
+
+      200 Breaststroke                       1:54.08
+
+      200 Individual Medley                  1:43.99
+
+      400 Individual Medley                  3:44.39
+
+             MEN'S RELAY STANDARDS
+
+                             25-Yard Course
+
+      EVENT                  QUALIFYING               PROVISIONAL
+
+      200 Freestyle Relay    1:16.02                   1:16.59
+
+      400 Freestyle Relay    2:48.73                   2:49.67
+
+      800 Freestyle Relay    6:13.33                   6:15.80
+
+      200 Medley Relay       1:23.52                   1:23.62
+
+      400 Medley Relay       3:04.30                   3:05.25
+
+             MEN'S DIVING STANDARDS
+
+      *Qualifying point total in any 6-dive list
+
+                             with standard DD
+
+      EVENT                                    POINTS
+
+      1-Meter Diving                           300*
+
+      3-Meter Diving                           320*
+
+      Platform Diving                          300*
+2027  Division I Women's Swimming and Diving Qualifying          Standards
+
+      WOMEN'S SWIMMING STANDARDS
+
+                             25-Yard Course
+
+      EVENT                  STANDARD
+
+      50 Freestyle                           22.26
+
+      100 Freestyle                          48.55
+
+      200 Freestyle                   1:45.39
+
+      500 Freestyle                   4:44.93
+
+      1,650 Freestyle        16:34.79
+
+      100 Butterfly                          52.60
+
+      200 Butterfly                   1:57.38
+
+      100 Backstroke                         52.59
+
+      200 Backstroke                  1:55.16
+
+      100 Breaststroke                1:00.41
+
+      200 Breaststroke                2:11.08
+
+      200 Individual Medley           1:58.66
+
+      400 Individual Medley           4:13.32
+
+      WOMEN'S RELAY STANDARDS
+
+      EVENT                  QUALIFYING             PROVISIONAL
+
+      200 Freestyle Relay    1:28.15                   1:28.54
+
+      400 Freestyle Relay    3:13.19                   3:14.63
+
+      800 Freestyle Relay    7:00.86                   7:04.46
+
+      200 Medley Relay       1:35.93                   1:36.36
+
+      400 Medley Relay       3:30.66                   3:32.05
+
+      WOMEN'S DIVING STANDARDS
+
+      *Qualifying point total in any 6-dive list
+
+                             with standard DD
+
+      **Qualifying point total in any 5-dive list
+
+                             with standard DD
+
+      EVENT                                    POINTS
+
+      1-Meter Diving                           265* / 220**
+
+      3-Meter Diving                           280* / 235**
+
+      Platform Diving                          225**
+Qualifying Standards
+
+-  The       standard  for  individual  events  is  calculated  by  using     the  88th  best  time  on   the   women's
+
+   performance list and the 64th best time on the men's performance list from the previous year.
+
+-  The "Qualifying Standard" for relay events is calculated using the three-year average of the 16th best
+
+   time on the championship finals performance list unless the current "Qualifying Standard" is faster
+
+   than the three-year average.
+
+-  The "Provisional Standard" for relay events is calculated using the three-year average of the 24th best
+
+   time             on      the         performance                 list           unless            the        current
+
+   "Provisional Standard" is faster than the three-year average.
+
+-  Note: The performance list includes all bona fide competitions with teams eligible for the Division I
+
+   championships during the NCAA qualifying period, the CSCAA National Invitational Championship
+
+   and the NCAA Championships. The three-year average will be rounded to two decimal places.
+
+Conversions
+
+All time standards, consideration standards and optional-entry standards achieved in 25-yard or 25-meter
+
+racing courses.  Times achieved in 25-meter racing courses will be converted to an equivalent time for a 25-
+
+yard racing course in order to select and seed swimming participants at the 2027 Division I Swimming and
+
+Diving Championships.
+
+To convert a metric time achieved in a 25-meter racing to an equivalent time for a 25-yard racing course: (a)
+
+transform the achieved metric time into seconds; (b) carrying the calculation out to five decimal places,
+
+multiply the transformed time in seconds by appropriately following the conversion factor; (c) drop, without
+
+rounding, all units smaller than a hundredth of a second; and (d) finally, transform the resultant value in seconds
+
+back into minutes and seconds to obtain the converted time.
+
+                            Short-Course Conversion Factors (Men and Women)
+
+                            Event                                   Factor
+
+                            400 meters to 500 yards                 1.153
+
+                            800 meters to 1,000 yards               1.153
+
+                            1,500 meters to 1,650 yards             1.013
+
+                            All other events                        0.906
+
+Please note the conversion table above does not reflect what is included in the NCAA Swimming and Diving
+
+Rules Book. This document reflects what will be used for selection to and seeding at the 2027 Division I
+
+Swimming and Diving Championships.
+
+Altitude
+
+Times achieved at an altitude of 3,000 feet or higher may be adjusted according to the following chart:
+
+                                        I                                 II                              III
+
+             Event               3,000-4,250 Ft.                4,251-6,500 Ft.                Above 6,500 Ft.
+
+                                        Elevation                   Elevation                        Elevation
+
+100 Yards/Meters                        .0                                .10                             .15
+
+(Individual Events)
+
+200 Yards/Meters                        .5                                1.2                             1.6
+
+(Individual Events)
+
+500 Yards-400 Meters                    2.5                               5.0                             7.0
+
+(Individual Events)
+
+1,000 Yards/800 Meters                  6.3                               11.4                            18.5
+
+1,650 Yards/1,500 Meters                11.0                              20.0                            32.5
+
+Subtract the time above from the actual time achieved.  A relay team may use a conversion that is four times
+
+the appropriate figures listed above. This is the time to be used on the entry form.
+2027 Number  of  Qualifying Spots per Zone
+
+Women            1m     3m                  Pl    Men     1m  3m  Pl
+
+Zone A           5      6                   6     Zone A  4   4   4
+
+Zone B           11     9                   10    Zone B  12  11  8
+
+Zone C           9      8                   8     Zone C  6   6   8
+
+Zone D           11     12                  9     Zone D  6   8   8
+
+Zone E           5      6                   8     Zone E  8   7   8
+
+2027 Number  of  Reimbursement Spots per    Zone
+
+                 Women  Men
+
+Zone A               4      4
+
+Zone B              12      9
+
+Zone C               9      5
+
+Zone D              10      10
+
+Zone E               6      7
+

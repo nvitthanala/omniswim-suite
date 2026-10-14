@@ -292,7 +292,7 @@ for (const bad of [{ timeSec: 0 }, { timeSec: -1 }, { time: 'NT' }, { time: 'DQ'
 const d1 = buildCutlineTag({ timeSec: 19.2, gender: 'Men', event: '50 Free', division: 'D1' });
 eq(d1.tag?.tier, 'Standard', 'D1 publishes one Standard, not an A cut');
 eq(d1.tag?.label, 'D1 STANDARD', 'D1 label must not say A CUT');
-eq(d1.tag?.title, 'NCAA D1 2025-2026 qualifying standard — 19.43', 'D1 tooltip');
+eq(d1.tag?.title, 'NCAA D1 2026-2027 qualifying standard — 19.22', 'D1 tooltip');
 
 const d3 = buildCutlineTag({ timeSec: 20.02, gender: 'Men', event: '50 Free', division: 'D3' });
 eq(d3.tag?.tier, 'Invited', 'D3 publishes an Invited tier');

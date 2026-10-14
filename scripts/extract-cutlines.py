@@ -424,7 +424,7 @@ def parse_d1(src: dict[str, Any], pdf_path: Path) -> list[dict[str, Any]]:
         marker_dive_count: dict[str, int] = {}
         marker_note: dict[str, str] = {}
         for line in dive_lines:
-            m = re.match(r"^(\*+)\s*Qualifying point total in any (\d+) dive list", line, re.I)
+            m = re.match(r"^(\*+)\s*Qualifying point total in any (\d+)[- ]dive list", line, re.I)
             if m:
                 marker_dive_count[m.group(1)] = int(m.group(2))
                 marker_note[m.group(1)] = re.sub(r"^\*+\s*", "", line).strip()
@@ -883,6 +883,7 @@ def parse_naia(src: dict[str, Any], pdf_path: Path) -> list[dict[str, Any]]:
 
 PARSERS = {
     "ncaa-d1-2025-26": parse_d1,
+    "ncaa-d1-2026-27": parse_d1,
     "ncaa-d2-men-2026-27": parse_d2,
     "ncaa-d2-women-2026-27": parse_d2,
     "ncaa-d3-2026-27": parse_d3,

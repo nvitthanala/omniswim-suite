@@ -1,6 +1,6 @@
 {
   "description": "Primary-source qualifying-standard PDFs. Every cutline record in data/cutlines/*.json traces to one of these by sourceId + sha256. Regenerate with scripts/fetch-cutlines.py then scripts/extract-cutlines.py.",
-  "generatedAt": "2026-07-26T06:14:07Z",
+  "generatedAt": "2026-10-14T18:46:48Z",
   "sources": [
     {
       "id": "ncaa-d1-2025-26",
@@ -21,6 +21,28 @@
         "tool": "xpdf pdftotext",
         "toolVersion": "4.00",
         "command": "pdftotext -eol unix -table 2025-26D1XSW_QUALSTANDARDS.pdf -",
+        "pageSeparator": "form feed (U+000C) after each page"
+      }
+    },
+    {
+      "id": "ncaa-d1-2026-27",
+      "division": "D1",
+      "season": "2026-2027",
+      "genders": "MW",
+      "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+      "filename": "2026-27D1XSW_QUALSTANDARDS.pdf",
+      "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+      "bytes": 206706,
+      "pageCount": 4,
+      "retrievedAt": "2026-10-14T18:44:29Z",
+      "extractedText": {
+        "filename": "2026-27D1XSW_QUALSTANDARDS.table.txt",
+        "sha256": "88392f058b491ffbf09c5507d8a35f471a05f15c3efff72849d92c0e3f5b4c04",
+        "bytes": 8010,
+        "pdfSha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "tool": "xpdf pdftotext",
+        "toolVersion": "4.00",
+        "command": "pdftotext -eol unix -table 2026-27D1XSW_QUALSTANDARDS.pdf -",
         "pageSeparator": "form feed (U+000C) after each page"
       }
     },

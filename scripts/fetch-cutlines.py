@@ -55,6 +55,14 @@ SOURCES: list[dict[str, Any]] = [
         "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2025-26D1XSW_QUALSTANDARDS.pdf",
     },
     {
+        "id": "ncaa-d1-2026-27",
+        "division": "D1",
+        "season": "2026-2027",
+        "genders": "MW",
+        "filename": "2026-27D1XSW_QUALSTANDARDS.pdf",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+    },
+    {
         "id": "ncaa-d2-men-2026-27",
         "division": "D2",
         "season": "2026-2027",
