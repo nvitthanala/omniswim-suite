@@ -642,6 +642,13 @@
     "A7": {
       "commits": "14a0c08f core+writer, b6e9509a labelled views, 6bb0d048 GET normalises source results and snapshots",
       "architect": "a71f55ae806e6b795: scoring and swaps identical; fixed team split summary (omitted on theoretical relay), normaliser no longer writes relayLegSplit back, source results normalised, swap-clock test added. Open: relayLegSwaps.ts manualLegTime from an applied swap persists an estimate in relayLegOverrides unlabelled (same value as before); backups not rewritten (read path normalises); legacy startAdjustmentSec unrecoverable; utils.ts ~3481 (oldSplitSec ?? 30) + 3 is an invented fallback leg time (pre-existing, scoring path, not changed)"
+    },
+    "T1": {
+      "commits": "a7e7931f config + helpers + lint:tests in lint:types, 50e29281 type fixes in ~156 test files, plus relayLegEstimate re-included",
+      "measured": "1526 errors in 140 files at start; 10 files still excluded (8 swimCloudExtension* tests, multiTeamDriverHarness.ts, theoreticalMeetTeamNames.test.ts) until extension src 21 unchecked reads are fixed (changes background.js; drift guard swimCloudExtensionBuildFreshness.test.ts)",
+      "casts": "as unknown as Workspace 100 -> 54; total as unknown as 187 -> 139",
+      "notAudited": "scripts/*.mjs checkJs error count not measured; 'eslint --fix' slip reverted by the worker, assertions spot-checked by lead (only whitespace/cast/bang diffs plus 2 equivalent rewrites)",
+      "gates": "lint 0/0, vitest 269 files 3997 passed 23 skipped, scripts 86/0/1"
     }
   },
   "commitsAfterAuditNote": "R11 steps 3-6 done (flag on). Next: A7 relayLegEstimate, R2 split utils.ts, R3 identity module, R4 optimizers to worker, R1 split parser.ts, R7, T1, T6, F4, F6, R9 last"
