@@ -128,11 +128,14 @@ export function registerWorkspaceRoutes(app: Express, deps: WorkspaceRoutesDeps)
       ...ws,
       menResults: (ws.menResults || []).map(normalizeSwimmerResultRelayFields),
       womenResults: (ws.womenResults || []).map(normalizeSwimmerResultRelayFields),
+      // The source copies hold the same leg rows. A key the workspace does not have stays absent.
+      ...(ws.sourceMenResults ? { sourceMenResults: ws.sourceMenResults.map(normalizeSwimmerResultRelayFields) } : {}),
+      ...(ws.sourceWomenResults ? { sourceWomenResults: ws.sourceWomenResults.map(normalizeSwimmerResultRelayFields) } : {}),
     };
   }
 
   registerWorkspaceCrudRoutes(app, deps, normalizeWorkspaceResults);
-  registerWorkspaceBackupAndSnapshotRoutes(app, deps);
+  registerWorkspaceBackupAndSnapshotRoutes(app, deps, normalizeWorkspaceResults);
   registerWorkspaceShareAndReportRoutes(app, deps, normalizeWorkspaceResults);
 }
 
@@ -310,7 +313,11 @@ function registerWorkspaceCrudRoutes(
   });
 }
 
-function registerWorkspaceBackupAndSnapshotRoutes(app: Express, deps: WorkspaceRoutesDeps): void {
+function registerWorkspaceBackupAndSnapshotRoutes(
+  app: Express,
+  deps: WorkspaceRoutesDeps,
+  normalizeWorkspaceResults: (ws: Workspace) => Workspace
+): void {
   const { repo, AUTH_REQUIRED, requireAuth, optionalAuth } = deps;
   const isAdmin = deps.isAdmin ?? (() => false);
   /** Under AUTH_REQUIRED the backup directory is shared by every tenant: administrators only. */
@@ -408,7 +415,7 @@ function registerWorkspaceBackupAndSnapshotRoutes(app: Express, deps: WorkspaceR
       }
       const content = await repo.getSnapshotContent(routeParam(req, 'snapshotId'), workspaceScopeOf(req));
       if (!content) return apiError(res, 404, 'SNAPSHOT_NOT_FOUND', 'Snapshot not found');
-      res.json(content);
+      res.json(normalizeWorkspaceResults(content));
     } catch (err) {
       apiError(res, 500, 'SNAPSHOT_READ_FAILED', 'Failed to read snapshot', String(err));
     }
@@ -418,7 +425,7 @@ function registerWorkspaceBackupAndSnapshotRoutes(app: Express, deps: WorkspaceR
     try {
       const restored = await repo.restoreSnapshot(routeParam(req, 'snapshotId'), workspaceScopeOf(req));
       if (!restored) return apiError(res, 404, 'SNAPSHOT_NOT_FOUND', 'Snapshot not found');
-      res.json(restored);
+      res.json(normalizeWorkspaceResults(restored));
     } catch (err) {
       apiError(res, 500, 'SNAPSHOT_RESTORE_FAILED', 'Restore failed', String(err));
     }
