@@ -205,7 +205,8 @@ export function parseRank(raw: unknown): { ok: true; rank: number } | { ok: fals
     if (Number.isInteger(raw) && raw > 0) return { ok: true, rank: raw };
   } else if (typeof raw === 'string') {
     const m = raw.trim().match(/^\*?(\d+)$/);
-    const n = m ? parseInt(m[1], 10) : 0;
+    const digits = m?.[1];
+    const n = digits === undefined ? 0 : parseInt(digits, 10);
     if (n > 0) return { ok: true, rank: n };
   }
   return { ok: false, reason: `rank ${JSON.stringify(raw)} is not a positive integer` };

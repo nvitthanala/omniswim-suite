@@ -98,6 +98,20 @@ function readExpectedVersion(req: AuthedRequest): ExpectedVersion {
   return { kind: 'none' };
 }
 
+/**
+ * A path parameter the route pattern already declares (`:id`, `:snapshotId`). Express types
+ * `req.params` as an index signature, so the read is `string | undefined`. A declared
+ * parameter is always present, so a missing one means the route and the reader disagree.
+ * Call this inside the handler's `try`: the throw becomes the route's own 500 response.
+ */
+function routeParam(req: { params: Record<string, string | undefined> }, name: string): string {
+  const value = req.params[name];
+  if (value === undefined) {
+    throw new Error(`Route parameter "${name}" is missing from the request path.`);
+  }
+  return value;
+}
+
 function errorCode(err: unknown): string | undefined {
   return err instanceof Error ? (err as Error & { code?: string }).code : undefined;
 }
@@ -230,7 +244,7 @@ function registerWorkspaceCrudRoutes(
           // here, so it can never cost a backup slot.
           return applyWorkspaceUpdateWithGuard(
             scopedUpdateRepo(repo, scope),
-            req.params.id,
+            routeParam(req, 'id'),
             patch,
             expectedVersion
           );
@@ -259,8 +273,8 @@ function registerWorkspaceCrudRoutes(
       if (outcome.unchecked) {
         // Flag it, once per workspace, so a client that forgot the headers shows up in the log.
         res.setHeader(SAVE_UNCHECKED_HEADER, 'no-sequence');
-        if (!uncheckedWarned.has(req.params.id)) {
-          uncheckedWarned.add(req.params.id);
+        if (!uncheckedWarned.has(routeParam(req, 'id'))) {
+          uncheckedWarned.add(routeParam(req, 'id'));
           console.warn(
             `PUT /api/workspaces/${req.params.id} had no save sequence; out-of-order arrival cannot be detected for it.`
           );
@@ -287,7 +301,7 @@ function registerWorkspaceCrudRoutes(
       } catch (backupErr) {
         console.warn('Pre-delete backup failed; deleting anyway:', backupErr);
       }
-      await repo.remove(req.params.id, scope);
+      await repo.remove(routeParam(req, 'id'), scope);
       sequencer.forget(sequenceKey(req));
       res.json({ success: true });
     } catch (err) {
@@ -368,7 +382,7 @@ function registerWorkspaceBackupAndSnapshotRoutes(app: Express, deps: WorkspaceR
   app.post('/api/workspaces/:id/snapshots', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     try {
       const label = typeof req.body?.label === 'string' ? req.body.label : 'snapshot';
-      const snap = await repo.snapshot(req.params.id, label, workspaceScopeOf(req));
+      const snap = await repo.snapshot(routeParam(req, 'id'), label, workspaceScopeOf(req));
       if (!snap) {
         return apiError(res, 400, 'SNAPSHOT_BACKEND_REQUIRED', 'Snapshots require SQLite or PostgreSQL backend');
       }
@@ -380,7 +394,7 @@ function registerWorkspaceBackupAndSnapshotRoutes(app: Express, deps: WorkspaceR
 
   app.get('/api/workspaces/:id/snapshots', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     try {
-      res.json(await repo.listSnapshots(req.params.id, workspaceScopeOf(req)));
+      res.json(await repo.listSnapshots(routeParam(req, 'id'), workspaceScopeOf(req)));
     } catch (err) {
       apiError(res, 500, 'SNAPSHOT_LIST_FAILED', 'Failed to list snapshots', String(err));
     }
@@ -392,7 +406,7 @@ function registerWorkspaceBackupAndSnapshotRoutes(app: Express, deps: WorkspaceR
       if (repo.kind === 'json') {
         return apiError(res, 400, 'SNAPSHOT_BACKEND_REQUIRED', 'Snapshots require SQLite or PostgreSQL backend');
       }
-      const content = await repo.getSnapshotContent(req.params.snapshotId, workspaceScopeOf(req));
+      const content = await repo.getSnapshotContent(routeParam(req, 'snapshotId'), workspaceScopeOf(req));
       if (!content) return apiError(res, 404, 'SNAPSHOT_NOT_FOUND', 'Snapshot not found');
       res.json(content);
     } catch (err) {
@@ -402,7 +416,7 @@ function registerWorkspaceBackupAndSnapshotRoutes(app: Express, deps: WorkspaceR
 
   app.post('/api/snapshots/:snapshotId/restore', AUTH_REQUIRED ? requireAuth : optionalAuth, async (req: AuthedRequest, res) => {
     try {
-      const restored = await repo.restoreSnapshot(req.params.snapshotId, workspaceScopeOf(req));
+      const restored = await repo.restoreSnapshot(routeParam(req, 'snapshotId'), workspaceScopeOf(req));
       if (!restored) return apiError(res, 404, 'SNAPSHOT_NOT_FOUND', 'Snapshot not found');
       res.json(restored);
     } catch (err) {
@@ -427,7 +441,7 @@ function registerWorkspaceShareAndReportRoutes(
       const ws = (await repo.list(workspaceScopeOf(req))).find(w => w.id === req.params.id);
       if (!ws) return apiError(res, 404, 'WORKSPACE_NOT_FOUND', 'Workspace not found');
       const link = await shareLinks.createLink(
-        req.params.id,
+        routeParam(req, 'id'),
         req.user.id,
         req.user.teamId,
         typeof req.body?.label === 'string' ? req.body.label : ws.name

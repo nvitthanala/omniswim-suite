@@ -66,7 +66,10 @@ export function parseHostHeader(raw: string | undefined): HostParts | undefined 
   if (typeof raw !== 'string') return undefined;
   const match = HOST_PATTERN.exec(raw.trim().toLowerCase());
   if (match === null) return undefined;
-  return { hostname: match[1], port: match[2] };
+  const hostname = match[1];
+  // Group 1 is mandatory in HOST_PATTERN, so this only guards the type.
+  if (hostname === undefined) return undefined;
+  return { hostname, port: match[2] };
 }
 
 /**
@@ -157,7 +160,8 @@ export function createHostOriginGuard(options: HostOriginGuardOptions): RequestH
   };
 
   const isCapturePath = (req: Request): boolean => {
-    const pathOnly = req.originalUrl.split('?')[0].toLowerCase();
+    // `split` always returns at least one element, so the fallback is never taken.
+    const pathOnly = (req.originalUrl.split('?')[0] ?? '').toLowerCase();
     return pathOnly === prefix || pathOnly.startsWith(`${prefix}/`);
   };
 

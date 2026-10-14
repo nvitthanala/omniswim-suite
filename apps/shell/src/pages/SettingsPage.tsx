@@ -207,7 +207,9 @@ export default function SettingsPage() {
                       className="h-12 w-28 cursor-pointer rounded-xl border border-theme-soft bg-[var(--surface-muted)] p-1"
                     />
                   </label>
-                  <p className="text-ui-caption text-theme-secondary">Current preset: {selectedPreset.name}</p>
+                  {selectedPreset !== undefined && (
+                    <p className="text-ui-caption text-theme-secondary">Current preset: {selectedPreset.name}</p>
+                  )}
                 </SettingsSection>
 
                 <SettingsSection title="Light or dark base" description="Flip the suite between bright deck mode and a darker analytics board.">

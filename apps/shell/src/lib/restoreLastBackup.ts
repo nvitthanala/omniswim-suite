@@ -34,7 +34,7 @@ export async function findLastBackup(): Promise<BackupChoice | null> {
   const res = await fetch('/api/workspaces/backups');
   if (!res.ok) throw await requestError(res, `Could not list backups (${res.status}).`);
   const list = (await res.json()) as BackupChoice[];
-  return Array.isArray(list) && list.length > 0 ? list[0] : null;
+  return Array.isArray(list) && list.length > 0 ? (list[0] ?? null) : null;
 }
 
 export async function restoreBackupFile(file: string): Promise<void> {

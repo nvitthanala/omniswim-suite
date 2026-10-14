@@ -39,7 +39,10 @@ export function readPinnedVersion(requirementsText: string, pkg: string = PINNED
   for (const rawLine of requirementsText.split(/\r?\n/)) {
     const line = rawLine.replace(/#.*$/, '').trim();
     const match = /^([A-Za-z0-9._-]+)\s*==\s*([A-Za-z0-9.+!_-]+)$/.exec(line);
-    if (match !== null && match[1].toLowerCase() === pkg.toLowerCase()) return match[2];
+    const name = match?.[1];
+    const version = match?.[2];
+    // Both groups are mandatory in the pattern, so a match always has both.
+    if (name !== undefined && version !== undefined && name.toLowerCase() === pkg.toLowerCase()) return version;
   }
   throw new Error(`${REQUIREMENTS_RELATIVE_PATH} must pin ${pkg} to an exact version (${pkg}==x.y.z).`);
 }

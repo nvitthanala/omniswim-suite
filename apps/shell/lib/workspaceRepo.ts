@@ -177,7 +177,10 @@ const EXTERNAL_DB_COPY_PATTERN = /^omniswim-[A-Za-z0-9][A-Za-z0-9_-]*-\d{4}-\d{2
 /** Split `<prefix>-<label>-<stamp>.<ext>` into its label and its stamp. Null when it is not ours. */
 function splitBackupName(file: string): { label: string; stamp: string } | null {
   const m = /^(?:meets|omniswim)-(.+)-(\d{4}-\d{2}-\d{2}T\d{2}-\d{2}-\d{2}-\d{3}Z)\.(?:json|db)$/.exec(file);
-  return m ? { label: m[1], stamp: m[2] } : null;
+  // Both groups are mandatory in the pattern, so a match always has both.
+  const label = m?.[1];
+  const stamp = m?.[2];
+  return label !== undefined && stamp !== undefined ? { label, stamp } : null;
 }
 
 function quotaFor(label: string, quotas: BackupQuotas): { pool: string; keep: number } {
@@ -357,12 +360,16 @@ function parseGeneratedBackupName(file: string): { label: string | null; written
   const m = /^meets-(.+)-(\d{4}-\d{2}-\d{2}T[\dZ-]+)\.json$/.exec(file);
   if (!m) return { label: null, writtenAt: null };
   // The stamp was written with ':' and '.' replaced by '-'; put them back so it parses.
-  const iso = m[2].replace(
+  const label = m[1];
+  const stampText = m[2];
+  // Both groups are mandatory in the pattern, so a match always has both.
+  if (label === undefined || stampText === undefined) return { label: null, writtenAt: null };
+  const iso = stampText.replace(
     /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/,
     '$1T$2:$3:$4.$5Z',
   );
   const d = new Date(iso);
-  return { label: m[1], writtenAt: Number.isNaN(d.getTime()) ? null : d.toISOString() };
+  return { label, writtenAt: Number.isNaN(d.getTime()) ? null : d.toISOString() };
 }
 
 /** Newest first. Only ever lists backups this app generated. */

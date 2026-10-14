@@ -237,11 +237,11 @@ export class PgWorkspaceService {
         });
       }
       await client.query('DELETE FROM workspaces');
-      for (let i = 0; i < workspaces.length; i++) {
-        const prev = previous.get(workspaces[i].id);
+      for (const [i, workspace] of workspaces.entries()) {
+        const prev = previous.get(workspace.id);
         await this.writeWorkspaceUnsafe(
           client,
-          workspaces[i],
+          workspace,
           i,
           { bumpVersion: prev !== undefined, version: prev ? prev.version + 1 : 1 },
           prev ? prev.owner : scope
