@@ -46,7 +46,7 @@
     "C4": "committed 9c87d57c + follow-up (points_on_status_clock raises; garbled clock keeps printed points). TS side must add the code to MEET_PIPELINE_ERROR_CODES in parsingPipeline.ts as final -> 422 with rows (part of C5 TS half)",
     "C5": "committed 9c87d57c + e461c859 + 871c0712",
     "C6": "committed e1c87ec0 (core) + 4057721d (UI); worker a467cc44fdcdec299 fixing two follow-ups (count-field truncation on keystroke; empty seed on Duplicate to edit)",
-    "C7": "committed 6368b19d (core) + caca5b72 (UI marker); matrix header \"vs prelims\" still counts no actual as 0 (open question) | projection null-not-0 completed e54adab4 (prelims and psych).",
+    "C7": "committed 6368b19d (core) + caca5b72 (UI marker); matrix header \"vs prelims\" still counts no actual as 0 (open question) | projection null-not-0 completed e54adab4 (prelims and psych). | null-seed marker e6b35d54: teams stay in the prelims/psych projection with expected null and 'N seeds past table'; bundle types lose totalPoints (runtime still carries it; scripts/test_*_projection.mjs read it). Needs architect eye on the type break.",
     "C8": "committed bdca188c (meet-name-missing at 3 sites; crawler.js bundle rebuilt)",
     "A7": "decided 2026-10-13: estimate goes in a labelled new field; relayLegSplit stays absent on theoretical rows (implementation pending)",
     "A12": "pending",
@@ -452,7 +452,7 @@
     "Copy: rename the ~49 user-visible 'athlete' strings (24 files) to 'swimmer'? The Manager step 'Athletes' is locked by tests/managerAthletesCopy.test.ts."
   ],
   "pendingArchitectReview": [
-    "IN FLIGHT 2026-10-13: architect a388b4128dda85e7f re-reviewing ddb838fb, e54adab4, d5dc09ff (tie key design, null seeds dropping a team, hasRelayLegTime, boundary precedence)."
+    "Review e6b35d54 (type break: projected bundle lacks totalPoints in its type) and a23a20b3/15b216e1 (migration at read time, not load time)"
   ],
   "u3Prereq": "U3 delete of 39 UI test workspaces: take a MANUAL backup first (a bulk delete writes 39 pre-delete backups and would evict the 20 startup backups of this worktree data/backups); a manual backup survives and restores all 39.",
   "gatesAfterWave2": {
@@ -530,9 +530,7 @@
     "vault gotcha: the Edit tool rewrote an LF file as CRLF once; normalize before commit",
     "urlClassifier.ts PATH_CLASSIFIERS plain-object lookup: use Object.hasOwn / Map (small executor fix, swimcloud)"
   ],
-  "inFlight20261013": {
-    "ac5a7c109269754bc": "executor: architect re-review findings 1-5 (core relay keys, history boundary, RelayGroupCard indicator)"
-  },
+  "inFlight20261013": {},
   "architectReReview20261013": {
     "reviewed": "ddb838fb, e54adab4, d5dc09ff",
     "findings": [
@@ -548,5 +546,14 @@
       "hasRelayLegTime": "correct for every row shape; excluding Rhodes (DQ with legal prelimsTime) is right; follow-up: show a reason in place of the silent drop. History change: an override naming a swimmer whose row at the leg event has no time now resolves onto a history swim (relay gets a time instead of NT), same with the setting on or off.",
       "boundaryPrecedence": "eventThrough first, then scoredEventNumberMax; matches the engine; no caller left on the old signature."
     }
+  },
+  "gatesAfterBatch20261014": {
+    "at": "c4e764e2 + CHANGELOG, quiet tree",
+    "lint": "0 errors, 66 warnings; index-access ratchet passes (baseline 343 -> lower after relay fixes)",
+    "vitest": "252 files, 3812 passed, 23 skipped",
+    "skipBudgetLocal": "23 = budget 23",
+    "scripts": "86 passed, 0 failed, 1 skipped (incl. e2e)",
+    "harness": "7 passed, 1 skipped",
+    "audit": "no forbidden paths in branch diff; 51 SHAs in items all exist; 11 commit subjects 51-58 chars and 2 bodies at 73 chars exceed the 50/72 rule (local, unpushed; history not rewritten so SHAs in this file stay valid); D8 local-data skip had no skip-budget entry (CI would have failed) fixed c4e764e2"
   }
 }

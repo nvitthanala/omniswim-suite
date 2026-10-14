@@ -8,6 +8,35 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed (improvement plan, 2026-10-12 to 2026-10-14)
+
+- **Tied relays split points.** When relays tie, the points of every place
+  the tie spans are added and divided by the number tied. Tied relays no
+  longer all get the first place's points.
+- **Time trials do not fill relay legs.** A new setting, "Let time trials
+  fill relay legs", turns it back on. A leg filled that way shows a "Time
+  trial" badge. A swim past the meet's last scored event counts as a time
+  trial. A swim with no time (DQ, DFS, DNF, DNS) never fills a leg.
+- **Tied A and B relays keep their own overrides.** An override for the A
+  relay no longer lands on a tied B relay. A tied relay that cannot be told
+  apart refuses an override and says why.
+- **Seeds past the place-point table show no expected points.** The matrix
+  shows "— (N seeds past table)" in place of 0. New place-point tables start
+  empty, and a blank cell blocks the save.
+- **Times no longer print 60.00 seconds.** 59.996 reads 1:00.00. A missing
+  time reads NT or a dash, never 0.00.
+- **Saves check the workspace version.** Two tabs no longer overwrite each
+  other without a warning. Backups keep their own quotas for manual and
+  pre-restore copies.
+- **The server stops on a database it cannot read.** It no longer falls back
+  to `meets.json` in that case. With sign-in required, registration is by invite only and
+  passwords need 12 characters.
+- **The header fits a phone.** Icon-only buttons have names. Hover lifts and
+  the sidebar width change stop under reduced motion. Screens the earlier
+  UI branch left alone use sentence case.
+- **A team's season trend has a picker.** The chart shows one team, not the
+  sum of every team in the meet.
+
 ### Added (PR #6, 2026-10-02 to 2026-10-10)
 
 - **The Manager is a set of steps.** An Athletes step and one shared team bar
