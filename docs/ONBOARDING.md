@@ -82,14 +82,14 @@ While you iterate, run one file: `npx vitest run tests/<name>.test.ts`. Use `npm
 
 ### Baseline numbers
 
-These came from a quiet tree after the second wave of the 2026-10-10 improvement plan (see [IMPROVEMENT_PLAN_2026-10-10_STATE.json](reference/IMPROVEMENT_PLAN_2026-10-10_STATE.json), `gatesAfterWave2`). Treat a different number as a signal to look, not as proof of a fault.
+These counts are approximate. They come from a quiet tree on 2026-10-14. Test counts grow with every change, so treat a nearby number as normal and a large drop as a signal to look. The skip count is exact, because the skip budget enforces it.
 
 | Gate | Expected |
 |---|---|
 | `npm run lint` | 0 errors, 2 baseline complexity warnings |
-| `npx vitest run` | 220 files passed, 3362 tests passed, 23 skipped, exit 0 |
+| `npx vitest run` | About 265 files and 3,950 tests passed, 23 skipped, exit 0 |
 | `node scripts/check_skip_budget.mjs` | 23 skipped, equal to the budget of 23, exit 0 |
-| `npm test` | 86 passed, 0 failed, 1 skipped (including the e2e spec `ui-ia.spec.ts`) |
+| `npm test` | About 86 scripts passed, 0 failed, 1 skipped (including the e2e spec `ui-ia.spec.ts`) |
 | `npm run test:harness` | 7 passed, 1 skipped (a known `fixme`) |
 
 The budget has two columns. `local` is for a machine that holds the gitignored capture data. `ci` is for a clean checkout. On a clean clone, run `SKIP_BUDGET_ENV=ci node scripts/check_skip_budget.mjs` (in PowerShell, set `$env:SKIP_BUDGET_ENV='ci'` first).
