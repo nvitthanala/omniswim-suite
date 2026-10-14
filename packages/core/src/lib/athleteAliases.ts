@@ -51,6 +51,7 @@ import {
   isDivingEvent,
   stripEventGenderMarker,
 } from './utils';
+import { itemAt, regexGroup } from './indexedAccess';
 import type { WorkspaceEditorPatch } from './swimEditor';
 
 /**
@@ -451,11 +452,12 @@ function levenshtein(a: string, b: string): number {
     cur[0] = i;
     for (let j = 1; j <= n; j += 1) {
       const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      cur[j] = Math.min(prev[j] + 1, cur[j - 1] + 1, prev[j - 1] + cost);
+      // Both rows hold n + 1 numbers and j runs 1..n, so each read is in range.
+      cur[j] = Math.min(itemAt(prev, j) + 1, itemAt(cur, j - 1) + 1, itemAt(prev, j - 1) + cost);
     }
     [prev, cur] = [cur, prev];
   }
-  return prev[n];
+  return itemAt(prev, n);
 }
 
 function isInitialToken(t: string): boolean {
@@ -553,8 +555,9 @@ function isVowelSwapPair(a: string, b: string): boolean {
   if (a.length !== b.length || a.length < 5) return false;
   const diffs = diffIndices(a, b);
   if (diffs.length !== 1) return false;
-  const at = diffs[0];
-  return at >= 2 && VOWELS.has(a[at]) && VOWELS.has(b[at]);
+  const at = itemAt(diffs, 0);
+  // `at` came from `diffIndices` over strings of equal length, so both reads are in range.
+  return at >= 2 && VOWELS.has(a.charAt(at)) && VOWELS.has(b.charAt(at));
 }
 
 /** `prefix_family` — shared prefix ≥4, edit distance ≤2, both ≥5 ("Stevie"/"Steven"). */
@@ -835,10 +838,13 @@ export function classifyAliasNamePair(a: string, b: string): AliasNameRelation |
   const tokB = nameTokens(b);
   if (tokA.length < 2 || tokB.length < 2) return null;
 
-  const firstA = tokA[0];
-  const firstB = tokB[0];
+  const firstA = itemAt(tokA, 0);
+  const firstB = itemAt(tokB, 0);
   const firstNameRelation = classifyNameToken(firstA, firstB);
-  const surnameRelation = classifySurname(tokA[tokA.length - 1], tokB[tokB.length - 1]);
+  const surnameRelation = classifySurname(
+    itemAt(tokA, tokA.length - 1),
+    itemAt(tokB, tokB.length - 1)
+  );
 
   // Rule order is load-bearing — see createRelationPicker.
   const pick = createRelationPicker(firstNameRelation, surnameRelation);
@@ -1074,7 +1080,9 @@ export function aliasIndividualEventKey(raw: string): string | null {
   e = e.replace(/\s+/g, ' ').trim();
   const m = e.match(/^(\d{2,4}) (.+)$/);
   if (!m) return null;
-  return INDIVIDUAL_STROKES.includes(m[2]) ? `${m[1]} ${m[2]}` : null;
+  const distance = regexGroup(m, 1);
+  const stroke = regexGroup(m, 2);
+  return INDIVIDUAL_STROKES.includes(stroke) ? `${distance} ${stroke}` : null;
 }
 
 /** Course implied by a HyTek meet event label (yards unless it says meters). */
@@ -1774,8 +1782,8 @@ function sweepAliasPairs(
 
   for (let i = 0; i < athletes.length; i += 1) {
     for (let j = i + 1; j < athletes.length; j += 1) {
-      const a = athletes[i];
-      const b = athletes[j];
+      const a = itemAt(athletes, i);
+      const b = itemAt(athletes, j);
       if (!isComparablePair(a, b)) continue;
 
       const foldIdentical = a.foldKey === b.foldKey;
