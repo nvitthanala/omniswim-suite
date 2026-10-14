@@ -431,6 +431,12 @@
       "what": "Session limit 429 (resets 2:40pm CT) stopped the architect re-review a388b4128dda85e7f (read-only, no output) and the R11 executor abcb8fdcf557dfc92 (was renaming a script to .mts). Two agents in parallel again hit the 5h window.",
       "dirty": "package.json, scripts/index-access-ratchet.mjs, scripts/index-access-baseline.json, packages/swimcloud/src/indexed.ts (R11 executor, unverified)",
       "resumePlan": "ONE agent at a time. 1 SendMessage abcb8fdcf557dfc92 (R11 steps 1-2) and finish; commit. 2 SendMessage a388b4128dda85e7f (architect re-review of ddb838fb, e54adab4, d5dc09ff). 3 then R11 core steps one at a time. Check usage report between agents."
+    },
+    {
+      "at": "2026-10-14 ~14:15 CT",
+      "what": "429 session limit during R11 step 5 executor a5a9325bf0e25dbcf (resets 15:40 CT); window total ~141M tokens",
+      "left": "uncommitted: packages/core/src/lib/utils.ts (partial), scripts/index-access-baseline.json, tests/coreIndexedAccessUtils.test.ts",
+      "resume": "after reset: SendMessage a5a9325bf0e25dbcf to finish utils.ts; one agent at a time; then commit utils.ts in 3-4 section commits + baseline last"
     }
   ],
   "gatesAfterWave1": {
