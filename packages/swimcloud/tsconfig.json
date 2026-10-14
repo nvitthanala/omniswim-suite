@@ -6,9 +6,8 @@
     // html.ts/parser.ts/fetcher.ts remain pure — this only widens what's
     // *available* to import, not what those files use.
     "types": ["node"],
-    // On for this package only. Every indexed read here is narrowed or goes through
-    // ./indexed. The rest of the repo is on scripts/index-access-ratchet.mjs until
-    // tsconfig.base.json can carry the flag.
+    // Every indexed read here is narrowed or goes through ./indexed. tsconfig.base.json
+    // carries the same flag for the rest of the repo.
     "noUncheckedIndexedAccess": true
   },
   "include": ["src/**/*"]
