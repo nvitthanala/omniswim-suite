@@ -3159,8 +3159,12 @@ export function assignTeamLineStyles(
 
   const parent = Array.from({ length: n }, (_, i) => i);
   function find(a: number): number {
-    if (parent[a] !== a) parent[a] = find(parent[a]);
-    return parent[a];
+    // `a` is always an index below `n` (a loop bound or a value stored in `parent`).
+    const p = itemAt(parent, a);
+    if (p === a) return a;
+    const root = find(p);
+    parent[a] = root;
+    return root;
   }
   function unite(a: number, b: number) {
     const ra = find(a);
@@ -3172,9 +3176,12 @@ export function assignTeamLineStyles(
 
   for (let i = 0; i < n; i++) {
     for (let j = i + 1; j < n; j++) {
-      const ci = safeHex(teams[i].color).toUpperCase();
-      const cj = safeHex(teams[j].color).toUpperCase();
-      if (ci === cj || rgbColorDistance(safeHex(teams[i].color), safeHex(teams[j].color)) < COLOR_CLOSE_THRESHOLD) {
+      // `i` and `j` are both below `n === teams.length`.
+      const colorI = itemAt(teams, i).color;
+      const colorJ = itemAt(teams, j).color;
+      const ci = safeHex(colorI).toUpperCase();
+      const cj = safeHex(colorJ).toUpperCase();
+      if (ci === cj || rgbColorDistance(safeHex(colorI), safeHex(colorJ)) < COLOR_CLOSE_THRESHOLD) {
         unite(i, j);
       }
     }
@@ -3197,25 +3204,31 @@ export function assignTeamLineStyles(
   for (const idxs of groups.values()) {
     if (idxs.length <= 1) continue;
 
-    idxs.sort((a, b) => teams[b].totalPoints - teams[a].totalPoints);
+    // Every member of `idxs` is an index below `n`, which is `teams.length` and `out.length`.
+    idxs.sort((a, b) => itemAt(teams, b).totalPoints - itemAt(teams, a).totalPoints);
 
     if (idxs.length === 2) {
-      const [win, lose] = idxs;
-      const { secondary } = getTeamColors(teams[lose].teamName);
-      out[win].lineColor = toStroke(safeHex(teams[win].color));
-      out[lose].lineColor = toStroke(
-        rgbColorDistance(safeHex(teams[win].color), secondary) < 22
-          ? synthesizeSecondaryColor(safeHex(teams[lose].color), teams[lose].teamName)
+      const win = itemAt(idxs, 0);
+      const lose = itemAt(idxs, 1);
+      const winTeam = itemAt(teams, win);
+      const loseTeam = itemAt(teams, lose);
+      const winOut = itemAt(out, win);
+      const loseOut = itemAt(out, lose);
+      const { secondary } = getTeamColors(loseTeam.teamName);
+      winOut.lineColor = toStroke(safeHex(winTeam.color));
+      loseOut.lineColor = toStroke(
+        rgbColorDistance(safeHex(winTeam.color), secondary) < 22
+          ? synthesizeSecondaryColor(safeHex(loseTeam.color), loseTeam.teamName)
           : secondary
       );
-      out[win].strokeDasharray = undefined;
-      out[lose].strokeDasharray = undefined;
+      winOut.strokeDasharray = undefined;
+      loseOut.strokeDasharray = undefined;
       continue;
     }
 
     const used = new Set<string>();
     idxs.forEach((teamIdx, rank) => {
-      const t = teams[teamIdx];
+      const t = itemAt(teams, teamIdx);
       const { primary: schoolPrimary, secondary } = getTeamColors(t.teamName);
       const basePrimary = safeHex(t.color);
       const baseSecondary =
@@ -3233,8 +3246,9 @@ export function assignTeamLineStyles(
         lineC = altColor;
       }
       used.add(`${lineC}|${dash ?? ''}`);
-      out[teamIdx].lineColor = toStroke(lineC);
-      out[teamIdx].strokeDasharray = dash;
+      const teamOut = itemAt(out, teamIdx);
+      teamOut.lineColor = toStroke(lineC);
+      teamOut.strokeDasharray = dash;
     });
   }
 
@@ -3417,7 +3431,8 @@ function resolveRelayLegs(
   }
 
   for (let index = 0; index < outLegs.length; index++) {
-    const leg = outLegs[index];
+    // `index < outLegs.length` is the loop bound.
+    const leg = itemAt(outLegs, index);
     if (!legNeedsReplace(leg)) continue;
     const isNonScorerLeg = vacateLegs.has(normalizeSwimmerName(leg.name));
 
@@ -3623,7 +3638,9 @@ function emitRelayGroupRows(
       row.relayLegIndex != null
         ? Math.min(Math.max(0, row.relayLegIndex), outLegs.length - 1)
         : Math.min(Math.max(0, ordered.indexOf(row)), outLegs.length - 1);
-    const legMeta = outLegs[idx];
+    // `outLegs` is never empty here (the caller returns early on no canonical legs)
+    // and `idx` is clamped into `[0, outLegs.length - 1]`.
+    const legMeta = itemAt(outLegs, idx);
     const legDetail = legDetailsByIndex.get(idx);
     finalResults.push({
       ...row,
@@ -3666,7 +3683,8 @@ function processRelayGroupForRosterSim(
   const group = results.filter(x => x.isRelay && relayGroupKey(x) === key);
   if (group.length === 0) return;
 
-  const template = group[0];
+  // `group.length === 0` returned above.
+  const template = itemAt(group, 0);
   const evLower = template.event.toLowerCase();
   const ordered = [...group].sort((a, b) => (a.relayLegIndex ?? 0) - (b.relayLegIndex ?? 0));
 
