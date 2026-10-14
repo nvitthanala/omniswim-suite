@@ -909,7 +909,8 @@ export function SwimCloudCaptureBrowser(props: SwimCloudCaptureBrowserProps) {
       const nextChecked: Record<string, boolean> = {};
       for (const group of groupParses(data.parses)) nextChecked[group.key] = true;
       setCheckedGroups(nextChecked);
-      if (data.rosters.length === 1) setSelectedRosterKey(rosterKeyFor(data.rosters[0], 0));
+      const onlyRoster = data.rosters.length === 1 ? data.rosters[0] : undefined;
+      if (onlyRoster !== undefined) setSelectedRosterKey(rosterKeyFor(onlyRoster, 0));
       if (data.warnings.length > 0) {
 
         console.warn('SwimCloud capture parse: warnings', data.warnings);

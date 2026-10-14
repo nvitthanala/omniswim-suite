@@ -207,7 +207,7 @@ function ProblemsPanel({ problems }: { problems: readonly Problem[] }) {
           <div key={severity}>
             <div className="text-ui-micro font-bold text-theme-muted mb-1">{severity}</div>
             <ul className="space-y-1">
-              {grouped[severity].map((problem, index) => (
+              {(grouped[severity] ?? []).map((problem, index) => (
                 <li
                   key={`${problem.code}-${index}`}
                   className="flex items-start gap-2 text-ui-caption text-theme-secondary"

@@ -87,7 +87,7 @@ export function Menu({
     const currentIndex = items.indexOf(document.activeElement as HTMLElement);
     const delta = event.key === 'ArrowDown' ? 1 : -1;
     const nextIndex = currentIndex === -1 ? 0 : (currentIndex + delta + items.length) % items.length;
-    items[nextIndex].focus();
+    items[nextIndex]?.focus();
   };
 
   return (

@@ -110,14 +110,14 @@ export function Modal({
       if (event.key !== 'Tab') return;
 
       const focusables = listFocusable(activeDialog);
-      if (focusables.length === 0) {
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (first === undefined || last === undefined) {
         event.preventDefault();
         activeDialog.focus();
         return;
       }
 
-      const first = focusables[0];
-      const last = focusables[focusables.length - 1];
       const active = document.activeElement;
 
       if (!activeDialog.contains(active)) {

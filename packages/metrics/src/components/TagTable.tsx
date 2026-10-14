@@ -58,6 +58,7 @@ export function TagTable({ config, tags, frameSeconds, onChange }: TagTableProps
   const nudge = (index: number, direction: 1 | -1) => {
     if (frameSeconds === null) return;
     const tag = tags[index];
+    if (tag === undefined) return;
     onChange(updateTagTime(tags, index, tag.time + direction * frameSeconds));
   };
 
