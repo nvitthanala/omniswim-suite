@@ -7,6 +7,7 @@
  */
 import { Gender, ProjectedTeamScore, ScoringSettings, SwimmerResult, Workspace } from '../types';
 import { mergeScoringSettings } from './scoringDefaults';
+import { itemAt, recordAt } from './indexedAccess';
 import type { ProjectionBundle } from './scoringEngine';
 import {
   aggregationTeamKey,
@@ -169,10 +170,10 @@ export function resolvePrelimsRanksForEvent(
 
   const timeSorted = [...entries].sort((a, b) => {
     const clockA = prelimsClock(
-      a.rows.find(r => classifyRoundTier(r.roundSwam) === 'PRE') ?? a.rows[0]
+      a.rows.find(r => classifyRoundTier(r.roundSwam) === 'PRE') ?? itemAt(a.rows, 0)
     );
     const clockB = prelimsClock(
-      b.rows.find(r => classifyRoundTier(r.roundSwam) === 'PRE') ?? b.rows[0]
+      b.rows.find(r => classifyRoundTier(r.roundSwam) === 'PRE') ?? itemAt(b.rows, 0)
     );
     return convertTimeToSeconds(clockA) - convertTimeToSeconds(clockB);
   });
@@ -190,7 +191,7 @@ function pickRepresentativeRow(rows: SwimmerResult[]): SwimmerResult {
   const finals = rows.find(r => isFinalsRound(r.roundSwam));
   if (finals) return finals;
   const prelims = rows.find(r => classifyRoundTier(r.roundSwam) === 'PRE');
-  return prelims ?? rows[0];
+  return prelims ?? itemAt(rows, 0);
 }
 
 /** The expected rows of a prelims projection, and the entries the table has no row for. */
@@ -509,7 +510,7 @@ export function buildMeetMomentumChartDataFromLookup(
         row[team] = null;
         continue;
       }
-      const cumulative = pt?.cumulative ?? carryForward[team];
+      const cumulative = pt?.cumulative ?? recordAt(carryForward, team);
       carryForward[team] = cumulative;
       row[team] = cumulative;
     }
