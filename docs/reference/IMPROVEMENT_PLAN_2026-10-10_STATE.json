@@ -532,8 +532,8 @@
     "urlClassifier.ts PATH_CLASSIFIERS plain-object lookup: use Object.hasOwn / Map (small executor fix, swimcloud)"
   ],
   "inFlight20261013": {
-    "a93ed69da712e081a": "architect: review b89198d1 and fb3dcd68",
-    "a6ed0d28cbba89299": "executor: delta options wiring, tied-relay save count, ScenarioDiffView absent side"
+    "a6ad5bc069b9419df": "worker: F5 season progression chart",
+    "a9bf5f2ec4ea32df0": "executor: R11 step 4 remaining core files except utils.ts"
   },
   "architectReReview20261013": {
     "reviewed": "ddb838fb, e54adab4, d5dc09ff",
@@ -584,6 +584,23 @@
     "followUpsLaunched": {
       "a93ed69da712e081a": "architect review of b89198d1 scoring files + fb3dcd68",
       "a6ed0d28cbba89299": "executor: wire prelimsDeltaTimelineOptions in useWorkspaceScoring + TeamCard, tied-relay save count (workingCopyChanges), ScenarioDiffView absent side"
+    },
+    "followUpCommits": {
+      "f6ae1c4d": "Use like-for-like deltas in the live app (hook options + TeamCard psych)",
+      "9b9a3cd3": "Count a tied relay edit once",
+      "dd21adbb": "Show absent sides in the scenario diff view"
+    },
+    "architectReview": {
+      "agent": "a93ed69da712e081a",
+      "verdict": "no bug in b89198d1 or fb3dcd68; golden does not cover the like-for-like change (prelimsProjected.sortedTeams is [] in the golden)",
+      "open": [
+        "commit message overclaims: events outside prelims/finals (timed finals, time trials) still count baseline points",
+        "sumProjectionLeftOutPoints keys on entryKey; a what-if or alias-resolved projected row may miss its gap key (not reproduced)",
+        "new ?? 0 on 'nothing to subtract' points in prelimsProjection.ts, MeetOpsStandingsStep.tsx:146,153, PrelimsDiffTable.tsx:91,94 (decision: left; 0 means nothing to subtract)",
+        "ScenarioCompareTables totals row shows +now for an absent side, not Added",
+        "TeamCard momentumMeetTotal falls back to prelims baselineOverUnder when psych anchor has no psych expectation",
+        "two independent identical edits to the same leg of tied relays A and B count as one change"
+      ]
     }
   }
 }
