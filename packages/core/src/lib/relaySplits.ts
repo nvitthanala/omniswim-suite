@@ -24,6 +24,8 @@ import {
 
 import { normalizeEventForCutline } from './cutlineEventNames';
 
+import { itemAt } from './indexedAccess';
+
 import { convertTimeToSeconds, formatSecondsToTime } from './utils';
 
 
@@ -398,7 +400,7 @@ export function displayTimeForRelayLeg(row: SwimmerResult): string {
 
     for (let i = detail.segments.length - 1; i >= 0; i--) {
 
-      const seg = detail.segments[i];
+      const seg = itemAt(detail.segments, i);
 
       if (seg.yards >= legDist) {
 
@@ -416,7 +418,7 @@ export function displayTimeForRelayLeg(row: SwimmerResult): string {
 
     for (let i = detail.segments.length - 1; i >= 0; i--) {
 
-      const segT = pickPlausibleLegTime(detail.segments[i].segmentTime, legDist, teamClock);
+      const segT = pickPlausibleLegTime(itemAt(detail.segments, i).segmentTime, legDist, teamClock);
 
       if (segT) return segT;
 
@@ -540,7 +542,7 @@ export function formatLegSplitSummary(detail: RelayLegSplitDetail | unknown): st
 
       const mark = 50 * (i + 1);
 
-      const lapSec = convertTimeToSeconds(segments[i].segmentTime);
+      const lapSec = convertTimeToSeconds(itemAt(segments, i).segmentTime);
 
       cumSec += lapSec;
 
@@ -548,7 +550,7 @@ export function formatLegSplitSummary(detail: RelayLegSplitDetail | unknown): st
 
         i === segments.length - 1 && legTotal ? legTotal : formatSecondsToTime(cumSec);
 
-      const lapStr = segments[i].segmentTime;
+      const lapStr = itemAt(segments, i).segmentTime;
 
       if (i === 0) {
 
@@ -640,9 +642,9 @@ export function computeRelayHalves(legTotals: (string | null)[]): {
 
   return {
 
-    firstHalf: formatSecondsToTime(secs[0] + secs[1]),
+    firstHalf: formatSecondsToTime(itemAt(secs, 0) + itemAt(secs, 1)),
 
-    secondHalf: formatSecondsToTime(secs[2] + secs[3]),
+    secondHalf: formatSecondsToTime(itemAt(secs, 2) + itemAt(secs, 3)),
 
   };
 
