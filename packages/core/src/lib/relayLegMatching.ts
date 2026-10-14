@@ -12,6 +12,7 @@ import {
   SwimmerResult,
 } from '../types';
 import { normalizeEventForCutline } from './cutlineEventNames';
+import { itemAt, recordAt, regexGroup } from './indexedAccess';
 import { relayLegsAllowTimeTrials } from './scoringDefaults';
 import { relayEntryKey, relayLegDistanceYardsOfEvent } from './relaySplits';
 import {
@@ -88,8 +89,9 @@ function normalizeName(name: string): string {
 function timeToSec(timeStr: string): number {
   if (!timeStr || timeStr === 'NT' || timeStr === 'DQ') return Infinity;
   const parts = timeStr.split(':');
-  if (parts.length === 2) return parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
-  return parseFloat(parts[0]);
+  // `split` always returns at least one element, and the length check bounds index 1.
+  if (parts.length === 2) return parseFloat(itemAt(parts, 0)) * 60 + parseFloat(itemAt(parts, 1));
+  return parseFloat(itemAt(parts, 0));
 }
 
 export function strokeKeywordsForRelayLeg(eventLower: string, legIndex: number): string[] {
@@ -173,7 +175,10 @@ export function individualEventDistanceStroke(
 ): { distance: number; stroke: RelayLegStroke } | null {
   const match = SINGLE_STROKE_EVENT.exec(normalizeEventForCutline(String(event ?? '')));
   if (!match) return null;
-  return { distance: Number(match[1]), stroke: STROKE_BY_EVENT_WORD[match[2].toLowerCase()] };
+  return {
+    distance: Number(regexGroup(match, 1)),
+    stroke: recordAt(STROKE_BY_EVENT_WORD, regexGroup(match, 2).toLowerCase()),
+  };
 }
 
 /**
@@ -295,7 +300,7 @@ const GENDER_BY_LABEL_WORD: Record<string, Gender | 'mixed'> = {
  */
 export function eventLabelGender(event: string): Gender | 'mixed' | null {
   const match = LABEL_GENDER_WORD.exec(String(event ?? ''));
-  return match ? GENDER_BY_LABEL_WORD[match[1].toLowerCase()] : null;
+  return match ? recordAt(GENDER_BY_LABEL_WORD, regexGroup(match, 1).toLowerCase()) : null;
 }
 
 /**
@@ -906,13 +911,13 @@ export function resolveOverrideAssignee(
     );
     if (strokeMatches.length > 0) {
       strokeMatches.sort((a, b) => timeToSec(a.time) - timeToSec(b.time));
-      return labelTimeTrialLeg(strokeMatches[0], settings);
+      return labelTimeTrialLeg(itemAt(strokeMatches, 0), settings);
     }
     // Nothing of the swimmer's fills the leg. The id's own row is still the
     // answer, so the leg check can say why (wrong event, or a time trial).
     return hit ? labelTimeTrialLeg(hit, settings) : null;
   }
-  return matches.length === 0 ? null : matches[0];
+  return matches.length === 0 ? null : itemAt(matches, 0);
 }
 
 /**
@@ -1009,7 +1014,7 @@ export function suggestBestRelayLegFill(
     settings
   );
   if (candidates.length === 0) return null;
-  const swimmer = candidates[0];
+  const swimmer = itemAt(candidates, 0);
   const override: RelayLegOverride = {
     relayEntryKey: relayEntryKeyIn(relayPool, template),
     legIndex,
