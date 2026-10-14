@@ -17,6 +17,8 @@
  * Test: npx tsx scripts/test_workspace_naming.mjs
  */
 
+import { itemAt } from './indexedAccess';
+
 /**
  * Placeholder names the app itself generates. Only these are replaced — a name
  * the user typed is theirs and is never overwritten.
@@ -88,7 +90,7 @@ export function meetNameFromPdfFilename(pdfFilename: string | undefined | null):
 
   // Drop document-describing words from the tail only.
   let end = words.length;
-  while (end > 0 && TRAILING_NOISE.has(words[end - 1].toLowerCase())) end -= 1;
+  while (end > 0 && TRAILING_NOISE.has(itemAt(words, end - 1).toLowerCase())) end -= 1;
   const kept = words.slice(0, end);
   if (!kept.length) return null;
 

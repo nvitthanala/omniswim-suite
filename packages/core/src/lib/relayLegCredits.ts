@@ -18,6 +18,7 @@
  */
 
 import type { RelayLegCredit, RelayLegStroke } from '../types';
+import { itemAt } from './indexedAccess';
 import { relayStrokeForIndex } from './relayLegMatching';
 import { relayLegDistanceYardsOfEvent } from './relaySplits';
 
@@ -134,7 +135,7 @@ export function mergeRelayLegCredits(
       credits.push(candidate);
       continue;
     }
-    const known = credits[index];
+    const known = itemAt(credits, index);
     const fields = conflictingFields(known, candidate);
     if (fields.length > 0) {
       conflicts.push({ existing: known, incoming: candidate, fields });

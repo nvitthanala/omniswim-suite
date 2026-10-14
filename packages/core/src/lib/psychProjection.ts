@@ -18,6 +18,7 @@ import {
   pointsForPrelimsSeedRankOrNull,
   type PrelimsOverUnderEntry,
   type PrelimsDeltaTimelinePoint,
+  type PrelimsDeltaTimelineOptions,
   buildPrelimsDeltaTimeline,
 } from './prelimsProjection';
 import {
@@ -334,7 +335,13 @@ export type PsychDeltaTimelinePoint = PrelimsDeltaTimelinePoint;
 export function buildPsychDeltaTimeline(
   baselineTimeline: Record<string, unknown>[],
   projectedTimeline: Record<string, unknown>[],
-  psychTimeline: Record<string, unknown>[]
+  psychTimeline: Record<string, unknown>[],
+  /**
+   * From `prelimsDeltaTimelineOptions` read on the psych bundle: leaves a team
+   * with no expectation out, and compares a partial team on the entries that
+   * have an expectation.
+   */
+  options?: PrelimsDeltaTimelineOptions
 ): PsychDeltaTimelinePoint[] {
-  return buildPrelimsDeltaTimeline(baselineTimeline, projectedTimeline, psychTimeline);
+  return buildPrelimsDeltaTimeline(baselineTimeline, projectedTimeline, psychTimeline, options);
 }

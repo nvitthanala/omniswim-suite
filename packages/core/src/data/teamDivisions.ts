@@ -776,7 +776,7 @@ export function resolveMeetDivisions(
     teams: resolutions,
     byTeam,
     divisions: distinct,
-    division: status === 'uniform' ? distinct[0] : null,
+    division: status === 'uniform' ? (distinct[0] ?? null) : null,
     status,
     unresolvedTeams,
   };

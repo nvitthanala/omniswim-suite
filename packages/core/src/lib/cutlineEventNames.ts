@@ -184,7 +184,8 @@ export function courseOfRecordFromEventLabel(event: string): CourseOfRecordFromL
   if (isDivingEvent(e)) return null;
 
   const code = e.match(EXPLICIT_COURSE_CODE);
-  if (code) return code[1].toUpperCase() as SwimCourseOfRecord;
+  const courseCode = code?.[1];
+  if (courseCode !== undefined) return courseCode.toUpperCase() as SwimCourseOfRecord;
 
   if (YARDS_WORD.test(e)) return 'SCY';
   if (METRIC_WORD.test(e)) return 'METRIC_UNSPECIFIED';

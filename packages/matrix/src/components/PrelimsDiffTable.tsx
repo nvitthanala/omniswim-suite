@@ -1,5 +1,6 @@
 import { TrendingUp } from 'lucide-react';
 import type { ProjectedTeamScore, TeamScore } from '@omniswim/core/types';
+import { sumProjectionLeftOutPoints } from '@omniswim/core/lib/prelimsProjection';
 import {
   NoExpectationMarker,
   NoExpectationText,
@@ -58,6 +59,18 @@ export default function PrelimsDiffTable({
     ...baselineByTeam.keys(),
     ...projectedByTeam.keys(),
   ]);
+  // Points both totals hold for the entries the place-point table has no row
+  // for. The expected sum leaves those entries out, so the over/under leaves
+  // them out of the baseline and projected side too. The Baseline and Projected
+  // columns still show the real totals.
+  const baselineLeftOut = sumProjectionLeftOutPoints(
+    baselineTeams.flatMap(t => t.swimmers),
+    prelimsTeams
+  ).byTeam;
+  const projectedLeftOut = sumProjectionLeftOutPoints(
+    projectedTeams.flatMap(t => t.swimmers),
+    prelimsTeams
+  ).byTeam;
   const q = searchQuery.trim().toLowerCase();
 
   const rows: DiffRow[] = [...teamNames]
@@ -74,9 +87,11 @@ export default function PrelimsDiffTable({
         prelimsPoints,
         prelimsWithoutExpectationCount: prelimsTeam?.withoutExpectationCount ?? 0,
         baselinePoints,
-        baselineOverUnder: prelimsPoints === null ? null : baselinePoints - prelimsPoints,
+        baselineOverUnder:
+          prelimsPoints === null ? null : baselinePoints - (baselineLeftOut.get(teamName) ?? 0) - prelimsPoints,
         projectedPoints,
-        projectedOverUnder: prelimsPoints === null ? null : projectedPoints - prelimsPoints,
+        projectedOverUnder:
+          prelimsPoints === null ? null : projectedPoints - (projectedLeftOut.get(teamName) ?? 0) - prelimsPoints,
       };
     })
     .filter(row => !q || row.teamName.toLowerCase().includes(q))

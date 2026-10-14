@@ -5,10 +5,11 @@
  * Placement-based prelims over/under: each swimmer's expected points from their
  * prelims placement (scored as if finals) vs actual baseline finals points.
  */
-import { Gender, ScoringSettings, SwimmerResult, Workspace } from '../types';
+import { Gender, ProjectedTeamScore, ScoringSettings, SwimmerResult, Workspace } from '../types';
 import { mergeScoringSettings } from './scoringDefaults';
 import type { ProjectionBundle } from './scoringEngine';
 import {
+  aggregationTeamKey,
   buildProjectionBundle,
   gatherBaselineScoredByEntry,
   type ExpectationGap,
@@ -645,9 +646,127 @@ function timelineTeamsAtEvent(
 }
 
 /**
+ * Points of a scored side that the expectation side has no figure for: the rows
+ * of the entries a team lists in `withoutExpectation`. A team total of that side
+ * includes them; the team's `expected` leaves them out. Subtract them to compare
+ * the same entries on both sides.
+ */
+export type ProjectionLeftOutPoints = {
+  /** Team -> points of its left-out entries. Only teams with a left-out entry. */
+  byTeam: Map<string, number>;
+  /**
+   * Team -> event (as on a timeline point's `fullEvent`) -> points. The per-event
+   * split lets a cumulative timeline subtract each entry from its own event on.
+   */
+  byTeamEvent: Map<string, Map<string, number>>;
+};
+
+/**
+ * Sum the points of `scored` rows whose entry a team lists in
+ * `withoutExpectation`.
+ *
+ * Sums every row of the entry exactly as `aggregateTeamScoring` added it to the
+ * team total (a relay aggregate row and its leg shares included), so the
+ * subtraction leaves no residue. The result is empty when no team lists a
+ * left-out entry, which is the case for any meet whose seeds all sit inside the
+ * place-point table.
+ */
+export function sumProjectionLeftOutPoints(
+  scored: readonly SwimmerResult[],
+  teams: readonly ProjectedTeamScore[]
+): ProjectionLeftOutPoints {
+  const byTeam = new Map<string, number>();
+  const byTeamEvent = new Map<string, Map<string, number>>();
+  const keysByTeam = new Map<string, Set<string>>();
+  for (const team of teams) {
+    if (team.withoutExpectation.length > 0) {
+      keysByTeam.set(team.teamName, new Set(team.withoutExpectation));
+    }
+  }
+  if (keysByTeam.size === 0) return { byTeam, byTeamEvent };
+
+  for (const row of scored) {
+    const teamName = aggregationTeamKey(row);
+    if (teamName === null) continue;
+    const keys = keysByTeam.get(teamName);
+    if (!keys || !keys.has(entryKey(row))) continue;
+    const pts = typeof row.points === 'number' ? row.points : 0;
+    byTeam.set(teamName, (byTeam.get(teamName) ?? 0) + pts);
+    const eventKey = stripEventGenderMarker(row.event);
+    const events = byTeamEvent.get(teamName) ?? new Map<string, number>();
+    events.set(eventKey, (events.get(eventKey) ?? 0) + pts);
+    byTeamEvent.set(teamName, events);
+  }
+  return { byTeam, byTeamEvent };
+}
+
+/**
+ * What {@link buildPrelimsDeltaTimeline} needs to compare like with like when a
+ * projection bundle (prelims or psych) holds teams with no expectation.
+ */
+export type PrelimsDeltaTimelineOptions = {
+  /**
+   * Teams the projection bundle lists with `expected: null`. Such a team has no
+   * point on the projection timeline, so it gets no delta: its whole baseline
+   * would otherwise read as "over". A team the bundle does not list at all keeps
+   * its delta against 0.
+   */
+  noExpectationTeams?: ReadonlySet<string>;
+  /** Baseline points of each team's left-out entries, by event ({@link ProjectionLeftOutPoints.byTeamEvent}). */
+  baselineLeftOut?: ReadonlyMap<string, ReadonlyMap<string, number>>;
+  /** Projected points of each team's left-out entries, by event. */
+  projectedLeftOut?: ReadonlyMap<string, ReadonlyMap<string, number>>;
+};
+
+/**
+ * Options for {@link buildPrelimsDeltaTimeline} read from a projection bundle,
+ * or `undefined` when the bundle has no team with `expected: null` and no
+ * left-out entry. With `undefined` the plain timeline is already right, so a
+ * caller keeps the delta timeline it has.
+ */
+export function prelimsDeltaTimelineOptions(
+  projection: Pick<ProjectionBundle, 'sortedTeams'>,
+  baselineScored: readonly SwimmerResult[],
+  projectedScored: readonly SwimmerResult[]
+): PrelimsDeltaTimelineOptions | undefined {
+  const teams = projection.sortedTeams;
+  const noExpectationTeams = new Set(teams.filter(t => t.expected === null).map(t => t.teamName));
+  const hasLeftOut = teams.some(t => t.withoutExpectationCount > 0);
+  if (noExpectationTeams.size === 0 && !hasLeftOut) return undefined;
+  return {
+    noExpectationTeams,
+    baselineLeftOut: sumProjectionLeftOutPoints(baselineScored, teams).byTeamEvent,
+    projectedLeftOut: sumProjectionLeftOutPoints(projectedScored, teams).byTeamEvent,
+  };
+}
+
+/** Carry a team's cumulative value from a timeline point into its running total, when the point has one. */
+function carryTimelineValue(
+  pt: Record<string, unknown> | undefined,
+  team: string,
+  last: Record<string, number>
+): void {
+  const value = pt?.[team];
+  if (typeof value === 'number') last[team] = value;
+}
+
+/** Add the left-out points of `team` at `eventKey` to its running total. */
+function addLeftOutAtEvent(
+  running: Record<string, number>,
+  leftOut: ReadonlyMap<string, ReadonlyMap<string, number>> | undefined,
+  team: string,
+  eventKey: string
+): void {
+  running[team] = (running[team] ?? 0) + (leftOut?.get(team)?.get(eventKey) ?? 0);
+}
+
+/**
  * Per-team baseline/projected deltas against the prelims anchor for one event.
  * Mutates `lastBase`/`lastPrelim`/`lastProj` (carry-forward running totals) —
  * same running-total contract `buildPrelimsDeltaTimeline`'s loop always had.
+ *
+ * `leftOutBase`/`leftOutProj` are the running totals of the left-out entries'
+ * points (also mutated); a team with none keeps the plain difference.
  */
 function computeTimelineDeltasForEvent(
   basePt: Record<string, unknown> | undefined,
@@ -655,18 +774,30 @@ function computeTimelineDeltasForEvent(
   prelimPt: Record<string, unknown> | undefined,
   lastBase: Record<string, number>,
   lastPrelim: Record<string, number>,
-  lastProj: Record<string, number>
+  lastProj: Record<string, number>,
+  eventKey: string,
+  options: PrelimsDeltaTimelineOptions | undefined,
+  leftOutBase: Record<string, number>,
+  leftOutProj: Record<string, number>
 ): { baselineDelta: Record<string, number>; projectedDelta: Record<string, number> } {
   const teams = timelineTeamsAtEvent([basePt, projPt, prelimPt], lastBase, lastPrelim, lastProj);
   const baselineDelta: Record<string, number> = {};
   const projectedDelta: Record<string, number> = {};
   for (const team of teams) {
-    if (basePt && typeof basePt[team] === 'number') lastBase[team] = basePt[team] as number;
-    if (projPt && typeof projPt[team] === 'number') lastProj[team] = projPt[team] as number;
-    if (prelimPt && typeof prelimPt[team] === 'number') lastPrelim[team] = prelimPt[team] as number;
+    carryTimelineValue(basePt, team, lastBase);
+    carryTimelineValue(projPt, team, lastProj);
+    carryTimelineValue(prelimPt, team, lastPrelim);
 
-    baselineDelta[team] = (lastBase[team] ?? 0) - (lastPrelim[team] ?? 0);
-    projectedDelta[team] = (lastProj[team] ?? 0) - (lastPrelim[team] ?? 0);
+    // No expectation for the team: there is nothing to be over or under, so no key.
+    if (options?.noExpectationTeams?.has(team)) continue;
+
+    // A left-out entry leaves a side once its own event has a point on that
+    // side's timeline, in step with the cumulative total it sits in.
+    if (basePt) addLeftOutAtEvent(leftOutBase, options?.baselineLeftOut, team, eventKey);
+    if (projPt) addLeftOutAtEvent(leftOutProj, options?.projectedLeftOut, team, eventKey);
+
+    baselineDelta[team] = (lastBase[team] ?? 0) - (leftOutBase[team] ?? 0) - (lastPrelim[team] ?? 0);
+    projectedDelta[team] = (lastProj[team] ?? 0) - (leftOutProj[team] ?? 0) - (lastPrelim[team] ?? 0);
   }
   return { baselineDelta, projectedDelta };
 }
@@ -674,7 +805,8 @@ function computeTimelineDeltasForEvent(
 export function buildPrelimsDeltaTimeline(
   baselineTimeline: Record<string, unknown>[],
   projectedTimeline: Record<string, unknown>[],
-  prelimsTimeline: Record<string, unknown>[]
+  prelimsTimeline: Record<string, unknown>[],
+  options?: PrelimsDeltaTimelineOptions
 ): PrelimsDeltaTimelinePoint[] {
   const baselineByEvent = indexTimelineByEvent(baselineTimeline);
   const projectedByEvent = indexTimelineByEvent(projectedTimeline);
@@ -685,6 +817,8 @@ export function buildPrelimsDeltaTimeline(
   const lastBase: Record<string, number> = {};
   const lastProj: Record<string, number> = {};
   const lastPrelim: Record<string, number> = {};
+  const leftOutBase: Record<string, number> = {};
+  const leftOutProj: Record<string, number> = {};
   const out: PrelimsDeltaTimelinePoint[] = [];
 
   for (const eventKey of eventOrder) {
@@ -698,7 +832,11 @@ export function buildPrelimsDeltaTimeline(
       prelimPt,
       lastBase,
       lastPrelim,
-      lastProj
+      lastProj,
+      eventKey,
+      options,
+      leftOutBase,
+      leftOutProj
     );
 
     out.push({

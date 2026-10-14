@@ -87,6 +87,7 @@ import {
   type Workspace,
 } from '../types';
 import { CONVERSION_FACTORS } from '../constants';
+import { recordAt } from './indexedAccess';
 import { aliasNameKey, buildAliasResolver, type AthleteAliasResolver } from './athleteAliases';
 import { swimEventIdentity } from './bestTimeEligibility';
 import {
@@ -198,7 +199,7 @@ function preSeptember22ScmTime(event: string, time: string): string | null {
   if (!factorKey) return null;
   const seconds = convertTimeToSeconds(time);
   if (!Number.isFinite(seconds)) return null;
-  return formatSecondsToTime(seconds * CONVERSION_FACTORS[factorKey].both_scm);
+  return formatSecondsToTime(seconds * recordAt(CONVERSION_FACTORS, factorKey).both_scm);
 }
 
 /**

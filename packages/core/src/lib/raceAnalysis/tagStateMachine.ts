@@ -1,4 +1,5 @@
 import { raceLengthCount } from './course';
+import { itemAt } from '../indexedAccess';
 import { buildRaceSegments, firstTag, tagsOfKind } from './segment';
 import { courseDistanceToMetres } from './course';
 import { UNDERWATER_LEGAL_LIMIT_METRES } from './reference';
@@ -231,7 +232,7 @@ function checkFifteenMetreAvailability(config: RaceConfig): Problem[] {
 /** `NON_MONOTONIC_TAGS`: tag times must not decrease by input order. */
 function checkMonotonicTags(tags: readonly RaceTag[]): Problem[] {
   for (let index = 1; index < tags.length; index += 1) {
-    if (tags[index].time < tags[index - 1].time) {
+    if (itemAt(tags, index).time < itemAt(tags, index - 1).time) {
       return [problem('NON_MONOTONIC_TAGS', 'error', 'tag times must be monotonic by input order')];
     }
   }

@@ -5,6 +5,7 @@
 
 import { ScorerAutoRules, ScoringPresetMeta, ScoringSettings, SwimmerResult } from '../types';
 import { SCORING_POINTS } from '../constants';
+import { itemAt } from './indexedAccess';
 import {
   NCAA_FORMAT_RULESETS,
   NCAA_MEET_FORMATS,
@@ -194,7 +195,7 @@ export function ncaaPresetId(format: NcaaMeetFormat): string {
  */
 function bracketForFinals(ruleset: NcaaFormatRuleset, longestTable: number): number {
   const finals = ruleset.finals;
-  return finals.kind === 'split' ? finals.pools[0].lastPlace : longestTable;
+  return finals.kind === 'split' ? itemAt(finals.pools, 0).lastPlace : longestTable;
 }
 
 function placesOf(table: NcaaPointTable): number[] {

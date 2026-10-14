@@ -7,6 +7,7 @@ import {
 } from './cutlineEventNames';
 import { isTheoreticalMeet } from './theoreticalMeetLabel';
 import { matchOfficialTeamKey } from './teamScoreMatching';
+import { recordAt } from './indexedAccess';
 
 export type SwimmerTrend = {
   name: string;
@@ -140,7 +141,7 @@ export function defaultSeasonTeam(workspace: Workspace | null | undefined): stri
   for (const r of workspace.recruits ?? []) names.add(r.team);
   for (const r of workspace.meetEntryPlans ?? []) names.add(r.team);
   const all = names.values();
-  return all.length === 1 ? all[0] : null;
+  return all.length === 1 ? (all[0] ?? null) : null;
 }
 
 type GenderScore = { total: number | null; source: TeamScoreSource | null; unreadable: number };
@@ -163,7 +164,7 @@ function teamScoreForGender(
     // "Henderson State University Henderson State University" is this team.
     const key = matchOfficialTeamKey(team, published);
     // A published total is a published total, 0 included.
-    if (key !== undefined) return { total: published[key], source: 'official', unreadable: 0 };
+    if (key !== undefined) return { total: recordAt(published, key), source: 'official', unreadable: 0 };
     // Published, and this team's name matched no entry. The rows below say
     // whether the team swam at all: if it did, its calculated sum is shown and
     // labelled as calculated; if not, the meet holds no score for it.
@@ -183,8 +184,9 @@ function teamScoreForGender(
 
 function parseTimeSeconds(t: string): number {
   const parts = t.trim().split(':');
-  if (parts.length === 2) {
-    return parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
+  const [minutes, seconds] = parts;
+  if (parts.length === 2 && minutes !== undefined && seconds !== undefined) {
+    return parseFloat(minutes) * 60 + parseFloat(seconds);
   }
   return parseFloat(t) || Infinity;
 }
@@ -240,7 +242,8 @@ function selectSeasonTeam(
     const team = availableTeams.find(t => teamKey(t) === teamKey(requested)) ?? null;
     return { team, selection: team === null ? 'team-not-in-any-meet' : 'chosen' };
   }
-  if (availableTeams.length === 1) return { team: availableTeams[0], selection: 'chosen' };
+  const [onlyTeam] = availableTeams;
+  if (availableTeams.length === 1 && onlyTeam !== undefined) return { team: onlyTeam, selection: 'chosen' };
   return { team: null, selection: availableTeams.length === 0 ? 'no-teams' : 'team-required' };
 }
 

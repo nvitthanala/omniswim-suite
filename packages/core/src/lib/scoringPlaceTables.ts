@@ -23,6 +23,7 @@
  */
 import { z } from 'zod';
 import type { ScoringSettings } from '../types';
+import { itemAt } from './indexedAccess';
 
 /** A place-point table being edited. `null` is a cell the user has not filled in. Place 1 first. */
 export type PlaceDraft = (number | null)[];
@@ -105,7 +106,7 @@ export function pointsTableSchema(field: string) {
         }
       });
       for (let i = 1; i < places.length; i += 1) {
-        if (places[i] > places[i - 1]) {
+        if (itemAt(places, i) > itemAt(places, i - 1)) {
           ctx.addIssue({
             code: z.ZodIssueCode.custom,
             path: [i],

@@ -173,7 +173,7 @@ export function SeedsPastTableNote({ count, className }: { count: number; classN
       className={['font-mono text-ui-micro text-theme-muted whitespace-nowrap', className]
         .filter(Boolean)
         .join(' ')}
-      title="The sum leaves these seeds out: the place-point table has no row for them"
+      title="The sum and the over/under leave these seeds out: the place-point table has no row for them"
       data-seeds-past-table
     >
       {seedsPastTableLabel(count)}

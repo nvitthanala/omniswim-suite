@@ -11,6 +11,7 @@
  *     a plain-text, human- and import-friendly approximation.)
  */
 import { Gender, type PlannedSwimEntry, type Workspace } from '../types';
+import { itemAt } from './indexedAccess';
 
 export type EntryExport = {
   filename: string;
@@ -185,6 +186,6 @@ function splitName(full: string): { first: string; last: string } {
   }
   // "First Last" form
   const parts = trimmed.split(/\s+/);
-  if (parts.length === 1) return { first: parts[0], last: '' };
-  return { first: parts.slice(0, -1).join(' '), last: parts[parts.length - 1] };
+  if (parts.length === 1) return { first: itemAt(parts, 0), last: '' };
+  return { first: parts.slice(0, -1).join(' '), last: itemAt(parts, parts.length - 1) };
 }

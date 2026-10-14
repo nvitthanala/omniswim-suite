@@ -45,6 +45,15 @@ interface MeetOpsStandingsStepProps {
    */
   prelimsWithoutExpectationByTeam?: Map<string, number>;
   psychWithoutExpectationByTeam?: Map<string, number>;
+  /**
+   * Points the baseline earned in the entries counted in
+   * `prelimsWithoutExpectationByTeam`, per team (teams with at least one). The
+   * "vs prelims" figure subtracts them, so it compares the entries that have an
+   * expectation. Absent: nothing is subtracted.
+   */
+  prelimsBaselineLeftOutByTeam?: Map<string, number>;
+  /** The same for the projected total (`team.totalPoints`). */
+  prelimsProjectedLeftOutByTeam?: Map<string, number>;
   showPrelimsPerformance: boolean;
   prelimsOuByEntry: Map<string, PrelimsOverUnderEntry>;
   showPsychPerformance: boolean;
@@ -71,6 +80,8 @@ export function MeetOpsStandingsStep({
   psychByTeam,
   prelimsWithoutExpectationByTeam,
   psychWithoutExpectationByTeam,
+  prelimsBaselineLeftOutByTeam,
+  prelimsProjectedLeftOutByTeam,
   showPrelimsPerformance,
   prelimsOuByEntry,
   showPsychPerformance,
@@ -131,11 +142,17 @@ export function MeetOpsStandingsStep({
                 prelimsProjectedScore={prelimsByTeam.get(team.teamName)}
                 baselineOverUnder={
                   prelimsByTeam.has(team.teamName)
-                    ? (baselineByTeam.get(team.teamName) ?? 0) - (prelimsByTeam.get(team.teamName) ?? 0)
+                    ? (baselineByTeam.get(team.teamName) ?? 0) -
+                      (prelimsBaselineLeftOutByTeam?.get(team.teamName) ?? 0) -
+                      (prelimsByTeam.get(team.teamName) ?? 0)
                     : undefined
                 }
                 projectedOverUnder={
-                  prelimsByTeam.has(team.teamName) ? team.totalPoints - (prelimsByTeam.get(team.teamName) ?? 0) : undefined
+                  prelimsByTeam.has(team.teamName)
+                    ? team.totalPoints -
+                      (prelimsProjectedLeftOutByTeam?.get(team.teamName) ?? 0) -
+                      (prelimsByTeam.get(team.teamName) ?? 0)
+                    : undefined
                 }
                 showPrelimsPerformance={showPrelimsPerformance}
                 prelimsOuByEntry={prelimsOuByEntry}

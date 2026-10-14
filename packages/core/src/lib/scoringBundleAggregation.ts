@@ -26,6 +26,7 @@ import {
   stripEventGenderMarker,
 } from './utils';
 import { computeVisibleEvents } from './eventIdentity';
+import { recordAt } from './indexedAccess';
 import type { ProjectionBundle, ScoringBundle } from './scoringEngine';
 
 export type AggregatedTeamScoring = {
@@ -90,7 +91,7 @@ export function aggregateTeamScoring(
       const pts = typeof res.points === 'number' ? res.points : 0;
       teamsMap[teamKey].totalPoints += pts;
       teamsMap[teamKey].swimmers.push(res);
-      runningTotals[teamKey] += pts;
+      runningTotals[teamKey] = recordAt(runningTotals, teamKey) + pts;
     });
 
     if (!isTimeTrial) {
@@ -178,8 +179,11 @@ export function buildProjectionBundle(
 
   const scoredTeams: ProjectedTeamScore[] = agg.sortedTeams.map(team => {
     const withoutExpectation = gapKeysByTeam.get(team.teamName) ?? [];
+    // `totalPoints` is not on ProjectedTeamScore: a reader of `.totalPoints` must
+    // get `undefined` on every team, not a number on some and nothing on others.
+    const { totalPoints: _totalPoints, ...rest } = team;
     return {
-      ...team,
+      ...rest,
       expected: team.totalPoints,
       withoutExpectation,
       withoutExpectationCount: withoutExpectation.length,

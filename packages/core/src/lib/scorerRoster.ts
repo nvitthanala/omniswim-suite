@@ -32,6 +32,7 @@ import {
   type SwimmerResult,
 } from '../types';
 import { DEFAULT_SCORER_AUTO_RULES } from './scoringDefaults';
+import { itemAt } from './indexedAccess';
 import { displayTimeForRelayLeg } from './relaySplits';
 import { canonicalSwimmerName, classifyRoundTier, isDivingEvent, isRelayResult, sortEventsByMeetOrder } from './utils';
 import { IDENTITY_ALIAS_RESOLVER, type AthleteAliasResolver } from './athleteAliases';
@@ -295,7 +296,7 @@ export function relayEntryRosterEligible(
   lookup?: ScorerRosterLookup
 ): boolean {
   if (!usesScorerRoster(settings)) return true;
-  const sample = group[0];
+  const sample = itemAt(group, 0);
   const rules = effectiveAutoRules(settings);
   const tier = classifyRoundTier(sample.roundSwam);
   const tiers = rules.abFinalTiers ?? ['A', 'B'];

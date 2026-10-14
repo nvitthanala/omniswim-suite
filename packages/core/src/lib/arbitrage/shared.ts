@@ -41,6 +41,7 @@ import {
 } from '../../types';
 import { buildMeetEventLabelIndex, canonicalProgramEvent } from '../eventIdentity';
 import { isUserInputtedSwim } from '../athleteHistory';
+import { itemAt } from '../indexedAccess';
 import { swimEventNotSwumInCourse } from '../courseEvents';
 import { effectivePdfPlacePointsMode } from '../scoringDefaults';
 import { buildScorerRosterLookup, usesScorerRoster, type ScorerRosterLookup } from '../scorerRoster';
@@ -752,8 +753,8 @@ function buildTeamGroupsForEvent(
   }
   const weight = isDivingEvent(event, diverEventPattern) ? diverWeight : 1;
   const keys = [...byKey.keys()].sort((a, b) => {
-    const ga = byKey.get(a)![0];
-    const gb = byKey.get(b)![0];
+    const ga = itemAt(byKey.get(a)!, 0);
+    const gb = itemAt(byKey.get(b)!, 0);
     const tw = roundTierSortForSweep(ga.roundSwam) - roundTierSortForSweep(gb.roundSwam);
     if (tw !== 0) return tw;
     return (parseRankInt(ga.rank) ?? 9999) - (parseRankInt(gb.rank) ?? 9999);

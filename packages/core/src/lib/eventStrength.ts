@@ -56,6 +56,7 @@ import {
   type MeetPlaceField,
 } from './utils';
 import { getSourceResults } from './meetSource';
+import { recordAt } from './indexedAccess';
 import {
   buildAliasResolver,
   IDENTITY_ALIAS_RESOLVER,
@@ -166,7 +167,7 @@ export function rankEventsByQuality(
       unranked.push(event);
     }
   }
-  ranked.sort((a, b) => ratioByEvent[a] - ratioByEvent[b] || a.localeCompare(b));
+  ranked.sort((a, b) => recordAt(ratioByEvent, a) - recordAt(ratioByEvent, b) || a.localeCompare(b));
   return { ranked, unranked: byTimeThenName(unranked), ratioByEvent, division, tier };
 }
 
@@ -268,9 +269,9 @@ export function rankEventsByStrength(
   }
 
   const order = Object.keys(strengthByEvent).sort((a, b) =>
-    compareEventStrength(strengthByEvent[a], strengthByEvent[b])
+    compareEventStrength(recordAt(strengthByEvent, a), recordAt(strengthByEvent, b))
   );
-  const rankedAgainstMeet = order.some(e => strengthByEvent[e].meetPlace != null);
+  const rankedAgainstMeet = order.some(e => recordAt(strengthByEvent, e).meetPlace != null);
   return { ...quality, order, strengthByEvent, rankedAgainstMeet };
 }
 

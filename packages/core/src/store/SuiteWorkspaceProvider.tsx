@@ -228,11 +228,12 @@ export function SuiteWorkspaceProvider({
    * selection logic of its own — dropping the row from the list is enough.
    */
   const activeWorkspaceId = useMemo(() => {
-    if (workspaces.length === 0) return null;
+    const firstWorkspace = workspaces[0];
+    if (firstWorkspace === undefined) return null;
     if (storedWorkspaceId != null && workspaces.some(w => w.id === storedWorkspaceId)) {
       return storedWorkspaceId;
     }
-    return workspaces[0].id;
+    return firstWorkspace.id;
   }, [workspaces, storedWorkspaceId]);
 
   // Mirror the resolved id back into intent so the two cannot drift. Only ever

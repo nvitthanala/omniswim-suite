@@ -137,9 +137,9 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
   const h = hex.replace('#', '').trim();
   if (h.length === 3) {
     return {
-      r: parseInt(h[0] + h[0], 16),
-      g: parseInt(h[1] + h[1], 16),
-      b: parseInt(h[2] + h[2], 16),
+      r: parseInt(h.charAt(0) + h.charAt(0), 16),
+      g: parseInt(h.charAt(1) + h.charAt(1), 16),
+      b: parseInt(h.charAt(2) + h.charAt(2), 16),
     };
   }
   if (h.length === 6) {

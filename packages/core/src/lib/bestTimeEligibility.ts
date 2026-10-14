@@ -258,7 +258,7 @@ function gluedCutChipReading(key: string): SwimCloudStampReading | null {
     if (!flags) continue;
     fits.push(cutChipReading(label, flags[1] as 'x' | 'u' | undefined, flags[2] === 'r'));
   }
-  return fits.length === 1 ? fits[0] : null;
+  return fits.length === 1 ? (fits[0] ?? null) : null;
 }
 
 /**

@@ -195,7 +195,8 @@ describe('a seed the table scores 0 is a real 0, not an absent expectation', () 
     const delta = byName(bundle.sortedTeams, 'Delta U');
     expect(delta.expected).toBe(0);
     expect(delta.withoutExpectationCount).toBe(0);
-    expect('totalPoints' in delta).toBe(true);
+    // The old field is gone at runtime too, even for a team that has a number.
+    expect('totalPoints' in delta).toBe(false);
   });
 });
 
@@ -213,10 +214,8 @@ describe('a bundle with no seed past the table is unchanged', () => {
     expect(bundle.timelineData).toEqual(legacy.timelineData);
     expect(bundle.events).toEqual(legacy.events);
     expect(bundle.visibleEvents).toEqual(legacy.visibleEvents);
-    // Runtime still carries the old field for a team that has a number.
-    expect(bundle.sortedTeams.map(t => (t as unknown as { totalPoints: number }).totalPoints)).toEqual(
-      legacy.sortedTeams.map(t => t.totalPoints)
-    );
+    // No team carries the old field at runtime: the shape matches the type.
+    expect(bundle.sortedTeams.some(t => 'totalPoints' in t)).toBe(false);
     expect(bundle.sortedTeams.every(t => t.withoutExpectationCount === 0)).toBe(true);
   });
 

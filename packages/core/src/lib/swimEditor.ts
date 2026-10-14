@@ -46,6 +46,7 @@
 import { v4 as uuidv4 } from 'uuid';
 import { ClassYear, Gender, HistoricalSwim, PlannedSwimEntry, Workspace } from '../types';
 import { normalizeEventLabel } from './athleteHistory';
+import { itemAt } from './indexedAccess';
 import { cloneMeetResults, getSourceResults } from './meetSource';
 import { pruneRelayOverridesForSwimmer } from './rosterLineupAudit';
 import { normalizeSwimmerName } from './utils';
@@ -311,7 +312,7 @@ export function updateHistorySwim(
   if (changes.meet !== undefined) applied.meetLabel = changes.meet;
   if (changes.date !== undefined) applied.date = changes.date;
 
-  const target = base[idx];
+  const target = itemAt(base, idx);
   return {
     patch: { athleteHistory: base.map((r, i) => (i === idx ? { ...r, ...applied } : r)) },
     inverse: { athleteHistory: base },
@@ -327,7 +328,7 @@ export function removeHistorySwim(
   const base = workspace.athleteHistory ?? [];
   const idx = base.findIndex(r => historyRowMatches(r, rowRef));
   if (idx < 0) throw new Error('removeHistorySwim: no history row matched rowRef');
-  const target = base[idx];
+  const target = itemAt(base, idx);
   return {
     patch: { athleteHistory: base.filter((_, i) => i !== idx) },
     inverse: { athleteHistory: base },
