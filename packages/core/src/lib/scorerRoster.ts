@@ -33,7 +33,7 @@ import {
 } from '../types';
 import { DEFAULT_SCORER_AUTO_RULES } from './scoringDefaults';
 import { itemAt } from './indexedAccess';
-import { displayTimeForRelayLeg } from './relaySplits';
+import { displayTimeForRelayLeg, relayLegTimeView } from './relaySplits';
 import { canonicalSwimmerName, classifyRoundTier, isDivingEvent, isRelayResult, sortEventsByMeetOrder } from './utils';
 import { IDENTITY_ALIAS_RESOLVER, type AthleteAliasResolver } from './athleteAliases';
 
@@ -346,7 +346,16 @@ export type AthleteCreditedSwim = {
   id: string;
   event: string;
   time: string;
+  /**
+   * A relay leg's measured split, or `'—'`. Never an estimate: a leg of a theoretical meet carries
+   * {@link AthleteCreditedSwim.legEstimate} instead.
+   */
   displayTime: string;
+  /**
+   * Set only on a relay leg whose time is an estimate (a theoretical meet: nobody swam the relay). Show it
+   * under the "Estimate" label, never as a split.
+   */
+  legEstimate?: { time: string; basis?: string };
   roundSwam?: string;
   rank: number;
   points: number;
@@ -393,11 +402,16 @@ export function getAthleteCreditedSwims(
 
     const pts = typeof r.points === 'number' ? r.points : 0;
     const isRelay = isRelayResult(r);
+    const legView = isRelay ? relayLegTimeView(r) : null;
+    const legEstimate = legView?.kind === 'estimate' ? legView : null;
     swims.push({
       id: r.id,
       event: r.event,
       time: r.time,
-      displayTime: isRelay ? displayTimeForRelayLeg(r) : r.time,
+      displayTime: isRelay ? (legEstimate ? '—' : displayTimeForRelayLeg(r)) : r.time,
+      ...(legEstimate
+        ? { legEstimate: { time: legEstimate.time, ...(legEstimate.basis === undefined ? {} : { basis: legEstimate.basis }) } }
+        : {}),
       roundSwam: r.roundSwam,
       rank: r.rank,
       points: pts,

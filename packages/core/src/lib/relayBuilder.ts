@@ -18,7 +18,7 @@ import {
   relayTemplateFromLeg,
 } from './relayLegMatching';
 import { convertTimeToSeconds, isRelayResult, normalizeSwimmerName } from './utils';
-import { displayTimeForRelayLeg } from './relaySplits';
+import { displayTimeForRelayLeg, relayLegTimeView } from './relaySplits';
 import { relayLegHistoryCandidates } from './relayLegHistoryCandidates';
 
 export type RelaySplitComparison = {
@@ -35,7 +35,12 @@ export type RelaySplitComparison = {
    * time SwimCloud took out of a longer swim's splits. Named separately from
    * `'history'` so a coach can see which legs rest on an estimate.
    */
-  source: 'pdf' | 'history' | 'lineup' | 'extracted-split' | 'none';
+  source: 'pdf' | 'history' | 'lineup' | 'extracted-split' | 'estimate' | 'none';
+  /**
+   * `true` when `knownSplit` is a theoretical meet's estimate, not a split (`relayLegTimeView`). Then
+   * `source` is `'estimate'`. Absent on every row of a real meet.
+   */
+  knownIsEstimate?: true;
 };
 
 /**
@@ -122,9 +127,13 @@ export function compareRelayLegSplits(
 ): RelaySplitComparison[] {
   return [0, 1, 2, 3].map(legIndex => {
     const leg = legs.find(l => (l.relayLegIndex ?? -1) === legIndex) ?? legs[legIndex];
+    const view = leg && !leg.relayLegVacant ? relayLegTimeView(leg) : null;
+    const knownIsEstimate = view?.kind === 'estimate';
     const known =
       leg && !leg.relayLegVacant
-        ? displayTimeForRelayLeg(leg) || leg.relayLegSplit || null
+        ? knownIsEstimate
+          ? view.time
+          : displayTimeForRelayLeg(leg) || leg.relayLegSplit || null
         : null;
     const name = leg && !leg.relayLegVacant ? leg.name : '';
     const calc =
@@ -141,7 +150,8 @@ export function compareRelayLegSplits(
       knownSplit: known,
       calculatedSplit: calc?.time ?? null,
       deltaSec,
-      source: known ? 'pdf' : calc?.source ?? 'none',
+      source: known ? (knownIsEstimate ? 'estimate' : 'pdf') : calc?.source ?? 'none',
+      ...(knownIsEstimate ? { knownIsEstimate: true as const } : {}),
     };
   });
 }

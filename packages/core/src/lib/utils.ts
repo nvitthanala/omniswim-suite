@@ -45,11 +45,13 @@ import {
   type EventNotSwumInCourse,
 } from './courseEvents';
 import { effectivePdfPlacePointsMode, mergeScoringSettings } from './scoringDefaults';
+import { isTheoreticalRelayLegRowId } from './theoreticalMeetLabel';
 import {
   buildSyntheticLegSplitDetail,
   normalizeRelayLegSplitDetail,
   rebuildTeamSplitSummary,
   relayLegDistanceYardsOfEvent,
+  relayLegEstimateOf,
 } from './relaySplits';
 import {
   findRelayLegOverride,
@@ -3365,6 +3367,17 @@ function unresolvedOverrideReason(
 }
 
 /**
+ * The leg clock a departed leg is taken off at, in seconds: the row's measured split, else (a theoretical
+ * meet's leg row, where nobody swam the relay) the leg's estimate, else `null`. A measured split always wins.
+ * A theoretical relay's team time is the sum of the estimates, so subtracting the estimate keeps it exact.
+ */
+function departedLegClockSec(legRow: SwimmerResult | undefined): number | null {
+  if (legRow === undefined) return null;
+  if (legRow.relayLegSplit && legRow.relayLegSplit !== 'NT') return convertTimeToSeconds(legRow.relayLegSplit);
+  return relayLegEstimateOf(legRow)?.time ?? null;
+}
+
+/**
  * Resolve every leg of one relay group: a leg whose holder stays untouched
  * keeps their spot; a leg whose holder departs (dropped, excluded, or a
  * non-scorer vacate) is filled by its override's assignee, or by its manual time
@@ -3440,10 +3453,7 @@ function resolveRelayLegs(
 
     const legRowForSplit =
       ordered.find(row => (row.relayLegIndex ?? -1) === index) ?? ordered[index];
-    const oldSplitSec =
-      legRowForSplit?.relayLegSplit && legRowForSplit.relayLegSplit !== 'NT'
-        ? convertTimeToSeconds(legRowForSplit.relayLegSplit)
-        : null;
+    const oldSplitSec = departedLegClockSec(legRowForSplit);
 
     const departedIndiv = findDepartedLegSwim(
       results,
@@ -3627,8 +3637,11 @@ function emitRelayGroupRows(
   const { outLegs, modified, legMissingByIndex, legVacantByIndex, legTimeTrialByIndex } = resolved;
   const newTeamStr = formatSecondsToTime(resolved.newTimeSecs);
 
-  const teamSplits =
-    modified || ordered.some(r => r.relayTeamSplits)
+  // A theoretical meet's relay has no splits (nobody swam it), so it has no team split summary. Its leg
+  // totals could only be estimates, or a vacancy placeholder, shown with no label.
+  const teamSplits = ordered.some(r => isTheoreticalRelayLegRowId(r.id))
+    ? undefined
+    : modified || ordered.some(r => r.relayTeamSplits)
       ? rebuildTeamSplitSummary(legTotals, newTeamStr)
       : ordered[0]?.relayTeamSplits;
 
@@ -3646,8 +3659,12 @@ function emitRelayGroupRows(
     // and `idx` is clamped into `[0, outLegs.length - 1]`.
     const legMeta = itemAt(outLegs, idx);
     const legDetail = legDetailsByIndex.get(idx);
+    // A replaced leg holds another swimmer's time: the departed swimmer's estimate must not stay on the row.
+    const { relayLegEstimate: departedEstimate, ...rowWithoutEstimate } = row;
+    const keptEstimate = resolved.legReplacements.has(idx) ? undefined : departedEstimate;
     finalResults.push({
-      ...row,
+      ...rowWithoutEstimate,
+      ...(keptEstimate === undefined ? {} : { relayLegEstimate: keptEstimate }),
       name: legMeta.name,
       classYear: legMeta.year,
       time: newTeamStr,

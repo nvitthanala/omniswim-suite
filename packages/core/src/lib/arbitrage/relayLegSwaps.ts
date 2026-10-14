@@ -18,7 +18,12 @@ import {
 } from '../../types';
 import { mergeScoringSettings } from '../scoringDefaults';
 import { buildScorerRosterLookup, usesScorerRoster, type ScorerRosterLookup } from '../scorerRoster';
-import { displayTimeForRelayLeg, relayLegDistanceYardsOfEvent } from '../relaySplits';
+import {
+  displayTimeForRelayLeg,
+  relayLegDistanceYardsOfEvent,
+  relayLegEstimateOf,
+  relayLegTimeView,
+} from '../relaySplits';
 import {
   buildRelayCandidateGenderIndex,
   individualEventDistanceStroke,
@@ -40,6 +45,7 @@ import {
   canonicalSwimmerName,
   convertTimeToSeconds,
   findDepartedLegSwim,
+  formatSecondsToTime,
   isRelayResult,
   isTimeTrialSwim,
   normalizeSwimmerName,
@@ -112,6 +118,11 @@ export type RelayLegSwap = {
   outAthlete: string;
   /** Outgoing leg split/time, when known. */
   outTime?: string;
+  /**
+   * `true` when `outTime` is an estimate, not a split: the leg row is a theoretical meet's, where nobody
+   * swam the relay. Label it "Estimate" wherever `outTime` is shown.
+   */
+  outTimeEstimate?: true;
   inAthlete: string;
   /** Incoming swimmer's projected leg time (SCY, cross-course best) — for display. */
   inTime: string;
@@ -420,6 +431,7 @@ type LegTarget = {
   outAthlete: string;
   outKey: string;
   outTime?: string;
+  outTimeEstimate?: true;
   legKey: string;
   clockLegTime?: string;
 };
@@ -491,6 +503,10 @@ function resolveClockHoldTime(
   }
   const rawSplit = legRow?.relayLegSplit;
   if (rawSplit && rawSplit !== 'NT') return rawSplit;
+  // Mirrors simulateRoster's `oldSplitSec`: a theoretical meet's leg row holds an estimate, not a split,
+  // and the clock it holds is that estimate. A measured split always wins (the line above).
+  const estimate = legRow ? relayLegEstimateOf(legRow) : undefined;
+  if (estimate) return formatSecondsToTime(estimate.time);
   return undefined;
 }
 
@@ -507,6 +523,7 @@ function buildLegTarget(
   const stroke = relayStrokeForBoundedIndex(evLower, legIndex);
   const outAthlete = entry.legNames[legIndex] ?? '';
   const legRow = entry.legRows.find(r => (r.relayLegIndex ?? -1) === legIndex);
+  const outView = legRow ? relayLegTimeView(legRow) : null;
   return {
     entry,
     legIndex,
@@ -515,7 +532,8 @@ function buildLegTarget(
     onRelay,
     outAthlete,
     outKey: normalizeSwimmerName(outAthlete),
-    outTime: legRow ? displayTimeForRelayLeg(legRow) : undefined,
+    outTime: legRow ? (outView?.time ?? displayTimeForRelayLeg(legRow)) : undefined,
+    ...(outView?.kind === 'estimate' ? { outTimeEstimate: true as const } : {}),
     legKey: `${legDistanceYards}|${stroke}`,
     clockLegTime: resolveClockHoldTime(
       ctx.results,
@@ -628,6 +646,7 @@ function buildRelayLegSwap(
     legDistanceYards: target.legDistanceYards,
     outAthlete: target.outAthlete,
     outTime: target.outTime,
+    ...(target.outTimeEstimate ? { outTimeEstimate: true as const } : {}),
     inAthlete: cand.name,
     inTime: bestRef?.time ?? cand.time,
     inTimeConverted: bestRef?.converted ? true : undefined,

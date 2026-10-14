@@ -55,12 +55,13 @@
  * `seeds.relayEntries` (empty unless relays were requested) become four rows each, one per leg, the way a
  * HyTek relay is stored: the legs of one relay share `event`, `team`, `roundSwam`, `rank` and the team time
  * (`time`, `finalsTime`, `relayTeamTime`), and each leg row carries its swimmer, `relayLegIndex`,
- * `relayLegStroke` and `relayLegSplit` (the leg time). The engine groups legs by that shared key
+ * `relayLegStroke` and `relayLegEstimate` (the leg time, a labelled estimate). `relayLegSplit` is NOT set:
+ * nobody swam the relay, so no leg time here is a split. The engine groups legs by that shared key
  * (`relayEntryGroupKey`) and pays `scoringPoints[place] x relayMultiplier` (or `relayPoints`) once per
  * relay, split over the legs (`halfRateRelaySwimmer`). Teams are ranked by estimated team time within an
  * event and gender, ties 1, 2, 2, 4, and banded like the individual rows. No `relayLegSplitDetail` is
  * written: a segment breakdown would be a second invented number. Every relay row of a theoretical meet is
- * an estimate by construction ({@link isEstimatedRelayRow}); the workspace has no field for it.
+ * an estimate by construction ({@link isEstimatedRelayRow}); each leg row also carries its own `relayLegEstimate`.
  *
  * ## Ties
  *
@@ -102,12 +103,13 @@
  */
 
 import { Gender } from '@omniswim/core/types';
-import type { LoadedMeetMeta, ScoringSettings, SwimmerResult, TheoreticalRemovedEvent } from '@omniswim/core/types';
+import type { LoadedMeetMeta, RelayLegEstimate, ScoringSettings, SwimmerResult, TheoreticalRemovedEvent } from '@omniswim/core/types';
 import { canonicalMeetEventLabel, swimEventIdentity } from '@omniswim/core/lib/athleteHistory';
 import { meetCopyFromParsed } from '@omniswim/core/lib/meetSource';
 import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
 import {
   THEORETICAL_MEET_LABEL,
+  THEORETICAL_RELAY_LEG_ROW_ID_PREFIX,
   isEstimatedRelayRow,
   isTheoreticalMeet,
   theoreticalRemovedEvents,
@@ -499,7 +501,31 @@ function rankGender(
 /* -------------------------------------------------------------------------- */
 
 const RELAY_ENTRY_PREFIX = 'tmrelay|';
-const RELAY_RESULT_PREFIX = 'tmresrelay|';
+const RELAY_RESULT_PREFIX = THEORETICAL_RELAY_LEG_ROW_ID_PREFIX;
+
+/** The labels `relayLegEstimate.basis` carries on a theoretical meet's leg rows. */
+export const THEORETICAL_LEG_ESTIMATE_BASIS = {
+  /** Leg 1: the swimmer's recorded individual best at the leg's event, flat start. */
+  flatStartBest: 'flat-start best time',
+  /** Legs 2 to 4 with the user's flying-start adjustment taken off. */
+  startAdjusted: 'start-adjusted best time',
+  /** Legs 2 to 4 with no adjustment: the recorded flat-start best as it stands. */
+  noAdjustment: 'best time, no start adjustment',
+} as const;
+
+/** The estimate a leg row holds in place of a split. The time is the leg's `timeSec`, as built. */
+function legEstimateOf(relay: TheoreticalProjectedRelay, leg: TheoreticalProjectedRelay['legs'][number]): RelayLegEstimate {
+  if (leg.basis === 'flat-start-best') {
+    return { time: leg.timeSec, basis: THEORETICAL_LEG_ESTIMATE_BASIS.flatStartBest };
+  }
+  if (leg.basis !== 'estimated-from-flat-start') {
+    throw new TheoreticalWorkspaceError('unexpected-seed-row', `The relay ${relay.id} has a leg with the basis ${JSON.stringify(leg.basis)}, which this build does not write.`);
+  }
+  if (leg.startAdjustmentSec !== undefined) {
+    return { time: leg.timeSec, basis: THEORETICAL_LEG_ESTIMATE_BASIS.startAdjusted, startAdjustmentSec: leg.startAdjustmentSec };
+  }
+  return { time: leg.timeSec, basis: THEORETICAL_LEG_ESTIMATE_BASIS.noAdjustment };
+}
 
 /** The leg row id for a relay entry id and a leg position. */
 export function theoreticalRelayLegRowId(relayEntryId: string, position: number): string {
@@ -561,7 +587,8 @@ function rankRelays(
       relayNames: relay.legs.map(l => ({ name: l.name, year: l.classYear })),
       relayLegIndex: leg.position - 1,
       relayLegStroke: leg.stroke,
-      relayLegSplit: leg.time,
+      // Nobody swam this relay, so the row holds no split. The leg time is a labelled estimate.
+      relayLegEstimate: legEstimateOf(relay, leg),
     }));
     legRows.set(relay.id, rows);
     resultIds.set(relay.id, rows.map(r => r.id));

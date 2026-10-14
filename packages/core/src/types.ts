@@ -55,6 +55,22 @@ export type RelayLegSplitDetail = {
   legTotal?: string;
 };
 
+/**
+ * A relay leg time nobody swam as a relay leg. A theoretical meet builds each leg from the swimmer's
+ * recorded individual best, less a flying-start adjustment when the user set one.
+ *
+ * It is a labelled estimate, not a measured split. Display it with the word "Estimate"
+ * (`RELAY_LEG_ESTIMATE_LABEL`) and never under a "Split" label.
+ */
+export interface RelayLegEstimate {
+  /** Leg time in seconds. */
+  time: number;
+  /** Short plain label for where the number comes from, for example `'start-adjusted best time'`. */
+  basis: string;
+  /** Present only when a flying-start adjustment (seconds) was taken off the recorded best. */
+  startAdjustmentSec?: number;
+}
+
 export type RelayTeamSplitSummary = {
   /** Per-leg contribution times, index 0 = leadoff. */
   legTotals: (string | null)[];
@@ -86,6 +102,12 @@ export interface SwimmerResult {
   relayLegStroke?: RelayLegStroke;
   /** Parsed HyTek leg split (parenthesized segment); team time stays in `time` / `finalsTime`. */
   relayLegSplit?: string;
+  /**
+   * An estimated leg time. Set only on a leg row of a theoretical meet, where no relay was swum.
+   * It is never a split: `relayLegSplit` stays absent there, and a reader that scores or credits
+   * a leg must not read this field as one. See {@link RelayLegEstimate}.
+   */
+  relayLegEstimate?: RelayLegEstimate;
   relayTeamTime?: string;
   relayLegSplitDetail?: RelayLegSplitDetail;
   relayTeamSplits?: RelayTeamSplitSummary;

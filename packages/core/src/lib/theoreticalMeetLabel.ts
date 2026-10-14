@@ -39,6 +39,20 @@ export function theoreticalRemovedEvents(
 }
 
 /**
+ * The id prefix of every relay leg row a theoretical meet writes (`tmresrelay|{workspaceId}|...|leg{n}`).
+ * The builder (`theoreticalRelayLegRowId`) and {@link isTheoreticalRelayLegRowId} share it.
+ */
+export const THEORETICAL_RELAY_LEG_ROW_ID_PREFIX = 'tmresrelay|';
+
+/**
+ * True when a row id is the id of a theoretical meet's relay leg row. Nobody swam such a relay, so no
+ * leg time on the row is a measured split.
+ */
+export function isTheoreticalRelayLegRowId(id: string | null | undefined): boolean {
+  return typeof id === 'string' && id.startsWith(THEORETICAL_RELAY_LEG_ROW_ID_PREFIX);
+}
+
+/**
  * Whether a row of this workspace is an estimated relay. In a theoretical meet nobody swam any relay, so
  * every relay row is one: its team time is the sum of four swimmers' individual bests. False for a row of
  * any other workspace.
