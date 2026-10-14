@@ -449,7 +449,8 @@
     "H5 (U8): untracking the roster .txt files breaks 11 test files and two seed scripts. Move them to a local-only path and repoint the tests, or untrack and let the tests skip when the files are absent? History keeps the files either way.",
     "D9 scope: a post-meet swim numbered past scoredEventNumberMax (NSISC Event 938/939) now counts as a time trial for relay legs, matching how the SwimCloud bridge flags it. Confirm.",
     "Fixture tests/fixtures/nsisc-2026-dq-relay-leg.json (33 KB) holds verbatim rows from the private data/meets.json (published NSISC 2026 championship results for Delta State and Henderson State). Decision U-meets said tests use data/demo-seed.json. Keep the fixture, or replace it with synthetic rows?",
-    "Copy: rename the ~49 user-visible 'athlete' strings (24 files) to 'swimmer'? The Manager step 'Athletes' is locked by tests/managerAthletesCopy.test.ts."
+    "Copy: rename the ~49 user-visible 'athlete' strings (24 files) to 'swimmer'? The Manager step 'Athletes' is locked by tests/managerAthletesCopy.test.ts.",
+    "Tied relay with a legacy plain override key: migrateTiedRelayOverrides copies it to BOTH relays (tests/relayTiedAmbiguityMigration.test.ts:314 pins ['X1','X1']), putting one swimmer on the same leg of both relays in one event. The scoring engine does not block it and no audit rule flags it. Recommendation (architect and lead): surface the key as ambiguous and refuse to apply it, so nothing is guessed. Real data has 0 tied relays. Change it?"
   ],
   "pendingArchitectReview": [
     "Review e6b35d54 (type break: projected bundle lacks totalPoints in its type) and a23a20b3/15b216e1 (migration at read time, not load time)"
@@ -530,7 +531,11 @@
     "vault gotcha: the Edit tool rewrote an LF file as CRLF once; normalize before commit",
     "urlClassifier.ts PATH_CLASSIFIERS plain-object lookup: use Object.hasOwn / Map (small executor fix, swimcloud)"
   ],
-  "inFlight20261013": {},
+  "inFlight20261013": {
+    "ae5563cbe88eb62bf": "executor: architect 20261014 findings 1-3 (prelims/psych deltas, partial-team baseline, totalPoints shape)",
+    "a96109dd12070025d": "executor: R11 step 3 small core files",
+    "a62502e54081f35c6": "worker: F1 printable lineup and relay cards in packages/manager"
+  },
   "architectReReview20261013": {
     "reviewed": "ddb838fb, e54adab4, d5dc09ff",
     "findings": [
@@ -555,5 +560,21 @@
     "scripts": "86 passed, 0 failed, 1 skipped (incl. e2e)",
     "harness": "7 passed, 1 skipped",
     "audit": "no forbidden paths in branch diff; 51 SHAs in items all exist; 11 commit subjects 51-58 chars and 2 bodies at 73 chars exceed the 50/72 rule (local, unpushed; history not rewritten so SHAs in this file stay valid); D8 local-data skip had no skip-budget entry (CI would have failed) fixed c4e764e2"
+  },
+  "architectReview20261014": {
+    "reviewed": "e6b35d54, a23a20b3, 15b216e1",
+    "findings": [
+      "1 HIGH reproduced: prelimsProjection.ts:668-669 timeline tooltip counts a team with expected null as 0 (Beta +6); psychProjection.ts:339 same -> fix in flight (executor ae5563cbe88eb62bf)",
+      "2 MED: partial teams' team-level over/under counts past-table seeds' actual points as over (PrelimsDiffTable, MeetOpsStandingsStep.tsx:133-138, timeline) -> in flight",
+      "3 LOW reproduced: runtime teams keep totalPoints while type omits it; scripts/test_prelims_projection.mjs:375, test_psych_projection.mjs:131 read it -> in flight",
+      "4 LOW: relays screen save writes the split for every tied legacy key of that gender; workingCopyChanges.ts:80 counts 2 where it counted 1 -> not started"
+    ],
+    "clean": [
+      "typed consumers guard null",
+      "worker boundary clone",
+      "teamStyleSignature :gapN memo key",
+      "PrelimsDiffTable ?? 0 for a team the bundle does not list",
+      "every scoring read of relayLegOverrides goes through simulateRoster/whatIfProjection which migrate; no writer creates a plain key on a tied relay"
+    ]
   }
 }
