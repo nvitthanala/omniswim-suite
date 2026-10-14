@@ -16,7 +16,7 @@ import type { PrelimsOverUnderEntry } from '@omniswim/core/lib/prelimsProjection
 import { entryKey, prelimsOuOverUnderForDisplay } from '@omniswim/core/lib/prelimsProjection';
 import type { PsychOverUnderEntry } from '@omniswim/core/lib/psychProjection';
 import { psychExpectedForResult } from '@omniswim/core/lib/psychProjection';
-import { displayTimeForRelayLeg, formatLegSplitSummary } from '@omniswim/core/lib/relaySplits';
+import { RELAY_LEG_ESTIMATE_LABEL, formatLegSplitSummary, hasRelayLegTime, relayLegTimeView } from '@omniswim/core/lib/relaySplits';
 import { rowHasNoActual } from '../lib/noActual';
 import { CompactEventLabel, NoActualMarker, PlacementExpectedValue, PrelimsOuValue } from './matrixPresentation';
 import { CutlineVerdict, PodiumMedal, RelayVerdict, useIsEstimatedRelayRow } from './TeamCardParts';
@@ -138,9 +138,13 @@ function SwimmerTimeCell({ s, hasRelaySplit, rowTags }: { s: TooltipSwimmer; has
       </span>
     );
   }
+  const legView = relayLegTimeView(s);
   return (
     <span className="font-mono text-theme-secondary">
-      <span className="text-points-positive">{displayTimeForRelayLeg(s)}</span>
+      <span className="text-points-positive">{legView?.time ?? '—'}</span>
+      {legView?.kind === 'estimate' ? (
+        <span className="ml-1 text-ui-micro text-theme-muted font-sans">{RELAY_LEG_ESTIMATE_LABEL}</span>
+      ) : null}
       {/* The leg's own individual verdict, when this leg is eligible (e.g. a
           medley relay's backstroke leadoff) — anchored to the split it
           actually describes. */}
@@ -206,7 +210,8 @@ export function TooltipSwimmerRow({
 }: TooltipSwimmerRowProps) {
   const estimatedRelay = useIsEstimatedRelayRow(s);
   const rowTags = buildTeamRowCutlineTags(s, gender, teamName, s.finalsTime || s.time, estimatedRelay);
-  const hasRelaySplit = Boolean(s.isRelay && (s.relayLegSplitDetail || s.relayLegSplit));
+  const hasRelaySplit = hasRelayLegTime(s);
+  const legIsEstimate = relayLegTimeView(s)?.kind === 'estimate';
 
   return (
     <div className="flex items-center justify-between py-1 border-b border-theme-soft/50 last:border-0 swimmer-row text-ui-caption">
@@ -217,7 +222,12 @@ export function TooltipSwimmerRow({
         </span>
         <span className="font-medium text-[var(--text-primary)] truncate max-w-[120px]">{s.name}</span>
         {hasRelaySplit && (
-          <span className="text-ui-micro text-theme-muted font-mono" title="Relay leg split">Split</span>
+          <span
+            className="text-ui-micro text-theme-muted font-mono"
+            title={legIsEstimate ? 'Estimated relay leg time' : 'Relay leg split'}
+          >
+            {legIsEstimate ? RELAY_LEG_ESTIMATE_LABEL : 'Split'}
+          </span>
         )}
         {s.relayMissingLeg && (
           <span className="text-ui-micro bg-warning-soft text-warning px-1 border border-warning-faint rounded-sm ml-1" title="Missing relay leg">

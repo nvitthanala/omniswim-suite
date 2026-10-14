@@ -5,7 +5,7 @@
 
 import type { ReactNode } from 'react';
 import type { SwimmerResult } from '@omniswim/core/types';
-import { displayTimeForRelayLeg } from '@omniswim/core/lib/relaySplits';
+import { RELAY_LEG_ESTIMATE_LABEL, hasRelayLegTime, relayLegTimeView } from '@omniswim/core/lib/relaySplits';
 import {
   compactEventTitleAttr,
   formatCompactEventLabel,
@@ -249,15 +249,24 @@ function relayTeamDisplayTime(result: SwimmerResult): string | undefined {
 }
 
 function isRelayLegResult(result: SwimmerResult): boolean {
-  return Boolean(result.isRelay && (result.relayLegSplitDetail || result.relayLegSplit));
+  return hasRelayLegTime(result);
 }
 
 export function SwimTimeCell({ result }: { result: SwimmerResult }) {
   if (isRelayLegResult(result)) {
     const teamTime = relayTeamDisplayTime(result);
+    const legView = relayLegTimeView(result);
     return (
       <div className="min-w-0 text-right font-mono tabular-nums text-ui-caption">
-        <span className="text-[var(--text-primary)]">{displayTimeForRelayLeg(result)}</span>
+        <span className="text-[var(--text-primary)]">{legView?.time ?? '—'}</span>
+        {legView?.kind === 'estimate' ? (
+          <span
+            className="ml-1 text-ui-micro text-theme-muted font-sans"
+            title={legView.basis ? `Estimated leg time: ${legView.basis}` : 'Estimated leg time'}
+          >
+            {RELAY_LEG_ESTIMATE_LABEL}
+          </span>
+        ) : null}
         {teamTime ? (
           <span className="block text-ui-micro text-theme-muted">Relay {teamTime}</span>
         ) : null}

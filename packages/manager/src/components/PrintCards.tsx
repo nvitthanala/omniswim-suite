@@ -10,11 +10,12 @@
 
 import React from 'react';
 import { Badge } from '@omniswim/ui';
+import { RELAY_LEG_ESTIMATE_LABEL } from '@omniswim/core/lib/relaySplits';
 import { RELAY_LEG_TIME_TRIAL_LABEL } from './RelayEligibleSwimmersPanel';
 import type { PrintCardSet, PrintEventCard, PrintRelayCard } from './printCardsView';
 
-/** The word a relay card prints where its time is an estimate. */
-export const PRINT_ESTIMATE_LABEL = 'Estimate';
+/** The word a relay card prints where its time is an estimate. One word for the whole app. */
+export const PRINT_ESTIMATE_LABEL = RELAY_LEG_ESTIMATE_LABEL;
 
 type CardMeta = {
   meetLabel: string;
@@ -110,7 +111,14 @@ function RelayCard({ card, meta }: { card: PrintRelayCard; meta: CardMeta }) {
                   </Badge>
                 ) : null}
               </td>
-              <td className="py-1 font-mono tabular-nums">{leg.time}</td>
+              <td className="py-1 font-mono tabular-nums">
+                {leg.time}
+                {leg.estimate && !leg.vacant ? (
+                  <Badge tone="neutral" className="ui-print-badge ml-2 font-sans normal-case">
+                    {PRINT_ESTIMATE_LABEL}
+                  </Badge>
+                ) : null}
+              </td>
             </tr>
           ))}
         </tbody>

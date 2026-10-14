@@ -23,6 +23,7 @@ import { formatPoints, type RelaySwapGroup } from './crossCourseArbitrageView';
 import type { RelayLegSwap, RelayLegSwapRanking } from '@omniswim/core/lib/crossCourseArbitrage';
 import type { RelayAlternatePromotion } from '@omniswim/core/lib/scoringTheory';
 import { relayStrokeForIndex } from '@omniswim/core/lib/relayLegMatching';
+import { RELAY_LEG_ESTIMATE_LABEL } from '@omniswim/core/lib/relaySplits';
 
 const RELAY_ALTERNATE_REASON_LABEL: Record<RelayAlternatePromotion['reason'], string> = {
   soft_removed: 'soft-removed',
@@ -82,7 +83,12 @@ function RelaySwapRow({
         ) : (
           <span className="text-theme-muted">vacant</span>
         )}
-        {swap.outTime ? <span>({swap.outTime})</span> : null}
+        {swap.outTime ? (
+          <span>
+            ({swap.outTime}
+            {swap.outTimeEstimate ? ` ${RELAY_LEG_ESTIMATE_LABEL}` : ''})
+          </span>
+        ) : null}
         <span aria-hidden="true" className="text-theme-muted">
           →
         </span>

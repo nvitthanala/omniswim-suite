@@ -13,7 +13,8 @@
  */
 
 import type { Gender, RelayLegStroke, SwimmerResult } from '@omniswim/core/types';
-import { convertTimeToSeconds, relaySplitQualificationCutEvent } from '@omniswim/core/lib/utils';
+import { convertTimeToSeconds, formatSecondsToTime, relaySplitQualificationCutEvent } from '@omniswim/core/lib/utils';
+import { relayLegEstimateOf } from '@omniswim/core/lib/relaySplits';
 import { normalizeEventForCutline } from '@omniswim/core/lib/cutlineUtils';
 import {
   buildCutlineTagForTeam,
@@ -96,6 +97,12 @@ export const RELAY_ESTIMATE_NOT_JUDGED_LABEL = 'Estimate, not judged';
 export const RELAY_ESTIMATE_NOT_JUDGED_TITLE =
   "This relay time is the sum of four swimmers' individual best times. Nobody swam it, so it is not judged against a relay cut.";
 
+/** Leg 1's recorded flat-start best of an estimated relay, as a time string; absent when the row has none. */
+function legOneRecordedBest(res: SwimmerResult): string | undefined {
+  const estimate = relayLegEstimateOf(res);
+  return estimate === undefined ? undefined : formatSecondsToTime(estimate.time);
+}
+
 /**
  * One cutline verdict per row, except a relay leg carries TWO independent
  * ones: the relay team's own result, and — only for an eligible leg, e.g. a
@@ -131,7 +138,11 @@ export function buildTeamRowCutlineTags(
       relayEvent: cleanEventBase,
       relayTeamTime: res.relayTeamTime || res.finalsTime || res.time,
       legQualificationEvent: relaySplitQualificationCutEvent(res),
-      legSplit: res.relayLegSplit,
+      // A theoretical meet's leg row holds no split. Leg 1 is the swimmer's recorded flat-start best (a real
+      // individual swim), which is the one leg that may keep its own verdict (see below). Legs 2 to 4 keep none.
+      legSplit:
+        res.relayLegSplit ??
+        (estimatedRelay && res.relayLegIndex === 0 ? legOneRecordedBest(res) : undefined),
     });
     if (!estimatedRelay) return { kind: 'relay', tags, relayEstimate: false };
     return {

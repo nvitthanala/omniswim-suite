@@ -11,7 +11,7 @@ import React from 'react';
 import { Check, Pencil, Trash2, X } from 'lucide-react';
 import type { Gender } from '@omniswim/core/types';
 import type { AthleteCreditedSwim } from '@omniswim/core/lib/scorerRoster';
-import { formatLegSplitSummary } from '@omniswim/core/lib/relaySplits';
+import { RELAY_LEG_ESTIMATE_LABEL, formatLegSplitSummary } from '@omniswim/core/lib/relaySplits';
 import { compactEventTitleAttr, formatCompactEventLabel } from '@omniswim/core/lib/utils';
 import { ALL_PLAN_EVENTS } from '@omniswim/core/lib/eventCatalog';
 import { buildCutlineTagForTeam, cutlineSwimOfRecord } from '@omniswim/core/lib/cutlineTags';
@@ -74,7 +74,19 @@ function TimeDisplay({ swim, team, gender }: { swim: AthleteCreditedSwim; team: 
   return (
     <>
       <div className="flex items-center gap-1">
-        <span>{swim.displayTime || swim.time || '—'}</span>
+        {swim.legEstimate ? (
+          <>
+            <span>{swim.legEstimate.time}</span>
+            <span
+              className="text-ui-micro text-theme-muted font-sans"
+              title={swim.legEstimate.basis ? `Estimated leg time: ${swim.legEstimate.basis}` : 'Estimated leg time'}
+            >
+              {RELAY_LEG_ESTIMATE_LABEL}
+            </span>
+          </>
+        ) : (
+          <span>{swim.displayTime || swim.time || '—'}</span>
+        )}
         {showCutline ? <SwimCutlineTag swim={swim} team={team} gender={gender as Gender} /> : null}
         <ProvenanceBadges swim={swim} compact />
       </div>

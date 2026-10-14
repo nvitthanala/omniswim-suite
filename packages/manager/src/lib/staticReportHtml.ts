@@ -224,7 +224,8 @@ function relayCardHtml(card: PrintRelayCard): string {
       ].join('');
       return (
         `<tr><td class="num">${leg.leg}</td><td>${cell(leg.name)}${tags}</td>` +
-        `<td class="mono">${cell(leg.time)}</td></tr>`
+        // The leg time is an estimate, not a split. It prints with the same word as the card header.
+        `<td class="mono">${cell(leg.time)}${leg.estimate && !leg.vacant ? ` <span class="tag">${esc(PRINT_ESTIMATE_LABEL)}</span>` : ''}</td></tr>`
       );
     })
     .join('');

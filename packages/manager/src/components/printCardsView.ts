@@ -14,7 +14,7 @@
 import { Gender, type Workspace } from '@omniswim/core/types';
 import type { ScoringBundle } from '@omniswim/core/lib/useWorkspaceScoring';
 import { selectActiveEntries } from '@omniswim/core/lib/entryExport';
-import { displayTimeForRelayLeg } from '@omniswim/core/lib/relaySplits';
+import { relayLegTimeView } from '@omniswim/core/lib/relaySplits';
 import { isEstimatedRelayRow } from '@omniswim/core/lib/theoreticalMeetLabel';
 import { convertTimeToSeconds, isRelayResult } from '@omniswim/core/lib/utils';
 import { buildRelayGroups } from './indRelayGroupsView';
@@ -52,6 +52,11 @@ export type PrintRelayLeg = {
   vacant: boolean;
   /** `SwimmerResult.relayLegTimeTrial` is set on the leg's row. */
   timeTrial: boolean;
+  /**
+   * `time` is an estimate (a theoretical meet's leg, nobody swam the relay), not a split. The card and the
+   * report print it with the "Estimate" label.
+   */
+  estimate: boolean;
 };
 
 export type PrintRelayCard = {
@@ -162,15 +167,17 @@ function buildRelayCards(
       legs: group.legs.map(leg => {
         const vacant = Boolean(leg.relayLegVacant || leg.relayMissingLeg);
         const name = (leg.name ?? '').trim();
+        const legView = vacant ? null : relayLegTimeView(leg);
         return {
           key: leg.id,
           leg: (leg.relayLegIndex ?? 0) + 1,
           name: vacant && (name === '' || name === '—') ? 'Vacant' : orAbsent(name),
           // A vacant leg has no swimmer, so it has no seed. The row can still carry the split of
           // the swimmer who left; printing it would pair a time with nobody.
-          time: vacant ? PRINT_NO_TIME : printableTime(displayTimeForRelayLeg(leg)),
+          time: vacant ? PRINT_NO_TIME : printableTime(legView?.time),
           vacant,
           timeTrial: leg.relayLegTimeTrial === true,
+          estimate: legView?.kind === 'estimate',
         };
       }),
     }));

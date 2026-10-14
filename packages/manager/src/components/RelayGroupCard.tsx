@@ -7,9 +7,10 @@
  * function body.
  */
 import {
-  displayTimeForRelayLeg,
+  RELAY_LEG_ESTIMATE_LABEL,
   formatLegSplitSummary,
   formatTeamSplitSummary,
+  relayLegTimeView,
 } from '@omniswim/core/lib/relaySplits';
 import {
   hasRelayLegOverride,
@@ -104,6 +105,7 @@ export default function RelayGroupCard({
           const isVacant = Boolean(leg.relayLegVacant || leg.relayMissingLeg);
           const legDropKey = `${group.key}|${legIndex}`;
           const fieldKey = legDropKey;
+          const legView = relayLegTimeView(leg);
           return (
             <div
               key={leg.id}
@@ -143,7 +145,15 @@ export default function RelayGroupCard({
                   )}
                 </span>
                 <span className="font-mono text-[var(--text-accent)] shrink-0 tabular-nums">
-                  {displayTimeForRelayLeg(leg)}
+                  {legView?.time ?? '—'}
+                  {legView?.kind === 'estimate' ? (
+                    <span
+                      className="ml-1 text-ui-micro font-sans text-theme-muted"
+                      title={legView.basis ? `Estimated leg time: ${legView.basis}` : 'Estimated leg time'}
+                    >
+                      {RELAY_LEG_ESTIMATE_LABEL}
+                    </span>
+                  ) : null}
                 </span>
               </div>
               {leg.relayLegSplitDetail ? (

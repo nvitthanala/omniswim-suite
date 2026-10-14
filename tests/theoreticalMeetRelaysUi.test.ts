@@ -10,7 +10,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Workspace } from '../packages/core/src/types';
 import { Gender } from '../packages/core/src/types';
-import { displayTimeForRelayLeg } from '../packages/core/src/lib/relaySplits';
+import { RELAY_LEG_ESTIMATE_LABEL, relayLegTimeView } from '../packages/core/src/lib/relaySplits';
 import { RELAYS_ESTIMATED_CAVEAT, RELAYS_EXCLUDED_CAVEAT } from '../packages/manager/src/lib/theoreticalMeetSeeds';
 import { THEORETICAL_MEET_LABEL } from '../packages/manager/src/lib/theoreticalMeetWorkspace';
 import { TheoreticalMeetDialogContent } from '../packages/manager/src/components/theoreticalMeet/TheoreticalMeetDialog';
@@ -164,7 +164,7 @@ describe('the dialog: relays', () => {
     }
     // The leg lines name leg 1 as a flat-start best and legs 2 to 4 as estimates.
     const first = cards[0];
-    const legs = [...first.querySelectorAll('ol > li')].map(li => li.textContent ?? '');
+    const legs = [...first!.querySelectorAll('ol > li')].map(li => li.textContent ?? '');
     expect(legs[0]).toContain('flat-start best');
     expect(legs[0]).not.toMatch(/estimated$/);
     for (const text of legs.slice(1)) expect(text).toContain('estimated');
@@ -172,7 +172,7 @@ describe('the dialog: relays', () => {
     expect(document.body.textContent).not.toContain('Relays are not included');
     // A relay a team could not form says so, with the leg and the reason.
     expect(qa('[data-tmeet-relay-absent]').length).toBeGreaterThan(0);
-    expect(qa('[data-tmeet-relay-absent]')[0].textContent).toMatch(/No .+ Relay SCY entry\. Leg \d \(/);
+    expect(qa('[data-tmeet-relay-absent]')[0]!.textContent).toMatch(/No .+ Relay SCY entry\. Leg \d \(/);
   });
 
   it('shows the same relays the data layer built', async () => {
@@ -314,12 +314,12 @@ describe('the banner and the Manager relay card', async () => {
 
   it('shows the estimated tag on the Manager relay card of a theoretical meet only', () => {
     const rows = withRelays.menResults.filter(r => r.isRelay === true);
-    const team = rows[0].team;
+    const team = rows[0]!.team;
     const groups = buildRelayGroups({ allScored: rows, originalResults: rows, gender: Gender.MEN, team });
     expect(groups.length).toBeGreaterThan(0);
     const noop = () => undefined;
     const props = {
-      group: groups[0],
+      group: groups[0]!,
       isSelected: false,
       whatIfMode: false,
       dragOverLeg: null,
@@ -337,7 +337,12 @@ describe('the banner and the Manager relay card', async () => {
     act(() => root.render(createElement(RelayGroupCard, { ...props, estimated: true })));
     expect(container.textContent).toContain('estimated');
     // The leg times on the card are the estimated leg times, not the team clock.
-    for (const leg of groups[0].legs) expect(container.textContent).toContain(displayTimeForRelayLeg(leg));
+    for (const leg of groups[0]!.legs) {
+      const view = relayLegTimeView(leg);
+      expect(view?.kind, 'a theoretical leg is an estimate, never a split').toBe('estimate');
+      expect(container.textContent).toContain((view as { time: string }).time);
+    }
+    expect(container.textContent).toContain(RELAY_LEG_ESTIMATE_LABEL);
     act(() => root.render(createElement(RelayGroupCard, props)));
     expect(container.textContent).not.toContain('estimated');
   });
