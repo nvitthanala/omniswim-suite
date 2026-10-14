@@ -1,9 +1,9 @@
 {
   "description": "Per-file count of errors that --noUncheckedIndexedAccess introduces. Written by scripts/index-access-ratchet.mjs --update. Counts may only fall.",
-  "total": 184,
+  "total": 81,
   "byDirectory": {
     "apps/shell": 21,
-    "packages/core": 104,
+    "packages/core": 1,
     "packages/db": 2,
     "packages/manager": 38,
     "packages/matrix": 1,
@@ -20,7 +20,6 @@
     "apps/shell/src/lib/restoreLastBackup.ts": 1,
     "apps/shell/src/pages/SettingsPage.tsx": 1,
     "packages/core/src/lib/relayLegMatching.ts": 1,
-    "packages/core/src/lib/utils.ts": 103,
     "packages/db/src/PgWorkspaceService.ts": 2,
     "packages/manager/src/components/LineupComplianceChecklistParts.tsx": 2,
     "packages/manager/src/components/RecruitForm.tsx": 5,
