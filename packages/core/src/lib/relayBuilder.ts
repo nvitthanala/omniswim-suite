@@ -8,6 +8,7 @@ import { Gender, RelayLegStroke, SwimmerResult, Workspace } from '../types';
 import { getAthleteProfile } from './athleteHistory';
 import { swimEventIdentity } from './bestTimeEligibility';
 import { mergeScoringSettings } from './scoringDefaults';
+import { itemAt } from './indexedAccess';
 import {
   relayLegRequirements,
   relayLegMatchSettings,
@@ -187,7 +188,7 @@ export function buildRelaysFromIndividualLineup(
 
   const exclude = new Set<string>();
   for (const [, legs] of byRelay) {
-    const template = relayTemplateFromLeg(teamRelayLegs, legs[0]);
+    const template = relayTemplateFromLeg(teamRelayLegs, itemAt(legs, 0));
     const assigned = new Set(
       legs
         .filter(l => !l.relayLegVacant && l.name)
