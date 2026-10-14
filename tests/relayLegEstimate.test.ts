@@ -121,7 +121,7 @@ describe('the builder writes the estimate and leaves relayLegSplit absent', () =
 
   it('survives the create schema and the row store (the field is not stripped on save)', () => {
     const body = createWorkspaceSchema.parse({ name: 'x', menResults: ws.menResults });
-    const rows = insertResultsRows('ws-a7', (body.menResults ?? []) as SwimmerResult[], 'Men');
+    const rows = insertResultsRows('ws-a7', (body.menResults ?? []) as unknown as SwimmerResult[], 'Men');
     const back = rows.map(r => JSON.parse(r.data) as SwimmerResult).filter(r => r.isRelay === true && r.team === 'Alpha University');
     expect(back.map(r => r.relayLegEstimate?.time)).toEqual([20, 20.5, 21, 21.5]);
     expect(back.every(r => r.relayLegSplit === undefined)).toBe(true);

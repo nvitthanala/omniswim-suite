@@ -16,9 +16,6 @@
     // carry 21 unchecked reads that fail here. Fix the extension source (it has a build drift
     // guard) before removing these. exclude cannot hide an imported file, so every importer
     // is listed.
-    // tests/relayLegEstimate.test.ts is new from another agent and casts a zod output to SwimmerResult[]
-    // (TS2352 at line 124). Its owner fixes it, then this entry goes.
-    "./relayLegEstimate.test.ts",
     "./helpers/multiTeamDriverHarness.ts",
     "./theoreticalMeetTeamNames.test.ts",
     "./swimCloudExtensionBoundedFetchPool.test.ts",
