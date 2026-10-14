@@ -84,7 +84,9 @@ function findCalculatedSplit(
   // A relay label that names no distance has no leg event to calculate from.
   const legDistance = req.legDistanceYards;
   if (legDistance == null) return null;
-  const isThisLeg = (event: string) => isLegEvent(event, legDistance, req.stroke);
+  // A leg index with no stroke matches no event, so the history and plan lookups find nothing.
+  const legStroke = req.stroke;
+  const isThisLeg = (event: string) => legStroke !== undefined && isLegEvent(event, legDistance, legStroke);
   const settings = mergeScoringSettings(workspace.scoringSettings, {
     conference: workspace.conference,
   });

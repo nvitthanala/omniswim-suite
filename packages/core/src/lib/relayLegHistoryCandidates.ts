@@ -71,7 +71,7 @@ import {
   relayLegEventKey,
   relayLegMatchSettings,
   relayLegEventName,
-  relayStrokeForIndex,
+  relayStrokeForBoundedIndex,
 } from './relayLegMatching';
 import { relayLegDistanceYardsOfEvent } from './relaySplits';
 import { relayLegsAllowTimeTrials } from './scoringDefaults';
@@ -101,7 +101,8 @@ function relayLegEventsOf(results: readonly SwimmerResult[]): Map<string, LegEve
     if (distance == null) continue;
     const lower = row.event.toLowerCase();
     for (let legIndex = 0; legIndex < 4; legIndex++) {
-      const stroke = relayStrokeForIndex(lower, legIndex);
+      // `legIndex` is the loop counter (0 to 3), so it always has a stroke.
+      const stroke = relayStrokeForBoundedIndex(lower, legIndex);
       legEvents.set(relayLegEventName(distance, stroke), { distance, stroke });
     }
   }

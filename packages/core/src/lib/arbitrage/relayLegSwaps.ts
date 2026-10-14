@@ -25,7 +25,7 @@ import {
   isRelayCandidateOfGender,
   relayEntryKeyIn,
   relayLegMatchSettings,
-  relayStrokeForIndex,
+  relayStrokeForBoundedIndex,
   relayTemplateFromLeg,
   swimmerMatchesRelayLeg,
   upsertRelayLegOverride,
@@ -503,7 +503,8 @@ function buildLegTarget(
   legDistanceYards: number,
   onRelay: Set<string>
 ): LegTarget {
-  const stroke = relayStrokeForIndex(evLower, legIndex);
+  // `legIndex` is the caller's loop counter, so it always has a stroke.
+  const stroke = relayStrokeForBoundedIndex(evLower, legIndex);
   const outAthlete = entry.legNames[legIndex] ?? '';
   const legRow = entry.legRows.find(r => (r.relayLegIndex ?? -1) === legIndex);
   return {

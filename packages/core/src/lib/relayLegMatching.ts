@@ -256,11 +256,28 @@ export function eventMatchesStrokeDistance(
   return [...strokes].some(stroke => isRelayLegEvent(eventRaw, distance, stroke));
 }
 
-export function relayStrokeForIndex(eventLower: string, legIndex: number): RelayLegStroke {
+export function relayStrokeForIndex(eventLower: string, legIndex: number): RelayLegStroke | undefined {
   if (eventLower.includes('medley') && legIndex < 4) {
-    return (['back', 'breast', 'fly', 'free'] as const)[legIndex];
+    // The caller passes `position - 1` from stored data; a negative or fractional index has no stroke.
+    const stroke = (['back', 'breast', 'fly', 'free'] as const)[legIndex];
+    if (stroke === undefined) return undefined;
+    return stroke;
   }
   return 'free';
+}
+
+/**
+ * The stroke for a leg index the caller took from a loop bound (a whole number from 0
+ * up). Such an index always has a stroke, so a missing one means the loop and this
+ * function disagree and the read throws. Use {@link relayStrokeForIndex} for an index
+ * that came from stored data or a caller.
+ */
+export function relayStrokeForBoundedIndex(eventLower: string, legIndex: number): RelayLegStroke {
+  const stroke = relayStrokeForIndex(eventLower, legIndex);
+  if (stroke === undefined) {
+    throw new Error(`Indexed-read invariant broken: relay leg index ${legIndex} has no stroke.`);
+  }
+  return stroke;
 }
 
 export function relayLegRequirements(event: string, legIndex: number) {
@@ -464,6 +481,8 @@ export function swimmerMatchesRelayLeg(
     return false;
   }
   const { legDistanceYards, stroke } = relayLegRequirements(event, legIndex);
+  // A leg index with no stroke matches no event.
+  if (stroke === undefined) return false;
   return isRelayLegEvent(swimmer.event, legDistanceYards, stroke);
 }
 

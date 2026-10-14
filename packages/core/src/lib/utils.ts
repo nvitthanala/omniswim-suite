@@ -59,7 +59,7 @@ import {
   overrideNamesTimeTrialOnlySwimmer,
   relayEntryGender,
   relayLegRequirements,
-  relayStrokeForIndex,
+  relayStrokeForBoundedIndex,
   resolveOverrideAssignee,
   swimmerMatchesRelayLeg,
   type RelayLegMatchSettings,
@@ -3280,6 +3280,8 @@ export function findDepartedLegSwim(
   team: string
 ): SwimmerResult | undefined {
   const { legDistanceYards, stroke } = relayLegRequirements(relayEvent, legIndex);
+  // A leg index with no stroke matches no event.
+  if (stroke === undefined) return undefined;
   const nameKey = canonicalSwimmerName(legName);
   const teamKey = String(team ?? '').trim();
   return results.find(
@@ -3451,7 +3453,8 @@ function resolveRelayLegs(
       template.team
     );
 
-    const stroke = relayStrokeForIndex(evLower, index);
+    // `index` is the loop counter, so it always has a stroke.
+    const stroke = relayStrokeForBoundedIndex(evLower, index);
     const override = findRelayLegOverride(overrideList, template, index, results);
     const departedNameKey = normalizeSwimmerName(leg.name);
 
@@ -3575,7 +3578,8 @@ function buildRelayLegSplitDetails(
   for (let index = 0; index < outLegs.length; index++) {
     const legRowForSplit =
       ordered.find(row => (row.relayLegIndex ?? -1) === index) ?? ordered[index];
-    const stroke = legRowForSplit?.relayLegStroke ?? relayStrokeForIndex(evLower, index);
+    // `index` is the loop counter, so it always has a stroke.
+    const stroke = legRowForSplit?.relayLegStroke ?? relayStrokeForBoundedIndex(evLower, index);
 
     if (legReplacements.has(index) && legDistYards == null) {
       // No leg distance to build a split detail on: carry the leg time only.

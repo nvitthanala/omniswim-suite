@@ -184,9 +184,13 @@ export function relayLegSlotOf(credit: RelayLegCredit): RelayLegSlot | null {
   if (title === undefined || title.trim().length === 0) return null;
   const distance = relayLegDistanceYardsOfEvent(title);
   if (distance === null) return null;
+  // `position - 1` comes from stored data. On a medley, a position below 1 or a fraction has no
+  // stroke, so no slot. A position above 4 reads as the free leg.
+  const stroke = relayStrokeForIndex(title.toLowerCase(), position - 1);
+  if (stroke === undefined) return null;
   return {
     distance,
-    stroke: relayStrokeForIndex(title.toLowerCase(), position - 1),
+    stroke,
     position,
     start: position === 1 ? 'flat' : 'takeover',
   };
