@@ -2,45 +2,54 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * teamAbbreviations.json (what backend/pdf_parser.py loads) and
- * TEAM_ABBREVIATIONS in teamAliases.ts (the hand-maintained TypeScript twin)
- * are duplicated by hand with nothing else enforcing they match. They already
- * drifted once — see docs/reference/AUDIT_2026-09-02.md and the fix in
- * commit 07fb5ae5 — so this pins them to each other going forward.
+ * `packages/core/src/data/teamAbbreviations.json` is the single source for team
+ * abbreviations. `TEAM_ABBREVIATIONS` (teamAliases.ts) imports it and
+ * `backend/pdf_parser.py` loads it. They drifted once when the TypeScript side
+ * was a hand-typed copy — see docs/reference/AUDIT_2026-09-02.md and the fix in
+ * commit 07fb5ae5.
+ *
+ * This test fails when either consumer stops matching the JSON:
+ *   - a hand-typed literal returns to teamAliases.ts and is edited, or
+ *   - `_load_abbrev_teams` in pdf_parser.py adds or keeps a code the JSON lacks
+ *     (it has hard-coded `setdefault` fallbacks that would hide a deleted row).
  */
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 import { TEAM_ABBREVIATIONS } from '../packages/core/src/data/teamAliases.ts';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const jsonPath = path.join(
-  __dirname,
-  '..',
-  'packages',
-  'core',
-  'src',
-  'data',
-  'teamAbbreviations.json'
-);
+const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
+const jsonPath = path.join(repoRoot, 'packages', 'core', 'src', 'data', 'teamAbbreviations.json');
 const fromJson = JSON.parse(readFileSync(jsonPath, 'utf-8'));
 
-const jsonKeys = new Set(Object.keys(fromJson));
-const tsKeys = new Set(Object.keys(TEAM_ABBREVIATIONS));
+assert.ok(Object.keys(fromJson).length > 0, 'teamAbbreviations.json is empty');
 
-const onlyInJson = [...jsonKeys].filter(k => !tsKeys.has(k)).sort();
-const onlyInTs = [...tsKeys].filter(k => !jsonKeys.has(k)).sort();
-const valueMismatches = [...jsonKeys]
-  .filter(k => tsKeys.has(k) && fromJson[k] !== TEAM_ABBREVIATIONS[k])
-  .sort()
-  .map(k => `${k}: json=${JSON.stringify(fromJson[k])} ts=${JSON.stringify(TEAM_ABBREVIATIONS[k])}`);
+// TypeScript side: same keys, same values, same order.
+assert.deepEqual(
+  Object.entries(TEAM_ABBREVIATIONS),
+  Object.entries(fromJson),
+  'TEAM_ABBREVIATIONS (teamAliases.ts) differs from teamAbbreviations.json'
+);
 
-if (onlyInJson.length || onlyInTs.length || valueMismatches.length) {
-  console.error('FAIL teamAbbreviations.json and teamAliases.ts have drifted apart:');
-  if (onlyInJson.length) console.error(`  keys only in teamAbbreviations.json: ${onlyInJson.join(', ')}`);
-  if (onlyInTs.length) console.error(`  keys only in teamAliases.ts: ${onlyInTs.join(', ')}`);
-  for (const line of valueMismatches) console.error(`  value mismatch — ${line}`);
-  process.exit(1);
-}
+// Python side: ABBREV_TEAMS must hold exactly the JSON entries.
+const harness = `
+import json, sys
+sys.path.insert(0, 'backend')
+import pdf_parser
+print(json.dumps(pdf_parser.ABBREV_TEAMS, sort_keys=True))
+`;
+const run = spawnSync('python', ['-I', '-c', harness], { cwd: repoRoot, encoding: 'utf8' });
+assert.equal(run.status, 0, `python harness failed:\n${run.stderr}`);
+const fromPython = JSON.parse(run.stdout);
+const sorted = o => Object.fromEntries(Object.entries(o).sort(([a], [b]) => (a < b ? -1 : 1)));
+assert.deepEqual(
+  sorted(fromPython),
+  sorted(fromJson),
+  'pdf_parser.ABBREV_TEAMS differs from teamAbbreviations.json (a hard-coded fallback in _load_abbrev_teams?)'
+);
 
-console.log(`OK teamAbbreviations.json and teamAliases.ts match (${jsonKeys.size} entries)`);
+console.log(
+  `OK teamAbbreviations.json, teamAliases.ts and pdf_parser.py agree (${Object.keys(fromJson).length} entries)`
+);
