@@ -14,6 +14,7 @@ import { buildSeasonTrends, defaultSeasonTeam } from '@omniswim/core/lib/seasonA
 import { isTheoreticalMeet } from '@omniswim/core/lib/theoreticalMeetLabel';
 import { useThemeColors, type ThemeColors } from '@omniswim/core/lib/useThemeColors';
 import { ChartFrame, ChartShell, EmptyState, TeamSelect } from '@omniswim/ui';
+import { SeasonProgressionPanel } from '../components/SeasonProgressionPanel';
 import {
   describeTeamScoreSelection,
   describeUnreadablePointRows,
@@ -263,6 +264,8 @@ export default function AnalyticsPage() {
           <p className="mt-4 text-ui-caption text-theme-muted">Choose a team above to see its score at each meet.</p>
         )}
       </div>
+
+      <SeasonProgressionPanel workspaces={workspaces} team={trends.team} />
 
       <div className="panel p-5">
         <h2 className="text-ui-label font-bold text-[var(--text-primary)] mb-1">Swimmer bests</h2>

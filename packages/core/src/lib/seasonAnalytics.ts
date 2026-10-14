@@ -1,8 +1,9 @@
 import type { Workspace } from '../types';
-import { isRankableSwim, swimEventIdentity } from './bestTimeEligibility';
+import { isRankableSwim, isRelayShapedEventLabel, swimEventIdentity } from './bestTimeEligibility';
 import {
   courseOfRecordFromEventLabel,
   isDivingEvent,
+  normalizeEventForCutline,
   type CourseOfRecordFromLabel,
 } from './cutlineEventNames';
 import { isTheoreticalMeet } from './theoreticalMeetLabel';
@@ -340,5 +341,269 @@ export function buildSeasonTrends(
     availableTeams,
     teamScoreSelection,
     unreadablePointRows: teamScoreTrends.reduce((n, t) => n + t.unreadablePointRows, 0),
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* Season progression: one swimmer, one event, meet by meet                    */
+/* -------------------------------------------------------------------------- */
+
+/** One meet on the progression's shared axis: a meet the chosen team swam the chosen event at. */
+export type ProgressionMeet = {
+  /** The workspace id. Two meets can share a label; they never share an id. */
+  id: string;
+  label: string;
+};
+
+/** A swimmer's measured time at one meet. When they swam the event twice there, the faster swim. */
+export type ProgressionPoint = {
+  time: string;
+  /** `time` in seconds, read from the recorded text. */
+  seconds: number;
+  /** How many swims of the event the swimmer has at this meet. 2 means prelims and finals. */
+  swimsAtMeet: number;
+};
+
+export type SwimmerProgression = {
+  name: string;
+  /**
+   * One slot per entry of `meets`, in that order. `null` means the swimmer has no
+   * measured time at that meet: a gap, never an interpolated or zero value.
+   */
+  points: (ProgressionPoint | null)[];
+  /** Meets with a point. */
+  meetsSwum: number;
+  /** Index into `meets` of the first meet with a point. */
+  firstIndex: number;
+  /** Index into `meets` of the fastest point; the earliest meet when two tie. */
+  bestIndex: number;
+  firstTime: string;
+  bestTime: string;
+  /**
+   * Seconds from the first meet's time to the best time, to the hundredth. `null`
+   * with a single meet (no drop to measure yet). `0` is a real answer: the first
+   * swim is still the best.
+   */
+  dropSeconds: number | null;
+};
+
+export type ProgressionEventOption = {
+  /** Pass this as `eventKey`. Event identity plus course. */
+  key: string;
+  /** The published event name, e.g. `100 Freestyle`, with ` time trial` when it is one. */
+  label: string;
+  course: CourseOfRecordFromLabel;
+  swimmerCount: number;
+};
+
+export type SeasonProgressionsOptions = {
+  /** The team to read, as `buildSeasonTrends` resolved it (`SeasonTrends.team`). `null` reads none. */
+  team: string | null;
+  /** An option's `key`. Absent or unknown, the event most of the team's swimmers swam is read. */
+  eventKey?: string | null;
+};
+
+export type SeasonProgressions = {
+  team: string | null;
+  /** Every event the team has a result row in, dives and relays left out. Empty when `team` is `null`. */
+  events: ProgressionEventOption[];
+  /** The option that was read, or `null` when there are no events. */
+  selectedEventKey: string | null;
+  /** The meets the team swam the selected event at, in workspace-list order (no meet date is stored). */
+  meets: ProgressionMeet[];
+  /** One per swimmer of the team, sorted by name. */
+  swimmers: SwimmerProgression[];
+  /** Rows of the selected event whose time could not be read as a time. They are left out, not counted as 0. */
+  unreadableTimeRows: number;
+};
+
+/**
+ * `52.10`, `1:02.00`, `15:12.5`, and the same with HyTek's record flag (`54.86R`).
+ * Anything else (`DQ`, `NS`, `52.10x`, `-`) is not a time.
+ */
+const MEASURED_TIME = /^(?:(\d{1,2}):([0-5]\d(?:\.\d{1,3})?)|(\d{1,2}(?:\.\d{1,3})?))R?$/;
+
+function measuredSeconds(time: unknown): number | null {
+  if (typeof time !== 'string') return null;
+  const m = MEASURED_TIME.exec(time.trim());
+  if (!m) return null;
+  const seconds = m[1] !== undefined && m[2] !== undefined ? Number(m[1]) * 60 + Number(m[2]) : Number(m[3]);
+  return Number.isFinite(seconds) && seconds > 0 ? seconds : null;
+}
+
+const hundredths = (seconds: number): number => Math.round(seconds * 100) / 100;
+
+type ProgressionSwim = {
+  workspaceId: string;
+  meetLabel: string;
+  name: string;
+  eventKey: string;
+  eventLabel: string;
+  course: CourseOfRecordFromLabel;
+  time: string;
+  seconds: number | null;
+};
+
+/** The swims of one team that can sit on a progression: not a relay, a dive, a projection or a seed. */
+function progressionSwimsOf(allWorkspaces: Workspace[], team: string): ProgressionSwim[] {
+  const wanted = teamKey(team);
+  const swims: ProgressionSwim[] = [];
+  for (const ws of allWorkspaces) {
+    if (isTheoreticalMeet(ws)) continue;
+    const meetLabel = ws.loadedMeet?.meetLabel ?? ws.name;
+    for (const r of [...(ws.menResults ?? []), ...(ws.womenResults ?? [])]) {
+      if (teamKey(r.team) !== wanted) continue;
+      if (r.isRelay || r.isPsychSheet || r.isRecruit || r.convertedFrom) continue;
+      if (!r.name || !r.event || isRelayShapedEventLabel(r.event) || isDivingEvent(r.event)) continue;
+      const course = trendCourse(r.event, undefined);
+      const raw = String(r.event).replace(/\s+/g, ' ').trim();
+      const base = normalizeEventForCutline(raw) || raw;
+      const identity = swimEventIdentity(r.event);
+      swims.push({
+        workspaceId: ws.id,
+        meetLabel,
+        name: r.name,
+        eventKey: `${identity}::${course}`,
+        eventLabel: identity.endsWith(' time trial') ? `${base} time trial` : base,
+        course,
+        time: String(r.time ?? '').trim().replace(/R$/, ''),
+        seconds: measuredSeconds(r.time),
+      });
+    }
+  }
+  return swims;
+}
+
+/**
+ * The events the team has a row in. An event whose every time is unreadable is
+ * still listed, with no swimmers, so the unreadable count is not silent.
+ */
+function progressionEventsOf(swims: readonly ProgressionSwim[]): ProgressionEventOption[] {
+  const found = new Map<string, { label: string; course: CourseOfRecordFromLabel; swimmers: Set<string> }>();
+  for (const s of swims) {
+    const held = found.get(s.eventKey) ?? { label: s.eventLabel, course: s.course, swimmers: new Set<string>() };
+    if (s.seconds !== null) held.swimmers.add(s.name.toLowerCase());
+    found.set(s.eventKey, held);
+  }
+  return [...found.entries()]
+    .map(([key, v]) => ({ key, label: v.label, course: v.course, swimmerCount: v.swimmers.size }))
+    .sort((a, b) => a.label.localeCompare(b.label, undefined, { numeric: true }) || a.course.localeCompare(b.course));
+}
+
+/** The faster of two points at one meet, with the count of swims there. */
+function mergePointsAtMeet(held: ProgressionPoint | null, time: string, seconds: number): ProgressionPoint {
+  if (held === null) return { time, seconds, swimsAtMeet: 1 };
+  return {
+    time: seconds < held.seconds ? time : held.time,
+    seconds: Math.min(seconds, held.seconds),
+    swimsAtMeet: held.swimsAtMeet + 1,
+  };
+}
+
+/** One slot per meet for each swimmer. `swims` are the readable swims of one event. */
+function progressionSlotsOf(
+  swims: readonly ProgressionSwim[],
+  meets: readonly ProgressionMeet[]
+): Map<string, { name: string; slots: (ProgressionPoint | null)[] }> {
+  const byName = new Map<string, { name: string; slots: (ProgressionPoint | null)[] }>();
+  for (const s of swims) {
+    if (s.seconds === null) continue;
+    const key = s.name.toLowerCase();
+    const entry = byName.get(key) ?? { name: s.name, slots: meets.map(() => null) };
+    byName.set(key, entry);
+    const at = meets.findIndex(m => m.id === s.workspaceId);
+    entry.slots[at] = mergePointsAtMeet(entry.slots[at] ?? null, s.time.trim(), s.seconds);
+  }
+  return byName;
+}
+
+/** First meet, fastest meet and drop for one swimmer's slots. `null` when every slot is a gap. */
+function summarizeProgression(name: string, slots: (ProgressionPoint | null)[]): SwimmerProgression | null {
+  let firstIndex = -1;
+  let bestIndex = -1;
+  let meetsSwum = 0;
+  slots.forEach((p, i) => {
+    if (p === null) return;
+    meetsSwum += 1;
+    if (firstIndex === -1) firstIndex = i;
+    const best = bestIndex === -1 ? null : slots[bestIndex];
+    if (!best || p.seconds < best.seconds) bestIndex = i;
+  });
+  const first = slots[firstIndex];
+  const best = slots[bestIndex];
+  if (!first || !best) return null;
+  return {
+    name,
+    points: slots,
+    meetsSwum,
+    firstIndex,
+    bestIndex,
+    firstTime: first.time,
+    bestTime: best.time,
+    dropSeconds: meetsSwum < 2 ? null : hundredths(first.seconds - best.seconds),
+  };
+}
+
+/**
+ * Each swimmer's measured times across the meets the team swam, for one event.
+ *
+ * Only what was swum counts: a meet's own result rows. Athlete history rows are
+ * left out (they belong to no meet, so they have no place in a season, and an
+ * old personal best would become the "first swim"). Relays, dives (scored in
+ * points, higher is better), psych sheet rows, recruit rows and converted
+ * projections are left out. A theoretical meet is skipped, as in
+ * {@link buildSeasonTrends}.
+ *
+ * The axis is the meets (workspaces) the team swam the event at, in workspace
+ * order, which is the workspace list's order (`sort_index`, then `created_at`;
+ * a user can reorder it). No meet date is stored, so that is the only order
+ * there is, and the same one `teamScoreTrends` uses. A swimmer who missed one of those meets has a `null`
+ * point there.
+ */
+export function buildSeasonProgressions(
+  allWorkspaces: Workspace[],
+  options: SeasonProgressionsOptions
+): SeasonProgressions {
+  const empty: SeasonProgressions = {
+    team: options.team,
+    events: [],
+    selectedEventKey: null,
+    meets: [],
+    swimmers: [],
+    unreadableTimeRows: 0,
+  };
+  if (options.team === null) return empty;
+
+  const swims = progressionSwimsOf(allWorkspaces, options.team);
+  const events = progressionEventsOf(swims);
+  const [firstEvent] = events;
+  if (firstEvent === undefined) return empty;
+
+  const requested = options.eventKey ?? null;
+  const chosen =
+    events.find(e => e.key === requested) ??
+    events.reduce((top, e) => (e.swimmerCount > top.swimmerCount ? e : top), firstEvent);
+
+  const ofEvent = swims.filter(s => s.eventKey === chosen.key);
+  const readable = ofEvent.filter(s => s.seconds !== null);
+  const meets: ProgressionMeet[] = [];
+  for (const s of readable) {
+    if (!meets.some(m => m.id === s.workspaceId)) meets.push({ id: s.workspaceId, label: s.meetLabel });
+  }
+
+  const swimmers: SwimmerProgression[] = [];
+  for (const { name, slots } of progressionSlotsOf(readable, meets).values()) {
+    const summary = summarizeProgression(name, slots);
+    if (summary) swimmers.push(summary);
+  }
+  swimmers.sort((a, b) => a.name.localeCompare(b.name));
+
+  return {
+    team: options.team,
+    events,
+    selectedEventKey: chosen.key,
+    meets,
+    swimmers,
+    unreadableTimeRows: ofEvent.length - readable.length,
   };
 }
