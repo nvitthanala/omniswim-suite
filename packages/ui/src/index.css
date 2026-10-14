@@ -1272,3 +1272,62 @@ select {
   color: var(--text-accent);
 }
 
+
+/*
+ * Print primitive. A view that prints renders its sheet inside a direct child
+ * of <body> with class `ui-print-root`. Each card in it carries `ui-print-page`
+ * and starts a new page. On screen the root is hidden; when printing, every
+ * other child of <body> is hidden. Black on white keeps the paper copy legible
+ * in Dark, Light and custom themes alike.
+ */
+.ui-print-root {
+  display: none;
+}
+
+@media print {
+  @page {
+    margin: 12mm;
+  }
+
+  body:has(> .ui-print-root) > :not(.ui-print-root) {
+    display: none !important;
+  }
+
+  html:has(> body > .ui-print-root),
+  body:has(> .ui-print-root) {
+    background: white !important;
+    color: black !important;
+  }
+
+  .ui-print-root {
+    display: block;
+    background: white;
+    color: black;
+  }
+
+  /* Type classes such as .text-heading-2 set their own colour from the theme.
+     Inherit black instead, so a Dark or custom theme never prints pale text. */
+  .ui-print-root * {
+    color: inherit;
+  }
+
+  .ui-print-page {
+    break-after: page;
+    page-break-after: always;
+    break-inside: avoid;
+  }
+
+  .ui-print-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  .ui-print-badge {
+    border: 1px solid black;
+    border-radius: 0.25rem;
+    padding: 0 0.35rem;
+    font-weight: 700;
+    background: white;
+    color: black;
+  }
+}

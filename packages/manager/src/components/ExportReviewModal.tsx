@@ -17,13 +17,26 @@ type Props = {
   issues: EntryExportIssue[];
   onExportAnyway: () => void;
   onCancel: () => void;
+  /** Heading and dialog name. Defaults to the export wording. */
+  title?: string;
+  /** Label of the button that goes ahead. Defaults to the export wording. */
+  actionLabel?: string;
+  /** What the issues are checked before, as in "before this export". Defaults to `export`. */
+  subject?: string;
 };
 
-export default function ExportReviewModal({ issues, onExportAnyway, onCancel }: Props) {
+export default function ExportReviewModal({
+  issues,
+  onExportAnyway,
+  onCancel,
+  title = 'Review before export',
+  actionLabel = 'Export anyway',
+  subject = 'export',
+}: Props) {
   return (
     <Modal
       onClose={onCancel}
-      ariaLabel="Review before export"
+      ariaLabel={title}
       className="border border-[var(--text-accent)]/20 rounded-xl max-w-lg w-full mx-4 p-6 max-h-[80vh] flex flex-col"
       style={{ boxShadow: 'var(--ui-shadow-lg)' }}
     >
@@ -33,10 +46,10 @@ export default function ExportReviewModal({ issues, onExportAnyway, onCancel }: 
             <AlertTriangle size={20} />
           </div>
           <div>
-            <h2 className="text-heading-2">Review before export</h2>
+            <h2 className="text-heading-2">{title}</h2>
             <p className="text-ui-body text-theme-secondary mt-1">
               {issues.length} {issues.length === 1 ? 'entry needs' : 'entries need'} a second look
-              before this export — none of these are fixed automatically.
+              before this {subject} — none of these are fixed automatically.
             </p>
           </div>
         </div>
@@ -71,7 +84,7 @@ export default function ExportReviewModal({ issues, onExportAnyway, onCancel }: 
           onClick={onExportAnyway}
           className="border-warning hover:border-warning-strong hover:bg-warning-faint text-warning"
         >
-          Export anyway
+          {actionLabel}
         </Button>
       </div>
     </Modal>

@@ -7,7 +7,7 @@
  * reads the team from here; none of them renders its own team select.
  */
 
-import React, { useId } from 'react';
+import React, { useId, type ReactNode } from 'react';
 import { TeamSelect } from '@omniswim/ui';
 
 type Props = {
@@ -15,9 +15,11 @@ type Props = {
   teams: string[];
   selectedTeam: string;
   onSelectTeam: (team: string) => void;
+  /** Controls that act on the selected team, such as "Print cards". Shown at the end of the bar. */
+  actions?: ReactNode;
 };
 
-export default function ManagerTeamBar({ teams, selectedTeam, onSelectTeam }: Props) {
+export default function ManagerTeamBar({ teams, selectedTeam, onSelectTeam, actions }: Props) {
   const selectId = useId();
   return (
     <div
@@ -42,6 +44,7 @@ export default function ManagerTeamBar({ teams, selectedTeam, onSelectTeam }: Pr
           ? 'Add athletes or load a meet to get a team.'
           : 'Every step below works on this team.'}
       </span>
+      {actions ? <div className="flex items-center gap-2 sm:ml-auto">{actions}</div> : null}
     </div>
   );
 }

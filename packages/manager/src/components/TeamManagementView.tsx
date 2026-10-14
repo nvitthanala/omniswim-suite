@@ -19,6 +19,7 @@ import type { RecruitAthletePrefill } from './RecruitForm';
 import type { EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
 import RosterWizardShell, { type RosterWizardStepId } from './RosterWizardShell';
 import ManagerTeamBar from './ManagerTeamBar';
+import PrintCardsButton from './PrintCardsButton';
 import RosterSourceStep from './RosterSourceStep';
 import RosterLineupStep from './RosterLineupStep';
 import RosterRelayStep from './RosterRelayStep';
@@ -247,7 +248,21 @@ export default function TeamManagementView({
       step={rosterStep}
       onStepChange={setRosterStep}
       toolbar={whatIfControls}
-      subheader={<ManagerTeamBar teams={teams} selectedTeam={selectedTeam} onSelectTeam={setSelectedTeam} />}
+      subheader={
+        <ManagerTeamBar
+          teams={teams}
+          selectedTeam={selectedTeam}
+          onSelectTeam={setSelectedTeam}
+          actions={
+            <PrintCardsButton
+              workspace={workspace}
+              gender={gender}
+              scoringBundle={scoringBundle}
+              team={selectedTeam}
+            />
+          }
+        />
+      }
     >
       {rosterStep === 'source' ? (
         <RosterSourceStep
