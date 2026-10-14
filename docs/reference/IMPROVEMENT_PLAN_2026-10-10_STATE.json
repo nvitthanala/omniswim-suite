@@ -630,6 +630,14 @@
       "architect": "a5e116f818f77a482 review a5e116f..: no defect. Six sites rely on caller promise (utils.ts ~2245, 2287, 2455, 2495, 3643, 2381); old code already threw TypeError there. New tests pin output but do not fail if a guard is reverted (out-of-range unreachable via public API)",
       "gates": "lint 0/0, vitest 265 files 3955 passed 23 skipped, ratchet 81",
       "note": "history rewritten for these 5 commits only (local, unpushed) to fix subject length; tree identical"
+    },
+    "r11Step6": {
+      "commits": "d6be4c07 relay stroke, e0790a8d shell+db, 9c1e5f1a manager+matrix, 21e5a199 metrics+ui, b72ff671 flag on in tsconfig.base.json; ratchet script and baseline deleted",
+      "architect": "a4957e60c335047b2: no bug. nits fixed (comments, spacing, test title). Open: tests/indexedAccessEnableFlag.test.ts pins computeClassTopPerformers listing a swimmer with only non-number rows at 0 (existing behaviour; provenance rule 4 says absent is not 0)",
+      "extensionLeftover": "extensions/swimcloud-companion/tsconfig.json keeps noUncheckedIndexedAccess false: 21 errors in src/multiTeamQueue.ts, multiTeamPanelModel.ts, boundedFetchPool.ts; fixing changes background.js, guarded by swimCloudExtensionBuildFreshness.test.ts. Nothing stops them growing: known issue",
+      "behaviourChanges": "relayLegSlotOf position below 1 or fraction on a medley returns null (above 4 reads as free leg); prefetchApplet unknown id is a no-op (was throw); cross-course relay row no longer prints (undefined)",
+      "gates": "lint 0/0, vitest 266 files 3967 passed 23 skipped, scripts 86/0/1"
     }
-  }
+  },
+  "commitsAfterAuditNote": "R11 steps 3-6 done (flag on). Next: A7 relayLegEstimate, R2 split utils.ts, R3 identity module, R4 optimizers to worker, R1 split parser.ts, R7, T1, T6, F4, F6, R9 last"
 }
