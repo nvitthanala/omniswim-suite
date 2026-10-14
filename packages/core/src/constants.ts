@@ -122,6 +122,10 @@ export type NcaaScmConversionTable = {
  * - `ncaa-d1-2025-26` — `2025-26D1XSW_QUALSTANDARDS.pdf`, page 3, section
  *   "Conversions". The sheet says the table "does not reflect what is included
  *   in the NCAA Swimming and Diving Rules Book". It applies to D1 only.
+ *   The D1 2026-27 sheet (`2026-27D1XSW_QUALSTANDARDS.pdf`, archived
+ *   2026-10-14, manifest id `ncaa-d1-2026-27`) prints the same four factors on
+ *   page 3 with the same statement, so it is a second source for this one
+ *   table. The id keeps its 2025-26 name so callers do not change.
  *
  * Not published, and therefore not here:
  * - D3: `2026-27D3XSW_QualifyingStandards.pdf` prints no conversion table.
@@ -162,7 +166,7 @@ export const NCAA_SCM_CONVERSION_TABLES: Readonly<
   },
   'ncaa-d1-2025-26': {
     id: 'ncaa-d1-2025-26',
-    label: 'NCAA Division I (2025-26)',
+    label: 'NCAA Division I (2025-26, 2026-27)',
     factors: {
       free400To500: 1.153,
       free800To1000: 1.153,
@@ -170,8 +174,8 @@ export const NCAA_SCM_CONVERSION_TABLES: Readonly<
       allOtherEvents: 0.906,
     },
     source: {
-      manifestIds: ['ncaa-d1-2025-26'],
-      filenames: ['2025-26D1XSW_QUALSTANDARDS.pdf'],
+      manifestIds: ['ncaa-d1-2025-26', 'ncaa-d1-2026-27'],
+      filenames: ['2025-26D1XSW_QUALSTANDARDS.pdf', '2026-27D1XSW_QUALSTANDARDS.pdf'],
       page: 3,
       section: 'Conversions',
       statement:

@@ -362,6 +362,15 @@ describe('the NCAA SCM tables match their archived sources', () => {
     });
   });
 
+  it('cites both archived D1 sheets, 2025-26 and 2026-27, for the D1 table', () => {
+    // The 2026-27 sheet (sha256 259c76ba...) prints 1.153 / 1.153 / 1.013 / 0.906 on page 3,
+    // the same four factors as the 2025-26 sheet. The loop in the PDF test below re-reads both.
+    expect(NCAA_SCM_CONVERSION_TABLES[D1_TABLE].source.manifestIds).toStrictEqual([
+      'ncaa-d1-2025-26',
+      'ncaa-d1-2026-27',
+    ]);
+  });
+
   it('names archived PDFs whose bytes match the manifest', () => {
     for (const table of TABLES) {
       expect(table.source.manifestIds.length).toBe(table.source.filenames.length);
