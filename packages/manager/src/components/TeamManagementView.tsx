@@ -20,6 +20,7 @@ import type { EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
 import RosterWizardShell, { type RosterWizardStepId } from './RosterWizardShell';
 import ManagerTeamBar from './ManagerTeamBar';
 import PrintCardsButton from './PrintCardsButton';
+import MeetDayDeckButton from './MeetDayDeckButton';
 import RosterSourceStep from './RosterSourceStep';
 import RosterLineupStep from './RosterLineupStep';
 import RosterRelayStep from './RosterRelayStep';
@@ -254,12 +255,20 @@ export default function TeamManagementView({
           selectedTeam={selectedTeam}
           onSelectTeam={setSelectedTeam}
           actions={
-            <PrintCardsButton
-              workspace={workspace}
-              gender={gender}
-              scoringBundle={scoringBundle}
-              team={selectedTeam}
-            />
+            <>
+              <MeetDayDeckButton
+                workspace={workspace}
+                gender={gender}
+                scoringBundle={scoringBundle}
+                team={selectedTeam}
+              />
+              <PrintCardsButton
+                workspace={workspace}
+                gender={gender}
+                scoringBundle={scoringBundle}
+                team={selectedTeam}
+              />
+            </>
           }
         />
       }
