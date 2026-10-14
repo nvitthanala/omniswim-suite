@@ -37,6 +37,7 @@ import { divisionForTeamOrNull } from '../data/teamDivisions';
 // Dependency-free by design — see the module header there. Importing
 // `cutlineUtils` here instead would create a cycle (it imports this file).
 import { courseOfRecordFromEventLabel, normalizeEventForCutline } from './cutlineEventNames';
+import { itemAt, recordAt, regexGroup } from './indexedAccess';
 // A leaf module (types + cutlineEventNames only), so no cycle.
 import {
   eventNotSwumInCourse,
@@ -135,9 +136,10 @@ function hexToRgb(hex: string): { r: number; g: number; b: number } | null {
   const h = hex.replace('#', '').trim();
   if (h.length === 3) {
     return {
-      r: parseInt(h[0] + h[0], 16),
-      g: parseInt(h[1] + h[1], 16),
-      b: parseInt(h[2] + h[2], 16),
+      // `h.length === 3` was just tested, so each index is in range.
+      r: parseInt(h.charAt(0) + h.charAt(0), 16),
+      g: parseInt(h.charAt(1) + h.charAt(1), 16),
+      b: parseInt(h.charAt(2) + h.charAt(2), 16),
     };
   }
   if (h.length === 6) {
@@ -247,7 +249,8 @@ export function getTeamColors(teamName: string | null | undefined): { primary: s
   } else {
     const hash = Array.from(safeName).reduce((acc, char) => acc + char.charCodeAt(0), 0);
     const colors = ['#00F5FF', '#FF00FF', '#39FF14', '#FFD700', '#FF4444', '#8A2BE2', '#FF8C00'];
-    primary = colors[hash % colors.length];
+    // `hash` is a sum of char codes (a non-negative integer), so the index is in range.
+    primary = itemAt(colors, hash % colors.length);
   }
 
   const searchName = safeName.toLowerCase();
@@ -278,10 +281,11 @@ export function convertTimeToSeconds(timeStr: string): number {
   const cached = timeToSecondsCache.get(timeStr);
   if (cached !== undefined) return cached;
   const parts = timeStr.split(':');
+  // `split` returns at least one part, and `parts.length === 2` proves index 1.
   const value =
     parts.length === 2
-      ? parseFloat(parts[0]) * 60 + parseFloat(parts[1])
-      : parseFloat(parts[0]);
+      ? parseFloat(itemAt(parts, 0)) * 60 + parseFloat(itemAt(parts, 1))
+      : parseFloat(itemAt(parts, 0));
   if (timeToSecondsCache.size >= TIME_CACHE_LIMIT) timeToSecondsCache.clear();
   timeToSecondsCache.set(timeStr, value);
   return value;
@@ -496,7 +500,8 @@ function individualSwimEventForScm(event: string): string | null {
   const canonical = normalizeEventForCutline(base);
   const match = INDIVIDUAL_SWIM_EVENT.exec(canonical);
   if (!match) return null;
-  const distance = Number.parseInt(match[1], 10);
+  // Group 1 of INDIVIDUAL_SWIM_EVENT (`(\d+)`) is mandatory.
+  const distance = Number.parseInt(regexGroup(match, 1), 10);
   if (!(distance > 0) || distance % 25 !== 0) return null;
   return canonical;
 }
@@ -784,7 +789,8 @@ function convertTimeWithBasis(
     // indicative one per event, and an event it does not hold stays absent.
     const factorEvent = resolveConversionFactorKey(baseEvent);
     if (!factorEvent) throw noFactor();
-    const factors = CONVERSION_FACTORS[factorEvent];
+    // `resolveConversionFactorKey` only returns a key `CONVERSION_FACTORS` holds.
+    const factors = recordAt(CONVERSION_FACTORS, factorEvent);
     const factor = gender === Gender.MEN ? factors.men_lcm : factors.women_lcm;
     return {
       time: formatSecondsToTime(seconds * factor),
@@ -1101,7 +1107,7 @@ function isChampionshipGenderEvent(event: string | undefined): boolean {
 export function parseEventNumber(event: string | undefined): number | null {
   const m = /^\s*Event\s+(\d+)\b/i.exec(String(event ?? ''));
   if (!m) return null;
-  const n = Number.parseInt(m[1], 10);
+  const n = Number.parseInt(regexGroup(m, 1), 10);
   return Number.isFinite(n) ? n : null;
 }
 
@@ -1237,7 +1243,7 @@ export function parseRankInt(rank: unknown): number | null {
   if (typeof rank === 'string') {
     const m = rank.trim().match(/(\d+)/);
     if (m) {
-      const n = parseInt(m[1], 10);
+      const n = parseInt(regexGroup(m, 1), 10);
       return n > 0 ? n : null;
     }
   }
@@ -1485,7 +1491,7 @@ function isDivingForSettings(event: string | undefined, settings: ScoringSetting
 
 export function eventMeetSortKey(event: string): number {
   const m = event.match(/Event\s+(\d+)/i);
-  return m ? parseInt(m[1], 10) : 99999;
+  return m ? parseInt(regexGroup(m, 1), 10) : 99999;
 }
 
 export function sortEventsByMeetOrder(events: string[]): string[] {
