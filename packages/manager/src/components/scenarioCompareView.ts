@@ -24,6 +24,29 @@ export function clockLabel(clock: string | null | undefined): string {
   return trimmed === '' ? NO_TIME_LABEL : trimmed;
 }
 
+/** Shown where a snapshot has no entry. Never "0.0": absent is not zero. */
+export const ABSENT_LABEL = '\u2013';
+
+/** Points for one side. A side that has no entry reads as a dash, not "0.0". */
+export function sidePointsLabel(present: boolean, points: number): string {
+  return present ? points.toFixed(1) : ABSENT_LABEL;
+}
+
+/**
+ * Plain-word status of a row. "Added" means snapshot A has no entry and B does.
+ * "Removed" means A has one and B does not. A row both sides hold has none.
+ */
+export function rowStatus(inThen: boolean, inNow: boolean): 'Added' | 'Removed' | null {
+  if (inNow && !inThen) return 'Added';
+  if (inThen && !inNow) return 'Removed';
+  return null;
+}
+
+/** Neither snapshot has a row for the team. This is not "no differences". */
+export function noTeamResultsMessage(team: string): string {
+  return `Neither snapshot has results for ${team}, so there is nothing to compare.`;
+}
+
 /** "+3.0", "-1.5", or "0.0" with no sign when nothing moved. */
 export function formatChange(delta: number): string {
   if (Math.abs(delta) < 1e-6) return '0.0';

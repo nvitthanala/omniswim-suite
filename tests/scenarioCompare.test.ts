@@ -40,7 +40,10 @@ vi.mock('@omniswim/core/lib/scenarioDiffClient', async () => {
 import ScenarioCompare from '../packages/manager/src/components/ScenarioCompare';
 import { ScenarioCompareResult } from '../packages/manager/src/components/ScenarioCompareTables';
 import {
+  ABSENT_LABEL,
   compareSnapshots,
+  rowStatus,
+  sidePointsLabel,
   snapshotOptionLabel,
 } from '../packages/manager/src/components/scenarioCompareView';
 
@@ -122,6 +125,7 @@ const SNAPSHOTS: Snapshot[] = [
   { id: 'snap-a', workspaceId: 'ws', label: 'Opening plan · 10.0 pts', createdAt: 1000 },
 ];
 
+const EMPTY_SNAPSHOT: Snapshot = { id: 'snap-empty', workspaceId: 'ws', label: 'No HSU plan', createdAt: 500 };
 const CONTEXT = { team: 'HSU', gender: MEN, settings: SETTINGS, removeSeniors: false };
 
 describe('ScenarioCompare (F3)', () => {
@@ -141,9 +145,12 @@ describe('ScenarioCompare (F3)', () => {
     container.remove();
   });
 
-  async function mount(loadDiff = (a: string, b: string) => compareSnapshots(a, b, CONTEXT)) {
+  async function mount(
+    loadDiff = (a: string, b: string) => compareSnapshots(a, b, CONTEXT),
+    snapshots: Snapshot[] = SNAPSHOTS
+  ) {
     await act(async () => {
-      root.render(createElement(ScenarioCompare, { snapshots: SNAPSHOTS, loadDiff }));
+      root.render(createElement(ScenarioCompare, { snapshots, loadDiff }));
     });
   }
 
@@ -200,7 +207,51 @@ describe('ScenarioCompare (F3)', () => {
     const bobRow = [...tables[1].querySelectorAll('tbody tr')].find(tr =>
       (tr.textContent ?? '').includes('Bob Brown')
     )!;
-    expect(bobRow.querySelector('td')!.textContent).toBe('-5.0');
+    // Before, after, change. Bob is absent from B, so the after cell is a dash, not 0.0.
+    const bobCells = [...bobRow.querySelectorAll('td')].map(td => td.textContent);
+    expect(bobCells.slice(0, 3)).toEqual(['5.0', ABSENT_LABEL, '-5.0']);
+    expect(bobRow.querySelector('th')!.textContent).toContain('Bob Brown');
+    expect(bobRow.querySelector('th')!.textContent).toContain('(Removed)');
+
+    const carlRow = [...tables[1].querySelectorAll('tbody tr')].find(tr =>
+      (tr.textContent ?? '').includes('Carl Cole')
+    )!;
+    const carlCells = [...carlRow.querySelectorAll('td')].map(td => td.textContent);
+    expect(carlCells.slice(0, 3)).toEqual([ABSENT_LABEL, '5.0', '+5.0']);
+    expect(carlRow.querySelector('th')!.textContent).toContain('(Added)');
+
+    // Alice swam in both snapshots: numbers on both sides and no status word.
+    const aliceRow = [...tables[1].querySelectorAll('tbody tr')].find(tr =>
+      (tr.textContent ?? '').includes('Alice Adams')
+    );
+    expect(aliceRow).toBeDefined();
+    expect(aliceRow!.querySelector('th')!.textContent).not.toMatch(/Added|Removed/);
+    const aliceCells = [...aliceRow!.querySelectorAll('td')].map(td => td.textContent);
+    expect(aliceCells.slice(0, 3)).toEqual(['5.0', '5.0', '0.0']);
+  });
+
+  it('shows a dash, not 0.0, for the side of a team that has no rows', async () => {
+    const noHsu = workspace([swim('v1', 'Vic Rivers', 'RIV', '100 Free', '51.00', 1)]);
+    contentById.set('snap-empty', noHsu);
+    await mount(undefined, [...SNAPSHOTS, EMPTY_SNAPSHOT]);
+    await choose(select('Snapshot A'), 'snap-empty');
+    await choose(select('Snapshot B'), 'snap-b');
+    const tables = container.querySelectorAll('table');
+    const totals = [...tables[0].querySelectorAll('tbody td')].map(td => td.textContent);
+    expect(totals).toEqual([ABSENT_LABEL, '15.0', '+15.0']);
+  });
+
+  it('says the team has no results, not "No differences", when neither snapshot has it', async () => {
+    const noHsu = workspace([swim('v1', 'Vic Rivers', 'RIV', '100 Free', '51.00', 1)]);
+    contentById.set('snap-empty', noHsu);
+    await mount(undefined, [...SNAPSHOTS, EMPTY_SNAPSHOT]);
+    await choose(select('Snapshot A'), 'snap-empty');
+    await choose(select('Snapshot B'), 'snap-empty');
+    const text = container.textContent ?? '';
+    expect(text).toContain('Neither snapshot has results for HSU');
+    expect(text).not.toContain('No differences');
+    const totals = [...container.querySelectorAll('tbody td')].map(td => td.textContent);
+    expect(totals).toEqual([ABSENT_LABEL, ABSENT_LABEL, ABSENT_LABEL]);
   });
 
   it('keeps A as before and B as after: swapping the picks flips the sign', async () => {
@@ -275,7 +326,7 @@ describe('ScenarioCompareResult empty values', () => {
     const result: ScenarioDiffResult = {
       team: 'HSU',
       gender: MEN,
-      totals: { then: 12, now: 12, delta: 0 },
+      totals: { then: 12, now: 12, delta: 0, inThen: true, inNow: true },
       swimmers: [
         {
           name: 'Alice Adams',
@@ -286,6 +337,8 @@ describe('ScenarioCompareResult empty values', () => {
           pointsThen: 5,
           pointsNow: 5,
           deltaPoints: 0,
+          inThen: true,
+          inNow: true,
         },
         {
           name: 'Bob Brown',
@@ -296,6 +349,8 @@ describe('ScenarioCompareResult empty values', () => {
           pointsThen: 5,
           pointsNow: 5,
           deltaPoints: 0,
+          inThen: true,
+          inNow: true,
         },
       ],
       events: [],
@@ -310,5 +365,111 @@ describe('ScenarioCompareResult empty values', () => {
     expect(text).not.toMatch(/(^|[^\d.:])0(?![\d.:])/);
     // The change cell of a row that only moved a clock reads "0.0", a real change of zero.
     expect(text).toContain('0.0');
+  });
+});
+
+describe('absent is not zero in the compare tables', () => {
+  let container: HTMLDivElement;
+  let root: Root;
+  beforeEach(() => {
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    root = createRoot(container);
+  });
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+  });
+
+  const swimmerBase = {
+    isRelay: false,
+    eventsAdded: [] as string[],
+    eventsRemoved: [] as string[],
+    eventsChanged: [] as { event: string; timeThen: string; timeNow: string }[],
+  };
+
+  it('shows 0.0 for a swimmer who scored 0 and a dash for one who was not entered', async () => {
+    const result: ScenarioDiffResult = {
+      team: 'HSU',
+      gender: MEN,
+      totals: { then: 5, now: 5, delta: 0, inThen: true, inNow: true },
+      swimmers: [
+        {
+          ...swimmerBase,
+          name: 'Zero Zed',
+          eventsChanged: [{ event: '200 Free', timeThen: '1:59.00', timeNow: '1:58.00' }],
+          pointsThen: 0,
+          pointsNow: 0,
+          deltaPoints: 0,
+          inThen: true,
+          inNow: true,
+        },
+        {
+          ...swimmerBase,
+          name: 'Gone Gus',
+          eventsRemoved: ['100 Back'],
+          pointsThen: 0,
+          pointsNow: 0,
+          deltaPoints: 0,
+          inThen: true,
+          inNow: false,
+        },
+        {
+          ...swimmerBase,
+          name: 'New Nat',
+          eventsAdded: ['100 Back'],
+          pointsThen: 0,
+          pointsNow: 0,
+          deltaPoints: 0,
+          inThen: false,
+          inNow: true,
+        },
+      ],
+      events: [
+        {
+          event: '100 Back',
+          pointsThen: 0,
+          pointsNow: 0,
+          delta: 0,
+          swimmersChanged: 2,
+          inThen: true,
+          inNow: false,
+        },
+      ],
+    };
+    await act(async () => {
+      root.render(createElement(ScenarioCompareResult, { result, labelA: 'A', labelB: 'B' }));
+    });
+    const rows = [...container.querySelectorAll('table')[1].querySelectorAll('tbody tr')];
+    const cellsOf = (name: string) => {
+      const row = rows.find(tr => (tr.textContent ?? '').includes(name))!;
+      return {
+        head: row.querySelector('th')!.textContent,
+        cells: [...row.querySelectorAll('td')].map(td => td.textContent).slice(0, 3),
+      };
+    };
+    expect(cellsOf('Zero Zed').cells).toEqual(['0.0', '0.0', '0.0']);
+    expect(cellsOf('Zero Zed').head).not.toMatch(/Added|Removed/);
+    expect(cellsOf('Gone Gus').cells).toEqual(['0.0', ABSENT_LABEL, '0.0']);
+    expect(cellsOf('Gone Gus').head).toContain('(Removed)');
+    expect(cellsOf('New Nat').cells).toEqual([ABSENT_LABEL, '0.0', '0.0']);
+    expect(cellsOf('New Nat').head).toContain('(Added)');
+
+    const eventRow = container.querySelectorAll('table')[2].querySelector('tbody tr')!;
+    expect([...eventRow.querySelectorAll('td')].map(td => td.textContent).slice(0, 3)).toEqual([
+      '0.0',
+      ABSENT_LABEL,
+      '0.0',
+    ]);
+    expect(eventRow.querySelector('th')!.textContent).toContain('(Removed)');
+  });
+
+  it('labels helpers: dash for absent, number for present, status in words', () => {
+    expect(sidePointsLabel(false, 0)).toBe(ABSENT_LABEL);
+    expect(sidePointsLabel(true, 0)).toBe('0.0');
+    expect(sidePointsLabel(true, 3.25)).toBe('3.3');
+    expect(rowStatus(false, true)).toBe('Added');
+    expect(rowStatus(true, false)).toBe('Removed');
+    expect(rowStatus(true, true)).toBeNull();
   });
 });
