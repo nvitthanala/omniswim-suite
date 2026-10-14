@@ -532,8 +532,8 @@
     "urlClassifier.ts PATH_CLASSIFIERS plain-object lookup: use Object.hasOwn / Map (small executor fix, swimcloud)"
   ],
   "inFlight20261013": {
-    "a6ad5bc069b9419df": "worker: F5 season progression chart",
-    "a9bf5f2ec4ea32df0": "executor: R11 step 4 remaining core files except utils.ts"
+    "acee6d4b4f0e8162c": "D1 check NCAA D1 2026-27 PDF + D10 factor recheck",
+    "af5d43ac0c8b3fbf0": "D4 team divisions 2026-27"
   },
   "architectReReview20261013": {
     "reviewed": "ddb838fb, e54adab4, d5dc09ff",
@@ -601,6 +601,22 @@
         "TeamCard momentumMeetTotal falls back to prelims baselineOverUnder when psych anchor has no psych expectation",
         "two independent identical edits to the same leg of tied relays A and B count as one change"
       ]
+    }
+  },
+  "commits20261014c": {
+    "r11Step4": {
+      "files": "relaySplits 4153e009, historyImportRoster 4af4e6fc, relayLegMatching 4aa8cea1, scoringTheory e8965784, athleteHistory b97890c1, athleteAliases a80560f7, prelimsProjection e44dbdd8, psychProjection 01b1760f, relayBuilder dcb850a2",
+      "baseline": "a32dc48b (total 285->184, core 205->104; utils.ts 103 = step 5; core excluding utils.ts = 1)",
+      "leftUnfixed": "relayLegMatching.ts:261 relayStrokeForIndex: negative legIndex returns undefined today; caller relayLegCredits.ts:189 passes position-1 from stored data. itemAt would throw, a default would invent a stroke. Needs a decision."
+    },
+    "F8": "9bad9532 Export a static HTML report (packages/manager/src/lib/staticReportHtml.ts; footer date is export date, Workspace has no saved-at; lineup is for the team picked in the team bar, active gender only)",
+    "F5": "2f89f23f Add the swimmer progress chart (meet order = workspace list order, no meet date exists; R flag accepted)",
+    "D5": "b6de276c TEAM_ABBREVIATIONS imports teamAbbreviations.json (pdf_parser.py already loaded it; plan wording was off). pdf_parser._load_abbrev_teams still has five setdefault fallbacks (UMSL, HSU, DSU, OUAC, UWF) that contradict its fail-loud comment; parity test catches drift",
+    "R5": "c63960df all 66 no-explicit-any removed; eslint --max-warnings now 0. Found: PodiumMedal reads s.podium which nothing sets (medal never renders)",
+    "gates": "after R5: lint 0 errors 0 warnings, vitest 264 files 3943 passed 23 skipped",
+    "inFlight": {
+      "acee6d4b4f0e8162c": "D1 check NCAA D1 2026-27 PDF + D10 factor recheck",
+      "af5d43ac0c8b3fbf0": "D4 team divisions 2026-27"
     }
   }
 }
