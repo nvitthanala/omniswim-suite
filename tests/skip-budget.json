@@ -40,6 +40,11 @@
       "local": 8,
       "ci": 0,
       "reason": "describe.skipIf(!pgUrl). Cross-tenant scope, duplicate id, version conflict, global-replace ownership and the newer-schema refusal need a real PostgreSQL server (PG_TEST_URL or DATABASE_URL). CI sets PG_TEST_URL on the postgres:16 service; a developer machine usually has no database."
+    },
+    "tests/rosterOnlyRankCollapse.test.ts": {
+      "local": 0,
+      "ci": 1,
+      "reason": "describe.skipIf(no data/meets.json), the 'D8 on the real HSU 2026-27 Roster Plan' block. Reads the live private workspace store (gitignored). The constructed 214-recruit and 67-plan cases in the same file use no local data and still run."
     }
   }
 }
