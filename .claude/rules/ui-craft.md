@@ -10,7 +10,8 @@ paths:
 
 Twelve skills from [emilkowalski/skills](https://github.com/emilkowalski/skills)
 are installed project-wide (`npx skills@latest add emilkowalski/skills`,
-symlinked into `.claude/skills/`, canonical copies in `.agents/skills/`).
+copied into `.claude/skills/`; the canonical copies are in `.agents/skills/` and
+`tests/skillsDirsInSync.test.ts` fails when the two differ).
 Route UI/animation work to them the same way `cyclomatic-complexity` is
 routed for complexity work — they should trigger on their own; invoke
 explicitly if they don't.
