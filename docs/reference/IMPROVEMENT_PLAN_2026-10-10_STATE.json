@@ -84,7 +84,7 @@
     "F1": "committed aeb85bfc printable lineup and relay cards",
     "F2": "committed 8468aede meet-day deck view",
     "F3": "committed 838de44e compare any two snapshots (A/B; three-way not built)",
-    "F4": "pending",
+    "F4": "committed 38ffacca (Scout tab; architect found 1 high + 2 medium, all fixed: per-team scorer-cap trim, pair-swap swing events, unknown-source recruits left out, exhibition seeds excluded)",
     "F5": "committed 2f89f23f swimmer progress chart",
     "F6": "committed f174ae04 (GLVC 2025-26 relay program as data; results PDF local-only, two tests skip without it)",
     "F7": "done (cef6ec4c core+manager, 91606bec banner UI)",
@@ -97,7 +97,7 @@
     "R4": "committed f5f1386a, e893dd8d optimizer in the scoring worker; useAllTeamsApply still sync",
     "R5": "committed c63960df all any warnings removed; max-warnings 0",
     "R6": "committed (complexity 29->7 and 31->11; golden over 83 calls identical; baseline now 0 complexity warnings)",
-    "R7": "pending",
+    "R7": "in progress: swimcloudCaptureRoutes router split committed 075b089c; OpsModule + RosterImportWizard with worker a5230407dad14c1ac; SwimCloudCaptureBrowser and multiTeamDriver runMultiTeamCrawl remain",
     "R8": "committed",
     "R9": "pending",
     "R10": "committed d19aa4df (folder) + 7c71285a (scripts, dependency, eslint ignore)",
@@ -453,6 +453,7 @@
     "harness": "7 passed, 1 skipped (pre-existing fixme)"
   },
   "userQuestionsAtEnd": [
+    "F4: a recruit row with no `source` is left out of the scout as unknown (types.ts:1076 says absent = unknown). Every HSU roster-plan recruit row has no source today, so only optimizer plans score on our side. Stamp a source at import, or trust unstamped rows?",
     "Individual A/B-final tie that includes an exhibition swimmer zeroes the scoring swimmer (utils.ts ~2152-2158: {A:0, X:0}); relay and timed-final paths exclude only the exhibition entry. The code comment calls it deliberate. Keep or change? (architect says needs a golden run)",
     "No admin concept exists in the database; admin is an email in OMNI_ADMIN_EMAILS (server agent). Backup list/restore under AUTH_REQUIRED are 403 until isAdmin is wired to that. Wire it?",
     "P7: a corrupt or locked SQLite database now stops the server (exit 1) instead of falling back to meets.json. Confirm that is wanted.",
