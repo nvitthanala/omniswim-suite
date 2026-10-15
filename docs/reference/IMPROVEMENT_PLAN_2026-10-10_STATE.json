@@ -437,6 +437,12 @@
       "what": "429 session limit during R11 step 5 executor a5a9325bf0e25dbcf (resets 15:40 CT); window total ~141M tokens",
       "left": "uncommitted: packages/core/src/lib/utils.ts (partial), scripts/index-access-baseline.json, tests/coreIndexedAccessUtils.test.ts",
       "resume": "after reset: SendMessage a5a9325bf0e25dbcf to finish utils.ts; one agent at a time; then commit utils.ts in 3-4 section commits + baseline last"
+    },
+    {
+      "at": "2026-10-14 ~19:50 CT",
+      "what": "429 session limit hit R4 architect a7f19f20b7516c32d and R1 executor a672ab80dcaab7cc3 (resets 20:40 CT)",
+      "left": "uncommitted R4 diff (optimizeJob.ts, optimizeClient.ts, scoringWorker.ts optimize op, rosterOptimizer.ts onProgress, manager useOptimizeRun/optimizeRunView/RosterOptimizeStep*/BatchOptimizerPanel*, tests optimizeWorkerClient/optimizeStepWorker/optimizeRunView, tests/e2e/optimize-worker.spec.ts) awaiting architect review (worker lacks user conference presets? stale-result check); R1 partial parser.ts split in packages/swimcloud",
+      "resume": "one agent at a time: SendMessage a7f19f20b7516c32d (architect R4), commit R4 after fixes, then a672ab80dcaab7cc3 (R1)"
     }
   ],
   "gatesAfterWave1": {
@@ -543,7 +549,8 @@
     "urlClassifier.ts PATH_CLASSIFIERS plain-object lookup: use Object.hasOwn / Map (small executor fix, swimcloud)"
   ],
   "inFlight20261013": {
-    "a4ac5b8e47d1979d1": "executor: R4 optimizers to the scoring worker"
+    "a7f19f20b7516c32d": "architect: review R4 uncommitted",
+    "a672ab80dcaab7cc3": "executor: R1 split swimcloud parser.ts"
   },
   "architectReReview20261013": {
     "reviewed": "ddb838fb, e54adab4, d5dc09ff",
@@ -625,7 +632,8 @@
     "R5": "c63960df all 66 no-explicit-any removed; eslint --max-warnings now 0. Found: PodiumMedal reads s.podium which nothing sets (medal never renders)",
     "gates": "after D1: lint 0/0, vitest 264 files 3944 passed 23 skipped, scripts 86 passed 0 failed 1 skipped",
     "inFlight": {
-      "a4ac5b8e47d1979d1": "executor: R4 optimizers to the scoring worker"
+      "a7f19f20b7516c32d": "architect: review R4 uncommitted",
+      "a672ab80dcaab7cc3": "executor: R1 split swimcloud parser.ts"
     },
     "D1": "544bca88 Archive the NCAA D1 2026-27 standards (id ncaa-d1-2026-27, sha256 259c76ba..., 44 records; D1 resolves to 2026-27 by default; PDF re-uploaded after its 6/15/2026 stamp, re-run fetch-cutlines.py --check before a release; SwimSwam shows 400 IM women 4:13.22, PDF prints 4:13.32, PDF used)",
     "D10": "91ca9ac7 factors match D1 and D2 2026-27 sheets; D3/NAIA publish none (Rules Book table); LCM stays 'indicative'. NCAA_ALTITUDE_ADJUSTMENT_TABLE still cites D1 2025-26 only (2026-27 identical)",
