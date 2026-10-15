@@ -548,9 +548,7 @@
     "vault gotcha: the Edit tool rewrote an LF file as CRLF once; normalize before commit",
     "urlClassifier.ts PATH_CLASSIFIERS plain-object lookup: use Object.hasOwn / Map (small executor fix, swimcloud)"
   ],
-  "inFlight20261013": {
-    "a672ab80dcaab7cc3": "executor: R1 split swimcloud parser.ts (resume with SendMessage)"
-  },
+  "inFlight20261013": {},
   "architectReReview20261013": {
     "reviewed": "ddb838fb, e54adab4, d5dc09ff",
     "findings": [
@@ -630,9 +628,7 @@
     "D5": "b6de276c TEAM_ABBREVIATIONS imports teamAbbreviations.json (pdf_parser.py already loaded it; plan wording was off). pdf_parser._load_abbrev_teams still has five setdefault fallbacks (UMSL, HSU, DSU, OUAC, UWF) that contradict its fail-loud comment; parity test catches drift",
     "R5": "c63960df all 66 no-explicit-any removed; eslint --max-warnings now 0. Found: PodiumMedal reads s.podium which nothing sets (medal never renders)",
     "gates": "after D1: lint 0/0, vitest 264 files 3944 passed 23 skipped, scripts 86 passed 0 failed 1 skipped",
-    "inFlight": {
-      "a672ab80dcaab7cc3": "executor: R1 split swimcloud parser.ts (resume with SendMessage)"
-    },
+    "inFlight": {},
     "D1": "544bca88 Archive the NCAA D1 2026-27 standards (id ncaa-d1-2026-27, sha256 259c76ba..., 44 records; D1 resolves to 2026-27 by default; PDF re-uploaded after its 6/15/2026 stamp, re-run fetch-cutlines.py --check before a release; SwimSwam shows 400 IM women 4:13.22, PDF prints 4:13.32, PDF used)",
     "D10": "91ca9ac7 factors match D1 and D2 2026-27 sheets; D3/NAIA publish none (Rules Book table); LCM stays 'indicative'. NCAA_ALTITUDE_ADJUSTMENT_TABLE still cites D1 2025-26 only (2026-27 identical)",
     "D4": "b4493d24 UWF divisionHistory gets D1 from 2026-27 (3 sources, uwf.edu page checked by lead). Top-level division stays D2: tag paths (cutlineTags, athleteHistory, eventStrength, utils, rosterLineupAudit) read the season-agnostic field. Unverified: Ouachita Baptist, McKendree, Henderson State, Delta State, Pitt, Louisville, Florida State (no 2026-27 primary source found)",
@@ -670,7 +666,9 @@
       "commits": "worker op + client (core), progress/cancel UI (manager); two commits after 'Log the 19:50 limit event'",
       "architect": "a7f19f20b7516c32d: equivalence verified (worker empty userConferenceBindings never changes a result; only a user preset with literal id 'nsisc' would, judged unreachable). Findings 1-4 fixed (22-field staleness list, click-time team/workspace/mode, worker error paths, live.current in layout effect)",
       "open": "useAllTeamsApply.ts (Lineup header one-click) still synchronous; BatchOptimizerPanel Apply still checks only the three lineup arrays (batchLineupMoved) because an existing test re-renders a renamed workspace; staleness check assumes autosave keeps field references stable (Playwright optimize-worker.spec.ts passed with autosave on)"
-    }
+    },
+    "R1": "committed: parser.ts barrel 185 lines over 16 modules (53 exported names identical, 0 cycle groups before/after); crawler.js rebuilt (module comments/order only). Gates: lint 0/0, vitest 273 files 4072 passed 23 skipped"
   },
-  "commitsAfterAuditNote": "R11 steps 3-6 done (flag on). Next: A7 relayLegEstimate, R2 split utils.ts, R3 identity module, R4 optimizers to worker, R1 split parser.ts, R7, T1, T6, F4, F6, R9 last"
+  "commitsAfterAuditNote": "R11 steps 3-6 done (flag on). Next: A7 relayLegEstimate, R2 split utils.ts, R3 identity module, R4 optimizers to worker, R1 split parser.ts, R7, T1, T6, F4, F6, R9 last",
+  "remainingAfterR1": "R3 identity module, R7 large components, R9 deps last, T6 mutation testing, F4 scouting, F6 relay programs (research), F10 reconcile video plan, H4/H5/H6/H7/H11, R12 alias config, T10/T11, P-items found-not-fixed; then end-of-run questions"
 }
