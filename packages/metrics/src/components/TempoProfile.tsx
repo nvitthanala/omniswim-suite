@@ -86,8 +86,9 @@ function TempoProfileComponent({
         const point: TooltipPoint | undefined = item?.payload;
         if (!point) return ['not measured', ''];
         if (typeof point.cycleIndex === 'number') {
-          const rate = point.rate ?? 0;
-          return [`${rate.toFixed(1)} ${unit}`, `Length ${point.lengthIndex}, cycle ${point.cycleIndex}`];
+          const label = `Length ${point.lengthIndex}, cycle ${point.cycleIndex}`;
+          if (point.rate === null || point.rate === undefined) return [point.reason ?? 'not measured', label];
+          return [`${point.rate.toFixed(1)} ${unit}`, label];
         }
         if (point.rate === null || point.rate === undefined) {
           return [point.reason ?? 'not measured', `Length ${point.lengthIndex} mean`];
