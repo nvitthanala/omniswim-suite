@@ -45,6 +45,11 @@
       "local": 0,
       "ci": 1,
       "reason": "describe.skipIf(no data/meets.json), the 'D8 on the real HSU 2026-27 Roster Plan' block. Reads the live private workspace store (gitignored). The constructed 214-recruit and 67-plan cases in the same file use no local data and still run."
+    },
+    "tests/conferenceRelayPrograms.test.ts": {
+      "local": 0,
+      "ci": 2,
+      "reason": "it.skipIf(no local results PDF and text). data/relay-programs/sources/*.pdf and *.txt are gitignored because they name every athlete at the GLVC meet (public repo, decision U8). The manifest and the data file are tracked."
     }
   }
 }

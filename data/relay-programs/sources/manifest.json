@@ -1,0 +1,33 @@
+{
+  "description": "Primary-source conference championship documents (event order and relay list). Every entry in packages/core/src/data/relayPrograms.ts traces to one of these by sourceId + sha256. Hand-maintained: no fetch script yet. Same fields as data/cutlines/sources/manifest.json.",
+  "generatedAt": "2026-10-15T02:59:53Z",
+  "sources": [
+    {
+      "id": "glvc-swim-dive-2025-26-complete-results",
+      "conference": "Great Lakes Valley Conference (GLVC)",
+      "season": "2025-2026",
+      "genders": "MW",
+      "kind": "results-as-run",
+      "meetDates": "2026-02-10 to 2026-02-14",
+      "url": "https://s3.amazonaws.com/glvcsports.com/documents/2026/2/14/Complete_Results.pdf",
+      "linkedFrom": "https://glvcsports.com/2026swim, link text \"Complete Results\", href /documents/2026/2/14//Complete_Results.pdf?id=5359. That glvcsports.com page is an HTML viewer that embeds the url above in an <object> tag.",
+      "filename": "2026-GLVC-Swimming-Diving-Complete_Results.pdf",
+      "sha256": "5917ac592ec84effada6589c82b97d29d60ba6d142592da7f5bbdbf0a6a06b61",
+      "bytes": 803486,
+      "pageCount": 76,
+      "lastModifiedHeader": "Sun, 15 Feb 2026 05:12:19 GMT",
+      "retrievedAt": "2026-10-15T02:59:53Z",
+      "note": "A results document, not a pre-meet program. It prints each numbered event in the order the meet ran it. The 2027 championship (2027-02-09 to 2027-02-13, Evansville) has no published program on record.",
+      "extractedText": {
+        "filename": "2026-GLVC-Swimming-Diving-Complete_Results.txt",
+        "sha256": "b070949ecdfe15198706f888b15ba919a7946bc787f0190a323712c738c29445",
+        "bytes": 270116,
+        "pdfSha256": "5917ac592ec84effada6589c82b97d29d60ba6d142592da7f5bbdbf0a6a06b61",
+        "tool": "xpdf pdftotext",
+        "toolVersion": "4.00",
+        "command": "pdftotext -eol unix 2026-GLVC-Swimming-Diving-Complete_Results.pdf 2026-GLVC-Swimming-Diving-Complete_Results.txt",
+        "pageSeparator": "form feed (U+000C) after each page"
+      }
+    }
+  ]
+}
