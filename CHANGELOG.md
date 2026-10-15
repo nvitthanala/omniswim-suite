@@ -37,6 +37,27 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - **A team's season trend has a picker.** The chart shows one team, not the
   sum of every team in the meet.
 
+### Added and fixed (improvement plan, 2026-10-15)
+
+- **Scout an opponent.** The lineup step has a Scout tab. It compares your
+  entered times with a crawled team's measured times, event by event, and
+  lists where you win, where you lose, and the swing events. Relays and
+  diving are not scouted.
+- **Timed-final swims and relays score.** A SwimCloud swim in a "Timed
+  Finals" round (the 1000 and 1650 free, relays) no longer reads as an
+  unscored D final. Relays now score in computed mode. On NSISC 2026 the
+  men's relay points match the published results. A meet with no "scored
+  through event N" setting also scores post-meet time trials; set it.
+- **Optimize all teams runs in the background.** It shows progress and has
+  a Cancel button. The page no longer freezes on a large workspace.
+- **Rename a workspace.** The active workspace has a rename button in the
+  sidebar.
+- **Retry a failed SwimCloud token.** The capture window has a Try again
+  button.
+- **Error text reaches the user in production.** Preset field messages and
+  the PDF size hint no longer disappear.
+- **A no-time event no longer counts toward the cut tier.**
+
 ### Added (PR #6, 2026-10-02 to 2026-10-10)
 
 - **The Manager is a set of steps.** An Athletes step and one shared team bar
