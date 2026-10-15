@@ -97,7 +97,7 @@
     "R4": "committed f5f1386a, e893dd8d optimizer in the scoring worker; useAllTeamsApply still sync",
     "R5": "committed c63960df all any warnings removed; max-warnings 0",
     "R6": "committed (complexity 29->7 and 31->11; golden over 83 calls identical; baseline now 0 complexity warnings)",
-    "R7": "in progress: swimcloudCaptureRoutes router split committed 075b089c; OpsModule + RosterImportWizard with worker a5230407dad14c1ac; SwimCloudCaptureBrowser and multiTeamDriver runMultiTeamCrawl remain",
+    "R7": "in progress: router split 075b089c, OpsModule ed464609, RosterImportWizard f69aa6e6, SwimCloudCaptureBrowser f81fc4f6 committed; runMultiTeamCrawl with executor addb71763e2e63084",
     "R8": "committed",
     "R9": "pending",
     "R10": "committed d19aa4df (folder) + 7c71285a (scripts, dependency, eslint ignore)",
@@ -349,6 +349,7 @@
     "C6 blank-cell representation; P3 client overlap/adopt policy; individual tie key gender; scoring diff review (dispatched as af176a27510a0f9d6)"
   ],
   "foundNotFixed": [
+    "SwimCloudCaptureBrowser: tokenError is never cleared and the refresh button is hidden while it is set, so a failed token fetch recovers only by closing and reopening the window (found in R7).",
     "backend: timed-but-ineligible rows in a mixed group are emitted twice (extend(ineligible) then extend(group))",
     "backend/pdf_parser.py: broad except Exception near the relay payload build (now flagged by relay_split_source legacy)",
     "backend: clock like 1:02:03.00 now reads None (used to read 62.0)",
