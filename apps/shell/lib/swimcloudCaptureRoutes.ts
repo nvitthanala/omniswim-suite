@@ -1154,24 +1154,18 @@ function buildMergedCaptureRecord(
   };
 }
 
-export function createSwimCloudCaptureRouter(options: SwimCloudCaptureRouterOptions): Router {
-  const { store, captureRoot, pairingToken } = options;
-  const bodyLimitBytes = options.bodyLimitBytes ?? SWIMCLOUD_CAPTURE_BODY_LIMIT_BYTES;
-  const router = express.Router();
-
-  if (options.extensionOrigin !== undefined && options.extensionOrigin.length > 0) {
-    router.use(narrowCors(options.extensionOrigin));
-  }
-  router.use(requireCaptureToken(pairingToken));
-  router.use(enforceCaptureBodyLimit(bodyLimitBytes));
-  router.use(express.json({ limit: bodyLimitBytes }));
-
+interface CaptureRouteDeps {
+  readonly store: FileSystemSwimCloudCaptureStore;
   /**
    * Validate a path or derived `captureId` and answer the request if it fails.
    * Returns `undefined` once a response has been sent, so every caller reads as
    * `const id = guardCaptureId(...); if (id === undefined) return;`.
    */
-  function guardCaptureId(candidate: unknown, res: Response): string | undefined {
+  readonly guardCaptureId: (candidate: unknown, res: Response) => string | undefined;
+}
+
+function makeCaptureIdGuard(captureRoot: string): CaptureRouteDeps['guardCaptureId'] {
+  return (candidate, res) => {
     if (!isValidSwimCloudCaptureId(candidate)) {
       apiError(
         res,
@@ -1193,314 +1187,352 @@ export function createSwimCloudCaptureRouter(options: SwimCloudCaptureRouterOpti
       return undefined;
     }
     return candidate;
+  };
+}
+
+/**
+ * Event references the STORED swims pages already name.
+ *
+ * ## Why this exists
+ *
+ * The crawler's event-results pass plans from the swims pages it fetched
+ * *this run*. Resume skips a swims page whose bytes are already stored, so a
+ * re-crawl of a complete capture collects no references at all, plans zero
+ * `meetEvent` pages, and leaves every prelims/finals pair unresolved — while
+ * reporting success, because it genuinely had nothing new to fetch. The
+ * crawler warns about this in one line and then cannot do anything about it,
+ * since only the app can see the stored bytes.
+ *
+ * So the app derives them. The pages are already on disk; reading them costs
+ * no request to SwimCloud, and only the `meetEvent` pages themselves are
+ * fetched afterwards.
+ *
+ * A page that does not parse contributes nothing and is not an error here:
+ * this is a best-effort enrichment of a resume decision, and a capture whose
+ * swims pages are unreadable has larger problems that the parse route
+ * reports properly.
+ */
+async function storedEventRefs(
+  store: FileSystemSwimCloudCaptureStore,
+  captureId: string
+): Promise<string[]> {
+  const record = await store.getCapture(captureId);
+  if (record === undefined) return [];
+  const refs = new Set<string>();
+  for (const page of record.pages) {
+    if (page.resourceKind !== 'meetTeamSwims' || page.outcome !== 'ok') continue;
+    const entry = await store.readPage(page.canonicalUrl);
+    if (entry?.html === undefined) continue;
+    let parsed;
+    try {
+      parsed = parseTeamMeetSwimsHtml(entry.html, {
+        sourceUrl: page.canonicalUrl,
+        retrievedAt: page.retrievedAt,
+        track: record.track,
+      });
+    } catch {
+      continue;
+    }
+    if (!parsed.ok) continue;
+    for (const swim of parsed.data.swims) {
+      const ref = swim.event.eventRef;
+      if (typeof ref === 'string' && ref.length > 0) refs.add(ref);
+    }
   }
 
-  /* --- POST /api/swimcloud/captures — open or update a capture record ----- */
-  router.post('/', async (req, res) => {
-    try {
-      const body: unknown = req.body;
-      if (!isPlainObject(body)) {
-        return apiError(res, 400, 'INVALID_CAPTURE_BODY', 'Capture body must be a JSON object');
-      }
-
-      const fields = validateCaptureOpenBody(body, res, guardCaptureId);
-      if (fields === undefined) return undefined;
-
-      const existing = await store.getCapture(fields.captureId);
-      const now = new Date().toISOString();
-      const record = buildMergedCaptureRecord(fields, existing, now);
-
-      const saved = await store.upsertCapture(record);
-      if (existing === undefined) return res.status(201).json(saved);
-      return res.json(saved);
-    } catch (err) {
-      return apiError(res, 500, 'CAPTURE_OPEN_FAILED', 'Failed to open capture', String(err));
+  // ## Why the stored EVENT pages are read too
+  //
+  // Swims pages alone are not enough, and on a re-crawl they are not enough
+  // in a way that never resolves itself. A per-event page prints the meet's
+  // own index of every event; a swims list names only the events its own
+  // team's swimmers swam. Measured on meet 356467: 51 refs from all 42 swims
+  // pages, 57 from any single event page. The six missing were four diving
+  // events and two mixed relays, and the diving four could never appear on a
+  // swims list at any page count, because a diver has no swims.
+  //
+  // The crawl also expands its own plan from each event page it fetches, but
+  // that cannot close this gap: on a re-crawl of a complete capture every
+  // planned page is already stored, so nothing is fetched, so no index is
+  // read. Only the app can see the stored bytes. Reading them here costs no
+  // request to SwimCloud.
+  //
+  // Every stored event page is read rather than just the first. All 51 of the
+  // real capture print the identical 57-entry index, so one would do — but
+  // "one would do" rests on that single meet, and a union cannot be wrong
+  // where an early exit could. `readMeetEventIndex` is one regex pass, not a
+  // full parse, so the cost is small.
+  for (const page of record.pages) {
+    if (page.resourceKind !== 'meetEvent' || page.outcome !== 'ok') continue;
+    const entry = await store.readPage(page.canonicalUrl);
+    if (entry?.html === undefined) continue;
+    // The page's own meet, not the capture subject's. readMeetEventIndex
+    // matches it against every href, so an index item naming another meet is
+    // rejected rather than planned.
+    if (page.meetId === undefined) continue;
+    for (const indexEntry of readMeetEventIndex(entry.html, page.meetId)) {
+      refs.add(indexEntry.eventRef);
     }
-  });
+  }
 
-  /* --- GET /api/swimcloud/captures — the picker's list -------------------- */
-  router.get('/', async (_req, res) => {
-    try {
-      const captures = [...(await store.listCaptures())].sort((a, b) => {
-        if (a.updatedAt !== b.updatedAt) return a.updatedAt < b.updatedAt ? 1 : -1;
-        return a.captureId < b.captureId ? -1 : 1;
-      });
-      return res.json(await Promise.all(captures.map(c => withTeamName(store, c))));
-    } catch (err) {
-      return apiError(res, 500, 'CAPTURE_LIST_FAILED', 'Failed to list captures', String(err));
+  return [...refs].sort();
+}
+
+/** POST / — open or update a capture record. */
+function openCaptureHandler({ store, guardCaptureId }: CaptureRouteDeps): RequestHandler {
+  return async (req, res) => {
+  try {
+    const body: unknown = req.body;
+    if (!isPlainObject(body)) {
+      return apiError(res, 400, 'INVALID_CAPTURE_BODY', 'Capture body must be a JSON object');
     }
-  });
 
-  /* --- GET /api/swimcloud/captures/:id ------------------------------------ */
-  /**
-   * Event references the STORED swims pages already name.
-   *
-   * ## Why this exists
-   *
-   * The crawler's event-results pass plans from the swims pages it fetched
-   * *this run*. Resume skips a swims page whose bytes are already stored, so a
-   * re-crawl of a complete capture collects no references at all, plans zero
-   * `meetEvent` pages, and leaves every prelims/finals pair unresolved — while
-   * reporting success, because it genuinely had nothing new to fetch. The
-   * crawler warns about this in one line and then cannot do anything about it,
-   * since only the app can see the stored bytes.
-   *
-   * So the app derives them. The pages are already on disk; reading them costs
-   * no request to SwimCloud, and only the `meetEvent` pages themselves are
-   * fetched afterwards.
-   *
-   * A page that does not parse contributes nothing and is not an error here:
-   * this is a best-effort enrichment of a resume decision, and a capture whose
-   * swims pages are unreadable has larger problems that the parse route
-   * reports properly.
-   */
-  async function storedEventRefs(captureId: string): Promise<string[]> {
+    const fields = validateCaptureOpenBody(body, res, guardCaptureId);
+    if (fields === undefined) return undefined;
+
+    const existing = await store.getCapture(fields.captureId);
+    const now = new Date().toISOString();
+    const record = buildMergedCaptureRecord(fields, existing, now);
+
+    const saved = await store.upsertCapture(record);
+    if (existing === undefined) return res.status(201).json(saved);
+    return res.json(saved);
+  } catch (err) {
+    return apiError(res, 500, 'CAPTURE_OPEN_FAILED', 'Failed to open capture', String(err));
+  }
+  };
+}
+
+/** GET / — the picker's list. */
+function listCapturesHandler({ store }: CaptureRouteDeps): RequestHandler {
+  return async (req, res) => {
+  try {
+    const captures = [...(await store.listCaptures())].sort((a, b) => {
+      if (a.updatedAt !== b.updatedAt) return a.updatedAt < b.updatedAt ? 1 : -1;
+      return a.captureId < b.captureId ? -1 : 1;
+    });
+    return res.json(await Promise.all(captures.map(c => withTeamName(store, c))));
+  } catch (err) {
+    return apiError(res, 500, 'CAPTURE_LIST_FAILED', 'Failed to list captures', String(err));
+  }
+  };
+}
+
+/** GET /:id — one capture record, optionally with the event refs its stored pages name. */
+function readCaptureHandler({ store, guardCaptureId }: CaptureRouteDeps): RequestHandler {
+  return async (req, res) => {
+  const captureId = guardCaptureId(req.params.id, res);
+  if (captureId === undefined) return undefined;
+  try {
     const record = await store.getCapture(captureId);
-    if (record === undefined) return [];
-    const refs = new Set<string>();
-    for (const page of record.pages) {
-      if (page.resourceKind !== 'meetTeamSwims' || page.outcome !== 'ok') continue;
-      const entry = await store.readPage(page.canonicalUrl);
-      if (entry?.html === undefined) continue;
-      let parsed;
-      try {
-        parsed = parseTeamMeetSwimsHtml(entry.html, {
-          sourceUrl: page.canonicalUrl,
-          retrievedAt: page.retrievedAt,
-          track: record.track,
-        });
-      } catch {
-        continue;
-      }
-      if (!parsed.ok) continue;
-      for (const swim of parsed.data.swims) {
-        const ref = swim.event.eventRef;
-        if (typeof ref === 'string' && ref.length > 0) refs.add(ref);
-      }
+    if (record === undefined) {
+      return apiError(res, 404, 'CAPTURE_NOT_FOUND', `Capture not found: ${captureId}`);
     }
-
-    // ## Why the stored EVENT pages are read too
-    //
-    // Swims pages alone are not enough, and on a re-crawl they are not enough
-    // in a way that never resolves itself. A per-event page prints the meet's
-    // own index of every event; a swims list names only the events its own
-    // team's swimmers swam. Measured on meet 356467: 51 refs from all 42 swims
-    // pages, 57 from any single event page. The six missing were four diving
-    // events and two mixed relays, and the diving four could never appear on a
-    // swims list at any page count, because a diver has no swims.
-    //
-    // The crawl also expands its own plan from each event page it fetches, but
-    // that cannot close this gap: on a re-crawl of a complete capture every
-    // planned page is already stored, so nothing is fetched, so no index is
-    // read. Only the app can see the stored bytes. Reading them here costs no
-    // request to SwimCloud.
-    //
-    // Every stored event page is read rather than just the first. All 51 of the
-    // real capture print the identical 57-entry index, so one would do — but
-    // "one would do" rests on that single meet, and a union cannot be wrong
-    // where an early exit could. `readMeetEventIndex` is one regex pass, not a
-    // full parse, so the cost is small.
-    for (const page of record.pages) {
-      if (page.resourceKind !== 'meetEvent' || page.outcome !== 'ok') continue;
-      const entry = await store.readPage(page.canonicalUrl);
-      if (entry?.html === undefined) continue;
-      // The page's own meet, not the capture subject's. readMeetEventIndex
-      // matches it against every href, so an index item naming another meet is
-      // rejected rather than planned.
-      if (page.meetId === undefined) continue;
-      for (const indexEntry of readMeetEventIndex(entry.html, page.meetId)) {
-        refs.add(indexEntry.eventRef);
-      }
+    // Opt-in, because deriving them parses every stored swims page and the
+    // ordinary read of a capture record must stay cheap. The crawler asks for
+    // them; the capture browser does not need them.
+    if (req.query.withEventRefs === '1') {
+      return res.json({ ...record, knownEventRefs: await storedEventRefs(store, captureId) });
     }
+    return res.json(record);
+  } catch (err) {
+    return apiError(res, 500, 'CAPTURE_READ_FAILED', 'Failed to read capture', String(err));
+  }
+  };
+}
 
-    return [...refs].sort();
+/** POST /:id/pages — one crawled page. */
+function storePageHandler({ store, guardCaptureId }: CaptureRouteDeps): RequestHandler {
+  return async (req, res) => {
+  const captureId = guardCaptureId(req.params.id, res);
+  if (captureId === undefined) return undefined;
+
+  // `readSwimCloudClipboardPayload` owns payload-shape validation for both
+  // versions and never throws, so this route re-serializes the parsed body
+  // rather than re-implementing the checks. The cost is one round trip
+  // through JSON for ~200 KB; the benefit is one validator, not two that can
+  // disagree about what version 2 means.
+  let serialized: string;
+  try {
+    serialized = JSON.stringify(req.body ?? null);
+  } catch (err) {
+    return apiError(res, 400, 'UNREADABLE_CAPTURE_PAGE', 'Unreadable capture page body', String(err));
+  }
+  const read = readSwimCloudClipboardPayload(serialized ?? '');
+  if (!read.ok) {
+    return apiError(res, 400, 'INVALID_CAPTURE_PAGE', 'Invalid capture page payload', read.message, {
+      reason: read.reason,
+    });
+  }
+  if (read.payload.omniswimSwimCloudCapture !== 2) {
+    return apiError(
+      res,
+      400,
+      'CAPTURE_PAYLOAD_VERSION',
+      'This route needs a version 2 capture payload',
+      'A version 1 payload is the single-page clipboard shape and carries no subject. Post `omniswimSwimCloudCapture: 2` with a subject, or use the clipboard import.'
+    );
+  }
+  const payload = read.payload;
+
+  // The canonical URL is the cache key and the page identity, so it is taken
+  // from the classifier, never from the raw sourceUrl. A forbidden or
+  // unmodelled path is refused here rather than stored: `SwimCloudCapturePageRef`
+  // requires a `resourceKind`, and there is no honest value for a path this
+  // repo does not model.
+  const classification = classifySwimCloudUrl(payload.sourceUrl);
+  if (classification.outcome !== 'fetchable') {
+    return apiError(
+      res,
+      400,
+      'CAPTURE_PAGE_URL_REFUSED',
+      'Capture page sourceUrl is not a fetchable SwimCloud resource',
+      classification.detail,
+      { outcome: classification.outcome }
+    );
   }
 
-  router.get('/:id', async (req, res) => {
-    const captureId = guardCaptureId(req.params.id, res);
-    if (captureId === undefined) return undefined;
-    try {
-      const record = await store.getCapture(captureId);
-      if (record === undefined) {
-        return apiError(res, 404, 'CAPTURE_NOT_FOUND', `Capture not found: ${captureId}`);
-      }
-      // Opt-in, because deriving them parses every stored swims page and the
-      // ordinary read of a capture record must stay cheap. The crawler asks for
-      // them; the capture browser does not need them.
-      if (req.query.withEventRefs === '1') {
-        return res.json({ ...record, knownEventRefs: await storedEventRefs(captureId) });
-      }
-      return res.json(record);
-    } catch (err) {
-      return apiError(res, 500, 'CAPTURE_READ_FAILED', 'Failed to read capture', String(err));
-    }
-  });
-
-  /* --- POST /api/swimcloud/captures/:id/pages — one crawled page ---------- */
-  router.post('/:id/pages', async (req, res) => {
-    const captureId = guardCaptureId(req.params.id, res);
-    if (captureId === undefined) return undefined;
-
-    // `readSwimCloudClipboardPayload` owns payload-shape validation for both
-    // versions and never throws, so this route re-serializes the parsed body
-    // rather than re-implementing the checks. The cost is one round trip
-    // through JSON for ~200 KB; the benefit is one validator, not two that can
-    // disagree about what version 2 means.
-    let serialized: string;
-    try {
-      serialized = JSON.stringify(req.body ?? null);
-    } catch (err) {
-      return apiError(res, 400, 'UNREADABLE_CAPTURE_PAGE', 'Unreadable capture page body', String(err));
-    }
-    const read = readSwimCloudClipboardPayload(serialized ?? '');
-    if (!read.ok) {
-      return apiError(res, 400, 'INVALID_CAPTURE_PAGE', 'Invalid capture page payload', read.message, {
-        reason: read.reason,
-      });
-    }
-    if (read.payload.omniswimSwimCloudCapture !== 2) {
+  try {
+    const capture = await store.getCapture(captureId);
+    if (capture === undefined) {
       return apiError(
         res,
-        400,
-        'CAPTURE_PAYLOAD_VERSION',
-        'This route needs a version 2 capture payload',
-        'A version 1 payload is the single-page clipboard shape and carries no subject. Post `omniswimSwimCloudCapture: 2` with a subject, or use the clipboard import.'
-      );
-    }
-    const payload = read.payload;
-
-    // The canonical URL is the cache key and the page identity, so it is taken
-    // from the classifier, never from the raw sourceUrl. A forbidden or
-    // unmodelled path is refused here rather than stored: `SwimCloudCapturePageRef`
-    // requires a `resourceKind`, and there is no honest value for a path this
-    // repo does not model.
-    const classification = classifySwimCloudUrl(payload.sourceUrl);
-    if (classification.outcome !== 'fetchable') {
-      return apiError(
-        res,
-        400,
-        'CAPTURE_PAGE_URL_REFUSED',
-        'Capture page sourceUrl is not a fetchable SwimCloud resource',
-        classification.detail,
-        { outcome: classification.outcome }
+        404,
+        'CAPTURE_NOT_FOUND',
+        `Capture not found: ${captureId}`,
+        `Open it with POST ${SWIMCLOUD_CAPTURE_ROUTE_BASE} before posting pages to it.`
       );
     }
 
-    try {
-      const capture = await store.getCapture(captureId);
-      if (capture === undefined) {
-        return apiError(
-          res,
-          404,
-          'CAPTURE_NOT_FOUND',
-          `Capture not found: ${captureId}`,
-          `Open it with POST ${SWIMCLOUD_CAPTURE_ROUTE_BASE} before posting pages to it.`
-        );
-      }
-
-      // A page whose subject disagrees with the capture it is being filed under
-      // would silently attribute one meet's results to another. Season is not
-      // compared: a per-page payload may legitimately omit it while the record
-      // carries one, and the team id is what identifies the crawl target.
-      if (!subjectsAgree(capture.subject, payload.subject)) {
-        return apiError(
-          res,
-          409,
-          'CAPTURE_SUBJECT_MISMATCH',
-          'Capture page subject does not match the capture',
-          `Capture ${captureId} is ${JSON.stringify(capture.subject)}; the page claims ${JSON.stringify(payload.subject)}.`
-        );
-      }
-
-      const canonicalUrl = classification.canonicalUrl;
-      const facets = pageFacetsFor(classification.resource);
-      const httpStatus = payload.httpStatus;
-      // An absent status means the extension recorded no non-200 outcome, which
-      // is the successful case in the v2 payload contract.
-      const succeeded = httpStatus === undefined || (httpStatus >= 200 && httpStatus < 300);
-
-      // Bytes are stored only for a successful fetch. `SwimCloudCapturePageRef`
-      // states that `sha256` is absent for a non-'ok' outcome, and the body of
-      // a 404 is an error page, not the resource — the recorded facts (status,
-      // outcome, detail) are what a 404 actually contributes.
-      const entry: SwimCloudCacheEntry | undefined = succeeded
-        ? {
-            canonicalUrl,
-            html: payload.html,
-            // `'provisional'`, always. `'final'` means "immutable, never
-            // re-fetch" (see cache.ts), and nothing in this payload proves the
-            // meet is over. A later, deliberate step may promote it; a
-            // transport route may not.
-            status: 'provisional',
-            retrievedAt: payload.retrievedAt,
-            track: payload.track,
-            sha256: crypto.createHash('sha256').update(payload.html, 'utf8').digest('hex'),
-            ...(httpStatus === undefined ? {} : { httpStatus }),
-          }
-        : undefined;
-
-      const pageRef: SwimCloudCapturePageRef = {
-        canonicalUrl,
-        resourceKind: facets.resourceKind,
-        ...(facets.meetId === undefined ? {} : { meetId: facets.meetId }),
-        ...(facets.teamId === undefined ? {} : { teamId: facets.teamId }),
-        ...(facets.gender === undefined ? {} : { gender: facets.gender }),
-        ...(facets.page === undefined ? {} : { page: facets.page }),
-        retrievedAt: payload.retrievedAt,
-        ...(httpStatus === undefined ? {} : { httpStatus }),
-        ...(entry === undefined
-          ? {}
-          : { sha256: entry.sha256, bytes: Buffer.byteLength(payload.html, 'utf8') }),
-        cacheStatus: 'provisional',
-        outcome: succeeded ? 'ok' : 'http-error',
-        ...(succeeded ? {} : { detail: `SwimCloud returned HTTP ${String(httpStatus)} for this page.` }),
-      };
-
-      await store.putPage(captureId, entry, pageRef);
-      const updated = await store.getCapture(captureId);
-      return res.json({ captureId, page: pageRef, capture: updated });
-    } catch (err) {
-      return apiError(res, 500, 'CAPTURE_PAGE_STORE_FAILED', 'Failed to store capture page', String(err));
+    // A page whose subject disagrees with the capture it is being filed under
+    // would silently attribute one meet's results to another. Season is not
+    // compared: a per-page payload may legitimately omit it while the record
+    // carries one, and the team id is what identifies the crawl target.
+    if (!subjectsAgree(capture.subject, payload.subject)) {
+      return apiError(
+        res,
+        409,
+        'CAPTURE_SUBJECT_MISMATCH',
+        'Capture page subject does not match the capture',
+        `Capture ${captureId} is ${JSON.stringify(capture.subject)}; the page claims ${JSON.stringify(payload.subject)}.`
+      );
     }
-  });
 
-  /* --- POST /api/swimcloud/captures/:id/parse — read the stored pages ----- */
-  router.post('/:id/parse', async (req, res) => {
-    // Same `guardCaptureId` as every other id-bearing route, reached through the
-    // same token gate, the same loopback registration and the same body cap —
-    // this handler is registered inside the one router so it cannot drift out of
-    // that middleware stack.
-    const captureId = guardCaptureId(req.params.id, res);
-    if (captureId === undefined) return undefined;
+    const canonicalUrl = classification.canonicalUrl;
+    const facets = pageFacetsFor(classification.resource);
+    const httpStatus = payload.httpStatus;
+    // An absent status means the extension recorded no non-200 outcome, which
+    // is the successful case in the v2 payload contract.
+    const succeeded = httpStatus === undefined || (httpStatus >= 200 && httpStatus < 300);
 
-    // A body is accepted and ignored. There is no filter parameter yet, and
-    // inventing one before the picker asks for it would be a guess at a contract.
-    try {
-      const capture = await store.getCapture(captureId);
-      if (capture === undefined) {
-        return apiError(res, 404, 'CAPTURE_NOT_FOUND', `Capture not found: ${captureId}`);
-      }
-      return res.json(await parseSwimCloudCapture(store, capture));
-    } catch (err) {
-      return apiError(res, 500, 'CAPTURE_PARSE_FAILED', 'Failed to parse capture', String(err));
+    // Bytes are stored only for a successful fetch. `SwimCloudCapturePageRef`
+    // states that `sha256` is absent for a non-'ok' outcome, and the body of
+    // a 404 is an error page, not the resource — the recorded facts (status,
+    // outcome, detail) are what a 404 actually contributes.
+    const entry: SwimCloudCacheEntry | undefined = succeeded
+      ? {
+          canonicalUrl,
+          html: payload.html,
+          // `'provisional'`, always. `'final'` means "immutable, never
+          // re-fetch" (see cache.ts), and nothing in this payload proves the
+          // meet is over. A later, deliberate step may promote it; a
+          // transport route may not.
+          status: 'provisional',
+          retrievedAt: payload.retrievedAt,
+          track: payload.track,
+          sha256: crypto.createHash('sha256').update(payload.html, 'utf8').digest('hex'),
+          ...(httpStatus === undefined ? {} : { httpStatus }),
+        }
+      : undefined;
+
+    const pageRef: SwimCloudCapturePageRef = {
+      canonicalUrl,
+      resourceKind: facets.resourceKind,
+      ...(facets.meetId === undefined ? {} : { meetId: facets.meetId }),
+      ...(facets.teamId === undefined ? {} : { teamId: facets.teamId }),
+      ...(facets.gender === undefined ? {} : { gender: facets.gender }),
+      ...(facets.page === undefined ? {} : { page: facets.page }),
+      retrievedAt: payload.retrievedAt,
+      ...(httpStatus === undefined ? {} : { httpStatus }),
+      ...(entry === undefined
+        ? {}
+        : { sha256: entry.sha256, bytes: Buffer.byteLength(payload.html, 'utf8') }),
+      cacheStatus: 'provisional',
+      outcome: succeeded ? 'ok' : 'http-error',
+      ...(succeeded ? {} : { detail: `SwimCloud returned HTTP ${String(httpStatus)} for this page.` }),
+    };
+
+    await store.putPage(captureId, entry, pageRef);
+    const updated = await store.getCapture(captureId);
+    return res.json({ captureId, page: pageRef, capture: updated });
+  } catch (err) {
+    return apiError(res, 500, 'CAPTURE_PAGE_STORE_FAILED', 'Failed to store capture page', String(err));
+  }
+  };
+}
+
+/** POST /:id/parse — read the stored pages. */
+function parseCaptureHandler({ store, guardCaptureId }: CaptureRouteDeps): RequestHandler {
+  return async (req, res) => {
+  // Same `guardCaptureId` as every other id-bearing route, reached through the
+  // same token gate, the same loopback registration and the same body cap —
+  // this handler is registered inside the one router so it cannot drift out of
+  // that middleware stack.
+  const captureId = guardCaptureId(req.params.id, res);
+  if (captureId === undefined) return undefined;
+
+  // A body is accepted and ignored. There is no filter parameter yet, and
+  // inventing one before the picker asks for it would be a guess at a contract.
+  try {
+    const capture = await store.getCapture(captureId);
+    if (capture === undefined) {
+      return apiError(res, 404, 'CAPTURE_NOT_FOUND', `Capture not found: ${captureId}`);
     }
-  });
+    return res.json(await parseSwimCloudCapture(store, capture));
+  } catch (err) {
+    return apiError(res, 500, 'CAPTURE_PARSE_FAILED', 'Failed to parse capture', String(err));
+  }
+  };
+}
 
-  /* --- DELETE /api/swimcloud/captures/:id --------------------------------- */
-  router.delete('/:id', async (req, res) => {
-    const captureId = guardCaptureId(req.params.id, res);
-    if (captureId === undefined) return undefined;
-    try {
-      const existing = await store.getCapture(captureId);
-      if (existing === undefined) {
-        return apiError(res, 404, 'CAPTURE_NOT_FOUND', `Capture not found: ${captureId}`);
-      }
-      await store.deleteCapture(captureId, { withPages: true });
-      return res.json({ success: true, captureId, pagesDeleted: existing.pages.length });
-    } catch (err) {
-      return apiError(res, 500, 'CAPTURE_DELETE_FAILED', 'Failed to delete capture', String(err));
+/** DELETE /:id */
+function deleteCaptureHandler({ store, guardCaptureId }: CaptureRouteDeps): RequestHandler {
+  return async (req, res) => {
+  const captureId = guardCaptureId(req.params.id, res);
+  if (captureId === undefined) return undefined;
+  try {
+    const existing = await store.getCapture(captureId);
+    if (existing === undefined) {
+      return apiError(res, 404, 'CAPTURE_NOT_FOUND', `Capture not found: ${captureId}`);
     }
-  });
+    await store.deleteCapture(captureId, { withPages: true });
+    return res.json({ success: true, captureId, pagesDeleted: existing.pages.length });
+  } catch (err) {
+    return apiError(res, 500, 'CAPTURE_DELETE_FAILED', 'Failed to delete capture', String(err));
+  }
+  };
+}
+
+
+export function createSwimCloudCaptureRouter(options: SwimCloudCaptureRouterOptions): Router {
+  const { store, captureRoot, pairingToken } = options;
+  const bodyLimitBytes = options.bodyLimitBytes ?? SWIMCLOUD_CAPTURE_BODY_LIMIT_BYTES;
+  const router = express.Router();
+
+  if (options.extensionOrigin !== undefined && options.extensionOrigin.length > 0) {
+    router.use(narrowCors(options.extensionOrigin));
+  }
+  router.use(requireCaptureToken(pairingToken));
+  router.use(enforceCaptureBodyLimit(bodyLimitBytes));
+  router.use(express.json({ limit: bodyLimitBytes }));
+
+  const deps: CaptureRouteDeps = { store, guardCaptureId: makeCaptureIdGuard(captureRoot) };
+
+  router.post('/', openCaptureHandler(deps));
+  router.get('/', listCapturesHandler(deps));
+  router.get('/:id', readCaptureHandler(deps));
+  router.post('/:id/pages', storePageHandler(deps));
+  router.post('/:id/parse', parseCaptureHandler(deps));
+  router.delete('/:id', deleteCaptureHandler(deps));
 
   router.use(captureErrorHandler);
   return router;
