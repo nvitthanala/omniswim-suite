@@ -317,9 +317,18 @@ def _resolve_scoring_settings(scoring_settings=None, overrides=None):
 
 
 
+def _normalized_round_label(label):
+
+    # "Timed Finals" holds the text "D FINAL" (TIME-D FINAL-s). Read it as "Finals".
+
+    return re.sub(r'\bTIMED[\s-]+FINAL(S?)\b', r'FINAL\1', (label or '').upper())
+
+
+
+
 def classify_round_tier(round_swam):
 
-    r = (round_swam or '').upper()
+    r = _normalized_round_label(round_swam)
 
     if 'TIME TRIAL' in r or 'TIME TRIALS' in r:
 
@@ -451,9 +460,9 @@ def is_outside_scored_program(event_name, scored_event_number_max):
 
 def is_unscored_round_or_event(round_swam, event_name, cfg):
 
-    r = (round_swam or '').upper()
+    r = _normalized_round_label(round_swam)
 
-    e = (event_name or '').upper()
+    e = _normalized_round_label(event_name)
 
     if is_outside_scored_program(event_name, cfg.get('scoredEventNumberMax')):
 

@@ -18,10 +18,19 @@ const DEFAULT_UNSCORED_ROUNDS = [
   'TIME TRIAL',
 ];
 
+/**
+ * Upper-cases a round label and reads "Timed Finals" as "Finals". Without this
+ * the "D" that ends "TIMED" and the word "FINAL" read as a D final, so a
+ * SwimCloud timed-final swim (distance events, relays) was unscored.
+ */
+function normalizedRoundLabel(roundSwam: string | undefined): string {
+  return (roundSwam || '').toUpperCase().replace(/\bTIMED[\s-]+FINAL(S?)\b/g, 'FINAL$1');
+}
+
 export function classifyRoundTier(
   roundSwam: string | undefined
 ): 'A' | 'B' | 'C' | 'D' | 'PRE' | 'TT' | 'FIN' | 'UNK' {
-  const r = (roundSwam || '').toUpperCase();
+  const r = normalizedRoundLabel(roundSwam);
   if (r.includes('TIME TRIAL') || r.includes('TIME TRIALS')) return 'TT';
   if (r.includes('C FINAL') || r.includes('C-FINAL') || r.includes('BONUS FINAL')) return 'C';
   if (r.includes('D FINAL') || r.includes('D-FINAL')) return 'D';
@@ -103,8 +112,8 @@ export function isOutsideScoredProgram(
 }
 
 function isUnscoredRoundOrEvent(roundSwam: string | undefined, event: string | undefined, settings: ScoringSettings): boolean {
-  const r = (roundSwam || '').toUpperCase();
-  const e = (event || '').toUpperCase();
+  const r = normalizedRoundLabel(roundSwam);
+  const e = normalizedRoundLabel(event);
   // The meet's own published boundary. HyTek numbers post-meet extra sessions
   // above the program and leaves them out of the team totals; the 2026 NSISC
   // results score "Through Event 42" and print events 938/939 after the time
