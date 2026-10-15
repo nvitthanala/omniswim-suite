@@ -113,12 +113,30 @@ export default function WorkspaceSidebar() {
     toast.push('success', `Workspace "${workspace.name}" ready`);
   };
 
+  const handleRenameStart = (id: string) => {
+    // Only the open workspace can be renamed: `saveWorkspace` writes to it.
+    if (id !== activeWorkspaceId) return;
+    const current = workspaces.find((w) => w.id === id);
+    setEditWorkspaceName(current?.name ?? '');
+    setEditingWorkspaceId(id);
+  };
+
+  const handleRenameCancel = () => {
+    setEditingWorkspaceId(null);
+  };
+
   const handleRename = async (id: string) => {
-    if (!editWorkspaceName.trim()) {
+    const nextName = editWorkspaceName.trim();
+    // A blank name is refused: the old name stays and the edit closes.
+    if (!nextName) {
       setEditingWorkspaceId(null);
       return;
     }
-    const nextName = editWorkspaceName.trim();
+    // An unchanged name is not a save, and gets no "renamed" notice.
+    if (nextName === workspaces.find((w) => w.id === id)?.name) {
+      setEditingWorkspaceId(null);
+      return;
+    }
     if (id === activeWorkspaceId) {
       // Say "renamed" only once the server has the name. A failed save already raised its own notice
       // or banner, so a success toast here would contradict it.
@@ -250,7 +268,9 @@ export default function WorkspaceSidebar() {
             editWorkspaceName={editWorkspaceName}
             onSelect={setActiveWorkspaceId}
             onEditNameChange={setEditWorkspaceName}
+            onRenameStart={handleRenameStart}
             onRenameCommit={(id) => void handleRename(id)}
+            onRenameCancel={handleRenameCancel}
             onDeleteRequest={setWorkspaceToDelete}
           />
         ) : (
