@@ -18,7 +18,6 @@ Living documents that describe how a part of the system works today.
 | --- | --- |
 | [reference/CUTLINE_TAGS_PLAN.md](reference/CUTLINE_TAGS_PLAN.md) | The cutline-tag provenance rebuild — four verified NCAA/NAIA sources, the tag taxonomy, and the finding that the original `cutlines.ts` mislabeled D2 data as D1. |
 | [reference/PERFORMANCE_NOTES.md](reference/PERFORMANCE_NOTES.md) | The optimisation pass that memoised `convertTimeToSeconds`, stabilised `TeamRosterPanel` references, and added transitions to the import panel. |
-| [reference/ROSTER_CATALOG_NOTES.md](reference/ROSTER_CATALOG_NOTES.md) | The cross-workspace team roster catalog: course-aware eligibility, how it's queried. |
 
 ## Video — current
 

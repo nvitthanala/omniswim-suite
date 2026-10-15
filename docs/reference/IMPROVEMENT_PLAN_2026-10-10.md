@@ -333,10 +333,11 @@ decoding (`server.ts:284` sets a global 50 MB JSON limit).
   PDF fixtures (public meet results only). CI runs both.
 
 **T3 Unlisted test scripts.** Size S. Route finisher.
-- Evidence: `scripts/test_acc_post.mjs`, `test_post.mjs` and
+- Evidence: `scripts/probes/test_acc_post.mjs`, `test_post.mjs` and
   `test_conference_pdfs.mjs` are not in `scripts/run-tests.mjs` `TESTS`.
-  The first two read PDFs from the working directory that are not in the
-  repo, so they are manual probes.
+  (They sat directly in `scripts/` when this plan was written. They now
+  live in `scripts/probes/`.) The first two read PDFs from the working
+  directory that are not in the repo, so they are manual probes.
 - Change: delete the two probes or move them to `scripts/probes/`. List
   `test_conference_pdfs.mjs` if it can run. Make the runner fail when a
   `scripts/test_*.mjs` is neither listed nor excluded.

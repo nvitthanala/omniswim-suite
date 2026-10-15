@@ -120,11 +120,11 @@ These are on disk but absent from `TESTS` in `scripts/run-tests.mjs`:
 | File | State |
 | --- | --- |
 | `scripts/test_nsisc_team_totals.mjs` | Good test. **Fails.** See above. |
-| `scripts/test_roster_catalog.mjs` | Good test. Passes. Should be added. |
-| `scripts/test_eligibility_toggle.mjs` | Good test. Passes. Should be added. |
-| `scripts/test_conference_pdfs.mjs` | Weak. Needs PDFs in the repo root. |
-| `scripts/test_post.mjs` | Not a test. Manual poke at a live server. |
-| `scripts/test_acc_post.mjs` | Not a test. Manual poke at a live server. |
+| `scripts/test_roster_catalog.mjs` | Good test. Passes. Should be added. (Removed later with the Roster Catalog subsystem.) |
+| `scripts/test_eligibility_toggle.mjs` | Good test. Passes. Should be added. (Removed later with the Roster Catalog subsystem.) |
+| `scripts/probes/test_conference_pdfs.mjs` | Weak. Needs PDFs in the repo root. (Moved to `scripts/probes/`.) |
+| `scripts/probes/test_post.mjs` | Not a test. Manual poke at a live server. (Moved to `scripts/probes/`.) |
+| `scripts/probes/test_acc_post.mjs` | Not a test. Manual poke at a live server. (Moved to `scripts/probes/`.) |
 
 `test_roster_catalog.mjs` and `test_eligibility_toggle.mjs` are free coverage
 being thrown away. Both pass right now.
@@ -224,9 +224,9 @@ failure comes from this audit:
 | `scripts/test_relay_scoring.mjs` | **Zero assertions.** 57 lines of `console.log`. Exits 0 no matter what the engine returns. Also gated on `tests/test_nsisc_output.json`, which is absent, so it has never run here. | **Pushover** |
 | `scripts/test_individual_scoring.mjs` | One check: `eventEvents.size < meetEvents.size * 0.5`. A smoke ratio, not an invariant — meet-scope and event-scope scoring could both be badly wrong and still sit within 2x. Everything else is logging. Also permanently fixture-skipped. | **Pushover** |
 | `scripts/test_roster_optimizer.mjs` | Asserts `Array.isArray(result.overrides)` and `typeof result.projectedTotal === 'number'`. Both pass for `{overrides: [], projectedTotal: NaN}` — `NaN` is a number. An optimizer that returns an empty, losing, or nonsense lineup passes. | **Pushover** |
-| `scripts/test_post.mjs` | Not a test. POSTs a PDF to `localhost:3000` and logs the team list. Catches every error and prints it, exiting 0. Not in the runner. | **Pushover** |
-| `scripts/test_acc_post.mjs` | Identical to the above with a different PDF. | **Pushover** |
-| `scripts/test_conference_pdfs.mjs` | The main loop logs `PARSE FAIL` / `SCORE FAIL` and `continue`s — a parser that fails on all four PDFs reports nothing wrong. Only the final SEC block sets a non-zero exit. Not in the runner, and needs four PDFs in the repo root. | **Weak** |
+| `scripts/probes/test_post.mjs` | Not a test. POSTs a PDF to `localhost:3000` and logs the team list. Catches every error and prints it, exiting 0. Not in the runner. | **Pushover** |
+| `scripts/probes/test_acc_post.mjs` | Identical to the above with a different PDF. | **Pushover** |
+| `scripts/probes/test_conference_pdfs.mjs` | The main loop logs `PARSE FAIL` / `SCORE FAIL` and `continue`s — a parser that fails on all four PDFs reports nothing wrong. Only the final SEC block sets a non-zero exit. Not in the runner, and needs four PDFs in the repo root. | **Weak** |
 | `scripts/test_chart_data.mjs` | Assertions are shape-level (`timelineData.length > 0`, `Object.keys(row).length < 3`). `topTeam.totalPoints > 0` is the only numeric check. `if (!hasData) continue` lets the whole file pass vacuously if the workspaces lose their results. | **Weak** |
 | `scripts/test_relay_overrides.mjs` | Real assertions with a custom accumulator and a correct non-zero exit. Loses points for the mid-file skip that still reports `PASS`. | **Weak** |
 | `scripts/test_athlete_history.mjs` | Mixes a strong exact check (`blaiseResult.swims.length === 15`, badge assertions) with loose ones against live `meets.json` (`history.length > 0`, `merged.length >= ...`). The loose half proves little. | **Weak** |
