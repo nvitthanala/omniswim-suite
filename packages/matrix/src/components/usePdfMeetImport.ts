@@ -97,7 +97,11 @@ export function usePdfMeetImport(ctx: OpsImportContext, pdfFormat: string) {
           // A refusal that names rows is shown as a panel that stays; any other failure is a toast.
           const refused = noticeForRefusedMeet(data);
           if (refused) setPdfImportNotice(refused);
-          else toast.push('error', `${data.error || 'PDF parsing failed'}${data.details ? ` — ${data.details}` : ''}`);
+          else {
+            // `userMessage` is always sent. `details` is dropped in production, so it is the fallback.
+            const hint = typeof data.userMessage === 'string' && data.userMessage ? data.userMessage : data.details;
+            toast.push('error', `${data.error || 'PDF parsing failed'}${hint ? ` — ${hint}` : ''}`);
+          }
           return;
         }
 

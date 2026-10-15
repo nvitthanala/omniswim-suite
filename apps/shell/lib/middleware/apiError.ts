@@ -23,6 +23,13 @@
  *   of that one response, so it is sent in production too. Do not put anything
  *   derived from an exception in it. It can not override `error`, `code` or
  *   `details`.
+ * - `userMessage` and `fieldErrors` are two named `extra` fields for text a user
+ *   must see even in production, because `details` is dropped there. Both are
+ *   written by this server from fixed text or from the validation issues of the
+ *   caller's own request. Never put exception text in them.
+ *   - `userMessage` is one short sentence, for example the PDF size limit.
+ *   - `fieldErrors` is a list of `{ path, message }`, for example the fields of
+ *     a rejected scoring preset.
  *
  * `NODE_ENV` is read on each call, not at import, so a test can switch it.
  */
@@ -38,6 +45,10 @@ export interface ApiErrorBody {
   readonly code: string;
   /** Present only outside production. */
   readonly details?: unknown;
+  /** Always sent when present. One sentence of user-facing text, never exception text. */
+  readonly userMessage?: string;
+  /** Always sent when present. The rejected fields of the caller's own request. */
+  readonly fieldErrors?: ReadonlyArray<{ readonly path: string; readonly message: string }>;
   readonly [field: string]: unknown;
 }
 

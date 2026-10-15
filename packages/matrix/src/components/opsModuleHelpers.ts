@@ -141,14 +141,16 @@ export function parsePsychApiResponse(
       error: `Psych PDF parse failed — server returned an empty response (${resStatus}). Restart dev server or run npm run build && npm start.`,
     };
   }
-  let data: { error?: string; details?: string; results?: SwimmerResult[] };
+  let data: { error?: string; details?: string; userMessage?: string; results?: SwimmerResult[] };
   try {
     data = JSON.parse(rawText) as typeof data;
   } catch {
     return { error: `Psych PDF parse failed — invalid server response: ${rawText.slice(0, 160)}` };
   }
   if (!resOk || data.error) {
-    return { error: `${data.error || 'Psych PDF parsing failed'}${data.details ? ` — ${data.details}` : ''}` };
+    // `userMessage` is always sent. `details` is dropped in production, so it is the fallback.
+    const hint = typeof data.userMessage === 'string' && data.userMessage ? data.userMessage : data.details;
+    return { error: `${data.error || 'Psych PDF parsing failed'}${hint ? ` — ${hint}` : ''}` };
   }
   const results = Array.isArray(data.results) ? data.results : [];
   if (results.length === 0) {

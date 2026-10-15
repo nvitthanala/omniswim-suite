@@ -54,9 +54,15 @@ async function throwApiError(res: Response, fallback: string): Promise<never> {
   let message = fallback;
   let details: ScoringPresetFieldError[] = [];
   try {
-    const body = (await res.json()) as { error?: string; details?: ScoringPresetFieldError[] };
+    const body = (await res.json()) as {
+      error?: string;
+      details?: ScoringPresetFieldError[];
+      fieldErrors?: ScoringPresetFieldError[];
+    };
     if (typeof body?.error === 'string' && body.error) message = body.error;
-    if (Array.isArray(body?.details)) details = body.details;
+    // `fieldErrors` is always sent. `details` only exists outside production, so it is the fallback.
+    if (Array.isArray(body?.fieldErrors)) details = body.fieldErrors;
+    else if (Array.isArray(body?.details)) details = body.details;
   } catch {
     // A non-JSON body means the server failed before it could explain itself.
   }

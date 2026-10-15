@@ -13,7 +13,7 @@ import express from 'express';
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
   createParsePdfGuards,
   DEFAULT_PARSE_PDF_MAX_BYTES,
@@ -241,6 +241,18 @@ describe.each([...PDF_UPLOAD_ROUTES])('PDF upload guard on %s, mounted as server
     expect(res.status).toBe(413);
     expect(res.json.code).toBe('PDF_TOO_LARGE');
     expect(reached).toBe(before);
+  });
+
+  it('sends the size hint as userMessage, which production keeps, while details is dropped', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    try {
+      const res = await send({ base64: pdfBase64(LIMIT + 200) });
+      expect(res.status).toBe(413);
+      expect(res.json).not.toHaveProperty('details');
+      expect(res.json.userMessage).toMatch(/limited to .* MB/);
+    } finally {
+      vi.unstubAllEnvs();
+    }
   });
 
   it('answers 413 for a chunked body far over the limit, which declares no Content-Length', async () => {

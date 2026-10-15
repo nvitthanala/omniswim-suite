@@ -114,6 +114,15 @@ describe('apiError', () => {
     });
     expect(sent.body).toEqual({ error: 'Rows unreadable', code: 'ROWS', rows: [{ row: 1 }] });
   });
+
+  it('sends userMessage and fieldErrors in production, with details still dropped', () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const { res, sent } = fakeRes();
+    const fieldErrors = [{ path: 'label', message: 'Required' }];
+    apiError(res, 400, 'BAD', 'Bad input', SECRET, { userMessage: 'Try a smaller file.', fieldErrors });
+    expect(sent.body).toEqual({ error: 'Bad input', code: 'BAD', userMessage: 'Try a smaller file.', fieldErrors });
+    expect(JSON.stringify(sent.body)).not.toContain('SECRET_LEAK');
+  });
 });
 
 /* -------------------------------------------------------------------------- */
@@ -494,7 +503,7 @@ describe('preset, cutline and parsing routes', () => {
     expect(typeof res.json.details, name).toBe('string');
   });
 
-  it('a preset validation 400 drops the issue list in production and keeps it outside', async () => {
+  it('a preset validation 400 drops details in production and keeps it outside', async () => {
     vi.stubEnv('NODE_ENV', 'production');
     const bad = { ...validPreset, settings: { ...validPreset.settings, scoringPoints: 'nope' } };
     const prod = await server.request({ method: 'POST', path: '/api/scoring-presets', body: bad });
@@ -504,6 +513,21 @@ describe('preset, cutline and parsing routes', () => {
     vi.stubEnv('NODE_ENV', 'test');
     const dev = await server.request({ method: 'POST', path: '/api/scoring-presets', body: bad });
     expect(Array.isArray(dev.json.details)).toBe(true);
+  });
+
+  it('a preset validation 400 sends fieldErrors in production, where details is dropped', async () => {
+    vi.stubEnv('NODE_ENV', 'production');
+    const bad = { ...validPreset, settings: { ...validPreset.settings, scoringPoints: 'nope' } };
+    const prod = await server.request({ method: 'POST', path: '/api/scoring-presets', body: bad });
+    expect(prod.status).toBe(400);
+    expect(prod.json).not.toHaveProperty('details');
+    const fieldErrors = prod.json.fieldErrors as Array<{ path: string; message: string }>;
+    expect(Array.isArray(fieldErrors)).toBe(true);
+    expect(fieldErrors.some(f => f.path.includes('scoringPoints'))).toBe(true);
+    for (const f of fieldErrors) {
+      expect(typeof f.path).toBe('string');
+      expect(typeof f.message).toBe('string');
+    }
   });
 });
 

@@ -318,7 +318,10 @@ export function registerScoringPresetRoutes(app: Express, deps: ScoringPresetRou
     }
     const parsed = scoringPresetWriteSchema.safeParse(body);
     if (!parsed.success) {
-      apiError(res, 400, 'INVALID_PRESET', 'Invalid scoring preset', zodDetails(parsed.error));
+      // `details` is dropped in production. The preset editor needs the field list to say what to fix,
+      // so it also goes in `fieldErrors`. The issues describe the caller's own request body.
+      const fieldErrors = zodDetails(parsed.error);
+      apiError(res, 400, 'INVALID_PRESET', 'Invalid scoring preset', fieldErrors, { fieldErrors });
       return null;
     }
     if (isBuiltInScoringPresetId(parsed.data.id)) {

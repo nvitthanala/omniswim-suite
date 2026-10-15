@@ -77,13 +77,9 @@ export function createParsePdfGuards(
   const bodyLimit = parsePdfBodyLimitBytes(maxPdfBytes);
 
   const tooLarge = (res: Parameters<RequestHandler>[1]): void => {
-    apiError(
-      res,
-      413,
-      'PDF_TOO_LARGE',
-      'PDF too large',
-      `The PDF upload is limited to ${megabytes(maxPdfBytes)}. Split the file or remove pages and try again.`
-    );
+    const hint = `The PDF upload is limited to ${megabytes(maxPdfBytes)}. Split the file or remove pages and try again.`;
+    // `details` is dropped in production. The size hint is fixed text, so it goes in `userMessage` too.
+    apiError(res, 413, 'PDF_TOO_LARGE', 'PDF too large', hint, { userMessage: hint });
   };
 
   const declaredLength: RequestHandler = (req, res, next) => {
