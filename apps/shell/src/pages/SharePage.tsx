@@ -38,26 +38,20 @@ export default function SharePage() {
   ).size;
   return (
     <div className="max-w-3xl mx-auto py-10 px-4">
-      {' '}
       <div className="panel p-6">
-        {' '}
         <p className="text-ui-micro uppercase tracking-widest text-[var(--text-accent)] mb-2">
           Shared report
         </p>{' '}
         <h1 className="text-2xl font-black text-[var(--text-primary)]">{label}</h1>{' '}
         <p className="text-ui-caption text-theme-muted mt-2">
-          {' '}
           {workspace.name} · {swimmerCount} athletes · read-only{' '}
         </p>{' '}
         <div className="mt-6 grid sm:grid-cols-2 gap-4 text-ui-caption">
-          {' '}
           <div className="rounded-lg border border-theme-soft p-4">
-            {' '}
             <div className="text-theme-muted">Men&apos;s results</div>{' '}
             <div className="text-2xl font-mono font-bold">{workspace.menResults?.length ?? 0}</div>{' '}
           </div>{' '}
           <div className="rounded-lg border border-theme-soft p-4">
-            {' '}
             <div className="text-theme-muted">Women&apos;s results</div>{' '}
             <div className="text-2xl font-mono font-bold">
               {workspace.womenResults?.length ?? 0}
@@ -70,7 +64,6 @@ export default function SharePage() {
           rel="noreferrer"
           className="inline-flex mt-6 btn-primary px-4 py-2 rounded-lg text-ui-caption font-bold"
         >
-          {' '}
           Open printable report{' '}
         </a>{' '}
       </div>{' '}

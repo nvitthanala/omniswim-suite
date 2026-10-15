@@ -33,19 +33,14 @@ export default function LoginPage() {
   };
   return (
     <div className="max-w-md mx-auto py-16 px-4">
-      {' '}
       <div className="panel p-8">
-        {' '}
         <h1 className="text-xl font-black text-[var(--text-primary)] mb-1">Omni Swim Suite</h1>{' '}
         <p className="text-ui-caption text-theme-muted mb-6">
-          {' '}
           {mode === 'login' ? 'Sign in to your team workspace' : 'Create a coach account'}{' '}
         </p>{' '}
         <form onSubmit={submit} className="space-y-4">
-          {' '}
           {mode === 'register' ? (
             <label className="block">
-              {' '}
               <span className="text-ui-caption text-theme-muted">Display name</span>{' '}
               <input
                 className="glass-input w-full mt-1"
@@ -56,7 +51,6 @@ export default function LoginPage() {
             </label>
           ) : null}{' '}
           <label className="block">
-            {' '}
             <span className="text-ui-caption text-theme-muted">Email</span>{' '}
             <input
               type="email"
@@ -67,7 +61,6 @@ export default function LoginPage() {
             />{' '}
           </label>{' '}
           <label className="block">
-            {' '}
             <span className="text-ui-caption text-theme-muted">Password</span>{' '}
             <input
               type="password"
@@ -79,7 +72,6 @@ export default function LoginPage() {
             />{' '}
           </label>{' '}
           <Button type="submit" disabled={busy} variant="primary" size="md" className="w-full">
-            {' '}
             {busy ? 'Please wait…' : mode === 'login' ? 'Sign in' : 'Create account'}{' '}
           </Button>{' '}
         </form>{' '}
@@ -89,7 +81,6 @@ export default function LoginPage() {
           className="w-full mt-4"
           onClick={() => setMode((m) => (m === 'login' ? 'register' : 'login'))}
         >
-          {' '}
           {mode === 'login' ? 'Need an account? Register' : 'Already have an account? Sign in'}{' '}
         </Button>{' '}
       </div>{' '}

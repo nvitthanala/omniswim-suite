@@ -167,7 +167,6 @@ export function FloatingWindow({
   if (!open) return null;
   return (
     <>
-      {' '}
       {dragMode ? (
         <div
           className="floating-window-overlay"
@@ -184,7 +183,6 @@ export function FloatingWindow({
         ref={windowRef}
         onKeyDown={handleKeyDown}
       >
-        {' '}
         <div
           className="floating-window-header"
           ref={headerRef}
