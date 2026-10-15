@@ -22,11 +22,10 @@
   "scripts": {
     "lint": "tsc --noEmit -p tsconfig.json"
   },
-  "dependencies": {
-    "playwright-core": "1.61.1"
+  "peerDependencies": {
+    "playwright-core": "^1.61.1"
   },
   "devDependencies": {
-    "@types/node": "^22.14.0",
-    "typescript": "~5.8.2"
+    "@types/node": "^22.14.0"
   }
 }
