@@ -78,6 +78,8 @@ Run these from the repository root. All four must pass before you hand work over
 
 While you iterate, run one file: `npx vitest run tests/<name>.test.ts`. Use `npm run test:unit` for the whole vitest suite.
 
+To check that the scoring tests catch a changed number, run `npm run test:mutation -- --mutate packages/core/src/lib/relayScoring.ts` (Stryker, run by hand, one file at a time; see [reference/MUTATION_RESULTS_2026-10-14.md](reference/MUTATION_RESULTS_2026-10-14.md)).
+
 `npm run test:harness` needs the built extension. Run `npm run build:extension` first if `extensions/swimcloud-companion/background.js` is stale. The harness skips with a message when the build is missing.
 
 ### Baseline numbers

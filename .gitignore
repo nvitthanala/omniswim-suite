@@ -62,3 +62,11 @@ test-results/
 data/training/*
 !data/training/MANIFEST.md
 !data/training/checksums.txt
+
+# Conference results PDFs and text name every athlete at the meet: keep local.
+data/relay-programs/sources/*.pdf
+data/relay-programs/sources/*.txt
+
+# Mutation testing (Stryker): sandbox copy of the repo and the JSON report
+/.stryker-tmp/
+/reports/
