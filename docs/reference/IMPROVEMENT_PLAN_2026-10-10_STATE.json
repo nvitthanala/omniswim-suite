@@ -467,7 +467,8 @@
     "relayLegMatching.ts relayStrokeForIndex: what should a negative or invalid leg index mean? (today undefined; caller passes position-1 from stored data)",
     "PodiumMedal reads s.podium which nothing sets, so the medal never renders: remove it or wire it from place?",
     "Python pdf_parser._load_abbrev_teams keeps five setdefault fallbacks (UMSL, HSU, DSU, OUAC, UWF) that contradict its fail-loud comment: remove them?",
-    "utils.ts ~3481 `(oldSplitSec ?? 30) + 3`: a vacated relay leg with no known split is priced at 33.0 s. That is an invented number on the scoring path. Keep (flagged as a vacancy penalty) or refuse to price the leg?"
+    "utils.ts ~3481 `(oldSplitSec ?? 30) + 3`: a vacated relay leg with no known split is priced at 33.0 s. That is an invented number on the scoring path. Keep (flagged as a vacancy penalty) or refuse to price the leg?",
+    "Swims-list SwimCloud imports have no time-trial flag (only event-page rows do). A time trial printed with the bare event label now counts as a program swim for best times, arbitrage and cut tags. Accept, or require an explicit flag from the user?"
   ],
   "pendingArchitectReview": [
     "Review e6b35d54 (type break: projected bundle lacks totalPoints in its type) and a23a20b3/15b216e1 (migration at read time, not load time)"
@@ -667,7 +668,14 @@
       "architect": "a7f19f20b7516c32d: equivalence verified (worker empty userConferenceBindings never changes a result; only a user preset with literal id 'nsisc' would, judged unreachable). Findings 1-4 fixed (22-field staleness list, click-time team/workspace/mode, worker error paths, live.current in layout effect)",
       "open": "useAllTeamsApply.ts (Lineup header one-click) still synchronous; BatchOptimizerPanel Apply still checks only the three lineup arrays (batchLineupMoved) because an existing test re-renders a renamed workspace; staleness check assumes autosave keeps field references stable (Playwright optimize-worker.spec.ts passed with autosave on)"
     },
-    "R1": "committed: parser.ts barrel 185 lines over 16 modules (53 exported names identical, 0 cycle groups before/after); crawler.js rebuilt (module comments/order only). Gates: lint 0/0, vitest 273 files 4072 passed 23 skipped"
+    "R1": "committed: parser.ts barrel 185 lines over 16 modules (53 exported names identical, 0 cycle groups before/after); crawler.js rebuilt (module comments/order only). Gates: lint 0/0, vitest 273 files 4072 passed 23 skipped",
+    "R3": {
+      "commits": "e068f145 delegations; then 'Write canonical labels for SwimCloud swims', 'Skip rows with no event in meet readers', 'Match relay leg names in either order'",
+      "architect": "af81a3d335fb071c3 (delegations clean) and ad2d53e69ac6377fd (bridge rewrite): guard tightened to exact `N Y|L|S stroke` shape agreeing with parsed fields",
+      "found": "A real gap: SwimCloud swims-list labels like '100 Y Breast' matched no event reader (no best-time pick, event_not_in_table cut tag, no alias evidence) until the bridge wrote canonical labels",
+      "open": "merge re-import of an old saved raw '100 Y Free' plus new '100 Freestyle' makes two history rows (athleteHistory.ts:162); replace mode cleans it. Time trials on swims-list-only imports have no isTimeTrial flag so a bare-label time trial now counts as a program swim. A1 '1,650 Freestyle' only in D1 sheet. Pinned accidental differences A4 (4x50 Free and 200 FR read as individual in canonicalMeetEventLabel), A5, A8 ((Relay split) kept by swimEventIdentity, dropped by relayLegEventKey), rosterOptimizer.ts:572,613 keys swimmers with trim().toLocaleLowerCase()",
+      "behaviourNote": "canonicalProgramEvent(undefined) threw before and still throws; whole-meet loops now skip a row with no event via programEventOrNull"
+    }
   },
   "commitsAfterAuditNote": "R11 steps 3-6 done (flag on). Next: A7 relayLegEstimate, R2 split utils.ts, R3 identity module, R4 optimizers to worker, R1 split parser.ts, R7, T1, T6, F4, F6, R9 last",
   "remainingAfterR1": "R3 identity module, R7 large components, R9 deps last, T6 mutation testing, F4 scouting, F6 relay programs (research), F10 reconcile video plan, H4/H5/H6/H7/H11, R12 alias config, T10/T11, P-items found-not-fixed; then end-of-run questions"
