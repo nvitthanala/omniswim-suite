@@ -16,6 +16,7 @@ import {
   type ScenarioDiffResult,
   type ScenarioDiffSideMode,
 } from '../lib/scenarioDiff';
+import { runOptimizeJob, type OptimizeJob, type OptimizeJobResult } from '../lib/optimizeJob';
 import type { Gender, ScoringSettings, Workspace } from '../types';
 import type { CatalogTeamRoster } from '../lib/rosterCatalog';
 
@@ -55,7 +56,26 @@ export type ScenarioDiffRequest = {
   thenMode?: ScenarioDiffSideMode;
 };
 
-export type WorkerRequest = ScoringRequest | CrossCourseArbitrageRequest | ScenarioDiffRequest;
+/**
+ * Optimizer op: runs one `OptimizeJob` (single team, all teams or the swap scan)
+ * through the same `runOptimizeJob` the in-thread fallback uses. The worker
+ * receives a structured-clone copy of the workspace and returns plain data; the
+ * caller applies the result on the main thread. Cancel is `worker.terminate()`
+ * from the client, so the worker holds no cancel state.
+ */
+export type OptimizeRequest = {
+  id: number;
+  op: 'optimize';
+  workspace: Workspace;
+  gender: Gender;
+  job: OptimizeJob;
+};
+
+export type WorkerRequest =
+  | ScoringRequest
+  | CrossCourseArbitrageRequest
+  | ScenarioDiffRequest
+  | OptimizeRequest;
 
 export type CrossCourseArbitrageResponse = {
   id: number;
@@ -72,6 +92,40 @@ export type ScenarioDiffResponse = {
   result?: ScenarioDiffResult;
   error?: string;
 };
+
+/**
+ * Posted first, before any work. It tells the client the worker script started, so a later
+ * worker error is a real failure of the run and not a failure to load.
+ */
+export type OptimizeStartedResponse = {
+  id: number;
+  op: 'optimize';
+  type: 'started';
+};
+
+/** Posted before each team of an all-teams job. `current` is 1-based. */
+export type OptimizeProgressResponse = {
+  id: number;
+  op: 'optimize';
+  type: 'progress';
+  current: number;
+  total: number;
+  team: string;
+};
+
+export type OptimizeResultResponse = {
+  id: number;
+  op: 'optimize';
+  type: 'result';
+  ok: boolean;
+  result?: OptimizeJobResult;
+  error?: string;
+};
+
+export type OptimizeResponse =
+  | OptimizeStartedResponse
+  | OptimizeProgressResponse
+  | OptimizeResultResponse;
 
 const ctx = self as unknown as Worker;
 
@@ -95,6 +149,30 @@ ctx.onmessage = (event: MessageEvent<WorkerRequest>) => {
         ok: false,
         error: err instanceof Error ? err.message : String(err),
       });
+    }
+    return;
+  }
+
+  if (data.op === 'optimize') {
+    const { id, workspace, gender, job } = data;
+    const started: OptimizeStartedResponse = { id, op: 'optimize', type: 'started' };
+    ctx.postMessage(started);
+    try {
+      const result = runOptimizeJob(workspace, gender, job, progress => {
+        const message: OptimizeProgressResponse = { id, op: 'optimize', type: 'progress', ...progress };
+        ctx.postMessage(message);
+      });
+      const message: OptimizeResultResponse = { id, op: 'optimize', type: 'result', ok: true, result };
+      ctx.postMessage(message);
+    } catch (err) {
+      const message: OptimizeResultResponse = {
+        id,
+        op: 'optimize',
+        type: 'result',
+        ok: false,
+        error: err instanceof Error ? err.message : String(err),
+      };
+      ctx.postMessage(message);
     }
     return;
   }
