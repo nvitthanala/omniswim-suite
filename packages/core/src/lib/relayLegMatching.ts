@@ -507,11 +507,16 @@ export function listEligibleRelayLegCandidates(
   relayGender?: Gender,
   settings?: RelayLegMatchSettings
 ): SwimmerResult[] {
+  // Order-insensitive: a leg spelled "Akin, Bartu" blocks the row "Bartu Akin".
+  // The callers' keys are unchanged (normalizeName); both sides are read through
+  // canonicalSwimmerName here, which folds a single "Last, First" comma.
+  const blocked = new Set<string>();
+  assignedInEvent.forEach(n => blocked.add(canonicalSwimmerName(n)));
   const legSwims = activeSwimmers.filter(
     s =>
       !s.isRelay &&
       s.team === team &&
-      !assignedInEvent.has(normalizeName(s.name)) &&
+      !blocked.has(canonicalSwimmerName(s.name)) &&
       swimmerMatchesRelayLeg(s, relayEvent, legIndex, settings)
   );
   const gender = relayGender ?? relayEntryGender({ event: relayEvent });
@@ -916,11 +921,12 @@ export function resolveOverrideAssignee(
   // swims that may fill the leg wins. A recruit row at another event, or a time
   // trial, no longer shadows the swimmer's program swim at the leg event.
   const keys = new Set<string>();
-  if (override.assigneeName) keys.add(normalizeName(override.assigneeName));
-  if (hit) keys.add(normalizeName(hit.name));
+  // Order-insensitive, like the blocked-name check in listEligibleRelayLegCandidates.
+  if (override.assigneeName) keys.add(canonicalSwimmerName(override.assigneeName));
+  if (hit) keys.add(canonicalSwimmerName(hit.name));
   if (keys.size === 0) return null;
   const named = activeSwimmers.filter(
-    s => !s.isRelay && s.team === team && keys.has(normalizeName(s.name))
+    s => !s.isRelay && s.team === team && keys.has(canonicalSwimmerName(s.name))
   );
   const matches = keepRelayGender(named, gender, named);
   if (relayEvent != null && legIndex != null) {
