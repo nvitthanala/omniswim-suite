@@ -383,17 +383,34 @@ describe('scoreRelaysInEvent called directly', () => {
 
   describe('roster mode', () => {
     const rosterSettings = mergeScoringSettings(settings({ scorerEligibilityMode: 'roster' }));
-    // `Finals` is the timed-final label: not an A or B final, so every leg must be on the roster.
+    // `Finals` is the timed-final label of a relay (a relay has no A or B heat). It is a
+    // final, so its legs count as A/B final legs: eligible whatever the lookup says.
+    // (T6 pinned the opposite, "every leg must be on the roster"; that zeroed every
+    // NSISC relay on SwimCloud data, where the lookup never holds the entry row's name.)
     const finals = (): SwimmerResult[] => entry('Alpha', 'A', 1, '1:20.00', { round: 'Finals' });
 
-    it('a timed-final relay scores when every leg is a scorer and not when one is not', () => {
-      const allIn = scoreRelaysInEvent(finals(), rosterSettings, new Map(), false, {
+    it('a timed-final relay scores whatever the roster lookup says', () => {
+      const none = scoreRelaysInEvent(finals(), rosterSettings, new Map(), false, {
+        isScorer: () => false,
+        rows: [],
+      });
+      expect(none.map(r => r.points)).toEqual([10, 10, 10, 10]);
+    });
+
+    it('a relay in a round outside the counted tiers needs every leg on the roster', () => {
+      // B Final is outside `abFinalTiers: ['A']`, so the entry goes through the leg check.
+      const aOnly = mergeScoringSettings(
+        settings({ scorerEligibilityMode: 'roster', scorerAutoRules: { abFinalTiers: ['A'] } })
+      );
+      const bFinal = (): SwimmerResult[] => entry('Alpha', 'A', 1, '1:20.00', { round: 'B Final' });
+      const allIn = scoreRelaysInEvent(bFinal(), aOnly, new Map(), false, {
         isScorer: () => true,
         rows: [],
       });
-      expect(allIn.map(r => r.points)).toEqual([10, 10, 10, 10]);
+      expect(allIn).toHaveLength(4);
+      for (const r of allIn) expect(r.points).toBeGreaterThan(0);
 
-      const oneOut = scoreRelaysInEvent(finals(), rosterSettings, new Map(), false, {
+      const oneOut = scoreRelaysInEvent(bFinal(), aOnly, new Map(), false, {
         isScorer: name => name !== 'Alpha A Leg 3',
         rows: [],
       });

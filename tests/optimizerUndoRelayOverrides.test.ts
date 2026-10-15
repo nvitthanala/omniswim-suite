@@ -8,8 +8,9 @@
  * optimizer writes scorer flags (`scorerRosterOverrides`). A coach who fills a relay leg with a
  * swimmer the run made a scorer left the fingerprint "clean". Undo then flipped the swimmer back to
  * non-scorer and kept the fill. That is the state `applyScorerOffRelayPatch` prunes when a coach
- * toggles a scorer off by hand, and it has a cost: a relay that is not an A or B final scores only
- * when every leg is a scorer (`relayEntryRosterEligible`), so the relay silently scored 0.
+ * toggles a scorer off by hand, and it has a cost: a relay that is not a final (an A, B or timed
+ * final) scores only when every leg is a scorer (`relayEntryRosterEligible`), so the relay silently
+ * scored 0. A timed-final relay ("Timed Finals", "Finals") counts as a final and is not exposed.
  *
  * Fixture: the real 2026 NSISC meet (relayLegEventMatching.test.ts). Reid Remmert (HSU men) swam only
  * C finals, so the auto rules do not make him a scorer. HSU's 400 Free Relay B is re-labelled a

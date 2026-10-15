@@ -85,14 +85,26 @@ export function rowSuggestsScorer(swim: SwimmerResult, rules?: ScorerAutoRules):
   if (!rules) return false;
   const tiers = rules.abFinalTiers ?? ['A', 'B'];
   const tier = classifyRoundTier(swim.roundSwam);
-  if (!tiers.includes(tier as 'A' | 'B')) return false;
+  const isRelayLeg = swim.isRelay === true || isRelayResult(swim);
+  // A relay has no A or B heat: it is swum once, as a timed final ("Timed Finals" on
+  // SwimCloud, "Finals" on HyTek: tier `FIN`). That is a final, so a relay leg in it
+  // counts like a leg in an A or B final. Relay legs only: an individual swim in a
+  // `FIN` round (a 1650 timed final) still marks no scorer.
+  // A SwimCloud entry row ("Henderson State (A)") is one row per relay entry with the
+  // legs in `relayNames`: its name is a label, not a swimmer, so it marks no scorer.
+  // A/B rows are not touched by this guard.
+  // Effect: a relay-only swimmer of a timed-final relay now joins the scorer roster
+  // and counts toward its caps, as a relay-only swimmer of an A/B final already did.
+  const isEntryLabelRow = isRelayLeg && (swim.relayNames?.length ?? 0) > 0;
+  const isTimedFinalLegRow = isRelayLeg && tier === 'FIN' && !isEntryLabelRow;
+  if (!tiers.includes(tier as 'A' | 'B') && !isTimedFinalLegRow) return false;
 
   if (rules.distanceFinalRequired && isDistanceForRules(swim.event, rules)) {
     // Prelims-only distance swims do not mark a scorer; A/B distance finals do.
     if (tier === 'PRE') return false;
   }
 
-  if (swim.isRelay || isRelayResult(swim)) {
+  if (isRelayLeg) {
     return rules.includeRelayLegsInFinals !== false;
   }
 
@@ -300,7 +312,14 @@ export function relayEntryRosterEligible(
   const rules = effectiveAutoRules(settings);
   const tier = classifyRoundTier(sample.roundSwam);
   const tiers = rules.abFinalTiers ?? ['A', 'B'];
-  if (rules.includeRelayLegsInFinals !== false && tiers.includes(tier as 'A' | 'B')) {
+  // A relay has no A or B heat: it is swum once, as a timed final ("Timed Finals" on
+  // SwimCloud, "Finals" on HyTek: tier `FIN`). That is a final, so its legs count as
+  // legs of an A/B final. Without this branch the leg check below ran for every
+  // relay, and on a SwimCloud entry row (named "Team (A)", legs in `relayNames`) it
+  // never matches the roster, so NSISC relays scored 0 in computed mode.
+  // Same rule as `rowSuggestsScorer`: a relay-only swimmer of a timed-final relay now
+  // joins the scorer roster and counts toward its caps.
+  if (rules.includeRelayLegsInFinals !== false && (tiers.includes(tier as 'A' | 'B') || tier === 'FIN')) {
     return true;
   }
   if (!lookup) return false;

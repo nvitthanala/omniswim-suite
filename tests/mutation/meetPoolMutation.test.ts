@@ -263,14 +263,25 @@ describe('seedAbRelayLegsIntoPool', () => {
     expect([...pool.keys()].sort()).toEqual(['ann', 'bea']);
   });
 
-  it('leaves out timed-final, prelim and C final legs, and non-relay rows', () => {
+  it('adds a timed-final relay leg, as a relay has no A or B heat', () => {
+    // T6 pinned "leaves out timed-final legs". A relay is only ever swum as a timed final
+    // ("Finals" on HyTek), so that left every relay leg out of the pool.
+    const states = new Map<string, TeamMeetState>();
+    seedAbRelayLegsIntoPool([leg('Fin', { roundSwam: 'Finals' })], settings(), states);
+
+    const pool = getOrCreateMeetState(states, 'Alpha', Gender.MEN).poolWeights;
+    expect([...pool.keys()]).toEqual(['fin']);
+  });
+
+  it('leaves out prelim and C final legs, and non-relay rows, even in a timed final', () => {
     const states = new Map<string, TeamMeetState>();
     seedAbRelayLegsIntoPool(
       [
-        leg('Fin', { roundSwam: 'Finals' }),
         leg('Pre', { roundSwam: 'Preliminaries' }),
         leg('Cee', { roundSwam: 'C Final' }),
         leg('Solo', { isRelay: false, event: EVENT }),
+        // An individual swim in a timed final marks no scorer: only relay legs count.
+        leg('Mile', { isRelay: false, event: EVENT, roundSwam: 'Timed Finals' }),
       ],
       settings(),
       states

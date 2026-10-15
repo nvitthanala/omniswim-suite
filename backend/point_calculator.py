@@ -1033,7 +1033,15 @@ def _row_suggests_scorer(ath, rules):
 
     tier = classify_round_tier(ath.get('round_swam'))
 
-    if tier not in tiers:
+    # A relay has no A or B heat: it is swum once, as a timed final (tier FIN).
+    # That is a final, so a relay leg in it counts like a leg in an A or B final.
+    # Relay legs only: an individual swim in a FIN round marks no scorer.
+    # Effect: a relay-only swimmer of a timed-final relay now joins the scorer
+    # roster and counts toward its caps. Mirrors scorerRoster.ts rowSuggestsScorer.
+    # A SwimCloud entry row (legs listed in relayNames) is a label, not a swimmer.
+    entry_label = bool(ath.get('relayNames') or ath.get('relay_names'))
+
+    if tier not in tiers and not (ath.get('is_relay') and tier == 'FIN' and not entry_label):
 
         return False
 
@@ -1135,7 +1143,9 @@ def _relay_entry_roster_eligible(group, cfg, roster_is_scorer):
 
     tiers = rules.get('abFinalTiers') or ['A', 'B']
 
-    if rules.get('includeRelayLegsInFinals', True) and tier in tiers:
+    # A timed-final relay (tier FIN) counts as a final: same rule as
+    # _row_suggests_scorer and relayEntryRosterEligible in scorerRoster.ts.
+    if rules.get('includeRelayLegsInFinals', True) and (tier in tiers or tier == 'FIN'):
 
         return True
 

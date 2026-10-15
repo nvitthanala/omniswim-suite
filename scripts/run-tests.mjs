@@ -118,6 +118,8 @@ const TESTS = [
   ['test_team_abbreviation_parity.mjs'],
   ['test_pdf_abbreviation_table_required.mjs'],
   ['test_scoring_settings_required.mjs'],
+  ['test_timed_finals_label.mjs'],
+  ['test_timed_final_relay_scorers.mjs'],
   ['test_season_analytics_official_zero.mjs'],
   ['test_cutlines.mjs'],
   ['test_cutline_tags.mjs'],
