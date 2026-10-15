@@ -468,7 +468,9 @@
     "PodiumMedal reads s.podium which nothing sets, so the medal never renders: remove it or wire it from place?",
     "Python pdf_parser._load_abbrev_teams keeps five setdefault fallbacks (UMSL, HSU, DSU, OUAC, UWF) that contradict its fail-loud comment: remove them?",
     "utils.ts ~3481 `(oldSplitSec ?? 30) + 3`: a vacated relay leg with no known split is priced at 33.0 s. That is an invented number on the scoring path. Keep (flagged as a vacancy penalty) or refuse to price the leg?",
-    "Swims-list SwimCloud imports have no time-trial flag (only event-page rows do). A time trial printed with the bare event label now counts as a program swim for best times, arbitrage and cut tags. Accept, or require an explicit flag from the user?"
+    "Swims-list SwimCloud imports have no time-trial flag (only event-page rows do). A time trial printed with the bare event label now counts as a program swim for best times, arbitrage and cut tags. Accept, or require an explicit flag from the user?",
+    "F6: the GLVC results PDF (76 pages, every athlete's name and time) is kept local and gitignored because the repo is public (same reasoning as the roster files, U8). Two tests skip without it. Keep that, or commit the PDF?",
+    "NSISC_RELAY_PROGRAM has no archived source. Want me to find the NSISC championship program document and archive it like GLVC, or is the data/meets.json-derived order enough?"
   ],
   "pendingArchitectReview": [
     "Review e6b35d54 (type break: projected bundle lacks totalPoints in its type) and a23a20b3/15b216e1 (migration at read time, not load time)"
@@ -549,7 +551,9 @@
     "vault gotcha: the Edit tool rewrote an LF file as CRLF once; normalize before commit",
     "urlClassifier.ts PATH_CLASSIFIERS plain-object lookup: use Object.hasOwn / Map (small executor fix, swimcloud)"
   ],
-  "inFlight20261013": {},
+  "inFlight20261013": {
+    "a3c51a7f5a343a870": "executor: T6 Stryker mutation testing of core scoring"
+  },
   "architectReReview20261013": {
     "reviewed": "ddb838fb, e54adab4, d5dc09ff",
     "findings": [
@@ -629,7 +633,9 @@
     "D5": "b6de276c TEAM_ABBREVIATIONS imports teamAbbreviations.json (pdf_parser.py already loaded it; plan wording was off). pdf_parser._load_abbrev_teams still has five setdefault fallbacks (UMSL, HSU, DSU, OUAC, UWF) that contradict its fail-loud comment; parity test catches drift",
     "R5": "c63960df all 66 no-explicit-any removed; eslint --max-warnings now 0. Found: PodiumMedal reads s.podium which nothing sets (medal never renders)",
     "gates": "after D1: lint 0/0, vitest 264 files 3944 passed 23 skipped, scripts 86 passed 0 failed 1 skipped",
-    "inFlight": {},
+    "inFlight": {
+      "a3c51a7f5a343a870": "executor: T6 Stryker mutation testing of core scoring"
+    },
     "D1": "544bca88 Archive the NCAA D1 2026-27 standards (id ncaa-d1-2026-27, sha256 259c76ba..., 44 records; D1 resolves to 2026-27 by default; PDF re-uploaded after its 6/15/2026 stamp, re-run fetch-cutlines.py --check before a release; SwimSwam shows 400 IM women 4:13.22, PDF prints 4:13.32, PDF used)",
     "D10": "91ca9ac7 factors match D1 and D2 2026-27 sheets; D3/NAIA publish none (Rules Book table); LCM stays 'indicative'. NCAA_ALTITUDE_ADJUSTMENT_TABLE still cites D1 2025-26 only (2026-27 identical)",
     "D4": "b4493d24 UWF divisionHistory gets D1 from 2026-27 (3 sources, uwf.edu page checked by lead). Top-level division stays D2: tag paths (cutlineTags, athleteHistory, eventStrength, utils, rosterLineupAudit) read the season-agnostic field. Unverified: Ouachita Baptist, McKendree, Henderson State, Delta State, Pitt, Louisville, Florida State (no 2026-27 primary source found)",
@@ -675,6 +681,12 @@
       "found": "A real gap: SwimCloud swims-list labels like '100 Y Breast' matched no event reader (no best-time pick, event_not_in_table cut tag, no alias evidence) until the bridge wrote canonical labels",
       "open": "merge re-import of an old saved raw '100 Y Free' plus new '100 Freestyle' makes two history rows (athleteHistory.ts:162); replace mode cleans it. Time trials on swims-list-only imports have no isTimeTrial flag so a bare-label time trial now counts as a program swim. A1 '1,650 Freestyle' only in D1 sheet. Pinned accidental differences A4 (4x50 Free and 200 FR read as individual in canonicalMeetEventLabel), A5, A8 ((Relay split) kept by swimEventIdentity, dropped by relayLegEventKey), rosterOptimizer.ts:572,613 keys swimmers with trim().toLocaleLowerCase()",
       "behaviourNote": "canonicalProgramEvent(undefined) threw before and still throws; whole-meet loops now skip a row with no event via programEventOrNull"
+    },
+    "F10": "85741d16 masterplan opens with 2026-10-14 status table; 84da676e tempo tooltip absent rate no longer 0.0. Open: raceAnalyses has DB tables but nothing in packages/metrics writes it; volume slider (VideoPlayerParts.tsx ~246) animates width; Math.random session id MetricsApp.tsx:96",
+    "F6": {
+      "commit": "f174ae04 GLVC 2025-26 relay program as data (not wired); ACC, ASUN, Gulf South unverified (no primary document), GLVC 2026-27 not yet published",
+      "decision": "the 76-page results PDF and its text name every athlete: gitignored, manifest + data tracked, two checks skip without local files (skip budget ci 2). User to confirm.",
+      "found": "NSISC_RELAY_PROGRAM (packages/manager/src/lib/theoreticalMeetSeeds.ts:1003) has no archived source or sha256; teamDivisions.ts has no conference field"
     }
   },
   "commitsAfterAuditNote": "R11 steps 3-6 done (flag on). Next: A7 relayLegEstimate, R2 split utils.ts, R3 identity module, R4 optimizers to worker, R1 split parser.ts, R7, T1, T6, F4, F6, R9 last",
