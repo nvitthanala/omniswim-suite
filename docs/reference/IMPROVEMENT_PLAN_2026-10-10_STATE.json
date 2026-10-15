@@ -549,8 +549,7 @@
     "urlClassifier.ts PATH_CLASSIFIERS plain-object lookup: use Object.hasOwn / Map (small executor fix, swimcloud)"
   ],
   "inFlight20261013": {
-    "a7f19f20b7516c32d": "architect: review R4 uncommitted",
-    "a672ab80dcaab7cc3": "executor: R1 split swimcloud parser.ts"
+    "a672ab80dcaab7cc3": "executor: R1 split swimcloud parser.ts (resume with SendMessage)"
   },
   "architectReReview20261013": {
     "reviewed": "ddb838fb, e54adab4, d5dc09ff",
@@ -632,8 +631,7 @@
     "R5": "c63960df all 66 no-explicit-any removed; eslint --max-warnings now 0. Found: PodiumMedal reads s.podium which nothing sets (medal never renders)",
     "gates": "after D1: lint 0/0, vitest 264 files 3944 passed 23 skipped, scripts 86 passed 0 failed 1 skipped",
     "inFlight": {
-      "a7f19f20b7516c32d": "architect: review R4 uncommitted",
-      "a672ab80dcaab7cc3": "executor: R1 split swimcloud parser.ts"
+      "a672ab80dcaab7cc3": "executor: R1 split swimcloud parser.ts (resume with SendMessage)"
     },
     "D1": "544bca88 Archive the NCAA D1 2026-27 standards (id ncaa-d1-2026-27, sha256 259c76ba..., 44 records; D1 resolves to 2026-27 by default; PDF re-uploaded after its 6/15/2026 stamp, re-run fetch-cutlines.py --check before a release; SwimSwam shows 400 IM women 4:13.22, PDF prints 4:13.32, PDF used)",
     "D10": "91ca9ac7 factors match D1 and D2 2026-27 sheets; D3/NAIA publish none (Rules Book table); LCM stays 'indicative'. NCAA_ALTITUDE_ADJUSTMENT_TABLE still cites D1 2025-26 only (2026-27 identical)",
@@ -667,6 +665,11 @@
       "commit": "9aa08734 Split utils.ts into twelve modules (barrel 148 lines, 99 exported names identical; 16 private helpers gained export for sibling use, not re-exported)",
       "pinTest": "tests/relayScoringPerSwimmerPoints.test.ts (7 tests) added because teamPts / n -> teamPts passed the whole suite before",
       "open": "pre-existing runtime import cycle (athleteAliases, relayLegMatching, relaySplits, scorerRoster, utils) now also includes meetPool, individualScoring, relayScoring, calculatePoints, relaySimulation; fix by pointing scorerRoster/relayLegMatching importers at the new modules; every built-in preset sets halfRateRelaySwimmer true, which overwrites teamPts / n"
+    },
+    "R4": {
+      "commits": "worker op + client (core), progress/cancel UI (manager); two commits after 'Log the 19:50 limit event'",
+      "architect": "a7f19f20b7516c32d: equivalence verified (worker empty userConferenceBindings never changes a result; only a user preset with literal id 'nsisc' would, judged unreachable). Findings 1-4 fixed (22-field staleness list, click-time team/workspace/mode, worker error paths, live.current in layout effect)",
+      "open": "useAllTeamsApply.ts (Lineup header one-click) still synchronous; BatchOptimizerPanel Apply still checks only the three lineup arrays (batchLineupMoved) because an existing test re-renders a renamed workspace; staleness check assumes autosave keeps field references stable (Playwright optimize-worker.spec.ts passed with autosave on)"
     }
   },
   "commitsAfterAuditNote": "R11 steps 3-6 done (flag on). Next: A7 relayLegEstimate, R2 split utils.ts, R3 identity module, R4 optimizers to worker, R1 split parser.ts, R7, T1, T6, F4, F6, R9 last"
