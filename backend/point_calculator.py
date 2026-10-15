@@ -1681,7 +1681,8 @@ def calculate_points(athletes, scoring_settings=None, overrides=None):
 
 
 
-                    scored_athletes.extend(group)
+                    # Not `group`: its ineligible rows were emitted above.
+                    scored_athletes.extend(eligible)
 
 
 

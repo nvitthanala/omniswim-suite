@@ -86,15 +86,30 @@ def test_builder_failure_falls_back_to_legacy_and_says_so(parse_synthetic, monke
     assert {r['relay_split_source'] for r in events['6']} == {'structured'}
 
 
-def test_unexpected_error_in_payload_building_also_falls_back_to_legacy(parse_synthetic, monkeypatch):
+def test_unexpected_error_in_payload_building_stops_the_parse_with_the_entry_named(
+    parse_synthetic, monkeypatch
+):
+    # A RuntimeError is not a split line the builders could not read. It is a
+    # bug or garbage input, so it must not be filed as a normal 'legacy' row.
     def boom(*_args, **_kwargs):
         raise RuntimeError('forced failure')
 
     monkeypatch.setattr(pdf_parser, '_build_relay_split_payload', boom)
-    events = parse_synthetic()
-    for event_no in ('5', '6'):
-        legs = events[event_no]
-        assert {r['relay_split_source'] for r in legs} == {'legacy'}
-        assert all(_codes(r) == [LEGACY_CODE] for r in legs)
-    # No split lines were printed for event 7, so nothing fell back there.
-    assert {r['relay_split_source'] for r in events['7']} == {None}
+    with pytest.raises(RuntimeError) as caught:
+        parse_synthetic()
+    message = str(caught.value)
+    assert 'forced failure' in message
+    assert 'Event 5 Women 4x50 Yard Freestyle Relay' in message
+    assert 'Henderson State University' in message
+    assert isinstance(caught.value.__cause__, RuntimeError)
+
+
+def test_unexpected_error_inside_a_builder_is_not_filed_as_legacy(parse_synthetic, monkeypatch):
+    # The same failure one level down, past the inner (IndexError, ValueError,
+    # TypeError) fallback in `_build_relay_split_payload`.
+    def boom(*_args, **_kwargs):
+        raise KeyError('forced failure')
+
+    monkeypatch.setattr(pdf_parser, '_build_short_relay_split_payload', boom)
+    with pytest.raises(RuntimeError, match='KeyError'):
+        parse_synthetic()

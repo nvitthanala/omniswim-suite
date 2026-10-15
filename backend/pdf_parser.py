@@ -529,8 +529,8 @@ def _relay_time_to_seconds(time_str):
             return float(parts[0])
         if len(parts) == 2:
             return float(parts[0]) * 60 + float(parts[1])
-        if len(parts) == 3:
-            return float(parts[0]) * 3600 + float(parts[1]) * 60 + float(parts[2])
+        # HyTek prints a swim as m:ss.hh. A clock with two colons ("1:02:03.00") is
+        # a PDF artifact, not an hour-long swim, so it has no seconds value.
     except (ValueError, TypeError):
         return None
     return None
@@ -1125,17 +1125,22 @@ def _parse_nsisc_relay(
         break
 
     if split_lines:
+        # `_build_relay_split_payload` already turns a split line it cannot read
+        # (IndexError, ValueError, TypeError) into a payload flagged 'legacy'. Any
+        # other error is a bug or garbage input. It must stop the parse with the
+        # entry named, not become a 'legacy' row that looks like a normal fallback.
         try:
             relay_split_payload = _build_relay_split_payload(
                 current_event, relay_names, split_lines, finals_time
             )
-            if relay_split_payload:
-                relay_split_source = relay_split_payload.get('split_source')
-        except Exception:
-            relay_split_payload = None
-            relay_leg_splits = _extract_relay_leg_splits_from_line(split_lines[0])
-            relay_split_source = 'legacy'
+        except Exception as exc:
+            raise RuntimeError(
+                f'relay split payload failed for {current_event!r}, '
+                f'{current_round!r}, {school!r} (rank {rank!r}, '
+                f'time {finals_time!r}): {type(exc).__name__}: {exc}'
+            ) from exc
         if relay_split_payload:
+            relay_split_source = relay_split_payload.get('split_source')
             relay_leg_splits = relay_split_payload.get('legacy_leg_splits') or []
 
     if relay_names:
