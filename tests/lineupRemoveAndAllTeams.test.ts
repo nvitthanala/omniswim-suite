@@ -12,7 +12,9 @@
  *    prompt, writes nothing when the run changes nothing, and its Undo refuses
  *    after a later edit.
  *
- * The engine is stubbed. Its correctness is covered by bestRosterEquivalence.
+ * The engine is stubbed at `requestOptimize`, the worker client the run goes
+ * through. Its correctness is covered by bestRosterEquivalence, and the worker
+ * path by allTeamsApplyWorker.test.ts.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement, useState } from 'react';
@@ -22,9 +24,9 @@ import type { Workspace } from '@omniswim/core/types';
 import type { ScorerRosterRow } from '@omniswim/core/lib/scorerRoster';
 
 const compute = vi.hoisted(() => vi.fn());
-vi.mock('../packages/manager/src/components/batchOptimizerView', async importOriginal => {
-  const actual = await importOriginal<typeof import('../packages/manager/src/components/batchOptimizerView')>();
-  return { ...actual, computeBatchOptimizationResult: compute };
+vi.mock('@omniswim/core/lib/optimizeClient', async importOriginal => {
+  const actual = await importOriginal<typeof import('@omniswim/core/lib/optimizeClient')>();
+  return { ...actual, requestOptimize: (...args: unknown[]) => Promise.resolve(compute(...args)) };
 });
 
 import TeamRosterRow from '../packages/manager/src/components/TeamRosterRow';
@@ -131,7 +133,8 @@ describe('one-click all-teams apply', () => {
     overrides: [{ name: 'After', team: 'HSU', gender: 'Men', isScorer: true }],
     meetEntryPlans: [{ id: 'p1' }],
     activeEntryIds: ['p1'],
-    optimizer: { projectedTotal: 110, previousTotal: 100 },
+    projectedTotal: 110,
+    previousTotal: 100,
   };
 
   let current: Workspace;

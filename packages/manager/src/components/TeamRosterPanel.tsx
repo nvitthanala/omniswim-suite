@@ -442,6 +442,8 @@ export default function TeamRosterPanel({
         onOpenOptimize={onOpenOptimize}
         onOptimizeAllTeams={allTeams.run}
         allTeamsBusy={allTeams.busy}
+        allTeamsRun={allTeams.progress}
+        onCancelAllTeams={allTeams.cancel}
         onResetTeam={resetTeamManual}
         canRemoveAthlete={canRemoveAthlete}
         maxIndividualScorersPerTeam={merged.maxIndividualScorersPerTeam}

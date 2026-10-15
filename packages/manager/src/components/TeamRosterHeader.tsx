@@ -9,6 +9,8 @@ import { Users, RotateCcw, Sparkles } from 'lucide-react';
 import { Button, TeamSelect } from '@omniswim/ui';
 import ProjectedActualScore from './ProjectedActualScore';
 import { scorerCapPhrase } from './teamRosterView';
+import { OptimizeRunStatus } from './OptimizeRunStatus';
+import type { OptimizeRunState } from './optimizeRunView';
 
 type Props = {
   selectedTeam: string;
@@ -20,6 +22,10 @@ type Props = {
   onOptimizeAllTeams?: () => void;
   /** True while the all-teams run is working. */
   allTeamsBusy?: boolean;
+  /** The all-teams run in flight, for "Optimizing N of M teams". Shown with `onCancelAllTeams`. */
+  allTeamsRun?: OptimizeRunState | null;
+  /** Cancel the all-teams run. Nothing is applied. */
+  onCancelAllTeams?: () => void;
   onResetTeam: () => void;
   /** The Delete or Backspace key removes the selected athlete; mention it in the help text. */
   canRemoveAthlete?: boolean;
@@ -41,6 +47,8 @@ export default function TeamRosterHeader({
   onOpenOptimize,
   onOptimizeAllTeams,
   allTeamsBusy = false,
+  allTeamsRun = null,
+  onCancelAllTeams,
   onResetTeam,
   canRemoveAthlete = false,
   maxIndividualScorersPerTeam,
@@ -103,6 +111,12 @@ export default function TeamRosterHeader({
           ) : null}
         </div>
       </div>
+
+      {allTeamsRun && onCancelAllTeams ? (
+        <div className="mb-3">
+          <OptimizeRunStatus run={allTeamsRun} onCancel={onCancelAllTeams} />
+        </div>
+      ) : null}
 
       {selectedTeam ? (
         <ProjectedActualScore

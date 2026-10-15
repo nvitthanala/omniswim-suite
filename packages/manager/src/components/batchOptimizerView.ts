@@ -77,8 +77,9 @@ export function buildBatchOptimizationResult(
 
 /**
  * Runs the all-teams optimizer in this thread and packages the result.
- * The panel runs it through `requestOptimize` instead; this stays for the
- * one-click apply in `useAllTeamsApply`.
+ * The panel and the one-click apply in `useAllTeamsApply` run it through
+ * `requestOptimize` (the scoring worker) instead. This stays as the
+ * synchronous reference the equivalence tests compare the worker result to.
  */
 export function computeBatchOptimizationResult(
   workspace: Workspace,
