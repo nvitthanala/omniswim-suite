@@ -1085,7 +1085,7 @@
     };
   }
 
-  // packages/swimcloud/src/parser.ts
+  // packages/swimcloud/src/parseResult.ts
   var SWIMCLOUD_PARSE_CONFIDENCE = "synthetic-fixture-only";
   var SWIMCLOUD_REAL_CAPTURE_CONFIDENCE = "real-capture-verified";
   function provenanceOf(context) {
@@ -1114,6 +1114,259 @@
       warnings
     };
   }
+
+  // packages/swimcloud/src/parseElements.ts
+  function firstHeadingText(html) {
+    const headings = findHeadings(html);
+    for (const heading of headings) {
+      if (heading.level === 1 && heading.text.length > 0) {
+        return heading.text;
+      }
+    }
+    return void 0;
+  }
+  function escapeRegExp(text) {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+  function startTagOf(elementHtml) {
+    const end = elementHtml.indexOf(">");
+    return end < 0 ? elementHtml : elementHtml.slice(0, end + 1);
+  }
+  function readAttribute(tagHtml, name) {
+    const pattern = new RegExp(
+      `(?:^|\\s)${escapeRegExp(name)}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s"'>]+))`,
+      "i"
+    );
+    const match = pattern.exec(tagHtml);
+    if (match === null) {
+      return void 0;
+    }
+    return decodeHtmlEntities(match[2] ?? match[3] ?? match[4] ?? "");
+  }
+  function classTokens(tagHtml) {
+    const value = readAttribute(tagHtml, "class");
+    return value === void 0 ? [] : value.split(/\s+/).filter((token) => token.length > 0);
+  }
+  function elementTextById(html, id) {
+    const pattern = new RegExp(
+      `<([A-Za-z][A-Za-z0-9]*)\\b[^>]*\\sid\\s*=\\s*["']?${escapeRegExp(id)}["'\\s>]`,
+      "i"
+    );
+    const match = pattern.exec(html);
+    if (match === null) {
+      return void 0;
+    }
+    const tag = regexGroup(match, 1).toLowerCase();
+    const startEnd = html.indexOf(">", match.index);
+    if (startEnd < 0) {
+      return void 0;
+    }
+    const close = html.toLowerCase().indexOf(`</${tag}`, startEnd);
+    if (close < 0) {
+      return void 0;
+    }
+    const text = htmlToText(html.slice(startEnd + 1, close));
+    return text.length === 0 ? void 0 : text;
+  }
+  function readQueryParam(href, name) {
+    try {
+      const url = new URL(href, `https://${SWIMCLOUD_CANONICAL_HOST}`);
+      const value = url.searchParams.get(name);
+      return value === null || value.length === 0 ? void 0 : value;
+    } catch {
+      return void 0;
+    }
+  }
+
+  // packages/swimcloud/src/swimFields.ts
+  var TIME_TOKEN = /^(?:\d{1,2}:){0,2}\d{1,2}\.\d{2}$/;
+  var RESULT_MARKERS = {
+    dq: { disqualified: true },
+    ns: { noShow: true },
+    scr: { scratched: true },
+    // Declared False Start: the athlete did not swim. Treated as a scratch, which
+    // is the state it shares — deliberately not folded into `disqualified`, since
+    // Rule 7 treats a DQ and a non-swim differently.
+    dfs: { scratched: true }
+  };
+  function swimmerIdFromCell(cellHtml) {
+    for (const href of extractHrefs(cellHtml)) {
+      const classification = classifySwimCloudUrl(href);
+      if (classification.outcome !== "fetchable") {
+        continue;
+      }
+      const resource = classification.resource;
+      if (resource.kind === "swimmer" || resource.kind === "meetSwimmer") {
+        return resource.swimmerId;
+      }
+    }
+    return void 0;
+  }
+  function teamIdFromCell(cellHtml) {
+    for (const href of extractHrefs(cellHtml)) {
+      const classification = classifySwimCloudUrl(href);
+      if (classification.outcome !== "fetchable") {
+        continue;
+      }
+      const resource = classification.resource;
+      if (resource.kind === "team" || resource.kind === "meetTeam" || resource.kind === "meetTeamSwims") {
+        return resource.teamId;
+      }
+    }
+    return void 0;
+  }
+  function mapGender(word) {
+    if (word === void 0) {
+      return "unknown";
+    }
+    const lower = word.toLowerCase();
+    if (lower === "men" || lower === "mens") {
+      return "Men";
+    }
+    if (lower === "women" || lower === "womens") {
+      return "Women";
+    }
+    return "unknown";
+  }
+  function mapStroke(lowerLabel, isRelay) {
+    if (/\bdiving\b|\bdiver\b|\bdive\b/.test(lowerLabel)) {
+      return "Diving";
+    }
+    if (isRelay) {
+      if (/\bmedley\b/.test(lowerLabel)) {
+        return "Medley Relay";
+      }
+      if (/\bfree(style)?\b/.test(lowerLabel)) {
+        return "Freestyle Relay";
+      }
+      return "unknown";
+    }
+    if (/\bindividual medley\b|\bim\b/.test(lowerLabel)) {
+      return "Individual Medley";
+    }
+    if (/\bbutterfly\b|\bfly\b/.test(lowerLabel)) {
+      return "Butterfly";
+    }
+    if (/\bbackstroke\b|\bback\b/.test(lowerLabel)) {
+      return "Backstroke";
+    }
+    if (/\bbreaststroke\b|\bbreast\b/.test(lowerLabel)) {
+      return "Breaststroke";
+    }
+    if (/\bfreestyle\b|\bfree\b/.test(lowerLabel)) {
+      return "Freestyle";
+    }
+    return "unknown";
+  }
+  function readPoints(raw, event, rowIndex, warnings) {
+    const token = raw.trim();
+    if (token.length === 0) {
+      return {};
+    }
+    if (/^[-‐‑‒–—―]+$/.test(token)) {
+      return {};
+    }
+    if (/^\d+(\.\d+)?$/.test(token)) {
+      const value = Number.parseFloat(token);
+      return { points: value };
+    }
+    warnings.push({
+      code: "unrecognized-points-token",
+      message: `Points cell ${JSON.stringify(token)} is not a non-negative number; no points recorded.`,
+      eventId: event.eventId,
+      rowIndex,
+      raw: token
+    });
+    return { rawPointsToken: token };
+  }
+  function readTime(raw, event, rowIndex, warnings) {
+    const token = raw.trim();
+    if (token.length === 0) {
+      return {};
+    }
+    const exhibition = /^x/i.test(token) && TIME_TOKEN.test(token.slice(1));
+    const body = exhibition ? token.slice(1) : token;
+    if (event.stroke === "Diving") {
+      warnings.push({
+        code: "diving-score-not-a-time",
+        message: `Diving result ${JSON.stringify(token)} is a judged score, not a time; preserved verbatim and not stored as finalTime.`,
+        eventId: event.eventId,
+        rowIndex,
+        raw: token
+      });
+      return {
+        rawTimeToken: token,
+        ...exhibition ? { flags: { exhibition: true } } : {}
+      };
+    }
+    if (TIME_TOKEN.test(body)) {
+      return {
+        finalTime: body,
+        ...exhibition ? { flags: { exhibition: true } } : {}
+      };
+    }
+    const marker = RESULT_MARKERS[body.toLowerCase()];
+    if (marker !== void 0) {
+      return {
+        rawTimeToken: token,
+        flags: exhibition ? { ...marker, exhibition: true } : marker
+      };
+    }
+    warnings.push({
+      code: "unrecognized-time-token",
+      message: `Time cell ${JSON.stringify(token)} is neither a time nor a known marker (${Object.keys(RESULT_MARKERS).join(", ").toUpperCase()}); preserved verbatim, no time recorded.`,
+      eventId: event.eventId,
+      rowIndex,
+      raw: token
+    });
+    return { rawTimeToken: token };
+  }
+  var SWIMS_NO_PLACE_TOKENS = /* @__PURE__ */ new Set(["", "\u2013", "\u2014", "-", "--", "---"]);
+  var ORDINAL_PLACE = /^(\d+)\s*(?:st|nd|rd|th)$/i;
+  function readOrdinalPlace(raw, event, rowIndex, warnings) {
+    const token = raw.trim();
+    if (SWIMS_NO_PLACE_TOKENS.has(token)) {
+      return void 0;
+    }
+    const ordinal = ORDINAL_PLACE.exec(token);
+    const digits = ordinal !== null ? ordinal[1] : /^\d+$/.test(token) ? token : void 0;
+    if (digits !== void 0) {
+      const value = Number.parseInt(digits, 10);
+      if (value > 0) {
+        return value;
+      }
+    }
+    warnings.push({
+      code: "unrecognized-place-token",
+      message: `Place cell ${JSON.stringify(token)} is neither an ordinal ("1st", "17th"), a positive integer, nor a known "no place" marker; no place recorded.`,
+      eventId: event.eventId,
+      rowIndex,
+      raw: token
+    });
+    return void 0;
+  }
+  function readFlagsCell(cellHtml) {
+    let relayLeadoff = false;
+    const cutStandards = [];
+    for (const span of findElementSpans(cellHtml, "span")) {
+      const startTag = startTagOf(span.html);
+      const title = readAttribute(startTag, "title");
+      if (title !== void 0 && title.trim().toLowerCase() === "leadoff") {
+        relayLeadoff = true;
+        continue;
+      }
+      if (!classTokens(startTag).includes("c-label--royal")) {
+        continue;
+      }
+      const label = htmlToText(span.inner);
+      if (label.length > 0) {
+        cutStandards.push({ label, ...title === void 0 ? {} : { title } });
+      }
+    }
+    return { relayLeadoff, cutStandards };
+  }
+
+  // packages/swimcloud/src/parseCells.ts
   function normalizeHeader(label) {
     return collapseWhitespace(label.toLowerCase().replace(/[^a-z0-9]+/g, " "));
   }
@@ -1138,6 +1391,47 @@
   function textAt(cells, index) {
     return htmlToText(cellAt(cells, index));
   }
+  var CELL_START_TAG = /<(?:td|th)\b[^>]*>/gi;
+  function readHeaderColumns(headerRowHtml) {
+    const cells = extractRowCells(headerRowHtml);
+    const spans = [];
+    CELL_START_TAG.lastIndex = 0;
+    for (let match = CELL_START_TAG.exec(headerRowHtml); match !== null; match = CELL_START_TAG.exec(headerRowHtml)) {
+      const raw = readAttribute(match[0], "colspan");
+      const parsed = raw === void 0 ? Number.NaN : Number.parseInt(raw, 10);
+      spans.push(Number.isInteger(parsed) && parsed > 0 ? parsed : 1);
+    }
+    CELL_START_TAG.lastIndex = 0;
+    const columns = [];
+    let start = 0;
+    cells.forEach((cell, index) => {
+      const span = spans[index] ?? 1;
+      columns.push({ label: normalizeHeader(htmlToText(cell)), start, span });
+      start += span;
+    });
+    return columns;
+  }
+  function columnFor(columns, synonyms) {
+    return columns.find((column) => synonyms.includes(column.label));
+  }
+  var SWIMS_EVENT_HEADERS = ["event"];
+  var SWIMS_TIME_HEADERS = ["time"];
+  var SWIMS_PLACE_HEADERS = ["place"];
+  var SWIMS_FLAGS_HEADERS = ["flags"];
+  var SWIMS_POINTS_HEADERS = ["pts", "points"];
+  var SWIMS_SCORE_HEADERS = ["score"];
+  function subjectCellIndex(cells, column) {
+    const end = Math.min(column.start + column.span, cells.length);
+    for (let index = column.start; index < end; index += 1) {
+      const cell = cells[index];
+      if (cell !== void 0 && swimmerIdFromCell(cell) !== void 0) {
+        return index;
+      }
+    }
+    return Math.max(column.start, end - 1);
+  }
+
+  // packages/swimcloud/src/rosterPage.ts
   var CLASS_YEARS = {
     fr: "FR",
     freshman: "FR",
@@ -1151,16 +1445,6 @@
     gr: "GR",
     grad: "GR",
     graduate: "GR"
-  };
-  var TIME_TOKEN = /^(?:\d{1,2}:){0,2}\d{1,2}\.\d{2}$/;
-  var RESULT_MARKERS = {
-    dq: { disqualified: true },
-    ns: { noShow: true },
-    scr: { scratched: true },
-    // Declared False Start: the athlete did not swim. Treated as a scratch, which
-    // is the state it shares — deliberately not folded into `disqualified`, since
-    // Rule 7 treats a DQ and a non-swim differently.
-    dfs: { scratched: true }
   };
   var ROSTER_EMPTY_STATE = /no\s+rosters?\s+found/i;
   function parseTeamRosterHtml(html, context, options = {}) {
@@ -1479,21 +1763,6 @@
     }
     return firstHeadingText(cleaned);
   }
-  function missingMeetNameWarning() {
-    return {
-      code: "meet-name-missing",
-      message: 'The page prints no meet name (no meet-name element and no level-1 heading). meet.name is the empty string, which means "not stated".'
-    };
-  }
-  function firstHeadingText(html) {
-    const headings = findHeadings(html);
-    for (const heading of headings) {
-      if (heading.level === 1 && heading.text.length > 0) {
-        return heading.text;
-      }
-    }
-    return void 0;
-  }
   function teamIdFromSourceUrl(sourceUrl) {
     const classification = classifySwimCloudUrl(sourceUrl);
     if (classification.outcome !== "fetchable") {
@@ -1505,452 +1774,13 @@
     }
     return { mismatch: resource.kind };
   }
-  function swimmerIdFromCell(cellHtml) {
-    for (const href of extractHrefs(cellHtml)) {
-      const classification = classifySwimCloudUrl(href);
-      if (classification.outcome !== "fetchable") {
-        continue;
-      }
-      const resource = classification.resource;
-      if (resource.kind === "swimmer" || resource.kind === "meetSwimmer") {
-        return resource.swimmerId;
-      }
-    }
-    return void 0;
-  }
-  function teamIdFromCell(cellHtml) {
-    for (const href of extractHrefs(cellHtml)) {
-      const classification = classifySwimCloudUrl(href);
-      if (classification.outcome !== "fetchable") {
-        continue;
-      }
-      const resource = classification.resource;
-      if (resource.kind === "team" || resource.kind === "meetTeam" || resource.kind === "meetTeamSwims") {
-        return resource.teamId;
-      }
-    }
-    return void 0;
-  }
-  function mapGender(word) {
-    if (word === void 0) {
-      return "unknown";
-    }
-    const lower = word.toLowerCase();
-    if (lower === "men" || lower === "mens") {
-      return "Men";
-    }
-    if (lower === "women" || lower === "womens") {
-      return "Women";
-    }
-    return "unknown";
-  }
-  function mapStroke(lowerLabel, isRelay) {
-    if (/\bdiving\b|\bdiver\b|\bdive\b/.test(lowerLabel)) {
-      return "Diving";
-    }
-    if (isRelay) {
-      if (/\bmedley\b/.test(lowerLabel)) {
-        return "Medley Relay";
-      }
-      if (/\bfree(style)?\b/.test(lowerLabel)) {
-        return "Freestyle Relay";
-      }
-      return "unknown";
-    }
-    if (/\bindividual medley\b|\bim\b/.test(lowerLabel)) {
-      return "Individual Medley";
-    }
-    if (/\bbutterfly\b|\bfly\b/.test(lowerLabel)) {
-      return "Butterfly";
-    }
-    if (/\bbackstroke\b|\bback\b/.test(lowerLabel)) {
-      return "Backstroke";
-    }
-    if (/\bbreaststroke\b|\bbreast\b/.test(lowerLabel)) {
-      return "Breaststroke";
-    }
-    if (/\bfreestyle\b|\bfree\b/.test(lowerLabel)) {
-      return "Freestyle";
-    }
-    return "unknown";
-  }
-  function readPoints(raw, event, rowIndex, warnings) {
-    const token = raw.trim();
-    if (token.length === 0) {
-      return {};
-    }
-    if (/^[-‐‑‒–—―]+$/.test(token)) {
-      return {};
-    }
-    if (/^\d+(\.\d+)?$/.test(token)) {
-      const value = Number.parseFloat(token);
-      return { points: value };
-    }
-    warnings.push({
-      code: "unrecognized-points-token",
-      message: `Points cell ${JSON.stringify(token)} is not a non-negative number; no points recorded.`,
-      eventId: event.eventId,
-      rowIndex,
-      raw: token
-    });
-    return { rawPointsToken: token };
-  }
-  function readTime(raw, event, rowIndex, warnings) {
-    const token = raw.trim();
-    if (token.length === 0) {
-      return {};
-    }
-    const exhibition = /^x/i.test(token) && TIME_TOKEN.test(token.slice(1));
-    const body = exhibition ? token.slice(1) : token;
-    if (event.stroke === "Diving") {
-      warnings.push({
-        code: "diving-score-not-a-time",
-        message: `Diving result ${JSON.stringify(token)} is a judged score, not a time; preserved verbatim and not stored as finalTime.`,
-        eventId: event.eventId,
-        rowIndex,
-        raw: token
-      });
-      return {
-        rawTimeToken: token,
-        ...exhibition ? { flags: { exhibition: true } } : {}
-      };
-    }
-    if (TIME_TOKEN.test(body)) {
-      return {
-        finalTime: body,
-        ...exhibition ? { flags: { exhibition: true } } : {}
-      };
-    }
-    const marker = RESULT_MARKERS[body.toLowerCase()];
-    if (marker !== void 0) {
-      return {
-        rawTimeToken: token,
-        flags: exhibition ? { ...marker, exhibition: true } : marker
-      };
-    }
-    warnings.push({
-      code: "unrecognized-time-token",
-      message: `Time cell ${JSON.stringify(token)} is neither a time nor a known marker (${Object.keys(RESULT_MARKERS).join(", ").toUpperCase()}); preserved verbatim, no time recorded.`,
-      eventId: event.eventId,
-      rowIndex,
-      raw: token
-    });
-    return { rawTimeToken: token };
-  }
-  function buildTeamMeetSwimsPayload(fields) {
-    const team = fields.teamId !== void 0 && fields.teamName !== void 0 && fields.gender !== "unknown" ? { swimCloudTeamId: fields.teamId, gender: fields.gender, name: fields.teamName } : void 0;
+
+  // packages/swimcloud/src/meetPageFields.ts
+  function missingMeetNameWarning() {
     return {
-      swimCloudMeetId: fields.meetId,
-      ...fields.meetName === void 0 ? {} : { meetName: fields.meetName },
-      meet: fields.meet,
-      ...fields.teamId === void 0 ? {} : { swimCloudTeamId: fields.teamId },
-      ...fields.teamName === void 0 ? {} : { teamName: fields.teamName },
-      ...team === void 0 ? {} : { team },
-      gender: fields.gender,
-      ...fields.entryCount === void 0 ? {} : { entryCount: fields.entryCount },
-      swims: fields.swims,
-      events: fields.events,
-      rowCount: fields.rowCount,
-      ...fields.pagination === void 0 ? {} : { pagination: fields.pagination }
+      code: "meet-name-missing",
+      message: 'The page prints no meet name (no meet-name element and no level-1 heading). meet.name is the empty string, which means "not stated".'
     };
-  }
-  function parseTeamMeetSwimsHtml(html, context, options = {}) {
-    const warnings = [];
-    const confidence = SWIMCLOUD_REAL_CAPTURE_CONFIDENCE;
-    if (collapseWhitespace(html).length === 0) {
-      return fail(context, "empty-input", "The captured HTML is empty.", warnings, confidence);
-    }
-    const fromUrl = meetScopeFromSourceUrl(context.sourceUrl);
-    if (fromUrl.mismatch !== void 0) {
-      return fail(
-        context,
-        "source-url-mismatch",
-        `Capture URL ${JSON.stringify(context.sourceUrl)} names a ${fromUrl.mismatch} resource, not a meet or a team within one.`,
-        warnings,
-        confidence
-      );
-    }
-    const meetId = options.meetId ?? fromUrl.meetId;
-    if (meetId === void 0) {
-      return fail(
-        context,
-        "source-url-mismatch",
-        `No meet id could be resolved: capture URL ${JSON.stringify(context.sourceUrl)} does not classify as a meet page and no meetId option was supplied.`,
-        warnings,
-        confidence
-      );
-    }
-    const teamId = options.teamId ?? fromUrl.teamId;
-    const cleaned = stripNonContent(html);
-    const tables = findTables(cleaned);
-    if (tables.length === 0) {
-      return fail(
-        context,
-        "expected-table-missing",
-        "No <table> element was found; a results page is expected to contain at least one.",
-        warnings,
-        confidence
-      );
-    }
-    const located = locateSwimsTable(tables);
-    if (located === null) {
-      return fail(
-        context,
-        "expected-header-missing",
-        `None of the ${tables.length} table(s) on the page has both an "Event" and a "Time" column, which is what identifies a results table on a SwimCloud results page.`,
-        warnings,
-        confidence
-      );
-    }
-    const gender = options.gender ?? readActiveGenderWord(cleaned);
-    const meetName = elementTextById(cleaned, "meet-name") ?? firstHeadingText(cleaned);
-    const meetCourse = readPrintedCourse(cleaned) ?? options.meetCourse;
-    const dates = readMeetDateRange(cleaned, warnings);
-    const teamName = teamId === void 0 ? void 0 : teamNameForId(cleaned, teamId);
-    const entryCount = readSplashStat(cleaned, "entries");
-    const rows = readSwimRows(located, {
-      meetId,
-      gender,
-      meetCourse,
-      fallbackTeamId: teamId,
-      fallbackTeamName: teamName,
-      warnings
-    });
-    const events = [];
-    for (const swim of rows.swims) {
-      if (!events.some((event) => event.eventId === swim.event.eventId)) {
-        events.push(swim.event);
-      }
-    }
-    if (meetName === void 0) warnings.push(missingMeetNameWarning());
-    const meet = {
-      swimCloudMeetId: meetId,
-      name: meetName ?? "",
-      format: options.meetFormat ?? "unknown",
-      ruleset: options.meetRuleset ?? "unknown",
-      course: meetCourse ?? "unknown",
-      ...dates.startDate === void 0 ? {} : { startDate: dates.startDate },
-      ...dates.endDate === void 0 ? {} : { endDate: dates.endDate }
-    };
-    const pagination = readPagination(cleaned, fromUrl.page);
-    return succeed(
-      context,
-      buildTeamMeetSwimsPayload({
-        meetId,
-        meetName,
-        meet,
-        teamId,
-        teamName,
-        gender,
-        entryCount,
-        swims: rows.swims,
-        events,
-        rowCount: rows.rowCount,
-        pagination
-      }),
-      warnings,
-      confidence
-    );
-  }
-  function locateCardTable(html, cardTitle) {
-    const heading = findElementSpans(html, "h2").find(
-      (h) => classTokens(startTagOf(h.html)).includes("c-title") && htmlToText(h.inner).trim() === cardTitle
-    );
-    if (heading === void 0) {
-      return null;
-    }
-    const tablesAfter = findTables(html).filter((t) => t.start > heading.start);
-    if (tablesAfter.length === 0) {
-      return null;
-    }
-    return tablesAfter.reduce((closest, t) => t.start < closest.start ? t : closest);
-  }
-  function extractTeamStandingsRows(tableHtml) {
-    const standings = [];
-    for (const row of extractTableRows(tableHtml)) {
-      if (isHeaderRow(row)) {
-        continue;
-      }
-      const cells = extractRowCells(row);
-      if (cells.length < 3) {
-        continue;
-      }
-      const linkCell = cells[1] ?? "";
-      const teamHref = extractHrefs(linkCell).find((href) => /\/team\/\d+\/?/.test(href));
-      if (teamHref === void 0) {
-        continue;
-      }
-      const idMatch = /\/team\/(\d+)\//.exec(teamHref);
-      if (idMatch === null) {
-        continue;
-      }
-      const teamName = htmlToText(linkCell).trim();
-      if (teamName.length === 0) {
-        continue;
-      }
-      const rankText = htmlToText(cells[0] ?? "").trim();
-      const scoreText = htmlToText(cells[2] ?? "").trim();
-      const rank = /^\d+$/.test(rankText) ? Number.parseInt(rankText, 10) : void 0;
-      const score = /^[\d.]+$/.test(scoreText) ? Number.parseFloat(scoreText) : void 0;
-      standings.push({
-        swimCloudTeamId: idMatch[1],
-        teamName,
-        ...rank === void 0 ? {} : { rank },
-        ...score === void 0 ? {} : { score }
-      });
-    }
-    return standings;
-  }
-  function parseTeamStandingsPage(html, context, options, cardTitle, discoveryCompleteness) {
-    const warnings = [];
-    const confidence = SWIMCLOUD_REAL_CAPTURE_CONFIDENCE;
-    if (collapseWhitespace(html).length === 0) {
-      return fail(context, "empty-input", "The captured HTML is empty.", warnings, confidence);
-    }
-    const fromUrl = meetScopeFromSourceUrl(context.sourceUrl);
-    if (fromUrl.mismatch !== void 0) {
-      return fail(
-        context,
-        "source-url-mismatch",
-        `Capture URL ${JSON.stringify(context.sourceUrl)} names a ${fromUrl.mismatch} resource, not a meet.`,
-        warnings,
-        confidence
-      );
-    }
-    const meetId = options.meetId ?? fromUrl.meetId;
-    if (meetId === void 0) {
-      return fail(
-        context,
-        "source-url-mismatch",
-        `No meet id could be resolved: capture URL ${JSON.stringify(context.sourceUrl)} does not classify as a meet page and no meetId option was supplied.`,
-        warnings,
-        confidence
-      );
-    }
-    const cleaned = stripNonContent(html);
-    const table = locateCardTable(cleaned, cardTitle);
-    if (table === null) {
-      return fail(
-        context,
-        "expected-table-missing",
-        `No "${cardTitle}" card table was found on this page.`,
-        warnings,
-        confidence
-      );
-    }
-    const teams = extractTeamStandingsRows(table.html);
-    const gender = readActiveGenderWord(cleaned);
-    const meetName = elementTextById(cleaned, "meet-name") ?? firstHeadingText(cleaned);
-    return succeed(
-      context,
-      {
-        swimCloudMeetId: meetId,
-        ...meetName === void 0 ? {} : { meetName },
-        gender,
-        teams,
-        discoveryCompleteness
-      },
-      warnings,
-      confidence
-    );
-  }
-  function parseMeetTeamsHtml(html, context, options = {}) {
-    return parseTeamStandingsPage(html, context, options, "Teams", "unproven");
-  }
-  function parseMeetTopTeamsHtml(html, context, options = {}) {
-    return parseTeamStandingsPage(html, context, options, "Teams", "verified-complete-for-this-capture");
-  }
-  var EVENT_INDEX_ITEM_MARKER = /\bjs-event-item\b/;
-  var EVENT_INDEX_ANCHOR = /<a\b([^>]*)>([\s\S]*?)<\/a>/g;
-  var EVENT_INDEX_HREF = /href="\/results\/(\d+)\/event\/(\d+)\/?"/;
-  var EVENT_INDEX_LABEL = /class="c-events__link-body"\s+title="([^"]*)"/;
-  var EVENT_INDEX_STATUS = /class="c-events__link-start"[^>]*title="([^"]*)"/;
-  var EVENT_INDEX_NUMBER = /class="c-event-status[^"]*"\s*>([\s\S]*?)<\/span>/;
-  function readMeetEventIndex(html, meetId) {
-    const entries = [];
-    const seen = /* @__PURE__ */ new Set();
-    const cleaned = stripNonContent(html);
-    for (const match of cleaned.matchAll(EVENT_INDEX_ANCHOR)) {
-      const attrs = match[1] ?? "";
-      const inner = match[2] ?? "";
-      if (!EVENT_INDEX_ITEM_MARKER.test(attrs)) {
-        continue;
-      }
-      const href = EVENT_INDEX_HREF.exec(attrs);
-      if (href === null || href[1] !== meetId) {
-        continue;
-      }
-      const eventRef = href[2];
-      if (seen.has(eventRef)) {
-        continue;
-      }
-      seen.add(eventRef);
-      const labelMatch = EVENT_INDEX_LABEL.exec(inner);
-      const statusMatch = EVENT_INDEX_STATUS.exec(inner);
-      const numberMatch = EVENT_INDEX_NUMBER.exec(inner);
-      const label = labelMatch === null ? "" : collapseWhitespace(decodeHtmlEntities(labelMatch[1]));
-      const status = statusMatch === null ? void 0 : collapseWhitespace(decodeHtmlEntities(statusMatch[1]));
-      const printedNumber = numberMatch === null ? void 0 : collapseWhitespace(htmlToText(numberMatch[1]));
-      entries.push({
-        eventRef,
-        label,
-        ...printedNumber === void 0 || printedNumber.length === 0 ? {} : { printedNumber },
-        ...status === void 0 || status.length === 0 ? {} : { status }
-      });
-    }
-    return entries;
-  }
-  function escapeRegExp(text) {
-    return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  }
-  function startTagOf(elementHtml) {
-    const end = elementHtml.indexOf(">");
-    return end < 0 ? elementHtml : elementHtml.slice(0, end + 1);
-  }
-  function readAttribute(tagHtml, name) {
-    const pattern = new RegExp(
-      `(?:^|\\s)${escapeRegExp(name)}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s"'>]+))`,
-      "i"
-    );
-    const match = pattern.exec(tagHtml);
-    if (match === null) {
-      return void 0;
-    }
-    return decodeHtmlEntities(match[2] ?? match[3] ?? match[4] ?? "");
-  }
-  function classTokens(tagHtml) {
-    const value = readAttribute(tagHtml, "class");
-    return value === void 0 ? [] : value.split(/\s+/).filter((token) => token.length > 0);
-  }
-  function elementTextById(html, id) {
-    const pattern = new RegExp(
-      `<([A-Za-z][A-Za-z0-9]*)\\b[^>]*\\sid\\s*=\\s*["']?${escapeRegExp(id)}["'\\s>]`,
-      "i"
-    );
-    const match = pattern.exec(html);
-    if (match === null) {
-      return void 0;
-    }
-    const tag = regexGroup(match, 1).toLowerCase();
-    const startEnd = html.indexOf(">", match.index);
-    if (startEnd < 0) {
-      return void 0;
-    }
-    const close = html.toLowerCase().indexOf(`</${tag}`, startEnd);
-    if (close < 0) {
-      return void 0;
-    }
-    const text = htmlToText(html.slice(startEnd + 1, close));
-    return text.length === 0 ? void 0 : text;
-  }
-  function readQueryParam(href, name) {
-    try {
-      const url = new URL(href, `https://${SWIMCLOUD_CANONICAL_HOST}`);
-      const value = url.searchParams.get(name);
-      return value === null || value.length === 0 ? void 0 : value;
-    } catch {
-      return void 0;
-    }
   }
   function meetScopeFromSourceUrl(sourceUrl) {
     const classification = classifySwimCloudUrl(sourceUrl);
@@ -2077,6 +1907,123 @@
     });
     return {};
   }
+
+  // packages/swimcloud/src/teamMeetSwimsPage.ts
+  function buildTeamMeetSwimsPayload(fields) {
+    const team = fields.teamId !== void 0 && fields.teamName !== void 0 && fields.gender !== "unknown" ? { swimCloudTeamId: fields.teamId, gender: fields.gender, name: fields.teamName } : void 0;
+    return {
+      swimCloudMeetId: fields.meetId,
+      ...fields.meetName === void 0 ? {} : { meetName: fields.meetName },
+      meet: fields.meet,
+      ...fields.teamId === void 0 ? {} : { swimCloudTeamId: fields.teamId },
+      ...fields.teamName === void 0 ? {} : { teamName: fields.teamName },
+      ...team === void 0 ? {} : { team },
+      gender: fields.gender,
+      ...fields.entryCount === void 0 ? {} : { entryCount: fields.entryCount },
+      swims: fields.swims,
+      events: fields.events,
+      rowCount: fields.rowCount,
+      ...fields.pagination === void 0 ? {} : { pagination: fields.pagination }
+    };
+  }
+  function parseTeamMeetSwimsHtml(html, context, options = {}) {
+    const warnings = [];
+    const confidence = SWIMCLOUD_REAL_CAPTURE_CONFIDENCE;
+    if (collapseWhitespace(html).length === 0) {
+      return fail(context, "empty-input", "The captured HTML is empty.", warnings, confidence);
+    }
+    const fromUrl = meetScopeFromSourceUrl(context.sourceUrl);
+    if (fromUrl.mismatch !== void 0) {
+      return fail(
+        context,
+        "source-url-mismatch",
+        `Capture URL ${JSON.stringify(context.sourceUrl)} names a ${fromUrl.mismatch} resource, not a meet or a team within one.`,
+        warnings,
+        confidence
+      );
+    }
+    const meetId = options.meetId ?? fromUrl.meetId;
+    if (meetId === void 0) {
+      return fail(
+        context,
+        "source-url-mismatch",
+        `No meet id could be resolved: capture URL ${JSON.stringify(context.sourceUrl)} does not classify as a meet page and no meetId option was supplied.`,
+        warnings,
+        confidence
+      );
+    }
+    const teamId = options.teamId ?? fromUrl.teamId;
+    const cleaned = stripNonContent(html);
+    const tables = findTables(cleaned);
+    if (tables.length === 0) {
+      return fail(
+        context,
+        "expected-table-missing",
+        "No <table> element was found; a results page is expected to contain at least one.",
+        warnings,
+        confidence
+      );
+    }
+    const located = locateSwimsTable(tables);
+    if (located === null) {
+      return fail(
+        context,
+        "expected-header-missing",
+        `None of the ${tables.length} table(s) on the page has both an "Event" and a "Time" column, which is what identifies a results table on a SwimCloud results page.`,
+        warnings,
+        confidence
+      );
+    }
+    const gender = options.gender ?? readActiveGenderWord(cleaned);
+    const meetName = elementTextById(cleaned, "meet-name") ?? firstHeadingText(cleaned);
+    const meetCourse = readPrintedCourse(cleaned) ?? options.meetCourse;
+    const dates = readMeetDateRange(cleaned, warnings);
+    const teamName = teamId === void 0 ? void 0 : teamNameForId(cleaned, teamId);
+    const entryCount = readSplashStat(cleaned, "entries");
+    const rows = readSwimRows(located, {
+      meetId,
+      gender,
+      meetCourse,
+      fallbackTeamId: teamId,
+      fallbackTeamName: teamName,
+      warnings
+    });
+    const events = [];
+    for (const swim of rows.swims) {
+      if (!events.some((event) => event.eventId === swim.event.eventId)) {
+        events.push(swim.event);
+      }
+    }
+    if (meetName === void 0) warnings.push(missingMeetNameWarning());
+    const meet = {
+      swimCloudMeetId: meetId,
+      name: meetName ?? "",
+      format: options.meetFormat ?? "unknown",
+      ruleset: options.meetRuleset ?? "unknown",
+      course: meetCourse ?? "unknown",
+      ...dates.startDate === void 0 ? {} : { startDate: dates.startDate },
+      ...dates.endDate === void 0 ? {} : { endDate: dates.endDate }
+    };
+    const pagination = readPagination(cleaned, fromUrl.page);
+    return succeed(
+      context,
+      buildTeamMeetSwimsPayload({
+        meetId,
+        meetName,
+        meet,
+        teamId,
+        teamName,
+        gender,
+        entryCount,
+        swims: rows.swims,
+        events,
+        rowCount: rows.rowCount,
+        pagination
+      }),
+      warnings,
+      confidence
+    );
+  }
   function teamNameForId(html, teamId) {
     for (const anchor of findElementSpans(html, "a")) {
       const href = readAttribute(startTagOf(anchor.html), "href");
@@ -2162,35 +2109,6 @@
       ...nextPageHref === void 0 ? {} : { nextPageHref }
     };
   }
-  var CELL_START_TAG = /<(?:td|th)\b[^>]*>/gi;
-  function readHeaderColumns(headerRowHtml) {
-    const cells = extractRowCells(headerRowHtml);
-    const spans = [];
-    CELL_START_TAG.lastIndex = 0;
-    for (let match = CELL_START_TAG.exec(headerRowHtml); match !== null; match = CELL_START_TAG.exec(headerRowHtml)) {
-      const raw = readAttribute(match[0], "colspan");
-      const parsed = raw === void 0 ? Number.NaN : Number.parseInt(raw, 10);
-      spans.push(Number.isInteger(parsed) && parsed > 0 ? parsed : 1);
-    }
-    CELL_START_TAG.lastIndex = 0;
-    const columns = [];
-    let start = 0;
-    cells.forEach((cell, index) => {
-      const span = spans[index] ?? 1;
-      columns.push({ label: normalizeHeader(htmlToText(cell)), start, span });
-      start += span;
-    });
-    return columns;
-  }
-  function columnFor(columns, synonyms) {
-    return columns.find((column) => synonyms.includes(column.label));
-  }
-  var SWIMS_EVENT_HEADERS = ["event"];
-  var SWIMS_TIME_HEADERS = ["time"];
-  var SWIMS_PLACE_HEADERS = ["place"];
-  var SWIMS_FLAGS_HEADERS = ["flags"];
-  var SWIMS_POINTS_HEADERS = ["pts", "points"];
-  var SWIMS_SCORE_HEADERS = ["score"];
   function locateSwimsTable(tables) {
     for (const table of tables) {
       const rows = extractTableRows(table.html);
@@ -2223,16 +2141,6 @@
       };
     }
     return null;
-  }
-  function subjectCellIndex(cells, column) {
-    const end = Math.min(column.start + column.span, cells.length);
-    for (let index = column.start; index < end; index += 1) {
-      const cell = cells[index];
-      if (cell !== void 0 && swimmerIdFromCell(cell) !== void 0) {
-        return index;
-      }
-    }
-    return Math.max(column.start, end - 1);
   }
   var SWIMS_EVENT_LABEL = /^(\d{1,4})\s+([A-Za-z])\s+(.+)$/;
   var COURSE_LETTERS = {
@@ -2281,50 +2189,6 @@
       };
     }
     return void 0;
-  }
-  var SWIMS_NO_PLACE_TOKENS = /* @__PURE__ */ new Set(["", "\u2013", "\u2014", "-", "--", "---"]);
-  var ORDINAL_PLACE = /^(\d+)\s*(?:st|nd|rd|th)$/i;
-  function readOrdinalPlace(raw, event, rowIndex, warnings) {
-    const token = raw.trim();
-    if (SWIMS_NO_PLACE_TOKENS.has(token)) {
-      return void 0;
-    }
-    const ordinal = ORDINAL_PLACE.exec(token);
-    const digits = ordinal !== null ? ordinal[1] : /^\d+$/.test(token) ? token : void 0;
-    if (digits !== void 0) {
-      const value = Number.parseInt(digits, 10);
-      if (value > 0) {
-        return value;
-      }
-    }
-    warnings.push({
-      code: "unrecognized-place-token",
-      message: `Place cell ${JSON.stringify(token)} is neither an ordinal ("1st", "17th"), a positive integer, nor a known "no place" marker; no place recorded.`,
-      eventId: event.eventId,
-      rowIndex,
-      raw: token
-    });
-    return void 0;
-  }
-  function readFlagsCell(cellHtml) {
-    let relayLeadoff = false;
-    const cutStandards = [];
-    for (const span of findElementSpans(cellHtml, "span")) {
-      const startTag = startTagOf(span.html);
-      const title = readAttribute(startTag, "title");
-      if (title !== void 0 && title.trim().toLowerCase() === "leadoff") {
-        relayLeadoff = true;
-        continue;
-      }
-      if (!classTokens(startTag).includes("c-label--royal")) {
-        continue;
-      }
-      const label = htmlToText(span.inner);
-      if (label.length > 0) {
-        cutStandards.push({ label, ...title === void 0 ? {} : { title } });
-      }
-    }
-    return { relayLeadoff, cutStandards };
   }
   function buildSwimRowEvent(ctx, eventLabel, link, eventId, parsedLabel, rowIndex) {
     const course = parsedLabel.course !== "unknown" ? parsedLabel.course : ctx.meetCourse ?? "unknown";
@@ -2489,6 +2353,158 @@
       });
     }
     return { swims, rowCount: table.dataRows.length };
+  }
+
+  // packages/swimcloud/src/meetTeamsPage.ts
+  function locateCardTable(html, cardTitle) {
+    const heading = findElementSpans(html, "h2").find(
+      (h) => classTokens(startTagOf(h.html)).includes("c-title") && htmlToText(h.inner).trim() === cardTitle
+    );
+    if (heading === void 0) {
+      return null;
+    }
+    const tablesAfter = findTables(html).filter((t) => t.start > heading.start);
+    if (tablesAfter.length === 0) {
+      return null;
+    }
+    return tablesAfter.reduce((closest, t) => t.start < closest.start ? t : closest);
+  }
+  function extractTeamStandingsRows(tableHtml) {
+    const standings = [];
+    for (const row of extractTableRows(tableHtml)) {
+      if (isHeaderRow(row)) {
+        continue;
+      }
+      const cells = extractRowCells(row);
+      if (cells.length < 3) {
+        continue;
+      }
+      const linkCell = cells[1] ?? "";
+      const teamHref = extractHrefs(linkCell).find((href) => /\/team\/\d+\/?/.test(href));
+      if (teamHref === void 0) {
+        continue;
+      }
+      const idMatch = /\/team\/(\d+)\//.exec(teamHref);
+      if (idMatch === null) {
+        continue;
+      }
+      const teamName = htmlToText(linkCell).trim();
+      if (teamName.length === 0) {
+        continue;
+      }
+      const rankText = htmlToText(cells[0] ?? "").trim();
+      const scoreText = htmlToText(cells[2] ?? "").trim();
+      const rank = /^\d+$/.test(rankText) ? Number.parseInt(rankText, 10) : void 0;
+      const score = /^[\d.]+$/.test(scoreText) ? Number.parseFloat(scoreText) : void 0;
+      standings.push({
+        swimCloudTeamId: idMatch[1],
+        teamName,
+        ...rank === void 0 ? {} : { rank },
+        ...score === void 0 ? {} : { score }
+      });
+    }
+    return standings;
+  }
+  function parseTeamStandingsPage(html, context, options, cardTitle, discoveryCompleteness) {
+    const warnings = [];
+    const confidence = SWIMCLOUD_REAL_CAPTURE_CONFIDENCE;
+    if (collapseWhitespace(html).length === 0) {
+      return fail(context, "empty-input", "The captured HTML is empty.", warnings, confidence);
+    }
+    const fromUrl = meetScopeFromSourceUrl(context.sourceUrl);
+    if (fromUrl.mismatch !== void 0) {
+      return fail(
+        context,
+        "source-url-mismatch",
+        `Capture URL ${JSON.stringify(context.sourceUrl)} names a ${fromUrl.mismatch} resource, not a meet.`,
+        warnings,
+        confidence
+      );
+    }
+    const meetId = options.meetId ?? fromUrl.meetId;
+    if (meetId === void 0) {
+      return fail(
+        context,
+        "source-url-mismatch",
+        `No meet id could be resolved: capture URL ${JSON.stringify(context.sourceUrl)} does not classify as a meet page and no meetId option was supplied.`,
+        warnings,
+        confidence
+      );
+    }
+    const cleaned = stripNonContent(html);
+    const table = locateCardTable(cleaned, cardTitle);
+    if (table === null) {
+      return fail(
+        context,
+        "expected-table-missing",
+        `No "${cardTitle}" card table was found on this page.`,
+        warnings,
+        confidence
+      );
+    }
+    const teams = extractTeamStandingsRows(table.html);
+    const gender = readActiveGenderWord(cleaned);
+    const meetName = elementTextById(cleaned, "meet-name") ?? firstHeadingText(cleaned);
+    return succeed(
+      context,
+      {
+        swimCloudMeetId: meetId,
+        ...meetName === void 0 ? {} : { meetName },
+        gender,
+        teams,
+        discoveryCompleteness
+      },
+      warnings,
+      confidence
+    );
+  }
+  function parseMeetTeamsHtml(html, context, options = {}) {
+    return parseTeamStandingsPage(html, context, options, "Teams", "unproven");
+  }
+  function parseMeetTopTeamsHtml(html, context, options = {}) {
+    return parseTeamStandingsPage(html, context, options, "Teams", "verified-complete-for-this-capture");
+  }
+
+  // packages/swimcloud/src/meetEventIndex.ts
+  var EVENT_INDEX_ITEM_MARKER = /\bjs-event-item\b/;
+  var EVENT_INDEX_ANCHOR = /<a\b([^>]*)>([\s\S]*?)<\/a>/g;
+  var EVENT_INDEX_HREF = /href="\/results\/(\d+)\/event\/(\d+)\/?"/;
+  var EVENT_INDEX_LABEL = /class="c-events__link-body"\s+title="([^"]*)"/;
+  var EVENT_INDEX_STATUS = /class="c-events__link-start"[^>]*title="([^"]*)"/;
+  var EVENT_INDEX_NUMBER = /class="c-event-status[^"]*"\s*>([\s\S]*?)<\/span>/;
+  function readMeetEventIndex(html, meetId) {
+    const entries = [];
+    const seen = /* @__PURE__ */ new Set();
+    const cleaned = stripNonContent(html);
+    for (const match of cleaned.matchAll(EVENT_INDEX_ANCHOR)) {
+      const attrs = match[1] ?? "";
+      const inner = match[2] ?? "";
+      if (!EVENT_INDEX_ITEM_MARKER.test(attrs)) {
+        continue;
+      }
+      const href = EVENT_INDEX_HREF.exec(attrs);
+      if (href === null || href[1] !== meetId) {
+        continue;
+      }
+      const eventRef = href[2];
+      if (seen.has(eventRef)) {
+        continue;
+      }
+      seen.add(eventRef);
+      const labelMatch = EVENT_INDEX_LABEL.exec(inner);
+      const statusMatch = EVENT_INDEX_STATUS.exec(inner);
+      const numberMatch = EVENT_INDEX_NUMBER.exec(inner);
+      const label = labelMatch === null ? "" : collapseWhitespace(decodeHtmlEntities(labelMatch[1]));
+      const status = statusMatch === null ? void 0 : collapseWhitespace(decodeHtmlEntities(statusMatch[1]));
+      const printedNumber = numberMatch === null ? void 0 : collapseWhitespace(htmlToText(numberMatch[1]));
+      entries.push({
+        eventRef,
+        label,
+        ...printedNumber === void 0 || printedNumber.length === 0 ? {} : { printedNumber },
+        ...status === void 0 || status.length === 0 ? {} : { status }
+      });
+    }
+    return entries;
   }
 
   // extensions/swimcloud-companion/src/crawlRequest.ts
@@ -5951,6 +5967,10 @@
  * One exception, added 2026-10-03: {@link planTeamSeasonRoster}. It emits a
  * `season_id` only from a `TeamSeasonOption` that `parseTeamSeasonOptions` read
  * off that team's own page. Every other planner here still emits none.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
  */
 /**
  * @license
