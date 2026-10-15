@@ -20,7 +20,7 @@ import {
 import { divisionForTeamOrNull } from '../data/teamDivisions';
 // Dependency-free by design — see the module header there. Importing
 // `cutlineUtils` here instead would create a cycle (it imports this file).
-import { normalizeEventForCutline } from './cutlineEventNames';
+import { normalizeEventForCutline, stripRelaySplitSuffix } from './cutlineEventNames';
 import { recordAt, regexGroup } from './indexedAccess';
 // A leaf module (types + cutlineEventNames only), so no cycle.
 import {
@@ -33,11 +33,6 @@ import { convertTimeToSeconds, formatSecondsToTime } from './timeFormat';
 /* -------------------------------------------------------------------------- */
 /* Course conversion (LCM/SCM → SCY)                                            */
 /* -------------------------------------------------------------------------- */
-
-/** `"100 Freestyle (Relay split)"` → `"100 Freestyle"`. */
-function stripRelaySplitSuffix(event: string): string {
-  return event.replace(/\s*\(Relay split\)\s*$/i, '').trim();
-}
 
 /**
  * The `CONVERSION_FACTORS` key for one exact spelling, trying only the

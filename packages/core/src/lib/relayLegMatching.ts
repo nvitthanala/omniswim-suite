@@ -11,7 +11,7 @@ import {
   ScoringSettings,
   SwimmerResult,
 } from '../types';
-import { normalizeEventForCutline } from './cutlineEventNames';
+import { normalizeEventForCutline, stripRelaySplitSuffix } from './cutlineEventNames';
 import { itemAt, recordAt, regexGroup } from './indexedAccess';
 import { relayLegsAllowTimeTrials } from './scoringDefaults';
 import { relayEntryKey, relayLegDistanceYardsOfEvent } from './relaySplits';
@@ -82,8 +82,10 @@ function labelTimeTrialLeg(row: SwimmerResult, settings?: RelayLegMatchSettings)
   return row.relayLegTimeTrial === true ? row : { ...row, relayLegTimeTrial: true };
 }
 
+// The same key as `normalizeSwimmerName`: low-level, and it keeps comma order.
+// A local name so the call sites below read as before.
 function normalizeName(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+  return normalizeSwimmerName(name);
 }
 
 function timeToSec(timeStr: string): number {
@@ -135,9 +137,6 @@ const STROKE_BY_KEYWORD: Record<string, RelayLegStroke> = {
   freestyle: 'free',
   free: 'free',
 };
-
-/** The label suffix a relay-split row carries: `100 Freestyle (relay split)`. */
-const RELAY_SPLIT_SUFFIX = /\s*\(relay split\)\s*$/i;
 
 /**
  * The individual event one relay leg swims, as a canonical event name:
@@ -229,7 +228,7 @@ export function isRelayLegEvent(
  * caller testing one label against many legs can read the key once.
  */
 export function relayLegEventKey(eventRaw: string): string {
-  const label = String(eventRaw ?? '').replace(RELAY_SPLIT_SUFFIX, '').trim();
+  const label = stripRelaySplitSuffix(String(eventRaw ?? ''));
   if (!label) return '';
   return normalizeEventForCutline(label).toLowerCase();
 }

@@ -53,6 +53,7 @@ import {
 } from './utils';
 import { itemAt, regexGroup } from './indexedAccess';
 import type { WorkspaceEditorPatch } from './swimEditor';
+import { teamLabelKey } from '../data/teamAliases';
 
 /**
  * Diacritic-folded normalized identity key for a name. Uses
@@ -1139,8 +1140,9 @@ export type BuildAliasEvidenceOptions = {
   gender?: Gender;
 };
 
+// The same key as `teamLabelKey` (data/teamAliases.ts): trim and lower-case.
 function teamKeyOf(team: string | undefined | null): string {
-  return String(team ?? '').trim().toLowerCase();
+  return teamLabelKey(team);
 }
 
 function evidenceMapKey(gender: Gender, teamKey: string, identityKey: string): string {

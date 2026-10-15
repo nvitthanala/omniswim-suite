@@ -114,7 +114,14 @@ import {
   isTheoreticalMeet,
   theoreticalRemovedEvents,
 } from '@omniswim/core/lib/theoreticalMeetLabel';
-import { calculatePoints, convertTimeToSeconds, isDivingEvent, isRelayResult, parseEventNumber } from '@omniswim/core/lib/utils';
+import {
+  calculatePoints,
+  convertTimeToSeconds,
+  isDivingEvent,
+  isRelayResult,
+  normalizeSwimmerName,
+  parseEventNumber,
+} from '@omniswim/core/lib/utils';
 import {
   PDF_POINTS_SETTINGS_MESSAGE,
   theoreticalRelayProgramIndex,
@@ -549,7 +556,7 @@ function requireRelayShape(relay: TheoreticalProjectedRelay, workspaceIdPart: st
   if (relay.anyEstimated !== true) bad('is not marked estimated');
   if (relay.legs.length !== 4 || relay.legs.some((leg, index) => leg.position !== index + 1)) bad('does not have exactly four legs in positions 1 to 4');
   if (relay.legs.some(leg => leg.team !== relay.team)) bad('has a leg from another team');
-  const names = new Set(relay.legs.map(leg => leg.name.trim().toLowerCase().replace(/\s+/g, ' ')));
+  const names = new Set(relay.legs.map(leg => normalizeSwimmerName(leg.name)));
   if (names.size !== 4) bad('has a swimmer on two legs');
   if (relay.legs.some(leg => !Number.isFinite(leg.timeSec) || leg.timeSec <= 0)) bad('has a leg time that is not a positive number');
   if (!Number.isFinite(relay.totalSec) || relay.totalSec !== round2(relay.legs.reduce((sum, leg) => sum + leg.timeSec, 0))) {

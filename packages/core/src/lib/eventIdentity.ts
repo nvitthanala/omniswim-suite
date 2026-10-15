@@ -23,13 +23,8 @@
  */
 
 import { SwimmerResult } from '../types';
-import { isChampionshipProgramEvent, normalizeEventLabel } from './athleteHistory';
-import {
-  chooseMeetEventLabels,
-  isDivingEvent,
-  isRelayResult,
-  stripEventGenderMarker,
-} from './utils';
+import { canonicalMeetEventLabel, isChampionshipProgramEvent } from './athleteHistory';
+import { chooseMeetEventLabels, isDivingEvent, isRelayResult } from './utils';
 
 /**
  * Canonical SCY individual program-event label for an arbitrary event string
@@ -38,12 +33,12 @@ import {
  * and any non-championship distance.
  */
 export function canonicalProgramEvent(raw: string): string | null {
-  if (/\brelay\b/i.test(raw)) return null;
-  let e = stripEventGenderMarker(raw);
-  e = e.replace(/\bEvent\s+\d+\b/gi, ' ');
-  e = e.replace(/\b(Yards?|Meters?|mtr|SCY|SCM|LCM)\b/gi, ' ');
-  e = e.replace(/\s{2,}/g, ' ').trim();
-  const norm = normalizeEventLabel(e);
+  // `canonicalMeetEventLabel` is the one reader of a HyTek label (it strips the
+  // gender marker, "Event N", and the course words). This function is that
+  // reader narrowed to the SCY championship program. A relay or a dive is null
+  // in both, and the program whitelist cannot match a label that names a dive.
+  const norm = canonicalMeetEventLabel(raw);
+  if (norm === null) return null;
   return isChampionshipProgramEvent(norm) && !/\brelay\b/i.test(norm) ? norm : null;
 }
 

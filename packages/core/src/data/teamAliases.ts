@@ -57,6 +57,16 @@ export function normalizeTeamKey(name: string): string {
     .replace(/[^a-z0-9]/g, '');
 }
 
+/**
+ * Exact-match team key: trimmed and lower-cased, punctuation and inner spacing
+ * kept (`"Henderson St."` -> `"henderson st."`). `normalizeTeamKey` above keeps
+ * letters and digits only (`"hendersonst"`). Absent input is the empty key.
+ * Callers: `athleteAliases.teamKeyOf`, `seasonAnalytics.teamKey`.
+ */
+export function teamLabelKey(team: unknown): string {
+  return String(team ?? '').trim().toLowerCase();
+}
+
 /** Build acronym from institution name (e.g. Henderson State University → HSU). */
 export function teamAcronym(fullName: string): string {
   const trimmed = String(fullName ?? '').trim();

@@ -9,6 +9,7 @@ import {
 import { isTheoreticalMeet } from './theoreticalMeetLabel';
 import { matchOfficialTeamKey } from './teamScoreMatching';
 import { recordAt } from './indexedAccess';
+import { teamLabelKey } from '../data/teamAliases';
 
 export type SwimmerTrend = {
   name: string;
@@ -87,7 +88,8 @@ export type SeasonTrends = {
   unreadablePointRows: number;
 };
 
-const teamKey = (name: unknown): string => String(name ?? '').trim().toLowerCase();
+// The same key as `teamLabelKey` (data/teamAliases.ts): trim and lower-case.
+const teamKey = (name: unknown): string => teamLabelKey(name);
 
 /** Collects names once each, first spelling wins. */
 function nameCollector() {
