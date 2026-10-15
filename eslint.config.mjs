@@ -68,6 +68,21 @@ export default tseslint.config(
     },
     plugins: { 'react-hooks': reactHooks },
     rules: {
+      // eslint-plugin-react-hooks 7 adds the React Compiler rules (purity,
+      // refs, immutability, set-state-in-effect and others). Take the plugin's
+      // own recommended set so a rule it adds later is not silently skipped,
+      // then pin the two classic rules and any exceptions below.
+      ...reactHooks.configs.flat.recommended.rules,
+
+      // New in v7, switched off so the upgrade lands without behaviour changes
+      // (docs/reference/IMPROVEMENT_PLAN_2026-10-10.md R9 step 2). Each needs a
+      // hand review of the effect or ref, not a mechanical edit. Turn one on,
+      // fix its findings, and delete its line.
+      // 41 findings in 29 files: reset-on-prop-change effects that call setState.
+      'react-hooks/set-state-in-effect': 'off',
+      // 23 findings in 10 files: the "latest value" ref written during render.
+      'react-hooks/refs': 'off',
+
       /* ---- Real defects -------------------------------------------------- */
 
       // The headline rule. A missing dependency silently serves stale state.
@@ -175,6 +190,9 @@ export default tseslint.config(
       // legitimate there and neither ships.
       '@typescript-eslint/no-this-alias': 'off',
       '@typescript-eslint/no-require-imports': 'off',
+      // 4 findings in 4 files: a probe component copies its context into a
+      // module variable so the test can read it. That is the point of the probe.
+      'react-hooks/globals': 'off',
     },
   },
 );
