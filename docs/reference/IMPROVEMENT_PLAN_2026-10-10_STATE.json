@@ -99,7 +99,7 @@
     "R6": "committed (complexity 29->7 and 31->11; golden over 83 calls identical; baseline now 0 complexity warnings)",
     "R7": "committed 075b089c, ed464609, f69aa6e6, f81fc4f6, 77dce9ed (architect: runMultiTeamCrawl split no defect)",
     "R8": "committed",
-    "R9": "pending",
+    "R9": "in progress: step 1 hygiene 412ddce6, step 2 react-hooks plugin 86222bdc; Zod 3 to 4 with a967b52369413f1f9; then Express 5, Vitest 5, Vite 8 (each own commit)",
     "R10": "committed d19aa4df (folder) + 7c71285a (scripts, dependency, eslint ignore)",
     "R11": "committed steps 1-6: flag on repo-wide (b72ff671), ratchet removed",
     "R12": "committed",
@@ -349,9 +349,10 @@
     "C6 blank-cell representation; P3 client overlap/adopt policy; individual tie key gender; scoring diff review (dispatched as af176a27510a0f9d6)"
   ],
   "foundNotFixed": [
+    "R9 step 2: react-hooks 7 rules set-state-in-effect (41 findings, 29 files) and refs (23, 10 files) are off in eslint.config.mjs until each component is reviewed; globals off in tests.",
     "T6 findings: rankRelayLegSwaps in roster mode builds its scorer lookup from raw meet rows only, so recruits are never offered as leg fills (silent empty result); a missing relay leg row makes the leg total read the next row's split (ordered[index] fallback); removed-from-consideration mode lets an over-cap diver's prelim row score; relayLegSwaps.ts has 113 unclassified surviving mutants (see MUTATION_RESULTS_2026-10-14.md).",
     "Timed Finals fix side effect: SwimCloud imports with no scoredEventNumberMax now score post-meet time trials captioned Timed Finals in computed mode (meet 356467: men +57, women +134 false points under NSISC). Nothing sets the boundary from SwimCloud; only a preset field does. Make it required or warn at import?",
-    "NSISC relays score 0 in computed mode (same at HEAD, root cause not found; PDF mode gives 652 men / 950 women). Suspect scorerRoster.ts:301-309 tier FIN not in [A,B] or the NSISC merge locks. Under the generic top-16 preset relays score and match published totals.",
+    "FIXED 4cc60d5a: NSISC relays scored 0 in computed mode (scorerRoster.ts relayEntryRosterEligible and rowSuggestsScorer skipped tier FIN; python twin too). Meet 356467: men relay 0 to 652 (published 652), women 0 to 966 (published 950: 800 free relay Delta State rank 1 and 9 differ, open). Still open: SwimCloud A/B relay entry-label rows (\"Henderson State (A)\") become phantom scorers; a relay-only swimmer of a SwimCloud timed-final relay does not join the roster (only row is the entry label; crediting from relayNames is a design call); TeamRosterPanel scorer count includes phantoms.",
     "SwimCloudCaptureBrowser: tokenError is never cleared and the refresh button is hidden while it is set, so a failed token fetch recovers only by closing and reopening the window (found in R7).",
     "backend: timed-but-ineligible rows in a mixed group are emitted twice (extend(ineligible) then extend(group))",
     "backend/pdf_parser.py: broad except Exception near the relay payload build (now flagged by relay_split_source legacy)",
