@@ -214,15 +214,16 @@ here shows up as a wrong "gain" number.
 
 ## Defects and gaps the work found
 
-None of these was fixed (no source change was allowed). Each is pinned only
-where noted.
+Item 1 was fixed afterwards. The rest were not fixed (no source change was
+allowed in the mutation run). Each is pinned only where noted.
 
-1. `classifyRoundTier('Timed Finals')` and `'Timed Final'` return `'D'`,
-   because `includes('D FINAL')` matches the text "TIME-D FINAL". The comment
-   at `scoringRules.ts:31` says the intended tier is `'FIN'`. A SwimCloud row
-   with `roundSwam: 'Timed Finals'` is then unscored by `canScoreAthlete`.
-   Pinned with an `it.fails` in `scoringRulesMutation.test.ts`: it turns red
-   when the defect is fixed, then remove `.fails`.
+1. FIXED 2026-10-15 (commit 3af2219c). `classifyRoundTier('Timed Finals')` returned `'D'`,
+   because `includes('D FINAL')` matches the text "TIME-D FINAL". A SwimCloud row
+   with `roundSwam: 'Timed Finals'` was unscored. `normalizedRoundLabel` now reads
+   it as Finals in `classifyRoundTier` and `isUnscoredRoundOrEvent`, and the same
+   fix is in `backend/point_calculator.py`. Effect: in computed mode a meet with
+   no `scoredEventNumberMax` also scores post-meet time trials that SwimCloud
+   prints as Timed Finals.
 2. Relay-pool eligibility (`relayEligibleFromScorerPool` with a meet-wide
    pool) had no coverage. A relay entry that held no place took a team relay
    slot undetected. Per-leg split for entries with other than four legs was

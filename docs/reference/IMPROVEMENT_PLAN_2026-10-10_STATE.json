@@ -62,7 +62,7 @@
     "T3": "committed 3a97d52a",
     "T4": "pending",
     "T5": "committed 1c52f5f1 (baseline 72.35% statements, 79.99% branches; no threshold)",
-    "T6": "pending",
+    "T6": "committed a9da1658 (scoring-path mutation score 56.7% to 89.0%; no CI wiring); defect found and fixed: 3af2219c Timed Finals read as D final",
     "T7": "committed 45422f89 (CI skip budget 46 -> 42; plan said 10 tests, it was 2)",
     "T8": "committed a30e58d1",
     "T9": "committed 3a97d52a (pool of 4; ~157 s serial vs ~60 s scripts-only)",
@@ -349,6 +349,9 @@
     "C6 blank-cell representation; P3 client overlap/adopt policy; individual tie key gender; scoring diff review (dispatched as af176a27510a0f9d6)"
   ],
   "foundNotFixed": [
+    "T6 findings: rankRelayLegSwaps in roster mode builds its scorer lookup from raw meet rows only, so recruits are never offered as leg fills (silent empty result); a missing relay leg row makes the leg total read the next row's split (ordered[index] fallback); removed-from-consideration mode lets an over-cap diver's prelim row score; relayLegSwaps.ts has 113 unclassified surviving mutants (see MUTATION_RESULTS_2026-10-14.md).",
+    "Timed Finals fix side effect: SwimCloud imports with no scoredEventNumberMax now score post-meet time trials captioned Timed Finals in computed mode (meet 356467: men +57, women +134 false points under NSISC). Nothing sets the boundary from SwimCloud; only a preset field does. Make it required or warn at import?",
+    "NSISC relays score 0 in computed mode (same at HEAD, root cause not found; PDF mode gives 652 men / 950 women). Suspect scorerRoster.ts:301-309 tier FIN not in [A,B] or the NSISC merge locks. Under the generic top-16 preset relays score and match published totals.",
     "SwimCloudCaptureBrowser: tokenError is never cleared and the refresh button is hidden while it is set, so a failed token fetch recovers only by closing and reopening the window (found in R7).",
     "backend: timed-but-ineligible rows in a mixed group are emitted twice (extend(ineligible) then extend(group))",
     "backend/pdf_parser.py: broad except Exception near the relay payload build (now flagged by relay_split_source legacy)",
@@ -455,6 +458,7 @@
     "harness": "7 passed, 1 skipped (pre-existing fixme)"
   },
   "userQuestionsAtEnd": [
+    "Timed Finals fix: SwimCloud imports have no scored-program boundary unless the preset sets scoredEventNumberMax, so computed mode now scores post-meet time trials (meet 356467 under NSISC: men +57, women +134 points). Require the boundary at import, warn, or derive it? Also: NSISC relays score 0 in computed mode, root cause open.",
     "F4: a recruit row with no `source` is left out of the scout as unknown (types.ts:1076 says absent = unknown). Every HSU roster-plan recruit row has no source today, so only optimizer plans score on our side. Stamp a source at import, or trust unstamped rows?",
     "Individual A/B-final tie that includes an exhibition swimmer zeroes the scoring swimmer (utils.ts ~2152-2158: {A:0, X:0}); relay and timed-final paths exclude only the exhibition entry. The code comment calls it deliberate. Keep or change? (architect says needs a golden run)",
     "No admin concept exists in the database; admin is an email in OMNI_ADMIN_EMAILS (server agent). Backup list/restore under AUTH_REQUIRED are 403 until isAdmin is wired to that. Wire it?",
