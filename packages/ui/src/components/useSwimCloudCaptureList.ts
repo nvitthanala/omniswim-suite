@@ -76,6 +76,19 @@ export function useSwimCloudCaptureList() {
     if (token) await loadCaptures(token);
   }, [pairingToken, loadPairingToken, loadCaptures]);
 
+  /**
+   * Recovers from a failed token fetch. `refresh` alone cannot do it: the
+   * picker that holds the refresh button is hidden while `tokenError` is set.
+   * This clears the error and the stale token, fetches the token again, then
+   * lists captures.
+   */
+  const retryToken = useCallback(async () => {
+    setTokenError(null);
+    setPairingToken(null);
+    const token = await loadPairingToken();
+    if (token) await loadCaptures(token);
+  }, [loadPairingToken, loadCaptures]);
+
   useEffect(() => {
     void refresh();
     // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only: the first listing runs once, and `refresh` changes identity whenever the pairing token does
@@ -91,6 +104,7 @@ export function useSwimCloudCaptureList() {
     tokenError,
     loadCaptures,
     refresh,
+    retryToken,
     hasCaptureRows,
     isLoadingList,
   };

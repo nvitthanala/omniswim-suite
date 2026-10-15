@@ -171,10 +171,37 @@ export function NoCapturesEmptyState({ pasteFallback }: NoCapturesEmptyStateProp
   );
 }
 
-/** The token/list error banner — at most one of the two ever shows. */
-export function CaptureErrorBanner({ tokenError, listError }: { tokenError: string | null; listError: string | null }): ReactNode {
+/**
+ * The token/list error banner — at most one of the two ever shows. A token
+ * error also offers "Try again" when `onRetryToken` is given, because the
+ * picker (and its refresh button) is hidden while the token is missing.
+ */
+export function CaptureErrorBanner({
+  tokenError,
+  listError,
+  onRetryToken,
+}: {
+  tokenError: string | null;
+  listError: string | null;
+  onRetryToken?: () => void;
+}): ReactNode {
   if (tokenError !== null) {
-    return <p className="text-ui-caption badge-warning px-3 py-2 rounded-lg">{tokenError}</p>;
+    return (
+      <div className="flex items-center gap-2 badge-warning px-3 py-2 rounded-lg" role="alert">
+        <p className="text-ui-caption flex-1 min-w-0">{tokenError}</p>
+        {onRetryToken ? (
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={onRetryToken}
+            className="px-2 py-1 shrink-0"
+            leadingIcon={<RefreshCw size={13} />}
+          >
+            Try again
+          </Button>
+        ) : null}
+      </div>
+    );
   }
   if (listError !== null) {
     return <p className="text-ui-caption badge-warning px-3 py-2 rounded-lg">{listError}</p>;

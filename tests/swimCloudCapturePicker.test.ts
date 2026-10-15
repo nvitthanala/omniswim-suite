@@ -571,4 +571,75 @@ describe('SwimCloudCaptureBrowser (mode="meet-results")', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith('/api/swimcloud/pairing-token');
   });
+
+  it('recovers from a failed pairing-token fetch with "Try again", without closing the window', async () => {
+    const capture = baseCapture({ label: 'HSU @ Test Championships' });
+    let tokenCalls = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/swimcloud/pairing-token') {
+        tokenCalls += 1;
+        return tokenCalls === 1 ? jsonResponse(500, {}) : jsonResponse(200, { token: 'test-pairing-token' });
+      }
+      if (url === '/api/swimcloud/captures') return jsonResponse(200, [capture]);
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await act(async () => {
+      root.render(
+        createElement(SwimCloudCaptureBrowser, {
+          mode: 'meet-results',
+          onClose: vi.fn(),
+          onImportMeetResults: vi.fn(),
+        })
+      );
+    });
+    await flush();
+
+    expect(container.textContent).toContain('Could not obtain the SwimCloud pairing token (HTTP 500)');
+    expect(container.querySelector('select[aria-label="SwimCloud capture"]')).toBeNull();
+    const retry = [...container.querySelectorAll('button')].find(b => b.textContent === 'Try again');
+    expect(retry).toBeTruthy();
+
+    await act(async () => {
+      retry!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flush();
+
+    expect(tokenCalls).toBe(2);
+    expect(container.textContent).not.toContain('Could not obtain the SwimCloud pairing token');
+    expect(container.querySelector('select[aria-label="SwimCloud capture"]')).not.toBeNull();
+    expect(container.textContent).toContain('HSU @ Test Championships');
+    expect([...container.querySelectorAll('button')].some(b => b.textContent === 'Try again')).toBe(false);
+  });
+
+  it('keeps showing the token error with "Try again" when the retry fails too', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/swimcloud/pairing-token') return jsonResponse(500, {});
+      throw new Error(`Unexpected fetch: ${String(input)}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await act(async () => {
+      root.render(
+        createElement(SwimCloudCaptureBrowser, {
+          mode: 'meet-results',
+          onClose: vi.fn(),
+          onImportMeetResults: vi.fn(),
+        })
+      );
+    });
+    await flush();
+
+    const retry = [...container.querySelectorAll('button')].find(b => b.textContent === 'Try again');
+    await act(async () => {
+      retry!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flush();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain('Could not obtain the SwimCloud pairing token (HTTP 500)');
+    expect([...container.querySelectorAll('button')].some(b => b.textContent === 'Try again')).toBe(true);
+  });
 });

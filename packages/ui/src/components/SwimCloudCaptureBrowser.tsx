@@ -160,7 +160,7 @@ export function SwimCloudCaptureBrowser(props: SwimCloudCaptureBrowserProps) {
 
   const { windowState, setWindowState } = useSwimCloudCaptureWindow(storageKey, onClose);
   const list = useSwimCloudCaptureList();
-  const { captures, listError, tokenError, refresh, hasCaptureRows, isLoadingList } = list;
+  const { captures, listError, tokenError, refresh, retryToken, hasCaptureRows, isLoadingList } = list;
 
   useEffect(() => {
     pickerRef.current?.focus();
@@ -191,7 +191,7 @@ export function SwimCloudCaptureBrowser(props: SwimCloudCaptureBrowserProps) {
       <div className="h-full overflow-y-auto custom-scrollbar p-4 space-y-3">
         <p className="text-ui-caption text-theme-muted">{description}</p>
 
-        <CaptureErrorBanner tokenError={tokenError} listError={listError} />
+        <CaptureErrorBanner tokenError={tokenError} listError={listError} onRetryToken={() => void retryToken()} />
 
         {tokenError === null ? (
           <CaptureListPicker
