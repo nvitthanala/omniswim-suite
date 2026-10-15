@@ -28,13 +28,14 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { SwimmerResult } from '../packages/core/src/types';
+import { individualEventLabelOf, type SwimCloudEvent } from '@omniswim/swimcloud/entities';
 import { canonicalMeetEventLabel, isChampionshipProgramEvent, normalizeEventLabel } from '../packages/core/src/lib/athleteHistory';
 import {
   isDivingEvent as isDivingEventCutline,
   normalizeEventForCutline,
   stripRelaySplitSuffix,
 } from '../packages/core/src/lib/cutlineEventNames';
-import { canonicalProgramEvent } from '../packages/core/src/lib/eventIdentity';
+import { buildMeetEventLabelIndex, canonicalProgramEvent, programEventOrNull } from '../packages/core/src/lib/eventIdentity';
 import { aliasIdentityKey, aliasIndividualEventKey, aliasNameKey } from '../packages/core/src/lib/athleteAliases';
 import { swimEventIdentity } from '../packages/core/src/lib/bestTimeEligibility';
 import { relayLegEventKey, relayLegNameKeys } from '../packages/core/src/lib/relayLegMatching';
@@ -157,7 +158,14 @@ const EVENT_ROWS: Row[] = [
   ["100 Back", "100 Backstroke", "100 Backstroke", "100 Backstroke", "100 Backstroke", "100 backstroke", "100 backstroke", "100 backstroke", "100 Back", "100 Back", "100 Backstroke", false, false],
   ["100 Freestyle (Avg Split)", "100 Freestyle (Avg Split)", "100 Freestyle (Avg Split)", "100 Freestyle (Avg Split)", null, null, "100 freestyle (avg split)", "100 freestyle (avg split)", "100 Freestyle (Avg Split)", "100 Freestyle (Avg Split)", null, false, false],
   ["1M Dives", "1M Dives", "1-Meter Diving", "1M Dives", null, null, "1-meter diving", "1-meter diving", "1M Dives", "1M Dives", null, false, true],
-  ["", "", "", null, null, null, "", "", "", "", null, false, false],
+  // The swims-list shape: `{distance} {course letter} {stroke}`. No reader understands the
+  // letter. The SwimCloud import bridges write the canonical `{distance} {stroke}` instead
+  // (see "swims-list event labels" below), so these labels never reach a reader from a bridge.
+  ["1650 Y Free", "1650 Y Freestyle", "1650 Y Freestyle", "1650 Y Freestyle", null, null, "1650 y freestyle", "1650 y freestyle", "1650 Y Free", "1650 Y Free", null, false, false],
+  ["100 Y Breast", "100 Y Breaststroke", "100 Y Breaststroke", "100 Y Breaststroke", null, null, "100 y breaststroke", "100 y breaststroke", "100 Y Breast", "100 Y Breast", null, false, false],
+  ["50 Y Back", "50 Y Backstroke", "50 Y Backstroke", "50 Y Backstroke", null, null, "50 y backstroke", "50 y backstroke", "50 Y Back", "50 Y Back", null, false, false],
+  ["200 Y IM", "200 Y Individual Medley", "200 Y Individual Medley", "200 Y Individual Medley", null, null, "200 y individual medley", "200 y individual medley", "200 Y IM", "200 Y IM", null, false, false],
+  ["100 L Free", "100 L Freestyle", "100 L Freestyle", "100 L Freestyle", null, null, "100 l freestyle", "100 l freestyle", "100 L Free", "100 L Free", null, false, false],
 ];
 
 // [input, normalizeSwimmerName, canonicalSwimmerName, aliasNameKey, aliasIdentityKey,
@@ -288,7 +296,8 @@ describe('identity agreement: pinned outputs', () => {
 
 describe('identity agreement: pairs that must stay equal', () => {
   const fx = fixtureCorpus();
-  const events = [...EVENT_ROWS.map(r => r[0]), ...fx.events];
+  // A missing label is "no event": canonicalProgramEvent throws on it (pinned below). An empty string is a string and gives null.
+  const events = [...EVENT_ROWS.map(r => r[0]), ...fx.events].filter(e => e !== '');
   const names = [...NAME_ROWS.map(r => r[0]), ...fx.names];
   const teams = [...TEAM_ROWS.map(r => r[0]), ...fx.teams];
 
@@ -373,6 +382,48 @@ describe('identity agreement: pairs that must stay equal', () => {
 
   it('teams: normalizeTeamKey is letters and digits only', () => {
     for (const t of teams) expect(normalizeTeamKey(t), t).toMatch(/^[a-z0-9]*$/);
+  });
+});
+
+describe('identity agreement: missing input fails loudly', () => {
+  it('canonicalProgramEvent throws a TypeError for a missing or non-string event, never null', () => {
+    expect(canonicalProgramEvent('')).toBeNull();
+    for (const bad of [undefined, null, 0, 42, {}] as unknown[]) {
+      expect(() => canonicalProgramEvent(bad as string), String(bad)).toThrow(TypeError);
+    }
+    expect(() => canonicalProgramEvent(undefined as unknown as string)).toThrow(/needs an event label string/);
+  });
+
+  it('null still means "names no SCY program event" for a real label', () => {
+    expect(canonicalProgramEvent('100 Individual Medley')).toBeNull();
+    expect(canonicalProgramEvent('Event 8 Men 4x50 Yard Freestyle Relay')).toBeNull();
+    expect(canonicalProgramEvent('   ')).toBeNull();
+  });
+});
+
+describe('identity agreement: whole-meet readers skip a row with no event', () => {
+  const row = (id: string, event: unknown): SwimmerResult =>
+    ({ id, rank: 1, name: id, classYear: 'SO', team: 'T', time: '50.00', points: 0, event, gender: 'M' }) as unknown as SwimmerResult;
+
+  it('buildMeetEventLabelIndex skips a row whose event is undefined, null or non-string, and indexes the rest', () => {
+    const rows = [
+      row('a', 'Event 24 Men 100 Yard Backstroke'),
+      row('b', undefined),
+      row('c', null),
+      row('d', 42),
+      row('e', 'Event 8 Men 50 Yard Freestyle'),
+    ];
+    const index = buildMeetEventLabelIndex(rows);
+    expect([...index.entries()].sort()).toStrictEqual([
+      ['100 Backstroke', 'Event 24 Men 100 Yard Backstroke'],
+      ['50 Freestyle', 'Event 8 Men 50 Yard Freestyle'],
+    ]);
+  });
+
+  it('programEventOrNull is null for a missing or empty label and canonicalProgramEvent otherwise', () => {
+    for (const bad of [undefined, null, 0, '']) expect(programEventOrNull(bad)).toBeNull();
+    expect(programEventOrNull('Event 8 Men 50 Yard Freestyle')).toBe('50 Freestyle');
+    expect(programEventOrNull('100 Individual Medley')).toBeNull();
   });
 });
 
@@ -475,11 +526,10 @@ describe('identity agreement: accidental differences (recorded, not fixed)', () 
     expect(aliasIndividualEventKey('50 Freestyle (Relay split)')).toBeNull();
   });
 
-  it('A9: relay-leg matching compares names with the comma-order-preserving key, so "Akin, Bartu" (leg) misses "Bartu Akin" (row)', () => {
-    // relayLegMatching's private normalizeName compares an assignee or leg spelling with an
-    // individual row's spelling (assignedInEvent, resolveOverrideAssignee). The same file's
-    // swimmerGenderKey uses canonicalSwimmerName. scorerRosterKey cites BUG 3.4: leg rows
-    // and individual rows can store names in different orders.
+  it('A9 (fixed in the blocked-name check): relayLegNameKeys still keeps comma order, so its key for "Akin, Bartu" differs from the row key for "Bartu Akin"', () => {
+    // The key is unchanged on purpose (callers build sets from it). The check that compares
+    // it with an individual row, `listEligibleRelayLegCandidates` and `resolveOverrideAssignee`,
+    // now reads both sides through canonicalSwimmerName: tests/relayLegBlockedNameOrder.test.ts.
     expect(legNameKeysOf('Akin, Bartu')).not.toEqual(legNameKeysOf('Bartu Akin'));
     expect(canonicalSwimmerName('Akin, Bartu')).toBe(canonicalSwimmerName('Bartu Akin'));
   });
@@ -489,5 +539,64 @@ describe('identity agreement: accidental differences (recorded, not fixed)', () 
     const nfd = ACCENTED.normalize('NFD');
     expect(canonicalSwimmerName(nfc)).not.toBe(canonicalSwimmerName(nfd));
     expect(aliasNameKey(nfc)).toBe(aliasNameKey(nfd));
+  });
+});
+
+describe('identity agreement: swims-list event labels (R3 follow-up)', () => {
+  const ev = (over: Partial<SwimCloudEvent>): SwimCloudEvent => ({
+    eventId: 'e',
+    swimCloudMeetId: 'm',
+    label: '',
+    kind: 'individual',
+    course: 'SCY',
+    gender: 'Men',
+    stroke: 'unknown',
+    ...over,
+  });
+
+  it('a bare "N Y|L|S stroke" cell becomes the canonical label the readers know', () => {
+    const cases: [string, SwimCloudEvent['course'], number, SwimCloudEvent['stroke'], string][] = [
+      ['1650 Y Free', 'SCY', 1650, 'Freestyle', '1650 Freestyle'],
+      ['100 Y Breast', 'SCY', 100, 'Breaststroke', '100 Breaststroke'],
+      ['50 Y Back', 'SCY', 50, 'Backstroke', '50 Backstroke'],
+      ['200 Y IM', 'SCY', 200, 'Individual Medley', '200 Individual Medley'],
+      // Course L: the manager bridge keeps the course in timeType; the matrix bridge only
+      // calls this for yards.
+      ['200 L Fly', 'LCM', 200, 'Butterfly', '200 Butterfly'],
+      ['100 y free', 'SCY', 100, 'Freestyle', '100 Freestyle'],
+    ];
+    for (const [label, course, distance, stroke, canonical] of cases) {
+      const out = individualEventLabelOf(ev({ label, course, distance, stroke }));
+      expect(out, label).toBe(canonical);
+      expect(normalizeEventForCutline(canonical), label).toBe(canonical);
+      expect(aliasIndividualEventKey(canonical), label).toBe(canonical.toLowerCase());
+    }
+  });
+
+  it('a label that is not exactly a bare cell is never rewritten, even when the loose fields look right', () => {
+    const mutated: [string, number, SwimCloudEvent['course'], SwimCloudEvent['stroke']][] = [
+      ['Event 9 200 Breast', 200, 'SCY', 'Breaststroke'],
+      ['1650 Q Free', 1650, 'SCY', 'Freestyle'],
+      ['100 Y Free Time Trial', 100, 'SCY', 'Freestyle'],
+      ['1000 Y Free Swim-off', 1000, 'SCY', 'Freestyle'],
+      ['Event 8 Men 50 Yard Freestyle', 50, 'SCY', 'Freestyle'],
+      ['50 Freestyle', 50, 'SCY', 'Freestyle'],
+    ];
+    for (const [label, distance, course, stroke] of mutated) {
+      expect(individualEventLabelOf(ev({ label, distance, course, stroke })), label).toBeNull();
+    }
+  });
+
+  it('a clean cell whose fields disagree with it is not rewritten', () => {
+    expect(individualEventLabelOf(ev({ label: '100 Y Free', distance: 200, stroke: 'Freestyle' }))).toBeNull();
+    expect(individualEventLabelOf(ev({ label: '100 Y Free', course: 'LCM', distance: 100, stroke: 'Freestyle' }))).toBeNull();
+    expect(individualEventLabelOf(ev({ label: '100 Y Free', course: 'unknown', distance: 100, stroke: 'Freestyle' }))).toBeNull();
+    expect(individualEventLabelOf(ev({ label: '100 Y Free', distance: 100, stroke: 'Butterfly' }))).toBeNull();
+    expect(individualEventLabelOf(ev({ label: '100 Y Free', distance: undefined, stroke: 'Freestyle' }))).toBeNull();
+  });
+
+  it('a relay or a dive keeps the printed label (null here)', () => {
+    expect(individualEventLabelOf(ev({ label: '200 Y Free', kind: 'relay', distance: 200, stroke: 'Freestyle Relay' }))).toBeNull();
+    expect(individualEventLabelOf(ev({ label: '1 Y Diving', distance: 1, stroke: 'Diving' }))).toBeNull();
   });
 });

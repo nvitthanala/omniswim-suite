@@ -39,7 +39,7 @@ import {
   Workspace,
   type ScyConversionProvenance,
 } from '../../types';
-import { buildMeetEventLabelIndex, canonicalProgramEvent } from '../eventIdentity';
+import { buildMeetEventLabelIndex, programEventOrNull } from '../eventIdentity';
 import { isUserInputtedSwim } from '../athleteHistory';
 import { itemAt } from '../indexedAccess';
 import { swimEventNotSwumInCourse } from '../courseEvents';
@@ -342,7 +342,7 @@ export function buildEventTimeIndex(
   const out = new Map<string, EventTimeRef[]>();
   const push = (event: string, name: string, timeSec: number) => {
     if (!Number.isFinite(timeSec) || timeSec <= 0) return;
-    const canon = canonicalProgramEvent(event);
+    const canon = programEventOrNull(event);
     if (!canon) return;
     let arr = out.get(canon);
     if (!arr) {
@@ -555,7 +555,7 @@ export function collectDroppableEntries(
       planIsActive(p, workspace.activeEntryIds)
   );
   for (const p of activePlans) {
-    const event = canonicalProgramEvent(p.event);
+    const event = programEventOrNull(p.event);
     if (!event) continue;
     consider(normalizeSwimmerName(p.name), p.name, {
       source: 'plan',
@@ -574,7 +574,7 @@ export function collectDroppableEntries(
     if (isRelayResult(r)) continue;
     if (r.isExhibition || r.isTimeTrial) continue;
     if (String(r.team ?? '').trim() !== team) continue;
-    const event = canonicalProgramEvent(r.event);
+    const event = programEventOrNull(r.event);
     if (!event) continue;
     consider(normalizeSwimmerName(r.name), r.name, {
       source: 'result',
@@ -590,7 +590,7 @@ export function collectDroppableEntries(
   for (const rec of workspace.recruits ?? []) {
     if (rec.gender !== gender) continue;
     if (String(rec.team ?? '').trim() !== team) continue;
-    const event = canonicalProgramEvent(rec.event);
+    const event = programEventOrNull(rec.event);
     if (!event) continue;
     consider(normalizeSwimmerName(rec.name), rec.name, {
       source: 'recruit',
@@ -936,7 +936,7 @@ export function buildFastSwapContext(
   const labelIndex = buildMeetEventLabelIndex(genderResults);
   const remapEvent = (event: string): string => {
     if (labelIndex.size === 0) return event;
-    const canon = canonicalProgramEvent(event);
+    const canon = programEventOrNull(event);
     if (!canon) return event;
     return labelIndex.get(canon) ?? event;
   };

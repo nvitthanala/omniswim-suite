@@ -38,7 +38,7 @@ import {
 import { computeVacateRelayLegNames } from './rosterLineupAudit';
 import { relayLegHistoryCandidates } from './relayLegHistoryCandidates';
 import { mergeScoringSettings } from './scoringDefaults';
-import { buildMeetEventLabelIndex, canonicalProgramEvent } from './eventIdentity';
+import { buildMeetEventLabelIndex, programEventOrNull } from './eventIdentity';
 import { swimEventNotSwumInCourse } from './courseEvents';
 import {
   canonicalSwimmerName,
@@ -62,7 +62,7 @@ type EventRemapper = (event: string) => string;
 function makeEventRemapper(labelIndex: Map<string, string>): EventRemapper {
   if (labelIndex.size === 0) return (event: string) => event;
   return (event: string): string => {
-    const canon = canonicalProgramEvent(event);
+    const canon = programEventOrNull(event);
     if (!canon) return event;
     return labelIndex.get(canon) ?? event;
   };
