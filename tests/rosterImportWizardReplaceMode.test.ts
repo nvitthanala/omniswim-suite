@@ -22,7 +22,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { Gender, type Workspace } from '@omniswim/core/types';
@@ -74,8 +74,8 @@ const CSV_INCOMING = ['name,event,time,team,gender', `Noel Kis,100 Freestyle,48.
 describe('RosterImportWizard — merge/replace mode', () => {
   let container: HTMLDivElement;
   let root: Root;
-  let onUpdate: ReturnType<typeof vi.fn>;
-  let onClose: ReturnType<typeof vi.fn>;
+  let onUpdate: Mock<(patch: Partial<Workspace>) => void>;
+  let onClose: Mock<() => void>;
 
   beforeEach(() => {
     container = document.createElement('div');

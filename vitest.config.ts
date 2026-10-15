@@ -10,6 +10,8 @@ export default defineConfig({
     globals: true,
     environment: 'node',
     include: ['tests/**/*.test.ts'],
+    // Gives happy-dom the dialogs it lacks, so `vi.spyOn(window, 'confirm')` works on Vitest 4+.
+    setupFiles: ['tests/helpers/happyDomDialogs.ts'],
     testTimeout: 30_000,
     // `npm run test:coverage`. Report only: there is no threshold, so a low number never fails a run.
     // The report goes under node_modules/.cache, which git and eslint already ignore. Not test-results/:

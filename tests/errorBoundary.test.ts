@@ -9,7 +9,7 @@
  */
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type MockInstance } from 'vitest';
 import { act, createElement, type ReactNode } from 'react';
 import { elementWithChildren } from './helpers/elementWithChildren';
 import { createRoot, type Root } from 'react-dom/client';
@@ -27,7 +27,7 @@ function Thrower(): ReactNode {
 describe('ErrorBoundary', () => {
   let container: HTMLDivElement;
   let root: Root;
-  let consoleError: ReturnType<typeof vi.spyOn>;
+  let consoleError: MockInstance<typeof console.error>;
   let onPageReload: () => void;
 
   beforeEach(() => {
