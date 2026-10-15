@@ -97,7 +97,7 @@
     "R4": "committed f5f1386a, e893dd8d optimizer in the scoring worker; useAllTeamsApply still sync",
     "R5": "committed c63960df all any warnings removed; max-warnings 0",
     "R6": "committed (complexity 29->7 and 31->11; golden over 83 calls identical; baseline now 0 complexity warnings)",
-    "R7": "in progress: router split 075b089c, OpsModule ed464609, RosterImportWizard f69aa6e6, SwimCloudCaptureBrowser f81fc4f6 committed; runMultiTeamCrawl with executor addb71763e2e63084",
+    "R7": "committed 075b089c, ed464609, f69aa6e6, f81fc4f6, 77dce9ed (architect: runMultiTeamCrawl split no defect)",
     "R8": "committed",
     "R9": "pending",
     "R10": "committed d19aa4df (folder) + 7c71285a (scripts, dependency, eslint ignore)",
@@ -390,6 +390,7 @@
     "metrics/utils.ts:19 stale NaN:NaN comment"
   ],
   "limitEvents": [
+    "2026-10-15 ~11:40 CT: usage limit reached after R7 and F4 landed. T6 executor a3c51a7f5a343a870 may still be running; its uncommitted work (.gitignore, eslint.config.mjs, docs/ONBOARDING.md, package.json, package-lock.json, stryker.config.mjs, tests/mutation/, vitest.stryker.config.ts) is in the tree: check git status, SendMessage-resume it, then lint + full vitest on a quiet tree and commit. Resume order after T6: H6 (needs quiet tree), H7 (.agents/skills and .claude/skills hold identical 19 files; core.symlinks=false so a git symlink needs a decision), H11 (visual check), R9 dependency upgrades last (one commit each), then re-run full gates, update vault 04/02/05/08 and CHANGELOG, then ask the end-of-run questions. Not mine, do not commit: .opencode/, opencode.json, docs/reference/OPENCODE_SETUP_STATE.json, PROVIDER_ROUTING.json edits (another session). Disk C: was at 115 MB free; cleared 1.6 GB of omniswim-e2e-data-* in %TEMP%.",
     {
       "at": "2026-10-12 (before 15:20 CT reset)",
       "what": "Session limit 429 stopped the server/auth executor (a4a12ccfffa3d7bce; it was on its final script-suite rerun, 7 targeted tests passing) and the architect review (af176a27510a0f9d6; it had reached the scoring diff). Limit then reset.",
