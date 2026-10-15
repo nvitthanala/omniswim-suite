@@ -355,3 +355,35 @@ describe('GET /api/cutlines/:version', () => {
     expect(res.status).toBe(500);
   });
 });
+
+describe('GET /api/cutlines with the version segment omitted', () => {
+  const dir = mkdtempSync(path.join(tmpdir(), 'omniswim-cutline-default-'));
+  writeFileSync(path.join(dir, 'good.json'), JSON.stringify({ cutlines: [{ a: 1 }] }));
+  const app = express();
+  registerCutlineRoutes(app, { cutlinesDir: dir, fallbackCutlineVersion: 'good', builtinCutlines: [] });
+  const server = http.createServer(app);
+  const ready = new Promise<string>(resolve => {
+    server.listen(0, '127.0.0.1', () => resolve(`http://127.0.0.1:${(server.address() as AddressInfo).port}`));
+  });
+  afterAll(async () => {
+    await new Promise<void>(resolve => server.close(() => resolve()));
+    rmSync(dir, { recursive: true, force: true });
+  });
+
+  it('serves the default version for /api/cutlines and /api/cutlines/', async () => {
+    const base = await ready;
+    for (const route of ['/api/cutlines', '/api/cutlines/']) {
+      const res = await fetch(`${base}${route}`);
+      expect(res.status, route).toBe(200);
+      const body = (await res.json()) as { version: string; cutlines: unknown[] };
+      expect(body.version, route).toBe('good');
+      expect(body.cutlines, route).toHaveLength(1);
+    }
+  });
+
+  it('still routes /api/cutlines/versions to the list, not to a version named "versions"', async () => {
+    const res = await fetch(`${await ready}/api/cutlines/versions`);
+    expect(res.status).toBe(200);
+    expect(await res.json()).toHaveProperty('versions');
+  });
+});

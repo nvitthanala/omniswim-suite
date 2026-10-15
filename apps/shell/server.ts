@@ -542,7 +542,8 @@ async function startServer() {
     app.use('/api', (_req, res) => {
       apiError(res, 404, 'API_ROUTE_NOT_FOUND', 'API route not found — restart the server after updating');
     });
-    app.get('*', (_req, res) => {
+    // Express 5 (path-to-regexp 8) needs a named wildcard; the braces keep `/` matching.
+    app.get('/{*splat}', (_req, res) => {
       res.sendFile(path.join(PROJECT_ROOT, 'dist', 'index.html'));
     });
 

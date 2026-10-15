@@ -1281,7 +1281,10 @@ async function storedEventRefs(
 function openCaptureHandler({ store, guardCaptureId }: CaptureRouteDeps): RequestHandler {
   return async (req, res) => {
   try {
-    const body: unknown = req.body;
+    // Express 5's body parser leaves `req.body` undefined when it parsed no body
+    // (no body, or a non-JSON content type); Express 4 set it to `{}`. Default
+    // it so a body-less request keeps the field-level 400, not this one.
+    const body: unknown = req.body ?? {};
     if (!isPlainObject(body)) {
       return apiError(res, 400, 'INVALID_CAPTURE_BODY', 'Capture body must be a JSON object');
     }
@@ -1353,7 +1356,8 @@ function storePageHandler({ store, guardCaptureId }: CaptureRouteDeps): RequestH
   // disagree about what version 2 means.
   let serialized: string;
   try {
-    serialized = JSON.stringify(req.body ?? null);
+    // `?? {}`, not null: Express 4 left an unparsed body as `{}`; Express 5 leaves it undefined.
+    serialized = JSON.stringify(req.body ?? {});
   } catch (err) {
     return apiError(res, 400, 'UNREADABLE_CAPTURE_PAGE', 'Unreadable capture page body', String(err));
   }

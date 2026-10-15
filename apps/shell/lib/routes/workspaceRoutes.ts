@@ -100,13 +100,14 @@ function readExpectedVersion(req: AuthedRequest): ExpectedVersion {
 
 /**
  * A path parameter the route pattern already declares (`:id`, `:snapshotId`). Express types
- * `req.params` as an index signature, so the read is `string | undefined`. A declared
+ * `req.params` as an index signature, so the read is `string | string[] | undefined`. A declared
  * parameter is always present, so a missing one means the route and the reader disagree.
  * Call this inside the handler's `try`: the throw becomes the route's own 500 response.
  */
-function routeParam(req: { params: Record<string, string | undefined> }, name: string): string {
+function routeParam(req: { params: Record<string, string | string[] | undefined> }, name: string): string {
   const value = req.params[name];
-  if (value === undefined) {
+  // Express 5 types a wildcard parameter as `string[]`; a `:name` segment is always a string.
+  if (typeof value !== 'string') {
     throw new Error(`Route parameter "${name}" is missing from the request path.`);
   }
   return value;

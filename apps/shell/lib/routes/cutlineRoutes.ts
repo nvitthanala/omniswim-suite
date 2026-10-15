@@ -48,7 +48,8 @@ export function registerCutlineRoutes(app: Express, deps: CutlineRoutesDeps): vo
     res.json({ versions: listCutlineVersions(), default: defaultCutlineVersion() });
   });
 
-  app.get('/api/cutlines/:version?', (req, res) => {
+  // path-to-regexp 8 (Express 5) dropped `:version?`; `{/:version}` is the optional segment.
+  app.get('/api/cutlines{/:version}', (req, res) => {
     const version = req.params.version || defaultCutlineVersion();
     const safe = version.replace(/[^0-9a-zA-Z._-]/g, '');
     const filePath = path.join(CUTLINES_DIR, `${safe}.json`);

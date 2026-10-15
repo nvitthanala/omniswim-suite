@@ -1941,3 +1941,36 @@ describe('shared swimmer page across two team captures (2026-10-03 review)', () 
     }
   });
 });
+
+/* -------------------------------------------------------------------------- */
+/* Requests with no parsed body (Express 5 leaves `req.body` undefined)        */
+/* -------------------------------------------------------------------------- */
+
+describe('requests with no JSON body', () => {
+  it('answers a body-less open with the field-level 400, as an empty object does', async () => {
+    const harness = await startHarness();
+    try {
+      const empty = await call(harness, 'POST', BASE, { body: {} });
+      const none = await call(harness, 'POST', BASE);
+      expect(none.status).toBe(400);
+      expect(none.json).toStrictEqual(empty.json);
+      expect((none.json as { code?: string }).code).toBe('INVALID_CAPTURE_SUBJECT');
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('answers a body-less page upload exactly as an empty object does', async () => {
+    const harness = await startHarness();
+    try {
+      await call(harness, 'POST', BASE, { body: { subject: { kind: 'meet', meetId: '356467' } } });
+      const empty = await call(harness, 'POST', `${BASE}/meet-356467/pages`, { body: {} });
+      const none = await call(harness, 'POST', `${BASE}/meet-356467/pages`);
+      expect(none.status).toBe(400);
+      expect(none.json).toStrictEqual(empty.json);
+      expect((none.json as { code?: string }).code).toBe('INVALID_CAPTURE_PAGE');
+    } finally {
+      await harness.close();
+    }
+  });
+});
