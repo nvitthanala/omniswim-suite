@@ -1,5 +1,91 @@
 # Video Analysis Suite — Masterplan
 
+**Status as of 2026-10-14:** manual tagging and metrics are built. Automatic detection is not started.
+**Reconciled against:** the working tree on branch `nvitthanala/improvement-plan-2026-10-10`. Every path below was opened and exists.
+**Scope decisions already made:** gamepad/X-Box input is **out** (user, 2026-08-02).
+
+The plan text below the divider is the original 2026-08-02 plan. It is kept as history.
+Its "No implementation started" line is out of date. This block replaces it.
+
+## Status table (2026-10-14)
+
+Legend: **built** = code and a test exist. **partly built** = code exists, the gap is named. **not started** = no code.
+
+| Plan section | State | Where it lives | Gap or note |
+| ------------ | ----- | -------------- | ----------- |
+| §0 Verification pass | n/a | History | Facts 1–3 hold: tests live in `tests/`, the child-table pattern is used, no new REST route was needed. Fact 4 concerns the retired fleet harness. |
+| §1 Source of truth, reference bands | built | `packages/core/src/lib/raceAnalysis/reference.ts` | Four bands with URL, `retrievedAt`, verbatim quote. Test: `tests/raceAnalysisPurity.test.ts`. |
+| §1.3–1.4 Tag sequence and OmniSwim tags | built | `packages/core/src/lib/raceAnalysis/tagStateMachine.ts`, `packages/metrics/src/hooks/useTagKeyboardHandlers.ts`, `packages/metrics/src/components/TagDeck.tsx` | Test: `tests/raceAnalysis.test.ts` ("supports legal and illegal tag presses, including undo"). |
+| §2.1 Start block | built | `packages/core/src/lib/raceAnalysis/metrics.ts` | Relay-leg rule present (`RELAY_START_REASON`). `isRelayLeg` toggle in `packages/metrics/src/components/RaceSetupFormFields.tsx`. |
+| §2.2 Underwater / breakout | built | `packages/core/src/lib/raceAnalysis/metrics.ts`, `packages/metrics/src/components/RaceSetupFormFields.tsx` (`BreakoutDistanceSection`) | Test: Fixture A. |
+| §2.3 15 m mark | built | `packages/core/src/lib/raceAnalysis/metrics.ts`, `packages/core/src/lib/raceAnalysis/course.ts` | SCY gate in the setup form. Test: Fixture B. |
+| §2.4 Stroke rate, cycles | built | `packages/core/src/lib/raceAnalysis/metrics.ts`, `packages/metrics/src/components/TempoProfile.tsx` | `cycleDefinition` required in config. |
+| §2.5 Turns | built | `packages/core/src/lib/raceAnalysis/metrics.ts` | Test: Fixture A, Fixture C. |
+| §2.6 Splits, finish | partly built | `packages/core/src/lib/raceAnalysis/metrics.ts` | Tagged splits and finish segment work. There is no field to enter official splits, so the "show both and flag divergence" rule is not met (see §4 row). |
+| §2.7 Explicitly absent | built | `packages/core/src/lib/raceAnalysis/metrics.ts`, `packages/metrics/src/components/MetricsDashboard.tsx` | Absent values render "not measured" with the reason. |
+| §2.8 IM per-length stroke | built | `proposeStandardImStrokeOrder` in `packages/core/src/lib/raceAnalysis/tagStateMachine.ts`, `packages/metrics/src/components/RaceSetupForm.tsx` | Test: "proposes standard IM order and rejects non-quarterable length counts". |
+| §3 Provenance model | built | `packages/core/src/lib/raceAnalysis/types.ts` (`Measured<T>`, `Provenance`, `Unit`) | Purity guard: `tests/raceAnalysisPurity.test.ts`. |
+| §4 Problem taxonomy | partly built | `packages/core/src/lib/raceAnalysis/types.ts`, `packages/core/src/lib/raceAnalysis/tagStateMachine.ts` | All 14 codes exist. `SPLIT_DIVERGENCE` differs from the plan: it fires when the sum of tagged splits differs from race time, at severity `warning` (`metrics.ts` ~line 395). The plan defines it as tagged vs official split, severity `info`. |
+| §5 Prototype audit (deletions) | built | `packages/metrics/src/MetricsApp.tsx` | Grep for `fatigueIndex`, `calculateMetricsLocal`, `worldRecordTime`, `interpolatedPace`, `s/m`: no hits. Stubs `runBodyDetect` etc.: no hits. `SessionComparePanel.tsx` is 7,534 bytes, not 0. Two stray hits: see Loose ends. |
+| §6 Fixtures A, B, C | built | `tests/raceAnalysis.test.ts` | 9 tests. Passed on 2026-10-14. |
+| §7 Repo facts | built | `vitest.config.ts` and others | Facts hold. The "`/api/analyze-video` is a 501 stub" fact is still true: `apps/shell/lib/routes/parsingRoutes.ts` line 271. |
+| §8 Architecture, engine files | built | `packages/core/src/lib/raceAnalysis/{types,reference,course,tagStateMachine,segment,metrics,index}.ts` | All seven files exist. |
+| §8 Architecture, UI files | built | `packages/metrics/src/components/{TagDeck,TagTimeline,TagTable,RaceSetupForm,MetricsDashboard,VelocityProfile,TempoProfile,SessionComparePanel}.tsx` | All eight exist. Extra files not in the plan: `LengthProfileChart.tsx`, `MetricsStepPanels.tsx`, `SessionsPanel.tsx`, `VideoStage.tsx`, `VideoPlayerParts.tsx`, `RaceSetupFormFields.tsx`. |
+| §8 Architecture, persistence | partly built | `packages/db/src/schema.ts`, `packages/db/src/pgSchema.ts`, `packages/db/src/workspacePersistence.ts`, `packages/db/src/WorkspaceService.ts`, `packages/db/src/PgWorkspaceService.ts`, `packages/core/src/types.ts` (`Workspace.raceAnalyses`) | The table and the read/write path exist in both dialects. Nothing in `packages/metrics` writes `raceAnalyses`. The app saves sessions to IndexedDB instead (`packages/metrics/src/lib/sessionStore.ts`). No round-trip test covers the table. |
+| §9 Agent DAG | retired | n/a | Written for the retired fleet harness. Ignore it. |
+| §10 A1 core engine | built | `packages/core/src/lib/raceAnalysis/` | Tests: `tests/raceAnalysis.test.ts`, `tests/raceAnalysisPurity.test.ts`. |
+| §10 B1 tagging UI | built | `packages/metrics/src/MetricsApp.tsx`, `packages/metrics/src/components/VideoPlayer.tsx` | Measured fps is wired (`measuredFps`, `fpsOverride`). When fps is unmeasured the UI shows "Not measured — select". Test: `tests/metricsAppFailureToasts.test.ts`. |
+| §10 B2 persistence | partly built | see §8 persistence row | Same gap. |
+| §10 B3 adversarial audit | not recorded | n/a | No findings file found in `docs/video/`. Do not assume it ran. |
+| §10 C1 visualisation | built | `packages/metrics/src/components/{MetricsDashboard,VelocityProfile,TempoProfile}.tsx` | Step charts use `type="stepAfter"`. Bands cite quote and URL. |
+| §10 C2 export, store, compare | built | `packages/metrics/src/lib/sessionStore.ts` (`DB_VERSION = 2`, legacy sessions marked untrusted), `packages/metrics/src/lib/reportExport.ts`, `packages/metrics/src/components/SessionComparePanel.tsx` | Compare suppresses a delta for different course, cycle definition or unit. No unit test for the three files. |
+| §10 D1 finisher | n/a | n/a | One-off pass. Not tracked here. |
+| §11 Acceptance criteria | partly built | see Loose ends | Criterion 2 grep is not clean: `Math.random` in `MetricsApp.tsx` line 96. Criterion 6 (workspace round trip) is not met, see persistence. |
+| §12 Working-tree caveat | n/a | n/a | History. |
+
+## Related and out of scope
+
+- Upload: the Metrics app opens a local file and plays it through a blob URL (`packages/metrics/src/MetricsApp.tsx` line 198, input in `packages/metrics/src/components/MetricsHeader.tsx`). The browser never sends the file to the server.
+- Server upload: `createVideoUpload()` in `apps/shell/server.ts` (line 240) is defined and not mounted. `/api/analyze-video` returns 501.
+- Detection (workstream E1): not started. See `docs/video/VIDEO_TAGGING_FRAMEWORK.md`.
+- End-to-end UI test: `tests/e2e/ui-phase-6.spec.ts` only checks that `/metrics` renders and has one "Open video" control. No test drives tagging in a browser.
+
+## Next
+
+1. Decide where analyses persist: IndexedDB only, or `Workspace.raceAnalyses`. Then wire or delete the unused path, and add a round-trip test.
+2. Add an official-split entry field, and align `SPLIT_DIVERGENCE` with §4 (or amend §4).
+3. Add unit tests for `sessionStore.ts`, `reportExport.ts` and `SessionComparePanel.tsx`.
+4. Tag one real multi-length race end to end (the training set holds one 50 free, which has no turn).
+5. Run the adversarial audit (B3) on the engine, or record that it ran.
+6. Detection (E1): blocked on ground truth. See `docs/video/VIDEO_TAGGING_FRAMEWORK.md`.
+
+## Loose ends found on 2026-10-14
+
+- **Video progress fill: fixed.** `packages/metrics/src/components/VideoPlayerParts.tsx` line 91 now scales the fill with `transform: scaleX(...)`, and honours `motion-reduce`. It no longer animates width.
+- **Width still animates elsewhere.** The volume slider at `VideoPlayerParts.tsx` line 246 transitions `width` (`w-0` to `w-16`, `transition-[width,opacity,background-color]`). This is the only width animation found in the player.
+- **`?? 0` on a rate.** `packages/metrics/src/components/TempoProfile.tsx` line 89 uses `point.rate ?? 0` in a tooltip. An absent rate would print `0.0`. The plan (§3, rule 1) bans this.
+- **`Math.random` for a session id.** `packages/metrics/src/MetricsApp.tsx` line 96. It is not a metric, but the §11 grep matches it. Allow it by name or change the id source.
+- **References to absent features.** `/api/analyze-video` (501 stub) and the unmounted `createVideoUpload()`. `docs/video/VIDEO_TAGGING_FRAMEWORK.md` says the training clip lives in `data/training/`. That folder holds only `MANIFEST.md` and `checksums.txt` in this checkout.
+- **Stale header in the original plan.** It names branch `feat/roster-management-overhaul` and a fleet harness. Both are retired.
+
+## Footage storage: what the repo does today
+
+This note states current behaviour. It does not decide the open question "Commit video footage via Git LFS, or keep it local-only?".
+
+- **Git ignores training footage.** `.gitignore` lines 60–64 ignore `data/training/*` and re-include only `data/training/MANIFEST.md` and `data/training/checksums.txt`.
+- **No LFS.** `.gitattributes` has one rule (`data/training/checksums.txt text eol=lf`). It has no `filter=lfs` entry. `git ls-files` lists no `.mp4`, `.mov`, `.webm` or `.mkv` file.
+- **Reason on record.** `data/training/MANIFEST.md`: the repo is public and race footage is third-party copyrighted material, so it is not committed. The manifest records identity, source and SHA-256 so a collaborator can verify a local copy.
+- **The app never stores video.** The browser reads the file through a blob URL. A saved analysis keeps only the file name, duration, width, height and fps (`Workspace.raceAnalyses[].video` in `packages/core/src/types.ts`).
+- **Server uploads.** `uploads/` is ignored (`.gitignore` line 27), and no route writes there today.
+
+In short: the repo is local-only by default. Moving to Git LFS would change `.gitignore` and `.gitattributes`, and would republish third-party footage to a public host. That is the owner's call.
+
+---
+
+> **History.** Everything below this line is the original plan, written 2026-08-02 and left unchanged. Its status line ("No implementation started") is superseded by the table above.
+
+# Video Analysis Suite — Masterplan
+
 **Status:** plan authored 2026-08-02, revised after a verification pass the same day. No implementation started.
 **Branch:** `feat/roster-management-overhaul` (working tree dirty — see §11).
 **Scope decisions already made:** gamepad/X-Box input is **out** (user, 2026-08-02).
