@@ -8,10 +8,11 @@
  */
 
 import React from 'react';
-import { Sparkles } from 'lucide-react';
+import { RefreshCw, Sparkles } from 'lucide-react';
 import type { ArbitrageCard, ArbitrageCardsResult, ArbitrageMode } from '@omniswim/core/lib/rosterArbitrage';
 import { Button, Disclosure } from '@omniswim/ui';
 import { ArbitrageCardList } from './RosterOptimizeStep';
+import { describeOptimizeRun, type OptimizeRunState } from './optimizeRunView';
 
 type OptimizerControlsProps = {
   team: string;
@@ -22,6 +23,8 @@ type OptimizerControlsProps = {
   onApplyLegacy: () => void;
   /** Opens the "All teams" dialog. */
   onOpenAllTeams: () => void;
+  /** An optimizer run is in flight. Both run buttons wait for it. */
+  busy?: boolean;
 };
 
 export function OptimizerControls({
@@ -32,6 +35,7 @@ export function OptimizerControls({
   onApplyTeam,
   onApplyLegacy,
   onOpenAllTeams,
+  busy = false,
 }: OptimizerControlsProps) {
   return (
     <div className="flex flex-col gap-4">
@@ -51,7 +55,7 @@ export function OptimizerControls({
         <div className="lg:col-span-8 flex flex-wrap gap-2">
           <Button
             data-optimizer-focus
-            disabled={!whatIfMode || !team}
+            disabled={!whatIfMode || !team || busy}
             onClick={onApplyTeam}
             leadingIcon={<Sparkles size={14} />}
           >
@@ -59,7 +63,7 @@ export function OptimizerControls({
           </Button>
           <Button
             variant="outline"
-            disabled={!whatIfMode}
+            disabled={!whatIfMode || busy}
             onClick={onOpenAllTeams}
             title={
               whatIfMode
@@ -75,7 +79,7 @@ export function OptimizerControls({
         <div className="flex flex-wrap items-center gap-3">
           <Button
             variant="outline"
-            disabled={!whatIfMode || !team}
+            disabled={!whatIfMode || !team || busy}
             onClick={onApplyLegacy}
             title="Ranks scorers, then fills events, in one greedy pass"
           >
@@ -91,20 +95,49 @@ export function OptimizerControls({
   );
 }
 
+type OptimizeRunStatusProps = {
+  run: OptimizeRunState;
+  onCancel: () => void;
+};
+
+/**
+ * What the coach sees while an optimizer run is in flight: plain-word progress and a Cancel. The
+ * region is polite-live so a screen reader hears "Optimizing 3 of 12 teams" as it advances.
+ */
+export function OptimizeRunStatus({ run, onCancel }: OptimizeRunStatusProps) {
+  return (
+    <div
+      role="status"
+      aria-live="polite"
+      className="rounded-lg border border-theme-soft surface-muted-bg px-3 py-2 flex flex-wrap items-center gap-3"
+    >
+      <RefreshCw size={14} className="animate-spin text-[var(--text-accent)] shrink-0" aria-hidden="true" />
+      <span className="text-ui-body text-theme-secondary min-w-0 flex-1 break-words">
+        {describeOptimizeRun(run)}
+      </span>
+      <Button variant="outline" size="sm" onClick={onCancel}>
+        Cancel run
+      </Button>
+    </div>
+  );
+}
+
 type ScanPromptProps = {
   team: string;
   scanning: boolean;
+  /** Another optimizer run is in flight, so a scan would compete with it. */
+  busy?: boolean;
   onScan: () => void;
 };
 
-function ScanPrompt({ team, scanning, onScan }: ScanPromptProps) {
+function ScanPrompt({ team, scanning, busy = false, onScan }: ScanPromptProps) {
   return (
     <div className="rounded-xl border border-dashed border-theme-soft px-4 py-8 text-center">
       <p className="text-ui-body text-theme-secondary leading-relaxed max-w-md mx-auto">
         Scanning every event swap re-scores the meet once per candidate, so it runs on
         request rather than on open.
       </p>
-      <Button variant="primary" size="md" onClick={onScan} disabled={!team || scanning} className="mt-4">
+      <Button variant="primary" size="md" onClick={onScan} disabled={!team || scanning || busy} className="mt-4">
         {scanning ? 'Scanning…' : 'Find point opportunities'}
       </Button>
       {!team ? <p className="text-ui-caption text-theme-muted mt-2">Choose a team in the team bar above first.</p> : null}
@@ -115,6 +148,7 @@ function ScanPrompt({ team, scanning, onScan }: ScanPromptProps) {
 type ArbitragePreviewSectionProps = {
   team: string;
   scanning: boolean;
+  busy?: boolean;
   onScan: () => void;
   displayCards: ArbitrageCard[];
   cards: ArbitrageCard[];
@@ -125,6 +159,7 @@ type ArbitragePreviewSectionProps = {
 export function ArbitragePreviewSection({
   team,
   scanning,
+  busy = false,
   onScan,
   displayCards,
   cards,
@@ -138,7 +173,7 @@ export function ArbitragePreviewSection({
         {team ? <span className="font-normal text-theme-secondary"> · {team}</span> : null}
       </h4>
       {showScanPrompt ? (
-        <ScanPrompt team={team} scanning={scanning} onScan={onScan} />
+        <ScanPrompt team={team} scanning={scanning} busy={busy} onScan={onScan} />
       ) : (
         <ArbitrageCardList
           cards={displayCards}

@@ -39,18 +39,16 @@ export type BatchOptimizationResult = {
 };
 
 /**
- * Runs the all-teams optimizer and packages the result the panel displays.
+ * Packages an all-teams optimizer result the way the panel displays it.
  * The optimizer reports aggregate totals only, so this shows a single "All
- * Teams" row plus the override/plan counts changed from the workspace as-is.
+ * Teams" row plus the override/plan counts changed from the workspace the run
+ * started from. Split out of `computeBatchOptimizationResult` so the run can
+ * happen in a worker and the packaging stay on the main thread.
  */
-export function computeBatchOptimizationResult(
+export function buildBatchOptimizationResult(
   workspace: Workspace,
-  gender: Gender,
-  mergedSettings: ScoringSettings,
-  stage: OptimizerStage,
-  removeSeniors = false
+  opt: GuardedOptimizerResult
 ): BatchOptimizationResult {
-  const opt = optimizeRosterAllTeams(workspace, gender, removeSeniors, mergedSettings, stage);
   const overrideCount = (opt.overrides ?? []).length - (workspace.scorerRosterOverrides ?? []).length;
   const planCount = (opt.meetEntryPlans ?? []).length - (workspace.meetEntryPlans ?? []).length;
   const teamDeltas: TeamDelta[] = [
@@ -75,6 +73,24 @@ export function computeBatchOptimizationResult(
       { overrides: opt.overrides, plans: opt.meetEntryPlans }
     ),
   };
+}
+
+/**
+ * Runs the all-teams optimizer in this thread and packages the result.
+ * The panel runs it through `requestOptimize` instead; this stays for the
+ * one-click apply in `useAllTeamsApply`.
+ */
+export function computeBatchOptimizationResult(
+  workspace: Workspace,
+  gender: Gender,
+  mergedSettings: ScoringSettings,
+  stage: OptimizerStage,
+  removeSeniors = false
+): BatchOptimizationResult {
+  return buildBatchOptimizationResult(
+    workspace,
+    optimizeRosterAllTeams(workspace, gender, removeSeniors, mergedSettings, stage)
+  );
 }
 
 /**

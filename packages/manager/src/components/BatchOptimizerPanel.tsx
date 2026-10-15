@@ -8,7 +8,7 @@
  * Undo (see RosterOptimizeStep.tsx).
  */
 
-import React, { useMemo, useState, useCallback } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState, useCallback } from 'react';
 import { X, Sparkles, RefreshCw, TrendingUp, CheckCircle } from 'lucide-react';
 import { motion, AnimatePresence } from 'motion/react';
 import { Gender, ScoringSettings, Workspace } from '@omniswim/core/types';
@@ -21,11 +21,19 @@ import {
   batchLineupMoved,
   batchRunInputsCurrent,
   buildBatchApplyPatch,
-  computeBatchOptimizationResult,
+  buildBatchOptimizationResult,
   type BatchRunInputs,
   deltaColorClass,
   type BatchOptimizationResult,
 } from './batchOptimizerView';
+import { useOptimizeRun } from './useOptimizeRun';
+import {
+  OPTIMIZE_CANCELLED_MESSAGE,
+  describeOptimizeRun,
+  optimizeFailedMessage,
+  optimizerInputRefsOf,
+  optimizerInputsMoved,
+} from './optimizeRunView';
 
 type Props = {
   workspace: Workspace;
@@ -127,7 +135,14 @@ const LINEUP_CHANGED_MESSAGE = 'Lineup changed, run again.';
 export default function BatchOptimizerPanel({ workspace, gender, scoringSettings, removeSeniors = false, onApply, onClose }: Props) {
   const toast = useToast();
   const [stage, setStage] = useState<OptimizerStage>('all');
-  const [isRunning, setIsRunning] = useState(false);
+  const optimizeRun = useOptimizeRun();
+  // The workspace as of the latest commit. A run finishes after the render that started it.
+  const latestWorkspace = useRef(workspace);
+  useLayoutEffect(() => {
+    latestWorkspace.current = workspace;
+  });
+  const { run: activeRun, start: startRun, cancel: cancelRun } = optimizeRun;
+  const isRunning = activeRun !== null;
   const [ran, setRan] = useState<RanResult | null>(null);
   const [lineupChanged, setLineupChanged] = useState(false);
 
@@ -142,8 +157,12 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
   const current = { workspaceId: workspace.id, gender, settingsKey, stage, removeSeniors };
   const result = ran && batchRunInputsCurrent(ran.inputs, current) ? ran.result : null;
 
-  const runOptimizer = useCallback(() => {
-    setIsRunning(true);
+  // A run stops when anything that produced it changes, so a result for other inputs never lands.
+  useEffect(() => {
+    cancelRun();
+  }, [cancelRun, workspace.id, gender, settingsKey, stage, removeSeniors]);
+
+  const runOptimizer = useCallback(async () => {
     setLineupChanged(false);
     const inputs: BatchRunInputs = {
       workspaceId: workspace.id,
@@ -155,26 +174,42 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
       plans: workspace.meetEntryPlans,
       activeEntryIds: workspace.activeEntryIds,
     };
-    // Use setTimeout to yield to the UI thread for the loading indicator
-    setTimeout(() => {
-      try {
-        const computed = computeBatchOptimizationResult(workspace, gender, mergedSettings, stage, removeSeniors);
-        setRan({ result: computed, inputs });
-        if (computed.outcome === 'unchanged') {
-          toast.push('info', BATCH_UNCHANGED_MESSAGE);
-        } else {
-          toast.push('success', batchOptimizationToastMessage(computed.overrideCount, computed.planCount));
-        }
-      } catch (err) {
-        toast.push('error', `Optimization failed: ${err instanceof Error ? err.message : String(err)}`);
-      } finally {
-        setIsRunning(false);
+    const startedFrom = optimizerInputRefsOf(workspace);
+    try {
+      // Off the main thread: the worker gets a copy of the workspace and the dialog stays usable.
+      const opt = await startRun(workspace, gender, {
+        kind: 'allTeams',
+        removeSeniors,
+        settings: mergedSettings,
+        stage,
+      });
+      // null: cancelled, or the inputs changed while it ran. Nothing was changed.
+      if (!opt) return;
+      // The run read more than the lineup arrays: roster, aliases, history, deleted swimmers.
+      // An edit to any of them while it ran makes the result describe a workspace that is gone.
+      if (optimizerInputsMoved(startedFrom, latestWorkspace.current)) {
+        setLineupChanged(true);
+        return;
       }
-    }, 50);
-  }, [workspace, gender, mergedSettings, settingsKey, stage, removeSeniors, toast]);
+      const computed = buildBatchOptimizationResult(workspace, opt);
+      setRan({ result: computed, inputs });
+      if (computed.outcome === 'unchanged') {
+        toast.push('info', BATCH_UNCHANGED_MESSAGE);
+      } else {
+        toast.push('success', batchOptimizationToastMessage(computed.overrideCount, computed.planCount));
+      }
+    } catch (err) {
+      toast.push('error', optimizeFailedMessage(err));
+    }
+  }, [workspace, gender, mergedSettings, settingsKey, stage, removeSeniors, toast, startRun]);
+
+  const handleCancelRun = useCallback(() => {
+    cancelRun();
+    toast.push('info', OPTIMIZE_CANCELLED_MESSAGE);
+  }, [cancelRun, toast]);
 
   const handleApply = useCallback(() => {
-    if (!ran || !result || !buildBatchApplyPatch(result)) return;
+    if (isRunning || !ran || !result || !buildBatchApplyPatch(result)) return;
     // The result holds the FULL post-run arrays. If the lineup moved since the
     // run, applying would silently overwrite those edits.
     if (batchLineupMoved(ran.inputs, workspace)) {
@@ -184,9 +219,10 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
     }
     onApply(result);
     onClose();
-  }, [ran, result, workspace, onApply, onClose]);
+  }, [isRunning, ran, result, workspace, onApply, onClose]);
 
-  const canApply = Boolean(result && buildBatchApplyPatch(result));
+  // A re-run is in flight: the result on screen is about to be replaced, so it is not applied.
+  const canApply = Boolean(result && buildBatchApplyPatch(result)) && !isRunning;
 
   return (
     <Modal
@@ -262,7 +298,7 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
             {isRunning ? (
               <>
                 <RefreshCw size={14} className="animate-spin" aria-hidden="true" />
-                <span>Optimizing...</span>
+                <span>{activeRun?.progress ? describeOptimizeRun(activeRun) : 'Optimizing...'}</span>
               </>
             ) : (
               <>
@@ -271,6 +307,14 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
               </>
             )}
           </Button>
+
+          {isRunning ? (
+            <div className="flex justify-end">
+              <Button variant="outline" size="sm" onClick={handleCancelRun}>
+                Cancel run
+              </Button>
+            </div>
+          ) : null}
 
           {lineupChanged ? (
             <p role="alert" className="text-ui-body text-theme-secondary">
