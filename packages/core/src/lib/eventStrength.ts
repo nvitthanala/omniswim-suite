@@ -141,7 +141,14 @@ export function rankEventsByQuality(
 
   const refs = new Map<string, { a: number; b: number }>();
   for (const event of events) {
-    const sec = bestByEvent[event]?.timeSec ?? 0;
+    const sec = bestByEvent[event]?.timeSec;
+    // An event with no usable time takes no part in choosing the tier. Its
+    // standard exists, but it is not a swim: counting it let an empty event
+    // tip the whole profile onto the permissive tier.
+    if (!hasUsableSeconds(sec)) {
+      refs.set(event, { a: 0, b: 0 });
+      continue;
+    }
     const cmp = compareTimeToCutline(sec, gender, event, division);
     refs.set(event, cmp.status === 'ok' ? { a: cmp.aCutSec, b: cmp.bCutSec } : { a: 0, b: 0 });
   }
@@ -159,8 +166,8 @@ export function rankEventsByQuality(
   const unranked: string[] = [];
   for (const event of events) {
     const ref = tier === 'B' ? refs.get(event)?.b ?? 0 : refs.get(event)?.a ?? 0;
-    const sec = bestByEvent[event]?.timeSec ?? 0;
-    if (ref > 0 && Number.isFinite(sec) && sec > 0) {
+    const sec = bestByEvent[event]?.timeSec;
+    if (ref > 0 && hasUsableSeconds(sec)) {
       ratioByEvent[event] = sec / ref;
       ranked.push(event);
     } else {
@@ -205,6 +212,10 @@ function compareOptional(a: number | undefined, b: number | undefined): number {
   if (a != null) return -1;
   if (b != null) return 1;
   return 0;
+}
+
+function hasUsableSeconds(sec: number | undefined): sec is number {
+  return typeof sec === 'number' && Number.isFinite(sec) && sec > 0;
 }
 
 /** A time a ranking may use: finite and above 0. Anything else is "no time" and sorts last. */
