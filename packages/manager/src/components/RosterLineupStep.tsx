@@ -23,8 +23,9 @@ import LineupComplianceChecklist from './LineupComplianceChecklist';
 import TeamPickerEmptyState from './TeamPickerEmptyState';
 import CrossCourseArbitragePanel from './CrossCourseArbitragePanel';
 import ScenarioSnapshotsPanel from './ScenarioSnapshotsPanel';
+import ScoutOpponentPanel from './ScoutOpponentPanel';
 
-type SidePanelTab = 'checklist' | 'arbitrage' | 'scenarios';
+type SidePanelTab = 'checklist' | 'arbitrage' | 'scenarios' | 'scout';
 
 type Props = {
   workspace: Workspace;
@@ -224,6 +225,7 @@ export default function RosterLineupStep({
               },
               { value: 'arbitrage', label: 'Cross-course' },
               { value: 'scenarios', label: 'Scenarios' },
+              { value: 'scout', label: 'Scout' },
             ]}
           />
           {sidePanelTab === 'checklist' ? (
@@ -288,6 +290,15 @@ export default function RosterLineupStep({
               gender={gender}
               scoringSettings={scoringSettings}
               removeSeniors={removeSeniors}
+            />
+          ) : null}
+          {sidePanelTab === 'scout' ? (
+            <ScoutOpponentPanel
+              workspace={workspace}
+              gender={gender}
+              team={selectedTeam}
+              scoredRows={scoringBundle.allScored}
+              scoringSettings={scoringSettings}
             />
           ) : null}
         </div>
