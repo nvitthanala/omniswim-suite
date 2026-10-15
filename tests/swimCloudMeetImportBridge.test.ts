@@ -128,7 +128,18 @@ function teamMeetSwim(overrides: {
   relayLeadoff?: boolean;
   meetScore?: number;
 } = {}): SwimCloudTeamMeetSwim {
-  const event = swimCloudEvent(overrides.event);
+  // A swims-list label ("100 Y Breast") carries the distance and stroke the parser
+  // reads off it. Keep the fixture's fields in step with its label, as the parser does.
+  const printed = /^(\d+) Y (Free|Back|Breast|Fly|IM)$/.exec(overrides.event?.label ?? '');
+  const fromLabel: Partial<SwimCloudEvent> = printed
+    ? {
+        distance: Number(printed[1]),
+        stroke: ({ Free: 'Freestyle', Back: 'Backstroke', Breast: 'Breaststroke', Fly: 'Butterfly', IM: 'Individual Medley' } as const)[
+          printed[2] as 'Free' | 'Back' | 'Breast' | 'Fly' | 'IM'
+        ],
+      }
+    : {};
+  const event = swimCloudEvent({ ...fromLabel, ...overrides.event });
   const entry = swimCloudEntry({ eventId: event.eventId, ...overrides.entry });
   const result = swimCloudResult(entry.entryId, { eventId: event.eventId, ...overrides.result });
   const swimId = overrides.swimCloudSwimId ?? `swim-${nextId++}`;
@@ -368,7 +379,7 @@ describe('swimCloudTeamMeetSwimsToSwimmerResults — real capture', () => {
       { reason: 'ambiguous-round-duplicate', eventLabel: '100 Y Breast', subject: 'Avery Henke', detail: '54.09 (place 1, swim 171560736)' },
       { reason: 'ambiguous-round-duplicate', eventLabel: '100 Y Breast', subject: 'Avery Henke', detail: '54.27 (place 1, swim 171560737)' },
     ]);
-    expect(result.men.some(row => row.name === 'Avery Henke' && row.event === '100 Y Breast')).toBe(false);
+    expect(result.men.some(row => row.name === 'Avery Henke' && row.event === '100 Breaststroke')).toBe(false);
     // Oskar Cebula's "100 Y Breast" group has three swims, split across two
     // different SwimCloud event ids (event/26 and event/100) — grouping by
     // event id alone would have missed the third.
@@ -381,10 +392,10 @@ describe('swimCloudTeamMeetSwimsToSwimmerResults — real capture', () => {
     // Three rows print "100 Y Free": one relay-leadoff split and a genuine
     // pair that is itself an ambiguous round duplicate (Olivér Pózvai, two
     // swims). Every one of the three is excluded, for two different reasons.
-    expect(result.men.filter(row => row.event === '100 Y Free')).toHaveLength(0);
+    expect(result.men.filter(row => row.event === '100 Freestyle')).toHaveLength(0);
     // The only "200 Y Free" on the page IS the leadoff, so that event drops out
     // entirely — correctly, because no one swam it individually here.
-    expect(result.men.filter(row => row.event === '200 Y Free')).toHaveLength(0);
+    expect(result.men.filter(row => row.event === '200 Freestyle')).toHaveLength(0);
   });
 
   it('does not put SwimCloud power points into a meet-score field', () => {
@@ -422,7 +433,7 @@ describe('swimCloudTeamMeetSwimsToSwimmerResults — real capture', () => {
     expect(first).toMatchObject({
       name: 'Colton Bennett',
       team: 'Henderson State University',
-      event: '1000 Y Free',
+      event: '1000 Freestyle',
       time: '9:26.63',
       rank: 3,
       classYear: 'unknown',
@@ -456,7 +467,7 @@ describe('swimCloudTeamMeetSwimsToSwimmerResults — ambiguous-round-duplicate',
     const dup2 = teamMeetSwim({ event, entry: { athleteName: 'Riley Adams' }, result: { place: 1 } });
     const other = teamMeetSwim({ event: { label: '200 Y Free', gender: 'Men' }, entry: { athleteName: 'Riley Adams' } });
     const result = swimCloudTeamMeetSwimsToSwimmerResults(teamMeetSwimsParse([dup1, dup2, other]));
-    expect(result.men).toStrictEqual([expect.objectContaining({ event: '200 Y Free' })]);
+    expect(result.men).toStrictEqual([expect.objectContaining({ event: '200 Freestyle' })]);
     expect(result.skipped).toStrictEqual([
       { reason: 'ambiguous-round-duplicate', eventLabel: '100 Y Breast', subject: 'Riley Adams', detail: expect.any(String) },
       { reason: 'ambiguous-round-duplicate', eventLabel: '100 Y Breast', subject: 'Riley Adams', detail: expect.any(String) },
@@ -510,7 +521,7 @@ describe('swimCloudTeamMeetSwimsToSwimmerResults — ambiguous-round-duplicate',
     const leadoff = teamMeetSwim({ event, entry: { athleteName: 'Riley Adams' }, relayLeadoff: true });
     const result = swimCloudTeamMeetSwimsToSwimmerResults(teamMeetSwimsParse([real, leadoff]));
     // One real swim of the event, one leadoff — not a same-event duplicate.
-    expect(result.men).toStrictEqual([expect.objectContaining({ event: '100 Y Free' })]);
+    expect(result.men).toStrictEqual([expect.objectContaining({ event: '100 Freestyle' })]);
     expect(result.skipped).toStrictEqual([{ reason: 'relay-leadoff', eventLabel: '100 Y Free', subject: 'Riley Adams' }]);
   });
 });
@@ -897,7 +908,7 @@ describe('swimCloudTeamMeetSwimsToSwimmerResults — round resolution against F9
   });
 
   it('gives Avery Henke both rows, correctly labelled, with the real A Final score', () => {
-    const henke = resolved().men.filter(row => row.name === 'Avery Henke' && row.event === '100 Y Breast');
+    const henke = resolved().men.filter(row => row.name === 'Avery Henke' && row.event === '100 Breaststroke');
     expect(henke).toHaveLength(2);
     const byRound = new Map(henke.map(row => [row.roundSwam, row]));
     expect([...byRound.keys()].sort()).toStrictEqual(['A Final', 'Preliminaries']);
@@ -913,7 +924,7 @@ describe('swimCloudTeamMeetSwimsToSwimmerResults — round resolution against F9
 
   it('splits Oskar Cebula into two resolved rows and leaves the third unresolved', () => {
     const result = resolved();
-    const cebula = result.men.filter(row => row.name === 'Oskar Cebula' && row.event === '100 Y Breast');
+    const cebula = result.men.filter(row => row.name === 'Oskar Cebula' && row.event === '100 Breaststroke');
     expect(cebula.map(row => [row.roundSwam, row.time, row.points]).sort()).toStrictEqual([
       ['A Final', '55.45', 13],
       ['Preliminaries', '55.48', 0],
@@ -950,12 +961,12 @@ describe('swimCloudTeamMeetSwimsToSwimmerResults — round resolution against F9
     //
     // Kock's single row is his PRELIM. It was being scored as a final.
     const before = swimCloudTeamMeetSwimsToSwimmerResults(swimsPageOne());
-    const kockBefore = before.men.find(row => row.name === 'Gavin Kock' && row.event === '100 Y Breast');
+    const kockBefore = before.men.find(row => row.name === 'Gavin Kock' && row.event === '100 Breaststroke');
     expect(kockBefore).toBeDefined();
     expect(kockBefore?.roundSwam).toBeUndefined();
 
     const after = resolved();
-    expect(after.men.find(row => row.name === 'Gavin Kock' && row.event === '100 Y Breast')).toMatchObject({
+    expect(after.men.find(row => row.name === 'Gavin Kock' && row.event === '100 Breaststroke')).toMatchObject({
       time: '55.69',
       roundSwam: 'Preliminaries',
       points: 0,
@@ -963,7 +974,7 @@ describe('swimCloudTeamMeetSwimsToSwimmerResults — round resolution against F9
     // Eberhard's single row is his A Final, and it now carries its real 12
     // meet points instead of leaving the app to derive them from a per-round
     // place it could not interpret.
-    expect(after.men.find(row => row.name === 'Mark Eberhard' && row.event === '100 Y Breast')).toMatchObject({
+    expect(after.men.find(row => row.name === 'Mark Eberhard' && row.event === '100 Breaststroke')).toMatchObject({
       time: '55.54',
       roundSwam: 'A Final',
       rank: 7,
@@ -1036,5 +1047,21 @@ describe('swimCloudTeamMeetSwimsToSwimmerResults — round resolution against F9
     const men = patches[0]!.menResults ?? [];
     const henkeA = men.find(row => row.name === 'Avery Henke' && row.roundSwam === 'A Final');
     expect(henkeA).toMatchObject({ pdfPoints: 20, time: '54.27' });
+  });
+});
+
+describe('swimCloudTeamMeetSwimsToSwimmerResults — swims-list event label (R3 follow-up)', () => {
+  it('writes a yards "100 Y Breast" as the canonical "100 Breaststroke"', () => {
+    const swim = teamMeetSwim({ event: { label: '100 Y Breast', gender: 'Men', course: 'SCY' } });
+    const result = swimCloudTeamMeetSwimsToSwimmerResults(teamMeetSwimsParse([swim]));
+    expect(result.men.map(r => r.event)).toStrictEqual(['100 Breaststroke']);
+  });
+
+  it('keeps a metric label as printed: a meet row has no course field, so dropping the letter would score it as yards', () => {
+    const swim = teamMeetSwim({
+      event: { label: '100 L Free', gender: 'Men', course: 'LCM', distance: 100, stroke: 'Freestyle' },
+    });
+    const result = swimCloudTeamMeetSwimsToSwimmerResults(teamMeetSwimsParse([swim]));
+    expect(result.men.map(r => r.event)).toStrictEqual(['100 L Free']);
   });
 });

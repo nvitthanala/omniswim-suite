@@ -80,6 +80,7 @@ import type {
   SwimCloudEvent,
   SwimCloudTeamId,
 } from '@omniswim/swimcloud/entities';
+import { individualEventLabelOf } from '@omniswim/swimcloud/entities';
 import type {
   SwimCloudMeetEventResultsParse,
   SwimCloudMeetEventSwim,
@@ -891,7 +892,11 @@ export function swimCloudTeamMeetSwimsToSwimmerResults(
       team,
       time: timeOrMarker(swim.result.finalTime, swim.result.rawTimeToken),
       points,
-      event: eventLabel,
+      // The swims list prints `1650 Y Free`, which no event reader understands.
+      // A meet row has no course field and is read as yards, so only a yards
+      // label is rewritten to `1650 Freestyle`. An L or S label stays as printed:
+      // dropping its letter would score a metric swim as yards.
+      event: (swim.event.course === 'SCY' ? individualEventLabelOf(swim.event) : null) ?? eventLabel,
       gender,
       ...(resolved === undefined ? {} : { roundSwam: resolved.roundSwam }),
       ...(isExhibition ? { isExhibition: true } : {}),

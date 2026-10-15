@@ -769,3 +769,65 @@ export interface SwimCloudRelay {
    */
   readonly legs: readonly SwimCloudRelayLeg[];
 }
+
+/**
+ * The bare swims-list event cell: `{distance} {course letter} {stroke word}`
+ * and nothing else. The stroke words are the ones `mapStroke` (swimFields.ts)
+ * reads for an individual event.
+ */
+const BARE_SWIMS_LIST_CELL = /^\s*(\d+)\s+([YLS])\s+(Freestyle|Free|Backstroke|Back|Breaststroke|Breast|Butterfly|Fly|Individual\s+Medley|IM)\s*$/i;
+
+/** The stroke a bare stroke word names, keyed by its lower-cased, single-spaced form. */
+const STROKE_OF_WORD: Readonly<Record<string, SwimCloudStroke>> = {
+  free: 'Freestyle',
+  freestyle: 'Freestyle',
+  back: 'Backstroke',
+  backstroke: 'Backstroke',
+  breast: 'Breaststroke',
+  breaststroke: 'Breaststroke',
+  fly: 'Butterfly',
+  butterfly: 'Butterfly',
+  im: 'Individual Medley',
+  'individual medley': 'Individual Medley',
+};
+
+const COURSE_OF_LETTER: Readonly<Record<string, SwimCloudCourse>> = { y: 'SCY', l: 'LCM', s: 'SCM' };
+
+/**
+ * The `{distance} {stroke}` label of an individual event, in the canonical
+ * stroke words (`1650 Freestyle`, `100 Breaststroke`, `200 Individual Medley`),
+ * or `null` when the printed label is not exactly a bare swims-list cell.
+ *
+ * Exists because the swims list prints `1650 Y Free`: a course letter between
+ * the distance and the stroke, which none of the core event readers understand
+ * (`canonicalProgramEvent`, `aliasIndividualEventKey` and `normalizeEventForCutline`
+ * all fail on `1650 Y Freestyle`).
+ *
+ * It rewrites only when `event.label` is, whole, `{digits} {Y|L|S} {stroke word}`
+ * (case-insensitive) AND the distance, the course letter and the stroke word
+ * each agree with `event.distance`, `event.course` and `event.stroke`. So
+ * `Event 9 200 Breast`, `1650 Q Free`, `100 Y Free Time Trial` and
+ * `1000 Y Free Swim-off` return `null`: a trailing word (a time trial is a
+ * different identity, see `swimEventIdentity`), an unknown course letter or a
+ * different leading number is never dropped or guessed. The caller keeps the
+ * raw label.
+ *
+ * The course is NOT in the returned label. It stays on {@link SwimCloudEvent.course};
+ * a caller that writes this label must carry the course somewhere else
+ * (`HistoricalSwim.timeType`) or restrict itself to yards.
+ */
+export function individualEventLabelOf(event: SwimCloudEvent): string | null {
+  if (event.kind !== 'individual') return null;
+  const match = BARE_SWIMS_LIST_CELL.exec(event.label);
+  if (match === null) return null;
+  // Three groups, none optional: an absent one means the pattern changed. Answer "no label"
+  // (the caller keeps the printed one) rather than write a guess.
+  const [, rawDistance, rawLetter, rawWord] = match;
+  if (rawDistance === undefined || rawLetter === undefined || rawWord === undefined) return null;
+  const distance = Number.parseInt(rawDistance, 10);
+  const course = COURSE_OF_LETTER[rawLetter.toLowerCase()];
+  const stroke = STROKE_OF_WORD[rawWord.toLowerCase().replace(/\s+/g, ' ')];
+  if (course === undefined || stroke === undefined) return null;
+  if (event.distance !== distance || event.course !== course || event.stroke !== stroke) return null;
+  return `${distance} ${stroke}`;
+}
