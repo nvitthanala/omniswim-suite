@@ -82,6 +82,11 @@ export function finalizeScoringDraft(draft: ScoringSettingsDraft): FinalizeScori
   return { ok: true, settings };
 }
 
+/** True for +Infinity and -Infinity. Zod 4 reports these as a type failure, not `not_finite`. */
+function isInfinite(value: unknown): boolean {
+  return value === Infinity || value === -Infinity;
+}
+
 /**
  * A place-value table, as a scoring RULE SET (a preset) may be written.
  *
@@ -93,13 +98,21 @@ export function finalizeScoringDraft(draft: ScoringSettingsDraft): FinalizeScori
  */
 export function pointsTableSchema(field: string) {
   return z
-    .array(z.number().finite(`${field}: every place value must be a finite number.`))
+    .array(
+      // Zod 4 has no `.finite()`: `z.number()` refuses ±Infinity with a type issue,
+      // so the Zod 3 "finite" message is attached to that issue. Other type
+      // failures keep the default text, as before.
+      z.number({
+        error: iss =>
+          isInfinite(iss.input) ? `${field}: every place value must be a finite number.` : undefined,
+      })
+    )
     .min(1, `${field} must list at least one place value.`)
     .superRefine((places, ctx) => {
       places.forEach((value, i) => {
         if (value < 0) {
           ctx.addIssue({
-            code: z.ZodIssueCode.custom,
+            code: 'custom',
             path: [i],
             message: `${field}: place ${i + 1} is ${value}; place values cannot be negative.`,
           });
@@ -108,7 +121,7 @@ export function pointsTableSchema(field: string) {
       for (let i = 1; i < places.length; i += 1) {
         if (itemAt(places, i) > itemAt(places, i - 1)) {
           ctx.addIssue({
-            code: z.ZodIssueCode.custom,
+            code: 'custom',
             path: [i],
             message:
               `${field}: place ${i + 1} is worth ${places[i]} but place ${i} is worth ` +
@@ -132,8 +145,18 @@ export function storedPlaceTableSchema(field: string) {
   return z
     .array(
       z
-        .number({ invalid_type_error: `${field}: every place value must be a number, not blank.` })
-        .finite(`${field}: every place value must be a finite number.`)
+        .number({
+          // Zod 4 has no `invalid_type_error` and no `.finite()`: `z.number()` itself
+          // refuses ±Infinity and NaN with an `invalid_type` issue. This keeps the
+          // three Zod 3 messages: a missing value reads as the default, an infinite
+          // value as "finite", anything else that is not a number as "blank".
+          error: iss => {
+            if (iss.input === undefined) return undefined;
+            return isInfinite(iss.input)
+              ? `${field}: every place value must be a finite number.`
+              : `${field}: every place value must be a number, not blank.`;
+          },
+        })
         .nonnegative(`${field}: place values cannot be negative.`)
     )
     .min(1, `${field} must list at least one place value.`);

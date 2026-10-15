@@ -1,31 +1,44 @@
 /**
  * Zod schemas for runtime validation at the API boundary.
  *
- * Most of these stay permissive (`.passthrough()` / optional) so they validate
+ * Most of these stay permissive (`.loose()` / optional) so they validate
  * shape without rejecting forward-compatible fields. The two workspace write
  * bodies are the exception: `createWorkspaceSchema` and `updateWorkspaceSchema`
- * are allowlists that strip what they do not name. They mirror the TypeScript
- * interfaces in `../types` but are the source of truth for server-side request
- * validation.
+ * are allowlists that strip what they do not name (a Zod object strips unknown
+ * keys by default). They mirror the TypeScript interfaces in `../types` but are
+ * the source of truth for server-side request validation.
  */
 import { z } from 'zod';
 import type { Workspace } from '../types';
 import { storedPlaceTableSchema } from '../lib/scoringPlaceTables';
+
+/**
+ * A number that, like `z.number()` in Zod 3, accepts +Infinity and -Infinity and
+ * refuses NaN and every non-number. Zod 4's `z.number()` refuses infinities, and a
+ * body of `{"createdAt": 1e999}` parses to Infinity, so a plain `z.number()` would
+ * start rejecting an input this API has always accepted. Use it only where the
+ * Zod 3 schema was a bare `z.number()`; a field that was `.finite()` or `.int()`
+ * stays `z.number()`, which rejects infinities in both versions.
+ */
+const numberAllowingInfinity = z.custom<number>(
+  value => typeof value === 'number' && !Number.isNaN(value),
+  'Invalid input: expected number'
+);
 
 export const genderSchema = z.enum(['Men', 'Women']);
 
 export const swimmerResultSchema = z
   .object({
     id: z.string(),
-    rank: z.number(),
+    rank: numberAllowingInfinity,
     name: z.string(),
     classYear: z.string(),
     team: z.string(),
     time: z.string(),
-    points: z.union([z.number(), z.string()]),
+    points: z.union([numberAllowingInfinity, z.string()]),
     event: z.string(),
   })
-  .passthrough();
+  .loose();
 
 export const recruitSchema = z
   .object({
@@ -38,7 +51,7 @@ export const recruitSchema = z
     classYear: z.string(),
     timeType: z.enum(['SCY', 'LCM', 'SCM']),
   })
-  .passthrough();
+  .loose();
 
 export const historicalSwimSchema = z
   .object({
@@ -49,7 +62,7 @@ export const historicalSwimSchema = z
     time: z.string(),
     source: z.enum(['pdf', 'paste', 'ocr', 'csv', 'manual', 'swimcloud']),
   })
-  .passthrough();
+  .loose();
 
 /** Full workspace document as persisted. */
 export const workspaceSchema = z
@@ -59,9 +72,9 @@ export const workspaceSchema = z
     menResults: z.array(swimmerResultSchema).default([]),
     womenResults: z.array(swimmerResultSchema).default([]),
     recruits: z.array(recruitSchema).default([]),
-    createdAt: z.number(),
+    createdAt: numberAllowingInfinity,
   })
-  .passthrough();
+  .loose();
 
 /**
  * One element of a workspace collection: an object, nothing more. Deliberately NOT
@@ -69,9 +82,9 @@ export const workspaceSchema = z
  * `points`) that real saved rows lack, and a stricter element schema would turn a
  * valid save into a 400. The element's own fields pass through untouched.
  */
-const rowSchema = z.object({}).passthrough();
+const rowSchema = z.object({}).loose();
 const rowsSchema = z.array(rowSchema);
-const recordSchema = z.object({}).passthrough();
+const recordSchema = z.object({}).loose();
 
 /**
  * A workspace's scoring settings: a record, plus a light check on its three place
@@ -87,7 +100,7 @@ const scoringSettingsSchema = z
     relayPoints: storedPlaceTableSchema('scoringSettings.relayPoints').optional(),
     divingPoints: storedPlaceTableSchema('scoringSettings.divingPoints').optional(),
   })
-  .passthrough();
+  .loose();
 
 /**
  * Fields of a workspace a PUT may set: an ALLOWLIST. `id`, `createdAt` and
@@ -130,7 +143,7 @@ export const workspacePatchShape = {
 } as const;
 
 /** Body accepted by PUT /api/workspaces/:id (partial patch). Unknown and protected keys are dropped. */
-export const updateWorkspaceSchema = z.object(workspacePatchShape).partial().strip();
+export const updateWorkspaceSchema = z.object(workspacePatchShape).partial();
 
 /**
  * Body accepted by POST /api/workspaces (the server fills defaults for what is absent).
@@ -149,11 +162,10 @@ export const updateWorkspaceSchema = z.object(workspacePatchShape).partial().str
 export const createWorkspaceSchema = z
   .object({
     id: z.string(),
-    createdAt: z.number(),
+    createdAt: numberAllowingInfinity,
     ...workspacePatchShape, // includes `name`
   })
-  .partial()
-  .strip();
+  .partial();
 
 /**
  * Compile-time guard: every `Workspace` field except `id` and `createdAt` is in the
@@ -192,7 +204,7 @@ export const parseAthleteHistorySchema = z
     swimmerName: z.string().optional(),
     division: z.string().optional(),
   })
-  .passthrough();
+  .loose();
 
 /** Body accepted by POST /api/import-csv. */
 export const importCsvSchema = z.object({
@@ -252,7 +264,8 @@ export const rosterEligibilityToggleSchema = z.object({
 
 export const rosterBulkImportSchema = z.object({
   // Canonical JSON format used by the manager wizard.
-  json: z.unknown(),
+  // Optional on purpose: Zod 3 accepted a body with no `json` key, Zod 4 would not.
+  json: z.unknown().optional(),
 });
 
 export const rosterPasteImportSchema = z.object({
