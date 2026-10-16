@@ -164,17 +164,15 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
 
   const runOptimizer = useCallback(async () => {
     setLineupChanged(false);
+    const startedFrom = optimizerInputRefsOf(workspace);
     const inputs: BatchRunInputs = {
       workspaceId: workspace.id,
       gender,
       settingsKey,
       stage,
       removeSeniors,
-      overrides: workspace.scorerRosterOverrides,
-      plans: workspace.meetEntryPlans,
-      activeEntryIds: workspace.activeEntryIds,
+      inputRefs: startedFrom,
     };
-    const startedFrom = optimizerInputRefsOf(workspace);
     try {
       // Off the main thread: the worker gets a copy of the workspace and the dialog stays usable.
       const opt = await startRun(workspace, gender, {
@@ -210,8 +208,9 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
 
   const handleApply = useCallback(() => {
     if (isRunning || !ran || !result || !buildBatchApplyPatch(result)) return;
-    // The result holds the FULL post-run arrays. If the lineup moved since the
-    // run, applying would silently overwrite those edits.
+    // The result holds the FULL post-run arrays. If anything the run read moved since
+    // the run (lineup, roster, aliases, history, deleted swimmers), applying would
+    // silently overwrite those edits.
     if (batchLineupMoved(ran.inputs, workspace)) {
       setRan(null);
       setLineupChanged(true);

@@ -15,6 +15,7 @@ import {
   type OptimizerOutcome,
   type OptimizerStage,
 } from '@omniswim/core/lib/rosterOptimizer';
+import { optimizerInputsMoved, type OptimizerInputRefs } from './optimizeRunView';
 
 export type TeamDelta = {
   teamName: string;
@@ -138,10 +139,13 @@ export type BatchRunInputs = {
   settingsKey: string;
   stage: OptimizerStage;
   removeSeniors: boolean;
-  /** The three optimizer-owned arrays, by identity: any edit replaces them. */
-  overrides: Workspace['scorerRosterOverrides'];
-  plans: Workspace['meetEntryPlans'];
-  activeEntryIds: Workspace['activeEntryIds'];
+  /**
+   * Every workspace field the run read (`OPTIMIZER_INPUT_FIELDS`), by reference, as they stood
+   * when it started. This was three lineup arrays, which let an edit to the roster, aliases,
+   * history or deleted swimmers slip through to Apply. It is the same list the per-team apply
+   * and `useAllTeamsApply` check.
+   */
+  inputRefs: OptimizerInputRefs;
 };
 
 /** True while the scoring inputs of a run still match, so its result may be shown. */
@@ -156,14 +160,10 @@ export function batchRunInputsCurrent(ran: BatchRunInputs, now: Pick<BatchRunInp
 }
 
 /**
- * True when the lineup arrays are no longer the objects the run started from.
+ * True when any field the run read is no longer the object the run started from.
  * The result holds the FULL post-run arrays, so applying it then would
- * overwrite the edits made since.
+ * overwrite the edits made since (or describe a roster that no longer exists).
  */
 export function batchLineupMoved(ran: BatchRunInputs, workspace: Workspace): boolean {
-  return (
-    ran.overrides !== workspace.scorerRosterOverrides ||
-    ran.plans !== workspace.meetEntryPlans ||
-    ran.activeEntryIds !== workspace.activeEntryIds
-  );
+  return optimizerInputsMoved(ran.inputRefs, workspace);
 }
