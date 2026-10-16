@@ -10,12 +10,14 @@ import {
   insertPositionalRows,
   insertResultsRows,
   insertWithIdRows,
+  createRowIdGuard,
   parseJson,
   versionConflictError,
   workspaceRowValues,
   type WorkspaceScope,
 } from './workspacePersistence';
 import { assertSchemaNotNewer, SchemaVersionError } from './schemaGuard';
+import { migratePgChildKeys } from './childKeyMigration';
 
 const { Pool } = pg;
 
@@ -57,6 +59,9 @@ export class PgWorkspaceService {
       await client.query(CREATE_PG_TABLES_SQL);
       // Additive column migration for pre-existing deployments (idempotent).
       await client.query('ALTER TABLE workspaces ADD COLUMN IF NOT EXISTS scoring_view TEXT');
+      // v9: key the id-keyed child tables on (workspace_id, id). Runs before the stamp, so a
+      // failure leaves the old version in place and the next start retries.
+      await migratePgChildKeys(client);
       await client.query(
         'INSERT INTO meta(key, value) VALUES($1, $2) ON CONFLICT(key) DO UPDATE SET value = EXCLUDED.value',
         ['schema_version', String(PG_SCHEMA_VERSION)]
@@ -472,13 +477,16 @@ export class PgWorkspaceService {
   }
 
   private async insertMeetResultRows(client: pg.PoolClient, ws: Workspace): Promise<void> {
+    const unique = createRowIdGuard('meet_results', ws.id);
     for (const row of insertResultsRows(ws.id, ws.menResults ?? [], 'Men')) {
+      unique(row.id);
       await client.query(
         'INSERT INTO meet_results(id, workspace_id, gender, position, data) VALUES($1,$2,$3,$4,$5)',
         [row.id, row.workspace_id, row.gender, row.position, row.data]
       );
     }
     for (const row of insertResultsRows(ws.id, ws.womenResults ?? [], 'Women')) {
+      unique(row.id);
       await client.query(
         'INSERT INTO meet_results(id, workspace_id, gender, position, data) VALUES($1,$2,$3,$4,$5)',
         [row.id, row.workspace_id, row.gender, row.position, row.data]
@@ -489,13 +497,16 @@ export class PgWorkspaceService {
   private async insertSourceMeetResultRows(client: pg.PoolClient, ws: Workspace): Promise<void> {
     const sourceMen = ws.sourceMenResults ?? ws.menResults ?? [];
     const sourceWomen = ws.sourceWomenResults ?? ws.womenResults ?? [];
+    const unique = createRowIdGuard('source_meet_results', ws.id);
     for (const row of insertResultsRows(ws.id, sourceMen, 'Men')) {
+      unique(`src-${row.id}`);
       await client.query(
         'INSERT INTO source_meet_results(id, workspace_id, gender, position, data) VALUES($1,$2,$3,$4,$5)',
         [`src-${row.id}`, row.workspace_id, row.gender, row.position, row.data]
       );
     }
     for (const row of insertResultsRows(ws.id, sourceWomen, 'Women')) {
+      unique(`src-${row.id}`);
       await client.query(
         'INSERT INTO source_meet_results(id, workspace_id, gender, position, data) VALUES($1,$2,$3,$4,$5)',
         [`src-${row.id}`, row.workspace_id, row.gender, row.position, row.data]
@@ -504,13 +515,16 @@ export class PgWorkspaceService {
   }
 
   private async insertPsychResultRows(client: pg.PoolClient, ws: Workspace): Promise<void> {
+    const unique = createRowIdGuard('psych_results', ws.id);
     for (const row of insertResultsRows(ws.id, ws.psychMenResults ?? [], 'Men')) {
+      unique(row.id);
       await client.query(
         'INSERT INTO psych_results(id, workspace_id, gender, position, data) VALUES($1,$2,$3,$4,$5)',
         [row.id, row.workspace_id, row.gender, row.position, row.data]
       );
     }
     for (const row of insertResultsRows(ws.id, ws.psychWomenResults ?? [], 'Women')) {
+      unique(row.id);
       await client.query(
         'INSERT INTO psych_results(id, workspace_id, gender, position, data) VALUES($1,$2,$3,$4,$5)',
         [row.id, row.workspace_id, row.gender, row.position, row.data]
@@ -519,19 +533,25 @@ export class PgWorkspaceService {
   }
 
   private async insertWithIdChildRows(client: pg.PoolClient, ws: Workspace): Promise<void> {
+    const uniqueRecruit = createRowIdGuard('recruits', ws.id);
     for (const row of insertWithIdRows('recruits', ws.id, ws.recruits ?? [])) {
+      uniqueRecruit(row.id);
       await client.query(
         'INSERT INTO recruits(id, workspace_id, position, data) VALUES($1,$2,$3,$4)',
         [row.id, row.workspace_id, row.position, row.data]
       );
     }
+    const uniquePlan = createRowIdGuard('meet_entry_plans', ws.id);
     for (const row of insertWithIdRows('meet_entry_plans', ws.id, ws.meetEntryPlans ?? [])) {
+      uniquePlan(row.id);
       await client.query(
         'INSERT INTO meet_entry_plans(id, workspace_id, position, data) VALUES($1,$2,$3,$4)',
         [row.id, row.workspace_id, row.position, row.data]
       );
     }
+    const uniqueAlias = createRowIdGuard('athlete_aliases', ws.id);
     for (const row of insertWithIdRows('athlete_aliases', ws.id, ws.athleteAliases ?? [])) {
+      uniqueAlias(row.id);
       await client.query(
         'INSERT INTO athlete_aliases(id, workspace_id, position, data) VALUES($1,$2,$3,$4)',
         [row.id, row.workspace_id, row.position, row.data]

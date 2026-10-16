@@ -37,9 +37,9 @@
       "reason": "describe.skipIf(!realPresent), the 'ALL the real captures' block. Reads data/swimcloud-captures/captures (gitignored)."
     },
     "tests/workspaceScopePg.test.ts": {
-      "local": 8,
+      "local": 10,
       "ci": 0,
-      "reason": "describe.skipIf(!pgUrl). Cross-tenant scope, duplicate id, version conflict, global-replace ownership and the newer-schema refusal need a real PostgreSQL server (PG_TEST_URL or DATABASE_URL). CI sets PG_TEST_URL on the postgres:16 service; a developer machine usually has no database."
+      "reason": "describe.skipIf(!pgUrl). Cross-tenant scope, duplicate id, version conflict, global-replace ownership and the newer-schema refusal and the v9 per-workspace row-id key need a real PostgreSQL server (PG_TEST_URL or DATABASE_URL). CI sets PG_TEST_URL on the postgres:16 service; a developer machine usually has no database."
     },
     "tests/rosterOnlyRankCollapse.test.ts": {
       "local": 0,

@@ -12,11 +12,13 @@ import {
   insertPositionalRows,
   insertResultsRows,
   insertWithIdRows,
+  createRowIdGuard,
   versionConflictError,
   workspaceRowValues,
   type WorkspaceScope,
 } from './workspacePersistence';
 import { assertSchemaNotNewer } from './schemaGuard';
+import { migrateSqliteChildKeys } from './childKeyMigration';
 
 export class WorkspaceService {
   private db: DatabaseSync;
@@ -83,6 +85,14 @@ export class WorkspaceService {
       } catch {
         /* table already exists */
       }
+    }
+    // v9: key the id-keyed child tables on (workspace_id, id). Not in the swallow-all loops
+    // above: a rebuild that stops halfway must throw, and the stamp below must not follow it.
+    try {
+      migrateSqliteChildKeys(this.db);
+    } catch (err) {
+      this.db.close();
+      throw err;
     }
     this.db
       .prepare('INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)')
@@ -486,10 +496,13 @@ export class WorkspaceService {
     const insertResult = this.db.prepare(
       'INSERT INTO meet_results(id, workspace_id, gender, position, data) VALUES(?, ?, ?, ?, ?)'
     );
+    const unique = createRowIdGuard('meet_results', ws.id);
     for (const row of insertResultsRows(ws.id, ws.menResults ?? [], 'Men')) {
+      unique(row.id);
       insertResult.run(row.id, row.workspace_id, row.gender, row.position, row.data);
     }
     for (const row of insertResultsRows(ws.id, ws.womenResults ?? [], 'Women')) {
+      unique(row.id);
       insertResult.run(row.id, row.workspace_id, row.gender, row.position, row.data);
     }
   }
@@ -500,10 +513,13 @@ export class WorkspaceService {
     );
     const sourceMen = ws.sourceMenResults ?? ws.menResults ?? [];
     const sourceWomen = ws.sourceWomenResults ?? ws.womenResults ?? [];
+    const unique = createRowIdGuard('source_meet_results', ws.id);
     for (const row of insertResultsRows(ws.id, sourceMen, 'Men')) {
+      unique(`src-${row.id}`);
       insertSource.run(`src-${row.id}`, row.workspace_id, row.gender, row.position, row.data);
     }
     for (const row of insertResultsRows(ws.id, sourceWomen, 'Women')) {
+      unique(`src-${row.id}`);
       insertSource.run(`src-${row.id}`, row.workspace_id, row.gender, row.position, row.data);
     }
   }
@@ -512,10 +528,13 @@ export class WorkspaceService {
     const insertPsych = this.db.prepare(
       'INSERT INTO psych_results(id, workspace_id, gender, position, data) VALUES(?, ?, ?, ?, ?)'
     );
+    const unique = createRowIdGuard('psych_results', ws.id);
     for (const row of insertResultsRows(ws.id, ws.psychMenResults ?? [], 'Men')) {
+      unique(row.id);
       insertPsych.run(row.id, row.workspace_id, row.gender, row.position, row.data);
     }
     for (const row of insertResultsRows(ws.id, ws.psychWomenResults ?? [], 'Women')) {
+      unique(row.id);
       insertPsych.run(row.id, row.workspace_id, row.gender, row.position, row.data);
     }
   }
@@ -523,13 +542,19 @@ export class WorkspaceService {
   private insertWithIdChildRows(ws: Workspace): void {
     const insertWithId = (table: string) =>
       this.db.prepare(`INSERT INTO ${table}(id, workspace_id, position, data) VALUES(?, ?, ?, ?)`);
+    const uniqueRecruit = createRowIdGuard('recruits', ws.id);
     for (const row of insertWithIdRows('recruits', ws.id, ws.recruits ?? [])) {
+      uniqueRecruit(row.id);
       insertWithId('recruits').run(row.id, row.workspace_id, row.position, row.data);
     }
+    const uniquePlan = createRowIdGuard('meet_entry_plans', ws.id);
     for (const row of insertWithIdRows('meet_entry_plans', ws.id, ws.meetEntryPlans ?? [])) {
+      uniquePlan(row.id);
       insertWithId('meet_entry_plans').run(row.id, row.workspace_id, row.position, row.data);
     }
+    const uniqueAlias = createRowIdGuard('athlete_aliases', ws.id);
     for (const row of insertWithIdRows('athlete_aliases', ws.id, ws.athleteAliases ?? [])) {
+      uniqueAlias(row.id);
       insertWithId('athlete_aliases').run(row.id, row.workspace_id, row.position, row.data);
     }
   }

@@ -32,6 +32,7 @@ import type { AuthedRequest } from '../authMiddleware.ts';
 import { apiError } from '../middleware/apiError.ts';
 import type { AuthService, ShareLinkService } from '../../../../packages/db/src/AuthService.ts';
 import type { WorkspaceScope } from '../../../../packages/db/src/workspacePersistence.ts';
+import { DUPLICATE_ROW_ID_CODE } from '../../../../packages/db/src/workspacePersistence.ts';
 
 export interface WorkspaceRoutesDeps {
   repo: WorkspaceRepo;
@@ -199,6 +200,9 @@ function registerWorkspaceCrudRoutes(
           'A workspace with this id already exists.'
         );
       }
+      if (errorCode(err) === DUPLICATE_ROW_ID_CODE) {
+        return apiError(res, 409, DUPLICATE_ROW_ID_CODE, 'A row id is used twice in one workspace.', String(err));
+      }
       apiError(res, 500, 'WORKSPACE_CREATE_FAILED', 'Failed to create workspace', String(err));
     }
   });
@@ -288,6 +292,9 @@ function registerWorkspaceCrudRoutes(
     } catch (err) {
       if (errorCode(err) === VERSION_CONFLICT_CODE) {
         return apiError(res, 409, VERSION_CONFLICT_CODE, 'Version conflict — refresh and retry');
+      }
+      if (errorCode(err) === DUPLICATE_ROW_ID_CODE) {
+        return apiError(res, 409, DUPLICATE_ROW_ID_CODE, 'A row id is used twice in one workspace.', String(err));
       }
       apiError(res, 500, 'WORKSPACE_UPDATE_FAILED', 'Failed to update workspace', String(err));
     }

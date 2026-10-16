@@ -109,6 +109,30 @@ export function versionConflictError(): CodedError {
   return err;
 }
 
+/** `code` on the error a store throws when one payload names the same row id twice in one child table. */
+export const DUPLICATE_ROW_ID_CODE = 'DUPLICATE_ROW_ID';
+
+export function duplicateRowIdError(table: string, workspaceId: string, id: string): CodedError {
+  const err = new Error(
+    `Row id "${id}" appears more than once in ${table} of workspace "${workspaceId}". A row id must be unique within its workspace.`
+  ) as CodedError;
+  err.code = DUPLICATE_ROW_ID_CODE;
+  return err;
+}
+
+/**
+ * One call per id-keyed child table per write. Throws on the second sighting of an id,
+ * so a payload that cannot be stored fails with a named 409 and not a bare constraint error.
+ * An id only has to be unique inside its workspace: the same id in another workspace is fine.
+ */
+export function createRowIdGuard(table: string, workspaceId: string): (id: string) => void {
+  const seen = new Set<string>();
+  return id => {
+    if (seen.has(id)) throw duplicateRowIdError(table, workspaceId, id);
+    seen.add(id);
+  };
+}
+
 export function duplicateWorkspaceError(id: string): CodedError {
   const err = new Error(`A workspace with id "${id}" already exists.`) as CodedError;
   err.code = DUPLICATE_WORKSPACE_ID_CODE;

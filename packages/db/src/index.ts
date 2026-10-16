@@ -13,12 +13,15 @@ export {
   type CatalogTable,
 } from './schema';
 export { PG_SCHEMA_VERSION, CREATE_PG_TABLES_SQL } from './pgSchema';
+export { ID_KEYED_CHILD_TABLES, migrateSqliteChildKeys, migratePgChildKeys } from './childKeyMigration';
 export type { WorkspaceScope } from './workspacePersistence';
 export {
   VERSION_CONFLICT_CODE,
   DUPLICATE_WORKSPACE_ID_CODE,
+  DUPLICATE_ROW_ID_CODE,
   PROTECTED_PATCH_FIELDS,
   duplicateWorkspaceError,
+  duplicateRowIdError,
   versionConflictError,
   stripProtectedPatchFields,
   workspaceVersionOf,

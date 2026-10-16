@@ -25,6 +25,8 @@ import { PgRepo } from '../apps/shell/lib/workspaceRepo';
 import { PgWorkspaceService } from '../packages/db/src/PgWorkspaceService';
 import { ShareLinkService } from '../packages/db/src/AuthService';
 import { PG_SCHEMA_VERSION } from '../packages/db/src/pgSchema';
+import { ID_KEYED_CHILD_TABLES } from '../packages/db/src/childKeyMigration';
+import type { Workspace } from '../packages/core/src/types';
 import { SchemaVersionError } from '../packages/db/src/schemaGuard';
 import { EXPECTED_VERSION_HEADER } from '../packages/core/src/api/saveSequence';
 import type { ScoringSettings } from '../packages/core/src/types';
@@ -39,6 +41,9 @@ describe.skipIf(!pgUrl)(
     const B = { userId: `u-pgs-b-${run}`, teamId: `t-pgs-b-${run}` };
     const wsA = `ws-pgs-a-${run}`;
     const wsB = `ws-pgs-b-${run}`;
+    const wsKeyOrig = `ws-pgk-orig-${run}`;
+    const wsKeyCopy = `ws-pgk-copy-${run}`;
+    const wsKeyDup = `ws-pgk-dup-${run}`;
     const users: Record<string, { id: string; email: string; displayName: string; teamId: string }> = {
       alice: { id: A.userId, email: `${A.userId}@x.test`, displayName: 'A', teamId: A.teamId },
       bob: { id: B.userId, email: `${B.userId}@x.test`, displayName: 'B', teamId: B.teamId },
@@ -108,7 +113,7 @@ describe.skipIf(!pgUrl)(
     afterAll(async () => {
       await new Promise<void>(r => server?.close(() => r()));
       if (admin) {
-        await admin.query('DELETE FROM workspaces WHERE id = ANY($1)', [[wsA, wsB]]);
+        await admin.query('DELETE FROM workspaces WHERE id = ANY($1)', [[wsA, wsB, wsKeyOrig, wsKeyCopy, wsKeyDup]]);
         await admin.query('DELETE FROM teams WHERE id = ANY($1)', [[A.teamId, B.teamId]]);
         await admin.query('DELETE FROM users WHERE id = ANY($1)', [[A.userId, B.userId]]);
         await admin.end();
@@ -229,6 +234,127 @@ describe.skipIf(!pgUrl)(
       } finally {
         await svc.close();
       }
+    });
+
+    // Schema v9: a child-table row id is unique per workspace (key is (workspace_id, id)),
+    // not store-wide. Needs CREATE DATABASE, like the P7 test, because it re-keys the tables.
+    it('v9: a v8-keyed database is re-keyed, keeps every row, and then accepts reused row ids', async () => {
+      const dbName = `omni_v9_${Date.now().toString(36)}_${process.pid}`;
+      await admin.query(`CREATE DATABASE ${dbName}`);
+      const scopedUrl = new URL(pgUrl as string);
+      scopedUrl.pathname = `/${dbName}`;
+      const probe = new pg.Pool({ connectionString: scopedUrl.toString() });
+      const keyWidths = async () => {
+        const out: number[] = [];
+        for (const { table } of ID_KEYED_CHILD_TABLES) {
+          const r = await probe.query(
+            "SELECT array_length(conkey, 1) AS w FROM pg_constraint WHERE conrelid = to_regclass($1) AND contype = 'p'",
+            [table]
+          );
+          out.push(Number(r.rows[0].w));
+        }
+        return out;
+      };
+      try {
+        const first = new PgWorkspaceService({ connectionString: scopedUrl.toString() });
+        await first.init();
+        await first.close();
+        expect(await keyWidths()).toEqual([2, 2, 2, 2, 2, 2]);
+
+        // Put the database back to its v8 shape: key on id alone, stamped 8, with rows in it.
+        for (const { table } of ID_KEYED_CHILD_TABLES) {
+          await probe.query(`ALTER TABLE ${table} DROP CONSTRAINT ${table}_pkey`);
+          await probe.query(`ALTER TABLE ${table} ADD PRIMARY KEY (id)`);
+        }
+        await probe.query("UPDATE meta SET value = '8' WHERE key = 'schema_version'");
+        expect(await keyWidths()).toEqual([1, 1, 1, 1, 1, 1]);
+        await probe.query("INSERT INTO workspaces(id, name, created_at) VALUES('v9-a', 'A', 1)");
+        for (const { table, gender } of ID_KEYED_CHILD_TABLES) {
+          if (gender) {
+            await probe.query(
+              `INSERT INTO ${table}(id, workspace_id, gender, position, data) VALUES($1,'v9-a','Men',0,'{"id":"r1","gender":"Men"}')`,
+              [`${table}-r1`]
+            );
+          } else {
+            await probe.query(
+              `INSERT INTO ${table}(id, workspace_id, position, data) VALUES($1,'v9-a',0,'{"id":"r1"}')`,
+              [`${table}-r1`]
+            );
+          }
+        }
+
+        const svc = new PgWorkspaceService({ connectionString: scopedUrl.toString() });
+        try {
+          await svc.init();
+          expect(await keyWidths()).toEqual([2, 2, 2, 2, 2, 2]);
+          const stamp = await probe.query("SELECT value FROM meta WHERE key = 'schema_version'");
+          expect(stamp.rows[0].value).toBe(String(PG_SCHEMA_VERSION));
+          for (const { table } of ID_KEYED_CHILD_TABLES) {
+            const n = await probe.query(`SELECT COUNT(*)::int AS n FROM ${table} WHERE workspace_id = 'v9-a'`);
+            expect(n.rows[0].n, table).toBe(1);
+          }
+          // A second init is a no-op.
+          await svc.init();
+          expect(await keyWidths()).toEqual([2, 2, 2, 2, 2, 2]);
+
+          // The create that used to fail: another workspace, the same row ids.
+          const reused = {
+            id: 'v9-b',
+            name: 'B',
+            createdAt: 2,
+            menResults: [{ id: 'meet_results-r1', gender: 'Men' }],
+            recruits: [{ id: 'recruits-r1' }],
+          } as unknown as Workspace;
+          await svc.createWorkspace(reused);
+          const back = await svc.getWorkspace('v9-b');
+          expect(back?.menResults).toHaveLength(1);
+          expect(back?.recruits).toHaveLength(1);
+          expect((await svc.getWorkspace('v9-a'))?.menResults).toHaveLength(1);
+        } finally {
+          await svc.close();
+        }
+      } finally {
+        await probe.end();
+        await admin.query(`DROP DATABASE IF EXISTS ${dbName} WITH (FORCE)`);
+      }
+    });
+
+    it('v9: creating a copy that reuses every row id is 200; an id used twice in one workspace is a coded 409', async () => {
+      const rows = (id: string, name: string) => ({
+        id,
+        name,
+        createdAt: 1,
+        menResults: [{ id: 'k-m1', name: 'A', gender: 'Men', event: '50 Y Free', time: '21.00' }],
+        womenResults: [{ id: 'k-w1', name: 'B', gender: 'Women', event: '50 Y Free', time: '23.00' }],
+        sourceMenResults: [{ id: 'k-m1', name: 'A', gender: 'Men', event: '50 Y Free', time: '21.00' }],
+        recruits: [{ id: 'k-rec1', name: 'R' }],
+        meetEntryPlans: [{ id: 'k-plan1' }],
+        athleteAliases: [{ id: 'k-alias1' }],
+      });
+      expect((await call('alice', 'POST', '/api/workspaces', rows(wsKeyOrig, 'Original'))).status).toBe(200);
+      expect((await call('alice', 'POST', '/api/workspaces', rows(wsKeyCopy, 'Copy'))).status).toBe(200);
+      const list = (await call('alice', 'GET', '/api/workspaces')).json as Array<Record<string, unknown[]> & { id: string }>;
+      for (const id of [wsKeyOrig, wsKeyCopy]) {
+        const w = list.find(x => x.id === id)!;
+        expect(w.menResults, id).toHaveLength(1);
+        expect(w.womenResults, id).toHaveLength(1);
+        expect(w.recruits, id).toHaveLength(1);
+        expect(w.meetEntryPlans, id).toHaveLength(1);
+        expect(w.athleteAliases, id).toHaveLength(1);
+      }
+
+      const dup = {
+        ...rows(wsKeyDup, 'Dup'),
+        menResults: [
+          { id: 'same', name: 'A', gender: 'Men' },
+          { id: 'same', name: 'B', gender: 'Men' },
+        ],
+      };
+      const refused = await call('alice', 'POST', '/api/workspaces', dup);
+      expect(refused.status).toBe(409);
+      expect(refused.json.code).toBe('DUPLICATE_ROW_ID');
+      const after = (await call('alice', 'GET', '/api/workspaces')).json as Array<{ id: string }>;
+      expect(after.some(w => w.id === wsKeyDup)).toBe(false);
     });
 
     it('P7: a database stamped newer is refused and left untouched (own throwaway database)', async () => {
