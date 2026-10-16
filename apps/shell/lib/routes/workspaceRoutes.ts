@@ -363,6 +363,11 @@ function registerWorkspaceBackupAndSnapshotRoutes(
       res.json({ success: true, file, workspaces: restored });
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
+      // A backup that names one row id twice in a workspace cannot be stored. Nothing was
+      // replaced (the write is one transaction), and the file is what must change.
+      if (errorCode(err) === DUPLICATE_ROW_ID_CODE) {
+        return apiError(res, 409, DUPLICATE_ROW_ID_CODE, 'A row id is used twice in one workspace.', message);
+      }
       // A rejected name and a corrupt file are both the caller's problem, not a
       // server fault; anything else is ours.
       const isCallerError = /Not a backup this app wrote|Backup file/.test(message);
@@ -435,6 +440,9 @@ function registerWorkspaceBackupAndSnapshotRoutes(
       if (!restored) return apiError(res, 404, 'SNAPSHOT_NOT_FOUND', 'Snapshot not found');
       res.json(normalizeWorkspaceResults(restored));
     } catch (err) {
+      if (errorCode(err) === DUPLICATE_ROW_ID_CODE) {
+        return apiError(res, 409, DUPLICATE_ROW_ID_CODE, 'A row id is used twice in one workspace.', String(err));
+      }
       apiError(res, 500, 'SNAPSHOT_RESTORE_FAILED', 'Restore failed', String(err));
     }
   });

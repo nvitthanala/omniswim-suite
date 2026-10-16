@@ -20,14 +20,19 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import express from 'express';
 import { DatabaseSync } from 'node:sqlite';
 import type { Server } from 'node:http';
-import { promises as fsp } from 'node:fs';
+import { promises as fsp, mkdirSync, readdirSync, writeFileSync } from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { registerWorkspaceRoutes } from '../apps/shell/lib/routes/workspaceRoutes';
 import { SqliteRepo } from '../apps/shell/lib/workspaceRepo';
 import { WorkspaceService } from '../packages/db/src/WorkspaceService';
 import { SCHEMA_VERSION } from '../packages/db/src/schema';
-import { ID_KEYED_CHILD_TABLES } from '../packages/db/src/childKeyMigration';
+import {
+  ID_KEYED_CHILD_TABLES,
+  CHILD_KEY_MIGRATION_BACKUP_FAILED_CODE,
+  CHILD_KEY_MIGRATION_BLOCKED_CODE,
+  migrateSqliteChildKeys,
+} from '../packages/db/src/childKeyMigration';
 import { DUPLICATE_ROW_ID_CODE } from '../packages/db/src/workspacePersistence';
 import type { ScoringSettings, Workspace } from '../packages/core/src/types';
 
@@ -218,28 +223,124 @@ describe('schema v9 migration (SQLite)', () => {
     }
   });
 
-  it('rolls back and does not stamp 9 when a row cannot be copied, then throws', () => {
-    const file = path.join(dir, 'broken.db');
-    makeV8File(file, [workspaceWithRows('ws-a', 'Original')]);
-    // The v8 key allowed a NULL id (SQLite's historic TEXT PRIMARY KEY quirk). v9 forbids it, so the
-    // copy of this one table fails. Nothing may be half-migrated.
-    const db = new DatabaseSync(file);
-    db.prepare('INSERT INTO recruits(id, workspace_id, position, data) VALUES(NULL, ?, 9, ?)').run('ws-a', '{}');
-    db.close();
+  const preV9Copies = () => fsReaddir().filter(f => /-pre-v9-/.test(f));
+  const fsReaddir = () => readdirSync(dir);
 
-    expect(() => new WorkspaceService(file)).toThrow();
+  /** The v8 file is exactly as it was: old key on every table, stamp 8, no half-built table. */
+  function expectV8Intact(file: string, rows: { meet_results: number }) {
     expect(stamp(file)).toBe('8');
     for (const table of TABLES) {
       expect(tableShape(file, table).find(c => c.name === 'id')?.pk, table).toBe(1);
     }
     const check = new DatabaseSync(file);
-    const left = check
-      .prepare("SELECT name FROM sqlite_master WHERE name LIKE '%__v9'")
-      .all() as Array<{ name: string }>;
+    const left = check.prepare("SELECT name FROM sqlite_master WHERE name LIKE '%__v9'").all();
     const meetRows = check.prepare('SELECT COUNT(*) AS n FROM meet_results').get() as { n: number };
     check.close();
     expect(left).toEqual([]);
-    expect(meetRows.n).toBe(3);
+    expect(meetRows.n).toBe(rows.meet_results);
+  }
+
+  it('writes a VACUUM INTO copy of the v8 file before it rebuilds, and none when nothing is rebuilt', () => {
+    const file = path.join(dir, 'v8.db');
+    makeV8File(file, [workspaceWithRows('ws-a', 'Original')]);
+    new WorkspaceService(file).close();
+    const copies = preV9Copies();
+    expect(copies).toHaveLength(1);
+    const copy = path.join(dir, copies[0]!);
+    expect(copies[0]).toMatch(/^v8-pre-v9-\d{8}T\d{6}Z\.db$/);
+    // The copy is a whole database in its v8 state: old key, stamp 8, every row.
+    expectV8Intact(copy, { meet_results: 3 });
+    // The live file moved on.
+    expect(stamp(file)).toBe('9');
+
+    // Reopening, and a fresh database, write no copy.
+    new WorkspaceService(file).close();
+    new WorkspaceService(path.join(dir, 'fresh.db')).close();
+    expect(preV9Copies()).toHaveLength(1);
+  });
+
+  it('does not migrate, and says which path, when the pre-migration copy cannot be written', () => {
+    const file = path.join(dir, 'nocopy.db');
+    makeV8File(file, [workspaceWithRows('ws-a', 'Original')]);
+    const db = new DatabaseSync(file);
+    const target = path.join(dir, 'missing-folder', 'copy.db');
+    let caught: (Error & { code?: string }) | undefined;
+    try {
+      migrateSqliteChildKeys(db, { backupPath: target });
+    } catch (err) {
+      caught = err as Error & { code?: string };
+    }
+    db.close();
+    expect(caught?.code).toBe(CHILD_KEY_MIGRATION_BACKUP_FAILED_CODE);
+    expect(caught?.message).toContain(target);
+    expect(caught?.message).toContain('Nothing was changed');
+    expectV8Intact(file, { meet_results: 3 });
+  });
+
+  it('refuses, naming table, count and workspace id, when a row has no workspace; leaves v8 intact', () => {
+    const file = path.join(dir, 'orphan.db');
+    makeV8File(file, [workspaceWithRows('ws-a', 'Original')]);
+    const db = new DatabaseSync(file);
+    db.exec('PRAGMA foreign_keys = OFF');
+    db.prepare(
+      "INSERT INTO meet_results(id, workspace_id, gender, position, data) VALUES('lost-1', 'ghost-ws', 'Men', 0, '{}')"
+    ).run();
+    db.close();
+
+    let caught: (Error & { code?: string }) | undefined;
+    try {
+      new WorkspaceService(file);
+    } catch (err) {
+      caught = err as Error & { code?: string };
+    }
+    expect(caught?.code).toBe(CHILD_KEY_MIGRATION_BLOCKED_CODE);
+    expect(caught?.message).toContain('meet_results: 1 row(s) belong to a workspace that does not exist');
+    expect(caught?.message).toContain('"ghost-ws"');
+    expect(caught?.message).toContain('Restore a backup');
+    expectV8Intact(file, { meet_results: 4 });
+    // Refused before any copy is written.
+    expect(preV9Copies()).toEqual([]);
+  });
+
+  it('refuses, naming table and count, when a row has a NULL id; leaves v8 intact', () => {
+    const file = path.join(dir, 'nullid.db');
+    makeV8File(file, [workspaceWithRows('ws-a', 'Original')]);
+    // The v8 key allowed a NULL id (SQLite's historic TEXT PRIMARY KEY quirk). v9 forbids it.
+    const db = new DatabaseSync(file);
+    db.prepare('INSERT INTO recruits(id, workspace_id, position, data) VALUES(NULL, ?, 9, ?)').run('ws-a', '{}');
+    db.close();
+
+    let caught: (Error & { code?: string }) | undefined;
+    try {
+      new WorkspaceService(file);
+    } catch (err) {
+      caught = err as Error & { code?: string };
+    }
+    expect(caught?.code).toBe(CHILD_KEY_MIGRATION_BLOCKED_CODE);
+    expect(caught?.message).toContain('recruits: 1 row(s) have a NULL id');
+    expect(caught?.message).toContain('"ws-a"');
+    expectV8Intact(file, { meet_results: 3 });
+    const check = new DatabaseSync(file);
+    const kept = check.prepare('SELECT COUNT(*) AS n FROM recruits').get() as { n: number };
+    check.close();
+    expect(kept.n).toBe(2);
+    expect(preV9Copies()).toEqual([]);
+  });
+
+  it('rolls back every table already rebuilt when a later step fails, and does not stamp 9', () => {
+    const file = path.join(dir, 'midway.db');
+    makeV8File(file, [workspaceWithRows('ws-a', 'Original')]);
+    // A VIEW squatting on a scratch name makes DROP TABLE IF EXISTS fail AFTER meet_results,
+    // source_meet_results and psych_results were rebuilt inside the transaction.
+    const db = new DatabaseSync(file);
+    db.exec('CREATE VIEW recruits__v9 AS SELECT 1 AS x');
+    db.close();
+
+    expect(() => new WorkspaceService(file)).toThrow();
+    const check = new DatabaseSync(file);
+    check.exec('DROP VIEW recruits__v9');
+    check.close();
+    expectV8Intact(file, { meet_results: 3 });
   });
 });
 
@@ -337,5 +438,42 @@ describe('row ids on the SQLite store, over HTTP', () => {
     const after = (await http(`${url}/api/workspaces`, 'GET')).json.find((w: any) => w.id === 'keep');
     expect(keyed(after)).toEqual(keyed(ok));
     expect(after.version).toBe(1);
+  });
+
+  it('restoring a snapshot or a backup file that holds a repeated row id is a coded 409, not 404 or 500', async () => {
+    const url = await boot();
+    const ok = workspaceWithRows('keep', 'Keep');
+    expect((await http(`${url}/api/workspaces`, 'POST', ok)).status).toBe(200);
+    const dupRows = [
+      { id: 'same', name: 'A', gender: 'Men', event: '50 Y Free', time: '21.00' },
+      { id: 'same', name: 'B', gender: 'Men', event: '50 Y Free', time: '22.00' },
+    ];
+
+    // Snapshot whose stored blob names one row id twice.
+    const snap = await http(`${url}/api/workspaces/keep/snapshots`, 'POST', { label: 'before' });
+    expect(snap.status).toBe(200);
+    const raw = new DatabaseSync(path.join(dir, 'omniswim.db'));
+    const blob = JSON.parse((raw.prepare('SELECT blob FROM workspace_snapshots WHERE id = ?').get(snap.json.id) as { blob: string }).blob);
+    raw.prepare('UPDATE workspace_snapshots SET blob = ? WHERE id = ?').run(
+      JSON.stringify({ ...blob, menResults: dupRows }),
+      snap.json.id
+    );
+    raw.close();
+    const restoredSnap = await http(`${url}/api/snapshots/${snap.json.id}/restore`, 'POST');
+    expect(restoredSnap.status).toBe(409);
+    expect(restoredSnap.json.code).toBe(DUPLICATE_ROW_ID_CODE);
+
+    // Backup file with the same defect.
+    const backupDir = path.join(dir, 'backups');
+    mkdirSync(backupDir, { recursive: true });
+    const file = 'meets-manual-2026-01-01T00-00-00-000Z.json';
+    writeFileSync(path.join(backupDir, file), JSON.stringify([{ ...workspaceWithRows('keep', 'Keep'), menResults: dupRows }]));
+    const restoredFile = await http(`${url}/api/workspaces/restore`, 'POST', { file });
+    expect(restoredFile.status).toBe(409);
+    expect(restoredFile.json.code).toBe(DUPLICATE_ROW_ID_CODE);
+
+    // Nothing was replaced.
+    const after = (await http(`${url}/api/workspaces`, 'GET')).json.find((w: any) => w.id === 'keep');
+    expect(keyed(after)).toEqual(keyed(ok));
   });
 });

@@ -345,12 +345,14 @@ export class WorkspaceService {
     // Check scope before deserializing: the blob is a full workspace, so an
     // out-of-scope snapshot id must not pull another tenant's data into memory.
     if (!this.isInScope(row.workspace_id, scope)) return undefined;
+    let ws: Workspace;
     try {
-      const ws = JSON.parse(row.blob) as Workspace;
-      return this.updateWorkspace(row.workspace_id, ws, undefined, scope);
+      ws = JSON.parse(row.blob) as Workspace;
     } catch {
       return undefined;
     }
+    // Outside the try: a failed write (for example DUPLICATE_ROW_ID) is not "snapshot not found".
+    return this.updateWorkspace(row.workspace_id, ws, undefined, scope);
   }
 
   private buildScopeWhere(

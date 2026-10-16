@@ -204,6 +204,8 @@ Every backup is a full export of the workspaces as one JSON array, `data/backups
 
 **Restore from `OMNI_BACKUP_DIR`.** Copy the `meets-*.json` file into `data/backups/`, then restore it by name as above. To go back to a whole database copy instead, stop the server, delete `data/omniswim.db`, `data/omniswim.db-wal` and `data/omniswim.db-shm`, copy the chosen `omniswim-*.db` file to `data/omniswim.db`, and start the server. Prefer the JSON restore: it keeps a `pre-restore` safety copy and works while the server runs.
 
+**Schema v9 upgrade (row-id key).** The first start on schema version 9 re-keys six child tables to `(workspace_id, id)`. On SQLite the server first writes a full copy beside the database, `data/omniswim-pre-v9-<UTC stamp>.db`, and stops without migrating if it cannot write it. It also stops, changing nothing, and names the table, the count and the workspace ids when a row has no workspace or a NULL id. On PostgreSQL the upgrade makes no dump: run `pg_dump` before you start the new build.
+
 Source of this section: the doc comment above `DEFAULT_BACKUP_KEEP` in [apps/shell/lib/workspaceRepo.ts](apps/shell/lib/workspaceRepo.ts).
 
 ## Documentation
