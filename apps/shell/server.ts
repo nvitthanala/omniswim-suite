@@ -24,7 +24,7 @@ import {
   timingSafeTokenEquals,
 } from './lib/swimcloudCaptureRoutes.ts';
 import { installApiHostOriginGuard } from './lib/middleware/hostOriginGuard.ts';
-import { apiError } from './lib/middleware/apiError.ts';
+import { mountProductionStatic } from './lib/productionStatic.ts';
 import { apiErrorHandler } from './lib/middleware/apiErrorHandler.ts';
 import { mountPdfUploadGuards, parsePdfMaxBytesFromEnv } from './lib/middleware/parsePdfGuard.ts';
 import { ensurePythonEnv, PythonDepsError } from './lib/pythonEnv.ts';
@@ -538,13 +538,12 @@ async function startServer() {
       logServerReady();
     });
   } else {
-    app.use(express.static(path.join(PROJECT_ROOT, 'dist')));
-    app.use('/api', (_req, res) => {
-      apiError(res, 404, 'API_ROUTE_NOT_FOUND', 'API route not found — restart the server after updating');
-    });
-    // Express 5 (path-to-regexp 8) needs a named wildcard; the braces keep `/` matching.
-    app.get('/{*splat}', (_req, res) => {
-      res.sendFile(path.join(PROJECT_ROOT, 'dist', 'index.html'));
+    // Host-checked like /api (OMNI_ALLOWED_HOSTS; loopback names on PORT always pass).
+    mountProductionStatic(app, {
+      distDir: path.join(PROJECT_ROOT, 'dist'),
+      port: PORT,
+      allowedHostsEnv: process.env.OMNI_ALLOWED_HOSTS,
+      bindHost: HOST,
     });
 
     const httpServer = http.createServer(app);

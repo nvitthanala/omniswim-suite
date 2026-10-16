@@ -38,9 +38,11 @@
  *
  * ## What this does not cover
  *
- * Only `/api/*` is guarded. Vite dev HMR runs over the HTTP `upgrade` event, which
- * never reaches Express middleware. Non-API paths (the SPA, `/share/:token`) are
- * not guarded here; Vite applies its own `allowedHosts` check in dev.
+ * `createHostOriginGuard` guards `/api/*` only. Vite dev HMR runs over the HTTP
+ * `upgrade` event, which never reaches Express middleware. Non-API paths are
+ * guarded by Vite's own `allowedHosts` check in dev, and in production by
+ * `createStaticHostGuard` (same Host rule, no Origin rule: those requests are
+ * reads), which `mountProductionStatic` mounts before the static handler.
  */
 import type { Express, Request, RequestHandler, Response } from 'express';
 import { isLoopbackHost } from '../loopbackHost.ts';
@@ -149,15 +151,60 @@ function sendDenied(res: Response, status: 403 | 421, code: string, error: strin
   apiError(res, status, code, error, details);
 }
 
+/**
+ * The one Host rule: a loopback name on the server's own port, or an entry of the
+ * extra list (`OMNI_ALLOWED_HOSTS` plus a deliberate non-loopback bind).
+ */
+function hostNameAllowed(
+  hostname: string,
+  port: string,
+  loopbackPort: string,
+  extras: readonly HostParts[]
+): boolean {
+  if (LOOPBACK_NAMES.has(hostname) && port === loopbackPort) return true;
+  return extras.some(entry => entry.hostname === hostname && (entry.port === undefined || entry.port === port));
+}
+
+export interface StaticHostGuardOptions {
+  /** The port the server listens on. The loopback names are only valid on it. */
+  readonly port: number;
+  /** Extra allowed hosts. See {@link resolveAllowedHosts}. */
+  readonly extraHosts?: readonly HostParts[];
+}
+
+/**
+ * Host check for the non-API paths the production server answers (the SPA bundle,
+ * its assets and the history-fallback index page). Same rule as `/api`, so a
+ * DNS-rebound page cannot read the app from the loopback server. A refused request
+ * gets a plain-text 421: these are page loads, not JSON calls.
+ */
+export function createStaticHostGuard(options: StaticHostGuardOptions): RequestHandler {
+  const extras = options.extraHosts ?? [];
+  const loopbackPort = String(options.port);
+  return (req, res, next) => {
+    const host = parseHostHeader(req.headers.host);
+    if (host !== undefined && hostNameAllowed(host.hostname, host.port ?? '80', loopbackPort, extras)) {
+      next();
+      return;
+    }
+    const shown = String(req.headers.host ?? '(none)').slice(0, 80);
+    res
+      .status(421)
+      .type('text/plain')
+      .send(
+        `Host not allowed. This server answers requests addressed to localhost, 127.0.0.1 or [::1] on port ${options.port}. ` +
+          `To allow ${JSON.stringify(shown)}, add it to OMNI_ALLOWED_HOSTS and restart.`
+      );
+  };
+}
+
 export function createHostOriginGuard(options: HostOriginGuardOptions): RequestHandler {
   const extras = options.extraHosts ?? [];
   const loopbackPort = String(options.port);
   const prefix = options.captureRoutePrefix.toLowerCase();
 
-  const hostAllowed = (hostname: string, port: string): boolean => {
-    if (LOOPBACK_NAMES.has(hostname) && port === loopbackPort) return true;
-    return extras.some(entry => entry.hostname === hostname && (entry.port === undefined || entry.port === port));
-  };
+  const hostAllowed = (hostname: string, port: string): boolean =>
+    hostNameAllowed(hostname, port, loopbackPort, extras);
 
   const isCapturePath = (req: Request): boolean => {
     // `split` always returns at least one element, so the fallback is never taken.
