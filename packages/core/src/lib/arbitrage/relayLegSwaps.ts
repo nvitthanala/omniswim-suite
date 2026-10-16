@@ -35,6 +35,7 @@ import {
   swimmerMatchesRelayLeg,
   upsertRelayLegOverride,
   type RelayCandidateGenderIndex,
+  type RelayLegMatchSettings,
 } from '../relayLegMatching';
 import { relayLegHistoryCandidates } from '../relayLegHistoryCandidates';
 import { canAcceptAnotherEntry, countSwimmerEntries, entryCapKey } from '../swimmerEntryLimits';
@@ -495,9 +496,10 @@ function resolveClockHoldTime(
   legIndex: number,
   outAthlete: string,
   legRow: SwimmerResult | undefined,
-  team: string
+  team: string,
+  settings: RelayLegMatchSettings
 ): string | undefined {
-  const departedIndiv = findDepartedLegSwim(results, outAthlete, relayEvent, legIndex, team);
+  const departedIndiv = findDepartedLegSwim(results, outAthlete, relayEvent, legIndex, team, settings);
   if (departedIndiv && Number.isFinite(convertTimeToSeconds(departedIndiv.time))) {
     return departedIndiv.time;
   }
@@ -541,7 +543,8 @@ function buildLegTarget(
       legIndex,
       outAthlete,
       legRow,
-      entry.template.team
+      entry.template.team,
+      relayLegMatchSettings(ctx.workspace)
     ),
   };
 }

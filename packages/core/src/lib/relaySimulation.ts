@@ -34,7 +34,8 @@ import {
 } from './relayLegMatching';
 import { convertTimeToSeconds, formatSecondsToTime } from './timeFormat';
 import { normalizeSwimmerName, canonicalSwimmerName, isGraduatingClassYear } from './swimmerNames';
-import { parseRankInt } from './scoringRules';
+import { isTimeTrialSwim, parseRankInt } from './scoringRules';
+import { relayLegsAllowTimeTrials } from './scoringDefaults';
 import { relayTeamClock, relayEntryLegSignature } from './relayScoring';
 
 /**
@@ -71,25 +72,39 @@ function relayGroupKey(r: SwimmerResult): string {
  * swimmer, and before R1 (plans/2026-09-24) the first one in `results` order
  * won. Names compare by `canonicalSwimmerName`. Rows are searched in `results`
  * order and the first match wins.
+ *
+ * A time-trial swim (`isTimeTrialSwim`) is not the baseline unless
+ * `settings.relayLegsAllowTimeTrials` is on (user decision D9). It is left out
+ * before the search, so the swimmer's next matching swim stands in, and a
+ * swimmer whose only swim at the leg is a time trial has none: the caller then
+ * measures against the leg's recorded split. `settings.scoredEventNumberMax`
+ * is the meet's scored-event boundary, as in `isTimeTrialSwim`. Omitted, the
+ * setting is off and no boundary applies. Both callers pass the same settings
+ * (`simulateRoster`'s `relayLegSettings`, and `relayLegMatchSettings` of the
+ * workspace in the swap ranking), so the held clock and the subtracted time
+ * stay one time.
  */
 export function findDepartedLegSwim(
   results: SwimmerResult[],
   legName: string,
   relayEvent: string,
   legIndex: number,
-  team: string
+  team: string,
+  settings?: RelayLegMatchSettings
 ): SwimmerResult | undefined {
   const { legDistanceYards, stroke } = relayLegRequirements(relayEvent, legIndex);
   // A leg index with no stroke matches no event.
   if (stroke === undefined) return undefined;
   const nameKey = canonicalSwimmerName(legName);
   const teamKey = String(team ?? '').trim();
+  const allowTimeTrials = relayLegsAllowTimeTrials(settings);
   return results.find(
     s =>
       !s.isRelay &&
       String(s.team ?? '').trim() === teamKey &&
       canonicalSwimmerName(s.name) === nameKey &&
-      isRelayLegEvent(s.event, legDistanceYards, stroke)
+      isRelayLegEvent(s.event, legDistanceYards, stroke) &&
+      (allowTimeTrials || !isTimeTrialSwim(s, settings?.scoredEventNumberMax))
   );
 }
 
@@ -258,7 +273,8 @@ function resolveRelayLegs(
       leg.name,
       template.event,
       index,
-      template.team
+      template.team,
+      relayLegSettings
     );
 
     // `index` is the loop counter, so it always has a stroke.
