@@ -152,9 +152,10 @@ export type RelayLegSwap = {
   /**
    * manualLegTime the override carries so the relay team clock is held constant
    * (the departed leg's split). Points are placement-based; holding the clock
-   * keeps the delta free of simulateRoster's leg re-add artifact. Undefined when
-   * the leg has no prior split to hold (the substitution then leaves the clock
-   * unchanged on its own).
+   * keeps the delta free of simulateRoster's leg re-add artifact. A leg with no
+   * baseline (no swim, no split, no estimate) is left out of the ranking and
+   * named in `RelayLegSwapRanking.legsWithoutBaseline`, so a ranked swap always
+   * carries one.
    */
   clockLegTime?: string;
   deltaPoints: number;
@@ -168,6 +169,22 @@ export type RelayLegSwapRanking = {
   swaps: RelayLegSwap[];
   /** Number of (relay x leg x candidate) combinations re-scored. */
   candidatesEvaluated: number;
+  /**
+   * Replaceable legs left out of the ranking because they have no baseline: the departed swimmer has no
+   * swim at the leg and the leg row has no readable split or estimate. The clock cannot be held and a
+   * substitution cannot be priced, so no candidate is scored on the leg (and none is shown as a change of
+   * 0). Present only when at least one leg was left out; absent otherwise.
+   */
+  legsWithoutBaseline?: RelayLegWithoutBaseline[];
+};
+
+/** A leg {@link RelayLegSwapRanking.legsWithoutBaseline} names. */
+export type RelayLegWithoutBaseline = {
+  relayEntryKey: string;
+  relayEvent: string;
+  relayRank: number;
+  legIndex: number;
+  outAthlete: string;
 };
 
 export type RelayLegSwapOptions = {
@@ -701,7 +718,8 @@ function collectSwapsForLegTarget(
 function collectSwapsForEntry(
   ctx: LegSwapContext,
   entry: RelayEntry,
-  bestByKey: Map<string, RelayLegSwap>
+  bestByKey: Map<string, RelayLegSwap>,
+  unpriced: RelayLegWithoutBaseline[]
 ): number {
   const evLower = entry.template.event.toLowerCase();
   const legDistanceYards = relayLegDistanceYardsOfEvent(entry.template.event);
@@ -715,6 +733,18 @@ function collectSwapsForEntry(
     // Only a replaceable leg can gain points; healthy scorer legs are no-ops.
     if (!ctx.isReplaceableLeg(entry.legNames[legIndex] ?? '')) continue;
     const target = buildLegTarget(ctx, entry, legIndex, evLower, legDistanceYards, onRelay);
+    // No baseline, no clock to hold: the substitution would re-score as "no change" for every candidate.
+    // Say so instead (`simulateRoster` leaves the same relay's team time `NT`).
+    if (target.clockLegTime === undefined || !Number.isFinite(convertTimeToSeconds(target.clockLegTime))) {
+      unpriced.push({
+        relayEntryKey: entry.entryKey,
+        relayEvent: entry.template.event,
+        relayRank: Number(entry.template.rank) || 0,
+        legIndex,
+        outAthlete: target.outAthlete,
+      });
+      continue;
+    }
     evaluated += collectSwapsForLegTarget(ctx, target, bestByKey);
   }
   return evaluated;
@@ -799,13 +829,19 @@ export function rankRelayLegSwaps(
 
   const ctx = buildLegSwapContext(workspace, opts, team, gender, merged, results);
   const bestByKey = new Map<string, RelayLegSwap>();
+  const unpriced: RelayLegWithoutBaseline[] = [];
   let candidatesEvaluated = 0;
   for (const entry of relayEntries) {
-    candidatesEvaluated += collectSwapsForEntry(ctx, entry, bestByKey);
+    candidatesEvaluated += collectSwapsForEntry(ctx, entry, bestByKey, unpriced);
   }
 
   const swaps = [...bestByKey.values()].sort((a, b) => b.deltaPoints - a.deltaPoints);
-  return { pointsMeaningful: true, swaps, candidatesEvaluated };
+  return {
+    pointsMeaningful: true,
+    swaps,
+    candidatesEvaluated,
+    ...(unpriced.length > 0 ? { legsWithoutBaseline: unpriced } : {}),
+  };
 }
 
 /**

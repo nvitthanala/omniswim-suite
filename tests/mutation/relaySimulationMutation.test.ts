@@ -433,7 +433,8 @@ describe('clock hold and vacancy', () => {
   });
 
   it('an NT split is treated as no recorded split', () => {
-    // Fill: no departed time to measure against, so the clock does not move.
+    // Fill: no departed time to measure against, so the replacement is unpriced and the team time is NT.
+    // It is not "unchanged": that priced Sam as exactly as fast as the swimmer who left.
     const out = simulateRoster(
       [...relayLegs(i => (i === 0 ? { relayLegSplit: 'NT' } : {})), SAM],
       [],
@@ -441,10 +442,10 @@ describe('clock hold and vacancy', () => {
       undefined,
       [fill(0, { assigneeName: 'Sam Roe' })]
     );
-    expect(relayRows(out)[0]).toMatchObject({ name: 'Sam Roe', time: '1:40.00' });
+    expect(relayRows(out)[0]).toMatchObject({ name: 'Sam Roe', time: 'NT' });
   });
 
-  it('a fill with neither a recorded split nor an individual swim leaves the clock where it was', () => {
+  it('a fill with neither a recorded split nor an individual swim leaves the team time NT', () => {
     const out = simulateRoster(
       [...relayLegs(i => (i === 0 ? { relayLegSplit: undefined } : {})), SAM],
       [],
@@ -453,7 +454,7 @@ describe('clock hold and vacancy', () => {
       [fill(0, { assigneeName: 'Sam Roe' })]
     );
     const rows = relayRows(out);
-    expect(rows[0]).toMatchObject({ name: 'Sam Roe', time: '1:40.00', relayLegSplit: '24.00' });
+    expect(rows[0]).toMatchObject({ name: 'Sam Roe', time: 'NT', relayTeamTime: 'NT', relayLegSplit: '24.00' });
   });
 
   it('measures a theoretical meet leg against its estimate', () => {
@@ -599,8 +600,8 @@ describe('split bookkeeping', () => {
     );
     const rows = relayRows(out);
     expect(rows).toHaveLength(3);
-    // No row holds leg 3, so there is no recorded split: the clock stays 1:40.00.
-    expect(rows.map(r => r.time)).toEqual(['1:40.00', '1:40.00', '1:40.00']);
+    // No row holds leg 3, so there is no recorded split: the leg is unpriced and the team time is NT.
+    expect(rows.map(r => r.time)).toEqual(['NT', 'NT', 'NT']);
     expect(rows[0]?.relayNames?.[3]).toEqual({ name: 'Sam Roe', year: 'FR' });
     expect(rows[0]?.relayTeamSplits?.legTotals).toEqual(['25.00', '25.00', '25.00', '24.00']);
   });

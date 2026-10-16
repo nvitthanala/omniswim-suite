@@ -77,7 +77,10 @@ function relayGroupKey(r: SwimmerResult): string {
  * `settings.relayLegsAllowTimeTrials` is on (user decision D9). It is left out
  * before the search, so the swimmer's next matching swim stands in, and a
  * swimmer whose only swim at the leg is a time trial has none: the caller then
- * measures against the leg's recorded split. `settings.scoredEventNumberMax`
+ * measures against the leg's recorded split. A leg with neither a swim nor a
+ * recorded split has no baseline at all, and the callers leave it unpriced:
+ * `simulateRoster` writes the team time `NT`, and the swap ranking skips the
+ * leg. `settings.scoredEventNumberMax`
  * is the meet's scored-event boundary, as in `isTimeTrialSwim`. Omitted, the
  * setting is off and no boundary applies. Both callers pass the same settings
  * (`simulateRoster`'s `relayLegSettings`, and `relayLegMatchSettings` of the
@@ -233,13 +236,21 @@ function resolveRelayLegs(
     oldSplitSec: number | null,
     departedIndiv: SwimmerResult | undefined
   ) => {
-    let delta = newLegTimeSec - (oldSplitSec ?? newLegTimeSec);
-    if (departedIndiv && Number.isFinite(convertTimeToSeconds(departedIndiv.time))) {
-      delta = newLegTimeSec - convertTimeToSeconds(departedIndiv.time);
-    } else if (oldSplitSec != null && Number.isFinite(oldSplitSec)) {
-      delta = newLegTimeSec - oldSplitSec;
+    // The time the leg is measured against: the departed swimmer's own swim, else the leg's recorded split.
+    // With neither, the leg has no baseline and the replacement cannot be priced. The team time is then
+    // unknown: `Infinity`, which `formatSecondsToTime` writes as `NT`. It is never "no change", which
+    // priced the replacement as exactly as fast as the swimmer who left.
+    const departedSec = departedIndiv ? convertTimeToSeconds(departedIndiv.time) : Number.NaN;
+    const baselineSec = Number.isFinite(departedSec)
+      ? departedSec
+      : oldSplitSec != null && Number.isFinite(oldSplitSec)
+        ? oldSplitSec
+        : null;
+    if (baselineSec === null) {
+      newTimeSecs = Number.POSITIVE_INFINITY;
+      return;
     }
-    newTimeSecs += delta;
+    newTimeSecs += newLegTimeSec - baselineSec;
   };
 
   const legNeedsReplace = (leg: RelayLegCanonical): boolean =>

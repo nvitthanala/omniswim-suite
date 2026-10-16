@@ -10,6 +10,10 @@
  *
  * ## Fixtures
  *
+ * A leg with NO baseline (no swim, no split, no estimate) is unpriced, not "no change": the team time is
+ * `NT` (the codebase's absent time, `formatSecondsToTime(Infinity)`), and the swap ranking leaves the leg out
+ * and names it in `legsWithoutBaseline`.
+ *
  * Part 1 and 2 are CONSTRUCTED rows (a name, a team, an event, a time). Part 3 is REAL: the Henderson
  * State 4x100 Free Relay (place 1) of the 2026 NSISC Championships, from
  * tests/fixtures/nsisc-2026-relay-followups-r1.json. Scott Doll's real Event 35 100 Free (45.39) is
@@ -155,6 +159,33 @@ describe('simulateRoster measures a departed leg against the split, not a time t
     expect(clockOf([...legs, SAM, tt, official], ON)).toBe('1:39.50');
   });
 
+  describe('with no split on any leg', () => {
+    const noSplit = [0, 1, 2, 3].map(i => ({ ...leg(i), relayLegSplit: 'NT' }) as SwimmerResult);
+    const tt = swim('tt', 'Ann Lee', FREE50, '24.50', { isTimeTrial: true });
+    const timeOf = (rows: SwimmerResult[], settings?: { relayLegsAllowTimeTrials?: boolean }) =>
+      simulateRoster(rows, [], true, undefined, [override], new Set(), [], settings)
+        .filter(r => r.isRelay)
+        .sort((a, b) => (a.relayLegIndex ?? 0) - (b.relayLegIndex ?? 0));
+
+    it('prices the replacement from nothing: the team time is NT, not 1:40.00', () => {
+      const rows = timeOf([...noSplit, SAM, tt]);
+      expect(rows[0]).toMatchObject({ name: 'Sam Roe', time: 'NT', finalsTime: 'NT', relayTeamTime: 'NT' });
+      expect(rows.map(r => r.time)).toStrictEqual(['NT', 'NT', 'NT', 'NT']);
+      expect(rows[0]?.relayTeamSplits?.teamTotal).toBe('NT');
+      // The sentinel, never a number that reads as a time.
+      expect(JSON.stringify(rows.map(r => [r.time, r.relayTeamTime, r.relayTeamSplits]))).not.toMatch(/NaN|Infinity|0.00"/);
+    });
+
+    it('is priced once the time trial may be the baseline: 100 - (24.50 - 24.00) = 1:39.50', () => {
+      expect(timeOf([...noSplit, SAM, tt], ON)[0]?.time).toBe('1:39.50');
+    });
+
+    it('is priced from an official swim: 100 - (25.50 - 24.00) = 1:38.50', () => {
+      const official = swim('official', 'Ann Lee', FREE50, '25.50');
+      expect(timeOf([...noSplit, SAM, tt, official])[0]?.time).toBe('1:38.50');
+    });
+  });
+
   it('leaves the vacant-leg path unchanged: +3.00 s, split + 3.00 shown', () => {
     const tt = swim('tt', 'Ann Lee', FREE50, '24.50', { isTimeTrial: true });
     const out = simulateRoster([...legs, SAM, tt], [], true, undefined, [], new Set());
@@ -244,5 +275,83 @@ describe('the relay swap holds the departed clock the way simulateRoster subtrac
     ]) {
       expect(swapClock(opts).team, JSON.stringify(opts)).toEqual([swum?.relayTeamTime]);
     }
+  });
+});
+
+describe('the relay swap ranking leaves a leg with no baseline out (real relay)', () => {
+  const DOLL_LEG = 2;
+  function rank(opts: { stripSplit: boolean; timeTrial: boolean; dropIndividual?: boolean; allow?: boolean; split?: string }) {
+    const men = fixture.menResults
+      .filter(r => !(opts.dropIndividual === true && r.id === DOLL_100))
+      .map(r => {
+        if (r.id === DOLL_100 && opts.timeTrial) return { ...r, isTimeTrial: true } as Row;
+        const isDollLeg =
+          r.isRelay === true && r.team === TEAM && r.event === EVENT && r.rank === 1 && r.relayLegIndex === DOLL_LEG;
+        if (isDollLeg && opts.stripSplit) {
+          const { relayLegSplit: _s, relayLegSplitDetail: _d, relayTeamSplits: _t, ...rest } = r;
+          void _s;
+          void _d;
+          void _t;
+          return (opts.split === undefined ? rest : { ...rest, relayLegSplit: opts.split }) as Row;
+        }
+        return r;
+      });
+    const settings = { ...STRICT, ...(opts.allow === true ? { relayLegsAllowTimeTrials: true } : {}) };
+    const ws: Workspace = workspaceFixture({
+      id: 'w',
+      name: 'w',
+      createdAt: 0,
+      menResults: men,
+      womenResults: fixture.womenResults,
+      recruits: [],
+      meetEntryPlans: [],
+      activeEntryIds: [],
+      athleteHistory: [],
+      relayLegOverrides: [],
+      deletedSwimmers: [],
+      conference: 'NSISC',
+      scoringSettings: settings,
+      scorerRosterOverrides: [{ name: OUT, team: TEAM, gender: Gender.MEN, isScorer: false }],
+    });
+    return rankRelayLegSwaps(ws, { team: TEAM, gender: Gender.MEN, settings });
+  }
+  const onDollLeg = (r: ReturnType<typeof rank>) =>
+    r.swaps.filter(s => s.relayEvent === EVENT && s.outAthlete === OUT && s.legIndex === DOLL_LEG);
+
+  it('control: with the split, the leg is ranked and nothing is left out', () => {
+    const r = rank({ stripSplit: false, timeTrial: false });
+    expect(onDollLeg(r).length).toBeGreaterThan(0);
+    expect(r.legsWithoutBaseline).toBeUndefined();
+  });
+
+  it('no split, only a time trial, setting off: no swap on the leg and the leg is named', () => {
+    const r = rank({ stripSplit: true, timeTrial: true });
+    expect(onDollLeg(r)).toStrictEqual([]);
+    expect(r.legsWithoutBaseline).toStrictEqual([
+      expect.objectContaining({ relayEvent: EVENT, relayRank: 1, legIndex: DOLL_LEG, outAthlete: OUT }),
+    ]);
+    // No ranked swap anywhere carries a held clock it did not have.
+    expect(r.swaps.every(s => s.clockLegTime !== undefined)).toBe(true);
+  });
+
+  it('no split, no swim at all: the same', () => {
+    const r = rank({ stripSplit: true, timeTrial: false, dropIndividual: true });
+    expect(onDollLeg(r)).toStrictEqual([]);
+    expect(r.legsWithoutBaseline?.map(l => l.legIndex)).toStrictEqual([DOLL_LEG]);
+  });
+
+  it('an unreadable split (NT, DQ) is no baseline either, the way simulateRoster reads it', () => {
+    for (const split of ['NT', 'DQ']) {
+      const r = rank({ stripSplit: true, timeTrial: true, split });
+      expect(onDollLeg(r), split).toStrictEqual([]);
+      expect(r.legsWithoutBaseline?.map(l => l.legIndex), split).toStrictEqual([DOLL_LEG]);
+    }
+  });
+
+  it('no split, the time trial allowed: the leg is priced from it and ranked again', () => {
+    const r = rank({ stripSplit: true, timeTrial: true, allow: true });
+    expect(onDollLeg(r).length).toBeGreaterThan(0);
+    expect(onDollLeg(r)[0]?.clockLegTime).toBe('45.39');
+    expect(r.legsWithoutBaseline).toBeUndefined();
   });
 });
