@@ -34,8 +34,12 @@ export interface RelayMissingLeg {
    * - `stroke_mismatch`: the named swim is not the leg's event, or the swimmer is already on the relay.
    * - `time_trial_only`: the named swimmer's only swim at the leg's event is a time trial, and
    *   `ScoringSettings.relayLegsAllowTimeTrials` is off. The leg takes the same +3.0 s penalty as a vacant leg.
+   * - `no_baseline`: the leg IS filled, but the leg it replaced has no baseline: the departed swimmer has no
+   *   usable swim at the leg's event and the leg row has no readable split or estimate. The replacement cannot
+   *   be priced, so the relay's team time is `NT`. The leg is not vacant and needs no swimmer
+   *   (`relayLegIsVacant` is false).
    */
-  reason: 'vacant' | 'no_replacement' | 'stroke_mismatch' | 'time_trial_only';
+  reason: 'vacant' | 'no_replacement' | 'stroke_mismatch' | 'time_trial_only' | 'no_baseline';
 }
 
 export type RelaySplitSegment = {

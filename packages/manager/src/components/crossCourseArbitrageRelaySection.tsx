@@ -20,7 +20,11 @@ import {
   type LastApplied,
 } from './crossCourseArbitrageParts';
 import { formatPoints, type RelaySwapGroup } from './crossCourseArbitrageView';
-import type { RelayLegSwap, RelayLegSwapRanking } from '@omniswim/core/lib/crossCourseArbitrage';
+import type {
+  RelayLegSwap,
+  RelayLegSwapRanking,
+  RelayLegWithoutBaseline,
+} from '@omniswim/core/lib/crossCourseArbitrage';
 import type { RelayAlternatePromotion } from '@omniswim/core/lib/scoringTheory';
 import { relayStrokeForIndex } from '@omniswim/core/lib/relayLegMatching';
 import { RELAY_LEG_ESTIMATE_LABEL } from '@omniswim/core/lib/relaySplits';
@@ -234,6 +238,32 @@ function RelayPromotionList({
   );
 }
 
+/**
+ * Legs the ranking left out because a swap on them cannot be priced. Named one by one: the ranking
+ * did not judge these legs, so "all legs are scoring-eligible" must never be said while any is listed.
+ */
+function LegsWithoutBaselineNote({ legs }: { legs: readonly RelayLegWithoutBaseline[] }) {
+  if (legs.length === 0) return null;
+  return (
+    <div className="mt-2">
+      <p className="text-ui-caption text-theme-secondary leading-relaxed">
+        {legs.length === 1 ? '1 relay leg was' : `${legs.length} relay legs were`} not ranked:
+      </p>
+      <ul className="mt-1 space-y-1">
+        {legs.map(leg => (
+          <li
+            key={`${leg.relayEntryKey}|${leg.legIndex}`}
+            className="text-ui-caption text-theme-secondary leading-relaxed break-words"
+          >
+            {leg.outAthlete && leg.outAthlete !== '—' ? leg.outAthlete : 'The leg holder'} on {leg.relayEvent}{' '}
+            leg {leg.legIndex + 1} has no recorded split or usable swim, so a swap cannot be priced.
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 export function RelayOptimizationSection({
   relayRanking,
   relaySwaps,
@@ -263,6 +293,7 @@ export function RelayOptimizationSection({
   onApplyRelayPromotion: (promotion: RelayAlternatePromotion) => void;
   onJumpAthlete?: (name: string) => void;
 }) {
+  const unpricedLegs = relayRanking.legsWithoutBaseline ?? [];
   return (
     <Section
       title="Relay optimization"
@@ -275,10 +306,19 @@ export function RelayOptimizationSection({
           {relayRanking.reason ?? 'Relay point deltas are not available for this team.'}
         </p>
       ) : relaySwaps.length === 0 && relayPromotions.length === 0 ? (
-        <p className="text-ui-caption text-theme-secondary leading-relaxed">
-          No beneficial relay substitutions — all relay legs are already scoring-eligible under
-          current rules.
-        </p>
+        unpricedLegs.length === 0 ? (
+          <p className="text-ui-caption text-theme-secondary leading-relaxed">
+            No beneficial relay substitutions — all relay legs are already scoring-eligible under
+            current rules.
+          </p>
+        ) : (
+          <>
+            <p className="text-ui-caption text-theme-secondary leading-relaxed">
+              No beneficial relay substitutions among the legs that could be priced.
+            </p>
+            <LegsWithoutBaselineNote legs={unpricedLegs} />
+          </>
+        )
       ) : (
         <>
           <RelaySwapList
@@ -298,6 +338,7 @@ export function RelayOptimizationSection({
             canApplySwaps={canApplySwaps}
             onApplyRelayPromotion={onApplyRelayPromotion}
           />
+          <LegsWithoutBaselineNote legs={unpricedLegs} />
         </>
       )}
     </Section>

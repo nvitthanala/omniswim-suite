@@ -10,7 +10,7 @@
 
 import type { SwimmerResult } from '@omniswim/core/types';
 import { isRelayResult, normalizeSwimmerName } from '@omniswim/core/lib/utils';
-import { relayMissingStrokeLabel, stableRelayEntryKey } from '@omniswim/core/lib/relayLegMatching';
+import { relayLegIsVacant, relayMissingStrokeLabel, stableRelayEntryKey } from '@omniswim/core/lib/relayLegMatching';
 import type { LineupAthleteIssue } from '@omniswim/core/lib/rosterLineupAudit';
 
 export type RelayInvolvement = {
@@ -85,7 +85,11 @@ function relayLegStatus(
   leg: SwimmerResult,
   issues: LineupAthleteIssue[]
 ): { status: RelayInvolvement['status']; statusLabel: string } {
-  if (!isVacant) return { status: 'ok', statusLabel: 'OK' };
+  if (!isVacant) {
+    return leg.relayMissingLeg?.reason === 'no_baseline'
+      ? { status: 'ok', statusLabel: 'OK — no split, relay time unknown' }
+      : { status: 'ok', statusLabel: 'OK' };
+  }
   const scorerOff = issues.some(i => i.type === 'relay_scorer_off');
   if (scorerOff) return { status: 'removed', statusLabel: 'Removed — not a scorer; fill this leg' };
   const stroke = relayMissingStrokeLabel(leg.relayMissingLeg?.stroke);
@@ -124,7 +128,7 @@ export function buildRelayInvolvement(
     if (seen.has(rowKey)) continue;
 
     const ctx: RelayLegContext = { pdf, leg, legIdx, team, nameKey };
-    const isVacant = Boolean(leg.relayLegVacant || leg.relayMissingLeg);
+    const isVacant = relayLegIsVacant(leg);
     const onThisLeg = isAthleteOnLeg(ctx, isVacant);
     if (shouldSkipLeg(ctx, onThisLeg, isVacant)) continue;
 

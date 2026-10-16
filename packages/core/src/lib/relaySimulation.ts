@@ -248,6 +248,12 @@ function resolveRelayLegs(
         : null;
     if (baselineSec === null) {
       newTimeSecs = Number.POSITIVE_INFINITY;
+      // The leg is filled, so it is not vacant. Name why the time is NT.
+      legMissingByIndex.set(index, {
+        legIndex: index,
+        stroke: relayStrokeForBoundedIndex(evLower, index),
+        reason: 'no_baseline',
+      });
       return;
     }
     newTimeSecs += newLegTimeSec - baselineSec;

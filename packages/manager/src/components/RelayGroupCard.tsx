@@ -14,6 +14,7 @@ import {
 } from '@omniswim/core/lib/relaySplits';
 import {
   hasRelayLegOverride,
+  relayLegIsVacant,
   relayLegRequirements,
   relayMissingStrokeLabel,
 } from '@omniswim/core/lib/relayLegMatching';
@@ -58,7 +59,7 @@ export default function RelayGroupCard({
   onSaveManualLeg,
   onClearLegOverride,
 }: Props) {
-  const vacantCount = group.legs.filter(l => l.relayLegVacant || l.relayMissingLeg).length;
+  const vacantCount = group.legs.filter(l => relayLegIsVacant(l)).length;
 
   return (
     <div
@@ -102,7 +103,7 @@ export default function RelayGroupCard({
         {group.legs.map(leg => {
           const legIndex = leg.relayLegIndex ?? 0;
           const req = relayLegRequirements(group.event, legIndex);
-          const isVacant = Boolean(leg.relayLegVacant || leg.relayMissingLeg);
+          const isVacant = relayLegIsVacant(leg);
           const legDropKey = `${group.key}|${legIndex}`;
           const fieldKey = legDropKey;
           const legView = relayLegTimeView(leg);

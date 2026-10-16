@@ -29,6 +29,7 @@ import {
   type TeamCardTooltipDatum,
   type TeamRowCutlineTags,
 } from './teamCardView';
+import { RELAY_NO_BASELINE_EXPLANATION } from '@omniswim/core/lib/relayLegMatching';
 
 /** Chart tooltip title + points, with the event tooltip's optional over/under badge. */
 export function TooltipHeader({ isClass, data, showPrelimsPerformance }: { isClass: boolean; data: TeamCardTooltipDatum; showPrelimsPerformance?: boolean }) {
@@ -230,8 +231,11 @@ export function TooltipSwimmerRow({
           </span>
         )}
         {s.relayMissingLeg && (
-          <span className="text-ui-micro bg-warning-soft text-warning px-1 border border-warning-faint rounded-sm ml-1" title="Missing relay leg">
-            Missing L{(s.relayMissingLeg.legIndex ?? 0) + 1}: {relayMissingStrokeLabel(s.relayMissingLeg.stroke)}
+          <span
+            className="text-ui-micro bg-warning-soft text-warning px-1 border border-warning-faint rounded-sm ml-1"
+            title={s.relayMissingLeg.reason === 'no_baseline' ? RELAY_NO_BASELINE_EXPLANATION : 'Missing relay leg'}
+          >
+            {s.relayMissingLeg.reason === 'no_baseline' ? 'No split' : 'Missing'} L{(s.relayMissingLeg.legIndex ?? 0) + 1}: {relayMissingStrokeLabel(s.relayMissingLeg.stroke)}
           </span>
         )}
         {/* Non-relay rows only — a relay's verdicts belong next to the

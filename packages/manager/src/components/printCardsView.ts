@@ -14,6 +14,7 @@
 import { Gender, type Workspace } from '@omniswim/core/types';
 import type { ScoringBundle } from '@omniswim/core/lib/useWorkspaceScoring';
 import { selectActiveEntries } from '@omniswim/core/lib/entryExport';
+import { relayLegIsVacant } from '@omniswim/core/lib/relayLegMatching';
 import { relayLegTimeView } from '@omniswim/core/lib/relaySplits';
 import { isEstimatedRelayRow } from '@omniswim/core/lib/theoreticalMeetLabel';
 import { convertTimeToSeconds, isRelayResult } from '@omniswim/core/lib/utils';
@@ -165,7 +166,7 @@ function buildRelayCards(
       teamTime: printableTime(group.teamTotal),
       estimate: isEstimatedRelayRow(workspace, group.template),
       legs: group.legs.map(leg => {
-        const vacant = Boolean(leg.relayLegVacant || leg.relayMissingLeg);
+        const vacant = relayLegIsVacant(leg);
         const name = (leg.name ?? '').trim();
         const legView = vacant ? null : relayLegTimeView(leg);
         return {

@@ -9,6 +9,7 @@ import type { ScoringBundle } from '@omniswim/core/lib/useWorkspaceScoring';
 import {
   listEligibleRelayLegCandidates,
   migrateTiedRelayOverrides,
+  relayLegIsVacant,
   relayLegMatchSettings,
   removeRelayLegOverride,
   suggestBestRelayLegFill,
@@ -218,7 +219,7 @@ export default function IndRelayManagementView({
 
   const poolCandidates = useMemo(() => {
     if (!selectedGroup || !selectedTeam) return [];
-    const vacantLegs = selectedGroup.legs.filter(l => l.relayLegVacant || l.relayMissingLeg);
+    const vacantLegs = selectedGroup.legs.filter(l => relayLegIsVacant(l));
     if (vacantLegs.length === 0) return [];
 
     const seen = new Set<string>();
@@ -305,7 +306,7 @@ export default function IndRelayManagementView({
     let next = [...overrides];
     const assigned = new Set(assignedInSelectedRelay);
     for (const leg of group.legs) {
-      if (!leg.relayLegVacant && !leg.relayMissingLeg?.reason) continue;
+      if (!relayLegIsVacant(leg)) continue;
       const legIndex = leg.relayLegIndex ?? 0;
       const exclude = new Set<string>();
       group.legs.forEach((ln, i) => {

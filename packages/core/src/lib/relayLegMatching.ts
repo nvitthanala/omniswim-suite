@@ -1104,6 +1104,22 @@ export function hasRelayLegOverride(
   return overrides.some(o => o.legIndex === legIndex && o.relayEntryKey === entryKey);
 }
 
+/**
+ * True when a relay row's leg has no swimmer: the leg is marked vacant, or it carries a missing-leg entry whose
+ * reason says nobody swims it. A `no_baseline` leg is filled (its time cannot be priced), so it is not vacant.
+ * Every reader that asks "does this leg need a swimmer" goes through this one test.
+ */
+export function relayLegIsVacant(
+  leg: Pick<SwimmerResult, 'relayLegVacant' | 'relayMissingLeg'>
+): boolean {
+  if (leg.relayLegVacant === true) return true;
+  return leg.relayMissingLeg !== undefined && leg.relayMissingLeg.reason !== 'no_baseline';
+}
+
+/** What a `no_baseline` leg means, in the words the coach reads. */
+export const RELAY_NO_BASELINE_EXPLANATION =
+  'This leg has no recorded split or usable swim, so a replacement cannot be priced and the relay time is NT.';
+
 export function relayMissingStrokeLabel(stroke: RelayLegStroke | undefined): string {
   if (!stroke) return '';
   const m: Record<RelayLegStroke, string> = { back: 'Back', breast: 'Breast', fly: 'Fly', free: 'Free' };

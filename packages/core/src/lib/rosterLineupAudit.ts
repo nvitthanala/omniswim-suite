@@ -23,6 +23,7 @@ import { mergeScoringSettings } from './scoringDefaults';
 import {
   relayEntryKeyIn,
   relayLegMatchSettings,
+  relayLegIsVacant,
   relayMissingStrokeLabel,
   relayTemplateFromLeg,
   resolveRelayEntryForLeg,
@@ -52,6 +53,11 @@ export type LineupIssueType =
   | 'relay_leg_vacant'
   | 'relay_scorer_off'
   | 'relay_needs_fill'
+  /**
+   * A relay leg is filled, but the leg it replaced has no recorded split or usable swim. The replacement
+   * cannot be priced and the relay's time shows `NT`. The leg needs no swimmer.
+   */
+  | 'relay_time_unknown'
   /** Two name spellings on this team that are probably one athlete. */
   | 'duplicate_athlete'
   /** This athlete's team has no known division — cut tags and lineup rules judged against a division may be wrong. */
@@ -691,6 +697,7 @@ export function buildTeamLineupAudit(input: LineupAuditInput): TeamLineupAudit {
   });
 
   auditUnreadableRelayDistances(collector, { pdfResults, team });
+  auditUnpricedRelayLegs(collector, { teamScored, pdfResults });
 
   // Runs AFTER the leg sweep on purpose: it skips anyone that sweep already
   // flagged, so the two are an ordered pair, not two independent checks.
@@ -709,7 +716,7 @@ export function buildTeamLineupAudit(input: LineupAuditInput): TeamLineupAudit {
 /** A scored relay leg is vacant when nobody is swimming it. */
 function isVacantRelayLeg(leg: SwimmerResult): boolean {
   if (!isRelayResult(leg) || leg.name === leg.team) return false;
-  return Boolean(leg.relayLegVacant || leg.relayMissingLeg);
+  return relayLegIsVacant(leg);
 }
 
 /**
@@ -805,6 +812,37 @@ function auditVacantRelayLegs(
   }
 
   return vacantRelayLegCount;
+}
+
+/**
+ * Name every filled leg whose replacement could not be priced (`relayMissingLeg.reason === 'no_baseline'`).
+ * The relay's time shows `NT`; without this item the row shows NT with no reason. One item per entry and leg.
+ */
+function auditUnpricedRelayLegs(
+  collector: LineupAuditCollector,
+  opts: { teamScored: SwimmerResult[]; pdfResults: SwimmerResult[] }
+): void {
+  const named = new Set<string>();
+  for (const leg of opts.teamScored) {
+    if (!isRelayResult(leg) || leg.name === leg.team) continue;
+    if (leg.relayMissingLeg?.reason !== 'no_baseline') continue;
+    const resolution = resolveRelayEntryForLeg(opts.pdfResults, leg);
+    const legIdx = leg.relayLegIndex ?? leg.relayMissingLeg.legIndex;
+    const key = `${resolution.status === 'resolved' ? resolution.entryKey : resolution.groupKey}|${legIdx}`;
+    if (named.has(key)) continue;
+    named.add(key);
+    const strokeLabel = relayMissingStrokeLabel(leg.relayMissingLeg.stroke);
+    const entryLabel = relayEntryLabel(leg);
+    const event = entryLabel ? `${leg.event} (${entryLabel})` : leg.event;
+    collector.pushChecklist({
+      type: 'relay_time_unknown',
+      group: 'relays',
+      message: `Relay ${event}: leg ${legIdx + 1}${strokeLabel ? ` (${strokeLabel})` : ''} has no recorded split or usable swim, so its replacement cannot be priced and the relay time shows NT.`,
+      relayEvent: leg.event,
+      legIndex: legIdx,
+      ...(resolution.status === 'resolved' ? { relayEntryKey: resolution.entryKey } : {}),
+    });
+  }
 }
 
 /**
@@ -1027,6 +1065,8 @@ export function issueBadgeLabel(issue: LineupAthleteIssue): string {
       return 'Relay removed';
     case 'relay_needs_fill':
       return 'Fill relay';
+    case 'relay_time_unknown':
+      return 'Relay time';
     case 'duplicate_athlete':
       return 'Duplicate?';
     case 'program_division_unknown':

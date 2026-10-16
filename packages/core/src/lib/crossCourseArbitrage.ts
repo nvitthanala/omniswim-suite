@@ -95,6 +95,7 @@ export type {
   RelayLegSwap,
   RelayLegSwapOptions,
   RelayLegSwapRanking,
+  RelayLegWithoutBaseline,
 } from './arbitrage/relayLegSwaps';
 
 // --- combined off-thread entry point ----------------------------------------

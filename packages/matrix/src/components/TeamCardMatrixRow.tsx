@@ -20,6 +20,7 @@ import { rowHasNoActual } from '../lib/noActual';
 import { AthleteName, CompactEventLabel, PlacementExpectedValue, PointsValue, PrelimsOuValue } from './matrixPresentation';
 import { CutlineVerdict, RelayVerdict, useIsEstimatedRelayRow } from './TeamCardParts';
 import { buildTeamRowCutlineTags, relayMissingStrokeLabel, type TeamRowCutlineTags } from './teamCardView';
+import { RELAY_NO_BASELINE_EXPLANATION } from '@omniswim/core/lib/relayLegMatching';
 
 interface TeamMatrixSwimmerRowProps {
   res: SwimmerResult;
@@ -273,8 +274,12 @@ export function TeamMatrixSwimmerRow({
           )}
         </span>
         {res.relayMissingLeg && (
-          <span className="text-ui-micro text-warning shrink-0" title="Missing relay leg">
-            Missing L{(res.relayMissingLeg.legIndex ?? 0) + 1}{' '}
+          <span
+            className="text-ui-micro text-warning shrink-0"
+            title={res.relayMissingLeg.reason === 'no_baseline' ? RELAY_NO_BASELINE_EXPLANATION : 'Missing relay leg'}
+          >
+            {res.relayMissingLeg.reason === 'no_baseline' ? 'No split' : 'Missing'} L
+            {(res.relayMissingLeg.legIndex ?? 0) + 1}{' '}
             {relayMissingStrokeLabel(res.relayMissingLeg.stroke)}
           </span>
         )}
