@@ -705,5 +705,31 @@
     }
   },
   "commitsAfterAuditNote": "R11 steps 3-6 done (flag on). Next: A7 relayLegEstimate, R2 split utils.ts, R3 identity module, R4 optimizers to worker, R1 split parser.ts, R7, T1, T6, F4, F6, R9 last",
-  "remainingAfterR1": "R3 identity module, R7 large components, R9 deps last, T6 mutation testing, F4 scouting, F6 relay programs (research), F10 reconcile video plan, H4/H5/H6/H7/H11, R12 alias config, T10/T11, P-items found-not-fixed; then end-of-run questions"
+  "remainingAfterR1": "R3 identity module, R7 large components, R9 deps last, T6 mutation testing, F4 scouting, F6 relay programs (research), F10 reconcile video plan, H4/H5/H6/H7/H11, R12 alias config, T10/T11, P-items found-not-fixed; then end-of-run questions",
+  "endAnswers20261016": {
+    "answeredAt": "2026-10-16",
+    "status": "answered, implementation not started",
+    "order": [
+      "E1 scored-program boundary: derive from the published program when one exists, else warn at import and show unknown (no guess)",
+      "E2 individual A/B tie with exhibition swimmer: exclude only the exhibition entry (match relays); needs golden run + architect review",
+      "E3 vacated relay leg with no known split: refuse to price (NT / no_baseline), remove the +3 / 33.0 s invention",
+      "E4 swims-list SwimCloud rows: require an explicit time-trial flag; bare-label rows stay out of best times, arbitrage, cut tags",
+      "E5 tied relay legacy override key: surface as ambiguous and refuse to apply (change relayTiedAmbiguityMigration pin)",
+      "E6 D9 confirmed: swim past scoredEventNumberMax counts as relay-leg time trial",
+      "E7 recruit rows: stamp source at every import path; unstamped legacy rows stay unknown",
+      "E8 UWF: route tag paths through divisionForTeamInSeason so 2026-27 judges against D1",
+      "E9 admin: wire isAdmin to OMNI_ADMIN_EMAILS for backup list/restore under AUTH_REQUIRED",
+      "E10 P7 confirmed: corrupt/locked SQLite stops the server",
+      "E11 season trend: add workspace own-team setting; picker empty until set",
+      "E12 X10 confirmed: keep Optimize all teams label and per-row remove",
+      "E13 H5: move roster .txt to gitignored local path, repoint 11 tests + 2 seed scripts, untrack (history keeps them)",
+      "E14 F6 confirmed: GLVC PDF stays local and gitignored",
+      "E15 replace tests/fixtures/nsisc-2026-dq-relay-leg.json with synthetic rows of the same shape",
+      "E16 find and archive the NSISC championship program under data/relay-programs/sources with manifest (url, sha256, retrievedAt)",
+      "E17 rename ~49 user-visible athlete strings to swimmer; update managerAthletesCopy test",
+      "E18 PodiumMedal: derive medal from place 1-3",
+      "E19 Python _load_abbrev_teams: remove five setdefault fallbacks, fail loudly",
+      "E20 relayStrokeForIndex: invalid or negative index throws a named error"
+    ]
+  }
 }
