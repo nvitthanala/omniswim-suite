@@ -730,6 +730,34 @@
       "E18 PodiumMedal: derive medal from place 1-3",
       "E19 Python _load_abbrev_teams: remove five setdefault fallbacks, fail loudly",
       "E20 relayStrokeForIndex: invalid or negative index throws a named error"
-    ]
+    ],
+    "progress": {
+      "uncommittedBuilt": [
+        "E9 E11 E18 E19 (worker a350819d0999729bb, done)",
+        "E2 E3 E5 E20 (executor afca20a9097cc44c1, done; E3 kept vacant reason not no_baseline)",
+        "E1 E4 E7 E8 (executor ae2e207c4cb206685, done, lint/vitest/scripts green then)",
+        "manager guards for invalid leg index and ambiguous tied keys (worker ae4694c4a4713dfa6, done)"
+      ],
+      "stoppedByLimit20261017": [
+        "architect audit of E1-E8 diff (agent afe4603e613e6cf54): had only started E2 tie math",
+        "worker program-swim confirm UI (agent a6eff80056921ea6f): partly written AthleteLineupEditorPanel.tsx, creditedSwimProgramStatus.ts, tests/programSwimConfirmUi.test.ts; first edit missed an anchor (entryLimitLabel?: string; then a comment line)"
+      ],
+      "notStarted": [
+        "E13 roster txt untrack + repoint tests",
+        "E15 synthetic fixture",
+        "E17 athlete->swimmer copy",
+        "vault session note"
+      ],
+      "blocked": [
+        "E16 no published NSISC program found; keep unsourced flag, ask user for a source"
+      ],
+      "resumeOrder": [
+        "SendMessage a6eff80056921ea6f then afe4603e613e6cf54 (one at a time)",
+        "review diff, rerun all gates, commit in groups (core scoring; import provenance; admin/own-team/medal/python; manager guards; UI confirm)",
+        "E15, E13, E17",
+        "vault + CHANGELOG"
+      ],
+      "note": "Nothing from this batch is committed yet. Tree has 91 changed paths; do not git stash."
+    }
   }
 }
