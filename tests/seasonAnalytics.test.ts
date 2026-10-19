@@ -1,7 +1,5 @@
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { describe, it, expect } from 'vitest';
+import { readRosterText, rosterBlock } from './helpers/localRosterPath';
 import { buildSeasonTrends } from '../packages/core/src/lib/seasonAnalytics';
 import { THEORETICAL_MEET_LABEL } from '../packages/core/src/lib/theoreticalMeetLabel';
 import { parseSwimCloudPasteDetailed } from '../packages/core/src/lib/athleteHistory';
@@ -154,11 +152,12 @@ describe('seasonAnalytics', () => {
  * Trends now key on the swimmer, `swimEventIdentity` and the course.
  */
 describe('seasonAnalytics keys trends by event identity and course', () => {
-  const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
+  const roster = readRosterText('hsuroster26-27.txt');
+  // The local export names the real swimmer; the committed stand-in carries the same rows under an invented name.
+  const GAVIN = roster.source === 'real' ? 'Gavin Kock' : 'Test Swimmer Bravo';
   const gavinKock = (() => {
-    const lines = readFileSync(join(repoRoot, 'hsuroster26-27.txt'), 'utf8').split(/\r?\n/);
-    const block = lines.slice(160, 200);
-    expect(block[0]).toBe('Gavin Kock');
+    const block = rosterBlock(roster, GAVIN);
+    expect(block[0]).toBe(GAVIN);
     return parseSwimCloudPasteDetailed(block.join('\n'), { team: 'Henderson State', gender: Gender.MEN }).swims;
   })();
 
@@ -168,13 +167,13 @@ describe('seasonAnalytics keys trends by event identity and course', () => {
 
   it('keeps a yards swim and a metres swim of one event apart (Gavin Kock, HSU)', () => {
     const trends = buildSeasonTrends([historyWorkspace(gavinKock)]).swimmerTrends;
-    const im = trends.filter(t => t.name === 'Gavin Kock' && t.event === '100 Individual Medley');
+    const im = trends.filter(t => t.name === GAVIN && t.event === '100 Individual Medley');
     expect(im.map(t => [t.course, t.bestTime, t.meetCount])).toStrictEqual([
       ['SCM', '58.25', 1],
       ['SCY', '52.57', 1],
     ]);
     // 50 Free: 20.46 SCY, 23.39 SCM, 23.84 LCM — three courses, three trends.
-    const fifty = trends.filter(t => t.name === 'Gavin Kock' && t.event === '50 Freestyle');
+    const fifty = trends.filter(t => t.name === GAVIN && t.event === '50 Freestyle');
     expect(fifty.map(t => [t.course, t.bestTime]).sort()).toStrictEqual([
       ['LCM', '23.84'],
       ['SCM', '23.39'],

@@ -61,7 +61,9 @@ You do not need it for a green run. The extracted text is committed next to each
 - `data/meets.json` is local, untracked and gitignored. It is this machine's live working store and holds real roster data. Never commit it.
 - Tests that read the real `data/meets.json` skip when it is absent: `scripts/test_relay_overrides.mjs` (whole script), a few parts of other scripts (the runner prints `LOCAL-ONLY SKIPPED` lines), and a few vitest files such as `tests/divingEventImport.test.ts`.
 - `data/swimcloud-captures/` is local and gitignored. Tests that need it skip.
-- Some vitest files read the roster text exports `hsuroster26-27.txt` and `oburoster202627.txt` from the repository root.
+- `data/local-rosters/` is local and gitignored. The roster text exports name real swimmers, so they are not committed. Put these files there: `hsuroster26-27.txt`, `oburoster202627.txt`, `possible_hsu_scoringteam2627.txt` and `NSISC_2026-27_ROSTER_FRAMEWORK.txt`. The path is set once in [scripts/lib/localRosters.mjs](../scripts/lib/localRosters.mjs).
+- Seven vitest files read the two exports through [tests/helpers/localRosterPath.ts](../tests/helpers/localRosterPath.ts). Without the real files they read the committed stand-ins in [tests/fixtures/synthetic-rosters](../tests/fixtures/synthetic-rosters), which use the same line format with invented names. They do not skip. A green run on a clean checkout proves the logic on the stand-ins. Run the suite on a machine that holds the real files to check the real rows.
+- `scripts/seed_hsu_roster.mjs` and `scripts/seed_obu_roster.mjs` need the real files. They stop with an error that names this page when a file is missing. They never fall back to invented text.
 
 Every skip is counted. See the skip budget below.
 

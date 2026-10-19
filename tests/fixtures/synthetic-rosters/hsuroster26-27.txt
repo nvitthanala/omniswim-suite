@@ -1,0 +1,119 @@
+Test Swimmer Delta
+Event	Time		Meet	Date	Stamp Link
+500 Free SCY	4:40.00		Test Open Invitational	Nov 8, 2025	
+100 Breast SCY	55.10	D2 B	Test Championships	Feb 20, 2026	
+50 Breast SCY	26.00	X	Test Championships	Feb 20, 2026	
+50 Back SCY	23.10	R	Test Championships	Feb 18, 2026	
+100 Back SCY	50.40	U	Test Open Invitational	Mar 3, 2025	
+200 Free SCY	1:44.20	A	Test Open Invitational	Mar 4, 2025	
+50 Free SCY	21.90	XR	Test Championships	Feb 21, 2026	
+100 Free SCM	52.00	UR	Test Short Course Meet	Dec 7, 2022	
+100 Fly SCY	51.20	B	Test Open Invitational	Mar 5, 2025	
+100 Free SCY	45.80	D1-B	Test Open Invitational	Mar 6, 2025	
+100 Free SCY	44.90	D2 BR	Test Championships	Feb 21, 2026	
+100 Free SCY	43.80	NCAA B	Test Invitational	Feb 28, 2025	
+200 IM SCY	1:52.00	WIN JRS	Test State Championships	Feb 12, 2023	
+200 Fly SCY	1:55.00	NCSA	Test Sectionals	Mar 7, 2025	
+50 Breast SCY	30.10	NCSAX	Test State Championships	Feb 18, 2024	
+200 Breast SCY	2:05.00	FTR-18U	Test Sectionals	Mar 13, 2025	
+100 Free LCM	54.00	FTR-18UR	Test Futures Championship	Jul 25, 2025	
+200 Free SCY	1:42.00	FTR-19O	Test Sectionals	Mar 14, 2025	
+100 Free SCY	47.00	YMCA-LC	Test YMCA Championship	Apr 1, 2022	
+100 Back SCY	52.00	5A	Test Region Meet	Feb 11, 2023	
+100 Breast SCY	58.00	6A	Test Region Meet	Feb 12, 2023	
+200 Back SCY	1:52.00	C	Test Invitational	Mar 8, 2025	
+400 Free SCM	4:15.00		Test Short Course Meet	Dec 8, 2022	
+800 Free SCM	8:50.00		Test Short Course Meet	Dec 9, 2022	
+1500 Free SCM	16:50.00		Test Short Course Meet	Dec 10, 2022	
+
+Test Swimmer Alpha
+1000 Free SCY	9:24.87	D2 B	New South Championships	Feb 19, 2025	
+400 Free LCM	4:06.21		Speedo Sectionals - Austin	Jul 12, 2025	
+500 Free SCY	4:33.41		New South Championships	Feb 20, 2026	
+1650 Free SCY	16:01.49		New South Championships	Feb 24, 2024	
+1500 Free LCM	16:27.90		Speedo Sectionals - Austin	Jul 14, 2024	
+200 Free LCM	1:55.91		Speedo Sectionals - Austin	Jul 11, 2025	
+200 Fly SCY	1:50.61		New South Championships	Feb 20, 2026	
+400 IM LCM	4:38.09		Speedo Sectionals - Austin	Jul 12, 2024	
+200 Free SCY	1:41.40		Delta State Thanksgiving Invitational	Nov 22, 2025	
+200 Fly LCM	2:06.70		Speedo Sectionals - Austin	Jul 10, 2025	
+800 Free LCM	8:44.19		Speedo Sectionals - Austin	Jul 9, 2023	
+50 Fly SCY	23.14		Little Rock Fall Invite	Oct 10, 2025	
+400 IM SCY	4:10.48		ST TXLA Jingle Bell Splash	Dec 17, 2022	
+100 Fly LCM	59.02		Speedo Sectionals - Austin	Jul 13, 2024	
+200 IM LCM	2:16.23		ST AAAA LC STAGS Championship	Jul 17, 2022	
+100 Free LCM	56.11		ST TXLA 11&O End of School Splash	May 25, 2024	
+200 IM SCY	1:58.98		ST TXLA Jingle Bell Splash	Dec 18, 2022	
+100 Fly SCY	52.43		ST TXLA Jingle Bell Splash	Dec 9, 2023	
+50 Fly LCM	27.35	X	Speedo Sectionals - Austin	Jul 12, 2025	
+100 Free SCY	49.27	R	Speedo Sectionals - College Station	Mar 2, 2023	
+200 Back SCY	1:58.28		2023 NT 41st Annual Greater Southwest	Jan 28, 2023	
+200 Back LCM	2:19.29		2023 ST AAAA 20th Annual Cinco	May 6, 2023	
+50 Free LCM	26.44		2023 ST AAAA 20th Annual Cinco	May 5, 2023	
+200 Breast SCY	2:16.42		ST TXLA Jingle Bell Splash	Dec 8, 2023	
+100 Back LCM	1:06.02		2023 ST AAAA 20th Annual Cinco	May 7, 2023	
+200 Breast LCM	2:41.34		2023 ST AAAA 20th Annual Cinco	May 7, 2023	
+50 Free SCY	22.93		ST TXLA Jingle Bell Splash	Dec 10, 2023	
+100 Back SCY	56.40		2023 South Texas Age Group Swimming Short Course Championship	Feb 25, 2023	
+50 Breast SCY	30.66	X	2022 ST-TST Arena Southern Slam	Dec 10, 2022	
+100 Breast SCY	1:04.80		2022 ST-TST Arena Southern Slam	Dec 10, 2022	
+100 Breast LCM	1:15.54		ST AAAA 19th Annual Cinco de Mayo	May 7, 2022	
+50 Back SCY	27.01	X	2023 South Texas Age Group Swimming Short Course Championship	Feb 25, 2023	
+50 Back LCM	32.06	X	ST AAAA 19th Annual Cinco de Mayo	May 8, 2022	
+50 Breast LCM	35.82	X	ST AAAA 19th Annual Cinco de Mayo	May 7, 2022	
+375 Free SCY	3:47.04	R	61st Annual Hendrix Relays	Oct 25, 2024	
+100 IM SCY	57.01		Henderson State vs. Ouachita Baptist	Jan 12, 2024	
+
+Test Swimmer Bravo
+Event	Time		Meet	Date	Stamp Link
+100 Breast SCY	55.69		New South Championships	Feb 20, 2026	
+50 Breast SCY	25.93		Little Rock Fall Invite	Oct 10, 2025	
+50 Free LCM	23.84		X Dominican Republic International Open	Apr 12, 2025	
+100 Free SCY	45.52		New South Championships	Feb 21, 2026	
+100 Breast LCM	1:05.60		XXXVI CCCAN Championship	Jun 17, 2024	
+200 Breast LCM	2:24.80		Himno y Bandera	Mar 6, 2025	
+100 Fly LCM	57.05		Stingray challenge	May 3, 2025	
+100 Free LCM	53.66		Himno y Bandera	Mar 8, 2025	
+50 Fly LCM	25.75		Campeonato Arubano	Jun 5, 2026	
+50 Breast LCM	30.04		Stingray challenge	May 3, 2025	
+50 Free SCY	20.46	R	New South Championships	Feb 20, 2026	
+50 Free SCM	23.39	R	TYR Giants Open	Oct 13, 2024	
+100 Breast SCM	1:04.17		TYR Giants Open	Oct 11, 2024	
+50 Fly SCY	23.21	X	New South Championships	Feb 19, 2026	
+100 Free SCM	52.47		Campeonato Arubano SCM	Dec 1, 2023	
+100 Fly SCY	50.08		New South Championships	Feb 19, 2026	
+200 Free LCM	1:59.93		Himno y Bandera	Mar 7, 2025	
+200 IM LCM	2:14.45		9th World Aquatics Junior Championships	Sep 5, 2023	
+100 IM SCM	58.25		TYR Giants Open	Oct 13, 2024	
+50 Breast SCM	29.64		TYR Giants Open	Oct 13, 2024	
+400 IM LCM	4:50.32		X Dominican Republic International Open	Apr 12, 2025	
+200 Breast SCY	2:07.36		FG PST 34th Annual Winter Championships	Dec 13, 2024	
+200 Breast SCM	2:24.42		TYR Giants Open	Oct 12, 2024	
+400 Free LCM	4:24.78		22nd Aruba Dolphins Age Group	Nov 1, 2024	
+50 Fly SCM	26.23		Campeonato Arubano SCM	Dec 2, 2023	
+100 Back LCM	1:03.07		20th Aruba Dolphins Age Group Meet	Nov 4, 2022	
+200 Fly LCM	2:14.67		Campeonato Arubano	Jul 5, 2025	
+400 IM SCY	4:15.08		FG PST 33rd Speedo Winter Championships	Dec 9, 2023	
+50 Back LCM	29.52		20th Aruba Dolphins Age Group Meet	Nov 5, 2022	
+100 Fly SCM	59.63		TYR Giants Open	Oct 13, 2024	
+1500 Free LCM	18:10.72		Campeonato Arubano	Jun 30, 2023	
+800 Free LCM	9:32.11		Campeonato Arubano Di Natacion	Jun 6, 2021	
+200 Back LCM	2:22.02		8th FINA World Junior Championships	Sep 4, 2022	
+200 IM SCY	2:05.33		31st Speedo Winter Championships - Plantation	Dec 10, 2021	
+50 Back SCY	26.16		FL PST 32nd Speedo Winter Championships	Dec 9, 2022	
+100 Back SCY	56.57		FG PST 33rd Speedo Winter Championships	Dec 10, 2023	
+25 Free SCM	11.00		Short Course Fall Meet	Sep 20, 2024	
+100 IM SCY	52.57		FG PST 34th Annual Winter Championships	Dec 15, 2024	
+
+Test Swimmer Charlie
+Event	Time		Meet	Date	Stamp Link
+100 Free LCM	50.78	R	LEN European Junior Championships	Jul 5, 2023	
+100 Free SCM	48.99		XXI Országos Bajnokság (25m)	Nov 5, 2025	
+50 Free SCM	22.10		XXI Országos Bajnokság (25m)	Nov 6, 2025	
+50 Free LCM	23.32		World Aquatics World Cup - Budapest	Oct 20, 2023	
+50 Fly SCM	24.20		XXI Országos Bajnokság (25m)	Nov 7, 2025	
+50 Fly LCM	25.33		World Aquatics World Cup - Budapest	Oct 22, 2023	
+50 Back LCM	27.04		Multinations Junior Meet	Apr 7, 2024	
+100 Back SCM	56.44		Hajós Alfréd Kupa III. forduló	Sep 27, 2025	
+50 Back SCM	27.47	X	Hajós Alfréd Kupa III. forduló	Sep 27, 2025	
+200 Free SCM	2:12.23		Hajós Alfréd Kupa III. forduló	Sep 27, 2025	

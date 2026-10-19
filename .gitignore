@@ -70,3 +70,11 @@ data/relay-programs/sources/*.txt
 # Mutation testing (Stryker): sandbox copy of the repo and the JSON report
 /.stryker-tmp/
 /reports/
+
+# Roster text exports name real swimmers: keep them local. They live in
+# data/local-rosters/ (see docs/ONBOARDING.md, section 5). Tests fall back to
+# the invented stand-ins in tests/fixtures/synthetic-rosters/ when absent.
+data/local-rosters/
+/hsuroster*.txt
+/oburoster*.txt
+/possible_hsu_*.txt

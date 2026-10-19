@@ -28,6 +28,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { readRosterText } from './helpers/localRosterPath';
 import { Gender } from '../packages/core/src/types';
 import {
   categorizeBestEvents,
@@ -50,19 +51,30 @@ const HDR = 'Event\tTime\t\tMeet\tDate\tStamp Link';
 const DATE = /^[A-Z][a-z]{2,8}\s+\d{1,2},\s+\d{4}$/;
 const TIME = /^(\d{1,2}:)?\d{1,2}\.\d{2}$/;
 
-const SOURCES = [
-  ['hsuroster26-27.txt', HSU],
-  ['oburoster202627.txt', OBU],
-  ['tests/fixtures/swimcloud/blaise_vera_personal_bests.txt', 'University of Pittsburgh'],
-] as const;
+/**
+ * The two roster exports are local-only: with them, the real rows are read;
+ * without them, the committed stand-ins (invented names, one row per stamp in
+ * the vocabulary) are. The Blaise Vera file is committed.
+ */
+const HSU_ROSTER = readRosterText('hsuroster26-27.txt');
+const OBU_ROSTER = readRosterText('oburoster202627.txt');
+/** Real: 836 HSU + 1030 OBU rows. Stand-in: 109 HSU + 3 OBU rows. Plus the 15 Blaise Vera rows. */
+const EXPECTED_ROW_COUNT =
+  (HSU_ROSTER.source === 'real' ? 836 : 109) + (OBU_ROSTER.source === 'real' ? 1030 : 3) + 15;
+
+const BLAISE_FILE = 'tests/fixtures/swimcloud/blaise_vera_personal_bests.txt';
+const SOURCES: ReadonlyArray<readonly [file: string, team: string, lines: string[]]> = [
+  ['hsuroster26-27.txt', HSU, HSU_ROSTER.lines],
+  ['oburoster202627.txt', OBU, OBU_ROSTER.lines],
+  [BLAISE_FILE, 'University of Pittsburgh', readFileSync(join(repoRoot, BLAISE_FILE), 'utf8').split(/\r?\n/)],
+];
 
 type RealRow = { file: string; line: number; text: string; cols: string[]; team: string };
 
-/** Every row of the real exports laid out `event, time, stamp, meet, date`. */
+/** Every row of the exports laid out `event, time, stamp, meet, date`. */
 function realRows(): RealRow[] {
   const rows: RealRow[] = [];
-  for (const [file, team] of SOURCES) {
-    const lines = readFileSync(join(repoRoot, file), 'utf8').split(/\r?\n/);
+  for (const [file, team, lines] of SOURCES) {
     lines.forEach((text, i) => {
       const cols = text.split('\t').map(c => c.trim());
       if (cols.length >= 5 && TIME.test(cols[1]!) && DATE.test(cols[4]!)) {
@@ -103,7 +115,7 @@ describe('every real row keeps its meet name and date', () => {
   const rows = realRows();
 
   it('covers the real exports and every stamp they print', () => {
-    expect(rows.length).toBe(1881);
+    expect(rows.length).toBe(EXPECTED_ROW_COUNT);
     const stamps = new Set(rows.map(r => r.cols[2]));
     expect([...stamps].sort()).toStrictEqual(Object.keys(EXPECTED).sort());
   });

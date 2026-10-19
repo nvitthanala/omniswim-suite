@@ -29,6 +29,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { readRosterText } from './helpers/localRosterPath';
 import {
   COURSE_DISTANCE_PAIRS,
   EventNotSwumInCourseError,
@@ -709,28 +710,34 @@ describe('a catalog time in an event its course does not swim', () => {
 });
 
 /* -------------------------------------------------------------------------- */
-/* No false positive on the real exports                                       */
+/* No false positive on the roster exports                                     */
 /* -------------------------------------------------------------------------- */
 
-describe('the real roster exports', () => {
+describe('the roster exports (real local files, or the committed stand-ins)', () => {
   const TIME = /^(\d{1,2}:)?\d{1,2}\.\d{2}$/;
   const COURSE = /\b(SCY|SCM|LCM)$/;
-  const rows = ['hsuroster26-27.txt', 'oburoster202627.txt'].flatMap(file =>
-    readFileSync(join(repoRoot, file), 'utf8')
-      .split(/\r?\n/)
+  const sources = ['hsuroster26-27.txt', 'oburoster202627.txt'].map(readRosterText);
+  const allReal = sources.every(s => s.source === 'real');
+  // SCM 400/800/1500 Free rows: 8 in each real export, 3 and 1 in the stand-ins.
+  const expectedScmDistance = sources.reduce(
+    (n, s) => n + (s.source === 'real' ? 8 : s.fileName === 'hsuroster26-27.txt' ? 3 : 1),
+    0
+  );
+  const rows = sources.flatMap(s =>
+    s.lines
       .map(line => line.split('\t').map(c => c.trim()))
       .filter(cols => cols.length >= 2 && TIME.test(cols[1]!) && COURSE.test(cols[0]!))
       .map(cols => ({ event: cols[0]!, time: cols[1]! }))
   );
 
   it('flag nothing', () => {
-    expect(rows.length).toBeGreaterThan(1800);
+    expect(rows.length).toBeGreaterThan(allReal ? 1800 : 50);
     expect(findSwimsNotSwumInCourse(rows)).toStrictEqual([]);
   });
 
   it('still convert every SCM 400, 800 and 1500 Freestyle', () => {
     const scmDistance = rows.filter(r => /^(400|800|1500) Free SCM$/.test(r.event));
-    expect(scmDistance).toHaveLength(16);
+    expect(scmDistance).toHaveLength(expectedScmDistance);
     for (const r of scmDistance) {
       expect(scyConversionOutcome(r.event, r.time, Gender.MEN, 'SCM', { team: HSU }).status, r.event).toBe(
         'converted'

@@ -1,7 +1,7 @@
 /**
  * Seed the HSU 2026-27 roster plan from local data files.
  *
- * Parses hsuroster26-27.txt (multi-athlete SwimCloud paste) and
+ * Parses hsuroster26-27.txt (local only, data/local-rosters/; multi-athlete SwimCloud paste) and
  * possible_hsu_scoringteam2627.txt (scoring theory), builds a workspace named
  * "HSU 2026-27 Roster Plan", and upserts it into BOTH stores (data/meets.json
  * and data/omniswim.db) so it appears regardless of OMNI_DB mode.
@@ -20,8 +20,8 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { resolveDataDir, assertNoServerHoldsStore } from './lib/dataDir.mjs';
+import { localRosterPath } from './lib/localRosters.mjs';
 import { randomUUID } from 'node:crypto';
 import { Gender, ClassYear } from '../packages/core/src/types.ts';
 import { parseSwimCloudMultiProfile } from '../packages/core/src/lib/swimCloudMultiProfile.ts';
@@ -30,10 +30,8 @@ import { parseScoringTheory, applyScoringTheory } from '../packages/core/src/lib
 import { convertSwimToSCY } from '../packages/core/src/lib/utils.ts';
 import { WorkspaceService } from '../packages/db/src/WorkspaceService.ts';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.join(__dirname, '..');
-const ROSTER_FILE = path.join(ROOT, 'hsuroster26-27.txt');
-const THEORY_FILE = path.join(ROOT, 'possible_hsu_scoringteam2627.txt');
+const ROSTER_FILE = localRosterPath('hsuroster26-27.txt');
+const THEORY_FILE = localRosterPath('possible_hsu_scoringteam2627.txt');
 const DATA_DIR = resolveDataDir();
 const MEETS_FILE = path.join(DATA_DIR, 'meets.json');
 const DB_FILE = path.join(DATA_DIR, 'omniswim.db');
@@ -59,8 +57,8 @@ function fail(msg) {
 }
 
 async function main() {
-  if (!fs.existsSync(ROSTER_FILE)) fail(`Missing ${ROSTER_FILE}`);
-  if (!fs.existsSync(THEORY_FILE)) fail(`Missing ${THEORY_FILE}`);
+  if (!fs.existsSync(ROSTER_FILE)) fail(`Missing ${ROSTER_FILE}. Local-only file: see docs/ONBOARDING.md, section 5. This seed never falls back to invented text.`);
+  if (!fs.existsSync(THEORY_FILE)) fail(`Missing ${THEORY_FILE}. Local-only file: see docs/ONBOARDING.md, section 5. This seed never falls back to invented text.`);
 
   // 1. Parse the multi-athlete roster paste.
   const rosterText = fs.readFileSync(ROSTER_FILE, 'utf-8');
