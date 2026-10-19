@@ -483,12 +483,14 @@ function buildIndividualEventGroups(
 /**
  * Individual event group: rows that never earn place points are zeroed and
  * pushed into `indivOut`. Ineligible rows (a non-finish result) are zeroed
- * per-row; if any row of the remaining eligible rows is exhibition or a
- * non-championship time trial, or the round/event is unscored, the WHOLE
- * eligible group is zeroed together (this differs from the timed-final
- * distance scorer, which zeroes per-row — a dead heat in a prelims/A-B-final
- * event is one field, so one swimmer's exhibition designation removes the
- * whole tie group from the ladder, not just that swimmer).
+ * per-row. An exhibition row is zeroed per-row too: it takes no place, so it
+ * leaves the tie count (user decision E2). The scoring rows earn what they
+ * would with every exhibition entry absent: their tie share counts only the
+ * scoring entries here, and the places behind an exhibition entry are moved up
+ * first (`rankAsIfExhibitionAbsent`), the way the timed-final scorer's ladder
+ * and `relayEntryPlaceIndex` already do. If any remaining row is a
+ * non-championship time trial, or the round/event is unscored, the whole
+ * remaining group is zeroed together.
  *
  * Returns `null` once the group is fully accounted for; otherwise the rows
  * still in play.
@@ -499,15 +501,18 @@ function eligibleIndividualGroupOrNull(
   indivOut: SwimmerResult[]
 ): SwimmerResult[] | null {
   const ineligible = group.filter(r => !isScoringSwimResult(r));
-  const eligible = group.filter(r => isScoringSwimResult(r));
+  const scoringSwims = group.filter(r => isScoringSwimResult(r));
   ineligible.forEach(r => indivOut.push({ ...r, points: 0 }));
+  // An exhibition swim holds no place, so it neither scores nor counts in the tie.
+  const exhibition = scoringSwims.filter(r => r.isExhibition);
+  exhibition.forEach(r => indivOut.push({ ...r, points: 0 }));
+  const eligible = scoringSwims.filter(r => !r.isExhibition);
   if (eligible.length === 0) return null;
 
   const sample = itemAt(eligible, 0);
-  const ex = eligible.some(r => r.isExhibition);
   const tt = eligible.some(r => r.isTimeTrial) && !isChampionshipGenderEvent(sample.event);
 
-  if (ex || tt || !canScoreAthlete(sample.roundSwam, sample.event, merged)) {
+  if (tt || !canScoreAthlete(sample.roundSwam, sample.event, merged)) {
     eligible.forEach(r => indivOut.push({ ...r, points: 0 }));
     return null;
   }
@@ -626,6 +631,55 @@ function awardIndividualEventTeamGroup(
   }
 }
 
+/**
+ * The rows with their rank rewritten as if every exhibition entry were absent
+ * (user decision E2, 2026-10-18). In each round tier that holds an exhibition
+ * entry with a rank, every other ranked row moves up by the exhibition entries
+ * ranked strictly ahead of it, the same subtraction `shiftRanksAfterRemoval`
+ * makes. The result is floored at 1 plus the number of other ranked rows
+ * strictly ahead, so a tie keeps its rank, and the entry after a tie of n
+ * still skips n places.
+ *
+ * A gap in the printed ranks is the meet's data and survives. A row that sits
+ * past the gap, such as an unprojected recruit at A-Final rank 12 behind eight
+ * finishers, moves up by the exhibition entries only (12 to 11), never down to
+ * the dense rank (9).
+ *
+ * A disqualified or time-trial row holds its printed place and counts as
+ * ahead. This differs from the timed-final ladder, which skips such rows.
+ * Only the exhibition entries leave.
+ *
+ * A tier with no ranked exhibition entry is returned as it came. The rewritten
+ * rank is internal; `scoreIndividualsInEvent` restores each row's source rank
+ * before returning.
+ */
+function rankAsIfExhibitionAbsent(individuals: SwimmerResult[]): SwimmerResult[] {
+  const exhibitionTiers = new Set<string>();
+  for (const r of individuals) {
+    if (isScoringSwimResult(r) && r.isExhibition && (parseRankInt(r.rank) ?? 0) >= 1) {
+      exhibitionTiers.add(classifyRoundTier(r.roundSwam));
+    }
+  }
+  if (exhibitionTiers.size === 0) return individuals;
+
+  const isExhibitionEntry = (r: SwimmerResult): boolean =>
+    isScoringSwimResult(r) && r.isExhibition === true;
+  const inTier = (r: SwimmerResult): boolean =>
+    (parseRankInt(r.rank) ?? 0) >= 1 && exhibitionTiers.has(classifyRoundTier(r.roundSwam));
+  const exhibition = individuals.filter(r => inTier(r) && isExhibitionEntry(r));
+  const present = individuals.filter(r => inTier(r) && !isExhibitionEntry(r));
+  return individuals.map(r => {
+    if (!inTier(r) || isExhibitionEntry(r)) return r;
+    const rank = parseRankInt(r.rank) as number;
+    const tier = classifyRoundTier(r.roundSwam);
+    const countAhead = (rows: SwimmerResult[]): number =>
+      rows.filter(h => classifyRoundTier(h.roundSwam) === tier && (parseRankInt(h.rank) as number) < rank)
+        .length;
+    const next = Math.max(rank - countAhead(exhibition), 1 + countAhead(present), 1);
+    return next === rank ? r : { ...r, rank: next };
+  });
+}
+
 function scoreIndividualsInEvent(
   individuals: SwimmerResult[],
   merged: ScoringSettings,
@@ -633,7 +687,8 @@ function scoreIndividualsInEvent(
   useMeetWidePool: boolean,
   rosterLookup?: ScorerRosterLookup
 ): SwimmerResult[] {
-  const { indivGroups, indivSortedKeys } = buildIndividualEventGroups(individuals);
+  const field = rankAsIfExhibitionAbsent(individuals);
+  const { indivGroups, indivSortedKeys } = buildIndividualEventGroups(field);
 
   const cap = merged.maxIndividualScorersPerTeam ?? 999;
   const teamIndivScorers: Record<string, number> = {};
@@ -660,7 +715,7 @@ function scoreIndividualsInEvent(
         allMembers,
         share.each,
         share.isPrelimDiving,
-        individuals,
+        field,
         // `eligible` is non-empty: `eligibleIndividualGroupOrNull` returned it.
         itemAt(eligible, 0).event,
         cap,
@@ -674,5 +729,10 @@ function scoreIndividualsInEvent(
     }
   }
 
-  return indivOut;
+  if (field === individuals) return indivOut;
+  const sourceRankById = new Map(individuals.map(r => [r.id, r.rank] as const));
+  return indivOut.map(r => {
+    const sourceRank = sourceRankById.get(r.id);
+    return sourceRank === undefined || sourceRank === r.rank ? r : { ...r, rank: sourceRank };
+  });
 }

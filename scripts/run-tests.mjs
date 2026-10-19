@@ -62,6 +62,7 @@ const TESTS = [
   ['test_optimizer_never_loses.mjs'],
   ['test_arbitrage_never_loses.mjs'],
   ['test_tie_group_scoring.mjs'],
+  ['test_exhibition_tie_parity.mjs'],
   ['test_recruit_placement_grid.mjs'],
   ['test_scorer_pool_cap.mjs'],
   ['test_fast_swap_context.mjs'],

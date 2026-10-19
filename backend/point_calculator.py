@@ -647,6 +647,58 @@ def _score_timed_final_individuals(
     return out
 
 
+def _rank_as_if_exhibition_absent(athletes):
+    """Rewrite ranks in place as if every exhibition entry were absent (user decision E2).
+
+    In each round tier that holds an exhibition entry with a rank, every other ranked
+    row moves up by the exhibition entries ranked strictly ahead of it (the subtraction
+    `shiftRanksAfterRemoval` makes in TypeScript). The result is floored at 1 plus the
+    number of other ranked rows strictly ahead, so a tie keeps its rank and the entry
+    after a tie of n still skips n places.
+
+    A gap in the printed ranks is the meet's data and survives: a row at A-Final rank 12
+    behind eight finishers moves to 11, not to the dense rank 9. A disqualified or
+    time-trial row holds its printed place and counts as ahead; only the exhibition
+    entries leave. Pass every row of the event, including rows set aside for an unreadable
+    time, so the count matches TypeScript. A tier with no ranked exhibition entry is not
+    touched. TS twin: `rankAsIfExhibitionAbsent` in individualScoring.ts.
+
+    Returns [(athlete, source_rank)] so the caller can restore the printed ranks.
+    """
+    exhibition_tiers = set()
+    for a in athletes:
+        rk = parse_rank_int(a)
+        if is_scoring_athlete(a) and a.get('is_exhibition', False) and rk is not None and rk >= 1:
+            exhibition_tiers.add(classify_round_tier(a.get('round_swam')))
+    if not exhibition_tiers:
+        return []
+
+    exhibition = []
+    present = []
+    for a in athletes:
+        rk = parse_rank_int(a)
+        if rk is None or rk < 1:
+            continue
+        tier = classify_round_tier(a.get('round_swam'))
+        if tier not in exhibition_tiers:
+            continue
+        if is_scoring_athlete(a) and a.get('is_exhibition', False):
+            exhibition.append((rk, tier))
+        else:
+            present.append((a, rk, tier))
+
+    rewrites = []
+    for a, rk, tier in present:
+        exhibition_ahead = sum(1 for xrk, xtier in exhibition if xtier == tier and xrk < rk)
+        others_ahead = sum(1 for _h, hrk, htier in present if htier == tier and hrk < rk)
+        new_rank = max(rk - exhibition_ahead, 1 + others_ahead, 1)
+        if new_rank != rk:
+            rewrites.append((a, a.get('rank'), new_rank))
+    for a, _source, new_rank in rewrites:
+        a['rank'] = new_rank
+    return [(a, source) for a, source, _new in rewrites]
+
+
 def _athlete_has_finals_dive_in_event(event_rows, name, team, cfg):
 
     n = (name or '').strip()
@@ -1293,6 +1345,7 @@ def calculate_points(athletes, scoring_settings=None, overrides=None):
 
     def _process_scoring_event(ev_athletes, gender):
 
+        all_event_rows = ev_athletes
         ev_athletes = _set_aside_untimed_rows(ev_athletes, scored_athletes)
         if not ev_athletes:
             return
@@ -1471,6 +1524,9 @@ def calculate_points(athletes, scoring_settings=None, overrides=None):
 
             else:
 
+                # Ranks as if every exhibition entry were absent; restored after the event.
+                source_ranks = _rank_as_if_exhibition_absent(all_event_rows)
+
                 ind_by_key = defaultdict(list)
 
                 for a in ev_athletes:
@@ -1489,7 +1545,15 @@ def calculate_points(athletes, scoring_settings=None, overrides=None):
 
 
 
-                sorted_groups = sorted(ind_by_key.values(), key=lambda grp: get_ev_sort_key(grp[0]))
+                # An exhibition row sorts last, so key a tie group off a row that holds
+                # the place: the scoring rows of the group keep their order (TS twin
+                # `buildIndividualEventGroups` keys off the group's first row).
+                sorted_groups = sorted(
+                    ind_by_key.values(),
+                    key=lambda grp: get_ev_sort_key(
+                        next((a for a in grp if not a.get('is_exhibition', False)), grp[0])
+                    ),
+                )
 
                 team_indiv_counts = defaultdict(int)
 
@@ -1507,15 +1571,28 @@ def calculate_points(athletes, scoring_settings=None, overrides=None):
 
                     scored_athletes.extend(ineligible)
 
+                    # An exhibition swim holds no place: it scores 0 and leaves the tie
+                    # count, whichever row of the group it is. The other rows earn what
+                    # they would with it absent (user decision E2). TS twin:
+                    # `eligibleIndividualGroupOrNull`.
+                    exhibition_rows = [a for a in eligible if a.get('is_exhibition', False)]
+
+                    for athlete in exhibition_rows:
+
+                        athlete['calculated_points'] = 0.0
+
+                    scored_athletes.extend(exhibition_rows)
+
+                    eligible = [a for a in eligible if not a.get('is_exhibition', False)]
+
                     if not eligible:
 
                         continue
 
                     team_athlete = eligible[0]
 
-                    is_exhibition = team_athlete.get('is_exhibition', False)
-
-                    is_time_trial = team_athlete.get('is_time_trial', False)
+                    # Any time trial in the group removes the group (TS: `eligible.some`).
+                    is_time_trial = any(a.get('is_time_trial', False) for a in eligible)
 
                     ev_nm = str(team_athlete.get('event', '') or '')
 
@@ -1532,8 +1609,7 @@ def calculate_points(athletes, scoring_settings=None, overrides=None):
 
 
                     if (
-                        is_exhibition
-                        or (is_time_trial and not is_championship_gender_event(ev_nm))
+                        (is_time_trial and not is_championship_gender_event(ev_nm))
                         or not can_score_swim(rs, ev_nm, cfg)
                     ):
 
@@ -1605,15 +1681,31 @@ def calculate_points(athletes, scoring_settings=None, overrides=None):
 
                         if roster_is_scorer is not None:
 
-                            roster_ok = all(roster_is_scorer(n, team_name, gender) for n in unique_names)
+                            # Roster eligibility is per swimmer, as in TS
+                            # `awardIndividualEventTeamGroup`: a tied teammate off the scoring
+                            # roster costs only their own points. The tie share is unchanged.
+                            on_roster = {
+                                n: roster_is_scorer(n, team_name, gender) for n in unique_names
+                            }
 
-                            for athlete in members:
+                            # Admission is per athlete, fastest first, as in TS
+                            # `admitTieGroupToMeetPool` / `admitTieGroupToEventCap`. An
+                            # athlete the cap cannot take forfeits their share; the share of
+                            # the others does not move.
+                            candidates = [
+                                a for a in members
+                                if on_roster[a.get('name')] and not _prelim_dive_blocked(a)
+                            ]
+                            best_seconds = {}
+                            for a in candidates:
+                                t = _row_time_seconds(a)
+                                t = float('inf') if t is None else t
+                                n = a.get('name')
+                                if n not in best_seconds or t < best_seconds[n]:
+                                    best_seconds[n] = t
+                            fastest_first = sorted(best_seconds, key=lambda n: (best_seconds[n], str(n).casefold(), str(n)))
 
-                                athlete['calculated_points'] = (
-                                    avg_pts if roster_ok and not _prelim_dive_blocked(athlete) else 0.0
-                                )
-
-                            if roster_ok and use_meet_wide_pool:
+                            if use_meet_wide_pool:
 
                                 if mkey not in meet_states:
 
@@ -1621,13 +1713,29 @@ def calculate_points(athletes, scoring_settings=None, overrides=None):
 
                                 pool = meet_states[mkey]['pool']
 
-                                for n in unique_names:
-
-                                    if not any(
-                                        _prelim_dive_blocked(a) for a in members if a.get('name') == n
-                                    ):
-
+                                admitted = set()
+                                for n in fastest_first:
+                                    if _can_add_to_pool(pool, n, ev_nm, cfg):
                                         _add_to_pool(pool, n, ev_nm, cfg)
+                                        admitted.add(n)
+
+                            elif max_individuals_cfg < 999:
+
+                                room = max(0, max_individuals_cfg - team_indiv_counts[team_name])
+                                admitted = set(fastest_first[:room])
+                                team_indiv_counts[team_name] += len(admitted)
+
+                            else:
+
+                                admitted = set(fastest_first)
+
+                            for athlete in members:
+
+                                athlete['calculated_points'] = (
+                                    avg_pts
+                                    if athlete.get('name') in admitted and not _prelim_dive_blocked(athlete)
+                                    else 0.0
+                                )
 
                             continue
 
@@ -1683,6 +1791,9 @@ def calculate_points(athletes, scoring_settings=None, overrides=None):
 
                     # Not `group`: its ineligible rows were emitted above.
                     scored_athletes.extend(eligible)
+
+                for a, source_rank in source_ranks:
+                    a['rank'] = source_rank
 
 
 

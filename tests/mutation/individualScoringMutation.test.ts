@@ -148,14 +148,15 @@ describe('placed events: rank decides the row', () => {
     expect(byName(out)).toEqual({ X: 0, Y: 20 });
   });
 
-  it('one exhibition row removes its whole tie group from the ladder', () => {
-    // X (exhibition) and Y share rank 1: both 0. Rank 2 is still 2nd place: 17.
+  it('an exhibition row scores nothing but leaves its tie group, so the scorer keeps the place', () => {
+    // X (exhibition) and Y share rank 1: X 0, Y 20 as if X were absent (user decision E2). Rank 2 is
+    // still 2nd place: 17.
     const out = run([
       row('X', 'T1', 1, '20.00', { isExhibition: true }),
       row('Y', 'T2', 1, '20.00'),
       row('Z', 'T3', 2, '20.50'),
     ]);
-    expect(byName(out)).toEqual({ X: 0, Y: 0, Z: 17 });
+    expect(byName(out)).toEqual({ X: 0, Y: 20, Z: 17 });
   });
 
   it('a time trial scores 0, but a Boys/Girls championship event scores', () => {
@@ -631,7 +632,8 @@ describe('the per-team place cap in a dual-meet event', () => {
 
   it('a swimmer who holds no place does not use one of the cap slots', () => {
     // Cap 2. Alpha: a DQ, an exhibition swim, a time trial, a C-final swim, and a swim with no rank
-    // are all outside the cap. A2 and A3 then both fit: 2nd (17) and 3rd (16).
+    // are all outside the cap. A2 and A3 then both fit. The exhibition entry is absent (decision E2), the
+    // DQ and the time trial still hold rank 1 between them, so A2 is 3rd (16) and A3 is 4th (15).
     const out = run(
       [
         row('Dq', 'Alpha', 1, 'DQ'),
@@ -644,7 +646,7 @@ describe('the per-team place cap in a dual-meet event', () => {
       ],
       { maxIndividualScorersPerTeamPerEvent: 2 }
     );
-    expect(byName(out)).toMatchObject({ A2: 17, A3: 16 });
+    expect(byName(out)).toMatchObject({ A2: 16, A3: 15 });
   });
 
   it('a championship-event time trial does hold a place', () => {
