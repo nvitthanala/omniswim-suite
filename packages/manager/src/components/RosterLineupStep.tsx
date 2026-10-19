@@ -142,7 +142,7 @@ export default function RosterLineupStep({
         icon={<FileWarning size={28} />}
         eyebrow="Lineup"
         title="Bring in swimmers first"
-        description="Load a meet or import swimmers on the Athletes step to build this lineup."
+        description="Load a meet or import swimmers on the Swimmers step to build this lineup."
       />
     );
   }
@@ -161,7 +161,7 @@ export default function RosterLineupStep({
     <div className="flex flex-col gap-3 flex-1 min-h-0">
       {!whatIfMode ? (
         <p className="text-ui-caption rounded-xl border border-theme-soft surface-muted-bg px-4 py-2.5 text-theme-secondary shrink-0">
-          Observe only — enable What-if to toggle scorers, edit entries, or remove athletes.
+          Observe only — enable What-if to toggle scorers, edit entries, or remove swimmers.
         </p>
       ) : null}
 
@@ -246,7 +246,7 @@ export default function RosterLineupStep({
                       onUpdate(patch);
                       toast.push(
                         'success',
-                        `Linked ${pair.aliasName} to ${pair.canonicalName} — their times now count as one athlete.`
+                        `Linked ${pair.aliasName} to ${pair.canonicalName} — their times now count as one swimmer.`
                       );
                     }
                   : undefined

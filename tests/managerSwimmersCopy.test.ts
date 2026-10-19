@@ -1,6 +1,6 @@
 // @vitest-environment happy-dom
 /**
- * Phase 3 wording: the first Manager step is "Athletes", and the recruit form
+ * Phase 3 wording: the first Manager step is "Swimmers", and the recruit form
  * submits an "Add swim" action.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -13,7 +13,7 @@ import { Gender } from '../packages/core/src/types';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-describe('Manager Athletes step wording', () => {
+describe('Manager Swimmers step wording', () => {
   let container: HTMLDivElement;
   let root: Root;
 
@@ -28,12 +28,12 @@ describe('Manager Athletes step wording', () => {
     container.remove();
   });
 
-  it('names the first step Athletes, not Source', async () => {
+  it('names the first step Swimmers, not Source', async () => {
     await act(async () => {
       root.render(elementWithChildren(RosterWizardShell, { step: 'source', onStepChange: vi.fn() }, 'body'));
     });
     const labels = Array.from(container.querySelectorAll('[role="tab"]')).map(t => t.textContent ?? '');
-    expect(labels[0]).toContain('Athletes');
+    expect(labels[0]).toContain('Swimmers');
     expect(labels.join(' ')).not.toContain('Source');
   });
 

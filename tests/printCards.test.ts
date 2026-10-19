@@ -273,7 +273,7 @@ describe('printable cards', () => {
       });
       expect(print).not.toHaveBeenCalled();
       expect(document.body.textContent).toContain('Review before print');
-      expect(document.body.textContent).toContain('has no athlete name');
+      expect(document.body.textContent).toContain('has no swimmer name');
     } finally {
       window.print = original;
     }

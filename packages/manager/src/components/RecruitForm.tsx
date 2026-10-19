@@ -360,7 +360,7 @@ export default function RecruitForm({
   return (
     <form onSubmit={handleSubmit} className={`space-y-4 ${disabled ? 'opacity-60 pointer-events-none' : ''}`}>
       <div>
-        <span className={labelClass}>Athlete name</span>
+        <span className={labelClass}>Swimmer name</span>
         <div className="grid grid-cols-2 gap-2">
           <input
             id={ids.firstName}

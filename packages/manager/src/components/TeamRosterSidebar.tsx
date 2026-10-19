@@ -53,7 +53,7 @@ export default function TeamRosterSidebar({
                   {team}
                 </div>
                 <div className="text-ui-caption text-theme-secondary mt-1">
-                  {memberCounts.get(team) ?? 0} athletes
+                  {memberCounts.get(team) ?? 0} swimmers
                 </div>
                 <div className="flex gap-2 mt-2 text-ui-micro font-mono">
                   {actual != null ? <span className="text-theme-secondary">Act {actual.toFixed(0)}</span> : null}

@@ -693,7 +693,7 @@ export function buildTheoreticalMeetWorkspace(input: TheoreticalMeetWorkspaceInp
   }
   const { seeds } = input;
   if (seeds.rows.length === 0) {
-    throw new TheoreticalWorkspaceError('no-seed-rows', 'The seeds hold no row, so there is no meet to build. See the report for why each athlete made none.');
+    throw new TheoreticalWorkspaceError('no-seed-rows', 'The seeds hold no row, so there is no meet to build. See the report for why each swimmer made none.');
   }
 
   if (input.scoringSettings?.usePdfPlacePoints === true) {

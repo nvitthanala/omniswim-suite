@@ -58,7 +58,7 @@ export function TeamCardHeader({
         <h3 className="text-sm font-bold text-[var(--text-primary)]">{team.teamName}</h3>
         <div className="flex flex-col gap-1">
           <span className="text-ui-caption text-theme-secondary font-medium">
-            {conference ? `${conference} • ` : ''}{athleteCount} Athletes
+            {conference ? `${conference} • ` : ''}{athleteCount} Swimmers
           </span>
           {(actualScore != null || baselineScore != null || showPrelimsPerformance) ? (
             <ProjectedActualScore

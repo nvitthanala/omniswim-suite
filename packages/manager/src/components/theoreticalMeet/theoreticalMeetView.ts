@@ -283,10 +283,18 @@ export function teamDivisionTag(schoolName: string | null, season?: string | nul
 /** The badge text for a team whose captures sit in different divisions. */
 export const DIVISION_VARIES_TEXT = 'division differs by season';
 
-/** One tag for a team group. The rows' tags when they agree; {@link DIVISION_VARIES_TEXT} (division null) when they do not. */
+/**
+ * One tag for a team group, read from the rows whose division is known.
+ *
+ * - Known rows agree: that tag. A row with no recorded season, or one the table cannot place, keeps its own
+ *   `unknown division` tag and does not change the heading.
+ * - Known rows disagree (two seasons in different divisions): {@link DIVISION_VARIES_TEXT} (division null).
+ * - No row has a known division: the first row's tag (`unknown division`).
+ */
 function groupDivisionTag(name: string | null, rows: readonly CaptureRow[]): { tag: DivisionTag; varies: boolean } {
-  const first = rows[0]?.divisionTag ?? teamDivisionTag(name);
-  const divisions = new Set(rows.map(r => r.divisionTag.division));
+  const known = rows.filter(r => r.divisionTag.division !== null);
+  const first = known[0]?.divisionTag ?? rows[0]?.divisionTag ?? teamDivisionTag(name);
+  const divisions = new Set(known.map(r => r.divisionTag.division));
   if (divisions.size <= 1) return { tag: first, varies: false };
   return { tag: { text: DIVISION_VARIES_TEXT, division: null, canonicalTeam: first.canonicalTeam }, varies: true };
 }

@@ -105,6 +105,52 @@ describe('groupCaptures tags each capture by its season', () => {
   });
 });
 
+describe('groupCaptures heading for a school whose division changed with the season (UWF)', () => {
+  const UWF = 'University of West Florida';
+  const rec = (season: string | undefined): CaptureListRecord => ({
+    captureId: season === undefined ? 'team-10002824' : `team-10002824-${season}`,
+    subject: { kind: 'team', teamId: '10002824', ...(season === undefined ? {} : { season }) },
+    completeness: 'every-planned-page-fetched',
+    plannedPageCount: 1,
+    pages: [],
+    updatedAt: '2026-10-19T00:00:00.000Z',
+    teamName: UWF,
+  });
+
+  it('a 2025-2026 capture heads the group NCAA D2', () => {
+    const [g] = groupCaptures([rec('2025-2026')], NOW);
+    expect(g!.divisionVaries).toBe(false);
+    expect(g!.divisionTag).toMatchObject({ text: 'NCAA D2', division: 'D2' });
+  });
+
+  it('a 2026-2027 capture heads the group NCAA D1', () => {
+    const [g] = groupCaptures([rec('2026-2027')], NOW);
+    expect(g!.divisionVaries).toBe(false);
+    expect(g!.divisionTag).toMatchObject({ text: 'NCAA D1', division: 'D1' });
+  });
+
+  it('a capture with no season recorded is unknown division, never D1 or D2', () => {
+    const [g] = groupCaptures([rec(undefined)], NOW);
+    expect(g!.divisionTag).toMatchObject({ text: 'unknown division', division: null });
+    expect(g!.rows[0]!.divisionTag.division).toBeNull();
+  });
+
+  it('a season-less capture beside a known season keeps its own unknown tag and does not hide the known heading', () => {
+    const [g] = groupCaptures([rec('2025-2026'), rec(undefined)], NOW);
+    expect(g!.divisionVaries).toBe(false);
+    expect(g!.divisionTag).toMatchObject({ text: 'NCAA D2', division: 'D2' });
+    const bySeason = new Map(g!.rows.map(r => [r.season, r.divisionTag.division]));
+    expect(bySeason.get('2025-2026')).toBe('D2');
+    expect(bySeason.get(null)).toBeNull();
+  });
+
+  it('two known seasons in different divisions still read "division differs by season"', () => {
+    const [g] = groupCaptures([rec('2025-2026'), rec('2026-2027')], NOW);
+    expect(g!.divisionVaries).toBe(true);
+    expect(g!.divisionTag).toMatchObject({ text: DIVISION_VARIES_TEXT, division: null });
+  });
+});
+
 /* -------------------------------------------------------------------------- */
 /* 2: unmatched removals                                                       */
 /* -------------------------------------------------------------------------- */

@@ -14,7 +14,7 @@ type Props = {
   onClose: () => void;
 };
 
-type PaletteGroup = 'Pages' | 'Workspaces' | 'Athletes';
+type PaletteGroup = 'Pages' | 'Workspaces' | 'Swimmers';
 
 type PaletteItem = {
   id: string;
@@ -30,7 +30,7 @@ type PaletteItem = {
   run: () => void;
 };
 
-const GROUP_ORDER: PaletteGroup[] = ['Pages', 'Workspaces', 'Athletes'];
+const GROUP_ORDER: PaletteGroup[] = ['Pages', 'Workspaces', 'Swimmers'];
 const MAX_PER_GROUP = 8;
 
 /** Case- and diacritic-insensitive fold for matching. */
@@ -194,7 +194,7 @@ export default function CommandPalette({ open, onClose }: Props) {
       .sort(([a], [b]) => a.localeCompare(b))
       .map(([name, meta]) => ({
         id: `athlete:${name}`,
-        group: 'Athletes' as const,
+        group: 'Swimmers' as const,
         label: name,
         hint: `${meta.source} · ${meta.gender === Gender.MEN ? 'Men' : 'Women'}`,
         icon: <User size={14} />,
@@ -299,7 +299,7 @@ export default function CommandPalette({ open, onClose }: Props) {
             value={query}
             onChange={e => setQuery(e.target.value)}
             onKeyDown={handleKeyDown}
-            placeholder="Jump to a page, workspace, or athlete…"
+            placeholder="Jump to a page, workspace, or swimmer…"
             className="flex-1 bg-transparent outline-none text-ui-body text-[var(--text-primary)] placeholder:text-[var(--text-muted)]"
             aria-label="Search commands"
           />

@@ -756,6 +756,7 @@ async function teamsOfCapture(
       gender,
       rosterStatus,
       ...(rosterSeasonId === undefined ? {} : { rosterSeasonId }),
+      ...(subject.season === undefined ? {} : { season: subject.season }),
       athletes,
       captureId,
       retrievedAt: page.ref.retrievedAt,
@@ -768,7 +769,7 @@ async function teamsOfCapture(
 
   const unmatched = parse.swimmerTimes.filter(t => !consumed.has(t)).length;
   if (unmatched > 0) {
-    const line = `${unmatched} parsed swimmer times page(s) match no athlete on this capture's roster pages. They are not used.`;
+    const line = `${unmatched} parsed swimmer times page(s) match no swimmer on this capture's roster pages. They are not used.`;
     captureWarnings.push(line);
     for (const [i, team] of teams.entries()) teams[i] = { ...team, warnings: [...team.warnings, line] };
   }

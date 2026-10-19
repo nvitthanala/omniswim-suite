@@ -154,7 +154,7 @@ export default function AthleteCreditedSwimsPanel({
       </div>
 
       {swims.length === 0 ? (
-        <p className="p-4 text-ui-caption text-theme-muted italic text-center">No swims found for this athlete.</p>
+        <p className="p-4 text-ui-caption text-theme-muted italic text-center">No swims found for this swimmer.</p>
       ) : (
         <>
           {unconfirmed.length > 0 ? (

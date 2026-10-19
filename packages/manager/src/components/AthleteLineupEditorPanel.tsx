@@ -211,7 +211,7 @@ export default function AthleteLineupEditorPanel({
     const alias = newAliasText.trim();
     if (!alias) return;
     if (canonicalSwimmerName(alias) === athleteCanonical) {
-      toast.push('error', 'That already matches the athlete name.');
+      toast.push('error', 'That already matches the swimmer name.');
       return;
     }
     applyPatch(ws =>
@@ -352,7 +352,7 @@ export default function AthleteLineupEditorPanel({
                 size="sm"
                 onClick={onClose}
                 className="p-1.5 text-theme-muted hover:text-[var(--text-primary)] shrink-0"
-                aria-label="Close athlete editor"
+                aria-label="Close swimmer editor"
                 leadingIcon={<X size={18} />}
               />
             </div>
@@ -429,7 +429,7 @@ export default function AthleteLineupEditorPanel({
                   </ul>
                 ) : (
                   <p className="text-ui-micro text-theme-muted italic">
-                    No linked spellings for this athlete.
+                    No linked spellings for this swimmer.
                   </p>
                 )}
                 {editable ? (

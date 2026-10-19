@@ -2036,8 +2036,8 @@ export function applyAutoAliasLinks(
     patch: added.length ? { athleteAliases: [...base, ...added] } : {},
     inverse: added.length ? { athleteAliases: base } : {},
     description: added.length
-      ? `Auto-link ${added.length} duplicate athlete name${added.length === 1 ? '' : 's'}`
-      : 'No athlete names met the auto-link bar',
+      ? `Auto-link ${added.length} duplicate swimmer name${added.length === 1 ? '' : 's'}`
+      : 'No swimmer names met the auto-link bar',
     plan,
     applied: plan.autoLinks,
   };

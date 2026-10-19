@@ -50,8 +50,8 @@ type Props = {
 };
 
 const STAGES: { value: OptimizerStage; label: string; desc: string }[] = [
-  { value: 'scorers', label: 'Scorers only', desc: 'Optimize which athletes score per team' },
-  { value: 'events', label: 'Events only', desc: 'Optimize event lineup per athlete' },
+  { value: 'scorers', label: 'Scorers only', desc: 'Optimize which swimmers score per team' },
+  { value: 'events', label: 'Events only', desc: 'Optimize event lineup per swimmer' },
   { value: 'all', label: 'Full (scorers + events)', desc: 'Both scorer roster and event lineup' },
 ];
 
@@ -244,7 +244,7 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
                 Optimizes every team using the current What-if setting.{' '}
                 {removeSeniors
                   ? 'Drop seniors is on: graduating seniors are left out.'
-                  : 'Drop seniors is off: every athlete stays in.'}
+                  : 'Drop seniors is off: every swimmer stays in.'}
               </p>
             </div>
           </div>

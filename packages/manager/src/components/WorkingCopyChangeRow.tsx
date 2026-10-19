@@ -24,7 +24,7 @@ function UnrestorableWarning({ change }: { change: RevertibleChange }) {
   return (
     <p className="text-ui-caption text-warning mt-0.5">
       Original rows are no longer recoverable — reverting will only clear the removal marker, not
-      bring back this athlete&apos;s swims.
+      bring back this swimmer&apos;s swims.
     </p>
   );
 }
@@ -33,7 +33,7 @@ export default function WorkingCopyChangeRow({ change, disabled, onRevert }: Pro
   const canRevert = canRevertChange(change);
   const title =
     change.kind === 'removal' && !change.fullyRestorable
-      ? "This athlete's original rows can no longer be rebuilt; only the removal marker will be cleared."
+      ? "This swimmer's original rows can no longer be rebuilt; only the removal marker will be cleared."
       : undefined;
 
   return (

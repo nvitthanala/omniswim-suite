@@ -107,7 +107,7 @@ test('Phase 6 screenshots: Athletes, Lineup, Optimize, Matrix, Metrics', async (
       await page.goto('/manager');
       await expect(page.locator('header')).toContainText(name.slice(0, 18));
       for (const step of [
-        { tab: /Athletes/, name: 'athletes', team: false },
+        { tab: /Swimmers/, name: 'athletes', team: false },
         { tab: /Lineup/, name: 'lineup', team: true },
         { tab: /Optimize/, name: 'optimize', team: true },
       ]) {

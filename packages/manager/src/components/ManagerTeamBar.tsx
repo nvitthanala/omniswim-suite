@@ -41,7 +41,7 @@ export default function ManagerTeamBar({ teams, selectedTeam, onSelectTeam, acti
       />
       <span className="text-ui-caption text-theme-muted">
         {teams.length === 0
-          ? 'Add athletes or load a meet to get a team.'
+          ? 'Add swimmers or load a meet to get a team.'
           : 'Every step below works on this team.'}
       </span>
       {actions ? <div className="flex flex-wrap items-center gap-2 sm:ml-auto">{actions}</div> : null}

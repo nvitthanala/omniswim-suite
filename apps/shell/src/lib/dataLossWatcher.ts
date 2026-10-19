@@ -53,7 +53,7 @@ interface DataLossWarning {
 const COLLECTION_LABELS: Record<string, string> = {
   menResults: "Men's results",
   womenResults: "Women's results",
-  athleteHistory: 'Athlete history',
+  athleteHistory: 'Swimmer history',
 };
 
 function collectionLabel(collection: string): string {

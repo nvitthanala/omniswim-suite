@@ -128,7 +128,7 @@ export default function TeamRosterHeader({
       ) : null}
 
       <p className="text-ui-body text-theme-secondary my-3 leading-relaxed">
-        Click an athlete to edit scorers, individual entries, and see relay status.
+        Click a swimmer to edit scorers, individual entries, and see relay status.
         {editable ? ` ${scorerCapPhrase(maxIndividualScorersPerTeam)}` : ' Enable What-if to edit scorers.'}
         {' '}
         <kbd className="px-1 rounded border border-theme-soft bg-[var(--surface-muted)] text-ui-micro font-mono">

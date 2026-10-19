@@ -28,7 +28,7 @@ const GROUP_LABEL: Record<LineupChecklistItem['group'], string> = {
   entries: 'Entry limits',
   lineups: 'Empty lineups',
   relays: 'Relay gaps',
-  roster: 'Duplicate athletes',
+  roster: 'Duplicate swimmers',
   program: 'Program provenance',
   provenance: 'Converted-time cuts',
 };
@@ -74,7 +74,7 @@ export default function LineupComplianceChecklist({
         <div className="flex items-start gap-2 text-ui-body text-theme-secondary leading-relaxed">
           <CheckCircle2 size={16} className="shrink-0 mt-0.5 text-[var(--text-accent)]" />
           <p>
-            No compliance issues for this team. Entry limits, scorers, relay legs, and athlete
+            No compliance issues for this team. Entry limits, scorers, relay legs, and swimmer
             names look clear.
           </p>
         </div>

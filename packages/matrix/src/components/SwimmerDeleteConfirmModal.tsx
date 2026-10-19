@@ -24,7 +24,7 @@ export default function SwimmerDeleteConfirmModal({ swimmerName, gender, onConfi
           <span className="text-[var(--text-primary)]">{gender}</span> results?
         </>
       }
-      warning="All individual swims for this athlete will be removed from the workspace. Relay legs will be treated as departed for projection (replacements from recruits or roster). Any recruit row with the same name will also be removed."
+      warning="All individual swims for this swimmer will be removed from the workspace. Relay legs will be treated as departed for projection (replacements from recruits or roster). Any recruit row with the same name will also be removed."
       confirmLabel="Confirm remove"
       onConfirm={onConfirm}
       onCancel={onCancel}

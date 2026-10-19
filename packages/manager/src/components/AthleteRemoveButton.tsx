@@ -14,7 +14,7 @@ import { Trash2 } from 'lucide-react';
 import { Button } from '@omniswim/ui';
 
 export const ATHLETE_REMOVE_HINT =
-  'Opens a confirmation. There you choose to hide this athlete from the What-if projection or to remove them from the roster. Meet results stay on record.';
+  'Opens a confirmation. There you choose to hide this swimmer from the What-if projection or to remove them from the roster. Meet results stay on record.';
 
 type Props = {
   athleteName: string;

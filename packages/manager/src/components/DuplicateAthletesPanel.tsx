@@ -158,7 +158,7 @@ export default function DuplicateAthletesPanel({
       >
         <span className="text-ui-caption text-theme-muted flex items-center gap-1.5 min-w-0">
           <Link2 size={13} className="text-[var(--text-accent)] shrink-0" />
-          Duplicate athletes
+          Duplicate swimmers
           {pending.length > 0 && (
             <span className="ml-1 rounded-full border border-[var(--text-accent)]/30 bg-[var(--text-accent)]/10 px-1.5 text-[var(--text-accent)]">
               {pending.length} to link

@@ -440,7 +440,7 @@ describe('SwimCloudCaptureBrowser (mode="meet-results")', () => {
       rostersSectionToggle!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(container.textContent).toContain('Team A');
-    expect(container.textContent).toContain('2 athletes');
+    expect(container.textContent).toContain('2 swimmers');
     expect(container.textContent).not.toContain('Norco, LA'); // athlete detail not yet expanded
 
     // Then expand the roster row within it -> athlete detail appears.

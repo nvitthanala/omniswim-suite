@@ -88,7 +88,7 @@ function RosterBrowseList({ options, expandedKeys, onToggle }: RosterBrowseListP
               type="button"
               onClick={() => onToggle(option.key)}
               aria-expanded={isExpanded}
-              aria-label={`${isExpanded ? 'Hide' : 'Show'} athletes on ${rosterTeamLabel(option.roster)}`}
+              aria-label={`${isExpanded ? 'Hide' : 'Show'} swimmers on ${rosterTeamLabel(option.roster)}`}
               className="w-full flex items-center gap-2 px-3 py-2 text-left"
             >
               {isExpanded ? (
@@ -102,7 +102,7 @@ function RosterBrowseList({ options, expandedKeys, onToggle }: RosterBrowseListP
               <span className="text-ui-caption text-theme-secondary">
                 {option.roster.gender ?? 'unknown gender'} ·{' '}
                 {option.roster.season ?? 'unknown season'} · {option.roster.athletes.length}{' '}
-                athlete{option.roster.athletes.length === 1 ? '' : 's'}
+                swimmer{option.roster.athletes.length === 1 ? '' : 's'}
               </span>
             </button>
             {isExpanded ? (

@@ -300,7 +300,7 @@ export default function TeamRosterPanel({
       onAthleteSelect?.(null);
       toast.push(
         'info',
-        `Could not open ${jumpAthleteName ?? 'that athlete'} on ${selectedTeam || 'this team'}.`
+        `Could not open ${jumpAthleteName ?? 'that swimmer'} on ${selectedTeam || 'this team'}.`
       );
     }
     onJumpAthleteHandled?.();
@@ -510,7 +510,7 @@ export default function TeamRosterPanel({
             </>
           ) : (
             <>
-              {teamRows.length} athletes on{' '}
+              {teamRows.length} swimmers on{' '}
               <span className="text-[var(--text-accent)]">{selectedTeam}</span> — enable What-if to
               edit scorers
             </>

@@ -220,7 +220,7 @@ export function MeetOpsStandingsStep({
             ) : (
               <tr>
                 <td colSpan={5} className="p-8 text-center text-theme-muted italic">
-                  No athlete data available in current matrix
+                  No swimmer data available in current matrix
                 </td>
               </tr>
             )}

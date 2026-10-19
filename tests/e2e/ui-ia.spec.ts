@@ -67,7 +67,7 @@ test('Phase 1 IA regressions and theme/width screenshots', async ({ page, reques
 
       await startOnWorkspace(page, createdWorkspace.id);
       await page.goto('/manager');
-      await expect(page.getByRole('tab', { name: /Athletes/ })).toBeVisible();
+      await expect(page.getByRole('tab', { name: /Swimmers/ })).toBeVisible();
       await captureScreenshot(page, `${theme}-${width}-manager-athletes`);
       const genderButtons = page.locator('nav[aria-label="Gender"] button[aria-pressed]');
       await expect(genderButtons).toHaveCount(2);
@@ -192,7 +192,7 @@ test('Phase 3 Manager screenshots', async ({ page, request }) => {
   page.on('pageerror', error => pageErrors.push(error.message));
   const { id, name } = await createPhaseWorkspace(request, 'shots');
   const steps = [
-    { tab: /Source|Athletes/, name: 'athletes', team: false },
+    { tab: /Source|Swimmers/, name: 'athletes', team: false },
     { tab: /Lineup/, name: 'lineup', team: true },
     { tab: /Relays/, name: 'relays', team: true },
     { tab: /Optimize/, name: 'optimize', team: true },
@@ -268,8 +268,8 @@ test('Phase 3 Athletes step, shared team bar and Export entries menu', async ({ 
   await startOnWorkspace(page, id);
   await page.goto('/manager');
 
-  // The first step is Athletes, not Source.
-  await expect(page.getByRole('tab', { name: /Athletes/ })).toHaveAttribute('aria-selected', 'true');
+  // The first step is Swimmers, not Source.
+  await expect(page.getByRole('tab', { name: /Swimmers/ })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('tab', { name: /Source/ })).toHaveCount(0);
 
   // At most 8 buttons above the fold inside the Athletes step.
@@ -408,7 +408,7 @@ test('Phase 4 Optimize owns the optimizers and Lineup only links to it', async (
   await openManagerOn(page, id, name);
 
   // The header no longer carries a Batch optimizer button on any step.
-  for (const step of ['Athletes', 'Lineup', 'Relays', 'Optimize']) {
+  for (const step of ['Swimmers', 'Lineup', 'Relays', 'Optimize']) {
     await page.getByRole('tab', { name: new RegExp(step) }).click();
     await expect(page.getByRole('button', { name: /Batch optimizer/i })).toHaveCount(0);
   }

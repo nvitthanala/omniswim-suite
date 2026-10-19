@@ -45,7 +45,7 @@ const MAX_SINGLE_TASK_MS = 1000;
 const MAX_TOTAL_BLOCKING_MS = 3200;
 const SETTLE_MS = 2500;
 
-const STEPS = ['Athletes', 'Lineup', 'Relays', 'Optimize'];
+const STEPS = ['Swimmers', 'Lineup', 'Relays', 'Optimize'];
 const TEAM_PICKER_NAME = 'Henderson State University';
 
 /**
@@ -145,7 +145,7 @@ async function measure(
       // one control that sets it. Pick Henderson State if the workspace has
       // it; single-team workspaces already have their team selected.
       const teamSelect = page.getByRole('combobox', { name: 'Team', exact: true });
-      if (step !== 'Athletes' && (await teamSelect.count())) {
+      if (step !== 'Swimmers' && (await teamSelect.count())) {
         const options = await teamSelect.first().locator('option').allTextContents();
         if (options.includes(TEAM_PICKER_NAME)) {
           await teamSelect.first().selectOption({ label: TEAM_PICKER_NAME });

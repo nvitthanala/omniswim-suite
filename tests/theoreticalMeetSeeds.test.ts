@@ -350,7 +350,7 @@ describe('no times captured is reported apart from no usable seed', () => {
     const res = buildTheoreticalMeetSeeds(meet({ teams: [team(UWF, Gender.MEN, [], '29', { rosterStatus: 'no_rosters_found' })] }));
     expect(res.rows.length).toBe(0);
     expect(res.report.teams[0]!.rosterStatus).toBe('no_rosters_found');
-    expect(res.report.teams[0]!.caveats.join(' ')).toMatch(/lists no athletes/);
+    expect(res.report.teams[0]!.caveats.join(' ')).toMatch(/lists no swimmers/);
   });
 
   it('refuses an empty roster that is not stated to be "no rosters found"', () => {

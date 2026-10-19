@@ -116,7 +116,7 @@ export function buildProvenanceBadges(input: ProvenanceBadgeInput): ProvenanceBa
     specs.push({
       key: 'from_history',
       label: 'From history',
-      tooltip: 'No meet or recruit swim at this event — filled from the athlete’s recorded history.',
+      tooltip: 'No meet or recruit swim at this event — filled from the swimmer’s recorded history.',
     });
   }
 

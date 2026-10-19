@@ -359,14 +359,14 @@ export function describeUnplannedPass(
  * present — a coach reading "31 of 35" must not have to infer the other 4.
  */
 export function describeRosterCoverage(coverage: SwimCloudCaptureRosterCoverage): string {
-  if (coverage.rosterAthleteCount === 0) return 'This roster page listed no athletes.';
+  if (coverage.rosterAthleteCount === 0) return 'This roster page listed no swimmers.';
   if (coverage.withCapturedTimes === 0) {
-    return `0 of ${coverage.rosterAthleteCount} athletes have captured times — all ${coverage.rosterAthleteCount} will need a manual capture.`;
+    return `0 of ${coverage.rosterAthleteCount} swimmers have captured times — all ${coverage.rosterAthleteCount} will need a manual capture.`;
   }
   if (coverage.withoutCapturedTimes === 0) {
-    return `${coverage.withCapturedTimes} of ${coverage.rosterAthleteCount} athletes have captured times.`;
+    return `${coverage.withCapturedTimes} of ${coverage.rosterAthleteCount} swimmers have captured times.`;
   }
-  return `${coverage.withCapturedTimes} of ${coverage.rosterAthleteCount} athletes have captured times · ${coverage.withoutCapturedTimes} will need a manual capture.`;
+  return `${coverage.withCapturedTimes} of ${coverage.rosterAthleteCount} swimmers have captured times · ${coverage.withoutCapturedTimes} will need a manual capture.`;
 }
 
 function groupKeyFor(parse: SwimCloudTeamMeetSwimsParse): string {

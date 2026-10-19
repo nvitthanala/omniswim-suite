@@ -171,7 +171,7 @@ export function ArbitrageCardList({
     return (
       <div className="rounded-xl border border-dashed border-theme-soft px-4 py-8 text-center">
         <p className="text-ui-body text-theme-secondary leading-relaxed max-w-md mx-auto">
-          No swap gains points for this team — every athlete is already in the events
+          No swap gains points for this team — every swimmer is already in the events
           that score most for them.
         </p>
       </div>
@@ -629,7 +629,7 @@ export default function RosterOptimizeStep({
         icon={<FileWarning size={28} />}
         eyebrow="Optimize"
         title="Bring in swimmers first"
-        description="Load a meet or import swimmers on the Athletes step to build this optimization."
+        description="Load a meet or import swimmers on the Swimmers step to build this optimization."
       />
     );
   }

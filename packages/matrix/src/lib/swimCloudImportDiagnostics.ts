@@ -142,7 +142,7 @@ export function skipReasonLabel(reason: SwimCloudMeetImportSkipReason): string {
     case 'no-team-name':
       return 'No team name on the row';
     case 'no-athlete-name':
-      return 'No athlete name on the row';
+      return 'No swimmer name on the row';
     case 'relay-leadoff':
       return 'Relay leadoff split (correctly excluded)';
     case 'ambiguous-round-duplicate':

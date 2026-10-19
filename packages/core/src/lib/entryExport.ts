@@ -63,7 +63,7 @@ export function validateEntriesForExport(entries: PlannedSwimEntry[]): EntryExpo
       });
     }
     if (!e.name?.trim()) {
-      issues.push({ type: 'missing_name', entryId: e.id, message: `Entry ${e.id} has no athlete name` });
+      issues.push({ type: 'missing_name', entryId: e.id, message: `Entry ${e.id} has no swimmer name` });
     }
     if (!e.team?.trim()) {
       issues.push({ type: 'missing_team', entryId: e.id, message: `${label}: no team recorded` });

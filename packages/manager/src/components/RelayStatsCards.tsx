@@ -16,7 +16,7 @@ type Stats = {
 
 export default function RelayStatsCards({ stats }: { stats: Stats }) {
   const items = [
-    { label: 'Athletes', value: stats.athletes },
+    { label: 'Swimmers', value: stats.athletes },
     { label: 'Individual swims', value: stats.individual },
     { label: 'Relay leg rows', value: stats.relayLegs },
     { label: 'Relay events', value: stats.relayEvents },

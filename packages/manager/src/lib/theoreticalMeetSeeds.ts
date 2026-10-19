@@ -200,6 +200,12 @@ export interface TheoreticalMeetTeamInput {
   readonly teamName: string;
   readonly gender: Gender;
   /**
+   * The season label the capture states (`'2025-2026'`), when it states one. It picks the division of a
+   * school whose division changed (UWF: D2 through 2025-2026, D1 from 2026-2027). Absent: no season is
+   * known, and such a school has no division here. Not derived from `rosterSeasonId`, which is an opaque id.
+   */
+  readonly season?: string;
+  /**
    * What the roster capture said. `parsed`: the page parsed and lists athletes.
    * `no_rosters_found`: the real "No rosters found" page (the parser warns
    * `no-roster-posted`); `athletes` must then be empty. An empty list with
@@ -687,7 +693,7 @@ function validateAthletes(team: TheoreticalMeetTeamInput): void {
   for (const entry of team.athletes) {
     const { athlete } = entry;
     if (typeof athlete.name !== 'string' || athlete.name.trim().length === 0) {
-      throw new TheoreticalMeetError('athlete-without-name', `Team ${team.teamName} has an athlete with no usable name (swimmer id ${athlete.swimCloudSwimmerId ?? 'none'}).`);
+      throw new TheoreticalMeetError('athlete-without-name', `Team ${team.teamName} has a swimmer with no usable name (swimmer id ${athlete.swimCloudSwimmerId ?? 'none'}).`);
     }
     const g = athlete.gender;
     if (g !== undefined && g !== 'unknown' && (g as string) !== (team.gender as string)) {
@@ -708,7 +714,7 @@ function validateRosterStatus(team: TheoreticalMeetTeamInput): void {
     throw new TheoreticalMeetError('roster-status-required', `Team ${team.teamName} (${team.gender}) has roster status ${JSON.stringify(status)}. State 'parsed' or 'no_rosters_found'.`);
   }
   if (status === 'parsed' && team.athletes.length === 0) {
-    throw new TheoreticalMeetError('roster-status-required', `Team ${team.teamName} (${team.gender}) has no athletes but its roster status is 'parsed'. An empty roster must be stated as 'no_rosters_found'.`);
+    throw new TheoreticalMeetError('roster-status-required', `Team ${team.teamName} (${team.gender}) has no swimmers but its roster status is 'parsed'. An empty roster must be stated as 'no_rosters_found'.`);
   }
   if (status === 'no_rosters_found' && team.athletes.length > 0) {
     throw new TheoreticalMeetError('invalid-input', `Team ${team.teamName} (${team.gender}) is 'no_rosters_found' but lists ${team.athletes.length} athlete(s).`);
@@ -900,7 +906,8 @@ function rankSeeds(ctx: Context, team: TheoreticalMeetTeamInput, athlete: SwimCl
     [],
     undefined,
     ctx.meetProgram,
-    null
+    null,
+    team.season
   );
   return profile.primaryEvents.map(selectorEvent => {
     const best = profile.bestByEvent[selectorEvent];
@@ -1377,7 +1384,7 @@ function teamCaveats(
   const fresh = freshnessCaveat(team, acc.seedSeasonIds);
   if (fresh !== undefined) caveats.push(fresh);
   if (team.rosterStatus === 'no_rosters_found') {
-    caveats.push(`The roster for ${team.teamName} (${team.gender}) lists no athletes (SwimCloud: no rosters found). No rows were made.`);
+    caveats.push(`The roster for ${team.teamName} (${team.gender}) lists no swimmers (SwimCloud: no rosters found). No rows were made.`);
   }
   const totalCapped = caps.totalCap !== undefined && caps.totalCap < UNCAPPED;
   // With relays built the slots ARE accounted for (relays are chosen first), so the "not reserved" line would be false.
@@ -1392,7 +1399,7 @@ function teamCaveats(
     caveats.push(`${acc.unknownCourseSwims} captured swim(s) have no recorded course. They were not used.`);
   }
   if (acc.parseFailed.length > 0) {
-    caveats.push(`${acc.parseFailed.length} athlete(s) have a times page that did not parse. No rows were made for them.`);
+    caveats.push(`${acc.parseFailed.length} swimmer(s) have a times page that did not parse. No rows were made for them.`);
   }
   caveats.push(...exhibitionCaveats(acc.exhibitionSeedsUsed, acc.rows.length, acc.exhibitionEventsExcluded));
   if (acc.eventsRemovedByUser > 0) caveats.push(removedEventsCaveat(acc.eventsRemovedByUser));
@@ -1541,7 +1548,7 @@ function processTeam(
     if (prior !== undefined) {
       throw new TheoreticalMeetError(
         'name-collision-in-team',
-        `Team ${team.teamName} (${team.gender}) has two athletes with the name ${entry.athlete.name}: ${describeAthlete(prior)} and ${describeAthlete(entry.athlete)}. ` +
+        `Team ${team.teamName} (${team.gender}) has two swimmers with the name ${entry.athlete.name}: ${describeAthlete(prior)} and ${describeAthlete(entry.athlete)}. ` +
           'Psych scoring keys an entry on event, team and name, so it would merge them. Neither is picked. Resolve the names first.'
       );
     }

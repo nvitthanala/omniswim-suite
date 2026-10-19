@@ -71,7 +71,7 @@ export default function TeamRosterTable({
     <table className="w-full">
       <thead className="sticky top-0 surface-muted-bg z-[1]">
         <tr className="text-ui-caption text-theme-muted border-b border-theme-soft">
-          <th className="text-left py-2.5 px-3 font-medium">Athlete</th>
+          <th className="text-left py-2.5 px-3 font-medium">Swimmer</th>
           <th className="text-right py-2.5 px-3 font-medium w-20">Class</th>
           <th className="text-right py-2.5 px-3 font-medium w-24">Meet pts</th>
           {editable ? (
@@ -88,7 +88,7 @@ export default function TeamRosterTable({
         {!selectedTeam || teamRows.length === 0 ? (
           <tr>
             <td colSpan={colSpan + 1} className="py-4 text-center text-ui-caption text-theme-muted italic">
-              {teams.length ? 'No athletes for this team' : 'Upload results to populate teams'}
+              {teams.length ? 'No swimmers for this team' : 'Upload results to populate teams'}
             </td>
           </tr>
         ) : (

@@ -429,18 +429,18 @@ function auditDuplicateAthletes(
   for (const pair of detectDuplicateAthletes(workspace, { team, gender })) {
     collector.pushIssue(pair.canonicalName, {
       type: 'duplicate_athlete',
-      message: `Also appears as "${pair.aliasName}" — likely the same athlete`,
+      message: `Also appears as "${pair.aliasName}" — likely the same swimmer`,
       duplicate: pair,
     });
     collector.pushIssue(pair.aliasName, {
       type: 'duplicate_athlete',
-      message: `Also appears as "${pair.canonicalName}" — likely the same athlete`,
+      message: `Also appears as "${pair.canonicalName}" — likely the same swimmer`,
       duplicate: pair,
     });
     collector.pushChecklist({
       type: 'duplicate_athlete',
       group: 'roster',
-      message: `${pair.canonicalName}: also entered as "${pair.aliasName}" — likely the same athlete`,
+      message: `${pair.canonicalName}: also entered as "${pair.aliasName}" — likely the same swimmer`,
       athleteName: pair.canonicalName,
       duplicate: pair,
     });
@@ -482,7 +482,7 @@ function auditProgramProvenance(
       collector.pushChecklist({
         type: 'program_division_unknown',
         group: 'program',
-        message: `${row.name}: ${team}'s division is not mapped — cut standards and lineup rules for this athlete may be judged against the wrong table`,
+        message: `${row.name}: ${team}'s division is not mapped — cut standards and lineup rules for this swimmer may be judged against the wrong table`,
         athleteName: row.name,
       });
     }

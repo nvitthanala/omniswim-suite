@@ -265,7 +265,13 @@ export function categorizeBestEvents(
    * meet (rule 1 of `rankEventsByStrength`). `null`: no meet is loaded, and
    * events rank by distance to the division cut.
    */
-  meetField: MeetPlaceField | null = null
+  meetField: MeetPlaceField | null = null,
+  /**
+   * The season label the swims were captured for (`'2025-2026'`), when one was stated. It picks the
+   * division for a school whose division changed ({@link divisionForTeamInSeason}). Absent: a school
+   * with a division history has no division, and events rank on raw time. Never defaulted.
+   */
+  swimSeason?: string
 ): AthleteEventProfile {
   const merged = mergeScoringSettings(settings);
   const indCap = merged.maxIndividualEntriesPerSwimmer ?? 3;
@@ -352,6 +358,7 @@ export function categorizeBestEvents(
   const ranking = rankEventsByStrength(bestByEvent, gender, team, {
     meetField,
     isSameSwimmer: sameSwimmerPredicate(name, team, gender, resolver),
+    swimSeason,
   });
   const primaryEvents = ranking.order.slice(0, indCap);
   const relayList = relayEvents.slice(0, relayCap);

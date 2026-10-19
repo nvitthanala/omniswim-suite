@@ -388,7 +388,7 @@ await readOnlyMount.unmount();
 // 5. The close control calls onClose.
 // ---------------------------------------------------------------------------
 
-const closeButton = container.querySelector('button[aria-label="Close athlete editor"]');
+const closeButton = container.querySelector('button[aria-label="Close swimmer editor"]');
 assert.ok(closeButton, 'the drawer should expose a close control');
 assert.equal(editableMount.calls.close, 0, 'onClose should not fire before the control is used');
 await click(closeButton);

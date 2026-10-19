@@ -240,7 +240,7 @@ describe('theoreticalMeetFromCaptures: times are undefined, [] or parse_failed, 
   it('a parsed times page that matches no roster athlete is reported, not used', async () => {
     const result = await run({ parse: { swimmerTimes: [timesFor('999999999')] } });
     expect(result.teams.every(t => t.athletes.every(a => a.swims === undefined))).toBe(true);
-    expect(result.warnings.join('\n')).toMatch(/1 parsed swimmer times page\(s\) match no athlete/);
+    expect(result.warnings.join('\n')).toMatch(/1 parsed swimmer times page\(s\) match no swimmer/);
   });
 });
 

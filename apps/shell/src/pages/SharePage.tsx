@@ -44,7 +44,7 @@ export default function SharePage() {
         </p>{' '}
         <h1 className="text-2xl font-black text-[var(--text-primary)]">{label}</h1>{' '}
         <p className="text-ui-caption text-theme-muted mt-2">
-          {workspace.name} · {swimmerCount} athletes · read-only{' '}
+          {workspace.name} · {swimmerCount} swimmers · read-only{' '}
         </p>{' '}
         <div className="mt-6 grid sm:grid-cols-2 gap-4 text-ui-caption">
           <div className="rounded-lg border border-theme-soft p-4">

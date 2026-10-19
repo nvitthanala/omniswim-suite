@@ -19,7 +19,8 @@
  *     `data/meets.json` holds when it is present.
  */
 import { describe, expect, it } from 'vitest';
-import { Gender } from '../packages/core/src/types';
+import { Gender, type HistoricalSwim } from '../packages/core/src/types';
+import { categorizeBestEvents } from '../packages/core/src/lib/athleteHistory';
 import {
   divisionForEntryInSeason,
   divisionForTeamInSeason,
@@ -248,5 +249,31 @@ describe('the other division readers agree', () => {
     // The cache must not hand a season-less answer to a seasoned call.
     const again = swim().basis;
     expect(again.method === 'ncaa_scm_table' && again.division).toBeNull();
+  });
+});
+
+describe('categorizeBestEvents reads the capture season for a school whose division changed', () => {
+  const swim = (event: string, time: string): HistoricalSwim => ({
+    name: 'Test Swimmer',
+    team: UWF,
+    gender: Gender.WOMEN,
+    event,
+    time,
+    timeType: 'SCY',
+    source: 'swimcloud',
+  });
+  const swims = [swim('50 Freestyle', '23.00'), swim('100 Freestyle', '50.00')];
+  const profile = (season?: string) =>
+    categorizeBestEvents(swims, UWF, Gender.WOMEN, 'Test Swimmer', { scoringPoints: [] } as never, [], undefined, null, null, season);
+
+  it('judges the events against the season\'s division, and leaves them unjudged without a season', () => {
+    const d2 = profile('2025-2026');
+    const d1 = profile('2026-2027');
+    const none = profile(undefined);
+    const bad = profile('last year');
+    expect(d2.unrankedEvents ?? []).toEqual([]);
+    expect(d1.unrankedEvents ?? []).toEqual([]);
+    expect(none.unrankedEvents?.length).toBeGreaterThan(0);
+    expect(bad.unrankedEvents?.length).toBeGreaterThan(0);
   });
 });

@@ -43,7 +43,7 @@ export default function RosterRelayStep({
         icon={<FileWarning size={28} />}
         eyebrow="Relays"
         title="Bring in swimmers first"
-        description="Load a meet or import swimmers on the Athletes step to build this relay plan."
+        description="Load a meet or import swimmers on the Swimmers step to build this relay plan."
       />
     );
   }
