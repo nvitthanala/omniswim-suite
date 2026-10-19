@@ -8,6 +8,18 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Changed (end-of-run decisions, 2026-10-16)
+
+- **An exhibition swimmer takes no place.** Every scoring swimmer in an A or B final is scored as if the exhibition entries were absent. A tie splits over the scoring entries.
+- **A vacated relay leg with no real split shows NT.** The 3 s vacancy penalty is gone.
+- **Swims-list swims need your confirmation.** A swim imported from a swimmer list reads "Not confirmed as a program swim". It stays out of best times, relay legs and cut tags until you confirm it (What-if on). The import notes count the swims that wait.
+- **A tied relay with an old override key asks you to choose.** The key is no longer copied to both relays.
+- **UWF is judged by season.** A 2025-2026 capture reads NCAA D2 and a 2026-2027 capture reads NCAA D1. A swim with no recorded season reads unknown division.
+- **Own team.** You can set your team on the season trend page. The trend opens on it. Changing it does not mark an optimizer result stale.
+- **Backups.** Admins named in OMNI_ADMIN_EMAILS can list and restore backups when sign-in is required.
+- **Podium medal.** The medal shows for 1st to 3rd place.
+- **The word "swimmer" replaces "athlete"** in the interface.
+
 ### Changed (improvement plan, 2026-10-12 to 2026-10-14)
 
 - **Tied relays split points.** When relays tie, the points of every place
