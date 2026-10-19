@@ -708,7 +708,7 @@
   "remainingAfterR1": "R3 identity module, R7 large components, R9 deps last, T6 mutation testing, F4 scouting, F6 relay programs (research), F10 reconcile video plan, H4/H5/H6/H7/H11, R12 alias config, T10/T11, P-items found-not-fixed; then end-of-run questions",
   "endAnswers20261016": {
     "answeredAt": "2026-10-16",
-    "status": "answered, implementation not started",
+    "status": "E1-E5, E7-E9, E11, E18-E20 built and committed (9a368db3, E2 commit after it); E13 E15 E17 not started; E16 blocked",
     "order": [
       "E1 scored-program boundary: derive from the published program when one exists, else warn at import and show unknown (no guess)",
       "E2 individual A/B tie with exhibition swimmer: exclude only the exhibition entry (match relays); needs golden run + architect review",
@@ -758,6 +758,14 @@
         "vault + CHANGELOG"
       ],
       "note": "Nothing from this batch is committed yet. Tree has 91 changed paths; do not git stash."
-    }
+    },
+    "followUps": [
+      "E8 season is not wired to any screen: no meet date source exists (PDF meets carry none; HistoricalSwim.seasonId is an opaque SwimCloud id). UWF rows read division_unknown (were D2). Needs a meet-date source from the user, then divisionForEntryInSeason at teamCardView.ts:167,173, rosterLineupAudit.ts:537, athleteHistory.ts:776, rosterCatalog.ts:156.",
+      "E3: kept the vacant reason instead of no_baseline so relayLegIsVacant stays true; the time is NT and the leg is never priced.",
+      "E2 edge: the max() rule can invert a printed order only with dense ranks after a gap and several ranked exhibition entries; nothing in core produces dense ranks. Add a monotonic-points test.",
+      "Python non-roster paths: the meet-pool check does not count earlier admissions in the same tie group and the per-event cap admits in row order; TS admits per swimmer. Edge case at the cap boundary with tied teammates; roster mode (the default) is fixed.",
+      "E4: swims can be confirmed only with What-if on; every swims-list import loses best times and cut tags until confirmed.",
+      "E16: no published NSISC program or complete-results PDF found (SwimCloud 403, school recaps only). Ask the user for a source."
+    ]
   }
 }
