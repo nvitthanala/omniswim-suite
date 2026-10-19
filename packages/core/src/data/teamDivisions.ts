@@ -123,7 +123,9 @@ export type TeamDivisionEntry = {
   team: string;
   /**
    * The division to judge a *current* swim against, or `null` when there is no
-   * honest single answer — a discontinued program, or one we could not verify.
+   * honest single answer — a discontinued program, one we could not verify, or
+   * a school that changed division (UWF): no season-less answer is right for it,
+   * so ask by season.
    *
    * `null` here is the same `null` {@link resolveTeamDivision} returns for an
    * unknown school: not D1, not the school's last-known division. Use
@@ -225,7 +227,7 @@ const TEAM_DIVISION_ENTRIES: readonly TeamDivisionEntry[] = [
   },
   {
     team: 'University of West Florida',
-    division: 'D2',
+    division: null,
     aliases: ['UWF', 'West Florida'],
     provenance: 'meet',
     status: 'active',
@@ -256,11 +258,15 @@ const TEAM_DIVISION_ENTRIES: readonly TeamDivisionEntry[] = [
     note:
       'Division move effective 2026-2027 (recorded 2026-10-14): UWF left NCAA ' +
       'D2 for NCAA D1 and the Atlantic Sun Conference; see `divisionHistory`. ' +
-      '`division` stays `D2` on purpose. The tag paths (`cutlineTags`, ' +
-      '`athleteHistory`, `eventStrength`, `utils`, `rosterLineupAudit`) read ' +
-      'this season-agnostic field, so `D1` here would judge every 2025-2026 ' +
-      'swim against the D1 table. Use `divisionForTeamInSeason` for a ' +
-      'season-aware answer. The sources dated 2026-10-14 are the three after ' +
+      '`division` is `null` on purpose (2026-10-16): the school has no single ' +
+      'division across the seasons we hold, and the tag paths (`cutlineTags`, ' +
+      '`athleteHistory`, `eventStrength`, `scyConversion`, `rosterLineupAudit`) ' +
+      'read this season-agnostic field. `D2` here judged a 2026-2027 swim ' +
+      'against the D2 table; `D1` would judge a 2025-2026 swim against the D1 ' +
+      'table. A season-less lookup is therefore unknown. A caller that knows ' +
+      'the swim’s season passes it (`TeamDivisionOptions.season`, ' +
+      '`divisionForTeamInSeason`) and gets D2 through 2025-2026 and D1 from ' +
+      '2026-2027. The sources dated 2026-10-14 are the three after ' +
       'the staff directory; the roster and staff directory were last read on ' +
       '2026-07-26, and sponsorship (women only) was not re-audited for men. ' +
       'The 2026-27 schedule release lists the women’s team only. ' +
@@ -491,6 +497,14 @@ export type TeamDivisionOptions = {
    * University'` both work.
    */
   overrides?: Record<string, NcaaDivision>;
+  /**
+   * The season of the swim being judged, `YYYY-YYYY`. When given, a registry
+   * match resolves through {@link divisionForTeamInSeason}'s rule instead of
+   * the season-agnostic `division`. An override still wins. Absent keeps the
+   * season-agnostic answer, which is `null` for a school with no single
+   * division across the seasons we hold.
+   */
+  season?: string;
 };
 
 function resolveOverride(
@@ -550,12 +564,17 @@ export function resolveTeamDivision(
     };
   }
 
+  // With a season given, the division is the one held that season; without one,
+  // the entry's season-agnostic `division` (`null` when it has no single answer).
+  const divisionOf = (entry: TeamDivisionEntry): NcaaDivision | null =>
+    options?.season === undefined ? entry.division : divisionForEntryInSeason(entry, options.season);
+
   const norm = normalizeTeamKey(team);
   const direct = norm ? BY_KEY.get(norm) : undefined;
   if (direct) {
     return {
       team,
-      division: direct.division,
+      division: divisionOf(direct),
       canonicalTeam: direct.team,
       match: normalizeTeamKey(direct.team) === norm ? 'canonical' : 'alias',
       entry: direct,
@@ -570,7 +589,7 @@ export function resolveTeamDivision(
     if (viaAbbrev) {
       return {
         team,
-        division: viaAbbrev.division,
+        division: divisionOf(viaAbbrev),
         canonicalTeam: viaAbbrev.team,
         match: 'abbreviation',
         entry: viaAbbrev,
@@ -653,15 +672,27 @@ export function divisionForTeamInSeason(
   season: string,
   options?: TeamDivisionOptions
 ): NcaaDivision | null {
-  const resolution = resolveTeamDivision(teamName, options);
-  if (resolution.match === 'override') return resolution.division;
+  // `resolveTeamDivision` applies the override first, then the season rule.
+  return resolveTeamDivision(teamName, { ...options, season }).division;
+}
 
-  const entry = resolution.entry;
-  if (!entry) return null;
+/**
+ * The division an entry held during `season`, or `null`.
+ *
+ * An entry with a `divisionHistory` answers only for a season it can parse:
+ * an absent or unparseable `season` is `null`, never the entry's `division`.
+ * That field is the season-agnostic answer, and for a school that changed
+ * division it is exactly the answer that must not stand in for a season.
+ */
+export function divisionForEntryInSeason(
+  entry: Pick<TeamDivisionEntry, 'division' | 'divisionHistory' | 'status' | 'lastActiveSeason'>,
+  season: string
+): NcaaDivision | null {
   if (!programCompetedInSeason(entry, season)) return null;
 
-  const target = teamSeasonStartYear(season);
-  if (target !== null && entry.divisionHistory?.length) {
+  if (entry.divisionHistory?.length) {
+    const target = teamSeasonStartYear(season);
+    if (target === null) return null;
     for (const period of entry.divisionHistory) {
       const from = period.from ? teamSeasonStartYear(period.from) : null;
       const through = period.through ? teamSeasonStartYear(period.through) : null;

@@ -17,6 +17,7 @@
 import { Gender, ScoringSettings, Workspace } from '../../types';
 import { programEventOrNull } from '../eventIdentity';
 import { isRankableSwim } from '../bestTimeEligibility';
+import { isUnconfirmedProgramSwim } from '../programSwim';
 import { mergeScoringSettings } from '../scoringDefaults';
 import { convertTimeToSeconds, isRelayResult, normalizeSwimmerName } from '../utils';
 import {
@@ -220,6 +221,7 @@ export function buildCoverageGaps(
     if (r.gender != null && r.gender !== opts.gender) continue;
     if (isRelayResult(r)) continue;
     if (r.isExhibition || r.isTimeTrial) continue;
+    if (isUnconfirmedProgramSwim(r)) continue;
     const event = programEventOrNull(r.event);
     if (!event) continue;
     const rTeam = String(r.team ?? '').trim();

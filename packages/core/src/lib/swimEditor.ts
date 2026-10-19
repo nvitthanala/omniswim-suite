@@ -401,6 +401,39 @@ export function removeCreditedSwim(
 }
 
 /**
+ * Flag a credited swim as a program swim (`'program'`), or put it back to
+ * unconfirmed. The swims-list import stamps its rows `'unconfirmed'` because the
+ * page prints the same label for a program swim and a time trial (see
+ * `programSwim.ts`). An unconfirmed row counts toward no best time, arbitrage
+ * field or cut tag. Only this explicit call lifts that.
+ *
+ * Throws when the row is missing or carries no `programSwim` stamp. A row with no
+ * stamp (a PDF row, an event-page row) states its own program membership, and
+ * there is nothing to confirm. The inverse restores the full prior results array.
+ */
+export function setCreditedSwimProgramStatus(
+  workspace: Workspace,
+  gender: Gender,
+  resultRowId: string,
+  status: 'program' | 'unconfirmed'
+): WorkspaceEditorPatch {
+  const field = genderResultsField(gender);
+  const results = workspace[field] ?? [];
+  const row = results.find(r => r.id === resultRowId);
+  if (!row) throw new Error(`setCreditedSwimProgramStatus: no result row ${resultRowId} in ${field}`);
+  if (row.programSwim === undefined) {
+    throw new Error(
+      `setCreditedSwimProgramStatus: row ${resultRowId} has no programSwim stamp, so it already states its own program membership.`
+    );
+  }
+  return {
+    patch: { [field]: results.map(r => (r.id === resultRowId ? { ...r, programSwim: status } : r)) },
+    inverse: { [field]: results },
+    description: `Mark ${row.name}: ${row.event} as ${status === 'program' ? 'a program swim' : 'unconfirmed'}`,
+  };
+}
+
+/**
  * Drop the relay leg fills that name `removed`'s swimmer once `edit` leaves that
  * swimmer with no meet row and no recruit row — the same prune a scorer toggle
  * makes (`applyScorerOffRelayPatch`).

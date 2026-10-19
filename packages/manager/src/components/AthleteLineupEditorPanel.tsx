@@ -59,6 +59,7 @@ import {
 } from '@omniswim/core/lib/swimEditor';
 import { addAliasLink, buildAliasResolver, removeAliasLink } from '@omniswim/core/lib/athleteAliases';
 import { Button, useToast } from '@omniswim/ui';
+import { setCreditedSwimsProgramStatus } from '../lib/creditedSwimProgramStatus';
 import AthleteCreditedSwimsPanel, { type EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
 import AthleteRoleTag from './AthleteRoleTag';
 import AthleteRemoveButton from './AthleteRemoveButton';
@@ -242,6 +243,25 @@ export default function AthleteLineupEditorPanel({
   // It raises on a row the workspace does not own — a Team Roster Catalog swim
   // is injected at scoring time and has nothing to delete. Say so; the previous
   // behaviour was a success toast over a patch that changed nothing.
+  // Confirm (or un-confirm) swims-list swims as program swims. A stamped row counts toward no best
+  // time, arbitrage field or cut tag until confirmed. Saved like any other what-if edit, with the
+  // same Undo chip. It raises on a row the workspace does not own (a Team Roster Catalog swim).
+  const setProgramStatus = (swims: AthleteCreditedSwim[], status: 'program' | 'unconfirmed') => {
+    if (!editable || swims.length === 0) return;
+    try {
+      applyPatch(ws =>
+        setCreditedSwimsProgramStatus(
+          ws,
+          gender,
+          swims.map(s => s.id),
+          status
+        )
+      );
+    } catch {
+      toast.push('error', 'Could not change the program-swim status of those swims. They are not in this workspace.');
+    }
+  };
+
   const handleDeleteCreditedSwim = (swim: AthleteCreditedSwim) => {
     try {
       applyPatch(ws => removeProjectedSwim(ws, gender, swim.id));
@@ -518,6 +538,8 @@ export default function AthleteLineupEditorPanel({
                   deletable={editable}
                   onDeleteSwim={editable ? handleDeleteCreditedSwim : undefined}
                   onEditSwim={editable ? handleEditCreditedSwim : undefined}
+                  onSetProgramStatus={editable ? (swim, status) => setProgramStatus([swim], status) : undefined}
+                  onConfirmAllProgramSwims={editable ? swims => setProgramStatus(swims, 'program') : undefined}
                   entryLimitLabel={formatEntryLimitLabel(counts, settings)}
                 />
               ) : (

@@ -17,9 +17,10 @@
  * prefix. Then "clear leg" on A removed the plain key and B lost its fill too,
  * and a save for A replaced the key B read.
  *
- * Now the plain key of a tied pair is rewritten into one override per relay
- * (`migrateTiedRelayOverrides`) before it is read, and the readers and the
- * editors match one exact key. Clearing A cannot change what B reads.
+ * Now the readers and the editors match one exact key. The plain key of a tied
+ * pair names neither relay (user decision E5, 2026-10-16: it is reported as
+ * ambiguous by `migrateTiedRelayOverridesDetailed` and applied to neither), so
+ * clearing A cannot change what B reads.
  *
  * Real data holds no tied relay of one team, so the relays are synthetic, in
  * the shape `relayOverrideTieKey.test.ts` builds.
@@ -121,7 +122,7 @@ describe('upsertRelayLegOverride', () => {
   const cOwn = at(cKey, LEG, 'Y1');
   const next = at(aKey, LEG, 'Y1');
 
-  it("leaves the plain key's override in place: it is B's too until it is migrated", () => {
+  it("leaves the plain key's override in place: it is neither relay's, and it is not dropped", () => {
     expect(upsertRelayLegOverride([legacy], next)).toStrictEqual([legacy, next]);
   });
 
@@ -140,19 +141,22 @@ describe('upsertRelayLegOverride', () => {
     expect(upsertRelayLegOverride([cOwn, legacy], cNext)).toStrictEqual([legacy, cNext]);
   });
 
-  it('a save for A leaves what B reads: the migrated plain key still fills B', () => {
+  it('a save for A leaves what B reads: B reads nothing, because the plain key names neither relay', () => {
     const wrote = migrateTiedRelayOverrides(upsertRelayLegOverride([legacy], next), results);
     const bTemplate = relayTemplateFromLeg(tied, bLeg);
     const aTemplate = relayTemplateFromLeg(tied, aLeg);
     expect(findRelayLegOverride(wrote, aTemplate, LEG, tied)?.assigneeName).toBe('Y1');
-    expect(findRelayLegOverride(wrote, bTemplate, LEG, tied)?.assigneeName).toBe('X1');
+    expect(findRelayLegOverride(wrote, bTemplate, LEG, tied)).toBeUndefined();
+    // The stored legacy override is kept, so nothing the coach saved is lost.
+    expect(wrote).toContainEqual(legacy);
   });
 
   it('the cleared leg of A does not come back from the plain key afterwards', () => {
     const migrated = migrateTiedRelayOverrides(upsertRelayLegOverride([legacy], next), results);
     const cleared = removeRelayLegOverride(migrated, aKey, LEG);
     expect(findRelayLegOverride(cleared, relayTemplateFromLeg(tied, aLeg), LEG, tied)).toBeUndefined();
-    // Migrating the cleared list again changes nothing: the plain key is gone.
+    // The legacy key is still stored (reported as ambiguous), and migrating again changes nothing.
+    expect(cleared).toStrictEqual([legacy]);
     expect(migrateTiedRelayOverrides(cleared, results)).toBe(cleared);
   });
 });
@@ -196,18 +200,20 @@ describe('removeRelayLegOverride', () => {
     expect(removeRelayLegOverride([legacy, aOwn, bOwn], plainKey, LEG)).toStrictEqual([aOwn, bOwn]);
   });
 
-  it('end to end: after "clear leg" on A, A is vacant and B keeps the fill', () => {
+  it('end to end: the plain key fills neither relay, and a fill saved on B stays on B after "clear leg" on A', () => {
     const left = new Set(['a2', 'b2']);
     const before = simulateRoster(results, [], false, left, [legacy]);
-    expect(before.filter(r => r.isRelay && r.name === 'X1' && r.relayLegIndex === LEG)).toHaveLength(2);
-    // The relays screen clears from the migrated list.
-    const cleared = removeRelayLegOverride(migrateTiedRelayOverrides([legacy], results), aKey, LEG);
+    // User decision E5: the legacy key is applied to neither tied relay.
+    expect(before.filter(r => r.isRelay && r.name === 'X1' && r.relayLegIndex === LEG)).toHaveLength(0);
+    // The coach sets B's leg again under B's own key. The relays screen clears A from the same list.
+    const list = upsertRelayLegOverride(migrateTiedRelayOverrides([legacy], results), at(bKey, LEG, 'Y1'));
+    const cleared = removeRelayLegOverride(list, aKey, LEG);
     const after = simulateRoster(results, [], false, left, cleared);
     const legOf = (first: string) =>
       after.find(r => r.isRelay && r.relayLegIndex === LEG && r.relayNames?.some(n => n.name === first));
     expect(legOf('A1')?.relayLegVacant).toBe(true);
     expect(legOf('A1')?.name).toBe('—');
-    expect(legOf('B1')?.name).toBe('X1');
+    expect(legOf('B1')?.name).toBe('Y1');
   });
 });
 
@@ -238,11 +244,10 @@ describe('hasRelayLegOverride', () => {
     }
   });
 
-  it('is true for the plain key on a tied relay once migrated (the indicator the card reads)', () => {
+  it('is false for the plain key on a tied relay: it names neither relay (the indicator the card reads)', () => {
     const migrated = migrateTiedRelayOverrides([legacy], results);
-    expect(hasRelayLegOverride(migrated, aKey, LEG)).toBe(true);
-    expect(hasRelayLegOverride(migrated, bKey, LEG)).toBe(true);
-    // The unmigrated plain key is not a key of A or B.
+    expect(hasRelayLegOverride(migrated, aKey, LEG)).toBe(false);
+    expect(hasRelayLegOverride(migrated, bKey, LEG)).toBe(false);
     expect(hasRelayLegOverride([legacy], aKey, LEG)).toBe(false);
   });
 

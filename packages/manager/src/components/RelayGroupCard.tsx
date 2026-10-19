@@ -14,6 +14,7 @@ import {
 } from '@omniswim/core/lib/relaySplits';
 import {
   hasRelayLegOverride,
+  isValidRelayLegIndex,
   relayLegIsVacant,
   relayLegRequirements,
   relayMissingStrokeLabel,
@@ -40,7 +41,31 @@ type Props = {
   onManualTimeChange: (fieldKey: string, value: string) => void;
   onSaveManualLeg: (legIndex: number) => void;
   onClearLegOverride: (legIndex: number) => void;
+  /**
+   * Deletes the stored override at an invalid leg index. Offered on a problem row
+   * only when an override is stored there. It works outside what-if mode.
+   */
+  onRemoveInvalidLeg?: (legIndex: number) => void;
 };
+
+/** The label shown for a leg index that names no leg. */
+export const INVALID_RELAY_LEG_LABEL = 'Invalid relay leg on this entry';
+
+/**
+ * Leg indexes of this relay that name no leg: a scored leg row that carries one,
+ * and a stored override at one (the scorer ignores it, so no leg row shows it).
+ * In order of first appearance, one per index.
+ */
+function invalidLegIndexes(group: RelayGroup, overrides: RelayLegOverride[]): number[] {
+  const eventLower = group.event.toLowerCase();
+  const found: number[] = [];
+  const note = (legIndex: number) => {
+    if (!isValidRelayLegIndex(eventLower, legIndex) && !found.includes(legIndex)) found.push(legIndex);
+  };
+  for (const leg of group.legs) note(leg.relayLegIndex ?? 0);
+  for (const o of overrides) if (o.relayEntryKey === group.key) note(o.legIndex);
+  return found;
+}
 
 export default function RelayGroupCard({
   group,
@@ -58,8 +83,12 @@ export default function RelayGroupCard({
   onManualTimeChange,
   onSaveManualLeg,
   onClearLegOverride,
+  onRemoveInvalidLeg,
 }: Props) {
-  const vacantCount = group.legs.filter(l => relayLegIsVacant(l)).length;
+  const eventLower = group.event.toLowerCase();
+  const badLegIndexes = invalidLegIndexes(group, overrides);
+  const readableLegs = group.legs.filter(l => isValidRelayLegIndex(eventLower, l.relayLegIndex ?? 0));
+  const vacantCount = readableLegs.filter(l => relayLegIsVacant(l)).length;
 
   return (
     <div
@@ -100,7 +129,37 @@ export default function RelayGroupCard({
         <p className="text-ui-micro text-theme-secondary mb-3 font-mono">{formatTeamSplitSummary(group.teamSplits)}</p>
       ) : null}
       <div className="grid sm:grid-cols-2 gap-2">
-        {group.legs.map(leg => {
+        {badLegIndexes.map(badIndex => (
+          <div
+            key={`invalid-${String(badIndex)}`}
+            role="alert"
+            data-invalid-relay-leg={String(badIndex)}
+            className="border border-warning bg-warning-faint rounded-lg px-2 py-1.5 text-ui-caption"
+          >
+            <p className="text-warning font-medium">{INVALID_RELAY_LEG_LABEL}</p>
+            <p className="text-ui-micro text-theme-secondary mt-0.5">
+              Leg index {String(badIndex)} names no leg of this relay.
+            </p>
+            {onRemoveInvalidLeg && hasRelayLegOverride(overrides, group.key, badIndex) ? (
+              <Button
+                variant="outline"
+                size="sm"
+                className="mt-1.5 px-2 py-0.5"
+                onClick={e => {
+                  e.stopPropagation();
+                  onRemoveInvalidLeg(badIndex);
+                }}
+              >
+                Remove
+              </Button>
+            ) : (
+              <p className="text-ui-micro text-theme-muted italic mt-1">
+                The saved result row carries this index. Re-import the meet to correct it.
+              </p>
+            )}
+          </div>
+        ))}
+        {readableLegs.map(leg => {
           const legIndex = leg.relayLegIndex ?? 0;
           const req = relayLegRequirements(group.event, legIndex);
           const isVacant = relayLegIsVacant(leg);

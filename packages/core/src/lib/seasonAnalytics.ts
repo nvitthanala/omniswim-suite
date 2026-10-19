@@ -10,6 +10,7 @@ import { isTheoreticalMeet } from './theoreticalMeetLabel';
 import { matchOfficialTeamKey } from './teamScoreMatching';
 import { recordAt } from './indexedAccess';
 import { teamLabelKey } from '../data/teamAliases';
+import { workspaceOwnTeam } from './ownTeam';
 
 export type SwimmerTrend = {
   name: string;
@@ -58,7 +59,7 @@ export type TeamScoreSource = 'official' | 'calculated';
 export type TeamScoreSelection =
   /** A team was chosen: passed in, or the only team the meets name. */
   | 'chosen'
-  /** No team was passed and the meets name more than one. Nothing is plotted until one is chosen. */
+  /** No team was passed and the meets name more than one (or `chooseSingleTeam` is off). Nothing is plotted until one is chosen. */
   | 'team-required'
   /** The meets name no team at all. */
   | 'no-teams'
@@ -73,6 +74,12 @@ export type SeasonTrendsOptions = {
    * {@link defaultSeasonTeam} reads the active workspace's own team.
    */
   team?: string;
+  /**
+   * With no `team`, choose the only team the meets name when there is exactly one
+   * (the default, `true`). Pass `false` to ask for a pick even then: the result is
+   * `'team-required'` and nothing is plotted until a team is given.
+   */
+  chooseSingleTeam?: boolean;
 };
 
 export type SeasonTrends = {
@@ -130,21 +137,15 @@ export function seasonTeams(allWorkspaces: Workspace[]): string[] {
 }
 
 /**
- * The team a workspace is about: the one team its rows (results, recruits,
- * planned entries) name, or `null` when they name none or more than one.
+ * The team the season trend opens on: the own team the user set on the workspace
+ * (`ScoringSettings.ownTeam`), trimmed, or `null` when none is set.
  *
- * Never a guess. A workspace that mixes teams has no single "own team" in its
- * data, so this answers `null` and a picker must ask.
+ * Never a guess. The rows of a workspace name teams, but a workspace can hold a
+ * roster, an opponent scout and a meet at once, so no row says which team the
+ * coach is. Until the user sets one, this answers `null` and a picker must ask.
  */
 export function defaultSeasonTeam(workspace: Workspace | null | undefined): string | null {
-  if (!workspace) return null;
-  const names = nameCollector();
-  for (const r of workspace.menResults ?? []) names.add(r.team);
-  for (const r of workspace.womenResults ?? []) names.add(r.team);
-  for (const r of workspace.recruits ?? []) names.add(r.team);
-  for (const r of workspace.meetEntryPlans ?? []) names.add(r.team);
-  const all = names.values();
-  return all.length === 1 ? (all[0] ?? null) : null;
+  return workspaceOwnTeam(workspace);
 }
 
 type GenderScore = { total: number | null; source: TeamScoreSource | null; unreadable: number };
@@ -238,7 +239,8 @@ function trendKey(name: string, event: string, course: CourseOfRecordFromLabel):
  */
 function selectSeasonTeam(
   availableTeams: string[],
-  requestedTeam: string | undefined
+  requestedTeam: string | undefined,
+  chooseSingleTeam = true
 ): { team: string | null; selection: TeamScoreSelection } {
   const requested = requestedTeam?.trim() ? requestedTeam : undefined;
   if (requested !== undefined) {
@@ -246,7 +248,9 @@ function selectSeasonTeam(
     return { team, selection: team === null ? 'team-not-in-any-meet' : 'chosen' };
   }
   const [onlyTeam] = availableTeams;
-  if (availableTeams.length === 1 && onlyTeam !== undefined) return { team: onlyTeam, selection: 'chosen' };
+  if (chooseSingleTeam && availableTeams.length === 1 && onlyTeam !== undefined) {
+    return { team: onlyTeam, selection: 'chosen' };
+  }
   return { team: null, selection: availableTeams.length === 0 ? 'no-teams' : 'team-required' };
 }
 
@@ -331,7 +335,11 @@ export function buildSeasonTrends(
   }
 
   const availableTeams = seasonTeams(workspaces);
-  const { team, selection: teamScoreSelection } = selectSeasonTeam(availableTeams, options.team);
+  const { team, selection: teamScoreSelection } = selectSeasonTeam(
+    availableTeams,
+    options.team,
+    options.chooseSingleTeam
+  );
   const teamScoreTrends = team === null ? [] : teamScoreTrendsFor(workspaces, team);
 
   const swimmerTrends = [...swimmerMap.values()].sort((a, b) => a.name.localeCompare(b.name));

@@ -8,7 +8,8 @@ import { X, Waves } from 'lucide-react';
 import { Button } from '@omniswim/ui';
 import type { Gender } from '@omniswim/core/types';
 import type { AthleteCreditedSwim } from '@omniswim/core/lib/scorerRoster';
-import AthleteCreditedSwimsRow from './AthleteCreditedSwimsRow';
+import { isUnconfirmedProgramSwim } from '@omniswim/core/lib/programSwim';
+import AthleteCreditedSwimsRow, { type ProgramSwimStatus } from './AthleteCreditedSwimsRow';
 
 export type EditCreditedSwimValues = { time: string; event: string };
 
@@ -31,6 +32,13 @@ type Props = {
   onDeleteSwim?: (swim: AthleteCreditedSwim) => void;
   /** Per-row edit (time and/or event) for individual credited swims. Relay legs are read-only here. */
   onEditSwim?: (swim: AthleteCreditedSwim, changes: EditCreditedSwimValues) => void;
+  /**
+   * Confirm one swims-list swim as a program swim, or put it back to unconfirmed.
+   * Omit it (read-only) and unconfirmed swims still show their badge, with no buttons.
+   */
+  onSetProgramStatus?: (swim: AthleteCreditedSwim, status: ProgramSwimStatus) => void;
+  /** Confirm every unconfirmed swim in the list at once ("Confirm all N swims"). Omit it to hide the button. */
+  onConfirmAllProgramSwims?: (swims: AthleteCreditedSwim[]) => void;
   entryLimitLabel?: string;
   /** Optional prelims/psych placement expected points keyed by swim id. */
   anchorExpectedBySwimId?: Map<string, { prelims?: number; psych?: number }>;
@@ -46,6 +54,8 @@ export default function AthleteCreditedSwimsPanel({
   deletable = false,
   onDeleteSwim,
   onEditSwim,
+  onSetProgramStatus,
+  onConfirmAllProgramSwims,
   entryLimitLabel,
   anchorExpectedBySwimId,
 }: Props) {
@@ -55,6 +65,7 @@ export default function AthleteCreditedSwimsPanel({
 
   const credited = swims.filter(s => s.points > 0);
   const other = swims.filter(s => s.points <= 0);
+  const unconfirmed = swims.filter(s => s.kind === 'individual' && isUnconfirmedProgramSwim(s));
   const showAnchors = Boolean(anchorExpectedBySwimId?.size);
   const editable = deletable && Boolean(onEditSwim);
   const colCount = (deletable ? 7 : 6) + (showAnchors ? 2 : 0);
@@ -104,6 +115,7 @@ export default function AthleteCreditedSwimsPanel({
         onCancelEdit={cancelEdit}
         onCommitEdit={commitEdit}
         onDeleteSwim={onDeleteSwim}
+        onSetProgramStatus={onSetProgramStatus}
       />
     ));
 
@@ -145,6 +157,31 @@ export default function AthleteCreditedSwimsPanel({
         <p className="p-4 text-ui-caption text-theme-muted italic text-center">No swims found for this athlete.</p>
       ) : (
         <>
+          {unconfirmed.length > 0 ? (
+            <div
+              className="flex flex-wrap items-center justify-between gap-2 px-3 py-1.5 border-b border-theme-soft"
+              data-testid="unconfirmed-swims-bar"
+            >
+              <p className="text-ui-micro text-theme-secondary min-w-0 flex-1">
+                {unconfirmed.length === 1
+                  ? '1 swim is not confirmed as a program swim.'
+                  : `${unconfirmed.length} swims are not confirmed as program swims.`}{' '}
+                {onConfirmAllProgramSwims
+                  ? 'Until confirmed, they count toward no best time, cut tag or arbitrage.'
+                  : 'Turn on What-if to confirm them. Until confirmed, they count toward no best time, cut tag or arbitrage.'}
+              </p>
+              {onConfirmAllProgramSwims ? (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="px-2 py-0.5 shrink-0"
+                  onClick={() => onConfirmAllProgramSwims(unconfirmed)}
+                >
+                  Confirm all {unconfirmed.length} swims for this swimmer
+                </Button>
+              ) : null}
+            </div>
+          ) : null}
           {deletable ? (
             <p className="px-3 py-1.5 text-ui-micro text-theme-secondary border-b border-theme-soft">
               What-if mode — {editable ? 'use the pencil to edit time/event, or ' : ''}use the trash

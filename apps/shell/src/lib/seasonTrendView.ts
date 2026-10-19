@@ -53,11 +53,40 @@ export function describeTeamScoreSelection(
       trends.teamScoreTrends.length > 0
         ? `Showing the points ${trends.team} scored at each meet it entered.`
         : `${trends.team} is in the loaded meets but none of them holds a score for it yet.`,
-    'team-required': 'Your meets name more than one team. Pick the team to chart.',
+    'team-required': 'Choose a team to chart.',
     'no-teams': 'No loaded meet names a team yet, so there is nothing to chart.',
     'team-not-in-any-meet': `${requested ?? 'That team'} does not appear in any loaded meet. Pick a team from the list.`,
   };
   return sentences[trends.teamScoreSelection];
+}
+
+/** Whether two team names are the same team: trimmed and case-folded, as core matches them. */
+const sameTeam = (a: string, b: string): boolean => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+export type OwnTeamControlView = {
+  /** One plain sentence about the workspace's own team. */
+  note: string;
+  /** The label of the button that makes the shown team the own team, or `null` when there is nothing to offer. */
+  offer: string | null;
+  /** Whether an own team is set and can be cleared. */
+  canClear: boolean;
+};
+
+/**
+ * What the own-team control says and offers. `ownTeam` is the workspace setting
+ * (`workspaceOwnTeam`), `shownTeam` the team the picker shows. Nothing here
+ * guesses a team: with none set the control asks.
+ */
+export function describeOwnTeamControl(ownTeam: string | null, shownTeam: string | null): OwnTeamControlView {
+  const offer = shownTeam !== null && (ownTeam === null || !sameTeam(ownTeam, shownTeam)) ? `Make ${shownTeam} my team` : null;
+  if (ownTeam === null) {
+    return {
+      note: 'No team is set as yours yet.',
+      offer,
+      canClear: false,
+    };
+  }
+  return { note: `Your team is ${ownTeam}.`, offer, canClear: true };
 }
 
 /** The note for point values the parser could not read as numbers, or `null` when there are none. */

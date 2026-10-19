@@ -17,9 +17,11 @@ import { entryKey, prelimsOuOverUnderForDisplay } from '@omniswim/core/lib/preli
 import type { PsychOverUnderEntry } from '@omniswim/core/lib/psychProjection';
 import { psychExpectedForResult } from '@omniswim/core/lib/psychProjection';
 import { RELAY_LEG_ESTIMATE_LABEL, formatLegSplitSummary, hasRelayLegTime, relayLegTimeView } from '@omniswim/core/lib/relaySplits';
+import { isTheoreticalMeet } from '@omniswim/core/lib/theoreticalMeetLabel';
+import { useSuiteWorkspaceOptional } from '@omniswim/core/store/SuiteWorkspaceProvider';
 import { rowHasNoActual } from '../lib/noActual';
 import { CompactEventLabel, NoActualMarker, PlacementExpectedValue, PrelimsOuValue } from './matrixPresentation';
-import { CutlineVerdict, PodiumMedal, RelayVerdict, useIsEstimatedRelayRow } from './TeamCardParts';
+import { CutlineVerdict, PodiumMedal, podiumPlaceOf, RelayVerdict, useIsEstimatedRelayRow } from './TeamCardParts';
 import {
   buildTeamRowCutlineTags,
   computeClassTopPerformers,
@@ -111,7 +113,8 @@ export function TooltipSwimmerList({
 
 /**
  * A swimmer row as the tooltip reads it. `podium` is not a `SwimmerResult` field
- * (nothing in core sets it); the medal reads it when a row carries one.
+ * (nothing in core sets it); the medal is derived from the row's place
+ * (`podiumPlaceOf`) and reads `podium` only as an older override.
  */
 type TooltipSwimmer = SwimmerResult & { podium?: string };
 
@@ -210,6 +213,9 @@ export function TooltipSwimmerRow({
   psychOuByEntry,
 }: TooltipSwimmerRowProps) {
   const estimatedRelay = useIsEstimatedRelayRow(s);
+  // A theoretical meet and an estimated relay were never swum, so their ranks are not finishes.
+  const theoretical = isTheoreticalMeet(useSuiteWorkspaceOptional()?.activeWorkspace);
+  const medalPlace = estimatedRelay || theoretical ? undefined : podiumPlaceOf(s);
   const rowTags = buildTeamRowCutlineTags(s, gender, teamName, s.finalsTime || s.time, estimatedRelay);
   const hasRelaySplit = hasRelayLegTime(s);
   const legIsEstimate = relayLegTimeView(s)?.kind === 'estimate';
@@ -219,7 +225,7 @@ export function TooltipSwimmerRow({
       <div className="flex items-center gap-2">
         <span className="w-4 font-mono text-theme-muted">{s.rank || '-'}</span>
         <span className="w-4 shrink-0 inline-flex justify-center">
-          <PodiumMedal podium={s.podium} />
+          <PodiumMedal place={medalPlace} podium={s.podium} />
         </span>
         <span className="font-medium text-[var(--text-primary)] truncate max-w-[120px]">{s.name}</span>
         {hasRelaySplit && (

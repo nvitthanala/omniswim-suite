@@ -15,6 +15,7 @@
 import type { Gender, RelayLegStroke, SwimmerResult } from '@omniswim/core/types';
 import { convertTimeToSeconds, formatSecondsToTime, relaySplitQualificationCutEvent } from '@omniswim/core/lib/utils';
 import { relayLegEstimateOf } from '@omniswim/core/lib/relaySplits';
+import { isUnconfirmedProgramSwim } from '@omniswim/core/lib/programSwim';
 import { normalizeEventForCutline } from '@omniswim/core/lib/cutlineUtils';
 import {
   buildCutlineTagForTeam,
@@ -157,11 +158,13 @@ export function buildTeamRowCutlineTags(
   // "indicative" but never a cut badge, while an NAIA team's SCM swim is
   // judged against the NAIA SCM column and can earn one. Every other row
   // keeps its caller's time exactly as before.
+  // A swims-list row nobody confirmed as a program swim is not judged at all.
+  const programUnconfirmed = isUnconfirmedProgramSwim(res) ? ({ programUnconfirmed: true } as const) : {};
   const converted = convertedSwimOfRecord(res);
   if (converted) {
     return {
       kind: 'single',
-      result: buildCutlineTagForTeam({ gender, team: teamName, ...converted }),
+      result: buildCutlineTagForTeam({ gender, team: teamName, ...converted, ...programUnconfirmed }),
     };
   }
 
@@ -172,6 +175,7 @@ export function buildTeamRowCutlineTags(
       gender,
       event: normalizeEventForCutline(cleanEventBase),
       team: teamName,
+      ...programUnconfirmed,
     }),
   };
 }

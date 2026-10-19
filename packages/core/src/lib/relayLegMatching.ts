@@ -13,6 +13,7 @@ import {
 } from '../types';
 import { normalizeEventForCutline, stripRelaySplitSuffix } from './cutlineEventNames';
 import { itemAt, recordAt, regexGroup } from './indexedAccess';
+import { isUnconfirmedProgramSwim } from './programSwim';
 import { relayLegsAllowTimeTrials } from './scoringDefaults';
 import { relayEntryKey, relayLegDistanceYardsOfEvent } from './relaySplits';
 import {
@@ -255,11 +256,54 @@ export function eventMatchesStrokeDistance(
   return [...strokes].some(stroke => isRelayLegEvent(eventRaw, distance, stroke));
 }
 
-export function relayStrokeForIndex(eventLower: string, legIndex: number): RelayLegStroke | undefined {
-  if (eventLower.includes('medley') && legIndex < 4) {
-    // The caller passes `position - 1` from stored data; a negative or fractional index has no stroke.
-    const stroke = (['back', 'breast', 'fly', 'free'] as const)[legIndex];
-    if (stroke === undefined) return undefined;
+/** The strokes of a medley relay, leg 1 first. A medley has exactly these four legs. */
+const MEDLEY_LEG_STROKES = ['back', 'breast', 'fly', 'free'] as const;
+
+/**
+ * A relay leg index that names no leg: negative, not a whole number, not finite, or past
+ * the fourth leg of a medley relay (a medley has four strokes and no fifth).
+ *
+ * Thrown by {@link relayStrokeForIndex} and everything that reads a stroke through it
+ * (`relayLegRequirements`, {@link relayStrokeForBoundedIndex}). Before user decision E20
+ * (2026-10-16) these returned `undefined` or a guessed `free`. Code that holds an index from
+ * stored data tests it with {@link isValidRelayLegIndex} first, or catches this class at its
+ * boundary and reports the bad index (the lineup audit item `relay_leg_index_invalid`).
+ */
+export class InvalidRelayLegIndexError extends Error {
+  readonly eventLower: string;
+  readonly legIndex: number;
+  constructor(eventLower: string, legIndex: number) {
+    super(`Relay leg index ${String(legIndex)} names no leg of "${eventLower}": it has no stroke.`);
+    this.name = 'InvalidRelayLegIndexError';
+    this.eventLower = eventLower;
+    this.legIndex = legIndex;
+  }
+}
+
+/**
+ * True when `legIndex` names a leg of the relay: a whole number from 0 up, and on a medley
+ * relay no higher than 3. A free relay places no upper bound here (every leg is free, so a
+ * stroke is never invented).
+ */
+export function isValidRelayLegIndex(eventLower: string, legIndex: number): boolean {
+  if (!Number.isInteger(legIndex) || legIndex < 0) return false;
+  return !eventLower.includes('medley') || legIndex < MEDLEY_LEG_STROKES.length;
+}
+
+/**
+ * The stroke of leg `legIndex` (0-based) of the relay named by `eventLower`.
+ *
+ * Throws {@link InvalidRelayLegIndexError} for an index that names no leg (see
+ * {@link isValidRelayLegIndex}). It never returns a guessed stroke.
+ */
+export function relayStrokeForIndex(eventLower: string, legIndex: number): RelayLegStroke {
+  if (!isValidRelayLegIndex(eventLower, legIndex)) {
+    throw new InvalidRelayLegIndexError(eventLower, legIndex);
+  }
+  if (eventLower.includes('medley')) {
+    const stroke = MEDLEY_LEG_STROKES[legIndex];
+    // `isValidRelayLegIndex` bounded the index to 0..3 above.
+    if (stroke === undefined) throw new InvalidRelayLegIndexError(eventLower, legIndex);
     return stroke;
   }
   return 'free';
@@ -267,16 +311,11 @@ export function relayStrokeForIndex(eventLower: string, legIndex: number): Relay
 
 /**
  * The stroke for a leg index the caller took from a loop bound (a whole number from 0
- * up). Such an index always has a stroke, so a missing one means the loop and this
- * function disagree and the read throws. Use {@link relayStrokeForIndex} for an index
- * that came from stored data or a caller.
+ * up). Same read as {@link relayStrokeForIndex}, kept as its own name for those callers:
+ * a throw here means the loop and the relay disagree.
  */
 export function relayStrokeForBoundedIndex(eventLower: string, legIndex: number): RelayLegStroke {
-  const stroke = relayStrokeForIndex(eventLower, legIndex);
-  if (stroke === undefined) {
-    throw new Error(`Indexed-read invariant broken: relay leg index ${legIndex} has no stroke.`);
-  }
-  return stroke;
+  return relayStrokeForIndex(eventLower, legIndex);
 }
 
 export function relayLegRequirements(event: string, legIndex: number) {
@@ -473,15 +512,18 @@ export function swimmerMatchesRelayLeg(
 ): boolean {
   if (swimmer.isRelay) return false;
   if (!hasRelayLegTime(swimmer)) return false;
+  // A swims-list row nobody confirmed as a program swim may be a time trial. It
+  // fills no leg, whatever the time-trial setting says: the setting governs a
+  // known time trial, and this swim is not known (`programSwim.ts`).
+  if (isUnconfirmedProgramSwim(swimmer)) return false;
   if (
     (isTimeTrialSwim(swimmer, settings?.scoredEventNumberMax) || swimmer.relayLegTimeTrial === true) &&
     !relayLegsAllowTimeTrials(settings)
   ) {
     return false;
   }
+  // Throws `InvalidRelayLegIndexError` for an index that names no leg: the caller owns that boundary.
   const { legDistanceYards, stroke } = relayLegRequirements(event, legIndex);
-  // A leg index with no stroke matches no event.
-  if (stroke === undefined) return false;
   return isRelayLegEvent(swimmer.event, legDistanceYards, stroke);
 }
 
@@ -779,9 +821,9 @@ export function stableRelayEntryKey(originalResults: SwimmerResult[], leg: Swimm
  * Pass `pool` (the results the template came from) so one team's tied A and B
  * relays are told apart (`relayEntryKeyIn`). Only the override stored under the
  * entry's own key is read. A key saved before the two relays were told apart
- * (the plain `relayEntryKey` of a tied pair) names neither: run the list
- * through {@link migrateTiedRelayOverrides} first, which rewrites it into one
- * override per relay. Without `pool` only the plain key is read, as before.
+ * (the plain `relayEntryKey` of a tied pair) names neither, and is read for
+ * neither: {@link migrateTiedRelayOverridesDetailed} reports it as ambiguous
+ * (user decision E5). Without `pool` only the plain key is read, as before.
  */
 export function findRelayLegOverride(
   overrides: RelayLegOverride[],
@@ -806,28 +848,51 @@ export function relayEntryOverrideKeys(
 }
 
 /**
- * The overrides with every override stored under the plain key of a tied relay
- * pair rewritten into one override per relay.
+ * A stored override that names a tied relay pair by the plain `relayEntryKey` of both
+ * relays. It was saved before one team's A and B relays on a dead heat were told apart,
+ * so nothing says which of the two it was for.
+ */
+export type AmbiguousRelayOverride = {
+  /** The stored override, exactly as it was saved. It is not applied to either relay. */
+  override: RelayLegOverride;
+  /** The plain key it is stored under (`override.relayEntryKey`). */
+  relayEntryKey: string;
+  legIndex: number;
+  /** The own keys (`relayEntryKeyIn`) of the tied relays it might have been for, sorted. */
+  candidateKeys: string[];
+};
+
+/** What {@link migrateTiedRelayOverridesDetailed} returns. */
+export type TiedRelayOverrideMigration = {
+  /** The overrides to read. Same array when nothing is ambiguous. */
+  overrides: RelayLegOverride[];
+  /** One entry per stored override that names a tied pair by its plain key. */
+  ambiguous: AmbiguousRelayOverride[];
+};
+
+/**
+ * The overrides to read, and the overrides that cannot be read.
  *
- * Before one team's A and B relays on a dead heat were told apart, an override
- * of a tied relay was stored under `relayEntryKey` (`team|event|round|place|
- * clock`) and applied to both. A reader no longer reads that key for a tied
- * relay, so this puts a copy under each relay's own key
- * (`relayEntryKeyIn`: the plain key, `|`, the named swimmers). A copy keeps
- * every field of the override, and the override list keeps its order.
+ * Before one team's A and B relays on a dead heat were told apart, an override of a tied
+ * relay was stored under `relayEntryKey` (`team|event|round|place|clock`) and applied to
+ * both. A reader no longer reads that key for a tied relay, and this does not guess which
+ * relay it was for: the override is reported in `ambiguous` (user decision E5,
+ * 2026-10-16) and applied to neither. A copy under each relay's own key would have put one
+ * swimmer on both relays.
  *
- * A relay's own override of the same leg wins: no copy is made over it. A
- * second legacy override of one leg is dropped, as `findRelayLegOverride` read
- * only the first. A relay that is not tied keeps every key it had.
+ * `overrides` keeps the stored override in its place, so a screen can show it and the
+ * coach can set the fill again on the right relay (a write under a relay's own key). It
+ * is inert: no reader finds a tied relay under the plain key. A relay that is not tied
+ * keeps every key it had.
  *
  * `results` is the original rows of the relays (`menResults`, `womenResults`).
- * Pure and idempotent. The same array comes back when nothing is rewritten.
+ * Pure and idempotent. The same array comes back.
  */
-export function migrateTiedRelayOverrides(
+export function migrateTiedRelayOverridesDetailed(
   overrides: RelayLegOverride[],
   results: readonly SwimmerResult[]
-): RelayLegOverride[] {
-  if (overrides.length === 0) return overrides;
+): TiedRelayOverrideMigration {
+  if (overrides.length === 0) return { overrides, ambiguous: [] };
   const signaturesByKey = new Map<string, Set<string>>();
   for (const r of results) {
     if (!r.isRelay) continue;
@@ -842,27 +907,32 @@ export function migrateTiedRelayOverrides(
   for (const [key, signatures] of signaturesByKey) {
     if (signatures.size >= 2) tiedKeys.set(key, [...signatures].sort());
   }
-  if (tiedKeys.size === 0) return overrides;
+  if (tiedKeys.size === 0) return { overrides, ambiguous: [] };
 
-  const slot = (key: string, legIndex: number): string => `${key}\u0000${legIndex}`;
-  const taken = new Set<string>(overrides.map(o => slot(o.relayEntryKey, o.legIndex)));
-  const out: RelayLegOverride[] = [];
-  let rewritten = false;
+  const ambiguous: AmbiguousRelayOverride[] = [];
   for (const o of overrides) {
     const signatures = tiedKeys.get(o.relayEntryKey);
-    if (!signatures) {
-      out.push(o);
-      continue;
-    }
-    rewritten = true;
-    for (const signature of signatures) {
-      const key = `${o.relayEntryKey}|${signature}`;
-      if (taken.has(slot(key, o.legIndex))) continue;
-      taken.add(slot(key, o.legIndex));
-      out.push({ ...o, relayEntryKey: key });
-    }
+    if (!signatures) continue;
+    ambiguous.push({
+      override: o,
+      relayEntryKey: o.relayEntryKey,
+      legIndex: o.legIndex,
+      candidateKeys: signatures.map(signature => `${o.relayEntryKey}|${signature}`),
+    });
   }
-  return rewritten ? out : overrides;
+  return { overrides, ambiguous };
+}
+
+/**
+ * The overrides to read: {@link migrateTiedRelayOverridesDetailed}'s `overrides`.
+ * A legacy plain key of a tied pair stays in the list and is applied to neither relay.
+ * Call the detailed form to learn which stored overrides that is.
+ */
+export function migrateTiedRelayOverrides(
+  overrides: RelayLegOverride[],
+  results: readonly SwimmerResult[]
+): RelayLegOverride[] {
+  return migrateTiedRelayOverridesDetailed(overrides, results).overrides;
 }
 
 /**
@@ -1055,10 +1125,9 @@ export function suggestBestRelayLegFill(
  * same relay entry key and leg.
  *
  * Only the same key counts. An override stored under the plain key of a tied
- * pair is another relay's, or both relays' until `migrateTiedRelayOverrides`
- * splits it: replacing it here would drop the other relay's fill. Readers
- * migrate first, so a plain key left in the list still reaches the tied relay
- * `next` is not for.
+ * pair names neither relay (it is reported as ambiguous by
+ * `migrateTiedRelayOverridesDetailed`): replacing it here would drop a fill the
+ * coach saved, so it stays in the list and neither tied relay reads it.
  */
 export function upsertRelayLegOverride(
   overrides: RelayLegOverride[],
@@ -1076,9 +1145,9 @@ export function upsertRelayLegOverride(
  * The overrides without the one stored under `entryKey` at `legIndex`.
  * `entryKey` is the key `stableRelayEntryKey` gives (a RelayGroup's `key`).
  *
- * A key saved before A and B were told apart is not `entryKey`. Pass a list
- * that went through `migrateTiedRelayOverrides`, or the legacy key stays and
- * the tied relays read it again after the next migration.
+ * A key saved before A and B were told apart is not `entryKey`, so it stays in
+ * the list (reported as ambiguous by `migrateTiedRelayOverridesDetailed`) and
+ * neither tied relay reads it. To drop it, pass the plain key as `entryKey`.
  */
 export function removeRelayLegOverride(
   overrides: RelayLegOverride[],
@@ -1094,7 +1163,8 @@ export function removeRelayLegOverride(
  * (non-`undefined`) for the relay `entryKey` was made from.
  *
  * Use it for "is there an override to clear" on a relay group, passing the
- * group's `key` and a migrated list (`migrateTiedRelayOverrides`).
+ * group's `key` and the override list. A legacy plain key of a tied pair is not
+ * a relay's own key, so it answers `false` for both relays.
  */
 export function hasRelayLegOverride(
   overrides: readonly RelayLegOverride[],

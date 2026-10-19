@@ -151,7 +151,8 @@ export default function BatchOptimizerPanel({ workspace, gender, scoringSettings
     [scoringSettings, workspace.conference]
   );
   // Content key, so an equal settings object rebuilt by a parent does not count as a change.
-  const settingsKey = JSON.stringify(mergedSettings);
+  // `ownTeam` is a display choice, so it stays out of the key: changing it must not drop a result.
+  const settingsKey = JSON.stringify({ ...mergedSettings, ownTeam: undefined });
 
   // The result is dropped (not just disabled) the moment its inputs change.
   const current = { workspaceId: workspace.id, gender, settingsKey, stage, removeSeniors };

@@ -23,7 +23,12 @@ import { isRankableSwim, swimEventIdentity } from './bestTimeEligibility';
 import { mergeScoringSettings } from './scoringDefaults';
 import { scorerRosterKey, usesScorerRoster } from './scorerRoster';
 import { parseRelayDistanceYardsOrNull } from './relaySplits';
-import { relayEntryKeyIn, relayTemplateFromLeg, upsertRelayLegOverride } from './relayLegMatching';
+import {
+  isValidRelayLegIndex,
+  relayEntryKeyIn,
+  relayTemplateFromLeg,
+  upsertRelayLegOverride,
+} from './relayLegMatching';
 import {
   canAcceptAnotherEntry,
   countSwimmerEntries,
@@ -1276,6 +1281,9 @@ function promotionForOverride(
   if (!alternate) return null;
 
   const relayEvent = override.relayEntryKey.split('|')[1] ?? '';
+  // A stored `legIndex` that names no leg cannot be promoted onto: the screen reads the leg's
+  // stroke from it. The lineup audit names the bad override (`relay_leg_index_invalid`).
+  if (!isValidRelayLegIndex(relayEvent.toLowerCase(), override.legIndex)) return null;
   const next: RelayLegOverride = { ...override, assigneeName: alternate, source: 'autofill' };
   return {
     relayEntryKey: override.relayEntryKey,

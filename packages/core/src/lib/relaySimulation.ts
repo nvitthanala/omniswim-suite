@@ -21,7 +21,9 @@ import {
 } from './relaySplits';
 import {
   findRelayLegOverride,
+  InvalidRelayLegIndexError,
   isRelayLegEvent,
+  isValidRelayLegIndex,
   isTimeTrialOnlyForRelayLeg,
   migrateTiedRelayOverrides,
   overrideNamesTimeTrialOnlySwimmer,
@@ -95,9 +97,8 @@ export function findDepartedLegSwim(
   team: string,
   settings?: RelayLegMatchSettings
 ): SwimmerResult | undefined {
+  // Throws `InvalidRelayLegIndexError` for an index that names no leg: the caller owns that boundary.
   const { legDistanceYards, stroke } = relayLegRequirements(relayEvent, legIndex);
-  // A leg index with no stroke matches no event.
-  if (stroke === undefined) return undefined;
   const nameKey = canonicalSwimmerName(legName);
   const teamKey = String(team ?? '').trim();
   const allowTimeTrials = relayLegsAllowTimeTrials(settings);
@@ -124,6 +125,9 @@ function clockHoldTime(override: RelayLegOverride): string | undefined {
   if (override.assigneeName?.trim() || override.recruitId) return undefined;
   return override.manualLegTime?.trim() || undefined;
 }
+
+/** The time of a vacant leg that has no recorded split and no estimate: unknown, written `NT`. */
+const UNKNOWN_LEG_TIME = 'NT';
 
 /** One relay leg's canonical name/class-year, as `relayNames` (or a fallback
  *  built from the ordered rows) records it. */
@@ -284,6 +288,10 @@ function resolveRelayLegs(
     const legRowForSplit =
       ordered.find(row => (row.relayLegIndex ?? -1) === index) ?? ordered[index];
     const oldSplitSec = departedLegClockSec(legRowForSplit);
+    // A split that reads as a time is a baseline. 'DQ' reads as Infinity and '--' as NaN: neither
+    // is a time, so such a leg is not priced (same test as `applyLegTimeDelta`).
+    const vacantLegSplitSec =
+      oldSplitSec !== null && Number.isFinite(oldSplitSec) ? oldSplitSec : null;
 
     const departedIndiv = findDepartedLegSwim(
       results,
@@ -301,7 +309,12 @@ function resolveRelayLegs(
 
     const markVacant = (reason: RelayMissingLeg['reason']) => {
       modified = true;
-      newTimeSecs += 3.0;
+      // A recorded split lets the leg be priced: the 3.0 s vacancy penalty. With none (and no
+      // estimate) the leg is not priced and the team time is unknown: `Infinity`, written `NT`, the
+      // same as a filled leg with no baseline (user decision E3, 2026-10-16). The reason stays the
+      // vacancy reason, so the leg still counts as vacant (`relayLegIsVacant`).
+      if (vacantLegSplitSec === null) newTimeSecs = Number.POSITIVE_INFINITY;
+      else newTimeSecs += 3.0;
       outLegs[index] = { name: '—', year: '' };
       legVacantByIndex.set(index, true);
       legMissingByIndex.set(index, { legIndex: index, stroke, reason });
@@ -310,7 +323,9 @@ function resolveRelayLegs(
         id: `vacant-${index}`,
         name: '—',
         classYear: '',
-        time: formatSecondsToTime((oldSplitSec ?? 30) + 3),
+        // The leg's recorded split plus the penalty. With no recorded split (and no estimate) the
+        // leg time is unknown: `NT`, never a number made up to stand in for it (user decision E3).
+        time: vacantLegSplitSec === null ? UNKNOWN_LEG_TIME : formatSecondsToTime(vacantLegSplitSec + 3),
         isRelay: false,
       });
     };
@@ -422,7 +437,11 @@ function buildRelayLegSplitDetails(
     // `index` is the loop counter, so it always has a stroke.
     const stroke = legRowForSplit?.relayLegStroke ?? relayStrokeForBoundedIndex(evLower, index);
 
-    if (legReplacements.has(index) && legDistYards == null) {
+    if (legReplacements.get(index)?.time === UNKNOWN_LEG_TIME) {
+      // A vacant leg with no recorded split: no time and no split detail to build, and none of
+      // the departed swimmer's. The row keeps the split it had (none), so no screen reads a made-up time.
+      legTotals.push(null);
+    } else if (legReplacements.has(index) && legDistYards == null) {
       // No leg distance to build a split detail on: carry the leg time only.
       const legTime = legReplacements.get(index)!.time;
       undetailedLegTimes.set(index, legTime);
@@ -550,33 +569,45 @@ function processRelayGroupForRosterSim(
     return;
   }
 
-  const resolved = resolveRelayLegs(
-    legsCanonical,
-    ordered,
-    template,
-    evLower,
-    results,
-    legPool,
-    overrideList,
-    removeSeniors,
-    excluded,
-    vacateLegs,
-    relayLegSettings
-  );
+  // A relay with more named legs than its event has (a fifth name on a medley) has a leg index
+  // that names no leg. Its stroke cannot be read, so the relay is left as recorded, not guessed.
+  // The lineup audit names it (`relay_leg_index_invalid`).
+  if (!isValidRelayLegIndex(evLower, legsCanonical.length - 1)) {
+    ordered.forEach(row => finalResults.push(row));
+    return;
+  }
+  try {
+    const resolved = resolveRelayLegs(
+      legsCanonical,
+      ordered,
+      template,
+      evLower,
+      results,
+      legPool,
+      overrideList,
+      removeSeniors,
+      excluded,
+      vacateLegs,
+      relayLegSettings
+    );
 
-  // Null when the relay's label names no distance. No swim then matches a
-  // leg (`isRelayLegEvent`), so a departing leg holder leaves the leg vacant;
-  // the lineup audit names the label (`relay_distance_unreadable`).
-  const legDistYards = relayLegDistanceYardsOfEvent(template.event);
-  const { legTotals, legDetailsByIndex, undetailedLegTimes } = buildRelayLegSplitDetails(
-    resolved.outLegs,
-    ordered,
-    evLower,
-    resolved.legReplacements,
-    legDistYards
-  );
+    // Null when the relay's label names no distance. No swim then matches a
+    // leg (`isRelayLegEvent`), so a departing leg holder leaves the leg vacant;
+    // the lineup audit names the label (`relay_distance_unreadable`).
+    const legDistYards = relayLegDistanceYardsOfEvent(template.event);
+    const { legTotals, legDetailsByIndex, undetailedLegTimes } = buildRelayLegSplitDetails(
+      resolved.outLegs,
+      ordered,
+      evLower,
+      resolved.legReplacements,
+      legDistYards
+    );
 
-  emitRelayGroupRows(ordered, resolved, legTotals, legDetailsByIndex, undetailedLegTimes, finalResults);
+    emitRelayGroupRows(ordered, resolved, legTotals, legDetailsByIndex, undetailedLegTimes, finalResults);
+  } catch (error) {
+    if (!(error instanceof InvalidRelayLegIndexError)) throw error;
+    ordered.forEach(row => finalResults.push(row));
+  }
 }
 
 /**
@@ -628,8 +659,8 @@ export function simulateRoster(
   relayLegSettings?: RelayLegMatchSettings
 ): SwimmerResult[] {
   const excluded = excludedSwimmerNames ?? new Set<string>();
-  // A key saved for a tied pair of relays (before the two were told apart) is
-  // split into one override per relay; every reader below reads the split list.
+  // A key saved for a tied pair of relays (before the two were told apart) names
+  // neither relay: it stays in the list and no reader below applies it (E5).
   const overrideList = migrateTiedRelayOverrides(relayLegOverrides ?? [], results);
   const vacateLegs = vacateRelayLegNames ?? new Set<string>();
   const runRosterSim =

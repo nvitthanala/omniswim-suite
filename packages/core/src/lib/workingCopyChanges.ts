@@ -62,10 +62,10 @@ export function countWorkingCopyChanges(workspace: Workspace, gender: Gender): W
   // wholesale would report every relay edit on BOTH genders, so a workspace
   // with 40 women's leg overrides would claim "40 changes" while the user is
   // looking at the men's roster — a plausible, wrong number.
-  // A tied relay pair's override is stored once per relay (`migrateTiedRelayOverrides`
-  // writes one split key per relay when the relays screen saves a legacy plain
-  // key). Both copies are one edit, so `plainKeyByOwnKey` maps a split key back
-  // to the plain key of its pair and the copies are counted once below.
+  // A tied relay pair's override may be stored once per relay (a list an older build
+  // split from a legacy plain key; `migrateTiedRelayOverrides` no longer copies it).
+  // Both copies are one edit, so `plainKeyByOwnKey` maps a split key back to the
+  // plain key of its pair and the copies are counted once below.
   const plainKeyByOwnKey = new Map<string, string>();
   const keysFor = (rows: Workspace['menResults']) => {
     const keys = new Set<string>();

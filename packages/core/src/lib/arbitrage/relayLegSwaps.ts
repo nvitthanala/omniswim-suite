@@ -16,6 +16,7 @@ import {
   SwimmerResult,
   Workspace,
 } from '../../types';
+import { isUnconfirmedProgramSwim } from '../programSwim';
 import { mergeScoringSettings } from '../scoringDefaults';
 import { buildScorerRosterLookup, usesScorerRoster, type ScorerRosterLookup } from '../scorerRoster';
 import {
@@ -28,6 +29,7 @@ import {
   buildRelayCandidateGenderIndex,
   individualEventDistanceStroke,
   isRelayCandidateOfGender,
+  isValidRelayLegIndex,
   relayEntryKeyIn,
   relayLegMatchSettings,
   relayStrokeForBoundedIndex,
@@ -366,6 +368,8 @@ function teamIndividualResults(
   return results.filter(
     r =>
       !r.isRelay &&
+      // A swims-list row nobody confirmed as a program swim is no candidate (`programSwim.ts`).
+      !isUnconfirmedProgramSwim(r) &&
       (r.gender == null || r.gender === gender) &&
       String(r.team ?? '').trim() === team
   );
@@ -726,6 +730,10 @@ function collectSwapsForEntry(
   // A relay whose label names no distance has no leg any swim matches, so
   // nothing can be scored against it; the lineup audit names the label.
   if (legDistanceYards == null) return 0;
+  // An entry with more named legs than its event has (a fifth name on a medley) has a leg that
+  // names no stroke. Nothing can be priced against it; the lineup audit names it
+  // (`relay_leg_index_invalid`).
+  if (!isValidRelayLegIndex(evLower, entry.legNames.length - 1)) return 0;
   const onRelay = new Set(entry.legNames.filter(Boolean).map(n => normalizeSwimmerName(n)));
 
   let evaluated = 0;

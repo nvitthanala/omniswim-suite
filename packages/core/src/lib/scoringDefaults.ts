@@ -486,7 +486,7 @@ export interface ConferencePresetBinding {
  * every other character a word break. `"Gulf South / NSISC Championships"` and
  * `"gulf south - nsisc  championships"` read the same.
  */
-function conferenceWords(name: string): string[] {
+export function conferenceWords(name: string): string[] {
   return name
     .toUpperCase()
     .split(/[^\p{L}\p{N}]+/u)
@@ -494,7 +494,7 @@ function conferenceWords(name: string): string[] {
 }
 
 /** True when `needle` appears in `haystack` as a run of whole, adjacent words. */
-function containsWholeWords(haystack: readonly string[], needle: readonly string[]): boolean {
+export function containsWholeWords(haystack: readonly string[], needle: readonly string[]): boolean {
   if (needle.length === 0 || needle.length > haystack.length) return false;
   for (let start = 0; start + needle.length <= haystack.length; start += 1) {
     if (needle.every((word, offset) => haystack[start + offset] === word)) return true;

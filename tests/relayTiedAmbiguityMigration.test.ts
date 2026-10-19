@@ -16,9 +16,10 @@
  * - (a) Such a leg is `ambiguous`. The relays screen groups it apart and every
  *   writer refuses it with `tied_relay_ambiguous`.
  * - (b) A key saved before the two relays were told apart (the plain
- *   `relayEntryKey`) is rewritten into one override per relay
- *   (`migrateTiedRelayOverrides`) before any reader reads it, and the readers
- *   no longer fall back to it. So a clear on A cannot change B's fill.
+ *   `relayEntryKey`) names neither relay. The readers do not fall back to it, so
+ *   a clear on A cannot change B's fill. It was first rewritten into one
+ *   override per relay; since user decision E5 (2026-10-16) it is reported as
+ *   ambiguous (`migrateTiedRelayOverridesDetailed`) and applied to neither.
  *
  * ## Finding 3 (LOW): history swims of other meets judged by the loaded meet
  *
@@ -42,6 +43,7 @@ import {
   findRelayLegOverride,
   hasRelayLegOverride,
   migrateTiedRelayOverrides,
+  migrateTiedRelayOverridesDetailed,
   relayOverrideRefusal,
   removeRelayLegOverride,
   resolveRelayEntryForLeg,
@@ -55,7 +57,7 @@ import {
   relayLegHistoryCandidates,
 } from '../packages/core/src/lib/relayLegHistoryCandidates';
 import { buildHistoryFromWorkspace } from '../packages/core/src/lib/athleteHistory';
-import { buildTeamLineupAudit } from '../packages/core/src/lib/rosterLineupAudit';
+import { buildTeamLineupAudit, issueBadgeLabel } from '../packages/core/src/lib/rosterLineupAudit';
 import { buildWhatIfProjection } from '../packages/core/src/lib/whatIfProjection';
 import {
   buildRelayGroups,
@@ -261,37 +263,47 @@ describe('a key saved before the two relays were told apart', () => {
   const nameOnLeg = (rows: SwimmerResult[], first: string) =>
     rows.find(r => r.isRelay && r.relayLegIndex === LEG && r.relayNames?.some(n => n.name === first))?.name;
 
-  it('is rewritten into one override per relay, in place, with every field kept', () => {
-    const migrated = migrateTiedRelayOverrides([legacy], results);
-    expect(migrated.map(o => o.relayEntryKey).sort()).toStrictEqual([keyA, keyB].sort());
-    for (const o of migrated) {
-      expect(o).toMatchObject({ legIndex: LEG, assigneeName: 'X1', source: 'manual' });
-    }
-    expect(findRelayLegOverride(migrated, aTemplate, LEG, tied)?.assigneeName).toBe('X1');
-    expect(findRelayLegOverride(migrated, bTemplate, LEG, tied)?.assigneeName).toBe('X1');
+  it('is reported as ambiguous, not copied to either relay (user decision E5, 2026-10-16)', () => {
+    const migration = migrateTiedRelayOverridesDetailed([legacy], results);
+    expect(migration.ambiguous).toStrictEqual([
+      {
+        override: legacy,
+        relayEntryKey: plainKey,
+        legIndex: LEG,
+        candidateKeys: [keyA, keyB].sort(),
+      },
+    ]);
+    // The stored override stays in the list, exactly as saved. Nothing is lost and nothing is invented.
+    expect(migration.overrides).toStrictEqual([legacy]);
+    expect(migrateTiedRelayOverrides([legacy], results)).toStrictEqual([legacy]);
+    // Neither relay reads it.
+    expect(findRelayLegOverride(migration.overrides, aTemplate, LEG, tied)).toBeUndefined();
+    expect(findRelayLegOverride(migration.overrides, bTemplate, LEG, tied)).toBeUndefined();
   });
 
-  it('a core writer (upsert on A) leaves what B reads unchanged', () => {
+  it('a core writer (upsert on A) leaves B with nothing, and keeps the legacy key', () => {
     const forA: RelayLegOverride = { relayEntryKey: keyA, legIndex: LEG, assigneeName: 'Y1', source: 'manual' };
     const list = upsertRelayLegOverride([legacy], forA);
     expect(list).toContainEqual(legacy);
     const out = simulateRoster(results, [], false, BOTH_LEFT, list);
     expect(nameOnLeg(out, 'A1')).toBe('Y1');
-    expect(nameOnLeg(out, 'B1')).toBe('X1');
+    expect(nameOnLeg(out, 'B1')).toBe('—');
   });
 
-  it('a clear on A leaves A open and B filled', () => {
-    const migrated = migrateTiedRelayOverrides([legacy], results);
+  it('a clear on A leaves A open, and the legacy key is still reported', () => {
+    const forA: RelayLegOverride = { relayEntryKey: keyA, legIndex: LEG, assigneeName: 'Y1', source: 'manual' };
+    const migrated = migrateTiedRelayOverrides([legacy, forA], results);
     expect(hasRelayLegOverride(migrated, keyA, LEG)).toBe(true);
     const cleared = removeRelayLegOverride(migrated, keyA, LEG);
     expect(hasRelayLegOverride(cleared, keyA, LEG)).toBe(false);
-    expect(hasRelayLegOverride(cleared, keyB, LEG)).toBe(true);
+    expect(hasRelayLegOverride(cleared, keyB, LEG)).toBe(false);
     const out = simulateRoster(results, [], false, BOTH_LEFT, cleared);
     expect(nameOnLeg(out, 'A1')).toBe('—');
-    expect(nameOnLeg(out, 'B1')).toBe('X1');
+    expect(nameOnLeg(out, 'B1')).toBe('—');
+    expect(migrateTiedRelayOverridesDetailed(cleared, results).ambiguous).toHaveLength(1);
   });
 
-  it('the legacy key on a projected tied relay reaches both through the what-if projection', () => {
+  it('the legacy key on a projected tied relay fills neither through the what-if projection', () => {
     const ws = workspaceFixture({
       id: 'ws',
       name: 'tied',
@@ -312,23 +324,29 @@ describe('a key saved before the two relays were told apart', () => {
     });
     const rows = buildWhatIfProjection({ workspace: ws, gender: Gender.MEN, removeSeniors: false }).rows;
     const legs = rows.filter(r => r.isRelay === true && r.relayLegIndex === LEG);
-    expect(legs.map(r => r.name)).toStrictEqual(['X1', 'X1']);
+    expect(legs.map(r => r.name)).toStrictEqual(['—', '—']);
+    expect(legs.every(r => r.relayLegVacant === true)).toBe(true);
   });
 
-  it('migration is idempotent and returns the same list when nothing is rewritten', () => {
+  it('migration is idempotent and returns the same list', () => {
     const once = migrateTiedRelayOverrides([legacy], results);
     expect(migrateTiedRelayOverrides(once, results)).toBe(once);
+    const detailed = migrateTiedRelayOverridesDetailed(once, results);
+    expect(detailed.overrides).toBe(once);
+    expect(migrateTiedRelayOverridesDetailed(detailed.overrides, results).ambiguous).toStrictEqual(detailed.ambiguous);
     const ownOnly: RelayLegOverride[] = [{ relayEntryKey: keyA, legIndex: LEG, assigneeName: 'Y1', source: 'manual' }];
     expect(migrateTiedRelayOverrides(ownOnly, results)).toBe(ownOnly);
+    expect(migrateTiedRelayOverridesDetailed(ownOnly, results).ambiguous).toStrictEqual([]);
   });
 
-  it("a relay's own override wins, and a second legacy override of one leg is dropped", () => {
+  it("a relay's own override is not ambiguous; every legacy override of a tied pair is, one entry each", () => {
     const own: RelayLegOverride = { relayEntryKey: keyB, legIndex: LEG, assigneeName: 'Y1', source: 'manual' };
     const second: RelayLegOverride = { ...legacy, assigneeName: 'Z9' };
-    const migrated = migrateTiedRelayOverrides([legacy, own, second], results);
-    expect(migrated).toHaveLength(2);
-    expect(findRelayLegOverride(migrated, bTemplate, LEG, tied)?.assigneeName).toBe('Y1');
-    expect(findRelayLegOverride(migrated, aTemplate, LEG, tied)?.assigneeName).toBe('X1');
+    const migration = migrateTiedRelayOverridesDetailed([legacy, own, second], results);
+    expect(migration.overrides).toStrictEqual([legacy, own, second]);
+    expect(migration.ambiguous.map(x => x.override)).toStrictEqual([legacy, second]);
+    expect(findRelayLegOverride(migration.overrides, bTemplate, LEG, tied)?.assigneeName).toBe('Y1');
+    expect(findRelayLegOverride(migration.overrides, aTemplate, LEG, tied)).toBeUndefined();
   });
 
   it('the keys of untied relays and of the other gender come back as they were', () => {
@@ -342,16 +360,48 @@ describe('a key saved before the two relays were told apart', () => {
     };
     const list = [women, onUntied];
     expect(migrateTiedRelayOverrides(list, [...results, ...untied])).toBe(list);
-    // A legacy key rewritten next to them leaves them in their order and untouched.
-    const mixed = migrateTiedRelayOverrides([women, legacy, onUntied], [...results, ...untied]);
-    expect(mixed[0]).toBe(women);
-    expect(mixed[mixed.length - 1]).toBe(onUntied);
-    expect(mixed).toHaveLength(4);
+    expect(migrateTiedRelayOverridesDetailed(list, [...results, ...untied]).ambiguous).toStrictEqual([]);
+    // A legacy key next to them is reported; the others stay in their order and are not.
+    const mixed = migrateTiedRelayOverridesDetailed([women, legacy, onUntied], [...results, ...untied]);
+    expect(mixed.overrides).toStrictEqual([women, legacy, onUntied]);
+    expect(mixed.ambiguous.map(x => x.override)).toStrictEqual([legacy]);
   });
 
   it('the writer for a tied relay always writes the relay own key', () => {
     const fill = suggestBestRelayLegFill(individuals, bTemplate, LEG, new Set(), new Set(), undefined, tied);
     expect(fill?.override.relayEntryKey).toBe(keyB);
+  });
+
+  it('the lineup audit names the ambiguous key, once, and says it is not applied', () => {
+    const ws = workspaceFixture({
+      id: 'ws',
+      name: 'tied',
+      createdAt: 0,
+      menResults: results,
+      womenResults: [],
+      recruits: [],
+      meetEntryPlans: [],
+      activeEntryIds: [],
+      athleteHistory: [],
+      relayLegOverrides: [legacy],
+      conference: 'NSISC',
+      scoringSettings: { ...NSISC_PRESET_SETTINGS },
+    });
+    const audit = buildTeamLineupAudit({
+      workspace: ws,
+      gender: Gender.MEN,
+      team: TEAM,
+      settings: NSISC_PRESET_SETTINGS,
+      allResults: results,
+      allScored: results,
+      removeSeniors: false,
+      detectDuplicates: false,
+    });
+    const items = audit.checklistItems.filter(i => i.type === 'tied_relay_ambiguous');
+    expect(items).toHaveLength(1);
+    expect(items[0]).toMatchObject({ group: 'relays', relayEvent: EVENT, legIndex: LEG, relayEntryKey: plainKey });
+    expect(items[0]?.message).toContain('not applied');
+    expect(issueBadgeLabel({ type: 'tied_relay_ambiguous', message: '' })).toBe('Tied relay');
   });
 });
 

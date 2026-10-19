@@ -10,12 +10,14 @@ import {
 } from 'recharts';
 import { ArrowLeft, BarChart3, Download } from 'lucide-react';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
+import { withOwnTeam, workspaceOwnTeam } from '@omniswim/core/lib/ownTeam';
 import { buildSeasonTrends, defaultSeasonTeam } from '@omniswim/core/lib/seasonAnalytics';
 import { isTheoreticalMeet } from '@omniswim/core/lib/theoreticalMeetLabel';
 import { useThemeColors, type ThemeColors } from '@omniswim/core/lib/useThemeColors';
-import { ChartFrame, ChartShell, EmptyState, TeamSelect } from '@omniswim/ui';
+import { Button, ChartFrame, ChartShell, EmptyState, TeamSelect } from '@omniswim/ui';
 import { SeasonProgressionPanel } from '../components/SeasonProgressionPanel';
 import {
+  describeOwnTeamControl,
   describeTeamScoreSelection,
   describeUnreadablePointRows,
   describeWorkspacesWithoutScore,
@@ -107,7 +109,7 @@ function MatrixLink({ children }: { children: string }) {
 }
 
 export default function AnalyticsPage() {
-  const { workspaces, activeWorkspace } = useSuiteWorkspace();
+  const { workspaces, activeWorkspace, updateWorkspace } = useSuiteWorkspace();
   const chartTheme = useThemeColors();
   const seriesColors = useSeriesColors(chartTheme);
   // The user's pick, kept apart from the default. The default is read on every
@@ -115,10 +117,20 @@ export default function AnalyticsPage() {
   const [pickedTeam, setPickedTeam] = useState<string | null>(null);
   const requestedTeam = requestedSeasonTeam(pickedTeam, defaultSeasonTeam(activeWorkspace));
 
+  // The picker starts empty until the user picks a team or sets one as their own: a lone team in
+  // the meets is not assumed to be theirs.
   const trends = useMemo(
-    () => buildSeasonTrends(workspaces, { team: requestedTeam }),
+    () => buildSeasonTrends(workspaces, { team: requestedTeam, chooseSingleTeam: false }),
     [workspaces, requestedTeam]
   );
+  const ownTeam = workspaceOwnTeam(activeWorkspace);
+  const ownTeamView = describeOwnTeamControl(ownTeam, trends.team);
+  const saveOwnTeam = (team: string | null) => {
+    if (!activeWorkspace) return;
+    void updateWorkspace({ scoringSettings: withOwnTeam(activeWorkspace.scoringSettings, team) });
+    // The saved team is the default now, so a stale pick must not outrank it.
+    setPickedTeam(null);
+  };
   const chartData = useMemo(() => teamTrendRows(trends.teamScoreTrends), [trends.teamScoreTrends]);
   const meetWorkspaceCount = useMemo(
     () => workspaces.filter(ws => !isTheoreticalMeet(ws)).length,
@@ -176,6 +188,24 @@ export default function AnalyticsPage() {
             className="glass-input rounded-lg py-1.5 px-2 text-ui-caption min-w-[14rem]"
           />
         </div>
+
+        {activeWorkspace ? (
+          <div className="flex flex-wrap items-center gap-2 mb-3" data-testid="season-own-team">
+            <span className="text-ui-caption text-theme-muted" data-testid="season-own-team-note">
+              {ownTeamView.note}
+            </span>
+            {ownTeamView.offer ? (
+              <Button variant="outline" size="sm" onClick={() => saveOwnTeam(trends.team)}>
+                {ownTeamView.offer}
+              </Button>
+            ) : null}
+            {ownTeamView.canClear ? (
+              <Button variant="ghost" size="sm" onClick={() => saveOwnTeam(null)}>
+                Clear my team
+              </Button>
+            ) : null}
+          </div>
+        ) : null}
 
         <p role="status" className="text-ui-caption text-theme-secondary" data-testid="season-team-sentence">
           {selectionSentence}

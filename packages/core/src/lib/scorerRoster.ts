@@ -388,6 +388,11 @@ export type AthleteCreditedSwim = {
    * a metric swim. Build its cut tag through `cutlineSwimOfRecord`.
    */
   convertedFrom?: ScyConversionProvenance;
+  /**
+   * Carried from `SwimmerResult.programSwim`. `'unconfirmed'`: the swims-list import could not tell a
+   * program swim from a time trial. Build its cut tag through `cutlineSwimOfRecord`, which reads it.
+   */
+  programSwim?: 'unconfirmed' | 'program';
 };
 
 /**
@@ -440,6 +445,7 @@ export function getAthleteCreditedSwims(
       relayLegSplitDetail: r.relayLegSplitDetail,
       relayTeamSplits: r.relayTeamSplits,
       ...(r.convertedFrom ? { convertedFrom: r.convertedFrom } : {}),
+      ...(r.programSwim ? { programSwim: r.programSwim } : {}),
     });
   }
 

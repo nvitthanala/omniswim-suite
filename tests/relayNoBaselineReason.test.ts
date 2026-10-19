@@ -103,6 +103,21 @@ describe('simulateRoster names the leg whose replacement cannot be priced', () =
     const legRow = out.find(r => r.relayLegIndex === LEG);
     expect(legRow?.relayMissingLeg?.reason).toBe('no_replacement');
     expect(relayLegIsVacant(legRow as SwimmerResult)).toBe(true);
+    // User decision E3: with no baseline the vacated leg is not priced, so the relay time is NT
+    // (no 3.00 s penalty, no made-up leg time).
+    expect(out.map(r => r.relayTeamTime)).toStrictEqual(['NT', 'NT', 'NT', 'NT']);
+    expect(legRow?.relayLegSplit).toBeUndefined();
+  });
+});
+
+describe('a vacated leg whose recorded split is DQ or unreadable (real NSISC relay)', () => {
+  it.each(['DQ', '--'])('split %s: the relay time is NT, not the old time plus 3.00 s', split => {
+    const rows = noBaselineRows().map(r => (isDollLeg(r) ? ({ ...r, relayLegSplit: split } as Row) : r));
+    const out = target(simulateRoster(rows, [], false, new Set(), [], new Set([normalizeSwimmerName(OUT)])));
+    expect(out.map(r => r.relayTeamTime)).toStrictEqual(['NT', 'NT', 'NT', 'NT']);
+    const legRow = out.find(r => r.relayLegIndex === LEG);
+    expect(legRow?.relayMissingLeg?.reason).toBe('no_replacement');
+    expect(relayLegIsVacant(legRow as SwimmerResult)).toBe(true);
   });
 });
 

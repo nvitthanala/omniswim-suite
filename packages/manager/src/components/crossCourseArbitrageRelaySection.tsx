@@ -26,7 +26,7 @@ import type {
   RelayLegWithoutBaseline,
 } from '@omniswim/core/lib/crossCourseArbitrage';
 import type { RelayAlternatePromotion } from '@omniswim/core/lib/scoringTheory';
-import { relayStrokeForIndex } from '@omniswim/core/lib/relayLegMatching';
+import { isValidRelayLegIndex, relayStrokeForIndex } from '@omniswim/core/lib/relayLegMatching';
 import { RELAY_LEG_ESTIMATE_LABEL } from '@omniswim/core/lib/relaySplits';
 
 const RELAY_ALTERNATE_REASON_LABEL: Record<RelayAlternatePromotion['reason'], string> = {
@@ -130,7 +130,19 @@ function RelayPromotionRow({
   canApplySwaps: boolean;
   onApplyRelayPromotion: (promotion: RelayAlternatePromotion) => void;
 }) {
-  const stroke = relayStrokeForIndex(promotion.relayEvent.toLowerCase(), promotion.legIndex);
+  const eventLower = promotion.relayEvent.toLowerCase();
+  if (!isValidRelayLegIndex(eventLower, promotion.legIndex)) {
+    return (
+      <li
+        key={`${promotion.relayEntryKey}|${promotion.legIndex}`}
+        role="alert"
+        className="rounded-lg border border-warning bg-warning-faint px-3 py-2 text-ui-caption text-warning"
+      >
+        Invalid relay leg on this entry (index {String(promotion.legIndex)}). No promotion offered.
+      </li>
+    );
+  }
+  const stroke = relayStrokeForIndex(eventLower, promotion.legIndex);
   return (
     <li
       key={`${promotion.relayEntryKey}|${promotion.legIndex}`}

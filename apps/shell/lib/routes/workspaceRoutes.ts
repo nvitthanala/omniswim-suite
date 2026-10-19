@@ -48,9 +48,10 @@ export interface WorkspaceRoutesDeps {
    * Who may list backups and restore one, when `AUTH_REQUIRED`. Defaults to nobody.
    *
    * A restore replaces EVERY workspace of EVERY user, and a backup file is not tagged
-   * with the tenant that wrote it, so neither is a per-user operation. The app has no
-   * administrator concept yet (`AuthUser` has no role, and every account owns its own
-   * team), so until the server wires one in, these two routes answer 403 under
+   * with the tenant that wrote it, so neither is a per-user operation. The database has
+   * no administrator role (`AuthUser` has none). The server passes `isAdminUser` over
+   * `OMNI_ADMIN_EMAILS`, so an administrator is a signed-in user whose email is on that
+   * list. Left unset, or with an empty list, these two routes answer 403 under
    * `AUTH_REQUIRED`. Without `AUTH_REQUIRED` the instance is single-tenant and they
    * behave as they always did.
    */

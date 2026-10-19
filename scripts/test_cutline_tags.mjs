@@ -85,9 +85,17 @@ const MEET_TEAMS = [
 ];
 
 // The live bug: UWF was absent from the map and fell through to the D1 default.
-eq(divisionForTeamOrNull('University of West Florida'), 'D2', 'UWF resolves to D2');
+// UWF changed division (D2 through 2025-2026, D1 from 2026-2027), so a lookup
+// with no season is unknown: it is a mapped school, not an unmapped one. Asked
+// by season it answers (E8, 2026-10-16).
+eq(divisionForTeamOrNull('University of West Florida'), null, 'UWF has no season-less division');
 eq(resolveTeamDivision('University of West Florida').match, 'canonical', 'UWF match kind');
-eq(divisionForTeamOrNull('UWF'), 'D2', 'UWF abbreviation resolves to D2');
+eq(divisionForTeamOrNull('UWF'), null, 'UWF abbreviation has no season-less division');
+eq(divisionForTeamOrNull('UWF', { season: '2025-2026' }), 'D2', 'UWF is D2 for a 2025-2026 swim');
+eq(divisionForTeamOrNull('UWF', { season: '2026-2027' }), 'D1', 'UWF is D1 for a 2026-2027 swim');
+eq(divisionForTeamOrNull('UWF', { season: 'sometime' }), null, 'UWF with an unparseable season is unknown');
+eq(divisionForTeamInSeason('UWF', 'sometime'), null, 'divisionForTeamInSeason never defaults an unparseable season');
+eq(divisionForTeamInSeason('UWF', '2027-2028'), 'D1', 'UWF stays D1 in later seasons (open-ended period)');
 eq(divisionForTeamOrNull('Henderson State University'), 'D2', 'HSU resolves to D2');
 eq(divisionForTeamOrNull('HSU'), 'D2', 'HSU abbreviation resolves to D2');
 
@@ -112,7 +120,9 @@ if (meets === null) {
     }
   })(meets);
   for (const t of meetTeams) {
-    if (divisionForTeamOrNull(t) === null) fail(`team in data/meets.json is unmapped: ${t}`);
+    // Mapped means the registry holds the school. A school that changed division
+    // has a `null` season-less division on purpose and is still mapped.
+    if (resolveTeamDivision(t).entry === undefined) fail(`team in data/meets.json is unmapped: ${t}`);
     const status = resolveTeamDivision(t).status;
     if (status !== 'active') {
       fail(`team in data/meets.json no longer has an active program (${status}): ${t}`);
@@ -167,7 +177,9 @@ for (const name of ['State University', 'University', 'Delta State University Ce
 // Legacy call sites keep their old signature and their old fallback, but the
 // fallback is now the only route to D1 for an unknown team.
 eq(divisionForTeam('Cascadia Polytechnic College'), 'D1', 'legacy divisionForTeam still defaults');
-eq(divisionForTeam('University of West Florida'), 'D2', 'legacy divisionForTeam sees UWF');
+// UWF has no season-less division, so the deprecated D1-defaulting lookup answers
+// its fallback. That is the legacy behaviour this lookup is retired for.
+eq(divisionForTeam('University of West Florida'), 'D1', 'legacy divisionForTeam falls back for UWF');
 eq(
   divisionForTeam('Cascadia Polytechnic College', { 'Cascadia Polytechnic College': 'NAIA' }),
   'NAIA',
@@ -190,12 +202,26 @@ for (const entry of knownTeamDivisions()) {
 /* 4. Meet-level resolution                                            */
 /* ------------------------------------------------------------------ */
 
-const uniform = resolveMeetDivisions(MEET_TEAMS);
-eq(uniform.status, 'uniform', 'the NSISC meet field is a uniform division');
+const SINGLE_DIVISION_TEAMS = MEET_TEAMS.filter(t => t !== 'University of West Florida');
+const uniform = resolveMeetDivisions(SINGLE_DIVISION_TEAMS);
+eq(uniform.status, 'uniform', 'the schools with one division are a uniform field');
 eq(uniform.division, 'D2', 'uniform meet exposes a meet-wide division');
 eq(uniform.divisions.join(','), 'D2', 'uniform meet divisions');
 eq(uniform.unresolvedTeams.length, 0, 'uniform meet has no unresolved teams');
-eq(uniform.byTeam['University of West Florida'], 'D2', 'per-team mapping includes UWF');
+
+// UWF changed division, so it joins a meet field only by season. Without one the
+// field is partial: the meet-wide division is not promoted over a school we
+// cannot place.
+const withUwf = resolveMeetDivisions(MEET_TEAMS);
+eq(withUwf.status, 'partial', 'a field with UWF and no season is partial');
+eq(withUwf.division, null, 'no meet-wide division is promoted over UWF');
+eq(withUwf.byTeam['University of West Florida'], null, 'per-team mapping reports UWF unknown without a season');
+const withUwfSeason = resolveMeetDivisions(MEET_TEAMS, { season: '2025-2026' });
+eq(withUwfSeason.status, 'uniform', 'the 2025-2026 field, UWF included, is uniform D2');
+eq(withUwfSeason.byTeam['University of West Florida'], 'D2', 'per-team mapping includes UWF for 2025-2026');
+const field2026 = resolveMeetDivisions(MEET_TEAMS, { season: '2026-2027' });
+eq(field2026.status, 'mixed', 'the 2026-2027 field is mixed: UWF is D1');
+eq(field2026.byTeam['University of West Florida'], 'D1', 'per-team mapping includes UWF for 2026-2027');
 
 const mixed = resolveMeetDivisions(['Henderson State University', 'University of Pittsburgh']);
 eq(mixed.status, 'mixed', 'a mixed field is reported as mixed');
@@ -506,7 +532,12 @@ eq(activeProgramTag.state, 'tagged', 'an active program still tags');
 // the school is unambiguously active and unambiguously D2, so every school-level
 // signal said "judge this against the D2 men's table".
 const uwf = resolveTeamDivision('University of West Florida');
-eq(uwf.division, 'D2', 'UWF is still a D2 school');
+eq(uwf.division, null, 'UWF has no season-less division');
+eq(
+  resolveTeamDivision('University of West Florida', { season: '2025-2026' }).division,
+  'D2',
+  'UWF is a D2 school for 2025-2026'
+);
 eq(uwf.status, 'active', 'UWF is still an active athletics program');
 eq(uwf.sponsoredGenders?.join(','), 'Women', 'UWF sponsors women only');
 
@@ -521,23 +552,88 @@ eq(uwfMen.tag, null, 'a gender the school does not sponsor carries no tag');
 eq(cutlineTagRenderMode(uwfMen), 'unknown', 'gender_not_sponsored renders unknown, not no_cut');
 eq(isCutlineTagConclusive(uwfMen), false, 'gender_not_sponsored is inconclusive');
 eq(uwfMen.lookupStatus, null, 'gender_not_sponsored attempts no table lookup');
-eq(uwfMen.division, 'D2', 'the refusal still reports the school’s division');
+eq(uwfMen.division, null, 'a refusal with no season reports no division');
 for (const needle of ['University of West Florida', 'men']) {
   if (!uwfMen.reason.includes(needle)) {
     fail(`gender_not_sponsored reason must name ${needle}: ${uwfMen.reason}`);
   }
 }
 
-// The gender it does sponsor is judged exactly as before.
+// The gender it does sponsor is judged by the swim's season (E8). With no season
+// UWF's division is unknown, so the swim is neither tagged nor a miss.
 const uwfWomen = buildCutlineTagForTeam({
   team: 'University of West Florida',
   timeSec: 19.2,
   gender: 'Women',
   event: '50 Freestyle',
 });
-eq(uwfWomen.state, 'tagged', 'a UWF women’s swim is still judged normally');
-eq(uwfWomen.tag?.gender, 'Women', 'UWF women’s tag gender');
-eq(uwfWomen.tag?.division, 'D2', 'UWF women’s tag division');
+eq(uwfWomen.state, 'division_unknown', 'a UWF women’s swim with no season is unknown');
+eq(cutlineTagRenderMode(uwfWomen), 'unknown', 'no season renders unknown, not no_cut');
+eq(uwfWomen.tag, null, 'no season, no tag');
+if (!uwfWomen.reason.includes('season')) {
+  fail(`division_unknown for a season-dependent school must say why: ${uwfWomen.reason}`);
+}
+
+const uwfWomen2025 = buildCutlineTagForTeam({
+  team: 'University of West Florida',
+  swimSeason: '2025-2026',
+  timeSec: 19.2,
+  gender: 'Women',
+  event: '50 Freestyle',
+});
+eq(uwfWomen2025.state, 'tagged', 'a UWF women’s 2025-2026 swim is judged');
+eq(uwfWomen2025.tag?.division, 'D2', 'a 2025-2026 swim is judged against D2');
+
+const uwfWomen2026 = buildCutlineTagForTeam({
+  team: 'University of West Florida',
+  swimSeason: '2026-2027',
+  timeSec: 19.2,
+  gender: 'Women',
+  event: '50 Freestyle',
+});
+eq(uwfWomen2026.state, 'tagged', 'a UWF women’s 2026-2027 swim is judged');
+eq(uwfWomen2026.tag?.division, 'D1', 'a 2026-2027 swim is judged against D1');
+eq(uwfWomen2026.tag?.season, '2026-2027', 'the D1 table used is the 2026-2027 one');
+
+// 22.40 beats the D2 women's 50 Free A standard (22.48) and misses the D1
+// standard (22.26), so the season decides the verdict. Standards are read from
+// the archived tables, not restated here.
+const uwfBoundary = swimSeason =>
+  buildCutlineTagForTeam({
+    team: 'University of West Florida',
+    swimSeason,
+    timeSec: 22.4,
+    gender: 'Women',
+    event: '50 Freestyle',
+  });
+eq(uwfBoundary('2025-2026').state, 'tagged', '22.40 makes the D2 standard for a 2025-2026 swim');
+eq(uwfBoundary('2026-2027').state, 'no_cut', '22.40 misses the D1 standard for a 2026-2027 swim');
+
+// D1 publishes no 1000 Freestyle standard. A 2026-2027 UWF 1000 Free is unknown,
+// not a miss: no table was reached.
+const uwf1000 = buildCutlineTagForTeam({
+  team: 'University of West Florida',
+  swimSeason: '2026-2027',
+  time: '10:00.00',
+  gender: 'Women',
+  event: '1000 Freestyle',
+});
+eq(uwf1000.state, 'event_not_in_table', 'D1 has no 1000 Freestyle standard');
+eq(cutlineTagRenderMode(uwf1000), 'unknown', 'a missing D1 table renders unknown, not no_cut');
+eq(uwf1000.division, 'D1', 'the unknown verdict still names the D1 division it looked in');
+
+// An unparseable season is unknown, never D2 or D1.
+eq(
+  buildCutlineTagForTeam({
+    team: 'University of West Florida',
+    swimSeason: 'sometime',
+    timeSec: 19.2,
+    gender: 'Women',
+    event: '50 Freestyle',
+  }).state,
+  'division_unknown',
+  'an unparseable swim season is unknown'
+);
 
 // An explicit division names the table that would apply; it does not conjure a
 // men's team at a school that has none.
@@ -637,7 +733,9 @@ for (const entry of knownTeamDivisions()) {
   for (const url of entry.sources ?? []) {
     if (!url.startsWith('http')) fail(`registry source is not a URL: ${entry.team} → ${url}`);
   }
-  if (entry.status === 'active' && !entry.division) {
+  // A school that changed division has no single division on purpose: its
+  // `divisionHistory` answers by season instead.
+  if (entry.status === 'active' && !entry.division && !entry.divisionHistory?.length) {
     fail(`active program without a division: ${entry.team}`);
   }
   // Sponsorship is only meaningful for a program that still exists, but where it
@@ -663,19 +761,20 @@ for (const entry of knownTeamDivisions()) {
   }
 }
 
-// Every meets.json team still resolves uniform D2 and still tags correctly, in
-// each gender it actually sponsors. 19.20 clears the published D2 50 Freestyle A
+// Every meets.json team resolves to D2 for the 2025-2026 meet and still tags
+// correctly, in each gender it actually sponsors. UWF is asked by season: it has
+// no season-less division. 19.20 clears the published D2 50 Freestyle A
 // standard on both sides. Iterating sponsorship rather than hardcoding "Men" is
 // the point: this loop used to assert a men's tag for UWF, which has no men's
 // team, and it passed.
 for (const team of MEET_TEAMS) {
-  const resolution = resolveTeamDivision(team);
-  eq(resolution.division, 'D2', `${team} resolves to D2`);
+  const resolution = resolveTeamDivision(team, { season: '2025-2026' });
+  eq(resolution.division, 'D2', `${team} resolves to D2 for 2025-2026`);
   eq(resolution.status, 'active', `${team} program is active`);
   const sponsored = resolution.sponsoredGenders ?? [];
   if (!sponsored.length) fail(`meets.json team has no recorded sponsorship: ${team}`);
   for (const gender of sponsored) {
-    const tag = buildCutlineTagForTeam({ timeSec: 19.2, gender, event: '50 Freestyle', team });
+    const tag = buildCutlineTagForTeam({ timeSec: 19.2, gender, event: '50 Freestyle', team, swimSeason: '2025-2026' });
     eq(tag.state, 'tagged', `${team} ${gender} 19.20 still produces a tag`);
     eq(tag.tag?.label, 'D2 A CUT', `${team} ${gender} 19.20 label`);
   }

@@ -36,6 +36,7 @@ import {
   SCORING_PRESET_META_KEYS,
 } from '@omniswim/core/lib/scoringDefaults';
 import type { FinalizeScoringDraftResult } from '@omniswim/core/lib/scoringPlaceTables';
+import { withoutWorkspaceOnlySettings } from '@omniswim/core/lib/ownTeam';
 import { ScoringSettingsFields } from './ScoringSettingsFields';
 import { BlankPlacesNotice, describeBlankPlaces } from './NullablePlacePointInput';
 
@@ -348,7 +349,8 @@ export function ScoringPresetManagerModal({ onClose, onPresetsChanged }: Scoring
     // Strip any preset-meta keys that leaked into `settings` (e.g. from a
     // round-tripped GET /:id payload) — the server's schema is strict and
     // rejects unknown keys outright.
-    const settings = { ...finalized.settings } as Record<string, unknown>;
+    // The workspace's own team is not a rule either: a preset never carries it.
+    const settings = withoutWorkspaceOnlySettings({ ...finalized.settings }) as Record<string, unknown>;
     for (const key of SCORING_PRESET_META_KEYS) delete settings[key];
     const input = {
       id: editor.id,

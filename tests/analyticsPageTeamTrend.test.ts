@@ -11,6 +11,8 @@
  *
  * Mutation map (revert the change, the named case turns red):
  *  - page calls buildSeasonTrends(workspaces) with no team   -> "defaults to the active workspace's own team"
+ *  - picker defaults to a team the workspace does not name as its own -> "starts empty until an own team is set"
+ *  - own-team button saves nothing, or saves without the key  -> "Make ... my team saves ownTeam"
  *  - picker not wired to the request                         -> "changing the picker changes the chart"
  *  - connectNulls true, or a null read as 0                  -> "a gender the team did not enter is a gap"
  *  - unreadable-rows note dropped                            -> "says how many rows had unreadable points"
@@ -27,10 +29,15 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 const state = vi.hoisted(() => ({
   workspaces: [] as unknown[],
   activeWorkspace: null as unknown,
+  updateWorkspace: undefined as unknown as (patch: unknown) => Promise<void>,
 }));
 
 vi.mock('@omniswim/core/store/SuiteWorkspaceProvider', () => ({
-  useSuiteWorkspace: () => ({ workspaces: state.workspaces, activeWorkspace: state.activeWorkspace }),
+  useSuiteWorkspace: () => ({
+    workspaces: state.workspaces,
+    activeWorkspace: state.activeWorkspace,
+    updateWorkspace: state.updateWorkspace,
+  }),
 }));
 
 vi.mock('recharts', async () => {
@@ -90,7 +97,11 @@ const TRI = ws(
 );
 const DUAL = ws('Dual Meet', [row('a3', 'Alpha U', 30), row('b3', 'Beta U', 20)]);
 const OTHER = ws('Other Meet', [row('c2', 'Gamma U', 50)]);
-const OWN_ALPHA = ws('Alpha roster', [row('o1', 'Alpha U', 0)]);
+const OWN_ALPHA = {
+  ...ws('Alpha roster', [row('o1', 'Alpha U', 0)]),
+  scoringSettings: { ownTeam: 'Alpha U' },
+} as unknown as Workspace;
+const NO_OWN = ws('Alpha roster', [row('o1', 'Alpha U', 0)]);
 
 let root: Root | null = null;
 let container: HTMLDivElement | null = null;
@@ -107,6 +118,7 @@ function render() {
 beforeEach(() => {
   state.workspaces = [TRI, DUAL, OTHER];
   state.activeWorkspace = OWN_ALPHA;
+  state.updateWorkspace = vi.fn(async () => undefined);
   // happy-dom lays nothing out. ChartShell draws its chart only once it measures a size.
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({
     x: 0, y: 0, top: 0, left: 0, right: 600, bottom: 300, width: 600, height: 300, toJSON: () => ({}),
@@ -146,6 +158,16 @@ describe('which team the chart shows', () => {
     ]);
   });
 
+  it('starts empty until an own team is set, even when the workspace rows name one team', () => {
+    state.activeWorkspace = NO_OWN;
+    render();
+    expect(picker().value).toBe('');
+    expect(sentence()).toBe('Choose a team to chart.');
+    expect(q('[data-testid="line-chart"]')).toBeNull();
+    expect(q('[data-testid="season-own-team-note"]')!.textContent).toBe('No team is set as yours yet.');
+    expect(container!.querySelectorAll('[data-testid="season-own-team"] button')).toHaveLength(0);
+  });
+
   it('lists every team the meets name in the picker', () => {
     render();
     const options = [...picker().options].map(o => o.value).filter(Boolean);
@@ -160,6 +182,51 @@ describe('which team the chart shows', () => {
       { name: 'Tri Meet', men: 31, women: null },
       { name: 'Dual Meet', men: 20, women: null },
     ]);
+  });
+});
+
+describe('the own-team control', () => {
+  const saved = () => (state.updateWorkspace as unknown as ReturnType<typeof vi.fn>).mock.calls;
+  const button = (label: string) =>
+    [...container!.querySelectorAll('button')].find(b => b.textContent === label) as HTMLButtonElement | undefined;
+  const click = (b: HTMLButtonElement) => act(() => b.click());
+
+  it('offers to make the picked team my team, and saves it in the workspace settings', () => {
+    state.activeWorkspace = NO_OWN;
+    render();
+    expect(button('Make Alpha U my team')).toBeUndefined();
+    choose('Beta U');
+    expect(q('[data-testid="season-own-team-note"]')!.textContent).toBe('No team is set as yours yet.');
+    click(button('Make Beta U my team')!);
+    expect(saved()).toHaveLength(1);
+    const patch = saved()[0]![0] as { scoringSettings: { ownTeam: string } };
+    expect(patch.scoringSettings.ownTeam).toBe('Beta U');
+  });
+
+  it('keeps the other scoring settings when it saves the own team', () => {
+    state.activeWorkspace = { ...NO_OWN, scoringSettings: { relayMultiplier: 2, scoringPoints: [9, 7] } } as unknown as Workspace;
+    render();
+    choose('Beta U');
+    click(button('Make Beta U my team')!);
+    const patch = saved()[0]![0] as { scoringSettings: Record<string, unknown> };
+    expect(patch.scoringSettings).toMatchObject({ relayMultiplier: 2, scoringPoints: [9, 7], ownTeam: 'Beta U' });
+  });
+
+  it('with an own team set: says so, offers a different picked team, and can clear', () => {
+    render();
+    expect(q('[data-testid="season-own-team-note"]')!.textContent).toBe('Your team is Alpha U.');
+    expect(button('Make Alpha U my team')).toBeUndefined();
+    choose('Gamma U');
+    expect(button('Make Gamma U my team')).toBeDefined();
+    click(button('Clear my team')!);
+    const patch = saved()[0]![0] as { scoringSettings: { ownTeam: string } };
+    expect(patch.scoringSettings.ownTeam).toBe('');
+  });
+
+  it('is absent when no workspace is open', () => {
+    state.activeWorkspace = null;
+    render();
+    expect(q('[data-testid="season-own-team"]')).toBeNull();
   });
 });
 
@@ -200,21 +267,34 @@ describe('each selection state has a plain sentence', () => {
   it('several teams and no own team: asks for a pick and plots nothing', () => {
     state.activeWorkspace = null;
     render();
-    expect(sentence()).toBe('Your meets name more than one team. Pick the team to chart.');
+    expect(sentence()).toBe('Choose a team to chart.');
     expect(q('[data-testid="line-chart"]')).toBeNull();
     expect(container!.textContent).toContain('Choose a team above');
     expect(container!.textContent).not.toContain('Load a meet to see');
   });
 
   it("the workspace's own team is in no meet: says so, does not chart another team", () => {
-    state.activeWorkspace = ws('Zed roster', [row('z1', 'Zed U', 0)]);
+    state.activeWorkspace = {
+      ...ws('Zed roster', [row('z1', 'Zed U', 0)]),
+      scoringSettings: { ownTeam: 'Zed U' },
+    } as unknown as Workspace;
     render();
     expect(sentence()).toBe('Zed U does not appear in any loaded meet. Pick a team from the list.');
     expect(q('[data-testid="line-chart"]')).toBeNull();
   });
 
-  it('one team in the meets and no own team: charts that team', () => {
+  it('one team in the meets and no own team: still asks, and does not assume that team is theirs', () => {
     state.activeWorkspace = null;
+    state.workspaces = [ws('Solo', [row('a1', 'Alpha U', 12)])];
+    render();
+    expect(picker().value).toBe('');
+    expect(sentence()).toBe('Choose a team to chart.');
+    expect(q('[data-testid="line-chart"]')).toBeNull();
+    expect([...picker().options].map(o => o.value).filter(Boolean)).toEqual(['Alpha U']);
+  });
+
+  it('one team in the meets and it is the own team: charts it', () => {
+    state.activeWorkspace = OWN_ALPHA;
     state.workspaces = [ws('Solo', [row('a1', 'Alpha U', 12)])];
     render();
     expect(picker().value).toBe('Alpha U');

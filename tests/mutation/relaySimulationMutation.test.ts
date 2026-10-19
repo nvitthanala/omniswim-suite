@@ -23,6 +23,7 @@ import {
   simulateRoster,
 } from '../../packages/core/src/lib/relaySimulation';
 import { relayEntryKey } from '../../packages/core/src/lib/relaySplits';
+import { InvalidRelayLegIndexError, relayLegIsVacant } from '../../packages/core/src/lib/relayLegMatching';
 import { canonicalSwimmerName, normalizeSwimmerName } from '../../packages/core/src/lib/swimmerNames';
 
 const HSU = 'HSU';
@@ -421,15 +422,65 @@ describe('clock hold and vacancy', () => {
     });
   });
 
-  it('a leg with no recorded split is shown at 30.00 + 3.00 and holds the clock otherwise', () => {
+  it('a vacated leg with no recorded split has no leg time: not a made-up 30.00 + 3.00 (decision E3)', () => {
     const out = simulateRoster(
       relayLegs(i => (i === 0 ? { relayLegSplit: undefined } : {})),
       [],
       true
     );
     const rows = relayRows(out);
-    // The clock still gains 3.00 s; the leg time shown is the 30.00 default plus 3.00.
-    expect(rows[0]).toMatchObject({ time: '1:43.00', relayLegSplit: '33.00' });
+    // The leg is not priced, so the relay time is NT: no 3.00 s penalty on a leg with no baseline.
+    // The leg itself is still vacant, with its reason.
+    expect(rows[0]).toMatchObject({
+      name: '—',
+      time: 'NT',
+      relayLegVacant: true,
+      relayMissingLeg: { legIndex: 0, stroke: 'free', reason: 'vacant' },
+    });
+    expect(relayLegIsVacant(rows[0] as SwimmerResult)).toBe(true);
+    // No leg time: nothing reads 33.00 off the row, and the recorded legs keep theirs.
+    expect(rows[0]?.relayLegSplit).toBeUndefined();
+    expect(rows[0]?.relayLegSplitDetail).toBeUndefined();
+    expect(rows[0]?.relayTeamSplits?.legTotals).toEqual([null, '25.00', '25.00', '25.00']);
+    expect(rows.map(r => r.relayTeamTime)).toEqual(['NT', 'NT', 'NT', 'NT']);
+    // A leg with a recorded split keeps the priced vacancy: the team time gains 3.00 s (control).
+    const priced = relayRows(simulateRoster(relayLegs(), [], true));
+    expect(priced[0]).toMatchObject({ time: '1:43.00', relayLegSplit: '28.00' });
+    const json = JSON.stringify(out);
+    expect(json).not.toContain('33.00');
+    expect(json).not.toContain('NaN');
+  });
+
+  it('a vacated leg whose recorded split is NT has no leg time either', () => {
+    const out = simulateRoster(
+      relayLegs(i => (i === 0 ? { relayLegSplit: 'NT' } : {})),
+      [],
+      true
+    );
+    const rows = relayRows(out);
+    expect(rows[0]).toMatchObject({ name: '—', relayLegVacant: true, time: 'NT' });
+    expect(rows[0]?.relayLegSplit).toBe('NT');
+    expect(rows[0]?.relayTeamSplits?.legTotals[0]).toBeNull();
+    expect(JSON.stringify(out)).not.toContain('NaN');
+  });
+
+  it('a vacated leg whose split does not read as a finite time is not priced: NT, no 3.00 s', () => {
+    // 'DQ' reads as Infinity and '--' as NaN. Neither is a baseline (decision E3).
+    for (const split of ['DQ', '--', 'abc', 'Infinity', 'NaN', null, undefined, '']) {
+      const out = simulateRoster(
+        relayLegs(i => (i === 0 ? ({ relayLegSplit: split } as Partial<SwimmerResult>) : {})),
+        [],
+        true
+      );
+      const rows = relayRows(out);
+      const label = String(split);
+      expect(rows.map(r => r.relayTeamTime), label).toEqual(['NT', 'NT', 'NT', 'NT']);
+      expect(rows[0], label).toMatchObject({ name: '—', relayLegVacant: true });
+      // The split is kept as recorded on the row; the computed fields hold no NaN and no priced time.
+      const computed = JSON.stringify(rows.map(r => [r.time, r.relayTeamTime, r.relayTeamSplits]));
+      expect(computed, label).not.toContain('NaN');
+      expect(computed, label).not.toContain('1:43.00');
+    }
   });
 
   it('an NT split is treated as no recorded split', () => {
@@ -709,12 +760,13 @@ describe('findDepartedLegSwim', () => {
     expect(findDepartedLegSwim(rows, 'Zed Nobody', RELAY, 0, HSU)).toBeUndefined();
   });
 
-  it('is undefined for a leg index with no stroke', () => {
-    // A medley relay has a stroke for legs 0-3 only; -1 has none.
+  it('throws for a leg index with no stroke (decision E20)', () => {
+    // A medley relay has a stroke for legs 0-3 only; -1 and 4 have none.
     const medley = 'Event 20 Men 4x50 Yard Medley Relay';
     const back = [swim('back50', 'Ann Lee', 'Event 7 Men 50 Yard Backstroke', '28.00')];
     expect(findDepartedLegSwim(back, 'Ann Lee', medley, 0, HSU)?.id).toBe('back50');
-    expect(findDepartedLegSwim(back, 'Ann Lee', medley, -1, HSU)).toBeUndefined();
+    expect(() => findDepartedLegSwim(back, 'Ann Lee', medley, -1, HSU)).toThrow(InvalidRelayLegIndexError);
+    expect(() => findDepartedLegSwim(back, 'Ann Lee', medley, 4, HSU)).toThrow(InvalidRelayLegIndexError);
   });
 });
 

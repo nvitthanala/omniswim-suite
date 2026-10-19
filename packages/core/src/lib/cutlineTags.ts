@@ -25,6 +25,7 @@
  * | program was cut before the season         | `program_discontinued`  | show "unknown" |
  * | school fields no team of that gender      | `gender_not_sponsored`  | show "unknown" |
  * | self-reported time, not a meet result     | `user_inputted`         | show "unknown" |
+ * | swims-list row not confirmed as a program swim | `program_unconfirmed` | show "unknown" |
  * | event its course does not swim (1000 SCM) | `event_not_swum_in_course` | show "unknown" |
  *
  * Collapsing the bottom rows into "no cut" is the exact silent-empty failure
@@ -183,6 +184,15 @@ export type CutlineTagState =
    * best, so no standard is applied to it. See `HistoricalSwim.isExtractedSplit`.
    */
   | 'extracted_split'
+  /**
+   * The swim is a SwimCloud swims-list row nobody has confirmed as a program
+   * swim (`SwimmerResult.programSwim === 'unconfirmed'`). The page prints the
+   * bare event label for a program swim and a post-meet time trial alike, so
+   * the row may not be a program swim at all. No standard is applied: not a
+   * cut, and not a miss. The user confirms it with
+   * `setCreditedSwimProgramStatus`, after which it is judged like any other.
+   */
+  | 'program_unconfirmed'
   /**
    * The swim names an event its recorded course does not swim: a 500, 1000
    * or 1650 Freestyle recorded SCM, or a 400, 800 or 1500 Freestyle recorded
@@ -578,6 +588,13 @@ export type CutlineTagInput = {
   /** Defaults to the newest season published for `division`. */
   season?: CutlineSeason;
   /**
+   * Why `division` is `null`, when the caller knows it is more specific than
+   * "unmapped". Shown as the `division_unknown` reason. A team builder sets it
+   * for a school whose division depends on the swim's season; leave it unset
+   * otherwise.
+   */
+  divisionUnknownReason?: string;
+  /**
    * Course of the **published table to look up**. Omit it: the default is
    * {@link cutlineTableCourseForSwim} — the swim's own course when its division
    * publishes the event in that course (an NAIA SCM swim), `SCY` otherwise.
@@ -635,6 +652,14 @@ export type CutlineTagInput = {
    * as unknown. `isExtractedSplitSwim(swim)` gives the value for a history row.
    */
   extractedSplit?: boolean;
+  /**
+   * The row is a swims-list swim nobody has confirmed as a program swim
+   * (`SwimmerResult.programSwim === 'unconfirmed'`, or
+   * `isUnconfirmedProgramSwim(row)`). When `true` the result is
+   * `state: 'program_unconfirmed'`: no standard is applied, and the swim renders
+   * as unknown. {@link cutlineSwimOfRecord} carries it from a stored row.
+   */
+  programUnconfirmed?: boolean;
 };
 
 function normalizeGender(gender: Gender | string): CutlineGender {
@@ -837,6 +862,26 @@ function checkUserInputted(input: CutlineTagInput, ctx: CutlineTagContext): Cutl
   };
 }
 
+/** A swims-list row nobody confirmed as a program swim may be a post-meet time trial. Not judged. */
+function checkProgramUnconfirmed(input: CutlineTagInput, ctx: CutlineTagContext): CutlineTagResult | null {
+  if (input.programUnconfirmed !== true) return null;
+  return {
+    state: 'program_unconfirmed',
+    tag: null,
+    division: ctx.division,
+    season: seasonUnderComparison(ctx.division, input.season),
+    ...ctx.courseFields,
+    gender: ctx.gender,
+    event: input.event,
+    swimSeconds: ctx.swimSeconds,
+    lookupStatus: null,
+    reason:
+      'SwimCloud swims-list row. The page prints the same event label for a program swim and a post-meet time trial, so this swim is not confirmed as a program swim. No standard is applied until you confirm it.',
+    program: ctx.program,
+    nextTier: null,
+  };
+}
+
 /** Same rule for an extracted split: part of a longer swim, not a race at this distance. */
 function checkExtractedSplit(input: CutlineTagInput, ctx: CutlineTagContext): CutlineTagResult | null {
   if (input.extractedSplit !== true) return null;
@@ -898,7 +943,9 @@ function checkDivisionKnown(input: CutlineTagInput, ctx: CutlineTagContext): Cut
     event: input.event,
     swimSeconds: ctx.swimSeconds,
     lookupStatus: null,
-    reason: "This team's division is not known, so there is no table to judge this swim against.",
+    reason:
+      input.divisionUnknownReason ??
+      "This team's division is not known, so there is no table to judge this swim against.",
     program: ctx.program,
     nextTier: null,
   };
@@ -1198,6 +1245,9 @@ export function buildCutlineTag(input: CutlineTagInput): CutlineTagResult {
   const extractedSplitResult = checkExtractedSplit(input, ctx);
   if (extractedSplitResult) return extractedSplitResult;
 
+  const unconfirmedResult = checkProgramUnconfirmed(input, ctx);
+  if (unconfirmedResult) return unconfirmedResult;
+
   const courseMismatchResult = checkEventCourseMismatch(input, ctx);
   if (courseMismatchResult) return courseMismatchResult;
 
@@ -1254,6 +1304,17 @@ export type CutlineTagForTeamInput = Omit<CutlineTagInput, 'division'> & {
   /** Passed through to `resolveTeamDivision`, e.g. workspace division overrides. */
   teamOptions?: TeamDivisionOptions;
   /**
+   * The season the swim was swum in, `YYYY-YYYY`. It picks the team's
+   * **division** only (`divisionForTeamInSeason`): UWF is D2 for a 2025-2026
+   * swim and D1 for a 2026-2027 swim. It does not pick the table: `season`
+   * does that, and defaults to the newest table held for the resolved division.
+   *
+   * Absent, a school with no single division across seasons (UWF) resolves to
+   * `division_unknown`. Never a default season, never the school's last known
+   * division. A school with one division is unaffected.
+   */
+  swimSeason?: string;
+  /**
    * Explicit division that wins over the team lookup. Pass the athlete's own
    * division in a mixed-division meet.
    */
@@ -1273,12 +1334,15 @@ export type CutlineTagForTeamInput = Omit<CutlineTagInput, 'division'> & {
  * says which table would apply, not that UWF fields a men's team.
  */
 export function buildCutlineTagForTeam(input: CutlineTagForTeamInput): CutlineTagResult {
-  const { team, teamOptions, division, program, ...rest } = input;
-  const resolved = resolveProgramForTeam(team, teamOptions, program);
+  const { team, teamOptions, swimSeason, division, program, ...rest } = input;
+  const resolved = resolveProgramForTeam(team, teamOptions, program, swimSeason);
   return buildCutlineTag({
     ...rest,
     division: division ?? resolved.division,
     program: resolved.program,
+    ...(resolved.divisionUnknownReason === undefined
+      ? {}
+      : { divisionUnknownReason: resolved.divisionUnknownReason }),
   });
 }
 
@@ -1307,6 +1371,10 @@ export function computedCutForTeamSwim(args: {
   gender: Gender | string;
   event: string;
   seconds: number;
+  /**
+   * The division to judge against. For a school that changed division, resolve
+   * it by the swim's season first: `divisionForTeamOrNull(team, { season })`.
+   */
   division: NcaaDivision;
   swimCourse: SwimCourseOfRecord;
 }): 'A' | 'B' | null {
@@ -1326,6 +1394,8 @@ export type CutlineSwimOfRecord = {
   time: string;
   /** Present when the row states its course. See {@link CutlineTagInput.swimCourse}. */
   swimCourse?: SwimCourseOfRecord;
+  /** Present, `true`, for a swims-list row nobody confirmed. See {@link CutlineTagInput.programUnconfirmed}. */
+  programUnconfirmed?: true;
 };
 
 /**
@@ -1338,6 +1408,8 @@ export type CutlineRecordRow = {
   /** The course of `time`. Absent on meet rows, whose label decides. */
   timeType?: SwimCourseOfRecord;
   convertedFrom?: ScyConversionProvenance;
+  /** A meet row's program flag (`SwimmerResult.programSwim`). Absent on a recruit or plan. */
+  programSwim?: 'unconfirmed' | 'program';
 };
 
 /**
@@ -1372,12 +1444,14 @@ export function convertedSwimOfRecord(
  * `buildCutlineTagForTeam({ team, gender, ...cutlineSwimOfRecord(row) })`.
  */
 export function cutlineSwimOfRecord(row: CutlineRecordRow): CutlineSwimOfRecord {
+  const unconfirmed = row.programSwim === 'unconfirmed' ? ({ programUnconfirmed: true } as const) : {};
   const converted = convertedSwimOfRecord(row);
-  if (converted) return converted;
+  if (converted) return { ...converted, ...unconfirmed };
   return {
     event: row.event,
     time: row.time,
     ...(row.timeType ? { swimCourse: row.timeType } : {}),
+    ...unconfirmed,
   };
 }
 
@@ -1388,9 +1462,29 @@ export function cutlineSwimOfRecord(row: CutlineRecordRow): CutlineSwimOfRecord 
 function resolveProgramForTeam(
   team: string,
   teamOptions: TeamDivisionOptions | undefined,
-  program: CutlineTagProgram | null | undefined
-): { division: NcaaDivision | null; program: CutlineTagProgram | null } {
-  const resolution = resolveTeamDivision(team, teamOptions);
+  program: CutlineTagProgram | null | undefined,
+  swimSeason?: string
+): {
+  division: NcaaDivision | null;
+  program: CutlineTagProgram | null;
+  divisionUnknownReason?: string;
+} {
+  const resolution = resolveTeamDivision(
+    team,
+    swimSeason === undefined ? teamOptions : { ...teamOptions, season: swimSeason }
+  );
+  // A school with a division history and an active program has a real division
+  // in every season it swam. Only the season is missing, and that is the
+  // reason to show, not "unmapped".
+  const needsSeason =
+    resolution.division === null &&
+    (resolution.entry?.divisionHistory?.length ?? 0) > 0 &&
+    resolution.status !== 'discontinued';
+  const divisionUnknownReason = needsSeason
+    ? swimSeason === undefined
+      ? `${resolution.canonicalTeam ?? resolution.team} changed division, so the division depends on the season of the swim. No season was given, so there is no table to judge this swim against.`
+      : `${resolution.canonicalTeam ?? resolution.team} has no recorded division for ${swimSeason}, so there is no table to judge this swim against.`
+    : undefined;
   const resolvedProgram: CutlineTagProgram | null =
     program ??
     (resolution.entry
@@ -1405,7 +1499,11 @@ function resolveProgramForTeam(
             : {}),
         }
       : null);
-  return { division: resolution.division, program: resolvedProgram };
+  return {
+    division: resolution.division,
+    program: resolvedProgram,
+    ...(divisionUnknownReason === undefined ? {} : { divisionUnknownReason }),
+  };
 }
 
 /* -------------------------------------------------------------------------- */
@@ -1558,6 +1656,8 @@ export type RelaySwimTagsForTeamInput = Omit<RelaySwimTagInput, 'division'> & {
   team: string;
   /** Passed through to `resolveTeamDivision`, e.g. workspace division overrides. */
   teamOptions?: TeamDivisionOptions;
+  /** See {@link CutlineTagForTeamInput.swimSeason}. */
+  swimSeason?: string;
   /** Explicit division that wins over the team lookup. */
   division?: NcaaDivision | null;
 };
@@ -1570,11 +1670,14 @@ export type RelaySwimTagsForTeamInput = Omit<RelaySwimTagInput, 'division'> & {
 export function buildRelaySwimTagsForTeam(
   input: RelaySwimTagsForTeamInput
 ): RelaySwimTagResults {
-  const { team, teamOptions, division, program, ...rest } = input;
-  const resolved = resolveProgramForTeam(team, teamOptions, program);
+  const { team, teamOptions, swimSeason, division, program, ...rest } = input;
+  const resolved = resolveProgramForTeam(team, teamOptions, program, swimSeason);
   return buildRelaySwimTags({
     ...rest,
     division: division ?? resolved.division,
     program: resolved.program,
+    ...(resolved.divisionUnknownReason === undefined
+      ? {}
+      : { divisionUnknownReason: resolved.divisionUnknownReason }),
   });
 }

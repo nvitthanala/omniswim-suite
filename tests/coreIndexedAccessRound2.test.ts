@@ -75,7 +75,7 @@ describe('relayLegMatching readers', () => {
     const order = [0, 1, 2, 3].map(i => relayStrokeForIndex('200 medley relay', i));
     expect(order).toEqual(['back', 'breast', 'fly', 'free']);
     expect(relayStrokeForIndex('200 free relay', 2)).toBe('free');
-    expect(relayStrokeForIndex('200 medley relay', 4)).toBe('free');
+    expect(() => relayStrokeForIndex('200 medley relay', 4)).toThrow('Relay leg index 4');
   });
 });
 

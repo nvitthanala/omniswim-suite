@@ -75,6 +75,12 @@ import { Gender } from '@omniswim/core/types';
 import type { SwimmerResult, Workspace } from '@omniswim/core/types';
 import { buildScoringPatchForParsedPdf, presetIdForConference } from '@omniswim/core/lib/scoringDefaults';
 import { meetCopyFromParsed } from '@omniswim/core/lib/meetSource';
+import { isUnconfirmedProgramSwim } from '@omniswim/core/lib/programSwim';
+import {
+  resolveScoredProgramBoundary,
+  swimsListOnlyBoundary,
+  type ScoredProgramBoundary,
+} from '@omniswim/core/lib/scoredProgramBoundary';
 import type {
   SwimCloudClassYear,
   SwimCloudEvent,
@@ -901,6 +907,12 @@ export function swimCloudTeamMeetSwimsToSwimmerResults(
       ...(resolved === undefined ? {} : { roundSwam: resolved.roundSwam }),
       ...(isExhibition ? { isExhibition: true } : {}),
       ...(pdfPoints === undefined ? {} : { pdfPoints }),
+      // The swims list prints the bare event label for a program swim and for a
+      // post-meet time trial alike, so the page cannot say which this is. The row
+      // counts toward no best time, arbitrage field or cut tag until the user
+      // flags it (`setCreditedSwimProgramStatus`). An event-page row of the same
+      // swim id replaces this one on merge, and states its own program number.
+      programSwim: 'unconfirmed',
     });
   }
 
@@ -1312,13 +1324,34 @@ function eventPointsFor(
  * Existing rows keep their position; genuinely new rows are appended. Rows from
  * another source (a PDF upload, a planned entry) pass through untouched — their
  * ids are of another shape and cannot collide.
+ *
+ * A user's `programSwim: 'program'` confirmation survives a re-import of the
+ * same swims-list row. Only an incoming row that is itself `'unconfirmed'` is
+ * given the stored confirmation back. An incoming row that carries no flag (an
+ * event-page row) replaces the stored row whole, as before.
+ *
+ * A known swim is never downgraded. An incoming `'unconfirmed'` row does not
+ * replace a stored row that carries no `programSwim` (an event-page row states
+ * its own program number): the stored row stays as it is. This also keeps a row
+ * saved by an older import, which has no stamp and cannot be told from an
+ * event-page row.
  */
 export function mergeSwimCloudResults(
   existing: readonly SwimmerResult[],
   incoming: readonly SwimmerResult[],
 ): SwimmerResult[] {
   const byId = new Map(incoming.map((row) => [row.id, row]));
-  const merged = existing.map((row) => byId.get(row.id) ?? row);
+  const existingById = new Map(existing.map((row) => [row.id, row]));
+  const carryConfirmation = (row: SwimmerResult): SwimmerResult =>
+    row.programSwim === 'unconfirmed' && existingById.get(row.id)?.programSwim === 'program'
+      ? { ...row, programSwim: 'program' }
+      : row;
+  const merged = existing.map((row) => {
+    const next = byId.get(row.id);
+    if (next === undefined) return row;
+    if (next.programSwim === 'unconfirmed' && row.programSwim === undefined) return row;
+    return carryConfirmation(next);
+  });
   const seen = new Set(existing.map((row) => row.id));
   for (const row of incoming) {
     if (!seen.has(row.id)) {
@@ -1375,6 +1408,69 @@ export interface ApplySwimCloudRowsResult {
   readonly presetHint: string | null;
   /** Whether this call folded into the meet already loaded (by the `${meetId}:` id-prefix test) rather than replacing it. */
   readonly isSameMeet: boolean;
+  /**
+   * Where the meet's scored program ends, as this call resolved it for the
+   * event pages it converted. A swims-list-only capture is `unknown` with reason
+   * `'no-event-pages'` (its rows carry no event number). `null` only when the
+   * call converted nothing. See `resolveScoredProgramBoundary`.
+   *
+   * `status: 'unknown'` means no row was marked as a time trial, so time trials
+   * in the capture still score. It always has a matching entry in
+   * {@link ApplySwimCloudRowsResult.warnings}.
+   */
+  readonly scoredProgramBoundary: ScoredProgramBoundary | null;
+  /**
+   * Plain-words notes for the coach that are not row skips. Today: the scored
+   * boundary is unknown. Empty when there is nothing to say.
+   */
+  readonly warnings: readonly string[];
+  /**
+   * Swims in the meet after this call that still await a "program swim"
+   * confirmation (`programSwim: 'unconfirmed'`, see `isUnconfirmedProgramSwim`).
+   * Counts the whole meet, not only this call's rows. The import panel tells the
+   * coach this number, because such a swim counts toward no best time, no
+   * arbitrage field and no cut tag until confirmed.
+   */
+  readonly unconfirmedProgramSwimCount: number;
+}
+
+/**
+ * Where the meet's scored program ends, resolved once for a capture, and only
+ * when there is an event page to classify: a swims-list row is never marked by
+ * it (see `SwimmerResult.programSwim`). Unknown marks nothing and says so,
+ * instead of picking a number. `boundaryOption` is what to spread into the
+ * event-page converter's options: the number when known, nothing when not.
+ */
+function scoredBoundaryForImport(
+  eventParses: readonly SwimCloudMeetEventResultsParse[],
+  workspace: Workspace,
+  hasSwimsListPages: boolean,
+): {
+  scoredProgramBoundary: ScoredProgramBoundary | null;
+  warnings: readonly string[];
+  boundaryOption: { scoredEventNumberMax?: number };
+} {
+  const meetPage = eventParses.find(p => p.meet.startDate !== undefined) ?? eventParses[0];
+  // A swims-list-only capture has no event number on any row, so no boundary can
+  // mark a time trial in it. Say so, in place of a silent `null`.
+  const scoredProgramBoundary: ScoredProgramBoundary | null =
+    eventParses.length === 0
+      ? hasSwimsListPages
+        ? swimsListOnlyBoundary()
+        : null
+      : resolveScoredProgramBoundary({
+          workspace,
+          ...(meetPage?.meet.startDate === undefined ? {} : { meetStartDate: meetPage.meet.startDate }),
+          ...(meetPage?.meet.endDate === undefined ? {} : { meetEndDate: meetPage.meet.endDate }),
+        });
+  return {
+    scoredProgramBoundary,
+    warnings: scoredProgramBoundary?.status === 'unknown' ? [scoredProgramBoundary.warning] : [],
+    boundaryOption:
+      scoredProgramBoundary?.status === 'known'
+        ? { scoredEventNumberMax: scoredProgramBoundary.scoredEventNumberMax }
+        : {},
+  };
 }
 
 /**
@@ -1417,8 +1513,13 @@ export async function applySwimCloudRows(
       meetName: undefined,
       presetHint: null,
       isSameMeet: false,
+      scoredProgramBoundary: null,
+      warnings: [],
+      unconfirmedProgramSwimCount: 0,
     };
   }
+
+  const { scoredProgramBoundary, warnings, boundaryOption } = scoredBoundaryForImport(eventParses, workspace, parses.length > 0);
 
   // Every page of the capture is converted against the *same* event-page set:
   // one event page covers every team and both genders, so it belongs to the
@@ -1441,11 +1542,10 @@ export async function applySwimCloudRows(
     swimCloudEventResultsToSwimmerResults(p, {
       pointsTrust: options.pointsTrust,
       teamNames,
-      // From the workspace's own scoring settings, never a literal. The
-      // boundary differs per meet and per format.
-      ...(workspace.scoringSettings?.scoredEventNumberMax === undefined
-        ? {}
-        : { scoredEventNumberMax: workspace.scoringSettings.scoredEventNumberMax }),
+      // The scoring settings' number, else the number a published program for
+      // this meet gives, else none. Never a literal: the boundary differs per
+      // meet and per format. See `resolveScoredProgramBoundary`.
+      ...boundaryOption,
       ...(options.rosters === undefined ? {} : { rosters: options.rosters }),
     }),
   );
@@ -1476,6 +1576,9 @@ export async function applySwimCloudRows(
       meetName,
       presetHint: null,
       isSameMeet: false,
+      scoredProgramBoundary,
+      warnings,
+      unconfirmedProgramSwimCount: [...loadedMen, ...loadedWomen].filter(isUnconfirmedProgramSwim).length,
     };
   }
 
@@ -1555,5 +1658,8 @@ export async function applySwimCloudRows(
     meetName,
     presetHint,
     isSameMeet,
+    scoredProgramBoundary,
+    warnings,
+    unconfirmedProgramSwimCount: allRows.filter(isUnconfirmedProgramSwim).length,
   };
 }

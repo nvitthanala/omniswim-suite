@@ -21,6 +21,9 @@ import {
 import type { SwimmerEntryCounts } from './swimmerEntryLimits';
 import { mergeScoringSettings } from './scoringDefaults';
 import {
+  isValidRelayLegIndex,
+  migrateTiedRelayOverridesDetailed,
+  relayEntryGender,
   relayEntryKeyIn,
   relayLegMatchSettings,
   relayLegIsVacant,
@@ -76,7 +79,20 @@ export type LineupIssueType =
    * is null). No swim matches its legs, so a departing leg holder cannot be
    * replaced and no split can be checked. Nothing guesses a distance.
    */
-  | 'relay_distance_unreadable';
+  | 'relay_distance_unreadable'
+  /**
+   * A relay leg index names no leg: a stored relay-leg override, or a relay entry with more named
+   * legs than its event has (a fifth name on a medley). The index has no stroke, so the leg is
+   * not projected, ranked or filled (`InvalidRelayLegIndexError`). Nothing guesses a stroke.
+   */
+  | 'relay_leg_index_invalid'
+  /**
+   * A stored relay-leg override names one team's tied A and B relays by the plain relay key. It was
+   * saved before the two were told apart, so it names neither. It is applied to neither (nothing is
+   * guessed); the coach sets the fill again on the relay it was for. Same reason as the writers'
+   * `tied_relay_ambiguous` refusal.
+   */
+  | 'tied_relay_ambiguous';
 
 export type LineupAthleteIssue = {
   type: LineupIssueType;
@@ -453,7 +469,15 @@ function auditProgramProvenance(
 
   const resolution = resolveTeamDivision(team);
 
-  if (resolution.division == null) {
+  // A school that changed division (UWF) has a `null` season-agnostic division on
+  // purpose. It is mapped: a cut tag for its swim says "unknown" until the swim's
+  // season is given, never a wrong table. So it is not the "unmapped" case below.
+  const divisionDependsOnSeason =
+    resolution.division == null &&
+    resolution.status === 'active' &&
+    (resolution.entry?.divisionHistory?.length ?? 0) > 0;
+
+  if (resolution.division == null && !divisionDependsOnSeason) {
     for (const row of teamRows) {
       collector.pushChecklist({
         type: 'program_division_unknown',
@@ -573,6 +597,88 @@ function auditUnreadableRelayDistances(
       group: 'relays',
       message: `Relay ${row.event}: the event label names no distance, so its legs cannot be matched, filled or split-checked. Check the relay's event label.`,
       relayEvent: row.event,
+    });
+  }
+}
+
+/**
+ * Relay data of this team whose leg index names no leg (`isValidRelayLegIndex`): a relay row or an
+ * entry with more named legs than its event has, and a stored relay-leg override. Each is named
+ * once so the coach can correct it. The projection leaves such a relay as recorded, the swap
+ * ranking skips it, and nothing guesses a stroke (`InvalidRelayLegIndexError`).
+ */
+function auditInvalidRelayLegIndexes(
+  collector: LineupAuditCollector,
+  opts: { pdfResults: SwimmerResult[]; overrides: readonly RelayLegOverride[]; team: string; gender: Gender }
+): void {
+  const named = new Set<string>();
+  for (const row of opts.pdfResults) {
+    if (!isRelayResult(row) || teamFrom(row.team) !== opts.team || named.has(row.event)) continue;
+    const eventLower = row.event.toLowerCase();
+    const legCount = row.relayNames?.length ?? 0;
+    const badRow = row.relayLegIndex != null && !isValidRelayLegIndex(eventLower, row.relayLegIndex);
+    const badCount = legCount > 0 && !isValidRelayLegIndex(eventLower, legCount - 1);
+    if (!badRow && !badCount) continue;
+    named.add(row.event);
+    collector.pushChecklist({
+      type: 'relay_leg_index_invalid',
+      group: 'relays',
+      message: `Relay ${row.event}: ${
+        badCount
+          ? `it names ${legCount} legs, which is more than this relay has`
+          : `a leg is numbered ${String(row.relayLegIndex)}, which is not a leg of this relay`
+      }. Its legs are not projected or filled. Check the relay's legs.`,
+      relayEvent: row.event,
+    });
+  }
+  for (const override of opts.overrides) {
+    const event = auditedOverrideEvent(override, opts.team, opts.gender);
+    if (event === null) continue;
+    if (isValidRelayLegIndex(event.toLowerCase(), override.legIndex)) continue;
+    const key = `${event}|${String(override.legIndex)}`;
+    if (named.has(key)) continue;
+    named.add(key);
+    collector.pushChecklist({
+      type: 'relay_leg_index_invalid',
+      group: 'relays',
+      message: `Relay ${event}: a saved leg fill is for leg ${String(override.legIndex)}, which is not a leg of this relay. It is ignored. Remove it from the relays screen.`,
+      relayEvent: event,
+      legIndex: override.legIndex,
+      relayEntryKey: override.relayEntryKey,
+    });
+  }
+}
+
+/**
+ * The event label a stored override's key names, when the override belongs to this team's audit of
+ * this gender; else `null`. The key is `team|event|round|place|clock`. A Mixed event belongs to both.
+ */
+function auditedOverrideEvent(override: RelayLegOverride, team: string, gender: Gender): string | null {
+  const [overrideTeam, event] = override.relayEntryKey.split('|');
+  if (event === undefined || teamFrom(overrideTeam) !== team) return null;
+  const eventGender = relayEntryGender({ event });
+  if (eventGender !== undefined && eventGender !== gender) return null;
+  return event;
+}
+
+/**
+ * Stored overrides that name a tied A/B relay pair by the plain key (`AmbiguousRelayOverride`).
+ * One item per override. The override is kept and applied to neither relay.
+ */
+function auditAmbiguousTiedRelayOverrides(
+  collector: LineupAuditCollector,
+  opts: { pdfResults: SwimmerResult[]; overrides: RelayLegOverride[]; team: string; gender: Gender }
+): void {
+  for (const entry of migrateTiedRelayOverridesDetailed(opts.overrides, opts.pdfResults).ambiguous) {
+    const event = auditedOverrideEvent(entry.override, opts.team, opts.gender);
+    if (event === null) continue;
+    collector.pushChecklist({
+      type: 'tied_relay_ambiguous',
+      group: 'relays',
+      message: `Relay ${event}: a saved fill for leg ${entry.legIndex + 1} was made before this team's tied relays were told apart, so it names neither one. It is not applied. Set the fill again on the relay it was for.`,
+      relayEvent: event,
+      legIndex: entry.legIndex,
+      relayEntryKey: entry.relayEntryKey,
     });
   }
 }
@@ -697,6 +803,18 @@ export function buildTeamLineupAudit(input: LineupAuditInput): TeamLineupAudit {
   });
 
   auditUnreadableRelayDistances(collector, { pdfResults, team });
+  auditInvalidRelayLegIndexes(collector, {
+    pdfResults,
+    overrides: workspace.relayLegOverrides ?? [],
+    team,
+    gender,
+  });
+  auditAmbiguousTiedRelayOverrides(collector, {
+    pdfResults,
+    overrides: workspace.relayLegOverrides ?? [],
+    team,
+    gender,
+  });
   auditUnpricedRelayLegs(collector, { teamScored, pdfResults });
 
   // Runs AFTER the leg sweep on purpose: it skips anyone that sweep already
@@ -1022,6 +1140,9 @@ export function suggestQuickFillForVacantLeg(
   const results = gender === Gender.MEN ? workspace.menResults ?? [] : workspace.womenResults ?? [];
   const template = findTeamRelayTemplateByEntryKey(results, team, relayEntryKeyStr);
   if (!template) return null;
+  // `legIndex` comes from a checklist item. An index that names no leg has no stroke to fill;
+  // the `relay_leg_index_invalid` item names the bad data.
+  if (!isValidRelayLegIndex(template.event.toLowerCase(), legIndex)) return null;
 
   // A roster swimmer with no swim at the leg's event may fill it from athlete
   // history (R1 e); a pool swim at the event always wins.
@@ -1077,6 +1198,10 @@ export function issueBadgeLabel(issue: LineupAthleteIssue): string {
       return 'Converted cut';
     case 'relay_distance_unreadable':
       return 'Relay label';
+    case 'relay_leg_index_invalid':
+      return 'Relay leg';
+    case 'tied_relay_ambiguous':
+      return 'Tied relay';
     default:
       return 'Issue';
   }

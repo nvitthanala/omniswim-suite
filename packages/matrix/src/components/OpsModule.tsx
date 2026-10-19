@@ -91,6 +91,7 @@ export default function OpsModule({ workspace, gender, onUpdate }: Props) {
             skipped={importDiagnostics.skipped}
             warnings={importDiagnostics.warnings}
             rawWarnings={importDiagnostics.rawWarnings}
+            unconfirmedSwimCount={importDiagnostics.unconfirmedSwimCount}
             onDismiss={() => setImportDiagnostics(null)}
           />
         </div>

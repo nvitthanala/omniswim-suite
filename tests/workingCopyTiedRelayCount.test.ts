@@ -5,14 +5,19 @@
  * The working-copy count of relay leg overrides when the relays screen has
  * saved a legacy tied-relay key.
  *
- * `migrateTiedRelayOverrides` rewrites one legacy override of a tied pair
+ * `migrateTiedRelayOverrides` used to rewrite one legacy override of a tied pair
  * (team + event + round + place + clock) into one override per relay. The
- * relays screen writes the migrated list on every save, so one edit became two
+ * relays screen wrote the migrated list on every save, so one edit became two
  * overrides and the count read 2 where it read 1 before the save. One edit is
  * one change: the copies of one edit count once, whatever the list holds.
  *
+ * Since user decision E5 (2026-10-16) the legacy key is no longer copied: it
+ * stays as one stored override that neither relay reads, so it counts once. The
+ * copy-collapsing rule in `countWorkingCopyChanges` stays for lists saved by an
+ * older build, which the "older build" case below builds by hand.
+ *
  * Break it: count `workspace.relayLegOverrides` entries one by one and the
- * cases below that save a legacy key fail.
+ * "older build" case fails.
  */
 import { describe, expect, it } from 'vitest';
 import { Gender, type RelayLegOverride, type SwimmerResult, type Workspace } from '../packages/core/src/types';
@@ -97,16 +102,20 @@ describe('the scenario', () => {
 describe('one edit is one change', () => {
   const legacy = at(plainKey, 1, 'X1');
 
-  it('a legacy key counts 1, and still 1 once the screen has split it', () => {
+  it('a legacy key counts 1, and still 1 once the screen has read it (it is kept, not copied)', () => {
     expect(count([legacy])).toBe(1);
     const migrated = migrateTiedRelayOverrides([legacy], results);
-    expect(migrated).toHaveLength(2);
+    expect(migrated).toHaveLength(1);
     expect(count(migrated)).toBe(1);
+  });
+
+  it('a list an older build split into one override per relay still counts the edit once', () => {
+    expect(count([at(aKey, 1, 'X1'), at(bKey, 1, 'X1')])).toBe(1);
   });
 
   it('saving another leg adds one change, not two', () => {
     const saved = migrateTiedRelayOverrides(upsertRelayLegOverride([legacy], at(aKey, 2, 'Y1')), results);
-    expect(saved).toHaveLength(3);
+    expect(saved).toHaveLength(2);
     expect(count(saved)).toBe(2);
   });
 

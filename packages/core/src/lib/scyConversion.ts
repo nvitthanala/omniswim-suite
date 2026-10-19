@@ -211,6 +211,11 @@ export type ScyConversionOptions = {
    * unknown — never the legacy D1 default.
    */
   team?: string | null;
+  /**
+   * The season of the swim, `YYYY-YYYY`, for a `team` that changed division
+   * (UWF). Without it such a team is unknown and takes the Rules Book table.
+   */
+  season?: string;
 };
 
 /**
@@ -343,13 +348,15 @@ function conversionDivision(options: ScyConversionOptions | undefined): NcaaDivi
   if (options.division !== undefined) return options.division;
   const team = String(options.team ?? '').trim();
   if (!team) return null;
-  const cached = conversionDivisionCache.get(team);
+  const season = options.season;
+  const cacheKey = season === undefined ? team : `${team}|${season}`;
+  const cached = conversionDivisionCache.get(cacheKey);
   if (cached !== undefined) return cached;
-  const division = divisionForTeamOrNull(team);
+  const division = divisionForTeamOrNull(team, season === undefined ? undefined : { season });
   if (conversionDivisionCache.size >= CONVERSION_DIVISION_CACHE_LIMIT) {
     conversionDivisionCache.clear();
   }
-  conversionDivisionCache.set(team, division);
+  conversionDivisionCache.set(cacheKey, division);
   return division;
 }
 

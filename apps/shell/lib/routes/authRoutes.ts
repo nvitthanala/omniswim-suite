@@ -16,7 +16,9 @@
  *     is a shared secret, not a single-use token: rotate it by editing the list
  *     and restarting.
  *   - `OMNI_ADMIN_EMAILS`: comma-separated emails. A signed-in user whose email is
- *     on the list can register another account with no code. The new account does
+ *     on the list is an administrator (`isAdminUser`). An administrator can list
+ *     and restore backups (see `workspaceRoutes.ts`) and can register another
+ *     account with no code. The new account does
  *     not become the admin's session: no cookie is set and the session minted by
  *     `AuthService.register` is deleted straight away.
  *   - With neither variable set, registration is closed. It fails closed, not open.
@@ -74,6 +76,20 @@ export function registrationConfigFromEnv(env: {
     inviteCodes,
     adminEmails: splitList(env.OMNI_ADMIN_EMAILS).map(email => email.toLowerCase()),
   };
+}
+
+/**
+ * Whether the signed-in user is an administrator: their email, trimmed and
+ * lower-cased, is in `OMNI_ADMIN_EMAILS`. No user, no email, or an empty list
+ * answers false. The one notion of "admin" in the app: registration and the
+ * shared backup routes both use it.
+ */
+export function isAdminUser(
+  config: Pick<RegistrationConfig, 'adminEmails'>,
+  user: { readonly email?: string | null | undefined } | null | undefined
+): boolean {
+  const email = user?.email?.trim().toLowerCase();
+  return !!email && config.adminEmails.includes(email);
 }
 
 /** Startup banner lines for the registration gate. */
@@ -171,8 +187,7 @@ export function registerAuthRoutes(app: Express, deps: AuthRoutesDeps): void {
 
   /** Who is allowed to register: a signed-in admin, an invite code, or nobody. */
   const registrationRoute = (req: AuthedRequest): 'admin' | 'invite' | undefined => {
-    const adminEmail = req.user?.email?.toLowerCase();
-    if (adminEmail !== undefined && registration.adminEmails.includes(adminEmail)) return 'admin';
+    if (isAdminUser(registration, req.user)) return 'admin';
     const code = (req.body as { inviteCode?: unknown } | undefined)?.inviteCode;
     if (typeof code === 'string' && registration.inviteCodes.some(known => secretMatches(known, code))) {
       return 'invite';

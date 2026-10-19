@@ -23,6 +23,12 @@ export interface SwimCloudImportDiagnostics {
   skipped: readonly SwimCloudMeetImportSkip[];
   warnings?: readonly SwimCloudParseWarning[];
   rawWarnings?: readonly string[];
+  /**
+   * Swims in the loaded meet that still await a "program swim" confirmation.
+   * The panel tells the coach, because such a swim counts toward no best time,
+   * arbitrage field or cut tag until confirmed (`setCreditedSwimProgramStatus`).
+   */
+  unconfirmedSwimCount?: number;
 }
 
 /**
@@ -97,8 +103,12 @@ export function useSwimCloudMeetImport(ctx: OpsImportContext) {
       if (result.presetHint) setSuggestedPresetId(result.presetHint);
       bumpScoringRefresh();
 
-      if (result.skipped.length > 0 || parseResult.warnings.length > 0) {
-        setImportDiagnostics({ skipped: result.skipped, warnings: parseResult.warnings });
+      if (result.skipped.length > 0 || parseResult.warnings.length > 0 || result.unconfirmedProgramSwimCount > 0) {
+        setImportDiagnostics({
+          skipped: result.skipped,
+          warnings: parseResult.warnings,
+          unconfirmedSwimCount: result.unconfirmedProgramSwimCount,
+        });
       }
       toast.push(
         'success',
@@ -129,16 +139,23 @@ export function useSwimCloudMeetImport(ctx: OpsImportContext) {
         // being imported may belong to a team the coach did not check.
         rosters: selection.rosters,
       });
+      // The import's own notes (the scored boundary is unknown) go beside the
+      // parser warnings, so a coach sees that time trials may still score.
+      const rawWarnings = [...selection.warnings, ...result.warnings];
       if (result.appliedRowCount === 0) {
         toast.push(
           'error',
           `No usable results in the selected pages (${result.skipped.length} row(s) skipped — see "Import notes" below).`
         );
-        setImportDiagnostics({ skipped: result.skipped, rawWarnings: selection.warnings });
+        setImportDiagnostics({ skipped: result.skipped, rawWarnings });
         return;
       }
-      if (result.skipped.length > 0 || selection.warnings.length > 0) {
-        setImportDiagnostics({ skipped: result.skipped, rawWarnings: selection.warnings });
+      if (result.skipped.length > 0 || rawWarnings.length > 0 || result.unconfirmedProgramSwimCount > 0) {
+        setImportDiagnostics({
+          skipped: result.skipped,
+          rawWarnings,
+          unconfirmedSwimCount: result.unconfirmedProgramSwimCount,
+        });
       }
       if (result.presetHint) setSuggestedPresetId(result.presetHint);
       bumpScoringRefresh();

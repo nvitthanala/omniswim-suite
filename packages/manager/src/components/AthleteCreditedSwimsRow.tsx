@@ -15,6 +15,7 @@ import { RELAY_LEG_ESTIMATE_LABEL, formatLegSplitSummary } from '@omniswim/core/
 import { compactEventTitleAttr, formatCompactEventLabel } from '@omniswim/core/lib/utils';
 import { ALL_PLAN_EVENTS } from '@omniswim/core/lib/eventCatalog';
 import { buildCutlineTagForTeam, cutlineSwimOfRecord } from '@omniswim/core/lib/cutlineTags';
+import { isUnconfirmedProgramSwim } from '@omniswim/core/lib/programSwim';
 import { Badge, Button, CutlineTag, CutlineNearMissChip, ProvenanceBadges } from '@omniswim/ui';
 
 type AnchorExpected = { prelims?: number; psych?: number };
@@ -37,7 +38,14 @@ type RowProps = {
   onCancelEdit: () => void;
   onCommitEdit: (swim: AthleteCreditedSwim) => void;
   onDeleteSwim?: (swim: AthleteCreditedSwim) => void;
+  /**
+   * Confirm a swims-list swim as a program swim, or put it back to unconfirmed.
+   * Omit it and the row still shows the "Not confirmed" badge, with no buttons.
+   */
+  onSetProgramStatus?: (swim: AthleteCreditedSwim, status: ProgramSwimStatus) => void;
 };
+
+export type ProgramSwimStatus = 'program' | 'unconfirmed';
 
 function EventCell({
   swim,
@@ -70,7 +78,8 @@ function EventCell({
 }
 
 function TimeDisplay({ swim, team, gender }: { swim: AthleteCreditedSwim; team: string; gender?: Gender }) {
-  const showCutline = Boolean(gender) && swim.kind === 'individual';
+  // An unconfirmed swim is not judged. ProgramSwimStatus says so in words, so no tag here.
+  const showCutline = Boolean(gender) && swim.kind === 'individual' && !isUnconfirmedProgramSwim(swim);
   return (
     <>
       <div className="flex items-center gap-1">
@@ -99,6 +108,60 @@ function TimeDisplay({ swim, team, gender }: { swim: AthleteCreditedSwim; team: 
         </div>
       ) : null}
     </>
+  );
+}
+
+/**
+ * Program-swim state of a SwimCloud swims-list swim (`swim.programSwim`). A swim with no stamp states
+ * its own program membership (PDF, event page), so it shows nothing here.
+ */
+function ProgramSwimStatusControl({
+  swim,
+  onSetProgramStatus,
+}: {
+  swim: AthleteCreditedSwim;
+  onSetProgramStatus?: (swim: AthleteCreditedSwim, status: ProgramSwimStatus) => void;
+}) {
+  if (swim.kind !== 'individual' || swim.programSwim === undefined) return null;
+  if (isUnconfirmedProgramSwim(swim)) {
+    return (
+      <div className="mt-1 flex flex-wrap items-center gap-1.5 font-sans">
+        <Badge
+          tone="warning"
+          className="px-1.5 py-0.5 font-normal normal-case tracking-normal"
+          title="The SwimCloud swims list prints the same label for a program swim and a post-meet time trial. Until you confirm it, this swim counts toward no best time, cut tag or arbitrage."
+        >
+          Not confirmed as a program swim
+        </Badge>
+        {onSetProgramStatus ? (
+          <Button
+            variant="outline"
+            size="sm"
+            className="px-2 py-0.5"
+            onClick={() => onSetProgramStatus(swim, 'program')}
+            aria-label={`Confirm as program swim: ${swim.event}`}
+            title="Count this swim toward best times, cut tags and arbitrage"
+          >
+            Confirm as program swim
+          </Button>
+        ) : null}
+      </div>
+    );
+  }
+  if (!onSetProgramStatus) return null;
+  return (
+    <div className="mt-1 font-sans">
+      <Button
+        variant="ghost"
+        size="sm"
+        className="px-1.5 py-0.5 text-theme-muted"
+        onClick={() => onSetProgramStatus(swim, 'unconfirmed')}
+        aria-label={`Mark as not a program swim: ${swim.event}`}
+        title="Take this swim out of best times, cut tags and arbitrage until it is confirmed again"
+      >
+        Mark as not a program swim
+      </Button>
+    </div>
   );
 }
 
@@ -271,6 +334,7 @@ export default function AthleteCreditedSwimsRow({
   onCancelEdit,
   onCommitEdit,
   onDeleteSwim,
+  onSetProgramStatus,
 }: RowProps) {
   const isEditing = editingId === swim.id;
   return (
@@ -292,6 +356,7 @@ export default function AthleteCreditedSwimsRow({
           onCommitEdit={onCommitEdit}
           onCancelEdit={onCancelEdit}
         />
+        {isEditing ? null : <ProgramSwimStatusControl swim={swim} onSetProgramStatus={onSetProgramStatus} />}
       </td>
       <td className="py-1.5 px-2 text-right text-theme-secondary tabular-nums">
         {swim.rank > 0 ? swim.rank : '—'}

@@ -84,8 +84,12 @@ describe('computedCut honours gender sponsorship (rule 7)', () => {
     expect(cutOf(UWF, Gender.MEN, FREE_100, 'D2')).toBeNull();
   });
 
-  it('UWF women, who do swim, still earn their badge', () => {
-    expect(cutOf(UWF, Gender.WOMEN, '100 Free SCY\t50.00\t\tTest Meet\tFeb 20, 2026\t')).toBe('B');
+  it('UWF women, who do swim, earn a badge only when the division is given', () => {
+    const row = '100 Free SCY\t50.00\t\tTest Meet\tFeb 20, 2026\t';
+    // No season and no division: UWF changed division, so the badge is unknown (E8).
+    expect(cutOf(UWF, Gender.WOMEN, row)).toBeNull();
+    // A caller that states the division is judged against it, as for any team.
+    expect(cutOf(UWF, Gender.WOMEN, row, 'D2')).toBe('B');
   });
 
   it('HSU men are unchanged: 44.00 is a D2 B cut (45.01)', () => {

@@ -535,8 +535,9 @@ export function buildWhatIfProjection({
       relayKeysForGender.add(key);
     }
   }
-  // A key a tied pair of relays had before the two were told apart is split into
-  // one override per relay first, or the filter below would drop it.
+  // A key a tied pair of relays had before the two were told apart names neither
+  // relay, so the filter below drops it from the projection (E5). The audit
+  // reports it as ambiguous (`tied_relay_ambiguous`).
   const relayOverrides: RelayLegOverride[] = migrateTiedRelayOverrides(
     workspace.relayLegOverrides ?? [],
     currentResults

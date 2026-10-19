@@ -193,14 +193,45 @@ describe('which team is plotted', () => {
 });
 
 describe('defaultSeasonTeam: the workspace own team, never a guess', () => {
-  it('the one team a workspace names', () => {
-    expect(defaultSeasonTeam(meet('Roster', [], [], { recruits: [{ team: 'Alpha U' }, { team: ' alpha u' }] }))).toBe('Alpha U');
+  const withOwn = (ownTeam: unknown, rest: Partial<Workspace> = {}) =>
+    ({ ...meet('Roster', []), ...rest, scoringSettings: { ownTeam } }) as unknown as Workspace;
+
+  it('is the own team the user set, trimmed', () => {
+    expect(defaultSeasonTeam(withOwn('  Alpha U '))).toBe('Alpha U');
   });
-  it('null when the workspace names several teams', () => {
+  it('is null while none is set, even when every row names one team', () => {
+    expect(defaultSeasonTeam(meet('Roster', [], [], { recruits: [{ team: 'Alpha U' }, { team: ' alpha u' }] }))).toBeNull();
+    expect(defaultSeasonTeam(meet('Solo', [row('a1', 'Alpha U', 5)]))).toBeNull();
+  });
+  it('is null when it names several teams and none is set', () => {
     expect(defaultSeasonTeam(THREE_TEAM_MEET)).toBeNull();
   });
-  it('null when it names none, and for no workspace', () => {
+  it('is null for a blank own team, a non-string one, none, and no workspace', () => {
+    expect(defaultSeasonTeam(withOwn('   '))).toBeNull();
+    expect(defaultSeasonTeam(withOwn(''))).toBeNull();
+    expect(defaultSeasonTeam(withOwn(42))).toBeNull();
     expect(defaultSeasonTeam(meet('Empty', []))).toBeNull();
     expect(defaultSeasonTeam(undefined)).toBeNull();
+  });
+});
+
+describe('buildSeasonTrends: chooseSingleTeam', () => {
+  const SOLO = meet('Solo', [row('a1', 'Alpha U', 12)]);
+
+  it('still picks the only team by default', () => {
+    expect(buildSeasonTrends([SOLO]).team).toBe('Alpha U');
+  });
+  it('asks for a pick when it is off, and plots nothing', () => {
+    const t = buildSeasonTrends([SOLO], { chooseSingleTeam: false });
+    expect(t.team).toBeNull();
+    expect(t.teamScoreSelection).toBe('team-required');
+    expect(t.teamScoreTrends).toEqual([]);
+    expect(t.availableTeams).toEqual(['Alpha U']);
+  });
+  it('a requested team still wins when it is off', () => {
+    expect(buildSeasonTrends([SOLO], { team: 'alpha u', chooseSingleTeam: false }).team).toBe('Alpha U');
+  });
+  it('no teams stays no-teams when it is off', () => {
+    expect(buildSeasonTrends([], { chooseSingleTeam: false }).teamScoreSelection).toBe('no-teams');
   });
 });

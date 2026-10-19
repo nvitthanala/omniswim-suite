@@ -100,6 +100,25 @@ export interface SwimmerResult {
   isRelay?: boolean;
   isExhibition?: boolean;
   isTimeTrial?: boolean;
+  /**
+   * Whether this swim belongs to the meet's scored program. Set only by the
+   * SwimCloud swims-list import, and only that row shape needs it.
+   *
+   * - `'unconfirmed'`: the swims list prints the bare event label ("100
+   *   Breast"). Nothing on that page says whether the swim is a program swim or
+   *   a post-meet time trial, and the label looks the same for both. Such a row
+   *   counts toward no best time, no arbitrage field and no cut tag
+   *   ({@link isUnconfirmedProgramSwim}).
+   * - `'program'`: the user marked it a program swim
+   *   (`setCreditedSwimProgramStatus`). It counts again.
+   * - Absent: the source states the answer itself (a PDF "Event N" label, a
+   *   SwimCloud event page) or the row predates this field. It behaves as it
+   *   always did. Absent is NOT "unconfirmed": a PDF row never carries this field.
+   *
+   * Team scoring does not read it. Whether a swim scores is `isTimeTrial` and
+   * the scored-event boundary (`resolveScoredProgramBoundary`).
+   */
+  programSwim?: 'unconfirmed' | 'program';
   relayNames?: { name: string; year: string }[];
   /** 0-based leg index for this row when expanded from a relay (0..3). */
   relayLegIndex?: number;
@@ -439,6 +458,16 @@ export interface ScoringSettings {
    * no value here.
    */
   meetFormat?: NcaaMeetFormat;
+
+  /**
+   * The team this workspace belongs to: the coach's own team. Absent or blank means unset.
+   *
+   * Not a scoring rule. It lives in this object only because this is the workspace's one
+   * settings record, so it needs no column. The scoring engine never reads it, a
+   * scoring preset never carries it, and a save of the rules that does not name it leaves
+   * it as it was (`keepOwnTeam`). Read it with `workspaceOwnTeam`.
+   */
+  ownTeam?: string;
 }
 
 export interface ScorerAutoRules {
@@ -776,6 +805,14 @@ export interface HistoricalSwim {
    * lane so it never displaces the program swim of the same event.
    */
   isTimeTrial?: true;
+  /**
+   * The swim came from a meet row whose program membership is unconfirmed
+   * (`SwimmerResult.programSwim === 'unconfirmed'`). Set only by
+   * `historicalSwimFromResult`. Such a swim may be a post-meet time trial, so it
+   * is never a best (`isRankableSwim`), a ranked event, an arbitrage field entry
+   * or a cut tag. It stays in the history list.
+   */
+  programUnconfirmed?: true;
   /**
    * SwimCloud's `season_id` for this swim, verbatim (e.g. `'29'` = 2025-26).
    * Only the times JSON states it. Absent on pasted, PDF and CSV rows.

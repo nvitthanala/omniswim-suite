@@ -10,8 +10,9 @@
  *
  * This test fails when either consumer stops matching the JSON:
  *   - a hand-typed literal returns to teamAliases.ts and is edited, or
- *   - `_load_abbrev_teams` in pdf_parser.py adds or keeps a code the JSON lacks
- *     (it has hard-coded `setdefault` fallbacks that would hide a deleted row).
+ *   - `_load_abbrev_teams` in pdf_parser.py adds a code the JSON lacks (it had
+ *     hard-coded `setdefault` fallbacks that hid a deleted row; they are gone,
+ *     and `test_pdf_abbreviation_table_required.mjs` pins that).
  */
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
@@ -47,7 +48,7 @@ const sorted = o => Object.fromEntries(Object.entries(o).sort(([a], [b]) => (a <
 assert.deepEqual(
   sorted(fromPython),
   sorted(fromJson),
-  'pdf_parser.ABBREV_TEAMS differs from teamAbbreviations.json (a hard-coded fallback in _load_abbrev_teams?)'
+  'pdf_parser.ABBREV_TEAMS differs from teamAbbreviations.json (a hard-coded code in _load_abbrev_teams?)'
 );
 
 console.log(

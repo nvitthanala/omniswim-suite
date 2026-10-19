@@ -197,9 +197,10 @@ describe('an override of one tied relay', () => {
 
 /**
  * Architect re-review 2026-10-13, finding 1b: a key saved before the two relays
- * were told apart is not read for a tied relay any more. It is rewritten into
- * one override per relay (`migrateTiedRelayOverrides`), which the readers
- * (`simulateRoster`, the what-if projection) and the relays screen do first.
+ * were told apart is not read for a tied relay any more. Since user decision E5
+ * (2026-10-16) it is not copied to each relay either: `migrateTiedRelayOverrides`
+ * keeps it in the list and `migrateTiedRelayOverridesDetailed` reports it as
+ * ambiguous. Neither relay applies it.
  * The fallback this block used to pin let a clear on A change B's fill.
  * `tests/relayTiedAmbiguityMigration.test.ts` holds the new-contract cases.
  */
@@ -218,18 +219,18 @@ describe('a key saved before the two relays were told apart', () => {
     expect(findRelayLegOverride([legacy], bTemplate, LEG, tied)).toBeUndefined();
   });
 
-  it('applies to both tied relays once migrated, as it did before (it named both)', () => {
+  it('applies to neither tied relay: both legs stay vacant (nothing is guessed)', () => {
     const out = simulateRoster(results, [], false, BOTH_LEFT, [legacy]);
-    expect(out.filter(r => r.isRelay && r.relayLegIndex === LEG).map(r => r.name)).toStrictEqual(['X1', 'X1']);
+    expect(out.filter(r => r.isRelay && r.relayLegIndex === LEG).map(r => r.name)).toStrictEqual(['—', '—']);
   });
 
-  it("an override saved under the relay's own key wins over the plain one", () => {
+  it("an override saved under the relay's own key applies to that relay only", () => {
     const own: RelayLegOverride = { ...autofillFor(bTemplate), assigneeName: 'Y1' };
     const out = simulateRoster(results, [], false, BOTH_LEFT, [legacy, own]);
     const nameOf = (first: string) =>
       out.find(r => r.isRelay && r.relayLegIndex === LEG && r.relayNames?.some(n => n.name === first))?.name;
     expect(nameOf('B1')).toBe('Y1');
-    expect(nameOf('A1')).toBe('X1');
+    expect(nameOf('A1')).toBe('—');
   });
 
   it('is read as plain when no pool is given', () => {

@@ -41,6 +41,7 @@ import {
 } from '../../types';
 import { buildMeetEventLabelIndex, programEventOrNull } from '../eventIdentity';
 import { isUserInputtedSwim } from '../athleteHistory';
+import { isUnconfirmedProgramSwim } from '../programSwim';
 import { itemAt } from '../indexedAccess';
 import { swimEventNotSwumInCourse } from '../courseEvents';
 import { effectivePdfPlacePointsMode } from '../scoringDefaults';
@@ -356,6 +357,8 @@ export function buildEventTimeIndex(
   for (const r of results) {
     if (r.gender != null && r.gender !== gender) continue;
     if (isRelayResult(r) || r.isExhibition || r.isTimeTrial) continue;
+    // A swims-list row nobody confirmed as a program swim may be a time trial: no competitor.
+    if (isUnconfirmedProgramSwim(r)) continue;
     push(r.event, r.name, convertTimeToSeconds(r.time));
   }
   // A stored row in an event its course does not swim (a hand-entered 1000
@@ -473,6 +476,7 @@ export function distinctIndividualResultTeams(
     if (r.gender != null && r.gender !== gender) continue;
     if (isRelayResult(r)) continue;
     if (r.isExhibition || r.isTimeTrial) continue;
+    if (isUnconfirmedProgramSwim(r)) continue;
     const t = String(r.team ?? '').trim();
     if (t) teams.add(t);
   }
@@ -516,6 +520,11 @@ const DROP_SOURCE_PRIORITY: Record<DroppableEntry['source'], number> = {
   result: 1,
   recruit: 2,
 };
+
+/** An exhibition, a time trial, or a swims-list row nobody confirmed as a program swim. */
+function isOutsideProgramRow(r: SwimmerResult): boolean {
+  return r.isExhibition === true || r.isTimeTrial === true || isUnconfirmedProgramSwim(r);
+}
 
 /**
  * Every current individual entry the team's athletes hold, grouped by athlete
@@ -572,7 +581,7 @@ export function collectDroppableEntries(
   for (const r of results) {
     if (r.gender != null && r.gender !== gender) continue;
     if (isRelayResult(r)) continue;
-    if (r.isExhibition || r.isTimeTrial) continue;
+    if (isOutsideProgramRow(r)) continue;
     if (String(r.team ?? '').trim() !== team) continue;
     const event = programEventOrNull(r.event);
     if (!event) continue;

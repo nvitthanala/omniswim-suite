@@ -174,7 +174,8 @@ export function useAllTeamsApply({ workspace, gender, settings, removeSeniors = 
   // A run belongs to one workspace, gender, rule set and drop-seniors choice. If any changes, its
   // result would describe a lineup the coach is no longer looking at, so the run stops and applies
   // nothing. Edits to the fields the optimizer reads are caught when the result arrives.
-  const settingsKey = useMemo(() => JSON.stringify(settings), [settings]);
+  // `ownTeam` is a display choice, so it stays out of the key.
+  const settingsKey = useMemo(() => JSON.stringify({ ...settings, ownTeam: undefined }), [settings]);
   const workspaceId = workspace?.id;
   useEffect(() => {
     cancelRun();

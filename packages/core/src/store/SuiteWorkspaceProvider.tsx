@@ -10,6 +10,7 @@ import React, {
 } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Gender, type Workspace } from '../types';
+import { keepOwnTeam } from '../lib/ownTeam';
 import {
   createWorkspace,
   deleteWorkspaceApi,
@@ -416,11 +417,23 @@ export function SuiteWorkspaceProvider({
   sendSaveRef.current = sendSave;
 
   const saveWorkspace = useCallback(
-    (patch: Partial<Workspace>): Promise<WorkspaceSaveResult> => {
+    (requested: Partial<Workspace>): Promise<WorkspaceSaveResult> => {
       if (!activeWorkspaceId) {
         return Promise.resolve({ ok: false, reason: 'no-workspace', message: 'No workspace is open.' });
       }
       const id = activeWorkspaceId;
+      // A save that replaces the whole settings object (a preset, the rules dialog) must not unset
+      // the workspace's own team, which lives in that object. The cache already holds every earlier
+      // local change, so it is the current copy.
+      const patch: Partial<Workspace> = requested.scoringSettings
+        ? {
+            ...requested,
+            scoringSettings: keepOwnTeam(
+              requested.scoringSettings,
+              queryClient.getQueryData<Workspace[]>(WORKSPACES_KEY)?.find(w => w.id === id)
+            ),
+          }
+        : requested;
       setCache(list => list.map(w => (w.id === id ? { ...w, ...patch } : w)));
       pendingRef.current.set(id, { ...pendingRef.current.get(id), ...patch });
       // A workspace paused on a conflict keeps the edit on screen and in memory, and sends nothing.
@@ -438,7 +451,7 @@ export function SuiteWorkspaceProvider({
       );
       return outcome;
     },
-    [activeWorkspaceId, setCache, trySave]
+    [activeWorkspaceId, queryClient, setCache, trySave]
   );
 
   const updateWorkspace = useCallback(

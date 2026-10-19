@@ -19,6 +19,7 @@ import {
 import { divisionForTeamOrNull } from '../data/teamDivisions';
 import { cutlineTableCourseForSwim } from './cutlineUtils';
 import { computedCutForTeamSwim } from './cutlineTags';
+import { isUnconfirmedProgramSwim } from './programSwim';
 import { itemAt, regexGroup } from './indexedAccess';
 import { mergeScoringSettings } from './scoringDefaults';
 import {
@@ -99,6 +100,9 @@ export function historicalSwimFromResult(r: SwimmerResult, meetLabel?: string): 
     meetLabel,
     // A SwimCloud meet import flags a time trial by event number, not label.
     ...(r.isTimeTrial === true ? { isTimeTrial: true as const } : {}),
+    // A swims-list row nobody confirmed as a program swim: kept in the history,
+    // never a best, a ranked event or a cut tag (`isRankableSwim`).
+    ...(isUnconfirmedProgramSwim(r) ? { programUnconfirmed: true as const } : {}),
   };
 }
 
@@ -136,7 +140,10 @@ export function eventBestTimeMarks(
 function mergeLaneSuffix(swim: HistoricalSwim): string {
   const lane = bestTimeLane(swim);
   const laneSuffix = lane === 'result' ? '' : `|${lane}`;
-  return swim.isTimeTrial === true ? `${laneSuffix}|time_trial` : laneSuffix;
+  const trialSuffix = swim.isTimeTrial === true ? `${laneSuffix}|time_trial` : laneSuffix;
+  // An unconfirmed row keys apart from a confirmed swim of the same label, so it
+  // can never displace one.
+  return swim.programUnconfirmed === true ? `${trialSuffix}|unconfirmed` : trialSuffix;
 }
 
 export function mergeHistoryIndex(
@@ -289,6 +296,9 @@ export function categorizeBestEvents(
     // `isEventOffered` refuses it; a SwimCloud meet import says so only
     // through the flag.
     if (s.isTimeTrial === true) continue;
+    // An unconfirmed swims-list row may be a time trial too. Not a best until
+    // the user confirms it is a program swim.
+    if (s.programUnconfirmed === true) continue;
     // An event its course does not swim (a 1000 Freestyle recorded SCM, a 400
     // Freestyle recorded SCY) is in no lane: not a best, not a split, not a
     // self-reported time. It stays in athleteHistory. See courseEvents.ts.
@@ -769,11 +779,16 @@ function enrichWithComputedCut(
     // never judged: no cut, and no miss either. See isRankableSwim.
     if (!isRankableSwim(s)) return { ...s, computedCut: null };
     const course = s.timeType ?? 'SCY';
-    // Two swims we hold no standard for: a metric swim whose division
-    // publishes no table in its course (every NCAA metric swim, an NAIA LCM
-    // swim), and any swim whose division did not resolve. Neither may be given
-    // a verdict here; a value the caller arrived with is theirs to keep.
-    if (!div || (course !== 'SCY' && cutlineTableCourseForSwim(s.gender, s.event, div, course) !== course)) {
+    // A swim whose division did not resolve (an unknown team, or a school whose
+    // division depends on a season nobody stated) has no standard. A badge it
+    // already carries was judged against some table, and nothing here proves it
+    // was the right one, so it is dropped, not kept (E8: a D2 badge must not
+    // outlive the question of which division the swim belongs to).
+    if (!div) return { ...s, computedCut: null };
+    // A metric swim whose division publishes no table in its course (every NCAA
+    // metric swim, an NAIA LCM swim) gets no verdict here; a value the caller
+    // arrived with is theirs to keep.
+    if (course !== 'SCY' && cutlineTableCourseForSwim(s.gender, s.event, div, course) !== course) {
       return { ...s, computedCut: s.computedCut ?? null };
     }
     // Gated by the cut tag, so a program the school does not field for this

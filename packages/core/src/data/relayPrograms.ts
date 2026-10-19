@@ -2,9 +2,9 @@
  * Conference championship programs: which relays a conference swims and the
  * order of events as the meet ran them, each tied to an archived primary source.
  *
- * DATA ONLY. Nothing imports this file yet: no scoring preset, optimizer or UI
- * reads it. It is not exported from `packages/core/src/index.ts`. The lead
- * decides how (and whether) to wire it in (plan item F6, decision U4).
+ * DATA ONLY. The one reader is `lib/scoredProgramBoundary.ts`, which derives
+ * the last scored event number of a SwimCloud import from a program here (plan
+ * item E1). No scoring preset, optimizer or UI reads this file directly.
  *
  * Rules (CLAUDE.md "Data provenance"):
  * - Every entry cites a source id from `data/relay-programs/sources/manifest.json`
@@ -46,8 +46,21 @@ export interface ConferenceProgramEvent {
 export interface ConferenceProgram {
   /** Conference as the source names it. */
   conference: string;
+  /**
+   * Other names the conference goes by in a workspace's `conference` field,
+   * matched as whole words. The abbreviation the source itself prints belongs
+   * here. Absent means only {@link ConferenceProgram.conference} matches.
+   */
+  conferenceAliases?: readonly string[];
   /** Season of the meet, in the format of `data/cutlines` ("2025-2026"). */
   season: string;
+  /**
+   * First and last day of the meet the program describes, `YYYY-MM-DD`, from
+   * the manifest's `meetDates`. A program describes one meet. It is not a
+   * statement about another meet of the same conference, so a SwimCloud import
+   * borrows its event numbers only when the imported meet falls in this window.
+   */
+  meetDates: { readonly start: string; readonly end: string };
   /** Id in `data/relay-programs/sources/manifest.json`. */
   sourceId: string;
   /** What the source is. A results document is the order as run, not a program. */
@@ -141,7 +154,9 @@ function toEvent(row: Row): ConferenceProgramEvent {
  */
 export const GLVC_2025_26_PROGRAM: ConferenceProgram = {
   conference: 'Great Lakes Valley Conference (GLVC)',
+  conferenceAliases: ['GLVC'],
   season: '2025-2026',
+  meetDates: { start: '2026-02-10', end: '2026-02-14' },
   sourceId: 'glvc-swim-dive-2025-26-complete-results',
   sourceKind: 'results-as-run',
   scope:

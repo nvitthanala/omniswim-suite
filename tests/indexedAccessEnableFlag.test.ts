@@ -7,12 +7,14 @@
  * relay-leg strokes for an index with no stroke, the class top-performer
  * accumulator, and the applet prefetcher for an id with no loader.
  *
- * A leg index with no stroke matches no event. It never receives a guessed stroke.
+ * A leg index that names no leg throws (decision E20, 2026-10-16). It never receives a guessed stroke.
  */
 import { describe, expect, it } from 'vitest';
 
 import type { RelayLegCredit, SwimmerResult } from '../packages/core/src/types';
 import {
+  InvalidRelayLegIndexError,
+  isValidRelayLegIndex,
   relayLegRequirements,
   relayStrokeForBoundedIndex,
   relayStrokeForIndex,
@@ -21,79 +23,101 @@ import {
 import { relayLegSlotOf } from '../packages/core/src/lib/relayLegCredits';
 import { findDepartedLegSwim } from '../packages/core/src/lib/utils';
 import { computeClassTopPerformers } from '../packages/matrix/src/components/teamCardView';
-import { swimEventIdentity } from '../packages/core/src/lib/athleteHistory';
 import { prefetchApplet } from '../apps/shell/src/lib/appletPrefetch';
 
 const MEDLEY = '400 medley relay men';
 const MEDLEY_LABEL = 'Event 20 Men 4x100 Yard Medley Relay';
 
-describe('relayStrokeForIndex: an index with no stroke stays absent', () => {
-  it('names the stroke for legs 0 to 3 of a medley, and free past leg 3', () => {
+describe('relayStrokeForIndex: an index that names no leg throws (decision E20)', () => {
+  it('names the stroke for legs 0 to 3 of a medley', () => {
     expect([0, 1, 2, 3].map(i => relayStrokeForIndex(MEDLEY, i))).toStrictEqual(['back', 'breast', 'fly', 'free']);
-    expect(relayStrokeForIndex(MEDLEY, 4)).toBe('free');
   });
 
-  it('returns undefined for a negative or fractional medley index', () => {
-    expect(relayStrokeForIndex(MEDLEY, -1)).toBeUndefined();
-    expect(relayStrokeForIndex(MEDLEY, 1.5)).toBeUndefined();
+  it('throws InvalidRelayLegIndexError for a negative, fractional, non-finite or fifth-leg medley index', () => {
+    for (const bad of [-1, 1.5, Number.NaN, Number.POSITIVE_INFINITY, 4, 7]) {
+      expect(() => relayStrokeForIndex(MEDLEY, bad), String(bad)).toThrow(InvalidRelayLegIndexError);
+    }
   });
 
-  it('a free relay is free for every index, as before', () => {
+  it('the error names the event and the index', () => {
+    try {
+      relayStrokeForIndex(MEDLEY, -1);
+      expect.unreachable('should have thrown');
+    } catch (error) {
+      expect(error).toBeInstanceOf(InvalidRelayLegIndexError);
+      expect(error).toBeInstanceOf(Error);
+      const named = error as InvalidRelayLegIndexError;
+      expect(named.name).toBe('InvalidRelayLegIndexError');
+      expect(named.legIndex).toBe(-1);
+      expect(named.eventLower).toBe(MEDLEY);
+      expect(named.message).toContain('-1');
+    }
+  });
+
+  it('a free relay is free for every whole-number index, and throws for a negative or fractional one', () => {
     expect(relayStrokeForIndex('400 free relay men', 0)).toBe('free');
-    expect(relayStrokeForIndex('400 free relay men', -1)).toBe('free');
+    expect(relayStrokeForIndex('400 free relay men', 3)).toBe('free');
+    expect(() => relayStrokeForIndex('400 free relay men', -1)).toThrow(InvalidRelayLegIndexError);
+    expect(() => relayStrokeForIndex('400 free relay men', 0.5)).toThrow(InvalidRelayLegIndexError);
   });
 
-  it('relayLegRequirements carries the absent stroke through', () => {
-    expect(relayLegRequirements(MEDLEY_LABEL, -1).stroke).toBeUndefined();
+  it('isValidRelayLegIndex agrees with relayStrokeForIndex', () => {
+    for (const event of [MEDLEY, '400 free relay men']) {
+      for (const index of [-1, 0, 1, 2, 3, 4, 1.5, Number.NaN]) {
+        let throws = false;
+        try {
+          relayStrokeForIndex(event, index);
+        } catch (error) {
+          throws = error instanceof InvalidRelayLegIndexError;
+        }
+        expect(isValidRelayLegIndex(event, index), `${event} ${String(index)}`).toBe(!throws);
+      }
+    }
+  });
+
+  it('relayLegRequirements throws for a bad index and carries the stroke for a good one', () => {
+    expect(() => relayLegRequirements(MEDLEY_LABEL, -1)).toThrow(InvalidRelayLegIndexError);
     expect(relayLegRequirements(MEDLEY_LABEL, 0).stroke).toBe('back');
   });
 
-  it('the bounded variant returns the same strokes and throws instead of returning undefined', () => {
-    expect([0, 1, 2, 3, 4].map(i => relayStrokeForBoundedIndex(MEDLEY, i))).toStrictEqual([
+  it('the bounded variant returns the same strokes and throws the same error', () => {
+    expect([0, 1, 2, 3].map(i => relayStrokeForBoundedIndex(MEDLEY, i))).toStrictEqual([
       'back',
       'breast',
       'fly',
       'free',
-      'free',
     ]);
-    expect(() => relayStrokeForBoundedIndex(MEDLEY, -1)).toThrow(/relay leg index -1 has no stroke/);
+    expect(() => relayStrokeForBoundedIndex(MEDLEY, -1)).toThrow(InvalidRelayLegIndexError);
+    expect(() => relayStrokeForBoundedIndex(MEDLEY, 4)).toThrow(/relay leg index 4/i);
   });
 });
 
-describe('relay leg lookups with an index that has no stroke', () => {
-  it('the label an absent stroke builds matches none of the four stroke events', () => {
-    // relayBuilder.isLegEvent compares swimEventIdentity of the swim and of `<distance> <stroke event>`.
-    const absent = swimEventIdentity('100 undefined');
-    for (const stroke of ['Backstroke', 'Breaststroke', 'Butterfly', 'Freestyle']) {
-      expect(absent).not.toBe(swimEventIdentity(`100 ${stroke}`));
-    }
-  });
-
+describe('relay leg lookups with an index that names no leg', () => {
   const row = (event: string): SwimmerResult => ({ event, isRelay: false, time: '1:00.00' }) as SwimmerResult;
 
-  it('swimmerMatchesRelayLeg is false for every swim', () => {
-    for (const event of ['100 Backstroke', '100 Freestyle', '100 Fly', '100 Breaststroke']) {
-      expect(swimmerMatchesRelayLeg(row(event), MEDLEY_LABEL, -1), event).toBe(false);
-    }
+  it('swimmerMatchesRelayLeg throws, never "false for every swim"', () => {
+    expect(() => swimmerMatchesRelayLeg(row('100 Backstroke'), MEDLEY_LABEL, -1)).toThrow(InvalidRelayLegIndexError);
     // Control: leg 0 still matches its stroke.
     expect(swimmerMatchesRelayLeg(row('100 Backstroke'), MEDLEY_LABEL, 0)).toBe(true);
   });
 
-  it('findDepartedLegSwim finds nothing', () => {
+  it('findDepartedLegSwim throws for a bad index and finds the swim for a good one', () => {
     const results = [
       { name: 'Ann Lee', team: 'T', event: '100 Backstroke', isRelay: false, time: '55.00' },
     ] as unknown as SwimmerResult[];
     expect(findDepartedLegSwim(results, 'Ann Lee', MEDLEY_LABEL, 0, 'T')).toBe(results[0]);
-    expect(findDepartedLegSwim(results, 'Ann Lee', MEDLEY_LABEL, -1, 'T')).toBeUndefined();
+    expect(() => findDepartedLegSwim(results, 'Ann Lee', MEDLEY_LABEL, -1, 'T')).toThrow(InvalidRelayLegIndexError);
   });
 
-  it('relayLegSlotOf gives no slot for a medley position below 1', () => {
-    const credit = (legPosition: number) =>
-      ({ legPosition, relayEventTitle: '400 Medley Relay Men', isLeadoff: false }) as unknown as RelayLegCredit;
+  it('relayLegSlotOf (stored positions) gives no slot for a position that names no leg', () => {
+    const credit = (legPosition: number, relayEventTitle = '400 Medley Relay Men') =>
+      ({ legPosition, relayEventTitle, isLeadoff: false }) as unknown as RelayLegCredit;
     expect(relayLegSlotOf(credit(1))).toStrictEqual({ distance: 100, stroke: 'back', position: 1, start: 'flat' });
     expect(relayLegSlotOf(credit(4))).toStrictEqual({ distance: 100, stroke: 'free', position: 4, start: 'takeover' });
-    expect(relayLegSlotOf(credit(0))).toBeNull();
-    expect(relayLegSlotOf(credit(-2))).toBeNull();
+    for (const bad of [0, -2, 5, 1.5, Number.NaN]) {
+      expect(relayLegSlotOf(credit(bad)), String(bad)).toBeNull();
+      expect(relayLegSlotOf(credit(bad, '200 Free Relay Men')), `free ${String(bad)}`).toBeNull();
+    }
   });
 });
 

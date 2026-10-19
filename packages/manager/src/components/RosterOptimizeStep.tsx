@@ -355,7 +355,8 @@ export default function RosterOptimizeStep({
   // A run belongs to one workspace, team, view and rule set. If any of them changes, its result
   // would describe a lineup the coach is no longer looking at, so the run stops and nothing is
   // applied. Edits to the lineup arrays are caught separately when the result arrives.
-  const settingsKey = useMemo(() => JSON.stringify(scoringSettings), [scoringSettings]);
+  // `ownTeam` is a display choice, so it stays out of the key.
+  const settingsKey = useMemo(() => JSON.stringify({ ...scoringSettings, ownTeam: undefined }), [scoringSettings]);
   useEffect(() => {
     cancelRun();
   }, [cancelRun, workspace.id, gender, team, removeSeniors, whatIfMode, settingsKey]);

@@ -33,6 +33,7 @@ import { AuthService, ShareLinkService } from '../../packages/db/src/AuthService
 import { DEFAULT_SCORING_SETTINGS } from '../../packages/core/src/lib/scoringDefaults.ts';
 import { cutlines as builtinCutlines } from '../../packages/core/src/cutlines.ts';
 import {
+  isAdminUser,
   registerAuthRoutes,
   registrationBannerLines,
   registrationConfigFromEnv,
@@ -484,6 +485,7 @@ async function startServer() {
     requireAuth,
     optionalAuth,
     defaultScoringSettings,
+    isAdmin: req => isAdminUser(registrationConfig, req.user),
   });
 
   registerScoringPresetRoutes(app, { scoringPresetsDir: SCORING_PRESETS_DIR });

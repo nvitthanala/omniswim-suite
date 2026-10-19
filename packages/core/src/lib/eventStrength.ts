@@ -122,7 +122,13 @@ export function rankEventsByQuality(
   bestByEvent: Record<string, { timeSec: number }>,
   gender: Gender,
   team: string,
-  divisionOverride?: NcaaDivision | null
+  divisionOverride?: NcaaDivision | null,
+  /**
+   * The season the bests were swum in, `YYYY-YYYY`. Picks the team's division
+   * (`TeamDivisionOptions.season`) when it changed over time. Absent for such a
+   * team, the division is unknown and every event comes back in `unranked`.
+   */
+  swimSeason?: string
 ): EventQualityRanking {
   const events = Object.keys(bestByEvent);
   const byTimeThenName = (list: string[]) =>
@@ -134,7 +140,10 @@ export function rankEventsByQuality(
         a.localeCompare(b)
     );
 
-  const division = divisionOverride !== undefined ? divisionOverride : divisionForTeamOrNull(team);
+  const division =
+    divisionOverride !== undefined
+      ? divisionOverride
+      : divisionForTeamOrNull(team, swimSeason === undefined ? undefined : { season: swimSeason });
   if (!division) {
     return { ranked: [], unranked: byTimeThenName(events), ratioByEvent: {}, division: null, tier: null };
   }
@@ -191,6 +200,8 @@ export type EventStrengthOptions = {
   isSameSwimmer?: (row: SwimmerResult) => boolean;
   /** Same three-state contract as {@link rankEventsByQuality}. */
   divisionOverride?: NcaaDivision | null;
+  /** See {@link rankEventsByQuality}'s `swimSeason`. */
+  swimSeason?: string;
 };
 
 export type EventStrengthRanking = EventQualityRanking & {
@@ -256,7 +267,13 @@ export function rankEventsByStrength(
   team: string,
   options: EventStrengthOptions = {}
 ): EventStrengthRanking {
-  const quality = rankEventsByQuality(bestByEvent, gender, team, options.divisionOverride);
+  const quality = rankEventsByQuality(
+    bestByEvent,
+    gender,
+    team,
+    options.divisionOverride,
+    options.swimSeason
+  );
   const field = options.meetField ?? null;
 
   const strengthByEvent: Record<string, EventStrength> = {};

@@ -45,18 +45,26 @@ _ALIASES_JSON = os.path.normpath(
 
 def _load_abbrev_teams():
     # Fails loudly on purpose: a missing or unreadable teamAbbreviations.json
-    # means every team code below silently degrades to the tiny hardcoded
-    # fallback, misattributing points for every school not in that short
-    # list. A broken deploy should not start up able to score meets wrong.
-    merged = {}
+    # raises, and a code the table does not hold has no hardcoded fallback. A
+    # broken deploy should not start up able to score meets wrong. The table is
+    # the only source; add a missing code there, with its source.
     with open(_ALIASES_JSON, encoding='utf-8') as fh:
-        merged.update(json.load(fh))
-    merged.setdefault('UMSL', 'University of Missouri-St. Louis')
-    merged.setdefault('HSU', 'Henderson State University')
-    merged.setdefault('DSU', 'Delta State University')
-    merged.setdefault('OUAC', 'Ouachita Baptist University')
-    merged.setdefault('UWF', 'University of West Florida')
-    return merged
+        return _AbbrevTable(json.load(fh))
+
+
+class _AbbrevTable(dict):
+    """
+    The abbreviation table. `table.get(code)` answers None for a code it does
+    not hold, which the row scanners rely on. `table[code]` raises a KeyError
+    that names the code, for a caller that needs the school and has no other
+    way to find it.
+    """
+
+    def __missing__(self, code):
+        raise KeyError(
+            f"Unknown team abbreviation {code!r}: it is not in {os.path.basename(_ALIASES_JSON)}. "
+            "Add it there with its source."
+        )
 
 
 ABBREV_TEAMS = _load_abbrev_teams()
@@ -347,6 +355,7 @@ def parse_meet_data(lines, conference="NSISC"):
                         'unparseable individual result row in '
                         f'{current_event!r} ({current_round}): no class year and '
                         f'no known school to split on: {stripped!r}'
+                        f'{_unrecorded_team_code_note(rest_line)}'
                     )
                 continue
             yr, before_yr, after_yr = recovered
@@ -1238,6 +1247,27 @@ def _resolve_team_code(token):
     if not _TEAM_CODE_TOKEN.match(t):
         return None
     return ABBREV_TEAMS.get(t.upper())
+
+
+def _unrecorded_team_code_note(rest_line):
+    """
+    A sentence naming the team code a refused row prints but the abbreviation
+    table does not hold, or '' when the row prints none. The code is the token
+    directly before the clock, where the school column ends.
+    """
+    tokens = rest_line.split()
+    for i in range(1, len(tokens) - 1):
+        code = tokens[i]
+        if (
+            _TEAM_CODE_TOKEN.match(code)
+            and _is_school_column_boundary(tokens[i + 1])
+            and code.upper() not in ABBREV_TEAMS
+        ):
+            return (
+                f'. {code!r} is not in the team abbreviation table '
+                f'({os.path.basename(_ALIASES_JSON)}); add it there with its source'
+            )
+    return ''
 
 
 def _is_school_column_boundary(token):
