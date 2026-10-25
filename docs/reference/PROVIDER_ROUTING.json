@@ -22,7 +22,7 @@
       "remainingPct": null,
       "remainingSource": "node ~/.claude/scripts/provider-usage-report.mjs --json -> codex.primary (usedPct of a windowMinutes window; remaining = 100 - usedPct). Reads Codex's own session logs. Never opens auth.json. Shown in the command-center band and pane.",
       "verified": "2026-10-25: the user says Codex has a full fresh quota (redesign plan, decision R13), so it is available again. Earlier, 2026-10-02: monthly cap at ~87% used after the two UI phases (each ~17 points). User rule: keep a 10% reserve, so Codex is off until the cap resets 2026-11-01 or the user says otherwise. Cost guide: audit ~2.5%, backend fix ~3-6%, core fix ~6-13%, UI phase ~17%.",
-      "launchNote": "2026-10-25: worker-start (Codex CLI 0.160.0, update 0.164.0 available) left the brief as an unsubmitted draft under the update banner for ~25 min. Fix: orca terminal read the worker terminal after launch; if the draft is still there, orca terminal send --terminal <h> --enter. Then it started normally."
+      "launchNote": "2026-10-25: worker-start (Codex CLI 0.160.0, update 0.164.0 available) left the brief as an unsubmitted draft under the update banner for ~25 min. Fix: orca terminal read the worker terminal after launch; if the draft is still there, orca terminal send --terminal <h> --enter. Then it started normally. A second launch hit the interactive update menu (Update now / Skip / Skip until next version); choosing 3 persists the skip. Still check for the unsent draft after each launch."
     },
     "cursor": {
       "dispatch": "orca orchestration worker-start --agent cursor",
@@ -174,5 +174,6 @@
     "noDirectProviderSpawns": "Never spawn cursor-agent or codex directly from a script or loop. Use Orca worker-start, one worker at a time."
   },
   "standbyOrder": [],
-  "standbyNote": "Order used by limit-handoff.mjs when Claude is out of quota. First provider that is available and below 90% used."
+  "standbyNote": "Order used by limit-handoff.mjs when Claude is out of quota. First provider that is available and below 90% used.",
+  "worktreeNote": "2026-10-25: worker-start --worktree new-child branches from the repo default branch (main), NOT from the coordinator branch. Pass --base-branch <coordinator branch>, or fast-forward the child (git merge --ff-only) before the worker reads. A child without the committed opencode.json also makes OpenCode fall back to its global default model."
 }

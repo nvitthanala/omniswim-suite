@@ -42,7 +42,7 @@
           "id": "P1.reorg",
           "status": "in-progress",
           "doc": "plans/2026-10-25/03-REPO-REORG.md",
-          "dispatch": "orca run_e227c1d43d7e, codex, new-child worktree redesign-reorg, dispatch ctx_72ffd7179d13; brief: same text as plans/2026-10-25/03-REPO-REORG.md plus gates acceptance"
+          "dispatch": "orca run_e227c1d43d7e task_d2a54ddb3b3e, codex, worktree C:/Users/nihar/orca/workspaces/omniswim-suite/redesign-reorg (branch nvitthanala/redesign-reorg, ff to 50d318dd). Attempts: ctx_6b84497f0e61 failed (worktree based on main, plan files missing); ctx_93e03ee451f3 failed (Codex update menu); ctx_a73688b491b3 running."
         },
         {
           "id": "D1",
@@ -77,7 +77,7 @@
           "id": "S4",
           "status": "in-progress",
           "what": "HiGHS wasm size and solve time in MV3",
-          "dispatch": "orca run_e227c1d43d7e, opencode2, new-child worktree redesign-s4-highs, dispatch ctx_6b84497f0e61; throwaway in spikes/s4-highs/"
+          "dispatch": "orca task_a527c6461950, opencode2, worktree .../redesign-s4-highs (ff to 50d318dd). ctx_72ffd7179d13 stopped (Flint 40B endpoint down; worktree lacked opencode.json); ctx_b77f91e238a4 running."
         },
         {
           "id": "P1.engine",
