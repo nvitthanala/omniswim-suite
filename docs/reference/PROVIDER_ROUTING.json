@@ -1,5 +1,5 @@
 {
-  "updated": "2026-10-11",
+  "updated": "2026-10-25",
   "about": "Data, not prose. The orchestrator reads this file to pick a provider for each task. Edit values here to change routing. Nothing in the agent files hardcodes a provider choice.",
   "providers": {
     "claude": {
@@ -18,10 +18,10 @@
     },
     "codex": {
       "dispatch": "orca orchestration worker-start --agent codex",
-      "available": false,
+      "available": true,
       "remainingPct": null,
       "remainingSource": "node ~/.claude/scripts/provider-usage-report.mjs --json -> codex.primary (usedPct of a windowMinutes window; remaining = 100 - usedPct). Reads Codex's own session logs. Never opens auth.json. Shown in the command-center band and pane.",
-      "verified": "2026-10-02: monthly cap at ~87% used after the two UI phases (each ~17 points). User rule: keep a 10% reserve, so Codex is off until the cap resets 2026-11-01 or the user says otherwise. Cost guide: audit ~2.5%, backend fix ~3-6%, core fix ~6-13%, UI phase ~17%."
+      "verified": "2026-10-25: the user says Codex has a full fresh quota (redesign plan, decision R13), so it is available again. Earlier, 2026-10-02: monthly cap at ~87% used after the two UI phases (each ~17 points). User rule: keep a 10% reserve, so Codex is off until the cap resets 2026-11-01 or the user says otherwise. Cost guide: audit ~2.5%, backend fix ~3-6%, core fix ~6-13%, UI phase ~17%."
     },
     "cursor": {
       "dispatch": "orca orchestration worker-start --agent cursor",

@@ -1,0 +1,148 @@
+{
+  "initiative": "chrome-extension-redesign-2026-10-25",
+  "plan": "plans/2026-10-25/01-REDESIGN-PLAN.md",
+  "decisions": "plans/2026-10-25/README.md#decisions-user-2026-10-25",
+  "created": "2026-10-25",
+  "branch": {
+    "base": "main @ d7d5c976 (PR #7 merged 2026-10-25)",
+    "work": "nvitthanala/extension-redesign",
+    "pr7": "https://github.com/nvitthanala/omniswim-suite/pull/7 merged 2026-10-25 as d7d5c976; GitHub CI build-and-test passed (14m10s) incl. Postgres round-trip"
+  },
+  "gatesAtCreation": {
+    "ref": "nvitthanala/improvement-plan-2026-10-10 @ 12f3947e, oyster worktree",
+    "lint": "npm run lint: exit 0",
+    "scripts": "npm test: 89 passed, 0 failed, 1 skipped (Postgres round-trip, needs PG_TEST_URL)",
+    "vitest": "npx vitest run: 314 files passed, 1 skipped; 4932 tests passed, 25 skipped",
+    "ranBy": "lead, 2026-10-25"
+  },
+  "phases": [
+    {
+      "id": "P0",
+      "name": "Simulator recon",
+      "status": "blocked",
+      "blocker": "User ran /chrome on 2026-10-25; tools not yet confirmed in session",
+      "doc": "plans/2026-10-25/02-SIMULATOR-RECON.md"
+    },
+    {
+      "id": "P1",
+      "name": "Foundation: merge, reorg, engine extraction, extension skeleton",
+      "status": "in-progress",
+      "items": [
+        {
+          "id": "P1.merge",
+          "status": "verified-committed",
+          "note": "Merged d7d5c976; local main fast-forwarded"
+        },
+        {
+          "id": "P1.routing",
+          "status": "verified-committed",
+          "note": "codex available=true, citing R13. The oyster worktree still holds an uncommitted opencode entry for the same file; left out pending the user approval its own availableNote requires."
+        },
+        {
+          "id": "P1.reorg",
+          "status": "pending",
+          "doc": "plans/2026-10-25/03-REPO-REORG.md"
+        },
+        {
+          "id": "D1",
+          "status": "pending",
+          "owner": "architect",
+          "what": "build tooling and extension layout"
+        },
+        {
+          "id": "D2",
+          "status": "pending",
+          "owner": "architect",
+          "what": "packages/engine public API"
+        },
+        {
+          "id": "D3",
+          "status": "pending",
+          "owner": "architect",
+          "what": "IndexedDB schema v1 + migrations"
+        },
+        {
+          "id": "S3",
+          "status": "pending",
+          "what": "content-script worker strategy"
+        },
+        {
+          "id": "S4",
+          "status": "pending",
+          "what": "HiGHS wasm size and solve time in MV3"
+        },
+        {
+          "id": "P1.engine",
+          "status": "pending",
+          "owner": "executor"
+        },
+        {
+          "id": "P1.skeleton",
+          "status": "pending",
+          "owner": "codex or worker"
+        }
+      ]
+    },
+    {
+      "id": "P2",
+      "name": "Read-only overlay + parity",
+      "status": "pending"
+    },
+    {
+      "id": "P3",
+      "name": "Rules (F2)",
+      "status": "pending"
+    },
+    {
+      "id": "P4",
+      "name": "Data sourcing (F1)",
+      "status": "pending"
+    },
+    {
+      "id": "P5",
+      "name": "Meet planner (F3)",
+      "status": "pending"
+    },
+    {
+      "id": "P6",
+      "name": "AutoBuilder (F4)",
+      "status": "pending"
+    },
+    {
+      "id": "P7",
+      "name": "Dashboard, theming, charts, carry-overs",
+      "status": "pending"
+    },
+    {
+      "id": "P8",
+      "name": "Opponent prediction, SwimCloud-wide hints",
+      "status": "pending"
+    },
+    {
+      "id": "P9",
+      "name": "Share-ready",
+      "status": "pending"
+    }
+  ],
+  "openQuestions": [
+    "Q1 flyover value + source",
+    "Q2 NSISC relay points: confirm doubled top-16 against a New South Championships source",
+    "Q3 New South ISC sources for cap/diver weight/session order",
+    "Q4 simulator plan level",
+    "Q5 prelim+final = two races?",
+    "Q6 approve extra fetches (history, roster seasons, splits) after recon"
+  ],
+  "resumeOrder": [
+    "P0",
+    "D1",
+    "D2",
+    "D3",
+    "P1.reorg",
+    "P1.engine",
+    "P1.skeleton"
+  ],
+  "notes": [
+    "Newest code was on the unmerged branch in the oyster worktree (C:/Users/nihar/orca/workspaces/omniswim-suite/oyster), not main. Plan docs were written in the main clone, untracked, to be committed on the redesign branch.",
+    "oyster has an uncommitted PROVIDER_ROUTING.json change and untracked .opencode/ files; not part of PR #7."
+  ]
+}
