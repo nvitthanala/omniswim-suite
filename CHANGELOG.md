@@ -41,8 +41,9 @@ Format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   other without a warning. Backups keep their own quotas for manual and
   pre-restore copies.
 - **The server stops on a database it cannot read.** It no longer falls back
-  to `meets.json` in that case. With sign-in required, registration is by invite only and
-  passwords need 12 characters.
+  to `meets.json` in that case.
+- **Registration is by invite only.** With sign-in required, a new account
+  needs an invite code, and passwords need 12 characters.
 - **The header fits a phone.** Icon-only buttons have names. Hover lifts and
   the sidebar width change stop under reduced motion. Screens the earlier
   UI branch left alone use sentence case.

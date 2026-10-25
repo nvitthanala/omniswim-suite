@@ -215,6 +215,11 @@ sources (NCAA D1/D2/D3 + NAIA).
 
 ## Project Context
 
+- **Current initiative (2026-10-25):** the Chrome extension redesign. Plan:
+  `plans/2026-10-25/`. State: `docs/reference/REDESIGN_2026-10-25_STATE.json`.
+  The standalone suite (shell, manager, matrix, metrics, db, ui, backend,
+  crawler extension) is moving to `legacy/`: frozen, runnable, not extended.
+  NSISC means the New South Intercollegiate Swim Conference.
 - **Primary workspace:** HSU 2026-27 roster (swimmers, class years, NSISC event rules).
 - **Data sources:** Meets.json (meet PDFs), SwimCloud (recruit imports), what-if projections.
 - **Key recent rounds:** Round 3 (2026-07-19) — athlete aliasing + drawer declutter; Round 2 — roster/lineup correctness bugs.

@@ -40,8 +40,9 @@
         },
         {
           "id": "P1.reorg",
-          "status": "pending",
-          "doc": "plans/2026-10-25/03-REPO-REORG.md"
+          "status": "in-progress",
+          "doc": "plans/2026-10-25/03-REPO-REORG.md",
+          "dispatch": "orca run_e227c1d43d7e, codex, new-child worktree redesign-reorg, dispatch ctx_72ffd7179d13; brief: same text as plans/2026-10-25/03-REPO-REORG.md plus gates acceptance"
         },
         {
           "id": "D1",
@@ -51,25 +52,28 @@
         },
         {
           "id": "D2",
-          "status": "pending",
+          "status": "in-progress",
           "owner": "architect",
-          "what": "packages/engine public API"
+          "what": "packages/engine public API",
+          "dispatch": "claude architect (background), output -> plans/2026-10-25/D2-ENGINE-API.md"
         },
         {
           "id": "D3",
-          "status": "pending",
+          "status": "in-progress",
           "owner": "architect",
-          "what": "IndexedDB schema v1 + migrations"
+          "what": "IndexedDB schema v1 + migrations",
+          "dispatch": "claude architect (background) with D1 pre-recon part and S3, output -> plans/2026-10-25/D3-STORAGE-AND-BUILD.md"
         },
         {
           "id": "S3",
-          "status": "pending",
+          "status": "in-progress",
           "what": "content-script worker strategy"
         },
         {
           "id": "S4",
-          "status": "pending",
-          "what": "HiGHS wasm size and solve time in MV3"
+          "status": "in-progress",
+          "what": "HiGHS wasm size and solve time in MV3",
+          "dispatch": "orca run_e227c1d43d7e, opencode2, new-child worktree redesign-s4-highs, dispatch ctx_6b84497f0e61; throwaway in spikes/s4-highs/"
         },
         {
           "id": "P1.engine",
@@ -125,12 +129,9 @@
     }
   ],
   "openQuestions": [
-    "Q1 flyover value + source",
-    "Q2 NSISC relay points: confirm doubled top-16 against a New South Championships source",
-    "Q3 New South ISC sources for cap/diver weight/session order",
-    "Q4 simulator plan level",
-    "Q5 prelim+final = two races?",
-    "Q6 approve extra fetches (history, roster seasons, splits) after recon"
+    "Q3 New South ISC sources (not blocking)",
+    "Q4 simulator plan level (recon)",
+    "Q6 approve extra fetches after recon"
   ],
   "resumeOrder": [
     "P0",
@@ -144,5 +145,6 @@
   "notes": [
     "Newest code was on the unmerged branch in the oyster worktree (C:/Users/nihar/orca/workspaces/omniswim-suite/oyster), not main. Plan docs were written in the main clone, untracked, to be committed on the redesign branch.",
     "oyster has an uncommitted PROVIDER_ROUTING.json change and untracked .opencode/ files; not part of PR #7."
-  ]
+  ],
+  "decisionsAdded": "R14-R19 recorded 2026-10-25 (second user message): flyover user number; NSISC SwimCloud table, no per-event scorer cap; event order editable on simulator page; sessions advisory, prelims AM/finals later, timed finals; OpenCode added; Chrome fallback in plan section 12"
 }

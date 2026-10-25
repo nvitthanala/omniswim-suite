@@ -1,5 +1,7 @@
 # Current state: one page
 
+**Updated 2026-10-25.** The project pivots to a Chrome extension on the SwimCloud meet simulator. Start with [plans/2026-10-25/README.md](2026-10-25/README.md) and the state file [docs/reference/REDESIGN_2026-10-25_STATE.json](../docs/reference/REDESIGN_2026-10-25_STATE.json). Active branch: `nvitthanala/extension-redesign`, based on `main@d7d5c976` (PR #7 merged). The standalone suite moves to `legacy/`. The 2026-10-13 notes below are history.
+
 **Updated 2026-10-13.** This page says where the work stands and where to look next. The long history that used to sit here is in [docs/archive/2026-10/STATE_HISTORY_2026-08.md](../docs/archive/2026-10/STATE_HISTORY_2026-08.md).
 
 ## Branch and base
