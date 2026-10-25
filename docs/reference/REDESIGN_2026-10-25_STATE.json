@@ -77,9 +77,14 @@
         },
         {
           "id": "S4",
-          "status": "in-progress",
+          "status": "verified",
           "what": "HiGHS wasm size and solve time in MV3",
-          "dispatch": "orca task_a527c6461950, opencode2, worktree .../redesign-s4-highs (ff to 50d318dd). ctx_72ffd7179d13 stopped (Flint 40B endpoint down; worktree lacked opencode.json); ctx_b77f91e238a4 running."
+          "dispatch": "orca task_a527c6461950, opencode2, worktree .../redesign-s4-highs (ff to 50d318dd). ctx_72ffd7179d13 stopped (Flint 40B endpoint down; worktree lacked opencode.json); ctx_b77f91e238a4 running.",
+          "note": "highs 1.15.4: wasm 3,531,401 B + 168,432 B loader, 36 ms load. Formulation A (column-to-z links): 20ev/60sw optimal 18-47 s; 40ev/100sw no proof in 120 s. Formulation B (x[s,e] assignment vars): 20ev optimal 1.0 s, 40ev optimal 3.0 s (lead rerun, structured synthetic values). D4 must use B. Table in 01-REDESIGN-PLAN.md F4. Not yet measured inside the extension worker. spikes/ not committed.",
+          "verifiedBy": [
+            "lead reran formulation A with structured values: 20ev optimal 30-47 s, 40ev time limit (confirms OpenCode order of magnitude)",
+            "lead ran formulation B: 20ev 1.0 s, 40ev 3.0 s, both Optimal; 20ev objective 691 equals A optimum"
+          ]
         },
         {
           "id": "P1.engine",
@@ -147,7 +152,6 @@
   ],
   "resumeOrder": [
     "P1.reorg",
-    "S4",
     "P0",
     "D1",
     "P1.engine",

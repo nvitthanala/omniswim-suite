@@ -412,9 +412,32 @@ headcount. That is a set-packing problem:
 - Generate columns: for each event, the subsets of its top candidates (about
   6 to 8), with their point value under the chosen objective. Relays get
   candidate squads the same way.
-- Solve a mixed-integer program over the columns. Candidate solver: HiGHS
-  compiled to WebAssembly, run in the optimizer worker.
+- Solve a mixed-integer program over the columns. Solver: HiGHS compiled to
+  WebAssembly (npm `highs` 1.15.4), run in the optimizer worker. Spike S4
+  showed it is fast enough **only with assignment variables** (see below).
 - Fallback: the existing local search, seeded from the MIP's best solution.
+
+**S4 result: the formulation decides the speed (2026-10-25).** Same
+synthetic problem in both rows (8 candidates per event, subsets of 1 to 4,
+entry cap 3, 2 per session, scoring team 18). Times are one Node process
+on the user's machine, single-threaded.
+
+| Formulation | 20 events, 60 swimmers | 40 events, 100 swimmers |
+| --- | --- | --- |
+| A: link each column to each of its swimmers' `z` (one row per column-swimmer pair; ~10,400 / ~20,700 rows) | optimal in 18-47 s | no proof in 120 s; incumbent 630 |
+| B: one binary `x[s,e]` per candidate pair; `sum(columns in e holding s) = x[s,e]`; `x[s,e] <= z[s]`; caps on `x` (478 / 863 rows) | **optimal in 1.0 s** (obj 691, equal to A's optimum) | **optimal in 3.0 s** (obj 773) |
+
+- D4 uses formulation B. A must not be used.
+- The wasm is 3,531,401 bytes plus a 168,432-byte loader; it loads in about
+  36 ms. A solve blocks its thread, so it runs only in the optimizer worker.
+- With random column values (OpenCode's run), A took 18 s for 20 events and
+  reached only a 1% gap after about 451 s for 40 events. B was not timed on
+  random values.
+- D4 still sets a time limit and reports the gap. A browser solve may be
+  slower than Node.
+- Scripts: OpenCode's `spikes/s4-highs/` (worktree `redesign-s4-highs`, not
+  committed) and the lead's variant scripts in the session scratchpad. Both
+  are throwaway.
 
 The architect owns this formulation (design item D4). It must prove the
 column bound does not drop a better lineup, or report the gap. "Too deep"
@@ -508,6 +531,8 @@ P3, P4 and P5 can overlap once P2 is green, in disjoint scopes: rules in
 - **S3** Worker strategy for a content script: offscreen document versus blob
   worker. (P1)
 - **S4** HiGHS WebAssembly bundle size and solve time inside an MV3 extension. (P1)
+  **Done:** 3.5 MB wasm; 1-3 s to optimal with formulation B (F4). Still to
+  measure: the same solve inside the extension's worker (P1.skeleton harness).
 
 ---
 
