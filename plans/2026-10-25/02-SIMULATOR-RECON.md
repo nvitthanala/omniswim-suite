@@ -70,6 +70,15 @@ Start URL from the user: `https://www.swimcloud.com/meetsimulator/?event=1|50|Y|
 18. Does the simulator have any notion of event order, days or sessions? If
     not, where on the page does a "Meet schedule" panel fit (R16)?
 
+### Page security and delivery (from the D3 spec)
+19. Record the `Content-Security-Policy` response header on
+    `/meetsimulator/`. It decides whether the docked dashboard iframe can load
+    (`D3-STORAGE-AND-BUILD.md` section 3).
+20. Does `swimcloud.com` (no `www`) redirect to `www`? It decides the
+    manifest `matches` patterns.
+21. Does the page load its data inside a page worker or a service worker?
+    If so, page-thread hooks see nothing.
+
 ### Look
 15. Record the CSS class names of tables, dropdowns, buttons and tabs, the
     font stack, and the main colors (light only, unless SwimCloud has dark).

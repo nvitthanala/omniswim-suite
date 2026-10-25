@@ -46,9 +46,10 @@
         },
         {
           "id": "D1",
-          "status": "pending",
+          "status": "designed-pre-recon",
           "owner": "architect",
-          "what": "build tooling and extension layout"
+          "what": "build tooling and extension layout",
+          "note": "esbuild per entry; manifest skeleton; recon decision table in D3 spec 2.7"
         },
         {
           "id": "D2",
@@ -59,15 +60,18 @@
         },
         {
           "id": "D3",
-          "status": "in-progress",
+          "status": "verified-committed",
           "owner": "architect",
           "what": "IndexedDB schema v1 + migrations",
-          "dispatch": "claude architect (background) with D1 pre-recon part and S3, output -> plans/2026-10-25/D3-STORAGE-AND-BUILD.md"
+          "dispatch": "claude architect (background) with D1 pre-recon part and S3, output -> plans/2026-10-25/D3-STORAGE-AND-BUILD.md",
+          "doc": "plans/2026-10-25/D3-STORAGE-AND-BUILD.md",
+          "note": "Spec by architect; lead wrote it in verbatim in substance and folded its 9 plan changes into 01-REDESIGN-PLAN.md 2/3.2/3.3/3.4/3.5 and recon Q19-21. Not code; nothing to test yet."
         },
         {
           "id": "S3",
-          "status": "in-progress",
-          "what": "content-script worker strategy"
+          "status": "designed",
+          "what": "content-script worker strategy",
+          "note": "Primary: worker in extension page (tab or docked iframe). Settled by harness tests/extension-harness/s3-workers.spec.ts in P1.skeleton."
         },
         {
           "id": "S4",

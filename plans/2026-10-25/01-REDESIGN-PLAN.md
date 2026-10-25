@@ -40,8 +40,11 @@ invariants. What gets left behind is the infrastructure.
 
 The user chose "either" for the dashboard host (decision R2). The plan builds
 one React dashboard app that mounts in both hosts. The full-tab page is the
-easy host and comes first. The docked panel reuses the same components inside
-a Shadow DOM.
+easy host and comes first. The docked panel is the same page loaded as an
+extension-page iframe inside a shadow-root container on the simulator page
+(D3 spec, decision 0.3). It must not be React mounted straight into the
+page: a content script uses SwimCloud's origin, so it would read and write
+SwimCloud's IndexedDB instead of the extension's.
 
 **One engine.** All scoring runs in TypeScript in the browser. The Python
 scorer and its parity rules stay with the legacy app (section 9). This
@@ -78,15 +81,14 @@ map.
 | Part | World / context | Job |
 | --- | --- | --- |
 | `sim-bridge` | Content script, `MAIN` world, `document_start` | Observes the simulator's own data (network responses or page state) without new requests. Posts normalized snapshots to the isolated script. Exact hook depends on recon (P0). |
-| `sim-overlay` | Content script, `ISOLATED` world | Owns all UI on the simulator page. Runs the engine. Talks to the service worker and storage. |
-| `service-worker` | Background | Storage broker, fetch queue (paced, cached, on click only), alarms, message routing. |
-| `dashboard.html` | Extension page | Full-tab dashboard. Hosts the AutoBuilder worker. |
-| `optimizer.worker` | Dedicated worker in the dashboard page; offscreen document when the dashboard is closed | Runs the AutoBuilder off the main thread. A content script cannot start a worker from a `chrome-extension://` URL on a SwimCloud page, so heavy work goes through the offscreen document. Spike S3 confirms this. |
+| `sim-overlay` | Content script, `ISOLATED` world | Light-DOM controls and badges on the simulator page, engine re-scoring, the shadow-root host for the docked iframe, and any on-click SwimCloud fetches (same-origin, paced). Never touches IndexedDB: storage goes through the service worker. |
+| `service-worker` | Background | Storage broker (validates every write), change bus, message routing. Never requests SwimCloud. |
+| `dashboard.html` | Extension page, two hosts: a full tab, or an iframe docked in the simulator page | The dashboard. Owns IndexedDB directly. Hosts the AutoBuilder worker. |
+| `optimizer.worker` | Dedicated worker started by the dashboard page (tab or docked iframe) | Runs the AutoBuilder (HiGHS WebAssembly) off the main thread. A content script cannot start a worker from a `chrome-extension://` URL; the docked iframe can. Offscreen document is a fallback only. |
 
-Build: Vite multi-entry (dashboard is React; content scripts are IIFE
-bundles). The crawler's esbuild pipeline and its build-freshness test are the
-precedent. The architect picks Vite plus a plain manifest, or esbuild, in
-design item D1.
+Build: esbuild, one build per entry, extending the crawler's pipeline and its
+build-freshness test. `dist/` is not committed. Full detail, manifest, tests
+and the recon decision rules: `D3-STORAGE-AND-BUILD.md`.
 
 ### 3.3 Data flow
 
@@ -99,7 +101,7 @@ sim-bridge ──► SimSnapshot (teams, swimmers, swims, settings, SwimCloud's 
    ▼
 adapter (packages/swimcloud/browser) ──► MeetModel (engine types)
    │                                        ▲
-   │      on-click history fetch ───────────┘ (service worker, paced, cached)
+   │      on-click history fetch ───────────┘ (content script, paced; cached via the SW)
    ▼
 engine: rules + planner + scoring + AutoBuilder ──► Results
    │
@@ -118,16 +120,19 @@ test for the adapter and an early warning when SwimCloud changes its page.
 | Store | Key | Holds |
 | --- | --- | --- |
 | `swimmerHistory` | `swimcloudSwimmerId` | Swims fetched on click, `fetchedAt`, source URL. Cache, never edited. |
-| `rosters` | `teamId:season:gender` | Season roster membership. |
+| `rosters` | `[teamId, seasonId, gender]` | Season roster membership. |
+| `meets` | `meetKey` | A simulated meet: teams, gender, chosen rule and session presets. |
 | `rulePresets` | `presetId` | Scoring rules, entry limits, scorer caps, diver weight. Each value carries `provenance`. |
 | `sessionPresets` | `presetId` | Meet planner: event → day and session. |
-| `tags` | `teamId:swimmerId:meetKey` | Scorer / non-scorer / exhibition tags. |
+| `tags` | `[meetKey, teamId, swimmerId]` | Scorer / non-scorer / exhibition tags. No record means "auto". |
 | `lineups` | `lineupId` | Saved lineups and snapshots, with the rules and planner preset they were built under. |
 | `settings` | singleton | Theme, cut threshold, fetch posture, flyover value. |
 
 A schema version and migration test ship from day one, because the user will
 share the extension later (section 8). Export and import as JSON cover backup
-and sharing.
+and sharing. The full schema, write rules, migrations and export format are
+in `D3-STORAGE-AND-BUILD.md` section 5. Built-in presets (NSISC, generic) live
+in code and are never copied into storage.
 
 ### 3.5 Look and feel
 
@@ -137,9 +142,11 @@ The user wants it to look like SwimCloud, not like OmniSwim (plan item 5.4).
   SwimCloud's own CSS classes** where a matching control exists (dropdowns,
   tables, buttons). They then inherit SwimCloud's styling and future
   restyles. Our own additions use a namespaced `osx-` prefix.
-- Complex widgets (AutoBuilder, docked dashboard, charts) render inside a
-  **Shadow DOM** with a token set sampled from SwimCloud's palette and type
-  scale. No OmniSwim CSS reaches the host page. `packages/ui/src/index.css`
+- Complex widgets (AutoBuilder, dashboard, charts) render in the docked
+  extension-page iframe, which sits in a **Shadow DOM** container with a token
+  set sampled from SwimCloud's palette and type scale. If SwimCloud's CSP
+  blocks the iframe, the fallback host is Chrome's side panel (beside the page,
+  not in it; ask the user first). No OmniSwim CSS reaches the host page. `packages/ui/src/index.css`
   sets `:root` tokens and must never be injected (scout finding).
 - Dark mode and a custom accent are tokens on the shadow root and the
   dashboard page. Light is the default, to match SwimCloud.
