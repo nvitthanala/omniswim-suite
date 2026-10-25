@@ -554,7 +554,8 @@ Import rules:
 3. Validate every record with the broker's zod schemas. **Never fill a missing
    field with a default.** Reject the whole file and list the JSON paths.
 4. **Provenance is never upgraded.** A `published` value whose source ID is not
-   in the bundled cutlines `manifest.json` is rejected. Records get
+   in a bundled `data/**/sources/manifest.json` is rejected (any source
+   manifest, not only the cutlines one; D2 finding F14). Records get
    `origin: {kind:'imported', …}`, `rev: 1`, `updatedAt: now`.
 5. `keep-both` gives a conflicting ID a new UUID and **remaps every reference
    in the same file** (`meets.rulePreset`, `meets.sessionPreset`,

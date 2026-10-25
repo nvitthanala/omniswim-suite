@@ -319,8 +319,10 @@ many scoring-team swimmers in one event as the entry limits allow. So the
 NSISC preset is:
 
 - per-event scorer cap: `'unlimited'`
-- scoring-team size: 18, with each diver counting 1/3 (R9)
-- per-swimmer total entries: 8 (R4)
+- scoring-team size: **pending**. The code says 18, but no user statement or
+  source gives 18 (D2 finding F13, question Q-D1). Each diver counts 1/3 (R9).
+- per-swimmer total entries: 8 (R4). The legacy code says 7
+  (`scoringDefaults.ts:58`, D2 finding F1); P3 changes it on purpose.
 - point table: read from SwimCloud's NSISC table in recon (P0, question 17)
   and compared with the current preset (individual top 16; relays as that
   table doubled). Any difference is a bug in the preset. Fix it in P3 with a
@@ -343,9 +345,11 @@ New. Nothing in core models days or sessions today (scout finding).
 - **Event format**, per event, per meet: `prelims-finals` or `timed-final`
   (R17). A prelims-finals event has two rounds in two sessions: prelims in
   the morning and finals later the same day by default. A timed-final event
-  has one round in one session. Distance events (1000, 1650, often the 500
-  and relays) default to timed final where the preset says so; every format
-  is editable.
+  has one round in one session. Each event's format comes from the session
+  preset; every format is editable. Note: Table C lists the 1000 and 1650
+  under both prelims and finals, although R17 says distance events are
+  usually timed finals. The `nsisc-table-c` preset follows Table C as written
+  until the user answers Q-D3 (`D2-ENGINE-API.md` section 4).
 - **Session presets**: saved and reusable. The default is the NSISC order from
   the user's Table C, marked `user-stated`. Every meet's order is editable
   (R16): add, remove or move an event, change its day, slot or format.
@@ -371,8 +375,9 @@ Acceptance:
 - With the NSISC preset, a swimmer entered in the 200 IM, the 50 free and the
   200 medley relay finals on day 2 breaks the default preference; dropping one
   clears it.
-- Changing the 1000 free to prelims-finals moves its finals into the day 2
-  later session and the outlook updates.
+- Changing the 1000 free from prelims-finals to timed final removes its
+  morning race on day 2, and the outlook updates. Changing it back restores
+  both races.
 - An order edited on the simulator page shows in the dashboard after reload.
 
 ### F4. AutoBuilder (plan 4)
@@ -489,6 +494,8 @@ P3, P4 and P5 can overlap once P2 is green, in disjoint scopes: rules in
 - **D1** Build tooling and extension layout (Vite or esbuild; worlds; offscreen).
 - **D2** `packages/engine` public API: `MeetModel`, `RulePreset`,
   `SessionPreset`, `Lineup`, `Results`, `'unlimited'`, provenance type.
+  **Designed:** `D2-ENGINE-API.md` (extraction steps A/B/C, public API,
+  NSISC as data, acceptance E1–E7).
 - **D3** IndexedDB schema v1 and the migration pattern.
 - **D4** AutoBuilder formulation, column bound, solver choice, modes.
 - **D5** Prediction model inputs and output (P8).
@@ -635,6 +642,22 @@ Still open:
   fetches (F1 table): approve or not, once recon shows what the simulator
   already carries. Recon writes the request counts into
   `02-SIMULATOR-RECON.md` so the user can decide.
+
+Raised by the D2 spec (`D2-ENGINE-API.md` section 6). None blocks the
+engine extraction; each value ships as `pending` until answered.
+- **Q-D1** NSISC values with no source: per-place points (recon Q17),
+  scoring-team size (18 exists only in code), scoring relays per team per
+  relay event (2 exists only in code), A-final size, half-rate relay swimmers,
+  whether "no per-event scorer limit" covers diving, and whether scorers come
+  from A/B-final rules or only from the coach's tags.
+- **Q-D2** Table D distance rows (400→500, 800→1000, 1500→1650) give
+  impossible times: a 4:00.00 400 m LCM gives a 3:28.37 500 yd. Confirm or
+  correct them. Until then those rows are pending.
+- **Q-D3** Table C distance events: are the 1000 and 1650 timed finals (slow
+  heats in the morning, fastest heat in the evening) or true prelims and
+  finals? Are relays listed only under "(Finals)" timed finals?
+- **Q-D4** Table D rounding: truncate or round half up?
+- **Q-D5** Does diving count toward the races-per-session preference?
 
 ---
 

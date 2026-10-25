@@ -66,7 +66,11 @@ Start URL from the user: `https://www.swimcloud.com/meetsimulator/?event=1|50|Y|
 17. Read SwimCloud's NSISC scoring table: individual points per place,
     relay points per place, number of places. Compare with the code's NSISC
     preset (`packages/core/src/lib/scoringDefaults.ts`). Record any
-    difference; P3 fixes it with a test.
+    difference; P3 fixes it with a test. Also record: how many relays per
+    team score in a relay event (the code's `maxRelaysScoringPerTeam: 2` has
+    no source, D2 finding F8), diving points per place, and the A-final size.
+    Archive the capture under `data/` with a manifest entry before any value
+    becomes `published` (D2 section 3.2).
 18. Does the simulator have any notion of event order, days or sessions? If
     not, where on the page does a "Meet schedule" panel fit (R16)?
 

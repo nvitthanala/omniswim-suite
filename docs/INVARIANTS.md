@@ -74,13 +74,15 @@ against stale code and wrote 39 `UI …` test workspaces into the real
 `data/omniswim.db`. Reuse now needs `PLAYWRIGHT_REUSE_SERVER=1`; otherwise
 a busy port fails the run. Stop the old server or set a free `PORT`.
 
-## 5. `calculatePoints` lives in `utils.ts`, not `scoringEngine.ts`
+## 5. `calculatePoints` lives in `calculatePoints.ts`, not `scoringEngine.ts`
 
 The single most important function in the product — the one that turns a swim
-result into competition points — is exported from
-`packages/core/src/lib/utils.ts`, not from the file named for scoring.
-`scoringEngine.ts` imports it. Searching only `scoringEngine.ts` for "where do
-points get computed" will not find it.
+result into competition points — is defined in
+`packages/core/src/lib/calculatePoints.ts`, not in the file named for scoring.
+`utils.ts` re-exports it, and `scoringEngine.ts` imports it from `./utils`.
+Searching only `scoringEngine.ts` for "where do points get computed" will not
+find it. (Updated 2026-10-25; the D2 extraction moves this file to
+`packages/engine/src/lib/` with a shim at the old path.)
 
 ## 6. The alias resolver is opt-in
 

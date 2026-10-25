@@ -42,7 +42,7 @@
           "id": "P1.reorg",
           "status": "in-progress",
           "doc": "plans/2026-10-25/03-REPO-REORG.md",
-          "dispatch": "orca run_e227c1d43d7e task_d2a54ddb3b3e, codex, worktree C:/Users/nihar/orca/workspaces/omniswim-suite/redesign-reorg (branch nvitthanala/redesign-reorg, ff to 50d318dd). Attempts: ctx_6b84497f0e61 failed (worktree based on main, plan files missing); ctx_93e03ee451f3 failed (Codex update menu); ctx_a73688b491b3 running."
+          "dispatch": "orca run_e227c1d43d7e task_d2a54ddb3b3e, codex, worktree C:/Users/nihar/orca/workspaces/omniswim-suite/redesign-reorg (branch nvitthanala/redesign-reorg, ff to 50d318dd). Attempts: ctx_6b84497f0e61 failed (worktree based on main, plan files missing); ctx_93e03ee451f3 failed (Codex update menu); ctx_a73688b491b3 running. Codex baseline in its worktree: vitest 4892 passed / 65 skipped (311+4 files; extra skips need gitignored local data); run-tests.mjs did not exit there. Dispatch marked failed (turn unobserved) but the terminal is alive; follow-up sent to term_b1cfdf6c with the worktree baseline as target and the F15 source-scan fix."
         },
         {
           "id": "D1",
@@ -53,10 +53,12 @@
         },
         {
           "id": "D2",
-          "status": "in-progress",
+          "status": "verified-committed",
           "owner": "architect",
           "what": "packages/engine public API",
-          "dispatch": "claude architect (background), output -> plans/2026-10-25/D2-ENGINE-API.md"
+          "dispatch": "claude architect (background), output -> plans/2026-10-25/D2-ENGINE-API.md",
+          "doc": "plans/2026-10-25/D2-ENGINE-API.md",
+          "note": "Spec by architect, written in by the lead. Findings folded: F13 scoring-team size now pending (plan F2), F7/Q-D3 Table C distance format (plan F3 acceptance), F14 D3 import rule 4, F8 recon Q17, F12 docs/INVARIANTS.md #5, F15 sent to the reorg worker. Not code; nothing to test yet."
         },
         {
           "id": "D3",
@@ -82,7 +84,8 @@
         {
           "id": "P1.engine",
           "status": "pending",
-          "owner": "executor"
+          "owner": "executor",
+          "note": "Spec: D2-ENGINE-API.md sections 2 (steps 0/A/B/C) and 2.5 (E1-E7). Base on the reorg commit."
         },
         {
           "id": "P1.skeleton",
@@ -135,14 +138,18 @@
   "openQuestions": [
     "Q3 New South ISC sources (not blocking)",
     "Q4 simulator plan level (recon)",
-    "Q6 approve extra fetches after recon"
+    "Q6 approve extra fetches after recon",
+    "Q-D1 NSISC values with no source (D2 section 6)",
+    "Q-D2 Table D distance rows give impossible times",
+    "Q-D3 Table C distance events: timed finals or prelims-finals",
+    "Q-D4 Table D rounding",
+    "Q-D5 diving and load preference"
   ],
   "resumeOrder": [
+    "P1.reorg",
+    "S4",
     "P0",
     "D1",
-    "D2",
-    "D3",
-    "P1.reorg",
     "P1.engine",
     "P1.skeleton"
   ],
