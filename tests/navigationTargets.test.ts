@@ -30,8 +30,8 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 const ROOT = path.resolve(__dirname, '..');
-const APP_TSX = path.join(ROOT, 'apps', 'shell', 'src', 'App.tsx');
-const SEARCH_DIRS = [path.join(ROOT, 'apps'), path.join(ROOT, 'packages')];
+const APP_TSX = path.join(ROOT, 'legacy', 'apps', 'shell', 'src', 'App.tsx');
+const SEARCH_DIRS = [path.join(ROOT, 'apps'), path.join(ROOT, 'packages'), path.join(ROOT, 'legacy', 'apps'), path.join(ROOT, 'legacy', 'packages')];
 
 /** Every `<Route path="…">` the shell declares, catch-all included. */
 function declaredRoutes(): string[] {

@@ -651,6 +651,8 @@ describe('buildCategorizedScoringInputs: which catalog events fill the cap', () 
     };
     walk(join(repoRoot, 'packages'));
     walk(join(repoRoot, 'apps'));
+    walk(join(repoRoot, 'legacy/packages'));
+    walk(join(repoRoot, 'legacy/apps'));
     expect(offenders).toStrictEqual([]);
   });
 });

@@ -40,24 +40,24 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
-const scriptsDir = path.join(repoRoot, 'scripts');
+const scriptsDirs = [path.join(repoRoot, 'scripts'), path.join(repoRoot, 'legacy', 'scripts')];
 
 function scriptTestFiles(): string[] {
-  return readdirSync(scriptsDir)
-    .filter(f => f.startsWith('test_') && f.endsWith('.mjs'))
+  return scriptsDirs.flatMap(dir => readdirSync(dir)
+    .filter(f => f.startsWith('test_') && f.endsWith('.mjs')))
     .sort();
 }
 
 function registeredNames(): Set<string> {
-  const runner = readFileSync(path.join(scriptsDir, 'run-tests.mjs'), 'utf-8');
-  return new Set(runner.match(/test_[a-zA-Z0-9_]+\.mjs/g) ?? []);
+  const runners = scriptsDirs.map((dir, i) => readFileSync(path.join(dir, i === 0 ? 'run-tests.mjs' : 'run-tests.mjs'), 'utf-8'));
+  return new Set(runners.flatMap(runner => runner.match(/test_[a-zA-Z0-9_]+\.mjs/g) ?? []));
 }
 
 describe('script suite registration', () => {
-  it('runs every test_*.mjs in scripts/, or declares why it cannot', () => {
+  it('runs every test_*.mjs in the active or legacy scripts folder, or declares why it cannot', () => {
     const registered = registeredNames();
     const unaccounted = scriptTestFiles().filter(f => !registered.has(f));
-    expect(unaccounted, 'add to scripts/run-tests.mjs TESTS, or to its EXCLUDED map with a reason').toEqual([]);
+    expect(unaccounted, 'add the script to its runner TESTS list, or to that runner EXCLUDED map').toEqual([]);
   });
 
   it('does not register a script that is not on disk', () => {

@@ -66,10 +66,10 @@ jobs:
         run: npm audit --omit=dev
         continue-on-error: true
 
-      # Exact versions live in backend/requirements.txt (pdfplumber is pinned), so a
+      # Exact versions live in legacy/backend/requirements.txt (pdfplumber is pinned), so a
       # new upstream release cannot change parser output between two CI runs.
       - name: Install Python PDF deps
-        run: python -m pip install -r backend/requirements.txt
+        run: python -m pip install -r legacy/backend/requirements.txt
 
       # pdftotext, for the tests that re-read the archived qualifying-standard PDFs.
       # ubuntu ships poppler, which lacks the xpdf-only `-table` flag. The altitude tests
@@ -87,11 +87,14 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Legacy lint
+        run: npm run lint:legacy
+
       # The Python parsers feed every PDF meet score. Lint tools install in their
       # own step so they never reach the runtime requirements (requirements.txt is
-      # installed above). Config lives in backend/pyproject.toml.
+      # installed above). Config lives in legacy/backend/pyproject.toml.
       - name: Python backend lint and tests
-        working-directory: backend
+        working-directory: legacy/backend
         run: |
           python -m pip install -r requirements-dev.txt
           python -m ruff check .
@@ -103,6 +106,11 @@ jobs:
       # prefers PORT over OMNI_PORT.
       - name: Test
         run: npm test
+        env:
+          PG_TEST_URL: postgres://postgres:postgres@localhost:5432/omni_test
+
+      - name: Legacy test
+        run: npm run test:legacy
         env:
           PG_TEST_URL: postgres://postgres:postgres@localhost:5432/omni_test
 

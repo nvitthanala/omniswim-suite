@@ -36,7 +36,7 @@ export default defineConfig({
   expect: { timeout: 15_000 },
   use: { baseURL: `http://127.0.0.1:${PORT}`, actionTimeout: 15_000 },
   webServer: {
-    command: 'npm run dev',
+    command: 'npm run dev --workspace legacy/apps/shell',
     cwd: root,
     url: `http://127.0.0.1:${PORT}`,
     reuseExistingServer: false,
