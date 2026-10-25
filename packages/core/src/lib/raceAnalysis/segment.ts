@@ -1,4 +1,5 @@
 import { poolLengthForCourse, raceLengthCount } from './course';
+import { itemAt } from '../indexedAccess';
 import type { RaceConfig, RaceTag, RaceTagKind, Stroke } from './types';
 
 export interface LengthSegment {
@@ -28,7 +29,7 @@ export function buildRaceSegments(config: RaceConfig, tags: readonly RaceTag[]):
   const canResolveLengths =
     !needsLengthResolution ||
     tags.every(
-      (tag, index) => Number.isFinite(tag.time) && (index === 0 || tag.time >= tags[index - 1].time),
+      (tag, index) => Number.isFinite(tag.time) && (index === 0 || tag.time >= itemAt(tags, index - 1).time),
     );
   const allTags: readonly RaceTag[] =
     !needsLengthResolution || !canResolveLengths

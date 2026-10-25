@@ -55,6 +55,7 @@ import type {
   SwimCloudRelayCreditJoin,
   SwimCloudRelayLegCredit,
 } from '@omniswim/swimcloud/relayLegCredits';
+import { individualEventLabelOf } from '@omniswim/swimcloud/entities';
 
 export interface SwimCloudPersonalBestsToHistoricalSwimsOptions {
   readonly team: string;
@@ -423,7 +424,11 @@ export function swimCloudTeamMeetSwimsToHistoricalSwims(
       name: athleteName,
       team: options.team,
       gender: options.gender,
-      event: eventLabel,
+      // The swims list prints `1650 Y Free`; no event reader understands the course
+      // letter. The canonical `1650 Freestyle` is written when the course is known,
+      // and the course travels in `timeType` below. A label that does not parse
+      // cleanly stays as printed (and stays unmatched, which is visible).
+      event: individualEventLabelOf(swim.event) ?? eventLabel,
       time: swim.result.finalTime,
       ...(swim.event.course === 'unknown' ? {} : { timeType: swim.event.course }),
       ...(meetLabel === undefined ? {} : { meetLabel }),

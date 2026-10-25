@@ -333,10 +333,11 @@ decoding (`server.ts:284` sets a global 50 MB JSON limit).
   PDF fixtures (public meet results only). CI runs both.
 
 **T3 Unlisted test scripts.** Size S. Route finisher.
-- Evidence: `scripts/test_acc_post.mjs`, `test_post.mjs` and
+- Evidence: `scripts/probes/test_acc_post.mjs`, `test_post.mjs` and
   `test_conference_pdfs.mjs` are not in `scripts/run-tests.mjs` `TESTS`.
-  The first two read PDFs from the working directory that are not in the
-  repo, so they are manual probes.
+  (They sat directly in `scripts/` when this plan was written. They now
+  live in `scripts/probes/`.) The first two read PDFs from the working
+  directory that are not in the repo, so they are manual probes.
 - Change: delete the two probes or move them to `scripts/probes/`. List
   `test_conference_pdfs.mjs` if it can run. Make the runner fail when a
   `scripts/test_*.mjs` is neither listed nor excluded.
@@ -543,6 +544,9 @@ repo-wide. Add `noUncheckedIndexedAccess` to `packages/swimcloud` and
 NAIA have 2026-27. When the NCAA publishes the D1 2026-27 standards PDF,
 archive it with `{url, sha256, retrievedAt}` and extract it with
 `scripts/extract-cutlines.py`. Until then D1 2026-27 stays absent.
+*Done 2026-10-14.* The NCAA published it (`ncaaorg` S3 object, last modified
+2026-10-12, sheet stamp "UPDATED 6/15/2026"). Manifest id `ncaa-d1-2026-27`,
+sha256 `259c76ba...`. Extracted into `data/cutlines/2026-2027.json`.
 
 **D2 NSISC team list (needs U12).** Parse the user's `/teams/` capture with
 `conferencePage.ts`.
@@ -573,6 +577,9 @@ swim fill a relay leg?
 
 **D10 Conversion factors.** NCAA SCM factors are sourced; LCM uses CTS and
 is labelled an estimate. Recheck when the 2026-27 NCAA PDFs are archived.
+*Done 2026-10-14.* All four SCM factors match the archived D1 2026-27 (p. 3)
+and D2 2026-27 (p. 2) sheets. D3 and NAIA print no factor. LCM has no archived
+source and stays an estimate.
 
 ## 10. Docs and repo hygiene
 

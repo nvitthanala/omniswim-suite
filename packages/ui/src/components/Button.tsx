@@ -49,8 +49,16 @@ export function Button({
     className
   );
 
+  // An icon-only button has no text to name it. Reuse the tooltip text as the
+  // accessible name so the two cannot drift. An explicit `aria-label` or
+  // `aria-labelledby` in `props` wins, because `{...props}` comes last.
+  const hasContent = children !== undefined && children !== null && children !== false && children !== '';
+  const hasName = props['aria-label'] !== undefined || props['aria-labelledby'] !== undefined;
+  const derivedLabel =
+    !hasContent && !hasName && typeof props.title === 'string' && props.title !== '' ? props.title : undefined;
+
   return (
-    <button type={type} className={classes} {...props}>
+    <button type={type} className={classes} aria-label={derivedLabel} {...props}>
       {leadingIcon}
       {children}
       {trailingIcon}

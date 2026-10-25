@@ -26,6 +26,7 @@ import {
   swimEditUndoState,
   useSwimEditUndo,
 } from '../packages/manager/src/components/useSwimEditUndo';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -33,12 +34,12 @@ const plan = (id: string, event = '50 Freestyle') =>
   ({ id, team: 'T', name: id, event, time: '22.00', gender: Gender.MEN, active: true, source: 'manual' }) as never;
 
 function workspace(id: string, plans: string[], activeIds?: string[]): Workspace {
-  return {
+  return workspaceFixture({
     id,
     name: id,
     meetEntryPlans: plans.map(p => plan(p)),
     ...(activeIds ? { activeEntryIds: activeIds } : {}),
-  } as unknown as Workspace;
+  });
 }
 
 describe('swim edit undo record (pure)', () => {

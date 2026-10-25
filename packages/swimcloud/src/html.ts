@@ -39,8 +39,10 @@
  * parser at the integration boundary — not to bolt more regexes on here.
  */
 
+import { regexGroup } from './indexed';
+
 /* -------------------------------------------------------------------------- */
-/* Entities                                                                    */
+/* Entities                                                                  */
 /* -------------------------------------------------------------------------- */
 
 const NAMED_ENTITIES: Readonly<Record<string, string>> = {
@@ -131,7 +133,7 @@ export function collapseWhitespace(text: string): string {
   // it in JavaScript, so it is redundant -- but it is deliberate and documented
   // above, and this parser's whole job is HTML whitespace. Kept rather than
   // silently narrowed to satisfy a linter.
-  // eslint-disable-next-line no-irregular-whitespace
+  // eslint-disable-next-line no-irregular-whitespace -- the literal U+00A0 in the class is deliberate (see above)
   return text.replace(/[\s ]+/g, ' ').trim();
 }
 
@@ -276,8 +278,8 @@ export function findHeadings(html: string): HtmlHeading[] {
   HEADING.lastIndex = 0;
   for (let match = HEADING.exec(cleaned); match !== null; match = HEADING.exec(cleaned)) {
     headings.push({
-      level: Number.parseInt(match[1], 10),
-      text: htmlToText(match[2]),
+      level: Number.parseInt(regexGroup(match, 1), 10),
+      text: htmlToText(regexGroup(match, 2)),
       start: match.index,
     });
   }
@@ -323,7 +325,8 @@ function removeNestedTablesFromTableBody(tableHtml: string): string {
   // When the caller passed a full `<table>…</table>`, the first span is that
   // table; its inner text is the body to work on. Re-scanning that body finds
   // only genuinely nested tables, with offsets already relative to it.
-  const body = spans.length > 0 ? spans[0].inner : tableHtml;
+  const firstTable = spans[0];
+  const body = firstTable === undefined ? tableHtml : firstTable.inner;
   return spliceOutSpans(body, findElementSpans(body, 'table'));
 }
 
@@ -337,16 +340,16 @@ function splitRepeatedElements(html: string, tagNames: readonly string[]): strin
   const opener = new RegExp(`<(${alternation})\\b[^>]*>`, 'gi');
   const starts: Array<{ contentStart: number; tag: string }> = [];
   for (let match = opener.exec(html); match !== null; match = opener.exec(html)) {
-    starts.push({ contentStart: match.index + match[0].length, tag: match[1].toLowerCase() });
+    starts.push({ contentStart: match.index + match[0].length, tag: regexGroup(match, 1).toLowerCase() });
   }
   if (starts.length === 0) {
     return [];
   }
 
   const results: string[] = [];
-  for (let index = 0; index < starts.length; index += 1) {
-    const current = starts[index];
-    const limit = index + 1 < starts.length ? starts[index + 1].contentStart : html.length;
+  for (const [index, current] of starts.entries()) {
+    const next = starts[index + 1];
+    const limit = next === undefined ? html.length : next.contentStart;
     const slice = html.slice(current.contentStart, limit);
     const closer = new RegExp(`</${current.tag}\\s*>`, 'i');
     const closeAt = closer.exec(slice);

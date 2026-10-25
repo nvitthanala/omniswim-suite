@@ -17,7 +17,7 @@
  *    are badges, abbreviations (M / W, FPS), the app nav and chart tooltips.
  */
 import { readdirSync, readFileSync, statSync } from 'node:fs';
-import { join, relative } from 'node:path';
+import { join, relative, sep } from 'node:path';
 import { describe, expect, it } from 'vitest';
 
 const ROOT = join(import.meta.dirname, '..');
@@ -101,5 +101,53 @@ describe('forced upper case ratchet', () => {
 
   it('stays well below where Phase 6 started', () => {
     expect(UPPERCASE_BASELINE).toBeLessThan(UPPERCASE_START_OF_PHASE_6);
+  });
+});
+
+/**
+ * 3. Fixed-size text (`text-[10px]`, `text-[0.65rem]`, ...). An arbitrary
+ *    size in px does not follow the Text size setting, and a hand-picked rem
+ *    value skips the fluid clamp that the `text-ui-*` tokens carry. Use
+ *    `text-ui-micro`, `text-ui-caption`, `text-ui-label` or `text-ui-body`
+ *    (see packages/ui/src/index.css). The baseline is zero. An exception goes
+ *    in FIXED_TEXT_ALLOWLIST with a reason. It must stay short.
+ */
+const FIXED_TEXT_DIRS = [...UPPERCASE_DIRS];
+
+/** `text-[10px]`, `text-[0.65rem]`, `text-[11.5px]`. A `text-[var(--x)]` colour does not match. */
+const FIXED_TEXT_SIZE = /\btext-\[\s*\d*\.?\d+\s*(?:px|rem|em|pt)\s*\]/g;
+
+/** `path` (from the repo root, forward slashes) -> reason it may keep a fixed size. Empty on purpose. */
+const FIXED_TEXT_ALLOWLIST: Record<string, string> = {};
+
+export function findFixedTextSizes(files: string[]): Record<string, string[]> {
+  const found: Record<string, string[]> = {};
+  for (const file of files) {
+    const rel = relative(ROOT, file).split(sep).join('/');
+    if (rel in FIXED_TEXT_ALLOWLIST) continue;
+    for (const line of readFileSync(file, 'utf8').split(/\r?\n/)) {
+      const trimmed = line.trim();
+      if (trimmed.startsWith('//') || trimmed.startsWith('*') || trimmed.startsWith('/*')) continue;
+      const matches = line.match(FIXED_TEXT_SIZE);
+      if (matches) (found[rel] ??= []).push(...matches);
+    }
+  }
+  return found;
+}
+
+describe('fixed-size text ratchet', () => {
+  it('finds no text-[Npx] or text-[Nrem] class in *.tsx', () => {
+    expect(findFixedTextSizes(filesIn(FIXED_TEXT_DIRS))).toEqual({});
+  });
+
+  it('keeps the exception list short and each entry explained', () => {
+    const entries = Object.entries(FIXED_TEXT_ALLOWLIST);
+    expect(entries.length).toBeLessThanOrEqual(5);
+    for (const [, reason] of entries) expect(reason.trim().length).toBeGreaterThan(10);
+  });
+
+  it('matches a fixed size (the matcher itself works)', () => {
+    expect('<p className="text-[10px] mt-2 text-[0.65rem] text-[12.5px]">'.match(FIXED_TEXT_SIZE)).toHaveLength(3);
+    expect('text-[var(--text-primary)] text-[length:var(--x)] text-ui-micro'.match(FIXED_TEXT_SIZE)).toBeNull();
   });
 });

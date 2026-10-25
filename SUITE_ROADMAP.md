@@ -29,7 +29,7 @@ Also delivered, outside the original five workstreams:
 - **`VIDEO_TAGGING_FRAMEWORK.md`** — the tagging model, operator protocol,
   ground-truth format and acceptance thresholds for E1, set before any detector
   exists.
-- **`data/rosters/NSISC_2026-27_ROSTER_FRAMEWORK.txt`** — fill-in template for
+- **`data/local-rosters/NSISC_2026-27_ROSTER_FRAMEWORK.txt` (local only, gitignored)** — fill-in template for
   Delta State and Ouachita Baptist.
 
 **An independent two-provider review before merge caught three regressions

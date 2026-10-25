@@ -19,6 +19,8 @@ import {
 import { divisionForTeamOrNull } from '../data/teamDivisions';
 import { cutlineTableCourseForSwim } from './cutlineUtils';
 import { computedCutForTeamSwim } from './cutlineTags';
+import { isUnconfirmedProgramSwim } from './programSwim';
+import { itemAt, regexGroup } from './indexedAccess';
 import { mergeScoringSettings } from './scoringDefaults';
 import {
   convertSwimToSCYDetailed,
@@ -98,6 +100,9 @@ export function historicalSwimFromResult(r: SwimmerResult, meetLabel?: string): 
     meetLabel,
     // A SwimCloud meet import flags a time trial by event number, not label.
     ...(r.isTimeTrial === true ? { isTimeTrial: true as const } : {}),
+    // A swims-list row nobody confirmed as a program swim: kept in the history,
+    // never a best, a ranked event or a cut tag (`isRankableSwim`).
+    ...(isUnconfirmedProgramSwim(r) ? { programUnconfirmed: true as const } : {}),
   };
 }
 
@@ -135,7 +140,10 @@ export function eventBestTimeMarks(
 function mergeLaneSuffix(swim: HistoricalSwim): string {
   const lane = bestTimeLane(swim);
   const laneSuffix = lane === 'result' ? '' : `|${lane}`;
-  return swim.isTimeTrial === true ? `${laneSuffix}|time_trial` : laneSuffix;
+  const trialSuffix = swim.isTimeTrial === true ? `${laneSuffix}|time_trial` : laneSuffix;
+  // An unconfirmed row keys apart from a confirmed swim of the same label, so it
+  // can never displace one.
+  return swim.programUnconfirmed === true ? `${trialSuffix}|unconfirmed` : trialSuffix;
 }
 
 export function mergeHistoryIndex(
@@ -257,7 +265,13 @@ export function categorizeBestEvents(
    * meet (rule 1 of `rankEventsByStrength`). `null`: no meet is loaded, and
    * events rank by distance to the division cut.
    */
-  meetField: MeetPlaceField | null = null
+  meetField: MeetPlaceField | null = null,
+  /**
+   * The season label the swims were captured for (`'2025-2026'`), when one was stated. It picks the
+   * division for a school whose division changed ({@link divisionForTeamInSeason}). Absent: a school
+   * with a division history has no division, and events rank on raw time. Never defaulted.
+   */
+  swimSeason?: string
 ): AthleteEventProfile {
   const merged = mergeScoringSettings(settings);
   const indCap = merged.maxIndividualEntriesPerSwimmer ?? 3;
@@ -288,6 +302,9 @@ export function categorizeBestEvents(
     // `isEventOffered` refuses it; a SwimCloud meet import says so only
     // through the flag.
     if (s.isTimeTrial === true) continue;
+    // An unconfirmed swims-list row may be a time trial too. Not a best until
+    // the user confirms it is a program swim.
+    if (s.programUnconfirmed === true) continue;
     // An event its course does not swim (a 1000 Freestyle recorded SCM, a 400
     // Freestyle recorded SCY) is in no lane: not a best, not a split, not a
     // self-reported time. It stays in athleteHistory. See courseEvents.ts.
@@ -341,6 +358,7 @@ export function categorizeBestEvents(
   const ranking = rankEventsByStrength(bestByEvent, gender, team, {
     meetField,
     isSameSwimmer: sameSwimmerPredicate(name, team, gender, resolver),
+    swimSeason,
   });
   const primaryEvents = ranking.order.slice(0, indCap);
   const relayList = relayEvents.slice(0, relayCap);
@@ -578,7 +596,7 @@ function looksLikePersonName(line: string): boolean {
   if (ORG_LINE_RE.test(t)) return false;
   if (SOCIAL_HANDLE_RE.test(t)) return false;
   const parts = t.split(/\s+/);
-  return parts.length >= 2 && parts.length <= 5 && /^[A-Za-z]/.test(parts[0]);
+  return parts.length >= 2 && parts.length <= 5 && /^[A-Za-z]/.test(itemAt(parts, 0));
 }
 
 export function extractSwimmerNameFromPaste(text: string): string | undefined {
@@ -611,7 +629,7 @@ export function isProfileNameLine(line: string): boolean {
 /** A row shaped like a personal-bests entry: event label in column 0, time in column 1. */
 function isSwimDataRow(trimmedLine: string): boolean {
   const cols = splitRow(trimmedLine);
-  return cols.length >= 2 && isEventToken(cols[0]) && isTimeToken(cols[1]);
+  return cols.length >= 2 && isEventToken(itemAt(cols, 0)) && isTimeToken(itemAt(cols, 1));
 }
 
 /** One athlete's slice of a multi-profile paste. */
@@ -714,8 +732,8 @@ export function detectSwimCloudPasteFormat(text: string): SwimCloudPasteFormat {
     if (!t || isHeaderOrJunkLine(t)) continue;
     const cols = splitRow(t);
     if (cols.length < 2) continue;
-    if (isEventToken(cols[0]) && isTimeToken(cols[1])) return 'personal_bests';
-    if (looksLikePersonName(cols[0])) return 'roster';
+    if (isEventToken(itemAt(cols, 0)) && isTimeToken(itemAt(cols, 1))) return 'personal_bests';
+    if (looksLikePersonName(itemAt(cols, 0))) return 'roster';
     break;
   }
   return 'unknown';
@@ -768,11 +786,16 @@ function enrichWithComputedCut(
     // never judged: no cut, and no miss either. See isRankableSwim.
     if (!isRankableSwim(s)) return { ...s, computedCut: null };
     const course = s.timeType ?? 'SCY';
-    // Two swims we hold no standard for: a metric swim whose division
-    // publishes no table in its course (every NCAA metric swim, an NAIA LCM
-    // swim), and any swim whose division did not resolve. Neither may be given
-    // a verdict here; a value the caller arrived with is theirs to keep.
-    if (!div || (course !== 'SCY' && cutlineTableCourseForSwim(s.gender, s.event, div, course) !== course)) {
+    // A swim whose division did not resolve (an unknown team, or a school whose
+    // division depends on a season nobody stated) has no standard. A badge it
+    // already carries was judged against some table, and nothing here proves it
+    // was the right one, so it is dropped, not kept (E8: a D2 badge must not
+    // outlive the question of which division the swim belongs to).
+    if (!div) return { ...s, computedCut: null };
+    // A metric swim whose division publishes no table in its course (every NCAA
+    // metric swim, an NAIA LCM swim) gets no verdict here; a value the caller
+    // arrived with is theirs to keep.
+    if (course !== 'SCY' && cutlineTableCourseForSwim(s.gender, s.event, div, course) !== course) {
       return { ...s, computedCut: s.computedCut ?? null };
     }
     // Gated by the cut tag, so a program the school does not field for this
@@ -819,7 +842,7 @@ const SANCTIONED_SWIM_DISTANCE_SET: ReadonlySet<number> = new Set(SANCTIONED_SWI
 export function swimEventDistance(event: string): number | null {
   const m = /^\s*(\d+)(?!\d)/.exec(event ?? '');
   if (!m) return null;
-  const n = Number.parseInt(m[1], 10);
+  const n = Number.parseInt(regexGroup(m, 1), 10);
   return Number.isFinite(n) ? n : null;
 }
 
@@ -950,7 +973,10 @@ type PastedRowColumns = { stamp: string; meet: string; date: string };
  */
 function pastedRowColumns(line: string, cols: string[]): PastedRowColumns | null {
   if (!line.includes('\t') || cols.length < 5) return null;
-  const [, , stamp, meet, date] = cols;
+  // `cols.length >= 5` above bounds all three reads.
+  const stamp = itemAt(cols, 2);
+  const meet = itemAt(cols, 3);
+  const date = itemAt(cols, 4);
   if (date !== '' && !DATE_RE.test(date)) return null;
   if (DATE_RE.test(stamp) || DATE_RE.test(meet)) return null;
   return { stamp, meet, date };
@@ -1024,9 +1050,10 @@ export function parseSwimCloudPersonalBestsDetailed(
     if (!t || isHeaderOrJunkLine(t)) continue;
     const cols = splitRow(t);
     if (cols.length < 2) continue;
-    if (!isEventToken(cols[0]) || !isTimeToken(cols[1])) continue;
+    const rawEvent = itemAt(cols, 0);
+    const time = itemAt(cols, 1);
+    if (!isEventToken(rawEvent) || !isTimeToken(time)) continue;
 
-    const rawEvent = cols[0];
     const event = normalizeEventLabel(rawEvent);
     // Gate here, at the one point where a row's event string becomes a stored
     // swim: the raw line is still in hand, so the warning can name exactly what
@@ -1035,7 +1062,6 @@ export function parseSwimCloudPersonalBestsDetailed(
       rejected.push({ raw: t, event, distance: swimEventDistance(event) });
       continue;
     }
-    const time = cols[1];
     const timeType = parseCourseFromEvent(rawEvent) ?? 'SCY';
 
     let fields: ReturnType<typeof stampFields>;

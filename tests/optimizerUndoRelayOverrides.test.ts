@@ -8,8 +8,9 @@
  * optimizer writes scorer flags (`scorerRosterOverrides`). A coach who fills a relay leg with a
  * swimmer the run made a scorer left the fingerprint "clean". Undo then flipped the swimmer back to
  * non-scorer and kept the fill. That is the state `applyScorerOffRelayPatch` prunes when a coach
- * toggles a scorer off by hand, and it has a cost: a relay that is not an A or B final scores only
- * when every leg is a scorer (`relayEntryRosterEligible`), so the relay silently scored 0.
+ * toggles a scorer off by hand, and it has a cost: a relay that is not a final (an A, B or timed
+ * final) scores only when every leg is a scorer (`relayEntryRosterEligible`), so the relay silently
+ * scored 0. A timed-final relay ("Timed Finals", "Finals") counts as a final and is not exposed.
  *
  * Fixture: the real 2026 NSISC meet (relayLegEventMatching.test.ts). Reid Remmert (HSU men) swam only
  * C finals, so the auto rules do not make him a scorer. HSU's 400 Free Relay B is re-labelled a
@@ -19,7 +20,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
-import { Gender, type RelayLegOverride, type SwimmerResult, type Workspace } from '../packages/core/src/types';
+import { Gender, type RelayLegOverride, type SwimmerResult } from '../packages/core/src/types';
 import { simulateRoster } from '../packages/core/src/lib/utils';
 import { buildScorerRosterLookup, relayEntryRosterEligible } from '../packages/core/src/lib/scorerRoster';
 import { mergeScoringSettings, NSISC_PRESET_SETTINGS } from '../packages/core/src/lib/scoringDefaults';
@@ -30,6 +31,7 @@ import {
   optimizerUndoState,
   optimizerUndoTargetReached,
 } from '../packages/manager/src/components/optimizerUndo';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const HSU = 'Henderson State University';
@@ -106,10 +108,10 @@ describe('optimizer Undo and relay leg fills', () => {
       before: { ...optimizerArraysOf({ ...before, ...existing }) },
       applied,
     });
-    const live = { ...applied, ...existing } as unknown as Workspace;
+    const live = workspaceFixture({ ...applied, ...existing });
     expect(optimizerUndoState(armed, optimizerArraysOf(live))).toBe('clean');
     // After Undo writes the pre-run arrays, the unchanged relay overrides must read as "target reached".
-    const undone = { ...armed.patch, ...existing } as unknown as Workspace;
+    const undone = workspaceFixture({ ...armed.patch, ...existing });
     expect(optimizerUndoTargetReached(armed, optimizerArraysOf(undone))).toBe(true);
     expect(optimizerUndoState(armed, optimizerArraysOf(undone))).toBe('apply_not_saved');
   });

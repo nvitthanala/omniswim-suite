@@ -12,6 +12,7 @@ import { v4 as uuidv4 } from 'uuid';
 import { execSync } from 'child_process';
 import { Workspace, ScoringSettings } from '../../packages/core/src/types.ts';
 import { JsonRepo, SqliteRepo, PgRepo, type WorkspaceRepo } from './lib/workspaceRepo.ts';
+import { decideSqliteStartupFailure } from './lib/sqliteStartup.ts';
 import { staleCutTableLines } from './lib/cutTableFreshness.ts';
 import { isLoopbackHost } from './lib/loopbackHost.ts';
 import { FileSystemSwimCloudCaptureStore } from '../../packages/swimcloud/src/captureStore.ts';
@@ -19,12 +20,24 @@ import {
   loadOrCreateSwimCloudPairingToken,
   registerSwimCloudCaptureRoutes,
   swimCloudCaptureBannerLines,
+  SWIMCLOUD_CAPTURE_ROUTE_BASE,
+  timingSafeTokenEquals,
 } from './lib/swimcloudCaptureRoutes.ts';
+import { installApiHostOriginGuard } from './lib/middleware/hostOriginGuard.ts';
+import { mountProductionStatic } from './lib/productionStatic.ts';
+import { apiErrorHandler } from './lib/middleware/apiErrorHandler.ts';
+import { mountPdfUploadGuards, parsePdfMaxBytesFromEnv } from './lib/middleware/parsePdfGuard.ts';
+import { ensurePythonEnv, PythonDepsError } from './lib/pythonEnv.ts';
 import { createAuthMiddleware } from './lib/authMiddleware.ts';
 import { AuthService, ShareLinkService } from '../../packages/db/src/AuthService.ts';
 import { DEFAULT_SCORING_SETTINGS } from '../../packages/core/src/lib/scoringDefaults.ts';
 import { cutlines as builtinCutlines } from '../../packages/core/src/cutlines.ts';
-import { registerAuthRoutes } from './lib/routes/authRoutes.ts';
+import {
+  isAdminUser,
+  registerAuthRoutes,
+  registrationBannerLines,
+  registrationConfigFromEnv,
+} from './lib/routes/authRoutes.ts';
 import { registerWorkspaceRoutes } from './lib/routes/workspaceRoutes.ts';
 import { registerScoringPresetRoutes } from './lib/routes/scoringPresetRoutes.ts';
 import { registerCutlineRoutes } from './lib/routes/cutlineRoutes.ts';
@@ -163,49 +176,42 @@ const defaultScoringSettings = loadDefaultScoringSettings();
  * token, or the reason the routes were not registered at all.
  */
 let swimCloudCaptureBanner: readonly string[] = [];
+/** Startup-banner lines for the /api Host/Origin guard and, with auth on, registration. */
+let apiGuardBanner: readonly string[] = [];
 
-function venvPythonPath(venvPath: string): string {
-  return process.platform === 'win32'
-    ? path.join(venvPath, 'Scripts', 'python.exe')
-    : path.join(venvPath, 'bin', 'python');
+/**
+ * Registration gate (S4). Read once at module load. A malformed value stops the
+ * server: a silently ignored invite list would read as "registration is closed"
+ * when it is not.
+ */
+let registrationConfig: ReturnType<typeof registrationConfigFromEnv>;
+let parsePdfMaxBytes: number;
+try {
+  registrationConfig = registrationConfigFromEnv(process.env);
+  parsePdfMaxBytes = parsePdfMaxBytesFromEnv(process.env.OMNI_PARSE_PDF_MAX_MB);
+} catch (err) {
+  console.error(err instanceof Error ? err.message : String(err));
+  process.exit(1);
 }
 
+/**
+ * Create or repair `venv/` and install the pinned PDF dependencies from
+ * `backend/requirements.txt`. `OMNI_NO_AUTO_INSTALL=1` makes this throw a
+ * `PythonDepsError` instead of installing. The logic lives in `lib/pythonEnv.ts`
+ * so it can be tested; this file starts its server at import time.
+ */
 function ensurePythonVenv() {
-  const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
-  const venvPath = path.join(PROJECT_ROOT, 'venv');
-
-  const createVenv = () => {
-    execSync(`${pythonCmd} -m venv venv`, { stdio: 'ignore', cwd: PROJECT_ROOT });
-  };
-
-  const venvPythonUsable = (interpreter: string): boolean => {
-    try {
-      execSync(`"${interpreter}" -c "import sys"`, { stdio: 'ignore', cwd: PROJECT_ROOT });
-      return true;
-    } catch {
-      return false;
-    }
-  };
-
-  if (!fs.existsSync(venvPath)) {
-    createVenv();
-  }
-
-  let venvPython = venvPythonPath(venvPath);
-  if (!venvPythonUsable(venvPython)) {
-    fs.rmSync(venvPath, { recursive: true, force: true });
-    createVenv();
-    venvPython = venvPythonPath(venvPath);
-    if (!venvPythonUsable(venvPython)) {
-      throw new Error('Python venv could not be created or repaired');
-    }
-  }
-
-  try {
-    execSync(`"${venvPython}" -c "import pdfplumber"`, { stdio: 'ignore', cwd: PROJECT_ROOT });
-  } catch {
-    execSync(`"${venvPython}" -m pip install pdfplumber`, { stdio: 'inherit', cwd: PROJECT_ROOT });
-  }
+  ensurePythonEnv({
+    projectRoot: PROJECT_ROOT,
+    platform: process.platform,
+    noAutoInstall: process.env.OMNI_NO_AUTO_INSTALL === '1',
+    exec: (command, mode) =>
+      execSync(command, {
+        cwd: PROJECT_ROOT,
+        encoding: 'utf8',
+        stdio: mode?.inherit ? 'inherit' : ['ignore', 'pipe', 'ignore'],
+      })?.toString() ?? '',
+  });
 }
 
 const ALLOWED_VIDEO_MIMETYPES = new Set([
@@ -256,6 +262,13 @@ async function startServer() {
   try {
     ensurePythonVenv();
   } catch (err) {
+    if (err instanceof PythonDepsError) {
+      // OMNI_NO_AUTO_INSTALL=1 and the environment is not as pinned. Do not start
+      // a server whose PDF parsing will fail, and do not install behind the
+      // operator's back.
+      console.error(err.message);
+      process.exit(1);
+    }
     console.warn('Python venv setup warning:', err);
   }
 
@@ -272,6 +285,32 @@ async function startServer() {
   // every one of them lives in `./lib/swimcloudCaptureRoutes.ts` and is
   // exercised by `tests/swimcloudCaptureRoutes.test.ts`.
   const swimCloudPairing = loadOrCreateSwimCloudPairingToken(DATA_DIR);
+
+  // Host and Origin guard (S1). First middleware on the app, so every /api route,
+  // the capture routes included, runs behind it. The extension's origin is only
+  // accepted where the capture routes are registered (a loopback bind).
+  try {
+    apiGuardBanner = [
+      ...installApiHostOriginGuard(app, {
+        port: PORT,
+        allowedHostsEnv: process.env.OMNI_ALLOWED_HOSTS,
+        bindHost: HOST,
+        captureRoutePrefix: SWIMCLOUD_CAPTURE_ROUTE_BASE,
+        ...(isLoopbackHost(HOST)
+          ? {
+              verifyPairingToken: (received: string | undefined) =>
+                typeof received === 'string' && timingSafeTokenEquals(swimCloudPairing.token, received),
+            }
+          : {}),
+        ...(SWIMCLOUD_EXTENSION_ORIGIN === '' ? {} : { extensionOrigin: SWIMCLOUD_EXTENSION_ORIGIN }),
+      }),
+      ...(AUTH_REQUIRED ? registrationBannerLines(registrationConfig) : []),
+    ];
+  } catch (err) {
+    console.error(err instanceof Error ? err.message : String(err));
+    process.exit(1);
+  }
+
   const swimCloudCaptureRegistration = registerSwimCloudCaptureRoutes(app, {
     store: new FileSystemSwimCloudCaptureStore(SWIMCLOUD_CAPTURE_ROOT),
     captureRoot: SWIMCLOUD_CAPTURE_ROOT,
@@ -280,6 +319,11 @@ async function startServer() {
     ...(SWIMCLOUD_EXTENSION_ORIGIN === '' ? {} : { extensionOrigin: SWIMCLOUD_EXTENSION_ORIGIN }),
   });
   swimCloudCaptureBanner = swimCloudCaptureBannerLines(swimCloudCaptureRegistration, swimCloudPairing);
+
+  // POST /api/parse-pdf and /api/parse-psych-pdf get their own, tighter size cap and a
+  // %PDF- check. They must be mounted BEFORE the app-wide parser below: body-parser is a
+  // no-op once req.body is set, so after it this cap would protect nothing.
+  mountPdfUploadGuards(app, { maxPdfBytes: parsePdfMaxBytes });
 
   app.use(express.json({ limit: '50mb' }));
 
@@ -339,7 +383,11 @@ async function startServer() {
       await repo.init();
       console.log('Storage backend: SQLite (data/omniswim.db)');
     } catch (err) {
-      console.warn('SQLite backend failed to initialize, falling back to JSON:', err);
+      // A newer schema or an unreadable file must stop the server; only a SQLite that cannot
+      // load may fall back to JSON, and that is logged as an error (see sqliteStartup.ts).
+      const decision = decideSqliteStartupFailure(err);
+      console.error(decision.message);
+      if (decision.action === 'exit') process.exit(1);
       repo = new JsonRepo(MEETS_FILE, BACKUP_DIR, seedWorkspaces);
       await repo.init();
     }
@@ -421,7 +469,13 @@ async function startServer() {
     );
   }
 
-  registerAuthRoutes(app, { auth, optionalAuth, requireAuth, AUTH_REQUIRED });
+  registerAuthRoutes(app, {
+    auth,
+    optionalAuth,
+    requireAuth,
+    AUTH_REQUIRED,
+    registration: registrationConfig,
+  });
 
   registerWorkspaceRoutes(app, {
     repo,
@@ -431,6 +485,7 @@ async function startServer() {
     requireAuth,
     optionalAuth,
     defaultScoringSettings,
+    isAdmin: req => isAdminUser(registrationConfig, req.user),
   });
 
   registerScoringPresetRoutes(app, { scoringPresetsDir: SCORING_PRESETS_DIR });
@@ -453,6 +508,11 @@ async function startServer() {
     teamRankingsScript: TEAM_RANKINGS_SCRIPT,
     aiEnabled: AI_ENABLED,
   });
+
+  // After every route and the app-wide body parser, so a malformed body or a throw
+  // outside a route's own try/catch is one JSON error and not an HTML page with a
+  // stack trace. A request outside /api passes through it untouched.
+  app.use(apiErrorHandler);
 
   if (process.env.NODE_ENV !== 'production') {
     const httpServer = http.createServer(app);
@@ -480,12 +540,12 @@ async function startServer() {
       logServerReady();
     });
   } else {
-    app.use(express.static(path.join(PROJECT_ROOT, 'dist')));
-    app.use('/api', (_req, res) => {
-      res.status(404).json({ error: 'API route not found — restart the server after updating' });
-    });
-    app.get('*', (_req, res) => {
-      res.sendFile(path.join(PROJECT_ROOT, 'dist', 'index.html'));
+    // Host-checked like /api (OMNI_ALLOWED_HOSTS; loopback names on PORT always pass).
+    mountProductionStatic(app, {
+      distDir: path.join(PROJECT_ROOT, 'dist'),
+      port: PORT,
+      allowedHostsEnv: process.env.OMNI_ALLOWED_HOSTS,
+      bindHost: HOST,
     });
 
     const httpServer = http.createServer(app);
@@ -532,6 +592,7 @@ function logServerReady() {
   );
   console.log('Charts: ChartShell → ChartFrame → Recharts (no ResponsiveContainer). Hard-refresh after git pull.');
   swimCloudCaptureBanner.forEach(line => console.log(line));
+  apiGuardBanner.forEach(line => console.log(line));
   warnIfNetworkExposed();
 }
 

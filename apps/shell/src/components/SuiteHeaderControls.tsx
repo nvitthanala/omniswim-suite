@@ -12,7 +12,7 @@ interface GenderToggleNavProps {
 /** The Men/Women segmented toggle shown when workspace controls are on. */
 export function GenderToggleNav({ activeGender, onChange }: GenderToggleNavProps) {
   return (
-    <nav aria-label="Gender" className="flex gap-1 bg-[var(--surface)] p-1 rounded-lg border border-[var(--border)] ml-2">
+    <nav aria-label="Gender" className="flex gap-1 bg-[var(--surface)] p-1 rounded-lg border border-[var(--border)] sm:ml-2">
       <button
         type="button"
         aria-pressed={activeGender === Gender.MEN}
@@ -83,6 +83,7 @@ export function UserAuthControl({ user, authRequired, onLogout }: UserAuthContro
           onClick={onLogout}
           className="p-1"
           title="Sign out"
+          aria-label="Sign out"
           leadingIcon={<LogOut size={12} />}
         />
       </div>

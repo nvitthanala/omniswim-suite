@@ -28,7 +28,7 @@ async function main() {
   const url = `${BASE}/matrix?workspace=${withData.id}`;
   console.log(`Navigating to ${url} (workspace: ${withData.name})`);
   await page.goto(url, { waitUntil: 'domcontentloaded' });
-  await page.waitForSelector('text=Chronological Team Score Timeline', { timeout: 30000 }).catch(() => undefined);
+  await page.waitForSelector('text=Team score timeline', { timeout: 30000 }).catch(() => undefined);
   await page.waitForTimeout(3000);
 
   const pageTitle = await page.title();

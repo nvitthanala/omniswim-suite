@@ -9,16 +9,20 @@
  * parent's `optionalPointsField` and passed through unchanged.
  */
 
+import { useEffect, useState } from 'react';
 import { NumberField, SegmentedControl } from '@omniswim/ui';
 import type { ScoringSettings } from '@omniswim/core/types';
+import type { PlaceDraft } from '@omniswim/core/lib/scoringPlaceTables';
+import { NullableNumberField, NullablePlacePointInput } from './NullablePlacePointInput';
 
 export interface OptionalPointsField {
-  points: number[];
+  /** The table as a draft: `null` is a cell the coach has not filled in yet. */
+  points: PlaceDraft;
   enabled: boolean;
   enable: () => void;
   disable: () => void;
   setCount: (count: number) => void;
-  setPoint: (index: number, value: number) => void;
+  setPoint: (index: number, value: number | null) => void;
 }
 
 /**
@@ -43,14 +47,46 @@ export function PlacePointInput({ value, ariaLabel, onValueChange }: { value: nu
   );
 }
 
-/** One "Place N" points input grid, shared by the relay and diving tables. */
-function PlacePointsGrid({ points, ariaPrefix, onSetPoint }: { points: number[]; ariaPrefix: string; onSetPoint: (i: number, v: number) => void }) {
+/**
+ * The "number of places" box of a relay or diving table. It commits on blur or Enter, not on
+ * each keystroke: typing "12" over "8" would otherwise publish 1 first, cut the table to one
+ * place, and bring places 2-8 back blank. Text that is not a whole number from 1 to 24 changes
+ * nothing and reverts to the table's real length.
+ */
+function PlaceCountField({ value, ariaLabel, onCommit }: { value: number; ariaLabel: string; onCommit: (count: number) => void }) {
+  const [text, setText] = useState(String(value));
+  // An outside change (a preset applied) replaces the text.
+  useEffect(() => setText(String(value)), [value]);
+  const commit = () => {
+    const n = /^\d+$/.test(text.trim()) ? Number(text) : Number.NaN;
+    if (Number.isInteger(n) && n >= 1 && n <= 24 && n !== value) onCommit(n);
+    else setText(String(value));
+  };
+  return (
+    <input
+      type="text"
+      inputMode="numeric"
+      aria-label={ariaLabel}
+      value={text}
+      aria-invalid={text.trim() !== String(value) && !/^\d+$/.test(text.trim()) ? true : undefined}
+      onChange={e => setText(e.currentTarget.value)}
+      onBlur={commit}
+      onKeyDown={e => {
+        if (e.key === 'Enter') commit();
+      }}
+      className="glass-input w-20 font-mono text-xs"
+    />
+  );
+}
+
+/** One "Place N" points input grid, shared by the relay and diving tables. A blank cell is `null`. */
+function PlacePointsGrid({ points, ariaPrefix, onSetPoint }: { points: PlaceDraft; ariaPrefix: string; onSetPoint: (i: number, v: number | null) => void }) {
   return (
     <div className="grid grid-cols-4 md:grid-cols-6 gap-3">
       {points.map((pt, i) => (
         <div key={i} className="flex flex-col gap-1">
-          <span className="text-[9px] text-theme-secondary font-mono">Place {i + 1}</span>
-          <PlacePointInput value={pt} ariaLabel={`${ariaPrefix} points for place ${i + 1}`} onValueChange={v => onSetPoint(i, v)} />
+          <span className="text-ui-micro text-theme-secondary font-mono">Place {i + 1}</span>
+          <NullablePlacePointInput value={pt} ariaLabel={`${ariaPrefix} points for place ${i + 1}`} onValueChange={v => onSetPoint(i, v)} />
         </div>
       ))}
     </div>
@@ -59,6 +95,15 @@ function PlacePointsGrid({ points, ariaPrefix, onSetPoint }: { points: number[];
 
 interface RelayScoringFieldsProps {
   relayTable: OptionalPointsField;
+}
+
+/**
+ * A saved `relayPoints: [0]` overrides the relay multiplier, so every relay
+ * scores 0. Older workspaces seeded exactly that. It is a legal stored table, so
+ * it loads as stored and never blocks save; the coach is told what it does.
+ */
+function isSingleZeroRelayTable(table: OptionalPointsField): boolean {
+  return table.enabled && table.points.length === 1 && table.points[0] === 0;
 }
 
 export function RelayScoringFields({ relayTable }: RelayScoringFieldsProps) {
@@ -79,27 +124,29 @@ export function RelayScoringFields({ relayTable }: RelayScoringFieldsProps) {
       </div>
       {relayTable.enabled ? (
         <>
-          <p className="text-[9px] text-theme-muted mb-2 normal-case tracking-normal">
+          <p className="text-ui-micro text-theme-muted mb-2 normal-case tracking-normal">
             This rule set carries its own relay place table — relays score from these values directly, and the relay
             multiplier above is ignored (shown disabled). Right for a dual meet: NCAA Rule 7-1-1 scores relays
             11-4-2, not individual 9-4-3-2-1 doubled.
           </p>
           <div className="flex items-center gap-3 mb-2">
-            <span className="text-[9px] text-theme-secondary font-mono">Relay places</span>
-            <input
-              type="number"
-              min={1}
-              max={24}
-              aria-label="Number of relay scoring places"
+            <span className="text-ui-micro text-theme-secondary font-mono">Relay places</span>
+            <PlaceCountField
+              ariaLabel="Number of relay scoring places"
               value={relayTable.points.length}
-              onChange={e => relayTable.setCount(parseInt(e.target.value, 10) || 1)}
-              className="glass-input w-20 font-mono text-xs"
+              onCommit={relayTable.setCount}
             />
           </div>
           <PlacePointsGrid points={relayTable.points} ariaPrefix="Relay" onSetPoint={relayTable.setPoint} />
+          {isSingleZeroRelayTable(relayTable) ? (
+            <p role="status" className="mt-2 p-2 rounded-lg badge-warning text-ui-caption normal-case tracking-normal">
+              Relay table: one place, worth 0. Every relay scores 0 points, and the relay multiplier is ignored. Add
+              the relay places, or switch to Multiplier.
+            </p>
+          ) : null}
         </>
       ) : (
-        <p className="text-[9px] text-theme-muted normal-case tracking-normal">
+        <p className="text-ui-micro text-theme-muted normal-case tracking-normal">
           Relays score as {`scoringPoints[place] × relayMultiplier`} (correct for championship formats, where the
           relay table is exactly double the individual one). Switch to an explicit table for a dual meet or any
           format whose relay values are not simply doubled.
@@ -133,20 +180,16 @@ export function DivingPointsFields({ divingTable, divingMaxScorersPerTeamPerEven
       </div>
       {divingTable.enabled ? (
         <>
-          <p className="text-[9px] text-theme-muted mb-2 normal-case tracking-normal">
+          <p className="text-ui-micro text-theme-muted mb-2 normal-case tracking-normal">
             Diving scores from this table by place instead of the diver scorer weight below (e.g. NCAA Rule 7-1-4
             dual diving: 7-1 for three or fewer divers, 12-1 for six or more).
           </p>
           <div className="flex items-center gap-3 mb-2">
-            <span className="text-[9px] text-theme-secondary font-mono">Diving places</span>
-            <input
-              type="number"
-              min={1}
-              max={24}
-              aria-label="Number of diving scoring places"
+            <span className="text-ui-micro text-theme-secondary font-mono">Diving places</span>
+            <PlaceCountField
+              ariaLabel="Number of diving scoring places"
               value={divingTable.points.length}
-              onChange={e => divingTable.setCount(parseInt(e.target.value, 10) || 1)}
-              className="glass-input w-20 font-mono text-xs"
+              onCommit={divingTable.setCount}
             />
           </div>
           <PlacePointsGrid points={divingTable.points} ariaPrefix="Diving" onSetPoint={divingTable.setPoint} />
@@ -154,15 +197,13 @@ export function DivingPointsFields({ divingTable, divingMaxScorersPerTeamPerEven
             <label className="block text-ui-caption text-theme-secondary mb-1">
               Max scoring divers / team / event
             </label>
-            <input
-              type="number"
+            <NullableNumberField
               aria-label="Maximum scoring divers per team per diving event"
-              value={divingMaxScorersPerTeamPerEvent ?? ''}
+              min={1}
+              step={1}
+              value={divingMaxScorersPerTeamPerEvent ?? null}
               placeholder="No separate cap"
-              onChange={e => {
-                const raw = e.target.value;
-                onChangeMaxScorers(raw === '' ? undefined : parseInt(raw, 10) || undefined);
-              }}
+              onValueChange={v => onChangeMaxScorers(v ?? undefined)}
               className="glass-input w-full font-mono text-xs"
             />
           </div>
@@ -192,7 +233,7 @@ export function PerEventCapsFields({
       <label className="block text-ui-caption text-theme-secondary font-medium mb-2">
         Per-team, per-event scoring caps
       </label>
-      <p className="text-[9px] text-theme-muted mb-2 normal-case tracking-normal">
+      <p className="text-ui-micro text-theme-muted mb-2 normal-case tracking-normal">
         Independent of the meet/event scorer pool above — this caps how many of one team&apos;s swimmers can score
         places in a single event, per NCAA Rule 7-2 (e.g. best 2 per team in a dual). Cannot be combined with a
         full-meet scorer pool scope; the server rejects that combination.
@@ -202,15 +243,13 @@ export function PerEventCapsFields({
           <label className="block text-ui-caption text-theme-secondary mb-1">
             Max individual scorers / team / event
           </label>
-          <input
-            type="number"
+          <NullableNumberField
             aria-label="Maximum individual scorers per team per event"
-            value={maxIndividualScorersPerTeamPerEvent ?? ''}
+            min={1}
+            step={1}
+            value={maxIndividualScorersPerTeamPerEvent ?? null}
             placeholder="No per-event cap"
-            onChange={e => {
-              const raw = e.target.value;
-              onChangeMaxIndividualScorersPerTeamPerEvent(raw === '' ? undefined : parseInt(raw, 10) || undefined);
-            }}
+            onValueChange={v => onChangeMaxIndividualScorersPerTeamPerEvent(v ?? undefined)}
             className="glass-input w-full font-mono text-xs"
           />
         </div>
@@ -228,7 +267,7 @@ export function PerEventCapsFields({
         </div>
       </div>
       {showConflictWarning ? (
-        <p className="mt-2 p-2 rounded-lg badge-warning text-[9px] normal-case tracking-normal">
+        <p className="mt-2 p-2 rounded-lg badge-warning text-ui-micro normal-case tracking-normal">
           A per-event place cap cannot be combined with a full-meet scorer pool (&quot;Scorer cap scope&quot; = Full
           meet, with the max individual scorers below 999). Saving this will be rejected — switch scorer cap scope to
           &quot;Per event&quot; or clear the meet-wide cap.

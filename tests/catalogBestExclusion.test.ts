@@ -17,7 +17,7 @@
  * 1:11.13, and an extracted 100 Fly SCY 54.91 that is his only 100 Fly.
  */
 import { describe, expect, it } from 'vitest';
-import { Gender, type Workspace } from '../packages/core/src/types';
+import { Gender } from '../packages/core/src/types';
 import {
   bestTimesByEvent,
   buildStoredSwim,
@@ -28,6 +28,7 @@ import {
 import { buildEventProfileFromCatalog } from '../packages/core/src/lib/athleteHistory';
 import { buildCategorizedScoringInputs } from '../packages/core/src/lib/utils';
 import { NSISC_PRESET_SETTINGS } from '../packages/core/src/lib/scoringDefaults';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 const HSU = 'Henderson State';
 const NAME = 'Bartu Akin';
@@ -132,14 +133,14 @@ describe('buildEventProfileFromCatalog', () => {
 
 describe('buildCategorizedScoringInputs', () => {
   it('scores no self-reported time or extracted split, and one row per event', () => {
-    const workspace = {
+    const workspace = workspaceFixture({
       id: 'ws',
       name: 'catalog',
       createdAt: 0,
       menResults: [],
       womenResults: [],
       scoringSettings: { ...NSISC_PRESET_SETTINGS },
-    } as unknown as Workspace;
+    });
     const rows = buildCategorizedScoringInputs({ workspace, gender: Gender.MEN, rosterCatalog: roster(TIMES) });
     expect(rows.map(r => r.id).sort()).toStrictEqual(['catalog_real-50', 'catalog_real-breast']);
   });
@@ -156,27 +157,27 @@ describe('buildCategorizedScoringInputs', () => {
       event: 'Event 8 Men 50 Yard Freestyle',
       gender: Gender.MEN,
     };
-    const workspace = {
+    const workspace = workspaceFixture({
       id: 'ws',
       name: 'catalog',
       createdAt: 0,
       menResults: [meetRow],
       womenResults: [],
       scoringSettings: { ...NSISC_PRESET_SETTINGS },
-    } as unknown as Workspace;
+    });
     const rows = buildCategorizedScoringInputs({ workspace, gender: Gender.MEN, rosterCatalog: roster(TIMES) });
     expect(rows.map(r => r.id).sort()).toStrictEqual(['catalog_real-50', 'catalog_real-breast']);
   });
 
   it('keeps one row per event when two spellings are stored', () => {
-    const workspace = {
+    const workspace = workspaceFixture({
       id: 'ws',
       name: 'catalog',
       createdAt: 0,
       menResults: [],
       womenResults: [],
       scoringSettings: { ...NSISC_PRESET_SETTINGS },
-    } as unknown as Workspace;
+    });
     const pasted = stored('paste-50', '50 Freestyle', '22.90', 'SCY');
     const rows = buildCategorizedScoringInputs({
       workspace,

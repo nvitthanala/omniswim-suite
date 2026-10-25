@@ -1,14 +1,23 @@
 {
   "version": "2026-2027",
   "season": "2026-2027",
-  "generatedAt": "2026-07-26T06:14:37Z",
+  "generatedAt": "2026-10-14T18:47:15Z",
   "generator": "scripts/extract-cutlines.py",
   "divisions": [
+    "D1",
     "D2",
     "D3",
     "NAIA"
   ],
   "sources": [
+    {
+      "id": "ncaa-d1-2026-27",
+      "division": "D1",
+      "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+      "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+      "retrievedAt": "2026-10-14T18:44:29Z",
+      "pageCount": 4
+    },
     {
       "id": "ncaa-d2-men-2026-27",
       "division": "D2",
@@ -43,6 +52,736 @@
     }
   ],
   "cutlines": [
+    {
+      "kind": "diving",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Men",
+      "event": "1-Meter Diving",
+      "course": "SCY",
+      "board": "1M",
+      "diveCount": 6,
+      "points": 300,
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 1
+      },
+      "note": "Qualifying point total in any 6-dive list"
+    },
+    {
+      "kind": "diving",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Men",
+      "event": "3-Meter Diving",
+      "course": "SCY",
+      "board": "3M",
+      "diveCount": 6,
+      "points": 320,
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 1
+      },
+      "note": "Qualifying point total in any 6-dive list"
+    },
+    {
+      "kind": "diving",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Men",
+      "event": "Platform Diving",
+      "course": "SCY",
+      "board": "PLATFORM",
+      "diveCount": 6,
+      "points": 300,
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 1
+      },
+      "note": "Qualifying point total in any 6-dive list"
+    },
+    {
+      "kind": "individual",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Men",
+      "event": "100 Backstroke",
+      "course": "SCY",
+      "scale": "single",
+      "standard": "45.84",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 1
+      }
+    },
+    {
+      "kind": "individual",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Men",
+      "event": "100 Breaststroke",
+      "course": "SCY",
+      "scale": "single",
+      "standard": "52.18",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 1
+      }
+    },
+    {
+      "kind": "individual",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Men",
+      "event": "100 Butterfly",
+      "course": "SCY",
+      "scale": "single",
+      "standard": "45.59",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 1
+      }
+    },
+    {
+      "kind": "individual",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Men",
+      "event": "100 Freestyle",
+      "course": "SCY",
+      "scale": "single",
+      "standard": "42.33",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 1
+      }
+    },
+    {
+      "kind": "individual",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Men",
+      "event": "1650 Freestyle",
+      "course": "SCY",
+      "scale": "single",
+      "standard": "15:03.96",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 1
+      }
+    },
+    {
+      "kind": "individual",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Men",
+      "event": "200 Backstroke",
+      "course": "SCY",
+      "scale": "single",
+      "standard": "1:41.11",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 1
+      }
+    },
+    {
+      "kind": "individual",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Men",
+      "event": "200 Breaststroke",
+      "course": "SCY",
+      "scale": "single",
+      "standard": "1:54.08",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 1
+      }
+    },
+    {
+      "kind": "individual",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Men",
+      "event": "200 Butterfly",
+      "course": "SCY",
+      "scale": "single",
+      "standard": "1:43.10",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 1
+      }
+    },
+    {
+      "kind": "individual",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Men",
+      "event": "200 Freestyle",
+      "course": "SCY",
+      "scale": "single",
+      "standard": "1:33.29",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 1
+      }
+    },
+    {
+      "kind": "individual",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Men",
+      "event": "200 Individual Medley",
+      "course": "SCY",
+      "scale": "single",
+      "standard": "1:43.99",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 1
+      }
+    },
+    {
+      "kind": "individual",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Men",
+      "event": "400 Individual Medley",
+      "course": "SCY",
+      "scale": "single",
+      "standard": "3:44.39",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 1
+      }
+    },
+    {
+      "kind": "individual",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Men",
+      "event": "50 Freestyle",
+      "course": "SCY",
+      "scale": "single",
+      "standard": "19.22",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 1
+      }
+    },
+    {
+      "kind": "individual",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Men",
+      "event": "500 Freestyle",
+      "course": "SCY",
+      "scale": "single",
+      "standard": "4:16.64",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 1
+      }
+    },
+    {
+      "kind": "relay",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Men",
+      "event": "200 Freestyle Relay",
+      "course": "SCY",
+      "scale": "qualifyingProvisional",
+      "qualifying": "1:16.02",
+      "provisional": "1:16.59",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 1
+      }
+    },
+    {
+      "kind": "relay",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Men",
+      "event": "200 Medley Relay",
+      "course": "SCY",
+      "scale": "qualifyingProvisional",
+      "qualifying": "1:23.52",
+      "provisional": "1:23.62",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 1
+      }
+    },
+    {
+      "kind": "relay",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Men",
+      "event": "400 Freestyle Relay",
+      "course": "SCY",
+      "scale": "qualifyingProvisional",
+      "qualifying": "2:48.73",
+      "provisional": "2:49.67",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 1
+      }
+    },
+    {
+      "kind": "relay",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Men",
+      "event": "400 Medley Relay",
+      "course": "SCY",
+      "scale": "qualifyingProvisional",
+      "qualifying": "3:04.30",
+      "provisional": "3:05.25",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 1
+      }
+    },
+    {
+      "kind": "relay",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Men",
+      "event": "800 Freestyle Relay",
+      "course": "SCY",
+      "scale": "qualifyingProvisional",
+      "qualifying": "6:13.33",
+      "provisional": "6:15.80",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 1
+      }
+    },
+    {
+      "kind": "diving",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Women",
+      "event": "1-Meter Diving",
+      "course": "SCY",
+      "board": "1M",
+      "diveCount": 5,
+      "points": 220,
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 2
+      },
+      "note": "Qualifying point total in any 5-dive list"
+    },
+    {
+      "kind": "diving",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Women",
+      "event": "1-Meter Diving",
+      "course": "SCY",
+      "board": "1M",
+      "diveCount": 6,
+      "points": 265,
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 2
+      },
+      "note": "Qualifying point total in any 6-dive list"
+    },
+    {
+      "kind": "diving",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Women",
+      "event": "3-Meter Diving",
+      "course": "SCY",
+      "board": "3M",
+      "diveCount": 5,
+      "points": 235,
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 2
+      },
+      "note": "Qualifying point total in any 5-dive list"
+    },
+    {
+      "kind": "diving",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Women",
+      "event": "3-Meter Diving",
+      "course": "SCY",
+      "board": "3M",
+      "diveCount": 6,
+      "points": 280,
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 2
+      },
+      "note": "Qualifying point total in any 6-dive list"
+    },
+    {
+      "kind": "diving",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Women",
+      "event": "Platform Diving",
+      "course": "SCY",
+      "board": "PLATFORM",
+      "diveCount": 5,
+      "points": 225,
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 2
+      },
+      "note": "Qualifying point total in any 5-dive list"
+    },
+    {
+      "kind": "individual",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Women",
+      "event": "100 Backstroke",
+      "course": "SCY",
+      "scale": "single",
+      "standard": "52.59",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 2
+      }
+    },
+    {
+      "kind": "individual",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Women",
+      "event": "100 Breaststroke",
+      "course": "SCY",
+      "scale": "single",
+      "standard": "1:00.41",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 2
+      }
+    },
+    {
+      "kind": "individual",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Women",
+      "event": "100 Butterfly",
+      "course": "SCY",
+      "scale": "single",
+      "standard": "52.60",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 2
+      }
+    },
+    {
+      "kind": "individual",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Women",
+      "event": "100 Freestyle",
+      "course": "SCY",
+      "scale": "single",
+      "standard": "48.55",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 2
+      }
+    },
+    {
+      "kind": "individual",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Women",
+      "event": "1650 Freestyle",
+      "course": "SCY",
+      "scale": "single",
+      "standard": "16:34.79",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 2
+      }
+    },
+    {
+      "kind": "individual",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Women",
+      "event": "200 Backstroke",
+      "course": "SCY",
+      "scale": "single",
+      "standard": "1:55.16",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 2
+      }
+    },
+    {
+      "kind": "individual",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Women",
+      "event": "200 Breaststroke",
+      "course": "SCY",
+      "scale": "single",
+      "standard": "2:11.08",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 2
+      }
+    },
+    {
+      "kind": "individual",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Women",
+      "event": "200 Butterfly",
+      "course": "SCY",
+      "scale": "single",
+      "standard": "1:57.38",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 2
+      }
+    },
+    {
+      "kind": "individual",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Women",
+      "event": "200 Freestyle",
+      "course": "SCY",
+      "scale": "single",
+      "standard": "1:45.39",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 2
+      }
+    },
+    {
+      "kind": "individual",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Women",
+      "event": "200 Individual Medley",
+      "course": "SCY",
+      "scale": "single",
+      "standard": "1:58.66",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 2
+      }
+    },
+    {
+      "kind": "individual",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Women",
+      "event": "400 Individual Medley",
+      "course": "SCY",
+      "scale": "single",
+      "standard": "4:13.32",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 2
+      }
+    },
+    {
+      "kind": "individual",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Women",
+      "event": "50 Freestyle",
+      "course": "SCY",
+      "scale": "single",
+      "standard": "22.26",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 2
+      }
+    },
+    {
+      "kind": "individual",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Women",
+      "event": "500 Freestyle",
+      "course": "SCY",
+      "scale": "single",
+      "standard": "4:44.93",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 2
+      }
+    },
+    {
+      "kind": "relay",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Women",
+      "event": "200 Freestyle Relay",
+      "course": "SCY",
+      "scale": "qualifyingProvisional",
+      "qualifying": "1:28.15",
+      "provisional": "1:28.54",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 2
+      }
+    },
+    {
+      "kind": "relay",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Women",
+      "event": "200 Medley Relay",
+      "course": "SCY",
+      "scale": "qualifyingProvisional",
+      "qualifying": "1:35.93",
+      "provisional": "1:36.36",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 2
+      }
+    },
+    {
+      "kind": "relay",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Women",
+      "event": "400 Freestyle Relay",
+      "course": "SCY",
+      "scale": "qualifyingProvisional",
+      "qualifying": "3:13.19",
+      "provisional": "3:14.63",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 2
+      }
+    },
+    {
+      "kind": "relay",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Women",
+      "event": "400 Medley Relay",
+      "course": "SCY",
+      "scale": "qualifyingProvisional",
+      "qualifying": "3:30.66",
+      "provisional": "3:32.05",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 2
+      }
+    },
+    {
+      "kind": "relay",
+      "division": "D1",
+      "season": "2026-2027",
+      "gender": "Women",
+      "event": "800 Freestyle Relay",
+      "course": "SCY",
+      "scale": "qualifyingProvisional",
+      "qualifying": "7:00.86",
+      "provisional": "7:04.46",
+      "source": {
+        "sourceId": "ncaa-d1-2026-27",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+        "sha256": "259c76ba10df6f72314a677df6aea1becc6d7d9b4400b5f0f95d4d33e88bf7ab",
+        "page": 2
+      }
+    },
     {
       "kind": "diving",
       "division": "D2",

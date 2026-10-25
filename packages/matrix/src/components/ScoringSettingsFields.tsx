@@ -32,6 +32,12 @@
  */
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ScoringPresetMeta, ScoringSettings } from '@omniswim/core/types';
+import {
+  finalizeScoringDraft,
+  type FinalizeScoringDraftResult,
+  type PlaceDraft,
+  type ScoringSettingsDraft,
+} from '@omniswim/core/lib/scoringPlaceTables';
 import { fetchScoringPresetList, fetchScoringPresetSettings } from '@omniswim/core/lib/scoringPresets';
 import {
   GENERIC_TOP16_SETTINGS,
@@ -42,9 +48,18 @@ import {
 import { ScoringViewBanner, ScoringLockBanner, SuggestedPresetBanner } from './ScoringSettingsBanners';
 import { ScoringPresetPicker } from './ScoringPresetPicker';
 import { ScoringCapsFields } from './ScoringCapsFields';
-import { RelayScoringFields, DivingPointsFields, PerEventCapsFields, PlacePointInput } from './ScoringOptionalTablesFields';
+import { RelayScoringFields, DivingPointsFields, PerEventCapsFields } from './ScoringOptionalTablesFields';
+import { NullablePlacePointInput } from './NullablePlacePointInput';
 
 const PLACE_COUNT_OPTIONS = [8, 12, 16, 20, 24];
+/**
+ * The offered place counts, plus the table's real length when it is not one of them (0 for a
+ * table the host publishes, 10 or 3 for a stored legacy table). A select whose value is not an
+ * option shows its first option, which would misreport the table as 8 places.
+ */
+function placeCountOptions(length: number): number[] {
+  return PLACE_COUNT_OPTIONS.includes(length) ? PLACE_COUNT_OPTIONS : [length, ...PLACE_COUNT_OPTIONS].sort((a, b) => a - b);
+}
 const TOP_24_POINTS = [32, 28, 27, 26, 25, 24, 23, 22, 20, 17, 16, 15, 14, 13, 12, 11, 9, 7, 6, 5, 4, 3, 2, 1];
 
 /**
@@ -55,14 +70,36 @@ const TOP_24_POINTS = [32, 28, 27, 26, 25, 24, 23, 22, 20, 17, 16, 15, 14, 13, 1
  * points-length-changing action here goes through this helper instead of
  * setting `scoringPoints` on its own, to keep that same guarantee.
  */
-function withScoringPoints(points: number[]): Pick<ScoringSettings, 'scoringPoints' | 'aFinalBracketSize'> {
+function withScoringPoints(points: PlaceDraft): Pick<ScoringSettingsDraft, 'scoringPoints' | 'aFinalBracketSize'> {
   return { scoringPoints: points, aFinalBracketSize: Math.floor(points.length / 2) };
+}
+
+/**
+ * The draft seen as `ScoringSettings`, for the two read-only helpers that take
+ * that type (`scoringSettingsLock`, `ScoringCapsFields`). Neither reads a table
+ * cell: the lock looks only at `relayPoints?.length` and the caps grid at the
+ * cap fields. A blank (`null`) cell is therefore never read as a number, and
+ * nothing is written back through this view.
+ */
+function readOnlyView(draft: ScoringSettingsDraft): ScoringSettings {
+  return draft as unknown as ScoringSettings;
 }
 
 export interface ScoringSettingsFieldsProps {
   settings: ScoringSettings;
-  /** Fires on every field edit with the full, current draft. Does not imply a save — each host decides when to persist. */
+  /**
+   * Fires on every field edit with the full, current settings, but ONLY while no place cell is blank:
+   * a blank cell cannot be a `ScoringSettings`, so a draft with one fires `onDraftChange` and not this.
+   * Does not imply a save — each host decides when to persist. Hosts that gate Save on blanks read
+   * `onDraftChange`; this copy is stale while a blank exists.
+   */
   onChange: (next: ScoringSettings) => void;
+  /**
+   * Fires on every field edit (never on mount, never on a reset from new `settings`) with the live
+   * draft and what `finalizeScoringDraft` made of it. `result.ok === false` names each blank cell:
+   * keep Save disabled and say why. `result.settings` is a plain `number[]` settings object.
+   */
+  onDraftChange?: (draft: ScoringSettingsDraft, result: FinalizeScoringDraftResult) => void;
   /** Decides which fields the engine will overwrite regardless of what's edited here — without it every field reads as freely editable when some are not. */
   conference?: string;
   /** Workspace-level scoring view (absent = 'merged'); omit the callback to hide the toggle entirely. */
@@ -95,6 +132,7 @@ export interface ScoringSettingsFieldsProps {
 export function ScoringSettingsFields({
   settings,
   onChange,
+  onDraftChange,
   conference,
   scoringView,
   onScoringViewChange,
@@ -106,7 +144,9 @@ export function ScoringSettingsFields({
   pdfPlacePointsLocked = false,
   resultsCarryPdfPlacePoints,
 }: ScoringSettingsFieldsProps) {
-  const [local, setLocal] = useState<ScoringSettings>(() => mergeScoringSettings(settings));
+  // A stored table loads exactly as stored: a 0 stays a 0 and nothing is rewritten. A blank (`null`)
+  // cell can only appear after an edit made here.
+  const [local, setLocal] = useState<ScoringSettingsDraft>(() => mergeScoringSettings(settings));
   const [presets, setPresets] = useState<ScoringPresetMeta[]>([]);
   const [selectedPreset, setSelectedPreset] = useState('');
   /**
@@ -144,7 +184,10 @@ export function ScoringSettingsFields({
   // regime is in force the engine ignores the scorer-pool fields (caps, scope, diver weight,
   // relay eligibility) even under Auto, so ask the lock for that regime explicitly.
   const lock = useMemo(
-    () => scoringSettingsLock(pdfPointsLock ? { ...local, usePdfPlacePoints: true } : local, { conference }),
+    () =>
+      scoringSettingsLock(readOnlyView(pdfPointsLock ? { ...local, usePdfPlacePoints: true } : local), {
+        conference,
+      }),
     [local, conference, pdfPointsLock]
   );
   const lockedKeys = useMemo(() => new Set<string>(lock.keys as readonly string[]), [lock]);
@@ -158,16 +201,25 @@ export function ScoringSettingsFields({
         }
       : { className: 'glass-input w-full text-xs' };
 
-  const update = (patch: Partial<ScoringSettings>) => {
-    const next = { ...local, ...patch };
+  /**
+   * The one place an edit leaves this component. `onDraftChange` always fires;
+   * `onChange` fires only when no place cell is blank. Called from event
+   * handlers, never from an effect, so mounting fires nothing.
+   */
+  const commit = (next: ScoringSettingsDraft) => {
     setLocal(next);
-    onChange(next);
+    const result = finalizeScoringDraft(next);
+    onDraftChange?.(next, result);
+    if (result.ok) onChange(result.settings);
+  };
+
+  const update = (patch: Partial<ScoringSettingsDraft>) => {
+    commit({ ...local, ...patch });
   };
 
   const applySettings = (s: ScoringSettings) => {
     const next = mergeScoringSettings(s, { conference });
-    setLocal(next);
-    onChange(next);
+    commit(next);
     return next;
   };
 
@@ -205,12 +257,13 @@ export function ScoringSettingsFields({
   };
 
   const handlePlacesChange = (count: number) => {
-    const nextPoints = [...local.scoringPoints];
-    while (nextPoints.length < count) nextPoints.push(0);
+    // New places are blank, not 0: a 0 would read as a published "worth nothing" nobody entered.
+    const nextPoints: PlaceDraft = [...local.scoringPoints];
+    while (nextPoints.length < count) nextPoints.push(null);
     update(withScoringPoints(nextPoints.slice(0, count)));
   };
 
-  const handlePointChange = (index: number, value: number) => {
+  const handlePointChange = (index: number, value: number | null) => {
     const nextPoints = [...local.scoringPoints];
     nextPoints[index] = value;
     update({ scoringPoints: nextPoints });
@@ -218,19 +271,20 @@ export function ScoringSettingsFields({
 
   /** Reader/writer pair for an optional points table field (`relayPoints`, `divingPoints`). */
   function optionalPointsField(key: 'relayPoints' | 'divingPoints') {
-    const points = local[key] ?? [];
-    const setPoints = (next: number[] | undefined) => update({ [key]: next } as Partial<ScoringSettings>);
+    const points: PlaceDraft = local[key] ?? [];
+    const setPoints = (next: PlaceDraft | undefined) => update({ [key]: next } as Partial<ScoringSettingsDraft>);
     return {
       points,
       enabled: (local[key]?.length ?? 0) > 0,
-      enable: () => setPoints(points.length ? points : [0]),
+      // A new table seeds one BLANK cell, never 0: the coach enters the published value.
+      enable: () => setPoints(points.length ? points : [null]),
       disable: () => setPoints(undefined),
       setCount: (count: number) => {
-        const next = [...points];
-        while (next.length < count) next.push(0);
+        const next: PlaceDraft = [...points];
+        while (next.length < count) next.push(null);
         setPoints(next.slice(0, Math.max(1, count)));
       },
-      setPoint: (index: number, value: number) => {
+      setPoint: (index: number, value: number | null) => {
         const next = [...points];
         next[index] = value;
         setPoints(next);
@@ -327,9 +381,9 @@ export function ScoringSettingsFields({
               className="glass-input font-mono text-xs"
               aria-label="Number of scoring places"
             >
-              {PLACE_COUNT_OPTIONS.map(n => (
+              {placeCountOptions(local.scoringPoints.length).map(n => (
                 <option key={n} value={n}>
-                  {n}
+                  {n === 0 ? 'None yet' : n}
                 </option>
               ))}
             </select>
@@ -337,8 +391,8 @@ export function ScoringSettingsFields({
           <div className="grid grid-cols-4 md:grid-cols-6 gap-3 pt-1">
             {local.scoringPoints.map((pt, i) => (
               <div key={i} className="flex flex-col gap-1">
-                <span className="text-[9px] text-theme-secondary font-mono">Place {i + 1}</span>
-                <PlacePointInput
+                <span className="text-ui-micro text-theme-secondary font-mono">Place {i + 1}</span>
+                <NullablePlacePointInput
                   ariaLabel={`Points for place ${i + 1}`}
                   value={pt}
                   onValueChange={v => handlePointChange(i, v)}
@@ -348,7 +402,7 @@ export function ScoringSettingsFields({
           </div>
         </div>
 
-        <ScoringCapsFields local={local} update={update} lock={{ message: lock.message, isLocked, lockProps }} />
+        <ScoringCapsFields local={readOnlyView(local)} update={update} lock={{ message: lock.message, isLocked, lockProps }} />
 
         <RelayScoringFields relayTable={relayTable} />
 

@@ -229,11 +229,12 @@ export function groupCaptures(records: readonly CaptureListRecord[], now: number
     .map(([teamId, group]) => {
       const disagree = group.names.size > 1;
       const named = group.names.size === 1 && group.warnings.size === 0;
-      const name = named ? [...group.names][0] : null;
+      // `named` means exactly one name, so the first read is that name.
+      const name = named ? ([...group.names][0] ?? null) : null;
       const nameWarning = disagree
         ? `The captures of team ${teamId} carry different school names (${[...group.names].join(' / ')}), so no school name is shown.`
         : group.warnings.size > 0
-          ? [...group.warnings][0]
+          ? ([...group.warnings][0] ?? null)
           : null;
       const rows: CaptureRow[] = [...group.rows]
         .sort((a, b) => (b.season ?? '').localeCompare(a.season ?? '') || Number(a.status === 'blocked') - Number(b.status === 'blocked'))
@@ -282,10 +283,18 @@ export function teamDivisionTag(schoolName: string | null, season?: string | nul
 /** The badge text for a team whose captures sit in different divisions. */
 export const DIVISION_VARIES_TEXT = 'division differs by season';
 
-/** One tag for a team group. The rows' tags when they agree; {@link DIVISION_VARIES_TEXT} (division null) when they do not. */
+/**
+ * One tag for a team group, read from the rows whose division is known.
+ *
+ * - Known rows agree: that tag. A row with no recorded season, or one the table cannot place, keeps its own
+ *   `unknown division` tag and does not change the heading.
+ * - Known rows disagree (two seasons in different divisions): {@link DIVISION_VARIES_TEXT} (division null).
+ * - No row has a known division: the first row's tag (`unknown division`).
+ */
 function groupDivisionTag(name: string | null, rows: readonly CaptureRow[]): { tag: DivisionTag; varies: boolean } {
-  const first = rows[0]?.divisionTag ?? teamDivisionTag(name);
-  const divisions = new Set(rows.map(r => r.divisionTag.division));
+  const known = rows.filter(r => r.divisionTag.division !== null);
+  const first = known[0]?.divisionTag ?? rows[0]?.divisionTag ?? teamDivisionTag(name);
+  const divisions = new Set(known.map(r => r.divisionTag.division));
   if (divisions.size <= 1) return { tag: first, varies: false };
   return { tag: { text: DIVISION_VARIES_TEXT, division: null, canonicalTeam: first.canonicalTeam }, varies: true };
 }

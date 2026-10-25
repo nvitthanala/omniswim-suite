@@ -63,6 +63,13 @@ export type ScenarioSwimmerDiff = {
   pointsThen: number;
   pointsNow: number;
   deltaPoints: number;
+  /**
+   * True when the swimmer (or relay) has at least one entry on that side.
+   * `pointsThen` / `pointsNow` report 0 for an absent side, so read these
+   * flags to tell "not entered" from "scored 0 points".
+   */
+  inThen: boolean;
+  inNow: boolean;
 };
 
 export type ScenarioEventDiff = {
@@ -72,12 +79,29 @@ export type ScenarioEventDiff = {
   delta: number;
   /** Distinct athletes/relay rows whose contribution to this event changed. */
   swimmersChanged: number;
+  /**
+   * True when the team has at least one entry in this event on that side.
+   * `pointsThen` / `pointsNow` report 0 for an absent side.
+   */
+  inThen: boolean;
+  inNow: boolean;
 };
 
 export type ScenarioDiffResult = {
   team: string;
   gender: Gender;
-  totals: { then: number; now: number; delta: number };
+  totals: {
+    then: number;
+    now: number;
+    delta: number;
+    /**
+     * True when the team has at least one scored row on that side. A team with
+     * no rows reports a total of 0; these flags separate "no rows" from a real
+     * total of 0 points.
+     */
+    inThen: boolean;
+    inNow: boolean;
+  };
   /** Sorted top movers first (|deltaPoints| desc). Unchanged swimmers omitted. */
   swimmers: ScenarioSwimmerDiff[];
   /** Sorted |delta| desc. Unchanged events omitted. */
@@ -118,6 +142,8 @@ type TeamSide = {
   /** Relay entries aggregated per event (points attributed to the relay row). */
   relays: Map<string, EntryContribution>;
   total: number;
+  /** Count of rows that counted toward the team. 0 means the team is absent. */
+  rowCount: number;
 };
 
 // ---------------------------------------------------------------------------
@@ -227,7 +253,7 @@ function scoreSide(
     else accumulateIndividualRow(individuals, r, event, pts);
   }
 
-  return { individuals, relays, total };
+  return { individuals, relays, total, rowCount: rows.length };
 }
 
 // ---------------------------------------------------------------------------
@@ -347,6 +373,8 @@ function buildIndividualDiffs(
       pointsThen,
       pointsNow,
       deltaPoints,
+      inThen: t !== undefined,
+      inNow: n !== undefined,
     });
   }
   return rows;
@@ -381,6 +409,8 @@ function buildRelayDiffs(
       pointsThen,
       pointsNow,
       deltaPoints,
+      inThen: t !== undefined,
+      inNow: n !== undefined,
     });
   }
   return rows;
@@ -397,6 +427,15 @@ function eventPointsFor(side: TeamSide, event: string): number {
     pts += s.byEvent.get(event)?.points ?? 0;
   }
   return pts;
+}
+
+/** True when the side has an entry in the event, whatever its points. */
+function hasEventEntry(side: TeamSide, event: string): boolean {
+  if (side.relays.has(event)) return true;
+  for (const s of side.individuals.values()) {
+    if (s.byEvent.has(event)) return true;
+  }
+  return false;
 }
 
 /** Every event either side scored, individual or relay. */
@@ -421,7 +460,15 @@ function buildEventDiffs(
     const delta = pointsNow - pointsThen;
     const swimmersChanged = changedByEvent.get(event)?.size ?? 0;
     if (Math.abs(delta) <= EPS && swimmersChanged === 0) continue;
-    rows.push({ event, pointsThen, pointsNow, delta, swimmersChanged });
+    rows.push({
+      event,
+      pointsThen,
+      pointsNow,
+      delta,
+      swimmersChanged,
+      inThen: hasEventEntry(then, event),
+      inNow: hasEventEntry(now, event),
+    });
   }
   return rows;
 }
@@ -487,7 +534,13 @@ export function computeScenarioDiff(
   return {
     team: opts.team.trim(),
     gender: opts.gender,
-    totals: { then: then.total, now: now.total, delta: now.total - then.total },
+    totals: {
+      then: then.total,
+      now: now.total,
+      delta: now.total - then.total,
+      inThen: then.rowCount > 0,
+      inNow: now.rowCount > 0,
+    },
     swimmers,
     events,
   };

@@ -434,7 +434,7 @@ Avery Henke   A Final
 ## Part K — Conversion, provenance and NAIA course round (2026-09-22 to 2026-09-24)
 
 Plan: `plans/2026-09-22/01-CONVERSION-AND-IMPROVEMENTS-PLAN.md`. Progress log:
-`docs/reference/IMPROVEMENTS_2026-09-22_STATE.json`.
+`docs/archive/2026-09/IMPROVEMENTS_2026-09-22_STATE.json`.
 
 ### New cut-tag states
 
@@ -522,7 +522,7 @@ skips it, so re-extraction still works. Guarded by
 ## Part L — Next-round follow-ups (2026-09-25)
 
 Plan: `plans/2026-09-24/01-NEXT-ROUND-PLAN.md`. Progress log:
-`docs/reference/NEXT_ROUND_2026-09-24_STATE.json`.
+`docs/archive/2026-09/NEXT_ROUND_2026-09-24_STATE.json`.
 
 ### Events a course does not swim (item B4)
 

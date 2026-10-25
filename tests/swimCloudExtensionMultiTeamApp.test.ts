@@ -109,7 +109,7 @@ describe('markCapture and flushDownloads', () => {
     await app.markCapture(SUBJECT, 'every-planned-page-fetched', 'Henderson State University');
     await app.markCapture(SUBJECT, 'partial');
     expect(w.sent[0]).toEqual({ type: 'omniswim-swimcloud-mark-capture', subject: SUBJECT, completeness: 'every-planned-page-fetched', label: 'Henderson State University' });
-    expect('label' in w.sent[1]).toBe(false);
+    expect('label' in w.sent[1]!).toBe(false);
   });
 
   it('flushes each subject and reports counts, filenames and failures', async () => {
@@ -122,8 +122,8 @@ describe('markCapture and flushDownloads', () => {
     const results = await createMultiTeamApp(w.send).flushDownloads([SUBJECT, other]);
     expect(w.sent.map((m) => m.type)).toEqual(['omniswim-swimcloud-flush-downloads', 'omniswim-swimcloud-flush-downloads']);
     expect(results[0]).toEqual({ subject: SUBJECT, pageCount: 3, filename: 'omniswim-swimcloud-captures/team-412/combined-capture.json' });
-    expect(results[1].subject).toEqual(other);
-    expect(results[1].pageCount).toBe(0);
-    expect(results[1].error).toBeDefined();
+    expect(results[1]!.subject).toEqual(other);
+    expect(results[1]!.pageCount).toBe(0);
+    expect(results[1]!.error).toBeDefined();
   });
 });

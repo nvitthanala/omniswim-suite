@@ -18,11 +18,17 @@ import {
   Workspace,
 } from '../types';
 import { isChampionshipProgramEvent, normalizeEventLabel } from './athleteHistory';
+import { itemAt, recordAt, regexGroup } from './indexedAccess';
 import { isRankableSwim, swimEventIdentity } from './bestTimeEligibility';
 import { mergeScoringSettings } from './scoringDefaults';
 import { scorerRosterKey, usesScorerRoster } from './scorerRoster';
-import { relayEntryKey, parseRelayDistanceYardsOrNull } from './relaySplits';
-import { relayTemplateFromLeg, upsertRelayLegOverride } from './relayLegMatching';
+import { parseRelayDistanceYardsOrNull } from './relaySplits';
+import {
+  isValidRelayLegIndex,
+  relayEntryKeyIn,
+  relayTemplateFromLeg,
+  upsertRelayLegOverride,
+} from './relayLegMatching';
 import {
   canAcceptAnotherEntry,
   countSwimmerEntries,
@@ -132,7 +138,7 @@ function normalizeTheoryEventToken(raw: string): string | null {
   if (!t || t === '?') return null;
   t = t.replace(/\?+$/, '').trim();
   if (!t) return null;
-  if (t.includes('/')) t = t.split('/')[0].trim();
+  if (t.includes('/')) t = itemAt(t.split('/'), 0).trim();
   const lower = t.toLowerCase().replace(/\s+/g, ' ');
   if (!lower || lower === '?') return null;
   return lower;
@@ -155,7 +161,10 @@ export function expandEventToken(raw: string): string | null {
 
   const m = lower.match(DISTANCE_AND_STROKE);
   if (!m) return null;
-  return normalizeEventLabel(`${m[1]} ${STROKE_SUFFIX_MAP[m[2]]}`);
+  // Group 2 is an alternative of the regex, and every alternative is a key of the map.
+  return normalizeEventLabel(
+    `${regexGroup(m, 1)} ${recordAt(STROKE_SUFFIX_MAP, regexGroup(m, 2))}`
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -212,7 +221,7 @@ function sectionHeaderFor(lower: string): Section | null {
 function parseRelaySectionLine(t: string, state: TheoryParseState): void {
   const header = t.match(RELAY_EVENT_HEADER);
   if (header) {
-    const sig = `${header[1]} ${header[2].toLowerCase()}`;
+    const sig = `${regexGroup(header, 1)} ${regexGroup(header, 2).toLowerCase()}`;
     state.relayEvent = RELAY_EVENT_MAP[sig] ?? null;
     if (!state.relayEvent) state.warnings.push(`Unknown relay event "${t}"`);
     return;
@@ -221,8 +230,8 @@ function parseRelaySectionLine(t: string, state: TheoryParseState): void {
   if (squad && state.relayEvent) {
     state.relays.push({
       event: state.relayEvent,
-      squad: squad[1].toUpperCase() as TheorySquad,
-      legs: parseRelayLegs(squad[2]),
+      squad: regexGroup(squad, 1).toUpperCase() as TheorySquad,
+      legs: parseRelayLegs(regexGroup(squad, 2)),
     });
     return;
   }
@@ -234,18 +243,18 @@ function parseSwimmerLine(t: string): TheorySwimmer | null {
   const m = t.match(NAME_WITH_PARENS);
   if (!m) return null;
   const events: string[] = [];
-  for (const token of m[2].split(',')) {
+  for (const token of regexGroup(m, 2).split(',')) {
     const ev = expandEventToken(token);
     if (ev && !events.includes(ev)) events.push(ev);
   }
-  return { rawName: m[1].trim(), events };
+  return { rawName: regexGroup(m, 1).trim(), events };
 }
 
 /** "Tristin F (sprint fr)" → name plus its free-text note, kept verbatim. */
 function parseOtherLine(t: string): TheoryOther | null {
   const m = t.match(NAME_WITH_PARENS);
   if (!m) return null;
-  return { rawName: m[1].trim(), note: m[2].trim() };
+  return { rawName: regexGroup(m, 1).trim(), note: regexGroup(m, 2).trim() };
 }
 
 /** Route one non-blank, non-header line to the handler for the section it sits in. */
@@ -321,11 +330,16 @@ function levenshtein(a: string, b: string): number {
     curr[0] = i;
     for (let j = 1; j <= n; j++) {
       const cost = a[i - 1] === b[j - 1] ? 0 : 1;
-      curr[j] = Math.min(prev[j] + 1, curr[j - 1] + 1, prev[j - 1] + cost);
+      // Both rows hold n + 1 numbers and j runs 1..n, so each read is in range.
+      curr[j] = Math.min(
+        itemAt(prev, j) + 1,
+        itemAt(curr, j - 1) + 1,
+        itemAt(prev, j - 1) + cost
+      );
     }
     [prev, curr] = [curr, prev];
   }
-  return prev[n];
+  return itemAt(prev, n);
 }
 
 function similarity(a: string, b: string): number {
@@ -359,7 +373,7 @@ function foldNameParts(raw: string): FoldedName {
     folded,
     parts,
     first: parts[0] ?? '',
-    last: parts.length > 1 ? parts[parts.length - 1] : '',
+    last: parts.length > 1 ? itemAt(parts, parts.length - 1) : '',
   };
 }
 
@@ -376,7 +390,7 @@ function foldTheoryQuery(raw: string): TheoryQueryName {
   return {
     ...base,
     firstExpanded: NICKNAMES[base.first] ?? base.first,
-    isInitialForm: base.parts.length === 2 && base.parts[1].length === 1,
+    isInitialForm: base.parts.length === 2 && itemAt(base.parts, 1).length === 1,
   };
 }
 
@@ -397,7 +411,7 @@ function scoreInitialFormQuery(query: TheoryQueryName, roster: FoldedName): numb
     firstNamesAgree(query, roster) ||
     roster.first.startsWith(query.firstExpanded) ||
     query.firstExpanded.startsWith(roster.first);
-  const initialOk = roster.last.startsWith(query.parts[1]);
+  const initialOk = roster.last.startsWith(itemAt(query.parts, 1));
   if (firstOk && initialOk) return 0.9;
   return similarity(query.folded, roster.folded) * 0.6;
 }
@@ -977,7 +991,7 @@ function indexRelayTemplatesBySignature(
     if (!isRelayResult(r)) continue;
     if (!resultRowIsForTeam(r, team, gender)) continue;
     const template = relayTemplateFromLeg(results, r);
-    const key = relayEntryKey(template);
+    const key = relayEntryKeyIn(results, template);
     if (seenKeys.has(key)) continue;
     seenKeys.add(key);
     const sig = relaySignature(template.event);
@@ -1106,7 +1120,7 @@ function applyTheoryRelay(
     );
     return;
   }
-  const entryKey = relayEntryKey(template);
+  const entryKey = relayEntryKeyIn(ctx.results, template);
   relay.legs.forEach((leg, legIndex) =>
     assignRelayLeg(ctx, draft, relay, entryKey, template.event, leg, legIndex)
   );
@@ -1267,6 +1281,9 @@ function promotionForOverride(
   if (!alternate) return null;
 
   const relayEvent = override.relayEntryKey.split('|')[1] ?? '';
+  // A stored `legIndex` that names no leg cannot be promoted onto: the screen reads the leg's
+  // stroke from it. The lineup audit names the bad override (`relay_leg_index_invalid`).
+  if (!isValidRelayLegIndex(relayEvent.toLowerCase(), override.legIndex)) return null;
   const next: RelayLegOverride = { ...override, assigneeName: alternate, source: 'autofill' };
   return {
     relayEntryKey: override.relayEntryKey,

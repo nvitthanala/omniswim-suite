@@ -72,7 +72,7 @@ test.describe('Matrix timeline chart', () => {
     await expect(page.getByRole('tab')).toHaveCount(3, { timeout: 30_000 });
     await page.getByRole('tab', { name: /Analyze/ }).click({ timeout: 30_000 });
 
-    await expect(page.getByText('Chronological Team Score Timeline')).toBeVisible({ timeout: 30_000 });
+    await expect(page.getByText('Team score timeline')).toBeVisible({ timeout: 30_000 });
 
     const shell = page.locator('.chart-shell').first();
     await expect(shell).toBeVisible({ timeout: 30_000 });

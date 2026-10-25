@@ -104,14 +104,14 @@ describe('the no-seed text', () => {
 });
 
 describe('the preview model with a removal', () => {
-  const removal = removalFor(picked.team, picked.swimmer, picked.swimmer.chosen[0].event);
+  const removal = removalFor(picked.team, picked.swimmer, picked.swimmer.chosen[0]!.event);
   const built = buildMeet({ ...args, excludedEvents: [removal] }, 'ws-removal-1', 1);
   const team = built.model.teams.find(t => t.key === picked.team.key)!;
   const swimmer = team.swimmers.find(s => s.swimmerKey === picked.swimmer.swimmerKey)!;
 
   it('lists the removed event for restoring, and no longer lists it as chosen', () => {
     expect(swimmer.removedByUser.map(e => e.event)).toEqual([removal.event]);
-    expect(swimmer.removedByUser[0].freedSlot).toBe(true);
+    expect(swimmer.removedByUser[0]!.freedSlot).toBe(true);
     expect(swimmer.chosen.map(e => e.event)).not.toContain(removal.event);
     expect(swimmer.chosen.length).toBe(picked.swimmer.chosen.length);
   });
@@ -119,7 +119,7 @@ describe('the preview model with a removal', () => {
   it('shows the replacement event, once, and nothing else as a replacement', () => {
     const fills = swimmer.chosen.filter(e => e.fillsRemovedSlot);
     expect(fills.length).toBe(1);
-    expect(picked.swimmer.chosen.map(e => e.event)).not.toContain(fills[0].event);
+    expect(picked.swimmer.chosen.map(e => e.event)).not.toContain(fills[0]!.event);
     expect(swimmer.unfilledSlots).toBe(0);
     expect(swimmer.leftOutByCap).toBe(picked.swimmer.leftOutByCap - 1);
   });
@@ -156,7 +156,7 @@ describe('the preview model with a removal', () => {
 
 describe('createMeet keeps the removals when the id is taken', () => {
   it('rebuilds under a fresh id with the same events removed', async () => {
-    const removal = removalFor(picked.team, picked.swimmer, picked.swimmer.chosen[0].event);
+    const removal = removalFor(picked.team, picked.swimmer, picked.swimmer.chosen[0]!.event);
     const withRemoval: BuildMeetArgs = { ...args, excludedEvents: [removal] };
     const preview = buildMeet(withRemoval, 'taken-id', 1);
     const restore = vi.fn(async (w: Workspace) => w);
@@ -236,8 +236,8 @@ describe('the dialog', () => {
     for (const summary of document.body.querySelectorAll('button[aria-expanded="false"]')) await click(summary);
   }
 
-  const removeLabel = `Remove ${picked.swimmer.chosen[0].event} for ${picked.swimmer.name}`;
-  const restoreLabel = `Restore ${picked.swimmer.chosen[0].event} for ${picked.swimmer.name}`;
+  const removeLabel = `Remove ${picked.swimmer.chosen[0]!.event} for ${picked.swimmer.name}`;
+  const restoreLabel = `Restore ${picked.swimmer.chosen[0]!.event} for ${picked.swimmer.name}`;
 
   it('shows a visible, named Remove button on every chosen event, and no read-only note', async () => {
     await openPreview();
@@ -262,7 +262,7 @@ describe('the dialog', () => {
     expect(document.activeElement).toBe(restore);
     expect(document.body.textContent).toContain('removed by you');
     expect(document.body.textContent).toContain('in place of a removed event');
-    expect(q('[role="status"]')?.textContent).toBe(`Removed ${picked.swimmer.chosen[0].event} for ${picked.swimmer.name}.`);
+    expect(q('[role="status"]')?.textContent).toBe(`Removed ${picked.swimmer.chosen[0]!.event} for ${picked.swimmer.name}.`);
     expect(document.body.textContent).toContain('You removed 1 event.');
     // The slot was refilled, so the number of entries does not change.
     expect(document.body.querySelectorAll('button[data-tmeet-toggle$="|remove"]').length).toBe(before);
@@ -274,7 +274,7 @@ describe('the dialog', () => {
     expect(document.activeElement).toBe(remove);
     expect(document.body.textContent).not.toContain('removed by you');
     expect(document.body.textContent).not.toContain('in place of a removed event');
-    expect(q('[role="status"]')?.textContent).toBe(`Restored ${picked.swimmer.chosen[0].event} for ${picked.swimmer.name}.`);
+    expect(q('[role="status"]')?.textContent).toBe(`Restored ${picked.swimmer.chosen[0]!.event} for ${picked.swimmer.name}.`);
   });
 
   it('works from the keyboard: the buttons are real buttons in the tab order', async () => {

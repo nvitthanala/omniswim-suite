@@ -23,7 +23,9 @@
  * 3. **Never over a meet or recruit swim.** A swimmer who already has a row at
  *    the leg's event in the pool gets no history candidate for it, even a
  *    faster one. Gavin Kock's history 20.46 50 Free does not displace his
- *    20.47 at the meet.
+ *    20.47 at the meet. A pool row with no time (a DQ, a no-show:
+ *    `hasRelayLegTime`) is not a swim here: it fills no leg, so it hides no
+ *    history swim.
  * 4. **Only a swimmer already on the roster.** History is read only for a
  *    swimmer the pool already holds (same team, same name after the alias
  *    links), so the roster gates the pool passed ("drop seniors", removed
@@ -39,9 +41,17 @@
  * rows as `relayLegOnlyPool`: an override may resolve onto one, and no row is
  * ever emitted.
  *
- * Time trials: a history swim flagged as one still qualifies, exactly as a
- * meet time-trial row does today. Whether a time trial may fill a relay leg
- * is an open user question (R1 g); change both together or neither.
+ * Time trials: a history swim that is a time trial (`isTimeTrialSwim`) fills no
+ * leg, the same rule a meet time-trial row follows. User decision D9: a time
+ * trial fills a leg only when `ScoringSettings.relayLegsAllowTimeTrials` is
+ * on. A candidate built from one then carries `relayLegTimeTrial: true`. With
+ * the setting off, a meet time-trial row also does not count as the swimmer's
+ * swim at the leg event (rule 3), so their history swim is still offered.
+ *
+ * The loaded meet's scored-event boundary (`officialTeamScores.eventThrough`)
+ * makes a swim of a later event a time trial. It judges the meet's own result
+ * rows, and the history swims copied from them (`historySwimBoundary`). A
+ * history swim of another meet is judged by its flag and label alone.
  */
 
 import {
@@ -56,15 +66,19 @@ import { aliasNameKey, buildAliasResolver } from './athleteAliases';
 import { isRankableSwim } from './bestTimeEligibility';
 import { recordedCourseOfSwim } from './courseEvents';
 import {
+  hasRelayLegTime,
   individualEventDistanceStroke,
   relayLegEventKey,
+  relayLegMatchSettings,
   relayLegEventName,
-  relayStrokeForIndex,
+  relayStrokeForBoundedIndex,
 } from './relayLegMatching';
 import { relayLegDistanceYardsOfEvent } from './relaySplits';
+import { relayLegsAllowTimeTrials } from './scoringDefaults';
 import {
   convertTimeToSeconds,
   isRelayResult,
+  isTimeTrialSwim,
   scyConversionOutcome,
   scyConversionProvenance,
 } from './utils';
@@ -87,7 +101,8 @@ function relayLegEventsOf(results: readonly SwimmerResult[]): Map<string, LegEve
     if (distance == null) continue;
     const lower = row.event.toLowerCase();
     for (let legIndex = 0; legIndex < 4; legIndex++) {
-      const stroke = relayStrokeForIndex(lower, legIndex);
+      // `legIndex` is the loop counter (0 to 3), so it always has a stroke.
+      const stroke = relayStrokeForBoundedIndex(lower, legIndex);
       legEvents.set(relayLegEventName(distance, stroke), { distance, stroke });
     }
   }
@@ -196,7 +211,8 @@ function historyCandidateRow(
   member: RosterSwimmer,
   legSwim: HistoryLegSwim,
   gender: Gender,
-  key: string
+  key: string,
+  timeTrial: boolean
 ): SwimmerResult {
   const { swim } = legSwim;
   return {
@@ -210,6 +226,7 @@ function historyCandidateRow(
     event: legSwim.legEvent,
     gender,
     ...(legSwim.convertedFrom ? { convertedFrom: legSwim.convertedFrom } : {}),
+    ...(timeTrial ? { relayLegTimeTrial: true as const } : {}),
     relayLegHistory: {
       event: swim.event,
       time: swim.time,
@@ -244,6 +261,15 @@ export function relayLegHistoryCandidates(
   const legEvents = relayLegEventsOf(results);
   if (legEvents.size === 0) return [];
 
+  // Read after the history cache, never inside it: the cache is keyed on the
+  // history array, so toggling the setting must not return stale rows.
+  const allowTimeTrials = relayLegsAllowTimeTrials(workspace.scoringSettings);
+  // The loaded meet's scored-event boundary. It judges only the swims that
+  // meet's own results gave (`historySwimBoundary`), never another meet's.
+  const meetBoundary = relayLegMatchSettings(workspace).scoredEventNumberMax;
+  const meetLabel = loadedMeetHistoryLabel(workspace);
+  const boundaryOf = (swim: HistoricalSwim): number | undefined =>
+    historySwimBoundary(swim, meetLabel, meetBoundary);
   const resolver = buildAliasResolver(workspace);
   const keys = new Map<string, string>();
   const keyOf = (name: string, team: string): string => {
@@ -268,7 +294,17 @@ export function relayLegHistoryCandidates(
     const key = keyOf(row.name, row.team);
     const member = roster.get(key) ?? { row, legEventsSwum: new Set<string>() };
     const legEvent = legEventByKey.get(memoLegEventKey(row.event));
-    if (legEvent) member.legEventsSwum.add(legEvent);
+    // A time-trial row cannot fill the leg while the setting is off, so it
+    // must not hide the swimmer's history swim at that event (rule 3).
+    // A row with no time (a DQ, a no-show) cannot fill the leg either, so it
+    // must not hide the swimmer's history swim: nothing else would be offered.
+    if (
+      legEvent &&
+      hasRelayLegTime(row) &&
+      (allowTimeTrials || !isTimeTrialSwim(row, meetBoundary))
+    ) {
+      member.legEventsSwum.add(legEvent);
+    }
     roster.set(key, member);
   }
   if (roster.size === 0) return [];
@@ -276,6 +312,7 @@ export function relayLegHistoryCandidates(
   const fastest = new Map<string, { legSwim: HistoryLegSwim; key: string; member: RosterSwimmer }>();
   for (const legSwim of historyLegSwims(history, gender)) {
     if (!legEvents.has(legSwim.legEvent)) continue;
+    if (!allowTimeTrials && isTimeTrialSwim(legSwim.swim, boundaryOf(legSwim.swim))) continue;
     const key = keyOf(legSwim.swim.name, legSwim.swim.team);
     const member = roster.get(key);
     if (!member || member.legEventsSwum.has(legSwim.legEvent)) continue;
@@ -286,8 +323,46 @@ export function relayLegHistoryCandidates(
   }
 
   return [...fastest.values()].map(({ legSwim, key, member }) =>
-    historyCandidateRow(member, legSwim, gender, key)
+    historyCandidateRow(
+      member,
+      legSwim,
+      gender,
+      key,
+      isTimeTrialSwim(legSwim.swim, boundaryOf(legSwim.swim))
+    )
   );
+}
+
+/**
+ * The `meetLabel` `buildHistoryFromWorkspace` gives the history swims it copies
+ * from the loaded meet's own results: the PDF file name, else the workspace
+ * name. A history swim carrying it came from the loaded meet.
+ */
+export function loadedMeetHistoryLabel(
+  workspace: Pick<Workspace, 'loadedMeet' | 'name'>
+): string {
+  return workspace.loadedMeet?.pdfFilename ?? workspace.name;
+}
+
+/**
+ * The scored-event boundary that judges one history swim.
+ *
+ * A history swim records no boundary of its own meet: `HistoricalSwim` has the
+ * meet's label, not the meet's program. The loaded meet's boundary
+ * (`meetBoundary`) is that meet's, so it applies only to a swim that meet's own
+ * results gave (its `meetLabel` is the loaded meet's, `loadedMeetHistoryLabel`).
+ * A swim of another meet, or one with no label, is a time trial only by its
+ * `isTimeTrial` flag or a "Time Trial" in its label: its event number is a
+ * number of some other meet's program (`Event 45` at a meet that scored through
+ * 60 is no time trial), so no boundary is applied.
+ */
+export function historySwimBoundary(
+  swim: Pick<HistoricalSwim, 'meetLabel'>,
+  loadedMeetLabel: string,
+  meetBoundary: number | undefined
+): number | undefined {
+  if (meetBoundary === undefined) return undefined;
+  return swim.meetLabel !== undefined && swim.meetLabel === loadedMeetLabel ? meetBoundary : undefined;
 }
 
 /** True for a row {@link relayLegHistoryCandidates} built. */

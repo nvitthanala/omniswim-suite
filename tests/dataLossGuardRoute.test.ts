@@ -20,6 +20,7 @@ import path from 'node:path';
 import { v4 as uuidv4 } from 'uuid';
 import { JsonRepo } from '../apps/shell/lib/workspaceRepo';
 import { applyWorkspaceUpdateWithGuard } from '../apps/shell/lib/dataLossGuard';
+import { NSISC_PRESET_SETTINGS } from '../packages/core/src/lib/scoringDefaults';
 import type { Workspace } from '../packages/core/src/types';
 
 function makeResults(count: number) {
@@ -97,7 +98,7 @@ describe('applyWorkspaceUpdateWithGuard — route wiring against a real JsonRepo
 
     // Only scoringSettings changes; menResults/womenResults are untouched.
     const { dataLossWarning } = await applyWorkspaceUpdateWithGuard(repo, seed.id, {
-      scoringSettings: { conference: 'NSISC' } as Workspace['scoringSettings'],
+      scoringSettings: { ...NSISC_PRESET_SETTINGS, relayMultiplier: 4 },
     });
 
     expect(dataLossWarning).toBeUndefined();

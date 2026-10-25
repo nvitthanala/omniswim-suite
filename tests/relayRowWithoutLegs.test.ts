@@ -29,7 +29,7 @@ function parse(html: string, meet: string, event: string) {
 
 /** The relay names a real page prints, taken from the markup: `<span ...>Henderson State (A)</span>`. */
 function printedRelayNames(html: string): string[] {
-  return [...html.matchAll(/<span class="u-inline-block@sm">([^<]*\([A-Z]\))<\/span>/g)].map(m => m[1]);
+  return [...html.matchAll(/<span class="u-inline-block@sm">([^<]*\([A-Z]\))<\/span>/g)].map(m => m[1]!);
 }
 
 describe('readRelayDesignator on what real pages print', () => {

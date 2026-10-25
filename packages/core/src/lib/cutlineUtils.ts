@@ -42,6 +42,7 @@ import {
   cutlineEventCategory,
   isDivingEvent,
   normalizeEventForCutline,
+  stripRelaySplitSuffix,
   type CourseOfRecordFromLabel,
   type CutlineEventCategory,
   type SwimCourseOfRecord,
@@ -59,6 +60,7 @@ export {
   cutlineEventCategory,
   isDivingEvent,
   normalizeEventForCutline,
+  stripRelaySplitSuffix,
 };
 export type { CourseOfRecordFromLabel, CutlineEventCategory, SwimCourseOfRecord };
 

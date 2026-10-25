@@ -16,28 +16,40 @@ import type { PrelimsOverUnderEntry } from '@omniswim/core/lib/prelimsProjection
 import { entryKey, prelimsOuOverUnderForDisplay } from '@omniswim/core/lib/prelimsProjection';
 import type { PsychOverUnderEntry } from '@omniswim/core/lib/psychProjection';
 import { psychExpectedForResult } from '@omniswim/core/lib/psychProjection';
-import { displayTimeForRelayLeg, formatLegSplitSummary } from '@omniswim/core/lib/relaySplits';
-import { CompactEventLabel, PlacementExpectedValue, PrelimsOuValue } from './matrixPresentation';
-import { CutlineVerdict, PodiumMedal, RelayVerdict, useIsEstimatedRelayRow } from './TeamCardParts';
+import { RELAY_LEG_ESTIMATE_LABEL, formatLegSplitSummary, hasRelayLegTime, relayLegTimeView } from '@omniswim/core/lib/relaySplits';
+import { isTheoreticalMeet } from '@omniswim/core/lib/theoreticalMeetLabel';
+import { useSuiteWorkspaceOptional } from '@omniswim/core/store/SuiteWorkspaceProvider';
+import { rowHasNoActual } from '../lib/noActual';
+import { CompactEventLabel, NoActualMarker, PlacementExpectedValue, PrelimsOuValue } from './matrixPresentation';
+import { CutlineVerdict, PodiumMedal, podiumPlaceOf, RelayVerdict, useIsEstimatedRelayRow } from './TeamCardParts';
 import {
   buildTeamRowCutlineTags,
   computeClassTopPerformers,
+  isTeamCardEventDatum,
   relayMissingStrokeLabel,
   sortSwimmersByPoints,
+  type TeamCardTooltipDatum,
   type TeamRowCutlineTags,
 } from './teamCardView';
+import { RELAY_NO_BASELINE_EXPLANATION } from '@omniswim/core/lib/relayLegMatching';
 
 /** Chart tooltip title + points, with the event tooltip's optional over/under badge. */
-export function TooltipHeader({ isClass, data, showPrelimsPerformance }: { isClass: boolean; data: any; showPrelimsPerformance?: boolean }) {
-  const showOverUnder = !isClass && showPrelimsPerformance && data.overUnder != null && Math.abs(data.overUnder) > 0.05;
+export function TooltipHeader({ isClass, data, showPrelimsPerformance }: { isClass: boolean; data: TeamCardTooltipDatum; showPrelimsPerformance?: boolean }) {
+  // Only an event datum carries over/under; a class datum has none.
+  const eventDatum = !isClass && isTeamCardEventDatum(data) ? data : null;
+  const overUnder = eventDatum?.overUnder ?? null;
+  const showOverUnder = eventDatum !== null && showPrelimsPerformance && overUnder !== null && Math.abs(overUnder) > 0.05;
+  // The event has an entry with no result yet and nothing else to show: say so rather than show nothing.
+  const showNoActual = eventDatum !== null && showPrelimsPerformance && overUnder === null && eventDatum.noActual === true;
   return (
     <div className="flex justify-between items-center mb-2 pb-2 border-b border-theme-soft shrink-0">
       <h4 className="font-bold text-[var(--text-accent)] uppercase tracking-widest" style={{ fontSize: 'clamp(8px, 5cqi, 12px)' }}>
-        {isClass ? `Class of ${data.name}` : <CompactEventLabel event={data.rawEvent} />}
+        {eventDatum ? <CompactEventLabel event={eventDatum.rawEvent} /> : `Class of ${data.name}`}
       </h4>
       <div className="flex flex-col items-end gap-0.5">
         <span className="font-mono font-black" style={{ fontSize: 'clamp(9px, 6cqi, 14px)' }}>{data.points.toFixed(1)} PTS</span>
-        {showOverUnder ? <PrelimsOuValue value={data.overUnder} compact /> : null}
+        {showOverUnder ? <PrelimsOuValue value={overUnder} compact /> : null}
+        {showNoActual ? <NoActualMarker /> : null}
       </div>
     </div>
   );
@@ -83,7 +95,7 @@ export function TooltipSwimmerList({
   }
   return (
     <>
-      {swimmers.map((s: any, idx: number) => (
+      {swimmers.map((s, idx) => (
         <TooltipSwimmerRow
           key={idx}
           s={s}
@@ -99,8 +111,15 @@ export function TooltipSwimmerList({
   );
 }
 
+/**
+ * A swimmer row as the tooltip reads it. `podium` is not a `SwimmerResult` field
+ * (nothing in core sets it); the medal is derived from the row's place
+ * (`podiumPlaceOf`) and reads `podium` only as an older override.
+ */
+type TooltipSwimmer = SwimmerResult & { podium?: string };
+
 interface TooltipSwimmerRowProps {
-  s: any;
+  s: TooltipSwimmer;
   gender: Gender | string;
   teamName: string;
   showPrelimsPerformance?: boolean;
@@ -110,7 +129,7 @@ interface TooltipSwimmerRowProps {
 }
 
 /** The row's mono time column: relay leg split, or plain finals/time. */
-function SwimmerTimeCell({ s, hasRelaySplit, rowTags }: { s: any; hasRelaySplit: boolean | undefined; rowTags: TeamRowCutlineTags }) {
+function SwimmerTimeCell({ s, hasRelaySplit, rowTags }: { s: TooltipSwimmer; hasRelaySplit: boolean; rowTags: TeamRowCutlineTags }) {
   if (!hasRelaySplit) {
     return (
       <span className="font-mono text-theme-secondary">
@@ -123,9 +142,13 @@ function SwimmerTimeCell({ s, hasRelaySplit, rowTags }: { s: any; hasRelaySplit:
       </span>
     );
   }
+  const legView = relayLegTimeView(s);
   return (
     <span className="font-mono text-theme-secondary">
-      <span className="text-points-positive">{displayTimeForRelayLeg(s)}</span>
+      <span className="text-points-positive">{legView?.time ?? '—'}</span>
+      {legView?.kind === 'estimate' ? (
+        <span className="ml-1 text-ui-micro text-theme-muted font-sans">{RELAY_LEG_ESTIMATE_LABEL}</span>
+      ) : null}
       {/* The leg's own individual verdict, when this leg is eligible (e.g. a
           medley relay's backstroke leadoff) — anchored to the split it
           actually describes. */}
@@ -168,7 +191,12 @@ function SwimmerExpectedValues({
         <PlacementExpectedValue label="Psych" value={psychExpectedForResult(s, psychOuByEntry)} />
       ) : null}
       {showPrelimsPerformance && prelimsOuByEntry ? (
-        <PrelimsOuValue value={prelimsOuOverUnderForDisplay(s, prelimsOuByEntry)} compact className="ml-1" />
+        <PrelimsOuValue
+          value={prelimsOuOverUnderForDisplay(s, prelimsOuByEntry)}
+          noActual={rowHasNoActual(s, prelimsOuByEntry)}
+          compact
+          className="ml-1"
+        />
       ) : null}
     </div>
   );
@@ -185,23 +213,35 @@ export function TooltipSwimmerRow({
   psychOuByEntry,
 }: TooltipSwimmerRowProps) {
   const estimatedRelay = useIsEstimatedRelayRow(s);
+  // A theoretical meet and an estimated relay were never swum, so their ranks are not finishes.
+  const theoretical = isTheoreticalMeet(useSuiteWorkspaceOptional()?.activeWorkspace);
+  const medalPlace = estimatedRelay || theoretical ? undefined : podiumPlaceOf(s);
   const rowTags = buildTeamRowCutlineTags(s, gender, teamName, s.finalsTime || s.time, estimatedRelay);
-  const hasRelaySplit = s.isRelay && (s.relayLegSplitDetail || s.relayLegSplit);
+  const hasRelaySplit = hasRelayLegTime(s);
+  const legIsEstimate = relayLegTimeView(s)?.kind === 'estimate';
 
   return (
     <div className="flex items-center justify-between py-1 border-b border-theme-soft/50 last:border-0 swimmer-row text-ui-caption">
       <div className="flex items-center gap-2">
         <span className="w-4 font-mono text-theme-muted">{s.rank || '-'}</span>
         <span className="w-4 shrink-0 inline-flex justify-center">
-          <PodiumMedal podium={s.podium} />
+          <PodiumMedal place={medalPlace} podium={s.podium} />
         </span>
         <span className="font-medium text-[var(--text-primary)] truncate max-w-[120px]">{s.name}</span>
         {hasRelaySplit && (
-          <span className="text-ui-micro text-theme-muted font-mono" title="Relay leg split">Split</span>
+          <span
+            className="text-ui-micro text-theme-muted font-mono"
+            title={legIsEstimate ? 'Estimated relay leg time' : 'Relay leg split'}
+          >
+            {legIsEstimate ? RELAY_LEG_ESTIMATE_LABEL : 'Split'}
+          </span>
         )}
         {s.relayMissingLeg && (
-          <span className="text-ui-micro bg-warning-soft text-warning px-1 border border-warning-faint rounded-sm ml-1" title="Missing relay leg">
-            Missing L{(s.relayMissingLeg.legIndex ?? 0) + 1}: {relayMissingStrokeLabel(s.relayMissingLeg.stroke)}
+          <span
+            className="text-ui-micro bg-warning-soft text-warning px-1 border border-warning-faint rounded-sm ml-1"
+            title={s.relayMissingLeg.reason === 'no_baseline' ? RELAY_NO_BASELINE_EXPLANATION : 'Missing relay leg'}
+          >
+            {s.relayMissingLeg.reason === 'no_baseline' ? 'No split' : 'Missing'} L{(s.relayMissingLeg.legIndex ?? 0) + 1}: {relayMissingStrokeLabel(s.relayMissingLeg.stroke)}
           </span>
         )}
         {/* Non-relay rows only — a relay's verdicts belong next to the
@@ -225,7 +265,7 @@ export function TooltipSwimmerRow({
 }
 
 interface TeamCardChartTooltipProps {
-  data: any;
+  data: TeamCardTooltipDatum;
   /** A pinned tooltip is resizable and carries a close affordance. */
   isPinned?: boolean;
   /** The class chart's tooltip lists per-class top performers; the event chart's lists swimmers. */
@@ -282,7 +322,7 @@ export function TeamCardChartTooltip({
       <div className="space-y-1 mt-2 flex-1 overflow-y-auto custom-scrollbar">
         {isClass ? (
           <>
-            <div className="text-theme-muted font-bold uppercase mb-1" style={{ fontSize: 'clamp(7px, 4cqi, 10px)' }}>Top Performers</div>
+            <div className="text-theme-muted font-bold uppercase mb-1" style={{ fontSize: 'clamp(7px, 4cqi, 10px)' }}>Top performers</div>
             <ClassTopPerformersList topPerformers={topPerformers} />
           </>
         ) : (

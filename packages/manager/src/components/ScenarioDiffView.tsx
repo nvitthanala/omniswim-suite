@@ -7,6 +7,7 @@
 
 import React from 'react';
 import type { ScenarioDiffResult } from '@omniswim/core/lib/scenarioDiffClient';
+import { ABSENT_LABEL, rowStatus, sidePointsLabel } from './scenarioCompareView';
 
 type Props = {
   result: ScenarioDiffResult;
@@ -31,14 +32,26 @@ function DeltaText({ value, className = '' }: { value: number; className?: strin
   );
 }
 
+/** "Added" or "Removed" as plain text beside a name. Nothing when both sides hold the row. */
+function StatusText({ inThen, inNow }: { inThen: boolean; inNow: boolean }) {
+  const status = rowStatus(inThen, inNow);
+  if (status === null) return null;
+  return <span className="text-theme-muted"> ({status})</span>;
+}
+
 export function ScenarioDiffView({ result, emptyMessage }: Props) {
   return (
     <div className="mt-2.5 border-t border-theme-soft pt-2.5">
       <div className="flex items-center justify-between gap-2 text-ui-micro font-mono tabular-nums">
         <span className="text-theme-secondary">
-          Then {result.totals.then.toFixed(1)} → Now {result.totals.now.toFixed(1)}
+          Then {sidePointsLabel(result.totals.inThen, result.totals.then)} → Now{' '}
+          {sidePointsLabel(result.totals.inNow, result.totals.now)}
         </span>
-        <DeltaText value={result.totals.delta} className="text-ui-caption" />
+        {result.totals.inThen || result.totals.inNow ? (
+          <DeltaText value={result.totals.delta} className="text-ui-caption" />
+        ) : (
+          <span className="font-mono tabular-nums text-theme-muted text-ui-caption">{ABSENT_LABEL}</span>
+        )}
       </div>
       {result.events.length === 0 && result.swimmers.length === 0 ? (
         <p className="text-ui-micro text-theme-muted mt-1.5">{emptyMessage}</p>
@@ -55,9 +68,11 @@ export function ScenarioDiffView({ result, emptyMessage }: Props) {
                   >
                     <span className="text-theme-secondary truncate" title={ev.event}>
                       {ev.event}
+                      <StatusText inThen={ev.inThen} inNow={ev.inNow} />
                     </span>
                     <span className="shrink-0 font-mono tabular-nums text-theme-muted">
-                      {ev.pointsThen.toFixed(1)}→{ev.pointsNow.toFixed(1)} <DeltaText value={ev.delta} />
+                      {sidePointsLabel(ev.inThen, ev.pointsThen)}→{sidePointsLabel(ev.inNow, ev.pointsNow)}{' '}
+                      <DeltaText value={ev.delta} />
                     </span>
                   </li>
                 ))}
@@ -74,9 +89,10 @@ export function ScenarioDiffView({ result, emptyMessage }: Props) {
                       <span className="text-[var(--text-primary)] truncate" title={sw.name}>
                         {sw.name}
                         {sw.isRelay ? <span className="text-theme-muted"> · relay</span> : null}
+                        <StatusText inThen={sw.inThen} inNow={sw.inNow} />
                       </span>
                       <span className="shrink-0 font-mono tabular-nums text-theme-muted">
-                        {sw.pointsThen.toFixed(1)}→{sw.pointsNow.toFixed(1)}{' '}
+                        {sidePointsLabel(sw.inThen, sw.pointsThen)}→{sidePointsLabel(sw.inNow, sw.pointsNow)}{' '}
                         <DeltaText value={sw.deltaPoints} />
                       </span>
                     </div>

@@ -331,7 +331,7 @@ describe('RosterImportWizard — bulk roster import from a completed capture', (
     expect(container.textContent).toContain('Henderson State University · Men · 2025-2026');
     // One athlete of thirty-five, and the other thirty-four named as work left.
     expect(container.textContent).toContain(
-      '1 of 35 athletes have captured times · 34 will need a manual capture.',
+      '1 of 35 swimmers have captured times · 34 will need a manual capture.',
     );
     // Never the bare word "Complete" for a partial crawl.
     expect(container.textContent).toContain('1 of 37 planned pages');
@@ -441,7 +441,7 @@ describe('RosterImportWizard — bulk roster import from a completed capture', (
     mockCaptureRoutes(parseResponseWith([realRoster('m')], []));
     await openCaptureAndParse(Gender.MEN);
 
-    expect(container.textContent).toContain('0 of 35 athletes have captured times');
+    expect(container.textContent).toContain('0 of 35 swimmers have captured times');
     await click(findButton('Import this roster'));
 
     expect(errors).toHaveLength(1);

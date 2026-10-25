@@ -216,10 +216,10 @@ describe('relay legs with the flying-start setting OFF', () => {
 
   it('builds only the relays four swimmers can swim, and says why not the others', () => {
     expect(seeds.relayEntries.map(r => r.event)).toEqual(['200 Free Relay SCY', '200 Free Relay SCY', '200 Free Relay SCY']);
-    const report = seeds.report.teams[0].relayReport!;
+    const report = seeds.report.teams[0]!.relayReport!;
     expect(report.absent.map(a => a.event)).toEqual(['800 Free Relay SCY', '200 Medley Relay SCY', '400 Medley Relay SCY', '400 Free Relay SCY']);
     // Nobody has a 200 Free, a 50 Back, a 100 Back or a 100 Free best: nobody, not "zero".
-    expect(report.absent[0].missingLegs.map(m => [m.position, m.legEvent, m.swimmersWithBest])).toEqual([
+    expect(report.absent[0]!.missingLegs.map(m => [m.position, m.legEvent, m.swimmersWithBest])).toEqual([
       [1, '200 Freestyle', 0],
       [2, '200 Freestyle', 0],
       [3, '200 Freestyle', 0],
@@ -313,9 +313,9 @@ describe('team totals through the existing scoring path', () => {
   it('equals the hand sum of individual places and relay places x 2', () => {
     const table = SCORING_POINTS;
     expect(table.slice(0, 12)).toEqual([20, 17, 16, 15, 14, 13, 12, 11, 9, 7, 6, 5]);
-    expect(totals.get('Alpha University')).toBe(table[0] + table[3] + table[6] + table[9] + 2 * table[0]);
-    expect(totals.get('Beta University')).toBe(table[1] + table[4] + table[7] + table[10] + 2 * table[1]);
-    expect(totals.get('Gamma University')).toBe(table[2] + table[5] + table[8] + table[11] + 2 * table[2]);
+    expect(totals.get('Alpha University')).toBe(table[0]! + table[3]! + table[6]! + table[9]! + 2 * table[0]!);
+    expect(totals.get('Beta University')).toBe(table[1]! + table[4]! + table[7]! + table[10]! + 2 * table[1]!);
+    expect(totals.get('Gamma University')).toBe(table[2]! + table[5]! + table[8]! + table[11]! + 2 * table[2]!);
     expect([totals.get('Alpha University'), totals.get('Beta University'), totals.get('Gamma University')]).toEqual([94, 82, 75]);
   });
 
@@ -342,16 +342,18 @@ describe('team totals through the existing scoring path', () => {
     expect(legs.map(r => r.name)).toEqual(['A1', 'A2', 'A3', 'A4']);
     expect(new Set(legs.map(r => `${r.event}|${r.roundSwam}|${r.rank}|${r.time}|${r.finalsTime}|${r.relayTeamTime}`)).size).toBe(1);
     expect(legs[0]).toMatchObject({ event: '200 Free Relay SCY', roundSwam: 'A Final', rank: 1, time: '1:23.00', relayTeamTime: '1:23.00' });
-    expect(legs.map(r => r.relayLegSplit)).toEqual(['20.00', '20.50', '21.00', '21.50']);
+    // Nobody swam the relay: no leg row holds a split. The leg time is a labelled estimate (A7).
+    expect(legs.map(r => r.relayLegSplit)).toEqual([undefined, undefined, undefined, undefined]);
+    expect(legs.map(r => r.relayLegEstimate?.time)).toEqual([20, 20.5, 21, 21.5]);
     expect(legs.every(r => r.pdfPoints === undefined && r.isPsychSheet === undefined && r.relayLegSplitDetail === undefined)).toBe(true);
-    expect(legs[0].relayNames?.map(n => n.name)).toEqual(['A1', 'A2', 'A3', 'A4']);
+    expect(legs[0]!.relayNames?.map(n => n.name)).toEqual(['A1', 'A2', 'A3', 'A4']);
     const ids = built.payload.menResults.map(r => r.id);
     expect(new Set(ids).size).toBe(ids.length);
     expect(ids.every(id => id.includes('ws-relay'))).toBe(true);
     expect(built.relayResultIdsByEntryId.size).toBe(3);
   });
 
-  it('ranks teams by estimated time with a shared place on an exact tie (1, 1, 3), pays each tied relay the full place points, and names the tie', () => {
+  it('ranks teams by estimated time with a shared place on an exact tie (1, 1, 3), splits the tied places between the tied relays, and names the tie', () => {
     const tie = build([
       team('Alpha University', { A1: [['50 Free SCY', '20.00']], A2: [['50 Free SCY', '20.50']], A3: [['50 Free SCY', '21.00']], A4: [['50 Free SCY', '21.50']] }),
       team('Beta University', { B1: [['50 Free SCY', '20.00']], B2: [['50 Free SCY', '20.50']], B3: [['50 Free SCY', '21.00']], B4: [['50 Free SCY', '21.50']] }),
@@ -360,19 +362,21 @@ describe('team totals through the existing scoring path', () => {
     const b = buildTheoreticalMeetWorkspace({ workspaceId: 'ws-relay', createdAt: 1, seeds: tie, scoringSettings: NSISC_PRESET_SETTINGS, conference: 'NSISC' });
     const places = new Map(b.payload.menResults.filter(r => r.isRelay === true && r.relayLegIndex === 0).map(r => [r.team, r.rank]));
     expect([places.get('Alpha University'), places.get('Beta University'), places.get('Gamma University')]).toEqual([1, 1, 3]);
-    // Pinned current behaviour: core relay scoring does not split tied points. Each tied relay gets the full
-    // place-1 points (2 x 20 = 40, a quarter per leg = 10). Place 3 follows with 2 x 16 = 32 (8 per leg).
+    // Decision U1 (2026-10-12): tied relays split the points of every place the tie spans, as tied
+    // individual swims do. 1st and 2nd tied under the NSISC relay values (2 x 20, 2 x 17): (40 + 34) / 2 = 37
+    // per relay, a quarter per leg = 9.25. Place 3 follows with 2 x 16 = 32 (8 per leg).
     const scored = buildScoringSnapshot(b.payload as unknown as Workspace, Gender.MEN, false).baseline.allScored.filter(r => r.isRelay === true);
     const legPoints = (t: string): number[] => scored.filter(r => r.team === t).map(r => r.points as number);
-    expect(legPoints('Alpha University')).toEqual([10, 10, 10, 10]);
-    expect(legPoints('Beta University')).toEqual([10, 10, 10, 10]);
+    expect(legPoints('Alpha University')).toEqual([9.25, 9.25, 9.25, 9.25]);
+    expect(legPoints('Beta University')).toEqual([9.25, 9.25, 9.25, 9.25]);
     expect(legPoints('Gamma University')).toEqual([8, 8, 8, 8]);
-    // The meet names each tied relay and says it is not split.
+    // The meet names each tied relay and says the tied places are shared.
     const note = b.caveats.find(c => c.startsWith('Tied estimated relays:')) as string;
     expect(note).toContain('200 Free Relay SCY');
     expect(note).toContain('Alpha University, Beta University');
     expect(note).toContain('place 1');
-    expect(note).toContain('each tied relay receives the full place points');
+    expect(note).toContain('share the points of the places the tie spans');
+    expect(note).not.toContain('full place points');
     expect(b.caveats.filter(c => c.startsWith('Tied estimated relays:'))).toHaveLength(1);
   });
 
@@ -444,7 +448,7 @@ describe('relays and the entry caps', () => {
   const off = build([echo()], { includeRelays: false });
   const on = build([echo()]);
   const chosen = (s: TheoreticalMeetSeeds, name: string): string[] =>
-    s.report.teams[0].eventsChosenPerSwimmer.find(x => x.name === name)!.events.filter(e => e.chosen).map(e => e.event);
+    s.report.teams[0]!.eventsChosenPerSwimmer.find(x => x.name === name)!.events.filter(e => e.chosen).map(e => e.event);
 
   it('without relays a swimmer takes 7 individual events', () => {
     for (const name of ['E1', 'E2', 'E3', 'E4']) expect(chosen(off, name)).toHaveLength(7);
@@ -454,7 +458,7 @@ describe('relays and the entry caps', () => {
     expect(on.relayEntries.map(r => r.event)).toEqual(['800 Free Relay SCY', '400 Medley Relay SCY', '200 Free Relay SCY', '400 Free Relay SCY']);
     for (const name of ['E1', 'E2', 'E3', 'E4']) {
       expect(chosen(on, name)).toEqual(chosen(off, name).slice(0, 3));
-      const swimmer = on.report.teams[0].eventsChosenPerSwimmer.find(x => x.name === name)!;
+      const swimmer = on.report.teams[0]!.eventsChosenPerSwimmer.find(x => x.name === name)!;
       const out = swimmer.events.filter(e => e.notChosenReason === 'entry_cap').map(e => e.event);
       // 8 events are offered. 3 are chosen. The other 5 are stopped by the cap, and they include the 4 that were chosen without relays.
       expect(out).toHaveLength(5);
@@ -475,8 +479,8 @@ describe('relays and the entry caps', () => {
 
   it('keeps a user removal working after the relays: the freed slot goes to the next offered event', () => {
     const order = chosen(off, 'E1');
-    const swimmerKey = on.report.teams[0].eventsChosenPerSwimmer.find(x => x.name === 'E1')!.swimmerKey;
-    const removed = build([echo()], { excludedEvents: [{ teamName: ECHO, gender: Gender.MEN, swimmerKey, event: order[1] }] });
+    const swimmerKey = on.report.teams[0]!.eventsChosenPerSwimmer.find(x => x.name === 'E1')!.swimmerKey;
+    const removed = build([echo()], { excludedEvents: [{ teamName: ECHO, gender: Gender.MEN, swimmerKey, event: order[1]! }] });
     // Three slots after the relays: the first event stays, the second is gone, the fourth fills the slot.
     expect(chosen(removed, 'E1')).toEqual([order[0], order[2], order[3]]);
     expect(removed.relayEntries).toEqual(on.relayEntries);
@@ -504,7 +508,7 @@ describe('"Relays per swimmer: at most N" (a user setting, unset by default)', (
   const four = () => team(ECHO, { E1: events(0), E2: events(1), E3: events(2), E4: events(3) });
   const five = () => team(ECHO, { E1: events(0), E2: events(1), E3: events(2), E4: events(3), E5: events(4) });
   const individualEvents = (s: TheoreticalMeetSeeds, name: string): string[] =>
-    s.report.teams[0].eventsChosenPerSwimmer.find(x => x.name === name)!.events.filter(e => e.chosen).map(e => e.event);
+    s.report.teams[0]!.eventsChosenPerSwimmer.find(x => x.name === name)!.events.filter(e => e.chosen).map(e => e.event);
   const relaysOf = (s: TheoreticalMeetSeeds, name: string): number => s.relayEntries.filter(r => names(r).includes(name)).length;
 
   const unlimited = build([four()]);
@@ -529,7 +533,7 @@ describe('"Relays per swimmer: at most N" (a user setting, unset by default)', (
 
   it('builds the relays in program order until the limit stops the fill, and says why the others are absent', () => {
     expect(limited.relayEntries.map(r => r.event)).toEqual(['800 Free Relay SCY', '400 Medley Relay SCY']);
-    const absent = limited.report.teams[0].relayReport?.absent ?? [];
+    const absent = limited.report.teams[0]!.relayReport?.absent ?? [];
     expect(absent.map(a => a.event)).toEqual(['200 Medley Relay SCY', '200 Free Relay SCY', '400 Free Relay SCY']);
     const freeAbsent = absent.find(a => a.event === '200 Free Relay SCY')!;
     for (const leg of freeAbsent.missingLegs) {
@@ -552,7 +556,7 @@ describe('"Relays per swimmer: at most N" (a user setting, unset by default)', (
     // The first two relays take E1 to E4. Those four are then at the limit, and E5 alone cannot fill a relay.
     expect(s.relayEntries.map(r => r.event)).toEqual(['800 Free Relay SCY', '400 Medley Relay SCY']);
     expect(relaysOf(s, 'E5')).toBe(0);
-    const absent = s.report.teams[0].relayReport!.absent.find(a => a.event === '200 Free Relay SCY')!;
+    const absent = s.report.teams[0]!.relayReport!.absent.find(a => a.event === '200 Free Relay SCY')!;
     expect(absent.missingLegs[0]).toMatchObject({ position: 2, swimmersWithBest: 5, atRelayLimit: 4, alreadyOnRelay: 1 });
   });
 
@@ -593,10 +597,10 @@ describe('a team without four eligible swimmers', () => {
 
   it('gets no relay entry, and the reason names the leg and the count', () => {
     expect(seeds.relayEntries).toEqual([]);
-    const absent = seeds.report.teams[0].relayReport!.absent.find(a => a.event === '200 Free Relay SCY')!;
+    const absent = seeds.report.teams[0]!.relayReport!.absent.find(a => a.event === '200 Free Relay SCY')!;
     expect(absent.missingLegs).toEqual([{ position: 4, legEvent: '50 Freestyle', swimmersWithBest: 3, alreadyOnRelay: 3, atEntryCap: 0, atRelayLimit: 0 }]);
     expect(describeAbsentRelay(absent).reasons).toEqual(['Leg 4 (50 Freestyle): 3 swimmers have a best time (3 already on this relay), so nobody is left for the leg.']);
-    const medley = seeds.report.teams[0].relayReport!.absent.find(a => a.event === '200 Medley Relay SCY')!;
+    const medley = seeds.report.teams[0]!.relayReport!.absent.find(a => a.event === '200 Medley Relay SCY')!;
     expect(describeAbsentRelay(medley).reasons[0]).toBe('Leg 1 (50 Backstroke): no swimmer on the team has a best time in this event.');
   });
 
@@ -625,14 +629,14 @@ describe('which swims can be a leg', () => {
 
   it('uses the meet course only: a faster long-course swim is not converted or used', () => {
     const seeds = build([four([['50 Free LCM', '19.00', { timeType: 'LCM' }], ['50 Free SCY', '20.00']])]);
-    expect(relayOf(seeds, GOLF, '200 Free Relay SCY')?.legs[0].time).toBe('20.00');
+    expect(relayOf(seeds, GOLF, '200 Free Relay SCY')?.legs[0]!.time).toBe('20.00');
   });
 
   it('never uses a time extracted from a longer swim', () => {
     const seeds = build([four([['50 Free SCY', '20.00']], [['50 Free SCY', '19.50', { isExtractedSplit: true }], ['50 Back SCY', '30.00']])]);
     // G2 has no real 50 Free: only three swimmers have a result, so the relay is absent. The extracted 19.50 is not a leg.
     expect(relayOf(seeds, GOLF, '200 Free Relay SCY')).toBeUndefined();
-    expect(seeds.report.teams[0].relayReport!.absent.find(a => a.event === '200 Free Relay SCY')!.missingLegs[0].swimmersWithBest).toBe(3);
+    expect(seeds.report.teams[0]!.relayReport!.absent.find(a => a.event === '200 Free Relay SCY')!.missingLegs[0]!.swimmersWithBest).toBe(3);
   });
 
   it('labels an exhibition leg, and drops it when exhibition seeds are excluded (no slower time is used instead)', () => {
@@ -669,14 +673,14 @@ describe('relays not requested, or no program on record', () => {
     expect(seeds.relayEntries).toEqual([]);
     expect(seeds.report.relays?.programKnown).toBe(false);
     // The 7-entry total cap is in force and no relay slot was reserved, so both the team and the meet say so.
-    expect(seeds.report.teams[0].caveats).toContain(TOTAL_CAP_CAVEAT);
+    expect(seeds.report.teams[0]!.caveats).toContain(TOTAL_CAP_CAVEAT);
     expect(seeds.report.caveats).toContain(TOTAL_CAP_CAVEAT);
   });
 
   it('drops the total-cap line only when relays were really built (NSISC)', () => {
     const seeds = build([deltaTeam()]);
     expect(seeds.relayEntries.length).toBeGreaterThan(0);
-    expect(seeds.report.teams[0].caveats).not.toContain(TOTAL_CAP_CAVEAT);
+    expect(seeds.report.teams[0]!.caveats).not.toContain(TOTAL_CAP_CAVEAT);
     expect(seeds.report.caveats).not.toContain(TOTAL_CAP_CAVEAT);
   });
 
@@ -686,7 +690,7 @@ describe('relays not requested, or no program on record', () => {
     expect(JSON.stringify([asked.rows, asked.report])).toBe(JSON.stringify([never.rows, never.report]));
     expect(never.relayEntries).toEqual([]);
     expect(never.report.relays).toBeUndefined();
-    expect(never.report.teams[0].relayReport).toBeUndefined();
+    expect(never.report.teams[0]!.relayReport).toBeUndefined();
     expect(never.report.caveats).toContain(RELAYS_EXCLUDED_CAVEAT);
     expect(never.report.caveats).toContain(TOTAL_CAP_CAVEAT);
   });
@@ -716,7 +720,7 @@ describe('three real captured teams (committed, trimmed fixtures)', async () => 
       expect(new Set(names(r)).size).toBe(4);
       expect(r.anyEstimated).toBe(true);
       expect(r.legs.every(l => l.team === r.team)).toBe(true);
-      expect(r.legs[0].basis).toBe('flat-start-best');
+      expect(r.legs[0]!.basis).toBe('flat-start-best');
       expect(r.legs.slice(1).every(l => l.basis === 'estimated-from-flat-start' && l.estimated === true)).toBe(true);
     }
   });

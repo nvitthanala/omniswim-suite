@@ -91,7 +91,7 @@ function teamTotals(rows: SwimmerResult[]): Record<string, number> {
   const out: Record<string, number> = {};
   for (const r of rows) out[r.team] = (out[r.team] ?? 0) + Number(r.points);
   // Kill float noise from relay-leg division without hiding a real fraction.
-  for (const k of Object.keys(out)) out[k] = Math.round(out[k] * 1e6) / 1e6;
+  for (const k of Object.keys(out)) out[k] = Math.round(out[k]! * 1e6) / 1e6;
   return out;
 }
 
@@ -171,8 +171,8 @@ describe('NCAA Rule 7-1-1 dual meet, six lanes or more', () => {
     const rows = [...relayEntry('HSU', 1, 'A'), ...relayEntry('OBU', 2, 'A')];
     const scored = calculatePoints(rows, GENERIC_TOP16_SETTINGS);
     const expected = [
-      GENERIC_TOP16_SETTINGS.scoringPoints[0] * GENERIC_TOP16_SETTINGS.relayMultiplier,
-      GENERIC_TOP16_SETTINGS.scoringPoints[1] * GENERIC_TOP16_SETTINGS.relayMultiplier,
+      GENERIC_TOP16_SETTINGS.scoringPoints[0]! * GENERIC_TOP16_SETTINGS.relayMultiplier,
+      GENERIC_TOP16_SETTINGS.scoringPoints[1]! * GENERIC_TOP16_SETTINGS.relayMultiplier,
     ];
     expect(relayTeamPointsByPlace(scored)).toEqual(expected);
     expect(expected).toEqual([40, 34]);

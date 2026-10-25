@@ -27,10 +27,11 @@
  * Fixture is synthetic: invented teams, names and times.
  */
 import { describe, expect, it } from 'vitest';
-import { Gender, type SwimmerResult, type Workspace } from '../packages/core/src/types';
+import { Gender, type SwimmerResult } from '../packages/core/src/types';
 import { NSISC_PRESET_SETTINGS, mergeScoringSettings } from '../packages/core/src/lib/scoringDefaults';
 import { buildScoringBundle } from '../packages/core/src/lib/scoringEngine';
 import { athleteHasIssueType, buildTeamLineupAudit } from '../packages/core/src/lib/rosterLineupAudit';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 const TEAM = 'Alpha University';
 const CANONICAL = 'Cam Mask';
@@ -80,7 +81,7 @@ function audit(legSpelling: string) {
     individual('i2', 'Bo Bee', 2, '20.50'),
     ...relay(legSpelling),
   ];
-  const workspace = {
+  const workspace = workspaceFixture({
     id: 'ws-audit-alias',
     name: 'audit alias probe',
     createdAt: 0,
@@ -100,7 +101,7 @@ function audit(legSpelling: string) {
       { id: 'link-1', gender: Gender.MEN, team: TEAM, canonicalName: CANONICAL, aliasName: ALIAS, source: 'manual', status: 'active' },
     ],
     scorerRosterOverrides: [{ name: CANONICAL, team: TEAM, gender: Gender.MEN, isScorer: false }],
-  } as unknown as Workspace;
+  });
   const bundle = buildScoringBundle({
     workspace,
     gender: Gender.MEN,
@@ -149,7 +150,7 @@ describe('lineup audit: a non-scorer vacated from a relay leg', () => {
     expect(scorerOff).toHaveLength(1);
     // The per-leg sweep names the relay; the roster-wide sweep does not. The one
     // issue on the roster row must be the informative one.
-    expect(scorerOff[0].relayEvent).toBe(RELAY_EVENT);
+    expect(scorerOff[0]!.relayEvent).toBe(RELAY_EVENT);
     expect(result.athleteIssues.has('camden mask'), 'nothing left under the alias spelling').toBe(false);
   });
 });

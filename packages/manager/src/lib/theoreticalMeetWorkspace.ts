@@ -55,12 +55,13 @@
  * `seeds.relayEntries` (empty unless relays were requested) become four rows each, one per leg, the way a
  * HyTek relay is stored: the legs of one relay share `event`, `team`, `roundSwam`, `rank` and the team time
  * (`time`, `finalsTime`, `relayTeamTime`), and each leg row carries its swimmer, `relayLegIndex`,
- * `relayLegStroke` and `relayLegSplit` (the leg time). The engine groups legs by that shared key
+ * `relayLegStroke` and `relayLegEstimate` (the leg time, a labelled estimate). `relayLegSplit` is NOT set:
+ * nobody swam the relay, so no leg time here is a split. The engine groups legs by that shared key
  * (`relayEntryGroupKey`) and pays `scoringPoints[place] x relayMultiplier` (or `relayPoints`) once per
  * relay, split over the legs (`halfRateRelaySwimmer`). Teams are ranked by estimated team time within an
  * event and gender, ties 1, 2, 2, 4, and banded like the individual rows. No `relayLegSplitDetail` is
  * written: a segment breakdown would be a second invented number. Every relay row of a theoretical meet is
- * an estimate by construction ({@link isEstimatedRelayRow}); the workspace has no field for it.
+ * an estimate by construction ({@link isEstimatedRelayRow}); each leg row also carries its own `relayLegEstimate`.
  *
  * ## Ties
  *
@@ -102,12 +103,25 @@
  */
 
 import { Gender } from '@omniswim/core/types';
-import type { LoadedMeetMeta, ScoringSettings, SwimmerResult } from '@omniswim/core/types';
+import type { LoadedMeetMeta, RelayLegEstimate, ScoringSettings, SwimmerResult, TheoreticalRemovedEvent } from '@omniswim/core/types';
 import { canonicalMeetEventLabel, swimEventIdentity } from '@omniswim/core/lib/athleteHistory';
 import { meetCopyFromParsed } from '@omniswim/core/lib/meetSource';
 import { mergeScoringSettings } from '@omniswim/core/lib/scoringDefaults';
-import { THEORETICAL_MEET_LABEL, isEstimatedRelayRow, isTheoreticalMeet } from '@omniswim/core/lib/theoreticalMeetLabel';
-import { calculatePoints, convertTimeToSeconds, isDivingEvent, isRelayResult, parseEventNumber } from '@omniswim/core/lib/utils';
+import {
+  THEORETICAL_MEET_LABEL,
+  THEORETICAL_RELAY_LEG_ROW_ID_PREFIX,
+  isEstimatedRelayRow,
+  isTheoreticalMeet,
+  theoreticalRemovedEvents,
+} from '@omniswim/core/lib/theoreticalMeetLabel';
+import {
+  calculatePoints,
+  convertTimeToSeconds,
+  isDivingEvent,
+  isRelayResult,
+  normalizeSwimmerName,
+  parseEventNumber,
+} from '@omniswim/core/lib/utils';
 import {
   PDF_POINTS_SETTINGS_MESSAGE,
   theoreticalRelayProgramIndex,
@@ -122,7 +136,7 @@ import {
 
 // Defined in core (no heavy imports) so the shell and Metrics can read the label without loading the
 // manager bundle. Re-exported here so every existing import keeps working.
-export { THEORETICAL_MEET_LABEL, isEstimatedRelayRow, isTheoreticalMeet };
+export { THEORETICAL_MEET_LABEL, isEstimatedRelayRow, isTheoreticalMeet, theoreticalRemovedEvents };
 
 export const EVENT_ORDER_CAVEAT =
   'Events run in the standard program order, not a published meet order. Under a meet-wide scorer cap (NSISC: 18 scorers per team) the order decides which swimmers fill the cap. NSISC totals can move by several percent with event order (measured up to 7% on real data).';
@@ -244,13 +258,18 @@ export interface TheoreticalMeetWorkspaceBuild {
 }
 
 /**
- * Names each group of tied estimated relays. Core relay scoring (`scoreRelaysInEvent`) gives every tied relay
- * the full points of the shared place; it does not split them the way individual ties are split. This app
- * does not change that, so the meet says it.
+ * Names each group of tied estimated relays. Core relay scoring (`scoreRelaysInEvent`) splits the points of
+ * every place the tie spans between the tied relays, as it does for individual ties. The meet names the tie
+ * so a reader knows why those relays score alike.
  */
 export function relayTieCaveat(event: string, tied: readonly Pick<TheoreticalProjectedRelay, 'team' | 'gender' | 'totalTime'>[], place: number): string {
+  const first = tied[0];
+  // The caller passes a group of two or more tied relays.
+  if (first === undefined) {
+    throw new Error(`Indexed-read invariant broken: a tie caveat for ${event} place ${place} needs at least one relay.`);
+  }
   const teams = tied.map(r => r.team).join(', ');
-  return `Tied estimated relays: ${event}, ${String(tied[0].gender)}, place ${place}, ${tied[0].totalTime}: ${teams}. In this app today each tied relay receives the full place points. The points are not split.`;
+  return `Tied estimated relays: ${event}, ${String(first.gender)}, place ${place}, ${first.totalTime}: ${teams}. The tied relays share the points of the places the tie spans, as tied individual swims do.`;
 }
 
 export const RELAY_PLACES_CAVEAT =
@@ -264,7 +283,7 @@ const NAME_MAX = 120;
 
 /** Collapse whitespace, drop control characters and angle brackets, cap the length. Empty stays empty. */
 export function sanitizeWorkspaceName(raw: string): string {
-  // eslint-disable-next-line no-control-regex
+  // eslint-disable-next-line no-control-regex -- the class strips C0 control characters on purpose
   const cleaned = raw.replace(/[\u0000-\u001f\u007f<>]/g, ' ').replace(/\s+/g, ' ').trim();
   return cleaned.length > NAME_MAX ? `${cleaned.slice(0, NAME_MAX - 3).trimEnd()}...` : cleaned;
 }
@@ -489,7 +508,31 @@ function rankGender(
 /* -------------------------------------------------------------------------- */
 
 const RELAY_ENTRY_PREFIX = 'tmrelay|';
-const RELAY_RESULT_PREFIX = 'tmresrelay|';
+const RELAY_RESULT_PREFIX = THEORETICAL_RELAY_LEG_ROW_ID_PREFIX;
+
+/** The labels `relayLegEstimate.basis` carries on a theoretical meet's leg rows. */
+export const THEORETICAL_LEG_ESTIMATE_BASIS = {
+  /** Leg 1: the swimmer's recorded individual best at the leg's event, flat start. */
+  flatStartBest: 'flat-start best time',
+  /** Legs 2 to 4 with the user's flying-start adjustment taken off. */
+  startAdjusted: 'start-adjusted best time',
+  /** Legs 2 to 4 with no adjustment: the recorded flat-start best as it stands. */
+  noAdjustment: 'best time, no start adjustment',
+} as const;
+
+/** The estimate a leg row holds in place of a split. The time is the leg's `timeSec`, as built. */
+function legEstimateOf(relay: TheoreticalProjectedRelay, leg: TheoreticalProjectedRelay['legs'][number]): RelayLegEstimate {
+  if (leg.basis === 'flat-start-best') {
+    return { time: leg.timeSec, basis: THEORETICAL_LEG_ESTIMATE_BASIS.flatStartBest };
+  }
+  if (leg.basis !== 'estimated-from-flat-start') {
+    throw new TheoreticalWorkspaceError('unexpected-seed-row', `The relay ${relay.id} has a leg with the basis ${JSON.stringify(leg.basis)}, which this build does not write.`);
+  }
+  if (leg.startAdjustmentSec !== undefined) {
+    return { time: leg.timeSec, basis: THEORETICAL_LEG_ESTIMATE_BASIS.startAdjusted, startAdjustmentSec: leg.startAdjustmentSec };
+  }
+  return { time: leg.timeSec, basis: THEORETICAL_LEG_ESTIMATE_BASIS.noAdjustment };
+}
 
 /** The leg row id for a relay entry id and a leg position. */
 export function theoreticalRelayLegRowId(relayEntryId: string, position: number): string {
@@ -513,7 +556,7 @@ function requireRelayShape(relay: TheoreticalProjectedRelay, workspaceIdPart: st
   if (relay.anyEstimated !== true) bad('is not marked estimated');
   if (relay.legs.length !== 4 || relay.legs.some((leg, index) => leg.position !== index + 1)) bad('does not have exactly four legs in positions 1 to 4');
   if (relay.legs.some(leg => leg.team !== relay.team)) bad('has a leg from another team');
-  const names = new Set(relay.legs.map(leg => leg.name.trim().toLowerCase().replace(/\s+/g, ' ')));
+  const names = new Set(relay.legs.map(leg => normalizeSwimmerName(leg.name)));
   if (names.size !== 4) bad('has a swimmer on two legs');
   if (relay.legs.some(leg => !Number.isFinite(leg.timeSec) || leg.timeSec <= 0)) bad('has a leg time that is not a positive number');
   if (!Number.isFinite(relay.totalSec) || relay.totalSec !== round2(relay.legs.reduce((sum, leg) => sum + leg.timeSec, 0))) {
@@ -551,12 +594,18 @@ function rankRelays(
       relayNames: relay.legs.map(l => ({ name: l.name, year: l.classYear })),
       relayLegIndex: leg.position - 1,
       relayLegStroke: leg.stroke,
-      relayLegSplit: leg.time,
+      // Nobody swam this relay, so the row holds no split. The leg time is a labelled estimate.
+      relayLegEstimate: legEstimateOf(relay, leg),
     }));
     legRows.set(relay.id, rows);
     resultIds.set(relay.id, rows.map(r => r.id));
     const list = byEvent.get(relay.event) ?? [];
-    list.push({ relay, key: rows[0] });
+    const key = rows[0];
+    // `requireRelayShape` proved exactly four legs, so there are four rows.
+    if (key === undefined) {
+      throw new TheoreticalWorkspaceError('unexpected-seed-row', `The relay ${relay.id} has no leg rows.`);
+    }
+    list.push({ relay, key });
     byEvent.set(relay.event, list);
   }
   const out: SwimmerResult[] = [];
@@ -601,6 +650,40 @@ const encodeIdPart = (part: string): string => encodeURIComponent(part.trim());
  * for one event (`event-label-conflict`), a time that is not a number
  * (`unrankable-time`), two rows with one id (`row-id-collision`).
  */
+/**
+ * The (swimmer, event) pairs the build preview removed, from the seed report.
+ *
+ * A candidate is removed when its `notChosenReason` is `removed_by_user`. The count must equal each team's
+ * `eventsRemovedByUser`: a report that disagrees with itself throws instead of storing a list that
+ * under- or over-states what was removed.
+ */
+export function removedEventsOfReport(report: TheoreticalMeetSeeds['report']): TheoreticalRemovedEvent[] {
+  const removed: TheoreticalRemovedEvent[] = [];
+  for (const team of report.teams) {
+    let teamCount = 0;
+    for (const swimmer of team.eventsChosenPerSwimmer) {
+      for (const candidate of swimmer.events) {
+        if (candidate.notChosenReason !== 'removed_by_user') continue;
+        teamCount += 1;
+        removed.push({
+          teamName: team.teamName,
+          gender: team.gender,
+          swimmerName: swimmer.name,
+          event: candidate.event,
+          time: candidate.time,
+        });
+      }
+    }
+    if (teamCount !== team.eventsRemovedByUser) {
+      throw new TheoreticalWorkspaceError(
+        'unexpected-seed-row',
+        `The report for ${team.teamName} (${String(team.gender)}) counts ${team.eventsRemovedByUser} removed events but lists ${teamCount}.`
+      );
+    }
+  }
+  return removed;
+}
+
 export function buildTheoreticalMeetWorkspace(input: TheoreticalMeetWorkspaceInput): TheoreticalMeetWorkspaceBuild {
   if (typeof input.workspaceId !== 'string' || input.workspaceId.trim().length === 0) {
     throw new TheoreticalWorkspaceError('invalid-input', 'The workspace id is empty. Row ids are scoped by it.');
@@ -610,7 +693,7 @@ export function buildTheoreticalMeetWorkspace(input: TheoreticalMeetWorkspaceInp
   }
   const { seeds } = input;
   if (seeds.rows.length === 0) {
-    throw new TheoreticalWorkspaceError('no-seed-rows', 'The seeds hold no row, so there is no meet to build. See the report for why each athlete made none.');
+    throw new TheoreticalWorkspaceError('no-seed-rows', 'The seeds hold no row, so there is no meet to build. See the report for why each swimmer made none.');
   }
 
   if (input.scoringSettings?.usePdfPlacePoints === true) {
@@ -687,6 +770,8 @@ export function buildTheoreticalMeetWorkspace(input: TheoreticalMeetWorkspaceInp
       uploadedAt: input.createdAt,
       meetLabel: THEORETICAL_MEET_LABEL,
       ...(input.conference === undefined ? {} : { conference: input.conference }),
+      // Always written, empty when nothing was removed: a missing list means "built before F7, unknown".
+      theoreticalRemovedEvents: removedEventsOfReport(seeds.report),
     },
   };
   return {

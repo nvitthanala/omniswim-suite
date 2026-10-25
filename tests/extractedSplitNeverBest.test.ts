@@ -129,7 +129,9 @@ describe('the one predicate', () => {
     expect(isRankableSwim({ ...base, isUserInputted: true })).toBe(false);
     expect(isRankableSwim({ ...base, swimcloudBadge: 'user_input' })).toBe(false);
     // An altitude-adjusted time is still a best.
-    expect(isRankableSwim({ ...base, isAltitudeAdjusted: true })).toBe(true);
+    // Built first: `isRankableSwim` reads provenance fields only, and a literal would fail the excess-property check.
+    const altitudeAdjusted: HistoricalSwim = { ...base, isAltitudeAdjusted: true };
+    expect(isRankableSwim(altitudeAdjusted)).toBe(true);
     expect(isRankableSwim({ ...base, swimcloudBadge: 'd1_b' })).toBe(true);
   });
 });
@@ -435,14 +437,14 @@ describe('an extracted split fills a relay leg only when no standalone time exis
 
   it('uses a slower standalone swim over a faster extracted split', () => {
     const swap = rankWith([swim('20.40'), swim('20.10', { isExtractedSplit: true })]);
-    expect(swap.inAthlete).toBe('Alpha Five');
-    expect(swap.inTime).toBe('20.40');
-    expect(swap.inTimeExtractedSplit).toBeUndefined();
+    expect(swap!.inAthlete).toBe('Alpha Five');
+    expect(swap!.inTime).toBe('20.40');
+    expect(swap!.inTimeExtractedSplit).toBeUndefined();
   });
 
   it('falls back on the extracted split, marked, when it is all there is', () => {
     const swap = rankWith([swim('20.10', { swimcloudBadge: 'extracted' })]);
-    expect(swap.inTime).toBe('20.10');
-    expect(swap.inTimeExtractedSplit).toBe(true);
+    expect(swap!.inTime).toBe('20.10');
+    expect(swap!.inTimeExtractedSplit).toBe(true);
   });
 });

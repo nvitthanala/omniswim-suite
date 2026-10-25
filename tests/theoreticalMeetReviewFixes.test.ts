@@ -89,19 +89,65 @@ describe('groupCaptures tags each capture by its season', () => {
 
   it('gives each row its own tag and flags a team whose seasons sit in different divisions', () => {
     const [g] = groupCaptures([rec('2021-2022'), rec('2022-2023')], NOW);
-    expect(g.divisionVaries).toBe(true);
-    expect(g.divisionTag).toMatchObject({ text: DIVISION_VARIES_TEXT, division: null });
-    const bySeason = new Map(g.rows.map(r => [r.season, r.divisionTag.division]));
+    expect(g!.divisionVaries).toBe(true);
+    expect(g!.divisionTag).toMatchObject({ text: DIVISION_VARIES_TEXT, division: null });
+    const bySeason = new Map(g!.rows.map(r => [r.season, r.divisionTag.division]));
     expect(bySeason.get('2021-2022')).toBe('D2');
     expect(bySeason.get('2022-2023')).toBe('D1');
   });
 
   it('uses the one division when the seasons agree, and unknown for a season after the cut', () => {
     const [same] = groupCaptures([rec('2022-2023'), rec('2023-2024')], NOW);
-    expect(same.divisionVaries).toBe(false);
-    expect(same.divisionTag).toMatchObject({ text: 'NCAA D1', division: 'D1' });
+    expect(same!.divisionVaries).toBe(false);
+    expect(same!.divisionTag).toMatchObject({ text: 'NCAA D1', division: 'D1' });
     const [cut] = groupCaptures([rec('2025-2026')], NOW);
-    expect(cut.divisionTag).toMatchObject({ text: 'unknown division', division: null });
+    expect(cut!.divisionTag).toMatchObject({ text: 'unknown division', division: null });
+  });
+});
+
+describe('groupCaptures heading for a school whose division changed with the season (UWF)', () => {
+  const UWF = 'University of West Florida';
+  const rec = (season: string | undefined): CaptureListRecord => ({
+    captureId: season === undefined ? 'team-10002824' : `team-10002824-${season}`,
+    subject: { kind: 'team', teamId: '10002824', ...(season === undefined ? {} : { season }) },
+    completeness: 'every-planned-page-fetched',
+    plannedPageCount: 1,
+    pages: [],
+    updatedAt: '2026-10-19T00:00:00.000Z',
+    teamName: UWF,
+  });
+
+  it('a 2025-2026 capture heads the group NCAA D2', () => {
+    const [g] = groupCaptures([rec('2025-2026')], NOW);
+    expect(g!.divisionVaries).toBe(false);
+    expect(g!.divisionTag).toMatchObject({ text: 'NCAA D2', division: 'D2' });
+  });
+
+  it('a 2026-2027 capture heads the group NCAA D1', () => {
+    const [g] = groupCaptures([rec('2026-2027')], NOW);
+    expect(g!.divisionVaries).toBe(false);
+    expect(g!.divisionTag).toMatchObject({ text: 'NCAA D1', division: 'D1' });
+  });
+
+  it('a capture with no season recorded is unknown division, never D1 or D2', () => {
+    const [g] = groupCaptures([rec(undefined)], NOW);
+    expect(g!.divisionTag).toMatchObject({ text: 'unknown division', division: null });
+    expect(g!.rows[0]!.divisionTag.division).toBeNull();
+  });
+
+  it('a season-less capture beside a known season keeps its own unknown tag and does not hide the known heading', () => {
+    const [g] = groupCaptures([rec('2025-2026'), rec(undefined)], NOW);
+    expect(g!.divisionVaries).toBe(false);
+    expect(g!.divisionTag).toMatchObject({ text: 'NCAA D2', division: 'D2' });
+    const bySeason = new Map(g!.rows.map(r => [r.season, r.divisionTag.division]));
+    expect(bySeason.get('2025-2026')).toBe('D2');
+    expect(bySeason.get(null)).toBeNull();
+  });
+
+  it('two known seasons in different divisions still read "division differs by season"', () => {
+    const [g] = groupCaptures([rec('2025-2026'), rec('2026-2027')], NOW);
+    expect(g!.divisionVaries).toBe(true);
+    expect(g!.divisionTag).toMatchObject({ text: DIVISION_VARIES_TEXT, division: null });
   });
 });
 
@@ -242,7 +288,7 @@ describe('the flow hook', () => {
     const built = latest.preview.status === 'ready' ? latest.preview.built : null;
     const team = built!.model.teams[0];
     // The key a swimmer had before a re-read changed it: same team, same event, a key no swimmer carries.
-    const stale: TheoreticalEventExclusion = { teamName: team.teamName, gender: team.gender, swimmerKey: 'sc:99999999', event: team.swimmers[0].chosen[0].event };
+    const stale: TheoreticalEventExclusion = { teamName: team!.teamName, gender: team!.gender, swimmerKey: 'sc:99999999', event: team!.swimmers[0]!.chosen[0]!.event };
     await act(async () => latest.toggleEventRemoval(stale));
     const line = await waitFor(() => document.querySelector('[data-testid="tmeet-unmatched-removals"]'));
     expect(line.textContent).toBe(describeUnmatchedRemovals(1));
@@ -268,8 +314,8 @@ describe('the flow hook', () => {
     expect(teamB).toBeDefined();
     const swimmerA = teamA.swimmers.find(s => s.chosen.length > 0)!;
     const swimmerB = teamB.swimmers.find(s => s.chosen.length > 0)!;
-    await act(async () => latest.toggleEventRemoval(removalFor(teamA, swimmerA, swimmerA.chosen[0].event)));
-    await act(async () => latest.toggleEventRemoval(removalFor(teamB, swimmerB, swimmerB.chosen[0].event)));
+    await act(async () => latest.toggleEventRemoval(removalFor(teamA, swimmerA, swimmerA.chosen[0]!.event)));
+    await act(async () => latest.toggleEventRemoval(removalFor(teamB, swimmerB, swimmerB.chosen[0]!.event)));
     expect(Object.keys(latest.removals)).toHaveLength(2);
 
     // The crawl of capture A is no longer finished. A reload drops it from the selection.

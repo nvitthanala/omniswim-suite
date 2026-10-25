@@ -31,7 +31,7 @@ import { classifySwimCloudUrl } from '../packages/swimcloud/src/urlClassifier';
 import { MIN_DELAY_MS } from '../extensions/swimcloud-companion/src/crawlPacing';
 import { BASE_BACKOFF_MS } from '../extensions/swimcloud-companion/src/rateLimitBackoff';
 import { SWIMMER_TIMES_STAGGER_MS } from '../extensions/swimcloud-companion/src/swimmerTimes';
-import { MultiTeamDriverError, PAUSE_POLL_MS, assertFetchableUrl, type MultiTeamFetchedPage } from '../extensions/swimcloud-companion/src/multiTeamDriver';
+import { MultiTeamDriverError, PAUSE_POLL_MS, assertFetchableUrl } from '../extensions/swimcloud-companion/src/multiTeamDriver';
 import {
   PAGES,
   IDS_412M,
@@ -90,8 +90,8 @@ describe('multi-team driver: full dry run on archived pages', () => {
     const bySource = new Map(h.relays.map((r) => [r.sourceUrl, r.subject]));
     expect(bySource.get(optionsUrl('412'))).toEqual({ kind: 'team', teamId: '412' });
     expect(bySource.get(seasonRosterUrl('412', 'F', '29'))).toEqual({ kind: 'team', teamId: '412', season: '2025-2026' });
-    expect(bySource.get(swimmerUrl(IDS_412M[0]))).toEqual({ kind: 'team', teamId: '412', season: '2025-2026' });
-    expect(bySource.get(swimmerUrl(IDS_10002824F[0]))).toEqual({ kind: 'team', teamId: '10002824', season: '2025-2026' });
+    expect(bySource.get(swimmerUrl(IDS_412M[0]!))).toEqual({ kind: 'team', teamId: '412', season: '2025-2026' });
+    expect(bySource.get(swimmerUrl(IDS_10002824F[0]!))).toEqual({ kind: 'team', teamId: '10002824', season: '2025-2026' });
   });
 
   it('keeps the pacing: each request starts at least the gap after the previous one', async () => {
@@ -101,9 +101,9 @@ describe('multi-team driver: full dry run on archived pages', () => {
     expect(SWIMMER_TIMES_STAGGER_MS).toBe(3000);
     expect(BASE_BACKOFF_MS).toBe(MIN_DELAY_MS);
     for (let i = 1; i < h.fetches.length; i += 1) {
-      const gap = h.fetches[i].at - h.fetches[i - 1].at;
-      const floor = h.fetches[i].url.includes('/api/swimmers/') ? SWIMMER_TIMES_STAGGER_MS : MIN_DELAY_MS;
-      expect(gap, h.fetches[i].url).toBeGreaterThanOrEqual(floor);
+      const gap = h.fetches[i]!.at - h.fetches[i - 1]!.at;
+      const floor = h.fetches[i]!.url.includes('/api/swimmers/') ? SWIMMER_TIMES_STAGGER_MS : MIN_DELAY_MS;
+      expect(gap, h.fetches[i]!.url).toBeGreaterThanOrEqual(floor);
     }
   });
 
@@ -115,14 +115,14 @@ describe('multi-team driver: full dry run on archived pages', () => {
     const [a, b] = summary.teams;
     expect(a).toMatchObject({ teamId: '412', status: 'done', seasonLabel: '2025-2026', seasonId: '29', rostersDone: 2, swimmersDone: 62 });
     expect(b).toMatchObject({ teamId: '10002824', status: 'done', rostersDone: 2, swimmersDone: 27, emptyRosterGenders: ['M'] });
-    expect(h.states[h.states.length - 1].phase).toBe('finished');
+    expect(h.states[h.states.length - 1]!.phase).toBe('finished');
   });
 
   it('reads each team\'s season ids from its own page', async () => {
     // Team 10002824's pages print the same season as id 91. A driver that reused
     // team 412's table would send it to season 29.
     const pages = { ...PAGES };
-    for (const g of ['M', 'F']) pages[`10002824|${g}`] = PAGES[`10002824|${g}`].replace('<option value="29" selected>', '<option value="91" selected>');
+    for (const g of ['M', 'F']) pages[`10002824|${g}`] = PAGES[`10002824|${g}`]!.replace('<option value="29" selected>', '<option value="91" selected>');
     expect(pages['10002824|F']).not.toBe(PAGES['10002824|F']);
     const h = makeHarness({ pages });
     await run(h);
@@ -147,7 +147,7 @@ describe('multi-team driver: Cloudflare 403', () => {
     expect(summary.outcome).toBe('halted');
     expect(summary.haltMessage).toContain('SwimCloud returned a challenge');
     expect(summary.haltMessage).not.toMatch(/Resume/);
-    expect(summary.teams[0].rostersFailed).toBe(1);
+    expect(summary.teams[0]!.rostersFailed).toBe(1);
     expect(urls(h).some((u) => u.includes('/api/swimmers/'))).toBe(false);
   });
 
@@ -160,7 +160,7 @@ describe('multi-team driver: Cloudflare 403', () => {
   });
 
   it('on a swimmer request, stops at that swimmer', async () => {
-    const bad = swimmerUrl(ALL_IDS[2]);
+    const bad = swimmerUrl(ALL_IDS[2]!);
     const h = makeHarness({ respond: (url) => (url === bad ? { html: 'x', httpStatus: 403 } : null) });
     const summary = await run(h);
     expect(urls(h).length).toBe(6 + 3);
@@ -182,7 +182,7 @@ describe('multi-team driver: resume', () => {
     for (const id of ALL_IDS.slice(0, 3)) expect(requested).not.toContain(swimmerUrl(id));
     expect(requested.length).toBe(95 - 3);
     expect(requested.filter((u) => u.includes('/api/swimmers/'))).toEqual(ALL_IDS.slice(3).map(swimmerUrl));
-    expect(summary.teams[0].swimmersSkippedResumed).toBe(3);
+    expect(summary.teams[0]!.swimmersSkippedResumed).toBe(3);
     // The union is saved: this run's keys plus the one key no chosen roster listed.
     const last = h.saves[h.saves.length - 1];
     expect(last).toContain('swimmer|999999999|412|29');
@@ -212,7 +212,7 @@ describe('multi-team driver: cancel and pause', () => {
     expect(urls(h).length).toBe(8);
     expect(h.relays.length).toBe(8);
     expect(summary.outcome).toBe('cancelled');
-    expect(h.states[h.states.length - 1].queue?.cancelled).toBe(true);
+    expect(h.states[h.states.length - 1]!.queue?.cancelled).toBe(true);
   });
 
   it('cancel before the season choice fetches nothing more and asks nothing', async () => {
@@ -247,7 +247,7 @@ describe('multi-team driver: cancel and pause', () => {
     expect(h.states.some((s) => s.queue?.paused === true)).toBe(true);
     expect(urls(h)).toEqual([...EXPECTED_ROSTER_SIDE, ...ALL_IDS.map(swimmerUrl)]);
     expect(summary.outcome).toBe('completed');
-    expect(h.states[h.states.length - 1].queue?.paused).toBe(false);
+    expect(h.states[h.states.length - 1]!.queue?.paused).toBe(false);
   });
 });
 
@@ -268,8 +268,8 @@ describe('multi-team driver: seasons', () => {
     for (const id of [...IDS_412M, ...IDS_412F]) expect(swimmerRequests).not.toContain(swimmerUrl(id));
     const t412 = summary.teams[0];
     expect(t412).toMatchObject({ rostersDone: 0, rostersFailed: 2, swimmersDone: 0, status: 'done-with-errors' });
-    expect(t412.errors[0]).toContain('shows season 2025-2026 (id 29)');
-    expect(t412.errors[0]).toContain('asked for season 2024-2025 (id 28)');
+    expect(t412!.errors[0]).toContain('shows season 2025-2026 (id 29)');
+    expect(t412!.errors[0]).toContain('asked for season 2024-2025 (id 28)');
     // The wrong-season pages are not filed under the chosen season.
     expect(h.relays.some((r) => r.sourceUrl.includes('season_id=28'))).toBe(false);
     expect(summary.teams[1]).toMatchObject({ status: 'done', swimmersDone: 27 });
@@ -280,27 +280,27 @@ describe('multi-team driver: seasons', () => {
     const summary = await run(h);
     expect(urls(h).filter((u) => u.includes('/team/412/'))).toEqual([optionsUrl('412')]);
     expect(urls(h).filter((u) => u.includes('/api/swimmers/'))).toEqual([...IDS_10002824M, ...IDS_10002824F].map(swimmerUrl));
-    expect(summary.teams[0].status).toBe('season-unavailable');
-    expect(summary.teams[0].availableLabels).toContain('2025-2026');
-    expect(summary.teams[0].errors[0]).toContain('is not offered');
-    expect(summary.teams[1].status).toBe('done');
+    expect(summary.teams[0]!.status).toBe('season-unavailable');
+    expect(summary.teams[0]!.availableLabels).toContain('2025-2026');
+    expect(summary.teams[0]!.errors[0]).toContain('is not offered');
+    expect(summary.teams[1]!.status).toBe('done');
   });
 
   it('a team the user did not pick a season for is not crawled', async () => {
     const h = makeHarness({ choose: (team) => (team === '412' ? undefined : '2025-2026') });
     const summary = await run(h);
     expect(urls(h).filter((u) => u.includes('/team/412/'))).toEqual([optionsUrl('412')]);
-    expect(summary.teams[0].status).toBe('not-chosen');
+    expect(summary.teams[0]!.status).toBe('not-chosen');
   });
 
   it('a season page without a readable season list is reported and the other team goes on', async () => {
     // Two season menus: the page is a real team page, but which list is the team's cannot be told.
-    const pages = { ...PAGES, '412|M': PAGES['412|M'] + PAGES['412|M'] };
+    const pages = { ...PAGES, '412|M': PAGES['412|M']! + PAGES['412|M']! };
     const h = makeHarness({ pages });
     const summary = await run(h);
-    expect(summary.teams[0].status).toBe('seasons-unreadable');
-    expect(summary.teams[0].errors[0]).toContain('could not be read');
-    expect(summary.teams[1].status).toBe('done');
+    expect(summary.teams[0]!.status).toBe('seasons-unreadable');
+    expect(summary.teams[0]!.errors[0]).toContain('could not be read');
+    expect(summary.teams[1]!.status).toBe('done');
     expect(urls(h).filter((u) => u.includes('/team/412/'))).toEqual([optionsUrl('412')]);
   });
 });
@@ -310,7 +310,7 @@ describe('multi-team driver: seasons', () => {
 /* -------------------------------------------------------------------------- */
 
 describe('multi-team driver: rate limiting', () => {
-  const limited = (): MultiTeamFetchedPage => ({ html: 'slow down', httpStatus: 429 });
+  const limited = () => ({ html: 'slow down', httpStatus: 429 });
 
   it('three consecutive give-ups halt the crawl', async () => {
     const h = makeHarness({ respond: (url) => (url.includes('/api/swimmers/') ? limited() : null) });
@@ -326,16 +326,16 @@ describe('multi-team driver: rate limiting', () => {
   });
 
   it('two give-ups then a success do not halt', async () => {
-    const first = [swimmerUrl(ALL_IDS[0]), swimmerUrl(ALL_IDS[1])];
+    const first = [swimmerUrl(ALL_IDS[0]!), swimmerUrl(ALL_IDS[1]!)];
     const h = makeHarness({ respond: (url) => (first.includes(url) ? limited() : null) });
     const summary = await run(h);
     expect(summary.outcome).toBe('completed');
-    expect(summary.teams[0].swimmersFailed).toBe(2);
-    expect(summary.teams[0].errors.some((e) => e.includes('rate-limited (HTTP 429) after retries'))).toBe(true);
+    expect(summary.teams[0]!.swimmersFailed).toBe(2);
+    expect(summary.teams[0]!.errors.some((e) => e.includes('rate-limited (HTTP 429) after retries'))).toBe(true);
   });
 
   it('a 429 that clears on retry is a normal success', async () => {
-    const target = swimmerUrl(ALL_IDS[0]);
+    const target = swimmerUrl(ALL_IDS[0]!);
     let seen = 0;
     const h = makeHarness({
       respond: (url) => {
@@ -364,7 +364,7 @@ describe('multi-team driver: other outcomes', () => {
   });
 
   it('a network error halts', async () => {
-    const h = makeHarness({ respond: (url) => (url === swimmerUrl(ALL_IDS[0]) ? undefined : null) });
+    const h = makeHarness({ respond: (url) => (url === swimmerUrl(ALL_IDS[0]!) ? undefined : null) });
     const summary = await run(h);
     expect(summary.outcome).toBe('halted');
     expect(summary.haltMessage).toContain('network error');
@@ -372,13 +372,13 @@ describe('multi-team driver: other outcomes', () => {
   });
 
   it('a 404 swimmer is a failure of that swimmer, not a halt', async () => {
-    const h = makeHarness({ respond: (url) => (url === swimmerUrl(ALL_IDS[0]) ? { html: 'gone', httpStatus: 404 } : null) });
+    const h = makeHarness({ respond: (url) => (url === swimmerUrl(ALL_IDS[0]!) ? { html: 'gone', httpStatus: 404 } : null) });
     const summary = await run(h);
     expect(summary.outcome).toBe('completed');
-    expect(summary.teams[0].swimmersFailed).toBe(1);
-    expect(summary.teams[0].errors[0]).toContain(`swimmer ${ALL_IDS[0]}`);
+    expect(summary.teams[0]!.swimmersFailed).toBe(1);
+    expect(summary.teams[0]!.errors[0]).toContain(`swimmer ${ALL_IDS[0]}`);
     // A failed swimmer is not remembered as finished.
-    expect(h.saves[h.saves.length - 1]).not.toContain(savedKey(ALL_IDS[0]));
+    expect(h.saves[h.saves.length - 1]).not.toContain(savedKey(ALL_IDS[0]!));
   });
 
   it('a 404 roster page is a failure, not an empty roster', async () => {
@@ -386,11 +386,11 @@ describe('multi-team driver: other outcomes', () => {
     const summary = await run(h);
     expect(summary.outcome).toBe('completed');
     expect(summary.teams[0]).toMatchObject({ rostersDone: 1, rostersFailed: 1 });
-    expect(summary.teams[0].emptyRosterGenders).toEqual([]);
+    expect(summary.teams[0]!.emptyRosterGenders).toEqual([]);
   });
 
   it('a swimmer body that is not JSON halts and is not relayed', async () => {
-    const bad = swimmerUrl(ALL_IDS[0]);
+    const bad = swimmerUrl(ALL_IDS[0]!);
     const h = makeHarness({ respond: (url) => (url === bad ? { html: '<html>Just a moment...</html>', httpStatus: 200 } : null) });
     const summary = await run(h);
     expect(summary.outcome).toBe('halted');

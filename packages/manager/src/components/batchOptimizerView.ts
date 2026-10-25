@@ -15,6 +15,7 @@ import {
   type OptimizerOutcome,
   type OptimizerStage,
 } from '@omniswim/core/lib/rosterOptimizer';
+import { optimizerInputsMoved, type OptimizerInputRefs } from './optimizeRunView';
 
 export type TeamDelta = {
   teamName: string;
@@ -39,18 +40,16 @@ export type BatchOptimizationResult = {
 };
 
 /**
- * Runs the all-teams optimizer and packages the result the panel displays.
+ * Packages an all-teams optimizer result the way the panel displays it.
  * The optimizer reports aggregate totals only, so this shows a single "All
- * Teams" row plus the override/plan counts changed from the workspace as-is.
+ * Teams" row plus the override/plan counts changed from the workspace the run
+ * started from. Split out of `computeBatchOptimizationResult` so the run can
+ * happen in a worker and the packaging stay on the main thread.
  */
-export function computeBatchOptimizationResult(
+export function buildBatchOptimizationResult(
   workspace: Workspace,
-  gender: Gender,
-  mergedSettings: ScoringSettings,
-  stage: OptimizerStage,
-  removeSeniors = false
+  opt: GuardedOptimizerResult
 ): BatchOptimizationResult {
-  const opt = optimizeRosterAllTeams(workspace, gender, removeSeniors, mergedSettings, stage);
   const overrideCount = (opt.overrides ?? []).length - (workspace.scorerRosterOverrides ?? []).length;
   const planCount = (opt.meetEntryPlans ?? []).length - (workspace.meetEntryPlans ?? []).length;
   const teamDeltas: TeamDelta[] = [
@@ -75,6 +74,25 @@ export function computeBatchOptimizationResult(
       { overrides: opt.overrides, plans: opt.meetEntryPlans }
     ),
   };
+}
+
+/**
+ * Runs the all-teams optimizer in this thread and packages the result.
+ * The panel and the one-click apply in `useAllTeamsApply` run it through
+ * `requestOptimize` (the scoring worker) instead. This stays as the
+ * synchronous reference the equivalence tests compare the worker result to.
+ */
+export function computeBatchOptimizationResult(
+  workspace: Workspace,
+  gender: Gender,
+  mergedSettings: ScoringSettings,
+  stage: OptimizerStage,
+  removeSeniors = false
+): BatchOptimizationResult {
+  return buildBatchOptimizationResult(
+    workspace,
+    optimizeRosterAllTeams(workspace, gender, removeSeniors, mergedSettings, stage)
+  );
 }
 
 /**
@@ -121,10 +139,13 @@ export type BatchRunInputs = {
   settingsKey: string;
   stage: OptimizerStage;
   removeSeniors: boolean;
-  /** The three optimizer-owned arrays, by identity: any edit replaces them. */
-  overrides: Workspace['scorerRosterOverrides'];
-  plans: Workspace['meetEntryPlans'];
-  activeEntryIds: Workspace['activeEntryIds'];
+  /**
+   * Every workspace field the run read (`OPTIMIZER_INPUT_FIELDS`), by reference, as they stood
+   * when it started. This was three lineup arrays, which let an edit to the roster, aliases,
+   * history or deleted swimmers slip through to Apply. It is the same list the per-team apply
+   * and `useAllTeamsApply` check.
+   */
+  inputRefs: OptimizerInputRefs;
 };
 
 /** True while the scoring inputs of a run still match, so its result may be shown. */
@@ -139,14 +160,10 @@ export function batchRunInputsCurrent(ran: BatchRunInputs, now: Pick<BatchRunInp
 }
 
 /**
- * True when the lineup arrays are no longer the objects the run started from.
+ * True when any field the run read is no longer the object the run started from.
  * The result holds the FULL post-run arrays, so applying it then would
- * overwrite the edits made since.
+ * overwrite the edits made since (or describe a roster that no longer exists).
  */
 export function batchLineupMoved(ran: BatchRunInputs, workspace: Workspace): boolean {
-  return (
-    ran.overrides !== workspace.scorerRosterOverrides ||
-    ran.plans !== workspace.meetEntryPlans ||
-    ran.activeEntryIds !== workspace.activeEntryIds
-  );
+  return optimizerInputsMoved(ran.inputRefs, workspace);
 }

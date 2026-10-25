@@ -347,7 +347,7 @@ path instead of the capture-browsing path.
 
 ## 5. Prioritized shortlist
 
-1. **✅ DONE 2026-09-10 (see `docs/reference/UI_REDESIGN_STATE.json` turn
+1. **✅ DONE 2026-09-10 (see `docs/archive/2026-09/UI_REDESIGN_STATE.json` turn
    t13).** Resolve the dead `editorMode: 'legacy'` path in
    `TeamRosterPanel.tsx` / `AthleteMeetEntriesPanel.tsx` (§4a). Highest
    leverage of anything found: this is not duplicated UI a coach ever sees
@@ -396,7 +396,7 @@ path instead of the capture-browsing path.
    inconsistency — left alone, correctly, matching this session's own
    standing rule of not forcing a genuinely-fine pattern into a shared
    primitive it doesn't fit.
-4. **✅ DONE 2026-09-13 (see `docs/reference/UI_REDESIGN_STATE.json` turn
+4. **✅ DONE 2026-09-13 (see `docs/archive/2026-09/UI_REDESIGN_STATE.json` turn
    t16).** Badge convergence (§4d). Converted at 5 of the 9 files (7 call
    sites): `AthleteCreditedSwimsRow.tsx`, `AthleteRoleTag.tsx`,
    `AthleteRosterRow.tsx`, `RosterCatalogPanelParts.tsx` (2 sites),

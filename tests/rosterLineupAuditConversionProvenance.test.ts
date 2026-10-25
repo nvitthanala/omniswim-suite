@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { buildTeamLineupAudit } from '../packages/core/src/lib/rosterLineupAudit';
 import { NSISC_PRESET_SETTINGS } from '../packages/core/src/lib/scoringDefaults';
 import { Gender, type SwimmerResult, type Workspace } from '../packages/core/src/types';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 function swimmer(overrides: Partial<SwimmerResult> = {}): SwimmerResult {
   return {
@@ -20,7 +21,7 @@ function swimmer(overrides: Partial<SwimmerResult> = {}): SwimmerResult {
 }
 
 function workspace(overrides: Partial<Workspace> = {}): Workspace {
-  return {
+  return workspaceFixture({
     id: 'audit-ws',
     name: 'Conversion provenance test',
     createdAt: Date.now(),
@@ -34,7 +35,7 @@ function workspace(overrides: Partial<Workspace> = {}): Workspace {
     relayLegOverrides: [],
     deletedSwimmers: [],
     ...overrides,
-  } as unknown as Workspace;
+  });
 }
 
 const team = 'Ouachita Baptist University';
@@ -62,7 +63,7 @@ describe('auditConversionProvenance (via buildTeamLineupAudit)', () => {
     const items = runAudit(ws).checklistItems.filter(i => i.group === 'provenance');
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ type: 'conversion_estimate', athleteName: 'Alpha, Ace' });
-    expect(items[0].message).toContain('converted-time estimate');
+    expect(items[0]!.message).toContain('converted-time estimate');
   });
 
   it('does not flag an ordinary SCY swim', () => {

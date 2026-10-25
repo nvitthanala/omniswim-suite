@@ -38,7 +38,7 @@ export function WizardShell<T extends string>({
   const stepIndex = steps.findIndex(s => s.id === step);
   const firstEnabledIndex = steps.findIndex(s => !s.disabled);
   const activeIndex =
-    stepIndex >= 0 && !steps[stepIndex].disabled
+    stepIndex >= 0 && !steps[stepIndex]?.disabled
       ? stepIndex
       : firstEnabledIndex >= 0
         ? firstEnabledIndex
@@ -46,17 +46,22 @@ export function WizardShell<T extends string>({
           ? stepIndex
           : 0;
   const active = steps[activeIndex];
+  // No steps: nothing to show a title or panel for.
+  if (active === undefined) return null;
   const panelId = `wizard-panel-${reactId}`;
 
   const selectStep = (nextIndex: number) => {
-    onStepChange(steps[nextIndex].id);
+    const target = steps[nextIndex];
+    if (target === undefined) return;
+    onStepChange(target.id);
     tabRefs.current[nextIndex]?.focus();
   };
 
   const selectAdjacentEnabledStep = (index: number, direction: -1 | 1) => {
     for (let offset = 1; offset <= steps.length; offset += 1) {
       const nextIndex = (index + direction * offset + steps.length) % steps.length;
-      if (!steps[nextIndex].disabled) {
+      const candidate = steps[nextIndex];
+      if (candidate !== undefined && !candidate.disabled) {
         selectStep(nextIndex);
         return;
       }
@@ -117,7 +122,7 @@ export function WizardShell<T extends string>({
                     case 'End':
                       event.preventDefault();
                       for (let index = steps.length - 1; index >= 0; index -= 1) {
-                        if (!steps[index].disabled) {
+                        if (!steps[index]?.disabled) {
                           selectStep(index);
                           break;
                         }
@@ -126,7 +131,7 @@ export function WizardShell<T extends string>({
                   }
                 }}
                 className={`text-left rounded-xl border px-3.5 py-3 transition-[color,background-color,border-color,transform] duration-150 ease-out min-w-0 ${
-                  isDisabled ? '' : 'active:scale-[0.98]'
+                  isDisabled ? '' : 'active:scale-[0.98] motion-reduce:active:scale-100'
                 } ${isDisabled
                   ? 'border-theme-soft surface-muted-bg text-theme-muted opacity-60 cursor-not-allowed'
                   : isActive

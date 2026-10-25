@@ -220,7 +220,7 @@ Per `CLAUDE.md`'s delegation table — schema/structural decisions to
 `executor`, UI wiring against a reported API to `worker`, mechanical
 verification to `finisher` — and per this repo's own "assess partial work,
 never trust it" discipline: each phase ships fully tested before the next
-starts, and `docs/reference/UI_REDESIGN_STATE.json` gets one entry per
+starts, and `docs/archive/2026-09/UI_REDESIGN_STATE.json` gets one entry per
 phase once it actually starts, not before.
 
 **Phase 0 — per-applet diagnosis passes — COMPLETE.** All three applets
@@ -241,7 +241,7 @@ logo unchanged per the hard constraint. Caught and fixed a real bug along
 the way: `MenuItem` was spreading `onSelect` onto a native `<button>`
 where it silently bound to the unrelated text-selection DOM event instead
 of firing on click — 3 of 5 relocated controls were dead until fixed. See
-`docs/reference/UI_REDESIGN_STATE.json` turns t11–t13 for the full record.
+`docs/archive/2026-09/UI_REDESIGN_STATE.json` turns t11–t13 for the full record.
 Still needs the user's own visual pass in a running app (Dark/Light/custom
 theme) and a decision on the Suite Settings placement (a `worker` judgment
 call, never explicitly confirmed).
@@ -258,7 +258,7 @@ interruption left the component built but unexported and unwired; recovered
 and completed in the same session. Three test files needed rewriting against
 the new shared DOM shape (`tests/rosterImportWizardCaptureRoster.test.ts`,
 `tests/swimCloudCapturePicker.test.ts`, `tests/rosterImportWizardClipboardRouting.test.ts`)
-— all passing. See `docs/reference/UI_REDESIGN_STATE.json` turns t14–t15.
+— all passing. See `docs/archive/2026-09/UI_REDESIGN_STATE.json` turns t14–t15.
 Still needs the user's own visual/behavioral pass in a running app.
 
 **Phase 2.5 — ad-hoc design-system convergence, drawn from each diagnosis
@@ -290,7 +290,7 @@ result. Metrics' 1 flagged site (`RaceSetupFormFields.tsx`'s
 `EventTypeSection`) is left hand-rolled — it is a third, structurally
 different pattern (two separately bordered boxes in a grid, not one
 shared-border toggle), which this decision did not cover. Full record in
-`docs/reference/UI_REDESIGN_STATE.json` turns t16–t17;
+`docs/archive/2026-09/UI_REDESIGN_STATE.json` turns t16–t17;
 `05-METRICS-DIAGNOSIS.md` §5 item 2 still describes its own item as open.
 
 **Phase 3 — Matrix Panel+Parts normalization** (`worker`, mechanical
@@ -305,7 +305,7 @@ hasn't found yet, which is exactly what §2 says this document does not do.
 
 ## 7. State tracking
 
-`docs/reference/UI_REDESIGN_STATE.json` — one entry per turn/session,
+`docs/archive/2026-09/UI_REDESIGN_STATE.json` — one entry per turn/session,
 covering exactly what was done, what's still open, and where to resume.
 Read it before continuing this work in a new session; it is the source of
 truth over this document's prose if the two ever drift, per this repo's

@@ -23,6 +23,10 @@ interface TeamCardHeaderProps {
   projectedOverUnder?: number;
   showPrelimsPerformance?: boolean;
   eventThrough?: number;
+  /** Entries with no result yet that the "vs prelims" difference counts as 0 points. */
+  noActualCount?: number;
+  /** Seeds past the end of the place-point table: they have no expected points. */
+  prelimsWithoutExpectationCount?: number;
   onToggle: () => void;
 }
 
@@ -38,6 +42,8 @@ export function TeamCardHeader({
   projectedOverUnder,
   showPrelimsPerformance,
   eventThrough,
+  noActualCount,
+  prelimsWithoutExpectationCount,
   onToggle,
 }: TeamCardHeaderProps) {
   return (
@@ -52,7 +58,7 @@ export function TeamCardHeader({
         <h3 className="text-sm font-bold text-[var(--text-primary)]">{team.teamName}</h3>
         <div className="flex flex-col gap-1">
           <span className="text-ui-caption text-theme-secondary font-medium">
-            {conference ? `${conference} • ` : ''}{athleteCount} Athletes
+            {conference ? `${conference} • ` : ''}{athleteCount} Swimmers
           </span>
           {(actualScore != null || baselineScore != null || showPrelimsPerformance) ? (
             <ProjectedActualScore
@@ -64,6 +70,8 @@ export function TeamCardHeader({
               prelimsProjected={prelimsProjectedScore}
               baselineOverUnder={baselineOverUnder}
               projectedOverUnder={projectedOverUnder}
+              noActualCount={noActualCount}
+              prelimsWithoutExpectationCount={prelimsWithoutExpectationCount}
             />
           ) : null}
         </div>

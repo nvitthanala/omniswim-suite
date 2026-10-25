@@ -15,31 +15,30 @@
  * Every other metric swim still gets no computed cut: its converted time is
  * an estimate (`converted_estimate`), and an estimate never earns a cut.
  *
- * The rows are Noel Kis's block from the HSU roster export
- * (`hsuroster26-27.txt` lines 878-889), verbatim. The registry holds no NAIA
+ * The rows are Noel Kis's block from the local HSU roster export
+ * (`hsuroster26-27.txt` lines 878-889), verbatim. On a machine without that
+ * gitignored file the committed stand-in block carries the same rows under an
+ * invented name (`tests/helpers/localRosterPath.ts`). The registry holds no NAIA
  * program yet (plan item B5), so the NAIA cases pass `division: 'NAIA'`
  * explicitly, as `tests/naiaMeterCourseAsScm.test.ts` does. HSU itself is D2,
  * and its result is pinned too: B1 changes nothing for it.
  */
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { readRosterText, rosterBlock } from './helpers/localRosterPath';
 import { Gender, type HistoricalSwim } from '../packages/core/src/types';
 import { parseSwimCloudPersonalBestsDetailed } from '../packages/core/src/lib/athleteHistory';
 import { buildStoredSwim } from '../packages/core/src/lib/rosterCatalog';
 import { computedCutInOwnCourse } from '../packages/core/src/lib/cutlineUtils';
 import { buildCutlineTag, computedCutTooltip } from '../packages/core/src/lib/cutlineTags';
 
-const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
-const NAME = 'Noel Kis';
+const roster = readRosterText('hsuroster26-27.txt');
+const NAME = roster.source === 'real' ? 'Noel Kis' : 'Test Swimmer Charlie';
 const NAIA_TEAM = 'Example NAIA College';
 const HSU = 'Henderson State';
 
 /** Noel Kis's block, checked at both ends so a shifted file fails loudly. */
 function noelKisBlock(): string {
-  const lines = readFileSync(join(repoRoot, 'hsuroster26-27.txt'), 'utf8').split(/\r?\n/);
-  const block = lines.slice(877, 889);
+  const block = rosterBlock(roster, NAME);
   expect(block[0]).toBe(NAME);
   expect(block[block.length - 1]).toMatch(/^200 Free SCM\t2:12\.23\t/);
   return block.join('\n');

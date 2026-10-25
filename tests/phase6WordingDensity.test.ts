@@ -125,9 +125,13 @@ describe('Lineup density and the Swimmer tag', () => {
     expect(buttons().length, names().join(' | ')).toBeLessThanOrEqual(45);
   });
 
-  it('has no per-row Remove button', async () => {
+  it('has one icon-only Remove button per row, named for its athlete (decision U6)', async () => {
     await renderLineup(largeRosterWorkspace());
-    expect(names().filter(name => /^Remove /.test(name))).toEqual([]);
+    const rows = container.querySelectorAll('tr[role="option"]');
+    const removes = buttons().filter(b => /^Remove .* from roster$/.test(b.getAttribute('aria-label') ?? ''));
+    expect(removes.length).toBe(rows.length);
+    // Icon only: the row button carries no visible text, so the roster stays compact.
+    expect(removes.every(b => (b.textContent ?? '').trim() === '')).toBe(true);
   });
 
   it('removes the selected athlete with the Delete key on the roster list', async () => {
@@ -356,7 +360,7 @@ describe('Lineup checklist rows', () => {
       );
     });
     await act(async () => {
-      jumps()[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      jumps()[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(onJump).toHaveBeenCalledWith('Ann', 'k-ann');
   });
@@ -491,7 +495,7 @@ describe('Metrics has one Open video call to action', () => {
     const input = container.querySelector('input#metrics-file-input') as HTMLInputElement;
     const click = vi.spyOn(input, 'click').mockImplementation(() => undefined);
     await act(async () => {
-      controls[0].dispatchEvent(new MouseEvent('click', { bubbles: true }));
+      controls[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(click).toHaveBeenCalledTimes(1);
   });

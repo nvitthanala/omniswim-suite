@@ -18,10 +18,10 @@
  * `100 IM SCM 58.25`, `25 Free SCM 11.00` and `100 IM SCY 52.57`.
  */
 import { spawnSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { readRosterText, rosterBlock } from './helpers/localRosterPath';
 import { CONVERSION_FACTORS, NCAA_SCM_CONVERSION_TABLES } from '../packages/core/src/constants';
 import { Gender } from '../packages/core/src/types';
 import {
@@ -45,11 +45,14 @@ const D1_TEAM = 'University of Pittsburgh';
 const RULES_BOOK = NCAA_SCM_CONVERSION_TABLES['ncaa-rules-book-a2-2026-27'];
 const D1_TABLE = NCAA_SCM_CONVERSION_TABLES['ncaa-d1-2025-26'];
 
-/** Gavin Kock's block from the real HSU export, checked at both ends so a shifted file fails loudly. */
+const roster = readRosterText('hsuroster26-27.txt');
+/** The swimmer's name: the real one with the local export, the stand-in's invented one without it. */
+const GAVIN = roster.source === 'real' ? 'Gavin Kock' : 'Test Swimmer Bravo';
+
+/** Gavin Kock's block from the local HSU export (or its stand-in), checked at both ends so a shifted file fails loudly. */
 function gavinKockBlock(): string {
-  const lines = readFileSync(join(repoRoot, 'hsuroster26-27.txt'), 'utf8').split(/\r?\n/);
-  const block = lines.slice(160, 200);
-  expect(block[0]).toBe('Gavin Kock');
+  const block = rosterBlock(roster, GAVIN);
+  expect(block[0]).toBe(GAVIN);
   expect(block[block.length - 1]).toMatch(/^100 IM SCY\t52\.57\t/);
   return block.join('\n');
 }
@@ -202,7 +205,7 @@ describe('Gavin Kock (HSU), through the pipelines', () => {
       swims,
       HSU,
       Gender.MEN,
-      'Gavin Kock',
+      GAVIN,
       NSISC_PRESET_SETTINGS,
       [],
       undefined,

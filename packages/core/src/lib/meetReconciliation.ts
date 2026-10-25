@@ -16,6 +16,7 @@
  */
 
 import { Gender, OfficialTeamScores } from '../types';
+import { recordAt } from './indexedAccess';
 import { matchOfficialTeamKey, officialScoresForGender } from './teamScoreMatching';
 
 /**
@@ -121,7 +122,7 @@ export function buildMeetReconciliationSummary(
       continue;
     }
     consumedOfficialKeys.add(officialKey);
-    const officialScore = officialForGender![officialKey];
+    const officialScore = recordAt(officialForGender!, officialKey);
     const delta = computed - officialScore;
     entries.push({
       team,

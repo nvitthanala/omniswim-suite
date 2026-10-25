@@ -410,12 +410,13 @@ function resolveAddCandidateAthlete(
 
   const entered = dropInfo?.byEvent ?? new Map<string, DroppableEntry>();
   const openEvents = [...bests.keys()].filter(ev => !entered.has(ev));
-  if (openEvents.length === 0) return null;
+  const firstOpenEvent = openEvents[0];
+  if (firstOpenEvent === undefined) return null;
 
   // Entry caps over the CURRENT scored what-if rows (plans + results +
   // recruits + relay legs) — an at-cap swimmer gets no add suggestions.
   const counts = countSwimmerEntries(teamRows, team, gender, display, resolver, merged);
-  if (!canAcceptAnotherEntry(counts, merged, openEvents[0])) return null;
+  if (!canAcceptAnotherEntry(counts, merged, firstOpenEvent)) return null;
 
   return { display, openEvents, classYear: classYearFromDroppableEntries(dropInfo) };
 }

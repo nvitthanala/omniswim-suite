@@ -1,27 +1,44 @@
 /**
  * Zod schemas for runtime validation at the API boundary.
  *
- * These intentionally stay permissive (`.passthrough()` / optional) so they
- * validate shape without rejecting forward-compatible fields. They mirror the
- * TypeScript interfaces in `../types` but are the source of truth for
- * server-side request validation.
+ * Most of these stay permissive (`.loose()` / optional) so they validate
+ * shape without rejecting forward-compatible fields. The two workspace write
+ * bodies are the exception: `createWorkspaceSchema` and `updateWorkspaceSchema`
+ * are allowlists that strip what they do not name (a Zod object strips unknown
+ * keys by default). They mirror the TypeScript interfaces in `../types` but are
+ * the source of truth for server-side request validation.
  */
 import { z } from 'zod';
+import type { Workspace } from '../types';
+import { storedPlaceTableSchema } from '../lib/scoringPlaceTables';
+
+/**
+ * A number that, like `z.number()` in Zod 3, accepts +Infinity and -Infinity and
+ * refuses NaN and every non-number. Zod 4's `z.number()` refuses infinities, and a
+ * body of `{"createdAt": 1e999}` parses to Infinity, so a plain `z.number()` would
+ * start rejecting an input this API has always accepted. Use it only where the
+ * Zod 3 schema was a bare `z.number()`; a field that was `.finite()` or `.int()`
+ * stays `z.number()`, which rejects infinities in both versions.
+ */
+const numberAllowingInfinity = z.custom<number>(
+  value => typeof value === 'number' && !Number.isNaN(value),
+  'Invalid input: expected number'
+);
 
 export const genderSchema = z.enum(['Men', 'Women']);
 
 export const swimmerResultSchema = z
   .object({
     id: z.string(),
-    rank: z.number(),
+    rank: numberAllowingInfinity,
     name: z.string(),
     classYear: z.string(),
     team: z.string(),
     time: z.string(),
-    points: z.union([z.number(), z.string()]),
+    points: z.union([numberAllowingInfinity, z.string()]),
     event: z.string(),
   })
-  .passthrough();
+  .loose();
 
 export const recruitSchema = z
   .object({
@@ -34,7 +51,7 @@ export const recruitSchema = z
     classYear: z.string(),
     timeType: z.enum(['SCY', 'LCM', 'SCM']),
   })
-  .passthrough();
+  .loose();
 
 export const historicalSwimSchema = z
   .object({
@@ -45,7 +62,7 @@ export const historicalSwimSchema = z
     time: z.string(),
     source: z.enum(['pdf', 'paste', 'ocr', 'csv', 'manual', 'swimcloud']),
   })
-  .passthrough();
+  .loose();
 
 /** Full workspace document as persisted. */
 export const workspaceSchema = z
@@ -55,20 +72,115 @@ export const workspaceSchema = z
     menResults: z.array(swimmerResultSchema).default([]),
     womenResults: z.array(swimmerResultSchema).default([]),
     recruits: z.array(recruitSchema).default([]),
-    createdAt: z.number(),
+    createdAt: numberAllowingInfinity,
   })
-  .passthrough();
+  .loose();
 
-/** Body accepted by POST /api/workspaces (server fills defaults). */
+/**
+ * One element of a workspace collection: an object, nothing more. Deliberately NOT
+ * `swimmerResultSchema` and friends — those require fields (`rank`, `classYear`,
+ * `points`) that real saved rows lack, and a stricter element schema would turn a
+ * valid save into a 400. The element's own fields pass through untouched.
+ */
+const rowSchema = z.object({}).loose();
+const rowsSchema = z.array(rowSchema);
+const recordSchema = z.object({}).loose();
+
+/**
+ * A workspace's scoring settings: a record, plus a light check on its three place
+ * tables (finite, not negative, not null, at least one entry each). A `null` cell
+ * is how a UI draft spells "blank"; it must never reach a stored table, where it
+ * would read as a place worth nothing. The non-increasing rule a preset obeys is
+ * deliberately NOT applied: a legacy table must always save. Nothing else is
+ * checked here, so every other settings key passes through untouched.
+ */
+const scoringSettingsSchema = z
+  .object({
+    scoringPoints: storedPlaceTableSchema('scoringSettings.scoringPoints').optional(),
+    relayPoints: storedPlaceTableSchema('scoringSettings.relayPoints').optional(),
+    divingPoints: storedPlaceTableSchema('scoringSettings.divingPoints').optional(),
+  })
+  .loose();
+
+/**
+ * Fields of a workspace a PUT may set: an ALLOWLIST. `id`, `createdAt` and
+ * `version` are not in it, so they are stripped, and so is anything else the
+ * client invents. The server owns identity, creation time and the revision counter.
+ *
+ * Why each is the shape it is:
+ * - Collections are arrays of objects, so `"menResults": {}` or `[1, 2]` is a 400
+ *   instead of a document the next read cannot map over.
+ * - `activeEntryIds` is the one collection of strings, not objects.
+ * - Keys left out of a patch stay out: nothing here has a default, because a default
+ *   would write `[]` over a collection the patch never mentioned.
+ */
+export const workspacePatchShape = {
+  name: z.string(),
+  menResults: rowsSchema,
+  womenResults: rowsSchema,
+  sourceMenResults: rowsSchema,
+  sourceWomenResults: rowsSchema,
+  recruits: rowsSchema,
+  scoringSettings: scoringSettingsSchema,
+  conference: z.string(),
+  deletedSwimmers: rowsSchema,
+  scorerRosterOverrides: rowsSchema,
+  officialTeamScores: recordSchema,
+  relayLegOverrides: rowsSchema,
+  loadedMeet: recordSchema,
+  psychMenResults: rowsSchema,
+  psychWomenResults: rowsSchema,
+  loadedPsych: recordSchema,
+  meetEntryPlans: rowsSchema,
+  entryPlanMode: z.enum(['overlay', 'plan_sheet']),
+  scoringView: z.enum(['merged', 'pdf_only']),
+  activeEntryIds: z.array(z.string()),
+  athleteHistory: rowsSchema,
+  raceAnalyses: rowsSchema,
+  historySources: rowsSchema,
+  relayLegCredits: rowsSchema,
+  athleteAliases: rowsSchema,
+} as const;
+
+/** Body accepted by PUT /api/workspaces/:id (partial patch). Unknown and protected keys are dropped. */
+export const updateWorkspaceSchema = z.object(workspacePatchShape).partial();
+
+/**
+ * Body accepted by POST /api/workspaces (the server fills defaults for what is absent).
+ *
+ * The same ALLOWLIST and the same collection checks as a patch, plus the three keys
+ * a create may name: `id` (a restore keeps its id), `name` and `createdAt`. It was
+ * `.passthrough()`, which stored whatever the client sent: a `menResults` that was
+ * not an array, or a key no code reads. Now a malformed value is a 400, and an
+ * unknown key is dropped, the same as on PUT.
+ *
+ * `version` is not in the allowlist: the store owns it. A restored workspace arrives
+ * carrying the revision it had, and it is stripped here, never trusted.
+ * `workspacePatchCoversWorkspace` below makes `tsc` fail if `Workspace` gains a field
+ * this does not accept, so a field cannot be silently dropped on create either.
+ */
 export const createWorkspaceSchema = z
   .object({
-    id: z.string().optional(),
-    name: z.string().optional(),
+    id: z.string(),
+    createdAt: numberAllowingInfinity,
+    ...workspacePatchShape, // includes `name`
   })
-  .passthrough();
+  .partial();
 
-/** Body accepted by PUT /api/workspaces/:id (partial patch). */
-export const updateWorkspaceSchema = z.object({}).passthrough();
+/**
+ * Compile-time guard: every `Workspace` field except `id` and `createdAt` is in the
+ * allowlist, and nothing else is. Add a field to `Workspace` without adding it to
+ * `workspacePatchShape` and `tsc` fails here, instead of the field silently never
+ * saving. (e2e alone would not catch a field the UI sends rarely.)
+ */
+type PatchKeys = keyof typeof workspacePatchShape;
+type WorkspacePatchableKeys = Exclude<keyof Workspace, 'id' | 'createdAt'>;
+export type WorkspacePatchCoversWorkspace = [WorkspacePatchableKeys] extends [PatchKeys]
+  ? [PatchKeys] extends [WorkspacePatchableKeys]
+    ? true
+    : { error: 'workspacePatchShape has a key Workspace does not'; extra: Exclude<PatchKeys, WorkspacePatchableKeys> }
+  : { error: 'Workspace has a field workspacePatchShape does not'; missing: Exclude<WorkspacePatchableKeys, PatchKeys> };
+export const workspacePatchCoversWorkspace: WorkspacePatchCoversWorkspace = true;
 
 /** Body accepted by POST /api/parse-pdf. */
 export const parsePdfSchema = z.object({
@@ -92,7 +204,7 @@ export const parseAthleteHistorySchema = z
     swimmerName: z.string().optional(),
     division: z.string().optional(),
   })
-  .passthrough();
+  .loose();
 
 /** Body accepted by POST /api/import-csv. */
 export const importCsvSchema = z.object({
@@ -152,7 +264,8 @@ export const rosterEligibilityToggleSchema = z.object({
 
 export const rosterBulkImportSchema = z.object({
   // Canonical JSON format used by the manager wizard.
-  json: z.unknown(),
+  // Optional on purpose: Zod 3 accepted a body with no `json` key, Zod 4 would not.
+  json: z.unknown().optional(),
 });
 
 export const rosterPasteImportSchema = z.object({

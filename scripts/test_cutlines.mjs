@@ -85,13 +85,13 @@ function findOne(query, label) {
   if (w) eq(w.standard, '22.28', 'D1 women 50 Free standard');
 
   const mile = findOne(
-    { division: 'D1', gender: 'Men', event: '1650 Freestyle', kind: 'individual' },
+    { division: 'D1', season: '2025-2026', gender: 'Men', event: '1650 Freestyle', kind: 'individual' },
     'D1 men 1650 Free'
   );
   if (mile) eq(mile.standard, '15:06.60', 'D1 men 1650 Free standard (comma-grouped label)');
 
   const relay = findOne(
-    { division: 'D1', gender: 'Men', event: '200 Medley Relay', kind: 'relay' },
+    { division: 'D1', season: '2025-2026', gender: 'Men', event: '200 Medley Relay', kind: 'relay' },
     'D1 men 200 MR'
   );
   if (relay) {
@@ -101,13 +101,60 @@ function findOne(query, label) {
   }
 
   // D1 women publish a 5-dive platform total and no 6-dive platform total.
-  const womensPlatform = findCutlines({ division: 'D1', gender: 'Women', kind: 'diving' }).filter(
+  const womensPlatform = findCutlines({ division: 'D1', season: '2025-2026', gender: 'Women', kind: 'diving' }).filter(
     d => d.board === 'PLATFORM'
   );
   eq(womensPlatform.length, 1, 'D1 women platform diving variants');
   if (womensPlatform[0]) {
     eq(womensPlatform[0].points, 225, 'D1 women platform points');
     eq(womensPlatform[0].diveCount, 5, 'D1 women platform dive count');
+  }
+}
+
+// --- NCAA D1 2026-27: archived 2026-27D1XSW_QUALSTANDARDS.pdf (sha256 259c76ba...),
+// men on page 1, women on page 2. Values are the sheet's, as printed. ---
+{
+  const season = '2026-2027';
+  const r = findOne(
+    { division: 'D1', season, gender: 'Men', event: '50 Freestyle', kind: 'individual' },
+    'D1 2026-27 men 50 Free'
+  );
+  if (r) {
+    eq(r.scale, 'single', 'D1 2026-27 men 50 Free scale');
+    eq(r.standard, '19.22', 'D1 2026-27 men 50 Free standard');
+    eq(r.source.sourceId, 'ncaa-d1-2026-27', 'D1 2026-27 men 50 Free sourceId');
+    eq(r.source.page, 1, 'D1 2026-27 men 50 Free page');
+  }
+  const w = findOne(
+    { division: 'D1', season, gender: 'Women', event: '50 Freestyle', kind: 'individual' },
+    'D1 2026-27 women 50 Free'
+  );
+  if (w) eq(w.standard, '22.26', 'D1 2026-27 women 50 Free standard');
+  const im = findOne(
+    { division: 'D1', season, gender: 'Women', event: '400 Individual Medley', kind: 'individual' },
+    'D1 2026-27 women 400 IM'
+  );
+  if (im) eq(im.standard, '4:13.32', 'D1 2026-27 women 400 IM standard (sheet prints 4:13.32)');
+  const mile = findOne(
+    { division: 'D1', season, gender: 'Men', event: '1650 Freestyle', kind: 'individual' },
+    'D1 2026-27 men 1650 Free'
+  );
+  if (mile) eq(mile.standard, '15:03.96', 'D1 2026-27 men 1650 Free standard');
+  const relay = findOne(
+    { division: 'D1', season, gender: 'Men', event: '200 Medley Relay', kind: 'relay' },
+    'D1 2026-27 men 200 MR'
+  );
+  if (relay) {
+    eq(relay.qualifying, '1:23.52', 'D1 2026-27 men 200 MR qualifying');
+    eq(relay.provisional, '1:23.62', 'D1 2026-27 men 200 MR provisional');
+  }
+  const platform = findCutlines({ division: 'D1', season, gender: 'Women', kind: 'diving' }).filter(
+    d => d.board === 'PLATFORM'
+  );
+  eq(platform.length, 1, 'D1 2026-27 women platform diving variants');
+  if (platform[0]) {
+    eq(platform[0].points, 225, 'D1 2026-27 women platform points');
+    eq(platform[0].diveCount, 5, 'D1 2026-27 women platform dive count');
   }
 }
 
@@ -270,7 +317,7 @@ function findOne(query, label) {
 eq(divisionsWithCutlineData().join(','), 'D1,D2,D3,NAIA', 'divisions with data');
 eq(cutlineSeasons().join(','), '2026-2027,2025-2026', 'seasons, newest first');
 eq(latestSeasonForDivision('D2'), '2026-2027', 'latest D2 season');
-eq(latestSeasonForDivision('D1'), '2025-2026', 'latest D1 season');
+eq(latestSeasonForDivision('D1'), '2026-2027', 'latest D1 season');
 eq(hasCutlineTable('D2'), true, 'D2 table present');
 
 const entries = publishedCutlines();
@@ -395,10 +442,16 @@ eq(noRelay.status, 'event_not_in_table', 'NAIA relays are absent from the source
 
 const d1 = getCutlinesForSwim('Men', '50 Freestyle', 'D1');
 eq(d1.status, 'ok', 'D1 50 Free status');
-eq(d1.aCutSec, 19.43, 'D1 50 Free standard seconds');
+eq(d1.season, '2026-2027', 'D1 default season is the latest published');
+eq(d1.aCutSec, 19.22, 'D1 50 Free standard seconds');
 eq(d1.bCutSec, 0, 'D1 publishes no individual B cut — absent reads as 0');
 eq(d1.tiers.map(t => t.tier).join(','), 'Standard', 'D1 individual tier labels');
-eq(compareTimeToCutline(19.4, 'Men', '50 Freestyle', 'D1').tier, 'Standard', 'D1 honest tier label');
+eq(compareTimeToCutline(19.2, 'Men', '50 Freestyle', 'D1').tier, 'Standard', 'D1 honest tier label');
+
+// An explicit season still reaches the 2025-26 sheet.
+const d1Prior = getCutlinesForSwim('Men', '50 Freestyle', 'D1', '2025-2026');
+eq(d1Prior.status, 'ok', 'D1 2025-26 50 Free status');
+eq(d1Prior.aCutSec, 19.43, 'D1 2025-26 50 Free standard seconds');
 
 const d3 = getCutlinesForSwim('Men', '50 Free', 'D3');
 eq(d3.tiers.map(t => t.tier).join(','), 'A,Invited,B', 'D3 tiers are listed in printed order (not a speed order)');

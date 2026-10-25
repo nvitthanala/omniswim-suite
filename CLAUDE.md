@@ -91,7 +91,7 @@ The model above is now configuration, not just prose. Six agent definitions exis
 | Agent | Model | Effort | Tools | Owns |
 | --- | --- | --- | --- | --- |
 | `orchestrator` | fable | high | read-only + `Agent(executor, architect, worker, finisher, bug-hunter)` — **no Edit/Write** | Sequencing, briefing, integration, end-to-end verification |
-| `executor` | sonnet | high | all | Scoring + lineup correctness, extraction pipelines, algorithms, built to a spec under snapshot and mutation gates |
+| `executor` | sonnet | high | Read, Edit, Write, Grep, Glob, Bash | Scoring + lineup correctness, extraction pipelines, algorithms, built to a spec under snapshot and mutation gates |
 | `architect` | opus | high | read-only (no Edit/Write) | Schema/type design with no precedent, specs, review of core diffs, proofs. Opus is the escalation, not the default |
 | `worker` | sonnet | high | all | Component wiring, restyles, panel layout, docs against an existing API |
 | `finisher` | haiku | low | Read, Grep, Glob, Bash, Edit | Lint/typecheck/tests, mechanical edge cases — **no design decisions** |
@@ -146,6 +146,10 @@ These rules apply to every provider and depend on you keeping them:
 - **Briefs stand alone.** A subagent starts cold. Give it file paths, the exact
   API it may rely on, the acceptance test, and the scope boundary. It has none
   of this conversation.
+- **Shape each brief for its tier.** `briefTiers` in the routing file names
+  the guided and autonomous targets. The global `tiered-brief` skill has the
+  two shapes. Every brief says: run targeted tests while iterating, and the
+  full gates once at the end.
 
 ### Long-horizon task state
 
@@ -163,39 +167,11 @@ target, not at "continue where you left off."
 
 ## UI craft and design system
 
-Twelve skills from [emilkowalski/skills](https://github.com/emilkowalski/skills)
-are installed project-wide (`npx skills@latest add emilkowalski/skills`,
-symlinked into `.claude/skills/`, canonical copies in `.agents/skills/`).
-Route UI/animation work to them the same way `cyclomatic-complexity` is
-routed for complexity work — they should trigger on their own; invoke
-explicitly if they don't.
-
-Applicable to this repo (a React/Vite web monorepo — `packages/ui`,
-`manager`, `matrix`, `metrics`, `apps/shell`):
-
-| Skill | Use for |
-| --- | --- |
-| `emil-design-eng` | The base philosophy — animation framework, component principles, performance, accessibility. Read this first. |
-| `animate` | Building a specific animation from a request — gates *whether* it should animate before *how*. |
-| `review-animations` | Auditing a diff's motion against the rules before it ships. |
-| `improve-animations` | Read-only codebase-wide audit, prioritized findings, no edits. |
-| `find-animation-opportunities` | Sweeping an interface for places motion is missing, with the same restraint gate. |
-| `animation-vocabulary` | Turning a vague motion description into the precise term. |
-| `pick-ui-library` | Curated picks for toasts, dropdowns, virtualization, drag-and-drop, charts, state, styling — check before hand-rolling or adding a new dependency. |
-| `apple-design` | Interruptible, velocity-aware motion for anything gesture-driven (drag, swipe-to-dismiss); the eight design principles for feature-level decisions. |
-| `prototype` | Building 3-5 genuinely divergent variants of one component behind a picker, in isolation from production code. |
-| `ask-sonner` | This repo doesn't use Sonner today; `pick-ui-library` will surface it if a toast need comes up. |
-
-Installed but not applicable here — kept for completeness, not for use:
-`animate-expo` (React Native/Expo) and `write-swift` (native Swift).
-
-**How to apply to work already done:** route `worker` (sonnet) for
-restyle-shaped application against `packages/ui` and other shared
-primitives, with the acceptance bar from `review-animations` — never apply
-motion changes to `packages/core`, `backend/`, or anything on the scoring
-data-path. Same rule as everywhere else in this file: additive, Dark/Light/
-custom tokens preserved, lint + tests green, no git operations by the
-subagent.
+The UI and animation skill table is a path-scoped rule:
+`.claude/rules/ui-craft.md`. It loads when you open a `.tsx` or `.css` file
+in `packages/ui`, `manager`, `matrix`, `metrics` or `apps/shell`. Read it
+before you plan UI work. Never apply motion changes to `packages/core`,
+`backend/`, or anything on the scoring data path.
 
 ---
 
@@ -237,29 +213,13 @@ sources (NCAA D1/D2/D3 + NAIA).
 
 ---
 
-## Known Bugs & Follow-up Items (2026-07-19 round — all three FIXED, live UI verification pending)
-
-### 1. Total Event Limitation (NSISC Rules) — FIXED
-
-- NSISC is **total-only**: max 7 events per swimmer, any individual/relay mix (user decision 2026-07-19); per-type caps set to 999 in the preset.
-- `maxTotalEntriesPerSwimmer` added to `ScoringSettings`, NSISC preset (7), `mergeScoringSettings` conference override, `swimmerEntryLimits.ts` (counts.total, totalOver, canAcceptAnotherEntry), `historyImportRoster.ts` (totalSlots), `scoringTheory.ts`, `rosterLineupAudit.ts` (checklist item), and settings UIs (RosterScoringSetup, matrix ScoringSettingsPanel/Modal).
-- Label shows "N/7 total (x ind · y relay)" when a total cap is set.
-
-### 2. Swimmer Attribution for Long-Form Names — FIXED
-
-- Heuristic was fine (Alan Gonzalez ↔ Alan Alejan Gonzalez Mujica scores 90%). Root cause: import suggestions only surfaced for `new_recruit` rows, so an athlete already on the recruit list under a long-form name never got a link offer.
-- Fix: both import panels (`AthleteHistoryImportPanel`, `RosterImportWizard`) now feed ALL incoming rows to `suggestAliasCandidates` (identical/already-linked pairs are auto-excluded, so no spam).
-
-### 3. Lineup Paste Feature Locks Editing — FIXED
-
-- Paste in the athlete drawer is now a two-step preset: Parse → checkbox preview list ("Add selected" / "Cancel") instead of auto-applying and clobbering the athlete's entries. Existing entries stay editable throughout (event select, time edit, remove, active toggle).
-
----
-
 ## Project Context
 
 - **Primary workspace:** HSU 2026-27 roster (swimmers, class years, NSISC event rules).
 - **Data sources:** Meets.json (meet PDFs), SwimCloud (recruit imports), what-if projections.
 - **Key recent rounds:** Round 3 (2026-07-19) — athlete aliasing + drawer declutter; Round 2 — roster/lineup correctness bugs.
+- **Round 3 fixes (2026-07-19):** total event limit (NSISC), long-form name
+  attribution, and lineup paste. All three are fixed. Live UI verification
+  is still pending. Details: `docs/archive/2026-08/ROUND3_KNOWN_BUGS.md`.
 
 See `docs/archive/2026-08/ROSTER_ALIAS_DECLUTTER_HANDOFF.md` for the complete round-3 context.

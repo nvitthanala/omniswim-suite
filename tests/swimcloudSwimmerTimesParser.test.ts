@@ -138,7 +138,7 @@ describe('parseSwimmerTimesHtml — the real swimmer-times capture', () => {
     expect(row.relayLeadoff).toBe(true);
     expect(row.tags).toStrictEqual([{ code: 'R', title: 'Leadoff' }]);
     // The chip's visible text is a single letter; nothing keys off it.
-    expect(row.tags[0].code).not.toBe('Leadoff');
+    expect(row.tags[0]!.code).not.toBe('Leadoff');
   });
 
   it('derives course from the label suffix, so SCY and LCM of one event stay separate rows', () => {
@@ -373,8 +373,8 @@ describe('parseSwimmerTimesHtml — labels it has not seen', () => {
     const result = parseSwimmerTimesHtml(withLabel('1 mtr Diving'), TIMES_CONTEXT);
     if (!result.ok) throw new Error(`expected success, got ${result.failure.code}`);
     const row = result.data.personalBests[0];
-    expect(row.eventLabel).toBe('1 mtr Diving');
-    expect(row.course).toBe('unknown');
+    expect(row!.eventLabel).toBe('1 mtr Diving');
+    expect(row!.course).toBe('unknown');
     expect(result.warnings.map((w) => w.code)).toContain('unrecognized-event-label');
     // Never defaulted to yards, and the other eight rows are untouched.
     expect(result.data.personalBests).toHaveLength(9);
@@ -384,9 +384,9 @@ describe('parseSwimmerTimesHtml — labels it has not seen', () => {
     const result = parseSwimmerTimesHtml(withLabel('50 Free XYZ'), TIMES_CONTEXT);
     if (!result.ok) throw new Error(`expected success, got ${result.failure.code}`);
     const row = result.data.personalBests[0];
-    expect(row.course).toBe('unknown');
-    expect(row.distance).toBe(50);
-    expect(row.stroke).toBe('Freestyle');
+    expect(row!.course).toBe('unknown');
+    expect(row!.distance).toBe(50);
+    expect(row!.stroke).toBe('Freestyle');
     expect(result.warnings.map((w) => w.code)).toContain('unrecognized-course-token');
   });
 
@@ -394,8 +394,8 @@ describe('parseSwimmerTimesHtml — labels it has not seen', () => {
     const result = parseSwimmerTimesHtml(withLabel('50 Wobble SCY'), TIMES_CONTEXT);
     if (!result.ok) throw new Error(`expected success, got ${result.failure.code}`);
     const row = result.data.personalBests[0];
-    expect(row.stroke).toBe('unknown');
-    expect(row.course).toBe('SCY');
+    expect(row!.stroke).toBe('unknown');
+    expect(row!.course).toBe('SCY');
     expect(result.warnings.map((w) => w.code)).toContain('unmapped-stroke');
   });
 });

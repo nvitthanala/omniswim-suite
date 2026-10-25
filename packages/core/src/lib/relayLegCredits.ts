@@ -18,6 +18,7 @@
  */
 
 import type { RelayLegCredit, RelayLegStroke } from '../types';
+import { itemAt } from './indexedAccess';
 import { relayStrokeForIndex } from './relayLegMatching';
 import { relayLegDistanceYardsOfEvent } from './relaySplits';
 
@@ -134,7 +135,7 @@ export function mergeRelayLegCredits(
       credits.push(candidate);
       continue;
     }
-    const known = credits[index];
+    const known = itemAt(credits, index);
     const fields = conflictingFields(known, candidate);
     if (fields.length > 0) {
       conflicts.push({ existing: known, incoming: candidate, fields });
@@ -168,7 +169,9 @@ export interface RelayLegSlot {
  *   never used);
  * - `relayEventTitle` is absent, or names no readable relay distance (I5);
  * - the credit contradicts itself: `isLeadoff` is true and `legPosition` is
- *   not 1.
+ *   not 1;
+ * - `legPosition` names no leg: not a whole number from 1 to 4 (a relay has four
+ *   legs). The stored credit is kept; it just proves no slot.
  *
  * `start` follows the position only: leg 1 is `flat`, legs 2-4 are `takeover`.
  * `isLeadoff: false` means "the page did not say leadoff", so it never makes a
@@ -179,13 +182,17 @@ export function relayLegSlotOf(credit: RelayLegCredit): RelayLegSlot | null {
   const position = credit.legPosition;
   if (position === undefined) return null;
   if (credit.isLeadoff && position !== 1) return null;
+  if (!Number.isInteger(position) || position < 1 || position > 4) return null;
   const title = credit.relayEventTitle;
   if (title === undefined || title.trim().length === 0) return null;
   const distance = relayLegDistanceYardsOfEvent(title);
   if (distance === null) return null;
+  // `position` comes from stored data. The check above kept it to 1-4, so `position - 1` names a
+  // leg and `relayStrokeForIndex` does not throw.
+  const stroke = relayStrokeForIndex(title.toLowerCase(), position - 1);
   return {
     distance,
-    stroke: relayStrokeForIndex(title.toLowerCase(), position - 1),
+    stroke,
     position,
     start: position === 1 ? 'flat' : 'takeover',
   };

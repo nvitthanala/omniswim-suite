@@ -54,7 +54,7 @@ export default function AthleteRosterRow({ athlete, onToggleEligibility, onDelet
             {athlete.fullName}
           </span>
           {athlete.classYear ? (
-            <Badge tone="info" className="rounded px-2 py-0.5 text-[10px] font-normal normal-case tracking-normal">
+            <Badge tone="info" className="rounded px-2 py-0.5 text-ui-micro font-normal normal-case tracking-normal">
               {athlete.classYear}
             </Badge>
           ) : null}
@@ -114,15 +114,15 @@ function SwimPills({
           />
           <span className="font-bold">{t.event}</span>
           <span className="font-mono">{t.timeText}</span>
-          <span className="text-[10px] text-theme-muted">{TIME_TYPE_LABEL[t.timeType] ?? t.timeType}</span>
+          <span className="text-ui-micro text-theme-muted">{TIME_TYPE_LABEL[t.timeType] ?? t.timeType}</span>
           {t.computedCut ? (
-            <span className={`px-1 rounded text-[10px] font-bold ${badgeClass(t.computedCut)}`}>
+            <span className={`px-1 rounded text-ui-micro font-bold ${badgeClass(t.computedCut)}`}>
               {CUT_BADGE[t.computedCut]}
             </span>
           ) : null}
           {t.swimcloudBadge ? (
             <span
-              className="px-1 rounded text-[10px] border border-theme-soft text-theme-secondary"
+              className="px-1 rounded text-ui-micro border border-theme-soft text-theme-secondary"
               title="SwimCloud stamp"
             >
               {t.swimcloudBadge}

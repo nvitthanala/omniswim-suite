@@ -9,6 +9,8 @@
     "moduleDetection": "force",
     "jsx": "react-jsx",
     "strict": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedIndexedAccess": true,
     "noEmit": true,
     "resolveJsonModule": true,
     "allowImportingTsExtensions": true,
@@ -18,7 +20,11 @@
       "@omniswim/ui": ["./packages/ui/src/index.ts"],
       "@omniswim/ui/*": ["./packages/ui/src/*"],
       "@omniswim/swimcloud": ["./packages/swimcloud/src/index.ts"],
-      "@omniswim/swimcloud/*": ["./packages/swimcloud/src/*"]
+      "@omniswim/swimcloud/*": ["./packages/swimcloud/src/*"],
+      "@omniswim/manager": ["./packages/manager/src/ManagerApp.tsx"],
+      "@omniswim/matrix": ["./packages/matrix/src/MatrixApp.tsx"],
+      "@omniswim/matrix/*": ["./packages/matrix/src/*"],
+      "@omniswim/metrics": ["./packages/metrics/src/MetricsApp.tsx"]
     }
   }
 }

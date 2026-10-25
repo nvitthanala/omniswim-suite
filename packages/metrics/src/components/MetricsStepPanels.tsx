@@ -81,7 +81,7 @@ export function TagStepPanel({
             {raceConfig.course} {raceConfig.raceDistance}
             {raceConfig.course === 'SCY' ? 'y' : 'm'}
           </div>
-          <h3 className="text-lg font-bold text-[var(--text-primary)]">{swimmerName || 'Unknown Swimmer'}</h3>
+          <h3 className="text-lg font-bold text-[var(--text-primary)]">{swimmerName || 'Unknown swimmer'}</h3>
           {comparisonTime ? (
             <div className="text-ui-caption text-theme-muted mt-0.5">
               Workspace best: <span className="font-mono text-[var(--text-accent)]">{comparisonTime}</span>

@@ -15,8 +15,9 @@
  */
 
 import { Gender, ScoringSettings, Workspace } from '../../types';
-import { canonicalProgramEvent } from '../eventIdentity';
+import { programEventOrNull } from '../eventIdentity';
 import { isRankableSwim } from '../bestTimeEligibility';
+import { isUnconfirmedProgramSwim } from '../programSwim';
 import { mergeScoringSettings } from '../scoringDefaults';
 import { convertTimeToSeconds, isRelayResult, normalizeSwimmerName } from '../utils';
 import {
@@ -109,7 +110,7 @@ export function buildCrossCourseTable(
     // (convertedHistorySwims keeps it because a relay leg may use it; a
     // self-reported time never reaches here at all.) See isRankableSwim.
     if (!isRankableSwim(s)) continue;
-    const programEvent = canonicalProgramEvent(converted.event);
+    const programEvent = programEventOrNull(converted.event);
     if (!programEvent) continue;
     const timeSec = convertTimeToSeconds(converted.time);
     if (!Number.isFinite(timeSec)) continue;
@@ -220,7 +221,8 @@ export function buildCoverageGaps(
     if (r.gender != null && r.gender !== opts.gender) continue;
     if (isRelayResult(r)) continue;
     if (r.isExhibition || r.isTimeTrial) continue;
-    const event = canonicalProgramEvent(r.event);
+    if (isUnconfirmedProgramSwim(r)) continue;
+    const event = programEventOrNull(r.event);
     if (!event) continue;
     const rTeam = String(r.team ?? '').trim();
     noteField(event, rTeam, r.name);
@@ -228,7 +230,7 @@ export function buildCoverageGaps(
   }
   for (const p of activePlans) {
     if (String(p.team ?? '').trim() !== team) continue;
-    const event = canonicalProgramEvent(p.event);
+    const event = programEventOrNull(p.event);
     if (!event) continue;
     noteTeam(event, p.name);
   }

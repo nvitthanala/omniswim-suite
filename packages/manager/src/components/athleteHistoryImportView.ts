@@ -113,8 +113,10 @@ export function splitUnreadStampWarnings(warnings: string[]): SplitUnreadStampWa
   const events: string[] = [];
   for (const w of warnings) {
     const match = UNREAD_STAMP_WARNING_RE.exec(w);
-    if (match) {
-      events.push(match[2]);
+    // Both groups are mandatory in the pattern, so a match always has the event.
+    const event = match?.[2];
+    if (event !== undefined) {
+      events.push(event);
     } else {
       otherWarnings.push(w);
     }

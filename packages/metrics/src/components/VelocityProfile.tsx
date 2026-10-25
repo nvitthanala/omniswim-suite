@@ -39,13 +39,13 @@ function VelocityProfileComponent({
 
   return (
     <LengthProfileChart
-      title="Velocity Profile"
+      title="Velocity profile"
       unit={unit}
       emptyMessage="No velocity data measured yet."
       lengths={lengths}
       data={points}
       chartKey={`velocity-${points.length}`}
-      tooltipFormatter={(_value: any, _name: any, item: any) => {
+      tooltipFormatter={(_value, _name, item) => {
         const point: VelocityPoint | undefined = item?.payload;
         if (!point) return ['not measured', ''];
         if (point.velocity === null) {

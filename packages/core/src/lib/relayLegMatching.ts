@@ -3,20 +3,98 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import { ClassYear, Gender, RelayLegOverride, RelayLegStroke, SwimmerResult } from '../types';
-import { normalizeEventForCutline } from './cutlineEventNames';
+import {
+  ClassYear,
+  Gender,
+  RelayLegOverride,
+  RelayLegStroke,
+  ScoringSettings,
+  SwimmerResult,
+} from '../types';
+import { normalizeEventForCutline, stripRelaySplitSuffix } from './cutlineEventNames';
+import { itemAt, recordAt, regexGroup } from './indexedAccess';
+import { isUnconfirmedProgramSwim } from './programSwim';
+import { relayLegsAllowTimeTrials } from './scoringDefaults';
 import { relayEntryKey, relayLegDistanceYardsOfEvent } from './relaySplits';
-import { canonicalSwimmerName } from './utils';
+import {
+  canonicalSwimmerName,
+  convertTimeToSeconds,
+  isTimeTrialSwim,
+  normalizeSwimmerName,
+  relayEntryLegSignature,
+} from './utils';
 
+/**
+ * The settings the relay-leg matchers read. Every matcher takes them as an
+ * optional trailing argument.
+ *
+ * - `relayLegsAllowTimeTrials`: whether a time-trial swim may fill a leg.
+ *   Omitted, or without the field, a time trial fills no leg.
+ * - `scoredEventNumberMax`: the meet's last scored event number. A swim of a
+ *   later event is a time trial for a leg (`isTimeTrialSwim`). Omitted, no
+ *   event number makes a swim a time trial.
+ *
+ * A whole `ScoringSettings` satisfies this type. It carries
+ * `scoredEventNumberMax` only when the workspace stored one: a loaded meet
+ * keeps its boundary on `officialTeamScores.eventThrough`. Callers that hold a
+ * workspace build the object with {@link relayLegMatchSettings}, which reads
+ * both places the way the scoring engine does.
+ */
+export type RelayLegMatchSettings = Pick<
+  ScoringSettings,
+  'relayLegsAllowTimeTrials' | 'scoredEventNumberMax'
+>;
+
+/**
+ * The relay-leg settings of a workspace: its `relayLegsAllowTimeTrials` and the
+ * meet's scored-event boundary.
+ *
+ * The boundary is `officialTeamScores.eventThrough` (the PDF "Team Rankings -
+ * Through Event N" line), else `scoringSettings.scoredEventNumberMax`. The
+ * order is the scoring engine's (`buildScoringBundle` hands `eventThrough` to
+ * `calculatePoints`, where it wins over the settings value), so a leg is
+ * matched against the same boundary the team totals use. Neither present: no
+ * boundary.
+ */
+export function relayLegMatchSettings(
+  workspace:
+    | { scoringSettings?: ScoringSettings; officialTeamScores?: { eventThrough?: number } }
+    | null
+    | undefined
+): RelayLegMatchSettings {
+  const settings = workspace?.scoringSettings;
+  const boundary = workspace?.officialTeamScores?.eventThrough ?? settings?.scoredEventNumberMax;
+  return {
+    ...(settings?.relayLegsAllowTimeTrials === undefined
+      ? {}
+      : { relayLegsAllowTimeTrials: settings.relayLegsAllowTimeTrials }),
+    ...(boundary === undefined ? {} : { scoredEventNumberMax: boundary }),
+  };
+}
+
+/**
+ * The row as a leg may take it: unchanged unless it is a time trial and the
+ * setting lets it fill a leg, in which case it carries `relayLegTimeTrial`.
+ */
+function labelTimeTrialLeg(row: SwimmerResult, settings?: RelayLegMatchSettings): SwimmerResult {
+  if (!relayLegsAllowTimeTrials(settings) || !isTimeTrialSwim(row, settings?.scoredEventNumberMax)) {
+    return row;
+  }
+  return row.relayLegTimeTrial === true ? row : { ...row, relayLegTimeTrial: true };
+}
+
+// The same key as `normalizeSwimmerName`: low-level, and it keeps comma order.
+// A local name so the call sites below read as before.
 function normalizeName(name: string): string {
-  return name.trim().toLowerCase().replace(/\s+/g, ' ');
+  return normalizeSwimmerName(name);
 }
 
 function timeToSec(timeStr: string): number {
   if (!timeStr || timeStr === 'NT' || timeStr === 'DQ') return Infinity;
   const parts = timeStr.split(':');
-  if (parts.length === 2) return parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
-  return parseFloat(parts[0]);
+  // `split` always returns at least one element, and the length check bounds index 1.
+  if (parts.length === 2) return parseFloat(itemAt(parts, 0)) * 60 + parseFloat(itemAt(parts, 1));
+  return parseFloat(itemAt(parts, 0));
 }
 
 export function strokeKeywordsForRelayLeg(eventLower: string, legIndex: number): string[] {
@@ -61,9 +139,6 @@ const STROKE_BY_KEYWORD: Record<string, RelayLegStroke> = {
   free: 'free',
 };
 
-/** The label suffix a relay-split row carries: `100 Freestyle (relay split)`. */
-const RELAY_SPLIT_SUFFIX = /\s*\(relay split\)\s*$/i;
-
 /**
  * The individual event one relay leg swims, as a canonical event name:
  * `relayLegEventName(100, 'free')` is `100 Freestyle`.
@@ -100,7 +175,10 @@ export function individualEventDistanceStroke(
 ): { distance: number; stroke: RelayLegStroke } | null {
   const match = SINGLE_STROKE_EVENT.exec(normalizeEventForCutline(String(event ?? '')));
   if (!match) return null;
-  return { distance: Number(match[1]), stroke: STROKE_BY_EVENT_WORD[match[2].toLowerCase()] };
+  return {
+    distance: Number(regexGroup(match, 1)),
+    stroke: recordAt(STROKE_BY_EVENT_WORD, regexGroup(match, 2).toLowerCase()),
+  };
 }
 
 /**
@@ -151,7 +229,7 @@ export function isRelayLegEvent(
  * caller testing one label against many legs can read the key once.
  */
 export function relayLegEventKey(eventRaw: string): string {
-  const label = String(eventRaw ?? '').replace(RELAY_SPLIT_SUFFIX, '').trim();
+  const label = stripRelaySplitSuffix(String(eventRaw ?? ''));
   if (!label) return '';
   return normalizeEventForCutline(label).toLowerCase();
 }
@@ -178,11 +256,66 @@ export function eventMatchesStrokeDistance(
   return [...strokes].some(stroke => isRelayLegEvent(eventRaw, distance, stroke));
 }
 
+/** The strokes of a medley relay, leg 1 first. A medley has exactly these four legs. */
+const MEDLEY_LEG_STROKES = ['back', 'breast', 'fly', 'free'] as const;
+
+/**
+ * A relay leg index that names no leg: negative, not a whole number, not finite, or past
+ * the fourth leg of a medley relay (a medley has four strokes and no fifth).
+ *
+ * Thrown by {@link relayStrokeForIndex} and everything that reads a stroke through it
+ * (`relayLegRequirements`, {@link relayStrokeForBoundedIndex}). Before user decision E20
+ * (2026-10-16) these returned `undefined` or a guessed `free`. Code that holds an index from
+ * stored data tests it with {@link isValidRelayLegIndex} first, or catches this class at its
+ * boundary and reports the bad index (the lineup audit item `relay_leg_index_invalid`).
+ */
+export class InvalidRelayLegIndexError extends Error {
+  readonly eventLower: string;
+  readonly legIndex: number;
+  constructor(eventLower: string, legIndex: number) {
+    super(`Relay leg index ${String(legIndex)} names no leg of "${eventLower}": it has no stroke.`);
+    this.name = 'InvalidRelayLegIndexError';
+    this.eventLower = eventLower;
+    this.legIndex = legIndex;
+  }
+}
+
+/**
+ * True when `legIndex` names a leg of the relay: a whole number from 0 up, and on a medley
+ * relay no higher than 3. A free relay places no upper bound here (every leg is free, so a
+ * stroke is never invented).
+ */
+export function isValidRelayLegIndex(eventLower: string, legIndex: number): boolean {
+  if (!Number.isInteger(legIndex) || legIndex < 0) return false;
+  return !eventLower.includes('medley') || legIndex < MEDLEY_LEG_STROKES.length;
+}
+
+/**
+ * The stroke of leg `legIndex` (0-based) of the relay named by `eventLower`.
+ *
+ * Throws {@link InvalidRelayLegIndexError} for an index that names no leg (see
+ * {@link isValidRelayLegIndex}). It never returns a guessed stroke.
+ */
 export function relayStrokeForIndex(eventLower: string, legIndex: number): RelayLegStroke {
-  if (eventLower.includes('medley') && legIndex < 4) {
-    return (['back', 'breast', 'fly', 'free'] as const)[legIndex];
+  if (!isValidRelayLegIndex(eventLower, legIndex)) {
+    throw new InvalidRelayLegIndexError(eventLower, legIndex);
+  }
+  if (eventLower.includes('medley')) {
+    const stroke = MEDLEY_LEG_STROKES[legIndex];
+    // `isValidRelayLegIndex` bounded the index to 0..3 above.
+    if (stroke === undefined) throw new InvalidRelayLegIndexError(eventLower, legIndex);
+    return stroke;
   }
   return 'free';
+}
+
+/**
+ * The stroke for a leg index the caller took from a loop bound (a whole number from 0
+ * up). Same read as {@link relayStrokeForIndex}, kept as its own name for those callers:
+ * a throw here means the loop and the relay disagree.
+ */
+export function relayStrokeForBoundedIndex(eventLower: string, legIndex: number): RelayLegStroke {
+  return relayStrokeForIndex(eventLower, legIndex);
 }
 
 export function relayLegRequirements(event: string, legIndex: number) {
@@ -222,7 +355,7 @@ const GENDER_BY_LABEL_WORD: Record<string, Gender | 'mixed'> = {
  */
 export function eventLabelGender(event: string): Gender | 'mixed' | null {
   const match = LABEL_GENDER_WORD.exec(String(event ?? ''));
-  return match ? GENDER_BY_LABEL_WORD[match[1].toLowerCase()] : null;
+  return match ? recordAt(GENDER_BY_LABEL_WORD, regexGroup(match, 1).toLowerCase()) : null;
 }
 
 /**
@@ -343,8 +476,53 @@ function keepRelayGender(
   return rows.filter(r => isRelayCandidateOfGender(r, relayGender, index));
 }
 
-export function swimmerMatchesRelayLeg(swimmer: SwimmerResult, event: string, legIndex: number): boolean {
+/**
+ * True when `swimmer`'s `time` is a time a relay leg may carry: a finished swim
+ * with a readable, positive clock.
+ *
+ * A disqualified swim (`DQ`), a no-show (`DFS`, `NS`, `SCR`), a no-time entry
+ * (`NT`, empty) and any other code that is not a time (`DNF`, `DSQ`) have none:
+ * `convertTimeToSeconds` reads none of them as a finite number. That covers
+ * every code `isScoringSwimTime` lists, and the ones it does not (`DNF`). A leg
+ * is ranked and filled from the row's own `time`, so the prelims or finals
+ * clock is never read in its place: a row with `time: 'DQ'` and a legal
+ * `prelimsTime` is a disqualified swim here.
+ */
+export function hasRelayLegTime(swimmer: Pick<SwimmerResult, 'time'>): boolean {
+  const seconds = convertTimeToSeconds(String(swimmer.time ?? '').trim());
+  return Number.isFinite(seconds) && seconds > 0;
+}
+
+/**
+ * True when `swimmer` is a swim of the individual event leg `legIndex` of
+ * `event` swims (`isRelayLegEvent`).
+ *
+ * A swim with no time (`hasRelayLegTime`: a DQ, a no-show, an NT) matches no
+ * leg, whatever the setting.
+ *
+ * A time-trial swim matches only when `settings.relayLegsAllowTimeTrials` is
+ * `true` (user decision D9). `isRelayLegEvent` itself still reads a time trial
+ * of the leg event as the leg event; this function is where the setting applies.
+ */
+export function swimmerMatchesRelayLeg(
+  swimmer: SwimmerResult,
+  event: string,
+  legIndex: number,
+  settings?: RelayLegMatchSettings
+): boolean {
   if (swimmer.isRelay) return false;
+  if (!hasRelayLegTime(swimmer)) return false;
+  // A swims-list row nobody confirmed as a program swim may be a time trial. It
+  // fills no leg, whatever the time-trial setting says: the setting governs a
+  // known time trial, and this swim is not known (`programSwim.ts`).
+  if (isUnconfirmedProgramSwim(swimmer)) return false;
+  if (
+    (isTimeTrialSwim(swimmer, settings?.scoredEventNumberMax) || swimmer.relayLegTimeTrial === true) &&
+    !relayLegsAllowTimeTrials(settings)
+  ) {
+    return false;
+  }
+  // Throws `InvalidRelayLegIndexError` for an index that names no leg: the caller owns that boundary.
   const { legDistanceYards, stroke } = relayLegRequirements(event, legIndex);
   return isRelayLegEvent(swimmer.event, legDistanceYards, stroke);
 }
@@ -357,6 +535,10 @@ export function swimmerMatchesRelayLeg(swimmer: SwimmerResult, event: string, le
  *
  * `relayGender` defaults to the gender word of `relayEvent`. Pass it when the
  * label has none (a SwimCloud `200 Free Relay`).
+ *
+ * A time-trial swim is left out unless `settings.relayLegsAllowTimeTrials` is
+ * `true`. When it is, the returned row for a time trial carries
+ * `relayLegTimeTrial: true` (a copy; the input row is not changed).
  */
 export function listEligibleRelayLegCandidates(
   activeSwimmers: SwimmerResult[],
@@ -364,24 +546,114 @@ export function listEligibleRelayLegCandidates(
   legIndex: number,
   assignedInEvent: Set<string>,
   team: string,
-  relayGender?: Gender
+  relayGender?: Gender,
+  settings?: RelayLegMatchSettings
 ): SwimmerResult[] {
+  // Order-insensitive: a leg spelled "Akin, Bartu" blocks the row "Bartu Akin".
+  // The callers' keys are unchanged (normalizeName); both sides are read through
+  // canonicalSwimmerName here, which folds a single "Last, First" comma.
+  const blocked = new Set<string>();
+  assignedInEvent.forEach(n => blocked.add(canonicalSwimmerName(n)));
   const legSwims = activeSwimmers.filter(
     s =>
       !s.isRelay &&
       s.team === team &&
-      !assignedInEvent.has(normalizeName(s.name)) &&
-      swimmerMatchesRelayLeg(s, relayEvent, legIndex)
+      !blocked.has(canonicalSwimmerName(s.name)) &&
+      swimmerMatchesRelayLeg(s, relayEvent, legIndex, settings)
   );
   const gender = relayGender ?? relayEntryGender({ event: relayEvent });
-  return keepRelayGender(legSwims, gender, activeSwimmers).sort(
-    (a, b) => timeToSec(a.time) - timeToSec(b.time)
-  );
+  return keepRelayGender(legSwims, gender, activeSwimmers)
+    .map(s => labelTimeTrialLeg(s, settings))
+    .sort((a, b) => timeToSec(a.time) - timeToSec(b.time));
 }
 
-export function relayTemplateFromLeg(results: SwimmerResult[], leg: SwimmerResult): SwimmerResult {
+/** The normalized names a relay row lists for its swimmers. */
+function relayEntryNameSet(r: SwimmerResult): Set<string> {
+  const names = new Set<string>();
+  for (const n of r.relayNames ?? []) {
+    const key = normalizeSwimmerName(String(n.name ?? ''));
+    if (key) names.add(key);
+  }
+  return names;
+}
+
+/** What `narrowToTiedEntry` found: the rows of one entry, or the whole group when it could not tell. */
+type TiedNarrowing = {
+  /** The leg's own entry's rows (plus unnamed rows), or the whole group when `ambiguous`. */
+  rows: SwimmerResult[];
+  /** True when the group holds more than one entry and nothing says which one `leg` belongs to. */
+  ambiguous: boolean;
+};
+
+/**
+ * The rows of one relay entry among rows that share its event, round, place and
+ * team, when those rows hold more than one entry (a dead heat).
+ *
+ * `leg` names its swimmers (`relayNames`). The entry that names the same four
+ * wins. A leg of a projected relay has had a swimmer replaced, so no entry names
+ * exactly its four: the entry that shares the most named swimmers wins, and
+ * only when one entry leads. Rows that name no swimmers stay with every entry.
+ *
+ * When the group holds more than one entry and nothing tells them apart (the
+ * leg names no swimmer, shares none, or shares as many with two entries) the
+ * result is `ambiguous`, with the whole group in `rows`. The caller must not
+ * read an entry, a key or an override from an ambiguous leg: any answer would
+ * be one entry's, given to a leg that may belong to the other.
+ */
+function narrowToTiedEntry(group: SwimmerResult[], leg: SwimmerResult): TiedNarrowing {
+  const signatures = new Set<string>();
+  for (const r of group) {
+    const signature = relayEntryLegSignature(r);
+    if (signature) signatures.add(signature);
+  }
+  if (signatures.size < 2) return { rows: group, ambiguous: false };
+
+  const legSignature = relayEntryLegSignature(leg);
+  const unnamed = group.filter(r => relayEntryLegSignature(r) === '');
+  if (legSignature && signatures.has(legSignature)) {
+    return {
+      rows: [...group.filter(r => relayEntryLegSignature(r) === legSignature), ...unnamed],
+      ambiguous: false,
+    };
+  }
+
+  const legNames = relayEntryNameSet(leg);
+  if (legNames.size === 0) return { rows: group, ambiguous: true };
+  let best: { signature: string; overlap: number } | null = null;
+  let leader = true;
+  for (const signature of signatures) {
+    const row = group.find(r => relayEntryLegSignature(r) === signature);
+    if (!row) continue;
+    let overlap = 0;
+    for (const name of relayEntryNameSet(row)) if (legNames.has(name)) overlap += 1;
+    if (best === null || overlap > best.overlap) {
+      best = { signature, overlap };
+      leader = true;
+    } else if (overlap === best.overlap) {
+      leader = false;
+    }
+  }
+  if (best === null || best.overlap === 0 || !leader) return { rows: group, ambiguous: true };
+  const chosen = best.signature;
+  return {
+    rows: [...group.filter(r => relayEntryLegSignature(r) === chosen), ...unnamed],
+    ambiguous: false,
+  };
+}
+
+/** The row with the lowest leg index (the first of equals), or `undefined` for no rows. */
+function firstLegRow(rows: readonly SwimmerResult[]): SwimmerResult | undefined {
+  let first: SwimmerResult | undefined;
+  for (const r of rows) {
+    if (first === undefined || (r.relayLegIndex ?? 0) < (first.relayLegIndex ?? 0)) first = r;
+  }
+  return first;
+}
+
+/** The relay rows that share `leg`'s team, event, place and round: one entry, or a dead heat of several. */
+function relayRowsSharingPlace(results: readonly SwimmerResult[], leg: SwimmerResult): SwimmerResult[] {
   const rs = (leg.roundSwam || '').trim();
-  const group = results.filter(
+  return results.filter(
     r =>
       r.isRelay &&
       r.team === leg.team &&
@@ -389,21 +661,278 @@ export function relayTemplateFromLeg(results: SwimmerResult[], leg: SwimmerResul
       r.rank === leg.rank &&
       (r.roundSwam || '').trim() === rs
   );
+}
+
+/**
+ * The first leg row of the relay entry `leg` belongs to.
+ *
+ * One team's A and B relays can share event, round, place and clock (a dead
+ * heat). Their rows then differ only in the swimmers they name
+ * (`relayNames`), and the template of a B leg must be a B row, not the A
+ * relay's leadoff (`narrowToTiedEntry`). With no tie the template is the first
+ * row of the group, as it always was.
+ *
+ * A leg that belongs to no entry the rows can name (an ambiguous leg of a
+ * projected tied relay) still gets the first row of the whole group here, as
+ * before. A caller that holds projected rows must use
+ * {@link resolveRelayEntryForLeg}, which says so.
+ */
+export function relayTemplateFromLeg(results: SwimmerResult[], leg: SwimmerResult): SwimmerResult {
+  const group = relayRowsSharingPlace(results, leg);
   if (group.length === 0) return leg;
-  return [...group].sort((a, b) => (a.relayLegIndex ?? 0) - (b.relayLegIndex ?? 0))[0];
+  const { rows } = narrowToTiedEntry(group, leg);
+  return firstLegRow(rows) ?? leg;
 }
 
+/**
+ * The relay entry of a leg row, or the fact that the rows cannot say.
+ *
+ * - `resolved`: `template` is a row of the entry, and `entryKey` is the key an
+ *   override of it is stored under (`relayEntryKeyIn`).
+ * - `ambiguous`: one team's relays share event, round, place and clock, and
+ *   nothing in the leg tells them apart (a projected leg whose swimmers all
+ *   left, or two of each relay's). It belongs to one of `candidates` (each
+ *   the first leg row of one tied entry). `groupKey` names the unresolved
+ *   leg's relay for grouping and de-duplication only. It starts with
+ *   `ambiguous-tied-relay|`, which no stored override key does, and must never
+ *   be written as an override key.
+ *
+ * An ambiguous leg gets no override read, no autofill and no edit
+ * ({@link relayOverrideRefusal}).
+ */
+export type RelayEntryResolution =
+  | { status: 'resolved'; template: SwimmerResult; entryKey: string }
+  | { status: 'ambiguous'; candidates: SwimmerResult[]; groupKey: string };
+
+const AMBIGUOUS_TIED_RELAY_PREFIX = 'ambiguous-tied-relay|';
+
+/**
+ * Resolve the relay entry `leg` belongs to among `results` (the original rows).
+ * See {@link RelayEntryResolution}. A leg whose place holds no relay row is its
+ * own template.
+ */
+export function resolveRelayEntryForLeg(
+  results: SwimmerResult[],
+  leg: SwimmerResult
+): RelayEntryResolution {
+  const group = relayRowsSharingPlace(results, leg);
+  if (group.length === 0) {
+    return { status: 'resolved', template: leg, entryKey: relayEntryKeyIn(results, leg) };
+  }
+  const narrowed = narrowToTiedEntry(group, leg);
+  if (!narrowed.ambiguous) {
+    const template = firstLegRow(narrowed.rows) ?? leg;
+    return { status: 'resolved', template, entryKey: relayEntryKeyIn(results, template) };
+  }
+  const bySignature = new Map<string, SwimmerResult[]>();
+  for (const r of group) {
+    const signature = relayEntryLegSignature(r);
+    if (!signature) continue;
+    const rows = bySignature.get(signature) ?? [];
+    rows.push(r);
+    bySignature.set(signature, rows);
+  }
+  const candidates: SwimmerResult[] = [];
+  for (const rows of bySignature.values()) {
+    const first = firstLegRow(rows);
+    if (first) candidates.push(first);
+  }
+  const placeKey = relayEntryKey(firstLegRow(group) ?? leg);
+  return {
+    status: 'ambiguous',
+    candidates,
+    groupKey: `${AMBIGUOUS_TIED_RELAY_PREFIX}${placeKey}|${relayEntryLegSignature(leg)}`,
+  };
+}
+
+/** The reason an override write is refused: its relay is one of a tied pair and the leg cannot say which. */
+export const TIED_RELAY_AMBIGUOUS = 'tied_relay_ambiguous' as const;
+
+export type RelayOverrideRefusal = {
+  reason: typeof TIED_RELAY_AMBIGUOUS;
+  /** Plain words for the coach. */
+  message: string;
+};
+
+/**
+ * `null` when an override may be written for the resolved relay entry, else why
+ * not. A writer that holds a leg row (the relays screen, the autofill, the
+ * quick fill) asks this first and writes nothing when it is not `null`: an
+ * override for an ambiguous leg would land on one of two tied relays by luck.
+ */
+export function relayOverrideRefusal(resolution: RelayEntryResolution): RelayOverrideRefusal | null {
+  if (resolution.status === 'resolved') return null;
+  return {
+    reason: TIED_RELAY_AMBIGUOUS,
+    message:
+      'This team has two relays with the same place and time, and this leg could belong to either. ' +
+      'Nothing was changed.',
+  };
+}
+
+/**
+ * The key an override of `template`'s relay entry is stored under.
+ *
+ * It is `relayEntryKey(template)` (`team|event|round|place|clock`), and
+ * nothing else, unless another relay in `pool` has the same key and names other
+ * swimmers: one team's A and B relays on a dead heat. Then the key carries the
+ * named swimmers (`relayEntryLegSignature`) after the clock, so an override of
+ * a leg of A does not apply to B.
+ *
+ * Every entry that is not tied keeps the key it always had, so saved overrides
+ * and the keys the screens compare are unchanged. Without `pool` the key is
+ * `relayEntryKey(template)`.
+ */
+export function relayEntryKeyIn(
+  pool: readonly SwimmerResult[] | undefined,
+  template: SwimmerResult
+): string {
+  const key = relayEntryKey(template);
+  if (!pool) return key;
+  const signature = relayEntryLegSignature(template);
+  if (!signature) return key;
+  const tied = pool.some(
+    r =>
+      r.isRelay &&
+      r.team === template.team &&
+      r.event === template.event &&
+      relayEntryKey(r) === key &&
+      relayEntryLegSignature(r) !== '' &&
+      relayEntryLegSignature(r) !== signature
+  );
+  return tied ? `${key}|${signature}` : key;
+}
+
+/**
+ * The key a stored override for `leg`'s relay entry carries (`relayEntryKeyIn`
+ * over the template).
+ *
+ * Only for a leg of the original rows. A leg of a projected relay may be
+ * ambiguous between two tied relays, and then this returns the key of the
+ * group's first entry: use {@link resolveRelayEntryForLeg} for such a leg.
+ */
 export function stableRelayEntryKey(originalResults: SwimmerResult[], leg: SwimmerResult): string {
-  return relayEntryKey(relayTemplateFromLeg(originalResults, leg));
+  return relayEntryKeyIn(originalResults, relayTemplateFromLeg(originalResults, leg));
 }
 
+/**
+ * The override for leg `legIndex` of `template`'s relay entry.
+ *
+ * Pass `pool` (the results the template came from) so one team's tied A and B
+ * relays are told apart (`relayEntryKeyIn`). Only the override stored under the
+ * entry's own key is read. A key saved before the two relays were told apart
+ * (the plain `relayEntryKey` of a tied pair) names neither, and is read for
+ * neither: {@link migrateTiedRelayOverridesDetailed} reports it as ambiguous
+ * (user decision E5). Without `pool` only the plain key is read, as before.
+ */
 export function findRelayLegOverride(
   overrides: RelayLegOverride[],
   template: SwimmerResult,
-  legIndex: number
+  legIndex: number,
+  pool?: readonly SwimmerResult[]
 ): RelayLegOverride | undefined {
-  const key = relayEntryKey(template);
+  const key = relayEntryKeyIn(pool, template);
   return overrides.find(o => o.relayEntryKey === key && o.legIndex === legIndex);
+}
+
+/**
+ * The keys an override of `template`'s relay entry may be stored under: the
+ * entry's own key (`relayEntryKeyIn`). One key, in a list for the callers that
+ * took two before a tied relay's plain key was migrated away.
+ */
+export function relayEntryOverrideKeys(
+  pool: readonly SwimmerResult[] | undefined,
+  template: SwimmerResult
+): string[] {
+  return [relayEntryKeyIn(pool, template)];
+}
+
+/**
+ * A stored override that names a tied relay pair by the plain `relayEntryKey` of both
+ * relays. It was saved before one team's A and B relays on a dead heat were told apart,
+ * so nothing says which of the two it was for.
+ */
+export type AmbiguousRelayOverride = {
+  /** The stored override, exactly as it was saved. It is not applied to either relay. */
+  override: RelayLegOverride;
+  /** The plain key it is stored under (`override.relayEntryKey`). */
+  relayEntryKey: string;
+  legIndex: number;
+  /** The own keys (`relayEntryKeyIn`) of the tied relays it might have been for, sorted. */
+  candidateKeys: string[];
+};
+
+/** What {@link migrateTiedRelayOverridesDetailed} returns. */
+export type TiedRelayOverrideMigration = {
+  /** The overrides to read. Same array when nothing is ambiguous. */
+  overrides: RelayLegOverride[];
+  /** One entry per stored override that names a tied pair by its plain key. */
+  ambiguous: AmbiguousRelayOverride[];
+};
+
+/**
+ * The overrides to read, and the overrides that cannot be read.
+ *
+ * Before one team's A and B relays on a dead heat were told apart, an override of a tied
+ * relay was stored under `relayEntryKey` (`team|event|round|place|clock`) and applied to
+ * both. A reader no longer reads that key for a tied relay, and this does not guess which
+ * relay it was for: the override is reported in `ambiguous` (user decision E5,
+ * 2026-10-16) and applied to neither. A copy under each relay's own key would have put one
+ * swimmer on both relays.
+ *
+ * `overrides` keeps the stored override in its place, so a screen can show it and the
+ * coach can set the fill again on the right relay (a write under a relay's own key). It
+ * is inert: no reader finds a tied relay under the plain key. A relay that is not tied
+ * keeps every key it had.
+ *
+ * `results` is the original rows of the relays (`menResults`, `womenResults`).
+ * Pure and idempotent. The same array comes back.
+ */
+export function migrateTiedRelayOverridesDetailed(
+  overrides: RelayLegOverride[],
+  results: readonly SwimmerResult[]
+): TiedRelayOverrideMigration {
+  if (overrides.length === 0) return { overrides, ambiguous: [] };
+  const signaturesByKey = new Map<string, Set<string>>();
+  for (const r of results) {
+    if (!r.isRelay) continue;
+    const signature = relayEntryLegSignature(r);
+    if (!signature) continue;
+    const key = relayEntryKey(r);
+    const signatures = signaturesByKey.get(key) ?? new Set<string>();
+    signatures.add(signature);
+    signaturesByKey.set(key, signatures);
+  }
+  const tiedKeys = new Map<string, string[]>();
+  for (const [key, signatures] of signaturesByKey) {
+    if (signatures.size >= 2) tiedKeys.set(key, [...signatures].sort());
+  }
+  if (tiedKeys.size === 0) return { overrides, ambiguous: [] };
+
+  const ambiguous: AmbiguousRelayOverride[] = [];
+  for (const o of overrides) {
+    const signatures = tiedKeys.get(o.relayEntryKey);
+    if (!signatures) continue;
+    ambiguous.push({
+      override: o,
+      relayEntryKey: o.relayEntryKey,
+      legIndex: o.legIndex,
+      candidateKeys: signatures.map(signature => `${o.relayEntryKey}|${signature}`),
+    });
+  }
+  return { overrides, ambiguous };
+}
+
+/**
+ * The overrides to read: {@link migrateTiedRelayOverridesDetailed}'s `overrides`.
+ * A legacy plain key of a tied pair stays in the list and is applied to neither relay.
+ * Call the detailed form to learn which stored overrides that is.
+ */
+export function migrateTiedRelayOverrides(
+  overrides: RelayLegOverride[],
+  results: readonly SwimmerResult[]
+): RelayLegOverride[] {
+  return migrateTiedRelayOverridesDetailed(overrides, results).overrides;
 }
 
 /**
@@ -414,6 +943,20 @@ export function findRelayLegOverride(
  * naming a woman whose only swim at the leg event is a Mixed time trial filed
  * in the men's results leaves a men's leg unresolved. `relayGender` defaults
  * to the gender word of `relayEvent`; pass it when the label has none.
+ *
+ * A name resolves onto a time-trial swim only when
+ * `settings.relayLegsAllowTimeTrials` is `true`, and the swim then carries
+ * `relayLegTimeTrial: true`. Otherwise the leg resolves onto the swimmer's
+ * other swim at the leg event, or onto nothing.
+ *
+ * With a leg named, a swim with no time (`hasRelayLegTime`) never resolves, on
+ * either path.
+ *
+ * The recruit id and the name choose the same swim. With a leg named, the id
+ * stands for its row's swimmer: the fastest swim of theirs that may fill the leg
+ * wins, the id's own row or a program swim at the event. Only when none may
+ * does the id's own row come back (so the leg check can name the reason).
+ * Without a leg, the id's own row.
  */
 export function resolveOverrideAssignee(
   override: RelayLegOverride,
@@ -421,31 +964,107 @@ export function resolveOverrideAssignee(
   team: string,
   relayEvent?: string,
   legIndex?: number,
-  relayGender?: Gender
+  relayGender?: Gender,
+  settings?: RelayLegMatchSettings
 ): SwimmerResult | null {
   const gender = relayGender ?? (relayEvent != null ? relayEntryGender({ event: relayEvent }) : undefined);
+  const hasLegContext = relayEvent != null && legIndex != null;
+
+  // The swim the recruit id points at. A swim with no time never stands in.
+  let hit: SwimmerResult | undefined;
   if (override.recruitId) {
-    const hit = activeSwimmers.find(s => !s.isRelay && s.id === override.recruitId);
-    if (hit && hit.team === team && keepRelayGender([hit], gender, activeSwimmers).length > 0) {
-      return hit;
+    const found = activeSwimmers.find(s => !s.isRelay && s.id === override.recruitId);
+    if (
+      found &&
+      found.team === team &&
+      hasRelayLegTime(found) &&
+      keepRelayGender([found], gender, activeSwimmers).length > 0
+    ) {
+      hit = found;
     }
   }
-  if (override.assigneeName) {
-    const key = normalizeName(override.assigneeName);
-    const named = activeSwimmers.filter(
-      s => !s.isRelay && s.team === team && normalizeName(s.name) === key
+  // With no leg named there is no swim to choose between: the id's own row.
+  if (hit && !hasLegContext) return labelTimeTrialLeg(hit, settings);
+
+  // Both paths choose among the swimmer's swims the same way: the id names the
+  // swimmer (its row's name, with the stored name), and the fastest of their
+  // swims that may fill the leg wins. A recruit row at another event, or a time
+  // trial, no longer shadows the swimmer's program swim at the leg event.
+  const keys = new Set<string>();
+  // Order-insensitive, like the blocked-name check in listEligibleRelayLegCandidates.
+  if (override.assigneeName) keys.add(canonicalSwimmerName(override.assigneeName));
+  if (hit) keys.add(canonicalSwimmerName(hit.name));
+  if (keys.size === 0) return null;
+  const named = activeSwimmers.filter(
+    s => !s.isRelay && s.team === team && keys.has(canonicalSwimmerName(s.name))
+  );
+  const matches = keepRelayGender(named, gender, named);
+  if (relayEvent != null && legIndex != null) {
+    const strokeMatches = matches.filter(m =>
+      swimmerMatchesRelayLeg(m, relayEvent, legIndex, settings)
     );
-    const matches = keepRelayGender(named, gender, named);
-    if (matches.length === 0) return null;
-    if (relayEvent != null && legIndex != null) {
-      const strokeMatches = matches.filter(m => swimmerMatchesRelayLeg(m, relayEvent, legIndex));
-      if (strokeMatches.length === 0) return null;
+    if (strokeMatches.length > 0) {
       strokeMatches.sort((a, b) => timeToSec(a.time) - timeToSec(b.time));
-      return strokeMatches[0];
+      return labelTimeTrialLeg(itemAt(strokeMatches, 0), settings);
     }
-    return matches[0];
+    // Nothing of the swimmer's fills the leg. The id's own row is still the
+    // answer, so the leg check can say why (wrong event, or a time trial).
+    return hit ? labelTimeTrialLeg(hit, settings) : null;
   }
-  return null;
+  return matches.length === 0 ? null : itemAt(matches, 0);
+}
+
+/**
+ * True when `swimmer` fails leg `legIndex` of `event` only because it is a
+ * time-trial swim and `settings.relayLegsAllowTimeTrials` is off: with the
+ * setting on, the same swim would match. A swim of another stroke or distance
+ * is not this (it is a stroke mismatch).
+ */
+export function isTimeTrialOnlyForRelayLeg(
+  swimmer: SwimmerResult,
+  event: string,
+  legIndex: number,
+  settings?: RelayLegMatchSettings
+): boolean {
+  // With the setting on, the swim either matches (so this is false) or does not
+  // match even as a time trial (so the second test is false).
+  if (swimmerMatchesRelayLeg(swimmer, event, legIndex, settings)) return false;
+  return swimmerMatchesRelayLeg(swimmer, event, legIndex, {
+    ...settings,
+    relayLegsAllowTimeTrials: true,
+  });
+}
+
+/**
+ * True when `override` names a swimmer whose only swim at the leg event is a
+ * time trial: it resolves onto nothing now (`resolveOverrideAssignee`) and
+ * would resolve onto that swim if `settings.relayLegsAllowTimeTrials` were on.
+ * The caller reports the leg as `time_trial_only`, not as a plain vacant leg.
+ *
+ * `false` when the setting is on, and `false` when the override resolves onto
+ * a swim now.
+ */
+export function overrideNamesTimeTrialOnlySwimmer(
+  override: RelayLegOverride,
+  activeSwimmers: SwimmerResult[],
+  team: string,
+  relayEvent: string,
+  legIndex: number,
+  relayGender?: Gender,
+  settings?: RelayLegMatchSettings
+): boolean {
+  const gender = relayGender ?? relayEntryGender({ event: relayEvent });
+  if (
+    resolveOverrideAssignee(override, activeSwimmers, team, relayEvent, legIndex, gender, settings) !== null
+  ) {
+    return false;
+  }
+  return (
+    resolveOverrideAssignee(override, activeSwimmers, team, relayEvent, legIndex, gender, {
+      ...settings,
+      relayLegsAllowTimeTrials: true,
+    }) !== null
+  );
 }
 
 export function relayLegNameKeys(template: SwimmerResult): Set<string> {
@@ -458,12 +1077,23 @@ export function relayLegNameKeys(template: SwimmerResult): Set<string> {
   return keys;
 }
 
+/**
+ * The fastest eligible swim for a leg, as an autofill override and the swim
+ * behind it. A time trial is a candidate only when
+ * `settings.relayLegsAllowTimeTrials` is `true`; `swimmer` then carries
+ * `relayLegTimeTrial: true`.
+ *
+ * Pass `relayPool` (the relay rows `template` came from) so the override is
+ * keyed to the one tied relay it fills (`relayEntryKeyIn`).
+ */
 export function suggestBestRelayLegFill(
   activeSwimmers: SwimmerResult[],
   template: SwimmerResult,
   legIndex: number,
   assignedInEvent: Set<string>,
-  excludeNormalizedNames: Set<string>
+  excludeNormalizedNames: Set<string>,
+  settings?: RelayLegMatchSettings,
+  relayPool?: readonly SwimmerResult[]
 ): { override: RelayLegOverride; swimmer: SwimmerResult } | null {
   const blocked = new Set(assignedInEvent);
   relayLegNameKeys(template).forEach(n => blocked.add(n));
@@ -474,12 +1104,13 @@ export function suggestBestRelayLegFill(
     legIndex,
     blocked,
     template.team,
-    relayEntryGender(template)
+    relayEntryGender(template),
+    settings
   );
   if (candidates.length === 0) return null;
-  const swimmer = candidates[0];
+  const swimmer = itemAt(candidates, 0);
   const override: RelayLegOverride = {
-    relayEntryKey: relayEntryKey(template),
+    relayEntryKey: relayEntryKeyIn(relayPool, template),
     legIndex,
     assigneeName: swimmer.name,
     recruitId: swimmer.isRecruit ? swimmer.id : undefined,
@@ -489,23 +1120,75 @@ export function suggestBestRelayLegFill(
   return { override, swimmer };
 }
 
+/**
+ * The overrides with `next` in place of the one it replaces: the override of the
+ * same relay entry key and leg.
+ *
+ * Only the same key counts. An override stored under the plain key of a tied
+ * pair names neither relay (it is reported as ambiguous by
+ * `migrateTiedRelayOverridesDetailed`): replacing it here would drop a fill the
+ * coach saved, so it stays in the list and neither tied relay reads it.
+ */
 export function upsertRelayLegOverride(
   overrides: RelayLegOverride[],
   next: RelayLegOverride
 ): RelayLegOverride[] {
   return [
-    ...overrides.filter(o => !(o.relayEntryKey === next.relayEntryKey && o.legIndex === next.legIndex)),
+    ...overrides.filter(
+      o => !(o.legIndex === next.legIndex && o.relayEntryKey === next.relayEntryKey)
+    ),
     next,
   ];
 }
 
+/**
+ * The overrides without the one stored under `entryKey` at `legIndex`.
+ * `entryKey` is the key `stableRelayEntryKey` gives (a RelayGroup's `key`).
+ *
+ * A key saved before A and B were told apart is not `entryKey`, so it stays in
+ * the list (reported as ambiguous by `migrateTiedRelayOverridesDetailed`) and
+ * neither tied relay reads it. To drop it, pass the plain key as `entryKey`.
+ */
 export function removeRelayLegOverride(
   overrides: RelayLegOverride[],
   entryKey: string,
   legIndex: number
 ): RelayLegOverride[] {
-  return overrides.filter(o => !(o.relayEntryKey === entryKey && o.legIndex === legIndex));
+  return overrides.filter(o => !(o.legIndex === legIndex && o.relayEntryKey === entryKey));
 }
+
+/**
+ * True when the leg has an override stored under `entryKey`: the test
+ * `removeRelayLegOverride` clears, and the answer `findRelayLegOverride` gives
+ * (non-`undefined`) for the relay `entryKey` was made from.
+ *
+ * Use it for "is there an override to clear" on a relay group, passing the
+ * group's `key` and the override list. A legacy plain key of a tied pair is not
+ * a relay's own key, so it answers `false` for both relays.
+ */
+export function hasRelayLegOverride(
+  overrides: readonly RelayLegOverride[],
+  entryKey: string,
+  legIndex: number
+): boolean {
+  return overrides.some(o => o.legIndex === legIndex && o.relayEntryKey === entryKey);
+}
+
+/**
+ * True when a relay row's leg has no swimmer: the leg is marked vacant, or it carries a missing-leg entry whose
+ * reason says nobody swims it. A `no_baseline` leg is filled (its time cannot be priced), so it is not vacant.
+ * Every reader that asks "does this leg need a swimmer" goes through this one test.
+ */
+export function relayLegIsVacant(
+  leg: Pick<SwimmerResult, 'relayLegVacant' | 'relayMissingLeg'>
+): boolean {
+  if (leg.relayLegVacant === true) return true;
+  return leg.relayMissingLeg !== undefined && leg.relayMissingLeg.reason !== 'no_baseline';
+}
+
+/** What a `no_baseline` leg means, in the words the coach reads. */
+export const RELAY_NO_BASELINE_EXPLANATION =
+  'This leg has no recorded split or usable swim, so a replacement cannot be priced and the relay time is NT.';
 
 export function relayMissingStrokeLabel(stroke: RelayLegStroke | undefined): string {
   if (!stroke) return '';

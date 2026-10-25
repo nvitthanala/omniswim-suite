@@ -9,15 +9,17 @@
  * components only render from it and report gestures back via callbacks.
  */
 
-import type { RefObject } from 'react';
+import type { MouseEvent, RefObject } from 'react';
 import { motion } from 'motion/react';
 import { LineChart, Line, BarChart, Bar, XAxis, YAxis, Tooltip, Cell, CartesianGrid } from 'recharts';
+import type { BarRectangleItem, MouseHandlerDataParam } from 'recharts';
 import { ChartFrame } from '@omniswim/ui';
 import type { Gender } from '@omniswim/core/types';
 import type { PrelimsOverUnderEntry } from '@omniswim/core/lib/prelimsProjection';
 import type { PsychOverUnderEntry } from '@omniswim/core/lib/psychProjection';
 import type { ThemeColors } from '@omniswim/core/lib/useThemeColors';
 import { TeamCardChartTooltip } from './TeamCardTooltips';
+import type { TeamCardClassDatum, TeamCardEventDatum, TeamCardTooltipAnchor } from './teamCardView';
 
 interface TooltipCommonProps {
   gender: Gender | string;
@@ -30,10 +32,10 @@ interface TooltipCommonProps {
 
 interface TeamEventChartPaneProps extends TooltipCommonProps {
   surfaceRef: RefObject<HTMLDivElement | null>;
-  activeTooltip: any;
-  pinnedTooltip: any;
+  activeTooltip: TeamCardTooltipAnchor<TeamCardEventDatum> | null;
+  pinnedTooltip: TeamCardTooltipAnchor<TeamCardEventDatum> | null;
   onClosePinned: () => void;
-  eventData: any[];
+  eventData: TeamCardEventDatum[];
   teamChartColor: string;
   chartTheme: ThemeColors;
   chartPanePercent: number;
@@ -41,9 +43,9 @@ interface TeamEventChartPaneProps extends TooltipCommonProps {
   teamName: string;
   width: number;
   height: number;
-  onMouseMove: (state: any) => void;
+  onMouseMove: (state: MouseHandlerDataParam) => void;
   onMouseLeave: () => void;
-  onClick: (state: any) => void;
+  onClick: (state: MouseHandlerDataParam) => void;
 }
 
 /** The "Points by Event" line chart, its hover/pinned tooltip overlays, and empty state. */
@@ -157,18 +159,18 @@ export function TeamEventChartPane({
 
 interface TeamClassChartPaneProps extends TooltipCommonProps {
   surfaceRef: RefObject<HTMLDivElement | null>;
-  activeClassTooltip: any;
-  pinnedClassTooltip: any;
+  activeClassTooltip: TeamCardTooltipAnchor<TeamCardClassDatum> | null;
+  pinnedClassTooltip: TeamCardTooltipAnchor<TeamCardClassDatum> | null;
   onClosePinned: () => void;
-  classData: any[];
+  classData: TeamCardClassDatum[];
   chartTheme: ThemeColors;
   chartPanePercent: number;
   scoringRefreshKey: number;
   teamName: string;
   width: number;
   height: number;
-  onBarClick: (data: any, index: number, e: any) => void;
-  onBarMouseEnter: (data: any, index: number, e: any) => void;
+  onBarClick: (data: BarRectangleItem, index: number, e: MouseEvent<SVGPathElement>) => void;
+  onBarMouseEnter: (data: BarRectangleItem, index: number, e: MouseEvent<SVGPathElement>) => void;
   onBarMouseLeave: () => void;
 }
 

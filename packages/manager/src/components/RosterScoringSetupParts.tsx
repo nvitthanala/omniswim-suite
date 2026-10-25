@@ -9,7 +9,7 @@
 
 import React from 'react';
 import { ScoringPresetMeta, ScoringSettings } from '@omniswim/core/types';
-import { entryCapPolicy } from '@omniswim/core/lib/scoringDefaults';
+import { entryCapPolicy, relayLegsAllowTimeTrials } from '@omniswim/core/lib/scoringDefaults';
 import { NumberField } from '@omniswim/ui';
 
 /** One numeric scoring-limit field: label, the settings key it reads/writes,
@@ -63,15 +63,22 @@ export function NumericSettingField({
  * Optional entry-cap policy flags. Absent settings resolve through
  * `entryCapPolicy`, so the checkboxes show the effective default (time trials
  * off, exhibition on) until the user sets an explicit boolean.
+ *
+ * The relay-leg time-trial checkbox sits beside them. It resolves through
+ * `relayLegsAllowTimeTrials` and is off until the user sets an explicit true.
  */
 export function EntryCapPolicyFields({
   settings,
   onChange,
 }: {
-  settings: Pick<ScoringSettings, 'entryCapCountsTimeTrials' | 'entryCapCountsExhibition'>;
+  settings: Pick<
+    ScoringSettings,
+    'entryCapCountsTimeTrials' | 'entryCapCountsExhibition' | 'relayLegsAllowTimeTrials'
+  >;
   onChange: (patch: Partial<ScoringSettings>) => void;
 }) {
   const policy = entryCapPolicy(settings);
+  const helperId = React.useId();
   return (
     <div className="sm:col-span-2 flex flex-col gap-2">
       <label className="flex items-center gap-2 text-ui-caption text-theme-muted cursor-pointer">
@@ -94,6 +101,21 @@ export function EntryCapPolicyFields({
         />
         Exhibition swims count toward the entry cap
       </label>
+      <div className="flex flex-col gap-0.5">
+        <label className="flex items-center gap-2 text-ui-caption text-theme-muted cursor-pointer">
+          <input
+            type="checkbox"
+            aria-describedby={helperId}
+            checked={relayLegsAllowTimeTrials(settings)}
+            onChange={e => onChange({ relayLegsAllowTimeTrials: e.target.checked })}
+            className="accent-[var(--text-accent)]"
+          />
+          Let time trials fill relay legs
+        </label>
+        <p id={helperId} className="pl-6 text-ui-micro text-theme-muted">
+          Off by default. A time trial is outside the meet&apos;s program. A leg filled from one is marked Time trial.
+        </p>
+      </div>
     </div>
   );
 }

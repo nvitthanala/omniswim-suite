@@ -5,10 +5,16 @@
  * Placement-based prelims over/under: each swimmer's expected points from their
  * prelims placement (scored as if finals) vs actual baseline finals points.
  */
-import { Gender, ScoringSettings, SwimmerResult, Workspace } from '../types';
+import { Gender, ProjectedTeamScore, ScoringSettings, SwimmerResult, Workspace } from '../types';
 import { mergeScoringSettings } from './scoringDefaults';
-import type { ScoringBundle } from './scoringEngine';
-import { buildProjectedScoringBundle, gatherBaselineScoredByEntry } from './scoringBundleAggregation';
+import { itemAt, recordAt } from './indexedAccess';
+import type { ProjectionBundle } from './scoringEngine';
+import {
+  aggregationTeamKey,
+  buildProjectionBundle,
+  gatherBaselineScoredByEntry,
+  type ExpectationGap,
+} from './scoringBundleAggregation';
 import {
   classifyRoundTier,
   convertTimeToSeconds,
@@ -21,7 +27,7 @@ import {
   looksLikeInstitutionTeamName,
   normalizeSwimmerName,
   parseRankInt,
-  pointsForPlacement,
+  pointsForPlacementOrNull,
   sortEventsByMeetOrder,
   stripEventGenderMarker,
 } from './utils';
@@ -96,15 +102,38 @@ export function roundAndRankForPrelimsSeed(
   return { roundSwam: 'Preliminaries', rank: prelimsRank };
 }
 
-/** Points a swimmer would earn if their prelims placement were their finals result. */
+/**
+ * Points a swimmer would earn if their prelims placement were their finals
+ * result, or `null` when the place-point table has no row for that place (a
+ * place past the end of the table).
+ *
+ * `null` is the table being silent; 0 is the table saying "no points". A
+ * caller that needs a number says what silent means for it.
+ */
+export function pointsForPrelimsSeedRankOrNull(
+  prelimsRank: number,
+  event: string,
+  settings: ScoringSettings
+): number | null {
+  const bracket = settings.aFinalBracketSize ?? Math.floor(settings.scoringPoints.length / 2);
+  const { roundSwam, rank } = roundAndRankForPrelimsSeed(prelimsRank, bracket);
+  return pointsForPlacementOrNull(roundSwam, rank, event, settings);
+}
+
+/**
+ * {@link pointsForPrelimsSeedRankOrNull} read as a number: a place the table has
+ * no row for expects 0 points.
+ *
+ * @deprecated Reads "the table is silent" as 0 points, which is not what the
+ * table says. Use {@link pointsForPrelimsSeedRankOrNull} and keep `null` apart
+ * from 0. The projection builders no longer call this.
+ */
 export function pointsForPrelimsSeedRank(
   prelimsRank: number,
   event: string,
   settings: ScoringSettings
 ): number {
-  const bracket = settings.aFinalBracketSize ?? Math.floor(settings.scoringPoints.length / 2);
-  const { roundSwam, rank } = roundAndRankForPrelimsSeed(prelimsRank, bracket);
-  return pointsForPlacement(roundSwam, rank, event, settings);
+  return pointsForPrelimsSeedRankOrNull(prelimsRank, event, settings) ?? 0;
 }
 
 type EntryRows = { key: string; rows: SwimmerResult[] };
@@ -141,10 +170,10 @@ export function resolvePrelimsRanksForEvent(
 
   const timeSorted = [...entries].sort((a, b) => {
     const clockA = prelimsClock(
-      a.rows.find(r => classifyRoundTier(r.roundSwam) === 'PRE') ?? a.rows[0]
+      a.rows.find(r => classifyRoundTier(r.roundSwam) === 'PRE') ?? itemAt(a.rows, 0)
     );
     const clockB = prelimsClock(
-      b.rows.find(r => classifyRoundTier(r.roundSwam) === 'PRE') ?? b.rows[0]
+      b.rows.find(r => classifyRoundTier(r.roundSwam) === 'PRE') ?? itemAt(b.rows, 0)
     );
     return convertTimeToSeconds(clockA) - convertTimeToSeconds(clockB);
   });
@@ -162,14 +191,20 @@ function pickRepresentativeRow(rows: SwimmerResult[]): SwimmerResult {
   const finals = rows.find(r => isFinalsRound(r.roundSwam));
   if (finals) return finals;
   const prelims = rows.find(r => classifyRoundTier(r.roundSwam) === 'PRE');
-  return prelims ?? rows[0];
+  return prelims ?? itemAt(rows, 0);
 }
 
-/** Build synthetic scored rows: one per entry with points = prelims-placement expected. */
-export function buildPrelimsExpectedRows(
+/** The expected rows of a prelims projection, and the entries the table has no row for. */
+type PrelimsExpectation = {
+  rows: SwimmerResult[];
+  /** Entries whose seed is past the end of the place-point table: no expectation. */
+  gaps: ExpectationGap[];
+};
+
+function collectPrelimsExpectation(
   results: SwimmerResult[],
   settings: ScoringSettings
-): SwimmerResult[] {
+): PrelimsExpectation {
   const byEvent = new Map<string, SwimmerResult[]>();
   for (const r of results) {
     const ev = String(r.event ?? '').trim();
@@ -178,6 +213,7 @@ export function buildPrelimsExpectedRows(
   }
 
   const out: SwimmerResult[] = [];
+  const gaps: ExpectationGap[] = [];
 
   for (const [event, eventRows] of byEvent) {
     if (!isPrelimsOuEligibleEvent(event, eventRows)) continue;
@@ -189,8 +225,14 @@ export function buildPrelimsExpectedRows(
       const prelimsRank = prelimsRanks.get(key);
       if (prelimsRank == null || prelimsRank < 1) continue;
 
-      const expected = pointsForPrelimsSeedRank(prelimsRank, event, settings);
+      const expected = pointsForPrelimsSeedRankOrNull(prelimsRank, event, settings);
       const rep = pickRepresentativeRow(rows);
+      // The table is silent for this seed: there is no expectation. It is not 0
+      // points, so no row is built (a 0 row would read as "expected nothing").
+      if (expected === null) {
+        gaps.push({ key: entryKey(rep), row: rep });
+        continue;
+      }
       const bracket = settings.aFinalBracketSize ?? Math.floor(settings.scoringPoints.length / 2);
       const seedRound = roundAndRankForPrelimsSeed(prelimsRank, bracket);
 
@@ -205,13 +247,48 @@ export function buildPrelimsExpectedRows(
     }
   }
 
-  return out;
+  return { rows: out, gaps };
+}
+
+/**
+ * Build synthetic scored rows: one per entry with points = prelims-placement
+ * expected.
+ *
+ * An entry whose seed is past the end of the place-point table has no
+ * expectation, and no row. A seed the table scores 0 keeps its row with 0 points.
+ * {@link listPrelimsEntriesWithoutExpectation} names the entries left out.
+ */
+export function buildPrelimsExpectedRows(
+  results: SwimmerResult[],
+  settings: ScoringSettings
+): SwimmerResult[] {
+  return collectPrelimsExpectation(results, settings).rows;
+}
+
+/**
+ * Entry keys (`entryKey`) that {@link buildPrelimsExpectedRows} leaves out
+ * because the place-point table has no row for the seed. Distinct from an entry
+ * that expects 0 points, which has a row.
+ */
+export function listPrelimsEntriesWithoutExpectation(
+  results: SwimmerResult[],
+  settings: ScoringSettings
+): string[] {
+  return collectPrelimsExpectation(results, settings).gaps.map(g => g.key);
 }
 
 export type PrelimsOverUnderEntry = {
   expected: number;
-  actual: number;
-  overUnder: number;
+  /**
+   * The points the entry actually earned in the baseline, or `null` when the
+   * baseline holds no row for it: the swim has not been scored yet, or the
+   * entrant never swam it. `null` is "no actual", which is not 0 points.
+   */
+  actual: number | null;
+  /** `actual - expected`, or `null` exactly when `actual` is. A sum skips it. */
+  overUnder: number | null;
+  /** `false` exactly when `actual` is `null`. The field a screen reads to draw a "no actual" marker. */
+  hasActual: boolean;
 };
 
 function isRelayAggregateRow(r: SwimmerResult): boolean {
@@ -260,8 +337,15 @@ export function buildPrelimsOverUnderByEntryKey(
   // Only entries with a prelims-placement anchor — skip timed-finals (actual but no expected).
   for (const [key, expected] of expectedByKey) {
     if (expected <= 0) continue;
-    const actual = actualByKey.get(key) ?? 0;
-    out.set(key, { expected, actual, overUnder: actual - expected });
+    // No baseline row is "no actual", not 0: an entry whose swim is not scored
+    // yet must not read as a swimmer who earned nothing.
+    const actual = actualByKey.get(key) ?? null;
+    out.set(key, {
+      expected,
+      actual,
+      overUnder: actual === null ? null : actual - expected,
+      hasActual: actual !== null,
+    });
   }
   return out;
 }
@@ -289,7 +373,8 @@ export function prelimsOuOverUnderForDisplay(
   if (!entry) return undefined;
   const credited = typeof r.points === 'number' ? r.points : 0;
   if (credited > 0) return credited - entry.expected;
-  return entry.overUnder;
+  // No actual: nothing to show, rather than -expected.
+  return entry.overUnder ?? undefined;
 }
 
 /** Sum O/U for a list of rows — one entry key counted once (prelims+finals rows deduped). */
@@ -310,7 +395,9 @@ export function sumPrelimsOuForSwimmers(
     if (seen.has(key)) continue;
     seen.add(key);
     const entry = lookup.get(key);
-    if (entry) total += entry.overUnder;
+    // An entry with no actual adds nothing; it is counted by
+    // {@link countPrelimsEntriesWithoutActual}, not as an under.
+    if (entry && entry.overUnder !== null) total += entry.overUnder;
   }
   return total;
 }
@@ -324,9 +411,28 @@ export function sumPrelimsOuForTeam(
   let total = 0;
   for (const [key, entry] of lookup) {
     const parts = key.split('|');
-    if ((parts[1] ?? '').trim() === teamNorm) total += entry.overUnder;
+    if ((parts[1] ?? '').trim() === teamNorm && entry.overUnder !== null) total += entry.overUnder;
   }
   return total;
+}
+
+/**
+ * How many entries have an expected value and no actual yet. Pair it with
+ * {@link sumPrelimsOuForTeam}: that sum covers only the entries that have one.
+ * Pass `teamName` for one team; omit it for the whole lookup.
+ */
+export function countPrelimsEntriesWithoutActual(
+  lookup: Map<string, PrelimsOverUnderEntry>,
+  teamName?: string
+): number {
+  const teamNorm = teamName?.trim();
+  let n = 0;
+  for (const [key, entry] of lookup) {
+    if (entry.actual !== null) continue;
+    if (teamNorm !== undefined && (key.split('|')[1] ?? '').trim() !== teamNorm) continue;
+    n += 1;
+  }
+  return n;
 }
 
 export type MomentumSeriesPoint = {
@@ -350,6 +456,7 @@ export function buildMomentumSeriesForTeam(
     if ((parts[1] ?? '').trim() !== teamNorm) continue;
     const ev = parts[0] ?? '';
     if (!ev) continue;
+    if (entry.overUnder === null) continue; // no actual: no delta for this event from it
     eventDelta.set(ev, (eventDelta.get(ev) ?? 0) + entry.overUnder);
   }
 
@@ -387,6 +494,9 @@ export function buildMeetMomentumChartDataFromLookup(
     teamNames.map(team => [team, buildMomentumSeriesForTeam(team, lookup, eventsList)])
   );
   const carryForward: Record<string, number> = Object.fromEntries(teamNames.map(t => [t, 0]));
+  // A team with no entry that has an actual has no momentum at all. Its line is
+  // absent (null), not a flat 0 that reads as "exactly on expectation".
+  const hasMomentum = new Set(teamNames.filter(t => (seriesByTeam.get(t) ?? []).length > 0));
 
   const orderedEvents = eventsList.filter(ev => !/\bTIME TRIAL\b/i.test(ev));
   return orderedEvents.map(rawEvent => {
@@ -396,7 +506,11 @@ export function buildMeetMomentumChartDataFromLookup(
     };
     for (const team of teamNames) {
       const pt = (seriesByTeam.get(team) ?? []).find(p => p.rawEvent === rawEvent);
-      const cumulative = pt?.cumulative ?? carryForward[team] ?? 0;
+      if (!hasMomentum.has(team)) {
+        row[team] = null;
+        continue;
+      }
+      const cumulative = pt?.cumulative ?? recordAt(carryForward, team);
       carryForward[team] = cumulative;
       row[team] = cumulative;
     }
@@ -415,7 +529,8 @@ export function buildMeetMomentumChartData(
       fullEvent: pt.fullEvent,
     };
     for (const team of teamNames) {
-      row[team] = pt.baselineDelta[team] ?? 0;
+      // A team the timeline point does not name has no value there: absent, not 0.
+      row[team] = pt.baselineDelta[team] ?? null;
     }
     return row;
   });
@@ -427,11 +542,18 @@ export type PrelimsProjectedOptions = {
   gender: Gender;
 };
 
-/** Build prelims-placement expected scoring bundle from raw loaded meet data. */
+/**
+ * Build prelims-placement expected scoring bundle from raw loaded meet data.
+ *
+ * A team with a seed past the end of the place-point table stays in
+ * `sortedTeams`: with its sum and the count of seeds left out, or with
+ * `expected: null` when every seed is past the table (see
+ * {@link ProjectedTeamScore}).
+ */
 export function buildPrelimsProjectedBundle({
   workspace,
   gender,
-}: PrelimsProjectedOptions): ScoringBundle {
+}: PrelimsProjectedOptions): ProjectionBundle {
   const menResults = workspace.menResults ?? [];
   const womenResults = workspace.womenResults ?? [];
   const currentResults = gender === Gender.MEN ? menResults : womenResults;
@@ -454,8 +576,8 @@ export function buildPrelimsProjectedBundle({
     };
   }
 
-  const expectedRows = buildPrelimsExpectedRows(currentResults, scoringSettings);
-  return buildProjectedScoringBundle(expectedRows, expectedRows);
+  const { rows, gaps } = collectPrelimsExpectation(currentResults, scoringSettings);
+  return buildProjectionBundle(rows, rows, gaps);
 }
 
 export type PrelimsDeltaTimelinePoint = {
@@ -525,9 +647,127 @@ function timelineTeamsAtEvent(
 }
 
 /**
+ * Points of a scored side that the expectation side has no figure for: the rows
+ * of the entries a team lists in `withoutExpectation`. A team total of that side
+ * includes them; the team's `expected` leaves them out. Subtract them to compare
+ * the same entries on both sides.
+ */
+export type ProjectionLeftOutPoints = {
+  /** Team -> points of its left-out entries. Only teams with a left-out entry. */
+  byTeam: Map<string, number>;
+  /**
+   * Team -> event (as on a timeline point's `fullEvent`) -> points. The per-event
+   * split lets a cumulative timeline subtract each entry from its own event on.
+   */
+  byTeamEvent: Map<string, Map<string, number>>;
+};
+
+/**
+ * Sum the points of `scored` rows whose entry a team lists in
+ * `withoutExpectation`.
+ *
+ * Sums every row of the entry exactly as `aggregateTeamScoring` added it to the
+ * team total (a relay aggregate row and its leg shares included), so the
+ * subtraction leaves no residue. The result is empty when no team lists a
+ * left-out entry, which is the case for any meet whose seeds all sit inside the
+ * place-point table.
+ */
+export function sumProjectionLeftOutPoints(
+  scored: readonly SwimmerResult[],
+  teams: readonly ProjectedTeamScore[]
+): ProjectionLeftOutPoints {
+  const byTeam = new Map<string, number>();
+  const byTeamEvent = new Map<string, Map<string, number>>();
+  const keysByTeam = new Map<string, Set<string>>();
+  for (const team of teams) {
+    if (team.withoutExpectation.length > 0) {
+      keysByTeam.set(team.teamName, new Set(team.withoutExpectation));
+    }
+  }
+  if (keysByTeam.size === 0) return { byTeam, byTeamEvent };
+
+  for (const row of scored) {
+    const teamName = aggregationTeamKey(row);
+    if (teamName === null) continue;
+    const keys = keysByTeam.get(teamName);
+    if (!keys || !keys.has(entryKey(row))) continue;
+    const pts = typeof row.points === 'number' ? row.points : 0;
+    byTeam.set(teamName, (byTeam.get(teamName) ?? 0) + pts);
+    const eventKey = stripEventGenderMarker(row.event);
+    const events = byTeamEvent.get(teamName) ?? new Map<string, number>();
+    events.set(eventKey, (events.get(eventKey) ?? 0) + pts);
+    byTeamEvent.set(teamName, events);
+  }
+  return { byTeam, byTeamEvent };
+}
+
+/**
+ * What {@link buildPrelimsDeltaTimeline} needs to compare like with like when a
+ * projection bundle (prelims or psych) holds teams with no expectation.
+ */
+export type PrelimsDeltaTimelineOptions = {
+  /**
+   * Teams the projection bundle lists with `expected: null`. Such a team has no
+   * point on the projection timeline, so it gets no delta: its whole baseline
+   * would otherwise read as "over". A team the bundle does not list at all keeps
+   * its delta against 0.
+   */
+  noExpectationTeams?: ReadonlySet<string>;
+  /** Baseline points of each team's left-out entries, by event ({@link ProjectionLeftOutPoints.byTeamEvent}). */
+  baselineLeftOut?: ReadonlyMap<string, ReadonlyMap<string, number>>;
+  /** Projected points of each team's left-out entries, by event. */
+  projectedLeftOut?: ReadonlyMap<string, ReadonlyMap<string, number>>;
+};
+
+/**
+ * Options for {@link buildPrelimsDeltaTimeline} read from a projection bundle,
+ * or `undefined` when the bundle has no team with `expected: null` and no
+ * left-out entry. With `undefined` the plain timeline is already right, so a
+ * caller keeps the delta timeline it has.
+ */
+export function prelimsDeltaTimelineOptions(
+  projection: Pick<ProjectionBundle, 'sortedTeams'>,
+  baselineScored: readonly SwimmerResult[],
+  projectedScored: readonly SwimmerResult[]
+): PrelimsDeltaTimelineOptions | undefined {
+  const teams = projection.sortedTeams;
+  const noExpectationTeams = new Set(teams.filter(t => t.expected === null).map(t => t.teamName));
+  const hasLeftOut = teams.some(t => t.withoutExpectationCount > 0);
+  if (noExpectationTeams.size === 0 && !hasLeftOut) return undefined;
+  return {
+    noExpectationTeams,
+    baselineLeftOut: sumProjectionLeftOutPoints(baselineScored, teams).byTeamEvent,
+    projectedLeftOut: sumProjectionLeftOutPoints(projectedScored, teams).byTeamEvent,
+  };
+}
+
+/** Carry a team's cumulative value from a timeline point into its running total, when the point has one. */
+function carryTimelineValue(
+  pt: Record<string, unknown> | undefined,
+  team: string,
+  last: Record<string, number>
+): void {
+  const value = pt?.[team];
+  if (typeof value === 'number') last[team] = value;
+}
+
+/** Add the left-out points of `team` at `eventKey` to its running total. */
+function addLeftOutAtEvent(
+  running: Record<string, number>,
+  leftOut: ReadonlyMap<string, ReadonlyMap<string, number>> | undefined,
+  team: string,
+  eventKey: string
+): void {
+  running[team] = (running[team] ?? 0) + (leftOut?.get(team)?.get(eventKey) ?? 0);
+}
+
+/**
  * Per-team baseline/projected deltas against the prelims anchor for one event.
  * Mutates `lastBase`/`lastPrelim`/`lastProj` (carry-forward running totals) —
  * same running-total contract `buildPrelimsDeltaTimeline`'s loop always had.
+ *
+ * `leftOutBase`/`leftOutProj` are the running totals of the left-out entries'
+ * points (also mutated); a team with none keeps the plain difference.
  */
 function computeTimelineDeltasForEvent(
   basePt: Record<string, unknown> | undefined,
@@ -535,18 +775,30 @@ function computeTimelineDeltasForEvent(
   prelimPt: Record<string, unknown> | undefined,
   lastBase: Record<string, number>,
   lastPrelim: Record<string, number>,
-  lastProj: Record<string, number>
+  lastProj: Record<string, number>,
+  eventKey: string,
+  options: PrelimsDeltaTimelineOptions | undefined,
+  leftOutBase: Record<string, number>,
+  leftOutProj: Record<string, number>
 ): { baselineDelta: Record<string, number>; projectedDelta: Record<string, number> } {
   const teams = timelineTeamsAtEvent([basePt, projPt, prelimPt], lastBase, lastPrelim, lastProj);
   const baselineDelta: Record<string, number> = {};
   const projectedDelta: Record<string, number> = {};
   for (const team of teams) {
-    if (basePt && typeof basePt[team] === 'number') lastBase[team] = basePt[team] as number;
-    if (projPt && typeof projPt[team] === 'number') lastProj[team] = projPt[team] as number;
-    if (prelimPt && typeof prelimPt[team] === 'number') lastPrelim[team] = prelimPt[team] as number;
+    carryTimelineValue(basePt, team, lastBase);
+    carryTimelineValue(projPt, team, lastProj);
+    carryTimelineValue(prelimPt, team, lastPrelim);
 
-    baselineDelta[team] = (lastBase[team] ?? 0) - (lastPrelim[team] ?? 0);
-    projectedDelta[team] = (lastProj[team] ?? 0) - (lastPrelim[team] ?? 0);
+    // No expectation for the team: there is nothing to be over or under, so no key.
+    if (options?.noExpectationTeams?.has(team)) continue;
+
+    // A left-out entry leaves a side once its own event has a point on that
+    // side's timeline, in step with the cumulative total it sits in.
+    if (basePt) addLeftOutAtEvent(leftOutBase, options?.baselineLeftOut, team, eventKey);
+    if (projPt) addLeftOutAtEvent(leftOutProj, options?.projectedLeftOut, team, eventKey);
+
+    baselineDelta[team] = (lastBase[team] ?? 0) - (leftOutBase[team] ?? 0) - (lastPrelim[team] ?? 0);
+    projectedDelta[team] = (lastProj[team] ?? 0) - (leftOutProj[team] ?? 0) - (lastPrelim[team] ?? 0);
   }
   return { baselineDelta, projectedDelta };
 }
@@ -554,7 +806,8 @@ function computeTimelineDeltasForEvent(
 export function buildPrelimsDeltaTimeline(
   baselineTimeline: Record<string, unknown>[],
   projectedTimeline: Record<string, unknown>[],
-  prelimsTimeline: Record<string, unknown>[]
+  prelimsTimeline: Record<string, unknown>[],
+  options?: PrelimsDeltaTimelineOptions
 ): PrelimsDeltaTimelinePoint[] {
   const baselineByEvent = indexTimelineByEvent(baselineTimeline);
   const projectedByEvent = indexTimelineByEvent(projectedTimeline);
@@ -565,6 +818,8 @@ export function buildPrelimsDeltaTimeline(
   const lastBase: Record<string, number> = {};
   const lastProj: Record<string, number> = {};
   const lastPrelim: Record<string, number> = {};
+  const leftOutBase: Record<string, number> = {};
+  const leftOutProj: Record<string, number> = {};
   const out: PrelimsDeltaTimelinePoint[] = [];
 
   for (const eventKey of eventOrder) {
@@ -578,7 +833,11 @@ export function buildPrelimsDeltaTimeline(
       prelimPt,
       lastBase,
       lastPrelim,
-      lastProj
+      lastProj,
+      eventKey,
+      options,
+      leftOutBase,
+      leftOutProj
     );
 
     out.push({

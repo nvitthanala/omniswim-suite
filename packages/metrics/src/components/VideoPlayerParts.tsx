@@ -87,8 +87,8 @@ export function VideoScrubber({
       />
       <div className="w-full h-1.5 bg-white/30 dark:bg-slate-800 rounded-full overflow-hidden backdrop-blur-sm border border-black/20">
         <div
-          className="h-full bg-accent-500 rounded-full transition-all duration-100 ease-linear shadow-[0_0_8px_var(--accent-500)]"
-          style={{ width: `${progress}%` }}
+          className="h-full w-full origin-left bg-accent-500 transition-transform duration-100 ease-linear shadow-[0_0_8px_var(--accent-500)] motion-reduce:transition-none"
+          style={{ transform: `scaleX(${progress / 100})` }}
         />
       </div>
       <TagTimeline
@@ -142,7 +142,7 @@ export function VideoTransportControls({
           onClick={() => onStepFrame(-1)}
           disabled={effectiveFps === null}
           className="hover:text-accent-400 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-accent)] disabled:opacity-40 disabled:cursor-not-allowed"
-          title="Previous Frame"
+          title="Previous frame"
           aria-label="Previous frame"
         >
           <SkipBack className="w-4 h-4 fill-current opacity-80 hover:opacity-100" />
@@ -158,7 +158,7 @@ export function VideoTransportControls({
           onClick={() => onStepFrame(1)}
           disabled={effectiveFps === null}
           className="hover:text-accent-400 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-accent)] disabled:opacity-40 disabled:cursor-not-allowed"
-          title="Next Frame"
+          title="Next frame"
           aria-label="Next frame"
         >
           <SkipForward className="w-4 h-4 fill-current opacity-80 hover:opacity-100" />
@@ -166,7 +166,8 @@ export function VideoTransportControls({
 
         <div className="text-xs font-mono font-medium tracking-wide opacity-90 drop-shadow-md ml-2 border-l border-white/20 pl-4 py-0.5 flex items-center gap-4">
           <span>
-            {formatTime(currentTime)} / {formatTime(duration)}
+            {/* `duration` is 0 until metadata loads and NaN for a stream with none: not a real length. */}
+            {formatTime(currentTime)} / {formatTime(duration > 0 ? duration : null)}
           </span>
           <span className="text-accent-300">
             FR: {effectiveFps !== null ? Math.floor(currentTime * effectiveFps) : '—'}
@@ -242,7 +243,7 @@ export function VideoTransportControls({
             value={isMuted ? 0 : volume}
             onChange={onVolumeChange}
             aria-label="Volume"
-            className="w-0 opacity-0 group-hover:w-16 group-hover:opacity-100 group-focus-within:w-16 group-focus-within:opacity-100 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer hover:bg-white/40 transition-all duration-300 [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-accent)]"
+            className="w-0 opacity-0 group-hover:w-16 group-hover:opacity-100 group-focus-within:w-16 group-focus-within:opacity-100 h-1 bg-white/20 rounded-lg appearance-none cursor-pointer hover:bg-white/40 transition-[width,opacity,background-color] duration-200 ease-out motion-reduce:transition-none [&::-webkit-slider-thumb]:appearance-none [&::-webkit-slider-thumb]:w-2.5 [&::-webkit-slider-thumb]:h-2.5 [&::-webkit-slider-thumb]:bg-white [&::-webkit-slider-thumb]:rounded-full focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--text-accent)]"
           />
         </div>
 

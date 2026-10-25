@@ -191,14 +191,28 @@ export class ShareLinkService {
     return { id, token, url: `/share/${token}` };
   }
 
-  async resolveToken(token: string): Promise<{ workspaceId: string; label: string } | null> {
+  /**
+   * `teamId` and `createdBy` say whose workspace the link points at, so the caller
+   * can fetch it under that tenant's scope instead of an unscoped listing.
+   */
+  async resolveToken(token: string): Promise<{
+    workspaceId: string;
+    label: string;
+    teamId?: string;
+    createdBy?: string;
+  } | null> {
     const res = await this.pool.query(
-      'SELECT workspace_id, label, expires_at FROM share_links WHERE token = $1',
+      'SELECT workspace_id, label, expires_at, team_id, created_by FROM share_links WHERE token = $1',
       [token]
     );
     const row = res.rows[0];
     if (!row) return null;
     if (row.expires_at && Number(row.expires_at) < Date.now()) return null;
-    return { workspaceId: row.workspace_id as string, label: (row.label as string) ?? 'Report' };
+    return {
+      workspaceId: row.workspace_id as string,
+      label: (row.label as string) ?? 'Report',
+      teamId: (row.team_id as string | null) ?? undefined,
+      createdBy: (row.created_by as string | null) ?? undefined,
+    };
   }
 }

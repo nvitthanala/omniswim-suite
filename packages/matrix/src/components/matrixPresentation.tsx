@@ -5,11 +5,12 @@
 
 import type { ReactNode } from 'react';
 import type { SwimmerResult } from '@omniswim/core/types';
-import { displayTimeForRelayLeg } from '@omniswim/core/lib/relaySplits';
+import { RELAY_LEG_ESTIMATE_LABEL, hasRelayLegTime, relayLegTimeView } from '@omniswim/core/lib/relaySplits';
 import {
   compactEventTitleAttr,
   formatCompactEventLabel,
 } from '@omniswim/core/lib/utils';
+import { noExpectationText, seedsPastTableLabel } from '../lib/noExpectation';
 
 export function AthleteName({ name, className }: { name: string; className?: string }) {
   return (
@@ -89,16 +90,111 @@ export function PointsValue({
   );
 }
 
+/**
+ * The mark for a value that has no actual result yet. A dash on screen and
+ * "No result yet" for a screen reader. It is never 0: 0 means a real result
+ * that scored nothing.
+ */
+export function NoActualMarker({
+  label = 'No result yet',
+  className,
+}: {
+  /** Replaces the default words for the screen reader and the hover title. */
+  label?: string;
+  className?: string;
+}) {
+  return (
+    <span
+      className={['font-mono tabular-nums text-ui-micro text-theme-muted whitespace-nowrap', className]
+        .filter(Boolean)
+        .join(' ')}
+      title={label}
+      data-no-actual
+    >
+      <span aria-hidden="true">{'—'}</span>
+      <span className="sr-only">{label}</span>
+    </span>
+  );
+}
+
+/**
+ * Shown where a team's expected figure would be, when no seed of the team has an
+ * expectation because every seed is past the end of the place-point table:
+ * "— (N seeds past table)". Real text, not colour or an icon alone. It is never 0:
+ * 0 would read as "expected nothing". `count` is a positive whole number.
+ */
+export function NoExpectationText({ count, className }: { count: number; className?: string }) {
+  return (
+    <span
+      className={['font-mono tabular-nums text-ui-micro text-theme-muted whitespace-nowrap', className]
+        .filter(Boolean)
+        .join(' ')}
+      title="Seeds past the end of the place-point table have no expected points"
+      data-no-expectation
+    >
+      {noExpectationText(count)}
+    </span>
+  );
+}
+
+/**
+ * A dash for a figure that cannot be worked out because the team has no expected
+ * points (an over/under against nothing). The screen reader hears the reason.
+ * Never 0.
+ */
+export function NoExpectationMarker({
+  label = 'No expected points, so no over/under',
+  className,
+}: {
+  label?: string;
+  className?: string;
+}) {
+  return (
+    <span
+      className={['font-mono tabular-nums text-ui-micro text-theme-muted whitespace-nowrap', className]
+        .filter(Boolean)
+        .join(' ')}
+      title={label}
+      data-no-expectation-dash
+    >
+      <span aria-hidden="true">{'—'}</span>
+      <span className="sr-only">{label}</span>
+    </span>
+  );
+}
+
+/**
+ * The note beside a team's expected sum when some of its seeds are past the end
+ * of the place-point table: "N seeds past table". The sum covers the other seeds.
+ */
+export function SeedsPastTableNote({ count, className }: { count: number; className?: string }) {
+  return (
+    <span
+      className={['font-mono text-ui-micro text-theme-muted whitespace-nowrap', className]
+        .filter(Boolean)
+        .join(' ')}
+      title="The sum and the over/under leave these seeds out: the place-point table has no row for them"
+      data-seeds-past-table
+    >
+      {seedsPastTableLabel(count)}
+    </span>
+  );
+}
+
 /** Compact prelims over/under badge (+5.0 vs prelims). */
 export function PrelimsOuValue({
   value,
   compact = false,
   className,
+  noActual = false,
 }: {
-  value: number | undefined;
+  value: number | undefined | null;
   compact?: boolean;
   className?: string;
+  /** The entry has no actual yet: with no value to show, draw the "No result yet" mark instead of nothing. */
+  noActual?: boolean;
 }) {
+  if (value == null && noActual) return <NoActualMarker className={className} />;
   if (value == null || Math.abs(value) <= 0.05) return null;
   const positive = value > 0;
   const label = compact
@@ -153,15 +249,24 @@ function relayTeamDisplayTime(result: SwimmerResult): string | undefined {
 }
 
 function isRelayLegResult(result: SwimmerResult): boolean {
-  return Boolean(result.isRelay && (result.relayLegSplitDetail || result.relayLegSplit));
+  return hasRelayLegTime(result);
 }
 
 export function SwimTimeCell({ result }: { result: SwimmerResult }) {
   if (isRelayLegResult(result)) {
     const teamTime = relayTeamDisplayTime(result);
+    const legView = relayLegTimeView(result);
     return (
       <div className="min-w-0 text-right font-mono tabular-nums text-ui-caption">
-        <span className="text-[var(--text-primary)]">{displayTimeForRelayLeg(result)}</span>
+        <span className="text-[var(--text-primary)]">{legView?.time ?? '—'}</span>
+        {legView?.kind === 'estimate' ? (
+          <span
+            className="ml-1 text-ui-micro text-theme-muted font-sans"
+            title={legView.basis ? `Estimated leg time: ${legView.basis}` : 'Estimated leg time'}
+          >
+            {RELAY_LEG_ESTIMATE_LABEL}
+          </span>
+        ) : null}
         {teamTime ? (
           <span className="block text-ui-micro text-theme-muted">Relay {teamTime}</span>
         ) : null}

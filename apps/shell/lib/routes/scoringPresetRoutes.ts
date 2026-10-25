@@ -18,6 +18,7 @@ import type { Express } from 'express';
 import fs from 'fs';
 import path from 'path';
 import { z } from 'zod';
+import { apiError } from '../middleware/apiError.ts';
 import {
   SCORING_PRESET_META_KEYS,
   HostPublishedTableRequiredError,
@@ -27,6 +28,7 @@ import {
   settingsForBuiltInScoringPreset,
 } from '../../../../packages/core/src/lib/scoringDefaults.ts';
 import { NCAA_MEET_FORMATS, type NcaaMeetFormat } from '../../../../packages/core/src/lib/ncaaScoringRules.ts';
+import { pointsTableSchema } from '../../../../packages/core/src/lib/scoringPlaceTables.ts';
 
 /** Keys a stored preset carries about itself rather than about scoring. Defined once, in core. */
 const PRESET_META_KEYS = new Set<string>(SCORING_PRESET_META_KEYS);
@@ -67,88 +69,74 @@ function stripPresetMeta(raw: Record<string, unknown>) {
 // Scoring-preset validation
 // ---------------------------------------------------------------------------
 
-/**
- * A place-value table.
- *
- * Rejects an empty table, a non-finite or negative value, and a table that goes
- * *up* as places get worse. None of those is a competition rule; accepting one
- * produces a plausible team total nobody can trace to a published table.
- */
-function pointsTableSchema(field: string) {
-  return z
-    .array(z.number().finite(`${field}: every place value must be a finite number.`))
-    .min(1, `${field} must list at least one place value.`)
-    .superRefine((places, ctx) => {
-      places.forEach((value, i) => {
-        if (value < 0) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: [i],
-            message: `${field}: place ${i + 1} is ${value}; place values cannot be negative.`,
-          });
-        }
-      });
-      for (let i = 1; i < places.length; i += 1) {
-        if (places[i] > places[i - 1]) {
-          ctx.addIssue({
-            code: z.ZodIssueCode.custom,
-            path: [i],
-            message:
-              `${field}: place ${i + 1} is worth ${places[i]} but place ${i} is worth ` +
-              `${places[i - 1]}. A place table must not increase as places get worse.`,
-          });
-        }
-      }
-    });
-}
+// `pointsTableSchema` (finite, not negative, not increasing, at least one entry)
+// lives in core so the shell and the workspace save share one definition.
 
-const scorerAutoRulesSchema = z
-  .object({
-    abFinalTiers: z.array(z.enum(['A', 'B'])).optional(),
-    includeRelayLegsInFinals: z.boolean().optional(),
-    distanceFinalRequired: z.boolean().optional(),
-    distanceEventPattern: z.array(z.string()).optional(),
-  })
-  .strict();
+/**
+ * A whole number of any size. Zod 3's `.int()` was `Number.isInteger`; Zod 4's
+ * `.int()` also refuses anything past `Number.MAX_SAFE_INTEGER`, which would turn a
+ * preset that saves today into a 400. `Number.isInteger` is false for NaN and the
+ * infinities, so those stay refused. Chain `.positive()` / `.nonnegative()` as before.
+ */
+const wholeNumber = () =>
+  z.number().refine(value => Number.isInteger(value), { error: 'Invalid input: expected int, received number' });
+
+/**
+ * A string of at most `max` UTF-16 code units, as Zod 3's `.max()` counted them.
+ * Zod 4's `.max()` counts code points, so a label of 61 emoji (122 units) that
+ * Zod 3 refused would be accepted. Keeps the stored length bound unchanged.
+ */
+const maxUnits = (max: number) => (value: string) => value.length <= max;
+const tooLong = (max: number) => ({ error: `Too big: expected string to have <=${max} characters` });
+
+const scorerAutoRulesSchema = z.strictObject({
+  abFinalTiers: z.array(z.enum(['A', 'B'])).optional(),
+  includeRelayLegsInFinals: z.boolean().optional(),
+  distanceFinalRequired: z.boolean().optional(),
+  distanceEventPattern: z.array(z.string()).optional(),
+});
 
 /**
  * Strict on purpose. A misspelled key in a scoring rule set is exactly how a
  * silent wrong total is born: the engine ignores `relayPoint`, the coach sees
  * their table saved, and the relays score off the multiplier instead. Naming the
  * unknown key is far better than accepting it.
+ *
+ * `z.number()` refuses NaN and the infinities in Zod 4, so the number fields below
+ * carry no `.finite()`. Zod 3 needed it: a bare `z.number()` let Infinity through.
  */
 const scoringSettingsSchema = z
-  .object({
+  .strictObject({
     scoringPoints: pointsTableSchema('scoringPoints'),
-    relayMultiplier: z.number().finite().nonnegative(),
+    relayMultiplier: z.number().nonnegative(),
     halfRateRelaySwimmer: z.boolean(),
-    maxIndividualScorersPerTeam: z.number().finite().nonnegative(),
-    maxRelaysScoringPerTeam: z.number().finite().nonnegative(),
-    aFinalBracketSize: z.number().int().positive().optional(),
+    maxIndividualScorersPerTeam: z.number().nonnegative(),
+    maxRelaysScoringPerTeam: z.number().nonnegative(),
+    aFinalBracketSize: wholeNumber().positive().optional(),
     unscoredRounds: z.array(z.string()).optional(),
-    scoredEventNumberMax: z.number().int().positive().optional(),
+    scoredEventNumberMax: wholeNumber().positive().optional(),
     scorerCapScope: z.enum(['meet', 'event']).optional(),
-    diverScorerWeight: z.number().finite().positive().optional(),
+    diverScorerWeight: z.number().positive().optional(),
     diverEventPattern: z.array(z.string().min(1)).optional(),
     relayEligibleFromScorerPool: z.boolean().optional(),
     scorerEligibilityMode: z.enum(['points_pool', 'roster']).optional(),
     usePdfPlacePoints: z.union([z.boolean(), z.literal('auto')]).optional(),
     scorerAutoRules: scorerAutoRulesSchema.optional(),
-    maxIndividualEntriesPerSwimmer: z.number().int().nonnegative().optional(),
-    maxRelayEntriesPerSwimmer: z.number().int().nonnegative().optional(),
-    maxTotalEntriesPerSwimmer: z.number().int().nonnegative().optional(),
+    maxIndividualEntriesPerSwimmer: wholeNumber().nonnegative().optional(),
+    maxRelayEntriesPerSwimmer: wholeNumber().nonnegative().optional(),
+    maxTotalEntriesPerSwimmer: wholeNumber().nonnegative().optional(),
     entryCapCountsTimeTrials: z.boolean().optional(),
     entryCapCountsExhibition: z.boolean().optional(),
+    relayLegsAllowTimeTrials: z.boolean().optional(),
     relayPoints: pointsTableSchema('relayPoints').optional(),
     divingPoints: pointsTableSchema('divingPoints').optional(),
-    maxIndividualScorersPerTeamPerEvent: z.number().int().positive().optional(),
-    divingMaxScorersPerTeamPerEvent: z.number().int().positive().optional(),
+    maxIndividualScorersPerTeamPerEvent: wholeNumber().positive().optional(),
+    divingMaxScorersPerTeamPerEvent: wholeNumber().positive().optional(),
     overCapPlaceBehavior: z.enum(['holds-place', 'removed-from-consideration']).optional(),
     meetFormat: z
       .enum([...NCAA_MEET_FORMATS] as [NcaaMeetFormat, ...NcaaMeetFormat[]])
       .optional(),
   })
-  .strict()
   .superRefine((settings, ctx) => {
     // The engine refuses this pair at scoring time (see `resolveTeamPlaceCap`);
     // refusing it at the API boundary means a coach learns at save time, not
@@ -159,7 +147,7 @@ const scoringSettingsSchema = z
       settings.maxIndividualScorersPerTeam < 999
     ) {
       ctx.addIssue({
-        code: z.ZodIssueCode.custom,
+        code: 'custom',
         path: ['maxIndividualScorersPerTeamPerEvent'],
         message:
           'A per-event place cap cannot be combined with a meet-wide scorer pool ' +
@@ -171,23 +159,26 @@ const scoringSettingsSchema = z
   });
 
 const scoringPresetWriteSchema = z
-  .object({
+  .strictObject({
     id: z.string().regex(USER_PRESET_ID_RE, {
-      message:
+      error:
         'A preset id must be lowercase letters, digits, hyphens or underscores, start with a ' +
         'letter or digit, and be at most 80 characters.',
     }),
-    label: z.string().trim().min(1, 'A preset needs a label.').max(120),
-    description: z.string().max(1000).optional(),
+    label: z
+      .string()
+      .trim()
+      .min(1, 'A preset needs a label.')
+      .refine(maxUnits(120), tooLong(120)),
+    description: z.string().refine(maxUnits(1000), tooLong(1000)).optional(),
     conferenceMatches: z.array(z.string().trim().min(1)).max(50).optional(),
     settings: scoringSettingsSchema,
-  })
-  .strict();
+  });
 
 type ScoringPresetWriteBody = z.infer<typeof scoringPresetWriteSchema>;
 
 function zodDetails(error: z.ZodError): { path: string; message: string }[] {
-  return error.issues.map(issue => ({ path: issue.path.join('.'), message: issue.message }));
+  return error.issues.map(issue => ({ path: issue.path.map(String).join('.'), message: issue.message }));
 }
 
 export interface ScoringPresetRoutesDeps {
@@ -273,7 +264,7 @@ export function registerScoringPresetRoutes(app: Express, deps: ScoringPresetRou
         ...onDisk.filter(e => !isBuiltInScoringPresetId(e.id)).map(userPresetMeta),
       ]);
     } catch (err) {
-      res.status(500).json({ error: 'Failed to list scoring presets', details: String(err) });
+      apiError(res, 500, 'PRESET_LIST_FAILED', 'Failed to list scoring presets', String(err));
     }
   });
 
@@ -286,17 +277,17 @@ export function registerScoringPresetRoutes(app: Express, deps: ScoringPresetRou
         if (err instanceof HostPublishedTableRequiredError) {
           // Absent, not empty. Rule 7-4 leaves the table to the host, so there is
           // nothing to return and nothing may be invented in its place.
-          return res.status(409).json({
-            error: err.message,
+          // err.message is the preset's own description, written for display (see apiError).
+          return apiError(res, 409, 'HOST_PUBLISHED_TABLE_REQUIRED', err.message, undefined, {
             citation: err.citation,
             requiresHostPublishedTable: true,
           });
         }
-        return res.status(500).json({ error: 'Failed to read preset', details: String(err) });
+        return apiError(res, 500, 'PRESET_READ_FAILED', 'Failed to read preset', String(err));
       }
     }
     const raw = loadScoringPresetFile(id);
-    if (!raw) return res.status(404).json({ error: 'Preset not found' });
+    if (!raw) return apiError(res, 404, 'PRESET_NOT_FOUND', 'Preset not found');
     res.json(stripPresetMeta(raw));
   });
 
@@ -315,26 +306,32 @@ export function registerScoringPresetRoutes(app: Express, deps: ScoringPresetRou
     const body = { ...(req.body ?? {}) } as Record<string, unknown>;
     if (urlId != null) {
       if (body.id != null && body.id !== urlId) {
-        res.status(400).json({
-          error: `Body id "${String(body.id)}" does not match the URL id "${urlId}".`,
-        });
+        apiError(
+          res,
+          400,
+          'PRESET_ID_MISMATCH',
+          `Body id "${String(body.id)}" does not match the URL id "${urlId}".`
+        );
         return null;
       }
       body.id = urlId;
     }
     const parsed = scoringPresetWriteSchema.safeParse(body);
     if (!parsed.success) {
-      res
-        .status(400)
-        .json({ error: 'Invalid scoring preset', details: zodDetails(parsed.error) });
+      // `details` is dropped in production. The preset editor needs the field list to say what to fix,
+      // so it also goes in `fieldErrors`. The issues describe the caller's own request body.
+      const fieldErrors = zodDetails(parsed.error);
+      apiError(res, 400, 'INVALID_PRESET', 'Invalid scoring preset', fieldErrors, { fieldErrors });
       return null;
     }
     if (isBuiltInScoringPresetId(parsed.data.id)) {
-      res.status(409).json({
-        error:
-          `"${parsed.data.id}" is a built-in rule set. Built-ins are generated from the ` +
-          `published rulebook and are immutable; save this under a different id.`,
-      });
+      apiError(
+        res,
+        409,
+        'PRESET_BUILT_IN',
+        `"${parsed.data.id}" is a built-in rule set. Built-ins are generated from the ` +
+          `published rulebook and are immutable; save this under a different id.`
+      );
       return null;
     }
     return parsed.data;
@@ -345,9 +342,7 @@ export function registerScoringPresetRoutes(app: Express, deps: ScoringPresetRou
     if (!body) return;
     const filePath = userPresetFilePath(body.id);
     if (fs.existsSync(filePath)) {
-      return res
-        .status(409)
-        .json({ error: `A scoring preset with id "${body.id}" already exists.` });
+      return apiError(res, 409, 'PRESET_EXISTS', `A scoring preset with id "${body.id}" already exists.`);
     }
     try {
       fs.mkdirSync(SCORING_PRESETS_DIR, { recursive: true });
@@ -362,7 +357,7 @@ export function registerScoringPresetRoutes(app: Express, deps: ScoringPresetRou
         conferenceMatches: body.conferenceMatches,
       });
     } catch (err) {
-      res.status(500).json({ error: 'Failed to save the scoring preset', details: String(err) });
+      apiError(res, 500, 'PRESET_SAVE_FAILED', 'Failed to save the scoring preset', String(err));
     }
   });
 
@@ -371,7 +366,7 @@ export function registerScoringPresetRoutes(app: Express, deps: ScoringPresetRou
     if (!body) return;
     const filePath = userPresetFilePath(body.id);
     if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: `No scoring preset with id "${body.id}".` });
+      return apiError(res, 404, 'PRESET_NOT_FOUND', `No scoring preset with id "${body.id}".`);
     }
     try {
       fs.writeFileSync(filePath, `${JSON.stringify(presetFileContents(body), null, 2)}\n`, 'utf-8');
@@ -385,30 +380,28 @@ export function registerScoringPresetRoutes(app: Express, deps: ScoringPresetRou
         conferenceMatches: body.conferenceMatches,
       });
     } catch (err) {
-      res.status(500).json({ error: 'Failed to save the scoring preset', details: String(err) });
+      apiError(res, 500, 'PRESET_SAVE_FAILED', 'Failed to save the scoring preset', String(err));
     }
   });
 
   app.delete('/api/scoring-presets/:id', (req, res) => {
     const id = req.params.id;
     if (isBuiltInScoringPresetId(id)) {
-      return res.status(409).json({
-        error: `"${id}" is a built-in rule set and cannot be deleted.`,
-      });
+      return apiError(res, 409, 'PRESET_BUILT_IN', `"${id}" is a built-in rule set and cannot be deleted.`);
     }
     if (!USER_PRESET_ID_RE.test(id)) {
-      return res.status(400).json({ error: `"${id}" is not a valid preset id.` });
+      return apiError(res, 400, 'INVALID_PRESET_ID', `"${id}" is not a valid preset id.`);
     }
     const filePath = userPresetFilePath(id);
     if (!fs.existsSync(filePath)) {
-      return res.status(404).json({ error: `No scoring preset with id "${id}".` });
+      return apiError(res, 404, 'PRESET_NOT_FOUND', `No scoring preset with id "${id}".`);
     }
     try {
       fs.unlinkSync(filePath);
       refreshUserConferenceBindings();
       res.json({ success: true });
     } catch (err) {
-      res.status(500).json({ error: 'Failed to delete the scoring preset', details: String(err) });
+      apiError(res, 500, 'PRESET_DELETE_FAILED', 'Failed to delete the scoring preset', String(err));
     }
   });
 }

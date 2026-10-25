@@ -49,6 +49,7 @@
  */
 
 import type { HistoricalSwim } from '../types';
+import { itemAt } from './indexedAccess';
 import {
   courseOfRecordFromEventLabel,
   normalizeEventForCutline,
@@ -181,7 +182,7 @@ function mismatchReason(
   courseEvent: string,
   pair: CourseDistancePair
 ): string {
-  const quoted = pair.sources[0];
+  const quoted = itemAt(pair.sources, 0);
   return (
     `There is no ${event} in ${COURSE_NAME[course]}. That course swims the ${courseEvent} in its place ` +
     `(NCAA conversion table: "${quoted.printed}"). Check the event and course of this swim. ` +

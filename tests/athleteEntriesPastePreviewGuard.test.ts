@@ -50,7 +50,7 @@ describe('selectPastePreviewRows', () => {
     });
     expect(preview).toHaveLength(1);
     expect(preview[0]).toMatchObject({ event: '200 Freestyle', selected: false, disabled: true });
-    expect(preview[0].disabledReason).toMatch(/extracted/i);
+    expect(preview[0]!.disabledReason).toMatch(/extracted/i);
   });
 
   it('keeps a self-reported time visible but disabled, unselected, with a reason', () => {
@@ -62,7 +62,7 @@ describe('selectPastePreviewRows', () => {
     });
     expect(preview).toHaveLength(1);
     expect(preview[0]).toMatchObject({ event: '50 Freestyle', selected: false, disabled: true });
-    expect(preview[0].disabledReason).toMatch(/self-reported/i);
+    expect(preview[0]!.disabledReason).toMatch(/self-reported/i);
   });
 
   it('reads the pasted-row badge the same as the bridge flag', () => {
@@ -72,7 +72,7 @@ describe('selectPastePreviewRows', () => {
       counts: zeroCounts,
       settings,
     });
-    expect(preview[0].disabled).toBe(true);
+    expect(preview[0]!.disabled).toBe(true);
   });
 
   it('mixes a rankable and a non-rankable swim: only the rankable one is selectable', () => {

@@ -55,6 +55,14 @@ SOURCES: list[dict[str, Any]] = [
         "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2025-26D1XSW_QUALSTANDARDS.pdf",
     },
     {
+        "id": "ncaa-d1-2026-27",
+        "division": "D1",
+        "season": "2026-2027",
+        "genders": "MW",
+        "filename": "2026-27D1XSW_QUALSTANDARDS.pdf",
+        "url": "https://ncaaorg.s3.amazonaws.com/championships/sports/swimdive/d1/2026-27D1XSW_QUALSTANDARDS.pdf",
+    },
+    {
         "id": "ncaa-d2-men-2026-27",
         "division": "D2",
         "season": "2026-2027",
@@ -204,6 +212,11 @@ def main() -> int:
         if status == "CHANGED" and prior:
             entry["previousSha256"] = prior.get("sha256")
             entry["previousRetrievedAt"] = prior.get("retrievedAt")
+        # Archived `pdftotext -table` text (scripts/extract-cutline-text.mjs). Keep it only
+        # while the PDF bytes are the ones it was extracted from. A changed PDF drops it, so
+        # a stale text file cannot pass for the new document.
+        if status == "UNCHANGED" and prior and prior.get("extractedText"):
+            entry["extractedText"] = prior["extractedText"]
         entries.append(entry)
         print(f"{status:<9} {src['id']:<22} {digest[:16]}  {entry['pageCount']}p  {dest.name}")
 
@@ -238,6 +251,7 @@ def main() -> int:
             f"    sha256 changed for: {', '.join(changed_ids)}\n"
             "    data/cutlines/*.json is now stale. Re-run scripts/extract-cutlines.py\n"
             "    and review the diff before trusting any cut tag.",
+            "    Also re-run node scripts/extract-cutline-text.mjs (xpdf) to refresh the archived text.",
             file=sys.stderr,
         )
         if args.check:

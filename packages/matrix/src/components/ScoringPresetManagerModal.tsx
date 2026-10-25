@@ -35,7 +35,10 @@ import {
   HostPublishedTableRequiredError,
   SCORING_PRESET_META_KEYS,
 } from '@omniswim/core/lib/scoringDefaults';
+import type { FinalizeScoringDraftResult } from '@omniswim/core/lib/scoringPlaceTables';
+import { withoutWorkspaceOnlySettings } from '@omniswim/core/lib/ownTeam';
 import { ScoringSettingsFields } from './ScoringSettingsFields';
+import { BlankPlacesNotice, describeBlankPlaces } from './NullablePlacePointInput';
 
 export interface ScoringPresetManagerModalProps {
   onClose: () => void;
@@ -151,6 +154,12 @@ export function ScoringPresetManagerModal({ onClose, onPresetsChanged }: Scoring
   const [loading, setLoading] = useState(true);
   const [listError, setListError] = useState<string | null>(null);
   const [editor, setEditor] = useState<EditorState | null>(null);
+  /**
+   * The latest finalized draft of the open editor, or `null` while the coach has not edited
+   * a field. `editor.settings` goes stale while a place cell is blank (the fields report no
+   * `ScoringSettings` for a draft with a blank), so Save reads this and never that copy.
+   */
+  const [editorResult, setEditorResult] = useState<FinalizeScoringDraftResult | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<ScoringPresetMeta | null>(null);
@@ -188,9 +197,14 @@ export function ScoringPresetManagerModal({ onClose, onPresetsChanged }: Scoring
     return [...byGroup.entries()];
   }, [presets]);
 
+  const openEditor = (next: EditorState) => {
+    setEditorResult(null);
+    setEditor(next);
+  };
+
   const openCreate = () => {
     setSaveError(null);
-    setEditor({
+    openEditor({
       editingId: null,
       id: '',
       label: '',
@@ -204,7 +218,7 @@ export function ScoringPresetManagerModal({ onClose, onPresetsChanged }: Scoring
     setSaveError(null);
     try {
       const settings = await fetchScoringPresetSettings(preset.id);
-      setEditor({
+      openEditor({
         editingId: preset.id,
         id: preset.id,
         label: preset.label,
@@ -231,7 +245,7 @@ export function ScoringPresetManagerModal({ onClose, onPresetsChanged }: Scoring
         return;
       }
     }
-    setEditor({
+    openEditor({
       editingId: null,
       id: slugify(`${preset.label}-copy`),
       label: `${preset.label} (copy)`,
@@ -243,7 +257,7 @@ export function ScoringPresetManagerModal({ onClose, onPresetsChanged }: Scoring
 
   const openImport = (file: ExportedPresetFile) => {
     setSaveError(null);
-    setEditor({
+    openEditor({
       editingId: null,
       id: file.id,
       label: file.label,
@@ -318,7 +332,13 @@ export function ScoringPresetManagerModal({ onClose, onPresetsChanged }: Scoring
       setSaveError('Give this rule set a label.');
       return;
     }
-    if (!editor.settings.scoringPoints.length) {
+    // The latest finalized draft, or the stored settings as loaded when nothing was edited.
+    const finalized: FinalizeScoringDraftResult = editorResult ?? { ok: true, settings: editor.settings };
+    if (!finalized.ok) {
+      setSaveError(describeBlankPlaces(finalized.blanks));
+      return;
+    }
+    if (!finalized.settings.scoringPoints.length) {
       setSaveError('Enter at least one scoring place before saving.');
       return;
     }
@@ -329,7 +349,8 @@ export function ScoringPresetManagerModal({ onClose, onPresetsChanged }: Scoring
     // Strip any preset-meta keys that leaked into `settings` (e.g. from a
     // round-tripped GET /:id payload) — the server's schema is strict and
     // rejects unknown keys outright.
-    const settings = { ...editor.settings } as Record<string, unknown>;
+    // The workspace's own team is not a rule either: a preset never carries it.
+    const settings = withoutWorkspaceOnlySettings({ ...finalized.settings }) as Record<string, unknown>;
     for (const key of SCORING_PRESET_META_KEYS) delete settings[key];
     const input = {
       id: editor.id,
@@ -445,23 +466,33 @@ export function ScoringPresetManagerModal({ onClose, onPresetsChanged }: Scoring
             <ScoringSettingsFields
               settings={editor.settings}
               onChange={next => setEditor(prev => (prev ? { ...prev, settings: next } : prev))}
+              onDraftChange={(_draft, next) => setEditorResult(next)}
               hidePresetPicker
             />
           </div>
 
           {saveError ? (
-            <div className="p-2 rounded-lg badge-warning text-[10px] flex items-start gap-2">
+            <div className="p-2 rounded-lg badge-warning text-ui-micro flex items-start gap-2">
               <AlertTriangle size={12} className="mt-0.5 shrink-0" aria-hidden />
               <span>{saveError}</span>
             </div>
           ) : null}
         </div>
 
-        <div className="pt-4 mt-2 border-t border-theme-soft flex justify-end gap-3">
-          <Button variant="ghost" onClick={() => setEditor(null)} disabled={saving}>
+        <div className="pt-4 mt-2 border-t border-theme-soft flex items-center justify-end gap-3">
+          {editorResult && !editorResult.ok ? (
+            <BlankPlacesNotice blanks={editorResult.blanks} id="scoring-preset-blank-places" />
+          ) : null}
+          <Button variant="ghost" onClick={() => setEditor(null)} disabled={saving} className="shrink-0">
             Cancel
           </Button>
-          <Button variant="primary" onClick={() => void saveEditor()} disabled={saving}>
+          <Button
+            variant="primary"
+            className="shrink-0"
+            onClick={() => void saveEditor()}
+            disabled={saving || (editorResult !== null && !editorResult.ok)}
+            aria-describedby={editorResult && !editorResult.ok ? 'scoring-preset-blank-places' : undefined}
+          >
             {saving ? 'Saving…' : 'Save rule set'}
           </Button>
         </div>
@@ -494,13 +525,13 @@ export function ScoringPresetManagerModal({ onClose, onPresetsChanged }: Scoring
         </div>
 
         {importError ? (
-          <div className="mb-3 p-2 rounded-lg badge-warning text-[10px]">{importError}</div>
+          <div className="mb-3 p-2 rounded-lg badge-warning text-ui-micro">{importError}</div>
         ) : null}
-        {listError ? <div className="mb-3 p-2 rounded-lg badge-warning text-[10px]">{listError}</div> : null}
+        {listError ? <div className="mb-3 p-2 rounded-lg badge-warning text-ui-micro">{listError}</div> : null}
 
         <div className="flex-1 overflow-y-auto pr-2 custom-scrollbar space-y-5 text-sm">
           {loading ? (
-            <p className="text-[10px] text-theme-muted">Loading…</p>
+            <p className="text-ui-micro text-theme-muted">Loading…</p>
           ) : (
             grouped.map(([group, items]) => (
               <div key={group}>
@@ -523,7 +554,7 @@ export function ScoringPresetManagerModal({ onClose, onPresetsChanged }: Scoring
                           ) : null}
                         </div>
                         {preset.description ? (
-                          <p className="text-[9px] text-theme-secondary">{preset.description}</p>
+                          <p className="text-ui-micro text-theme-secondary">{preset.description}</p>
                         ) : null}
                       </div>
                       <div className="flex items-center gap-2 shrink-0">

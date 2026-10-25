@@ -18,6 +18,7 @@ import { NSISC_PRESET_SETTINGS, mergeScoringSettings } from '../packages/core/sr
 import { buildScorerRosterLookup } from '../packages/core/src/lib/scorerRoster';
 import { buildScoringBundle } from '../packages/core/src/lib/scoringEngine';
 import { optimizeScorersForTeam } from '../packages/core/src/lib/rosterOptimizer';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 const ALPHA = 'Alpha University';
 const BRAVO = 'Bravo University';
@@ -49,7 +50,7 @@ function recruit(id: string, name: string, time: string): Recruit {
 }
 
 function workspace(overrides: ScorerRosterOverride[], cap = 1): Workspace {
-  return {
+  return workspaceFixture({
     id: 'ws-opt-override',
     name: 'optimizer override probe',
     createdAt: 0,
@@ -66,7 +67,7 @@ function workspace(overrides: ScorerRosterOverride[], cap = 1): Workspace {
     relayLegOverrides: [],
     athleteHistory: [],
     athleteAliases: [],
-  } as unknown as Workspace;
+  });
 }
 
 const OFF = (name: string): ScorerRosterOverride => ({ name, team: ALPHA, gender: Gender.MEN, isScorer: false });

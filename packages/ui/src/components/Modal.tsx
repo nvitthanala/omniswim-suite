@@ -38,7 +38,8 @@ const FOCUSABLE_SELECTOR = [
 ].join(',');
 const modalStack: HTMLElement[] = [];
 
-function listFocusable(root: HTMLElement): HTMLElement[] {
+/** Tabbable, visible descendants of `root` in DOM order. Shared with `FloatingWindow`. */
+export function listFocusable(root: HTMLElement): HTMLElement[] {
   return Array.from(root.querySelectorAll<HTMLElement>(FOCUSABLE_SELECTOR)).filter(
     el =>
       !el.matches(':disabled') &&
@@ -109,14 +110,14 @@ export function Modal({
       if (event.key !== 'Tab') return;
 
       const focusables = listFocusable(activeDialog);
-      if (focusables.length === 0) {
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (first === undefined || last === undefined) {
         event.preventDefault();
         activeDialog.focus();
         return;
       }
 
-      const first = focusables[0];
-      const last = focusables[focusables.length - 1];
       const active = document.activeElement;
 
       if (!activeDialog.contains(active)) {

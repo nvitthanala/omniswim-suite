@@ -67,7 +67,7 @@ test('Phase 1 IA regressions and theme/width screenshots', async ({ page, reques
 
       await startOnWorkspace(page, createdWorkspace.id);
       await page.goto('/manager');
-      await expect(page.getByRole('tab', { name: /Athletes/ })).toBeVisible();
+      await expect(page.getByRole('tab', { name: /Swimmers/ })).toBeVisible();
       await captureScreenshot(page, `${theme}-${width}-manager-athletes`);
       const genderButtons = page.locator('nav[aria-label="Gender"] button[aria-pressed]');
       await expect(genderButtons).toHaveCount(2);
@@ -192,7 +192,7 @@ test('Phase 3 Manager screenshots', async ({ page, request }) => {
   page.on('pageerror', error => pageErrors.push(error.message));
   const { id, name } = await createPhaseWorkspace(request, 'shots');
   const steps = [
-    { tab: /Source|Athletes/, name: 'athletes', team: false },
+    { tab: /Source|Swimmers/, name: 'athletes', team: false },
     { tab: /Lineup/, name: 'lineup', team: true },
     { tab: /Relays/, name: 'relays', team: true },
     { tab: /Optimize/, name: 'optimize', team: true },
@@ -268,8 +268,8 @@ test('Phase 3 Athletes step, shared team bar and Export entries menu', async ({ 
   await startOnWorkspace(page, id);
   await page.goto('/manager');
 
-  // The first step is Athletes, not Source.
-  await expect(page.getByRole('tab', { name: /Athletes/ })).toHaveAttribute('aria-selected', 'true');
+  // The first step is Swimmers, not Source.
+  await expect(page.getByRole('tab', { name: /Swimmers/ })).toHaveAttribute('aria-selected', 'true');
   await expect(page.getByRole('tab', { name: /Source/ })).toHaveCount(0);
 
   // At most 8 buttons above the fold inside the Athletes step.
@@ -408,7 +408,7 @@ test('Phase 4 Optimize owns the optimizers and Lineup only links to it', async (
   await openManagerOn(page, id, name);
 
   // The header no longer carries a Batch optimizer button on any step.
-  for (const step of ['Athletes', 'Lineup', 'Relays', 'Optimize']) {
+  for (const step of ['Swimmers', 'Lineup', 'Relays', 'Optimize']) {
     await page.getByRole('tab', { name: new RegExp(step) }).click();
     await expect(page.getByRole('button', { name: /Batch optimizer/i })).toHaveCount(0);
   }
@@ -565,4 +565,183 @@ test('Phase 5 Matrix has three steps and scoring lives on Meet', async ({ page, 
   await expect(page.getByRole('tab').nth(1)).toHaveAttribute('aria-selected', 'true');
 
   expect(pageErrors).toEqual([]);
+});
+
+/* ------------------------------------------------------------------------ */
+/* Narrow width: Manager Lineup and Relays at 390px (phone)                  */
+/* ------------------------------------------------------------------------ */
+
+const NARROW_WIDTH = 390;
+
+type Overflow = {
+  viewport: number;
+  panelFound: boolean;
+  /** The tab panel itself is wider than it is shown. */
+  panelWiderThanShown: boolean;
+  /** Elements inside the panel that end past the right edge, outside any overflow-x scroll area. */
+  insidePanel: Array<{ selector: string; right: number; text: string }>;
+  /** Ancestors of the panel (shell, html) whose content is wider than they are shown. */
+  ancestorsWiderThanShown: Array<{ selector: string; scrollWidth: number; clientWidth: number }>;
+  /** Elements outside the panel (the app header and footer) that end past the right edge. */
+  outsidePanel: Array<{ selector: string; right: number; text: string }>;
+};
+
+/**
+ * Does a step run sideways at phone width, and which elements cause it?
+ *
+ * The inside-the-panel scan skips an element under an `overflow-x: auto` or `scroll` wrapper
+ * below the panel (a wide table): that wrapper is the scroll area the design chose. The panel
+ * and its ancestors are checked by `scrollWidth` instead of by that rule, because a panel with
+ * `overflow-y: auto` computes `overflow-x: auto` too and would otherwise hide everything in it.
+ */
+async function measureOverflow(page: PhasePage): Promise<Overflow> {
+  return page.evaluate(() => {
+    const doc = document.documentElement;
+    const viewport = doc.clientWidth;
+    const panel = document.querySelector('[role="tabpanel"]');
+    const describe = (el: Element) => {
+      const parts: string[] = [];
+      for (let node: Element | null = el; node && node !== document.body && parts.length < 4; node = node.parentElement) {
+        const id = node.id ? `#${node.id}` : '';
+        const classes = typeof node.className === 'string' ? node.className.trim().split(/\s+/).slice(0, 2).join('.') : '';
+        parts.unshift(`${node.tagName.toLowerCase()}${id}${classes ? `.${classes}` : ''}`);
+      }
+      return parts.join(' > ');
+    };
+    const entry = (el: Element, right: number) => ({
+      selector: describe(el),
+      right: Math.round(right),
+      text: (el.textContent ?? '').trim().replace(/\s+/g, ' ').slice(0, 40),
+    });
+
+    const ancestorsWiderThanShown: Overflow['ancestorsWiderThanShown'] = [];
+    for (let node = panel?.parentElement ?? null; node; node = node.parentElement) {
+      if (node.scrollWidth > node.clientWidth + 1) {
+        ancestorsWiderThanShown.push({
+          selector: node === doc ? 'html' : describe(node),
+          scrollWidth: node.scrollWidth,
+          clientWidth: node.clientWidth,
+        });
+      }
+    }
+
+    const insidePanel: Overflow['insidePanel'] = [];
+    const outsidePanel: Overflow['outsidePanel'] = [];
+    for (const el of Array.from(document.body.querySelectorAll('*'))) {
+      if (el instanceof SVGElement && !(el instanceof SVGSVGElement)) continue;
+      const rect = el.getBoundingClientRect();
+      if (rect.width === 0 || rect.height === 0 || rect.right <= viewport + 1) continue;
+      if (!panel || !panel.contains(el)) {
+        outsidePanel.push(entry(el, rect.right));
+        continue;
+      }
+      let inScrollArea = false;
+      for (let node = el.parentElement; node && node !== panel; node = node.parentElement) {
+        const overflowX = getComputedStyle(node).overflowX;
+        if (overflowX === 'auto' || overflowX === 'scroll') {
+          inScrollArea = true;
+          break;
+        }
+      }
+      if (!inScrollArea) insidePanel.push(entry(el, rect.right));
+    }
+    return {
+      viewport,
+      panelFound: panel !== null,
+      panelWiderThanShown: panel !== null && panel.scrollWidth > panel.clientWidth + 1,
+      insidePanel: insidePanel.slice(0, 8),
+      ancestorsWiderThanShown,
+      outsidePanel: outsidePanel.slice(0, 8),
+    };
+  });
+}
+
+/** What a coach reaches for first on each step. Both must be on screen and clickable at phone width. */
+const NARROW_STEPS = [
+  { tab: /Lineup/, label: 'Lineup', actions: [{ role: 'button', name: 'Optimize this lineup' }] },
+  { tab: /Relays/, label: 'Relays', actions: [{ role: 'button', name: 'Build relays from individual lineup' }] },
+] as const;
+
+/** Open one Manager step at phone width, with a team chosen, and wait until it has settled. */
+async function openNarrowStep(page: PhasePage, id: string, name: string, theme: string, step: (typeof NARROW_STEPS)[number]) {
+  await page.addInitScript(value => {
+    localStorage.setItem('omni-preferences', JSON.stringify({
+      themePreset: value, colorMode: value === 'deck-light' ? 'light' : 'dark',
+      textScale: 'default', reducedMotion: false, highContrast: false, focusRingEnhanced: false, sidebarCollapsedDefault: false,
+    }));
+  }, theme);
+  await page.setViewportSize({ width: NARROW_WIDTH, height: 844 });
+  await openManagerOn(page, id, name);
+  const tab = page.getByRole('tab', { name: step.tab });
+  await tab.click();
+  await chooseTeam(page, PHASE3_SHOT_TEAM);
+  await expect(tab).toHaveAttribute('aria-selected', 'true');
+  await expect(page.getByRole('heading', { name: 'Team management' })).toBeVisible();
+  await expect(page.getByRole('combobox', { name: 'Team', exact: true })).toHaveValue(PHASE3_SHOT_TEAM);
+  await page.waitForTimeout(400);
+}
+
+test(`Manager Lineup and Relays at ${NARROW_WIDTH}px: the step fits and its primary actions are reachable`, async ({ page, request }) => {
+  test.setTimeout(180_000);
+  const pageErrors: string[] = [];
+  page.on('pageerror', error => pageErrors.push(error.message));
+  const { id, name } = await createPhaseWorkspace(request, 'narrow');
+  for (const theme of themes) {
+    for (const step of NARROW_STEPS) {
+      const where = `${theme}, ${step.label}, ${NARROW_WIDTH}px`;
+      await openNarrowStep(page, id, name, theme, step);
+
+      // The step's own content does not run sideways. The lists name the selector to fix.
+      const overflow = await measureOverflow(page);
+      expect(overflow.panelFound, `${where}: no tab panel`).toBe(true);
+      expect(
+        { panelWiderThanShown: overflow.panelWiderThanShown, insidePanel: overflow.insidePanel },
+        `${where}: the step runs sideways`,
+      ).toEqual({ panelWiderThanShown: false, insidePanel: [] });
+
+      // The team picker and the step's primary action sit fully inside the viewport and can be clicked.
+      const targets = [
+        page.getByRole('combobox', { name: 'Team', exact: true }),
+        ...step.actions.map(action => page.getByRole(action.role, { name: action.name })),
+      ];
+      for (const target of targets) {
+        await expect(target, where).toBeVisible();
+        await target.scrollIntoViewIfNeeded();
+        const box = await target.boundingBox();
+        expect(box, `${where}: no box`).not.toBeNull();
+        // One pixel of tolerance: a fractional layout reports x = -0.3 for a control that is fully on screen.
+        expect(box!.x, `${where}: starts left of the viewport`).toBeGreaterThanOrEqual(-1);
+        expect(box!.x + box!.width, `${where}: runs past the viewport`).toBeLessThanOrEqual(NARROW_WIDTH + 1);
+        // A trial click runs the actionability checks (enabled, stable, not covered) without clicking.
+        await target.click({ trial: true, timeout: 5_000 });
+      }
+      // Screenshots stay under test-results/, not docs/, so a run leaves the tree clean.
+      await page.screenshot({
+        path: `test-results/ui-ia/narrow/${theme}-${NARROW_WIDTH}-${step.label.toLowerCase()}.png`,
+        fullPage: true,
+      });
+    }
+  }
+  expect(pageErrors).toEqual([]);
+});
+
+/**
+ * The app header once ran to 566px of content in a 390px bar (measured 2026-10-12): the applet
+ * nav was 455px wide and the right-hand icon buttons ended at x=566, off screen. Under 640px the
+ * header now drops the brand name and the Experimental badge text from the bar, and moves
+ * "Configure scoring model" and the colour-mode switch into the More menu. This test holds that:
+ * no header or shell ancestor may be wider than the viewport, and no element outside the step
+ * panel may sit past it.
+ */
+test(`Manager header at ${NARROW_WIDTH}px stays inside the viewport`, async ({ page, request }) => {
+  test.setTimeout(120_000);
+  const { id, name } = await createPhaseWorkspace(request, 'narrow-header');
+  for (const step of NARROW_STEPS) {
+    await openNarrowStep(page, id, name, 'midnight', step);
+    const overflow = await measureOverflow(page);
+    expect(
+      { ancestorsWiderThanShown: overflow.ancestorsWiderThanShown, outsidePanel: overflow.outsidePanel },
+      `${step.label} at ${NARROW_WIDTH}px: header or shell runs past the viewport`,
+    ).toEqual({ ancestorsWiderThanShown: [], outsidePanel: [] });
+  }
 });

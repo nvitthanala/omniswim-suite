@@ -8,15 +8,17 @@ import { Gender, RelayLegStroke, SwimmerResult, Workspace } from '../types';
 import { getAthleteProfile } from './athleteHistory';
 import { swimEventIdentity } from './bestTimeEligibility';
 import { mergeScoringSettings } from './scoringDefaults';
+import { itemAt } from './indexedAccess';
 import {
   relayLegRequirements,
+  relayLegMatchSettings,
   suggestBestRelayLegFill,
   upsertRelayLegOverride,
   stableRelayEntryKey,
   relayTemplateFromLeg,
 } from './relayLegMatching';
 import { convertTimeToSeconds, isRelayResult, normalizeSwimmerName } from './utils';
-import { displayTimeForRelayLeg } from './relaySplits';
+import { displayTimeForRelayLeg, relayLegTimeView } from './relaySplits';
 import { relayLegHistoryCandidates } from './relayLegHistoryCandidates';
 
 export type RelaySplitComparison = {
@@ -33,7 +35,12 @@ export type RelaySplitComparison = {
    * time SwimCloud took out of a longer swim's splits. Named separately from
    * `'history'` so a coach can see which legs rest on an estimate.
    */
-  source: 'pdf' | 'history' | 'lineup' | 'extracted-split' | 'none';
+  source: 'pdf' | 'history' | 'lineup' | 'extracted-split' | 'estimate' | 'none';
+  /**
+   * `true` when `knownSplit` is a theoretical meet's estimate, not a split (`relayLegTimeView`). Then
+   * `source` is `'estimate'`. Absent on every row of a real meet.
+   */
+  knownIsEstimate?: true;
 };
 
 /**
@@ -82,7 +89,9 @@ function findCalculatedSplit(
   // A relay label that names no distance has no leg event to calculate from.
   const legDistance = req.legDistanceYards;
   if (legDistance == null) return null;
-  const isThisLeg = (event: string) => isLegEvent(event, legDistance, req.stroke);
+  // `relayLegRequirements` threw for an index that names no leg; this one has a stroke.
+  const legStroke = req.stroke;
+  const isThisLeg = (event: string) => isLegEvent(event, legDistance, legStroke);
   const settings = mergeScoringSettings(workspace.scoringSettings, {
     conference: workspace.conference,
   });
@@ -118,9 +127,13 @@ export function compareRelayLegSplits(
 ): RelaySplitComparison[] {
   return [0, 1, 2, 3].map(legIndex => {
     const leg = legs.find(l => (l.relayLegIndex ?? -1) === legIndex) ?? legs[legIndex];
+    const view = leg && !leg.relayLegVacant ? relayLegTimeView(leg) : null;
+    const knownIsEstimate = view?.kind === 'estimate';
     const known =
       leg && !leg.relayLegVacant
-        ? displayTimeForRelayLeg(leg) || leg.relayLegSplit || null
+        ? knownIsEstimate
+          ? view.time
+          : displayTimeForRelayLeg(leg) || leg.relayLegSplit || null
         : null;
     const name = leg && !leg.relayLegVacant ? leg.name : '';
     const calc =
@@ -137,7 +150,8 @@ export function compareRelayLegSplits(
       knownSplit: known,
       calculatedSplit: calc?.time ?? null,
       deltaSec,
-      source: known ? 'pdf' : calc?.source ?? 'none',
+      source: known ? (knownIsEstimate ? 'estimate' : 'pdf') : calc?.source ?? 'none',
+      ...(knownIsEstimate ? { knownIsEstimate: true as const } : {}),
     };
   });
 }
@@ -186,7 +200,7 @@ export function buildRelaysFromIndividualLineup(
 
   const exclude = new Set<string>();
   for (const [, legs] of byRelay) {
-    const template = relayTemplateFromLeg(teamRelayLegs, legs[0]);
+    const template = relayTemplateFromLeg(teamRelayLegs, itemAt(legs, 0));
     const assigned = new Set(
       legs
         .filter(l => !l.relayLegVacant && l.name)
@@ -195,7 +209,15 @@ export function buildRelaysFromIndividualLineup(
     for (let legIndex = 0; legIndex < 4; legIndex++) {
       const leg = legs.find(l => (l.relayLegIndex ?? -1) === legIndex) ?? legs[legIndex];
       if (leg && !leg.relayLegVacant) continue;
-      const suggestion = suggestBestRelayLegFill(pool, template, legIndex, assigned, exclude);
+      const suggestion = suggestBestRelayLegFill(
+        pool,
+        template,
+        legIndex,
+        assigned,
+        exclude,
+        relayLegMatchSettings(workspace),
+        teamRelayLegs
+      );
       if (!suggestion) continue;
       assigned.add(normalizeSwimmerName(suggestion.swimmer.name));
       overrides = upsertRelayLegOverride(overrides, suggestion.override);

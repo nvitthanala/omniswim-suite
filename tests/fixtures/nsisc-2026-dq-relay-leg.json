@@ -1,0 +1,716 @@
+{
+  "_provenance": {
+    "source": "SYNTHETIC. Invented for the test suite. Not a published competition result and not copied from any meet file.",
+    "createdAt": "2026-10-18",
+    "selection": "Same keys and structure as a SwimmerResult row of a parsed NSISC final-results meet, kept to the rows tests/relayLegNoTimeSwim.test.ts, tests/relayOverrideRecruitIdSwim.test.ts and the identityAgreement corpus need. Teams are \"Test Team A\" and \"Test Team B\". Swimmers are \"Test Swimmer A1\" to \"A7\" and \"B1\" to \"B6\". Every time is invented; relay splits sum to their leg totals, and leg totals sum to the team time.",
+    "why": "A swim with no time is not a relay-leg candidate. Test Swimmer A1 (Test Team A) is DQ in the Event 25 100 Breast prelims, has a 1:03.41R time trial (Event 400) and no other 100 Breast; leg 1 of the 4x100 medley relay is the 100 Breast. Test Swimmer A2 also has an Event 938 swim, past the scored program (a time trial). Test Swimmer B1 (Test Team B) is DQ in the Event 34 100 Free B Final: time DQ, prelimsTime 57.42. Test Swimmer B2 is DFS in the same event."
+  },
+  "womenResults": [
+    {
+      "id": "synthetic-dq-0001",
+      "rank": 13,
+      "name": "Test Swimmer B1",
+      "classYear": "FR",
+      "team": "Test Team B",
+      "time": "1:03.08",
+      "prelimsTime": "1:02.44",
+      "finalsTime": "1:03.08",
+      "roundSwam": "B Final",
+      "points": 4,
+      "event": "Event 12 Women 100 Yard Butterfly",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "synthetic-dq-0002",
+      "rank": 2,
+      "name": "Test Swimmer A5",
+      "classYear": "SR",
+      "team": "Test Team A",
+      "time": "3:45.17",
+      "prelimsTime": null,
+      "finalsTime": "3:45.17",
+      "roundSwam": "A Final",
+      "points": 8.5,
+      "event": "Event 19 Women 4x100 Yard Medley Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Test Swimmer A5",
+          "year": "SR"
+        },
+        {
+          "name": "Test Swimmer A3",
+          "year": "SR"
+        },
+        {
+          "name": "Test Swimmer A6",
+          "year": "SO"
+        },
+        {
+          "name": "Test Swimmer A7",
+          "year": "SO"
+        }
+      ],
+      "relayLegIndex": 0,
+      "relayLegStroke": "back",
+      "relayLegSplit": "55.90",
+      "relayLegSplitDetail": {
+        "legIndex": 0,
+        "stroke": "back",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "26.84",
+            "cumulativeLeg": "26.84"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "29.06",
+            "cumulativeLeg": "55.90"
+          }
+        ],
+        "legTotal": "55.90"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "55.90",
+          "1:04.88",
+          "54.77",
+          "49.62"
+        ],
+        "firstHalf": "2:00.78",
+        "secondHalf": "1:44.39",
+        "teamTotal": "3:45.17"
+      },
+      "relayTeamTime": "3:45.17"
+    },
+    {
+      "id": "synthetic-dq-0003",
+      "rank": 2,
+      "name": "Test Swimmer A3",
+      "classYear": "SR",
+      "team": "Test Team A",
+      "time": "3:45.17",
+      "prelimsTime": null,
+      "finalsTime": "3:45.17",
+      "roundSwam": "A Final",
+      "points": 8.5,
+      "event": "Event 19 Women 4x100 Yard Medley Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Test Swimmer A5",
+          "year": "SR"
+        },
+        {
+          "name": "Test Swimmer A3",
+          "year": "SR"
+        },
+        {
+          "name": "Test Swimmer A6",
+          "year": "SO"
+        },
+        {
+          "name": "Test Swimmer A7",
+          "year": "SO"
+        }
+      ],
+      "relayLegIndex": 1,
+      "relayLegStroke": "breast",
+      "relayLegSplit": "1:04.88",
+      "relayLegSplitDetail": {
+        "legIndex": 1,
+        "stroke": "breast",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "30.71",
+            "cumulativeLeg": "30.71"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "34.17",
+            "cumulativeLeg": "1:04.88"
+          }
+        ],
+        "legTotal": "1:04.88"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "55.90",
+          "1:04.88",
+          "54.77",
+          "49.62"
+        ],
+        "firstHalf": "2:00.78",
+        "secondHalf": "1:44.39",
+        "teamTotal": "3:45.17"
+      },
+      "relayTeamTime": "3:45.17"
+    },
+    {
+      "id": "synthetic-dq-0004",
+      "rank": 2,
+      "name": "Test Swimmer A6",
+      "classYear": "SO",
+      "team": "Test Team A",
+      "time": "3:45.17",
+      "prelimsTime": null,
+      "finalsTime": "3:45.17",
+      "roundSwam": "A Final",
+      "points": 8.5,
+      "event": "Event 19 Women 4x100 Yard Medley Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Test Swimmer A5",
+          "year": "SR"
+        },
+        {
+          "name": "Test Swimmer A3",
+          "year": "SR"
+        },
+        {
+          "name": "Test Swimmer A6",
+          "year": "SO"
+        },
+        {
+          "name": "Test Swimmer A7",
+          "year": "SO"
+        }
+      ],
+      "relayLegIndex": 2,
+      "relayLegStroke": "fly",
+      "relayLegSplit": "54.77",
+      "relayLegSplitDetail": {
+        "legIndex": 2,
+        "stroke": "fly",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "25.93",
+            "cumulativeLeg": "25.93"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "28.84",
+            "cumulativeLeg": "54.77"
+          }
+        ],
+        "legTotal": "54.77"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "55.90",
+          "1:04.88",
+          "54.77",
+          "49.62"
+        ],
+        "firstHalf": "2:00.78",
+        "secondHalf": "1:44.39",
+        "teamTotal": "3:45.17"
+      },
+      "relayTeamTime": "3:45.17"
+    },
+    {
+      "id": "synthetic-dq-0005",
+      "rank": 2,
+      "name": "Test Swimmer A7",
+      "classYear": "SO",
+      "team": "Test Team A",
+      "time": "3:45.17",
+      "prelimsTime": null,
+      "finalsTime": "3:45.17",
+      "roundSwam": "A Final",
+      "points": 8.5,
+      "event": "Event 19 Women 4x100 Yard Medley Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Test Swimmer A5",
+          "year": "SR"
+        },
+        {
+          "name": "Test Swimmer A3",
+          "year": "SR"
+        },
+        {
+          "name": "Test Swimmer A6",
+          "year": "SO"
+        },
+        {
+          "name": "Test Swimmer A7",
+          "year": "SO"
+        }
+      ],
+      "relayLegIndex": 3,
+      "relayLegStroke": "free",
+      "relayLegSplit": "49.62",
+      "relayLegSplitDetail": {
+        "legIndex": 3,
+        "stroke": "free",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "23.88",
+            "cumulativeLeg": "23.88"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "25.74",
+            "cumulativeLeg": "49.62"
+          }
+        ],
+        "legTotal": "49.62"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "55.90",
+          "1:04.88",
+          "54.77",
+          "49.62"
+        ],
+        "firstHalf": "2:00.78",
+        "secondHalf": "1:44.39",
+        "teamTotal": "3:45.17"
+      },
+      "relayTeamTime": "3:45.17"
+    },
+    {
+      "id": "synthetic-dq-0006",
+      "rank": 2,
+      "name": "Test Swimmer A2",
+      "classYear": "FR",
+      "team": "Test Team A",
+      "time": "1:04.27",
+      "prelimsTime": "1:04.11",
+      "finalsTime": "1:04.27",
+      "roundSwam": "A Final",
+      "points": 17,
+      "event": "Event 25 Women 100 Yard Breaststroke",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "synthetic-dq-0007",
+      "rank": 4,
+      "name": "Test Swimmer A3",
+      "classYear": "SR",
+      "team": "Test Team A",
+      "time": "1:05.58",
+      "prelimsTime": "1:06.20",
+      "finalsTime": "1:05.58",
+      "roundSwam": "A Final",
+      "points": 15,
+      "event": "Event 25 Women 100 Yard Breaststroke",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "synthetic-dq-0008",
+      "rank": 5,
+      "name": "Test Swimmer A4",
+      "classYear": "JR",
+      "team": "Test Team A",
+      "time": "1:06.30",
+      "prelimsTime": "1:06.41",
+      "finalsTime": "1:06.30",
+      "roundSwam": "A Final",
+      "points": 14,
+      "event": "Event 25 Women 100 Yard Breaststroke",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "synthetic-dq-0009",
+      "rank": 0,
+      "name": "Test Swimmer A1",
+      "classYear": "JR",
+      "team": "Test Team A",
+      "time": "DQ",
+      "prelimsTime": "DQ",
+      "finalsTime": null,
+      "roundSwam": "Preliminaries",
+      "points": 0,
+      "event": "Event 25 Women 100 Yard Breaststroke",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "synthetic-dq-0010",
+      "rank": 16,
+      "name": "Test Swimmer B1",
+      "classYear": "FR",
+      "team": "Test Team B",
+      "time": "DQ",
+      "prelimsTime": "57.42",
+      "finalsTime": "DQ",
+      "roundSwam": "B Final",
+      "points": 0,
+      "event": "Event 34 Women 100 Yard Freestyle",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "synthetic-dq-0011",
+      "rank": 0,
+      "name": "Test Swimmer B2",
+      "classYear": "SO",
+      "team": "Test Team B",
+      "time": "DFS",
+      "prelimsTime": "DFS",
+      "finalsTime": null,
+      "roundSwam": "Preliminaries",
+      "points": 0,
+      "event": "Event 34 Women 100 Yard Freestyle",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    },
+    {
+      "id": "synthetic-dq-0012",
+      "rank": 3,
+      "name": "Test Swimmer B3",
+      "classYear": "SO",
+      "team": "Test Team B",
+      "time": "3:33.81",
+      "prelimsTime": null,
+      "finalsTime": "3:33.81",
+      "roundSwam": "A Final",
+      "points": 8,
+      "event": "Event 41 Women 4x100 Yard Freestyle Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Test Swimmer B3",
+          "year": "SO"
+        },
+        {
+          "name": "Test Swimmer B4",
+          "year": "FR"
+        },
+        {
+          "name": "Test Swimmer B5",
+          "year": "SR"
+        },
+        {
+          "name": "Test Swimmer B6",
+          "year": "SO"
+        }
+      ],
+      "relayLegIndex": 0,
+      "relayLegStroke": "free",
+      "relayLegSplit": "53.10",
+      "relayLegSplitDetail": {
+        "legIndex": 0,
+        "stroke": "free",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "25.61",
+            "cumulativeLeg": "25.61"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "27.49",
+            "cumulativeLeg": "53.10"
+          }
+        ],
+        "legTotal": "53.10"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "53.10",
+          "53.84",
+          "53.21",
+          "53.66"
+        ],
+        "firstHalf": "1:46.94",
+        "secondHalf": "1:46.87",
+        "teamTotal": "3:33.81"
+      },
+      "relayTeamTime": "3:33.81"
+    },
+    {
+      "id": "synthetic-dq-0013",
+      "rank": 3,
+      "name": "Test Swimmer B4",
+      "classYear": "FR",
+      "team": "Test Team B",
+      "time": "3:33.81",
+      "prelimsTime": null,
+      "finalsTime": "3:33.81",
+      "roundSwam": "A Final",
+      "points": 8,
+      "event": "Event 41 Women 4x100 Yard Freestyle Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Test Swimmer B3",
+          "year": "SO"
+        },
+        {
+          "name": "Test Swimmer B4",
+          "year": "FR"
+        },
+        {
+          "name": "Test Swimmer B5",
+          "year": "SR"
+        },
+        {
+          "name": "Test Swimmer B6",
+          "year": "SO"
+        }
+      ],
+      "relayLegIndex": 1,
+      "relayLegStroke": "free",
+      "relayLegSplit": "53.84",
+      "relayLegSplitDetail": {
+        "legIndex": 1,
+        "stroke": "free",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "25.97",
+            "cumulativeLeg": "25.97"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "27.87",
+            "cumulativeLeg": "53.84"
+          }
+        ],
+        "legTotal": "53.84"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "53.10",
+          "53.84",
+          "53.21",
+          "53.66"
+        ],
+        "firstHalf": "1:46.94",
+        "secondHalf": "1:46.87",
+        "teamTotal": "3:33.81"
+      },
+      "relayTeamTime": "3:33.81"
+    },
+    {
+      "id": "synthetic-dq-0014",
+      "rank": 3,
+      "name": "Test Swimmer B5",
+      "classYear": "SR",
+      "team": "Test Team B",
+      "time": "3:33.81",
+      "prelimsTime": null,
+      "finalsTime": "3:33.81",
+      "roundSwam": "A Final",
+      "points": 8,
+      "event": "Event 41 Women 4x100 Yard Freestyle Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Test Swimmer B3",
+          "year": "SO"
+        },
+        {
+          "name": "Test Swimmer B4",
+          "year": "FR"
+        },
+        {
+          "name": "Test Swimmer B5",
+          "year": "SR"
+        },
+        {
+          "name": "Test Swimmer B6",
+          "year": "SO"
+        }
+      ],
+      "relayLegIndex": 2,
+      "relayLegStroke": "free",
+      "relayLegSplit": "53.21",
+      "relayLegSplitDetail": {
+        "legIndex": 2,
+        "stroke": "free",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "25.74",
+            "cumulativeLeg": "25.74"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "27.47",
+            "cumulativeLeg": "53.21"
+          }
+        ],
+        "legTotal": "53.21"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "53.10",
+          "53.84",
+          "53.21",
+          "53.66"
+        ],
+        "firstHalf": "1:46.94",
+        "secondHalf": "1:46.87",
+        "teamTotal": "3:33.81"
+      },
+      "relayTeamTime": "3:33.81"
+    },
+    {
+      "id": "synthetic-dq-0015",
+      "rank": 3,
+      "name": "Test Swimmer B6",
+      "classYear": "SO",
+      "team": "Test Team B",
+      "time": "3:33.81",
+      "prelimsTime": null,
+      "finalsTime": "3:33.81",
+      "roundSwam": "A Final",
+      "points": 8,
+      "event": "Event 41 Women 4x100 Yard Freestyle Relay",
+      "gender": "Women",
+      "isRelay": true,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": [
+        {
+          "name": "Test Swimmer B3",
+          "year": "SO"
+        },
+        {
+          "name": "Test Swimmer B4",
+          "year": "FR"
+        },
+        {
+          "name": "Test Swimmer B5",
+          "year": "SR"
+        },
+        {
+          "name": "Test Swimmer B6",
+          "year": "SO"
+        }
+      ],
+      "relayLegIndex": 3,
+      "relayLegStroke": "free",
+      "relayLegSplit": "53.66",
+      "relayLegSplitDetail": {
+        "legIndex": 3,
+        "stroke": "free",
+        "legDistanceYards": 100,
+        "segments": [
+          {
+            "yards": 50,
+            "segmentTime": "25.88",
+            "cumulativeLeg": "25.88"
+          },
+          {
+            "yards": 50,
+            "segmentTime": "27.78",
+            "cumulativeLeg": "53.66"
+          }
+        ],
+        "legTotal": "53.66"
+      },
+      "relayTeamSplits": {
+        "legTotals": [
+          "53.10",
+          "53.84",
+          "53.21",
+          "53.66"
+        ],
+        "firstHalf": "1:46.94",
+        "secondHalf": "1:46.87",
+        "teamTotal": "3:33.81"
+      },
+      "relayTeamTime": "3:33.81"
+    },
+    {
+      "id": "synthetic-dq-0016",
+      "rank": 1,
+      "name": "Test Swimmer A1",
+      "classYear": "JR",
+      "team": "Test Team A",
+      "time": "1:03.41R",
+      "prelimsTime": "NT",
+      "finalsTime": "1:03.41R",
+      "roundSwam": "A Final",
+      "points": 0,
+      "event": "Event 400 Women 100 Yard Breaststroke Time Trial",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": true,
+      "relayNames": []
+    },
+    {
+      "id": "synthetic-dq-0017",
+      "rank": 1,
+      "name": "Test Swimmer A2",
+      "classYear": "FR",
+      "team": "Test Team A",
+      "time": "1:06.02",
+      "prelimsTime": "NT",
+      "finalsTime": "1:06.02",
+      "roundSwam": "A Final",
+      "points": 0,
+      "event": "Event 938 Women 100 Yard Breaststroke",
+      "gender": "Women",
+      "isRelay": false,
+      "isExhibition": false,
+      "isTimeTrial": false,
+      "relayNames": []
+    }
+  ]
+}

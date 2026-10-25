@@ -12,12 +12,23 @@ Usage:
     python parse_meet.py <pdf_path> [format]
 
 Emits a single JSON object on stdout:
-    { "athletes": [...], "conference": str | None, "officialTeamScores": {...} | None }
+    { "athletes": [...], "conference": str | None, "officialTeamScores": {...} | None,
+      "warnings": [ { "code": str, "rows": int, "examples": [str, ...] }, ... ] }
 
-On failure emits: { "error": "<message>", "code": "<tag>" | null, "trace": "..." }
-Known codes: "rankings_extraction_failed", "scoring_settings_missing". The Node
-route treats both as final: it does not retry the legacy pipeline, which would
-score without the meet's event cutoff.
+`warnings` is a roll-up of each row's `parse_warnings` list (codes
+`unreadable_time` and `relay_split_legacy_fallback`). Each athlete row carries
+its own entries; a row with none has no `parse_warnings` key. Relay rows also
+carry `relay_split_source`: "structured", "legacy", or null when the PDF printed
+no split lines for that entry.
+
+On failure emits:
+    { "error": "<message>", "code": "<tag>" | null, "rows": [str, ...] | null, "trace": "..." }
+`rows` is set only by "points_on_status_clock" (one description per offending row).
+Known codes: "rankings_extraction_failed", "scoring_settings_missing",
+"points_on_status_clock". The Node
+route treats the first two as final: it does not retry the legacy pipeline, which
+would score without the meet's event cutoff. The third must be final too: the
+legacy pipeline raises the same error.
 """
 import json
 import sys
@@ -100,6 +111,22 @@ def _team_rankings(pdf_path):
     }
 
 
+def _collect_warnings(rows, max_examples=5):
+    """Roll the per-row `parse_warnings` up into one entry per warning code."""
+    by_code = {}
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        for w in row.get('parse_warnings') or []:
+            code = w.get('code') or 'unknown'
+            entry = by_code.setdefault(code, {'code': code, 'rows': 0, 'examples': []})
+            entry['rows'] += 1
+            msg = w.get('message')
+            if msg and msg not in entry['examples'] and len(entry['examples']) < max_examples:
+                entry['examples'].append(msg)
+    return list(by_code.values())
+
+
 def main():
     if len(sys.argv) < 2:
         print(json.dumps({'error': 'Usage: parse_meet.py <pdf_path> [format]'}))
@@ -132,11 +159,13 @@ def main():
             'athletes': scored,
             'conference': conference,
             'officialTeamScores': official,
+            'warnings': _collect_warnings(scored if isinstance(scored, list) else []),
         }))
     except Exception as exc:  # noqa: BLE001 - surface any failure as JSON
         print(json.dumps({
             'error': str(exc),
             'code': getattr(exc, 'code', None),
+            'rows': getattr(exc, 'rows', None),
             'trace': traceback.format_exc(),
         }))
         sys.exit(1)

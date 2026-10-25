@@ -23,13 +23,8 @@
  */
 
 import { SwimmerResult } from '../types';
-import { isChampionshipProgramEvent, normalizeEventLabel } from './athleteHistory';
-import {
-  chooseMeetEventLabels,
-  isDivingEvent,
-  isRelayResult,
-  stripEventGenderMarker,
-} from './utils';
+import { canonicalMeetEventLabel, isChampionshipProgramEvent } from './athleteHistory';
+import { chooseMeetEventLabels, isDivingEvent, isRelayResult } from './utils';
 
 /**
  * Canonical SCY individual program-event label for an arbitrary event string
@@ -38,13 +33,31 @@ import {
  * and any non-championship distance.
  */
 export function canonicalProgramEvent(raw: string): string | null {
-  if (/\brelay\b/i.test(raw)) return null;
-  let e = stripEventGenderMarker(raw);
-  e = e.replace(/\bEvent\s+\d+\b/gi, ' ');
-  e = e.replace(/\b(Yards?|Meters?|mtr|SCY|SCM|LCM)\b/gi, ' ');
-  e = e.replace(/\s{2,}/g, ' ').trim();
-  const norm = normalizeEventLabel(e);
+  // A row with no event is a defect upstream, not "not a program event". `null`
+  // means "this label names no SCY program event"; it must not also mean "no label".
+  // An empty string is still a string: it names no program event and returns null,
+  // as it did before.
+  if (typeof raw !== 'string') {
+    throw new TypeError(`canonicalProgramEvent needs an event label string, got ${typeof raw}.`);
+  }
+  // `canonicalMeetEventLabel` is the one reader of a HyTek label (it strips the
+  // gender marker, "Event N", and the course words). This function is that
+  // reader narrowed to the SCY championship program. A relay or a dive is null
+  // in both, and the program whitelist cannot match a label that names a dive.
+  const norm = canonicalMeetEventLabel(raw);
+  if (norm === null) return null;
   return isChampionshipProgramEvent(norm) && !/\brelay\b/i.test(norm) ? norm : null;
+}
+
+/**
+ * {@link canonicalProgramEvent} for a loop over stored rows: `null` for a row whose
+ * event is not a string or is empty, so a whole-meet reader skips that row and
+ * indexes the rest. A row with no event cannot name a program event. The strict
+ * function stays strict for a caller that holds one label and must not lose it.
+ */
+export function programEventOrNull(raw: unknown): string | null {
+  if (typeof raw !== 'string' || raw === '') return null;
+  return canonicalProgramEvent(raw);
 }
 
 /**
@@ -65,7 +78,7 @@ export function buildMeetEventLabelIndex(results: SwimmerResult[]): Map<string, 
   // The label rule lives in `chooseMeetEventLabels` so the meet place field
   // (`buildMeetPlaceField`) picks the same label for an event as this remap.
   return chooseMeetEventLabels(results, r =>
-    isRelayResult(r) || r.isTimeTrial ? null : canonicalProgramEvent(r.event)
+    isRelayResult(r) || r.isTimeTrial ? null : programEventOrNull(r.event)
   );
 }
 
@@ -100,7 +113,7 @@ export function computeVisibleEvents(
     if (isDivingEvent(event, settings.diverEventPattern)) return true;
     // Time-trial pseudo-events (rows are all time trials) are hidden.
     if (rows.length > 0 && rows.every(r => r.isTimeTrial)) return false;
-    const canon = canonicalProgramEvent(event);
+    const canon = programEventOrNull(event);
     // 25-yard events, 100 IM, odd distances: non-program individual.
     if (!canon) return false;
     // No meet loaded (roster-only): show canonical program events.

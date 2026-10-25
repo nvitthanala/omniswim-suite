@@ -22,7 +22,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { Gender, type Workspace } from '@omniswim/core/types';
@@ -74,8 +74,8 @@ const CSV_INCOMING = ['name,event,time,team,gender', `Noel Kis,100 Freestyle,48.
 describe('RosterImportWizard — merge/replace mode', () => {
   let container: HTMLDivElement;
   let root: Root;
-  let onUpdate: ReturnType<typeof vi.fn>;
-  let onClose: ReturnType<typeof vi.fn>;
+  let onUpdate: Mock<(patch: Partial<Workspace>) => void>;
+  let onClose: Mock<() => void>;
 
   beforeEach(() => {
     container = document.createElement('div');
@@ -155,8 +155,8 @@ describe('RosterImportWizard — merge/replace mode', () => {
     await renderAtPreviewStep();
     const radios = [...container.querySelectorAll<HTMLInputElement>('input[name="swimcloud-import-mode"]')];
     expect(radios).toHaveLength(2);
-    expect(radios[0].checked).toBe(true); // merge
-    expect(radios[1].checked).toBe(false); // replace
+    expect(radios[0]!.checked).toBe(true); // merge
+    expect(radios[1]!.checked).toBe(false); // replace
     expect(container.textContent).not.toContain('history row');
     expect(
       [...container.querySelectorAll('button')].some(b => b.textContent?.includes('Import & add to roster'))
@@ -169,7 +169,7 @@ describe('RosterImportWizard — merge/replace mode', () => {
       'input[name="swimcloud-import-mode"]'
     )[1];
     await act(async () => {
-      replaceRadio.click();
+      replaceRadio!.click();
     });
 
     // The fixture's stored Capocci rows are removed (see
@@ -199,7 +199,7 @@ describe('RosterImportWizard — merge/replace mode', () => {
       'input[name="swimcloud-import-mode"]'
     )[1];
     await act(async () => {
-      replaceRadio.click();
+      replaceRadio!.click();
     });
     await act(async () => {
       clickByText('Review replace');
@@ -210,8 +210,8 @@ describe('RosterImportWizard — merge/replace mode', () => {
     await flush();
 
     expect(fetchCalls).toHaveLength(1);
-    expect(fetchCalls[0].url).toContain('/api/workspaces/backup');
-    expect(fetchCalls[0].method).toBe('POST');
+    expect(fetchCalls[0]!.url).toContain('/api/workspaces/backup');
+    expect(fetchCalls[0]!.method).toBe('POST');
     expect(onUpdate).not.toHaveBeenCalled();
     expect(onClose).not.toHaveBeenCalled();
     // The confirm dialog is still up, ready to retry, not stuck mid-request.
@@ -236,7 +236,7 @@ describe('RosterImportWizard — merge/replace mode', () => {
       'input[name="swimcloud-import-mode"]'
     )[1];
     await act(async () => {
-      replaceRadio.click();
+      replaceRadio!.click();
     });
     await act(async () => {
       clickByText('Review replace');
@@ -247,9 +247,9 @@ describe('RosterImportWizard — merge/replace mode', () => {
     await flush();
 
     expect(fetchCalls).toHaveLength(1);
-    expect(fetchCalls[0].url).toContain('/api/workspaces/backup');
+    expect(fetchCalls[0]!.url).toContain('/api/workspaces/backup');
     expect(onUpdate).toHaveBeenCalledTimes(1);
-    const patch = onUpdate.mock.calls[0][0] as Partial<Workspace>;
+    const patch = onUpdate.mock.calls[0]![0] as Partial<Workspace>;
     expect(Array.isArray(patch.athleteHistory)).toBe(true);
     // The fixture's Capocci history rows are all SwimCloud-sourced and removed.
     expect((patch.athleteHistory ?? []).some(h => h.name === 'Fabio Capocci')).toBe(false);

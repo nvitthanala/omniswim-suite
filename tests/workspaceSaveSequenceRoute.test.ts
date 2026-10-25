@@ -29,13 +29,14 @@ import {
   STALE_SAVE_CODE,
 } from '../packages/core/src/api/saveSequence';
 import type { Workspace, ScoringSettings } from '../packages/core/src/types';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 const WS_ID = 'ws-seq-1';
 const CLIENT = 'client-aaaaaaaa';
 const OTHER_CLIENT = 'client-bbbbbbbb';
 
 function seedWorkspace(): Workspace {
-  return {
+  return workspaceFixture({
     id: WS_ID,
     name: 'HSU 2026-27',
     menResults: [],
@@ -44,7 +45,7 @@ function seedWorkspace(): Workspace {
     deletedSwimmers: [],
     createdAt: 1,
     activeEntryIds: ['seed'],
-  } as unknown as Workspace;
+  });
 }
 
 interface Harness {

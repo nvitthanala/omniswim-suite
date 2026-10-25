@@ -15,10 +15,12 @@ import type { PrelimsOverUnderEntry } from '@omniswim/core/lib/prelimsProjection
 import { entryKey, prelimsOuOverUnderForDisplay } from '@omniswim/core/lib/prelimsProjection';
 import type { PsychOverUnderEntry } from '@omniswim/core/lib/psychProjection';
 import { psychExpectedForResult } from '@omniswim/core/lib/psychProjection';
-import { displayTimeForRelayLeg, formatLegSplitSummary } from '@omniswim/core/lib/relaySplits';
+import { RELAY_LEG_ESTIMATE_LABEL, formatLegSplitSummary, hasRelayLegTime, relayLegTimeView } from '@omniswim/core/lib/relaySplits';
+import { rowHasNoActual } from '../lib/noActual';
 import { AthleteName, CompactEventLabel, PlacementExpectedValue, PointsValue, PrelimsOuValue } from './matrixPresentation';
 import { CutlineVerdict, RelayVerdict, useIsEstimatedRelayRow } from './TeamCardParts';
 import { buildTeamRowCutlineTags, relayMissingStrokeLabel, type TeamRowCutlineTags } from './teamCardView';
+import { RELAY_NO_BASELINE_EXPLANATION } from '@omniswim/core/lib/relayLegMatching';
 
 interface TeamMatrixSwimmerRowProps {
   res: SwimmerResult;
@@ -73,7 +75,8 @@ interface TeamMatrixTimeCellProps {
   res: SwimmerResult;
   rowTags: TeamRowCutlineTags;
   timeColorClass: string;
-  relaySplitPrimary: any;
+  /** True when the row is a relay leg with a parsed split to show as its primary time. */
+  relaySplitPrimary: boolean;
   onStartEdit: () => void;
   editingResultId: string | null;
   editValue: string;
@@ -98,6 +101,7 @@ export function TeamMatrixTimeCell({
   onCancelEdit,
 }: TeamMatrixTimeCellProps) {
   const timeClassName = `font-mono font-medium cursor-pointer hover:underline bg-transparent border-0 p-0 text-right ${timeColorClass}`;
+  const legView = relaySplitPrimary ? relayLegTimeView(res) : null;
 
   return (
     <div className="flex flex-col items-end gap-0.5 justify-center w-1/3 text-right">
@@ -107,9 +111,12 @@ export function TeamMatrixTimeCell({
         </div>
       )}
       {relaySplitPrimary && (
-        <button type="button" className={timeClassName} onClick={onStartEdit} aria-label="Edit relay split time">
+        <button type="button" className={timeClassName} onClick={onStartEdit} aria-label={legView?.kind === 'estimate' ? 'Edit relay time' : 'Edit relay split time'}>
           <span className="inline-flex items-center gap-1 flex-wrap">
-            <span>Split: {displayTimeForRelayLeg(res)}</span>
+            {/* An estimate is never shown under the "Split" label. */}
+            <span>
+              {legView?.kind === 'estimate' ? RELAY_LEG_ESTIMATE_LABEL : 'Split'}: {legView?.time ?? '—'}
+            </span>
             {/* The leg's own individual verdict — only present when this leg is eligible. */}
             {rowTags.kind === 'relay' && rowTags.tags.legQualification ? (
               <span className="inline-flex items-center gap-1 no-underline">
@@ -212,6 +219,7 @@ export function TeamMatrixPointsCell({
         {showPrelimsPerformance && prelimsOuByEntry ? (
           <PrelimsOuValue
             value={prelimsOuOverUnderForDisplay(res, prelimsOuByEntry)}
+            noActual={rowHasNoActual(res, prelimsOuByEntry)}
             compact
           />
         ) : null}
@@ -249,7 +257,7 @@ export function TeamMatrixSwimmerRow({
   const isACut = cutlineTier === 'A' || cutlineTier === 'Standard' || cutlineTier === 'Qualifying';
   const isBCut = cutlineTier === 'B' || cutlineTier === 'Provisional' || cutlineTier === 'Invited';
   const timeColorClass = isACut ? 'text-[var(--text-accent)]' : isBCut ? 'text-warning' : 'text-theme-secondary';
-  const relaySplitPrimary = res.isRelay && (res.relayLegSplitDetail || res.relayLegSplit);
+  const relaySplitPrimary = hasRelayLegTime(res);
   const startEdit = () => {
     if (onUpdateTime && res.id) onStartEdit(res.id, res.time);
   };
@@ -266,8 +274,12 @@ export function TeamMatrixSwimmerRow({
           )}
         </span>
         {res.relayMissingLeg && (
-          <span className="text-ui-micro text-warning shrink-0" title="Missing relay leg">
-            Missing L{(res.relayMissingLeg.legIndex ?? 0) + 1}{' '}
+          <span
+            className="text-ui-micro text-warning shrink-0"
+            title={res.relayMissingLeg.reason === 'no_baseline' ? RELAY_NO_BASELINE_EXPLANATION : 'Missing relay leg'}
+          >
+            {res.relayMissingLeg.reason === 'no_baseline' ? 'No split' : 'Missing'} L
+            {(res.relayMissingLeg.legIndex ?? 0) + 1}{' '}
             {relayMissingStrokeLabel(res.relayMissingLeg.stroke)}
           </span>
         )}

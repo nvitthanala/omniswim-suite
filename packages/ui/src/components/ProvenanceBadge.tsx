@@ -116,7 +116,7 @@ export function buildProvenanceBadges(input: ProvenanceBadgeInput): ProvenanceBa
     specs.push({
       key: 'from_history',
       label: 'From history',
-      tooltip: 'No meet or recruit swim at this event — filled from the athlete’s recorded history.',
+      tooltip: 'No meet or recruit swim at this event — filled from the swimmer’s recorded history.',
     });
   }
 
@@ -151,7 +151,7 @@ export function ProvenanceBadges({ swim, compact = false, className }: Provenanc
           title={spec.tooltip}
           className={cn(
             'font-normal normal-case tracking-normal',
-            compact ? 'px-1.5 py-0.5 text-[0.65rem] gap-0.5' : 'text-ui-micro'
+            compact ? 'px-1.5 py-0.5 text-ui-micro gap-0.5' : 'text-ui-micro'
           )}
         >
           {spec.label}

@@ -24,8 +24,12 @@ import {
   Workspace,
   type ScyConversionProvenance,
 } from '../types';
-import { relayEntryKey } from './relaySplits';
-import { relayTemplateFromLeg } from './relayLegMatching';
+import {
+  migrateTiedRelayOverrides,
+  relayEntryOverrideKeys,
+  relayLegMatchSettings,
+  relayTemplateFromLeg,
+} from './relayLegMatching';
 import {
   buildAliasResolver,
   IDENTITY_ALIAS_RESOLVER,
@@ -34,7 +38,7 @@ import {
 import { computeVacateRelayLegNames } from './rosterLineupAudit';
 import { relayLegHistoryCandidates } from './relayLegHistoryCandidates';
 import { mergeScoringSettings } from './scoringDefaults';
-import { buildMeetEventLabelIndex, canonicalProgramEvent } from './eventIdentity';
+import { buildMeetEventLabelIndex, programEventOrNull } from './eventIdentity';
 import { swimEventNotSwumInCourse } from './courseEvents';
 import {
   canonicalSwimmerName,
@@ -58,7 +62,7 @@ type EventRemapper = (event: string) => string;
 function makeEventRemapper(labelIndex: Map<string, string>): EventRemapper {
   if (labelIndex.size === 0) return (event: string) => event;
   return (event: string): string => {
-    const canon = canonicalProgramEvent(event);
+    const canon = programEventOrNull(event);
     if (!canon) return event;
     return labelIndex.get(canon) ?? event;
   };
@@ -527,11 +531,17 @@ export function buildWhatIfProjection({
 
   const relayKeysForGender = new Set<string>();
   for (const row of currentResults.filter(x => x.isRelay)) {
-    relayKeysForGender.add(relayEntryKey(relayTemplateFromLeg(currentResults, row)));
+    for (const key of relayEntryOverrideKeys(currentResults, relayTemplateFromLeg(currentResults, row))) {
+      relayKeysForGender.add(key);
+    }
   }
-  const relayOverrides: RelayLegOverride[] = (workspace.relayLegOverrides ?? []).filter(o =>
-    relayKeysForGender.has(o.relayEntryKey)
-  );
+  // A key a tied pair of relays had before the two were told apart names neither
+  // relay, so the filter below drops it from the projection (E5). The audit
+  // reports it as ambiguous (`tied_relay_ambiguous`).
+  const relayOverrides: RelayLegOverride[] = migrateTiedRelayOverrides(
+    workspace.relayLegOverrides ?? [],
+    currentResults
+  ).filter(o => relayKeysForGender.has(o.relayEntryKey));
 
   // Built once: the vacate step and the cross-plane collapse both read raw
   // workspace rows, before the engine collapses alias spellings onto the
@@ -581,7 +591,8 @@ export function buildWhatIfProjection({
     excluded,
     relayOverrides,
     vacateRelayLegs,
-    relayLegOnlyPool
+    relayLegOnlyPool,
+    relayLegMatchSettings(workspace)
   );
 
   // pdf_only: exclude meet entry plans + recruits from scoring entirely. The

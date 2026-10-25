@@ -42,8 +42,8 @@ describe('the URL the pool actually fetches', () => {
     // swimmer 1330318 (2026-09-22). This is the exact string
     // `runSwimmerTimesPass` hands to `fetch()`.
     const plan = planSwimmerTimesSteps(MEET_ID, [[{ swimCloudSwimmerId: '1330318', name: 'Avery Henke' }]]);
-    expect(plan.steps[0].canonicalUrl).toBe('https://www.swimcloud.com/api/swimmers/1330318/profile_fastest_times/');
-    expect(plan.steps[0].resourceKind).toBe('swimmerFastestTimes');
+    expect(plan.steps[0]!.canonicalUrl).toBe('https://www.swimcloud.com/api/swimmers/1330318/profile_fastest_times/');
+    expect(plan.steps[0]!.resourceKind).toBe('swimmerFastestTimes');
   });
 
   it('is a leaf page: the real capture carries no pagination widget to follow', () => {
@@ -140,7 +140,7 @@ describe('planSwimmerTimesSteps', () => {
     // A swimmer-times URL is not meet-scoped. The step still carries the meet so
     // the relayed page stays attributable to one capture subject.
     const plan = planSwimmerTimesSteps(MEET_ID, [[{ swimCloudSwimmerId: '11' }]]);
-    expect(plan.steps[0].meetId).toBe(MEET_ID);
+    expect(plan.steps[0]!.meetId).toBe(MEET_ID);
   });
 
   it('plans nothing when no roster row carried a profile link', () => {

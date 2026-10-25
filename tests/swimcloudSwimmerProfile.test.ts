@@ -90,7 +90,7 @@ describe('parseSwimmerProfileHtml — the happy path', () => {
   it('a defaultCourse option resolves that same row instead of leaving it unknown', () => {
     const result = parseSwimmerProfileHtml(html, context, { defaultCourse: 'LCM' });
     if (!result.ok) throw new Error('expected success');
-    expect(result.data.personalBests[2].course).toBe('LCM');
+    expect(result.data.personalBests[2]!.course).toBe('LCM');
     expect(
       result.warnings.some((w) => w.code === 'ambiguous-metric-course' && w.raw === '400 Meter Individual Medley'),
     ).toBe(false);
@@ -159,7 +159,7 @@ describe('parseSwimmerProfileHtml — a course column that contradicts the label
     const result = parseSwimmerProfileHtml(contradictingHtml, context);
     if (!result.ok) throw new Error(`expected success, got ${result.failure.code}`);
 
-    expect(result.data.personalBests[0].course).toBe('SCY');
+    expect(result.data.personalBests[0]!.course).toBe('SCY');
 
     const warning = result.warnings.find((w) => w.code === 'course-column-contradicts-label');
     expect(warning).toBeDefined();

@@ -201,8 +201,8 @@ describe('buildTheoreticalMeetWorkspace: places', () => {
     const snap = snapshot(b, Gender.MEN);
     expect(snap.prelimsProjected.sortedTeams).toEqual([]);
     // C Final rows score nothing and the totals are the A and B places only.
-    expect(snap.baseline.sortedTeams[0].totalPoints).toBe(NCAA_TABLE.reduce((a, c) => a + c, 0));
-    expect(snap.projected.sortedTeams[0].totalPoints).toBe(NCAA_TABLE.reduce((a, c) => a + c, 0));
+    expect(snap.baseline.sortedTeams[0]!.totalPoints).toBe(NCAA_TABLE.reduce((a, c) => a + c, 0));
+    expect(snap.projected.sortedTeams[0]!.totalPoints).toBe(NCAA_TABLE.reduce((a, c) => a + c, 0));
   });
 
   it('a tie that crosses no band edge stays in one band; a tie at place 8 stays in the A bracket', () => {
@@ -333,7 +333,7 @@ describe('buildTheoreticalMeetWorkspace: ids and provenance', () => {
     const rows = [...b.payload.menResults, ...b.payload.womenResults];
     expect([...b.sources.keys()].sort()).toEqual(rows.map(r => r.id).sort());
     for (const seed of seeds.rows) expect(b.sources.get(theoreticalResultRowId(seed.id))).toBe(seeds.sources.get(seed.id));
-    expect(b.sources.get(rows[0].id)).toMatchObject({ course: 'SCY', captureId: 'capture-Alpha U', seasonId: '30' });
+    expect(b.sources.get(rows[0]!.id)).toMatchObject({ course: 'SCY', captureId: 'capture-Alpha U', seasonId: '30' });
   });
 });
 
@@ -346,7 +346,8 @@ describe('buildTheoreticalMeetWorkspace: the theoretical label, the name, the co
 
   it('marks the meet as theoretical, and isTheoreticalMeet reads it back', () => {
     const b = build(teams());
-    expect(b.payload.loadedMeet).toEqual({ pdfFilename: THEORETICAL_MEET_LABEL, uploadedAt: CREATED, meetLabel: THEORETICAL_MEET_LABEL });
+    // `theoreticalRemovedEvents` is always written (F7), empty when the build removed nothing.
+    expect(b.payload.loadedMeet).toEqual({ pdfFilename: THEORETICAL_MEET_LABEL, uploadedAt: CREATED, meetLabel: THEORETICAL_MEET_LABEL, theoreticalRemovedEvents: [] });
     expect(isTheoreticalMeet(b.payload)).toBe(true);
     expect(isTheoreticalMeet({ loadedMeet: { meetLabel: 'NSISC Championships 2026' } })).toBe(false);
     expect(isTheoreticalMeet({ loadedMeet: { meetLabel: `${THEORETICAL_MEET_LABEL} (copy)` } })).toBe(false);
@@ -400,8 +401,8 @@ describe('buildTheoreticalMeetWorkspace: the theoretical label, the name, the co
     ];
     const many = [teamOf('Alpha U', Gender.MEN, rows)];
     const full = NCAA_TABLE.reduce((a, b) => a + b, 0);
-    expect(snapshot(build(many), Gender.MEN).baseline.sortedTeams[0].totalPoints).toBe(2 * full);
-    expect(snapshot(build(many, { conference: 'NSISC' }), Gender.MEN).baseline.sortedTeams[0].totalPoints).toBe(full + 20 + 17);
+    expect(snapshot(build(many), Gender.MEN).baseline.sortedTeams[0]!.totalPoints).toBe(2 * full);
+    expect(snapshot(build(many, { conference: 'NSISC' }), Gender.MEN).baseline.sortedTeams[0]!.totalPoints).toBe(full + 20 + 17);
   });
 
   it('adds its caveats after the seed caveats, once each', () => {
@@ -457,7 +458,7 @@ describe('buildTheoreticalMeetWorkspace: fails loudly', () => {
   it('a seed with no provenance record is refused', () => {
     const s = seeds();
     const sources = new Map(s.sources);
-    sources.delete(s.rows[0].id);
+    sources.delete(s.rows[0]!.id);
     expect(codeOf(() => buildTheoreticalMeetWorkspace(base({ seeds: { ...s, sources } })))).toBe('unexpected-seed-row');
   });
 
@@ -474,7 +475,7 @@ describe('buildTheoreticalMeetWorkspace: fails loudly', () => {
   });
 
   it('a repeated row id is refused', () => {
-    const dup = withRows(rows => [...rows, rows[0]]);
+    const dup = withRows(rows => [...rows, rows[0]!]);
     expect(codeOf(() => buildTheoreticalMeetWorkspace(base({ seeds: dup })))).toBe('row-id-collision');
   });
 });
@@ -594,7 +595,7 @@ describe('buildTheoreticalMeetWorkspace: event order', () => {
       },
     ];
   };
-  const total = (b: Build) => snapshot(b, Gender.MEN).baseline.sortedTeams[0].totalPoints;
+  const total = (b: Build) => snapshot(b, Gender.MEN).baseline.sortedTeams[0]!.totalPoints;
   const full = NCAA_TABLE.reduce((a, b) => a + b, 0);
 
   it('defaults to the program order and says so', () => {
@@ -637,7 +638,7 @@ describe('buildTheoreticalMeetWorkspace: event order', () => {
 
   it('accepts HyTek and course-qualified labels, skips relays and diving, and refuses what it cannot read', () => {
     const b = build(field(), { eventOrder: ['Event 35 Men 100 Yard Freestyle', 'Event 20 Men 4x100 Yard Medley Relay', '1 mtr Diving', '50 Free SCY'] });
-    expect(b.payload.menResults[0].event).toBe('100 Free SCY');
+    expect(b.payload.menResults[0]!.event).toBe('100 Free SCY');
     expect(codeOf(() => build(field(), { eventOrder: ['Underwater Hockey'] }))).toBe('invalid-event-order');
     expect(codeOf(() => build(field(), { eventOrder: ['50 Freestyle', '50 Free SCY'] }))).toBe('invalid-event-order');
   });

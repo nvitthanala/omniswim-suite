@@ -1,7 +1,7 @@
 /**
  * Seed the Ouachita Baptist University 2026-27 roster from a local data file.
  *
- * Parses oburoster202627.txt (multi-athlete SwimCloud paste), builds a
+ * Parses oburoster202627.txt (local only, data/local-rosters/; multi-athlete SwimCloud paste), builds a
  * workspace named "OBU 2026-27 Roster", and upserts it into BOTH stores
  * (data/meets.json and data/omniswim.db) so it appears regardless of
  * OMNI_DB mode. Mirrors scripts/seed_hsu_roster.mjs.
@@ -32,17 +32,15 @@
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
 import { resolveDataDir, assertNoServerHoldsStore } from './lib/dataDir.mjs';
+import { localRosterPath } from './lib/localRosters.mjs';
 import { randomUUID } from 'node:crypto';
 import { Gender } from '../packages/core/src/types.ts';
 import { parseSwimCloudMultiProfile } from '../packages/core/src/lib/swimCloudMultiProfile.ts';
 import { importHistoryToRoster } from '../packages/core/src/lib/historyImportRoster.ts';
 import { WorkspaceService } from '../packages/db/src/WorkspaceService.ts';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const ROOT = path.join(__dirname, '..');
-const ROSTER_FILE = path.join(ROOT, 'oburoster202627.txt');
+const ROSTER_FILE = localRosterPath('oburoster202627.txt');
 const DATA_DIR = resolveDataDir();
 const MEETS_FILE = path.join(DATA_DIR, 'meets.json');
 const DB_FILE = path.join(DATA_DIR, 'omniswim.db');
@@ -58,7 +56,7 @@ function fail(msg) {
 }
 
 async function main() {
-  if (!fs.existsSync(ROSTER_FILE)) fail(`Missing ${ROSTER_FILE}`);
+  if (!fs.existsSync(ROSTER_FILE)) fail(`Missing ${ROSTER_FILE}. Local-only file: see docs/ONBOARDING.md, section 5. This seed never falls back to invented text.`);
 
   // 1. Parse the multi-athlete roster paste.
   const rosterText = fs.readFileSync(ROSTER_FILE, 'utf-8');

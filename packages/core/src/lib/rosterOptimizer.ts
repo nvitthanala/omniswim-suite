@@ -54,6 +54,13 @@ import { swimEventIdentity } from './bestTimeEligibility';
 export type OptimizerStage = 'scorers' | 'events' | 'hypothetical' | 'all';
 
 /**
+ * Progress of {@link optimizeRosterAllTeams}, reported before each team starts.
+ * `current` is 1-based, so "Optimizing 3 of 12 teams" is `{ current: 3, total: 12 }`.
+ * A callback receives plain data and cannot change the result.
+ */
+export type OptimizerProgress = { current: number; total: number; team: string };
+
+/**
  * Did the optimizer actually change anything?
  *
  * - `improved`  — the returned state scores strictly higher than the workspace's
@@ -830,7 +837,8 @@ export function optimizeRosterAllTeams(
   removeSeniors: boolean,
   settings: ScoringSettings,
   stages: OptimizerStage = 'all',
-  rosterCatalog?: CatalogTeamRoster
+  rosterCatalog?: CatalogTeamRoster,
+  onProgress?: (progress: OptimizerProgress) => void
 ): GuardedOptimizerResult {
   const baselineResults = buildWhatIfResults({ workspace, gender, removeSeniors });
   const baseTeams = new Set(
@@ -877,7 +885,8 @@ export function optimizeRosterAllTeams(
   // ranking to preserve here, just a concatenation.
   const rejectedAcrossTeams: RejectedScorerCandidate[] = [];
 
-  for (const team of teams) {
+  for (const [index, team] of teams.entries()) {
+    onProgress?.({ current: index + 1, total: teams.length, team });
     const sub = optimizeRosterForTeam(
       { ...workspace, scorerRosterOverrides: overrides, meetEntryPlans: plans, activeEntryIds: activeIds },
       gender,

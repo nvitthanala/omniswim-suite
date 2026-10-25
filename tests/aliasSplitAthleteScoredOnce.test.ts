@@ -28,9 +28,10 @@
  * alias spelling, an active link between them.
  */
 import { describe, expect, it } from 'vitest';
-import { ClassYear, Gender, type Recruit, type SwimmerResult, type Workspace } from '../packages/core/src/types';
+import { ClassYear, Gender, type PlannedSwimEntry, type Recruit, type SwimmerResult, type Workspace } from '../packages/core/src/types';
 import { NSISC_PRESET_SETTINGS } from '../packages/core/src/lib/scoringDefaults';
 import { buildScoringBundle } from '../packages/core/src/lib/scoringEngine';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 const ALPHA = 'Alpha University';
 const BRAVO = 'Bravo University';
@@ -75,7 +76,7 @@ function recruit(name: string): Recruit {
 }
 
 function workspace(recruitName: string): Workspace {
-  return {
+  return workspaceFixture({
     id: 'ws-alias-split',
     name: 'alias split probe',
     createdAt: 0,
@@ -102,7 +103,7 @@ function workspace(recruitName: string): Workspace {
         status: 'active',
       },
     ],
-  } as unknown as Workspace;
+  });
 }
 
 function project(ws: Workspace) {
@@ -128,8 +129,8 @@ describe('an alias-linked athlete holds one entry per event in the projection', 
     const rows = rowsFor(project(workspace(CANONICAL)).allScored, CANONICAL);
     expect(rows).toHaveLength(1);
     // The recruit plane outranks the meet plane, so the recruit's time stands.
-    expect(rows[0].time).toBe('20.22');
-    expect(rows[0].points).toBeGreaterThan(0);
+    expect(rows[0]!.time).toBe('20.22');
+    expect(rows[0]!.points).toBeGreaterThan(0);
   });
 
   it('a recruit row stored under the alias spelling also collapses onto the meet row', () => {
@@ -168,7 +169,7 @@ function sameplaneRecruit(id: string, name: string, time: string): Recruit {
   };
 }
 
-function planEntry(id: string, name: string, time: string) {
+function planEntry(id: string, name: string, time: string): PlannedSwimEntry {
   return {
     id,
     name,
@@ -185,9 +186,9 @@ function planEntry(id: string, name: string, time: string) {
 function sameplaneWorkspace(opts: {
   meet: SwimmerResult[];
   recruits?: Recruit[];
-  plans?: ReturnType<typeof planEntry>[];
+  plans?: PlannedSwimEntry[];
 }): Workspace {
-  return {
+  return workspaceFixture({
     ...workspace(CANONICAL),
     id: 'ws-same-plane',
     menResults: opts.meet,
@@ -206,7 +207,7 @@ function sameplaneWorkspace(opts: {
         status: 'active',
       },
     ],
-  } as unknown as Workspace;
+  });
 }
 
 const FIELD: SwimmerResult[] = [

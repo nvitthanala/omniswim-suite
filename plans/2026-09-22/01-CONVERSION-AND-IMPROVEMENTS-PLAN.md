@@ -1,7 +1,7 @@
 # Course conversion, altitude, and follow-up improvements
 
 Date: 2026-09-22. Branch: `nvitthanala/production-readiness`.
-Progress log: `docs/reference/IMPROVEMENTS_2026-09-22_STATE.json`. The log
+Progress log: `docs/archive/2026-09/IMPROVEMENTS_2026-09-22_STATE.json`. The log
 is the source of truth for what is done. Read it before resuming.
 
 ## Why conversion comes first
@@ -123,7 +123,7 @@ A phase may be resumed from the state file alone.
 
 ### P3 to P11
 
-Scoped in `docs/reference/IMPROVEMENTS_2026-09-22_STATE.json`. Each
+Scoped in `docs/archive/2026-09/IMPROVEMENTS_2026-09-22_STATE.json`. Each
 entry states its acceptance test before work starts.
 
 ## Rules every phase keeps

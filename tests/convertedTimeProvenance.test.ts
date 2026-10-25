@@ -299,12 +299,12 @@ describe('planned entries carry the mark too', () => {
     };
     const edited = updatePlannedEntry(workspaceWith({ meetEntryPlans: [plan] }), 'p-1', { time: '47.00' })
       .patch.meetEntryPlans![0];
-    expect(edited.time).toBe('47.00');
-    expect(edited.convertedFrom).toBeUndefined();
+    expect(edited!.time).toBe('47.00');
+    expect(edited!.convertedFrom).toBeUndefined();
     // Toggling active is not a restatement; the mark stays.
     const toggled = updatePlannedEntry(workspaceWith({ meetEntryPlans: [plan] }), 'p-1', { active: false })
       .patch.meetEntryPlans![0];
-    expect(toggled.convertedFrom).toStrictEqual(plan.convertedFrom);
+    expect(toggled!.convertedFrom).toStrictEqual(plan.convertedFrom);
   });
 
   it('ignores a mark that no longer matches the row time', () => {

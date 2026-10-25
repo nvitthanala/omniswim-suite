@@ -28,6 +28,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
+import { readRosterText } from './helpers/localRosterPath';
 import { Gender } from '../packages/core/src/types';
 import {
   categorizeBestEvents,
@@ -50,22 +51,33 @@ const HDR = 'Event\tTime\t\tMeet\tDate\tStamp Link';
 const DATE = /^[A-Z][a-z]{2,8}\s+\d{1,2},\s+\d{4}$/;
 const TIME = /^(\d{1,2}:)?\d{1,2}\.\d{2}$/;
 
-const SOURCES = [
-  ['hsuroster26-27.txt', HSU],
-  ['oburoster202627.txt', OBU],
-  ['tests/fixtures/swimcloud/blaise_vera_personal_bests.txt', 'University of Pittsburgh'],
-] as const;
+/**
+ * The two roster exports are local-only: with them, the real rows are read;
+ * without them, the committed stand-ins (invented names, one row per stamp in
+ * the vocabulary) are. The Blaise Vera file is committed.
+ */
+const HSU_ROSTER = readRosterText('hsuroster26-27.txt');
+const OBU_ROSTER = readRosterText('oburoster202627.txt');
+/** Real: 836 HSU + 1030 OBU rows. Stand-in: 109 HSU + 3 OBU rows. Plus the 15 Blaise Vera rows. */
+const EXPECTED_ROW_COUNT =
+  (HSU_ROSTER.source === 'real' ? 836 : 109) + (OBU_ROSTER.source === 'real' ? 1030 : 3) + 15;
+
+const BLAISE_FILE = 'tests/fixtures/swimcloud/blaise_vera_personal_bests.txt';
+const SOURCES: ReadonlyArray<readonly [file: string, team: string, lines: string[]]> = [
+  ['hsuroster26-27.txt', HSU, HSU_ROSTER.lines],
+  ['oburoster202627.txt', OBU, OBU_ROSTER.lines],
+  [BLAISE_FILE, 'University of Pittsburgh', readFileSync(join(repoRoot, BLAISE_FILE), 'utf8').split(/\r?\n/)],
+];
 
 type RealRow = { file: string; line: number; text: string; cols: string[]; team: string };
 
-/** Every row of the real exports laid out `event, time, stamp, meet, date`. */
+/** Every row of the exports laid out `event, time, stamp, meet, date`. */
 function realRows(): RealRow[] {
   const rows: RealRow[] = [];
-  for (const [file, team] of SOURCES) {
-    const lines = readFileSync(join(repoRoot, file), 'utf8').split(/\r?\n/);
+  for (const [file, team, lines] of SOURCES) {
     lines.forEach((text, i) => {
       const cols = text.split('\t').map(c => c.trim());
-      if (cols.length >= 5 && TIME.test(cols[1]) && DATE.test(cols[4])) {
+      if (cols.length >= 5 && TIME.test(cols[1]!) && DATE.test(cols[4]!)) {
         rows.push({ file, line: i + 1, text, cols, team });
       }
     });
@@ -103,7 +115,7 @@ describe('every real row keeps its meet name and date', () => {
   const rows = realRows();
 
   it('covers the real exports and every stamp they print', () => {
-    expect(rows.length).toBe(1881);
+    expect(rows.length).toBe(EXPECTED_ROW_COUNT);
     const stamps = new Set(rows.map(r => r.cols[2]));
     expect([...stamps].sort()).toStrictEqual(Object.keys(EXPECTED).sort());
   });
@@ -115,8 +127,8 @@ describe('every real row keeps its meet name and date', () => {
       if (swims.length !== 1) continue; // a row the plausibility gate refuses is not this test's subject
       const [swim] = swims;
       const meet = row.cols[3] || undefined;
-      if (swim.meetLabel !== meet || swim.date !== row.cols[4]) {
-        wrong.push(`${row.file}:${row.line} [${row.cols[2]}] meet=${swim.meetLabel} date=${swim.date}`);
+      if (swim!.meetLabel !== meet || swim!.date !== row.cols[4]) {
+        wrong.push(`${row.file}:${row.line} [${row.cols[2]}] meet=${swim!.meetLabel} date=${swim!.date}`);
       }
     }
     expect(wrong).toStrictEqual([]);
@@ -127,8 +139,8 @@ describe('every real row keeps its meet name and date', () => {
     for (const row of rows) {
       const { swims } = parseSwimCloudPersonalBestsDetailed(row.text, 'Real Swimmer', row.team, Gender.MEN);
       if (swims.length !== 1) continue;
-      const want = EXPECTED[row.cols[2]];
-      const got = { x: swims[0].isExtractedSplit === true, u: swims[0].isUserInputted === true };
+      const want = EXPECTED[row.cols[2]!]!;
+      const got = { x: swims[0]!.isExtractedSplit === true, u: swims[0]!.isUserInputted === true };
       if (got.x !== want.x || got.u !== want.u) {
         wrong.push(`${row.file}:${row.line} [${row.cols[2]}] got x=${got.x} u=${got.u}`);
       }
@@ -147,11 +159,11 @@ describe('the rows this defect was found on', () => {
   });
 
   it('NCAA B and WIN JRS (lines 830, 6)', () => {
-    expect(one('100 Free SCY\t42.99\tNCAA B\tJames E Martin Invitational\tFeb 28, 2025\t').meetLabel).toBe(
+    expect(one('100 Free SCY\t42.99\tNCAA B\tJames E Martin Invitational\tFeb 28, 2025\t')!.meetLabel).toBe(
       'James E Martin Invitational'
     );
     expect(
-      one('200 IM SCY\t1:49.77\tWIN JRS\t2023 Louisiana Senior SC State Championships\tFeb 12, 2023\t').meetLabel
+      one('200 IM SCY\t1:49.77\tWIN JRS\t2023 Louisiana Senior SC State Championships\tFeb 12, 2023\t')!.meetLabel
     ).toBe('2023 Louisiana Senior SC State Championships');
   });
 
@@ -164,15 +176,15 @@ describe('the rows this defect was found on', () => {
       meetLabel: 'Louisiana Senior Short Course State Championships',
       computedCut: null,
     });
-    const profile = categorizeBestEvents([swim], HSU, Gender.MEN, 'Real Swimmer', NSISC_PRESET_SETTINGS);
+    const profile = categorizeBestEvents([swim!], HSU, Gender.MEN, 'Real Swimmer', NSISC_PRESET_SETTINGS);
     expect(profile.bestByEvent).toStrictEqual({});
   });
 
   it('D2 BR (line 45) is the D2 B cut on a relay leadoff, and still a result', () => {
     const swim = one('100 Free SCY\t44.32\tD2 BR\tNew South Championships\tFeb 21, 2026\t');
     expect(swim).toMatchObject({ swimcloudBadge: 'other', meetLabel: 'New South Championships' });
-    expect(swim.isExtractedSplit).toBeUndefined();
-    expect(swim.isUserInputted).toBeUndefined();
+    expect(swim!.isExtractedSplit).toBeUndefined();
+    expect(swim!.isUserInputted).toBeUndefined();
   });
 
   it('FTR-18U and FTR-18UR (oburoster202627.txt lines 213, 386) are not self-reported', () => {
@@ -181,8 +193,8 @@ describe('the rows this defect was found on', () => {
       '100 Free LCM\t53.28\tFTR-18UR\tUSA Swimming Futures Championship - Justin\tJul 25, 2025\t',
     ]) {
       const swim = one(row, OBU);
-      expect(swim.isUserInputted, row).toBeUndefined();
-      expect(swim.swimcloudBadge, row).toBe('other');
+      expect(swim!.isUserInputted, row).toBeUndefined();
+      expect(swim!.swimcloudBadge, row).toBe('other');
     }
   });
 

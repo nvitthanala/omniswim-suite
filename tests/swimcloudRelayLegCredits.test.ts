@@ -68,16 +68,16 @@ describe('F-B: a swimmer at one meet (real capture)', () => {
   it('keeps the Extracted 50 Fly out of swims and marks it not seed-eligible', () => {
     expect(data.extractedSplits).toHaveLength(1);
     const split = data.extractedSplits[0];
-    expect(split.kind).toBe('extracted-split');
-    expect(split.seedEligible).toBe(false);
-    expect([split.eventLabel, split.eventRef, split.round, split.time, split.swimCloudSwimId]).toStrictEqual([
+    expect(split!.kind).toBe('extracted-split');
+    expect(split!.seedEligible).toBe(false);
+    expect([split!.eventLabel, split!.eventRef, split!.round, split!.time, split!.swimCloudSwimId]).toStrictEqual([
       '50 Fly',
       '10',
       'Extracted',
       '25.88',
       '186274165',
     ]);
-    expect(split.place).toBeUndefined();
+    expect(split!.place).toBeUndefined();
     // Not among the individual swims, not among the relay legs.
     expect(data.individualSwims.map((s) => s.time)).not.toContain('25.88');
     expect(data.relayLegs.map((s) => s.time)).not.toContain('25.88');
@@ -115,23 +115,23 @@ describe('F-B: leg words and absent fields (mutated copies of the capture)', () 
 
   it('maps Leadoff to leg 1 and flags it', () => {
     const leg = withLabel('Leadoff');
-    expect(leg.legIndex).toBe(1);
-    expect(leg.isLeadoff).toBe(true);
+    expect(leg!.legIndex).toBe(1);
+    expect(leg!.isLeadoff).toBe(true);
   });
 
   it('keeps an unmapped word verbatim and leaves legIndex absent', () => {
     const leg = withLabel('2nd Leg');
-    expect(leg.legLabel).toBe('2nd Leg');
-    expect('legIndex' in leg).toBe(false);
-    expect(leg.isLeadoff).toBe(false);
+    expect(leg!.legLabel).toBe('2nd Leg');
+    expect('legIndex' in leg!).toBe(false);
+    expect(leg!.isLeadoff).toBe(false);
   });
 
   it('gives a relay row with no leg word neither a label nor an index', () => {
     const leg = withLabel(null);
-    expect(leg.kind).toBe('relay-leg');
-    expect(leg.relayEvent).toBe('200 MED-R');
-    expect('legLabel' in leg).toBe(false);
-    expect('legIndex' in leg).toBe(false);
+    expect(leg!.kind).toBe('relay-leg');
+    expect(leg!.relayEvent).toBe('200 MED-R');
+    expect('legLabel' in leg!).toBe(false);
+    expect('legIndex' in leg!).toBe(false);
   });
 
   it('reads a Leadoff chip in the Flags cell', () => {
@@ -139,13 +139,13 @@ describe('F-B: leg words and absent fields (mutated copies of the capture)', () 
       /(href="\/times\/186273837\/">[\s\S]*?<td colspan="2" class="u-pl0">)/,
       '$1<span title="Leadoff">R</span>',
     );
-    expect(swimmerOk(html).data.relayLegs[0].isLeadoff).toBe(true);
+    expect(swimmerOk(html).data.relayLegs[0]!.isLeadoff).toBe(true);
   });
 
   it('leaves place absent when the cell is empty, and warns on a non-ordinal place', () => {
     const html = SWIMMER_HTML.replace(/6<span class="u-text-small u-color-mute u-text-semi">th<\/span>/, 'DQ');
     const r = swimmerOk(html);
-    expect(r.data.relayLegs[0].place).toBeUndefined();
+    expect(r.data.relayLegs[0]!.place).toBeUndefined();
     expect(r.warnings.map((w) => w.code)).toStrictEqual(['unrecognized-place-token']);
   });
 });
@@ -238,8 +238,8 @@ describe('F-C: relay event page (real capture)', () => {
   });
 
   it('reads HSU (A) legs exactly: swimmer id, name, split, times id, order', () => {
-    expect(data.entries[0].swimCloudSwimId).toBe('188544298');
-    expect(data.entries[0].legs).toStrictEqual([
+    expect(data.entries[0]!.swimCloudSwimId).toBe('188544298');
+    expect(data.entries[0]!.legs).toStrictEqual([
       { order: 1, swimCloudSwimmerId: '2253944', athleteName: 'Olivér Pózvai', splitTime: '21.03', swimCloudSwimId: '188544373' },
       { order: 2, swimCloudSwimmerId: '1389320', athleteName: 'Máté Hosszú', splitTime: '20.62', swimCloudSwimId: '188544374' },
       { order: 3, swimCloudSwimmerId: '1818382', athleteName: 'Tristin Ferguson', splitTime: '20.70', swimCloudSwimId: '188544375' },
@@ -248,7 +248,7 @@ describe('F-C: relay event page (real capture)', () => {
   });
 
   it('reads HSU (B) legs', () => {
-    expect(data.entries[1].legs.map((l) => [l.order, l.swimCloudSwimmerId, l.athleteName, l.splitTime, l.swimCloudSwimId])).toStrictEqual([
+    expect(data.entries[1]!.legs.map((l) => [l.order, l.swimCloudSwimmerId, l.athleteName, l.splitTime, l.swimCloudSwimId])).toStrictEqual([
       [1, '1641985', 'Luka Herceg', '21.99', '188544377'],
       [2, '3498502', 'Fabio Capocci', '20.96', '188544378'],
       [3, '2852737', 'Reid Remmert', '21.24', '188544379'],
@@ -271,7 +271,7 @@ describe('F-C: relay event page (real capture)', () => {
   it('keeps the existing event parser output and only adds the leg swim id', () => {
     const base = parseMeetEventResultsHtml(EVENT_HTML, ctx(EVENT_URL), {} as never);
     if (!base.ok) throw new Error('base parse failed');
-    const leg = base.data.rounds[0].swims[0].relayLegs?.[0];
+    const leg = base.data.rounds[0]!.swims[0]!.relayLegs?.[0];
     expect(leg).toStrictEqual({
       order: 1,
       swimCloudSwimmerId: '2253944',
@@ -294,14 +294,14 @@ describe('F-C: hidden list missing, malformed or short is never an empty success
   it('warns on a relay with three legs and keeps the three, inventing no fourth', () => {
     const html = EVENT_HTML.replace(/<tr>\s*<td class="u-whitespace-normal u-text-default">\s*<a href="\/results\/401354\/swimmer\/1472365\/">River Paulk[\s\S]*?<\/tr>/, '');
     const r = eventOk(html);
-    expect(r.data.entries[0].legs).toHaveLength(3);
+    expect(r.data.entries[0]!.legs).toHaveLength(3);
     expect(r.warnings.filter((w) => w.code === 'relay-leg-count-unexpected')).toHaveLength(1);
   });
 
   it('does not lend a neighbour leg its time when one split link is missing', () => {
     // Remove the times link around Hosszú's 20.62. Legs after it must keep their own times.
     const html = EVENT_HTML.replace('<a href="/times/188544374/">20.62</a>', '');
-    const legs = eventOk(html).data.entries[0].legs;
+    const legs = eventOk(html).data.entries[0]!.legs;
     expect(legs.map((l) => [l.athleteName, l.splitTime, l.swimCloudSwimId])).toStrictEqual([
       ['Olivér Pózvai', '21.03', '188544373'],
       ['Máté Hosszú', undefined, undefined],
@@ -313,9 +313,9 @@ describe('F-C: hidden list missing, malformed or short is never an empty success
   it('leaves the relay letter absent when the team cell prints none (never defaults to A)', () => {
     const r = eventOk(EVENT_HTML.replace('<span class="u-inline-block@sm">Henderson State (A)</span>', '<span class="u-inline-block@sm">Henderson State</span>'));
     const e = r.data.entries[0];
-    expect(e.printedName).toBe('Henderson State');
-    expect('relayLetter' in e).toBe(false);
-    expect('teamName' in e).toBe(false);
+    expect(e!.printedName).toBe('Henderson State');
+    expect('relayLetter' in e!).toBe(false);
+    expect('teamName' in e!).toBe(false);
   });
 
   it('fails an individual event page with not-a-relay-event', () => {
@@ -335,7 +335,7 @@ describe('F-C: hidden list missing, malformed or short is never an empty success
 
 describe('join: credits to relay-event legs on SwimCloud ids only (synthetic pair)', () => {
   const page = eventOk().data;
-  const [real] = swimmerOk().data.relayLegs;
+  const real = swimmerOk().data.relayLegs[0]!;
   // A credit for River Paulk's anchor leg of HSU (A), built from F-C's own ids.
   const credit: SwimCloudRelayLegCredit = {
     ...real,
@@ -354,8 +354,8 @@ describe('join: credits to relay-event legs on SwimCloud ids only (synthetic pai
     expect(j.conflicts).toStrictEqual([]);
     expect(j.unmatchedCredits).toStrictEqual([]);
     expect(j.matched).toHaveLength(1);
-    expect(j.matched[0].entry.printedName).toBe('Henderson State (A)');
-    expect(j.matched[0].leg.order).toBe(4);
+    expect(j.matched[0]!.entry.printedName).toBe('Henderson State (A)');
+    expect(j.matched[0]!.leg.order).toBe(4);
   });
 
   it('does not match on name plus time: right time, wrong id stays unmatched', () => {
@@ -369,7 +369,7 @@ describe('join: credits to relay-event legs on SwimCloud ids only (synthetic pai
     const html = EVENT_HTML.replace('<a href="/times/188544380/">20.74</a>', '<a href="/times/188544380/">20.03</a>');
     const dup = eventOk(html).data;
     const j = joinRelayCreditsToEventEntries([credit], dup);
-    expect(j.matched[0].leg.swimCloudSwimId).toBe('188544376');
+    expect(j.matched[0]!.leg.swimCloudSwimId).toBe('188544376');
   });
 
   it('reports a swimmer-id disagreement as a conflict, not a match', () => {

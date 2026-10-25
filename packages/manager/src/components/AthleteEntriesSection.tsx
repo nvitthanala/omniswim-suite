@@ -80,16 +80,6 @@ export default function AthleteEntriesSection({
 }: Props) {
   const toast = useToast();
 
-  // A fresh athlete selection must not inherit an open inline time editor or a
-  // half-finished paste preview. This is the reset the parent drawer performed
-  // for these fields before the split, moved here with the state it clears.
-  useEffect(() => {
-    setEditingTimeId(null);
-    setParsePreview([]);
-    setPasteOpen(false);
-    setPasteText('');
-  }, [athlete.key]);
-
   // Same derivations the parent makes; recomputed here rather than threaded
   // through props, since they are pure functions of values already passed in.
   const athleteCanonical = canonicalSwimmerName(athlete.name);
@@ -104,6 +94,16 @@ export default function AthleteEntriesSection({
   const [editingTimeId, setEditingTimeId] = useState<string | null>(null);
   const [editingTimeValue, setEditingTimeValue] = useState('');
   const [pastePreview, setParsePreview] = useState<PastePreviewRow[]>([]);
+
+  // A fresh athlete selection must not inherit an open inline time editor or a
+  // half-finished paste preview. This is the reset the parent drawer performed
+  // for these fields before the split, moved here with the state it clears.
+  useEffect(() => {
+    setEditingTimeId(null);
+    setParsePreview([]);
+    setPasteOpen(false);
+    setPasteText('');
+  }, [athlete.key]);
 
   const addEntry = () => {
     if (!editable || !newTime.trim()) return;

@@ -43,9 +43,11 @@ interface VideoPlayerProps {
 function calculateLiveSPM(tags: readonly RaceTag[]): number {
   const strokes = tagsOfKind(tags, 'Stroke');
   if (strokes.length < 2) return 0;
-  const last = strokes[strokes.length - 1].time;
-  const prev = strokes[strokes.length - 2].time;
-  const diff = last - prev;
+  const lastStroke = strokes[strokes.length - 1];
+  const prevStroke = strokes[strokes.length - 2];
+  // At least two strokes exist, so both reads are in range.
+  if (lastStroke === undefined || prevStroke === undefined) return 0;
+  const diff = lastStroke.time - prevStroke.time;
   if (diff <= 0) return 0;
   return 60 / diff;
 }

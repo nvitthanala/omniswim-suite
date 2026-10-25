@@ -3,6 +3,26 @@
 
 "use strict";
 (() => {
+  // packages/swimcloud/src/indexed.ts
+  function regexGroup(match, index) {
+    const value = match[index];
+    if (value === void 0) {
+      throw new Error(
+        `SwimCloud parser invariant broken: capture group ${index} did not take part in the match of ${JSON.stringify(match[0])}.`
+      );
+    }
+    return value;
+  }
+  function itemAt(items, index) {
+    const value = items[index];
+    if (value === void 0) {
+      throw new Error(
+        `SwimCloud parser invariant broken: index ${index} is outside an array of length ${items.length}.`
+      );
+    }
+    return value;
+  }
+
   // packages/swimcloud/src/html.ts
   var NAMED_ENTITIES = {
     amp: "&",
@@ -121,8 +141,8 @@
     HEADING.lastIndex = 0;
     for (let match = HEADING.exec(cleaned); match !== null; match = HEADING.exec(cleaned)) {
       headings.push({
-        level: Number.parseInt(match[1], 10),
-        text: htmlToText(match[2]),
+        level: Number.parseInt(regexGroup(match, 1), 10),
+        text: htmlToText(regexGroup(match, 2)),
         start: match.index
       });
     }
@@ -141,7 +161,8 @@
   }
   function removeNestedTablesFromTableBody(tableHtml) {
     const spans = findElementSpans(tableHtml, "table");
-    const body = spans.length > 0 ? spans[0].inner : tableHtml;
+    const firstTable = spans[0];
+    const body = firstTable === void 0 ? tableHtml : firstTable.inner;
     return spliceOutSpans(body, findElementSpans(body, "table"));
   }
   function splitRepeatedElements(html, tagNames) {
@@ -149,15 +170,15 @@
     const opener = new RegExp(`<(${alternation})\\b[^>]*>`, "gi");
     const starts = [];
     for (let match = opener.exec(html); match !== null; match = opener.exec(html)) {
-      starts.push({ contentStart: match.index + match[0].length, tag: match[1].toLowerCase() });
+      starts.push({ contentStart: match.index + match[0].length, tag: regexGroup(match, 1).toLowerCase() });
     }
     if (starts.length === 0) {
       return [];
     }
     const results = [];
-    for (let index = 0; index < starts.length; index += 1) {
-      const current = starts[index];
-      const limit = index + 1 < starts.length ? starts[index + 1].contentStart : html.length;
+    for (const [index, current] of starts.entries()) {
+      const next = starts[index + 1];
+      const limit = next === void 0 ? html.length : next.contentStart;
       const slice = html.slice(current.contentStart, limit);
       const closer = new RegExp(`</${current.tag}\\s*>`, "i");
       const closeAt = closer.exec(slice);
@@ -203,7 +224,7 @@
   var SEASON_ID = /^[0-9]+$/;
   function readValueAttribute(attributes) {
     for (const match of attributes.matchAll(ATTRIBUTE)) {
-      if (match[1].toLowerCase() !== "value") continue;
+      if (regexGroup(match, 1).toLowerCase() !== "value") continue;
       const quoted = match[2] ?? match[3];
       if (quoted !== void 0) return quoted;
     }
@@ -264,8 +285,8 @@
       );
     }
     const options = [];
-    for (const match of selects[0][1].matchAll(OPTION)) {
-      const raw = readOption(match[1], match[2]);
+    for (const match of regexGroup(itemAt(selects, 0), 1).matchAll(OPTION)) {
+      const raw = readOption(regexGroup(match, 1), regexGroup(match, 2));
       if (raw.value === "") continue;
       options.push(toSeasonOption(raw));
     }
@@ -309,7 +330,8 @@
   function exemptSwimmerFastestTimesId(lower) {
     if (lower.length !== 4) return void 0;
     if (lower[0] !== "api" || lower[1] !== "swimmers" || lower[3] !== "profile_fastest_times") return void 0;
-    return NUMERIC_ID.test(lower[2]) ? lower[2] : void 0;
+    const swimmerId = lower[2];
+    return swimmerId !== void 0 && NUMERIC_ID.test(swimmerId) ? swimmerId : void 0;
   }
   var SWIMCLOUD_CANONICAL_HOST = "www.swimcloud.com";
   var SWIMCLOUD_APEX_HOST = "swimcloud.com";
@@ -427,7 +449,7 @@
     if (segments.length === 1) {
       return malformed(input, canonicalPath, "team", "missing-id", "Team URL carries no team id.");
     }
-    const teamId = segments[1];
+    const teamId = itemAt(segments, 1);
     if (!NUMERIC_ID.test(teamId)) {
       return malformed(
         input,
@@ -482,7 +504,7 @@
     if (segments.length === 1) {
       return malformed(input, canonicalPath, "swimmer", "missing-id", "Swimmer URL carries no swimmer id.");
     }
-    const swimmerId = segments[1];
+    const swimmerId = itemAt(segments, 1);
     if (!NUMERIC_ID.test(swimmerId)) {
       return malformed(
         input,
@@ -516,7 +538,7 @@
         "Meet event URL carries no event reference."
       );
     }
-    const eventRef = segments[3];
+    const eventRef = itemAt(segments, 3);
     if (!NUMERIC_ID.test(eventRef)) {
       return malformed(
         input,
@@ -556,7 +578,7 @@
     if (segments.length === 3) {
       return malformed(input, canonicalPath, "meetTeam", "missing-id", "Meet team URL carries no team id.");
     }
-    const teamId = segments[3];
+    const teamId = itemAt(segments, 3);
     if (!NUMERIC_ID.test(teamId)) {
       return malformed(
         input,
@@ -597,7 +619,7 @@
         "Meet swimmer URL carries no swimmer id."
       );
     }
-    const swimmerId = segments[3];
+    const swimmerId = itemAt(segments, 3);
     if (!NUMERIC_ID.test(swimmerId)) {
       return malformed(
         input,
@@ -617,7 +639,7 @@
     if (segments.length === 1) {
       return malformed(input, canonicalPath, "meet", "missing-id", "Meet URL carries no meet id.");
     }
-    const meetId = segments[1];
+    const meetId = itemAt(segments, 1);
     if (!NUMERIC_ID.test(meetId)) {
       return malformed(
         input,
@@ -663,7 +685,7 @@
           "Conference URL carries no conference slug."
         );
       }
-      const slug = segments[4];
+      const slug = itemAt(segments, 4);
       if (!CONFERENCE_SLUG.test(slug)) {
         return malformed(
           input,
@@ -678,8 +700,8 @@
           kind: "conference",
           urlForm: "country-scoped",
           slug,
-          country: lower[1],
-          level: lower[2]
+          country: itemAt(lower, 1),
+          level: itemAt(lower, 2)
         });
       }
     }
@@ -701,7 +723,7 @@
         "Conference URL carries no conference slug."
       );
     }
-    const slug = segments[1];
+    const slug = itemAt(segments, 1);
     if (!CONFERENCE_SLUG.test(slug)) {
       return malformed(
         input,
@@ -781,7 +803,7 @@
     if (exemptSwimmerId !== void 0) {
       return fetchable({ kind: "swimmerFastestTimes", swimmerId: exemptSwimmerId });
     }
-    const classifyPath = PATH_CLASSIFIERS[lower[0]];
+    const classifyPath = PATH_CLASSIFIERS[itemAt(lower, 0)];
     if (classifyPath === void 0) {
       return unrecognized(
         input,
@@ -1063,7 +1085,7 @@
     };
   }
 
-  // packages/swimcloud/src/parser.ts
+  // packages/swimcloud/src/parseResult.ts
   var SWIMCLOUD_PARSE_CONFIDENCE = "synthetic-fixture-only";
   var SWIMCLOUD_REAL_CAPTURE_CONFIDENCE = "real-capture-verified";
   function provenanceOf(context) {
@@ -1092,12 +1114,265 @@
       warnings
     };
   }
+
+  // packages/swimcloud/src/parseElements.ts
+  function firstHeadingText(html) {
+    const headings = findHeadings(html);
+    for (const heading of headings) {
+      if (heading.level === 1 && heading.text.length > 0) {
+        return heading.text;
+      }
+    }
+    return void 0;
+  }
+  function escapeRegExp(text) {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+  function startTagOf(elementHtml) {
+    const end = elementHtml.indexOf(">");
+    return end < 0 ? elementHtml : elementHtml.slice(0, end + 1);
+  }
+  function readAttribute(tagHtml, name) {
+    const pattern = new RegExp(
+      `(?:^|\\s)${escapeRegExp(name)}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s"'>]+))`,
+      "i"
+    );
+    const match = pattern.exec(tagHtml);
+    if (match === null) {
+      return void 0;
+    }
+    return decodeHtmlEntities(match[2] ?? match[3] ?? match[4] ?? "");
+  }
+  function classTokens(tagHtml) {
+    const value = readAttribute(tagHtml, "class");
+    return value === void 0 ? [] : value.split(/\s+/).filter((token) => token.length > 0);
+  }
+  function elementTextById(html, id) {
+    const pattern = new RegExp(
+      `<([A-Za-z][A-Za-z0-9]*)\\b[^>]*\\sid\\s*=\\s*["']?${escapeRegExp(id)}["'\\s>]`,
+      "i"
+    );
+    const match = pattern.exec(html);
+    if (match === null) {
+      return void 0;
+    }
+    const tag = regexGroup(match, 1).toLowerCase();
+    const startEnd = html.indexOf(">", match.index);
+    if (startEnd < 0) {
+      return void 0;
+    }
+    const close = html.toLowerCase().indexOf(`</${tag}`, startEnd);
+    if (close < 0) {
+      return void 0;
+    }
+    const text = htmlToText(html.slice(startEnd + 1, close));
+    return text.length === 0 ? void 0 : text;
+  }
+  function readQueryParam(href, name) {
+    try {
+      const url = new URL(href, `https://${SWIMCLOUD_CANONICAL_HOST}`);
+      const value = url.searchParams.get(name);
+      return value === null || value.length === 0 ? void 0 : value;
+    } catch {
+      return void 0;
+    }
+  }
+
+  // packages/swimcloud/src/swimFields.ts
+  var TIME_TOKEN = /^(?:\d{1,2}:){0,2}\d{1,2}\.\d{2}$/;
+  var RESULT_MARKERS = {
+    dq: { disqualified: true },
+    ns: { noShow: true },
+    scr: { scratched: true },
+    // Declared False Start: the athlete did not swim. Treated as a scratch, which
+    // is the state it shares — deliberately not folded into `disqualified`, since
+    // Rule 7 treats a DQ and a non-swim differently.
+    dfs: { scratched: true }
+  };
+  function swimmerIdFromCell(cellHtml) {
+    for (const href of extractHrefs(cellHtml)) {
+      const classification = classifySwimCloudUrl(href);
+      if (classification.outcome !== "fetchable") {
+        continue;
+      }
+      const resource = classification.resource;
+      if (resource.kind === "swimmer" || resource.kind === "meetSwimmer") {
+        return resource.swimmerId;
+      }
+    }
+    return void 0;
+  }
+  function teamIdFromCell(cellHtml) {
+    for (const href of extractHrefs(cellHtml)) {
+      const classification = classifySwimCloudUrl(href);
+      if (classification.outcome !== "fetchable") {
+        continue;
+      }
+      const resource = classification.resource;
+      if (resource.kind === "team" || resource.kind === "meetTeam" || resource.kind === "meetTeamSwims") {
+        return resource.teamId;
+      }
+    }
+    return void 0;
+  }
+  function mapGender(word) {
+    if (word === void 0) {
+      return "unknown";
+    }
+    const lower = word.toLowerCase();
+    if (lower === "men" || lower === "mens") {
+      return "Men";
+    }
+    if (lower === "women" || lower === "womens") {
+      return "Women";
+    }
+    return "unknown";
+  }
+  function mapStroke(lowerLabel, isRelay) {
+    if (/\bdiving\b|\bdiver\b|\bdive\b/.test(lowerLabel)) {
+      return "Diving";
+    }
+    if (isRelay) {
+      if (/\bmedley\b/.test(lowerLabel)) {
+        return "Medley Relay";
+      }
+      if (/\bfree(style)?\b/.test(lowerLabel)) {
+        return "Freestyle Relay";
+      }
+      return "unknown";
+    }
+    if (/\bindividual medley\b|\bim\b/.test(lowerLabel)) {
+      return "Individual Medley";
+    }
+    if (/\bbutterfly\b|\bfly\b/.test(lowerLabel)) {
+      return "Butterfly";
+    }
+    if (/\bbackstroke\b|\bback\b/.test(lowerLabel)) {
+      return "Backstroke";
+    }
+    if (/\bbreaststroke\b|\bbreast\b/.test(lowerLabel)) {
+      return "Breaststroke";
+    }
+    if (/\bfreestyle\b|\bfree\b/.test(lowerLabel)) {
+      return "Freestyle";
+    }
+    return "unknown";
+  }
+  function readPoints(raw, event, rowIndex, warnings) {
+    const token = raw.trim();
+    if (token.length === 0) {
+      return {};
+    }
+    if (/^[-‐‑‒–—―]+$/.test(token)) {
+      return {};
+    }
+    if (/^\d+(\.\d+)?$/.test(token)) {
+      const value = Number.parseFloat(token);
+      return { points: value };
+    }
+    warnings.push({
+      code: "unrecognized-points-token",
+      message: `Points cell ${JSON.stringify(token)} is not a non-negative number; no points recorded.`,
+      eventId: event.eventId,
+      rowIndex,
+      raw: token
+    });
+    return { rawPointsToken: token };
+  }
+  function readTime(raw, event, rowIndex, warnings) {
+    const token = raw.trim();
+    if (token.length === 0) {
+      return {};
+    }
+    const exhibition = /^x/i.test(token) && TIME_TOKEN.test(token.slice(1));
+    const body = exhibition ? token.slice(1) : token;
+    if (event.stroke === "Diving") {
+      warnings.push({
+        code: "diving-score-not-a-time",
+        message: `Diving result ${JSON.stringify(token)} is a judged score, not a time; preserved verbatim and not stored as finalTime.`,
+        eventId: event.eventId,
+        rowIndex,
+        raw: token
+      });
+      return {
+        rawTimeToken: token,
+        ...exhibition ? { flags: { exhibition: true } } : {}
+      };
+    }
+    if (TIME_TOKEN.test(body)) {
+      return {
+        finalTime: body,
+        ...exhibition ? { flags: { exhibition: true } } : {}
+      };
+    }
+    const marker = RESULT_MARKERS[body.toLowerCase()];
+    if (marker !== void 0) {
+      return {
+        rawTimeToken: token,
+        flags: exhibition ? { ...marker, exhibition: true } : marker
+      };
+    }
+    warnings.push({
+      code: "unrecognized-time-token",
+      message: `Time cell ${JSON.stringify(token)} is neither a time nor a known marker (${Object.keys(RESULT_MARKERS).join(", ").toUpperCase()}); preserved verbatim, no time recorded.`,
+      eventId: event.eventId,
+      rowIndex,
+      raw: token
+    });
+    return { rawTimeToken: token };
+  }
+  var SWIMS_NO_PLACE_TOKENS = /* @__PURE__ */ new Set(["", "\u2013", "\u2014", "-", "--", "---"]);
+  var ORDINAL_PLACE = /^(\d+)\s*(?:st|nd|rd|th)$/i;
+  function readOrdinalPlace(raw, event, rowIndex, warnings) {
+    const token = raw.trim();
+    if (SWIMS_NO_PLACE_TOKENS.has(token)) {
+      return void 0;
+    }
+    const ordinal = ORDINAL_PLACE.exec(token);
+    const digits = ordinal !== null ? ordinal[1] : /^\d+$/.test(token) ? token : void 0;
+    if (digits !== void 0) {
+      const value = Number.parseInt(digits, 10);
+      if (value > 0) {
+        return value;
+      }
+    }
+    warnings.push({
+      code: "unrecognized-place-token",
+      message: `Place cell ${JSON.stringify(token)} is neither an ordinal ("1st", "17th"), a positive integer, nor a known "no place" marker; no place recorded.`,
+      eventId: event.eventId,
+      rowIndex,
+      raw: token
+    });
+    return void 0;
+  }
+  function readFlagsCell(cellHtml) {
+    let relayLeadoff = false;
+    const cutStandards = [];
+    for (const span of findElementSpans(cellHtml, "span")) {
+      const startTag = startTagOf(span.html);
+      const title = readAttribute(startTag, "title");
+      if (title !== void 0 && title.trim().toLowerCase() === "leadoff") {
+        relayLeadoff = true;
+        continue;
+      }
+      if (!classTokens(startTag).includes("c-label--royal")) {
+        continue;
+      }
+      const label = htmlToText(span.inner);
+      if (label.length > 0) {
+        cutStandards.push({ label, ...title === void 0 ? {} : { title } });
+      }
+    }
+    return { relayLeadoff, cutStandards };
+  }
+
+  // packages/swimcloud/src/parseCells.ts
   function normalizeHeader(label) {
     return collapseWhitespace(label.toLowerCase().replace(/[^a-z0-9]+/g, " "));
   }
   function findColumn(headers, synonyms) {
-    for (let index = 0; index < headers.length; index += 1) {
-      if (synonyms.includes(headers[index])) {
+    for (const [index, header] of headers.entries()) {
+      if (synonyms.includes(header)) {
         return index;
       }
     }
@@ -1111,11 +1386,52 @@
     if (index < 0 || index >= cells.length) {
       return "";
     }
-    return cells[index];
+    return itemAt(cells, index);
   }
   function textAt(cells, index) {
     return htmlToText(cellAt(cells, index));
   }
+  var CELL_START_TAG = /<(?:td|th)\b[^>]*>/gi;
+  function readHeaderColumns(headerRowHtml) {
+    const cells = extractRowCells(headerRowHtml);
+    const spans = [];
+    CELL_START_TAG.lastIndex = 0;
+    for (let match = CELL_START_TAG.exec(headerRowHtml); match !== null; match = CELL_START_TAG.exec(headerRowHtml)) {
+      const raw = readAttribute(match[0], "colspan");
+      const parsed = raw === void 0 ? Number.NaN : Number.parseInt(raw, 10);
+      spans.push(Number.isInteger(parsed) && parsed > 0 ? parsed : 1);
+    }
+    CELL_START_TAG.lastIndex = 0;
+    const columns = [];
+    let start = 0;
+    cells.forEach((cell, index) => {
+      const span = spans[index] ?? 1;
+      columns.push({ label: normalizeHeader(htmlToText(cell)), start, span });
+      start += span;
+    });
+    return columns;
+  }
+  function columnFor(columns, synonyms) {
+    return columns.find((column) => synonyms.includes(column.label));
+  }
+  var SWIMS_EVENT_HEADERS = ["event"];
+  var SWIMS_TIME_HEADERS = ["time"];
+  var SWIMS_PLACE_HEADERS = ["place"];
+  var SWIMS_FLAGS_HEADERS = ["flags"];
+  var SWIMS_POINTS_HEADERS = ["pts", "points"];
+  var SWIMS_SCORE_HEADERS = ["score"];
+  function subjectCellIndex(cells, column) {
+    const end = Math.min(column.start + column.span, cells.length);
+    for (let index = column.start; index < end; index += 1) {
+      const cell = cells[index];
+      if (cell !== void 0 && swimmerIdFromCell(cell) !== void 0) {
+        return index;
+      }
+    }
+    return Math.max(column.start, end - 1);
+  }
+
+  // packages/swimcloud/src/rosterPage.ts
   var CLASS_YEARS = {
     fr: "FR",
     freshman: "FR",
@@ -1129,16 +1445,6 @@
     gr: "GR",
     grad: "GR",
     graduate: "GR"
-  };
-  var TIME_TOKEN = /^(?:\d{1,2}:){0,2}\d{1,2}\.\d{2}$/;
-  var RESULT_MARKERS = {
-    dq: { disqualified: true },
-    ns: { noShow: true },
-    scr: { scratched: true },
-    // Declared False Start: the athlete did not swim. Treated as a scratch, which
-    // is the state it shares — deliberately not folded into `disqualified`, since
-    // Rule 7 treats a DQ and a non-swim differently.
-    dfs: { scratched: true }
   };
   var ROSTER_EMPTY_STATE = /no\s+rosters?\s+found/i;
   function parseTeamRosterHtml(html, context, options = {}) {
@@ -1274,7 +1580,7 @@
       if (headerIndex < 0) {
         continue;
       }
-      const headerCells = extractRowCells(rows[headerIndex]).map(
+      const headerCells = extractRowCells(itemAt(rows, headerIndex)).map(
         (cell) => normalizeHeader(htmlToText(cell))
       );
       const nameColumn = findColumn(headerCells, NAME_HEADERS);
@@ -1316,7 +1622,7 @@
     if (match === null) {
       return {};
     }
-    let rest = match[1].trim();
+    let rest = regexGroup(match, 1).trim();
     let gender;
     const trailing = /\s*(men|women|mens|womens|mixed|boys|girls)$/i.exec(rest);
     if (trailing !== null) {
@@ -1450,21 +1756,12 @@
     if (title !== void 0) {
       const text = htmlToText(title.inner);
       const match = ROSTER_TITLE.exec(text);
-      const name = (match === null ? text : match[1]).trim();
+      const name = (match === null ? text : regexGroup(match, 1)).trim();
       if (name.length > 0) {
         return name;
       }
     }
     return firstHeadingText(cleaned);
-  }
-  function firstHeadingText(html) {
-    const headings = findHeadings(html);
-    for (const heading of headings) {
-      if (heading.level === 1 && heading.text.length > 0) {
-        return heading.text;
-      }
-    }
-    return void 0;
   }
   function teamIdFromSourceUrl(sourceUrl) {
     const classification = classifySwimCloudUrl(sourceUrl);
@@ -1477,451 +1774,13 @@
     }
     return { mismatch: resource.kind };
   }
-  function swimmerIdFromCell(cellHtml) {
-    for (const href of extractHrefs(cellHtml)) {
-      const classification = classifySwimCloudUrl(href);
-      if (classification.outcome !== "fetchable") {
-        continue;
-      }
-      const resource = classification.resource;
-      if (resource.kind === "swimmer" || resource.kind === "meetSwimmer") {
-        return resource.swimmerId;
-      }
-    }
-    return void 0;
-  }
-  function teamIdFromCell(cellHtml) {
-    for (const href of extractHrefs(cellHtml)) {
-      const classification = classifySwimCloudUrl(href);
-      if (classification.outcome !== "fetchable") {
-        continue;
-      }
-      const resource = classification.resource;
-      if (resource.kind === "team" || resource.kind === "meetTeam" || resource.kind === "meetTeamSwims") {
-        return resource.teamId;
-      }
-    }
-    return void 0;
-  }
-  function mapGender(word) {
-    if (word === void 0) {
-      return "unknown";
-    }
-    const lower = word.toLowerCase();
-    if (lower === "men" || lower === "mens") {
-      return "Men";
-    }
-    if (lower === "women" || lower === "womens") {
-      return "Women";
-    }
-    return "unknown";
-  }
-  function mapStroke(lowerLabel, isRelay) {
-    if (/\bdiving\b|\bdiver\b|\bdive\b/.test(lowerLabel)) {
-      return "Diving";
-    }
-    if (isRelay) {
-      if (/\bmedley\b/.test(lowerLabel)) {
-        return "Medley Relay";
-      }
-      if (/\bfree(style)?\b/.test(lowerLabel)) {
-        return "Freestyle Relay";
-      }
-      return "unknown";
-    }
-    if (/\bindividual medley\b|\bim\b/.test(lowerLabel)) {
-      return "Individual Medley";
-    }
-    if (/\bbutterfly\b|\bfly\b/.test(lowerLabel)) {
-      return "Butterfly";
-    }
-    if (/\bbackstroke\b|\bback\b/.test(lowerLabel)) {
-      return "Backstroke";
-    }
-    if (/\bbreaststroke\b|\bbreast\b/.test(lowerLabel)) {
-      return "Breaststroke";
-    }
-    if (/\bfreestyle\b|\bfree\b/.test(lowerLabel)) {
-      return "Freestyle";
-    }
-    return "unknown";
-  }
-  function readPoints(raw, event, rowIndex, warnings) {
-    const token = raw.trim();
-    if (token.length === 0) {
-      return {};
-    }
-    if (/^[-‐‑‒–—―]+$/.test(token)) {
-      return {};
-    }
-    if (/^\d+(\.\d+)?$/.test(token)) {
-      const value = Number.parseFloat(token);
-      return { points: value };
-    }
-    warnings.push({
-      code: "unrecognized-points-token",
-      message: `Points cell ${JSON.stringify(token)} is not a non-negative number; no points recorded.`,
-      eventId: event.eventId,
-      rowIndex,
-      raw: token
-    });
-    return { rawPointsToken: token };
-  }
-  function readTime(raw, event, rowIndex, warnings) {
-    const token = raw.trim();
-    if (token.length === 0) {
-      return {};
-    }
-    const exhibition = /^x/i.test(token) && TIME_TOKEN.test(token.slice(1));
-    const body = exhibition ? token.slice(1) : token;
-    if (event.stroke === "Diving") {
-      warnings.push({
-        code: "diving-score-not-a-time",
-        message: `Diving result ${JSON.stringify(token)} is a judged score, not a time; preserved verbatim and not stored as finalTime.`,
-        eventId: event.eventId,
-        rowIndex,
-        raw: token
-      });
-      return {
-        rawTimeToken: token,
-        ...exhibition ? { flags: { exhibition: true } } : {}
-      };
-    }
-    if (TIME_TOKEN.test(body)) {
-      return {
-        finalTime: body,
-        ...exhibition ? { flags: { exhibition: true } } : {}
-      };
-    }
-    const marker = RESULT_MARKERS[body.toLowerCase()];
-    if (marker !== void 0) {
-      return {
-        rawTimeToken: token,
-        flags: exhibition ? { ...marker, exhibition: true } : marker
-      };
-    }
-    warnings.push({
-      code: "unrecognized-time-token",
-      message: `Time cell ${JSON.stringify(token)} is neither a time nor a known marker (${Object.keys(RESULT_MARKERS).join(", ").toUpperCase()}); preserved verbatim, no time recorded.`,
-      eventId: event.eventId,
-      rowIndex,
-      raw: token
-    });
-    return { rawTimeToken: token };
-  }
-  function buildTeamMeetSwimsPayload(fields) {
-    const team = fields.teamId !== void 0 && fields.teamName !== void 0 && fields.gender !== "unknown" ? { swimCloudTeamId: fields.teamId, gender: fields.gender, name: fields.teamName } : void 0;
+
+  // packages/swimcloud/src/meetPageFields.ts
+  function missingMeetNameWarning() {
     return {
-      swimCloudMeetId: fields.meetId,
-      ...fields.meetName === void 0 ? {} : { meetName: fields.meetName },
-      meet: fields.meet,
-      ...fields.teamId === void 0 ? {} : { swimCloudTeamId: fields.teamId },
-      ...fields.teamName === void 0 ? {} : { teamName: fields.teamName },
-      ...team === void 0 ? {} : { team },
-      gender: fields.gender,
-      ...fields.entryCount === void 0 ? {} : { entryCount: fields.entryCount },
-      swims: fields.swims,
-      events: fields.events,
-      rowCount: fields.rowCount,
-      ...fields.pagination === void 0 ? {} : { pagination: fields.pagination }
+      code: "meet-name-missing",
+      message: 'The page prints no meet name (no meet-name element and no level-1 heading). meet.name is the empty string, which means "not stated".'
     };
-  }
-  function parseTeamMeetSwimsHtml(html, context, options = {}) {
-    const warnings = [];
-    const confidence = SWIMCLOUD_REAL_CAPTURE_CONFIDENCE;
-    if (collapseWhitespace(html).length === 0) {
-      return fail(context, "empty-input", "The captured HTML is empty.", warnings, confidence);
-    }
-    const fromUrl = meetScopeFromSourceUrl(context.sourceUrl);
-    if (fromUrl.mismatch !== void 0) {
-      return fail(
-        context,
-        "source-url-mismatch",
-        `Capture URL ${JSON.stringify(context.sourceUrl)} names a ${fromUrl.mismatch} resource, not a meet or a team within one.`,
-        warnings,
-        confidence
-      );
-    }
-    const meetId = options.meetId ?? fromUrl.meetId;
-    if (meetId === void 0) {
-      return fail(
-        context,
-        "source-url-mismatch",
-        `No meet id could be resolved: capture URL ${JSON.stringify(context.sourceUrl)} does not classify as a meet page and no meetId option was supplied.`,
-        warnings,
-        confidence
-      );
-    }
-    const teamId = options.teamId ?? fromUrl.teamId;
-    const cleaned = stripNonContent(html);
-    const tables = findTables(cleaned);
-    if (tables.length === 0) {
-      return fail(
-        context,
-        "expected-table-missing",
-        "No <table> element was found; a results page is expected to contain at least one.",
-        warnings,
-        confidence
-      );
-    }
-    const located = locateSwimsTable(tables);
-    if (located === null) {
-      return fail(
-        context,
-        "expected-header-missing",
-        `None of the ${tables.length} table(s) on the page has both an "Event" and a "Time" column, which is what identifies a results table on a SwimCloud results page.`,
-        warnings,
-        confidence
-      );
-    }
-    const gender = options.gender ?? readActiveGenderWord(cleaned);
-    const meetName = elementTextById(cleaned, "meet-name") ?? firstHeadingText(cleaned);
-    const meetCourse = readPrintedCourse(cleaned) ?? options.meetCourse;
-    const dates = readMeetDateRange(cleaned, warnings);
-    const teamName = teamId === void 0 ? void 0 : teamNameForId(cleaned, teamId);
-    const entryCount = readSplashStat(cleaned, "entries");
-    const rows = readSwimRows(located, {
-      meetId,
-      gender,
-      meetCourse,
-      fallbackTeamId: teamId,
-      fallbackTeamName: teamName,
-      warnings
-    });
-    const events = [];
-    for (const swim of rows.swims) {
-      if (!events.some((event) => event.eventId === swim.event.eventId)) {
-        events.push(swim.event);
-      }
-    }
-    const meet = {
-      swimCloudMeetId: meetId,
-      name: meetName ?? "",
-      format: options.meetFormat ?? "unknown",
-      ruleset: options.meetRuleset ?? "unknown",
-      course: meetCourse ?? "unknown",
-      ...dates.startDate === void 0 ? {} : { startDate: dates.startDate },
-      ...dates.endDate === void 0 ? {} : { endDate: dates.endDate }
-    };
-    const pagination = readPagination(cleaned, fromUrl.page);
-    return succeed(
-      context,
-      buildTeamMeetSwimsPayload({
-        meetId,
-        meetName,
-        meet,
-        teamId,
-        teamName,
-        gender,
-        entryCount,
-        swims: rows.swims,
-        events,
-        rowCount: rows.rowCount,
-        pagination
-      }),
-      warnings,
-      confidence
-    );
-  }
-  function locateCardTable(html, cardTitle) {
-    const heading = findElementSpans(html, "h2").find(
-      (h) => classTokens(startTagOf(h.html)).includes("c-title") && htmlToText(h.inner).trim() === cardTitle
-    );
-    if (heading === void 0) {
-      return null;
-    }
-    const tablesAfter = findTables(html).filter((t) => t.start > heading.start);
-    if (tablesAfter.length === 0) {
-      return null;
-    }
-    return tablesAfter.reduce((closest, t) => t.start < closest.start ? t : closest);
-  }
-  function extractTeamStandingsRows(tableHtml) {
-    const standings = [];
-    for (const row of extractTableRows(tableHtml)) {
-      if (isHeaderRow(row)) {
-        continue;
-      }
-      const cells = extractRowCells(row);
-      if (cells.length < 3) {
-        continue;
-      }
-      const linkCell = cells[1] ?? "";
-      const teamHref = extractHrefs(linkCell).find((href) => /\/team\/\d+\/?/.test(href));
-      if (teamHref === void 0) {
-        continue;
-      }
-      const idMatch = /\/team\/(\d+)\//.exec(teamHref);
-      if (idMatch === null) {
-        continue;
-      }
-      const teamName = htmlToText(linkCell).trim();
-      if (teamName.length === 0) {
-        continue;
-      }
-      const rankText = htmlToText(cells[0] ?? "").trim();
-      const scoreText = htmlToText(cells[2] ?? "").trim();
-      const rank = /^\d+$/.test(rankText) ? Number.parseInt(rankText, 10) : void 0;
-      const score = /^[\d.]+$/.test(scoreText) ? Number.parseFloat(scoreText) : void 0;
-      standings.push({
-        swimCloudTeamId: idMatch[1],
-        teamName,
-        ...rank === void 0 ? {} : { rank },
-        ...score === void 0 ? {} : { score }
-      });
-    }
-    return standings;
-  }
-  function parseTeamStandingsPage(html, context, options, cardTitle, discoveryCompleteness) {
-    const warnings = [];
-    const confidence = SWIMCLOUD_REAL_CAPTURE_CONFIDENCE;
-    if (collapseWhitespace(html).length === 0) {
-      return fail(context, "empty-input", "The captured HTML is empty.", warnings, confidence);
-    }
-    const fromUrl = meetScopeFromSourceUrl(context.sourceUrl);
-    if (fromUrl.mismatch !== void 0) {
-      return fail(
-        context,
-        "source-url-mismatch",
-        `Capture URL ${JSON.stringify(context.sourceUrl)} names a ${fromUrl.mismatch} resource, not a meet.`,
-        warnings,
-        confidence
-      );
-    }
-    const meetId = options.meetId ?? fromUrl.meetId;
-    if (meetId === void 0) {
-      return fail(
-        context,
-        "source-url-mismatch",
-        `No meet id could be resolved: capture URL ${JSON.stringify(context.sourceUrl)} does not classify as a meet page and no meetId option was supplied.`,
-        warnings,
-        confidence
-      );
-    }
-    const cleaned = stripNonContent(html);
-    const table = locateCardTable(cleaned, cardTitle);
-    if (table === null) {
-      return fail(
-        context,
-        "expected-table-missing",
-        `No "${cardTitle}" card table was found on this page.`,
-        warnings,
-        confidence
-      );
-    }
-    const teams = extractTeamStandingsRows(table.html);
-    const gender = readActiveGenderWord(cleaned);
-    const meetName = elementTextById(cleaned, "meet-name") ?? firstHeadingText(cleaned);
-    return succeed(
-      context,
-      {
-        swimCloudMeetId: meetId,
-        ...meetName === void 0 ? {} : { meetName },
-        gender,
-        teams,
-        discoveryCompleteness
-      },
-      warnings,
-      confidence
-    );
-  }
-  function parseMeetTeamsHtml(html, context, options = {}) {
-    return parseTeamStandingsPage(html, context, options, "Teams", "unproven");
-  }
-  function parseMeetTopTeamsHtml(html, context, options = {}) {
-    return parseTeamStandingsPage(html, context, options, "Teams", "verified-complete-for-this-capture");
-  }
-  var EVENT_INDEX_ITEM_MARKER = /\bjs-event-item\b/;
-  var EVENT_INDEX_ANCHOR = /<a\b([^>]*)>([\s\S]*?)<\/a>/g;
-  var EVENT_INDEX_HREF = /href="\/results\/(\d+)\/event\/(\d+)\/?"/;
-  var EVENT_INDEX_LABEL = /class="c-events__link-body"\s+title="([^"]*)"/;
-  var EVENT_INDEX_STATUS = /class="c-events__link-start"[^>]*title="([^"]*)"/;
-  var EVENT_INDEX_NUMBER = /class="c-event-status[^"]*"\s*>([\s\S]*?)<\/span>/;
-  function readMeetEventIndex(html, meetId) {
-    const entries = [];
-    const seen = /* @__PURE__ */ new Set();
-    const cleaned = stripNonContent(html);
-    for (const match of cleaned.matchAll(EVENT_INDEX_ANCHOR)) {
-      const attrs = match[1] ?? "";
-      const inner = match[2] ?? "";
-      if (!EVENT_INDEX_ITEM_MARKER.test(attrs)) {
-        continue;
-      }
-      const href = EVENT_INDEX_HREF.exec(attrs);
-      if (href === null || href[1] !== meetId) {
-        continue;
-      }
-      const eventRef = href[2];
-      if (seen.has(eventRef)) {
-        continue;
-      }
-      seen.add(eventRef);
-      const labelMatch = EVENT_INDEX_LABEL.exec(inner);
-      const statusMatch = EVENT_INDEX_STATUS.exec(inner);
-      const numberMatch = EVENT_INDEX_NUMBER.exec(inner);
-      const label = labelMatch === null ? "" : collapseWhitespace(decodeHtmlEntities(labelMatch[1]));
-      const status = statusMatch === null ? void 0 : collapseWhitespace(decodeHtmlEntities(statusMatch[1]));
-      const printedNumber = numberMatch === null ? void 0 : collapseWhitespace(htmlToText(numberMatch[1]));
-      entries.push({
-        eventRef,
-        label,
-        ...printedNumber === void 0 || printedNumber.length === 0 ? {} : { printedNumber },
-        ...status === void 0 || status.length === 0 ? {} : { status }
-      });
-    }
-    return entries;
-  }
-  function escapeRegExp(text) {
-    return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-  }
-  function startTagOf(elementHtml) {
-    const end = elementHtml.indexOf(">");
-    return end < 0 ? elementHtml : elementHtml.slice(0, end + 1);
-  }
-  function readAttribute(tagHtml, name) {
-    const pattern = new RegExp(
-      `(?:^|\\s)${escapeRegExp(name)}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s"'>]+))`,
-      "i"
-    );
-    const match = pattern.exec(tagHtml);
-    if (match === null) {
-      return void 0;
-    }
-    return decodeHtmlEntities(match[2] ?? match[3] ?? match[4] ?? "");
-  }
-  function classTokens(tagHtml) {
-    const value = readAttribute(tagHtml, "class");
-    return value === void 0 ? [] : value.split(/\s+/).filter((token) => token.length > 0);
-  }
-  function elementTextById(html, id) {
-    const pattern = new RegExp(
-      `<([A-Za-z][A-Za-z0-9]*)\\b[^>]*\\sid\\s*=\\s*["']?${escapeRegExp(id)}["'\\s>]`,
-      "i"
-    );
-    const match = pattern.exec(html);
-    if (match === null) {
-      return void 0;
-    }
-    const tag = match[1].toLowerCase();
-    const startEnd = html.indexOf(">", match.index);
-    if (startEnd < 0) {
-      return void 0;
-    }
-    const close = html.toLowerCase().indexOf(`</${tag}`, startEnd);
-    if (close < 0) {
-      return void 0;
-    }
-    const text = htmlToText(html.slice(startEnd + 1, close));
-    return text.length === 0 ? void 0 : text;
-  }
-  function readQueryParam(href, name) {
-    try {
-      const url = new URL(href, `https://${SWIMCLOUD_CANONICAL_HOST}`);
-      const value = url.searchParams.get(name);
-      return value === null || value.length === 0 ? void 0 : value;
-    } catch {
-      return void 0;
-    }
   }
   function meetScopeFromSourceUrl(sourceUrl) {
     const classification = classifySwimCloudUrl(sourceUrl);
@@ -2014,18 +1873,18 @@
     }
     const cross = DATE_CROSS_MONTH.exec(text);
     if (cross !== null) {
-      const year = Number.parseInt(cross[5], 10);
-      const startDate = isoDate(year, cross[1], Number.parseInt(cross[2], 10));
-      const endDate = isoDate(year, cross[3], Number.parseInt(cross[4], 10));
+      const year = Number.parseInt(regexGroup(cross, 5), 10);
+      const startDate = isoDate(year, regexGroup(cross, 1), Number.parseInt(regexGroup(cross, 2), 10));
+      const endDate = isoDate(year, regexGroup(cross, 3), Number.parseInt(regexGroup(cross, 4), 10));
       if (startDate !== void 0 && endDate !== void 0) {
         return { startDate, endDate };
       }
     }
     const same = DATE_SAME_MONTH.exec(text);
     if (same !== null) {
-      const year = Number.parseInt(same[4], 10);
-      const startDate = isoDate(year, same[1], Number.parseInt(same[2], 10));
-      const endDate = isoDate(year, same[1], Number.parseInt(same[3], 10));
+      const year = Number.parseInt(regexGroup(same, 4), 10);
+      const startDate = isoDate(year, regexGroup(same, 1), Number.parseInt(regexGroup(same, 2), 10));
+      const endDate = isoDate(year, regexGroup(same, 1), Number.parseInt(regexGroup(same, 3), 10));
       if (startDate !== void 0 && endDate !== void 0) {
         return { startDate, endDate };
       }
@@ -2033,9 +1892,9 @@
     const single = DATE_SINGLE.exec(text);
     if (single !== null) {
       const startDate = isoDate(
-        Number.parseInt(single[3], 10),
-        single[1],
-        Number.parseInt(single[2], 10)
+        Number.parseInt(regexGroup(single, 3), 10),
+        regexGroup(single, 1),
+        Number.parseInt(regexGroup(single, 2), 10)
       );
       if (startDate !== void 0) {
         return { startDate };
@@ -2047,6 +1906,123 @@
       raw: text
     });
     return {};
+  }
+
+  // packages/swimcloud/src/teamMeetSwimsPage.ts
+  function buildTeamMeetSwimsPayload(fields) {
+    const team = fields.teamId !== void 0 && fields.teamName !== void 0 && fields.gender !== "unknown" ? { swimCloudTeamId: fields.teamId, gender: fields.gender, name: fields.teamName } : void 0;
+    return {
+      swimCloudMeetId: fields.meetId,
+      ...fields.meetName === void 0 ? {} : { meetName: fields.meetName },
+      meet: fields.meet,
+      ...fields.teamId === void 0 ? {} : { swimCloudTeamId: fields.teamId },
+      ...fields.teamName === void 0 ? {} : { teamName: fields.teamName },
+      ...team === void 0 ? {} : { team },
+      gender: fields.gender,
+      ...fields.entryCount === void 0 ? {} : { entryCount: fields.entryCount },
+      swims: fields.swims,
+      events: fields.events,
+      rowCount: fields.rowCount,
+      ...fields.pagination === void 0 ? {} : { pagination: fields.pagination }
+    };
+  }
+  function parseTeamMeetSwimsHtml(html, context, options = {}) {
+    const warnings = [];
+    const confidence = SWIMCLOUD_REAL_CAPTURE_CONFIDENCE;
+    if (collapseWhitespace(html).length === 0) {
+      return fail(context, "empty-input", "The captured HTML is empty.", warnings, confidence);
+    }
+    const fromUrl = meetScopeFromSourceUrl(context.sourceUrl);
+    if (fromUrl.mismatch !== void 0) {
+      return fail(
+        context,
+        "source-url-mismatch",
+        `Capture URL ${JSON.stringify(context.sourceUrl)} names a ${fromUrl.mismatch} resource, not a meet or a team within one.`,
+        warnings,
+        confidence
+      );
+    }
+    const meetId = options.meetId ?? fromUrl.meetId;
+    if (meetId === void 0) {
+      return fail(
+        context,
+        "source-url-mismatch",
+        `No meet id could be resolved: capture URL ${JSON.stringify(context.sourceUrl)} does not classify as a meet page and no meetId option was supplied.`,
+        warnings,
+        confidence
+      );
+    }
+    const teamId = options.teamId ?? fromUrl.teamId;
+    const cleaned = stripNonContent(html);
+    const tables = findTables(cleaned);
+    if (tables.length === 0) {
+      return fail(
+        context,
+        "expected-table-missing",
+        "No <table> element was found; a results page is expected to contain at least one.",
+        warnings,
+        confidence
+      );
+    }
+    const located = locateSwimsTable(tables);
+    if (located === null) {
+      return fail(
+        context,
+        "expected-header-missing",
+        `None of the ${tables.length} table(s) on the page has both an "Event" and a "Time" column, which is what identifies a results table on a SwimCloud results page.`,
+        warnings,
+        confidence
+      );
+    }
+    const gender = options.gender ?? readActiveGenderWord(cleaned);
+    const meetName = elementTextById(cleaned, "meet-name") ?? firstHeadingText(cleaned);
+    const meetCourse = readPrintedCourse(cleaned) ?? options.meetCourse;
+    const dates = readMeetDateRange(cleaned, warnings);
+    const teamName = teamId === void 0 ? void 0 : teamNameForId(cleaned, teamId);
+    const entryCount = readSplashStat(cleaned, "entries");
+    const rows = readSwimRows(located, {
+      meetId,
+      gender,
+      meetCourse,
+      fallbackTeamId: teamId,
+      fallbackTeamName: teamName,
+      warnings
+    });
+    const events = [];
+    for (const swim of rows.swims) {
+      if (!events.some((event) => event.eventId === swim.event.eventId)) {
+        events.push(swim.event);
+      }
+    }
+    if (meetName === void 0) warnings.push(missingMeetNameWarning());
+    const meet = {
+      swimCloudMeetId: meetId,
+      name: meetName ?? "",
+      format: options.meetFormat ?? "unknown",
+      ruleset: options.meetRuleset ?? "unknown",
+      course: meetCourse ?? "unknown",
+      ...dates.startDate === void 0 ? {} : { startDate: dates.startDate },
+      ...dates.endDate === void 0 ? {} : { endDate: dates.endDate }
+    };
+    const pagination = readPagination(cleaned, fromUrl.page);
+    return succeed(
+      context,
+      buildTeamMeetSwimsPayload({
+        meetId,
+        meetName,
+        meet,
+        teamId,
+        teamName,
+        gender,
+        entryCount,
+        swims: rows.swims,
+        events,
+        rowCount: rows.rowCount,
+        pagination
+      }),
+      warnings,
+      confidence
+    );
   }
   function teamNameForId(html, teamId) {
     for (const anchor of findElementSpans(html, "a")) {
@@ -2133,35 +2109,6 @@
       ...nextPageHref === void 0 ? {} : { nextPageHref }
     };
   }
-  var CELL_START_TAG = /<(?:td|th)\b[^>]*>/gi;
-  function readHeaderColumns(headerRowHtml) {
-    const cells = extractRowCells(headerRowHtml);
-    const spans = [];
-    CELL_START_TAG.lastIndex = 0;
-    for (let match = CELL_START_TAG.exec(headerRowHtml); match !== null; match = CELL_START_TAG.exec(headerRowHtml)) {
-      const raw = readAttribute(match[0], "colspan");
-      const parsed = raw === void 0 ? Number.NaN : Number.parseInt(raw, 10);
-      spans.push(Number.isInteger(parsed) && parsed > 0 ? parsed : 1);
-    }
-    CELL_START_TAG.lastIndex = 0;
-    const columns = [];
-    let start = 0;
-    cells.forEach((cell, index) => {
-      const span = spans[index] ?? 1;
-      columns.push({ label: normalizeHeader(htmlToText(cell)), start, span });
-      start += span;
-    });
-    return columns;
-  }
-  function columnFor(columns, synonyms) {
-    return columns.find((column) => synonyms.includes(column.label));
-  }
-  var SWIMS_EVENT_HEADERS = ["event"];
-  var SWIMS_TIME_HEADERS = ["time"];
-  var SWIMS_PLACE_HEADERS = ["place"];
-  var SWIMS_FLAGS_HEADERS = ["flags"];
-  var SWIMS_POINTS_HEADERS = ["pts", "points"];
-  var SWIMS_SCORE_HEADERS = ["score"];
   function locateSwimsTable(tables) {
     for (const table of tables) {
       const rows = extractTableRows(table.html);
@@ -2169,7 +2116,7 @@
       if (headerIndex < 0) {
         continue;
       }
-      const columns = readHeaderColumns(rows[headerIndex]);
+      const columns = readHeaderColumns(itemAt(rows, headerIndex));
       const name = columnFor(columns, NAME_HEADERS);
       const event = columnFor(columns, SWIMS_EVENT_HEADERS);
       const time = columnFor(columns, SWIMS_TIME_HEADERS);
@@ -2195,15 +2142,6 @@
     }
     return null;
   }
-  function subjectCellIndex(cells, column) {
-    const end = Math.min(column.start + column.span, cells.length);
-    for (let index = column.start; index < end; index += 1) {
-      if (swimmerIdFromCell(cells[index]) !== void 0) {
-        return index;
-      }
-    }
-    return Math.max(column.start, end - 1);
-  }
   var SWIMS_EVENT_LABEL = /^(\d{1,4})\s+([A-Za-z])\s+(.+)$/;
   var COURSE_LETTERS = {
     y: "SCY",
@@ -2217,17 +2155,17 @@
     if (match === null) {
       const loose = /\b(\d{1,4})\b/.exec(label);
       return {
-        ...loose === null ? {} : { distance: Number.parseInt(loose[1], 10) },
+        ...loose === null ? {} : { distance: Number.parseInt(regexGroup(loose, 1), 10) },
         course: "unknown",
         stroke: mapStroke(lower, isRelay),
         isRelay,
         matchedShape: false
       };
     }
-    const courseLetter = match[2];
+    const courseLetter = regexGroup(match, 2);
     const course = COURSE_LETTERS[courseLetter.toLowerCase()] ?? "unknown";
     return {
-      distance: Number.parseInt(match[1], 10),
+      distance: Number.parseInt(regexGroup(match, 1), 10),
       course,
       stroke: mapStroke(lower, isRelay),
       isRelay,
@@ -2251,50 +2189,6 @@
       };
     }
     return void 0;
-  }
-  var SWIMS_NO_PLACE_TOKENS = /* @__PURE__ */ new Set(["", "\u2013", "\u2014", "-", "--", "---"]);
-  var ORDINAL_PLACE = /^(\d+)\s*(?:st|nd|rd|th)$/i;
-  function readOrdinalPlace(raw, event, rowIndex, warnings) {
-    const token = raw.trim();
-    if (SWIMS_NO_PLACE_TOKENS.has(token)) {
-      return void 0;
-    }
-    const ordinal = ORDINAL_PLACE.exec(token);
-    const digits = ordinal !== null ? ordinal[1] : /^\d+$/.test(token) ? token : void 0;
-    if (digits !== void 0) {
-      const value = Number.parseInt(digits, 10);
-      if (value > 0) {
-        return value;
-      }
-    }
-    warnings.push({
-      code: "unrecognized-place-token",
-      message: `Place cell ${JSON.stringify(token)} is neither an ordinal ("1st", "17th"), a positive integer, nor a known "no place" marker; no place recorded.`,
-      eventId: event.eventId,
-      rowIndex,
-      raw: token
-    });
-    return void 0;
-  }
-  function readFlagsCell(cellHtml) {
-    let relayLeadoff = false;
-    const cutStandards = [];
-    for (const span of findElementSpans(cellHtml, "span")) {
-      const startTag = startTagOf(span.html);
-      const title = readAttribute(startTag, "title");
-      if (title !== void 0 && title.trim().toLowerCase() === "leadoff") {
-        relayLeadoff = true;
-        continue;
-      }
-      if (!classTokens(startTag).includes("c-label--royal")) {
-        continue;
-      }
-      const label = htmlToText(span.inner);
-      if (label.length > 0) {
-        cutStandards.push({ label, ...title === void 0 ? {} : { title } });
-      }
-    }
-    return { relayLeadoff, cutStandards };
   }
   function buildSwimRowEvent(ctx, eventLabel, link, eventId, parsedLabel, rowIndex) {
     const course = parsedLabel.course !== "unknown" ? parsedLabel.course : ctx.meetCourse ?? "unknown";
@@ -2461,6 +2355,158 @@
     return { swims, rowCount: table.dataRows.length };
   }
 
+  // packages/swimcloud/src/meetTeamsPage.ts
+  function locateCardTable(html, cardTitle) {
+    const heading = findElementSpans(html, "h2").find(
+      (h) => classTokens(startTagOf(h.html)).includes("c-title") && htmlToText(h.inner).trim() === cardTitle
+    );
+    if (heading === void 0) {
+      return null;
+    }
+    const tablesAfter = findTables(html).filter((t) => t.start > heading.start);
+    if (tablesAfter.length === 0) {
+      return null;
+    }
+    return tablesAfter.reduce((closest, t) => t.start < closest.start ? t : closest);
+  }
+  function extractTeamStandingsRows(tableHtml) {
+    const standings = [];
+    for (const row of extractTableRows(tableHtml)) {
+      if (isHeaderRow(row)) {
+        continue;
+      }
+      const cells = extractRowCells(row);
+      if (cells.length < 3) {
+        continue;
+      }
+      const linkCell = cells[1] ?? "";
+      const teamHref = extractHrefs(linkCell).find((href) => /\/team\/\d+\/?/.test(href));
+      if (teamHref === void 0) {
+        continue;
+      }
+      const idMatch = /\/team\/(\d+)\//.exec(teamHref);
+      if (idMatch === null) {
+        continue;
+      }
+      const teamName = htmlToText(linkCell).trim();
+      if (teamName.length === 0) {
+        continue;
+      }
+      const rankText = htmlToText(cells[0] ?? "").trim();
+      const scoreText = htmlToText(cells[2] ?? "").trim();
+      const rank = /^\d+$/.test(rankText) ? Number.parseInt(rankText, 10) : void 0;
+      const score = /^[\d.]+$/.test(scoreText) ? Number.parseFloat(scoreText) : void 0;
+      standings.push({
+        swimCloudTeamId: idMatch[1],
+        teamName,
+        ...rank === void 0 ? {} : { rank },
+        ...score === void 0 ? {} : { score }
+      });
+    }
+    return standings;
+  }
+  function parseTeamStandingsPage(html, context, options, cardTitle, discoveryCompleteness) {
+    const warnings = [];
+    const confidence = SWIMCLOUD_REAL_CAPTURE_CONFIDENCE;
+    if (collapseWhitespace(html).length === 0) {
+      return fail(context, "empty-input", "The captured HTML is empty.", warnings, confidence);
+    }
+    const fromUrl = meetScopeFromSourceUrl(context.sourceUrl);
+    if (fromUrl.mismatch !== void 0) {
+      return fail(
+        context,
+        "source-url-mismatch",
+        `Capture URL ${JSON.stringify(context.sourceUrl)} names a ${fromUrl.mismatch} resource, not a meet.`,
+        warnings,
+        confidence
+      );
+    }
+    const meetId = options.meetId ?? fromUrl.meetId;
+    if (meetId === void 0) {
+      return fail(
+        context,
+        "source-url-mismatch",
+        `No meet id could be resolved: capture URL ${JSON.stringify(context.sourceUrl)} does not classify as a meet page and no meetId option was supplied.`,
+        warnings,
+        confidence
+      );
+    }
+    const cleaned = stripNonContent(html);
+    const table = locateCardTable(cleaned, cardTitle);
+    if (table === null) {
+      return fail(
+        context,
+        "expected-table-missing",
+        `No "${cardTitle}" card table was found on this page.`,
+        warnings,
+        confidence
+      );
+    }
+    const teams = extractTeamStandingsRows(table.html);
+    const gender = readActiveGenderWord(cleaned);
+    const meetName = elementTextById(cleaned, "meet-name") ?? firstHeadingText(cleaned);
+    return succeed(
+      context,
+      {
+        swimCloudMeetId: meetId,
+        ...meetName === void 0 ? {} : { meetName },
+        gender,
+        teams,
+        discoveryCompleteness
+      },
+      warnings,
+      confidence
+    );
+  }
+  function parseMeetTeamsHtml(html, context, options = {}) {
+    return parseTeamStandingsPage(html, context, options, "Teams", "unproven");
+  }
+  function parseMeetTopTeamsHtml(html, context, options = {}) {
+    return parseTeamStandingsPage(html, context, options, "Teams", "verified-complete-for-this-capture");
+  }
+
+  // packages/swimcloud/src/meetEventIndex.ts
+  var EVENT_INDEX_ITEM_MARKER = /\bjs-event-item\b/;
+  var EVENT_INDEX_ANCHOR = /<a\b([^>]*)>([\s\S]*?)<\/a>/g;
+  var EVENT_INDEX_HREF = /href="\/results\/(\d+)\/event\/(\d+)\/?"/;
+  var EVENT_INDEX_LABEL = /class="c-events__link-body"\s+title="([^"]*)"/;
+  var EVENT_INDEX_STATUS = /class="c-events__link-start"[^>]*title="([^"]*)"/;
+  var EVENT_INDEX_NUMBER = /class="c-event-status[^"]*"\s*>([\s\S]*?)<\/span>/;
+  function readMeetEventIndex(html, meetId) {
+    const entries = [];
+    const seen = /* @__PURE__ */ new Set();
+    const cleaned = stripNonContent(html);
+    for (const match of cleaned.matchAll(EVENT_INDEX_ANCHOR)) {
+      const attrs = match[1] ?? "";
+      const inner = match[2] ?? "";
+      if (!EVENT_INDEX_ITEM_MARKER.test(attrs)) {
+        continue;
+      }
+      const href = EVENT_INDEX_HREF.exec(attrs);
+      if (href === null || href[1] !== meetId) {
+        continue;
+      }
+      const eventRef = href[2];
+      if (seen.has(eventRef)) {
+        continue;
+      }
+      seen.add(eventRef);
+      const labelMatch = EVENT_INDEX_LABEL.exec(inner);
+      const statusMatch = EVENT_INDEX_STATUS.exec(inner);
+      const numberMatch = EVENT_INDEX_NUMBER.exec(inner);
+      const label = labelMatch === null ? "" : collapseWhitespace(decodeHtmlEntities(labelMatch[1]));
+      const status = statusMatch === null ? void 0 : collapseWhitespace(decodeHtmlEntities(statusMatch[1]));
+      const printedNumber = numberMatch === null ? void 0 : collapseWhitespace(htmlToText(numberMatch[1]));
+      entries.push({
+        eventRef,
+        label,
+        ...printedNumber === void 0 || printedNumber.length === 0 ? {} : { printedNumber },
+        ...status === void 0 || status.length === 0 ? {} : { status }
+      });
+    }
+    return entries;
+  }
+
   // extensions/swimcloud-companion/src/crawlRequest.ts
   function crawlStepToFetchRequest(step) {
     return { url: step.canonicalUrl, resourceKind: step.resourceKind };
@@ -2619,12 +2665,13 @@
         if (input.beforeStart !== void 0) await input.beforeStart();
         if (stopped() || cursor >= items.length) return;
         const index = cursor;
+        const item = items[index];
         cursor += 1;
         started += 1;
         inFlight += 1;
         if (inFlight > peakInFlight) peakInFlight = inFlight;
         try {
-          await run(items[index], index);
+          await run(item, index);
         } catch {
         } finally {
           inFlight -= 1;
@@ -2820,6 +2867,9 @@
         continue;
       }
       const existing = entries[existingIndex];
+      if (existing === void 0) {
+        throw new MultiTeamQueueError("unknown-key", `swimmer key ${key} is indexed but has no queue entry.`);
+      }
       if (existing.work.kind !== "swimmer") continue;
       const known = existing.work.attributions.some((a) => a.teamId === teamId && a.seasonId === season.seasonId);
       if (known) continue;
@@ -2856,36 +2906,39 @@
     if (index === -1) return idle(queue, inFlight > 0 ? "waiting-for-in-flight" : "drained");
     if (inFlight >= queue.concurrency) return idle(queue, "at-concurrency-limit");
     const entry = queue.entries[index];
+    if (entry === void 0) throw new MultiTeamQueueError("unknown-key", `pending index ${index} has no queue entry.`);
     const rosterInFlight = queue.entries.some((e) => e.status === "in-flight" && e.work.kind === "roster");
     if (rosterInFlight || entry.work.kind === "roster" && inFlight > 0) return idle(queue, "at-concurrency-limit");
     return { kind: "work", queue: withStatus(queue, index, { work: entry.work, status: "in-flight" }), work: entry.work };
   }
-  function inFlightIndex(queue, key) {
+  function inFlightEntry(queue, key) {
     const index = queue.entries.findIndex((e) => e.work.key === key);
-    if (index === -1) throw new MultiTeamQueueError("unknown-key", `no work has key ${key}.`);
-    if (queue.entries[index].status !== "in-flight") {
-      throw new MultiTeamQueueError("not-in-flight", `work ${key} is ${queue.entries[index].status}, not in-flight.`);
+    const entry = queue.entries[index];
+    if (index === -1 || entry === void 0) throw new MultiTeamQueueError("unknown-key", `no work has key ${key}.`);
+    if (entry.status !== "in-flight") {
+      throw new MultiTeamQueueError("not-in-flight", `work ${key} is ${entry.status}, not in-flight.`);
     }
-    return index;
+    return { index, entry };
   }
   function markDone(queue, key) {
-    const index = inFlightIndex(queue, key);
-    return withStatus(queue, index, { work: queue.entries[index].work, status: "done" });
+    const { index, entry } = inFlightEntry(queue, key);
+    return withStatus(queue, index, { work: entry.work, status: "done" });
   }
   function markFailed(queue, key, message, options = {}) {
-    const index = inFlightIndex(queue, key);
-    const next = withStatus(queue, index, { work: queue.entries[index].work, status: "failed", error: message });
+    const { index, entry } = inFlightEntry(queue, key);
+    const next = withStatus(queue, index, { work: entry.work, status: "failed", error: message });
     if (options.haltQueue !== true) return next;
     const halt = queue.halt === void 0 ? { message, keys: [key] } : { message: queue.halt.message, keys: [...queue.halt.keys, key] };
     return { ...next, halt };
   }
   function retryFailed(queue, key) {
     const index = queue.entries.findIndex((e) => e.work.key === key);
-    if (index === -1) throw new MultiTeamQueueError("unknown-key", `no work has key ${key}.`);
-    if (queue.entries[index].status !== "failed") {
-      throw new MultiTeamQueueError("not-failed", `work ${key} is ${queue.entries[index].status}, not failed.`);
+    const entry = queue.entries[index];
+    if (index === -1 || entry === void 0) throw new MultiTeamQueueError("unknown-key", `no work has key ${key}.`);
+    if (entry.status !== "failed") {
+      throw new MultiTeamQueueError("not-failed", `work ${key} is ${entry.status}, not failed.`);
     }
-    return withStatus(queue, index, { work: queue.entries[index].work, status: "pending" });
+    return withStatus(queue, index, { work: entry.work, status: "pending" });
   }
   function pauseQueue(queue) {
     return queue.cancelled ? queue : { ...queue, paused: true };
@@ -2982,10 +3035,10 @@
       const detail = error instanceof Error ? error.message : String(error);
       return { ok: false, reason: `The roster page's season list could not be read, so its season is not verified: ${detail}` };
     }
-    if (selected.length === 0) {
+    const shown = selected[0];
+    if (shown === void 0) {
       return { ok: false, reason: `The roster page selects no season. It was asked for season ${work.seasonLabel} (id ${work.seasonId}).` };
     }
-    const shown = selected[0];
     if (shown.seasonId !== work.seasonId) {
       return {
         ok: false,
@@ -3137,465 +3190,477 @@
   function genderWord(gender) {
     return gender === "M" ? "men's" : "women's";
   }
+  function newRunContext(deps, input) {
+    return {
+      deps,
+      input,
+      requestedUrls: [],
+      seasonReports: [],
+      teamNotes: /* @__PURE__ */ new Map(),
+      usedSubjects: /* @__PURE__ */ new Map(),
+      optionsLanded: /* @__PURE__ */ new Map(),
+      rosterNames: /* @__PURE__ */ new Map(),
+      landedPages: /* @__PURE__ */ new Map(),
+      plannedBySubject: /* @__PURE__ */ new Map(),
+      phase: "reading-seasons",
+      readingTeamId: void 0,
+      queue: void 0,
+      notice: void 0,
+      haltMessage: void 0,
+      recent429: 0,
+      choiceAsked: false,
+      plannedCorrected: false,
+      runKey: ""
+    };
+  }
+  function notesFor(ctx, teamId) {
+    let notes = ctx.teamNotes.get(teamId);
+    if (notes === void 0) {
+      notes = { rosterRowsWithoutSwimmerId: 0, emptyRosterGenders: [] };
+      ctx.teamNotes.set(teamId, notes);
+    }
+    return notes;
+  }
+  function emit(ctx) {
+    ctx.deps.onProgress({
+      phase: ctx.phase,
+      ...ctx.readingTeamId === void 0 ? {} : { readingTeamId: ctx.readingTeamId },
+      seasonReports: [...ctx.seasonReports],
+      ...ctx.queue === void 0 ? {} : { queue: queueProgress(ctx.queue) },
+      ...ctx.notice === void 0 ? {} : { notice: ctx.notice },
+      ...ctx.haltMessage === void 0 ? {} : { haltMessage: ctx.haltMessage }
+    });
+  }
+  function currentQueue(ctx) {
+    if (ctx.queue === void 0) throw new MultiTeamDriverError("queue-invariant", "no queue.");
+    return ctx.queue;
+  }
   async function runMultiTeamCrawl(deps, input) {
     const seenTeams = /* @__PURE__ */ new Set();
     for (const teamId of input.teamIds) {
       if (seenTeams.has(teamId)) throw new MultiTeamDriverError("duplicate-team", `team ${teamId} is listed more than once.`);
       seenTeams.add(teamId);
     }
-    const { control } = deps;
-    const requestedUrls = [];
-    const seasonReports = [];
-    const teamNotes = /* @__PURE__ */ new Map();
-    const usedSubjects = /* @__PURE__ */ new Map();
-    const optionsLanded = /* @__PURE__ */ new Map();
-    const rosterNames = /* @__PURE__ */ new Map();
-    const landedPages = /* @__PURE__ */ new Map();
-    const plannedBySubject = /* @__PURE__ */ new Map();
-    const notesFor = (teamId) => {
-      let notes = teamNotes.get(teamId);
-      if (notes === void 0) {
-        notes = { rosterRowsWithoutSwimmerId: 0, emptyRosterGenders: [] };
-        teamNotes.set(teamId, notes);
-      }
-      return notes;
-    };
-    let phase = "reading-seasons";
-    let readingTeamId;
-    let queue;
-    let notice;
-    let haltMessage;
-    let recent429 = 0;
-    let choiceAsked = false;
-    let plannedCorrected = false;
-    let runKey = "";
-    const emit = () => {
-      deps.onProgress({
-        phase,
-        ...readingTeamId === void 0 ? {} : { readingTeamId },
-        seasonReports: [...seasonReports],
-        ...queue === void 0 ? {} : { queue: queueProgress(queue) },
-        ...notice === void 0 ? {} : { notice },
-        ...haltMessage === void 0 ? {} : { haltMessage }
-      });
-    };
-    function currentQueue() {
-      if (queue === void 0) throw new MultiTeamDriverError("queue-invariant", "no queue.");
-      return queue;
-    }
-    const gate = async () => {
-      if (control.paused && !control.cancelled) {
-        if (queue !== void 0) {
-          queue = pauseQueue(queue);
-          emit();
-        }
-        while (control.paused && !control.cancelled) await deps.sleep(PAUSE_POLL_MS);
-        if (queue !== void 0 && !control.cancelled) {
-          queue = resumeQueue(queue);
-          emit();
-        }
-      }
-      return !control.cancelled;
-    };
-    const paceWait = async (gapMs) => {
-      if (!await gate()) return false;
-      const last = deps.paceClock.get();
-      if (last === void 0) return true;
-      const elapsed = deps.now() - last;
-      if (elapsed >= gapMs) return true;
-      await deps.sleep(gapMs - elapsed);
-      return gate();
-    };
-    const fetchPaced = async (url, expected, gapMs) => {
-      assertFetchableUrl(url, expected);
-      let attempt = 0;
-      for (; ; ) {
-        attempt += 1;
-        if (!await paceWait(gapMs)) return { page: void 0, aborted: true };
-        deps.paceClock.set(deps.now());
-        requestedUrls.push(url);
-        const page = await deps.fetchPage(url);
-        if (page === void 0 || page.httpStatus !== RATE_LIMITED_STATUS) return { page, aborted: false };
-        const decision = decideRateLimitRetry(attempt, page.retryAfter, deps.now());
-        notice = formatRateLimitWaitLine(url, decision);
-        emit();
-        if (decision.action === "give-up") return { page, aborted: false };
-        if (control.cancelled) return { page: void 0, aborted: true };
-        await deps.sleep(decision.waitMs);
-      }
-    };
-    const haltDecision = (page) => {
-      const outcome = page === void 0 ? { kind: "network-error" } : { kind: "http-status", httpStatus: page.httpStatus };
-      const action = shouldHalt(outcome, recent429);
-      recent429 = outcome.kind === "http-status" && outcome.httpStatus === RATE_LIMITED_STATUS ? recent429 + 1 : 0;
-      return action.action === "stop" ? { stop: true, message: restartText(action.message) } : { stop: false };
-    };
-    const redirectProblem = (url, expected, page) => {
-      if (normalizedUrl(page.finalUrl) === normalizedUrl(url) && normalizedUrl(url) !== void 0) return void 0;
-      if (!urlIsFetchable(page.finalUrl, expected)) {
-        return { halt: true, message: `SwimCloud redirected ${url} to ${page.finalUrl}, which this crawl does not fetch. Refresh your SwimCloud session in this tab, then start the crawl again.` };
-      }
-      return { halt: false, message: `the page was redirected to ${page.finalUrl}, so it is not the page that was asked for` };
-    };
-    const screenPage = (url, expected, page, contentCheck) => {
-      const stop = haltDecision(page);
-      const redirect = page === void 0 ? void 0 : redirectProblem(url, expected, page);
-      if (stop.stop) return { action: "halt", message: stop.message, relay: false };
-      if (page === void 0) return { action: "fail", message: "no response", relay: false };
-      if (redirect !== void 0) return { action: redirect.halt ? "halt" : "fail", message: redirect.message, relay: false };
-      if (!isOkStatus(page.httpStatus)) {
-        const text = page.httpStatus === RATE_LIMITED_STATUS ? "rate-limited (HTTP 429) after retries" : `HTTP ${page.httpStatus}`;
-        return { action: "fail", message: text, relay: true };
-      }
-      const problem = contentCheck(page.html);
-      if (problem !== void 0) return { action: problem.halt ? "halt" : "fail", message: problem.message, relay: false };
-      return { action: "clean", message: "", relay: true };
-    };
-    const relayTo = async (subjects, sourceUrl, page) => {
-      let result = "landed";
-      for (const subject of subjects) {
-        usedSubjects.set(captureIdForSubject(subject), subject);
-        const outcome = await deps.relay({ subject, sourceUrl, httpStatus: page.httpStatus, html: page.html });
-        if (outcome === "streak-stop") return "streak-stop";
-        if (outcome !== "landed") {
-          result = "not-landed";
-          continue;
-        }
-        const id = captureIdForSubject(subject);
-        landedPages.set(id, (landedPages.get(id) ?? /* @__PURE__ */ new Set()).add(sourceUrl));
-      }
-      return result;
-    };
-    const openSubject = async (subject, planned) => {
-      const id = await deps.openCapture(subject, planned);
-      if (id === void 0) return false;
-      usedSubjects.set(captureIdForSubject(subject), subject);
-      plannedBySubject.set(captureIdForSubject(subject), planned);
-      return true;
-    };
+    const ctx = newRunContext(deps, input);
     let endedBy = "halted";
     let thrown;
-    emit();
+    emit(ctx);
     try {
-      await readSeasonLists();
-      readingTeamId = void 0;
-      const choices = await askForChoices();
-      endedBy = haltMessage !== void 0 ? "halted" : control.cancelled ? "cancelled" : "completed";
-      if (endedBy === "completed" && choices.length > 0) endedBy = await crawlQueue(choices);
+      await readSeasonLists(ctx);
+      ctx.readingTeamId = void 0;
+      const choices = await askForChoices(ctx);
+      endedBy = ctx.haltMessage !== void 0 ? "halted" : deps.control.cancelled ? "cancelled" : "completed";
+      if (endedBy === "completed" && choices.length > 0) endedBy = await crawlQueue(ctx, choices);
     } catch (error) {
       thrown = { error };
     }
-    phase = "finished";
-    haltMessage = haltMessage ?? queue?.halt?.message;
-    notice = void 0;
-    await markCaptures(thrown === void 0 ? endedBy : "halted");
-    const downloads = await flushAll();
-    emit();
+    ctx.phase = "finished";
+    ctx.haltMessage = ctx.haltMessage ?? ctx.queue?.halt?.message;
+    ctx.notice = void 0;
+    await markCaptures(ctx, thrown === void 0 ? endedBy : "halted");
+    const downloads = await flushAll(ctx);
+    emit(ctx);
     if (thrown !== void 0) throw thrown.error;
-    return buildSummary(endedBy, downloads);
-    async function readSeasonLists() {
-      for (const teamId of input.teamIds) {
-        if (!await gate()) return;
-        readingTeamId = teamId;
-        emit();
-        if (!await openSubject(teamSubject(teamId), 1)) {
-          haltMessage = OPEN_FAILED_TEXT;
-          seasonReports.push({ teamId, error: OPEN_FAILED_TEXT });
+    return buildSummary(ctx, endedBy, downloads);
+  }
+  async function gate(ctx) {
+    const { control } = ctx.deps;
+    if (control.paused && !control.cancelled) {
+      if (ctx.queue !== void 0) {
+        ctx.queue = pauseQueue(ctx.queue);
+        emit(ctx);
+      }
+      while (control.paused && !control.cancelled) await ctx.deps.sleep(PAUSE_POLL_MS);
+      if (ctx.queue !== void 0 && !control.cancelled) {
+        ctx.queue = resumeQueue(ctx.queue);
+        emit(ctx);
+      }
+    }
+    return !control.cancelled;
+  }
+  async function paceWait(ctx, gapMs) {
+    if (!await gate(ctx)) return false;
+    const last = ctx.deps.paceClock.get();
+    if (last === void 0) return true;
+    const elapsed = ctx.deps.now() - last;
+    if (elapsed >= gapMs) return true;
+    await ctx.deps.sleep(gapMs - elapsed);
+    return gate(ctx);
+  }
+  async function fetchPaced(ctx, url, expected, gapMs) {
+    const { deps } = ctx;
+    assertFetchableUrl(url, expected);
+    let attempt = 0;
+    for (; ; ) {
+      attempt += 1;
+      if (!await paceWait(ctx, gapMs)) return { page: void 0, aborted: true };
+      deps.paceClock.set(deps.now());
+      ctx.requestedUrls.push(url);
+      const page = await deps.fetchPage(url);
+      if (page === void 0 || page.httpStatus !== RATE_LIMITED_STATUS) return { page, aborted: false };
+      const decision = decideRateLimitRetry(attempt, page.retryAfter, deps.now());
+      ctx.notice = formatRateLimitWaitLine(url, decision);
+      emit(ctx);
+      if (decision.action === "give-up") return { page, aborted: false };
+      if (deps.control.cancelled) return { page: void 0, aborted: true };
+      await deps.sleep(decision.waitMs);
+    }
+  }
+  function haltDecision(ctx, page) {
+    const outcome = page === void 0 ? { kind: "network-error" } : { kind: "http-status", httpStatus: page.httpStatus };
+    const action = shouldHalt(outcome, ctx.recent429);
+    ctx.recent429 = outcome.kind === "http-status" && outcome.httpStatus === RATE_LIMITED_STATUS ? ctx.recent429 + 1 : 0;
+    return action.action === "stop" ? { stop: true, message: restartText(action.message) } : { stop: false };
+  }
+  function redirectProblem(url, expected, page) {
+    if (normalizedUrl(page.finalUrl) === normalizedUrl(url) && normalizedUrl(url) !== void 0) return void 0;
+    if (!urlIsFetchable(page.finalUrl, expected)) {
+      return { halt: true, message: `SwimCloud redirected ${url} to ${page.finalUrl}, which this crawl does not fetch. Refresh your SwimCloud session in this tab, then start the crawl again.` };
+    }
+    return { halt: false, message: `the page was redirected to ${page.finalUrl}, so it is not the page that was asked for` };
+  }
+  function screenPage(ctx, url, expected, page, contentCheck) {
+    const stop = haltDecision(ctx, page);
+    const redirect = page === void 0 ? void 0 : redirectProblem(url, expected, page);
+    if (stop.stop) return { action: "halt", message: stop.message, relay: false };
+    if (page === void 0) return { action: "fail", message: "no response", relay: false };
+    if (redirect !== void 0) return { action: redirect.halt ? "halt" : "fail", message: redirect.message, relay: false };
+    if (!isOkStatus(page.httpStatus)) {
+      const text = page.httpStatus === RATE_LIMITED_STATUS ? "rate-limited (HTTP 429) after retries" : `HTTP ${page.httpStatus}`;
+      return { action: "fail", message: text, relay: true };
+    }
+    const problem = contentCheck(page.html);
+    if (problem !== void 0) return { action: problem.halt ? "halt" : "fail", message: problem.message, relay: false };
+    return { action: "clean", message: "", relay: true };
+  }
+  async function relayTo(ctx, subjects, sourceUrl, page) {
+    let result = "landed";
+    for (const subject of subjects) {
+      ctx.usedSubjects.set(captureIdForSubject(subject), subject);
+      const outcome = await ctx.deps.relay({ subject, sourceUrl, httpStatus: page.httpStatus, html: page.html });
+      if (outcome === "streak-stop") return "streak-stop";
+      if (outcome !== "landed") {
+        result = "not-landed";
+        continue;
+      }
+      const id = captureIdForSubject(subject);
+      ctx.landedPages.set(id, (ctx.landedPages.get(id) ?? /* @__PURE__ */ new Set()).add(sourceUrl));
+    }
+    return result;
+  }
+  async function openSubject(ctx, subject, planned) {
+    const id = await ctx.deps.openCapture(subject, planned);
+    if (id === void 0) return false;
+    ctx.usedSubjects.set(captureIdForSubject(subject), subject);
+    ctx.plannedBySubject.set(captureIdForSubject(subject), planned);
+    return true;
+  }
+  async function readSeasonLists(ctx) {
+    for (const teamId of ctx.input.teamIds) {
+      if (!await gate(ctx)) return;
+      ctx.readingTeamId = teamId;
+      emit(ctx);
+      if (!await openSubject(ctx, teamSubject(teamId), 1)) {
+        ctx.haltMessage = OPEN_FAILED_TEXT;
+        ctx.seasonReports.push({ teamId, error: OPEN_FAILED_TEXT });
+        return;
+      }
+      const step = planTeamRosterPage(teamId, "M");
+      const { page, aborted } = await fetchPaced(ctx, step.canonicalUrl, "teamRoster", MIN_DELAY_MS);
+      ctx.notice = void 0;
+      if (aborted) return;
+      const screen = screenPage(ctx, step.canonicalUrl, "teamRoster", page, challengeProblem);
+      if (screen.relay && page !== void 0) {
+        const relayed = await relayTo(ctx, [teamSubject(teamId)], step.canonicalUrl, page);
+        ctx.optionsLanded.set(teamId, relayed === "landed" && screen.action === "clean");
+        if (relayed === "streak-stop") {
+          ctx.haltMessage = RELAY_STREAK_TEXT;
+          ctx.seasonReports.push({ teamId, error: ctx.haltMessage });
           return;
         }
-        const step = planTeamRosterPage(teamId, "M");
-        const { page, aborted } = await fetchPaced(step.canonicalUrl, "teamRoster", MIN_DELAY_MS);
-        notice = void 0;
-        if (aborted) return;
-        const screen = screenPage(step.canonicalUrl, "teamRoster", page, challengeProblem);
-        if (screen.relay && page !== void 0) {
-          const relayed = await relayTo([teamSubject(teamId)], step.canonicalUrl, page);
-          optionsLanded.set(teamId, relayed === "landed" && screen.action === "clean");
-          if (relayed === "streak-stop") {
-            haltMessage = RELAY_STREAK_TEXT;
-            seasonReports.push({ teamId, error: haltMessage });
-            return;
-          }
-        }
-        if (screen.action === "halt") {
-          haltMessage = screen.message;
-          seasonReports.push({ teamId, error: screen.message });
-          return;
-        }
-        seasonReports.push(reportSeasons(teamId, screen, page));
+      }
+      if (screen.action === "halt") {
+        ctx.haltMessage = screen.message;
+        ctx.seasonReports.push({ teamId, error: screen.message });
+        return;
+      }
+      ctx.seasonReports.push(reportSeasons(teamId, screen, page));
+    }
+  }
+  function challengeProblem(html) {
+    return looksLikeChallengePage(html) ? { halt: true, message: CHALLENGE_TEXT } : void 0;
+  }
+  function reportSeasons(teamId, screen, page) {
+    if (screen.action === "fail" || page === void 0) {
+      const why = screen.message.startsWith("HTTP") || screen.message === "no response" ? `returned ${screen.message}` : screen.message;
+      return { teamId, error: `The season page for team ${teamId} ${why}.` };
+    }
+    try {
+      return { teamId, options: parseTeamSeasonOptions(page.html) };
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      return { teamId, error: `The season list on team ${teamId}'s page could not be read: ${detail}` };
+    }
+  }
+  async function askForChoices(ctx) {
+    if (ctx.haltMessage !== void 0 || ctx.deps.control.cancelled) return [];
+    ctx.phase = "choosing-seasons";
+    emit(ctx);
+    const withOptions = ctx.seasonReports.filter((r) => r.options !== void 0);
+    ctx.choiceAsked = withOptions.length > 0;
+    if (!ctx.choiceAsked) return [];
+    const picked = await ctx.deps.chooseSeasons(ctx.seasonReports);
+    for (const choice of picked) {
+      if (!withOptions.some((r) => r.teamId === choice.teamId)) {
+        throw new MultiTeamDriverError("unknown-choice", `a season was chosen for team ${choice.teamId}, which has no season list.`);
       }
     }
-    function challengeProblem(html) {
-      return looksLikeChallengePage(html) ? { halt: true, message: CHALLENGE_TEXT } : void 0;
-    }
-    function reportSeasons(teamId, screen, page) {
-      if (screen.action === "fail" || page === void 0) {
-        const why = screen.message.startsWith("HTTP") || screen.message === "no response" ? `returned ${screen.message}` : screen.message;
-        return { teamId, error: `The season page for team ${teamId} ${why}.` };
+    return picked;
+  }
+  async function crawlQueue(ctx, picked) {
+    ctx.runKey = resumeKeyForChoices(ctx.seasonReports, picked);
+    const finishedAtStart = ctx.runKey === "" ? [] : await ctx.deps.loadFinished(ctx.runKey);
+    ctx.queue = createQueue({
+      teams: picked.map((choice) => {
+        const options = ctx.seasonReports.find((r) => r.teamId === choice.teamId)?.options;
+        if (options === void 0) throw new MultiTeamDriverError("unknown-choice", `team ${choice.teamId} has no season list.`);
+        return { teamId: choice.teamId, seasonLabel: choice.seasonLabel, seasonOptions: options };
+      }),
+      finishedKeys: finishedAtStart
+    });
+    ctx.phase = "crawling";
+    emit(ctx);
+    if (!await openSeasonCaptures(ctx)) return "halted";
+    const persistFinished = async () => {
+      await ctx.deps.saveFinished(ctx.runKey, [.../* @__PURE__ */ new Set([...finishedAtStart, ...finishedSwimmerKeys(currentQueue(ctx))])]);
+    };
+    for (; ; ) {
+      if (!await gate(ctx)) {
+        ctx.queue = cancelQueue(currentQueue(ctx));
+        return "cancelled";
       }
-      try {
-        return { teamId, options: parseTeamSeasonOptions(page.html) };
-      } catch (error) {
-        const detail = error instanceof Error ? error.message : String(error);
-        return { teamId, error: `The season list on team ${teamId}'s page could not be read: ${detail}` };
-      }
-    }
-    async function askForChoices() {
-      if (haltMessage !== void 0 || control.cancelled) return [];
-      phase = "choosing-seasons";
-      emit();
-      const withOptions = seasonReports.filter((r) => r.options !== void 0);
-      choiceAsked = withOptions.length > 0;
-      if (!choiceAsked) return [];
-      const picked = await deps.chooseSeasons(seasonReports);
-      for (const choice of picked) {
-        if (!withOptions.some((r) => r.teamId === choice.teamId)) {
-          throw new MultiTeamDriverError("unknown-choice", `a season was chosen for team ${choice.teamId}, which has no season list.`);
+      const next = nextWork(currentQueue(ctx));
+      ctx.queue = next.queue;
+      if (next.kind === "idle") {
+        const outcome = idleOutcome(next.reason);
+        if (outcome === "completed") {
+          await correctPlannedCounts(ctx);
+          await clearIfClean(ctx);
         }
+        return outcome;
       }
-      return picked;
+      ctx.notice = void 0;
+      emit(ctx);
+      const work = next.work;
+      if (work.kind === "swimmer") await correctPlannedCounts(ctx);
+      const halted = work.kind === "roster" ? await runRosterWork(ctx, work) : await runSwimmerWork(ctx, work, persistFinished);
+      emit(ctx);
+      if (halted) return "halted";
     }
-    async function crawlQueue(picked) {
-      runKey = resumeKeyForChoices(seasonReports, picked);
-      const finishedAtStart = runKey === "" ? [] : await deps.loadFinished(runKey);
-      queue = createQueue({
-        teams: picked.map((choice) => {
-          const options = seasonReports.find((r) => r.teamId === choice.teamId)?.options;
-          if (options === void 0) throw new MultiTeamDriverError("unknown-choice", `team ${choice.teamId} has no season list.`);
-          return { teamId: choice.teamId, seasonLabel: choice.seasonLabel, seasonOptions: options };
-        }),
-        finishedKeys: finishedAtStart
-      });
-      phase = "crawling";
-      emit();
-      if (!await openSeasonCaptures()) return "halted";
-      const persistFinished = async () => {
-        await deps.saveFinished(runKey, [.../* @__PURE__ */ new Set([...finishedAtStart, ...finishedSwimmerKeys(currentQueue())])]);
-      };
-      for (; ; ) {
-        if (!await gate()) {
-          queue = cancelQueue(currentQueue());
-          return "cancelled";
-        }
-        const next = nextWork(currentQueue());
-        queue = next.queue;
-        if (next.kind === "idle") {
-          const outcome = idleOutcome(next.reason);
-          if (outcome === "completed") {
-            await correctPlannedCounts();
-            await clearIfClean();
-          }
-          return outcome;
-        }
-        notice = void 0;
-        emit();
-        const work = next.work;
-        if (work.kind === "swimmer") await correctPlannedCounts();
-        const halted = work.kind === "roster" ? await runRosterWork(work) : await runSwimmerWork(work, persistFinished);
-        emit();
-        if (halted) return "halted";
+  }
+  function idleOutcome(reason) {
+    if (reason === "drained") return "completed";
+    if (reason === "halted") return "halted";
+    if (reason === "cancelled") return "cancelled";
+    throw new MultiTeamDriverError("queue-invariant", `the queue is idle (${reason}) with nothing in flight.`);
+  }
+  function readyTeams(ctx) {
+    return queueProgress(currentQueue(ctx)).teams.flatMap(
+      (t) => t.status === "season-unavailable" ? [] : [{ teamId: t.teamId, seasonLabel: t.seasonLabel, swimmerTotal: t.swimmers.total }]
+    );
+  }
+  function captureHasEveryPlannedPage(ctx, teamId, seasonLabel) {
+    const id = captureIdForSubject(teamSubject(teamId, seasonLabel));
+    const team = queueProgress(currentQueue(ctx)).teams.find((t) => t.teamId === teamId);
+    if (team === void 0) return false;
+    return capturePagesComplete({
+      planned: ctx.plannedBySubject.get(id),
+      landedThisRun: ctx.landedPages.get(id)?.size ?? 0,
+      resumedProven: team.swimmers.skippedResumed,
+      teamDone: team.status === "done"
+    });
+  }
+  async function openSeasonCaptures(ctx) {
+    for (const team of readyTeams(ctx)) {
+      if (!await openSubject(ctx, teamSubject(team.teamId, team.seasonLabel), 2)) {
+        ctx.haltMessage = OPEN_FAILED_TEXT;
+        return false;
       }
     }
-    function idleOutcome(reason) {
-      if (reason === "drained") return "completed";
-      if (reason === "halted") return "halted";
-      if (reason === "cancelled") return "cancelled";
-      throw new MultiTeamDriverError("queue-invariant", `the queue is idle (${reason}) with nothing in flight.`);
+    return true;
+  }
+  async function correctPlannedCounts(ctx) {
+    if (ctx.plannedCorrected) return;
+    ctx.plannedCorrected = true;
+    for (const team of readyTeams(ctx)) {
+      const subject = teamSubject(team.teamId, team.seasonLabel);
+      const planned = 2 + team.swimmerTotal;
+      if (ctx.plannedBySubject.get(captureIdForSubject(subject)) === planned) continue;
+      if (!await openSubject(ctx, subject, planned)) {
+        ctx.notice = `The app did not accept the corrected page count for team ${team.teamId}. The crawl goes on.`;
+        emit(ctx);
+      }
     }
-    function readyTeams() {
-      return queueProgress(currentQueue()).teams.flatMap(
-        (t) => t.status === "season-unavailable" ? [] : [{ teamId: t.teamId, seasonLabel: t.seasonLabel, swimmerTotal: t.swimmers.total }]
+  }
+  async function clearIfClean(ctx) {
+    if (ctx.runKey === "") return;
+    const failed = queueProgress(currentQueue(ctx)).teams.some((t) => t.rosters.failed + t.swimmers.failed > 0);
+    if (!failed) await ctx.deps.clearFinished(ctx.runKey);
+  }
+  function haltItem(ctx, key, message) {
+    ctx.queue = markFailed(currentQueue(ctx), key, message, { haltQueue: true });
+    ctx.haltMessage = ctx.haltMessage ?? message;
+    return true;
+  }
+  function failItem(ctx, key, message) {
+    ctx.queue = markFailed(currentQueue(ctx), key, message);
+    return false;
+  }
+  function actOn(ctx, key, screen) {
+    return screen.action === "halt" ? haltItem(ctx, key, screen.message) : failItem(ctx, key, screen.message);
+  }
+  async function relayItem(ctx, key, subjects, url, page) {
+    const relayed = await relayTo(ctx, subjects, url, page);
+    if (relayed === "streak-stop") return haltItem(ctx, key, RELAY_STREAK_TEXT);
+    if (relayed === "not-landed") return failItem(ctx, key, NOT_HANDED_TEXT);
+    return void 0;
+  }
+  function rosterProblem(work) {
+    return (html) => {
+      if (looksLikeChallengePage(html)) return { halt: true, message: CHALLENGE_TEXT };
+      const check = verifyRosterSeason(html, work);
+      return check.ok ? void 0 : { halt: false, message: check.reason };
+    };
+  }
+  async function runRosterWork(ctx, work) {
+    const { page, aborted } = await fetchPaced(ctx, work.canonicalUrl, "teamRoster", MIN_DELAY_MS);
+    if (aborted) return failItem(ctx, work.key, "not fetched: the run was cancelled");
+    const screen = screenPage(ctx, work.canonicalUrl, "teamRoster", page, rosterProblem(work));
+    if (screen.relay && page !== void 0) {
+      const subject = teamSubject(work.teamId, work.seasonLabel);
+      if (screen.action === "clean") {
+        const stopped = await relayItem(ctx, work.key, [subject], work.canonicalUrl, page);
+        if (stopped !== void 0) return stopped;
+      } else if (await relayTo(ctx, [subject], work.canonicalUrl, page) === "streak-stop") {
+        return haltItem(ctx, work.key, RELAY_STREAK_TEXT);
+      }
+    }
+    if (screen.action !== "clean" || page === void 0) return actOn(ctx, work.key, screen);
+    return finishRoster(ctx, work, page.html);
+  }
+  function finishRoster(ctx, work, html) {
+    const parsed = parseTeamRosterHtml(
+      html,
+      { sourceUrl: work.canonicalUrl, retrievedAt: ctx.deps.isoNow(), track: "browser-extension" },
+      { gender: work.gender === "M" ? "Men" : "Women", season: work.seasonLabel, teamId: work.teamId }
+    );
+    if (!parsed.ok) return failItem(ctx, work.key, `the ${genderWord(work.gender)} roster could not be read: ${parsed.failure.message}`);
+    const printed = parsed.data.teamName?.trim();
+    if (printed !== void 0 && printed.length > 0) {
+      ctx.rosterNames.set(work.teamId, (ctx.rosterNames.get(work.teamId) ?? /* @__PURE__ */ new Set()).add(printed));
+    }
+    const says = parsed.warnings.some((w) => w.code === "no-roster-posted");
+    if (parsed.data.athletes.length === 0 && !says) {
+      const codes = parsed.warnings.map((w) => w.code).join(", ") || "no warnings";
+      return failItem(
+        ctx,
+        work.key,
+        `the ${genderWord(work.gender)} roster page lists nobody and does not say that no roster is posted (${codes}), so it is not treated as an empty roster`
       );
     }
-    function captureHasEveryPlannedPage(teamId, seasonLabel) {
-      const id = captureIdForSubject(teamSubject(teamId, seasonLabel));
-      const team = queueProgress(currentQueue()).teams.find((t) => t.teamId === teamId);
-      if (team === void 0) return false;
-      return capturePagesComplete({
-        planned: plannedBySubject.get(id),
-        landedThisRun: landedPages.get(id)?.size ?? 0,
-        resumedProven: team.swimmers.skippedResumed,
-        teamDone: team.status === "done"
-      });
-    }
-    async function openSeasonCaptures() {
-      for (const team of readyTeams()) {
-        if (!await openSubject(teamSubject(team.teamId, team.seasonLabel), 2)) {
-          haltMessage = OPEN_FAILED_TEXT;
-          return false;
-        }
-      }
-      return true;
-    }
-    async function correctPlannedCounts() {
-      if (plannedCorrected) return;
-      plannedCorrected = true;
-      for (const team of readyTeams()) {
-        const subject = teamSubject(team.teamId, team.seasonLabel);
-        const planned = 2 + team.swimmerTotal;
-        if (plannedBySubject.get(captureIdForSubject(subject)) === planned) continue;
-        if (!await openSubject(subject, planned)) {
-          notice = `The app did not accept the corrected page count for team ${team.teamId}. The crawl goes on.`;
-          emit();
-        }
+    const collected = collectSwimmerIds([parsed.data.athletes]);
+    const notes = notesFor(ctx, work.teamId);
+    notes.rosterRowsWithoutSwimmerId += collected.withoutSwimmerId;
+    if (parsed.data.athletes.length === 0) notes.emptyRosterGenders.push(work.gender);
+    ctx.queue = addSwimmers(currentQueue(ctx), work.teamId, work.gender, collected.swimmerIds);
+    ctx.queue = markDone(currentQueue(ctx), work.key);
+    return false;
+  }
+  function swimmerProblem(html) {
+    return looksLikeJson(html) ? void 0 : { halt: true, message: NOT_JSON_TEXT };
+  }
+  async function runSwimmerWork(ctx, work, persist) {
+    const step = planSwimmerFastestTimes(work.swimmerId);
+    const { page, aborted } = await fetchPaced(ctx, step.canonicalUrl, "swimmerFastestTimes", SWIMMER_TIMES_STAGGER_MS);
+    if (aborted) return failItem(ctx, work.key, "not fetched: the run was cancelled");
+    const screen = screenPage(ctx, step.canonicalUrl, "swimmerFastestTimes", page, swimmerProblem);
+    const subjects = work.attributions.map((a) => teamSubject(a.teamId, a.seasonLabel));
+    if (screen.relay && page !== void 0) {
+      if (screen.action === "clean") {
+        const stopped = await relayItem(ctx, work.key, subjects, step.canonicalUrl, page);
+        if (stopped !== void 0) return stopped;
+      } else if (await relayTo(ctx, subjects, step.canonicalUrl, page) === "streak-stop") {
+        return haltItem(ctx, work.key, RELAY_STREAK_TEXT);
       }
     }
-    async function clearIfClean() {
-      if (runKey === "") return;
-      const failed = queueProgress(currentQueue()).teams.some((t) => t.rosters.failed + t.swimmers.failed > 0);
-      if (!failed) await deps.clearFinished(runKey);
+    if (screen.action !== "clean") return actOn(ctx, work.key, screen);
+    ctx.queue = markDone(currentQueue(ctx), work.key);
+    await persist();
+    return false;
+  }
+  async function markCaptures(ctx, outcome) {
+    const seasonDone = /* @__PURE__ */ new Set();
+    if (ctx.queue !== void 0 && outcome === "completed") {
+      for (const t of queueProgress(ctx.queue).teams) {
+        if (captureHasEveryPlannedPage(ctx, t.teamId, t.seasonLabel)) {
+          seasonDone.add(captureIdForSubject(teamSubject(t.teamId, t.seasonLabel)));
+        }
+      }
     }
-    function halt(key, message) {
-      queue = markFailed(currentQueue(), key, message, { haltQueue: true });
-      haltMessage = haltMessage ?? message;
-      return true;
+    for (const [id, subject] of ctx.usedSubjects) {
+      const complete = subject.kind === "team" && subject.season === void 0 ? ctx.optionsLanded.get(subject.teamId) === true : seasonDone.has(id);
+      const names = subject.kind === "team" ? ctx.rosterNames.get(subject.teamId) : void 0;
+      const label = names?.size === 1 ? [...names][0] : void 0;
+      await ctx.deps.markCapture(subject, complete ? "every-planned-page-fetched" : "partial", label);
     }
-    function failItem(key, message) {
-      queue = markFailed(currentQueue(), key, message);
-      return false;
-    }
-    function actOn(key, screen) {
-      return screen.action === "halt" ? halt(key, screen.message) : failItem(key, screen.message);
-    }
-    async function relayItem(key, subjects, url, page) {
-      const relayed = await relayTo(subjects, url, page);
-      if (relayed === "streak-stop") return halt(key, RELAY_STREAK_TEXT);
-      if (relayed === "not-landed") return failItem(key, NOT_HANDED_TEXT);
-      return void 0;
-    }
-    function rosterProblem(work) {
-      return (html) => {
-        if (looksLikeChallengePage(html)) return { halt: true, message: CHALLENGE_TEXT };
-        const check = verifyRosterSeason(html, work);
-        return check.ok ? void 0 : { halt: false, message: check.reason };
+  }
+  async function flushAll(ctx) {
+    if (ctx.usedSubjects.size === 0) return [];
+    const results = await ctx.deps.flushDownloads([...ctx.usedSubjects.values()]);
+    return results.filter((r) => r.pageCount > 0 || r.error !== void 0);
+  }
+  function buildSummary(ctx, outcome, downloads) {
+    const progress = ctx.queue === void 0 ? void 0 : queueProgress(ctx.queue);
+    const teams = ctx.input.teamIds.map((teamId) => {
+      const notes = notesFor(ctx, teamId);
+      const base = {
+        teamId,
+        rostersDone: 0,
+        rostersFailed: 0,
+        swimmersDone: 0,
+        swimmersFailed: 0,
+        swimmersSkippedResumed: 0,
+        rosterRowsWithoutSwimmerId: notes.rosterRowsWithoutSwimmerId,
+        emptyRosterGenders: notes.emptyRosterGenders
       };
-    }
-    async function runRosterWork(work) {
-      const { page, aborted } = await fetchPaced(work.canonicalUrl, "teamRoster", MIN_DELAY_MS);
-      if (aborted) return failItem(work.key, "not fetched: the run was cancelled");
-      const screen = screenPage(work.canonicalUrl, "teamRoster", page, rosterProblem(work));
-      if (screen.relay && page !== void 0) {
-        const subject = teamSubject(work.teamId, work.seasonLabel);
-        if (screen.action === "clean") {
-          const stopped = await relayItem(work.key, [subject], work.canonicalUrl, page);
-          if (stopped !== void 0) return stopped;
-        } else if (await relayTo([subject], work.canonicalUrl, page) === "streak-stop") {
-          return halt(work.key, RELAY_STREAK_TEXT);
-        }
-      }
-      if (screen.action !== "clean" || page === void 0) return actOn(work.key, screen);
-      return finishRoster(work, page.html);
-    }
-    function finishRoster(work, html) {
-      const parsed = parseTeamRosterHtml(
-        html,
-        { sourceUrl: work.canonicalUrl, retrievedAt: deps.isoNow(), track: "browser-extension" },
-        { gender: work.gender === "M" ? "Men" : "Women", season: work.seasonLabel, teamId: work.teamId }
-      );
-      if (!parsed.ok) return failItem(work.key, `the ${genderWord(work.gender)} roster could not be read: ${parsed.failure.message}`);
-      const printed = parsed.data.teamName?.trim();
-      if (printed !== void 0 && printed.length > 0) {
-        rosterNames.set(work.teamId, (rosterNames.get(work.teamId) ?? /* @__PURE__ */ new Set()).add(printed));
-      }
-      const says = parsed.warnings.some((w) => w.code === "no-roster-posted");
-      if (parsed.data.athletes.length === 0 && !says) {
-        const codes = parsed.warnings.map((w) => w.code).join(", ") || "no warnings";
-        return failItem(work.key, `the ${genderWord(work.gender)} roster page lists nobody and does not say that no roster is posted (${codes}), so it is not treated as an empty roster`);
-      }
-      const collected = collectSwimmerIds([parsed.data.athletes]);
-      const notes = notesFor(work.teamId);
-      notes.rosterRowsWithoutSwimmerId += collected.withoutSwimmerId;
-      if (parsed.data.athletes.length === 0) notes.emptyRosterGenders.push(work.gender);
-      queue = addSwimmers(currentQueue(), work.teamId, work.gender, collected.swimmerIds);
-      queue = markDone(currentQueue(), work.key);
-      return false;
-    }
-    function swimmerProblem(html) {
-      return looksLikeJson(html) ? void 0 : { halt: true, message: NOT_JSON_TEXT };
-    }
-    async function runSwimmerWork(work, persist) {
-      const step = planSwimmerFastestTimes(work.swimmerId);
-      const { page, aborted } = await fetchPaced(step.canonicalUrl, "swimmerFastestTimes", SWIMMER_TIMES_STAGGER_MS);
-      if (aborted) return failItem(work.key, "not fetched: the run was cancelled");
-      const screen = screenPage(step.canonicalUrl, "swimmerFastestTimes", page, swimmerProblem);
-      const subjects = work.attributions.map((a) => teamSubject(a.teamId, a.seasonLabel));
-      if (screen.relay && page !== void 0) {
-        if (screen.action === "clean") {
-          const stopped = await relayItem(work.key, subjects, step.canonicalUrl, page);
-          if (stopped !== void 0) return stopped;
-        } else if (await relayTo(subjects, step.canonicalUrl, page) === "streak-stop") {
-          return halt(work.key, RELAY_STREAK_TEXT);
-        }
-      }
-      if (screen.action !== "clean") return actOn(work.key, screen);
-      queue = markDone(currentQueue(), work.key);
-      await persist();
-      return false;
-    }
-    async function markCaptures(outcome) {
-      const seasonDone = /* @__PURE__ */ new Set();
-      if (queue !== void 0 && outcome === "completed") {
-        for (const t of queueProgress(queue).teams) {
-          if (captureHasEveryPlannedPage(t.teamId, t.seasonLabel)) {
-            seasonDone.add(captureIdForSubject(teamSubject(t.teamId, t.seasonLabel)));
-          }
-        }
-      }
-      for (const [id, subject] of usedSubjects) {
-        const complete = subject.kind === "team" && subject.season === void 0 ? optionsLanded.get(subject.teamId) === true : seasonDone.has(id);
-        const names = subject.kind === "team" ? rosterNames.get(subject.teamId) : void 0;
-        const label = names?.size === 1 ? [...names][0] : void 0;
-        await deps.markCapture(subject, complete ? "every-planned-page-fetched" : "partial", label);
-      }
-    }
-    async function flushAll() {
-      if (usedSubjects.size === 0) return [];
-      const results = await deps.flushDownloads([...usedSubjects.values()]);
-      return results.filter((r) => r.pageCount > 0 || r.error !== void 0);
-    }
-    function buildSummary(outcome, downloads2) {
-      const progress = queue === void 0 ? void 0 : queueProgress(queue);
-      const teams = input.teamIds.map((teamId) => {
-        const notes = notesFor(teamId);
-        const base = {
-          teamId,
-          rostersDone: 0,
-          rostersFailed: 0,
-          swimmersDone: 0,
-          swimmersFailed: 0,
-          swimmersSkippedResumed: 0,
-          rosterRowsWithoutSwimmerId: notes.rosterRowsWithoutSwimmerId,
-          emptyRosterGenders: notes.emptyRosterGenders
+      const queued = progress?.teams.find((t) => t.teamId === teamId);
+      if (queued !== void 0) {
+        return {
+          ...base,
+          status: queued.status,
+          seasonLabel: queued.seasonLabel,
+          ...queued.seasonId === void 0 ? {} : { seasonId: queued.seasonId },
+          ...queued.availableLabels === void 0 ? {} : { availableLabels: queued.availableLabels },
+          rostersDone: queued.rosters.done,
+          rostersFailed: queued.rosters.failed,
+          swimmersDone: queued.swimmers.done,
+          swimmersFailed: queued.swimmers.failed,
+          swimmersSkippedResumed: queued.swimmers.skippedResumed,
+          errors: queued.errorLines
         };
-        const queued = progress?.teams.find((t) => t.teamId === teamId);
-        if (queued !== void 0) {
-          return {
-            ...base,
-            status: queued.status,
-            seasonLabel: queued.seasonLabel,
-            ...queued.seasonId === void 0 ? {} : { seasonId: queued.seasonId },
-            ...queued.availableLabels === void 0 ? {} : { availableLabels: queued.availableLabels },
-            rostersDone: queued.rosters.done,
-            rostersFailed: queued.rosters.failed,
-            swimmersDone: queued.swimmers.done,
-            swimmersFailed: queued.swimmers.failed,
-            swimmersSkippedResumed: queued.swimmers.skippedResumed,
-            errors: queued.errorLines
-          };
-        }
-        const report = seasonReports.find((r) => r.teamId === teamId);
-        if (report === void 0) return { ...base, status: "not-reached", errors: [] };
-        if (report.error !== void 0) return { ...base, status: "seasons-unreadable", errors: [report.error] };
-        return { ...base, status: choiceAsked ? "not-chosen" : "not-reached", errors: [] };
-      });
-      return {
-        outcome,
-        ...haltMessage === void 0 ? {} : { haltMessage },
-        teams,
-        requestedUrls,
-        downloads: downloads2
-      };
-    }
+      }
+      const report = ctx.seasonReports.find((r) => r.teamId === teamId);
+      if (report === void 0) return { ...base, status: "not-reached", errors: [] };
+      if (report.error !== void 0) return { ...base, status: "seasons-unreadable", errors: [report.error] };
+      return { ...base, status: ctx.choiceAsked ? "not-chosen" : "not-reached", errors: [] };
+    });
+    return {
+      outcome,
+      ...ctx.haltMessage === void 0 ? {} : { haltMessage: ctx.haltMessage },
+      teams,
+      requestedUrls: ctx.requestedUrls,
+      downloads
+    };
   }
 
   // packages/swimcloud/src/targetUrls.ts
@@ -3691,7 +3756,9 @@
     };
   }
   function defaultSeasonLabel(options) {
-    return (options.find((o) => o.selected) ?? options[0]).label;
+    const season = options.find((o) => o.selected) ?? options[0];
+    if (season === void 0) throw new Error("defaultSeasonLabel: the season list is empty, so there is no default.");
+    return season.label;
   }
   function formatScopeNote() {
     const seconds = Math.round(MIN_DELAY_MS / 1e3);
@@ -5724,6 +5791,22 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
+ * Two checked reads for places where a parser already knows an index exists.
+ *
+ * `noUncheckedIndexedAccess` types `match[1]` and `cells[i]` as `T | undefined`.
+ * Most reads in this package are provably in range: a capture group that is not
+ * optional, or an index that came from `findIndex`. Writing `?? ''` there would
+ * hide a broken invariant behind an empty string. These helpers raise instead,
+ * so a pattern edit or a bad index fails loudly at the read, not as a blank
+ * field further downstream.
+ *
+ * Do not use them for an optional group (`(…)?`) or for an index that may be out
+ * of range. Test `=== undefined` there and decide what absent means.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
+ *
  * Minimal HTML text extraction, implemented with string and regular-expression
  * operations only.
  *
@@ -5896,6 +5979,10 @@
  * One exception, added 2026-10-03: {@link planTeamSeasonRoster}. It emits a
  * `season_id` only from a `TeamSeasonOption` that `parseTeamSeasonOptions` read
  * off that team's own page. Every other planner here still emits none.
+ */
+/**
+ * @license
+ * SPDX-License-Identifier: Apache-2.0
  */
 /**
  * @license

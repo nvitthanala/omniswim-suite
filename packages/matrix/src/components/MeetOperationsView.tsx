@@ -10,9 +10,16 @@ import { aggregateSwimmerMeetPoints, scorerRosterKey } from '@omniswim/core/lib/
 import { buildTeamScoreLookup, officialScoresForGender } from '@omniswim/core/lib/teamScoreMatching';
 import { buildMeetReconciliationSummary } from '@omniswim/core/lib/meetReconciliation';
 import type { PrelimsDeltaTimelinePoint, PrelimsOverUnderEntry } from '@omniswim/core/lib/prelimsProjection';
-import { buildMeetMomentumChartDataFromLookup, buildPrelimsOverUnderByEntryKey } from '@omniswim/core/lib/prelimsProjection';
+import {
+  buildMeetMomentumChartDataFromLookup,
+  buildPrelimsDeltaTimeline,
+  buildPrelimsOverUnderByEntryKey,
+  countPrelimsEntriesWithoutActual,
+  prelimsDeltaTimelineOptions,
+  sumProjectionLeftOutPoints,
+} from '@omniswim/core/lib/prelimsProjection';
 import type { PsychOverUnderEntry } from '@omniswim/core/lib/psychProjection';
-import type { ScoringBundle } from '@omniswim/core/lib/useWorkspaceScoring';
+import type { ProjectionBundle, ScoringBundle } from '@omniswim/core/lib/useWorkspaceScoring';
 import { useThemeColors } from '@omniswim/core/lib/useThemeColors';
 import { MeetOpsMeetStep } from './MeetOpsMeetStep';
 import type { MatrixStepId } from './matrixStepState';
@@ -27,11 +34,15 @@ type Props = {
   gender: Gender;
   scoringBundle: ScoringBundle;
   baselineBundle: ScoringBundle;
-  prelimsProjectedBundle: ScoringBundle;
-  psychProjectedBundle: ScoringBundle;
+  prelimsProjectedBundle: ProjectionBundle;
+  psychProjectedBundle: ProjectionBundle;
   baselineByTeam: Map<string, number>;
+  /** Expected points per team. A team with no expectation (every seed past the place-point table) is absent. */
   prelimsByTeam: Map<string, number>;
   psychByTeam: Map<string, number>;
+  /** Seeds past the place-point table per team (teams with at least one): no expected points. */
+  prelimsWithoutExpectationByTeam?: Map<string, number>;
+  psychWithoutExpectationByTeam?: Map<string, number>;
   prelimsDeltaTimeline: PrelimsDeltaTimelinePoint[];
   psychDeltaTimeline: PrelimsDeltaTimelinePoint[];
   showPrelimsPerformance: boolean;
@@ -75,10 +86,12 @@ export default function MeetOperationsView({
   scoringBundle,
   baselineBundle,
   prelimsProjectedBundle,
-  psychProjectedBundle: _psychProjectedBundle,
+  psychProjectedBundle,
   baselineByTeam,
   prelimsByTeam,
   psychByTeam,
+  prelimsWithoutExpectationByTeam,
+  psychWithoutExpectationByTeam,
   prelimsDeltaTimeline,
   psychDeltaTimeline: _psychDeltaTimeline,
   showPrelimsPerformance,
@@ -123,7 +136,7 @@ export default function MeetOperationsView({
     // per team (see prelimsProjection.ts), so it changes whenever anything read
     // here changes. sortedTeams is a fresh array on every worker response, so
     // depending on it would rebuild this for identical data every recompute.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on teamStyleSignature, which changes with any team's name, points or color; sortedTeams is a new array on every response
     [scoringBundle.teamStyleSignature, chartTheme.isDark]
   );
 
@@ -167,7 +180,7 @@ export default function MeetOperationsView({
       .slice(0, 10);
   // Deliberate: scoringRefreshKey is a cache-buster. It is not read in the
   // body; bumping it is how a caller forces a recompute.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- scoringRefreshKey is a cache-buster that is not read in the body; bumping it forces a recompute
   }, [scoringBundle.allScored, gender, searchQuery, scoringRefreshKey]);
 
   const prelimsOuByEntryLocal = useMemo(
@@ -187,13 +200,50 @@ export default function MeetOperationsView({
   const { visibleEvents, timelineData } = scoringBundle;
   const timelineChartKey = `timeline-${scoringRefreshKey}-${scoringBundle.teamStyleSignature}`;
 
+  // A team with no expectation has no delta, and a team with seeds past the
+  // table is compared on the entries that have an expectation. The delta timeline
+  // from the scoring hook reads neither, so rebuild it when the prelims bundle
+  // holds such a team. With none, the hook's timeline is already right.
+  const resolvedPrelimsDeltaTimeline = useMemo(() => {
+    const options = prelimsDeltaTimelineOptions(
+      prelimsProjectedBundle,
+      baselineBundle.allScored,
+      scoringBundle.allScored
+    );
+    if (!options) return prelimsDeltaTimeline;
+    return buildPrelimsDeltaTimeline(
+      baselineBundle.timelineData,
+      scoringBundle.timelineData,
+      prelimsProjectedBundle.timelineData,
+      options
+    );
+  }, [prelimsDeltaTimeline, prelimsProjectedBundle, baselineBundle, scoringBundle]);
+
   const prelimsDeltaByLabel = useMemo(() => {
     const map = new Map<string, Record<string, number>>();
-    for (const pt of prelimsDeltaTimeline) {
+    for (const pt of resolvedPrelimsDeltaTimeline) {
       map.set(pt.name, pt.baselineDelta);
     }
     return map;
-  }, [prelimsDeltaTimeline]);
+  }, [resolvedPrelimsDeltaTimeline]);
+
+  // Points of the entries the place-point table has no row for, per team. The
+  // "vs prelims" figures subtract them from the baseline and the projected total,
+  // so both sides of the difference hold the same entries.
+  const prelimsBaselineLeftOutByTeam = useMemo(
+    () => sumProjectionLeftOutPoints(baselineBundle.allScored, prelimsProjectedBundle.sortedTeams).byTeam,
+    [baselineBundle.allScored, prelimsProjectedBundle.sortedTeams]
+  );
+  const prelimsProjectedLeftOutByTeam = useMemo(
+    () => sumProjectionLeftOutPoints(scoringBundle.allScored, prelimsProjectedBundle.sortedTeams).byTeam,
+    [scoringBundle.allScored, prelimsProjectedBundle.sortedTeams]
+  );
+  // The same for the psych projection: its "vs baseline" total leaves out the
+  // baseline points of the entries the psych sheet has no expectation for.
+  const psychBaselineLeftOutByTeam = useMemo(
+    () => sumProjectionLeftOutPoints(baselineBundle.allScored, psychProjectedBundle.sortedTeams).byTeam,
+    [baselineBundle.allScored, psychProjectedBundle.sortedTeams]
+  );
 
   const psychMomentumHasData = resolvedPsychOuByEntry.size > 0;
   const prelimsMomentumHasData = resolvedPrelimsOuByEntry.size > 0;
@@ -220,6 +270,14 @@ export default function MeetOperationsView({
     teamsWithLineStyles,
     visibleEvents,
   ]);
+
+  // Entries the momentum chart leaves out because they have no result yet.
+  const momentumNoActualCount =
+    meetMomentumAnchor === 'psych' && showPsychPerformance
+      ? countPrelimsEntriesWithoutActual(resolvedPsychOuByEntry)
+      : showPrelimsPerformance
+        ? countPrelimsEntriesWithoutActual(resolvedPrelimsOuByEntry)
+        : 0;
 
   const momentumEmptyMessage =
     meetMomentumAnchor === 'psych' && showPsychPerformance && !psychMomentumHasData
@@ -268,6 +326,7 @@ export default function MeetOperationsView({
             onMeetMomentumAnchorChange={setMeetMomentumAnchor}
             meetMomentumData={meetMomentumData}
             momentumEmptyMessage={momentumEmptyMessage}
+            momentumNoActualCount={momentumNoActualCount}
             analysisView={analysisView}
             onAnalysisViewChange={setAnalysisView}
             baselineBundle={baselineBundle}
@@ -290,6 +349,11 @@ export default function MeetOperationsView({
             baselineByTeam={baselineByTeam}
             prelimsByTeam={prelimsByTeam}
             psychByTeam={psychByTeam}
+            prelimsWithoutExpectationByTeam={prelimsWithoutExpectationByTeam}
+            psychWithoutExpectationByTeam={psychWithoutExpectationByTeam}
+            prelimsBaselineLeftOutByTeam={prelimsBaselineLeftOutByTeam}
+            prelimsProjectedLeftOutByTeam={prelimsProjectedLeftOutByTeam}
+            psychBaselineLeftOutByTeam={psychBaselineLeftOutByTeam}
             showPrelimsPerformance={showPrelimsPerformance}
             prelimsOuByEntry={resolvedPrelimsOuByEntry}
             showPsychPerformance={showPsychPerformance}

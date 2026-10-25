@@ -10,6 +10,8 @@
 
 import {
 
+  RelayLegEstimate,
+
   RelayLegSplitDetail,
 
   RelayLegStroke,
@@ -23,6 +25,10 @@ import {
 } from '../types';
 
 import { normalizeEventForCutline } from './cutlineEventNames';
+
+import { itemAt } from './indexedAccess';
+
+import { isTheoreticalRelayLegRowId } from './theoreticalMeetLabel';
 
 import { convertTimeToSeconds, formatSecondsToTime } from './utils';
 
@@ -398,7 +404,7 @@ export function displayTimeForRelayLeg(row: SwimmerResult): string {
 
     for (let i = detail.segments.length - 1; i >= 0; i--) {
 
-      const seg = detail.segments[i];
+      const seg = itemAt(detail.segments, i);
 
       if (seg.yards >= legDist) {
 
@@ -416,7 +422,7 @@ export function displayTimeForRelayLeg(row: SwimmerResult): string {
 
     for (let i = detail.segments.length - 1; i >= 0; i--) {
 
-      const segT = pickPlausibleLegTime(detail.segments[i].segmentTime, legDist, teamClock);
+      const segT = pickPlausibleLegTime(itemAt(detail.segments, i).segmentTime, legDist, teamClock);
 
       if (segT) return segT;
 
@@ -432,9 +438,103 @@ export function displayTimeForRelayLeg(row: SwimmerResult): string {
 
 
 
+/** The word that labels an estimated relay leg time. Never shown as a split. */
+export const RELAY_LEG_ESTIMATE_LABEL = 'Estimate';
+
+/**
+ * The row's leg estimate, or `undefined` when it holds none or an unusable one (not a positive number).
+ * Absent stays absent: this never returns zero.
+ */
+export function relayLegEstimateOf(row: Pick<SwimmerResult, 'relayLegEstimate'>): RelayLegEstimate | undefined {
+  const estimate = row.relayLegEstimate;
+  if (estimate === undefined || estimate === null) return undefined;
+  if (typeof estimate.time !== 'number' || !Number.isFinite(estimate.time) || estimate.time <= 0) return undefined;
+  return estimate;
+}
+
+/** A leg time prepared for display: a measured split, or a labelled estimate. */
+export type RelayLegTimeView = {
+  time: string;
+  /** `'split'`: swum and recorded. `'estimate'`: nobody swam it; show it with {@link RELAY_LEG_ESTIMATE_LABEL}. */
+  kind: 'split' | 'estimate';
+  /** Where an estimate comes from (`RelayLegEstimate.basis`). Absent when the row does not record it. */
+  basis?: string;
+};
+
+/**
+ * The leg time a screen shows for a relay leg row, with what kind of time it is. `null` when the row has
+ * no leg time (show a dash, not a zero).
+ *
+ * - A leg row of a theoretical meet (`isTheoreticalRelayLegRowId`) is never a split: nobody swam the
+ *   relay. Any time it carries is an estimate, whether in `relayLegEstimate` or (rows saved before the
+ *   field existed, or a leg the roster simulation refilled) in `relayLegSplit`.
+ * - Every other row keeps `displayTimeForRelayLeg` unchanged and is a split.
+ *
+ * Display only. A scoring or crediting path must not call this: it reads `relayLegSplit` itself.
+ */
+export function relayLegTimeView(row: SwimmerResult): RelayLegTimeView | null {
+  const measured = displayTimeForRelayLeg(row);
+  const estimate = relayLegEstimateOf(row);
+  if (isTheoreticalRelayLegRowId(row.id)) {
+    if (estimate) return { time: formatSecondsToTime(estimate.time), kind: 'estimate', basis: estimate.basis };
+    if (measured !== '—') return { time: measured, kind: 'estimate' };
+    return null;
+  }
+  if (measured !== '—') return { time: measured, kind: 'split' };
+  if (estimate) return { time: formatSecondsToTime(estimate.time), kind: 'estimate', basis: estimate.basis };
+  return null;
+}
+
+/**
+ * True when a screen has a leg time to show for the row, split or estimate. Use it where
+ * `Boolean(res.relayLegSplitDetail || res.relayLegSplit)` decided whether to show a leg time.
+ */
+export function hasRelayLegTime(row: SwimmerResult): boolean {
+  return Boolean(row.isRelay && (row.relayLegSplitDetail || row.relayLegSplit || relayLegEstimateOf(row)));
+}
+
+const LEGACY_ESTIMATE_BASIS_LEG_ONE = 'flat-start best time';
+const LEGACY_ESTIMATE_BASIS_LATER_LEG = 'best time (start adjustment not recorded)';
+
+/**
+ * Read-time normaliser for a theoretical meet's leg row saved before `relayLegEstimate` existed.
+ *
+ * Those rows hold the estimate in `relayLegSplit`. A row is recognised by its id
+ * (`isTheoreticalRelayLegRowId`). The value is moved, not changed: `relayLegSplit` becomes
+ * `relayLegEstimate.time`, and the basis says only what the row can still tell (leg 1 is the recorded
+ * flat-start best; for legs 2 to 4 the adjustment is not recoverable, so `startAdjustmentSec` stays
+ * absent). `relayTeamSplits` is dropped too: on such a row its leg totals were built from the estimates,
+ * and a theoretical meet has no team split to keep. Any other row, a row that already has an estimate, and
+ * a row whose time does not parse come back untouched.
+ */
+export function normalizeTheoreticalRelayLegEstimate(row: SwimmerResult): SwimmerResult {
+  if (!isTheoreticalRelayLegRowId(row.id)) return row;
+  if (row.relayLegEstimate !== undefined || row.relayLegSplitDetail !== undefined) return row;
+  const split = row.relayLegSplit;
+  if (typeof split !== 'string' || split.trim() === '' || split === 'NT') return row;
+  const seconds = convertTimeToSeconds(split);
+  if (!Number.isFinite(seconds) || seconds <= 0) return row;
+  const { relayLegSplit: _moved, relayTeamSplits: _derived, ...rest } = row;
+  void _moved;
+  void _derived;
+  return {
+    ...rest,
+    relayLegEstimate: {
+      time: Math.round(seconds * 100) / 100,
+      basis: row.relayLegIndex === 0 ? LEGACY_ESTIMATE_BASIS_LEG_ONE : LEGACY_ESTIMATE_BASIS_LATER_LEG,
+    },
+  };
+}
+
 /** Normalize relay split fields on a swimmer row (snake_case → camelCase). */
 
-export function normalizeSwimmerResultRelayFields(r: SwimmerResult): SwimmerResult {
+export function normalizeSwimmerResultRelayFields(raw: SwimmerResult): SwimmerResult {
+
+  const r = normalizeTheoreticalRelayLegEstimate(raw);
+
+  // A theoretical meet's leg row carries no split, so there is nothing to derive one from. Without this
+  // the display split below would rebuild `relayLegSplit` from `relayTeamSplits.legTotals`.
+  if (isTheoreticalRelayLegRowId(r.id)) return r;
 
   const isRelay = Boolean(r.isRelay) || /\brelay\b/i.test(String(r.event || ''));
 
@@ -540,7 +640,7 @@ export function formatLegSplitSummary(detail: RelayLegSplitDetail | unknown): st
 
       const mark = 50 * (i + 1);
 
-      const lapSec = convertTimeToSeconds(segments[i].segmentTime);
+      const lapSec = convertTimeToSeconds(itemAt(segments, i).segmentTime);
 
       cumSec += lapSec;
 
@@ -548,7 +648,7 @@ export function formatLegSplitSummary(detail: RelayLegSplitDetail | unknown): st
 
         i === segments.length - 1 && legTotal ? legTotal : formatSecondsToTime(cumSec);
 
-      const lapStr = segments[i].segmentTime;
+      const lapStr = itemAt(segments, i).segmentTime;
 
       if (i === 0) {
 
@@ -640,9 +740,9 @@ export function computeRelayHalves(legTotals: (string | null)[]): {
 
   return {
 
-    firstHalf: formatSecondsToTime(secs[0] + secs[1]),
+    firstHalf: formatSecondsToTime(itemAt(secs, 0) + itemAt(secs, 1)),
 
-    secondHalf: formatSecondsToTime(secs[2] + secs[3]),
+    secondHalf: formatSecondsToTime(itemAt(secs, 2) + itemAt(secs, 3)),
 
   };
 

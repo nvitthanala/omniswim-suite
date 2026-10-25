@@ -5,18 +5,15 @@
  * A relay dead heat divides the tied places' points, the same as an individual
  * one (NCAA Rule 7-8).
  *
- * KNOWN DEFECT, found 2026-10-01 by the bug-hunter pass. The `it.fails` cases
- * assert the correct behaviour and currently fail. When the defect is fixed,
- * vitest reports them as failing ("expected to fail") — change `it.fails` to
- * `it` at that point.
- *
- * What goes wrong. `scoreRelaysInEvent` (utils.ts) keys a relay entry by
- * event|team|round|rank|clock, so two teams tied for a place are two groups,
- * and each group takes the FULL value of that place from
- * `relayTeamPointsForIndex`. Two relays tied for 2nd under a 16-place
- * championship table each score 34 (2nd place) instead of 33 ((34 + 32) / 2).
- * The event pays out 2 points more than its table holds. Individual events do
- * split (`resolveIndividualGroupLadderShare`); relays never do.
+ * History. Found 2026-10-01 by the bug-hunter pass as a KNOWN DEFECT: every tied
+ * relay took the FULL value of the shared place, so two relays tied for 2nd
+ * under a 16-place championship table each scored 34 instead of 33
+ * ((34 + 32) / 2), and the event paid out 2 points more than its table holds.
+ * Fixed 2026-10-12 (user decision U1): `scoreRelaysInEvent` counts the entries
+ * that hold each tied place and divides through `tiedPlaceShare`, the one tie
+ * helper the individual scorers also use. These cases were `it.fails` until
+ * then. The finer cases (3-way, straddling the table end, one shared helper)
+ * live in tests/relayTieSplit.test.ts.
  *
  * The second derivation is the repo's own Rule 7-8 model,
  * `computeNcaaEventScoring` (ncaaScoringRules.ts), fed the same field. The
@@ -98,7 +95,7 @@ describe.each(PRESETS)('relay places under %s', (_label, settings) => {
     expect(engineTeamPoints(NO_TIE, settings)).toEqual(rule7TeamPoints(NO_TIE));
   });
 
-  it.fails('KNOWN DEFECT: two relays tied for 2nd split the 2nd and 3rd place points (Rule 7-8)', () => {
+  it('two relays tied for 2nd split the 2nd and 3rd place points (Rule 7-8)', () => {
     expect(engineTeamPoints(TIE_FOR_SECOND, settings)).toEqual(rule7TeamPoints(TIE_FOR_SECOND));
   });
 });

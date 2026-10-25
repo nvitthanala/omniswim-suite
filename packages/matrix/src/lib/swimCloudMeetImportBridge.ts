@@ -75,11 +75,18 @@ import { Gender } from '@omniswim/core/types';
 import type { SwimmerResult, Workspace } from '@omniswim/core/types';
 import { buildScoringPatchForParsedPdf, presetIdForConference } from '@omniswim/core/lib/scoringDefaults';
 import { meetCopyFromParsed } from '@omniswim/core/lib/meetSource';
+import { isUnconfirmedProgramSwim } from '@omniswim/core/lib/programSwim';
+import {
+  resolveScoredProgramBoundary,
+  swimsListOnlyBoundary,
+  type ScoredProgramBoundary,
+} from '@omniswim/core/lib/scoredProgramBoundary';
 import type {
   SwimCloudClassYear,
   SwimCloudEvent,
   SwimCloudTeamId,
 } from '@omniswim/swimcloud/entities';
+import { individualEventLabelOf } from '@omniswim/swimcloud/entities';
 import type {
   SwimCloudMeetEventResultsParse,
   SwimCloudMeetEventSwim,
@@ -204,6 +211,106 @@ function timeOrMarker(finalTime: string | undefined, rawTimeToken: string | unde
   return finalTime ?? rawTimeToken ?? 'NT';
 }
 
+type MeetResultsEvent = SwimCloudMeetResultsParse['events'][number];
+type MeetResultsEntry = MeetResultsEvent['entries'][number];
+type MeetResultsResult = MeetResultsEvent['results'][number];
+type MeetResultsRelay = MeetResultsEvent['relays'][number];
+
+/**
+ * What one source row became: a scoreable row, or a named reason it was left
+ * out. `classYearGap` is only ever set by the per-event-page converter; the
+ * meet-results converter reads no roster and leaves it `undefined`.
+ */
+type RowOutcome =
+  | { readonly kind: 'row'; readonly row: SwimmerResult; readonly classYearGap: SwimCloudClassYearGap | undefined }
+  | { readonly kind: 'skip'; readonly skip: SwimCloudMeetImportSkip };
+
+function skipOutcome(skip: SwimCloudMeetImportSkip): RowOutcome {
+  return { kind: 'skip', skip };
+}
+
+function rowOutcome(row: SwimmerResult, classYearGap: SwimCloudClassYearGap | undefined = undefined): RowOutcome {
+  return { kind: 'row', row, classYearGap };
+}
+
+/** `{ subject }` when the row names a swimmer, else nothing: a skip never invents a subject. */
+function subjectField(name: string | undefined): { subject?: string } {
+  return name === undefined ? {} : { subject: name };
+}
+
+/** `isExhibition` then `pdfPoints`, each present only when the page printed it. */
+function exhibitionAndPdfPoints(
+  result: MeetResultsResult | undefined,
+): { isExhibition?: true; pdfPoints?: number } {
+  return {
+    ...(result?.flags?.exhibition === true ? { isExhibition: true as const } : {}),
+    ...(result?.points !== undefined ? { pdfPoints: result.points } : {}),
+  };
+}
+
+/** A relay's leg names, or nothing when the relay is unknown or has no legs. */
+function relayNamesField(relay: MeetResultsRelay | undefined): { relayNames?: { name: string; year: string }[] } {
+  if (relay === undefined || relay.legs.length === 0) return {};
+  return { relayNames: relay.legs.map(leg => ({ name: leg.athleteName ?? '', year: '' })) };
+}
+
+/** One meet-results entry on a relay event: a team row, or a `'no-team-name'` skip. */
+function meetResultsRelayOutcome(
+  parsedEvent: MeetResultsEvent,
+  entry: MeetResultsEntry,
+  result: MeetResultsResult | undefined,
+  gender: Gender,
+): RowOutcome {
+  const relay = parsedEvent.relays.find(r => r.relayId === entry.relayId);
+  const teamName = relay?.teamName ?? entry.teamName;
+  if (teamName === undefined) {
+    return skipOutcome({ reason: 'no-team-name', eventLabel: parsedEvent.event.label });
+  }
+  return rowOutcome({
+    id: entry.entryId,
+    rank: result?.place ?? UNRANKED_SENTINEL,
+    name: teamName,
+    classYear: 'unknown',
+    team: teamName,
+    time: timeOrMarker(result?.finalTime, result?.rawTimeToken),
+    points: result?.points ?? 0,
+    event: parsedEvent.event.label,
+    gender,
+    isRelay: true,
+    ...relayNamesField(relay),
+    ...exhibitionAndPdfPoints(result),
+  });
+}
+
+/** One meet-results entry on an individual event: a swimmer row, or a named skip. */
+function meetResultsIndividualOutcome(
+  parsedEvent: MeetResultsEvent,
+  entry: MeetResultsEntry,
+  result: MeetResultsResult | undefined,
+  gender: Gender,
+): RowOutcome {
+  const name = entry.athleteName;
+  if (name === undefined) {
+    return skipOutcome({ reason: 'no-athlete-name', eventLabel: parsedEvent.event.label });
+  }
+  const team = entry.teamName;
+  if (team === undefined) {
+    return skipOutcome({ reason: 'no-team-name', eventLabel: parsedEvent.event.label, subject: name });
+  }
+  return rowOutcome({
+    id: entry.entryId,
+    rank: result?.place ?? UNRANKED_SENTINEL,
+    name,
+    classYear: 'unknown',
+    team,
+    time: timeOrMarker(result?.finalTime, result?.rawTimeToken),
+    points: result?.points ?? 0,
+    event: parsedEvent.event.label,
+    gender,
+    ...exhibitionAndPdfPoints(result),
+  });
+}
+
 export function swimCloudMeetResultsToSwimmerResults(parse: SwimCloudMeetResultsParse): SwimCloudMeetImportResult {
   const men: SwimmerResult[] = [];
   const women: SwimmerResult[] = [];
@@ -220,59 +327,11 @@ export function swimCloudMeetResultsToSwimmerResults(parse: SwimCloudMeetResults
 
     for (const entry of parsedEvent.entries) {
       const result = parsedEvent.results.find(r => r.entryId === entry.entryId);
-      const time = timeOrMarker(result?.finalTime, result?.rawTimeToken);
-      const rank = result?.place ?? UNRANKED_SENTINEL;
-      const points = result?.points ?? 0;
-
-      if (isRelay) {
-        const relay = parsedEvent.relays.find(r => r.relayId === entry.relayId);
-        const teamName = relay?.teamName ?? entry.teamName;
-        if (teamName === undefined) {
-          skipped.push({ reason: 'no-team-name', eventLabel: parsedEvent.event.label });
-          continue;
-        }
-        bucket.push({
-          id: entry.entryId,
-          rank,
-          name: teamName,
-          classYear: 'unknown',
-          team: teamName,
-          time,
-          points,
-          event: parsedEvent.event.label,
-          gender,
-          isRelay: true,
-          ...(relay !== undefined && relay.legs.length > 0
-            ? { relayNames: relay.legs.map(leg => ({ name: leg.athleteName ?? '', year: '' })) }
-            : {}),
-          ...(result?.flags?.exhibition === true ? { isExhibition: true } : {}),
-          ...(result?.points !== undefined ? { pdfPoints: result.points } : {}),
-        });
-      } else {
-        const name = entry.athleteName;
-        if (name === undefined) {
-          skipped.push({ reason: 'no-athlete-name', eventLabel: parsedEvent.event.label });
-          continue;
-        }
-        const team = entry.teamName;
-        if (team === undefined) {
-          skipped.push({ reason: 'no-team-name', eventLabel: parsedEvent.event.label, subject: name });
-          continue;
-        }
-        bucket.push({
-          id: entry.entryId,
-          rank,
-          name,
-          classYear: 'unknown',
-          team,
-          time,
-          points,
-          event: parsedEvent.event.label,
-          gender,
-          ...(result?.flags?.exhibition === true ? { isExhibition: true } : {}),
-          ...(result?.points !== undefined ? { pdfPoints: result.points } : {}),
-        });
-      }
+      const outcome = isRelay
+        ? meetResultsRelayOutcome(parsedEvent, entry, result, gender)
+        : meetResultsIndividualOutcome(parsedEvent, entry, result, gender);
+      if (outcome.kind === 'skip') skipped.push(outcome.skip);
+      else bucket.push(outcome.row);
     }
   }
 
@@ -839,11 +898,21 @@ export function swimCloudTeamMeetSwimsToSwimmerResults(
       team,
       time: timeOrMarker(swim.result.finalTime, swim.result.rawTimeToken),
       points,
-      event: eventLabel,
+      // The swims list prints `1650 Y Free`, which no event reader understands.
+      // A meet row has no course field and is read as yards, so only a yards
+      // label is rewritten to `1650 Freestyle`. An L or S label stays as printed:
+      // dropping its letter would score a metric swim as yards.
+      event: (swim.event.course === 'SCY' ? individualEventLabelOf(swim.event) : null) ?? eventLabel,
       gender,
       ...(resolved === undefined ? {} : { roundSwam: resolved.roundSwam }),
       ...(isExhibition ? { isExhibition: true } : {}),
       ...(pdfPoints === undefined ? {} : { pdfPoints }),
+      // The swims list prints the bare event label for a program swim and for a
+      // post-meet time trial alike, so the page cannot say which this is. The row
+      // counts toward no best time, arbitrage field or cut tag until the user
+      // flags it (`setCreditedSwimProgramStatus`). An event-page row of the same
+      // swim id replaces this one on merge, and states its own program number.
+      programSwim: 'unconfirmed',
     });
   }
 
@@ -1011,137 +1080,181 @@ export function swimCloudEventResultsToSwimmerResults(
   parse: SwimCloudMeetEventResultsParse,
   options: SwimCloudEventResultsImportOptions = {},
 ): SwimCloudEventResultsImportResult {
-  const trust = options.pointsTrust ?? 'meet-score-column';
-  const coverage =
-    options.rosters === undefined
-      ? NO_CLASS_YEAR_COVERAGE
-      : buildSwimCloudClassYearIndex(options.rosters);
+  const conversion: EventPageConversion = {
+    eventLabel: parse.event.label,
+    isRelay: parse.event.kind === 'relay',
+    // The page states its own gender on its gender dropdown's active item, and
+    // that is a statement about every row on it — so it is read once here rather
+    // than per row. When the page never said (a "Mixed" event, which the parser
+    // records as unknown rather than mapping it to a side), every row is skipped
+    // with a reason instead of being assigned to a side of the meet by guess.
+    gender: mapGender(parse.gender),
+    genderLabel: parse.genderLabel,
+    isTimeTrial: isTimeTrialEvent(parse, options.scoredEventNumberMax),
+    trust: options.pointsTrust ?? 'meet-score-column',
+    coverage:
+      options.rosters === undefined
+        ? NO_CLASS_YEAR_COVERAGE
+        : buildSwimCloudClassYearIndex(options.rosters),
+    teamNames: options.teamNames,
+  };
   const men: SwimmerResult[] = [];
   const women: SwimmerResult[] = [];
   const skipped: SwimCloudMeetImportSkip[] = [];
   const classYearGaps: Partial<Record<SwimCloudClassYearGap, number>> = {};
 
-  const eventLabel = parse.event.label;
-  const isRelay = parse.event.kind === 'relay';
-
-  // A post-meet time trial is a real swim that scores nothing and counts
-  // against nothing. `swimmerEntryLimits` already skips a row flagged this way
-  // — a 2026 measurement found 8 of 13 athletes wrongly flagged over the NSISC
-  // seven-event cap because a time trial counted twice — and `utils.ts` already
-  // scores one at zero. Neither could act on a SwimCloud import, because
-  // nothing on this path ever set the flag: the SwimCloud event label is
-  // "100 Breast", so `parseEventNumber` finds no "Event N" prefix and
-  // `isOutsideScoredProgram` answers false for every row.
-  const programmeNumber = eventProgrammeNumber(parse);
-  const isTimeTrial =
-    options.scoredEventNumberMax !== undefined &&
-    programmeNumber !== undefined &&
-    programmeNumber > options.scoredEventNumberMax;
-
-  // The page states its own gender on its gender dropdown's active item, and
-  // that is a statement about every row on it — so it is read once here rather
-  // than per row. When the page never said (a "Mixed" event, which the parser
-  // records as unknown rather than mapping it to a side), every row is skipped
-  // with a reason instead of being assigned to a side of the meet by guess.
-  const gender = mapGender(parse.gender);
-
   for (const round of parse.rounds) {
-    if (round.round === undefined) {
-      for (const swim of round.swims) {
-        skipped.push({
-          reason: 'missing-round-caption',
-          eventLabel,
-          ...(swim.entry.athleteName === undefined ? {} : { subject: swim.entry.athleteName }),
-        });
-      }
-      continue;
-    }
-
     for (const swim of round.swims) {
-      if (swim.relayLeadoff) {
-        skipped.push({
-          reason: 'relay-leadoff',
-          eventLabel,
-          ...(swim.entry.athleteName === undefined ? {} : { subject: swim.entry.athleteName }),
-        });
+      const outcome =
+        round.round === undefined
+          ? skipOutcome({
+              reason: 'missing-round-caption',
+              eventLabel: conversion.eventLabel,
+              ...subjectField(swim.entry.athleteName),
+            })
+          : convertEventPageSwim(swim, round.round, conversion);
+      if (outcome.kind === 'skip') {
+        skipped.push(outcome.skip);
         continue;
       }
-
-      if (gender === undefined) {
-        skipped.push({
-          // The page said "Mixed" is not the page failing to say anything.
-          reason: isMixedGenderLabel(parse.genderLabel) ? 'mixed-gender-event' : 'unknown-gender',
-          eventLabel,
-          ...(swim.entry.athleteName === undefined ? {} : { subject: swim.entry.athleteName }),
-        });
-        continue;
+      if (outcome.classYearGap !== undefined) {
+        classYearGaps[outcome.classYearGap] = (classYearGaps[outcome.classYearGap] ?? 0) + 1;
       }
-
-      // A relay row's "name" is its team, which is that row's real subject —
-      // see the file header. An individual row with no name is a parse gap.
-      const name = swim.entry.athleteName;
-      if (name === undefined) {
-        skipped.push({ reason: 'no-athlete-name', eventLabel });
-        continue;
-      }
-
-      // A relay table prints no team name, only a team link, so the plain name
-      // comes from the id index — see {@link buildSwimCloudTeamNameIndex} for
-      // why the entry label "Henderson State (A)" is not used as the team.
-      const team =
-        swim.entry.teamName ??
-        (swim.entry.swimCloudTeamId === undefined
-          ? undefined
-          : options.teamNames?.get(swim.entry.swimCloudTeamId));
-      if (team === undefined) {
-        skipped.push({ reason: 'no-team-name', eventLabel, subject: name });
-        continue;
-      }
-
-      const { points, pdfPoints } = eventPointsFor(swim, trust);
-      const resolvedYear = resolveClassYear(
-        swim.entry.swimCloudSwimmerId,
-        swim.entry.swimCloudTeamId,
-        coverage,
-      );
-      if (resolvedYear.gap !== undefined) {
-        classYearGaps[resolvedYear.gap] = (classYearGaps[resolvedYear.gap] ?? 0) + 1;
-      }
-
-      const legs = swim.relayLegs ?? [];
-
-      (gender === Gender.MEN ? men : women).push({
-        id: swim.swimKey,
-        // An exhibition row prints no ordinal, so it has no place. The sentinel
-        // is the same one the swims path uses for an unranked row.
-        rank: swim.result.place ?? UNRANKED_SENTINEL,
-        name,
-        classYear: resolvedYear.classYear,
-        team,
-        time: timeOrMarker(swim.result.finalTime, swim.result.rawTimeToken),
-        points,
-        event: eventLabel,
-        gender,
-        roundSwam: round.round,
-        ...(isRelay ? { isRelay: true } : {}),
-        ...(legs.length === 0
-          ? {}
-          : {
-              // The year is left empty rather than joined. A leg names a
-              // swimmer and a split; filling a class year here would put a
-              // second, separately-sourced year on the same page as the
-              // individual rows' one, and the two could disagree. Worth doing
-              // deliberately, not as a side effect of this converter.
-              relayNames: legs.map((leg) => ({ name: leg.athleteName ?? '', year: '' })),
-            }),
-        ...(swim.exhibition ? { isExhibition: true } : {}),
-        ...(isTimeTrial ? { isTimeTrial: true } : {}),
-        ...(pdfPoints === undefined ? {} : { pdfPoints }),
-      });
+      (outcome.row.gender === Gender.MEN ? men : women).push(outcome.row);
     }
   }
 
   return { men, women, skipped, classYearGaps };
+}
+
+/** What every row of one per-event page shares, worked out once per page. */
+interface EventPageConversion {
+  readonly eventLabel: string;
+  readonly isRelay: boolean;
+  /** `undefined` when the page did not state a gender this bridge maps to a side. */
+  readonly gender: Gender | undefined;
+  readonly genderLabel: string | undefined;
+  readonly isTimeTrial: boolean;
+  readonly trust: SwimCloudPointsTrust;
+  readonly coverage: SwimCloudClassYearCoverage;
+  readonly teamNames: SwimCloudTeamNameIndex | undefined;
+}
+
+/**
+ * Whether this page's event is a post-meet time trial.
+ *
+ * A post-meet time trial is a real swim that scores nothing and counts
+ * against nothing. `swimmerEntryLimits` already skips a row flagged this way
+ * — a 2026 measurement found 8 of 13 athletes wrongly flagged over the NSISC
+ * seven-event cap because a time trial counted twice — and `utils.ts` already
+ * scores one at zero. Neither could act on a SwimCloud import, because
+ * nothing on this path ever set the flag: the SwimCloud event label is
+ * "100 Breast", so `parseEventNumber` finds no "Event N" prefix and
+ * `isOutsideScoredProgram` answers false for every row.
+ *
+ * No boundary, or no printed programme number, means nothing is marked.
+ */
+function isTimeTrialEvent(
+  parse: SwimCloudMeetEventResultsParse,
+  scoredEventNumberMax: number | undefined,
+): boolean {
+  if (scoredEventNumberMax === undefined) return false;
+  const programmeNumber = eventProgrammeNumber(parse);
+  return programmeNumber !== undefined && programmeNumber > scoredEventNumberMax;
+}
+
+/**
+ * The plain team name for one event-page row.
+ *
+ * A relay table prints no team name, only a team link, so the plain name
+ * comes from the id index — see {@link buildSwimCloudTeamNameIndex} for
+ * why the entry label "Henderson State (A)" is not used as the team.
+ */
+function eventSwimTeamName(
+  swim: SwimCloudMeetEventSwim,
+  teamNames: SwimCloudTeamNameIndex | undefined,
+): string | undefined {
+  return (
+    swim.entry.teamName ??
+    (swim.entry.swimCloudTeamId === undefined
+      ? undefined
+      : teamNames?.get(swim.entry.swimCloudTeamId))
+  );
+}
+
+/** One swim of a captioned round: a scoreable row, or the named reason it was left out. */
+function convertEventPageSwim(
+  swim: SwimCloudMeetEventSwim,
+  roundSwam: string,
+  conversion: EventPageConversion,
+): RowOutcome {
+  const { eventLabel, gender } = conversion;
+  const subject = subjectField(swim.entry.athleteName);
+
+  if (swim.relayLeadoff) {
+    return skipOutcome({ reason: 'relay-leadoff', eventLabel, ...subject });
+  }
+
+  if (gender === undefined) {
+    return skipOutcome({
+      // The page said "Mixed" is not the page failing to say anything.
+      reason: isMixedGenderLabel(conversion.genderLabel) ? 'mixed-gender-event' : 'unknown-gender',
+      eventLabel,
+      ...subject,
+    });
+  }
+
+  // A relay row's "name" is its team, which is that row's real subject —
+  // see the file header. An individual row with no name is a parse gap.
+  const name = swim.entry.athleteName;
+  if (name === undefined) {
+    return skipOutcome({ reason: 'no-athlete-name', eventLabel });
+  }
+
+  const team = eventSwimTeamName(swim, conversion.teamNames);
+  if (team === undefined) {
+    return skipOutcome({ reason: 'no-team-name', eventLabel, subject: name });
+  }
+
+  const { points, pdfPoints } = eventPointsFor(swim, conversion.trust);
+  const resolvedYear = resolveClassYear(
+    swim.entry.swimCloudSwimmerId,
+    swim.entry.swimCloudTeamId,
+    conversion.coverage,
+  );
+  const legs = swim.relayLegs ?? [];
+
+  return rowOutcome(
+    {
+      id: swim.swimKey,
+      // An exhibition row prints no ordinal, so it has no place. The sentinel
+      // is the same one the swims path uses for an unranked row.
+      rank: swim.result.place ?? UNRANKED_SENTINEL,
+      name,
+      classYear: resolvedYear.classYear,
+      team,
+      time: timeOrMarker(swim.result.finalTime, swim.result.rawTimeToken),
+      points,
+      event: eventLabel,
+      gender,
+      roundSwam,
+      ...(conversion.isRelay ? { isRelay: true } : {}),
+      ...(legs.length === 0
+        ? {}
+        : {
+            // The year is left empty rather than joined. A leg names a
+            // swimmer and a split; filling a class year here would put a
+            // second, separately-sourced year on the same page as the
+            // individual rows' one, and the two could disagree. Worth doing
+            // deliberately, not as a side effect of this converter.
+            relayNames: legs.map((leg) => ({ name: leg.athleteName ?? '', year: '' })),
+          }),
+      ...(swim.exhibition ? { isExhibition: true } : {}),
+      ...(conversion.isTimeTrial ? { isTimeTrial: true } : {}),
+      ...(pdfPoints === undefined ? {} : { pdfPoints }),
+    },
+    resolvedYear.gap,
+  );
 }
 
 /**
@@ -1211,13 +1324,34 @@ function eventPointsFor(
  * Existing rows keep their position; genuinely new rows are appended. Rows from
  * another source (a PDF upload, a planned entry) pass through untouched — their
  * ids are of another shape and cannot collide.
+ *
+ * A user's `programSwim: 'program'` confirmation survives a re-import of the
+ * same swims-list row. Only an incoming row that is itself `'unconfirmed'` is
+ * given the stored confirmation back. An incoming row that carries no flag (an
+ * event-page row) replaces the stored row whole, as before.
+ *
+ * A known swim is never downgraded. An incoming `'unconfirmed'` row does not
+ * replace a stored row that carries no `programSwim` (an event-page row states
+ * its own program number): the stored row stays as it is. This also keeps a row
+ * saved by an older import, which has no stamp and cannot be told from an
+ * event-page row.
  */
 export function mergeSwimCloudResults(
   existing: readonly SwimmerResult[],
   incoming: readonly SwimmerResult[],
 ): SwimmerResult[] {
   const byId = new Map(incoming.map((row) => [row.id, row]));
-  const merged = existing.map((row) => byId.get(row.id) ?? row);
+  const existingById = new Map(existing.map((row) => [row.id, row]));
+  const carryConfirmation = (row: SwimmerResult): SwimmerResult =>
+    row.programSwim === 'unconfirmed' && existingById.get(row.id)?.programSwim === 'program'
+      ? { ...row, programSwim: 'program' }
+      : row;
+  const merged = existing.map((row) => {
+    const next = byId.get(row.id);
+    if (next === undefined) return row;
+    if (next.programSwim === 'unconfirmed' && row.programSwim === undefined) return row;
+    return carryConfirmation(next);
+  });
   const seen = new Set(existing.map((row) => row.id));
   for (const row of incoming) {
     if (!seen.has(row.id)) {
@@ -1274,6 +1408,69 @@ export interface ApplySwimCloudRowsResult {
   readonly presetHint: string | null;
   /** Whether this call folded into the meet already loaded (by the `${meetId}:` id-prefix test) rather than replacing it. */
   readonly isSameMeet: boolean;
+  /**
+   * Where the meet's scored program ends, as this call resolved it for the
+   * event pages it converted. A swims-list-only capture is `unknown` with reason
+   * `'no-event-pages'` (its rows carry no event number). `null` only when the
+   * call converted nothing. See `resolveScoredProgramBoundary`.
+   *
+   * `status: 'unknown'` means no row was marked as a time trial, so time trials
+   * in the capture still score. It always has a matching entry in
+   * {@link ApplySwimCloudRowsResult.warnings}.
+   */
+  readonly scoredProgramBoundary: ScoredProgramBoundary | null;
+  /**
+   * Plain-words notes for the coach that are not row skips. Today: the scored
+   * boundary is unknown. Empty when there is nothing to say.
+   */
+  readonly warnings: readonly string[];
+  /**
+   * Swims in the meet after this call that still await a "program swim"
+   * confirmation (`programSwim: 'unconfirmed'`, see `isUnconfirmedProgramSwim`).
+   * Counts the whole meet, not only this call's rows. The import panel tells the
+   * coach this number, because such a swim counts toward no best time, no
+   * arbitrage field and no cut tag until confirmed.
+   */
+  readonly unconfirmedProgramSwimCount: number;
+}
+
+/**
+ * Where the meet's scored program ends, resolved once for a capture, and only
+ * when there is an event page to classify: a swims-list row is never marked by
+ * it (see `SwimmerResult.programSwim`). Unknown marks nothing and says so,
+ * instead of picking a number. `boundaryOption` is what to spread into the
+ * event-page converter's options: the number when known, nothing when not.
+ */
+function scoredBoundaryForImport(
+  eventParses: readonly SwimCloudMeetEventResultsParse[],
+  workspace: Workspace,
+  hasSwimsListPages: boolean,
+): {
+  scoredProgramBoundary: ScoredProgramBoundary | null;
+  warnings: readonly string[];
+  boundaryOption: { scoredEventNumberMax?: number };
+} {
+  const meetPage = eventParses.find(p => p.meet.startDate !== undefined) ?? eventParses[0];
+  // A swims-list-only capture has no event number on any row, so no boundary can
+  // mark a time trial in it. Say so, in place of a silent `null`.
+  const scoredProgramBoundary: ScoredProgramBoundary | null =
+    eventParses.length === 0
+      ? hasSwimsListPages
+        ? swimsListOnlyBoundary()
+        : null
+      : resolveScoredProgramBoundary({
+          workspace,
+          ...(meetPage?.meet.startDate === undefined ? {} : { meetStartDate: meetPage.meet.startDate }),
+          ...(meetPage?.meet.endDate === undefined ? {} : { meetEndDate: meetPage.meet.endDate }),
+        });
+  return {
+    scoredProgramBoundary,
+    warnings: scoredProgramBoundary?.status === 'unknown' ? [scoredProgramBoundary.warning] : [],
+    boundaryOption:
+      scoredProgramBoundary?.status === 'known'
+        ? { scoredEventNumberMax: scoredProgramBoundary.scoredEventNumberMax }
+        : {},
+  };
 }
 
 /**
@@ -1316,8 +1513,13 @@ export async function applySwimCloudRows(
       meetName: undefined,
       presetHint: null,
       isSameMeet: false,
+      scoredProgramBoundary: null,
+      warnings: [],
+      unconfirmedProgramSwimCount: 0,
     };
   }
+
+  const { scoredProgramBoundary, warnings, boundaryOption } = scoredBoundaryForImport(eventParses, workspace, parses.length > 0);
 
   // Every page of the capture is converted against the *same* event-page set:
   // one event page covers every team and both genders, so it belongs to the
@@ -1340,11 +1542,10 @@ export async function applySwimCloudRows(
     swimCloudEventResultsToSwimmerResults(p, {
       pointsTrust: options.pointsTrust,
       teamNames,
-      // From the workspace's own scoring settings, never a literal. The
-      // boundary differs per meet and per format.
-      ...(workspace.scoringSettings?.scoredEventNumberMax === undefined
-        ? {}
-        : { scoredEventNumberMax: workspace.scoringSettings.scoredEventNumberMax }),
+      // The scoring settings' number, else the number a published program for
+      // this meet gives, else none. Never a literal: the boundary differs per
+      // meet and per format. See `resolveScoredProgramBoundary`.
+      ...boundaryOption,
       ...(options.rosters === undefined ? {} : { rosters: options.rosters }),
     }),
   );
@@ -1375,6 +1576,9 @@ export async function applySwimCloudRows(
       meetName,
       presetHint: null,
       isSameMeet: false,
+      scoredProgramBoundary,
+      warnings,
+      unconfirmedProgramSwimCount: [...loadedMen, ...loadedWomen].filter(isUnconfirmedProgramSwim).length,
     };
   }
 
@@ -1454,5 +1658,8 @@ export async function applySwimCloudRows(
     meetName,
     presetHint,
     isSameMeet,
+    scoredProgramBoundary,
+    warnings,
+    unconfirmedProgramSwimCount: allRows.filter(isUnconfirmedProgramSwim).length,
   };
 }

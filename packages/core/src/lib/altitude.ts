@@ -57,6 +57,7 @@ import {
 } from '../constants';
 import type { HistoricalSwim } from '../types';
 import { normalizeEventForCutline } from './cutlineEventNames';
+import { regexGroup } from './indexedAccess';
 import { convertTimeToSeconds, formatSecondsToTime, isDivingEvent } from './utils';
 
 /** The course a time was swum in. Required: the chart's rows differ by course. */
@@ -285,7 +286,7 @@ export function ncaaAltitudeAdjustment(input: NcaaAltitudeAdjustmentInput): Ncaa
   if (!distanceMatch) {
     return notInTable(event, course, `"${input.event}" states no distance the altitude chart can be read by.`);
   }
-  const distance = Number.parseInt(distanceMatch[1], 10);
+  const distance = Number.parseInt(regexGroup(distanceMatch, 1), 10);
   const relay = /\brelay\b/i.test(event);
   // A relay is four legs. "Four times the appropriate figures" is read as four
   // times the figure for one leg's distance; see the module header.

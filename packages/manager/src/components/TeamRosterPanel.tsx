@@ -22,6 +22,7 @@ import TeamRosterTable from './TeamRosterTable';
 import TeamRosterLayoutShell from './TeamRosterLayoutShell';
 import RemovedSwimmersSection from './RemovedSwimmersSection';
 import AthleteLineupDrawer from './AthleteLineupDrawer';
+import { useAllTeamsApply } from './useAllTeamsApply';
 
 const ROSTER_WINDOW_THRESHOLD = 80;
 const ROSTER_ROW_ESTIMATE_PX = 44;
@@ -58,6 +59,8 @@ type Props = {
   workspace?: Workspace;
   /** Opens the Optimize step. The Lineup step has no optimizer of its own. */
   onOpenOptimize?: () => void;
+  /** Drop seniors setting for the one-click all-teams run. Matches the Optimize step. */
+  removeSeniors?: boolean;
   onWorkspaceUpdate?: (patch: Partial<Workspace>) => void;
   /** Select this athlete by name when set (checklist Jump). */
   jumpAthleteName?: string | null;
@@ -90,6 +93,7 @@ export default function TeamRosterPanel({
   onRequestDeleteSwimmer,
   workspace,
   onOpenOptimize,
+  removeSeniors,
   onWorkspaceUpdate,
   jumpAthleteName,
   jumpAthleteKey,
@@ -101,6 +105,15 @@ export default function TeamRosterPanel({
   // useMemo below (buildScorerRosterLookup ×2 over all genderResults) doesn't rerun on
   // every workspace patch / keystroke that re-renders this panel.
   const merged = useMemo(() => mergeScoringSettings(settings), [settings]);
+  // One-click "Optimize all teams". Same engine as the Optimize step's dialog; Undo comes on the toast.
+  const allTeams = useAllTeamsApply({
+    workspace,
+    gender,
+    settings,
+    removeSeniors,
+    editable,
+    onWorkspaceUpdate,
+  });
   const rosterMode = usesScorerRoster(merged);
   // Explicit On, or Auto with PDF place points in the results: the real blocker when Lineup is locked.
   const pdfPlacePointsActive = effectivePdfPlacePointsMode(merged, results);
@@ -169,7 +182,8 @@ export default function TeamRosterPanel({
     if (controlledTeam === '' && useDropdown) return '';
     if (!teams.length) return '';
     if (pickedTeam && teams.includes(pickedTeam)) return pickedTeam;
-    return useDropdown ? '' : teams[0];
+    // `teams` is not empty here; the fallback only satisfies the type.
+    return useDropdown ? '' : (teams[0] ?? '');
   }, [teams, pickedTeam, controlledTeam, useDropdown]);
 
   useEffect(() => {
@@ -269,7 +283,13 @@ export default function TeamRosterPanel({
       onAthleteSelect?.({ name: row.name, team: row.team, classYear: row.classYear });
       requestAnimationFrame(() => {
         document.getElementById('athlete-lineup-editor')?.scrollIntoView({
-          behavior: 'smooth',
+          // Script scrolling ignores the CSS `scroll-behavior` guard, so check
+          // both the OS setting and the app's own Reduced motion setting here.
+          behavior:
+            window.matchMedia?.('(prefers-reduced-motion: reduce)').matches ||
+            document.documentElement.dataset.reducedMotion === 'true'
+              ? 'auto'
+              : 'smooth',
           block: 'nearest',
         });
       });
@@ -280,7 +300,7 @@ export default function TeamRosterPanel({
       onAthleteSelect?.(null);
       toast.push(
         'info',
-        `Could not open ${jumpAthleteName ?? 'that athlete'} on ${selectedTeam || 'this team'}.`
+        `Could not open ${jumpAthleteName ?? 'that swimmer'} on ${selectedTeam || 'this team'}.`
       );
     }
     onJumpAthleteHandled?.();
@@ -304,6 +324,7 @@ export default function TeamRosterPanel({
       if (!teamRows.length) return;
       const clamped = Math.max(0, Math.min(teamRows.length - 1, index));
       const row = teamRows[clamped];
+      if (row === undefined) return;
       setSelectedAthleteKey(row.key);
       onAthleteSelect?.({ name: row.name, team: row.team, classYear: row.classYear });
       const el = rosterScrollRef.current;
@@ -339,9 +360,10 @@ export default function TeamRosterPanel({
       } else if ((e.key === 'Delete' || e.key === 'Backspace') && currentIndex >= 0 && e.target === e.currentTarget) {
         // The per-row remove buttons are gone; Delete or Backspace on the list itself asks to
         // remove the selected athlete. The same confirm dialog opens.
-        if (editable && onRequestDeleteSwimmer) {
+        const current = teamRows[currentIndex];
+        if (editable && onRequestDeleteSwimmer && current !== undefined) {
           e.preventDefault();
-          onRequestDeleteSwimmer(teamRows[currentIndex].name);
+          onRequestDeleteSwimmer(current.name);
         }
       }
     },
@@ -408,8 +430,8 @@ export default function TeamRosterPanel({
   }
 
   const genderLabel = genderLabelFor(gender);
-  const colSpan = rosterColSpan(editable, false);
   const canRemoveAthlete = Boolean(editable && onRequestDeleteSwimmer);
+  const colSpan = rosterColSpan(editable, canRemoveAthlete);
 
   const rosterTable = (
     <div className={expanded ? 'flex flex-col flex-1 min-h-0' : undefined}>
@@ -418,6 +440,10 @@ export default function TeamRosterPanel({
         genderLabel={genderLabel}
         editable={editable}
         onOpenOptimize={onOpenOptimize}
+        onOptimizeAllTeams={allTeams.run}
+        allTeamsBusy={allTeams.busy}
+        allTeamsRun={allTeams.progress}
+        onCancelAllTeams={allTeams.cancel}
         onResetTeam={resetTeamManual}
         canRemoveAthlete={canRemoveAthlete}
         maxIndividualScorersPerTeam={merged.maxIndividualScorersPerTeam}
@@ -450,6 +476,7 @@ export default function TeamRosterPanel({
           rosterWindow={rosterWindow}
           colSpan={colSpan}
           editable={editable}
+          onRequestRemove={onRequestDeleteSwimmer}
           selectedAthleteKey={selectedAthleteKey}
           pointTotals={pointTotals}
           genderResults={genderResults}
@@ -483,7 +510,7 @@ export default function TeamRosterPanel({
             </>
           ) : (
             <>
-              {teamRows.length} athletes on{' '}
+              {teamRows.length} swimmers on{' '}
               <span className="text-[var(--text-accent)]">{selectedTeam}</span> — enable What-if to
               edit scorers
             </>

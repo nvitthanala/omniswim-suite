@@ -33,8 +33,8 @@ function reasonFor(text: string): CrawlTargetRejectionReason | 'accepted' {
   const parsed = parseCrawlTargetInput(text);
   if (parsed.targets.length > 0) return 'accepted';
   expect(parsed.rejected).toHaveLength(1);
-  expect(parsed.rejected[0].text).toBe(text);
-  return parsed.rejected[0].reason;
+  expect(parsed.rejected[0]!.text).toBe(text);
+  return parsed.rejected[0]!.reason;
 }
 
 describe('parseCrawlTargetInput with the user\'s four links', () => {

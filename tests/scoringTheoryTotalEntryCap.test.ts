@@ -24,6 +24,7 @@ import { NSISC_PRESET_SETTINGS, mergeScoringSettings } from '../packages/core/sr
 import { applyScoringTheory, parseScoringTheory } from '../packages/core/src/lib/scoringTheory';
 import { countSwimmerEntries, swimmerExceedsEntryLimits } from '../packages/core/src/lib/swimmerEntryLimits';
 import { buildWhatIfResults } from '../packages/core/src/lib/whatIfProjection';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 const TEAM = 'Alpha University';
 const ANN = 'Ann Able';
@@ -90,7 +91,7 @@ function history(event: string, time: string): HistoricalSwim {
 }
 
 function workspace(menResults: SwimmerResult[]): Workspace {
-  return {
+  return workspaceFixture({
     id: 'ws-theory-cap',
     name: 'theory cap probe',
     createdAt: 0,
@@ -110,7 +111,7 @@ function workspace(menResults: SwimmerResult[]): Workspace {
       history('200 Individual Medley', '1:50.00'),
       history('100 Backstroke', '50.00'),
     ],
-  } as unknown as Workspace;
+  });
 }
 
 /** Ann's four history events, written the way a coach writes a theory file. */

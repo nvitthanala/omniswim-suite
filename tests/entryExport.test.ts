@@ -5,6 +5,7 @@ import {
   validateEntriesForExport,
 } from '../packages/core/src/lib/entryExport';
 import { Gender, type PlannedSwimEntry, type Workspace } from '../packages/core/src/types';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 function entry(overrides: Partial<PlannedSwimEntry> = {}): PlannedSwimEntry {
   return {
@@ -21,7 +22,7 @@ function entry(overrides: Partial<PlannedSwimEntry> = {}): PlannedSwimEntry {
 }
 
 function workspace(entries: PlannedSwimEntry[]): Workspace {
-  return {
+  return workspaceFixture({
     id: 'ws',
     name: 'Export test',
     createdAt: Date.now(),
@@ -31,7 +32,7 @@ function workspace(entries: PlannedSwimEntry[]): Workspace {
     deletedSwimmers: [],
     meetEntryPlans: entries,
     activeEntryIds: [],
-  } as unknown as Workspace;
+  });
 }
 
 describe('validateEntriesForExport', () => {

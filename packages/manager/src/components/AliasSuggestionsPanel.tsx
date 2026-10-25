@@ -41,7 +41,7 @@ export default function AliasSuggestionsPanel({ suggestions, dismissed, onLink, 
     <div className="mb-3 rounded-xl border border-theme-soft surface-muted-bg p-3">
       <p className="text-ui-caption text-theme-muted mb-2 flex items-center gap-1.5">
         <Link2 size={13} className="text-[var(--text-accent)] shrink-0" />
-        Possible same athlete
+        Possible same swimmer
       </p>
       <ul className="space-y-1.5">
         {shown.map(s => {

@@ -19,6 +19,8 @@ import type { RecruitAthletePrefill } from './RecruitForm';
 import type { EditCreditedSwimValues } from './AthleteCreditedSwimsPanel';
 import RosterWizardShell, { type RosterWizardStepId } from './RosterWizardShell';
 import ManagerTeamBar from './ManagerTeamBar';
+import PrintCardsButton from './PrintCardsButton';
+import MeetDayDeckButton from './MeetDayDeckButton';
 import RosterSourceStep from './RosterSourceStep';
 import RosterLineupStep from './RosterLineupStep';
 import RosterRelayStep from './RosterRelayStep';
@@ -40,6 +42,8 @@ type Props = {
   onUpdate: (patch: Partial<Workspace>) => void;
   onOpenImportWizard: () => void;
   onRequestDeleteSwimmer?: (name: string) => void;
+  /** Called with the team chosen in the team bar (`''` when none), so the header can export a report for it. */
+  onSelectedTeamChange?: (team: string) => void;
 };
 
 export default function TeamManagementView({
@@ -57,6 +61,7 @@ export default function TeamManagementView({
   onUpdate,
   onOpenImportWizard,
   onRequestDeleteSwimmer,
+  onSelectedTeamChange,
 }: Props) {
   const toast = useToast();
   // The compose-ref and the one-shot Undo for the last swim edit. The Undo is bound to the
@@ -74,7 +79,7 @@ export default function TeamManagementView({
   // per team (see prelimsProjection.ts), so it changes whenever anything read
   // here changes. sortedTeams is a fresh array on every worker response, so
   // depending on it would rebuild this for identical data every recompute.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on teamStyleSignature, which changes with any team's name, points or color; sortedTeams is a new array on every response
   }, [scoringBundle.teamStyleSignature]);
 
   const teams = useMemo(() => {
@@ -83,9 +88,12 @@ export default function TeamManagementView({
   // per team (see prelimsProjection.ts), so it changes whenever anything read
   // here changes. sortedTeams is a fresh array on every worker response, so
   // depending on it would rebuild this for identical data every recompute.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on teamStyleSignature, which changes with any team's name, points or color; sortedTeams is a new array on every response
   }, [scoringBundle.teamStyleSignature]);
   const [selectedTeam, setSelectedTeam] = useState<string>('');
+  useEffect(() => {
+    onSelectedTeamChange?.(selectedTeam);
+  }, [selectedTeam, onSelectedTeamChange]);
   const [recruitPrefill, setRecruitPrefill] = useState<RecruitAthletePrefill | null>(null);
   const [rosterStep, setRosterStep] = useState<RosterWizardStepId>('source');
   const [jumpAthleteName, setJumpAthleteName] = useState<string | null>(null);
@@ -97,11 +105,12 @@ export default function TeamManagementView({
     // that offered no way to choose one. Select it. With several teams, the
     // team bar (ManagerTeamBar) is the one place the user picks.
     if (!selectedTeam) {
-      if (teams.length === 1) setSelectedTeam(teams[0]);
+      const onlyTeam = teams.length === 1 ? teams[0] : undefined;
+      if (onlyTeam !== undefined) setSelectedTeam(onlyTeam);
       return;
     }
     if (teams.includes(selectedTeam)) return;
-    setSelectedTeam(teams.length === 1 ? teams[0] : '');
+    setSelectedTeam(teams.length === 1 ? (teams[0] ?? '') : '');
   }, [teams, selectedTeam, gender]);
 
   const handleAthleteSelect = useCallback((athlete: RecruitAthletePrefill | null) => {
@@ -247,7 +256,29 @@ export default function TeamManagementView({
       step={rosterStep}
       onStepChange={setRosterStep}
       toolbar={whatIfControls}
-      subheader={<ManagerTeamBar teams={teams} selectedTeam={selectedTeam} onSelectTeam={setSelectedTeam} />}
+      subheader={
+        <ManagerTeamBar
+          teams={teams}
+          selectedTeam={selectedTeam}
+          onSelectTeam={setSelectedTeam}
+          actions={
+            <>
+              <MeetDayDeckButton
+                workspace={workspace}
+                gender={gender}
+                scoringBundle={scoringBundle}
+                team={selectedTeam}
+              />
+              <PrintCardsButton
+                workspace={workspace}
+                gender={gender}
+                scoringBundle={scoringBundle}
+                team={selectedTeam}
+              />
+            </>
+          }
+        />
+      }
     >
       {rosterStep === 'source' ? (
         <RosterSourceStep

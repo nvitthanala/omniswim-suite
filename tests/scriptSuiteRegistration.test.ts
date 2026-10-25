@@ -27,10 +27,11 @@
  *
  * ## The escape hatch
  *
- * Three scripts in `scripts/` are named `test_*` but are not suite tests: they
- * need a PDF that is not in the repo, a live server on port 3000, or the Python
- * backend. They are listed below WITH A REASON. Adding a name here is a
- * deliberate, reviewable act; forgetting to register a real test is not.
+ * `scripts/run-tests.mjs` now enforces this itself and fails before it spawns
+ * anything. A script that cannot run unattended either lives in
+ * `scripts/probes/` (manual probes: they need a PDF that is not in the repo or a
+ * live server on port 3000) or is named in the runner's `EXCLUDED` map with a
+ * reason. This test is the same check inside `vitest run`.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -40,19 +41,6 @@ import { fileURLToPath } from 'node:url';
 
 const repoRoot = path.dirname(path.dirname(fileURLToPath(import.meta.url)));
 const scriptsDir = path.join(repoRoot, 'scripts');
-
-/**
- * Scripts named `test_*` that deliberately do not run in the suite, each with
- * the reason it cannot. A name may only be added here with a reason.
- */
-const NOT_SUITE_TESTS: Record<string, string> = {
-  'test_post.mjs':
-    'manual probe: needs 2026_NSISC_Championships_Final_Results.pdf in the cwd and a server on port 3000',
-  'test_acc_post.mjs':
-    'manual probe: needs 2026_acc_championship_full_meet_results_1col.pdf in the cwd and a server on port 3000',
-  'test_conference_pdfs.mjs':
-    'manual probe: needs the Python venv backend and four conference PDFs that are not in the repo',
-};
 
 function scriptTestFiles(): string[] {
   return readdirSync(scriptsDir)
@@ -68,27 +56,13 @@ function registeredNames(): Set<string> {
 describe('script suite registration', () => {
   it('runs every test_*.mjs in scripts/, or declares why it cannot', () => {
     const registered = registeredNames();
-    const unaccounted = scriptTestFiles().filter(
-      f => !registered.has(f) && !(f in NOT_SUITE_TESTS)
-    );
-    expect(unaccounted, 'add to scripts/run-tests.mjs TESTS, or to NOT_SUITE_TESTS with a reason').toEqual([]);
-  });
-
-  it('does not excuse a script that is actually registered', () => {
-    const registered = registeredNames();
-    const bothWays = Object.keys(NOT_SUITE_TESTS).filter(f => registered.has(f));
-    expect(bothWays, 'listed as not-a-suite-test but registered in run-tests.mjs').toEqual([]);
+    const unaccounted = scriptTestFiles().filter(f => !registered.has(f));
+    expect(unaccounted, 'add to scripts/run-tests.mjs TESTS, or to its EXCLUDED map with a reason').toEqual([]);
   });
 
   it('does not register a script that is not on disk', () => {
     const onDisk = new Set(scriptTestFiles());
     const missing = [...registeredNames()].filter(f => !onDisk.has(f));
     expect(missing, 'run-tests.mjs names a script that does not exist').toEqual([]);
-  });
-
-  it('only excuses scripts that exist', () => {
-    const onDisk = new Set(scriptTestFiles());
-    const stale = Object.keys(NOT_SUITE_TESTS).filter(f => !onDisk.has(f));
-    expect(stale, 'NOT_SUITE_TESTS names a script that no longer exists').toEqual([]);
   });
 });

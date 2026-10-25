@@ -14,6 +14,8 @@ import { ToastProvider } from '@omniswim/ui';
 import { Gender, type Workspace } from '@omniswim/core/types';
 import RosterOptimizeStep from '../packages/manager/src/components/RosterOptimizeStep';
 import BatchOptimizerPanel from '../packages/manager/src/components/BatchOptimizerPanel';
+import { batchLineupMoved } from '../packages/manager/src/components/batchOptimizerView';
+import { OPTIMIZER_INPUT_FIELDS, optimizerInputRefsOf } from '../packages/manager/src/components/optimizeRunView';
 import { HOME_TEAM, buildMeetWorkspace, resolvedScoringSettings } from './optimizerStepFixtures';
 
 vi.mock('motion/react', async () => (await import('./motionStub')).motionStub);
@@ -76,7 +78,7 @@ describe('fix 4: All-teams Undo exists with no team picked and survives picking 
     await settle();
     await click(/Apply to workspace/);
     expect(updates).toHaveLength(1);
-    expect(updates[0].meetEntryPlans?.length).toBeGreaterThan(0);
+    expect(updates[0]!.meetEntryPlans?.length).toBeGreaterThan(0);
 
     expect(findButton(/Undo this optimize/), 'Undo in the no-team state').toBeTruthy();
     await click(/Undo this optimize/);
@@ -134,12 +136,12 @@ describe('fix 5: the All-teams dialog result cannot outlive its inputs', () => {
     act(async () => root.render(panel(ws, o)));
   const runIt = async () => { await click(/Run optimizer/); await settle(); };
 
-  it('Run Full, switch to Scorers Only, then Apply has nothing to apply', async () => {
+  it('Run Full, switch to Scorers only, then Apply has nothing to apply', async () => {
     const onApply = vi.fn();
     await renderPanel(gainWorkspace(), { onApply });
     await runIt();
     expect((findButton(/Apply to workspace/) as HTMLButtonElement).disabled).toBe(false);
-    await click(/Scorers Only/);
+    await click(/Scorers only/);
     expect((findButton(/Apply to workspace/) as HTMLButtonElement).disabled).toBe(true);
     await click(/Apply to workspace/);
     expect(onApply).not.toHaveBeenCalled();
@@ -191,14 +193,48 @@ describe('fix 5: the All-teams dialog result cannot outlive its inputs', () => {
     expect(document.body.textContent).toContain('Lineup changed, run again');
   });
 
-  it('applies when the lineup arrays are untouched since the run', async () => {
+  it('applies when nothing the run read has moved since the run', async () => {
     const onApply = vi.fn();
     const ws = gainWorkspace();
     await renderPanel(ws, { onApply });
     await runIt();
-    // A re-render with an unrelated workspace field changing keeps the three arrays.
-    await renderPanel({ ...ws, name: 'renamed' } as Workspace, { onApply });
+    // `createdAt` and `raceAnalyses` are not optimizer inputs (see OPTIMIZER_INPUT_FIELDS).
+    await renderPanel({ ...ws, createdAt: 5, raceAnalyses: [] } as Workspace, { onApply });
     await click(/Apply to workspace/);
     expect(onApply).toHaveBeenCalledTimes(1);
+  });
+
+  // The old check compared only scorerRosterOverrides, meetEntryPlans and activeEntryIds. Each of
+  // these is a field the run reads that the old check ignored.
+  it.each([
+    ['athleteAliases', [{ id: 'a1', from: 'X', to: 'Y' }]],
+    ['athleteHistory', [{ name: 'X' }]],
+    ['deletedSwimmers', [{ name: 'X' }]],
+    ['recruits', [{ id: 'r1' }]],
+    ['menResults', []],
+  ] as const)('refuses to apply after %s changed since the run', async (field, value) => {
+    const onApply = vi.fn();
+    const ws = gainWorkspace();
+    await renderPanel(ws, { onApply });
+    await runIt();
+    await renderPanel({ ...ws, [field]: value } as unknown as Workspace, { onApply });
+    await click(/Apply to workspace/);
+    expect(onApply).not.toHaveBeenCalled();
+    expect(document.body.textContent).toContain('Lineup changed, run again');
+  });
+});
+
+describe('batchLineupMoved watches every optimizer input field', () => {
+  it('is false for an untouched or unrelated change and true for each OPTIMIZER_INPUT_FIELDS entry', () => {
+    const ws = gainWorkspace();
+    const ran = {
+      workspaceId: ws.id, gender: Gender.MEN, settingsKey: '{}', stage: 'all' as const, removeSeniors: false,
+      inputRefs: optimizerInputRefsOf(ws),
+    };
+    expect(batchLineupMoved(ran, { ...ws })).toBe(false);
+    expect(batchLineupMoved(ran, { ...ws, createdAt: 9 } as Workspace)).toBe(false);
+    for (const field of OPTIMIZER_INPUT_FIELDS) {
+      expect(batchLineupMoved(ran, { ...ws, [field]: { replaced: field } } as unknown as Workspace), field).toBe(true);
+    }
   });
 });

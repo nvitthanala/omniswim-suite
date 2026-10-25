@@ -49,6 +49,7 @@ export type BestTimeProvenance = Pick<
   HistoricalSwim,
   'isExtractedSplit' | 'isUserInputted' | 'swimcloudBadge'
 > &
+  Partial<Pick<HistoricalSwim, 'programUnconfirmed'>> &
   Partial<Pick<HistoricalSwim, 'event' | 'timeType'>>;
 
 /**
@@ -115,6 +116,9 @@ export function bestTimeLane(swim: BestTimeProvenance): BestTimeLane {
  */
 export function isRankableSwim(swim: BestTimeProvenance): boolean {
   if (bestTimeLane(swim) !== 'result') return false;
+  // A swims-list row the user has not confirmed as a program swim may be a
+  // post-meet time trial. Not a best until it is confirmed.
+  if (swim.programUnconfirmed === true) return false;
   if (swim.event === undefined) return true;
   if (isRelayShapedEventLabel(swim.event)) return false;
   return swimEventNotSwumInCourse({ event: swim.event, timeType: swim.timeType }) === null;
@@ -258,7 +262,7 @@ function gluedCutChipReading(key: string): SwimCloudStampReading | null {
     if (!flags) continue;
     fits.push(cutChipReading(label, flags[1] as 'x' | 'u' | undefined, flags[2] === 'r'));
   }
-  return fits.length === 1 ? fits[0] : null;
+  return fits.length === 1 ? (fits[0] ?? null) : null;
 }
 
 /**

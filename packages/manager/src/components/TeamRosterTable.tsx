@@ -29,6 +29,8 @@ type Props = {
   rosterWindow: RosterWindow;
   colSpan: number;
   editable: boolean;
+  /** Opens the remove confirmation for an athlete. Omit to hide the Remove column. Ignored when not editable. */
+  onRequestRemove?: (name: string) => void;
   selectedAthleteKey: string | null;
   pointTotals: Map<string, number>;
   genderResults: SwimmerResult[];
@@ -49,6 +51,7 @@ export default function TeamRosterTable({
   rosterWindow,
   colSpan,
   editable,
+  onRequestRemove,
   selectedAthleteKey,
   pointTotals,
   genderResults,
@@ -63,15 +66,21 @@ export default function TeamRosterTable({
 }: Props) {
   // Judged over the whole team, not the visible window, so scrolling cannot flip it.
   const hideSwimmerTag = isUniformSwimmerRoster(teamRows);
+  const removeHandler = editable ? onRequestRemove : undefined;
   return (
     <table className="w-full">
       <thead className="sticky top-0 surface-muted-bg z-[1]">
         <tr className="text-ui-caption text-theme-muted border-b border-theme-soft">
-          <th className="text-left py-2.5 px-3 font-medium">Athlete</th>
+          <th className="text-left py-2.5 px-3 font-medium">Swimmer</th>
           <th className="text-right py-2.5 px-3 font-medium w-20">Class</th>
           <th className="text-right py-2.5 px-3 font-medium w-24">Meet pts</th>
           {editable ? (
             <th className="text-center py-2.5 px-3 font-medium w-20">Scorer</th>
+          ) : null}
+          {removeHandler ? (
+            <th className="py-2.5 px-2 w-12 border-l border-theme-soft/50">
+              <span className="sr-only">Remove</span>
+            </th>
           ) : null}
         </tr>
       </thead>
@@ -79,7 +88,7 @@ export default function TeamRosterTable({
         {!selectedTeam || teamRows.length === 0 ? (
           <tr>
             <td colSpan={colSpan + 1} className="py-4 text-center text-ui-caption text-theme-muted italic">
-              {teams.length ? 'No athletes for this team' : 'Upload results to populate teams'}
+              {teams.length ? 'No swimmers for this team' : 'Upload results to populate teams'}
             </td>
           </tr>
         ) : (
@@ -114,6 +123,8 @@ export default function TeamRosterTable({
                   warningLabel={viewModel.warningLabel}
                   editable={editable}
                   hideSwimmerTag={hideSwimmerTag}
+                  showRemoveColumn={Boolean(removeHandler)}
+                  onRequestRemove={removeHandler ? () => removeHandler(row.name) : undefined}
                   onSelect={() => onSelectRow(row)}
                   onSetScorer={isScorer => onSetScorer(row, isScorer)}
                 />

@@ -1,7 +1,7 @@
 // @vitest-environment happy-dom
 import { act, createElement, useState } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
 import { NumberField } from '../packages/ui/src/components/NumberField';
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -9,7 +9,7 @@ import { NumberField } from '../packages/ui/src/components/NumberField';
 describe('NumberField', () => {
   let container: HTMLDivElement;
   let root: Root;
-  let onValueChange: ReturnType<typeof vi.fn>;
+  let onValueChange: Mock<(value: number) => void>;
 
   beforeEach(() => {
     container = document.createElement('div');

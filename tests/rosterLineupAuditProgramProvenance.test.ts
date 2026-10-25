@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { buildTeamLineupAudit } from '../packages/core/src/lib/rosterLineupAudit';
 import { NSISC_PRESET_SETTINGS } from '../packages/core/src/lib/scoringDefaults';
 import { Gender, type SwimmerResult, type Workspace } from '../packages/core/src/types';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 function swimmer(team: string, name: string, event: string, gender: Gender): SwimmerResult {
   return {
@@ -19,7 +20,7 @@ function swimmer(team: string, name: string, event: string, gender: Gender): Swi
 }
 
 function workspace(overrides: Partial<Workspace> = {}): Workspace {
-  return {
+  return workspaceFixture({
     id: 'audit-ws',
     name: 'Program provenance test',
     createdAt: Date.now(),
@@ -33,7 +34,7 @@ function workspace(overrides: Partial<Workspace> = {}): Workspace {
     relayLegOverrides: [],
     deletedSwimmers: [],
     ...overrides,
-  } as unknown as Workspace;
+  });
 }
 
 describe('auditProgramProvenance (via buildTeamLineupAudit)', () => {
@@ -52,7 +53,7 @@ describe('auditProgramProvenance (via buildTeamLineupAudit)', () => {
     const items = audit.checklistItems.filter(i => i.group === 'program');
     expect(items).toHaveLength(1);
     expect(items[0]).toMatchObject({ type: 'program_division_unknown', athleteName: 'Alpha, Ace' });
-    expect(items[0].message).toContain(team);
+    expect(items[0]!.message).toContain(team);
   });
 
   it('flags an athlete on a team not recorded as sponsoring their gender', () => {

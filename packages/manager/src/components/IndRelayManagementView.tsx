@@ -7,7 +7,12 @@ import React, { useMemo, useState } from 'react';
 import { Gender, RelayLegOverride, SwimmerResult, Workspace } from '@omniswim/core/types';
 import type { ScoringBundle } from '@omniswim/core/lib/useWorkspaceScoring';
 import {
+  isValidRelayLegIndex,
   listEligibleRelayLegCandidates,
+  migrateTiedRelayOverridesDetailed,
+  type AmbiguousRelayOverride,
+  relayLegIsVacant,
+  relayLegMatchSettings,
   removeRelayLegOverride,
   suggestBestRelayLegFill,
   upsertRelayLegOverride,
@@ -27,7 +32,7 @@ import {
   compareRelayLegSplits,
 } from '@omniswim/core/lib/relayBuilder';
 import { Button, TeamSelect, useToast } from '@omniswim/ui';
-import { buildRelayGroups, type RelayGroup } from './indRelayGroupsView';
+import { buildRelayGroups, relayGroupWriteRefusal, type RelayGroup } from './indRelayGroupsView';
 import RelayStatsCards from './RelayStatsCards';
 import RelaySplitInspector from './RelaySplitInspector';
 import RelayGroupCard from './RelayGroupCard';
@@ -92,7 +97,17 @@ export default function IndRelayManagementView({
     () => (gender === Gender.MEN ? workspace.menResults ?? [] : workspace.womenResults ?? []),
     [gender, workspace.menResults, workspace.womenResults]
   );
-  const overrides = workspace.relayLegOverrides ?? [];
+  // A key saved for one team's tied A and B relays before the two were told
+  // apart names both. It is split into one override per relay here, so clearing
+  // a leg of A leaves B's fill, and every save below writes the split list.
+  const migration = useMemo(
+    () => migrateTiedRelayOverridesDetailed(workspace.relayLegOverrides ?? [], originalResults),
+    [workspace.relayLegOverrides, originalResults]
+  );
+  const overrides = migration.overrides;
+  // A legacy key that names a tied pair is read by neither relay. It stays in the
+  // list until the coach removes it; nothing here picks a relay for it.
+  const ambiguousOverrides = migration.ambiguous;
 
   const activeSwimmers = useMemo(() => {
     // Same identity key and the same shared senior test the scoring
@@ -210,7 +225,11 @@ export default function IndRelayManagementView({
 
   const poolCandidates = useMemo(() => {
     if (!selectedGroup || !selectedTeam) return [];
-    const vacantLegs = selectedGroup.legs.filter(l => l.relayLegVacant || l.relayMissingLeg);
+    // A leg whose index names no leg has no stroke to match: the card shows it as a problem row.
+    const eventLower = selectedGroup.event.toLowerCase();
+    const vacantLegs = selectedGroup.legs.filter(
+      l => relayLegIsVacant(l) && isValidRelayLegIndex(eventLower, l.relayLegIndex ?? 0)
+    );
     if (vacantLegs.length === 0) return [];
 
     const seen = new Set<string>();
@@ -223,7 +242,8 @@ export default function IndRelayManagementView({
         idx,
         assignedInSelectedRelay,
         selectedTeam,
-        gender
+        gender,
+        relayLegMatchSettings(workspace)
       )) {
         const k = normalizeSwimmerName(swimmer.name);
         if (seen.has(k)) continue;
@@ -232,14 +252,26 @@ export default function IndRelayManagementView({
       }
     }
     return out.sort((a, b) => a.name.localeCompare(b.name));
-  }, [relayLegCandidatePool, assignedInSelectedRelay, selectedGroup, selectedTeam, gender]);
+  }, [relayLegCandidatePool, assignedInSelectedRelay, selectedGroup, selectedTeam, gender, workspace]);
 
   const patchOverrides = (next: RelayLegOverride[]) => {
     onUpdate({ relayLegOverrides: next });
   };
 
+  /**
+   * True (after telling the coach why) when `group` may not be edited: its legs
+   * cannot be told from its tied sibling's, so an override would land on one of
+   * the two relays by luck. Nothing is written.
+   */
+  const refuseWrite = (group: RelayGroup): boolean => {
+    const refusal = relayGroupWriteRefusal(group);
+    if (refusal === null) return false;
+    toast.push('info', refusal.message);
+    return true;
+  };
+
   const assignDragPayload = (group: RelayGroup, legIndex: number, payload: DragPayload) => {
-    if (!whatIfMode) return;
+    if (!whatIfMode || refuseWrite(group)) return;
     patchOverrides(
       upsertRelayLegOverride(overrides, {
         relayEntryKey: group.key,
@@ -253,7 +285,7 @@ export default function IndRelayManagementView({
   };
 
   const autofillLeg = (group: RelayGroup, legIndex: number) => {
-    if (!whatIfMode) return;
+    if (!whatIfMode || refuseWrite(group)) return;
     const exclude = new Set<string>();
     const origNames = group.template.relayNames ?? group.legs.map(l => ({ name: l.name, year: '' }));
     origNames.forEach((ln, _i) => {
@@ -271,19 +303,23 @@ export default function IndRelayManagementView({
       group.template,
       legIndex,
       assignedInSelectedRelay,
-      exclude
+      exclude,
+      relayLegMatchSettings(workspace),
+      originalResults
     );
     if (!fill) return;
     patchOverrides(upsertRelayLegOverride(overrides, fill.override));
   };
 
   const autofillAllVacant = (group: RelayGroup) => {
-    if (!whatIfMode) return;
+    if (!whatIfMode || refuseWrite(group)) return;
     let next = [...overrides];
     const assigned = new Set(assignedInSelectedRelay);
+    const eventLower = group.event.toLowerCase();
     for (const leg of group.legs) {
-      if (!leg.relayLegVacant && !leg.relayMissingLeg?.reason) continue;
+      if (!relayLegIsVacant(leg)) continue;
       const legIndex = leg.relayLegIndex ?? 0;
+      if (!isValidRelayLegIndex(eventLower, legIndex)) continue;
       const exclude = new Set<string>();
       group.legs.forEach((ln, i) => {
         if (i === legIndex) return;
@@ -297,7 +333,9 @@ export default function IndRelayManagementView({
         group.template,
         legIndex,
         assigned,
-        exclude
+        exclude,
+        relayLegMatchSettings(workspace),
+        originalResults
       );
       if (!fill) continue;
       next = upsertRelayLegOverride(next, fill.override);
@@ -307,7 +345,7 @@ export default function IndRelayManagementView({
   };
 
   const saveManualLeg = (group: RelayGroup, legIndex: number) => {
-    if (!whatIfMode) return;
+    if (!whatIfMode || refuseWrite(group)) return;
     const fieldKey = `${group.key}|${legIndex}`;
     const manualLegTime = manualTimes[fieldKey]?.trim();
     if (!manualLegTime) return;
@@ -322,8 +360,18 @@ export default function IndRelayManagementView({
   };
 
   const clearLegOverride = (group: RelayGroup, legIndex: number) => {
-    if (!whatIfMode) return;
+    if (!whatIfMode || refuseWrite(group)) return;
     patchOverrides(removeRelayLegOverride(overrides, group.key, legIndex));
+  };
+
+  /** Deletes the stored override at a leg index that names no leg. Not tied to what-if mode: it is cleanup. */
+  const removeInvalidLeg = (group: RelayGroup, legIndex: number) => {
+    patchOverrides(removeRelayLegOverride(overrides, group.key, legIndex));
+  };
+
+  /** Deletes a saved leg choice that matches two tied relays. Nothing is assigned to either. */
+  const removeAmbiguousOverride = (entry: AmbiguousRelayOverride) => {
+    patchOverrides(removeRelayLegOverride(overrides, entry.relayEntryKey, entry.legIndex));
   };
 
   const buildFromLineup = () => {
@@ -373,6 +421,36 @@ export default function IndRelayManagementView({
           </div>
 
           <RelayStatsCards stats={stats} />
+
+          {ambiguousOverrides.length > 0 ? (
+            <ul
+              aria-label="Saved leg choices that match two tied relays"
+              className="mb-3 space-y-2"
+              data-testid="ambiguous-relay-overrides"
+            >
+              {ambiguousOverrides.map(entry => (
+                <li
+                  key={`${entry.relayEntryKey}|${String(entry.legIndex)}`}
+                  className="flex flex-wrap items-center justify-between gap-2 rounded-lg border border-warning bg-warning-faint px-3 py-2 text-ui-caption"
+                >
+                  <span className="text-theme-secondary min-w-0">
+                    <span className="text-warning font-medium">
+                      Leg {entry.legIndex + 1}, {entry.relayEntryKey.split('|').slice(0, 2).join(' · ')}.
+                    </span>{' '}
+                    This saved leg choice matches two tied relays. Pick which relay it belongs to, or remove it.
+                  </span>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    className="px-2 py-0.5 shrink-0"
+                    onClick={() => removeAmbiguousOverride(entry)}
+                  >
+                    Remove
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          ) : null}
 
           {recruitCount > 0 ? (
             <p className="text-ui-caption text-theme-secondary">
@@ -425,6 +503,7 @@ export default function IndRelayManagementView({
                   }
                   onSaveManualLeg={legIndex => saveManualLeg(group, legIndex)}
                   onClearLegOverride={legIndex => clearLegOverride(group, legIndex)}
+                  onRemoveInvalidLeg={legIndex => removeInvalidLeg(group, legIndex)}
                 />
               ))}
             </div>

@@ -51,6 +51,8 @@
  *    {@link resolveNcaaDualMeetOutcome}, not by a flag on an entry.
  */
 
+import { itemAt } from './indexedAccess';
+
 // ---------------------------------------------------------------------------
 // Errors — pipelines fail loudly, never silently default
 // ---------------------------------------------------------------------------
@@ -1105,9 +1107,9 @@ function awardPlacesAcrossPools(
     let nextPlace = pool.firstPlace;
     let cursor = 0;
     while (cursor < considered.length) {
-      const rank = considered[cursor].entry.finishRank;
+      const rank = itemAt(considered, cursor).entry.finishRank;
       let end = cursor;
-      while (end + 1 < considered.length && considered[end + 1].entry.finishRank === rank) end += 1;
+      while (end + 1 < considered.length && itemAt(considered, end + 1).entry.finishRank === rank) end += 1;
       const groupSize = end - cursor + 1;
 
       const tiedPlaces: number[] = [];
@@ -1122,10 +1124,11 @@ function awardPlacesAcrossPools(
       const share = combined / groupSize;
 
       for (let offset = 0; offset < groupSize; offset += 1) {
-        const row = considered[cursor + offset];
+        const row = itemAt(considered, cursor + offset);
+        const place = itemAt(tiedPlaces, offset);
         awarded.set(row.entry.id, {
-          place: tiedPlaces[offset],
-          tiedPlaces: groupSize > 1 ? tiedPlaces : [tiedPlaces[offset]],
+          place,
+          tiedPlaces: groupSize > 1 ? tiedPlaces : [place],
           rawPoints: share,
         });
       }

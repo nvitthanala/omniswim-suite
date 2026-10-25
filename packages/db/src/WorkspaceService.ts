@@ -8,12 +8,17 @@ import type { Workspace, SwimmerResult } from '@omniswim/core/types';
 import { SCHEMA_VERSION, CREATE_TABLES_SQL, SQLITE_MIGRATIONS_V2, SQLITE_MIGRATIONS_V3, SQLITE_MIGRATIONS_V4, SQLITE_MIGRATIONS_V5, SQLITE_MIGRATIONS_V6, SQLITE_MIGRATIONS_V7, SQLITE_MIGRATIONS_V8 } from './schema';
 import {
   assembleWorkspace,
+  duplicateWorkspaceError,
   insertPositionalRows,
   insertResultsRows,
   insertWithIdRows,
+  createRowIdGuard,
+  versionConflictError,
   workspaceRowValues,
   type WorkspaceScope,
 } from './workspacePersistence';
+import { assertSchemaNotNewer } from './schemaGuard';
+import { migrateSqliteChildKeys } from './childKeyMigration';
 
 export class WorkspaceService {
   private db: DatabaseSync;
@@ -22,6 +27,15 @@ export class WorkspaceService {
   constructor(dbPath: string) {
     fs.mkdirSync(path.dirname(dbPath), { recursive: true });
     this.db = new DatabaseSync(dbPath);
+    // Compare BEFORE anything runs against the file. The migrations below only add,
+    // so they would "succeed" on a newer database and the stamp at the end of this
+    // constructor would then downgrade it. A refusal must leave the file untouched.
+    try {
+      assertSchemaNotNewer(this.readStoredSchemaVersion(), SCHEMA_VERSION, dbPath);
+    } catch (err) {
+      this.db.close();
+      throw err;
+    }
     this.db.exec(CREATE_TABLES_SQL);
     for (const sql of SQLITE_MIGRATIONS_V2) {
       try {
@@ -72,11 +86,24 @@ export class WorkspaceService {
         /* table already exists */
       }
     }
+    // v9: key the id-keyed child tables on (workspace_id, id). Not in the swallow-all loops
+    // above: a rebuild that stops halfway must throw, and the stamp below must not follow it.
+    try {
+      migrateSqliteChildKeys(this.db);
+    } catch (err) {
+      this.db.close();
+      throw err;
+    }
     this.db
       .prepare('INSERT OR REPLACE INTO meta(key, value) VALUES(?, ?)')
       .run('schema_version', String(SCHEMA_VERSION));
   }
 
+  /**
+   * Default scope for calls that do not pass one. Kept for scripts and tests; the
+   * server passes the scope on every call instead (a shared mutable scope is how a
+   * request ran under the previous request's tenant).
+   */
   setScope(scope: WorkspaceScope): void {
     this.scope = scope;
   }
@@ -85,8 +112,20 @@ export class WorkspaceService {
     this.db.close();
   }
 
-  count(): number {
-    const { where, params } = this.buildScopeWhere();
+  /** Raw `meta.schema_version`, or null for a file with no `meta` table or no stamp yet. */
+  private readStoredSchemaVersion(): string | null {
+    const hasMeta = this.db
+      .prepare("SELECT 1 AS ok FROM sqlite_master WHERE type = 'table' AND name = 'meta'")
+      .get();
+    if (!hasMeta) return null;
+    const row = this.db.prepare("SELECT value FROM meta WHERE key = 'schema_version'").get() as
+      | { value: string | null }
+      | undefined;
+    return row?.value ?? null;
+  }
+
+  count(scope: WorkspaceScope = this.scope): number {
+    const { where, params } = this.buildScopeWhere(scope);
     const row = this.db.prepare(`SELECT COUNT(*) AS n FROM workspaces ${where}`).get(
       ...(params as (string | number | null)[])
     ) as {
@@ -95,16 +134,16 @@ export class WorkspaceService {
     return row?.n ?? 0;
   }
 
-  listWorkspaces(): Workspace[] {
-    const { where, params } = this.buildScopeWhere();
+  listWorkspaces(scope: WorkspaceScope = this.scope): Workspace[] {
+    const { where, params } = this.buildScopeWhere(scope);
     const rows = this.db
       .prepare(`SELECT id FROM workspaces ${where} ORDER BY sort_index ASC, created_at ASC`)
       .all(...(params as (string | number | null)[])) as { id: string }[];
-    return rows.map(r => this.getWorkspace(r.id)).filter((w): w is Workspace => w != null);
+    return rows.map(r => this.getWorkspace(r.id, scope)).filter((w): w is Workspace => w != null);
   }
 
-  getWorkspace(id: string): Workspace | undefined {
-    const { where, params } = this.buildScopeWhere('id = ?', [id]);
+  getWorkspace(id: string, scope: WorkspaceScope = this.scope): Workspace | undefined {
+    const { where, params } = this.buildScopeWhere(scope, 'id = ?', [id]);
     const row = this.db
       .prepare(`SELECT * FROM workspaces ${where}`)
       .get(...(params as (string | number | null)[])) as Record<string, unknown> | undefined;
@@ -128,8 +167,11 @@ export class WorkspaceService {
     return assembleWorkspace(row, childData);
   }
 
-  getWorkspaceMeta(id: string): { version: number; updatedAt: number } | undefined {
-    const { where, params } = this.buildScopeWhere('id = ?', [id]);
+  getWorkspaceMeta(
+    id: string,
+    scope: WorkspaceScope = this.scope
+  ): { version: number; updatedAt: number } | undefined {
+    const { where, params } = this.buildScopeWhere(scope, 'id = ?', [id]);
     const row = this.db
       .prepare(`SELECT version, updated_at FROM workspaces ${where}`)
       .get(...(params as (string | number | null)[])) as
@@ -139,50 +181,121 @@ export class WorkspaceService {
     return { version: Number(row.version ?? 1), updatedAt: Number(row.updated_at ?? 0) };
   }
 
-  createWorkspace(ws: Workspace, sortIndex?: number): Workspace {
-    this.writeWorkspace(ws, sortIndex ?? this.count(), { version: 1 });
-    return this.getWorkspace(ws.id)!;
+  /**
+   * Insert a new workspace. Refuses with `DUPLICATE_WORKSPACE_ID` when the id is
+   * taken by ANY tenant: ids are the table's primary key, and the upsert below
+   * would otherwise overwrite another tenant's rows and take over their owner.
+   */
+  createWorkspace(ws: Workspace, sortIndex?: number, scope: WorkspaceScope = this.scope): Workspace {
+    this.tx(() => {
+      const taken = this.db.prepare('SELECT 1 AS ok FROM workspaces WHERE id = ?').get(ws.id);
+      if (taken) throw duplicateWorkspaceError(ws.id);
+      this.writeWorkspaceUnsafe(ws, sortIndex ?? this.count(scope), { version: 1 }, scope);
+    });
+    return this.getWorkspace(ws.id, scope)!;
   }
 
-  updateWorkspace(id: string, patch: Partial<Workspace>, expectedVersion?: number): Workspace | undefined {
-    const existing = this.getWorkspace(id);
+  updateWorkspace(
+    id: string,
+    patch: Partial<Workspace>,
+    expectedVersion?: number,
+    scope: WorkspaceScope = this.scope
+  ): Workspace | undefined {
+    const existing = this.getWorkspace(id, scope);
     if (!existing) return undefined;
-    if (expectedVersion != null) {
-      const meta = this.getWorkspaceMeta(id);
-      if (meta && meta.version !== expectedVersion) {
-        const err = new Error('VERSION_CONFLICT');
-        (err as Error & { code: string }).code = 'VERSION_CONFLICT';
-        throw err;
-      }
+    const meta = this.getWorkspaceMeta(id, scope);
+    if (expectedVersion != null && meta && meta.version !== expectedVersion) {
+      throw versionConflictError();
     }
     const merged: Workspace = { ...existing, ...patch, id };
     const sortRow = this.db.prepare('SELECT sort_index FROM workspaces WHERE id = ?').get(id) as
       | { sort_index: number }
       | undefined;
-    const currentVersion = this.getWorkspaceMeta(id)?.version ?? 1;
-    this.writeWorkspace(merged, sortRow?.sort_index ?? this.count(), { version: currentVersion + 1 });
-    return this.getWorkspace(id);
+    const currentVersion = meta?.version ?? 1;
+    this.writeWorkspace(
+      merged,
+      sortRow?.sort_index ?? this.count(scope),
+      { version: currentVersion + 1 },
+      scope
+    );
+    return this.getWorkspace(id, scope);
   }
 
-  deleteWorkspace(id: string): void {
+  deleteWorkspace(id: string, scope: WorkspaceScope = this.scope): void {
     // Scoped: a tenant must not be able to destroy another tenant's workspace by id.
-    const { where, params } = this.buildScopeWhere('id = ?', [id]);
+    const { where, params } = this.buildScopeWhere(scope, 'id = ?', [id]);
     this.db.prepare(`DELETE FROM workspaces ${where}`).run(...(params as (string | number | null)[]));
   }
 
-  replaceAll(workspaces: Workspace[]): void {
+  /**
+   * Replace EVERY workspace, for every tenant (a global restore or a migration).
+   * Deliberately not scoped: callers that must not do this check before calling.
+   *
+   * A workspace that already exists keeps its owner and team, and its revision
+   * counter moves forward, so a restore neither orphans a tenant's data nor lets a
+   * tab holding the old revision overwrite what was just restored.
+   */
+  replaceAll(workspaces: Workspace[], scope: WorkspaceScope = this.scope): void {
     this.tx(() => {
+      const previous = new Map<string, { ownerId?: string; teamId?: string; version: number }>();
+      const rows = this.db.prepare('SELECT id, owner_id, team_id, version FROM workspaces').all() as {
+        id: string;
+        owner_id: string | null;
+        team_id: string | null;
+        version: number;
+      }[];
+      for (const r of rows) {
+        previous.set(r.id, {
+          ownerId: r.owner_id ?? undefined,
+          teamId: r.team_id ?? undefined,
+          version: Number(r.version),
+        });
+      }
       this.db.exec('DELETE FROM workspaces');
-      workspaces.forEach((ws, i) => this.writeWorkspaceUnsafe(ws, i, { version: 1 }));
+      workspaces.forEach((ws, i) => {
+        const prev = previous.get(ws.id);
+        this.writeWorkspaceUnsafe(
+          ws,
+          i,
+          { version: prev ? prev.version + 1 : 1 },
+          prev ? { ownerId: prev.ownerId, teamId: prev.teamId } : scope
+        );
+      });
     });
   }
 
-  exportAll(): Workspace[] {
-    return this.listWorkspaces();
+  exportAll(scope: WorkspaceScope = this.scope): Workspace[] {
+    return this.listWorkspaces(scope);
   }
 
-  createSnapshot(workspaceId: string, label: string): { id: string } | undefined {
-    const ws = this.getWorkspace(workspaceId);
+  /**
+   * Write a consistent, standalone copy of the live database to `destPath`.
+   *
+   * Copying `omniswim.db` with a file copy while the server runs can capture the main file
+   * without the `-wal` pages that hold the newest commits, or a torn page mid-checkpoint. The
+   * copy then opens, but not at any state the database was ever in. `VACUUM INTO` reads one
+   * snapshot through SQLite itself and writes a single file with no `-wal` or `-shm` beside it,
+   * so the result opens on its own.
+   *
+   * The copy holds EVERY tenant's rows (it is the whole database), not the current scope.
+   * `destPath` must not exist: SQLite refuses to overwrite, and this refuses first with a clear
+   * message. The caller writes to a temporary name and renames, so a half-written file never
+   * carries a final name.
+   */
+  copyDatabaseTo(destPath: string): void {
+    if (fs.existsSync(destPath)) {
+      throw new Error(`Refusing to overwrite an existing file with a database copy: ${destPath}`);
+    }
+    fs.mkdirSync(path.dirname(destPath), { recursive: true });
+    this.db.prepare('VACUUM INTO ?').run(destPath);
+  }
+
+  createSnapshot(
+    workspaceId: string,
+    label: string,
+    scope: WorkspaceScope = this.scope
+  ): { id: string } | undefined {
+    const ws = this.getWorkspace(workspaceId, scope);
     if (!ws) return undefined;
     const id = `snap_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
     this.db
@@ -193,10 +306,13 @@ export class WorkspaceService {
     return { id };
   }
 
-  listSnapshots(workspaceId: string): { id: string; createdAt: number; label: string }[] {
+  listSnapshots(
+    workspaceId: string,
+    scope: WorkspaceScope = this.scope
+  ): { id: string; createdAt: number; label: string }[] {
     // Snapshot labels leak workspace names, so gate the listing on the same scope
     // that governs reads rather than trusting the caller-supplied id.
-    if (!this.isInScope(workspaceId)) return [];
+    if (!this.isInScope(workspaceId, scope)) return [];
     const rows = this.db
       .prepare(
         'SELECT id, created_at, label FROM workspace_snapshots WHERE workspace_id = ? ORDER BY created_at DESC'
@@ -206,11 +322,14 @@ export class WorkspaceService {
   }
 
   /** Read-only: snapshot's stored workspace content without restoring it. */
-  getSnapshotContent(snapshotId: string): Workspace | undefined {
+  getSnapshotContent(snapshotId: string, scope: WorkspaceScope = this.scope): Workspace | undefined {
     const row = this.db
-      .prepare('SELECT blob FROM workspace_snapshots WHERE id = ?')
-      .get(snapshotId) as { blob: string } | undefined;
+      .prepare('SELECT workspace_id, blob FROM workspace_snapshots WHERE id = ?')
+      .get(snapshotId) as { workspace_id: string; blob: string } | undefined;
     if (!row) return undefined;
+    // Same gate as restoreSnapshot: a snapshot is a full copy of someone's workspace,
+    // and its id is not a secret.
+    if (!this.isInScope(row.workspace_id, scope)) return undefined;
     try {
       return JSON.parse(row.blob) as Workspace;
     } catch {
@@ -218,43 +337,46 @@ export class WorkspaceService {
     }
   }
 
-  restoreSnapshot(snapshotId: string): Workspace | undefined {
+  restoreSnapshot(snapshotId: string, scope: WorkspaceScope = this.scope): Workspace | undefined {
     const row = this.db
       .prepare('SELECT workspace_id, blob FROM workspace_snapshots WHERE id = ?')
       .get(snapshotId) as { workspace_id: string; blob: string } | undefined;
     if (!row) return undefined;
     // Check scope before deserializing: the blob is a full workspace, so an
     // out-of-scope snapshot id must not pull another tenant's data into memory.
-    if (!this.isInScope(row.workspace_id)) return undefined;
+    if (!this.isInScope(row.workspace_id, scope)) return undefined;
+    let ws: Workspace;
     try {
-      const ws = JSON.parse(row.blob) as Workspace;
-      return this.updateWorkspace(row.workspace_id, ws);
+      ws = JSON.parse(row.blob) as Workspace;
     } catch {
       return undefined;
     }
+    // Outside the try: a failed write (for example DUPLICATE_ROW_ID) is not "snapshot not found".
+    return this.updateWorkspace(row.workspace_id, ws, undefined, scope);
   }
 
   private buildScopeWhere(
+    scope: WorkspaceScope,
     baseClause?: string,
     baseParams: unknown[] = []
   ): { where: string; params: unknown[] } {
     const clauses: string[] = [];
     const params = [...baseParams];
     if (baseClause) clauses.push(baseClause);
-    if (this.scope.teamId) {
+    if (scope.teamId) {
       clauses.push('team_id = ?');
-      params.push(this.scope.teamId);
-    } else if (this.scope.ownerId) {
+      params.push(scope.teamId);
+    } else if (scope.ownerId) {
       clauses.push('owner_id = ?');
-      params.push(this.scope.ownerId);
+      params.push(scope.ownerId);
     }
     const where = clauses.length > 0 ? `WHERE ${clauses.join(' AND ')}` : '';
     return { where, params };
   }
 
   /** True when `id` is visible under the current scope. Cheap existence probe. */
-  private isInScope(id: string): boolean {
-    const { where, params } = this.buildScopeWhere('id = ?', [id]);
+  private isInScope(id: string, scope: WorkspaceScope): boolean {
+    const { where, params } = this.buildScopeWhere(scope, 'id = ?', [id]);
     const row = this.db
       .prepare(`SELECT 1 AS ok FROM workspaces ${where} LIMIT 1`)
       .get(...(params as (string | number | null)[]));
@@ -272,14 +394,25 @@ export class WorkspaceService {
     }
   }
 
-  private writeWorkspace(ws: Workspace, sortIndex: number, meta: { version: number }): void {
-    this.tx(() => this.writeWorkspaceUnsafe(ws, sortIndex, meta));
+  private writeWorkspace(
+    ws: Workspace,
+    sortIndex: number,
+    meta: { version: number },
+    scope: WorkspaceScope
+  ): void {
+    this.tx(() => this.writeWorkspaceUnsafe(ws, sortIndex, meta, scope));
   }
 
-  private writeWorkspaceUnsafe(ws: Workspace, sortIndex: number, meta: { version: number }): void {
+  /** `owner` is stamped on the row: the caller's scope, or an existing row's owner on a global replace. */
+  private writeWorkspaceUnsafe(
+    ws: Workspace,
+    sortIndex: number,
+    meta: { version: number },
+    owner: WorkspaceScope
+  ): void {
     const vals = workspaceRowValues(ws, sortIndex, {
-      ownerId: this.scope.ownerId,
-      teamId: this.scope.teamId,
+      ownerId: owner.ownerId,
+      teamId: owner.teamId,
       updatedAt: Date.now(),
       version: meta.version,
     });
@@ -365,10 +498,13 @@ export class WorkspaceService {
     const insertResult = this.db.prepare(
       'INSERT INTO meet_results(id, workspace_id, gender, position, data) VALUES(?, ?, ?, ?, ?)'
     );
+    const unique = createRowIdGuard('meet_results', ws.id);
     for (const row of insertResultsRows(ws.id, ws.menResults ?? [], 'Men')) {
+      unique(row.id);
       insertResult.run(row.id, row.workspace_id, row.gender, row.position, row.data);
     }
     for (const row of insertResultsRows(ws.id, ws.womenResults ?? [], 'Women')) {
+      unique(row.id);
       insertResult.run(row.id, row.workspace_id, row.gender, row.position, row.data);
     }
   }
@@ -379,10 +515,13 @@ export class WorkspaceService {
     );
     const sourceMen = ws.sourceMenResults ?? ws.menResults ?? [];
     const sourceWomen = ws.sourceWomenResults ?? ws.womenResults ?? [];
+    const unique = createRowIdGuard('source_meet_results', ws.id);
     for (const row of insertResultsRows(ws.id, sourceMen, 'Men')) {
+      unique(`src-${row.id}`);
       insertSource.run(`src-${row.id}`, row.workspace_id, row.gender, row.position, row.data);
     }
     for (const row of insertResultsRows(ws.id, sourceWomen, 'Women')) {
+      unique(`src-${row.id}`);
       insertSource.run(`src-${row.id}`, row.workspace_id, row.gender, row.position, row.data);
     }
   }
@@ -391,10 +530,13 @@ export class WorkspaceService {
     const insertPsych = this.db.prepare(
       'INSERT INTO psych_results(id, workspace_id, gender, position, data) VALUES(?, ?, ?, ?, ?)'
     );
+    const unique = createRowIdGuard('psych_results', ws.id);
     for (const row of insertResultsRows(ws.id, ws.psychMenResults ?? [], 'Men')) {
+      unique(row.id);
       insertPsych.run(row.id, row.workspace_id, row.gender, row.position, row.data);
     }
     for (const row of insertResultsRows(ws.id, ws.psychWomenResults ?? [], 'Women')) {
+      unique(row.id);
       insertPsych.run(row.id, row.workspace_id, row.gender, row.position, row.data);
     }
   }
@@ -402,13 +544,19 @@ export class WorkspaceService {
   private insertWithIdChildRows(ws: Workspace): void {
     const insertWithId = (table: string) =>
       this.db.prepare(`INSERT INTO ${table}(id, workspace_id, position, data) VALUES(?, ?, ?, ?)`);
+    const uniqueRecruit = createRowIdGuard('recruits', ws.id);
     for (const row of insertWithIdRows('recruits', ws.id, ws.recruits ?? [])) {
+      uniqueRecruit(row.id);
       insertWithId('recruits').run(row.id, row.workspace_id, row.position, row.data);
     }
+    const uniquePlan = createRowIdGuard('meet_entry_plans', ws.id);
     for (const row of insertWithIdRows('meet_entry_plans', ws.id, ws.meetEntryPlans ?? [])) {
+      uniquePlan(row.id);
       insertWithId('meet_entry_plans').run(row.id, row.workspace_id, row.position, row.data);
     }
+    const uniqueAlias = createRowIdGuard('athlete_aliases', ws.id);
     for (const row of insertWithIdRows('athlete_aliases', ws.id, ws.athleteAliases ?? [])) {
+      uniqueAlias(row.id);
       insertWithId('athlete_aliases').run(row.id, row.workspace_id, row.position, row.data);
     }
   }

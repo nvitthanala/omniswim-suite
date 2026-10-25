@@ -141,7 +141,7 @@ export function useSwimEditUndo({
     } else if (!swimEditUndoTargetReached(flow.record, workspace)) {
       setFlow(null); // something else wrote these fields; there is nothing left to watch
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `toast` changes identity each time one is pushed; listing it would re-run this observer on its own announcements
   }, [workspace, flow]);
 
   const applySwimPatch = useCallback(

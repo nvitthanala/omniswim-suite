@@ -36,8 +36,8 @@ describe('ExportEntriesMenu', () => {
     });
     const buttons = container.querySelectorAll('button');
     expect(buttons).toHaveLength(1);
-    expect(buttons[0].getAttribute('aria-label')).toBe('Export entries');
-    expect(buttons[0].getAttribute('aria-expanded')).toBe('false');
+    expect(buttons[0]!.getAttribute('aria-label')).toBe('Export entries');
+    expect(buttons[0]!.getAttribute('aria-expanded')).toBe('false');
     expect(container.querySelectorAll('[role="menuitem"]')).toHaveLength(0);
   });
 
@@ -49,10 +49,26 @@ describe('ExportEntriesMenu', () => {
     await click(container.querySelector('button')!);
     const items = Array.from(container.querySelectorAll('[role="menuitem"]'));
     expect(items.map(i => i.textContent)).toEqual(['CSV (spreadsheet)', 'HyTek entry list']);
-    await click(items[0]);
+    await click(items[0]!);
     expect(onExport).toHaveBeenLastCalledWith('csv');
     await click(container.querySelector('button')!);
-    await click(container.querySelectorAll('[role="menuitem"]')[1]);
+    await click(container.querySelectorAll('[role="menuitem"]')[1]!);
     expect(onExport).toHaveBeenLastCalledWith('hytek');
+  });
+
+  it('adds "Export report (HTML)" only when a report handler is passed', async () => {
+    const onExportReport = vi.fn();
+    await act(async () => {
+      root.render(createElement(ExportEntriesMenu, { onExport: vi.fn(), onExportReport }));
+    });
+    await click(container.querySelector('button')!);
+    const items = Array.from(container.querySelectorAll('[role="menuitem"]'));
+    expect(items.map(i => i.textContent)).toEqual([
+      'CSV (spreadsheet)',
+      'HyTek entry list',
+      'Export report (HTML)',
+    ]);
+    await click(items[2]!);
+    expect(onExportReport).toHaveBeenCalledTimes(1);
   });
 });

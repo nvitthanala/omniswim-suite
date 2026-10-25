@@ -39,8 +39,10 @@ import {
   Workspace,
   type ScyConversionProvenance,
 } from '../../types';
-import { buildMeetEventLabelIndex, canonicalProgramEvent } from '../eventIdentity';
+import { buildMeetEventLabelIndex, programEventOrNull } from '../eventIdentity';
 import { isUserInputtedSwim } from '../athleteHistory';
+import { isUnconfirmedProgramSwim } from '../programSwim';
+import { itemAt } from '../indexedAccess';
 import { swimEventNotSwumInCourse } from '../courseEvents';
 import { effectivePdfPlacePointsMode } from '../scoringDefaults';
 import { buildScorerRosterLookup, usesScorerRoster, type ScorerRosterLookup } from '../scorerRoster';
@@ -341,7 +343,7 @@ export function buildEventTimeIndex(
   const out = new Map<string, EventTimeRef[]>();
   const push = (event: string, name: string, timeSec: number) => {
     if (!Number.isFinite(timeSec) || timeSec <= 0) return;
-    const canon = canonicalProgramEvent(event);
+    const canon = programEventOrNull(event);
     if (!canon) return;
     let arr = out.get(canon);
     if (!arr) {
@@ -355,6 +357,8 @@ export function buildEventTimeIndex(
   for (const r of results) {
     if (r.gender != null && r.gender !== gender) continue;
     if (isRelayResult(r) || r.isExhibition || r.isTimeTrial) continue;
+    // A swims-list row nobody confirmed as a program swim may be a time trial: no competitor.
+    if (isUnconfirmedProgramSwim(r)) continue;
     push(r.event, r.name, convertTimeToSeconds(r.time));
   }
   // A stored row in an event its course does not swim (a hand-entered 1000
@@ -472,6 +476,7 @@ export function distinctIndividualResultTeams(
     if (r.gender != null && r.gender !== gender) continue;
     if (isRelayResult(r)) continue;
     if (r.isExhibition || r.isTimeTrial) continue;
+    if (isUnconfirmedProgramSwim(r)) continue;
     const t = String(r.team ?? '').trim();
     if (t) teams.add(t);
   }
@@ -516,6 +521,11 @@ const DROP_SOURCE_PRIORITY: Record<DroppableEntry['source'], number> = {
   recruit: 2,
 };
 
+/** An exhibition, a time trial, or a swims-list row nobody confirmed as a program swim. */
+function isOutsideProgramRow(r: SwimmerResult): boolean {
+  return r.isExhibition === true || r.isTimeTrial === true || isUnconfirmedProgramSwim(r);
+}
+
 /**
  * Every current individual entry the team's athletes hold, grouped by athlete
  * (normalized name) then by canonical program event. Union of three sources:
@@ -554,7 +564,7 @@ export function collectDroppableEntries(
       planIsActive(p, workspace.activeEntryIds)
   );
   for (const p of activePlans) {
-    const event = canonicalProgramEvent(p.event);
+    const event = programEventOrNull(p.event);
     if (!event) continue;
     consider(normalizeSwimmerName(p.name), p.name, {
       source: 'plan',
@@ -571,9 +581,9 @@ export function collectDroppableEntries(
   for (const r of results) {
     if (r.gender != null && r.gender !== gender) continue;
     if (isRelayResult(r)) continue;
-    if (r.isExhibition || r.isTimeTrial) continue;
+    if (isOutsideProgramRow(r)) continue;
     if (String(r.team ?? '').trim() !== team) continue;
-    const event = canonicalProgramEvent(r.event);
+    const event = programEventOrNull(r.event);
     if (!event) continue;
     consider(normalizeSwimmerName(r.name), r.name, {
       source: 'result',
@@ -589,7 +599,7 @@ export function collectDroppableEntries(
   for (const rec of workspace.recruits ?? []) {
     if (rec.gender !== gender) continue;
     if (String(rec.team ?? '').trim() !== team) continue;
-    const event = canonicalProgramEvent(rec.event);
+    const event = programEventOrNull(rec.event);
     if (!event) continue;
     consider(normalizeSwimmerName(rec.name), rec.name, {
       source: 'recruit',
@@ -752,8 +762,8 @@ function buildTeamGroupsForEvent(
   }
   const weight = isDivingEvent(event, diverEventPattern) ? diverWeight : 1;
   const keys = [...byKey.keys()].sort((a, b) => {
-    const ga = byKey.get(a)![0];
-    const gb = byKey.get(b)![0];
+    const ga = itemAt(byKey.get(a)!, 0);
+    const gb = itemAt(byKey.get(b)!, 0);
     const tw = roundTierSortForSweep(ga.roundSwam) - roundTierSortForSweep(gb.roundSwam);
     if (tw !== 0) return tw;
     return (parseRankInt(ga.rank) ?? 9999) - (parseRankInt(gb.rank) ?? 9999);
@@ -935,7 +945,7 @@ export function buildFastSwapContext(
   const labelIndex = buildMeetEventLabelIndex(genderResults);
   const remapEvent = (event: string): string => {
     if (labelIndex.size === 0) return event;
-    const canon = canonicalProgramEvent(event);
+    const canon = programEventOrNull(event);
     if (!canon) return event;
     return labelIndex.get(canon) ?? event;
   };

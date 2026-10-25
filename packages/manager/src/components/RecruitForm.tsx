@@ -33,11 +33,12 @@ function parseAthleteName(name: string): { firstName: string; lastName: string }
   if (!trimmed) return { firstName: '', lastName: '' };
   if (trimmed.includes(',')) {
     const [last, ...rest] = trimmed.split(',');
-    return { firstName: rest.join(',').trim(), lastName: last.trim() };
+    // `split` always returns at least one element.
+    return { firstName: rest.join(',').trim(), lastName: (last ?? '').trim() };
   }
   const parts = trimmed.split(/\s+/);
   if (parts.length >= 2) {
-    return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
+    return { firstName: parts[0] ?? '', lastName: parts.slice(1).join(' ') };
   }
   return { firstName: trimmed, lastName: '' };
 }
@@ -61,7 +62,8 @@ function parseClassYear(raw: string | undefined): ClassYear {
   return CLASS_YEAR_ALIASES[u] ?? ClassYear.FR;
 }
 
-const EVENTS = [
+// A non-empty tuple, so `EVENTS[0]` is a string under `noUncheckedIndexedAccess`.
+const EVENTS: readonly [string, ...string[]] = [
   '50 Freestyle', '100 Freestyle', '200 Freestyle', '500 Freestyle', '1000 Freestyle', '1650 Freestyle',
   '100 Backstroke', '200 Backstroke', '100 Breaststroke', '200 Breaststroke',
   '100 Butterfly', '200 Butterfly', '200 IM', '400 IM',
@@ -143,7 +145,7 @@ const LONG_CLASS_YEAR_LABELS: ClassYearLabels = {
   [ClassYear.SO]: 'Sophomore (SO)',
   [ClassYear.JR]: 'Junior (JR)',
   [ClassYear.SR]: 'Senior (SR)',
-  [ClassYear.HS]: 'High School (HS)',
+  [ClassYear.HS]: 'High school (HS)',
 };
 
 /** Shared `<select>` shape behind both "Year"/class-year fields; option text
@@ -358,7 +360,7 @@ export default function RecruitForm({
   return (
     <form onSubmit={handleSubmit} className={`space-y-4 ${disabled ? 'opacity-60 pointer-events-none' : ''}`}>
       <div>
-        <span className={labelClass}>Athlete Name</span>
+        <span className={labelClass}>Swimmer name</span>
         <div className="grid grid-cols-2 gap-2">
           <input
             id={ids.firstName}
@@ -383,7 +385,7 @@ export default function RecruitForm({
 
       <div className="grid grid-cols-2 gap-3">
         <div>
-          <label htmlFor={ids.team} className={labelClass}>Committed Team</label>
+          <label htmlFor={ids.team} className={labelClass}>Committed team</label>
           <TeamSelect
             id={ids.team}
             value={formData.team}
@@ -408,7 +410,7 @@ export default function RecruitForm({
       </div>
 
       <div>
-        <span className={labelClass}>Event Selection</span>
+        <span className={labelClass}>Event selection</span>
         <div className="grid grid-cols-2 gap-3">
           <EventSelect
             id={ids.event}
@@ -429,7 +431,7 @@ export default function RecruitForm({
       </div>
 
       <div>
-        <label htmlFor={ids.time} className={labelClass}>Time Entry (Auto-Convert Enabled)</label>
+        <label htmlFor={ids.time} className={labelClass}>Time entry (auto-convert on)</label>
         <input
           id={ids.time}
           type="text"

@@ -16,6 +16,12 @@ import { dirname, join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import { Gender } from '@omniswim/core/types';
 import { swimCloudTeamMeetSwimsToHistoricalSwims } from '@omniswim/manager/lib/swimCloudImportBridge';
+import { aliasIndividualEventKey } from '../packages/core/src/lib/athleteAliases';
+import { swimEventIdentity } from '../packages/core/src/lib/bestTimeEligibility';
+import { buildCutlineTag } from '../packages/core/src/lib/cutlineTags';
+import { canonicalMeetEventLabel } from '../packages/core/src/lib/athleteHistory';
+import { canonicalProgramEvent } from '../packages/core/src/lib/eventIdentity';
+import { convertTimeToSeconds } from '../packages/core/src/lib/timeFormat';
 import { parseTeamMeetSwimsHtml, type SwimCloudParseContext } from '@omniswim/swimcloud';
 
 const fixturesDir = join(dirname(fileURLToPath(import.meta.url)), 'fixtures');
@@ -58,8 +64,9 @@ describe('swimCloudTeamMeetSwimsToHistoricalSwims — real capture (356467, Hend
       .swims.filter((s) => s.relayLeadoff)
       .map((s) => s.event.label);
     expect(leadoffEvents).toStrictEqual(['100 Y Free', '50 Y Back', '200 Y Free']);
-    for (const label of leadoffEvents) {
-      expect(conversion.swims.some((s) => s.event === label)).toBe(true);
+    // Written as the canonical individual event; the course letter becomes timeType.
+    for (const label of ['100 Freestyle', '50 Backstroke', '200 Freestyle']) {
+      expect(conversion.swims.some((s) => s.event === label && s.timeType === 'SCY')).toBe(true);
     }
   });
 
@@ -102,7 +109,54 @@ describe('swimCloudTeamMeetSwimsToHistoricalSwims — real capture (356467, Hend
       team: 'Henderson State',
       gender: Gender.MEN,
     });
-    const row = conversion.swims.find((s) => s.name === 'Colin Candebat' && s.event === '200 Y IM');
-    expect(row).toMatchObject({ time: '1:46.74', team: 'Henderson State', gender: Gender.MEN, source: 'swimcloud' });
+    const row = conversion.swims.find((s) => s.name === 'Colin Candebat' && s.event === '200 Individual Medley');
+    expect(row).toMatchObject({
+      time: '1:46.74',
+      team: 'Henderson State',
+      gender: Gender.MEN,
+      source: 'swimcloud',
+      timeType: 'SCY',
+    });
+  });
+
+  it('every swim lands on an event the readers and the cut tables know (R3 follow-up: "100 Y Breast" matched nothing)', () => {
+    const conversion = swimCloudTeamMeetSwimsToHistoricalSwims(parsedFixture(), {
+      team: 'Henderson State',
+      gender: Gender.MEN,
+    });
+    expect(conversion.swims).toHaveLength(30);
+    const labels = [...new Set(conversion.swims.map((s) => s.event))].sort();
+    expect(labels).toStrictEqual([
+      '100 Breaststroke',
+      '100 Butterfly',
+      '100 Freestyle',
+      '1000 Freestyle',
+      '1650 Freestyle',
+      '200 Breaststroke',
+      '200 Butterfly',
+      '200 Freestyle',
+      '200 Individual Medley',
+      '400 Individual Medley',
+      '50 Backstroke',
+      '500 Freestyle',
+    ]);
+    for (const swim of conversion.swims) {
+      // The readers agree. 50 Backstroke is read, but it is not on the SCY program.
+      expect(canonicalMeetEventLabel(swim.event), swim.event).toBe(swim.event);
+      expect(canonicalProgramEvent(swim.event), swim.event).toBe(swim.event === '50 Backstroke' ? null : swim.event);
+      expect(aliasIndividualEventKey(swim.event), swim.event).toBe(swim.event.toLowerCase());
+      expect(swimEventIdentity(swim.event), swim.event).toBe(swim.event.toLowerCase());
+      // The cutline table has a row for it: before the fix this was event_not_in_table.
+      const tag = buildCutlineTag({
+        gender: Gender.MEN,
+        event: swim.event,
+        timeSec: convertTimeToSeconds(swim.time),
+        division: 'D2',
+        swimCourse: 'SCY',
+      });
+      // NCAA D2 publishes no 50 Backstroke standard, so that one is honestly absent.
+      if (swim.event === '50 Backstroke') expect(tag.state).toBe('event_not_in_table');
+      else expect(['tagged', 'no_cut'], `${swim.event} ${swim.time}`).toContain(tag.state);
+    }
   });
 });

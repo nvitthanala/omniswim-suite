@@ -11,6 +11,7 @@
 
 import { Gender, Workspace } from '../types';
 import { relayEntryKey } from './relaySplits';
+import { relayEntryKeyIn } from './relayLegMatching';
 import { canonicalSwimmerName, isRelayResult } from './utils';
 import { getSourceResults } from './meetSource';
 
@@ -61,13 +62,40 @@ export function countWorkingCopyChanges(workspace: Workspace, gender: Gender): W
   // wholesale would report every relay edit on BOTH genders, so a workspace
   // with 40 women's leg overrides would claim "40 changes" while the user is
   // looking at the men's roster — a plausible, wrong number.
+  // A tied relay pair's override may be stored once per relay (a list an older build
+  // split from a legacy plain key; `migrateTiedRelayOverrides` no longer copies it).
+  // Both copies are one edit, so `plainKeyByOwnKey` maps a split key back to the
+  // plain key of its pair and the copies are counted once below.
+  const plainKeyByOwnKey = new Map<string, string>();
   const keysFor = (rows: Workspace['menResults']) => {
     const keys = new Set<string>();
-    for (const r of rows ?? []) keys.add(relayEntryKey(r));
+    const list = rows ?? [];
+    for (const r of list) {
+      const plain = relayEntryKey(r);
+      keys.add(plain);
+      // A tied relay's override may carry the named swimmers after the clock.
+      if (r.isRelay) {
+        const own = relayEntryKeyIn(list, r);
+        keys.add(own);
+        plainKeyByOwnKey.set(own, plain);
+      }
+    }
     return keys;
   };
   const thisGenderKeys = keysFor(gender === Gender.MEN ? workspace.menResults : workspace.womenResults);
   const otherGenderKeys = keysFor(gender === Gender.MEN ? workspace.womenResults : workspace.menResults);
+
+  // One edit = one change: overrides of the same leg of one tied pair with the
+  // same content are the copies of one edit. Different content is a different
+  // edit (the relay's own override of the leg is its own change).
+  const countedEdits = new Set<string>();
+  const editIdentity = (o: NonNullable<Workspace['relayLegOverrides']>[number]): string => {
+    const plain = plainKeyByOwnKey.get(o.relayEntryKey) ?? o.relayEntryKey;
+    const content = Object.entries(o)
+      .filter(([field]) => field !== 'relayEntryKey')
+      .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
+    return JSON.stringify([plain, content]);
+  };
 
   let relayLegOverrides = 0;
   let unresolvedRelayLegOverrides = 0;
@@ -79,8 +107,12 @@ export function countWorkingCopyChanges(workspace: Workspace, gender: Gender): W
     // unreachable on real meet data — but attributing an ambiguous key would
     // count the same edit in both gender views, so it is reported instead of
     // guessed, exactly like a key matching neither.
-    if (here && !there) relayLegOverrides += 1;
-    else if (!here && !there) unresolvedRelayLegOverrides += 1;
+    if (here && !there) {
+      const identity = editIdentity(o);
+      if (countedEdits.has(identity)) continue;
+      countedEdits.add(identity);
+      relayLegOverrides += 1;
+    } else if (!here && !there) unresolvedRelayLegOverrides += 1;
     else if (here && there) unresolvedRelayLegOverrides += 1;
   }
 

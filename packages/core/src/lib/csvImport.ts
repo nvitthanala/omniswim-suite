@@ -6,6 +6,7 @@
  * Accepts a header row and maps common column aliases. No external deps.
  */
 import { Gender, type HistoricalSwim } from '../types';
+import { itemAt } from './indexedAccess';
 
 export type CsvImportResult = {
   swims: HistoricalSwim[];
@@ -103,7 +104,7 @@ export function parseCsvHistory(
     return { swims: [], warnings: ['Empty CSV'], rowCount: 0 };
   }
 
-  const headerCells = splitCsvLine(lines[0]).map(normalizeHeader);
+  const headerCells = splitCsvLine(itemAt(lines, 0)).map(normalizeHeader);
   const hasHeader = headerCells.some(h => h in HEADER_ALIASES);
   if (!hasHeader) {
     warnings.push('No recognizable header row found; expected columns like name, event, time.');
@@ -130,7 +131,7 @@ export function parseCsvHistory(
   let skipped = 0;
 
   for (let i = 1; i < lines.length; i++) {
-    const cells = splitCsvLine(lines[i]);
+    const cells = splitCsvLine(itemAt(lines, i));
     const get = (field: keyof HistoricalSwim) => {
       const idx = colMap[field];
       return idx !== undefined ? cells[idx]?.trim() ?? '' : '';

@@ -25,7 +25,7 @@ export default function AthleteHistoryImportHeader({ infoRef, showInfo, onToggle
         </h4>
         <p className="text-ui-body text-theme-secondary mt-1 leading-relaxed">
           Paste Personal Bests (or a roster table). We add new swimmers to the roster and line up
-          events for athletes already on the team.
+          events for swimmers already on the team.
         </p>
       </div>
       <Button

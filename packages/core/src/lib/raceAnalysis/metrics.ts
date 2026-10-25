@@ -1,4 +1,5 @@
 import { distanceUnitForCourse, poolLengthForCourse, velocityUnitForCourse } from './course';
+import { itemAt } from '../indexedAccess';
 import { UNDERWATER_LEGAL_LIMIT_METRES } from './reference';
 import { buildRaceSegments, enteredDistanceForLength, firstTag, tagsOfKind } from './segment';
 import { validateRaceTags } from './tagStateMachine';
@@ -69,8 +70,8 @@ function meanRate(tags: readonly RaceTag[], unit: 'cycles/min' | 'kicks/min', ab
     return absent(absentReason);
   }
 
-  const first = tags[0];
-  const last = tags[tags.length - 1];
+  const first = itemAt(tags, 0);
+  const last = itemAt(tags, tags.length - 1);
   const duration = last.time - first.time;
   if (!Number.isFinite(duration) || duration <= 0) {
     return absent('tag interval for rate must be finite and greater than zero');

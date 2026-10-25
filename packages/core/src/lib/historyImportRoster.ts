@@ -48,6 +48,7 @@ import {
   IDENTITY_ALIAS_RESOLVER,
   type AthleteAliasResolver,
 } from './athleteAliases';
+import { itemAt } from './indexedAccess';
 import {
   applySwimCloudReplacePlan,
   planSwimCloudReplace,
@@ -692,7 +693,7 @@ export function previewHistoryImportActions(
   const out: ImportSwimmerPreview[] = [];
 
   for (const [, swims] of groupPreviewBySwimmer(preview, resolver)) {
-    const sample = swims[0];
+    const sample = itemAt(swims, 0);
     if (sample.team !== team || sample.gender !== gender) continue;
     const resolvedName = resolver.resolveAthleteName(sample.name, team, gender);
     const match = matchAthleteToRoster(resolvedName, rosterNames);
@@ -954,6 +955,15 @@ function appendRecruitRow(
 ): boolean {
   const key = recruitEventKey(ctx.displayName, ctx.team, ctx.gender, swim.event);
   if (acc.existingRecruitEventKeys.has(key)) return false;
+  // Every row an import writes names its origin. A swim with no `source` is a
+  // defect in the parser that built it; writing the row anyway would leave a
+  // recruit that scouting reads as "unknown origin" (see `Recruit.source`).
+  if (!swim.source) {
+    throw new Error(
+      `importHistoryToRoster: the ${swim.event} swim for ${ctx.displayName} has no source, so its recruit row cannot be stamped. ` +
+        `Set HistoricalSwim.source in the parser that built it.`
+    );
+  }
   const recruit: Recruit = {
     id: uuidv4(),
     name: ctx.displayName,
@@ -966,7 +976,7 @@ function appendRecruitRow(
     ...candidateTimeMarks(swim),
     // Last, so every other field keeps its place. A replace reimport reads it
     // (see planSwimCloudReplace) instead of tracing the row back to history.
-    ...(swim.source ? { source: swim.source } : {}),
+    source: swim.source,
   };
   acc.recruits.push(recruit);
   acc.writtenIds.add(recruit.id);
@@ -1011,7 +1021,7 @@ function importSwimmerGroup(
   ctx: ImportContext,
   swims: HistoricalSwim[]
 ): void {
-  const sample = swims[0];
+  const sample = itemAt(swims, 0);
   if (sample.team !== ctx.team || sample.gender !== ctx.gender) return;
 
   const { displayName, isOnRoster, isExistingRecruit } = resolveImportIdentity(

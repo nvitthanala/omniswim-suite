@@ -1,5 +1,5 @@
 import { Link } from 'react-router-dom';
-import { Cog, Globe, MoreHorizontal, Search, Settings, TrendingUp, User } from 'lucide-react';
+import { Cog, Globe, MoreHorizontal, Moon, Search, Settings, Sun, TrendingUp, User } from 'lucide-react';
 import { Button, Menu, MenuItem, ThemeToggle, useSwimCloudWindow } from '@omniswim/ui';
 import { useSuiteWorkspace } from '@omniswim/core/store/SuiteWorkspaceProvider';
 import { useAuth } from '../context/AuthContext';
@@ -28,36 +28,40 @@ export default function SuiteHeader({
   const { user, authRequired, logout } = useAuth();
 
   return (
-    <header className="app-header h-16 flex items-center justify-between px-6 z-20 shrink-0">
-      <div className="flex items-center gap-4">
+    <header className="app-header h-16 flex items-center justify-between gap-2 px-3 sm:px-6 z-20 shrink-0">
+      <div className="flex items-center gap-4 shrink-0">
         <Link to="/" className="flex items-center gap-4 group">
           <div
-            className="w-10 h-10 flex items-center justify-center bg-[var(--surface-muted)] rounded-lg border border-[var(--border)] overflow-hidden"
+            className="w-10 h-10 shrink-0 flex items-center justify-center bg-[var(--surface-muted)] rounded-lg border border-[var(--border)] overflow-hidden"
             style={{ boxShadow: 'var(--ui-shadow-sm)' }}
           >
-            <img src="/OMNISWIMLOGO.png" alt="Omni Swim Logo" className="w-full h-full object-contain p-1" />
+            <img src="/OMNISWIMLOGO.png" alt="Omni Swim logo" className="w-full h-full object-contain p-1" />
           </div>
-          <h1 className="text-xl font-black tracking-tighter text-[var(--text-primary)] group-hover:text-[var(--text-accent)] transition-colors">
+          {/* Under 640px the logo stands alone; the name stays in the accessible name. */}
+          <h1 className="max-sm:sr-only text-xl font-black tracking-tighter text-[var(--text-primary)] group-hover:text-[var(--text-accent)] transition-colors">
             Omni Swim <span className="text-[var(--text-muted)] font-semibold text-base">Suite</span>
           </h1>
         </Link>
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-1.5 sm:gap-2">
         <AppletNav />
 
         {showWorkspaceControls ? <GenderToggleNav activeGender={activeGender} onChange={setActiveGender} /> : null}
 
         {showWorkspaceControls && activeWorkspace && onOpenScoringSettings ? (
-          <Button
-            variant="outline"
-            size="sm"
-            onClick={onOpenScoringSettings}
-            className="p-1.5"
-            title="Configure Scoring Model"
-            aria-label="Configure Scoring Model"
-            leadingIcon={<Settings size={14} />}
-          />
+          // Under 640px this button hides and the same action sits in the More menu.
+          <span className="hidden sm:contents">
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={onOpenScoringSettings}
+              className="p-1.5"
+              title="Configure scoring model"
+              aria-label="Configure scoring model"
+              leadingIcon={<Settings size={14} />}
+            />
+          </span>
         ) : null}
 
         {showWorkspaceControls && activeWorkspace ? (
@@ -66,9 +70,26 @@ export default function SuiteHeader({
           </div>
         ) : null}
 
-        <ThemeToggle theme={theme} onToggle={onThemeToggle} className="ml-1" />
+        {/* Under 640px the toggle hides and the same action sits in the More menu. */}
+        <span className="hidden sm:contents">
+          <ThemeToggle theme={theme} onToggle={onThemeToggle} className="ml-1" />
+        </span>
 
         <Menu label="More" icon={<MoreHorizontal size={14} />} triggerClassName="btn-ghost p-1.5 rounded-lg">
+          {showWorkspaceControls && activeWorkspace && onOpenScoringSettings ? (
+            <MenuItem icon={<Settings size={14} />} onSelect={onOpenScoringSettings} className="sm:hidden">
+              Configure scoring model
+            </MenuItem>
+          ) : null}
+
+          <MenuItem
+            icon={theme === 'dark' ? <Sun size={14} /> : <Moon size={14} />}
+            onSelect={onThemeToggle}
+            className="sm:hidden"
+          >
+            Toggle color mode
+          </MenuItem>
+
           {onOpenCommandPalette ? (
             <MenuItem
               icon={<Search size={14} />}

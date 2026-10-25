@@ -58,6 +58,7 @@ export function TagTable({ config, tags, frameSeconds, onChange }: TagTableProps
   const nudge = (index: number, direction: 1 | -1) => {
     if (frameSeconds === null) return;
     const tag = tags[index];
+    if (tag === undefined) return;
     onChange(updateTagTime(tags, index, tag.time + direction * frameSeconds));
   };
 
@@ -105,6 +106,7 @@ export function TagTable({ config, tags, frameSeconds, onChange }: TagTableProps
                     onClick={() => nudge(index, -1)}
                     disabled={frameSeconds === null}
                     title={frameSeconds === null ? 'Set frame rate to nudge by frame' : 'Nudge back 1 frame'}
+                    aria-label="Nudge back 1 frame"
                     className="p-1"
                     leadingIcon={<ChevronDown size={14} />}
                   />
@@ -114,6 +116,7 @@ export function TagTable({ config, tags, frameSeconds, onChange }: TagTableProps
                     onClick={() => nudge(index, 1)}
                     disabled={frameSeconds === null}
                     title={frameSeconds === null ? 'Set frame rate to nudge by frame' : 'Nudge forward 1 frame'}
+                    aria-label="Nudge forward 1 frame"
                     className="p-1"
                     leadingIcon={<ChevronUp size={14} />}
                   />
@@ -122,6 +125,7 @@ export function TagTable({ config, tags, frameSeconds, onChange }: TagTableProps
                     size="sm"
                     onClick={() => deleteRow(index)}
                     title="Delete tag"
+                    aria-label="Delete tag"
                     className="p-1 hover:text-red-400"
                     leadingIcon={<Trash2 size={14} />}
                   />

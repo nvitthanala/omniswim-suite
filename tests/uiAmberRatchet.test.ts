@@ -85,7 +85,7 @@ describe('warning-tone utilities follow the theme', () => {
     const used = new Set<string>();
     const usage = /(?<![\w-])(?:[a-z]+:)*((?:text|bg|border)-warning(?:-[a-z]+)?)(?![\w-])/g;
     for (const file of FILES) {
-      for (const m of readFileSync(file, 'utf8').matchAll(usage)) used.add(m[1]);
+      for (const m of readFileSync(file, 'utf8').matchAll(usage)) used.add(m[1]!);
     }
     expect(used.size).toBeGreaterThan(0);
     for (const name of used) expect(defined.has(name), `${name} is used but not defined with @utility`).toBe(true);

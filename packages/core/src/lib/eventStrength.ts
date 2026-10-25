@@ -56,6 +56,7 @@ import {
   type MeetPlaceField,
 } from './utils';
 import { getSourceResults } from './meetSource';
+import { recordAt } from './indexedAccess';
 import {
   buildAliasResolver,
   IDENTITY_ALIAS_RESOLVER,
@@ -121,22 +122,42 @@ export function rankEventsByQuality(
   bestByEvent: Record<string, { timeSec: number }>,
   gender: Gender,
   team: string,
-  divisionOverride?: NcaaDivision | null
+  divisionOverride?: NcaaDivision | null,
+  /**
+   * The season the bests were swum in, `YYYY-YYYY`. Picks the team's division
+   * (`TeamDivisionOptions.season`) when it changed over time. Absent for such a
+   * team, the division is unknown and every event comes back in `unranked`.
+   */
+  swimSeason?: string
 ): EventQualityRanking {
   const events = Object.keys(bestByEvent);
   const byTimeThenName = (list: string[]) =>
+    // An event with no usable time sorts LAST. It used to read as 0 seconds, the
+    // fastest possible, and led the list.
     [...list].sort(
-      (a, b) => (bestByEvent[a]?.timeSec ?? 0) - (bestByEvent[b]?.timeSec ?? 0) || a.localeCompare(b)
+      (a, b) =>
+        compareNumbers(usableSeconds(bestByEvent[a]?.timeSec), usableSeconds(bestByEvent[b]?.timeSec)) ||
+        a.localeCompare(b)
     );
 
-  const division = divisionOverride !== undefined ? divisionOverride : divisionForTeamOrNull(team);
+  const division =
+    divisionOverride !== undefined
+      ? divisionOverride
+      : divisionForTeamOrNull(team, swimSeason === undefined ? undefined : { season: swimSeason });
   if (!division) {
     return { ranked: [], unranked: byTimeThenName(events), ratioByEvent: {}, division: null, tier: null };
   }
 
   const refs = new Map<string, { a: number; b: number }>();
   for (const event of events) {
-    const sec = bestByEvent[event]?.timeSec ?? 0;
+    const sec = bestByEvent[event]?.timeSec;
+    // An event with no usable time takes no part in choosing the tier. Its
+    // standard exists, but it is not a swim: counting it let an empty event
+    // tip the whole profile onto the permissive tier.
+    if (!hasUsableSeconds(sec)) {
+      refs.set(event, { a: 0, b: 0 });
+      continue;
+    }
     const cmp = compareTimeToCutline(sec, gender, event, division);
     refs.set(event, cmp.status === 'ok' ? { a: cmp.aCutSec, b: cmp.bCutSec } : { a: 0, b: 0 });
   }
@@ -154,15 +175,15 @@ export function rankEventsByQuality(
   const unranked: string[] = [];
   for (const event of events) {
     const ref = tier === 'B' ? refs.get(event)?.b ?? 0 : refs.get(event)?.a ?? 0;
-    const sec = bestByEvent[event]?.timeSec ?? 0;
-    if (ref > 0 && Number.isFinite(sec) && sec > 0) {
+    const sec = bestByEvent[event]?.timeSec;
+    if (ref > 0 && hasUsableSeconds(sec)) {
       ratioByEvent[event] = sec / ref;
       ranked.push(event);
     } else {
       unranked.push(event);
     }
   }
-  ranked.sort((a, b) => ratioByEvent[a] - ratioByEvent[b] || a.localeCompare(b));
+  ranked.sort((a, b) => recordAt(ratioByEvent, a) - recordAt(ratioByEvent, b) || a.localeCompare(b));
   return { ranked, unranked: byTimeThenName(unranked), ratioByEvent, division, tier };
 }
 
@@ -179,6 +200,8 @@ export type EventStrengthOptions = {
   isSameSwimmer?: (row: SwimmerResult) => boolean;
   /** Same three-state contract as {@link rankEventsByQuality}. */
   divisionOverride?: NcaaDivision | null;
+  /** See {@link rankEventsByQuality}'s `swimSeason`. */
+  swimSeason?: string;
 };
 
 export type EventStrengthRanking = EventQualityRanking & {
@@ -202,8 +225,13 @@ function compareOptional(a: number | undefined, b: number | undefined): number {
   return 0;
 }
 
-function usableSeconds(sec: number): number {
-  return Number.isFinite(sec) && sec > 0 ? sec : Number.POSITIVE_INFINITY;
+function hasUsableSeconds(sec: number | undefined): sec is number {
+  return typeof sec === 'number' && Number.isFinite(sec) && sec > 0;
+}
+
+/** A time a ranking may use: finite and above 0. Anything else is "no time" and sorts last. */
+function usableSeconds(sec: number | undefined): number {
+  return typeof sec === 'number' && Number.isFinite(sec) && sec > 0 ? sec : Number.POSITIVE_INFINITY;
 }
 
 /**
@@ -239,7 +267,13 @@ export function rankEventsByStrength(
   team: string,
   options: EventStrengthOptions = {}
 ): EventStrengthRanking {
-  const quality = rankEventsByQuality(bestByEvent, gender, team, options.divisionOverride);
+  const quality = rankEventsByQuality(
+    bestByEvent,
+    gender,
+    team,
+    options.divisionOverride,
+    options.swimSeason
+  );
   const field = options.meetField ?? null;
 
   const strengthByEvent: Record<string, EventStrength> = {};
@@ -263,9 +297,9 @@ export function rankEventsByStrength(
   }
 
   const order = Object.keys(strengthByEvent).sort((a, b) =>
-    compareEventStrength(strengthByEvent[a], strengthByEvent[b])
+    compareEventStrength(recordAt(strengthByEvent, a), recordAt(strengthByEvent, b))
   );
-  const rankedAgainstMeet = order.some(e => strengthByEvent[e].meetPlace != null);
+  const rankedAgainstMeet = order.some(e => recordAt(strengthByEvent, e).meetPlace != null);
   return { ...quality, order, strengthByEvent, rankedAgainstMeet };
 }
 

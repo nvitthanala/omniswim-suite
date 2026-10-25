@@ -127,6 +127,18 @@ export function normalizeEventForCutline(event: string): string {
 }
 
 /**
+ * `"100 Freestyle (Relay split)"` -> `"100 Freestyle"`. The suffix a relay-split
+ * row carries, matched case-insensitively at the end of the label.
+ *
+ * Callers: `relayLegEventKey` (relayLegMatching.ts) and
+ * `resolveConversionFactorKey` (scyConversion.ts). `swimEventIdentity`
+ * (bestTimeEligibility.ts) does not call it and keeps the suffix.
+ */
+export function stripRelaySplitSuffix(label: string): string {
+  return label.replace(/\s*\(relay split\)\s*$/i, '').trim();
+}
+
+/**
  * Whether an event label — raw or already normalized — names a diving event.
  *
  * Callers rendering a cut badge should treat `true` as "not applicable" rather
@@ -184,7 +196,8 @@ export function courseOfRecordFromEventLabel(event: string): CourseOfRecordFromL
   if (isDivingEvent(e)) return null;
 
   const code = e.match(EXPLICIT_COURSE_CODE);
-  if (code) return code[1].toUpperCase() as SwimCourseOfRecord;
+  const courseCode = code?.[1];
+  if (courseCode !== undefined) return courseCode.toUpperCase() as SwimCourseOfRecord;
 
   if (YARDS_WORD.test(e)) return 'SCY';
   if (METRIC_WORD.test(e)) return 'METRIC_UNSPECIFIED';

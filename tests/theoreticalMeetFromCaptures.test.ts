@@ -38,7 +38,7 @@ import {
   type TheoreticalStoredPageStamp,
 } from '../packages/manager/src/lib/theoreticalMeetFromCaptures';
 import { buildTheoreticalMeetSeeds } from '../packages/manager/src/lib/theoreticalMeetSeeds';
-import { SWIMMER_BODY, rosterPage } from './helpers/multiTeamDriverHarness';
+import { SWIMMER_BODY, rosterPage } from './helpers/multiTeamFixtures';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const SEASON_FORM = readFileSync(join(here, 'fixtures', 'swimcloud', 'team-412-roster-gender-F-season-form.html'), 'utf8');
@@ -171,8 +171,8 @@ describe('theoreticalMeetFromCaptures: the happy path over real roster pages', (
       ['Ouachita Baptist University', Gender.MEN, 'parsed'],
       ['Ouachita Baptist University', Gender.WOMEN, 'parsed'],
     ]);
-    expect(result.teams[0].athletes.map(a => a.athlete.name)).toEqual(OBU_M.athletes.map(a => a.name));
-    expect(result.teams[1].athletes.map(a => a.athlete.name)).toEqual(OBU_F.athletes.map(a => a.name));
+    expect(result.teams[0]!.athletes.map(a => a.athlete.name)).toEqual(OBU_M.athletes.map(a => a.name));
+    expect(result.teams[1]!.athletes.map(a => a.athlete.name)).toEqual(OBU_F.athletes.map(a => a.name));
     expect(result.teams.every(t => t.captureId === 'team-412-2025-2026' && t.retrievedAt === RETRIEVED)).toBe(true);
   });
 
@@ -183,7 +183,7 @@ describe('theoreticalMeetFromCaptures: the happy path over real roster pages', (
   });
 
   it('the output is accepted by the seed builder as it stands', async () => {
-    const id = OBU_M.athletes[0].swimCloudSwimmerId as string;
+    const id = OBU_M.athletes[0]!.swimCloudSwimmerId as string;
     const result = await run({
       records: [record({ pages: [rosterRef('412', 'M'), rosterRef('412', 'F'), timesRef(id)] })],
       parse: { swimmerTimes: [timesFor(id)] },
@@ -192,16 +192,16 @@ describe('theoreticalMeetFromCaptures: the happy path over real roster pages', (
     expect(seeds.report.teams).toHaveLength(2);
     expect(seeds.rows.length).toBeGreaterThan(0);
     expect(seeds.rows.every(r => r.gender === Gender.MEN)).toBe(true);
-    expect(seeds.sources.get(seeds.rows[0].id)?.captureId).toBe('team-412-2025-2026');
+    expect(seeds.sources.get(seeds.rows[0]!.id)?.captureId).toBe('team-412-2025-2026');
     // The athlete's own page stamp rode along as the swim's source time.
-    expect(seeds.sources.get(seeds.rows[0].id)?.retrievedAt).toBe('2026-10-04T12:05:00.000Z');
+    expect(seeds.sources.get(seeds.rows[0]!.id)?.retrievedAt).toBe('2026-10-04T12:05:00.000Z');
   });
 });
 
 describe('theoreticalMeetFromCaptures: times are undefined, [] or parse_failed, never confused', () => {
-  const first = OBU_M.athletes[0].swimCloudSwimmerId as string;
-  const second = OBU_M.athletes[1].swimCloudSwimmerId as string;
-  const third = OBU_M.athletes[2].swimCloudSwimmerId as string;
+  const first = OBU_M.athletes[0]!.swimCloudSwimmerId as string;
+  const second = OBU_M.athletes[1]!.swimCloudSwimmerId as string;
+  const third = OBU_M.athletes[2]!.swimCloudSwimmerId as string;
 
   it('a parsed page gives swims, a page with no usable swim gives [], a page that did not parse gives parse_failed, no page gives undefined', async () => {
     const emptyPage: SwimCloudSwimmerTimesParse = { ...timesFor(second), personalBests: [], rowCount: 0 };
@@ -210,37 +210,37 @@ describe('theoreticalMeetFromCaptures: times are undefined, [] or parse_failed, 
       // `third` has a page record and no parse: the page did not parse.
       parse: { swimmerTimes: [timesFor(first), emptyPage] },
     });
-    const men = result.teams[0].athletes;
-    expect(men[0].swims?.length).toBeGreaterThan(0);
-    expect(men[0].swimsStatus).toBeUndefined();
-    expect(men[0].swims?.every(s => s.name === OBU_M.athletes[0].name && s.team === 'Ouachita Baptist University' && s.gender === Gender.MEN)).toBe(true);
-    expect(men[1].swims).toEqual([]);
-    expect(men[1].swimsStatus).toBeUndefined();
-    expect(men[2].swims).toBeUndefined();
-    expect(men[2].swimsStatus).toBe('parse_failed');
-    expect(men[3].swims).toBeUndefined();
-    expect(men[3].swimsStatus).toBeUndefined();
+    const men = result.teams[0]!.athletes;
+    expect(men[0]!.swims?.length).toBeGreaterThan(0);
+    expect(men[0]!.swimsStatus).toBeUndefined();
+    expect(men[0]!.swims?.every(s => s.name === OBU_M.athletes[0]!.name && s.team === 'Ouachita Baptist University' && s.gender === Gender.MEN)).toBe(true);
+    expect(men[1]!.swims).toEqual([]);
+    expect(men[1]!.swimsStatus).toBeUndefined();
+    expect(men[2]!.swims).toBeUndefined();
+    expect(men[2]!.swimsStatus).toBe('parse_failed');
+    expect(men[3]!.swims).toBeUndefined();
+    expect(men[3]!.swimsStatus).toBeUndefined();
     // The builder reports the four apart.
     const seeds = buildTheoreticalMeetSeeds({ meetId: 'ws-1', course: 'SCY', scoringSettings: GENERIC_TOP16_SETTINGS, teams: result.teams });
     const report = seeds.report.teams[0];
-    expect(report.athletesWithTimesParseFailed.map(a => a.swimCloudSwimmerId)).toEqual([third]);
-    expect(report.athletesWithNoSeedInMeetCourse.map(a => [a.swimCloudSwimmerId, a.reason])).toEqual([[second, 'no_usable_swim']]);
-    expect(report.athletesWithNoTimes).toHaveLength(OBU_M.athletes.length - 3);
+    expect(report!.athletesWithTimesParseFailed.map(a => a.swimCloudSwimmerId)).toEqual([third]);
+    expect(report!.athletesWithNoSeedInMeetCourse.map(a => [a.swimCloudSwimmerId, a.reason])).toEqual([[second, 'no_usable_swim']]);
+    expect(report!.athletesWithNoTimes).toHaveLength(OBU_M.athletes.length - 3);
   });
 
   it('a times page recorded with a non-ok outcome counts as no times, and says so', async () => {
     const result = await run({
       records: [record({ pages: [rosterRef('412', 'M'), rosterRef('412', 'F'), timesRef(first, { outcome: 'http-error' })] })],
     });
-    expect(result.teams[0].athletes[0].swims).toBeUndefined();
-    expect(result.teams[0].athletes[0].swimsStatus).toBeUndefined();
+    expect(result.teams[0]!.athletes[0]!.swims).toBeUndefined();
+    expect(result.teams[0]!.athletes[0]!.swimsStatus).toBeUndefined();
     expect(result.warnings.join('\n')).toMatch(/1 swimmer times page\(s\) were recorded with a non-ok outcome/);
   });
 
   it('a parsed times page that matches no roster athlete is reported, not used', async () => {
     const result = await run({ parse: { swimmerTimes: [timesFor('999999999')] } });
     expect(result.teams.every(t => t.athletes.every(a => a.swims === undefined))).toBe(true);
-    expect(result.warnings.join('\n')).toMatch(/1 parsed swimmer times page\(s\) match no athlete/);
+    expect(result.warnings.join('\n')).toMatch(/1 parsed swimmer times page\(s\) match no swimmer/);
   });
 });
 
@@ -255,17 +255,17 @@ describe('theoreticalMeetFromCaptures: capture completeness is reported, never r
       expect(team.pagesPlanned).toBe(79);
       expect(team.warnings.join('\n')).toMatch(/is partial \(2 of 79 planned page\(s\) stored with outcome ok\)/);
     }
-    expect(result.captures[0].warnings).toHaveLength(1);
+    expect(result.captures[0]!.warnings).toHaveLength(1);
   });
 
   it('an in-progress capture is accepted and flagged', async () => {
     const result = await run({ records: [record({ completeness: 'in-progress', plannedPageCount: 10 })] });
-    expect(result.teams[0].warnings.join('\n')).toMatch(/still in progress \(2 of 10 planned page\(s\)/);
+    expect(result.teams[0]!.warnings.join('\n')).toMatch(/still in progress \(2 of 10 planned page\(s\)/);
   });
 
   it('a capture that says it fetched every page but holds fewer is flagged', async () => {
     const result = await run({ records: [record({ plannedPageCount: 79 })] });
-    expect(result.teams[0].warnings.join('\n')).toMatch(/says it fetched every planned page, but only 2 of 79/);
+    expect(result.teams[0]!.warnings.join('\n')).toMatch(/says it fetched every planned page, but only 2 of 79/);
   });
 
   it('a complete capture carries no completeness warning', async () => {
@@ -299,17 +299,17 @@ describe('theoreticalMeetFromCaptures: the real "No rosters found" page', () => 
       parseCapture: async captureId => ({ captureId, rosters: [UWF_M_EMPTY, uwfWomen], swimmerTimes: [] }),
     });
     const [men, women] = result.teams;
-    expect(men.rosterStatus).toBe('no_rosters_found');
-    expect(men.athletes).toEqual([]);
-    expect(men.gender).toBe(Gender.MEN);
-    expect(men.teamName).toBe(uwfWomen.teamName);
-    expect(men.warnings.join('\n')).toMatch(/comes from this capture's other roster page/);
-    expect(women.rosterStatus).toBe('parsed');
+    expect(men!.rosterStatus).toBe('no_rosters_found');
+    expect(men!.athletes).toEqual([]);
+    expect(men!.gender).toBe(Gender.MEN);
+    expect(men!.teamName).toBe(uwfWomen.teamName);
+    expect(men!.warnings.join('\n')).toMatch(/comes from this capture's other roster page/);
+    expect(women!.rosterStatus).toBe('parsed');
     // The parsed sibling confirms the filter-letter reading, so no gender warning.
-    expect(men.warnings.join('\n')).not.toMatch(/gender of this/);
+    expect(men!.warnings.join('\n')).not.toMatch(/gender of this/);
     // The seed builder accepts it, and states the empty roster.
     const seeds = buildTheoreticalMeetSeeds({ meetId: 'ws-1', course: 'SCY', scoringSettings: GENERIC_TOP16_SETTINGS, teams: result.teams });
-    expect(seeds.report.teams[0].caveats.join('\n')).toMatch(/no rosters found/i);
+    expect(seeds.report.teams[0]!.caveats.join('\n')).toMatch(/no rosters found/i);
   });
 
   it('an empty page with no sibling to name it throws, it is not given a guessed name', async () => {
@@ -387,19 +387,22 @@ describe('theoreticalMeetFromCaptures: the roster season id is never guessed', (
   const seasonOf = async (f: Fixture) => (await run(f)).teams.map(t => [t.rosterSeasonId, t.warnings.join(' | ')] as const);
 
   it('stays undefined, with a warning, when no page bytes are available', async () => {
-    const [[id, warning]] = await seasonOf({ withHtmlDep: false });
+    const [first] = await seasonOf({ withHtmlDep: false });
+    const [id, warning] = first!;
     expect(id).toBeUndefined();
     expect(warning).toMatch(/No roster page bytes were available/);
   });
 
   it('stays undefined when the bytes are not stored', async () => {
-    const [[id, warning]] = await seasonOf({ html: undefined });
+    const [first] = await seasonOf({ html: undefined });
+    const [id, warning] = first!;
     expect(id).toBeUndefined();
     expect(warning).toMatch(/bytes are not stored/);
   });
 
   it('stays undefined when the page has no season table', async () => {
-    const [[id, warning]] = await seasonOf({ html: '<html><body>no form</body></html>' });
+    const [first] = await seasonOf({ html: '<html><body>no form</body></html>' });
+    const [id, warning] = first!;
     expect(id).toBeUndefined();
     expect(warning).toMatch(/season table did not parse/);
   });
@@ -408,14 +411,16 @@ describe('theoreticalMeetFromCaptures: the roster season id is never guessed', (
     const records = [record({ subject: { kind: 'team', teamId: '412', season: '1999-2000' } })];
     // The page prints no recognised season label, so the subject's label is the only claim.
     const unlabelled = [{ ...OBU_M, season: undefined }, { ...OBU_F, season: undefined }];
-    const [[id, warning]] = await seasonOf({ records, parse: { rosters: unlabelled } });
+    const [first] = await seasonOf({ records, parse: { rosters: unlabelled } });
+    const [id, warning] = first!;
     expect(id).toBeUndefined();
     expect(warning).toMatch(/does not list 1999-2000/);
   });
 
   it('stays undefined when the subject has no season label', async () => {
     const records = [record({ subject: { kind: 'team', teamId: '412' } })];
-    const [[id, warning]] = await seasonOf({ records });
+    const [first] = await seasonOf({ records });
+    const [id, warning] = first!;
     expect(id).toBeUndefined();
     expect(warning).toMatch(/no season label/);
   });
@@ -423,9 +428,9 @@ describe('theoreticalMeetFromCaptures: the roster season id is never guessed', (
   it('stays undefined when the page URL asks for another season id than the table lists', async () => {
     const pages = [rosterRef('412', 'M', { canonicalUrl: 'https://www.swimcloud.com/team/412/roster/?gender=M&page=1&season_id=30&sort=name' }), rosterRef('412', 'F')];
     const result = await run({ records: [record({ pages })] });
-    expect(result.teams[0].rosterSeasonId).toBeUndefined();
-    expect(result.teams[0].warnings.join(' ')).toMatch(/asks for season_id=30, but its season table lists 2025-2026 as 29/);
-    expect(result.teams[1].rosterSeasonId).toBe('29');
+    expect(result.teams[0]!.rosterSeasonId).toBeUndefined();
+    expect(result.teams[0]!.warnings.join(' ')).toMatch(/asks for season_id=30, but its season table lists 2025-2026 as 29/);
+    expect(result.teams[1]!.rosterSeasonId).toBe('29');
   });
 
   it('throws when the roster page prints another season than the capture is labelled', async () => {
@@ -471,7 +476,7 @@ describe('theoreticalMeetFromCaptures: bad input', () => {
 /* -------------------------------------------------------------------------- */
 
 describe('theoreticalMeetFromCaptures: page bytes that changed since the fetch', () => {
-  const first = OBU_M.athletes[0].swimCloudSwimmerId as string;
+  const first = OBU_M.athletes[0]!.swimCloudSwimmerId as string;
   const STORED_AT = '2026-10-06T09:00:00.000Z';
   const pagesWithTimes = () => [rosterRef('412', 'M'), rosterRef('412', 'F'), timesRef(first)];
   const driftOf = (url: string): TheoreticalStoredPageStamp => ({ canonicalUrl: url, resourceKind: 'x', entryRetrievedAt: STORED_AT, contentSha256: 'ab'.repeat(32) });
@@ -479,48 +484,48 @@ describe('theoreticalMeetFromCaptures: page bytes that changed since the fetch',
   it('a clean capture reports nothing and keeps the record fetch times', async () => {
     const result = await run({ records: [record({ pages: pagesWithTimes() })], parse: { swimmerTimes: [timesFor(first)] } });
     expect(result.warnings).toEqual([]);
-    expect(result.captures[0].driftedPages).toEqual([]);
-    expect(result.captures[0].unverifiedPages).toBe(0);
-    expect(result.teams[0].retrievedAt).toBe(RETRIEVED);
+    expect(result.captures[0]!.driftedPages).toEqual([]);
+    expect(result.captures[0]!.unverifiedPages).toBe(0);
+    expect(result.teams[0]!.retrievedAt).toBe(RETRIEVED);
   });
 
   it('a roster page whose stored bytes differ gets a page-bytes-drifted warning and the stored write time as its time', async () => {
     const pages = pagesWithTimes();
-    const result = await run({ records: [record({ pages })], parse: { storedPages: [driftOf(pages[0].canonicalUrl), ...stampsOf(record({ pages })).slice(1)] } });
-    expect(result.captures[0].driftedPages).toEqual([pages[0].canonicalUrl]);
+    const result = await run({ records: [record({ pages })], parse: { storedPages: [driftOf(pages[0]!.canonicalUrl), ...stampsOf(record({ pages })).slice(1)] } });
+    expect(result.captures[0]!.driftedPages).toEqual([pages[0]!.canonicalUrl]);
     expect(result.warnings.join('\n')).toMatch(/page-bytes-drifted/);
-    expect(result.warnings.join('\n')).toContain(pages[0].canonicalUrl);
+    expect(result.warnings.join('\n')).toContain(pages[0]!.canonicalUrl);
     for (const team of result.teams) expect(team.warnings.join('\n')).toMatch(/page-bytes-drifted/);
     // The drifted men's roster page no longer keeps the old fetch time as its provenance.
-    expect(result.teams[0].retrievedAt).toBe(STORED_AT);
-    expect(result.teams[1].retrievedAt).toBe(RETRIEVED);
+    expect(result.teams[0]!.retrievedAt).toBe(STORED_AT);
+    expect(result.teams[1]!.retrievedAt).toBe(RETRIEVED);
   });
 
   it('a times page whose stored bytes differ stamps its athlete, its swims and the seed source with the stored write time', async () => {
     const pages = pagesWithTimes();
     const result = await run({
       records: [record({ pages })],
-      parse: { swimmerTimes: [timesFor(first)], storedPages: [...stampsOf(record({ pages })).slice(0, 2), driftOf(pages[2].canonicalUrl)] },
+      parse: { swimmerTimes: [timesFor(first)], storedPages: [...stampsOf(record({ pages })).slice(0, 2), driftOf(pages[2]!.canonicalUrl)] },
     });
-    const athlete = result.teams[0].athletes[0];
-    expect(athlete.retrievedAt).toBe(STORED_AT);
-    expect(athlete.swims?.every(s => s.retrievedAt === STORED_AT)).toBe(true);
-    expect(result.captures[0].driftedPages).toEqual([pages[2].canonicalUrl]);
+    const athlete = result.teams[0]!.athletes[0];
+    expect(athlete!.retrievedAt).toBe(STORED_AT);
+    expect(athlete!.swims?.every(s => s.retrievedAt === STORED_AT)).toBe(true);
+    expect(result.captures[0]!.driftedPages).toEqual([pages[2]!.canonicalUrl]);
     const seeds = buildTheoreticalMeetSeeds({ meetId: 'ws-1', course: 'SCY', scoringSettings: GENERIC_TOP16_SETTINGS, teams: result.teams });
-    expect(seeds.sources.get(seeds.rows[0].id)?.retrievedAt).toBe(STORED_AT);
+    expect(seeds.sources.get(seeds.rows[0]!.id)?.retrievedAt).toBe(STORED_AT);
   });
 
   it('a parse that returns no stamps cannot verify anything, and says so once', async () => {
     const result = await run({ parse: { storedPages: undefined } });
-    expect(result.captures[0].unverifiedPages).toBe(2);
+    expect(result.captures[0]!.unverifiedPages).toBe(2);
     expect(result.warnings.join('\n')).toMatch(/2 page\(s\) could not be checked against the fetched bytes/);
   });
 
   it('a page with no recorded hash, or no stored stamp, is unverified, not drifted', async () => {
     const pages = [rosterRef('412', 'M', { sha256: undefined }), rosterRef('412', 'F')];
     const result = await run({ records: [record({ pages })], parse: { storedPages: [] } });
-    expect(result.captures[0].driftedPages).toEqual([]);
-    expect(result.captures[0].unverifiedPages).toBe(2);
+    expect(result.captures[0]!.driftedPages).toEqual([]);
+    expect(result.captures[0]!.unverifiedPages).toBe(2);
   });
 });
 
@@ -540,7 +545,7 @@ describe('theoreticalMeetFromCaptures: parse warnings reach the report', () => {
 
   it('counts them by code in the capture summary and on every team', async () => {
     const result = await run({ parse: { warnings } });
-    expect(result.captures[0].parseWarnings).toEqual({
+    expect(result.captures[0]!.parseWarnings).toEqual({
       total: 5,
       byCode: { 'unparsed-row': 2, 'missing-athlete-link': 1, 'page-not-parsed': 1, 'no-stored-content': 1 },
       lines: warnings,
@@ -553,13 +558,13 @@ describe('theoreticalMeetFromCaptures: parse warnings reach the report', () => {
 
   it('a clean parse adds nothing', async () => {
     const result = await run({ parse: { warnings: [] } });
-    expect(result.captures[0].parseWarnings.total).toBe(0);
+    expect(result.captures[0]!.parseWarnings.total).toBe(0);
     expect(result.warnings).toEqual([]);
   });
 
   it('a warning in a shape this file does not know is counted as other, never dropped', async () => {
     const result = await run({ parse: { warnings: ['something new happened'] } });
-    expect(result.captures[0].parseWarnings.byCode).toEqual({ other: 1 });
+    expect(result.captures[0]!.parseWarnings.byCode).toEqual({ other: 1 });
   });
 });
 
@@ -575,20 +580,20 @@ describe('theoreticalMeetFromCaptures: no season id without proof', () => {
   it('leaves the id undefined when the URL has no season_id and the page prints no season, even if the table lists the label', async () => {
     const noneSelected = SEASON_FORM.replace('value="29" selected', 'value="29"');
     const result = await run({ records: [record({ pages: noProofPages })], parse: { rosters: unprinted }, html: noneSelected });
-    expect(result.teams[0].rosterSeasonId).toBeUndefined();
-    expect(result.teams[0].warnings.join(' ')).toMatch(/nothing proves which season/);
+    expect(result.teams[0]!.rosterSeasonId).toBeUndefined();
+    expect(result.teams[0]!.warnings.join(' ')).toMatch(/nothing proves which season/);
     // The women's page prints its season, so it is proof.
-    expect(result.teams[1].rosterSeasonId).toBe('29');
+    expect(result.teams[1]!.rosterSeasonId).toBe('29');
   });
 
   it('uses the selected option only when it is the subject label', async () => {
     // The real season form marks 2025-2026 (29) selected, and the subject label is 2025-2026.
     const result = await run({ records: [record({ pages: noProofPages })], parse: { rosters: unprinted } });
-    expect(result.teams[0].rosterSeasonId).toBe('29');
+    expect(result.teams[0]!.rosterSeasonId).toBe('29');
     // A different selected option is not proof for this label.
     const other = SEASON_FORM.replace('value="29" selected', 'value="29"').replace('value="30"', 'value="30" selected');
     const mismatch = await run({ records: [record({ pages: noProofPages })], parse: { rosters: unprinted }, html: other });
-    expect(mismatch.teams[0].rosterSeasonId).toBeUndefined();
-    expect(mismatch.teams[0].warnings.join(' ')).toMatch(/marks 2026-2027 selected, not 2025-2026/);
+    expect(mismatch.teams[0]!.rosterSeasonId).toBeUndefined();
+    expect(mismatch.teams[0]!.warnings.join(' ')).toMatch(/marks 2026-2027 selected, not 2025-2026/);
   });
 });

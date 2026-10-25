@@ -25,13 +25,14 @@ import {
   useSuiteWorkspace,
 } from '@omniswim/core/store/SuiteWorkspaceProvider';
 import type { Workspace } from '@omniswim/core/types';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 type Ctx = ReturnType<typeof useSuiteWorkspace>;
 
 (globalThis as unknown as { IS_REACT_ACT_ENVIRONMENT: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
 function makeWorkspace(id: string, activeEntryIds: string[]): Workspace {
-  return {
+  return workspaceFixture({
     id,
     name: id,
     menResults: [],
@@ -40,7 +41,7 @@ function makeWorkspace(id: string, activeEntryIds: string[]): Workspace {
     deletedSwimmers: [],
     createdAt: 1,
     activeEntryIds,
-  } as unknown as Workspace;
+  });
 }
 
 function jsonResponse(status: number, body: unknown): Response {
@@ -69,7 +70,7 @@ function installFetch() {
     }
     const put = /\/api\/workspaces\/([^/]+)$/.exec(url);
     if (put && method === 'PUT') {
-      const id = put[1];
+      const id = put[1]!;
       const patch = JSON.parse(String(init?.body ?? '{}')) as Partial<Workspace>;
       return new Promise<Response>(resolve => {
         puts.push({
@@ -125,7 +126,9 @@ async function mount() {
       )
     );
   });
-  await tick();
+  // Wait for the list to land and a workspace to be selected; two bare ticks drop the first edit on a busy machine.
+  for (let i = 0; i < 200 && !ctx?.activeWorkspace; i += 1) await tick(10);
+  expect(ctx?.activeWorkspace, 'the workspace list loaded').toBeTruthy();
   await tick();
 }
 
@@ -178,7 +181,7 @@ describe('a late save response never overwrites a newer local change', () => {
 
     // PUT A answers late, with the optimized arrays. The Undo is still waiting in the queue.
     await act(async () => {
-      puts[0].succeed();
+      puts[0]!.succeed();
     });
     await tick();
     expect(ids()).toEqual(['pre']); // not flipped back to the optimized lineup
@@ -187,14 +190,14 @@ describe('a late save response never overwrites a newer local change', () => {
     await waitForDebounce();
     expect(puts).toHaveLength(2);
     await act(async () => {
-      puts[1].succeed();
+      puts[1]!.succeed();
     });
     await tick();
     expect(ids()).toEqual(['pre']);
-    expect(serverCopies.a.activeEntryIds).toEqual(['pre']);
+    expect(serverCopies.a!.activeEntryIds).toEqual(['pre']);
   });
 
-  it('out of order: the older response arrives after the newer save was sent', async () => {
+  it('the first response lands while a newer edit waits: the cache keeps the newer edit, and it is sent next', async () => {
     await mount();
     await act(async () => {
       await ctx!.updateWorkspace({ activeEntryIds: ['optimized'] });
@@ -203,18 +206,21 @@ describe('a late save response never overwrites a newer local change', () => {
     await act(async () => {
       await ctx!.updateWorkspace({ activeEntryIds: ['pre'] });
     });
-    await waitForDebounce(); // PUT B sent, queue is empty now
-    expect(puts).toHaveLength(2);
+    await waitForDebounce();
+    // One save per workspace at a time: B waits behind A instead of overlapping it.
+    expect(puts).toHaveLength(1);
 
-    // Only the debounce queue is empty here, so the sequence check alone must hold the line.
     await act(async () => {
-      puts[0].succeed();
+      puts[0]!.succeed();
     });
     await tick();
-    expect(ids()).toEqual(['pre']);
+    await tick();
+    expect(ids()).toEqual(['pre']); // A's response did not put 'optimized' back in view
+    expect(puts).toHaveLength(2);
+    expect(puts[1]!.patch.activeEntryIds).toEqual(['pre']);
 
     await act(async () => {
-      puts[1].succeed();
+      puts[1]!.succeed();
     });
     await tick();
     expect(ids()).toEqual(['pre']);
@@ -227,7 +233,7 @@ describe('a late save response never overwrites a newer local change', () => {
     });
     await waitForDebounce();
     await act(async () => {
-      puts[0].succeed({ name: 'renamed-by-server' });
+      puts[0]!.succeed({ name: 'renamed-by-server' });
     });
     await tick();
     expect(ctx!.activeWorkspace?.name).toBe('renamed-by-server');
@@ -251,7 +257,7 @@ describe('a late save response never overwrites a newer local change', () => {
     expect(puts.map(p => p.id)).toEqual(['a', 'b']);
 
     await act(async () => {
-      puts[0].succeed({ name: 'a-from-server' });
+      puts[0]!.succeed({ name: 'a-from-server' });
     });
     await tick();
     expect(ctx!.workspaces.find(w => w.id === 'a')?.name).toBe('a-from-server');
@@ -266,7 +272,7 @@ describe('a late save response never overwrites a newer local change', () => {
     await waitForDebounce();
     expect(ids()).toEqual(['optimized']);
     await act(async () => {
-      puts[0].fail();
+      puts[0]!.fail();
     });
     await tick();
     await tick();

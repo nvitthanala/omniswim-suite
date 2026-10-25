@@ -60,7 +60,7 @@ describe('readStoredCapture', () => {
     });
     expect(record?.captureId).toBe('meet-356467');
     expect(record?.pages).toHaveLength(1);
-    expect(record?.pages[0].outcome).toBe('ok');
+    expect(record?.pages[0]!.outcome).toBe('ok');
   });
 
   it('keeps the descriptive facets when the record carries them', () => {
@@ -133,18 +133,18 @@ describe('partitionResumableSteps', () => {
     });
     expect(steps).toHaveLength(6);
 
-    const captured = new Set([steps[0].canonicalUrl, steps[2].canonicalUrl, steps[5].canonicalUrl]);
+    const captured = new Set([steps[0]!.canonicalUrl, steps[2]!.canonicalUrl, steps[5]!.canonicalUrl]);
     const { toFetch, alreadyCaptured } = partitionResumableSteps(steps, captured);
 
     expect(toFetch.map((s) => s.canonicalUrl)).toEqual([
-      steps[1].canonicalUrl,
-      steps[3].canonicalUrl,
-      steps[4].canonicalUrl,
+      steps[1]!.canonicalUrl,
+      steps[3]!.canonicalUrl,
+      steps[4]!.canonicalUrl,
     ]);
     expect(alreadyCaptured.map((s) => s.canonicalUrl)).toEqual([
-      steps[0].canonicalUrl,
-      steps[2].canonicalUrl,
-      steps[5].canonicalUrl,
+      steps[0]!.canonicalUrl,
+      steps[2]!.canonicalUrl,
+      steps[5]!.canonicalUrl,
     ]);
     // Nothing is lost or duplicated: a skipped page still counts toward the
     // crawl's progress, so the two halves must cover the plan exactly once.
@@ -217,7 +217,7 @@ describe('partitionResumableSteps', () => {
       // that upgrades to pass options for one branch must not accidentally
       // change behaviour for every other branch that still omits them.
       const steps = planMeetTeamSwims({ meetId: '356467', teamIds: ['58'] });
-      const captured = new Set([steps[0].canonicalUrl]);
+      const captured = new Set([steps[0]!.canonicalUrl]);
       const withDefaultOptions = partitionResumableSteps(steps, captured, {});
       const withNoOptions = partitionResumableSteps(steps, captured);
       expect(withDefaultOptions).toEqual(withNoOptions);

@@ -39,9 +39,9 @@ import type {
   SwimCloudTeamMeetSwim,
   SwimCloudRosterParse,
   SwimCloudSwimmerTimesParse,
-  SwimCloudAthlete,
   SwimCloudPersonalBestSwim,
 } from '@omniswim/swimcloud/parser';
+import type { SwimCloudAthlete } from '@omniswim/swimcloud/entities';
 import {
   SwimCloudCaptureBrowser,
   describeSwimCloudCaptureCompleteness,
@@ -152,12 +152,13 @@ function fakeParse(opts: { teamName: string; gender: 'Men' | 'Women'; swims: Swi
   };
 }
 
-function fakeAthlete(opts: { name: string; hometown?: string; classYear?: SwimCloudAthlete['classYear']; swimCloudSwimmerId?: string }): SwimCloudAthlete {
+function fakeAthlete(opts: { name: string; hometown?: string; classYear?: string; swimCloudSwimmerId?: string }): SwimCloudAthlete {
   return {
     swimCloudSwimmerId: opts.swimCloudSwimmerId,
     name: opts.name,
     hometown: opts.hometown,
-    classYear: opts.classYear,
+    // A string on purpose: one test passes a class year the SwimCloud union does not list.
+    classYear: opts.classYear as SwimCloudAthlete['classYear'],
   };
 }
 
@@ -177,6 +178,8 @@ function fakePersonalBest(opts: { eventLabel: string; time?: string; meetName?: 
     swimKey: `pb:${opts.eventLabel}`,
     eventId: `evt:${opts.eventLabel}`,
     eventLabel: opts.eventLabel,
+    course: 'unknown',
+    stroke: 'unknown',
     time: opts.time,
     meetName: opts.meetName,
     date: opts.date,
@@ -354,7 +357,7 @@ describe('SwimCloudCaptureBrowser (mode="meet-results")', () => {
     await flush();
 
     expect(onImportMeetResults).toHaveBeenCalledTimes(1);
-    const selection = onImportMeetResults.mock.calls[0][0] as SwimCloudCaptureMeetResultsSelection;
+    const selection = onImportMeetResults.mock.calls[0]![0] as SwimCloudCaptureMeetResultsSelection;
     expect(selection.parses).toStrictEqual([teamAMen]);
     expect(selection.pageCount).toBe(1);
     expect(selection.groups.map(g => g.label)).toStrictEqual(['Team A · Men']);
@@ -437,7 +440,7 @@ describe('SwimCloudCaptureBrowser (mode="meet-results")', () => {
       rostersSectionToggle!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     });
     expect(container.textContent).toContain('Team A');
-    expect(container.textContent).toContain('2 athletes');
+    expect(container.textContent).toContain('2 swimmers');
     expect(container.textContent).not.toContain('Norco, LA'); // athlete detail not yet expanded
 
     // Then expand the roster row within it -> athlete detail appears.
@@ -567,5 +570,76 @@ describe('SwimCloudCaptureBrowser (mode="meet-results")', () => {
     expect(container.textContent).toContain('not available on this server');
     expect(fetchMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledWith('/api/swimcloud/pairing-token');
+  });
+
+  it('recovers from a failed pairing-token fetch with "Try again", without closing the window', async () => {
+    const capture = baseCapture({ label: 'HSU @ Test Championships' });
+    let tokenCalls = 0;
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url === '/api/swimcloud/pairing-token') {
+        tokenCalls += 1;
+        return tokenCalls === 1 ? jsonResponse(500, {}) : jsonResponse(200, { token: 'test-pairing-token' });
+      }
+      if (url === '/api/swimcloud/captures') return jsonResponse(200, [capture]);
+      throw new Error(`Unexpected fetch: ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await act(async () => {
+      root.render(
+        createElement(SwimCloudCaptureBrowser, {
+          mode: 'meet-results',
+          onClose: vi.fn(),
+          onImportMeetResults: vi.fn(),
+        })
+      );
+    });
+    await flush();
+
+    expect(container.textContent).toContain('Could not obtain the SwimCloud pairing token (HTTP 500)');
+    expect(container.querySelector('select[aria-label="SwimCloud capture"]')).toBeNull();
+    const retry = [...container.querySelectorAll('button')].find(b => b.textContent === 'Try again');
+    expect(retry).toBeTruthy();
+
+    await act(async () => {
+      retry!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flush();
+
+    expect(tokenCalls).toBe(2);
+    expect(container.textContent).not.toContain('Could not obtain the SwimCloud pairing token');
+    expect(container.querySelector('select[aria-label="SwimCloud capture"]')).not.toBeNull();
+    expect(container.textContent).toContain('HSU @ Test Championships');
+    expect([...container.querySelectorAll('button')].some(b => b.textContent === 'Try again')).toBe(false);
+  });
+
+  it('keeps showing the token error with "Try again" when the retry fails too', async () => {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/swimcloud/pairing-token') return jsonResponse(500, {});
+      throw new Error(`Unexpected fetch: ${String(input)}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    await act(async () => {
+      root.render(
+        createElement(SwimCloudCaptureBrowser, {
+          mode: 'meet-results',
+          onClose: vi.fn(),
+          onImportMeetResults: vi.fn(),
+        })
+      );
+    });
+    await flush();
+
+    const retry = [...container.querySelectorAll('button')].find(b => b.textContent === 'Try again');
+    await act(async () => {
+      retry!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    });
+    await flush();
+
+    expect(fetchMock).toHaveBeenCalledTimes(2);
+    expect(container.textContent).toContain('Could not obtain the SwimCloud pairing token (HTTP 500)');
+    expect([...container.querySelectorAll('button')].some(b => b.textContent === 'Try again')).toBe(true);
   });
 });

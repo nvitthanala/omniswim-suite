@@ -12,6 +12,7 @@ import {
   resolvePsychRanksForEvent,
 } from '../packages/core/src/lib/psychProjection.ts';
 import { buildScoringSnapshot } from '../packages/core/src/lib/scoringEngine.ts';
+import { settingsForBuiltInScoringPreset } from '../packages/core/src/lib/scoringDefaults.ts';
 import { calculatePoints, mergeScoringSettings } from '../packages/core/src/lib/utils.ts';
 
 const settings = mergeScoringSettings({});
@@ -128,9 +129,54 @@ if (!snapshot.psychProjected) {
 
 const bundle = buildPsychProjectedBundle({ workspace, gender: Gender.MEN });
 const teamA = bundle.sortedTeams.find(t => t.teamName === 'Team A');
-if (!teamA || teamA.totalPoints !== 15) {
-  console.error('FAIL: Team A psych anchor should be 15', teamA?.totalPoints);
+// A projected team carries `expected`, never `totalPoints` (the type omits it).
+if (!teamA || teamA.expected !== 15) {
+  console.error('FAIL: Team A psych anchor should be 15', teamA?.expected);
   process.exit(1);
+}
+if ('totalPoints' in teamA) {
+  console.error('FAIL: a projected team should not carry totalPoints at runtime');
+  process.exit(1);
+}
+
+// A team whose every seed is past the place-point table stays in the bundle:
+// `expected` is null (absent, not 0) and the old `totalPoints` is not there.
+{
+  const psychSwim = (team, name, rank) => ({
+    id: `psy-${team}-${name}`,
+    rank,
+    name,
+    classYear: 'JR',
+    team,
+    time: `${40 + rank}.00`,
+    roundSwam: 'Psych Sheet',
+    isPsychSheet: true,
+    points: 0,
+    event,
+    gender: Gender.MEN,
+    isRelay: false,
+  });
+  // Dual-meet table: the 7th seed and below have no place-point row.
+  const dualSettings = settingsForBuiltInScoringPreset('ncaa-dual-six-lanes-or-more');
+  const nullPsychRows = [psychSwim('Team Y', 'Y1', 1), psychSwim('Team Z', 'Z1', 8)];
+  const nullBundle = buildPsychProjectedBundle({
+    workspace: { ...workspace, psychMenResults: nullPsychRows, scoringSettings: dualSettings },
+    gender: Gender.MEN,
+  });
+  const teamZ = nullBundle.sortedTeams.find(t => t.teamName === 'Team Z');
+  const teamY = nullBundle.sortedTeams.find(t => t.teamName === 'Team Y');
+  if (!teamZ || teamZ.expected !== null || teamZ.withoutExpectationCount !== 1) {
+    console.error('FAIL: a psych team with every seed past the table should keep expected null', teamZ);
+    process.exit(1);
+  }
+  if (!teamY || typeof teamY.expected !== 'number') {
+    console.error('FAIL: a psych team inside the table should carry a numeric expected', teamY);
+    process.exit(1);
+  }
+  if (nullBundle.sortedTeams.some(t => 'totalPoints' in t)) {
+    console.error('FAIL: no projected psych team should carry totalPoints at runtime');
+    process.exit(1);
+  }
 }
 
 if (psychClock({ time: '49.00', isRelay: false }) !== '49.00') {

@@ -15,8 +15,10 @@ import type { Gender, SwimmerResult } from '@omniswim/core/types';
 import type { PrelimsOverUnderEntry } from '@omniswim/core/lib/prelimsProjection';
 import { sumPrelimsOuForSwimmers } from '@omniswim/core/lib/prelimsProjection';
 import type { PsychOverUnderEntry } from '@omniswim/core/lib/psychProjection';
-import { CompactEventLabel, PrelimsOuValue } from './matrixPresentation';
+import { countGroupEntriesWithoutActual, NO_ACTUAL_LABEL } from '../lib/noActual';
+import { CompactEventLabel, NoActualMarker, PrelimsOuValue } from './matrixPresentation';
 import { TeamMatrixSwimmerRow } from './TeamCardMatrixRow';
+import { isTeamCardSwimmerGroup, type TeamCardGroup } from './teamCardView';
 
 type SortMode = 'chrono' | 'eventDesc' | 'eventAsc' | 'swimmerDesc' | 'swimmerAsc';
 type ViewMode = 'swimmer' | 'event';
@@ -44,10 +46,10 @@ export function TeamCardMatrixControls({ viewMode, sortMode, onSortModeChange, o
           aria-label="Sort team matrix"
         >
           {viewMode === 'event' && <option value="chrono">Chronological</option>}
-          {viewMode === 'event' && <option value="eventDesc">High to Low</option>}
-          {viewMode === 'event' && <option value="eventAsc">Low to High</option>}
-          {viewMode === 'swimmer' && <option value="swimmerDesc">High to Low</option>}
-          {viewMode === 'swimmer' && <option value="swimmerAsc">Low to High</option>}
+          {viewMode === 'event' && <option value="eventDesc">High to low</option>}
+          {viewMode === 'event' && <option value="eventAsc">Low to high</option>}
+          {viewMode === 'swimmer' && <option value="swimmerDesc">High to low</option>}
+          {viewMode === 'swimmer' && <option value="swimmerAsc">Low to high</option>}
         </select>
 
         <span className="text-ui-micro text-theme-secondary">List:</span>
@@ -67,7 +69,7 @@ export function TeamCardMatrixControls({ viewMode, sortMode, onSortModeChange, o
 }
 
 interface TeamCardMatrixListProps {
-  groups: any[];
+  groups: TeamCardGroup[];
   viewMode: ViewMode;
   gender: Gender | string;
   teamName: string;
@@ -92,31 +94,33 @@ function TeamCardMatrixGroupHeader({
   prelimsOuByEntry,
   onRequestDeleteSwimmer,
 }: {
-  group: any;
+  group: TeamCardGroup;
   viewMode: ViewMode;
   showPrelimsPerformance?: boolean;
   prelimsOuByEntry?: Map<string, PrelimsOverUnderEntry>;
   onRequestDeleteSwimmer?: (name: string) => void;
 }) {
+  // The by-swimmer list holds swimmer groups, the by-event list event groups.
+  const swimmerGroup = viewMode === 'swimmer' && isTeamCardSwimmerGroup(group) ? group : null;
   return (
     <div className="flex items-center justify-between mb-2">
       <div className="flex items-center gap-3">
         <h4 className="text-xs font-medium text-[var(--text-primary)] group-hover:text-[var(--text-accent)] transition-colors">
-          {viewMode === 'swimmer' ? group.name : <CompactEventLabel event={group.event} className="font-mono" />}
+          {swimmerGroup ? swimmerGroup.name : isTeamCardSwimmerGroup(group) ? null : <CompactEventLabel event={group.event} className="font-mono" />}
         </h4>
-        {viewMode === 'swimmer' && (
+        {swimmerGroup && (
           <span className="px-1.5 py-0.5 rounded surface-overlay border border-theme-soft text-ui-micro font-mono font-medium text-theme-secondary">
-            {group.classYear}
+            {swimmerGroup.classYear}
           </span>
         )}
-        {viewMode === 'swimmer' && onRequestDeleteSwimmer && (
+        {swimmerGroup && onRequestDeleteSwimmer && (
           <Button
             variant="outline"
             size="sm"
             title="Remove swimmer from workspace"
-            aria-label={`Remove ${group.name} from workspace`}
+            aria-label={`Remove ${swimmerGroup.name} from workspace`}
             className="p-1"
-            onClick={() => onRequestDeleteSwimmer(group.name)}
+            onClick={() => onRequestDeleteSwimmer(swimmerGroup.name)}
             leadingIcon={<Trash2 size={12} />}
           />
         )}
@@ -132,7 +136,7 @@ function PrelimsOuValueOrPoints({
   showPrelimsPerformance,
   prelimsOuByEntry,
 }: {
-  group: any;
+  group: TeamCardGroup;
   viewMode: ViewMode;
   showPrelimsPerformance?: boolean;
   prelimsOuByEntry?: Map<string, PrelimsOverUnderEntry>;
@@ -150,8 +154,31 @@ function PrelimsOuValueOrPoints({
           compact
         />
       ) : null}
+      {showPrelimsPerformance && prelimsOuByEntry
+        ? <GroupNoActualMarker group={group} viewMode={viewMode} prelimsOuByEntry={prelimsOuByEntry} />
+        : null}
     </div>
   );
+}
+
+/**
+ * The over/under sum skips an entry with no actual, so it is a lower or higher
+ * number than the whole group would give. This says how many entries it skipped.
+ */
+function GroupNoActualMarker({
+  group,
+  viewMode,
+  prelimsOuByEntry,
+}: {
+  group: TeamCardGroup;
+  viewMode: ViewMode;
+  prelimsOuByEntry: Map<string, PrelimsOverUnderEntry>;
+}) {
+  const missing = countGroupEntriesWithoutActual(group.swimmers, prelimsOuByEntry, {
+    includeRelay: viewMode === 'event',
+  });
+  if (missing === 0) return null;
+  return <NoActualMarker label={`${NO_ACTUAL_LABEL}: ${missing} ${missing === 1 ? 'entry is' : 'entries are'} left out of this over/under`} />;
 }
 
 /** The scrollable list of group cards (by-event or by-swimmer) with their swimmer rows. */
@@ -174,8 +201,8 @@ export function TeamCardMatrixList({
 }: TeamCardMatrixListProps) {
   return (
     <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-      {groups.map((group: any) => (
-        <div key={group.name || group.event} className="p-3 rounded-lg surface-overlay border border-theme-soft group transition-colors hover:border-[var(--border)]">
+      {groups.map((group) => (
+        <div key={isTeamCardSwimmerGroup(group) ? group.name : group.event} className="p-3 rounded-lg surface-overlay border border-theme-soft group transition-colors hover:border-[var(--border)]">
           <TeamCardMatrixGroupHeader
             group={group}
             viewMode={viewMode}

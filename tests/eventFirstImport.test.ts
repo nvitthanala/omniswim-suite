@@ -258,7 +258,7 @@ describe.skipIf(!HAVE_CAPTURE)('event-first import against the real capture', ()
     // Every key is a SwimCloud swimmer id. A name key would mean the join had
     // silently become a name match, which INVARIANTS item 6 forbids.
     for (const key of coverage.index.keys()) expect(key).toMatch(/^\d+$/);
-    expect(coverage.teamsWithRosters.sort()).toStrictEqual(['10002824', '412', '48', '58']);
+    expect([...coverage.teamsWithRosters].sort()).toStrictEqual(['10002824', '412', '48', '58']);
   });
 
   it('carries the round on every row, so nothing imports as an unknown tier', () => {

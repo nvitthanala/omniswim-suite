@@ -5,7 +5,7 @@
  * Pure scoring engine extracted from useWorkspaceScoring so it can run either
  * on the main thread (synchronous fallback) or inside a Web Worker.
  */
-import { Gender, SwimmerResult, TeamScore, Workspace } from '../types';
+import { Gender, ProjectedTeamScore, SwimmerResult, TeamScore, Workspace } from '../types';
 import { buildCategorizedScoringInputs, calculatePoints } from './utils';
 import { mergeScoringSettings } from './scoringDefaults';
 import { computeVisibleEvents } from './eventIdentity';
@@ -33,6 +33,18 @@ export type ScoringBundle = {
   sortedTeams: TeamScore[];
   timelineData: Record<string, unknown>[];
   teamStyleSignature: string;
+};
+
+/**
+ * A prelims-seed or psych-seed projection bundle. Same as {@link ScoringBundle}
+ * except `sortedTeams` carries {@link ProjectedTeamScore}: a team whose seeds
+ * are all past the end of the place-point table stays in the list with
+ * `expected: null`, and there is no `totalPoints` to read as 0.
+ *
+ * Plain data, so it crosses the scoring worker boundary by structured clone.
+ */
+export type ProjectionBundle = Omit<ScoringBundle, 'sortedTeams'> & {
+  sortedTeams: ProjectedTeamScore[];
 };
 
 export type BuildOptions = {

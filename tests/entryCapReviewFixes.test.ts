@@ -39,6 +39,7 @@ import { relayEntryKey } from '../packages/core/src/lib/relaySplits';
 import { relayTemplateFromLeg } from '../packages/core/src/lib/relayLegMatching';
 import { rankRelayLegSwaps } from '../packages/core/src/lib/arbitrage/relayLegSwaps';
 import { rankAddOnly, rankDropOnly } from '../packages/core/src/lib/arbitrage/dropAdd';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 const TEAM = 'Alpha University';
 const RIVAL = 'Beta College';
@@ -92,7 +93,7 @@ function relayRows(prefix: string, event: string, clock: string, legs: string[])
 /** The override that puts `name` on leg `legIndex` of the relay these rows describe. */
 function legOverride(rows: SwimmerResult[], legIndex: number, name: string): RelayLegOverride {
   return {
-    relayEntryKey: relayEntryKey(relayTemplateFromLeg(rows, rows[0])),
+    relayEntryKey: relayEntryKey(relayTemplateFromLeg(rows, rows[0]!)),
     legIndex,
     assigneeName: name,
     source: 'manual',
@@ -104,7 +105,7 @@ function history(event: string, time: string, name = ANN): HistoricalSwim {
 }
 
 function workspace(menResults: SwimmerResult[], extra: Partial<Workspace> = {}): Workspace {
-  return {
+  return workspaceFixture({
     id: 'ws-entry-cap-review',
     name: 'entry cap review probe',
     createdAt: 0,
@@ -127,7 +128,7 @@ function workspace(menResults: SwimmerResult[], extra: Partial<Workspace> = {}):
       history('100 Backstroke', '50.00'),
     ],
     ...extra,
-  } as unknown as Workspace;
+  });
 }
 
 /** What the lineup audit reports: `countSwimmerEntries` over the projected pool. */

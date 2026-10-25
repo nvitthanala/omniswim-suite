@@ -322,8 +322,8 @@ describe('pairing token gate', () => {
       // Nothing an unauthenticated caller sent was written, deleted or altered.
       const after = await harness.store.listCaptures();
       expect(after).toHaveLength(1);
-      expect(after[0].captureId).toBe('meet-356467');
-      expect(after[0].pages).toHaveLength(0);
+      expect(after[0]!.captureId).toBe('meet-356467');
+      expect(after[0]!.pages).toHaveLength(0);
     } finally {
       await harness.close();
     }
@@ -969,27 +969,27 @@ describe('capture parse route', () => {
       expect(body.warnings).toStrictEqual([]);
 
       const [first] = body.parses;
-      expect(first.swimCloudMeetId).toBe('356467');
-      expect(first.swimCloudTeamId).toBe('58');
-      expect(first.teamName).toBe('Henderson State University');
-      expect(first.meetName).toBe('New South Championships');
-      expect(first.gender).toBe('Men');
-      expect(first.rowCount).toBe(30);
-      expect(first.swims).toHaveLength(30);
-      expect(first.events).toHaveLength(14);
-      expect(first.pagination).toStrictEqual({
+      expect(first!.swimCloudMeetId).toBe('356467');
+      expect(first!.swimCloudTeamId).toBe('58');
+      expect(first!.teamName).toBe('Henderson State University');
+      expect(first!.meetName).toBe('New South Championships');
+      expect(first!.gender).toBe('Men');
+      expect(first!.rowCount).toBe(30);
+      expect(first!.swims).toHaveLength(30);
+      expect(first!.events).toHaveLength(14);
+      expect(first!.pagination).toStrictEqual({
         currentPage: 1,
         totalPages: 8,
         nextPageHref: '?page=2',
       });
       // A real swim, not a shape check: Avery Henke's row, keyed off SwimCloud's
       // own swim id.
-      expect(first.swims[0].swimKey).toBe('356467:swim:171560736');
-      expect(first.swims[0].event.label).toBe('100 Y Breast');
-      expect(first.swims[0].result.place).toBe(1);
+      expect(first!.swims[0]!.swimKey).toBe('356467:swim:171560736');
+      expect(first!.swims[0]!.event.label).toBe('100 Y Breast');
+      expect(first!.swims[0]!.result.place).toBe(1);
       // The three relay leadoff splits survive the round trip flagged, so a
       // consumer of this route can still refuse to score them as individual swims.
-      expect(first.swims.filter(swim => swim.relayLeadoff)).toHaveLength(3);
+      expect(first!.swims.filter(swim => swim.relayLeadoff)).toHaveLength(3);
     } finally {
       await harness.close();
     }
@@ -1023,18 +1023,18 @@ describe('capture parse route', () => {
       ]);
 
       const [event] = body.eventResults;
-      expect(event.swimCloudMeetId).toBe('356467');
-      expect(event.eventRef).toBe('26');
-      expect(event.eventLabel).toBe('100 Breast');
-      expect(event.meetName).toBe('New South Championships');
+      expect(event!.swimCloudMeetId).toBe('356467');
+      expect(event!.eventRef).toBe('26');
+      expect(event!.eventLabel).toBe('100 Breast');
+      expect(event!.meetName).toBe('New South Championships');
       // Read off the page's own gender dropdown. Event-id arithmetic would
       // answer wrongly here — this page's toggle points at event 100 and 400.
-      expect(event.gender).toBe('Men');
-      expect(event.rowCount).toBe(40);
+      expect(event!.gender).toBe('Men');
+      expect(event!.rowCount).toBe(40);
 
       // The four captioned round tables, in printed (program) order rather
       // than chronological order: Preliminaries swam first and prints last.
-      expect(event.rounds.map(round => [round.round, round.rowCount])).toStrictEqual([
+      expect(event!.rounds.map(round => [round.round, round.rowCount])).toStrictEqual([
         ['A Final', 8],
         ['B Final', 7],
         ['C Final', 5],
@@ -1043,23 +1043,23 @@ describe('capture parse route', () => {
       // Two different quantities, survived the round trip apart: A/B Final
       // publish the real meet Score, C Final and Prelims publish SwimCloud's
       // power index. A caller that confused them would multiply a team score.
-      expect(event.rounds.map(round => round.pointsColumn)).toStrictEqual([
+      expect(event!.rounds.map(round => round.pointsColumn)).toStrictEqual([
         'score',
         'score',
         'pts',
         'pts',
       ]);
-      const [aFinal, , cFinal, prelims] = event.rounds;
-      expect(aFinal.swims.map(swim => swim.meetScore)).toStrictEqual([20, 17, 16, 15, 14, 13, 12, 11]);
+      const [aFinal, , cFinal, prelims] = event!.rounds;
+      expect(aFinal!.swims.map(swim => swim.meetScore)).toStrictEqual([20, 17, 16, 15, 14, 13, 12, 11]);
       // The rounds that did not score carry no meetScore at all — absent
       // across JSON, never a zero a consumer would add up.
-      expect(cFinal.swims.every(swim => swim.meetScore === undefined)).toBe(true);
-      expect(prelims.swims.every(swim => swim.meetScore === undefined)).toBe(true);
-      expect(cFinal.swims.map(swim => swim.result.points)).toStrictEqual([709, 638, 547, 502, 424]);
+      expect(cFinal!.swims.every(swim => swim.meetScore === undefined)).toBe(true);
+      expect(prelims!.swims.every(swim => swim.meetScore === undefined)).toBe(true);
+      expect(cFinal!.swims.map(swim => swim.result.points)).toStrictEqual([709, 638, 547, 502, 424]);
 
       // A real swim, not a shape check: Avery Henke's A Final row, keyed off
       // SwimCloud's own swim id, with the slower of her two 100 Breast times.
-      const henkeA = aFinal.swims.find(swim => swim.entry.athleteName === 'Avery Henke');
+      const henkeA = aFinal!.swims.find(swim => swim.entry.athleteName === 'Avery Henke');
       expect(henkeA).toMatchObject({
         swimKey: '356467:swim:171560737',
         swimCloudSwimId: '171560737',
@@ -1073,10 +1073,10 @@ describe('capture parse route', () => {
       // All five C Final swimmers are exhibition, marked from the rank cell.
       // The marker replaced the ordinal, so those rows print no place — absent,
       // not zero, and not a parse failure.
-      expect(cFinal.swims.map(swim => swim.exhibition)).toStrictEqual([true, true, true, true, true]);
-      expect(cFinal.swims.every(swim => swim.result.flags?.exhibition === true)).toBe(true);
-      expect(cFinal.swims.every(swim => swim.result.place === undefined)).toBe(true);
-      expect(prelims.swims.filter(swim => swim.exhibition).map(swim => swim.entry.athleteName)).toStrictEqual([
+      expect(cFinal!.swims.map(swim => swim.exhibition)).toStrictEqual([true, true, true, true, true]);
+      expect(cFinal!.swims.every(swim => swim.result.flags?.exhibition === true)).toBe(true);
+      expect(cFinal!.swims.every(swim => swim.result.place === undefined)).toBe(true);
+      expect(prelims!.swims.filter(swim => swim.exhibition).map(swim => swim.entry.athleteName)).toStrictEqual([
         'Camden Mask',
         'Benjamin Skinner',
         'Theo Scarpino',
@@ -1112,14 +1112,14 @@ describe('capture parse route', () => {
       // Avery Henke's two "100 Y Breast" rows on the swims list. Both read
       // "1st", in two different pools, which is why the swims list's own Place
       // could never tell them apart on its own.
-      const swimsKeys = body.parses[0].swims
+      const swimsKeys = body.parses[0]!.swims
         .filter(swim => swim.entry.athleteName === 'Avery Henke' && swim.event.label === '100 Y Breast')
         .map(swim => swim.swimKey);
       expect(swimsKeys.sort()).toStrictEqual(['356467:swim:171560736', '356467:swim:171560737']);
 
       // The event page names the round for each of them, keyed identically.
       const byKey = new Map(
-        body.eventResults[0].rounds.flatMap(round => round.swims.map(swim => [swim.swimKey, swim] as const)),
+        body.eventResults[0]!.rounds.flatMap(round => round.swims.map(swim => [swim.swimKey, swim] as const)),
       );
       expect(byKey.get('356467:swim:171560737')?.roundLabel).toBe('A Final');
       expect(byKey.get('356467:swim:171560736')?.roundLabel).toBe('Preliminaries');
@@ -1166,7 +1166,7 @@ describe('capture parse route', () => {
       expect(status).toBe(200);
       // One bad page costs one page, never the whole capture.
       expect(body.parses).toHaveLength(1);
-      expect(body.parses[0].swims).toHaveLength(30);
+      expect(body.parses[0]!.swims).toHaveLength(30);
       expect(body.warnings).toHaveLength(1);
       expect(body.warnings[0]).toContain(`Could not parse ${broken}: `);
       expect(body.warnings[0]).toContain('<table>');
@@ -1200,16 +1200,20 @@ describe('capture parse route', () => {
       expect(status).toBe(200);
       // The page still parsed, so it is still in `parses`.
       expect(body.parses).toHaveLength(1);
-      expect(body.parses[0].swims).toHaveLength(1);
+      expect(body.parses[0]!.swims).toHaveLength(1);
       // Neither warning invented a value: no time was recorded, and the raw
       // token survives for a human to look at.
-      expect(body.parses[0].swims[0].result.finalTime).toBeUndefined();
-      expect(body.parses[0].swims[0].result.rawTimeToken).toBe('banana');
+      expect(body.parses[0]!.swims[0]!.result.finalTime).toBeUndefined();
+      expect(body.parses[0]!.swims[0]!.result.rawTimeToken).toBe('banana');
       // Each warning names the page it came from, the row, and the parser's own
-      // code. This is the string shape the picker renders.
+      // code. This is the string shape the picker renders. The seeded page is a
+      // bare table with no meet-name element and no level-1 heading, so the
+      // parser also says so with a page-level warning (no row): the meet name is
+      // "not stated", not a name that happens to be empty (C8).
       expect(body.warnings.map(line => line.split(' — ')[0])).toStrictEqual([
         `${warnUrl} (row 0): missing-swim-link`,
         `${warnUrl} (row 0): unrecognized-time-token`,
+        `${warnUrl}: meet-name-missing`,
       ]);
       expect(body.warnings[1]).toContain('"banana"');
     } finally {
@@ -1331,18 +1335,18 @@ describe('capture parse route — rosters and swimmer times', () => {
       expect(body.warnings).toStrictEqual([]);
 
       const [men, women] = body.rosters;
-      expect(men.swimCloudTeamId).toBe('58');
-      expect(men.teamName).toBe('Henderson State University');
+      expect(men!.swimCloudTeamId).toBe('58');
+      expect(men!.teamName).toBe('Henderson State University');
       // Read off the page's own "Season 2025-2026 Men" heading, never off the
       // URL's ?gender=M — which is why `genderSource` is 'page' even though the
       // capture URL carried the parameter.
-      expect(men.gender).toBe('Men');
-      expect(men.genderSource).toBe('page');
-      expect(men.season).toBe('2025-2026');
-      expect(men.rowCount).toBe(35);
-      expect(men.athletes).toHaveLength(35);
+      expect(men!.gender).toBe('Men');
+      expect(men!.genderSource).toBe('page');
+      expect(men!.season).toBe('2025-2026');
+      expect(men!.rowCount).toBe(35);
+      expect(men!.athletes).toHaveLength(35);
       // A real row, not a shape check.
-      expect(men.athletes.find(a => a.name === 'Colin Candebat')).toStrictEqual({
+      expect(men!.athletes.find(a => a.name === 'Colin Candebat')).toStrictEqual({
         swimCloudSwimmerId: '1865160',
         name: 'Colin Candebat',
         swimCloudTeamId: '58',
@@ -1352,11 +1356,11 @@ describe('capture parse route — rosters and swimmer times', () => {
         hometown: 'Norco, LA',
       });
 
-      expect(women.gender).toBe('Women');
-      expect(women.genderSource).toBe('page');
-      expect(women.rowCount).toBe(16);
-      expect(women.athletes).toHaveLength(16);
-      expect(women.athletes.find(a => a.name === 'Emma Crowe')).toStrictEqual({
+      expect(women!.gender).toBe('Women');
+      expect(women!.genderSource).toBe('page');
+      expect(women!.rowCount).toBe(16);
+      expect(women!.athletes).toHaveLength(16);
+      expect(women!.athletes.find(a => a.name === 'Emma Crowe')).toStrictEqual({
         swimCloudSwimmerId: '1828356',
         name: 'Emma Crowe',
         swimCloudTeamId: '58',
@@ -1384,15 +1388,15 @@ describe('capture parse route — rosters and swimmer times', () => {
       expect(body.warnings).toStrictEqual([]);
 
       const [times] = body.swimmerTimes;
-      expect(times.swimCloudSwimmerId).toBe('1472365');
+      expect(times!.swimCloudSwimmerId).toBe('1472365');
       // The page's own #swimmer-info block answered, not the capture URL — and
       // the name survives family-name-first, never reshaped into display order.
-      expect(times.swimmerIdSource).toBe('swimmer-info-json');
-      expect(times.name).toBe('Paulk, River J');
-      expect(times.rowCount).toBe(9);
-      expect(times.personalBests).toHaveLength(9);
+      expect(times!.swimmerIdSource).toBe('swimmer-info-json');
+      expect(times!.name).toBe('Paulk, River J');
+      expect(times!.rowCount).toBe(9);
+      expect(times!.personalBests).toHaveLength(9);
 
-      const fiftyFree = times.personalBests.find(best => best.eventLabel === '50 Free SCY');
+      const fiftyFree = times!.personalBests.find(best => best.eventLabel === '50 Free SCY');
       expect(fiftyFree?.time).toBe('19.42');
       expect(fiftyFree?.meetName).toBe('James E Martin Invitational');
       expect(fiftyFree?.swimCloudMeetId).toBe('338673');
@@ -1427,13 +1431,13 @@ describe('capture parse route — rosters and swimmer times', () => {
 
       // Each list holds its own shape, and each holds the real page's values —
       // so nothing was routed into the wrong list or overwritten by a later page.
-      expect(body.parses[0].swimCloudMeetId).toBe('356467');
-      expect(body.parses[0].swims).toHaveLength(30);
-      expect(body.parses[0].swims[0].swimKey).toBe('356467:swim:171560736');
-      expect(body.rosters[0].athletes).toHaveLength(35);
-      expect(body.rosters[0].gender).toBe('Men');
-      expect(body.swimmerTimes[0].swimCloudSwimmerId).toBe('1472365');
-      expect(body.swimmerTimes[0].personalBests).toHaveLength(9);
+      expect(body.parses[0]!.swimCloudMeetId).toBe('356467');
+      expect(body.parses[0]!.swims).toHaveLength(30);
+      expect(body.parses[0]!.swims[0]!.swimKey).toBe('356467:swim:171560736');
+      expect(body.rosters[0]!.athletes).toHaveLength(35);
+      expect(body.rosters[0]!.gender).toBe('Men');
+      expect(body.swimmerTimes[0]!.swimCloudSwimmerId).toBe('1472365');
+      expect(body.swimmerTimes[0]!.personalBests).toHaveLength(9);
     } finally {
       await harness.close();
     }
@@ -1452,7 +1456,7 @@ describe('capture parse route — rosters and swimmer times', () => {
       const { status, body } = await parseCapture(harness, TEAM_CAPTURE_ID);
       expect(status).toBe(200);
       expect(body.rosters).toHaveLength(1);
-      expect(body.rosters[0].gender).toBe('Men');
+      expect(body.rosters[0]!.gender).toBe('Men');
       expect(body.warnings).toStrictEqual([
         `No stored content for ${ROSTER_WOMEN_URL} (outcome: http-error)`,
       ]);
@@ -1730,7 +1734,7 @@ describe('POST /api/swimcloud/captures — crawlScope', () => {
       expect(listed.status).toBe(200);
       const records = listed.json as Array<{ captureId: string; crawlScope?: unknown }>;
       expect(records).toHaveLength(1);
-      expect(records[0].crawlScope).toStrictEqual({
+      expect(records[0]!.crawlScope).toStrictEqual({
         latestScopeId: 'meet-results',
         plannedPasses: ['meetTeamSwims', 'meetEvent'],
       });
@@ -1826,7 +1830,7 @@ describe('GET /api/swimcloud/captures/:id?withEventRefs=1', () => {
       await seedPage(harness, '356467', SWIMS_PAGE_1, SWIMS_HTML);
       const res = await call(harness, 'GET', `${BASE}/meet-356467?withEventRefs=1`);
       expect(res.status).toBe(200);
-      expect((res.json as Record<string, unknown>).knownEventRefs.length).toBeGreaterThan(0);
+      expect((res.json as { knownEventRefs: unknown[] }).knownEventRefs.length).toBeGreaterThan(0);
     } finally {
       await harness.close();
     }
@@ -1864,8 +1868,8 @@ describe('capture parse route — swimmer times JSON (2026-09-22)', () => {
       expect(body.warnings).toStrictEqual([]);
       expect(body.rosters).toHaveLength(1);
       expect(body.swimmerTimes).toHaveLength(1);
-      expect(body.swimmerTimes[0].swimCloudSwimmerId).toBe('1330318');
-      expect(body.swimmerTimes[0].personalBests).toHaveLength(35);
+      expect(body.swimmerTimes[0]!.swimCloudSwimmerId).toBe('1330318');
+      expect(body.swimmerTimes[0]!.personalBests).toHaveLength(35);
     } finally {
       await harness.close();
     }
@@ -1932,6 +1936,39 @@ describe('shared swimmer page across two team captures (2026-10-03 review)', () 
       const parsed = await parseCapture(harness, 'team-10002824-2025-2026');
       expect(parsed.body.warnings.some((w) => w.includes('No stored content'))).toBe(false);
       expect(parsed.body.swimmerTimes).toHaveLength(1);
+    } finally {
+      await harness.close();
+    }
+  });
+});
+
+/* -------------------------------------------------------------------------- */
+/* Requests with no parsed body (Express 5 leaves `req.body` undefined)        */
+/* -------------------------------------------------------------------------- */
+
+describe('requests with no JSON body', () => {
+  it('answers a body-less open with the field-level 400, as an empty object does', async () => {
+    const harness = await startHarness();
+    try {
+      const empty = await call(harness, 'POST', BASE, { body: {} });
+      const none = await call(harness, 'POST', BASE);
+      expect(none.status).toBe(400);
+      expect(none.json).toStrictEqual(empty.json);
+      expect((none.json as { code?: string }).code).toBe('INVALID_CAPTURE_SUBJECT');
+    } finally {
+      await harness.close();
+    }
+  });
+
+  it('answers a body-less page upload exactly as an empty object does', async () => {
+    const harness = await startHarness();
+    try {
+      await call(harness, 'POST', BASE, { body: { subject: { kind: 'meet', meetId: '356467' } } });
+      const empty = await call(harness, 'POST', `${BASE}/meet-356467/pages`, { body: {} });
+      const none = await call(harness, 'POST', `${BASE}/meet-356467/pages`);
+      expect(none.status).toBe(400);
+      expect(none.json).toStrictEqual(empty.json);
+      expect((none.json as { code?: string }).code).toBe('INVALID_CAPTURE_PAGE');
     } finally {
       await harness.close();
     }

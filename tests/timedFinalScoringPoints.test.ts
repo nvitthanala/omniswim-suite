@@ -83,7 +83,7 @@ function rowsForEvent(event: string): SwimmerResult[] {
 function pointsByRank(scored: SwimmerResult[]): [number, number][] {
   return [...scored]
     .sort((a, b) => (a.rank ?? 0) - (b.rank ?? 0))
-    .map(r => [r.rank ?? 0, r.points ?? 0]);
+    .map(r => [r.rank ?? 0, (r.points ?? 0) as number]);
 }
 
 describe('scoreTimedFinalIndividualsInEvent (via calculatePoints), real NSISC data', () => {

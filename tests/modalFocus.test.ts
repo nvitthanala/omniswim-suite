@@ -8,6 +8,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, createElement } from 'react';
+import { elementWithChildren } from './helpers/elementWithChildren';
 import { createRoot, type Root } from 'react-dom/client';
 import { Modal } from '../packages/ui/src/components/Modal';
 
@@ -49,7 +50,7 @@ describe('Modal focus handling', () => {
 
     await act(async () => {
       root.render(
-        createElement(
+        elementWithChildren(
           Modal,
           { onClose, ariaLabel: 'Example dialog' },
           createElement('button', { type: 'button' }, 'First'),
@@ -71,7 +72,7 @@ describe('Modal focus handling', () => {
   it('traps Tab and Shift+Tab inside the dialog', async () => {
     await act(async () => {
       root.render(
-        createElement(
+        elementWithChildren(
           Modal,
           { onClose, ariaLabel: 'Trap dialog' },
           createElement('button', { type: 'button' }, 'First'),
@@ -89,7 +90,7 @@ describe('Modal focus handling', () => {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
     });
     // Native Tab still advances; trap only fires at the ends. Move to last then Tab.
-    buttons[1].focus();
+    buttons[1]!.focus();
     await act(async () => {
       document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Tab', bubbles: true }));
     });
@@ -105,7 +106,7 @@ describe('Modal focus handling', () => {
 
   it('keeps focus on the dialog when there are no focusable children', async () => {
     await act(async () => {
-      root.render(createElement(Modal, { onClose, ariaLabel: 'Empty dialog' }, createElement('p', null, 'No controls')));
+      root.render(elementWithChildren(Modal, { onClose, ariaLabel: 'Empty dialog' }, createElement('p', null, 'No controls')));
     });
     await flush();
 
@@ -122,10 +123,10 @@ describe('Modal focus handling', () => {
     const innerClose = vi.fn();
     await act(async () => {
       root.render(
-        createElement(
+        elementWithChildren(
           Modal,
           { onClose, ariaLabel: 'Parent dialog' },
-          createElement(
+          elementWithChildren(
             Modal,
             { onClose: innerClose, ariaLabel: 'Nested dialog' },
             createElement('button', { type: 'button' }, 'Nested action')
@@ -151,7 +152,7 @@ describe('Modal focus handling', () => {
 
     await act(async () => {
       root.render(
-        createElement(
+        elementWithChildren(
           Modal,
           { onClose, ariaLabel: 'Restore dialog' },
           createElement('button', { type: 'button' }, 'Inside')

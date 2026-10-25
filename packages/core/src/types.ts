@@ -26,7 +26,20 @@ export type RelayLegStroke = 'back' | 'breast' | 'fly' | 'free';
 export interface RelayMissingLeg {
   stroke: RelayLegStroke;
   legIndex: number;
-  reason: 'vacant' | 'no_replacement' | 'stroke_mismatch';
+  /**
+   * Why the leg has no swimmer.
+   *
+   * - `vacant`: nobody is named, or the name resolves onto nothing.
+   * - `no_replacement`: the departed swimmer was a non-scorer and nobody replaces them.
+   * - `stroke_mismatch`: the named swim is not the leg's event, or the swimmer is already on the relay.
+   * - `time_trial_only`: the named swimmer's only swim at the leg's event is a time trial, and
+   *   `ScoringSettings.relayLegsAllowTimeTrials` is off. The leg takes the same +3.0 s penalty as a vacant leg.
+   * - `no_baseline`: the leg IS filled, but the leg it replaced has no baseline: the departed swimmer has no
+   *   usable swim at the leg's event and the leg row has no readable split or estimate. The replacement cannot
+   *   be priced, so the relay's team time is `NT`. The leg is not vacant and needs no swimmer
+   *   (`relayLegIsVacant` is false).
+   */
+  reason: 'vacant' | 'no_replacement' | 'stroke_mismatch' | 'time_trial_only' | 'no_baseline';
 }
 
 export type RelaySplitSegment = {
@@ -45,6 +58,22 @@ export type RelayLegSplitDetail = {
   segments: RelaySplitSegment[];
   legTotal?: string;
 };
+
+/**
+ * A relay leg time nobody swam as a relay leg. A theoretical meet builds each leg from the swimmer's
+ * recorded individual best, less a flying-start adjustment when the user set one.
+ *
+ * It is a labelled estimate, not a measured split. Display it with the word "Estimate"
+ * (`RELAY_LEG_ESTIMATE_LABEL`) and never under a "Split" label.
+ */
+export interface RelayLegEstimate {
+  /** Leg time in seconds. */
+  time: number;
+  /** Short plain label for where the number comes from, for example `'start-adjusted best time'`. */
+  basis: string;
+  /** Present only when a flying-start adjustment (seconds) was taken off the recorded best. */
+  startAdjustmentSec?: number;
+}
 
 export type RelayTeamSplitSummary = {
   /** Per-leg contribution times, index 0 = leadoff. */
@@ -71,12 +100,37 @@ export interface SwimmerResult {
   isRelay?: boolean;
   isExhibition?: boolean;
   isTimeTrial?: boolean;
+  /**
+   * Whether this swim belongs to the meet's scored program. Set only by the
+   * SwimCloud swims-list import, and only that row shape needs it.
+   *
+   * - `'unconfirmed'`: the swims list prints the bare event label ("100
+   *   Breast"). Nothing on that page says whether the swim is a program swim or
+   *   a post-meet time trial, and the label looks the same for both. Such a row
+   *   counts toward no best time, no arbitrage field and no cut tag
+   *   ({@link isUnconfirmedProgramSwim}).
+   * - `'program'`: the user marked it a program swim
+   *   (`setCreditedSwimProgramStatus`). It counts again.
+   * - Absent: the source states the answer itself (a PDF "Event N" label, a
+   *   SwimCloud event page) or the row predates this field. It behaves as it
+   *   always did. Absent is NOT "unconfirmed": a PDF row never carries this field.
+   *
+   * Team scoring does not read it. Whether a swim scores is `isTimeTrial` and
+   * the scored-event boundary (`resolveScoredProgramBoundary`).
+   */
+  programSwim?: 'unconfirmed' | 'program';
   relayNames?: { name: string; year: string }[];
   /** 0-based leg index for this row when expanded from a relay (0..3). */
   relayLegIndex?: number;
   relayLegStroke?: RelayLegStroke;
   /** Parsed HyTek leg split (parenthesized segment); team time stays in `time` / `finalsTime`. */
   relayLegSplit?: string;
+  /**
+   * An estimated leg time. Set only on a leg row of a theoretical meet, where no relay was swum.
+   * It is never a split: `relayLegSplit` stays absent there, and a reader that scores or credits
+   * a leg must not read this field as one. See {@link RelayLegEstimate}.
+   */
+  relayLegEstimate?: RelayLegEstimate;
   relayTeamTime?: string;
   relayLegSplitDetail?: RelayLegSplitDetail;
   relayTeamSplits?: RelayTeamSplitSummary;
@@ -102,6 +156,16 @@ export interface SwimmerResult {
    * swim stated in SCY; this record is the swim as recorded.
    */
   relayLegHistory?: RelayLegHistoryOrigin;
+  /**
+   * Set only when this swim is a time trial that fills a relay leg because
+   * `ScoringSettings.relayLegsAllowTimeTrials` is on. It labels the leg as
+   * filled from a time trial. It appears on a relay-leg candidate row
+   * (`listEligibleRelayLegCandidates`, `suggestBestRelayLegFill`,
+   * `relayLegHistoryCandidates`) and on the emitted relay row of the leg it
+   * fills (`simulateRoster`, `buildWhatIfProjection`). It is never set while
+   * the setting is off, because no time trial fills a leg then.
+   */
+  relayLegTimeTrial?: true;
 }
 
 /**
@@ -176,6 +240,25 @@ export interface TeamScore {
   strokeDasharray?: string;
 }
 
+/**
+ * A team in a placement-projection bundle (prelims seed or psych seed).
+ *
+ * `expected` is the sum of expected points over the seeds the place-point table
+ * covers. It is `null` when no seed of the team has an expectation: that is
+ * "no expectation", not 0 points. There is no `totalPoints` field on purpose,
+ * so a caller cannot read the absent figure as a number. A team whose seeds are
+ * partly past the table keeps its sum in `expected` and names the rest in
+ * `withoutExpectation`.
+ */
+export interface ProjectedTeamScore extends Omit<TeamScore, 'totalPoints'> {
+  /** Sum of expected points, or `null` when every seed of the team lacks one. */
+  expected: number | null;
+  /** Entry keys (`event|team|swimmer`) whose seed is past the end of the place-point table. */
+  withoutExpectation: string[];
+  /** `withoutExpectation.length`. */
+  withoutExpectationCount: number;
+}
+
 export interface ScoringSettings {
   scoringPoints: number[];
   relayMultiplier: number;
@@ -244,6 +327,15 @@ export interface ScoringSettings {
    * through `entryCapPolicy`, never directly.
    */
   entryCapCountsExhibition?: boolean;
+  /**
+   * Whether a time-trial swim may fill a relay leg. Absent means `false`: a
+   * time trial is outside the meet's program, so by default it does not fill a
+   * leg (user decision D9). When `true`, a leg filled from one is labelled
+   * (`SwimmerResult.relayLegTimeTrial`). Read it through
+   * `relayLegsAllowTimeTrials`, never directly. A saved workspace without the
+   * field behaves as `false`.
+   */
+  relayLegsAllowTimeTrials?: boolean;
 
   /**
    * The relay place-value table, place 1 first — used instead of
@@ -262,6 +354,13 @@ export interface ScoringSettings {
    * `relayMultiplier` is not consulted. The table may be shorter than
    * `scoringPoints` — a relay placing past its end scores 0, which is how
    * 11-4-2-0 stops a fourth-place relay from scoring in a six-lane dual.
+   *
+   * Tied relays split the points of every place the tie spans, the same as
+   * tied individual swims (`tiedPlaceShare` in `utils.ts`). The table lookup
+   * itself returns `null`, not 0, for a place it has no row for
+   * (`relayTeamPointsForIndex`); the relay scorer reads that as "takes no
+   * points" and the straddle of a tie across the table's end counts the
+   * missing place as 0.
    *
    * Source: NCAA Rule 7, archived at `data/scoring_rules/sources/ncaascoring.pdf`.
    * Never hand-type one of these; generate it from `NCAA_FORMAT_RULESETS`.
@@ -359,6 +458,16 @@ export interface ScoringSettings {
    * no value here.
    */
   meetFormat?: NcaaMeetFormat;
+
+  /**
+   * The team this workspace belongs to: the coach's own team. Absent or blank means unset.
+   *
+   * Not a scoring rule. It lives in this object only because this is the workspace's one
+   * settings record, so it needs no column. The scoring engine never reads it, a
+   * scoring preset never carries it, and a save of the rules that does not name it leaves
+   * it as it was (`keepOwnTeam`). Read it with `workspaceOwnTeam`.
+   */
+  ownTeam?: string;
 }
 
 export interface ScorerAutoRules {
@@ -404,9 +513,12 @@ export interface ScoringPresetMeta {
   /** Heading a picker can group by, e.g. `'NCAA dual meets'`. Presentation only. */
   group?: string;
   /**
-   * Uppercased substrings that select this preset from a workspace's conference
-   * name. Replaces the conference names that used to be hardcoded inside
-   * `presetIdForConference`. See `conferencePresetBindings` in `scoringDefaults.ts`.
+   * Names that select this preset from a workspace's conference name, matched as
+   * WHOLE WORDS (case and punctuation ignored) — never as substrings, so
+   * "Sectional Championships" does not select an "SEC" preset. A multi-word
+   * entry ("Big 12") must appear as that word sequence. Replaces the conference
+   * names that used to be hardcoded inside `presetIdForConference`. See
+   * `conferencePresetBindings` in `scoringDefaults.ts`.
    */
   conferenceMatches?: string[];
 }
@@ -444,6 +556,29 @@ export interface LoadedMeetMeta {
   meetLabel?: string;
   /** Optional tie to linked psych sheet upload timestamp. */
   linkedPsychUploadedAt?: number;
+  /**
+   * Theoretical meets only. The (swimmer, event) pairs the user removed from a
+   * lineup in the build preview, in report order. An empty array means the build
+   * recorded no removal. Absent means the workspace was built before the list was
+   * kept, so nothing is known: read it through `theoreticalRemovedEvents`, never
+   * as "none removed". Written once by `buildTheoreticalMeetWorkspace`.
+   */
+  theoreticalRemovedEvents?: TheoreticalRemovedEvent[];
+}
+
+/**
+ * One event the user removed from a swimmer's lineup in a theoretical-meet
+ * preview. See {@link LoadedMeetMeta.theoreticalRemovedEvents}.
+ */
+export interface TheoreticalRemovedEvent {
+  /** The team name as the meet holds it. */
+  teamName: string;
+  gender: Gender;
+  swimmerName: string;
+  /** Course-qualified label as the seed carried it (`'100 Free SCY'`). */
+  event: string;
+  /** The seed time that was removed, as recorded. */
+  time: string;
 }
 
 export interface LoadedPsychMeta {
@@ -670,6 +805,14 @@ export interface HistoricalSwim {
    * lane so it never displaces the program swim of the same event.
    */
   isTimeTrial?: true;
+  /**
+   * The swim came from a meet row whose program membership is unconfirmed
+   * (`SwimmerResult.programSwim === 'unconfirmed'`). Set only by
+   * `historicalSwimFromResult`. Such a swim may be a post-meet time trial, so it
+   * is never a best (`isRankableSwim`), a ranked event, an arbitrage field entry
+   * or a cut tag. It stays in the history list.
+   */
+  programUnconfirmed?: true;
   /**
    * SwimCloud's `season_id` for this swim, verbatim (e.g. `'29'` = 2025-26).
    * Only the times JSON states it. Absent on pasted, PDF and CSV rows.

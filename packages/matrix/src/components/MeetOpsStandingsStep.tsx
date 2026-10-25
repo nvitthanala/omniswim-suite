@@ -38,6 +38,24 @@ interface MeetOpsStandingsStepProps {
   baselineByTeam: Map<string, number>;
   prelimsByTeam: Map<string, number>;
   psychByTeam: Map<string, number>;
+  /**
+   * Seeds past the end of the place-point table per team (teams with at least
+   * one). These have no expected points. A team with every seed past the table
+   * is absent from `prelimsByTeam` and present here.
+   */
+  prelimsWithoutExpectationByTeam?: Map<string, number>;
+  psychWithoutExpectationByTeam?: Map<string, number>;
+  /**
+   * Points the baseline earned in the entries counted in
+   * `prelimsWithoutExpectationByTeam`, per team (teams with at least one). The
+   * "vs prelims" figure subtracts them, so it compares the entries that have an
+   * expectation. Absent: nothing is subtracted.
+   */
+  prelimsBaselineLeftOutByTeam?: Map<string, number>;
+  /** The same for the projected total (`team.totalPoints`). */
+  prelimsProjectedLeftOutByTeam?: Map<string, number>;
+  /** The same for the psych projection: baseline points of its left-out entries, per team. */
+  psychBaselineLeftOutByTeam?: Map<string, number>;
   showPrelimsPerformance: boolean;
   prelimsOuByEntry: Map<string, PrelimsOverUnderEntry>;
   showPsychPerformance: boolean;
@@ -62,6 +80,11 @@ export function MeetOpsStandingsStep({
   baselineByTeam,
   prelimsByTeam,
   psychByTeam,
+  prelimsWithoutExpectationByTeam,
+  psychWithoutExpectationByTeam,
+  prelimsBaselineLeftOutByTeam,
+  prelimsProjectedLeftOutByTeam,
+  psychBaselineLeftOutByTeam,
   showPrelimsPerformance,
   prelimsOuByEntry,
   showPsychPerformance,
@@ -122,17 +145,26 @@ export function MeetOpsStandingsStep({
                 prelimsProjectedScore={prelimsByTeam.get(team.teamName)}
                 baselineOverUnder={
                   prelimsByTeam.has(team.teamName)
-                    ? (baselineByTeam.get(team.teamName) ?? 0) - (prelimsByTeam.get(team.teamName) ?? 0)
+                    ? (baselineByTeam.get(team.teamName) ?? 0) -
+                      (prelimsBaselineLeftOutByTeam?.get(team.teamName) ?? 0) -
+                      (prelimsByTeam.get(team.teamName) ?? 0)
                     : undefined
                 }
                 projectedOverUnder={
-                  prelimsByTeam.has(team.teamName) ? team.totalPoints - (prelimsByTeam.get(team.teamName) ?? 0) : undefined
+                  prelimsByTeam.has(team.teamName)
+                    ? team.totalPoints -
+                      (prelimsProjectedLeftOutByTeam?.get(team.teamName) ?? 0) -
+                      (prelimsByTeam.get(team.teamName) ?? 0)
+                    : undefined
                 }
                 showPrelimsPerformance={showPrelimsPerformance}
                 prelimsOuByEntry={prelimsOuByEntry}
                 showPsychPerformance={showPsychPerformance}
                 psychOuByEntry={psychOuByEntry}
                 psychProjectedScore={psychByTeam.get(team.teamName)}
+                prelimsWithoutExpectationCount={prelimsWithoutExpectationByTeam?.get(team.teamName)}
+                psychWithoutExpectationCount={psychWithoutExpectationByTeam?.get(team.teamName)}
+                psychBaselineLeftOut={psychBaselineLeftOutByTeam?.get(team.teamName)}
                 eventThrough={eventThrough}
                 onRequestDeleteSwimmer={onRequestDeleteSwimmer}
                 scoringRefreshKey={scoringRefreshKey}
@@ -156,7 +188,7 @@ export function MeetOpsStandingsStep({
           <thead className="surface-overlay text-ui-micro text-theme-secondary font-medium">
             <tr>
               <th className="p-3">Rank</th>
-              <th className="p-3">Athlete Name</th>
+              <th className="p-3">Swimmer name</th>
               <th className="p-3">Team</th>
               <th className="p-3">Class</th>
               <th className="p-3 text-right">Meet pts</th>
@@ -188,7 +220,7 @@ export function MeetOpsStandingsStep({
             ) : (
               <tr>
                 <td colSpan={5} className="p-8 text-center text-theme-muted italic">
-                  No athlete data available in current matrix
+                  No swimmer data available in current matrix
                 </td>
               </tr>
             )}

@@ -41,7 +41,7 @@ import { buildTheoreticalMeetWorkspace } from '../packages/manager/src/lib/theor
 import { Gender, type HistoricalSwim } from '../packages/core/src/types';
 import { GENERIC_TOP16_SETTINGS } from '../packages/core/src/lib/scoringDefaults';
 import { canonicalMeetEventLabel, mergeHistoryIndex } from '../packages/core/src/lib/athleteHistory';
-import { SWIMMER_BODY, rosterPage } from './helpers/multiTeamDriverHarness';
+import { SWIMMER_BODY, rosterPage } from './helpers/multiTeamFixtures';
 
 const RETRIEVED = '2026-10-03T12:00:00.000Z';
 const OBU = 'Ouachita Baptist University';
@@ -98,11 +98,11 @@ describe('parser: exhibition on the real fastest-times fixture', () => {
     const rows = RAW_ROWS.map(r => ({ ...r }));
     const exhibitionIndex = rows.findIndex(r => r['exhibition'] === true);
     // Constructed variants on rows the real file marks `false`.
-    const plain = rows.map((r, i) => i).filter(i => i !== exhibitionIndex && rows[i]['stroke'] !== 'H' && rows[i]['eventstroke'] !== 'H');
-    delete rows[plain[0]]['exhibition']; // field missing
-    rows[plain[1]]['exhibition'] = 'true'; // string
-    rows[plain[2]]['exhibition'] = 1; // number
-    rows[plain[3]]['exhibition'] = null; // null
+    const plain = rows.map((r, i) => i).filter(i => i !== exhibitionIndex && rows[i]!['stroke'] !== 'H' && rows[i]!['eventstroke'] !== 'H');
+    delete rows[plain[0]!]!['exhibition']; // field missing
+    rows[plain[1]!]!['exhibition'] = 'true'; // string
+    rows[plain[2]!]!['exhibition'] = 1; // number
+    rows[plain[3]!]!['exhibition'] = null; // null
     const data = parseBody(JSON.stringify(rows));
     const flagged = data.personalBests.filter(p => 'isExhibition' in p);
     expect(flagged.map(p => `${p.eventLabel} ${p.time}`)).toEqual(['100 IM SCY 53.27']);
@@ -137,8 +137,8 @@ describe('converter and merge survival', () => {
     const fasterOfficial: HistoricalSwim = { ...official, time: '52.00' };
     const other = mergeHistoryIndex(swims, [fasterOfficial]).filter(s => s.event === '100 IM SCY');
     expect(other).toHaveLength(1);
-    expect(other[0].time).toBe('52.00');
-    expect('isExhibition' in other[0]).toBe(false);
+    expect(other[0]!.time).toBe('52.00');
+    expect('isExhibition' in other[0]!).toBe(false);
   });
 
   it('survives the JSON the workspace persists (positional rows, passthrough schema)', () => {
@@ -186,9 +186,9 @@ describe('seed builder: include (the default)', () => {
 
   it('seeds the exhibition 100 IM and counts it', () => {
     expect(eventsOf(seeds).filter(e => e === '100 IM SCY')).toHaveLength(2);
-    expect(team.rowsCreated).toBe(30);
-    expect(team.exhibitionSeedsUsed).toBe(2);
-    expect(team.exhibitionEventsExcluded).toBe(0);
+    expect(team!.rowsCreated).toBe(30);
+    expect(team!.exhibitionSeedsUsed).toBe(2);
+    expect(team!.exhibitionEventsExcluded).toBe(0);
   });
 
   it("an unset option behaves as 'include'", () => {
@@ -198,7 +198,7 @@ describe('seed builder: include (the default)', () => {
   });
 
   it('marks isExhibition on the chosen candidate and on the row source, and nowhere else', () => {
-    for (const swimmer of team.eventsChosenPerSwimmer) {
+    for (const swimmer of team!.eventsChosenPerSwimmer) {
       const flagged = swimmer.events.filter(e => e.isExhibition === true);
       expect(flagged.map(e => [e.event, e.time, e.chosen])).toEqual([['100 IM SCY', '53.27', true]]);
       expect(swimmer.events.filter(e => 'isExhibition' in e && e.isExhibition !== true)).toEqual([]);
@@ -213,8 +213,8 @@ describe('seed builder: include (the default)', () => {
   });
 
   it('adds the team caveat, and the meet caveat with the all-team total', () => {
-    expect(team.caveats).toContain('2 of 30 seeds come from exhibition swims (not scored in their meet). They are included.');
-    expect(team.caveats).toContain(exhibitionIncludedCaveat(2, 30));
+    expect(team!.caveats).toContain('2 of 30 seeds come from exhibition swims (not scored in their meet). They are included.');
+    expect(team!.caveats).toContain(exhibitionIncludedCaveat(2, 30));
     expect(seeds.report.caveats).toContain('All teams: 2 of 30 seeds come from exhibition swims (not scored in their meet). They are included.');
   });
 
@@ -228,7 +228,7 @@ describe('seed builder: include (the default)', () => {
 
   it('says nothing when the program does not offer the exhibition event (the standard program has no 100 IM)', () => {
     const standard = buildTheoreticalMeetSeeds(meet({ meetProgram: null }));
-    expect(standard.report.teams[0].exhibitionSeedsUsed).toBe(0);
+    expect(standard.report.teams[0]!.exhibitionSeedsUsed).toBe(0);
     expect(eventsOf(standard)).not.toContain('100 IM SCY');
     expect(standard.report.caveats.some(c => /exhibition/i.test(c))).toBe(false);
   });
@@ -241,10 +241,10 @@ describe("seed builder: exhibitionSeeds 'exclude'", () => {
 
   it('drops the exhibition event: it has NO seed, and nothing replaces it', () => {
     expect(eventsOf(excluded)).not.toContain('100 IM SCY');
-    expect(team.rowsCreated).toBe(28);
-    expect(team.exhibitionSeedsUsed).toBe(0);
-    expect(team.exhibitionEventsExcluded).toBe(2);
-    expect(team.eventsChosenPerSwimmer.map(s => s.excludedExhibitionEvents)).toEqual([['100 IM SCY'], ['100 IM SCY']]);
+    expect(team!.rowsCreated).toBe(28);
+    expect(team!.exhibitionSeedsUsed).toBe(0);
+    expect(team!.exhibitionEventsExcluded).toBe(2);
+    expect(team!.eventsChosenPerSwimmer.map(s => s.excludedExhibitionEvents)).toEqual([['100 IM SCY'], ['100 IM SCY']]);
   });
 
   it('every other row is identical to the include build', () => {
@@ -253,27 +253,27 @@ describe("seed builder: exhibitionSeeds 'exclude'", () => {
   });
 
   it('adds the excluded caveat at team and meet level', () => {
-    expect(team.caveats).toContain(exhibitionExcludedCaveat(2));
-    expect(team.caveats.some(c => c.includes('are included'))).toBe(false);
+    expect(team!.caveats).toContain(exhibitionExcludedCaveat(2));
+    expect(team!.caveats.some(c => c.includes('are included'))).toBe(false);
     expect(excluded.report.caveats).toContain(`All teams: ${exhibitionExcludedCaveat(2)}`);
     expect(exhibitionExcludedCaveat(2)).toContain('NO seed');
   });
 
   it('excluding changes nothing when the exhibition event is not in the program, and says nothing', () => {
     const noProgram = buildTheoreticalMeetSeeds(meet({ meetProgram: null, exhibitionSeeds: 'exclude' }));
-    expect(noProgram.report.teams[0].exhibitionEventsExcluded).toBe(0);
+    expect(noProgram.report.teams[0]!.exhibitionEventsExcluded).toBe(0);
     expect(noProgram.report.caveats.some(c => /exhibition/i.test(c))).toBe(false);
   });
 
   it('a swimmer whose only swim is the exhibition one has no seed and the report names the dropped event', () => {
     const only = (a: SwimCloudAthlete) => swimsOf(SWIMMER_BODY, a.name).filter(s => s.event === '100 IM SCY');
-    expect(only(obuMen[0])).toHaveLength(1);
+    expect(only(obuMen[0]!)).toHaveLength(1);
     const incl = buildTheoreticalMeetSeeds(meet({ teams: [menTeam(1, only)] }));
     expect(eventsOf(incl)).toEqual(['100 IM SCY']);
     const excl = buildTheoreticalMeetSeeds(meet({ teams: [menTeam(1, only)], exhibitionSeeds: 'exclude' }));
     expect(excl.rows).toHaveLength(0);
-    expect(excl.report.teams[0].athletesWithNoSeedInMeetCourse).toEqual([
-      expect.objectContaining({ name: obuMen[0].name, reason: 'all_seeds_exhibition_excluded', excludedExhibitionEvents: ['100 IM SCY'] }),
+    expect(excl.report.teams[0]!.athletesWithNoSeedInMeetCourse).toEqual([
+      expect.objectContaining({ name: obuMen[0]!.name, reason: 'all_seeds_exhibition_excluded', excludedExhibitionEvents: ['100 IM SCY'] }),
     ]);
   });
 
@@ -295,10 +295,10 @@ describe("seed builder: exhibitionSeeds 'exclude'", () => {
     expect(program.size).toBe(PROGRAM.size - 1);
     const out = buildTheoreticalMeetSeeds(meet({ teams: [menTeam(1, () => [exhibitionSwim])], meetProgram: program, exhibitionSeeds: 'exclude' }));
     expect(out.rows).toHaveLength(0);
-    const [noSeed] = out.report.teams[0].athletesWithNoSeedInMeetCourse;
-    expect(noSeed).toMatchObject({ name: obuMen[0].name, reason: 'no_event_in_program' });
+    const [noSeed] = out.report.teams[0]!.athletesWithNoSeedInMeetCourse;
+    expect(noSeed).toMatchObject({ name: obuMen[0]!.name, reason: 'no_event_in_program' });
     expect(noSeed).not.toHaveProperty('excludedExhibitionEvents');
-    expect(out.report.teams[0].exhibitionEventsExcluded).toBe(0);
+    expect(out.report.teams[0]!.exhibitionEventsExcluded).toBe(0);
   });
 
   it('rejects an unknown mode loudly', () => {
@@ -329,21 +329,21 @@ describe('seed builder: constructed ties and a slower official swim', () => {
   it('the same event and time on an exhibition and an official swim is backed by the official swim: not labelled', () => {
     const out = run([swim('45.00', true), swim('45.00', false)]);
     expect(out.rows).toHaveLength(1);
-    expect(out.report.teams[0].exhibitionSeedsUsed).toBe(0);
-    expect(out.sources.get(out.rows[0].id)).not.toHaveProperty('isExhibition');
+    expect(out.report.teams[0]!.exhibitionSeedsUsed).toBe(0);
+    expect(out.sources.get(out.rows[0]!.id)).not.toHaveProperty('isExhibition');
   });
 
   it("'exclude' falls to a slower official swim in the same event, and that is not a dropped event", () => {
     const out = run([swim('44.00', true), swim('45.00', false)], 'exclude');
     expect(out.rows.map(r => r.time)).toEqual(['45.00']);
-    expect(out.report.teams[0].exhibitionEventsExcluded).toBe(0);
+    expect(out.report.teams[0]!.exhibitionEventsExcluded).toBe(0);
     expect(out.report.caveats.some(c => /exhibition/i.test(c))).toBe(false);
   });
 
   it("'include' seeds the faster exhibition swim and labels it", () => {
     const out = run([swim('44.00', true), swim('45.00', false)]);
     expect(out.rows.map(r => r.time)).toEqual(['44.00']);
-    expect(out.report.teams[0].exhibitionSeedsUsed).toBe(1);
+    expect(out.report.teams[0]!.exhibitionSeedsUsed).toBe(1);
   });
 });
 
@@ -357,6 +357,6 @@ describe('workspace builder carries the exhibition facts through', () => {
     expect(flagged).toHaveLength(2);
     expect(flagged.every(([id]) => id.endsWith(encodeURIComponent('100 IM SCY')))).toBe(true);
     for (const r of [...build.payload.menResults, ...build.payload.womenResults]) expect(r.isExhibition).toBeUndefined();
-    expect(build.report.teams[0].exhibitionSeedsUsed).toBe(2);
+    expect(build.report.teams[0]!.exhibitionSeedsUsed).toBe(2);
   });
 });

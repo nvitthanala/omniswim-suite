@@ -127,10 +127,10 @@ describe('the bridge flags exactly the rows SwimCloud marks User Inputted', () =
       if (!result.ok) throw new Error('refused');
       return result.swims[0];
     };
-    expect(importOnce([{ code: 'U', title: 'User Inputted' }]).isUserInputted).toBe(true);
-    expect(importOnce([{ code: 'U', title: 'Unattached' }]).isUserInputted).toBeUndefined();
-    expect(importOnce([{ code: 'M', title: 'User Inputted' }]).isUserInputted).toBe(true);
-    expect(importOnce([]).isUserInputted).toBeUndefined();
+    expect(importOnce([{ code: 'U', title: 'User Inputted' }])!.isUserInputted).toBe(true);
+    expect(importOnce([{ code: 'U', title: 'Unattached' }])!.isUserInputted).toBeUndefined();
+    expect(importOnce([{ code: 'M', title: 'User Inputted' }])!.isUserInputted).toBe(true);
+    expect(importOnce([])!.isUserInputted).toBeUndefined();
   });
 });
 

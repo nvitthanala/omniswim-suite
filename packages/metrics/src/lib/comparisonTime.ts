@@ -65,12 +65,13 @@ export function computeComparisonTime(
   const strokeSearch = primaryStroke === undefined ? '' : STROKE_LABEL[primaryStroke].toLowerCase().slice(0, 4);
   const distanceStr = String(raceConfig.raceDistance);
   const historyMatches = findHistoryComparisonTimes(activeWorkspace.athleteHistory, target, strokeSearch, distanceStr);
-  if (historyMatches.length > 0) return historyMatches[0];
+  const firstHistory = historyMatches[0];
+  if (firstHistory !== undefined) return firstHistory;
   const resultMatches = findResultComparisonTimes(
     [...(activeWorkspace.menResults ?? []), ...(activeWorkspace.womenResults ?? [])],
     target,
     strokeSearch,
     distanceStr,
   );
-  return resultMatches.length > 0 ? resultMatches[0] : null;
+  return resultMatches[0] ?? null;
 }

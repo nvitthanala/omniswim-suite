@@ -51,8 +51,11 @@ describe('focus after the drawer closes because its athlete was removed', () => 
           }))));
   }
 
+  // The drawer's Remove only. Each roster row also has an icon-only Remove (decision U6).
   const removeButton = () =>
-    Array.from(document.querySelectorAll('button')).find(b => /^Remove .* from roster$/.test(b.getAttribute('aria-label') ?? ''));
+    Array.from(document.querySelectorAll<HTMLButtonElement>('#athlete-lineup-editor button')).find(b =>
+      /^Remove .* from roster$/.test(b.getAttribute('aria-label') ?? '')
+    );
 
   async function openDrawer() {
     await render(bundle.allResults, bundle.allScored);
@@ -72,7 +75,7 @@ describe('focus after the drawer closes because its athlete was removed', () => 
     removeButton()!.focus();
     expect(document.activeElement).toBe(removeButton());
 
-    await render(without(bundle.allResults, name), without(bundle.allScored, name));
+    await render(without(bundle.allResults, name!), without(bundle.allScored, name!));
     expect(removeButton()).toBeUndefined(); // the drawer closed with its athlete
     const list = document.querySelector('[role="listbox"]');
     expect(document.activeElement).not.toBe(document.body);
@@ -85,7 +88,7 @@ describe('focus after the drawer closes because its athlete was removed', () => 
     other.textContent = 'elsewhere';
     document.body.appendChild(other);
     other.focus();
-    await render(without(bundle.allResults, name), without(bundle.allScored, name));
+    await render(without(bundle.allResults, name!), without(bundle.allScored, name!));
     expect(document.activeElement).toBe(other);
     other.remove();
   });

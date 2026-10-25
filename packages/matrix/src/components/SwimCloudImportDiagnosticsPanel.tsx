@@ -38,6 +38,13 @@ export interface SwimCloudImportDiagnosticsPanelProps {
    * "see console" — never both this and `warnings` at once.
    */
   readonly rawWarnings?: readonly string[];
+  /**
+   * Swims in the loaded meet that await a "program swim" confirmation. A swims
+   * list prints the same label for a program swim and a post-meet time trial, so
+   * the importer marks each such swim unconfirmed. It counts toward no best time,
+   * arbitrage field or cut tag until the coach confirms it in the athlete drawer.
+   */
+  readonly unconfirmedSwimCount?: number;
   readonly onDismiss: () => void;
 }
 
@@ -119,17 +126,37 @@ function WarningGroupRow({ group }: { group: WarningCodeGroup }) {
   );
 }
 
+function hasNotes(
+  skipped: readonly SwimCloudMeetImportSkip[],
+  warnings: readonly SwimCloudParseWarning[] | undefined,
+  rawWarnings: readonly string[] | undefined
+): boolean {
+  return skipped.length > 0 || (warnings?.length ?? 0) > 0 || (rawWarnings?.length ?? 0) > 0;
+}
+
+function UnconfirmedSwimsNote({ count }: { count: number }) {
+  if (count === 0) return null;
+  return (
+    <p className="text-ui-caption text-[var(--text-primary)]" data-testid="unconfirmed-swims-note">
+      {count === 1
+        ? '1 swim awaits confirmation as a program swim.'
+        : `${count} swims await confirmation as program swims.`}{' '}
+      Until you confirm them, they count toward no best time, cut tag or arbitrage. Open a swimmer and use
+      &ldquo;Confirm as program swim&rdquo; (What-if mode).
+    </p>
+  );
+}
+
 export function SwimCloudImportDiagnosticsPanel({
   skipped,
   warnings,
   rawWarnings,
+  unconfirmedSwimCount = 0,
   onDismiss,
 }: SwimCloudImportDiagnosticsPanelProps) {
   const [showStructural, setShowStructural] = useState(false);
 
-  if (skipped.length === 0 && (warnings?.length ?? 0) === 0 && (rawWarnings?.length ?? 0) === 0) {
-    return null;
-  }
+  if (unconfirmedSwimCount === 0 && !hasNotes(skipped, warnings, rawWarnings)) return null;
 
   const skipGroups = groupSkipsByReason(skipped);
   const warningGroups = warnings ? groupWarningsByCode(warnings) : [];
@@ -156,7 +183,9 @@ export function SwimCloudImportDiagnosticsPanel({
         />
       </div>
 
-      {reviewSkips.length === 0 && reviewWarnings.length === 0 && rawWarnings === undefined ? (
+      <UnconfirmedSwimsNote count={unconfirmedSwimCount} />
+
+      {unconfirmedSwimCount === 0 && reviewSkips.length === 0 && reviewWarnings.length === 0 && rawWarnings === undefined ? (
         <p className="text-ui-caption text-theme-muted">
           Nothing here needs a look — only expected structural notes below.
         </p>

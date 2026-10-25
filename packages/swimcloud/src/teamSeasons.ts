@@ -28,6 +28,7 @@
  */
 
 import { collapseWhitespace, decodeHtmlEntities, stripHtmlTags, stripNonContent } from './html';
+import { itemAt, regexGroup } from './indexed';
 
 declare const teamSeasonOptionBrand: unique symbol;
 
@@ -105,7 +106,7 @@ interface RawOption {
 /** The quoted `value` attribute, matched by exact name (`data-value` is a different attribute). */
 function readValueAttribute(attributes: string): string | undefined {
   for (const match of attributes.matchAll(ATTRIBUTE)) {
-    if (match[1].toLowerCase() !== 'value') continue;
+    if (regexGroup(match, 1).toLowerCase() !== 'value') continue;
     const quoted = match[2] ?? match[3];
     if (quoted !== undefined) return quoted;
   }
@@ -180,8 +181,8 @@ export function parseTeamSeasonOptions(html: string): readonly TeamSeasonOption[
   }
 
   const options: TeamSeasonOption[] = [];
-  for (const match of selects[0][1].matchAll(OPTION)) {
-    const raw = readOption(match[1], match[2]);
+  for (const match of regexGroup(itemAt(selects, 0), 1).matchAll(OPTION)) {
+    const raw = readOption(regexGroup(match, 1), regexGroup(match, 2));
     if (raw.value === '') continue;
     options.push(toSeasonOption(raw));
   }

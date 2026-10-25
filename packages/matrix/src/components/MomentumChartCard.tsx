@@ -9,7 +9,8 @@ import { ChartFrame, ChartShell } from '@omniswim/ui';
 import { useThemeColors } from '@omniswim/core/lib/useThemeColors';
 import type { MomentumSeriesPoint } from '@omniswim/core/lib/prelimsProjection';
 import { assignTeamLineStyles } from '@omniswim/core/lib/utils';
-import { CompactEventLabel, PrelimsOuValue } from './matrixPresentation';
+import { noActualCountSentence } from '../lib/noActual';
+import { CompactEventLabel, NoActualMarker, PrelimsOuValue } from './matrixPresentation';
 
 type SingleTeamProps = {
   mode?: 'single';
@@ -19,6 +20,8 @@ type SingleTeamProps = {
   size?: 'sm' | 'md' | 'lg';
   className?: string;
   emptyMessage?: string;
+  /** Entries left out of the line because they have no result yet. Shown as a note when above 0. */
+  noActualCount?: number;
 };
 
 type MultiTeamProps = {
@@ -29,6 +32,8 @@ type MultiTeamProps = {
   size?: 'sm' | 'md' | 'lg';
   className?: string;
   emptyMessage?: string;
+  /** Entries left out of the lines because they have no result yet. Shown as a note when above 0. */
+  noActualCount?: number;
 };
 
 type Props = SingleTeamProps | MultiTeamProps;
@@ -116,7 +121,11 @@ export default function MomentumChartCard(props: Props) {
                               <span className="text-theme-secondary truncate max-w-[120px]">
                                 {String(p.dataKey)}
                               </span>
-                              <PrelimsOuValue value={typeof p.value === 'number' ? p.value : 0} compact />
+                              {typeof p.value === 'number' ? (
+                                <PrelimsOuValue value={p.value} compact />
+                              ) : (
+                                <NoActualMarker />
+                              )}
                             </div>
                           ))}
                         </div>
@@ -210,9 +219,15 @@ export default function MomentumChartCard(props: Props) {
           )
         }
       </ChartShell>
-      <p className="text-[9px] text-theme-muted mt-2 normal-case tracking-normal">
+      <p className="text-ui-micro text-theme-muted mt-2 normal-case tracking-normal">
         Cumulative over/under vs prelims placement expected points. Timed-finals events contribute 0.
       </p>
+      {props.noActualCount != null && props.noActualCount > 0 ? (
+        <p className="text-ui-micro text-theme-muted mt-1 normal-case tracking-normal" data-testid="momentum-no-actual-note">
+          {noActualCountSentence(props.noActualCount)}. {props.noActualCount === 1 ? 'It is' : 'They are'} left out of
+          this chart, not counted as 0.
+        </p>
+      ) : null}
     </div>
   );
 }

@@ -75,6 +75,7 @@ import type {
   SwimCloudSwimmerId,
   SwimCloudTeamId,
 } from './entities';
+import { itemAt } from './indexed';
 
 /* -------------------------------------------------------------------------- */
 /* robots.txt denylist                                                         */
@@ -129,7 +130,8 @@ export const SWIMCLOUD_ROBOTS_USER_EXEMPTIONS = ['/api/swimmers/{id}/profile_fas
 function exemptSwimmerFastestTimesId(lower: readonly string[]): SwimCloudSwimmerId | undefined {
   if (lower.length !== 4) return undefined;
   if (lower[0] !== 'api' || lower[1] !== 'swimmers' || lower[3] !== 'profile_fastest_times') return undefined;
-  return NUMERIC_ID.test(lower[2]) ? (lower[2] as SwimCloudSwimmerId) : undefined;
+  const swimmerId = lower[2];
+  return swimmerId !== undefined && NUMERIC_ID.test(swimmerId) ? (swimmerId as SwimCloudSwimmerId) : undefined;
 }
 
 /** One of the four robots.txt `Disallow:` lines. */
@@ -714,7 +716,7 @@ function classifyTeamPath(args: PathClassifyArgs): SwimCloudUrlClassification {
   if (segments.length === 1) {
     return malformed(input, canonicalPath, 'team', 'missing-id', 'Team URL carries no team id.');
   }
-  const teamId = segments[1];
+  const teamId = itemAt(segments, 1);
   if (!NUMERIC_ID.test(teamId)) {
     return malformed(
       input,
@@ -771,7 +773,7 @@ function classifySwimmerPath(args: PathClassifyArgs): SwimCloudUrlClassification
   if (segments.length === 1) {
     return malformed(input, canonicalPath, 'swimmer', 'missing-id', 'Swimmer URL carries no swimmer id.');
   }
-  const swimmerId = segments[1];
+  const swimmerId = itemAt(segments, 1);
   if (!NUMERIC_ID.test(swimmerId)) {
     return malformed(
       input,
@@ -813,7 +815,7 @@ function classifyMeetEventSubPath(
       'Meet event URL carries no event reference.',
     );
   }
-  const eventRef = segments[3];
+  const eventRef = itemAt(segments, 3);
   if (!NUMERIC_ID.test(eventRef)) {
     return malformed(
       input,
@@ -869,7 +871,7 @@ function classifyMeetTeamSubPath(args: PathClassifyArgs, meetId: SwimCloudMeetId
   if (segments.length === 3) {
     return malformed(input, canonicalPath, 'meetTeam', 'missing-id', 'Meet team URL carries no team id.');
   }
-  const teamId = segments[3];
+  const teamId = itemAt(segments, 3);
   if (!NUMERIC_ID.test(teamId)) {
     return malformed(
       input,
@@ -921,7 +923,7 @@ function classifyMeetSwimmerSubPath(
       'Meet swimmer URL carries no swimmer id.',
     );
   }
-  const swimmerId = segments[3];
+  const swimmerId = itemAt(segments, 3);
   if (!NUMERIC_ID.test(swimmerId)) {
     return malformed(
       input,
@@ -945,7 +947,7 @@ function classifyResultsPath(args: PathClassifyArgs): SwimCloudUrlClassification
   if (segments.length === 1) {
     return malformed(input, canonicalPath, 'meet', 'missing-id', 'Meet URL carries no meet id.');
   }
-  const meetId = segments[1] as SwimCloudMeetId;
+  const meetId = itemAt(segments, 1) as SwimCloudMeetId;
   if (!NUMERIC_ID.test(meetId)) {
     return malformed(
       input,
@@ -993,7 +995,7 @@ function classifyCountryPath(args: PathClassifyArgs): SwimCloudUrlClassification
         'Conference URL carries no conference slug.',
       );
     }
-    const slug = segments[4];
+    const slug = itemAt(segments, 4);
     if (!CONFERENCE_SLUG.test(slug)) {
       return malformed(
         input,
@@ -1008,8 +1010,8 @@ function classifyCountryPath(args: PathClassifyArgs): SwimCloudUrlClassification
         kind: 'conference',
         urlForm: 'country-scoped',
         slug,
-        country: lower[1],
-        level: lower[2],
+        country: itemAt(lower, 1),
+        level: itemAt(lower, 2),
       });
     }
   }
@@ -1033,7 +1035,7 @@ function classifyConferencePath(args: PathClassifyArgs): SwimCloudUrlClassificat
       'Conference URL carries no conference slug.',
     );
   }
-  const slug = segments[1];
+  const slug = itemAt(segments, 1);
   if (!CONFERENCE_SLUG.test(slug)) {
     return malformed(
       input,
@@ -1159,7 +1161,7 @@ export function classifySwimCloudUrl(url: string): SwimCloudUrlClassification {
     return fetchable({ kind: 'swimmerFastestTimes', swimmerId: exemptSwimmerId });
   }
 
-  const classifyPath = PATH_CLASSIFIERS[lower[0]];
+  const classifyPath = PATH_CLASSIFIERS[itemAt(lower, 0)];
   if (classifyPath === undefined) {
     return unrecognized(
       input,

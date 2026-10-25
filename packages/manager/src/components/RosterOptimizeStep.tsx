@@ -3,25 +3,34 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { FileWarning } from 'lucide-react';
 import { Gender, ScoringSettings, Workspace } from '@omniswim/core/types';
 import {
   diffOptimizerChanges,
-  optimizeRosterForTeam,
   type GuardedOptimizerResult,
   type OptimizerChangeSummary,
 } from '@omniswim/core/lib/rosterOptimizer';
 import {
-  buildArbitrageCardsResult,
   type ArbitrageCardsResult,
-  optimizeWithArbitrage,
+  type ArbitrageOptimizeResult,
   type ArbitrageCard,
   type ArbitrageMode,
 } from '@omniswim/core/lib/rosterArbitrage';
+import type { OptimizeJob, OptimizeJobResult } from '@omniswim/core/lib/optimizeJob';
 import { Button, EmptyState, useToast } from '@omniswim/ui';
 import TeamPickerEmptyState from './TeamPickerEmptyState';
-import { ArbitragePreviewSection, OptimizerControls } from './RosterOptimizeStepParts';
+import { ArbitragePreviewSection, OptimizeRunStatus, OptimizerControls } from './RosterOptimizeStepParts';
+import { useOptimizeRun } from './useOptimizeRun';
+import {
+  CHANGED_WHILE_OPTIMIZING_MESSAGE,
+  OPTIMIZE_CANCELLED_MESSAGE,
+  optimizeFailedMessage,
+  optimizerInputRefsOf,
+  optimizerInputsMoved,
+  teamRunContextChanged,
+  type TeamRunContext,
+} from './optimizeRunView';
 import OptimizerChangeSummaryPanel, { type OptimizerRunSummary } from './OptimizerChangeSummaryPanel';
 import BatchOptimizerPanel from './BatchOptimizerPanel';
 import {
@@ -162,7 +171,7 @@ export function ArbitrageCardList({
     return (
       <div className="rounded-xl border border-dashed border-theme-soft px-4 py-8 text-center">
         <p className="text-ui-body text-theme-secondary leading-relaxed max-w-md mx-auto">
-          No swap gains points for this team — every athlete is already in the events
+          No swap gains points for this team — every swimmer is already in the events
           that score most for them.
         </p>
       </div>
@@ -230,9 +239,12 @@ export default function RosterOptimizeStep({
   // candidates at ~7 ms each on the largest measured meet. Running that in a `useMemo` froze
   // the main thread for 8.3 s in a single task (measured), so opening this step
   // locked the UI. Correct numbers are not worth a frozen tab; the button makes
-  // the cost explicit and keeps the step instant to open.
+  // the cost explicit and keeps the step instant to open. The scan and the two team
+  // optimizers run in the scoring worker (`useOptimizeRun`), so the step stays usable.
   const [preview, setPreview] = useState<ArbitrageCardsResult | null>(null);
-  const [scanning, setScanning] = useState(false);
+  const optimizeRun = useOptimizeRun();
+  const { run: activeRun, cancel: cancelRun } = optimizeRun;
+  const scanning = activeRun?.kind === 'scan';
   // The Undo lives INSIDE the summary record, because the summary panel is the only place its
   // button renders. Dropping the summary (Dismiss, team change, workspace change) therefore drops
   // the Undo with it, and an Undo that is armed but out of reach cannot be represented.
@@ -321,7 +333,7 @@ export default function RosterOptimizeStep({
     } else if (!optimizerUndoTargetReached(undoFlow.undo, current)) {
       setUndoFlow(null); // something else wrote the lineup; there is nothing left to watch
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `toast` changes identity each time one is pushed and `releaseFocusFromSummary` is a per-render closure; listing them would re-run this observer on its own announcements
   }, [workspace, undoFlow]);
 
   // A stale scan is worse than none — it would describe a roster that no longer exists.
@@ -339,6 +351,15 @@ export default function RosterOptimizeStep({
     if (lastRunIsAllTeams.current) return;
     dropRun();
   }, [team]);
+
+  // A run belongs to one workspace, team, view and rule set. If any of them changes, its result
+  // would describe a lineup the coach is no longer looking at, so the run stops and nothing is
+  // applied. Edits to the lineup arrays are caught separately when the result arrives.
+  // `ownTeam` is a display choice, so it stays out of the key.
+  const settingsKey = useMemo(() => JSON.stringify({ ...scoringSettings, ownTeam: undefined }), [scoringSettings]);
+  useEffect(() => {
+    cancelRun();
+  }, [cancelRun, workspace.id, gender, team, removeSeniors, whatIfMode, settingsKey]);
 
   /** The three optimizer-owned fields, as they read right now — the only
    *  state `diffOptimizerChanges` can honestly compare against, and exactly
@@ -386,32 +407,108 @@ export default function RosterOptimizeStep({
     if (lastRunSummary) setUndoFlow({ phase: 'pending', undo: lastOptimizeUndo, summary: lastRunSummary });
   };
 
-  const runScan = () => {
-    if (!team) return;
-    setScanning(true);
-    // Yield a frame so the "Scanning…" state paints before the blocking work starts.
-    window.setTimeout(() => {
-      try {
-        setPreview(buildArbitrageCardsResult(workspace, gender, team, scoringSettings));
-      } finally {
-        setScanning(false);
-      }
-    }, 0);
+  /**
+   * The latest render's view of the step. A run finishes after the render that started it, so the
+   * continuation reads the workspace, the toast and the apply helpers from here, never from its
+   * own closure.
+   */
+  const live = useRef<{
+    workspace: Workspace;
+    /** What the step shows now, to compare with what a run was started for. */
+    context: TeamRunContext;
+    toast: ReturnType<typeof useToast>;
+    finishArbitrage: (
+      result: ArbitrageOptimizeResult,
+      before: OptimizerBeforeState,
+      started: TeamRunContext
+    ) => void;
+    finishLegacy: (
+      result: GuardedOptimizerResult,
+      before: OptimizerBeforeState,
+      started: TeamRunContext
+    ) => void;
+    showScan: (result: ArbitrageCardsResult) => void;
+  } | null>(null);
+
+  const handleCancelRun = () => {
+    cancelRun();
+    toast.push('info', OPTIMIZE_CANCELLED_MESSAGE);
+  };
+
+  const runScan = async () => {
+    if (!team || activeRun) return;
+    const startedWith = workspace;
+    try {
+      const result = await optimizeRun.start(workspace, gender, {
+        kind: 'scan',
+        team,
+        settings: scoringSettings,
+      });
+      const now = live.current;
+      // A scan of a workspace that has since changed describes a roster that no longer exists.
+      if (result && now && now.workspace === startedWith) now.showScan(result);
+    } catch (err) {
+      live.current?.toast.push('error', optimizeFailedMessage(err));
+    }
   };
 
   const displayCards = cards.length > 0 ? cards : preview?.cards ?? [];
 
-  const applyTeam = () => {
-    if (!whatIfMode || !team) return;
+  /**
+   * Run one guarded team optimizer off the main thread, then apply its result here, exactly as
+   * the synchronous path did. The worker only ever sees a copy of the workspace, so a cancelled
+   * run has changed nothing. A result is dropped when the lineup arrays moved while it ran: it
+   * holds the FULL post-run arrays and would overwrite those edits.
+   */
+  const runApplyJob = async <J extends OptimizeJob>(
+    job: J,
+    runMode: ArbitrageMode | null,
+    finishOf: (
+      now: NonNullable<typeof live.current>
+    ) => (result: OptimizeJobResult<J>, before: OptimizerBeforeState, started: TeamRunContext) => void
+  ) => {
+    if (!whatIfMode || !team || activeRun) return;
+    // Everything the apply reads is captured here, at the click, and compared when the result
+    // arrives. The latest render may show another team, workspace or strategy by then.
+    const startedFrom = optimizerInputRefsOf(workspace);
+    const started: TeamRunContext = { workspaceId: workspace.id, team, mode: runMode };
     const before = captureBeforeState();
-    const result = optimizeWithArbitrage(
-      workspace,
-      gender,
-      team,
-      removeSeniors,
-      scoringSettings,
-      mode
+    let result: OptimizeJobResult<J> | null;
+    try {
+      result = await optimizeRun.start(workspace, gender, job);
+    } catch (err) {
+      live.current?.toast.push('error', optimizeFailedMessage(err));
+      return;
+    }
+    const now = live.current;
+    if (!result || !now) return;
+    if (optimizerInputsMoved(startedFrom, now.workspace) || teamRunContextChanged(started, now.context)) {
+      now.toast.push('info', CHANGED_WHILE_OPTIMIZING_MESSAGE);
+      return;
+    }
+    finishOf(now)(result, before, started);
+  };
+
+  const applyTeam = () =>
+    runApplyJob(
+      { kind: 'teamArbitrage', team, removeSeniors, settings: scoringSettings, mode },
+      mode,
+      now => now.finishArbitrage
     );
+
+  // "Quick optimize" ignores the Strategy setting, so a Strategy change does not stale its result.
+  const applyLegacy = () =>
+    runApplyJob(
+      { kind: 'teamLegacy', team, removeSeniors, settings: scoringSettings },
+      null,
+      now => now.finishLegacy
+    );
+
+  const finishArbitrage = (
+    result: ArbitrageOptimizeResult,
+    before: OptimizerBeforeState,
+    started: TeamRunContext
+  ) => {
     // The cards describe the lineup that came back, so they are worth showing
     // whether or not that lineup was applied.
     setCards(result.cards);
@@ -420,11 +517,12 @@ export default function RosterOptimizeStep({
     // and on a recruit-driven workspace it does refuse. A "+0.0 pts" success
     // toast over an untouched lineup would report a win for a no-op.
     applyOptimizerResult({
-      team,
-      workspaceId: workspace.id,
+      team: started.team,
+      workspaceId: started.workspaceId,
       result,
       before,
-      buildSuccessMessage: (_result, gain) => `${team}: +${gain.toFixed(1)} pts (${mode.replace('_', ' ')})`,
+      buildSuccessMessage: (_result, gain) =>
+        `${started.team}: +${gain.toFixed(1)} pts (${(started.mode ?? '').replace('_', ' ')})`,
       recordRunSummary,
       onUpdate,
       setLastOptimizeUndo,
@@ -432,23 +530,39 @@ export default function RosterOptimizeStep({
     });
   };
 
-  const applyLegacy = () => {
-    if (!whatIfMode || !team) return;
-    const before = captureBeforeState();
-    const result = optimizeRosterForTeam(workspace, gender, team, removeSeniors, scoringSettings);
+  const finishLegacy = (
+    result: GuardedOptimizerResult,
+    before: OptimizerBeforeState,
+    started: TeamRunContext
+  ) => {
     applyOptimizerResult({
-      team,
-      workspaceId: workspace.id,
+      team: started.team,
+      workspaceId: started.workspaceId,
       result,
       before,
       buildSuccessMessage: (result, gain) =>
-        `${team}: +${gain.toFixed(1)} pts → ${result.projectedTotal.toFixed(1)} (${result.appliedStages?.replace('+', ' + ') ?? 'optimised'})`,
+        `${started.team}: +${gain.toFixed(1)} pts → ${result.projectedTotal.toFixed(1)} (${result.appliedStages?.replace('+', ' + ') ?? 'optimised'})`,
       recordRunSummary,
       onUpdate,
       setLastOptimizeUndo,
       toast,
     });
   };
+
+  const showScan = (result: ArbitrageCardsResult) => setPreview(result);
+
+  // Published after commit, never during render: a render React abandons must not become what a
+  // finishing run reads.
+  useLayoutEffect(() => {
+    live.current = {
+      workspace,
+      context: { workspaceId: workspace.id, team, mode },
+      toast,
+      finishArbitrage,
+      finishLegacy,
+      showScan,
+    };
+  });
 
   /**
    * Applies what the "All teams" dialog produced. The dialog never offers an
@@ -515,7 +629,7 @@ export default function RosterOptimizeStep({
         icon={<FileWarning size={28} />}
         eyebrow="Optimize"
         title="Bring in swimmers first"
-        description="Load a meet or import swimmers on the Athletes step to build this optimization."
+        description="Load a meet or import swimmers on the Swimmers step to build this optimization."
       />
     );
   }
@@ -558,7 +672,10 @@ export default function RosterOptimizeStep({
         onApplyTeam={applyTeam}
         onApplyLegacy={applyLegacy}
         onOpenAllTeams={() => setShowAllTeams(true)}
+        busy={activeRun !== null}
       />
+
+      {activeRun ? <OptimizeRunStatus run={activeRun} onCancel={handleCancelRun} /> : null}
 
       {!whatIfMode ? (
         <p className="text-ui-caption rounded-lg border border-theme-soft surface-muted-bg px-3 py-2 text-theme-secondary">
@@ -573,6 +690,7 @@ export default function RosterOptimizeStep({
       <ArbitragePreviewSection
         team={team}
         scanning={scanning}
+        busy={activeRun !== null}
         onScan={runScan}
         displayCards={displayCards}
         cards={cards}

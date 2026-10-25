@@ -210,6 +210,8 @@ export default function AthleteHistorySection({ rows, athlete, gender, editable,
               // also read a pasted row's badge.
               userInputted: isUserInputtedSwim(row),
               extractedSplit: isExtractedSplitSwim(row),
+              // A swims-list row nobody confirmed as a program swim is not judged.
+              programUnconfirmed: row.programUnconfirmed,
             });
             return (
               <li key={rowKey} className="flex items-center gap-2 text-ui-body">
@@ -327,7 +329,7 @@ export default function AthleteHistorySection({ rows, athlete, gender, editable,
         <p className="text-ui-caption text-theme-muted mb-3 italic">
           {athleteHistoryRows.length > 0
             ? 'No supplemental history in this season.'
-            : 'No supplemental history for this athlete.'}
+            : 'No supplemental history for this swimmer.'}
         </p>
       )}
       {editable ? (

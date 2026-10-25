@@ -42,7 +42,7 @@ export function ScoringViewBanner({ scoringView, onScoringViewChange }: ScoringV
           },
         ]}
       />
-      <p className="text-[9px] text-theme-muted mt-2 normal-case tracking-normal">
+      <p className="text-ui-micro text-theme-muted mt-2 normal-case tracking-normal">
         {scoringView === 'merged'
           ? 'Plans, imports, and recruits remap onto the loaded meet and compete for points.'
           : 'Plans and recruits are excluded from scoring — only the original meet results score.'}
@@ -55,7 +55,7 @@ export function ScoringLockBanner({ message }: { message: string }) {
   return (
     <div className="mb-4 p-3 rounded-lg border border-theme-soft surface-overlay flex items-start gap-2">
       <Lock size={12} className="text-theme-muted mt-0.5 shrink-0" aria-hidden />
-      <p className="text-[10px] text-theme-secondary leading-relaxed normal-case tracking-normal">
+      <p className="text-ui-micro text-theme-secondary leading-relaxed normal-case tracking-normal">
         {message}
         <span className="text-theme-muted">
           {' '}
@@ -74,7 +74,7 @@ interface SuggestedPresetBannerProps {
 
 export function SuggestedPresetBanner({ suggestedPresetId, onLoadAndSave }: SuggestedPresetBannerProps) {
   return (
-    <div className="mb-4 p-3 rounded badge-warning text-[10px]">
+    <div className="mb-4 p-3 rounded badge-warning text-ui-micro">
       <span className="font-medium">Suggested preset: </span>
       {suggestedPresetId}
       <Button

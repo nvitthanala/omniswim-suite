@@ -122,7 +122,7 @@ export default function AthleteHistoryImportPanel({
     return suggestAliasCandidates(existingNames, incomingNames, { resolver });
   // Deliberate: depends on the individual workspace fields this reads, not the
   // whole object, so an unrelated workspace edit does not re-run the scan.
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- keyed on the individual workspace fields the scan reads, so an unrelated workspace edit does not re-run it
   }, [
     workspace.menResults,
     workspace.womenResults,

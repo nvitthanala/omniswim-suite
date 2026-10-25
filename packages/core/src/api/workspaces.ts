@@ -1,10 +1,41 @@
 import type { Workspace } from '../types';
 import {
+  EXPECTED_VERSION_HEADER,
   SAVE_CLIENT_HEADER,
   SAVE_SEQ_HEADER,
   STALE_SAVE_CODE,
+  VERSION_CONFLICT_CODE,
   type SaveToken,
 } from './saveSequence';
+
+/**
+ * A workspace as the server returns it: `version` is the stored revision. The
+ * server owns it; send it back as `expectedVersion` on a save to be refused
+ * (409 `VERSION_CONFLICT`) when somebody else changed the workspace since.
+ * `Workspace` itself has no `version` field, so this is the type to read it from.
+ */
+export type VersionedWorkspace = Workspace & { version?: number };
+
+/** The version a workspace came back with, or undefined when the server sent none. */
+export function workspaceVersion(ws: Workspace | undefined | null): number | undefined {
+  const v = (ws as VersionedWorkspace | undefined | null)?.version;
+  return typeof v === 'number' && Number.isInteger(v) && v >= 1 ? v : undefined;
+}
+
+/**
+ * The server refused a save because the stored workspace is no longer the version
+ * this client last saw (another tab, another user, a script). Nothing was written.
+ * The caller must refetch and tell the user; it must not retry blindly, because a
+ * retry with the same version would be refused again and a retry without one would
+ * overwrite the other change.
+ */
+export class VersionConflictError extends Error {
+  readonly code = VERSION_CONFLICT_CODE;
+  constructor(message: string) {
+    super(message);
+    this.name = 'VersionConflictError';
+  }
+}
 
 const API_BASE = '';
 
@@ -73,24 +104,39 @@ export class StaleSaveError extends Error {
 }
 
 /**
+ * A `version` riding along in a patch (a whole workspace spread into one) would be read
+ * by the server as the expected version. The header is the only way to ask for that check.
+ */
+function withoutVersion(patch: Partial<Workspace>): Partial<Workspace> {
+  if (!('version' in patch)) return patch;
+  const { version: _version, ...rest } = patch as Partial<Workspace> & { version?: unknown };
+  return rest;
+}
+
+/**
  * Save a workspace patch. Pass `token` to let the server detect a save that
  * arrives after a newer one; without it the save still works but cannot be
- * checked (the server flags it).
+ * checked (the server flags it). Pass `expectedVersion` (the `version` of the
+ * workspace this patch was made against) to be refused with
+ * {@link VersionConflictError} when the stored copy has moved on; without it the
+ * save is last-writer-wins, as before.
  */
 export async function updateWorkspaceApi(
   id: string,
   patch: Partial<Workspace>,
-  token?: SaveToken
-): Promise<Workspace> {
+  token?: SaveToken,
+  expectedVersion?: number
+): Promise<VersionedWorkspace> {
   const headers: Record<string, string> = { 'Content-Type': 'application/json' };
   if (token) {
     headers[SAVE_CLIENT_HEADER] = token.clientId;
     headers[SAVE_SEQ_HEADER] = String(token.seq);
   }
+  if (expectedVersion !== undefined) headers[EXPECTED_VERSION_HEADER] = String(expectedVersion);
   const res = await fetch(`${API_BASE}/api/workspaces/${id}`, {
     method: 'PUT',
     headers,
-    body: JSON.stringify(patch),
+    body: JSON.stringify(withoutVersion(patch)),
   });
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
@@ -100,6 +146,9 @@ export async function updateWorkspaceApi(
         typeof err.lastAppliedSeq === 'number' ? err.lastAppliedSeq : undefined,
         typeof err.receivedSeq === 'number' ? err.receivedSeq : undefined
       );
+    }
+    if (res.status === 409 && err.code === VERSION_CONFLICT_CODE) {
+      throw new VersionConflictError(err.error || 'This workspace changed somewhere else.');
     }
     throw new Error(err.error || `Failed to update workspace (${res.status})`);
   }

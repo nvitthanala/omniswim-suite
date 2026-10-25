@@ -20,8 +20,9 @@
  *    program.
  *
  * Real meet rows come from `tests/fixtures/nsisc-2026-relay-followups-r1.json`
- * (2026 NSISC Championships) and the committed HSU roster export
- * `hsuroster26-27.txt`, the same sources `tests/relayFollowUpsR1.test.ts`
+ * (2026 NSISC Championships) and the local HSU roster export
+ * `hsuroster26-27.txt` (gitignored; its committed stand-in under
+ * `tests/fixtures/synthetic-rosters/` is used when it is absent), the same sources `tests/relayFollowUpsR1.test.ts`
  * uses for the core-level tests of the same fixes. Written without JSX,
  * matching `tests/teamRosterRowEventLabel.test.ts`.
  */
@@ -29,6 +30,7 @@ import { readFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { readRosterText, rosterBlock } from './helpers/localRosterPath';
 import { act, createElement } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { Gender, type SwimmerResult, type TeamScore, type Workspace } from '@omniswim/core/types';
@@ -44,8 +46,14 @@ const HSU = 'Henderson State University';
 const DSU = 'Delta State University';
 const M_200FR = 'Event 31 Men 4x50 Yard Freestyle Relay';
 
+const roster = readRosterText('hsuroster26-27.txt');
+/** The real name with the local export; the stand-in's invented name without it. */
+const COLTON = roster.source === 'real' ? 'Colton Bennett' : 'Test Swimmer Alpha';
+
+// With the stand-in, his meet rows carry the invented name too (in memory only), so history joins them by name.
+const fixtureText = readFileSync(join(repoRoot, 'tests', 'fixtures', 'nsisc-2026-relay-followups-r1.json'), 'utf8');
 const fixture = JSON.parse(
-  readFileSync(join(repoRoot, 'tests', 'fixtures', 'nsisc-2026-relay-followups-r1.json'), 'utf8')
+  roster.source === 'real' ? fixtureText : fixtureText.replaceAll('Colton Bennett', COLTON)
 ) as { menResults: SwimmerResult[]; womenResults: SwimmerResult[] };
 const { menResults } = fixture;
 
@@ -54,9 +62,8 @@ const { menResults } = fixture;
  * no 50 Free at the meet (see that file's "holds the roster export rows"
  * test), so his only route onto a 50-free relay leg is history. */
 function coltonBennettHistory() {
-  const lines = readFileSync(join(repoRoot, 'hsuroster26-27.txt'), 'utf8').split(/\r?\n/);
-  const block = lines.slice(76, 113);
-  expect(block[0]).toBe('Colton Bennett');
+  const block = rosterBlock(roster, COLTON);
+  expect(block[0]).toBe(COLTON);
   return parseSwimCloudPasteDetailed(block.join('\n'), { team: HSU, gender: Gender.MEN }).swims;
 }
 
@@ -150,14 +157,14 @@ describe('IndRelayManagementView (R1 relay follow-ups)', () => {
       selectedTeam: HSU,
     });
 
-    expect(container.textContent).toContain('Colton Bennett');
+    expect(container.textContent).toContain(COLTON);
     expect(container.textContent).toContain('From history');
 
     // Never an individual entry: he must not appear as a plain roster swim
     // anywhere his history swim's raw event/time pairing would only make
     // sense as a leg candidate (no "50 Freestyle" individual row exists for
     // him in the fixture).
-    const individualRow = scored.find(r => !r.isRelay && r.name === 'Colton Bennett' && r.event === '50 Freestyle');
+    const individualRow = scored.find(r => !r.isRelay && r.name === COLTON && r.event === '50 Freestyle');
     expect(individualRow).toBeUndefined();
   });
 

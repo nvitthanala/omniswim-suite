@@ -84,10 +84,10 @@ describe('parseTeamRosterHtml — swimcloud-synthetic-team-roster.html', () => {
     if (!result.ok) throw new Error(`expected success, got ${result.failure.code}`);
 
     const gonzalez = result.data.athletes[1];
-    expect(gonzalez.name).toBe('Alan Alejan González Mujica');
-    expect(gonzalez.swimCloudSwimmerId).toBe('3646511');
-    expect(gonzalez.classYear).toBe('JR'); // "Junior" is in the known vocabulary
-    expect(gonzalez.hometown).toBe('Caracas, VE');
+    expect(gonzalez!.name).toBe('Alan Alejan González Mujica');
+    expect(gonzalez!.swimCloudSwimmerId).toBe('3646511');
+    expect(gonzalez!.classYear).toBe('JR'); // "Junior" is in the known vocabulary
+    expect(gonzalez!.hometown).toBe('Caracas, VE');
   });
 
   it('flags a missing profile link and an unmapped class year on the same row, without inventing either', () => {
@@ -95,10 +95,10 @@ describe('parseTeamRosterHtml — swimcloud-synthetic-team-roster.html', () => {
     if (!result.ok) throw new Error(`expected success, got ${result.failure.code}`);
 
     const jordan = result.data.athletes[2];
-    expect(jordan.name).toBe('Jordan Pike');
-    expect(jordan.swimCloudSwimmerId).toBeUndefined();
-    expect(jordan.classYear).toBe('unknown');
-    expect(jordan.hometown).toBeUndefined(); // empty cell, never coerced to ''
+    expect(jordan!.name).toBe('Jordan Pike');
+    expect(jordan!.swimCloudSwimmerId).toBeUndefined();
+    expect(jordan!.classYear).toBe('unknown');
+    expect(jordan!.hometown).toBeUndefined(); // empty cell, never coerced to ''
 
     const codes = warningCodes(result.warnings);
     expect(codes).toContain('missing-athlete-link');
@@ -188,25 +188,25 @@ describe('parseMeetResultsHtml — swimcloud-synthetic-meet-results.html', () =>
     expect(relayEvent.relays).toHaveLength(3);
 
     const [first, second, third] = relayEvent.relays;
-    expect(first.swimCloudTeamId).toBe('633');
-    expect(first.designator).toBe('A');
-    expect(first.legs).toHaveLength(4);
-    expect(first.legs[0]).toEqual({
+    expect(first!.swimCloudTeamId).toBe('633');
+    expect(first!.designator).toBe('A');
+    expect(first!.legs).toHaveLength(4);
+    expect(first!.legs[0]).toEqual({
       order: 1,
       swimCloudSwimmerId: '3646504',
       athleteName: 'Landon Dehn',
       splitTime: '23.41',
     });
-    expect(first.legs[1].athleteName).toBe('Alan Alejan González Mujica');
-    expect(first.legs[1].splitTime).toBe('23.90');
+    expect(first!.legs[1]!.athleteName).toBe('Alan Alejan González Mujica');
+    expect(first!.legs[1]!.splitTime).toBe('23.90');
     expect(relayEvent.results[0]).toMatchObject({ place: 1, finalTime: '1:34.12', points: 40 });
     // The relay's SwimCloudEntry (not just its SwimCloudRelay) also carries the team name.
-    expect(relayEvent.entries[0].teamName).toBe(first.teamName);
+    expect(relayEvent.entries[0]!.teamName).toBe(first!.teamName);
 
     // Second row: no <ol> of legs at all.
-    expect(second.designator).toBe('A');
-    expect(second.teamName).toBe('Ouachita Baptist');
-    expect(second.legs).toHaveLength(0);
+    expect(second!.designator).toBe('A');
+    expect(second!.teamName).toBe('Ouachita Baptist');
+    expect(second!.legs).toHaveLength(0);
     expect(relayEvent.results[1]).toMatchObject({ place: 2, finalTime: '1:35.60', points: 34 });
 
     // Third row: the DQ'd 'B' relay — no place, no finalTime, disqualified flag,
@@ -214,13 +214,13 @@ describe('parseMeetResultsHtml — swimcloud-synthetic-meet-results.html', () =>
     // (the fixture's Points cell is empty for this row — an empty cell is
     // not a warning-worthy case, plenty of DQ'd rows legitimately score
     // nothing on the printed page too).
-    expect(third.designator).toBe('B');
-    expect(third.legs).toHaveLength(0);
-    expect(relayEvent.results[2].place).toBeUndefined();
-    expect(relayEvent.results[2].finalTime).toBeUndefined();
-    expect(relayEvent.results[2].points).toBeUndefined();
-    expect(relayEvent.results[2].flags).toEqual({ disqualified: true });
-    expect(relayEvent.results[2].rawTimeToken).toBe('DQ');
+    expect(third!.designator).toBe('B');
+    expect(third!.legs).toHaveLength(0);
+    expect(relayEvent.results[2]!.place).toBeUndefined();
+    expect(relayEvent.results[2]!.finalTime).toBeUndefined();
+    expect(relayEvent.results[2]!.points).toBeUndefined();
+    expect(relayEvent.results[2]!.flags).toEqual({ disqualified: true });
+    expect(relayEvent.results[2]!.rawTimeToken).toBe('DQ');
 
     const codes = warningCodes(result.warnings);
     expect(codes.filter((c) => c === 'relay-legs-absent')).toHaveLength(2);
@@ -239,29 +239,29 @@ describe('parseMeetResultsHtml — swimcloud-synthetic-meet-results.html', () =>
 
     // Clean top two.
     expect(event.results[0]).toMatchObject({ place: 1, finalTime: '49.87', points: 20 });
-    expect(event.entries[0].swimCloudSwimmerId).toBe('3646504');
-    expect(event.entries[0].athleteName).toBe('Landon Dehn');
-    expect(event.entries[0].teamName).toBe('Henderson State');
+    expect(event.entries[0]!.swimCloudSwimmerId).toBe('3646504');
+    expect(event.entries[0]!.athleteName).toBe('Landon Dehn');
+    expect(event.entries[0]!.teamName).toBe('Henderson State');
     expect(event.results[1]).toMatchObject({ place: 2, finalTime: '50.11', points: 17 });
-    expect(event.entries[1].teamName).toBe('Ouachita Baptist');
+    expect(event.entries[1]!.teamName).toBe('Ouachita Baptist');
 
     // Exhibition: place "X" -> no place; time "X50.44" -> finalTime "50.44" + exhibition flag.
-    expect(event.results[2].place).toBeUndefined();
-    expect(event.results[2].finalTime).toBe('50.44');
-    expect(event.results[2].flags).toEqual({ exhibition: true });
+    expect(event.results[2]!.place).toBeUndefined();
+    expect(event.results[2]!.finalTime).toBe('50.44');
+    expect(event.results[2]!.flags).toEqual({ exhibition: true });
 
     // No-show, and a plain-text name with no profile link — the name is
     // still captured even though there's no id to link it to.
-    expect(event.entries[3].swimCloudSwimmerId).toBeUndefined();
-    expect(event.entries[3].athleteName).toBe('Casey Nolan');
-    expect(event.results[3].flags).toEqual({ noShow: true });
-    expect(event.results[3].rawTimeToken).toBe('NS');
-    expect(event.results[3].finalTime).toBeUndefined();
+    expect(event.entries[3]!.swimCloudSwimmerId).toBeUndefined();
+    expect(event.entries[3]!.athleteName).toBe('Casey Nolan');
+    expect(event.results[3]!.flags).toEqual({ noShow: true });
+    expect(event.results[3]!.rawTimeToken).toBe('NS');
+    expect(event.results[3]!.finalTime).toBeUndefined();
 
     // "22.9" is a tenths-precision time, not the hundredths this parser
     // requires: preserved verbatim, not padded, not silently accepted.
-    expect(event.results[4].finalTime).toBeUndefined();
-    expect(event.results[4].rawTimeToken).toBe('22.9');
+    expect(event.results[4]!.finalTime).toBeUndefined();
+    expect(event.results[4]!.rawTimeToken).toBe('22.9');
 
     const codes = warningCodes(result.warnings);
     expect(codes).toContain('missing-athlete-link');
@@ -301,8 +301,8 @@ describe('parseMeetResultsHtml — swimcloud-synthetic-meet-results.html', () =>
     if (event === undefined) throw new Error('event 20 missing from output');
 
     expect(event.event.stroke).toBe('Diving');
-    expect(event.results[0].finalTime).toBeUndefined();
-    expect(event.results[0].rawTimeToken).toBe('385.60');
+    expect(event.results[0]!.finalTime).toBeUndefined();
+    expect(event.results[0]!.rawTimeToken).toBe('385.60');
     expect(
       result.warnings.some((w) => w.code === 'diving-score-not-a-time' && w.eventId === '193735:event:20'),
     ).toBe(true);
@@ -327,8 +327,8 @@ describe('parseMeetResultsHtml — swimcloud-synthetic-meet-results-empty-event.
     expect(result.data.events).toHaveLength(1);
 
     const [onlyEvent] = result.data.events;
-    expect(onlyEvent.event.eventId).toBe('193735:event:1');
-    expect(onlyEvent.results).toHaveLength(0);
+    expect(onlyEvent!.event.eventId).toBe('193735:event:1');
+    expect(onlyEvent!.results).toHaveLength(0);
 
     const codes = warningCodes(result.warnings);
     expect(codes).toContain('zero-data-rows'); // event 1: real table, zero rows
@@ -365,8 +365,8 @@ describe('parseMeetResultsHtml — a printed "0" place', () => {
     if (!result.ok) throw new Error(`expected success, got ${result.failure.code}`);
 
     const event = result.data.events[0];
-    expect(event.results[0]).toMatchObject({ place: 1 });
-    expect(event.results[1].place).toBeUndefined();
+    expect(event!.results[0]).toMatchObject({ place: 1 });
+    expect(event!.results[1]!.place).toBeUndefined();
 
     const warning = result.warnings.find((w) => w.code === 'unrecognized-place-token' && w.raw === '0');
     expect(warning).toBeDefined();
@@ -403,14 +403,14 @@ describe('parseMeetResultsHtml — points are captured, not discarded', () => {
   it('captures a well-formed points cell verbatim as a number', () => {
     const result = parseMeetResultsHtml(html, context);
     if (!result.ok) throw new Error(`expected success, got ${result.failure.code}`);
-    expect(result.data.events[0].results[0].points).toBe(20);
+    expect(result.data.events[0]!.results[0]!.points).toBe(20);
   });
 
   it('leaves points absent for an empty cell, without any warning — a real zero-points row is not an error', () => {
     const result = parseMeetResultsHtml(html, context);
     if (!result.ok) throw new Error('expected success');
-    expect(result.data.events[0].results[1].points).toBeUndefined();
-    expect(result.data.events[0].results[1].rawPointsToken).toBeUndefined();
+    expect(result.data.events[0]!.results[1]!.points).toBeUndefined();
+    expect(result.data.events[0]!.results[1]!.rawPointsToken).toBeUndefined();
     // Scoped to this row specifically — row 2 (the "garbage" cell, tested
     // separately below) does legitimately produce this warning code, so an
     // unscoped `.some()` over the whole warnings array would pass for the
@@ -421,8 +421,8 @@ describe('parseMeetResultsHtml — points are captured, not discarded', () => {
   it('preserves an unparseable points cell verbatim and warns, rather than guessing or silently dropping it', () => {
     const result = parseMeetResultsHtml(html, context);
     if (!result.ok) throw new Error('expected success');
-    expect(result.data.events[0].results[2].points).toBeUndefined();
-    expect(result.data.events[0].results[2].rawPointsToken).toBe('garbage');
+    expect(result.data.events[0]!.results[2]!.points).toBeUndefined();
+    expect(result.data.events[0]!.results[2]!.rawPointsToken).toBe('garbage');
     const warning = result.warnings.find((w) => w.code === 'unrecognized-points-token' && w.raw === 'garbage');
     expect(warning).toBeDefined();
   });
@@ -553,18 +553,18 @@ describe('parseTeamMeetSwimsHtml — real capture, full swims list (page 1 of 8)
     expect(unplaced.map((swim) => swim.rowOrdinal)).toStrictEqual([7, 18, 20, 21]);
     expect(unplaced.filter((swim) => swim.relayLeadoff)).toHaveLength(3);
     const rowTwenty = swims[19];
-    expect(rowTwenty.rowOrdinal).toBe(20);
-    expect(rowTwenty.result.place).toBeUndefined();
-    expect(rowTwenty.relayLeadoff).toBe(false);
+    expect(rowTwenty!.rowOrdinal).toBe(20);
+    expect(rowTwenty!.result.place).toBeUndefined();
+    expect(rowTwenty!.relayLeadoff).toBe(false);
   });
 
   it('reads ordinal places, and leaves an en-dash place absent rather than zero', () => {
     const swims = parsed().data.swims;
-    expect(swims[0].result.place).toBe(1); // "1st"
-    expect(swims[2].result.place).toBe(3); // "3rd"
-    expect(swims[15].result.place).toBe(17); // "17th" — the two-digit case
-    expect(swims[6].result.place).toBeUndefined(); // en dash, U+2013
-    expect(swims[6].result).not.toHaveProperty('place');
+    expect(swims[0]!.result.place).toBe(1); // "1st"
+    expect(swims[2]!.result.place).toBe(3); // "3rd"
+    expect(swims[15]!.result.place).toBe(17); // "17th" — the two-digit case
+    expect(swims[6]!.result.place).toBeUndefined(); // en dash, U+2013
+    expect(swims[6]!.result).not.toHaveProperty('place');
   });
 
   it('reports pagination: page 1 of 8, with the next-page link as printed', () => {
@@ -578,8 +578,8 @@ describe('parseTeamMeetSwimsHtml — real capture, full swims list (page 1 of 8)
   it('gives every swim a distinct, stable key from its own SwimCloud swim id', () => {
     const swims = parsed().data.swims;
     expect(new Set(swims.map((swim) => swim.swimKey)).size).toBe(30);
-    expect(swims[0].swimCloudSwimId).toBe('171560736');
-    expect(swims[0].swimKey).toBe('356467:swim:171560736');
+    expect(swims[0]!.swimCloudSwimId).toBe('171560736');
+    expect(swims[0]!.swimKey).toBe('356467:swim:171560736');
     // Every row carried one, so no row fell back to a composite key.
     expect(swims.filter((swim) => swim.swimCloudSwimId === undefined)).toHaveLength(0);
   });
@@ -589,26 +589,26 @@ describe('parseTeamMeetSwimsHtml — real capture, full swims list (page 1 of 8)
     const swims = result.data.swims;
     // Rows 1 and 4 both print "100 Y Breast" and belong to different events
     // (26 and 100). The label cannot tell them apart; the link can.
-    expect(swims[0].event.label).toBe('100 Y Breast');
-    expect(swims[3].event.label).toBe('100 Y Breast');
-    expect(swims[0].event.eventRef).toBe('26');
-    expect(swims[3].event.eventRef).toBe('100');
-    expect(swims[0].event.eventId).not.toBe(swims[3].event.eventId);
+    expect(swims[0]!.event.label).toBe('100 Y Breast');
+    expect(swims[3]!.event.label).toBe('100 Y Breast');
+    expect(swims[0]!.event.eventRef).toBe('26');
+    expect(swims[3]!.event.eventRef).toBe('100');
+    expect(swims[0]!.event.eventId).not.toBe(swims[3]!.event.eventId);
     expect(result.data.events).toHaveLength(14);
   });
 
   it('reads distance, course and stroke out of the "{n} Y {stroke}" label shape', () => {
     const swims = parsed().data.swims;
-    expect(swims[0].event).toMatchObject({ distance: 100, course: 'SCY', stroke: 'Breaststroke' });
-    expect(swims[2].event).toMatchObject({ distance: 1000, course: 'SCY', stroke: 'Freestyle' });
-    expect(swims[4].event).toMatchObject({
+    expect(swims[0]!.event).toMatchObject({ distance: 100, course: 'SCY', stroke: 'Breaststroke' });
+    expect(swims[2]!.event).toMatchObject({ distance: 1000, course: 'SCY', stroke: 'Freestyle' });
+    expect(swims[4]!.event).toMatchObject({
       distance: 200,
       course: 'SCY',
       stroke: 'Individual Medley',
     });
-    expect(swims[7].event).toMatchObject({ distance: 200, course: 'SCY', stroke: 'Butterfly' });
-    expect(swims[17].event).toMatchObject({ distance: 50, course: 'SCY', stroke: 'Backstroke' });
-    expect(swims[25].event).toMatchObject({ distance: 1650, course: 'SCY', stroke: 'Freestyle' });
+    expect(swims[7]!.event).toMatchObject({ distance: 200, course: 'SCY', stroke: 'Butterfly' });
+    expect(swims[17]!.event).toMatchObject({ distance: 50, course: 'SCY', stroke: 'Backstroke' });
+    expect(swims[25]!.event).toMatchObject({ distance: 1650, course: 'SCY', stroke: 'Freestyle' });
   });
 
   it('reads the athlete id from the meet-scoped /results/{id}/swimmer/ link', () => {
@@ -617,13 +617,13 @@ describe('parseTeamMeetSwimsHtml — real capture, full swims list (page 1 of 8)
     // printed name is the ambiguous part. Row 12 is the long-form
     // "Alan Alejan Gonzalez Mujica" this repo already has an aliasing story about.
     expect(swims.filter((swim) => swim.entry.swimCloudSwimmerId === undefined)).toHaveLength(0);
-    expect(swims[0].entry.swimCloudSwimmerId).toBe('1330318');
-    expect(swims[11].entry.athleteName).toBe('Alan Alejan Gonzalez Mujica');
+    expect(swims[0]!.entry.swimCloudSwimmerId).toBe('1330318');
+    expect(swims[11]!.entry.athleteName).toBe('Alan Alejan Gonzalez Mujica');
     expect(new Set(swims.map((swim) => swim.entry.swimCloudSwimmerId)).size).toBe(12);
   });
 
   it('decodes accented names rather than mangling or emptying them', () => {
-    expect(parsed().data.swims[8].entry.athleteName).toBe('Olivér Pózvai');
+    expect(parsed().data.swims[8]!.entry.athleteName).toBe('Olivér Pózvai');
   });
 
   it('reads meet and team identity from the page, not from assumptions', () => {
@@ -656,18 +656,18 @@ describe('parseTeamMeetSwimsHtml — real capture, full swims list (page 1 of 8)
     expect([...badges]).toStrictEqual(['D2 B|NCAA Division II Championship']);
     expect(swims.filter((swim) => swim.cutStandards.length > 0)).toHaveLength(11);
     // Row 7 carries a cut badge and the leadoff badge in one cell.
-    expect(swims[6].cutStandards).toHaveLength(1);
-    expect(swims[6].relayLeadoff).toBe(true);
+    expect(swims[6]!.cutStandards).toHaveLength(1);
+    expect(swims[6]!.relayLeadoff).toBe(true);
     // Row 18's flags cell holds the leadoff badge and nothing else.
-    expect(swims[17].cutStandards).toHaveLength(0);
-    expect(swims[17].relayLeadoff).toBe(true);
+    expect(swims[17]!.cutStandards).toHaveLength(0);
+    expect(swims[17]!.relayLeadoff).toBe(true);
   });
 
   it('captures the Pts column but reports no meet score, because the page has none', () => {
     const swims = parsed().data.swims;
     // "Pts" is SwimCloud's power index. It is captured verbatim...
-    expect(swims[0].result.points).toBe(767);
-    expect(swims[29].result.points).toBe(692);
+    expect(swims[0]!.result.points).toBe(767);
+    expect(swims[29]!.result.points).toBe(692);
     // ...and it is not a meet score. This page has no Score column at all, so
     // meetScore is absent everywhere — absent, not zero. Henderson State's real
     // meet score is 1056, while these 30 rows alone sum past 21,000.
@@ -679,9 +679,9 @@ describe('parseTeamMeetSwimsHtml — real capture, full swims list (page 1 of 8)
   it('reads every time, including the minutes-and-seconds ones', () => {
     const swims = parsed().data.swims;
     expect(swims.filter((swim) => swim.result.finalTime === undefined)).toHaveLength(0);
-    expect(swims[0].result.finalTime).toBe('54.09');
-    expect(swims[2].result.finalTime).toBe('9:26.63');
-    expect(swims[25].result.finalTime).toBe('16:00.67');
+    expect(swims[0]!.result.finalTime).toBe('54.09');
+    expect(swims[2]!.result.finalTime).toBe('9:26.63');
+    expect(swims[25]!.result.finalTime).toBe('16:00.67');
   });
 
   it('lets the page body outrank the URL on gender', () => {
@@ -724,10 +724,10 @@ describe('parseTeamMeetSwimsHtml — real capture, the two summary pages', () =>
     expect(data.team).toBeUndefined();
 
     const swim = data.swims[0];
-    expect(swim.entry.athleteName).toBe('Mateus Franco');
-    expect(swim.entry.teamName).toBe('Delta State');
-    expect(swim.entry.swimCloudTeamId).toBe('48');
-    expect(swim.event).toMatchObject({ eventRef: '4', distance: 1000, course: 'SCY' });
+    expect(swim!.entry.athleteName).toBe('Mateus Franco');
+    expect(swim!.entry.teamName).toBe('Delta State');
+    expect(swim!.entry.swimCloudTeamId).toBe('48');
+    expect(swim!.event).toMatchObject({ eventRef: '4', distance: 1000, course: 'SCY' });
   });
 
   it('reads Score and Pts as the different quantities they are', () => {
@@ -735,8 +735,8 @@ describe('parseTeamMeetSwimsHtml — real capture, the two summary pages', () =>
     // One row, two columns, two numbers: 20 meet points for a first-place
     // 1000 Free, and 846 on SwimCloud's power index. This single row is the
     // proof that the Pts column is not a meet score.
-    expect(swim.meetScore).toBe(20);
-    expect(swim.result.points).toBe(846);
+    expect(swim!.meetScore).toBe(20);
+    expect(swim!.result.points).toBe(846);
   });
 
   it('ignores the Teams and High point cards and finds the results card', () => {
@@ -784,8 +784,8 @@ describe('parseTeamMeetSwimsHtml — real capture, the two summary pages', () =>
     if (!summary.ok || !full.ok) throw new Error('expected both to parse');
     // Avery Henke's 54.09 appears on both pages and is one swim. A caller
     // merging captures must see one row, not two.
-    expect(summary.data.swims[0].swimKey).toBe(full.data.swims[0].swimKey);
-    expect(summary.data.swims[0].swimKey).toBe('356467:swim:171560736');
+    expect(summary.data.swims[0]!.swimKey).toBe(full.data.swims[0]!.swimKey);
+    expect(summary.data.swims[0]!.swimKey).toBe('356467:swim:171560736');
   });
 });
 
@@ -933,7 +933,7 @@ describe('parseMeetEventResultsHtml — real capture, per-event results (F9)', (
 
   it('reads the real meet Score from A/B Final and the power index from C Final/Prelims', () => {
     const [aFinal, bFinal, cFinal, prelims] = parsed().data.rounds;
-    expect([aFinal.pointsColumn, bFinal.pointsColumn, cFinal.pointsColumn, prelims.pointsColumn]).toStrictEqual([
+    expect([aFinal!.pointsColumn, bFinal!.pointsColumn, cFinal!.pointsColumn, prelims!.pointsColumn]).toStrictEqual([
       'score',
       'score',
       'pts',
@@ -942,14 +942,14 @@ describe('parseMeetEventResultsHtml — real capture, per-event results (F9)', (
 
     // A real NCAA point table's values, out of a `u-is-hidden` cell — hidden
     // from the rendered page, present in the markup.
-    expect(aFinal.swims.map(swim => swim.meetScore)).toStrictEqual([20, 17, 16, 15, 14, 13, 12, 11]);
-    expect(bFinal.swims.map(swim => swim.meetScore)).toStrictEqual([9, 7, 6, 5, 4, 3, 2]);
+    expect(aFinal!.swims.map(swim => swim.meetScore)).toStrictEqual([20, 17, 16, 15, 14, 13, 12, 11]);
+    expect(bFinal!.swims.map(swim => swim.meetScore)).toStrictEqual([9, 7, 6, 5, 4, 3, 2]);
 
     // The rounds that do not score carry no meetScore at all — absent, never
     // zero — and their Pts is the power index, kept in `result.points`.
-    expect(cFinal.swims.every(swim => swim.meetScore === undefined)).toBe(true);
-    expect(prelims.swims.every(swim => swim.meetScore === undefined)).toBe(true);
-    expect(cFinal.swims.map(swim => swim.result.points)).toStrictEqual([709, 638, 547, 502, 424]);
+    expect(cFinal!.swims.every(swim => swim.meetScore === undefined)).toBe(true);
+    expect(prelims!.swims.every(swim => swim.meetScore === undefined)).toBe(true);
+    expect(cFinal!.swims.map(swim => swim.result.points)).toStrictEqual([709, 638, 547, 502, 424]);
   });
 
   it('resolves the Avery Henke duplicate this whole investigation started from', () => {
@@ -958,8 +958,8 @@ describe('parseMeetEventResultsHtml — real capture, per-event results (F9)', (
     // *slower* one is the A Final. That is why the swims list's "Place" could
     // never be trusted: both rows read 1st, in two different pools.
     const rounds = parsed().data.rounds;
-    const aFinal = rounds[0].swims.find(swim => swim.entry.athleteName === 'Avery Henke');
-    const prelim = rounds[3].swims.find(swim => swim.entry.athleteName === 'Avery Henke');
+    const aFinal = rounds[0]!.swims.find(swim => swim.entry.athleteName === 'Avery Henke');
+    const prelim = rounds[3]!.swims.find(swim => swim.entry.athleteName === 'Avery Henke');
     expect(aFinal).toMatchObject({
       swimKey: '356467:swim:171560737',
       swimCloudSwimId: '171560737',
@@ -992,8 +992,8 @@ describe('parseMeetEventResultsHtml — real capture, per-event results (F9)', (
     // All five C Final swimmers are exhibition, and the same five appear again
     // in Preliminaries also marked exhibition — SwimCloud tags a swimmer
     // consistently across every round they appear in on the page.
-    expect(rounds[2].swims.map(swim => swim.exhibition)).toStrictEqual([true, true, true, true, true]);
-    expect(rounds[3].swims.filter(swim => swim.exhibition).map(swim => swim.entry.athleteName)).toStrictEqual([
+    expect(rounds[2]!.swims.map(swim => swim.exhibition)).toStrictEqual([true, true, true, true, true]);
+    expect(rounds[3]!.swims.filter(swim => swim.exhibition).map(swim => swim.entry.athleteName)).toStrictEqual([
       'Camden Mask',
       'Benjamin Skinner',
       'Theo Scarpino',
@@ -1001,20 +1001,20 @@ describe('parseMeetEventResultsHtml — real capture, per-event results (F9)', (
       'Aiden Killackey',
     ]);
     // The flag reaches the result too, which is what the scoring bridge reads.
-    expect(rounds[2].swims.every(swim => swim.result.flags?.exhibition === true)).toBe(true);
+    expect(rounds[2]!.swims.every(swim => swim.result.flags?.exhibition === true)).toBe(true);
     // An exhibition row has NO place: the marker replaced the ordinal, so the
     // page printed none. Absent, not zero, and not a parse failure.
-    expect(rounds[2].swims.every(swim => swim.result.place === undefined)).toBe(true);
+    expect(rounds[2]!.swims.every(swim => swim.result.place === undefined)).toBe(true);
     // And the time cells carry a bare time — no leading `X` anywhere on this
     // page — so `readTime`'s Hy-Tek guess never fires here.
-    expect(rounds[2].swims.every(swim => swim.result.rawTimeToken === undefined)).toBe(true);
+    expect(rounds[2]!.swims.every(swim => swim.result.rawTimeToken === undefined)).toBe(true);
   });
 
   it('reads the athlete name from the swimmer link, not the whole name cell', () => {
     // The cell repeats the team in a mobile-only <div>. Taking the cell's text
     // would produce "Avery Henke Henderson State" — a plausible-looking name
     // that matches no roster and no swims-list row.
-    expect(parsed().data.rounds[0].swims.map(swim => swim.entry.athleteName)).toStrictEqual([
+    expect(parsed().data.rounds[0]!.swims.map(swim => swim.entry.athleteName)).toStrictEqual([
       'Avery Henke',
       'Jacob Hamblen',
       'Justin Oulette',
@@ -1057,21 +1057,21 @@ describe('parseMeetEventResultsHtml — real capture, per-event results (F9)', (
   });
 
   it('reads team links and cut-standard badges out of unlabeled columns', () => {
-    const aFinal = parsed().data.rounds[0].swims;
-    expect(aFinal[0].entry).toMatchObject({ teamName: 'Henderson State', swimCloudTeamId: '58' });
+    const aFinal = parsed().data.rounds[0]!.swims;
+    expect(aFinal[0]!.entry).toMatchObject({ teamName: 'Henderson State', swimCloudTeamId: '58' });
     // Justin Oulette's row carries a D2 B badge in a column whose <th> is
     // empty — this page labels no "Flags" column, unlike the swims list.
-    expect(aFinal[2].cutStandards).toStrictEqual([
+    expect(aFinal[2]!.cutStandards).toStrictEqual([
       { label: 'D2 B', title: 'NCAA Division II Championship' },
     ]);
     // A PB/SB chip is not a cut standard and must not become one.
-    expect(aFinal[1].cutStandards).toStrictEqual([]);
+    expect(aFinal[1]!.cutStandards).toStrictEqual([]);
   });
 
   it('keeps a tie as a tie rather than renumbering it', () => {
     // Preliminaries prints 7, 7, 9 — two swimmers at 56.24. Nothing here
     // re-ranks them.
-    expect(parsed().data.rounds[3].swims.slice(0, 9).map(swim => swim.result.place)).toStrictEqual([
+    expect(parsed().data.rounds[3]!.swims.slice(0, 9).map(swim => swim.result.place)).toStrictEqual([
       1, 2, 3, 4, 5, 6, 7, 7, 9,
     ]);
   });
@@ -1100,6 +1100,79 @@ describe('parseMeetEventResultsHtml — real capture, per-event results (F9)', (
       expect(warningCodes(result.warnings)).toContain('missing-round-caption');
     } else {
       expect(['expected-header-missing', 'expected-table-missing']).toContain(result.failure.code);
+    }
+  });
+});
+
+/**
+ * C8 (2026-10-12). A page with no meet name used to build `meet.name = ''` while
+ * `format`, `ruleset` and `course` read 'unknown', and raised nothing: an empty
+ * name looked like a meet called nothing. Each of the three parsers that build a
+ * `SwimCloudMeet` now says so with a `meet-name-missing` warning.
+ *
+ * The fixtures are the committed pages with their meet-name element removed, so
+ * the only thing that changed is the name. No request to swimcloud.com is made.
+ */
+describe('meet-name-missing: a page that prints no meet name says so', () => {
+  const stripMeetName = (html: string): string => {
+    const stripped = html
+      .replace(/<h1\b[^>]*>[\s\S]*?<\/h1>/gi, '')
+      .replace(/<[a-z0-9]+\b[^>]*\bid="meet-name"[^>]*>[\s\S]*?<\/[a-z0-9]+>/gi, '');
+    expect(stripped).not.toMatch(/<h1\b/i);
+    expect(stripped).not.toContain('id="meet-name"');
+    return stripped;
+  };
+  const realCtx = (url: string): SwimCloudParseContext => ({
+    sourceUrl: url,
+    retrievedAt: '2026-09-08T00:00:00Z',
+    track: 'browser-extension',
+  });
+
+  it('parseMeetResultsHtml: empty name, warning raised, meetName absent', () => {
+    const html = stripMeetName(fixture('swimcloud-synthetic-meet-results.html'));
+    const result = parseMeetResultsHtml(html, contextFor('https://www.swimcloud.com/results/193735/'));
+    if (!result.ok) throw new Error(`expected success, got ${result.failure.code}`);
+    expect(result.data.meet.name).toBe('');
+    expect(result.data.meet.format).toBe('unknown');
+    expect(result.data.meetName).toBeUndefined();
+    expect(warningCodes(result.warnings)).toContain('meet-name-missing');
+  });
+
+  it('parseTeamMeetSwimsHtml: empty name, warning raised, meetName absent', () => {
+    const html = stripMeetName(fixture('swimcloud-real-meet-team-swims-356467-team58-page1.html'));
+    const result = parseTeamMeetSwimsHtml(html, realCtx('https://www.swimcloud.com/results/356467/team/58/swims/'));
+    if (!result.ok) throw new Error(`expected success, got ${result.failure.code}`);
+    expect(result.data.meet.name).toBe('');
+    expect(result.data.meetName).toBeUndefined();
+    expect(warningCodes(result.warnings)).toContain('meet-name-missing');
+  });
+
+  it('parseMeetEventResultsHtml: empty name, warning raised, meetName absent', () => {
+    const html = stripMeetName(fixture('swimcloud-real-meet-event-356467-event26.html'));
+    const result = parseMeetEventResultsHtml(html, realCtx('https://www.swimcloud.com/results/356467/event/26/'));
+    if (!result.ok) throw new Error(`expected success, got ${result.failure.code}`);
+    expect(result.data.meet.name).toBe('');
+    expect(result.data.meetName).toBeUndefined();
+    expect(warningCodes(result.warnings)).toContain('meet-name-missing');
+  });
+
+  it('a page that does print its name raises no such warning, at any of the three sites', () => {
+    const synthetic = parseMeetResultsHtml(
+      fixture('swimcloud-synthetic-meet-results.html'),
+      contextFor('https://www.swimcloud.com/results/193735/'),
+    );
+    const teamSwims = parseTeamMeetSwimsHtml(
+      fixture('swimcloud-real-meet-team-swims-356467-team58-page1.html'),
+      realCtx('https://www.swimcloud.com/results/356467/team/58/swims/'),
+    );
+    const event = parseMeetEventResultsHtml(
+      fixture('swimcloud-real-meet-event-356467-event26.html'),
+      realCtx('https://www.swimcloud.com/results/356467/event/26/'),
+    );
+    for (const result of [synthetic, teamSwims, event]) {
+      if (!result.ok) throw new Error(`expected success, got ${result.failure.code}`);
+      expect(result.data.meet.name.length).toBeGreaterThan(0);
+      expect(warningCodes(result.warnings)).not.toContain('meet-name-missing');
     }
   });
 });

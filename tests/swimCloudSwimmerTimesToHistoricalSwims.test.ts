@@ -179,26 +179,26 @@ describe('swimCloudSwimmerTimesToHistoricalSwims — never fabricates a required
 
   it('skips a row with no time rather than inventing one, and says why', () => {
     const real = parsedFixture();
-    const timeless: SwimCloudPersonalBestSwim = { ...real.personalBests[0], rawTimeToken: 'NT' };
+    const timeless: SwimCloudPersonalBestSwim = { ...real.personalBests[0]!, rawTimeToken: 'NT' };
     delete (timeless as { time?: string }).time;
 
     const conversion = swimCloudSwimmerTimesToHistoricalSwims(withRows([timeless]), OPTIONS);
     if (!conversion.ok) throw new Error('expected ok');
     expect(conversion.swims).toStrictEqual([]);
     expect(conversion.skipped).toHaveLength(1);
-    expect(conversion.skipped[0].reason).toBe('no-time');
-    expect(conversion.skipped[0].personalBest.rawTimeToken).toBe('NT');
+    expect(conversion.skipped[0]!.reason).toBe('no-time');
+    expect(conversion.skipped[0]!.personalBest.rawTimeToken).toBe('NT');
   });
 
   it('omits timeType for an unknown course instead of guessing yards', () => {
     const real = parsedFixture();
     const conversion = swimCloudSwimmerTimesToHistoricalSwims(
-      withRows([{ ...real.personalBests[0], course: 'unknown' }]),
+      withRows([{ ...real.personalBests[0]!, course: 'unknown' }]),
       OPTIONS,
     );
     if (!conversion.ok) throw new Error('expected ok');
     expect(conversion.swims[0]).not.toHaveProperty('timeType');
-    expect(conversion.swims[0].time).toBe('19.42');
+    expect(conversion.swims[0]!.time).toBe('19.42');
   });
 
   it('refuses the whole capture when the page named no swimmer, rather than inventing a placeholder', () => {
@@ -233,12 +233,12 @@ describe('swimCloudSwimmerTimesToHistoricalSwims — meet label fallback', () =>
       meetLabelFallback: 'Fallback Meet',
     });
     if (!conversion.ok) throw new Error('expected ok');
-    expect(conversion.swims[0].meetLabel).toBe('James E Martin Invitational');
+    expect(conversion.swims[0]!.meetLabel).toBe('James E Martin Invitational');
   });
 
   it('falls back only when the row printed no meet name', () => {
     const real = parsedFixture();
-    const unnamed = { ...real.personalBests[0] };
+    const unnamed = { ...real.personalBests[0]! };
     delete (unnamed as { meetName?: string }).meetName;
 
     const conversion = swimCloudSwimmerTimesToHistoricalSwims(
@@ -246,12 +246,12 @@ describe('swimCloudSwimmerTimesToHistoricalSwims — meet label fallback', () =>
       { ...OPTIONS, meetLabelFallback: 'Fallback Meet' },
     );
     if (!conversion.ok) throw new Error('expected ok');
-    expect(conversion.swims[0].meetLabel).toBe('Fallback Meet');
+    expect(conversion.swims[0]!.meetLabel).toBe('Fallback Meet');
   });
 
   it('omits meetLabel entirely when neither the row nor the caller supplies one', () => {
     const real = parsedFixture();
-    const unnamed = { ...real.personalBests[0] };
+    const unnamed = { ...real.personalBests[0]! };
     delete (unnamed as { meetName?: string }).meetName;
 
     const conversion = swimCloudSwimmerTimesToHistoricalSwims({ ...real, personalBests: [unnamed] }, OPTIONS);

@@ -95,9 +95,9 @@ describe('F1: captures are opened first, pages reach the app, downloads are flus
   it('does not count a downloads-fallback relay as landed: the swimmer fails and is not saved as finished', async () => {
     const h = makeHarness({ relayOutcome: (r) => (r.sourceUrl.includes('/api/swimmers/') ? 'fallback' : undefined) });
     const summary = await run(h);
-    expect(summary.teams[0].swimmersDone).toBe(0);
-    expect(summary.teams[0].swimmersFailed).toBe(62);
-    expect(summary.teams[0].errors[0]).toContain('not handed to the app');
+    expect(summary.teams[0]!.swimmersDone).toBe(0);
+    expect(summary.teams[0]!.swimmersFailed).toBe(62);
+    expect(summary.teams[0]!.errors[0]).toContain('not handed to the app');
     expect(h.saves).toEqual([]);
   });
 
@@ -112,7 +112,7 @@ describe('F1: captures are opened first, pages reach the app, downloads are flus
     const h = makeHarness();
     await run(h);
     expect(h.flushes).toHaveLength(1);
-    expect(h.flushes[0].map(captureIdForSubject).sort()).toEqual(ALL_CAPTURES);
+    expect(h.flushes[0]!.map(captureIdForSubject).sort()).toEqual(ALL_CAPTURES);
   });
 
   it('flushes on cancel', async () => {
@@ -120,7 +120,7 @@ describe('F1: captures are opened first, pages reach the app, downloads are flus
     const summary = await run(h);
     expect(summary.outcome).toBe('cancelled');
     expect(h.flushes).toHaveLength(1);
-    expect(h.flushes[0].map(captureIdForSubject).sort()).toEqual(ALL_CAPTURES);
+    expect(h.flushes[0]!.map(captureIdForSubject).sort()).toEqual(ALL_CAPTURES);
   });
 
   it('flushes on halt', async () => {
@@ -128,7 +128,7 @@ describe('F1: captures are opened first, pages reach the app, downloads are flus
     const summary = await run(h);
     expect(summary.outcome).toBe('halted');
     expect(h.flushes).toHaveLength(1);
-    expect(h.flushes[0].length).toBeGreaterThan(0);
+    expect(h.flushes[0]!.length).toBeGreaterThan(0);
   });
 
   it('flushes when the run throws', async () => {
@@ -136,7 +136,7 @@ describe('F1: captures are opened first, pages reach the app, downloads are flus
     const bogus: MultiTeamDriverDeps = { ...h.deps, chooseSeasons: async () => [{ teamId: '999', seasonLabel: '2025-2026' }] };
     await expect(runMultiTeamCrawl(bogus, { teamIds: ['412'] })).rejects.toMatchObject({ code: 'unknown-choice' });
     expect(h.flushes).toHaveLength(1);
-    expect(h.flushes[0].map(captureIdForSubject)).toEqual(['team-412']);
+    expect(h.flushes[0]!.map(captureIdForSubject)).toEqual(['team-412']);
   });
 
   it('marks the season captures complete after a clean run and partial after a halt', async () => {
@@ -145,7 +145,7 @@ describe('F1: captures are opened first, pages reach the app, downloads are flus
     const seasonMarks = clean.marks.filter((m) => m.subject.kind === 'team' && m.subject.season !== undefined);
     expect(seasonMarks.map((m) => m.completeness)).toEqual(['every-planned-page-fetched', 'every-planned-page-fetched']);
 
-    const halted = makeHarness({ respond: (url) => (url === swimmerUrl(ALL_IDS[2]) ? { html: 'x', httpStatus: 403 } : null) });
+    const halted = makeHarness({ respond: (url) => (url === swimmerUrl(ALL_IDS[2]!) ? { html: 'x', httpStatus: 403 } : null) });
     await run(halted);
     const haltedMarks = halted.marks.filter((m) => m.subject.kind === 'team' && m.subject.season !== undefined);
     expect(haltedMarks.length).toBe(2);
@@ -161,16 +161,16 @@ describe('F2: one pacing clock for every run on the page', () => {
   it('a run started right after another run waits out the 3 s gap', async () => {
     const first = makeHarness({ respond: (url) => (url === seasonRosterUrl('412', 'M', '29') ? { html: 'x', httpStatus: 403 } : null) });
     await run(first);
-    const lastStart = first.fetches[first.fetches.length - 1].at;
+    const lastStart = first.fetches[first.fetches.length - 1]!.at;
     const second = makeHarness({ shareWith: first });
     await run(second);
-    expect(second.fetches[0].at - lastStart).toBeGreaterThanOrEqual(MIN_DELAY_MS);
+    expect(second.fetches[0]!.at - lastStart).toBeGreaterThanOrEqual(MIN_DELAY_MS);
   });
 
   it('writes every request start to the shared clock', async () => {
     const h = makeHarness();
     await run(h);
-    expect(h.clock.last).toBe(h.fetches[h.fetches.length - 1].at);
+    expect(h.clock.last).toBe(h.fetches[h.fetches.length - 1]!.at);
   });
 });
 
@@ -180,13 +180,13 @@ describe('F2: one pacing clock for every run on the page', () => {
 
 describe('F3: a page the app did not take is not finished', () => {
   it('a lost swimmer relay fails the swimmer, so it is not saved and is fetched again next run', async () => {
-    const target = swimmerUrl(ALL_IDS[5]);
+    const target = swimmerUrl(ALL_IDS[5]!);
     const h = makeHarness({ relayOutcome: (r) => (r.sourceUrl === target ? 'lost' : undefined) });
     const summary = await run(h);
-    expect(summary.teams[0].swimmersFailed).toBe(1);
-    expect(summary.teams[0].errors[0]).toContain(`swimmer ${ALL_IDS[5]}`);
-    expect(summary.teams[0].errors[0]).toContain('not handed to the app');
-    for (const keys of h.saves) expect(keys).not.toContain(savedKey(ALL_IDS[5]));
+    expect(summary.teams[0]!.swimmersFailed).toBe(1);
+    expect(summary.teams[0]!.errors[0]).toContain(`swimmer ${ALL_IDS[5]}`);
+    expect(summary.teams[0]!.errors[0]).toContain('not handed to the app');
+    for (const keys of h.saves) expect(keys).not.toContain(savedKey(ALL_IDS[5]!));
     // Not a clean run, so the saved progress stays for the retry.
     expect(h.clears).toEqual([]);
   });
@@ -195,8 +195,8 @@ describe('F3: a page the app did not take is not finished', () => {
     const target = seasonRosterUrl('412', 'M', '29');
     const h = makeHarness({ relayOutcome: (r) => (r.sourceUrl === target ? 'lost' : undefined) });
     const summary = await run(h);
-    expect(summary.teams[0].rostersFailed).toBe(1);
-    expect(summary.teams[0].rostersDone).toBe(1);
+    expect(summary.teams[0]!.rostersFailed).toBe(1);
+    expect(summary.teams[0]!.rostersDone).toBe(1);
     for (const id of IDS_412M) expect(urls(h)).not.toContain(swimmerUrl(id));
     for (const id of IDS_412F) expect(urls(h)).toContain(swimmerUrl(id));
   });
@@ -209,7 +209,7 @@ describe('F3: a page the app did not take is not finished', () => {
 const sharedSwimmer = IDS_412M[0];
 const PAGES_SHARED = {
   ...PAGES,
-  '10002824|F': PAGES['10002824|F'].replace(new RegExp(`/swimmer/${IDS_10002824F[0]}(?=[/"'?#])`, 'g'), `/swimmer/${sharedSwimmer}`),
+  '10002824|F': PAGES['10002824|F']!.replace(new RegExp(`/swimmer/${IDS_10002824F[0]}(?=[/"'?#])`, 'g'), `/swimmer/${sharedSwimmer}`),
 };
 
 describe('F4: saved progress is per selection, and a shared swimmer is filed under every team', () => {
@@ -223,10 +223,10 @@ describe('F4: saved progress is per selection, and a shared swimmer is filed und
     const h = makeHarness({ pages: PAGES_SHARED });
     const summary = await run(h);
     expect(summary.outcome).toBe('completed');
-    expect(urls(h).filter((u) => u === swimmerUrl(sharedSwimmer))).toHaveLength(1);
-    expect(h.appPages.get('team-412-2025-2026')).toContain(swimmerUrl(sharedSwimmer));
-    expect(h.appPages.get('team-10002824-2025-2026')).toContain(swimmerUrl(sharedSwimmer));
-    const relayed = h.relays.filter((r) => r.sourceUrl === swimmerUrl(sharedSwimmer));
+    expect(urls(h).filter((u) => u === swimmerUrl(sharedSwimmer!))).toHaveLength(1);
+    expect(h.appPages.get('team-412-2025-2026')).toContain(swimmerUrl(sharedSwimmer!));
+    expect(h.appPages.get('team-10002824-2025-2026')).toContain(swimmerUrl(sharedSwimmer!));
+    const relayed = h.relays.filter((r) => r.sourceUrl === swimmerUrl(sharedSwimmer!));
     expect(relayed.map((r) => captureIdForSubject(r.subject)).sort()).toEqual(['team-10002824-2025-2026', 'team-412-2025-2026']);
   });
 
@@ -239,8 +239,8 @@ describe('F4: saved progress is per selection, and a shared swimmer is filed und
 
   describe('resume keys', () => {
     const reports = (): TeamSeasonOptionsReport[] => [
-      { teamId: '412', options: parseTeamSeasonOptions(PAGES['412|M']) },
-      { teamId: '10002824', options: parseTeamSeasonOptions(PAGES['10002824|M']) },
+      { teamId: '412', options: parseTeamSeasonOptions(PAGES['412|M']!) },
+      { teamId: '10002824', options: parseTeamSeasonOptions(PAGES['10002824|M']!) },
     ];
 
     it('builds one key from the sorted (team, season id) pairs, whatever the order', () => {
@@ -317,11 +317,11 @@ describe('F4: saved progress is per selection, and a shared swimmer is filed und
       expect(cancelled.clears).toEqual([]);
       expect(cancelled.store.size).toBe(1);
 
-      const halted = makeHarness({ respond: (url) => (url === swimmerUrl(ALL_IDS[3]) ? { html: 'x', httpStatus: 403 } : null) });
+      const halted = makeHarness({ respond: (url) => (url === swimmerUrl(ALL_IDS[3]!) ? { html: 'x', httpStatus: 403 } : null) });
       await run(halted);
       expect(halted.clears).toEqual([]);
 
-      const failed = makeHarness({ respond: (url) => (url === swimmerUrl(ALL_IDS[0]) ? { html: 'gone', httpStatus: 404 } : null) });
+      const failed = makeHarness({ respond: (url) => (url === swimmerUrl(ALL_IDS[0]!) ? { html: 'gone', httpStatus: 404 } : null) });
       const summary = await run(failed);
       expect(summary.outcome).toBe('completed');
       expect(failed.clears).toEqual([]);
@@ -336,7 +336,7 @@ describe('F4: saved progress is per selection, and a shared swimmer is filed und
 
 describe('F5: cancel and pause are honoured after every wait', () => {
   it('cancel during a 429 wait does not request the page again', async () => {
-    const target = swimmerUrl(ALL_IDS[0]);
+    const target = swimmerUrl(ALL_IDS[0]!);
     const h = makeHarness({
       respond: (url) => (url === target ? { html: 'slow down', httpStatus: 429, retryAfter: '30' } : null),
       onSleep: (ms, hh) => void (ms === 30_000 && (hh.control.cancelled = true)),
@@ -348,10 +348,10 @@ describe('F5: cancel and pause are honoured after every wait', () => {
   });
 
   it('cancel that arrives with a 429 answer starts no wait and no retry', async () => {
-    const target = swimmerUrl(ALL_IDS[0]);
+    const target = swimmerUrl(ALL_IDS[0]!);
     const h = makeHarness({
       respond: (url) => (url === target ? { html: 'slow down', httpStatus: 429, retryAfter: '30' } : null),
-      afterFetch: (_n, hh) => void (hh.fetches[hh.fetches.length - 1].url === target && (hh.control.cancelled = true)),
+      afterFetch: (_n, hh) => void (hh.fetches[hh.fetches.length - 1]!.url === target && (hh.control.cancelled = true)),
     });
     const summary = await run(h);
     expect(h.sleeps).not.toContain(30_000);
@@ -389,7 +389,7 @@ describe('F5: cancel and pause are honoured after every wait', () => {
   });
 
   it('pause during a 429 wait holds the retry until resume', async () => {
-    const target = swimmerUrl(ALL_IDS[0]);
+    const target = swimmerUrl(ALL_IDS[0]!);
     let seen = 0;
     let polls = 0;
     let fetchesAtFirstPoll = -1;
@@ -444,7 +444,7 @@ describe('F6: a challenge page that answers 200 halts and is never relayed', () 
   });
 
   it('on a swimmer request', async () => {
-    const bad = swimmerUrl(ALL_IDS[1]);
+    const bad = swimmerUrl(ALL_IDS[1]!);
     const h = makeHarness({ respond: (url) => (url === bad ? challenge : null) });
     const summary = await run(h);
     expect(summary.outcome).toBe('halted');
@@ -477,8 +477,8 @@ describe('F7: a redirected page is a failure, not data', () => {
     const asked = seasonRosterUrl('412', 'M', '29');
     const h = makeHarness({ respond: (url) => (url === asked ? { ...okPage(url), finalUrl: seasonRosterUrl('999', 'M', '29') } : null) });
     const summary = await run(h);
-    expect(summary.teams[0].rostersFailed).toBe(1);
-    expect(summary.teams[0].errors[0]).toContain('redirected');
+    expect(summary.teams[0]!.rostersFailed).toBe(1);
+    expect(summary.teams[0]!.errors[0]).toContain('redirected');
     expect(h.relays.some((r) => r.sourceUrl === asked)).toBe(false);
     for (const id of IDS_412M) expect(urls(h)).not.toContain(swimmerUrl(id));
   });
@@ -488,15 +488,15 @@ describe('F7: a redirected page is a failure, not data', () => {
     const same = asked.replace('www.swimcloud.com', 'WWW.swimcloud.com').replace('/roster/?', '/roster?');
     const h = makeHarness({ respond: (url) => (url === asked ? { ...okPage(url), finalUrl: same } : null) });
     const summary = await run(h);
-    expect(summary.teams[0].rostersFailed).toBe(0);
+    expect(summary.teams[0]!.rostersFailed).toBe(0);
   });
 
   it('a season page that redirected to another team is unreadable, and nothing is fetched for that team', async () => {
     const asked = optionsUrl('412');
     const h = makeHarness({ respond: (url) => (url === asked ? { ...okPage(url), finalUrl: optionsUrl('999') } : null) });
     const summary = await run(h);
-    expect(summary.teams[0].status).toBe('seasons-unreadable');
-    expect(summary.teams[0].errors[0]).toContain('redirected');
+    expect(summary.teams[0]!.status).toBe('seasons-unreadable');
+    expect(summary.teams[0]!.errors[0]).toContain('redirected');
     expect(urls(h).filter((u) => u.includes('/team/412/'))).toEqual([asked]);
     expect(h.relays.some((r) => r.sourceUrl === asked)).toBe(false);
   });
@@ -510,10 +510,10 @@ describe('F7: a redirected page is a failure, not data', () => {
   });
 
   it('a swimmer reply that redirected fails that swimmer', async () => {
-    const asked = swimmerUrl(ALL_IDS[0]);
-    const h = makeHarness({ respond: (url) => (url === asked ? { ...okPage(url), finalUrl: swimmerUrl(ALL_IDS[1]) } : null) });
+    const asked = swimmerUrl(ALL_IDS[0]!);
+    const h = makeHarness({ respond: (url) => (url === asked ? { ...okPage(url), finalUrl: swimmerUrl(ALL_IDS[1]!) } : null) });
     const summary = await run(h);
-    expect(summary.teams[0].swimmersFailed).toBe(1);
+    expect(summary.teams[0]!.swimmersFailed).toBe(1);
     expect(h.relays.some((r) => r.sourceUrl === asked)).toBe(false);
   });
 });
@@ -521,7 +521,7 @@ describe('F7: a redirected page is a failure, not data', () => {
 function okPage(url: string): { html: string; httpStatus: number } {
   // The default server's answer for this URL, for building a redirected reply.
   const roster = /\/team\/(\d+)\/roster\/\?(?:page=1&)?gender=([MF])/.exec(url);
-  if (roster !== null) return { html: PAGES[`${roster[1]}|${roster[2]}`], httpStatus: 200 };
+  if (roster !== null) return { html: PAGES[`${roster[1]}|${roster[2]}`]!, httpStatus: 200 };
   return { html: '{"ok":true}', httpStatus: 200 };
 }
 
@@ -531,20 +531,20 @@ function okPage(url: string): { html: string; httpStatus: number } {
 
 describe('F8: an empty roster needs the page to say so', () => {
   it('a roster table with no data rows is a failure, not an "Empty roster"', async () => {
-    const headerOnly = PAGES['412|F'].replace(/<tbody[\s\S]*?<\/tbody>/i, '<tbody></tbody>');
+    const headerOnly = PAGES['412|F']!.replace(/<tbody[\s\S]*?<\/tbody>/i, '<tbody></tbody>');
     expect(headerOnly).not.toBe(PAGES['412|F']);
     const h = makeHarness({ pages: { ...PAGES, '412|F': headerOnly } });
     const summary = await run(h);
-    expect(summary.teams[0].emptyRosterGenders).toEqual([]);
-    expect(summary.teams[0].rostersFailed).toBe(1);
-    expect(summary.teams[0].errors[0]).toContain('no roster');
+    expect(summary.teams[0]!.emptyRosterGenders).toEqual([]);
+    expect(summary.teams[0]!.rostersFailed).toBe(1);
+    expect(summary.teams[0]!.errors[0]).toContain('no roster');
   });
 
   it('the real "No rosters found" page is still a real empty roster', async () => {
     const h = makeHarness();
     const summary = await run(h);
-    expect(summary.teams[1].emptyRosterGenders).toEqual(['M']);
-    expect(summary.teams[1].rostersFailed).toBe(0);
+    expect(summary.teams[1]!.emptyRosterGenders).toEqual(['M']);
+    expect(summary.teams[1]!.rostersFailed).toBe(0);
   });
 });
 
@@ -554,13 +554,13 @@ describe('F8: an empty roster needs the page to say so', () => {
 
 describe('F9: a halted run says "start again", never "Resume"', () => {
   const scenarios: [string, Parameters<typeof makeHarness>[0]][] = [
-    ['403', { respond: (url) => (url === swimmerUrl(ALL_IDS[0]) ? { html: 'x', httpStatus: 403 } : null) }],
-    ['5xx', { respond: (url) => (url === swimmerUrl(ALL_IDS[0]) ? { html: 'x', httpStatus: 503 } : null) }],
-    ['network error', { respond: (url) => (url === swimmerUrl(ALL_IDS[0]) ? undefined : null) }],
+    ['403', { respond: (url) => (url === swimmerUrl(ALL_IDS[0]!) ? { html: 'x', httpStatus: 403 } : null) }],
+    ['5xx', { respond: (url) => (url === swimmerUrl(ALL_IDS[0]!) ? { html: 'x', httpStatus: 503 } : null) }],
+    ['network error', { respond: (url) => (url === swimmerUrl(ALL_IDS[0]!) ? undefined : null) }],
     ['three 429 give-ups', { respond: (url) => (url.includes('/api/swimmers/') ? { html: 'x', httpStatus: 429 } : null) }],
-    ['relay streak', { relayOutcome: (r) => (r.sourceUrl === swimmerUrl(ALL_IDS[0]) ? 'streak-stop' : undefined) }],
-    ['non-JSON swimmer body', { respond: (url) => (url === swimmerUrl(ALL_IDS[0]) ? { html: '<html>x</html>', httpStatus: 200 } : null) }],
-    ['200 challenge page', { respond: (url) => (url === swimmerUrl(ALL_IDS[0]) ? { html: CHALLENGE_BODY, httpStatus: 200 } : null) }],
+    ['relay streak', { relayOutcome: (r) => (r.sourceUrl === swimmerUrl(ALL_IDS[0]!) ? 'streak-stop' : undefined) }],
+    ['non-JSON swimmer body', { respond: (url) => (url === swimmerUrl(ALL_IDS[0]!) ? { html: '<html>x</html>', httpStatus: 200 } : null) }],
+    ['200 challenge page', { respond: (url) => (url === swimmerUrl(ALL_IDS[0]!) ? { html: CHALLENGE_BODY, httpStatus: 200 } : null) }],
   ];
   it.each(scenarios)('%s', async (_name, options) => {
     const h = makeHarness(options);

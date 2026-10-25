@@ -6,8 +6,13 @@
  * out of the view's own function body.
  */
 import type { SwimmerResult } from '@omniswim/core/types';
-import { ProvenanceBadges } from '@omniswim/ui';
+import { Badge, ProvenanceBadges } from '@omniswim/ui';
 import type { DragPayload } from './IndRelayManagementView';
+
+/** Shown on a candidate whose swim is a time trial that may fill a leg (`SwimmerResult.relayLegTimeTrial`). */
+export const RELAY_LEG_TIME_TRIAL_LABEL = 'Time trial';
+const RELAY_LEG_TIME_TRIAL_TOOLTIP =
+  'This swim was a time trial. It can fill a relay leg because time trials are allowed on relay legs.';
 
 type Props = {
   eventLabel: string;
@@ -50,12 +55,24 @@ export default function RelayEligibleSwimmersPanel({ eventLabel, poolCandidates 
                 {swimmer.classYear}
                 {swimmer.isRecruit ? ' · recruit' : ''} · {swimmer.event} {swimmer.time}
               </p>
-              {swimmer.relayLegHistory || swimmer.convertedFrom ? (
-                <ProvenanceBadges
-                  swim={{ fromHistory: !!swimmer.relayLegHistory, convertedFrom: swimmer.convertedFrom }}
-                  compact
-                  className="mt-1"
-                />
+              {swimmer.relayLegHistory || swimmer.convertedFrom || swimmer.relayLegTimeTrial ? (
+                <span className="mt-1 flex flex-wrap items-center gap-1">
+                  {swimmer.relayLegHistory || swimmer.convertedFrom ? (
+                    <ProvenanceBadges
+                      swim={{ fromHistory: !!swimmer.relayLegHistory, convertedFrom: swimmer.convertedFrom }}
+                      compact
+                    />
+                  ) : null}
+                  {swimmer.relayLegTimeTrial ? (
+                    <Badge
+                      tone="neutral"
+                      title={RELAY_LEG_TIME_TRIAL_TOOLTIP}
+                      className="gap-0.5 px-1.5 py-0.5 font-normal normal-case tracking-normal"
+                    >
+                      {RELAY_LEG_TIME_TRIAL_LABEL}
+                    </Badge>
+                  ) : null}
+                </span>
               ) : null}
             </li>
           ))}

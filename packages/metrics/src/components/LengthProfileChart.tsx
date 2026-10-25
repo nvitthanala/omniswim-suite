@@ -1,5 +1,6 @@
 import React, { type ReactNode } from 'react';
 import { CartesianGrid, ComposedChart, Tooltip, XAxis, YAxis } from 'recharts';
+import type { TooltipPayloadEntry, TooltipValueType } from 'recharts';
 import { useThemeColors, type ThemeColors } from '@omniswim/core/lib/useThemeColors';
 import { ChartFrame, ChartShell } from '@omniswim/ui';
 import type { LengthMetrics } from '../types';
@@ -30,7 +31,12 @@ export function LengthProfileChart<TPoint>({
   lengths: readonly LengthMetrics[];
   data: TPoint[];
   chartKey: string;
-  tooltipFormatter: (value: unknown, name: unknown, item: unknown) => [string, string];
+  /** `[value text, label text]`; `item.payload` is the plotted point (recharts types it `any`). */
+  tooltipFormatter: (
+    value: TooltipValueType | undefined,
+    name: string | number | undefined,
+    item: TooltipPayloadEntry,
+  ) => [string, string];
   renderSeries: (ctx: { chartTheme: ThemeColors; maxX: number }) => ReactNode;
   footer: ReactNode;
 }) {
@@ -69,7 +75,7 @@ export function LengthProfileChart<TPoint>({
                 dataKey="x"
                 domain={[0, maxX]}
                 ticks={axisTicks}
-                tickFormatter={(value: any) => (value === 0 ? 'Start' : value === maxX ? 'Finish' : `T${value}`)}
+                tickFormatter={(value: number) => (value === 0 ? 'Start' : value === maxX ? 'Finish' : `T${value}`)}
                 stroke={chartTheme.chartTick}
                 fontSize={10}
                 tickLine={false}
@@ -85,7 +91,7 @@ export function LengthProfileChart<TPoint>({
                 }}
                 itemStyle={{ color: 'var(--text-primary)', fontSize: '12px', fontFamily: 'var(--font-mono)' }}
                 labelFormatter={() => ''}
-                formatter={tooltipFormatter as any}
+                formatter={tooltipFormatter}
               />
               {renderSeries({ chartTheme, maxX })}
             </ComposedChart>

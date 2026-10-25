@@ -124,7 +124,7 @@ describe('parseSwimmerFastestTimesJson', () => {
     const result = parseSwimmerFastestTimesJson(body, CONTEXT);
     if (!result.ok) throw new Error(result.failure.message);
     expect(result.data.personalBests).toHaveLength(1);
-    expect(result.data.personalBests[0].time).toBeUndefined();
+    expect(result.data.personalBests[0]!.time).toBeUndefined();
     expect(result.warnings.map((w) => w.code)).toStrictEqual(['unrecognized-event-label', 'unrecognized-time-token']);
   });
 });

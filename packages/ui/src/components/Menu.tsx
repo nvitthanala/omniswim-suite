@@ -78,14 +78,16 @@ export function Menu({
   const handlePanelKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
     if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
     event.preventDefault();
+    // Skip an item hidden by CSS (for example `sm:hidden`). `focus()` on a
+    // `display: none` element does nothing, so arrow keys would stick on it.
     const items = Array.from(
       panelRef.current?.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])') ?? []
-    );
+    ).filter(item => getComputedStyle(item).display !== 'none');
     if (items.length === 0) return;
     const currentIndex = items.indexOf(document.activeElement as HTMLElement);
     const delta = event.key === 'ArrowDown' ? 1 : -1;
     const nextIndex = currentIndex === -1 ? 0 : (currentIndex + delta + items.length) % items.length;
-    items[nextIndex].focus();
+    items[nextIndex]?.focus();
   };
 
   return (

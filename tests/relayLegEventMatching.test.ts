@@ -44,6 +44,7 @@ import {
 } from '../packages/core/src/lib/relayLegMatching';
 import { applyRelayLegSwap, rankRelayLegSwaps } from '../packages/core/src/lib/crossCourseArbitrage';
 import { NSISC_PRESET_SETTINGS } from '../packages/core/src/lib/scoringDefaults';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 const repoRoot = dirname(dirname(fileURLToPath(import.meta.url)));
 const HSU = 'Henderson State University';
@@ -114,7 +115,7 @@ describe('the fixture is the real meet', () => {
     const events = (name: string) => individual([...womenResults, ...menResults], name).map(r => [r.event, r.time]);
     // Ryann Grasser (HSU, SR): leads off the 200 Free Relay, never swam a 50 Free.
     expect(events('Ryann Grasser')).toContainEqual(['Event 21 Women 500 Yard Freestyle', '5:23.54']);
-    expect(events('Ryann Grasser').some(([e]) => /\b50 Yard Freestyle\b/.test(e))).toBe(false);
+    expect(events('Ryann Grasser').some(([e]) => /\b50 Yard Freestyle\b/.test(e!))).toBe(false);
     // Daniella Ruiz (HSU): a distance swimmer with no 50 Free.
     expect(events('Daniella Ruiz')).toContainEqual(['Event 32 Women 1650 Yard Freestyle', '18:00.63']);
     // Colton Bennett (HSU): anchors the 400 Free Relay B, never swam a 100 Free.
@@ -136,7 +137,7 @@ describe('simulateRoster measures a fill against the departed leg, not a longer 
     ]);
     // "Drop seniors" removes Grasser. She has no 50 Free, so her own recorded
     // split is what leaves: 1:39.74 - 25.17 + 24.33 = 1:38.90.
-    const out = simulateRoster(womenResults, [], true, new Set(), [fillOverride(legs[0], 0, 'Shelby Travis')]);
+    const out = simulateRoster(womenResults, [], true, new Set(), [fillOverride(legs[0]!, 0, 'Shelby Travis')]);
     const relay = simulatedRelay(out, HSU, W_200FR, 12);
     expect(relay.map(r => r.name)).toStrictEqual(['Shelby Travis', 'Ryleigh Wells', 'Allie Grace Rhodes', 'Iris McNamara']);
     expect(relay.map(r => r.relayTeamTime)).toStrictEqual(['1:38.90', '1:38.90', '1:38.90', '1:38.90']);
@@ -144,27 +145,27 @@ describe('simulateRoster measures a fill against the departed leg, not a longer 
 
   it('HSU men 400 Free Relay B: Reid Remmert fills Colton Bennett\'s anchor leg', () => {
     const legs = relayLegRows(menResults, HSU, M_400FR, 10);
-    expect(legs[3].name).toBe('Colton Bennett');
-    expect(legs[3].relayLegSplit).toBe('47.24');
+    expect(legs[3]!.name).toBe('Colton Bennett');
+    expect(legs[3]!.relayLegSplit).toBe('47.24');
     // No 100 Free for Bennett, so his 47.24 split leaves: 3:06.60 - 47.24 + 46.12.
     const out = simulateRoster(menResults, [], false, new Set(['colton bennett']), [
-      fillOverride(legs[0], 3, 'Reid Remmert'),
+      fillOverride(legs[0]!, 3, 'Reid Remmert'),
     ]);
     const relay = simulatedRelay(out, HSU, M_400FR, 10);
-    expect(relay[3].name).toBe('Reid Remmert');
-    expect(relay[3].relayTeamTime).toBe('3:05.48');
+    expect(relay[3]!.name).toBe('Reid Remmert');
+    expect(relay[3]!.relayTeamTime).toBe('3:05.48');
   });
 
   it('Delta State 400 Free Relay A: the departed time is Huffhines\'s 100 Free, not his 1000 Free', () => {
     const legs = relayLegRows(menResults, DSU, M_400FR, 0);
-    expect(legs[3].name).toBe('Austin Huffhines');
+    expect(legs[3]!.name).toBe('Austin Huffhines');
     // Flat-start 100 Free 45.85 leaves, 46.73 arrives: 3:00.20 + 0.88 = 3:01.08.
     const out = simulateRoster(menResults, [], false, new Set(['austin huffhines']), [
-      fillOverride(legs[0], 3, 'Sergio Rodriguez Rodriguez'),
+      fillOverride(legs[0]!, 3, 'Sergio Rodriguez Rodriguez'),
     ]);
     const relay = simulatedRelay(out, DSU, M_400FR, 0);
-    expect(relay[3].name).toBe('Sergio Rodriguez Rodriguez');
-    expect(relay[3].relayTeamTime).toBe('3:01.08');
+    expect(relay[3]!.name).toBe('Sergio Rodriguez Rodriguez');
+    expect(relay[3]!.relayTeamTime).toBe('3:01.08');
   });
 
   it('HSU men 400 Medley Relay A: Cam Mask fills the senior breaststroke leg', () => {
@@ -177,10 +178,10 @@ describe('simulateRoster measures a fill against the departed leg, not a longer 
     ]);
     // "Drop seniors" removes Cebula. His program 100 Breast (55.45) leaves and
     // Mask's 55.52 arrives: 3:15.24 + 0.07 = 3:15.31.
-    const out = simulateRoster(menResults, [], true, new Set(), [fillOverride(legs[0], 1, 'Cam Mask')]);
+    const out = simulateRoster(menResults, [], true, new Set(), [fillOverride(legs[0]!, 1, 'Cam Mask')]);
     const relay = simulatedRelay(out, HSU, M_400MR, 2);
-    expect(relay[1].name).toBe('Cam Mask');
-    expect(relay[1].relayTeamTime).toBe('3:15.31');
+    expect(relay[1]!.name).toBe('Cam Mask');
+    expect(relay[1]!.relayTeamTime).toBe('3:15.31');
   });
 });
 
@@ -189,13 +190,13 @@ describe('a leg takes only a swimmer with a swim at its distance and stroke', ()
     const legs = relayLegRows(womenResults, HSU, W_200FR, 12);
     const unfilled = simulatedRelay(simulateRoster(womenResults, [], true), HSU, W_200FR, 12);
     const named = simulatedRelay(
-      simulateRoster(womenResults, [], true, new Set(), [fillOverride(legs[0], 0, 'Daniella Ruiz')]),
+      simulateRoster(womenResults, [], true, new Set(), [fillOverride(legs[0]!, 0, 'Daniella Ruiz')]),
       HSU,
       W_200FR,
       12
     );
-    expect(named[0].name).toBe('—');
-    expect(named[0].relayLegVacant).toBe(true);
+    expect(named[0]!.name).toBe('—');
+    expect(named[0]!.relayLegVacant).toBe(true);
     // Naming her is the same as naming nobody.
     expect(named.map(r => [r.name, r.relayTeamTime, r.relayLegSplit])).toStrictEqual(
       unfilled.map(r => [r.name, r.relayTeamTime, r.relayLegSplit])
@@ -222,7 +223,7 @@ describe('the relay-leg swap ranking', () => {
     ...NSISC_PRESET_SETTINGS,
     scorerAutoRules: { ...NSISC_PRESET_SETTINGS.scorerAutoRules!, includeRelayLegsInFinals: false },
   };
-  const ws = {
+  const ws = workspaceFixture({
     id: 'ws-nsisc-2026-p15',
     name: '2026 NSISC (P15 relay legs)',
     createdAt: 0,
@@ -237,7 +238,7 @@ describe('the relay-leg swap ranking', () => {
     conference: 'NSISC',
     scoringSettings: settings,
     scorerRosterOverrides: [{ name: 'Ryann Grasser', team: HSU, gender: Gender.WOMEN, isScorer: false }],
-  } as unknown as Workspace;
+  });
 
   it('offers only a 50 Free swimmer and holds the clock at the departed split', () => {
     const ranking = rankRelayLegSwaps(ws, { team: HSU, gender: Gender.WOMEN, settings });
@@ -247,7 +248,7 @@ describe('the relay-leg swap ranking', () => {
     ]);
 
     // The held clock is the clock: applying the swap leaves the relay at 1:39.74.
-    const { patch } = applyRelayLegSwap(ws, ranking.swaps[0], { team: HSU, gender: Gender.WOMEN });
+    const { patch } = applyRelayLegSwap(ws, ranking.swaps[0]!, { team: HSU, gender: Gender.WOMEN });
     const out = simulateRoster(
       womenResults,
       [],
@@ -257,7 +258,7 @@ describe('the relay-leg swap ranking', () => {
       new Set(['ryann grasser'])
     );
     const relay = simulatedRelay(out, HSU, W_200FR, 12);
-    expect(relay[0].name).toBe('Shelby Travis');
+    expect(relay[0]!.name).toBe('Shelby Travis');
     expect(relay.map(r => r.relayTeamTime)).toStrictEqual(['1:39.74', '1:39.74', '1:39.74', '1:39.74']);
   });
 
@@ -288,7 +289,7 @@ describe('the relay-leg swap ranking', () => {
     // simulateRoster subtracts the 25.55, so the hold must carry 25.55 too.
     const { swap, relay } = holdFor(womenResults, 'Ryleigh Wells');
     expect([swap.outAthlete, swap.legIndex, swap.clockLegTime]).toStrictEqual(['Ryleigh Wells', 1, '25.55']);
-    expect(relay[1].name).toBe('Shelby Travis');
+    expect(relay[1]!.name).toBe('Shelby Travis');
     expect(relay.map(r => r.relayTeamTime)).toStrictEqual(['1:39.74', '1:39.74', '1:39.74', '1:39.74']);
   });
 
@@ -409,7 +410,8 @@ describe('event labels', () => {
   });
 
   it('medley legs match by stroke in leg order', () => {
-    const row = (event: string) => ({ event, isRelay: false }) as SwimmerResult;
+    // A leg takes only a swim that has a time; the label is what this test varies.
+    const row = (event: string) => ({ event, isRelay: false, time: '1:00.00' }) as SwimmerResult;
     const MR = 'Event 20 Men 4x100 Yard Medley Relay';
     expect(swimmerMatchesRelayLeg(row('Event 24 Men 100 Yard Backstroke'), MR, 0)).toBe(true);
     expect(swimmerMatchesRelayLeg(row('100 Breaststroke'), MR, 1)).toBe(true);
@@ -421,7 +423,11 @@ describe('event labels', () => {
   });
 
   it('a relay row never fills a leg, whatever its label says', () => {
-    const splitRow = { event: '100 Freestyle (relay split)', isRelay: true } as SwimmerResult;
+    const splitRow = {
+      event: '100 Freestyle (relay split)',
+      isRelay: true,
+      time: '1:00.00',
+    } as SwimmerResult;
     expect(swimmerMatchesRelayLeg(splitRow, M_400FR, 0)).toBe(false);
     expect(swimmerMatchesRelayLeg({ ...splitRow, isRelay: false }, M_400FR, 0)).toBe(true);
   });

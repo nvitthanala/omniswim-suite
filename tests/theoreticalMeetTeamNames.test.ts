@@ -66,7 +66,7 @@ describe('groupCaptures school names', () => {
   it('keeps the numeric id, with no division claim, when no name is known', () => {
     const [g] = groupCaptures([rec({ captureId: 'team-48-2026-2027' })], NOW);
     expect(g).toMatchObject({ title: 'Team 48', named: false, nameWarning: null });
-    expect(g.divisionTag).toMatchObject({ text: 'unknown division', division: null });
+    expect(g!.divisionTag).toMatchObject({ text: 'unknown division', division: null });
   });
 
   it('shows neither name, and warns, when two captures of a team disagree', () => {
@@ -77,9 +77,9 @@ describe('groupCaptures school names', () => {
       ],
       NOW
     );
-    expect(g.title).toBe('Team 48');
-    expect(g.named).toBe(false);
-    expect(g.nameWarning).toContain('different school names');
+    expect(g!.title).toBe('Team 48');
+    expect(g!.named).toBe(false);
+    expect(g!.nameWarning).toContain('different school names');
   });
 
   it('keeps the numeric id and shows the server warning', () => {
@@ -153,7 +153,7 @@ describe('the multi-team driver label path', () => {
   // The 10002824 men's page is the "No rosters found" page and prints no name, so that team's name comes from its women's page.
   const nameOf = (team: string, g: 'M' | 'F'): string => {
     const p = parseTeamRosterHtml(
-      PAGES[`${team}|${g}`],
+      PAGES[`${team}|${g}`]!,
       { sourceUrl: `https://www.swimcloud.com/team/${team}/roster/?gender=${g}`, retrievedAt: '2026-10-03T00:00:00.000Z', track: 'browser-extension' },
       { gender: g === 'M' ? 'Men' : 'Women', season: '2025-2026', teamId: team as never }
     );
@@ -162,7 +162,7 @@ describe('the multi-team driver label path', () => {
   };
   const seasonMarks = (h: ReturnType<typeof makeHarness>) =>
     h.marks.filter(m => m.subject.kind === 'team' && m.subject.season !== undefined);
-  const teamOf = (m: { subject: { kind: string } }) => (m.subject.kind === 'team' ? (m.subject as { teamId: string }).teamId : '');
+  const teamOf = (m: { subject: { kind: string; teamId?: string } }) => (m.subject.kind === 'team' ? (m.subject.teamId ?? '') : '');
 
   it('passes the printed school name on the season captures', async () => {
     const h = makeHarness({ serveBySeason: true });
@@ -182,7 +182,7 @@ describe('the multi-team driver label path', () => {
 
   it('leaves the label absent when the two roster pages print different names', async () => {
     const pages = { ...PAGES };
-    pages['412|F'] = pages['412|F'].split(nameOf('412', 'F')).join('Some Other University');
+    pages['412|F'] = pages['412|F']!.split(nameOf('412', 'F')).join('Some Other University');
     const h = makeHarness({ serveBySeason: true, pages });
     await run(h);
     const marks = seasonMarks(h);

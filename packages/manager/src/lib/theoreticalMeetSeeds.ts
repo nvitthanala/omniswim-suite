@@ -112,10 +112,11 @@ import {
   relayLegEventName,
   relayLegRequirements,
   suggestBestRelayLegFill,
+  type RelayLegMatchSettings,
 } from '@omniswim/core/lib/relayLegMatching';
-import { mergeScoringSettings, presetIdForConference } from '@omniswim/core/lib/scoringDefaults';
+import { mergeScoringSettings, presetIdForConference, relayLegsAllowTimeTrials } from '@omniswim/core/lib/scoringDefaults';
 import { canAcceptAnotherEntry, type SwimmerEntryCounts } from '@omniswim/core/lib/swimmerEntryLimits';
-import { convertTimeToSeconds, formatSecondsToTime, isDivingEvent, normalizeSwimmerName } from '@omniswim/core/lib/utils';
+import { convertTimeToSeconds, formatSecondsToTime, isDivingEvent, isTimeTrialSwim, normalizeSwimmerName } from '@omniswim/core/lib/utils';
 import type { SwimCloudAthlete } from '@omniswim/swimcloud/entities';
 
 /* -------------------------------------------------------------------------- */
@@ -198,6 +199,12 @@ export interface TheoreticalMeetTeamInput {
    */
   readonly teamName: string;
   readonly gender: Gender;
+  /**
+   * The season label the capture states (`'2025-2026'`), when it states one. It picks the division of a
+   * school whose division changed (UWF: D2 through 2025-2026, D1 from 2026-2027). Absent: no season is
+   * known, and such a school has no division here. Not derived from `rosterSeasonId`, which is an opaque id.
+   */
+  readonly season?: string;
   /**
    * What the roster capture said. `parsed`: the page parsed and lists athletes.
    * `no_rosters_found`: the real "No rosters found" page (the parser warns
@@ -345,6 +352,12 @@ export interface TheoreticalProjectedRelayLeg {
   readonly startAdjustmentSec?: number;
   /** Present (`true`) only when the flat-start best is an exhibition swim at its source. */
   readonly isExhibition?: true;
+  /**
+   * Present (`true`) only when the flat-start best is a time trial. A time trial fills a leg only when the
+   * build's scoring settings carry `relayLegsAllowTimeTrials: true` (user decision D9); a leg that rests on one
+   * says so here. Absent on every leg of a default build.
+   */
+  readonly isTimeTrial?: true;
 }
 
 export interface TheoreticalProjectedRelay {
@@ -680,7 +693,7 @@ function validateAthletes(team: TheoreticalMeetTeamInput): void {
   for (const entry of team.athletes) {
     const { athlete } = entry;
     if (typeof athlete.name !== 'string' || athlete.name.trim().length === 0) {
-      throw new TheoreticalMeetError('athlete-without-name', `Team ${team.teamName} has an athlete with no usable name (swimmer id ${athlete.swimCloudSwimmerId ?? 'none'}).`);
+      throw new TheoreticalMeetError('athlete-without-name', `Team ${team.teamName} has a swimmer with no usable name (swimmer id ${athlete.swimCloudSwimmerId ?? 'none'}).`);
     }
     const g = athlete.gender;
     if (g !== undefined && g !== 'unknown' && (g as string) !== (team.gender as string)) {
@@ -701,7 +714,7 @@ function validateRosterStatus(team: TheoreticalMeetTeamInput): void {
     throw new TheoreticalMeetError('roster-status-required', `Team ${team.teamName} (${team.gender}) has roster status ${JSON.stringify(status)}. State 'parsed' or 'no_rosters_found'.`);
   }
   if (status === 'parsed' && team.athletes.length === 0) {
-    throw new TheoreticalMeetError('roster-status-required', `Team ${team.teamName} (${team.gender}) has no athletes but its roster status is 'parsed'. An empty roster must be stated as 'no_rosters_found'.`);
+    throw new TheoreticalMeetError('roster-status-required', `Team ${team.teamName} (${team.gender}) has no swimmers but its roster status is 'parsed'. An empty roster must be stated as 'no_rosters_found'.`);
   }
   if (status === 'no_rosters_found' && team.athletes.length > 0) {
     throw new TheoreticalMeetError('invalid-input', `Team ${team.teamName} (${team.gender}) is 'no_rosters_found' but lists ${team.athletes.length} athlete(s).`);
@@ -893,10 +906,15 @@ function rankSeeds(ctx: Context, team: TheoreticalMeetTeamInput, athlete: SwimCl
     [],
     undefined,
     ctx.meetProgram,
-    null
+    null,
+    team.season
   );
   return profile.primaryEvents.map(selectorEvent => {
-    const seed = traceSeed(selectorEvent, profile.bestByEvent[selectorEvent], used);
+    const best = profile.bestByEvent[selectorEvent];
+    if (best === undefined) {
+      throw new TheoreticalMeetError('seed-provenance-missing', `The selector offered ${selectorEvent} with no best time.`);
+    }
+    const seed = traceSeed(selectorEvent, best, used);
     return {
       swim: seed.swim,
       candidate: {
@@ -1071,11 +1089,24 @@ const round2 = (n: number): number => Math.round(n * 100) / 100;
  * swims already limited to the meet course and the exhibition mode. Only a result counts (`isRankableSwim`:
  * no extracted split, no self-reported time). One best per event, the fastest; on an exact tie an official
  * swim wins over an exhibition one. An unreadable time on such a swim throws: it is never skipped.
+ *
+ * A time-trial swim (`isTimeTrialSwim`) is not a leg best unless `allowTimeTrials` is true (user decision D9,
+ * `relayLegsAllowTimeTrials`). It is left out before the comparison, so the swimmer's best official swim at the
+ * event stands in its place, and a swimmer whose only swim there is a time trial has no best at that event.
+ *
+ * The swim is judged by its own `isTimeTrial` flag and label only. A history swim records no boundary of the meet it
+ * came from, and the build's `scoredEventNumberMax` belongs to another meet: `Event 45` at a meet that scored through
+ * 60 is no time trial because this build's settings say 42.
  */
-function legBestsOf(used: readonly HistoricalSwim[], athleteName: string): LegBest[] {
+function legBestsOf(
+  used: readonly HistoricalSwim[],
+  athleteName: string,
+  allowTimeTrials: boolean
+): LegBest[] {
   const best = new Map<string, LegBest>();
   for (const swim of used) {
     if (!isRankableSwim(swim)) continue;
+    if (!allowTimeTrials && isTimeTrialSwim(swim)) continue;
     const ds = individualEventDistanceStroke(swim.event);
     if (ds === null || !(RELAY_LEG_DISTANCES as readonly number[]).includes(ds.distance)) continue;
     const seconds = convertTimeToSeconds(swim.time);
@@ -1123,6 +1154,7 @@ function makeLeg(
     legDistanceYards: best.distance,
     flatStartTime: best.swim.time,
     ...(best.swim.isExhibition === true ? { isExhibition: true as const } : {}),
+    ...(isTimeTrialSwim(best.swim) ? { isTimeTrial: true as const } : {}),
   };
   if (position === 1) {
     return { ...base, time: best.swim.time, timeSec: round2(best.seconds), basis: 'flat-start-best' };
@@ -1178,6 +1210,14 @@ function buildTeamRelays(
     }
   }
 
+  // The leg matchers read `scoredEventNumberMax` too. The pool rows here are history swims of other meets
+  // (`Event 45 Men 100 Yard Breaststroke` from a meet that scored through 60), so the build's boundary
+  // is left out: only the `relayLegsAllowTimeTrials` setting goes in, and `legBestsOf` has already judged each
+  // swim by its own flag and label.
+  const legSettings: RelayLegMatchSettings =
+    ctx.settings.relayLegsAllowTimeTrials === undefined
+      ? {}
+      : { relayLegsAllowTimeTrials: ctx.settings.relayLegsAllowTimeTrials };
   const relays: TheoreticalProjectedRelay[] = [];
   const absent: TheoreticalRelayAbsent[] = [];
   for (const event of plan.program) {
@@ -1212,13 +1252,18 @@ function buildTeamRelays(
     const chosen: RelayCandidate[] = [];
     for (let legIndex = 0; legIndex < 4; legIndex += 1) {
       const position = (legIndex + 1) as 1 | 2 | 3 | 4;
-      const suggestion = suggestBestRelayLegFill(pool, template, legIndex, assigned, atCap);
+      const suggestion = suggestBestRelayLegFill(pool, template, legIndex, assigned, atCap, legSettings);
       if (suggestion === null) {
-        const everyone = listEligibleRelayLegCandidates(pool, event, legIndex, new Set<string>(), team.teamName, team.gender);
+        const everyone = listEligibleRelayLegCandidates(pool, event, legIndex, new Set<string>(), team.teamName, team.gender, legSettings);
         const req = relayLegRequirements(event, legIndex);
+        // `legIndex` is the loop counter (0 to 3), so it always has a stroke.
+        const legStroke = req.stroke;
+        if (legStroke === undefined) {
+          throw new Error(`Indexed-read invariant broken: relay leg index ${legIndex} has no stroke.`);
+        }
         missing.push({
           position,
-          legEvent: relayLegEventName(req.legDistanceYards as number, req.stroke),
+          legEvent: relayLegEventName(req.legDistanceYards as number, legStroke),
           swimmersWithBest: everyone.length,
           alreadyOnRelay: everyone.filter(s => assigned.has(normalizeSwimmerName(s.name))).length,
           atEntryCap: everyone.filter(s => atCap.has(normalizeSwimmerName(s.name)) && !atRelayLimit.has(normalizeSwimmerName(s.name))).length,
@@ -1339,7 +1384,7 @@ function teamCaveats(
   const fresh = freshnessCaveat(team, acc.seedSeasonIds);
   if (fresh !== undefined) caveats.push(fresh);
   if (team.rosterStatus === 'no_rosters_found') {
-    caveats.push(`The roster for ${team.teamName} (${team.gender}) lists no athletes (SwimCloud: no rosters found). No rows were made.`);
+    caveats.push(`The roster for ${team.teamName} (${team.gender}) lists no swimmers (SwimCloud: no rosters found). No rows were made.`);
   }
   const totalCapped = caps.totalCap !== undefined && caps.totalCap < UNCAPPED;
   // With relays built the slots ARE accounted for (relays are chosen first), so the "not reserved" line would be false.
@@ -1354,7 +1399,7 @@ function teamCaveats(
     caveats.push(`${acc.unknownCourseSwims} captured swim(s) have no recorded course. They were not used.`);
   }
   if (acc.parseFailed.length > 0) {
-    caveats.push(`${acc.parseFailed.length} athlete(s) have a times page that did not parse. No rows were made for them.`);
+    caveats.push(`${acc.parseFailed.length} swimmer(s) have a times page that did not parse. No rows were made for them.`);
   }
   caveats.push(...exhibitionCaveats(acc.exhibitionSeedsUsed, acc.rows.length, acc.exhibitionEventsExcluded));
   if (acc.eventsRemovedByUser > 0) caveats.push(removedEventsCaveat(acc.eventsRemovedByUser));
@@ -1503,7 +1548,7 @@ function processTeam(
     if (prior !== undefined) {
       throw new TheoreticalMeetError(
         'name-collision-in-team',
-        `Team ${team.teamName} (${team.gender}) has two athletes with the name ${entry.athlete.name}: ${describeAthlete(prior)} and ${describeAthlete(entry.athlete)}. ` +
+        `Team ${team.teamName} (${team.gender}) has two swimmers with the name ${entry.athlete.name}: ${describeAthlete(prior)} and ${describeAthlete(entry.athlete)}. ` +
           'Psych scoring keys an entry on event, team and name, so it would merge them. Neither is picked. Resolve the names first.'
       );
     }
@@ -1543,9 +1588,10 @@ function buildRelaysForTeam(ctx: Context, team: TheoreticalMeetTeamInput, prepar
   const plan = ctx.relays;
   if (plan === null || plan.program === null) return undefined;
   const candidates: RelayCandidate[] = [];
+  const allowTimeTrials = relayLegsAllowTimeTrials(ctx.settings);
   for (const p of prepared) {
     if (p.outcome === undefined) continue;
-    const legBests = legBestsOf(p.outcome.used, p.entry.athlete.name);
+    const legBests = legBestsOf(p.outcome.used, p.entry.athlete.name, allowTimeTrials);
     if (legBests.length > 0) candidates.push({ athlete: p.entry.athlete, swimmerKey: p.swimmerKey, legBests });
   }
   return buildTeamRelays(ctx, { ...plan, program: plan.program }, team, candidates);

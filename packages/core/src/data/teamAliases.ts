@@ -5,11 +5,15 @@
  * HyTek psych-sheet / results PDF team abbreviations and meet-name resolution.
  */
 
+import teamAbbreviationsData from './teamAbbreviations.json';
+
 /**
  * Uppercase abbreviation → canonical full school name.
  *
- * Kept byte-identical to `teamAbbreviations.json`, which `backend/pdf_parser.py`
- * loads at import time. Edit both together — nothing enforces the pair.
+ * `teamAbbreviations.json` is the single source. `backend/pdf_parser.py` loads
+ * it at import time and this module imports it, so the two cannot drift. Edit
+ * the JSON, not this file. `scripts/test_team_abbreviation_parity.mjs` fails if
+ * either side stops reading it unchanged.
  *
  * Two codes were wrong until 2026-09-01, both in the way `CLAUDE.md` § Data
  * provenance warns about: a plausible name that quietly attributes one school's
@@ -41,32 +45,7 @@
  * live. A live collision would need this map to become conference-aware; adding
  * a code that reintroduces one is not a rename.
  */
-export const TEAM_ABBREVIATIONS: Record<string, string> = {
-  // NSISC
-  HSU: 'Henderson State University',
-  DSU: 'Delta State University',
-  OUAC: 'Ouachita Baptist University',
-  OBU: 'Ouachita Baptist University',
-  UWF: 'University of West Florida',
-  // GLVC / legacy (backend/pdf_parser.py)
-  UMSL: 'University of Missouri-St. Louis',
-  TRUM: 'Truman State University',
-  SBU: 'Southwest Baptist University',
-  WJC: 'William Jewell College',
-  MKU: 'McKendree University',
-  ROCK: 'Rockhurst University',
-  UINDY: 'University of Indianapolis',
-  INDY: 'University of Indianapolis',
-  'MS&T': 'Missouri S&T',
-  MST: 'Missouri S&T',
-  QU: 'Quincy University',
-  DRURY: 'Drury University',
-  DRUR: 'Drury University',
-  LU: 'Lewis University',
-  MARY: 'University of Mary',
-  NSU: 'Northern State University',
-  SCAD: 'SCAD Savannah',
-};
+export const TEAM_ABBREVIATIONS: Record<string, string> = teamAbbreviationsData;
 
 const ACRONYM_STOP_WORDS = new Set(['of', 'the', 'at', '&', 'and', 'a']);
 
@@ -76,6 +55,16 @@ export function normalizeTeamKey(name: string): string {
     .trim()
     .toLowerCase()
     .replace(/[^a-z0-9]/g, '');
+}
+
+/**
+ * Exact-match team key: trimmed and lower-cased, punctuation and inner spacing
+ * kept (`"Henderson St."` -> `"henderson st."`). `normalizeTeamKey` above keeps
+ * letters and digits only (`"hendersonst"`). Absent input is the empty key.
+ * Callers: `athleteAliases.teamKeyOf`, `seasonAnalytics.teamKey`.
+ */
+export function teamLabelKey(team: unknown): string {
+  return String(team ?? '').trim().toLowerCase();
 }
 
 /** Build acronym from institution name (e.g. Henderson State University → HSU). */

@@ -51,7 +51,7 @@ const dives = (rows: HistoricalSwim[]) =>
   rows
     .filter(s => /diving/i.test(s.event))
     .map(s => [s.event, s.time])
-    .sort((a, b) => a[0].localeCompare(b[0]));
+    .sort((a, b) => a[0]!.localeCompare(b[0]!));
 
 describe('mergeHistoryIndex keeps the higher dive score', () => {
   const swims = diverSwims();
@@ -113,7 +113,7 @@ describe('mergeHistoryIndex keeps the higher dive score', () => {
   it('still keeps the faster swim for a swim', () => {
     const free = swims.filter(s => !/diving/i.test(s.event));
     expect(free.length).toBeGreaterThan(0);
-    const swim = (time: string): HistoricalSwim => ({ ...free[0], time });
+    const swim = (time: string): HistoricalSwim => ({ ...free[0]!, time });
     expect(mergeHistoryIndex([swim('1:00.00')], [swim('59.00')]).map(s => s.time)).toStrictEqual(['59.00']);
     expect(mergeHistoryIndex([swim('59.00')], [swim('1:00.00')]).map(s => s.time)).toStrictEqual(['59.00']);
   });

@@ -13,7 +13,7 @@ import { TrendingUp, GitCompareArrows } from 'lucide-react';
 import { LineChart, Line, XAxis, YAxis, Tooltip, CartesianGrid } from 'recharts';
 import { ChartFrame, ChartShell, SegmentedControl } from '@omniswim/ui';
 import type { TeamScore } from '@omniswim/core/types';
-import type { ScoringBundle } from '@omniswim/core/lib/scoringEngine';
+import type { ProjectionBundle, ScoringBundle } from '@omniswim/core/lib/scoringEngine';
 import type { ThemeColors } from '@omniswim/core/lib/useThemeColors';
 import MeetDiffTable from './MeetDiffTable';
 import PrelimsDiffTable from './PrelimsDiffTable';
@@ -40,7 +40,8 @@ function TimelineTooltipContent({
   const rows = [...payload]
     .map(p => ({
       name: String(p.name ?? p.dataKey ?? ''),
-      value: typeof p.value === 'number' ? p.value : Number(p.value),
+      // Number(null) is 0: a missing value must drop out of the list, not read as 0.0.
+      value: typeof p.value === 'number' ? p.value : p.value == null ? Number.NaN : Number(p.value),
       color: String(p.color ?? ''),
       strokeDasharray: dashByTeam[String(p.name ?? p.dataKey ?? '')] as string | undefined,
       prelimsDelta: prelimsDeltaByTeam?.[String(p.name ?? p.dataKey ?? '')],
@@ -100,10 +101,12 @@ interface MeetOpsAnalyzeStepProps {
   onMeetMomentumAnchorChange: (anchor: 'prelims' | 'psych') => void;
   meetMomentumData: Record<string, unknown>[];
   momentumEmptyMessage?: string;
+  /** Entries the meet momentum chart leaves out because they have no result yet. */
+  momentumNoActualCount?: number;
   analysisView: 'diff' | 'prelims';
   onAnalysisViewChange: (view: 'diff' | 'prelims') => void;
   baselineBundle: ScoringBundle;
-  prelimsProjectedBundle: ScoringBundle;
+  prelimsProjectedBundle: ProjectionBundle;
   searchQuery: string;
 }
 
@@ -119,6 +122,7 @@ export function MeetOpsAnalyzeStep({
   onMeetMomentumAnchorChange,
   meetMomentumData,
   momentumEmptyMessage,
+  momentumNoActualCount,
   analysisView,
   onAnalysisViewChange,
   baselineBundle,
@@ -130,11 +134,11 @@ export function MeetOpsAnalyzeStep({
       <div className="surface-card rounded-xl p-5 mb-6">
         <div className="flex items-center gap-2 mb-4">
           <TrendingUp size={16} className="text-[var(--text-accent)]" />
-          <h3 className="text-[12px] font-bold text-[var(--text-primary)]">
-            Chronological Team Score Timeline
+          <h3 className="text-ui-caption font-bold text-[var(--text-primary)]">
+            Team score timeline
           </h3>
           {showPrelimsPerformance ? (
-            <p className="text-[10px] text-theme-muted mt-1 normal-case tracking-normal">
+            <p className="text-ui-micro text-theme-muted mt-1 normal-case tracking-normal">
               Tooltip middle column shows baseline over/under vs prelims projection at each event.
             </p>
           ) : null}
@@ -240,6 +244,7 @@ export function MeetOpsAnalyzeStep({
             teams={teamsWithLineStyles}
             size="md"
             emptyMessage={momentumEmptyMessage}
+            noActualCount={momentumNoActualCount}
           />
         </div>
       ) : null}

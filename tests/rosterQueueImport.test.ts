@@ -272,7 +272,7 @@ describe('markRosterQueueCaptured', () => {
     // Display order on the roster page, family name first on the times page.
     const marked = markRosterQueueCaptured(queue, { swimmerId: '999', name: 'Batts, Katie' });
     expect(marked.matchedNew).toBe(true);
-    expect(marked.queue.entries[0].captured).toBe(true);
+    expect(marked.queue.entries[0]!.captured).toBe(true);
   });
 });
 

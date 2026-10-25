@@ -4,6 +4,8 @@
  */
 
 import React from 'react';
+import { noActualCountSentence } from '../lib/noActual';
+import { NoActualMarker, NoExpectationText, SeedsPastTableNote } from './matrixPresentation';
 
 type Props = {
   actual?: number;
@@ -14,7 +16,25 @@ type Props = {
   prelimsProjected?: number;
   baselineOverUnder?: number;
   projectedOverUnder?: number;
+  /**
+   * Entries of this team with an expected value and no actual result yet. The
+   * "vs prelims" difference is baseline minus prelims, so it counts them as 0
+   * points. A count above 0 puts a "No result yet" marker beside it.
+   */
+  noActualCount?: number;
+  /**
+   * Seeds of this team past the end of the place-point table: they have no
+   * expected points. With `prelimsProjected` set, the sum leaves them out and a
+   * note says how many. With `prelimsProjected` absent, every seed is past the
+   * table and the prelims figure reads "— (N seeds past table)", never 0.
+   */
+  prelimsWithoutExpectationCount?: number;
 };
+
+/** The words behind the marker on a "vs prelims" difference. */
+function noActualBaselineLabel(count: number): string {
+  return `${noActualCountSentence(count)}. The "vs prelims" difference counts ${count === 1 ? 'it' : 'them'} as 0 points.`;
+}
 
 /** True when a delta is far enough from zero to be worth showing. */
 function isMeaningfulDelta(value: number | null | undefined): value is number {
@@ -56,7 +76,7 @@ function ScoreRow({
         ? 'text-[var(--text-accent)]'
         : 'text-[var(--text-primary)]';
   return (
-    <div className="flex items-center justify-between gap-4 text-[10px] font-mono">
+    <div className="flex items-center justify-between gap-4 text-ui-micro font-mono">
       <span className={`${muted ? 'text-theme-muted' : 'text-theme-secondary'}`}>
         {label}
       </span>
@@ -88,6 +108,8 @@ interface CompactScoreSummaryProps {
   baselineOverUnder?: number;
   projectedOverUnder?: number;
   showPrelims: boolean;
+  noActualCount?: number;
+  prelimsWithoutExpectationCount?: number;
 }
 
 /** The one-line compact summary used inline in tighter layouts (e.g. the TeamCard header). */
@@ -99,6 +121,8 @@ function CompactScoreSummary({
   baselineOverUnder,
   projectedOverUnder,
   showPrelims,
+  noActualCount = 0,
+  prelimsWithoutExpectationCount = 0,
 }: CompactScoreSummaryProps) {
   return (
     <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-ui-micro font-mono">
@@ -116,11 +140,23 @@ function CompactScoreSummary({
         <span className="text-theme-secondary">
           Prelims{' '}
           <span className="text-[var(--text-primary)] font-bold">{prelimsProjected.toFixed(1)}</span>
+          {prelimsWithoutExpectationCount > 0 ? (
+            <>
+              {' '}
+              <SeedsPastTableNote count={prelimsWithoutExpectationCount} />
+            </>
+          ) : null}
+        </span>
+      ) : null}
+      {prelimsProjected == null && prelimsWithoutExpectationCount > 0 ? (
+        <span className="text-theme-secondary">
+          Prelims <NoExpectationText count={prelimsWithoutExpectationCount} />
         </span>
       ) : null}
       {showPrelims && isMeaningfulDelta(baselineOverUnder) ? (
         <DeltaBadge value={baselineOverUnder} prefix="vs prelims " />
       ) : null}
+      {showPrelims && noActualCount > 0 ? <NoActualMarker label={noActualBaselineLabel(noActualCount)} /> : null}
       {showPrelims && shouldShowProjectedOverUnder(baselineOverUnder, projectedOverUnder) ? (
         <DeltaBadge value={projectedOverUnder} prefix="projected vs prelims " />
       ) : null}
@@ -138,6 +174,8 @@ interface FullScoreSummaryProps {
   projectedOverUnder?: number;
   delta?: number;
   showPrelims: boolean;
+  noActualCount?: number;
+  prelimsWithoutExpectationCount?: number;
 }
 
 /** The full card-style summary used in the expanded team panel. */
@@ -151,7 +189,10 @@ function FullScoreSummary({
   projectedOverUnder,
   delta,
   showPrelims,
+  noActualCount = 0,
+  prelimsWithoutExpectationCount = 0,
 }: FullScoreSummaryProps) {
+  const noPrelimsExpectation = prelimsProjected == null && prelimsWithoutExpectationCount > 0;
   return (
     <div className="surface-overlay border border-theme-soft rounded-lg p-3 space-y-2">
       <div className="flex items-center justify-between gap-2 mb-1">
@@ -165,20 +206,37 @@ function FullScoreSummary({
       <ScoreRow label="Actual" value={actual} />
       <ScoreRow label="Baseline" value={baseline} muted />
       <ScoreRow label="Projected" value={projected} highlight />
-      {showPrelims ? (
+      {showPrelims || noPrelimsExpectation ? (
         <div className="pt-2 border-t border-theme-soft space-y-2">
-          <ScoreRow label="Prelims Proj" value={prelimsProjected} muted />
+          <ScoreRow label="Prelims proj" value={prelimsProjected} muted />
+          {noPrelimsExpectation ? (
+            <div className="flex items-center justify-between gap-4 text-ui-micro font-mono">
+              <span className="text-theme-muted">Prelims proj</span>
+              <NoExpectationText count={prelimsWithoutExpectationCount} />
+            </div>
+          ) : null}
+          {prelimsProjected != null && prelimsWithoutExpectationCount > 0 ? (
+            <p className="text-right">
+              <SeedsPastTableNote count={prelimsWithoutExpectationCount} />
+            </p>
+          ) : null}
           <ScoreRow label="Baseline vs Prelims" value={baselineOverUnder} delta />
+          {noActualCount > 0 ? (
+            <p className="flex items-center gap-1 text-ui-micro font-mono text-theme-muted">
+              <NoActualMarker label={noActualBaselineLabel(noActualCount)} />
+              <span>{noActualCountSentence(noActualCount)}</span>
+            </p>
+          ) : null}
           <ScoreRow label="Projected vs Prelims" value={projectedOverUnder} delta />
         </div>
       ) : null}
       {actual == null && baseline == null ? (
-        <p className="text-[9px] text-theme-muted italic leading-relaxed">
+        <p className="text-ui-micro text-theme-muted italic leading-relaxed">
           No official PDF totals — showing computed scores only.
         </p>
       ) : null}
       {isMeaningfulDelta(delta) ? (
-        <div className="pt-2 border-t border-theme-soft flex justify-between text-[10px] font-mono">
+        <div className="pt-2 border-t border-theme-soft flex justify-between text-ui-micro font-mono">
           <span className="text-theme-secondary">
             Delta vs {actual != null ? 'actual' : 'baseline'}
           </span>
@@ -198,6 +256,8 @@ export default function ProjectedActualScore({
   prelimsProjected,
   baselineOverUnder,
   projectedOverUnder,
+  noActualCount,
+  prelimsWithoutExpectationCount,
 }: Props) {
   const delta =
     actual != null ? projected - actual : baseline != null ? projected - baseline : undefined;
@@ -216,6 +276,8 @@ export default function ProjectedActualScore({
         baselineOverUnder={baselineOverUnder}
         projectedOverUnder={projectedOverUnder}
         showPrelims={showPrelims}
+        noActualCount={noActualCount}
+        prelimsWithoutExpectationCount={prelimsWithoutExpectationCount}
       />
     );
   }
@@ -231,6 +293,8 @@ export default function ProjectedActualScore({
       projectedOverUnder={projectedOverUnder}
       delta={delta}
       showPrelims={showPrelims}
+      noActualCount={noActualCount}
+      prelimsWithoutExpectationCount={prelimsWithoutExpectationCount}
     />
   );
 }

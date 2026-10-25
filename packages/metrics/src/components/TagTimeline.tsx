@@ -36,8 +36,8 @@ export const TAG_KIND_LABEL: Record<RaceTagKind, string> = {
   Entry: 'Entry',
   Breakout: 'Breakout',
   Stroke: 'Stroke',
-  TurnStart: 'Turn Start',
-  TurnEnd: 'Turn End',
+  TurnStart: 'Turn start',
+  TurnEnd: 'Turn end',
   Finish: 'Finish',
   FifteenMetre: '15 m',
   Flags: 'Flags',
@@ -185,7 +185,7 @@ export function TagTimeline({ tags, duration, frameSeconds, onSeek, onTagTimeCha
             onPointerMove={handlePointerMove}
             onPointerUp={handlePointerUp}
             onPointerCancel={handlePointerCancel}
-            className={`absolute top-0 bottom-0 w-0.5 pointer-events-auto touch-none cursor-ew-resize hover:w-1 transition-[width] ${
+            className={`absolute top-0 bottom-0 w-0.5 pointer-events-auto touch-none cursor-ew-resize hover:w-1 ${
               isDragging ? 'w-1 ring-2 ring-[var(--text-accent)]' : ''
             }`}
             style={{ left: `${(displayTime / duration) * 100}%`, backgroundColor: TAG_KIND_COLOR[tag.kind] }}

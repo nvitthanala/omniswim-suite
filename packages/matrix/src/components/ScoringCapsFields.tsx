@@ -9,8 +9,9 @@
  * — no behavior change. Lock state and the field updater stay in the parent.
  */
 
+import { useId } from 'react';
 import type { ScoringSettings } from '@omniswim/core/types';
-import { entryCapPolicy } from '@omniswim/core/lib/scoringDefaults';
+import { entryCapPolicy, relayLegsAllowTimeTrials } from '@omniswim/core/lib/scoringDefaults';
 import { NumberField } from '@omniswim/ui';
 
 interface LockState {
@@ -28,6 +29,7 @@ interface ScoringCapsFieldsProps {
 export function ScoringCapsFields({ local, update, lock }: ScoringCapsFieldsProps) {
   const { isLocked, lockProps } = lock;
   const policy = entryCapPolicy(local);
+  const relayTimeTrialHelperId = useId();
   return (
     <div className="grid grid-cols-2 gap-3">
       <div>
@@ -107,7 +109,7 @@ export function ScoringCapsFields({ local, update, lock }: ScoringCapsFieldsProp
         />
       </div>
       <div className="col-span-2 flex flex-col gap-2">
-        <label className="flex items-center gap-2 text-[10px] text-theme-secondary cursor-pointer">
+        <label className="flex items-center gap-2 text-ui-micro text-theme-secondary cursor-pointer">
           <input
             type="checkbox"
             aria-label="Time trials count toward the entry cap"
@@ -117,7 +119,7 @@ export function ScoringCapsFields({ local, update, lock }: ScoringCapsFieldsProp
           />
           Time trials count toward the entry cap
         </label>
-        <label className="flex items-center gap-2 text-[10px] text-theme-secondary cursor-pointer">
+        <label className="flex items-center gap-2 text-ui-micro text-theme-secondary cursor-pointer">
           <input
             type="checkbox"
             aria-label="Exhibition swims count toward the entry cap"
@@ -127,6 +129,21 @@ export function ScoringCapsFields({ local, update, lock }: ScoringCapsFieldsProp
           />
           Exhibition swims count toward the entry cap
         </label>
+        <div className="flex flex-col gap-0.5">
+          <label className="flex items-center gap-2 text-ui-micro text-theme-secondary cursor-pointer">
+            <input
+              type="checkbox"
+              aria-describedby={relayTimeTrialHelperId}
+              checked={relayLegsAllowTimeTrials(local)}
+              onChange={e => update({ relayLegsAllowTimeTrials: e.target.checked })}
+              className="accent-[var(--text-accent)]"
+            />
+            Let time trials fill relay legs
+          </label>
+          <p id={relayTimeTrialHelperId} className="pl-6 text-ui-micro text-theme-muted">
+            Off by default. A time trial is outside the meet&apos;s program. A leg filled from one is marked Time trial.
+          </p>
+        </div>
       </div>
       <div>
         <label className="block text-ui-caption text-theme-secondary mb-1">Relay multiplier</label>
@@ -140,7 +157,7 @@ export function ScoringCapsFields({ local, update, lock }: ScoringCapsFieldsProp
         />
       </div>
       <div className="flex items-end">
-        <label className="flex items-center gap-2 text-[10px] text-theme-secondary cursor-pointer">
+        <label className="flex items-center gap-2 text-ui-micro text-theme-secondary cursor-pointer">
           <input
             type="checkbox"
             aria-label="Half-rate relay swimmers"
@@ -153,7 +170,7 @@ export function ScoringCapsFields({ local, update, lock }: ScoringCapsFieldsProp
       </div>
       <div className="col-span-2">
         <label
-          className={`flex items-center gap-2 text-[10px] text-theme-secondary ${
+          className={`flex items-center gap-2 text-ui-micro text-theme-secondary ${
             isLocked('relayEligibleFromScorerPool') ? 'opacity-60 cursor-not-allowed' : 'cursor-pointer'
           }`}
           title={isLocked('relayEligibleFromScorerPool') ? lock.message ?? undefined : undefined}

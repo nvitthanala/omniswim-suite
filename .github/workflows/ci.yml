@@ -60,12 +60,21 @@ jobs:
       - name: Install
         run: npm ci
 
+      # Report only: it lists known advisories in production dependencies but does
+      # not fail the build. Read the log; fix by upgrading, not by silencing it.
+      - name: Audit production dependencies (report only)
+        run: npm audit --omit=dev
+        continue-on-error: true
+
+      # Exact versions live in backend/requirements.txt (pdfplumber is pinned), so a
+      # new upstream release cannot change parser output between two CI runs.
       - name: Install Python PDF deps
-        run: python -m pip install pdfplumber
+        run: python -m pip install -r backend/requirements.txt
 
       # pdftotext, for the tests that re-read the archived qualifying-standard PDFs.
-      # ubuntu ships poppler, which lacks the xpdf-only `-table` flag, so the two
-      # altitudeAdjustment PDF tests still skip here; tests/skip-budget.json counts them.
+      # ubuntu ships poppler, which lacks the xpdf-only `-table` flag. The altitude tests
+      # that need `-table` read the text archived next to each PDF instead (hashes in
+      # data/cutlines/sources/manifest.json; scripts/extract-cutline-text.mjs writes it).
       - name: Install pdftotext
         run: sudo apt-get update && sudo apt-get install -y poppler-utils
 
@@ -77,6 +86,16 @@ jobs:
 
       - name: Lint
         run: npm run lint
+
+      # The Python parsers feed every PDF meet score. Lint tools install in their
+      # own step so they never reach the runtime requirements (requirements.txt is
+      # installed above). Config lives in backend/pyproject.toml.
+      - name: Python backend lint and tests
+        working-directory: backend
+        run: |
+          python -m pip install -r requirements-dev.txt
+          python -m ruff check .
+          python -m pytest
 
       # Runs the script suite and the Playwright e2e specs. run-tests.mjs picks a free
       # PORT for the e2e dev server itself; do not set PORT here, because
@@ -92,6 +111,15 @@ jobs:
       # missing fixture or tool cannot quietly shrink the suite.
       - name: Unit tests and skip budget
         run: node scripts/check_skip_budget.mjs
+        env:
+          PG_TEST_URL: postgres://postgres:postgres@localhost:5432/omni_test
+
+      # Line and branch coverage of packages/*/src, from the same vitest suite. Report only:
+      # there is no threshold, and continue-on-error means a coverage failure cannot fail
+      # the build. The text summary prints in this log; the HTML report is not uploaded.
+      - name: Coverage summary (report only)
+        run: npm run test:coverage
+        continue-on-error: true
         env:
           PG_TEST_URL: postgres://postgres:postgres@localhost:5432/omni_test
 

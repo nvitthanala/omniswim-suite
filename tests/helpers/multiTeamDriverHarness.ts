@@ -8,10 +8,7 @@
  * models the real app: a capture that was never opened is refused, and the page
  * goes to the downloads fallback instead.
  */
-import { readFileSync } from 'node:fs';
-import { dirname, join } from 'node:path';
-import { fileURLToPath } from 'node:url';
-
+import { PAGES, SWIMMER_BODY, fixturesDir, here, rosterPage, type RosterGender } from './multiTeamFixtures';
 import { captureIdForSubject, type SwimCloudCaptureSubject } from '../../packages/swimcloud/src/entities';
 import { parseTeamRosterHtml } from '../../packages/swimcloud/src/parser';
 import { collectSwimmerIds } from '../../extensions/swimcloud-companion/src/swimmerTimes';
@@ -27,26 +24,20 @@ import {
   type TeamSeasonChoice,
 } from '../../extensions/swimcloud-companion/src/multiTeamDriver';
 
-export const here = dirname(fileURLToPath(import.meta.url)); // tests/helpers
-export const fixturesDir = join(here, '..', 'fixtures', 'swimcloud');
-export const SWIMMER_BODY = readFileSync(join(here, '..', 'fixtures', 'profile_fastest_times-1330318.json'), 'utf8');
+// The stored bytes live in multiTeamFixtures.ts, which does not import the extension.
+export { here, fixturesDir, SWIMMER_BODY, rosterPage, PAGES };
 
-type Gender = 'M' | 'F';
-export const rosterPage = (team: string, gender: Gender): string =>
-  readFileSync(join(fixturesDir, `team-${team}-roster-gender-${gender}-page.html`), 'utf8');
-
-export const PAGES: Record<string, string> = {};
-for (const team of ['412', '10002824']) for (const g of ['M', 'F'] as const) PAGES[`${team}|${g}`] = rosterPage(team, g);
+type Gender = RosterGender;
 
 /** Swimmer ids per roster page, read by the real parser, in page order. */
 export function idsOf(team: string, gender: Gender, pages: Record<string, string> = PAGES): string[] {
-  const parsed = parseTeamRosterHtml(pages[`${team}|${gender}`], {
+  const parsed = parseTeamRosterHtml(pages[`${team}|${gender}`]!, {
     sourceUrl: `https://www.swimcloud.com/team/${team}/roster/?gender=${gender}`,
     retrievedAt: '2026-10-03T00:00:00.000Z',
     track: 'browser-extension',
   });
   if (!parsed.ok) throw new Error('fixture does not parse');
-  return collectSwimmerIds([parsed.data.athletes]).swimmerIds;
+  return [...collectSwimmerIds([parsed.data.athletes]).swimmerIds];
 }
 
 export const IDS_412M = idsOf('412', 'M');

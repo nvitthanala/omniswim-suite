@@ -161,7 +161,7 @@ describe('NCAA Rule 7 point tables (provenance snapshots)', () => {
         expect(slot.places.length).toBeGreaterThan(0);
         for (const [index, value] of slot.places.entries()) {
           expect(value).toBeGreaterThanOrEqual(0);
-          if (index > 0) expect(value).toBeLessThanOrEqual(slot.places[index - 1]);
+          if (index > 0) expect(value).toBeLessThanOrEqual(slot.places[index - 1]!);
         }
       }
     }

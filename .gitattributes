@@ -3,3 +3,10 @@
 # these to CRLF and the documented verification command would fail to find
 # the file it just listed. Pin them to LF.
 data/training/checksums.txt text eol=lf
+
+# Source and text files are stored with LF and checked out with LF on every
+# platform, so a Windows checkout with core.autocrlf=true shows no line-ending
+# noise. Windows batch files keep CRLF because cmd.exe needs it.
+* text=auto eol=lf
+*.bat text eol=crlf
+*.cmd text eol=crlf

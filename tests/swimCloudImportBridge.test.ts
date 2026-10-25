@@ -10,13 +10,11 @@ import {
   swimCloudMeetResultsToHistoricalSwims,
   swimCloudPersonalBestsToHistoricalSwims,
 } from '@omniswim/manager/lib/swimCloudImportBridge';
+import type { SwimCloudEntry, SwimCloudEvent, SwimCloudResult } from '@omniswim/swimcloud/entities';
 import type {
-  SwimCloudEntry,
-  SwimCloudEvent,
   SwimCloudMeetResultsParse,
   SwimCloudParsedEvent,
   SwimCloudPersonalBest,
-  SwimCloudResult,
   SwimCloudSwimmerProfileParse,
 } from '@omniswim/swimcloud/parser';
 
@@ -88,8 +86,8 @@ describe('swimCloudPersonalBestsToHistoricalSwims — never fabricates a require
     if (!result.ok) throw new Error('expected ok');
     expect(result.swims).toEqual([]);
     expect(result.skipped).toHaveLength(1);
-    expect(result.skipped[0].reason).toBe('no-time');
-    expect(result.skipped[0].personalBest.rawTimeToken).toBe('21.4');
+    expect(result.skipped[0]!.reason).toBe('no-time');
+    expect(result.skipped[0]!.personalBest.rawTimeToken).toBe('21.4');
   });
 
   it('excludes a relay-labeled personal best rather than importing a relay split as an individual time', () => {
@@ -113,7 +111,7 @@ describe('swimCloudPersonalBestsToHistoricalSwims — never fabricates a require
     );
     if (!result.ok) throw new Error('expected ok');
     expect(result.swims).toHaveLength(1);
-    expect(result.swims[0].event).toBe('200 Yard Freestyle');
+    expect(result.swims[0]!.event).toBe('200 Yard Freestyle');
     expect(result.skipped.filter((s) => s.reason === 'relay-event')).toHaveLength(2);
   });
 
@@ -153,7 +151,7 @@ describe('swimCloudPersonalBestsToHistoricalSwims — meet label fallback', () =
       meetLabelFallback: 'Fallback Meet',
     });
     if (!result.ok) throw new Error('expected ok');
-    expect(result.swims[0].meetLabel).toBe('2026 NSISC Championships');
+    expect(result.swims[0]!.meetLabel).toBe('2026 NSISC Championships');
   });
 
   it('falls back to meetLabelFallback when the row has no meetName', () => {
@@ -162,7 +160,7 @@ describe('swimCloudPersonalBestsToHistoricalSwims — meet label fallback', () =
       { team: 'Henderson State', gender: Gender.MEN, meetLabelFallback: 'Fallback Meet' },
     );
     if (!result.ok) throw new Error('expected ok');
-    expect(result.swims[0].meetLabel).toBe('Fallback Meet');
+    expect(result.swims[0]!.meetLabel).toBe('Fallback Meet');
   });
 
   it('omits meetLabel entirely when neither the row nor the options supply one', () => {
@@ -306,7 +304,7 @@ describe('swimCloudMeetResultsToHistoricalSwims — the happy path', () => {
       gender: Gender.WOMEN,
       meetLabelFallback: 'Fallback Meet',
     });
-    expect(result.swims[0].meetLabel).toBe('Fallback Meet');
+    expect(result.swims[0]!.meetLabel).toBe('Fallback Meet');
   });
 });
 
@@ -391,7 +389,7 @@ describe('swimCloudMeetResultsToHistoricalSwims — never fabricates a required 
     const result = swimCloudMeetResultsToHistoricalSwims(parse, { team: 'Henderson State', gender: Gender.WOMEN });
 
     expect(result.swims).toHaveLength(1);
-    expect(result.swims[0].time).toBe('52.10');
+    expect(result.swims[0]!.time).toBe('52.10');
   });
 });
 

@@ -19,7 +19,10 @@ const TIER_TONE: Record<string, 'accent' | 'warning' | 'info'> = {
   Invited: 'info',
 };
 
-type CutlineTagProps = Omit<HTMLAttributes<HTMLSpanElement>, 'children'> & {
+/** What a `program_unconfirmed` tag says. The tooltip carries core's reason. */
+const UNCONFIRMED_PROGRAM_SWIM_LABEL = 'Unconfirmed program swim';
+
+type CutlineTagProps =Omit<HTMLAttributes<HTMLSpanElement>, 'children'> & {
   result: CutlineTagResult;
   /**
    * Smaller inline chip for dense tables/rows where the full uppercase pill
@@ -52,7 +55,7 @@ export function CutlineTag({ result, compact = false, className, ...props }: Cut
   if (mode === 'no_cut') return null;
 
   const tooltip = describeCutlineTagResult(result);
-  const sizeClass = compact ? 'px-1.5 py-0.5 text-[0.65rem] gap-0.5' : '';
+  const sizeClass = compact ? 'px-1.5 py-0.5 text-ui-micro gap-0.5' : '';
   const classes = [sizeClass, className].filter(Boolean).join(' ');
 
   if (mode === 'indicative' && result.state === 'converted_estimate') {
@@ -67,6 +70,22 @@ export function CutlineTag({ result, compact = false, className, ...props }: Cut
       >
         <ArrowLeftRight size={compact ? 9 : 11} aria-hidden="true" />
         {indicative.label}
+      </Badge>
+    );
+  }
+
+  if (result.state === 'program_unconfirmed') {
+    // Not a miss and not a cut: a swims-list swim nobody confirmed as a program
+    // swim. Spelled out even when compact, because an icon alone reads as "no data".
+    return (
+      <Badge
+        tone="neutral"
+        title={tooltip}
+        className={['border-dashed opacity-70 normal-case tracking-normal', classes].filter(Boolean).join(' ')}
+        {...props}
+      >
+        <HelpCircle size={compact ? 9 : 11} aria-hidden="true" />
+        {UNCONFIRMED_PROGRAM_SWIM_LABEL}
       </Badge>
     );
   }
@@ -169,7 +188,7 @@ export function CutlineNearMissChip({
   if (!nextTier || !isWithinNearMissThreshold(nextTier)) return null;
 
   const tooltip = `${nextTier.tierName} standard for ${nextTier.event}: ${nextTier.standardTime}`;
-  const sizeClass = compact ? 'text-[0.65rem] gap-0.5' : 'text-ui-micro gap-1';
+  const sizeClass = compact ? 'text-ui-micro gap-0.5' : 'text-ui-micro gap-1';
 
   return (
     <span

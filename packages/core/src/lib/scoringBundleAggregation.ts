@@ -17,7 +17,7 @@
  * settings; the real scoring engine passes the gender's real PDF rows and the
  * merged settings), so that one line stays with each caller.
  */
-import { SwimmerResult, TeamScore } from '../types';
+import { ProjectedTeamScore, SwimmerResult, TeamScore } from '../types';
 import {
   formatEventChartAxisLabel,
   getTeamColors,
@@ -26,7 +26,8 @@ import {
   stripEventGenderMarker,
 } from './utils';
 import { computeVisibleEvents } from './eventIdentity';
-import type { ScoringBundle } from './scoringEngine';
+import { recordAt } from './indexedAccess';
+import type { ProjectionBundle, ScoringBundle } from './scoringEngine';
 
 export type AggregatedTeamScoring = {
   /** `allResults`' distinct events, in meet order. */
@@ -35,6 +36,24 @@ export type AggregatedTeamScoring = {
   timelineData: Record<string, unknown>[];
   teamStyleSignature: string;
 };
+
+/**
+ * The team a row is totalled under, or `null` when the row belongs to no team:
+ * a relay-style row whose name equals its team label and whose label does not
+ * look like an institution (a person's name used as a team label).
+ */
+export function aggregationTeamKey(res: SwimmerResult): string | null {
+  const tName = String(res.name ?? '')
+    .trim()
+    .toLowerCase();
+  const tTeam = String(res.team ?? '')
+    .trim()
+    .toLowerCase();
+  if (tName && tTeam === tName && !looksLikeInstitutionTeamName(res.team)) {
+    return null;
+  }
+  return String(res.team ?? 'Unknown').trim() || 'Unknown';
+}
 
 /**
  * Per-event team totals and a cumulative timeline from a result/scored-row
@@ -58,16 +77,8 @@ export function aggregateTeamScoring(
     const scored = eventResults.map(r => scoredById.get(r.id) ?? { ...r, points: 0 });
 
     scored.forEach(res => {
-      const tName = String(res.name ?? '')
-        .trim()
-        .toLowerCase();
-      const tTeam = String(res.team ?? '')
-        .trim()
-        .toLowerCase();
-      if (tName && tTeam === tName && !looksLikeInstitutionTeamName(res.team)) {
-        return;
-      }
-      const teamKey = String(res.team ?? 'Unknown').trim() || 'Unknown';
+      const teamKey = aggregationTeamKey(res);
+      if (teamKey === null) return;
       if (!teamsMap[teamKey]) {
         teamsMap[teamKey] = {
           teamName: teamKey,
@@ -80,7 +91,7 @@ export function aggregateTeamScoring(
       const pts = typeof res.points === 'number' ? res.points : 0;
       teamsMap[teamKey].totalPoints += pts;
       teamsMap[teamKey].swimmers.push(res);
-      runningTotals[teamKey] += pts;
+      runningTotals[teamKey] = recordAt(runningTotals, teamKey) + pts;
     });
 
     if (!isTimeTrial) {
@@ -127,6 +138,112 @@ export function buildProjectedScoringBundle(
     timelineData: agg.timelineData,
     teamStyleSignature: agg.teamStyleSignature,
   };
+}
+
+/** An entry of a projection that the place-point table has no row for. */
+export type ExpectationGap = {
+  /** `entryKey` of the entry. */
+  key: string;
+  /** The row that stands for the entry: it names the team. */
+  row: SwimmerResult;
+};
+
+/**
+ * Projection bundle (prelims-seed or psych-seed) that keeps every team with a
+ * seed past the end of the place-point table.
+ *
+ * - A team with some seeds scored keeps its sum in `expected` and lists the
+ *   rest in `withoutExpectation`.
+ * - A team with no seed scored has no rows to total. It is appended after the
+ *   scored teams with `expected: null` and no `totalPoints`: a missing figure
+ *   is never a 0.
+ *
+ * For input with no gap every figure matches {@link buildProjectedScoringBundle}
+ * (`expected` equals the team's total, and `teamStyleSignature` is unchanged).
+ */
+export function buildProjectionBundle(
+  allResults: SwimmerResult[],
+  allScored: SwimmerResult[],
+  gaps: readonly ExpectationGap[]
+): ProjectionBundle {
+  const agg = aggregateTeamScoring(allResults, allScored);
+
+  const gapKeysByTeam = new Map<string, string[]>();
+  for (const { key, row } of gaps) {
+    const team = aggregationTeamKey(row);
+    if (team === null) continue; // a row that belongs to no team, as in aggregateTeamScoring
+    const keys = gapKeysByTeam.get(team) ?? [];
+    if (!keys.includes(key)) keys.push(key);
+    gapKeysByTeam.set(team, keys);
+  }
+
+  const scoredTeams: ProjectedTeamScore[] = agg.sortedTeams.map(team => {
+    const withoutExpectation = gapKeysByTeam.get(team.teamName) ?? [];
+    // `totalPoints` is not on ProjectedTeamScore: a reader of `.totalPoints` must
+    // get `undefined` on every team, not a number on some and nothing on others.
+    const { totalPoints: _totalPoints, ...rest } = team;
+    return {
+      ...rest,
+      expected: team.totalPoints,
+      withoutExpectation,
+      withoutExpectationCount: withoutExpectation.length,
+    };
+  });
+
+  const scoredNames = new Set(scoredTeams.map(t => t.teamName));
+  const unscoredTeams: ProjectedTeamScore[] = [];
+  for (const [teamName, withoutExpectation] of gapKeysByTeam) {
+    if (scoredNames.has(teamName)) continue;
+    unscoredTeams.push({
+      teamName,
+      swimmers: [],
+      color: getTeamColors(teamName).primary,
+      expected: null,
+      withoutExpectation,
+      withoutExpectationCount: withoutExpectation.length,
+    });
+  }
+
+  const sortedTeams = [...scoredTeams, ...unscoredTeams];
+  // `name:points:color` as in aggregateTeamScoring. The gap count is appended
+  // only when above 0, so a memo keyed on it refreshes when a count changes
+  // while the sum stays put, and a bundle with no gap is unchanged.
+  const teamStyleSignature = sortedTeams
+    .map(
+      t =>
+        `${t.teamName}:${t.expected === null ? 'none' : t.expected}:${t.color}` +
+        (t.withoutExpectationCount > 0 ? `:gap${t.withoutExpectationCount}` : '')
+    )
+    .join('|');
+
+  return {
+    allResults,
+    allScored,
+    events: agg.events,
+    visibleEvents: computeVisibleEvents(agg.events, allResults, allResults, {}),
+    sortedTeams,
+    timelineData: agg.timelineData,
+    teamStyleSignature,
+  };
+}
+
+/**
+ * Per-team expectation, split so a caller cannot sum an absent figure as 0.
+ * - `expectedByTeam`: teams with a numeric `expected` only.
+ * - `withoutExpectationByTeam`: teams with at least one seed past the table
+ *   (including teams with no `expected`), mapped to how many.
+ */
+export function projectionTeamExpectations(teams: readonly ProjectedTeamScore[]): {
+  expectedByTeam: Map<string, number>;
+  withoutExpectationByTeam: Map<string, number>;
+} {
+  const expectedByTeam = new Map<string, number>();
+  const withoutExpectationByTeam = new Map<string, number>();
+  for (const t of teams) {
+    if (t.expected !== null) expectedByTeam.set(t.teamName, t.expected);
+    if (t.withoutExpectationCount > 0) withoutExpectationByTeam.set(t.teamName, t.withoutExpectationCount);
+  }
+  return { expectedByTeam, withoutExpectationByTeam };
 }
 
 /**

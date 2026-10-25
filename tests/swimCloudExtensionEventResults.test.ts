@@ -51,7 +51,7 @@ describe('the URL this pass actually fetches', () => {
     if (canonical === null) throw new Error('fixture carries no <link rel="canonical">');
 
     const [step] = planEventResultsSteps('356467', [[swim('26')]]).steps;
-    expect(step.canonicalUrl).toBe(canonical[1]);
+    expect(step!.canonicalUrl).toBe(canonical[1]);
   });
 });
 

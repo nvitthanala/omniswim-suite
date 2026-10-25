@@ -1,0 +1,5 @@
+Test Swimmer Echo
+Event	Time		Meet	Date	Stamp Link
+200 Free SCY	1:45.00		Test Open Invitational	Nov 9, 2025	
+100 Breast SCY	57.00		Test Open Invitational	Nov 9, 2025	
+400 Free SCM	4:20.00		Test Short Course Meet	Dec 8, 2022	

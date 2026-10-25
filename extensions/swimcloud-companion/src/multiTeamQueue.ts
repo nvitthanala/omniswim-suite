@@ -416,6 +416,10 @@ export function addSwimmers(
     }
     // Already queued for another team or season (or this one): one fetch, one more pair.
     const existing = entries[existingIndex];
+    // `indexByKey` is built from `entries` and only grows alongside it, so the index is in range.
+    if (existing === undefined) {
+      throw new MultiTeamQueueError('unknown-key', `swimmer key ${key} is indexed but has no queue entry.`);
+    }
     if (existing.work.kind !== 'swimmer') continue;
     const known = existing.work.attributions.some((a) => a.teamId === teamId && a.seasonId === season.seasonId);
     if (known) continue;
@@ -478,6 +482,8 @@ export function nextWork(queue: MultiTeamQueue): NextWork {
   if (inFlight >= queue.concurrency) return idle(queue, 'at-concurrency-limit');
 
   const entry = queue.entries[index];
+  // `firstPendingIndex` returned an index into `queue.entries`, so it is in range.
+  if (entry === undefined) throw new MultiTeamQueueError('unknown-key', `pending index ${index} has no queue entry.`);
   // A roster page runs alone: nothing starts beside it, and it starts beside nothing.
   // Only swimmer fetches may overlap, and only with each other (see the module comment).
   const rosterInFlight = queue.entries.some((e) => e.status === 'in-flight' && e.work.kind === 'roster');
@@ -485,19 +491,20 @@ export function nextWork(queue: MultiTeamQueue): NextWork {
   return { kind: 'work', queue: withStatus(queue, index, { work: entry.work, status: 'in-flight' }), work: entry.work };
 }
 
-function inFlightIndex(queue: MultiTeamQueue, key: string): number {
+function inFlightEntry(queue: MultiTeamQueue, key: string): { readonly index: number; readonly entry: QueueEntry } {
   const index = queue.entries.findIndex((e) => e.work.key === key);
-  if (index === -1) throw new MultiTeamQueueError('unknown-key', `no work has key ${key}.`);
-  if (queue.entries[index].status !== 'in-flight') {
-    throw new MultiTeamQueueError('not-in-flight', `work ${key} is ${queue.entries[index].status}, not in-flight.`);
+  const entry = queue.entries[index];
+  if (index === -1 || entry === undefined) throw new MultiTeamQueueError('unknown-key', `no work has key ${key}.`);
+  if (entry.status !== 'in-flight') {
+    throw new MultiTeamQueueError('not-in-flight', `work ${key} is ${entry.status}, not in-flight.`);
   }
-  return index;
+  return { index, entry };
 }
 
 /** The item finished. Allowed while paused, halted or cancelled: work in flight is allowed to finish. */
 export function markDone(queue: MultiTeamQueue, key: string): MultiTeamQueue {
-  const index = inFlightIndex(queue, key);
-  return withStatus(queue, index, { work: queue.entries[index].work, status: 'done' });
+  const { index, entry } = inFlightEntry(queue, key);
+  return withStatus(queue, index, { work: entry.work, status: 'done' });
 }
 
 export interface MarkFailedOptions {
@@ -512,8 +519,8 @@ export function markFailed(
   message: string,
   options: MarkFailedOptions = {},
 ): MultiTeamQueue {
-  const index = inFlightIndex(queue, key);
-  const next = withStatus(queue, index, { work: queue.entries[index].work, status: 'failed', error: message });
+  const { index, entry } = inFlightEntry(queue, key);
+  const next = withStatus(queue, index, { work: entry.work, status: 'failed', error: message });
   if (options.haltQueue !== true) return next;
   // A second halting failure (work finishing while the queue halts) is kept
   // beside the first. The first message is the one reported.
@@ -524,11 +531,12 @@ export function markFailed(
 /** A failed item goes back to `pending`. Throws if it is not `failed`. */
 export function retryFailed(queue: MultiTeamQueue, key: string): MultiTeamQueue {
   const index = queue.entries.findIndex((e) => e.work.key === key);
-  if (index === -1) throw new MultiTeamQueueError('unknown-key', `no work has key ${key}.`);
-  if (queue.entries[index].status !== 'failed') {
-    throw new MultiTeamQueueError('not-failed', `work ${key} is ${queue.entries[index].status}, not failed.`);
+  const entry = queue.entries[index];
+  if (index === -1 || entry === undefined) throw new MultiTeamQueueError('unknown-key', `no work has key ${key}.`);
+  if (entry.status !== 'failed') {
+    throw new MultiTeamQueueError('not-failed', `work ${key} is ${entry.status}, not failed.`);
   }
-  return withStatus(queue, index, { work: queue.entries[index].work, status: 'pending' });
+  return withStatus(queue, index, { work: entry.work, status: 'pending' });
 }
 
 export function pauseQueue(queue: MultiTeamQueue): MultiTeamQueue {
@@ -715,10 +723,10 @@ export function verifyRosterSeason(html: string, work: Pick<QueueRosterWork, 'se
     const detail = error instanceof Error ? error.message : String(error);
     return { ok: false, reason: `The roster page's season list could not be read, so its season is not verified: ${detail}` };
   }
-  if (selected.length === 0) {
+  const shown = selected[0];
+  if (shown === undefined) {
     return { ok: false, reason: `The roster page selects no season. It was asked for season ${work.seasonLabel} (id ${work.seasonId}).` };
   }
-  const shown = selected[0];
   if (shown.seasonId !== work.seasonId) {
     return {
       ok: false,

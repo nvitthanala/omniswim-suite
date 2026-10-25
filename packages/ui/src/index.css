@@ -51,6 +51,9 @@
   --color-success: #34d399;
   --color-warning: #fbbf24;
   --color-info: #22d3ee;
+  --ui-medal-gold: #e8b923;
+  --ui-medal-silver: #b4bcc9;
+  --ui-medal-bronze: #c97b3d;
   --toast-bg: color-mix(in srgb, var(--text-accent) 18%, transparent);
   --toast-border: color-mix(in srgb, var(--text-accent) 36%, transparent);
   --toast-text: var(--text-accent);
@@ -114,6 +117,9 @@
   --color-success: #059669;
   --color-warning: #d97706;
   --color-info: #0891b2;
+  --ui-medal-gold: #b98a0b;
+  --ui-medal-silver: #7d8798;
+  --ui-medal-bronze: #a85a1f;
   --toast-bg: color-mix(in srgb, var(--text-accent) 10%, transparent);
   --toast-border: color-mix(in srgb, var(--text-accent) 30%, transparent);
   --toast-text: var(--text-accent);
@@ -387,6 +393,18 @@ html {
   .suite-pool-shimmer {
     animation: none !important;
   }
+
+  /* Hover lifts and the sidebar width change are movement: drop them, keep
+     the colour and shadow feedback. */
+  .surface-interactive:hover,
+  .neon-card:hover,
+  .suite-home-card:hover {
+    transform: none;
+  }
+
+  .workspace-sidebar {
+    transition: none;
+  }
 }
 
 :root:not([data-theme='light'])[data-theme-preset='oled'] {
@@ -498,7 +516,7 @@ select {
 .theme-toggle-button {
   background: var(--hover-overlay);
   border: 1px solid var(--border);
-  transition: all var(--transition-fast);
+  transition: background var(--transition-fast), border-color var(--transition-fast), color var(--transition-fast);
 }
 
 .theme-toggle-button:hover {
@@ -914,6 +932,11 @@ select {
   cursor: grabbing;
 }
 
+/* The window clips its overflow, so draw the focus ring inside the title bar. */
+.floating-window-header:focus-visible {
+  outline-offset: -2px;
+}
+
 .floating-window-title {
   flex: 1;
   font-size: var(--text-ui-caption);
@@ -1255,3 +1278,62 @@ select {
   color: var(--text-accent);
 }
 
+
+/*
+ * Print primitive. A view that prints renders its sheet inside a direct child
+ * of <body> with class `ui-print-root`. Each card in it carries `ui-print-page`
+ * and starts a new page. On screen the root is hidden; when printing, every
+ * other child of <body> is hidden. Black on white keeps the paper copy legible
+ * in Dark, Light and custom themes alike.
+ */
+.ui-print-root {
+  display: none;
+}
+
+@media print {
+  @page {
+    margin: 12mm;
+  }
+
+  body:has(> .ui-print-root) > :not(.ui-print-root) {
+    display: none !important;
+  }
+
+  html:has(> body > .ui-print-root),
+  body:has(> .ui-print-root) {
+    background: white !important;
+    color: black !important;
+  }
+
+  .ui-print-root {
+    display: block;
+    background: white;
+    color: black;
+  }
+
+  /* Type classes such as .text-heading-2 set their own colour from the theme.
+     Inherit black instead, so a Dark or custom theme never prints pale text. */
+  .ui-print-root * {
+    color: inherit;
+  }
+
+  .ui-print-page {
+    break-after: page;
+    page-break-after: always;
+    break-inside: avoid;
+  }
+
+  .ui-print-page:last-child {
+    break-after: auto;
+    page-break-after: auto;
+  }
+
+  .ui-print-badge {
+    border: 1px solid black;
+    border-radius: 0.25rem;
+    padding: 0 0.35rem;
+    font-weight: 700;
+    background: white;
+    color: black;
+  }
+}

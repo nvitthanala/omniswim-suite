@@ -46,6 +46,7 @@ import {
   type MultiTeamQueueErrorCode,
   type MultiTeamQueueTeamInput,
   type QueueRosterWork,
+  type QueueSwimmerWork,
   type QueueWork,
 } from '../extensions/swimcloud-companion/src/multiTeamQueue';
 
@@ -186,17 +187,17 @@ describe('a team whose chosen season its own page does not offer', () => {
     const queue = createQueue({ teams: [teamC(), teamA()] });
     const progress = queueProgress(queue);
     const c = progress.teams[0];
-    expect(c.status).toBe('season-unavailable');
-    expect(c.seasonId).toBeUndefined();
-    expect(c.availableLabels).toStrictEqual(OPTIONS_C.map((o) => o.label));
-    expect(c.availableLabels).not.toContain('2025-2026');
-    expect(c.availableLabels?.[0]).toBe('2026-2027');
-    expect(c.errorLines).toHaveLength(1);
-    expect(c.errorLines[0]).toContain('Team 48');
-    expect(c.errorLines[0]).toContain('2025-2026');
-    expect(c.errorLines[0]).toContain('2026-2027, 2024-2025');
-    expect(c.rosters.total).toBe(0);
-    expect(c.swimmers.total).toBe(0);
+    expect(c!.status).toBe('season-unavailable');
+    expect(c!.seasonId).toBeUndefined();
+    expect(c!.availableLabels).toStrictEqual(OPTIONS_C.map((o) => o.label));
+    expect(c!.availableLabels).not.toContain('2025-2026');
+    expect(c!.availableLabels?.[0]).toBe('2026-2027');
+    expect(c!.errorLines).toHaveLength(1);
+    expect(c!.errorLines[0]).toContain('Team 48');
+    expect(c!.errorLines[0]).toContain('2025-2026');
+    expect(c!.errorLines[0]).toContain('2026-2027, 2024-2025');
+    expect(c!.rosters.total).toBe(0);
+    expect(c!.swimmers.total).toBe(0);
 
     // Every item the queue ever hands out belongs to the other team.
     const handedOut: string[] = [];
@@ -212,16 +213,16 @@ describe('a team whose chosen season its own page does not offer', () => {
 
   it('does not fall back to a nearby season or to the selected one', () => {
     const queue = createQueue({ teams: [teamC('2025-26')] });
-    expect(queueProgress(queue).teams[0].status).toBe('season-unavailable');
+    expect(queueProgress(queue).teams[0]!.status).toBe('season-unavailable');
     expect(nextWork(queue)).toMatchObject({ kind: 'idle', reason: 'drained' });
   });
 
   it('says so, with an empty list, when no season was read from the page at all', () => {
     const queue = createQueue({ teams: [{ teamId: '9', seasonLabel: '2025-2026', seasonOptions: [] }] });
     const t = queueProgress(queue).teams[0];
-    expect(t.status).toBe('season-unavailable');
-    expect(t.availableLabels).toStrictEqual([]);
-    expect(t.errorLines[0]).toContain('none read');
+    expect(t!.status).toBe('season-unavailable');
+    expect(t!.availableLabels).toStrictEqual([]);
+    expect(t!.errorLines[0]).toContain('none read');
   });
 
   it('refuses addSwimmers for it', () => {
@@ -346,7 +347,7 @@ describe('roster pages never overlap other work', () => {
     const swimmer = lease(widen(queue, 3));
     expect(swimmer.work.key).toBe(swimmerWorkKey('6001'));
     queue = retryFailed(swimmer.queue, last.work.key);
-    expect(queueProgress(queue).teams[1].rosters.pending).toBe(1);
+    expect(queueProgress(queue).teams[1]!.rosters.pending).toBe(1);
     expect(queueProgress(queue).inFlight).toBe(1);
     // Room is left (1 of 3) and a roster is pending, but a swimmer is in flight: wait.
     expect(idleReason(queue)).toBe('at-concurrency-limit');
@@ -387,7 +388,7 @@ describe('resume keyed by swimmer, team and season', () => {
       rosterWorkKey('412', '29', 'F'),
       swimmerWorkKey('7003'),
     ]);
-    const swimmers = queueProgress(queue).teams[0].swimmers;
+    const swimmers = queueProgress(queue).teams[0]!.swimmers;
     expect(swimmers).toMatchObject({ total: 3, done: 1, skippedResumed: 2, pending: 0 });
   });
 
@@ -480,7 +481,7 @@ describe('resume keyed by swimmer, team and season', () => {
     let queue = createQueue({ teams: [teamA()] });
     queue = addSwimmers(queue, '412', 'M', ['3001', '3002']);
     queue = addSwimmers(queue, '412', 'F', ['3002', '3003']);
-    expect(queueProgress(queue).teams[0].swimmers.total).toBe(3);
+    expect(queueProgress(queue).teams[0]!.swimmers.total).toBe(3);
     expect(errorCode(() => addSwimmers(queue, '412', 'M', ['x1']))).toBe('invalid-swimmer-id');
     expect(errorCode(() => addSwimmers(queue, '999', 'M', ['1']))).toBe('unknown-team');
   });
@@ -512,18 +513,18 @@ describe('marking work', () => {
 describe('per-team progress and error lines', () => {
   it('moves a team from queued to running to done, and is not done until swimmers are listed', () => {
     let queue = createQueue({ teams: [teamA()], concurrency: 1 });
-    expect(queueProgress(queue).teams[0].status).toBe('queued');
+    expect(queueProgress(queue).teams[0]!.status).toBe('queued');
 
     const m = lease(queue);
-    expect(queueProgress(m.queue).teams[0].status).toBe('running');
+    expect(queueProgress(m.queue).teams[0]!.status).toBe('running');
     queue = markDone(m.queue, m.work.key);
     const f = lease(queue);
     queue = markDone(f.queue, f.work.key);
     // Both rosters done, no swimmers listed yet: the team's swimmers are unknown, not finished.
-    expect(queueProgress(queue).teams[0].status).toBe('running');
+    expect(queueProgress(queue).teams[0]!.status).toBe('running');
     queue = addSwimmers(queue, '412', 'M', ['6001']);
     queue = addSwimmers(queue, '412', 'F', []);
-    expect(queueProgress(queue).teams[0].status).toBe('running');
+    expect(queueProgress(queue).teams[0]!.status).toBe('running');
     const s = lease(queue);
     queue = markDone(s.queue, s.work.key);
     expect(queueProgress(queue).teams[0]).toMatchObject({
@@ -550,11 +551,11 @@ describe('per-team progress and error lines', () => {
       }
     }
     const [a, b] = queueProgress(queue).teams;
-    expect(a.status).toBe('done-with-errors');
-    expect(a.errorLines).toStrictEqual(["Team 412 · 2025-2026 · swimmer 4002: times endpoint returned no rows"]);
-    expect(a.swimmers).toMatchObject({ done: 1, failed: 1 });
-    expect(b.status).toBe('done-with-errors');
-    expect(b.errorLines).toStrictEqual(["Team 58 · 2025-2026 · women's roster: HTTP 404"]);
+    expect(a!.status).toBe('done-with-errors');
+    expect(a!.errorLines).toStrictEqual(["Team 412 · 2025-2026 · swimmer 4002: times endpoint returned no rows"]);
+    expect(a!.swimmers).toMatchObject({ done: 1, failed: 1 });
+    expect(b!.status).toBe('done-with-errors');
+    expect(b!.errorLines).toStrictEqual(["Team 58 · 2025-2026 · women's roster: HTTP 404"]);
   });
 
   it('a failure does not stop the other teams unless it asks to', () => {
@@ -585,7 +586,7 @@ describe('pause, cancel and halt', () => {
     queue = cancelQueue(a.queue);
     expect(idleReason(queue)).toBe('cancelled');
     queue = markDone(queue, a.work.key);
-    expect(queueProgress(queue).teams[0].rosters).toMatchObject({ done: 1, pending: 1 });
+    expect(queueProgress(queue).teams[0]!.rosters).toMatchObject({ done: 1, pending: 1 });
     queue = resumeQueue(queue);
     expect(idleReason(queue)).toBe('cancelled');
     expect(idleReason(pauseQueue(queue))).toBe('cancelled');
@@ -607,11 +608,11 @@ describe('pause, cancel and halt', () => {
     queue = markFailed(a.queue, a.work.key, 'SwimCloud returned a challenge.', { haltQueue: true });
     expect(idleReason(queue)).toBe('halted');
     expect(queueProgress(queue).haltMessage).toBe('SwimCloud returned a challenge.');
-    expect(queueProgress(queue).teams[0].errorLines).toHaveLength(1);
+    expect(queueProgress(queue).teams[0]!.errorLines).toHaveLength(1);
 
     queue = resumeQueue(queue);
     expect(queueProgress(queue).haltMessage).toBeUndefined();
-    expect(queueProgress(queue).teams[0].errorLines).toHaveLength(0);
+    expect(queueProgress(queue).teams[0]!.errorLines).toHaveLength(0);
     expect(lease(queue).work.key).toBe(a.work.key);
   });
 
@@ -650,10 +651,10 @@ describe('a swimmer is fetched once, whatever team and season asked for it', () 
     const swimmerKeys = order.filter((k) => k.startsWith('swimmer|'));
     expect(swimmerKeys).toStrictEqual([swimmerWorkKey('7001'), swimmerWorkKey('7002'), swimmerWorkKey('7003')]);
     const [a, b] = queueProgress(queue).teams;
-    expect(a.swimmers).toMatchObject({ total: 2, done: 2, pending: 0 });
-    expect(b.swimmers).toMatchObject({ total: 2, done: 2, pending: 0 });
-    expect(a.status).toBe('done');
-    expect(b.status).toBe('done');
+    expect(a!.swimmers).toMatchObject({ total: 2, done: 2, pending: 0 });
+    expect(b!.swimmers).toMatchObject({ total: 2, done: 2, pending: 0 });
+    expect(a!.status).toBe('done');
+    expect(b!.status).toBe('done');
   });
 
   it('keeps every (team, season) pair on the shared work, in the order they were added', () => {
@@ -674,8 +675,8 @@ describe('a swimmer is fetched once, whatever team and season asked for it', () 
     // Team 58's roster is listed late, while 7001 is already being fetched.
     queue = addSwimmers(queue, '58', 'M', ['7001']);
     const [a, b] = queueProgress(queue).teams;
-    expect(a.swimmers).toMatchObject({ total: 1, inFlight: 1 });
-    expect(b.swimmers).toMatchObject({ total: 1, inFlight: 1 });
+    expect(a!.swimmers).toMatchObject({ total: 1, inFlight: 1 });
+    expect(b!.swimmers).toMatchObject({ total: 1, inFlight: 1 });
     queue = markDone(queue, swimmer.work.key);
     expect(queueProgress(queue).teams.map((t) => t.swimmers.done)).toStrictEqual([1, 1]);
     expect(queueProgress(queue).inFlight).toBe(0);
@@ -697,8 +698,8 @@ describe('a swimmer is fetched once, whatever team and season asked for it', () 
     queue = addSwimmers(queue, '412', 'F', ['7001']);
     queue = finishRosters(queue, {});
     const next = lease(queue);
-    expect((next.work as { attributions: unknown[] }).attributions).toHaveLength(1);
-    expect(queueProgress(queue).teams[0].swimmers.total).toBe(1);
+    expect((next.work as QueueSwimmerWork).attributions).toHaveLength(1);
+    expect(queueProgress(queue).teams[0]!.swimmers.total).toBe(1);
   });
 
   it('a team crawled again for another season fetches its returning swimmers again: the reply is filed per season', () => {
@@ -712,7 +713,7 @@ describe('a swimmer is fetched once, whatever team and season asked for it', () 
     });
     const fetched = second.order.filter((k) => k.startsWith('swimmer|'));
     expect(fetched).toStrictEqual([swimmerWorkKey('7001'), swimmerWorkKey('7005')]);
-    expect(queueProgress(second.queue).teams[0].swimmers).toMatchObject({ total: 2, done: 2, skippedResumed: 0 });
+    expect(queueProgress(second.queue).teams[0]!.swimmers).toMatchObject({ total: 2, done: 2, skippedResumed: 0 });
   });
 });
 
@@ -728,7 +729,7 @@ describe('Resume after a halt, in either order', () => {
     expect(idleReason(retried)).toBe('halted');
     const resumed = resumeQueue(retried);
     expect(queueProgress(resumed).haltMessage).toBeUndefined();
-    expect(queueProgress(resumed).teams[0].errorLines).toStrictEqual([]);
+    expect(queueProgress(resumed).teams[0]!.errorLines).toStrictEqual([]);
     const first = lease(resumed);
     expect(first.work.key).toBe(key);
     expect(lease(markDone(first.queue, key)).work.key).not.toBe(key);
@@ -744,7 +745,7 @@ describe('Resume after a halt, in either order', () => {
   it('resumeQueue without a halt changes no item', () => {
     const a = lease(createQueue({ teams: [teamA()] }));
     const failed = markFailed(a.queue, a.work.key, 'HTTP 500');
-    expect(queueProgress(resumeQueue(failed)).teams[0].rosters).toMatchObject({ failed: 1 });
+    expect(queueProgress(resumeQueue(failed)).teams[0]!.rosters).toMatchObject({ failed: 1 });
   });
 });
 
@@ -763,13 +764,13 @@ describe('two halting failures', () => {
     q = markFailed(q, second.key, 'challenge on 7002', { haltQueue: true });
     expect(idleReason(q)).toBe('halted');
     expect(queueProgress(q).haltMessage).toBe('challenge on 7001');
-    expect(queueProgress(q).teams[0].swimmers).toMatchObject({ failed: 2 });
+    expect(queueProgress(q).teams[0]!.swimmers).toMatchObject({ failed: 2 });
 
     const resumed = resumeQueue(q);
     expect(queueProgress(resumed).haltMessage).toBeUndefined();
-    expect(queueProgress(resumed).teams[0].swimmers).toMatchObject({ failed: 0, pending: 2 });
+    expect(queueProgress(resumed).teams[0]!.swimmers).toMatchObject({ failed: 0, pending: 2 });
     const handedOut = [lease(resumed)];
-    handedOut.push(lease(handedOut[0].queue));
+    handedOut.push(lease(handedOut[0]!.queue));
     expect(handedOut.map((h) => h.work.key).sort()).toStrictEqual([first.key, second.key].sort());
   });
 
@@ -779,7 +780,7 @@ describe('two halting failures', () => {
     q = markFailed(q, second.key, 'b', { haltQueue: true });
     q = retryFailed(q, second.key);
     const resumed = resumeQueue(q);
-    expect(queueProgress(resumed).teams[0].swimmers).toMatchObject({ failed: 0, pending: 2 });
+    expect(queueProgress(resumed).teams[0]!.swimmers).toMatchObject({ failed: 0, pending: 2 });
   });
 
   it('a failure without halt beside a halting one is not returned to pending by Resume', () => {
@@ -787,7 +788,7 @@ describe('two halting failures', () => {
     let q = markFailed(queue, first.key, 'plain 404');
     q = markFailed(q, second.key, 'challenge', { haltQueue: true });
     const resumed = resumeQueue(q);
-    expect(queueProgress(resumed).teams[0].swimmers).toMatchObject({ failed: 1, pending: 1 });
+    expect(queueProgress(resumed).teams[0]!.swimmers).toMatchObject({ failed: 1, pending: 1 });
   });
 });
 

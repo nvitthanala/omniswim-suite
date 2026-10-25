@@ -124,7 +124,7 @@ export default function SwimCloudReplacePreviewPanel({ preview }: Props) {
 
       {keptUntraced.recruits.length + keptUntraced.plans.length > 0 ? (
         <p className="text-ui-caption text-theme-muted">
-          {keptUntraced.recruits.length + keptUntraced.plans.length} row(s) kept for an athlete losing
+          {keptUntraced.recruits.length + keptUntraced.plans.length} row(s) kept for a swimmer losing
           SwimCloud history, but their own time does not match any removed swim, so they were not
           touched.
         </p>

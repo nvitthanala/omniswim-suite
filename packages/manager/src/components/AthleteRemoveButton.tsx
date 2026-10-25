@@ -14,14 +14,16 @@ import { Trash2 } from 'lucide-react';
 import { Button } from '@omniswim/ui';
 
 export const ATHLETE_REMOVE_HINT =
-  'Opens a confirmation. There you choose to hide this athlete from the What-if projection or to remove them from the roster. Meet results stay on record.';
+  'Opens a confirmation. There you choose to hide this swimmer from the What-if projection or to remove them from the roster. Meet results stay on record.';
 
 type Props = {
   athleteName: string;
   onRequestRemove: () => void;
+  /** Icon only, for a roster row. The name and hint stay on the button for screen readers. */
+  iconOnly?: boolean;
 };
 
-export default function AthleteRemoveButton({ athleteName, onRequestRemove }: Props) {
+export default function AthleteRemoveButton({ athleteName, onRequestRemove, iconOnly = false }: Props) {
   const hintId = useId();
   return (
     <>
@@ -29,13 +31,13 @@ export default function AthleteRemoveButton({ athleteName, onRequestRemove }: Pr
         variant="ghost"
         size="sm"
         onClick={onRequestRemove}
-        className="text-theme-muted hover:text-rose-400"
+        className={iconOnly ? 'p-1.5 text-theme-muted hover:text-rose-400' : 'text-theme-muted hover:text-rose-400'}
         title={ATHLETE_REMOVE_HINT}
         aria-label={`Remove ${athleteName} from roster`}
         aria-describedby={hintId}
         leadingIcon={<Trash2 size={14} />}
       >
-        Remove
+        {iconOnly ? null : 'Remove'}
       </Button>
       <span id={hintId} className="sr-only">
         {ATHLETE_REMOVE_HINT}

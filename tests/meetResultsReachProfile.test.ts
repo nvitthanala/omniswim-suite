@@ -227,7 +227,7 @@ describe('a relay leg reads only its own distance and stroke from the profile', 
     } as SwimmerResult;
   }
   const calculated = (name: string, relayEvent: string, legIndex: number) =>
-    compareRelayLegSplits(nsiscWorkspace(), Gender.MEN, [leg(name, relayEvent, legIndex)], relayEvent, DSU)[legIndex]
+    compareRelayLegSplits(nsiscWorkspace(), Gender.MEN, [leg(name, relayEvent, legIndex)], relayEvent, DSU)[legIndex]!
       .calculatedSplit;
 
   it('takes a swimmer’s own 100 Free for a 100 free leg', () => {
@@ -252,7 +252,7 @@ describe('a relay leg reads only its own distance and stroke from the profile', 
     const ws = nsiscWorkspace([history]);
     const relayEvent = 'Event 31 Men 4x50 Yard Freestyle Relay';
     const [first] = compareRelayLegSplits(ws, Gender.MEN, [leg('Adam Rickert', relayEvent, 0)], relayEvent, DSU);
-    expect(first.calculatedSplit).toBeNull();
+    expect(first!.calculatedSplit).toBeNull();
   });
 
   it('takes the stroke the medley leg needs', () => {

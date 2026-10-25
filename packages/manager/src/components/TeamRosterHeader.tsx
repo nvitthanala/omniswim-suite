@@ -9,6 +9,8 @@ import { Users, RotateCcw, Sparkles } from 'lucide-react';
 import { Button, TeamSelect } from '@omniswim/ui';
 import ProjectedActualScore from './ProjectedActualScore';
 import { scorerCapPhrase } from './teamRosterView';
+import { OptimizeRunStatus } from './OptimizeRunStatus';
+import type { OptimizeRunState } from './optimizeRunView';
 
 type Props = {
   selectedTeam: string;
@@ -16,6 +18,14 @@ type Props = {
   editable: boolean;
   /** Open the Optimize step. Omit to hide the link. */
   onOpenOptimize?: () => void;
+  /** One click: optimize every team and apply it, with an Undo. Omit to hide the button. */
+  onOptimizeAllTeams?: () => void;
+  /** True while the all-teams run is working. */
+  allTeamsBusy?: boolean;
+  /** The all-teams run in flight, for "Optimizing N of M teams". Shown with `onCancelAllTeams`. */
+  allTeamsRun?: OptimizeRunState | null;
+  /** Cancel the all-teams run. Nothing is applied. */
+  onCancelAllTeams?: () => void;
   onResetTeam: () => void;
   /** The Delete or Backspace key removes the selected athlete; mention it in the help text. */
   canRemoveAthlete?: boolean;
@@ -35,6 +45,10 @@ export default function TeamRosterHeader({
   genderLabel,
   editable,
   onOpenOptimize,
+  onOptimizeAllTeams,
+  allTeamsBusy = false,
+  allTeamsRun = null,
+  onCancelAllTeams,
   onResetTeam,
   canRemoveAthlete = false,
   maxIndividualScorersPerTeam,
@@ -71,6 +85,18 @@ export default function TeamRosterHeader({
               Optimize this lineup
             </Button>
           ) : null}
+          {onOptimizeAllTeams ? (
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={onOptimizeAllTeams}
+              disabled={allTeamsBusy}
+              className="text-theme-secondary hover:text-[var(--text-accent)] whitespace-nowrap"
+              title="Optimize every team and apply it now. You can undo it from the message that follows."
+            >
+              {allTeamsBusy ? 'Optimizing…' : 'Optimize all teams'}
+            </Button>
+          ) : null}
           {editable ? (
             <Button
               variant="ghost"
@@ -86,6 +112,12 @@ export default function TeamRosterHeader({
         </div>
       </div>
 
+      {allTeamsRun && onCancelAllTeams ? (
+        <div className="mb-3">
+          <OptimizeRunStatus run={allTeamsRun} onCancel={onCancelAllTeams} />
+        </div>
+      ) : null}
+
       {selectedTeam ? (
         <ProjectedActualScore
           actual={selectedActual}
@@ -96,7 +128,7 @@ export default function TeamRosterHeader({
       ) : null}
 
       <p className="text-ui-body text-theme-secondary my-3 leading-relaxed">
-        Click an athlete to edit scorers, individual entries, and see relay status.
+        Click a swimmer to edit scorers, individual entries, and see relay status.
         {editable ? ` ${scorerCapPhrase(maxIndividualScorersPerTeam)}` : ' Enable What-if to edit scorers.'}
         {' '}
         <kbd className="px-1 rounded border border-theme-soft bg-[var(--surface-muted)] text-ui-micro font-mono">

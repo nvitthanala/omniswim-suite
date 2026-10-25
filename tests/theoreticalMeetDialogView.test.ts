@@ -89,10 +89,10 @@ describe('groupCaptures', () => {
       ['1', 'Team 1', ['2026-2027', '2025-2026']],
       ['2', 'Team 2', ['2026-2027']],
     ]);
-    const row = groups[0].rows[0];
+    const row = groups[0]!.rows[0];
     expect(row).toMatchObject({ status: 'ready', blockedReason: null, pagesStored: 3, pagesPlanned: 3, swimmersCaptured: 2, staleHint: null });
-    expect(row.coverageText).toBe('3 of 3 planned pages stored. 2 swimmers with times.');
-    expect(row.capturedOn).toBe(iso(2).slice(0, 10));
+    expect(row!.coverageText).toBe('3 of 3 planned pages stored. 2 swimmers with times.');
+    expect(row!.capturedOn).toBe(iso(2).slice(0, 10));
   });
 
   it('leaves a meet capture out', () => {
@@ -101,15 +101,15 @@ describe('groupCaptures', () => {
   });
 
   it('blocks a capture that is not finished, and says why', () => {
-    const inProgress = groupCaptures([record({ captureId: 'a', completeness: 'in-progress' })], NOW)[0].rows[0];
-    expect(inProgress.status).toBe('blocked');
-    expect(inProgress.blockedReason).toMatch(/still running/);
-    const partial = groupCaptures([record({ captureId: 'b', completeness: 'partial', plannedPageCount: 10 })], NOW)[0].rows[0];
-    expect(partial.blockedReason).toMatch(/7 planned pages not stored/);
-    const failed = groupCaptures([record({ captureId: 'c', completeness: 'failed' })], NOW)[0].rows[0];
-    expect(failed.blockedReason).toMatch(/failed/);
-    const empty = groupCaptures([record({ captureId: 'd', pages: [] })], NOW)[0].rows[0];
-    expect(empty.status).toBe('blocked');
+    const inProgress = groupCaptures([record({ captureId: 'a', completeness: 'in-progress' })], NOW)[0]!.rows[0];
+    expect(inProgress!.status).toBe('blocked');
+    expect(inProgress!.blockedReason).toMatch(/still running/);
+    const partial = groupCaptures([record({ captureId: 'b', completeness: 'partial', plannedPageCount: 10 })], NOW)[0]!.rows[0];
+    expect(partial!.blockedReason).toMatch(/7 planned pages not stored/);
+    const failed = groupCaptures([record({ captureId: 'c', completeness: 'failed' })], NOW)[0]!.rows[0];
+    expect(failed!.blockedReason).toMatch(/failed/);
+    const empty = groupCaptures([record({ captureId: 'd', pages: [] })], NOW)[0]!.rows[0];
+    expect(empty!.status).toBe('blocked');
   });
 
   it('shows the stale hint on an old capture and counts only pages that were stored ok', () => {
@@ -120,10 +120,10 @@ describe('groupCaptures', () => {
         { canonicalUrl: 'https://x/a', resourceKind: 'swimmerFastestTimes', retrievedAt: iso(44), outcome: 'http-error' },
       ],
     });
-    const row = groupCaptures([old], NOW)[0].rows[0];
-    expect(row.staleHint).toContain('45 days old');
-    expect(row.swimmersCaptured).toBe(0);
-    expect(row.pagesStored).toBe(1);
+    const row = groupCaptures([old], NOW)[0]!.rows[0];
+    expect(row!.staleHint).toContain('45 days old');
+    expect(row!.swimmersCaptured).toBe(0);
+    expect(row!.pagesStored).toBe(1);
   });
 
   it('keeps ready ids selectable and prunes the rest from a selection', () => {
@@ -250,10 +250,10 @@ describe('preview model over the committed fixtures', async () => {
   it('lists the report names, with diving moved out of the no-seed list', () => {
     for (const [index, team] of seeds.report.teams.entries()) {
       const row = model.teams[index];
-      expect(row.athletesWithNoTimes).toEqual(team.athletesWithNoTimes.map(a => a.name));
-      expect(row.divingExcluded).toEqual(team.athletesWithNoSeedInMeetCourse.filter(a => a.reason === 'diving_not_supported').map(a => a.name));
-      expect(row.noSeedInCourse.length + row.divingExcluded.length).toBe(team.athletesWithNoSeedInMeetCourse.length);
-      expect(row.swimmers.length).toBe(team.eventsChosenPerSwimmer.filter(s => s.events.some(e => e.chosen)).length);
+      expect(row!.athletesWithNoTimes).toEqual(team.athletesWithNoTimes.map(a => a.name));
+      expect(row!.divingExcluded).toEqual(team.athletesWithNoSeedInMeetCourse.filter(a => a.reason === 'diving_not_supported').map(a => a.name));
+      expect(row!.noSeedInCourse.length + row!.divingExcluded.length).toBe(team.athletesWithNoSeedInMeetCourse.length);
+      expect(row!.swimmers.length).toBe(team.eventsChosenPerSwimmer.filter(s => s.events.some(e => e.chosen)).length);
     }
     // The trimmed fixtures keep 6 of each team's swimmers, so most of the roster has no times page.
     expect(model.teams.some(t => t.athletesWithNoTimes.length > 0)).toBe(true);
@@ -262,10 +262,10 @@ describe('preview model over the committed fixtures', async () => {
   it('shows each chosen event once as a chip with the seed time from the report', () => {
     const first = model.teams.find(t => t.swimmers.length > 0)!;
     const swimmer = first.swimmers[0];
-    expect(swimmer.chosen.length).toBeGreaterThan(0);
-    const source = seeds.report.teams.flatMap(t => t.eventsChosenPerSwimmer).find(s => s.name === swimmer.name)!;
-    expect(swimmer.chosen).toEqual(source.events.filter(e => e.chosen).map(e => ({ event: e.event, time: e.time, isExhibition: e.isExhibition === true, fillsRemovedSlot: false })));
-    expect(new Set(swimmer.chosen.map(c => c.event)).size).toBe(swimmer.chosen.length);
+    expect(swimmer!.chosen.length).toBeGreaterThan(0);
+    const source = seeds.report.teams.flatMap(t => t.eventsChosenPerSwimmer).find(s => s.name === swimmer!.name)!;
+    expect(swimmer!.chosen).toEqual(source.events.filter(e => e.chosen).map(e => ({ event: e.event, time: e.time, isExhibition: e.isExhibition === true, fillsRemovedSlot: false })));
+    expect(new Set(swimmer!.chosen.map(c => c.event)).size).toBe(swimmer!.chosen.length);
   });
 
   it('shows every caveat of the report, relays not included, and the exhibition caveat, each once', () => {
@@ -308,7 +308,7 @@ describe('preview model over the committed fixtures', async () => {
 
   it('puts the first picked team first', () => {
     const reversed = buildMeet({ captureIds: [...CAPTURE_IDS].reverse(), resultsByCaptureId: results, scoringChoiceId: 'nsisc' }, 'ws-view-test-2', 1);
-    expect(reversed.model.teams[0].teamName).toBe(model.teams[model.teams.length - 2].teamName);
+    expect(reversed.model.teams[0]!.teamName).toBe(model.teams[model.teams.length - 2]!.teamName);
   });
 
   it('builds a men and women pair with the Gender enum labels', () => {

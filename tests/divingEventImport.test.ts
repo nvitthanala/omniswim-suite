@@ -60,7 +60,7 @@ function storedEventPage(ref: string): { html: string; url: string } | undefined
 }
 
 const PAGES_ON_DISK = DIVING_REFS.map((ref) => ({ ref, page: storedEventPage(ref) })).filter(
-  (p): p is { ref: string; page: { html: string; url: string } } => p.page !== undefined,
+  (p): p is { ref: (typeof DIVING_REFS)[number]; page: { html: string; url: string } } => p.page !== undefined,
 );
 
 /**

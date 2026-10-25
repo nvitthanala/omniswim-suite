@@ -8,7 +8,15 @@
  * field into columns.
  */
 
-export const SCHEMA_VERSION = 8;
+/**
+ * 9 = the six id-keyed child tables (`meet_results`, `source_meet_results`,
+ * `psych_results`, `recruits`, `meet_entry_plans`, `athlete_aliases`) are keyed on
+ * `(workspace_id, id)` instead of `id` alone. A row id only has to be unique inside
+ * its workspace: a copy of a workspace reuses its row ids, and the store-wide key
+ * made that create fail with a 500. Existing files are rebuilt by
+ * `migrateSqliteChildKeys` (see `./childKeyMigration`).
+ */
+export const SCHEMA_VERSION = 9;
 
 export const CREATE_TABLES_SQL = `
 PRAGMA journal_mode = WAL;
@@ -40,37 +48,41 @@ CREATE TABLE IF NOT EXISTS workspaces (
 );
 
 CREATE TABLE IF NOT EXISTS meet_results (
-  id           TEXT PRIMARY KEY,
+  id           TEXT NOT NULL,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   gender       TEXT NOT NULL,
   position     INTEGER NOT NULL DEFAULT 0,
-  data         TEXT NOT NULL
+  data         TEXT NOT NULL,
+  PRIMARY KEY (workspace_id, id)
 );
 CREATE INDEX IF NOT EXISTS idx_meet_results_ws ON meet_results(workspace_id);
 
 CREATE TABLE IF NOT EXISTS source_meet_results (
-  id           TEXT PRIMARY KEY,
+  id           TEXT NOT NULL,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   gender       TEXT NOT NULL,
   position     INTEGER NOT NULL DEFAULT 0,
-  data         TEXT NOT NULL
+  data         TEXT NOT NULL,
+  PRIMARY KEY (workspace_id, id)
 );
 CREATE INDEX IF NOT EXISTS idx_source_meet_results_ws ON source_meet_results(workspace_id);
 
 CREATE TABLE IF NOT EXISTS psych_results (
-  id           TEXT PRIMARY KEY,
+  id           TEXT NOT NULL,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   gender       TEXT NOT NULL,
   position     INTEGER NOT NULL DEFAULT 0,
-  data         TEXT NOT NULL
+  data         TEXT NOT NULL,
+  PRIMARY KEY (workspace_id, id)
 );
 CREATE INDEX IF NOT EXISTS idx_psych_results_ws ON psych_results(workspace_id);
 
 CREATE TABLE IF NOT EXISTS recruits (
-  id           TEXT PRIMARY KEY,
+  id           TEXT NOT NULL,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   position     INTEGER NOT NULL DEFAULT 0,
-  data         TEXT NOT NULL
+  data         TEXT NOT NULL,
+  PRIMARY KEY (workspace_id, id)
 );
 CREATE INDEX IF NOT EXISTS idx_recruits_ws ON recruits(workspace_id);
 
@@ -82,10 +94,11 @@ CREATE TABLE IF NOT EXISTS roster_overrides (
 CREATE INDEX IF NOT EXISTS idx_roster_overrides_ws ON roster_overrides(workspace_id);
 
 CREATE TABLE IF NOT EXISTS meet_entry_plans (
-  id           TEXT PRIMARY KEY,
+  id           TEXT NOT NULL,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   position     INTEGER NOT NULL DEFAULT 0,
-  data         TEXT NOT NULL
+  data         TEXT NOT NULL,
+  PRIMARY KEY (workspace_id, id)
 );
 CREATE INDEX IF NOT EXISTS idx_meet_entry_plans_ws ON meet_entry_plans(workspace_id);
 
@@ -118,10 +131,11 @@ CREATE TABLE IF NOT EXISTS race_analyses (
 CREATE INDEX IF NOT EXISTS idx_race_analyses_ws ON race_analyses(workspace_id);
 
 CREATE TABLE IF NOT EXISTS athlete_aliases (
-  id           TEXT PRIMARY KEY,
+  id           TEXT NOT NULL,
   workspace_id TEXT NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
   position     INTEGER NOT NULL DEFAULT 0,
-  data         TEXT NOT NULL
+  data         TEXT NOT NULL,
+  PRIMARY KEY (workspace_id, id)
 );
 CREATE INDEX IF NOT EXISTS idx_athlete_aliases_ws ON athlete_aliases(workspace_id);
 

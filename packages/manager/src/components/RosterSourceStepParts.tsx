@@ -18,9 +18,9 @@ import AthleteHistoryImportPanel from './AthleteHistoryImportPanel';
 export type AddAthletesMethod = 'one' | 'swimcloud' | 'roster';
 
 const METHOD_COPY: Record<AddAthletesMethod, { label: string; description: string }> = {
-  one: { label: 'One athlete', description: 'Add a single event and time' },
-  swimcloud: { label: 'From SwimCloud', description: "Import an athlete's best times" },
-  roster: { label: 'A whole roster', description: 'Import a list of athletes' },
+  one: { label: 'One swimmer', description: 'Add a single event and time' },
+  swimcloud: { label: 'From SwimCloud', description: "Import a swimmer's best times" },
+  roster: { label: 'A whole roster', description: 'Import a list of swimmers' },
 };
 
 function MethodButton({
@@ -84,7 +84,7 @@ export function AddAthletesSection({
   return (
     <section className="surface-card rounded-xl p-4 sm:p-5">
       <div className="mb-4">
-        <h4 className="text-ui-label font-semibold text-[var(--text-primary)]">Add athletes</h4>
+        <h4 className="text-ui-label font-semibold text-[var(--text-primary)]">Add swimmers</h4>
         <p className="text-ui-body text-theme-secondary mt-1 leading-relaxed">
           Choose how to bring swimmers into this roster.
         </p>
@@ -93,7 +93,7 @@ export function AddAthletesSection({
       <div
         role="group"
         className="grid grid-cols-1 sm:grid-cols-3 gap-2"
-        aria-label="How would you like to add athletes?"
+        aria-label="How would you like to add swimmers?"
       >
         <MethodButton method="one" active={method === 'one'} onSelect={() => onSelectMethod('one')} />
         <MethodButton
@@ -146,7 +146,7 @@ export function AddAthletesSection({
         {method === 'roster' ? (
           <div className="rounded-lg border border-theme-soft surface-muted-bg p-4">
             <p className="text-ui-body text-theme-secondary leading-relaxed">
-              Import a list of athletes with the roster import wizard.
+              Import a list of swimmers with the roster import wizard.
             </p>
             <Button variant="primary" size="md" onClick={onOpenImportWizard} className="mt-3">
               Open roster import

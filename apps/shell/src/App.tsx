@@ -1,4 +1,4 @@
-import { Suspense, useEffect, useRef, useState } from 'react';
+import { Suspense, useEffect, useRef, useState, type ReactNode } from 'react';
 import { BrowserRouter, Navigate, Route, Routes, useLocation, useNavigate, useSearchParams } from 'react-router-dom';
 import { AnimatePresence, motion, MotionConfig } from 'motion/react';
 import { AppletSkeleton, ScoringRulesOpenerProvider, TheoreticalMeetOpenerProvider, useToast } from '@omniswim/ui';
@@ -10,6 +10,7 @@ import type { Workspace } from '@omniswim/core/types';
 import { isTheoreticalMeet } from '@omniswim/core/lib/theoreticalMeetLabel';
 import SuiteHeader from './components/SuiteHeader';
 import WorkspaceSidebar from './components/WorkspaceSidebar';
+import WorkspaceConflictBanner from './components/WorkspaceConflictBanner';
 import SuiteHome from './pages/SuiteHome';
 import SettingsPage from './pages/SettingsPage';
 import LoginPage from './pages/LoginPage';
@@ -17,6 +18,7 @@ import SharePage from './pages/SharePage';
 import AnalyticsPage from './pages/AnalyticsPage';
 import SwimCloudWindow from './components/SwimCloudWindow';
 import CommandPalette from './components/CommandPalette';
+import AppErrorBoundary from './components/AppErrorBoundary';
 import { AuthProvider } from './context/AuthContext';
 import {
   ManagerAppLazy,
@@ -173,6 +175,8 @@ function ShellLayout() {
         </div>
       ) : null}
 
+      <WorkspaceConflictBanner />
+
       <div className="flex-1 flex overflow-hidden min-w-0">
         {showWorkspaceChrome ? <WorkspaceSidebar /> : null}
         <main className="main-content flex-1 min-w-0 overflow-y-auto custom-scrollbar">
@@ -192,14 +196,14 @@ function ShellLayout() {
                   </Suspense>
                 ) : null}
                 <Routes location={location}>
-                  <Route path="/" element={<SuiteHome />} />
-                  <Route path="/login" element={<LoginPage />} />
-                  <Route path="/share/:token" element={<SharePage />} />
-                  <Route path="/analytics" element={<AnalyticsPage />} />
-                  <Route path="/manager" element={<ManagerApp />} />
-                  <Route path="/matrix" element={<MatrixApp />} />
-                  <Route path="/metrics" element={<MetricsApp />} />
-                  <Route path="/settings" element={<SettingsPage />} />
+                  <Route path="/" element={<AppErrorBoundary area="Home"><SuiteHome /></AppErrorBoundary>} />
+                  <Route path="/login" element={<AppErrorBoundary area="Sign in"><LoginPage /></AppErrorBoundary>} />
+                  <Route path="/share/:token" element={<AppErrorBoundary area="Shared view"><SharePage /></AppErrorBoundary>} />
+                  <Route path="/analytics" element={<AppErrorBoundary area="Analytics"><AnalyticsPage /></AppErrorBoundary>} />
+                  <Route path="/manager" element={<AppErrorBoundary area="Manager"><ManagerApp /></AppErrorBoundary>} />
+                  <Route path="/matrix" element={<AppErrorBoundary area="Matrix"><MatrixApp /></AppErrorBoundary>} />
+                  <Route path="/metrics" element={<AppErrorBoundary area="Metrics"><MetricsApp /></AppErrorBoundary>} />
+                  <Route path="/settings" element={<AppErrorBoundary area="Settings"><SettingsPage /></AppErrorBoundary>} />
                   <Route path="*" element={<Navigate to="/" replace />} />
                 </Routes>
               </motion.div>
@@ -254,6 +258,12 @@ function ShellLayout() {
   );
 }
 
+/** Motion follows the OS setting, and the app's own Reduced motion setting forces it on. */
+function PreferenceMotionConfig({ children }: { children: ReactNode }) {
+  const { preferences } = useSuitePreferences();
+  return <MotionConfig reducedMotion={preferences.reducedMotion ? 'always' : 'user'}>{children}</MotionConfig>;
+}
+
 export default function App() {
   const toast = useToast();
 
@@ -268,13 +278,15 @@ export default function App() {
   return (
     <BrowserRouter>
       <SuitePreferencesProvider>
-        <MotionConfig reducedMotion="user">
+        <PreferenceMotionConfig>
           <AuthProvider>
             <SuiteWorkspaceProvider onNotify={toast.push}>
-              <ShellLayout />
+              <AppErrorBoundary>
+                <ShellLayout />
+              </AppErrorBoundary>
             </SuiteWorkspaceProvider>
           </AuthProvider>
-        </MotionConfig>
+        </PreferenceMotionConfig>
       </SuitePreferencesProvider>
     </BrowserRouter>
   );

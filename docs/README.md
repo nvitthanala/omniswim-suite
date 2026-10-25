@@ -8,6 +8,7 @@ in the repository root. Everything else lives here.
 | Doc | Covers |
 | --- | --- |
 | [USER_GUIDE.md](USER_GUIDE.md) | **How to use the app.** Written for a coach: workspaces, choosing a scoring rule set, getting swimmers in, lineups, relays, optimising, scoring a meet, reconciling against official results, and backups. |
+| [ONBOARDING.md](ONBOARDING.md) | **First-day setup for a developer.** Tools, Python environment, Playwright browsers, `pdftotext`, which tests need local data, the gates and their baseline numbers, the port-3000 rule. |
 
 ## Reference — current
 
@@ -17,7 +18,6 @@ Living documents that describe how a part of the system works today.
 | --- | --- |
 | [reference/CUTLINE_TAGS_PLAN.md](reference/CUTLINE_TAGS_PLAN.md) | The cutline-tag provenance rebuild — four verified NCAA/NAIA sources, the tag taxonomy, and the finding that the original `cutlines.ts` mislabeled D2 data as D1. |
 | [reference/PERFORMANCE_NOTES.md](reference/PERFORMANCE_NOTES.md) | The optimisation pass that memoised `convertTimeToSeconds`, stabilised `TeamRosterPanel` references, and added transitions to the import panel. |
-| [reference/ROSTER_CATALOG_NOTES.md](reference/ROSTER_CATALOG_NOTES.md) | The cross-workspace team roster catalog: course-aware eligibility, how it's queried. |
 
 ## Video — current
 

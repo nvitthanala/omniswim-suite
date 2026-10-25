@@ -18,6 +18,7 @@ import {
   sumPrelimsOuForSwimmers,
 } from '../packages/core/src/lib/prelimsProjection.ts';
 import { buildScoringSnapshot } from '../packages/core/src/lib/scoringEngine.ts';
+import { settingsForBuiltInScoringPreset } from '../packages/core/src/lib/scoringDefaults.ts';
 import {
   calculatePoints,
   eventScoringStage,
@@ -372,8 +373,13 @@ const snapshot = buildScoringSnapshot(workspace, Gender.MEN, false);
 const prelimsTeamA = snapshot.prelimsProjected.sortedTeams.find(t => t.teamName === 'Team A');
 const baselineTeamA = snapshot.baseline.sortedTeams.find(t => t.teamName === 'Team A');
 
-if (!prelimsTeamA || prelimsTeamA.totalPoints !== 15) {
-  console.error('FAIL: Team A prelims anchor should be 15, got', prelimsTeamA?.totalPoints);
+// A projected team carries `expected`, never `totalPoints` (the type omits it).
+if (!prelimsTeamA || prelimsTeamA.expected !== 15) {
+  console.error('FAIL: Team A prelims anchor should be 15, got', prelimsTeamA?.expected);
+  process.exit(1);
+}
+if ('totalPoints' in prelimsTeamA) {
+  console.error('FAIL: a projected team should not carry totalPoints at runtime');
   process.exit(1);
 }
 if (!baselineTeamA || baselineTeamA.totalPoints !== 20) {
@@ -381,7 +387,7 @@ if (!baselineTeamA || baselineTeamA.totalPoints !== 20) {
   process.exit(1);
 }
 
-const baselineOu = baselineTeamA.totalPoints - prelimsTeamA.totalPoints;
+const baselineOu = baselineTeamA.totalPoints - prelimsTeamA.expected;
 if (baselineOu !== 5) {
   console.error('FAIL: Team A baseline O/U should be +5, got', baselineOu);
   process.exit(1);
@@ -395,6 +401,45 @@ const deltaTimeline = buildPrelimsDeltaTimeline(
 if (deltaTimeline.length === 0) {
   console.error('FAIL: expected non-empty prelims delta timeline');
   process.exit(1);
+}
+
+// A team whose every seed is past the place-point table stays in the bundle:
+// `expected` is null (absent, not 0) and the old `totalPoints` is not there.
+{
+  const nullEvent = 'Event 5 Men 100 Yard Backstroke';
+  const swim = (team, name, rank) => ({
+    id: `${team}-${name}`,
+    rank,
+    name,
+    classYear: 'JR',
+    team,
+    time: `${50 + rank}.00`,
+    points: 0,
+    event: nullEvent,
+    gender: Gender.MEN,
+    roundSwam: 'Preliminaries',
+  });
+  // Dual-meet table: the 7th seed and below have no place-point row.
+  const dualSettings = settingsForBuiltInScoringPreset('ncaa-dual-six-lanes-or-more');
+  const nullRows = [swim('Team Y', 'Y1', 1), swim('Team Z', 'Z1', 8)];
+  const nullBundle = buildPrelimsProjectedBundle({
+    workspace: { ...workspace, menResults: nullRows, scoringSettings: dualSettings },
+    gender: Gender.MEN,
+  });
+  const teamZ = nullBundle.sortedTeams.find(t => t.teamName === 'Team Z');
+  const teamY = nullBundle.sortedTeams.find(t => t.teamName === 'Team Y');
+  if (!teamZ || teamZ.expected !== null || teamZ.withoutExpectationCount !== 1) {
+    console.error('FAIL: a team with every seed past the table should keep expected null', teamZ);
+    process.exit(1);
+  }
+  if (!teamY || typeof teamY.expected !== 'number') {
+    console.error('FAIL: a team inside the table should carry a numeric expected', teamY);
+    process.exit(1);
+  }
+  if (nullBundle.sortedTeams.some(t => 'totalPoints' in t)) {
+    console.error('FAIL: no projected team should carry totalPoints at runtime');
+    process.exit(1);
+  }
 }
 
 const emptyBundle = buildPrelimsProjectedBundle({

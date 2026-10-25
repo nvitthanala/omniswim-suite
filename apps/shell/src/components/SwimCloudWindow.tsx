@@ -56,12 +56,10 @@ export default function SwimCloudWindow() {
           title="Open in new tab"
           onPointerDown={(e) => e.stopPropagation()}
         >
-          {' '}
           <ExternalLink size={14} />{' '}
         </a>
       }
     >
-      {' '}
       <iframe
         title="SwimCloud reference"
         src="https://www.swimcloud.com/"

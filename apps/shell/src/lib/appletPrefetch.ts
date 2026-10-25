@@ -10,8 +10,11 @@ const prefetched = new Set<string>();
 
 export function prefetchApplet(id: keyof typeof prefetchers) {
   if (prefetched.has(id)) return;
+  const load = prefetchers[id];
+  // An id with no loader has nothing to warm; the nav and home page pass applet ids.
+  if (load === undefined) return;
   prefetched.add(id);
-  void prefetchers[id]();
+  void load();
 }
 
 export function useAppletPrefetch() {

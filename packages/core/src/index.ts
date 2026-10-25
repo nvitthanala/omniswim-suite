@@ -77,6 +77,11 @@ export {
 /* --- Derived cut tags. Never hand-set; always built from the tables above. --- */
 export * from './lib/cutlineTags';
 
+/* --- Swims-list rows that may be time trials, and the scored-program boundary. --- */
+export { isUnconfirmedProgramSwim } from './lib/programSwim';
+export { resolveScoredProgramBoundary } from './lib/scoredProgramBoundary';
+export type { ScoredProgramBoundary, ScoredProgramBoundaryInput } from './lib/scoredProgramBoundary';
+
 /* --- Team → division resolution. `null` means unknown, never D1. --- */
 export {
   divisionForTeam,
@@ -87,6 +92,7 @@ export {
   registerTeamsFromList,
   knownTeamDivisions,
   divisionForTeamInSeason,
+  divisionForEntryInSeason,
   programCompetedInSeason,
   programSponsorsGender,
   teamSeasonStartYear,
@@ -183,3 +189,15 @@ export {
   type MeetPlaceField,
   type CatalogEventOrder,
 } from './lib/eventStrength';
+
+/* --- Place-point table drafts: a blank cell exists only in a UI draft; stored tables are number[]. --- */
+export {
+  finalizeScoringDraft,
+  pointsTableSchema,
+  storedPlaceTableSchema,
+  type PlaceDraft,
+  type PlaceTableName,
+  type BlankPlace,
+  type ScoringSettingsDraft,
+  type FinalizeScoringDraftResult,
+} from './lib/scoringPlaceTables';

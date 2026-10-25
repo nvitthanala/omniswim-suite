@@ -32,7 +32,8 @@ import {
   type SwimmerResult,
 } from '../types';
 import { DEFAULT_SCORER_AUTO_RULES } from './scoringDefaults';
-import { displayTimeForRelayLeg } from './relaySplits';
+import { itemAt } from './indexedAccess';
+import { displayTimeForRelayLeg, relayLegTimeView } from './relaySplits';
 import { canonicalSwimmerName, classifyRoundTier, isDivingEvent, isRelayResult, sortEventsByMeetOrder } from './utils';
 import { IDENTITY_ALIAS_RESOLVER, type AthleteAliasResolver } from './athleteAliases';
 
@@ -84,14 +85,26 @@ export function rowSuggestsScorer(swim: SwimmerResult, rules?: ScorerAutoRules):
   if (!rules) return false;
   const tiers = rules.abFinalTiers ?? ['A', 'B'];
   const tier = classifyRoundTier(swim.roundSwam);
-  if (!tiers.includes(tier as 'A' | 'B')) return false;
+  const isRelayLeg = swim.isRelay === true || isRelayResult(swim);
+  // A relay has no A or B heat: it is swum once, as a timed final ("Timed Finals" on
+  // SwimCloud, "Finals" on HyTek: tier `FIN`). That is a final, so a relay leg in it
+  // counts like a leg in an A or B final. Relay legs only: an individual swim in a
+  // `FIN` round (a 1650 timed final) still marks no scorer.
+  // A SwimCloud entry row ("Henderson State (A)") is one row per relay entry with the
+  // legs in `relayNames`: its name is a label, not a swimmer, so it marks no scorer.
+  // A/B rows are not touched by this guard.
+  // Effect: a relay-only swimmer of a timed-final relay now joins the scorer roster
+  // and counts toward its caps, as a relay-only swimmer of an A/B final already did.
+  const isEntryLabelRow = isRelayLeg && (swim.relayNames?.length ?? 0) > 0;
+  const isTimedFinalLegRow = isRelayLeg && tier === 'FIN' && !isEntryLabelRow;
+  if (!tiers.includes(tier as 'A' | 'B') && !isTimedFinalLegRow) return false;
 
   if (rules.distanceFinalRequired && isDistanceForRules(swim.event, rules)) {
     // Prelims-only distance swims do not mark a scorer; A/B distance finals do.
     if (tier === 'PRE') return false;
   }
 
-  if (swim.isRelay || isRelayResult(swim)) {
+  if (isRelayLeg) {
     return rules.includeRelayLegsInFinals !== false;
   }
 
@@ -295,11 +308,18 @@ export function relayEntryRosterEligible(
   lookup?: ScorerRosterLookup
 ): boolean {
   if (!usesScorerRoster(settings)) return true;
-  const sample = group[0];
+  const sample = itemAt(group, 0);
   const rules = effectiveAutoRules(settings);
   const tier = classifyRoundTier(sample.roundSwam);
   const tiers = rules.abFinalTiers ?? ['A', 'B'];
-  if (rules.includeRelayLegsInFinals !== false && tiers.includes(tier as 'A' | 'B')) {
+  // A relay has no A or B heat: it is swum once, as a timed final ("Timed Finals" on
+  // SwimCloud, "Finals" on HyTek: tier `FIN`). That is a final, so its legs count as
+  // legs of an A/B final. Without this branch the leg check below ran for every
+  // relay, and on a SwimCloud entry row (named "Team (A)", legs in `relayNames`) it
+  // never matches the roster, so NSISC relays scored 0 in computed mode.
+  // Same rule as `rowSuggestsScorer`: a relay-only swimmer of a timed-final relay now
+  // joins the scorer roster and counts toward its caps.
+  if (rules.includeRelayLegsInFinals !== false && (tiers.includes(tier as 'A' | 'B') || tier === 'FIN')) {
     return true;
   }
   if (!lookup) return false;
@@ -345,7 +365,16 @@ export type AthleteCreditedSwim = {
   id: string;
   event: string;
   time: string;
+  /**
+   * A relay leg's measured split, or `'—'`. Never an estimate: a leg of a theoretical meet carries
+   * {@link AthleteCreditedSwim.legEstimate} instead.
+   */
   displayTime: string;
+  /**
+   * Set only on a relay leg whose time is an estimate (a theoretical meet: nobody swam the relay). Show it
+   * under the "Estimate" label, never as a split.
+   */
+  legEstimate?: { time: string; basis?: string };
   roundSwam?: string;
   rank: number;
   points: number;
@@ -359,6 +388,11 @@ export type AthleteCreditedSwim = {
    * a metric swim. Build its cut tag through `cutlineSwimOfRecord`.
    */
   convertedFrom?: ScyConversionProvenance;
+  /**
+   * Carried from `SwimmerResult.programSwim`. `'unconfirmed'`: the swims-list import could not tell a
+   * program swim from a time trial. Build its cut tag through `cutlineSwimOfRecord`, which reads it.
+   */
+  programSwim?: 'unconfirmed' | 'program';
 };
 
 /**
@@ -392,11 +426,16 @@ export function getAthleteCreditedSwims(
 
     const pts = typeof r.points === 'number' ? r.points : 0;
     const isRelay = isRelayResult(r);
+    const legView = isRelay ? relayLegTimeView(r) : null;
+    const legEstimate = legView?.kind === 'estimate' ? legView : null;
     swims.push({
       id: r.id,
       event: r.event,
       time: r.time,
-      displayTime: isRelay ? displayTimeForRelayLeg(r) : r.time,
+      displayTime: isRelay ? (legEstimate ? '—' : displayTimeForRelayLeg(r)) : r.time,
+      ...(legEstimate
+        ? { legEstimate: { time: legEstimate.time, ...(legEstimate.basis === undefined ? {} : { basis: legEstimate.basis }) } }
+        : {}),
       roundSwam: r.roundSwam,
       rank: r.rank,
       points: pts,
@@ -406,6 +445,7 @@ export function getAthleteCreditedSwims(
       relayLegSplitDetail: r.relayLegSplitDetail,
       relayTeamSplits: r.relayTeamSplits,
       ...(r.convertedFrom ? { convertedFrom: r.convertedFrom } : {}),
+      ...(r.programSwim ? { programSwim: r.programSwim } : {}),
     });
   }
 

@@ -3,6 +3,7 @@ import { Gender, type HistoricalSwim, type SwimmerResult, type Workspace } from 
 import { NSISC_PRESET_SETTINGS } from '../packages/core/src/lib/scoringDefaults';
 import { optimizeEventLineupForTeam, optimizeRosterForTeam, teamTotalForTeam } from '../packages/core/src/lib/rosterOptimizer';
 import { previewHistoryImportActions } from '../packages/core/src/lib/historyImportRoster';
+import { workspaceFixture } from './helpers/typedFixtures';
 
 const A = 'Alpha University';
 const B = 'Beta College';
@@ -16,10 +17,10 @@ function history(name: string, team: string, event: string, time: string, extra:
   return { name, team, gender: Gender.MEN, event, time, timeType: 'SCY', source: 'paste', ...extra } as HistoricalSwim;
 }
 function ws(menResults: SwimmerResult[], extra: Partial<Workspace> = {}): Workspace {
-  return { id: 'regression', name: 'regression', createdAt: 0, menResults, womenResults: [], sourceMenResults: menResults, sourceWomenResults: [], recruits: [], scoringSettings: { ...NSISC_PRESET_SETTINGS, maxIndividualEntriesPerSwimmer: 999, maxTotalEntriesPerSwimmer: 7 }, meetEntryPlans: [], activeEntryIds: [], athleteHistory: [], historySources: [], scorerRosterOverrides: [], relayLegOverrides: [], ...extra } as unknown as Workspace;
+  return workspaceFixture({ id: 'regression', name: 'regression', createdAt: 0, menResults, womenResults: [], sourceMenResults: menResults, sourceWomenResults: [], recruits: [], scoringSettings: { ...NSISC_PRESET_SETTINGS, maxIndividualEntriesPerSwimmer: 999, maxTotalEntriesPerSwimmer: 7 }, meetEntryPlans: [], activeEntryIds: [], athleteHistory: [], historySources: [], scorerRosterOverrides: [], relayLegOverrides: [], ...extra });
 }
 
-describe('optimizer preserves published entries and the caller’s team state', () => {
+describe('optimizer preserves published entries and the callerï¿½s team state', () => {
   it('does not plan over a published event even when recruit and history times are faster, while still planning a free event', () => {
     const workspace = ws([
       row('held', ANN, A, BACK, '55.00'),
@@ -75,8 +76,8 @@ describe('optimizeRosterForTeam keeps other teams plans active when the list sta
     // The returned list must name team A's plan explicitly. A list holding only B's new ids would
     // read as "only these are active" and silently switch A's plan off.
     expect(result.activeEntryIds).toContain('plan-a');
-    const withA = teamTotalForTeam({ ...workspace, meetEntryPlans: result.meetEntryPlans, activeEntryIds: result.activeEntryIds }, Gender.MEN, false, workspace.scoringSettings!, A);
-    const withoutA = teamTotalForTeam({ ...workspace, meetEntryPlans: result.meetEntryPlans, activeEntryIds: result.activeEntryIds.filter(id => id !== 'plan-a') }, Gender.MEN, false, workspace.scoringSettings!, A);
+    const withA = teamTotalForTeam({ ...workspace, meetEntryPlans: result.meetEntryPlans, activeEntryIds: result.activeEntryIds }, Gender.MEN, false, workspace.scoringSettings!, A, []);
+    const withoutA = teamTotalForTeam({ ...workspace, meetEntryPlans: result.meetEntryPlans, activeEntryIds: result.activeEntryIds.filter(id => id !== 'plan-a') }, Gender.MEN, false, workspace.scoringSettings!, A, []);
     expect(withA).toBeGreaterThan(withoutA);
   });
 });

@@ -1,0 +1,11 @@
+{
+  // Type-checks tests/ (vitest files, Playwright specs and their helpers) against the
+  // same strict base the packages use, including noUncheckedIndexedAccess.
+  // Run by `npm run lint:types`. Path aliases come from tsconfig.base.json, the same
+  // list vitest.config.ts reads, so a test resolves `@omniswim/*` the way it runs.
+  "extends": "../tsconfig.base.json",
+  "compilerOptions": {
+    "types": ["node", "vitest/globals"]
+  },
+  "include": ["./**/*.ts"]
+}

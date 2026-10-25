@@ -54,7 +54,7 @@ function rosterFixture(team: string, gender: Gender): string | undefined {
 /** Swimmer ids on a trimmed roster page, in page order. A plain scan, not the parser. */
 export function swimmerIdsOnPage(html: string): string[] {
   const ids: string[] = [];
-  for (const m of html.matchAll(/\/swimmer\/(\d+)/g)) if (!ids.includes(m[1])) ids.push(m[1]);
+  for (const m of html.matchAll(/\/swimmer\/(\d+)/g)) if (!ids.includes(m[1]!)) ids.push(m[1]!);
   return ids;
 }
 
@@ -122,13 +122,13 @@ export class FakeSwimCloud {
     const roster = /^\/team\/(\d+)\/roster\/?$/.exec(url.pathname);
     if (roster !== null) {
       const gender = url.searchParams.get('gender');
-      const html = gender === 'M' || gender === 'F' ? rosterFixture(roster[1], gender) : undefined;
+      const html = gender === 'M' || gender === 'F' ? rosterFixture(roster[1]!, gender) : undefined;
       if (html === undefined) return { status: 404, contentType: 'text/html', body: 'not found' };
       const season = url.searchParams.get('season_id');
       return { status: 200, contentType: 'text/html', body: season === null ? html : selectSeasonInPage(html, season) };
     }
     const swimmer = /^\/api\/swimmers\/(\d+)\/profile_fastest_times\/?$/.exec(url.pathname);
-    if (swimmer !== null) return { status: 200, contentType: 'application/json', body: swimmerBody(swimmer[1]) };
+    if (swimmer !== null) return { status: 200, contentType: 'application/json', body: swimmerBody(swimmer[1]!) };
     return { status: 404, contentType: 'text/html', body: 'not found' };
   }
 }
