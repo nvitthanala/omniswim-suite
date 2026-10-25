@@ -1,6 +1,7 @@
 # Phase P0: SwimCloud meet simulator recon
 
-Status: **blocked on the Claude in Chrome connection.** The user authorized
+Status: **blocked on the Claude in Chrome connection.** Start the next
+session as `01-REDESIGN-PLAN.md` section 12 says; it has the fallback chain. The user authorized
 live research through Claude in Chrome on 2026-10-25 ("run your own research,
 i trust it"). Decision U12 of the 2026-10-10 plan covers the posture: the
 user's own Chrome and sign-in, a separate tab, human pace, captures never
@@ -60,6 +61,14 @@ Start URL from the user: `https://www.swimcloud.com/meetsimulator/?event=1|50|Y|
     - A dual meet, two teams, SCY only.
     - A conference meet with the NSISC teams, default settings.
     - The same conference meet with a non-default entry limit and scorer count.
+
+### NSISC scoring and schedule (R15, R16)
+17. Read SwimCloud's NSISC scoring table: individual points per place,
+    relay points per place, number of places. Compare with the code's NSISC
+    preset (`packages/core/src/lib/scoringDefaults.ts`). Record any
+    difference; P3 fixes it with a test.
+18. Does the simulator have any notion of event order, days or sessions? If
+    not, where on the page does a "Meet schedule" panel fit (R16)?
 
 ### Look
 15. Record the CSS class names of tables, dropdowns, buttons and tabs, the

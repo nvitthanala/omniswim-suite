@@ -28,6 +28,12 @@ the SwimCloud meet simulator, plus a dashboard inside the extension.
 | R11 | "Close to a cut" | Within 1.0%, and always show the time gap. A swimmer with their division's B cut is tagged and shows the gap to the A cut. Thresholds are settings. |
 | R12 | What carries over from the suite | Saved lineups and snapshots; reports and entry export. Everything else moves to `legacy/`. |
 | R13 | Codex | Full fresh quota available (user, 2026-10-25). Update `PROVIDER_ROUTING.json`. |
+| R14 | Flyover allowance | A number the user sets (x.xx seconds). No default. |
+| R15 | NSISC scoring | SwimCloud already holds the NSISC scoring table: 16-place scoring. No limit on how many swimmers from one team score in an event. Only scoring-team swimmers score, and a team may enter as many scoring-team swimmers in one event as the entry limits allow. |
+| R16 | Event order | The NSISC order (Table C) is the default, but every meet's order is customizable, and editable on the meet simulator page too, not only in the dashboard. |
+| R17 | Sessions and load | A session has no meet-imposed race limit. The load limit protects swimmers' performance; it is a coach preference. Prelims usually swim in the morning and finals later the same day. Timed-final events (usually the distance events) swim once. Each event's format (prelims/finals or timed final) is a setting. |
+| R18 | OpenCode | Add OpenCode to the provider pool for this work ("more resources to knock out the work"). This is the user approval the routing file's OpenCode `availableNote` asked for. |
+| R19 | Chrome | The user will start a new session with Claude in Chrome running. The plan carries a fallback for getting the extension connected. |
 
 NSISC is the New South Intercollegiate Swim Conference. The repo's meet data
 labels its meet "New South Championships". It is not the Northern Sun

@@ -244,9 +244,10 @@ changes the lineup only through the SCM swim.
   the split window. Leg 1 is a flat start. Legs 2 to 4 are flying starts
   (`relayLegCredits.ts:160-197`).
 - When a swimmer has no usable split, estimate a flying leg from the flat-start
-  individual time minus a **flyover allowance**. The allowance is a user-set
-  number of seconds per leg with **no baked-in default** (no source exists;
-  open question Q1). An estimated leg shows an "est." badge.
+  individual time minus a **flyover allowance**. The allowance is a number the
+  user sets, in seconds to two decimals (R14). It has **no default**: until the
+  user sets it, no flying-leg estimate is made and the leg shows "no split".
+  An estimated leg shows an "est." badge.
 - When a converted swim (F1.2) is faster than the swimmer's SCY swim, the
   estimate uses the converted swim and shows both.
 
@@ -304,11 +305,23 @@ Two engine changes:
    and wording), or `user-edited`. The NSISC cap of 8 is `user-stated
    2026-10-25` until a handbook is archived.
 
-**Check before shipping the NSISC preset (Q2).** The current preset scores
-relays as the individual top-16 table doubled (40-34-32-…). No published
-NSISC document in the repo confirms that. Confirm it against a published New
-South Championships results PDF or the conference handbook, and archive the
-source, before the preset is marked `published`.
+**NSISC scoring (R15).** SwimCloud's simulator already holds the NSISC
+scoring table: 16 places. NSISC sets **no per-event cap on scorers**. A
+swimmer scores only if they are on the scoring team, and a team may enter as
+many scoring-team swimmers in one event as the entry limits allow. So the
+NSISC preset is:
+
+- per-event scorer cap: `'unlimited'`
+- scoring-team size: 18, with each diver counting 1/3 (R9)
+- per-swimmer total entries: 8 (R4)
+- point table: read from SwimCloud's NSISC table in recon (P0, question 17)
+  and compared with the current preset (individual top 16; relays as that
+  table doubled). Any difference is a bug in the preset. Fix it in P3 with a
+  test that pins SwimCloud's table.
+
+This matches the current code's model: `scorerCapScope: 'meet'` with
+`maxIndividualScorersPerTeam: 18` limits the scoring team, not each event.
+P3 adds a test that proves 10 scoring-team swimmers in one event all score.
 
 Risk: `core`. Build: executor. Review: a different provider (Codex).
 Acceptance: the existing golden snapshots and mutation checks for these
@@ -320,22 +333,40 @@ missing value behave differently.
 New. Nothing in core models days or sessions today (scout finding).
 
 - **Session model**: `{ day: number, slot: 'morning' | 'afternoon' | 'evening' }`.
-  Each event round (prelims, finals, timed final) maps to one session.
-- **Session presets**: saved and reusable. Ships with the NSISC order from the
-  user's Table C, marked `user-stated` until a published meet program is
-  archived.
+- **Event format**, per event, per meet: `prelims-finals` or `timed-final`
+  (R17). A prelims-finals event has two rounds in two sessions: prelims in
+  the morning and finals later the same day by default. A timed-final event
+  has one round in one session. Distance events (1000, 1650, often the 500
+  and relays) default to timed final where the preset says so; every format
+  is editable.
+- **Session presets**: saved and reusable. The default is the NSISC order from
+  the user's Table C, marked `user-stated`. Every meet's order is editable
+  (R16): add, remove or move an event, change its day, slot or format.
+- **Edit where you are** (R16): the order editor exists in two places, the
+  dashboard and a "Meet schedule" panel on the simulator page. Both write the
+  same session preset.
 - **Athlete outlook**: per swimmer, a day-by-day view of their swims, for
   sharing with athletes.
-- **Load rule** (R6): at most **2 races per session, relays included**. A
-  prelim and its final are two races in two sessions. Editable per meet.
-  An entry that breaks the rule shows a warning in manual mode. The
-  AutoBuilder treats it as a hard limit.
+- **Load preference** (R6, R17): the meet itself imposes no session limit. The
+  load limit protects performance; it is the coach's preference. Default: at
+  most **2 races per session, relays included**. Each round counts in its own
+  session, so a prelim and its final are one race each in two sessions. Three
+  modes, set per meet:
+  - **Respect** (default): the AutoBuilder never exceeds it; manual entries
+    over it show a warning.
+  - **Prefer**: the AutoBuilder may exceed it when the points gain beats a
+    user-set penalty per extra race.
+  - **Off**: no limit.
 
 Risk: `design` for the model (architect), `core` for the rule (executor),
-`ui` for the planner screen (Codex or worker).
-Acceptance: with the NSISC preset, a swimmer entered in the 200 IM, the 50
-free and the 200 medley relay on day 2 evening breaks the rule; dropping one
-clears it.
+`ui` for the two editors (Codex or worker).
+Acceptance:
+- With the NSISC preset, a swimmer entered in the 200 IM, the 50 free and the
+  200 medley relay finals on day 2 breaks the default preference; dropping one
+  clears it.
+- Changing the 1000 free to prelims-finals moves its finals into the day 2
+  later session and the outlook updates.
+- An order edited on the simulator page shows in the dashboard after reload.
 
 ### F4. AutoBuilder (plan 4)
 
@@ -355,7 +386,8 @@ better (`rosterOptimizer.ts:1-21`).
 
 **Constraints.** Per-swimmer individual, relay and total caps (F2.4); max
 scorers per event (F2.5); roster scoring headcount with diver weights (F2.1,
-F2.2); scorer tags (F2.3); session load (F3); relay legality (invariant #19);
+F2.2); scorer tags (F2.3); session load in "respect" mode, or a per-race
+penalty in "prefer" mode (F3); relay legality (invariant #19);
 course and conversion choices (F1.2); unknown divisions excluded from cut
 logic.
 
@@ -480,6 +512,16 @@ full fresh quota.
 - **Claude finisher (Haiku)**: gates, mechanical fixes.
 - **Claude bug-hunter (Opus)**: adversarial pass on the adapter (P2) and the
   AutoBuilder (P6).
+- **OpenCode (free Zen models, R18)**: mechanical work, docs, read-only
+  scouting and a second-family review (`.opencode/agents/`: scout, finisher,
+  docs-worker, reviewer). Always `--worktree new-child`, never `current`: its
+  read denies do not stop grep or shell, so separation is the data barrier.
+  Never core scoring logic, never a design decision. Its diffs are reviewed by
+  Claude.
+
+Dispatch Codex and OpenCode through Orca only
+(`orca orchestration worker-start --agent codex|opencode2`), never by
+spawning `codex` or `opencode` directly.
 
 Rules that hold for every provider: no git operations by a subagent; a diff is
 reviewed by a different provider than its author; briefs stand alone and point
@@ -573,16 +615,59 @@ See `03-REPO-REORG.md` for the full move map. Summary:
 
 ## 11. Open questions
 
-- **Q1** Flyover allowance: what value per leg, and from what source? Until
-  answered, it is a user setting with no default.
-- **Q2** NSISC relay points: is the doubled individual table (current preset)
-  right? Needs a published New South Championships results PDF or handbook.
+Answered on 2026-10-25: Q1 (flyover is a user-set number, R14), Q2 (use
+SwimCloud's NSISC table; no per-event scorer cap, R15), Q5 (each round counts
+in its own session, R17).
+
+Still open:
 - **Q3** New South ISC source documents for the 8-event cap, the 1/3 diver
   weight and the Table C session order, so presets can move from
-  `user-stated` to `published`.
+  `user-stated` to `published`. Not blocking: presets ship as `user-stated`.
+- **Q4** Does the simulator need a paid SwimCloud plan? Recon answers it.
 - **Q6** Per-swimmer history fetches, per-season roster fetches, or split
   fetches (F1 table): approve or not, once recon shows what the simulator
-  already carries.
-- **Q4** Does the simulator need a paid SwimCloud plan? (Recon answers.)
-- **Q5** Prelims and finals of one event: does the user want the load rule to
-  count them as two races (current plan) or one?
+  already carries. Recon writes the request counts into
+  `02-SIMULATOR-RECON.md` so the user can decide.
+
+---
+
+## 12. Starting the next session (Claude in Chrome)
+
+P0 needs the Claude in Chrome tools (`mcp__claude-in-chrome__*`). They load
+when a session starts, not mid-session. The 2026-10-25 session ran `/chrome`
+mid-session and the tools never appeared.
+
+**Normal start.**
+
+1. Open Chrome. Check that the Claude in Chrome extension shows "connected",
+   and that the user's tab group ("claude") exists.
+2. Start Claude Code with `claude --chrome` from the repo folder.
+3. First prompt: "Resume the redesign. Read
+   `docs/reference/REDESIGN_2026-10-25_STATE.json` and run P0 from
+   `plans/2026-10-25/02-SIMULATOR-RECON.md`."
+4. The session loads the `chrome-browser` skill. It then calls `ToolSearch`
+   once with
+   `select:mcp__claude-in-chrome__tabs_context_mcp,mcp__claude-in-chrome__tabs_create_mcp,mcp__claude-in-chrome__navigate,mcp__claude-in-chrome__read_page,mcp__claude-in-chrome__get_page_text,mcp__claude-in-chrome__read_network_requests,mcp__claude-in-chrome__javascript_tool,mcp__claude-in-chrome__computer,mcp__claude-in-chrome__tabs_close_mcp`,
+   and calls `tabs_context_mcp` first.
+
+**Fallback, in order. Stop at the first step that works.**
+
+1. **Tools missing after a `--chrome` start.** Run `/chrome`, pick "Enabled
+   by default", and restart Claude Code. Search the deferred tools once with
+   `ToolSearch` query `chrome`. If a single `enable__mcp__claude-in-chrome`
+   tool is listed, call it.
+2. **Extension not connected.** In Chrome, open the Claude in Chrome
+   extension, sign in with the same Claude account as Claude Code, and reload
+   it from `chrome://extensions`. Repeat the normal start.
+3. **Site permission prompt.** The extension asks per site. The user allows
+   `swimcloud.com`. Claude waits; it never works around a refused permission.
+4. **Still no tools.** Use the Orca embedded browser through the `orca-cli`
+   skill (its browser commands drive a page inside Orca). The user signs in
+   to SwimCloud there once. Same posture rules as Claude in Chrome.
+5. **No browser automation at all.** The user captures by hand, guided by a
+   checklist the session writes into `02-SIMULATOR-RECON.md`: for each of the
+   three configurations, DevTools > Network > "Save all as HAR with
+   content", plus "Save page as > Webpage, HTML only". Save the files under
+   `data/swimcloud-captures/simulator/` (untracked). The session parses them.
+
+Whichever route works, record it in the state file's P0 entry.

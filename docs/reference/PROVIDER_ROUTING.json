@@ -31,6 +31,25 @@
       "verified": "2026-10-02: Cursor Free monthly cap EXHAUSTED (re-checked 2026-10-03: Cursor Models bucket 100%, Other Models 0% but named models still need a paid plan; no re-probe, it triggers Avast) (Cursor Models bucket 100%, resets 2026-10-19). Auto uses that bucket. A small task costs ~1.5%; a large multi-file UI task (accessibility, ~10 files) consumed the rest. Treat Cursor as available again only after 2026-10-19 or on a paid plan.",
       "models": "Free plan: only 'Auto' works. Checked 2026-10-02: all 24 named models (Claude, GPT, Gemini, Grok, Kimi, GLM, Composer) were rejected with 'Free plans can only use Auto'; rejected calls spend no tokens. A paid Cursor plan is needed for a model menu. Fable models are marked NO ZDR (no zero data retention): do not send roster data to them.",
       "launch": "ONLY through Orca (orca orchestration worker-start --agent cursor). Do not spawn cursor-agent directly from scripts or loops: repeated direct spawns trigger the user's Avast."
+    },
+    "opencode": {
+      "dispatch": "orca orchestration worker-start --agent opencode2 --worktree current|new-child (no --model). Bind a Run first: orca orchestration run-create --objective <text>. The model comes from opencode.json at the repo root.",
+      "available": true,
+      "remainingPct": null,
+      "remainingSource": "Free OpenCode Zen models. No metered quota is known. Rate limits are unverified.",
+      "verified": "2026-10-15: smoke worker succeeded through Orca (SMOKE-OK, 21s, DeepSeek V4.1 Flash Free). Micro-eval of 5 free models: all exact on a 6-file search and a signature read. DeepSeek was fastest and cleanest. Edit quality and long context were NOT tested.",
+      "models": {
+        "default": "opencode/deepseek-v4.1-flash-free (set in opencode.json). Fastest of five on the micro-eval.",
+        "reviewer": "opencode/nemotron-3-ultra-free. A different model family from the default. Used by the reviewer agent.",
+        "otherFree": "big-pickle (slower), mimo-v2.6-flash-free (backticks around answers), step-5-preview-free (slowest, chatty). Others untested.",
+        "paid": "deepseek-v4.1-flash and the rest of the opencode/ list bill the stored account. Never select one without the user's approval."
+      },
+      "agents": ".opencode/agents/: scout (read-only), finisher (mechanical), docs-worker (docs/ and README.md only), reviewer (read-only). opencode2 cannot pick an agent or model at launch: the worker runs the default agent, so name the role in the spec or use opencode run --agent from a script.",
+      "dataRule": "Free Zen models may retain or train on prompts (Zen terms not verified). Send code, tests and docs only. Probe 2026-10-15: opencode.json read denies are enforced for the read tool (relative and absolute paths), but a grep returned the contents of denied files, and a shell command can read them too. So the denies are a guardrail, not a data barrier. Physical separation helps: data/omniswim.db, data/meets.json, data/backups, data/swimcloud-captures and the pairing token are untracked, so a child worktree does not contain them. These tracked files DO reach a child worktree: data/rosters (1), data/training (2), hsuroster26-27.txt, oburoster202627.txt, possible_hsu_scoringteam2627.txt. Failing tests print swimmer names and times. Keep briefs narrow and run only targeted tests that do not read those files.",
+      "knownIssue": "opencode commands run from a non-opencode pane that inherits ORCA_AGENT_HOOK_* env (for example opencode models from a Claude pane) hang with 'Location plugins did not finish activating'. Clear ORCA_AGENT_HOOK_ENDPOINT, ORCA_AGENT_HOOK_PORT and ORCA_AGENT_HOOK_TOKEN for that command. Orca-launched workers are not affected.",
+      "standby": "limit-handoff.mjs maps opencode to the Orca agent id opencode2 and skips it when a paid model ran (verified by dry run 2026-10-15). standbyOrder stays empty and available is false, so it is never chosen until the user approves the commit and opts in.",
+      "availableNote": "Set true 2026-10-25: the user approved adding OpenCode to the provider pool (redesign plan decision R18), and opencode.json plus .opencode/ are now committed so child worktrees carry the read denies. The deny probe still shows grep and shell can read denied files, so data safety rests on worktree separation: OpenCode workers run ONLY with --worktree new-child, never current. On main after PR #7 the roster text files and data/rosters are untracked; the repo is public, so a child worktree holds nothing that is not already public.",
+      "usage": "node ~/.claude/scripts/provider-usage-report.mjs --json -> opencode: sessions, steps, tokens, costUsd, paidModelsUsed (from opencode stats, cached 10 min). No quota %: free models publish none. Shown in the command-center band (oc) and pane."
     }
   },
   "riskClasses": {
@@ -85,6 +104,7 @@
       "build": [
         "cursor",
         "codex",
+        "opencode",
         "claude:finisher"
       ],
       "review": "orchestrator-reruns-gates",
