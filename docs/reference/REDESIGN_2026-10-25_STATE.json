@@ -630,9 +630,9 @@
     "DONE: answers backlog (NSISC v2, storage fields, zod/mini, colors, conversion capture).",
     "DONE: engine LCM->SCY (8d188a27)",
     "DONE: P2 risk. profile_fastest_times answers without a challenge (bests only; see p2Risk).",
-    "P2 UI: overlay results table + matches-SwimCloud line (Codex via Orca, child worktree). Brief notes: simulator preset is parity-only (never in a picker or copied); rescoreSimulator throws AdapterError on SCM/LCM, Actual relays, exhibition, coach-edited times, unknown pointSystem: catch and show not-compared reason",
+    "DONE (d22375ee): P2 UI. Overlay forwards the validated snapshot over the nonce port and keeps the console log; dashboard re-scores and shows team totals plus the parity line. Codex wrote it; Claude reviewed (advisor audit). Gates green: vitest 2693, npm test 65, golden, harness 2/2.",
     "DONE (24a0eee1): stored rule presets migrate on read, ties pending. Diff audit skipped: one-function mechanical change with a red test; no cross-provider review for the same reason.",
-    "P2 per plan; adapter brief notes flystart optional on relay rows"
+    "NEXT: P3 rules per plan (preset editor and pickers). Then P4 sourcing (flyover, history, cut-tag wiring incl. estimated-cut tag, conversion-source picker hiding retired built-ins), then P5 planner."
   ],
   "notes": [
     "Newest code was on the unmerged branch in the oyster worktree (C:/Users/nihar/orca/workspaces/omniswim-suite/oyster), not main. Plan docs were written in the main clone, untracked, to be committed on the redesign branch.",
@@ -817,7 +817,8 @@
     {
       "sha": "24a0eee1",
       "subject": "Migrate stored rule presets on read"
-    }
+    },
+    "d22375ee Show simulator parity in the docked panel"
   ],
   "lowPriority": {
     "since": "2026-10-26T16:03Z",
@@ -847,9 +848,9 @@
   },
   "liveCheckNext": [
     "After the next reload: open the dashboard and confirm storage opens at schema v2 with no DatabaseInconsistentError. The upgrade is one-way.",
-    "P2 live: load teams 58, 48, 412 with 16 Place Scoring (config C setup); confirm matches-SwimCloud on 100 Breast and 100 Free (tied events), once the overlay line exists"
+    "P2 live (d22375ee): reload the unpacked extension. Load teams 58, 48, 412 with 16 Place Scoring (config C setup). The docked panel should show the team table and \"Matches SwimCloud\", including the tied events 100 Breast and 100 Free. The console should still show [OmniSwim] SimSnapshot."
   ],
-  "budget": "2026-10-26 afternoon: command-center band shows 5h 24%, 7d 61%, tier conserve: low-priority pace, one agent at a time",
+  "budget": "2026-10-26 evening: 5h 14%, 7d 72% (pace 118% at reset in 3d), tier conserve: low-priority pace, one agent at a time",
   "conversionCapture": {
     "done": "2026-10-26",
     "archive": "data/conversions/swimswam/lcm-to-scy-2026-10-26.json (53 captures) + README.md (fitted model)",
@@ -899,11 +900,18 @@
       "2026-10-26 ~17:00 local: executor hit the 5h session limit (429) mid tie-policy task; tree left with 3 failing targeted tests (387 passed). After the reset the lead resumed it via SendMessage with the failing test names."
     ]
   },
-  "inFlight": {
-    "item": "P2 UI: snapshot over the panel port, rescore in the dashboard, results table + parity line, not-compared states",
-    "agent": "Codex via Orca, child worktree p2-overlay-ui (C:/Users/nihar/orca/workspaces/omniswim-suite/p2-overlay-ui, branch nvitthanala/p2-overlay-ui moved to 934240e5 by the lead before start)",
-    "dispatch": "ctx_7ab57a4cdebf",
-    "terminal": "term_687a5cad-bcee-4cdf-b6af-83cbf7346024",
-    "onDone": "lead reads the child diff, reruns gates there, Claude review (different provider), then applies the diff to the main worktree and commits"
+  "p2Ui": {
+    "commit": "d22375ee",
+    "bundleBytes": {
+      "dashboard": 1049925,
+      "overlay": 77483,
+      "bridge": 4974
+    },
+    "note": "Only the bridge has a size budget (tests/extensionBundleBoundaries.test.ts). The dashboard grew from 676,554 bytes because it now bundles the engine.",
+    "followUps": [
+      "dockedPanel reconnects only before the first pong. If an answered port later disconnects, activePort stays null and later snapshots are dropped silently.",
+      "sendSnapshot re-parses the full snapshot with zod on the page thread although the overlay already validated it; the dashboard parses it a third time."
+    ],
+    "codexWorker": "ctx_7ab57a4cdebf released 2026-10-26; child worktree p2-overlay-ui left in place"
   }
 }
