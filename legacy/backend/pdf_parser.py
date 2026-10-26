@@ -39,7 +39,7 @@ _POINTS_SKIP_TOKENS = frozenset({
 
 # Map known abbreviations to full team names (NSISC + GLVC; see packages/core/src/data/teamAbbreviations.json)
 _ALIASES_JSON = os.path.normpath(
-    os.path.join(os.path.dirname(__file__), '..', '..', 'packages', 'core', 'src', 'data', 'teamAbbreviations.json')
+    os.path.join(os.path.dirname(__file__), '..', '..', 'packages', 'engine', 'src', 'data', 'teamAbbreviations.json')
 )
 
 

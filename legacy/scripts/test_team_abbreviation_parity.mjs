@@ -22,7 +22,7 @@ import path from 'node:path';
 import { TEAM_ABBREVIATIONS } from '../../packages/core/src/data/teamAliases.ts';
 
 const repoRoot = path.join(path.dirname(fileURLToPath(import.meta.url)), '../..');
-const jsonPath = path.join(repoRoot, 'packages', 'core', 'src', 'data', 'teamAbbreviations.json');
+const jsonPath = path.join(repoRoot, 'packages', 'engine', 'src', 'data', 'teamAbbreviations.json');
 const fromJson = JSON.parse(readFileSync(jsonPath, 'utf-8'));
 
 assert.ok(Object.keys(fromJson).length > 0, 'teamAbbreviations.json is empty');

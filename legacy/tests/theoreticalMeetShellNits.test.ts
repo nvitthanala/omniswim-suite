@@ -108,7 +108,10 @@ describe('the label module', () => {
   });
 
   it('imports nothing but a type, so the shell and Metrics stay light', () => {
-    const src = readFileSync(join(import.meta.dirname, '../../packages/core/src/lib/theoreticalMeetLabel.ts'), 'utf8');
+    const src = readFileSync(join(import.meta.dirname, '../../packages/engine/src/lib/theoreticalMeetLabel.ts'), 'utf8');
+    // The real file, not the core shim: over 1 KB and carrying its named export.
+    expect(src.length).toBeGreaterThan(1024);
+    expect(src).toContain('export function isTheoreticalMeet');
     const imports = src.split('\n').filter(l => l.startsWith('import '));
     expect(imports.every(l => l.startsWith('import type '))).toBe(true);
   });

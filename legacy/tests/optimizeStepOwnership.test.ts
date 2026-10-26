@@ -13,7 +13,7 @@ import { createRoot, type Root } from 'react-dom/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ToastProvider } from '@omniswim/ui';
 import { Gender, type Workspace } from '@omniswim/core/types';
-import * as rosterOptimizer from '@omniswim/core/lib/rosterOptimizer';
+import * as rosterOptimizer from '@omniswim/engine/lib/rosterOptimizer';
 import RosterOptimizeStep from '../packages/manager/src/components/RosterOptimizeStep';
 import TeamRosterPanel from '../packages/manager/src/components/TeamRosterPanel';
 import {
@@ -29,8 +29,8 @@ import {
 
 vi.mock('motion/react', async () => (await import('../../tests/motionStub')).motionStub);
 // Pass-through spy: the real optimizer still runs, the test only watches its arguments.
-vi.mock('@omniswim/core/lib/rosterOptimizer', async importOriginal => {
-  const actual = await importOriginal<typeof import('@omniswim/core/lib/rosterOptimizer')>();
+vi.mock('@omniswim/engine/lib/rosterOptimizer', async importOriginal => {
+  const actual = await importOriginal<typeof import('@omniswim/engine/lib/rosterOptimizer')>();
   return { ...actual, optimizeRosterAllTeams: vi.fn(actual.optimizeRosterAllTeams) };
 });
 

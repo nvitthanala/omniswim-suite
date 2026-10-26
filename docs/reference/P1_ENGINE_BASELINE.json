@@ -1,0 +1,1374 @@
+{
+ "ranAt": "2026-10-25",
+ "ref": "1c6f79f3 main clone + uncommitted P0 docs/fixtures",
+ "env": "SKIP_BUDGET_ENV=local, after npm ci, no Postgres",
+ "totals": {
+  "lint": "exit 0",
+  "vitestActive": "2047 passed / 0 skipped",
+  "vitestLegacy": "2885 / 25",
+  "scriptsActive": "65 / 0",
+  "scriptsLegacy": "24 / 1 (Postgres)"
+ },
+ "vitest": {
+  "active": {
+   "tests/aliasSplitAthleteScoredOnce.test.ts": [
+    9,
+    0
+   ],
+   "tests/athleteHistory.test.ts": [
+    8,
+    0
+   ],
+   "tests/catalogBestExclusion.test.ts": [
+    8,
+    0
+   ],
+   "tests/championshipRelayDoubling.test.ts": [
+    13,
+    0
+   ],
+   "tests/conferenceRelayPrograms.test.ts": [
+    6,
+    0
+   ],
+   "tests/coreIndexedAccess.test.ts": [
+    7,
+    0
+   ],
+   "tests/coreIndexedAccessRound2.test.ts": [
+    14,
+    0
+   ],
+   "tests/coreIndexedAccessUtils.test.ts": [
+    11,
+    0
+   ],
+   "tests/courseEventMismatch.test.ts": [
+    61,
+    0
+   ],
+   "tests/demoSeed.test.ts": [
+    7,
+    0
+   ],
+   "tests/divisionBySwimSeason.test.ts": [
+    16,
+    0
+   ],
+   "tests/dualMeetScoring.test.ts": [
+    12,
+    0
+   ],
+   "tests/entryCapPolicy.test.ts": [
+    21,
+    0
+   ],
+   "tests/entryCapReviewFixes.test.ts": [
+    18,
+    0
+   ],
+   "tests/entryExport.test.ts": [
+    7,
+    0
+   ],
+   "tests/eslintDisableReasons.test.ts": [
+    2,
+    0
+   ],
+   "tests/eventCatalogCoverage.test.ts": [
+    5,
+    0
+   ],
+   "tests/eventStrengthRanking.test.ts": [
+    32,
+    0
+   ],
+   "tests/formatSecondsToTime.test.ts": [
+    5,
+    0
+   ],
+   "tests/historyImportEntryBudget.test.ts": [
+    4,
+    0
+   ],
+   "tests/identityAgreement.test.ts": [
+    37,
+    0
+   ],
+   "tests/individualExhibitionTie.test.ts": [
+    16,
+    0
+   ],
+   "tests/lineupAuditAliasRelayLeg.test.ts": [
+    4,
+    0
+   ],
+   "tests/meetEventIndex.test.ts": [
+    8,
+    0
+   ],
+   "tests/meetReconciliation.test.ts": [
+    16,
+    0
+   ],
+   "tests/meetResultsReachProfile.test.ts": [
+    12,
+    0
+   ],
+   "tests/mutation/calculatePointsMutation.test.ts": [
+    42,
+    0
+   ],
+   "tests/mutation/individualScoringMutation.test.ts": [
+    62,
+    0
+   ],
+   "tests/mutation/meetPoolMutation.test.ts": [
+    20,
+    0
+   ],
+   "tests/mutation/ncaaScoringRulesMutation.test.ts": [
+    39,
+    0
+   ],
+   "tests/mutation/relayLegSwapsMutation.test.ts": [
+    18,
+    0
+   ],
+   "tests/mutation/relayScoringMutation.test.ts": [
+    28,
+    0
+   ],
+   "tests/mutation/relaySimulationMutation.test.ts": [
+    62,
+    0
+   ],
+   "tests/mutation/scorerRosterMutation.test.ts": [
+    63,
+    0
+   ],
+   "tests/mutation/scoringRulesMutation.test.ts": [
+    79,
+    0
+   ],
+   "tests/naiaMeterCourseAsScm.test.ts": [
+    47,
+    0
+   ],
+   "tests/naiaScmComputedCut.test.ts": [
+    10,
+    0
+   ],
+   "tests/navigationTargets.test.ts": [
+    4,
+    0
+   ],
+   "tests/ncaaScoringRules.test.ts": [
+    43,
+    0
+   ],
+   "tests/nsiscTimedFinalRelays.test.ts": [
+    11,
+    0
+   ],
+   "tests/oledThemePreferences.test.ts": [
+    1,
+    0
+   ],
+   "tests/optimizerActivePlansAcrossTeams.test.ts": [
+    1,
+    0
+   ],
+   "tests/optimizerChangeDiff.test.ts": [
+    7,
+    0
+   ],
+   "tests/optimizerObjectiveMatchesEngine.test.ts": [
+    6,
+    0
+   ],
+   "tests/optimizerPublishedHoldAndImportFilters.test.ts": [
+    5,
+    0
+   ],
+   "tests/optimizerScorerOverridePreserved.test.ts": [
+    4,
+    0
+   ],
+   "tests/optimizerTotalEntryCap.test.ts": [
+    2,
+    0
+   ],
+   "tests/pasteCutChips.test.ts": [
+    16,
+    0
+   ],
+   "tests/pasteStampFlags.test.ts": [
+    10,
+    0
+   ],
+   "tests/projectedPoolReviewFixes.test.ts": [
+    24,
+    0
+   ],
+   "tests/projectionNoActual.test.ts": [
+    16,
+    0
+   ],
+   "tests/projectionNoExpectation.test.ts": [
+    9,
+    0
+   ],
+   "tests/projectionTeamsWithoutExpectation.test.ts": [
+    23,
+    0
+   ],
+   "tests/projectionVacateConferenceRule.test.ts": [
+    2,
+    0
+   ],
+   "tests/raceAnalysis.test.ts": [
+    9,
+    0
+   ],
+   "tests/raceAnalysisPurity.test.ts": [
+    1,
+    0
+   ],
+   "tests/rankEventsByQualityNoTime.test.ts": [
+    9,
+    0
+   ],
+   "tests/relayDeadHeatSplit.test.ts": [
+    4,
+    0
+   ],
+   "tests/relayDepartedLegTimeTrial.test.ts": [
+    22,
+    0
+   ],
+   "tests/relayFollowUpsR1.test.ts": [
+    30,
+    0
+   ],
+   "tests/relayLegBlockedNameOrder.test.ts": [
+    5,
+    0
+   ],
+   "tests/relayLegEstimateSwapClock.test.ts": [
+    5,
+    0
+   ],
+   "tests/relayLegEventMatching.test.ts": [
+    24,
+    0
+   ],
+   "tests/relayLegIndexBoundary.test.ts": [
+    8,
+    0
+   ],
+   "tests/relayLegNoTimeSwim.test.ts": [
+    16,
+    0
+   ],
+   "tests/relayLegScoredProgramBoundary.test.ts": [
+    21,
+    0
+   ],
+   "tests/relayLegSwapTiedLegRows.test.ts": [
+    4,
+    0
+   ],
+   "tests/relayLegTimeTrialOnlyReason.test.ts": [
+    10,
+    0
+   ],
+   "tests/relayLegTimeTrials.test.ts": [
+    17,
+    0
+   ],
+   "tests/relayLegsHiddenList.test.ts": [
+    5,
+    0
+   ],
+   "tests/relayNeedsFillEntryLabel.test.ts": [
+    2,
+    0
+   ],
+   "tests/relayNoBaselineReason.test.ts": [
+    9,
+    0
+   ],
+   "tests/relayOverrideLegacyKeyCleanup.test.ts": [
+    18,
+    0
+   ],
+   "tests/relayOverrideRecruitIdSwim.test.ts": [
+    9,
+    0
+   ],
+   "tests/relayOverrideTieKey.test.ts": [
+    19,
+    0
+   ],
+   "tests/relayScoringPerSwimmerPoints.test.ts": [
+    7,
+    0
+   ],
+   "tests/relayTieSplit.test.ts": [
+    33,
+    0
+   ],
+   "tests/relayUnresolvedFill.test.ts": [
+    4,
+    0
+   ],
+   "tests/removeProjectedSwimRelayOverrides.test.ts": [
+    5,
+    0
+   ],
+   "tests/reportBuilder.test.ts": [
+    4,
+    0
+   ],
+   "tests/rosterEmptyState.test.ts": [
+    3,
+    0
+   ],
+   "tests/rosterLineupAuditConversionProvenance.test.ts": [
+    5,
+    0
+   ],
+   "tests/rosterLineupAuditProgramProvenance.test.ts": [
+    4,
+    0
+   ],
+   "tests/rosterOnlyRankCollapse.test.ts": [
+    7,
+    0
+   ],
+   "tests/scenarioDiffPresence.test.ts": [
+    10,
+    0
+   ],
+   "tests/scmAllOtherEventsConversion.test.ts": [
+    15,
+    0
+   ],
+   "tests/scorerRosterRecruitDefault.test.ts": [
+    2,
+    0
+   ],
+   "tests/scoringPresetsBuiltIn.test.ts": [
+    25,
+    0
+   ],
+   "tests/scoringTheoryTotalEntryCap.test.ts": [
+    3,
+    0
+   ],
+   "tests/scriptSuiteRegistration.test.ts": [
+    2,
+    0
+   ],
+   "tests/seasonAnalytics.test.ts": [
+    10,
+    0
+   ],
+   "tests/seasonProgressions.test.ts": [
+    16,
+    0
+   ],
+   "tests/seasonTeamScoreTrend.test.ts": [
+    23,
+    0
+   ],
+   "tests/skillsDirsInSync.test.ts": [
+    20,
+    0
+   ],
+   "tests/swimcloudCache.test.ts": [
+    15,
+    0
+   ],
+   "tests/swimcloudCaptureStore.test.ts": [
+    26,
+    0
+   ],
+   "tests/swimcloudClipboardPayload.test.ts": [
+    20,
+    0
+   ],
+   "tests/swimcloudConferenceHome.test.ts": [
+    12,
+    0
+   ],
+   "tests/swimcloudCrawlPlan.test.ts": [
+    36,
+    0
+   ],
+   "tests/swimcloudCrawlPlanNoMeet.test.ts": [
+    4,
+    0
+   ],
+   "tests/swimcloudCrawlScopes.test.ts": [
+    35,
+    0
+   ],
+   "tests/swimcloudFetcher.test.ts": [
+    18,
+    0
+   ],
+   "tests/swimcloudIndexedReads.test.ts": [
+    8,
+    0
+   ],
+   "tests/swimcloudMeetTeamsParser.test.ts": [
+    13,
+    0
+   ],
+   "tests/swimcloudParser.test.ts": [
+    67,
+    0
+   ],
+   "tests/swimcloudPlaywrightFetcher.local.test.ts": [
+    3,
+    0
+   ],
+   "tests/swimcloudPlaywrightFetcher.test.ts": [
+    5,
+    0
+   ],
+   "tests/swimcloudRelayLegCredits.test.ts": [
+    41,
+    0
+   ],
+   "tests/swimcloudSwimmerProfile.test.ts": [
+    18,
+    0
+   ],
+   "tests/swimcloudSwimmerTimesParser.test.ts": [
+    29,
+    0
+   ],
+   "tests/swimcloudTargetUrls.test.ts": [
+    20,
+    0
+   ],
+   "tests/swimcloudTeamRosterParser.test.ts": [
+    26,
+    0
+   ],
+   "tests/swimcloudTeamSeasonRosterPlan.test.ts": [
+    10,
+    0
+   ],
+   "tests/swimcloudTeamSeasons.test.ts": [
+    33,
+    0
+   ],
+   "tests/swimcloudUrlClassifier.test.ts": [
+    83,
+    0
+   ],
+   "tests/timedFinalScoringPoints.test.ts": [
+    2,
+    0
+   ],
+   "tests/uiAmberRatchet.test.ts": [
+    5,
+    0
+   ],
+   "tests/uiCaseAndColorRatchet.test.ts": [
+    8,
+    0
+   ],
+   "tests/workingCopyTiedRelayCount.test.ts": [
+    8,
+    0
+   ],
+   "tests/workspaceOwnTeamKept.test.ts": [
+    4,
+    0
+   ],
+   "tests/workspaceSaveSequencing.test.ts": [
+    5,
+    0
+   ],
+   "tests/workspaceSaveStaleClient.test.ts": [
+    23,
+    0
+   ],
+   "tests/workspaceSelectionStability.test.ts": [
+    8,
+    0
+   ],
+   "tests/workspaceVersionClient.test.ts": [
+    4,
+    0
+   ]
+  },
+  "legacy": {
+   "legacy/tests/aliasConfigAgreement.test.ts": [
+    6,
+    0
+   ],
+   "legacy/tests/allTeamsApplyWorker.test.ts": [
+    16,
+    0
+   ],
+   "legacy/tests/altitudeAdjustment.test.ts": [
+    23,
+    0
+   ],
+   "legacy/tests/analyticsPageTeamTrend.test.ts": [
+    19,
+    0
+   ],
+   "legacy/tests/apiErrorShape.test.ts": [
+    104,
+    0
+   ],
+   "legacy/tests/apiErrorUserText.test.ts": [
+    7,
+    0
+   ],
+   "legacy/tests/athleteEntriesPastePreviewGuard.test.ts": [
+    5,
+    0
+   ],
+   "legacy/tests/athleteHistoryImportViewBadgeLabel.test.ts": [
+    4,
+    0
+   ],
+   "legacy/tests/athleteHistoryImportViewUnreadStamps.test.ts": [
+    3,
+    0
+   ],
+   "legacy/tests/athleteHistorySeasonToggle.test.ts": [
+    7,
+    0
+   ],
+   "legacy/tests/athleteHistorySectionCutTags.test.ts": [
+    1,
+    0
+   ],
+   "legacy/tests/athleteRemoveButton.test.ts": [
+    4,
+    0
+   ],
+   "legacy/tests/authHardening.test.ts": [
+    20,
+    0
+   ],
+   "legacy/tests/backendDiagnostics.test.ts": [
+    10,
+    0
+   ],
+   "legacy/tests/backupAdminRoutes.test.ts": [
+    8,
+    0
+   ],
+   "legacy/tests/backupQuotas.test.ts": [
+    17,
+    0
+   ],
+   "legacy/tests/backupRestore.test.ts": [
+    11,
+    0
+   ],
+   "legacy/tests/backupRetention.test.ts": [
+    8,
+    0
+   ],
+   "legacy/tests/bestRosterEquivalence.test.ts": [
+    40,
+    0
+   ],
+   "legacy/tests/childRowIdKey.test.ts": [
+    12,
+    0
+   ],
+   "legacy/tests/cnFontSizeTokens.test.ts": [
+    3,
+    0
+   ],
+   "legacy/tests/convertedTimeProvenance.test.ts": [
+    20,
+    0
+   ],
+   "legacy/tests/courseConversionDivision.test.ts": [
+    43,
+    0
+   ],
+   "legacy/tests/cutTableFreshness.test.ts": [
+    19,
+    0
+   ],
+   "legacy/tests/cutlineAuditFixes.test.ts": [
+    27,
+    0
+   ],
+   "legacy/tests/dataLossGuard.test.ts": [
+    19,
+    0
+   ],
+   "legacy/tests/dataLossGuardRoute.test.ts": [
+    4,
+    0
+   ],
+   "legacy/tests/dataLossGuardSqlite.test.ts": [
+    2,
+    0
+   ],
+   "legacy/tests/divingEventImport.test.ts": [
+    9,
+    0
+   ],
+   "legacy/tests/divingMergeKeepsHigherScore.test.ts": [
+    5,
+    0
+   ],
+   "legacy/tests/errorBoundary.test.ts": [
+    14,
+    0
+   ],
+   "legacy/tests/eventFirstImport.test.ts": [
+    10,
+    14
+   ],
+   "legacy/tests/eventIdentityBestPicking.test.ts": [
+    12,
+    0
+   ],
+   "legacy/tests/exhibitionSeeds.test.ts": [
+    23,
+    0
+   ],
+   "legacy/tests/exportEntriesMenu.test.ts": [
+    3,
+    0
+   ],
+   "legacy/tests/extractedSplitNeverBest.test.ts": [
+    19,
+    0
+   ],
+   "legacy/tests/extractedSplitsAndLeadoffs.test.ts": [
+    11,
+    0
+   ],
+   "legacy/tests/floatingWindowKeyboard.test.ts": [
+    9,
+    0
+   ],
+   "legacy/tests/hostOriginGuard.test.ts": [
+    29,
+    0
+   ],
+   "legacy/tests/iconButtonAccessibleName.test.ts": [
+    13,
+    0
+   ],
+   "legacy/tests/indRelayManagementViewR1.test.ts": [
+    3,
+    0
+   ],
+   "legacy/tests/indexedAccessEnableFlag.test.ts": [
+    13,
+    0
+   ],
+   "legacy/tests/lineupRemoveAndAllTeams.test.ts": [
+    11,
+    0
+   ],
+   "legacy/tests/managerSwimmersCopy.test.ts": [
+    3,
+    0
+   ],
+   "legacy/tests/managerTeamBar.test.ts": [
+    3,
+    0
+   ],
+   "legacy/tests/matrixMeetStandingsAnalyze.test.ts": [
+    18,
+    0
+   ],
+   "legacy/tests/meetDayDeck.test.ts": [
+    13,
+    0
+   ],
+   "legacy/tests/meetDiffTable.test.ts": [
+    1,
+    0
+   ],
+   "legacy/tests/metricsAppFailureToasts.test.ts": [
+    5,
+    0
+   ],
+   "legacy/tests/metricsFormatTime.test.ts": [
+    5,
+    0
+   ],
+   "legacy/tests/modalFocus.test.ts": [
+    5,
+    0
+   ],
+   "legacy/tests/numberField.test.ts": [
+    6,
+    0
+   ],
+   "legacy/tests/opponentScouting.test.ts": [
+    45,
+    0
+   ],
+   "legacy/tests/optimizeRunView.test.ts": [
+    11,
+    0
+   ],
+   "legacy/tests/optimizeStepOwnership.test.ts": [
+    15,
+    0
+   ],
+   "legacy/tests/optimizeStepReviewFixes.test.ts": [
+    15,
+    0
+   ],
+   "legacy/tests/optimizeStepWorker.test.ts": [
+    17,
+    0
+   ],
+   "legacy/tests/optimizeWorkerClient.test.ts": [
+    38,
+    0
+   ],
+   "legacy/tests/optimizerUndoRelayOverrides.test.ts": [
+    5,
+    0
+   ],
+   "legacy/tests/optimizerUndoTrackA.test.ts": [
+    29,
+    0
+   ],
+   "legacy/tests/ownTeamSetting.test.ts": [
+    11,
+    0
+   ],
+   "legacy/tests/parsePdfGuard.test.ts": [
+    27,
+    0
+   ],
+   "legacy/tests/parsingPipelineRows.test.ts": [
+    26,
+    0
+   ],
+   "legacy/tests/parsingPipelineWarnings.test.ts": [
+    13,
+    0
+   ],
+   "legacy/tests/parsingRoutesFallback.test.ts": [
+    13,
+    0
+   ],
+   "legacy/tests/parsingTempFilePaths.test.ts": [
+    1,
+    0
+   ],
+   "legacy/tests/pdfImportNotice.test.ts": [
+    9,
+    0
+   ],
+   "legacy/tests/phase6WordingDensity.test.ts": [
+    26,
+    0
+   ],
+   "legacy/tests/podiumMedal.test.ts": [
+    18,
+    0
+   ],
+   "legacy/tests/printCards.test.ts": [
+    11,
+    0
+   ],
+   "legacy/tests/productionStaticHost.test.ts": [
+    7,
+    0
+   ],
+   "legacy/tests/programSwimConfirmUi.test.ts": [
+    13,
+    0
+   ],
+   "legacy/tests/programSwimUnconfirmed.test.ts": [
+    28,
+    0
+   ],
+   "legacy/tests/projectionLikeForLike.test.ts": [
+    14,
+    0
+   ],
+   "legacy/tests/projectionNoActualUi.test.ts": [
+    18,
+    0
+   ],
+   "legacy/tests/projectionNoExpectationUi.test.ts": [
+    19,
+    0
+   ],
+   "legacy/tests/provenanceBadge.test.ts": [
+    14,
+    0
+   ],
+   "legacy/tests/pythonDeps.test.ts": [
+    13,
+    0
+   ],
+   "legacy/tests/rateLimitBackoff.test.ts": [
+    14,
+    0
+   ],
+   "legacy/tests/recruitSourceStamp.test.ts": [
+    8,
+    0
+   ],
+   "legacy/tests/relayEligibleTimeTrialLabel.test.ts": [
+    7,
+    0
+   ],
+   "legacy/tests/relayLegCredits.test.ts": [
+    70,
+    0
+   ],
+   "legacy/tests/relayLegCreditsPersistence.test.ts": [
+    8,
+    1
+   ],
+   "legacy/tests/relayLegEstimate.test.ts": [
+    22,
+    0
+   ],
+   "legacy/tests/relayLegEstimateRoutes.test.ts": [
+    3,
+    0
+   ],
+   "legacy/tests/relayLegTimeTrialSettingFields.test.ts": [
+    12,
+    0
+   ],
+   "legacy/tests/relayLegTimeTrialSettingRoutes.test.ts": [
+    7,
+    0
+   ],
+   "legacy/tests/relayLegsWithoutBaselineSection.test.ts": [
+    5,
+    0
+   ],
+   "legacy/tests/relayOptimizationSectionInFromHistory.test.ts": [
+    2,
+    0
+   ],
+   "legacy/tests/relayRowWithoutLegs.test.ts": [
+    8,
+    0
+   ],
+   "legacy/tests/relayStoredIndexUi.test.ts": [
+    6,
+    0
+   ],
+   "legacy/tests/relayTiedAmbiguityMigration.test.ts": [
+    26,
+    0
+   ],
+   "legacy/tests/restoreLastBackup.test.ts": [
+    4,
+    0
+   ],
+   "legacy/tests/resumeEventRefs.test.ts": [
+    5,
+    0
+   ],
+   "legacy/tests/rosterImportWizardCaptureRoster.test.ts": [
+    10,
+    0
+   ],
+   "legacy/tests/rosterImportWizardClipboardRouting.test.ts": [
+    5,
+    0
+   ],
+   "legacy/tests/rosterImportWizardReplaceMode.test.ts": [
+    4,
+    0
+   ],
+   "legacy/tests/rosterQueueImport.test.ts": [
+    25,
+    0
+   ],
+   "legacy/tests/rosterRemoveFocus.test.ts": [
+    3,
+    0
+   ],
+   "legacy/tests/rosterViewEntryCapTimeTrial.test.ts": [
+    2,
+    0
+   ],
+   "legacy/tests/saveSequencer.test.ts": [
+    15,
+    0
+   ],
+   "legacy/tests/scenarioCompare.test.ts": [
+    11,
+    0
+   ],
+   "legacy/tests/scenarioDiffViewAbsentSide.test.ts": [
+    3,
+    0
+   ],
+   "legacy/tests/schemaVersionGuard.test.ts": [
+    4,
+    0
+   ],
+   "legacy/tests/scoredProgramBoundary.test.ts": [
+    16,
+    0
+   ],
+   "legacy/tests/scoringDialogReviewFixes.test.ts": [
+    8,
+    0
+   ],
+   "legacy/tests/scoringPdfLockTrackA.test.ts": [
+    9,
+    0
+   ],
+   "legacy/tests/scoringPlaceDraftUi.test.ts": [
+    26,
+    0
+   ],
+   "legacy/tests/scoringPlaceTables.test.ts": [
+    18,
+    0
+   ],
+   "legacy/tests/scoringPresetManagerImport.test.ts": [
+    11,
+    0
+   ],
+   "legacy/tests/scoringPresetPathSafety.test.ts": [
+    27,
+    0
+   ],
+   "legacy/tests/scoringRulesPhase2.test.ts": [
+    5,
+    0
+   ],
+   "legacy/tests/scoringSettingsFields.test.ts": [
+    21,
+    0
+   ],
+   "legacy/tests/scoringSettingsModalA11y.test.ts": [
+    1,
+    0
+   ],
+   "legacy/tests/scoutOpponentPanel.test.ts": [
+    3,
+    0
+   ],
+   "legacy/tests/scoutOpponentPanelLoaded.test.ts": [
+    2,
+    0
+   ],
+   "legacy/tests/scoutOpponentView.test.ts": [
+    17,
+    0
+   ],
+   "legacy/tests/seasonProgressionPanel.test.ts": [
+    11,
+    0
+   ],
+   "legacy/tests/serverRefusesNewerSchema.test.ts": [
+    4,
+    0
+   ],
+   "legacy/tests/staticReportHtml.test.ts": [
+    11,
+    0
+   ],
+   "legacy/tests/suggestedPresetBannerCatch.test.ts": [
+    1,
+    0
+   ],
+   "legacy/tests/swimCloudCapturePicker.test.ts": [
+    11,
+    0
+   ],
+   "legacy/tests/swimCloudCaptureScopeSurfacing.test.ts": [
+    16,
+    0
+   ],
+   "legacy/tests/swimCloudExtensionBackgroundRoundTrip.test.ts": [
+    22,
+    0
+   ],
+   "legacy/tests/swimCloudExtensionBoundedFetchPool.test.ts": [
+    10,
+    0
+   ],
+   "legacy/tests/swimCloudExtensionBuildFreshness.test.ts": [
+    3,
+    0
+   ],
+   "legacy/tests/swimCloudExtensionCaptureId.test.ts": [
+    12,
+    0
+   ],
+   "legacy/tests/swimCloudExtensionCaptureResume.test.ts": [
+    18,
+    0
+   ],
+   "legacy/tests/swimCloudExtensionCrawlErrorPolicy.test.ts": [
+    5,
+    0
+   ],
+   "legacy/tests/swimCloudExtensionCrawlLock.test.ts": [
+    5,
+    0
+   ],
+   "legacy/tests/swimCloudExtensionCrawlRequest.test.ts": [
+    6,
+    0
+   ],
+   "legacy/tests/swimCloudExtensionCrawlScope.test.ts": [
+    29,
+    0
+   ],
+   "legacy/tests/swimCloudExtensionEventResults.test.ts": [
+    13,
+    0
+   ],
+   "legacy/tests/swimCloudExtensionMultiTeamApp.test.ts": [
+    11,
+    0
+   ],
+   "legacy/tests/swimCloudExtensionMultiTeamDriver.test.ts": [
+    36,
+    0
+   ],
+   "legacy/tests/swimCloudExtensionMultiTeamDriverDenylist.test.ts": [
+    3,
+    0
+   ],
+   "legacy/tests/swimCloudExtensionMultiTeamDriverReview.test.ts": [
+    47,
+    0
+   ],
+   "legacy/tests/swimCloudExtensionMultiTeamDriverReview2.test.ts": [
+    19,
+    0
+   ],
+   "legacy/tests/swimCloudExtensionMultiTeamPanelModel.test.ts": [
+    21,
+    0
+   ],
+   "legacy/tests/swimCloudExtensionMultiTeamQueue.test.ts": [
+    63,
+    0
+   ],
+   "legacy/tests/swimCloudExtensionProgress.test.ts": [
+    45,
+    0
+   ],
+   "legacy/tests/swimCloudExtensionSwimmerTimes.test.ts": [
+    16,
+    0
+   ],
+   "legacy/tests/swimCloudImportBridge.test.ts": [
+    23,
+    0
+   ],
+   "legacy/tests/swimCloudImportDiagnostics.test.ts": [
+    13,
+    0
+   ],
+   "legacy/tests/swimCloudImprovementDiff.test.ts": [
+    10,
+    0
+   ],
+   "legacy/tests/swimCloudMeetImportBridge.test.ts": [
+    53,
+    0
+   ],
+   "legacy/tests/swimCloudReplaceFlow.test.ts": [
+    7,
+    0
+   ],
+   "legacy/tests/swimCloudReplaceImport.test.ts": [
+    32,
+    0
+   ],
+   "legacy/tests/swimCloudSwimmerTimesToHistoricalSwims.test.ts": [
+    17,
+    0
+   ],
+   "legacy/tests/swimCloudTeamMeetSwimsToHistoricalSwims.test.ts": [
+    7,
+    0
+   ],
+   "legacy/tests/swimEditUndo.test.ts": [
+    18,
+    0
+   ],
+   "legacy/tests/swimcloudCaptureLabelWrite.test.ts": [
+    6,
+    0
+   ],
+   "legacy/tests/swimcloudCaptureRoutes.test.ts": [
+    69,
+    0
+   ],
+   "legacy/tests/swimmerFastestTimes.test.ts": [
+    17,
+    0
+   ],
+   "legacy/tests/teamCardButtonsA11y.test.ts": [
+    3,
+    0
+   ],
+   "legacy/tests/teamRosterRowEventLabel.test.ts": [
+    1,
+    0
+   ],
+   "legacy/tests/teamRosterViewEventLabel.test.ts": [
+    5,
+    0
+   ],
+   "legacy/tests/teamRosterViewH5.test.ts": [
+    11,
+    0
+   ],
+   "legacy/tests/theoreticalMeetBanner.test.ts": [
+    7,
+    0
+   ],
+   "legacy/tests/theoreticalMeetDialog.test.ts": [
+    13,
+    0
+   ],
+   "legacy/tests/theoreticalMeetDialogView.test.ts": [
+    32,
+    0
+   ],
+   "legacy/tests/theoreticalMeetExclusions.test.ts": [
+    30,
+    0
+   ],
+   "legacy/tests/theoreticalMeetFromCaptures.test.ts": [
+    42,
+    0
+   ],
+   "legacy/tests/theoreticalMeetGolden.test.ts": [
+    22,
+    0
+   ],
+   "legacy/tests/theoreticalMeetIndividualSeedTimeTrial.test.ts": [
+    5,
+    0
+   ],
+   "legacy/tests/theoreticalMeetRelayCutTags.test.ts": [
+    6,
+    0
+   ],
+   "legacy/tests/theoreticalMeetRelayOtherMeetBoundary.test.ts": [
+    4,
+    0
+   ],
+   "legacy/tests/theoreticalMeetRelayTimeTrials.test.ts": [
+    5,
+    0
+   ],
+   "legacy/tests/theoreticalMeetRelays.test.ts": [
+    48,
+    0
+   ],
+   "legacy/tests/theoreticalMeetRelaysUi.test.ts": [
+    19,
+    0
+   ],
+   "legacy/tests/theoreticalMeetRemoval.test.ts": [
+    15,
+    0
+   ],
+   "legacy/tests/theoreticalMeetRemovedEvents.test.ts": [
+    8,
+    0
+   ],
+   "legacy/tests/theoreticalMeetReviewFixes.test.ts": [
+    19,
+    0
+   ],
+   "legacy/tests/theoreticalMeetSeeds.test.ts": [
+    64,
+    0
+   ],
+   "legacy/tests/theoreticalMeetShellNits.test.ts": [
+    8,
+    0
+   ],
+   "legacy/tests/theoreticalMeetTeamNames.test.ts": [
+    14,
+    0
+   ],
+   "legacy/tests/theoreticalMeetWorkspace.test.ts": [
+    42,
+    0
+   ],
+   "legacy/tests/timesEndpointDiscovery.test.ts": [
+    14,
+    0
+   ],
+   "legacy/tests/toastRolesAndTimers.test.ts": [
+    5,
+    0
+   ],
+   "legacy/tests/uiDisclosure.test.ts": [
+    4,
+    0
+   ],
+   "legacy/tests/uiReviewSmallFixes.test.ts": [
+    4,
+    0
+   ],
+   "legacy/tests/userInputtedTimes.test.ts": [
+    14,
+    0
+   ],
+   "legacy/tests/workspaceCreateAllowlist.test.ts": [
+    16,
+    0
+   ],
+   "legacy/tests/workspaceRepoRestoreBackup.test.ts": [
+    2,
+    0
+   ],
+   "legacy/tests/workspaceRouteSync.test.ts": [
+    16,
+    0
+   ],
+   "legacy/tests/workspaceSaveSequenceRoute.test.ts": [
+    22,
+    0
+   ],
+   "legacy/tests/workspaceScopePg.test.ts": [
+    0,
+    10
+   ],
+   "legacy/tests/workspaceScopeRoutes.test.ts": [
+    7,
+    0
+   ],
+   "legacy/tests/workspaceSidebarRename.test.ts": [
+    8,
+    0
+   ],
+   "legacy/tests/workspaceWritePolicy.test.ts": [
+    16,
+    0
+   ],
+   "legacy/tests/zodCompat.test.ts": [
+    10,
+    0
+   ]
+  }
+ },
+ "scripts": {
+  "active": {
+   "test_alias_scorer_roster.mjs": "PASS",
+   "test_athlete_aliases.mjs": "PASS",
+   "test_arbitrage_units.mjs": "PASS",
+   "test_athlete_autolink.mjs": "PASS",
+   "test_athlete_history.mjs": "PASS",
+   "test_arbitrage_never_loses.mjs": "PASS",
+   "test_compact_event_label.mjs": "PASS",
+   "test_conversion_keys.mjs": "PASS",
+   "test_chart_data.mjs": "PASS",
+   "test_course_conversion.mjs": "PASS",
+   "test_cut_division_absent.mjs": "PASS",
+   "test_cutline_tags.mjs": "PASS",
+   "test_cutlines.mjs": "PASS",
+   "test_dq_scoring.mjs": "PASS",
+   "test_chart_bundle.mjs": "PASS",
+   "test_drop_add_analysis.mjs": "PASS",
+   "test_duplicate_athletes.mjs": "PASS",
+   "test_entry_limits.mjs": "PASS",
+   "test_entry_limits_aliases.mjs": "PASS",
+   "test_entry_limits_prelims_finals.mjs": "PASS",
+   "test_entry_limits_time_trials.mjs": "PASS",
+   "test_event_identity_scoring.mjs": "PASS",
+   "test_event_quality_ranking.mjs": "PASS",
+   "test_fast_swap_context.mjs": "PASS",
+   "test_history_import_roster.mjs": "PASS",
+   "test_individual_scoring.mjs": "PASS",
+   "test_lineup_audit.mjs": "PASS",
+   "test_meet_program_events.mjs": "PASS",
+   "test_meet_source.mjs": "PASS",
+   "test_momentum_series.mjs": "PASS",
+   "test_multi_profile_import.mjs": "PASS",
+   "test_nsisc_team_totals.mjs": "PASS",
+   "test_parse_plausibility.mjs": "PASS",
+   "test_prelims_projection.mjs": "PASS",
+   "test_optimizer_never_loses.mjs": "PASS",
+   "test_projection_roster_gates.mjs": "PASS",
+   "test_psych_projection.mjs": "PASS",
+   "test_relay_overrides.mjs": "PASS",
+   "test_relay_scoring.mjs": "PASS",
+   "test_relay_splits.mjs": "PASS",
+   "test_roster_arbitrage.mjs": "PASS",
+   "test_roster_identity_match.mjs": "PASS",
+   "test_roster_optimizer.mjs": "PASS",
+   "test_roster_removal.mjs": "PASS",
+   "test_scenario_diff.mjs": "PASS",
+   "test_scored_event_boundary.mjs": "PASS",
+   "test_scorer_gender_default.mjs": "PASS",
+   "test_scorer_pool_cap.mjs": "PASS",
+   "test_scoring_settings_effect.mjs": "PASS",
+   "test_scoring_theory.mjs": "PASS",
+   "test_season_analytics_official_zero.mjs": "PASS",
+   "test_settings_lock.mjs": "PASS",
+   "test_swim_editor.mjs": "PASS",
+   "test_team_aliases.mjs": "PASS",
+   "test_team_colors.mjs": "PASS",
+   "test_team_matching_ambiguity.mjs": "PASS",
+   "test_relay_swaps.mjs": "PASS",
+   "test_theme_css.mjs": "PASS",
+   "test_tie_group_scoring.mjs": "PASS",
+   "test_working_copy_changes.mjs": "PASS",
+   "test_vacate_relay_alias.mjs": "PASS",
+   "test_workspace_naming.mjs": "PASS",
+   "test_workspace_scoring_debounce.mjs": "PASS",
+   "test_cross_course_arbitrage.mjs": "PASS",
+   "test_recruit_placement_grid.mjs": "PASS"
+  },
+  "legacy": {
+   "test_server_binding.mjs": "PASS",
+   "test_chart_shell.mjs": "PASS",
+   "test_cross_course_arbitrage_view.mjs": "PASS",
+   "test_abbreviated_school_column.mjs": "PASS",
+   "test_exhibition_tie_parity.mjs": "PASS",
+   "test_chart_render.mjs": "PASS",
+   "test_pdf_place_points_boundary.mjs": "PASS",
+   "test_persistence_parity.mjs": "PASS",
+   "test_athlete_lineup_editor.mjs": "PASS",
+   "test_scoring_settings_required.mjs": "PASS",
+   "test_python_bad_times.mjs": "PASS",
+   "test_sqlite_roundtrip.mjs": "PASS",
+   "test_pdf_abbreviation_table_required.mjs": "PASS",
+   "test_timed_final_relay_scorers.mjs": "PASS",
+   "test_team_abbreviation_parity.mjs": "PASS",
+   "test_timed_finals_label.mjs": "PASS",
+   "test_team_rankings_parser.mjs": "PASS",
+   "test_workspace_scope.mjs": "PASS",
+   "test_yearless_relay_row.mjs": "PASS",
+   "test_yearless_result_row.mjs": "PASS",
+   "test_nsisc_psych.mjs": "PASS",
+   "test_data_dir_guard.mjs": "PASS",
+   "test_scoring_preset_routes.mjs": "PASS",
+   "PostgreSQL round-trip test (set PG_TEST_URL to run)": "SKIP",
+   "playwright e2e (all specs)": "PASS"
+  }
+ }
+}

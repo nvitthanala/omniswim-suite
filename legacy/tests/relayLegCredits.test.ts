@@ -90,7 +90,7 @@ function credit(over: Partial<RelayLegCredit> = {}): RelayLegCredit {
  * `@ts-expect-error` below would otherwise never be enforced.
  */
 function typeCheckSnippet(body: string): string[] {
-  const typesPath = path.join(ROOT, 'packages', 'core', 'src', 'types.ts').replace(/\\/g, '/');
+  const typesPath = path.join(ROOT, 'packages', 'engine', 'src', 'types.ts').replace(/\\/g, '/');
   const snippetPath = path.join(ROOT, 'tests', '__relay_credit_type_snippet__.ts');
   const source = `import type { HistoricalSwim, RelayLegCredit } from '${typesPath.replace(/\.ts$/, '')}';\n${body}\n`;
   const options: ts.CompilerOptions = {

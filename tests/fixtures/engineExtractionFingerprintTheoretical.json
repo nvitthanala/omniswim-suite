@@ -1,0 +1,10 @@
+{
+  "cases": {
+    "buildScoringBundle|theoretical-meet|Men|applyWhatIf=true": "8c463b131a91abc43e9d0308ec7e760b831aa7da461e445029bc3c9bc17ec210",
+    "buildScoringBundle|theoretical-meet|Men|applyWhatIf=false": "8c463b131a91abc43e9d0308ec7e760b831aa7da461e445029bc3c9bc17ec210",
+    "buildScoringSnapshot|theoretical-meet|Men": "bd3d50bafc859f9c7298357fa3d4d9bc0cfb2723504d665d9bdcc779cbde0cde",
+    "buildScoringBundle|theoretical-meet|Women|applyWhatIf=true": "8a78e5d3eef38b91392d5c9f8430611c2571906ceac6f23a2c67c38e38c62376",
+    "buildScoringBundle|theoretical-meet|Women|applyWhatIf=false": "8a78e5d3eef38b91392d5c9f8430611c2571906ceac6f23a2c67c38e38c62376",
+    "buildScoringSnapshot|theoretical-meet|Women": "bee3ee18b9c783575bd78a06691554738ee5fe26ecbc21ce712e391916c6f06b"
+  }
+}

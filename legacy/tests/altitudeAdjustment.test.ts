@@ -513,7 +513,18 @@ describe('no code path subtracts the altitude chart from an imported time', () =
     // pipeline holds no elevation for any swim, so the only legitimate reader
     // is the guarded API in lib/altitude.ts. A new caller has to be added here
     // on purpose, next to the reason it is safe.
-    const allowed = new Set(['packages/core/src/constants.ts', 'packages/core/src/lib/altitude.ts']);
+    const allowed = new Set(['packages/engine/src/constants.ts', 'packages/engine/src/lib/altitude.ts']);
+    // The allowlist names the real files, not the two-line shims in core. A shim holds no chart
+    // reader, so scanning it would pass for the wrong reason. Prove each allowed file is the
+    // implementation: over 1 KB and carrying its named export.
+    for (const [rel, exportName] of [
+      ['packages/engine/src/constants.ts', 'export const NCAA_ALTITUDE_ADJUSTMENT_TABLE'],
+      ['packages/engine/src/lib/altitude.ts', 'export function ncaaAltitudeAdjustment'],
+    ] as const) {
+      const text = readFileSync(join(repoRoot, rel), 'utf8');
+      expect(text.length, `${rel} must be over 1 KB`).toBeGreaterThan(1024);
+      expect(text, `${rel} must contain ${exportName}`).toContain(exportName);
+    }
     const offenders: string[] = [];
     // apps/ and extensions/ hold no tracked files after the legacy move, so a
     // fresh checkout lacks them. The legacy roots must exist and be scanned.
@@ -534,7 +545,7 @@ describe('no code path subtracts the altitude chart from an imported time', () =
         }
       }
     }
-    expect(scanned).toContain('packages/core/src/lib/altitude.ts');
+    expect(scanned).toContain('packages/engine/src/lib/altitude.ts');
     expect(scanned.some((f) => f.startsWith('legacy/apps/shell/'))).toBe(true);
     expect(offenders).toStrictEqual([]);
   });
