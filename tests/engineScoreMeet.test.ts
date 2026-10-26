@@ -27,7 +27,8 @@ import type {
   Results,
   RulePreset,
 } from '@omniswim/engine';
-import { set } from './engineTestPresets';
+import { LEGACY_UNLIMITED, toLegacyScoringSettings } from '@omniswim/engine/rules/legacyBridge';
+import { completeNsisc, set } from './engineTestPresets';
 
 const SOURCING: ConversionSettings = { includeConvertedSwims: false, lcmToScy: null };
 const ORIGIN = { kind: 'simulator', snapshotId: 'synthetic' } as const;
@@ -125,7 +126,7 @@ const flatOf = new Map<string, number>();
 const lineup = (...entries: LineupEntry[]): Lineup => ({ payloadVersion: 1, meetKey: 'synthetic', entries });
 
 /** A points_pool preset with the college tables (9-4-3-2-1, relay 11-4-2) and the caps a test names. */
-function preset(opts: { ties?: 'split' | 'ordered'; scorerCap?: number; relayCap?: number | 'unlimited'; maxInd?: number | 'unlimited'; eligibility?: 'points_pool' | 'roster'; overCap?: 'holds-place' | 'removed-from-consideration' } = {}): CompleteRulePreset {
+function preset(opts: { ties?: 'split' | 'ordered'; scorerCap?: number; relayCap?: number | 'unlimited'; maxInd?: number | 'unlimited'; eligibility?: 'points_pool' | 'roster'; overCap?: 'holds-place' | 'removed-from-consideration'; divingCap?: { cap: number; overCap: 'holds-place' | 'removed-from-consideration' } } = {}): CompleteRulePreset {
   const p: RulePreset = {
     payloadVersion: 2,
     scoring: {
@@ -146,7 +147,7 @@ function preset(opts: { ties?: 'split' | 'ordered'; scorerCap?: number; relayCap
       scoringTeamScope: set('event' as const),
       diverWeight: set({ numerator: 1, denominator: 1 }),
       perEventScorerCap: set(opts.scorerCap === undefined ? { cap: 'unlimited' as const } : { cap: opts.scorerCap, overCap: opts.overCap ?? ('holds-place' as const) }),
-      divingPerEventScorerCap: set({ kind: 'same-as-swimming' as const }),
+      divingPerEventScorerCap: set(opts.divingCap === undefined ? { kind: 'same-as-swimming' as const } : { kind: 'own' as const, ...opts.divingCap }),
       scoringRelaysPerTeamPerEvent: set(opts.relayCap ?? 'unlimited'),
       relayEligibleFromScorerPool: set(false),
       relayLegsMustBeScorers:
@@ -377,6 +378,214 @@ describe('scoreMeet: relays', () => {
   });
 });
 
+describe("scoreMeet: an over-cap entry under 'removed-from-consideration'", () => {
+  const REMOVED = 'removed_over_event_cap';
+  const swimmers = [
+    { id: 'a1', team: 'T1' }, { id: 'a2', team: 'T1' }, { id: 'a3', team: 'T1' },
+    { id: 'b1', team: 'T2' }, { id: 'b2', team: 'T2' },
+    { id: 'c1', team: 'T3' },
+  ];
+  const removedPreset = (opts: Parameters<typeof preset>[0] = {}) => preset({ scorerCap: 2, overCap: 'removed-from-consideration', ...opts });
+  const shape = (r: Results, eventKey: string) => rowsOf(r, eventKey).map((x) => [x.swimmerId, x.place, x.points, x.scored, x.notScoredReason ?? null]);
+
+  it('removes the over-cap entry from the places and moves the entries behind it up', () => {
+    const swims = [swim('a1', '50 Freestyle', 2000), swim('a2', '50 Freestyle', 2010), swim('a3', '50 Freestyle', 2020), swim('b1', '50 Freestyle', 2030), swim('b2', '50 Freestyle', 2040), swim('c1', '50 Freestyle', 2050)];
+    const entries = [ind('T1', 'a1'), ind('T1', 'a2'), ind('T1', 'a3'), ind('T2', 'b1'), ind('T2', 'b2'), ind('T3', 'c1')];
+    const removed = scoreMeet(model(swimmers, swims), lineup(...entries), [], removedPreset(), SOURCING);
+    expect(shape(removed, '50 Freestyle')).toEqual([
+      ['a1', 1, 9, true, null],
+      ['a2', 2, 4, true, null],
+      ['b1', 3, 3, true, null], // a3 left the places: b1 moves up from 4th (2 points) to 3rd (3)
+      ['b2', 4, 2, true, null],
+      ['c1', 5, 1, true, null], // 6th held no points; 5th does
+      ['a3', null, 0, false, REMOVED], // in Results, no place, no points, and a reason that is not a placed zero
+    ]);
+    expect(pointsOf(removed, 'T1')).toBe(13);
+    expect(pointsOf(removed, 'T2')).toBe(5);
+    expect(pointsOf(removed, 'T3')).toBe(1);
+  });
+
+  it("'holds-place' is unchanged: the over-cap entry keeps its place and the entries behind it do not move up", () => {
+    const swims = [swim('a1', '50 Freestyle', 2000), swim('a2', '50 Freestyle', 2010), swim('a3', '50 Freestyle', 2020), swim('b1', '50 Freestyle', 2030), swim('b2', '50 Freestyle', 2040), swim('c1', '50 Freestyle', 2050)];
+    const entries = [ind('T1', 'a1'), ind('T1', 'a2'), ind('T1', 'a3'), ind('T2', 'b1'), ind('T2', 'b2'), ind('T3', 'c1')];
+    const held = scoreMeet(model(swimmers, swims), lineup(...entries), [], preset({ scorerCap: 2, overCap: 'holds-place' }), SOURCING);
+    expect(shape(held, '50 Freestyle')).toEqual([
+      ['a1', 1, 9, true, null],
+      ['a2', 2, 4, true, null],
+      ['a3', 3, 0, false, 'event_scorer_cap'],
+      ['b1', 4, 2, true, null],
+      ['b2', 5, 1, true, null],
+      ['c1', 6, 0, false, 'outside_point_table'],
+    ]);
+  });
+
+  it('an unbound cap removes nothing', () => {
+    const swims = [swim('a1', '50 Freestyle', 2000), swim('a2', '50 Freestyle', 2010), swim('b1', '50 Freestyle', 2030)];
+    const r = scoreMeet(model(swimmers, swims), lineup(ind('T1', 'a1'), ind('T1', 'a2'), ind('T2', 'b1')), [], removedPreset(), SOURCING);
+    expect(shape(r, '50 Freestyle')).toEqual([
+      ['a1', 1, 9, true, null],
+      ['a2', 2, 4, true, null],
+      ['b1', 3, 3, true, null],
+    ]);
+  });
+
+  it("'split': a removed entry inside a tie group leaves the group, and its tie-mate takes the place alone", () => {
+    // a2 and b1 tie for 2nd. T1 is capped at 1, so a2 is removed. b1 holds 2nd by itself and scores the full
+    // value of 2nd (4), not half of 2nd and 3rd (3.5). c1 moves up from 4th to 3rd.
+    const swims = [swim('a1', '50 Freestyle', 2000), swim('a2', '50 Freestyle', 2010), swim('b1', '50 Freestyle', 2010), swim('c1', '50 Freestyle', 2100)];
+    const entries = [ind('T1', 'a1'), ind('T1', 'a2'), ind('T2', 'b1'), ind('T3', 'c1')];
+    const r = scoreMeet(model(swimmers, swims), lineup(...entries), [], removedPreset({ scorerCap: 1 }), SOURCING);
+    expect(shape(r, '50 Freestyle')).toEqual([
+      ['a1', 1, 9, true, null],
+      ['b1', 2, 4, true, null],
+      ['c1', 3, 3, true, null],
+      ['a2', null, 0, false, REMOVED],
+    ]);
+    // The same field under 'holds-place': a2 keeps the shared 2nd place and the tie splits.
+    const held = scoreMeet(model(swimmers, swims), lineup(...entries), [], preset({ scorerCap: 1, overCap: 'holds-place' }), SOURCING);
+    expect(shape(held, '50 Freestyle')).toEqual([
+      ['a1', 1, 9, true, null],
+      ['a2', 2, 0, false, 'event_scorer_cap'],
+      ['b1', 2, 3.5, true, null],
+      ['c1', 4, 2, true, null],
+    ]);
+  });
+
+  it("'split': a tie between entries that all stay shares the places, with a removal behind it", () => {
+    // a1 and b1 tie for 1st and split 9 and 4. a2 is over the cap and removed. c1 moves from 4th to 3rd.
+    const swims = [swim('a1', '50 Freestyle', 2000), swim('b1', '50 Freestyle', 2000), swim('a2', '50 Freestyle', 2010), swim('c1', '50 Freestyle', 2100)];
+    const r = scoreMeet(model(swimmers, swims), lineup(ind('T1', 'a1'), ind('T2', 'b1'), ind('T1', 'a2'), ind('T3', 'c1')), [], removedPreset({ scorerCap: 1 }), SOURCING);
+    expect(shape(r, '50 Freestyle')).toEqual([
+      ['a1', 1, 6.5, true, null],
+      ['b1', 1, 6.5, true, null],
+      ['c1', 3, 3, true, null],
+      ['a2', null, 0, false, REMOVED],
+    ]);
+  });
+
+  it("'ordered': a removed entry leaves the places, and lineup order still breaks the tie among the rest", () => {
+    // a2 and b1 tie at 20.10. Entered a2 first, a2 is 2nd, b1 3rd. T1 is capped at 1, so a2 is removed: b1 is 2nd.
+    const swims = [swim('a1', '50 Freestyle', 2000), swim('a2', '50 Freestyle', 2010), swim('b1', '50 Freestyle', 2010), swim('c1', '50 Freestyle', 2100)];
+    const ordered = (...entries: LineupEntry[]) => scoreMeet(model(swimmers, swims), lineup(...entries), [], removedPreset({ ties: 'ordered', scorerCap: 1 }), SOURCING);
+    expect(shape(ordered(ind('T1', 'a1'), ind('T1', 'a2'), ind('T2', 'b1'), ind('T3', 'c1')), '50 Freestyle')).toEqual([
+      ['a1', 1, 9, true, null],
+      ['b1', 2, 4, true, null],
+      ['c1', 3, 3, true, null],
+      ['a2', null, 0, false, REMOVED],
+    ]);
+    // Entered b1 first, b1 is 2nd and a2 3rd; a2 is still over T1's cap, so it is removed and c1 is 3rd.
+    expect(shape(ordered(ind('T1', 'a1'), ind('T2', 'b1'), ind('T1', 'a2'), ind('T3', 'c1')), '50 Freestyle')).toEqual([
+      ['a1', 1, 9, true, null],
+      ['b1', 2, 4, true, null],
+      ['c1', 3, 3, true, null],
+      ['a2', null, 0, false, REMOVED],
+    ]);
+  });
+
+  it('diving with its own cap removes the over-cap diver and moves the field up', () => {
+    const swims = [diveSwim('a1', 300), diveSwim('a2', 290), diveSwim('b1', 280), diveSwim('a3', 270), swim('a1', '50 Freestyle', 2000), swim('a2', '50 Freestyle', 2010), swim('a3', '50 Freestyle', 2020)];
+    const dives = [ind('T1', 'a1', '1-Meter Diving'), ind('T1', 'a2', '1-Meter Diving'), ind('T2', 'b1', '1-Meter Diving'), ind('T1', 'a3', '1-Meter Diving')];
+    const swum = [ind('T1', 'a1'), ind('T1', 'a2'), ind('T1', 'a3')];
+    const r = scoreMeet(model(swimmers, swims), lineup(...dives, ...swum), [], preset({ divingCap: { cap: 1, overCap: 'removed-from-consideration' } }), SOURCING);
+    expect(shape(r, '1-Meter Diving')).toEqual([
+      ['a1', 1, 9, true, null],
+      ['b1', 2, 4, true, null], // a2 left the places: b1 moves up from 3rd to 2nd
+      ['a2', null, 0, false, REMOVED],
+      ['a3', null, 0, false, REMOVED],
+    ]);
+    // The swimming cap is unlimited, so the swimming event is untouched.
+    expect(shape(r, '50 Freestyle').map((x) => x[2])).toEqual([9, 4, 3]);
+  });
+
+  it("diving 'same-as-swimming' follows the swimming cap's behavior", () => {
+    const swims = [diveSwim('a1', 300), diveSwim('a2', 290), diveSwim('b1', 280)];
+    const r = scoreMeet(model(swimmers, swims), lineup(ind('T1', 'a1', '1-Meter Diving'), ind('T1', 'a2', '1-Meter Diving'), ind('T2', 'b1', '1-Meter Diving')), [], removedPreset({ scorerCap: 1 }), SOURCING);
+    expect(shape(r, '1-Meter Diving')).toEqual([
+      ['a1', 1, 9, true, null],
+      ['b1', 2, 4, true, null],
+      ['a2', null, 0, false, REMOVED],
+    ]);
+  });
+
+  it("diving 'own' with 'holds-place' is unchanged while swimming is unlimited", () => {
+    const swims = [diveSwim('a1', 300), diveSwim('a2', 290), diveSwim('b1', 280)];
+    const r = scoreMeet(model(swimmers, swims), lineup(ind('T1', 'a1', '1-Meter Diving'), ind('T1', 'a2', '1-Meter Diving'), ind('T2', 'b1', '1-Meter Diving')), [], preset({ divingCap: { cap: 1, overCap: 'holds-place' } }), SOURCING);
+    expect(shape(r, '1-Meter Diving')).toEqual([
+      ['a1', 1, 9, true, null],
+      ['a2', 2, 0, false, 'event_scorer_cap'],
+      ['b1', 3, 3, true, null],
+    ]);
+  });
+
+  describe('relays', () => {
+    const ids = (team: string, n: number) => Array.from({ length: n }, (_, i) => `${team}-${i}`);
+    const relaySwimmers = [...ids('T1', 12), ...ids('T2', 4)].map((id) => ({ id, team: id.slice(0, 2) }));
+    const swims: MeetSwim[] = [];
+    const splits: RelaySplit[] = [];
+    const base: Record<string, number> = { T1: 2000, T2: 2300 };
+    relaySwimmers.forEach((s, i) => {
+      const flat = base[s.team]! + i * 10;
+      swims.push(swim(s.id, '100 Freestyle', flat));
+      flatOf.set(s.id, flat);
+      splits.push(split(s.id, flat - 100));
+    });
+    const group = (team: string, g: number): [string, string, string, string] => [0, 1, 2, 3].map((k) => `${team}-${g * 4 + k}`) as [string, string, string, string];
+    const entries = [relay('T1', 'A', group('T1', 0)), relay('T1', 'B', group('T1', 1)), relay('T1', 'C', group('T1', 2)), relay('T2', 'A', group('T2', 0))];
+
+    // GAP (reported to the architect): scorers.scoringRelaysPerTeamPerEvent has no over-cap behavior, and D2 says
+    // none is specified. The relay branch therefore keeps today's behavior under every swimming overCap.
+    it("a relay over its cap holds its place even when the swimming cap's overCap is 'removed-from-consideration'", () => {
+      const r = scoreMeet(model(relaySwimmers, swims, { splits }), lineup(...entries), [], preset({ relayCap: 2, scorerCap: 5, overCap: 'removed-from-consideration' }), SOURCING);
+      expect(rowsOf(r, '400 Freestyle Relay').map((x) => [x.entryKey, x.place, x.points, x.notScoredReason ?? null])).toEqual([
+        ['r|T1|400 Freestyle Relay|Men|A', 1, 11, null],
+        ['r|T1|400 Freestyle Relay|Men|B', 2, 4, null],
+        ['r|T1|400 Freestyle Relay|Men|C', 3, 0, 'relay_scorer_cap'],
+        ['r|T2|400 Freestyle Relay|Men|A', 4, 0, 'outside_point_table'],
+      ]);
+    });
+  });
+
+  it('the engine, not the legacy scorer, removes: a removed entry never reaches legacy with a place', () => {
+    // Legacy `shiftRanksAfterRemoval` restores source ranks, so only the engine reports place 2 for b1 here.
+    const swims = [swim('a1', '50 Freestyle', 2000), swim('a2', '50 Freestyle', 2010), swim('b1', '50 Freestyle', 2020)];
+    const r = scoreMeet(model(swimmers, swims), lineup(ind('T1', 'a1'), ind('T1', 'a2'), ind('T2', 'b1')), [], removedPreset({ scorerCap: 1 }), SOURCING);
+    expect(rowsOf(r, '50 Freestyle').find((x) => x.swimmerId === 'b1')?.place).toBe(2);
+    expect(rowsOf(r, '50 Freestyle').find((x) => x.swimmerId === 'a2')).toMatchObject({ place: null, notScoredReason: REMOVED });
+  });
+});
+
+describe('F17: the engine never reaches the legacy relay cap fallback', () => {
+  // relayScoring.ts reads `merged.maxRelaysScoringPerTeam ?? 2`. The engine path always writes the key.
+  it('toLegacyScoringSettings writes maxRelaysScoringPerTeam for unlimited, a number and the NSISC preset', () => {
+    const keyOf = (p: CompleteRulePreset) => {
+      const settings = toLegacyScoringSettings(p, { ranksAreDistinct: true });
+      expect(Object.hasOwn(settings, 'maxRelaysScoringPerTeam')).toBe(true);
+      return settings.maxRelaysScoringPerTeam;
+    };
+    expect(keyOf(preset({ relayCap: 'unlimited' }))).toBe(LEGACY_UNLIMITED);
+    expect(keyOf(preset({ relayCap: 3 }))).toBe(3);
+    expect(typeof keyOf(completeNsisc())).toBe('number');
+  });
+
+  it("an unlimited relay cap lets a team's third relay score: a `?? 2` fallback would have stopped it", () => {
+    const ids = (team: string, n: number) => Array.from({ length: n }, (_, i) => `${team}-${i}`);
+    const swimmers = [...ids('T1', 12), ...ids('T2', 4)].map((id) => ({ id, team: id.slice(0, 2) }));
+    const swims: MeetSwim[] = [];
+    const splits: RelaySplit[] = [];
+    const base: Record<string, number> = { T1: 2000, T2: 2300 };
+    swimmers.forEach((s, i) => {
+      const flat = base[s.team]! + i * 10;
+      swims.push(swim(s.id, '100 Freestyle', flat));
+      flatOf.set(s.id, flat);
+      splits.push(split(s.id, flat - 100));
+    });
+    const group = (team: string, g: number): [string, string, string, string] => [0, 1, 2, 3].map((k) => `${team}-${g * 4 + k}`) as [string, string, string, string];
+    const entries = [relay('T1', 'A', group('T1', 0)), relay('T1', 'B', group('T1', 1)), relay('T1', 'C', group('T1', 2))];
+    const r = scoreMeet(model(swimmers, swims, { splits }), lineup(...entries), [], preset({ relayCap: 'unlimited' }), SOURCING);
+    expect(rowsOf(r, '400 Freestyle Relay').map((x) => x.points)).toEqual([11, 4, 2]);
+  });
+});
+
 describe('scoreMeet: entry limits and the roster', () => {
   const swimmers = [{ id: 'a1', team: 'T1' }, { id: 'b1', team: 'T2' }];
   const swims = [swim('a1', '50 Freestyle', 2000), swim('a1', '100 Freestyle', 4500), swim('b1', '50 Freestyle', 2100), swim('b1', '100 Freestyle', 4600)];
@@ -401,11 +610,10 @@ describe('scoreMeet: entry limits and the roster', () => {
     expect(r.rosterUnknown).toEqual(['a1']);
   });
 
-  it('roster eligibility, tags under points_pool, and a removed-from-consideration cap each throw', () => {
+  it('roster eligibility and tags under points_pool each throw', () => {
     const m = model(swimmers, swims);
     expect(scoreCode(() => scoreMeet(m, lineup(ind('T1', 'a1')), [], preset({ eligibility: 'roster' }), SOURCING))).toBe('roster_mode_unsupported');
     expect(scoreCode(() => scoreMeet(m, lineup(ind('T1', 'a1')), [{ teamId: 'T1', swimmerId: 'a1', role: 'scorer' }], preset(), SOURCING))).toBe('tags_need_roster_mode');
-    expect(scoreCode(() => scoreMeet(m, lineup(ind('T1', 'a1')), [], preset({ scorerCap: 1, overCap: 'removed-from-consideration' }), SOURCING))).toBe('placement_unsupported');
   });
 
   it('refuses a lineup for another meet, a duplicate entry, a swimmer on the wrong team and the wrong gender', () => {

@@ -632,7 +632,8 @@
     "DONE: P2 risk. profile_fastest_times answers without a challenge (bests only; see p2Risk).",
     "DONE (d22375ee): P2 UI. Overlay forwards the validated snapshot over the nonce port and keeps the console log; dashboard re-scores and shows team totals plus the parity line. Codex wrote it; Claude reviewed (advisor audit). Gates green: vitest 2693, npm test 65, golden, harness 2/2.",
     "DONE (24a0eee1): stored rule presets migrate on read, ties pending. Diff audit skipped: one-function mechanical change with a red test; no cross-provider review for the same reason.",
-    "NEXT: P3 rules per plan (preset editor and pickers). Then P4 sourcing (flyover, history, cut-tag wiring incl. estimated-cut tag, conversion-source picker hiding retired built-ins), then P5 planner."
+    "NEXT: P3 rules per plan (preset editor and pickers). Then P4 sourcing (flyover, history, cut-tag wiring incl. estimated-cut tag, conversion-source picker hiding retired built-ins), then P5 planner.",
+    "DONE: P3.core-a over-cap removal (see p3CoreA). NEXT unblocked: P3.ui (preset editor, dropdowns) against the Results surface, budget permitting. P3.core-b waits on Q-roster-untagged."
   ],
   "notes": [
     "Newest code was on the unmerged branch in the oyster worktree (C:/Users/nihar/orca/workspaces/omniswim-suite/oyster), not main. Plan docs were written in the main clone, untracked, to be committed on the redesign branch.",
@@ -873,7 +874,8 @@
     "questionsForUser": [
       "Q-history-depth: profile_fastest_times gives one best swim per event and course (all teams, back to 2012), not every swim. Is that enough for Load history (R50) and recruits (R52)? If the date window (R49) must pick the best swim inside the window, a full per-swim history endpoint is needed; may Claude look for one (a few requests, stop on any challenge)?",
       "Q-R61-weaker-real: when a real swim earns a weaker cut than an estimated one (real B, estimated A), foldEventCutTags keeps both tags, real first. Keep both, or show only the stronger one?",
-      "Q-roster-untagged: in a lineup that has no finals yet (all timed finals), who is on the scoring team when the coach has tagged no one? The legacy rule (scorerRoster.ts:240) makes an untagged swimmer a scorer only if a relay or a final marked them, or they are a recruit. Under that rule almost nobody scores before finals exist. Options: (a) keep legacy, (b) every untagged swimmer is a scorer until the 18-spot team is full (who drops then?), (c) the planner must tag first, else the meet is not scored."
+      "Q-roster-untagged: in a lineup that has no finals yet (all timed finals), who is on the scoring team when the coach has tagged no one? The legacy rule (scorerRoster.ts:240) makes an untagged swimmer a scorer only if a relay or a final marked them, or they are a recruit. Under that rule almost nobody scores before finals exist. Options: (a) keep legacy, (b) every untagged swimmer is a scorer until the 18-spot team is full (who drops then?), (c) the planner must tag first, else the meet is not scored.",
+      "Q-relay-overcap: when a team enters more relays in one event than may score (NSISC: 2), does the extra relay keep its place and score 0 (today), or leave the places so the relays behind move up, like a non-scorer under R41? R42 says NSISC enters no non-scoring relays, so this matters for other presets and for a lineup that breaks the limit."
     ],
     "resolvedNote": "Dark good/bad colors: answered by README R57 (system colors in dark), removed from questions 2026-10-26."
   },
@@ -917,14 +919,20 @@
     "codexWorker": "ctx_7ab57a4cdebf released 2026-10-26; child worktree p2-overlay-ui left in place"
   },
   "inFlight": {
-    "P3.core-a": {
-      "status": "dispatched to executor (Claude Sonnet), then Codex review",
-      "scope": "scoreMeet scores over-cap removed-from-consideration under points_pool (drops placement_unsupported at results.ts:467): remove-and-move-up in the scoreMeet ranking step only; F17 proven by test (engine path never reaches relayScoring ?? 2). packages/engine/src/lib/** untouched; golden byte-identical; P2 parity A-D exact.",
-      "precedent": "packages/engine/src/lib/ncaaScoringRules.ts:1192 (re-run with the over-cap finisher removed); rankAsIfExhibitionAbsent individualScoring.ts:656"
-    },
     "P3.core-b": {
       "status": "blocked on Q-roster-untagged; after core-a",
       "scope": "roster eligibility for timed finals: tags + relay-leg auto marks (R39), coach tags win (R21/R40), R41 non-scorers leave places (ind + relay), R37/F19 legs must be scorers, scoringTeamSize 18 with diver 1/3 (R9/R24/R28) over-size = reported violation never a silent trim; abFinalTiers and splitTimedFinalMarksScorer set but not evaluable without rounds -> throw needs_rounds (P5)."
     }
+  },
+  "followUps": [
+    "tests/extensionStorageAudit.test.ts \"a migration that awaits a timer makes openOmniDb reject\" failed once under --maxWorkers=4 (2026-10-26), passed 3/3 alone and on the full rerun: timing flake under load.",
+    "Tie at the cap boundary: placeOrderCompare picks which teammate is removed by synthetic-id order. Team total is unchanged; per-swimmer points are arbitrary. Decide in P3.core-b (D2 9.5)."
+  ],
+  "p3CoreA": {
+    "status": "DONE: Codex review accepted (ctx_5b81979038a5, released); advisor audit passed; lead gates green incl. harness 2/2; D2 section 9 records the deviations",
+    "scope": "scoreMeet scores over-cap removed-from-consideration under points_pool (drops placement_unsupported at results.ts:467): remove-and-move-up in the scoreMeet ranking step only; F17 proven by test (engine path never reaches relayScoring ?? 2). packages/engine/src/lib/** untouched; golden byte-identical; P2 parity A-D exact.",
+    "precedent": "packages/engine/src/lib/ncaaScoringRules.ts:1192 (re-run with the over-cap finisher removed); rankAsIfExhibitionAbsent individualScoring.ts:656",
+    "api": "NotScoredReason gains removed_over_event_cap. Removed row: {place:null, points:0, scored:false, notScoredReason:removed_over_event_cap}; sorts last. UI reads the reason, not place (no_time is also place null). placement_unsupported stays in ScoreMeetErrorCode but is no longer thrown.",
+    "openRelay": "Relays over scoringRelaysPerTeamPerEvent always hold their place (pinned by a test): the preset has no relay over-cap rule (D2 6). See Q-relay-overcap."
   }
 }

@@ -633,7 +633,7 @@ Invariants (each has a test):
 ### 3.8 Results and scoring (`model/results.ts`), P2
 
 ```ts
-export type NotScoredReason = 'non_scorer' | 'scoring_team_full' | 'event_scorer_cap' | 'relay_scorer_cap'
+export type NotScoredReason = 'non_scorer' | 'scoring_team_full' | 'event_scorer_cap' | 'relay_scorer_cap' | 'removed_over_event_cap'
   | 'exhibition' | 'outside_point_table' | 'no_time' | 'time_trial';
 export interface ResultRow { readonly entryKey: string; readonly teamId: TeamId; readonly swimmerId: SwimmerId | null;
   readonly place: number | null; readonly points: number; readonly scored: boolean;
@@ -1277,3 +1277,25 @@ and `architect` have not accepted them yet. Item 12 decides nothing.
       `PAYLOAD_VERSION = 1` and stores a rule preset payload as given. A stored
       version 1 payload validates (it migrates in `parseRulePreset`) but the stored
       value stays version 1, so storage must migrate on read before scoring.
+
+## 9. Deviations taken during P3.core-a (2026-10-26)
+
+1. **Over-cap removal is engine-side.** `scoreMeet` now scores a per-event
+   scorer cap whose `overCap` is `'removed-from-consideration'`, for
+   individual and diving events. The cap picks the over-cap entries from
+   the full-field ranks. `scoreMeet` then ranks the field again without
+   them, under the same `scoring.ties` rule, and hands only the survivors
+   to the legacy scorer. `packages/engine/src/lib` is unchanged.
+2. **A removed row has its own reason.** `NotScoredReason` gains
+   `'removed_over_event_cap'`. A removed row has `place: null` and
+   `points: 0`. `no_time` also has `place: null`, so a reader must check
+   the reason, not `place`.
+3. **`placement_unsupported` is no longer thrown.** It stays in
+   `ScoreMeetErrorCode` so existing callers still compile.
+4. **Relays always hold their place.** `scoringRelaysPerTeamPerEvent` has no
+   over-cap rule (section 6). A test pins this. The question is open with
+   the user (state file, `Q-relay-overcap`).
+5. **A tie at the cap boundary.** When two teammates tie exactly at the cap,
+   `placeOrderCompare` picks the one removed, by synthetic-id order. The
+   team total does not change. Which swimmer earns the points is arbitrary.
+   This matters for per-swimmer totals in P3.core-b.

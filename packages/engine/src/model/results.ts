@@ -29,8 +29,22 @@
  *   with the planner and the NSISC rules (P3, P5).
  * - A tag throws under `'points_pool'`: the legacy scorer ignores a tag there, and a silent ignore
  *   would be a plausible, wrong lineup.
- * - An over-cap rule of `'removed-from-consideration'` throws: it changes the places, and `place` for
- *   a removed entry is not specified yet (P3, R41).
+ *
+ * ## Over-cap entries
+ * A per-team per-event scorer cap (`scorers.perEventScorerCap`, and `divingPerEventScorerCap` when it has
+ * its own rule) has an over-cap rule:
+ * - `'holds-place'`: the over-cap entry keeps its place and scores 0 (`notScoredReason` `event_scorer_cap`).
+ *   Nobody behind it moves up.
+ * - `'removed-from-consideration'`: the over-cap entry leaves the places, as an exhibition swimmer does
+ *   (`ncaaScoringRules.ts` re-runs without it; `rankAsIfExhibitionAbsent`). The cap is applied to the ranks of
+ *   the full field, in place order, as under `'holds-place'`. The field is then ranked again without the
+ *   removed entries, under the same `scoring.ties` rule, and only the rest reach the legacy scorer. In a
+ *   `'split'` tie group the removed entry leaves the group: its tie-mates share one place fewer. A removed
+ *   entry stays in `Results` with `place: null`, `points: 0`, `scored: false` and `notScoredReason:
+ *   'removed_over_event_cap'`. That reason tells it apart from `no_time` (also `place: null`) and from a placed
+ *   entry that earned 0.
+ * - A relay over `scorers.scoringRelaysPerTeamPerEvent` always holds its place. The preset has no over-cap
+ *   rule for relays and D2 says none is specified, so `scoreMeet` does not remove one (open: architect).
  * - A relay leg of kind `flyover-estimate` throws (P4).
  *
  * A flat-start swim on leg 2 to 4 scores, with a `basis_position` violation. SwimCloud's aggregate free
@@ -65,6 +79,12 @@ export type NotScoredReason =
   | 'scoring_team_full'
   | 'event_scorer_cap'
   | 'relay_scorer_cap'
+  /**
+   * The entry was over its team's per-event scorer cap under an over-cap rule of
+   * `'removed-from-consideration'`, so it left the places (`place` is `null`) and the entries behind it
+   * moved up. A placed entry that earned 0 never carries this reason.
+   */
+  | 'removed_over_event_cap'
   | 'exhibition'
   | 'outside_point_table'
   | 'no_time'
@@ -75,7 +95,12 @@ export interface ResultRow {
   readonly teamId: TeamId;
   /** `null` for a relay entry. */
   readonly swimmerId: SwimmerId | null;
-  /** The rank in the full field, or `null` when the entry has no time. */
+  /**
+   * The rank in the field, or `null` when the entry has no place: it has no time (`notScoredReason`
+   * `'no_time'`), or it was removed from the places (`'removed_over_event_cap'`). A removed entry is
+   * not in the ranking, so the places of the rest are numbered without it. `notScoredReason` says
+   * which `null` it is.
+   */
   readonly place: number | null;
   readonly points: number;
   /** `points > 0`. */
@@ -454,19 +479,21 @@ function pointTables(rules: CompleteRulePreset): Tables {
   };
 }
 
+interface IndividualCap {
+  readonly cap: number;
+  readonly overCap: 'holds-place' | 'removed-from-consideration';
+}
+
 /**
- * The per-event scorer cap that applies to an individual event, or `null` for unlimited. Throws for
- * a rule P2 does not score (`'removed-from-consideration'`).
+ * The per-event scorer cap that applies to an individual event, with its over-cap behavior, or `null`
+ * for unlimited. Diving uses its own rule when it has one, the swimming rule otherwise.
  */
-function individualCap(rules: CompleteRulePreset, event: MeetEvent): number | null {
+function individualCap(rules: CompleteRulePreset, event: MeetEvent): IndividualCap | null {
   const swimming = settled(rules.scorers.perEventScorerCap, 'scorers.perEventScorerCap');
   const diving = settled(rules.scorers.divingPerEventScorerCap, 'scorers.divingPerEventScorerCap');
   const rule = event.kind === 'diving' && diving.kind === 'own' ? diving : swimming;
   if (rule.cap === 'unlimited') return null;
-  if ('overCap' in rule && rule.overCap === 'removed-from-consideration') {
-    fail('placement_unsupported', 'an over-cap rule of "removed-from-consideration" changes the places; scoring it arrives in P3 (R41)');
-  }
-  return rule.cap;
+  return { cap: rule.cap, overCap: rule.overCap };
 }
 
 /** The entries of each (gender, event), in lineup order. */
@@ -533,15 +560,27 @@ function legacyPoints(resolved: readonly Resolved[], rankOf: ReadonlyMap<string,
   return pointsById;
 }
 
-/** The entries over a per-team cap. The legacy scorer already zeroed them; this only names the reason. */
+interface OverCap {
+  /** Over the cap and holding its place: the legacy scorer zeroed it; this only names the reason. */
+  readonly held: Set<string>;
+  /** Over the cap and removed from the places (an individual or diving event whose rule says so). */
+  readonly removed: Set<string>;
+}
+
+/**
+ * The entries over a per-team cap, from the ranks of the full field. `removed` holds the individual and
+ * diving entries whose over-cap rule is `'removed-from-consideration'`. A relay over its cap always
+ * holds its place: the preset has no over-cap rule for relays (D2 section 6, "Not asked, not specified").
+ */
 function overCapKeys(
   fieldOf: ReadonlyMap<string, readonly Resolved[]>,
   rankOf: ReadonlyMap<string, number>,
   rules: CompleteRulePreset,
   tables: Tables
-): Set<string> {
+): OverCap {
   const relayCap = settled(rules.scorers.scoringRelaysPerTeamPerEvent, 'scorers.scoringRelaysPerTeamPerEvent');
-  const overCap = new Set<string>();
+  const held = new Set<string>();
+  const removed = new Set<string>();
   for (const field of fieldOf.values()) {
     const sample = (field[0] as Resolved).event;
     const timed = field.filter((r) => rankOf.has(r.key)).sort(byRank(rankOf));
@@ -551,24 +590,25 @@ function overCapKeys(
       for (const r of timed) {
         if ((rankOf.get(r.key) as number) > tables.relay.length) continue; // a relay past the table takes no cap slot (relayScoring.ts)
         const used = counts.get(r.entry.teamId) ?? 0;
-        if (used >= relayCap) overCap.add(r.key);
+        if (used >= relayCap) held.add(r.key);
         else counts.set(r.entry.teamId, used + 1);
       }
     } else {
-      const cap = individualCap(rules, sample);
-      if (cap === null) continue;
+      const rule = individualCap(rules, sample);
+      if (rule === null) continue;
+      const over = rule.overCap === 'removed-from-consideration' ? removed : held;
       const admitted = new Map<TeamId, Set<SwimmerId>>();
       for (const r of timed) {
         const set = admitted.get(r.entry.teamId) ?? new Set<SwimmerId>();
         admitted.set(r.entry.teamId, set);
         const id = r.swimmerIds[0] as SwimmerId;
         if (set.has(id)) continue;
-        if (set.size < cap) set.add(id);
-        else overCap.add(r.key);
+        if (set.size < rule.cap) set.add(id);
+        else over.add(r.key);
       }
     }
   }
-  return overCap;
+  return { held, removed };
 }
 
 function entryPoints(r: Resolved, place: number | null, pointsById: ReadonlyMap<string, number>): number {
@@ -577,15 +617,17 @@ function entryPoints(r: Resolved, place: number | null, pointsById: ReadonlyMap<
   return r.swimmerIds.reduce((sum, _id, i) => sum + (pointsById.get(`${r.key}#${i}`) as number), 0);
 }
 
-function resultRow(r: Resolved, rankOf: ReadonlyMap<string, number>, pointsById: ReadonlyMap<string, number>, overCap: ReadonlySet<string>, tables: Tables): ResultRow {
+function resultRow(r: Resolved, rankOf: ReadonlyMap<string, number>, pointsById: ReadonlyMap<string, number>, overCap: OverCap, tables: Tables): ResultRow {
   const place = rankOf.get(r.key) ?? null;
   const points = entryPoints(r, place, pointsById);
   const base = { entryKey: r.key, teamId: r.entry.teamId, swimmerId: r.entry.kind === 'individual' ? r.entry.swimmerId : null, place, points, scored: points > 0 };
+  // A removed entry has no place and no points, like an entry with no time. Its own reason keeps the two apart.
+  if (overCap.removed.has(r.key)) return { ...base, notScoredReason: 'removed_over_event_cap' };
   if (points > 0) return base;
   if (place === null) return { ...base, notScoredReason: 'no_time' };
   const table = r.event.kind === 'relay' ? tables.relay : r.event.kind === 'diving' ? tables.diving : tables.individual;
   if (place > table.length) return { ...base, notScoredReason: 'outside_point_table' };
-  if (overCap.has(r.key)) return { ...base, notScoredReason: r.event.kind === 'relay' ? 'relay_scorer_cap' : 'event_scorer_cap' };
+  if (overCap.held.has(r.key)) return { ...base, notScoredReason: r.event.kind === 'relay' ? 'relay_scorer_cap' : 'event_scorer_cap' };
   return base;
 }
 
@@ -644,9 +686,14 @@ export function scoreMeet(
   const { resolved, violations, rosterUnknown } = resolveLineup(model, lineup, index);
 
   const fieldOf = groupFields(resolved);
-  const rankOf = rankFields(fieldOf, ties);
-  const pointsById = legacyPoints(resolved, rankOf, legacySettings);
-  const overCap = overCapKeys(fieldOf, rankOf, rules, tables);
+  const fullRankOf = rankFields(fieldOf, ties);
+  const overCap = overCapKeys(fieldOf, fullRankOf, rules, tables);
+  // 'removed-from-consideration': the over-cap entries leave the field, and the rest are ranked again
+  // without them, so the entries behind move up. A removed entry has no rank. One pass is enough: after it
+  // every team is within its cap. 'holds-place' skips this and keeps the full-field ranks.
+  const rankOf = overCap.removed.size === 0 ? fullRankOf : rankFields(withoutRemoved(fieldOf, overCap.removed), ties);
+  const survivors = overCap.removed.size === 0 ? resolved : resolved.filter((r) => !overCap.removed.has(r.key));
+  const pointsById = legacyPoints(survivors, rankOf, legacySettings);
 
   const events: { eventKey: EventKey; gender: Gender; rows: ResultRow[] }[] = [];
   for (const event of model.events) {
@@ -663,6 +710,16 @@ export function scoreMeet(
     violations: [...violations, ...entryCapViolations(resolved, entryCaps)],
     rosterUnknown,
   };
+}
+
+/** The fields without the removed entries. The best entry of a team is never over its cap, so no field empties. */
+function withoutRemoved(fieldOf: ReadonlyMap<string, readonly Resolved[]>, removed: ReadonlySet<string>): Map<string, Resolved[]> {
+  const out = new Map<string, Resolved[]>();
+  for (const [id, field] of fieldOf) {
+    const kept = field.filter((r) => !removed.has(r.key));
+    if (kept.length > 0) out.set(id, kept);
+  }
+  return out;
 }
 
 function byRank(rankOf: ReadonlyMap<string, number>) {
