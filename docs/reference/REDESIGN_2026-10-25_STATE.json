@@ -611,18 +611,26 @@
       "asked": "2026-10-26",
       "question": "Q15 records no good/warn/bad color and SwimCloud has none to copy. Pick a source for --osx-good/--osx-warn/--osx-bad (or approve a named palette). Until then they are CanvasText and no UI may use them to tell states apart.",
       "blocks": "any P2+ UI that colors cut tags or warnings",
-      "status": "answered 2026-10-26 (README R46)"
+      "status": "light ANSWERED (R46), dark warn ANSWERED (R57: reuse the light pair). OPEN: dark good and bad (800 shades fail 4.5:1 on dark Canvas)."
     },
     {
       "id": "Q-D2-swimswam",
       "asked": "2026-10-26",
       "finding": "https://swimswam.com/swimming-times-conversion-tool/ retrieved 2026-10-26 (HTTP 200, 183,623 B, sha256 78beb0ad343425971e037039657893ef11c7e343228ba73088a013c14636513a, not archived in repo). It publishes NO factors: the form posts to SwimSwam (server-side conversion) and the page says it converts using Colorado Timing's conversion factors. Values could only be inferred from form outputs, which the provenance rules forbid. A web search found no published Colorado Time Systems table. The archived NCAA D1 standards PDF (data/cutlines/sources) publishes SCM->SCY factors 400m->500y 1.153, 800m->1000y 1.153, 1500m->1650y 1.013, other 0.906, but these are 25 m course factors, not LCM.",
       "question": "R29 LCM distance rows: (a) no estimate (R29 fallback), (b) look for Colorado Time Systems' own published table, (c) other source",
-      "blocks": "P4 Table D distance rows only"
-    }
+      "blocks": "P4 Table D distance rows only",
+      "status": "ANSWERED 2026-10-26, see userAnswers Q-D2-swimswam"
+    },
+    "Q-classyear-source: no recon shows which SwimCloud page carries a class year; P4 must confirm it before RosterRecord.classYears is filled",
+    "Q-classyear-codes: D2 uses FR/SO/JR/SR/GR, legacy engine uses FR/SO/JR/SR/HS (HS = recruit); reconcile before recruits (R52)",
+    "Gap: the D3 5.7 \"export a backup\" prompt before a schema upgrade is not built; a P1 build cannot open a v2 database",
+    "Flake: one unnamed test failed once after a build (executor run); not seen in 3 later full runs",
+    "Q-provenance-exception: ask the user whether to add a one-line exception to CLAUDE.md data-provenance rule 2 for the R58 tool-derived conversions (recorded in README R58 meanwhile)",
+    "Q-relay-split-conversion: converting a relay split with its stroke and distance individual divisor and turn is the lead inference; the converter has no split data. Tell the user."
   ],
   "resumeOrder": [
-    "lead: answers backlog. NSISC v2 DONE (75dd5520, 7380ad70). Storage fields BUILT, uncommitted, awaiting gate rerun + Codex review (see inFlight). Then zod/mini + Material 800 colors (warn fill only), then SwimSwam once the user answers Q-D2-swimswam",
+    "DONE: answers backlog (NSISC v2, storage fields, zod/mini, colors, conversion capture).",
+    "executor: engine LCM->SCY preset from data/conversions/swimswam (see conversionCapture.next)",
     "architect: P2 risk - verify a per-swimmer history endpoint without a Cloudflare challenge before Load history is built",
     "P2 per plan; adapter brief notes flystart optional on relay rows"
   ],
@@ -723,6 +731,29 @@
       "id": "warn-contrast",
       "answered": "2026-10-26",
       "answer": "Lead corrected its claim: #EF6C00 is 3.08:1 on white, 2.95:1 on #FAFAFA. User chose: warn is a fill only (badge/chip background with dark text, ~6.8:1), never a text or thin-icon color. Green 5.13:1, red 5.62:1 pass as text."
+    },
+    {
+      "id": "dark-warn",
+      "answered": "2026-10-26",
+      "answer": "yes: carry the light warn pair (#EF6C00 fill, #000000 text) into dark mode. Good and bad stay system colors in dark."
+    },
+    {
+      "id": "Q-D2-swimswam",
+      "answered": "2026-10-26",
+      "sequence": [
+        "\"use the table d from the handwritten plan\"",
+        "lead showed Table D distance rows give 4:00.00 400m -> 3:28.37 500y vs the user check ~4:34",
+        "\"do 3, if needed, find the factors for all of the time conversions using the swimswam time convertor from lcm to scy, completely disregard table d, its incorrect.\"",
+        "\"i take that back. dont use it.\"",
+        "asked to clarify; user picked: go ahead with the SwimSwam search",
+        "lead search: no published Colorado Timing table found (swimswam, swimstandards, swimtimeconverter list none verifiable)"
+      ],
+      "answer": "Record converter outputs: submit the SwimSwam converter once per event with a fixed LCM test time; archive each response (url, sha256, date); store the factor with a tool-derived label naming converter, input and output; est. badge; never used for cut tags. Table D is disregarded for every row (user: incorrect)."
+    },
+    {
+      "id": "conversion-rules",
+      "answered": "2026-10-26",
+      "answer": "User: \"4:00.00 in scm is 4:34ish scy, 4:00.00LCM to scy is 4:28.9 like you calculated. you can round, we dont need precision beyond final resultant times to hundreths of seconds. remember to be able to convert from the appropriate source to scy. you can tag them as estimated cut achieved, but when they actually get the cut, then they get the normal tag.. dont worry about the 800 free relay conversion ... we are trying to source individual swims and relay splits\". README R59-R61."
     }
   ],
   "commits": [
@@ -748,6 +779,22 @@
     {
       "sha": "7380ad70",
       "subject": "Offer only the newest built-in in preset pickers"
+    },
+    {
+      "sha": "32aa949c",
+      "subject": "Add empty rosters, draft meets, class-year overrides"
+    },
+    {
+      "sha": "96863182",
+      "subject": "Archive SwimSwam LCM to SCY conversions"
+    },
+    {
+      "sha": "56681df0",
+      "subject": "Validate the overlay with zod/mini"
+    },
+    {
+      "sha": "29c4484f",
+      "subject": "Add the status colors from R46 and R57"
     }
   ],
   "lowPriority": {
@@ -771,31 +818,27 @@
       "gates": "lint ok; active vitest 144 files 2431 passed; npm test 65/0; golden diff clean; extension tests 191 passed"
     }
   ],
-  "inFlight": {
-    "item": "storage-fields (R51 class-year override, R53 verified-empty rosters, R54 draft meets)",
-    "status": "STOPPED 2026-10-26 at user request (connection loss). Executor finished; diff is UNCOMMITTED in the working tree and NOT yet reviewed.",
-    "executorReport": {
-      "schema": "DB_VERSION 2; new edited store classYearOverrides keyed [swimmerId, seasonId]; MeetRecord.status?:draft; RosterRecord.verifiedEmpty?:true and classYears?",
-      "newFiles": "apps/extension/src/storage/meetGuard.ts, rosterState.ts, classYear.ts; tests extensionStorageRosterEmpty/DraftMeet/ClassYear; fixtures v2.json, v2.expected-current.json, FROZEN.json; D3 section 14",
-      "exports": "requireScorableMeet, isDraftMeet, readRosterState, verifiedEmptyRoster, classifyRoster, resolveClassYear, readClassYear, ClassYearCode, CLASS_YEARS, ClassYearOverrideRecord, ScorableMeet",
-      "claimedGates": "lint ok; vitest 147 files 2480 passed; npm test 65/0; build ok",
-      "caveat": "one post-build combined run had 1 unnamed failing test; 4 reruns passed. Possible flake, not yet identified.",
-      "findings": [
-        "open.ts now refuses to upgrade when meta.db is missing or stale (DatabaseInconsistentError)",
-        "classYears has no verified SwimCloud source; P4 must confirm the page",
-        "P4 parser may set verifiedEmpty only on positive evidence",
-        "class-year codes: D2 FR/SO/JR/SR/GR vs legacy FR/SO/JR/SR/HS",
-        "first schema bump: a P1 build refuses v2 export files; D3 5.7 backup prompt not built"
-      ]
-    },
-    "resumeSteps": [
-      "git status; confirm the diff above is still in the tree",
-      "rerun only npm run build:extension then the extension tests (other gates passed in the lead rerun)",
-      "identify the flaky test if it recurs",
-      "cross-provider review: Codex via Orca read-only (executor was Claude), focus on the v1->v2 migration and the open.ts refusal",
-      "commit as one storage area commit, push to PR #8",
-      "then resumeOrder: zod/mini + Material 800 colors"
+  "storageFieldsDone": {
+    "commit": "32aa949c",
+    "review": "Codex read-only (Orca ctx_144994e95538, released): one P2 finding, test default export omitted classYearOverrides; fixed in the commit. Migration, import and provenance: no findings.",
+    "leadChecks": "v1 validate.ts:403 already refused empty teamIds and empty memberIds, so no v1 record falls into a newly refused state; P1 open.ts writes meta.db.schemaVersion in the upgrade tx, so a healthy install passes the new refusal."
+  },
+  "liveCheckNext": "After the next reload: open the dashboard and confirm storage opens at schema v2 with no DatabaseInconsistentError. The upgrade is one-way.",
+  "budget": "2026-10-26 afternoon: command-center band shows 5h 24%, 7d 61%, tier conserve: low-priority pace, one agent at a time",
+  "conversionCapture": {
+    "done": "2026-10-26",
+    "archive": "data/conversions/swimswam/lcm-to-scy-2026-10-26.json (53 captures) + README.md (fitted model)",
+    "model": "SCY = truncate((LCM - turn) / divisor) to 0.01 s; reproduces all 51 individual outputs. Divisor 1.11 for free/fly/breast/IM; 1.09361 back (range 1.0936095-1.0936130); 0.8925 for 400->500 and 800->1000; 1.02 for 1500->1650. Turns per 50: free 0.8, fly 0.7, breast 1.0, back 2.5; 200 IM 3.2, 400 IM 6.4; distance 0.",
+    "relay": "800 free relay returns input unchanged: no conversion, absent",
+    "next": "executor: engine sourcing preset for LCM->SCY from data/conversions/swimswam (new id, tool-derived provenance kind, est. badge), results truncated to 0.01 s like the converter (R59 permits rounding; truncation lets a test replay all 51 captures exactly); SCM->SCY keeps NCAA Table A (R60); individual swims and relay splits (R60); estimated-cut tag kind that a real cut replaces (R61); table-d-user retired from use (R58)"
+  },
+  "zodMiniAndColorsDone": {
+    "commits": [
+      "56681df0",
+      "29c4484f"
     ],
-    "leadGates": "2026-10-26 lead rerun on the uncommitted tree: lint clean; full vitest twice, 2480/2480 both times (flake did not recur); npm test 65/0; golden diff clean. Not rerun: the post-build extension tests."
+    "review": "Codex read-only (Orca ctx_c006e6fad8de, released): claims 2-4 no findings; claim 1 parity: 56 adversarial inputs, no divergence",
+    "sizes": "sim-overlay.js 810,945 -> 76,698 bytes; sim-bridge.js 4,974 unchanged",
+    "minifyNote": "esbuild minify would roughly halve the overlay again; not enabled"
   }
 }
