@@ -790,11 +790,12 @@
     },
     "resumeSteps": [
       "git status; confirm the diff above is still in the tree",
-      "rerun gates: npm run lint; SKIP_BUDGET_ENV=local npx vitest run --maxWorkers=4 (twice, to catch the flake); npm test; golden; npm run build:extension then extension tests",
+      "rerun only npm run build:extension then the extension tests (other gates passed in the lead rerun)",
       "identify the flaky test if it recurs",
       "cross-provider review: Codex via Orca read-only (executor was Claude), focus on the v1->v2 migration and the open.ts refusal",
       "commit as one storage area commit, push to PR #8",
       "then resumeOrder: zod/mini + Material 800 colors"
-    ]
+    ],
+    "leadGates": "2026-10-26 lead rerun on the uncommitted tree: lint clean; full vitest twice, 2480/2480 both times (flake did not recur); npm test 65/0; golden diff clean. Not rerun: the post-build extension tests."
   }
 }
