@@ -14,12 +14,16 @@
  * pin a type, the schema accepts string or number rather than dropping a real
  * snapshot.
  */
-import { z } from 'zod';
+import * as z from 'zod/mini';
+import en from 'zod/v4/locales/en.js';
 import { BRIDGE_SOURCE, BRIDGE_VERSION } from './protocol';
 
 // Zod v4 can compile parsers with the Function constructor. MV3 content scripts
 // and extension pages block that (D3 T-B7). Turn it off before any schema exists.
-z.config({ jitless: true });
+// `zod/mini` ships no error text, so the English locale keeps the drop reasons readable
+// ("expected string, received number", not "Invalid input"). Import the one file: `z.locales.en()`
+// bundles all locales (about 387 KB more). README R55.
+z.config({ jitless: true, ...en() });
 
 const id = z.union([z.string(), z.number()]);
 const num = z.union([z.string(), z.number()]);
@@ -27,17 +31,17 @@ const num = z.union([z.string(), z.number()]);
 const team = z.object({
   id: z.number(),
   name: z.string(),
-  abbr: z.string().nullish(),
-  orgcode: num.nullish(),
+  abbr: z.nullish(z.string()),
+  orgcode: z.nullish(num),
 });
 
 const swimmer = z.object({
   id,
   teamId: z.number(),
-  name: z.string().nullish(),
-  display_name: z.string().nullish(),
-  gender: z.string().nullish(),
-  gradcollege: num.nullish(),
+  name: z.nullish(z.string()),
+  display_name: z.nullish(z.string()),
+  gender: z.nullish(z.string()),
+  gradcollege: z.nullish(num),
 });
 
 /**
@@ -53,7 +57,7 @@ const swim = z
   .object({
     kind: z.enum(['ind', 'split', 'leadoff', 'relay']),
     teamId: z.number(),
-    swimmerId: id.nullable(),
+    swimmerId: z.nullable(id),
     id,
     eventstroke: z.string(),
     eventdistance: num,
@@ -61,10 +65,15 @@ const swim = z
     eventgender: z.string(),
     numlegs: num,
     eventtime: num,
-    flystart: z.boolean().nullable().optional(),
-    pointvalue: num.nullable(),
+    flystart: z.optional(z.nullable(z.boolean())),
+    pointvalue: z.nullable(num),
   })
-  .refine((s) => s.kind === 'relay' || s.flystart !== undefined, { message: 'flystart is required unless kind is relay', path: ['flystart'] });
+  .check(
+    z.refine((s) => s.kind === 'relay' || s.flystart !== undefined, {
+      error: 'flystart is required unless kind is relay',
+      path: ['flystart'],
+    }),
+  );
 
 /**
  * One entry the page chose, from `simulatedMeet.splashes` (recon Q14). Recon saw the entry summaries,
@@ -77,27 +86,27 @@ const swim = z
 const splash = z.object({
   id,
   teamId: id,
-  swimmerId: id.nullable(),
+  swimmerId: z.nullable(id),
   eventstroke: z.string(),
   eventdistance: num,
   eventcourse: z.string(),
-  eventtime: num.nullable(),
-  eventgender: z.string().nullish(),
-  numlegs: num.nullish(),
-  flystart: z.boolean().nullish(),
-  pointvalue: num.nullish(),
-  relay_id: id.nullish(),
-  legposition: num.nullish(),
-  points: z.number().nullish(),
-  exhibition: z.union([z.boolean(), z.number(), z.string()]).nullish(),
+  eventtime: z.nullable(num),
+  eventgender: z.nullish(z.string()),
+  numlegs: z.nullish(num),
+  flystart: z.nullish(z.boolean()),
+  pointvalue: z.nullish(num),
+  relay_id: z.nullish(id),
+  legposition: z.nullish(num),
+  points: z.nullish(z.number()),
+  exhibition: z.nullish(z.union([z.boolean(), z.number(), z.string()])),
 });
 
 const settings = z.object({
-  seasonId: z.number().nullable(),
-  startDate: z.string().nullable(),
-  endDate: z.string().nullable(),
-  startSeason: z.string().nullable(),
-  endSeason: z.string().nullable(),
+  seasonId: z.nullable(z.number()),
+  startDate: z.nullable(z.string()),
+  endDate: z.nullable(z.string()),
+  startSeason: z.nullable(z.string()),
+  endSeason: z.nullable(z.string()),
   dateToUse: z.string(),
   pointSystem: z.string(),
   gender: z.string(),
@@ -112,13 +121,13 @@ const settings = z.object({
   maxTotalPerAthlete: z.number(),
   freeRelayStrategy: z.string(),
   relayDataSource: z.string(),
-  selectedShortcut: z.string().nullable(),
+  selectedShortcut: z.nullable(z.string()),
   inactiveSwimmers: z.array(id),
   /** The page's coach edits, as it holds them. The shape is not pinned by recon, so it passes through. */
   meetChanges: z.array(z.unknown()),
 });
 
-const totalScores = z.record(z.string(), z.object({ points: z.number(), place: z.number().nullable() }));
+const totalScores = z.record(z.string(), z.object({ points: z.number(), place: z.nullable(z.number()) }));
 
 /**
  * What the simulator page holds, copied out of its Redux store.
@@ -132,13 +141,13 @@ const roster = z.object({ swimmers: z.array(swimmer), swims: z.array(swim) });
 export const simSnapshotSchema = z.object({
   teams: z.array(team),
   /** From the store's `origRosters`: the team data as parsed, before coach edits. */
-  swimmers: z.array(swimmer).nullable(),
-  swims: z.array(swim).nullable(),
+  swimmers: z.nullable(z.array(swimmer)),
+  swims: z.nullable(z.array(swim)),
   /** From the store's `rosters`: the current rosters after coach edits (inactive swimmers removed). */
-  rosters: roster.nullable(),
+  rosters: z.nullable(roster),
   settings,
-  splashes: z.array(splash).nullable(),
-  totalScores: totalScores.nullable(),
+  splashes: z.nullable(z.array(splash)),
+  totalScores: z.nullable(totalScores),
 });
 export type SimSnapshot = z.infer<typeof simSnapshotSchema>;
 
@@ -150,7 +159,7 @@ export const bridgeMessageSchema = z.discriminatedUnion('kind', [
   z.object({
     ...header,
     kind: z.literal('response'),
-    url: z.string().regex(/^\/api\/teams\/\d+\/simulator\/(\?.*)?$/),
+    url: z.string().check(z.regex(/^\/api\/teams\/\d+\/simulator\/(\?.*)?$/)),
     body: z.object({ swimmers: z.array(z.unknown()), relays: z.array(z.unknown()) }),
   }),
   z.object({ ...header, kind: z.literal('error'), code: z.string(), detail: z.string() }),

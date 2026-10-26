@@ -24,7 +24,7 @@ import path from 'node:path';
 import { Window as HappyWindow } from 'happy-dom';
 import { installBridge } from '../apps/extension/src/bridge/install';
 import { LOG_PREFIX, mountShadowHost, startOverlay, type OverlayLog } from '../apps/extension/src/overlay/overlay';
-import { z } from 'zod';
+import * as z from 'zod/mini';
 import { parseBridgeMessage } from '../apps/extension/src/shared/bridgeSchema';
 
 type Obj = Record<string, unknown>;
