@@ -759,10 +759,23 @@ Code: `apps/extension/src/shared/theme.ts`,
 3. An accent override also replaces the dark theme's accent.
 4. The dark accent is the Q15 `#1565C0` mixed 65% with `CanvasText`.
    SwimCloud has no dark theme, so no dark value claims to be SwimCloud's.
-5. `--osx-good`, `--osx-warn` and `--osx-bad` are `CanvasText` in both
-   themes. Q15 records none, and no CSS system color means good, warn or
-   bad. No UI may use them to tell states apart until the user picks a
-   source (state file `Q-semantic-colors`).
+5. Status colors follow README R46 (the user chose Material 800 shades).
+   Q15 records none. Light: `--osx-good` `#2E7D32` and `--osx-bad`
+   `#C62828` may be text (5.1:1 and 5.6:1 on white). Warn is a fill only:
+   `--osx-warn-bg` `#EF6C00` is a badge or chip background, and
+   `--osx-warn-fg` `#000000` is the text on it (6.8:1). Orange is 3.1:1
+   on white, so it is never text, a border, a stroke or a thin icon. The
+   plain token `--osx-warn` no longer exists, so no one can write
+   `color: var(--osx-warn)`.
+   `tests/extensionStatusColors.test.ts` computes the contrast from the
+   hex values and scans `apps/extension/src` and `static` for any use of
+   the warn color outside `background` and `background-color`.
+   **Dark (README R57).** Warn reuses the light pair (`#EF6C00` fill,
+   `#000000` text): the pair does not depend on the page background.
+   Good and bad stay `CanvasText`. The 800 shades fail 4.5:1 on a dark
+   Canvas (about 3.7:1 for good and 3.3:1 for bad on `#121212`), so they
+   are not used. Until the user picks dark good and bad colors, no UI may
+   use good or bad to tell states apart in dark mode.
 6. **Gap, trap 8.** The dashboard inside the docked iframe binds its own
    theme, which is always light. No preference crosses the iframe boundary
    yet. This is safe only while both sides are pinned light. The phase that

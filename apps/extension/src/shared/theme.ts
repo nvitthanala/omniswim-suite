@@ -5,11 +5,16 @@
  * Design tokens and theme control (D3 section 4). Pure: no DOM at import time, so the
  * content-script bundle and the dashboard bundle can both use it.
  *
- * Provenance rule: a LIGHT value comes only from recon Q15
- * (plans/2026-10-25/02-SIMULATOR-RECON.md, "Look", item 15). SwimCloud has no dark theme and Q15
- * records no good, warn, bad or accent-fg value. Those, and all of dark mode, use CSS system colors
- * (Canvas, CanvasText, GrayText) or color-mix() from a recorded value. No SwimCloud palette value is
- * invented here.
+ * Provenance rule: a LIGHT value comes from recon Q15
+ * (plans/2026-10-25/02-SIMULATOR-RECON.md, "Look", item 15), except the status colors. SwimCloud has no
+ * dark theme and Q15 records no good, warn, bad or accent-fg value. The status colors come from the
+ * user's decision README R46 (plans/2026-10-25/README.md): Material 800 shades, good #2E7D32, warn
+ * #EF6C00, bad #C62828. Good and bad may be text. Warn is a FILL ONLY (a badge or chip background with
+ * the dark foreground token beside it): orange is 3.1:1 on white, so it is never text, a border or a
+ * thin icon. tests/extensionStatusColors.test.ts measures the contrast and scans the CSS for misuse.
+ * Dark mode reuses the light warn pair (README R57, user decision). Everything else, including dark
+ * good and bad, uses CSS system colors (Canvas, CanvasText, GrayText) or color-mix() from a recorded
+ * value. No dark good or bad value has been recorded, so none is invented here.
  *
  * Units: px and em only. `rem` follows the host page's `html` font-size (D3 section 4, trap 4).
  */
@@ -27,8 +32,11 @@ export const TOKEN_NAMES = [
   '--osx-border',
   '--osx-accent',
   '--osx-accent-fg',
+  // R46. Good and bad are text colors. Warn is a fill: use `--osx-warn-bg` as a background only, with
+  // `--osx-warn-fg` as the text on it. There is no plain `--osx-warn`, so nothing reads as warn text.
   '--osx-good',
-  '--osx-warn',
+  '--osx-warn-bg',
+  '--osx-warn-fg',
   '--osx-bad',
   '--osx-font',
   '--osx-radius',
@@ -40,6 +48,12 @@ export type TokenSet = Readonly<Record<TokenName, string>>;
 
 /** Q15: "primary and links `#1565C0`". The one recorded accent. Dark mode derives from it. */
 const Q15_ACCENT = '#1565C0';
+
+/** README R46 (user decision). The warn pair is a fill and the foreground that sits on it. */
+const R46_GOOD = '#2E7D32';
+const R46_WARN_FILL = '#EF6C00';
+const R46_WARN_ON_FILL = '#000000';
+const R46_BAD = '#C62828';
 
 /**
  * Light theme. Every value marked Q15 is copied from recon Q15; the rest are system colors or
@@ -60,11 +74,13 @@ export const LIGHT_TOKENS: TokenSet = {
   '--osx-accent': Q15_ACCENT,
   // Not in Q15. System color: the page background under `color-scheme: light`, so white on the accent.
   '--osx-accent-fg': 'Canvas',
-  // Not in Q15, and no system color means good, warn or bad. Neutral until the user decides a
-  // semantic palette: these three read as plain text, so no code may rely on them to tell states apart.
-  '--osx-good': 'CanvasText',
-  '--osx-warn': 'CanvasText',
-  '--osx-bad': 'CanvasText',
+  // R46: Material 800 shades. Good 5.1:1 and bad 5.6:1 on white, so both may be text.
+  '--osx-good': R46_GOOD,
+  // R46: warn is a FILL ONLY. 3.1:1 on white as text, so never `color`, a border or a thin icon.
+  '--osx-warn-bg': R46_WARN_FILL,
+  // R46: the dark text on the warn fill, 6.8:1.
+  '--osx-warn-fg': R46_WARN_ON_FILL,
+  '--osx-bad': R46_BAD,
   // Q15: font Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif. No font files ship (the font-face at-rule does not load in a shadow root): reuse the family name.
   '--osx-font': 'Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif',
   // Q15: cards radius 8 px.
@@ -73,7 +89,13 @@ export const LIGHT_TOKENS: TokenSet = {
   '--osx-accent-soft': 'color-mix(in srgb, var(--osx-accent) 12%, var(--osx-surface))',
 };
 
-/** Dark theme. SwimCloud has none (Q15), so nothing here claims to be SwimCloud's. */
+/**
+ * Dark theme. SwimCloud has none (Q15), so nothing here claims to be SwimCloud's.
+ *
+ * Good and bad stay neutral: the 800 shades fail 4.5:1 on a dark Canvas (about 3.7:1 for good,
+ * 3.3:1 for bad on #121212). Warn uses the light pair (README R57, user decision): the fill and its
+ * black text measure 6.8:1 whatever the page background is.
+ */
 export const DARK_TOKENS: TokenSet = {
   '--osx-bg': 'Canvas',
   '--osx-surface': 'color-mix(in srgb, Canvas 92%, CanvasText)',
@@ -83,9 +105,10 @@ export const DARK_TOKENS: TokenSet = {
   // The recorded Q15 accent, lightened with color-mix() so it reads on a dark surface.
   '--osx-accent': `color-mix(in srgb, ${Q15_ACCENT} 65%, CanvasText)`,
   '--osx-accent-fg': 'Canvas',
-  '--osx-good': LIGHT_TOKENS['--osx-good'],
-  '--osx-warn': LIGHT_TOKENS['--osx-warn'],
-  '--osx-bad': LIGHT_TOKENS['--osx-bad'],
+  '--osx-good': 'CanvasText',
+  '--osx-warn-bg': LIGHT_TOKENS['--osx-warn-bg'],
+  '--osx-warn-fg': LIGHT_TOKENS['--osx-warn-fg'],
+  '--osx-bad': 'CanvasText',
   '--osx-font': LIGHT_TOKENS['--osx-font'],
   '--osx-radius': LIGHT_TOKENS['--osx-radius'],
   '--osx-accent-soft': LIGHT_TOKENS['--osx-accent-soft'],

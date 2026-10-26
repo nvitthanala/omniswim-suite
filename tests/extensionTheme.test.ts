@@ -236,7 +236,7 @@ describe('(e) light tokens equal recon Q15', () => {
     }
   });
 
-  it('a color token uses only Q15 values, system colors, var(--osx-*), color-mix(in srgb) and percentages', () => {
+  it('a color token uses only Q15 values, R46 status colors, system colors, var(--osx-*), color-mix(in srgb) and percentages', () => {
     const allowed = [
       /#(FAFAFA|FFFFFF|E0E0E0|1565C0)/gi, // Q15 hexes
       /rgba\(0,0,0,0\.(87|54)\)/g, // Q15 text colors
@@ -245,13 +245,19 @@ describe('(e) light tokens equal recon Q15', () => {
       /color-mix\(in srgb,/g,
       /\d+%/g,
     ];
+    // README R46: only the four status tokens may hold a status hex in the light theme; R57 lets dark reuse the warn pair.
+    const r46 = /#(2E7D32|EF6C00|C62828|000000)/gi;
+    const statusTokens: readonly string[] = ['--osx-good', '--osx-warn-bg', '--osx-warn-fg', '--osx-bad'];
     const colorTokens = TOKEN_NAMES.filter((n) => n !== '--osx-font' && n !== '--osx-radius');
-    expect(colorTokens.length).toBe(11);
+    expect(colorTokens.length).toBe(12);
     for (const [theme, set] of [['light', LIGHT_TOKENS], ['dark', DARK_TOKENS]] as const) {
       for (const name of colorTokens) {
         let rest = set[name];
         for (const re of allowed) rest = rest.replace(re, ' ');
-        expect(rest.replace(/[\s,()]/g, ''), `${theme} ${name} = ${set[name]} holds a value that is neither Q15 nor a system color`).toBe('');
+        // README R57: dark reuses the light warn pair. Good and bad have no dark hex.
+        const darkWarn = name === '--osx-warn-bg' || name === '--osx-warn-fg';
+        if ((theme === 'light' && statusTokens.includes(name)) || (theme === 'dark' && darkWarn)) rest = rest.replace(r46, ' ');
+        expect(rest.replace(/[\s,()]/g, ''), `${theme} ${name} = ${set[name]} holds a value that is neither Q15, R46 nor a system color`).toBe('');
       }
     }
   });

@@ -14,9 +14,10 @@
   --osx-border: #E0E0E0;
   --osx-accent: #1565C0;
   --osx-accent-fg: Canvas;
-  --osx-good: CanvasText;
-  --osx-warn: CanvasText;
-  --osx-bad: CanvasText;
+  --osx-good: #2E7D32;
+  --osx-warn-bg: #EF6C00;
+  --osx-warn-fg: #000000;
+  --osx-bad: #C62828;
   --osx-font: Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif;
   --osx-radius: 8px;
   --osx-accent-soft: color-mix(in srgb, var(--osx-accent) 12%, var(--osx-surface));
@@ -31,7 +32,8 @@
   --osx-accent: color-mix(in srgb, #1565C0 65%, CanvasText);
   --osx-accent-fg: Canvas;
   --osx-good: CanvasText;
-  --osx-warn: CanvasText;
+  --osx-warn-bg: #EF6C00;
+  --osx-warn-fg: #000000;
   --osx-bad: CanvasText;
   --osx-font: Roboto, "Helvetica Neue", Helvetica, Arial, sans-serif;
   --osx-radius: 8px;
