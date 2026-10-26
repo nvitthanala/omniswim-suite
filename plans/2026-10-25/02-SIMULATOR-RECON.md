@@ -462,3 +462,31 @@ no fallback needed. Evidence names:
   bundles once each (static assets, read offline). One store `dispatch`
   set the S2 start date. Raw responses stayed in the page and in the
   session scratchpad; only sanitized files were written to the repo.
+
+## P2 risk: per-swimmer history endpoint (2026-10-26)
+
+One request from the simulator tab (same origin, the user's session):
+`GET /api/swimmers/1130590/profile_fastest_times/`. A second read of the
+same URL used the browser cache.
+
+- **No challenge.** Status 200, `application/json`, 38,360 bytes. No
+  Cloudflare page. The public profile page (`/swimmer/{id}/`) still
+  hit a challenge in the P0 recon; this API path does not.
+- **Shape.** A JSON array, one row per swim, with `eventstroke`,
+  `eventdistance`, `eventcourse`, `dateofswim`, `eventtime`, `flystart`,
+  `team_id`, `season_id`, `meet_id`, `relay_id`, `legposition`, `split`
+  and more (45 keys).
+- **Content: bests, not history.** 38 rows, 38 distinct
+  stroke-distance-course keys: one fastest swim per event and course
+  (21 SCY, 17 LCM). Dates run from 2012-11-18 to 2026-02-21.
+- **Cross-team.** Rows carry team 58 (Henderson State, 6), 10004439
+  (27), 10009480 (1; the school before the transfer) and `null` (4).
+  So the endpoint follows the swimmer, not the team. This suits R49
+  (history for current-roster swimmers) and R52 (recruits).
+- **Limit for R49.** One best per event cannot answer "best inside a
+  date window": the overall best may fall outside the window while a
+  slower swim falls inside. A full per-swim history needs another
+  endpoint. None was probed. Open question for the user in the state
+  file (`Q-history-depth`).
+- Raw responses stayed in the page. Nothing was written to the repo but
+  this summary.
