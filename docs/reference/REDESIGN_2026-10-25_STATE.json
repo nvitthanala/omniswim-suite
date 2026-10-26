@@ -872,8 +872,10 @@
     "user": "\"continue work, i will be away from computer. move ahead and build everything you can, keep tab on open items or questions you have for me and i will let you know answers when i return.\"",
     "questionsForUser": [
       "Q-history-depth: profile_fastest_times gives one best swim per event and course (all teams, back to 2012), not every swim. Is that enough for Load history (R50) and recruits (R52)? If the date window (R49) must pick the best swim inside the window, a full per-swim history endpoint is needed; may Claude look for one (a few requests, stop on any challenge)?",
-      "Q-R61-weaker-real: when a real swim earns a weaker cut than an estimated one (real B, estimated A), foldEventCutTags keeps both tags, real first. Keep both, or show only the stronger one?"
-    ]
+      "Q-R61-weaker-real: when a real swim earns a weaker cut than an estimated one (real B, estimated A), foldEventCutTags keeps both tags, real first. Keep both, or show only the stronger one?",
+      "Q-roster-untagged: in a lineup that has no finals yet (all timed finals), who is on the scoring team when the coach has tagged no one? The legacy rule (scorerRoster.ts:240) makes an untagged swimmer a scorer only if a relay or a final marked them, or they are a recruit. Under that rule almost nobody scores before finals exist. Options: (a) keep legacy, (b) every untagged swimmer is a scorer until the 18-spot team is full (who drops then?), (c) the planner must tag first, else the meet is not scored."
+    ],
+    "resolvedNote": "Dark good/bad colors: answered by README R57 (system colors in dark), removed from questions 2026-10-26."
   },
   "p2Risk": {
     "done": "2026-10-26",
@@ -913,5 +915,16 @@
       "sendSnapshot re-parses the full snapshot with zod on the page thread although the overlay already validated it; the dashboard parses it a third time."
     ],
     "codexWorker": "ctx_7ab57a4cdebf released 2026-10-26; child worktree p2-overlay-ui left in place"
+  },
+  "inFlight": {
+    "P3.core-a": {
+      "status": "dispatched to executor (Claude Sonnet), then Codex review",
+      "scope": "scoreMeet scores over-cap removed-from-consideration under points_pool (drops placement_unsupported at results.ts:467): remove-and-move-up in the scoreMeet ranking step only; F17 proven by test (engine path never reaches relayScoring ?? 2). packages/engine/src/lib/** untouched; golden byte-identical; P2 parity A-D exact.",
+      "precedent": "packages/engine/src/lib/ncaaScoringRules.ts:1192 (re-run with the over-cap finisher removed); rankAsIfExhibitionAbsent individualScoring.ts:656"
+    },
+    "P3.core-b": {
+      "status": "blocked on Q-roster-untagged; after core-a",
+      "scope": "roster eligibility for timed finals: tags + relay-leg auto marks (R39), coach tags win (R21/R40), R41 non-scorers leave places (ind + relay), R37/F19 legs must be scorers, scoringTeamSize 18 with diver 1/3 (R9/R24/R28) over-size = reported violation never a silent trim; abFinalTiers and splitTimedFinalMarksScorer set but not evaluable without rounds -> throw needs_rounds (P5)."
+    }
   }
 }
