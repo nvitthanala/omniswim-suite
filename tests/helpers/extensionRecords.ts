@@ -2,25 +2,31 @@
  * @license
  * SPDX-License-Identifier: Apache-2.0
  *
- * Valid records for the storage tests, read from the frozen v1 fixture
- * (tests/fixtures/extension-db/v1.json). Every call returns a fresh deep copy,
- * so a test can break one field without touching the next test.
+ * Valid records for the storage tests, read from a frozen fixture
+ * (tests/fixtures/extension-db/v1.json by default, v2.json for the R51, R53 and R54 fields).
+ * Every call returns a fresh deep copy, so a test can break one field without touching the next test.
  */
 import type { DbFixture } from './extensionDb';
 import { readFixture } from './extensionDb';
 import type { UserStore } from '../../apps/extension/src/storage/schema';
 import type { StorageRepo } from '../../apps/extension/src/storage/repo';
 
-export function fixtureRecords<T extends object = Record<string, unknown>>(store: UserStore | 'meta'): T[] {
-  const fixture = readFixture('v1.json') as DbFixture;
+export function fixtureRecords<T extends object = Record<string, unknown>>(store: UserStore | 'meta', version = 1): T[] {
+  const fixture = readFixture(`v${version}.json`) as DbFixture;
   const records = fixture.stores[store];
-  if (!records) throw new Error(`fixture v1.json has no ${store} records`);
+  if (!records) throw new Error(`fixture v${version}.json has no ${store} records`);
   return JSON.parse(JSON.stringify(records)) as T[];
 }
 
-export function fixtureRecord<T extends object = Record<string, unknown>>(store: UserStore, index = 0): T {
-  const record = fixtureRecords<T>(store)[index];
-  if (record === undefined) throw new Error(`fixture v1.json has no ${store}[${index}]`);
+/** True when fixture `v<version>.json` has a (non-empty) list for `store`. A store added at a later version has none in v1. */
+export function hasFixtureStore(store: UserStore | 'meta', version: number): boolean {
+  const fixture = readFixture(`v${version}.json`) as DbFixture;
+  return fixture.stores[store] !== undefined;
+}
+
+export function fixtureRecord<T extends object = Record<string, unknown>>(store: UserStore, index = 0, version = 1): T {
+  const record = fixtureRecords<T>(store, version)[index];
+  if (record === undefined) throw new Error(`fixture v${version}.json has no ${store}[${index}]`);
   return record;
 }
 

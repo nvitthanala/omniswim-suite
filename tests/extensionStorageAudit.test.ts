@@ -15,6 +15,7 @@ import type { ChangeNotice, MissedChange } from '../apps/extension/src/storage/c
 import { exportData, importData } from '../apps/extension/src/storage/exportImport';
 import { assertValidRecord, validateRecord } from '../apps/extension/src/storage/validate';
 import { InvalidRecordError, ImportValidationError } from '../apps/extension/src/storage/errors';
+import { DB_VERSION } from '../apps/extension/src/storage/schema';
 import type { MeetRecord } from '../apps/extension/src/storage/schema';
 import { buildOldDb, freshFactory, readFixture, steppingClock } from './helpers/extensionDb';
 import type { DbFixture } from './helpers/extensionDb';
@@ -24,7 +25,8 @@ const tick = (): Promise<void> => new Promise(resolve => setTimeout(resolve, 0))
 
 describe('audit 1: a broken migration never yields an open database', () => {
   const lateStep: Migration = {
-    to: 2,
+    // The step after the last real one. A fixed 2 would repeat a real step and fail the chain check, not the late write.
+    to: DB_VERSION + 1,
     up: async (db, tx) => {
       await tx.objectStore('settings').put({ key: 'theme', value: 'dark', rev: 1, updatedAt: '2026-10-27T00:00:00.000Z' });
       // The upgrade transaction can finish while this timer runs. The store below is then never created.
@@ -36,9 +38,9 @@ describe('audit 1: a broken migration never yields an open database', () => {
   it('a migration that awaits a timer makes openOmniDb reject, and every later open rejects too', async () => {
     const factory = freshFactory();
     const chain = [...MIGRATIONS, lateStep];
-    await expect(openOmniDb({ factory, version: 2, migrations: chain, now: steppingClock() })).rejects.toThrow();
-    // The database is now at version 2 with meta.db at 1. It is never repaired and never deleted, so it never opens.
-    await expect(openOmniDb({ factory, version: 2, migrations: chain })).rejects.toThrow(/schemaVersion/);
+    await expect(openOmniDb({ factory, version: DB_VERSION + 1, migrations: chain, now: steppingClock() })).rejects.toThrow();
+    // The database is now at the late version with meta.db one behind. It is never repaired and never deleted, so it never opens.
+    await expect(openOmniDb({ factory, version: DB_VERSION + 1, migrations: chain })).rejects.toThrow(/schemaVersion/);
   });
 
   it('an open requires meta.db.schemaVersion to equal the database version', async () => {

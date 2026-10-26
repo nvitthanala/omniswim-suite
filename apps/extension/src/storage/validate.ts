@@ -13,8 +13,10 @@
  * - Rule presets go through the engine's `parseRulePreset`: a missing or legacy-sentinel cap, and
  *   `provenance:'legacy'`, are rejected there. Every `published` source must also be listed in a
  *   bundled source manifest (a value is never upgraded to published).
- * - Cache rows are never empty: a history with an empty payload and a roster with no members are
- *   rejected, so a failed fetch cannot leave a plausible empty row.
+ * - Cache rows are never empty by accident: a history with an empty payload is rejected, and so is a
+ *   roster with no members unless it carries `verifiedEmpty: true` (R53). A failed fetch or a parser
+ *   that found nothing cannot leave a plausible empty row.
+ * - A meet with no teams is valid only as a draft (`status: 'draft'`, R54), and a draft has no teams.
  * - Nothing here reads a clock or a random source.
  *
  * INTERIM: the engine has no `parseSessionPreset` or lineup parser until P5. `validateSessionPreset`
@@ -26,7 +28,7 @@ import type { RulePreset, SessionPreset } from '@omniswim/engine';
 import { InvalidRecordError } from './errors';
 import type { ValidationIssue } from './errors';
 import { publishedSourceProblem } from './sourceManifests';
-import { PAYLOAD_VERSION } from './schema';
+import { CLASS_YEARS, PAYLOAD_VERSION } from './schema';
 import type { SettingsMap, UserStore } from './schema';
 
 /** Internal: thrown by a check, caught by `validateRecord`. */
@@ -394,13 +396,19 @@ const RECORD_CHECKS: { readonly [S in UserStore]: (raw: unknown, path: string) =
       raw,
       path,
       ['meetKey', 'name', 'gender', 'teamIds', 'rulePreset', 'origin', 'rev', 'createdAt', 'updatedAt'],
-      ['simulatorQuery', 'sessionPreset']
+      ['simulatorQuery', 'sessionPreset', 'status']
     );
     str(o.meetKey, `${path}.meetKey`);
     str(o.name, `${path}.name`);
     gender(o.gender, `${path}.gender`);
+    // R54: no teams if and only if status is 'draft'. Any other status, and a draft with teams, is refused.
+    if (o.status !== undefined && o.status !== 'draft') fail(`${path}.status`, 'expected "draft"; leave the key out for a meet with teams');
     const teams = list(o.teamIds, `${path}.teamIds`);
-    if (teams.length === 0) fail(`${path}.teamIds`, 'a meet needs at least one team; leave the meet out instead');
+    if (o.status === 'draft') {
+      if (teams.length > 0) fail(`${path}.status`, 'a draft has no teams; leave status out once the meet has teams');
+    } else if (teams.length === 0) {
+      fail(`${path}.teamIds`, 'a meet with no teams must be saved as a draft (status: "draft")');
+    }
     teams.forEach((t, i) => swimCloudId(t, `${path}.teamIds[${i}]`));
     if (o.simulatorQuery !== undefined) str(o.simulatorQuery, `${path}.simulatorQuery`);
     presetRef(o.rulePreset, `${path}.rulePreset`);
@@ -469,15 +477,42 @@ const RECORD_CHECKS: { readonly [S in UserStore]: (raw: unknown, path: string) =
     str(o.sourceUrl, `${path}.sourceUrl`);
     parserInfo(o.parser, `${path}.parser`, true);
   },
+  classYearOverrides(raw, path) {
+    const o = keys(raw, path, ['swimmerId', 'seasonId', 'classYear', 'origin', 'rev', 'createdAt', 'updatedAt']);
+    swimCloudId(o.swimmerId, `${path}.swimmerId`);
+    str(o.seasonId, `${path}.seasonId`);
+    // No null: a user clears an override by deleting the record (tags work the same way).
+    oneOf(o.classYear, `${path}.classYear`, CLASS_YEARS);
+    origin(o.origin, `${path}.origin`);
+    rev(o.rev, `${path}.rev`);
+    isoTime(o.createdAt, `${path}.createdAt`);
+    isoTime(o.updatedAt, `${path}.updatedAt`);
+  },
   rosters(raw, path) {
-    const o = keys(raw, path, ['teamId', 'seasonId', 'gender', 'memberIds', 'sourceUrl', 'fetchedAt', 'parser']);
+    const o = keys(raw, path, ['teamId', 'seasonId', 'gender', 'memberIds', 'sourceUrl', 'fetchedAt', 'parser'], ['verifiedEmpty', 'classYears']);
     swimCloudId(o.teamId, `${path}.teamId`);
     str(o.seasonId, `${path}.seasonId`);
     gender(o.gender, `${path}.gender`);
     const members = list(o.memberIds, `${path}.memberIds`);
-    // Absent is not empty (D3 5.4): a season never fetched has no row, so `memberIds: []` is never valid.
-    if (members.length === 0) fail(`${path}.memberIds`, 'an empty roster; write nothing when the season was not fetched');
     members.forEach((m, i) => swimCloudId(m, `${path}.memberIds[${i}]`));
+    // Absent is not empty (D3 5.4): a season never fetched has no row. R53: a fetched roster with no members is
+    // stored only as verified-empty, so `memberIds: []` without the mark (a parser that found nothing) is refused.
+    if (o.verifiedEmpty !== undefined) {
+      if (o.verifiedEmpty !== true) fail(`${path}.verifiedEmpty`, 'expected true; leave the key out for a roster with members');
+      if (members.length > 0) fail(`${path}.verifiedEmpty`, 'a roster with members is not verified-empty');
+    } else if (members.length === 0) {
+      fail(`${path}.memberIds`, 'an empty roster must be marked verifiedEmpty: true; write nothing when the season was not fetched');
+    }
+    if (o.classYears !== undefined) {
+      const map = o.classYears;
+      if (!isObj(map) || Object.keys(map).length === 0) return fail(`${path}.classYears`, 'expected an object with an entry; leave the key out when SwimCloud gave no class years');
+      for (const [id, code] of Object.entries(map)) {
+        const p = `${path}.classYears.${id}`;
+        swimCloudId(id, p);
+        if (!members.includes(id)) fail(p, 'not a member of this roster');
+        oneOf(code, p, CLASS_YEARS);
+      }
+    }
     str(o.sourceUrl, `${path}.sourceUrl`);
     isoTime(o.fetchedAt, `${path}.fetchedAt`);
     parserInfo(o.parser, `${path}.parser`, false);

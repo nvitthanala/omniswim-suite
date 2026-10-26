@@ -9,6 +9,8 @@ import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
 import { readdirSync, readFileSync } from 'node:fs';
 import path from 'node:path';
+import { wrap } from 'idb';
+import type { IDBPDatabase } from 'idb';
 import { openOmniDb } from '../apps/extension/src/storage/open';
 import { assertMigrationChain, MIGRATIONS } from '../apps/extension/src/storage/migrations';
 import type { Migration } from '../apps/extension/src/storage/migrations';
@@ -18,6 +20,17 @@ import { buildOldDb, dumpDb, FIXTURE_DIR, freshFactory, readFixture, sequentialI
 import type { DbDump, DbFixture } from './helpers/extensionDb';
 
 const versions = Array.from({ length: DB_VERSION }, (_, i) => i + 1);
+
+/** A plain connection at `version` (no upgrade runs), for reading what a failed or refused upgrade left on disk. */
+function openRaw(factory: IDBFactory, version: number): Promise<IDBPDatabase<unknown>> {
+  return wrap(factory.open(DB_NAME, version)) as unknown as Promise<IDBPDatabase<unknown>>;
+}
+async function openAndDump(factory: IDBFactory, version: number) {
+  const raw = await openRaw(factory, version);
+  const dump = await dumpDb(raw);
+  raw.close();
+  return dump;
+}
 
 describe('extension storage migrations (D3 5.5)', () => {
   it('T-M1: MIGRATIONS run to 1..DB_VERSION in order, with no gap', () => {
@@ -58,6 +71,30 @@ describe('extension storage migrations (D3 5.5)', () => {
     } finally {
       db.close();
     }
+  });
+
+  it('v1 to v2 only adds the empty classYearOverrides store: no v1 record changes, none gains status, verifiedEmpty or classYears', async () => {
+    const factory = freshFactory();
+    const fixture = readFixture('v1.json') as DbFixture;
+    await buildOldDb(factory, 1, MIGRATIONS, fixture);
+    const before = await openAndDump(factory, 1);
+    const db = await openOmniDb({ factory, now: steppingClock(), newId: sequentialIds() });
+    const after = await dumpDb(db);
+    db.close();
+    expect(after.version).toBe(2);
+    expect(Object.keys(after.stores).filter(n => !(n in before.stores))).toEqual(['classYearOverrides']);
+    expect(after.stores.classYearOverrides?.records).toEqual([]);
+    for (const [name, store] of Object.entries(before.stores)) {
+      if (name === 'meta') continue;
+      expect(after.stores[name], name).toEqual(store);
+    }
+    for (const meet of after.stores.meets?.records ?? []) expect(meet, 'meet').not.toHaveProperty('status');
+    for (const roster of after.stores.rosters?.records ?? []) {
+      expect(roster, 'roster').not.toHaveProperty('verifiedEmpty');
+      expect(roster, 'roster').not.toHaveProperty('classYears');
+    }
+    const meta = after.stores.meta?.records.find(r => (r as { key: string }).key === 'db') as { migrationLog: { from: number; to: number }[] };
+    expect(meta.migrationLog.map(m => [m.from, m.to])).toEqual([[0, 1], [1, 2]]);
   });
 
   it('a fresh database has exactly the STORE_DEFS layout and a meta.db row written once', async () => {
@@ -131,13 +168,15 @@ describe('extension storage migrations (D3 5.5)', () => {
     a.close();
   });
 
-  it('T-M6: a throwing migration leaves the database at its old version with its data unchanged', async () => {
+  it.each(versions)('T-M6: a throwing migration leaves a v%i database at its old version with its data unchanged', async v => {
     const factory = freshFactory();
-    const fixture = readFixture('v1.json') as DbFixture;
-    await buildOldDb(factory, 1, MIGRATIONS, fixture);
+    const fixture = readFixture(`v${v}.json`) as DbFixture;
+    await buildOldDb(factory, v, MIGRATIONS, fixture);
+    // The golden snapshot: what is on disk before the failed upgrade. It must be what is on disk after.
+    const before = await openAndDump(factory, v);
     const boom = new Error('migration exploded');
     const bad: Migration = {
-      to: 2,
+      to: DB_VERSION + 1,
       up: async (db, tx) => {
         db.createObjectStore('extraStore');
         // A write that would be committed if the failure did not abort the transaction.
@@ -146,13 +185,33 @@ describe('extension storage migrations (D3 5.5)', () => {
         throw boom;
       },
     };
-    await expect(openOmniDb({ factory, version: 2, migrations: [...MIGRATIONS, bad], now: steppingClock(), newId: sequentialIds() })).rejects.toBe(boom);
+    await expect(openOmniDb({ factory, version: DB_VERSION + 1, migrations: [...MIGRATIONS, bad], now: steppingClock(), newId: sequentialIds() })).rejects.toBe(boom);
 
-    const db = await openOmniDb({ factory });
-    expect(db.version).toBe(1);
-    expect([...db.objectStoreNames]).not.toContain('extraStore');
-    expect(await dumpDb(db)).toEqual(readFixture('v1.expected-current.json'));
-    db.close();
+    // The steps before the bad one ran in the same transaction (for v1, the v2 step created its store). All of it rolled back.
+    const raw = await openRaw(factory, v);
+    expect(raw.version).toBe(v);
+    expect([...raw.objectStoreNames]).not.toContain('extraStore');
+    expect(await dumpDb(raw)).toEqual(before);
+    raw.close();
+  });
+
+  it('an upgrade refuses a database whose meta.db is missing or stale, and leaves it at its old version', async () => {
+    const fixture = readFixture('v1.json') as DbFixture;
+    const cases: [string, DbFixture, RegExp][] = [
+      ['missing', { ...fixture, stores: { ...fixture.stores, meta: [] } }, /meta.db.schemaVersion is missing/],
+      ['stale', { ...fixture, stores: { ...fixture.stores, meta: [{ ...(fixture.stores.meta?.[1] as object), schemaVersion: 7 }] } }, /schemaVersion is 7/],
+    ];
+    for (const [label, broken, message] of cases) {
+      const factory = freshFactory();
+      await buildOldDb(factory, 1, MIGRATIONS, broken);
+      await expect(openOmniDb({ factory, now: steppingClock(), newId: sequentialIds() }), label).rejects.toThrow(message);
+      // Not repaired, not upgraded: still v1, no v2 store, and no invented meta.db row.
+      const raw = await openRaw(factory, 1);
+      expect(raw.version, label).toBe(1);
+      expect([...raw.objectStoreNames], label).not.toContain('classYearOverrides');
+      expect(await raw.get('meta', 'db'), label).toEqual(broken.stores.meta?.find(r => (r as { key: string }).key === 'db'));
+      raw.close();
+    }
   });
 
   it('opens the DB_NAME database, never another', async () => {

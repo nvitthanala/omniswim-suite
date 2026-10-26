@@ -13,10 +13,10 @@ import { createStorageRepo } from '../apps/extension/src/storage/repo';
 import { openOmniDb } from '../apps/extension/src/storage/open';
 import { readChangeRev, createMemoryChangeBus } from '../apps/extension/src/storage/changeBus';
 import { ImportValidationError, InvalidRecordError, NewerExportError, SnapshotImmutableError, StaleWriteError } from '../apps/extension/src/storage/errors';
-import { toSwimCloudId, USER_STORES } from '../apps/extension/src/storage/schema';
+import { DB_VERSION, toSwimCloudId, USER_STORES } from '../apps/extension/src/storage/schema';
 import type { ExportableStore, LineupRecord, MeetRecord, RulePresetRecord } from '../apps/extension/src/storage/schema';
 import { freshFactory, sequentialIds, steppingClock } from './helpers/extensionDb';
-import { fixtureRecord, fixtureRecords, removeAt, seedFromFixture, setAt, withoutRev } from './helpers/extensionRecords';
+import { fixtureRecord, fixtureRecords, hasFixtureStore, removeAt, seedFromFixture, setAt, withoutRev } from './helpers/extensionRecords';
 
 async function newDb() {
   const db = await openOmniDb({ factory: freshFactory(), now: steppingClock(), newId: sequentialIds('install') });
@@ -27,7 +27,8 @@ async function newDb() {
 const ALL_STORES: readonly ExportableStore[] = [...EXPORT_STORE_ORDER];
 const FULL = { stores: ALL_STORES, includeSwimCloudData: true, includeSettings: true, extensionVersion: '0.1.0', now: () => '2026-10-28T00:00:00.000Z' } as const;
 const DEFAULT = {
-  stores: ['rulePresets', 'sessionPresets', 'meets', 'tags', 'lineups'] as ExportableStore[],
+  // D3 14: classYearOverrides is user data, so the default export carries it.
+  stores: ['rulePresets', 'sessionPresets', 'meets', 'tags', 'lineups', 'classYearOverrides'] as ExportableStore[],
   includeSwimCloudData: false,
   includeSettings: false,
   extensionVersion: '0.1.0',
@@ -115,7 +116,7 @@ describe('extension storage export and import (D3 5.6)', () => {
 
     const file = asFile(await exportData(repo, DEFAULT));
     expect(file.includesSwimCloudData).toBe(false);
-    expect(Object.keys(file.stores as object)).toEqual(['rulePresets', 'sessionPresets', 'meets', 'tags', 'lineups']);
+    expect(Object.keys(file.stores as object)).toEqual(['rulePresets', 'sessionPresets', 'meets', 'tags', 'lineups', 'classYearOverrides']);
     const keys = keysDeep(file);
     for (const banned of ['swimmerHistory', 'rosters', 'results', 'display']) expect(keys.has(banned), banned).toBe(false);
     const text = JSON.stringify(file);
@@ -358,7 +359,7 @@ describe('extension storage export and import (D3 5.6)', () => {
     const run = (file: unknown) => importData(db, file, { fileName: 'f.json', onConflict: 'keep-both' }).catch(e => e as unknown);
 
     expect(await run({ ...good, formatVersion: 2 })).toBeInstanceOf(NewerExportError);
-    expect(await run({ ...good, dbSchemaVersion: 2 })).toBeInstanceOf(NewerExportError);
+    expect(await run({ ...good, dbSchemaVersion: DB_VERSION + 1 })).toBeInstanceOf(NewerExportError);
     expect(await run({ ...good, formatVersion: 0 })).toBeInstanceOf(ImportValidationError);
     expect(await run({ ...good, format: 'other' })).toBeInstanceOf(ImportValidationError);
     expect(await run('not an object')).toBeInstanceOf(ImportValidationError);
@@ -389,16 +390,20 @@ describe('extension storage export and import (D3 5.6)', () => {
     await seedFromFixture(repo);
     let seen = 0;
     for (const store of USER_STORES) {
-      for (const r of fixtureRecords(store)) {
-        expect(JSON.parse(JSON.stringify(r)), `fixture ${store}`).toStrictEqual(r);
-        seen += 1;
+      // v2 holds what v1 does, plus the R51, R53 and R54 records (a draft meet, a verified-empty roster, class years, an override).
+      for (const version of [1, 2]) {
+        if (!hasFixtureStore(store, version)) continue;
+        for (const r of fixtureRecords(store, version)) {
+          expect(JSON.parse(JSON.stringify(r)), `fixture v${version} ${store}`).toStrictEqual(r);
+          seen += 1;
+        }
       }
       for (const r of await repo.list(store)) {
         expect(JSON.parse(JSON.stringify(r)), `stored ${store}`).toStrictEqual(r);
         seen += 1;
       }
     }
-    expect(seen).toBe(26);
+    expect(seen).toBe(43); // 13 in v1, 17 in v2, 13 stored from v1
     const file = await exportData(repo, FULL);
     expect(JSON.parse(JSON.stringify(file))).toStrictEqual(file);
     // An undefined-valued key is refused before it can become a stored key that JSON drops.

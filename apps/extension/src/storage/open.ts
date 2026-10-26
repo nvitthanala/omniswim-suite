@@ -64,6 +64,16 @@ export async function openOmniDb(opts: OpenOmniDbOptions = {}): Promise<IDBPData
     const oldVersion = event.oldVersion;
     const newVersion = event.newVersion ?? version;
     const run = async (): Promise<void> => {
+      // An upgrade of an existing database starts from a consistent meta.db. Without this check the write below would
+      // invent a row for a database whose own row is missing or stale, and hide the damage it is meant to refuse.
+      if (oldVersion > 0) {
+        const stored = (await tx.objectStore('meta').get('db')) as MetaDbRow | undefined;
+        if (stored === undefined || stored.schemaVersion !== oldVersion) {
+          throw new DatabaseInconsistentError(
+            `meta.db.schemaVersion is ${stored === undefined ? 'missing' : String(stored.schemaVersion)} but the database is at version ${oldVersion}. It is not upgraded.`
+          );
+        }
+      }
       for (const m of migrations) {
         if (m.to > oldVersion && m.to <= newVersion) await m.up(db, tx);
       }

@@ -18,8 +18,8 @@ export interface Migration {
 }
 
 /**
- * The v1 layout, frozen. `STORE_DEFS` in schema.ts describes the current layout and will change at
- * v2; this table must not. A test compares a fresh database to `STORE_DEFS`.
+ * The v1 layout, frozen. `STORE_DEFS` in schema.ts describes the current layout and changed at v2
+ * (it gained `classYearOverrides`); this table must not. A test compares a fresh database to `STORE_DEFS`.
  */
 const V1_STORES: readonly { readonly name: string; readonly keyPath: string | string[]; readonly indexes: readonly (readonly [string, string])[] }[] = [
   { name: 'meta', keyPath: 'key', indexes: [] },
@@ -40,7 +40,26 @@ export function createV1Stores(db: IDBPDatabase<unknown>): void {
   }
 }
 
-export const MIGRATIONS: readonly Migration[] = [{ to: 1, up: createV1Stores }];
+/**
+ * v2 (R51): the `classYearOverrides` store, keyed by swimmer and season. It adds a store and changes no
+ * existing record. R53's `verifiedEmpty` and R54's `status` are optional fields: no v1 record has either,
+ * and none gains a meaning (every v1 roster has members and every v1 meet has teams), so no record is rewritten.
+ */
+const V2_STORES: readonly { readonly name: string; readonly keyPath: string | string[]; readonly indexes: readonly (readonly [string, string])[] }[] = [
+  { name: 'classYearOverrides', keyPath: ['swimmerId', 'seasonId'], indexes: [['bySeason', 'seasonId']] },
+];
+
+export function createV2Stores(db: IDBPDatabase<unknown>): void {
+  for (const def of V2_STORES) {
+    const store = db.createObjectStore(def.name, { keyPath: def.keyPath });
+    for (const [indexName, keyPath] of def.indexes) store.createIndex(indexName, keyPath);
+  }
+}
+
+export const MIGRATIONS: readonly Migration[] = [
+  { to: 1, up: createV1Stores },
+  { to: 2, up: createV2Stores },
+];
 
 /**
  * Throws unless `migrations` run `to` 1, 2, ... `version` with no gap, repeat or extra step.

@@ -10,14 +10,16 @@ import { validateRecord } from '../apps/extension/src/storage/validate';
 import { BUNDLED_SOURCE_MANIFESTS, publishedSourceProblem } from '../apps/extension/src/storage/sourceManifests';
 import { EDITED_STORES, SETTINGS_DEFAULTS, STORE_NAMES, USER_STORES, toSwimCloudId } from '../apps/extension/src/storage/schema';
 import type { UserStore } from '../apps/extension/src/storage/schema';
-import { fixtureRecord, fixtureRecords, removeAt, setAt } from './helpers/extensionRecords';
+import { fixtureRecord, fixtureRecords, hasFixtureStore, removeAt, setAt } from './helpers/extensionRecords';
 
 const paths = (store: UserStore, record: unknown): string[] => validateRecord(store, record).map(i => i.path);
 
 describe('extension storage validation (D3 5.4)', () => {
-  it('accepts every record in the v1 fixture, in every store', () => {
+  it('accepts every record in the v1 fixture, in every store it has', () => {
     let seen = 0;
     for (const store of USER_STORES) {
+      // The class-year store is new in v2, so the v1 fixture has no list for it.
+      if (!hasFixtureStore(store, 1)) continue;
       for (const record of fixtureRecords(store)) {
         expect(validateRecord(store, record), `${store} fixture record`).toEqual([]);
         seen += 1;
@@ -26,8 +28,19 @@ describe('extension storage validation (D3 5.4)', () => {
     expect(seen).toBe(13);
   });
 
+  it('accepts every record in the v2 fixture, in every store: a draft meet, a verified-empty roster, class years and an override', () => {
+    let seen = 0;
+    for (const store of USER_STORES) {
+      for (const record of fixtureRecords(store, 2)) {
+        expect(validateRecord(store, record), `${store} fixture record`).toEqual([]);
+        seen += 1;
+      }
+    }
+    expect(seen).toBe(17);
+  });
+
   it('lists the stores and splits them into user, edited and cache stores', () => {
-    expect([...STORE_NAMES]).toHaveLength(9);
+    expect([...STORE_NAMES]).toHaveLength(10);
     expect([...USER_STORES]).toEqual(STORE_NAMES.filter(s => s !== 'meta'));
     expect([...EDITED_STORES]).toEqual(USER_STORES.filter(s => s !== 'swimmerHistory' && s !== 'rosters'));
   });

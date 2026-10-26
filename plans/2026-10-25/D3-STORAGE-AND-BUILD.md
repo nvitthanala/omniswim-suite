@@ -796,3 +796,144 @@ test first.
 The window stayed maximized, so the 1280 px and 390 px views of the real
 page are still unmeasured (Q16). The harness assertion covers the panel
 geometry instead.
+
+## 14. Verified-empty rosters, draft meets and class-year overrides (2026-10-26)
+
+The user approved three storage features (README R51, R53, R54). They
+settle the two open decisions in section 11, item 8 (P4 empty roster and
+P3 draft meet). The database moves to **version 2**. Section 5.2 shows the
+v1 types; this section lists what v2 adds. Each feature has a failing test
+first.
+
+### 14.1 R53: a verified-empty roster
+
+`RosterRecord` gains `verifiedEmpty?: true`.
+
+| State | Record | Meaning |
+| --- | --- | --- |
+| not loaded | none | Never fetched, or the fetch failed (nothing is written, 5.4) |
+| verified-empty | `memberIds: []`, `verifiedEmpty: true`, with `sourceUrl`, `fetchedAt`, `parser` | SwimCloud was fetched and listed no swimmers |
+| has members | `memberIds` non-empty, no `verifiedEmpty` | A normal roster |
+
+- The validator ties the two fields: `memberIds` is empty if and only if
+  `verifiedEmpty` is `true`. An empty list with no mark is rejected, so a
+  parser that found nothing cannot write a plausible empty roster. The mark
+  next to members is rejected. `false` and `null` are rejected: leave the
+  key out.
+- `sourceUrl`, `fetchedAt` and `parser` stay required on every roster.
+- Storage cannot check the claim "SwimCloud listed no swimmers". **P4's
+  parser sets the mark only on positive evidence** (the page loaded and
+  shows an empty roster), never because it parsed zero rows.
+- `readRosterState(repo, key)` returns `not-loaded`, `verified-empty` or
+  `members`. `verifiedEmptyRoster(input)` builds the record.
+- No migration rewrites a record: the field is optional, and no v1 roster
+  could hold `[]`, so no old record gains a meaning.
+
+### 14.2 R54: a draft meet
+
+`MeetRecord` gains `status?: 'draft'`.
+
+- A meet has no teams if and only if `status` is `'draft'`. A non-draft meet
+  with zero teams fails validation (as it did before). A draft that has
+  teams fails too, so a stale mark cannot block a finished meet. When the
+  user adds the first team, the writer leaves `status` out. Any other
+  `status` value is rejected.
+- `requireScorableMeet(meet)` is the one guard that P3's scoring and
+  optimizer must call. It returns `{ ok: true, meet }` or a typed refusal
+  `{ ok: false, reason: 'draft' | 'no-teams', meetKey, message }`. It never
+  throws, and it never returns an empty result. `'no-teams'` covers a record
+  with no teams and no mark, which validation never lets into storage.
+- The `meet` in the `ok` branch has the branded type `ScorableMeet`. A P3
+  function that takes `ScorableMeet` cannot be called with a raw
+  `MeetRecord` (a test checks this with `@ts-expect-error`).
+- Every v1 meet has teams and no `status`, so none is a draft.
+
+### 14.3 R51: class-year override
+
+Two places hold a class year, and they stay apart.
+
+- **The sourced value** is `RosterRecord.classYears?: Record<swimmerId,
+  ClassYearCode>`. Its source is the roster record's `sourceUrl` and
+  `fetchedAt`. Every key must be in `memberIds`. An empty map is rejected
+  (leave the key out). A v1 roster has no map.
+- **The override** is a new edited store, `classYearOverrides`, key path
+  `['swimmerId', 'seasonId']`, index `bySeason`. A record holds `swimmerId`,
+  `seasonId`, `classYear`, `origin`, `rev`, `createdAt`, `updatedAt`. To
+  clear an override, delete the record; there is no `null`. This matches
+  `tags`, where "auto" is the absence of a record.
+
+Why this shape:
+
+- **A separate store, not a field on the roster.** `putCache` replaces the
+  whole roster row on every refetch. An override stored in it would vanish
+  at the next fetch. A roster is also SwimCloud data and is evicted by
+  "clear cache" (5.7). An override is user data and is never evicted.
+- **Keyed by season.** A class year changes every season. Keyed by swimmer
+  alone, "SR" for swimmer 1130590 would still win in 2027-28. `seasonId` is
+  the same SwimCloud season string that keys `rosters` (for example `"26"`).
+  The next season has no override and reads as sourced or absent.
+- **Keyed by swimmer, not by team.** A transfer, such as 1130590 (a senior
+  at Henderson State whom SwimCloud lists otherwise), has one class year in
+  a season whatever team the page shows.
+- **`rev`, `updatedAt` and `origin`** record who and when: the store is user
+  data, `origin` says whether the value came from a file, and `rev` is the
+  optimistic-write counter.
+- **`ClassYearCode`** is `'FR' | 'SO' | 'JR' | 'SR' | 'GR'`, taken from the
+  engine's D2 type `MeetSwimmer['classYear']`. The legacy engine enum
+  `ClassYear` is FR, SO, JR, SR, HS (HS marks recruits) and has no GR. The
+  storage layer uses the D2 set. A recruit (R52) has no class year until
+  the user or SwimCloud gives one.
+
+Reading: `resolveClassYear({ swimmerId, seasonId, override?, roster? })` is
+pure, and `readClassYear(repo, { swimmerId, seasonId, teamId, gender })`
+reads both records first. The result is one of:
+
+| `state` | Fields | When |
+| --- | --- | --- |
+| `user` | `classYear`, `rev`, `updatedAt` | An override exists. It wins. |
+| `sourced` | `classYear`, `sourceUrl`, `fetchedAt` | No override, and the roster has a class year for the swimmer |
+| `absent` | none | Neither. Never a default class year. |
+
+A roster or override for another season or swimmer throws `RangeError`
+instead of answering for the wrong one.
+
+**Not verified:** no recon note says which SwimCloud page shows a class
+year or how it is written. Storage only provides the slot. P4's parser must
+confirm the source and may need to move `classYears` if the roster page does
+not carry it.
+
+### 14.4 Database version 2
+
+- `DB_VERSION` is 2. `MIGRATIONS` gains `{ to: 2, up: createV2Stores }`,
+  which creates `classYearOverrides`. No existing record is rewritten.
+- `openOmniDb` now checks, at the start of an upgrade of an existing
+  database (old version above 0), that `meta.db` exists and its
+  `schemaVersion` equals the old version. Otherwise it throws
+  `DatabaseInconsistentError` and the database stays as it was. Before v2
+  the upgrade wrote a new `meta.db` row when none existed, which would have
+  hidden a damaged v1 database once a v1 to v2 upgrade existed.
+- Export: `classYearOverrides` is user data. It is in the default export
+  and needs no `includeSwimCloudData`. `rosters` (with `classYears`) is
+  still SwimCloud data. `EXPORT_STORE_ORDER` puts `classYearOverrides`
+  after `lineups`. An export file carries `dbSchemaVersion: 2`, so a
+  v1 build refuses it as newer.
+- `keep-both` skips a conflicting override (a natural-key store, section
+  11 item 3). `replace` writes the stored `rev + 1`.
+
+### 14.5 Tests
+
+- `tests/extensionStorageRosterEmpty.test.ts` (R53): validation, the three
+  states, `putCache`, export round trip, a file with an unmarked empty roster.
+- `tests/extensionStorageDraftMeet.test.ts` (R54): validation, the guard,
+  the type brand, draft to complete, export round trip.
+- `tests/extensionStorageClassYear.test.ts` (R51): override and roster
+  validation, precedence, season scoping, a refetch that keeps the override,
+  stale writes, export and import.
+- `tests/extensionStorageMigrations.test.ts`: T-M2 and T-M3 now cover
+  `v2.json` (frozen, with a draft meet, a verified-empty roster, a class-year
+  map and an override). T-M6 runs for each version with a golden snapshot.
+  A new test shows v1 to v2 only adds the empty store. Another shows an
+  upgrade refuses a missing or stale `meta.db`.
+- Golden gate: the regenerated `v1.expected-current.json` differs from the
+  old one by the version (2), one empty store, `meta.db.schemaVersion` and one
+  `migrationLog` entry. Every v1 record is byte-identical.

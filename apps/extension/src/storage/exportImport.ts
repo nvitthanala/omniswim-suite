@@ -29,6 +29,7 @@ import type { ValidationIssue } from './errors';
 import type { StorageRepo } from './repo';
 import { DB_VERSION, STORE_DEFS } from './schema';
 import type {
+  ClassYearOverrideRecord,
   ExportableStore,
   IsoTime,
   LineupRecord,
@@ -60,6 +61,8 @@ export interface OmniSwimExportV1 {
     readonly meets?: readonly MeetRecord[];
     readonly tags?: readonly TagRecord[];
     readonly lineups?: readonly LineupRecord[];
+    /** User data (R51), so it is in the default export. Absent in a file written at database version 1. */
+    readonly classYearOverrides?: readonly ClassYearOverrideRecord[];
     /** Only with "include my settings". */
     readonly settings?: readonly SettingRecord[];
     /** Only if `includesSwimCloudData`. */
@@ -70,7 +73,7 @@ export interface OmniSwimExportV1 {
 }
 
 /** The order stores appear in a file, and the order an import validates and writes them. */
-export const EXPORT_STORE_ORDER: readonly ExportableStore[] = ['rulePresets', 'sessionPresets', 'meets', 'tags', 'lineups', 'settings', 'swimmerHistory', 'rosters'];
+export const EXPORT_STORE_ORDER: readonly ExportableStore[] = ['rulePresets', 'sessionPresets', 'meets', 'tags', 'lineups', 'classYearOverrides', 'settings', 'swimmerHistory', 'rosters'];
 const SWIMCLOUD_STORES: readonly ExportableStore[] = ['swimmerHistory', 'rosters'];
 
 type Row = Record<string, unknown>;

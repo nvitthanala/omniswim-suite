@@ -20,3 +20,9 @@ export { BUNDLED_SOURCE_MANIFESTS, publishedSourceProblem } from './sourceManife
 export { EXPORT_FORMAT, EXPORT_FORMAT_VERSION, EXPORT_STORE_ORDER, exportData, importData } from './exportImport';
 export type { ExportOptions, ImportOptions, ImportReport, OmniSwimExportV1, OnConflict, SkipReason } from './exportImport';
 export * from './presets';
+export { isDraftMeet, requireScorableMeet } from './meetGuard';
+export type { MeetRefusal, MeetRefusalReason, ScorableMeet, ScorableMeetResult } from './meetGuard';
+export { classifyRoster, readRosterState, verifiedEmptyRoster } from './rosterState';
+export type { RosterKey, RosterState } from './rosterState';
+export { readClassYear, resolveClassYear } from './classYear';
+export type { ClassYearInput, ClassYearQuery, ResolvedClassYear } from './classYear';
