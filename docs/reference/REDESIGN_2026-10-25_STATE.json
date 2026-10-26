@@ -622,7 +622,7 @@
     }
   ],
   "resumeOrder": [
-    "lead: answers backlog. NSISC v2 DONE (75dd5520, 7380ad70). Next: storage fields verified-empty/draft/class-year (executor, extension storage), then zod/mini + Material 800 colors with warn as fill only (worker), then SwimSwam archive after the user answers Q-D2-swimswam",
+    "lead: answers backlog. NSISC v2 DONE (75dd5520, 7380ad70). Storage fields BUILT, uncommitted, awaiting gate rerun + Codex review (see inFlight). Then zod/mini + Material 800 colors (warn fill only), then SwimSwam once the user answers Q-D2-swimswam",
     "architect: P2 risk - verify a per-swimmer history endpoint without a Cloudflare challenge before Load history is built",
     "P2 per plan; adapter brief notes flystart optional on relay rows"
   ],
@@ -770,5 +770,31 @@
       "result": "done; worker released 2026-10-26",
       "gates": "lint ok; active vitest 144 files 2431 passed; npm test 65/0; golden diff clean; extension tests 191 passed"
     }
-  ]
+  ],
+  "inFlight": {
+    "item": "storage-fields (R51 class-year override, R53 verified-empty rosters, R54 draft meets)",
+    "status": "STOPPED 2026-10-26 at user request (connection loss). Executor finished; diff is UNCOMMITTED in the working tree and NOT yet reviewed.",
+    "executorReport": {
+      "schema": "DB_VERSION 2; new edited store classYearOverrides keyed [swimmerId, seasonId]; MeetRecord.status?:draft; RosterRecord.verifiedEmpty?:true and classYears?",
+      "newFiles": "apps/extension/src/storage/meetGuard.ts, rosterState.ts, classYear.ts; tests extensionStorageRosterEmpty/DraftMeet/ClassYear; fixtures v2.json, v2.expected-current.json, FROZEN.json; D3 section 14",
+      "exports": "requireScorableMeet, isDraftMeet, readRosterState, verifiedEmptyRoster, classifyRoster, resolveClassYear, readClassYear, ClassYearCode, CLASS_YEARS, ClassYearOverrideRecord, ScorableMeet",
+      "claimedGates": "lint ok; vitest 147 files 2480 passed; npm test 65/0; build ok",
+      "caveat": "one post-build combined run had 1 unnamed failing test; 4 reruns passed. Possible flake, not yet identified.",
+      "findings": [
+        "open.ts now refuses to upgrade when meta.db is missing or stale (DatabaseInconsistentError)",
+        "classYears has no verified SwimCloud source; P4 must confirm the page",
+        "P4 parser may set verifiedEmpty only on positive evidence",
+        "class-year codes: D2 FR/SO/JR/SR/GR vs legacy FR/SO/JR/SR/HS",
+        "first schema bump: a P1 build refuses v2 export files; D3 5.7 backup prompt not built"
+      ]
+    },
+    "resumeSteps": [
+      "git status; confirm the diff above is still in the tree",
+      "rerun gates: npm run lint; SKIP_BUDGET_ENV=local npx vitest run --maxWorkers=4 (twice, to catch the flake); npm test; golden; npm run build:extension then extension tests",
+      "identify the flaky test if it recurs",
+      "cross-provider review: Codex via Orca read-only (executor was Claude), focus on the v1->v2 migration and the open.ts refusal",
+      "commit as one storage area commit, push to PR #8",
+      "then resumeOrder: zod/mini + Material 800 colors"
+    ]
+  }
 }
