@@ -605,16 +605,24 @@
     "Q6 approve extra fetches after recon (R31)",
     "Q-D1 rest: SwimCloud 16-place table equals code TOP16 (recon Q17); SwimCloud has no relays-scoring or A-final rule; R25/R26 stay the sources",
     "Q-D2 rest: archive SwimSwam factors for 400-500, 800-1000, 1500-1650 if SwimCloud has no conversion (R29)",
-    "Q-NSISC-points (for the user, 2026-10-26): Is NSISC scoring exactly 20-17-16-15-14-13-12-11-9-7-6-5-4-3-2-1 individual and diving, relays x2 (40-34-32-...), ties split? R15 said SwimCloud holds the NSISC table; recon Q17 found SwimCloud has no NSISC preset (its scoring16 has these values, but a JS bundle is parity reference, not a source). Observed evidence: data/meets.json workspace 1, loadedMeet 2026_NSISC_Championships_Final_Results.pdf, parsed points per place match that table in every individual and diving event, relay rows carry quarter credits 10/8.5/8/7.5 (= 40/34/32/30 / 4), and ties split (200 IM M 12th 4.5/4.5). Until answered, engine nsisc v1 keeps individual/relay/diving points pending; a yes becomes nsisc v2 (builtin version pin).",
+    "Q-NSISC-points: ANSWERED yes (R45). Shipped as nsisc v2 in commit 75dd5520. Ties split through legacyBridge into lib/individualScoring.ts:683.",
     {
       "id": "Q-semantic-colors",
       "asked": "2026-10-26",
       "question": "Q15 records no good/warn/bad color and SwimCloud has none to copy. Pick a source for --osx-good/--osx-warn/--osx-bad (or approve a named palette). Until then they are CanvasText and no UI may use them to tell states apart.",
-      "blocks": "any P2+ UI that colors cut tags or warnings"
+      "blocks": "any P2+ UI that colors cut tags or warnings",
+      "status": "answered 2026-10-26 (README R46)"
+    },
+    {
+      "id": "Q-D2-swimswam",
+      "asked": "2026-10-26",
+      "finding": "https://swimswam.com/swimming-times-conversion-tool/ retrieved 2026-10-26 (HTTP 200, 183,623 B, sha256 78beb0ad343425971e037039657893ef11c7e343228ba73088a013c14636513a, not archived in repo). It publishes NO factors: the form posts to SwimSwam (server-side conversion) and the page says it converts using Colorado Timing's conversion factors. Values could only be inferred from form outputs, which the provenance rules forbid. A web search found no published Colorado Time Systems table. The archived NCAA D1 standards PDF (data/cutlines/sources) publishes SCM->SCY factors 400m->500y 1.153, 800m->1000y 1.153, 1500m->1650y 1.013, other 0.906, but these are 25 m course factors, not LCM.",
+      "question": "R29 LCM distance rows: (a) no estimate (R29 fallback), (b) look for Colorado Time Systems' own published table, (c) other source",
+      "blocks": "P4 Table D distance rows only"
     }
   ],
   "resumeOrder": [
-    "lead: apply answers backlog (see notes): NSISC v2 (executor, engine), storage fields verified-empty/draft/class-year (executor, extension storage), zod/mini + colors (worker), SwimSwam archive + plan R-rows (lead)",
+    "lead: answers backlog. NSISC v2 DONE (75dd5520, 7380ad70). Next: storage fields verified-empty/draft/class-year (executor, extension storage), then zod/mini + Material 800 colors with warn as fill only (worker), then SwimSwam archive after the user answers Q-D2-swimswam",
     "architect: P2 risk - verify a per-swimmer history endpoint without a Cloudflare challenge before Load history is built",
     "P2 per plan; adapter brief notes flystart optional on relay rows"
   ],
@@ -710,6 +718,11 @@
       "id": "next",
       "answered": "2026-10-26",
       "answer": "User does the live load check first and reports back; lead fixes what it finds; then move forward"
+    },
+    {
+      "id": "warn-contrast",
+      "answered": "2026-10-26",
+      "answer": "Lead corrected its claim: #EF6C00 is 3.08:1 on white, 2.95:1 on #FAFAFA. User chose: warn is a fill only (badge/chip background with dark text, ~6.8:1), never a text or thin-icon color. Green 5.13:1, red 5.62:1 pass as text."
     }
   ],
   "commits": [
@@ -723,6 +736,39 @@
         "state file": "this commit"
       },
       "note": "Only the tip is verified green; intermediate commits share package.json/lock/eslint and are not tested alone (user accepted)."
+    },
+    {
+      "sha": "e71ffcfd",
+      "subject": "Record the user's 2026-10-26 answers"
+    },
+    {
+      "sha": "75dd5520",
+      "subject": "Add NSISC v2 with the confirmed points"
+    },
+    {
+      "sha": "7380ad70",
+      "subject": "Offer only the newest built-in in preset pickers"
+    }
+  ],
+  "lowPriority": {
+    "since": "2026-10-26T16:03Z",
+    "trigger": "local usage report: Claude 5h window 89% used",
+    "resetsAt": "2026-10-26T17:20Z (12:20 local)",
+    "plan": "no new Claude agents until reset; Codex (37% used) takes NSISC v2 via Orca in a child worktree; lead does cheap docs work; resume Claude executors after reset",
+    "resumePoint": "NSISC v2 committed; next is the storage-fields executor",
+    "endedAt": "2026-10-26 (window reset reported to the lead)"
+  },
+  "codexRuns": [
+    {
+      "item": "nsisc-v2",
+      "dispatch": "ctx_348b0f9a7026",
+      "terminal": "term_6ed9ebeb-0d70-4151-bf24-bc6ecfd77c38",
+      "worktree": "current",
+      "started": "2026-10-26T16:2xZ",
+      "brief": "scratchpad codex-nsisc-v2.txt (cites README.md:69 = R45)",
+      "review": "Claude (lead plus advisor) reviewed the diff, a different provider than Codex. Lead fixed 5 extension tests Codex could not edit (picker now shows newest version only) and added the evidence comment.",
+      "result": "done; worker released 2026-10-26",
+      "gates": "lint ok; active vitest 144 files 2431 passed; npm test 65/0; golden diff clean; extension tests 191 passed"
     }
   ]
 }
