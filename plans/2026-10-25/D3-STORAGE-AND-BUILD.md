@@ -766,3 +766,28 @@ Code: `apps/extension/src/shared/theme.ts`,
 7. The keyboard guard sits on the `.osx-root` wrapper. A page listener in
    the capture phase on `window` or `document` still runs first. No content
    script can prevent that.
+
+## 13. Fixes from the live load check (2026-10-26)
+
+The user loaded `apps/extension/dist` unpacked on the real simulator
+(teams 48 and 58). Two defects surfaced. Both are fixed under a failing
+test first.
+
+1. **Relay rows have no `flystart`.** The bridge required all nine row
+   keys on relay rows and stopped with `store-shape: missing store path:
+   origRosters.48.relays.flystart`. The bridge now requires eight keys
+   on a relay row and nine on every swimmer row. The schema allows a
+   missing `flystart` only when `kind` is `relay`. The recon fixture had
+   hidden the gap: its array format wrote the missing key as `null`.
+   Recon Q5 carries the correction.
+2. **The docked panel covered SwimCloud's "Options" button.** Below the
+   `md` breakpoint (992 px) the page shows a fixed `.btn-fab` button at
+   bottom 15 px, right 10 px. It opens the settings drawer. The panel's
+   position now lives in the shadow stylesheet. Below 992 px the panel
+   anchors left and keeps 144 px clear on the right. Harness assertion 7
+   checks 1280, 800 and 390 px against a synthetic copy of the button's
+   geometry.
+
+The window stayed maximized, so the 1280 px and 390 px views of the real
+page are still unmeasured (Q16). The harness assertion covers the panel
+geometry instead.

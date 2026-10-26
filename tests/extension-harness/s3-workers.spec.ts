@@ -14,7 +14,10 @@
  *   3. the iframe and the dashboard tab read the same IndexedDB record, written through the repo;
  *   4. the overlay <-> iframe port delivers a message each way;
  *   5. the page's styleSheets.length and one element's computed style match a page the extension
- *      did not inject into.
+ *      did not inject into;
+ *   6. nothing left the fake network;
+ *   7. at 1280, 800 and 390 px the docked panel stays in the viewport and never covers the page's
+ *      narrow-layout "Options" button (a synthetic copy of SwimCloud's measured geometry).
  *
  * Each assertion is recorded on its own, so one failure does not hide the others. A variant-2
  * failure is a finding (D3 section 3, CSP decision table), not something to retry or weaken.
@@ -269,6 +272,34 @@ test.describe('S3 workers and the docked iframe', () => {
           return `${served.length} synthetic responses served, 0 aborted`;
         });
 
+        await record(7, "panel stays clear of the page's narrow-layout Options button", async () => {
+          const seen: string[] = [];
+          for (const width of [1280, 800, 390]) {
+            await page.setViewportSize({ width, height: 800 });
+            await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+            const geometry = await page.evaluate(() => {
+              const frameEl = document.querySelector('[data-osx-host]')?.shadowRoot?.querySelector('iframe');
+              const fab = document.getElementById('fixture-fab');
+              const box = (el: Element | null | undefined) => {
+                if (!el || getComputedStyle(el).display === 'none') return null;
+                const r = el.getBoundingClientRect();
+                return { left: r.left, top: r.top, right: r.right, bottom: r.bottom };
+              };
+              return { panel: box(frameEl), fab: box(fab), vw: document.documentElement.clientWidth, vh: innerHeight };
+            });
+            const { panel, fab, vw, vh } = geometry;
+            if (!panel) throw new Error(`no panel at ${width} px`);
+            if (panel.left < 0 || panel.right > vw || panel.top < 0 || panel.bottom > vh) throw new Error(`the panel leaves the viewport at ${width} px: ${JSON.stringify(panel)}`);
+            if (width < 992 && !fab) throw new Error(`the fixture Options button is hidden at ${width} px, so the check would pass vacuously`);
+            if (fab) {
+              const overlaps = panel.left < fab.right && fab.left < panel.right && panel.top < fab.bottom && fab.top < panel.bottom;
+              if (overlaps) throw new Error(`the panel covers the Options button at ${width} px: panel ${JSON.stringify(panel)}, button ${JSON.stringify(fab)}`);
+            }
+            seen.push(`${width} px: panel x ${Math.round(panel.left)}-${Math.round(panel.right)}${fab ? `, button x ${Math.round(fab.left)}-${Math.round(fab.right)}` : ', button hidden'}`);
+          }
+          return seen.join('; ');
+        });
+
         // Console problems the injection added: those on the simulator page that the baseline page lacks.
         const extra = consoleProblems.filter((m) => !baselineProblems.includes(m));
         console.log(
@@ -286,7 +317,7 @@ test.describe('S3 workers and the docked iframe', () => {
 
       const failed = [...results].filter(([, r]) => !r.ok).map(([n, r]) => `${n}: ${r.detail}`);
       expect(failed, 'failed assertions').toStrictEqual([]);
-      expect(results.size).toBe(6);
+      expect(results.size).toBe(7);
     });
   }
 });

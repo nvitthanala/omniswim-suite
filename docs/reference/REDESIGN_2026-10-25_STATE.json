@@ -534,6 +534,27 @@
             "sim-bridge.js 4,993 B (budget 5,000; 7 B headroom - next bridge change must shrink something)"
           ],
           "note": "Codex review took ~2 min and was shallow (second time). Weight it accordingly."
+        },
+        {
+          "id": "P1.liveCheck",
+          "status": "verified 2026-10-26",
+          "date": "2026-10-26",
+          "userReport": "SimSnapshot posted (data null at first), then bridge error store-shape: missing store path: origRosters.48.relays.flystart; host dataset osxPanel connected, osxState error; panel covers the Options button when the window is narrow or split",
+          "findings": [
+            "F1 relay rows carry no flystart key (live store teams 48, 58; flystart never null elsewhere: splits true, ind/leadoff false). Fixed: bridge requires 8 keys on relays (ROW reordered, slice(0,8)); schema refine allows missing flystart only for kind relay. Tests: fixture inflation drops relay flystart (12 tests went red first), 2 new tests, schema variants for ind/split. Bridge 4,974 B.",
+            "F2 docked panel covered SwimCloud .btn-fab Options (fixed bottom 15 right 10, shown below 992 px). Fixed: panel geometry moved to shadow stylesheet; below 991.98 px anchors left, width min(360px, 100vw - 160px). Harness assertion 7 at 1280/800/390 against a synthetic FAB; confirmed red with the rule reverted."
+          ],
+          "gates": "lint 0; active vitest 2429/0; extension tests 161/0; scripts 65/0; harness 7/7 both variants. CI on e4dd3ffc passed (13m57s, includes legacy + golden).",
+          "notes": [
+            "Chrome tools cannot open chrome:// or chrome-extension:// pages: the user must press Reload on the extension card.",
+            "resize_window cannot un-maximize the window; inner width at full screen is 1534 CSS px. Q16 real-page widths still unmeasured."
+          ],
+          "resumePoint": "user reloads the extension; lead rechecks live in tab (javascript_tool: host dataset, console [OmniSwim]); then commit the fixes and continue with the answers backlog",
+          "liveRecheck": {
+            "bridge": "lead tab after user reload: osxState ready, no bridge error, team responses 48 and 58 captured; fresh snapshot: 66 swimmers, swims ind 256 / split 94 / leadoff 44 / relay 10 (relay rows without flystart), 110 splashes, totals 58: 193 (1st), 48: 91 (2nd)",
+            "panel": "user, own tab, 2026-10-26: panel moved left at narrow width, Options button works"
+          },
+          "observation": "In the Claude-in-Chrome automated tab the docked iframe was absent after connecting (osxPanel connected, pongs 1, wrapper empty), and inserting an extension iframe detached the debugger. Cause unverified. Implication: the automated tab is fine for reading the store and bridge; any live panel or dashboard check needs the user tab or the Playwright harness."
         }
       ]
     },
@@ -593,9 +614,9 @@
     }
   ],
   "resumeOrder": [
-    "user: live unpacked load check (instructions given 2026-10-26); lead fixes findings",
-    "lead: apply answers (nsisc v2, Material 800 colors, verified-empty rosters, draft meets, zod/mini, class-year override field, SwimSwam archive, width measurement)",
-    "P2 per plan, with history-fetch and recruit answers folded into the P2+ design"
+    "lead: apply answers backlog (see notes): NSISC v2 (executor, engine), storage fields verified-empty/draft/class-year (executor, extension storage), zod/mini + colors (worker), SwimSwam archive + plan R-rows (lead)",
+    "architect: P2 risk - verify a per-swimmer history endpoint without a Cloudflare challenge before Load history is built",
+    "P2 per plan; adapter brief notes flystart optional on relay rows"
   ],
   "notes": [
     "Newest code was on the unmerged branch in the oyster worktree (C:/Users/nihar/orca/workspaces/omniswim-suite/oyster), not main. Plan docs were written in the main clone, untracked, to be committed on the redesign branch.",

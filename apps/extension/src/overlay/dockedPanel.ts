@@ -72,10 +72,10 @@ export function mountDockedPanel(host: HTMLElement, runtime: PanelRuntime, opts:
   iframe.setAttribute('data-osx-panel-frame', '');
   iframe.title = 'OmniSwim';
   // Trap 8 (D3 section 4): an explicit background and a color-scheme that matches the theme, so
-  // the page's scheme cannot paint an opaque backdrop. Layout stays inline, as on the host.
-  iframe.style.cssText =
-    'position: fixed; right: 16px; bottom: 16px; width: 360px; height: 240px; ' +
-    'border: 1px solid var(--osx-border); background: var(--osx-bg); z-index: 2147483000;';
+  // the page's scheme cannot paint an opaque backdrop. Position and size live in the shadow
+  // stylesheet (./shadowStyle.ts), where a media query moves the panel clear of SwimCloud's
+  // narrow-layout "Options" button. An inline value would beat that rule.
+  iframe.style.cssText = 'border: 1px solid var(--osx-border); background: var(--osx-bg);';
   const syncScheme = (): void => {
     iframe.style.colorScheme = root.getAttribute(THEME_ATTRIBUTE) === 'dark' ? 'dark' : 'light';
   };

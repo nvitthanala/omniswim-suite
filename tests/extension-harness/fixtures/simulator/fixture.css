@@ -49,3 +49,27 @@ body {
   border: 0;
   border-radius: 3px;
 }
+
+/*
+ * Imitates the geometry of SwimCloud's narrow-layout "Options" button (.btn-fab.u-is-hidden@md):
+ * fixed, bottom 15px, right 10px, z-index 1040, hidden from 992px up. Measured live on 2026-10-26
+ * from computed style; this is not SwimCloud's stylesheet. Text size and padding imitate .btn.
+ */
+.c-fab {
+  position: fixed;
+  bottom: 15px;
+  right: 10px;
+  z-index: 1040;
+  padding: 6px 12px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 0;
+  border-radius: 4px;
+  display: none;
+}
+
+@media (max-width: 991.98px) {
+  .c-fab {
+    display: inline-block;
+  }
+}
