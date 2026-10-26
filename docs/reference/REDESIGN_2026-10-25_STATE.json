@@ -631,7 +631,7 @@
     "DONE: engine LCM->SCY (8d188a27)",
     "DONE: P2 risk. profile_fastest_times answers without a challenge (bests only; see p2Risk).",
     "P2 UI: overlay results table + matches-SwimCloud line (Codex via Orca, child worktree). Brief notes: simulator preset is parity-only (never in a picker or copied); rescoreSimulator throws AdapterError on SCM/LCM, Actual relays, exhibition, coach-edited times, unknown pointSystem: catch and show not-compared reason",
-    "storage: rule presets read through parseRulePreset (v1 migrates, ties pending) before scoring; record wrapper PAYLOAD_VERSION stays; grep validate.ts:174",
+    "DONE (24a0eee1): stored rule presets migrate on read, ties pending. Diff audit skipped: one-function mechanical change with a red test; no cross-provider review for the same reason.",
     "P2 per plan; adapter brief notes flystart optional on relay rows"
   ],
   "notes": [
@@ -813,6 +813,10 @@
     {
       "sha": "92c438d6",
       "subject": "Re-score the simulator with exact SwimCloud parity"
+    },
+    {
+      "sha": "24a0eee1",
+      "subject": "Migrate stored rule presets on read"
     }
   ],
   "lowPriority": {
@@ -894,5 +898,12 @@
     "interruptions": [
       "2026-10-26 ~17:00 local: executor hit the 5h session limit (429) mid tie-policy task; tree left with 3 failing targeted tests (387 passed). After the reset the lead resumed it via SendMessage with the failing test names."
     ]
+  },
+  "inFlight": {
+    "item": "P2 UI: snapshot over the panel port, rescore in the dashboard, results table + parity line, not-compared states",
+    "agent": "Codex via Orca, child worktree p2-overlay-ui (C:/Users/nihar/orca/workspaces/omniswim-suite/p2-overlay-ui, branch nvitthanala/p2-overlay-ui moved to 934240e5 by the lead before start)",
+    "dispatch": "ctx_7ab57a4cdebf",
+    "terminal": "term_687a5cad-bcee-4cdf-b6af-83cbf7346024",
+    "onDone": "lead reads the child diff, reruns gates there, Claude review (different provider), then applies the diff to the main worktree and commits"
   }
 }
