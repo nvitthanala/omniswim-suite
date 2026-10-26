@@ -875,7 +875,8 @@
       "Q-history-depth: profile_fastest_times gives one best swim per event and course (all teams, back to 2012), not every swim. Is that enough for Load history (R50) and recruits (R52)? If the date window (R49) must pick the best swim inside the window, a full per-swim history endpoint is needed; may Claude look for one (a few requests, stop on any challenge)?",
       "Q-R61-weaker-real: when a real swim earns a weaker cut than an estimated one (real B, estimated A), foldEventCutTags keeps both tags, real first. Keep both, or show only the stronger one?",
       "Q-roster-untagged: in a lineup that has no finals yet (all timed finals), who is on the scoring team when the coach has tagged no one? The legacy rule (scorerRoster.ts:240) makes an untagged swimmer a scorer only if a relay or a final marked them, or they are a recruit. Under that rule almost nobody scores before finals exist. Options: (a) keep legacy, (b) every untagged swimmer is a scorer until the 18-spot team is full (who drops then?), (c) the planner must tag first, else the meet is not scored.",
-      "Q-relay-overcap: when a team enters more relays in one event than may score (NSISC: 2), does the extra relay keep its place and score 0 (today), or leave the places so the relays behind move up, like a non-scorer under R41? R42 says NSISC enters no non-scoring relays, so this matters for other presets and for a lineup that breaks the limit."
+      "Q-relay-overcap: when a team enters more relays in one event than may score (NSISC: 2), does the extra relay keep its place and score 0 (today), or leave the places so the relays behind move up, like a non-scorer under R41? R42 says NSISC enters no non-scoring relays, so this matters for other presets and for a lineup that breaks the limit.",
+      "Q-P3-ui-target: the rule dropdowns (per-event scorer cap with \"-\", total entries per swimmer) go in SwimCloud's settings panel (plan 3.5, D3 4). Should changing one also change SwimCloud's own simulator setting (so its totals move too), or only OmniSwim's preset (SwimCloud keeps its own numbers, and parity then shows the difference)? Writing to SwimCloud's page state is a new trust direction; today the bridge only reads."
     ],
     "resolvedNote": "Dark good/bad colors: answered by README R57 (system colors in dark), removed from questions 2026-10-26."
   },
@@ -891,7 +892,7 @@
     "gates": "lint ok; vitest 2577; npm test 65/0; golden clean",
     "followUps": [
       "docs/INVARIANTS.md #10 and #11 wording check against R61",
-      "extension storage validate.ts does not check the archive sha for tool-derived provenance",
+      "CLOSED: storage validate.ts checks tool-derived archive path and sha against the archives the engine built-ins cite",
       "pickers must hide built-ins with retired set (presets.ts latestBuiltins)",
       "nothing in the extension calls the new conversion/cut functions yet (P4)"
     ]
@@ -926,7 +927,9 @@
   },
   "followUps": [
     "tests/extensionStorageAudit.test.ts \"a migration that awaits a timer makes openOmniDb reject\" failed once under --maxWorkers=4 (2026-10-26), passed 3/3 alone and on the full rerun: timing flake under load.",
-    "Tie at the cap boundary: placeOrderCompare picks which teammate is removed by synthetic-id order. Team total is unchanged; per-swimmer points are arbitrary. Decide in P3.core-b (D2 9.5)."
+    "Tie at the cap boundary: placeOrderCompare picks which teammate is removed by synthetic-id order. Team total is unchanged; per-swimmer points are arbitrary. Decide in P3.core-b (D2 9.5).",
+    "P4: converted swims and estimated-cut tags must run checkProvenanceSources when they are first stored, or they bypass the tool-archive check.",
+    "Deferred to P4: pickers hide retired built-ins (no live picker shows one today). dockedPanel reconnect after an answered port drops: low severity (an iframe reload leaves an empty panel, not a wrong number)."
   ],
   "p3CoreA": {
     "status": "DONE: Codex review accepted (ctx_5b81979038a5, released); advisor audit passed; lead gates green incl. harness 2/2; D2 section 9 records the deviations",
@@ -934,5 +937,9 @@
     "precedent": "packages/engine/src/lib/ncaaScoringRules.ts:1192 (re-run with the over-cap finisher removed); rankAsIfExhibitionAbsent individualScoring.ts:656",
     "api": "NotScoredReason gains removed_over_event_cap. Removed row: {place:null, points:0, scored:false, notScoredReason:removed_over_event_cap}; sorts last. UI reads the reason, not place (no_time is also place null). placement_unsupported stays in ScoreMeetErrorCode but is no longer thrown.",
     "openRelay": "Relays over scoringRelaysPerTeamPerEvent always hold their place (pinned by a test): the preset has no relay over-cap rule (D2 6). See Q-relay-overcap."
+  },
+  "toolArchiveValidation": {
+    "status": "DONE: Codex review accepted (ctx_1727615e5c3f, released), advisor audit passed, gates green",
+    "scope": "rulePresets, sessionPresets and lineups (builtUnder.rulePresetValues and sessionPresetValues) are the only stores with provenance today; all three run checkProvenanceSources"
   }
 }

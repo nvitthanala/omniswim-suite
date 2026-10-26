@@ -27,7 +27,7 @@ import { parseProvenance, parseRulePreset, parseSetting, parseTimeText, RulePres
 import type { RulePreset, SessionPreset } from '@omniswim/engine';
 import { InvalidRecordError } from './errors';
 import type { ValidationIssue } from './errors';
-import { publishedSourceProblem } from './sourceManifests';
+import { publishedSourceProblem, toolArchiveProblem } from './sourceManifests';
 import { CLASS_YEARS, PAYLOAD_VERSION } from './schema';
 import type { SettingsMap, UserStore } from './schema';
 
@@ -190,7 +190,8 @@ function viaEngine<T>(base: string, run: () => T): T {
 
 /**
  * Every `provenance` in the value (and each `previous` link of a `user-edited` chain) must not be
- * `legacy`, and every `published` source must be in a bundled manifest.
+ * `legacy`, every `published` source must be in a bundled manifest, and every `tool-derived` archive
+ * must be one a built-in sourcing preset cites, with the same sha256.
  */
 function checkProvenanceSources(value: unknown, path: string): void {
   if (Array.isArray(value)) {
@@ -209,6 +210,15 @@ function checkChain(prov: unknown, path: string): void {
   if (prov.kind === 'published' && isObj(prov.source)) {
     const problem = publishedSourceProblem(prov.source as never);
     if (problem) fail(`${path}.source`, problem);
+  }
+  if (prov.kind === 'tool-derived') {
+    const archive = prov.archive;
+    if (!isObj(archive) || typeof archive.path !== 'string' || typeof archive.sha256 !== 'string') {
+      fail(`${path}.archive`, 'a tool-derived value must cite its archive path and sha256');
+    } else {
+      const problem = toolArchiveProblem({ path: archive.path, sha256: archive.sha256 });
+      if (problem) fail(`${path}.archive`, problem);
+    }
   }
   if (prov.kind === 'user-edited') checkChain(prov.previous, `${path}.previous`);
 }

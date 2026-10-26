@@ -10,6 +10,7 @@
  * is not here on purpose: it says "Parity reference only, not published provenance", it is untracked,
  * and CI does not have it.
  */
+import { BUILTIN_LCM_TO_SCY } from '@omniswim/engine';
 import type { SourceRef } from '@omniswim/engine';
 import cutlines from '../../../../data/cutlines/sources/manifest.json';
 import relayPrograms from '../../../../data/relay-programs/sources/manifest.json';
@@ -29,6 +30,41 @@ export const BUNDLED_SOURCE_MANIFESTS: ReadonlyMap<string, ReadonlyMap<string, s
   ['data/relay-programs/sources/manifest.json', sourceIndex(relayPrograms as ManifestShape)],
   ['data/scoring_rules/sources/manifest.json', sourceIndex(scoringRules as ManifestShape)],
 ]);
+
+/**
+ * The tool archives a stored `tool-derived` provenance may cite: archive path, then sha256. The list is
+ * read from the provenance of the engine's built-in sourcing presets, so it cannot drift from what the
+ * engine ships. `tests/engineLcmToScy.test.ts` checks the sha256 against the file on disk. The SwimCloud
+ * simulator archive is not here on purpose: the simulator preset is parity-only and is never stored.
+ */
+export const BUNDLED_TOOL_ARCHIVES: ReadonlyMap<string, string> = (() => {
+  const out = new Map<string, string>();
+  const walk = (value: unknown): void => {
+    if (Array.isArray(value)) {
+      value.forEach(walk);
+      return;
+    }
+    if (typeof value !== 'object' || value === null) return;
+    const o = value as { kind?: unknown; archive?: { path?: unknown; sha256?: unknown } };
+    if (o.kind === 'tool-derived' && typeof o.archive?.path === 'string' && typeof o.archive.sha256 === 'string') {
+      out.set(o.archive.path, o.archive.sha256);
+    }
+    Object.values(value).forEach(walk);
+  };
+  walk(BUILTIN_LCM_TO_SCY);
+  return out;
+})();
+
+/**
+ * Why a `tool-derived` archive is not one a built-in cites, or `null` when it is. The path must be
+ * listed and the sha256 must match.
+ */
+export function toolArchiveProblem(archive: { readonly path: string; readonly sha256: string }): string | null {
+  const sha256 = BUNDLED_TOOL_ARCHIVES.get(archive.path);
+  if (sha256 === undefined) return `tool archive "${archive.path}" is not one a built-in sourcing preset cites`;
+  if (sha256 !== archive.sha256) return `tool archive "${archive.path}" sha256 does not match the built-in`;
+  return null;
+}
 
 /**
  * Why a `published` source is not backed by a bundled manifest, or `null` when it is.

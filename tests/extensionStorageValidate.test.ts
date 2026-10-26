@@ -7,7 +7,7 @@
  */
 import { describe, expect, it } from 'vitest';
 import { validateRecord } from '../apps/extension/src/storage/validate';
-import { BUNDLED_SOURCE_MANIFESTS, publishedSourceProblem } from '../apps/extension/src/storage/sourceManifests';
+import { BUNDLED_SOURCE_MANIFESTS, BUNDLED_TOOL_ARCHIVES, publishedSourceProblem, toolArchiveProblem } from '../apps/extension/src/storage/sourceManifests';
 import { EDITED_STORES, SETTINGS_DEFAULTS, STORE_NAMES, USER_STORES, toSwimCloudId } from '../apps/extension/src/storage/schema';
 import type { UserStore } from '../apps/extension/src/storage/schema';
 import { fixtureRecord, fixtureRecords, hasFixtureStore, removeAt, setAt } from './helpers/extensionRecords';
@@ -116,6 +116,31 @@ describe('extension storage validation (D3 5.4)', () => {
         const [sourceId, sha256] = [...index.entries()][0] as [string, string];
         expect(publishedSourceProblem({ sourceId, manifest, sha256, url: 'https://example.com', publisher: 'x' })).toBeNull();
       }
+    });
+    it('accepts a tool-derived value only when it cites an archive a built-in cites, with the same sha256', () => {
+      const where = ['payload', 'scoring', 'individualPoints', 'provenance'];
+      const [path, sha256] = [...BUNDLED_TOOL_ARCHIVES.entries()][0] as [string, string];
+      const toolDerived = (archive: unknown) => ({
+        kind: 'tool-derived',
+        tool: { name: 'SwimSwam Swimming Time Conversion Tool', url: 'https://swimswam.com/swimming-times-conversion-tool/' },
+        archive,
+        capturedOn: '2026-10-26',
+        basis: 'inferred-from-tool-outputs',
+      });
+      expect(validateRecord('rulePresets', setAt(fixtureRecord('rulePresets', 1), where, toolDerived({ path, sha256 })))).toEqual([]);
+      const cases: [string, unknown][] = [
+        ['unknown archive', { path: 'data/conversions/made-up.json', sha256 }],
+        // The simulator preset is parity-only: a stored value may never cite its archive.
+        ['simulator archive', { path: 'data/swimcloud-captures/simulator/simulator.1792676876.js', sha256: '93f6be650c703f41b3ac5f01d1614cfcfe2160b2bf0b3220e140f1987b69c6da' }],
+        ['wrong sha256', { path, sha256: '0'.repeat(64) }],
+      ];
+      for (const [label, archive] of cases) {
+        expect(paths('rulePresets', setAt(fixtureRecord('rulePresets', 1), where, toolDerived(archive))), label).toEqual([`$.${where.join('.')}.archive`]);
+      }
+    });
+    it('reads the tool archives from the engine built-ins: the SwimSwam LCM to SCY capture only', () => {
+      expect([...BUNDLED_TOOL_ARCHIVES.keys()]).toEqual(['data/conversions/swimswam/lcm-to-scy-2026-10-26.json']);
+      for (const [path, sha256] of BUNDLED_TOOL_ARCHIVES) expect(toolArchiveProblem({ path, sha256 })).toBeNull();
     });
   });
 
