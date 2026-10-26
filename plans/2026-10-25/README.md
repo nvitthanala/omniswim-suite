@@ -83,6 +83,8 @@ Asked after P1. The state file `docs/reference/REDESIGN_2026-10-25_STATE.json` (
 | R59 | Conversion precision | User: "you can round, we dont need precision beyond final resultant times to hundreths of seconds." The R29 check value 4:00.00 → about 4:34 is SCM to SCY. LCM to SCY gives 4:28.90. |
 | R60 | Conversion sources | Convert to SCY from each source course: SCM uses the NCAA-archived factors (Table A); LCM uses R58. Convert individual swims and relay splits. The 800 free relay's full-relay conversion is not needed ("most times its a moot point"). |
 | R61 | Cut tags from estimates | An estimated (converted) time may earn an "estimated cut achieved" tag. When the swimmer swims the cut, the normal cut tag replaces it. This replaces the earlier rule that estimated times never tag. |
+| R62 | Relay split conversion | Yes: convert a relay split with the individual conversion for its stroke and distance. User on the flyover (R14): "the flyover/relay exchange modifier is to subtract a little bit of time due to the momentum gained and reaction on the exchange of the entering swimmer". |
+| R63 | Provenance exception | Yes: the R58 tool-derived conversions are a recorded exception to the CLAUDE.md data-provenance rule against estimates. Added to CLAUDE.md. |
 
 NSISC is the New South Intercollegiate Swim Conference. The repo's meet data
 labels its meet "New South Championships". It is not the Northern Sun

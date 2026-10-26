@@ -187,6 +187,11 @@ does not throw; it silently produces a plausible, wrong lineup a coach may act o
    retrievedAt}`. No competition time is ever hand-typed into a `.ts` file.
 2. **Never interpolate, extrapolate, project, or estimate.** If a governing body
    has not published it, it does not exist. Emit absent — not zero, not a guess.
+   **One user-approved exception (2026-10-26, plans/2026-10-25/README.md R58
+   and R63):** LCM to SCY course conversions inferred from archived SwimSwam
+   converter outputs (`data/conversions/swimswam/`). They carry a tool-derived
+   provenance label and an "est." badge, and are never labeled `published`.
+   No other estimate is allowed.
 3. **Parsers fail loudly.** A missing or unparseable row raises. No silent
    defaults, no gap filling, no `?? 0` on a competition time.
 4. **Absent ≠ empty.** A lookup that matches nothing must be distinguishable from

@@ -624,9 +624,7 @@
     "Q-classyear-source: no recon shows which SwimCloud page carries a class year; P4 must confirm it before RosterRecord.classYears is filled",
     "Q-classyear-codes: D2 uses FR/SO/JR/SR/GR, legacy engine uses FR/SO/JR/SR/HS (HS = recruit); reconcile before recruits (R52)",
     "Gap: the D3 5.7 \"export a backup\" prompt before a schema upgrade is not built; a P1 build cannot open a v2 database",
-    "Flake: one unnamed test failed once after a build (executor run); not seen in 3 later full runs",
-    "Q-provenance-exception: ask the user whether to add a one-line exception to CLAUDE.md data-provenance rule 2 for the R58 tool-derived conversions (recorded in README R58 meanwhile)",
-    "Q-relay-split-conversion: converting a relay split with its stroke and distance individual divisor and turn is the lead inference; the converter has no split data. Tell the user."
+    "Flake: one unnamed test failed once after a build (executor run); not seen in 3 later full runs"
   ],
   "resumeOrder": [
     "DONE: answers backlog (NSISC v2, storage fields, zod/mini, colors, conversion capture).",
@@ -754,6 +752,16 @@
       "id": "conversion-rules",
       "answered": "2026-10-26",
       "answer": "User: \"4:00.00 in scm is 4:34ish scy, 4:00.00LCM to scy is 4:28.9 like you calculated. you can round, we dont need precision beyond final resultant times to hundreths of seconds. remember to be able to convert from the appropriate source to scy. you can tag them as estimated cut achieved, but when they actually get the cut, then they get the normal tag.. dont worry about the 800 free relay conversion ... we are trying to source individual swims and relay splits\". README R59-R61."
+    },
+    {
+      "id": "relay-split-and-flyover",
+      "answered": "2026-10-26",
+      "answer": "R62: yes, relay splits use the individual conversion for stroke and distance. Flyover: \"subtract a little bit of time due to the momentum gained and reaction on the exchange of the entering swimmer\". Lead rule: never subtract the flyover from a time that is already a flying-start split."
+    },
+    {
+      "id": "provenance-exception",
+      "answered": "2026-10-26",
+      "answer": "R63: yes, an exception. Added to CLAUDE.md data-provenance rule 2."
     }
   ],
   "commits": [
@@ -840,5 +848,16 @@
     "review": "Codex read-only (Orca ctx_c006e6fad8de, released): claims 2-4 no findings; claim 1 parity: 56 adversarial inputs, no divergence",
     "sizes": "sim-overlay.js 810,945 -> 76,698 bytes; sim-bridge.js 4,974 unchanged",
     "minifyNote": "esbuild minify would roughly halve the overlay again; not enabled"
+  },
+  "inFlight": {
+    "item": "engine LCM->SCY preset from data/conversions/swimswam (R58-R61): tool-derived provenance, table-d-user retired from use, SCM via Table A, relay splits, estimated-cut tag",
+    "agent": "Claude executor, background, dispatched 2026-10-26 afternoon",
+    "scope": "packages/engine/**, tests/engine*, D2 new section",
+    "onResume": "resume with SendMessage; do not re-brief. Then cross-provider review by Codex (Orca, read-only) before commit."
+  },
+  "awayMode": {
+    "since": "2026-10-26 afternoon",
+    "user": "\"continue work, i will be away from computer. move ahead and build everything you can, keep tab on open items or questions you have for me and i will let you know answers when i return.\"",
+    "questionsForUser": []
   }
 }
