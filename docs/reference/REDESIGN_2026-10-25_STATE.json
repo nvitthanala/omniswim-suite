@@ -877,5 +877,11 @@
       "pickers must hide built-ins with retired set (presets.ts latestBuiltins)",
       "nothing in the extension calls the new conversion/cut functions yet (P4)"
     ]
+  },
+  "inFlight": {
+    "item": "P2 core: adapter SimSnapshot->MeetModel, SwimCloud-settings preset, validateMeetModel, scoreMeet, parity on configs A-D, per-event diff shape",
+    "agent": "Claude executor, background, dispatched 2026-10-26 evening",
+    "scope": "packages/engine/**, packages/swimcloud/** (browser/), new tests, D2 3.6/3.8",
+    "onResume": "resume with SendMessage; do not re-brief. Then Codex read-only review, then a worker builds the overlay results table against the reported API."
   }
 }
